@@ -8,6 +8,7 @@
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
+// @donateUrl       https://livepix.gg/caliberda
 // @include         windhawk.exe
 // @include         explorer.exe
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv
@@ -102,6 +103,11 @@ the taskbar.
     jump in it, previous / play / next, the volume (the mouse wheel too),
     and the playing app's own volume, muted with a click on its note. The
     buttons, and the cover with the title, can also sit on the pill.
+    Clicking the cover brings its app to the front, and a title or an
+    artist too long scrolls in it under the mouse; on the pill, the mouse
+    over it shows the whole title and the artist in a bubble, and a long
+    title can keep scrolling while it plays (an island setting, off by
+    default).
     With several apps with media (a paused Spotify and a browser playing,
     for example), a row at its top chooses which one the island controls
     ("Automatic" follows Windows); on the pill, a dot under the cover for
@@ -119,12 +125,20 @@ the taskbar.
     panel): start, stop and reload buttons, with its version under them,
     like yasb's control. Each runs komorebi's own `komorebic start`, `stop`
     or both, only when clicked, without a window like yasb does; when it
-    fails, it runs again in a terminal on the screen that shows why.
+    fails, a terminal on the screen shows what it printed (it isn't run
+    again).
     Options choose whether whkd and masir start and stop with it. Nothing
     is installed or accepted for you, and the mod never ends komorebi by
     itself.
   * The calendar keeps events, with reminders that show in the pill, and,
-    if chosen, the public holidays of the country set in Windows.
+    if chosen, the public holidays of the country set in Windows. Its gear
+    opens its agendas: .ics calendars (a link, like Google Calendar's
+    "Secret address in iCal format", or a file), added there or in the
+    mod's settings, whose events show read only, repeating ones too, on
+    their days in each agenda's color, with the next ones under the month
+    (with their year when it's another one, like a birthday already past
+    this year); and today's color (red, Windows' accent color, or one
+    chosen).
   * **Power** (an optional button on the pill): sleep, restart, shut down,
     lock and sign out, like the macOS Apple menu. Restarting, shutting down
     and signing out ask first, and Windows closes the apps as usual.
@@ -136,8 +150,10 @@ the taskbar.
     settings):
     how much the processor, the memory and the video memory are used
     (clicking one shows its graphs and details), a button muting the
-    microphones (their level goes to 0 too, for apps that record a muted
-    microphone, and back as it was when unmuted), the screen's brightness
+    microphones (while the island runs their level goes to 0 too, for apps
+    that record a muted microphone; it comes back when they're unmuted or
+    the island stops, and they stay muted until you unmute them), the
+    screen's brightness
     (the mouse wheel changes it, a click opens it alone), the keyboard's language and input mode
     (中 or 英, あ or A, 가 or A, or the language, like PT, when there's more
     than one keyboard; a click lists the keyboards, to switch the app in
@@ -195,8 +211,15 @@ the taskbar.
   right-clicking them works like on the taskbar (a double click opens the app,
   the right button shows its menu; a click in the room between two icons
   goes to the nearer one); their names show under them in a bubble drawn
-  like the island, in its colors; the pin that shows after the mouse
-  stays two seconds on an icon (or the middle button) pins it. With many
+  like the island, in its colors. To keep one on the pill (pinned), click it
+  with the middle button (the mouse wheel), or leave the mouse on it for two
+  seconds and click the pin that shows; the same unpins it (the grid and the
+  list say so under their icons). Dragged, an icon changes its place: in the
+  list of the ones not pinned (their order), anywhere on the pill (beside an
+  item, it goes with that item, in every style and notch), from the list to
+  the pill (pinned there) or back (unpinned). Each island keeps its own: the
+  ones following the main settings share them, and one with a profile of its
+  own keeps them in that profile (like the other monitors using it). With many
   icons, the list shows twelve at a time (an island setting; fewer on small
   screens): the icons at an edge with more past it
   fade out, and the mouse wheel (or a sideways swipe) over the icons scrolls
@@ -229,9 +252,10 @@ the taskbar.
   towards the middle. Against the bottom edge or upright on a side, it can
   be minimized to a line there too.
 * **Several monitors**: the island stays on the main monitor, on another
-  one chosen, or follows the monitor with the mouse; each monitor keeps its
-  own place for it. Going to another monitor, it closes into its dot, which
-  glides there and opens again.
+  one chosen, follows the monitor with the mouse, or shows on every monitor
+  (each with the main island's settings or a profile of its own); each
+  monitor keeps its own place for it. Going to another monitor, it closes
+  into its dot, which glides there and opens again.
 * **Smooth everywhere**: what it shows opens, closes, grows, shrinks and
   changes with springs (icons crossfade, new tray icons and notifications
   grow in, old ones shrink away). For slower computers, the "Animations"
@@ -251,10 +275,14 @@ the taskbar.
 A right click on the island (not on another app's icon or a notification)
 brings out a small bubble with a gear under it; clicking it opens the
 control center on the settings (with the bar style, the right click opens
-them right away, in the middle of the screen). They're in three tabs (the
-profiles, the backup, the look and the animations; the pill, its tray icons
-and what's playing; the place, the clock and the notifications), shown in
-two or three columns (one on small screens, scrolling). Typing anywhere in
+them right away, in the middle of the screen). They're in five tabs
+(General: the profiles, the backup and the place; Look: the style with its
+notches, the colors, the size and transparency, the animations; Pill: the
+order of its items, the system's, the desktop's, apps and tools, and the
+control center buttons; Tray, media and clock; Notifications), with a sixth
+Monitors tab when two or more screens are connected, shown in two or three
+columns (one on small screens, scrolling), each option right under the one
+it depends on. Typing anywhere in
 them searches them all
 (accents don't matter); the box works like any text box (arrows, Home, End,
 Shift to select, dragging the mouse, a double click on a word, Ctrl+A,
@@ -263,23 +291,24 @@ search, and Esc (or a click outside) closes them.
 
 | Section | What it sets |
 | :--- | :--- |
-| Profiles | Up to 10 profiles with the island's settings below (for work, for games, one with everything on): "+" beside the title saves the current ones, a click applies one, the one in use keeps every change made to the settings by itself, and a pencil renames one, saves the current settings in it or deletes it. A button on the pill switches them (off by default): a click lists them, and Shift and the mouse wheel on it go to the next one (shown under it, applied once Shift is let go). Notifications, notes, tasks and pinned tray icons aren't part of them. |
+| Profiles | Up to 10 profiles with the island's settings below (for work, for games, one with everything on): "+" beside the title saves the current ones, a click applies one, the one in use keeps every change made to the settings by itself, and a pencil renames one, saves the current settings in it or deletes it. A button on the pill switches them (off by default): a click lists them, and Shift and the mouse wheel on it go to the next one (shown under it, applied once Shift is let go). Notifications, notes and tasks aren't part of them (the pinned tray icons and their places are). |
 | Backup | "Export…" saves a file with the notes, tasks, keyboard shortcuts, calendar events, pinned folders, the wallpapers' folder, profiles and the island's settings; "Import…" puts one back (the island starts again with it). They're kept by Windhawk on this computer only, so export them before formatting it; Windhawk keeps them for the whole computer, so every Windows account on it sees the same ones. |
+| Place | Where it sits (kept for each monitor); "Place and icons per app" (only for the Island style, the pill: the Fixed style and the bar keep one place and the same items for every app; for some apps, added from the open apps: a place, icons and their order, what's playing's parts, a clock (and whether it's kept in the middle), a distance from the edges and a size of their own); moving the pill by dragging it; standing upright on the left and right edges; hiding as its line until the mouse reaches it (at an edge), after the time chosen; its distance from the screen's edges. |
 | Look | The style (the pill; the pill keeping its room at its edge, so maximized windows stop beside it; or the bar), the colors (and your own: a click on "Fill", "Text" or "Icons" opens Windows' color dialog), the opacity, the frosted glass (the bar and the Fixed style's strip, without notches), colors following the app in front (its title bar's color when it has one, or its icon's main color, blending in as you switch apps; never read from the screen), the size, and panels as wide as the island. |
 | Notches (Fixed style) | None, one in the middle, one at each top corner, or three; how big their curves are (75% by default, up to 200% for wide, sweeping curves); and hiding each one on its own (otherwise one line, on the bell's notch, opens them all). |
 | Animations | On or off, how many (all, partial, none), their speed, and the frames a second, for the island (the dock's are in Windhawk's settings; the island's start as those were). |
 | On the pill | The order of its items (drag them in the little pill; with notches, from one notch to another), the clock kept in the middle (the other items spread on both sides, keeping their order), and which items it shows: the control center, volume and battery (each with its percentage beside it, off by default), the bell, and (off by default) the power button, light and dark mode, the microphone, notes, tasks, keyboard shortcuts, the weather, updates, the profiles, the screen's brightness, the keyboard's language, the microphone, camera and location in use, USB drives (their icon and the notice when one is plugged in, both on by default), the virtual desktops, folders and places, wallpapers (and their transition), and the processor, memory and video memory use. A pill longer than its screen stops short of the edges, and the mouse wheel slides along it (Shift+wheel over what's playing). |
 | Control center buttons on the pill | Night light, Wi-Fi, Bluetooth, the mobile hotspot, airplane mode, project, cast, captions, accessibility, screenshot, lock, emoji, the clipboard, Task Manager, Calculator, File Explorer and komorebi, each on its own, with its own place in the pill's order (the control center keeps its own order). |
-| Tray icons and media | The other apps' tray icons: the ones not pinned open sideways in the pill (keeping their list open, and how many it shows before it scrolls), or in a list under it, as a grid of icons (like Windows') or with their names; what's playing (its note), and its buttons and its cover with the title on the pill, each on its own. |
-| Place | Where it sits (kept for each monitor); "Place and icons per app" (only for the Island style, the pill: the Fixed style and the bar keep one place and the same items for every app; for some apps, added from the open apps: a place, icons and their order, what's playing's parts, a clock (and whether it's kept in the middle), a distance from the edges and a size of their own); moving the pill by dragging it; standing upright on the left and right edges; hiding as its line until the mouse reaches it (at an edge), after the time chosen; its distance from the screen's edges; on every monitor (an island on each, with each monitor's own place; the chosen monitor's is the main one, and each other one shows the main island's settings or a profile of its own, chosen in the profiles of its own island's settings, or on the main island, a line for each monitor), on the monitor with the mouse, or on the monitor chosen. |
+| Tray icons and media | The other apps' tray icons: the ones not pinned open sideways in the pill (keeping their list open, and how many it shows before it scrolls), or in a list under it, as a grid of icons (like Windows') or with their names; what's playing (its note), and its buttons and its cover with the title on the pill, each on its own, and the wheel on it changing the song instead of the volume and a long title kept scrolling while it plays (both off by default). |
 | Clock | The time's format (Windows', 24 hours, or 12 hours with a small AM/PM after it, also in the calendar and the notifications), seconds, the day of the week, the day and month, the year, the date's order, the month as a number ("9/10"), and the holidays in the calendar (off by default). The date follows the Windows regional format ("Fri Oct 9", "sex 9 out"; in Chinese, Japanese and Korean from the year to the day, 2026年10月9日), or the order chosen (day, month, year; month, day, year; or year, month, day). |
-| Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, downloading pictures from the web (off by default), one icon per app (Phone Link's phone apps together), and showing what's copied in a bubble under the pill (off by default: the start of a text, a file's name or a picture, but not the Snipping Tool's, which has its own banner; nothing is kept, password managers' copies aren't shown, and it only says "Copied" while the notifications' contents are hidden), and Win+N and Win+A opening the island's notifications and control center instead of Windows' own (both off by default). |
+| Notifications | "The island handles notifications and their sounds" (off by default, see the notes), new notifications in the pill (also while it's minimized), hiding the Windows banners, downloading pictures from the web (off by default), one icon per app (Phone Link's phone apps together), and showing what's copied in a bubble under the pill (off by default: the start of a text, a file's name or a picture, but not the Snipping Tool's, which has its own banner; nothing is kept, password managers' copies aren't shown, and it only says "Copied" while the notifications' contents are hidden), Win+N and Win+A opening the island's notifications and control center instead of Windows' own (both off by default), and a click on the Snipping Tool's notifications showing the newest screenshot in Explorer instead of opening the Snipping Tool (off by default). |
+| Monitors (2+ screens) | Choose one monitor, all monitors, or follow the mouse. The map follows the real screen layout and uses the display device numbers; click a screen to choose the main island (alerts and tray). Notches on the main island disable following the mouse. In all-monitor mode, each other screen uses "Same as the main one" (live mirror) or a profile; each island's own settings open from its gear. Edits update every monitor using that profile, including the main island; "+" on another island copies its current look into a new profile used there. Items' order and distribution between notches belong to the profile. Notification options are the main island's (dimmed on the others); animation options stay shared. Unplugging a monitor hides this tab when only one remains; existing profile assignments are preserved. |
 
 ### Screenshots
 
 | The calendar | What's playing | Notifications |
 | :---: | :---: | :---: |
-| ![The calendar](https://i.imgur.com/BklN6j7.png) | ![What's playing](https://i.imgur.com/mHmKd5L.png) | ![Notifications](https://i.imgur.com/nmcC43L.png) |
+| ![The calendar](https://i.imgur.com/jNEikBl.png) | ![What's playing](https://i.imgur.com/mHmKd5L.png) | ![Notifications](https://i.imgur.com/nmcC43L.png) |
 | **The weather** | **Notes** | **Tasks** |
 | ![The weather](https://i.imgur.com/5fxH29Y.png) | ![Notes](https://i.imgur.com/Qj0NbXp.png) | ![Tasks](https://i.imgur.com/29Jdwf7.png) |
 | **Updates** | **The processor's use** | **Power** |
@@ -287,7 +316,7 @@ search, and Esc (or a click outside) closes them.
 
 | The island's settings | Keyboard shortcuts |
 | :---: | :---: |
-| ![The island's settings](https://i.imgur.com/DCXZIoJ.png) | ![Keyboard shortcuts](https://i.imgur.com/q75V4Sm.png) |
+| ![The island's settings](https://i.imgur.com/nvuBMH9.png) | ![Keyboard shortcuts](https://i.imgur.com/q75V4Sm.png) |
 
 The other apps' tray icons: their list open, and opening:
 
@@ -297,7 +326,7 @@ The other apps' tray icons: their list open, and opening:
 
 Or as a grid under the pill:
 
-![The tray icons as a grid under the pill](https://i.imgur.com/YiRxMrQ.png)
+![The tray icons as a grid under the pill](https://i.imgur.com/KbdLN4p.png)
 
 The styles: the pill, the Fixed style (the pill keeping its room, so
 maximized windows stop beside it) and the bar, at the top of the screen:
@@ -438,7 +467,8 @@ usable), or as it is (all of it, or only its apps).
     which newer Windows builds may no longer keep up to date.
   * A USB drive is ejected the way Windows' "Safely Remove Hardware" does
     (asking the device to be ejected; a program with a file open on it
-    keeps it).
+    keeps it). A card in a built-in reader: only the card is ejected, like
+    Explorer's "Eject".
   * The virtual desktops are read from the registry, where Windows keeps
     them (watched for changes, not polled); switching presses Windows'
     shortcut (Ctrl+Win+Left or Right) as many times as it takes.
@@ -511,7 +541,8 @@ usable), or as it is (all of it, or only its apps).
     the weather ([Open-Meteo](https://open-meteo.com): the city typed, then
     its forecast every 30 minutes while it's on the pill), the holidays
     ([Nager.Date](https://date.nager.at): the country set in Windows, once a
-    year) and updates (winget asks its community source, 20 seconds after
+    year), the agendas' links added to the calendar (as it opens, at most
+    every 15 minutes) and updates (winget asks its community source, 20 seconds after
     the island starts unless it did in the last 6 hours, then every 6
     hours; the Windows updates are read, read-only and offline, from
     Windows' own last scan through the Windows Update Agent).
@@ -651,7 +682,12 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     tempo para pular partes, voltar / tocar / avançar, o volume (a roda do
     mouse também), e o volume só do app que está tocando, mutado com um
     clique na nota dele. Os botões, e a capa com o título, também podem
-    ficar na pílula. Com vários apps com mídia (um Spotify pausado e um
+    ficar na pílula. Clicar na capa traz o app para a frente, e um título
+    ou um artista longo demais rola nele com o mouse em cima; na pílula, o
+    mouse em cima mostra o título inteiro e o artista num balão, e um título
+    longo pode ficar rolando enquanto toca (uma configuração da ilha,
+    desligada por padrão). Com
+    vários apps com mídia (um Spotify pausado e um
     navegador tocando, por exemplo), uma fileira no topo escolhe qual a ilha controla
     ("Automático" segue o Windows); na pílula, um pontinho embaixo da capa
     para cada um, e Shift+roda (ou deslizar para o lado no touchpad) em cima
@@ -669,12 +705,20 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     painelzinho): botões de iniciar, parar e recarregar, com a versão
     embaixo, como o controle do yasb. Cada um roda o próprio `komorebic
     start`, `stop` ou os dois, só no clique, sem janela como o yasb faz;
-    quando falha, roda de novo num terminal na tela que mostra o motivo.
+    quando falha, um terminal na tela mostra o que ele escreveu (ele não
+    roda de novo).
     Opções escolhem se o whkd e o masir iniciam e param junto. Nada é
     instalado nem aceito por você, e o mod nunca encerra o komorebi
     sozinho.
   * O calendário guarda eventos, com lembretes que aparecem na pílula, e,
-    se escolhido, os feriados do país configurado no Windows.
+    se escolhido, os feriados do país configurado no Windows. A engrenagem
+    dele abre as agendas: agendas .ics (um link, como o "Endereço secreto
+    no formato iCal" do Google Agenda, ou um arquivo), adicionadas ali ou
+    nas configurações do mod, com os eventos só para leitura, inclusive os
+    que se repetem, nos dias deles na cor de cada agenda, e os próximos
+    embaixo do mês (com o ano quando é outro, como um aniversário que já
+    passou neste ano); e a cor de hoje (vermelho, a cor de destaque do
+    Windows ou uma escolhida).
   * **Energia** (um botão opcional na pílula): suspender, reiniciar,
     desligar, bloquear e sair, como o menu Apple do macOS. Reiniciar,
     desligar e sair perguntam antes, e o Windows fecha os apps como sempre.
@@ -684,8 +728,10 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   * **Mais na pílula** (cada um opcional, desligado por padrão, nas
     configurações da ilha): o uso do processador, da memória e da memória de vídeo
     (clicar num mostra os gráficos e os detalhes), um botão que silencia os
-    microfones (o nível deles vai a 0 também, para apps que gravam um
-    microfone mudo, e volta como estava ao tirar o mudo), o brilho da tela (a
+    microfones (enquanto a ilha roda, o nível deles vai a 0 também, para
+    apps que gravam um microfone mudo; ele volta ao tirar o mudo ou quando a
+    ilha para, e eles continuam mudos até você tirar o mudo), o brilho da
+    tela (a
     roda do mouse muda, um clique o abre sozinho), o idioma e o modo de digitação do teclado (中 ou
     英, あ ou A, 가 ou A, ou o idioma, como PT, quando há mais de um teclado;
     um clique lista os teclados, para trocar o do app em primeiro plano, e
@@ -746,8 +792,16 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   clicar com o botão direito funcionam como na barra (o duplo clique abre o
   app, o botão direito mostra o menu dele; um clique no espaço entre dois
   ícones vale para o mais perto); os nomes deles aparecem embaixo num balão
-  desenhado como a ilha, nas cores dela; o alfinete que aparece depois de
-  dois segundos com o mouse no ícone (ou o botão do meio) fixa o ícone. Com
+  desenhado como a ilha, nas cores dela. Para deixar um na pílula (fixado),
+  clique nele com o botão do meio (a roda do mouse), ou deixe o mouse em
+  cima dele por dois segundos e clique no alfinete que aparece; o mesmo
+  desafixa (a grade e a lista dizem isso embaixo dos ícones). Arrastando, um
+  ícone muda de lugar: na lista dos não fixados (a ordem deles), em qualquer
+  ponto da pílula (ao lado de um item, ele acompanha esse item, em todo estilo
+  e entalhe), da lista para a pílula (fixado ali) ou de volta (desafixado).
+  Cada ilha guarda os seus: as que seguem as configurações principais
+  compartilham, e uma com um perfil próprio guarda os dela nesse perfil (como
+  os outros monitores que usam ele). Com
   muitos ícones, a lista mostra doze por vez (uma configuração da ilha;
   menos em telas pequenas): os ícones numa ponta com mais depois
   dela vão sumindo, e a roda do mouse (ou deslizar para o lado) em cima dos
@@ -780,9 +834,10 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   borda de baixo ou em pé numa lateral, ela também pode ser minimizada para
   uma linha ali.
 * **Vários monitores**: a ilha fica no monitor principal, num outro
-  escolhido, ou segue o monitor onde está o mouse; cada monitor guarda a
-  posição dela. Indo para outro monitor, ela se fecha no pontinho, que
-  desliza até lá e se abre de novo.
+  escolhido, segue o monitor onde está o mouse, ou aparece em todos os
+  monitores (cada um com as configurações da ilha principal ou um perfil
+  próprio); cada monitor guarda a posição dela. Indo para outro monitor,
+  ela se fecha no pontinho, que desliza até lá e se abre de novo.
 * **Suave em tudo**: o que ela mostra abre, fecha, cresce, diminui e muda
   com efeito de mola (os ícones trocam com transição, ícones da bandeja e
   notificações novas crescem, os que saem encolhem). Para computadores mais
@@ -803,10 +858,14 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
 Um clique com o botão direito na ilha (fora do ícone de outro app ou de uma
 notificação) faz sair um balãozinho com uma engrenagem embaixo dela; clicar
 nele abre a central de controle nas configurações (no estilo barra, o clique
-direito já abre as configurações, no meio da tela). Elas ficam em três
-abas (os perfis, o backup, a aparência e as animações; a pílula, os ícones
-da bandeja e o que está tocando; a posição, o relógio e as notificações), em
-duas ou três colunas (uma em telas pequenas, rolando). Digitar
+direito já abre as configurações, no meio da tela). Elas ficam em cinco
+abas (Geral: os perfis, o backup e a posição; Aparência: o estilo com os
+entalhes, as cores, o tamanho e a transparência, as animações; Pílula: a
+ordem dos itens, os do sistema, os da área de trabalho, apps e ferramentas,
+e os botões da central; Bandeja, mídia e relógio; Notificações), com a sexta
+aba Monitores quando há duas ou mais telas conectadas, em duas ou três
+colunas (uma em telas pequenas, rolando), cada opção logo abaixo da que ela
+depende. Digitar
 em qualquer lugar delas faz uma busca em todas (os acentos não importam); a caixa funciona como qualquer
 campo de texto (setas, Home, End, Shift para selecionar, arrastar o mouse,
 dois cliques numa palavra, Ctrl+A, Ctrl+Backspace apaga uma palavra), o Esc
@@ -814,23 +873,24 @@ limpa a busca, e o Esc (ou um clique fora) fecha.
 
 | Seção | O que ela ajusta |
 | :--- | :--- |
-| Perfis | Até 10 perfis com as configurações da ilha abaixo (para trabalhar, para jogar, um com tudo ligado): o "+" ao lado do título salva as atuais, um clique aplica um, o perfil em uso guarda sozinho toda mudança feita nas configurações, e o lápis renomeia um perfil, salva nele as configurações atuais ou exclui. Um botão na pílula troca de perfil (desligado por padrão): um clique lista os perfis, e Shift e a roda do mouse em cima dele vão para o próximo (mostrado embaixo dele, aplicado quando o Shift é solto). As notificações, anotações, tarefas e ícones fixados da bandeja não fazem parte deles. |
+| Perfis | Até 10 perfis com as configurações da ilha abaixo (para trabalhar, para jogar, um com tudo ligado): o "+" ao lado do título salva as atuais, um clique aplica um, o perfil em uso guarda sozinho toda mudança feita nas configurações, e o lápis renomeia um perfil, salva nele as configurações atuais ou exclui. Um botão na pílula troca de perfil (desligado por padrão): um clique lista os perfis, e Shift e a roda do mouse em cima dele vão para o próximo (mostrado embaixo dele, aplicado quando o Shift é solto). As notificações, anotações e tarefas não fazem parte deles (os ícones fixados da bandeja e os lugares deles fazem). |
 | Backup | "Exportar…" salva um arquivo com as anotações, tarefas, atalhos do teclado, eventos do calendário, pastas fixadas, a pasta dos papéis de parede, perfis e as configurações da ilha; "Importar…" coloca um de volta (a ilha recomeça com ele). Eles ficam guardados pelo Windhawk só neste computador, então exporte antes de formatar; o Windhawk guarda para o computador todo, então todas as contas do Windows nele veem os mesmos. |
+| Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (só no estilo Ilha, a pílula: o estilo Fixa e a barra ficam num lugar só e com os mesmos itens para todos os apps; para alguns apps, escolhidos entre os apps abertos: uma posição, ícones e a ordem deles, as partes do que está tocando, um relógio (e se ele fica no meio), a distância das bordas e o tamanho só deles); mover a pílula arrastando; ficar em pé nas laterais; esconder na linha até o mouse chegar nela (numa borda), depois do tempo escolhido; a distância dela até as bordas da tela. |
 | Aparência | O estilo (a pílula; a pílula fixa, guardando o espaço dela na borda para as janelas maximizadas pararem ao lado; ou a barra), as cores (e as próprias: um clique em "Fundo", "Texto" ou "Ícones" abre a janela de cores do Windows), a opacidade, o vidro fosco (a barra e a faixa do estilo Fixa, sem entalhes), cores seguindo o app da frente (a cor da barra de título dele, quando tem, ou a cor principal do ícone, mudando suave ao trocar de app; nunca lida da tela), o tamanho, e painéis na largura da ilha. |
 | Entalhes (estilo Fixa) | Nenhum, um no meio, um em cada canto de cima, ou três; o tamanho das curvas (75% por padrão, até 200% para curvas largas e abertas); e esconder cada um sozinho (senão, uma linha só, no entalhe do sino, abre todos). |
 | Animações | Ligadas ou não, quantas (todas, parciais, nenhuma), a velocidade e os quadros por segundo, da ilha (as da dock ficam nas configurações do Windhawk; as da ilha começam como aquelas estavam). |
 | Na pílula | A ordem dos itens (arraste-os na pilulinha; com entalhes, de um entalhe para outro), o relógio no meio (os outros itens se dividem dos dois lados, mantendo a ordem), e quais itens ela mostra: a central de controle, volume e bateria (cada um com a porcentagem ao lado, desligada por padrão), o sino, e (desligados por padrão) o botão de desligar, o modo claro e escuro, o microfone, anotações, tarefas, atalhos do teclado, o clima, atualizações, os perfis, o brilho da tela, o idioma do teclado, o microfone, a câmera e a localização em uso, os pendrives (o ícone e o aviso ao conectar, os dois ligados por padrão), as áreas de trabalho virtuais, pastas e locais, papéis de parede (e a transição deles), e o uso do processador, da memória e da memória de vídeo. Uma pílula maior que a tela para antes das bordas, e a roda do mouse desliza por ela (Shift+roda em cima do que está tocando). |
 | Botões da central na pílula | Luz noturna, Wi-Fi, Bluetooth, hotspot móvel, modo avião, projetar, transmitir, legendas, acessibilidade, captura de tela, bloquear, emojis, área de transferência, Gerenciador de Tarefas, Calculadora, Explorador de Arquivos e komorebi, cada um por si, com o seu próprio lugar na ordem da pílula (a central mantém a ordem dela). |
-| Bandeja e mídia | Os ícones dos outros apps: os não fixados abrem para o lado na pílula (manter a lista deles aberta, e quantos ela mostra antes de rolar), ou numa lista embaixo dela, em grade de ícones (como a do Windows) ou com os nomes; o que está tocando (a nota), e os botões e a capa com o título na pílula, cada um por si. |
-| Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (só no estilo Ilha, a pílula: o estilo Fixa e a barra ficam num lugar só e com os mesmos itens para todos os apps; para alguns apps, escolhidos entre os apps abertos: uma posição, ícones e a ordem deles, as partes do que está tocando, um relógio (e se ele fica no meio), a distância das bordas e o tamanho só deles); mover a pílula arrastando; ficar em pé nas laterais; esconder na linha até o mouse chegar nela (numa borda), depois do tempo escolhido; a distância dela até as bordas da tela; em todos os monitores (uma ilha em cada, com a posição de cada monitor; a do monitor escolhido é a principal, e cada uma das outras mostra as configurações da principal ou um perfil só dela, escolhido nos perfis das configurações dela, ou na ilha principal, uma linha para cada monitor), no monitor onde está o mouse, ou no monitor escolhido. |
+| Bandeja e mídia | Os ícones dos outros apps: os não fixados abrem para o lado na pílula (manter a lista deles aberta, e quantos ela mostra antes de rolar), ou numa lista embaixo dela, em grade de ícones (como a do Windows) ou com os nomes; o que está tocando (a nota), e os botões e a capa com o título na pílula, cada um por si, a roda em cima dele trocando a música em vez do volume e um título longo rolando enquanto toca (os dois desligados por padrão). |
 | Relógio | O formato da hora (o do Windows, 24 horas, ou 12 horas com um AM/PM pequeno depois, também no calendário e nas notificações), segundos, o dia da semana, o dia e o mês, o ano, a ordem da data, o mês em número ("9/10"), e os feriados no calendário (desligado por padrão). A data segue o formato regional do Windows ("Fri Oct 9", "sex 9 out"; em chinês, japonês e coreano do ano ao dia, 2026年10月9日), ou a ordem escolhida (dia, mês, ano; mês, dia, ano; ou ano, mês, dia). |
-| Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows, baixar fotos da internet (desligado por padrão), um ícone por app (os apps do celular do Vincular ao Celular juntos), e mostrar o que foi copiado num balão sob a pílula (desligado por padrão: o começo de um texto, o nome de um arquivo ou uma imagem, menos as da Ferramenta de Captura, que já mostra o aviso dela; nada é guardado, o que os gerenciadores de senhas copiam não aparece, e só diz "Copiado" enquanto o conteúdo das notificações está escondido), e Win+N e Win+A abrindo as notificações e a central de controle da ilha no lugar das do Windows (os dois desligados por padrão). |
+| Notificações | "A ilha cuida das notificações e dos sons" (desligada por padrão, veja as observações), os avisos na pílula (também com ela minimizada), esconder os avisos do Windows, baixar fotos da internet (desligado por padrão), um ícone por app (os apps do celular do Vincular ao Celular juntos), e mostrar o que foi copiado num balão sob a pílula (desligado por padrão: o começo de um texto, o nome de um arquivo ou uma imagem, menos as da Ferramenta de Captura, que já mostra o aviso dela; nada é guardado, o que os gerenciadores de senhas copiam não aparece, e só diz "Copiado" enquanto o conteúdo das notificações está escondido), Win+N e Win+A abrindo as notificações e a central de controle da ilha no lugar das do Windows (os dois desligados por padrão), e um clique nos avisos da Ferramenta de Captura mostrando a captura mais recente no Explorador em vez de abrir a Ferramenta de Captura (desligado por padrão). |
+| Monitores (2+ telas) | Escolha um monitor, todos os monitores ou seguir o mouse. O mapa acompanha a disposição real das telas e usa os números dos dispositivos; clique numa tela para escolher a ilha principal (avisos e bandeja). Entalhes na principal desabilitam seguir o mouse. No modo em todos, cada outra tela usa "Igual à principal" (espelho ao vivo) ou um perfil; as configurações de cada ilha abrem pela engrenagem dela. Uma edição atualiza todo monitor que usa o perfil, inclusive a principal; o "+" em outra ilha copia sua aparência atual para um perfil novo, usado nela. A ordem dos itens e sua distribuição entre entalhes pertencem ao perfil. As opções de notificação são da ilha principal (apagadas nas outras); as de animação continuam compartilhadas. A guia desaparece se restar um monitor; os perfis já atribuídos ficam guardados. |
 
 #### Imagens
 
 | O calendário | O que está tocando | Notificações |
 | :---: | :---: | :---: |
-| ![O calendário](https://i.imgur.com/BklN6j7.png) | ![O que está tocando](https://i.imgur.com/mHmKd5L.png) | ![Notificações](https://i.imgur.com/nmcC43L.png) |
+| ![O calendário](https://i.imgur.com/jNEikBl.png) | ![O que está tocando](https://i.imgur.com/mHmKd5L.png) | ![Notificações](https://i.imgur.com/nmcC43L.png) |
 | **O clima** | **Anotações** | **Tarefas** |
 | ![O clima](https://i.imgur.com/5fxH29Y.png) | ![Anotações](https://i.imgur.com/Qj0NbXp.png) | ![Tarefas](https://i.imgur.com/29Jdwf7.png) |
 | **Atualizações** | **O uso do processador** | **Energia** |
@@ -838,7 +898,7 @@ limpa a busca, e o Esc (ou um clique fora) fecha.
 
 | As configurações da ilha | Atalhos do teclado |
 | :---: | :---: |
-| ![As configurações da ilha](https://i.imgur.com/DCXZIoJ.png) | ![Atalhos do teclado](https://i.imgur.com/q75V4Sm.png) |
+| ![As configurações da ilha](https://i.imgur.com/nvuBMH9.png) | ![Atalhos do teclado](https://i.imgur.com/q75V4Sm.png) |
 
 Os ícones dos outros apps na bandeja: a lista deles aberta, e abrindo:
 
@@ -848,7 +908,7 @@ Os ícones dos outros apps na bandeja: a lista deles aberta, e abrindo:
 
 Ou em grade embaixo da pílula:
 
-![Os ícones da bandeja em grade embaixo da pílula](https://i.imgur.com/YiRxMrQ.png)
+![Os ícones da bandeja em grade embaixo da pílula](https://i.imgur.com/KbdLN4p.png)
 
 Os estilos: a pílula, o estilo Fixa (a pílula guardando o espaço dela, para
 as janelas maximizadas pararem ao lado) e a barra, no topo da tela:
@@ -994,7 +1054,8 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     atualizar mais.
   * Um pendrive é ejetado como o "Remover hardware com segurança" do
     Windows faz (pedindo ao dispositivo para ser ejetado; um programa com
-    um arquivo aberto nele o segura).
+    um arquivo aberto nele o segura). Um cartão num leitor embutido: só o
+    cartão é ejetado, como o "Ejetar" do Explorador.
   * As áreas de trabalho virtuais são lidas do registro, onde o Windows as
     guarda (avisado das mudanças, sem ficar consultando); trocar aperta o
     atalho do Windows (Ctrl+Win+Esquerda ou Direita) quantas vezes for
@@ -1069,7 +1130,8 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     clima ([Open-Meteo](https://open-meteo.com): a cidade digitada, depois a
     previsão dela a cada 30 minutos enquanto está na pílula), os feriados
     ([Nager.Date](https://date.nager.at): o país configurado no Windows, uma
-    vez por ano) e as atualizações (o winget consulta a fonte da comunidade
+    vez por ano), os links das agendas adicionadas ao calendário (quando ele
+    abre, no máximo a cada 15 minutos) e as atualizações (o winget consulta a fonte da comunidade
     dele, 20 segundos depois que a ilha começa, a não ser que já tenha
     consultado nas últimas 6 horas, e depois a cada 6 horas; as atualizações
     do Windows são lidas, somente leitura e offline, da última verificação
@@ -1168,6 +1230,13 @@ escrever em português.
   $description: The clock, the control center, notifications, what's playing and the other apps' tray icons, at the top of the screen. Its own options (style, colors, what it shows) are in it (right-click the island, then click the gear that comes out under it)
   $description:pt-BR: O relógio, a central de controle, as notificações, o que está tocando e os ícones dos outros apps, no topo da tela. As opções dela (estilo, cores, o que ela mostra) ficam nela mesma (clique com o botão direito na ilha e depois na engrenagem que sai embaixo dela)
   $description:zh-CN: 时钟、控制中心、通知、正在播放的内容和其他应用的托盘图标，显示在屏幕顶部。它自己的选项（样式、颜色、显示内容）在它里面（右键点击灵动岛，再点击下方出现的齿轮）
+- calendarIcs: [""]
+  $name: Calendar agendas (.ics)
+  $name:pt-BR: Agendas do calendário (.ics)
+  $name:zh-CN: 日历订阅（.ics）
+  $description: Links (https) or paths of .ics calendars, like Google Calendar's "Secret address in iCal format". Their events show in the island's calendar, read only, in each agenda's color (chosen in the calendar, where agendas can also be added)
+  $description:pt-BR: Links (https) ou caminhos de agendas .ics, como o "Endereço secreto no formato iCal" do Google Agenda. Os eventos aparecem no calendário da ilha, só para leitura, na cor de cada agenda (escolhida no calendário, onde também dá para adicionar agendas)
+  $description:zh-CN: .ics 日历的链接（https）或路径，例如 Google 日历的“iCal 格式的私密地址”。其中的事件以只读方式显示在灵动岛的日历中，使用各自的颜色（在日历中选择，也可以在日历中添加订阅）
 - hiding:
   - autoHide: false
     $name: Hide the taskbar until the mouse reaches the bottom edge
@@ -1472,6 +1541,7 @@ escrever em português.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -1526,6 +1596,14 @@ struct {
     // Pictures of notifications that are on the web (like WhatsApp's contact
     // photos) are downloaded: off unless chosen, since it goes online.
     bool islandWebPictures;
+    // A click on the Snipping Tool's notifications shows the newest
+    // screenshot in Explorer instead of opening the Snipping Tool.
+    bool islandScreenshotFolder;
+    // The wheel on what's playing on the pill changes the song (not the
+    // volume).
+    bool islandMediaWheel;
+    // A title too long for the pill keeps scrolling while it plays.
+    bool islandMediaMarquee;
     // The island's clock: seconds (-1 like the Windows clock), the day of the
     // week, the day and month, the year.
     int clockSeconds;
@@ -1954,11 +2032,36 @@ void LoadAnimationSettings() {
 // A setting a profile keeps (see CaptureProfile), stored: the profile in use
 // takes it too, a moment later (see SaveActiveProfileSoon).
 void SaveActiveProfileSoon();
+// Whether the current island shows a profile of its own (another monitor's,
+// see Island::SaveOwnProfile), and whether a stored value is part of what it
+// shows (not what every island shares, see IsSharedPref).
+bool OwnLookShown();
+// Whether the island shown (its settings, its panels) is another
+// monitor's, not the main one (see Island::HasMainSettings).
+bool OtherIslandShown();
+bool IsLookValue(PCWSTR name);
+// The current island's own profile saved a moment later.
+void SaveOwnLookSoon();
+// A value of the island's settings: in the main settings (and the profile in
+// use there), or, on an island showing a profile of its own, in that
+// profile instead.
 void StoreProfileInt(PCWSTR name, int value) {
+    if (OwnLookShown() && IsLookValue(name)) {
+        SaveOwnLookSoon();
+        return;
+    }
     Wh_SetIntValue(name, value);
     SaveActiveProfileSoon();
 }
 void StoreProfileString(PCWSTR name, PCWSTR value) {
+    if (OwnLookShown() &&
+        (wcscmp(name, L"islandOrder") == 0 ||
+         wcscmp(name, L"islandNotchSides") == 0 ||
+         wcscmp(name, L"trayPinned") == 0 || wcscmp(name, L"trayOrder") == 0 ||
+         wcscmp(name, L"trayAnchors") == 0)) {
+        SaveOwnLookSoon();
+        return;
+    }
     Wh_SetStringValue(name, value);
     SaveActiveProfileSoon();
 }
@@ -2176,9 +2279,11 @@ std::atomic<double> g_backdropLight{0.5};
 std::atomic<bool> g_unloading;
 
 // The mod's storage is the computer's, shared by its accounts: what one
-// account's session changed in Windows (its auto-hide, its Do not disturb)
-// and its explorer.exe part are kept under a name with the account's SID, so
-// another account never undoes them. Values kept before under the plain name
+// account's session changed in Windows (its auto-hide, its Do not disturb),
+// its explorer.exe part and what describes its own Windows (its
+// notifications cleared here, its tray icons kept across a reload) are kept
+// under a name with the account's SID, so another account never undoes or
+// reads them. Values kept before under the plain name
 // are read once and moved.
 std::wstring UserValueName(PCWSTR name) {
     static const std::wstring suffix = [] {
@@ -2220,6 +2325,24 @@ int GetUserIntValue(PCWSTR name, int defaultValue) {
 
 void SetUserIntValue(PCWSTR name, int value) {
     Wh_SetIntValue(UserValueName(name).c_str(), value);
+}
+
+size_t GetUserStringValue(PCWSTR name, PWSTR value, size_t size) {
+    const std::wstring userName = UserValueName(name);
+    size_t length = Wh_GetStringValue(userName.c_str(), value, size);
+    if (length || userName == name) {
+        return length;
+    }
+    length = Wh_GetStringValue(name, value, size);
+    if (length) {
+        Wh_SetStringValue(userName.c_str(), value);
+        Wh_DeleteValue(name);
+    }
+    return length;
+}
+
+void SetUserStringValue(PCWSTR name, PCWSTR value) {
+    Wh_SetStringValue(UserValueName(name).c_str(), value);
 }
 
 // The mod's own module (set in Wh_ModInit), for its window classes.
@@ -2490,9 +2613,26 @@ HWND FindTaskbarWnd() {
     return FindWindow(L"Shell_TrayWnd", nullptr);
 }
 
+// Told to the taskbar by the island when it sees the monitors changed (see
+// Island::Tick): restyled as after WM_DISPLAYCHANGE, which can be missed.
+UINT DisplayChangedMessage() {
+    static const UINT message =
+        RegisterWindowMessage(L"WindhawkMacIslandDock_DisplayChanged");
+    return message;
+}
+
 // Where Windows keeps the taskbar's edge (as for TaskbarEdge), read without
-// asking the taskbar.
+// asking the taskbar. Read again at most twice a second: the island lays
+// itself out, and the taskbars find their monitor, with every frame.
 UINT StoredTaskbarEdge() {
+    static std::atomic<ULONGLONG> readAt{0};
+    static std::atomic<UINT> stored{ABE_BOTTOM};
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG last = readAt.load(std::memory_order_relaxed);
+    if (last && now - last < 500) {
+        return stored.load(std::memory_order_relaxed);
+    }
+    UINT edge = ABE_BOTTOM;
     BYTE data[64];
     DWORD size = sizeof(data);
     if (RegGetValue(HKEY_CURRENT_USER,
@@ -2501,9 +2641,46 @@ UINT StoredTaskbarEdge() {
                     L"Settings", RRF_RT_REG_BINARY, nullptr, data,
                     &size) == ERROR_SUCCESS &&
         size > 12 && data[12] <= ABE_BOTTOM) {
-        return data[12];
+        edge = data[12];
     }
-    return ABE_BOTTOM;
+    stored.store(edge, std::memory_order_relaxed);
+    readAt.store(now, std::memory_order_relaxed);
+    return edge;
+}
+
+// The edge last seen from the taskbar's window all on its monitor (see
+// TaskbarEdge), or UINT_MAX before. Moved in Settings, the taskbar keeps the
+// edge stored for it as it was until explorer restarts.
+std::atomic<UINT> g_seenTaskbarEdge{UINT_MAX};
+
+// The edge last seen, or the stored one before it's been seen.
+UINT KnownTaskbarEdge() {
+    const UINT seen = g_seenTaskbarEdge.load(std::memory_order_relaxed);
+    return seen != UINT_MAX ? seen : StoredTaskbarEdge();
+}
+
+// The edge a taskbar at `rect` is on, if it's all on a monitor (shown).
+bool RectEdge(const RECT& rect, UINT* edge) {
+    MONITORINFO info{sizeof(info)};
+    if (!GetMonitorInfo(MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST),
+                        &info) ||
+        rect.left < info.rcMonitor.left || rect.top < info.rcMonitor.top ||
+        rect.right > info.rcMonitor.right ||
+        rect.bottom > info.rcMonitor.bottom) {
+        return false;
+    }
+    if (rect.right - rect.left < rect.bottom - rect.top) {
+        *edge = rect.left + rect.right <
+                        info.rcMonitor.left + info.rcMonitor.right
+                    ? ABE_LEFT
+                    : ABE_RIGHT;
+    } else {
+        *edge = rect.top + rect.bottom <
+                        info.rcMonitor.top + info.rcMonitor.bottom
+                    ? ABE_TOP
+                    : ABE_BOTTOM;
+    }
+    return true;
 }
 
 // The edge of its monitor the taskbar is on (ABE_LEFT, ABE_TOP, ABE_RIGHT or
@@ -2512,29 +2689,60 @@ UINT StoredTaskbarEdge() {
 // edge, maybe over another monitor (which made the dock and the taskbar as
 // it is take turns). Otherwise from where Windows keeps it (asking the
 // taskbar waits for it while it's busy, and from its own process could wait
-// for a thread waiting for it).
+// for a thread waiting for it), as last seen.
 UINT TaskbarEdge() {
     HWND taskbar = FindTaskbarWnd();
     RECT rect;
-    MONITORINFO info{sizeof(info)};
-    if (taskbar && GetWindowRect(taskbar, &rect) &&
-        GetMonitorInfo(MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST),
-                       &info) &&
-        rect.left >= info.rcMonitor.left && rect.top >= info.rcMonitor.top &&
-        rect.right <= info.rcMonitor.right &&
-        rect.bottom <= info.rcMonitor.bottom) {
-        if (rect.right - rect.left < rect.bottom - rect.top) {
-            return rect.left + rect.right < info.rcMonitor.left +
-                                                info.rcMonitor.right
-                       ? ABE_LEFT
-                       : ABE_RIGHT;
-        }
-        return rect.top + rect.bottom <
-                       info.rcMonitor.top + info.rcMonitor.bottom
-                   ? ABE_TOP
-                   : ABE_BOTTOM;
+    UINT edge;
+    if (taskbar && GetWindowRect(taskbar, &rect) && RectEdge(rect, &edge)) {
+        g_seenTaskbarEdge.store(edge, std::memory_order_relaxed);
+        return edge;
     }
-    return StoredTaskbarEdge();
+    return KnownTaskbarEdge();
+}
+
+// The monitor a taskbar belongs to: the one under its row next to the
+// screen's inside (all of it when shown, the 2 pixels left of it when
+// auto-hidden). Not MonitorFromWindow: a hidden taskbar is mostly past its
+// edge, maybe over the next monitor (the one below a bottom taskbar), which
+// that would take.
+HMONITOR TaskbarMonitor(HWND taskbar) {
+    RECT rect;
+    if (!taskbar || !GetWindowRect(taskbar, &rect)) {
+        return MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    }
+    const LONG middleX = (rect.left + rect.right) / 2;
+    const LONG middleY = (rect.top + rect.bottom) / 2;
+    POINT inner;
+    switch (KnownTaskbarEdge()) {
+        case ABE_LEFT:
+            inner = {rect.right - 1, middleY};
+            break;
+        case ABE_RIGHT:
+            inner = {rect.left, middleY};
+            break;
+        case ABE_TOP:
+            inner = {middleX, rect.bottom - 1};
+            break;
+        default:
+            inner = {middleX, rect.top};
+            break;
+    }
+    return MonitorFromPoint(inner, MONITOR_DEFAULTTONEAREST);
+}
+
+// The part of a taskbar's window on its own monitor, in the window's
+// pixels (empty if none); `at`: with the window there.
+RECT TaskbarOwnPart(HWND taskbar, const RECT* at = nullptr) {
+    RECT window{};
+    RECT part{};
+    MONITORINFO info{sizeof(info)};
+    if ((at ? (window = *at, true) : GetWindowRect(taskbar, &window)) &&
+        GetMonitorInfo(TaskbarMonitor(taskbar), &info) &&
+        IntersectRect(&part, &window, &info.rcMonitor)) {
+        OffsetRect(&part, -window.left, -window.top);
+    }
+    return part;
 }
 
 // Whether the taskbar is at the bottom of its monitor.
@@ -3017,8 +3225,11 @@ RECT g_appsRegion{};
 // The apps' extent it was made for (XAML coordinates), to make it again.
 double g_appsLeft = 0;
 double g_appsRight = 0;
-std::atomic<int> g_appsAreaLeft{0};
-std::atomic<int> g_appsAreaRight{0};
+// The monitor it was cut on (see g_appsAreas).
+HMONITOR g_appsAreaMonitor;
+// The span the shadow was last put behind.
+double g_shadowLeft = 0;
+double g_shadowRight = 0;
 // Room around the apps that still counts as theirs, and the shadow's (which
 // fades out before its edges).
 constexpr double kAppsAreaMargin = 34;
@@ -3029,6 +3240,128 @@ constexpr double kShadowMargin = 30;
 int g_dockItemCount = -1;
 double g_dockSince;
 double g_lastRenderTime;
+// When the taskbar's scale last changed (WM_DPICHANGED: hidden past its edge
+// over a monitor with another scaling, then shown again): the icons take
+// their new places at once for a moment, instead of sliding there.
+double g_dockScaleChangedAt;
+constexpr double kDockScaleSettleSeconds = 1.0;
+// The taskbar's buttons are moved by its repeater's animator, one by one:
+// when its scale changes, that's every button at once, out of order (Windows'
+// own taskbar does it too). Meanwhile the animator is taken out: the value
+// it had (DependencyProperty::UnsetValue() if none of its own), put back a
+// moment later (see kAnimatorTimerId).
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable
+    g_animatorKept{nullptr};
+bool g_animatorPaused;
+// The animator also leaves an implicit animation on each button's visual,
+// which moves it on every layout change by itself: taken out meanwhile too,
+// and put back on the buttons still there.
+struct KeptImplicitAnimations {
+    winrt::weak_ref<UIElement> element;
+    winrt::Windows::UI::Composition::ImplicitAnimationCollection animations{
+        nullptr};
+};
+[[clang::no_destroy]] std::vector<KeptImplicitAnimations> g_implicitKept;
+// Until the taskbar is laid out again at its new scale (its buttons move
+// once, a moment after WM_DPICHANGED), and while its scale isn't its own
+// monitor's (hidden, mostly over a monitor with another scaling), its icons
+// are drawn at the wrong size and places: its frame is see-through
+// meanwhile (it still takes the mouse), its own opacity kept.
+bool g_dockScaleSettled = true;
+bool g_dockScaleMoved;
+bool g_dockContentHidden;
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable
+    g_dockOpacityKept{nullptr};
+// (Windows lays it out again in about 0.15 s.)
+constexpr double kDockScaleHideSeconds = 0.3;
+// (Not one of the taskbar's own timers.)
+constexpr UINT_PTR kAnimatorTimerId = 0x4D49;
+constexpr UINT_PTR kDisplayRestyleTimerId = 0x4D4A;
+constexpr UINT kAnimatorPauseMs = 1000;
+// The repeater's Animator property, found by its name (the repeater is
+// Microsoft.UI.Xaml's, which has no header here) as a style's setter, like
+// the taskbar stylers do; null if it couldn't be.
+[[clang::no_destroy]] DependencyProperty g_animatorProperty{nullptr};
+bool g_animatorPropertyTried;
+
+DependencyProperty RepeaterAnimatorProperty() {
+    if (!g_animatorPropertyTried) {
+        g_animatorPropertyTried = true;
+        try {
+            auto resources =
+                Markup::XamlReader::Load(
+                    LR"(<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
+    <Style x:Key="repeater" TargetType="muxc:ItemsRepeater">
+        <Setter Property="Animator" Value="{x:Null}"/>
+    </Style>
+</ResourceDictionary>)")
+                    .as<ResourceDictionary>();
+            auto style =
+                resources.Lookup(winrt::box_value(L"repeater")).as<Style>();
+            g_animatorProperty =
+                style.Setters().GetAt(0).as<Setter>().Property();
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"The taskbar's animator isn't reachable: %08X",
+                   (unsigned)e.code());
+        }
+    }
+    return g_animatorProperty;
+}
+
+void PauseRepeaterAnimations() {
+    auto repeater = g_dockRepeater.get();
+    if (g_animatorPaused || !repeater ||
+        winrt::get_class_name(repeater) !=
+            L"Microsoft.UI.Xaml.Controls.ItemsRepeater") {
+        return;
+    }
+    if (auto property = RepeaterAnimatorProperty()) {
+        g_animatorKept = repeater.ReadLocalValue(property);
+        repeater.SetValue(property, nullptr);
+        g_animatorPaused = true;
+    }
+    const int count = Media::VisualTreeHelper::GetChildrenCount(repeater);
+    for (int i = 0; i < count; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(repeater, i)
+                         .try_as<UIElement>();
+        if (!child) {
+            continue;
+        }
+        auto visual =
+            Hosting::ElementCompositionPreview::GetElementVisual(child);
+        if (auto animations = visual.ImplicitAnimations()) {
+            g_implicitKept.push_back({winrt::make_weak(child), animations});
+            visual.ImplicitAnimations(nullptr);
+            g_animatorPaused = true;
+        }
+    }
+}
+
+void ResumeRepeaterAnimations() {
+    if (!g_animatorPaused) {
+        return;
+    }
+    auto repeater = g_dockRepeater.get();
+    if (repeater && g_animatorProperty && g_animatorKept) {
+        if (g_animatorKept == DependencyProperty::UnsetValue()) {
+            repeater.ClearValue(g_animatorProperty);
+        } else {
+            repeater.SetValue(g_animatorProperty, g_animatorKept);
+        }
+    }
+    for (const auto& kept : g_implicitKept) {
+        if (auto element = kept.element.get()) {
+            Hosting::ElementCompositionPreview::GetElementVisual(element)
+                .ImplicitAnimations(kept.animations);
+        }
+    }
+    g_implicitKept.clear();
+    g_animatorPaused = false;
+    g_animatorKept = nullptr;
+}
 
 // The boxed handler, kept to remove it again.
 [[clang::no_destroy]] winrt::Windows::Foundation::IInspectable
@@ -3058,6 +3391,157 @@ struct BadgeWatch {
 };
 [[clang::no_destroy]] std::vector<BadgeWatch> g_badgeWatches;
 double g_lastBadgeScan;
+
+// Whether the dock state in the globals above is the main taskbar's.
+bool g_dockIsMain = true;
+
+// The other monitors' taskbars have the same behavior as the main one
+// (magnification, sliding and growing icons, dots, the transparent taskbar's
+// cut and shadow), with a state of their own each, kept here. All taskbars
+// are on one thread: the code above works on the globals, and a DockScope
+// puts another taskbar's state in them while that taskbar is handled (its
+// XAML events, its frames, its slides). The badges and the icon peeking out
+// for attention are the main taskbar's only (the same apps are on each).
+struct DockState {
+    std::vector<DockIcon> icons;
+    HWND wnd = nullptr;
+    winrt::weak_ref<FrameworkElement> frame;
+    winrt::weak_ref<FrameworkElement> repeater;
+    winrt::weak_ref<FrameworkElement> background;
+    winrt::weak_ref<UIElement> shadowFill;
+    double shadowStrength = 0.6;
+    winrt::Windows::UI::Composition::SpriteVisual shadowVisual{nullptr};
+    RECT appsRegion{};
+    double appsLeft = 0;
+    double appsRight = 0;
+    HMONITOR appsAreaMonitor = nullptr;
+    double shadowLeft = 0;
+    double shadowRight = 0;
+    int itemCount = -1;
+    double since = 0;
+    double scaleChangedAt = 0;
+    winrt::Windows::Foundation::IInspectable animatorKept{nullptr};
+    bool animatorPaused = false;
+    std::vector<KeptImplicitAnimations> implicitKept;
+    bool scaleSettled = true;
+    bool scaleMoved = false;
+    bool contentHidden = false;
+    winrt::Windows::Foundation::IInspectable opacityKept{nullptr};
+    winrt::Windows::Foundation::IInspectable pointerHandler{nullptr};
+    winrt::Windows::Foundation::IInspectable pressedHandler{nullptr};
+    winrt::weak_ref<FrameworkElement> pointerTarget;
+    FrameworkElement::LayoutUpdated_revoker layoutRevoker;
+    bool isMain = false;
+};
+
+[[clang::no_destroy]] std::vector<std::unique_ptr<DockState>> g_otherDocks;
+
+void SwapDockState(DockState& state) {
+    std::swap(g_dockIcons, state.icons);
+    std::swap(g_dockWnd, state.wnd);
+    std::swap(g_dockFrame, state.frame);
+    std::swap(g_dockRepeater, state.repeater);
+    std::swap(g_dockBackground, state.background);
+    std::swap(g_shadowFill, state.shadowFill);
+    std::swap(g_shadowStrength, state.shadowStrength);
+    std::swap(g_shadowVisual, state.shadowVisual);
+    std::swap(g_appsRegion, state.appsRegion);
+    std::swap(g_appsLeft, state.appsLeft);
+    std::swap(g_appsRight, state.appsRight);
+    std::swap(g_appsAreaMonitor, state.appsAreaMonitor);
+    std::swap(g_shadowLeft, state.shadowLeft);
+    std::swap(g_shadowRight, state.shadowRight);
+    std::swap(g_dockItemCount, state.itemCount);
+    std::swap(g_dockSince, state.since);
+    std::swap(g_dockScaleChangedAt, state.scaleChangedAt);
+    std::swap(g_animatorKept, state.animatorKept);
+    std::swap(g_animatorPaused, state.animatorPaused);
+    std::swap(g_implicitKept, state.implicitKept);
+    std::swap(g_dockScaleSettled, state.scaleSettled);
+    std::swap(g_dockScaleMoved, state.scaleMoved);
+    std::swap(g_dockContentHidden, state.contentHidden);
+    std::swap(g_dockOpacityKept, state.opacityKept);
+    std::swap(g_pointerHandler, state.pointerHandler);
+    std::swap(g_pressedHandler, state.pressedHandler);
+    std::swap(g_pointerTarget, state.pointerTarget);
+    std::swap(g_layoutRevoker, state.layoutRevoker);
+    std::swap(g_dockIsMain, state.isMain);
+}
+
+DockState* FindOtherDock(HWND wnd) {
+    for (auto& state : g_otherDocks) {
+        if (state->wnd == wnd) {
+            return state.get();
+        }
+    }
+    return nullptr;
+}
+
+// Another taskbar's state in the globals for as long as it lives (nothing
+// for the main taskbar, or inside another scope).
+class DockScope {
+   public:
+    explicit DockScope(HWND wnd) {
+        if (!s_active && wnd && wnd != g_dockWnd) {
+            m_state = FindOtherDock(wnd);
+            if (m_state) {
+                SwapDockState(*m_state);
+                s_active = true;
+            }
+        }
+    }
+    ~DockScope() {
+        if (m_state) {
+            SwapDockState(*m_state);
+            s_active = false;
+        }
+    }
+    DockScope(const DockScope&) = delete;
+    DockScope& operator=(const DockScope&) = delete;
+
+   private:
+    DockState* m_state = nullptr;
+    static inline bool s_active = false;
+};
+
+// The taskbars cut by ClipToOwnMonitor (their regions go when the mod does).
+[[clang::no_destroy]] std::vector<HWND> g_ownClips;
+
+// Where each transparent taskbar takes the mouse at the bottom edge (its
+// apps, on the screen), by monitor, for the edge thread.
+struct AppsArea {
+    HMONITOR monitor;
+    int left;
+    int right;
+};
+SRWLOCK g_appsAreasLock = SRWLOCK_INIT;
+std::vector<AppsArea> g_appsAreas;
+
+// (An empty span forgets it.)
+void SetAppsArea(HMONITOR monitor, int left, int right) {
+    AcquireSRWLockExclusive(&g_appsAreasLock);
+    std::erase_if(g_appsAreas, [&](const AppsArea& area) {
+        return area.monitor == monitor;
+    });
+    if (monitor && right > left) {
+        g_appsAreas.push_back({monitor, left, right});
+    }
+    ReleaseSRWLockExclusive(&g_appsAreasLock);
+}
+
+bool GetAppsArea(HMONITOR monitor, int* left, int* right) {
+    AcquireSRWLockShared(&g_appsAreasLock);
+    bool found = false;
+    for (const auto& area : g_appsAreas) {
+        if (area.monitor == monitor) {
+            *left = area.left;
+            *right = area.right;
+            found = true;
+        }
+    }
+    ReleaseSRWLockShared(&g_appsAreasLock);
+    return found;
+}
 
 // Defined further down.
 bool IsTaskbarHidden(HWND hTaskbarWnd, const RECT& monitorRect);
@@ -3150,7 +3634,7 @@ void FindAllByClassName(FrameworkElement const& root,
 void RecordAttentionButton(FrameworkElement const& button) {
     auto parent =
         Media::VisualTreeHelper::GetParent(button).try_as<UIElement>();
-    if (!parent || !g_dockWnd) {
+    if (!parent || !g_dockWnd || !g_dockIsMain) {
         return;
     }
     const auto offset = button.ActualOffset();
@@ -3262,8 +3746,7 @@ void ShowDockForNotification() {
     RECT rect;
     MONITORINFO monitor{sizeof(monitor)};
     if (!GetWindowRect(g_dockWnd, &rect) ||
-        !GetMonitorInfo(MonitorFromWindow(g_dockWnd, MONITOR_DEFAULTTONEAREST),
-                        &monitor)) {
+        !GetMonitorInfo(TaskbarMonitor(g_dockWnd), &monitor)) {
         return;
     }
     g_notificationHiddenRect = rect;
@@ -3327,8 +3810,7 @@ void OnAppNotified(FrameworkElement const& button) {
     RecordAttentionButton(button);
 
     MONITORINFO monitor{sizeof(monitor)};
-    GetMonitorInfo(MonitorFromWindow(g_dockWnd, MONITOR_DEFAULTTONEAREST),
-                   &monitor);
+    GetMonitorInfo(TaskbarMonitor(g_dockWnd), &monitor);
     const bool hidden = IsTaskbarHidden(g_dockWnd, monitor.rcMonitor);
     if (hidden && g_settings.attentionMode == AttentionMode::Icon) {
         PostAttentionRequest(nullptr, appId);
@@ -3376,6 +3858,9 @@ void SendBadgeApps() {
 }
 
 void PublishBadgeApps() {
+    if (!g_dockIsMain) {
+        return;
+    }
     std::vector<std::wstring> ids;
     std::vector<std::wstring> apps;
     for (const auto& icon : g_dockIcons) {
@@ -3505,6 +3990,9 @@ void WatchBadges() {
 }
 
 void WatchBadgesAndPublish() {
+    if (!g_dockIsMain) {
+        return;
+    }
     WatchBadges();
     PublishBadgeApps();
 }
@@ -3524,9 +4012,10 @@ void WatchRunningState(FrameworkElement const& button) {
         }
         g_stateRevokers.push_back(group.CurrentStateChanged(
             winrt::auto_revoke,
-            [weakButton = winrt::make_weak(button)](
+            [weakButton = winrt::make_weak(button), taskbar = g_dockWnd](
                 winrt::Windows::Foundation::IInspectable const&,
                 VisualStateChangedEventArgs const& args) {
+                DockScope scope(taskbar);
                 Safely(L"Following an app's state", [&] {
                     const auto oldState = args.OldState()
                                               ? args.OldState().Name()
@@ -3770,10 +4259,6 @@ double BounceOffset(DockIcon& icon, double now, double maxHeight) {
 // puts its shadow behind them. `left` and `right` are the apps' extent, in
 // the taskbar's XAML coordinates. Only done when it changes (an app opened or
 // closed): the shadow's size is part of the layout.
-// The span the shadow was last put behind.
-double g_shadowLeft = 0;
-double g_shadowRight = 0;
-
 void PlaceShadow(double left, double right) {
     if (left == g_shadowLeft && right == g_shadowRight) {
         return;
@@ -3804,8 +4289,12 @@ void PlaceShadow(double left, double right) {
 }
 
 // `withShadow`: also puts the shadow behind the apps (XAML, so only from the
-// taskbar's own drawing, not while Windows moves it).
-void UpdateAppsArea(double left, double right, bool withShadow) {
+// taskbar's own drawing, not while Windows moves it). `own`: the part of the
+// window it may show (see ClipSlideStep), or the one on its monitor.
+void UpdateAppsArea(double left,
+                    double right,
+                    bool withShadow,
+                    const RECT* own = nullptr) {
     if (!g_dockWnd) {
         return;
     }
@@ -3822,7 +4311,21 @@ void UpdateAppsArea(double left, double right, bool withShadow) {
                 window.bottom - window.top};
     region.left = std::max(region.left, 0L);
     region.right = std::min(region.right, window.right - window.left);
-    if (region.right <= region.left) {
+    // Laid out again at a new scale (see g_dockScaleSettled): its apps'
+    // places are stale for a moment, and Windows would take the mouse past
+    // them for leaving and hide it again at once. Its whole width meanwhile
+    // (nothing of it shows yet).
+    if (!g_dockScaleSettled) {
+        region.left = 0;
+        region.right = window.right - window.left;
+    }
+    // Only what's on its own monitor (hidden, the rest is past its edge,
+    // maybe over the next monitor: Windows' own clip, which this region
+    // replaces, leaves only that part too).
+    const RECT shown = own ? *own : TaskbarOwnPart(g_dockWnd);
+    region.top = std::max(region.top, shown.top);
+    region.bottom = std::min(region.bottom, shown.bottom);
+    if (region.right <= region.left || region.bottom <= region.top) {
         return;
     }
     g_appsLeft = left;
@@ -3835,9 +4338,7 @@ void UpdateAppsArea(double left, double right, bool withShadow) {
         kind != NULLREGION && EqualRect(&current, &region)) {
         return;
     }
-    if (g_appsRegion.right > g_appsRegion.left) {
-        Wh_Log(L"The taskbar's region was changed (%d), setting it again", kind);
-    }
+    // (Also when Windows dropped it, as its own moves do: set again.)
     HRGN handle = CreateRectRgnIndirect(&region);
     if (!handle) {
         return;
@@ -3848,8 +4349,9 @@ void UpdateAppsArea(double left, double right, bool withShadow) {
         return;
     }
     g_appsRegion = region;
-    g_appsAreaLeft = window.left + region.left;
-    g_appsAreaRight = window.left + region.right;
+    g_appsAreaMonitor = TaskbarMonitor(g_dockWnd);
+    SetAppsArea(g_appsAreaMonitor, window.left + region.left,
+                window.left + region.right);
 }
 
 // The shadow: an ellipse centered on the bottom edge, dark in its middle and
@@ -3889,26 +4391,27 @@ void ResetAppsArea() {
     g_appsRegion = {};
     g_appsLeft = g_appsRight = 0;
     g_shadowLeft = g_shadowRight = 0;
-    g_appsAreaLeft = 0;
-    g_appsAreaRight = 0;
+    SetAppsArea(g_appsAreaMonitor, 0, 0);
+    g_appsAreaMonitor = nullptr;
 }
 
-void OnRenderingUnsafe();
+bool OnRenderingUnsafe(double now, double dt);
 
+// The frame's own opacity back (see g_dockScaleSettled).
+void RestoreDockOpacity(FrameworkElement const& frame) {
+    if (!g_dockOpacityKept ||
+        g_dockOpacityKept == DependencyProperty::UnsetValue()) {
+        frame.ClearValue(UIElement::OpacityProperty());
+    } else {
+        frame.SetValue(UIElement::OpacityProperty(), g_dockOpacityKept);
+    }
+    g_dockOpacityKept = nullptr;
+}
+
+// A frame for every taskbar (the main one and the other monitors'): stops
+// once none is moving anymore.
 void OnRendering(winrt::Windows::Foundation::IInspectable const&,
                  winrt::Windows::Foundation::IInspectable const&) {
-    bool failed = true;
-    Safely(L"Drawing the icons", [&] {
-        OnRenderingUnsafe();
-        failed = false;
-    });
-    // Tried again on the next change, not every frame.
-    if (failed) {
-        g_renderingRevoker.revoke();
-    }
-}
-
-void OnRenderingUnsafe() {
     const double now = NowSeconds();
     // Under a frame rate limit, some of the taskbar's frames are skipped.
     if (const int limit = g_frameRateLimit.load(std::memory_order_relaxed);
@@ -3918,11 +4421,36 @@ void OnRenderingUnsafe() {
     const double dt =
         AnimationDt(std::clamp(now - g_lastRenderTime, 0.0, 0.05));
     g_lastRenderTime = now;
+    bool failed = true;
+    bool busy = false;
+    Safely(L"Drawing the icons", [&] {
+        busy = OnRenderingUnsafe(now, dt);
+        // (Taskbars gone with their monitor are let go.)
+        std::erase_if(g_otherDocks, [](const auto& state) {
+            return !IsWindow(state->wnd);
+        });
+        for (auto& state : g_otherDocks) {
+            DockScope scope(state->wnd);
+            busy = OnRenderingUnsafe(now, dt) || busy;
+        }
+        failed = false;
+    });
+    // Tried again on the next change, not every frame.
+    if (failed || !busy) {
+        g_renderingRevoker.revoke();
+    }
+}
 
+// One taskbar's frame; whether it's still moving.
+bool OnRenderingUnsafe(double now, double dt) {
     auto frame = g_dockFrame.get();
     if (!frame || g_unloading || !AnimatesIcons()) {
-        g_renderingRevoker.revoke();
-        return;
+        if (frame && g_dockContentHidden) {
+            RestoreDockOpacity(frame);
+            g_dockContentHidden = false;
+        }
+        g_dockScaleSettled = true;
+        return false;
     }
 
     // The mouse, in the taskbar's XAML coordinates.
@@ -4027,6 +4555,49 @@ void OnRenderingUnsafe() {
                           iconTop, iconHeight, contentTop});
     }
 
+    // After a scale change: settled one frame after its buttons moved (see
+    // g_dockScaleSettled), or after a while if they never do.
+    if (!g_dockScaleSettled) {
+        bool moved = false;
+        for (const auto& item : placed) {
+            if (!std::isnan(item.icon->lastCenter) &&
+                std::fabs(item.center - item.icon->lastCenter) > 0.5) {
+                moved = true;
+            }
+        }
+        if ((g_dockScaleMoved && !moved) ||
+            now - g_dockScaleChangedAt > kDockScaleHideSeconds) {
+            g_dockScaleSettled = true;
+        }
+        g_dockScaleMoved = g_dockScaleMoved || moved;
+    }
+    bool ownScale = true;
+    if (const HMONITOR monitor = TaskbarMonitor(g_dockWnd)) {
+        UINT dpiX = 0;
+        UINT dpiY = 0;
+        MONITORINFO info{sizeof(info)};
+        RECT window{};
+        const bool inside = GetMonitorInfo(monitor, &info) &&
+                            GetWindowRect(g_dockWnd, &window) &&
+                            window.top >= info.rcMonitor.top &&
+                            window.bottom <= info.rcMonitor.bottom;
+        if (!inside && SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI,
+                                                  &dpiX, &dpiY))) {
+            ownScale = dpiX == GetDpiForWindow(g_dockWnd);
+        }
+    }
+    const bool hideContent = !g_dockScaleSettled || !ownScale;
+    if (hideContent != g_dockContentHidden) {
+        g_dockContentHidden = hideContent;
+        if (hideContent) {
+            g_dockOpacityKept =
+                frame.ReadLocalValue(UIElement::OpacityProperty());
+            frame.Opacity(0);
+        } else {
+            RestoreDockOpacity(frame);
+        }
+    }
+
     const bool hovering = !placed.empty() && mouseY >= 0 &&
                           mouseY <= clientHeight + 2 && mouseX >= left - 16 &&
                           mouseX <= right + 16;
@@ -4034,7 +4605,7 @@ void OnRenderingUnsafe() {
                               ? 1.0
                               : 1 - std::exp(-dt * kMagnificationFollow);
 
-    bool busy = hovering;
+    bool busy = hovering || !g_dockScaleSettled;
 
     if (IsTransparentTaskbar() && !placed.empty()) {
         UpdateAppsArea(left, right, true);
@@ -4048,7 +4619,13 @@ void OnRenderingUnsafe() {
                           mouseX <= client.right * 96.0 /
                                         GetDpiForWindow(g_dockWnd);
         const double target =
-            std::min(1.0, 0.66 + 0.28 * g_backdropLight + (over ? 0.12 : 0.0));
+            g_dockContentHidden
+                ? 0.0
+                : std::min(1.0, 0.66 + 0.28 * g_backdropLight +
+                                    (over ? 0.12 : 0.0));
+        if (g_dockContentHidden) {
+            g_shadowStrength = 0;
+        }
         g_shadowStrength += (target - g_shadowStrength) * (1 - std::exp(-dt * 8));
         if (std::fabs(target - g_shadowStrength) < 0.003) {
             g_shadowStrength = target;
@@ -4121,10 +4698,12 @@ void OnRenderingUnsafe() {
         icon.scale.ScaleY(icon.magnification * appear);
 
         // Moved by the taskbar: it slides there from where it was (not while
-        // an icon is dragged, which the taskbar moves itself).
+        // an icon is dragged, which the taskbar moves itself, nor just after
+        // its scale changed: see g_dockScaleChangedAt).
         if (!std::isnan(icon.lastCenter) &&
             std::fabs(item.center - icon.lastCenter) > 0.5 &&
-            !(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+            !(GetAsyncKeyState(VK_LBUTTON) & 0x8000) &&
+            now - g_dockScaleChangedAt > kDockScaleSettleSeconds) {
             icon.slide += icon.lastCenter - item.center;
         }
         icon.lastCenter = item.center;
@@ -4147,9 +4726,7 @@ void OnRenderingUnsafe() {
                           dockBottom});
     }
 
-    if (!busy) {
-        g_renderingRevoker.revoke();
-    }
+    return busy;
 }
 
 void CheckDockItems() {
@@ -4182,8 +4759,9 @@ void SetupDockBehavior(HWND hWnd,
            Input::PointerRoutedEventArgs const&) { StartRendering(); }));
     frame.AddHandler(UIElement::PointerMovedEvent(), g_pointerHandler, true);
     g_pressedHandler = winrt::box_value(Input::PointerEventHandler(
-        [](winrt::Windows::Foundation::IInspectable const&,
-           Input::PointerRoutedEventArgs const& args) {
+        [hWnd](winrt::Windows::Foundation::IInspectable const&,
+               Input::PointerRoutedEventArgs const& args) {
+            DockScope scope(hWnd);
             Safely(L"A click on the taskbar", [&] { OnDockPressed(args); });
         }));
     frame.AddHandler(UIElement::PointerPressedEvent(), g_pressedHandler, true);
@@ -4192,8 +4770,9 @@ void SetupDockBehavior(HWND hWnd,
     // New and closed apps change the number of buttons.
     g_layoutRevoker = frame.LayoutUpdated(
         winrt::auto_revoke,
-        [](winrt::Windows::Foundation::IInspectable const&,
-           winrt::Windows::Foundation::IInspectable const&) {
+        [hWnd](winrt::Windows::Foundation::IInspectable const&,
+               winrt::Windows::Foundation::IInspectable const&) {
+            DockScope scope(hWnd);
             Safely(L"Following the layout", [] {
                 CheckDockItems();
                 // Positions may have changed: line the icons up again.
@@ -4208,6 +4787,9 @@ void SetupDockBehavior(HWND hWnd,
         });
     CheckDockItems();
     StartRendering();
+    if (!g_dockIsMain) {
+        return;
+    }
 
     // Badges fade in and out, so they're also checked every second.
     g_badgeTimer = DispatcherTimer();
@@ -4219,10 +4801,22 @@ void SetupDockBehavior(HWND hWnd,
         }
     });
     g_badgeTimer.Start();
-
 }
 
+void ResetDockOfTaskbar();
+
 void ResetDockBehavior() {
+    for (auto& state : g_otherDocks) {
+        DockScope scope(state->wnd);
+        ResetDockOfTaskbar();
+    }
+    g_otherDocks.clear();
+    for (HWND hWnd : g_ownClips) {
+        if (IsWindow(hWnd)) {
+            SetWindowRgn(hWnd, nullptr, TRUE);
+        }
+    }
+    g_ownClips.clear();
     if (g_badgeTimer) {
         g_badgeTimer.Stop();
         g_badgeTimer = nullptr;
@@ -4247,7 +4841,6 @@ void ResetDockBehavior() {
     g_badgeApps.clear();
     ReleaseSRWLockExclusive(&g_badgeAppsLock);
     g_renderingRevoker.revoke();
-    g_layoutRevoker.revoke();
     g_stateRevokers.clear();
     g_dotRevokers.clear();
     for (const auto& watch : g_badgeWatches) {
@@ -4257,6 +4850,14 @@ void ResetDockBehavior() {
         }
     }
     g_badgeWatches.clear();
+    g_watchedButtons.clear();
+    ResetDockOfTaskbar();
+}
+
+// The taskbar in the globals (see DockScope): its handlers, icons, shadow
+// and cut go.
+void ResetDockOfTaskbar() {
+    g_layoutRevoker.revoke();
     if (auto target = g_pointerTarget.get()) {
         if (g_pointerHandler) {
             target.RemoveHandler(UIElement::PointerMovedEvent(),
@@ -4270,8 +4871,18 @@ void ResetDockBehavior() {
     g_pointerHandler = nullptr;
     g_pressedHandler = nullptr;
     g_pointerTarget = nullptr;
-    g_watchedButtons.clear();
     g_dockIcons.clear();
+    if (g_dockWnd) {
+        KillTimer(g_dockWnd, kAnimatorTimerId);
+    }
+    ResumeRepeaterAnimations();
+    if (auto frame = g_dockFrame.get(); frame && g_dockContentHidden) {
+        RestoreDockOpacity(frame);
+    }
+    g_dockContentHidden = false;
+    g_dockScaleSettled = true;
+    g_dockScaleMoved = false;
+    g_dockOpacityKept = nullptr;
     g_dockFrame = nullptr;
     g_dockRepeater = nullptr;
     g_dockBackground = nullptr;
@@ -4286,7 +4897,29 @@ void ResetDockBehavior() {
     g_dockWnd = nullptr;
 }
 
+bool ApplyStyleUnscoped(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar);
+
+// Another monitor's taskbar gets a dock state of its own (see DockState).
 bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
+    if (mainTaskbar) {
+        return ApplyStyleUnscoped(xamlRoot, hWnd, true);
+    }
+    // (Styled again, as when its monitor comes back: its old handlers go.)
+    const bool again = FindOtherDock(hWnd) != nullptr;
+    if (!again) {
+        auto state = std::make_unique<DockState>();
+        state->wnd = hWnd;
+        g_otherDocks.push_back(std::move(state));
+    }
+    DockScope scope(hWnd);
+    if (again) {
+        ResetDockOfTaskbar();
+        g_dockWnd = hWnd;
+    }
+    return ApplyStyleUnscoped(xamlRoot, hWnd, false);
+}
+
+bool ApplyStyleUnscoped(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
     auto content = xamlRoot.Content().try_as<FrameworkElement>();
     if (!content) {
         return false;
@@ -4342,7 +4975,7 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
                               winrt::box_value(g_shadowStrength));
                     // (The shadow rises from the bottom edge: not on the
                     // other edges.)
-                    if (mainTaskbar && g_taskbarAtBottom) {
+                    if (g_taskbarAtBottom) {
                         g_shadowFill = winrt::make_weak(fill.as<UIElement>());
                         MakeShadow(fill);
                     }
@@ -4355,9 +4988,7 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
                 Wh_Log(L"TaskbarBackground not found");
             }
         }
-        if (mainTaskbar) {
-            SetupDockBehavior(hWnd, frame, nullptr);
-        }
+        SetupDockBehavior(hWnd, frame, nullptr);
         return true;
     }
 
@@ -4413,10 +5044,8 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
         }
     }
 
-    // Magnification and bouncing follow the mouse on the main taskbar.
-    if (mainTaskbar) {
-        SetupDockBehavior(hWnd, frame, dockBackground);
-    }
+    // Magnification and bouncing follow the mouse, on every taskbar.
+    SetupDockBehavior(hWnd, frame, dockBackground);
     return true;
 }
 
@@ -4511,6 +5140,10 @@ BOOL CALLBACK ApplyToTaskbarWindowProc(HWND hWnd, LPARAM) {
 // Unloading: what the XAML globals still hold goes, on the taskbar's thread
 // (their destructors never run, see g_styledProperties).
 void FreeXamlGlobals() {
+    g_otherDocks.clear();
+    g_animatorKept = nullptr;
+    g_animatorProperty = nullptr;
+    g_animatorPropertyTried = false;
     std::vector<StyledProperty>().swap(g_styledProperties);
     std::vector<WidthWatch>().swap(g_widthWatches);
     std::vector<DockIcon>().swap(g_dockIcons);
@@ -4633,7 +5266,8 @@ void WaitForAnimationFrame(FrameTimer& timer) {
         timer.rateReadAt = now;
         DWM_TIMING_INFO timing{sizeof(timing)};
         if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &timing)) &&
-            timing.rateRefresh.uiDenominator && timing.rateRefresh.uiNumerator) {
+            timing.rateRefresh.uiDenominator &&
+            timing.rateRefresh.uiNumerator) {
             timer.rate = (double)timing.rateRefresh.uiNumerator /
                          timing.rateRefresh.uiDenominator;
         }
@@ -4656,6 +5290,72 @@ void WaitForAnimationFrame(FrameTimer& timer) {
     }
 }
 
+// The part of a taskbar it shows: on its own monitor, and before it moves to
+// `next`, on it both where it is and where it goes (cut after the move, a
+// frame would show it past the edge in between).
+RECT TaskbarShownPart(HWND hWnd, const RECT* next) {
+    RECT own = TaskbarOwnPart(hWnd);
+    if (next) {
+        const RECT there = TaskbarOwnPart(hWnd, next);
+        if (!IntersectRect(&own, &own, &there)) {
+            own = {};
+        }
+    }
+    return own;
+}
+
+// A taskbar (not the transparent one, cut down to its apps) shows only its
+// part on its own monitor while some of it is past its edge (hidden, or
+// sliding: with a monitor past that edge, the rest would show there), and
+// its whole window again once it's all on it. `next`: before it moves there.
+void ClipToOwnMonitor(HWND hWnd, const RECT* next = nullptr) {
+    RECT window;
+    if (!GetWindowRect(hWnd, &window)) {
+        return;
+    }
+    const RECT own = TaskbarShownPart(hWnd, next);
+    const bool whole = own.left <= 0 && own.top <= 0 &&
+                       own.right >= window.right - window.left &&
+                       own.bottom >= window.bottom - window.top;
+    const bool ours = std::find(g_ownClips.begin(), g_ownClips.end(), hWnd) !=
+                      g_ownClips.end();
+    if (whole) {
+        // (Before a move, its cut stays until after it.)
+        if (!next && ours) {
+            std::erase(g_ownClips, hWnd);
+            SetWindowRgn(hWnd, nullptr, TRUE);
+        }
+        return;
+    }
+    RECT current{};
+    const int kind = GetWindowRgnBox(hWnd, &current);
+    if (ours && kind == SIMPLEREGION && EqualRect(&current, &own)) {
+        return;
+    }
+    if (HRGN region = CreateRectRgnIndirect(&own)) {
+        // The system owns the region once it's set.
+        if (!SetWindowRgn(hWnd, region, TRUE)) {
+            DeleteObject(region);
+        } else if (!ours) {
+            g_ownClips.push_back(hWnd);
+        }
+    }
+}
+
+// Each step of a slide shows only the part of the taskbar on its own monitor,
+// as Windows' own slide does: cut down to its apps (the transparent taskbar),
+// or to that part. `next`: before the step, to where it goes.
+void ClipSlideStep(HWND hWnd, const RECT* next) {
+    DockScope scope(hWnd);
+    if (hWnd == g_dockWnd && IsTransparentTaskbar() &&
+        g_appsRight > g_appsLeft) {
+        const RECT shown = TaskbarShownPart(hWnd, next);
+        UpdateAppsArea(g_appsLeft, g_appsRight, false, &shown);
+        return;
+    }
+    ClipToOwnMonitor(hWnd, next);
+}
+
 // Slides the window from where it is to `target`, one step per display frame,
 // timed by the clock so a slow frame doesn't slow the whole animation down.
 // Showing settles like a spring; hiding eases in and out.
@@ -4666,9 +5366,11 @@ void SlideTo(HWND hWnd, const RECT& target, int durationMs, bool show) {
     }
     // Without an animation, it's there at once.
     if (durationMs <= 0) {
+        ClipSlideStep(hWnd, &target);
         SetWindowPos(hWnd, nullptr, target.left, target.top,
                      target.right - target.left, target.bottom - target.top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
+        ClipSlideStep(hWnd, nullptr);
         return;
     }
 
@@ -4679,13 +5381,18 @@ void SlideTo(HWND hWnd, const RECT& target, int durationMs, bool show) {
         const double t =
             std::min((NowSeconds() - begin) / duration, 1.0);
         const double p = t >= 1 ? 1 : show ? SpringOut(t) : EaseInOutCubic(t);
-        SetWindowPos(hWnd, nullptr, LerpInt(start.left, target.left, p),
-                     LerpInt(start.top, target.top, p),
-                     LerpInt(start.right - start.left,
-                             target.right - target.left, p),
-                     LerpInt(start.bottom - start.top,
-                             target.bottom - target.top, p),
+        const int left = LerpInt(start.left, target.left, p);
+        const int top = LerpInt(start.top, target.top, p);
+        const RECT step{left, top,
+                        left + LerpInt(start.right - start.left,
+                                       target.right - target.left, p),
+                        top + LerpInt(start.bottom - start.top,
+                                      target.bottom - target.top, p)};
+        ClipSlideStep(hWnd, &step);
+        SetWindowPos(hWnd, nullptr, step.left, step.top,
+                     step.right - step.left, step.bottom - step.top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
+        ClipSlideStep(hWnd, nullptr);
         if (t >= 1) {
             break;
         }
@@ -4712,8 +5419,7 @@ bool UserIsReachingForTaskbar(HWND hWnd) {
         return true;
     }
     MONITORINFO info{sizeof(info)};
-    return GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST),
-                          &info) &&
+    return GetMonitorInfo(TaskbarMonitor(hWnd), &info) &&
            pt.y >= info.rcMonitor.bottom - 2;
 }
 
@@ -4821,16 +5527,14 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
     if (show && !g_unloading &&
         !(GetWindowLongPtr(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) &&
         !IsFullscreenAppOnMonitor(hWnd)) {
-        Wh_Log(L"The taskbar wasn't on top, putting it back");
         SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     if (!animate || g_unloading) {
         TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, animate);
-        if (!g_unloading && IsTransparentTaskbar() && hWnd == g_dockWnd &&
-            g_appsRight > g_appsLeft) {
-            UpdateAppsArea(g_appsLeft, g_appsRight, false);
+        if (!g_unloading) {
+            ClipSlideStep(hWnd, nullptr);
         }
         return;
     }
@@ -4842,11 +5546,9 @@ void WINAPI TrayUI_SlideWindow_Hook(void* pThis,
                              : g_settings.hideDuration),
             show);
     TrayUI_SlideWindow_Original(pThis, hWnd, rect, monitor, show, false);
-    // Still cut down to its apps.
-    if (IsTransparentTaskbar() && hWnd == g_dockWnd &&
-        g_appsRight > g_appsLeft) {
-        UpdateAppsArea(g_appsLeft, g_appsRight, false);
-    }
+    // Still cut down to its apps, or to its monitor (the taskbar's own move
+    // drops a region).
+    ClipSlideStep(hWnd, nullptr);
 }
 
 using SetTimer_t = decltype(&SetTimer);
@@ -4950,10 +5652,8 @@ bool IsSnippingOn(HMONITOR monitor) {
            ProcessIsOneOf(processId, kSnippingPrograms);
 }
 
-// Whether the foreground window covers the whole monitor of this taskbar,
-// like games in exclusive or borderless full screen, and videos in full
-// screen.
-// Whether a window covers the whole monitor like a full-screen app.
+// Whether a window covers the whole monitor like a full-screen app (games
+// in exclusive or borderless full screen, videos in full screen).
 // `windowsSaysBusy`: Windows itself takes a full-screen app to be running (a
 // browser's video in full screen, for one), so a window with a title bar
 // counts even if its size isn't exactly the screen's.
@@ -5001,8 +5701,7 @@ bool CoversMonitor(HWND hWnd,
 bool IsFullscreenAppOn(HMONITOR monitor);
 
 bool IsFullscreenAppOnMonitor(HWND hTaskbarWnd) {
-    return IsFullscreenAppOn(
-        MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST));
+    return IsFullscreenAppOn(TaskbarMonitor(hTaskbarWnd));
 }
 
 bool IsFullscreenAppOn(HMONITOR monitor) {
@@ -5494,7 +6193,7 @@ void KeepTrayIcons() {
         value += line;
     }
     ReleaseSRWLockShared(&g_trayIconsLock);
-    Wh_SetStringValue(L"trayIconsKept", value.c_str());
+    SetUserStringValue(L"trayIconsKept", value.c_str());
 }
 
 void TakeBackTrayIcons() {
@@ -5503,11 +6202,11 @@ void TakeBackTrayIcons() {
     }
     WCHAR buffer[kTrayIconsKeptRoom];
     const size_t length =
-        Wh_GetStringValue(L"trayIconsKept", buffer, ARRAYSIZE(buffer));
+        GetUserStringValue(L"trayIconsKept", buffer, ARRAYSIZE(buffer));
     if (!length) {
         return;
     }
-    Wh_DeleteValue(L"trayIconsKept");
+    Wh_DeleteValue(UserValueName(L"trayIconsKept").c_str());
     std::vector<TrayIcon> icons;
     std::wstring_view rest = buffer;
     while (!rest.empty()) {
@@ -5710,6 +6409,140 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                      WPARAM wParam,
                                      LPARAM lParam,
                                      DWORD_PTR) {
+    const bool displayChanged =
+        DisplayChangedMessage() && uMsg == DisplayChangedMessage();
+    if ((uMsg == WM_DISPLAYCHANGE || displayChanged) && !g_unloading) {
+        if (hWnd == FindCurrentProcessTaskbarWnd()) {
+            SetTimer(hWnd, kDisplayRestyleTimerId, 200, nullptr);
+        }
+    }
+    // (The mod's own: not for explorer.)
+    if (displayChanged) {
+        return 0;
+    }
+    if (uMsg == WM_TIMER && wParam == kDisplayRestyleTimerId) {
+        KillTimer(hWnd, kDisplayRestyleTimerId);
+        if (!g_unloading) {
+            Safely(L"Restyling taskbars after a display change", [] {
+                ApplySettingsFromTaskbarThread();
+                SubclassTaskbars();
+            });
+        }
+        return 0;
+    }
+    if (uMsg == WM_DPICHANGED) {
+        DockScope scope(hWnd);
+        if (hWnd == g_dockWnd) {
+            g_dockScaleChangedAt = NowSeconds();
+            g_dockScaleSettled = false;
+            g_dockScaleMoved = false;
+            // (Not as it turns to another orientation, see below.)
+            const auto* suggested = (const RECT*)lParam;
+            RECT now;
+            const bool turning =
+                suggested && GetWindowRect(hWnd, &now) &&
+                (suggested->right - suggested->left <
+                 suggested->bottom - suggested->top) !=
+                    (now.right - now.left < now.bottom - now.top);
+            if (!turning) {
+                Safely(L"Pausing the taskbar's animator",
+                       [] { PauseRepeaterAnimations(); });
+            }
+            StartRendering();
+            if (!turning &&
+                !SetTimer(hWnd, kAnimatorTimerId, kAnimatorPauseMs, nullptr)) {
+                Safely(L"Resuming the taskbar's animator",
+                       [] { ResumeRepeaterAnimations(); });
+            }
+        }
+    }
+    // Moved to another edge (in Settings) while its animator is out: put
+    // back first, or explorer lays the taskbar out there without it and
+    // crashes.
+    if (uMsg == WM_WINDOWPOSCHANGING && lParam && !g_unloading &&
+        (((const WINDOWPOS*)lParam)->flags & (SWP_NOMOVE | SWP_NOSIZE)) !=
+            (SWP_NOMOVE | SWP_NOSIZE)) {
+        const auto* pos = (const WINDOWPOS*)lParam;
+        DockScope scope(hWnd);
+        RECT now;
+        if (hWnd == g_dockWnd && g_animatorPaused &&
+            GetWindowRect(hWnd, &now)) {
+            RECT next = now;
+            if (!(pos->flags & SWP_NOMOVE)) {
+                OffsetRect(&next, pos->x - now.left, pos->y - now.top);
+            }
+            if (!(pos->flags & SWP_NOSIZE)) {
+                next.right = next.left + pos->cx;
+                next.bottom = next.top + pos->cy;
+            }
+            UINT edge;
+            if (RectEdge(next, &edge) && edge != KnownTaskbarEdge()) {
+                KillTimer(hWnd, kAnimatorTimerId);
+                Safely(L"Resuming the taskbar's animator",
+                       [] { ResumeRepeaterAnimations(); });
+            }
+        }
+    }
+    if (uMsg == WM_TIMER && wParam == kAnimatorTimerId) {
+        KillTimer(hWnd, kAnimatorTimerId);
+        DockScope scope(hWnd);
+        if (hWnd == g_dockWnd) {
+            Safely(L"Resuming the taskbar's animator",
+                   [] { ResumeRepeaterAnimations(); });
+        }
+        return 0;
+    }
+    // Windows sometimes takes a window for a full-screen app when it isn't
+    // (one it once saw covering its monitor keeps that mark until it closes)
+    // and keeps the taskbar under it, even while it's shown: its own handler
+    // turns a request to be on top into one to go under. Kept on top while
+    // it's shown (or asked to be) and no app on its monitor is in full
+    // screen (see IsFullscreenAppOn).
+    if (uMsg == WM_WINDOWPOSCHANGING && lParam && !g_unloading) {
+        auto* pos = (WINDOWPOS*)lParam;
+        const bool askedTop = !(pos->flags & SWP_NOZORDER) &&
+                              pos->hwndInsertAfter == HWND_TOPMOST;
+        const LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        bool goesUnder = askedTop;
+        if (!(pos->flags & SWP_NOZORDER)) {
+            const HWND after = pos->hwndInsertAfter;
+            goesUnder = after == HWND_NOTOPMOST || after == HWND_BOTTOM ||
+                        (after != HWND_TOPMOST && after != HWND_TOP &&
+                         !(GetWindowLongPtr(after, GWL_EXSTYLE) &
+                           WS_EX_TOPMOST));
+        }
+        MONITORINFO info{sizeof(info)};
+        if (goesUnder &&
+            (askedTop || (GetMonitorInfo(TaskbarMonitor(hWnd), &info) &&
+                          !IsTaskbarHidden(hWnd, info.rcMonitor))) &&
+            !IsFullscreenAppOnMonitor(hWnd)) {
+            pos->hwndInsertAfter = HWND_TOPMOST;
+            pos->flags &= ~SWP_NOZORDER;
+        }
+        return result;
+    }
+    // Brought up while under a window (Windows shows it where it was, behind
+    // the one in front): on top as it shows, kept there by the above.
+    if (uMsg == WM_WINDOWPOSCHANGED && !g_unloading &&
+        !(GetWindowLongPtr(hWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
+        static bool raising;
+        MONITORINFO info{sizeof(info)};
+        if (!raising && GetMonitorInfo(TaskbarMonitor(hWnd), &info) &&
+            !IsTaskbarHidden(hWnd, info.rcMonitor) &&
+            !IsFullscreenAppOnMonitor(hWnd)) {
+            raising = true;
+            SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            raising = false;
+        }
+    }
+    // The dock: never shown past its monitor (see ClipToOwnMonitor), whoever
+    // moved it.
+    if (uMsg == WM_WINDOWPOSCHANGED && IsDock() && !g_unloading) {
+        const LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        ClipToOwnMonitor(hWnd);
+        return result;
+    }
     // An app closed and the taskbar got the focus back (see HandFocusBack):
     // once the focus moved, it tries to hide again right after.
     if (uMsg == WM_TIMER && wParam == kHideTimerId && HandFocusBack(hWnd)) {
@@ -5724,6 +6557,9 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
             lastLogged = GetTickCount64();
             Wh_Log(L"Full-screen app in front, not showing the taskbar");
         }
+        // (The taskbar's own handler is what stops it: stopped here, or it
+        // fires every few milliseconds for as long as the app stays.)
+        KillTimer(hWnd, kUnhideTimerId);
         return 0;
     }
     // The other apps' tray icons, for the island (the taskbar still gets
@@ -5773,7 +6609,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                 return TRUE;
             case kIpcNotifiedApps: {
                 std::vector<std::wstring> apps = SplitLines(copyData);
-                NotifyToastApps(&apps);
+                Safely(L"Notified apps", [&] { NotifyToastApps(&apps); });
                 return TRUE;
             }
             case kIpcAppIcon:
@@ -5900,6 +6736,7 @@ void UnsubclassTaskbars() {
     ReleaseSRWLockExclusive(&g_subclassedLock);
     for (HWND hWnd : taskbars) {
         if (IsWindow(hWnd)) {
+            KillTimer(hWnd, kDisplayRestyleTimerId);
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, TaskbarSubclassProc);
         }
@@ -6066,8 +6903,7 @@ BOOL CALLBACK FindTaskbarForMonitorProc(HWND hWnd, LPARAM lParam) {
         GetClassName(hWnd, className, ARRAYSIZE(className)) &&
         (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
          _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) &&
-        MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) ==
-            context->monitor) {
+        TaskbarMonitor(hWnd) == context->monitor) {
         context->result = hWnd;
         return FALSE;
     }
@@ -6118,9 +6954,12 @@ DWORD WINAPI EdgeThreadProc(LPVOID) {
             atEdgeSince = 0;
             continue;
         }
-        // The transparent taskbar: only under its apps.
-        if (IsTransparentTaskbar() && g_appsAreaRight > g_appsAreaLeft &&
-            (pt.x < g_appsAreaLeft || pt.x >= g_appsAreaRight)) {
+        // The transparent taskbar: only under its apps (that monitor's).
+        int appsLeft = 0;
+        int appsRight = 0;
+        if (IsTransparentTaskbar() &&
+            GetAppsArea(monitor, &appsLeft, &appsRight) &&
+            (pt.x < appsLeft || pt.x >= appsRight)) {
             atEdgeSince = 0;
             continue;
         }
@@ -7135,9 +7974,7 @@ bool RunAttentionIcon(HWND window, const AttentionRequest& request) {
 
     HWND taskbar = FindCurrentProcessTaskbarWnd();
     MONITORINFO monitor{sizeof(monitor)};
-    if (!taskbar ||
-        !GetMonitorInfo(MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST),
-                        &monitor)) {
+    if (!taskbar || !GetMonitorInfo(TaskbarMonitor(taskbar), &monitor)) {
         return true;
     }
     // With the dock on screen, the icon bounces in it instead. Full-screen
@@ -7451,9 +8288,9 @@ constexpr float kNotchGap = 24;
 
 // A notch's shape: `body` hanging from the screen's top edge (at body.top),
 // round corners under it, and between each side and the edge a curve the
-// other way (`shoulder` wide along the edge); at the screen's side (`edgeLeft`, `edgeRight`), a
-// curve down that side instead. `filled`: the whole shape; otherwise its
-// outline away from the screen's edges (for a line along it).
+// other way (`shoulder` wide along the edge); at the screen's side (`edgeLeft`,
+// `edgeRight`), a curve down that side instead. `filled`: the whole shape;
+// otherwise its outline away from the screen's edges (for a line along it).
 winrt::com_ptr<ID2D1PathGeometry> NotchGeometry(ID2D1Factory* factory,
                                                 const D2D1_RECT_F& body,
                                                 float radius,
@@ -7471,8 +8308,9 @@ winrt::com_ptr<ID2D1PathGeometry> NotchGeometry(ID2D1Factory* factory,
     const float right = body.right;
     const float top = body.top;
     const float bottom = body.bottom;
-    const float r = std::clamp(
-        radius, 0.0f, std::max(0.0f, std::min((right - left) / 2, bottom - top)));
+    const float r =
+        std::clamp(radius, 0.0f,
+                   std::max(0.0f, std::min((right - left) / 2, bottom - top)));
     // The curves beside it: `s` along the edge, `d` across (wider than deep
     // when big: the side is only so tall; at a corner, across its bottom).
     const float s = std::max(0.0f, shoulder);
@@ -7491,8 +8329,8 @@ winrt::com_ptr<ID2D1PathGeometry> NotchGeometry(ID2D1Factory* factory,
             sink->AddLine(to);
         }
     };
-    const D2D1_POINT_2F start =
-        edgeLeft ? D2D1_POINT_2F{left, bottom + s} : D2D1_POINT_2F{left - s, top};
+    const D2D1_POINT_2F start = edgeLeft ? D2D1_POINT_2F{left, bottom + s}
+                                         : D2D1_POINT_2F{left - s, top};
     sink->BeginFigure(start, filled ? D2D1_FIGURE_BEGIN_FILLED
                                     : D2D1_FIGURE_BEGIN_HOLLOW);
     if (edgeLeft) {
@@ -7682,10 +8520,11 @@ bool IsPrivacyItem(IslandItem item) {
 }
 
 // The items showing a name under the mouse (see Island::ItemTip): the
-// icons (not the clock, what's playing, the apps' and tray icons, which
+// icons and what's playing (not the clock, the apps' and tray icons, which
 // have their own).
 bool HasItemTip(IslandItem item) {
     switch (item) {
+        case IslandItem::Media:
         case IslandItem::Overflow:
         case IslandItem::Network:
         case IslandItem::Volume:
@@ -7782,18 +8621,24 @@ constexpr PROPERTYKEY kPKEY_Device_FriendlyName = {
 // clang-format off
 constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L" (all apps)", L"（所有应用）"},
+    {L" (all monitors)", L"（所有显示器）"},
+    {L" events", L" 个事件"},
     {L" files", L" 个文件"},
     {L" in progress", L" 项进行中"},
     {L" shortcuts imported", L" 个快捷键已导入"},
     {L" · click to hide", L" · 点击隐藏"},
+    {L" · drag to move", L" · 拖动以移动"},
     {L" · hidden, click to show", L" · 已隐藏，点击显示"},
+    {L" · this island", L" · 本岛"},
     {L"(the wheel turns the pages)", L"（滚轮翻页）"},
     {L"+  New event", L"+  新建事件"},
     {L"+  New shortcut", L"+  新建快捷键"},
     {L"+ saves the current settings as a profile, to switch back to them later.", L"+ 将当前设置保存为配置文件，以便以后切换回来。"},
+    {L".ics link or file path", L".ics 链接或文件路径"},
     {L"12 h AM/PM", L"12 小时 AM/PM"},
     {L"24 h", L"24 小时"},
     {L"A file with all of it", L"包含全部内容的文件"},
+    {L"A long title keeps scrolling while it plays", L"播放时长标题保持滚动"},
     {L"Accent color", L"强调色"},
     {L"Accessibility", L"辅助功能"},
     {L"Add", L"添加"},
@@ -7803,15 +8648,18 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Add controls", L"添加控件"},
     {L"Add note  (Ctrl+Enter)", L"添加笔记  (Ctrl+Enter)"},
     {L"Add the shortcuts you want to remember", L"添加你想记住的快捷键"},
+    {L"Agendas", L"日程订阅"},
     {L"Airplane mode", L"飞行模式"},
     {L"All", L"全部"},
     {L"All day", L"全天"},
     {L"All done", L"全部完成"},
     {L"All files", L"所有文件"},
     {L"All up to date", L"全部已是最新"},
+    {L"Already added", L"已添加"},
     {L"Animations", L"动画"},
     {L"App", L"应用"},
     {L"Apps (winget, in a terminal)", L"应用（winget，在终端中）"},
+    {L"Apps and tools", L"应用和工具"},
     {L"Apps with notifications", L"有通知的应用"},
     {L"Apps with unsaved work can stop it.", L"有未保存工作的应用可能会阻止它。"},
     {L"At most 8 buttons", L"最多 8 个按钮"},
@@ -7848,14 +8696,17 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Charging", L"正在充电"},
     {L"Choose a power plan", L"选择电源计划"},
     {L"Choose the folder with your pictures", L"选择存放图片的文件夹"},
+    {L"Choose…", L"选择…"},
     {L"Circle", L"圆形"},
     {L"City not found", L"未找到城市"},
     {L"Clear", L"晴"},
     {L"Clear all", L"全部清除"},
+    {L"Click a screen to choose where the island appears.", L"点击屏幕以选择灵动岛显示的位置。"},
+    {L"Click a screen to place the main island there (alerts and tray).", L"点击屏幕以将主岛放在那里（提醒和托盘）。"},
     {L"Click and press the keys", L"点击后按下按键"},
     {L"Clipboard", L"剪贴板"},
     {L"Clock", L"时钟"},
-    {L"Clock (the calendar shows it all)", L"时钟（日历会显示全部）"},
+    {L"Clock and calendar (agendas: the calendar's gear)", L"时钟和日历（日程订阅：日历的齿轮）"},
     {L"Clock in the middle (the other items move around it)", L"时钟居中（其他项目围绕它重新排列）"},
     {L"Clouds", L"云量"},
     {L"Color filters", L"颜色滤镜"},
@@ -7876,6 +8727,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Couldn't connect.", L"无法连接。"},
     {L"Couldn't connect. Check the password.", L"无法连接。请检查密码。"},
     {L"Couldn't forget the network.", L"无法忘记该网络。"},
+    {L"Couldn't read it", L"无法读取"},
     {L"Cover and title on the pill", L"胶囊上的封面和标题"},
     {L"D M Y", L"日 月 年"},
     {L"Dark mode", L"深色模式"},
@@ -7900,6 +8752,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Download pictures from the web (goes online)", L"从网络下载图片（需联网）"},
     {L"Downloads", L"下载"},
     {L"Drag from one notch to another · click to hide", L"在刘海之间拖动 · 点击隐藏"},
+    {L"Drag to change the order or to put one on the pill · middle click, or the pin after a moment on an icon: kept on the pill", L"拖动可更改顺序或放到胶囊上 · 中键单击，或在图标上停留片刻后点图钉：固定在胶囊上"},
     {L"Drag to change the order · click to hide", L"拖动以更改顺序 · 点击隐藏"},
     {L"Drive", L"驱动器"},
     {L"Drizzle", L"毛毛雨"},
@@ -7931,6 +8784,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Folders and places", L"文件夹和位置"},
     {L"Folders and places (your shortcuts)", L"文件夹和位置（你的快捷方式）"},
     {L"Folder…", L"文件夹…"},
+    {L"Following the mouse is unavailable with notches on the main island.", L"主岛使用刘海时无法跟随鼠标。"},
+    {L"Follows the mouse", L"跟随鼠标"},
     {L"Forget", L"忘记"},
     {L"Forget it?", L"确定忘记？"},
     {L"Frames a second", L"每秒帧数"},
@@ -7938,6 +8793,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Freezing rain", L"冻雨"},
     {L"Frequency", L"频率"},
     {L"Frosted glass on the bar and the Fixed style's strip", L"栏和固定样式条带使用毛玻璃"},
+    {L"General", L"常规"},
     {L"Glass", L"玻璃"},
     {L"Graphite", L"石墨"},
     {L"Grid", L"网格"},
@@ -7985,6 +8841,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Looking…", L"正在查找…"},
     {L"M D Y", L"月 日 年"},
     {L"Magnifier", L"放大镜"},
+    {L"Main island", L"主灵动岛"},
     {L"Manage profiles…", L"管理配置文件…"},
     {L"Media buttons on the pill", L"胶囊上的媒体按钮"},
     {L"Memory", L"内存"},
@@ -7997,6 +8854,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Mobile hotspot", L"移动热点"},
     {L"Monitor", L"显示器"},
     {L"Monitor ", L"显示器 "},
+    {L"Monitors", L"显示器"},
     {L"Month as a number (9/10)", L"月份显示为数字 (9/10)"},
     {L"More Windows controls", L"更多 Windows 控件"},
     {L"More in Explorer…", L"在资源管理器中查看更多…"},
@@ -8006,7 +8864,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Muted", L"已静音"},
     {L"Narrator", L"讲述人"},
     {L"Needs Windows' transparency effects: click to open Personalization > Colors", L"需要 Windows 的透明效果：点击打开 个性化 > 颜色"},
-    {L"Needs more than one monitor", L"需要多台显示器"},
     {L"Needs the date or the year on the clock", L"需要时钟显示日期或年份"},
     {L"Needs the notches (Fixed style)", L"需要刘海（固定样式）"},
     {L"Needs “%s” on", L"需要先打开“%s”"},
@@ -8022,6 +8879,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"No Bluetooth", L"没有蓝牙"},
     {L"No USB drives", L"没有 U 盘"},
     {L"No Wi-Fi adapter", L"没有 Wi-Fi 适配器"},
+    {L"No agendas yet.", L"还没有日程订阅。"},
     {L"No events", L"没有事件"},
     {L"No internet", L"无 Internet"},
     {L"No notes yet", L"还没有笔记"},
@@ -8034,12 +8892,12 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"None", L"无"},
     {L"None found", L"未找到"},
     {L"Not a backup of the island", L"这不是灵动岛的备份"},
+    {L"Not an .ics link (Google: Secret address in iCal format)", L"不是 .ics 链接（Google：iCal 格式的私密地址）"},
     {L"Not available here", L"此处不可用"},
     {L"Not available on this PC", L"此电脑上不可用"},
     {L"Not checked yet", L"尚未检查"},
     {L"Notch curves", L"刘海弧度"},
     {L"Notches", L"刘海"},
-    {L"Notches (Fixed style)", L"刘海（固定样式）"},
     {L"Notes", L"笔记"},
     {L"Notes button", L"笔记按钮"},
     {L"Nothing playing", L"没有正在播放的内容"},
@@ -8055,14 +8913,17 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Off with the notches (Fixed style)", L"刘海开启时关闭（固定样式）"},
     {L"Off: only the app's icon peeks out of the line", L"关闭时：只有应用图标从线条中探出"},
     {L"On", L"开"},
+    {L"On all monitors", L"所有显示器"},
     {L"On battery", L"使用电池"},
     {L"On every monitor", L"在所有显示器上"},
+    {L"On one monitor", L"一个显示器"},
     {L"On the monitor with the mouse", L"在鼠标所在的显示器上"},
-    {L"On the pill", L"胶囊上"},
     {L"One icon per app (Phone Link's phone apps together)", L"每个应用一个图标（手机连接的手机应用合并）"},
     {L"Only for the Fixed style", L"仅限固定样式"},
     {L"Only for the Island style: the Fixed style and the bar keep one place and the same items for every app", L"仅限灵动岛样式：固定样式和横条对所有应用使用同一位置和相同项目"},
     {L"Only for the bar and the Fixed style", L"仅适用于菜单栏和固定样式"},
+    {L"Only https links or file paths", L"仅支持 https 链接或文件路径"},
+    {L"Only on the main island: change it in its settings", L"仅限主岛：请在主岛的设置中更改"},
     {L"Only with the icons opening in the pill", L"仅当图标在胶囊中展开时可用"},
     {L"Opacity", L"不透明度"},
     {L"Open", L"打开"},
@@ -8070,6 +8931,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Open an app to give it a place", L"打开一个应用来为它设置位置"},
     {L"Open in Explorer", L"在资源管理器中打开"},
     {L"Open the Windows notification center", L"打开 Windows 通知中心"},
+    {L"Order of the items", L"项目顺序"},
     {L"Other apps' tray icons", L"其他应用的托盘图标"},
     {L"Output", L"输出"},
     {L"Overcast", L"阴"},
@@ -8078,6 +8940,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Partial", L"部分"},
     {L"Partly cloudy", L"局部多云"},
     {L"Password", L"密码"},
+    {L"Paste an .ics link (Google Calendar: Settings, your calendar, Secret address in iCal format) or a file's path.", L"粘贴 .ics 链接（Google 日历：设置 > 你的日历 > iCal 格式的私密地址）或文件路径。"},
     {L"Performance", L"性能"},
     {L"Personalization", L"个性化"},
     {L"Picture copied", L"已复制图片"},
@@ -8089,7 +8952,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Place (the bar is at the top)", L"位置（栏位于顶部）"},
     {L"Place (the notches are at the top)", L"位置（刘海在顶部）"},
     {L"Place and icons per app", L"每个应用的位置和图标"},
-    {L"Place and notifications", L"位置和通知"},
+    {L"Plan: ", L"计划："},
     {L"Power", L"电源"},
     {L"Power button", L"电源按钮"},
     {L"Power button (sleep, restart, shut down)", L"电源按钮（睡眠、重启、关机）"},
@@ -8103,7 +8966,6 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Processor use (CPU)", L"处理器使用率 (CPU)"},
     {L"Profile ", L"配置文件"},
     {L"Profiles", L"配置文件"},
-    {L"Profiles and look", L"配置文件和外观"},
     {L"Profiles button (switch profiles)", L"配置文件按钮（切换配置文件）"},
     {L"Programs and Features", L"程序和功能"},
     {L"Project", L"投影"},
@@ -8111,11 +8973,13 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Rain chance", L"降雨概率"},
     {L"Reading…", L"正在读取…"},
     {L"Recycle Bin", L"回收站"},
+    {L"Red", L"红色"},
     {L"Reply", L"回复"},
     {L"Restart", L"重启"},
     {L"Restart now?", L"现在重启？"},
     {L"Restart…", L"重启…"},
     {L"Safe to remove", L"可以安全移除"},
+    {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"与主岛相同：这里的更改也适用于主岛 · + 为此显示器创建配置"},
     {L"Same as the main one", L"与主灵动岛相同"},
     {L"Save", L"保存"},
     {L"Save  (Enter)", L"保存  (Enter)"},
@@ -8126,6 +8990,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Screen brightness", L"屏幕亮度"},
     {L"Screen brightness (the mouse wheel changes it)", L"屏幕亮度（用鼠标滚轮调节）"},
     {L"Screenshot", L"截图"},
+    {L"Screenshot notifications open the picture (in Explorer)", L"截图通知打开图片（在资源管理器中）"},
     {L"Search", L"搜索"},
     {L"Second screen only", L"仅第二屏幕"},
     {L"Seconds", L"秒"},
@@ -8143,6 +9008,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Sign out now?", L"现在注销？"},
     {L"Sign out…", L"注销…"},
     {L"Size", L"大小"},
+    {L"Size and transparency", L"大小和透明度"},
     {L"Sleep", L"睡眠"},
     {L"Slide", L"滑动"},
     {L"Snooze", L"稍后提醒"},
@@ -8156,6 +9022,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Sticky keys", L"粘滞键"},
     {L"Stopped", L"已停止"},
     {L"Style", L"样式"},
+    {L"System", L"系统"},
     {L"System sounds (notifications)", L"系统声音（通知）"},
     {L"Task", L"任务"},
     {L"Task Manager", L"任务管理器"},
@@ -8165,26 +9032,30 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Temperature", L"温度"},
     {L"Text", L"文字"},
     {L"The folder with your wallpapers", L"存放壁纸的文件夹"},
+    {L"The island appears:", L"灵动岛显示在："},
+    {L"The island follows the mouse between screens.", L"灵动岛跟随鼠标在屏幕之间移动。"},
     {L"The island handles notifications and their sounds (Windows' stay quiet)", L"由灵动岛处理通知和声音（Windows 保持安静）"},
     {L"The island's: no banners or sounds from it", L"灵动岛的：它不显示横幅也不发出声音"},
     {L"The password has at least 8 characters.", L"密码至少需要 8 个字符。"},
     {L"The title and the text, in the pill and in this list", L"标题和正文，显示在胶囊和此列表中"},
     {L"The weather service didn't answer", L"天气服务没有响应"},
+    {L"The wheel on what's playing changes the song (not the volume)", L"在正在播放上滚动滚轮切换歌曲（而不是音量）"},
     {L"This PC", L"此电脑"},
-    {L"This monitor's island: the main one's settings, or a profile of its own", L"此显示器的灵动岛：使用主灵动岛的设置，或它自己的配置文件"},
-    {L"This monitor's profile: its settings are changed on the main island", L"此显示器的配置文件：它的设置在主灵动岛上更改"},
+    {L"This monitor's profile: changes here apply to every monitor using it", L"此显示器的配置：这里的更改适用于使用它的所有显示器"},
     {L"Three", L"三个"},
     {L"Thunderstorm", L"雷暴"},
     {L"Thunderstorm with hail", L"雷暴伴有冰雹"},
     {L"Time format", L"时间格式"},
     {L"Title", L"标题"},
     {L"Today", L"今天"},
+    {L"Today's color", L"今天的颜色"},
     {L"Tomorrow", L"明天"},
+    {L"Too many agendas", L"日程订阅过多"},
     {L"Too many events", L"事件太多"},
     {L"Topics", L"主题"},
     {L"Total", L"总计"},
     {L"Transition", L"过渡效果"},
-    {L"Tray icons and media", L"托盘图标和媒体"},
+    {L"Tray, media and clock", L"托盘、媒体和时钟"},
     {L"Type to filter the shortcuts…", L"输入以筛选快捷键…"},
     {L"Type your note here…", L"在这里输入笔记…"},
     {L"USB drive", L"U 盘"},
@@ -8193,6 +9064,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"USB drives icon on the pill (open or eject them)", L"胶囊上的 U 盘图标（打开或弹出）"},
     {L"UV index", L"紫外线指数"},
     {L"Unavailable", L"不可用"},
+    {L"Upcoming events", L"即将到来的事件"},
     {L"Upcoming holidays", L"即将到来的节假日"},
     {L"Update", L"更新"},
     {L"Update all", L"全部更新"},
@@ -8240,11 +9112,13 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Zoom", L"缩放"},
     {L"checking", L"正在检查"},
     {L"en", L"zh"},
+    {L"from Windhawk", L"来自 Windhawk"},
     {L"komorebi", L"komorebi"},
     {L"komorebi (start, stop, reload)", L"komorebi（启动、停止、重新加载）"},
     {L"komorebi isn't installed", L"未安装 komorebi"},
     {L"komorebi: with masir (focus follows the mouse)", L"komorebi：同时运行 masir（焦点跟随鼠标）"},
     {L"komorebi: with whkd (its shortcuts)", L"komorebi：同时运行 whkd（它的快捷键）"},
+    {L"more", L"更多"},
     {L"not connected", L"未连接"},
     {L"notification", L"条通知"},
     {L"notifications", L"条通知"},
@@ -8986,6 +9860,9 @@ constexpr float kMediaTitleShortWidth = 90;
 constexpr float kMediaTitleMinWidth = 60;
 constexpr float kMediaTitleMaxWidth = 150;
 constexpr double kMediaLinger = 1.5;
+// The wheel on what's playing changing the song: at most once in this long
+// (a touchpad sends many small steps).
+constexpr double kMediaWheelSeconds = 0.4;
 // The cloaking and uncloaking events (not in older headers).
 constexpr DWORD kEventObjectCloaked = 0x8017;
 constexpr DWORD kEventObjectUncloaked = 0x8018;
@@ -9036,14 +9913,21 @@ int WrappedLineCount(IDWriteFactory* dwrite,
 }
 
 // The text boxes' caret: blue, steady while typing (or just clicked), then
-// blinking softly, fading in and out.
+// blinking softly, fading in and out, for a few seconds (kCaretBlinkSeconds:
+// four blinks), then steady again, so nothing is drawn while nothing happens.
 double g_lastTyped;
+constexpr double kCaretBlinkSeconds = 5;
+
+bool CaretBlinking() {
+    return NowSeconds() - g_lastTyped < kCaretBlinkSeconds;
+}
 
 D2D1_COLOR_F CaretColor(float opacity = 1) {
     const double since = NowSeconds() - g_lastTyped;
     const double shown =
-        since < 0.6 ? 1.0
-                    : 0.5 + 0.5 * std::cos((since - 0.6) * 2 * 3.14159265 / 1.1);
+        since < 0.6 || since >= kCaretBlinkSeconds
+            ? 1.0
+            : 0.5 + 0.5 * std::cos((since - 0.6) * 2 * 3.14159265 / 1.1);
     return Accent((float)shown * opacity);
 }
 
@@ -9827,6 +10711,9 @@ constexpr UINT_PTR kPanelScreenshotTimerId = 7;
 
 // Runs the island's animation frames (see IslandThreadProc).
 void StartIslandAnimation();
+// How many times frames were asked for (see StartIslandAnimation): an open
+// panel draws itself again on the next frame after one (see Panel::Animate).
+unsigned long long g_frameRequests = 0;
 
 class Panel;
 // Gives a panel a new snapshot of the pill (see Island::CapturePill).
@@ -10057,6 +10944,9 @@ class Panel {
     virtual bool OnAppMessage(UINT, WPARAM, LPARAM) { return false; }
     // Before the window goes away.
     virtual void OnDestroy() {}
+    // The mouse held by the window taken away (it closed, or another window
+    // took it).
+    virtual void OnCaptureLost() {}
     // A timer set on the panel's window (other than the screenshot's); it
     // runs once.
     virtual bool OnTimer(UINT_PTR) { return false; }
@@ -10101,6 +10991,46 @@ class Panel {
     // (scrolling text): drawn at a lower frame rate then, which
     // looks the same and costs much less.
     bool m_idleMotion = false;
+    // Moving on the last frame, and the frames asked for when last drawn
+    // (see Animate).
+    bool m_moved = false;
+    unsigned long long m_drawnRequest = 0;
+    // Texts too long for their place scroll only under the mouse (see
+    // ScrollsHere), so a panel left open draws nothing: the ones drawn last
+    // time (where they are in the panel), the one under the mouse, and since
+    // when.
+    std::vector<D2D1_RECT_F> m_scrollSpots;
+    int m_scrollSpot = -1;
+    double m_scrollSince = 0;
+    // A text too long for `rect` (drawn with the target's transform): true
+    // while the mouse is over it (it scrolls from m_scrollSince).
+    bool ScrollsHere(ID2D1RenderTarget* target, const D2D1_RECT_F& rect) {
+        D2D1_MATRIX_3X2_F transform;
+        target->GetTransform(&transform);
+        m_scrollSpots.push_back(
+            {rect.left * transform._11 + transform._31 - m_contentOffset.x,
+             rect.top * transform._22 + transform._32 - m_contentOffset.y,
+             rect.right * transform._11 + transform._31 - m_contentOffset.x,
+             rect.bottom * transform._22 + transform._32 - m_contentOffset.y});
+        return m_scrollSpot == (int)m_scrollSpots.size() - 1;
+    }
+    // The mouse moved in the panel (or left it: nullptr): true when it went
+    // onto a long text or off one (drawn again).
+    bool TrackScrollSpot(const POINT* pt) {
+        int spot = -1;
+        for (size_t i = 0; pt && i < m_scrollSpots.size(); i++) {
+            if (PointInRect(*pt, m_scrollSpots[i])) {
+                spot = (int)i;
+                break;
+            }
+        }
+        if (spot == m_scrollSpot) {
+            return false;
+        }
+        m_scrollSpot = spot;
+        m_scrollSince = NowSeconds();
+        return true;
+    }
     // What's under the mouse, lighting up smoothly (see HoverFades).
     HoverFades m_hoverFades;
     float Hover(const D2D1_RECT_F& rect, bool on) {
@@ -10239,6 +11169,7 @@ void Panel::Open(POINT anchor,
     if (!m_hwnd) {
         return;
     }
+    m_scrollSpot = -1;
     m_source = source;
     m_fromPill = fromPill;
     m_joinPill = fromPill;
@@ -10337,10 +11268,10 @@ void Panel::Close() {
     }
 }
 
-// Returns true while it's still moving.
 // Frames of motion that never stops (see m_idleMotion): 30 a second.
 constexpr double kIdleFrameSeconds = 1.0 / 30;
 
+// Returns true while it's still moving.
 bool Panel::Animate(double dt) {
     if (!m_hwnd) {
         return false;
@@ -10396,15 +11327,20 @@ bool Panel::Animate(double dt) {
         ShowWindow(m_hwnd, SW_HIDE);
         return false;
     }
-    Render();
+    // Drawn while something moves, once more as it stops, and after frames
+    // were asked for (something changed): not on every frame of the island's
+    // own animations (a count, a graph), which would draw an open panel
+    // again and again with nothing new.
+    if (moving || m_moved || m_drawnRequest != g_frameRequests) {
+        m_drawnRequest = g_frameRequests;
+        Render();
+    }
+    m_moved = moving;
     return moving;
 }
 
-// The island part stretches into the panel: a black shape going from the
-// island part's rect to the panel's, sideways and downwards on their own
-// springs. Out of the pill, the pill's contents shrink and fade away first,
-// then the panel's contents fade in, sliding down a little. Closing goes back
-// the same way.
+// Drawn once while closed, off any window: its first opening doesn't wait
+// for its resources (fonts, layouts) to be made.
 void Panel::WarmUp(float scale) {
     if (!m_hwnd || m_open > 0 || m_target > 0) {
         return;
@@ -10447,6 +11383,11 @@ float Panel::CenterWanted() const {
     return (float)m_anchor.x;
 }
 
+// The island part stretches into the panel: a black shape going from the
+// island part's rect to the panel's, sideways and downwards on their own
+// springs. Out of the pill, the pill's contents shrink and fade away first,
+// then the panel's contents fade in, sliding down a little. Closing goes back
+// the same way.
 void Panel::Render() {
     if (!m_hwnd) {
         return;
@@ -10631,6 +11572,8 @@ void Panel::Render() {
         std::round((to.left + to.right) / 2 - m_size.cx / 2.0f);
     const float contentTop = to.top;
     m_contentOffset = {(LONG)contentLeft, (LONG)contentTop};
+    // (Found again while drawing, see ScrollsHere.)
+    m_scrollSpots.clear();
     if (contents > 0.01f && clip) {
         winrt::com_ptr<ID2D1Layer> layer;
         target->CreateLayer(nullptr, layer.put());
@@ -10674,6 +11617,12 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             break;
 
+        // Alt+F4 (the panel has the focus): closed like Esc, never
+        // destroyed (it's opened again with the same window).
+        case WM_CLOSE:
+            Close();
+            return 0;
+
         case WM_CHAR:
             g_lastTyped = NowSeconds();
             redraw = OnChar((WCHAR)wParam);
@@ -10713,11 +11662,17 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             if ((wParam & MK_LBUTTON) && EditTextDrag(hWnd, pt)) {
                 redraw = true;
             }
+            if (TrackScrollSpot(&pt)) {
+                redraw = true;
+            }
             break;
 
         case WM_MOUSELEAVE:
             m_tracking = false;
             redraw = OnMouseLeave();
+            if (TrackScrollSpot(nullptr)) {
+                redraw = true;
+            }
             break;
 
         case WM_LBUTTONDOWN:
@@ -10737,6 +11692,7 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         case WM_CAPTURECHANGED:
             if ((HWND)lParam != hWnd) {
                 EndEditDrag(hWnd);
+                OnCaptureLost();
             }
             return DefWindowProc(hWnd, msg, wParam, lParam);
 
@@ -10866,7 +11822,8 @@ void Panel::DrawScrollBar(ID2D1RenderTarget* target,
 
 ////////////////////////////////////////////////////////////////////////////////
 // The calendar, like the one in the macOS notification center: the month,
-// today marked, arrows (or the mouse wheel) to change the month.
+// today marked, arrows (or the mouse wheel) to change the month, and the
+// agendas (.ics) in a view of their own.
 
 int DaysInMonth(int year, int month) {
     static const int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -10908,6 +11865,8 @@ void LoadEvents() {
         return;
     }
     g_eventsLoaded = true;
+    // (Read again after a backup is imported: what was there goes.)
+    g_events.clear();
     std::vector<WCHAR> value(64 * 1024);
     Wh_GetStringValue(L"events", value.data(), (size_t)value.size());
     // One event per line: id, year, month, day, minute, remind, fired, title
@@ -11151,7 +12110,12 @@ std::vector<Holiday> ParseHolidays(const std::wstring& json) {
     return holidays;
 }
 
-bool HttpsGet(const std::wstring& url, std::vector<BYTE>* data, size_t maxSize);
+bool HttpsGet(const std::wstring& url,
+              std::vector<BYTE>* data,
+              size_t maxSize,
+              DWORD waitMs = 3000,
+              const std::atomic<bool>* stop = nullptr);
+bool ReadTextFile(PCWSTR path, size_t limit, std::wstring* text);
 
 struct HolidayRequest {
     HWND notify;
@@ -11192,6 +12156,1118 @@ DWORD WINAPI HolidayThreadProc(LPVOID parameter) {
     ReleaseSRWLockExclusive(&g_holidaysLock);
     PostMessage(request->notify, WM_APP_HOLIDAYS, request->year, 0);
     return 0;
+}
+
+// Agendas: .ics calendars (iCalendar, like Google Calendar's "Secret address
+// in iCal format"), added in the calendar (value "agendas") or in the mod's
+// settings (calendarIcs). Their events show on their days in each agenda's
+// color, read only (no reminders: their own apps remind). They're read on a
+// thread of their own as the calendar opens (again after 15 minutes, or 10
+// after failing) and kept in memory only; repeating events are expanded
+// from the start of last year to the end of the next one. Times in UTC turn
+// into local ones; times in a time zone of their own are taken as local.
+struct AgendaEvent {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    // Minutes into the day, or -1 for the whole day.
+    int minute = -1;
+    std::wstring title;
+};
+
+struct Agenda {
+    // An https link (webcal:// read as https://) or a file's path.
+    std::wstring source;
+    // 0xRRGGBB.
+    int color = 0;
+    // In the mod's settings: removed there, not in the calendar.
+    bool fromSettings = false;
+    // Its own name (X-WR-CALNAME), once read.
+    std::wstring name;
+    std::vector<AgendaEvent> events;
+    bool read = false;
+    bool failed = false;
+    // Read, but not an .ics (a web page's link).
+    bool notIcs = false;
+    bool reading = false;
+    ULONGLONG readAt = 0;
+};
+
+// An agenda's event, with the agenda's color.
+struct AgendaItem {
+    AgendaEvent event;
+    int color = 0;
+};
+
+// Touched under the lock (read on a thread of their own).
+SRWLOCK g_agendasLock = SRWLOCK_INIT;
+std::vector<Agenda> g_agendas;
+// The days with events (year * 10000 + month * 100 + day) and their color:
+// the first agenda's with an event that day.
+std::unordered_map<int, int> g_agendaDays;
+// The links and paths in the mod's settings (read with them).
+std::vector<std::wstring> g_calendarIcs;
+// Reading them (one thread at a time), and told to stop (the calendar
+// going away).
+HANDLE g_agendaThread;
+std::atomic<bool> g_agendaBusy{false};
+std::atomic<bool> g_agendaStop{false};
+constexpr size_t kMaxAgendas = 12;
+constexpr size_t kMaxAgendaSource = 1024;
+constexpr size_t kMaxAgendaEvents = 20000;
+constexpr size_t kMaxAgendaBytes = 16 * 1024 * 1024;
+// New agendas' colors, in turn (macOS's calendar colors, without the
+// holidays' green).
+constexpr int kAgendaColors[] = {0x0A84FF, 0xFF9F0A, 0xBF5AF2, 0xFF375F,
+                                 0x64D2FF, 0xFFD60A, 0xAC8E68};
+// Today's circle (value calendarToday): red like on macOS (0), Windows'
+// accent color (1), or one chosen (2, calendarTodayColor).
+constexpr int kTodayRed = 0xFF453A;
+// An agenda was read (wParam 1: the last one asked for).
+constexpr UINT WM_APP_AGENDAS = WM_APP + 87;
+// The color dialog closed (see ColorThreadProc).
+constexpr UINT WM_APP_COLOR_DONE = WM_APP + 72;
+
+D2D1_COLOR_F RgbColor(int rgb, float alpha) {
+    float parts[3];
+    CustomColorParts(rgb, parts);
+    return {parts[0], parts[1], parts[2], alpha};
+}
+
+// Windows' accent color (Settings, Personalization, Colors), 0xRRGGBB.
+int WindowsAccentColor() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    if (RegGetValue(HKEY_CURRENT_USER,
+                    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\"
+                    L"Accent",
+                    L"AccentColorMenu", RRF_RT_REG_DWORD, nullptr, &value,
+                    &size) == ERROR_SUCCESS) {
+        // 0xAABBGGRR.
+        return (int)(((value & 0xFF) << 16) | (value & 0xFF00) |
+                     ((value >> 16) & 0xFF));
+    }
+    DWORD color = 0;
+    BOOL opaque = FALSE;
+    return SUCCEEDED(DwmGetColorizationColor(&color, &opaque))
+               ? (int)(color & 0xFFFFFF)
+               : 0x0078D4;
+}
+
+// A base64 text's bytes (the URL-safe kind too; it ends at its padding).
+std::string DecodeBase64(const std::wstring& text) {
+    std::string bytes;
+    int value = 0;
+    int bits = 0;
+    for (const WCHAR c : text) {
+        int digit;
+        if (c >= L'A' && c <= L'Z') {
+            digit = c - L'A';
+        } else if (c >= L'a' && c <= L'z') {
+            digit = c - L'a' + 26;
+        } else if (c >= L'0' && c <= L'9') {
+            digit = c - L'0' + 52;
+        } else if (c == L'+' || c == L'-') {
+            digit = 62;
+        } else if (c == L'/' || c == L'_') {
+            digit = 63;
+        } else {
+            break;
+        }
+        value = ((value << 6) | digit) & 0xFFFFFF;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes += (char)((value >> bits) & 0xFF);
+        }
+    }
+    return bytes;
+}
+
+// A Google Calendar page's link (sharing a calendar, "?cid=" its ID in
+// base64, or showing it, "embed?src=" its ID) as the calendar's public iCal
+// address (which works only while it's public; any calendar has a secret
+// one, in its settings); nothing for other links.
+std::wstring GooglePublicIcs(const std::wstring& link) {
+    if (!link.starts_with(L"https://calendar.google.com/") ||
+        link.find(L"/ical/") != std::wstring::npos) {
+        return {};
+    }
+    auto parameter = [&](PCWSTR name) {
+        for (const WCHAR before : {L'?', L'&'}) {
+            const std::wstring key = std::wstring(1, before) + name + L"=";
+            const size_t at = link.find(key);
+            if (at != std::wstring::npos) {
+                const size_t start = at + key.size();
+                return link.substr(start,
+                                   link.find_first_of(L"&#", start) - start);
+            }
+        }
+        return std::wstring();
+    };
+    std::wstring id;
+    if (const std::wstring cid = parameter(L"cid"); !cid.empty()) {
+        const std::string bytes = DecodeBase64(cid);
+        id.assign(bytes.begin(), bytes.end());
+    } else {
+        id = parameter(L"src");
+    }
+    std::wstring escaped;
+    for (const WCHAR c : id) {
+        if (c == L'@') {
+            escaped += L"%40";
+        } else if (iswalnum(c) || c == L'.' || c == L'-' || c == L'_' ||
+                   c == L'%') {
+            escaped += c;
+        } else {
+            return {};
+        }
+    }
+    return escaped.empty() ? std::wstring()
+                           : L"https://calendar.google.com/calendar/ical/" +
+                                 escaped + L"/public/basic.ics";
+}
+
+// A link or a path as typed or pasted (quotes and spaces around it gone,
+// webcal:// read as https://, a Google Calendar page's link as its iCal
+// address); nothing when it's neither an https link nor a file's path.
+std::wstring AgendaSource(std::wstring text) {
+    const size_t start = text.find_first_not_of(L" \t\"'");
+    if (start == std::wstring::npos) {
+        return {};
+    }
+    text = text.substr(start, text.find_last_not_of(L" \t\"'") - start + 1);
+    if (_wcsnicmp(text.c_str(), L"webcal://", 9) == 0) {
+        text = L"https://" + text.substr(9);
+    }
+    const bool link =
+        _wcsnicmp(text.c_str(), L"https://", 8) == 0 && text.size() > 8;
+    if (link) {
+        text = L"https://" + text.substr(8);
+        if (const std::wstring google = GooglePublicIcs(text);
+            !google.empty()) {
+            text = google;
+        }
+    }
+    const bool path =
+        (text.size() > 3 && iswalpha(text[0]) && text[1] == L':' &&
+         (text[2] == L'\\' || text[2] == L'/')) ||
+        text.starts_with(L"\\\\");
+    return (link || path) && text.size() <= kMaxAgendaSource ? text
+                                                             : std::wstring();
+}
+
+// What an agenda is called before it's read: its link's host, or its
+// file's name.
+std::wstring AgendaShortName(const std::wstring& source) {
+    if (source.starts_with(L"https://")) {
+        const size_t end = source.find(L'/', 8);
+        return source.substr(8, end == std::wstring::npos ? end : end - 8);
+    }
+    const size_t slash = source.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? source : source.substr(slash + 1);
+}
+
+// A color for a new agenda: the first one none has.
+int NextAgendaColor(const std::vector<Agenda>& agendas) {
+    for (const int color : kAgendaColors) {
+        if (std::none_of(
+                agendas.begin(), agendas.end(),
+                [&](const Agenda& agenda) { return agenda.color == color; })) {
+            return color;
+        }
+    }
+    return kAgendaColors[agendas.size() % std::size(kAgendaColors)];
+}
+
+// (Under the lock, exclusive.)
+void IndexAgendaDays() {
+    g_agendaDays.clear();
+    for (const auto& agenda : g_agendas) {
+        for (const auto& event : agenda.events) {
+            g_agendaDays.try_emplace(
+                event.year * 10000 + event.month * 100 + event.day,
+                agenda.color);
+        }
+    }
+}
+
+// The calendar's agendas: the ones added in it (value "agendas": a line
+// each, "u", its color and its source, tab-separated), then the settings'
+// ones (whose colors "s" lines keep). Read as the calendar opens: what's
+// already read stays.
+void LoadAgendas() {
+    std::vector<WCHAR> value(32 * 1024);
+    Wh_GetStringValue(L"agendas", value.data(), value.size());
+    std::vector<Agenda> wanted;
+    std::vector<std::pair<std::wstring, int>> settingsColors;
+    auto known = [&](const std::wstring& source) {
+        return std::any_of(
+            wanted.begin(), wanted.end(),
+            [&](const Agenda& agenda) { return agenda.source == source; });
+    };
+    for (PCWSTR line = value.data(); *line;) {
+        PCWSTR end = wcschr(line, L'\n');
+        const std::wstring text =
+            end ? std::wstring(line, end) : std::wstring(line);
+        line = end ? end + 1 : line + wcslen(line);
+        const size_t tab = text.find(L'\t');
+        const size_t second =
+            tab == std::wstring::npos ? tab : text.find(L'\t', tab + 1);
+        if (second == std::wstring::npos) {
+            continue;
+        }
+        const int color =
+            (int)wcstoul(text.substr(tab + 1, second - tab - 1).c_str(),
+                         nullptr, 16) &
+            0xFFFFFF;
+        const std::wstring source = AgendaSource(text.substr(second + 1));
+        if (source.empty()) {
+            continue;
+        }
+        if (text[0] == L's') {
+            settingsColors.push_back({source, color});
+        } else if (!known(source) && wanted.size() < kMaxAgendas) {
+            Agenda agenda;
+            agenda.source = source;
+            agenda.color = color;
+            wanted.push_back(std::move(agenda));
+        }
+    }
+    for (const auto& source : g_calendarIcs) {
+        if (known(source) || wanted.size() >= kMaxAgendas) {
+            continue;
+        }
+        Agenda agenda;
+        agenda.source = source;
+        agenda.fromSettings = true;
+        agenda.color = -1;
+        for (const auto& [kept, color] : settingsColors) {
+            if (kept == source) {
+                agenda.color = color;
+            }
+        }
+        if (agenda.color < 0) {
+            agenda.color = NextAgendaColor(wanted);
+        }
+        wanted.push_back(std::move(agenda));
+    }
+    AcquireSRWLockExclusive(&g_agendasLock);
+    for (auto& agenda : wanted) {
+        for (auto& old : g_agendas) {
+            if (old.source == agenda.source) {
+                agenda.name = std::move(old.name);
+                agenda.events = std::move(old.events);
+                agenda.read = old.read;
+                agenda.failed = old.failed;
+                agenda.notIcs = old.notIcs;
+                agenda.reading = old.reading;
+                agenda.readAt = old.readAt;
+                break;
+            }
+        }
+    }
+    g_agendas = std::move(wanted);
+    IndexAgendaDays();
+    ReleaseSRWLockExclusive(&g_agendasLock);
+}
+
+void SaveAgendas() {
+    std::wstring value;
+    AcquireSRWLockShared(&g_agendasLock);
+    for (const auto& agenda : g_agendas) {
+        WCHAR color[8];
+        swprintf_s(color, L"%06X", agenda.color & 0xFFFFFF);
+        value += std::wstring(agenda.fromSettings ? L"s\t" : L"u\t") + color +
+                 L"\t" + agenda.source + L"\n";
+    }
+    ReleaseSRWLockShared(&g_agendasLock);
+    Wh_SetStringValue(L"agendas", value.c_str());
+}
+
+// The color of a day with agenda events, if it has some.
+bool AgendaDayColor(int year, int month, int day, int* color) {
+    AcquireSRWLockShared(&g_agendasLock);
+    const auto it = g_agendaDays.find(year * 10000 + month * 100 + day);
+    const bool found = it != g_agendaDays.end();
+    if (found) {
+        *color = it->second;
+    }
+    ReleaseSRWLockShared(&g_agendasLock);
+    return found;
+}
+
+// A day's agenda events: the whole-day ones, then by time.
+std::vector<AgendaItem> AgendaEventsOn(int year, int month, int day) {
+    std::vector<AgendaItem> items;
+    AcquireSRWLockShared(&g_agendasLock);
+    for (const auto& agenda : g_agendas) {
+        for (const auto& event : agenda.events) {
+            if (event.year == year && event.month == month &&
+                event.day == day) {
+                items.push_back({event, agenda.color});
+            }
+        }
+    }
+    ReleaseSRWLockShared(&g_agendasLock);
+    std::stable_sort(items.begin(), items.end(),
+                     [](const AgendaItem& a, const AgendaItem& b) {
+                         return a.event.minute < b.event.minute;
+                     });
+    return items;
+}
+
+// The next `count` agenda events from now (today's whole-day ones too); the
+// same one in two agendas counts once.
+std::vector<AgendaItem> UpcomingAgendaEvents(size_t count) {
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    const int today = now.wYear * 10000 + now.wMonth * 100 + now.wDay;
+    const int minute = now.wHour * 60 + now.wMinute;
+    auto day = [](const AgendaEvent& event) {
+        return event.year * 10000 + event.month * 100 + event.day;
+    };
+    struct Candidate {
+        const AgendaEvent* event;
+        int color;
+    };
+    auto earlier = [&](const Candidate& a, const Candidate& b) {
+        const int dayA = day(*a.event);
+        const int dayB = day(*b.event);
+        if (dayA != dayB) {
+            return dayA < dayB;
+        }
+        if (a.event->minute != b.event->minute) {
+            return a.event->minute < b.event->minute;
+        }
+        return a.event->title < b.event->title;
+    };
+    std::vector<AgendaItem> upcoming;
+    AcquireSRWLockShared(&g_agendasLock);
+    std::vector<Candidate> candidates;
+    for (const auto& agenda : g_agendas) {
+        for (const auto& event : agenda.events) {
+            const int on = day(event);
+            if (on > today ||
+                (on == today && (event.minute < 0 || event.minute >= minute))) {
+                candidates.push_back({&event, agenda.color});
+            }
+        }
+    }
+    const size_t kept = std::min(candidates.size(), count * 3);
+    std::partial_sort(candidates.begin(), candidates.begin() + kept,
+                      candidates.end(), earlier);
+    for (size_t i = 0; i < kept && upcoming.size() < count; i++) {
+        if (i && !earlier(candidates[i - 1], candidates[i])) {
+            continue;
+        }
+        upcoming.push_back({*candidates[i].event, candidates[i].color});
+    }
+    ReleaseSRWLockShared(&g_agendasLock);
+    return upcoming;
+}
+
+// A day as a number, to count days with (days since 1601; 0 for none).
+int DayNumber(int year, int month, int day) {
+    SYSTEMTIME time{(WORD)year, (WORD)month, 0, (WORD)day};
+    FILETIME file;
+    if (year < 1601 || year > 30000 || !SystemTimeToFileTime(&time, &file)) {
+        return 0;
+    }
+    return (int)((((ULONGLONG)file.dwHighDateTime << 32) | file.dwLowDateTime) /
+                 (24ULL * 60 * 60 * 10000000));
+}
+
+void DayFromNumber(int number, int* year, int* month, int* day) {
+    const ULONGLONG ticks = (ULONGLONG)number * 24 * 60 * 60 * 10000000;
+    const FILETIME file{(DWORD)ticks, (DWORD)(ticks >> 32)};
+    SYSTEMTIME time{};
+    FileTimeToSystemTime(&file, &time);
+    *year = time.wYear;
+    *month = time.wMonth;
+    *day = time.wDay;
+}
+
+// 0 is Sunday (1601 started on a Monday).
+int NumberWeekday(int number) {
+    return (number + 1) % 7;
+}
+
+// An iCalendar date ("20261012") or time ("20261012T143000", in UTC with a
+// "Z" at its end), as a local day number and minute (-1 for a date).
+bool ParseIcsTime(const std::wstring& value, int* number, int* minute) {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    if (value.size() < 8 ||
+        swscanf_s(value.c_str(), L"%4d%2d%2d", &year, &month, &day) != 3) {
+        return false;
+    }
+    *minute = -1;
+    if (value.size() >= 13 && value[8] == L'T') {
+        int hour = 0;
+        int minutes = 0;
+        if (swscanf_s(value.c_str() + 9, L"%2d%2d", &hour, &minutes) != 2 ||
+            hour > 23 || minutes > 59) {
+            return false;
+        }
+        if (value.size() >= 16 && towupper(value[15]) == L'Z') {
+            SYSTEMTIME utc{(WORD)year, (WORD)month, 0,
+                           (WORD)day,  (WORD)hour,  (WORD)minutes};
+            SYSTEMTIME local;
+            if (SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local)) {
+                year = local.wYear;
+                month = local.wMonth;
+                day = local.wDay;
+                hour = local.wHour;
+                minutes = local.wMinute;
+            }
+        }
+        *minute = hour * 60 + minutes;
+    }
+    *number = DayNumber(year, month, day);
+    return *number != 0;
+}
+
+// A text with its escapes ("\," "\;" "\n"), on one line.
+std::wstring UnescapeIcsText(const std::wstring& text) {
+    std::wstring result;
+    for (size_t i = 0; i < text.size() && result.size() < 200; i++) {
+        if (text[i] == L'\\' && i + 1 < text.size()) {
+            const WCHAR next = text[++i];
+            result += next == L'n' || next == L'N' ? L' ' : next;
+        } else if (text[i] >= 0x20) {
+            result += text[i];
+        }
+    }
+    return result;
+}
+
+// A repeating event's rule (RRULE): what the island understands of it.
+struct IcsRule {
+    // 1 daily, 2 weekly, 3 monthly, 4 yearly.
+    int frequency = 0;
+    int interval = 1;
+    int count = 0;
+    // The last day (a day number), or 0.
+    int until = 0;
+    // BYDAY: which one in the month (0 for each one, from the end when
+    // negative) and the weekday (0 for Sunday).
+    std::vector<std::pair<int, int>> days;
+    std::vector<int> monthDays;
+    std::vector<int> months;
+    int position = 0;
+};
+
+bool ParseIcsRule(const std::wstring& text, IcsRule* rule) {
+    for (size_t at = 0; at < text.size();) {
+        size_t end = text.find(L';', at);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        const std::wstring part = text.substr(at, end - at);
+        at = end + 1;
+        const size_t equals = part.find(L'=');
+        if (equals == std::wstring::npos) {
+            continue;
+        }
+        std::wstring key = part.substr(0, equals);
+        for (auto& c : key) {
+            c = towupper(c);
+        }
+        const std::wstring value = part.substr(equals + 1);
+        std::vector<std::wstring> items;
+        for (size_t from = 0; from <= value.size();) {
+            size_t comma = value.find(L',', from);
+            if (comma == std::wstring::npos) {
+                comma = value.size();
+            }
+            items.push_back(value.substr(from, comma - from));
+            from = comma + 1;
+        }
+        if (key == L"FREQ") {
+            static constexpr PCWSTR kFrequencies[] = {L"DAILY", L"WEEKLY",
+                                                      L"MONTHLY", L"YEARLY"};
+            for (int i = 0; i < 4; i++) {
+                if (_wcsicmp(value.c_str(), kFrequencies[i]) == 0) {
+                    rule->frequency = i + 1;
+                }
+            }
+        } else if (key == L"INTERVAL") {
+            rule->interval = std::clamp(_wtoi(value.c_str()), 1, 1000);
+        } else if (key == L"COUNT") {
+            rule->count = std::clamp(_wtoi(value.c_str()), 0, 100000);
+        } else if (key == L"UNTIL") {
+            int minute;
+            if (!ParseIcsTime(value, &rule->until, &minute)) {
+                rule->until = 0;
+            }
+        } else if (key == L"BYDAY") {
+            static constexpr PCWSTR kWeekdays[] = {L"SU", L"MO", L"TU", L"WE",
+                                                   L"TH", L"FR", L"SA"};
+            for (const auto& item : items) {
+                if (item.size() < 2) {
+                    continue;
+                }
+                const std::wstring name = item.substr(item.size() - 2);
+                for (int weekday = 0; weekday < 7; weekday++) {
+                    if (_wcsicmp(name.c_str(), kWeekdays[weekday]) == 0) {
+                        rule->days.push_back(
+                            {item.size() > 2
+                                 ? _wtoi(
+                                       item.substr(0, item.size() - 2).c_str())
+                                 : 0,
+                             weekday});
+                    }
+                }
+            }
+        } else if (key == L"BYMONTHDAY") {
+            for (const auto& item : items) {
+                const int day = _wtoi(item.c_str());
+                if (day && day >= -31 && day <= 31) {
+                    rule->monthDays.push_back(day);
+                }
+            }
+        } else if (key == L"BYMONTH") {
+            for (const auto& item : items) {
+                const int month = _wtoi(item.c_str());
+                if (month >= 1 && month <= 12) {
+                    rule->months.push_back(month);
+                }
+            }
+        } else if (key == L"BYSETPOS") {
+            rule->position = _wtoi(value.c_str());
+        }
+    }
+    return rule->frequency != 0;
+}
+
+// The days a monthly or yearly rule picks in a month (day numbers, sorted):
+// its days of the month, its weekdays (each one, or the nth one), or the
+// event's own day.
+std::vector<int> IcsMonthDays(const IcsRule& rule,
+                              int year,
+                              int month,
+                              int ownDay) {
+    std::vector<int> days;
+    const int first = DayNumber(year, month, 1);
+    if (!first) {
+        return days;
+    }
+    const int count = DaysInMonth(year, month);
+    if (!rule.monthDays.empty()) {
+        for (const int day : rule.monthDays) {
+            const int one = day > 0 ? day : count + day + 1;
+            if (one >= 1 && one <= count) {
+                days.push_back(first + one - 1);
+            }
+        }
+    } else if (!rule.days.empty()) {
+        for (const auto& [nth, weekday] : rule.days) {
+            std::vector<int> all;
+            for (int day = first + (weekday - NumberWeekday(first) + 7) % 7;
+                 day < first + count; day += 7) {
+                all.push_back(day);
+            }
+            if (nth == 0) {
+                days.insert(days.end(), all.begin(), all.end());
+            } else if (nth > 0 && nth <= (int)all.size()) {
+                days.push_back(all[nth - 1]);
+            } else if (nth < 0 && -nth <= (int)all.size()) {
+                days.push_back(all[(int)all.size() + nth]);
+            }
+        }
+    } else if (ownDay <= count) {
+        days.push_back(first + ownDay - 1);
+    }
+    std::sort(days.begin(), days.end());
+    days.erase(std::unique(days.begin(), days.end()), days.end());
+    if (rule.position && !days.empty()) {
+        const int index = rule.position > 0 ? rule.position - 1
+                                            : (int)days.size() + rule.position;
+        const int one =
+            index >= 0 && index < (int)days.size() ? days[index] : 0;
+        days.clear();
+        if (one) {
+            days.push_back(one);
+        }
+    }
+    return days;
+}
+
+// An event as read from the file.
+struct IcsEvent {
+    std::wstring uid;
+    std::wstring title;
+    std::wstring rule;
+    // Its first day (a day number), its minute (-1 for the whole day), and
+    // how many days it lasts.
+    int start = 0;
+    int minute = -1;
+    int span = 1;
+    int end = 0;
+    int endMinute = -1;
+    int durationDays = 0;
+    // Days taken out of its rule (EXDATE, or moved).
+    std::vector<int> excluded;
+    // An occurrence of another event, moved (RECURRENCE-ID): the day it
+    // was on.
+    int moved = 0;
+    bool cancelled = false;
+};
+
+// The days an event starts on (day numbers), up to `last` (from `first`,
+// counting the days it lasts): its own, or its rule's, without the ones
+// taken out.
+std::vector<int> IcsEventDays(const IcsEvent& event, int first, int last) {
+    std::vector<int> days;
+    const int from = first - event.span + 1;
+    IcsRule rule;
+    if (event.moved || event.rule.empty() || !ParseIcsRule(event.rule, &rule)) {
+        if (event.start >= from && event.start <= last) {
+            days.push_back(event.start);
+        }
+        return days;
+    }
+    int taken = 0;
+    // False once past its end (its last day, its count, or `last`).
+    auto take = [&](int day) {
+        if (day < event.start) {
+            return true;
+        }
+        if ((rule.until && day > rule.until) || day > last) {
+            return false;
+        }
+        taken++;
+        if (day >= from &&
+            std::find(event.excluded.begin(), event.excluded.end(), day) ==
+                event.excluded.end()) {
+            days.push_back(day);
+        }
+        return !rule.count || taken < rule.count;
+    };
+    auto past = [&](int day) {
+        return day > last || (rule.until && day > rule.until);
+    };
+    auto inMonths = [&](int day) {
+        int year;
+        int month;
+        int date;
+        DayFromNumber(day, &year, &month, &date);
+        return rule.months.empty() ||
+               std::find(rule.months.begin(), rule.months.end(), month) !=
+                   rule.months.end();
+    };
+    int year;
+    int month;
+    int day;
+    DayFromNumber(event.start, &year, &month, &day);
+    int fromYear;
+    int fromMonth;
+    int fromDay;
+    DayFromNumber(std::max(from, event.start), &fromYear, &fromMonth, &fromDay);
+    const int step = rule.interval;
+    // Without a count, the periods long before `first` are skipped.
+    const bool skip = !rule.count;
+    constexpr int kMaxPeriods = 5000;
+    if (rule.frequency == 1) {
+        int k = skip ? std::max(0, (from - event.start) / step - 1) : 0;
+        for (int n = 0; n < kMaxPeriods; n++, k++) {
+            const int one = event.start + k * step;
+            if (past(one)) {
+                break;
+            }
+            const bool weekday =
+                rule.days.empty() ||
+                std::any_of(rule.days.begin(), rule.days.end(),
+                            [&](const std::pair<int, int>& entry) {
+                                return entry.second == NumberWeekday(one);
+                            });
+            if (weekday && inMonths(one) && !take(one)) {
+                break;
+            }
+        }
+    } else if (rule.frequency == 2) {
+        // Weeks from Monday.
+        const int base = event.start - (NumberWeekday(event.start) + 6) % 7;
+        std::vector<int> offsets;
+        for (const auto& entry : rule.days) {
+            offsets.push_back((entry.second + 6) % 7);
+        }
+        if (offsets.empty()) {
+            offsets.push_back((NumberWeekday(event.start) + 6) % 7);
+        }
+        std::sort(offsets.begin(), offsets.end());
+        offsets.erase(std::unique(offsets.begin(), offsets.end()),
+                      offsets.end());
+        int k = skip ? std::max(0, (from - base) / (7 * step) - 1) : 0;
+        bool going = true;
+        for (int n = 0; n < kMaxPeriods && going; n++, k++) {
+            const int week = base + k * 7 * step;
+            if (past(week)) {
+                break;
+            }
+            for (const int offset : offsets) {
+                if (inMonths(week + offset) && !take(week + offset)) {
+                    going = false;
+                    break;
+                }
+            }
+        }
+    } else if (rule.frequency == 3) {
+        const int startIndex = year * 12 + month - 1;
+        int k =
+            skip ? std::max(
+                       0,
+                       (fromYear * 12 + fromMonth - 1 - startIndex) / step - 1)
+                 : 0;
+        bool going = true;
+        for (int n = 0; n < kMaxPeriods && going; n++, k++) {
+            const int index = startIndex + k * step;
+            const int y = index / 12;
+            const int m = index % 12 + 1;
+            const int firstDay = DayNumber(y, m, 1);
+            if (!firstDay || past(firstDay)) {
+                break;
+            }
+            if (!rule.months.empty() &&
+                std::find(rule.months.begin(), rule.months.end(), m) ==
+                    rule.months.end()) {
+                continue;
+            }
+            for (const int one : IcsMonthDays(rule, y, m, day)) {
+                if (!take(one)) {
+                    going = false;
+                    break;
+                }
+            }
+        }
+    } else if (rule.frequency == 4) {
+        std::vector<int> months = rule.months;
+        if (months.empty()) {
+            months.push_back(month);
+        }
+        std::sort(months.begin(), months.end());
+        int k = skip ? std::max(0, (fromYear - year) / step - 1) : 0;
+        bool going = true;
+        for (int n = 0; n < kMaxPeriods && going; n++, k++) {
+            const int y = year + k * step;
+            const int firstDay = DayNumber(y, 1, 1);
+            if (!firstDay || past(firstDay)) {
+                break;
+            }
+            for (const int m : months) {
+                for (const int one : IcsMonthDays(rule, y, m, day)) {
+                    if (!take(one)) {
+                        going = false;
+                        break;
+                    }
+                }
+                if (!going) {
+                    break;
+                }
+            }
+        }
+    }
+    return days;
+}
+
+// The events of an .ics file's text between `first` and `last` (day
+// numbers; up to kMaxAgendaEvents), and the calendar's name.
+std::vector<AgendaEvent> ParseIcs(const std::wstring& text,
+                                  int first,
+                                  int last,
+                                  std::wstring* name) {
+    // A long line goes on in the next ones, after a space or a tab.
+    std::vector<std::wstring> lines;
+    for (size_t at = 0; at < text.size();) {
+        size_t end = text.find(L'\n', at);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        std::wstring line = text.substr(at, end - at);
+        at = end + 1;
+        if (!line.empty() && line.back() == L'\r') {
+            line.pop_back();
+        }
+        if (!line.empty() && (line[0] == L' ' || line[0] == L'\t') &&
+            !lines.empty()) {
+            lines.back() += line.substr(1);
+        } else {
+            lines.push_back(std::move(line));
+        }
+    }
+    std::vector<IcsEvent> events;
+    IcsEvent event;
+    bool inEvent = false;
+    // Inside an event's own parts (its alarms).
+    int nested = 0;
+    for (const auto& line : lines) {
+        // "NAME;PARAMETERS:VALUE" (a colon in quotes is a parameter's).
+        size_t colon = std::wstring::npos;
+        bool quoted = false;
+        for (size_t i = 0; i < line.size(); i++) {
+            if (line[i] == L'"') {
+                quoted = !quoted;
+            } else if (line[i] == L':' && !quoted) {
+                colon = i;
+                break;
+            }
+        }
+        if (colon == std::wstring::npos) {
+            continue;
+        }
+        std::wstring key = line.substr(0, std::min(colon, line.find(L';')));
+        for (auto& c : key) {
+            c = towupper(c);
+        }
+        const std::wstring value = line.substr(colon + 1);
+        if (key == L"BEGIN") {
+            if (inEvent) {
+                nested++;
+            } else if (_wcsicmp(value.c_str(), L"VEVENT") == 0) {
+                inEvent = true;
+                event = {};
+            }
+            continue;
+        }
+        if (key == L"END") {
+            if (nested) {
+                nested--;
+            } else if (inEvent && _wcsicmp(value.c_str(), L"VEVENT") == 0) {
+                inEvent = false;
+                if (event.minute < 0) {
+                    event.span = event.end > event.start
+                                     ? event.end - event.start
+                                 : event.durationDays > 0 ? event.durationDays
+                                                          : 1;
+                } else if (event.end > event.start) {
+                    // On its next days too only when it lasts a day or more.
+                    const int days = event.end - event.start;
+                    const bool lasting =
+                        days >= 2 || event.endMinute >= event.minute;
+                    event.span =
+                        lasting ? days + (event.endMinute > 0 ? 1 : 0) : 1;
+                }
+                event.span = std::clamp(event.span, 1, 60);
+                if (event.start) {
+                    events.push_back(std::move(event));
+                }
+            }
+            continue;
+        }
+        if (!inEvent) {
+            if (key == L"X-WR-CALNAME" && name->empty()) {
+                *name = UnescapeIcsText(value).substr(0, 60);
+            }
+            continue;
+        }
+        if (nested) {
+            continue;
+        }
+        if (key == L"SUMMARY") {
+            event.title = UnescapeIcsText(value);
+        } else if (key == L"UID") {
+            event.uid = value;
+        } else if (key == L"DTSTART") {
+            if (!ParseIcsTime(value, &event.start, &event.minute)) {
+                event.start = 0;
+            }
+        } else if (key == L"DTEND") {
+            if (!ParseIcsTime(value, &event.end, &event.endMinute)) {
+                event.end = 0;
+            }
+        } else if (key == L"DURATION") {
+            // "P2D" or "P1W" (whole days).
+            const size_t p = value.find(L'P');
+            if (p != std::wstring::npos) {
+                wchar_t* after = nullptr;
+                const long number = wcstol(value.c_str() + p + 1, &after, 10);
+                if (after && (*after == L'D' || *after == L'W')) {
+                    event.durationDays = (int)std::clamp(number, 0L, 60L) *
+                                         (*after == L'W' ? 7 : 1);
+                }
+            }
+        } else if (key == L"RRULE") {
+            event.rule = value;
+        } else if (key == L"EXDATE") {
+            for (size_t from = 0; from < value.size();) {
+                size_t comma = value.find(L',', from);
+                if (comma == std::wstring::npos) {
+                    comma = value.size();
+                }
+                int day;
+                int minute;
+                if (ParseIcsTime(value.substr(from, comma - from), &day,
+                                 &minute)) {
+                    event.excluded.push_back(day);
+                }
+                from = comma + 1;
+            }
+        } else if (key == L"RECURRENCE-ID") {
+            int minute;
+            if (!ParseIcsTime(value, &event.moved, &minute)) {
+                event.moved = 0;
+            }
+        } else if (key == L"STATUS") {
+            event.cancelled = _wcsicmp(value.c_str(), L"CANCELLED") == 0;
+        }
+    }
+    // A moved occurrence (or a cancelled one) takes its event's place on
+    // the day it was on.
+    std::unordered_map<std::wstring, std::vector<size_t>> byUid;
+    for (size_t i = 0; i < events.size(); i++) {
+        if (!events[i].moved && !events[i].uid.empty()) {
+            byUid[events[i].uid].push_back(i);
+        }
+    }
+    for (const auto& moved : events) {
+        if (!moved.moved) {
+            continue;
+        }
+        if (const auto it = byUid.find(moved.uid); it != byUid.end()) {
+            for (const size_t i : it->second) {
+                events[i].excluded.push_back(moved.moved);
+            }
+        }
+    }
+    std::vector<AgendaEvent> found;
+    for (const auto& one : events) {
+        if (one.cancelled) {
+            continue;
+        }
+        for (const int start : IcsEventDays(one, first, last)) {
+            for (int i = 0; i < one.span; i++) {
+                if (start + i < first || start + i > last) {
+                    continue;
+                }
+                AgendaEvent item;
+                DayFromNumber(start + i, &item.year, &item.month, &item.day);
+                item.minute = i == 0 ? one.minute : -1;
+                item.title = one.title;
+                found.push_back(std::move(item));
+                if (found.size() >= kMaxAgendaEvents) {
+                    return found;
+                }
+            }
+        }
+    }
+    return found;
+}
+
+struct AgendaRequest {
+    HWND notify = nullptr;
+    std::vector<std::wstring> sources;
+};
+
+// Reads the agendas asked for, one at a time: the calendar is told as each
+// comes.
+DWORD WINAPI AgendaThreadProc(LPVOID parameter) {
+    std::unique_ptr<AgendaRequest> request((AgendaRequest*)parameter);
+    SYSTEMTIME today;
+    GetLocalTime(&today);
+    const int first = DayNumber(today.wYear - 1, 1, 1);
+    const int last = DayNumber(today.wYear + 1, 12, 31);
+    for (const auto& source : request->sources) {
+        if (g_agendaStop) {
+            break;
+        }
+        std::wstring text;
+        bool ok;
+        if (source.starts_with(L"https://")) {
+            std::vector<BYTE> data;
+            ok = HttpsGet(source, &data, kMaxAgendaBytes, 10000, &g_agendaStop);
+            const int length =
+                ok ? MultiByteToWideChar(CP_UTF8, 0, (const char*)data.data(),
+                                         (int)data.size(), nullptr, 0)
+                   : 0;
+            if (length > 0) {
+                text.resize(length);
+                MultiByteToWideChar(CP_UTF8, 0, (const char*)data.data(),
+                                    (int)data.size(), text.data(), length);
+            }
+        } else {
+            ok = ReadTextFile(source.c_str(), kMaxAgendaBytes, &text);
+        }
+        const bool fetched = ok;
+        ok = ok && text.find(L"BEGIN:VCALENDAR") != std::wstring::npos;
+        std::wstring name;
+        std::vector<AgendaEvent> events;
+        if (ok) {
+            events = ParseIcs(text, first, last, &name);
+        }
+        // (Stopped: nothing kept, nobody told.)
+        if (g_agendaStop) {
+            break;
+        }
+        AcquireSRWLockExclusive(&g_agendasLock);
+        for (auto& agenda : g_agendas) {
+            if (agenda.source != source) {
+                continue;
+            }
+            agenda.reading = false;
+            agenda.readAt = GetTickCount64();
+            agenda.failed = !ok;
+            agenda.notIcs = fetched && !ok;
+            if (ok) {
+                agenda.read = true;
+                agenda.name = std::move(name);
+                agenda.events = std::move(events);
+            }
+            break;
+        }
+        IndexAgendaDays();
+        ReleaseSRWLockExclusive(&g_agendasLock);
+        if (&source != &request->sources.back()) {
+            PostMessage(request->notify, WM_APP_AGENDAS, 0, 0);
+        }
+    }
+    g_agendaBusy = false;
+    if (!g_agendaStop) {
+        PostMessage(request->notify, WM_APP_AGENDAS, 1, 0);
+    }
+    return 0;
+}
+
+// Reads the agendas not read yet, or read 15 minutes ago (10, after
+// failing), on a thread (one at a time); `notify` is told as each comes.
+void RequestAgendas(HWND notify) {
+    if (g_agendaBusy) {
+        return;
+    }
+    if (g_agendaThread) {
+        CloseHandle(g_agendaThread);
+        g_agendaThread = nullptr;
+    }
+    const ULONGLONG now = GetTickCount64();
+    auto request = std::make_unique<AgendaRequest>();
+    request->notify = notify;
+    AcquireSRWLockExclusive(&g_agendasLock);
+    for (auto& agenda : g_agendas) {
+        const ULONGLONG wait = (agenda.failed ? 10 : 15) * 60 * 1000;
+        if (!agenda.readAt || now - agenda.readAt >= wait) {
+            agenda.reading = true;
+            request->sources.push_back(agenda.source);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_agendasLock);
+    if (request->sources.empty()) {
+        return;
+    }
+    g_agendaBusy = true;
+    g_agendaStop = false;
+    g_agendaThread =
+        CreateThread(nullptr, 0, AgendaThreadProc, request.get(), 0, nullptr);
+    if (g_agendaThread) {
+        request.release();
+        return;
+    }
+    g_agendaBusy = false;
+    AcquireSRWLockExclusive(&g_agendasLock);
+    for (auto& agenda : g_agendas) {
+        agenda.reading = false;
+    }
+    ReleaseSRWLockExclusive(&g_agendasLock);
 }
 
 bool HasEvents(int year, int month, int day) {
@@ -11304,6 +13380,25 @@ std::wstring EventTimeText(int minute) {
     return FormatClockTime(time, false);
 }
 
+// What's on the clipboard added to a text being typed (on one line, up to
+// `limit` characters).
+void PasteText(HWND hwnd, std::wstring* text, size_t limit) {
+    if (!OpenClipboard(hwnd)) {
+        return;
+    }
+    if (HANDLE data = GetClipboardData(CF_UNICODETEXT)) {
+        if (auto pasted = (PCWSTR)GlobalLock(data)) {
+            for (PCWSTR p = pasted; *p && text->size() < limit; p++) {
+                if (*p >= 0x20 && *p != L'\t') {
+                    *text += *p;
+                }
+            }
+            GlobalUnlock(data);
+        }
+    }
+    CloseClipboard();
+}
+
 class CalendarPanel : public Panel {
    protected:
     void Prepare(float scale) override;
@@ -11349,6 +13444,15 @@ class CalendarPanel : public Panel {
         Remind,
         Save,
         Cancel,
+        // The agendas' view: its button, an agenda's color and its "x" (the
+        // agenda's index), the link's field and "Add", and today's colors
+        // (0 to 2).
+        Agendas,
+        AgendaColor,
+        AgendaRemove,
+        LinkField,
+        LinkAdd,
+        TodayChoice,
     };
     struct Hit {
         Part part = Part::None;
@@ -11449,6 +13553,44 @@ class CalendarPanel : public Panel {
     bool m_newRemind = true;
     void StepTime(Part part, int steps);
     std::wstring m_statusText;
+
+    // The agendas' view (instead of the month): the agendas, a link or a
+    // path to add, and today's color.
+    bool m_agendasView = false;
+    D2D1_RECT_F m_agendasButton{}, m_agendaHint{}, m_linkField{}, m_linkAdd{},
+        m_agendaStatus{}, m_todayHeader{};
+    std::vector<D2D1_RECT_F> m_agendaRows;
+    // The ones added in the calendar (the settings' ones are removed there).
+    std::vector<bool> m_agendaRemovable;
+    std::array<D2D1_RECT_F, 3> m_todayChips{};
+    std::wstring m_newLink;
+    std::wstring m_agendaStatusText;
+    // The chosen day's agenda events (up to kEventsShown, and how many
+    // more), and the next ones from now.
+    std::vector<AgendaItem> m_dayAgenda;
+    std::vector<D2D1_RECT_F> m_agendaEventRows;
+    size_t m_agendaMore = 0;
+    D2D1_RECT_F m_agendaMoreRow{};
+    std::vector<AgendaItem> m_upcomingAgenda;
+    D2D1_RECT_F m_upcomingAgendaHeader{};
+    // Today's circle (see kTodayRed), and Windows' accent color (read as the
+    // calendar opens).
+    int m_todayMode = 0;
+    int m_todayColor = kTodayRed;
+    int m_windowsAccent = 0x0078D4;
+    D2D1_COLOR_F TodayColor() const;
+    void SetTodayMode(int mode);
+    void LayoutAgendas(float y);
+    void DrawAgendas(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
+    void AddAgenda();
+    void RemoveAgenda(size_t index);
+    // Windows' color dialog (see ColorThreadProc), for an agenda (its
+    // source) or for today (empty).
+    HANDLE m_colorThread = nullptr;
+    std::wstring m_colorSource;
+    void StartColorDialog(const std::wstring& source, int color);
+    bool OnColorDone(LPARAM lParam);
+    void EndColorDialog();
 };
 
 // The clock on top of the calendar; the events' rows under it.
@@ -11457,6 +13599,7 @@ constexpr float kEventRowHeight = 30;
 constexpr int kEventsShown = 4;
 constexpr WCHAR kGlyphEventDelete = 0xE711;
 constexpr WCHAR kGlyphChevronDownCalendar = 0xE70D;
+constexpr WCHAR kGlyphCalendarBack = 0xE72B;
 
 void CalendarPanel::Prepare(float scale) {
     if (scale != m_preparedScale) {
@@ -11512,6 +13655,15 @@ void CalendarPanel::OnOpen() {
     m_form = 0;
     m_formVelocity = 0;
     m_statusText.clear();
+    // The agendas (read again when due) and today's color.
+    m_agendasView = false;
+    m_newLink.clear();
+    m_agendaStatusText.clear();
+    m_todayMode = std::clamp(Wh_GetIntValue(L"calendarToday", 0), 0, 2);
+    m_todayColor = Wh_GetIntValue(L"calendarTodayColor", kTodayRed) & 0xFFFFFF;
+    m_windowsAccent = WindowsAccentColor();
+    LoadAgendas();
+    RequestAgendas(m_hwnd);
     Layout();
 }
 
@@ -11521,9 +13673,11 @@ bool CalendarPanel::AnimateContents(double dt) {
     const bool form = SpringTowards(m_form, m_formVelocity, m_adding ? 1 : 0,
                                     m_adding ? 0.4 : 0.25, dt,
                                     m_adding ? kBounceDamping : 1.0);
-    // Writing an event: the caret blinks (at the lower frame rate).
-    m_idleMotion = m_adding && !slide && !form;
-    return slide || form || m_adding;
+    // Writing an event or a link: the caret blinks a moment (at the lower
+    // frame rate).
+    const bool typing = (m_adding || m_agendasView) && CaretBlinking();
+    m_idleMotion = typing && !slide && !form;
+    return slide || form || typing;
 }
 
 // Writing an event: a new one (nullptr) for the chosen day, or one to change.
@@ -11628,6 +13782,18 @@ void CalendarPanel::RequestHolidays() {
 }
 
 bool CalendarPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_APP_COLOR_DONE) {
+        return OnColorDone(lParam);
+    }
+    // An agenda read; the last one: the ones added meanwhile are read too.
+    if (msg == WM_APP_AGENDAS) {
+        if (wParam) {
+            RequestAgendas(m_hwnd);
+        }
+        Layout();
+        StartIslandAnimation();
+        return true;
+    }
     if (msg != WM_APP_HOLIDAYS) {
         return false;
     }
@@ -11646,6 +13812,21 @@ bool CalendarPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 void CalendarPanel::OnDestroy() {
+    EndColorDialog();
+    // The agendas being read (any calendar's): stopped at the next step (a
+    // request gives up after a few seconds), and read again as the calendar
+    // opens next time.
+    if (g_agendaThread) {
+        g_agendaStop = true;
+        WaitForSingleObject(g_agendaThread, 20000);
+        CloseHandle(g_agendaThread);
+        g_agendaThread = nullptr;
+        AcquireSRWLockExclusive(&g_agendasLock);
+        for (auto& agenda : g_agendas) {
+            agenda.reading = false;
+        }
+        ReleaseSRWLockExclusive(&g_agendasLock);
+    }
     if (m_holidayThread) {
         // The download gives up after a few seconds.
         WaitForSingleObject(m_holidayThread, 15000);
@@ -11701,6 +13882,28 @@ void CalendarPanel::Layout() {
     const float titleHeight = cell * 1.2f;
     const float gridTop = top + titleHeight + cell * 0.8f;
 
+    if (m_agendasView) {
+        m_dayRects.clear();
+        m_holidayRows.clear();
+        m_eventRows.clear();
+        m_dayAgenda.clear();
+        m_agendaEventRows.clear();
+        m_upcoming.clear();
+        m_upcomingAgenda.clear();
+        m_agendaMore = 0;
+        m_eventsHeader = m_addButton = m_titleField = m_hourBox = m_minuteBox =
+            m_allDayButton = m_remindButton = m_saveButton = m_cancelButton =
+                m_status = m_upcomingHeader = m_upcomingAgendaHeader =
+                    m_agendaMoreRow = {};
+        LayoutAgendas(top + titleHeight);
+        return;
+    }
+    m_agendaRows.clear();
+    m_agendaRemovable.clear();
+    m_agendaHint = m_linkField = m_linkAdd = m_agendaStatus =
+        m_todayHeader = {};
+    m_todayChips = {};
+
     // The days of the month shown, where they are.
     m_dayRects.clear();
     WCHAR firstDayText[4] = L"6";
@@ -11719,7 +13922,7 @@ void CalendarPanel::Layout() {
               gridTop + (index / 7 + 1) * cell}});
     }
 
-    // The chosen day's holidays and events, then adding one.
+    // The chosen day's holidays, agenda events and events, then adding one.
     float y = gridTop + cell * 6 + std::round(6 * scale);
     const float row = std::round(kEventRowHeight * scale);
     m_eventsHeader = {padding, y, width - padding, y + row};
@@ -11732,6 +13935,25 @@ void CalendarPanel::Layout() {
         m_holidayRows.push_back({padding, y, width - padding, y + row});
         y += row;
     }
+    // (Up to kEventsShown agenda events; how many more under them.)
+    m_dayAgenda =
+        AgendaEventsOn(m_selectedYear, m_selectedMonth, m_selectedDay);
+    m_agendaMore = m_dayAgenda.size() > (size_t)kEventsShown
+                       ? m_dayAgenda.size() - kEventsShown
+                       : 0;
+    if (m_agendaMore) {
+        m_dayAgenda.resize(kEventsShown);
+    }
+    m_agendaEventRows.clear();
+    for (size_t i = 0; i < m_dayAgenda.size(); i++) {
+        m_agendaEventRows.push_back({padding, y, width - padding, y + row});
+        y += row;
+    }
+    m_agendaMoreRow = {};
+    if (m_agendaMore) {
+        m_agendaMoreRow = {padding, y, width - padding, y + row * 0.7f};
+        y += row * 0.7f;
+    }
     m_eventRows.clear();
     const auto events = DayEvents();
     for (size_t i = 0; i < events.size() && (int)i < kEventsShown; i++) {
@@ -11739,7 +13961,7 @@ void CalendarPanel::Layout() {
             {events[i]->id, {padding, y, width - padding, y + row}});
         y += row;
     }
-    if (events.empty() && m_holidayRows.empty()) {
+    if (events.empty() && m_holidayRows.empty() && m_dayAgenda.empty()) {
         // "No events".
         y += row;
     }
@@ -11782,7 +14004,14 @@ void CalendarPanel::Layout() {
                         y + field};
         y += field;
     }
-    // The next holidays, from today.
+    // The next agenda events and holidays, from today.
+    m_upcomingAgenda = UpcomingAgendaEvents(4);
+    m_upcomingAgendaHeader = {};
+    if (!m_upcomingAgenda.empty()) {
+        y += std::round(8 * scale);
+        m_upcomingAgendaHeader = {padding, y, width - padding, y + row};
+        y += row + m_upcomingAgenda.size() * std::round(22 * scale);
+    }
     m_upcoming = UpcomingHolidays(4);
     m_upcomingHeader = {};
     if (!m_upcoming.empty()) {
@@ -11795,6 +14024,38 @@ void CalendarPanel::Layout() {
 }
 
 CalendarPanel::Hit CalendarPanel::HitTest(POINT pt) const {
+    if (PointInRect(pt, m_agendasButton)) {
+        return {Part::Agendas};
+    }
+    if (m_agendasView) {
+        // An agenda's color at its start, its "x" at its end.
+        for (size_t i = 0; i < m_agendaRows.size(); i++) {
+            const D2D1_RECT_F& row = m_agendaRows[i];
+            if (!PointInRect(pt, row)) {
+                continue;
+            }
+            if (pt.x < row.left + std::round(28 * m_scale)) {
+                return {Part::AgendaColor, (long long)i};
+            }
+            if (pt.x >= row.right - std::round(28 * m_scale) &&
+                i < m_agendaRemovable.size() && m_agendaRemovable[i]) {
+                return {Part::AgendaRemove, (long long)i};
+            }
+            return {};
+        }
+        if (PointInRect(pt, m_linkField)) {
+            return {Part::LinkField};
+        }
+        if (PointInRect(pt, m_linkAdd)) {
+            return {Part::LinkAdd};
+        }
+        for (size_t i = 0; i < m_todayChips.size(); i++) {
+            if (PointInRect(pt, m_todayChips[i])) {
+                return {Part::TodayChoice, (long long)i};
+            }
+        }
+        return {};
+    }
     if (PointInRect(pt, m_previous)) {
         return {Part::Previous};
     }
@@ -11961,17 +14222,29 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
     }
     const float top = padding + clockHeight;
 
-    // The arrows; the title slides with the days.
+    // The agendas' button and the arrows; the title slides with the days.
     const float titleHeight = cell * 1.2f;
-    m_title = {padding + cell * 0.2f, top, width - padding - cell * 2,
+    // (In the agendas' view, its button goes back, at the end.)
+    const float buttonRight =
+        m_agendasView ? width - padding : width - padding - cell * 2;
+    m_title = {padding + cell * 0.2f, top, buttonRight - cell,
                top + titleHeight};
-    m_previous = {width - padding - cell * 2, top, width - padding - cell,
+    m_agendasButton = {buttonRight - cell, top, buttonRight, top + titleHeight};
+    m_previous = m_next = {};
+    if (!m_agendasView) {
+        m_previous = {width - padding - cell * 2, top, width - padding - cell,
+                      top + titleHeight};
+        m_next = {width - padding - cell, top, width - padding,
                   top + titleHeight};
-    m_next = {width - padding - cell, top, width - padding,
-              top + titleHeight};
-    for (Part arrow : {Part::Previous, Part::Next}) {
-        const D2D1_RECT_F& rect = arrow == Part::Previous ? m_previous : m_next;
-        if (const float lit = Hover(rect, m_hover.part == arrow);
+    }
+    for (Part button : {Part::Agendas, Part::Previous, Part::Next}) {
+        const D2D1_RECT_F& rect = button == Part::Agendas    ? m_agendasButton
+                                  : button == Part::Previous ? m_previous
+                                                             : m_next;
+        if (rect.right <= rect.left) {
+            continue;
+        }
+        if (const float lit = Hover(rect, m_hover.part == button);
             lit > 0.01f) {
             const float inset = cell * 0.18f;
             const D2D1_RECT_F back{rect.left + inset, rect.top + inset,
@@ -11982,9 +14255,21 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
                  (back.bottom - back.top) / 2},
                 brush);
         }
-        const WCHAR glyph = arrow == Part::Previous ? kGlyphPrevious : kGlyphNext;
+        const WCHAR glyph =
+            button == Part::Agendas
+                ? (m_agendasView ? kGlyphCalendarBack : kGlyphSettings)
+            : button == Part::Previous ? kGlyphPrevious
+                                       : kGlyphNext;
         brush->SetColor(Fg(0.9f));
         target->DrawText(&glyph, 1, m_iconFormat.get(), rect, brush);
+    }
+    if (m_agendasView) {
+        PCWSTR title = Tr(L"Agendas", L"Agendas");
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(title, (UINT32)wcslen(title), m_titleFormat.get(),
+                         m_title, brush);
+        DrawAgendas(target, brush);
+        return;
     }
 
     // Weekday initials, starting on the locale's first day of the week.
@@ -12058,8 +14343,48 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
                           row.right, row.bottom},
                          brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
     }
+    // The agendas' events: a bar in the agenda's color, the time, the title
+    // (read only).
+    for (size_t i = 0; i < m_agendaEventRows.size() && i < m_dayAgenda.size();
+         i++) {
+        const AgendaItem& item = m_dayAgenda[i];
+        const D2D1_RECT_F& row = m_agendaEventRows[i];
+        brush->SetColor(RgbColor(item.color, 0.9f));
+        target->FillRoundedRectangle(
+            {{row.left, row.top + std::round(6 * scale),
+              row.left + std::round(3 * scale),
+              row.bottom - std::round(6 * scale)},
+             1.5f,
+             1.5f},
+            brush);
+        const float timeWidth = std::round(64 * scale);
+        const std::wstring time = EventTimeText(item.event.minute);
+        brush->SetColor(Fg(0.55f));
+        target->DrawText(time.c_str(), (UINT32)time.size(), m_smallFormat.get(),
+                         {row.left + std::round(10 * scale), row.top,
+                          row.left + timeWidth, row.bottom},
+                         brush);
+        const std::wstring title = item.event.title.empty()
+                                       ? std::wstring(Tr(L"Event", L"Evento"))
+                                       : item.event.title;
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(title.c_str(), (UINT32)title.size(),
+                         m_textFormat.get(),
+                         {row.left + timeWidth, row.top, row.right, row.bottom},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    if (m_agendaMore) {
+        const std::wstring more =
+            L"+" + std::to_wstring(m_agendaMore) + L" " + Tr(L"more", L"mais");
+        brush->SetColor(Fg(0.5f));
+        target->DrawText(
+            more.c_str(), (UINT32)more.size(), m_smallFormat.get(),
+            {m_agendaMoreRow.left + std::round(10 * scale), m_agendaMoreRow.top,
+             m_agendaMoreRow.right, m_agendaMoreRow.bottom},
+            brush);
+    }
     const auto events = DayEvents();
-    if (events.empty() && holidays.empty()) {
+    if (events.empty() && holidays.empty() && m_dayAgenda.empty()) {
         PCWSTR none = Tr(L"No events", L"Nenhum evento");
         brush->SetColor(Fg(0.4f));
         target->DrawText(none, (UINT32)wcslen(none), m_textFormat.get(),
@@ -12279,42 +14604,349 @@ void CalendarPanel::Draw(ID2D1RenderTarget* target,
     }
 }
 
-void CalendarPanel::DrawUpcoming(ID2D1RenderTarget* target,
-                                 ID2D1SolidColorBrush* brush) {
-    if (m_upcoming.empty()) {
-        return;
-    }
+// The agendas' view: each agenda (its color, a click changes it; its name
+// and how it's doing; its "x"), the link or path to add, and today's color.
+void CalendarPanel::LayoutAgendas(float y) {
     const float scale = m_scale;
+    const float padding = std::round(kPanelPadding * scale);
+    // (Wider than the month, for the agendas' names.)
+    const float width = std::round(
+        (padding * 2 + std::round(kCalendarCell * scale) * 7) * 1.25f);
+    const float row = std::round(40 * scale);
+    const float gap = std::round(6 * scale);
+    y += gap;
+    m_agendaRows.clear();
+    m_agendaRemovable.clear();
+    AcquireSRWLockShared(&g_agendasLock);
+    for (const auto& agenda : g_agendas) {
+        m_agendaRows.push_back({padding, y, width - padding, y + row});
+        m_agendaRemovable.push_back(!agenda.fromSettings);
+        y += row;
+    }
+    const bool none = g_agendas.empty();
+    ReleaseSRWLockShared(&g_agendasLock);
+    // Without any: what to paste.
+    m_agendaHint = {};
+    if (none) {
+        m_agendaHint = {padding, y, width - padding,
+                        y + std::round(70 * scale)};
+        y = m_agendaHint.bottom;
+    }
+    y += gap;
+    const float field = std::round(32 * scale);
+    const float add = std::round(84 * scale);
+    m_linkField = {padding, y, width - padding - add - gap, y + field};
+    m_linkAdd = {width - padding - add, y, width - padding, y + field};
+    y += field;
+    const float status = std::round(kEventRowHeight * scale * 0.8f);
+    m_agendaStatus = {padding, y, width - padding, y + status};
+    if (!m_agendaStatusText.empty()) {
+        y += status;
+    }
+    y += std::round(12 * scale);
+    m_todayHeader = {padding, y, width - padding,
+                     y + std::round(kEventRowHeight * scale)};
+    y = m_todayHeader.bottom;
+    const float chip = std::round(30 * scale);
+    const float chipWidth = std::floor((width - padding * 2 - gap * 2) / 3);
+    for (size_t i = 0; i < m_todayChips.size(); i++) {
+        const float left = padding + i * (chipWidth + gap);
+        m_todayChips[i] = {left, y, left + chipWidth, y + chip};
+    }
+    y += chip + padding;
+    m_size = {(LONG)width, (LONG)std::ceil(y)};
+}
+
+void CalendarPanel::DrawAgendas(ID2D1RenderTarget* target,
+                                ID2D1SolidColorBrush* brush) {
+    const float scale = m_scale;
+    AcquireSRWLockShared(&g_agendasLock);
+    for (size_t i = 0; i < m_agendaRows.size() && i < g_agendas.size(); i++) {
+        const Agenda& agenda = g_agendas[i];
+        const D2D1_RECT_F& row = m_agendaRows[i];
+        const float middle = (row.top + row.bottom) / 2;
+        const float dot = std::round(6 * scale);
+        const D2D1_POINT_2F center{row.left + std::round(10 * scale), middle};
+        brush->SetColor(RgbColor(agenda.color, 1));
+        target->FillEllipse({center, dot, dot}, brush);
+        if (const float lit = Hover(HoverKey(5002, (long long)i),
+                                    m_hover.part == Part::AgendaColor &&
+                                        m_hover.value == (long long)i);
+            lit > 0.01f) {
+            brush->SetColor(Fg(0.5f * lit));
+            target->DrawEllipse({center, dot + std::round(3 * scale),
+                                 dot + std::round(3 * scale)},
+                                brush, 1.5f);
+        }
+        const float textLeft = row.left + std::round(28 * scale);
+        const float textRight = row.right - std::round(32 * scale);
+        const std::wstring name =
+            agenda.name.empty() ? AgendaShortName(agenda.source) : agenda.name;
+        brush->SetColor(Fg(0.95f));
+        target->DrawText(name.c_str(), (UINT32)name.size(), m_textFormat.get(),
+                         {textLeft, row.top + std::round(3 * scale), textRight,
+                          middle + std::round(2 * scale)},
+                         brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        std::wstring state =
+            agenda.reading && !agenda.read
+                ? std::wstring(Tr(L"Reading…", L"Lendo…"))
+            : agenda.notIcs
+                ? std::wstring(
+                      Tr(L"Not an .ics link (Google: Secret address in iCal "
+                         L"format)",
+                         L"Não é um link .ics (Google: Endereço secreto no "
+                         L"formato iCal)"))
+            : agenda.failed
+                ? std::wstring(Tr(L"Couldn't read it", L"Não foi possível ler"))
+            : agenda.read ? std::to_wstring(agenda.events.size()) +
+                                Tr(L" events", L" eventos")
+                          : std::wstring();
+        if (agenda.fromSettings) {
+            state += (state.empty() ? L"" : L" · ") +
+                     std::wstring(Tr(L"from Windhawk", L"do Windhawk"));
+        }
+        brush->SetColor(agenda.failed ? D2D1::ColorF(1.0f, 0.55f, 0.5f, 1)
+                                      : Fg(0.5f));
+        target->DrawText(
+            state.c_str(), (UINT32)state.size(), m_smallFormat.get(),
+            {textLeft, middle, textRight, row.bottom - std::round(3 * scale)},
+            brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        if (i < m_agendaRemovable.size() && m_agendaRemovable[i]) {
+            brush->SetColor(
+                Fg(0.4f + 0.55f * Hover(HoverKey(5003, (long long)i),
+                                        m_hover.part == Part::AgendaRemove &&
+                                            m_hover.value == (long long)i)));
+            target->DrawText(&kGlyphEventDelete, 1, m_iconFormat.get(),
+                             {row.right - std::round(28 * scale), row.top,
+                              row.right, row.bottom},
+                             brush);
+        }
+    }
+    ReleaseSRWLockShared(&g_agendasLock);
+    if (m_agendaHint.bottom > m_agendaHint.top) {
+        const std::wstring hint =
+            std::wstring(Tr(L"No agendas yet.", L"Nenhuma agenda ainda.")) +
+            L" " +
+            Tr(L"Paste an .ics link (Google Calendar: Settings, your calendar, "
+               L"Secret address in iCal format) or a file's path.",
+               L"Cole um link .ics (Google Agenda: Configurações, a sua "
+               L"agenda, Endereço secreto no formato iCal) ou o caminho "
+               L"de um arquivo.");
+        winrt::com_ptr<IDWriteTextLayout> layout;
+        if (SUCCEEDED(m_dwrite->CreateTextLayout(
+                hint.c_str(), (UINT32)hint.size(), m_smallFormat.get(),
+                m_agendaHint.right - m_agendaHint.left,
+                m_agendaHint.bottom - m_agendaHint.top, layout.put()))) {
+            layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+            layout->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            brush->SetColor(Fg(0.55f));
+            target->DrawTextLayout({m_agendaHint.left, m_agendaHint.top},
+                                   layout.get(), brush);
+        }
+    }
+    DrawField(target, brush, m_linkField, m_newLink,
+              Tr(L".ics link or file path", L"Link ou caminho do .ics"), true);
+    const float addRadius = (m_linkAdd.bottom - m_linkAdd.top) / 2;
+    brush->SetColor(
+        Accent(1.0f - 0.15f * Hover(m_linkAdd, m_hover.part == Part::LinkAdd)));
+    target->FillRoundedRectangle({m_linkAdd, addRadius, addRadius}, brush);
+    PCWSTR add = Tr(L"Add", L"Adicionar");
+    brush->SetColor(AccentInk(1));
+    m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    target->DrawText(add, (UINT32)wcslen(add), m_textFormat.get(), m_linkAdd,
+                     brush);
+    m_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    if (!m_agendaStatusText.empty()) {
+        brush->SetColor(D2D1::ColorF(1.0f, 0.55f, 0.5f, 1));
+        target->DrawText(m_agendaStatusText.c_str(),
+                         (UINT32)m_agendaStatusText.size(), m_smallFormat.get(),
+                         m_agendaStatus, brush);
+    }
+    // Today's color: red, Windows' accent color, or one chosen (a swatch on
+    // each; the one in use outlined).
     brush->SetColor(Fg(0.1f));
-    target->FillRectangle({m_upcomingHeader.left, m_upcomingHeader.top,
-                           m_upcomingHeader.right, m_upcomingHeader.top + 1},
+    target->FillRectangle({m_todayHeader.left, m_todayHeader.top,
+                           m_todayHeader.right, m_todayHeader.top + 1},
                           brush);
-    PCWSTR header = Tr(L"Upcoming holidays", L"Próximos feriados");
+    PCWSTR header = Tr(L"Today's color", L"Cor de hoje");
     brush->SetColor(Fg(0.6f));
     target->DrawText(header, (UINT32)wcslen(header), m_smallFormat.get(),
-                     m_upcomingHeader, brush);
-    float y = m_upcomingHeader.bottom;
-    const float line = std::round(22 * scale);
-    for (const auto& holiday : m_upcoming) {
-        SYSTEMTIME day{(WORD)holiday.year, (WORD)holiday.month, 0,
-                       (WORD)holiday.day};
-        WCHAR date[32] = L"";
-        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &day, L"d MMM", date,
-                        ARRAYSIZE(date), nullptr);
-        const float dateWidth = std::round(46 * scale);
-        brush->SetColor(D2D1::ColorF(0.2f, 0.78f, 0.35f, 1));
-        target->DrawText(date, (UINT32)wcslen(date), m_smallFormat.get(),
-                         {m_upcomingHeader.left, y,
-                          m_upcomingHeader.left + dateWidth, y + line},
-                         brush);
-        brush->SetColor(Fg(0.85f));
-        target->DrawText(holiday.name.c_str(), (UINT32)holiday.name.size(),
+                     m_todayHeader, brush);
+    const int colors[] = {kTodayRed, m_windowsAccent, m_todayColor};
+    const PCWSTR names[] = {Tr(L"Red", L"Vermelho"), Tr(L"Windows", L"Windows"),
+                            Tr(L"Choose…", L"Escolher…")};
+    for (size_t i = 0; i < m_todayChips.size(); i++) {
+        const D2D1_RECT_F& chip = m_todayChips[i];
+        const bool chosen = m_todayMode == (int)i;
+        const float radius = (chip.bottom - chip.top) / 2;
+        brush->SetColor(Fg(
+            chosen ? 0.18f
+                   : 0.08f + 0.08f * Hover(chip,
+                                           m_hover.part == Part::TodayChoice &&
+                                               m_hover.value == (long long)i)));
+        target->FillRoundedRectangle({chip, radius, radius}, brush);
+        if (chosen) {
+            brush->SetColor(Fg(0.7f));
+            target->DrawRoundedRectangle(
+                {{chip.left + 0.75f, chip.top + 0.75f, chip.right - 0.75f,
+                  chip.bottom - 0.75f},
+                 radius,
+                 radius},
+                brush, 1.5f);
+        }
+        const float dot = std::round(5 * scale);
+        brush->SetColor(RgbColor(colors[i], 1));
+        target->FillEllipse(
+            {{chip.left + std::round(13 * scale), (chip.top + chip.bottom) / 2},
+             dot,
+             dot},
+            brush);
+        brush->SetColor(Fg(0.9f));
+        target->DrawText(names[i], (UINT32)wcslen(names[i]),
                          m_smallFormat.get(),
-                         {m_upcomingHeader.left + dateWidth, y,
-                          m_upcomingHeader.right, y + line},
+                         {chip.left + std::round(22 * scale), chip.top,
+                          chip.right - std::round(4 * scale), chip.bottom},
                          brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        y += line;
     }
+}
+
+// A link or a path typed (or pasted) added, and read.
+void CalendarPanel::AddAgenda() {
+    const std::wstring source = AgendaSource(m_newLink);
+    m_agendaStatusText.clear();
+    if (source.empty()) {
+        m_agendaStatusText = Tr(L"Only https links or file paths",
+                                L"Só links https ou caminhos de arquivos");
+    } else {
+        AcquireSRWLockExclusive(&g_agendasLock);
+        const bool known = std::any_of(
+            g_agendas.begin(), g_agendas.end(),
+            [&](const Agenda& agenda) { return agenda.source == source; });
+        const bool full = g_agendas.size() >= kMaxAgendas;
+        if (!known && !full) {
+            Agenda agenda;
+            agenda.source = source;
+            agenda.color = NextAgendaColor(g_agendas);
+            // (Before the settings' ones, as they're read.)
+            g_agendas.insert(std::find_if(g_agendas.begin(), g_agendas.end(),
+                                          [](const Agenda& one) {
+                                              return one.fromSettings;
+                                          }),
+                             std::move(agenda));
+        }
+        ReleaseSRWLockExclusive(&g_agendasLock);
+        if (known) {
+            m_agendaStatusText = Tr(L"Already added", L"Já adicionada");
+        } else if (full) {
+            m_agendaStatusText = Tr(L"Too many agendas", L"Agendas demais");
+        } else {
+            m_newLink.clear();
+            SaveAgendas();
+            RequestAgendas(m_hwnd);
+        }
+    }
+    Layout();
+    StartIslandAnimation();
+}
+
+void CalendarPanel::RemoveAgenda(size_t index) {
+    AcquireSRWLockExclusive(&g_agendasLock);
+    if (index < g_agendas.size() && !g_agendas[index].fromSettings) {
+        g_agendas.erase(g_agendas.begin() + index);
+        IndexAgendaDays();
+    }
+    ReleaseSRWLockExclusive(&g_agendasLock);
+    SaveAgendas();
+    Layout();
+    StartIslandAnimation();
+}
+
+D2D1_COLOR_F CalendarPanel::TodayColor() const {
+    return m_todayMode == 1   ? RgbColor(m_windowsAccent, 1)
+           : m_todayMode == 2 ? RgbColor(m_todayColor, 1)
+                              : D2D1::ColorF(1.0f, 0.27f, 0.23f, 1);
+}
+
+void CalendarPanel::SetTodayMode(int mode) {
+    m_todayMode = std::clamp(mode, 0, 2);
+    if (m_todayMode == 1) {
+        m_windowsAccent = WindowsAccentColor();
+    }
+    Wh_SetIntValue(L"calendarToday", m_todayMode);
+}
+
+void CalendarPanel::DrawUpcoming(ID2D1RenderTarget* target,
+                                 ID2D1SolidColorBrush* brush) {
+    const float scale = m_scale;
+    const float line = std::round(22 * scale);
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    // A list: a line over it, its title, then a row each, the date (in the
+    // agenda's color, or the holidays' green; with the year when it isn't
+    // this one, like a yearly event already past this year) and what it is.
+    struct Row {
+        SYSTEMTIME date;
+        int color;
+        std::wstring text;
+    };
+    auto list = [&](const D2D1_RECT_F& header, PCWSTR title,
+                    const std::vector<Row>& rows) {
+        if (rows.empty()) {
+            return;
+        }
+        brush->SetColor(Fg(0.1f));
+        target->FillRectangle(
+            {header.left, header.top, header.right, header.top + 1}, brush);
+        brush->SetColor(Fg(0.6f));
+        target->DrawText(title, (UINT32)wcslen(title), m_smallFormat.get(),
+                         header, brush);
+        bool otherYear = false;
+        for (const auto& row : rows) {
+            otherYear = otherYear || row.date.wYear != now.wYear;
+        }
+        const float dateWidth = std::round((otherYear ? 80 : 46) * scale);
+        float y = header.bottom;
+        for (const auto& row : rows) {
+            WCHAR date[32] = L"";
+            GetDateFormatEx(
+                LOCALE_NAME_USER_DEFAULT, 0, &row.date,
+                row.date.wYear != now.wYear ? L"d MMM yyyy" : L"d MMM", date,
+                ARRAYSIZE(date), nullptr);
+            brush->SetColor(RgbColor(row.color, 1));
+            target->DrawText(
+                date, (UINT32)wcslen(date), m_smallFormat.get(),
+                {header.left, y, header.left + dateWidth, y + line}, brush);
+            brush->SetColor(Fg(0.85f));
+            target->DrawText(
+                row.text.c_str(), (UINT32)row.text.size(), m_smallFormat.get(),
+                {header.left + dateWidth, y, header.right, y + line}, brush,
+                D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            y += line;
+        }
+    };
+    std::vector<Row> events;
+    for (const auto& item : m_upcomingAgenda) {
+        const AgendaEvent& event = item.event;
+        const std::wstring title = event.title.empty()
+                                       ? std::wstring(Tr(L"Event", L"Evento"))
+                                       : event.title;
+        events.push_back(
+            {{(WORD)event.year, (WORD)event.month, 0, (WORD)event.day},
+             item.color,
+             event.minute >= 0 ? EventTimeText(event.minute) + L" · " + title
+                               : title});
+    }
+    list(m_upcomingAgendaHeader, Tr(L"Upcoming events", L"Próximos eventos"),
+         events);
+    std::vector<Row> holidays;
+    for (const auto& holiday : m_upcoming) {
+        holidays.push_back(
+            {{(WORD)holiday.year, (WORD)holiday.month, 0, (WORD)holiday.day},
+             0x33C759,
+             holiday.name});
+    }
+    list(m_upcomingHeader, Tr(L"Upcoming holidays", L"Próximos feriados"),
+         holidays);
 }
 
 void CalendarPanel::DrawMonth(ID2D1RenderTarget* target,
@@ -12348,10 +14980,15 @@ void CalendarPanel::DrawMonth(ID2D1RenderTarget* target,
                     firstDayText, ARRAYSIZE(firstDayText));
     const int firstDay = (_wtoi(firstDayText) + 1) % 7;
 
-    // Six weeks of days: today in a red circle like on macOS, the chosen day
-    // in a ring, a dot under days with events.
+    // Six weeks of days: today in a circle (red like on macOS, or the color
+    // chosen), the chosen day in a ring, a dot under days with events.
     SYSTEMTIME today;
     GetLocalTime(&today);
+    D2D1_COLOR_F todayFill = TodayColor();
+    // White on it, or dark on a light color.
+    const float todayInk =
+        Luminance(todayFill.r, todayFill.g, todayFill.b) > 0.62f ? 0.08f : 1.0f;
+    todayFill.a = opacity;
     const int lead = (DayOfWeek(year, month, 1) - firstDay + 7) % 7;
     const int days = DaysInMonth(year, month);
     const int previousMonth = month == 1 ? 12 : month - 1;
@@ -12384,7 +15021,7 @@ void CalendarPanel::DrawMonth(ID2D1RenderTarget* target,
                            m_hover.value == day && year == m_year &&
                            month == m_month;
         if (isToday) {
-            brush->SetColor(D2D1::ColorF(1.0f, 0.27f, 0.23f, opacity));
+            brush->SetColor(todayFill);
             target->FillEllipse({center, circle, circle}, brush);
         } else if (const float lit = Hover(
                        HoverKey(5001, year * 10000 + month * 100 + index),
@@ -12398,20 +15035,25 @@ void CalendarPanel::DrawMonth(ID2D1RenderTarget* target,
             target->DrawEllipse({center, circle, circle}, brush, 1.5f);
         }
         const std::wstring text = std::to_wstring(day);
-        // White on today's red circle; green on a holiday; the theme's color
-        // elsewhere.
-        const bool holiday =
-            inMonth && !isToday && !HolidaysOn(year, month, day).empty();
-        brush->SetColor(isToday   ? D2D1::ColorF(1, 1, 1, opacity)
-                        : holiday ? D2D1::ColorF(0.2f, 0.78f, 0.35f, opacity)
-                                  : Fg((inMonth ? 0.9f : 0.3f) * opacity));
+        // On today's circle, its ink; a day with agenda events in its
+        // agenda's color, a holiday green; the theme's color elsewhere.
+        int agendaColor = 0;
+        const bool agendaDay = inMonth && !isToday &&
+                               AgendaDayColor(year, month, day, &agendaColor);
+        const bool holiday = inMonth && !isToday && !agendaDay &&
+                             !HolidaysOn(year, month, day).empty();
+        brush->SetColor(
+            isToday     ? D2D1::ColorF(todayInk, todayInk, todayInk, opacity)
+            : agendaDay ? RgbColor(agendaColor, opacity)
+            : holiday   ? D2D1::ColorF(0.2f, 0.78f, 0.35f, opacity)
+                        : Fg((inMonth ? 0.9f : 0.3f) * opacity));
         target->DrawText(text.c_str(), (UINT32)text.size(), m_dayFormat.get(),
                          rect, brush);
         if (inMonth && HasEvents(year, month, day)) {
             const float dot = 1.8f * scale;
-            brush->SetColor(isToday
-                                ? D2D1::ColorF(1, 1, 1, opacity)
-                                : D2D1::ColorF(1.0f, 0.27f, 0.23f, opacity));
+            brush->SetColor(
+                isToday ? D2D1::ColorF(todayInk, todayInk, todayInk, opacity)
+                        : D2D1::ColorF(1.0f, 0.27f, 0.23f, opacity));
             target->FillEllipse(
                 {{center.x, center.y + circle - 3 * scale}, dot, dot}, brush);
         }
@@ -12554,6 +15196,46 @@ bool CalendarPanel::OnMouseUp(POINT pt) {
         case Part::Save:
             SaveNewEvent();
             return true;
+        case Part::Agendas:
+            if (m_adding) {
+                StopEditing();
+            }
+            m_agendasView = !m_agendasView;
+            m_agendaStatusText.clear();
+            g_lastTyped = NowSeconds();
+            Layout();
+            StartIslandAnimation();
+            return true;
+        case Part::AgendaColor: {
+            std::wstring source;
+            int color = 0;
+            AcquireSRWLockShared(&g_agendasLock);
+            if ((size_t)hit.value < g_agendas.size()) {
+                source = g_agendas[hit.value].source;
+                color = g_agendas[hit.value].color;
+            }
+            ReleaseSRWLockShared(&g_agendasLock);
+            if (!source.empty()) {
+                StartColorDialog(source, color);
+            }
+            return true;
+        }
+        case Part::AgendaRemove:
+            RemoveAgenda((size_t)hit.value);
+            return true;
+        case Part::LinkField:
+            g_lastTyped = NowSeconds();
+            StartIslandAnimation();
+            return true;
+        case Part::LinkAdd:
+            AddAgenda();
+            return true;
+        case Part::TodayChoice:
+            SetTodayMode((int)hit.value);
+            if (hit.value == 2) {
+                StartColorDialog(L"", m_todayColor);
+            }
+            return true;
         case Part::None:
             break;
     }
@@ -12575,6 +15257,9 @@ void CalendarPanel::StepTime(Part part, int steps) {
 }
 
 bool CalendarPanel::OnWheel(int delta) {
+    if (m_agendasView) {
+        return false;
+    }
     // Over the hour or the minute: changes it.
     if (m_adding &&
         (m_hover.part == Part::Hour || m_hover.part == Part::Minute)) {
@@ -12586,6 +15271,17 @@ bool CalendarPanel::OnWheel(int delta) {
 }
 
 bool CalendarPanel::OnKey(WPARAM key) {
+    // Escape goes back from the agendas to the month.
+    if (m_agendasView) {
+        if (key != VK_ESCAPE) {
+            return false;
+        }
+        m_agendasView = false;
+        m_agendaStatusText.clear();
+        Layout();
+        StartIslandAnimation();
+        return true;
+    }
     if (m_adding) {
         // Escape leaves the event; the arrows change the hour or the minute.
         if (key == VK_ESCAPE) {
@@ -12611,8 +15307,31 @@ bool CalendarPanel::OnKey(WPARAM key) {
 }
 
 // Typing the event's title, or its time; Tab goes to the next field, Enter
-// adds it.
+// adds it. In the agendas' view, a link or a path.
 bool CalendarPanel::OnChar(WCHAR c) {
+    if (m_agendasView) {
+        std::wstring& text = m_newLink;
+        if (c == L'\r') {
+            AddAgenda();
+            return true;
+        }
+        if (c == L'\b') {
+            if (!text.empty()) {
+                text.pop_back();
+            }
+        } else if (c == 0x16) {
+            PasteText(m_hwnd, &text, kMaxAgendaSource);
+        } else if (c >= 0x20 && text.size() < kMaxAgendaSource) {
+            text += c;
+        } else {
+            return false;
+        }
+        if (!m_agendaStatusText.empty()) {
+            m_agendaStatusText.clear();
+            Layout();
+        }
+        return true;
+    }
     if (!m_adding) {
         return false;
     }
@@ -12653,19 +15372,7 @@ bool CalendarPanel::OnChar(WCHAR c) {
             text.pop_back();
         }
     } else if (c == 0x16) {
-        if (OpenClipboard(m_hwnd)) {
-            if (HANDLE data = GetClipboardData(CF_UNICODETEXT)) {
-                if (auto pasted = (PCWSTR)GlobalLock(data)) {
-                    for (PCWSTR p = pasted; *p && text.size() < 120; p++) {
-                        if (*p >= 0x20 && *p != L'\t') {
-                            text += *p;
-                        }
-                    }
-                    GlobalUnlock(data);
-                }
-            }
-            CloseClipboard();
-        }
+        PasteText(m_hwnd, &text, 120);
     } else if (c >= 0x20 && text.size() < 120) {
         text += c;
     } else {
@@ -12865,6 +15572,7 @@ const ControlInfo kControls[] = {
 // in a terminal on the screen when it fails, to show why. Nothing is
 // installed or accepted for the user, and the mod never ends komorebi by
 // itself.
+
 // The user's environment as Windows has it now, not this process's (from
 // when it started: its PATH lacks what was installed since, like komorebi
 // and whkd installed with Windhawk running). Freed with
@@ -13034,11 +15742,11 @@ std::wstring KomorebiCommands(const std::wstring& komorebic, int button) {
     return button == 0 ? start : button == 1 ? stop : stop + L" && " + start;
 }
 
-// Runs commands with cmd, with the user's current environment (komorebic
-// looks for whkd and masir on PATH): without a window, or in its own
-// console window on the screen (where it waits for a key when they fail).
-// It inherits nothing. `process` (if given) gets its handles.
-bool StartKomorebiCommand(const std::wstring& commands,
+// Runs a cmd line (what follows "cmd /c"), with the user's current
+// environment (komorebic looks for whkd and masir on PATH): without a
+// window, or in its own console window on the screen. It inherits nothing.
+// `process` (if given) gets its handles.
+bool StartKomorebiCommand(const std::wstring& line,
                           bool onScreen,
                           PROCESS_INFORMATION* process) {
     WCHAR cmd[MAX_PATH];
@@ -13047,8 +15755,7 @@ bool StartKomorebiCommand(const std::wstring& commands,
         return false;
     }
     wcscat_s(cmd, L"\\cmd.exe");
-    std::wstring command = L"cmd.exe /c \"" + commands +
-                           (onScreen ? L" || pause\"" : L"\"");
+    std::wstring command = L"cmd.exe /c \"" + line + L"\"";
     void* environment = FreshEnvironment();
     STARTUPINFO startup{};
     startup.cb = sizeof(startup);
@@ -13077,7 +15784,9 @@ bool StartKomorebiCommand(const std::wstring& commands,
 }
 
 // A button's commands, on a thread of their own (which owns this, and its
-// own copy of the stop event).
+// own copy of the stop event). What they print goes to a temporary file,
+// shown in a terminal only if they fail (they're never run a second time:
+// a reload would stop komorebi again), and deleted.
 struct KomorebiJob {
     std::wstring commands;
     int button;
@@ -13093,27 +15802,46 @@ constexpr DWORD kKomorebiCommandMs = 60000;
 
 DWORD WINAPI KomorebiThreadProc(LPVOID parameter) {
     std::unique_ptr<KomorebiJob> job((KomorebiJob*)parameter);
+    WCHAR folder[MAX_PATH];
+    WCHAR output[MAX_PATH] = L"";
+    const DWORD folderLength = GetTempPath(ARRAYSIZE(folder), folder);
+    if (!folderLength || folderLength >= ARRAYSIZE(folder) ||
+        !GetTempFileName(folder, L"kmb", 0, output)) {
+        output[0] = L'\0';
+    }
     PROCESS_INFORMATION process{};
+    bool started = false;
     bool ended = false;
     DWORD exitCode = 0;
-    if (StartKomorebiCommand(job->commands, false, &process)) {
+    if (output[0] &&
+        StartKomorebiCommand(L"(" + job->commands + L") > \"" + output +
+                                 L"\" 2>&1",
+                             false, &process)) {
+        started = true;
         const HANDLE waits[] = {process.hProcess, job->stop};
         ended = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE,
                                        kKomorebiCommandMs) == WAIT_OBJECT_0 &&
                 GetExitCodeProcess(process.hProcess, &exitCode);
         CloseHandle(process.hThread);
         CloseHandle(process.hProcess);
-    } else {
-        // (Not started: shown on the screen instead.)
-        ended = true;
-        exitCode = 1;
     }
     const bool stopping = WaitForSingleObject(job->stop, 0) == WAIT_OBJECT_0;
-    // It failed: again in a terminal on the screen, which shows why (one
-    // still running after the wait isn't run a second time).
-    const bool failed = !ended || exitCode != 0;
-    if (ended && exitCode != 0 && !stopping) {
-        StartKomorebiCommand(job->commands, true, nullptr);
+    const bool failed = !started || !ended || exitCode != 0;
+    if (!stopping && !started) {
+        // (Nothing ran: it runs once, on the screen, where it waits for a
+        // key if it fails.)
+        StartKomorebiCommand(job->commands + L" || pause", true, nullptr);
+    } else if (!stopping && ended && exitCode != 0) {
+        // What it printed, in a terminal on the screen (which deletes it).
+        const std::wstring file = L"\"" + std::wstring(output) + L"\"";
+        if (!StartKomorebiCommand(
+                L"type " + file + L" & del " + file + L" & pause", true,
+                nullptr)) {
+            DeleteFile(output);
+        }
+    } else if (output[0]) {
+        // (One still running at the wait's end keeps its file open.)
+        DeleteFile(output);
     }
     if (!stopping && job->notify) {
         PostMessage(job->notify, WM_APP_KOMOREBI_DONE, job->button, failed);
@@ -13262,6 +15990,9 @@ enum class IslandPref {
     ActionKomorebi,
     KomorebiWhkd,
     KomorebiMasir,
+    ScreenshotFolder,
+    MediaWheel,
+    MediaMarquee,
 };
 
 struct IslandPrefInfo {
@@ -13450,6 +16181,15 @@ const IslandPrefInfo kIslandPrefs[] = {
     {IslandPref::KomorebiMasir, L"komorebiMasir", kGlyphKomorebi,
      L"komorebi: with masir (focus follows the mouse)",
      L"komorebi: com o masir (o foco segue o mouse)"},
+    {IslandPref::ScreenshotFolder, L"islandScreenshotFolder", 0xE722,
+     L"Screenshot notifications open the picture (in Explorer)",
+     L"Avisos de captura abrem a imagem (no Explorador)"},
+    {IslandPref::MediaWheel, L"islandMediaWheel", 0xE893,
+     L"The wheel on what's playing changes the song (not the volume)",
+     L"A roda no que está tocando troca a música (não o volume)"},
+    {IslandPref::MediaMarquee, L"islandMediaMarquee", 0xE8AB,
+     L"A long title keeps scrolling while it plays",
+     L"Título longo rolando enquanto toca"},
 };
 
 // The groups of items on the pill, which can be put in another order in the
@@ -13672,7 +16412,6 @@ bool ProfileChanged(int id);
 // The profile the current island shows: the one in use, or another
 // monitor's own (-1: the main island's settings).
 int ChosenProfile();
-bool SettingsLocked();
 // Everything the user made and chose in the island, as text for a file
 // (see kBackupValues), and put back from one (false if it isn't one).
 std::wstring CaptureBackup();
@@ -13791,6 +16530,131 @@ void LoadPillOrder() {
 void SavePillOrder() {
     StoreProfileString(L"islandOrder", EncodePillOrder(g_pillOrder).c_str());
 }
+
+// The other apps' tray icons as arranged on the island, each look its own
+// like the pill's order (the main settings and the islands following them,
+// a profile, another monitor's profile): the ones pinned on the pill, the
+// order they were put in (the others after them, in Windows' order) and,
+// for pinned ones put elsewhere on the pill than with the tray, the item
+// they're beside (see TrayAnchor).
+std::vector<std::wstring> g_trayPinned;
+std::vector<std::wstring> g_trayOrder;
+std::vector<std::pair<std::wstring, int>> g_trayAnchors;
+// (Remembered for icons not there now too, up to this many.)
+constexpr size_t kTrayOrderMax = 64;
+
+// A pinned icon's place: -1 with the tray, a group's number after that
+// group, or TrayAnchorBefore(group) before it.
+int TrayAnchorBefore(PillGroup group) {
+    return -(int)group - 2;
+}
+
+int TrayAnchor(const std::wstring& key) {
+    for (const auto& [anchored, anchor] : g_trayAnchors) {
+        if (anchored == key) {
+            return anchor;
+        }
+    }
+    return -1;
+}
+
+std::vector<std::wstring> DecodeTrayKeys(std::wstring_view text) {
+    std::vector<std::wstring> keys;
+    while (!text.empty()) {
+        const size_t end = text.find(L'\n');
+        if (const std::wstring_view key = text.substr(0, end); !key.empty()) {
+            keys.emplace_back(key);
+        }
+        if (end == std::wstring_view::npos) {
+            break;
+        }
+        text.remove_prefix(end + 1);
+    }
+    return keys;
+}
+
+std::wstring EncodeTrayKeys(const std::vector<std::wstring>& keys) {
+    std::wstring text;
+    for (const auto& key : keys) {
+        text += (text.empty() ? L"" : L"\n") + key;
+    }
+    return text;
+}
+
+// "anchor<TAB>key" lines.
+std::vector<std::pair<std::wstring, int>> DecodeTrayAnchors(
+    std::wstring_view text) {
+    std::vector<std::pair<std::wstring, int>> anchors;
+    for (const auto& line : DecodeTrayKeys(text)) {
+        const size_t tab = line.find(L'\t');
+        const int anchor = _wtoi(line.c_str());
+        // (Beside the tray's own items: with the tray.)
+        if (tab != std::wstring::npos && anchor != -1 &&
+            anchor != (int)PillGroup::Tray &&
+            anchor != TrayAnchorBefore(PillGroup::Tray) &&
+            anchor >= TrayAnchorBefore((PillGroup)(kPillGroups - 1)) &&
+            anchor < kPillGroups) {
+            anchors.push_back({line.substr(tab + 1), anchor});
+        }
+    }
+    return anchors;
+}
+
+std::wstring EncodeTrayAnchors(
+    const std::vector<std::pair<std::wstring, int>>& anchors) {
+    std::wstring text;
+    for (const auto& [key, anchor] : anchors) {
+        text += (text.empty() ? L"" : L"\n") + std::to_wstring(anchor) + L"\t" +
+                key;
+    }
+    return text;
+}
+
+void LoadTrayArrangement() {
+    std::vector<WCHAR> value(8192);
+    auto read = [&](PCWSTR name) {
+        value[0] = 0;
+        Wh_GetStringValue(name, value.data(), value.size());
+        return std::wstring_view(value.data());
+    };
+    g_trayPinned = DecodeTrayKeys(read(L"trayPinned"));
+    g_trayOrder = DecodeTrayKeys(read(L"trayOrder"));
+    g_trayAnchors = DecodeTrayAnchors(read(L"trayAnchors"));
+}
+
+void SaveTrayArrangement() {
+    StoreProfileString(L"trayPinned", EncodeTrayKeys(g_trayPinned).c_str());
+    StoreProfileString(L"trayOrder", EncodeTrayKeys(g_trayOrder).c_str());
+    StoreProfileString(L"trayAnchors",
+                       EncodeTrayAnchors(g_trayAnchors).c_str());
+}
+
+// Another app's tray icon dragged to another place (on the pill, or in the
+// list of the ones not pinned): where it would go.
+struct TrayDrop {
+    // The island it goes on (none: back where it was).
+    Island* island = nullptr;
+    bool pinned = false;
+    int anchor = -1;
+    // Put before this icon, or after `after`, or after the ones there.
+    std::wstring before;
+    std::wstring after;
+    // The line showing where, in that island's window.
+    D2D1_RECT_F mark{};
+};
+
+// The icon held (see Island::DragTrayIcon and TrayListPanel::DragIcon): its
+// key, the island whose icons they are, from its panel's list or not, where
+// it was pressed, and whether it moved far enough to be dragged.
+struct TrayDrag {
+    std::wstring key;
+    Island* owner = nullptr;
+    bool fromList = false;
+    POINT from{};
+    bool moved = false;
+    TrayDrop drop;
+};
+TrayDrag g_trayDrag;
 
 // The notches (the Fixed style's, see islandNotches): one in the middle,
 // two at the screen's corners, or three. Each group goes in the left (0),
@@ -13913,38 +16777,59 @@ constexpr int kAutoHideDelayMax = 50;
 constexpr int kAutoHideDelayDefault = 8;
 constexpr int kAutoHideDelayStep = 1;
 
-// The settings view's sections, in order (see ControlPanel::SettingEntry),
-// in three tabs (see SettingSectionTab).
+// The settings view's sections (see ControlPanel::SettingEntry), in their
+// tabs' order (see SettingSectionTab).
 enum SettingSection {
     kSectionProfiles,
     kSectionBackup,
+    kSectionPlace,
+    kSectionStyle,
+    kSectionColors,
     kSectionLook,
-    kSectionNotches,
     kSectionAnimations,
     kSectionPill,
+    kSectionSystem,
+    kSectionDesktop,
+    kSectionTools,
     kSectionActions,
-    kSectionTrayMedia,
-    kSectionPlace,
+    kSectionTray,
+    kSectionMedia,
     kSectionClock,
     kSectionNotifications,
+    kSectionMonitors,
     kSectionCount
 };
 
-// The settings view's tabs: the profiles (with the backup) and the look, the
-// pill's items, and its place with the clock and the notifications.
-enum SettingTab { kTabLook, kTabPill, kTabPlace, kTabCount };
+// The settings view's tabs: the profiles, the backup and the place; the
+// look; the pill's items; the tray icons, what's playing and the clock; the
+// notifications; and the monitors (with two or more).
+enum SettingTab {
+    kTabGeneral,
+    kTabLook,
+    kTabPill,
+    kTabItems,
+    kTabNotifications,
+    kTabMonitors,
+    kTabCount
+};
+
+int SettingTabCount() {
+    return GetSystemMetrics(SM_CMONITORS) > 1 ? kTabCount : kTabMonitors;
+}
 
 int SettingSectionTab(int section) {
-    return section <= kSectionAnimations  ? kTabLook
-           : section <= kSectionTrayMedia ? kTabPill
-                                          : kTabPlace;
+    static constexpr int kTabs[kSectionCount] = {
+        kTabGeneral,       kTabGeneral, kTabGeneral, kTabLook,  kTabLook,
+        kTabLook,          kTabLook,    kTabPill,    kTabPill,  kTabPill,
+        kTabPill,          kTabPill,    kTabItems,   kTabItems, kTabItems,
+        kTabNotifications, kTabMonitors};
+    return kTabs[std::clamp(section, 0, kSectionCount - 1)];
 }
 
 // The settings rows with a few choices.
 enum ChoiceId {
     kChoiceAnimationLevel,
     kChoiceFrameRate,
-    kChoiceMonitor,
     // Two buttons, none chosen: exporting and importing a backup.
     kChoiceBackup,
     // Three buttons, none chosen: the custom colors (see CustomColor).
@@ -13960,6 +16845,8 @@ enum ChoiceId {
 };
 
 int MonitorCount();
+bool IsSharedPref(IslandPref pref);
+void SaveShownInProfile(int id);
 // The monitor chosen for the island (when it doesn't follow the mouse), as
 // an index in MonitorCount's order.
 int ChosenMonitorIndex();
@@ -13991,7 +16878,7 @@ int ChoiceCount(int id) {
         case kChoiceNotches:
             return 4;
         default:
-            return std::clamp(MonitorCount(), 1, 6);
+            return 0;
     }
 }
 
@@ -14035,7 +16922,7 @@ std::wstring ChoiceOption(int id, int index) {
                    : index == 2 ? Tr(L"Corners", L"Cantos")
                                 : Tr(L"Three", L"Três");
         default:
-            return std::to_wstring(index + 1);
+            return {};
     }
 }
 
@@ -14059,13 +16946,14 @@ int ChoiceValue(int id) {
         case kChoiceNotches:
             return g_settings.islandNotches;
         default:
-            return ChosenMonitorIndex();
+            return -1;
     }
 }
 
-// Dimmed (and not pressable): the level without animations, the monitor
-// while following the mouse or with one monitor, the date's order without a
-// date.
+// Dimmed (and not pressable): the level without animations, the date's
+// order without the date or the year, the icons that aren't pinned without
+// the tray, the wallpaper's transition without it, and the notches without
+// the Fixed style.
 bool ChoiceDisabled(int id) {
     switch (id) {
         case kChoiceAnimationLevel:
@@ -14084,7 +16972,7 @@ bool ChoiceDisabled(int id) {
         case kChoiceNotches:
             return g_settings.islandBar || !g_settings.islandReserve;
         default:
-            return g_settings.islandFollowMouse || MonitorCount() < 2;
+            return true;
     }
 }
 
@@ -14342,7 +17230,8 @@ void LoadPlaces() {
                     place.media =
                         number & (kAppMediaButtons | kAppMediaTitle);
                 } else if (place.appId[0] == L'g') {
-                    place.gap = std::clamp(number, kIslandGapMin, kIslandGapMax);
+                    place.gap =
+                        std::clamp(number, kIslandGapMin, kIslandGapMax);
                 } else if (place.appId[0] == L's') {
                     place.size =
                         std::clamp(number, kIslandSizeMin, kIslandSizeMax);
@@ -14386,25 +17275,26 @@ void SavePlaces() {
     }
     std::wstring value;
     for (const auto& place : g_appPlaces) {
-        value += std::to_wstring(std::lround(place.x * 1000)) + L"\t" +
-                 std::to_wstring(std::lround(place.y * 1000)) + L"\t" +
-                 (place.own      ? L"a" + std::to_wstring(place.hidden) + L"\t"
-                  : place.hidden ? L"h" + std::to_wstring(place.hidden) + L"\t"
-                                 : std::wstring()) +
-                 (place.clock >= 0 ? L"c" + std::to_wstring(place.clock) + L"\t"
-                                   : std::wstring()) +
-                 (place.center >= 0 ? L"e" + std::to_wstring(place.center) + L"\t"
-                                    : std::wstring()) +
-                 (place.media >= 0 ? L"m" + std::to_wstring(place.media) + L"\t"
-                                   : std::wstring()) +
-                 (place.gap >= 0 ? L"g" + std::to_wstring(place.gap) + L"\t"
-                                 : std::wstring()) +
-                 (place.size >= 0 ? L"s" + std::to_wstring(place.size) + L"\t"
-                                  : std::wstring()) +
-                 (place.order.empty()
-                      ? std::wstring()
-                      : L"o" + EncodePillOrder(place.order) + L"\t") +
-                 place.appId + L"\n";
+        value +=
+            std::to_wstring(std::lround(place.x * 1000)) + L"\t" +
+            std::to_wstring(std::lround(place.y * 1000)) + L"\t" +
+            (place.own      ? L"a" + std::to_wstring(place.hidden) + L"\t"
+             : place.hidden ? L"h" + std::to_wstring(place.hidden) + L"\t"
+                            : std::wstring()) +
+            (place.clock >= 0 ? L"c" + std::to_wstring(place.clock) + L"\t"
+                              : std::wstring()) +
+            (place.center >= 0 ? L"e" + std::to_wstring(place.center) + L"\t"
+                               : std::wstring()) +
+            (place.media >= 0 ? L"m" + std::to_wstring(place.media) + L"\t"
+                              : std::wstring()) +
+            (place.gap >= 0 ? L"g" + std::to_wstring(place.gap) + L"\t"
+                            : std::wstring()) +
+            (place.size >= 0 ? L"s" + std::to_wstring(place.size) + L"\t"
+                             : std::wstring()) +
+            (place.order.empty()
+                 ? std::wstring()
+                 : L"o" + EncodePillOrder(place.order) + L"\t") +
+            place.appId + L"\n";
     }
     StoreProfileString(L"appPlaces", value.c_str());
 }
@@ -14421,8 +17311,8 @@ void UseMonitorPlace(const std::wstring& device) {
     }
 }
 
-// The monitors, left to right (then top to bottom), as the island's settings
-// number them.
+// The monitors, left to right (then top to bottom); the island's settings
+// show each with Windows' own number (see MonitorNumber).
 struct MonitorEntry {
     HMONITOR handle;
     std::wstring device;
@@ -14448,6 +17338,19 @@ std::vector<MonitorEntry> ListMonitors() {
                                                     : a.rect.top < b.rect.top;
               });
     return monitors;
+}
+
+// The Windows display device's number, independent of its position.
+std::wstring MonitorNumber(const std::wstring& device) {
+    const size_t at = device.rfind(L"DISPLAY");
+    if (at != std::wstring::npos) {
+        const std::wstring number = device.substr(at + 7);
+        if (!number.empty() &&
+            number.find_first_not_of(L"0123456789") == std::wstring::npos) {
+            return number;
+        }
+    }
+    return device;
 }
 
 int MonitorCount() {
@@ -14659,10 +17562,12 @@ constexpr size_t kMaxNetworks = 8;
 constexpr size_t kMaxBluetoothDevices = 8;
 
 // The control center's messages: the radios' state (wParam Wi-Fi, lParam
-// Bluetooth, see RadioThreadProc), and Wi-Fi events (wParam the event, lParam
-// the reason of a failed connection).
+// Bluetooth, see RadioThreadProc), and Wi-Fi events (wParam the event: a
+// scan done or Wi-Fi disconnected; a join's end is WM_APP_WLAN_CONNECTION).
 constexpr UINT WM_APP_RADIOS = WM_APP + 60;
 constexpr UINT WM_APP_WLAN = WM_APP + 61;
+// A join finished (lParam: a new WlanConnectionEvent, the receiver's).
+constexpr UINT WM_APP_WLAN_CONNECTION = WM_APP + 86;
 // The Wi-Fi networks in reach, read on a thread (lParam: a list, see
 // ControlPanel::WifiListThreadProc).
 constexpr UINT WM_APP_WIFI_LIST = WM_APP + 73;
@@ -14871,24 +17776,44 @@ DWORD WINAPI RadioThreadProc(LPVOID parameter) {
     return 0;
 }
 
+// Waits for threads that own their jobs, all of them together for at most
+// `ms`: one stuck in a slow call (a monitor, a radio, a media app) ends by
+// itself later, and the tool process exits at unload anyway.
+void JoinOwningThreads(std::vector<HANDLE>& threads, DWORD ms) {
+    const ULONGLONG until = GetTickCount64() + ms;
+    for (HANDLE thread : threads) {
+        const ULONGLONG now = GetTickCount64();
+        WaitForSingleObject(thread, now < until ? (DWORD)(until - now) : 0);
+        CloseHandle(thread);
+    }
+    threads.clear();
+}
+
 // Brightness: reads it (BrightnessQueryProc), or sets the latest level asked
 // for until no newer one comes (BrightnessThreadProc), so dragging the slider
-// doesn't queue up slow calls.
+// doesn't queue up slow calls. Each thread holds the job too (its parameter
+// is a new std::shared_ptr to it), so it can outlive its window; `notify` is
+// cleared when that window goes.
 struct BrightnessJob {
-    HWND notify = nullptr;
+    std::atomic<HWND> notify{nullptr};
     std::atomic<int> target{-1};
     std::atomic<bool> running{false};
 };
 
 DWORD WINAPI BrightnessQueryProc(LPVOID parameter) {
-    auto* job = (BrightnessJob*)parameter;
-    PostMessage(job->notify, WM_APP_BRIGHTNESS,
-                (WPARAM)(INT_PTR)ReadBrightness(), 0);
+    const std::unique_ptr<std::shared_ptr<BrightnessJob>> held(
+        (std::shared_ptr<BrightnessJob>*)parameter);
+    const int level = ReadBrightness();
+    if (HWND notify = (*held)->notify) {
+        PostMessage(notify, WM_APP_BRIGHTNESS, (WPARAM)(INT_PTR)level, 0);
+    }
     return 0;
 }
 
 DWORD WINAPI BrightnessThreadProc(LPVOID parameter) {
-    auto* job = (BrightnessJob*)parameter;
+    const std::unique_ptr<std::shared_ptr<BrightnessJob>> held(
+        (std::shared_ptr<BrightnessJob>*)parameter);
+    BrightnessJob* job = held->get();
     int applied = -1;
     for (;;) {
         const int level = job->target;
@@ -14907,22 +17832,39 @@ DWORD WINAPI BrightnessThreadProc(LPVOID parameter) {
     return 0;
 }
 
+// A join that finished: how, and which profile it was for (a click on
+// another network meanwhile makes the first one's end come later).
+struct WlanConnectionEvent {
+    DWORD code;
+    DWORD reason;
+    std::wstring profile;
+};
+
 // Wi-Fi events, on a system thread: passed on to the control center.
 void WINAPI WlanNotificationCallback(PWLAN_NOTIFICATION_DATA data,
                                      PVOID context) {
     if (!data || data->NotificationSource != WLAN_NOTIFICATION_SOURCE_ACM) {
         return;
     }
-    DWORD reason = 0;
     if ((data->NotificationCode == wlan_notification_acm_connection_complete ||
          data->NotificationCode ==
              wlan_notification_acm_connection_attempt_fail) &&
         data->pData &&
         data->dwDataSize >= sizeof(WLAN_CONNECTION_NOTIFICATION_DATA)) {
-        reason =
-            ((PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData)->wlanReasonCode;
+        const auto* connection =
+            (PWLAN_CONNECTION_NOTIFICATION_DATA)data->pData;
+        auto* event = new WlanConnectionEvent{
+            data->NotificationCode, connection->wlanReasonCode,
+            std::wstring(connection->strProfileName,
+                         wcsnlen(connection->strProfileName,
+                                 WLAN_MAX_NAME_LENGTH))};
+        if (!PostMessage((HWND)context, WM_APP_WLAN_CONNECTION, 0,
+                         (LPARAM)event)) {
+            delete event;
+        }
+        return;
     }
-    PostMessage((HWND)context, WM_APP_WLAN, data->NotificationCode, reason);
+    PostMessage((HWND)context, WM_APP_WLAN, data->NotificationCode, 0);
 }
 
 std::wstring EscapeXml(const std::wstring& text) {
@@ -15070,7 +18012,6 @@ std::vector<AudioOutput> ActiveOutputs(IMMDeviceEnumerator* devices) {
     return outputs;
 }
 
-
 // Makes a device the default output, for everything (like the Windows sound
 // settings do).
 void SetDefaultOutput(const std::wstring& id) {
@@ -15106,8 +18047,12 @@ class ControlPanel : public Panel {
         StartWorker(DarkModeThreadProc, nullptr);
     }
     // Called while open, to show changes made elsewhere.
+    // (Not the settings: they change by a click or Windhawk's settings,
+    // which lay them out again.)
     void Refresh() {
-        if (IsOpen() && !m_dragging && m_dragId < 0) {
+        if (IsOpen() && m_view != View::Settings && !m_dragging &&
+            m_dragId < 0) {
+            CheckConnecting();
             Update();
             Layout();
             Render();
@@ -15285,16 +18230,19 @@ class ControlPanel : public Panel {
         ProfileUpdate,
         ProfileDelete,
         ProfileDone,
-        // Another monitor's profile, from the main island (its index in
-        // OtherIslands): a click goes to the next one.
-        MonitorProfileRow,
+        // The Monitors section (index: the part in m_monitorParts): the
+        // mode (one monitor, all, following the mouse), a screen on the
+        // map, and a profile for another monitor.
+        MonitorMode,
+        MonitorMap,
+        MonitorProfile,
         SizeSlider,   // The island's size.
         SizeReset,    // Back to its usual size.
         SearchField,  // The settings' search box.
         SearchClear,  // Its "x".
         OrderChip,    // An item in the order strip (its PillGroup).
         ChoiceSegment,  // A choice of a row (ChoiceId * 16 + its index).
-        SettingsTab,    // A tab of the settings (its section).
+        SettingsTab,    // A tab of the settings (its SettingTab).
     };
 
     struct Hit {
@@ -15364,7 +18312,8 @@ class ControlPanel : public Panel {
     void JoinWifi(int index);
     void SubmitPassword();
     void SwitchRadio(int kind, bool on);
-    void StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter);
+    bool StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter);
+    bool StartBrightnessWorker(LPTHREAD_START_ROUTINE proc);
     void WaitForWorkers();
     void UpdateDisplayMode();
     void UpdateAccessibility();
@@ -15434,10 +18383,28 @@ class ControlPanel : public Panel {
                          const D2D1_RECT_F& rect,
                          float amount);
     void SetEditing(bool editing);
-    // An option that depends on another one being on.
+    // What only the main island does (it shows the alerts and takes the
+    // shortcuts): dimmed in another monitor's island's settings.
+    static bool MainIslandOnly(IslandPref pref) {
+        switch (pref) {
+            case IslandPref::OwnNotifications:
+            case IslandPref::ShortcutNotifications:
+            case IslandPref::ShortcutControl:
+            case IslandPref::Banner:
+            case IslandPref::BannerMinimized:
+            case IslandPref::HideWindowsBanners:
+            case IslandPref::WebPictures:
+                return true;
+            default:
+                return false;
+        }
+    }
+    // An option that depends on another one being on (or the main island's
+    // only, on another one).
     static bool PrefDisabled(IslandPref pref) {
         const bool notches = NotchCountWanted() > 0;
-        return (pref == IslandPref::FollowMouse &&
+        return (OtherIslandShown() && MainIslandOnly(pref)) ||
+               (pref == IslandPref::FollowMouse &&
                 (GetIslandPref(IslandPref::AllMonitors) || notches)) ||
                ((pref == IslandPref::FreeDrag ||
                  pref == IslandPref::VerticalSides ||
@@ -15459,6 +18426,8 @@ class ControlPanel : public Panel {
                   GetIslandPref(IslandPref::AutoHide)))) ||
                (pref == IslandPref::MonthNumber &&
                 !GetIslandPref(IslandPref::ClockDate)) ||
+               (pref == IslandPref::MediaMarquee &&
+                !GetIslandPref(IslandPref::MediaTitle)) ||
                ((pref == IslandPref::BannerMinimized ||
                  pref == IslandPref::HideWindowsBanners ||
                  pref == IslandPref::WebPictures) &&
@@ -15555,6 +18524,7 @@ class ControlPanel : public Panel {
     D2D1_RECT_F m_komorebiButtons[3]{};
     winrt::com_ptr<IDWriteTextFormat> m_komorebiIconFormat;
     bool KomorebiShown() const;
+    void PrepareFormats(float scale);
     bool KomorebiEnabled(int button) const;
     void UpdateKomorebi();
     // The power plans, the active one, and its row in the section (which
@@ -15580,9 +18550,17 @@ class ControlPanel : public Panel {
     std::wstring m_password;
     TextEdit m_passwordEdit;
     bool m_showPassword = false;
-    // A profile made to join, removed if joining fails.
-    std::wstring m_createdProfile;
+    // Profiles made to join whose join hasn't ended yet: each one is removed
+    // if its own join fails (a wrong password isn't kept).
+    std::vector<std::wstring> m_createdProfiles;
+    // Joining `m_connectingProfile` (given up after a while: Windows may
+    // never say how it went).
     bool m_connecting = false;
+    std::wstring m_connectingProfile;
+    ULONGLONG m_connectingSince = 0;
+    static constexpr ULONGLONG kConnectingMs = 45000;
+    void CheckConnecting();
+    void OnWifiJoinEnded(const WlanConnectionEvent& event);
     std::wstring m_wifiStatus;
     // The thread reading the networks, and whether to read them (and scan)
     // again when it's done.
@@ -15643,7 +18621,8 @@ class ControlPanel : public Panel {
     // The monitors' brightness, 0 to 100, or -1 (not known or not
     // adjustable).
     int m_brightness = -1;
-    BrightnessJob m_brightnessJob;
+    std::shared_ptr<BrightnessJob> m_brightnessJob =
+        std::make_shared<BrightnessJob>();
     ULONGLONG m_brightnessReadAt = 0;
     // The display mode (DISPLAYCONFIG_TOPOLOGY_*).
     int m_displayMode = 0;
@@ -15747,13 +18726,19 @@ class ControlPanel : public Panel {
         // A row with a few choices (its ChoiceId).
         Choice,
         // The profiles (see m_profileChips).
-        Profiles
+        Profiles,
+        Monitors
     };
     struct SettingEntry {
         SettingKind kind;
         // The IslandPref, for an option.
         int value;
         int section;
+        // Kept in the column of the option before (see SettingSpec).
+        bool follows = false;
+        // A selector's or a slider's: its name's height over it (see
+        // SettingNameHeight); 0 for a name beside its control.
+        float head = 0;
         // In the list (0 at its top).
         D2D1_RECT_F rect{};
         bool shown = true;
@@ -15772,7 +18757,7 @@ class ControlPanel : public Panel {
     D2D1_RECT_F m_searchField{}, m_searchClear{}, m_settingsViewport{};
     // The settings in tabs, one for each section: the one shown, and where
     // each is. While searching, every section shows (its matches).
-    int m_settingsTab = kTabLook;
+    int m_settingsTab = kTabGeneral;
     // Another tab's options fading in, all together (see BeginScrollArea).
     double m_tabFade = 1;
     double m_tabFadeVelocity = 0;
@@ -15797,7 +18782,25 @@ class ControlPanel : public Panel {
     void SettleSettings();
     bool AnimateSettings(double dt);
     std::wstring SettingText(const SettingEntry& entry) const;
-    float SettingHeight(SettingKind kind) const;
+    // In pixels, for a column `width` wide (the names wrap, see
+    // SettingName).
+    float SettingHeight(const SettingEntry& entry, float width) const;
+    float SettingNameHeight(const SettingEntry& entry, float width) const;
+    std::wstring SettingName(const SettingEntry& entry) const;
+    // The profiles' line of help (see DrawProfiles), by case.
+    static PCWSTR ProfilesHint(int hint);
+    static constexpr int kProfilesHints = 6;
+    // A text on as many lines as it needs, in the middle of `rect` (see
+    // WrappedHeight); in the settings, instead of scrolling.
+    void DrawWrapped(ID2D1RenderTarget* target,
+                     ID2D1SolidColorBrush* brush,
+                     const std::wstring& text,
+                     IDWriteTextFormat* format,
+                     const D2D1_RECT_F& rect,
+                     bool centered = false);
+    float WrappedHeight(const std::wstring& text,
+                        IDWriteTextFormat* format,
+                        float width) const;
     void DrawSettingEntry(ID2D1RenderTarget* target,
                           ID2D1SolidColorBrush* brush,
                           const SettingEntry& entry);
@@ -15883,7 +18886,6 @@ class ControlPanel : public Panel {
     // each profile's pencil, and the one being edited (its id, or -1) with
     // its name being typed, its buttons, and when it was last saved.
     std::vector<D2D1_RECT_F> m_profileChips;
-    std::vector<D2D1_RECT_F> m_monitorProfileRows;
     std::vector<D2D1_RECT_F> m_profilePencils;
     D2D1_RECT_F m_profileNameField{}, m_profileUpdate{}, m_profileDelete{},
         m_profileDone{};
@@ -15898,6 +18900,22 @@ class ControlPanel : public Panel {
     void EndProfileEdit(bool keep);
     void DrawProfiles(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush,
                       const D2D1_RECT_F& row);
+    // The Monitors section: its buttons and screens (what each chooses: a
+    // mode, a screen's index, a profile's id; for which monitor; its name;
+    // chosen or dimmed), and its lines of text.
+    struct MonitorPart {
+        D2D1_RECT_F rect;
+        Part part;
+        int value;
+        std::wstring device;
+        std::wstring text;
+        bool chosen;
+        bool disabled;
+    };
+    std::vector<MonitorPart> m_monitorParts;
+    std::vector<std::pair<D2D1_RECT_F, std::wstring>> m_monitorLabels;
+    void LayoutMonitors(const D2D1_RECT_F& row);
+    void DrawMonitors(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     int m_orderDragStrip = -1;
     int m_orderDrag = -1;
     bool m_orderMoved = false;
@@ -15943,8 +18961,7 @@ class ControlPanel : public Panel {
         double target;
     };
     std::vector<Knob> m_knobs;
-    // Scrolling texts: since when, and whether one scrolls now.
-    double m_marqueeStart = 0;
+    // Whether a text scrolls now (under the mouse, see ScrollsHere).
     bool m_marqueeActive = false;
     // Their layouts, made once instead of on every frame.
     struct MarqueeLayout {
@@ -15956,6 +18973,16 @@ class ControlPanel : public Panel {
         float width;
     };
     std::vector<MarqueeLayout> m_marqueeLayouts;
+    struct WrappedLayout {
+        std::wstring text;
+        IDWriteTextFormat* format;
+        float fontSize;
+        float width;
+        float height;
+        bool centered;
+        winrt::com_ptr<IDWriteTextLayout> layout;
+    };
+    std::vector<WrappedLayout> m_wrappedLayouts;
     bool m_darkMode = false;
     std::vector<D2D1_RECT_F> m_rows;
     std::vector<D2D1_RECT_F> m_rowIcons;
@@ -16136,13 +19163,15 @@ class NotificationPanel : public Panel {
     std::vector<Notification> m_notifications;
     // Cleared here (the Windows notification database is only read): all
     // that arrived up to `m_clearedUntil`, and the ones dismissed one by one.
-    long long m_clearedUntil = 0;
-    std::vector<long long> m_dismissed;
+    // One copy for every island's panel (all on the island thread), so a
+    // panel saving it never brings back what another one cleared.
+    static inline long long m_clearedUntil = 0;
+    static inline std::vector<long long> m_dismissed;
     // Also by its tag and what it says: some apps (like Claude) post a
     // notification again, as a new one with the same tag, which stays
     // dismissed. Not for notifications without a tag: the same text can
     // come again as news (like "3 unread messages").
-    std::vector<std::wstring> m_dismissedTexts;
+    static inline std::vector<std::wstring> m_dismissedTexts;
     // Only the latest ones dismissed one by one are worth keeping (and
     // their stored text is read back with room for all of them).
     static constexpr size_t kMaxDismissed = 200;
@@ -16157,7 +19186,7 @@ class NotificationPanel : public Panel {
         std::replace(key.begin(), key.end(), L'\n', L' ');
         return key.substr(0, kDismissKeyMax);
     }
-    bool m_clearedLoaded = false;
+    static inline bool m_clearedLoaded = false;
     bool m_doNotDisturb = false;
     Hit m_hover;
     // The cards, in the list's coordinates (0 at its top), the room the list
@@ -16386,24 +19415,38 @@ void SendMediaCommand(MediaCommand command, double position = 0) {
     }
 }
 
-DWORD WINAPI MediaThreadProc(LPVOID) {
+// The media thread's own copies of its events (stop, changed, command), so
+// StopMediaWatch can give up waiting for it (a media app's call that hangs)
+// and close the island's; the thread closes these when it ends.
+struct MediaThreadEvents {
+    HANDLE events[3];
+};
+
+DWORD WINAPI MediaThreadProc(LPVOID parameter) {
     using namespace winrt::Windows::Media::Control;
+    const std::unique_ptr<MediaThreadEvents> own(
+        (MediaThreadEvents*)parameter);
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     {
         GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
+        GlobalSystemMediaTransportControlsSessionManager::
+            CurrentSessionChanged_revoker sessionRevoker;
+        GlobalSystemMediaTransportControlsSessionManager::
+            SessionsChanged_revoker sessionsRevoker;
+        auto changed = [](auto&&...) { TellMediaChanged(); };
         try {
             manager =
                 GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
                     .get();
+            sessionRevoker =
+                manager.CurrentSessionChanged(winrt::auto_revoke, changed);
+            sessionsRevoker =
+                manager.SessionsChanged(winrt::auto_revoke, changed);
         } catch (winrt::hresult_error const& e) {
             Wh_Log(L"Media controls: %08X", (unsigned)e.code());
+            manager = nullptr;
         }
         if (manager) {
-            auto changed = [](auto&&...) { TellMediaChanged(); };
-            auto sessionRevoker =
-                manager.CurrentSessionChanged(winrt::auto_revoke, changed);
-            auto sessionsRevoker =
-                manager.SessionsChanged(winrt::auto_revoke, changed);
             GlobalSystemMediaTransportControlsSession session{nullptr};
             GlobalSystemMediaTransportControlsSession::
                 MediaPropertiesChanged_revoker propertiesRevoker;
@@ -16427,13 +19470,12 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
                 std::shared_ptr<std::atomic<bool>> titleStale;
             };
             std::vector<WatchedSession> watched;
-            SetEvent(g_mediaChangedEvent);
+            const HANDLE* events = own->events;
+            SetEvent(events[1]);
 
-            const HANDLE events[] = {g_mediaStopEvent, g_mediaChangedEvent,
-                                     g_mediaCommandEvent};
             for (;;) {
-                const DWORD wait = WaitForMultipleObjects(
-                    ARRAYSIZE(events), events, FALSE, INFINITE);
+                const DWORD wait =
+                    WaitForMultipleObjects(3, events, FALSE, INFINITE);
                 if (wait == WAIT_OBJECT_0) {
                     break;
                 }
@@ -16695,6 +19737,9 @@ DWORD WINAPI MediaThreadProc(LPVOID) {
         }
     }
     winrt::uninit_apartment();
+    for (HANDLE event : own->events) {
+        CloseHandle(event);
+    }
     return 0;
 }
 
@@ -16705,16 +19750,38 @@ void StartMediaWatch() {
     g_mediaStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     g_mediaChangedEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     g_mediaCommandEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (g_mediaStopEvent && g_mediaChangedEvent && g_mediaCommandEvent) {
+    if (!g_mediaStopEvent || !g_mediaChangedEvent || !g_mediaCommandEvent) {
+        return;
+    }
+    auto* own = new MediaThreadEvents{};
+    int copied = 0;
+    for (HANDLE event :
+         {g_mediaStopEvent, g_mediaChangedEvent, g_mediaCommandEvent}) {
+        if (!DuplicateHandle(GetCurrentProcess(), event, GetCurrentProcess(),
+                             &own->events[copied], 0, FALSE,
+                             DUPLICATE_SAME_ACCESS)) {
+            break;
+        }
+        copied++;
+    }
+    if (copied == 3) {
         g_mediaThread =
-            CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0, nullptr);
+            CreateThread(nullptr, 0, MediaThreadProc, own, 0, nullptr);
+    }
+    if (!g_mediaThread) {
+        for (int i = 0; i < copied; i++) {
+            CloseHandle(own->events[i]);
+        }
+        delete own;
     }
 }
 
 void StopMediaWatch() {
     if (g_mediaThread) {
         SetEvent(g_mediaStopEvent);
-        WaitForSingleObject(g_mediaThread, INFINITE);
+        // (A media app's call that hangs: the thread ends by itself later,
+        // with its own events.)
+        WaitForSingleObject(g_mediaThread, 5000);
         CloseHandle(g_mediaThread);
         g_mediaThread = nullptr;
     }
@@ -16736,6 +19803,27 @@ void StopMediaWatch() {
 }
 
 std::wstring AppDisplayName(const std::wstring& appId);
+
+// How far a text too long for its place has scrolled `elapsed` seconds after
+// it started: a pause, on to its end, a pause, back, like on macOS.
+double MarqueeShift(double elapsed, double distance, float scale) {
+    const double speed = 30 * scale;
+    const double pause = 1.5;
+    const double travel = distance / speed;
+    const double cycle = (pause + travel) * 2;
+    const double t = std::fmod(std::max(elapsed, 0.0), cycle);
+    double shift;
+    if (t < pause) {
+        shift = 0;
+    } else if (t < pause + travel) {
+        shift = (t - pause) * speed;
+    } else if (t < pause * 2 + travel) {
+        shift = distance;
+    } else {
+        shift = distance - (t - pause * 2 - travel) * speed;
+    }
+    return std::clamp(shift, 0.0, distance);
+}
 
 // "3:07", or "1:02:45".
 std::wstring FormatMediaTime(double seconds) {
@@ -16766,6 +19854,10 @@ class MediaPanel : public Panel {
             StartIslandAnimation();
         }
         const bool otherApp = state.appId != m_state.appId;
+        // Another song scrolls from its start.
+        if (state.title != m_state.title || state.artist != m_state.artist) {
+            m_scrollStart = NowSeconds();
+        }
         m_state = state;
         if (IsOpen()) {
             if (otherApp) {
@@ -16807,6 +19899,8 @@ class MediaPanel : public Panel {
         PillButtons,
         PillTitle,
         Source,
+        // The cover: its app to the front.
+        Cover,
     };
     // With several apps with media: "Automatic" (Windows' choice) and each
     // app, to choose which one is controlled; the one under the mouse.
@@ -16875,6 +19969,16 @@ class MediaPanel : public Panel {
     bool m_appMuted = false;
     double m_appVolumeHover = 0;
     double m_appVolumeHoverVelocity = 0;
+    // A title or an artist too long scrolls under the mouse (from
+    // m_scrollStart, another song, or the mouse coming onto it; m_scrolling
+    // while one does).
+    double m_scrollStart = 0;
+    bool m_scrolling = false;
+    void DrawScrolling(ID2D1RenderTarget* target,
+                       ID2D1SolidColorBrush* brush,
+                       const std::wstring& text,
+                       IDWriteTextFormat* format,
+                       const D2D1_RECT_F& rect);
 };
 
 // The Windows banner and the hook that follows it (see BannerWinEventProc).
@@ -17447,10 +20551,8 @@ class ProfilesPanel : public Panel {
         }
         m_separatorY = y + separator / 2;
         y += separator;
-        // (Not on a monitor showing a profile of its own: its settings are
-        // the main island's.)
         m_save = {};
-        if (g_profiles.size() < kMaxProfiles && !SettingsLocked()) {
+        if (g_profiles.size() < kMaxProfiles) {
             m_save = {padding, y, width - padding, y + row};
             y += row;
         }
@@ -18495,7 +21597,6 @@ std::wstring StampText(long long stamp) {
     return std::wstring(date) + L"  " + FormatClockTime(time, false);
 }
 
-
 constexpr WCHAR kGlyphNote = 0xE70B;
 constexpr WCHAR kGlyphTasks = 0xE9D5;
 constexpr WCHAR kGlyphKeyboardShortcuts = 0xE765;
@@ -18540,7 +21641,7 @@ class EditingPanel : public Panel {
     // The caret blinks a moment after typing (`moving`: something else
     // moves too, drawn at full rate then).
     bool AnimateTyping(bool typing, bool moving) {
-        const bool blinking = typing && NowSeconds() - g_lastTyped < 5;
+        const bool blinking = typing && CaretBlinking();
         m_idleMotion = blinking && !moving;
         return blinking || moving;
     }
@@ -20124,8 +23225,6 @@ constexpr size_t kMaxShortcuts = 300;
 constexpr UINT WM_APP_SHORTCUTS_IMPORTED = WM_APP + 69;
 // A backup's file dialog closed (see BackupThreadProc).
 constexpr UINT WM_APP_BACKUP_DONE = WM_APP + 71;
-// The color dialog closed (see ColorThreadProc).
-constexpr UINT WM_APP_COLOR_DONE = WM_APP + 72;
 
 // "alt + shift + h" as "Alt+Shift+H".
 std::wstring TidyKeys(const std::wstring& keys) {
@@ -21629,7 +24728,10 @@ DWORD WINAPI WeatherThreadProc(LPVOID parameter) {
     WeatherPlace place = request->place;
     if (!request->search.empty()) {
         Json found;
-        const std::wstring language = Tr(L"en", L"pt");
+        // (In Chinese too, so Chinese cities are found by their names.)
+        const std::wstring language =
+            IslandTextLanguage() == TextLanguage::Chinese ? L"zh"
+                                                          : Tr(L"en", L"pt");
         if (!HttpsGetJson(
                 L"https://geocoding-api.open-meteo.com/v1/search?count=1&"
                 L"format=json&language=" +
@@ -22913,6 +26015,19 @@ DWORD WINAPI UpdatesThreadProc(LPVOID parameter) {
     if (WaitForSingleObject(job->stop, 0) != WAIT_OBJECT_0) {
         ListWindowsUpdates(&windows);
     }
+    // Stopped (the island restarting): nothing was checked, so the lists
+    // kept stay, and the next island checks again on its own schedule
+    // (never "all up to date" for 6 hours from a cut-short check).
+    if (WaitForSingleObject(job->stop, 0) == WAIT_OBJECT_0) {
+        AcquireSRWLockExclusive(&g_updatesLock);
+        g_updates.checking = false;
+        ReleaseSRWLockExclusive(&g_updatesLock);
+        if (SUCCEEDED(com)) {
+            CoUninitialize();
+        }
+        CloseHandle(job->stop);
+        return 0;
+    }
     AcquireSRWLockExclusive(&g_updatesLock);
     // The ones ticked stay ticked.
     for (auto& app : apps) {
@@ -23687,7 +26802,8 @@ class PrivacyAudioEvents final : public IAudioSessionNotification,
     IFACEMETHODIMP OnStateChanged(AudioSessionState) override {
         return Changed();
     }
-    IFACEMETHODIMP OnSessionDisconnected(AudioSessionDisconnectReason) override {
+    IFACEMETHODIMP OnSessionDisconnected(
+        AudioSessionDisconnectReason) override {
         return Changed();
     }
     IFACEMETHODIMP OnDisplayNameChanged(LPCWSTR, LPCGUID) override {
@@ -23817,8 +26933,12 @@ struct IMFSensorProcessActivity : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetReportTime(FILETIME* time) = 0;
 };
 struct IMFSensorActivityReport : public IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE GetFriendlyName(LPWSTR, ULONG, ULONG*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetSymbolicLink(LPWSTR, ULONG, ULONG*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetFriendlyName(LPWSTR,
+                                                      ULONG,
+                                                      ULONG*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSymbolicLink(LPWSTR,
+                                                      ULONG,
+                                                      ULONG*) = 0;
     virtual HRESULT STDMETHODCALLTYPE GetProcessCount(ULONG* count) = 0;
     virtual HRESULT STDMETHODCALLTYPE
     GetProcessActivity(ULONG index, IMFSensorProcessActivity** activity) = 0;
@@ -24271,6 +27391,30 @@ struct EjectJob {
     WCHAR letter;
 };
 
+// A card taken out of its reader: the volume locked (nothing open on it),
+// dismounted, and its media ejected.
+bool EjectMedia(PCWSTR volume) {
+    HANDLE handle = CreateFile(volume, GENERIC_READ | GENERIC_WRITE,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                               OPEN_EXISTING, 0, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    DWORD bytes = 0;
+    PREVENT_MEDIA_REMOVAL allow{FALSE};
+    const bool ejected =
+        DeviceIoControl(handle, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0,
+                        &bytes, nullptr) &&
+        DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0,
+                        &bytes, nullptr) &&
+        DeviceIoControl(handle, IOCTL_STORAGE_MEDIA_REMOVAL, &allow,
+                        sizeof(allow), nullptr, 0, &bytes, nullptr) &&
+        DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, nullptr, 0, nullptr,
+                        0, &bytes, nullptr);
+    CloseHandle(handle);
+    return ejected;
+}
+
 // The drive's disk is found among the disks (by its number), and the device
 // it's on asked to be ejected (a program with a file open on it says no).
 DWORD WINAPI EjectThreadProc(LPVOID parameter) {
@@ -24312,19 +27456,38 @@ DWORD WINAPI EjectThreadProc(LPVOID parameter) {
         }
         SetupDiDestroyDeviceInfoList(disks);
     }
+    // The device Windows' "Safely remove" ejects: the first one up from the
+    // disk that is removable (a USB drive). A card in a built-in reader has
+    // none (the reader stays): only its card is ejected, like Explorer's
+    // "Eject" does.
     DEVINST device = 0;
-    if (disk && CM_Get_Parent(&device, disk, 0) == CR_SUCCESS) {
-        // (Windows can say no for a moment while it lets go of the drive.)
-        for (int attempt = 0; attempt < 3 && !ejected; attempt++) {
+    for (DEVINST node = disk; node && !device;) {
+        ULONG capabilities = 0;
+        ULONG size = sizeof(capabilities);
+        if (CM_Get_DevNode_Registry_Property(node, CM_DRP_CAPABILITIES,
+                                             nullptr, &capabilities, &size,
+                                             0) == CR_SUCCESS &&
+            (capabilities & CM_DEVCAP_REMOVABLE)) {
+            device = node;
+        } else if (CM_Get_Parent(&node, node, 0) != CR_SUCCESS) {
+            node = 0;
+        }
+    }
+    // (Windows can say no for a moment while it lets go of the drive.)
+    for (int attempt = 0; attempt < 3 && !ejected && (device || disk);
+         attempt++) {
+        if (device) {
             PNP_VETO_TYPE veto = PNP_VetoTypeUnknown;
             WCHAR vetoName[MAX_PATH] = L"";
             ejected = CM_Request_Device_Eject(device, &veto, vetoName,
                                               ARRAYSIZE(vetoName),
                                               0) == CR_SUCCESS &&
                       veto == PNP_VetoTypeUnknown;
-            if (!ejected) {
-                Sleep(300);
-            }
+        } else {
+            ejected = EjectMedia(volume);
+        }
+        if (!ejected) {
+            Sleep(300);
         }
     }
     PostMessage(job->notify, WM_APP_EJECTED, job->letter, ejected);
@@ -24779,6 +27942,10 @@ class TrayListPanel : public Panel {
     void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
 
     bool OnMouseMove(POINT pt) override {
+        if (!g_trayDrag.key.empty() && g_trayDrag.fromList &&
+            g_trayDrag.owner == m_owner) {
+            return DragIcon();
+        }
         bool pin = false;
         const int hover = HitTest(pt, &pin);
         if (hover == m_hover && pin == m_pinHover) {
@@ -24836,6 +28003,8 @@ class TrayListPanel : public Panel {
     }
 
     // A double click is told apart here (the window takes single clicks).
+    // Its app gets the press as the button comes up; moved a little, the
+    // icon is dragged instead (see DragIcon).
     bool OnMouseDown(POINT pt) override {
         bool pin = false;
         const int hit = HitTest(pt, &pin);
@@ -24844,18 +28013,35 @@ class TrayListPanel : public Panel {
         }
         const std::wstring& key = m_icons[hit].icon.key;
         const DWORD now = GetTickCount();
-        const bool twice =
-            key == m_lastDownKey && now - m_lastDownTime <= GetDoubleClickTime();
+        const bool twice = key == m_lastDownKey &&
+                           now - m_lastDownTime <= GetDoubleClickTime();
         m_lastDownKey = twice ? L"" : key;
         m_lastDownTime = now;
-        Pass(key, twice ? WM_LBUTTONDBLCLK : WM_LBUTTONDOWN);
+        m_pressTwice = twice;
+        g_trayDrag = {key, m_owner, true};
+        GetCursorPos(&g_trayDrag.from);
+        SetCapture(m_hwnd);
         return false;
     }
 
     bool OnMouseUp(POINT pt) override;
     bool OnOtherButton(UINT msg, POINT pt) override;
+    // A held icon (see g_trayDrag) dragged: its place in the list, or on
+    // the island under the mouse; let go (put there, or back).
+    bool DragIcon();
+    void EndDrag(bool drop);
+    // Where in the list (an icon's index, the count: last), and the line
+    // showing it.
+    int DropIndex(POINT pt, D2D1_RECT_F* mark) const;
 
     void OnDestroy() override { StopMenuWatch(); }
+    // An icon held as the list closes (or loses the mouse): back.
+    void OnCaptureLost() override {
+        if (!g_trayDrag.key.empty() && g_trayDrag.fromList &&
+            g_trayDrag.owner == m_owner) {
+            EndDrag(false);
+        }
+    }
 
    private:
     static constexpr UINT_PTR kPinTimerId = 1;
@@ -24909,7 +28095,8 @@ class TrayListPanel : public Panel {
         const int count = (int)m_icons.size();
         m_cells.clear();
         if (m_names) {
-            const int columns = std::max(1, (count + kListRows - 1) / kListRows);
+            const int columns =
+                std::max(1, (count + kListRows - 1) / kListRows);
             const int rows = std::max(1, (count + columns - 1) / columns);
             const float cellWidth = std::round(230 * s);
             const float cellHeight = std::round(34 * s);
@@ -24918,9 +28105,9 @@ class TrayListPanel : public Panel {
                 const float y = padding + (i % rows) * cellHeight;
                 m_cells.push_back({x, y, x + cellWidth, y + cellHeight});
             }
-            m_footer = {};
-            m_size = {(LONG)(padding * 2 + columns * cellWidth),
-                      (LONG)(padding * 2 + rows * cellHeight)};
+            const float width = padding * 2 + columns * cellWidth;
+            LayoutFooter(padding, padding + rows * cellHeight, width);
+            m_size = {(LONG)width, (LONG)(m_footer.bottom + padding / 2)};
             return;
         }
         const int columns = std::clamp(count, 1, kGridColumns);
@@ -24934,10 +28121,38 @@ class TrayListPanel : public Panel {
         // The name of the icon under the mouse, under them.
         const float width =
             std::max(padding * 2 + columns * cell, std::round(200 * s));
-        const float footerTop = padding + rows * cell;
-        m_footer = {padding, footerTop, width - padding,
-                    footerTop + std::round(26 * s)};
+        LayoutFooter(padding, padding + rows * cell, width);
         m_size = {(LONG)width, (LONG)(m_footer.bottom + padding / 2)};
+    }
+
+    // The line under the icons: how to pin one (on more lines when
+    // narrow), or the grid's icon under the mouse.
+    void LayoutFooter(float padding, float top, float width) {
+        const float s = m_scale;
+        const std::wstring hint =
+            Tr(L"Drag to change the order or to put one on the pill · middle "
+               L"click, or the pin after a moment on an icon: kept on the pill",
+               L"Arraste para mudar a ordem ou levar um para a pílula · botão "
+               L"do meio, ou o alfinete após um instante no ícone: fica na "
+               L"pílula");
+        const float hintWidth = width - padding * 2;
+        float height = std::round(26 * s);
+        m_hintLayout = nullptr;
+        if (m_nameFormat && hintWidth > 1 &&
+            SUCCEEDED(m_dwrite->CreateTextLayout(
+                hint.c_str(), (UINT32)hint.size(), m_nameFormat.get(),
+                hintWidth, 10000, m_hintLayout.put()))) {
+            m_hintLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+            m_hintLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            DWRITE_TEXT_METRICS metrics{};
+            m_hintLayout->GetMetrics(&metrics);
+            height = std::max(height,
+                              std::ceil(metrics.height) + std::round(10 * s));
+            m_hintLayout->SetMaxHeight(height);
+            m_hintLayout->SetParagraphAlignment(
+                DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+        m_footer = {padding, top, width - padding, top + height};
     }
 
     // The pin's circle, at a cell's top right (at the row's end with names).
@@ -24999,6 +28214,12 @@ class TrayListPanel : public Panel {
     float m_preparedScale = 0;
     std::vector<TrayListEntry> m_icons;
     bool m_names = false;
+    winrt::com_ptr<IDWriteTextLayout> m_hintLayout;
+    // The press held was a double click's second one; where a dragged icon
+    // goes in the list (-1: not in it) and its line.
+    bool m_pressTwice = false;
+    int m_dropIndex = -1;
+    D2D1_RECT_F m_dropMark{};
     std::vector<D2D1_RECT_F> m_cells;
     D2D1_RECT_F m_footer{};
     std::vector<std::tuple<std::wstring, UINT, winrt::com_ptr<ID2D1Bitmap>>>
@@ -25030,15 +28251,19 @@ void TrayListPanel::Draw(ID2D1RenderTarget* target,
         const float iconX = m_names ? cell.left + std::round(10 * s)
                                     : (cell.left + cell.right - iconSize) / 2;
         const float iconY = (cell.top + cell.bottom - iconSize) / 2;
+        // (The one dragged: faint where it was.)
+        const bool dragged =
+            g_trayDrag.moved && g_trayDrag.key == entry.icon.key;
         if (ID2D1Bitmap* bitmap = Bitmap(target, entry.icon)) {
-            target->DrawBitmap(bitmap,
-                               {iconX, iconY, iconX + iconSize,
-                                iconY + iconSize});
+            target->DrawBitmap(
+                bitmap, {iconX, iconY, iconX + iconSize, iconY + iconSize},
+                dragged ? 0.3f : 1.0f);
         }
         const bool pinShown = !m_pinKey.empty() && entry.icon.key == m_pinKey;
         if (m_names) {
-            const float right = pinShown ? PinRect(cell).left - std::round(4 * s)
-                                         : cell.right - std::round(8 * s);
+            const float right = pinShown
+                                    ? PinRect(cell).left - std::round(4 * s)
+                                    : cell.right - std::round(8 * s);
             brush->SetColor(Fg(0.92f));
             target->DrawText(entry.name.c_str(), (UINT32)entry.name.size(),
                              m_textFormat.get(),
@@ -25059,12 +28284,40 @@ void TrayListPanel::Draw(ID2D1RenderTarget* target,
             target->DrawText(&kGlyphPin, 1, m_pinFormat.get(), pin, brush);
         }
     }
-    // The grid: the name of the icon under the mouse.
+    // A dragged icon: the line where it goes, and the icon under the mouse.
+    if (g_trayDrag.moved && g_trayDrag.fromList &&
+        g_trayDrag.owner == m_owner && m_dropIndex >= 0) {
+        const float radius = std::min(m_dropMark.right - m_dropMark.left,
+                                      m_dropMark.bottom - m_dropMark.top) /
+                             2;
+        brush->SetColor(Accent(1));
+        target->FillRoundedRectangle({m_dropMark, radius, radius}, brush);
+        for (const auto& entry : m_icons) {
+            if (entry.icon.key != g_trayDrag.key) {
+                continue;
+            }
+            if (ID2D1Bitmap* bitmap = Bitmap(target, entry.icon)) {
+                POINT cursor;
+                GetCursorPos(&cursor);
+                const float x = (float)(cursor.x - m_position.x);
+                const float y = (float)(cursor.y - m_position.y);
+                const float half = std::round(9 * s);
+                target->DrawBitmap(
+                    bitmap, {x - half, y - half, x + half, y + half}, 0.9f);
+            }
+        }
+    }
+    // The grid: the name of the icon under the mouse; otherwise how to pin
+    // one.
     if (!m_names && m_hover >= 0 && m_hover < (int)m_icons.size()) {
         const std::wstring& name = m_icons[m_hover].name;
         brush->SetColor(Fg(0.75f));
         target->DrawText(name.c_str(), (UINT32)name.size(), m_nameFormat.get(),
                          m_footer, brush);
+    } else if (m_hintLayout) {
+        brush->SetColor(Fg(0.45f));
+        target->DrawTextLayout({m_footer.left, m_footer.top},
+                               m_hintLayout.get(), brush);
     }
 }
 
@@ -25301,11 +28554,11 @@ void KeyboardPanel::Draw(ID2D1RenderTarget* target,
     }
     const WCHAR gear = kGlyphSettings;
     brush->SetColor(Fg(0.8f));
-    target->DrawText(&gear, 1, m_iconFormat.get(),
-                     {m_settingsRow.left + std::round(4 * s),
-                      m_settingsRow.top, m_settingsRow.left + std::round(36 * s),
-                      m_settingsRow.bottom},
-                     brush);
+    target->DrawText(
+        &gear, 1, m_iconFormat.get(),
+        {m_settingsRow.left + std::round(4 * s), m_settingsRow.top,
+         m_settingsRow.left + std::round(36 * s), m_settingsRow.bottom},
+        brush);
     PCWSTR label = Tr(L"Language settings", L"Configurações de idioma");
     brush->SetColor(Fg(0.85f));
     target->DrawText(label, (UINT32)wcslen(label), m_textFormat.get(),
@@ -25532,9 +28785,9 @@ class DesktopsPanel : public Panel {
 
     bool OnMouseMove(POINT pt) override {
         const int hover = HitTest(pt);
-        const bool remove = hover >= 0 && hover < (int)m_desktops.names.size() &&
-                            CanRemove() &&
-                            PointInRect(pt, RemoveRect(m_rows[hover]));
+        const bool remove =
+            hover >= 0 && hover < (int)m_desktops.names.size() && CanRemove() &&
+            PointInRect(pt, RemoveRect(m_rows[hover]));
         if (hover == m_hover && remove == m_removeHover) {
             return false;
         }
@@ -25705,10 +28958,10 @@ void DesktopsPanel::Draw(ID2D1RenderTarget* target,
 // opened from the pill. A click on a folder shows what's in it in a column
 // beside it (and so on, deeper), like the Finder's columns, with a button
 // back; "Open in Explorer" opens the column's folder, and a click on a file
-// opens it with its app; a folder's pin puts it with the pinned ones. Only names are shown
-// (with a small icon by their type), read when the folder is shown, on a
-// thread; nothing is kept or sent anywhere. Hidden files show as Explorer
-// is set to show them (its own setting, only read).
+// opens it with its app; a folder's pin puts it with the pinned ones. Only
+// names are shown (with a small icon by their type), read when the folder
+// is shown, on a thread; nothing is kept or sent anywhere. Hidden files
+// show as Explorer is set to show them (its own setting, only read).
 struct FolderPlace {
     PCWSTR token;
     // A folder of the user's (navigable), or a place opened as is.
@@ -25867,6 +29120,11 @@ DWORD WINAPI FolderListThreadProc(LPVOID parameter) {
         if (!folder.empty() && folder.back() != L'\\') {
             folder += L'\\';
         }
+        // (The 32-bit Windhawk process would list SysWOW64 for System32:
+        // the redirection is off for this thread while it lists.)
+        PVOID redirection = nullptr;
+        const bool unredirected =
+            Wow64DisableWow64FsRedirection(&redirection) != FALSE;
         WIN32_FIND_DATA data;
         HANDLE find = FindFirstFileEx((folder + L"*").c_str(),
                                       FindExInfoBasic, &data,
@@ -25898,6 +29156,9 @@ DWORD WINAPI FolderListThreadProc(LPVOID parameter) {
                                 data.cFileName, folder + data.cFileName});
             } while (FindNextFile(find, &data));
             FindClose(find);
+        }
+        if (unredirected) {
+            Wow64RevertWow64FsRedirection(redirection);
         }
         auto byName = [](const FolderEntry& a, const FolderEntry& b) {
             return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0;
@@ -26066,9 +29327,23 @@ class FoldersPanel : public Panel {
         for (size_t i = m_first; i < m_columns.size(); i++) {
             Column& column = m_columns[i];
             if (pt.x >= column.rect.left && pt.x < column.rect.right) {
+                // 3 rows a notch; a touchpad's smaller steps add up.
+                m_wheelRest += delta;
+                const int steps = m_wheelRest / (WHEEL_DELTA / 3);
+                m_wheelRest -= steps * (WHEEL_DELTA / 3);
+                // The rows it shows (the columns after the first start with
+                // "Open in Explorer").
+                const int shown =
+                    (int)std::lround((column.rect.bottom - column.rect.top) /
+                                     m_rowHeight) -
+                    (i > 0 ? 1 : 0);
                 const int rows = (int)column.items.size();
-                column.top = std::clamp(column.top - delta / WHEEL_DELTA * 3,
-                                        0, std::max(0, rows - m_visibleRows));
+                const int top = std::clamp(column.top - steps, 0,
+                                           std::max(0, rows - shown));
+                if (top == column.top) {
+                    return false;
+                }
+                column.top = top;
                 m_hover = {-1, -1};
                 return true;
             }
@@ -26210,7 +29485,8 @@ class FoldersPanel : public Panel {
         if (item->kind == FolderKind::WindowsPlaces) {
             // The places not pinned yet.
             for (const auto& place : kFolderPlaces) {
-                const std::wstring pin = std::wstring(kPlacePrefix) + place.token;
+                const std::wstring pin =
+                    std::wstring(kPlacePrefix) + place.token;
                 if (std::find(m_pins.begin(), m_pins.end(), pin) ==
                     m_pins.end()) {
                     column.items.push_back(
@@ -26327,6 +29603,7 @@ class FoldersPanel : public Panel {
     UINT m_generation = 0;
     int m_visibleRows = 12;
     float m_rowHeight = 30;
+    int m_wheelRest = 0;
     Spot m_hover{-1, -1};
     RowButton m_buttonHover = RowButton::None;
     D2D1_RECT_F m_back{};
@@ -26746,9 +30023,8 @@ DWORD WINAPI WallpaperThumbnailsProc(LPVOID parameter) {
          i < job->paths.size() && i < job->first + job->count; i++) {
         HBITMAP thumbnail = nullptr;
         winrt::com_ptr<IShellItemImageFactory> factory;
-        if (SUCCEEDED(SHCreateItemFromParsingName(job->paths[i].c_str(),
-                                                  nullptr,
-                                                  IID_PPV_ARGS(factory.put())))) {
+        if (SUCCEEDED(SHCreateItemFromParsingName(
+                job->paths[i].c_str(), nullptr, IID_PPV_ARGS(factory.put())))) {
             factory->GetImage(job->size, SIIGBF_BIGGERSIZEOK, &thumbnail);
         }
         job->thumbnails.push_back(thumbnail);
@@ -26853,7 +30129,8 @@ winrt::com_ptr<IWICBitmapSource> LoadWallpaperPicture(
         case DWPOS_TILE:
             break;
         default:
-            scaledWidth = std::max<UINT>(size.cx, (UINT)std::ceil(width * fill));
+            scaledWidth =
+                std::max<UINT>(size.cx, (UINT)std::ceil(width * fill));
             scaledHeight =
                 std::max<UINT>(size.cy, (UINT)std::ceil(height * fill));
             break;
@@ -27192,7 +30469,7 @@ class WallpaperPanel : public Panel {
         bool missing = list;
         for (size_t i = first; i < first + kPageSize && i < m_paths.size();
              i++) {
-            missing = missing || !Thumbnail(m_paths[i]);
+            missing = missing || !Tried(m_paths[i]);
         }
         if (!missing) {
             return;
@@ -27230,13 +30507,23 @@ class WallpaperPanel : public Panel {
         return nullptr;
     }
 
+    // Read already (a picture whose thumbnail failed keeps an empty entry:
+    // it isn't read again each time its page shows).
+    bool Tried(const std::wstring& path) const {
+        return std::any_of(m_thumbnails.begin(), m_thumbnails.end(),
+                           [&](const auto& entry) {
+                               return entry.first == path;
+                           });
+    }
+
     void Layout() {
         const float s = m_scale;
         const float padding = std::round(10 * s);
         const float cell = std::round(124 * s);
         const float cellHeight = std::round(74 * s);
         const float gap = std::round(8 * s);
-        const float width = padding * 2 + kColumns * cell + (kColumns - 1) * gap;
+        const float width =
+            padding * 2 + kColumns * cell + (kColumns - 1) * gap;
         float y = padding;
         m_folderButton = {width - padding - std::round(96 * s), y,
                           width - padding, y + std::round(28 * s)};
@@ -27334,13 +30621,22 @@ bool WallpaperPanel::OnAppMessage(UINT msg, WPARAM, LPARAM lParam) {
     }
     for (size_t i = 0; i < job->thumbnails.size(); i++) {
         HBITMAP thumbnail = job->thumbnails[i];
+        const std::wstring& path = job->paths[job->first + i];
+        // (Once per picture: one read again, or by an older page's job.)
+        if (!current || Tried(path)) {
+            if (thumbnail) {
+                DeleteObject(thumbnail);
+            }
+            continue;
+        }
         if (!thumbnail) {
+            m_thumbnails.push_back({path, nullptr});
             continue;
         }
         winrt::com_ptr<IWICBitmap> wicBitmap;
         winrt::com_ptr<IWICFormatConverter> converter;
         winrt::com_ptr<ID2D1Bitmap> bitmap;
-        if (current && m_wic && m_canvas.target &&
+        if (m_wic && m_canvas.target &&
             SUCCEEDED(m_wic->CreateBitmapFromHBITMAP(
                 thumbnail, nullptr, WICBitmapIgnoreAlpha, wicBitmap.put())) &&
             SUCCEEDED(m_wic->CreateFormatConverter(converter.put())) &&
@@ -27350,7 +30646,9 @@ bool WallpaperPanel::OnAppMessage(UINT msg, WPARAM, LPARAM lParam) {
                 WICBitmapPaletteTypeMedianCut)) &&
             SUCCEEDED(m_canvas.target->CreateBitmapFromWicBitmap(
                 converter.get(), nullptr, bitmap.put()))) {
-            m_thumbnails.push_back({job->paths[job->first + i], bitmap});
+            m_thumbnails.push_back({path, bitmap});
+        } else {
+            m_thumbnails.push_back({path, nullptr});
         }
         DeleteObject(thumbnail);
     }
@@ -27446,8 +30744,9 @@ void WallpaperPanel::Draw(ID2D1RenderTarget* target,
         if (ID2D1Bitmap* bitmap = Thumbnail(m_paths[first + i])) {
             // Cut to fill the cell, rounded.
             const D2D1_SIZE_F size = bitmap->GetSize();
-            const float scale = std::max((rect.right - rect.left) / size.width,
-                                         (rect.bottom - rect.top) / size.height);
+            const float scale =
+                std::max((rect.right - rect.left) / size.width,
+                         (rect.bottom - rect.top) / size.height);
             const float w = size.width * scale;
             const float h = size.height * scale;
             const float cx = (rect.left + rect.right) / 2;
@@ -27513,6 +30812,10 @@ struct IslandLook {
     int trayList = 12;
     std::vector<PillGroup> order;
     std::array<int, kCustomColors> colors{};
+    std::array<uint8_t, kPillGroups> notchSides{};
+    std::vector<std::wstring> trayPinned;
+    std::vector<std::wstring> trayOrder;
+    std::vector<std::pair<std::wstring, int>> trayAnchors;
 };
 IslandLook CaptureLook();
 void PutLook(const IslandLook& look);
@@ -27551,7 +30854,8 @@ class Island {
     // another one as the wheel turns.
     int m_brightness = -1;
     double m_brightnessReadAt = 0;
-    BrightnessJob m_brightnessJob;
+    std::shared_ptr<BrightnessJob> m_brightnessJob =
+        std::make_shared<BrightnessJob>();
     std::vector<HANDLE> m_brightnessThreads;
     void ReadBrightnessSoon();
     void SetBrightness(int level);
@@ -27596,6 +30900,9 @@ class Island {
         m_notchCount = count;
     }
     void AddNotchSibling(Island* island) { m_notchSiblings.push_back(island); }
+    // The app in front's color, read (once) when any island follows it (see
+    // islandWindowColor), each one in its own look.
+    void ReadWindowColor();
     // Notches hiding together again: each one as the bell's.
     void MatchNotchBase() {
         if (m_notchBase && m_minimized != m_notchBase->m_minimized) {
@@ -27800,7 +31107,9 @@ class Island {
     // The item clicked is the one with that key (see SlotKey), or the one
     // under the mouse; IslandItem::None opens out of the island's middle (the
     // settings), in every style.
-    void TogglePanel(Panel& panel, IslandItem item, const std::wstring& key = {});
+    void TogglePanel(Panel& panel,
+                     IslandItem item,
+                     const std::wstring& key = {});
     // Kept for next time unless the auto-hide does it (`keep` false).
     void SetMinimized(bool minimized, bool keep = true);
     // Hiding as its line while the mouse is away (islandAutoHide): turned on
@@ -27909,7 +31218,7 @@ class Island {
     std::vector<RemovableDrive> m_drives;
     bool m_drivesListed = false;
 
-    public:
+   public:
     // The app in front, or its keyboard, may have changed: looked at a
     // moment later (several events come at once).
     void CheckInputMethodSoon() {
@@ -27918,7 +31227,7 @@ class Island {
         }
     }
 
-    private:
+   private:
     // An app's icon (with unread notifications): its tip's key is this and
     // its ID.
     static constexpr WCHAR kAppTipPrefix[] = L"\x01" L"app:";
@@ -27973,6 +31282,15 @@ class Island {
     ID2D1Bitmap* GetTrayBitmap(const TrayIcon& icon);
     bool IsTrayPinned(const std::wstring& key) const;
     void SetTrayPinned(const std::wstring& key, bool pinned);
+    // The icons in the order kept (see g_trayOrder); every island laid out
+    // again after a change (the ones with this look show it).
+    void SortTrayIcons();
+    void OnTrayArranged();
+    // A tray icon held on the pill (see g_trayDrag): dragged once the mouse
+    // moved a little, and let go (dropped, or `drop` false: back).
+    void DragTrayIcon();
+    void FinishTrayDrag(bool drop);
+    void DrawTrayDrag(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void SendToTrayIcon(const std::wstring& key, UINT message);
     void ShowTrayTip(const std::wstring& key);
     void WatchTrayAppWindows(const TrayIcon& icon);
@@ -27987,6 +31305,18 @@ class Island {
     void ToggleTrayPin(const std::wstring& key) {
         SetTrayPinned(key, !IsTrayPinned(key));
     }
+    // Where an icon dragged to `screen` would go on this island (see
+    // TrayDropAt), on the island there of `owner`'s monitor; and putting it
+    // there (as the current island).
+    bool TrayDropAt(POINT screen,
+                    const std::wstring& key,
+                    TrayDrop* drop) const;
+    static TrayDrop TrayDropUnder(Island* owner,
+                                  POINT screen,
+                                  const std::wstring& key);
+    void MoveTrayIcon(const std::wstring& key, const TrayDrop& drop);
+    // Drawn again, each as itself (a drag's line and icon came or went).
+    static void RenderIslands(std::initializer_list<Island*> islands);
     void OnWindowsBanner(HWND banner, bool appeared);
     // A Windows banner showed (whatever the island does with it).
     void OnWindowsBannerSeen() { m_windowsBannerSeenAt = NowSeconds(); }
@@ -28058,20 +31388,20 @@ class Island {
     int m_nightLightState = -1;
     // All of them, for what's done to each.
     std::array<Panel*, 18> Panels() {
-        return {&m_calendar,     &m_control,       &m_notifications,
-                &m_mediaPanel,   &m_power,         &m_profilesPanel,
-                &m_usagePanel,   &m_notesPanel,    &m_tasksPanel,
-                &m_shortcutsPanel, &m_weatherPanel, &m_updatesPanel,
-                &m_drivesPanel,  &m_trayListPanel, &m_keyboardPanel,
-                &m_desktopsPanel, &m_foldersPanel, &m_wallpaperPanel};
+        return {&m_calendar,       &m_control,       &m_notifications,
+                &m_mediaPanel,     &m_power,         &m_profilesPanel,
+                &m_usagePanel,     &m_notesPanel,    &m_tasksPanel,
+                &m_shortcutsPanel, &m_weatherPanel,  &m_updatesPanel,
+                &m_drivesPanel,    &m_trayListPanel, &m_keyboardPanel,
+                &m_desktopsPanel,  &m_foldersPanel,  &m_wallpaperPanel};
     }
     std::array<const Panel*, 18> Panels() const {
-        return {&m_calendar,     &m_control,       &m_notifications,
-                &m_mediaPanel,   &m_power,         &m_profilesPanel,
-                &m_usagePanel,   &m_notesPanel,    &m_tasksPanel,
-                &m_shortcutsPanel, &m_weatherPanel, &m_updatesPanel,
-                &m_drivesPanel,  &m_trayListPanel, &m_keyboardPanel,
-                &m_desktopsPanel, &m_foldersPanel, &m_wallpaperPanel};
+        return {&m_calendar,       &m_control,       &m_notifications,
+                &m_mediaPanel,     &m_power,         &m_profilesPanel,
+                &m_usagePanel,     &m_notesPanel,    &m_tasksPanel,
+                &m_shortcutsPanel, &m_weatherPanel,  &m_updatesPanel,
+                &m_drivesPanel,    &m_trayListPanel, &m_keyboardPanel,
+                &m_desktopsPanel,  &m_foldersPanel,  &m_wallpaperPanel};
     }
     bool AnyPanelOpen() const {
         for (const Panel* panel : Panels()) {
@@ -28119,6 +31449,23 @@ class Island {
     // The title as shown (with its artist, when short).
     std::wstring m_mediaTitleShown;
     float m_mediaTitleWidth = 0;
+    // Its width without the limit: wider, it keeps scrolling while it plays
+    // with islandMediaMarquee, on the screen (from m_mediaMarqueeStart, a new
+    // title or playing again; m_mediaMarquee while it does). Its tip has it
+    // all.
+    float m_mediaTitleFullWidth = 0;
+    double m_mediaMarqueeStart = 0;
+    bool m_mediaMarquee = false;
+    bool MediaTitleScrolls() const {
+        return g_settings.islandMediaMarquee && m_mediaShown.playing &&
+               !m_away && AnimationLevel() == 0 &&
+               m_mediaTitleFullWidth > m_mediaTitleWidth + 1;
+    }
+    // The wheel on what's playing changing the song (islandMediaWheel): its
+    // steps added up, the last one, and the last song change.
+    int m_mediaWheelDelta = 0;
+    double m_mediaWheelAt = 0;
+    double m_mediaSkippedAt = 0;
     // Another song: the title before slides up and away as the new one comes
     // up from below, the cover before fades into the new one (1 to 0), and
     // the pill's width follows the new title smoothly.
@@ -28436,7 +31783,6 @@ class Island {
     std::vector<TrayIcon> m_trayIcons;
     // Icons came once (later ones grow in).
     bool m_trayIconsSeen = false;
-    std::vector<std::wstring> m_trayPinned;
     // How pinned each icon is shown (0 in the list, 1 pinned), animated.
     struct PinState {
         std::wstring key;
@@ -28456,7 +31802,7 @@ class Island {
     double m_trayVelocity = 0;
     double m_trayBounce = 0;
     double m_trayBounceVelocity = 0;
-    // The arrow turning from › to ‹ (0 to 1).
+    // The arrow turning from ‹ to › (0 to 1).
     double m_trayArrow = 0;
     // With many icons, the list stops at a few and the wheel scrolls it
     // (pixels along the pill); how far it can go, one icon's step, and
@@ -28770,6 +32116,7 @@ class Island {
     // closes into its dot (1), the dot glides there (2), and it opens again
     // (m_moveT from 0 to 1 while gliding, from where it was).
     HMONITOR m_monitorHandle = nullptr;
+    std::vector<MonitorEntry> m_displayMonitors;
     int m_monitorMove = 0;
     HMONITOR m_moveTarget = nullptr;
     POINT m_moveFrom{};
@@ -28809,6 +32156,14 @@ class Island {
     const std::wstring& OwnDevice() const { return m_ownDevice; }
     int MonitorProfile() const { return m_profileId; }
     bool HasOwnLook() const { return m_profileId >= 0; }
+    // The island whose settings it shows (a notch: its base island).
+    Island* SettingsIsland() { return m_notchBase ? m_notchBase : this; }
+    // Its look kept in its profile (changed on it, see StoreProfileInt), and
+    // shown by the other islands with it; not `show` as the islands go.
+    void SaveOwnProfile(bool show = true);
+    // Its look made again from its profile and laid out (the islands start
+    // again for another kind of window or other notches).
+    void ReloadLook();
     // Its monitor's profile chosen (on its own settings: not the main
     // island's), or -1.
     void SetMonitorProfile(int id);
@@ -28820,12 +32175,14 @@ class Island {
     void SaveProfileSoon() {
         if (m_hwnd) {
             SetTimer(m_hwnd, kProfileSaveTimerId, kProfileSaveMs, nullptr);
+            m_profileSavePending = true;
         }
     }
     void CancelProfileSave() {
         if (m_hwnd) {
             KillTimer(m_hwnd, kProfileSaveTimerId);
         }
+        m_profileSavePending = false;
     }
     // Becoming the current island, or no longer: its place for all apps (its
     // monitor's) put in and taken out of g_islandPlace.
@@ -28861,6 +32218,9 @@ class Island {
     int m_profileId = -1;
     IslandLook m_look;
     bool m_lookApplied = false;
+    // The profile in use is waiting to be saved (see SaveProfileSoon): done
+    // before the island goes, if a restart comes first.
+    bool m_profileSavePending = false;
     IslandPlace m_contextPlace;
     bool m_contextKept = false;
     // Its monitor's name (for its place there).
@@ -28920,10 +32280,54 @@ std::vector<Island*> OtherIslands() {
     return others;
 }
 
-// The current island shows its monitor's own profile: its settings aren't
-// changed there (they'd be the main island's), only on the main island.
-bool SettingsLocked() {
+bool OwnLookShown() {
     return g_island && g_island->HasOwnLook();
+}
+
+bool OtherIslandShown() {
+    return g_island && !g_island->HasMainSettings();
+}
+
+void SaveOwnLookSoon() {
+    if (g_island) {
+        g_island->SaveProfileSoon();
+    }
+}
+
+// What every island shares, whatever profile it shows (the main island runs
+// it for all of them): always in the main settings.
+bool IsSharedPref(IslandPref pref) {
+    switch (pref) {
+        case IslandPref::AllMonitors:
+        case IslandPref::FollowMouse:
+        case IslandPref::Profiles:
+        case IslandPref::Animations:
+        case IslandPref::HideWindowsBanners:
+        case IslandPref::OwnNotifications:
+        case IslandPref::ShortcutNotifications:
+        case IslandPref::ShortcutControl:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsLookValue(PCWSTR name) {
+    for (const auto& info : kIslandPrefs) {
+        if (info.key && wcscmp(info.key, name) == 0) {
+            return !IsSharedPref(info.pref);
+        }
+    }
+    for (PCWSTR look : {L"islandSize", L"islandGap", L"islandOpacity",
+                        L"islandAutoHideDelay", L"islandNotchCurve",
+                        L"trayListIsland"}) {
+        if (wcscmp(look, name) == 0) {
+            return true;
+        }
+    }
+    return std::any_of(
+        std::begin(kCustomColorKeys), std::end(kCustomColorKeys),
+        [name](PCWSTR key) { return wcscmp(key, name) == 0; });
 }
 
 HWND IslandWindow(const Island* island) {
@@ -28961,10 +32365,14 @@ void ControlPanel::Prepare(float scale) {
                          IID_PPV_ARGS(m_wic.put()));
     }
     Update();
-    Layout();
-    if (scale == m_preparedScale) {
-        return;
+    if (scale != m_preparedScale) {
+        PrepareFormats(scale);
     }
+    // (After the formats: the settings' names are measured with them.)
+    Layout();
+}
+
+void ControlPanel::PrepareFormats(float scale) {
     m_preparedScale = scale;
     m_iconFormat = MakeFormat(L"Segoe Fluent Icons", DWRITE_FONT_WEIGHT_NORMAL,
                               15 * scale);
@@ -29115,7 +32523,6 @@ void ControlPanel::OnOpen() {
         SettleSettings();
     }
     m_wifiStatus.clear();
-    m_marqueeStart = NowSeconds();
     m_darkMode = IsDarkMode();
     // (Before a view is opened: Wi-Fi's looks for the networks.)
     StartWifi();
@@ -29129,12 +32536,11 @@ void ControlPanel::OnOpen() {
     SwitchRadio(-1, false);
     // The monitor is asked once, and again only after a while: asking over
     // DDC/CI can make some monitors flicker.
-    m_brightnessJob.notify = m_hwnd;
     const ULONGLONG now = GetTickCount64();
-    if (!m_brightnessJob.running &&
+    if (!m_brightnessJob->running &&
         (!m_brightnessReadAt || now - m_brightnessReadAt > 10 * 60 * 1000)) {
         m_brightnessReadAt = now;
-        StartWorker(BrightnessQueryProc, &m_brightnessJob);
+        StartBrightnessWorker(BrightnessQueryProc);
     }
 }
 
@@ -29275,7 +32681,7 @@ void ControlPanel::OnDestroy() {
 
 // One dialog at a time (the panel stays open while one shows).
 void ControlPanel::StartColorDialog(int color) {
-    if (m_dialogShown || SettingsLocked()) {
+    if (m_dialogShown) {
         return;
     }
     auto* job = new ColorJob{m_hwnd, color, g_customColors[color]};
@@ -29284,6 +32690,62 @@ void ControlPanel::StartColorDialog(int color) {
     if (!m_colorThread) {
         m_dialogShown = false;
         delete job;
+    }
+}
+
+// The calendar's color dialog, like the control center's.
+void CalendarPanel::StartColorDialog(const std::wstring& source, int color) {
+    if (m_dialogShown) {
+        return;
+    }
+    auto* job = new ColorJob{m_hwnd, 0, color};
+    m_colorSource = source;
+    m_dialogShown = true;
+    m_colorThread = CreateThread(nullptr, 0, ColorThreadProc, job, 0, nullptr);
+    if (!m_colorThread) {
+        m_dialogShown = false;
+        delete job;
+    }
+}
+
+// (Only from its thread: the job is its.)
+bool CalendarPanel::OnColorDone(LPARAM lParam) {
+    if (!m_colorThread) {
+        return false;
+    }
+    m_dialogShown = false;
+    WaitForSingleObject(m_colorThread, INFINITE);
+    CloseHandle(m_colorThread);
+    m_colorThread = nullptr;
+    std::unique_ptr<ColorJob> job((ColorJob*)lParam);
+    if (job->done && m_colorSource.empty()) {
+        m_todayColor = job->value & 0xFFFFFF;
+        Wh_SetIntValue(L"calendarTodayColor", m_todayColor);
+    } else if (job->done) {
+        AcquireSRWLockExclusive(&g_agendasLock);
+        for (auto& agenda : g_agendas) {
+            if (agenda.source == m_colorSource) {
+                agenda.color = job->value & 0xFFFFFF;
+            }
+        }
+        IndexAgendaDays();
+        ReleaseSRWLockExclusive(&g_agendasLock);
+        SaveAgendas();
+    }
+    SetForegroundWindow(m_hwnd);
+    Layout();
+    return true;
+}
+
+// The calendar going away with the dialog still open: it's closed, and its
+// job (posted to this window, about to go) freed here.
+void CalendarPanel::EndColorDialog() {
+    const bool color = m_colorThread != nullptr;
+    EndFileDialogThread(&m_colorThread);
+    MSG msg;
+    if (color && PeekMessage(&msg, m_hwnd, WM_APP_COLOR_DONE, WM_APP_COLOR_DONE,
+                             PM_REMOVE)) {
+        delete (ColorJob*)msg.lParam;
     }
 }
 
@@ -29349,6 +32811,12 @@ void ControlPanel::StopWifi() {
     WlanCloseHandle(m_wlan, nullptr);
     m_wlan = nullptr;
     m_hasWifi = false;
+    // Joins' ends still queued (each one allocated by the callback).
+    MSG msg;
+    while (m_hwnd && PeekMessage(&msg, m_hwnd, WM_APP_WLAN_CONNECTION,
+                                 WM_APP_WLAN_CONNECTION, PM_REMOVE)) {
+        delete (WlanConnectionEvent*)msg.lParam;
+    }
 }
 
 struct WifiListJob {
@@ -29622,7 +33090,7 @@ bool ControlPanel::ConnectWifi(const WifiNetwork& network,
             return false;
         }
         if (!update) {
-            m_createdProfile = profile;
+            m_createdProfiles.push_back(profile);
         }
     }
     WLAN_CONNECTION_PARAMETERS parameters{};
@@ -29636,8 +33104,21 @@ bool ControlPanel::ConnectWifi(const WifiNetwork& network,
         return false;
     }
     m_connecting = true;
+    m_connectingProfile = profile;
+    m_connectingSince = GetTickCount64();
     m_wifiStatus = Tr(L"Connecting...", L"Conectando...");
     return true;
+}
+
+// A join Windows never answered: the panel stops waiting for it (its end,
+// if it comes later, still removes a profile made for it that failed).
+void ControlPanel::CheckConnecting() {
+    if (m_connecting && GetTickCount64() - m_connectingSince > kConnectingMs) {
+        m_connecting = false;
+        m_connectingProfile.clear();
+        m_wifiStatus =
+            Tr(L"Couldn't connect.", L"Não foi possível conectar.");
+    }
 }
 
 // A network clicked in the list: joins it, asking for its password if needed.
@@ -29649,7 +33130,6 @@ void ControlPanel::JoinWifi(int index) {
     if (network.connected) {
         return;
     }
-    m_createdProfile.clear();
     if (!network.profile.empty() || !network.secure) {
         if (!ConnectWifi(network, nullptr)) {
             m_wifiStatus = Tr(L"Couldn't connect.",
@@ -29678,6 +33158,7 @@ void ControlPanel::JoinWifi(int index) {
 }
 
 void ControlPanel::SubmitPassword() {
+    CheckConnecting();
     if (m_connecting) {
         return;
     }
@@ -29686,7 +33167,6 @@ void ControlPanel::SubmitPassword() {
                           L"A senha tem pelo menos 8 caracteres.");
         return;
     }
-    m_createdProfile.clear();
     if (!ConnectWifi(m_joining, &m_password)) {
         m_wifiStatus =
             Tr(L"Couldn't connect.", L"Não foi possível conectar.");
@@ -29781,7 +33261,8 @@ bool ControlPanel::OnTimer(UINT_PTR id) {
     return true;
 }
 
-void ControlPanel::StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter) {
+// (False when the thread couldn't start: the caller still owns `parameter`.)
+bool ControlPanel::StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter) {
     std::erase_if(m_workers, [](HANDLE thread) {
         if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
             CloseHandle(thread);
@@ -29789,9 +33270,22 @@ void ControlPanel::StartWorker(LPTHREAD_START_ROUTINE proc, void* parameter) {
         }
         return false;
     });
-    if (HANDLE thread = CreateThread(nullptr, 0, proc, parameter, 0, nullptr)) {
-        m_workers.push_back(thread);
+    HANDLE thread = CreateThread(nullptr, 0, proc, parameter, 0, nullptr);
+    if (!thread) {
+        return false;
     }
+    m_workers.push_back(thread);
+    return true;
+}
+
+bool ControlPanel::StartBrightnessWorker(LPTHREAD_START_ROUTINE proc) {
+    m_brightnessJob->notify = m_hwnd;
+    auto* held = new std::shared_ptr<BrightnessJob>(m_brightnessJob);
+    if (!StartWorker(proc, held)) {
+        delete held;
+        return false;
+    }
+    return true;
 }
 
 // The display mode, like Windows+P: the PC's screen only, duplicated,
@@ -29929,14 +33423,10 @@ void ControlPanel::ToggleAccessibility(int index) {
 
 void ControlPanel::SetBrightness(int level) {
     m_brightness = std::clamp(level, 0, 100);
-    m_brightnessJob.notify = m_hwnd;
-    m_brightnessJob.target = m_brightness;
-    if (!m_brightnessJob.running.exchange(true)) {
-        const size_t before = m_workers.size();
-        StartWorker(BrightnessThreadProc, &m_brightnessJob);
-        if (m_workers.size() == before) {
-            m_brightnessJob.running = false;
-        }
+    m_brightnessJob->target = m_brightness;
+    if (!m_brightnessJob->running.exchange(true) &&
+        !StartBrightnessWorker(BrightnessThreadProc)) {
+        m_brightnessJob->running = false;
     }
 }
 
@@ -29949,12 +33439,12 @@ void ControlPanel::SetBrightnessAt(POINT pt) {
                          0.0f, 1.0f)));
 }
 
+// Each worker owns what it uses (a request, the shared brightness job), so
+// the wait is bounded: a radio or a monitor stuck in a slow call can't hold
+// the island's restart or the unload.
 void ControlPanel::WaitForWorkers() {
-    for (HANDLE thread : m_workers) {
-        WaitForSingleObject(thread, INFINITE);
-        CloseHandle(thread);
-    }
-    m_workers.clear();
+    m_brightnessJob->notify = nullptr;
+    JoinOwningThreads(m_workers, 5000);
 }
 
 // The line under a list: why it's empty, or how joining went.
@@ -30309,7 +33799,8 @@ void ControlPanel::Layout() {
                                 : Tr(L"Forget", L"Esquecer"));
                     }
                     if (network.connected) {
-                        add(Part::Disconnect, Tr(L"Disconnect", L"Desconectar"));
+                        add(Part::Disconnect,
+                            Tr(L"Disconnect", L"Desconectar"));
                     } else {
                         add(Part::WifiConnect, Tr(L"Connect", L"Conectar"));
                     }
@@ -30408,8 +33899,8 @@ void ControlPanel::Layout() {
                     if (shown && shown % perLine == 0) {
                         chipLeft = rect.left + inset;
                     }
-                    const float top =
-                        chipsTop - std::round(2 * s) + chips * (shown / perLine);
+                    const float top = chipsTop - std::round(2 * s) +
+                                      chips * (shown / perLine);
                     m_appItemChips.push_back(
                         {base + index,
                          {chipLeft, top, chipLeft + itemChip,
@@ -30851,34 +34342,216 @@ struct SettingSpec {
     int kind;
     int value;
     int section;
+    // Kept right under the option before (which it depends on).
+    int follows = 0;
 };
 
-float ControlPanel::SettingHeight(SettingKind kind) const {
-    switch (kind) {
+PCWSTR ThemeName(int index);
+
+float ControlPanel::SettingHeight(const SettingEntry& entry,
+                                  float width) const {
+    const float s = m_scale;
+    // The name beside its control (as tall as it needs), or over it.
+    auto beside = [&](float control, float least) {
+        const float text = WrappedHeight(
+            SettingName(entry), m_subtitleFormat.get(),
+            width - std::round(36 * s) - std::round(8 * s) - control);
+        return std::max(std::round(least * s), text + std::round(14 * s));
+    };
+    switch (entry.kind) {
         case SettingKind::Profiles: {
             // Its chips, three on a line (the profiles; "+" on its title
-            // adds one), the one being edited, and a line of help.
+            // adds one), the one being edited, and a line of help (as tall
+            // as its longest).
             // (Another island than the main one: a chip for the main one's
             // settings; on the main one, a line for each other monitor.)
             const bool main = !g_island || g_island->HasMainSettings();
             const size_t chips = g_profiles.size() + (main ? 0 : 1);
-            return 4 + (float)((chips + 2) / 3) * 38 +
-                   (m_profileEdit >= 0 ? 80 : 0) + 22 +
-                   (main ? (float)OtherIslands().size() * 38 : 0);
+            float hint = 0;
+            for (int i = 0; i < kProfilesHints; i++) {
+                hint = std::max(
+                    hint, WrappedHeight(ProfilesHint(i), m_smallFormat.get(),
+                                        width - std::round(4 * s)));
+            }
+            return std::round((4 + (float)((chips + 2) / 3) * 38 +
+                               (m_profileEdit >= 0 ? 80 : 0)) *
+                              s) +
+                   std::max(std::round(22 * s), hint + std::round(4 * s));
+        }
+        case SettingKind::Monitors: {
+            return std::round(
+                (276 +
+                 (g_settings.islandAllMonitors
+                      ? (float)OtherIslands().size() *
+                            (36 + (float)((g_profiles.size() + 3) / 3) * 38)
+                      : 0)) *
+                s);
         }
         case SettingKind::Label:
-            return 26;
+            return std::round(26 * s);
         case SettingKind::Style:
         case SettingKind::Theme:
         case SettingKind::Size:
-        case SettingKind::Place:
-            return 44;
-        case SettingKind::Order:
-            return 66;
         case SettingKind::Choice:
-            return 44;
+            // The name, then its selector or slider under it.
+            return SettingNameHeight(entry, width) + std::round(40 * s);
+        case SettingKind::Place:
+            return beside(std::round(60 * s), 44);
+        case SettingKind::AppPlaces:
+            return beside(std::round(28 * s), 34);
+        case SettingKind::Order:
+            return std::round(66 * s);
+        case SettingKind::Pref:
+            return beside(std::round(52 * s), 34);
         default:
-            return 34;
+            return std::round(34 * s);
+    }
+}
+
+// The name over a selector or a slider: across the whole row.
+float ControlPanel::SettingNameHeight(const SettingEntry& entry,
+                                      float width) const {
+    const float s = m_scale;
+    const float text =
+        WrappedHeight(SettingName(entry), m_subtitleFormat.get(),
+                      width - std::round(36 * s) - std::round(8 * s));
+    return std::max(std::round(30 * s), text + std::round(10 * s));
+}
+
+std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
+    // (Shared with the other islands: said on theirs.)
+    const bool otherIsland = g_island && !g_island->HasMainSettings();
+    switch (entry.kind) {
+        case SettingKind::Style: {
+            const IslandPrefInfo& info = kIslandPrefs[(int)IslandPref::Bar];
+            return Tr(info.english, info.portuguese);
+        }
+        case SettingKind::Theme: {
+            const IslandPrefInfo& info = kIslandPrefs[(int)IslandPref::Theme];
+            return std::wstring(Tr(info.english, info.portuguese)) +
+                   L" \u00B7 " + ThemeName(g_themeIndex);
+        }
+        case SettingKind::Place:
+            return g_settings.islandBar ? Tr(L"Place (the bar is at the top)",
+                                             L"Posição (a barra fica no topo)")
+                   : NotchCountWanted() > 0
+                       ? Tr(L"Place (the notches are at the top)",
+                            L"Posição (os entalhes ficam no topo)")
+                   : g_settings.islandFreeDrag
+                       ? Tr(L"Place (or drag the pill)",
+                            L"Posição (ou arraste a pílula)")
+                       : Tr(L"Place", L"Posição");
+        case SettingKind::AppPlaces:
+            return std::wstring(Tr(L"Place and icons per app",
+                                   L"Posição e ícones por app")) +
+                   (g_appPlaces.empty()
+                        ? std::wstring()
+                        : L"  (" + std::to_wstring(g_appPlaces.size()) + L")");
+        case SettingKind::Size: {
+            const int slider = entry.value;
+            const int size = IslandSliderValue(slider);
+            WCHAR seconds[16];
+            swprintf_s(seconds, L"%.1f s", size / 10.0);
+            std::wstring name =
+                slider == 6 ? std::wstring(
+                                  Tr(L"Notch curves", L"Curvas dos entalhes")) +
+                                  L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 5
+                    ? std::wstring(Tr(L"Hide after", L"Esconder depois de")) +
+                          L" \u00B7 " + seconds
+                : slider == 4 ? std::wstring(Tr(L"Opacity", L"Opacidade")) +
+                                    L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 3 ? std::wstring(Tr(L"Icons before scrolling",
+                                                L"Ícones antes de rolar")) +
+                                    L" \u00B7 " + std::to_wstring(size)
+                : slider == 2 ? std::wstring(Tr(L"Speed", L"Velocidade")) +
+                                    L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 1 ? std::wstring(Tr(L"Edge distance",
+                                                L"Distância da borda")) +
+                                    L" \u00B7 " + std::to_wstring(size) + L" px"
+                              : std::wstring(Tr(L"Size", L"Tamanho")) +
+                                    L" \u00B7 " + std::to_wstring(size) + L"%";
+            if (slider == 2 && otherIsland) {
+                name += Tr(L" (all monitors)", L" (todos os monitores)");
+            }
+            return name;
+        }
+        case SettingKind::Choice: {
+            const int id = entry.value;
+            // Your own colors hard to read: said instead of the name.
+            std::wstring name =
+                id == kChoiceAnimationLevel ? Tr(L"How many", L"Quantas")
+                : id == kChoiceFrameRate
+                    ? Tr(L"Frames a second", L"Quadros por segundo")
+                : id == kChoiceBackup
+                    ? (m_backupStatus.empty() ? Tr(L"A file with all of it",
+                                                   L"Um arquivo com tudo")
+                                              : m_backupStatus.c_str())
+                : id == kChoiceColors && CustomColorsHardToRead()
+                    ? Tr(L"Hard to read: too alike",
+                         L"Difícil de ler: cores parecidas")
+                : id == kChoiceColors
+                    ? Tr(L"Your own colors", L"Cores próprias")
+                : id == kChoiceDateOrder ? Tr(L"Date order", L"Ordem da data")
+                : id == kChoiceClockFormat
+                    ? Tr(L"Time format", L"Formato da hora")
+                : id == kChoiceTrayStyle
+                    ? Tr(L"Icons that aren't pinned", L"Ícones não fixados")
+                : id == kChoiceWallpaper ? Tr(L"Wallpaper transition",
+                                              L"Transição do papel de parede")
+                : id == kChoiceNotches   ? Tr(L"Notches", L"Entalhes")
+                                         : L"";
+            if (otherIsland &&
+                (id == kChoiceAnimationLevel || id == kChoiceFrameRate)) {
+                name += Tr(L" (all monitors)", L" (todos os monitores)");
+            }
+            return name;
+        }
+        case SettingKind::Pref: {
+            const IslandPref pref = (IslandPref)entry.value;
+            const IslandPrefInfo& info = kIslandPrefs[entry.value];
+            std::wstring name = Tr(info.english, info.portuguese);
+            if (otherIsland && IsSharedPref(pref) && !MainIslandOnly(pref)) {
+                name += Tr(L" (all monitors)", L" (todos os monitores)");
+            }
+            return name;
+        }
+        default:
+            return {};
+    }
+}
+
+PCWSTR ControlPanel::ProfilesHint(int hint) {
+    switch (hint) {
+        case 0:
+            return Tr(
+                L"This monitor's profile: changes here apply to every "
+                L"monitor using it",
+                L"Perfil deste monitor: as mudanças aqui valem para todo "
+                L"monitor que usa ele");
+        case 1:
+            return Tr(
+                L"Same as main: changes here apply to it too · + creates "
+                L"this monitor's profile",
+                L"Igual à principal: as mudanças aqui valem para ela "
+                L"também · + cria o perfil deste monitor");
+        case 2:
+            return Tr(
+                L"+ saves the current settings as a profile, to switch "
+                L"back to them later.",
+                L"+ salva as configurações atuais como um perfil, para "
+                L"voltar a elas depois.");
+        case 3:
+            return Tr(L"Saved \u2713", L"Salvo \u2713");
+        case 4:
+            return Tr(L"No profile in use: click one to apply it",
+                      L"Nenhum perfil em uso: clique num para aplicar");
+        default:
+            return Tr(
+                L"Changes are saved in the one in use · the pencil "
+                L"renames, saves or deletes",
+                L"As mudanças ficam salvas no perfil em uso · o lápis "
+                L"renomeia, salva ou exclui");
     }
 }
 
@@ -30887,26 +34560,34 @@ PCWSTR SettingSectionTitle(int section, bool english) {
         {L"Profiles", L"Perfis"},
         {L"Backup (notes, tasks, profiles and settings)",
          L"Backup (notas, tarefas, perfis e configurações)"},
-        {L"Look", L"Aparência"},
-        {L"Notches (Fixed style)", L"Entalhes (estilo Fixa)"},
-        {L"Animations", L"Animações"},
-        {L"On the pill", L"Na pílula"},
-        {L"Control center buttons on the pill",
-         L"Botões da central na pílula"},
-        {L"Tray icons and media", L"Bandeja e mídia"},
         {L"Place", L"Posição"},
-        {L"Clock (the calendar shows it all)",
-         L"Relógio (o calendário mostra tudo)"},
+        {L"Style", L"Estilo"},
+        {L"Colors", L"Cores"},
+        {L"Size and transparency", L"Tamanho e transparência"},
+        {L"Animations", L"Animações"},
+        {L"Order of the items", L"Ordem dos itens"},
+        {L"System", L"Sistema"},
+        {L"Desktop", L"Área de trabalho"},
+        {L"Apps and tools", L"Apps e ferramentas"},
+        {L"Control center buttons on the pill", L"Botões da central na pílula"},
+        {L"Other apps' tray icons", L"Ícones dos outros apps"},
+        {L"What's playing", L"O que está tocando"},
+        {L"Clock and calendar (agendas: the calendar's gear)",
+         L"Relógio e calendário (agendas: engrenagem do calendário)"},
         {L"Notifications", L"Notificações"},
+        {L"Monitors", L"Monitores"},
     };
     return kTitles[std::clamp(section, 0, kSectionCount - 1)][english ? 0 : 1];
 }
 
 PCWSTR SettingTabTitle(int tab) {
     static const PCWSTR kTitles[kTabCount][2] = {
-        {L"Profiles and look", L"Perfis e aparência"},
+        {L"General", L"Geral"},
+        {L"Look", L"Aparência"},
         {L"Pill", L"Pílula"},
-        {L"Place and notifications", L"Posição e avisos"},
+        {L"Tray, media and clock", L"Bandeja, mídia e relógio"},
+        {L"Notifications", L"Notificações"},
+        {L"Monitors", L"Monitores"},
     };
     const int i = std::clamp(tab, 0, kTabCount - 1);
     return Tr(kTitles[i][0], kTitles[i][1]);
@@ -30989,10 +34670,15 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                     : entry.value == kChoiceNotches
                         ? L" Notches notch MacBook corners middle three Fixed "
                           L"Entalhes entalhe cantos meio três Fixa"
-                        : L" Monitor screen display Monitor tela";
+                        : L"";
             break;
         case SettingKind::AppPlaces:
             text += L" Place and icons per app Posição e ícones por app";
+            break;
+        case SettingKind::Monitors:
+            text +=
+                L" Monitors screens follow mouse all profile Monitor telas "
+                L"segue mouse todos perfil";
             break;
         case SettingKind::Profiles:
             text += L" Profiles save apply rename delete Perfis salvar aplicar "
@@ -31189,65 +34875,83 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Profiles, 0, kSectionProfiles},
             {(int)SettingKind::Label, 0, kSectionBackup},
             {(int)SettingKind::Choice, kChoiceBackup, kSectionBackup},
+            {(int)SettingKind::Label, 0, kSectionPlace},
+            {(int)SettingKind::Place, 0, kSectionPlace},
+            {(int)SettingKind::AppPlaces, 0, kSectionPlace},
+            {(int)SettingKind::Pref, (int)IslandPref::FreeDrag, kSectionPlace},
+            {(int)SettingKind::Pref, (int)IslandPref::VerticalSides,
+             kSectionPlace},
+            {(int)SettingKind::Pref, (int)IslandPref::AutoHide, kSectionPlace},
+            {(int)SettingKind::Size, 5, kSectionPlace, 1},
+            {(int)SettingKind::Size, 1, kSectionPlace},
+            {(int)SettingKind::Label, 0, kSectionStyle},
+            {(int)SettingKind::Style, 0, kSectionStyle},
+            {(int)SettingKind::Choice, kChoiceNotches, kSectionStyle, 1},
+            {(int)SettingKind::Size, 6, kSectionStyle, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::NotchEach, kSectionStyle,
+             1},
+            {(int)SettingKind::Label, 0, kSectionColors},
+            {(int)SettingKind::Theme, 0, kSectionColors},
+            {(int)SettingKind::Choice, kChoiceColors, kSectionColors, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::WindowColor,
+             kSectionColors},
             {(int)SettingKind::Label, 0, kSectionLook},
-            {(int)SettingKind::Style, 0, kSectionLook},
-            {(int)SettingKind::Theme, 0, kSectionLook},
-            {(int)SettingKind::Choice, kChoiceColors, kSectionLook},
             {(int)SettingKind::Size, 0, kSectionLook},
             {(int)SettingKind::Size, 4, kSectionLook},
             {(int)SettingKind::Pref, (int)IslandPref::Frosted, kSectionLook},
-            {(int)SettingKind::Pref, (int)IslandPref::WindowColor,
-             kSectionLook},
             {(int)SettingKind::Pref, (int)IslandPref::PanelsFollow,
              kSectionLook},
-            {(int)SettingKind::Label, 0, kSectionNotches},
-            {(int)SettingKind::Choice, kChoiceNotches, kSectionNotches},
-            {(int)SettingKind::Size, 6, kSectionNotches},
-            {(int)SettingKind::Pref, (int)IslandPref::NotchEach,
-             kSectionNotches},
             {(int)SettingKind::Label, 0, kSectionAnimations},
             {(int)SettingKind::Pref, (int)IslandPref::Animations,
              kSectionAnimations},
             {(int)SettingKind::Choice, kChoiceAnimationLevel,
-             kSectionAnimations},
-            {(int)SettingKind::Size, 2, kSectionAnimations},
-            {(int)SettingKind::Choice, kChoiceFrameRate, kSectionAnimations},
+             kSectionAnimations, 1},
+            {(int)SettingKind::Size, 2, kSectionAnimations, 1},
+            {(int)SettingKind::Choice, kChoiceFrameRate, kSectionAnimations, 1},
             {(int)SettingKind::Label, 0, kSectionPill},
             {(int)SettingKind::Order, 0, kSectionPill},
             {(int)SettingKind::Pref, (int)IslandPref::ClockCenter,
              kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Network, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Volume, kSectionPill},
+            {(int)SettingKind::Label, 0, kSectionSystem},
+            {(int)SettingKind::Pref, (int)IslandPref::Network, kSectionSystem},
+            {(int)SettingKind::Pref, (int)IslandPref::Volume, kSectionSystem},
             {(int)SettingKind::Pref, (int)IslandPref::VolumePercent,
-             kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Battery, kSectionPill},
+             kSectionSystem, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::Battery, kSectionSystem},
             {(int)SettingKind::Pref, (int)IslandPref::BatteryPercent,
-             kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Brightness, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::InputMethod,
-             kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Privacy, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Desktops, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Folders, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Wallpaper, kSectionPill},
-            {(int)SettingKind::Choice, kChoiceWallpaper, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::UsbDrives, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::UsbNotify, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Bell, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Power, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::ThemeButton,
-             kSectionPill},
+             kSectionSystem, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::Brightness,
+             kSectionSystem},
             {(int)SettingKind::Pref, (int)IslandPref::Microphone,
-             kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Notes, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Tasks, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Shortcuts, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Weather, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Updates, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::Profiles, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::UsageCpu, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::UsageRam, kSectionPill},
-            {(int)SettingKind::Pref, (int)IslandPref::UsageVram, kSectionPill},
+             kSectionSystem},
+            {(int)SettingKind::Pref, (int)IslandPref::Privacy, kSectionSystem},
+            {(int)SettingKind::Pref, (int)IslandPref::InputMethod,
+             kSectionSystem},
+            {(int)SettingKind::Pref, (int)IslandPref::ThemeButton,
+             kSectionSystem},
+            {(int)SettingKind::Pref, (int)IslandPref::Power, kSectionSystem},
+            {(int)SettingKind::Pref, (int)IslandPref::Bell, kSectionSystem},
+            {(int)SettingKind::Label, 0, kSectionDesktop},
+            {(int)SettingKind::Pref, (int)IslandPref::Desktops,
+             kSectionDesktop},
+            {(int)SettingKind::Pref, (int)IslandPref::Folders, kSectionDesktop},
+            {(int)SettingKind::Pref, (int)IslandPref::Wallpaper,
+             kSectionDesktop},
+            {(int)SettingKind::Choice, kChoiceWallpaper, kSectionDesktop, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::UsbDrives,
+             kSectionDesktop},
+            {(int)SettingKind::Pref, (int)IslandPref::UsbNotify,
+             kSectionDesktop, 1},
+            {(int)SettingKind::Label, 0, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::Notes, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::Tasks, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::Shortcuts, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::Weather, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::Updates, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::Profiles, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::UsageCpu, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::UsageRam, kSectionTools},
+            {(int)SettingKind::Pref, (int)IslandPref::UsageVram, kSectionTools},
             {(int)SettingKind::Label, 0, kSectionActions},
             {(int)SettingKind::Pref, (int)IslandPref::ActionNetwork,
              kSectionActions},
@@ -31284,34 +34988,25 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Pref, (int)IslandPref::ActionKomorebi,
              kSectionActions},
             {(int)SettingKind::Pref, (int)IslandPref::KomorebiWhkd,
-             kSectionActions},
+             kSectionActions, 1},
             {(int)SettingKind::Pref, (int)IslandPref::KomorebiMasir,
-             kSectionActions},
-            {(int)SettingKind::Label, 0, kSectionTrayMedia},
-            {(int)SettingKind::Pref, (int)IslandPref::Tray, kSectionTrayMedia},
-            {(int)SettingKind::Choice, kChoiceTrayStyle, kSectionTrayMedia},
-            {(int)SettingKind::Pref, (int)IslandPref::TrayOpen,
-             kSectionTrayMedia},
-            {(int)SettingKind::Size, 3, kSectionTrayMedia},
-            {(int)SettingKind::Pref, (int)IslandPref::Media, kSectionTrayMedia},
+             kSectionActions, 1},
+            {(int)SettingKind::Label, 0, kSectionTray},
+            {(int)SettingKind::Pref, (int)IslandPref::Tray, kSectionTray},
+            {(int)SettingKind::Choice, kChoiceTrayStyle, kSectionTray, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::TrayOpen, kSectionTray,
+             1},
+            {(int)SettingKind::Size, 3, kSectionTray, 1},
+            {(int)SettingKind::Label, 0, kSectionMedia},
+            {(int)SettingKind::Pref, (int)IslandPref::Media, kSectionMedia},
             {(int)SettingKind::Pref, (int)IslandPref::MediaButtons,
-             kSectionTrayMedia},
-            {(int)SettingKind::Pref, (int)IslandPref::MediaTitle,
-             kSectionTrayMedia},
-            {(int)SettingKind::Label, 0, kSectionPlace},
-            {(int)SettingKind::Place, 0, kSectionPlace},
-            {(int)SettingKind::AppPlaces, 0, kSectionPlace},
-            {(int)SettingKind::Pref, (int)IslandPref::FreeDrag, kSectionPlace},
-            {(int)SettingKind::Pref, (int)IslandPref::VerticalSides,
-             kSectionPlace},
-            {(int)SettingKind::Pref, (int)IslandPref::AutoHide, kSectionPlace},
-            {(int)SettingKind::Size, 5, kSectionPlace},
-            {(int)SettingKind::Size, 1, kSectionPlace},
-            {(int)SettingKind::Pref, (int)IslandPref::AllMonitors,
-             kSectionPlace},
-            {(int)SettingKind::Pref, (int)IslandPref::FollowMouse,
-             kSectionPlace},
-            {(int)SettingKind::Choice, kChoiceMonitor, kSectionPlace},
+             kSectionMedia, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::MediaTitle, kSectionMedia,
+             1},
+            {(int)SettingKind::Pref, (int)IslandPref::MediaMarquee,
+             kSectionMedia, 1},
+            {(int)SettingKind::Pref, (int)IslandPref::MediaWheel, kSectionMedia,
+             1},
             {(int)SettingKind::Label, 0, kSectionClock},
             {(int)SettingKind::Choice, kChoiceClockFormat, kSectionClock},
             {(int)SettingKind::Pref, (int)IslandPref::ClockSeconds,
@@ -31320,39 +35015,45 @@ void ControlPanel::LayoutSettings() {
              kSectionClock},
             {(int)SettingKind::Pref, (int)IslandPref::ClockDate, kSectionClock},
             {(int)SettingKind::Pref, (int)IslandPref::ClockYear, kSectionClock},
-            {(int)SettingKind::Choice, kChoiceDateOrder, kSectionClock},
+            {(int)SettingKind::Choice, kChoiceDateOrder, kSectionClock, 1},
             {(int)SettingKind::Pref, (int)IslandPref::MonthNumber,
-             kSectionClock},
+             kSectionClock, 1},
             {(int)SettingKind::Pref, (int)IslandPref::Holidays, kSectionClock},
             {(int)SettingKind::Label, 0, kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::OwnNotifications,
              kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::ShortcutNotifications,
-             kSectionNotifications},
+             kSectionNotifications, 1},
             {(int)SettingKind::Pref, (int)IslandPref::ShortcutControl,
-             kSectionNotifications},
+             kSectionNotifications, 1},
             {(int)SettingKind::Pref, (int)IslandPref::Banner,
              kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::BannerMinimized,
-             kSectionNotifications},
+             kSectionNotifications, 1},
             {(int)SettingKind::Pref, (int)IslandPref::HideWindowsBanners,
              kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::WebPictures,
-             kSectionNotifications},
+             kSectionNotifications, 1},
             {(int)SettingKind::Pref, (int)IslandPref::GroupApps,
              kSectionNotifications},
             {(int)SettingKind::Pref, (int)IslandPref::Clipboard,
              kSectionNotifications},
+            {(int)SettingKind::Pref, (int)IslandPref::ScreenshotFolder,
+             kSectionNotifications},
+            {(int)SettingKind::Label, 0, kSectionMonitors},
+            {(int)SettingKind::Monitors, 0, kSectionMonitors},
         };
         for (const auto& spec : kSpecs) {
-            m_settings.push_back(
-                {(SettingKind)spec.kind, spec.value, spec.section});
+            m_settings.push_back({(SettingKind)spec.kind, spec.value,
+                                  spec.section, spec.follows != 0});
         }
     }
 
     const float s = m_scale;
     const float padding = std::round(kControlPadding * s);
-    const float column = std::round((kControlWidth - kControlPadding * 2) * s);
+    // (Wider than the control center's.)
+    const float column =
+        std::round((kControlWidth - kControlPadding * 2) * 1.15f * s);
     const float between = std::round(25 * s);
     // Two or three columns when the screen has room for them.
     const float twoWidth = padding * 2 + column * 2 + between;
@@ -31364,7 +35065,7 @@ void ControlPanel::LayoutSettings() {
     m_twoColumns = m_columns >= 2;
     const float width = m_columns == 3   ? threeWidth
                         : m_columns == 2 ? twoWidth
-                                         : std::round(kControlWidth * s);
+                                         : padding * 2 + column;
 
     // "<  Island settings", and the search box: beside the title with two
     // columns, under it with one.
@@ -31389,14 +35090,27 @@ void ControlPanel::LayoutSettings() {
     const float tabHeight = std::round(26 * s);
     const float tabGap = std::round(4 * s);
     const float tabTop = y + std::round(4 * s);
-    const float tabWidth =
-        std::floor((width - padding * 2 - tabGap * (kTabCount - 1)) /
-                   (float)kTabCount);
-    for (int i = 0; i < kTabCount; i++) {
-        const float tabX = padding + (tabWidth + tabGap) * i;
-        m_tabs.push_back({tabX, tabTop, tabX + tabWidth, tabTop + tabHeight});
+    const int tabCount = SettingTabCount();
+    if (m_settingsTab >= tabCount) {
+        m_settingsTab = kTabGeneral;
     }
-    y = tabTop + tabHeight + std::round(4 * s);
+    const int perRow = m_columns == 1 ? 3 : tabCount;
+    const float tabWidth =
+        std::floor((width - padding * 2 - tabGap * (perRow - 1)) /
+                   (float)perRow);
+    float rowHeight = tabHeight;
+    for (int i = 0; i < tabCount; i++) {
+        rowHeight = std::max(
+            rowHeight, WrappedHeight(SettingTabTitle(i), m_smallFormat.get(),
+                                     tabWidth - std::round(12 * s)) +
+                           std::round(8 * s));
+    }
+    for (int i = 0; i < tabCount; i++) {
+        const float tabX = padding + (tabWidth + tabGap) * (i % perRow);
+        const float rowTop = tabTop + (rowHeight + tabGap) * (i / perRow);
+        m_tabs.push_back({tabX, rowTop, tabX + tabWidth, rowTop + rowHeight});
+    }
+    y = m_tabs.back().bottom + std::round(4 * s);
     const float listTop = y + std::round(2 * s);
 
     // What's shown: the options matching what's typed (or in a section
@@ -31412,6 +35126,9 @@ void ControlPanel::LayoutSettings() {
                           ? SettingSectionTab(entry.section) == m_settingsTab
                           : entry.kind != SettingKind::Order &&
                                 MatchesSearch(SettingText(entry), m_search);
+        if (entry.section == kSectionMonitors && MonitorCount() < 2) {
+            entry.shown = false;
+        }
         sectionShown[entry.section] |= entry.shown;
     }
     // In a tab with columns, the pill's order strip (with its title) goes
@@ -31419,19 +35136,29 @@ void ControlPanel::LayoutSettings() {
     auto acrossColumns = [&](const SettingEntry& entry) {
         return m_search.empty() && m_columns >= 2 &&
                (entry.kind == SettingKind::Order ||
+                entry.kind == SettingKind::Monitors ||
                 (entry.kind == SettingKind::Label &&
-                 entry.section == kSectionPill));
+                 (entry.section == kSectionPill ||
+                  entry.section == kSectionMonitors)));
     };
+    // Each row's height, measured once (its name on its lines).
+    std::vector<float> heights(m_settings.size());
     float sectionHeight[kSectionCount] = {};
     float total = 0;
-    for (auto& entry : m_settings) {
+    for (size_t i = 0; i < m_settings.size(); i++) {
+        SettingEntry& entry = m_settings[i];
         if (entry.kind == SettingKind::Label) {
             entry.shown = sectionShown[entry.section];
         }
-        if (entry.shown && !acrossColumns(entry)) {
-            const float height = std::round(SettingHeight(entry.kind) * s);
-            sectionHeight[entry.section] += height;
-            total += height;
+        if (!entry.shown) {
+            continue;
+        }
+        const bool across = acrossColumns(entry);
+        heights[i] =
+            SettingHeight(entry, across ? width - padding * 2 : column);
+        if (!across) {
+            sectionHeight[entry.section] += heights[i];
+            total += heights[i];
         }
     }
     // Searching, the sections fill the columns in turn, each up to about
@@ -31440,15 +35167,17 @@ void ControlPanel::LayoutSettings() {
     float filled = 0;
     int columnNow = 0;
     if (m_search.empty()) {
-        // (A title stays with the option after it.)
+        // (A title stays with the option after it, and an option with the
+        // one it depends on.)
         bool afterTitle = false;
         for (size_t i = 0; i < m_settings.size(); i++) {
             const SettingEntry& entry = m_settings[i];
             if (!entry.shown || acrossColumns(entry)) {
                 continue;
             }
-            const float height = std::round(SettingHeight(entry.kind) * s);
+            const float height = heights[i];
             if (columnNow < m_columns - 1 && filled > 0 && !afterTitle &&
+                !entry.follows &&
                 filled + height / 2 > total * (columnNow + 1) / m_columns) {
                 columnNow++;
             }
@@ -31477,9 +35206,9 @@ void ControlPanel::LayoutSettings() {
     float columnBottom[3] = {};
     // The rows across the columns first (see acrossColumns).
     float acrossBottom = 0;
-    for (const auto& entry : m_settings) {
-        if (entry.shown && acrossColumns(entry)) {
-            acrossBottom += std::round(SettingHeight(entry.kind) * s);
+    for (size_t i = 0; i < m_settings.size(); i++) {
+        if (m_settings[i].shown && acrossColumns(m_settings[i])) {
+            acrossBottom += heights[i];
         }
     }
     if (acrossBottom > 0) {
@@ -31496,11 +35225,19 @@ void ControlPanel::LayoutSettings() {
         const int col = across ? 0 : entryColumn[&entry - m_settings.data()];
         const float left = padding + col * (column + between);
         const float top = across ? acrossTop : columnBottom[col];
-        const float height = std::round(SettingHeight(entry.kind) * s);
+        const float height = heights[&entry - m_settings.data()];
         const D2D1_RECT_F rect{left, top,
                                across ? width - padding : left + column,
                                top + height};
         entry.rect = rect;
+        const bool under = entry.kind == SettingKind::Style ||
+                           entry.kind == SettingKind::Theme ||
+                           entry.kind == SettingKind::Size ||
+                           entry.kind == SettingKind::Choice;
+        entry.head = under ? SettingNameHeight(entry, column) : 0;
+        // A selector's or a slider's row, under its name.
+        const float controlTop = top + entry.head;
+        const float controlBottom = rect.bottom - std::round(6 * s);
         if (across) {
             acrossTop += height;
         } else {
@@ -31510,53 +35247,59 @@ void ControlPanel::LayoutSettings() {
         switch (entry.kind) {
             case SettingKind::Label:
                 if (entry.section == kSectionProfiles &&
-                    (!g_island || g_island->HasMainSettings()) &&
                     g_profiles.size() < kMaxProfiles) {
                     const float add = std::round(22 * s);
                     const float addTop = top + (height - add) / 2;
-                    m_profileAdd = {rect.right - std::round(4 * s) - add, addTop,
-                                    rect.right - std::round(4 * s),
+                    m_profileAdd = {rect.right - std::round(4 * s) - add,
+                                    addTop, rect.right - std::round(4 * s),
                                     addTop + add};
                 }
                 break;
             case SettingKind::Style: {
                 m_styleRow = rect;
-                const float segment = std::round(66 * s);
-                const float segmentTop = top + std::round(7 * s);
-                const float segmentBottom = top + height - std::round(7 * s);
-                const float right = rect.right - std::round(4 * s);
+                const float segment = std::min(
+                    std::round(84 * s),
+                    std::floor((rect.right - rect.left - std::round(8 * s)) /
+                               3));
+                const float left =
+                    std::round((rect.left + rect.right) / 2 - segment * 1.5f);
                 for (int i = 0; i < 3; i++) {
-                    m_styleSegments[i] = {right - segment * (3 - i), segmentTop,
-                                          right - segment * (2 - i),
-                                          segmentBottom};
+                    m_styleSegments[i] = {left + segment * i, controlTop,
+                                          left + segment * (i + 1),
+                                          controlBottom};
                 }
                 break;
             }
             case SettingKind::Theme: {
                 m_themeRow = rect;
                 const float swatch = std::round(20 * s);
-                const float swatchGap = std::round(6 * s);
-                float swatchRight = rect.right - std::round(6 * s);
-                const float middle = top + height / 2;
-                for (int i = (int)ThemeId::Count - 1; i >= 0; i--) {
-                    m_swatches[i] = {swatchRight - swatch, middle - swatch / 2,
-                                     swatchRight, middle + swatch / 2};
-                    swatchRight -= swatch + swatchGap;
+                const float swatchGap = std::round(8 * s);
+                const int count = (int)ThemeId::Count;
+                float swatchLeft =
+                    std::round((rect.left + rect.right) / 2 -
+                               (swatch * count + swatchGap * (count - 1)) / 2);
+                const float middle = (controlTop + controlBottom) / 2;
+                for (int i = 0; i < count; i++) {
+                    m_swatches[i] = {swatchLeft, middle - swatch / 2,
+                                     swatchLeft + swatch, middle + swatch / 2};
+                    swatchLeft += swatch + swatchGap;
                 }
                 break;
             }
             case SettingKind::Size: {
+                // The slider in the middle, its "restore" at the right.
                 const int slider = entry.value;
                 m_sizeRow[slider] = rect;
                 const float reset = std::round(28 * s);
+                const float middle = (controlTop + controlBottom) / 2;
                 m_sizeReset[slider] = {rect.right - std::round(2 * s) - reset,
-                                       top + (height - reset) / 2,
+                                       middle - reset / 2,
                                        rect.right - std::round(2 * s),
-                                       top + (height + reset) / 2};
+                                       middle + reset / 2};
                 m_sizeSlider[slider] = {
-                    rect.left + std::round(column * 0.48f), top,
+                    rect.left + reset + std::round(12 * s), controlTop,
                     m_sizeReset[slider].left - std::round(10 * s),
-                    top + height};
+                    controlBottom};
                 break;
             }
             case SettingKind::Place: {
@@ -31572,14 +35315,16 @@ void ControlPanel::LayoutSettings() {
             case SettingKind::AppPlaces:
                 m_appPlacesRow = rect;
                 break;
+            case SettingKind::Monitors:
+                LayoutMonitors(rect);
+                break;
             case SettingKind::Profiles: {
                 const float chip = std::round(32 * s);
                 const float gap = std::round(6 * s);
                 const float chipWidth =
                     std::floor((rect.right - rect.left - gap * 2) / 3);
                 // On another island than the main one: its monitor's
-                // profile, or the main island's settings (the last chip);
-                // no editing.
+                // profile, or the main island's settings (the last chip).
                 const bool monitor = g_island && !g_island->HasMainSettings();
                 const size_t count = g_profiles.size();
                 const size_t chips = count + (monitor ? 1 : 0);
@@ -31594,27 +35339,13 @@ void ControlPanel::LayoutSettings() {
                     const D2D1_RECT_F chipRect{left, chipTop, left + chipWidth,
                                                chipTop + chip};
                     m_profileChips.push_back(chipRect);
-                    if (i < count && !monitor) {
+                    if (i < count) {
                         m_profilePencils.push_back({chipRect.right - chip,
                                                     chipRect.top,
                                                     chipRect.right,
                                                     chipRect.bottom});
                     }
                     chipsBottom = chipTop + chip + gap;
-                }
-                // The other monitors' profiles, a line each, after the help
-                // line.
-                m_monitorProfileRows.clear();
-                if (!monitor) {
-                    float rowTop = chipsBottom + (m_profileEdit >= 0
-                                                      ? std::round(80 * s)
-                                                      : 0) +
-                                   std::round(22 * s);
-                    for (size_t i = 0; i < OtherIslands().size(); i++) {
-                        m_monitorProfileRows.push_back(
-                            {rect.left, rowTop, rect.right, rowTop + chip});
-                        rowTop += chip + gap;
-                    }
                 }
                 m_profileNameField = m_profileUpdate = m_profileDelete =
                     m_profileDone = {};
@@ -31636,24 +35367,22 @@ void ControlPanel::LayoutSettings() {
                 break;
             }
             case SettingKind::Choice: {
-                // Right-aligned segments, as wide as the row allows.
+                // Segments in the middle, as wide as the row allows.
                 const int id = entry.value;
                 const int count = ChoiceCount(id);
                 m_choiceRow[id] = rect;
                 // (The notches' four: wider, their names are longer.)
-                const bool wide = id == kChoiceNotches;
                 const float segment = std::min(
-                    std::round(64 * s),
-                    std::floor((rect.right - rect.left) * (wide ? 0.68f : 0.6f) /
+                    std::round((id == kChoiceNotches ? 96 : 80) * s),
+                    std::floor((rect.right - rect.left - std::round(8 * s)) /
                                count));
-                const float segmentTop = top + std::round(7 * s);
-                const float segmentBottom = top + height - std::round(7 * s);
-                const float right = rect.right - std::round(4 * s);
+                const float first = std::round((rect.left + rect.right) / 2 -
+                                               segment * count / 2);
                 m_choiceSegments[id].clear();
                 for (int i = 0; i < count; i++) {
-                    const float left = right - segment * (count - i);
+                    const float left = first + segment * i;
                     m_choiceSegments[id].push_back(
-                        {left, segmentTop, left + segment, segmentBottom});
+                        {left, controlTop, left + segment, controlBottom});
                 }
                 break;
             }
@@ -31667,7 +35396,7 @@ void ControlPanel::LayoutSettings() {
                 break;
         }
     }
-    m_nothingFound = total <= 0;
+    m_nothingFound = total <= 0 && acrossBottom <= 0;
     float content =
         std::max({columnBottom[0], columnBottom[1], columnBottom[2]});
     if (m_nothingFound) {
@@ -31922,6 +35651,14 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                         return {Part::AppPlacesRow};
                     }
                     return {Part::DisabledSetting, kDisabledAppPlaces};
+                case SettingKind::Monitors:
+                    for (size_t i = 0; i < m_monitorParts.size(); i++) {
+                        const auto& part = m_monitorParts[i];
+                        if (!part.disabled && PointInRect(list, part.rect)) {
+                            return {part.part, (int)i};
+                        }
+                    }
+                    break;
                 case SettingKind::Profiles:
                     for (size_t i = 0; i < m_profilePencils.size(); i++) {
                         if (PointInRect(list, m_profilePencils[i])) {
@@ -31931,11 +35668,6 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
                     for (size_t i = 0; i < m_profileChips.size(); i++) {
                         if (PointInRect(list, m_profileChips[i])) {
                             return {Part::ProfileChip, (int)i};
-                        }
-                    }
-                    for (size_t i = 0; i < m_monitorProfileRows.size(); i++) {
-                        if (PointInRect(list, m_monitorProfileRows[i])) {
-                            return {Part::MonitorProfileRow, (int)i};
                         }
                     }
                     if (m_profileEdit >= 0) {
@@ -32001,7 +35733,8 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         pt = ToAppPlacesList(pt);
         for (const auto& chip : m_orderChips) {
             if (chip.strip >= 0 && PointInRect(pt, chip.rect)) {
-                return {Part::OrderChip, OrderChipIndex(chip.strip, chip.group)};
+                return {Part::OrderChip,
+                        OrderChipIndex(chip.strip, chip.group)};
             }
         }
         for (const auto& [index, rect] : m_appItemChips) {
@@ -32196,8 +35929,7 @@ void ControlPanel::DrawTile(ID2D1RenderTarget* target,
     const float circle = std::round(17 * s);
     const D2D1_POINT_2F center{rect.left + std::round(12 * s) + circle,
                                (rect.top + rect.bottom) / 2};
-    brush->SetColor(active ? Accent(1)
-                           : Fg(0.18f));
+    brush->SetColor(active ? Accent(1) : Fg(0.18f));
     target->FillEllipse({center, circle, circle}, brush);
     brush->SetColor(Fg(0.95f));
     target->DrawText(&glyph, 1, m_iconFormat.get(),
@@ -32207,7 +35939,7 @@ void ControlPanel::DrawTile(ID2D1RenderTarget* target,
 
     const float textLeft = center.x + circle + std::round(9 * s);
     const float middle = (rect.top + rect.bottom) / 2;
-    // Long names scroll instead of being cut.
+    // Long names scroll (under the mouse) instead of being cut.
     DrawMarquee(target, brush, title, m_titleFormat.get(),
                 {textLeft, middle - std::round(17 * s),
                  rect.right - std::round(8 * s), middle});
@@ -32217,9 +35949,9 @@ void ControlPanel::DrawTile(ID2D1RenderTarget* target,
                  middle + std::round(16 * s)});
 }
 
-// Text that doesn't fit scrolls to its end and back, with a pause at each
-// end, like on macOS; text that fits is drawn as it is. Uses the brush's
-// color.
+// Text that doesn't fit scrolls to its end and back while the mouse is over
+// it, with a pause at each end, like on macOS (otherwise its start shows);
+// text that fits is drawn as it is. Uses the brush's color.
 void ControlPanel::DrawMarquee(ID2D1RenderTarget* target,
                                ID2D1SolidColorBrush* brush,
                                const std::wstring& text,
@@ -32265,40 +35997,84 @@ void ControlPanel::DrawMarquee(ID2D1RenderTarget* target,
         if (centered) {
             x += (width - textWidth) / 2;
         }
-    } else if (AnimationLevel() == 0) {
-        // Pause, scroll to the end, pause, scroll back.
+    } else if (ScrollsHere(target, rect) && AnimationLevel() == 0) {
         m_marqueeActive = true;
-        const double distance = textWidth - width;
-        const double speed = 30 * m_scale;
-        const double pause = 1.5;
-        const double travel = distance / speed;
-        const double cycle = (pause + travel) * 2;
-        const double t = std::fmod(NowSeconds() - m_marqueeStart, cycle);
-        double shift;
-        if (t < pause) {
-            shift = 0;
-        } else if (t < pause + travel) {
-            shift = (t - pause) * speed;
-        } else if (t < pause * 2 + travel) {
-            shift = distance;
-        } else {
-            shift = distance - (t - pause * 2 - travel) * speed;
-        }
-        x -= (float)std::clamp(shift, 0.0, distance);
+        x -= (float)MarqueeShift(NowSeconds() - m_scrollSince,
+                                 textWidth - width, m_scale);
     }
     target->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_ALIASED);
-    target->DrawTextLayout({x, rect.top}, layout.get(), brush);
+    target->DrawTextLayout({x, rect.top}, layout.get(), brush,
+                           D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
     target->PopAxisAlignedClip();
+}
+
+void ControlPanel::DrawWrapped(ID2D1RenderTarget* target,
+                               ID2D1SolidColorBrush* brush,
+                               const std::wstring& text,
+                               IDWriteTextFormat* format,
+                               const D2D1_RECT_F& rect,
+                               bool centered) {
+    const float width = rect.right - rect.left;
+    const float height = rect.bottom - rect.top;
+    if (text.empty() || !format || width <= 1 || height <= 1) {
+        return;
+    }
+    winrt::com_ptr<IDWriteTextLayout> layout;
+    for (const auto& cached : m_wrappedLayouts) {
+        if (cached.format == format && cached.width == width &&
+            cached.height == height && cached.centered == centered &&
+            cached.fontSize == format->GetFontSize() && cached.text == text) {
+            layout = cached.layout;
+            break;
+        }
+    }
+    if (!layout) {
+        if (FAILED(m_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(),
+                                              format, width, height,
+                                              layout.put()))) {
+            return;
+        }
+        layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        layout->SetTextAlignment(centered ? DWRITE_TEXT_ALIGNMENT_CENTER
+                                          : DWRITE_TEXT_ALIGNMENT_LEADING);
+        layout->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        if (m_wrappedLayouts.size() >= 96) {
+            m_wrappedLayouts.clear();
+        }
+        m_wrappedLayouts.push_back({text, format, format->GetFontSize(), width,
+                                    height, centered, layout});
+    }
+    target->DrawTextLayout({rect.left, rect.top}, layout.get(), brush);
+}
+
+float ControlPanel::WrappedHeight(const std::wstring& text,
+                                  IDWriteTextFormat* format,
+                                  float width) const {
+    winrt::com_ptr<IDWriteTextLayout> layout;
+    if (!format) {
+        return 0;
+    }
+    if (text.empty() || width <= 1 ||
+        FAILED(m_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(),
+                                          format, width, 10000,
+                                          layout.put()))) {
+        return std::ceil(format->GetFontSize() * 1.33f);
+    }
+    layout->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+    DWRITE_TEXT_METRICS metrics{};
+    layout->GetMetrics(&metrics);
+    return std::ceil(metrics.height);
 }
 
 // Scrolling texts move while the control center is open; so do switches,
 // the controls while editing (sliding to their places), and
 // removed ones shrinking away.
 bool ControlPanel::AnimateContents(double dt) {
-    // Scrolling text never stops (see m_idleMotion), nor a text box's
-    // blinking caret.
-    const bool idle = m_marqueeActive || m_view == View::Settings ||
-                      m_view == View::Password;
+    // A text scrolling under the mouse never stops (see m_idleMotion), nor
+    // a text box's caret while it blinks (a few seconds after typing).
+    const bool idle = m_marqueeActive ||
+                      ((m_view == View::Settings || m_view == View::Password) &&
+                       CaretBlinking());
     bool moving = false;
     if (SpringTowards(m_viewIn, m_viewInVelocity, 1, 0.42, dt)) {
         moving = true;
@@ -32409,8 +36185,7 @@ void ControlPanel::DrawShortcut(ID2D1RenderTarget* target,
     const float circle = std::round(14 * s);
     const D2D1_POINT_2F center{(rect.left + rect.right) / 2,
                                rect.top + std::round(8 * s) + circle};
-    brush->SetColor(active ? Accent(1)
-                           : Fg(0.18f));
+    brush->SetColor(active ? Accent(1) : Fg(0.18f));
     target->FillEllipse({center, circle, circle}, brush);
     brush->SetColor(Fg(0.95f));
     target->DrawText(&glyph, 1, m_iconFormat.get(),
@@ -32594,8 +36369,8 @@ void ControlPanel::DrawWifi(ID2D1RenderTarget* target,
         const WifiNetwork& network = m_networks[i];
         const D2D1_RECT_F& row = m_rows[i];
         const bool hover =
-            (m_hover.part == Part::WifiRow || m_hover.part == Part::Disconnect ||
-             m_hover.part == Part::Forget ||
+            (m_hover.part == Part::WifiRow ||
+             m_hover.part == Part::Disconnect || m_hover.part == Part::Forget ||
              m_hover.part == Part::WifiConnect) &&
             m_hover.index == (int)i;
         const float lit = Hover(row, hover);
@@ -32625,11 +36400,11 @@ void ControlPanel::DrawWifi(ID2D1RenderTarget* target,
                 Hover(HoverKey(4006, (long long)i * 8 + (int)button.part),
                       m_hover.part == button.part && m_hover.index == (int)i);
             const float radius = (button.rect.bottom - button.rect.top) / 2;
-            brush->SetColor(
-                armed ? D2D1::ColorF(0.86f, 0.2f, 0.18f, 0.85f + 0.15f * buttonLit)
-                : button.part == Part::WifiConnect
-                    ? AccentLit(0.9f, buttonLit)
-                    : Fg(0.1f + 0.08f * buttonLit));
+            brush->SetColor(armed ? D2D1::ColorF(0.86f, 0.2f, 0.18f,
+                                                 0.85f + 0.15f * buttonLit)
+                            : button.part == Part::WifiConnect
+                                ? AccentLit(0.9f, buttonLit)
+                                : Fg(0.1f + 0.08f * buttonLit));
             target->FillRoundedRectangle({button.rect, radius, radius}, brush);
             PCWSTR label =
                 button.part == Part::Forget
@@ -33029,8 +36804,8 @@ void ControlPanel::DrawAppPlaces(ID2D1RenderTarget* target,
             if (group >= kMediaChipFirst && group < kClockChipFirst) {
                 // What's playing's buttons, or its cover and title: lit when
                 // shown for this app (each on its own, like its note).
-                const int part =
-                    group == kMediaChipFirst ? kAppMediaButtons : kAppMediaTitle;
+                const int part = group == kMediaChipFirst ? kAppMediaButtons
+                                                          : kAppMediaTitle;
                 const int parts =
                     place.media >= 0
                         ? place.media
@@ -33051,7 +36826,8 @@ void ControlPanel::DrawAppPlaces(ID2D1RenderTarget* target,
                     brush->SetColor(Fg(0.6f * (1 - on)));
                     target->DrawLine({chip.left + strike, chip.bottom - strike},
                                      {chip.right - strike, chip.top + strike},
-                                     brush, std::max(1.0f, std::round(1.5f * s)));
+                                     brush,
+                                     std::max(1.0f, std::round(1.5f * s)));
                 }
                 continue;
             }
@@ -33272,13 +37048,6 @@ void ControlPanel::DrawProfiles(ID2D1RenderTarget* target,
             brush->SetColor(Fg(0.08f + 0.07f * lit + (editing ? 0.06f : 0)));
         }
         target->FillRoundedRectangle({chip, radius, radius}, brush);
-        if (monitor) {
-            brush->SetColor(active ? AccentInk(1) : Fg(0.92f));
-            DrawMarquee(target, brush, profile.name, m_smallFormat.get(),
-                        {chip.left + std::round(10 * s), chip.top,
-                         chip.right - std::round(10 * s), chip.bottom});
-            continue;
-        }
         const D2D1_RECT_F& pencil = m_profilePencils[i];
         brush->SetColor(active ? AccentInk(1) : Fg(0.92f));
         DrawMarquee(target, brush,
@@ -33355,70 +37124,173 @@ void ControlPanel::DrawProfiles(ID2D1RenderTarget* target,
                false);
         hintTop = m_profileDone.bottom + std::round(6 * s);
     }
-    PCWSTR hint =
-        monitor
-            ? (g_island->HasOwnLook()
-                   ? Tr(L"This monitor's profile: its settings are changed "
-                        L"on the main island",
-                        L"Perfil deste monitor: as configurações dele mudam "
-                        L"na ilha principal")
-                   : Tr(L"This monitor's island: the main one's settings, or "
-                        L"a profile of its own",
-                        L"Ilha deste monitor: as configurações da principal, "
-                        L"ou um perfil só dela"))
-        : g_profiles.empty()
-            ? Tr(L"+ saves the current settings as a profile, to switch back "
-                 L"to them later.",
-                 L"+ salva as configurações atuais como um perfil, para "
-                 L"voltar a elas depois.")
-        : NowSeconds() - m_profileSavedAt < 1.5
-            ? Tr(L"Saved \u2713", L"Salvo \u2713")
-        : g_activeProfile < 0
-            ? Tr(L"No profile in use: click one to apply it",
-                 L"Nenhum perfil em uso: clique num para aplicar")
-            : Tr(L"Changes are saved in the one in use · the pencil "
-                 L"renames, saves or deletes",
-                 L"As mudanças ficam salvas no perfil em uso · o lápis "
-                 L"renomeia, salva ou exclui");
+    const int hint = monitor              ? (g_island->HasOwnLook() ? 0 : 1)
+                     : g_profiles.empty() ? 2
+                     : NowSeconds() - m_profileSavedAt < 1.5 ? 3
+                     : g_activeProfile < 0                   ? 4
+                                                             : 5;
     brush->SetColor(Fg(0.45f));
-    DrawMarquee(target, brush, hint, m_smallFormat.get(),
+    DrawWrapped(target, brush, ProfilesHint(hint), m_smallFormat.get(),
                 {row.left + std::round(4 * s), hintTop, row.right,
-                 hintTop + std::round(18 * s)});
-    // Each other monitor's profile: "Monitor 2 · Work  ›".
-    if (m_monitorProfileRows.empty()) {
+                 std::max(hintTop + std::round(18 * s), row.bottom)});
+}
+
+// The display layout in physical coordinates, scaled into one map.
+void ControlPanel::LayoutMonitors(const D2D1_RECT_F& row) {
+    const float s = m_scale;
+    m_monitorParts.clear();
+    m_monitorLabels.clear();
+    const auto monitors = ListMonitors();
+    bool notches = false;
+    {
+        IslandScope scope(MainIsland());
+        notches = NotchCountWanted() > 0;
+    }
+    const bool all = g_settings.islandAllMonitors;
+    const bool follow = g_settings.islandFollowMouse && !all && !notches;
+    const int mode = all ? 1 : follow ? 2 : 0;
+    const float left = row.left + std::round(4 * s);
+    const float right = row.right - std::round(4 * s);
+    const float gap = std::round(6 * s);
+    float top = row.top + std::round(4 * s);
+    m_monitorLabels.push_back({{left, top, right, top + 24 * s},
+                               Tr(L"The island appears:", L"A ilha aparece:")});
+    top += 28 * s;
+    const float third = (right - left - gap * 2) / 3;
+    for (int i = 0; i < 3; i++) {
+        m_monitorParts.push_back(
+            {{left + (third + gap) * i, top, left + (third + gap) * i + third,
+              top + 32 * s},
+             Part::MonitorMode,
+             i,
+             {},
+             i == 0   ? Tr(L"On one monitor", L"Num monitor")
+             : i == 1 ? Tr(L"On all monitors", L"Em todos")
+                      : Tr(L"Follows the mouse", L"Segue o mouse"),
+             mode == i,
+             i == 2 && notches});
+    }
+    top += 40 * s;
+    RECT bounds{};
+    if (!monitors.empty()) {
+        bounds = monitors.front().rect;
+        for (const auto& monitor : monitors) {
+            bounds.left = std::min(bounds.left, monitor.rect.left);
+            bounds.top = std::min(bounds.top, monitor.rect.top);
+            bounds.right = std::max(bounds.right, monitor.rect.right);
+            bounds.bottom = std::max(bounds.bottom, monitor.rect.bottom);
+        }
+    }
+    const float mapWidth = right - left;
+    const float mapHeight = 140 * s;
+    const float scale =
+        std::min(mapWidth / std::max(1L, bounds.right - bounds.left),
+                 mapHeight / std::max(1L, bounds.bottom - bounds.top));
+    const float mapLeft =
+        left + (mapWidth - (bounds.right - bounds.left) * scale) / 2;
+    const float mapTop =
+        top + (mapHeight - (bounds.bottom - bounds.top) * scale) / 2;
+    const int chosen = ChosenMonitorIndex();
+    for (size_t i = 0; i < monitors.size(); i++) {
+        const auto& monitor = monitors[i];
+        // (The main island's: the monitor chosen, not Windows' primary.)
+        std::wstring text = MonitorNumber(monitor.device);
+        if ((int)i == chosen) {
+            text += L" · " + std::wstring(Tr(L"Main island", L"Ilha principal"));
+        }
+        m_monitorParts.push_back(
+            {{mapLeft + (monitor.rect.left - bounds.left) * scale + s,
+              mapTop + (monitor.rect.top - bounds.top) * scale + s,
+              mapLeft + (monitor.rect.right - bounds.left) * scale - s,
+              mapTop + (monitor.rect.bottom - bounds.top) * scale - s},
+             Part::MonitorMap,
+             (int)i,
+             monitor.device,
+             text,
+             all || (int)i == chosen,
+             follow});
+    }
+    top += mapHeight + 8 * s;
+    PCWSTR hint =
+        all ? Tr(L"Click a screen to place the main island there (alerts and "
+                 L"tray).",
+                 L"Clique numa tela para pôr a ilha principal nela (avisos e "
+                 L"bandeja).")
+        : follow ? Tr(L"The island follows the mouse between screens.",
+                      L"A ilha segue o mouse entre as telas.")
+                 : Tr(L"Click a screen to choose where the island appears.",
+                      L"Clique numa tela para escolher onde a ilha aparece.");
+    m_monitorLabels.push_back({{left, top, right, top + 20 * s}, hint});
+    top += 22 * s;
+    if (notches) {
+        m_monitorLabels.push_back({{left, top, right, top + 20 * s},
+                                   Tr(L"Following the mouse is unavailable "
+                                      L"with notches on the main island.",
+                                      L"Segue o mouse fica indisponível com "
+                                      L"entalhes na ilha principal.")});
+    }
+    top = row.top + 276 * s;
+    if (!all) {
         return;
     }
-    const std::vector<Island*> others = OtherIslands();
-    const std::vector<MonitorEntry> monitors = ListMonitors();
-    for (size_t i = 0; i < m_monitorProfileRows.size() && i < others.size();
-         i++) {
-        const D2D1_RECT_F& line = m_monitorProfileRows[i];
-        const float radius = (line.bottom - line.top) / 2;
-        const bool hover = m_hover.part == Part::MonitorProfileRow &&
-                           m_hover.index == (int)i;
-        brush->SetColor(Fg(0.06f + 0.06f * Hover(HoverKey(4104, (int)i),
-                                                  hover)));
-        target->FillRoundedRectangle({line, radius, radius}, brush);
-        int number = (int)i + 2;
-        for (size_t m = 0; m < monitors.size(); m++) {
-            if (monitors[m].device == others[i]->OwnDevice()) {
-                number = (int)m + 1;
-            }
+    for (Island* other : OtherIslands()) {
+        const std::wstring& device = other->OwnDevice();
+        // (The island these settings belong to, marked.)
+        const bool own = other == Owner();
+        m_monitorLabels.push_back(
+            {{left, top, right, top + 30 * s},
+             std::wstring(Tr(L"Monitor ", L"Monitor ")) +
+                 MonitorNumber(device) +
+                 (own ? Tr(L" · this island", L" · esta ilha") : L"")});
+        top += 36 * s;
+        for (size_t i = 0; i <= g_profiles.size(); i++) {
+            const int id = i == 0 ? -1 : g_profiles[i - 1].id;
+            const float x = left + (third + gap) * (float)(i % 3);
+            const float y = top + 38 * s * (float)(i / 3);
+            m_monitorParts.push_back(
+                {{x, y, x + third, y + 32 * s},
+                 Part::MonitorProfile,
+                 id,
+                 device,
+                 i == 0 ? std::wstring(
+                              Tr(L"Same as the main one", L"Igual à principal"))
+                        : g_profiles[i - 1].name,
+                 other->MonitorProfile() == id,
+                 false});
         }
-        std::wstring name = Tr(L"Same as the main one", L"Igual à principal");
-        for (const auto& profile : g_profiles) {
-            if (profile.id == others[i]->MonitorProfile()) {
-                name = profile.name;
-            }
+        top += (float)((g_profiles.size() + 3) / 3) * 38 * s;
+    }
+}
+
+void ControlPanel::DrawMonitors(ID2D1RenderTarget* target,
+                                ID2D1SolidColorBrush* brush) {
+    for (const auto& [rect, text] : m_monitorLabels) {
+        brush->SetColor(Fg(0.6f));
+        DrawMarquee(target, brush, text, m_smallFormat.get(), rect);
+    }
+    for (size_t i = 0; i < m_monitorParts.size(); i++) {
+        const auto& part = m_monitorParts[i];
+        const float opacity = part.disabled ? 0.4f : 1.0f;
+        const float lit = Hover(HoverKey(4120, (int)i),
+                                !part.disabled && m_hover.part == part.part &&
+                                    m_hover.index == (int)i);
+        const float radius =
+            std::round((part.part == Part::MonitorMap ? 6 : 12) * m_scale);
+        brush->SetColor(part.chosen ? Accent((0.75f + 0.15f * lit) * opacity)
+                                    : Fg((0.08f + 0.06f * lit) * opacity));
+        target->FillRoundedRectangle({part.rect, radius, radius}, brush);
+        if (part.part == Part::MonitorMap &&
+            part.value == ChosenMonitorIndex()) {
+            brush->SetColor(Accent(opacity));
+            target->DrawRoundedRectangle(
+                {part.rect, radius, radius}, brush,
+                std::max(1.0f, std::round(2 * m_scale)));
         }
-        brush->SetColor(Fg(0.85f));
-        DrawMarquee(target, brush,
-                    std::wstring(Tr(L"Monitor ", L"Monitor ")) +
-                        std::to_wstring(number) + L" \u00B7 " + name +
-                        L"  \u203A",
-                    m_smallFormat.get(),
-                    {line.left + std::round(12 * s), line.top,
-                     line.right - std::round(12 * s), line.bottom});
+        brush->SetColor(part.chosen ? AccentInk(opacity) : Fg(0.9f * opacity));
+        DrawMarquee(target, brush, part.text, m_smallFormat.get(),
+                    {part.rect.left + 4 * m_scale, part.rect.top,
+                     part.rect.right - 4 * m_scale, part.rect.bottom},
+                    true);
     }
 }
 
@@ -33453,9 +37325,10 @@ void ControlPanel::DrawSliderTrack(ID2D1RenderTarget* target,
     const float usualX = track.left + (track.right - track.left) *
                                           (float)(usual - min) / (max - min);
     brush->SetColor(Fg(0.35f));
-    target->FillRectangle({usualX - std::round(1 * s), middle - std::round(6 * s),
-                           usualX + std::round(1 * s), middle + std::round(6 * s)},
-                          brush);
+    target->FillRectangle(
+        {usualX - std::round(1 * s), middle - std::round(6 * s),
+         usualX + std::round(1 * s), middle + std::round(6 * s)},
+        brush);
     const float knob = std::round((active ? 9 : 8) * s);
     brush->SetColor(AccentInk(1));
     target->FillEllipse({{knobX, middle}, knob, knob}, brush);
@@ -33517,7 +37390,12 @@ void ControlPanel::SetIslandSizeAt(int slider, POINT pt, bool keep) {
 void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
                                 ID2D1SolidColorBrush* brush) {
     const float s = m_scale;
-    DrawHeader(target, brush, Tr(L"Island settings", L"Configurações da ilha"));
+    std::wstring title = Tr(L"Island settings", L"Configurações da ilha");
+    if (g_island && !g_island->HasMainSettings()) {
+        title += L" · " + std::wstring(Tr(L"Monitor ", L"Monitor ")) +
+                 MonitorNumber(g_island->SettingsIsland()->OwnDevice());
+    }
+    DrawHeader(target, brush, title.c_str());
     DrawSearchField(target, brush);
     // The tabs: the one shown lit (none while searching).
     for (size_t i = 0; i < m_tabs.size(); i++) {
@@ -33526,13 +37404,16 @@ void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
         const float lit = Hover(HoverKey(4110, (int)i),
                                 m_hover.part == Part::SettingsTab &&
                                     m_hover.index == (int)i);
-        const float radius = (tab.bottom - tab.top) / 2;
+        const float radius =
+            std::min((tab.bottom - tab.top) / 2, std::round(13 * m_scale));
         brush->SetColor(chosen ? Accent(0.9f + 0.1f * lit)
                                : Fg(0.06f + 0.06f * lit));
         target->FillRoundedRectangle({tab, radius, radius}, brush);
         brush->SetColor(chosen ? AccentInk(1) : Fg(0.8f));
-        DrawMarquee(target, brush, SettingTabTitle((int)i), m_smallFormat.get(),
-                    tab, true);
+        DrawWrapped(target, brush, SettingTabTitle((int)i), m_smallFormat.get(),
+                    {tab.left + std::round(6 * m_scale), tab.top,
+                     tab.right - std::round(6 * m_scale), tab.bottom},
+                    true);
     }
 
     const D2D1_RECT_F& viewport = m_settingsViewport;
@@ -33606,8 +37487,8 @@ void ControlPanel::DrawSettings(ID2D1RenderTarget* target,
         if (appPlaces ? entry.kind != SettingKind::AppPlaces
                       : entry.kind != (choice ? SettingKind::Choice
                                               : SettingKind::Pref) ||
-                            entry.value !=
-                                m_hover.index - (choice ? kDisabledChoice : 0)) {
+                            entry.value != m_hover.index -
+                                               (choice ? kDisabledChoice : 0)) {
             continue;
         }
         const std::wstring reason = DisabledReason(m_hover.index);
@@ -33692,10 +37573,7 @@ std::wstring ControlPanel::DisabledReason(int index) {
                 return Tr(L"Only for the Fixed style",
                           L"Só no estilo Fixa");
             default:
-                return MonitorCount() < 2
-                           ? Tr(L"Needs more than one monitor",
-                                L"Precisa de mais de um monitor")
-                           : offWhile(IslandPref::FollowMouse);
+                return {};
         }
     }
     // (The notches: chosen on their own row.)
@@ -33707,6 +37585,10 @@ std::wstring ControlPanel::DisabledReason(int index) {
                   L"keep one place and the same items for every app",
                   L"Só no estilo Ilha: o estilo Fixa e a barra ficam num "
                   L"lugar só e com os mesmos itens para todos os apps");
+    }
+    if (OtherIslandShown() && MainIslandOnly((IslandPref)index)) {
+        return Tr(L"Only on the main island: change it in its settings",
+                  L"Só na ilha principal: mude nas configurações dela");
     }
     switch ((IslandPref)index) {
         case IslandPref::FollowMouse:
@@ -33821,15 +37703,21 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                                     const SettingEntry& entry) {
     const float s = m_scale;
     const float icon = std::round(36 * s);
-    auto label = [&](const D2D1_RECT_F& row, WCHAR glyph, PCWSTR name,
-                     float right, float opacity) {
-        brush->SetColor(Fg(0.95f * opacity));
+    // The name on its lines: over a selector or a slider (entry.head), or
+    // beside its control (up to `right`).
+    const std::wstring entryName = SettingName(entry);
+    auto label = [&](const D2D1_RECT_F& row, WCHAR glyph, float right,
+                     D2D1_COLOR_F color) {
+        const D2D1_RECT_F head{
+            row.left, row.top, entry.head > 0 ? row.right : right,
+            entry.head > 0 ? row.top + entry.head : row.bottom};
+        brush->SetColor(color);
         target->DrawText(&glyph, 1, m_iconFormat.get(),
-                         {row.left, row.top, row.left + icon, row.bottom},
+                         {head.left, head.top, head.left + icon, head.bottom},
                          brush);
-        DrawMarquee(
-            target, brush, name, m_subtitleFormat.get(),
-            {row.left + icon, row.top, right - std::round(8 * s), row.bottom});
+        DrawWrapped(target, brush, entryName, m_subtitleFormat.get(),
+                    {head.left + icon, head.top, head.right - std::round(8 * s),
+                     head.bottom});
     };
     switch (entry.kind) {
         case SettingKind::Label: {
@@ -33848,7 +37736,8 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                 const D2D1_POINT_2F center{
                     (m_profileAdd.left + m_profileAdd.right) / 2,
                     (m_profileAdd.top + m_profileAdd.bottom) / 2};
-                const float radius = (m_profileAdd.right - m_profileAdd.left) / 2;
+                const float radius =
+                    (m_profileAdd.right - m_profileAdd.left) / 2;
                 const float lit = Hover(m_profileAdd,
                                         m_hover.part == Part::ProfileAdd);
                 brush->SetColor(Fg(0.08f + 0.1f * lit));
@@ -33865,8 +37754,7 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
             // chosen one lit (sliding).
             {
                 const IslandPrefInfo& info = kIslandPrefs[(int)IslandPref::Bar];
-                label(m_styleRow, info.glyph, Tr(info.english, info.portuguese),
-                      m_styleSegments[0].left, 1);
+                label(m_styleRow, info.glyph, m_styleRow.right, Fg(0.95f));
                 const D2D1_RECT_F track{
                     m_styleSegments[0].left, m_styleSegments[0].top,
                     m_styleSegments[2].right, m_styleSegments[2].bottom};
@@ -33925,50 +37813,11 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                                     : id == kChoiceTrayStyle    ? 0xE712
                                     : id == kChoiceWallpaper    ? 0xE8B9
                                     : id == kChoiceNotches      ? 0xECA5
-                                                                : 0xE7F4;
-                PCWSTR name =
-                    id == kChoiceAnimationLevel ? Tr(L"How many", L"Quantas")
-                    : id == kChoiceFrameRate
-                        ? Tr(L"Frames a second", L"Quadros por segundo")
-                    : id == kChoiceBackup
-                        ? (m_backupStatus.empty()
-                               ? Tr(L"A file with all of it",
-                                    L"Um arquivo com tudo")
-                               : m_backupStatus.c_str())
-                    : hardToRead
-                        ? Tr(L"Hard to read: too alike",
-                             L"Difícil de ler: cores parecidas")
-                    : id == kChoiceColors
-                        ? Tr(L"Your own colors", L"Cores próprias")
-                    : id == kChoiceDateOrder
-                        ? Tr(L"Date order", L"Ordem da data")
-                    : id == kChoiceClockFormat
-                        ? Tr(L"Time format", L"Formato da hora")
-                    : id == kChoiceTrayStyle
-                        ? Tr(L"Icons that aren't pinned",
-                             L"Ícones não fixados")
-                    : id == kChoiceWallpaper
-                        ? Tr(L"Wallpaper transition",
-                             L"Transição do papel de parede")
-                    : id == kChoiceNotches ? Tr(L"Notches", L"Entalhes")
-                        : Tr(L"Monitor", L"Monitor");
-                if (hardToRead) {
-                    // In orange, like a warning.
-                    const D2D1_RECT_F& row = m_choiceRow[id];
-                    brush->SetColor(
-                        D2D1::ColorF(1.0f, 0.62f, 0.04f, opacity));
-                    target->DrawText(&glyph, 1, m_iconFormat.get(),
-                                     {row.left, row.top, row.left + icon,
-                                      row.bottom},
-                                     brush);
-                    DrawMarquee(target, brush, name, m_subtitleFormat.get(),
-                                {row.left + icon, row.top,
-                                 segments.front().left - std::round(8 * s),
-                                 row.bottom});
-                } else {
-                    label(m_choiceRow[id], glyph, name, segments.front().left,
-                          opacity);
-                }
+                                                                : 0;
+                // (Hard to read: in orange, like a warning.)
+                label(m_choiceRow[id], glyph, m_choiceRow[id].right,
+                      hardToRead ? D2D1::ColorF(1.0f, 0.62f, 0.04f, opacity)
+                                 : Fg(0.95f * opacity));
                 const D2D1_RECT_F track{segments.front().left,
                                         segments.front().top,
                                         segments.back().right,
@@ -34026,7 +37875,8 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                                 segments[i].top + inset,
                                 segments[i].right - inset,
                                 segments[i].bottom - inset};
-                            const float ringRadius = (ring.bottom - ring.top) / 2;
+                            const float ringRadius =
+                                (ring.bottom - ring.top) / 2;
                             brush->SetColor(
                                 D2D1::ColorF(1.0f, 0.62f, 0.04f, opacity));
                             target->DrawRoundedRectangle(
@@ -34045,11 +37895,7 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
             {
                 const IslandPrefInfo& info =
                     kIslandPrefs[(int)IslandPref::Theme];
-                const std::wstring name =
-                    std::wstring(Tr(info.english, info.portuguese)) +
-                    L" \u00B7 " + ThemeName(g_themeIndex);
-                label(m_themeRow, info.glyph, name.c_str(), m_swatches[0].left,
-                      1);
+                label(m_themeRow, info.glyph, m_themeRow.right, Fg(0.95f));
                 for (int i = 0; i < (int)ThemeId::Count; i++) {
                     const D2D1_RECT_F& r = m_swatches[i];
                     const D2D1_POINT_2F center{(r.left + r.right) / 2,
@@ -34106,17 +37952,8 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                 const bool bar = g_settings.islandBar;
                 const bool notches = NotchCountWanted() > 0;
                 const float opacity = bar || notches ? 0.4f : 1.0f;
-                label(m_placeRow, 0xE81E,
-                      bar ? Tr(L"Place (the bar is at the top)",
-                               L"Posição (a barra fica no topo)")
-                      : notches
-                          ? Tr(L"Place (the notches are at the top)",
-                               L"Posição (os entalhes ficam no topo)")
-                      : g_settings.islandFreeDrag
-                          ? Tr(L"Place (or drag the pill)",
-                               L"Posição (ou arraste a pílula)")
-                          : Tr(L"Place", L"Posição"),
-                      m_placeGrid.left, opacity);
+                label(m_placeRow, 0xE81E, m_placeGrid.left,
+                      Fg(0.95f * opacity));
                 DrawPlaceGrid(
                     target, brush, m_placeGrid, g_islandPlace.x,
                     g_islandPlace.y,
@@ -34138,14 +37975,9 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                     target->FillRoundedRectangle(
                         {m_appPlacesRow, radius, radius}, brush);
                 }
-                const std::wstring perApp =
-                    std::wstring(Tr(L"Place and icons per app",
-                                    L"Posição e ícones por app")) +
-                    (g_appPlaces.empty()
-                         ? std::wstring()
-                         : L"  (" + std::to_wstring(g_appPlaces.size()) + L")");
-                label(m_appPlacesRow, 0xE8A9, perApp.c_str(),
-                      m_appPlacesRow.right - std::round(24 * s), opacity);
+                label(m_appPlacesRow, 0xE8A9,
+                      m_appPlacesRow.right - std::round(24 * s),
+                      Fg(0.95f * opacity));
                 brush->SetColor(Fg(0.5f * opacity));
                 const WCHAR chevron = kGlyphNext;
                 target->DrawText(&chevron, 1, m_iconFormat.get(),
@@ -34172,32 +38004,6 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                     (slider == 2 && AnimationLevel() >= 2) ||
                     (slider == 5 && !g_settings.islandAutoHide) ||
                     (slider == 6 && NotchCountWanted() == 0);
-                WCHAR seconds[16];
-                swprintf_s(seconds, L"%.1f s", size / 10.0);
-                const std::wstring name =
-                    slider == 6
-                        ? std::wstring(Tr(L"Notch curves",
-                                          L"Curvas dos entalhes")) +
-                              L" \u00B7 " + std::to_wstring(size) + L"%"
-                    : slider == 5
-                        ? std::wstring(
-                              Tr(L"Hide after", L"Esconder depois de")) +
-                              L" \u00B7 " + seconds
-                    : slider == 4
-                        ? std::wstring(Tr(L"Opacity", L"Opacidade")) +
-                              L" \u00B7 " + std::to_wstring(size) + L"%"
-                    : slider == 3
-                        ? std::wstring(Tr(L"Icons before scrolling",
-                                          L"Ícones antes de rolar")) +
-                              L" \u00B7 " + std::to_wstring(size)
-                    : slider == 2
-                        ? std::wstring(Tr(L"Speed", L"Velocidade")) +
-                              L" \u00B7 " + std::to_wstring(size) + L"%"
-                    : slider == 1
-                        ? std::wstring(Tr(L"Edge distance", L"Distância da borda")) +
-                              L" \u00B7 " + std::to_wstring(size) + L" px"
-                        : std::wstring(Tr(L"Size", L"Tamanho")) + L" \u00B7 " +
-                              std::to_wstring(size) + L"%";
                 label(sizeRow,
                       slider == 6   ? 0xE8B4
                       : slider == 5 ? 0xE916
@@ -34206,7 +38012,7 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                       : slider == 2 ? 0xEC4A
                       : slider == 1 ? 0xE9A6
                                     : 0xE740,
-                      name.c_str(), sizeSlider.left, bar ? 0.4f : 1.0f);
+                      sizeRow.right, Fg(bar ? 0.38f : 0.95f));
                 DrawSliderTrack(
                     target, brush, sizeSlider, info.min, info.max, info.usual,
                     size,
@@ -34233,6 +38039,9 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
             break;
         case SettingKind::Order:
             DrawOrderStrip(target, brush, entry.rect);
+            break;
+        case SettingKind::Monitors:
+            DrawMonitors(target, brush);
             break;
         case SettingKind::Profiles:
             DrawProfiles(target, brush, entry.rect);
@@ -34263,8 +38072,7 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                     std::round((row.top + row.bottom - toggleHeight) / 2) +
                         toggleHeight};
                 const float opacity = disabled ? 0.4f : 1.0f;
-                label(row, info.glyph, Tr(info.english, info.portuguese),
-                      toggle.left, opacity);
+                label(row, info.glyph, toggle.left, Fg(0.95f * opacity));
                 winrt::com_ptr<ID2D1Layer> layer;
                 if (disabled) {
                     target->CreateLayer(nullptr, layer.put());
@@ -34327,8 +38135,9 @@ void ControlPanel::DrawOrderStrip(ID2D1RenderTarget* target,
                                              : true;
         const bool lifted = m_orderMoved && (int)chip.group == m_orderDrag &&
                             chip.strip == m_orderDragStrip;
-        const bool hover = m_hover.part == Part::OrderChip &&
-                           m_hover.index == OrderChipIndex(stripIndex, chip.group);
+        const bool hover =
+            m_hover.part == Part::OrderChip &&
+            m_hover.index == OrderChipIndex(stripIndex, chip.group);
         const float dx = (float)chip.x - chip.rect.left;
         D2D1_RECT_F rect{chip.rect.left + dx, chip.rect.top,
                          chip.rect.right + dx, chip.rect.bottom};
@@ -34376,6 +38185,8 @@ void ControlPanel::DrawOrderStrip(ID2D1RenderTarget* target,
         const PillGroupInfo& info = kPillGroupInfo[m_hover.index];
         hint = Tr(info.english, info.portuguese);
         const int pref = PillGroupPref((PillGroup)m_hover.index);
+        // (Any of them is dragged, shown or hidden.)
+        hint += Tr(L" · drag to move", L" · arraste para mover");
         if (pref >= 0) {
             hint += GetIslandPref((IslandPref)pref)
                         ? Tr(L" · click to hide", L" · clique para esconder")
@@ -34389,7 +38200,7 @@ void ControlPanel::DrawOrderStrip(ID2D1RenderTarget* target,
         hint = Tr(L"Drag to change the order · click to hide",
                   L"Arraste para mudar a ordem · clique para esconder");
     }
-    brush->SetColor(Fg(0.45f));
+    brush->SetColor(Fg(0.6f));
     DrawMarquee(target, brush, hint, m_smallFormat.get(),
                 {row.left + std::round(6 * s), strip.bottom + std::round(3 * s),
                  row.right - std::round(6 * s), row.bottom - std::round(2 * s)},
@@ -34452,10 +38263,10 @@ void ControlPanel::DrawPassword(ID2D1RenderTarget* target,
 
     // "Connect", blue.
     const float buttonRadius = (m_connect.bottom - m_connect.top) / 2;
-    brush->SetColor(Accent(m_connecting                     ? 0.5f
-                                 : 1.0f - 0.15f * Hover(m_connect,
-                                                        m_hover.part ==
-                                                            Part::Connect)));
+    brush->SetColor(Accent(
+        m_connecting
+            ? 0.5f
+            : 1.0f - 0.15f * Hover(m_connect, m_hover.part == Part::Connect)));
     target->FillRoundedRectangle({m_connect, buttonRadius, buttonRadius},
                                  brush);
     PCWSTR connect = Tr(L"Connect", L"Conectar");
@@ -34481,8 +38292,7 @@ void ControlPanel::DrawBluetooth(ID2D1RenderTarget* target,
             brush->SetColor(Fg(0.08f * lit));
             target->FillRoundedRectangle({row, radius, radius}, brush);
         }
-        brush->SetColor(device.connected ? Accent(1)
-                                         : Fg(0.95f));
+        brush->SetColor(device.connected ? Accent(1) : Fg(0.95f));
         target->DrawText(&device.glyph, 1, m_iconFormat.get(),
                          {row.left, row.top, row.left + icon, row.bottom},
                          brush);
@@ -34813,9 +38623,11 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
                 Fg(0.06f + 0.08f * Hover(row, m_hover.part == Part::PowerPlan)));
             target->FillRoundedRectangle({row, radius, radius}, brush);
             const float arrow = std::round(28 * s);
+            // (The Windows power plan, not the mode under it.)
             const std::wstring name =
                 m_activePlan >= 0 && m_activePlan < (int)m_powerPlans.size()
-                    ? m_powerPlans[m_activePlan].name
+                    ? Tr(L"Plan: ", L"Plano: ") +
+                          m_powerPlans[m_activePlan].name
                     : std::wstring(Tr(L"Choose a power plan",
                                       L"Escolha um plano de energia"));
             brush->SetColor(Fg(0.92f));
@@ -34883,7 +38695,8 @@ void ControlPanel::DrawControl(ID2D1RenderTarget* target,
                 text += L" v" + m_komorebiVersion;
             }
             if (m_komorebiBusy >= 0) {
-                text += std::wstring(L"  ·  ") + Tr(L"Working…", L"Executando…");
+                text +=
+                    std::wstring(L"  ·  ") + Tr(L"Working…", L"Executando…");
             } else if (m_komorebiFailed) {
                 text += std::wstring(L"  ·  ") +
                         Tr(L"It failed (see the terminal)",
@@ -35049,7 +38862,8 @@ void ControlPanel::DrawMain(ID2D1RenderTarget* target,
         }
         // "Done", blue.
         const float doneRadius = (m_done.bottom - m_done.top) / 2;
-        brush->SetColor(Accent(1.0f - 0.15f * Hover(m_done, m_hover.part == Part::EditDone)));
+        brush->SetColor(Accent(
+            1.0f - 0.15f * Hover(m_done, m_hover.part == Part::EditDone)));
         target->FillRoundedRectangle({m_done, doneRadius, doneRadius}, brush);
         PCWSTR done = Tr(L"Done", L"Concluído");
         brush->SetColor(AccentInk(1));
@@ -35089,8 +38903,9 @@ void ControlPanel::DrawMain(ID2D1RenderTarget* target,
     const D2D1_POINT_2F gearCenter{
         (m_settingsButton.left + m_settingsButton.right) / 2,
         (m_settingsButton.top + m_settingsButton.bottom) / 2};
-    brush->SetColor(Fg(0.1f + 0.1f * Hover(m_settingsButton,
-                                           m_hover.part == Part::SettingsButton)));
+    brush->SetColor(
+        Fg(0.1f + 0.1f * Hover(m_settingsButton,
+                               m_hover.part == Part::SettingsButton)));
     target->FillEllipse({gearCenter, editRadius, editRadius}, brush);
     brush->SetColor(Fg(0.9f));
     target->DrawText(&kGlyphSettings, 1, m_iconFormat.get(), m_settingsButton,
@@ -35371,9 +39186,6 @@ void ControlPanel::SetAppVolumeAt(int index, POINT pt) {
 }
 
 void ControlPanel::DragNotchChip(float middle) {
-    if (SettingsLocked()) {
-        return;
-    }
     const int count = NotchCountWanted();
     const auto dragged = (PillGroup)m_orderDrag;
     // The notch it's over (the nearest one).
@@ -35391,6 +39203,10 @@ void ControlPanel::DragNotchChip(float middle) {
     const bool moved = NotchOfGroup(dragged, count) != place;
     if (moved) {
         g_notchSides[(int)dragged] = (uint8_t)place;
+        SaveNotchSides();
+        if (OwnLookShown()) {
+            g_island->SaveOwnProfile();
+        }
     }
     // After the last of that notch's items whose middle it has passed, or
     // before its first one (alone there: where it was).
@@ -35933,7 +39749,8 @@ bool ControlPanel::OnMouseUp(POINT pt) {
         case Part::DisabledSetting:
             // The glass without Windows' transparency effects: where to turn
             // them on.
-            if (hit.index == (int)IslandPref::Frosted && !g_transparencyEffects) {
+            if (hit.index == (int)IslandPref::Frosted &&
+                !g_transparencyEffects) {
                 ShellExecute(nullptr, L"open", L"ms-settings:colors", nullptr,
                              nullptr, SW_SHOWNORMAL);
             }
@@ -35967,8 +39784,6 @@ bool ControlPanel::OnMouseUp(POINT pt) {
                 SetIslandPref(IslandPref::WallpaperTransition, index);
             } else if (id == kChoiceNotches) {
                 SetIslandPref(IslandPref::Notches, index);
-            } else if (id == kChoiceMonitor) {
-                ChooseMonitor(index);
             } else {
                 AnimationChoice choice = g_animationChoice;
                 (id == kChoiceAnimationLevel ? choice.level : choice.rate) =
@@ -35998,26 +39813,45 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             m_appPlacesScroll.Reset();
             SetView(View::AppPlaces);
             return true;
-        case Part::MonitorProfileRow:
-            // The next profile for that monitor (after the last one, the
-            // main island's settings again).
-            if (const std::vector<Island*> others = OtherIslands();
-                hit.index >= 0 && hit.index < (int)others.size()) {
-                Island* other = others[hit.index];
-                int next = g_profiles.empty() ? -1 : g_profiles.front().id;
-                for (size_t i = 0; i < g_profiles.size(); i++) {
-                    if (g_profiles[i].id == other->MonitorProfile()) {
-                        next = i + 1 < g_profiles.size()
-                                   ? g_profiles[i + 1].id
-                                   : -1;
+        case Part::MonitorMode:
+        case Part::MonitorMap:
+        case Part::MonitorProfile: {
+            if (hit.index < 0 || hit.index >= (int)m_monitorParts.size()) {
+                return true;
+            }
+            const MonitorPart part = m_monitorParts[hit.index];
+            if (part.disabled) {
+                return true;
+            }
+            if (hit.part == Part::MonitorMode) {
+                IslandScope scope(MainIsland());
+                if (part.value == 2 && NotchCountWanted() > 0) {
+                    return true;
+                }
+                SetIslandPref(IslandPref::FollowMouse, part.value == 2);
+                SetIslandPref(IslandPref::AllMonitors, part.value == 1);
+            } else if (hit.part == Part::MonitorMap) {
+                const auto monitors = ListMonitors();
+                for (size_t i = 0; i < monitors.size(); i++) {
+                    if (monitors[i].device == part.device) {
+                        ChooseMonitor((int)i);
+                        break;
                     }
                 }
-                IslandScope scope(other);
-                other->SetMonitorProfile(next);
+            } else {
+                for (Island* other : OtherIslands()) {
+                    if (other->OwnDevice() != part.device) {
+                        continue;
+                    }
+                    IslandScope scope(other);
+                    other->SetMonitorProfile(part.value);
+                    break;
+                }
             }
             Layout();
             StartIslandAnimation();
             return true;
+        }
         case Part::ProfileChip:
             // Another island than the main one: its monitor's profile (the
             // last chip: the main island's settings).
@@ -36073,7 +39907,11 @@ bool ControlPanel::OnMouseUp(POINT pt) {
             return true;
         case Part::ProfileUpdate:
             // Saved, and done editing it.
-            UpdateProfile(m_profileEdit);
+            if (g_island && !g_island->HasMainSettings()) {
+                SaveShownInProfile(m_profileEdit);
+            } else {
+                UpdateProfile(m_profileEdit);
+            }
             m_profileSavedAt = NowSeconds();
             EndProfileEdit(true);
             return true;
@@ -36551,7 +40389,7 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     if (msg == WM_APP_BRIGHTNESS) {
         // Not while it's being changed here.
-        if (!m_brightnessJob.running) {
+        if (!m_brightnessJob->running) {
             m_brightness = (int)(INT_PTR)wParam;
         }
         Layout();
@@ -36578,56 +40416,14 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
         Layout();
         return true;
     }
-    if (msg != WM_APP_WLAN) {
+    if (msg == WM_APP_WLAN_CONNECTION) {
+        const std::unique_ptr<WlanConnectionEvent> event(
+            (WlanConnectionEvent*)lParam);
+        OnWifiJoinEnded(*event);
+    } else if (msg != WM_APP_WLAN ||
+               (wParam != wlan_notification_acm_scan_complete &&
+                wParam != wlan_notification_acm_disconnected)) {
         return false;
-    }
-    switch (wParam) {
-        case wlan_notification_acm_scan_complete:
-        case wlan_notification_acm_disconnected:
-            break;
-        case wlan_notification_acm_connection_complete:
-        case wlan_notification_acm_connection_attempt_fail:
-            if (!m_connecting) {
-                break;
-            }
-            m_connecting = false;
-            if (wParam == wlan_notification_acm_connection_complete &&
-                lParam == WLAN_REASON_CODE_SUCCESS) {
-                m_createdProfile.clear();
-                m_wifiStatus.clear();
-                if (m_view == View::Password) {
-                    m_password.clear();
-                    m_passwordEdit.Reset();
-                    SetView(View::Wifi);
-                }
-            } else {
-                Wh_Log(L"Joining Wi-Fi failed, reason %u", (unsigned)lParam);
-                // A wrong password isn't kept.
-                if (!m_createdProfile.empty() && m_wlan) {
-                    WlanDeleteProfile(m_wlan, &m_wifiInterface,
-                                      m_createdProfile.c_str(), nullptr);
-                }
-                m_createdProfile.clear();
-                m_wifiStatus =
-                    m_view == View::Password
-                        ? Tr(L"Couldn't connect. Check the password.",
-                             L"Não foi possível conectar. Confira a senha.")
-                        : Tr(L"Couldn't connect.",
-                             L"Não foi possível conectar.");
-                // Why, as Windows says it (in its language).
-                WCHAR reason[512];
-                if (lParam && WlanReasonCodeToString((DWORD)lParam,
-                                                     ARRAYSIZE(reason), reason,
-                                                     nullptr) ==
-                                  ERROR_SUCCESS &&
-                    *reason) {
-                    m_wifiStatus += L"\n";
-                    m_wifiStatus += reason;
-                }
-            }
-            break;
-        default:
-            return false;
     }
     if (m_view == View::Wifi) {
         UpdateWifi();
@@ -36637,6 +40433,53 @@ bool ControlPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     Layout();
     return true;
+}
+
+// A join ended: a profile made for it stays only if it worked; the panel
+// shows how it went only if it's the join it's waiting for (not an earlier
+// one, left by a click on another network).
+void ControlPanel::OnWifiJoinEnded(const WlanConnectionEvent& event) {
+    const bool worked =
+        event.code == wlan_notification_acm_connection_complete &&
+        event.reason == WLAN_REASON_CODE_SUCCESS;
+    if (auto it = std::find(m_createdProfiles.begin(), m_createdProfiles.end(),
+                            event.profile);
+        it != m_createdProfiles.end()) {
+        if (!worked && m_wlan) {
+            WlanDeleteProfile(m_wlan, &m_wifiInterface, event.profile.c_str(),
+                              nullptr);
+        }
+        m_createdProfiles.erase(it);
+    }
+    if (!m_connecting || event.profile != m_connectingProfile) {
+        return;
+    }
+    m_connecting = false;
+    m_connectingProfile.clear();
+    if (worked) {
+        m_wifiStatus.clear();
+        if (m_view == View::Password) {
+            m_password.clear();
+            m_passwordEdit.Reset();
+            SetView(View::Wifi);
+        }
+        return;
+    }
+    Wh_Log(L"Joining Wi-Fi failed, reason %u", (unsigned)event.reason);
+    m_wifiStatus =
+        m_view == View::Password
+            ? Tr(L"Couldn't connect. Check the password.",
+                 L"Não foi possível conectar. Confira a senha.")
+            : Tr(L"Couldn't connect.", L"Não foi possível conectar.");
+    // Why, as Windows says it (in its language).
+    WCHAR reason[512];
+    if (event.reason &&
+        WlanReasonCodeToString(event.reason, ARRAYSIZE(reason), reason,
+                               nullptr) == ERROR_SUCCESS &&
+        *reason) {
+        m_wifiStatus += L"\n";
+        m_wifiStatus += reason;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36974,10 +40817,13 @@ bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data) {
     return true;
 }
 
-// An https address's contents (up to `maxSize`), not waiting long.
+// An https address's contents (up to `maxSize`), not waiting long (for
+// each answer, `waitMs`); given up once `stop` is set.
 bool HttpsGet(const std::wstring& url,
               std::vector<BYTE>* data,
-              size_t maxSize) {
+              size_t maxSize,
+              DWORD waitMs,
+              const std::atomic<bool>* stop) {
     URL_COMPONENTS parts{sizeof(parts)};
     parts.dwHostNameLength = (DWORD)-1;
     parts.dwUrlPathLength = (DWORD)-1;
@@ -37008,7 +40854,7 @@ bool HttpsGet(const std::wstring& url,
                                  WINHTTP_FLAG_SECURE)
             : nullptr;
     if (request) {
-        WinHttpSetTimeouts(request, 2000, 2000, 2000, 3000);
+        WinHttpSetTimeouts(request, 2000, 2000, 2000, (int)waitMs);
         DWORD status = 0;
         DWORD statusSize = sizeof(status);
         if (WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
@@ -37019,13 +40865,20 @@ bool HttpsGet(const std::wstring& url,
                 WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize,
                 WINHTTP_NO_HEADER_INDEX) &&
             status == 200) {
-            ok = true;
+            // Whole, or nothing: a connection dropped halfway (the read
+            // failing) isn't taken for the end.
             BYTE buffer[16 * 1024];
-            DWORD read = 0;
-            while (WinHttpReadData(request, buffer, sizeof(buffer), &read) &&
-                   read > 0) {
+            for (;;) {
+                DWORD read = 0;
+                if ((stop && *stop) ||
+                    !WinHttpReadData(request, buffer, sizeof(buffer), &read)) {
+                    break;
+                }
+                if (read == 0) {
+                    ok = true;
+                    break;
+                }
                 if (data->size() + read > maxSize) {
-                    ok = false;
                     break;
                 }
                 data->insert(data->end(), buffer, buffer + read);
@@ -37408,15 +41261,22 @@ void PostTrayIconRelease(const TrayIcon& icon, UINT released) {
     }
 }
 
+bool ProcessIsMediaApp(DWORD processId, const std::wstring& appId);
+
 // An app hidden in the tray (like many chat apps, with no window to bring
-// up): its tray icon is clicked, as the user would. False without one.
-bool OpenFromTrayIcon(const std::wstring& appId) {
+// up): its tray icon is clicked, as the user would. False without one. With
+// `byProgram`, the ID can also be the app's program's name (what's playing's,
+// see ProcessIsMediaApp).
+bool OpenFromTrayIcon(const std::wstring& appId, bool byProgram = false) {
     AcquireSRWLockShared(&g_trayIconsLock);
     const std::vector<TrayIcon> icons = g_trayIcons;
     ReleaseSRWLockShared(&g_trayIconsLock);
     for (const auto& icon : icons) {
+        DWORD processId = 0;
         if (icon.callback && IsWindow(icon.owner) &&
-            WindowMatchesApp(icon.owner, appId)) {
+            (WindowMatchesApp(icon.owner, appId) ||
+             (byProgram && GetWindowThreadProcessId(icon.owner, &processId) &&
+              ProcessIsMediaApp(processId, appId)))) {
             PostTrayIconMessage(icon, WM_LBUTTONDOWN);
             PostTrayIconMessage(icon, WM_LBUTTONUP);
             PostTrayIconRelease(icon, WM_LBUTTONUP);
@@ -37426,14 +41286,65 @@ bool OpenFromTrayIcon(const std::wstring& appId) {
     return false;
 }
 
+// The Snipping Tool's (Win+Shift+S): its notification says a screenshot
+// was taken.
+bool IsSnippingToolApp(const std::wstring& appId) {
+    return StrStrI(appId.c_str(), L"ScreenSketch") ||
+           StrStrI(appId.c_str(), L"ScreenClipping") ||
+           StrStrI(appId.c_str(), L"SnippingTool");
+}
+
+// The newest picture of the Screenshots folder, selected in Explorer (the
+// folder itself when it has none); false without the folder.
+bool ShowNewestScreenshot() {
+    // FOLDERID_Screenshots.
+    constexpr GUID kScreenshots = {
+        0xb7bede81,
+        0xdf94,
+        0x4682,
+        {0xa7, 0xd8, 0x57, 0xa5, 0x26, 0x20, 0xb8, 0x6f}};
+    const std::wstring folder = KnownFolderPath(kScreenshots);
+    WCHAR windows[MAX_PATH];
+    if (folder.empty() || !GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
+        return false;
+    }
+    std::wstring newest;
+    FILETIME newestTime{};
+    WIN32_FIND_DATA data;
+    HANDLE find = FindFirstFileEx((folder + L"\\*").c_str(), FindExInfoBasic,
+                                  &data, FindExSearchNameMatch, nullptr, 0);
+    if (find != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+                CompareFileTime(&data.ftLastWriteTime, &newestTime) > 0) {
+                newest = data.cFileName;
+                newestTime = data.ftLastWriteTime;
+            }
+        } while (FindNextFile(find, &data));
+        FindClose(find);
+    }
+    const std::wstring explorer = std::wstring(windows) + L"\\explorer.exe";
+    const std::wstring arguments =
+        newest.empty() ? L"\"" + folder + L"\""
+                       : L"/select,\"" + folder + L"\\" + newest + L"\"";
+    return (INT_PTR)ShellExecute(nullptr, L"open", explorer.c_str(),
+                                 arguments.c_str(), nullptr,
+                                 SW_SHOWNORMAL) > 32;
+}
+
 // Opens a notification: the place in the app it points to (a chat, through
 // the app's notification handler), the app's window, or the app itself when
-// the shell knows it by its ID. Returns false when there's nothing to open
+// the shell knows it by its ID; the Snipping Tool's, the screenshot when
+// chosen (islandScreenshotFolder). Returns false when there's nothing to open
 // (like a script's notification, whose ID is only a path): the island shows
 // the list instead.
 bool OpenNotification(const std::wstring& appId, const ToastReply& reply) {
     if (appId.empty()) {
         return false;
+    }
+    if (g_settings.islandScreenshotFolder && IsSnippingToolApp(appId) &&
+        ShowNewestScreenshot()) {
+        return true;
     }
     if (!reply.launch.empty() &&
         ActivateToast(appId, reply.launch, L"foreground")) {
@@ -37877,11 +41788,11 @@ void NotificationPanel::LoadCleared() {
     }
     m_clearedLoaded = true;
     WCHAR value[4096] = L"";
-    Wh_GetStringValue(L"notificationsClearedUntil", value, ARRAYSIZE(value));
+    GetUserStringValue(L"notificationsClearedUntil", value, ARRAYSIZE(value));
     m_clearedUntil = _wcstoi64(value, nullptr, 10);
     // (An id is at most 19 digits, and a comma.)
     std::vector<WCHAR> ids(kMaxDismissed * 20 + 1);
-    Wh_GetStringValue(L"notificationsDismissed", ids.data(), ids.size());
+    GetUserStringValue(L"notificationsDismissed", ids.data(), ids.size());
     for (PCWSTR p = ids.data(); *p;) {
         PWSTR end = nullptr;
         const long long id = _wcstoi64(p, &end, 10);
@@ -37892,8 +41803,8 @@ void NotificationPanel::LoadCleared() {
         p = *end == L',' ? end + 1 : end;
     }
     std::vector<WCHAR> texts(kMaxDismissedTexts * (kDismissKeyMax + 1) + 1);
-    Wh_GetStringValue(L"notificationsDismissedTags", texts.data(),
-                      texts.size());
+    GetUserStringValue(L"notificationsDismissedTags", texts.data(),
+                       texts.size());
     for (PCWSTR line = texts.data(); *line;) {
         PCWSTR end = wcschr(line, L'\n');
         m_dismissedTexts.push_back(end ? std::wstring(line, end)
@@ -37910,13 +41821,13 @@ void NotificationPanel::SaveCleared() {
         m_dismissed.erase(m_dismissed.begin(),
                           m_dismissed.end() - kMaxDismissed);
     }
-    Wh_SetStringValue(L"notificationsClearedUntil",
-                      std::to_wstring(m_clearedUntil).c_str());
+    SetUserStringValue(L"notificationsClearedUntil",
+                       std::to_wstring(m_clearedUntil).c_str());
     std::wstring dismissed;
     for (long long id : m_dismissed) {
         dismissed += (dismissed.empty() ? L"" : L",") + std::to_wstring(id);
     }
-    Wh_SetStringValue(L"notificationsDismissed", dismissed.c_str());
+    SetUserStringValue(L"notificationsDismissed", dismissed.c_str());
     if (m_dismissedTexts.size() > kMaxDismissedTexts) {
         m_dismissedTexts.erase(m_dismissedTexts.begin(),
                                m_dismissedTexts.end() - kMaxDismissedTexts);
@@ -37925,7 +41836,7 @@ void NotificationPanel::SaveCleared() {
     for (const auto& key : m_dismissedTexts) {
         texts += key + L"\n";
     }
-    Wh_SetStringValue(L"notificationsDismissedTags", texts.c_str());
+    SetUserStringValue(L"notificationsDismissedTags", texts.c_str());
 }
 
 // The latest toasts, newest first, without the ones cleared here.
@@ -38302,10 +42213,11 @@ NotificationPanel::Hit NotificationPanel::HitTest(POINT panelPt) const {
     if (PointInRect(panelPt, m_contentRow)) {
         return {Part::ContentToggle};
     }
-    if (PointInRect(panelPt, m_bannerRow)) {
+    // (The banners are the main island's: dimmed on the others.)
+    if (!OtherIslandShown() && PointInRect(panelPt, m_bannerRow)) {
         return {Part::BannerToggle};
     }
-    if (PointInRect(panelPt, m_minimizedRow)) {
+    if (!OtherIslandShown() && PointInRect(panelPt, m_minimizedRow)) {
         return {Part::MinimizedToggle};
     }
     if (PointInRect(panelPt, m_link)) {
@@ -38531,7 +42443,9 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
                            L"O do Windows: sem os sons das notificações"),
                   m_dndKnob, m_hover.part == Part::DndToggle);
     // The pill's banners, and under them, in the same card, whether they
-    // also open the minimized pill (which only applies with them on).
+    // also open the minimized pill (which only applies with them on). Only
+    // the main island shows them: dimmed on the others.
+    const bool otherIsland = OtherIslandShown();
     {
         const D2D1_RECT_F card{m_bannerRow.left, m_bannerRow.top,
                                m_minimizedRow.right, m_minimizedRow.bottom};
@@ -38548,17 +42462,22 @@ void NotificationPanel::Draw(ID2D1RenderTarget* target,
     DrawSwitchRow(target, brush, m_bannerRow, m_bannerToggle, kGlyphBell,
                   Accent(1),
                   Tr(L"Banners in the pill", L"Avisos na pílula"),
-                  Tr(L"Each new one opens the pill for a moment",
-                     L"Cada nova abre a pílula por alguns segundos"),
-                  m_bannerKnob, m_hover.part == Part::BannerToggle, true,
-                  false);
+                  otherIsland
+                      ? Tr(L"Only on the main island: change it in its "
+                           L"settings",
+                           L"Só na ilha principal: mude nas configurações "
+                           L"dela")
+                      : Tr(L"Each new one opens the pill for a moment",
+                           L"Cada nova abre a pílula por alguns segundos"),
+                  m_bannerKnob, m_hover.part == Part::BannerToggle,
+                  !otherIsland, false);
     DrawSwitchRow(target, brush, m_minimizedRow, m_minimizedToggle,
                   kGlyphCollapse, Accent(1),
                   Tr(L"Even when minimized", L"Mesmo com a pílula minimizada"),
                   Tr(L"Off: only the app's icon peeks out of the line",
                      L"Desligado: só o ícone do app aparece na linha"),
                   m_minimizedKnob, m_hover.part == Part::MinimizedToggle,
-                  g_bannerEnabled, false);
+                  g_bannerEnabled && !otherIsland, false);
     DrawSwitchRow(target, brush, m_contentRow, m_contentToggle, kGlyphShow,
                   Accent(1),
                   Tr(L"Show what they say", L"Mostrar o conteúdo"),
@@ -39034,8 +42953,9 @@ bool NotificationPanel::AnimateContents(double dt) {
     const bool glowing = NowSeconds() - m_glowStart < kCardGlowSeconds;
     const bool moving = a || b || c || d || folding || cards || scrolling ||
                         glowing || hovering;
-    // A reply being typed: its caret blinks (at the lower frame rate).
-    const bool caret = m_replyId >= 0;
+    // A reply being typed: its caret blinks a moment (at the lower frame
+    // rate).
+    const bool caret = m_replyId >= 0 && CaretBlinking();
     m_idleMotion = caret && !moving;
     return moving || caret;
 }
@@ -39402,17 +43322,12 @@ bool NotificationPanel::OnMouseUp(POINT pt) {
             Wh_SetIntValue(L"notificationContent", g_showNotificationContent);
             StartIslandAnimation();
             return true;
-        // (As in the settings: on a monitor showing a profile of its own,
-        // changed on the main island, see SettingsLocked.)
         case Part::BannerToggle:
-            if (SettingsLocked()) {
-                return false;
-            }
             SetIslandPref(IslandPref::Banner, !g_bannerEnabled);
             StartIslandAnimation();
             return true;
         case Part::MinimizedToggle:
-            if (!g_bannerEnabled || SettingsLocked()) {
+            if (!g_bannerEnabled) {
                 return false;
             }
             SetIslandPref(IslandPref::BannerMinimized, !g_bannerWhenMinimized);
@@ -39535,6 +43450,7 @@ void MediaPanel::OnOpen() {
     m_hover = Part::None;
     m_dragging = Part::None;
     m_press = {};
+    m_scrollStart = NowSeconds();
     m_pillKnob = -1;
     m_titleKnob = -1;
     m_timelineHover = m_volumeHover = m_appVolumeHover = 0;
@@ -39582,7 +43498,9 @@ bool MediaPanel::AnimateContents(double dt) {
                       appVolume ? 1 : 0, 0.25, dt)) {
         moving = true;
     }
-    return moving;
+    // A text scrolling never stops (see m_idleMotion).
+    m_idleMotion = m_scrolling && !moving;
+    return moving || m_scrolling;
 }
 
 // Whether a process is the app whose media it is: the app's ID is its
@@ -39622,6 +43540,83 @@ bool ProcessIsMediaApp(DWORD processId, const std::wstring& appId) {
     const std::wstring file =
         slash == std::wstring::npos ? lowerPath : lowerPath.substr(slash + 1);
     return file == id || file == id + L".exe" || lowerPath == id;
+}
+
+BOOL CALLBACK FindMediaWindowProc(HWND hWnd, LPARAM lParam) {
+    auto* search = (AppWindowSearch*)lParam;
+    if (!IsWindowVisible(hWnd) || GetWindow(hWnd, GW_OWNER) ||
+        (GetWindowLongPtr(hWnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) ||
+        !GetWindowTextLength(hWnd)) {
+        return TRUE;
+    }
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hWnd, &processId);
+    if (WindowMatchesApp(hWnd, *search->appId) ||
+        ProcessIsMediaApp(processId, *search->appId)) {
+        search->found = hWnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// What's playing's app brought to the front (its cover clicked): its
+// window, the app hidden in the tray, or a Store app started by its ID.
+void OpenMediaApp(const std::wstring& appId) {
+    if (appId.empty()) {
+        return;
+    }
+    AppWindowSearch search{&appId, nullptr};
+    EnumWindows(FindMediaWindowProc, (LPARAM)&search);
+    if (search.found) {
+        ActivateApp(search.found);
+        return;
+    }
+    if (OpenFromTrayIcon(appId, true)) {
+        return;
+    }
+    if (appId.find(L'!') != std::wstring::npos) {
+        const std::wstring target = L"shell:AppsFolder\\" + appId;
+        ShellExecute(nullptr, L"open", target.c_str(), nullptr, nullptr,
+                     SW_SHOWNORMAL);
+    }
+}
+
+// A text too long for its place scrolls to its end and back while the
+// mouse is over it (see MarqueeShift; otherwise its start shows); one that
+// fits, or without animations, is drawn as it is.
+void MediaPanel::DrawScrolling(ID2D1RenderTarget* target,
+                               ID2D1SolidColorBrush* brush,
+                               const std::wstring& text,
+                               IDWriteTextFormat* format,
+                               const D2D1_RECT_F& rect) {
+    if (text.empty() || !format) {
+        return;
+    }
+    winrt::com_ptr<IDWriteTextLayout> layout;
+    DWRITE_TEXT_METRICS metrics{};
+    const float width = rect.right - rect.left;
+    if (AnimationLevel() != 0 ||
+        FAILED(m_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(),
+                                          format, 10000, rect.bottom - rect.top,
+                                          layout.put())) ||
+        FAILED(layout->GetMetrics(&metrics)) ||
+        metrics.widthIncludingTrailingWhitespace <= width) {
+        target->DrawText(text.c_str(), (UINT32)text.size(), format, rect,
+                         brush);
+        return;
+    }
+    const bool here = ScrollsHere(target, rect);
+    m_scrolling = m_scrolling || here;
+    layout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    const float shift =
+        here ? (float)MarqueeShift(
+                   NowSeconds() - std::max(m_scrollStart, m_scrollSince),
+                   metrics.widthIncludingTrailingWhitespace - width, m_scale)
+             : 0.0f;
+    target->PushAxisAlignedClip(rect, D2D1_ANTIALIAS_MODE_ALIASED);
+    target->DrawTextLayout({rect.left - shift, rect.top}, layout.get(), brush,
+                           D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+    target->PopAxisAlignedClip();
 }
 
 // The sessions of the app whose media it is, on the default device.
@@ -39767,7 +43762,8 @@ void MediaPanel::Layout() {
     m_appVolumeIcon = m_appVolume = {};
     if (!m_appVolumes.empty()) {
         y -= std::round(4 * s);
-        m_appVolumeIcon = {padding, y, padding + volumeHeight, y + volumeHeight};
+        m_appVolumeIcon = {padding, y, padding + volumeHeight,
+                           y + volumeHeight};
         m_appVolume = {m_appVolumeIcon.right + std::round(8 * s),
                        y + volumeHeight / 2 - std::round(3 * s),
                        width - padding,
@@ -39800,6 +43796,9 @@ MediaPanel::Part MediaPanel::HitTest(POINT pt) const {
     }
     if (PointInRect(pt, m_next)) {
         return Part::Next;
+    }
+    if (m_state.present && PointInRect(pt, m_cover)) {
+        return Part::Cover;
     }
     if (m_state.canSeek && m_timeline.right > m_timeline.left &&
         around(m_timeline)) {
@@ -39873,6 +43872,8 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
     const float s = m_scale;
     const float width = (float)m_size.cx;
     const float padding = std::round(16 * s);
+    // (A text scrolling says so while drawn.)
+    m_scrolling = false;
 
     // The apps to choose from: the one controlled lit, with a dot for the
     // ones playing.
@@ -39885,8 +43886,7 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
                                          m_state.sourceIndex == source;
         const float chipRadius = (chip.bottom - chip.top) / 2;
         const float hover = Hover(chip, m_sourceHover == (int)i);
-        brush->SetColor(lit ? Accent(1)
-                            : Fg(0.08f + 0.08f * hover));
+        brush->SetColor(lit ? Accent(1) : Fg(0.08f + 0.08f * hover));
         target->FillRoundedRectangle({chip, chipRadius, chipRadius}, brush);
         std::wstring name;
         bool playing = false;
@@ -39951,6 +43951,12 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
         target->DrawText(&kGlyphMusic, 1, m_bigIconFormat.get(), m_cover,
                          brush);
     }
+    // A click on it brings the app to the front: lit under the mouse.
+    if (const float lit = Hover(m_cover, m_hover == Part::Cover);
+        lit > 0.01f && m_state.present) {
+        brush->SetColor(Fg(0.14f * lit));
+        target->FillRoundedRectangle({m_cover, radius, radius}, brush);
+    }
 
     // The song, the artist, the app.
     const float textLeft = m_cover.right + std::round(14 * s);
@@ -39961,13 +43967,12 @@ void MediaPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
         m_state.present ? m_state.title
                         : std::wstring(Tr(L"Nothing playing", L"Nada tocando"));
     brush->SetColor(Fg(0.95f));
-    target->DrawText(title.c_str(), (UINT32)title.size(), m_titleFormat.get(),
-                     {textLeft, textTop, textRight, textTop + line}, brush);
+    DrawScrolling(target, brush, title, m_titleFormat.get(),
+                  {textLeft, textTop, textRight, textTop + line});
     textTop += line;
     brush->SetColor(Fg(0.65f));
-    target->DrawText(m_state.artist.c_str(), (UINT32)m_state.artist.size(),
-                     m_textFormat.get(),
-                     {textLeft, textTop, textRight, textTop + line}, brush);
+    DrawScrolling(target, brush, m_state.artist, m_textFormat.get(),
+                  {textLeft, textTop, textRight, textTop + line});
     textTop += line;
     const std::wstring app = AppDisplayName(m_state.appId);
     brush->SetColor(Fg(0.4f));
@@ -40286,6 +44291,9 @@ bool MediaPanel::OnMouseUp(POINT pt) {
         case Part::AppMute:
             SetAppMute(!m_appMuted);
             return true;
+        case Part::Cover:
+            OpenMediaApp(m_state.appId);
+            return true;
         case Part::Previous:
             SendMediaCommand(MediaCommand::Previous);
             break;
@@ -40488,6 +44496,12 @@ int GetIslandPref(IslandPref pref) {
             return g_settings.komorebiWhkd;
         case IslandPref::KomorebiMasir:
             return g_settings.komorebiMasir;
+        case IslandPref::ScreenshotFolder:
+            return g_settings.islandScreenshotFolder;
+        case IslandPref::MediaWheel:
+            return g_settings.islandMediaWheel;
+        case IslandPref::MediaMarquee:
+            return g_settings.islandMediaMarquee;
         case IslandPref::ShortcutNotifications:
             return g_settings.islandWinN;
         case IslandPref::ShortcutControl:
@@ -40558,9 +44572,6 @@ void SetIslandPlace(const std::wstring& appId, double x, double y) {
 // Changed in the island's settings (its thread): shown right away, and kept
 // when `keep` (once the slider is let go).
 void SetIslandGap(int pixels, bool keep) {
-    if (SettingsLocked()) {
-        return;
-    }
     pixels = std::clamp(pixels, kIslandGapMin, kIslandGapMax);
     if (keep) {
         StoreProfileInt(L"islandGap", pixels);
@@ -40575,9 +44586,6 @@ void SetIslandGap(int pixels, bool keep) {
 }
 
 void SetTrayListIcons(int icons, bool keep) {
-    if (SettingsLocked()) {
-        return;
-    }
     icons = std::clamp(icons, kTrayListMin, kTrayListMax);
     if (keep) {
         StoreProfileInt(L"trayListIsland", icons);
@@ -40592,9 +44600,6 @@ void SetTrayListIcons(int icons, bool keep) {
 }
 
 void SetNotchCurve(int percent, bool keep) {
-    if (SettingsLocked()) {
-        return;
-    }
     percent = std::clamp(percent, kNotchCurveMin, kNotchCurveMax);
     if (keep) {
         StoreProfileInt(L"islandNotchCurve", percent);
@@ -40609,9 +44614,6 @@ void SetNotchCurve(int percent, bool keep) {
 }
 
 void SetAutoHideDelay(int tenths, bool keep) {
-    if (SettingsLocked()) {
-        return;
-    }
     tenths = std::clamp(tenths, kAutoHideDelayMin, kAutoHideDelayMax);
     if (keep) {
         StoreProfileInt(L"islandAutoHideDelay", tenths);
@@ -40620,7 +44622,7 @@ void SetAutoHideDelay(int tenths, bool keep) {
 }
 
 void SetCustomColor(int color, int value) {
-    if (SettingsLocked() || color < 0 || color >= kCustomColors) {
+    if (color < 0 || color >= kCustomColors) {
         return;
     }
     g_customColors[color] = value & 0xFFFFFF;
@@ -40638,9 +44640,6 @@ void SetCustomColor(int color, int value) {
 }
 
 void SetIslandOpacity(int percent, bool keep) {
-    if (SettingsLocked()) {
-        return;
-    }
     percent = std::clamp(percent, kIslandOpacityMin, kIslandOpacityMax);
     if (keep) {
         StoreProfileInt(L"islandOpacity", percent);
@@ -40655,9 +44654,6 @@ void SetIslandOpacity(int percent, bool keep) {
 }
 
 void SetIslandSize(int percent, bool keep) {
-    if (SettingsLocked()) {
-        return;
-    }
     percent = std::clamp(percent, kIslandSizeMin, kIslandSizeMax);
     if (keep) {
         StoreProfileInt(L"islandSize", percent);
@@ -40673,7 +44669,16 @@ void SetIslandSize(int percent, bool keep) {
 
 // Changed in the island (its thread): kept, and shown right away.
 void SetIslandPref(IslandPref pref, int value) {
-    if (SettingsLocked()) {
+    // What every island shares is the main island's, also when changed on
+    // one showing a profile of its own (they all take it again).
+    if (Island* main = MainIsland();
+        IsSharedPref(pref) && OwnLookShown() && main && main != g_island) {
+        g_island->SaveOwnProfile();
+        {
+            IslandScope scope(main);
+            SetIslandPref(pref, value);
+        }
+        ForEachIsland([](Island& island) { island.RefreshLook(); });
         return;
     }
     for (const auto& info : kIslandPrefs) {
@@ -40707,7 +44712,10 @@ void SetIslandPref(IslandPref pref, int value) {
             }
             return;
         case IslandPref::Theme:
-            LoadTheme(true);
+            // (The value itself: on an island showing its own look, the
+            // stored theme and colors are the main island's.)
+            g_themeIndex = std::clamp(value, 0, (int)ThemeId::Count - 1);
+            ApplyThemeIndex(true);
             StartIslandAnimation();
             break;
         case IslandPref::Tray:
@@ -40826,8 +44834,11 @@ void SetIslandPref(IslandPref pref, int value) {
         case IslandPref::WindowColor:
             if (g_settings.islandWindowColor != on) {
                 g_settings.islandWindowColor = on;
-                g_windowColor = -1;
                 ApplyThemeIndex(true);
+                // (Read now: no island may have followed it so far.)
+                if (Island* main = MainIsland(); on && main) {
+                    main->ReadWindowColor();
+                }
             }
             break;
         case IslandPref::ActionNetwork:
@@ -40855,6 +44866,15 @@ void SetIslandPref(IslandPref pref, int value) {
         case IslandPref::KomorebiMasir:
             g_settings.komorebiMasir = on;
             break;
+        case IslandPref::ScreenshotFolder:
+            g_settings.islandScreenshotFolder = on;
+            break;
+        case IslandPref::MediaWheel:
+            g_settings.islandMediaWheel = on;
+            break;
+        case IslandPref::MediaMarquee:
+            g_settings.islandMediaMarquee = on;
+            break;
         case IslandPref::ShortcutNotifications:
             g_settings.islandWinN = on;
             break;
@@ -40878,7 +44898,8 @@ void SetIslandPref(IslandPref pref, int value) {
             if (g_settings.islandGroupApps != on) {
                 g_settings.islandGroupApps = on;
                 if (g_island) {
-                    ForEachIsland([](Island& island) { island.RegroupUnread(); });
+                    ForEachIsland(
+                        [](Island& island) { island.RegroupUnread(); });
                 }
             }
             break;
@@ -40959,13 +44980,14 @@ void SetIslandPref(IslandPref pref, int value) {
 // Another order of the pill's items, chosen in its settings: the items slide
 // to their new places (kept with SavePillOrder once chosen).
 void SetPillOrder(const std::vector<PillGroup>& order) {
-    if (SettingsLocked()) {
-        return;
-    }
     if (order == g_pillOrder) {
         return;
     }
     g_pillOrder = order;
+    SavePillOrder();
+    if (OwnLookShown()) {
+        g_island->SaveOwnProfile();
+    }
     if (g_island) {
         ForEachIsland([&](Island& island) { island.OnOrderChanged(); });
     }
@@ -41044,7 +45066,9 @@ std::wstring UnescapeProfileText(std::wstring_view text) {
     for (size_t i = 0; i < text.size(); i++) {
         if (text[i] == L'\\' && i + 1 < text.size()) {
             i++;
-            plain += text[i] == L'n' ? L'\n' : text[i] == L't' ? L'\t' : text[i];
+            plain += text[i] == L'n'   ? L'\n'
+                     : text[i] == L't' ? L'\t'
+                                       : text[i];
         } else {
             plain += text[i];
         }
@@ -41060,11 +45084,15 @@ struct ProfileText {
 constexpr ProfileText kProfileTexts[] = {
     {L"islandOrder", 64},    {L"monitorPlaces", 2048}, {L"appPlaces", 16384},
     {L"controls", 1024},     {L"islandMonitor", 64},   {L"islandNotchSides", 64},
+    {L"trayPinned", 4096},   {L"trayOrder", 8192},     {L"trayAnchors", 4096},
 };
 
-// Everything the island's settings choose (not its notifications, notes,
-// tasks or pinned tray icons; not whether the profiles' button is on).
-std::wstring CaptureProfile() {
+// Everything the island's settings choose, the tray icons pinned and their
+// places too (not its notifications, notes or tasks; not whether the
+// profiles' button is on).
+// `texts`: the texts kept (another monitor's profile), not the stored ones.
+std::wstring CaptureProfile(
+    const std::unordered_map<std::wstring, std::wstring>* texts = nullptr) {
     std::wstring data;
     auto number = [&](PCWSTR name, int value) {
         data += L"i" + std::wstring(name) + L"=" + std::to_wstring(value) +
@@ -41090,20 +45118,58 @@ std::wstring CaptureProfile() {
     for (const auto& text : kProfileTexts) {
         std::vector<WCHAR> value(text.room);
         Wh_GetStringValue(text.name, value.data(), value.size());
+        std::wstring kept = value.data();
+        if (texts) {
+            if (const auto it = texts->find(text.name); it != texts->end()) {
+                kept = it->second;
+            }
+        }
         data += L"s" + std::wstring(text.name) + L"=" +
-                EscapeProfileText(value.data()) + L"\n";
+                EscapeProfileText(kept) + L"\n";
     }
     return data;
 }
 
-int AddProfile(const std::wstring& name) {
-    if (SettingsLocked()) {
-        return -1;
+void ParseProfileLines(PCWSTR data,
+                       std::unordered_map<std::wstring, int>* numbers,
+                       std::unordered_map<std::wstring, std::wstring>* texts);
+
+// What the current island shows (another monitor's look, or the main
+// settings), as profile `id`'s new text: its own texts kept (they're the
+// main island's on the others), with the pill's order it shows.
+std::wstring CaptureShownProfile(int id) {
+    std::vector<WCHAR> value(64 * 1024);
+    Wh_GetStringValue(ProfileValueName(id).c_str(), value.data(), value.size());
+    std::unordered_map<std::wstring, int> numbers;
+    std::unordered_map<std::wstring, std::wstring> texts;
+    ParseProfileLines(value.data(), &numbers, &texts);
+    if (!OwnLookShown()) {
+        return CaptureProfile();
     }
+    texts[L"islandOrder"] = EncodePillOrder(g_pillOrder);
+    std::wstring sides;
+    for (uint8_t side : g_notchSides) {
+        sides += (WCHAR)(L'0' + side);
+    }
+    texts[L"islandNotchSides"] = sides;
+    texts[L"trayPinned"] = EncodeTrayKeys(g_trayPinned);
+    texts[L"trayOrder"] = EncodeTrayKeys(g_trayOrder);
+    texts[L"trayAnchors"] = EncodeTrayAnchors(g_trayAnchors);
+    return CaptureProfile(&texts);
+}
+
+int AddProfile(const std::wstring& name) {
     if (g_profiles.size() >= kMaxProfiles) {
         return -1;
     }
-    SaveActiveProfile();
+    // Another monitor's island: a copy of what it shows, used by it alone
+    // from then on (the main island's profile in use stays).
+    Island* monitor = g_island && !g_island->HasMainSettings()
+                          ? g_island->SettingsIsland()
+                          : nullptr;
+    if (!monitor) {
+        SaveActiveProfile();
+    }
     // (Never one used before: a monitor unplugged when its profile was
     // deleted mustn't find another one under its id later.)
     int id = std::max(1, Wh_GetIntValue(L"profileNextId", 1));
@@ -41111,11 +45177,41 @@ int AddProfile(const std::wstring& name) {
         id = std::max(id, profile.id + 1);
     }
     Wh_SetIntValue(L"profileNextId", id + 1);
-    Wh_SetStringValue(ProfileValueName(id).c_str(), CaptureProfile().c_str());
+    Wh_SetStringValue(ProfileValueName(id).c_str(),
+                      CaptureShownProfile(ChosenProfile()).c_str());
     g_profiles.push_back({id, name});
+    if (monitor) {
+        SaveProfiles();
+        IslandScope scope(monitor);
+        monitor->SetMonitorProfile(id);
+        return id;
+    }
     g_activeProfile = id;
     SaveProfiles();
     return id;
+}
+
+void ShowSavedProfile(int id, Island* from);
+
+// Another monitor's island: what it shows now, saved in profile `id`, which
+// it uses from then on (and every island with it shows).
+void SaveShownInProfile(int id) {
+    if (!g_island || g_island->HasMainSettings() ||
+        std::none_of(g_profiles.begin(), g_profiles.end(),
+                     [id](const IslandProfile& profile) {
+                         return profile.id == id;
+                     })) {
+        return;
+    }
+    Island* monitor = g_island->SettingsIsland();
+    g_island->SaveOwnProfile();
+    Wh_SetStringValue(ProfileValueName(id).c_str(),
+                      CaptureShownProfile(id).c_str());
+    {
+        IslandScope scope(monitor);
+        monitor->SetMonitorProfile(id);
+    }
+    ShowSavedProfile(id, monitor);
 }
 
 // The profile in use follows the settings: changed (see StoreProfileInt), it's
@@ -41133,26 +45229,30 @@ void SaveActiveProfileSoon() {
 // Now (before another profile is applied, added or exported), if its
 // settings changed since.
 void SaveActiveProfile() {
-    if (Island* main = MainIsland()) {
+    Island* main = MainIsland();
+    if (main) {
         main->CancelProfileSave();
     }
-    if (g_activeProfile >= 0 && !g_applyingProfile && !SettingsLocked() &&
+    // (The main island's settings, whichever island is the current one.)
+    IslandScope scope(main);
+    if (g_activeProfile >= 0 && !g_applyingProfile &&
         ProfileChanged(g_activeProfile)) {
         UpdateProfile(g_activeProfile);
     }
 }
 
+// The main island's settings saved in profile `id`, now the one in use there
+// (and shown by every other island with it).
 void UpdateProfile(int id) {
-    if (SettingsLocked()) {
-        return;
-    }
+    Island* main = MainIsland();
+    IslandScope scope(main);
     for (const auto& profile : g_profiles) {
         if (profile.id == id) {
             Wh_SetStringValue(ProfileValueName(id).c_str(),
                               CaptureProfile().c_str());
             g_activeProfile = id;
             SaveProfiles();
-            ForEachIsland([](Island& island) { island.RefreshLook(); });
+            ShowSavedProfile(id, main);
             return;
         }
     }
@@ -41184,8 +45284,9 @@ void RenameProfile(int id, const std::wstring& name) {
 
 void DeleteProfile(int id) {
     const size_t before = g_profiles.size();
-    std::erase_if(g_profiles,
-                  [id](const IslandProfile& profile) { return profile.id == id; });
+    std::erase_if(g_profiles, [id](const IslandProfile& profile) {
+        return profile.id == id;
+    });
     if (g_profiles.size() == before) {
         return;
     }
@@ -41194,7 +45295,13 @@ void DeleteProfile(int id) {
         g_activeProfile = -1;
     }
     SaveProfiles();
-    ForEachIsland([](Island& island) { island.RefreshLook(); });
+    // The monitors that used it: the main island's settings again.
+    ForEachIsland([id](Island& island) {
+        if (!island.IsNotchSibling() && !island.IsMainIsland() &&
+            island.MonitorProfile() == id) {
+            island.SetMonitorProfile(-1);
+        }
+    });
 }
 
 // Reads a profile's lines (see CaptureProfile) into its numbers and texts;
@@ -41294,14 +45401,16 @@ bool ApplyProfileSettings(
         it != numbers.end()) {
         SetAutoHideDelay(it->second, true);
     }
-    if (const auto it = numbers.find(L"islandNotchCurve"); it != numbers.end()) {
+    if (const auto it = numbers.find(L"islandNotchCurve");
+        it != numbers.end()) {
         SetNotchCurve(it->second, true);
     }
     if (const auto it = numbers.find(L"trayListIsland"); it != numbers.end()) {
         SetTrayListIcons(it->second, true);
     }
     if (const auto it = numbers.find(L"animationsIsland");
-        it != numbers.end() && it->second != EncodeAnimations(g_animationChoice)) {
+        it != numbers.end() &&
+        it->second != EncodeAnimations(g_animationChoice)) {
         SetAnimationChoice(DecodeAnimations(it->second), true);
     }
     for (PCWSTR name : {L"placeX", L"placeY"}) {
@@ -41317,11 +45426,22 @@ bool ApplyProfileSettings(
     g_applyingProfile = false;
     LoadPillOrder();
     LoadNotchSides();
+    LoadTrayArrangement();
     LoadPlaces();
     if (const auto it = texts.find(L"islandMonitor"); it != texts.end()) {
         g_islandMonitor = it->second;
     }
     return true;
+}
+
+// Profile `id`'s values put in the main settings.
+bool LoadProfileSettings(int id) {
+    std::vector<WCHAR> value(64 * 1024);
+    Wh_GetStringValue(ProfileValueName(id).c_str(), value.data(), value.size());
+    std::unordered_map<std::wstring, int> numbers;
+    std::unordered_map<std::wstring, std::wstring> texts;
+    ParseProfileLines(value.data(), &numbers, &texts);
+    return ApplyProfileSettings(numbers, texts);
 }
 
 bool ApplyProfile(int id) {
@@ -41337,12 +45457,7 @@ bool ApplyProfile(int id) {
     }
     // (The one in use keeps its last changes.)
     SaveActiveProfile();
-    std::vector<WCHAR> value(64 * 1024);
-    Wh_GetStringValue(ProfileValueName(id).c_str(), value.data(), value.size());
-    std::unordered_map<std::wstring, int> numbers;
-    std::unordered_map<std::wstring, std::wstring> texts;
-    ParseProfileLines(value.data(), &numbers, &texts);
-    if (!ApplyProfileSettings(numbers, texts)) {
+    if (!LoadProfileSettings(id)) {
         return false;
     }
     g_activeProfile = id;
@@ -41351,6 +45466,27 @@ bool ApplyProfile(int id) {
         ForEachIsland([&](Island& island) { island.OnProfileApplied(); });
     }
     return true;
+}
+
+// Profile `id` just saved from island `from`: every other island with it
+// shows it again, the main island's settings too if it's the one in use
+// there.
+void ShowSavedProfile(int id, Island* from) {
+    for (Island* island : std::vector<Island*>(g_islands)) {
+        if (island != from && !island->IsMainIsland() &&
+            island->MonitorProfile() == id) {
+            IslandScope scope(island);
+            island->ReloadLook();
+        }
+    }
+    Island* main = MainIsland();
+    if (main && from != main && g_activeProfile == id) {
+        IslandScope scope(main);
+        main->CancelProfileSave();
+        if (LoadProfileSettings(id)) {
+            ForEachIsland([](Island& island) { island.OnProfileApplied(); });
+        }
+    }
 }
 
 // What a backup keeps besides the settings (CaptureProfile) and the
@@ -41371,11 +45507,13 @@ constexpr BackupValue kBackupValues[] = {
     {L"weatherPlace", 1024},    {L"trayPinned", 4096},
     {L"updatesIgnored", 4096},  {L"profiles", 1024},
     {L"monitorProfiles", 2048}, {L"folderPins", 16 * 1024},
-    {L"wallpaperFolder", 1024},
+    {L"wallpaperFolder", 1024}, {L"agendas", 32 * 1024},
+    {L"trayOrder", 8192},       {L"trayAnchors", 4096},
     {L"profileActive", 0, -1},  {L"islandMinimized", 0, 0},
     {L"islandMinimizedNotch0", 0, 0}, {L"islandMinimizedNotch1", 0, 0},
     {L"islandMinimizedNotch2", 0, 0},
     {L"islandQuiet", 0, 0},     {L"notificationContent", 0, 1},
+    {L"calendarToday", 0, 0},   {L"calendarTodayColor", 0, kTodayRed},
 };
 constexpr WCHAR kBackupHeader[] = L"Mac Island & Dock backup";
 
@@ -41410,6 +45548,11 @@ bool RestoreBackup(const std::wstring& text) {
     std::unordered_map<std::wstring, int> numbers;
     std::unordered_map<std::wstring, std::wstring> texts;
     ParseProfileLines(text.c_str(), &numbers, &texts);
+    // (A save of the profile in use still waiting would write the imported
+    // settings over it as the island restarts.)
+    if (Island* main = MainIsland()) {
+        main->CancelProfileSave();
+    }
     // The settings first (they're what a profile keeps).
     if (!ApplyProfileSettings(numbers, texts)) {
         return false;
@@ -41446,11 +45589,27 @@ bool RestoreBackup(const std::wstring& text) {
 }
 
 IslandLook CaptureLook() {
-    return {g_settings,       g_themeIndex,         g_theme,
-            g_themeTarget,    g_themeFrom,          g_themeChangeStart,
-            g_mediaButtonsInPill, g_mediaTitleInPill, g_bannerEnabled,
-            g_bannerWhenMinimized, g_islandOpacity,  g_trayListIcons,
-            g_pillOrder,      g_customColors};
+    IslandLook look{g_settings,
+                    g_themeIndex,
+                    g_theme,
+                    g_themeTarget,
+                    g_themeFrom,
+                    g_themeChangeStart,
+                    g_mediaButtonsInPill,
+                    g_mediaTitleInPill,
+                    g_bannerEnabled,
+                    g_bannerWhenMinimized,
+                    g_islandOpacity,
+                    g_trayListIcons,
+                    g_pillOrder,
+                    g_customColors,
+                    {}};
+    std::copy(std::begin(g_notchSides), std::end(g_notchSides),
+              look.notchSides.begin());
+    look.trayPinned = g_trayPinned;
+    look.trayOrder = g_trayOrder;
+    look.trayAnchors = g_trayAnchors;
+    return look;
 }
 
 void PutLook(const IslandLook& look) {
@@ -41468,6 +45627,34 @@ void PutLook(const IslandLook& look) {
     g_trayListIcons = look.trayList;
     g_pillOrder = look.order;
     g_customColors = look.colors;
+    std::copy(look.notchSides.begin(), look.notchSides.end(), g_notchSides);
+    g_trayPinned = look.trayPinned;
+    g_trayOrder = look.trayOrder;
+    g_trayAnchors = look.trayAnchors;
+}
+
+// A look made again (from its profile) keeps the colors shown before it:
+// still blending into the same ones, or blending from them into its own
+// (made again, it would show them at once). Returns whether they blend.
+bool KeepThemeBlend(const IslandLook& before, IslandLook& look) {
+    auto same = [](const IslandTheme& a, const IslandTheme& b) {
+        return std::equal(a.background, a.background + 3, b.background) &&
+               std::equal(a.foreground, a.foreground + 3, b.foreground) &&
+               std::equal(a.icon, a.icon + 3, b.icon) &&
+               a.backgroundAlpha == b.backgroundAlpha && a.light == b.light;
+    };
+    if (before.themeChangeStart && same(before.themeTarget, look.themeTarget)) {
+        look.theme = before.theme;
+        look.themeFrom = before.themeFrom;
+        look.themeChangeStart = before.themeChangeStart;
+        return true;
+    }
+    if (same(before.theme, look.themeTarget)) {
+        return false;
+    }
+    look.theme = look.themeFrom = before.theme;
+    look.themeChangeStart = NowSeconds();
+    return true;
 }
 
 // An option's value put in memory only (not kept, nothing else done), for a
@@ -41663,6 +45850,15 @@ void SetIslandPrefValue(IslandPref pref, int value) {
         case IslandPref::KomorebiMasir:
             g_settings.komorebiMasir = on;
             break;
+        case IslandPref::ScreenshotFolder:
+            g_settings.islandScreenshotFolder = on;
+            break;
+        case IslandPref::MediaWheel:
+            g_settings.islandMediaWheel = on;
+            break;
+        case IslandPref::MediaMarquee:
+            g_settings.islandMediaMarquee = on;
+            break;
         case IslandPref::ShortcutNotifications:
             g_settings.islandWinN = on;
             break;
@@ -41705,7 +45901,7 @@ IslandLook LookFromProfile(int id) {
         }
     }
     for (const auto& info : kIslandPrefs) {
-        if (!info.key) {
+        if (!info.key || IsSharedPref(info.pref)) {
             continue;
         }
         if (const auto it = numbers.find(info.key); it != numbers.end()) {
@@ -41732,7 +45928,8 @@ IslandLook LookFromProfile(int id) {
         g_settings.islandAutoHideDelay =
             std::clamp(it->second, kAutoHideDelayMin, kAutoHideDelayMax);
     }
-    if (const auto it = numbers.find(L"islandNotchCurve"); it != numbers.end()) {
+    if (const auto it = numbers.find(L"islandNotchCurve");
+        it != numbers.end()) {
         g_settings.islandNotchCurve =
             std::clamp(it->second, kNotchCurveMin, kNotchCurveMax);
     }
@@ -41741,6 +45938,24 @@ IslandLook LookFromProfile(int id) {
             !order.empty()) {
             g_pillOrder = std::move(order);
         }
+    }
+    if (const auto it = texts.find(L"islandNotchSides"); it != texts.end()) {
+        for (size_t i = 0; i < kPillGroups; i++) {
+            const WCHAR c = i < it->second.size() ? it->second[i] : 0;
+            g_notchSides[i] = c >= L'0' && c <= L'2'
+                                  ? (uint8_t)(c - L'0')
+                                  : DefaultNotchSide((PillGroup)i);
+        }
+    }
+    // (A profile saved before it kept them: the main look's.)
+    if (const auto it = texts.find(L"trayPinned"); it != texts.end()) {
+        g_trayPinned = DecodeTrayKeys(it->second);
+    }
+    if (const auto it = texts.find(L"trayOrder"); it != texts.end()) {
+        g_trayOrder = DecodeTrayKeys(it->second);
+    }
+    if (const auto it = texts.find(L"trayAnchors"); it != texts.end()) {
+        g_trayAnchors = DecodeTrayAnchors(it->second);
     }
     IslandLook look = CaptureLook();
     PutLook(main);
@@ -41807,14 +46022,32 @@ void Island::SetMonitorProfile(int id) {
     if (m_main) {
         return;
     }
+    // (Its own changes still waiting go in the profile it had.)
+    if (m_profileSavePending) {
+        SaveOwnProfile();
+    }
     SaveMonitorProfile(m_ownDevice, id);
     m_profileId = id;
+    // Its notches show it too.
+    for (Island* notch : m_notchSiblings) {
+        notch->m_profileId = id;
+    }
+    ReloadLook();
+    for (Island* notch : m_notchSiblings) {
+        IslandScope scope(notch);
+        notch->ReloadLook();
+    }
+}
+
+void Island::ReloadLook() {
     RefreshLook();
     // Another style (the pill, the fixed pill, the bar), or other notches:
-    // it starts again.
+    // they start again. (A notch beside its base keeps no strip: the base
+    // does, see RegisterAppBar.)
     if (m_bar != g_settings.islandBar ||
-        m_appBar != (g_settings.islandBar || g_settings.islandReserve) ||
-        m_notchCount > 0 || m_notchCount != NotchCountWanted()) {
+        m_appBar != ((g_settings.islandBar || g_settings.islandReserve) &&
+                     !m_notchBase) ||
+        m_notchCount != NotchCountWanted()) {
         RestartIslandSoon();
         return;
     }
@@ -41824,10 +46057,37 @@ void Island::SetMonitorProfile(int id) {
     Render(true);
 }
 
+void Island::SaveOwnProfile(bool show) {
+    CancelProfileSave();
+    const int id = m_profileId;
+    if (m_main || id < 0 ||
+        std::none_of(g_profiles.begin(), g_profiles.end(),
+                     [id](const IslandProfile& profile) {
+                         return profile.id == id;
+                     })) {
+        return;
+    }
+    {
+        IslandScope scope(this);
+        Wh_SetStringValue(ProfileValueName(id).c_str(),
+                          CaptureShownProfile(id).c_str());
+    }
+    if (show) {
+        ShowSavedProfile(id, this);
+    }
+}
+
 void Island::RefreshLook() {
     if (m_main) {
         return;
     }
+    // (Its own changes still waiting are kept first.)
+    if (m_profileSavePending) {
+        SaveOwnProfile();
+    }
+    // (The colors shown, to keep blending from them.)
+    const bool shown = g_island == this || m_profileId >= 0;
+    const IslandLook before = g_island == this ? CaptureLook() : m_look;
     // (Made from the main settings: those go in memory meanwhile.)
     const bool applied = m_lookApplied;
     if (applied) {
@@ -41845,6 +46105,9 @@ void Island::RefreshLook() {
     }
     if (m_profileId >= 0) {
         m_look = LookFromProfile(m_profileId);
+        if (shown && KeepThemeBlend(before, m_look)) {
+            StartAnimating();
+        }
     }
     if ((applied || g_island == this) && m_profileId >= 0) {
         g_mainLook = CaptureLook();
@@ -41854,7 +46117,14 @@ void Island::RefreshLook() {
 }
 
 void Island::OnProfileApplied() {
-    if (NotchBaseMoved()) {
+    // The bell moved to another notch, or the profile chose another monitor
+    // while there's an island on each one (or notches, made on the chosen
+    // one): they start again, as ChooseMonitor does (two islands would end
+    // up on the same monitor otherwise).
+    if (NotchBaseMoved() ||
+        (m_main &&
+         (g_settings.islandAllMonitors || NotchCountWanted() > 0) &&
+         IslandMonitorsChanged())) {
         RestartIslandSoon();
         return;
     }
@@ -42208,14 +46478,16 @@ RECT Island::ReservedInsets() const {
                 info.rcWork.top - info.rcMonitor.top,
                 info.rcMonitor.right - info.rcWork.right,
                 info.rcMonitor.bottom - info.rcWork.bottom};
-    // (The room the island keeps itself isn't another bar's.)
-    if (m_appBar && m_appBarThickness > 0 &&
-        EqualRect(&m_appBarMonitor, &info.rcMonitor)) {
-        LONG& side = m_appBarEdge == ABE_LEFT    ? insets.left
-                     : m_appBarEdge == ABE_RIGHT  ? insets.right
-                     : m_appBarEdge == ABE_BOTTOM ? insets.bottom
-                                                  : insets.top;
-        side = std::max(0L, side - m_appBarThickness);
+    // (The room the island keeps itself isn't another bar's; a notch's is
+    // its base island's.)
+    const Island& keeper = m_notchBase ? *m_notchBase : *this;
+    if (keeper.m_appBar && keeper.m_appBarThickness > 0 &&
+        EqualRect(&keeper.m_appBarMonitor, &info.rcMonitor)) {
+        LONG& side = keeper.m_appBarEdge == ABE_LEFT    ? insets.left
+                     : keeper.m_appBarEdge == ABE_RIGHT  ? insets.right
+                     : keeper.m_appBarEdge == ABE_BOTTOM ? insets.bottom
+                                                         : insets.top;
+        side = std::max(0L, side - keeper.m_appBarThickness);
     }
     return insets;
 }
@@ -42230,10 +46502,10 @@ RECT Island::TaskbarInsets() const {
     // even while it's hidden).
     const UINT edge = TaskbarEdge();
     const POINT inner =
-        edge == ABE_LEFT    ? POINT{rect.right - 1, (rect.top + rect.bottom) / 2}
+        edge == ABE_LEFT ? POINT{rect.right - 1, (rect.top + rect.bottom) / 2}
         : edge == ABE_RIGHT ? POINT{rect.left, (rect.top + rect.bottom) / 2}
-        : edge == ABE_TOP   ? POINT{(rect.left + rect.right) / 2, rect.bottom - 1}
-                            : POINT{(rect.left + rect.right) / 2, rect.top};
+        : edge == ABE_TOP ? POINT{(rect.left + rect.right) / 2, rect.bottom - 1}
+                          : POINT{(rect.left + rect.right) / 2, rect.top};
     // Another monitor: its own taskbar's room, as Windows leaves it.
     if (MonitorFromPoint(inner, MONITOR_DEFAULTTONEAREST) != CurrentMonitor()) {
         return ReservedInsets();
@@ -42256,14 +46528,14 @@ RECT Island::TaskbarInsets() const {
     return insets;
 }
 
+// (Before it's placed on one, or after its monitor went: the one it goes
+// on.)
 HMONITOR Island::CurrentMonitor() const {
     MONITORINFO info{sizeof(info)};
     if (m_monitorHandle && GetMonitorInfo(m_monitorHandle, &info)) {
         return m_monitorHandle;
     }
-    HWND taskbar = FindTaskbarWnd();
-    return taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY)
-                   : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    return WantedMonitor();
 }
 
 // The monitor with the mouse (if chosen, with several), the one chosen, or
@@ -42286,9 +46558,7 @@ HMONITOR Island::WantedMonitor() const {
             }
         }
     }
-    HWND taskbar = FindTaskbarWnd();
-    return taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY)
-                   : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    return TaskbarMonitor(FindTaskbarWnd());
 }
 
 void Island::UpdateMonitorWatch() {
@@ -42341,9 +46611,7 @@ int ChosenMonitorIndex() {
         }
     }
     if (!chosen) {
-        HWND taskbar = FindTaskbarWnd();
-        chosen = taskbar ? MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY)
-                         : MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        chosen = TaskbarMonitor(FindTaskbarWnd());
     }
     for (size_t i = 0; i < monitors.size(); i++) {
         if (monitors[i].handle == chosen) {
@@ -42354,6 +46622,7 @@ int ChosenMonitorIndex() {
 }
 
 void ChooseMonitor(int index) {
+    IslandScope scope(MainIsland());
     const std::vector<MonitorEntry> monitors = ListMonitors();
     if (index < 0 || index >= (int)monitors.size()) {
         return;
@@ -42548,6 +46817,23 @@ void CALLBACK IslandForegroundProc(HWINEVENTHOOK,
     }
 }
 
+void Island::ReadWindowColor() {
+    bool wanted = false;
+    ForEachIsland(
+        [&](Island&) { wanted = wanted || g_settings.islandWindowColor; });
+    if (!wanted || !m_appWindow || !IsWindow(m_appWindow)) {
+        return;
+    }
+    const int color = WindowColor(m_appWindow);
+    if (color != g_windowColor) {
+        g_windowColor = color;
+        ForEachIsland([](Island& island) {
+            ApplyThemeIndex(true);
+            island.StartAnimating();
+        });
+    }
+}
+
 void Island::OnForegroundChanged() {
     HWND foreground = GetForegroundWindow();
     if (!foreground) {
@@ -42570,14 +46856,9 @@ void Island::OnForegroundChanged() {
         return;
     }
     m_appWindow = foreground;
-    // Its color, blending in (once, for every island).
-    if (m_main && g_settings.islandWindowColor) {
-        const int color = WindowColor(foreground);
-        if (color != g_windowColor) {
-            g_windowColor = color;
-            ApplyThemeIndex(true);
-            ForEachIsland([](Island& island) { island.StartAnimating(); });
-        }
+    // Its color, blending in.
+    if (m_main) {
+        ReadWindowColor();
     }
     for (size_t i = m_unreadApps.size(); i-- > 0;) {
         if (WindowMatchesApp(foreground, m_unreadApps[i].id)) {
@@ -42632,8 +46913,8 @@ bool Island::GroupWanted(PillGroup group) const {
         return false;
     }
     // What's playing also shows for its buttons or its cover and title.
-    if (group == PillGroup::Media &&
-        (MediaPartWanted(kAppMediaButtons) || MediaPartWanted(kAppMediaTitle))) {
+    if (group == PillGroup::Media && (MediaPartWanted(kAppMediaButtons) ||
+                                      MediaPartWanted(kAppMediaTitle))) {
         return true;
     }
     if (const IslandPlace* place = FindAppPlace(m_placeApp)) {
@@ -43216,11 +47497,14 @@ bool Island::Create() {
     m_trayKeepOpen = Wh_GetIntValue(L"trayKeepOpen",
                                     g_settings.islandTrayOpen ? 1 : 0) != 0 &&
                      g_settings.islandTrayStyle == 0;
-    g_bannerEnabled =
-        Wh_GetIntValue(L"bannerEnabled", g_settings.islandBanner ? 1 : 0) != 0;
-    g_bannerWhenMinimized =
-        Wh_GetIntValue(L"bannerMinimized",
-                       g_settings.islandBannerMinimized ? 1 : 0) != 0;
+    // (An island showing a profile of its own has them from its look.)
+    if (!HasOwnLook()) {
+        g_bannerEnabled = Wh_GetIntValue(L"bannerEnabled",
+                                         g_settings.islandBanner ? 1 : 0) != 0;
+        g_bannerWhenMinimized =
+            Wh_GetIntValue(L"bannerMinimized",
+                           g_settings.islandBannerMinimized ? 1 : 0) != 0;
+    }
     // The app in front (told to every island), and the Windows banner: when
     // it's uncloaked and cloaked, and as it moves (the main island's).
     if (m_main) {
@@ -43253,16 +47537,6 @@ bool Island::Create() {
     m_trayAmount = m_trayBounce = m_trayArrow = m_trayOpen ? 1 : 0;
     g_showNotificationContent =
         Wh_GetIntValue(L"notificationContent", 1) != 0;
-    WCHAR pinned[4096] = L"";
-    Wh_GetStringValue(L"trayPinned", pinned, ARRAYSIZE(pinned));
-    for (PCWSTR p = pinned; *p;) {
-        PCWSTR end = wcschr(p, L'\n');
-        m_trayPinned.push_back(end ? std::wstring(p, end) : std::wstring(p));
-        if (!end) {
-            break;
-        }
-        p = end + 1;
-    }
 
     Render(true);
     // Explorer sends the badges and the tray icons when it hears from it
@@ -43281,11 +47555,13 @@ bool Island::Create() {
     }
     UpdateApps();
     UpdateTrayIcons();
-    g_mediaButtonsInPill =
-        Wh_GetIntValue(L"mediaButtons",
-                       g_settings.islandMediaButtons ? 1 : 0) != 0;
+    if (!HasOwnLook()) {
+        g_mediaButtonsInPill =
+            Wh_GetIntValue(L"mediaButtons",
+                           g_settings.islandMediaButtons ? 1 : 0) != 0;
+        g_mediaTitleInPill = Wh_GetIntValue(L"mediaTitle", 0) != 0;
+    }
     m_mediaButtonsAmount = m_mediaButtonsRoom = g_mediaButtonsInPill ? 1 : 0;
-    g_mediaTitleInPill = Wh_GetIntValue(L"mediaTitle", 0) != 0;
     m_mediaTitleRoom = g_mediaTitleInPill ? 1 : 0;
     if (m_main && (g_settings.islandMedia || g_mediaButtonsInPill ||
                    g_mediaTitleInPill)) {
@@ -43306,10 +47582,35 @@ void Island::ScheduleTick() {
 void StopShortcutKeys();
 
 void Island::Destroy() {
+    // A tray icon held on it or over it: let go (its window, about to go,
+    // loses the mouse with nothing held).
+    if (g_trayDrag.owner == this || g_trayDrag.drop.island == this) {
+        g_trayDrag = {};
+    }
+    // A Windows banner moved off screen (one could be ringing) comes back
+    // first, before the waits below. Only the main island takes it over.
+    m_stackTakeover = false;
+    if (m_stackHidden) {
+        RestoreWindowsBanner();
+    }
+    for (HWINEVENTHOOK* hook :
+         {&m_bannerHook, &m_bannerMoveHook, &m_foregroundHook}) {
+        if (*hook) {
+            UnhookWinEvent(*hook);
+            *hook = nullptr;
+        }
+    }
     if (m_main) {
+        g_windowsBanner = nullptr;
+        if (m_profileSavePending) {
+            SaveActiveProfile();
+        }
         StopTrayPlacesSender();
         UpdateWindowsQuiet(false);
         g_islandWnd = nullptr;
+    } else if (m_profileSavePending) {
+        // (Its own changes, see SaveOwnProfile.)
+        SaveOwnProfile(false);
     }
     if (g_trayIsland == this) {
         g_trayIsland = nullptr;
@@ -43341,13 +47642,9 @@ void Island::Destroy() {
         CloseHandle(m_weatherThread);
         m_weatherThread = nullptr;
     }
-    // To their end: they use m_brightnessJob (a monitor's answer takes a
-    // second or two at most).
-    for (HANDLE thread : m_brightnessThreads) {
-        WaitForSingleObject(thread, INFINITE);
-        CloseHandle(thread);
-    }
-    m_brightnessThreads.clear();
+    // (They hold the brightness job too.)
+    m_brightnessJob->notify = nullptr;
+    JoinOwningThreads(m_brightnessThreads, 5000);
     // (Each thread has its own handle of its stop event: closing the
     // island's is safe even if one is still ending.)
     for (HANDLE thread : m_updatesThreads) {
@@ -43362,8 +47659,7 @@ void Island::Destroy() {
     for (Panel* panel : Panels()) {
         panel->Destroy();
     }
-    // Windows banners hidden now come back (one could be ringing), once the
-    // reads of them are done.
+    // (The reads of Windows banners only read them.)
     for (HANDLE thread : m_bannerReadThreads) {
         WaitForSingleObject(thread, 10000);
         CloseHandle(thread);
@@ -43376,18 +47672,6 @@ void Island::Destroy() {
     AcquireSRWLockExclusive(&g_windowsBannerReadsLock);
     g_windowsBannerReads.clear();
     ReleaseSRWLockExclusive(&g_windowsBannerReadsLock);
-    m_stackTakeover = false;
-    if (m_stackHidden) {
-        RestoreWindowsBanner();
-    }
-    for (HWINEVENTHOOK* hook :
-         {&m_bannerHook, &m_bannerMoveHook, &m_foregroundHook}) {
-        if (*hook) {
-            UnhookWinEvent(*hook);
-            *hook = nullptr;
-        }
-    }
-    g_windowsBanner = nullptr;
     StopWatchingTrayAppWindows();
     m_trayIcons.clear();
     m_trayBitmaps.clear();
@@ -43473,8 +47757,9 @@ void Island::SetAppBarPosition(bool force) {
         thickness = 0;
         const std::vector<Island*> notches = NotchSet();
         if (!g_settings.islandAutoHide &&
-            std::any_of(notches.begin(), notches.end(),
-                        [](const Island* notch) { return !notch->m_minimized; })) {
+            std::any_of(
+                notches.begin(), notches.end(),
+                [](const Island* notch) { return !notch->m_minimized; })) {
             thickness = (int)std::lround(kPillHeight * m_scale);
         }
     } else if (!m_bar) {
@@ -43877,11 +48162,18 @@ void SaveMicrophoneLevels() {
     Wh_SetStringValue(L"microphoneLevels", value.c_str());
 }
 
-// The microphones the island muted get their level back, and their sound:
-// all of them (`all`: the island's button, or the island stopping), or only
-// the ones unmuted elsewhere meanwhile (Windows, another app, a key), whose
-// level would stay at 0. Unplugged ones are kept for when they come back.
-void RestoreMicrophoneLevels(IMMDeviceEnumerator* enumerator, bool all) {
+// The microphones the island muted get their level back: all of them
+// (`all`: the island's button, the island stopping, or a level left at 0 by
+// a process that ended without stopping it), or only the ones unmuted
+// elsewhere meanwhile (Windows, another app, a key), whose level would stay
+// at 0. Only the island's own button (`unmute`) unmutes them too: stopping
+// leaves the user's mute as it is (a plain Windows mute from then on) and
+// keeps them listed, so that button still unmutes them all later (one
+// unmuted elsewhere meanwhile leaves the list then). Unplugged ones are kept
+// for when they come back.
+void RestoreMicrophoneLevels(IMMDeviceEnumerator* enumerator,
+                             bool all,
+                             bool unmute) {
     auto& levels = MicrophoneLevels();
     winrt::com_ptr<IMMDeviceCollection> devices;
     UINT count = 0;
@@ -43920,11 +48212,13 @@ void RestoreMicrophoneLevels(IMMDeviceEnumerator* enumerator, bool all) {
             volume->SetMasterVolumeLevelScalar(
                 std::clamp(it->second, 0, 1000) / 1000.0f, nullptr);
         }
-        if (all) {
+        if (unmute) {
             volume->SetMute(FALSE, nullptr);
         }
-        levels.erase(it);
-        changed = true;
+        if (unmute || !all) {
+            levels.erase(it);
+            changed = true;
+        }
     }
     if (changed) {
         SaveMicrophoneLevels();
@@ -43937,7 +48231,7 @@ DWORD WINAPI RestoreMicrophonesThreadProc(LPVOID) {
     if (SUCCEEDED(CoCreateInstance(kCLSID_MMDeviceEnumerator, nullptr,
                                    CLSCTX_ALL, kIID_IMMDeviceEnumerator,
                                    enumerator.put_void()))) {
-        RestoreMicrophoneLevels(enumerator.get(), true);
+        RestoreMicrophoneLevels(enumerator.get(), true, false);
     }
     enumerator = nullptr;
     if (SUCCEEDED(result)) {
@@ -43946,9 +48240,10 @@ DWORD WINAPI RestoreMicrophonesThreadProc(LPVOID) {
     return 0;
 }
 
-// The island stopping (the mod turned off, or the island alone): the
-// microphones it muted come back as they were (on a thread with COM of its
-// own: the caller's may have none).
+// The island stopping (the mod turned off, or the island alone), or the
+// process starting after one that ended without it (a crash, signing out):
+// the microphones it muted get their level back and stay muted (on a thread
+// with COM of its own: the caller's may have none).
 void RestoreMicrophonesNow() {
     if (MicrophoneLevels().empty()) {
         return;
@@ -43964,7 +48259,8 @@ void RestoreMicrophonesNow() {
 // may record from another one than the default, like a webcam's while a
 // headset is the default). Some apps record a muted microphone anyway (they
 // take its sound before Windows mutes it): muted, its level goes to 0 too,
-// and back to what it was when it's unmuted. One muted on purpose before is
+// while the island runs, and back to what it was when it's unmuted or the
+// island stops (still muted then). One muted on purpose before is
 // left alone (and stays muted).
 void Island::ToggleMicrophone() {
     const int muted = MicrophoneMuted();
@@ -43972,7 +48268,7 @@ void Island::ToggleMicrophone() {
         return;
     }
     if (muted) {
-        RestoreMicrophoneLevels(m_devices.get(), true);
+        RestoreMicrophoneLevels(m_devices.get(), true, true);
         // (The default ones too, if they were muted elsewhere.)
         for (const auto& microphone : GetMicrophones()) {
             microphone->SetMute(FALSE, nullptr);
@@ -44461,7 +48757,7 @@ void Island::OnNetworkChanged() {
 void Island::OnVolumeChanged() {
     // A microphone the island muted, unmuted elsewhere: its level back.
     if (m_main && m_devices && !MicrophoneLevels().empty()) {
-        RestoreMicrophoneLevels(m_devices.get(), false);
+        RestoreMicrophoneLevels(m_devices.get(), false, false);
     }
     m_volumeGlyph = VolumeGlyph();
     m_microphoneGlyph = MicrophoneGlyph();
@@ -44477,18 +48773,21 @@ void Island::StartBrightnessThread(LPTHREAD_START_ROUTINE proc) {
         }
         return false;
     });
-    m_brightnessJob.notify = m_hwnd;
-    if (HANDLE thread =
-            CreateThread(nullptr, 0, proc, &m_brightnessJob, 0, nullptr)) {
+    m_brightnessJob->notify = m_hwnd;
+    auto* held = new std::shared_ptr<BrightnessJob>(m_brightnessJob);
+    if (HANDLE thread = CreateThread(nullptr, 0, proc, held, 0, nullptr)) {
         m_brightnessThreads.push_back(thread);
-    } else if (proc == BrightnessThreadProc) {
-        m_brightnessJob.running = false;
+    } else {
+        delete held;
+        if (proc == BrightnessThreadProc) {
+            m_brightnessJob->running = false;
+        }
     }
 }
 
 // (Changed elsewhere meanwhile, like with the keyboard's keys.)
 void Island::ReadBrightnessSoon() {
-    if (!g_settings.islandBrightness || m_brightnessJob.running ||
+    if (!g_settings.islandBrightness || m_brightnessJob->running ||
         NowSeconds() - m_brightnessReadAt < 10) {
         return;
     }
@@ -44499,8 +48798,8 @@ void Island::ReadBrightnessSoon() {
 void Island::SetBrightness(int level) {
     m_brightness = std::clamp(level, 0, 100);
     m_brightnessReadAt = NowSeconds();
-    m_brightnessJob.target = m_brightness;
-    if (!m_brightnessJob.running.exchange(true)) {
+    m_brightnessJob->target = m_brightness;
+    if (!m_brightnessJob->running.exchange(true)) {
         StartBrightnessThread(BrightnessThreadProc);
     }
     ShowTextBubble(std::wstring(Tr(L"Brightness", L"Brilho")) + L" " +
@@ -44802,8 +49101,44 @@ void Island::Layout() {
         float end;
         size_t firstSlot;
         size_t endSlot;
+        // Pinned tray icons beside that group's items (see addAnchored).
+        bool tray = false;
     };
     std::vector<GroupSpan> spans;
+    // Pinned tray icons put beside another item (see TrayAnchor): in a span
+    // of their own before or after its group's, sliding with it, there even
+    // while it's hidden (on its notch), whenever the tray's icons show.
+    const bool trayShown = g_settings.islandTray || PlaceShows(PillGroup::Tray);
+    auto addAnchored = [&](int anchor, PillGroup group) {
+        if (!trayShown || !InThisNotch(group)) {
+            return;
+        }
+        const size_t first = m_slots.size();
+        const float start = x;
+        for (const auto& icon : m_trayIcons) {
+            if (TrayAnchor(icon.key) != anchor) {
+                continue;
+            }
+            const float iconShown = (float)std::clamp(icon.shown, 0.0, 1.15);
+            const float pinned =
+                PinAmount(icon.key) * std::min(iconShown, 1.0f);
+            if (pinned <= 0.001f) {
+                continue;
+            }
+            IslandSlot slot{IslandItem::TrayIcon,
+                            {x, 0, x + iconSlot * pinned, height},
+                            icon.key,
+                            4};
+            slot.scale = PinAmount(icon.key) * iconShown;
+            slot.group = (int)group;
+            m_slots.push_back(slot);
+            x += (iconSlot + spacing) * pinned;
+        }
+        if (m_slots.size() > first) {
+            spans.push_back(
+                {(int)group, start, x, first, m_slots.size(), true});
+        }
+    };
     // The groups of items, in the order chosen (see g_pillOrder; the app in
     // front may have its own), each squeezed by how much it's shown.
     const IslandPlace* orderPlace = m_bar ? nullptr : FindAppPlace(m_placeApp);
@@ -44812,11 +49147,13 @@ void Island::Layout() {
     const bool orderMoved = !m_layoutOrder.empty() && m_layoutOrder != order;
     m_layoutOrder = order;
     for (PillGroup group : order) {
+        addAnchored(TrayAnchorBefore(group), group);
         const float shown =
             group == PillGroup::Clock
                 ? (InThisNotch(group) ? 1.0f : 0.0f)
                 : (float)std::clamp(m_groupShown[(int)group], 0.0, 1.15);
         if (shown <= 0.001f) {
+            addAnchored((int)group, group);
             continue;
         }
         const size_t firstSlot = m_slots.size();
@@ -44927,7 +49264,8 @@ void Island::Layout() {
                     // pinned ones.
                     bool anyPinned = false;
                     for (const auto& icon : m_trayIcons) {
-                        anyPinned = anyPinned || PinAmount(icon.key) > 0.001f;
+                        anyPinned = anyPinned || (TrayAnchor(icon.key) == -1 &&
+                                                  PinAmount(icon.key) > 0.001f);
                     }
                     if (unpinned && anyPinned && room > 0.001f) {
                         const float line = std::round(6 * scale);
@@ -44940,6 +49278,10 @@ void Island::Layout() {
                         x += (line + spacing) * room;
                     }
                     for (const auto& icon : m_trayIcons) {
+                        // (Not the ones put elsewhere, see addAnchored.)
+                        if (TrayAnchor(icon.key) != -1) {
+                            continue;
+                        }
                         const float iconShown =
                             (float)std::clamp(icon.shown, 0.0, 1.15);
                         const float pinned =
@@ -45060,6 +49402,7 @@ void Island::Layout() {
                                 L" \u00B7 " + m_mediaShown.artist;
                             m_mediaTitleWidth = measure(m_mediaTitleShown);
                         }
+                        m_mediaTitleFullWidth = m_mediaTitleWidth;
                         m_mediaTitleWidth = std::clamp(
                             m_mediaTitleWidth,
                             std::round(kMediaTitleMinWidth * scale),
@@ -45249,7 +49592,8 @@ void Island::Layout() {
                             SUCCEEDED(m_dwrite->CreateTextLayout(
                                 m_weatherShown.c_str() + tab + 1,
                                 (UINT32)(m_weatherShown.size() - tab - 1),
-                                m_textFormat.get(), 1000, height, measure.put()))) {
+                                m_textFormat.get(), 1000, height,
+                                measure.put()))) {
                             DWRITE_TEXT_METRICS metrics{};
                             measure->GetMetrics(&metrics);
                             m_weatherMeasured = std::ceil(metrics.width);
@@ -45309,6 +49653,7 @@ void Island::Layout() {
             spans.push_back(
                 {(int)group, groupStart, x, firstSlot, m_slots.size()});
         }
+        addAnchored((int)group, group);
     }
     // The clock goes among the other groups, which keep their order around
     // it, with a little more room on its sides. Kept in the middle (not on
@@ -45329,14 +49674,18 @@ void Island::Layout() {
     {
         size_t clockSpan = spans.size();
         for (size_t i = 0; i < spans.size(); i++) {
-            if (spans[i].group == (int)PillGroup::Clock) {
+            if (spans[i].group == (int)PillGroup::Clock && !spans[i].tray) {
                 clockSpan = i;
             }
         }
         if (clockSpan < spans.size()) {
+            // (Tray icons put beside the clock go with it.)
+            auto withClock = [&](size_t i) {
+                return spans[i].tray && spans[i].group == (int)PillGroup::Clock;
+            };
             std::vector<GroupSpan> others;
             for (size_t i = 0; i < spans.size(); i++) {
-                if (i != clockSpan) {
+                if (i != clockSpan && !withClock(i)) {
                     others.push_back(spans[i]);
                 }
             }
@@ -45397,7 +49746,19 @@ void Island::Layout() {
             // (The room after it too, kept in the middle: alike on its sides.)
             for (size_t i = 0; i <= count; i++) {
                 if (i == at) {
-                    put(spans[clockSpan], i > 0 ? spacing : 0);
+                    float room = i > 0 ? spacing : 0;
+                    for (size_t j = 0; j < spans.size(); j++) {
+                        if (j < clockSpan && withClock(j)) {
+                            put(spans[j], room);
+                            room = 0;
+                        }
+                    }
+                    put(spans[clockSpan], room);
+                    for (size_t j = clockSpan + 1; j < spans.size(); j++) {
+                        if (withClock(j)) {
+                            put(spans[j], 0);
+                        }
+                    }
                     if (i < count && centered) {
                         place += spacing;
                     }
@@ -45499,8 +49860,8 @@ void Island::Layout() {
                                  insets.left - insets.right);
         // A notch: its share of the screen, so they never meet.
         if (m_notch >= 0) {
-            along = along / std::max(1, m_notchCount) - NotchShoulderWidth() * 2 -
-                    std::round(kNotchGap * scale);
+            along = along / std::max(1, m_notchCount) -
+                    NotchShoulderWidth() * 2 - std::round(kNotchGap * scale);
         }
         // (Its items show between its round ends, where they're cut.)
         const float ends = std::max(0.0f, height / 2 - padding);
@@ -45510,7 +49871,8 @@ void Island::Layout() {
             m_pillOverflow = contentWidth - room;
             m_pillScrollTarget =
                 std::clamp(m_pillScrollTarget, 0.0, (double)m_pillOverflow);
-            m_pillScroll = std::clamp(m_pillScroll, 0.0, (double)m_pillOverflow);
+            m_pillScroll =
+                std::clamp(m_pillScroll, 0.0, (double)m_pillOverflow);
             const float scroll = (float)m_pillScroll;
             std::erase_if(m_slots, [room, scroll](const IslandSlot& slot) {
                 return slot.rect.right - scroll <= 0 ||
@@ -45714,8 +50076,8 @@ void Island::LayoutNotch(float contentWidth,
                          float height,
                          float padding,
                          float scale) {
-    const float pillWidth =
-        std::max(contentWidth + padding * 2, std::round(kNotchMinWidth * scale));
+    const float pillWidth = std::max(contentWidth + padding * 2,
+                                     std::round(kNotchMinWidth * scale));
     const float inside =
         padding + std::round((pillWidth - contentWidth - padding * 2) / 2);
     const float curve = NotchShoulderWidth();
@@ -45787,9 +50149,10 @@ void Island::LayoutNotch(float contentWidth,
 void Island::PublishTrayPlaces() {
     // (Until the mouse comes, the main island's; with notches, the main
     // monitor's one with the tray.)
-    const bool usual = m_notch < 0 ? m_main
-                                   : InThisNotch(PillGroup::Tray) &&
-                                         (m_main || m_notchBase == MainIsland());
+    const bool usual = m_notch < 0
+                           ? m_main
+                           : InThisNotch(PillGroup::Tray) &&
+                                 (m_main || m_notchBase == MainIsland());
     if (g_trayIsland ? g_trayIsland != this : !usual) {
         return;
     }
@@ -45811,6 +50174,22 @@ void Island::PublishTrayPlaces() {
             if (slot.item == IslandItem::TrayIcon && slot.text == icon.key &&
                 slot.rect.right - slot.rect.left > 4) {
                 rect = toScreen(slot.rect);
+            }
+        }
+        // (Put beside an item in another notch: there.)
+        for (const Island* other : g_islands) {
+            if (other == this || !EqualRect(&other->m_monitor, &m_monitor)) {
+                continue;
+            }
+            for (const auto& slot : other->m_slots) {
+                if (slot.item == IslandItem::TrayIcon && !slot.inList &&
+                    slot.text == icon.key &&
+                    slot.rect.right - slot.rect.left > 4) {
+                    rect = {other->m_position.x + (LONG)slot.rect.left,
+                            other->m_position.y + (LONG)slot.rect.top,
+                            other->m_position.x + (LONG)slot.rect.right,
+                            other->m_position.y + (LONG)slot.rect.bottom};
+                }
             }
         }
         places.push_back(
@@ -45860,7 +50239,7 @@ D2D1_RECT_F Island::BannerRect() const {
               : std::clamp((m_pill.left + m_pill.right) / 2, width / 2,
                            std::max(width / 2, (float)m_size.cx - width / 2));
     // Under the bar, in its middle; upwards on the lower half of the screen.
-    const float top = m_bar        ? m_pill.bottom + std::round(kPanelGap * m_scale)
+    const float top = m_bar ? m_pill.bottom + std::round(kPanelGap * m_scale)
                       : AtBottom() ? m_pill.bottom - height
                                    : m_pill.top;
     return {std::round(centerX - width / 2), top,
@@ -46072,8 +50451,8 @@ void Island::ShowBanner() {
     std::vector<IslandToast> toasts = std::move(g_islandToasts);
     g_islandToasts.clear();
     ReleaseSRWLockExclusive(&g_islandToastsLock);
-    // Each island shows them (the main one plays their sounds and handles
-    // the Windows banners).
+    // Each island counts them; the main one shows them, plays their sounds
+    // and handles the Windows banners.
     if (m_main) {
         NoteToastsSeen(toasts);
         for (Island* other : g_islands) {
@@ -46090,8 +50469,9 @@ void Island::ShowToasts(std::vector<IslandToast> toasts) {
     for (const auto& toast : toasts) {
         AddUnread(toast);
     }
-    // (A notch without the bell: only its apps' icons.)
-    if (!ShowsNotices()) {
+    // (A notch without the bell, or another monitor's island: only its apps'
+    // icons. The main island shows the notifications, see README.)
+    if (!ShowsNotices() || !m_main) {
         return;
     }
     // Their Windows banners (see m_bannersOwed): the island's go (in the
@@ -46408,8 +50788,7 @@ void Island::Render(bool force) {
         L"|" + std::to_wstring(m_position.y) + L"|" +
         std::to_wstring((int)(PeekAmount(NowSeconds()) * 1000)) + L"|" +
         std::to_wstring((int)(GearAmount(NowSeconds()) * 1000)) + m_gearText +
-        L"|" +
-        std::to_wstring((int)(m_bannerAmount * 1000)) + L"|" +
+        L"|" + std::to_wstring((int)(m_bannerAmount * 1000)) + L"|" +
         std::to_wstring((int)(m_bannerSwap * 1000)) + L"|" + m_banner.appId +
         m_banner.title + m_banner.text + L"|" +
         std::to_wstring((int)(m_bannerOpen * 1000)) + L"|" +
@@ -46418,8 +50797,7 @@ void Island::Render(bool force) {
         std::to_wstring(m_bannerEdit.caret) + L"|" +
         (m_bannerTyping ? std::to_wstring((int)(CaretColor().a * 24))
                         : std::wstring()) +
-        L"|" +
-        std::to_wstring((int)m_bannerEdit.scroll) + L"|" +
+        L"|" + std::to_wstring((int)m_bannerEdit.scroll) + L"|" +
         std::to_wstring(g_trayIconSerial) + L"|" +
         std::to_wstring((int)(m_trayAmount * 1000)) + L"|" +
         std::to_wstring((int)(m_trayBounce * 1000)) + L"|" +
@@ -46457,9 +50835,9 @@ void Island::Render(bool force) {
         std::to_wstring(g_theme.background[0] + g_theme.background[1] * 3 +
                         g_theme.background[2] * 7 + g_theme.foreground[0] * 11 +
                         g_theme.backgroundAlpha * 13 + g_theme.light +
-                        g_theme.foreground[1] * 17 + g_theme.foreground[2] * 19 +
-                        g_theme.icon[0] * 23 + g_theme.icon[1] * 29 +
-                        g_theme.icon[2] * 31) +
+                        g_theme.foreground[1] * 17 +
+                        g_theme.foreground[2] * 19 + g_theme.icon[0] * 23 +
+                        g_theme.icon[1] * 29 + g_theme.icon[2] * 31) +
         std::to_wstring(m_barBlurred) + L"|";
     for (const auto& slot : m_slots) {
         key += slot.text + L"|" + std::to_wstring((int)(slot.scale * 1000)) +
@@ -46490,6 +50868,12 @@ void Island::Render(bool force) {
     key += std::to_wstring((int)(m_updatesDot * 1000)) + L"|" +
            std::to_wstring((int)(m_unseenDot * 1000)) + L"|" +
            std::to_wstring((int)(m_weatherSwap * 1000)) + L"|";
+    // A title too long scrolling (see m_mediaMarquee): drawn again at each
+    // frame.
+    if (MediaTitleScrolls()) {
+        key +=
+            std::to_wstring((int)((NowSeconds() - m_mediaMarqueeStart) * 240));
+    }
     if (!force && key == m_drawnKey) {
         return;
     }
@@ -46658,8 +51042,8 @@ void Island::Render(bool force) {
             const bool edgeLeft = rect.left <= m_notchEdgeLeft + 0.5f;
             const bool edgeRight = rect.right >= m_notchEdgeRight - 0.5f;
             const std::array<float, 8> key{
-                rect.left, rect.top,       rect.right,          rect.bottom,
-                radius,    shoulder,       (float)edgeLeft,     (float)edgeRight};
+                rect.left, rect.top, rect.right,      rect.bottom,
+                radius,    shoulder, (float)edgeLeft, (float)edgeRight};
             if (key != m_notchShapeKey || !m_notchFill || !m_notchLine) {
                 m_notchShapeKey = key;
                 m_notchFill = NotchGeometry(m_d2d.get(), rect, radius, shoulder,
@@ -47175,13 +51559,15 @@ void Island::Render(bool force) {
                                              brush.get());
             }
             if (slot.item == IslandItem::Overflow && m_iconFormat) {
-                // › turning into ‹ as the list opens.
+                // ‹ turning into › as the list opens (into ⌄ for a list of
+                // their own, see AnimationFrame).
                 const D2D1_POINT_2F center{
                     (slot.rect.left + slot.rect.right) / 2,
                     (slot.rect.top + slot.rect.bottom) / 2};
-                // Pointing down when upright.
+                // Pointing up when upright, down once open.
                 target->SetTransform(D2D1::Matrix3x2F::Rotation(
-                    (float)(m_trayArrow * 180) + (m_vertical ? 90.0f : 0.0f),
+                    180 - (float)(m_trayArrow * 180) +
+                        (m_vertical ? 90.0f : 0.0f),
                     center));
                 brush->SetColor(Fg(0.95f * contentOpacity));
                 target->DrawText(slot.text.c_str(), (UINT32)slot.text.size(),
@@ -47292,11 +51678,42 @@ void Island::Render(bool force) {
                             brush.get());
                     }
                     brush->SetColor(Fg(0.92f * shown * title * (1 - swap)));
-                    target->DrawText(slot.text.c_str(), (UINT32)slot.text.size(),
-                                     m_bannerTextFormat.get(),
-                                     {textLeft, slot.rect.top + rise * swap,
-                                      textRight, slot.rect.bottom + rise * swap},
-                                     brush.get());
+                    // Too long, while it plays (see MediaTitleScrolls): it
+                    // scrolls to its end and back.
+                    winrt::com_ptr<IDWriteTextLayout> scrolling;
+                    if (MediaTitleScrolls() && swap <= 0.004f &&
+                        title > 0.99f &&
+                        m_mediaTitleFullWidth > textRight - textLeft + 1 &&
+                        SUCCEEDED(m_dwrite->CreateTextLayout(
+                            slot.text.c_str(), (UINT32)slot.text.size(),
+                            m_bannerTextFormat.get(), 10000,
+                            slot.rect.bottom - slot.rect.top,
+                            scrolling.put()))) {
+                        m_mediaMarquee = true;
+                        scrolling->SetTextAlignment(
+                            DWRITE_TEXT_ALIGNMENT_LEADING);
+                        const float shift = (float)MarqueeShift(
+                            NowSeconds() - m_mediaMarqueeStart,
+                            m_mediaTitleFullWidth - (textRight - textLeft),
+                            scale);
+                        target->PushAxisAlignedClip(
+                            {textLeft, slot.rect.top, textRight,
+                             slot.rect.bottom},
+                            D2D1_ANTIALIAS_MODE_ALIASED);
+                        // (Not snapped to whole pixels: a slow scroll
+                        // would move in jerks.)
+                        target->DrawTextLayout(
+                            {textLeft - shift, slot.rect.top}, scrolling.get(),
+                            brush.get(), D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+                        target->PopAxisAlignedClip();
+                    } else {
+                        target->DrawText(
+                            slot.text.c_str(), (UINT32)slot.text.size(),
+                            m_bannerTextFormat.get(),
+                            {textLeft, slot.rect.top + rise * swap, textRight,
+                             slot.rect.bottom + rise * swap},
+                            brush.get());
+                    }
                 }
                 // Several apps with media, switched between: a dot each under
                 // the cover for a moment, the one shown lit.
@@ -47505,6 +51922,10 @@ void Island::Render(bool force) {
                 const D2D1_RECT_F rect{centerX - size / 2, centerY - size / 2,
                                        centerX + size / 2, centerY + size / 2};
                 float opacity = contentOpacity * std::clamp(shown, 0.0f, 1.0f);
+                // The one dragged: faint where it was.
+                if (g_trayDrag.moved && slot.text == g_trayDrag.key) {
+                    opacity *= 0.3f;
+                }
                 // Fading towards an edge with more icons past it.
                 if (slot.inList && trayList) {
                     const float center = m_vertical ? centerY : centerX;
@@ -47958,6 +52379,8 @@ void Island::Render(bool force) {
         }
     }
 
+    DrawTrayDrag(target, brush.get());
+
     // Off the screen while away (over a full-screen app). Not drawn: tried
     // again next time, even with nothing changed.
     if (!m_canvas.End(m_hwnd, m_away ? POINT{-32000, -32000} : m_position,
@@ -48088,8 +52511,7 @@ void Island::RenderBarBubble() {
 // dot, going away and coming back.
 void Island::UpdateGlass() {
     const bool wanted = g_settings.islandFrosted && g_transparencyEffects &&
-                        !m_away &&
-                        m_notch < 0;
+                        !m_away && m_notch < 0;
     m_barBlurred = wanted && m_bar;
     RECT strip{};
     if (m_barBlurred) {
@@ -48320,6 +52742,15 @@ std::wstring Island::ItemTip(IslandItem item, const std::wstring& text) const {
     if (IsPrivacyItem(item)) {
         return PrivacyText();
     }
+    // What's playing: its whole title and its artist (the pill may cut
+    // them), on more lines when long.
+    if (item == IslandItem::Media) {
+        std::wstring tip = MediaTitleText();
+        if (!m_mediaShown.title.empty() && !m_mediaShown.artist.empty()) {
+            tip += L"\n" + m_mediaShown.artist;
+        }
+        return tip;
+    }
     if (item == IslandItem::Desktops) {
         return DesktopName(m_desktops, m_desktops.current);
     }
@@ -48512,8 +52943,9 @@ void Island::ChangeWallpaper(const std::vector<std::wstring>& paths,
                  m_position.y + (LONG)((m_pill.top + m_pill.bottom) / 2)};
     for (const auto& slot : m_slots) {
         if (slot.item == IslandItem::Wallpaper) {
-            origin = {m_position.x + (LONG)((slot.rect.left + slot.rect.right) / 2),
-                      m_position.y + (LONG)((slot.rect.top + slot.rect.bottom) / 2)};
+            origin = {
+                m_position.x + (LONG)((slot.rect.left + slot.rect.right) / 2),
+                m_position.y + (LONG)((slot.rect.top + slot.rect.bottom) / 2)};
         }
     }
     auto* change = new WallpaperChange{
@@ -48686,7 +53118,8 @@ int WindowColor(HWND hWnd) {
                 const int b = pixel & 0xFF;
                 const int top = std::max({r, g, b});
                 const int bottom = std::min({r, g, b});
-                const double saturation = top ? (top - bottom) / (double)top : 0;
+                const double saturation =
+                    top ? (top - bottom) / (double)top : 0;
                 if (a < 128 || saturation < 0.3 || top < 60) {
                     continue;
                 }
@@ -48811,9 +53244,8 @@ void Island::OnClipboardChanged() {
         if (const auto* text = (PCWSTR)GlobalLock(data)) {
             // One line, without runs of spaces.
             const size_t room = GlobalSize(data) / sizeof(WCHAR);
-            for (size_t i = 0; i < room && text[i] && line.size() <=
-                                                          kClipboardChars;
-                 i++) {
+            for (size_t i = 0;
+                 i < room && text[i] && line.size() <= kClipboardChars; i++) {
                 const WCHAR c = iswspace(text[i]) ? L' ' : text[i];
                 if (c != L' ' || (!line.empty() && line.back() != L' ')) {
                     line += c;
@@ -49421,7 +53853,8 @@ void Island::AnimationFrame() {
     if (!m_pinShownKey.empty() && now - m_pinShownAt < kPinGrowSeconds) {
         apps = true;
     }
-    if (m_hoverFades.Animate(dt) || m_bannerTyping) {
+    // (A reply being typed: its caret blinking a moment.)
+    if (m_hoverFades.Animate(dt) || (m_bannerTyping && CaretBlinking())) {
         apps = true;
     }
     // Colors blending into another theme.
@@ -49449,9 +53882,12 @@ void Island::AnimationFrame() {
             apps = true;
         }
     }
+    // (A title scrolling under the mouse says so while drawn.)
+    m_mediaMarquee = false;
     Render();
-    // Started while drawing (another title measured, another cover decoded).
-    if (m_mediaSwap > 0 || m_mediaCoverSwap > 0 ||
+    // Started while drawing (another title measured, another cover decoded,
+    // a title scrolling).
+    if (m_mediaSwap > 0 || m_mediaCoverSwap > 0 || m_mediaMarquee ||
         std::fabs(m_mediaTitleWidthShown - m_mediaTitleWidth) > 0.01) {
         apps = true;
     }
@@ -49516,7 +53952,23 @@ void Island::UpdateMediaShown() {
             m_playSwap = 1;
             m_playSwapVelocity = 0;
         }
+        const bool newText = m_mediaShown.title != m_mediaState.title ||
+                             m_mediaShown.artist != m_mediaState.artist ||
+                             m_mediaShown.appId != m_mediaState.appId;
+        // A long title scrolls from its start again (see
+        // MediaTitleScrolls).
+        if (newText || (m_mediaState.playing && !m_mediaShown.playing)) {
+            m_mediaMarqueeStart = now;
+        }
         m_mediaShown = m_mediaState;
+        // Its tip shown: with the new title.
+        if (newText && m_tooltipKey.starts_with(kItemTipPrefix) &&
+            (IslandItem)_wtoi(m_tooltipKey.c_str() + wcslen(kItemTipPrefix)) ==
+                IslandItem::Media) {
+            const std::wstring key = m_tooltipKey;
+            m_tooltipKey.clear();
+            ShowTrayTip(key);
+        }
         if (!m_mediaWanted) {
             m_mediaWanted = true;
             m_mediaSince = now;
@@ -49602,11 +54054,37 @@ void Island::Tick() {
     UpdateWindowsQuiet(true);
     // The taskbar moved to another edge (hiding itself, it doesn't change
     // the screen's work area): the pill's room is another.
-    if (const UINT edge = StoredTaskbarEdge(); edge != m_taskbarEdge) {
+    if (const UINT edge = TaskbarEdge(); edge != m_taskbarEdge) {
         m_taskbarEdge = edge;
         Relayout();
     }
     ReadBrightnessSoon();
+    // A display message can be missed: the monitors are looked at here too
+    // (one plugged in or out, moved, or another resolution), and the
+    // taskbars told.
+    if (m_main) {
+        const auto monitors = ListMonitors();
+        const bool changed =
+            !m_displayMonitors.empty() &&
+            (monitors.size() != m_displayMonitors.size() ||
+             !std::equal(monitors.begin(), monitors.end(),
+                         m_displayMonitors.begin(),
+                         [](const MonitorEntry& a, const MonitorEntry& b) {
+                             return a.device == b.device &&
+                                    a.handle == b.handle &&
+                                    EqualRect(&a.rect, &b.rect);
+                         }));
+        m_displayMonitors = monitors;
+        if (changed) {
+            PostMessage(FindTaskbarWnd(), DisplayChangedMessage(), 0, 0);
+            if (g_settings.islandAllMonitors || m_notchCount > 0) {
+                RestartIslandSoon();
+                return;
+            }
+            m_control.ReloadControls();
+            Relayout();
+        }
+    }
     // On the monitor it should be on (another one chosen, unplugged...).
     CheckMonitor();
     // Not over a full-screen app (a game or a video), nor over the
@@ -51048,6 +55526,7 @@ void Island::UpdateTrayIcons() {
         }
     }
     ReleaseSRWLockShared(&g_trayIconsLock);
+    SortTrayIcons();
     // A new one grows in (not the first ones); one gone shrinks away where
     // it was.
     for (auto& icon : m_trayIcons) {
@@ -51133,8 +55612,8 @@ float Island::PinAmount(const std::wstring& key) const {
 }
 
 bool Island::IsTrayPinned(const std::wstring& key) const {
-    return std::find(m_trayPinned.begin(), m_trayPinned.end(), key) !=
-           m_trayPinned.end();
+    return std::find(g_trayPinned.begin(), g_trayPinned.end(), key) !=
+           g_trayPinned.end();
 }
 
 void Island::SetTrayPinned(const std::wstring& key, bool pinned) {
@@ -51143,18 +55622,313 @@ void Island::SetTrayPinned(const std::wstring& key, bool pinned) {
                      [&](const PinState& state) { return state.key == key; })) {
         m_pinStates.push_back({key, IsTrayPinned(key) ? 1.0 : 0.0, 0});
     }
-    std::erase(m_trayPinned, key);
+    std::erase(g_trayPinned, key);
     if (pinned) {
-        m_trayPinned.push_back(key);
+        g_trayPinned.push_back(key);
+    } else {
+        // (Pinned again, it's with the tray.)
+        std::erase_if(g_trayAnchors,
+                      [&](const auto& anchor) { return anchor.first == key; });
     }
     StartAnimating();
-    std::wstring value;
-    for (const auto& one : m_trayPinned) {
-        value += (value.empty() ? L"" : L"\n") + one;
+    SaveTrayArrangement();
+    OnTrayArranged();
+}
+
+void Island::SortTrayIcons() {
+    auto rank = [](const std::wstring& key) {
+        const auto it = std::find(g_trayOrder.begin(), g_trayOrder.end(), key);
+        return (size_t)(it - g_trayOrder.begin());
+    };
+    std::stable_sort(m_trayIcons.begin(), m_trayIcons.end(),
+                     [&](const TrayIcon& a, const TrayIcon& b) {
+                         return rank(a.key) < rank(b.key);
+                     });
+}
+
+void Island::OnTrayArranged() {
+    ForEachIsland([](Island& island) {
+        island.SortTrayIcons();
+        island.UpdateTrayList();
+        island.Relayout();
+        island.StartAnimating();
+        island.Render();
+    });
+}
+
+void Island::RenderIslands(std::initializer_list<Island*> islands) {
+    for (Island* island : islands) {
+        // (Still there; the only one before they're all made.)
+        if (island &&
+            (g_islands.empty() ? island == g_island
+                               : std::find(g_islands.begin(), g_islands.end(),
+                                           island) != g_islands.end())) {
+            IslandScope scope(island);
+            island->Render(true);
+        }
     }
-    Wh_SetStringValue(L"trayPinned", value.c_str());
-    UpdateTrayList();
-    Render();
+}
+
+bool Island::TrayDropAt(POINT screen,
+                        const std::wstring& key,
+                        TrayDrop* drop) const {
+    if (!m_hwnd || !IsWindowVisible(m_hwnd) || m_away ||
+        (m_minimized && !m_bar)) {
+        return false;
+    }
+    const float s = m_scale;
+    const POINT pt{screen.x - m_position.x, screen.y - m_position.y};
+    const float grow = std::round(10 * s);
+    if (pt.x < m_pill.left - grow || pt.x > m_pill.right + grow ||
+        pt.y < m_pill.top - grow || pt.y > m_pill.bottom + grow) {
+        return false;
+    }
+    // Along the pill, whichever way it stands.
+    auto from = [&](const D2D1_RECT_F& r) {
+        return m_vertical ? r.top : r.left;
+    };
+    auto to = [&](const D2D1_RECT_F& r) {
+        return m_vertical ? r.bottom : r.right;
+    };
+    auto middle = [&](const IslandSlot* slot) {
+        return (from(slot->rect) + to(slot->rect)) / 2;
+    };
+    const float along = (float)(m_vertical ? pt.y : pt.x);
+    const float gap = std::round(3 * s);
+    auto markAt = [&](float at) {
+        const float inset = std::round(6 * s);
+        drop->mark = m_vertical ? D2D1_RECT_F{m_pill.left + inset, at - 1.5f,
+                                              m_pill.right - inset, at + 1.5f}
+                                : D2D1_RECT_F{at - 1.5f, m_pill.top + inset,
+                                              at + 1.5f, m_pill.bottom - inset};
+    };
+    // The items it can go between, and the ones not pinned open sideways.
+    std::vector<const IslandSlot*> items;
+    std::vector<const IslandSlot*> listed;
+    bool anyListed = false;
+    float listFrom = 0;
+    float listTo = 0;
+    for (const auto& slot : m_slots) {
+        if (to(slot.rect) - from(slot.rect) < 2) {
+            continue;
+        }
+        const bool tray = slot.item == IslandItem::TrayIcon;
+        if (slot.inList) {
+            listFrom = anyListed ? std::min(listFrom, from(slot.rect))
+                                 : from(slot.rect);
+            listTo =
+                anyListed ? std::max(listTo, to(slot.rect)) : to(slot.rect);
+            anyListed = true;
+            if (tray && slot.text != key) {
+                listed.push_back(&slot);
+            }
+            continue;
+        }
+        if (slot.font == kTrayListFont || slot.item == IslandItem::None ||
+            slot.item == IslandItem::TraySeparator || slot.group < 0 ||
+            (tray && slot.text == key)) {
+            continue;
+        }
+        items.push_back(&slot);
+    }
+    // Into that list: not pinned, in its place among them.
+    if (m_trayAmount > 0.5 && anyListed && along >= listFrom - gap &&
+        along <= listTo + gap) {
+        drop->pinned = false;
+        drop->anchor = -1;
+        const auto next = std::find_if(
+            listed.begin(), listed.end(),
+            [&](const IslandSlot* slot) { return middle(slot) > along; });
+        if (next != listed.end()) {
+            drop->before = (*next)->text;
+            markAt(from((*next)->rect) - gap);
+        } else if (!listed.empty()) {
+            drop->after = listed.back()->text;
+            markAt(to(listed.back()->rect) + gap);
+        } else {
+            markAt(listFrom);
+        }
+        return true;
+    }
+    // On the pill, between two items: beside the one before (or the one
+    // after, at the start), with the pinned icons there in their order.
+    std::stable_sort(items.begin(), items.end(),
+                     [&](const IslandSlot* a, const IslandSlot* b) {
+                         return middle(a) < middle(b);
+                     });
+    size_t next = 0;
+    while (next < items.size() && middle(items[next]) <= along) {
+        next++;
+    }
+    const IslandSlot* after = next > 0 ? items[next - 1] : nullptr;
+    const IslandSlot* before = next < items.size() ? items[next] : nullptr;
+    auto icon = [](const IslandSlot* slot) {
+        return slot && slot->item == IslandItem::TrayIcon;
+    };
+    drop->pinned = true;
+    if (icon(before)) {
+        drop->anchor = TrayAnchor(before->text);
+        drop->before = before->text;
+    } else if (icon(after)) {
+        drop->anchor = TrayAnchor(after->text);
+        drop->after = after->text;
+    } else if (after) {
+        drop->anchor = after->group == (int)PillGroup::Tray ? -1 : after->group;
+    } else if (before) {
+        drop->anchor = before->group == (int)PillGroup::Tray
+                           ? -1
+                           : TrayAnchorBefore((PillGroup)before->group);
+    } else {
+        return false;
+    }
+    markAt(after && before ? (to(after->rect) + from(before->rect)) / 2
+           : after         ? to(after->rect) + gap
+                           : from(before->rect) - gap);
+    return true;
+}
+
+TrayDrop Island::TrayDropUnder(Island* owner,
+                               POINT screen,
+                               const std::wstring& key) {
+    std::vector<Island*> islands = g_islands;
+    if (islands.empty()) {
+        islands.push_back(owner);
+    }
+    // (Its monitor's: the notches share the icons.)
+    for (Island* island : islands) {
+        if (island != owner &&
+            !EqualRect(&island->m_monitor, &owner->m_monitor)) {
+            continue;
+        }
+        IslandScope scope(island);
+        TrayDrop here;
+        if (island->TrayDropAt(screen, key, &here)) {
+            here.island = island;
+            return here;
+        }
+    }
+    return {};
+}
+
+void Island::MoveTrayIcon(const std::wstring& key, const TrayDrop& drop) {
+    // The order: the icons here now (the ones never moved in Windows'
+    // order), then the ones remembered that aren't, with this one in its
+    // new place.
+    std::vector<std::wstring> order;
+    for (const auto& icon : m_trayIcons) {
+        if (!icon.leaving && icon.key != key) {
+            order.push_back(icon.key);
+        }
+    }
+    const size_t here = order.size();
+    for (const auto& kept : g_trayOrder) {
+        if (kept != key &&
+            std::find(order.begin(), order.end(), kept) == order.end()) {
+            order.push_back(kept);
+        }
+    }
+    auto at = order.begin() + here;
+    if (!drop.before.empty()) {
+        if (auto it = std::find(order.begin(), order.end(), drop.before);
+            it != order.end()) {
+            at = it;
+        }
+    } else if (!drop.after.empty()) {
+        if (auto it = std::find(order.begin(), order.end(), drop.after);
+            it != order.end()) {
+            at = it + 1;
+        }
+    }
+    order.insert(at, key);
+    order.resize(std::min(order.size(), std::max(kTrayOrderMax, here + 1)));
+    g_trayOrder = std::move(order);
+    std::erase_if(g_trayAnchors,
+                  [&](const auto& anchor) { return anchor.first == key; });
+    if (drop.pinned && drop.anchor != -1) {
+        g_trayAnchors.push_back({key, drop.anchor});
+    }
+    if (drop.pinned != IsTrayPinned(key)) {
+        SetTrayPinned(key, drop.pinned);
+        return;
+    }
+    SaveTrayArrangement();
+    OnTrayArranged();
+}
+
+void Island::DragTrayIcon() {
+    POINT cursor;
+    GetCursorPos(&cursor);
+    if (!g_trayDrag.moved) {
+        const int threshold = (int)std::round(6 * m_scale);
+        if (std::abs(cursor.x - g_trayDrag.from.x) <= threshold &&
+            std::abs(cursor.y - g_trayDrag.from.y) <= threshold) {
+            return;
+        }
+        g_trayDrag.moved = true;
+        KillTimer(m_hwnd, kTipTimerId);
+        m_pendingTipKey.clear();
+        ShowTrayTip({});
+        KillTimer(m_hwnd, kPinTimerId);
+        m_pinShownKey.clear();
+        KillTimer(m_hwnd, kTrayCloseTimerId);
+    }
+    const TrayDrop before = g_trayDrag.drop;
+    g_trayDrag.drop = TrayDropUnder(this, cursor, g_trayDrag.key);
+    RenderIslands({this, before.island, g_trayDrag.drop.island});
+}
+
+void Island::FinishTrayDrag(bool drop) {
+    const TrayDrag drag = std::move(g_trayDrag);
+    g_trayDrag = {};
+    if (GetCapture() == m_hwnd) {
+        ReleaseCapture();
+    }
+    if (!drag.moved) {
+        // A click: its app gets it now.
+        if (drop) {
+            ClickTrayIcon(drag.key, WM_LBUTTONDOWN);
+            ClickTrayIcon(drag.key, WM_LBUTTONUP);
+        }
+        return;
+    }
+    if (drop && drag.drop.island) {
+        IslandScope scope(drag.drop.island);
+        drag.drop.island->MoveTrayIcon(drag.key, drag.drop);
+    }
+    RenderIslands({this, drag.drop.island});
+}
+
+void Island::DrawTrayDrag(ID2D1RenderTarget* target,
+                          ID2D1SolidColorBrush* brush) {
+    if (!g_trayDrag.moved) {
+        return;
+    }
+    const TrayDrop& drop = g_trayDrag.drop;
+    if (drop.island == this) {
+        const D2D1_RECT_F& mark = drop.mark;
+        const float radius =
+            std::min(mark.right - mark.left, mark.bottom - mark.top) / 2;
+        brush->SetColor(Accent(1));
+        target->FillRoundedRectangle({mark, radius, radius}, brush);
+    }
+    // The icon under the mouse, in the window there: the one it would go
+    // on, or the pill it's from (a list's panel draws its own).
+    if (drop.island ? drop.island != this
+                    : g_trayDrag.fromList || g_trayDrag.owner != this) {
+        return;
+    }
+    const TrayIcon* icon = FindTrayIcon(g_trayDrag.key);
+    ID2D1Bitmap* bitmap = icon ? GetTrayBitmap(*icon) : nullptr;
+    if (!bitmap) {
+        return;
+    }
+    POINT cursor;
+    GetCursorPos(&cursor);
+    const float size = std::round(18 * m_scale);
+    const float x = (float)(cursor.x - m_position.x);
+    const float y = (float)(cursor.y - m_position.y);
+    target->DrawBitmap(
+        bitmap, {x - size / 2, y - size / 2, x + size / 2, y + size / 2}, 0.9f);
 }
 
 // The pin's circle, at the top right of a tray icon's slot.
@@ -51223,8 +55997,11 @@ void Island::ShowTrayTip(const std::wstring& key) {
     // (The first: a copy shrinking away is after it.)
     const IslandSlot* at = nullptr;
     for (const auto& slot : m_slots) {
-        if (slot.item == item &&
-            SlotKey(slot) == (itemTip ? tipText : slotKey)) {
+        // (What's playing by its part: its note, or its cover and title.)
+        const std::wstring part = slot.item == IslandItem::Media
+                                      ? std::wstring(MediaSlotPart(slot))
+                                      : SlotKey(slot);
+        if (slot.item == item && part == (itemTip ? tipText : slotKey)) {
             at = &slot;
             break;
         }
@@ -51249,15 +56026,16 @@ void Island::ShowTrayTip(const std::wstring& key) {
     if (m_vertical) {
         m_tipSide = m_sideLeft ? TipSide::Right : TipSide::Left;
         m_tipAnchor = {
-            m_position.x +
-                (LONG)std::lround(m_sideLeft ? m_pill.right + gap
-                                             : m_pill.left - gap),
-            m_position.y + (LONG)std::lround((at->rect.top + at->rect.bottom) / 2)};
+            m_position.x + (LONG)std::lround(m_sideLeft ? m_pill.right + gap
+                                                        : m_pill.left - gap),
+            m_position.y +
+                (LONG)std::lround((at->rect.top + at->rect.bottom) / 2)};
     } else {
         const bool over = !m_bar && AtBottom();
         m_tipSide = over ? TipSide::Over : TipSide::Under;
         m_tipAnchor = {
-            m_position.x + (LONG)std::lround((at->rect.left + at->rect.right) / 2),
+            m_position.x +
+                (LONG)std::lround((at->rect.left + at->rect.right) / 2),
             m_position.y + (LONG)std::lround(over ? m_pill.top - gap
                                                   : m_pill.bottom + gap)};
     }
@@ -51356,10 +56134,12 @@ void Island::RenderTrayTip() {
         }
     }
     // Inside the monitor.
-    position.x = std::clamp(position.x, m_monitor.left,
-                            std::max(m_monitor.left, m_monitor.right - size.cx));
-    position.y = std::clamp(position.y, m_monitor.top,
-                            std::max(m_monitor.top, m_monitor.bottom - size.cy));
+    position.x =
+        std::clamp(position.x, m_monitor.left,
+                   std::max(m_monitor.left, m_monitor.right - size.cx));
+    position.y =
+        std::clamp(position.y, m_monitor.top,
+                   std::max(m_monitor.top, m_monitor.bottom - size.cy));
     const std::wstring key =
         std::to_wstring((int)(amount * 1000)) + L"|" + m_tooltipKey + L"|" +
         std::to_wstring(position.x) + L"," + std::to_wstring(position.y) +
@@ -51447,6 +56227,22 @@ void Island::ClickTrayIcon(const std::wstring& key, UINT msg) {
 }
 
 bool TrayListPanel::OnMouseUp(POINT pt) {
+    if (!g_trayDrag.key.empty() && g_trayDrag.fromList &&
+        g_trayDrag.owner == m_owner) {
+        if (g_trayDrag.moved) {
+            EndDrag(true);
+            return true;
+        }
+        // A click: the press and the release, to the icon pressed.
+        const std::wstring key = g_trayDrag.key;
+        g_trayDrag = {};
+        if (GetCapture() == m_hwnd) {
+            ReleaseCapture();
+        }
+        Pass(key, m_pressTwice ? WM_LBUTTONDBLCLK : WM_LBUTTONDOWN);
+        Pass(key, WM_LBUTTONUP);
+        return false;
+    }
     bool pin = false;
     const int hit = HitTest(pt, &pin);
     if (hit < 0) {
@@ -51478,6 +56274,105 @@ bool TrayListPanel::OnOtherButton(UINT msg, POINT pt) {
     }
     Pass(key, msg);
     return false;
+}
+
+bool TrayListPanel::DragIcon() {
+    // (Let go outside, or the mouse taken by another window.)
+    if (GetKeyState(VK_LBUTTON) >= 0 || GetCapture() != m_hwnd) {
+        EndDrag(false);
+        return true;
+    }
+    POINT cursor;
+    GetCursorPos(&cursor);
+    if (!g_trayDrag.moved) {
+        const int threshold = (int)std::round(6 * m_scale);
+        if (std::abs(cursor.x - g_trayDrag.from.x) <= threshold &&
+            std::abs(cursor.y - g_trayDrag.from.y) <= threshold) {
+            return false;
+        }
+        g_trayDrag.moved = true;
+        m_pinKey.clear();
+        KillTimer(m_hwnd, kPinTimerId);
+    }
+    const POINT pt{cursor.x - m_position.x, cursor.y - m_position.y};
+    const TrayDrop before = g_trayDrag.drop;
+    g_trayDrag.drop = {};
+    m_dropIndex = -1;
+    if (pt.x >= 0 && pt.y >= 0 && pt.x < m_size.cx && pt.y < m_size.cy) {
+        m_dropIndex = DropIndex(pt, &m_dropMark);
+    } else if (m_owner) {
+        g_trayDrag.drop =
+            Island::TrayDropUnder(m_owner, cursor, g_trayDrag.key);
+    }
+    Island::RenderIslands({before.island, g_trayDrag.drop.island});
+    return true;
+}
+
+int TrayListPanel::DropIndex(POINT pt, D2D1_RECT_F* mark) const {
+    // Before the nearest icon, or after it past its middle.
+    int nearest = -1;
+    float distance = 0;
+    for (size_t i = 0; i < m_cells.size(); i++) {
+        const D2D1_RECT_F& cell = m_cells[i];
+        const float dx = pt.x - (cell.left + cell.right) / 2;
+        const float dy = pt.y - (cell.top + cell.bottom) / 2;
+        if (nearest < 0 || dx * dx + dy * dy < distance) {
+            nearest = (int)i;
+            distance = dx * dx + dy * dy;
+        }
+    }
+    if (nearest < 0) {
+        *mark = {};
+        return 0;
+    }
+    const D2D1_RECT_F& cell = m_cells[nearest];
+    // (A grid's rows go sideways, the names' columns down.)
+    const bool past = m_names ? pt.y > (cell.top + cell.bottom) / 2
+                              : pt.x > (cell.left + cell.right) / 2;
+    const float inset = std::round(4 * m_scale);
+    if (m_names) {
+        const float y = past ? cell.bottom : cell.top;
+        *mark = {cell.left + inset, y - 1.5f, cell.right - inset, y + 1.5f};
+    } else {
+        const float x = past ? cell.right : cell.left;
+        *mark = {x - 1.5f, cell.top + inset, x + 1.5f, cell.bottom - inset};
+    }
+    return nearest + (past ? 1 : 0);
+}
+
+void TrayListPanel::EndDrag(bool drop) {
+    const TrayDrag drag = std::move(g_trayDrag);
+    g_trayDrag = {};
+    const int index = m_dropIndex;
+    m_dropIndex = -1;
+    if (GetCapture() == m_hwnd) {
+        ReleaseCapture();
+    }
+    if (drop && drag.moved && m_owner && index >= 0) {
+        // In the list: before the icon there (not itself), or last.
+        TrayDrop place;
+        for (size_t i = index; i < m_icons.size(); i++) {
+            if (m_icons[i].icon.key != drag.key) {
+                place.before = m_icons[i].icon.key;
+                break;
+            }
+        }
+        if (place.before.empty()) {
+            for (size_t i = m_icons.size(); i-- > 0;) {
+                if (m_icons[i].icon.key != drag.key) {
+                    place.after = m_icons[i].icon.key;
+                    break;
+                }
+            }
+        }
+        IslandScope scope(m_owner);
+        m_owner->MoveTrayIcon(drag.key, place);
+    } else if (drop && drag.moved && drag.drop.island) {
+        IslandScope scope(drag.drop.island);
+        drag.drop.island->MoveTrayIcon(drag.key, drag.drop);
+    }
+    Island::RenderIslands({drag.drop.island});
+    Render();
 }
 
 void TrayListPanel::Pass(const std::wstring& key, UINT msg) {
@@ -52256,8 +57151,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
          msg == WM_APP_UPDATES || msg == WM_APP_BADGES || msg == WM_APP_TRAY ||
          msg == WM_APP_MEDIA || msg == WM_APP_TOASTS_CHANGED ||
          msg == WM_APP_INPUT_METHOD || msg == WM_APP_PRIVACY ||
-         msg == WM_APP_DRIVES ||
-         msg == WM_APP_RELOAD_SETTINGS ||
+         msg == WM_APP_DRIVES || msg == WM_APP_RELOAD_SETTINGS ||
          (msg == WM_APP_STATUS && wParam == kStatusDoNotDisturb))) {
         for (Island* other : g_islands) {
             if (other != this) {
@@ -52272,7 +57166,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         case WM_APP_BRIGHTNESS:
             // Read (-1: no monitor tells it, the item isn't shown), unless
             // it's being changed here.
-            if (!m_brightnessJob.running &&
+            if (!m_brightnessJob->running &&
                 (int)(INT_PTR)wParam != m_brightness) {
                 m_brightness = (int)(INT_PTR)wParam;
                 Relayout();
@@ -52307,6 +57201,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             UpdateMonitorWatch();
             CheckMonitor();
+            m_control.ReloadControls();
             Relayout();
             break;
         case WM_SETTINGCHANGE:
@@ -52450,7 +57345,11 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 return 0;
             }
             if (wParam == kProfileSaveTimerId) {
-                SaveActiveProfile();
+                if (m_main) {
+                    SaveActiveProfile();
+                } else {
+                    SaveOwnProfile();
+                }
                 return 0;
             }
             if (wParam == kAutoHideTimerId) {
@@ -52718,6 +57617,14 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             return 0;
 
+        // Alt+F4 while typing a reply: the reply is left, the island stays.
+        case WM_CLOSE:
+            if (m_bannerTyping) {
+                EndBannerTyping();
+                HideBanner();
+            }
+            return 0;
+
         case WM_CHAR:
             g_lastTyped = NowSeconds();
             if (OnBannerChar((WCHAR)wParam)) {
@@ -52739,6 +57646,13 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             if (!m_tracking) {
                 TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, hWnd, 0};
                 m_tracking = TrackMouseEvent(&track);
+            }
+            if (!g_trayDrag.key.empty() && !g_trayDrag.fromList &&
+                g_trayDrag.owner == this) {
+                if (wParam & MK_LBUTTON) {
+                    DragTrayIcon();
+                }
+                return 0;
             }
             // Selecting in the reply box.
             if (m_replyPressed && (wParam & MK_LBUTTON)) {
@@ -52862,15 +57776,23 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                                   (short)HIWORD(lParam)})) {
                 return 0;
             }
+            // Another app's tray icon: its app gets the click as the button
+            // comes up; moved a little, it's dragged to another place (see
+            // DragTrayIcon).
+            std::wstring itemKey;
+            const IslandItem item = HitTest(
+                {(short)LOWORD(lParam), (short)HIWORD(lParam)}, &itemKey);
+            if (item == IslandItem::TrayIcon) {
+                g_trayDrag = {itemKey, this};
+                GetCursorPos(&g_trayDrag.from);
+                SetCapture(m_hwnd);
+                return 0;
+            }
             // The pill can be dragged from anywhere but the tray icons (their
             // apps get the click) and the line; a click still clicks.
-            const IslandItem item =
-                HitTest({(short)LOWORD(lParam), (short)HIWORD(lParam)});
             if (g_settings.islandFreeDrag && !m_bar && m_notch < 0 &&
-                !m_bannerTyping &&
-                m_bannerAmount <= 0.01 && !m_minimized &&
-                item != IslandItem::TrayIcon &&
-                item != IslandItem::TrayPin) {
+                !m_bannerTyping && m_bannerAmount <= 0.01 && !m_minimized &&
+                item != IslandItem::TrayIcon && item != IslandItem::TrayPin) {
                 m_dragArmed = true;
                 m_dragMoved = false;
                 GetCursorPos(&m_dragFrom);
@@ -52884,6 +57806,11 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         }
 
         case WM_LBUTTONUP:
+            if (!g_trayDrag.key.empty() && !g_trayDrag.fromList &&
+                g_trayDrag.owner == this) {
+                FinishTrayDrag(true);
+                return 0;
+            }
             // (The press in the reply box was its click.)
             if (m_replyPressed) {
                 m_replyPressed = false;
@@ -52906,6 +57833,10 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             return 0;
 
         case WM_CAPTURECHANGED:
+            if (!g_trayDrag.key.empty() && !g_trayDrag.fromList &&
+                g_trayDrag.owner == this && (HWND)lParam != m_hwnd) {
+                FinishTrayDrag(false);
+            }
             if (m_replyPressed && (HWND)lParam != m_hwnd) {
                 m_replyPressed = false;
                 EndEditDrag(m_hwnd);
@@ -53015,6 +57946,29 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                               5 * GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA);
                 return 0;
             }
+            // The wheel on what's playing, when chosen: the next song (down)
+            // or the one before (up), once a notch however fast it turns.
+            if (g_settings.islandMediaWheel &&
+                (m_hover == IslandItem::Media ||
+                 m_hover == IslandItem::MediaPrevious ||
+                 m_hover == IslandItem::MediaPlayPause ||
+                 m_hover == IslandItem::MediaNext)) {
+                const double now = NowSeconds();
+                if (now - m_mediaWheelAt > kMediaWheelSeconds) {
+                    m_mediaWheelDelta = 0;
+                }
+                m_mediaWheelAt = now;
+                m_mediaWheelDelta += GET_WHEEL_DELTA_WPARAM(wParam);
+                if (std::abs(m_mediaWheelDelta) >= WHEEL_DELTA &&
+                    now - m_mediaSkippedAt >= kMediaWheelSeconds) {
+                    SendMediaCommand(m_mediaWheelDelta < 0
+                                         ? MediaCommand::Next
+                                         : MediaCommand::Previous);
+                    m_mediaSkippedAt = now;
+                    m_mediaWheelDelta = 0;
+                }
+                return 0;
+            }
             // The wheel on the volume changes it, 2% a notch.
             if (m_hover == IslandItem::Volume || m_hover == IslandItem::Media ||
                 m_hover == IslandItem::MediaPrevious ||
@@ -53047,6 +58001,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
 }
 
 void StartIslandAnimation() {
+    g_frameRequests++;
     ForEachIsland([](Island& island) { island.StartAnimating(); });
 }
 
@@ -53487,6 +58442,11 @@ void LoadSettings() {
                    kNotchCurveMin, kNotchCurveMax);
     g_settings.islandNotchEach = Wh_GetIntValue(L"islandNotchEach", 0) != 0;
     g_settings.islandGroupApps = Wh_GetIntValue(L"islandGroupApps", 1) != 0;
+    g_settings.islandScreenshotFolder =
+        Wh_GetIntValue(L"islandScreenshotFolder", 0) != 0;
+    g_settings.islandMediaWheel = Wh_GetIntValue(L"islandMediaWheel", 0) != 0;
+    g_settings.islandMediaMarquee =
+        Wh_GetIntValue(L"islandMediaMarquee", 0) != 0;
     LoadNotchSides();
     g_settings.islandVerticalSides =
         Wh_GetIntValue(L"islandVerticalSides", 1) != 0;
@@ -53501,6 +58461,17 @@ void LoadSettings() {
     g_settings.usageVram = Wh_GetIntValue(L"usageVram", 0) != 0;
     g_settings.islandMicrophone = Wh_GetIntValue(L"islandMicrophone", 0) != 0;
     g_settings.calendarHolidays = Wh_GetIntValue(L"calendarHolidays", 0) != 0;
+    g_calendarIcs.clear();
+    for (int i = 0; i < (int)kMaxAgendas; i++) {
+        const auto value =
+            WindhawkUtils::StringSetting::make(L"calendarIcs[%d]", i);
+        const std::wstring source = AgendaSource(value.get());
+        if (!source.empty() &&
+            std::find(g_calendarIcs.begin(), g_calendarIcs.end(), source) ==
+                g_calendarIcs.end()) {
+            g_calendarIcs.push_back(source);
+        }
+    }
     g_settings.islandNotes = Wh_GetIntValue(L"islandNotes", 0) != 0;
     g_settings.islandTasks = Wh_GetIntValue(L"islandTasks", 0) != 0;
     g_settings.islandShortcuts = Wh_GetIntValue(L"islandShortcuts", 0) != 0;
@@ -53513,6 +58484,7 @@ void LoadSettings() {
         Wh_GetIntValue(L"islandOwnsNotifications", 0) != 0;
     g_islandQuiet = Wh_GetIntValue(L"islandQuiet", 0) != 0;
     LoadPillOrder();
+    LoadTrayArrangement();
     g_settings.islandSize = std::clamp(
         Wh_GetIntValue(L"islandSize", kIslandSizeDefault), kIslandSizeMin,
         kIslandSizeMax);
@@ -53609,50 +58581,56 @@ void ExplorerModBeforeUninit() {
 // of its own, since applying them waits for the taskbar's thread.
 HANDLE g_taskbarPlaceThread;
 HANDLE g_taskbarPlaceStop;
-// (Started on the taskbar's thread, stopped by the unloading one.)
+// (Started on the taskbar's thread, stopped by the unloading one. The lock
+// only guards the handles: the thread is waited for outside it, since it may
+// be sending to the taskbar's thread, which may be waiting for the lock.)
 SRWLOCK g_taskbarPlaceLock = SRWLOCK_INIT;
 
 void ExplorerModSettingsChanged();
 
-DWORD WINAPI TaskbarPlaceThreadProc(LPVOID) {
-    if (WaitForSingleObject(g_taskbarPlaceStop, 800) == WAIT_TIMEOUT &&
+// (Its stop event is its parameter.)
+DWORD WINAPI TaskbarPlaceThreadProc(LPVOID parameter) {
+    if (WaitForSingleObject((HANDLE)parameter, 800) == WAIT_TIMEOUT &&
         !g_unloading && IsTaskbarAtBottom() != g_taskbarAtBottom) {
         ExplorerModSettingsChanged();
     }
     return 0;
 }
 
-void StopWatchingTaskbarPlaceLocked() {
-    if (g_taskbarPlaceThread) {
-        SetEvent(g_taskbarPlaceStop);
-        WaitForSingleObject(g_taskbarPlaceThread, INFINITE);
-        CloseHandle(g_taskbarPlaceThread);
-        g_taskbarPlaceThread = nullptr;
-    }
-    if (g_taskbarPlaceStop) {
-        CloseHandle(g_taskbarPlaceStop);
-        g_taskbarPlaceStop = nullptr;
-    }
-}
-
 void StopWatchingTaskbarPlace() {
     AcquireSRWLockExclusive(&g_taskbarPlaceLock);
-    StopWatchingTaskbarPlaceLocked();
+    const HANDLE thread = std::exchange(g_taskbarPlaceThread, nullptr);
+    const HANDLE stop = std::exchange(g_taskbarPlaceStop, nullptr);
     ReleaseSRWLockExclusive(&g_taskbarPlaceLock);
+    if (thread) {
+        SetEvent(stop);
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+    if (stop) {
+        CloseHandle(stop);
+    }
 }
 
-// On the taskbar's thread (not once unloading has begun).
+// On the taskbar's thread (not once unloading has begun: g_unloading is set
+// before the first StopWatchingTaskbarPlace, so none starts after it).
 void WatchTaskbarPlace() {
     AcquireSRWLockExclusive(&g_taskbarPlaceLock);
+    // (One that has ended is only closed.)
     if (g_taskbarPlaceThread &&
         WaitForSingleObject(g_taskbarPlaceThread, 0) == WAIT_OBJECT_0) {
-        StopWatchingTaskbarPlaceLocked();
+        CloseHandle(std::exchange(g_taskbarPlaceThread, nullptr));
+        CloseHandle(std::exchange(g_taskbarPlaceStop, nullptr));
     }
     if (!g_unloading && !g_taskbarPlaceThread) {
         g_taskbarPlaceStop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         if (g_taskbarPlaceStop) {
-            g_taskbarPlaceThread = CreateThread(
-                nullptr, 0, TaskbarPlaceThreadProc, nullptr, 0, nullptr);
+            g_taskbarPlaceThread =
+                CreateThread(nullptr, 0, TaskbarPlaceThreadProc,
+                             g_taskbarPlaceStop, 0, nullptr);
+            if (!g_taskbarPlaceThread) {
+                CloseHandle(std::exchange(g_taskbarPlaceStop, nullptr));
+            }
         }
     }
     ReleaseSRWLockExclusive(&g_taskbarPlaceLock);
@@ -53709,6 +58687,8 @@ BOOL WhTool_ModInit() {
     LoadSettings();
     g_turnedDndOn = GetUserIntValue(L"turnedDndOn", 0) != 0;
     RestoreLeftoverDnd();
+    // (Levels left at 0 by a process that ended without its uninit.)
+    RestoreMicrophonesNow();
     StartToastWatch();
     StartIslandThread();
     return TRUE;
