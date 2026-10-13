@@ -2327,25 +2327,37 @@ void SetUserIntValue(PCWSTR name, int value) {
     Wh_SetIntValue(UserValueName(name).c_str(), value);
 }
 
+// A stored text in a buffer of `size` characters (empty when it doesn't fit,
+// like a missing one).
+std::wstring GetStringValueIn(PCWSTR name, size_t size) {
+    const auto value = std::make_unique_for_overwrite<WCHAR[]>(size);
+    return Wh_GetStringValue(name, value.get(), size) ? value.get() : L"";
+}
+
 // A stored text, whole: Wh_GetStringValue reads a value larger than the
-// buffer as empty, so a larger one is tried (`room`: the usual size).
+// buffer as empty, so a larger one is tried, up to 16 times `room` (the usual
+// size; no stored text grows that far). A missing value costs those reads
+// too: not for a value read often.
 std::wstring GetWholeStringValue(PCWSTR name, size_t room) {
-    for (size_t size = room; size <= 1024 * 1024; size *= 2) {
-        std::vector<WCHAR> value(size);
-        if (Wh_GetStringValue(name, value.data(), value.size())) {
-            return value.data();
+    const size_t most = std::max(room, std::min(room * 16, (size_t)1 << 20));
+    for (size_t size = room; size <= most; size *= 2) {
+        std::wstring value = GetStringValueIn(name, size);
+        if (!value.empty()) {
+            return value;
         }
     }
     return L"";
 }
 
+// Read once (on Explorer's taskbar thread too): its writers keep it within
+// `room` (the kept tray icons, the cleared and dismissed notifications).
 std::wstring GetUserStringValue(PCWSTR name, size_t room) {
     const std::wstring userName = UserValueName(name);
-    std::wstring value = GetWholeStringValue(userName.c_str(), room);
+    std::wstring value = GetStringValueIn(userName.c_str(), room);
     if (!value.empty() || userName == name) {
         return value;
     }
-    value = GetWholeStringValue(name, room);
+    value = GetStringValueIn(name, room);
     if (!value.empty()) {
         Wh_SetStringValue(userName.c_str(), value.c_str());
         Wh_DeleteValue(name);
