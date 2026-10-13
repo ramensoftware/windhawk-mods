@@ -203,6 +203,14 @@ namespace util {
     void change_font_in_struct(
         LOGFONTW* font
     ) {
+        const std::wstring_view current_face(font->lfFaceName);
+
+        // Only replace text UI fonts (skip icon, symbol, etc. fonts).
+        if (current_face != L"Segoe UI"sv &&
+            current_face != L"Segoe UI Variable"sv) {
+            return;
+        }
+      
         auto font_name = std::wstring_view(s_font_name.get());
 
         // Check font configuration.
