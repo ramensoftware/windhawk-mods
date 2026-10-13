@@ -32,12 +32,12 @@ This mod provides a recreation of the Windows 10 1507 search pane experience in 
 
 ## Scope and limitations
 - The app catalog indexes Start-menu shortcuts; full file content indexing and UWP package enumeration are not included.
-- Targets the Windows 10 1507 search interface design.
+- The mod targets the Windows 10 1507 search interface design.
 
 ## Credits 
-AdmnistratoX - Technical inspiration.
-m417z - Technical inspiration 
-Microsoft - Documentation 
+- AdmnistratoX - Technical inspiration
+- m417z - Technical inspiration 
+- Microsoft - Documentation 
 */
 // ==/WindhawkModReadme==
 
@@ -45,16 +45,16 @@ Microsoft - Documentation
 /*
 - searchHotkey: false
   $name: Fallback search shortcut
-  $description: Enables Ctrl+Alt+S to open or close the search pane. Disabled by default because Ctrl+Alt conflicts with AltGr on international keyboard layouts (such as AltGr+S for 'ś') and applications like JetBrains IDEs. Win+S and Win+Q are intercepted by default.
+  $description: This setting enables Ctrl+Alt+S to open or close the search pane. Disabled by default because Ctrl+Alt conflicts with AltGr on international keyboard layouts (such as AltGr+S for 'ś') and applications like JetBrains IDEs. Win+S and Win+Q are intercepted by default.
 - webSearch: true
   $name: Web search footer action
-  $description: Shows or hides the Web footer action to allow submitting queries to Bing.
+  $description: This setting makes the mod show or hide the Web footer action to allow submitting queries to Bing.
 - interceptSearch: true
   $name: Replace Windows Search
-  $description: Makes Windows open this pane instead of Windows Search when clicking the taskbar search button/box or pressing Win+S / Win+Q.
+  $description: This setting makes Windows open this pane instead of Windows Search when clicking the taskbar search button/box or pressing Win+S / Win+Q.
 - overTaskbar: true
   $name: Search bar over the taskbar
-  $description: Places a themed search bar overlay directly over the native taskbar search box while keeping the search pane above the work area. Only applies when the taskbar is at the bottom of the screen.
+  $description: This setting places a themed search bar overlay directly over the native taskbar search box while keeping the search pane above the work area. Only applies when the taskbar is at the bottom of the screen.
 */
 // ==/WindhawkModSettings==
 
@@ -118,6 +118,9 @@ constexpr int kSettingsRowHeight96 = 58;
 constexpr int kMaxVisibleRows = 11;
 constexpr int kSettingsCount = 9;
 
+#ifndef SLDF_RUNAS_USER
+#define SLDF_RUNAS_USER 0x00002000
+#endif
 #ifndef TMT_BORDERCOLOR
 #define TMT_BORDERCOLOR 3801
 #endif
@@ -334,15 +337,17 @@ std::wstring RedirectSystem32ToSysnative(const std::wstring& target) {
     return windowsDir + L"Sysnative\\" + target.substr(system32.size());
 }
 
-// Launches a Start-menu shortcut the way the real Start menu does: the .lnk is
-// resolved with IShellLink and its target is started with the shortcut's arguments,
-// working directory and show command, so a System32 target is not silently
-// redirected to SysWOW64 by the 32-bit tool process.
+// Launches a Start-menu shortcut through the shell, exactly as opening the .lnk
+// does (elevation flag, %ProgramFiles% resolution, working directory, link name
+// for the started process). The only exception is a 32-bit tool process under
+// WOW64 (Windhawk 1.x), where a System32 target would be silently redirected to
+// SysWOW64: then, and only then, the .lnk is resolved and its target is started
+// through Sysnative. On Windhawk 2.0 (64-bit) every shortcut goes through the shell.
 void LaunchShortcut(const std::wstring& shortcutPath) {
     const auto launchShortcutFile = [&shortcutPath]() {
         ShellExecuteW(nullptr, L"open", shortcutPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     };
-    if (shortcutPath.empty() || !IsShortcut(shortcutPath.c_str())) {
+    if (shortcutPath.empty() || !IsShortcut(shortcutPath.c_str()) || !IsRunningUnderWow64()) {
         launchShortcutFile();
         return;
     }
@@ -361,8 +366,7 @@ void LaunchShortcut(const std::wstring& shortcutPath) {
     WIN32_FIND_DATAW findData{};
     if (FAILED(shellLink->GetPath(rawTarget, ARRAYSIZE(rawTarget), &findData, SLGP_RAWPATH)) ||
         !rawTarget[0]) {
-        // UWP and other shell-backed shortcuts have no file target; the shell
-        // launches them from the .lnk itself.
+        // UWP and other shell-backed shortcuts have no file target.
         launchShortcutFile();
         return;
     }
@@ -370,19 +374,42 @@ void LaunchShortcut(const std::wstring& shortcutPath) {
     const bool expanded = ExpandEnvironmentStringsW(rawTarget, target, ARRAYSIZE(target)) != 0;
     const wchar_t* effectiveTarget = expanded ? target : rawTarget;
 
-    std::wstring launchPath = RedirectSystem32ToSysnative(effectiveTarget);
-    if (launchPath.empty()) launchPath = effectiveTarget;
+    // Only a System32 target needs special handling; everything else stays with the shell.
+    const std::wstring launchPath = RedirectSystem32ToSysnative(effectiveTarget);
+    if (launchPath.empty()) { launchShortcutFile(); return; }
 
     wchar_t arguments[1024]{};
     shellLink->GetArguments(arguments, ARRAYSIZE(arguments));
+    wchar_t rawWorkingDirectory[MAX_PATH]{};
+    shellLink->GetWorkingDirectory(rawWorkingDirectory, ARRAYSIZE(rawWorkingDirectory));
     wchar_t workingDirectory[MAX_PATH]{};
-    shellLink->GetWorkingDirectory(workingDirectory, ARRAYSIZE(workingDirectory));
+    if (rawWorkingDirectory[0] &&
+        ExpandEnvironmentStringsW(rawWorkingDirectory, workingDirectory,
+                                  ARRAYSIZE(workingDirectory)) == 0) {
+        wcscpy_s(workingDirectory, rawWorkingDirectory);
+    }
     int showCmd = SW_SHOWNORMAL;
     if (FAILED(shellLink->GetShowCmd(&showCmd)) || showCmd <= 0) showCmd = SW_SHOWNORMAL;
 
-    ShellExecuteW(nullptr, L"open", launchPath.c_str(),
-                  arguments[0] ? arguments : nullptr,
-                  workingDirectory[0] ? workingDirectory : nullptr, showCmd);
+    // "Run as administrator" is the shortcut's SLDF_RUNAS_USER flag.
+    bool runAsAdmin = false;
+    ComPtr<IShellLinkDataList> dataList;
+    if (SUCCEEDED(shellLink->QueryInterface(IID_IShellLinkDataList,
+                                            reinterpret_cast<void**>(dataList.GetAddressOf()))) &&
+        dataList) {
+        DWORD flags = 0;
+        if (SUCCEEDED(dataList->GetFlags(&flags))) runAsAdmin = (flags & SLDF_RUNAS_USER) != 0;
+    }
+
+    SHELLEXECUTEINFOW info{};
+    info.cbSize = sizeof(info);
+    info.fMask = SEE_MASK_DOENVSUBST | SEE_MASK_FLAG_NO_UI;
+    info.lpVerb = runAsAdmin ? L"runas" : L"open";
+    info.lpFile = launchPath.c_str();
+    info.lpParameters = arguments[0] ? arguments : nullptr;
+    info.lpDirectory = workingDirectory[0] ? workingDirectory : nullptr;
+    info.nShow = showCmd;
+    if (!ShellExecuteExW(&info)) Wh_Log(L"ShellExecuteExW failed: %u", GetLastError());
 }
 
 // Launches a System32 tool by name (for example control.exe) through Sysnative when
@@ -1231,7 +1258,14 @@ struct TaskbarSearchEntry {
     HWND trayHwnd = nullptr;
     TaskbarSearchState state;
     bool needsTreeScan = true;     // no usable cached window/element yet
+    RECT lastTrayRect{};           // tray rect at the last full inspection
+    ULONGLONG nextRescanTick = 0;  // back-off deadline when nothing was found
 };
+
+// How long a taskbar without any search control is left alone before it is
+// inspected again (a cheap safety net; forced events and tray-rect changes
+// trigger an immediate rescan).
+constexpr ULONGLONG kNoSearchControlRescanMs = 5000;
 
 // Released with `g_taskbarSearchEntries.clear();` on the UI thread before it exits.
 [[clang::no_destroy]] std::vector<TaskbarSearchEntry> g_taskbarSearchEntries;  // UI thread only
@@ -1337,10 +1371,14 @@ bool RefreshTaskbarSearchStateRects(TaskbarSearchState& state) {
     if (!state.hasButtonRect) return false;
     RECT r{};
     if (state.buttonHwnd) {
-        if (!IsWindow(state.buttonHwnd)) return false;
+        // A hidden window still reports its last position, so visibility decides.
+        if (!IsWindow(state.buttonHwnd) || !IsWindowVisible(state.buttonHwnd)) return false;
         if (!GetWindowRect(state.buttonHwnd, &r)) return false;
     } else if (state.element) {
+        BOOL offscreen = FALSE;
         if (FAILED(state.element->get_CurrentBoundingRectangle(&r))) return false;
+        if (SUCCEEDED(state.element->get_CurrentIsOffscreen(&offscreen)) && offscreen) return false;
+        if (r.right <= r.left || r.bottom <= r.top) return false;
     } else {
         return false;
     }
@@ -1358,6 +1396,15 @@ bool RefreshTaskbarSearchStateRects(TaskbarSearchState& state) {
 // Keeps the hook's click target up to date for every taskbar (primary and
 // secondary) and in every search mode, independently of the overTaskbar setting.
 void UpdateSearchButtonCache(bool forceTreeScan) {
+    // Nothing reads the cache while both features are off: drop it, so no UI
+    // Automation work runs, and rebuild it from scratch when one is enabled again.
+    if (!g_interceptEnabled.load() && !g_overTaskbar.load()) {
+        g_taskbarSearchEntries.clear();
+        std::lock_guard<std::mutex> lock(g_searchButtonLock);
+        g_cachedSearchButtonRects.clear();
+        return;
+    }
+
     std::vector<HWND> trays;
     if (HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr)) trays.push_back(primary);
     for (HWND secondary = nullptr;
@@ -1383,13 +1430,26 @@ void UpdateSearchButtonCache(bool forceTreeScan) {
 
     std::vector<RECT> rects;
     for (TaskbarSearchEntry& entry : g_taskbarSearchEntries) {
+        RECT trayRect{};
+        GetWindowRect(entry.trayHwnd, &trayRect);
+        const ULONGLONG now = GetTickCount64();
+        bool inspect = false;
         if (forceTreeScan || entry.needsTreeScan) {
+            inspect = true;
+        } else if (entry.state.hasButtonRect) {
+            // The cached window or element is gone or hidden (Explorer restart,
+            // taskbar re-creation, search switched to hidden): one full search.
+            inspect = !RefreshTaskbarSearchStateRects(entry.state);
+        } else {
+            // "No search control" is a cached result: retry only when the tray
+            // rect changed or on a slow back-off, never on every tick.
+            inspect = !EqualRect(&trayRect, &entry.lastTrayRect) || now >= entry.nextRescanTick;
+        }
+        if (inspect) {
             InspectTaskbarTarget(entry.trayHwnd, false, entry.state);
             entry.needsTreeScan = false;
-        } else if (!RefreshTaskbarSearchStateRects(entry.state)) {
-            // The cached window or element is gone (Explorer restart, taskbar
-            // re-creation): fall back to the full tree search.
-            InspectTaskbarTarget(entry.trayHwnd, false, entry.state);
+            entry.lastTrayRect = trayRect;
+            entry.nextRescanTick = now + kNoSearchControlRescanMs;
         }
         if (entry.state.hasButtonRect) rects.push_back(entry.state.buttonRect);
     }
@@ -2948,8 +3008,11 @@ private:
         SetBkMode(dc, TRANSPARENT);
         const int rowHeight = CustomMenuRowHeight();
         for (size_t i = 0; i < customMenuActions_.size(); ++i) {
-            RECT row{customMenuRect_.left + Scale(1), customMenuRect_.top + Scale(4) + static_cast<int>(i) * rowHeight,
-                     customMenuRect_.right - Scale(1), customMenuRect_.top + Scale(4) + static_cast<int>(i + 1) * rowHeight};
+            // The wide-box menu has a double frame (outer + inner 1px), so the hover
+            // highlight must stay clear of both borders instead of painting over the inner one.
+            const int sideInset = (std::max)(wideBoxMode_ ? 2 : 1, Scale(wideBoxMode_ ? 2 : 1));
+            RECT row{customMenuRect_.left + sideInset, customMenuRect_.top + Scale(4) + static_cast<int>(i) * rowHeight,
+                     customMenuRect_.right - sideInset, customMenuRect_.top + Scale(4) + static_cast<int>(i + 1) * rowHeight};
             if (static_cast<int>(i) == customMenuHover_ && hoverBrush.value)
                 FillRect(dc, &row, reinterpret_cast<HBRUSH>(hoverBrush.value));
             const int action = customMenuActions_[i];
