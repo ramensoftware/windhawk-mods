@@ -4,7 +4,7 @@
 // @name:vi-VN          Lịch nghỉ lễ Việt Nam
 // @description         Vietnamese lunar dates and configurable holidays in the Windows 11 calendar
 // @description:vi-VN   Hiển thị ngày âm Việt Nam và ngày nghỉ tùy chỉnh trong lịch Windows 11
-// @version             0.29
+// @version             0.30
 // @author              Van Truong
 // @github              https://github.com/vantruong-dev
 // @include             ShellExperienceHost.exe
@@ -17,6 +17,8 @@
 // ==WindhawkModReadme==
 /*
 # Lịch âm và ngày nghỉ Việt Nam
+![Vietnamese Holiday Calendar View](https://imgur.com/a/XLZduWF)
+
 
 Mod hiển thị ngày âm Việt Nam (UTC+7) trong lịch Windows 11 và lấy ngày nghỉ từ URL iCalendar (`.ics`) bạn cấu hình. Bạn có thể tô màu ngày nghỉ, hiện tên sự kiện khi rê chuột và tùy chọn thay dòng ngày âm bằng tên hoặc nội dung riêng.
 
@@ -24,9 +26,9 @@ Mod hiển thị ngày âm Việt Nam (UTC+7) trong lịch Windows 11 và lấy 
 - `SUMMARY` chỉ dùng làm tên hiển thị và nội dung tooltip; nó không quyết định sự kiện có phải ngày nghỉ hay không. Nếu thiếu `SUMMARY`, tooltip và dòng thay thế dùng nội dung “Ngày nghỉ”.
 - Bật **Show additional calendars in the taskbar** trong Windows để hiện ngày âm dưới ngày dương.
 - Rê chuột lên ngày nghỉ để xem tên sự kiện; có thể tắt tooltip trong cài đặt mod.
-- Mod thay dòng lịch âm/lễ Trung Quốc của Windows bằng lịch âm Việt Nam. Ngày nghỉ chỉ làm số ngày dương chuyển sang màu xanh; dòng ngày âm giữ màu mặc định.
+- Mod thay ngày âm trong các ô lịch và dòng ngày âm ở phần đầu flyout bằng ngày âm Việt Nam. Header luôn hiển thị ngày âm của hôm nay và không đổi khi chọn ngày khác. Ngày nghỉ chỉ làm số ngày dương chuyển sang màu xanh; dòng ngày âm trong ô giữ màu mặc định.
 
-Nhập URL ICS trực tiếp vào **Data source (ICS)**. Mod không đọc file `.ics` cục bộ; file cần được cung cấp qua URL truy cập được. `DTEND` được hiểu là ngày kết thúc không bao gồm, theo RFC 5545.
+Nhập URL ICS trực tiếp vào **Data source (ICS)**. Mặc định trường này để trống nên mod không gửi yêu cầu mạng; chỉ tải lịch khi bạn tự nhập URL. Mod không đọc file `.ics` cục bộ; file cần được cung cấp qua URL truy cập được. `DTEND` được hiểu là ngày kết thúc không bao gồm, theo RFC 5545.
 
 ### Thiết lập hiển thị và cài đặt cơ bản
 
@@ -34,7 +36,7 @@ Nhập URL ICS trực tiếp vào **Data source (ICS)**. Mod không đọc file 
 
 Trong tab **Settings** của mod:
 
-- **Data source (ICS):** nhập URL lịch ICS có thể truy cập, ví dụ `https://www.officeholidays.com/ics-clean/vietnam`. Mod không đọc file `.ics` cục bộ.
+- **Data source (ICS):** nhập URL lịch ICS có thể truy cập, ví dụ `https://www.officeholidays.com/ics-clean/vietnam`. Để trống nếu không muốn tải dữ liệu qua mạng. Mod không đọc file `.ics` cục bộ.
 - **Refresh interval (hours):** chọn khoảng thời gian tải lại lịch ICS.
 - **Replace the lunar text:** bật để thay dòng ngày âm trên ngày nghỉ bằng tiêu đề/nội dung ngày nghỉ; tắt để giữ ngày âm và chỉ tô màu số ngày dương.
 - **Day-off text:** để trống để hiện tiêu đề sự kiện (`SUMMARY`); nhập chữ cố định để dùng cho mọi ngày nghỉ. Dùng `{name}` để chèn tiêu đề, ví dụ `Nghỉ lễ: {name}`.
@@ -47,9 +49,12 @@ Mọi sự kiện có `DTSTART` hợp lệ đều được coi là ngày nghỉ.
 
 This mod displays Vietnamese lunar dates (UTC+7) in the Windows 11 calendar and loads holidays from an iCalendar (`.ics`) URL you configure. It can colour holiday dates, show event names on hover, and optionally replace the lunar line with an event title or custom text.
 
+It replaces the lunar line inside each day cell and shows today's Vietnamese lunar date near the top of the flyout. Selecting another day does not change the header.
+
 - Every event with a valid `DTSTART` is treated as a day off. The event title does not need a special marker.
 - `SUMMARY` is used only as the event name in the tooltip or replacement text. It does not determine whether an event is a day off. If it is missing, the mod uses “Ngày nghỉ” (Day off).
 - Enter an accessible ICS URL in **Data source (ICS)**. Local `.ics` files are not read directly. `DTEND` is treated as an exclusive end date, as specified by RFC 5545.
+- The ICS URL is empty by default, so the mod makes no network request until you enter a feed address.
 - Enable **Show additional calendars in the taskbar** in Windows Date & time settings to display the lunar date on the second line of each calendar day.
 
 ### Display setup and basic settings
@@ -58,7 +63,7 @@ To show lunar dates below Gregorian dates, enable **Show additional calendars in
 
 In the mod's **Settings** tab:
 
-- **Data source (ICS):** enter an accessible ICS URL, for example `https://www.officeholidays.com/ics-clean/vietnam`. Local `.ics` files are not read directly.
+- **Data source (ICS):** enter an accessible ICS URL, for example `https://www.officeholidays.com/ics-clean/vietnam`. Leave it empty to avoid network requests. Local `.ics` files are not read directly.
 - **Refresh interval (hours):** choose how often the ICS feed is fetched again.
 - **Replace the lunar text:** enable to replace the lunar line on holidays with the event title or custom text; disable to keep the lunar date and colour only the Gregorian day number.
 - **Day-off text:** leave empty to show the event `SUMMARY`; enter fixed text to use it for all holidays. Use `{name}` to insert the event title, e.g. `Holiday: {name}`.
@@ -69,7 +74,7 @@ Every event with a valid `DTSTART` is treated as a day off. `SUMMARY` is used on
 
 ## Credits
 
-The calendar window lookup follows lonfro's [Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp). Cross-thread helpers follow m417z's [Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods). This mod does not use XAML Diagnostics.
+The holiday-calendar implementation is derived from dcsmf's [Chinese Holiday Calendar](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/chinese-holiday-calendar.wh.cpp), licensed under GPL-3.0. The calendar window lookup also follows lonfro's [Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp). Cross-thread helpers follow m417z's [Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods). This mod does not use XAML Diagnostics.
 */
 // ==/WindhawkModReadme==
 
@@ -120,6 +125,10 @@ The calendar window lookup follows lonfro's [Agenda in Calendar View](https://gi
 */
 // ==/WindhawkModSettings==
 
+//
+// This mod is derived from dcsmf's "Chinese Holiday Calendar" mod, licensed under
+// GPL-3.0:
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/chinese-holiday-calendar.wh.cpp
 //
 // The way the calendar window is found - hooking CreateWindowInBand(Ex), running on the
 // window's own UI thread and walking the XAML tree from Window::Current() - follows the
@@ -1365,7 +1374,7 @@ wuxc::TextBlock FindLabelTextBlock(wuxc::CalendarViewDayItem const& item,
     std::vector<wuxc::TextBlock> candidates;
     for (const auto& found : descendants) {
         auto textBlock = found.element.try_as<wuxc::TextBlock>();
-        if (!textBlock || IsNumberText(ElementText(textBlock))) {
+        if (!textBlock) {
             continue;
         }
         candidates.push_back(textBlock);
@@ -1395,12 +1404,16 @@ wuxc::TextBlock FindLabelTextBlock(wuxc::CalendarViewDayItem const& item,
     }
 
     // The lunar text is the smaller of the texts: prefer a text block which
-    // already has text, and among those the one with the smallest font.
+    // already has non-numeric text, and among those the one with the smallest font.
     wuxc::TextBlock best = nullptr;
     double bestFontSize = 0;
     bool bestHasText = false;
     for (const auto& candidate : candidates) {
-        bool hasText = !ElementText(candidate).empty();
+        const std::wstring candidateText = ElementText(candidate);
+        if (IsNumberText(candidateText)) {
+            continue;
+        }
+        bool hasText = !candidateText.empty();
         double fontSize = 0;
         try {
             fontSize = candidate.FontSize();
@@ -1423,7 +1436,8 @@ wuxc::TextBlock FindLabelTextBlock(wuxc::CalendarViewDayItem const& item,
 // the day number rather than a smaller badge.
 wuxc::TextBlock FindDayNumberTextBlock(
     wuxc::CalendarViewDayItem const& item,
-    void* preferredId) {
+    void* preferredId,
+    void* lunarLabelId) {
     std::vector<FoundElement> descendants;
     CollectDescendants(item, descendants);
 
@@ -1431,7 +1445,8 @@ wuxc::TextBlock FindDayNumberTextBlock(
     double bestFontSize = 0;
     for (const auto& found : descendants) {
         auto candidate = found.element.try_as<wuxc::TextBlock>();
-        if (!candidate || !IsNumberText(ElementText(candidate))) {
+        if (!candidate || winrt::get_abi(candidate) == lunarLabelId ||
+            !IsNumberText(ElementText(candidate))) {
             continue;
         }
         if (preferredId && winrt::get_abi(candidate) == preferredId) {
@@ -1525,7 +1540,6 @@ struct LunarHeaderState {
     winrt::weak_ref<wuxc::TextBlock> label{nullptr};
     std::wstring savedText;
     std::wstring appliedText;
-    int64_t changedToken = 0;
 };
 thread_local std::unordered_map<void*, LunarHeaderState> t_lunarHeaders;
 // A day cell the mod could not find the lunar text in is worth reporting once,
@@ -1847,8 +1861,12 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     HolidayInfo info;
     const bool hasInfo = LookupHoliday(key, info);
 
-    wuxc::TextBlock dayNumber =
-        FindDayNumberTextBlock(item, cell.dayNumberId);
+    // Find the lunar line first. It can contain only digits (for example lunar
+    // days 2-9), so exclude its ID from the Gregorian-number search.
+    wuxc::TextBlock label = FindLabelTextBlock(item, cell.labelId);
+    void* lunarLabelId = label ? winrt::get_abi(label) : cell.labelId;
+    wuxc::TextBlock dayNumber = FindDayNumberTextBlock(
+        item, cell.dayNumberId, lunarLabelId);
     if (cell.dayNumber.get() != dayNumber) {
         if (auto previous = cell.dayNumber.get()) {
             if (cell.dayNumberForeground.applied) {
@@ -1926,7 +1944,6 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     }
 
     // The shell's lunar/solar-term text block.
-    wuxc::TextBlock label = FindLabelTextBlock(item, cell.labelId);
     if (!label) {
         if (DayItemHasContent(item) && !t_loggedMissingTextBlock) {
             t_loggedMissingTextBlock = true;
@@ -2370,23 +2387,50 @@ void CollectDayItemsOnCurrentThread() {
     }
 }
 
+// Match only a Chinese lunar date (e.g. 九月初四), not arbitrary CJK text in
+// the flyout such as notification titles or sender names.
 bool IsChineseLunarHeaderText(std::wstring const& text) {
-    if (text.size() < 2 || text.size() > 32) {
+    std::wstring value = text;
+    if (value.rfind(L"农历", 0) == 0 || value.rfind(L"農曆", 0) == 0) {
+        value.erase(0, 2);
+    }
+
+    const size_t monthEnd = value.find(L'月');
+    if (monthEnd == std::wstring::npos || monthEnd == 0 || monthEnd > 2 ||
+        monthEnd + 1 >= value.size()) {
         return false;
     }
-    for (wchar_t c : text) {
-        // The shell's additional calendar can put either a Chinese lunar date
-        // or a Chinese festival name in the header. Replace any CJK header text
-        // so no default Chinese holiday label leaks through.
-        if ((c >= 0x3400 && c <= 0x4DBF) ||
-            (c >= 0x4E00 && c <= 0x9FFF)) {
-            return true;
-        }
+
+    const std::wstring month = value.substr(0, monthEnd);
+    const std::wstring monthChars = L"正一二三四五六七八九十冬腊臘";
+    size_t monthStart = 0;
+    if (month.size() == 2 && (month[0] == L'闰' || month[0] == L'閏')) {
+        monthStart = 1;
+    } else if (month.size() != 1) {
+        return false;
+    }
+    if (monthChars.find(month[monthStart]) == std::wstring::npos) {
+        return false;
+    }
+
+    const std::wstring day = value.substr(monthEnd + 1);
+    if (day.size() == 2 && day[0] == L'初') {
+        return std::wstring(L"一二三四五六七八九十").find(day[1]) !=
+               std::wstring::npos;
+    }
+    if (day == L"十" || day == L"二十" || day == L"三十") {
+        return true;
+    }
+    if (day.size() == 2 && (day[0] == L'十' || day[0] == L'廿')) {
+        return std::wstring(L"一二三四五六七八九").find(day[1]) !=
+               std::wstring::npos;
     }
     return false;
 }
 
-void OnLunarHeaderTextChanged(wux::DependencyObject const& sender);
+std::wstring VietnameseLunarHeaderText(int32_t dateKey) {
+    return VietnameseLunarDateText(dateKey, true) + L" âm lịch";
+}
 
 void ApplyLunarHeaderTextInTree(wux::DependencyObject const& root,
                                 int32_t lunarDateKey,
@@ -2397,56 +2441,47 @@ void ApplyLunarHeaderTextInTree(wux::DependencyObject const& root,
     }
     --budget;
 
-    // Day-cell labels are handled separately. This header is the Chinese lunar
-    // date beside the full Gregorian date at the top of the calendar flyout.
+    // Day-cell labels are handled by ApplyToDayItem. This is the lunar date
+    // beside the full Gregorian date at the top of the flyout.
     if (root.try_as<wuxc::CalendarViewDayItem>()) {
         return;
     }
 
     if (auto textBlock = root.try_as<wuxc::TextBlock>()) {
         const std::wstring current = ElementText(textBlock);
-        if (IsChineseLunarHeaderText(current)) {
-            void* id = winrt::get_abi(textBlock);
-            auto [it, inserted] = t_lunarHeaders.try_emplace(id);
-            LunarHeaderState& state = it->second;
-            if (inserted || state.label.get() != textBlock) {
-                if (auto previous = state.label.get(); previous && state.changedToken) {
-                    try {
-                        previous.UnregisterPropertyChangedCallback(
-                            wuxc::TextBlock::TextProperty(), state.changedToken);
-                    } catch (...) {
-                    }
-                }
-                state = {};
-                state.label = winrt::make_weak(textBlock);
-                state.savedText = current;
-                try {
-                    state.changedToken = textBlock.RegisterPropertyChangedCallback(
-                        wuxc::TextBlock::TextProperty(),
-                        [](wux::DependencyObject const& sender,
-                           wux::DependencyProperty const&) {
-                            OnLunarHeaderTextChanged(sender);
-                        });
-                } catch (...) {
-                    Wh_Log(L"Failed to watch the lunar date in the calendar header: %08X",
-                           winrt::to_hresult());
-                }
-            } else if (current != state.appliedText) {
-                state.savedText = current;
-            }
+        void* id = winrt::get_abi(textBlock);
+        auto it = t_lunarHeaders.find(id);
+        const bool tracked = it != t_lunarHeaders.end() &&
+                             it->second.label.get() == textBlock;
 
-            const std::wstring desired =
-                VietnameseLunarDateText(lunarDateKey, true) + L" âm lịch";
+        if (tracked && current == it->second.appliedText) {
+            const std::wstring desired = VietnameseLunarHeaderText(lunarDateKey);
             if (current != desired) {
                 try {
                     textBlock.Text(desired);
-                    state.appliedText = desired;
+                    it->second.appliedText = desired;
                     t_applyWrote = true;
                 } catch (...) {
                 }
-            } else {
-                state.appliedText = desired;
             }
+        } else if (IsChineseLunarHeaderText(current)) {
+            LunarHeaderState& state = t_lunarHeaders[id];
+            if (!tracked) {
+                state = {};
+                state.label = winrt::make_weak(textBlock);
+            }
+            state.savedText = current;
+            const std::wstring desired = VietnameseLunarHeaderText(lunarDateKey);
+            try {
+                textBlock.Text(desired);
+                state.appliedText = desired;
+                t_applyWrote = true;
+            } catch (...) {
+            }
+        } else if (tracked) {
+            // The shell reused this text block for something else. Stop tracking
+            // it so unrelated text is never replaced.
+            t_lunarHeaders.erase(it);
         }
     }
 
@@ -2467,71 +2502,6 @@ void ApplyLunarHeaderTextInTree(wux::DependencyObject const& root,
     }
 }
 
-int32_t SelectedCalendarDateInTree(wux::DependencyObject const& root,
-                                   size_t& budget,
-                                   int depth) {
-    if (!root || budget == 0 || depth > kMaxScanDepth) {
-        return 0;
-    }
-    --budget;
-
-    if (auto calendar = root.try_as<wuxc::CalendarView>()) {
-        try {
-            auto selectedDates = calendar.SelectedDates();
-            if (selectedDates.Size() > 0) {
-                if (int32_t key = DateKeyFromDateTime(selectedDates.GetAt(0))) {
-                    return key;
-                }
-            }
-        } catch (...) {
-        }
-    }
-
-    int count = 0;
-    try {
-        count = wuxm::VisualTreeHelper::GetChildrenCount(root);
-    } catch (...) {
-        return 0;
-    }
-    for (int childIndex = 0; childIndex < count && budget > 0; childIndex++) {
-        wux::DependencyObject child = nullptr;
-        try {
-            child = wuxm::VisualTreeHelper::GetChild(root, childIndex);
-        } catch (...) {
-            continue;
-        }
-        if (int32_t key = SelectedCalendarDateInTree(child, budget, depth + 1)) {
-            return key;
-        }
-    }
-    return 0;
-}
-
-int32_t SelectedCalendarDateOnCurrentThread(wux::Window const& window) {
-    size_t budget = kMaxScannedElements;
-    if (auto content = window.Content()) {
-        if (int32_t key = SelectedCalendarDateInTree(content, budget, 0)) {
-            return key;
-        }
-    }
-    try {
-        for (auto popup : wuxm::VisualTreeHelper::GetOpenPopups(window)) {
-            if (budget == 0) {
-                break;
-            }
-            if (auto child = popup.Child()) {
-                if (int32_t key = SelectedCalendarDateInTree(child, budget, 0)) {
-                    return key;
-                }
-            }
-        }
-    } catch (...) {
-    }
-    SYSTEMTIME localTime{};
-    GetLocalTime(&localTime);
-    return MakeDateKey(localTime.wYear, localTime.wMonth, localTime.wDay);
-}
-
 void ApplyLunarHeaderTextOnCurrentThread() {
     wux::Window window = nullptr;
     try {
@@ -2542,14 +2512,13 @@ void ApplyLunarHeaderTextOnCurrentThread() {
     if (!window) {
         return;
     }
-    const int32_t selectedDate = SelectedCalendarDateOnCurrentThread(window);
-    if (!selectedDate) {
-        return;
-    }
+    SYSTEMTIME today{};
+    GetLocalTime(&today);
+    const int32_t todayDate = MakeDateKey(today.wYear, today.wMonth, today.wDay);
 
     size_t budget = kMaxScannedElements;
     if (auto content = window.Content()) {
-        ApplyLunarHeaderTextInTree(content, selectedDate, budget, 0);
+        ApplyLunarHeaderTextInTree(content, todayDate, budget, 0);
     }
     try {
         for (auto popup : wuxm::VisualTreeHelper::GetOpenPopups(window)) {
@@ -2557,24 +2526,11 @@ void ApplyLunarHeaderTextOnCurrentThread() {
                 break;
             }
             if (auto child = popup.Child()) {
-                ApplyLunarHeaderTextInTree(child, selectedDate, budget, 0);
+                ApplyLunarHeaderTextInTree(child, todayDate, budget, 0);
             }
         }
     } catch (...) {
     }
-}
-
-void OnLunarHeaderTextChanged(wux::DependencyObject const& sender) {
-    auto it = t_lunarHeaders.find(winrt::get_abi(sender));
-    if (it == t_lunarHeaders.end()) {
-        return;
-    }
-    auto textBlock = sender.try_as<wuxc::TextBlock>();
-    if (!textBlock || !IsChineseLunarHeaderText(ElementText(textBlock))) {
-        return;
-    }
-    ApplyLunarHeaderTextOnCurrentThread();
-    StartSweepTimer();
 }
 
 void UninitializeLunarHeaderTextOnCurrentThread() {
@@ -2584,10 +2540,6 @@ void UninitializeLunarHeaderTextOnCurrentThread() {
             continue;
         }
         try {
-            if (entry.second.changedToken) {
-                label.UnregisterPropertyChangedCallback(
-                    wuxc::TextBlock::TextProperty(), entry.second.changedToken);
-            }
             if (!entry.second.appliedText.empty() &&
                 ElementText(label) == entry.second.appliedText) {
                 label.Text(entry.second.savedText);
