@@ -2,11 +2,11 @@
 // @id              audio-hardware-volume-preset
 // @name            Audio Hardware Volume Preset
 // @description     Sets audio playback devices to a configured volume whenever they connect
-// @version         1.2.1
+// @version         1.3.0
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
-// @include         explorer.exe
-// @compilerOptions -lole32
+// @include         windhawk.exe
+// @compilerOptions -lole32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,7 +30,7 @@ volume (e.g., 30%).
 - **Auto-Unmute:** Optionally unmute the device on connection.
 - **Intelligent Debouncing:** Prevents duplicate triggers when Windows fires
 multiple rapid connection events.
-- **Safe & Efficient:** Runs inside `explorer.exe` using standard Windows Core
+- **Safe & Efficient:** Runs as a dedicated background tool mod using standard Windows Core
 Audio event notifications (`IMMNotificationClient`). Zero polling, zero idle CPU
 usage.
 
@@ -99,9 +99,14 @@ static BOOL g_autoUnmute = TRUE;
 static BOOL g_applyOnStartup = TRUE;
 static std::vector<DeviceRule> g_rules;
 
-// Debouncing state to prevent rapid duplicate events from Windows
+// Debouncing state to prevent rapid duplicate events from Windows (worker thread only)
 static std::wstring g_lastDeviceId;
 static ULONGLONG g_lastApplyTick = 0;
+
+// Queue and event handles for offloading notification work to the worker thread
+static HANDLE g_hWorkEvent = NULL;
+static SRWLOCK g_queueLock = SRWLOCK_INIT;
+static std::vector<std::wstring> g_pendingDeviceIds;
 
 // COM & Worker Thread handles
 static HANDLE g_hWorkerThread = NULL;
@@ -153,7 +158,8 @@ static std::vector<std::wstring> GetTokens(const std::wstring &str) {
 
 // Checks if a candidate device string matches a rule
 static bool CheckCandidateMatch(const std::wstring &candidate,
-                                const DeviceRule &rule) {
+                                const DeviceRule &rule,
+                                bool allowTokens) {
   if (candidate.empty() || rule.nameLower.empty())
     return false;
 
@@ -162,6 +168,10 @@ static bool CheckCandidateMatch(const std::wstring &candidate,
   // 1. Direct substring match: device name contains the rule keyword
   if (candidateLower.find(rule.nameLower) != std::wstring::npos) {
     return true;
+  }
+
+  if (!allowTokens) {
+    return false;
   }
 
   // 2. Token match: check if any device token contains a rule token
@@ -201,7 +211,7 @@ static void LoadSettings() {
     WindhawkUtils::StringSetting ruleName =
         WindhawkUtils::StringSetting::make(L"deviceRules[%d].name", i);
     if (!*ruleName.get()) {
-      break;
+      continue;
     }
 
     int ruleVol = Wh_GetIntSetting(L"deviceRules[%d].volume", i);
@@ -226,6 +236,16 @@ static void LoadSettings() {
          g_applyOnStartup, g_rules.size());
 }
 
+static void QueueApply(LPCWSTR deviceId) {
+  if (!deviceId)
+    return;
+
+  AcquireSRWLockExclusive(&g_queueLock);
+  g_pendingDeviceIds.emplace_back(deviceId);
+  ReleaseSRWLockExclusive(&g_queueLock);
+  SetEvent(g_hWorkEvent);
+}
+
 static void ApplyVolumeToDevice(LPCWSTR pwstrDeviceId) {
   if (!pwstrDeviceId || !g_pEnumerator) {
     return;
@@ -234,15 +254,12 @@ static void ApplyVolumeToDevice(LPCWSTR pwstrDeviceId) {
   ULONGLONG currentTick = GetTickCount64();
 
   // Check debounce (ignore duplicate notifications for same device within 1.5s)
-  AcquireSRWLockExclusive(&g_lock);
   if (g_lastDeviceId == pwstrDeviceId &&
       (currentTick - g_lastApplyTick) < 1500) {
-    ReleaseSRWLockExclusive(&g_lock);
     return;
   }
   g_lastDeviceId = pwstrDeviceId;
   g_lastApplyTick = currentTick;
-  ReleaseSRWLockExclusive(&g_lock);
 
   IMMDevice *pDevice = NULL;
   HRESULT hr = g_pEnumerator->GetDevice(pwstrDeviceId, &pDevice);
@@ -303,18 +320,31 @@ static void ApplyVolumeToDevice(LPCWSTR pwstrDeviceId) {
   std::wstring matchedRuleName;
 
   AcquireSRWLockShared(&g_lock);
-  // 1. Check custom rules against all candidate names
+  // Pass 1: Direct substring match across all custom rules first
   for (const auto &rule : g_rules) {
-    if (CheckCandidateMatch(szFriendlyName, rule) ||
-        CheckCandidateMatch(szInterfaceName, rule) ||
-        CheckCandidateMatch(szDeviceDesc, rule)) {
+    if (CheckCandidateMatch(szFriendlyName, rule, false) ||
+        CheckCandidateMatch(szInterfaceName, rule, false) ||
+        CheckCandidateMatch(szDeviceDesc, rule, false)) {
       targetVolume = rule.volume;
       matchedRuleName = rule.originalName;
       break;
     }
   }
 
-  // 2. If no custom rule matched, check if global default applies
+  // Pass 2: Fall back to token match if no custom rule matched direct substring
+  if (targetVolume == -1) {
+    for (const auto &rule : g_rules) {
+      if (CheckCandidateMatch(szFriendlyName, rule, true) ||
+          CheckCandidateMatch(szInterfaceName, rule, true) ||
+          CheckCandidateMatch(szDeviceDesc, rule, true)) {
+        targetVolume = rule.volume;
+        matchedRuleName = rule.originalName;
+        break;
+      }
+    }
+  }
+
+  // If no custom rule matched, check if global default applies
   if (targetVolume == -1 && g_applyToAllDevices) {
     targetVolume = g_defaultVolume;
     Wh_Log(L"  -> No custom rule matched. Applying global default volume: %d%%",
@@ -324,7 +354,7 @@ static void ApplyVolumeToDevice(LPCWSTR pwstrDeviceId) {
            matchedRuleName.c_str(), targetVolume);
   }
 
-  // 3. Enforce max volume safety cap
+  // Enforce max volume safety cap
   if (targetVolume > g_maxVolumeLimit) {
     targetVolume = g_maxVolumeLimit;
     Wh_Log(L"  -> Capped by max volume limit to %d%%", targetVolume);
@@ -408,7 +438,7 @@ public:
                                     DWORD dwNewState) override {
     if (dwNewState == DEVICE_STATE_ACTIVE && pwstrDeviceId) {
       Wh_Log(L"OnDeviceStateChanged (ACTIVE): %s", pwstrDeviceId);
-      ApplyVolumeToDevice(pwstrDeviceId);
+      QueueApply(pwstrDeviceId);
     }
     return S_OK;
   }
@@ -423,7 +453,7 @@ public:
     if (flow == eRender && pwstrDeviceId) {
       Wh_Log(L"OnDefaultDeviceChanged (Render, role=%d): %s", role,
              pwstrDeviceId);
-      ApplyVolumeToDevice(pwstrDeviceId);
+      QueueApply(pwstrDeviceId);
     }
     return S_OK;
   }
@@ -536,8 +566,18 @@ static DWORD WINAPI AudioMonitorThread(LPVOID lpParam) {
         ApplyToCurrentDefaultDevice();
       }
 
-      // Wait until mod uninitialization is requested
-      WaitForSingleObject(g_hStopEvent, INFINITE);
+      // Process queued audio events until mod uninitialization is requested
+      HANDLE handles[] = {g_hStopEvent, g_hWorkEvent};
+      while (WaitForMultipleObjects(2, handles, FALSE, INFINITE) ==
+             WAIT_OBJECT_0 + 1) {
+        std::vector<std::wstring> ids;
+        AcquireSRWLockExclusive(&g_queueLock);
+        ids.swap(g_pendingDeviceIds);
+        ReleaseSRWLockExclusive(&g_queueLock);
+        for (const auto &id : ids) {
+          ApplyVolumeToDevice(id.c_str());
+        }
+      }
 
       g_pEnumerator->UnregisterEndpointNotificationCallback(g_pClient);
     } else {
@@ -557,38 +597,48 @@ static DWORD WINAPI AudioMonitorThread(LPVOID lpParam) {
   return 0;
 }
 
-BOOL Wh_ModInit() {
-  Wh_Log(L"Audio Hardware Volume Preset initializing...");
+BOOL WhTool_ModInit() {
+  Wh_Log(L"Audio Hardware Volume Preset tool mod initializing...");
 
   LoadSettings();
 
   g_hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
   if (!g_hStopEvent) {
-    Wh_Log(L"CreateEvent failed: %d", GetLastError());
+    Wh_Log(L"CreateEvent (stop) failed: %d", GetLastError());
+    return FALSE;
+  }
+
+  g_hWorkEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (!g_hWorkEvent) {
+    Wh_Log(L"CreateEvent (work) failed: %d", GetLastError());
+    CloseHandle(g_hStopEvent);
+    g_hStopEvent = NULL;
     return FALSE;
   }
 
   g_hWorkerThread = CreateThread(NULL, 0, AudioMonitorThread, NULL, 0, NULL);
   if (!g_hWorkerThread) {
     Wh_Log(L"CreateThread failed: %d", GetLastError());
+    CloseHandle(g_hWorkEvent);
+    g_hWorkEvent = NULL;
     CloseHandle(g_hStopEvent);
     g_hStopEvent = NULL;
     return FALSE;
   }
 
-  Wh_Log(L"Audio Hardware Volume Preset initialized successfully.");
+  Wh_Log(L"Audio Hardware Volume Preset tool mod initialized successfully.");
   return TRUE;
 }
 
-void Wh_ModUninit() {
-  Wh_Log(L"Audio Hardware Volume Preset uninitializing...");
+void WhTool_ModUninit() {
+  Wh_Log(L"Audio Hardware Volume Preset tool mod uninitializing...");
 
   if (g_hStopEvent) {
     SetEvent(g_hStopEvent);
   }
 
   if (g_hWorkerThread) {
-    WaitForSingleObject(g_hWorkerThread, 5000);
+    WaitForSingleObject(g_hWorkerThread, INFINITE);
     CloseHandle(g_hWorkerThread);
     g_hWorkerThread = NULL;
   }
@@ -598,10 +648,192 @@ void Wh_ModUninit() {
     g_hStopEvent = NULL;
   }
 
-  Wh_Log(L"Audio Hardware Volume Preset uninitialized.");
+  if (g_hWorkEvent) {
+    CloseHandle(g_hWorkEvent);
+    g_hWorkEvent = NULL;
+  }
+
+  Wh_Log(L"Audio Hardware Volume Preset tool mod uninitialized.");
+}
+
+void WhTool_ModSettingsChanged() {
+  Wh_Log(L"Settings changed notification received.");
+  LoadSettings();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+  Wh_Log(L">");
+  ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+  DWORD sessionId;
+  if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+      sessionId == 0) {
+    return FALSE;
+  }
+
+  bool isExcluded = false;
+  bool isToolModProcess = false;
+  bool isCurrentToolModProcess = false;
+  int argc;
+  LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
+  if (!argv) {
+    Wh_Log(L"CommandLineToArgvW failed");
+    return FALSE;
+  }
+
+  for (int i = 1; i < argc; i++) {
+    if (wcscmp(argv[i], L"-service") == 0 ||
+        wcscmp(argv[i], L"-service-start") == 0 ||
+        wcscmp(argv[i], L"-service-stop") == 0) {
+      isExcluded = true;
+      break;
+    }
+  }
+
+  for (int i = 1; i < argc - 1; i++) {
+    if (wcscmp(argv[i], L"-tool-mod") == 0) {
+      isToolModProcess = true;
+      if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+        isCurrentToolModProcess = true;
+      }
+      break;
+    }
+  }
+
+  LocalFree(argv);
+
+  if (isExcluded) {
+    return FALSE;
+  }
+
+  if (isCurrentToolModProcess) {
+    g_toolModProcessMutex =
+        CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+    if (!g_toolModProcessMutex) {
+      Wh_Log(L"CreateMutex failed");
+      ExitProcess(1);
+    }
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+      Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+      ExitProcess(1);
+    }
+
+    if (!WhTool_ModInit()) {
+      ExitProcess(1);
+    }
+
+    IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandle(nullptr);
+    IMAGE_NT_HEADERS *ntHeaders =
+        (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
+
+    DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+    void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
+
+    Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
+    return TRUE;
+  }
+
+  if (isToolModProcess) {
+    return FALSE;
+  }
+
+  g_isToolModProcessLauncher = true;
+  return TRUE;
+}
+
+void Wh_ModAfterInit() {
+  if (!g_isToolModProcessLauncher) {
+    return;
+  }
+
+  WCHAR currentProcessPath[MAX_PATH];
+  switch (GetModuleFileName(nullptr, currentProcessPath,
+                            ARRAYSIZE(currentProcessPath))) {
+  case 0:
+  case ARRAYSIZE(currentProcessPath):
+    Wh_Log(L"GetModuleFileName failed");
+    return;
+  }
+
+  WCHAR commandLine[MAX_PATH + 2 +
+                    (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
+                    1];
+  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+             WH_MOD_ID);
+
+  HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+  if (!kernelModule) {
+    kernelModule = GetModuleHandle(L"kernel32.dll");
+    if (!kernelModule) {
+      Wh_Log(L"No kernelbase.dll/kernel32.dll");
+      return;
+    }
+  }
+
+  using CreateProcessInternalW_t = BOOL(WINAPI *)(
+      HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+      LPSECURITY_ATTRIBUTES lpProcessAttributes,
+      LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+      DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+      LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+      PHANDLE hRestrictedUserToken);
+  CreateProcessInternalW_t pCreateProcessInternalW =
+      (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                               "CreateProcessInternalW");
+  if (!pCreateProcessInternalW) {
+    Wh_Log(L"No CreateProcessInternalW");
+    return;
+  }
+
+  STARTUPINFO si{
+      .cb = sizeof(STARTUPINFO),
+      .dwFlags = STARTF_FORCEOFFFEEDBACK,
+  };
+  PROCESS_INFORMATION pi;
+  if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                               nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                               nullptr, nullptr, &si, &pi, nullptr)) {
+    Wh_Log(L"CreateProcess failed");
+    return;
+  }
+
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-  Wh_Log(L"Settings changed notification received.");
-  LoadSettings();
+  if (g_isToolModProcessLauncher) {
+    return;
+  }
+
+  WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+  if (g_isToolModProcessLauncher) {
+    return;
+  }
+
+  WhTool_ModUninit();
+  ExitProcess(0);
 }
