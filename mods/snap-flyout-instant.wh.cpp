@@ -124,7 +124,7 @@ static bool TryHookFlyout(HMODULE mod) {
     if (!mod || g_flyoutHookAttempted.exchange(true)) return false;
 
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinui_pcshell_dll_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {L"public: static void __cdecl SnapFlyoutTelemetry::SnapFlyout_StartInvokeTimer(void)"},
             &StartInvoke_Original,
@@ -132,8 +132,7 @@ static bool TryHookFlyout(HMODULE mod) {
         },
     };
 
-    return WindhawkUtils::HookSymbols(mod, twinui_pcshell_dll_hooks,
-                                      ARRAYSIZE(twinui_pcshell_dll_hooks));
+    return WindhawkUtils::HookSymbols(mod, hooks, ARRAYSIZE(hooks));
 }
 
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
