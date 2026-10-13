@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -36,6 +36,19 @@ Moves the Windows 11 taskbar to the top of the screen.
   solution](https://github.com/ramensoftware/windhawk-mods/issues/1053#issuecomment-2405461863).
 
 ![Screenshot](https://i.imgur.com/LqBwGVn.png)
+
+## Changelog
+
+# 1.2.1
+- **Fixed Start menu reveal with auto-hide:** Pressing the Windows key while
+  the taskbar is auto-hidden no longer leaves a blank space at the top; the
+  taskbar is now treated as shown while the Start menu is open.
+- **Fixed oversized auto-hide reveal zone:** The area that keeps the taskbar
+  revealed used the taskbar's full height instead of the small trigger
+  height while hidden, making the reveal/hide zone much taller than
+  intended and interfering with controls near the top of maximized windows
+  (e.g. terminal tab bars). The hidden/shown state is now tracked correctly
+  so the thin trigger height is used for hidden-state sensing.
 */
 // ==/WindhawkModReadme==
 
@@ -307,6 +320,73 @@ bool IsStoredTaskbarAutoHideEnabled() {
 
     DWORD state = *(DWORD*)(settings + 8);
     return (state & ABS_AUTOHIDE) != 0;
+}
+
+// Checks whether the Start menu is currently open, by looking for a visible
+// Windows.UI.Core.CoreWindow belonging to StartMenuExperienceHost.exe.
+bool IsStartMenuOpen() {
+    struct FindParam {
+        bool found = false;
+    } param;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& param = *reinterpret_cast<FindParam*>(lParam);
+
+            if (!IsWindowVisible(hWnd)) {
+                return TRUE;
+            }
+
+            // UWP/XAML windows (like the Start menu's CoreWindow) are
+            // typically hidden via DWM cloaking rather than by actually
+            // becoming invisible, so IsWindowVisible() alone stays TRUE even
+            // after the Start menu is closed. Skip cloaked windows too.
+            BOOL cloaked = FALSE;
+            if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked,
+                                                 sizeof(cloaked))) &&
+                cloaked) {
+                return TRUE;
+            }
+
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hWnd, &pid);
+            if (!pid) {
+                return TRUE;
+            }
+
+            HANDLE hProcess =
+                OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (!hProcess) {
+                return TRUE;
+            }
+
+            WCHAR path[MAX_PATH];
+            DWORD size = ARRAYSIZE(path);
+            bool isStartMenuHost = false;
+            if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
+                PCWSTR fileName = wcsrchr(path, L'\\');
+                fileName = fileName ? fileName + 1 : path;
+                isStartMenuHost =
+                    _wcsicmp(fileName, L"StartMenuExperienceHost.exe") == 0;
+            }
+            CloseHandle(hProcess);
+
+            if (!isStartMenuHost) {
+                return TRUE;
+            }
+
+            WCHAR className[32];
+            if (GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Windows.UI.Core.CoreWindow") == 0) {
+                param.found = true;
+                return FALSE;
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&param));
+
+    return param.found;
 }
 
 HWND FindCurrentProcessWindow(PCWSTR className) {
@@ -967,21 +1047,53 @@ LRESULT TaskbarWndProcPostProcess(HWND hWnd,
                             // and over taskbar).
                             int currentHeight =
                                 currentRect.bottom - currentRect.top;
+
+                            UINT monitorDpiX = 96;
+                            UINT monitorDpiY = 96;
+                            GetDpiForMonitor(monitor, MDT_DEFAULT,
+                                             &monitorDpiX, &monitorDpiY);
+                            int triggerHeight = MulDiv(
+                                kAutoHideTriggerHeight, monitorDpiY, 96);
+
+                            // GetWindowRect(hWnd) doesn't reliably reflect
+                            // whether the taskbar is actually pushed
+                            // off-screen (it keeps reporting the un-hidden
+                            // top position even while hidden), so track the
+                            // hidden state explicitly instead of inferring it
+                            // from the window rect. While hidden, only the
+                            // thin trigger strip counts as "in the taskbar"
+                            // for revealing it - using the full height here
+                            // would make the reveal zone as tall as the
+                            // taskbar itself, which can overlap controls near
+                            // the top of maximized windows (e.g. terminal
+                            // tabs). Once shown, the full height is used so
+                            // moving within the taskbar doesn't prematurely
+                            // hide it.
+                            static bool s_taskbarHidden = false;
+                            int sensingHeight = s_taskbarHidden
+                                                     ? triggerHeight
+                                                     : currentHeight;
+
                             bool cursorInShownTaskbarArea =
                                 pt.x >= monitorRect.left &&
                                 pt.x < monitorRect.right &&
                                 pt.y >= monitorRect.top &&
-                                pt.y < monitorRect.top + currentHeight;
-                            if (!cursorInShownTaskbarArea) {
-                                // Cursor is not in taskbar - hide it by moving
-                                // mostly off-screen.
-                                UINT monitorDpiX = 96;
-                                UINT monitorDpiY = 96;
-                                GetDpiForMonitor(monitor, MDT_DEFAULT,
-                                                 &monitorDpiX, &monitorDpiY);
-                                int triggerHeight = MulDiv(
-                                    kAutoHideTriggerHeight, monitorDpiY, 96);
+                                pt.y < monitorRect.top + sensingHeight;
+
+                            // Also treat the taskbar as "shown" while the
+                            // Start menu is open, so that pressing the
+                            // Windows key while auto-hidden actually reveals
+                            // the taskbar instead of leaving a blank space
+                            // where it should be.
+                            if (!cursorInShownTaskbarArea &&
+                                !IsStartMenuOpen()) {
+                                // Cursor is not in taskbar and the Start menu
+                                // isn't open - hide it by moving mostly
+                                // off-screen.
                                 yPosition -= currentHeight - triggerHeight;
+                                s_taskbarHidden = true;
+                            } else {
+                                s_taskbarHidden = false;
                             }
                         }
 
