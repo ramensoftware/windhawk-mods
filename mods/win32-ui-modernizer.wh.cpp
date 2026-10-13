@@ -2536,6 +2536,10 @@ static COLORREF DarkBgForPaint(HWND hwnd)
 
 static std::mutex g_staticBrushCacheMutex;
 static std::unordered_map<COLORREF, HBRUSH> g_staticBrushCache;
+// The previous generation of brushes, deleted only when the cache fills
+// again: a brush another thread (or a WM_CTLCOLOR* caller) is still using
+// outlives the eviction that dropped it.
+static std::vector<HBRUSH> g_retiredStaticBrushes;
 
 static HBRUSH GetCachedSolidBrush(COLORREF color)
 {
@@ -2544,15 +2548,17 @@ static HBRUSH GetCachedSolidBrush(COLORREF color)
     if (it != g_staticBrushCache.end())
         return it->second;
 
-    // Only bulk-cleared on theme change (StaticBrushCacheClear). Some callers
-    // pass sampled or app-provided colors, so the set is effectively unbounded
-    // -- cap the real GDI brush count instead of growing towards the
-    // per-process GDI object quota.
+    // Some callers pass sampled or app-provided colors, so the set is
+    // effectively unbounded -- cap the real GDI brush count (two generations)
+    // instead of growing towards the per-process GDI object quota.
     constexpr size_t kStaticBrushCacheMax = 64;
     if (g_staticBrushCache.size() >= kStaticBrushCacheMax) {
+        for (HBRUSH retired : g_retiredStaticBrushes)
+            DeleteObject(retired);
+        g_retiredStaticBrushes.clear();
         for (auto& kv : g_staticBrushCache)
             if (kv.second)
-                DeleteObject(kv.second);
+                g_retiredStaticBrushes.push_back(kv.second);
         g_staticBrushCache.clear();
     }
 
@@ -2582,6 +2588,10 @@ static void StaticBrushCacheClear()
         if (kv.second)
             DeleteObject(kv.second);
     g_staticBrushCache.clear();
+    for (HBRUSH retired : g_retiredStaticBrushes)
+        DeleteObject(retired);
+    g_retiredStaticBrushes.clear();
+    g_retiredStaticBrushes.shrink_to_fit();
     for (HPEN& pen : g_drawEdgePens) {
         if (pen) DeleteObject(pen);
         pen = nullptr;
@@ -4706,8 +4716,9 @@ static HRESULT CreateDXGIFactory1Dynamic(REFIID riid, void** factory)
 
 // Waits for the next compositor clock tick (Windows 11) or until `wake` is
 // signaled. dcomp stays inside Explorer, so elsewhere this returns false at
-// once; it also returns false when the clock returns without waiting (display
-// off), so callers fall back to their own timed wait.
+// once, as it does when the clock call fails; callers then fall back to their
+// own timed wait. A timeout counts as a tick: falling back after it would add
+// a timed sleep, and the next frame would be late.
 static bool WaitForCompositorFrame(HANDLE wake, DWORD timeoutMs)
 {
     using WaitForCompositorClock_t = DWORD(WINAPI*)(UINT, const HANDLE*, DWORD);
@@ -11065,12 +11076,18 @@ static LRESULT WINAPI SendMessageW_hook(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                         // the same RGB/geometry contract in every renderer.
                         const COLORREF background = glyphDark
                             ? ExplorerDarkColor : kExplorerListLight;
+                        // A GlyphColor of the user's own wins over the neutral
+                        // selection's text color, selected or not; only the
+                        // WinUI opacity applies. The neutral selection keeps
+                        // the accent off the selected glyph either way.
+                        const bool customGlyph = g_settings.GlyphColor != CLR_INVALID;
+                        const bool neutral = g_settings.NeutralSelection && !customGlyph;
+                        if (g_settings.NeutralSelection && customGlyph)
+                            color = neutralColor;
                         neutralColor = WinUI::FlattenOver(NavigationItemForegroundColor(
-                            glyphDark, g_settings.NeutralSelection, neutralColor,
-                            glyphPressed), background);
+                            glyphDark, neutral, neutralColor, glyphPressed), background);
                         color = WinUI::FlattenOver(NavigationItemForegroundColor(
-                            glyphDark, g_settings.NeutralSelection, color,
-                            glyphPressed), background);
+                            glyphDark, neutral, color, glyphPressed), background);
                     }
 
                     // Spring scale-pop on a genuine selection change to this item
@@ -15656,11 +15673,31 @@ struct LegacyDialogTextDcScope {
     LegacyDialogTextDcScope& operator=(const LegacyDialogTextDcScope&) = delete;
 };
 
+static bool TryDrawLegacyRebarMutableText(HDC hdc, LPCWSTR text, INT count,
+    LPRECT rect, UINT flags, INT* result);
+
 static bool TryDrawLegacyRebarText(HDC hdc, LPCWSTR text, int count,
     LPCRECT rect, UINT flags, INT* result,
     const ShellTextExtPlacement* placement = nullptr,
     COLORREF themedColor = CLR_INVALID, bool nativeRectClip = false)
 {
+    // DirectWrite trims only at the end or at a word. A path is shortened in
+    // its middle by native DrawText first, into a copy.
+    if (flags & DT_PATH_ELLIPSIS) {
+        if (placement || themedColor != CLR_INVALID || nativeRectClip ||
+            !text || !rect || !result || (flags & DT_MODIFYSTRING))
+            return false;
+        const size_t length = count >= 0 ? static_cast<size_t>(count)
+            : wcsnlen(text, 32769);
+        if (!length || length > 32768)
+            return false;
+        // DT_MODIFYSTRING may write up to four more characters.
+        std::wstring copy(text, length);
+        copy.resize(length + 5);
+        RECT layout = *rect;
+        return TryDrawLegacyRebarMutableText(hdc, copy.data(),
+            static_cast<INT>(length), &layout, flags | DT_MODIFYSTRING, result);
+    }
     const auto paint = LegacyRebarTextForDc(hdc);
     LegacyDialogTextDcScope dcScope(hdc, paint.kind);
     if (!dcScope.ready)
@@ -15835,9 +15872,10 @@ static bool TryDrawLegacyRebarThemeText(HTHEME theme, HDC hdc,
     DWORD flags, const DTTOPTS* options)
 {
     const auto paint = LegacyRebarTextForDc(hdc);
+    // DirectWrite has no path ellipsis.
     if (paint.kind == LegacyRebarTextKind::None ||
         (flags & (DT_CALCRECT | DT_MODIFYSTRING | DT_PREFIXONLY |
-            DT_EXPANDTABS | DT_TABSTOP | DT_INTERNAL)) ||
+            DT_EXPANDTABS | DT_TABSTOP | DT_INTERNAL | DT_PATH_ELLIPSIS)) ||
         ((flags & DT_NOCLIP) && !LegacyRebarAllowsNoClip(paint.kind, flags)) ||
         (options && (options->dwSize != sizeof(DTTOPTS) ||
             (options->dwFlags & ~(DTT_TEXTCOLOR | DTT_COMPOSITED | DTT_FONTPROP)) ||
@@ -17507,7 +17545,7 @@ static void ListRenameCaptureBackground(HWND edit, HDC hdc)
     }
 }
 
-static void ListRenameClearVisualState(HWND hwnd, bool redraw)
+static void ListRenameClearVisualState(HWND hwnd)
 {
     HWND visualHost = ListRenameVisualHost(hwnd);
     const bool hostOutlivesEdit = visualHost && visualHost != hwnd;
@@ -17543,7 +17581,7 @@ struct ListRenameRenderState {
 
 static bool ListRenamePrepareRender(
     HWND edit, HDC hdc, const RECT& paintRect,
-    ListRenameRenderState* state, bool preserveAlpha = false)
+    ListRenameRenderState* state)
 {
     if (!state || !g_d2dFactory)
         return false;
@@ -17558,9 +17596,7 @@ static bool ListRenamePrepareRender(
         D2D1::RenderTargetProperties(
             D2D1_RENDER_TARGET_TYPE_DEFAULT,
             D2D1::PixelFormat(
-                DXGI_FORMAT_B8G8R8A8_UNORM,
-                preserveAlpha ? D2D1_ALPHA_MODE_PREMULTIPLIED
-                              : D2D1_ALPHA_MODE_IGNORE));
+                DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
     if (FAILED(g_d2dFactory->CreateDCRenderTarget(
             &properties, state->renderTarget.GetAddressOf())) ||
         FAILED(state->renderTarget->BindDC(hdc, &paintRect))) {
@@ -18093,7 +18129,7 @@ static LRESULT CALLBACK ListRenameSubclassProc(
     HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
     if (msg == WM_NCDESTROY) {
-        ListRenameClearVisualState(hwnd, false);
+        ListRenameClearVisualState(hwnd);
         {
             std::lock_guard<std::mutex> lock(g_listRenameWindowsMutex);
             g_listRenameWindows.erase(hwnd);
@@ -18107,7 +18143,7 @@ static LRESULT CALLBACK ListRenameSubclassProc(
         return DefSubclassProc(hwnd, msg, wp, lp);
 
     if (!ListRenameFeatureEnabled()) {
-        ListRenameClearVisualState(hwnd, true);
+        ListRenameClearVisualState(hwnd);
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
 
@@ -18263,7 +18299,7 @@ static void ListRenameCleanupAll(bool redraw)
     for (HWND hwnd : windows) {
         if (!IsWindow(hwnd))
             continue;
-        ListRenameClearVisualState(hwnd, redraw);
+        ListRenameClearVisualState(hwnd);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, ListRenameSubclassProc);
         if (redraw) {
@@ -21316,6 +21352,9 @@ static void WinEventHooksSync(bool removeAll);
 static std::atomic<bool> g_directUiUnloading{false};
 static std::atomic<bool> g_explorerFrameUnloading{false};
 static std::atomic<bool> g_lazyFeatureHooksUnloading{false};
+// Held by the SysLink and insertion-mark installers through their apply;
+// Wh_ModBeforeUninit sets g_lazyFeatureHooksUnloading under it.
+static std::mutex g_lazyControlHookMutex;
 static const wchar_t* MSG_WND_CLS = L"W32MThemeMsgWnd";
 
 // Set first thing in Wh_ModUninit (see there), well before the
@@ -29969,9 +30008,11 @@ static LRESULT CALLBACK ListViewSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
     DWORD_PTR)
 {
     if (msg == WM_NCDESTROY) {
-        // comctl32 drops the subclass itself.
+        // comctl32 drops the subclass itself. A recheck still queued dies
+        // with the window.
         HWND expected = hwnd;
-        g_listView.compare_exchange_strong(expected, nullptr);
+        if (g_listView.compare_exchange_strong(expected, nullptr))
+            g_recheckPending.store(false, std::memory_order_release);
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
     const HWND outerListView = t_listView;
@@ -29992,20 +30033,33 @@ static LRESULT CALLBACK ListViewSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
     return result;
 }
 
+// BeforeUninit raises g_unloading before it reads g_listView: either it sees
+// this view and removes the subclass, or this sees the flag and does.
+static bool Install(HWND lv)
+{
+    HWND expected = nullptr;
+    if (!g_listView.compare_exchange_strong(expected, lv, std::memory_order_seq_cst))
+        return false;
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(lv, ListViewSubclass, 0)) {
+        g_listView.store(nullptr, std::memory_order_release);
+        return false;
+    }
+    if (g_unloading.load(std::memory_order_seq_cst)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(lv, ListViewSubclass);
+        g_listView.store(nullptr, std::memory_order_release);
+        return false;
+    }
+    return true;
+}
+
 // From the desktop list view's paint, on its thread.
 static void Attach(HWND lv)
 {
     if (!lv || !g_recheckMessage || !Enabled() ||
         g_listView.load(std::memory_order_acquire) == lv)
         return;
-    HWND expected = nullptr;
-    if (!g_listView.compare_exchange_strong(expected, lv))
-        return;
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(lv, ListViewSubclass, 0)) {
-        g_listView.store(nullptr, std::memory_order_release);
-        return;
-    }
-    QueueRecheck(lv);
+    if (Install(lv))
+        QueueRecheck(lv);
 }
 
 static void Init()
@@ -30040,22 +30094,15 @@ static void SettingsChanged()
     if (!Enabled())
         return;
     EnumWindows(FindListViewEnum, reinterpret_cast<LPARAM>(&lv));
-    if (lv) {
-        HWND expected = nullptr;
-        if (g_listView.compare_exchange_strong(expected, lv)) {
-            if (WindhawkUtils::SetWindowSubclassFromAnyThread(lv, ListViewSubclass, 0))
-                QueueRecheck(lv);
-            else
-                g_listView.store(nullptr, std::memory_order_release);
-        }
-    }
+    if (lv && Install(lv))
+        QueueRecheck(lv);
 }
 
 // Puts the native check boxes back while the subclass still runs.
 static void BeforeUninit()
 {
-    g_unloading.store(true, std::memory_order_release);
-    HWND lv = g_listView.load(std::memory_order_acquire);
+    g_unloading.store(true, std::memory_order_seq_cst);
+    HWND lv = g_listView.load(std::memory_order_seq_cst);
     if (!lv || !IsWindow(lv))
         return;
     DWORD_PTR ignored = 0;
@@ -40918,7 +40965,9 @@ static void SysLinkTextEnsureHook(bool applyHooks)
         return;
     }
     const HMODULE comctl32 = g_sysLinkComctl32.load(std::memory_order_acquire);
-    if (!comctl32 || attempted.exchange(true, std::memory_order_acq_rel))
+    std::lock_guard<std::mutex> lock(g_lazyControlHookMutex);
+    if (!comctl32 || g_lazyFeatureHooksUnloading.load(std::memory_order_acquire) ||
+        attempted.exchange(true, std::memory_order_acq_rel))
         return;
     SetResolvedSymbolHook(Comctl32ResolveSymbols(comctl32).markupPaint,
                           CMarkupPaint_hook, &CMarkupPaint_orig);
@@ -40940,6 +40989,9 @@ static void InsertMarkEnsureHook(bool applyHooks)
         !g_insertMarkContextSeen.load(std::memory_order_acquire)) {
         return;
     }
+    std::lock_guard<std::mutex> lock(g_lazyControlHookMutex);
+    if (g_lazyFeatureHooksUnloading.load(std::memory_order_acquire))
+        return;
     InsertMarkInstallHook();
     if (applyHooks && CCDrawInsertMark_orig && !Wh_ApplyHookOperations())
         Wh_Log(L"Insertion mark: Wh_ApplyHookOperations failed");
@@ -44449,7 +44501,9 @@ static bool IsCurrentProcessRegedit()
 // regedit.exe through it instead of leaving anything half-applied.
 static bool RgIsDarkMode()
 {
-    return !g_darkModeExcluded.load(std::memory_order_acquire) && IsSystemDarkMode();
+    // A contrast theme brings its own colors, as ShouldCustomDarkModeBeActive.
+    return !g_darkModeExcluded.load(std::memory_order_acquire) && IsSystemDarkMode() &&
+        !g_roundedSelectionHighContrast.load(std::memory_order_acquire);
 }
 
 // ---------------------------------------------------------------------------
@@ -48930,7 +48984,10 @@ static void RestoreDarkSysColors()
         // -- leave the live system table alone.
         DarkSysColsUnlockShared(shared);
     } else {
-        if (freshThemeMetrics) {
+        // A contrast theme has already written its own colors.
+        if (SysHighContrastEnabled()) {
+            releaseComplete = true;
+        } else if (freshThemeMetrics) {
             COLORREF liveColors[kLegacyDarkSysColorCount];
             ReadLiveSysColors(liveColors);
             releaseComplete = RestoreThemeSysMetricsColors(
@@ -51935,8 +51992,10 @@ static LRESULT CALLBACK HdrDarkPaintSubclassProc(
 {
     switch (msg) {
     case WM_PAINT: {
-        if (!IsSystemDarkMode())
-            break;  // light mode: default paint
+        // Light mode or a contrast theme: default paint.
+        if (!IsSystemDarkMode() ||
+            g_roundedSelectionHighContrast.load(std::memory_order_acquire))
+            break;
 
         if (!g_win32MainDarkBrush)
             g_win32MainDarkBrush = CreateSolidBrush(Win32MainDark);
@@ -51954,7 +52013,8 @@ static LRESULT CALLBACK HdrDarkPaintSubclassProc(
     // Some hosts repaint via WM_PRINTCLIENT instead of WM_PAINT (see
     // StatusBarSubclassProc/TrackbarSubclassProc).
     case WM_PRINTCLIENT: {
-        if (!IsSystemDarkMode())
+        if (!IsSystemDarkMode() ||
+            g_roundedSelectionHighContrast.load(std::memory_order_acquire))
             break;
 
         if (!g_win32MainDarkBrush)
@@ -54690,6 +54750,11 @@ static DuiElement_GetClass_t DuiElement_GetClass_orig = nullptr;
 typedef VOID(DUI_STDCALL *DuiElement_OnDestroy_t)(void*);
 static DuiElement_OnDestroy_t DuiElement_OnDestroy_orig = nullptr;
 static std::atomic<bool> g_duiElementLifetimeLive{false};
+// duser!DeleteHandle, hooked with OnDestroy: it also destroys a thread's
+// DirectUser context.
+using DUserDeleteHandle_t = BOOL(WINAPI*)(HANDLE);
+static DUserDeleteHandle_t DUser_DeleteHandle_orig = nullptr;
+static std::atomic<bool> g_duserDeleteHandleLive{false};
 
 typedef VOID(DUI_STDCALL *DuiElement_PaintStringContent_t)(
     void*, HDC, LPCRECT, void*, int);
@@ -54751,6 +54816,9 @@ struct Member {
 struct Slot {
     std::atomic<int> state{kFree};
     std::atomic<DWORD> ownerThread{0};
+    // A SYNCHRONIZE handle, so a reused thread ID can't pass for the owner.
+    // Closed under ownerLock.
+    HANDLE ownerHandle = nullptr;
     // Owner thread only: the paint, the action callback and OnDestroy all run
     // on the thread that owns the items.
     bool oneShot = false;
@@ -54770,6 +54838,8 @@ static LONGLONG joinTicks = 0;
 static Slot slots[16];
 static std::atomic<int> busySlots{0};
 static std::atomic<bool> stopping{false};
+// Serializes closing a slot's owner handle with the threads that wait on it.
+static SRWLOCK ownerLock = SRWLOCK_INIT;
 // Last painted state per checkbox element: the reveal starts only on a real
 // unchecked-to-checked change. Entries are dropped with their element. A
 // hidden checkbox paints nothing, so its item's paints reset the state.
@@ -54818,62 +54888,113 @@ static bool Enabled()
     return g_settings.ExplorerSection && g_settings.RoundedButtons &&
         !stopping.load(std::memory_order_acquire) &&
         g_duiElementLifetimeLive.load(std::memory_order_acquire) &&
+        g_duserDeleteHandleLive.load(std::memory_order_acquire) &&
         DuiElement_GetParent_orig && Resolve();
 }
 
-static bool ThreadAlive(DWORD threadId)
+// ownerLock held exclusively.
+static void ReleaseLocked(Slot& slot)
 {
-    HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
-    if (!thread)
-        return false;
-    const bool alive = WaitForSingleObject(thread, 0) == WAIT_TIMEOUT;
-    CloseHandle(thread);
-    return alive;
-}
-
-static void Release(Slot& slot)
-{
+    if (slot.ownerHandle)
+        CloseHandle(slot.ownerHandle);
+    slot.ownerHandle = nullptr;
     slot.count = 0;
     slot.ownerThread.store(0, std::memory_order_relaxed);
-    slot.state.store(kFree, std::memory_order_release);
+    slot.state.store(kFree, std::memory_order_seq_cst);
     busySlots.fetch_sub(1, std::memory_order_acq_rel);
 }
 
-// Actions die with their thread's DirectUser context without a final callback.
+// The caller holds the slot as kReserved.
+static void Release(Slot& slot)
+{
+    AcquireSRWLockExclusive(&ownerLock);
+    ReleaseLocked(slot);
+    ReleaseSRWLockExclusive(&ownerLock);
+}
+
+// ownerLock held exclusively. A slot whose thread exited gets no more
+// callbacks.
+static bool ReleaseIfOwnerExited(Slot& slot)
+{
+    if (slot.state.load(std::memory_order_acquire) != kBusy ||
+        WaitForSingleObject(slot.ownerHandle, 0) != WAIT_OBJECT_0)
+        return false;
+    int expected = kBusy;
+    if (!slot.state.compare_exchange_strong(expected, kReserved,
+            std::memory_order_seq_cst))
+        return false;
+    ReleaseLocked(slot);
+    return true;
+}
+
 static bool ReclaimDeadOwners()
 {
     bool reclaimed = false;
-    for (Slot& slot : slots) {
-        if (slot.state.load(std::memory_order_acquire) != kBusy)
-            continue;
-        const DWORD owner = slot.ownerThread.load(std::memory_order_relaxed);
-        if (!owner || ThreadAlive(owner))
-            continue;
-        int expected = kBusy;
-        if (slot.state.compare_exchange_strong(expected, kReserved,
-                std::memory_order_acq_rel)) {
-            Release(slot);
-            reclaimed = true;
-        }
-    }
+    AcquireSRWLockExclusive(&ownerLock);
+    for (Slot& slot : slots)
+        reclaimed = ReleaseIfOwnerExited(slot) || reclaimed;
+    ReleaseSRWLockExclusive(&ownerLock);
     return reclaimed;
 }
 
+// Reserves a slot for the calling thread, which becomes its owner.
 static Slot* Acquire()
 {
     for (int pass = 0; pass < 2; ++pass) {
         for (Slot& slot : slots) {
             int expected = kFree;
-            if (slot.state.compare_exchange_strong(expected, kReserved,
-                    std::memory_order_acq_rel)) {
-                busySlots.fetch_add(1, std::memory_order_acq_rel);
-                return &slot;
+            if (!slot.state.compare_exchange_strong(expected, kReserved,
+                    std::memory_order_seq_cst))
+                continue;
+            busySlots.fetch_add(1, std::memory_order_acq_rel);
+            // BeforeUninit raises stopping before it scans the slots: either
+            // it sees this reservation and waits, or this sees stopping.
+            slot.ownerHandle = stopping.load(std::memory_order_seq_cst)
+                ? nullptr : OpenThread(SYNCHRONIZE, FALSE, GetCurrentThreadId());
+            if (!slot.ownerHandle) {
+                Release(slot);
+                return nullptr;
             }
+            slot.ownerThread.store(GetCurrentThreadId(), std::memory_order_relaxed);
+            return &slot;
         }
         if (pass == 0 && !ReclaimDeadOwners())
             break;
     }
     return nullptr;
+}
+
+// DirectUser drops a destroyed context's actions without a final callback
+// (MotionSC::xwPreDestroyNL), and dui70's last UnInitThread destroys the
+// context through DeleteHandle with the thread still running. Without a
+// context, CreateAction fails before reading its argument.
+static void OnDUserHandleDeleted()
+{
+    if (!busySlots.load(std::memory_order_acquire))
+        return;
+    const DWORD self = GetCurrentThreadId();
+    bool owned = false;
+    for (Slot& slot : slots) {
+        owned = owned || (slot.state.load(std::memory_order_acquire) == kBusy &&
+            slot.ownerThread.load(std::memory_order_relaxed) == self);
+    }
+    if (!owned)
+        return;
+    const DWORD lastError = GetLastError();
+    SetLastError(ERROR_SUCCESS);
+    createAction(nullptr);
+    constexpr DWORD kNoContext = 0x80040014;  // DU_E_NOCONTEXT
+    const bool contextGone = GetLastError() == kNoContext;
+    SetLastError(lastError);
+    if (!contextGone)
+        return;
+    for (Slot& slot : slots) {
+        int expected = kBusy;
+        if (slot.ownerThread.load(std::memory_order_relaxed) == self &&
+            slot.state.compare_exchange_strong(expected, kReserved,
+                std::memory_order_seq_cst))
+            Release(slot);
+    }
 }
 
 static void WINAPI ActionProc(void* info)
@@ -54902,7 +55023,9 @@ static void WINAPI ActionProc(void* info)
                 invalidateGadget(member.node);
         }
     }
-    if (finished)
+    int expected = kBusy;
+    if (finished && slot->state.compare_exchange_strong(expected, kReserved,
+            std::memory_order_seq_cst))
         Release(*slot);
 }
 
@@ -54944,7 +55067,6 @@ static bool StartReveal(void* item, void* checkbox, HANDLE node)
         group->fired = false;
         group->start = now;
         group->count = 0;
-        group->ownerThread.store(self, std::memory_order_relaxed);
     }
     Member& member = group->members[group->count++];
     member.item = item;
@@ -54969,7 +55091,6 @@ static bool StartRepaint(void* item, HANDLE node)
     slot->start = 0;
     slot->count = 1;
     slot->members[0] = {item, nullptr, node, 0, 0.f, false};
-    slot->ownerThread.store(GetCurrentThreadId(), std::memory_order_relaxed);
     return Launch(*slot, 0, 0);
 }
 
@@ -55128,27 +55249,22 @@ static float OnPaint(HDC hdc, INT state, LPCRECT native, LPCRECT target, void* i
     return progress;
 }
 
+// A busy slot's action still calls back while its thread and context live:
+// with stopping set, its last frame arrives within one duration of the thread
+// pumping messages again. A context destroyed meanwhile frees its slots in
+// OnDUserHandleDeleted, and an exited thread's are freed here.
 static void BeforeUninit()
 {
-    stopping.store(true, std::memory_order_release);
+    stopping.store(true, std::memory_order_seq_cst);
     for (;;) {
         bool waiting = false;
+        AcquireSRWLockExclusive(&ownerLock);
         for (Slot& slot : slots) {
-            const int state = slot.state.load(std::memory_order_acquire);
-            if (state == kFree)
-                continue;
-            if (state == kBusy) {
-                const DWORD owner = slot.ownerThread.load(std::memory_order_relaxed);
-                int expected = kBusy;
-                if (owner && !ThreadAlive(owner) &&
-                    slot.state.compare_exchange_strong(expected, kReserved,
-                        std::memory_order_acq_rel)) {
-                    Release(slot);
-                    continue;
-                }
-            }
-            waiting = true;
+            if (slot.state.load(std::memory_order_seq_cst) != kFree &&
+                !ReleaseIfOwnerExited(slot))
+                waiting = true;
         }
+        ReleaseSRWLockExclusive(&ownerLock);
         if (!waiting)
             break;
         Sleep(10);
@@ -55308,8 +55424,13 @@ UINT g_updateMessage = 0;
 UINT g_cleanupMessage = 0;
 constexpr DWORD_PTR kLayoutSubclassData = 0x53544257;  // STBW
 
-constexpr size_t kStatusStateCapacity = 16;
-constexpr size_t kSubclassWindowCapacity = 48;
+// One state per Explorer tab; each tab subclasses five windows (host, tab,
+// view, pane sink and tree). Entries of destroyed windows are reused.
+constexpr size_t kStatusStateCapacity = 64;
+constexpr size_t kSubclassWindowCapacity = kStatusStateCapacity * 5;
+// Set once an element is tracked, cleared when CleanupAll drops them all:
+// OnDestroy skips the lock otherwise.
+std::atomic<bool> g_anyTracked{false};
 
 struct ViewButtonState {
     void* element = nullptr;
@@ -55683,7 +55804,7 @@ bool TrackStatusElement(void* element, HWND host) {
         StatusState* state = FindStatusStateByHostLocked(host);
         if (!state) {
             for (auto& candidate : g_statusStates) {
-                if (!candidate.host) {
+                if (!candidate.host || !IsWindow(candidate.host)) {
                     state = &candidate;
                     break;
                 }
@@ -55699,6 +55820,7 @@ bool TrackStatusElement(void* element, HWND host) {
         replaced = state->host == host && state->element != element;
         const StatusState previous = *state;
         *state = {};
+        g_anyTracked.store(true, std::memory_order_release);
         state->element = element;
         state->host = host;
         state->tab = tab;
@@ -55749,7 +55871,7 @@ bool TrackStatusElement(void* element, HWND host) {
 }
 
 void QueueHostUpdate(HWND host) {
-    if (Unloading() || !host ||
+    if (!Active() || !host ||
         !IsWindow(host) || !g_updateMessage) {
         return;
     }
@@ -55772,7 +55894,11 @@ void QueueHostUpdate(HWND host) {
 
 void ApplyStatusHost(HWND host);
 
+// With the option turned off, CleanupAll's restore moves the pane back, and
+// the WM_WINDOWPOSCHANGED of that move must not apply the layout again.
 void QueueUpdatesForWindow(HWND hwnd) {
+    if (!Active())
+        return;
     HWND hosts[kStatusStateCapacity] = {};
     size_t count = 0;
     {
@@ -56131,10 +56257,8 @@ LRESULT CALLBACK LayoutSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
                                     LPARAM lParam, DWORD_PTR subclassData);
 
 bool EnsureWindowSubclass(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd) ||
-        Unloading()) {
+    if (!hwnd || !IsWindow(hwnd) || !Active())
         return false;
-    }
 
     {
         ExclusiveSrwLock lock(&g_stateLock);
@@ -56143,7 +56267,8 @@ bool EnsureWindowSubclass(HWND hwnd) {
 
         SubclassWindowState* empty = nullptr;
         for (auto& candidate : g_subclassWindows) {
-            if (!candidate.hwnd) {
+            if (!candidate.hwnd ||
+                (!candidate.installing && !IsWindow(candidate.hwnd))) {
                 empty = &candidate;
                 break;
             }
@@ -56152,6 +56277,7 @@ bool EnsureWindowSubclass(HWND hwnd) {
             Wh_Log(L"[Subclass] Window capacity reached; hwnd=%p", hwnd);
             return false;
         }
+        *empty = {};
         empty->hwnd = hwnd;
         empty->installing = true;
     }
@@ -56286,8 +56412,12 @@ void ApplyNavigationPaneExtension(HWND host, HWND tab, int hostBottom) {
     const bool regionExtended =
         nativeRegionBoxValid &&
         !RectEquals(desiredRegionBox, nativeRegionBox);
-    EnsureWindowSubclass(navigationSink);
-    EnsureWindowSubclass(namespaceTree);
+    // Their subclasses see the pane's destruction and Explorer's own moves.
+    if (!EnsureWindowSubclass(navigationSink) ||
+        !EnsureWindowSubclass(namespaceTree)) {
+        RestoreNavigationPane(host);
+        return;
+    }
 
     {
         ExclusiveSrwLock lock(&g_stateLock);
@@ -56457,7 +56587,7 @@ int WINAPI SetWindowRgnHook(HWND hwnd, HRGN region, BOOL redraw) {
 }
 
 void ApplyStatusHost(HWND host) {
-    if (Unloading() || !IsWindow(host))
+    if (!Active() || !IsWindow(host))
         return;
     if (g_applyingStatusLayout) {
         QueueHostUpdate(host);
@@ -56481,6 +56611,11 @@ void ApplyStatusHost(HWND host) {
             return;
         snapshot = *state;
     }
+
+    // Only the host's subclass restores the buttons, margin and pane
+    // (CleanupAll), so nothing is changed without it.
+    if (!EnsureWindowSubclass(host))
+        return;
 
     ApplyViewModeButtons(host, false);
 
@@ -56562,11 +56697,9 @@ void ApplyStatusHost(HWND host) {
         }
     }
 
-    EnsureWindowSubclass(host);
     EnsureWindowSubclass(tab);
     EnsureWindowSubclass(shellView);
     ApplyNavigationPaneExtension(host, tab, clientRect.bottom);
-
 }
 
 LRESULT CALLBACK LayoutSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
@@ -56604,7 +56737,7 @@ LRESULT CALLBACK LayoutSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
     }
 
     const LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
-    if (!Unloading()) {
+    if (Active()) {
         switch (message) {
             case WM_SIZE:
             case WM_WINDOWPOSCHANGED:
@@ -56977,6 +57110,11 @@ void CleanupAll() {
         state = {};
     for (auto& request : g_viewButtonRequests)
         request = {};
+    g_anyTracked.store(false, std::memory_order_release);
+}
+
+bool AnyTracked() {
+    return g_anyTracked.load(std::memory_order_acquire);
 }
 
 BOOL CALLBACK RedrawExplorerWindow(HWND hwnd, LPARAM) {
@@ -58329,17 +58467,26 @@ VOID DUI_STDCALL DuiElement_PaintBg_hook(
 
 VOID DUI_STDCALL DuiElement_OnDestroy_hook(void* self)
 {
-    if (StatusWidth::Mode())
+    if (StatusWidth::AnyTracked())
         StatusWidth::ForgetDestroyedElement(self);
     ShellCheckAnim::OnElementDestroyed(self);
     DuiElement_OnDestroy_orig(self);
 }
 
-// Once the hook queued by the ElementLifetime capability is applied.
+BOOL WINAPI DUser_DeleteHandle_hook(HANDLE handle)
+{
+    const BOOL result = DUser_DeleteHandle_orig(handle);
+    ShellCheckAnim::OnDUserHandleDeleted();
+    return result;
+}
+
+// Once the hooks queued by the ElementLifetime capability are applied.
 static void DuiElementLifetimeMarkLive()
 {
     if (DuiElement_OnDestroy_orig)
         g_duiElementLifetimeLive.store(true, std::memory_order_release);
+    if (DUser_DeleteHandle_orig)
+        g_duserDeleteHandleLive.store(true, std::memory_order_release);
 }
 
 enum DirectUiSymbolCapability : unsigned {
@@ -58428,10 +58575,15 @@ static void DirectUiEnsureSymbolsForLoadedModule(bool applyHooks)
     if (!dui70)
         return;
 
+    // Held through the apply: Wh_ModBeforeUninit sets g_directUiUnloading
+    // under it, so no hook operation starts after it returns.
+    std::lock_guard<std::mutex> applyLock(g_directUiSymbolsMutex);
+    if (g_directUiUnloading.load(std::memory_order_acquire))
+        return;
+
     bool hooksQueued = false;
     bool renameHookQueued = false;
     {
-        std::lock_guard<std::mutex> lock(g_directUiSymbolsMutex);
         const unsigned required = DirectUiRequiredCapabilities();
         const unsigned missing = required &
             ~g_directUiAttemptedCapabilities.load(
@@ -58532,6 +58684,15 @@ static void DirectUiEnsureSymbolsForLoadedModule(bool applyHooks)
                     "?OnDestroy@Element@DirectUI@@UAEXXZ"),
                 DuiElement_OnDestroy_hook, &DuiElement_OnDestroy_orig);
             hooksQueued = hooksQueued || DuiElement_OnDestroy_orig;
+        }
+        if ((missing & DirectUiCapabilityElementLifetime) && !DUser_DeleteHandle_orig) {
+            // dui70 imports duser, so it is loaded.
+            HMODULE duser = GetModuleHandleW(L"duser.dll");
+            SetResolvedSymbolHook(
+                duser ? reinterpret_cast<void*>(GetProcAddress(duser, "DeleteHandle"))
+                      : nullptr,
+                DUser_DeleteHandle_hook, &DUser_DeleteHandle_orig);
+            hooksQueued = hooksQueued || DUser_DeleteHandle_orig;
         }
 
         if (missing & DirectUiCapabilityStatusWidth)
@@ -70788,12 +70949,13 @@ void Wh_ModBeforeUninit()
     // finishes applying before this returns, and none starts afterwards.
     {
         std::scoped_lock hookLocks(g_navTreeUniscribeHookMutex,
-                                   NavAnim::g_hookMutex, g_navDividerHookMutex);
+                                   NavAnim::g_hookMutex, g_navDividerHookMutex,
+                                   g_lazyControlHookMutex, g_directUiSymbolsMutex);
         g_lazyFeatureHooksUnloading.store(true, std::memory_order_release);
         g_navDividerUnloading.store(true, std::memory_order_release);
+        g_directUiUnloading.store(true, std::memory_order_release);
     }
     g_explorerFrameUnloading.store(true, std::memory_order_release);
-    g_directUiUnloading.store(true, std::memory_order_release);
     g_listRenameUnloading.store(true, std::memory_order_release);
     g_shortcutOverlayActive.store(false, std::memory_order_release);
     g_tooltipEffectsUnloading.store(true, std::memory_order_release);
