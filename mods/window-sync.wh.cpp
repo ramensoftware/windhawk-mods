@@ -108,7 +108,7 @@ the title bar, or Alt+Space).
   - fixed: Fixed size (percent of the screen)
 - widthPercent: 60
   $name: Fixed width (percent of the screen)
-  $description: Used with the fixed size, or when the active window can't be used (desktop selected, or a maximized window)
+  $description: Used with the fixed size, or when the active window can't be used (desktop selected, a maximized window, or a window that can't be resized)
 - heightPercent: 70
   $name: Fixed height (percent of the screen)
 */
