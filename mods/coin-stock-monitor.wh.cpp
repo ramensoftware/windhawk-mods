@@ -2,7 +2,7 @@
 // @id              coin-stock-monitor
 // @name            Coin & Stock Monitor
 // @description     Shows stock and crypto prices on the Windows 11 taskbar, with a configurable price API, symbol list, colors and entry-price percentage
-// @version         1.0.0
+// @version         1.1.0
 // @author          jayll1303
 // @github          https://github.com/jayll1303
 // @license         MIT
@@ -22,6 +22,14 @@ Shows live stock and crypto prices on the left side of the taskbar.
 Prices come from a configurable JSON API. The default is the Yahoo Finance chart
 API, which works without an API key for both stocks (`AAPL`, `VNM.VN`) and crypto
 (`BTC-USD`, `ETH-USD`).
+
+## Network access
+
+This mod sends HTTPS requests from `explorer.exe` to the URL set in **Price API URL**.
+By default that is `query1.finance.yahoo.com`. It sends one request per symbol (up to
+4) at startup, then once every **Refresh interval** (default 60 seconds). Each request
+uses the User-Agent `CoinStockMonitor/1.1 (Windhawk mod)`. No other data is sent. To
+stop all requests, disable the mod.
 
 ## Settings
 
@@ -147,17 +155,16 @@ using WindhawkUtils::StringSetting;
 namespace {
 
 constexpr wchar_t kOverlayClassName[] = L"WhTaskbarPriceMonitorOverlay";
-constexpr wchar_t kUserAgent[] =
-    L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    L"(KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+constexpr wchar_t kUserAgent[] = L"CoinStockMonitor/1.1 (Windhawk mod)";
 constexpr wchar_t kSymbolPlaceholder[] = L"{symbol}";
 constexpr wchar_t kSeparator[] = L"  |  ";
 constexpr wchar_t kHexDigits[] = L"0123456789ABCDEF";
 constexpr wchar_t kLoadingText[] = L"Loading prices...";
 constexpr UINT kMsgPricesUpdated = WM_APP + 1;
+constexpr UINT_PTR kPlacementTimerId = 1;
 constexpr UINT kPlacementIntervalMs = 1000;
+constexpr DWORD kTaskbarPollIntervalMs = 1000;
 constexpr int kMinRefreshSeconds = 15;
-constexpr DWORD kShutdownTimeoutMs = 15000;
 constexpr COLORREF kColorKey = RGB(255, 0, 255);
 constexpr int kTextPaddingX = 8;
 constexpr size_t kSymbolsPerLine = 2;
@@ -200,9 +207,12 @@ std::mutex g_textMutex;
 std::vector<TextLine> g_displayLines = {{{kLoadingText, Tone::neutral}}};
 std::atomic<HWND> g_overlay{nullptr};
 HANDLE g_stopEvent;
-HANDLE g_fetchThread;
-HANDLE g_uiThread;
+HANDLE g_workerThread;
 HFONT g_font;
+
+bool StopRequested() {
+    return WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0;
+}
 
 std::string ToUtf8(const std::wstring& text) {
     int size = WideCharToMultiByte(CP_UTF8, 0, text.data(),
@@ -345,6 +355,38 @@ std::wstring FormatChange(double percent) {
     return buffer;
 }
 
+// The request in flight, so that Wh_ModUninit can abort it.
+std::mutex g_requestMutex;
+HINTERNET g_activeRequest = nullptr;
+
+void SetActiveRequest(HINTERNET request) {
+    std::lock_guard<std::mutex> lock(g_requestMutex);
+    g_activeRequest = request;
+}
+
+// Closes the request unless CancelActiveRequest has already closed it.
+void FinishActiveRequest(HINTERNET request) {
+    bool owned = false;
+    {
+        std::lock_guard<std::mutex> lock(g_requestMutex);
+        owned = request && g_activeRequest == request;
+        if (owned) {
+            g_activeRequest = nullptr;
+        }
+    }
+    if (owned) {
+        WinHttpCloseHandle(request);
+    }
+}
+
+void CancelActiveRequest() {
+    std::lock_guard<std::mutex> lock(g_requestMutex);
+    if (g_activeRequest) {
+        WinHttpCloseHandle(g_activeRequest);
+        g_activeRequest = nullptr;
+    }
+}
+
 bool HttpGet(HINTERNET session, const std::wstring& url, std::string& body) {
     URL_COMPONENTS parts{};
     parts.dwStructSize = sizeof(parts);
@@ -369,6 +411,7 @@ bool HttpGet(HINTERNET session, const std::wstring& url, std::string& body) {
     HINTERNET request = WinHttpOpenRequest(
         connection, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
         WINHTTP_DEFAULT_ACCEPT_TYPES, secure ? WINHTTP_FLAG_SECURE : 0);
+    SetActiveRequest(request);
 
     bool ok = false;
     if (request &&
@@ -403,7 +446,7 @@ bool HttpGet(HINTERNET session, const std::wstring& url, std::string& body) {
         }
     }
 
-    WinHttpCloseHandle(request);
+    FinishActiveRequest(request);
     WinHttpCloseHandle(connection);
     return ok;
 }
@@ -445,6 +488,9 @@ TextLines BuildMonitorLines(HINTERNET session, const Settings& settings) {
 
     TextLines lines;
     for (size_t i = 0; i < settings.symbols.size(); i++) {
+        if (StopRequested()) {
+            break;
+        }
         if (i % kSymbolsPerLine == 0) {
             lines.emplace_back();
         }
@@ -476,33 +522,72 @@ TextLines BuildMonitorLines(HINTERNET session, const Settings& settings) {
     return lines;
 }
 
-DWORD WINAPI FetchThreadProc(LPVOID) {
-    Settings settings = g_settings;
+// Returns this process's taskbar. Secondary Explorer processes have none.
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND taskbar = nullptr;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD processId = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&taskbar));
+    return taskbar;
+}
 
-    HINTERNET session = WinHttpOpen(kUserAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                                    WINHTTP_NO_PROXY_NAME,
-                                    WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) {
-        return 0;
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+// Runs proc on the thread that owns hWnd, and waits until it returns. The overlay
+// must be created and destroyed on the taskbar's thread, because a child window
+// on another thread shares input state with its parent.
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runMsg =
+        RegisterWindowMessageW(L"CoinStockMonitor_RunFromWindowThread");
+
+    struct RunParam {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (threadId == 0) {
+        return false;
     }
-    WinHttpSetTimeouts(session, 5000, 5000, 5000, 10000);
+    if (threadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
 
-    do {
-        TextLines lines = BuildMonitorLines(session, settings);
-        {
-            std::lock_guard<std::mutex> lock(g_textMutex);
-            g_displayLines = lines;
-        }
-        HWND overlay = g_overlay;
-        if (overlay) {
-            PostMessageW(overlay, kMsgPricesUpdated, 0, 0);
-        }
-    } while (WaitForSingleObject(g_stopEvent,
-                                 static_cast<DWORD>(settings.refreshSeconds) *
-                                     1000) == WAIT_TIMEOUT);
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == runMsg) {
+                    RunParam* param = reinterpret_cast<RunParam*>(cwp->lParam);
+                    param->proc(param->procParam);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) {
+        return false;
+    }
 
-    WinHttpCloseHandle(session);
-    return 0;
+    RunParam param{proc, procParam};
+    SendMessageW(hWnd, runMsg, 0, reinterpret_cast<LPARAM>(&param));
+    UnhookWindowsHookEx(hook);
+    return true;
 }
 
 TextLines GetDisplayLines() {
@@ -630,6 +715,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
             PaintOverlay(hwnd);
             return 0;
 
+        case WM_TIMER:
+            if (wParam == kPlacementTimerId) {
+                RefreshOverlay(hwnd);
+            }
+            return 0;
+
         case kMsgPricesUpdated:
             RefreshOverlay(hwnd);
             return 0;
@@ -637,7 +728,29 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-HWND CreateOverlay(HWND taskbar) {
+HMODULE GetThisModule() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&OverlayWndProc), &module);
+    return module;
+}
+
+// Runs on the taskbar's thread.
+void WINAPI CreateOverlayOnTaskbarThread(PVOID parameter) {
+    HWND taskbar = static_cast<HWND>(parameter);
+    HMODULE module = GetThisModule();
+
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = OverlayWndProc;
+    windowClass.hInstance = module;
+    windowClass.lpszClassName = kOverlayClassName;
+    if (!RegisterClassExW(&windowClass) &&
+        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        return;
+    }
+
     if (!g_font) {
         int dpi = static_cast<int>(GetDpiForWindow(taskbar));
         g_font = CreateFontW(-MulDiv(kFontPointSize, dpi, 72), 0, 0, 0,
@@ -650,59 +763,72 @@ HWND CreateOverlay(HWND taskbar) {
     // lets clicks fall through to the taskbar.
     HWND overlay = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE, kOverlayClassName,
-        nullptr, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, taskbar, nullptr,
-        GetModuleHandleW(nullptr), nullptr);
-    if (overlay) {
-        SetLayeredWindowAttributes(overlay, kColorKey, 0, LWA_COLORKEY);
-    }
-    return overlay;
-}
-
-VOID CALLBACK PlacementTimerProc(HWND, UINT, UINT_PTR, DWORD) {
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!taskbar) {
+        nullptr, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, taskbar, nullptr, module,
+        nullptr);
+    if (!overlay) {
         return;
     }
-
-    HWND overlay = g_overlay;
-    if (!overlay || !IsWindow(overlay)) {
-        overlay = CreateOverlay(taskbar);
-        if (!overlay) {
-            return;
-        }
-        g_overlay = overlay;
-    }
+    SetLayeredWindowAttributes(overlay, kColorKey, 0, LWA_COLORKEY);
+    SetTimer(overlay, kPlacementTimerId, kPlacementIntervalMs, nullptr);
+    g_overlay = overlay;
     RefreshOverlay(overlay);
 }
 
-DWORD WINAPI UiThreadProc(LPVOID) {
-    WNDCLASSEXW windowClass{};
-    windowClass.cbSize = sizeof(windowClass);
-    windowClass.lpfnWndProc = OverlayWndProc;
-    windowClass.hInstance = GetModuleHandleW(nullptr);
-    windowClass.lpszClassName = kOverlayClassName;
-    RegisterClassExW(&windowClass);
-
-    UINT_PTR timerId =
-        SetTimer(nullptr, 0, kPlacementIntervalMs, PlacementTimerProc);
-    PlacementTimerProc(nullptr, 0, 0, 0);
-
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
-
-    KillTimer(nullptr, timerId);
-    HWND overlay = g_overlay.exchange(nullptr);
-    if (overlay) {
-        DestroyWindow(overlay);
-    }
-    UnregisterClassW(kOverlayClassName, windowClass.hInstance);
+// Runs on the taskbar's thread, after the worker thread has stopped.
+void WINAPI DestroyOverlayOnTaskbarThread(PVOID parameter) {
+    HWND overlay = static_cast<HWND>(parameter);
+    KillTimer(overlay, kPlacementTimerId);
+    DestroyWindow(overlay);
+    UnregisterClassW(kOverlayClassName, GetThisModule());
     if (g_font) {
         DeleteObject(g_font);
         g_font = nullptr;
     }
+}
+
+// Waits for this process's taskbar, then fetches prices until the mod unloads.
+DWORD WINAPI WorkerThreadProc(LPVOID) {
+    HWND taskbar = nullptr;
+    while (!(taskbar = FindCurrentProcessTaskbarWnd())) {
+        if (WaitForSingleObject(g_stopEvent, kTaskbarPollIntervalMs) !=
+            WAIT_TIMEOUT) {
+            return 0;
+        }
+    }
+    if (!RunFromWindowThread(taskbar, CreateOverlayOnTaskbarThread, taskbar)) {
+        return 0;
+    }
+
+    Settings settings = g_settings;
+    HINTERNET session = WinHttpOpen(kUserAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                    WINHTTP_NO_PROXY_NAME,
+                                    WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) {
+        return 0;
+    }
+    WinHttpSetTimeouts(session, 5000, 5000, 5000, 10000);
+
+    while (!StopRequested()) {
+        TextLines lines = BuildMonitorLines(session, settings);
+        if (StopRequested()) {
+            break;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_textMutex);
+            g_displayLines = lines;
+        }
+        HWND overlay = g_overlay;
+        if (overlay) {
+            PostMessageW(overlay, kMsgPricesUpdated, 0, 0);
+        }
+        if (WaitForSingleObject(g_stopEvent,
+                                static_cast<DWORD>(settings.refreshSeconds) *
+                                    1000) != WAIT_TIMEOUT) {
+            break;
+        }
+    }
+
+    WinHttpCloseHandle(session);
     return 0;
 }
 
@@ -748,18 +874,28 @@ BOOL Wh_ModInit() {
     if (!g_stopEvent) {
         return FALSE;
     }
-    g_fetchThread = CreateThread(nullptr, 0, FetchThreadProc, nullptr, 0, nullptr);
-    g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
-    return g_fetchThread && g_uiThread;
+    g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
+    if (!g_workerThread) {
+        CloseHandle(g_stopEvent);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 void Wh_ModUninit() {
     SetEvent(g_stopEvent);
-    PostThreadMessageW(GetThreadId(g_uiThread), WM_QUIT, 0, 0);
-    WaitForSingleObject(g_fetchThread, kShutdownTimeoutMs);
-    WaitForSingleObject(g_uiThread, kShutdownTimeoutMs);
-    CloseHandle(g_fetchThread);
-    CloseHandle(g_uiThread);
+    CancelActiveRequest();
+
+    // Every WinHTTP call has a timeout, so the worker always returns. Waiting
+    // without a limit keeps the mod's code mapped until the thread has left it.
+    WaitForSingleObject(g_workerThread, INFINITE);
+    CloseHandle(g_workerThread);
+
+    HWND overlay = g_overlay.exchange(nullptr);
+    if (overlay && IsWindow(overlay)) {
+        RunFromWindowThread(GetParent(overlay), DestroyOverlayOnTaskbarThread,
+                            overlay);
+    }
     CloseHandle(g_stopEvent);
 }
 
