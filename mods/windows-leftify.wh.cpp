@@ -1626,6 +1626,9 @@ static bool Classify(const void* bmp, char* kind, int* state, const void** st0) 
 }
 
 // ---------------- CBitmapSource::Update symbol (cached per uDWM.dll version) ----------------
+// CBitmapSource::Update is only called (never hooked), so HookSymbols does not
+// apply here. The symbol is searched manually, and its RVA is cached per
+// uDWM.dll build (Wh_SetIntValue), so the slow symbol enumeration runs only once.
 typedef long (*UpdateBmp_t)(void* pThis, IWICBitmap* bmp);
 static UpdateBmp_t g_updateBmp = nullptr;
 
@@ -2908,7 +2911,7 @@ BOOL Wh_ModInit() {
 
     FindUpdate(udwm);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         // ---- Leftify ----
         { { LR"(public: void __cdecl CTopLevelWindow::GetTitleBarInfo(struct tagTITLEBARINFOEX *,bool *))" },
           (void**)&GetTitleBarInfo_Orig, (void*)GetTitleBarInfo_Hook, false },
@@ -2942,7 +2945,7 @@ BOOL Wh_ModInit() {
           (void**)&UpdatePos_Orig, (void*)UpdatePos_Hook, true },
     };
 
-    BOOL ok = WindhawkUtils::HookSymbols(udwm, hooks, ARRAYSIZE(hooks));
+    BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
     g_hasPosHook = (PosAndSizes_Orig != nullptr);
     return ok;
 }
