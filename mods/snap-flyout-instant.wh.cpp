@@ -21,11 +21,13 @@ The mod finds the timer that Windows starts when the pointer enters the maximize
 
 ## Hide delay
 
-When "Hide delay" is above 0, the mod also replaces the timer that Windows arms shortly after the flyout is shown, which controls when the flyout hides after the pointer leaves it. The hide timer is identified by its duration (100-3000 ms) and by the thread it is armed on, within a few seconds of the flyout being shown. With the default value of 0 this part is disabled and the behavior is the same as in version 1.0.
+When "Hide delay" is above 0, the mod also replaces the timer that Windows starts when the pointer leaves the flyout (the Windows default is 200 ms). The hide timer is identified by its exact duration (200 ms), by being created through the WinRT thread pool, and by being armed on the flyout's thread within 10 seconds after the flyout is shown. Timers armed after that window use the system hide delay. With the default value of 0 this part is disabled and the behavior is the same as in version 1.0.
 
 ## Notes
 
 The mod relies on a symbol in twinui.pcshell.dll that a Windows update may rename, which would stop the show delay from being applied.
+
+Tested on Windows 11 build 26300.9457 (twinui.pcshell.dll 10.0.26100.9444).
 */
 // ==/WindhawkModReadme==
 
@@ -36,7 +38,7 @@ The mod relies on a symbol in twinui.pcshell.dll that a Windows update may renam
   $description: Delay before the snap layouts flyout appears. Minimum 1. The Windows default is 600.
 - hideDelayMs: 0
   $name: Hide delay (ms)
-  $description: Delay before the flyout hides after the pointer leaves it. 0 keeps the system default.
+  $description: Delay before the flyout hides after the pointer leaves it. 0 keeps the system default. The Windows default is 200.
 */
 // ==/WindhawkModSettings==
 
@@ -54,6 +56,7 @@ static std::atomic<ULONGLONG> g_flyoutTick{0};
 static std::atomic<bool> g_flyoutHookAttempted{false};
 
 static constexpr ULONGLONG kHideWindowMs = 10000;
+static constexpr long long kSystemHideMs = 200;
 
 using Void_t = void(__cdecl*)();
 static Void_t StartInvoke_Original;
@@ -106,9 +109,8 @@ VOID NTAPI TpSet_Hook(PVOID timer, PLARGE_INTEGER due, ULONG period, ULONG windo
             g_flyoutTid = 0;
         } else {
             long long ms = -due->QuadPart / 10000;
-            if (ms >= 100 && ms <= 3000 &&
+            if (ms == kSystemHideMs &&
                 CallerIsWinrtTimer(__builtin_return_address(0))) {
-                g_flyoutTick = now;
                 LARGE_INTEGER custom;
                 custom.QuadPart = -(long long)hideMs * 10000;
                 TpSet_Original(timer, &custom, period, window);
