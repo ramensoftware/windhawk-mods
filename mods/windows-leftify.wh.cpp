@@ -21,6 +21,10 @@ Moves the caption buttons (minimize, maximize, close) to the left side of the ti
 
 It works by hooking internal functions of the Desktop Window Manager (`dwm.exe` / `uDWM.dll`), so it affects every standard Windows window.
 
+## Setup
+
+`dwm.exe` is a critical system process, so Windhawk does not inject into it by default. To use this mod, add `dwm.exe` to the process inclusion list: *Windhawk Settings > Advanced settings > More advanced settings > Process inclusion list*. Without it, only the `explorer.exe` part of the mod loads and the caption buttons will not move.
+
 # Features & Preview
 
 ## Caption Buttons
@@ -2092,7 +2096,7 @@ static void PaintAtlas() {
             d[6] = keep[0]; d[7] = keep[1];
             d[20] = keep[2]; d[21] = keep[3]; d[22] = keep[4]; d[23] = keep[5];
             if (r >= 0) g_everPainted = 1;
-            // bmp is intentionally not released: it is unknown whether Update keeps the pointer without AddRef.
+            bmp->Release();
         } else {
             LogCat(2, 40, L"[Atlas] CreateBitmapFromMemory failed hr=0x%lx", (unsigned long)hr);
         }
@@ -2516,6 +2520,7 @@ typedef HWND (WINAPI *CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, in
 static CreateWindowExW_t CreateWindowExW_Orig;
 
 static const UINT_PTR kRescanTimerId = 0x4C46;
+static UINT g_msgCleanup = 0;   // registered in ExplorerInit; asks the subclass to remove itself
 static BOOL CALLBACK ExChildProc(HWND h, LPARAM);
 static int TabSnapshot(HWND* hw, int* applied, bool* isTab);
 
@@ -2525,6 +2530,12 @@ static void StartRescan(HWND cab) {
 }
 
 static LRESULT CALLBACK CabinetSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
+    if (g_msgCleanup && msg == g_msgCleanup) {
+        KillTimer(hwnd, kRescanTimerId);
+        RemovePropW(hwnd, L"LeftifyTicks");
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CabinetSubclassProc);
+        return 0;
+    }
     if (msg == WM_TIMER && wParam == kRescanTimerId) {
         int ticks = (int)(INT_PTR)GetPropW(hwnd, L"LeftifyTicks") + 1;
         SetPropW(hwnd, L"LeftifyTicks", (HANDLE)(INT_PTR)ticks);
@@ -2690,7 +2701,27 @@ static void ExplorerReapply() {
     }
 }
 
+// Removes CabinetSubclassProc from every File Explorer frame of this process.
+// The rescan timer and the window property belong to the window's thread, so
+// the subclass cleans them up itself when it receives g_msgCleanup.
+static BOOL CALLBACK ExTopUninitProc(HWND h, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+    wchar_t cls[64] = L"";
+    GetClassNameW(h, cls, 64);
+    if (wcscmp(cls, L"CabinetWClass") != 0) return TRUE;
+
+    DWORD_PTR res = 0;
+    if (!g_msgCleanup || !SendMessageTimeoutW(h, g_msgCleanup, 0, 0, SMTO_ABORTIFHUNG, 1000, &res)) {
+        // The window did not answer: remove the subclass directly
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, CabinetSubclassProc);
+    }
+    return TRUE;
+}
+
 static void ExplorerUninit() {
+    EnumWindows(ExTopUninitProc, 0);
     HWND hw[32];
     int applied[32];
     bool isTab[32];
@@ -2806,6 +2837,7 @@ static BOOL ExplorerInit() {
     SyncIconCache();    // copy custom images where dwm.exe can read them
     ExLoadSettings();
     LoadUser32Procs();
+    g_msgCleanup = RegisterWindowMessageW(L"WindowsLeftify_RemoveSubclass"); 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Orig);
     return TRUE;
 }
