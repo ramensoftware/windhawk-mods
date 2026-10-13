@@ -124,14 +124,14 @@ By default *Excluded apps* contains `notepad.exe`, `taskmgr.exe` and `WindowsTer
 ## Files created by the mod
 
 - **Image cache:** `C:\Users\Public\Windows Leftify Cache` (only with custom images, see above).
-- **Debug logs:** `C:\Users\Public\Windows Leftify Log` (`layout.txt`, `glyphs.txt`, `explorer-tabs.txt`). Logs are only written while *Write debug log* is on (off by default) and are deleted when you turn it off, so send them before switching it off. Logs can contain folder paths (including your Windows user name), so check them before sharing.
+- **Debug logs:** none. With *Write debug log* on (off by default), the mod writes detailed messages to the Windhawk log output instead of files. Logs can contain folder paths (including your Windows user name), so check them before sharing.
 
 ## Important notes
 
 - When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open).
 - The circles or custom images are global. Excluded apps keep them too; only their layout stays at the Windows default.
 - The mod hooks internal, undocumented functions of `uDWM.dll`. A Windows update can change them and stop the mod until it is updated.
-- If you report a bug, turn on *Write debug log* and attach the log files.
+- If you report a bug, turn on *Write debug log* and attach the Windhawk log output.
 
 ## Compatibility and known issues
 
@@ -269,7 +269,7 @@ By default *Excluded apps* contains `notepad.exe`, `taskmgr.exe` and `WindowsTer
   $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.
 - debugLog: false
   $name: Write debug log
-  $description: Writes logs to C:/Users/Public/Windows Leftify Log (layout.txt, glyphs.txt, explorer-tabs.txt) and to the Windhawk log output
+  $description: Writes detailed debug messages to the Windhawk log output. Turn on logging for this mod in Windhawk to see them.
 */
 // ==/WindhawkModSettings==
 
@@ -381,31 +381,6 @@ static void LoadSettings() {
     LoadExclusions();
 }
 
-// ---------------- log files ----------------
-// All logs live in one folder. dwm.exe cannot write to user profile folders,
-// so the folder is created under C:\Users\Public.
-static const wchar_t kLogDir[] = L"C:\\Users\\Public\\Windows Leftify Log";
-
-static FILE* OpenLogFile(const wchar_t* name, const wchar_t* mode) {
-    CreateDirectoryW(kLogDir, nullptr);
-    wchar_t path[MAX_PATH];
-    _snwprintf(path, MAX_PATH - 1, L"%s\\%s", kLogDir, name);
-    path[MAX_PATH - 1] = 0;
-    return _wfopen(path, mode);
-}
-
-// Debug logging off: remove the log files and the (empty) folder, so nothing is left behind.
-static void RemoveLogFiles() {
-    static const wchar_t* const kNames[] = { L"layout.txt", L"glyphs.txt", L"explorer-tabs.txt" };
-    for (int i = 0; i < 3; i++) {
-        wchar_t path[MAX_PATH];
-        _snwprintf(path, MAX_PATH - 1, L"%s\\%s", kLogDir, kNames[i]);
-        path[MAX_PATH - 1] = 0;
-        DeleteFileW(path);
-    }
-    RemoveDirectoryW(kLogDir);   // only succeeds when the folder is empty
-}
-
 // ---------------- logging ----------------
 static int g_logCount = 0;
 static int g_hitLogCount = 0;
@@ -414,10 +389,6 @@ static wchar_t g_lastHitLog[300] = L"";
 
 static void WriteLogLine(const wchar_t* line) {
     Wh_Log(L"%s", line);
-    FILE* f = OpenLogFile(L"layout.txt", L"a, ccs=UTF-8");
-    if (!f) return;
-    fwprintf(f, L"%s\n", line);
-    fclose(f);
 }
 
 static void DebugLog(const wchar_t* fmt, ...) {
@@ -1438,8 +1409,6 @@ static void LogCat(int cat, int cap, const wchar_t* fmt, ...) {
         g_catCount[cat]++;
         g_total++;
         Wh_Log(L"%s", buf);
-        FILE* f = OpenLogFile(L"glyphs.txt", L"a, ccs=UTF-8");
-        if (f) { fwprintf(f, L"%s\n", buf); fclose(f); }
     }
     ReleaseSRWLockExclusive(&g_logLock);
 }
@@ -2240,8 +2209,6 @@ static void ExLog(const wchar_t* fmt, ...) {
     wcscpy(s_last, buf);
     s_count++;
     Wh_Log(L"%s", buf);
-    FILE* f = OpenLogFile(L"explorer-tabs.txt", L"a, ccs=UTF-8");
-    if (f) { fwprintf(f, L"%s\n", buf); fclose(f); }
 }
 
 static void ExLoadSettings() {
@@ -2827,17 +2794,11 @@ static void LoadUser32Procs() {
 }
 
 static BOOL ExplorerInit() {
-    if (Wh_GetIntSetting(L"debugLog")) {
-        FILE* f = OpenLogFile(L"explorer-tabs.txt", L"w, ccs=UTF-8");
-        if (f) fclose(f);
-    } else {
-        RemoveLogFiles();
-    }
     LoadSettings();     // moveButtons, leftMargin, exclusions
     SyncIconCache();    // copy custom images where dwm.exe can read them
     ExLoadSettings();
     LoadUser32Procs();
-    g_msgCleanup = RegisterWindowMessageW(L"WindowsLeftify_RemoveSubclass"); 
+    g_msgCleanup = RegisterWindowMessageW(L"WindowsLeftify_RemoveSubclass");
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Orig);
     return TRUE;
 }
@@ -2850,14 +2811,12 @@ void Wh_ModSettingsChanged() {
         LoadSettings();
         ExLoadSettings();
         SyncIconCache();
-        if (!g_settings.debugLog) RemoveLogFiles();
         ExplorerReapply();
         EnumWindows(ExTopProc, 0);
         return;
     }
     LoadSettings();       // Leftify (including the excluded apps lists)
     TL_LoadSettings();    // painter
-    if (!g_settings.debugLog) RemoveLogFiles();
     InterlockedExchange(&g_pending, 1);   // repaint on the next DWM-thread hook call
 }
 
@@ -2883,17 +2842,6 @@ BOOL Wh_ModInit() {
     exeName = exeName ? exeName + 1 : exePath;
     g_isExplorer = _wcsicmp(exeName, L"explorer.exe") == 0;
     if (g_isExplorer) return ExplorerInit();
-
-    // Truncate the logs first so lines written while loading settings are not erased.
-    // With debug logging off, remove any leftover log files instead.
-    if (Wh_GetIntSetting(L"debugLog")) {
-        FILE* f = OpenLogFile(L"layout.txt", L"w, ccs=UTF-8");
-        if (f) fclose(f);
-        f = OpenLogFile(L"glyphs.txt", L"w, ccs=UTF-8");
-        if (f) fclose(f);
-    } else {
-        RemoveLogFiles();
-    }
 
     LoadSettings();
     TL_LoadSettings();
@@ -2943,6 +2891,7 @@ BOOL Wh_ModInit() {
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
     g_hasPosHook = (PosAndSizes_Orig != nullptr);
+
     if (!g_updateBmp) Wh_Log(L"CBitmapSource::Update not found, custom button styles will not be painted");
     return ok;
 }
