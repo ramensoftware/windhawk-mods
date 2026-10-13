@@ -6,7 +6,7 @@
 // @author          paran01d-qq
 // @github          https://github.com/paran01d-qq
 // @include         explorer.exe
-// @compilerOptions -lgdi32 -lwinmm -lgdiplus -lole32 -loleaut32 -luuid
+// @compilerOptions -lgdi32 -lshell32 -lwinmm -lgdiplus -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,6 +27,9 @@ and plays a sound.
 
 Each field wraps around independently (59 → 00), like on an alarm clock.
 The maximum time is 99:59:59.
+
+The timer is hidden while a fullscreen app (video, game, presentation) is
+active on the same monitor. The countdown and the alarm sound keep working.
 
 ## Troubleshooting
 If the timer is not placed next to the arrow, enable **Debug logging**, find the
@@ -54,6 +57,8 @@ the timer is placed at a fixed offset from the right edge of the taskbar.
 - chevronName: ""
   $name: Arrow name/ID
   $description: Fill in only if the arrow is not detected automatically
+- hideInFullscreen: true
+  $name: Hide when a fullscreen app is active
 - debugLog: false
   $name: Debug logging
 */
@@ -61,6 +66,7 @@ the timer is placed at a fixed offset from the right edge of the taskbar.
 
 #include <windows.h>
 #include <windowsx.h>
+#include <shellapi.h>
 #include <mmsystem.h>
 #include <objbase.h>
 #include <uiautomation.h>
@@ -83,6 +89,7 @@ struct Settings {
     int gap = 2;
     int fallbackOffset = 160;
     std::wstring chevronName;
+    bool hideInFullscreen = true;
     bool debugLog = false;
 };
 
@@ -110,6 +117,7 @@ static void LoadSettings() {
     s.gap = std::clamp(Wh_GetIntSetting(L"gap"), 0, 100);
     s.fallbackOffset = std::clamp(Wh_GetIntSetting(L"fallbackOffset"), 0, 2000);
     s.chevronName = ReadStringSetting(L"chevronName");
+    s.hideInFullscreen = Wh_GetIntSetting(L"hideInFullscreen") != 0;
     s.debugLog = Wh_GetIntSetting(L"debugLog") != 0;
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -163,6 +171,8 @@ static ULONGLONG g_endTick = 0;
 static int g_alarmPlayed = 0;
 static bool g_hover = false;
 static bool g_lightTheme = false;
+static bool g_visible = false;
+static int g_tickCount = 0;
 
 // Hit-test regions
 enum Hit {
@@ -742,8 +752,73 @@ static void Render(HWND hwnd) {
     DeleteObject(bmp);
     DeleteDC(mem);
     ReleaseDC(nullptr, screen);
+}
 
-    if (!IsWindowVisible(hwnd)) ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+// ---------------------------------------------------------------------------
+// Visibility (fullscreen detection, z-order)
+// ---------------------------------------------------------------------------
+
+static bool IsShellWindowClass(HWND hwnd) {
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, 64);
+    return wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0 ||
+           wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+           wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+           wcscmp(cls, kWindowClass) == 0;
+}
+
+static bool IsFullscreenAppActive(HWND taskbar) {
+    // Exclusive fullscreen games / presentation mode
+    QUERY_USER_NOTIFICATION_STATE quns;
+    if (SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+        (quns == QUNS_RUNNING_D3D_FULL_SCREEN || quns == QUNS_PRESENTATION_MODE)) {
+        return true;
+    }
+
+    // Borderless fullscreen (browser video, players, most games)
+    HWND fg = GetForegroundWindow();
+    if (!fg || IsShellWindowClass(fg)) return false;
+
+    // A maximized window with a title bar is not fullscreen
+    // (matters when the taskbar is set to auto-hide)
+    LONG style = GetWindowLongW(fg, GWL_STYLE);
+    if (IsZoomed(fg) && (style & WS_CAPTION) == WS_CAPTION) return false;
+
+    HMONITOR mon = MonitorFromWindow(taskbar, MONITOR_DEFAULTTOPRIMARY);
+    if (MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != mon) return false;
+
+    MONITORINFO mi{sizeof(mi)};
+    RECT wr;
+    if (!GetMonitorInfoW(mon, &mi) || !GetWindowRect(fg, &wr)) return false;
+
+    return wr.left <= mi.rcMonitor.left && wr.top <= mi.rcMonitor.top &&
+           wr.right >= mi.rcMonitor.right && wr.bottom >= mi.rcMonitor.bottom;
+}
+
+static void UpdateVisibility(HWND hwnd) {
+    HWND taskbar = GetWindow(hwnd, GW_OWNER);
+    RECT r;
+    UINT dpi;
+    bool show = taskbar && IsWindowVisible(taskbar) && GetGeometry(&r, &dpi);
+    if (show && GetSettings().hideInFullscreen && IsFullscreenAppActive(taskbar))
+        show = false;
+
+    if (show && !g_visible) {
+        Render(hwnd);
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                         SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+        g_visible = true;
+    } else if (!show && g_visible) {
+        ShowWindow(hwnd, SW_HIDE);
+        g_visible = false;
+        g_hover = false;
+        g_hoverHit = HitNone;
+    } else if (show && ++g_tickCount % 4 == 0) {
+        // Once a second, make sure the taskbar hasn't covered the timer
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -810,6 +885,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_TIMER:
             if (wp == TIMER_TICK) {
+                UpdateVisibility(hwnd);
                 if (g_state == State::Running) {
                     if (RemainingMs() <= 0) FinishTimer(hwnd);
                     Render(hwnd);
@@ -928,10 +1004,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
         case WM_DESTROY:
+            // Also happens when Windows recreates the taskbar (our owner).
+            // The UI thread will create a new window; the countdown continues.
             KillTimer(hwnd, TIMER_TICK);
             KillTimer(hwnd, TIMER_REPEAT);
-            StopAlarm(hwnd);
-            PostQuitMessage(0);
+            KillTimer(hwnd, TIMER_ALARM);
+            if (g_hwnd.load() == hwnd) g_hwnd = nullptr;
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -976,34 +1054,53 @@ static DWORD WINAPI UiThread(LPVOID) {
     wc.lpszClassName = kWindowClass;
     RegisterClassExW(&wc);
 
-    HWND hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                kWindowClass, L"", WS_POPUP, 0, 0, 1, 1, taskbar,
-                                nullptr, g_hInstance, nullptr);
-    HANDLE posThread = nullptr;
+    HANDLE posThread = CreateThread(nullptr, 0, PositionThread, nullptr, 0, nullptr);
 
-    if (hwnd) {
-        g_hwnd = hwnd;
-        SetTimer(hwnd, TIMER_TICK, 250, nullptr);
-        posThread = CreateThread(nullptr, 0, PositionThread, nullptr, 0, nullptr);
+    HWND hwnd = nullptr;
+    HWND owner = nullptr;
 
-        bool quit = false;
-        while (!quit) {
-            DWORD r = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
-                                                QS_ALLINPUT);
-            if (r == WAIT_OBJECT_0) break;
-            MSG msg;
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                if (msg.message == WM_QUIT) { quit = true; break; }
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
+    for (;;) {
+        // (Re)create the window if the taskbar was recreated or our window is gone
+        HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (tb) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(tb, &pid);
+            if (pid != GetCurrentProcessId()) break;
+        }
+        if (tb && (!hwnd || !IsWindow(hwnd) || owner != tb)) {
+            if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
+            hwnd = CreateWindowExW(
+                WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+                kWindowClass, L"", WS_POPUP, 0, 0, 1, 1, tb, nullptr, g_hInstance,
+                nullptr);
+            owner = tb;
+            g_visible = false;
+            g_hover = false;
+            g_hoverHit = HitNone;
+            g_repeatHit = HitNone;
+            if (hwnd) {
+                Wh_Log(L"Timer window created");
+                g_hwnd = hwnd;
+                SetTimer(hwnd, TIMER_TICK, 250, nullptr);
+                UpdateVisibility(hwnd);
+            } else {
+                Wh_Log(L"Failed to create the timer window");
             }
         }
 
-        g_hwnd = nullptr;
-        if (IsWindow(hwnd)) DestroyWindow(hwnd);
-    } else {
-        Wh_Log(L"Failed to create the timer window");
+        DWORD r = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 1000, QS_ALLINPUT);
+        if (r == WAIT_OBJECT_0) break;
+
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
     }
+
+    g_hwnd = nullptr;
+    if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
+    StopAlarm(nullptr);
 
     SetEvent(g_stopEvent);
     if (posThread) {
