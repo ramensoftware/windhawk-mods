@@ -104,7 +104,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 * **`%folders`** — Selected folders only (skips selected regular files).
 * **`%1`** — Quoted path of the first selected file or directory (`"C:\a.txt"`).
 * **`%n`** / **`%name`** — File or folder names only without absolute directory paths (`"a.txt"`).
-* **`%base`** / **`%basename`** — File or folder names without extension (`"document"` from `"document.pdf"`, or `"LICENSE"` for extensionless files).
+* **`%base`** / **`%basename`** — File names without extension (`"document"` from `"document.pdf"`, or `"LICENSE"` for extensionless files). Selected folders retain their full name without stripping dots (e.g. `"v1.2"`).
 * **`%c`** / **`%count`** — Total number of selected items as an integer (`3`). In loop modes, this resolves to `1`.
 * **`%ext`** — File extension of the first selected item (`.png`).
 * **`%s`** — Space-separated paths with **smart-quoting** (automatically adds double-quotes only to paths containing spaces).
@@ -337,6 +337,7 @@ You can add your own shortcuts using these templates in the settings:
 #include <string>
 #include <vector>
 #include <string_view>
+#include <filesystem>
 
 #include <windhawk_utils.h>
 
@@ -682,13 +683,19 @@ std::wstring GetFileBaseNamesOnly(const std::vector<std::wstring>& paths,
         PCWSTR namePtr = PathFindFileNameW(p.c_str());
         std::wstring name = namePtr ? namePtr : L"";
 
-        // Find the last dot to strip extension
-        size_t dot = name.find_last_of(L'.');
-        // Only strip if dot exists and is NOT the first character
-        // (preserves dotfiles like .gitignore, and extensionless files like
-        // LICENSE)
-        if (dot != std::wstring::npos && dot > 0) {
-            name = name.substr(0, dot);
+        DWORD attr = GetFileAttributesW(p.c_str());
+        bool isDirectory = (attr != INVALID_FILE_ATTRIBUTES &&
+                            (attr & FILE_ATTRIBUTE_DIRECTORY));
+
+        // Only strip extensions from regular files, preserving directory names
+        if (!isDirectory) {
+            size_t dot = name.find_last_of(L'.');
+            // Only strip if dot exists and is NOT the first character
+            // (preserves dotfiles like .gitignore, and extensionless files like
+            // LICENSE)
+            if (dot != std::wstring::npos && dot > 0) {
+                name = name.substr(0, dot);
+            }
         }
 
         if (forceQuotes || name.find(L' ') != std::wstring::npos) {
@@ -1408,6 +1415,36 @@ void LaunchTerminalHelper(const std::wstring& activeDir,
     } else {
         Wh_Log(L"LaunchTerminalHelper: Process created successfully.");
     }
+}
+
+// Finds VS Code executable (Code.exe), preferring the direct binary over
+// code.cmd.
+std::wstring FindVsCode() {
+    // 1. Try direct App Paths / PATH resolution for Code.exe
+    std::wstring exe = ResolveCommandPath(L"code.exe");
+    if (exe.find(L'\\') != std::wstring::npos &&
+        GetFileAttributesW(exe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return exe;
+    }
+
+    // 2. Fall back to code.cmd on PATH
+    std::wstring cmd = ResolveCommandPath(L"code.cmd");
+    if (cmd.find(L'\\') == std::wstring::npos) {
+        return std::wstring();
+    }
+
+    // 3. Resolve sibling <install>\Code.exe from <install>\bin\code.cmd
+    std::error_code ec;
+    std::filesystem::path binCmdPath(cmd);
+    std::filesystem::path siblingExe =
+        binCmdPath.parent_path().parent_path() / L"Code.exe";
+
+    if (GetFileAttributesW(siblingExe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return siblingExe.wstring();
+    }
+
+    // 4. Fall back to the script only if Code.exe cannot be found
+    return cmd;
 }
 
 void ExecuteInternalCommand(const std::wstring& action,
@@ -2450,13 +2487,9 @@ void ExecuteInternalCommand(const std::wstring& action,
     // --- Open Current Directory in VS Code ---
     if (_wcsicmp(action.c_str(), L"openDirInCode") == 0) {
         Wh_Log(L"internal:openDirInCode: Invoked.");
-        std::wstring codePath = ResolveCommandPath(L"code.exe");
-        if (codePath.find(L'\\') == std::wstring::npos) {
-            codePath = ResolveCommandPath(L"Code.cmd");
-        }
+        std::wstring codePath = FindVsCode();
 
-        if (codePath.find(L'\\') == std::wstring::npos &&
-            GetFileAttributesW(codePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        if (codePath.empty()) {
             Wh_Log(L"internal:openDirInCode: VS Code not found");
             ShowActionToast(rootHwnd, L"VS Code not found", ToastType::Error);
             return;
@@ -2479,13 +2512,8 @@ void ExecuteInternalCommand(const std::wstring& action,
     // --- Open Selected Items in VS Code ---
     if (_wcsicmp(action.c_str(), L"openWithCode") == 0) {
         Wh_Log(L"internal:openWithCode: Invoked.");
-        std::wstring codePath = ResolveCommandPath(L"code.exe");
-        if (codePath.find(L'\\') == std::wstring::npos) {
-            codePath = ResolveCommandPath(L"Code.cmd");
-        }
-
-        if (codePath.find(L'\\') == std::wstring::npos &&
-            GetFileAttributesW(codePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        std::wstring codePath = FindVsCode();
+        if (codePath.empty()) {
             Wh_Log(L"internal:openWithCode: VS Code not found");
             ShowActionToast(rootHwnd, L"VS Code not found", ToastType::Error);
             return;
