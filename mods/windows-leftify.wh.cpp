@@ -1625,49 +1625,11 @@ static bool Classify(const void* bmp, char* kind, int* state, const void** st0) 
     return ok;
 }
 
-// ---------------- CBitmapSource::Update symbol (cached per uDWM.dll version) ----------------
-// CBitmapSource::Update is only called (never hooked), so HookSymbols does not
-// apply here. The symbol is searched manually, and its RVA is cached per
-// uDWM.dll build (Wh_SetIntValue), so the slow symbol enumeration runs only once.
+// ---------------- CBitmapSource::Update (address only) ----------------
+// CBitmapSource::Update is only called, never hooked. Its address is resolved
+// through an address-only entry in the HookSymbols array in Wh_ModInit.
 typedef long (*UpdateBmp_t)(void* pThis, IWICBitmap* bmp);
 static UpdateBmp_t g_updateBmp = nullptr;
-
-static void FindUpdate(HMODULE udwm) {
-    const BYTE* base = (const BYTE*)udwm;
-    wchar_t key[64] = L"";
-    DWORD imageSize = 0;
-    const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)base;
-    if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
-        const IMAGE_NT_HEADERS* nt = (const IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
-        if (nt->Signature == IMAGE_NT_SIGNATURE) {
-            imageSize = nt->OptionalHeader.SizeOfImage;
-            _snwprintf(key, 63, L"updRva_%08lX_%08lX",
-                       (unsigned long)nt->FileHeader.TimeDateStamp, (unsigned long)imageSize);
-            key[63] = 0;
-        }
-    }
-    if (key[0]) {
-        int rva = Wh_GetIntValue(key, 0);
-        if (rva > 0 && (DWORD)rva < imageSize) {
-            g_updateBmp = (UpdateBmp_t)(base + rva);
-            LogCat(1, 10, L"[Symbol] Update from cache: %p (rva=0x%x)", (void*)g_updateBmp, rva);
-            return;
-        }
-    }
-    WH_FIND_SYMBOL sym;
-    HANDLE h = Wh_FindFirstSymbol(udwm, nullptr, &sym);
-    if (!h) { LogCat(1, 10, L"[Symbol] Wh_FindFirstSymbol failed"); return; }
-    do {
-        if (sym.symbol && wcsstr(sym.symbol, L"CBitmapSource::Update(struct IWICBitmap *)")) {
-            g_updateBmp = (UpdateBmp_t)sym.address;
-            LogCat(1, 10, L"[Symbol] Update found: %p %s", sym.address, sym.symbol);
-            break;
-        }
-    } while (Wh_FindNextSymbol(h, &sym));
-    Wh_FindCloseSymbol(h);
-    if (!g_updateBmp) LogCat(1, 10, L"[Symbol] Update NOT found");
-    else if (key[0]) Wh_SetIntValue(key, (int)((const BYTE*)g_updateBmp - base));
-}
 
 // ---------------- rendering ----------------
 static const GUID kPBGRA = {0x6fddc324, 0x4e03, 0x4bfe, {0xb1, 0x85, 0x3d, 0x77, 0x76, 0x8d, 0xc9, 0x10}};
@@ -2909,8 +2871,6 @@ BOOL Wh_ModInit() {
     HMODULE udwm = LoadLibraryW(L"uDWM.dll");
     if (!udwm) return FALSE;
 
-    FindUpdate(udwm);
-
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         // ---- Leftify ----
         { { LR"(public: void __cdecl CTopLevelWindow::GetTitleBarInfo(struct tagTITLEBARINFOEX *,bool *))" },
@@ -2943,9 +2903,14 @@ BOOL Wh_ModInit() {
           (void**)&ImgSetSize_Orig, (void*)ImgSetSize_Hook, true },
         { { LR"(private: void __cdecl CButton::UpdateAtlasPositionAndSize(void))" },
           (void**)&UpdatePos_Orig, (void*)UpdatePos_Hook, true },
+  
+        // Address only (no hook): called by PaintAtlas
+        { { LR"(public: long __cdecl CBitmapSource::Update(struct IWICBitmap *))" },
+          (void**)&g_updateBmp, nullptr, true },
     };
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
     g_hasPosHook = (PosAndSizes_Orig != nullptr);
+    if (!g_updateBmp) Wh_Log(L"CBitmapSource::Update not found, custom button styles will not be painted");
     return ok;
 }
