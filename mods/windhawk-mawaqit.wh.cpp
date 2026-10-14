@@ -26,8 +26,12 @@ Mawaqit prayer clock with live countdown, prayer schedule popup, and customizabl
 - Native XAML taskbar integration with reserved layout space for anchored positions
 - Automatic or manual clock height, four-sided margins and padding, tray gap, corner radius, and font size
 - Background schedule updates through native WinHTTP, with configurable refresh interval
+- Live settings updates without restarting Explorer
 
 ## Network access and cached schedules
+This mod intentionally uses Mawaqit’s published mosque-specific prayer times rather
+than locally calculated astronomical times, preserving mosque-specific adjustments.
+
 This mod connects to **https://mawaqit.net** over HTTPS to retrieve the public
 prayer schedule for the mosque identifier configured in Settings. The request
 is an HTTP GET for `https://mawaqit.net/<language>/<mosque-identifier>`;
@@ -42,8 +46,6 @@ If a download fails, it retries after one hour. An empty, expired, mismatched,
 or unusable cache causes a download at startup. The mod reads schedule data
 from the public Mawaqit webpage, so changes to that page can interrupt updates.
 
-- Live settings updates without restarting Explorer
-
 ## Screenshots
 Mawaqit Prayer Clock supports multiple appearance themes to match your Windows 11 desktop.
 
@@ -51,9 +53,9 @@ Windows System Default | Traditional Islamic |
 |:---:|:---:|
 ![Windows](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default.png) | ![Traditional](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic.png) |
 
-| Catppucchin Mocha | Emberveil |
+| Catppuccin Mocha | Emberveil |
 |:---:|:---:|
-| ![Catppucchin](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png) | ![Emberveil](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png) |
+| ![Catppuccin](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png) | ![Emberveil](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png) |
 
 ## Desktop Integration
 See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 desktop.
@@ -70,6 +72,10 @@ For installation instructions, additional screenshots,
 troubleshooting, and release information, visit:
 
 [GitHub Project](https://github.com/hheitlager/windhawk-mawaqit)
+
+## Compatibility and credits
+Windows 11 only. Taskbar XAML integration adapted from Windhawk’s
+[taskbar-folder-menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp) (MIT).
 
 ## License
 MIT License.
@@ -121,7 +127,7 @@ with or endorsed by Mawaqit.
   - PopupAutoCloseSeconds: 5
     $name: Popup auto-close (seconds, 0 = disabled)
     $description: Automatically close popup after 1–300 seconds. Opening it again resets the timer.
-  $name: Popup settings
+  $name: Display and popup settings
 - AdvancedCustomization:
   - ModSettingsAdvanced:
     - RefreshHours: 24
@@ -129,7 +135,7 @@ with or endorsed by Mawaqit.
       $description: Choose how often the prayer schedule is updated from Mawaqit (1–168 hours).
     $name: Mod settings
   - LayoutSettings:
-    - Width: 0
+    - Width: 200
       $name: Width
       $description: Choose how wide the clock appears (180–400 px). Values outside this range use 200 px.
     - PillHeight: 0
@@ -981,6 +987,7 @@ namespace taskxaml = folder_menus_taskbar_xaml;
 static std::atomic<bool> g_stopping{false};
 // TrayUI::StartTaskbar can recreate XAML without restarting explorer.exe.
 static std::atomic<bool> g_taskbarRebuildPending{false};
+static std::atomic<bool> g_settingsPending{false};
 
 static slot::Lease g_lease{};
 static winrt::weak_ref<FrameworkElement> g_placeholder;
@@ -1727,7 +1734,9 @@ static DWORD WINAPI StartWorker(void*) {
         HWND wnd=taskwin::FindCurrentProcessTaskbarWnd();
         if(wnd) inserted=OnTaskbarThread([](void*) {InsertOnUiThread();});
         if(inserted && g_placeholder.get()) return 0;
-        Sleep(1500);
+        // Wake immediately on mod shutdown instead of sleeping for 1.5 seconds.
+        if (WaitForSingleObject(g_stopEvent, 1500) != WAIT_TIMEOUT)
+            break;
     }
     return 0;
 }
@@ -1759,8 +1768,33 @@ static void EnsureTaskbarSlotOnUiThread() {
     g_taskbarRebuildPending.store(false, std::memory_order_release);
 }
 
+static void LoadModSettings();
+static void ApplyPendingSettingsOnUiThread() {
+    if (!g_settingsPending.exchange(false, std::memory_order_acq_rel))
+        return;
+    try {
+        LoadModSettings();
+        if (g_popup && IsWindowVisible(g_popup)) {
+            if (!g_enablePopup) HidePrayerPopup();
+            else {
+                int seconds = g_popupAutoCloseSeconds.load();
+                g_popupAutoCloseDeadline = seconds > 0
+                    ? GetTickCount64() + static_cast<ULONGLONG>(seconds) * 1000 : 0;
+            }
+        }
+        RemoveOnUiThread();
+        InsertOnUiThread();
+        Wh_Log(L"[Mawaqit] Pending settings applied on taskbar thread");
+    } catch (...) {
+        // Keep the request for the next countdown tick if rebuilding throws.
+        g_settingsPending.store(true, std::memory_order_release);
+        LogException(L"Applying pending settings");
+    }
+}
+
 static void UpdateClockOnUiThread() {
     if(g_stopping.load())return;
+    ApplyPendingSettingsOnUiThread();
     // Check occasionally even without a StartTaskbar notification: some
     // Windows shell changes replace the XAML tree through other paths.
     static unsigned healthTick = 0;
@@ -1968,23 +2002,15 @@ void Wh_ModAfterInit() {
     g_countdownWorker=CreateThread(nullptr,0,CountdownWorker,nullptr,0,nullptr);
 }
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"[Mawaqit] Settings change received; rebuilding native slot");
-    // Keep UI-owned settings and XAML rebuild on the same taskbar thread.
-    // Previously LoadModSettings() ran on the Windhawk settings callback thread,
-    // racing with UI reads of g_theme, g_position and layout values.
-    // The schedule worker independently snapshots mosque/interval under g_settingsLock.
+    Wh_Log(L"[Mawaqit] Settings change received; scheduling native slot rebuild");
+    g_settingsPending.store(true, std::memory_order_release);
     bool dispatched=OnTaskbarThread([](void*){
-        LoadModSettings();
-        if(g_popup && IsWindowVisible(g_popup)){
-            if(!g_enablePopup) HidePrayerPopup();
-            else {
-                int seconds=g_popupAutoCloseSeconds.load();
-                g_popupAutoCloseDeadline=seconds>0?GetTickCount64()+static_cast<ULONGLONG>(seconds)*1000:0;
-            }
-        }
-        RemoveOnUiThread();InsertOnUiThread();
+        ApplyPendingSettingsOnUiThread();
     });
-    Wh_Log(L"[Mawaqit] Settings rebuild dispatched=%d",dispatched?1:0);
+    if (!dispatched)
+        Wh_Log(L"[Mawaqit] Settings dispatch unavailable; pending update will retry on countdown tick");
+    else
+        Wh_Log(L"[Mawaqit] Settings rebuild dispatched successfully");
 }
 void Wh_ModUninit() {
     g_stopping=true;
