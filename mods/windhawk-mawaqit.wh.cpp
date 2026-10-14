@@ -2,7 +2,7 @@
 // @id windhawk-mawaqit
 // @name Mawaqit Prayer Clock
 // @description Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.
-// @version 0.6.9-rc1
+// @version 0.6.9
 // @author HHeitlager
 // @github https://github.com/hheitlager
 // @include explorer.exe
