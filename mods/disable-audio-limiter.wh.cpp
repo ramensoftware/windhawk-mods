@@ -40,15 +40,6 @@ std::wstring ToLower(std::wstring s) {
     return s;
 }
 
-std::wstring AnsiToWide(LPCSTR str) {
-    if (!str || !*str) return L"";
-    int len = MultiByteToWideChar(CP_ACP, 0, str, -1, nullptr, 0);
-    std::wstring result(len, L'\0');
-    MultiByteToWideChar(CP_ACP, 0, str, -1, result.data(), len);
-    if (!result.empty() && result.back() == L'\0') result.pop_back();
-    return result;
-}
-
 std::wstring GetKeyFullPath(HKEY hKey) {
     if (!pNtQueryKey || !hKey) return L"";
 
@@ -84,12 +75,10 @@ bool ShouldBlock(const wchar_t* apiName, HKEY hKey,
 
     Wh_Log(L"[BLOCKED] %s (Default) on %s (PID: %lu)", apiName, path.c_str(),
            GetCurrentProcessId());
-    SetLastError(ERROR_ACCESS_DENIED);
     return true;
 }
 
 bool IsDefaultValueName(LPCWSTR name) { return !name || !*name; }
-bool IsDefaultValueNameA(LPCSTR name) { return !name || !*name; }
 
 using RegQueryValueExW_t = decltype(&RegQueryValueExW);
 RegQueryValueExW_t RegQueryValueExW_Original;
@@ -111,7 +100,7 @@ BOOL Wh_ModInit() {
 
     pNtQueryKey = (NtQueryKey_t)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey");
 
-    Wh_SetFunctionHook((void*)GetProcAddress(LoadLibrary(L"kernelbase.dll"), "RegQueryValueExW"), (void*)RegQueryValueExW_Hook, (void**)&RegQueryValueExW_Original);
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "RegQueryValueExW"), (void*)RegQueryValueExW_Hook, (void**)&RegQueryValueExW_Original);
 
     return TRUE;
    
