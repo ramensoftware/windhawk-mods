@@ -5,7 +5,7 @@
 // @description     Display Vietnamese lunar calendar dates, full moons, and traditional holidays in Windows 11 calendar flyout
 // @description:vi-VN Hiển thị ngày âm lịch, Mùng 1, Rằm và Lễ Tết Việt Nam trực tiếp trên bảng lịch Windows 11
 // @version         1.0.0
-// @author          PhatMT
+// @author          PhatMT97
 // @github          https://github.com/phatMT97
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
