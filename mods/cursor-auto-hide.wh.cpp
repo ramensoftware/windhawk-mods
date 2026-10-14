@@ -2,7 +2,7 @@
 // @id              cursor-auto-hide
 // @name            Cursor auto-hide on idle
 // @description     Hides the mouse cursor after a configurable idle timeout and shows it again as soon as the mouse moves or a button is clicked
-// @version         1.0
+// @version         1.1
 // @author          nikitor32
 // @github          https://github.com/nikitor32
 // @include         windhawk.exe
@@ -27,6 +27,33 @@ written to the registry, and any mouse activity restores it right away.
 Only the system cursors are replaced. Applications that draw their own
 cursor, such as games or drawing tools, keep showing it.
 
+A global hotkey turns the auto-hide on and off without opening the
+settings. The shortcut works in any application and the cursor stays
+visible for as long as the feature is switched off. The switch is a
+runtime one: it starts enabled again the next time Windhawk starts.
+
+The shortcut does not have to be typed. Tick "Record the shortcut by
+pressing it" in the settings, press Save, then press the combination you
+want within 60 seconds. While the window is open, a note in the bottom
+right corner of the screen says so. The mod writes the combination to the
+clipboard in the format the field expects, so it can be pasted in instead
+of being typed.
+
+Click a window other than the Windhawk settings before pressing the
+combination. While the settings window keeps the focus, every key you
+press also lands in the settings fields, so the values you are about to
+save can change under you and the field you type into is not the one you
+will paste into afterwards.
+
+Three rules decide whether a combination is accepted. It has to include
+Ctrl, Alt, Shift or Win - a plain key on its own is ignored. It can be
+any key, including the punctuation on the main block ( , . / [ ] \ ' ;
+- = and ` ), the lock keys and the numeric keypad. And it has to be
+pressed before you click the field and paste: recording is still open
+at that point, so pressing Ctrl+V records Ctrl+V instead of your
+combination. Recording ends on the first accepted combination, after 60
+seconds, or when the box is unticked and Save is pressed again.
+
 The mod runs in a dedicated Windhawk process (as a tool mod) and does
 not inject into other applications.
 */
@@ -37,17 +64,41 @@ not inject into other applications.
 - idleSeconds: 5
   $name: Idle timeout (seconds)
   $description: The cursor is hidden this many seconds after the last mouse movement or click. Set to 0 to disable hiding.
+- toggleHotkey: ""
+  $name: Toggle hotkey
+  $description: A global shortcut that turns the auto-hide on and off, for example Ctrl+Shift+F9. Write it as modifiers joined with plus signs and a key name, such as Ctrl+Alt+H, Shift+End or Win+F10. Supported modifiers are Ctrl, Alt, Shift and Win. Supported keys are A to Z, 0 to 9, F1 to F24, Esc, Space, Tab, Enter, Backspace, Insert, Delete, Home, End, PageUp, PageDown, the four arrow keys, the punctuation keys on the main block ( , . / [ ] \ ' ; - = and ` ), CapsLock, NumLock, ScrollLock, PrtSc, Pause, Menu and the numeric keypad. Leave empty to switch the shortcut off. If the shortcut is already taken by another program, the mod logs it and keeps running without a shortcut.
+- recordHotkey: false
+  $name: Record the shortcut by pressing it
+  $description: Tick this box and press Save, then press the shortcut you want within 60 seconds. While the window is open a note appears in the bottom right corner of the screen, so you can see that recording has started. Click a window other than this one before pressing the combination - while these settings keep the focus, the keys you press also go into the fields below and change the values you are about to save. The mod puts the shortcut on the clipboard in the format the field above expects, so press the combination first, then click that field, press Ctrl+V, and untick this box. If recording is still open when Ctrl+V goes in, Ctrl+V is what gets recorded. A shortcut must include Ctrl, Alt, Shift or Win - a plain key on its own is ignored. Any key can be used, including punctuation such as , . / [ ] \ ' ; - = and `, the lock keys and the numeric keypad. Recording stops after the first shortcut, after 60 seconds, or when you untick the box and press Save again.
 */
 // ==/WindhawkModSettings==
 
 #include <stdio.h>
+#include <string.h>
 #include <windows.h>
 
 #include <atomic>
+#include <string>
+
+#ifndef MOD_NOREPEAT
+#define MOD_NOREPEAT 0x4000
+#endif
 
 // The setting can be updated from another thread while the worker thread
 // reads it, so an atomic type is used to avoid a data race.
 std::atomic<int> g_idleSeconds{5};
+
+// Parsed form of the toggle hotkey setting: the settings callback only
+// rewrites these, the worker thread is what registers the shortcut.
+std::atomic<UINT> g_hotkeyModifiers{0};
+std::atomic<UINT> g_hotkeyVk{0};
+// Set when the shortcut has to be registered or removed again.
+std::atomic<bool> g_hotkeyDirty{true};
+
+// Recording mode: armed by the settings callback, driven by the worker.
+std::atomic<bool> g_recordRequested{false};
+// The "record the shortcut by pressing it" checkbox as last saved.
+std::atomic<bool> g_recordEnabled{false};
 
 HANDLE g_stopEvent = nullptr;
 HANDLE g_threadHandle = nullptr;
@@ -57,6 +108,25 @@ HANDLE g_threadHandle = nullptr;
 ULONGLONG g_lastActivity = 0;
 bool g_hidden = false;
 POINT g_lastPolledPos{};
+// Runtime switch driven by the hotkey: true while the idle fade works.
+bool g_fadeEnabled = true;
+// Whether the worker window currently owns a registered shortcut.
+bool g_hotkeyRegistered = false;
+// Recording state, touched by the worker thread only.
+bool g_recording = false;
+ULONGLONG g_recordDeadline = 0;
+bool g_recordWarned = false;
+// The note shown on screen while recording is open.
+HWND g_recordHint = nullptr;
+
+// Only the settings callback thread touches these: they compare the settings
+// against the previous save to tell a ticked box from an edited field.
+std::wstring g_prevToggleHotkey;
+bool g_prevRecordEnabled = false;
+
+constexpr int kHotkeyId = 1;
+// How long the recording window stays open after a settings save.
+constexpr ULONGLONG kRecordWindowMs = 60000;
 
 // Restores the cursors if the process dies while they are modified.
 LPTOP_LEVEL_EXCEPTION_FILTER g_previousExceptionFilter = nullptr;
@@ -85,12 +155,434 @@ constexpr int kSystemCursorIds[] = {
     32672,  // Person (person select)
 };
 
-void LoadSettings() {
+// Case-insensitive ASCII comparison for the hotkey tokens.
+static bool EqualsNoCase(const WCHAR* a, const WCHAR* b) {
+    while (*a && *b) {
+        WCHAR ca = *a >= L'A' && *a <= L'Z' ? *a - L'A' + L'a' : *a;
+        WCHAR cb = *b >= L'A' && *b <= L'Z' ? *b - L'A' + L'a' : *b;
+        if (ca != cb) {
+            return false;
+        }
+        a++;
+        b++;
+    }
+    return *a == L'\0' && *b == L'\0';
+}
+
+struct NamedKey {
+    const WCHAR* name;
+    UINT vk;
+};
+
+// Matching is case-insensitive, but this spelling is also what hotkey
+// recording puts on the clipboard, and it has to go back into the
+// settings field unchanged, so keep it readable.
+//
+// One table serves both directions: KeyNameToVk looks a name up and
+// VkToKeyName searches for the key, so every shortcut that can be typed
+// can also be recorded and pasted back. A recorded shortcut must
+// therefore never land on a key that is missing here - it would be
+// dropped in silence. Virtual-key codes for the punctuation keys are
+// tied to the physical key rather than to the layout, so these names
+// describe the US layout; they still parse to the same key on any
+// layout, which is what RegisterHotKey needs.
+static const NamedKey kNamedKeys[] = {
+    {L"Esc", VK_ESCAPE},       {L"Escape", VK_ESCAPE},
+    {L"Space", VK_SPACE},      {L"Tab", VK_TAB},
+    {L"Enter", VK_RETURN},     {L"Return", VK_RETURN},
+    {L"Backspace", VK_BACK},   {L"Insert", VK_INSERT},
+    {L"Delete", VK_DELETE},    {L"Home", VK_HOME},
+    {L"End", VK_END},          {L"PageUp", VK_PRIOR},
+    {L"PageDown", VK_NEXT},    {L"Left", VK_LEFT},
+    {L"Right", VK_RIGHT},      {L"Up", VK_UP},
+    {L"Down", VK_DOWN},
+
+    // Punctuation on the main block. "=" is written as "=" and never as
+    // "+", because ParseHotkey splits the setting on "+".
+    {L"-", VK_OEM_MINUS},      {L"=", VK_OEM_PLUS},
+    {L",", VK_OEM_COMMA},      {L".", VK_OEM_PERIOD},
+    {L";", VK_OEM_1},          {L"/", VK_OEM_2},
+    {L"`", VK_OEM_3},          {L"[", VK_OEM_4},
+    {L"\\", VK_OEM_5},         {L"]", VK_OEM_6},
+    {L"'", VK_OEM_7},          {L"<", VK_OEM_102},
+
+    // Lock keys and the rest of the modifiers' neighbours.
+    {L"CapsLock", VK_CAPITAL}, {L"NumLock", VK_NUMLOCK},
+    {L"ScrollLock", VK_SCROLL},{L"PrtSc", VK_SNAPSHOT},
+    {L"Pause", VK_PAUSE},      {L"Menu", VK_APPS},
+
+    // Numeric keypad. The operator names are spelled out so that none of
+    // them contains "+", which ParseHotkey would split on.
+    {L"Numpad0", VK_NUMPAD0},  {L"Numpad1", VK_NUMPAD1},
+    {L"Numpad2", VK_NUMPAD2},  {L"Numpad3", VK_NUMPAD3},
+    {L"Numpad4", VK_NUMPAD4},  {L"Numpad5", VK_NUMPAD5},
+    {L"Numpad6", VK_NUMPAD6},  {L"Numpad7", VK_NUMPAD7},
+    {L"Numpad8", VK_NUMPAD8},  {L"Numpad9", VK_NUMPAD9},
+    {L"NumpadStar", VK_MULTIPLY},
+    {L"NumpadPlus", VK_ADD},
+    {L"NumpadMinus", VK_SUBTRACT},
+    {L"NumpadDot", VK_DECIMAL},
+    {L"NumpadSlash", VK_DIVIDE},
+};
+
+// Maps a key name to a virtual key: single letters and digits use their
+// own code, F1..F24 use VK_F1..VK_F24, everything else comes from the
+// table above. Returns 0 when the name is unknown.
+static UINT KeyNameToVk(const WCHAR* name) {
+    if (name[0] != L'\0' && name[1] == L'\0') {
+        WCHAR c = name[0];
+        if (c >= L'a' && c <= L'z') {
+            c = c - L'a' + L'A';
+        }
+        if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) {
+            return (UINT)c;
+        }
+    }
+
+    if ((name[0] == L'F' || name[0] == L'f') && name[1] != L'\0') {
+        int n = 0;
+        bool digits = true;
+        for (const WCHAR* p = name + 1; *p; p++) {
+            if (*p < L'0' || *p > L'9') {
+                digits = false;
+                break;
+            }
+            n = n * 10 + (*p - L'0');
+        }
+        if (digits && n >= 1 && n <= 24) {
+            return VK_F1 + (n - 1);
+        }
+    }
+
+    for (const NamedKey& k : kNamedKeys) {
+        if (EqualsNoCase(name, k.name)) {
+            return k.vk;
+        }
+    }
+    return 0;
+}
+
+// Parses a shortcut written as "Ctrl+Shift+F9" into RegisterHotKey
+// arguments. Returns false when a token is not understood, so the mod
+// can log it instead of registering a key the user did not ask for.
+static bool ParseHotkey(const WCHAR* text, UINT* outModifiers, UINT* outVk) {
+    UINT modifiers = 0;
+    UINT vk = 0;
+    bool haveKey = false;
+
+    const WCHAR* p = text;
+    while (*p != L'\0') {
+        // Read one token, up to the next '+'. Surrounding spaces are
+        // allowed so "Ctrl + Shift + F9" parses as well.
+        WCHAR token[64];
+        size_t len = 0;
+        while (*p != L'\0' && *p != L'+') {
+            if (*p != L' ' && *p != L'\t') {
+                if (len < ARRAYSIZE(token) - 1) {
+                    token[len++] = *p;
+                }
+            }
+            p++;
+        }
+        token[len] = L'\0';
+        if (*p == L'+') {
+            p++;
+        }
+
+        if (len == 0) {
+            continue;  // an empty segment, such as a trailing "+"
+        }
+
+        if (EqualsNoCase(token, L"ctrl") || EqualsNoCase(token, L"control")) {
+            modifiers |= MOD_CONTROL;
+        } else if (EqualsNoCase(token, L"alt")) {
+            modifiers |= MOD_ALT;
+        } else if (EqualsNoCase(token, L"shift")) {
+            modifiers |= MOD_SHIFT;
+        } else if (EqualsNoCase(token, L"win") ||
+                   EqualsNoCase(token, L"windows")) {
+            modifiers |= MOD_WIN;
+        } else {
+            UINT key = KeyNameToVk(token);
+            if (key == 0 || haveKey) {
+                return false;
+            }
+            vk = key;
+            haveKey = true;
+        }
+    }
+
+    if (!haveKey) {
+        return false;
+    }
+    *outModifiers = modifiers;
+    *outVk = vk;
+    return true;
+}
+
+// fromSettingsCallback is true only for saves made from the settings
+// window: a restart with the box still ticked must not start listening
+// for keys on its own.
+void LoadSettings(bool fromSettingsCallback) {
     int idleSeconds = Wh_GetIntSetting(L"idleSeconds");
     if (idleSeconds < 0) {
         idleSeconds = 0;
     }
     g_idleSeconds.store(idleSeconds);
+
+    // An empty setting means "no shortcut". A setting the parser does
+    // not understand is treated the same way and reported by the caller.
+    UINT modifiers = 0;
+    UINT vk = 0;
+    bool valid = false;
+    PCWSTR setting = Wh_GetStringSetting(L"toggleHotkey");
+    std::wstring hotkeyText = setting ? setting : L"";
+    if (!hotkeyText.empty()) {
+        valid = ParseHotkey(hotkeyText.c_str(), &modifiers, &vk);
+        if (!valid) {
+            Wh_Log(L"Toggle hotkey not understood: %s", setting);
+        }
+    }
+    if (setting) {
+        Wh_FreeStringSetting(setting);
+    }
+
+    g_hotkeyModifiers.store(valid ? modifiers : 0);
+    g_hotkeyVk.store(valid ? vk : 0);
+    // Ask the worker thread to (re)register the shortcut.
+    g_hotkeyDirty.store(true);
+
+    bool record = Wh_GetIntSetting(L"recordHotkey") != 0;
+    // Listening starts on any save made while the box is ticked, and always
+    // when the box has just been ticked, so checking it together with
+    // editing the field in one save still opens a window. The single case
+    // that is skipped is a save which only pasted the freshly recorded
+    // shortcut into the field: opening a window there would swallow the
+    // next shortcut the user happens to press.
+    bool fieldChanged =
+        fromSettingsCallback && (hotkeyText != g_prevToggleHotkey);
+    bool justTicked =
+        fromSettingsCallback && record && !g_prevRecordEnabled;
+    g_prevToggleHotkey = hotkeyText;
+    g_prevRecordEnabled = record;
+    g_recordEnabled.store(record);
+    if (fromSettingsCallback && record && (!fieldChanged || justTicked)) {
+        g_recordRequested.store(true);
+    }
+}
+
+// Reverse of KeyNameToVk: writes a name that ParseHotkey accepts back for
+// the given virtual key. Returns false when the key has no name, which
+// means it cannot be written into the setting at all.
+static bool VkToKeyName(UINT vk, WCHAR* out, size_t outCount) {
+    if (outCount == 0) {
+        return false;
+    }
+    if ((vk >= L'A' && vk <= L'Z') || (vk >= L'0' && vk <= L'9')) {
+        if (outCount < 2) {
+            return false;
+        }
+        out[0] = (WCHAR)vk;
+        out[1] = L'\0';
+        return true;
+    }
+    if (vk >= VK_F1 && vk <= VK_F24) {
+        // Built by hand: the snprintf family differs between C runtimes,
+        // and the result is at most four characters long.
+        unsigned number = vk - VK_F1 + 1;
+        WCHAR digits[3];
+        int length = 0;
+        do {
+            digits[length++] = (WCHAR)(L'0' + number % 10);
+            number /= 10;
+        } while (number && length < 3);
+        if ((size_t)length + 2 > outCount) {
+            return false;
+        }
+        out[0] = L'F';
+        for (int i = 0; i < length; i++) {
+            out[i + 1] = digits[length - 1 - i];
+        }
+        out[length + 1] = L'\0';
+        return true;
+    }
+    for (const NamedKey& k : kNamedKeys) {
+        if (k.vk == vk) {
+            size_t length = wcslen(k.name);
+            if (length + 1 > outCount) {
+                return false;
+            }
+            memcpy(out, k.name, (length + 1) * sizeof(WCHAR));
+            return true;
+        }
+    }
+    return false;
+}
+
+// Builds exactly the text the settings field accepts, so a recorded
+// shortcut can be pasted straight back into it.
+static std::wstring FormatHotkey(UINT modifiers, UINT vk) {
+    std::wstring text;
+    if (modifiers & MOD_CONTROL) {
+        text += L"Ctrl+";
+    }
+    if (modifiers & MOD_ALT) {
+        text += L"Alt+";
+    }
+    if (modifiers & MOD_SHIFT) {
+        text += L"Shift+";
+    }
+    if (modifiers & MOD_WIN) {
+        text += L"Win+";
+    }
+    WCHAR name[32];
+    if (VkToKeyName(vk, name, ARRAYSIZE(name))) {
+        text += name;
+    }
+    return text;
+}
+
+static bool CopyToClipboard(const std::wstring& text) {
+    if (!OpenClipboard(nullptr)) {
+        return false;
+    }
+    EmptyClipboard();
+    size_t bytes = (text.size() + 1) * sizeof(WCHAR);
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (!memory) {
+        CloseClipboard();
+        return false;
+    }
+    void* buffer = GlobalLock(memory);
+    if (!buffer) {
+        GlobalFree(memory);
+        CloseClipboard();
+        return false;
+    }
+    memcpy(buffer, text.c_str(), bytes);
+    GlobalUnlock(memory);
+    bool ok = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
+    CloseClipboard();
+    if (!ok) {
+        GlobalFree(memory);
+    }
+    return ok;
+}
+
+// A small always-on-top note shown while the shortcut window is open, so
+// that recording is something the user sees rather than has to guess at.
+// Owned by the worker thread, which creates, shows and destroys it.
+void ShowRecordHint() {
+    if (g_recordHint) {
+        return;
+    }
+    WCHAR text[160];
+    swprintf_s(text,
+               L"Cursor auto-hide: click another window, then press the "
+               L"shortcut within %u seconds.",
+               (unsigned)(kRecordWindowMs / 1000));
+    RECT area{};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &area, 0);
+    const int width = 620;
+    const int height = 64;
+    // WS_EX_NOACTIVATE matters: the hint must not steal focus from the
+    // settings window the user is working in.
+    // No font is set: asking GDI for one would add a gdi32 link
+    // dependency, and the control already paints with the system font.
+    // SS_CENTERIMAGE keeps that font vertically centred in the note.
+    g_recordHint = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", text,
+        WS_POPUP | WS_BORDER | SS_CENTER | SS_CENTERIMAGE,
+        area.right - width - 12, area.bottom - height - 12, width, height,
+        nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
+    if (!g_recordHint) {
+        Wh_Log(L"Recording hint window failed: %u", GetLastError());
+        return;
+    }
+    ShowWindow(g_recordHint, SW_SHOWNOACTIVATE);
+    UpdateWindow(g_recordHint);
+}
+
+void HideRecordHint() {
+    if (!g_recordHint) {
+        return;
+    }
+    DestroyWindow(g_recordHint);
+    g_recordHint = nullptr;
+}
+
+static bool IsModifierVk(UINT vk) {
+    switch (vk) {
+        case VK_CONTROL:
+        case VK_LCONTROL:
+        case VK_RCONTROL:
+        case VK_MENU:
+        case VK_LMENU:
+        case VK_RMENU:
+        case VK_SHIFT:
+        case VK_LSHIFT:
+        case VK_RSHIFT:
+        case VK_LWIN:
+        case VK_RWIN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// One poll of the open recording window: returns true when a shortcut was
+// found and copied to the clipboard, which closes the window.
+//
+// The keyboard is read with GetAsyncKeyState rather than raw input. Raw
+// input does not report a key-down at all while Ctrl and Alt are both
+// held - which is exactly the shape of most shortcuts - so depending on
+// it would make recording fail for the common case.
+static bool RecordPollStep() {
+    UINT modifiers = 0;
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
+        modifiers |= MOD_CONTROL;
+    }
+    if (GetAsyncKeyState(VK_MENU) & 0x8000) {
+        modifiers |= MOD_ALT;
+    }
+    if (GetAsyncKeyState(VK_SHIFT) & 0x8000) {
+        modifiers |= MOD_SHIFT;
+    }
+    if ((GetAsyncKeyState(VK_LWIN) & 0x8000) ||
+        (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
+        modifiers |= MOD_WIN;
+    }
+    if (modifiers == 0) {
+        return false;  // a bare key is not a shortcut, wait for a modifier
+    }
+
+    // VK_BACK is the first keyboard key; 1..6 are the mouse buttons,
+    // which can be held down while a shortcut is pressed.
+    for (UINT vk = VK_BACK; vk < 256; vk++) {
+        if (IsModifierVk(vk) || !(GetAsyncKeyState(vk) & 0x8000)) {
+            continue;
+        }
+        WCHAR name[32];
+        if (!VkToKeyName(vk, name, ARRAYSIZE(name))) {
+            if (!g_recordWarned) {
+                g_recordWarned = true;
+                Wh_Log(L"Key 0x%X has no name and cannot be recorded", vk);
+            }
+            return false;
+        }
+        std::wstring text = FormatHotkey(modifiers, vk);
+        if (!CopyToClipboard(text)) {
+            if (!g_recordWarned) {
+                g_recordWarned = true;
+                Wh_Log(L"OpenClipboard failed: %u", GetLastError());
+            }
+            return false;
+        }
+        Wh_Log(L"Recorded %s - paste it into the toggle hotkey field",
+               text.c_str());
+        return true;
+    }
+    return false;
 }
 
 // A fully transparent 32x32 cursor: the AND mask keeps the screen, the
@@ -158,6 +650,43 @@ bool IsMouseButtonHeld() {
     return false;
 }
 
+// Registers or removes the toggle shortcut on the worker window. Called
+// from the worker thread only, because RegisterHotKey binds the key to
+// the thread that owns the window.
+void UpdateHotkey(HWND hwnd) {
+    if (g_hotkeyRegistered) {
+        UnregisterHotKey(hwnd, kHotkeyId);
+        g_hotkeyRegistered = false;
+        Wh_Log(L"Toggle hotkey unregistered");
+    }
+
+    UINT vk = g_hotkeyVk.load();
+    if (vk == 0) {
+        return;  // no shortcut configured
+    }
+
+    UINT modifiers = g_hotkeyModifiers.load() | MOD_NOREPEAT;
+    if (!RegisterHotKey(hwnd, kHotkeyId, modifiers, vk)) {
+        Wh_Log(L"RegisterHotKey failed: %u (key already taken?)",
+               GetLastError());
+        return;
+    }
+    g_hotkeyRegistered = true;
+    Wh_Log(L"Toggle hotkey registered: modifiers=0x%X vk=0x%X", modifiers, vk);
+}
+
+// Flips the fade switch. Turning it off has to bring the cursor back at
+// once, otherwise it would stay invisible until the next mouse move.
+void ToggleFade() {
+    g_fadeEnabled = !g_fadeEnabled;
+    g_lastActivity = GetTickCount64();  // restart the idle countdown
+    Wh_Log(L"Auto-hide %s", g_fadeEnabled ? L"enabled" : L"disabled");
+    if (!g_fadeEnabled && g_hidden) {
+        g_hidden = false;
+        RestoreCursors();
+    }
+}
+
 DWORD WINAPI WorkerThread(LPVOID /*param*/) {
     g_lastActivity = GetTickCount64();
     GetCursorPos(&g_lastPolledPos);
@@ -185,30 +714,75 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
         return 1;
     }
     Wh_Log(L"Raw input registered");
+    g_hotkeyDirty.exchange(false);  // registering right here anyway
+    UpdateHotkey(hwnd);
 
     bool stopping = false;
     while (!stopping) {
         // Wake up on raw input, on the stop event, or after roughly the
         // interval used for the idle check. While the cursor is hidden
         // the loop runs more often so that movement is noticed quickly.
+        // While a recording window is open the keys are polled, so the
+        // wait has to be short enough not to miss a quick press.
         DWORD wait =
             MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE,
-                                       g_hidden ? 100 : 500, QS_ALLINPUT);
+                                       g_recording ? 20
+                                                   : (g_hidden ? 100 : 500),
+                                       QS_ALLINPUT);
         if (wait == WAIT_OBJECT_0) {
             stopping = true;
         }
 
         bool mouseActivity = false;
+        bool hotkeyPressed = false;
         MSG msg;
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_INPUT) {
                 mouseActivity = true;
+            } else if (msg.message == WM_HOTKEY && (int)msg.wParam == kHotkeyId) {
+                hotkeyPressed = true;
             }
             TranslateMessage(&msg);
             DispatchMessage(&msg);  // DefWindowProc frees the raw data.
         }
         if (stopping) {
             break;
+        }
+
+        // The settings callback runs on another thread and cannot
+        // touch the worker window, so re-registering is done here.
+        if (g_hotkeyDirty.exchange(false)) {
+            UpdateHotkey(hwnd);
+        }
+
+        if (hotkeyPressed) {
+            ToggleFade();
+        }
+
+        // Hotkey recording: opened by a settings save, closed by the
+        // first shortcut with a modifier, by the timeout, or by
+        // unticking the box.
+        if (g_recordRequested.exchange(false)) {
+            g_recording = true;
+            g_recordWarned = false;
+            g_recordDeadline = GetTickCount64() + kRecordWindowMs;
+            Wh_Log(L"Recording a shortcut, press it within %u seconds",
+                   (unsigned)(kRecordWindowMs / 1000));
+            ShowRecordHint();
+        }
+        if (g_recording) {
+            if (!g_recordEnabled.load()) {
+                g_recording = false;
+                Wh_Log(L"Recording cancelled");
+            } else if (GetTickCount64() >= g_recordDeadline) {
+                g_recording = false;
+                Wh_Log(L"Recording timed out, nothing was pressed");
+            } else if (RecordPollStep()) {
+                g_recording = false;
+            }
+        }
+        if (!g_recording) {
+            HideRecordHint();  // a no-op unless the note is still up
         }
 
         if (mouseActivity) {
@@ -243,9 +817,10 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
         }
 
         int idleSeconds = g_idleSeconds.load();
-        if (idleSeconds <= 0) {
-            // Hiding is disabled; make sure the cursor is shown again if
-            // the setting was just changed while hidden.
+        if (idleSeconds <= 0 || !g_fadeEnabled) {
+            // Hiding is disabled, by the setting or by the hotkey; make
+            // sure the cursor is shown again if it was hidden when the
+            // switch was flipped.
             if (g_hidden) {
                 g_hidden = false;
                 RestoreCursors();
@@ -262,6 +837,11 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
         }
     }
 
+    HideRecordHint();
+    if (g_hotkeyRegistered) {
+        UnregisterHotKey(hwnd, kHotkeyId);
+        g_hotkeyRegistered = false;
+    }
     DestroyWindow(hwnd);
     if (g_hidden) {
         g_hidden = false;
@@ -273,7 +853,7 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L">");
-    LoadSettings();
+    LoadSettings(false);
 
     // The previous run ended while the cursors were modified (a crash or
     // a process killed from Task Manager), so put the normal cursors back.
@@ -302,7 +882,7 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L">");
-    LoadSettings();
+    LoadSettings(true);
 }
 
 void WhTool_ModUninit() {
