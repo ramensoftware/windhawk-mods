@@ -59,12 +59,13 @@ launch maximized).
 ## How it works
 
 The mod runs only inside Windows Terminal. When Windows starts Terminal through
-its **Launch on machine startup** option, the windows Terminal opens in that
-launch are shown minimized instead of on the screen. Opening Terminal any other
-way (Start menu, taskbar, `wt` command, a shortcut) isn't changed.
+its **Launch on machine startup** option, the windows of that launch (one, or
+one per window when Terminal restores your last session) are shown minimized
+instead of on the screen. Opening Terminal any other way (Start menu, taskbar,
+`wt` command, a shortcut) isn't changed, even right after you sign in.
 
-The sign-in launch ends when you bring back one of those windows, or one minute
-after Terminal started. A Terminal window opened after that shows normally.
+The mod stops acting when you bring back one of those windows, or one minute
+after Terminal started.
 
 ## Known limitations
 
@@ -132,13 +133,14 @@ estiver configurado para abrir maximizado).
 ### Como funciona
 
 O mod roda só dentro do Windows Terminal. Quando o Windows abre o Terminal pela
-opção **Iniciar na inicialização da máquina**, as janelas que o Terminal abre
-nessa inicialização aparecem minimizadas em vez de na tela. Abrir o Terminal de
-outro jeito (menu Iniciar, barra de tarefas, comando `wt`, um atalho) não muda.
+opção **Iniciar na inicialização da máquina**, as janelas dessa inicialização
+(uma, ou uma por janela quando o Terminal restaura a última sessão) aparecem
+minimizadas em vez de na tela. Abrir o Terminal de outro jeito (menu Iniciar,
+barra de tarefas, comando `wt`, um atalho) não muda, mesmo logo depois de você
+entrar.
 
-A inicialização do logon termina quando você traz de volta uma dessas janelas,
-ou um minuto depois de o Terminal iniciar. Uma janela do Terminal aberta depois
-disso aparece normalmente.
+O mod para de agir quando você traz de volta uma dessas janelas, ou um minuto
+depois de o Terminal iniciar.
 
 ### Limitações conhecidas
 
@@ -176,9 +178,8 @@ Sou o **caliberda**, desenvolvedor brasileiro. Pode escrever em português.
 #include <winrt/Windows.ApplicationModel.Activation.h>
 #include <winrt/Windows.ApplicationModel.h>
 
-// A Terminal window first shown later than this after the process started isn't
-// part of the sign-in launch: Terminal runs all its windows in one process, so a
-// `wt` command run later hands its window over to this process.
+// The sign-in launch, when the mod keeps Terminal's windows minimized, lasts at
+// most this long after the process started.
 constexpr ULONGLONG kSignInLaunchMs = 60 * 1000;
 
 enum class Phase { Undecided, SignInLaunch, Over };
@@ -187,6 +188,7 @@ std::atomic<Phase> g_phase{Phase::Undecided};
 ULONGLONG g_signInLaunchEnd;  // GetTickCount64() time, set in Wh_ModInit.
 
 std::mutex g_mutex;
+std::vector<HWND> g_launchWindows;     // Guarded by g_mutex.
 std::vector<HWND> g_minimizedWindows;  // Guarded by g_mutex.
 
 // The window whose next SetForegroundWindow call is skipped.
@@ -277,6 +279,15 @@ bool LaunchedByStartupTask() {
     }
 }
 
+BOOL CALLBACK AddTerminalWindow(HWND hWnd, LPARAM lParam) {
+    DWORD processId;
+    if (GetWindowThreadProcessId(hWnd, &processId) &&
+        processId == GetCurrentProcessId() && IsTerminalWindow(hWnd)) {
+        reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(hWnd);
+    }
+    return TRUE;
+}
+
 // Shows a new Terminal window minimized instead of with nCmdShow, if it's part
 // of the sign-in launch. Returns false to let the window show normally.
 bool StartMinimized(HWND hWnd, int nCmdShow) {
@@ -285,6 +296,19 @@ bool StartMinimized(HWND hWnd, int nCmdShow) {
         if (!LaunchedByStartupTask()) {
             EndSignInLaunch(L"not launched at sign-in");
             return false;
+        }
+        // Terminal runs all its windows in one process. It creates the windows
+        // of its launch (one, or one per window of a restored layout) before
+        // its message loop starts, and shows them only after that. A window the
+        // user opens meanwhile (Start menu, taskbar, a shortcut, `wt`) is handed
+        // over by another Terminal process through a message, so it's created
+        // later and isn't in this list.
+        std::vector<HWND> launchWindows;
+        EnumWindows(AddTerminalWindow, reinterpret_cast<LPARAM>(&launchWindows));
+        Wh_Log(L"Sign-in launch with %zu window(s)", launchWindows.size());
+        {
+            std::lock_guard lock(g_mutex);
+            g_launchWindows = std::move(launchWindows);
         }
         Phase expected = Phase::Undecided;
         g_phase.compare_exchange_strong(expected, Phase::SignInLaunch);
@@ -300,6 +324,11 @@ bool StartMinimized(HWND hWnd, int nCmdShow) {
             // Terminal is bringing back a window the mod minimized (its
             // notification area icon, a `wt` command).
             EndSignInLaunch(L"a minimized window was brought back");
+            return false;
+        }
+        if (std::find(g_launchWindows.begin(), g_launchWindows.end(), hWnd) ==
+            g_launchWindows.end()) {
+            Wh_Log(L"Window %p was opened by the user, showing it", hWnd);
             return false;
         }
     }
