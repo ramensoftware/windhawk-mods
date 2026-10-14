@@ -4,6 +4,7 @@
 // @description     This mod recreates the Windows 7/8.1 UAC prompt on Windows 10 and Windows 11 without replacing system files and the secure desktop
 // @version         1.0.0
 // @author          babamohammed
+// @github          https://github.com/babamohammed2022
 // @include         consent.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32
