@@ -36,8 +36,9 @@ so you can spot it instantly. Stop shaking and it shrinks back.
   step of the same size takes twice as long as the previous one. By default
   it stops at the height of your screen, which takes hours of shaking.
 * The grow and shrink animations are time-based and run at your display's
-  refresh rate. While animating, only the cursor that's on screen is resized,
-  which keeps every frame cheap.
+  refresh rate. The cursor that's on screen is resized every frame; the other
+  cursor types are resized a few at a time within a small time budget per
+  frame, so each frame stays cheap.
 * Animated cursors (.ani) grow and shrink smoothly too, and keep animating
   while enlarged: the mod plays the animation itself, one frame at a time at
   the current size, and hands back to the real cursor when it's done.
@@ -558,8 +559,8 @@ void RestoreSystemCursors() {
     Wh_SetIntValue(L"cursorsModified", 0);
 }
 
-// Size of the normal arrow as currently loaded (includes DPI scaling and the
-// Accessibility pointer size setting).
+// Size of the normal arrow's image as currently loaded (includes DPI scaling).
+// Windows applies the Accessibility pointer size on top of this when drawing.
 int GetNormalCursorSize() {
     int size = 0;
 
@@ -732,6 +733,7 @@ struct CursorSource {
     size_t lastStep;        // Stand-in step at the last loop-start check.
     std::unique_ptr<FrameWriter> writer;  // See StartFrameWriter.
     int firstReadyFrame;
+    bool resizeFailed;  // Last resize failed; treated as done until next shake.
 };
 
 CursorSource g_sources[kCursorTypeCount];
@@ -786,63 +788,50 @@ void CaptureCursorSources(int normalSize) {
         source.loadedFrame = -1;
         source.staticFrame = {};
         source.lastStep = 0;
+        source.resizeFailed = false;
     }
 }
 
-// The frame the stand-in for an animated cursor should show right now. The
-// stand-in keeps the animation running while the size changes: each step shows
-// the frame that's due at that moment, so only one frame is decoded per step.
-// Returns 0 if the .ani file can't be indexed (e.g. it fails to parse); the
-// stand-in is then a still image.
-void StartFrameWriter(CursorSource& source, int firstFrame);
+// Folder for the .ani frame files, in the mod's storage folder, with a
+// subfolder per Windows session so that users who are signed in at the same
+// time don't share files. Ends with a backslash; empty if it couldn't be
+// created, in which case frames are built in memory instead.
+WCHAR g_framesDir[MAX_PATH];
 
-int StandInFrameNow(CursorSource& source) {
-    if (!source.standInTried) {
-        source.standInTried = true;
-        source.standInReady = ReadAniIndex(source.path, source.aniIndex);
-        source.aniStartMs = NowMs();
-        source.loadedFrame = -1;
-        if (source.standInReady) {
-            StartFrameWriter(source,
-                             static_cast<int>(AniFrameAt(source.aniIndex, 0)));
-        }
-    }
-    if (!source.standInReady) {
-        return 0;
-    }
-    return static_cast<int>(
-        AniFrameAt(source.aniIndex, NowMs() - source.aniStartMs));
-}
+bool InitFramesDir() {
+    g_framesDir[0] = L'\0';
 
-// Whether the stand-in's animation is back at the start of its loop: at its
-// first step, or wrapped around since the last check (a step can be shorter
-// than the time between checks).
-bool StandInAtLoopStart(CursorSource& source) {
-    const size_t step =
-        AniStepAt(source.aniIndex, NowMs() - source.aniStartMs);
-    const bool atStart = step == 0 || step < source.lastStep;
-    source.lastStep = step;
-    return atStart;
-}
-
-void ResetLoopStartCheck(CursorSource& source) {
-    if (source.standInReady) {
-        source.lastStep =
-            AniStepAt(source.aniIndex, NowMs() - source.aniStartMs);
-    }
-}
-
-// A static stand-in for an animated cursor at the given size: the given frame
-// of its .ani file, or the pristine copy stretched if that can't be read.
-// Path of the temp file holding one .ani frame of one cursor type.
-bool GetFrameTempPath(size_t typeIndex, int frameIndex, WCHAR (&path)[MAX_PATH]) {
-    WCHAR dir[MAX_PATH];
-    const DWORD length = GetTempPathW(MAX_PATH, dir);
+    WCHAR storage[MAX_PATH];
+    size_t length = Wh_GetModStoragePath(storage, MAX_PATH);
     if (length == 0 || length >= MAX_PATH) {
         return false;
     }
-    return swprintf_s(path, L"%sshake-to-find-cursor-%lu-%zu-%d.cur", dir,
-                      GetCurrentProcessId(), typeIndex, frameIndex) > 0;
+    if (storage[length - 1] == L'\\') {
+        storage[--length] = L'\0';
+    }
+    CreateDirectoryW(storage, nullptr);  // Usually exists already.
+
+    DWORD sessionId = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+    WCHAR dir[MAX_PATH];
+    if (swprintf_s(dir, L"%s\\frames-%lu\\", storage, sessionId) <= 0) {
+        return false;
+    }
+    if (!CreateDirectoryW(dir, nullptr) &&
+        GetLastError() != ERROR_ALREADY_EXISTS) {
+        return false;
+    }
+    lstrcpynW(g_framesDir, dir, MAX_PATH);
+    return true;
+}
+
+// Path of the file holding one .ani frame of one cursor type.
+bool GetFrameFilePath(size_t typeIndex, int frameIndex, WCHAR (&path)[MAX_PATH]) {
+    if (!g_framesDir[0]) {
+        return false;
+    }
+    return swprintf_s(path, L"%s%zu-%d.cur", g_framesDir, typeIndex,
+                      frameIndex) > 0;
 }
 
 // .ani frames are shown by loading them the same way cursors from the scheme
@@ -851,7 +840,7 @@ bool GetFrameTempPath(size_t typeIndex, int frameIndex, WCHAR (&path)[MAX_PATH])
 // they're applied, which makes them flicker between two sizes; cursors loaded
 // from a file don't.
 //
-// Each frame is written to its own temp file. Writing a new file is slow (the
+// Each frame is written to its own file. Writing a new file is slow (the
 // file is typically scanned by antivirus software before it can be read), so
 // the first frame is written right away and the rest by a low-priority
 // background thread; until a frame is ready, the last ready one stays on
@@ -862,7 +851,7 @@ bool GetFrameTempPath(size_t typeIndex, int frameIndex, WCHAR (&path)[MAX_PATH])
 bool WriteFrameFile(size_t typeIndex, int frameIndex,
                     const std::vector<BYTE>& data) {
     WCHAR path[MAX_PATH];
-    if (!GetFrameTempPath(typeIndex, frameIndex, path)) {
+    if (!GetFrameFilePath(typeIndex, frameIndex, path)) {
         return false;
     }
     HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
@@ -971,23 +960,21 @@ void StopFrameWriter(CursorSource& source) {
     for (size_t frame = 0; frame < writer.count; frame++) {
         WCHAR path[MAX_PATH];
         if (writer.ready[frame] &&
-            GetFrameTempPath(writer.typeIndex, static_cast<int>(frame), path)) {
+            GetFrameFilePath(writer.typeIndex, static_cast<int>(frame), path)) {
             DeleteFileW(path);
         }
     }
     source.writer.reset();
 }
 
-// Removes temp files left behind by a run that ended without cleaning up
+// Removes frame files left behind by a run that ended without cleaning up
 // (crash or killed process).
-void DeleteStaleTempFrames() {
-    WCHAR dir[MAX_PATH];
-    const DWORD length = GetTempPathW(MAX_PATH, dir);
-    if (length == 0 || length >= MAX_PATH) {
+void DeleteStaleFrameFiles() {
+    if (!g_framesDir[0]) {
         return;
     }
     WCHAR pattern[MAX_PATH];
-    if (swprintf_s(pattern, L"%sshake-to-find-cursor-*.cur", dir) <= 0) {
+    if (swprintf_s(pattern, L"%s*.cur", g_framesDir) <= 0) {
         return;
     }
     WIN32_FIND_DATAW found;
@@ -997,18 +984,61 @@ void DeleteStaleTempFrames() {
     }
     do {
         WCHAR path[MAX_PATH];
-        if (swprintf_s(path, L"%s%s", dir, found.cFileName) > 0) {
+        if (swprintf_s(path, L"%s%s", g_framesDir, found.cFileName) > 0) {
             DeleteFileW(path);
         }
     } while (FindNextFileW(search, &found));
     FindClose(search);
 }
 
+// The frame the stand-in for an animated cursor should show right now. The
+// stand-in keeps the animation running while the size changes: each step shows
+// the frame that's due at that moment, so only one frame is decoded per step.
+// Returns 0 if the .ani file can't be indexed (e.g. it fails to parse); the
+// stand-in is then a still image.
+int StandInFrameNow(CursorSource& source) {
+    if (!source.standInTried) {
+        source.standInTried = true;
+        source.standInReady = ReadAniIndex(source.path, source.aniIndex);
+        source.aniStartMs = NowMs();
+        source.loadedFrame = -1;
+        if (source.standInReady) {
+            StartFrameWriter(source,
+                             static_cast<int>(AniFrameAt(source.aniIndex, 0)));
+        }
+    }
+    if (!source.standInReady) {
+        return 0;
+    }
+    return static_cast<int>(
+        AniFrameAt(source.aniIndex, NowMs() - source.aniStartMs));
+}
+
+// Whether the stand-in's animation is back at the start of its loop: at its
+// first step, or wrapped around since the last check (a step can be shorter
+// than the time between checks).
+bool StandInAtLoopStart(CursorSource& source) {
+    const size_t step =
+        AniStepAt(source.aniIndex, NowMs() - source.aniStartMs);
+    const bool atStart = step == 0 || step < source.lastStep;
+    source.lastStep = step;
+    return atStart;
+}
+
+void ResetLoopStartCheck(CursorSource& source) {
+    if (source.standInReady) {
+        source.lastStep =
+            AniStepAt(source.aniIndex, NowMs() - source.aniStartMs);
+    }
+}
+
+// A static stand-in for an animated cursor at the given size: the given frame
+// of its .ani file, or the pristine copy stretched if that can't be read.
 HCURSOR LoadStandInAtSize(CursorSource& source, int size, int frameIndex) {
     HCURSOR cursor = nullptr;
     WCHAR path[MAX_PATH];
     if (IsFrameReady(source, frameIndex) &&
-        GetFrameTempPath(static_cast<size_t>(&source - g_sources), frameIndex,
+        GetFrameFilePath(static_cast<size_t>(&source - g_sources), frameIndex,
                          path)) {
         cursor = static_cast<HCURSOR>(LoadImageW(
             nullptr, path, IMAGE_CURSOR, size, size, LR_LOADFROMFILE));
@@ -1099,15 +1129,18 @@ bool SetCursorTypeSize(size_t index, int size) {
                              source.hasPath ? source.path : nullptr, size,
                              source.pristineCopy);
         if (!cursor) {
+            source.resizeFailed = true;
             return false;
         }
         // On success, the system takes ownership of the handle and destroys
         // it.
         if (SetSystemCursor(cursor, kCursorTypes[index].id)) {
             source.appliedSize = size;
+            source.resizeFailed = false;
             return true;
         }
         DestroyCursor(cursor);
+        source.resizeFailed = true;
         return false;
     }
 
@@ -1124,15 +1157,18 @@ bool SetCursorTypeSize(size_t index, int size) {
 
     HCURSOR cursor = LoadStandInAtSize(source, size, frame);
     if (!cursor) {
+        source.resizeFailed = true;
         return false;
     }
     if (SetSystemCursor(cursor, kCursorTypes[index].id)) {
         source.appliedSize = size;
         source.appliedStatic = true;
         source.appliedFrame = frame;
+        source.resizeFailed = false;
         return true;
     }
     DestroyCursor(cursor);
+    source.resizeFailed = true;
     return false;
 }
 
@@ -1207,8 +1243,10 @@ void ResizeSomeOtherCursors(int size, ULONGLONG tickStart) {
          n++) {
         const size_t i = g_nextOtherCursor;
         g_nextOtherCursor = (g_nextOtherCursor + 1) % kCursorTypeCount;
+        // A type that failed to resize is skipped rather than retried every
+        // tick; it's tried again on the next shake.
         if (g_sources[i].systemHandle == visible ||
-            g_sources[i].appliedSize == size) {
+            g_sources[i].appliedSize == size || g_sources[i].resizeFailed) {
             continue;
         }
         SetCursorTypeSize(i, size);
@@ -1225,7 +1263,7 @@ void ResizeCursors(int size) {
 
 bool AllCursorsAtSize(int size) {
     for (const CursorSource& source : g_sources) {
-        if (source.appliedSize != size) {
+        if (source.appliedSize != size && !source.resizeFailed) {
             return false;
         }
     }
@@ -1740,14 +1778,13 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             1, &g_timer, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         if (result == WAIT_OBJECT_0) {
             OnTimerFired();
-            continue;
-        }
-
-        if (result != WAIT_OBJECT_0 + 1) {
+        } else if (result != WAIT_OBJECT_0 + 1) {
             Wh_Log(L"MsgWaitForMultipleObjectsEx failed: %u", GetLastError());
             break;
         }
 
+        // Also after a tick, so a busy timer can't hold back input and
+        // shutdown messages.
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
@@ -1778,15 +1815,17 @@ LONG WINAPI RestoreCursorsOnCrash(EXCEPTION_POINTERS* exceptionInfo) {
 BOOL WhTool_ModInit() {
     Wh_Log(L">");
 
-    DeleteStaleTempFrames();
-
     g_settings = LoadSettings();
 
     // The previous run ended while the cursor was enlarged (crash or killed
-    // process), so put the normal cursors back.
+    // process), so put the normal cursors back first: they may still be
+    // loaded from frame files that are about to be deleted.
     if (Wh_GetIntValue(L"cursorsModified", 0)) {
         RestoreSystemCursors();
     }
+
+    InitFramesDir();
+    DeleteStaleFrameFiles();
 
     g_previousExceptionFilter =
         SetUnhandledExceptionFilter(RestoreCursorsOnCrash);
