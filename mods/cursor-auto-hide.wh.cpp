@@ -46,13 +46,22 @@ save can change under you and the field you type into is not the one you
 will paste into afterwards.
 
 Three rules decide whether a combination is accepted. It has to include
-Ctrl, Alt, Shift or Win - a plain key on its own is ignored. It can be
-any key, including the punctuation on the main block ( , . / [ ] \ ' ;
-- = and ` ), the lock keys and the numeric keypad. And it has to be
-pressed before you click the field and paste: recording is still open
-at that point, so pressing Ctrl+V records Ctrl+V instead of your
-combination. Recording ends on the first accepted combination, after 60
-seconds, or when the box is unticked and Save is pressed again.
+Ctrl, Alt, Shift or Win: a plain key on its own is ignored, and a
+character key (a letter, a digit, punctuation, Space, Tab or Enter)
+needs Ctrl, Alt or Win rather than Shift alone, because the shortcut is
+global and Shift+A would stop capital A from being typed anywhere. The
+rest of the keyboard is accepted as it stands, the punctuation of the
+main block ( , . / [ ] \ ' ; - = and ` ), the lock keys and the
+numeric keypad included. And it has to be pressed before you click the
+field and paste: recording is still open at that point, so pressing
+Ctrl+V records Ctrl+V instead of your combination. Recording ends on
+the first accepted combination, after 60 seconds, or when the box is
+unticked and Save is pressed again.
+
+Recording is opened by ticking the box and pressing Save, and by nothing
+else: later saves with the box still ticked do not open a new window, so
+nothing you press in between can reach the clipboard. To record another
+shortcut, untick the box, press Save, then tick it and press Save again.
 
 The mod runs in a dedicated Windhawk process (as a tool mod) and does
 not inject into other applications.
@@ -66,10 +75,10 @@ not inject into other applications.
   $description: The cursor is hidden this many seconds after the last mouse movement or click. Set to 0 to disable hiding.
 - toggleHotkey: ""
   $name: Toggle hotkey
-  $description: A global shortcut that turns the auto-hide on and off, for example Ctrl+Shift+F9. Write it as modifiers joined with plus signs and a key name, such as Ctrl+Alt+H, Shift+End or Win+F10. Supported modifiers are Ctrl, Alt, Shift and Win. Supported keys are A to Z, 0 to 9, F1 to F24, Esc, Space, Tab, Enter, Backspace, Insert, Delete, Home, End, PageUp, PageDown, the four arrow keys, the punctuation keys on the main block ( , . / [ ] \ ' ; - = and ` ), CapsLock, NumLock, ScrollLock, PrtSc, Pause, Menu and the numeric keypad. Leave empty to switch the shortcut off. If the shortcut is already taken by another program, the mod logs it and keeps running without a shortcut.
+  $description: A global shortcut that turns the auto-hide on and off, for example Ctrl+Shift+F9. Write it as modifiers joined with plus signs and a key name, such as Ctrl+Alt+H, Shift+End or Win+F10. Supported modifiers are Ctrl, Alt, Shift and Win. A character key, meaning a letter, a digit, punctuation, Space, Tab or Enter, needs Ctrl, Alt or Win and will not accept Shift on its own, because the shortcut is global, so Shift+A would stop capital A from being typed in every application, while Shift+End and Shift+F1, which type nothing, are fine. Supported keys are A to Z, 0 to 9, F1 to F24, Esc, Space, Tab, Enter, Backspace, Insert, Delete, Home, End, PageUp, PageDown, the four arrow keys, the punctuation keys on the main block ( , . / [ ] \ ' ; - = and ` ), CapsLock, NumLock, ScrollLock, PrtSc, Pause, Menu and the numeric keypad. Leave empty to switch the shortcut off. If the shortcut is already taken by another program, the mod logs it and keeps running without a shortcut.
 - recordHotkey: false
   $name: Record the shortcut by pressing it
-  $description: Tick this box and press Save, then press the shortcut you want within 60 seconds. While the window is open a note appears in the bottom right corner of the screen, so you can see that recording has started. Click a window other than this one before pressing the combination - while these settings keep the focus, the keys you press also go into the fields below and change the values you are about to save. The mod puts the shortcut on the clipboard in the format the field above expects, so press the combination first, then click that field, press Ctrl+V, and untick this box. If recording is still open when Ctrl+V goes in, Ctrl+V is what gets recorded. A shortcut must include Ctrl, Alt, Shift or Win - a plain key on its own is ignored. Any key can be used, including punctuation such as , . / [ ] \ ' ; - = and `, the lock keys and the numeric keypad. Recording stops after the first shortcut, after 60 seconds, or when you untick the box and press Save again.
+  $description: Tick this box and press Save, then press the shortcut you want within 60 seconds. While the window is open a note appears in the bottom right corner of the screen, so you can see that recording has started. Click a window other than this one before pressing the combination. While these settings keep the focus, the keys you press also go into the fields below and change the values you are about to save. The mod puts the shortcut on the clipboard in the format the field above expects, so press the combination first, then click that field, press Ctrl+V, and untick this box. If recording is still open when Ctrl+V goes in, Ctrl+V is what gets recorded. A shortcut must include Ctrl, Alt, Shift or Win, and a character key, meaning a letter, a digit, punctuation, Space, Tab or Enter, needs Ctrl, Alt or Win rather than Shift on its own, so Shift+End is accepted while Shift+A is waited out. Every other key works, including punctuation such as , . / [ ] \ ' ; - = and `, the lock keys and the numeric keypad. Recording stops after the first shortcut, after 60 seconds, or when you untick the box and press Save again. It opens only when you tick the box. Later saves with the box still ticked listen for nothing, and to record another shortcut you untick the box, press Save, then tick it and press Save again.
 */
 // ==/WindhawkModSettings==
 
@@ -79,10 +88,6 @@ not inject into other applications.
 
 #include <atomic>
 #include <string>
-
-#ifndef MOD_NOREPEAT
-#define MOD_NOREPEAT 0x4000
-#endif
 
 // The setting can be updated from another thread while the worker thread
 // reads it, so an atomic type is used to avoid a data race.
@@ -155,20 +160,6 @@ constexpr int kSystemCursorIds[] = {
     32672,  // Person (person select)
 };
 
-// Case-insensitive ASCII comparison for the hotkey tokens.
-static bool EqualsNoCase(const WCHAR* a, const WCHAR* b) {
-    while (*a && *b) {
-        WCHAR ca = *a >= L'A' && *a <= L'Z' ? *a - L'A' + L'a' : *a;
-        WCHAR cb = *b >= L'A' && *b <= L'Z' ? *b - L'A' + L'a' : *b;
-        if (ca != cb) {
-            return false;
-        }
-        a++;
-        b++;
-    }
-    return *a == L'\0' && *b == L'\0';
-}
-
 struct NamedKey {
     const WCHAR* name;
     UINT vk;
@@ -225,6 +216,34 @@ static const NamedKey kNamedKeys[] = {
     {L"NumpadSlash", VK_DIVIDE},
 };
 
+// True for the keys that type a character when pressed. RegisterHotKey
+// consumes its key in every application, so a character key without Ctrl,
+// Alt or Win would be taken away from all of them: "A" would make the
+// letter A unusable and "Shift+A" would block capital A. Shift therefore
+// only counts as a modifier for keys that type nothing, which keeps
+// Shift+End and Shift+F1 working. The only single character names in the
+// table above are the punctuation keys, so they fall out of this check.
+static bool IsCharacterKey(UINT vk) {
+    if ((vk >= L'A' && vk <= L'Z') || (vk >= L'0' && vk <= L'9')) {
+        return true;
+    }
+    switch (vk) {
+        case VK_SPACE:
+        case VK_TAB:
+        case VK_RETURN:
+        case VK_BACK:
+            return true;
+        default:
+            break;
+    }
+    for (const NamedKey& k : kNamedKeys) {
+        if (k.vk == vk && k.name[0] != L'\0' && k.name[1] == L'\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Maps a key name to a virtual key: single letters and digits use their
 // own code, F1..F24 use VK_F1..VK_F24, everything else comes from the
 // table above. Returns 0 when the name is unknown.
@@ -255,7 +274,7 @@ static UINT KeyNameToVk(const WCHAR* name) {
     }
 
     for (const NamedKey& k : kNamedKeys) {
-        if (EqualsNoCase(name, k.name)) {
+        if (_wcsicmp(name, k.name) == 0) {
             return k.vk;
         }
     }
@@ -293,14 +312,14 @@ static bool ParseHotkey(const WCHAR* text, UINT* outModifiers, UINT* outVk) {
             continue;  // an empty segment, such as a trailing "+"
         }
 
-        if (EqualsNoCase(token, L"ctrl") || EqualsNoCase(token, L"control")) {
+        if (_wcsicmp(token, L"ctrl") == 0 || _wcsicmp(token, L"control") == 0) {
             modifiers |= MOD_CONTROL;
-        } else if (EqualsNoCase(token, L"alt")) {
+        } else if (_wcsicmp(token, L"alt") == 0) {
             modifiers |= MOD_ALT;
-        } else if (EqualsNoCase(token, L"shift")) {
+        } else if (_wcsicmp(token, L"shift") == 0) {
             modifiers |= MOD_SHIFT;
-        } else if (EqualsNoCase(token, L"win") ||
-                   EqualsNoCase(token, L"windows")) {
+        } else if (_wcsicmp(token, L"win") == 0 ||
+                   _wcsicmp(token, L"windows") == 0) {
             modifiers |= MOD_WIN;
         } else {
             UINT key = KeyNameToVk(token);
@@ -313,6 +332,12 @@ static bool ParseHotkey(const WCHAR* text, UINT* outModifiers, UINT* outVk) {
     }
 
     if (!haveKey) {
+        return false;
+    }
+    // The shortcut is registered globally, so a character key has to come
+    // with Ctrl, Alt or Win: "A" would swallow the letter everywhere and
+    // "Shift+A" would block capital A in every application.
+    if (IsCharacterKey(vk) && !(modifiers & (MOD_CONTROL | MOD_ALT | MOD_WIN))) {
         return false;
     }
     *outModifiers = modifiers;
@@ -340,7 +365,9 @@ void LoadSettings(bool fromSettingsCallback) {
     if (!hotkeyText.empty()) {
         valid = ParseHotkey(hotkeyText.c_str(), &modifiers, &vk);
         if (!valid) {
-            Wh_Log(L"Toggle hotkey not understood: %s", setting);
+            Wh_Log(L"Toggle hotkey not accepted: %s (an unknown token, or a "
+                   L"character key without Ctrl, Alt or Win)",
+                   setting);
         }
     }
     if (setting) {
@@ -353,12 +380,14 @@ void LoadSettings(bool fromSettingsCallback) {
     g_hotkeyDirty.store(true);
 
     bool record = Wh_GetIntSetting(L"recordHotkey") != 0;
-    // Listening starts on any save made while the box is ticked, and always
-    // when the box has just been ticked, so checking it together with
-    // editing the field in one save still opens a window. The single case
-    // that is skipped is a save which only pasted the freshly recorded
-    // shortcut into the field: opening a window there would swallow the
-    // next shortcut the user happens to press.
+    // The box is a stored setting, not a button, so it stays ticked after
+    // recording. Recording is therefore armed by nothing but the
+    // transition from unticked to ticked: a later save that simply
+    // re-saves the settings - changing the idle timeout, say - must not
+    // open a capture window, because the first combination pressed in any
+    // application during it, Alt+Tab or Ctrl+C included, would overwrite
+    // the clipboard. The other excluded case is a save which also edits
+    // the shortcut field: that save already carries a shortcut of its own.
     bool fieldChanged =
         fromSettingsCallback && (hotkeyText != g_prevToggleHotkey);
     bool justTicked =
@@ -366,7 +395,7 @@ void LoadSettings(bool fromSettingsCallback) {
     g_prevToggleHotkey = hotkeyText;
     g_prevRecordEnabled = record;
     g_recordEnabled.store(record);
-    if (fromSettingsCallback && record && (!fieldChanged || justTicked)) {
+    if (justTicked && !fieldChanged) {
         g_recordRequested.store(true);
     }
 }
@@ -387,23 +416,12 @@ static bool VkToKeyName(UINT vk, WCHAR* out, size_t outCount) {
         return true;
     }
     if (vk >= VK_F1 && vk <= VK_F24) {
-        // Built by hand: the snprintf family differs between C runtimes,
-        // and the result is at most four characters long.
-        unsigned number = vk - VK_F1 + 1;
-        WCHAR digits[3];
-        int length = 0;
-        do {
-            digits[length++] = (WCHAR)(L'0' + number % 10);
-            number /= 10;
-        } while (number && length < 3);
-        if ((size_t)length + 2 > outCount) {
+        // "F24" is the longest result, so four characters plus the
+        // terminator always fit once there is room for five.
+        if (outCount < 5) {
             return false;
         }
-        out[0] = L'F';
-        for (int i = 0; i < length; i++) {
-            out[i + 1] = digits[length - 1 - i];
-        }
-        out[length + 1] = L'\0';
+        swprintf_s(out, outCount, L"F%u", vk - VK_F1 + 1);
         return true;
     }
     for (const NamedKey& k : kNamedKeys) {
@@ -442,31 +460,70 @@ static std::wstring FormatHotkey(UINT modifiers, UINT vk) {
     return text;
 }
 
-static bool CopyToClipboard(const std::wstring& text) {
-    if (!OpenClipboard(nullptr)) {
+// Puts text on the clipboard. The window is passed as the owner rather
+// than nullptr: with no owner, EmptyClipboard leaves the clipboard ownerless
+// and SetClipboardData is then allowed to fail. Which call broke is handed
+// back to the caller, because "OpenClipboard failed" would otherwise be
+// logged even when it was the allocation that failed.
+static bool CopyToClipboard(HWND owner,
+                            const std::wstring& text,
+                            PCWSTR* failedCall,
+                            DWORD* failedError) {
+    *failedCall = L"";
+    *failedError = 0;
+    auto fail = [&](PCWSTR call) {
+        *failedCall = call;
+        *failedError = GetLastError();
         return false;
+    };
+
+    if (!OpenClipboard(owner)) {
+        return fail(L"OpenClipboard");
     }
-    EmptyClipboard();
-    size_t bytes = (text.size() + 1) * sizeof(WCHAR);
-    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
-    if (!memory) {
-        CloseClipboard();
-        return false;
-    }
-    void* buffer = GlobalLock(memory);
-    if (!buffer) {
-        GlobalFree(memory);
-        CloseClipboard();
-        return false;
-    }
-    memcpy(buffer, text.c_str(), bytes);
-    GlobalUnlock(memory);
-    bool ok = SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
+    bool ok = false;
+    do {
+        if (!EmptyClipboard()) {
+            fail(L"EmptyClipboard");
+            break;
+        }
+        size_t bytes = (text.size() + 1) * sizeof(WCHAR);
+        HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        if (!memory) {
+            fail(L"GlobalAlloc");
+            break;
+        }
+        void* buffer = GlobalLock(memory);
+        if (!buffer) {
+            fail(L"GlobalLock");
+            GlobalFree(memory);
+            break;
+        }
+        memcpy(buffer, text.c_str(), bytes);
+        GlobalUnlock(memory);
+        if (!SetClipboardData(CF_UNICODETEXT, memory)) {
+            fail(L"SetClipboardData");
+            GlobalFree(memory);
+            break;
+        }
+        // Ownership of memory passes to the clipboard on success.
+        ok = true;
+    } while (false);
     CloseClipboard();
-    if (!ok) {
-        GlobalFree(memory);
-    }
     return ok;
+}
+
+// Resolved at run time rather than imported: GetDpiForWindow only exists
+// from Windows 10 1607 on, and the classic 96 is the right answer for any
+// system that does not have it.
+static UINT DpiForWindow(HWND hwnd) {
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    static GetDpiForWindow_t pGetDpiForWindow = (GetDpiForWindow_t)
+        GetProcAddress(GetModuleHandle(L"user32.dll"), "GetDpiForWindow");
+    if (!pGetDpiForWindow) {
+        return 96;
+    }
+    UINT dpi = pGetDpiForWindow(hwnd);
+    return dpi ? dpi : 96;
 }
 
 // A small always-on-top note shown while the shortcut window is open, so
@@ -481,8 +538,24 @@ void ShowRecordHint() {
                L"Cursor auto-hide: click another window, then press the "
                L"shortcut within %u seconds.",
                (unsigned)(kRecordWindowMs / 1000));
+
+    // The note belongs on the monitor the pointer is over, not on the
+    // primary one whatever the user is looking at, and its size has to
+    // follow that monitor's scale: 620x64 carries the text with room to
+    // spare at 96 DPI, but the text grows with the display scale and
+    // would be cut off from 125% upwards.
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
     RECT area{};
-    SystemParametersInfoW(SPI_GETWORKAREA, 0, &area, 0);
+    HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    if (monitor && GetMonitorInfo(monitor, &monitorInfo)) {
+        area = monitorInfo.rcWork;
+    } else {
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &area, 0);
+    }
+
     const int width = 620;
     const int height = 64;
     // WS_EX_NOACTIVATE matters: the hint must not steal focus from the
@@ -499,6 +572,17 @@ void ShowRecordHint() {
         Wh_Log(L"Recording hint window failed: %u", GetLastError());
         return;
     }
+
+    // The window was created at its 96 DPI size and is still hidden, so
+    // it can be scaled to the monitor it sits on before being shown.
+    int dpi = (int)DpiForWindow(g_recordHint);
+    int noteWidth = MulDiv(width, dpi, 96);
+    int noteHeight = MulDiv(height, dpi, 96);
+    int margin = MulDiv(12, dpi, 96);
+    SetWindowPos(g_recordHint, nullptr, area.right - noteWidth - margin,
+                 area.bottom - noteHeight - margin, noteWidth, noteHeight,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+
     ShowWindow(g_recordHint, SW_SHOWNOACTIVATE);
     UpdateWindow(g_recordHint);
 }
@@ -537,7 +621,7 @@ static bool IsModifierVk(UINT vk) {
 // input does not report a key-down at all while Ctrl and Alt are both
 // held - which is exactly the shape of most shortcuts - so depending on
 // it would make recording fail for the common case.
-static bool RecordPollStep() {
+static bool RecordPollStep(HWND hwnd) {
     UINT modifiers = 0;
     if (GetAsyncKeyState(VK_CONTROL) & 0x8000) {
         modifiers |= MOD_CONTROL;
@@ -555,11 +639,20 @@ static bool RecordPollStep() {
     if (modifiers == 0) {
         return false;  // a bare key is not a shortcut, wait for a modifier
     }
+    // A character key accepted here would be rejected by the settings field
+    // afterwards, or worse, accepted and then swallow the key everywhere.
+    // Keeping to Ctrl, Alt or Win mirrors the check the parser applies, so
+    // Shift+A waits instead of being put on the clipboard.
+    const bool strongModifiers =
+        (modifiers & (MOD_CONTROL | MOD_ALT | MOD_WIN)) != 0;
 
     // VK_BACK is the first keyboard key; 1..6 are the mouse buttons,
     // which can be held down while a shortcut is pressed.
     for (UINT vk = VK_BACK; vk < 256; vk++) {
         if (IsModifierVk(vk) || !(GetAsyncKeyState(vk) & 0x8000)) {
+            continue;
+        }
+        if (!strongModifiers && IsCharacterKey(vk)) {
             continue;
         }
         WCHAR name[32];
@@ -571,10 +664,13 @@ static bool RecordPollStep() {
             return false;
         }
         std::wstring text = FormatHotkey(modifiers, vk);
-        if (!CopyToClipboard(text)) {
+        PCWSTR failedCall = L"";
+        DWORD failedError = 0;
+        if (!CopyToClipboard(hwnd, text, &failedCall, &failedError)) {
             if (!g_recordWarned) {
                 g_recordWarned = true;
-                Wh_Log(L"OpenClipboard failed: %u", GetLastError());
+                Wh_Log(L"Could not put %s on the clipboard: %s failed: %u",
+                       text.c_str(), failedCall, failedError);
             }
             return false;
         }
@@ -662,6 +758,10 @@ void UpdateHotkey(HWND hwnd) {
 
     UINT vk = g_hotkeyVk.load();
     if (vk == 0) {
+        // Nothing will be able to switch auto-hide back on any more, so it
+        // must not be left switched off: the run-time toggle has no other
+        // way to be reached, and no on-screen state shows that it is off.
+        g_fadeEnabled = true;
         return;  // no shortcut configured
     }
 
@@ -669,6 +769,9 @@ void UpdateHotkey(HWND hwnd) {
     if (!RegisterHotKey(hwnd, kHotkeyId, modifiers, vk)) {
         Wh_Log(L"RegisterHotKey failed: %u (key already taken?)",
                GetLastError());
+        // Same as above: with the shortcut unavailable, the switch would
+        // stay wherever the last key press left it until a restart.
+        g_fadeEnabled = true;
         return;
     }
     g_hotkeyRegistered = true;
@@ -759,9 +862,8 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
             ToggleFade();
         }
 
-        // Hotkey recording: opened by a settings save, closed by the
-        // first shortcut with a modifier, by the timeout, or by
-        // unticking the box.
+        // Hotkey recording: opened by ticking the box and saving, closed
+        // by the first shortcut, by the timeout, or by unticking the box.
         if (g_recordRequested.exchange(false)) {
             g_recording = true;
             g_recordWarned = false;
@@ -777,7 +879,7 @@ DWORD WINAPI WorkerThread(LPVOID /*param*/) {
             } else if (GetTickCount64() >= g_recordDeadline) {
                 g_recording = false;
                 Wh_Log(L"Recording timed out, nothing was pressed");
-            } else if (RecordPollStep()) {
+            } else if (RecordPollStep(hwnd)) {
                 g_recording = false;
             }
         }
