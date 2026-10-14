@@ -15438,7 +15438,7 @@
         "ratingUsers": 49,
         "reviews": 0,
         "trendingSorting": 9.762008664611402,
-        "updated": 1791234093000,
+        "updated": 1791990366000,
         "users": 1468
       },
       "metadata": {
@@ -15455,7 +15455,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Системний монітор панелі завдань",
-        "version": "1.7.1"
+        "version": "1.7.2"
       },
       "metadataEnglish": {
         "description": "CPU, GPU, RAM and VRAM on the Windows 11 taskbar, with temperatures, history graphs, adaptive layouts and live dragging.",

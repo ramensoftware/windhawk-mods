@@ -15465,7 +15465,7 @@
         "ratingUsers": 49,
         "reviews": 0,
         "trendingSorting": 9.762008664611402,
-        "updated": 1791234093000,
+        "updated": 1791990366000,
         "users": 1468
       },
       "metadata": {
@@ -15482,7 +15482,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar System Info",
-        "version": "1.7.1"
+        "version": "1.7.2"
       }
     },
     "taskbar-thumbnail-hover-fix": {

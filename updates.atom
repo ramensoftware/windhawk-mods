@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-14T14:02:22.000Z</updated>
+    <updated>2026-10-14T15:06:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Info 1.7.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-info#61383b397cd68d6ab9da69049518ef89ac492128</id>
+        <link href="https://windhawk.net/mods/taskbar-system-info"/>
+        <updated>2026-10-14T15:06:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>Fix the widget disappearing in auto-sized dock taskbars when reserving space before the Start button.</p></li>
+<li><p>Restore the outer <code>Grid#WindhawkTaskbarSystemInfo</code> for Taskbar Styler selectors while retaining adaptive scaling inside it.</p></li>
+<li><p>Correct placement with taskbar padding, borders and constrained widths, including measured one-row layouts.</p></li>
+<li><p>Recover placement after available-width or relevant settings changes, and safely roll back rejected reservations.</p></li>
+<li><p>Prevent repeated dock growth/shrink cycles with saved right-side positions, and keep the move editor from offering space created by its own reservation.</p></li>
+</ul>]]></content>
+        <author>
+            <name>Yevhenii Starychenko</name>
+            <uri>https://github.com/starychenko</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 10 1507 Search Pane Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win10-1507-rtm-search-recreation#1acd570f98ddc79496b4f4e320e7e022f19f771c</id>
@@ -947,21 +964,6 @@ a smaller part from his <a href="https://windhawk.net/mods/taskbar-wheel-cycle">
         <author>
             <name>Jori Huisman</name>
             <uri>https://github.com/SixFive7</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#629e90b0437a456728437b6c3b0a82950302311b</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
-        <updated>2026-10-12T20:03:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>option to hide the process count; </li>
-<li>fix CPU usage shown on only one thumbnail when several windows of the same app are open;</li>
-<li>optional: click the line to open Process Explorer (process selected) or Task Manager</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

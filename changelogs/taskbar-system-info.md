@@ -1,3 +1,12 @@
+## 1.7.2 ([Oct 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/61383b397cd68d6ab9da69049518ef89ac492128/mods/taskbar-system-info.wh.cpp))
+
+* Fix the widget disappearing in auto-sized dock taskbars when reserving space before the Start button.
+* Restore the outer `Grid#WindhawkTaskbarSystemInfo` for Taskbar Styler selectors while retaining adaptive scaling inside it.
+* Correct placement with taskbar padding, borders and constrained widths, including measured one-row layouts.
+* Recover placement after available-width or relevant settings changes, and safely roll back rejected reservations.
+
+* Prevent repeated dock growth/shrink cycles with saved right-side positions, and keep the move editor from offering space created by its own reservation.
+
 ## 1.7.1 ([Oct 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/05168884e6fe6c3cbfa16abec0f2ccd6ab5e79cd/mods/taskbar-system-info.wh.cpp))
 
 * Add automatic placement around visible taskbar controls, with readable shrinking, collision-safe reservation, and hide/restore when free space changes. Remove the 1,000-pixel left-offset cap.
