@@ -4,7 +4,7 @@
 // @name:zh-CN      中国节假日日历
 // @description     Show Chinese statutory holidays and adjusted workdays, from an ICS feed you supply, in the Windows 11 calendar flyout
 // @description:zh-CN 在 Windows 11 日历中显示你自己填的 ICS 订阅源里的中国法定节假日与调休安排
-// @version         0.21
+// @version         0.22
 // @author          dcsmf
 // @github          https://github.com/dcsmf
 // @include         ShellExperienceHost.exe
@@ -61,6 +61,10 @@ END:VEVENT
 带（休）/（班）标记）。它只是示例：mod 不会自己去访问它，除非你把这个地址填进设置里；任何其他符合
 上面格式的 ICS 订阅源也一样可用。
 
+另一个可用的示例是苹果 iCloud 的中国大陆节假日日历
+`https://p10-calendars.icloud.com/holiday/CN_zh.ics`：这个地址返回的响应是 gzip 压缩的，mod 会先
+解压再解析。
+
 解析规则：
 
 - 只有 `SUMMARY` 里带"（休）"或"（班）"标记的条目才算数：带"（休）"的按放假日显示（文字用
@@ -74,6 +78,8 @@ END:VEVENT
 - 只在填了地址之后才会去取数据，之后默认每 24 小时（可改）刷新一次；请求失败时保留上次的数据，
   10 分钟后重试。取不到数据（没填地址、没网、地址失效）时，日历保持系统原本的样子，不会变成一片
   空白，也不会报错刷屏。
+- 响应如果是 gzip 或 zlib 压缩的，会先解压再解析（上面那个苹果地址就是这么返回的）。其他压缩方式
+  （brotli、zstd 之类）读不了：遇到时日志里会说明这一点，而不是把二进制当成文本乱读。
 
 ## 颜色
 
@@ -201,6 +207,11 @@ years at once, with the day-off and workday markers). It is an example: the mod 
 not contact it - or anything else - unless you paste that address into the settings.
 Any other feed in the format above works as well.
 
+Another one is Apple's iCloud holiday calendar for the mainland,
+`https://p10-calendars.icloud.com/holiday/CN_zh.ics`: it is answered
+gzip-compressed whatever the request asks for, which the mod undoes before it reads
+the body.
+
 - Only events whose `SUMMARY` carries a full-width or half-width "day off" or
   "workday" marker are used: a day-off marker marks a holiday, with the festival
   name taken from the `SUMMARY`, and a workday marker an adjusted workday. Entries
@@ -217,6 +228,10 @@ Any other feed in the format above works as well.
 - Data is fetched once an address is set, and reused for 24 hours (configurable); a
   failed request keeps the previous data and is retried after 10 minutes, and a
   feed may describe at most 20000 dates in total.
+- A response which is compressed with gzip or zlib is decompressed before it is
+  parsed. A body compressed in any other way (brotli and zstd are the others a
+  server may pick) cannot be read: the log says so instead of the mod reading the
+  bytes as text.
 
 Deliberately not supported: recurrence rules (`RRULE`, `EXDATE` and
 `RECURRENCE-ID` are read as the single occurrence the event names, and a one-time
@@ -980,10 +995,570 @@ bool ParseHolidayData(std::wstring const& body, HolidayMap& out) {
     if (body.find(L"BEGIN:VEVENT") == std::wstring::npos &&
         body.find(L"BEGIN:VCALENDAR") == std::wstring::npos) {
         Wh_Log(L"The data source did not return an iCalendar feed");
+        // A body which is still binary after the compression the mod knows about
+        // has been taken care of is compressed with something else, or it is not
+        // a calendar at all. The line above is what a user notices; this one says
+        // which of the two it is.
+        if (body.find(L'\0') != std::wstring::npos ||
+            body.find(L'\xfffd') != std::wstring::npos) {
+            Wh_Log(L"The body does not look like text: it may be compressed in "
+                   L"a way the mod does not decode");
+        }
         return false;
     }
 
     return ParseIcs(body, out);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Decompressing the response
+//
+// Wh_GetUrlContent hands the body back exactly as it arrived on the wire, and a
+// feed may arrive compressed: the iCloud holiday feed, for one, answers with gzip
+// whatever the request asks for, and the parser can only read text. A body which
+// is gzip (RFC 1952) or zlib (RFC 1950) is therefore expanded here first.
+//
+// Both wrappers carry a raw deflate stream (RFC 1951), which is what is decoded
+// below. A stream which is damaged, or compressed in a way this does not know, is
+// reported as a failure instead of being passed on as half a feed: half a feed
+// would quietly mark the wrong days.
+
+// The most a body may decode to. The feed itself is capped at kMaxHolidayDates as
+// well, so this only has to keep a small response which expands into gigabytes
+// from exhausting the taskbar's memory.
+constexpr size_t kMaxDecodedBodyBytes = 4 * 1024 * 1024;
+
+// A gzip stream starts with 0x1f 0x8b, which no text starts with, so these two
+// bytes settle the question on their own.
+bool IsGzipBody(const char* data, size_t length) {
+    return length >= 2 && (unsigned char)data[0] == 0x1f &&
+           (unsigned char)data[1] == 0x8b;
+}
+
+// A zlib stream starts with CMF and FLG: compression method 8 (deflate), a header
+// whose two bytes are a multiple of 31, and - the last check here - no preset
+// dictionary, which the mod has no way to supply. Text can in principle start with
+// two such bytes, which is why the caller only believes this for a body which is
+// not already the text the parser reads.
+bool IsZlibBody(const char* data, size_t length) {
+    if (length < 2) {
+        return false;
+    }
+    unsigned cmf = (unsigned char)data[0];
+    unsigned flg = (unsigned char)data[1];
+    return (cmf & 0x0f) == 8 && (flg & 0x20) == 0 &&
+           (cmf * 256 + flg) % 31 == 0;
+}
+
+// Whether the body already is the iCalendar text the parser wants. Such a body is
+// never decompressed: it cannot be gzip, and this is what keeps a plain text body
+// whose first two bytes happen to look like zlib from being treated as compressed.
+bool LooksLikeIcsText(std::string const& body) {
+    return body.find("BEGIN:VCALENDAR") != std::string::npos ||
+           body.find("BEGIN:VEVENT") != std::string::npos;
+}
+
+// Whether the body is compressed in one of the two ways this decodes.
+bool IsCompressedBody(const char* data, size_t length) {
+    return IsGzipBody(data, length) || IsZlibBody(data, length);
+}
+
+// deflate is read bit by bit, the least significant bit of a byte first.
+class DeflateBits {
+   public:
+    DeflateBits(const unsigned char* data, size_t length)
+        : m_data(data), m_length(length) {}
+
+    // The next "count" bits, "count" being 16 at most. False means the stream
+    // ended inside them, which is what turns a truncated response into a failure
+    // instead of a shorter feed.
+    bool Read(int count, unsigned& value) {
+        while (m_bits < count) {
+            if (m_position >= m_length) {
+                return false;
+            }
+            m_window |= (unsigned)m_data[m_position++] << m_bits;
+            m_bits += 8;
+        }
+        value = m_window & ((1u << count) - 1);
+        m_window >>= count;
+        m_bits -= count;
+        return true;
+    }
+
+    // A stored block starts on the next byte boundary; whatever is left of the
+    // current byte is padding.
+    void AlignToByte() {
+        m_window = 0;
+        m_bits = 0;
+    }
+
+    // What is left, for a stored block, which is read as bytes and not as bits.
+    const unsigned char* Position() const { return m_data + m_position; }
+    size_t Remaining() const { return m_length - m_position; }
+    void Skip(size_t count) { m_position += count; }
+
+   private:
+    const unsigned char* m_data;
+    size_t m_length;
+    size_t m_position = 0;
+    unsigned m_window = 0;
+    int m_bits = 0;
+};
+
+// One canonical Huffman code, the only kind deflate uses. counts[length] is how
+// many symbols have a code of that many bits, and "symbols" lists every symbol
+// which has a code, in code order.
+struct HuffmanCode {
+    int counts[16] = {};
+    std::vector<short> symbols;
+
+    // Builds the code from the length of each symbol's code; a length of 0 means
+    // that the symbol has no code. False means the lengths do not describe a
+    // usable code, which is a damaged stream.
+    bool Build(const unsigned char* lengths, size_t lengthCount) {
+        for (size_t i = 0; i < lengthCount; i++) {
+            counts[lengths[i]]++;
+        }
+        counts[0] = 0;
+
+        // How much of the code space is still unassigned at each length: lengths
+        // which assign more codes than there is room for are the damaged case.
+        int left = 1;
+        for (int length = 1; length <= 15; length++) {
+            left = (left << 1) - counts[length];
+            if (left < 0) {
+                return false;
+            }
+        }
+
+        int offsets[16] = {};
+        for (int length = 1; length < 15; length++) {
+            offsets[length + 1] = offsets[length] + counts[length];
+        }
+        symbols.assign((size_t)(offsets[15] + counts[15]), 0);
+        for (size_t i = 0; i < lengthCount; i++) {
+            if (lengths[i]) {
+                symbols[offsets[lengths[i]]++] = (short)i;
+            }
+        }
+        return true;
+    }
+
+    // The next symbol, or false when the stream ends inside a code. A code is
+    // walked bit by bit, which is all a feed of this size needs.
+    bool Decode(DeflateBits& bits, unsigned& symbol) const {
+        int code = 0;
+        int first = 0;
+        int index = 0;
+        for (int length = 1; length <= 15; length++) {
+            unsigned bit;
+            if (!bits.Read(1, bit)) {
+                return false;
+            }
+            code |= (int)bit;
+
+            // The codes of this length start at "first": a code which lands below
+            // that belongs to a shorter code, and the walk continues.
+            int count = counts[length];
+            if (code - count < first) {
+                symbol = (unsigned)symbols[index + (code - first)];
+                return true;
+            }
+            index += count;
+            first = (first + count) << 1;
+            code <<= 1;
+        }
+        return false;
+    }
+};
+
+// A length or a distance code of deflate (RFC 1951, 3.2.5): the value it stands
+// for, and how many extra bits follow it.
+struct DeflateValue {
+    unsigned base;
+    unsigned extraBits;
+};
+
+constexpr DeflateValue kDeflateLengths[29] = {
+    {3, 0},   {4, 0},   {5, 0},    {6, 0},    {7, 0},    {8, 0},    {9, 0},
+    {10, 0},  {11, 1},  {13, 1},   {15, 1},   {17, 1},   {19, 2},   {23, 2},
+    {27, 2},  {31, 2},  {35, 3},   {43, 3},   {51, 3},   {59, 3},   {67, 4},
+    {83, 4},  {99, 4},  {115, 4},  {131, 5},  {163, 5},  {195, 5},  {227, 5},
+    {258, 0}};
+
+constexpr DeflateValue kDeflateDistances[30] = {
+    {1, 0},     {2, 0},      {3, 0},      {4, 0},      {5, 1},      {7, 1},
+    {9, 2},     {13, 2},     {17, 3},     {25, 3},     {33, 4},     {49, 4},
+    {65, 5},    {97, 5},     {129, 6},    {193, 6},    {257, 7},    {385, 7},
+    {513, 8},   {769, 8},    {1025, 9},   {1537, 9},   {2049, 10},  {3073, 10},
+    {4097, 11}, {6145, 11},  {8193, 12},  {12289, 12}, {16385, 13}, {24577, 13}};
+
+// The order the lengths of the code-length code are stored in (RFC 1951, 3.2.7):
+// the lengths which are needed most come first.
+constexpr unsigned char kCodeLengthOrder[19] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5,
+                                                11, 4, 12, 3, 13, 2, 14, 1, 15};
+
+// The two codes a fixed-Huffman block uses (RFC 1951, 3.2.6).
+bool BuildFixedCodes(HuffmanCode& lengths, HuffmanCode& distances) {
+    unsigned char literalLengths[288];
+    for (int i = 0; i < 288; i++) {
+        literalLengths[i] = i < 144   ? 8    // literals 0..143
+                            : i < 256 ? 9    // literals 144..255
+                            : i < 280 ? 7    // the end-of-block code and 257..279
+                                      : 8;   // 280..287
+    }
+    unsigned char distanceLengths[30];
+    for (int i = 0; i < 30; i++) {
+        distanceLengths[i] = 5;
+    }
+    return lengths.Build(literalLengths, 288) &&
+           distances.Build(distanceLengths, 30);
+}
+
+// The two codes a dynamic-Huffman block describes for itself (RFC 1951, 3.2.7).
+bool ReadDynamicCodes(DeflateBits& bits,
+                      HuffmanCode& lengths,
+                      HuffmanCode& distances) {
+    unsigned count;
+    if (!bits.Read(5, count)) {
+        return false;
+    }
+    const size_t literalCount = count + 257;
+    if (!bits.Read(5, count)) {
+        return false;
+    }
+    const size_t distanceCount = count + 1;
+    if (!bits.Read(4, count)) {
+        return false;
+    }
+    const size_t codeLengthCount = count + 4;
+
+    // A block cannot carry more codes than the format defines.
+    if (literalCount > 286 || distanceCount > 30) {
+        return false;
+    }
+
+    unsigned char codeLengths[19] = {};
+    for (size_t i = 0; i < codeLengthCount; i++) {
+        unsigned value;
+        if (!bits.Read(3, value)) {
+            return false;
+        }
+        codeLengths[kCodeLengthOrder[i]] = (unsigned char)value;
+    }
+
+    HuffmanCode codeLengthCode;
+    if (!codeLengthCode.Build(codeLengths, 19)) {
+        return false;
+    }
+
+    // The lengths of the two codes, run-length encoded with that code: 16 repeats
+    // the length before it, and 17 and 18 stand for runs of lengths which are 0,
+    // meaning "this symbol has no code".
+    unsigned char allLengths[286 + 30] = {};
+    const size_t total = literalCount + distanceCount;
+    size_t index = 0;
+    while (index < total) {
+        unsigned symbol;
+        if (!codeLengthCode.Decode(bits, symbol)) {
+            return false;
+        }
+
+        unsigned repeat = 1;
+        unsigned extra = 0;
+        unsigned char value = (unsigned char)symbol;
+        if (symbol == 16) {
+            if (index == 0) {
+                return false;
+            }
+            value = allLengths[index - 1];
+            if (!bits.Read(2, extra)) {
+                return false;
+            }
+            repeat = 3 + extra;
+        } else if (symbol == 17 || symbol == 18) {
+            value = 0;
+            if (!bits.Read(symbol == 17 ? 3 : 7, extra)) {
+                return false;
+            }
+            repeat = (symbol == 17 ? 3 : 11) + extra;
+        } else if (symbol > 18) {
+            // 19 and up are not code lengths.
+            return false;
+        }
+
+        if (index + repeat > total) {
+            return false;
+        }
+        while (repeat--) {
+            allLengths[index++] = value;
+        }
+    }
+
+    // A block which has no end-of-block code cannot be ended.
+    if (allLengths[256] == 0) {
+        return false;
+    }
+
+    return lengths.Build(allLengths, literalCount) &&
+           distances.Build(allLengths + literalCount, distanceCount);
+}
+
+// One Huffman-coded block: literals are written out, and a length together with a
+// distance copies what has already been written (RFC 1951, 3.2.3).
+bool ReadCompressedBlock(DeflateBits& bits,
+                         const HuffmanCode& lengths,
+                         const HuffmanCode& distances,
+                         std::string& out) {
+    while (true) {
+        unsigned symbol;
+        if (!lengths.Decode(bits, symbol)) {
+            return false;
+        }
+
+        if (symbol < 256) {
+            out += (char)symbol;
+        } else if (symbol == 256) {
+            return true;
+        } else {
+            symbol -= 257;
+            if (symbol >= 29) {
+                // 286 and 287 are not used by the format.
+                return false;
+            }
+
+            unsigned length = kDeflateLengths[symbol].base;
+            if (kDeflateLengths[symbol].extraBits) {
+                unsigned extra;
+                if (!bits.Read(kDeflateLengths[symbol].extraBits, extra)) {
+                    return false;
+                }
+                length += extra;
+            }
+
+            unsigned distanceSymbol;
+            if (!distances.Decode(bits, distanceSymbol)) {
+                return false;
+            }
+            if (distanceSymbol >= 30) {
+                return false;
+            }
+
+            unsigned distance = kDeflateDistances[distanceSymbol].base;
+            if (kDeflateDistances[distanceSymbol].extraBits) {
+                unsigned extra;
+                if (!bits.Read(kDeflateDistances[distanceSymbol].extraBits,
+                               extra)) {
+                    return false;
+                }
+                distance += extra;
+            }
+
+            // The copy may overlap what it copies - a distance of one repeats the
+            // byte just written - so it is done one byte at a time.
+            if (distance > out.size()) {
+                return false;
+            }
+            for (unsigned i = 0; i < length; i++) {
+                char byte = out[out.size() - distance];
+                out += byte;
+            }
+        }
+
+        if (out.size() > kMaxDecodedBodyBytes) {
+            return false;
+        }
+    }
+}
+
+// The deflate stream itself (RFC 1951): a series of blocks, the last of which says
+// that it is the last.
+bool InflateDeflate(const unsigned char* data, size_t length, std::string& out) {
+    DeflateBits bits(data, length);
+
+    unsigned isLast = 0;
+    do {
+        if (!bits.Read(1, isLast)) {
+            return false;
+        }
+
+        unsigned type;
+        if (!bits.Read(2, type)) {
+            return false;
+        }
+
+        if (type == 0) {
+            // A stored block: the length of the data, the same length with every
+            // bit flipped, and then the data as it is.
+            bits.AlignToByte();
+            if (bits.Remaining() < 4) {
+                return false;
+            }
+            const unsigned char* header = bits.Position();
+            unsigned storedLength = header[0] | (header[1] << 8);
+            unsigned complement = header[2] | (header[3] << 8);
+            if ((storedLength ^ 0xffff) != complement) {
+                return false;
+            }
+            bits.Skip(4);
+            if (bits.Remaining() < storedLength) {
+                return false;
+            }
+            out.append((const char*)bits.Position(), storedLength);
+            bits.Skip(storedLength);
+        } else if (type == 1 || type == 2) {
+            HuffmanCode lengths;
+            HuffmanCode distances;
+            if (type == 1) {
+                if (!BuildFixedCodes(lengths, distances)) {
+                    return false;
+                }
+            } else if (!ReadDynamicCodes(bits, lengths, distances)) {
+                return false;
+            }
+            if (!ReadCompressedBlock(bits, lengths, distances, out)) {
+                return false;
+            }
+        } else {
+            // A type of 3 is reserved, and there is no way to read past it.
+            return false;
+        }
+
+        if (out.size() > kMaxDecodedBodyBytes) {
+            return false;
+        }
+    } while (!isLast);
+
+    return true;
+}
+
+// The CRC-32 and the adler-32 of the two wrappers, over the decoded bytes.
+uint32_t Crc32(std::string const& text) {
+    uint32_t crc = 0xffffffff;
+    for (unsigned char byte : text) {
+        crc ^= byte;
+        for (int bit = 0; bit < 8; bit++) {
+            crc = (crc >> 1) ^ ((crc & 1) ? 0xedb88320u : 0u);
+        }
+    }
+    return crc ^ 0xffffffff;
+}
+
+uint32_t Adler32(std::string const& text) {
+    uint32_t a = 1;
+    uint32_t b = 0;
+    for (unsigned char byte : text) {
+        a = (a + byte) % 65521;
+        b = (b + a) % 65521;
+    }
+    return (b << 16) | a;
+}
+
+// Steps "offset" past the zero-terminated string which starts there.
+bool SkipZeroTerminated(const unsigned char* data, size_t length, size_t& offset) {
+    while (offset < length && data[offset]) {
+        offset++;
+    }
+    if (offset >= length) {
+        return false;
+    }
+    offset++;  // the terminating zero
+    return true;
+}
+
+// The four bytes at "data" as a little-endian number, which is how a stored
+// block's length and both trailers are written.
+uint32_t ReadLittleEndian(const unsigned char* data) {
+    return (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+}
+
+// Decodes a gzip or zlib body into "out". False means the body is compressed but
+// could not be decoded, and then there is no feed at all: the caller keeps the
+// data it already has rather than showing a feed which is quietly wrong.
+bool DecompressBody(const char* data, size_t length, std::string& out) {
+    // "out" is empty unless the whole body decoded: a caller which keeps the data
+    // it already has has to be able to tell "nothing decoded" from "half of it".
+    out.clear();
+
+    const unsigned char* bytes = (const unsigned char*)data;
+    const bool gzip = IsGzipBody(data, length);
+    size_t offset = 0;
+
+    if (gzip) {
+        // The ten-byte header - magic, method, flags, time, extra flags, OS - and
+        // then the fields the flags name (RFC 1952, 2.3.1).
+        if (length < 10 || bytes[2] != 8) {
+            return false;
+        }
+        const unsigned char flags = bytes[3];
+        offset = 10;
+
+        if (flags & 0x04) {  // FEXTRA: a two-byte length, then that many bytes
+            if (length - offset < 2) {
+                return false;
+            }
+            size_t extra =
+                (size_t)bytes[offset] | ((size_t)bytes[offset + 1] << 8);
+            offset += 2;
+            if (length - offset < extra) {
+                return false;
+            }
+            offset += extra;
+        }
+        if (flags & 0x08) {  // FNAME: a zero-terminated file name
+            if (!SkipZeroTerminated(bytes, length, offset)) {
+                return false;
+            }
+        }
+        if (flags & 0x10) {  // FCOMMENT: a zero-terminated comment
+            if (!SkipZeroTerminated(bytes, length, offset)) {
+                return false;
+            }
+        }
+        if (flags & 0x02) {  // FHCRC: the header's own two-byte checksum
+            if (length - offset < 2) {
+                return false;
+            }
+            offset += 2;
+        }
+    } else if (IsZlibBody(data, length)) {
+        // The two-byte zlib header. IsZlibBody has already turned away a stream
+        // which asks for a preset dictionary, since there is none to give it.
+        offset = 2;
+    } else {
+        return false;
+    }
+
+    std::string decoded;
+    if (!InflateDeflate(bytes + offset, length - offset, decoded)) {
+        return false;
+    }
+
+    // The trailer, which both wrappers carry for the decoded data. Checking it is
+    // what keeps a response which lost or gained bytes on the way from being read
+    // as a feed which is quietly wrong.
+    if (gzip) {
+        if (length < 8) {
+            return false;
+        }
+        const unsigned char* trailer = bytes + length - 8;
+        if (ReadLittleEndian(trailer) != Crc32(decoded) ||
+            ReadLittleEndian(trailer + 4) != (uint32_t)decoded.size()) {
+            return false;
+        }
+    } else {
+        if (length < 4) {
+            return false;
+        }
+        if (ReadLittleEndian(bytes + length - 4) != Adler32(decoded)) {
+            return false;
+        }
+    }
+
+    out = std::move(decoded);
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1044,16 +1619,42 @@ bool FetchHolidayData() {
         return false;
     }
 
-    std::wstring body;
+    // The body is copied out before the content is freed: a compressed body is
+    // expanded below, and Wh_FreeUrlContent takes the bytes away.
+    std::string rawBody;
     bool ok = content->statusCode == 200 && content->data && content->length;
     if (ok) {
-        body = Utf8ToWide(content->data, content->length);
+        rawBody.assign(content->data, content->length);
     } else {
         Wh_Log(L"Wh_GetUrlContent returned HTTP status %d", content->statusCode);
     }
     Wh_FreeUrlContent(content);
 
-    if (!ok || body.empty()) {
+    if (!ok || rawBody.empty()) {
+        return false;
+    }
+
+    // Wh_GetUrlContent hands back what the server sent, and a server may send the
+    // feed compressed, so a body which is gzip or zlib is expanded before it is
+    // turned into text. The two bytes of the gzip magic cannot be text at all; the
+    // two bytes a zlib header consists of can, which is why a body which already
+    // is the text the parser reads is left exactly as it is.
+    std::string bodyBytes;
+    if (!LooksLikeIcsText(rawBody) &&
+        IsCompressedBody(rawBody.data(), rawBody.size())) {
+        if (!DecompressBody(rawBody.data(), rawBody.size(), bodyBytes)) {
+            Wh_Log(L"The response is compressed, but it is not a stream which "
+                   L"could be decompressed");
+            return false;
+        }
+        Wh_Log(L"Decompressed the response from %zu to %zu bytes",
+               rawBody.size(), bodyBytes.size());
+    } else {
+        bodyBytes = std::move(rawBody);
+    }
+
+    std::wstring body = Utf8ToWide(bodyBytes.data(), bodyBytes.size());
+    if (body.empty()) {
         return false;
     }
 
