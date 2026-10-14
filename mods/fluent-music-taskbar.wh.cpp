@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         MIT
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -22,20 +22,39 @@ taskbar's own XAML tree, not a window floating over it.
 
 ![The player popover](https://raw.githubusercontent.com/xabdelrahman/flyout-taskbar/main/docs/popover.png)
 
-The strip shows album artwork, the track and the artist, plus a waveform that
-animates only while something is actually playing. Clicking it opens a popover
-with previous / play-pause / next, shuffle and repeat.
+The strip shows album artwork, the track and the artist, plus an animation that
+runs only while something is actually playing. Clicking it opens a popover with
+previous / play-pause / next, shuffle and repeat.
 
 Reads the Windows System Media Transport Controls, so it follows Spotify, a
 YouTube tab in a browser, or anything else that publishes a media session - no
 per-app setup.
 
+## How this compares to the other media mods
+
+The catalog already has **Taskbar Fluent Media Player**, **Island Media
+Controls** and **Taskbar Music Lounge**, and the first two also inject into the
+taskbar's XAML tree rather than floating a window over it. So "really inside the
+taskbar" is not what sets this one apart.
+
+What is different is the scope. This mod is deliberately small: one hooked
+symbol, one fixed layout, four settings. Taskbar Fluent Media Player is the
+full-featured option - 20+ placements, auto-hide, theme-aware materials - and if
+you want those, use it instead. Pick this one if you want a minimal strip with a
+cross-fade between tracks and a decorative playing indicator, and nothing else
+to configure.
+
 ## Settings
 
-* **Distance from the left** moves the strip along the taskbar. The default sits
-  it in the empty run between the widgets button and the centred Start icons; if
-  your taskbar is arranged differently, change this rather than reinstalling.
-* Artwork, the popover controls and the waveform can each be turned off.
+* **Distance from the left** moves the strip along the taskbar. The strip is
+  drawn *over* the taskbar rather than reserving space in it, so it needs a clear
+  run: anything underneath it cannot be clicked. The default sits it in the empty
+  gap between the widgets button and the centred Start icons. With a left-aligned
+  taskbar, or with many windows open and a centred taskbar, the task buttons can
+  grow under it - move the strip if that happens.
+* Album artwork and the popover controls can each be turned off.
+* **Playing animation** is a decorative indicator, not an audio visualizer: it
+  is not driven by the audio signal, it only tells you something is playing.
 
 ## Compatibility
 
@@ -43,6 +62,8 @@ Developed and tested on Windows 11 25H2 (build 26200). It hooks
 `TaskbarFrame::OnTaskbarLayoutChildBoundsChanged` in `Taskbar.View.dll`; if that
 symbol is absent on your build the mod logs a failure and does nothing rather
 than misbehaving.
+
+Secondary monitors each get their own strip, and all of them update together.
 */
 // ==/WindhawkModReadme==
 
@@ -57,8 +78,8 @@ than misbehaving.
   $name: Controls in the popover
   $description: Previous, play/pause, next, shuffle and repeat
 - showWaveform: true
-  $name: Animated waveform
-  $description: Animates only while something is playing
+  $name: Playing animation
+  $description: A decorative indicator, not driven by the audio
 */
 // ==/WindhawkModSettings==
 
@@ -70,8 +91,11 @@ than misbehaving.
 #undef GetCurrentTime
 
 #include <atomic>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -80,6 +104,7 @@ than misbehaving.
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -90,7 +115,6 @@ than misbehaving.
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
-#include <winrt/base.h>
 
 using namespace winrt::Windows::UI::Xaml;
 namespace WinMedia = winrt::Windows::Media::Control;
@@ -118,6 +142,14 @@ constexpr int kWaveformBars = 8;
 constexpr double kBarWidth = 3;
 constexpr double kBarHeight = 16;
 constexpr double kArtSize = 28;
+constexpr double kFlyoutArtSize = 36;
+
+/// Widest the bar is allowed to get, so a long title never grows into the
+/// centred Start icons.
+constexpr double kBarMaxWidth = 190;
+
+/// Gap between the popover and the taskbar edge.
+constexpr double kFlyoutGap = 10;
 
 struct {
     int offsetX;
@@ -126,30 +158,76 @@ struct {
     bool showWaveform;
 } g_settings;
 
-/// Widest the bar is allowed to get; also what we reserve from the taskbar.
-constexpr double kBarMaxWidth = 190;
-
-/// Gap between the popover and the taskbar edge.
-constexpr double kFlyoutGap = 10;
-
 std::atomic<bool> g_unloading;
 std::atomic<bool> g_taskbarViewDllLoaded;
 
-WinMedia::GlobalSystemMediaTransportControlsSessionManager g_sessionManager{nullptr};
-WinMedia::GlobalSystemMediaTransportControlsSession g_session{nullptr};
-winrt::weak_ref<FrameworkElement> g_barElement;
-winrt::weak_ref<FrameworkElement> g_taskbarFrame;
+// The session objects are touched from the worker thread, the WinRT callback
+// threads and the UI thread, so everything about them lives behind this mutex.
+// They are [[clang::no_destroy]] because releasing an out-of-process WinRT object
+// at process exit marshals into an apartment whose thread may already be gone:
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+std::mutex g_sessionMutex;
+[[clang::no_destroy]] WinMedia::GlobalSystemMediaTransportControlsSessionManager
+    g_sessionManager{nullptr};
+[[clang::no_destroy]] WinMedia::GlobalSystemMediaTransportControlsSession g_session{
+    nullptr};
+winrt::event_token g_currentSessionChangedToken{};
+winrt::event_token g_mediaPropertiesChangedToken{};
+winrt::event_token g_playbackInfoChangedToken{};
 
-// Which track's cover each layer currently holds, so a cover that arrives after
-// the title still gets written, and nothing is decoded twice.
-std::wstring g_artKeyA;
-std::wstring g_artKeyB;
+/// Everything belonging to one taskbar's strip. Secondary monitors have their own
+/// taskbar and their own TaskbarFrame, so they get their own entry here; keeping
+/// this per-bar is what stops one monitor's strip from being the only live one.
+/// Only ever touched on the XAML UI thread.
+struct BarState {
+    winrt::weak_ref<FrameworkElement> bar;
+    Media::Animation::Storyboard swapStoryboard{nullptr};
+    Media::Animation::Storyboard waveStoryboard{nullptr};
+    DispatcherTimer hideTimer{nullptr};
 
-/// Track the transition last ran for, so it plays once per song rather than on
-/// every position update.
-std::wstring g_animatedKey;
+    // Which track's cover each layer currently holds, so a cover that arrives
+    // after the title still gets written, and nothing is decoded twice.
+    std::wstring artKeyA;
+    std::wstring artKeyB;
 
+    /// The track the transition last ran for, so it plays once per song rather
+    /// than on every playback update.
+    std::wstring animatedKey;
 
+    /// Which of the two layers is currently the visible one.
+    bool frontIsB = false;
+};
+
+// Holds XAML objects, so it must not be destroyed during process shutdown, when
+// the UI thread is already gone.
+[[clang::no_destroy]] std::optional<std::vector<BarState>> g_bars;
+
+/// The taskbar's dispatcher, kept so unload can marshal the teardown back onto
+/// the UI thread. Every XAML call below has thread affinity. Written from the UI
+/// thread and read from the worker, so it is behind a lock for the same reason
+/// the session is: copying a projected type is not atomic.
+std::mutex g_dispatcherMutex;
+[[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher g_dispatcher{nullptr};
+
+winrt::Windows::UI::Core::CoreDispatcher GetDispatcher() {
+    std::lock_guard<std::mutex> guard(g_dispatcherMutex);
+    return g_dispatcher;
+}
+
+void SetDispatcherOnce(winrt::Windows::UI::Core::CoreDispatcher dispatcher) {
+    std::lock_guard<std::mutex> guard(g_dispatcherMutex);
+    if (!g_dispatcher) {
+        g_dispatcher = dispatcher;
+    }
+}
+
+std::vector<BarState>& Bars() {
+    if (!g_bars) {
+        g_bars.emplace();
+    }
+
+    return *g_bars;
+}
 
 void LoadSettings() {
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
@@ -199,34 +277,11 @@ FrameworkElement FindDescendantByName(FrameworkElement element, PCWSTR name) {
     return nullptr;
 }
 
-/// Uses the taskbar's own theme brushes so the bar follows light and dark without
-/// us picking colours; falls back only if the resource is missing.
-Media::Brush ThemeBrush(PCWSTR key, winrt::Windows::UI::Color fallback) {
-    try {
-        auto app = Application::Current();
-        if (!app) {
-            return Media::SolidColorBrush{fallback};
-        }
-
-        auto resources = app.Resources();
-        auto boxedKey = winrt::box_value(winrt::hstring{key});
-        if (resources.HasKey(boxedKey)) {
-            if (auto brush = resources.Lookup(boxedKey).try_as<Media::Brush>()) {
-                return brush;
-            }
-        }
-    } catch (const winrt::hresult_error&) {
-        // Fall through to the fallback colour.
-    }
-
-    return Media::SolidColorBrush{fallback};
-}
-
-
-/// Returns the first theme brush that exists, so the card can match the system
-/// flyout surface without hardcoding a colour for one Windows build.
-Media::Brush FirstThemeBrush(std::initializer_list<PCWSTR> keys,
-                             winrt::Windows::UI::Color fallback) {
+/// Returns the first theme brush that exists, so the bar follows light and dark
+/// without us picking colours, and the popover can match the system flyout
+/// surface without hardcoding a colour for one Windows build.
+Media::Brush ThemeBrush(std::initializer_list<PCWSTR> keys,
+                        winrt::Windows::UI::Color fallback) {
     try {
         if (auto app = Application::Current()) {
             auto resources = app.Resources();
@@ -240,7 +295,7 @@ Media::Brush FirstThemeBrush(std::initializer_list<PCWSTR> keys,
             }
         }
     } catch (const winrt::hresult_error&) {
-        // Fall through.
+        // Fall through to the fallback colour.
     }
 
     return Media::SolidColorBrush{fallback};
@@ -254,12 +309,11 @@ Controls::FontIcon MakeGlyph(PCWSTR glyph) {
     return icon;
 }
 
-Controls::Button MakeTransportButton(PCWSTR name, PCWSTR glyph) {
+Controls::Button MakeTransportButton(PCWSTR glyph, double size) {
     Controls::Button button;
-    button.Name(name);
     button.Content(MakeGlyph(glyph));
-    button.Width(24);
-    button.Height(24);
+    button.Width(size);
+    button.Height(size);
     button.Padding(Thickness{});
     button.BorderThickness(Thickness{});
     button.Background(Media::SolidColorBrush{winrt::Windows::UI::Colors::Transparent()});
@@ -268,33 +322,27 @@ Controls::Button MakeTransportButton(PCWSTR name, PCWSTR glyph) {
     return button;
 }
 
-
-/// Wires a tap on a transport button. See the note on AddHandler above.
-void OnTap(UIElement element, void (*action)()) {
+/// Wires a left-click. PointerPressed rather than Click because Click is not
+/// reliably hookable from here, but it fires for every button, so a right-click
+/// would otherwise open the popover and swallow the taskbar context menu.
+template <typename TAction>
+void OnLeftTap(UIElement element, TAction action) {
     element.AddHandler(
         UIElement::PointerPressedEvent(),
         winrt::box_value(Input::PointerEventHandler(
-            [action](winrt::Windows::Foundation::IInspectable const&,
-                    Input::PointerRoutedEventArgs const&) {
+            [action](winrt::Windows::Foundation::IInspectable const& sender,
+                     Input::PointerRoutedEventArgs const& args) {
                 try {
-                    if (g_session) {
-                        action();
+                    auto element = sender.try_as<UIElement>();
+                    if (!element) {
+                        return;
                     }
-                } catch (const winrt::hresult_error&) {
-                    // The media app went away between the tap and the call.
-                }
-            })),
-        true);
-}
 
-/// Like OnTap, but runs even with no session - used to open the popover.
-void OnTapAlways(UIElement element, void (*action)()) {
-    element.AddHandler(
-        UIElement::PointerPressedEvent(),
-        winrt::box_value(Input::PointerEventHandler(
-            [action](winrt::Windows::Foundation::IInspectable const&,
-                    Input::PointerRoutedEventArgs const&) {
-                try {
+                    auto point = args.GetCurrentPoint(element);
+                    if (!point || !point.Properties().IsLeftButtonPressed()) {
+                        return;
+                    }
+
                     action();
                 } catch (const winrt::hresult_error&) {
                     // Never let a click take the taskbar down with it.
@@ -336,9 +384,9 @@ Controls::StackPanel CreateWaveform() {
     return panel;
 }
 
-/// Animates ScaleY, which the compositor handles, rather than Height, which would
-/// make the taskbar relayout on every frame.
-void StartWaveform(Controls::StackPanel panel) {
+/// Builds the forever-running animation. Animates ScaleY, which the compositor
+/// handles, rather than Height, which would relayout the taskbar every frame.
+Media::Animation::Storyboard BuildWaveformStoryboard(Controls::StackPanel panel) {
     Media::Animation::Storyboard storyboard;
 
     unsigned seed = 7;
@@ -347,8 +395,8 @@ void StartWaveform(Controls::StackPanel panel) {
         return ((seed >> 16) & 0x7FFF) / 32767.0;
     };
 
-    for (uint32_t ia = 0; ia < panel.Children().Size(); ia++) {
-        auto bar = panel.Children().GetAt(ia).try_as<Shapes::Rectangle>();
+    for (uint32_t i = 0; i < panel.Children().Size(); i++) {
+        auto bar = panel.Children().GetAt(i).try_as<Shapes::Rectangle>();
         if (!bar) {
             continue;
         }
@@ -380,12 +428,30 @@ void StartWaveform(Controls::StackPanel panel) {
         storyboard.Children().Append(animation);
     }
 
-    storyboard.Begin();
+    return storyboard;
 }
 
+/// One storyboard per bar, started once. Rebuilding it on every playback update
+/// would stack another eight Forever animations on the same transforms, and
+/// nothing would ever stop them.
+void EnsureWaveformRunning(BarState& state, Controls::StackPanel panel) {
+    if (!state.waveStoryboard) {
+        state.waveStoryboard = BuildWaveformStoryboard(panel);
+    }
 
+    if (state.waveStoryboard.GetCurrentState() !=
+        Media::Animation::ClockState::Active) {
+        state.waveStoryboard.Begin();
+    }
+}
 
-/// A snapshot handed from the reader thread to the UI thread.
+void StopWaveform(BarState& state) {
+    if (state.waveStoryboard) {
+        state.waveStoryboard.Stop();
+    }
+}
+
+/// A snapshot handed from the worker thread to the UI thread.
 struct NowPlaying {
     std::wstring title;
     std::wstring artist;
@@ -398,35 +464,52 @@ struct NowPlaying {
 };
 
 /// Last state applied to the UI, so the popover can render without a fresh read.
-NowPlaying g_lastState;
+/// UI thread only. Holds a WinRT stream, so it must outlive process shutdown.
+[[clang::no_destroy]] NowPlaying g_lastState;
 
 /// Raw artwork bytes for the current track. The popover decodes its own copy:
 /// sharing one ImageBrush between the strip and the popover made the image slow
 /// to swap when the track changed.
-WinStreams::IRandomAccessStream g_artStream{nullptr};
+[[clang::no_destroy]] WinStreams::IRandomAccessStream g_artStream{nullptr};
 
-/// Holds the running fade so its Completed handler is still alive when it fires.
-Media::Animation::Storyboard g_swapStoryboard{nullptr};
+/// Copies the session under the lock. Callers must use the returned local rather
+/// than touching the global again: a projected type is not atomic, so a
+/// concurrent assignment could otherwise release the object under the reader.
+WinMedia::GlobalSystemMediaTransportControlsSession CurrentSession() {
+    std::lock_guard<std::mutex> guard(g_sessionMutex);
+    return g_session;
+}
 
-/// Which of the two layers is currently the visible one.
-bool g_frontIsB = false;
+/// Decodes artwork no larger than the tile it goes into. Without this a 640x640
+/// cover is decoded at full size into every layer, on the UI thread.
+Media::ImageBrush MakeArtBrush(WinStreams::IRandomAccessStream stream, double size) {
+    stream.Seek(0);
 
-/// Delays hiding the strip. Apps report no session for a moment between tracks,
-/// and collapsing the whole bar on that gap is what read as a flash.
-DispatcherTimer g_hideTimer{nullptr};
+    Media::Imaging::BitmapImage bitmap;
+    bitmap.DecodePixelType(Media::Imaging::DecodePixelType::Logical);
+    bitmap.DecodePixelWidth(static_cast<int32_t>(size));
+    bitmap.DecodePixelHeight(static_cast<int32_t>(size));
+    bitmap.SetSource(stream);
+
+    Media::ImageBrush brush;
+    brush.ImageSource(bitmap);
+    brush.Stretch(Media::Stretch::UniformToFill);
+    return brush;
+}
 
 /// Writes the track into one of the two layers. The layer may be the hidden one,
 /// which is how the swap happens without anything blank appearing on screen.
-void WriteLayer(FrameworkElement bar, NowPlaying state, bool useB) {
+void WriteLayer(BarState& state, FrameworkElement bar, NowPlaying const& track,
+                bool useB) {
     if (auto title = FindDescendantByName(bar, useB ? kTitleB : kTitleA)
                          .try_as<Controls::TextBlock>()) {
-        title.Text(state.title);
+        title.Text(track.title);
     }
 
     if (auto artist = FindDescendantByName(bar, useB ? kArtistB : kArtistA)
                           .try_as<Controls::TextBlock>()) {
-        artist.Text(state.artist);
-        artist.Visibility(state.artist.empty() ? Visibility::Collapsed
+        artist.Text(track.artist);
+        artist.Visibility(track.artist.empty() ? Visibility::Collapsed
                                                : Visibility::Visible);
     }
 
@@ -439,34 +522,25 @@ void WriteLayer(FrameworkElement bar, NowPlaying state, bool useB) {
     art.Visibility(g_settings.showArtwork ? Visibility::Visible
                                           : Visibility::Collapsed);
 
-    if (!g_settings.showArtwork || !state.artStream) {
+    if (!g_settings.showArtwork || !track.artStream) {
         return;
     }
 
-    auto& layerArtKey = useB ? g_artKeyB : g_artKeyA;
-    if (layerArtKey == state.key) {
+    auto& layerArtKey = useB ? state.artKeyB : state.artKeyA;
+    if (layerArtKey == track.key) {
         return;
     }
 
     try {
-        state.artStream.Seek(0);
-
-        Media::Imaging::BitmapImage bitmap;
-        bitmap.SetSource(state.artStream);
-
-        Media::ImageBrush brush;
-        brush.ImageSource(bitmap);
-        brush.Stretch(Media::Stretch::UniformToFill);
-        art.Background(brush);
-
-        layerArtKey = state.key;
+        art.Background(MakeArtBrush(track.artStream, kArtSize));
+        layerArtKey = track.key;
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"Artwork decode failed: %08X", e.code().value);
     }
 }
 
 /// Fades one layer up while the other fades down, both at once.
-void CrossfadeLayers(FrameworkElement bar, bool toB) {
+void CrossfadeLayers(BarState& state, FrameworkElement bar, bool toB) {
     auto incomingInfo = FindDescendantByName(bar, toB ? kInfoB : kInfoA);
     auto outgoingInfo = FindDescendantByName(bar, toB ? kInfoA : kInfoB);
     auto incomingArt = FindDescendantByName(bar, toB ? kArtB : kArtA);
@@ -476,8 +550,8 @@ void CrossfadeLayers(FrameworkElement bar, bool toB) {
     // row (the artist usually arrives after the title, which changes the key), and
     // two storyboards animating the same opacities fight each other - which could
     // leave BOTH copies hidden, so only the waveform was left on screen.
-    if (g_swapStoryboard) {
-        g_swapStoryboard.Stop();
+    if (state.swapStoryboard) {
+        state.swapStoryboard.Stop();
     }
 
     // A stopped storyboard releases its hold on Opacity, so put the layers into a
@@ -536,225 +610,356 @@ void CrossfadeLayers(FrameworkElement bar, bool toB) {
         }
     }
 
-    g_swapStoryboard = storyboard;
+    state.swapStoryboard = storyboard;
     storyboard.Begin();
 }
 
-void ApplyToUi(FrameworkElement bar, NowPlaying state) {
-    g_lastState = state;
-    g_artStream = state.artStream;
-
+void ApplyToBar(BarState& state, FrameworkElement bar, NowPlaying const& track) {
     auto wave = FindDescendantByName(bar, kWaveName).try_as<Controls::StackPanel>();
     if (wave) {
-        bool show = g_settings.showWaveform && state.playing;
+        bool show = g_settings.showWaveform && track.playing;
         wave.Visibility(show ? Visibility::Visible : Visibility::Collapsed);
         if (show) {
-            StartWaveform(wave);
+            EnsureWaveformRunning(state, wave);
+        } else {
+            StopWaveform(state);
         }
     }
 
     bar.Margin(Thickness{.Left = static_cast<double>(g_settings.offsetX)});
 
-    bool haveTrack = state.hasSession && !state.title.empty();
+    bool haveTrack = track.hasSession && !track.title.empty();
 
     if (haveTrack) {
-        if (g_hideTimer) {
-            g_hideTimer.Stop();
+        if (state.hideTimer) {
+            state.hideTimer.Stop();
         }
         bar.Visibility(Visibility::Visible);
     } else if (bar.Visibility() == Visibility::Visible) {
         // Do not hide yet: this is almost always the brief gap a player leaves
         // while switching tracks. Confirm it is really over first.
-        if (!g_hideTimer) {
-            g_hideTimer = DispatcherTimer();
-            g_hideTimer.Interval(
+        if (!state.hideTimer) {
+            state.hideTimer = DispatcherTimer();
+            state.hideTimer.Interval(
                 winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds{700}});
-            g_hideTimer.Tick([bar](winrt::Windows::Foundation::IInspectable const&,
-                                   winrt::Windows::Foundation::IInspectable const&) {
-                if (g_hideTimer) {
-                    g_hideTimer.Stop();
-                }
+
+            winrt::weak_ref<FrameworkElement> weakBar = bar;
+            auto timer = state.hideTimer;
+            state.hideTimer.Tick([weakBar, timer](
+                                     winrt::Windows::Foundation::IInspectable const&,
+                                     winrt::Windows::Foundation::IInspectable const&) {
+                timer.Stop();
 
                 if (g_unloading) {
                     return;
                 }
 
                 if (!g_lastState.hasSession || g_lastState.title.empty()) {
-                    bar.Visibility(Visibility::Collapsed);
+                    if (auto target = weakBar.get()) {
+                        target.Visibility(Visibility::Collapsed);
+                    }
                 }
             });
         }
 
-        g_hideTimer.Start();
+        state.hideTimer.Start();
     }
 
-    bool trackChanged = !state.key.empty() && state.key != g_animatedKey;
+    bool trackChanged = !track.key.empty() && track.key != state.animatedKey;
 
     if (!trackChanged) {
         // Not a new song. Write into whichever layer is (or is becoming) the front
         // one - that is where this track belongs, transition running or not. This
         // is how a cover that arrives after the title still shows up.
-        WriteLayer(bar, state, g_frontIsB);
+        WriteLayer(state, bar, track, state.frontIsB);
         return;
     }
 
-    g_animatedKey = state.key;
+    state.animatedKey = track.key;
 
     // Fill the hidden layer, then cross-fade to it.
-    bool toB = !g_frontIsB;
-    WriteLayer(bar, state, toB);
-    g_frontIsB = toB;
+    bool toB = !state.frontIsB;
+    WriteLayer(state, bar, track, toB);
+    state.frontIsB = toB;
 
-    CrossfadeLayers(bar, toB);
+    CrossfadeLayers(state, bar, toB);
 }
 
-/// Reads the session off the UI thread. TryGetMediaPropertiesAsync and OpenReadAsync
-/// both block, and blocking here would stall the whole taskbar.
-void RefreshNowPlaying() {
-    if (g_unloading) {
-        return;
-    }
+/// Applies a snapshot to every taskbar's strip. UI thread only.
+void ApplyToUi(NowPlaying track) {
+    g_lastState = track;
+    g_artStream = track.artStream;
 
-    auto bar = g_barElement.get();
-    if (!bar) {
-        return;
-    }
-
-    std::thread([bar]() {
-        NowPlaying state;
-        auto session = g_session;
-
-        try {
-            if (session) {
-                state.hasSession = true;
-
-                auto playback = session.GetPlaybackInfo();
-                state.playing =
-                    playback &&
-                    playback.PlaybackStatus() ==
-                        WinMedia::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-
-                if (playback) {
-                    if (auto shuffle = playback.IsShuffleActive()) {
-                        state.shuffle = shuffle.Value();
-                    }
-                    if (auto repeat = playback.AutoRepeatMode()) {
-                        state.repeatOn =
-                            repeat.Value() !=
-                            winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None;
-                    }
-                }
-
-                if (auto properties = session.TryGetMediaPropertiesAsync().get()) {
-                    state.title = properties.Title().c_str();
-                    state.artist = properties.Artist().c_str();
-                    state.key = state.title + L"|" + state.artist;
-
-                    if (auto thumbnail = properties.Thumbnail()) {
-                        auto source = thumbnail.OpenReadAsync().get();
-
-                        // Own the bytes outright: decoding happens later, on the UI
-                        // thread, by which time the app's stream may be gone.
-                        WinStreams::InMemoryRandomAccessStream copy;
-                        WinStreams::RandomAccessStream::CopyAsync(source, copy).get();
-                        copy.Seek(0);
-                        state.artStream = copy;
-                    }
-                }
-            }
-        } catch (const winrt::hresult_error&) {
-            // The media app went away mid-read; show the empty state instead.
-            state = NowPlaying{};
+    auto& bars = Bars();
+    for (auto it = bars.begin(); it != bars.end();) {
+        auto bar = it->bar.get();
+        if (!bar) {
+            // That taskbar is gone; drop its state rather than leaking it.
+            it = bars.erase(it);
+            continue;
         }
 
         try {
-            bar.Dispatcher().RunAsync(
-                winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                [bar, state]() {
-                    if (!g_unloading) {
-                        ApplyToUi(bar, state);
-                    }
-                });
-        } catch (const winrt::hresult_error&) {
-            // The taskbar went away; nothing to update.
+            ApplyToBar(*it, bar, track);
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Updating a bar failed: %08X", e.code().value);
         }
-    }).detach();
+
+        ++it;
+    }
 }
 
-// Defined below; OnSessionChanged subscribes the newly selected session to it.
-void OnSessionDetailChanged(
-    WinMedia::GlobalSystemMediaTransportControlsSession const&,
-    winrt::Windows::Foundation::IInspectable const&);
+// ---------------------------------------------------------------------------
+// Media session reading
+//
+// One long-lived worker, woken by an event, rather than a detached thread per
+// notification. A detached thread blocked in TryGetMediaPropertiesAsync().get()
+// can still be running mod code when the DLL is unmapped, and there is no handle
+// to wait on; this one is joined on unload. It also coalesces the burst of
+// notifications a single track change produces.
+// ---------------------------------------------------------------------------
 
-void OnSessionChanged(WinMedia::GlobalSystemMediaTransportControlsSessionManager const&,
-                    WinMedia::CurrentSessionChangedEventArgs const&) {
+[[clang::no_destroy]] std::optional<std::thread> g_refreshThread;
+HANDLE g_refreshEvent;
+HANDLE g_stopEvent;
+
+// Worker thread only. The UI thread's g_lastState cannot be read from here -
+// that would be the same unsynchronized cross-thread access flagged elsewhere -
+// so the worker keeps its own record of what it last fetched.
+[[clang::no_destroy]] std::wstring g_workerLastKey;
+[[clang::no_destroy]] WinStreams::IRandomAccessStream g_workerLastArt{nullptr};
+
+void RequestRefresh() {
+    if (g_refreshEvent) {
+        SetEvent(g_refreshEvent);
+    }
+}
+
+NowPlaying ReadNowPlaying() {
+    NowPlaying track;
+    auto session = CurrentSession();
+
     try {
-        g_session = g_sessionManager.GetCurrentSession();
-
-        if (g_session) {
-            g_session.MediaPropertiesChanged(OnSessionDetailChanged);
-            g_session.PlaybackInfoChanged(OnSessionDetailChanged);
+        if (!session) {
+            return track;
         }
+
+        track.hasSession = true;
+
+        auto playback = session.GetPlaybackInfo();
+        track.playing =
+            playback &&
+            playback.PlaybackStatus() ==
+                WinMedia::GlobalSystemMediaTransportControlsSessionPlaybackStatus::
+                    Playing;
+
+        if (playback) {
+            if (auto shuffle = playback.IsShuffleActive()) {
+                track.shuffle = shuffle.Value();
+            }
+            if (auto repeat = playback.AutoRepeatMode()) {
+                track.repeatOn =
+                    repeat.Value() !=
+                    winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None;
+            }
+        }
+
+        auto properties = session.TryGetMediaPropertiesAsync().get();
+        if (!properties) {
+            return track;
+        }
+
+        track.title = properties.Title().c_str();
+        track.artist = properties.Artist().c_str();
+
+        // The album is part of the key so that a different version of a track
+        // with the same title and artist still counts as a change, and so its
+        // artwork is refreshed rather than short-circuited in WriteLayer.
+        track.key = track.title + L"|" + track.artist + L"|" +
+                    std::wstring{properties.AlbumTitle().c_str()};
+
+        // Re-opening and copying the cover on every playback update is wasted
+        // work; only the track changing can change the artwork.
+        if (track.key == g_workerLastKey && g_workerLastArt) {
+            track.artStream = g_workerLastArt;
+            return track;
+        }
+
+        if (auto thumbnail = properties.Thumbnail()) {
+            auto source = thumbnail.OpenReadAsync().get();
+
+            // Own the bytes outright: decoding happens later, on the UI thread,
+            // by which time the app's stream may be gone.
+            WinStreams::InMemoryRandomAccessStream copy;
+            WinStreams::RandomAccessStream::CopyAsync(source, copy).get();
+            copy.Seek(0);
+            track.artStream = copy;
+        }
+
+        g_workerLastKey = track.key;
+        g_workerLastArt = track.artStream;
     } catch (const winrt::hresult_error&) {
-        g_session = nullptr;
+        // The media app went away mid-read; show the empty state instead.
+        g_workerLastKey.clear();
+        g_workerLastArt = nullptr;
+        return NowPlaying{};
     }
 
-    RefreshNowPlaying();
+    return track;
 }
 
 void OnSessionDetailChanged(
     WinMedia::GlobalSystemMediaTransportControlsSession const&,
     winrt::Windows::Foundation::IInspectable const&) {
-    RefreshNowPlaying();
+    RequestRefresh();
 }
 
-void StartMediaWatch() {
-    std::thread([]() {
-        try {
-            g_sessionManager = WinMedia::GlobalSystemMediaTransportControlsSessionManager::
-                RequestAsync()
-                    .get();
-            g_session = g_sessionManager.GetCurrentSession();
-
-            g_sessionManager.CurrentSessionChanged(OnSessionChanged);
-
-            if (g_session) {
-                g_session.MediaPropertiesChanged(OnSessionDetailChanged);
-                g_session.PlaybackInfoChanged(OnSessionDetailChanged);
-            }
-
-            RefreshNowPlaying();
-        } catch (const winrt::hresult_error& e) {
-            Wh_Log(L"Media session watch failed: %08X", e.code().value);
-        }
-    }).detach();
-}
-
-
-/// A toggle-looking button for shuffle and repeat, tinted when the mode is on.
-Controls::Button MakeToggleButton(PCWSTR glyph, bool active) {
-    auto button = MakeTransportButton(L"", glyph);
-    button.Width(24);
-    button.Height(24);
-
-    if (active) {
-        button.Background(ThemeBrush(
-            L"AccentFillColorDefaultBrush",
-            winrt::Windows::UI::ColorHelper::FromArgb(0xFF, 0x00, 0x78, 0xD4)));
+/// Drops the handlers on the session we are leaving. Without this every session
+/// that was ever current keeps its handlers and keeps waking the worker - and
+/// after unload those delegates point into an unmapped image.
+void UnsubscribeFromSessionNoLock() {
+    if (!g_session) {
+        return;
     }
 
-    return button;
+    try {
+        g_session.MediaPropertiesChanged(g_mediaPropertiesChangedToken);
+        g_session.PlaybackInfoChanged(g_playbackInfoChangedToken);
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Unsubscribing from the session failed: %08X", e.code().value);
+    }
+
+    g_mediaPropertiesChangedToken = {};
+    g_playbackInfoChangedToken = {};
+    g_session = nullptr;
+}
+
+void SubscribeToCurrentSessionNoLock() {
+    UnsubscribeFromSessionNoLock();
+
+    if (!g_sessionManager || g_unloading) {
+        return;
+    }
+
+    try {
+        auto session = g_sessionManager.GetCurrentSession();
+        if (!session) {
+            return;
+        }
+
+        g_session = session;
+        g_mediaPropertiesChangedToken =
+            session.MediaPropertiesChanged(OnSessionDetailChanged);
+        g_playbackInfoChangedToken =
+            session.PlaybackInfoChanged(OnSessionDetailChanged);
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Subscribing to the session failed: %08X", e.code().value);
+        g_session = nullptr;
+    }
+}
+
+void OnCurrentSessionChanged(
+    WinMedia::GlobalSystemMediaTransportControlsSessionManager const&,
+    WinMedia::CurrentSessionChangedEventArgs const&) {
+    {
+        std::lock_guard<std::mutex> guard(g_sessionMutex);
+        SubscribeToCurrentSessionNoLock();
+    }
+
+    RequestRefresh();
+}
+
+void MediaSessionInit() {
+    try {
+        auto manager =
+            WinMedia::GlobalSystemMediaTransportControlsSessionManager::RequestAsync()
+                .get();
+
+        if (g_unloading) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> guard(g_sessionMutex);
+        g_sessionManager = manager;
+        g_currentSessionChangedToken =
+            manager.CurrentSessionChanged(OnCurrentSessionChanged);
+        SubscribeToCurrentSessionNoLock();
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Media session init failed: %08X", e.code().value);
+    }
+}
+
+/// Revokes every handler, so nothing can call into the mod image after unload.
+void MediaSessionUninit() {
+    WinMedia::GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
+    winrt::event_token currentSessionChangedToken{};
+
+    {
+        std::lock_guard<std::mutex> guard(g_sessionMutex);
+
+        UnsubscribeFromSessionNoLock();
+
+        manager = std::move(g_sessionManager);
+        g_sessionManager = nullptr;
+        currentSessionChangedToken = g_currentSessionChangedToken;
+        g_currentSessionChangedToken = {};
+    }
+
+    // Detach outside the lock: this waits for an in-flight CurrentSessionChanged,
+    // which takes the lock itself.
+    if (manager) {
+        try {
+            manager.CurrentSessionChanged(currentSessionChangedToken);
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Revoking the session manager handler failed: %08X",
+                   e.code().value);
+        }
+    }
+}
+
+void RefreshThreadProc() {
+    MediaSessionInit();
+
+    HANDLE waits[] = {g_stopEvent, g_refreshEvent};
+
+    for (;;) {
+        if (g_unloading) {
+            return;
+        }
+
+        auto track = ReadNowPlaying();
+
+        auto dispatcher = GetDispatcher();
+        if (dispatcher && !g_unloading) {
+            try {
+                dispatcher.RunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+                    [track]() {
+                        if (!g_unloading) {
+                            ApplyToUi(track);
+                        }
+                    });
+            } catch (const winrt::hresult_error&) {
+                // The taskbar went away; nothing to update.
+            }
+        }
+
+        DWORD waited = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, INFINITE);
+        if (waited != WAIT_OBJECT_0 + 1) {
+            // Stop requested, or the wait failed; either way we are done.
+            return;
+        }
+    }
 }
 
 /// Opens the player popover: full artwork, track, transport, shuffle and repeat.
 /// Built fresh each time from the last snapshot, so nothing needs syncing.
-void ShowPlayerFlyout() {
-    auto anchor = g_barElement.get();
+void ShowPlayerFlyout(FrameworkElement anchor) {
     if (!anchor) {
         return;
     }
 
-    const auto& state = g_lastState;
+    const auto& track = g_lastState;
 
     // Landscape card: artwork on the left, everything else stacked beside it.
     // A tall column gets clipped when the flyout opens above the taskbar.
@@ -763,28 +968,21 @@ void ShowPlayerFlyout() {
     root.Spacing(10);
     root.Padding(Thickness{});
 
+    auto placeholder = Media::SolidColorBrush{
+        winrt::Windows::UI::ColorHelper::FromArgb(0x24, 0xFF, 0xFF, 0xFF)};
+
     Controls::Border art;
-    art.Width(36);
-    art.Height(36);
+    art.Width(kFlyoutArtSize);
+    art.Height(kFlyoutArtSize);
     art.CornerRadius(CornerRadius{5, 5, 5, 5});
     art.VerticalAlignment(VerticalAlignment::Center);
+    art.Background(placeholder);
     if (g_artStream) {
         try {
-            Media::Imaging::BitmapImage bitmap;
-            g_artStream.Seek(0);
-            bitmap.SetSource(g_artStream);
-
-            Media::ImageBrush brush;
-            brush.ImageSource(bitmap);
-            brush.Stretch(Media::Stretch::UniformToFill);
-            art.Background(brush);
+            art.Background(MakeArtBrush(g_artStream, kFlyoutArtSize));
         } catch (const winrt::hresult_error&) {
-            art.Background(Media::SolidColorBrush{
-                winrt::Windows::UI::ColorHelper::FromArgb(0x24, 0xFF, 0xFF, 0xFF)});
+            // Keep the placeholder.
         }
-    } else {
-        art.Background(Media::SolidColorBrush{
-            winrt::Windows::UI::ColorHelper::FromArgb(0x24, 0xFF, 0xFF, 0xFF)});
     }
     root.Children().Append(art);
 
@@ -795,28 +993,30 @@ void ShowPlayerFlyout() {
     details.MinWidth(124);
 
     Controls::TextBlock title;
-    title.Text(state.title.empty() ? L"Nothing playing" : state.title.c_str());
+    title.Text(track.title.empty() ? L"Nothing playing" : track.title.c_str());
     title.FontSize(12);
     title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-    title.Foreground(ThemeBrush(L"TextFillColorPrimaryBrush",
+    title.Foreground(ThemeBrush({L"TextFillColorPrimaryBrush"},
                                 winrt::Windows::UI::Colors::White()));
     title.TextTrimming(TextTrimming::CharacterEllipsis);
     title.TextWrapping(TextWrapping::NoWrap);
     title.MaxWidth(150);
     details.Children().Append(title);
 
-    if (!state.artist.empty()) {
+    if (!track.artist.empty()) {
         Controls::TextBlock artist;
-        artist.Text(state.artist.c_str());
+        artist.Text(track.artist.c_str());
         artist.FontSize(11);
         artist.Foreground(ThemeBrush(
-            L"TextFillColorSecondaryBrush",
+            {L"TextFillColorSecondaryBrush"},
             winrt::Windows::UI::ColorHelper::FromArgb(0xA0, 0xFF, 0xFF, 0xFF)));
         artist.TextTrimming(TextTrimming::CharacterEllipsis);
         artist.TextWrapping(TextWrapping::NoWrap);
         artist.MaxWidth(150);
         details.Children().Append(artist);
     }
+
+    root.Children().Append(details);
 
     if (g_settings.showControls) {
         Controls::StackPanel transport;
@@ -825,44 +1025,61 @@ void ShowPlayerFlyout() {
         transport.Spacing(1);
         transport.VerticalAlignment(VerticalAlignment::Center);
 
-        auto shuffle = MakeToggleButton(L"", state.shuffle);
-        OnTap(shuffle, []() {
-            g_session.TryChangeShuffleActiveAsync(!g_lastState.shuffle);
+        auto shuffle = MakeTransportButton(L"", 24);
+        if (track.shuffle) {
+            shuffle.Background(ThemeBrush(
+                {L"AccentFillColorDefaultBrush"},
+                winrt::Windows::UI::ColorHelper::FromArgb(0xFF, 0x00, 0x78, 0xD4)));
+        }
+        OnLeftTap(shuffle, []() {
+            if (auto session = CurrentSession()) {
+                session.TryChangeShuffleActiveAsync(!g_lastState.shuffle);
+            }
         });
         transport.Children().Append(shuffle);
 
-        auto previous = MakeTransportButton(L"", L"");
-        previous.Width(24);
-        previous.Height(24);
-        OnTap(previous, []() { g_session.TrySkipPreviousAsync(); });
+        auto previous = MakeTransportButton(L"", 24);
+        OnLeftTap(previous, []() {
+            if (auto session = CurrentSession()) {
+                session.TrySkipPreviousAsync();
+            }
+        });
         transport.Children().Append(previous);
 
         auto playPause =
-            MakeTransportButton(L"", state.playing ? L"" : L"");
-        playPause.Width(28);
-        playPause.Height(28);
-        OnTap(playPause, []() { g_session.TryTogglePlayPauseAsync(); });
+            MakeTransportButton(track.playing ? L"" : L"", 28);
+        OnLeftTap(playPause, []() {
+            if (auto session = CurrentSession()) {
+                session.TryTogglePlayPauseAsync();
+            }
+        });
         transport.Children().Append(playPause);
 
-        auto next = MakeTransportButton(L"", L"");
-        next.Width(24);
-        next.Height(24);
-        OnTap(next, []() { g_session.TrySkipNextAsync(); });
+        auto next = MakeTransportButton(L"", 24);
+        OnLeftTap(next, []() {
+            if (auto session = CurrentSession()) {
+                session.TrySkipNextAsync();
+            }
+        });
         transport.Children().Append(next);
 
-        auto repeat = MakeToggleButton(L"", state.repeatOn);
-        OnTap(repeat, []() {
-            g_session.TryChangeAutoRepeatModeAsync(
-                g_lastState.repeatOn
-                    ? winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None
-                    : winrt::Windows::Media::MediaPlaybackAutoRepeatMode::List);
+        auto repeat = MakeTransportButton(L"", 24);
+        if (track.repeatOn) {
+            repeat.Background(ThemeBrush(
+                {L"AccentFillColorDefaultBrush"},
+                winrt::Windows::UI::ColorHelper::FromArgb(0xFF, 0x00, 0x78, 0xD4)));
+        }
+        OnLeftTap(repeat, []() {
+            if (auto session = CurrentSession()) {
+                session.TryChangeAutoRepeatModeAsync(
+                    g_lastState.repeatOn
+                        ? winrt::Windows::Media::MediaPlaybackAutoRepeatMode::None
+                        : winrt::Windows::Media::MediaPlaybackAutoRepeatMode::List);
+            }
         });
         transport.Children().Append(repeat);
 
-        root.Children().Append(details);
         root.Children().Append(transport);
-    } else {
-        root.Children().Append(details);
     }
 
     // The presenter is made invisible and this Border is the visible popover, so
@@ -874,13 +1091,13 @@ void ShowPlayerFlyout() {
     card.Padding(Thickness{10, 8, 10, 8});
     card.Margin(Thickness{0, 0, 0, kFlyoutGap});
     card.BorderThickness(Thickness{1, 1, 1, 1});
-    card.Background(FirstThemeBrush(
+    card.Background(ThemeBrush(
         {L"AcrylicInAppFillColorDefaultBrush",
          L"AcrylicBackgroundFillColorDefaultBrush",
          L"SystemControlAcrylicElementBrush",
          L"FlyoutPresenterBackground"},
         winrt::Windows::UI::ColorHelper::FromArgb(0xFF, 0xF3, 0xF3, 0xF3)));
-    card.BorderBrush(FirstThemeBrush(
+    card.BorderBrush(ThemeBrush(
         {L"SurfaceStrokeColorFlyoutBrush", L"FlyoutBorderThemeBrush"},
         winrt::Windows::UI::ColorHelper::FromArgb(0x20, 0x00, 0x00, 0x00)));
 
@@ -949,7 +1166,6 @@ void EnsureBar(FrameworkElement taskbarFrameElement) {
             break;
         }
 
-
         if (auto panel = parent.try_as<Controls::Panel>()) {
             containerGrid = panel;
             break;
@@ -963,17 +1179,29 @@ void EnsureBar(FrameworkElement taskbarFrameElement) {
         return;
     }
 
-    if (FindChildByName(containerGrid, kBarName)) {
-        return;
+    auto& bars = Bars();
+
+    if (auto existing = FindChildByName(containerGrid, kBarName)) {
+        for (auto const& state : bars) {
+            if (state.bar.get() == existing) {
+                // Already ours and already tracked; nothing to do.
+                return;
+            }
+        }
+
+        // Left behind by a previous load of the mod. Its click handler points into
+        // an unmapped image, so replace it rather than leaving it in the tree.
+        uint32_t index;
+        if (containerGrid.Children().IndexOf(existing, index)) {
+            containerGrid.Children().RemoveAt(index);
+        }
     }
 
-
-    auto primaryText = ThemeBrush(L"TextFillColorPrimaryBrush",
-                                winrt::Windows::UI::Colors::White());
-    auto secondaryText = ThemeBrush(L"TextFillColorSecondaryBrush",
-                                    winrt::Windows::UI::ColorHelper::FromArgb(
-                                        0xA0, 0xFF, 0xFF, 0xFF));
-
+    auto primaryText =
+        ThemeBrush({L"TextFillColorPrimaryBrush"}, winrt::Windows::UI::Colors::White());
+    auto secondaryText = ThemeBrush(
+        {L"TextFillColorSecondaryBrush"},
+        winrt::Windows::UI::ColorHelper::FromArgb(0xA0, 0xFF, 0xFF, 0xFF));
 
     Controls::StackPanel bar;
     bar.Name(kBarName);
@@ -1043,50 +1271,77 @@ void EnsureBar(FrameworkElement taskbarFrameElement) {
     }
 
     bar.Children().Append(infoHost);
-
     bar.Children().Append(CreateWaveform());
 
-
-    // The whole strip opens the popover.
+    // The whole strip opens the popover. Weak, so the handler does not keep the
+    // bar it is attached to alive.
     bar.Background(Media::SolidColorBrush{winrt::Windows::UI::Colors::Transparent()});
-    OnTapAlways(bar, ShowPlayerFlyout);
+    winrt::weak_ref<FrameworkElement> weakBar = bar;
+    OnLeftTap(bar, [weakBar]() {
+        if (!g_unloading) {
+            ShowPlayerFlyout(weakBar.get());
+        }
+    });
 
     // Hidden until we know something is playing, so it never flashes empty.
     bar.Visibility(Visibility::Collapsed);
 
     containerGrid.Children().Append(bar);
-    g_barElement = bar;
 
-    Wh_Log(L"Fluent Music bar added to the taskbar");
+    BarState state;
+    state.bar = bar;
+    bars.push_back(std::move(state));
 
-    RefreshNowPlaying();
+    Wh_Log(L"Fluent Music bar added to a taskbar (%zu total)", bars.size());
+
+    RequestRefresh();
 }
 
-void RemoveBar() {
-    if (auto frame = g_taskbarFrame.get()) {
-        auto margin = frame.Margin();
-        if (margin.Left != 0) {
-            margin.Left = 0;
-            frame.Margin(margin);
-        }
-    }
-
-    auto bar = g_barElement.get();
-    if (!bar) {
+/// Tears down every strip. Must run on the UI thread: all of this has thread
+/// affinity and would throw RPC_E_WRONG_THREAD from Windhawk's callback thread.
+void RemoveBarsOnUiThread() {
+    if (!g_bars) {
         return;
     }
 
-    auto parent = Media::VisualTreeHelper::GetParent(bar).try_as<Controls::Panel>();
-    if (parent) {
-        uint32_t index;
-        if (parent.Children().IndexOf(bar, index)) {
-            parent.Children().RemoveAt(index);
+    for (auto& state : *g_bars) {
+        try {
+            if (state.hideTimer) {
+                state.hideTimer.Stop();
+                state.hideTimer = nullptr;
+            }
+
+            if (state.swapStoryboard) {
+                state.swapStoryboard.Stop();
+                state.swapStoryboard = nullptr;
+            }
+
+            if (state.waveStoryboard) {
+                state.waveStoryboard.Stop();
+                state.waveStoryboard = nullptr;
+            }
+
+            if (auto bar = state.bar.get()) {
+                auto parent =
+                    Media::VisualTreeHelper::GetParent(bar).try_as<Controls::Panel>();
+                if (parent) {
+                    uint32_t index;
+                    if (parent.Children().IndexOf(bar, index)) {
+                        parent.Children().RemoveAt(index);
+                    }
+                }
+            }
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Removing a bar failed: %08X", e.code().value);
         }
+
+        state.bar = nullptr;
     }
 
-    g_barElement = nullptr;
-    g_artKeyA.clear();
-    g_artKeyB.clear();
+    g_bars->clear();
+
+    g_artStream = nullptr;
+    g_lastState = NowPlaying{};
 }
 
 using TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t = void(WINAPI*)(void* pThis);
@@ -1095,7 +1350,6 @@ TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t
 
 void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
     TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Original(pThis);
-
 
     if (g_unloading) {
         return;
@@ -1118,7 +1372,10 @@ void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
         // This hook runs *inside* a layout pass, where walking or mutating the
         // visual tree is an invalid operation (XAML reports 0x800F1000). Defer to
         // the dispatcher so the work happens once layout has finished.
-        taskbarFrameElement.Dispatcher().RunAsync(
+        auto dispatcher = taskbarFrameElement.Dispatcher();
+        SetDispatcherOnce(dispatcher);
+
+        dispatcher.RunAsync(
             winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
             [taskbarFrameElement]() {
                 if (g_unloading) {
@@ -1126,7 +1383,6 @@ void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
                 }
 
                 try {
-                    g_taskbarFrame = taskbarFrameElement;
                     EnsureBar(taskbarFrameElement);
                 } catch (const winrt::hresult_error& e) {
                     Wh_Log(L"EnsureBar failed: %08X", e.code().value);
@@ -1136,8 +1392,6 @@ void WINAPI TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_Hook(void* pThis) {
             });
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"Taskbar hook failed: %08X", e.code().value);
-    } catch (const std::exception&) {
-        Wh_Log(L"Taskbar hook failed with a std::exception");
     } catch (...) {
         Wh_Log(L"Taskbar hook failed with an unknown exception");
     }
@@ -1192,6 +1446,14 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    // Auto-reset, initially clear: the worker does a read before its first wait.
+    g_refreshEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_refreshEvent || !g_stopEvent) {
+        Wh_Log(L"CreateEvent failed");
+        return FALSE;
+    }
+
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
@@ -1215,27 +1477,66 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    StartMediaWatch();
+    g_refreshThread.emplace(RefreshThreadProc);
 }
 
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
     g_unloading = true;
-    RemoveBar();
 
-    // Give the taskbar a moment to finish any in-flight layout pass before the
-    // mod's code is unloaded from under it.
-    Sleep(200);
+    // Revoke first, so nothing can wake the worker or call into the mod image
+    // while the rest of the teardown runs.
+    MediaSessionUninit();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    // Stop and join the worker before touching anything it uses. A detached
+    // thread still running mod code when the DLL is unmapped crashes Explorer.
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+
+    if (g_refreshThread && g_refreshThread->joinable()) {
+        g_refreshThread->join();
+    }
+    g_refreshThread.reset();
+
+    // Now the UI teardown, on the UI thread and synchronously. Low priority so it
+    // runs after every Normal item the hook and the worker already queued.
+    auto dispatcher = GetDispatcher();
+    if (dispatcher) {
+        try {
+            dispatcher
+                .RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
+                          []() { RemoveBarsOnUiThread(); })
+                .get();
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"UI teardown failed: %08X", e.code().value);
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> guard(g_dispatcherMutex);
+        g_dispatcher = nullptr;
+    }
+
+    if (g_refreshEvent) {
+        CloseHandle(g_refreshEvent);
+        g_refreshEvent = nullptr;
+    }
+
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     LoadSettings();
-    RefreshNowPlaying();
+    RequestRefresh();
 }
