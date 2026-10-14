@@ -38,8 +38,10 @@ path, so it looks like a camera motion blur rather than a trail.
 ## Resource use
 - About 2-3 MB of memory. It draws with plain GDI and its own blending; a GPU
   (Direct3D) version needed about 24 MB just to load.
-- No CPU while the mouse is still or moves slower than "Minimum blur speed";
-  about 1-2.5% while it moves faster, more on high-DPI screens.
+- No CPU while the mouse is still, and almost none while it moves slower than
+  "Minimum blur speed"; about 1-2.5% while it moves faster, more on high-DPI
+  screens. With an administrator window or a fullscreen app in front, it
+  checks on a light timer instead.
 - Full measurements:
   [benchmarks](https://github.com/sidlikesgrapess/CursorMotionBlur/blob/main/windhawk/BENCHMARKS.md).
 
@@ -74,7 +76,7 @@ path, so it looks like a camera motion blur rather than a trail.
   $name: Minimum blur speed (cm/s)
   $description: >-
     0-50. Slower movements draw no blur (it would sit under the pointer anyway)
-    and use no CPU. 0 draws at any speed.
+    and use almost no CPU. 0 draws at any speed.
 - trailMs: 30
   $name: Trail length (ms)
   $description: 10-150. How far back in time the blur reaches.
@@ -119,6 +121,7 @@ path, so it looks like a camera motion blur rather than a trail.
 #define COPY_BUF       (MAX_SAMPLES + MAX_COPIES)
 #define MAX_SPRITES    16      // cursor pictures kept before the cache is emptied
 #define WM_APP_PAUSED  (WM_APP + 1)
+#define WM_APP_WATCH   (WM_APP + 2)   // to explorer's window: wParam is the mod's process, to watch
 
 struct Sample { int x, y; LONGLONG t; };
 struct Sprite { int w, h, hx, hy, id; UINT32* px; };   // cursor picture at its own size: premultiplied BGRA, hotspot
@@ -141,6 +144,7 @@ static std::atomic<bool> g_monStale, g_spritesStale;   // display or cursor sett
 static std::atomic<bool> g_recheck;      // settings or the active window changed: look at the window in front now
 static std::atomic<bool> g_paused;       // a fullscreen app is in front
 static std::atomic<bool> g_drawing;      // the mouse moves faster than the draw speed: the blur is drawn
+static std::atomic<HCURSOR> g_pictureOf; // the cursor whose picture the blur has: hiding waits until it is the current one
 static std::atomic<bool> g_stop;
 static std::atomic<HWND> g_wnd;          // the overlay window (owned by the render thread)
 
@@ -219,6 +223,21 @@ static void ReloadCursors() { SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 
 // write per hide and per restore, only while hiding is switched on: a deliberate trade for being able to recover.
 // The flag is per user, as the storage is shared by everyone signed in on the machine.
 static WCHAR g_hiddenKey[256] = L"cursorsHidden";
+
+// The flag's name with the user's SID in it.
+static void BuildHiddenKey() {
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return;
+    alignas(TOKEN_USER) BYTE buf[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_USER)];
+    DWORD len;
+    LPWSTR sid;
+    if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len) &&
+        ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) {
+        swprintf_s(g_hiddenKey, L"cursorsHidden_%s", sid);
+        LocalFree(sid);
+    }
+    CloseHandle(token);
+}
 
 static void SetBlank(bool on) {
     g_blankActive = on;
@@ -365,7 +384,10 @@ static DWORD WINAPI SampleThread(void*) {
                 }
                 g_hist[g_histN++] = {ci.ptScreenPos.x, ci.ptScreenPos.y, now};
             }
-            if (changed) lastMove = now;
+            if (changed) {
+                if (now - lastMove >= 1000) lastLook = -1000;   // moving again: first see what is in front
+                lastMove = now;
+            }
             int drop = 0;
             while (g_histN - drop > 1 && now - g_hist[drop].t > g_trailMs) drop++;
             if (drop) {
@@ -409,7 +431,9 @@ static DWORD WINAPI SampleThread(void*) {
                 double hide = g_hideSpeedCm * hidePxPerCm;   // px/s on this monitor, the same hand speed everywhere
                 LONGLONG recentDt = now - g_hist[j].t;
                 double recent = recentDt >= 4 ? recentPath * 1000.0 / recentDt : speed;
-                if (speed > hide) {
+                // Only while the blur is drawn, with the picture of this very cursor: once the real cursor is swapped for
+                // the invisible one, its picture can no longer be taken.
+                if (speed > hide && g_drawing && g_pictureOf == g_curHandle) {
                     g_hideWanted = true;
                     lastFast = now;
                 } else if (g_hideWanted && recent < hide * 0.5 && now - lastFast > HOLD_MS) {
@@ -417,9 +441,10 @@ static DWORD WINAPI SampleThread(void*) {
                 }
             }
             if (g_hideWanted && now - lastMove > HOLD_MS + SHOW_WINDOW_MS) g_hideWanted = false;   // stopped
+            if (g_hideWanted && !g_drawing) g_hideWanted = false;   // never hidden without the blur
             if (g_hideWanted != wasHidden) SetEvent(g_hideChanged);
         }
-        bool visible = g_curVisible, hidden = g_hideWanted;
+        bool hidden = g_hideWanted;
         LeaveCriticalSection(&g_gate);
 
         // drawing (or the trail still fading), or the real cursor hidden: look often; below the draw speed, only on reports
@@ -433,12 +458,13 @@ static DWORD WINAPI SampleThread(void*) {
             // Sleep until the mouse moves or another window is activated; while an app hides the cursor, just look once
             // per report. While a window with more rights is in front no mouse reports arrive, so look at the cursor
             // every 10 ms instead, and every 100 ms once the mouse has been still for a second.
+            if (g_drawing) {   // the trail has faded: the next movement starts below the minimum blur speed again
+                g_drawing = false;
+                crossedAt = 0;
+            }
             DWORD poll = INFINITE;
             if (adminFront) poll = Now() - lastMove < 1000 ? 10 : 100;
-            if (WaitForSingleObject(g_mouseWake, poll) == WAIT_OBJECT_0 && visible) {
-                if (Now() - lastMove >= 1000) lastLook = -1000;   // moving again: first see what is in front
-                lastMove = Now();
-            }
+            WaitForSingleObject(g_mouseWake, poll);
         }
     }
     if (timerHigh) timeEndPeriod(1);
@@ -726,6 +752,19 @@ static void Blend(int a, int ox, int oy) {
 static HWND g_band;     // the overlay explorer.exe made above the Start menu, if there is one
 static HWND g_target;   // the window the blur is drawn in: g_band, else this process's own
 
+static HWND g_bandFailed;   // a window of explorer's that could not be drawn in
+
+// The shell explorer.exe's window above the Start menu (looked up afresh, so a reused handle is never drawn in).
+static HWND FindBand() {
+    DWORD shell = 0;
+    if (HWND s = GetShellWindow()) GetWindowThreadProcessId(s, &shell);
+    for (HWND b = FindWindowExW(nullptr, nullptr, BAND_CLASS, nullptr); b; b = FindWindowExW(nullptr, b, BAND_CLASS, nullptr)) {
+        DWORD owner = 0;
+        if (b != g_bandFailed && GetWindowThreadProcessId(b, &owner) && (!shell || owner == shell)) return b;
+    }
+    return nullptr;
+}
+
 // Shows or hides the window drawn in. g_band belongs to explorer.exe, so this doesn't wait for it to answer.
 static void ShowTarget(bool show) {
     SetWindowPos(g_target, HWND_TOPMOST, 0, 0, 0, 0,
@@ -748,13 +787,19 @@ static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, 
     SIZE size = {w, h};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     if (!g_shown) {   // a new stretch of movement: draw in explorer's window if it has one
-        if (!g_band || !IsWindow(g_band)) g_band = FindWindowW(BAND_CLASS, nullptr);
+        static HWND watching;
+        g_band = FindBand();
+        if (g_band && g_band != watching) {   // explorer hides its window as soon as this process ends, however
+            PostMessageW(g_band, WM_APP_WATCH, GetCurrentProcessId(), 0);
+            watching = g_band;
+        }
         g_target = g_band ? g_band : g_wnd.load();
     }
     if (!UpdateLayeredWindow(g_target, nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA)) {
         if (g_target != g_band) return false;
         Wh_Log(L"Drawing in explorer's window failed (%lu), drawing in this process's own", GetLastError());
         if (g_shown) ShowTarget(false);
+        g_bandFailed = g_band;
         g_band = nullptr;
         g_target = g_wnd;
         g_shown = false;
@@ -801,8 +846,12 @@ static bool Render() {
     } else {
         if (IsEmpty(handle)) return Hide();   // the app hid its cursor: don't blur the previous one
         sp = GetSprite(handle, size);
-        if (sp) g_lastSprite = sp;
-        else sp = g_lastSprite;
+        if (sp) {
+            g_lastSprite = sp;
+            g_pictureOf = handle;
+        } else {
+            sp = g_lastSprite;
+        }
     }
     if (!sp) return Hide();
 
@@ -966,6 +1015,7 @@ static LPTOP_LEVEL_EXCEPTION_FILTER g_prevFilter;
 // This process exists only for this mod: if it ever crashes while the real cursor is hidden, give the cursor back.
 static LONG WINAPI CrashFilter(EXCEPTION_POINTERS* e) {
     if (g_blankActive) ReloadCursors();   // the stored flag stays set, so the next start checks again
+    if (g_band) ShowWindowAsync(g_band, SW_HIDE);
     return g_prevFilter ? g_prevFilter(e) : EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -994,24 +1044,14 @@ BOOL WhTool_ModInit() {
     QueryPerformanceCounter(&g_start);
     InitializeCriticalSection(&g_gate);
     g_ownIntegrity = Integrity(GetCurrentProcess());
-    HANDLE token;
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-        alignas(TOKEN_USER) BYTE buf[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_USER)];
-        DWORD len;
-        LPWSTR sid;
-        if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len) &&
-            ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &sid)) {
-            swprintf_s(g_hiddenKey, L"cursorsHidden_%s", sid);
-            LocalFree(sid);
-        }
-        CloseHandle(token);
-    }
+    BuildHiddenKey();
     if (Wh_GetIntValue(g_hiddenKey, 0)) {   // an earlier run was killed while hiding the cursor
         Wh_Log(L"Restoring the cursors after an earlier run");
         ReloadCursors();
         Wh_SetIntValue(g_hiddenKey, 0);
     }
     g_prevFilter = SetUnhandledExceptionFilter(CrashFilter);
+    if (HWND band = FindWindowW(BAND_CLASS, nullptr)) ShowWindowAsync(band, SW_HIDE);   // left by an earlier run
 
     // Windows 11 ignores a finer timer for a process with no visible window; the short waits here need it while moving.
     PROCESS_POWER_THROTTLING_STATE pt = {PROCESS_POWER_THROTTLING_CURRENT_VERSION,
@@ -1084,17 +1124,58 @@ static DWORD WINAPI BandThread(void*) {
         Wh_Log(L"CreateWindowInBand(%lu): %p (%lu)", band, w, w ? 0 : GetLastError());
         if (w) break;
     }
-    if (w) {
+    // The mod's process draws in the window and tells it which process it is; when that process ends, however it
+    // ends, the window hides, so a crashed or killed mod never leaves its last frame on screen.
+    HANDLE watched = nullptr;
+    for (bool quit = !w; !quit;) {
+        if (MsgWaitForMultipleObjects(watched ? 1 : 0, &watched, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 &&
+            watched) {
+            ShowWindow(w, SW_HIDE);
+            if (Wh_GetIntValue(g_hiddenKey, 0)) {   // it was killed while hiding the cursor: put the cursors back now
+                Wh_Log(L"The mod's process ended while hiding the cursor: restoring the cursors");
+                ReloadCursors();
+                Wh_SetIntValue(g_hiddenKey, 0);
+            }
+            CloseHandle(watched);
+            watched = nullptr;
+            continue;
+        }
         MSG m;
-        while (GetMessageW(&m, nullptr, 0, 0) > 0) DispatchMessageW(&m);
-        DestroyWindow(w);
+        while (!quit && PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+            if (m.message == WM_QUIT) {
+                quit = true;
+            } else if (m.message == WM_APP_WATCH && m.hwnd == w) {
+                // only a process that owns the mod's own window
+                DWORD pid = (DWORD)m.wParam, owner;
+                for (HWND t = FindWindowExW(nullptr, nullptr, L"PointerAfterimageMotionBlur", nullptr); t;
+                     t = FindWindowExW(nullptr, t, L"PointerAfterimageMotionBlur", nullptr)) {
+                    if (!GetWindowThreadProcessId(t, &owner) || owner != pid) continue;
+                    if (HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, pid)) {
+                        if (watched) CloseHandle(watched);
+                        watched = h;
+                    }
+                    break;
+                }
+            } else {
+                DispatchMessageW(&m);
+            }
+        }
     }
+    if (watched) CloseHandle(watched);
+    if (w) DestroyWindow(w);
     UnregisterClassW(BAND_CLASS, inst);
     return 0;
 }
 
-// Folder windows can run in explorer.exe processes of their own: only the shell's one makes the window.
+// Only the shell's explorer.exe makes the window: not folder windows in processes of their own, and not the brief ones
+// that hand a path to the shell ("Show in folder", explorer.exe C:\...). Once the desktop exists, its owner is the
+// shell; while explorer is starting there is none yet, and the command line tells.
 static bool IsShellExplorer() {
+    if (HWND shell = GetShellWindow()) {
+        DWORD owner = 0;
+        GetWindowThreadProcessId(shell, &owner);
+        return owner == GetCurrentProcessId();
+    }
     WCHAR cmd[1024];
     wcsncpy_s(cmd, GetCommandLineW(), _TRUNCATE);
     _wcslwr_s(cmd);
@@ -1103,7 +1184,8 @@ static bool IsShellExplorer() {
 
 static void StopBandThread() {
     if (!g_bandThread) return;
-    while (WaitForSingleObject(g_bandThread, 50) == WAIT_TIMEOUT) PostThreadMessageW(g_bandThreadId, WM_QUIT, 0, 0);
+    do PostThreadMessageW(g_bandThreadId, WM_QUIT, 0, 0);   // again while its message queue may not exist yet
+    while (WaitForSingleObject(g_bandThread, 50) == WAIT_TIMEOUT);
     CloseHandle(g_bandThread);
     g_bandThread = nullptr;
 }
@@ -1138,6 +1220,7 @@ BOOL Wh_ModInit() {
     if (name && !_wcsicmp(name + 1, L"explorer.exe")) {
         if (!IsShellExplorer()) return FALSE;
         g_isExplorer = true;
+        BuildHiddenKey();
         g_bandThread = CreateThread(nullptr, 0, BandThread, nullptr, 0, &g_bandThreadId);
         return TRUE;
     }
