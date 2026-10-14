@@ -50,7 +50,7 @@ Modernizes legacy Win32 UI elements across all applications to match WinUI 3 / F
 - **Custom accent color**: Optional hex color used by every accent element in place of the system accent
 - **Modern tooltips**: WinUI 3 style tooltips with rounded corners, dark mode support, and modern solid colors
 - **Focus rectangle**: Replaces the dotted focus rectangle with a rounded outline, or hides focus indication entirely
-- **Modern controls**: WinUI 3 style push buttons, check boxes with a progressive reveal animation, accent radio buttons, group headers, and rounded selection backgrounds in lists and trees; OK and Yes buttons use accent color fill, focused Edit controls get an accent line at the bottom, and expand/collapse arrows rotate smoothly in every TreeView
+- **Modern controls**: WinUI 3 style push buttons, check boxes with a progressive reveal animation, accent radio buttons, group headers, and rounded selection backgrounds in lists and trees; OK and Yes buttons use accent color fill, focused Edit controls get an accent line at the bottom, expand/collapse arrows rotate smoothly in every TreeView, and drop-down lists draw their text with DirectWrite in every app
 - **Modern progress bars**: WinUI 3 style progress bars (rounded, solid accent, no gradient), including the drive usage bars in This PC
 - **Accent gradient fills**: Optional gradient instead of a solid accent on accent buttons, the Edit focus line and the navigation pane pill
 - **Modern separators and group boxes**: Replaces 3D embossed separators with a clean 1px semi-transparent line, and the 3D GroupBox border with a subtle rounded card background (WinUI SettingsCard style); also removes the legacy dotted connecting lines in tree views
@@ -369,7 +369,7 @@ Las listas reciben la marca moderna mediante un auxiliar de dibujo de comctl32 q
 - **自定义强调色**：可选的十六进制颜色，用于替代系统强调色应用于所有强调元素
 - **现代工具提示**：WinUI 3 风格工具提示，含圆角、深色模式支持与现代纯色配色
 - **焦点矩形**：将点状焦点矩形替换为圆角轮廓，或彻底隐藏焦点指示
-- **现代控件**：WinUI 3 风格按钮、带渐进式动画的复选框、强调色单选按钮、分组标题，以及列表与树形视图中的圆角选择背景；“确定”与“是”按钮使用强调色填充，聚焦的编辑框底部显示强调色横线，所有树形视图的展开/折叠箭头平滑旋转
+- **现代控件**：WinUI 3 风格按钮、带渐进式动画的复选框、强调色单选按钮、分组标题，以及列表与树形视图中的圆角选择背景；“确定”与“是”按钮使用强调色填充，聚焦的编辑框底部显示强调色横线，所有树形视图的展开/折叠箭头平滑旋转，所有应用中的下拉列表使用 DirectWrite 绘制文字
 - **现代进度条**：WinUI 3 风格进度条(圆角、纯色强调色、无渐变)，包括“此电脑”中的驱动器使用量条
 - **强调色渐变填充**：强调色按钮、编辑框焦点线与导航窗格指示条可使用渐变代替纯色
 - **现代分隔线与分组框**：将 3D 浮雕分隔线替换为 1px 半透明细线，将 3D 分组框边框替换为柔和的圆角卡片背景(WinUI SettingsCard 风格)；同时移除树形视图中的旧式点状连接线
@@ -556,10 +556,10 @@ DirectWrite 是 Windows 的现代文本渲染器。旧版 Win32 界面通常使�
     $name:pt: Controles modernos
     $name:es: Controles modernos
     $name:zh-CN: 现代控件
-    $description: WinUI 3 style push buttons, check boxes with a progressive reveal animation, accent radio buttons, group headers, and rounded selection backgrounds in lists and trees. OK and Yes buttons use accent color fill, focused text fields get an accent line at the bottom, and expand/collapse arrows rotate smoothly in every tree view.
-    $description:pt: Botoes, caixas de selecao com animacao de revelacao, radio buttons com cor de destaque, cabecalhos de grupo e fundos de selecao arredondados em listas e arvores no estilo WinUI 3. Botoes OK e Sim usam preenchimento com cor de destaque, campos de texto focados ganham uma linha de destaque na base, e as setas de expansao giram suavemente em qualquer arvore.
-    $description:es: Botones, casillas con animacion de revelado, radio buttons con color de acento, encabezados de grupo y fondos de seleccion redondeados en listas y arboles al estilo WinUI 3. Botones Aceptar y Si usan relleno con color de acento, los campos de texto enfocados reciben una linea de acento en la base, y las flechas de expansion giran suavemente en cualquier arbol.
-    $description:zh-CN: WinUI 3 风格按钮、带渐进式动画的复选框、强调色单选按钮、分组标题，以及列表与树形视图中的圆角选择背景。“确定”与“是”按钮使用强调色填充，聚焦的文本框底部显示强调色横线，所有树形视图的展开/折叠箭头平滑旋转。
+    $description: WinUI 3 style push buttons, check boxes with a progressive reveal animation, accent radio buttons, group headers, and rounded selection backgrounds in lists and trees. OK and Yes buttons use accent color fill, focused text fields get an accent line at the bottom, and expand/collapse arrows rotate smoothly in every tree view. Drop-down lists draw their text with DirectWrite in every app.
+    $description:pt: Botoes, caixas de selecao com animacao de revelacao, radio buttons com cor de destaque, cabecalhos de grupo e fundos de selecao arredondados em listas e arvores no estilo WinUI 3. Botoes OK e Sim usam preenchimento com cor de destaque, campos de texto focados ganham uma linha de destaque na base, e as setas de expansao giram suavemente em qualquer arvore. Listas suspensas desenham o texto com DirectWrite em qualquer aplicativo.
+    $description:es: Botones, casillas con animacion de revelado, radio buttons con color de acento, encabezados de grupo y fondos de seleccion redondeados en listas y arboles al estilo WinUI 3. Botones Aceptar y Si usan relleno con color de acento, los campos de texto enfocados reciben una linea de acento en la base, y las flechas de expansion giran suavemente en cualquier arbol. Las listas desplegables dibujan el texto con DirectWrite en cualquier aplicacion.
+    $description:zh-CN: WinUI 3 风格按钮、带渐进式动画的复选框、强调色单选按钮、分组标题，以及列表与树形视图中的圆角选择背景。“确定”与“是”按钮使用强调色填充，聚焦的文本框底部显示强调色横线，所有树形视图的展开/折叠箭头平滑旋转。所有应用中的下拉列表使用 DirectWrite 绘制文字。
   - ModernSeparators: TRUE
     $name: Modern separators and group boxes
     $name:pt: Separadores e caixas de grupo modernos
@@ -14419,6 +14419,20 @@ static void LegacyRebarTextBeginPaint(HWND hwnd, LPCWSTR windowClass)
     }
 }
 
+// A dialog control's scope from the kind its last classification stored on
+// it (ExplorerDialogTextObserve's marker), without classifying again.
+static void LegacyRebarTextBeginPaintKnown(HWND hwnd, LegacyRebarTextKind kind)
+{
+    if (IsTextPipelineDisabled() || !LegacyRebarTextKindEnabled(kind))
+        kind = LegacyRebarTextKind::None;
+    if (!g_legacyRebarTextPaintDepth && !g_ribbonDirectTextDC &&
+        kind == LegacyRebarTextKind::None)
+        return;
+    const unsigned depth = g_legacyRebarTextPaintDepth++;
+    if (depth < ARRAYSIZE(g_legacyRebarTextPaints))
+        g_legacyRebarTextPaints[depth] = {hwnd, kind};
+}
+
 static void LegacyRebarTextEndPaint(HWND hwnd)
 {
     if (!g_legacyRebarTextPaintDepth)
@@ -25737,10 +25751,21 @@ static LRESULT CALLBACK ExplorerDialogTextSubclassProc(HWND hwnd, UINT msg,
         (g_settings.DialogTextDirectWrite || g_settings.ShellTextDirectWrite || g_settings.RoundedButtons) &&
         !g_explorerDialogTextUnloading.load(
             std::memory_order_acquire)) {
-        wchar_t cls[16] = {};
-        GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+        // Paints and layout, text or style changes classify the control
+        // again; input and timer messages reuse the kind that stored.
+        const bool revalidate = msg == WM_PAINT || msg == WM_PRINTCLIENT ||
+            msg == WM_PRINT || msg == WM_ERASEBKGND || msg == WM_SIZE ||
+            msg == WM_WINDOWPOSCHANGED || msg == WM_SETTEXT || msg == WM_SETFONT ||
+            msg == WM_ENABLE;
         const unsigned previousDepth = g_legacyRebarTextPaintDepth;
-        LegacyRebarTextBeginPaint(hwnd, cls);
+        if (revalidate) {
+            wchar_t cls[16] = {};
+            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+            LegacyRebarTextBeginPaint(hwnd, cls);
+        } else {
+            LegacyRebarTextBeginPaintKnown(hwnd, static_cast<LegacyRebarTextKind>(
+                reinterpret_cast<UINT_PTR>(GetPropW(hwnd, kExplorerDialogTextProp))));
+        }
         const bool pushed = g_legacyRebarTextPaintDepth == previousDepth + 1;
         if (msg == WM_PAINT && LegacyDialogCheckboxOwnsTransition(BP_CHECKBOX))
             BufferedPaintStopAllAnimations(hwnd);
@@ -29815,20 +29840,23 @@ static bool ReadBox(HDC hdc, const RECT& box, std::vector<DWORD>* pixels, RECT* 
     if (boxW <= 0 || boxH <= 0)
         return false;
 
+    // Only the box's scan lines. They are numbered from the bottom, so the
+    // rows come back bottom-up.
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
     bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biHeight = height;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
-    std::vector<DWORD> all(static_cast<size_t>(width) * height);
-    if (GetDIBits(hdc, bitmap, 0, height, all.data(), &bmi, DIB_RGB_COLORS) != height)
+    std::vector<DWORD> rows(static_cast<size_t>(width) * boxH);
+    if (GetDIBits(hdc, bitmap, static_cast<UINT>(height - device->bottom),
+            static_cast<UINT>(boxH), rows.data(), &bmi, DIB_RGB_COLORS) != boxH)
         return false;
     pixels->resize(static_cast<size_t>(boxW) * boxH);
     for (int y = 0; y < boxH; ++y)
         memcpy(&(*pixels)[static_cast<size_t>(y) * boxW],
-            &all[static_cast<size_t>(device->top + y) * width + device->left],
+            &rows[static_cast<size_t>(boxH - 1 - y) * width + device->left],
             boxW * sizeof(DWORD));
     return true;
 }
@@ -29892,6 +29920,9 @@ static thread_local int t_depth = 0;
 static thread_local HWND t_listView = nullptr;
 static thread_local int t_drawDy = 0;
 static thread_local int t_drawSize = 0;
+// The re-bake at unload: the theme draw hook leaves check boxes native, so
+// no image drawn by this mod outlives it.
+static thread_local bool t_nativeBake = false;
 static SIZE g_customCell = {};
 
 static bool Enabled()
@@ -29952,9 +29983,11 @@ static void Rebake(HWND lv)
     for (int i = 0; i < count; ++i)
         states[i] = static_cast<UINT>(DefSubclassProc(lv, LVM_GETITEMSTATE, i,
             LVIS_STATEIMAGEMASK));
+    t_nativeBake = g_unloading.load(std::memory_order_acquire);
     DefSubclassProc(lv, LVM_SETEXTENDEDLISTVIEWSTYLE, LVS_EX_CHECKBOXES, 0);
     DefSubclassProc(lv, LVM_SETEXTENDEDLISTVIEWSTYLE, LVS_EX_CHECKBOXES,
         LVS_EX_CHECKBOXES);
+    t_nativeBake = false;
     for (int i = 0; i < count; ++i) {
         const UINT now = static_cast<UINT>(DefSubclassProc(lv, LVM_GETITEMSTATE, i,
             LVIS_STATEIMAGEMASK));
@@ -36324,6 +36357,9 @@ static bool HandleThemeDraw(HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, L
         }
     }
 
+    if (DesktopCheckbox::t_nativeBake && cls == L"Button")
+        return false;
+
     // Button class — radio button + checkbox animation
     const bool offscreenBake = g_settings.RoundedButtons && cls == L"Button" &&
         OffscreenBake::Begin(hdc, iPartId, pRect);
@@ -38718,34 +38754,15 @@ static COLORREF FixDarkTextColorForDc(HDC hdc, COLORREF c,
 // FixDarkTextColor kept readable on what is already under the text: covers
 // a light native background still showing when the text is drawn. Checked
 // even when the color is unchanged: tooltip text can already be white from
-// this mod's own TMT_TEXTCOLOR answer (taken from the owner's mode). One
-// BitBlt per tooltip text draw.
+// this mod's own TMT_TEXTCOLOR answer (taken from the owner's mode). Two
+// one-pixel rows per tooltip text draw.
 static COLORREF FixDarkTextColorOverDc(HDC hdc, const RECT& rect, COLORREF c)
 {
     const COLORREF fixed = FixDarkTextColor(c);
-    const LONG width = rect.right - rect.left, height = rect.bottom - rect.top;
-    if (!g_darkModeActive || width < 4 || height < 4 ||
-        width > 4096 || height > 4096)
-        return fixed;
-    BITMAPINFO info = {};
-    info.bmiHeader = {sizeof(BITMAPINFOHEADER), width, -height, 1, 32, BI_RGB};
-    void* bits = nullptr;
-    HBITMAP bitmap = CreateDIBSection(hdc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-    HDC copy = bitmap ? CreateCompatibleDC(hdc) : nullptr;
-    COLORREF result = fixed;
-    if (copy && bits) {
-        HGDIOBJ previous = SelectObject(copy, bitmap);
-        COLORREF background;
-        if (BitBlt(copy, 0, 0, width, height, hdc, rect.left, rect.top, SRCCOPY) &&
-            GdiFlush() &&
-            CornerBackgroundFromBits(static_cast<const RGBQUAD*>(bits),
-                width, height, &background))
-            result = ReadableTextColorOn(fixed, c, background);
-        SelectObject(copy, previous);
-    }
-    if (copy) DeleteDC(copy);
-    if (bitmap) DeleteObject(bitmap);
-    return result;
+    COLORREF background;
+    if (g_darkModeActive && SampleTextBackground(hdc, rect, &background))
+        return ReadableTextColorOn(fixed, c, background);
+    return fixed;
 }
 
 // ExplorerMicaBackdrop's light-mode counterpart to FixDarkTextColor's own
@@ -41083,8 +41100,10 @@ static void LazyFeatureObserveWindow(HWND hwnd, LPCWSTR className)
             (newlyRelevant && g_settings.ModernInsert && !CCDrawInsertMark_orig);
     }
     // SysLink exists only in comctl32 v6, so the class's own procedure
-    // names the module to resolve CMarkup::Paint in.
-    if (_wcsicmp(className, WC_LINK) == 0 && SysLinkTextColorWanted() &&
+    // names the module to resolve CMarkup::Paint in. Recorded even while the
+    // link color is off: turning it on later installs the hook from
+    // Wh_ModSettingsChanged.
+    if (_wcsicmp(className, WC_LINK) == 0 &&
         !g_sysLinkContextSeen.load(std::memory_order_acquire)) {
         HMODULE comctl32 = nullptr;
         const auto classProc = reinterpret_cast<LPCWSTR>(
@@ -41094,8 +41113,9 @@ static void LazyFeatureObserveWindow(HWND hwnd, LPCWSTR className)
                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                 classProc, &comctl32) && comctl32) {
             g_sysLinkComctl32.store(comctl32, std::memory_order_release);
-            requestHooks = requestHooks ||
+            const bool first =
                 !g_sysLinkContextSeen.exchange(true, std::memory_order_acq_rel);
+            requestHooks = requestHooks || (first && SysLinkTextColorWanted());
         }
     }
 
