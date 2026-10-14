@@ -38,6 +38,8 @@ Since the work area itself shrinks, the gap also applies to:
 
 * Snap / Snap Layouts (snapped windows keep the margin too).
 * Desktop icon placement.
+* Anything else that positions itself from the work area, such as pop-ups and
+  notifications that apps place in a corner of the screen.
 
 Real fullscreen apps (games, videos, F11) cover the whole monitor and are not
 affected.
@@ -58,16 +60,16 @@ affected.
 /*
 - top: 10
   $name: Top margin
-  $description: Gap in pixels (at 100% scaling) between the top of the screen and maximized windows. 0 to 200.
+  $description: Gap in pixels (at 100% scaling) between the top edge of the screen and maximized windows. 0 to 200.
 - bottom: 10
   $name: Bottom margin
-  $description: Gap between maximized windows and the taskbar / bottom of the screen. 0 to 200.
+  $description: Gap in pixels (at 100% scaling) between the taskbar (or the bottom edge of the screen) and maximized windows. 0 to 200.
 - left: 10
   $name: Left margin
-  $description: 0 to 200.
+  $description: Gap in pixels (at 100% scaling) between the left edge of the screen and maximized windows. 0 to 200.
 - right: 10
   $name: Right margin
-  $description: 0 to 200.
+  $description: Gap in pixels (at 100% scaling) between the right edge of the screen and maximized windows. 0 to 200.
 - monitors: all
   $name: Monitors
   $options:
@@ -76,11 +78,14 @@ affected.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
 
 #include <shellapi.h>
 #include <shellscalingapi.h>
 
+#include <algorithm>
 #include <vector>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -111,9 +116,9 @@ void LoadSettings() {
     g_settings.margin[ABE_RIGHT] = ClampMargin(Wh_GetIntSetting(L"right"));
     g_settings.margin[ABE_BOTTOM] = ClampMargin(Wh_GetIntSetting(L"bottom"));
 
-    PCWSTR monitors = Wh_GetStringSetting(L"monitors");
-    g_settings.primaryOnly = wcscmp(monitors, L"primary") == 0;
-    Wh_FreeStringSetting(monitors);
+    g_settings.primaryOnly =
+        wcscmp(WindhawkUtils::StringSetting::make(L"monitors"), L"primary") ==
+        0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -127,7 +132,7 @@ constexpr UINT kAppBarCallbackMsg = WM_APP + 1;
 constexpr UINT kReloadSettingsMsg = WM_APP + 2;
 
 constexpr UINT_PTR kRebuildTimerId = 1;
-constexpr UINT_PTR kRepositionTimerId = 2;
+constexpr UINT_PTR kSyncTimerId = 2;
 constexpr UINT kDebounceMs = 300;
 
 struct AppBar {
@@ -207,7 +212,7 @@ bool QueryAppBarRect(const AppBar& bar, RECT* result) {
     return true;
 }
 
-void PositionAppBar(AppBar& bar, bool force) {
+void PositionAppBar(AppBar& bar) {
     RECT rc;
     if (!QueryAppBarRect(bar, &rc)) {
         return;
@@ -215,7 +220,7 @@ void PositionAppBar(AppBar& bar, bool force) {
 
     // Avoid ABM_SETPOS when nothing changed: each SETPOS notifies every other
     // AppBar, so unconditional updates would ping-pong forever.
-    if (!force && EqualRect(&rc, &bar.rect)) {
+    if (EqualRect(&rc, &bar.rect)) {
         return;
     }
 
@@ -236,10 +241,10 @@ void PositionAppBar(AppBar& bar, bool force) {
            abd.rc.top, abd.rc.right, abd.rc.bottom);
 }
 
-void PositionAllAppBars(bool force) {
+void PositionAllAppBars() {
     g_positioning = true;
     for (auto& bar : g_appBars) {
-        PositionAppBar(bar, force);
+        PositionAppBar(bar);
     }
     g_positioning = false;
 }
@@ -260,7 +265,15 @@ HWND CreateHiddenWindow() {
                           GetModuleHandle(nullptr), nullptr);
 }
 
-BOOL CALLBACK EnumMonitorsProc(HMONITOR monitor, HDC, LPRECT, LPARAM) {
+struct DesiredAppBar {
+    HMONITOR monitor;
+    UINT edge;
+    int thickness;
+};
+
+BOOL CALLBACK EnumMonitorsProc(HMONITOR monitor, HDC, LPRECT, LPARAM param) {
+    auto& desired = *reinterpret_cast<std::vector<DesiredAppBar>*>(param);
+
     if (g_settings.primaryOnly) {
         MONITORINFO mi{.cbSize = sizeof(mi)};
         if (!GetMonitorInfo(monitor, &mi) ||
@@ -274,39 +287,85 @@ BOOL CALLBACK EnumMonitorsProc(HMONITOR monitor, HDC, LPRECT, LPARAM) {
             continue;
         }
 
-        HWND hwnd = CreateHiddenWindow();
-        if (!hwnd) {
-            Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
-            continue;
-        }
-
-        APPBARDATA abd{
-            .cbSize = sizeof(abd),
-            .hWnd = hwnd,
-            .uCallbackMessage = kAppBarCallbackMsg,
-        };
-        if (!SHAppBarMessage(ABM_NEW, &abd)) {
-            Wh_Log(L"ABM_NEW failed for edge %u", edge);
-            DestroyWindow(hwnd);
-            continue;
-        }
-
-        g_appBars.push_back({
-            .hwnd = hwnd,
+        desired.push_back({
             .monitor = monitor,
             .edge = edge,
             .thickness = ScaleForMonitor(g_settings.margin[edge], monitor),
-            .rect = {},
         });
     }
 
     return TRUE;
 }
 
+void CreateAppBar(const DesiredAppBar& desired) {
+    HWND hwnd = CreateHiddenWindow();
+    if (!hwnd) {
+        Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+        return;
+    }
+
+    APPBARDATA abd{
+        .cbSize = sizeof(abd),
+        .hWnd = hwnd,
+        .uCallbackMessage = kAppBarCallbackMsg,
+    };
+    if (!SHAppBarMessage(ABM_NEW, &abd)) {
+        Wh_Log(L"ABM_NEW failed for edge %u", desired.edge);
+        DestroyWindow(hwnd);
+        return;
+    }
+
+    g_appBars.push_back({
+        .hwnd = hwnd,
+        .monitor = desired.monitor,
+        .edge = desired.edge,
+        .thickness = desired.thickness,
+        .rect = {},
+    });
+}
+
+// Brings the AppBars in line with the settings and the connected monitors.
+// Only the bars that differ are touched, so the work area changes once per
+// affected edge and maximized windows don't jump to full screen and back.
+void SyncAppBars() {
+    std::vector<DesiredAppBar> desired;
+    EnumDisplayMonitors(nullptr, nullptr, EnumMonitorsProc,
+                        reinterpret_cast<LPARAM>(&desired));
+
+    g_positioning = true;
+
+    std::erase_if(g_appBars, [&](const AppBar& bar) {
+        bool wanted = std::ranges::any_of(desired, [&](const auto& d) {
+            return d.monitor == bar.monitor && d.edge == bar.edge;
+        });
+        if (!wanted) {
+            APPBARDATA abd{.cbSize = sizeof(abd), .hWnd = bar.hwnd};
+            SHAppBarMessage(ABM_REMOVE, &abd);
+            DestroyWindow(bar.hwnd);
+        }
+        return !wanted;
+    });
+
+    for (const auto& d : desired) {
+        auto it = std::ranges::find_if(g_appBars, [&](const AppBar& bar) {
+            return bar.monitor == d.monitor && bar.edge == d.edge;
+        });
+        if (it != g_appBars.end()) {
+            it->thickness = d.thickness;
+        } else {
+            CreateAppBar(d);
+        }
+    }
+
+    // ABM_SETPOS goes only to new bars and bars whose rect changed.
+    PositionAllAppBars();
+}
+
+// Registers every AppBar from scratch. Needed after Explorer restarts, since
+// the new taskbar doesn't know about the old registrations.
 void RebuildAppBars() {
     DestroyAppBars();
-    EnumDisplayMonitors(nullptr, nullptr, EnumMonitorsProc, 0);
-    PositionAllAppBars(/*force=*/true);
+    SyncAppBars();
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -314,7 +373,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // ABN_POSCHANGED: the taskbar or another AppBar moved. Debounce, since
         // every one of our bars receives it.
         if (wParam == ABN_POSCHANGED && !g_positioning) {
-            SetTimer(g_controlWnd, kRepositionTimerId, kDebounceMs, nullptr);
+            SetTimer(g_controlWnd, kSyncTimerId, kDebounceMs, nullptr);
         }
         return 0;
     }
@@ -333,47 +392,31 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
-            SetTimer(hwnd, kRebuildTimerId, kDebounceMs, nullptr);
+            SetTimer(hwnd, kSyncTimerId, kDebounceMs, nullptr);
             return 0;
 
         case WM_SETTINGCHANGE:
             // Monitor scaling changes arrive as a settings change.
             if (wParam == SPI_SETWORKAREA || wParam == SPI_SETNONCLIENTMETRICS ||
                 wParam == 0) {
-                SetTimer(hwnd, kRepositionTimerId, kDebounceMs, nullptr);
+                SetTimer(hwnd, kSyncTimerId, kDebounceMs, nullptr);
             }
             return 0;
 
         case WM_TIMER:
             KillTimer(hwnd, wParam);
             if (wParam == kRebuildTimerId) {
-                KillTimer(hwnd, kRepositionTimerId);
+                KillTimer(hwnd, kSyncTimerId);
                 RebuildAppBars();
-            } else if (wParam == kRepositionTimerId) {
-                // Rebuild if the monitor layout or scaling changed, otherwise
-                // only follow the taskbar / other AppBars.
-                bool stale = false;
-                for (const auto& bar : g_appBars) {
-                    MONITORINFO mi{.cbSize = sizeof(mi)};
-                    if (!GetMonitorInfo(bar.monitor, &mi) ||
-                        bar.thickness !=
-                            ScaleForMonitor(g_settings.margin[bar.edge],
-                                            bar.monitor)) {
-                        stale = true;
-                        break;
-                    }
-                }
-                if (stale) {
-                    RebuildAppBars();
-                } else {
-                    PositionAllAppBars(/*force=*/false);
-                }
+            } else if (wParam == kSyncTimerId) {
+                // Follows monitor, scaling, taskbar and other AppBar changes.
+                SyncAppBars();
             }
             return 0;
 
         case kReloadSettingsMsg:
             LoadSettings();
-            RebuildAppBars();
+            SyncAppBars();
             return 0;
 
         case WM_CLOSE:
@@ -423,7 +466,7 @@ DWORD WINAPI WorkerThread(LPVOID param) {
     ChangeWindowMessageFilterEx(g_controlWnd, g_taskbarCreatedMsg,
                                 MSGFLT_ALLOW, nullptr);
 
-    RebuildAppBars();
+    SyncAppBars();
     SetEvent(readyEvent);
 
     MSG msg;
@@ -458,6 +501,16 @@ BOOL WhTool_ModInit() {
 
     WaitForSingleObject(readyEvent, INFINITE);
     CloseHandle(readyEvent);
+
+    // The worker exits right away if it couldn't set up its window. Report the
+    // failure so the launcher ends the tool process instead of leaving it idle.
+    if (!g_controlWnd) {
+        WaitForSingleObject(g_thread, INFINITE);
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+        return FALSE;
+    }
+
     return TRUE;
 }
 
