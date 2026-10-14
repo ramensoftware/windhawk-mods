@@ -14,6 +14,8 @@
 /*
 # Maximized Window Margins
 
+![Screenshot](https://raw.githubusercontent.com/mariogomesbarbosa/window-maximized-margin/main/images/preview.png)
+
 Maximized windows no longer touch the screen edges. A configurable gap is kept
 on every side, which pairs nicely with a floating dock (for example the
 *Luminosity* or *DockLike* themes of **Windows 11 Taskbar Styler**).
