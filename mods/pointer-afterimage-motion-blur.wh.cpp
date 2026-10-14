@@ -7,6 +7,7 @@
 // @github          https://github.com/sidlikesgrapess
 // @homepage        https://github.com/sidlikesgrapess/CursorMotionBlur
 // @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lgdi32 -lshell32 -lshcore -lwinmm
 // @license         Unlicense
 // ==/WindhawkMod==
@@ -16,10 +17,7 @@
 # Pointer Afterimage Motion Blur
 A live motion blur for the mouse pointer, everywhere in Windows. While the
 mouse moves, fading copies of your actual cursor are drawn along its recent
-path, so it looks like a camera motion blur rather than a trail. Unlike the
-smear ribbon of [Cursor Motion Blur](https://windhawk.net/mods/cursor-motion-blur)
-or the particles of [Mouse Trail](https://windhawk.net/mods/mouse-trail), the
-blur is made of your own cursor picture.
+path, so it looks like a camera motion blur rather than a trail.
 
 ![Demo](https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/demo.gif)
 
@@ -29,23 +27,26 @@ blur is made of your own cursor picture.
 - Optionally hides the real pointer during very fast movement so only the blur
   shows.
 - Pauses itself while a fullscreen app or game is in front.
-- Runs in its own small Windhawk process.
+- Runs in its own small Windhawk process, plus a small window in explorer.exe so
+  the blur shows above the Start menu.
 
-## Limitations
-- No blur over the Start menu, Search, Task View or the notification centre:
-  Windows keeps those above every app's windows.
+## Limitation
 - In a few apps (Paint, Photos, File Explorer's address and search bars) the
-  pointer can briefly flicker to the arrow while it moves.
+  pointer can briefly flicker to the arrow while the blur is drawn. If it gets
+  in the way, increase "Minimum blur speed": slower movements draw no blur.
 
 ## Resource use
-- About 1.5 MB of memory. It draws with plain GDI and its own blending; a GPU
+- About 2-3 MB of memory. It draws with plain GDI and its own blending; a GPU
   (Direct3D) version needed about 24 MB just to load.
-- Practically no CPU while the mouse is still (a quick look at the front window
-  twice a second); about 1-2.5% while it moves, more on high-DPI screens.
+- No CPU while the mouse is still or moves slower than "Minimum blur speed";
+  about 1-2.5% while it moves faster, more on high-DPI screens.
+- Full measurements:
+  [benchmarks](https://github.com/sidlikesgrapess/CursorMotionBlur/blob/main/windhawk/BENCHMARKS.md).
+
+![1.1 vs 1.0 benchmarks](https://raw.githubusercontent.com/sidlikesgrapess/CursorMotionBlur/main/assets/benchmark-1.1.png)
 
 ## Troubleshooting
-- **The cursor stays invisible** (only possible with hiding on, e.g. if the
-  process was killed mid-flick). Disable and re-enable the mod, or open
+- **The cursor stays invisible.** Disable and re-enable the mod, or open
   Settings > Bluetooth & devices > Mouse > Additional mouse settings > Pointers
   and click OK.
 - **The blur is stuck at the wrong size or shape** after changing the pointer
@@ -54,13 +55,11 @@ blur is made of your own cursor picture.
   the Windows cursor scheme, so turn hiding off if you use a tool that swaps
   the system cursors, such as the Shake to Find Cursor or macOS magnifying
   cursor mods.
-- **No blur in a game or video.** That is the fullscreen pause; turn off
-  "Pause in fullscreen apps and games" if you want it there.
-- **The cursor hides too often or not at all.** Raise or lower "Hide above
+- **The cursor hides too quickly or not at all.** Raise or lower "Hide above
   speed", or turn hiding off.
 - **The blur seems slightly behind the pointer at high speed.** Windows draws
   the real pointer more directly than any window can be drawn, so every
-  overlay is 1-2 frames behind. Hiding the real cursor when fast hides this.
+  overlay is 1-2 frames behind. A faster refresh rate reduces this latency obviously.
 - A standalone app version (no Windhawk needed) is on the
   [homepage](https://github.com/sidlikesgrapess/CursorMotionBlur).
 */
@@ -71,6 +70,11 @@ blur is made of your own cursor picture.
 - opacity: 92
   $name: Trail opacity (%)
   $description: 1-100. How solid the blur is right behind the pointer.
+- drawSpeed: 3
+  $name: Minimum blur speed (cm/s)
+  $description: >-
+    0-50. Slower movements draw no blur (it would sit under the pointer anyway)
+    and use no CPU. 0 draws at any speed.
 - trailMs: 30
   $name: Trail length (ms)
   $description: 10-150. How far back in time the blur reaches.
@@ -91,7 +95,8 @@ blur is made of your own cursor picture.
 //   sampler  reads the cursor position on every raw mouse report and decides when the real cursor should be hidden
 //   hider    swaps the system cursors for an invisible one and back (restoring takes ~20 ms, so it runs on its own)
 //   render   works out the fading copies along the recent path, blends them by hand into one bitmap and shows it in a
-//            click-through layered window; it owns that window, which also receives the raw mouse input
+//            click-through layered window; it owns a window that receives the raw mouse input, and draws in it unless
+//            explorer.exe provides one above the Start menu (see the end of the file)
 
 #include <windows.h>
 #include <atomic>
@@ -120,7 +125,7 @@ struct Sprite { int w, h, hx, hy, id; UINT32* px; };   // cursor picture at its 
 struct Copy { int x, y; float a; };                   // one copy: top-left relative to the frame, opacity 0-1
 
 // settings (written by WhTool_ModSettingsChanged, read by the threads)
-static std::atomic<int> g_opacity, g_trailMs, g_hideWhenFast, g_hideSpeedCm, g_pauseInFullscreen;
+static std::atomic<int> g_opacity, g_trailMs, g_drawSpeedCm, g_hideWhenFast, g_hideSpeedCm, g_pauseInFullscreen;
 
 // shared between the threads (guarded by g_gate)
 static CRITICAL_SECTION g_gate;
@@ -133,8 +138,9 @@ static std::atomic<int> g_monGap{7};     // ms between frames: half a refresh of
 static std::atomic<bool> g_blankActive;  // the system cursors are currently swapped for an invisible one
 static std::atomic<bool> g_drawFailed;   // the overlay could not draw: then never hide the real cursor
 static std::atomic<bool> g_monStale, g_spritesStale;   // display or cursor settings changed
-static std::atomic<bool> g_recheck;      // settings changed: look at the window in front now
+static std::atomic<bool> g_recheck;      // settings or the active window changed: look at the window in front now
 static std::atomic<bool> g_paused;       // a fullscreen app is in front
+static std::atomic<bool> g_drawing;      // the mouse moves faster than the draw speed: the blur is drawn
 static std::atomic<bool> g_stop;
 static std::atomic<HWND> g_wnd;          // the overlay window (owned by the render thread)
 
@@ -161,6 +167,7 @@ static void LoadSettings() {
     g_trailMs = Clamp(Wh_GetIntSetting(L"trailMs"), 10, 150);
     g_hideWhenFast = Wh_GetIntSetting(L"hideWhenFast") != 0;
     g_hideSpeedCm = Clamp(Wh_GetIntSetting(L"hideSpeed"), 20, 300);
+    g_drawSpeedCm = Clamp(Wh_GetIntSetting(L"drawSpeed"), 0, 50);
     g_pauseInFullscreen = Wh_GetIntSetting(L"pauseInFullscreen") != 0;
 }
 
@@ -257,11 +264,11 @@ static DWORD WINAPI SampleThread(void*) {
     UINT mainDpi = 96;
     double mainPxPerCm = 0;     // pixel density of the main monitor (0: not measured yet)
     double hidePxPerCm = 38;    // turns the hide speed (cm/s on the main monitor) into px/s on the monitor in use
-    LONGLONG lastMove = 0, lastFast = 0, lastLook = -1000;
+    LONGLONG lastMove = 0, lastFast = 0, lastDrawn = 0, lastLook = -1000, crossedAt = 0;
     bool paused = false, timerHigh = false, adminFront = false;
     while (!g_stop) {
-        // Every half second, the window in front. Windows doesn't tell this process when a window with more rights
-        // comes to the front (and then sends it no mouse input), so it has to look.
+        // The window in front: whenever another window is activated (the shell hook says so, administrator windows
+        // included), and every half second while the mouse moves, as an app can also go fullscreen in place.
         bool forced = g_recheck.exchange(false);
         LONGLONG t = Now();
         if (forced || t - lastLook >= 500) {
@@ -358,7 +365,7 @@ static DWORD WINAPI SampleThread(void*) {
                 }
                 g_hist[g_histN++] = {ci.ptScreenPos.x, ci.ptScreenPos.y, now};
             }
-            if (changed) { lastMove = now; SetEvent(g_moved); }   // new mouse position: draw now
+            if (changed) lastMove = now;
             int drop = 0;
             while (g_histN - drop > 1 && now - g_hist[drop].t > g_trailMs) drop++;
             if (drop) {
@@ -366,23 +373,39 @@ static DWORD WINAPI SampleThread(void*) {
                 g_histN -= drop;
             }
 
-            // speed over the trail window -> hide the real cursor when very fast
+            // Speed over the trail window: the blur is drawn above the draw speed and stops below half of it, each only
+            // once the speed has stayed past that line for 16 ms (mouse reports arrive unevenly, so a single reading can
+            // be a third off). The real cursor is hidden when very fast; bringing it back looks at only the last few ms
+            // (from sample j on), so it returns as soon as the mouse stops or slows.
             LONGLONG dt = g_hist[g_histN - 1].t - g_hist[0].t;
+            int j = g_histN - 1;
+            while (j > 0 && now - g_hist[j - 1].t <= SHOW_WINDOW_MS) j--;
+            double path = 0, recentPath = 0;
+            for (int i = 1; i < g_histN; i++) {
+                double d = Dist(g_hist[i - 1], g_hist[i]);
+                path += d;
+                if (i > j) recentPath += d;
+            }
+            double speed = dt >= 4 ? path * 1000.0 / dt : 0;
+            double drawAt = g_drawSpeedCm * hidePxPerCm * (g_drawing ? 0.5 : 1);
+            bool want = g_histN > 1 && (g_drawSpeedCm == 0 || (dt >= 4 && speed >= drawAt));
+            if (want == g_drawing || g_histN < 2 || g_drawSpeedCm == 0) {
+                crossedAt = 0;
+                g_drawing = want;
+            } else if (!crossedAt) {
+                crossedAt = now;
+            } else if (now - crossedAt >= 16) {
+                crossedAt = 0;
+                g_drawing = want;
+            }
+            if (changed && g_drawing) {   // new mouse position, fast enough: draw now
+                lastDrawn = now;
+                SetEvent(g_moved);
+            }
             bool wasHidden = g_hideWanted;
             if (!g_hideWhenFast || g_drawFailed) {
                 g_hideWanted = false;
             } else if (dt >= 8) {
-                // Hiding looks at the whole trail window (steady). Bringing the cursor back looks at only the last few ms
-                // (from sample j on), so it returns as soon as the mouse stops or slows, not a whole trail later.
-                int j = g_histN - 1;
-                while (j > 0 && now - g_hist[j - 1].t <= SHOW_WINDOW_MS) j--;
-                double path = 0, recentPath = 0;
-                for (int i = 1; i < g_histN; i++) {
-                    double d = Dist(g_hist[i - 1], g_hist[i]);
-                    path += d;
-                    if (i > j) recentPath += d;
-                }
-                double speed = path * 1000.0 / dt;
                 double hide = g_hideSpeedCm * hidePxPerCm;   // px/s on this monitor, the same hand speed everywhere
                 LONGLONG recentDt = now - g_hist[j].t;
                 double recent = recentDt >= 4 ? recentPath * 1000.0 / recentDt : speed;
@@ -399,19 +422,23 @@ static DWORD WINAPI SampleThread(void*) {
         bool visible = g_curVisible, hidden = g_hideWanted;
         LeaveCriticalSection(&g_gate);
 
-        if (Now() - lastMove < g_trailMs + 40 || hidden) {   // never sleep while the real cursor is hidden
+        // drawing (or the trail still fading), or the real cursor hidden: look often; below the draw speed, only on reports
+        if (Now() - lastDrawn < g_trailMs + 40 || hidden) {
             if (!timerHigh) { timeBeginPeriod(1); timerHigh = true; }
             // look again on every mouse report; the timeout keeps the path ageing after a stop, and checks every 2 ms
             // while the real cursor is hidden so it comes back quickly
             WaitForSingleObject(g_mouseWake, hidden ? 2 : 10);
         } else {
             if (timerHigh) { timeEndPeriod(1); timerHigh = false; }
-            // Sleep until the mouse moves (or the next look at the window in front); while an app hides the cursor, just
-            // look once per report. While a window with more rights is in front no mouse reports arrive, so look at the
-            // cursor every 10 ms instead, and every 100 ms once the mouse has been still for a second.
-            DWORD poll = 500;
+            // Sleep until the mouse moves or another window is activated; while an app hides the cursor, just look once
+            // per report. While a window with more rights is in front no mouse reports arrive, so look at the cursor
+            // every 10 ms instead, and every 100 ms once the mouse has been still for a second.
+            DWORD poll = INFINITE;
             if (adminFront) poll = Now() - lastMove < 1000 ? 10 : 100;
-            if (WaitForSingleObject(g_mouseWake, poll) == WAIT_OBJECT_0 && visible) lastMove = Now();
+            if (WaitForSingleObject(g_mouseWake, poll) == WAIT_OBJECT_0 && visible) {
+                if (Now() - lastMove >= 1000) lastLook = -1000;   // moving again: first see what is in front
+                lastMove = Now();
+            }
         }
     }
     if (timerHigh) timeEndPeriod(1);
@@ -695,6 +722,17 @@ static void Blend(int a, int ox, int oy) {
     }
 }
 
+#define BAND_CLASS L"PointerAfterimageMotionBlurBand"
+static HWND g_band;     // the overlay explorer.exe made above the Start menu, if there is one
+static HWND g_target;   // the window the blur is drawn in: g_band, else this process's own
+
+// Shows or hides the window drawn in. g_band belongs to explorer.exe, so this doesn't wait for it to answer.
+static void ShowTarget(bool show) {
+    SetWindowPos(g_target, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS |
+                     (show ? SWP_SHOWWINDOW : SWP_HIDEWINDOW | SWP_NOZORDER));
+}
+
 static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, int y, int w, int h) {
     if (!Resize(sp, sw, sh)) return false;
     EnsureCanvas(w, h);
@@ -709,9 +747,21 @@ static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, 
     POINT dst = {x, y}, src = {0, 0};
     SIZE size = {w, h};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(g_wnd, nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA);
+    if (!g_shown) {   // a new stretch of movement: draw in explorer's window if it has one
+        if (!g_band || !IsWindow(g_band)) g_band = FindWindowW(BAND_CLASS, nullptr);
+        g_target = g_band ? g_band : g_wnd.load();
+    }
+    if (!UpdateLayeredWindow(g_target, nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA)) {
+        if (g_target != g_band) return false;
+        Wh_Log(L"Drawing in explorer's window failed (%lu), drawing in this process's own", GetLastError());
+        if (g_shown) ShowTarget(false);
+        g_band = nullptr;
+        g_target = g_wnd;
+        g_shown = false;
+        if (!UpdateLayeredWindow(g_target, nullptr, &dst, &size, g_memDc, &src, 0, &bf, ULW_ALPHA)) return false;
+    }
     if (!g_shown) {
-        SetWindowPos(g_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        ShowTarget(true);
         g_shown = true;
     }
     return true;
@@ -719,7 +769,7 @@ static bool Draw(const Sprite* sp, int sw, int sh, const Copy* c, int n, int x, 
 
 static bool Hide() {
     if (g_shown) {
-        ShowWindow(g_wnd, SW_HIDE);
+        ShowTarget(false);
         g_shown = false;
     }
     return false;
@@ -739,7 +789,7 @@ static bool Render() {
     np = g_histN;
     memcpy(pts, g_hist, np * sizeof(Sample));
     LeaveCriticalSection(&g_gate);
-    if (!visible || np < 2) return Hide();
+    if (!visible || np < 2 || !g_drawing) return Hide();
     if (g_spritesStale && !g_blankActive) {   // the cursor scheme, size or colour may have changed
         g_spritesStale = 0;
         FreeSprites();
@@ -811,7 +861,15 @@ static bool ListenToMouse(bool on) {
     return false;
 }
 
+static UINT g_shellHookMsg;   // the shell hook's message: a window was activated, created, destroyed...
+
 static LRESULT CALLBACK OverlayProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    // Another window was activated (the high bit marks a fullscreen one): look at the window in front.
+    if (msg == g_shellHookMsg && msg && (wp & 0x7FFF) == HSHELL_WINDOWACTIVATED) {
+        g_recheck = true;
+        SetEvent(g_mouseWake);
+        return 0;
+    }
     switch (msg) {
         case WM_INPUT: {   // wake the sampler for movement only (not for wheel or button reports)
             RAWINPUT ri;
@@ -850,6 +908,9 @@ static DWORD WINAPI RenderThread(void*) {
         Wh_Log(L"Could not set up the overlay window");
         if (g_wnd) DestroyWindow(g_wnd);
         g_wnd = nullptr;
+    } else {
+        g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
+        if (!RegisterShellHookWindow(g_wnd)) Wh_Log(L"RegisterShellHookWindow failed");
     }
     SetEvent(g_ready);
 
@@ -881,7 +942,9 @@ static DWORD WINAPI RenderThread(void*) {
         }
     }
 
+    Hide();   // explorer's window stays, hidden, for the next start
     if (g_wnd) {
+        DeregisterShellHookWindow(g_wnd);
         ListenToMouse(false);
         DestroyWindow(g_wnd);
         g_wnd = nullptr;
@@ -992,6 +1055,59 @@ void WhTool_ModUninit() {
     SetUnhandledExceptionFilter(g_prevFilter);
 }
 
+// ---- explorer.exe: a window above the Start menu ----
+// Windows lets only some of its own processes put a window above the Start menu, Search and the notification centre,
+// and explorer.exe is one of them. In explorer.exe the mod only creates that window (in the UIAccess band, or the
+// system tools band) and runs its message loop; the mod's own process finds it and draws in it. Nothing else runs here.
+
+extern "C" IMAGE_DOS_HEADER __ImageBase;   // this mod's module
+static HANDLE g_bandThread;
+static DWORD g_bandThreadId;
+
+static DWORD WINAPI BandThread(void*) {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);   // the mod's process draws in pixels
+    HINSTANCE inst = (HINSTANCE)&__ImageBase;
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = inst;
+    wc.lpszClassName = BAND_CLASS;
+    RegisterClassW(&wc);
+    using CreateWindowInBand_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU,
+                                               HINSTANCE, LPVOID, DWORD);
+    auto createInBand = (CreateWindowInBand_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowInBand");
+    HWND w = nullptr;
+    static const DWORD bands[] = {2, 16};   // ZBID_UIACCESS, ZBID_SYSTEM_TOOLS
+    for (DWORD band : bands) {
+        if (!createInBand) break;
+        w = createInBand(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+                         BAND_CLASS, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, inst, nullptr, band);
+        Wh_Log(L"CreateWindowInBand(%lu): %p (%lu)", band, w, w ? 0 : GetLastError());
+        if (w) break;
+    }
+    if (w) {
+        MSG m;
+        while (GetMessageW(&m, nullptr, 0, 0) > 0) DispatchMessageW(&m);
+        DestroyWindow(w);
+    }
+    UnregisterClassW(BAND_CLASS, inst);
+    return 0;
+}
+
+// Folder windows can run in explorer.exe processes of their own: only the shell's one makes the window.
+static bool IsShellExplorer() {
+    WCHAR cmd[1024];
+    wcsncpy_s(cmd, GetCommandLineW(), _TRUNCATE);
+    _wcslwr_s(cmd);
+    return !wcsstr(cmd, L"/factory") && !wcsstr(cmd, L"/separate") && !wcsstr(cmd, L"-embedding");
+}
+
+static void StopBandThread() {
+    if (!g_bandThread) return;
+    while (WaitForSingleObject(g_bandThread, 50) == WAIT_TIMEOUT) PostThreadMessageW(g_bandThreadId, WM_QUIT, 0, 0);
+    CloseHandle(g_bandThread);
+    g_bandThread = nullptr;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -1008,6 +1124,7 @@ void WhTool_ModUninit() {
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
+bool g_isExplorer;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -1015,6 +1132,16 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    WCHAR exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
+    const WCHAR* name = wcsrchr(exe, L'\\');
+    if (name && !_wcsicmp(name + 1, L"explorer.exe")) {
+        if (!IsShellExplorer()) return FALSE;
+        g_isExplorer = true;
+        g_bandThread = CreateThread(nullptr, 0, BandThread, nullptr, 0, &g_bandThreadId);
+        return TRUE;
+    }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -1155,7 +1282,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
+    if (g_isToolModProcessLauncher || g_isExplorer) {
         return;
     }
 
@@ -1163,6 +1290,11 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    if (g_isExplorer) {
+        StopBandThread();
+        return;
+    }
+
     if (g_isToolModProcessLauncher) {
         return;
     }
