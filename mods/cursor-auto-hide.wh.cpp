@@ -45,18 +45,19 @@ press also lands in the settings fields, so the values you are about to
 save can change under you and the field you type into is not the one you
 will paste into afterwards.
 
-Three rules decide whether a combination is accepted. It has to include
-Ctrl, Alt, Shift or Win: a plain key on its own is ignored, and a
-character key (a letter, a digit, punctuation, Space, Tab or Enter)
-needs Ctrl, Alt or Win rather than Shift alone, because the shortcut is
-global and Shift+A would stop capital A from being typed anywhere. The
-rest of the keyboard is accepted as it stands, the punctuation of the
-main block ( , . / [ ] \ ' ; - = and ` ), the lock keys and the
-numeric keypad included. And it has to be pressed before you click the
-field and paste: recording is still open at that point, so pressing
-Ctrl+V records Ctrl+V instead of your combination. Recording ends on
-the first accepted combination, after 60 seconds, or when the box is
-unticked and Save is pressed again.
+Three rules decide whether a combination is accepted. It has to
+include Ctrl, Alt or Win, because the shortcut is global and takes its
+key away from every application - Shift+A would stop capital A from
+being typed and Shift+End would stop text selection, while Ctrl+Alt+H
+collides with nothing. F1 to F24, Pause and ScrollLock are the
+exception and may be used alone or with Shift. Every other key takes
+part as well, punctuation, lock keys and numeric keypad included, and
+the main block gives you ", . / [ ] \ ' ; - = `". And the combination
+has to be pressed before you click the field and paste, because
+recording is still open at that point, so pressing Ctrl+V records
+Ctrl+V instead of your combination. Recording ends on the first
+accepted combination, after 60 seconds, or when the box is unticked
+and Save is pressed again.
 
 Recording is opened by ticking the box and pressing Save, and by nothing
 else: later saves with the box still ticked do not open a new window, so
@@ -75,10 +76,10 @@ not inject into other applications.
   $description: The cursor is hidden this many seconds after the last mouse movement or click. Set to 0 to disable hiding.
 - toggleHotkey: ""
   $name: Toggle hotkey
-  $description: A global shortcut that turns the auto-hide on and off, for example Ctrl+Shift+F9. Write it as modifiers joined with plus signs and a key name, such as Ctrl+Alt+H, Shift+End or Win+F10. Supported modifiers are Ctrl, Alt, Shift and Win. A character key, meaning a letter, a digit, punctuation, Space, Tab or Enter, needs Ctrl, Alt or Win and will not accept Shift on its own, because the shortcut is global, so Shift+A would stop capital A from being typed in every application, while Shift+End and Shift+F1, which type nothing, are fine. Supported keys are A to Z, 0 to 9, F1 to F24, Esc, Space, Tab, Enter, Backspace, Insert, Delete, Home, End, PageUp, PageDown, the four arrow keys, the punctuation keys on the main block ( , . / [ ] \ ' ; - = and ` ), CapsLock, NumLock, ScrollLock, PrtSc, Pause, Menu and the numeric keypad. Leave empty to switch the shortcut off. If the shortcut is already taken by another program, the mod logs it and keeps running without a shortcut.
+  $description: A global shortcut that turns the auto-hide on and off, for example Ctrl+Shift+F9. Write it as modifiers joined with plus signs and a key name, such as Ctrl+Alt+H, Shift+F9 or Win+F10. Modifiers are Ctrl, Alt, Shift and Win; keys are A to Z, 0 to 9, F1 to F24, Esc, Space, Tab, Enter, Backspace, the navigation keys, the punctuation keys, the lock keys and the numeric keypad. Because the shortcut is global it takes its key away from every application, so it needs Ctrl, Alt or Win; F1 to F24, Pause and ScrollLock are the exception and may be used alone or with Shift. Leave empty to switch it off, and a shortcut another program already holds is logged while the mod keeps running without one.
 - recordHotkey: false
   $name: Record the shortcut by pressing it
-  $description: Tick this box and press Save, then press the shortcut you want within 60 seconds. While the window is open a note appears in the bottom right corner of the screen, so you can see that recording has started. Click a window other than this one before pressing the combination. While these settings keep the focus, the keys you press also go into the fields below and change the values you are about to save. The mod puts the shortcut on the clipboard in the format the field above expects, so press the combination first, then click that field, press Ctrl+V, and untick this box. If recording is still open when Ctrl+V goes in, Ctrl+V is what gets recorded. A shortcut must include Ctrl, Alt, Shift or Win, and a character key, meaning a letter, a digit, punctuation, Space, Tab or Enter, needs Ctrl, Alt or Win rather than Shift on its own, so Shift+End is accepted while Shift+A is waited out. Every other key works, including punctuation such as , . / [ ] \ ' ; - = and `, the lock keys and the numeric keypad. Recording stops after the first shortcut, after 60 seconds, or when you untick the box and press Save again. It opens only when you tick the box. Later saves with the box still ticked listen for nothing, and to record another shortcut you untick the box, press Save, then tick it and press Save again.
+  $description: Tick this box and press Save, then press the shortcut you want within 60 seconds. A note appears in the bottom right corner of the screen so you know recording has started. Click a window other than this one before pressing, because while these settings keep the focus your keys also go into the fields below and change what you are about to save. The shortcut is put on the clipboard in the format the field above expects, so press it first, then click that field, press Ctrl+V, and untick this box; if recording is still open then, Ctrl+V is what gets recorded. The same rules as above apply, so a shortcut needs Ctrl, Alt or Win unless it is F1 to F24, Pause or ScrollLock. Recording stops after the first shortcut, after 60 seconds, or when you untick the box and press Save again. It opens only when you tick the box, so to record again you untick, press Save, then tick and press Save again.
 */
 // ==/WindhawkModSettings==
 
@@ -88,6 +89,8 @@ not inject into other applications.
 
 #include <atomic>
 #include <string>
+
+#include <windhawk_utils.h>
 
 // The setting can be updated from another thread while the worker thread
 // reads it, so an atomic type is used to avoid a data race.
@@ -216,32 +219,17 @@ static const NamedKey kNamedKeys[] = {
     {L"NumpadSlash", VK_DIVIDE},
 };
 
-// True for the keys that type a character when pressed. RegisterHotKey
-// consumes its key in every application, so a character key without Ctrl,
-// Alt or Win would be taken away from all of them: "A" would make the
-// letter A unusable and "Shift+A" would block capital A. Shift therefore
-// only counts as a modifier for keys that type nothing, which keeps
-// Shift+End and Shift+F1 working. The only single character names in the
-// table above are the punctuation keys, so they fall out of this check.
-static bool IsCharacterKey(UINT vk) {
-    if ((vk >= L'A' && vk <= L'Z') || (vk >= L'0' && vk <= L'9')) {
-        return true;
-    }
-    switch (vk) {
-        case VK_SPACE:
-        case VK_TAB:
-        case VK_RETURN:
-        case VK_BACK:
-            return true;
-        default:
-            break;
-    }
-    for (const NamedKey& k : kNamedKeys) {
-        if (k.vk == vk && k.name[0] != L'\0' && k.name[1] == L'\0') {
-            return true;
-        }
-    }
-    return false;
+// The only keys a shortcut may use without Ctrl, Alt or Win. RegisterHotKey
+// takes its key away from every application in the session, so nearly every
+// shortcut has to carry one of the three strong modifiers: Shift+A would
+// stop capital A from being typed, Shift+End would stop text selection,
+// Shift+Delete would stop cutting, and a bare Delete would stop deleting.
+// Function keys, Pause and ScrollLock have no role in normal typing, so
+// they stay usable alone or with Shift - they are the keys people reach
+// for once the combinations that mean something are all taken.
+static bool AllowsWeakModifiers(UINT vk) {
+    return (vk >= VK_F1 && vk <= VK_F24) || vk == VK_PAUSE ||
+           vk == VK_SCROLL;
 }
 
 // Maps a key name to a virtual key: single letters and digits use their
@@ -334,10 +322,11 @@ static bool ParseHotkey(const WCHAR* text, UINT* outModifiers, UINT* outVk) {
     if (!haveKey) {
         return false;
     }
-    // The shortcut is registered globally, so a character key has to come
-    // with Ctrl, Alt or Win: "A" would swallow the letter everywhere and
-    // "Shift+A" would block capital A in every application.
-    if (IsCharacterKey(vk) && !(modifiers & (MOD_CONTROL | MOD_ALT | MOD_WIN))) {
+    // The shortcut is registered globally, so without Ctrl, Alt or Win
+    // only the keys listed in AllowsWeakModifiers are usable: "Shift+End"
+    // would stop text selection and a bare "Delete" would stop deleting.
+    if (!AllowsWeakModifiers(vk) &&
+        !(modifiers & (MOD_CONTROL | MOD_ALT | MOD_WIN))) {
         return false;
     }
     *outModifiers = modifiers;
@@ -360,18 +349,17 @@ void LoadSettings(bool fromSettingsCallback) {
     UINT modifiers = 0;
     UINT vk = 0;
     bool valid = false;
-    PCWSTR setting = Wh_GetStringSetting(L"toggleHotkey");
-    std::wstring hotkeyText = setting ? setting : L"";
+    // StringSetting frees the value it holds when it goes out of scope,
+    // so there is nothing to release by hand here.
+    WindhawkUtils::StringSetting toggleHotkeySetting(L"toggleHotkey");
+    std::wstring hotkeyText = toggleHotkeySetting.get();
     if (!hotkeyText.empty()) {
         valid = ParseHotkey(hotkeyText.c_str(), &modifiers, &vk);
         if (!valid) {
             Wh_Log(L"Toggle hotkey not accepted: %s (an unknown token, or a "
-                   L"character key without Ctrl, Alt or Win)",
-                   setting);
+                   L"key used without Ctrl, Alt or Win)",
+                   toggleHotkeySetting.get());
         }
-    }
-    if (setting) {
-        Wh_FreeStringSetting(setting);
     }
 
     g_hotkeyModifiers.store(valid ? modifiers : 0);
@@ -636,13 +624,10 @@ static bool RecordPollStep(HWND hwnd) {
         (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
         modifiers |= MOD_WIN;
     }
-    if (modifiers == 0) {
-        return false;  // a bare key is not a shortcut, wait for a modifier
-    }
-    // A character key accepted here would be rejected by the settings field
-    // afterwards, or worse, accepted and then swallow the key everywhere.
-    // Keeping to Ctrl, Alt or Win mirrors the check the parser applies, so
-    // Shift+A waits instead of being put on the clipboard.
+    // The rule is the one the settings field applies, so nothing can be
+    // recorded that the field would then refuse: without Ctrl, Alt or Win
+    // only F keys, Pause and ScrollLock qualify, and Shift+A is waited out
+    // instead of being put on the clipboard.
     const bool strongModifiers =
         (modifiers & (MOD_CONTROL | MOD_ALT | MOD_WIN)) != 0;
 
@@ -652,7 +637,7 @@ static bool RecordPollStep(HWND hwnd) {
         if (IsModifierVk(vk) || !(GetAsyncKeyState(vk) & 0x8000)) {
             continue;
         }
-        if (!strongModifiers && IsCharacterKey(vk)) {
+        if (!strongModifiers && !AllowsWeakModifiers(vk)) {
             continue;
         }
         WCHAR name[32];
