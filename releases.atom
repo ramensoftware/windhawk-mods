@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-14T05:00:46.000Z</updated>
+    <updated>2026-10-14T06:21:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Swipe Taskbar Fix 1.0.5]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-swipe-taskbar-fix#3b5992685827bfee26b0ac55c6770b6a1b0b60a7</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-swipe-taskbar-fix"/>
+        <updated>2026-10-14T06:21:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="virtualdesktopswipetaskbarfix">Virtual Desktop Swipe Taskbar Fix</h1>
+<p>Restores the missing incoming taskbar bitmap during a touchpad virtual desktop swipe
+on Windows 11.</p>
+<p><img src="https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/virtual-desktop-swipe-taskbar-fix/virtual-desktop-swipe-taskbar-fix.png" alt="The issue" />
+<em>The issue</em></p>
+<h2 id="limitation">Limitation</h2>
+<p>While a swipe is held, both previews can show the current desktop's taskbar
+buttons, instead of reflecting the incoming taskbar's current state. This is
+because Windows has not yet committed the switch during a swipe gesture, and
+thumbnails taken at that time inevitably look the same as on the outgoing
+desktop.</p>
+<p>Keyboard switching avoids this because it freezes the outgoing taskbar preview
+and updates the actual taskbar during the transition, allowing the live incoming
+preview to show the destination desktop's buttons.</p>
+<p>ARM64 is not supported: native methods are resolved through symbols, but internal
+member offsets are discovered from those methods at initialization. Initialization
+stops if the required symbols or layout cannot be recognized.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Spotlight Launcher 0.5.11]]></title>
         <id>https://windhawk.net/mods/spotlight-launcher#002d01efc7998c0c2c45cd7f0a44650aef7f3955</id>
@@ -1357,48 +1384,6 @@ Windhawk debug logging and check for initialization or compatibility errors.</p>
         <author>
             <name>iMAboud</name>
             <uri>https://github.com/iMAboud</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Control Center Buttons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-11-control-center-buttons#4a5ac03d9dd76ed8af9db1980382c5ff182b6755</id>
-        <link href="https://windhawk.net/mods/windows-11-control-center-buttons"/>
-        <updated>2026-10-11T19:00:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11controlcenterbuttons">Windows 11 Control Center Buttons</h1>
-<p>• <strong><a href="https://github.com/Salyts/Windows-11-Control-Center-Buttons/issues">Report a bug or suggest a feature</a></strong> · <strong><a href="https://discord.com/channels/923944342991818753/1558419938820227123">Discussion on Discord</a></strong> · <strong><a href="https://ko-fi.com/salyts">Support</a></strong></p>
-<p>Removes the stock <strong>Settings (gear)</strong> button from the bottom bar of the Windows 11 Control Center panel and puts your own buttons there instead.</p>
-<p>Actions are run by a dedicated Windhawk tool-mod process (<code>windhawk.exe -tool-mod</code>), the panel host sends the click to a tiny hidden window inside that process, which runs the command.</p>
-<p>| Before | After |
-|--------|---------|
-| <img src="https://i.imgur.com/ILoCB2R.png" alt="before" /> | <img src="https://i.imgur.com/R7ET89k.png" alt="after" /> |</p>
-<h2 id="buttonfields">Button fields</h2>
-<p>| Field | Description |
-|---|---|
-| <strong>Preset</strong> | Ready-made button. Set <code>Custom</code> to define your own. |
-| <strong>Name</strong> | Tooltip. Empty on presets = default name. |
-| <strong>Icon</strong> | Segoe Fluent glyph (<code>E713</code> or <code>\uE713</code>), image path (PNG/ICO/JPG/BMP/WEBP) or <code>.exe</code>/<code>.dll</code> path to take the icon from. |
-| <strong>Action</strong> | Used for <code>Custom</code>. One or several commands, run in order. |
-| <strong>Left-click submenu</strong> | Menu opened on left click (replaces Action). |
-| <strong>Right-click submenu</strong> | Menu opened on right click. |</p>
-<h2 id="actionformats">Action formats</h2>
-<p>| Prefix | Example | Description |
-|--------|---------|-------------|
-| <code>" "</code> | <code>"C:\Program Files\Windhawk\windhawk.exe"</code> | Opens a file or folder by absolute path. |
-| <code>~</code> | <code>~Downloads</code> or <code>~windhawk.exe</code> | Opens a folder or file by name. |
-| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
-| <code>ps:</code> or <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code> |
-| <code>press:</code> | <code>press:Win+E</code> or <code>press:0x5B;0x45</code> | Keyboard key press using <a href="https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes">Win32 key code</a>. |
-| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
-| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
-<h3 id="modifiersignsprependtoanyaction">Modifier signs (prepend to any action)</h3>
-<p>| Sign | Example | Description |
-|------|---------|-------------|
-| <code>-</code> | <code>-"C:\Program Files\app.exe"</code> or <code>-ps:shutdown /r /f /t 0</code> | Runs as administrator. |
-| <code>*</code> | <code>*cmd:tasklist</code> or <code>*ps:Get-Process</code> | Execution with a terminal window. (only for <code>cmd:</code> and <code>ps:</code> prefixes). |</p>
-<p>Signs can be combined: <code>-*cmd:tasklist</code> runs cmd in a visible window as admin.</p>]]></content>
-        <author>
-            <name>Salyts</name>
-            <uri>https://github.com/Salyts</uri>
         </author>
     </entry>
 </feed>

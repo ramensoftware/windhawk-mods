@@ -2,12 +2,39 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-14T06:02:09.000Z</updated>
+    <updated>2026-10-14T06:21:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Swipe Taskbar Fix 1.0.5]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-swipe-taskbar-fix#3b5992685827bfee26b0ac55c6770b6a1b0b60a7</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-swipe-taskbar-fix"/>
+        <updated>2026-10-14T06:21:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="virtualdesktopswipetaskbarfix">Virtual Desktop Swipe Taskbar Fix</h1>
+<p>Restores the missing incoming taskbar bitmap during a touchpad virtual desktop swipe
+on Windows 11.</p>
+<p><img src="https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/virtual-desktop-swipe-taskbar-fix/virtual-desktop-swipe-taskbar-fix.png" alt="The issue" />
+<em>The issue</em></p>
+<h2 id="limitation">Limitation</h2>
+<p>While a swipe is held, both previews can show the current desktop's taskbar
+buttons, instead of reflecting the incoming taskbar's current state. This is
+because Windows has not yet committed the switch during a swipe gesture, and
+thumbnails taken at that time inevitably look the same as on the outgoing
+desktop.</p>
+<p>Keyboard switching avoids this because it freezes the outgoing taskbar preview
+and updates the actual taskbar during the transition, allowing the live incoming
+preview to show the destination desktop's buttons.</p>
+<p>ARM64 is not supported: native methods are resolved through symbols, but internal
+member offsets are discovered from those methods at initialization. Initialization
+stops if the required symbols or layout cannot be recognized.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Magic Pointer 1.0.2]]></title>
         <id>https://windhawk.net/mods/magic-pointer#9ef5c6d286cc4961cf85aa8d1b691862c900e82f</id>
@@ -1058,63 +1085,6 @@ default) have nothing to switch to unless you open separate windows.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SameFolderOnly 4.1.5]]></title>
-        <id>https://windhawk.net/mods/xandriw-explorer-select-interceptor#fa750447213d3d2c91aadac412826eaec6343cc2</id>
-        <link href="https://windhawk.net/mods/xandriw-explorer-select-interceptor"/>
-        <updated>2026-10-12T16:04:02.000Z</updated>
-        <content type="html"><![CDATA[<p>Purpose</p>
-<ul>
-<li>Source-level fix for "Show in folder", "Open downloads folder", and plain
-explorer.exe folder opens.</li>
-<li>Runs inside the new explorer.exe process before the duplicate window appears.</li>
-</ul>
-<p>What it intercepts</p>
-<ul>
-<li>explorer.exe /select,"C:\Folder\File.ext"</li>
-<li>explorer.exe "C:\Folder"</li>
-<li>explorer.exe C:\Folder</li>
-<li>explorer.exe shell:Downloads</li>
-<li>explorer.exe /e,C:\Folder or /root,C:\Folder style commands when possible</li>
-</ul>
-<p>Behavior</p>
-<ol>
-<li>If a matching folder is already open:</li>
-</ol>
-<ul>
-<li>Select the requested file if /select was used.</li>
-<li>Activate that existing Explorer window if enabled.</li>
-<li>Exit this helper explorer.exe before it creates a duplicate window.</li>
-</ul>
-<ol>
-<li>If no matching folder is visible through ShellWindows:</li>
-</ol>
-<ul>
-<li>By default, do NOT steal a random Explorer window.</li>
-<li>Optional fallback can reuse another Explorer window if you explicitly enable it.</li>
-</ul>
-<ol>
-<li>If no usable Explorer window is found:</li>
-</ol>
-<ul>
-<li>Let Explorer continue normally.</li>
-</ul>
-<p>Windows 11 tabs</p>
-<ul>
-<li>ShellWindows can enumerate inactive tabs, which share the window handle of
-their parent Explorer window. This mod checks each tab's Shell view visibility
-and only reuses an active tab, so a request is not swallowed by a hidden tab.</li>
-<li>If the target folder is only in a background tab, SameFolderOnly lets Explorer
-handle the request normally (it does not automatically switch to that tab).</li>
-<li>The optional ReuseAnyExplorerWindow fallback also skips inactive tabs.</li>
-</ul>
-<p>Hold Shift (or your configured bypass key) to allow Explorer's normal behavior.
-Requests not launched through a supported explorer.exe command line are unaffected.</p>]]></content>
-        <author>
-            <name>XandriW</name>
-            <uri>https://github.com/xandri19wang</uri>
         </author>
     </entry>
 </feed>
