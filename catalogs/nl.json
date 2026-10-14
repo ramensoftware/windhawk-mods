@@ -17390,6 +17390,30 @@
         "version": "1.0.0"
       }
     },
+    "win10-1507-rtm-search-recreation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791986542000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791986542000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "babamohammed",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lshlwapi -lshcore -lcomctl32 -lgdiplus -luxtheme",
+        "description": "This mod recreates the Windows 10 RTM (1507) Search on Windows 10 and Windows 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Windows 10 1507 Search Pane Recreation",
+        "version": "1.0.0"
+      }
+    },
     "win10-1507-start-menu-recreation": {
       "details": {
         "defaultSorting": 66,
