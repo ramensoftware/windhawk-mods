@@ -7,7 +7,6 @@
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @include         explorer.exe
-// @include         dwm.exe
 // @compilerOptions -lgdi32 -luser32 -lshell32 -lole32 -ldwmapi -lshcore -lshlwapi -lcrypt32 -lwindowscodecs -lmsimg32 -lcomctl32
 // ==/WindhawkMod==
 
@@ -15,11 +14,10 @@
 /*
 # Windows 8/8.1 Display Switch Recreation
 
-> **IMPORTANT:** To make this modification functional, `dwm.exe` must be added to Windhawk's
-> **Process inclusion list**. Windhawk excludes `dwm.exe` by default because it is a critical
-> system process. Open Windhawk, go to **Settings > Advanced settings > More advanced settings**,
-> add `dwm.exe` to **Process inclusion list**, save the change, and restart Windhawk when prompted.
-> See the [Windhawk documentation](https://github.com/ramensoftware/windhawk/wiki/Injection-targets-and-critical-system-processes).
+> **IMPORTANT:** This modification runs in `explorer.exe` and does not require adding the critical
+> `dwm.exe` process to Windhawk's inclusion list. When an elevated window or a secure desktop is
+> active, Windows may not deliver keyboard input to Explorer; in that case the native Project
+> flyout remains available.
 
 This mod recreates the Windows 8/8.1 display switch panel (the **Second screen** flyout in
 Windows 8 and the **Project** pane in Windows 8.1) on Windows 10 and Windows 11. It uses the
@@ -51,15 +49,14 @@ Windows APIs and persist like the native Project flyout. This modification has b
 
 ## Win+P input path
 
-On current Windows builds, `Win+P` is handled by the compositor/DWM rather than by the taskbar's
-`WM_HOTKEY`. When enabled, this mod therefore installs a narrow `WH_KEYBOARD_LL` hook in `dwm.exe`.
+When enabled, the mod installs one narrow `WH_KEYBOARD_LL` hook in the main `explorer.exe` process.
 It consumes only the physical `Win+P` sequence, passes injected input and every other key through,
-and sends private messages to the panel in the main Explorer process. The taskbar subclass remains
-a compatibility fallback for builds that deliver `Win+P` as `WM_HOTKEY`. The DWM hook has no panel
-or display UI and is cleaned up during unload or settings changes.
+and sends private messages to the panel. The hook is removed when the setting is disabled or the mod
+is unloaded. If an elevated window or a secure desktop is active, the hook may not receive the input;
+the native Windows Project flyout is intentionally preserved in that case.
 
-The panel itself loads only in the Explorer process that owns the shell window, so separate folder
-window processes do not create duplicate panels.
+The panel loads only in the Explorer process that owns the shell window, so separate folder-window
+processes do not create duplicate panels.
 
 ## Windows APIs
 
@@ -109,7 +106,7 @@ is shown in the panel when the current session cannot change the display configu
 /*
 - useWinP: true
   $name: Open with Win+P
-  $description: This setting replaces compositor-owned Win+P (through the DWM hook) and other native Project flyout entry points with this panel, including a DisplaySwitchUIWnd opened by the Windows 8/8.1 Devices route.
+  $description: This setting replaces Win+P through the Explorer keyboard hook and other native Project flyout entry points with this panel, including a DisplaySwitchUIWnd opened by the Windows 8/8.1 Devices route.
 - language: auto
   $name: Language
   $description: This setting modifies the UI language for the display switch panel. Automatic follows the Windows display language.
@@ -205,7 +202,6 @@ is shown in the panel when the current session cannot change the display configu
 #include <wincrypt.h>
 #include <initguid.h>
 #include <wincodec.h>
-#include <windhawk_utils.h>
 #include <math.h>
 #include <string>
 #include <vector>
@@ -600,25 +596,18 @@ static WinHandle g_stopEvent;
 static WinHandle g_uiReady, g_keyboardReady;
 static DWORD g_uiTid = 0, g_keyboardTid = 0;
 static HHOOK g_mouseHook = NULL;           // owned by the input-hook thread
-static HHOOK g_hook = NULL;                // on-demand keyboard hook, same thread
+static HHOOK g_hook = NULL;                // Explorer's Win+P hook, same thread
 static bool g_mouseHookWanted = false;     // UI-thread view of the requested state
-static bool g_keyboardHookWanted = false;  // UI-thread view of the requested state
-static HWND g_trayWnd = NULL;              // Shell_TrayWnd subclassed for WM_HOTKEY
-static bool g_isDwmProcess = false;
-static WinHandle g_dwmKeyboardThread;
-static WinHandle g_dwmReady;
-static DWORD g_dwmKeyboardTid = 0;
-static HHOOK g_dwmHook = NULL;
-static volatile LONG g_dwmStarted = 0;
-static bool g_dwmPConsumed = false;
-static bool g_dwmWinPSequence = false;
-static bool g_dwmCycle = false;
-static bool g_dwmLwinDown = false;
-static bool g_dwmRwinDown = false;
+static bool g_keyboardHookWanted = false;  // Explorer Win+P hook requested state
+static bool g_winPConsumed = false;
+static bool g_winPSequence = false;
+static bool g_winPCycle = false;
+static bool g_lwinDown = false;
+static bool g_rwinDown = false;
 static ScopedWinEventHook g_foregroundHook;    // owned by the UI thread
 static DWORD g_openTick = 0;               // GetTickCount() of the last OpenPane
 static volatile LONG g_uiStarted = 0, g_keyboardStarted = 0;
-static DWORD g_lastApply = 0, g_lastHotkey = 0;
+static DWORD g_lastApply = 0;
 
 static bool g_useWinP = true;
 static int g_titleMode = 0;                // 0 = Project, 1 = Second screen
@@ -629,7 +618,6 @@ static int g_lang = 0;
 static bool g_fullHeight = true, g_validateFirst = true, g_persistPaths = false;
 static bool g_disableUnavailable = false, g_allowSetPrimary = true;
 static bool g_closeAfterApply = true;
-static volatile LONG g_winCycle = 0;   // set while Win is held after a Win+P cycle press
 static bool g_closeOnClickOutside = true, g_aboveTaskbar = true;
 static bool g_useZBand = true;
 static int g_applyCooldownMs = 700, g_hotkeyCooldownMs = 400;
@@ -695,7 +683,6 @@ static int PaneContentHeight();
 static void ShowContextMenu(HWND h, int x, int y, bool fromKeyboard);
 static void SetOutsideClickHook(bool on);
 static void SetKeyboardHook(bool on);
-static bool RequestToggleFromHotkey(const wchar_t* source);
 static void OnGlobalPointerDown(POINT pt);
 
 // ---------------------------------------------------------------- z-band overlay (from the search charm mod)
@@ -2133,7 +2120,8 @@ static void Tick() {
         if (g_state == ST_OUT) {
             KillTimer(g_wnd, 2);   // the status line is gone with the panel
             ShowWindow(g_wnd, SW_HIDE);
-            // Input hooks are used only while the panel is visible.
+            // The mouse hook is used only while the panel is visible. The
+            // Explorer Win+P hook remains active while its setting is enabled.
             SetOutsideClickHook(false);
             SetKeyboardHook(false);
         }
@@ -2603,16 +2591,20 @@ static void SetOutsideClickHook(bool on) {
         Wh_Log(L"[Dismiss] PostThreadMessageW failed, err=%u", (unsigned)GetLastError());
 }
 
-// Asks the same thread to install/remove the low-level keyboard hook. It is
-// intentionally not present while the pane is hidden: Win+P itself is handled
-// by Shell_TrayWnd's WM_HOTKEY subclass above.
+// The Explorer Win+P hook stays installed while the setting is enabled, even
+// when the panel is hidden, because it is also responsible for opening it. The
+// on/off parameter is kept for the panel lifecycle callers; the setting is the
+// actual lifetime gate.
 static void SetKeyboardHook(bool on) {
-    if (g_keyboardHookWanted == on) return;
+    (void)on;
+    const bool wanted = g_useWinP;
+    if (g_keyboardHookWanted == wanted) return;
     const DWORD tid = g_keyboardTid;
     if (!tid) return;
-    if (PostThreadMessageW(tid, on ? WM_HOOKCTL_KEYBOARD_ON : WM_HOOKCTL_KEYBOARD_OFF,
+    if (PostThreadMessageW(tid,
+                           wanted ? WM_HOOKCTL_KEYBOARD_ON : WM_HOOKCTL_KEYBOARD_OFF,
                            0, 0))
-        g_keyboardHookWanted = on;
+        g_keyboardHookWanted = wanted;
     else
         Wh_Log(L"[Hook] PostThreadMessageW failed, err=%u", (unsigned)GetLastError());
 }
@@ -2669,8 +2661,8 @@ static void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
         // If the native DisplaySwitch flyout activates while replacement is enabled,
         // dismiss it immediately and open our pane instead. This is also the fallback
         // for non-keyboard routes such as the Windows 8/8.1 Devices charm and a
-        // no-argument DisplaySwitch.exe launch; those routes do not deliver the
-        // Shell_TrayWnd WM_HOTKEY handled above.
+        // no-argument DisplaySwitch.exe launch; those routes do not deliver a
+        // keyboard event to this hook.
         if (g_useWinP) {
             wchar_t cls[64] = {};
             if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"DisplaySwitchUIWnd")) {
@@ -2791,7 +2783,6 @@ static void OpenPane() {
             g_sel = (g_topology >= 0 && g_topology < TOPO_COUNT) ? g_topology : TOPO_INTERNAL;
         }
         g_hoverOpt = -1;
-        InterlockedExchange(&g_winCycle, 0);
         g_raiseCount = 0; g_raiseSince = 0; g_gaveUp = false;
         SetStatus(L"");
         if (g_state == ST_IDLE || !IsWindowVisible(g_wnd)) {
@@ -2810,9 +2801,9 @@ static void OpenPane() {
     }
     g_openTick = GetTickCount();
     StartAnim(true);
-    // Light dismiss must work even if activation below is refused. The keyboard
-    // hook is needed only for Win-release after cycling; neither hook is used to
-    // forward ordinary keystrokes to the panel.
+    // Light dismiss must work even if activation below is refused. The Explorer
+    // Win+P hook is already active while enabled and never forwards ordinary
+    // keystrokes to the panel.
     SetOutsideClickHook(true);
     SetKeyboardHook(true);
 
@@ -3025,189 +3016,16 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(h, msg, wp, lp);
 }
 
-// ---------------------------------------------------------------- keyboard and taskbar hotkey handling
-// Some Windows builds deliver Win+P through Explorer's Shell_TrayWnd, so the
-// subclass below remains a compatibility fallback. Current builds can reserve
-// Win+P in the compositor/DWM path instead (the log observed vk=0x53/Win+S at
-// the taskbar); DwmKeyboardProc above is the primary replacement there. The
-// Explorer-side hook below is still on-demand and only watches Win release
-// after a cycle press while the pane is visible.
-static bool IsWinPHotkeyParams(WPARAM, LPARAM lParam) {
-    const UINT mod = LOWORD(lParam);
-    const UINT vk = HIWORD(lParam);
-    return vk == 'P' && (mod & MOD_WIN) != 0 &&
-           (mod & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) == 0;
-}
-
-static bool RequestToggleFromHotkey(const wchar_t* source) {
-    const DWORD now = GetTickCount();
-    if (now - g_lastHotkey < (DWORD)g_hotkeyCooldownMs) return false;
-    g_lastHotkey = now;
-    HWND panel = g_wnd;
-    if (panel && g_open) {
-        // Real flyout behavior: Win+P again cycles; releasing Win applies.
-        InterlockedExchange(&g_winCycle, 1);
-        PostMessageW(panel, WM_APP_CYCLE, 0, 0);
-        return true;
-    }
-    if (panel) {
-        Wh_Log(L"[Hotkey] Win+P intercepted (%s) -> opening pane", source);
-        PostMessageW(panel, WM_APP_TOGGLE, 0, 0);
-        return true;
-    }
-    return false;
-}
-
-static LRESULT CALLBACK TraySubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
-                                         LPARAM lParam, DWORD_PTR) {
-    if (uMsg == WM_HOTKEY) {
-        wchar_t cls[64] = {};
-        GetClassNameW(hWnd, cls, ARRAYSIZE(cls));
-        Wh_Log(L"[Hotkey] WM_HOTKEY hwnd=%p class=%s id=%llu mod=0x%X vk=0x%X useWinP=%d",
-               hWnd, cls, (unsigned long long)wParam,
-               (unsigned)LOWORD(lParam), (unsigned)HIWORD(lParam),
-               g_useWinP ? 1 : 0);
-        if (g_useWinP && IsWinPHotkeyParams(wParam, lParam)) {
-            RequestToggleFromHotkey(L"Shell_TrayWnd/WM_HOTKEY");
-            return 0;  // Do not let Explorer open its native Project flyout.
-        }
-    }
-
-    if (uMsg == WM_NCDESTROY && hWnd == g_trayWnd)
-        g_trayWnd = NULL;
-
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-static void SubclassTrayWindow(HWND tray) {
-    if (!tray) return;
-    DWORD pid = 0;
-    if (!GetWindowThreadProcessId(tray, &pid) || pid != GetCurrentProcessId())
-        return;
-    if (g_trayWnd == tray) return;
-
-    if (g_trayWnd) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_trayWnd,
-                                                          TraySubclassProc);
-        g_trayWnd = NULL;
-    }
-
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(tray, TraySubclassProc, 0)) {
-        g_trayWnd = tray;
-        Wh_Log(L"[Hotkey] subclassed Shell_TrayWnd=%p", tray);
-    } else {
-        Wh_Log(L"[Hotkey] failed to subclass Shell_TrayWnd=%p", tray);
-    }
-}
-
-static void SubclassCurrentTrayWindow() {
-    // RegisterHotKey_Hook may already have identified a helper window as the
-    // receiver on an older shell build. Do not replace that known target with
-    // a best-effort lookup.
-    if (g_trayWnd) return;
-    HWND tray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (tray)
-        SubclassTrayWindow(tray);
-    else
-        Wh_Log(L"[Hotkey] Shell_TrayWnd not found during post-init lookup");
-}
-
-static void UnsubclassTrayWindow() {
-    if (!g_trayWnd) return;
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_trayWnd, TraySubclassProc);
-    g_trayWnd = NULL;
-}
-
-static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
-    try {
-        if (code == HC_ACTION && lp) {
-            const KBDLLHOOKSTRUCT* k = (const KBDLLHOOKSTRUCT*)lp;
-            if (k->dwExtraInfo != kMagic &&
-                (wp == WM_KEYUP || wp == WM_SYSKEYUP) &&
-                (k->vkCode == VK_LWIN || k->vkCode == VK_RWIN) &&
-                InterlockedExchange(&g_winCycle, 0) && g_wnd) {
-                PostMessageW(g_wnd, WM_APP_COMMIT, 0, 0);
-            }
-        }
-    } catch (const std::exception& e) {
-        LogCaughtException(L"KbProc", e.what());
-    } catch (...) {
-        LogCaughtException(L"KbProc", nullptr);
-    }
-    // This hook never consumes input: all normal keystrokes continue to the
-    // foreground application, including while the pane is open in the
-    // background.
-    return CallNextHookEx(g_hook, code, wp, lp);
-}
-
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-static CreateWindowExW_t g_createWindowExWOriginal = nullptr;
-
-static HWND WINAPI CreateWindowExW_Hook(
-    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam) {
-    HWND hWnd = g_createWindowExWOriginal(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam);
-    if (!hWnd || !lpClassName ||
-        ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) == 0)
-        return hWnd;  // The class can also be passed as an atom.
-
-    if (!_wcsicmp(lpClassName, L"Shell_TrayWnd"))
-        SubclassTrayWindow(hWnd);
-    return hWnd;
-}
-
-static CreateWindowInBand_t g_createWindowInBandOriginal = nullptr;
-
-static HWND WINAPI CreateWindowInBand_Hook(
-    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam,
-    DWORD dwBand) {
-    HWND hWnd = g_createWindowInBandOriginal(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (hWnd && lpClassName &&
-        ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0 &&
-        !_wcsicmp(lpClassName, L"Shell_TrayWnd"))
-        SubclassTrayWindow(hWnd);
-    return hWnd;
-}
-
-// Observe a real Explorer Win+P registration when a Windows build exposes one.
-// Normally this is Shell_TrayWnd, but recording the registration target also
-// covers shell builds that deliver the hotkey through a helper window. Current
-// compositor-owned builds may never call this for Win+P.
-using RegisterHotKey_t = decltype(&RegisterHotKey);
-static RegisterHotKey_t g_registerHotKeyOriginal = nullptr;
-
-static BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT modifiers, UINT vk) {
-    BOOL result = g_registerHotKeyOriginal(hWnd, id, modifiers, vk);
-    if (result && hWnd && vk == 'P' &&
-        (modifiers & MOD_WIN) != 0 &&
-        (modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) == 0) {
-        Wh_Log(L"[Hotkey] Explorer registered Win+P on hwnd=%p id=%d mod=0x%X",
-               hWnd, id, (unsigned)modifiers);
-        // Keep the documented taskbar path as a compatibility fallback on
-        // builds that really deliver Win+P through WM_HOTKEY. This observer
-        // never registers a second Win+P hotkey of its own.
-        SubclassTrayWindow(hWnd);
-    }
-    return result;
-}
-
-// Win+P is a compositor-owned shortcut on current Windows builds. The
-// taskbar's WM_HOTKEY path is therefore not sufficient: the low-level hook is
-// hosted in dwm.exe, following the established Windhawk pattern for special
-// shell shortcuts. It is deliberately narrow: only the physical Win+P
-// sequence is consumed, while injected input and every other key go through.
-static bool DwmWinPModifiersDown() {
-    // GetAsyncKeyState can still show the previous state while a low-level
-    // hook callback is running. Keep the physical Win state locally as well,
-    // so a fast Win+P press is not accidentally passed to the shell.
-    const bool win = g_dwmLwinDown || g_dwmRwinDown;
+// ---------------------------------------------------------------- Explorer Win+P keyboard handling
+// Current Windows builds may keep Win+P outside Explorer's WM_HOTKEY path. A
+// single, narrow low-level hook in the main Explorer process handles the
+// physical sequence without forwarding or consuming any ordinary input. An
+// elevated window or the secure desktop can hide the input from Explorer; the
+// native Project flyout is intentionally left available in that case.
+static bool ExplorerWinPModifiersDown() {
+    const bool win = g_lwinDown || g_rwinDown ||
+                     ((GetAsyncKeyState(VK_LWIN) |
+                       GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
     const bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 ||
                       (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0 ||
                       (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
@@ -3220,10 +3038,23 @@ static bool DwmWinPModifiersDown() {
     return win && !ctrl && !shift && !alt;
 }
 
-static void MaskDwmWinKey() {
-    // VK_E8 is intentionally unassigned and is the established menu-mask key:
-    // it marks the held Win key as part of a shortcut instead of allowing the
-    // shell to interpret the sequence as a bare Win press and open Start.
+static void ResetExplorerWinPState() {
+    g_winPConsumed = false;
+    g_winPSequence = false;
+    g_winPCycle = false;
+    g_lwinDown = false;
+    g_rwinDown = false;
+}
+
+static void CALLBACK ExplorerDesktopSwitchProc(HWINEVENTHOOK, DWORD event,
+                                                HWND, LONG, LONG, DWORD, DWORD) {
+    if (event == EVENT_SYSTEM_DESKTOPSWITCH)
+        ResetExplorerWinPState();
+}
+
+static void MaskExplorerWinKey() {
+    // VK_E8 is intentionally unassigned and prevents a consumed Win+P from
+    // being interpreted as a bare Win press that opens the Start menu.
     INPUT inputs[2] = {};
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = 0xE8;
@@ -3232,104 +3063,80 @@ static void MaskDwmWinKey() {
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
     const UINT sent = SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
     if (sent != ARRAYSIZE(inputs))
-        Wh_Log(L"[DWM] Win+P menu-mask SendInput sent %u/%u events, err=%u",
+        Wh_Log(L"[Hook] Win+P menu-mask SendInput sent %u/%u events, err=%u",
                (unsigned)sent, (unsigned)ARRAYSIZE(inputs), (unsigned)GetLastError());
 }
 
-static LRESULT CALLBACK DwmKeyboardProc(int code, WPARAM wp, LPARAM lp) {
+static LRESULT CALLBACK ExplorerWinPKeyboardProc(int code, WPARAM wp, LPARAM lp) {
     if (code != HC_ACTION || !lp)
-        return CallNextHookEx(g_dwmHook, code, wp, lp);
+        return CallNextHookEx(g_hook, code, wp, lp);
 
     const KBDLLHOOKSTRUCT* key = (const KBDLLHOOKSTRUCT*)lp;
-    // The replacement must not hijack SendInput/automation calls. This also
-    // prevents the masking keystroke above from recursively entering this path.
     if (key->flags & LLKHF_INJECTED)
-        return CallNextHookEx(g_dwmHook, code, wp, lp);
+        return CallNextHookEx(g_hook, code, wp, lp);
 
     const bool up = (key->flags & LLKHF_UP) != 0;
     const bool down = !up;
 
     if (key->vkCode == VK_LWIN)
-        g_dwmLwinDown = down;
+        g_lwinDown = down;
     else if (key->vkCode == VK_RWIN)
-        g_dwmRwinDown = down;
+        g_rwinDown = down;
 
-    if (up && key->vkCode == 'P' && g_dwmPConsumed) {
-        g_dwmPConsumed = false;
+    const bool asyncWin = ((GetAsyncKeyState(VK_LWIN) |
+                            GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+
+    // A Win-up or P-up can be missed during a secure-desktop transition. If a
+    // later physical P arrives with no async Win state, discard stale state
+    // before evaluating it; otherwise a plain P could open the panel.
+    if (down && key->vkCode == 'P' && !asyncWin &&
+        (g_lwinDown || g_rwinDown || g_winPConsumed || g_winPSequence)) {
+        ResetExplorerWinPState();
+        return CallNextHookEx(g_hook, code, wp, lp);
+    }
+
+    if (up && key->vkCode == 'P' && g_winPConsumed) {
+        g_winPConsumed = false;
         return 1;
     }
-    // Suppress auto-repeat P downs as well; only the first down starts the
-    // open/cycle action above.
-    if (down && key->vkCode == 'P' && g_dwmPConsumed)
+    // Suppress P auto-repeat while the physical Win+P sequence is active.
+    if (down && key->vkCode == 'P' && g_winPConsumed)
         return 1;
 
     if (up && (key->vkCode == VK_LWIN || key->vkCode == VK_RWIN) &&
-        g_dwmWinPSequence) {
-        const bool commit = g_dwmCycle;
-        g_dwmCycle = false;
-        g_dwmWinPSequence = false;
+        g_winPSequence) {
+        const bool commit = g_winPCycle;
+        g_winPCycle = false;
+        g_winPSequence = false;
         HWND panel = FindWindowW(kClass, NULL);
         if (commit && panel)
             PostMessageW(panel, WM_APP_COMMIT, 0, 0);
-        // Mask again immediately before the physical Win-up. This closes the
-        // race where the shell sees Win-up before the first menu-mask event.
-        MaskDwmWinKey();
-        return CallNextHookEx(g_dwmHook, code, wp, lp);
+        // Repeat the mask immediately before Win-up to cover the shell's
+        // key-up timing while still passing the physical Win-up through.
+        MaskExplorerWinKey();
+        return CallNextHookEx(g_hook, code, wp, lp);
     }
 
-    if (down && key->vkCode == 'P' && !g_dwmPConsumed &&
-        g_useWinP && DwmWinPModifiersDown()) {
+    if (down && key->vkCode == 'P' && !g_winPConsumed &&
+        g_useWinP && ExplorerWinPModifiersDown()) {
         HWND panel = FindWindowW(kClass, NULL);
-        // If the replacement panel is not present, leave the native Windows
-        // projection shortcut untouched rather than breaking Win+P outright.
+        // If Explorer has no panel, leave native Win+P untouched.
         if (!panel)
-            return CallNextHookEx(g_dwmHook, code, wp, lp);
+            return CallNextHookEx(g_hook, code, wp, lp);
 
-        g_dwmPConsumed = true;
-        g_dwmWinPSequence = true;
+        g_winPConsumed = true;
+        g_winPSequence = true;
         const bool visible = IsWindowVisible(panel) != FALSE;
-        g_dwmCycle = visible;
+        g_winPCycle = visible;
         if (g_debug)
-            Wh_Log(L"[DWM] Win+P intercepted panel=%p visible=%d cycle=%d",
-                   panel, visible ? 1 : 0, g_dwmCycle ? 1 : 0);
-        PostMessageW(panel, g_dwmCycle ? WM_APP_CYCLE : WM_APP_TOGGLE, 0, 0);
-        MaskDwmWinKey();
-        return 1; // suppress only the physical P down event
+            Wh_Log(L"[Hook] Win+P intercepted panel=%p visible=%d cycle=%d",
+                   panel, visible ? 1 : 0, g_winPCycle ? 1 : 0);
+        PostMessageW(panel, g_winPCycle ? WM_APP_CYCLE : WM_APP_TOGGLE, 0, 0);
+        MaskExplorerWinKey();
+        return 1;
     }
 
-    return CallNextHookEx(g_dwmHook, code, wp, lp);
-}
-
-static DWORD WINAPI DwmKeyboardThread(LPVOID) {
-    MSG queued = {};
-    PeekMessageW(&queued, NULL, WM_USER, WM_USER, PM_NOREMOVE);
-
-    HHOOK hook = SetWindowsHookExW(
-        WH_KEYBOARD_LL, DwmKeyboardProc, (HINSTANCE)&__ImageBase, 0);
-    g_dwmHook = hook;
-    InterlockedExchange(&g_dwmStarted, hook ? 1 : 0);
-    if (g_dwmReady.get()) SetEvent(g_dwmReady.get());
-
-    if (!hook) {
-        Wh_Log(L"[DWM] SetWindowsHookExW(WH_KEYBOARD_LL) failed, err=%u",
-               (unsigned)GetLastError());
-        return 0;
-    }
-    Wh_Log(L"[DWM] Win+P low-level hook installed: %p", hook);
-
-    MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
-        // The callback is dispatched by user32; the queue only keeps the hook
-        // thread alive and gives StopDwmKeyboardHook a clean WM_QUIT path.
-    }
-
-    g_dwmHook = NULL;
-    g_dwmPConsumed = false;
-    g_dwmWinPSequence = false;
-    g_dwmCycle = false;
-    g_dwmLwinDown = false;
-    g_dwmRwinDown = false;
-    return 0;
+    return CallNextHookEx(g_hook, code, wp, lp);
 }
 
 // Low-level mouse hook, active only while the panel is visible. Per the
@@ -3385,16 +3192,37 @@ static DWORD WINAPI StateThread(LPVOID) {
     return 0;
 }
 
-// This thread owns the on-demand low-level keyboard hook and the on-demand
-// low-level mouse hook. It always keeps a message queue so the UI thread can
-// request either hook without attaching input queues or doing hook work on the
-// painting thread.
+// This thread owns the Explorer Win+P hook and the on-demand low-level mouse
+// hook. It always keeps a message queue so hook callbacks stay off the UI
+// thread and the desktop-switch event can reset keyboard state on this thread.
 static DWORD WINAPI KeyboardHookThread(LPVOID) {
     MSG queued = {};
     PeekMessageW(&queued, NULL, WM_USER, WM_USER, PM_NOREMOVE); // create the queue first
-    SignalKeyboardReady(true);
+
+    ScopedWinEventHook desktopHook(SetWinEventHook(
+        EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH,
+        NULL, ExplorerDesktopSwitchProc, 0, 0, WINEVENT_OUTOFCONTEXT));
+    if (!desktopHook.get())
+        Wh_Log(L"[Hook] SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH) failed, err=%u",
+               (unsigned)GetLastError());
 
     ScopedHook kbHook;
+    if (g_useWinP) {
+        HHOOK kh = SetWindowsHookExW(
+            WH_KEYBOARD_LL, ExplorerWinPKeyboardProc, (HINSTANCE)&__ImageBase, 0);
+        if (!kh) {
+            Wh_Log(L"[Hook] SetWindowsHookExW(WH_KEYBOARD_LL) failed, err=%u",
+                   (unsigned)GetLastError());
+            SignalKeyboardReady(false);
+            return 0;
+        }
+        kbHook.reset(kh);
+        g_hook = kbHook.get();
+        g_keyboardHookWanted = true;
+        Wh_Log(L"[Hook] Explorer Win+P keyboard hook installed: %p", g_hook);
+    }
+    SignalKeyboardReady(true);
+
     ScopedHook mouseHook;
 
     try {
@@ -3408,11 +3236,12 @@ static DWORD WINAPI KeyboardHookThread(LPVOID) {
             if (msg.message == WM_HOOKCTL_KEYBOARD_ON) {
                 if (!kbHook.get()) {
                     HHOOK kh = SetWindowsHookExW(
-                        WH_KEYBOARD_LL, KbProc, (HINSTANCE)&__ImageBase, 0);
+                        WH_KEYBOARD_LL, ExplorerWinPKeyboardProc,
+                        (HINSTANCE)&__ImageBase, 0);
                     if (kh) {
                         kbHook.reset(kh);
                         g_hook = kbHook.get();
-                        Wh_Log(L"[Hook] on-demand keyboard hook installed: %p", g_hook);
+                        Wh_Log(L"[Hook] Explorer Win+P keyboard hook installed: %p", g_hook);
                     } else {
                         Wh_Log(L"[Hook] SetWindowsHookExW(WH_KEYBOARD_LL) failed, err=%u",
                                (unsigned)GetLastError());
@@ -3567,15 +3396,6 @@ static DWORD WINAPI UiThread(LPVOID) {
     return 0;
 }
 
-static bool IsDwmProcess() {
-    wchar_t path[MAX_PATH] = {};
-    DWORD length = GetModuleFileNameW(NULL, path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path)) return false;
-    const wchar_t* base = wcsrchr(path, L'\\');
-    base = base ? base + 1 : path;
-    return _wcsicmp(base, L"dwm.exe") == 0;
-}
-
 // The shell process owns GetShellWindow. If it is in the middle of restarting,
 // exclude the known folder-window command lines while waiting for its taskbar.
 static bool IsMainExplorerProcess() {
@@ -3621,47 +3441,6 @@ static void QuitAndJoinThread(WinHandle& thread, DWORD& threadId, const wchar_t*
     threadId = 0;
 }
 
-static bool StartDwmKeyboardHook() {
-    g_dwmReady.reset(CreateEventW(NULL, TRUE, FALSE, NULL));
-    InterlockedExchange(&g_dwmStarted, 0);
-    if (!g_dwmReady.get()) {
-        Wh_Log(L"[DWM] CreateEventW failed, err=%u", (unsigned)GetLastError());
-        return false;
-    }
-
-    HANDLE raw = CreateThread(NULL, 0, DwmKeyboardThread, NULL, 0, &g_dwmKeyboardTid);
-    g_dwmKeyboardThread.reset(raw);
-    if (!g_dwmKeyboardThread.get()) {
-        Wh_Log(L"[DWM] CreateThread failed, err=%u", (unsigned)GetLastError());
-        g_dwmReady.reset();
-        return false;
-    }
-
-    const DWORD wait = WaitForSingleObject(g_dwmReady.get(), 10000);
-    if (wait != WAIT_OBJECT_0 ||
-        InterlockedCompareExchange(&g_dwmStarted, 0, 0) == 0) {
-        Wh_Log(L"[DWM] keyboard hook did not start (wait=%u)", (unsigned)wait);
-        QuitAndJoinThread(g_dwmKeyboardThread, g_dwmKeyboardTid,
-                          L"DWM keyboard-hook thread");
-        g_dwmReady.reset();
-        return false;
-    }
-    return true;
-}
-
-static void StopDwmKeyboardHook() {
-    QuitAndJoinThread(g_dwmKeyboardThread, g_dwmKeyboardTid,
-                      L"DWM keyboard-hook thread");
-    g_dwmReady.reset();
-    InterlockedExchange(&g_dwmStarted, 0);
-    g_dwmHook = NULL;
-    g_dwmPConsumed = false;
-    g_dwmWinPSequence = false;
-    g_dwmCycle = false;
-    g_dwmLwinDown = false;
-    g_dwmRwinDown = false;
-}
-
 static void StopInfrastructure() {
     // Stop the hook thread first so it cannot post work to a panel that is
     // going away, then the state watchdog, then the panel itself.
@@ -3674,8 +3453,6 @@ static void StopInfrastructure() {
         g_stateThread.reset();
     }
 
-    UnsubclassTrayWindow();
-
     QuitAndJoinThread(g_uiThread, g_uiTid, L"UI thread");
 
     g_uiReady.reset();
@@ -3686,32 +3463,12 @@ static void StopInfrastructure() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isDwmProcess) {
-        // The DWM instance owns only the narrow keyboard hook. It must not
-        // touch the Explorer panel state or call UI helpers in this process.
-        LoadSettings();
-        if (g_useWinP && !g_dwmKeyboardThread.get())
-            StartDwmKeyboardHook();
-        else if (!g_useWinP && g_dwmKeyboardThread.get())
-            StopDwmKeyboardHook();
-        return;
-    }
-
     RunGuarded(L"applying settings", [] { LoadSettings(); RefreshState(); });
+    SetKeyboardHook(g_useWinP);
     InvalidatePanel();
 }
 
 BOOL Wh_ModInit() {
-    g_isDwmProcess = IsDwmProcess();
-    if (g_isDwmProcess) {
-        LoadSettings();
-        if (!g_useWinP) {
-            Wh_Log(L"[DWM] Win+P replacement is disabled by settings");
-            return TRUE;
-        }
-        return StartDwmKeyboardHook() ? TRUE : FALSE;
-    }
-
     if (!IsMainExplorerProcess()) {
         Wh_Log(L"[Init] not the main Explorer shell process; skipping");
         return FALSE;
@@ -3723,25 +3480,6 @@ BOOL Wh_ModInit() {
         g_freq = f.QuadPart ? f.QuadPart : 1;
 
         LoadSettings();
-
-        // Keep the taskbar subclass and registration observer as a compatibility
-        // path for builds that deliver Win+P as Explorer WM_HOTKEY. The primary
-        // path on current builds is the narrow hook running in dwm.exe; this
-        // Explorer instance never calls RegisterHotKey for the panel.
-        Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                           (void**)&g_createWindowExWOriginal);
-        Wh_SetFunctionHook((void*)RegisterHotKey, (void*)RegisterHotKey_Hook,
-                           (void**)&g_registerHotKeyOriginal);
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        if (user32) {
-            auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
-                user32, "CreateWindowInBand");
-            if (pCreateWindowInBand) {
-                Wh_SetFunctionHook((void*)pCreateWindowInBand,
-                                   (void*)CreateWindowInBand_Hook,
-                                   (void**)&g_createWindowInBandOriginal);
-            }
-        }
 
         g_uiReady.reset(CreateEventW(NULL, TRUE, FALSE, NULL));
         g_keyboardReady.reset(CreateEventW(NULL, TRUE, FALSE, NULL));
@@ -3776,6 +3514,7 @@ BOOL Wh_ModInit() {
             StopInfrastructure();
             return FALSE;
         }
+        SetKeyboardHook(g_useWinP);
 
         Wh_Log(L"[Init] initialized in the main Explorer shell process");
         return TRUE;
@@ -3790,21 +3529,7 @@ BOOL Wh_ModInit() {
     }
 }
 
-void Wh_ModAfterInit() {
-    if (g_isDwmProcess) return;
-
-    // If Explorer already had a taskbar when the mod loaded, the creation hook
-    // cannot see it. Subclass it once here; taskbars created later are handled
-    // by the creation hooks.
-    SubclassCurrentTrayWindow();
-}
-
 void Wh_ModUninit() {
-    if (g_isDwmProcess) {
-        StopDwmKeyboardHook();
-        return;
-    }
-
     RunGuarded(L"Wh_ModUninit", [] {
         Wh_Log(L"[Uninit] shutting down, exceptions=%u", g_exceptionCount.load());
         StopInfrastructure();
