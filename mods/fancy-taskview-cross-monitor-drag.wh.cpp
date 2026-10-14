@@ -5,9 +5,8 @@
 // @version         0.7.0
 // @author          His Fanciness
 // @github          https://github.com/HisFanciness
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -luser32 -lole32 -loleaut32 -luuid
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lole32 -loleaut32 -luuid -lshell32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,9 +26,9 @@ Move windows between monitors by dragging their thumbnails in Windows 11 Task Vi
 - Virtual desktop assignments do not change.
 - Elevated or protected windows may not accept movement requests.
 - Some applications adjust their own dimensions when changing monitors.
-- Window positions are remembered for the current Explorer session.
-
-Diagnostic log: `%TEMP%\FancyTaskViewMove.log`.
+- Window positions are remembered while the mod is running.
+- Windows with duplicate titles on the source monitor cannot be identified.
+- A thumbnail whose name differs from its window title cannot be identified.
 */
 // ==/WindhawkModReadme==
 
@@ -55,27 +54,26 @@ Diagnostic log: `%TEMP%\FancyTaskViewMove.log`.
   $name: Remember window position and size per monitor
 - AllowMaximized: true
   $name: Move maximized windows
-- DetailedLogging: false
-  $name: Enable detailed logging
 */
 // ==/WindhawkModSettings==
 
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <strsafe.h>
 #include <uiautomation.h>
 #include <cwchar>
+#include <atomic>
+#include <new>
+#include <shellapi.h>
+#include <shellscalingapi.h>
 
 static constexpr UINT kInspect = WM_APP + 0x61;
 static constexpr UINT kMove = WM_APP + 0x62;
-static constexpr UINT kTrace = WM_APP + 0x63;
-static bool g_enableMovement = true;
-static bool g_allowMaximized = true;
-static int g_geometryMode = 0;  // 0 proportional, 1 pixels, 2 DPI
-static bool g_keepEdgeAlignment = false;
-static bool g_rememberPerMonitorGeometry = true;
-static int g_afterMove = 0;   // 0 stay, 1 close, 2 reopen
-static bool g_detailedLogging = false;
+static std::atomic<bool> g_enableMovement = true;
+static std::atomic<bool> g_allowMaximized = true;
+static std::atomic<int> g_geometryMode = 0;  // 0 proportional, 1 pixels, 2 DPI
+static std::atomic<bool> g_keepEdgeAlignment = false;
+static std::atomic<bool> g_rememberPerMonitorGeometry = true;
+static std::atomic<int> g_afterMove = 0;   // 0 stay, 1 close, 2 reopen
 static HANDLE g_mouseThread = nullptr;
 static DWORD g_mouseThreadId = 0;
 static HANDLE g_mouseReady = nullptr;
@@ -84,15 +82,12 @@ static LONG g_mouseStatus = 0;
 static HANDLE g_worker = nullptr;
 static DWORD g_workerId = 0;
 static HANDLE g_workerReady = nullptr;
-static WCHAR g_logPath[MAX_PATH] = {};
 static LONG g_dragSequence = 0;
 static bool g_dragging = false;       // Mouse thread only
 static HMONITOR g_startMonitor = nullptr;
 static HMONITOR g_lastMonitor = nullptr;
 static POINT g_startPt = {};
 static DWORD g_startTick = 0;
-// The identification result belongs to the ordered UIA worker, not the mouse
-// hook. v0.5.1's shared g_candidate caused missed fast drags.
 static volatile LONG g_mousePressed = 0;
 
 struct Probe {
@@ -106,52 +101,79 @@ struct MoveRequest {
     HMONITOR source;
     HMONITOR destination;
     LONG sequence;
-    DWORD durationMs;
-    POINT dropPoint;
-    POINT startPoint;
     DWORD releaseTick;
 };
 
-struct Trace {
-    WCHAR message[320];
-};
-
-// A WH_MOUSE_LL callback must finish promptly. File I/O stays off the
-// mouse hook thread to prevent Windows silently timing out our hook.
-static void TraceFromMouseHook(const WCHAR* note) {
-    Trace* item = new Trace{};
-    if (!item) return;
-    StringCchCopyW(item->message, ARRAYSIZE(item->message), note);
-    if (!PostThreadMessageW(g_workerId, kTrace,
-                            reinterpret_cast<WPARAM>(item), 0)) delete item;
+static DWORD ShellProcessId() {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetShellWindow(), &pid);
+    return pid;
 }
 
-struct Locate {
-    POINT pt;
-    HWND found;
-};
-
-static BOOL CALLBACK FindTaskView(HWND window, LPARAM p) {
-    Locate* lookup = reinterpret_cast<Locate*>(p);
-    if (!IsWindowVisible(window)) return TRUE;
-    WCHAR cls[80] = {}, text[80] = {};
-    if (GetClassNameW(window, cls, ARRAYSIZE(cls)) == 0 ||
-        lstrcmpW(cls, L"XamlExplorerHostIslandWindow") != 0 ||
-        GetWindowTextW(window, text, ARRAYSIZE(text)) == 0 ||
-        lstrcmpW(text, L"Task View") != 0) return TRUE;
+static bool IsTaskViewHost(HWND window, RECT* bounds = nullptr) {
+    if (!window || !IsWindowVisible(window)) return false;
+    WCHAR cls[80] = {};
+    if (!GetClassNameW(window, cls, ARRAYSIZE(cls)) ||
+        lstrcmpW(cls, L"XamlExplorerHostIslandWindow") != 0) return false;
     DWORD pid = 0;
     GetWindowThreadProcessId(window, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;
+    const DWORD shellPid = ShellProcessId();
+    if (!shellPid || pid != shellPid) return false;
     RECT rect = {};
-    if (!GetWindowRect(window, &rect) || !PtInRect(&rect, lookup->pt)) return TRUE;
-    lookup->found = window;
-    return FALSE;
+    MONITORINFO monitor = {sizeof(monitor)};
+    if (!GetWindowRect(window, &rect) ||
+        !GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONULL), &monitor))
+        return false;
+    // Task View covers a monitor; Alt+Tab uses the same class but a smaller host.
+    if (rect.left > monitor.rcMonitor.left || rect.top > monitor.rcMonitor.top ||
+        rect.right < monitor.rcMonitor.right || rect.bottom < monitor.rcMonitor.bottom)
+        return false;
+    if (bounds) *bounds = rect;
+    return true;
+}
+
+struct TaskViewHost {
+    HWND hwnd;
+    RECT bounds;
+};
+// Both WinEvent callbacks and the mouse hook run on the mouse thread.
+static TaskViewHost g_hosts[32] = {};
+static HWINEVENTHOOK g_hostEvents = nullptr;
+
+static void UpdateTaskViewHost(HWND hwnd) {
+    RECT bounds = {};
+    const bool host = IsTaskViewHost(hwnd, &bounds);
+    int freeSlot = -1;
+    for (int i = 0; i < ARRAYSIZE(g_hosts); ++i) {
+        if (g_hosts[i].hwnd == hwnd) {
+            g_hosts[i] = host ? TaskViewHost{hwnd, bounds} : TaskViewHost{};
+            return;
+        }
+        if (!g_hosts[i].hwnd && freeSlot == -1) freeSlot = i;
+    }
+    if (host && freeSlot != -1) g_hosts[freeSlot] = {hwnd, bounds};
+}
+
+static BOOL CALLBACK CacheTaskViewHost(HWND hwnd, LPARAM) {
+    UpdateTaskViewHost(hwnd);
+    return TRUE;
+}
+
+static void CALLBACK HostEvent(HWINEVENTHOOK, DWORD event, HWND hwnd,
+                               LONG object, LONG child, DWORD, DWORD) {
+    if (!hwnd || object != OBJID_WINDOW || child != CHILDID_SELF) return;
+    if (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY) {
+        for (auto& host : g_hosts) if (host.hwnd == hwnd) host = {};
+    } else if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_LOCATIONCHANGE) {
+        UpdateTaskViewHost(hwnd);
+    }
 }
 
 static HWND TaskViewAt(POINT pt) {
-    Locate lookup = {pt, nullptr};
-    EnumWindows(FindTaskView, reinterpret_cast<LPARAM>(&lookup));
-    return lookup.found;
+    // No enumeration, cross-thread window messages, or UIA inside the LL hook.
+    for (const auto& host : g_hosts)
+        if (host.hwnd && PtInRect(&host.bounds, pt)) return host.hwnd;
+    return nullptr;
 }
 
 static void MonitorName(HMONITOR monitor, WCHAR* out, size_t chars) {
@@ -162,27 +184,6 @@ static void MonitorName(HMONITOR monitor, WCHAR* out, size_t chars) {
     } else {
         StringCchCopyW(out, chars, L"unknown");
     }
-}
-
-static void Log(const WCHAR* message) {
-    if (!g_logPath[0]) return;
-    SYSTEMTIME st = {};
-    GetLocalTime(&st);
-    WCHAR line[1024] = {};
-    if (FAILED(StringCchPrintfW(line, ARRAYSIZE(line),
-        L"%02u:%02u:%02u.%03u | %s\r\n", st.wHour, st.wMinute,
-        st.wSecond, st.wMilliseconds, message))) return;
-    int len = WideCharToMultiByte(CP_UTF8, 0, line, -1, nullptr, 0, nullptr, nullptr);
-    if (len <= 1 || len > 4096) return;
-    char utf8[4096] = {};
-    if (!WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8, len, nullptr, nullptr)) return;
-    HANDLE file = CreateFileW(g_logPath, FILE_APPEND_DATA,
-        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
-        FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    WriteFile(file, utf8, static_cast<DWORD>(len - 1), &written, nullptr);
-    CloseHandle(file);
 }
 
 struct WindowMatch {
@@ -201,7 +202,7 @@ static BOOL CALLBACK FindTitleMatch(HWND hwnd, LPARAM context) {
     if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != match->requiredMonitor)
         return TRUE;
     WCHAR title[1024] = {};
-    int n = GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+    int n = InternalGetWindowText(hwnd, title, ARRAYSIZE(title));
     if (!n || lstrcmpiW(title, match->title) != 0) return TRUE;
     ++match->matches;
     match->hwnd = hwnd;
@@ -217,12 +218,11 @@ static HWND ResolveAtPoint(IUIAutomation* automation, IUIAutomationTreeWalker* w
         WCHAR note[180] = {};
         StringCchPrintfW(note, ARRAYSIZE(note), L"PROBE #%ld ElementFromPoint failed hr=0x%08lX",
                          probe.sequence, static_cast<unsigned long>(hr));
-        Log(note);
+        Wh_Log(L"%s", note);
         return nullptr;
     }
 
     HWND unique = nullptr;
-    int distinctMatches = 0;
     int totalLevels = 0;
     for (int level = 0; level < 12 && current; ++level) {
         ++totalLevels;
@@ -238,14 +238,13 @@ static HWND ResolveAtPoint(IUIAutomation* automation, IUIAutomationTreeWalker* w
             // The clicked point may be a descendant of the card. Accept
             // only the nearest ListItem with a unique EXACT window title.
             // Avoid enumerating all app windows for generic parent panels.
-            if (type == 50007 && level <= 4) {
+            if (type == UIA_ListItemControlTypeId && level <= 4) {
                 WindowMatch match = {name, probe.monitor, nullptr, 0};
                 EnumWindows(FindTitleMatch, reinterpret_cast<LPARAM>(&match));
                 count = match.matches;
                 candidate = match.hwnd;
                 if (count == 1) {
                     unique = candidate;
-                    distinctMatches = 1;
                 }
             }
         }
@@ -255,10 +254,9 @@ static HWND ResolveAtPoint(IUIAutomation* automation, IUIAutomationTreeWalker* w
             L"exactSourceMonitorMatches=%d hwnd=%p",
             probe.sequence, level, static_cast<long>(type), nameLen,
             count, count == 1 ? candidate : nullptr);
-        if (g_detailedLogging) Log(note);
+        Wh_Log(L"%s", note);
         if (name) SysFreeString(name);
-        // The first matching ListItem is all we need to move. Avoid the
-        // previous six slow parent COM calls on every successful drag.
+        // Stop after identifying the nearest matching ListItem.
         if (unique) {
             current->Release();
             current = nullptr;
@@ -276,9 +274,9 @@ static HWND ResolveAtPoint(IUIAutomation* automation, IUIAutomationTreeWalker* w
     StringCchPrintfW(result, ARRAYSIZE(result),
         L"PROBE #%ld COMPLETE levels=%d uniqueCandidate=%s hwnd=%p",
         probe.sequence, totalLevels,
-        distinctMatches == 1 ? L"yes" : L"no",
-        distinctMatches == 1 ? unique : nullptr);
-    if (g_detailedLogging || !unique) Log(result);
+        unique != nullptr ? L"yes" : L"no",
+        unique != nullptr ? unique : nullptr);
+    Wh_Log(L"%s", result);
     return unique;
 }
 
@@ -296,7 +294,7 @@ static LONG RectWidth(const RECT& r) { return r.right - r.left; }
 static LONG RectHeight(const RECT& r) { return r.bottom - r.top; }
 
 // Kept on the single UIA worker thread. It intentionally does not survive a
-// Windhawk/Explorer restart or retain a window across process recreation.
+// mod restart or retain a window across process recreation.
 struct SavedGeometry {
     HWND hwnd;
     DWORD pid;
@@ -347,16 +345,7 @@ static bool LoadGeometry(HWND hwnd, HMONITOR monitor, RECT* output) {
 }
 
 static BOOL CALLBACK CountTaskViewHost(HWND host, LPARAM context) {
-    if (!IsWindowVisible(host)) return TRUE;
-    WCHAR cls[80] = {}, title[80] = {};
-    if (!GetClassNameW(host, cls, ARRAYSIZE(cls)) ||
-        lstrcmpW(cls, L"XamlExplorerHostIslandWindow") != 0 ||
-        !GetWindowTextW(host, title, ARRAYSIZE(title)) ||
-        lstrcmpW(title, L"Task View") != 0) return TRUE;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(host, &pid);
-    if (pid == GetCurrentProcessId())
-        ++(*reinterpret_cast<int*>(context));
+    if (IsTaskViewHost(host)) ++(*reinterpret_cast<int*>(context));
     return TRUE;
 }
 static int TaskViewHostCount() {
@@ -389,20 +378,20 @@ static void ApplyAfterMove(LONG sequence) {
     if (afterMove == 0) return;
     if (InterlockedCompareExchange(&g_mousePressed, 0, 0) ||
         sequence != InterlockedCompareExchange(&g_dragSequence, 0, 0)) {
-        Log(L"REFRESH skipped, another mouse interaction already started");
+        Wh_Log(L"REFRESH skipped, another mouse interaction already started");
         return;
     }
     int before = TaskViewHostCount();
     if (before == 0) {
-        Log(L"REFRESH skipped, Task View already gone");
+        Wh_Log(L"REFRESH skipped, Task View already gone");
         return;
     }
     // Only inject hotkeys while Task View's own Explorer process has focus.
     // Otherwise Esc could dismiss an unrelated application's dialog.
     DWORD foregroundPid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
-    if (foregroundPid != GetCurrentProcessId()) {
-        Log(L"REFRESH skipped, Task View Explorer process not in foreground");
+    if (!foregroundPid || foregroundPid != ShellProcessId()) {
+        Wh_Log(L"REFRESH skipped, Task View Explorer process not in foreground");
         return;
     }
     // Do not interfere with user input, held modifiers, or another drag.
@@ -410,17 +399,17 @@ static void ApplyAfterMove(LONG sequence) {
                             VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN};
     for (int key : heldKeys) {
         if (GetAsyncKeyState(key) & 0x8000) {
-            Log(L"REFRESH skipped, key/button currently held");
+            Wh_Log(L"REFRESH skipped, key/button currently held");
             return;
         }
     }
     if (InterlockedCompareExchange(&g_mousePressed, 0, 0) ||
         sequence != InterlockedCompareExchange(&g_dragSequence, 0, 0)) {
-        Log(L"REFRESH skipped, new drag before Esc");
+        Wh_Log(L"REFRESH skipped, new drag before Esc");
         return;
     }
     if (!KeyStroke(VK_ESCAPE)) {
-        Log(L"REFRESH failed, Esc SendInput unsuccessful");
+        Wh_Log(L"REFRESH failed, Esc SendInput unsuccessful");
         return;
     }
     int gone = 0;
@@ -429,18 +418,18 @@ static void ApplyAfterMove(LONG sequence) {
         if (TaskViewHostCount() == 0) { gone = 1; break; }
     }
     if (!gone) {
-        Log(L"AFTER_MOVE Escape did not close Task View; no further action");
+        Wh_Log(L"AFTER_MOVE Escape did not close Task View; no further action");
         return;
     }
     if (afterMove == 1) {
-        Log(L"AFTER_MOVE Task View closed");
+        Wh_Log(L"AFTER_MOVE Task View closed");
         return;
     }
     // Only reopen after we verified the original interface disappeared.
     Sleep(65);
     if (InterlockedCompareExchange(&g_mousePressed, 0, 0) ||
         sequence != InterlockedCompareExchange(&g_dragSequence, 0, 0)) {
-        Log(L"REFRESH reopen aborted, another gesture started");
+        Wh_Log(L"REFRESH reopen aborted, another gesture started");
         return;
     }
     bool opened = OpenTaskViewShortcut();
@@ -449,18 +438,18 @@ static void ApplyAfterMove(LONG sequence) {
     StringCchPrintfW(note, ARRAYSIZE(note),
         L"AFTER_MOVE #%ld reopenSent=%s newHosts=%d",
         sequence, opened ? L"yes" : L"no", TaskViewHostCount());
-    Log(note);
+    Wh_Log(L"%s", note);
 }
 
 static void MoveWindowToMonitor(const MoveRequest& req) {
     // Give native Task View a chance to finish its mouseup handling.
     Sleep(130);
     if (GetTickCount() - req.releaseTick > 4500) {
-        Log(L"SKIP stale move request (UI Automation queue was delayed)");
+        Wh_Log(L"SKIP stale move request (UI Automation queue was delayed)");
         return;
     }
     if (InterlockedCompareExchange(&g_mousePressed, 0, 0)) {
-        Log(L"SKIP another drag began before pending move");
+        Wh_Log(L"SKIP another drag began before pending move");
         return;
     }
     WCHAR note[512] = {};
@@ -469,32 +458,32 @@ static void MoveWindowToMonitor(const MoveRequest& req) {
         MonitorFromWindow(req.hwnd, MONITOR_DEFAULTTONULL) != req.source) {
         StringCchPrintfW(note, ARRAYSIZE(note),
             L"SKIP #%ld candidate moved, vanished, or no longer on source", req.sequence);
-        Log(note);
+        Wh_Log(L"%s", note);
         return;
     }
     WCHAR cls[80] = {};
     GetClassNameW(req.hwnd, cls, ARRAYSIZE(cls));
     if (lstrcmpW(cls, L"XamlExplorerHostIslandWindow") == 0) {
-        Log(L"SKIP shell's Task View window");
+        Wh_Log(L"SKIP shell's Task View window");
         return;
     }
     MONITORINFO src = {}, dst = {};
     src.cbSize = sizeof(src);
     dst.cbSize = sizeof(dst);
     if (!GetMonitorInfoW(req.source, &src) || !GetMonitorInfoW(req.destination, &dst)) {
-        Log(L"SKIP monitor information unavailable");
+        Wh_Log(L"SKIP monitor information unavailable");
         return;
     }
     WINDOWPLACEMENT placement = {};
     placement.length = sizeof(placement);
     if (!GetWindowPlacement(req.hwnd, &placement) ||
         placement.showCmd == SW_SHOWMINIMIZED || IsIconic(req.hwnd)) {
-        Log(L"SKIP window minimized or placement unavailable");
+        Wh_Log(L"SKIP window minimized or placement unavailable");
         return;
     }
     const bool maximized = IsZoomed(req.hwnd) != FALSE;
     if (maximized && !g_allowMaximized) {
-        Log(L"SKIP maximized window movement disabled");
+        Wh_Log(L"SKIP maximized window movement disabled");
         return;
     }
     bool restored = false;
@@ -502,7 +491,7 @@ static void MoveWindowToMonitor(const MoveRequest& req) {
         ShowWindowAsync(req.hwnd, SW_RESTORE);
         for (int i = 0; i < 12 && IsZoomed(req.hwnd); ++i) Sleep(25);
         restored = !IsZoomed(req.hwnd);
-        if (!restored) { Log(L"SKIP restore timed out"); return; }
+        if (!restored) { Wh_Log(L"SKIP restore timed out"); return; }
     }
     RECT oldRect = {};
     if (!GetWindowRect(req.hwnd, &oldRect)) {
@@ -516,11 +505,12 @@ static void MoveWindowToMonitor(const MoveRequest& req) {
     const LONG w = RectWidth(oldRect), h = RectHeight(oldRect);
     if (srcW < 100 || srcH < 100 || dstW < 100 || dstH < 100 ||
         w < 100 || h < 50 || w > 20000 || h > 20000) {
-        Log(L"SKIP invalid work/window dimensions");
+        Wh_Log(L"SKIP invalid work/window dimensions");
         if (restored) ShowWindowAsync(req.hwnd, SW_MAXIMIZE);
         return;
     }
-    const UINT srcDpi = GetDpiForWindow(req.hwnd);
+    UINT srcDpi = 96, srcDpiY = 96;
+    GetDpiForMonitor(req.source, MDT_EFFECTIVE_DPI, &srcDpi, &srcDpiY);
     RECT targetRect = {};
     const bool cached = LoadGeometry(req.hwnd, req.destination, &targetRect);
     double scale = 1.0;
@@ -530,15 +520,8 @@ static void MoveWindowToMonitor(const MoveRequest& req) {
             const double sy = double(dstH) / double(srcH);
             scale = sx < sy ? sx : sy;
         } else if (g_geometryMode == 2) {
-            // Destination monitor's DPI is only available with Shcore's
-            // GetDpiForMonitor; dynamic import avoids hard dependency.
-            using GetDpiFn = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-            HMODULE shcore = GetModuleHandleW(L"shcore.dll");
-            if (!shcore) shcore = LoadLibraryW(L"shcore.dll");
             UINT dx = 96, dy = 96;
-            auto getDpi = shcore ? reinterpret_cast<GetDpiFn>(
-                GetProcAddress(shcore, "GetDpiForMonitor")) : nullptr;
-            if (getDpi && SUCCEEDED(getDpi(req.destination, 0, &dx, &dy)) && srcDpi)
+            if (SUCCEEDED(GetDpiForMonitor(req.destination, MDT_EFFECTIVE_DPI, &dx, &dy)) && srcDpi)
                 scale = double(dx) / double(srcDpi);
         }
         // Both dimensions use one factor: preserve the outer aspect ratio.
@@ -588,10 +571,10 @@ static void MoveWindowToMonitor(const MoveRequest& req) {
     StringCchPrintfW(note, ARRAYSIZE(note),
         L"PLAN #%ld src=(%ld,%ld %ldx%ld) dst=(%ld,%ld %ldx%ld) mode=%d scale=%.3f cached=%s dpi=%u",
         req.sequence, oldRect.left, oldRect.top, w, h,
-        tx, ty, tw, th, g_geometryMode, scale, cached ? L"yes" : L"no", srcDpi);
-    Log(note);
+        tx, ty, tw, th, g_geometryMode.load(), scale, cached ? L"yes" : L"no", srcDpi);
+    Wh_Log(L"%s", note);
     if (!g_enableMovement) {
-        Log(L"DRY_RUN movement disabled");
+        Wh_Log(L"DRY_RUN movement disabled");
         if (restored) ShowWindowAsync(req.hwnd, SW_MAXIMIZE);
         return;
     }
@@ -610,7 +593,7 @@ static void MoveWindowToMonitor(const MoveRequest& req) {
             L"PASS1 #%ld rect=(%ld,%ld %ldx%ld) delta=(%ld,%ld %ldx%ld) dpi=%u",
             req.sequence, after.left, after.top, RectWidth(after), RectHeight(after),
             deltaX, deltaY, deltaW, deltaH, GetDpiForWindow(req.hwnd));
-        Log(note);
+        Wh_Log(L"%s", note);
         // A single bounded second pass can correct unwanted DPI auto-resizing.
         // It cannot override an app's enforced minimum size.
         if (!maximized && (deltaW > 3 || deltaW < -3 || deltaH > 3 || deltaH < -3 ||
@@ -632,18 +615,19 @@ static void MoveWindowToMonitor(const MoveRequest& req) {
         now == req.destination ? L"yes" : L"no",
         observed.left, observed.top, RectWidth(observed), RectHeight(observed),
         IsZoomed(req.hwnd) ? L"yes" : L"no", GetDpiForWindow(req.hwnd));
-    Log(note);
+    Wh_Log(L"%s", note);
     if (!ok && error == ERROR_ACCESS_DENIED)
-        Log(L"ACCESS_DENIED Windows refused to move the target; often an elevated/protected process. No app-specific override is attempted.");
+        Wh_Log(L"ACCESS_DENIED Windows refused to move the target; often an elevated/protected process. No app-specific override is attempted.");
     if (now == req.destination && ok) {
         SaveGeometry(req.hwnd, req.source, oldRect);
         ApplyAfterMove(req.sequence);
     } else if (ok) {
-        Log(L"WARN movement posted but destination monitor was not observed");
+        Wh_Log(L"WARN movement posted but destination monitor was not observed");
     }
 }
 
 static DWORD WINAPI AutomationThread(void*) {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG msg = {};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     SetEvent(g_workerReady);
@@ -657,7 +641,7 @@ static DWORD WINAPI AutomationThread(void*) {
     if (SUCCEEDED(hr) && automation) hr = automation->get_RawViewWalker(&walker);
     WCHAR note[140] = {};
     StringCchPrintfW(note, ARRAYSIZE(note), L"UIA worker init hr=0x%08lX", static_cast<unsigned long>(hr));
-    Log(note);
+    Wh_Log(L"%s", note);
 
     HWND inspectedHwnd = nullptr;
     LONG inspectedSequence = -1;
@@ -669,12 +653,9 @@ static DWORD WINAPI AutomationThread(void*) {
                 inspectedSequence = probe->sequence;
                 if (SUCCEEDED(hr) && automation && walker)
                     inspectedHwnd = ResolveAtPoint(automation, walker, *probe);
-                else Log(L"SKIP identification unavailable, UIA not initialised");
+                else Wh_Log(L"SKIP identification unavailable, UIA not initialised");
                 delete probe;
             }
-        } else if (msg.message == kTrace) {
-            Trace* record = reinterpret_cast<Trace*>(msg.wParam);
-            if (record) { Log(record->message); delete record; }
         } else if (msg.message == kMove) {
             MoveRequest* req = reinterpret_cast<MoveRequest*>(msg.wParam);
             if (req) {
@@ -685,9 +666,9 @@ static DWORD WINAPI AutomationThread(void*) {
                     StringCchPrintfW(diagnostic, ARRAYSIZE(diagnostic),
                         L"SKIP #%ld no identified thumbnail (probeSequence=%ld match=%p)",
                         req->sequence, inspectedSequence, inspectedHwnd);
-                    Log(diagnostic);
+                    Wh_Log(L"%s", diagnostic);
                 } else if (InterlockedCompareExchange(&g_mousePressed, 0, 0)) {
-                    Log(L"SKIP a new drag is already in progress");
+                    Wh_Log(L"SKIP a new drag is already in progress");
                 } else {
                     req->hwnd = inspectedHwnd;
                     MoveWindowToMonitor(*req);
@@ -696,6 +677,10 @@ static DWORD WINAPI AutomationThread(void*) {
                 delete req;
             }
         }
+    }
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        if (msg.message == kInspect) delete reinterpret_cast<Probe*>(msg.wParam);
+        else if (msg.message == kMove) delete reinterpret_cast<MoveRequest*>(msg.wParam);
     }
     if (walker) walker->Release();
     if (automation) automation->Release();
@@ -717,14 +702,14 @@ static LRESULT CALLBACK MouseHook(int code, WPARAM msg, LPARAM param) {
                     g_startTick = GetTickCount();
                     InterlockedExchange(&g_mousePressed, 1);
                     LONG seq = InterlockedIncrement(&g_dragSequence);
-                    Probe* probe = new Probe{p, g_startMonitor, seq};
-                    if (!PostThreadMessageW(g_workerId, kInspect, reinterpret_cast<WPARAM>(probe), 0))
+                    Probe* probe = new (std::nothrow) Probe{p, g_startMonitor, seq};
+                    if (probe && !PostThreadMessageW(g_workerId, kInspect, reinterpret_cast<WPARAM>(probe), 0))
                         delete probe;
                     WCHAR mon[80], note[250];
                     MonitorName(g_startMonitor, mon, ARRAYSIZE(mon));
                     StringCchPrintfW(note, ARRAYSIZE(note),
                         L"DOWN #%ld x=%ld y=%ld monitor=%s", seq, p.x, p.y, mon);
-                    if (g_detailedLogging) TraceFromMouseHook(note);
+                    Wh_Log(L"%s", note);
                 }
             } else if (g_dragging && msg == WM_MOUSEMOVE) {
                 HMONITOR newMon = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
@@ -734,7 +719,7 @@ static LRESULT CALLBACK MouseHook(int code, WPARAM msg, LPARAM param) {
                     StringCchPrintfW(note, ARRAYSIZE(note),
                         L"CROSS x=%ld y=%ld into=%s taskview=%s",
                         p.x, p.y, mon, TaskViewAt(p) ? L"yes" : L"no");
-                    if (g_detailedLogging) TraceFromMouseHook(note);
+                    Wh_Log(L"%s", note);
                     g_lastMonitor = newMon;
                 }
             } else if (g_dragging && (msg == WM_LBUTTONUP || msg == WM_RBUTTONDOWN)) {
@@ -748,7 +733,7 @@ static LRESULT CALLBACK MouseHook(int code, WPARAM msg, LPARAM param) {
                     p.x, p.y, mon,
                     dest == g_startMonitor ? L"no" : L"yes",
                     overTaskView ? L"yes" : L"no", elapsed);
-                if (g_detailedLogging) TraceFromMouseHook(note);
+                Wh_Log(L"%s", note);
                 const LONG deltaX = p.x - g_startPt.x;
                 const LONG deltaY = p.y - g_startPt.y;
                 const bool travelled = (deltaX >= 40 || deltaX <= -40 ||
@@ -757,18 +742,18 @@ static LRESULT CALLBACK MouseHook(int code, WPARAM msg, LPARAM param) {
                     dest != g_startMonitor && overTaskView &&
                     elapsed >= 150 && travelled);
                 if (validDrop) {
-                    MoveRequest* req = new MoveRequest{nullptr, g_startMonitor, dest,
+                    MoveRequest* req = new (std::nothrow) MoveRequest{nullptr, g_startMonitor, dest,
                         InterlockedCompareExchange(&g_dragSequence, 0, 0),
-                        elapsed, p, g_startPt, GetTickCount()};
-                    if (!PostThreadMessageW(g_workerId, kMove,
+                        GetTickCount()};
+                    if (!req || !PostThreadMessageW(g_workerId, kMove,
                             reinterpret_cast<WPARAM>(req), 0)) {
                         delete req;
-                        TraceFromMouseHook(L"ERROR unable to queue window movement");
+                        Wh_Log(L"ERROR unable to queue window movement");
                     } else {
-                        if (g_detailedLogging) TraceFromMouseHook(L"QUEUE move request queued for post-release processing");
+                        Wh_Log(L"QUEUE move request queued for post-release processing");
                     }
                 } else if (dest != g_startMonitor) {
-                    TraceFromMouseHook(L"SKIP release rejected: wrong mouse button, Task View closed, or drag too short");
+                    Wh_Log(L"SKIP release rejected: wrong mouse button, Task View closed, or drag too short");
                 }
                 g_dragging = false;
                 InterlockedExchange(&g_mousePressed, 0);
@@ -779,33 +764,40 @@ static LRESULT CALLBACK MouseHook(int code, WPARAM msg, LPARAM param) {
 }
 
 static DWORD WINAPI MouseThread(void*) {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG msg = {};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_hostEvents = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE,
+        nullptr, HostEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    if (g_hostEvents) EnumWindows(CacheTaskViewHost, 0);
     HMODULE module = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(&MouseHook), &module);
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook, module, 0);
+    if (g_hostEvents)
+        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook, module, 0);
     InterlockedExchange(&g_mouseStatus, g_mouseHook ? 1 : -1);
     SetEvent(g_mouseReady);
-    if (!g_mouseHook) return 1;
-    Log(L"START v0.7 ordered movement");
+    if (!g_mouseHook) {
+        if (g_hostEvents) UnhookWinEvent(g_hostEvents);
+        g_hostEvents = nullptr;
+        return 1;
+    }
+    Wh_Log(L"START ordered movement");
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
     UnhookWindowsHookEx(g_mouseHook);
     g_mouseHook = nullptr;
-    Log(L"STOP v0.7 ordered movement");
+    UnhookWinEvent(g_hostEvents);
+    g_hostEvents = nullptr;
+    for (auto& host : g_hosts) host = {};
+    Wh_Log(L"STOP ordered movement");
     return 0;
 }
 
-BOOL Wh_ModInit(void) {
-    WCHAR temp[MAX_PATH] = {};
-    DWORD n = GetTempPathW(ARRAYSIZE(temp), temp);
-    if (n == 0 || n >= ARRAYSIZE(temp) ||
-        FAILED(StringCchPrintfW(g_logPath, ARRAYSIZE(g_logPath),
-                                L"%sFancyTaskViewMove.log", temp))) return FALSE;
+static void LoadSettings() {
     g_enableMovement = Wh_GetIntSetting(L"EnableMovement") != 0;
     g_allowMaximized = Wh_GetIntSetting(L"AllowMaximized") != 0;
     PCWSTR choice = Wh_GetStringSetting(L"GeometryChoice");
@@ -818,59 +810,232 @@ BOOL Wh_ModInit(void) {
     g_afterMove = (after && lstrcmpiW(after, L"close") == 0) ? 1 :
                   (after && lstrcmpiW(after, L"reopen") == 0) ? 2 : 0;
     if (after) Wh_FreeStringSetting(after);
-    g_detailedLogging = Wh_GetIntSetting(L"DetailedLogging") != 0;
-    g_workerReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_mouseReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_workerReady || !g_mouseReady) goto fail;
-    g_worker = CreateThread(nullptr, 0, AutomationThread, nullptr, 0, &g_workerId);
-    if (!g_worker || WaitForSingleObject(g_workerReady, 5000) != WAIT_OBJECT_0) goto fail;
-    g_mouseThread = CreateThread(nullptr, 0, MouseThread, nullptr, 0, &g_mouseThreadId);
-    if (!g_mouseThread || WaitForSingleObject(g_mouseReady, 5000) != WAIT_OBJECT_0 ||
-        InterlockedCompareExchange(&g_mouseStatus, 0, 0) != 1) goto fail;
-    return TRUE;
-fail:
-    if (g_mouseThread) {
-        PostThreadMessageW(g_mouseThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_mouseThread, 2000);
-        CloseHandle(g_mouseThread); g_mouseThread = nullptr;
-    }
-    if (g_worker) {
-        PostThreadMessageW(g_workerId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_worker, 2000);
-        CloseHandle(g_worker); g_worker = nullptr;
-    }
-    if (g_workerReady) { CloseHandle(g_workerReady); g_workerReady = nullptr; }
-    if (g_mouseReady) { CloseHandle(g_mouseReady); g_mouseReady = nullptr; }
-    return FALSE;
 }
 
-void Wh_ModUninit(void) {
+static void StopThreads() {
+    // Readiness is signalled only after each thread's message queue exists.
+    // Stop the producer first, then join the consumer before unloading code.
     if (g_mouseThread) {
         PostThreadMessageW(g_mouseThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_mouseThread, INFINITE);
-        CloseHandle(g_mouseThread); g_mouseThread = nullptr;
+        CloseHandle(g_mouseThread);
+        g_mouseThread = nullptr;
+        g_mouseThreadId = 0;
     }
     if (g_worker) {
         PostThreadMessageW(g_workerId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_worker, INFINITE);
-        CloseHandle(g_worker); g_worker = nullptr;
+        CloseHandle(g_worker);
+        g_worker = nullptr;
+        g_workerId = 0;
     }
     if (g_workerReady) { CloseHandle(g_workerReady); g_workerReady = nullptr; }
     if (g_mouseReady) { CloseHandle(g_mouseReady); g_mouseReady = nullptr; }
+    g_dragging = false;
+    InterlockedExchange(&g_mousePressed, 0);
 }
 
-void Wh_ModSettingsChanged(void) {
-    g_enableMovement = Wh_GetIntSetting(L"EnableMovement") != 0;
-    g_allowMaximized = Wh_GetIntSetting(L"AllowMaximized") != 0;
-    PCWSTR choice = Wh_GetStringSetting(L"GeometryChoice");
-    g_geometryMode = (choice && lstrcmpiW(choice, L"pixels") == 0) ? 1 :
-                     (choice && lstrcmpiW(choice, L"dpi") == 0) ? 2 : 0;
-    if (choice) Wh_FreeStringSetting(choice);
-    g_keepEdgeAlignment = Wh_GetIntSetting(L"KeepEdgeAlignment") != 0;
-    g_rememberPerMonitorGeometry = Wh_GetIntSetting(L"RememberPerMonitorGeometry") != 0;
-    PCWSTR after = Wh_GetStringSetting(L"AfterMove");
-    g_afterMove = (after && lstrcmpiW(after, L"close") == 0) ? 1 :
-                  (after && lstrcmpiW(after, L"reopen") == 0) ? 2 : 0;
-    if (after) Wh_FreeStringSetting(after);
-    g_detailedLogging = Wh_GetIntSetting(L"DetailedLogging") != 0;
+BOOL WhTool_ModInit(void) {
+    LoadSettings();
+    g_workerReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_mouseReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_workerReady || !g_mouseReady) goto fail;
+    g_worker = CreateThread(nullptr, 0, AutomationThread, nullptr, 0, &g_workerId);
+    if (!g_worker) goto fail;
+    WaitForSingleObject(g_workerReady, INFINITE);
+    g_mouseThread = CreateThread(nullptr, 0, MouseThread, nullptr, 0, &g_mouseThreadId);
+    if (!g_mouseThread) goto fail;
+    WaitForSingleObject(g_mouseReady, INFINITE);
+    if (InterlockedCompareExchange(&g_mouseStatus, 0, 0) != 1) goto fail;
+    return TRUE;
+fail:
+    StopThreads();
+    return FALSE;
+}
+
+void WhTool_ModUninit(void) {
+    StopThreads();
+}
+
+void WhTool_ModSettingsChanged(void) {
+    LoadSettings();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
