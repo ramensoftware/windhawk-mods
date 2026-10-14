@@ -69,7 +69,7 @@ path, so it looks like a camera motion blur rather than a trail.
 
 // ==WindhawkModSettings==
 /*
-- opacity: 50
+- trailOpacity: 50
   $name: Trail opacity (%)
   $description: 1-100. How solid the blur is right behind the pointer.
 - drawSpeed: 29
@@ -167,7 +167,7 @@ static double Dist(Sample a, Sample b) {
 static int Clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 static void LoadSettings() {
-    g_opacity = Clamp(Wh_GetIntSetting(L"opacity"), 1, 100);
+    g_opacity = Clamp(Wh_GetIntSetting(L"trailOpacity"), 1, 100);
     g_trailMs = Clamp(Wh_GetIntSetting(L"trailMs"), 10, 150);
     g_hideWhenFast = Wh_GetIntSetting(L"hideWhenFast") != 0;
     g_hideSpeedCm = Clamp(Wh_GetIntSetting(L"hideSpeed"), 20, 300);
