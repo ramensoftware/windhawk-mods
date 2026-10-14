@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-14T15:06:06.000Z</updated>
+    <updated>2026-10-14T19:02:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Audio Hardware Volume Preset 1.3.0]]></title>
+        <id>https://windhawk.net/mods/audio-hardware-volume-preset#9ff243a5cae4724a61b55393e976db12d7bfdfd1</id>
+        <link href="https://windhawk.net/mods/audio-hardware-volume-preset"/>
+        <updated>2026-10-14T19:02:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="audiohardwarevolumepreset">Audio Hardware Volume Preset</h1>
+<p>Automatically sets your headphones, speakers, Bluetooth headsets, USB DACs, or
+any other audio playback hardware to a specific preset volume whenever they
+connect.</p>
+<h2 id="keyfeatures">Key Features</h2>
+<ul>
+<li><strong>Prevent Sudden Hearing Blasts:</strong> Never plug in headphones only to be blasted
+by 100% volume again.</li>
+<li><strong>Smart Hardware Matching:</strong> Supports flexible keyword and token matching. You
+can enter simple keywords (like <code>AirPods</code>, <code>Sony</code>, <code>DAC</code>, <code>Speakers</code>) or full
+device names.</li>
+<li><strong>Max Volume Safety Cap:</strong> Set a ceiling on the preset volume applied at
+connect time (up to 100%).</li>
+<li><strong>Global Fallback:</strong> Set any unrecognized audio device to a safe default
+volume (e.g., 30%).</li>
+<li><strong>Auto-Unmute:</strong> Optionally unmute the device on connection.</li>
+<li><strong>Intelligent Debouncing:</strong> Prevents duplicate triggers when Windows fires
+multiple rapid connection events.</li>
+<li><strong>Safe & Efficient:</strong> Runs as a dedicated background tool mod using standard Windows Core
+Audio event notifications (<code>IMMNotificationClient</code>). Zero polling, zero idle CPU
+usage.</li>
+</ul>
+<p><strong>Note:</strong> Volume presets are also applied when switching the default audio
+output between already-connected devices. The first matching custom rule wins,
+so place more specific rules before general ones.</p>]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar System Info 1.7.2]]></title>
         <id>https://windhawk.net/mods/taskbar-system-info#61383b397cd68d6ab9da69049518ef89ac492128</id>
@@ -924,46 +959,6 @@ Pointers</em>.</p>]]></content>
         <author>
             <name>Nuzza</name>
             <uri>https://github.com/Nuzza</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Spatial Order 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-spatial-order#ada6e8fcff1875621a78829001fd10753caf23cd</id>
-        <link href="https://windhawk.net/mods/taskbar-spatial-order"/>
-        <updated>2026-10-12T22:04:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarspatialorder">Taskbar Spatial Order</h1>
-<p>Keeps each app's windows on the taskbar in the order they sit on your screens,
-left to right, then top to bottom, rather than roughly the order they were
-opened. Hover over an app's taskbar button and its leftmost window is the
-leftmost thumbnail; uncombined buttons follow the same order.</p>
-<p>Without the mod, the previews follow the order the windows were opened:</p>
-<p><img src="https://raw.githubusercontent.com/SixFive7/taskbar-spatial-order/main/images/without.gif" alt="without" /></p>
-<p>With it, they follow the windows on screen:</p>
-<p><img src="https://raw.githubusercontent.com/SixFive7/taskbar-spatial-order/main/images/with.gif" alt="with" /></p>
-<p>The order follows as windows move, are minimised or restored, open or close.
-The mod waits until things have been still for a moment, and while a window
-is dragged or the Start menu, search, notifications or a jump list is open.</p>
-<p>By default, minimised windows go last and a group whose windows are all
-minimised is left alone. The settings can change both and exclude apps.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Windows 11 24H2 and later, with its own taskbar, tested on build 26300;
-older versions are untested. The mod relies on internal taskbar functions
-found through Windows debug symbols, which an update can change; if one is
-missing or looks unexpected, the mod logs it and does nothing.</li>
-<li>A button that moves is taken off the taskbar and put back, which can show
-as a brief animation. Only buttons that are out of place move, and they keep
-their progress bar, overlay badge and thumbnail toolbar buttons.</li>
-<li>The mod's order wins: a window moved to another place in its group, by hand
-or by another mod, goes back at the next sort.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The move-and-refresh technique and the code that finds the taskbar's lists
-are adapted from <a href="https://windhawk.net/mods/taskbar-thumbnail-reorder">Taskbar Thumbnail Reorder</a> by <a href="https://github.com/m417z">m417z</a>, with
-a smaller part from his <a href="https://windhawk.net/mods/taskbar-wheel-cycle">Cycle taskbar buttons with mouse wheel</a> mod.</p>]]></content>
-        <author>
-            <name>Jori Huisman</name>
-            <uri>https://github.com/SixFive7</uri>
         </author>
     </entry>
 </feed>

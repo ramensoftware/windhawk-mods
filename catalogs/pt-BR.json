@@ -669,6 +669,30 @@
         "version": "1.0.0"
       }
     },
+    "audio-hardware-volume-preset": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792004542000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792004542000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Dev-StudioCode",
+        "compilerOptions": "-lole32 -lshell32",
+        "description": "Sets audio playback devices to a configured volume whenever they connect",
+        "github": "https://github.com/Dev-StudioCode",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Audio Hardware Volume Preset",
+        "version": "1.3.0"
+      }
+    },
     "audio-scroll-switcher": {
       "details": {
         "defaultSorting": 5022,
