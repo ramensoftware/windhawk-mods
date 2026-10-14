@@ -185,6 +185,9 @@ struct BarState {
     Media::Animation::Storyboard waveStoryboard{nullptr};
     DispatcherTimer hideTimer{nullptr};
 
+    /// The strip's click handler, kept so it can be detached on unload.
+    winrt::Windows::Foundation::IInspectable tapHandler{nullptr};
+
     // Which track's cover each layer currently holds, so a cover that arrives
     // after the title still gets written, and nothing is decoded twice.
     std::wstring artKeyA;
@@ -325,30 +328,49 @@ Controls::Button MakeTransportButton(PCWSTR glyph, double size) {
 /// Wires a left-click. PointerPressed rather than Click because Click is not
 /// reliably hookable from here, but it fires for every button, so a right-click
 /// would otherwise open the popover and swallow the taskbar context menu.
+///
+/// Returns the boxed handler. The caller must keep it and pass it to
+/// RemoveHandler before unload: the delegate is code in the mod image, and XAML
+/// would otherwise release it whenever it gets round to destroying the element,
+/// which can be after the image has been unmapped.
 template <typename TAction>
-void OnLeftTap(UIElement element, TAction action) {
-    element.AddHandler(
-        UIElement::PointerPressedEvent(),
-        winrt::box_value(Input::PointerEventHandler(
-            [action](winrt::Windows::Foundation::IInspectable const& sender,
-                     Input::PointerRoutedEventArgs const& args) {
-                try {
-                    auto element = sender.try_as<UIElement>();
-                    if (!element) {
-                        return;
-                    }
-
-                    auto point = args.GetCurrentPoint(element);
-                    if (!point || !point.Properties().IsLeftButtonPressed()) {
-                        return;
-                    }
-
-                    action();
-                } catch (const winrt::hresult_error&) {
-                    // Never let a click take the taskbar down with it.
+winrt::Windows::Foundation::IInspectable OnLeftTap(UIElement element,
+                                                   TAction action) {
+    auto handler = winrt::box_value(Input::PointerEventHandler(
+        [action](winrt::Windows::Foundation::IInspectable const& sender,
+                 Input::PointerRoutedEventArgs const& args) {
+            try {
+                auto element = sender.try_as<UIElement>();
+                if (!element) {
+                    return;
                 }
-            })),
-        true);
+
+                auto point = args.GetCurrentPoint(element);
+                if (!point || !point.Properties().IsLeftButtonPressed()) {
+                    return;
+                }
+
+                action();
+            } catch (const winrt::hresult_error&) {
+                // Never let a click take the taskbar down with it.
+            }
+        }));
+
+    element.AddHandler(UIElement::PointerPressedEvent(), handler, true);
+    return handler;
+}
+
+void DetachLeftTap(UIElement element,
+                   winrt::Windows::Foundation::IInspectable const& handler) {
+    if (!element || !handler) {
+        return;
+    }
+
+    try {
+        element.RemoveHandler(UIElement::PointerPressedEvent(), handler);
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Detaching a click handler failed: %08X", e.code().value);
+    }
 }
 
 /// Bars scale about their centre line, so they grow symmetrically the way an audio
@@ -952,12 +974,56 @@ void RefreshThreadProc() {
     }
 }
 
+/// The popover's buttons carry the same kind of delegate as the strip, and the
+/// popover is rebuilt on every open. Strong references are deliberate: holding
+/// the elements ourselves means the handlers are released when we drop them,
+/// during teardown while the mod is still loaded, rather than whenever XAML
+/// happens to destroy the popover - which can be after unload.
+struct TrackedHandler {
+    UIElement element{nullptr};
+    winrt::Windows::Foundation::IInspectable handler{nullptr};
+};
+
+[[clang::no_destroy]] Controls::Flyout g_openFlyout{nullptr};
+[[clang::no_destroy]] std::vector<TrackedHandler> g_flyoutHandlers;
+
+/// Detaches the popover's handlers and, optionally, closes it. UI thread only.
+void ReleaseFlyout(bool hide) {
+    for (auto& tracked : g_flyoutHandlers) {
+        DetachLeftTap(tracked.element, tracked.handler);
+        tracked.element = nullptr;
+        tracked.handler = nullptr;
+    }
+    g_flyoutHandlers.clear();
+
+    if (g_openFlyout) {
+        if (hide) {
+            try {
+                g_openFlyout.Hide();
+            } catch (const winrt::hresult_error& e) {
+                Wh_Log(L"Hiding the popover failed: %08X", e.code().value);
+            }
+        }
+
+        g_openFlyout = nullptr;
+    }
+}
+
+template <typename TAction>
+void TrackedLeftTap(UIElement element, TAction action) {
+    g_flyoutHandlers.push_back(
+        TrackedHandler{element, OnLeftTap(element, action)});
+}
+
 /// Opens the player popover: full artwork, track, transport, shuffle and repeat.
 /// Built fresh each time from the last snapshot, so nothing needs syncing.
 void ShowPlayerFlyout(FrameworkElement anchor) {
     if (!anchor) {
         return;
     }
+
+    // Drop the previous popover's handlers before building a new one.
+    ReleaseFlyout(true);
 
     const auto& track = g_lastState;
 
@@ -1031,7 +1097,7 @@ void ShowPlayerFlyout(FrameworkElement anchor) {
                 {L"AccentFillColorDefaultBrush"},
                 winrt::Windows::UI::ColorHelper::FromArgb(0xFF, 0x00, 0x78, 0xD4)));
         }
-        OnLeftTap(shuffle, []() {
+        TrackedLeftTap(shuffle, []() {
             if (auto session = CurrentSession()) {
                 session.TryChangeShuffleActiveAsync(!g_lastState.shuffle);
             }
@@ -1039,7 +1105,7 @@ void ShowPlayerFlyout(FrameworkElement anchor) {
         transport.Children().Append(shuffle);
 
         auto previous = MakeTransportButton(L"", 24);
-        OnLeftTap(previous, []() {
+        TrackedLeftTap(previous, []() {
             if (auto session = CurrentSession()) {
                 session.TrySkipPreviousAsync();
             }
@@ -1048,7 +1114,7 @@ void ShowPlayerFlyout(FrameworkElement anchor) {
 
         auto playPause =
             MakeTransportButton(track.playing ? L"" : L"", 28);
-        OnLeftTap(playPause, []() {
+        TrackedLeftTap(playPause, []() {
             if (auto session = CurrentSession()) {
                 session.TryTogglePlayPauseAsync();
             }
@@ -1056,7 +1122,7 @@ void ShowPlayerFlyout(FrameworkElement anchor) {
         transport.Children().Append(playPause);
 
         auto next = MakeTransportButton(L"", 24);
-        OnLeftTap(next, []() {
+        TrackedLeftTap(next, []() {
             if (auto session = CurrentSession()) {
                 session.TrySkipNextAsync();
             }
@@ -1069,7 +1135,7 @@ void ShowPlayerFlyout(FrameworkElement anchor) {
                 {L"AccentFillColorDefaultBrush"},
                 winrt::Windows::UI::ColorHelper::FromArgb(0xFF, 0x00, 0x78, 0xD4)));
         }
-        OnLeftTap(repeat, []() {
+        TrackedLeftTap(repeat, []() {
             if (auto session = CurrentSession()) {
                 session.TryChangeAutoRepeatModeAsync(
                     g_lastState.repeatOn
@@ -1147,6 +1213,8 @@ void ShowPlayerFlyout(FrameworkElement anchor) {
         -static_cast<float>(kFlyoutGap),
         static_cast<float>(anchor.ActualWidth() > 0 ? anchor.ActualWidth() : 1.0),
         static_cast<float>(anchor.ActualHeight() + kFlyoutGap)});
+
+    g_openFlyout = flyout;
 
     flyout.ShowAt(anchor, options);
 }
@@ -1277,7 +1345,7 @@ void EnsureBar(FrameworkElement taskbarFrameElement) {
     // bar it is attached to alive.
     bar.Background(Media::SolidColorBrush{winrt::Windows::UI::Colors::Transparent()});
     winrt::weak_ref<FrameworkElement> weakBar = bar;
-    OnLeftTap(bar, [weakBar]() {
+    auto tapHandler = OnLeftTap(bar, [weakBar]() {
         if (!g_unloading) {
             ShowPlayerFlyout(weakBar.get());
         }
@@ -1290,6 +1358,7 @@ void EnsureBar(FrameworkElement taskbarFrameElement) {
 
     BarState state;
     state.bar = bar;
+    state.tapHandler = tapHandler;
     bars.push_back(std::move(state));
 
     Wh_Log(L"Fluent Music bar added to a taskbar (%zu total)", bars.size());
@@ -1300,6 +1369,11 @@ void EnsureBar(FrameworkElement taskbarFrameElement) {
 /// Tears down every strip. Must run on the UI thread: all of this has thread
 /// affinity and would throw RPC_E_WRONG_THREAD from Windhawk's callback thread.
 void RemoveBarsOnUiThread() {
+    // Close the popover and drop its handlers first: it holds a strip as its
+    // anchor, which would otherwise keep that element - and its handler - alive
+    // past unload.
+    ReleaseFlyout(true);
+
     if (!g_bars) {
         return;
     }
@@ -1322,6 +1396,11 @@ void RemoveBarsOnUiThread() {
             }
 
             if (auto bar = state.bar.get()) {
+                // Detach before removing: XAML can keep a removed element alive
+                // for a while, and releasing the delegate after FreeLibrary
+                // would be a call into an unmapped image.
+                DetachLeftTap(bar, state.tapHandler);
+
                 auto parent =
                     Media::VisualTreeHelper::GetParent(bar).try_as<Controls::Panel>();
                 if (parent) {
@@ -1335,6 +1414,7 @@ void RemoveBarsOnUiThread() {
             Wh_Log(L"Removing a bar failed: %08X", e.code().value);
         }
 
+        state.tapHandler = nullptr;
         state.bar = nullptr;
     }
 
@@ -1343,6 +1423,88 @@ void RemoveBarsOnUiThread() {
     g_artStream = nullptr;
     g_lastState = NowPlaying{};
 }
+
+// Both helpers are the established ones from taskbar-labels. They give unload a
+// synchronous round-trip through the taskbar thread's message loop, which
+// RunAsync(...).get() alone does not: .get() returns while that thread is still
+// inside the mod's own Completed delegate.
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+/// Does nothing on purpose. Unload only needs the round-trip itself: once this
+/// has been called, the taskbar thread has returned to its message loop and is
+/// therefore no longer executing anything in the mod image.
+void WINAPI SettleOnWindowThread(PVOID) {}
 
 using TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t = void(WINAPI*)(void* pThis);
 TaskbarFrame_OnTaskbarLayoutChildBoundsChanged_t
@@ -1509,6 +1671,8 @@ void Wh_ModUninit() {
     auto dispatcher = GetDispatcher();
     if (dispatcher) {
         try {
+            // Low priority, so this runs after every Normal item the hook and
+            // the worker already queued.
             dispatcher
                 .RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
                           []() { RemoveBarsOnUiThread(); })
@@ -1516,6 +1680,15 @@ void Wh_ModUninit() {
         } catch (const winrt::hresult_error& e) {
             Wh_Log(L"UI teardown failed: %08X", e.code().value);
         }
+    }
+
+    // .get() above wakes this thread from a Completed delegate that is itself
+    // code in the mod image, so the taskbar thread is still inside the mod when
+    // it returns. This SendMessage round-trip comes back only once that thread
+    // is in its message loop again, which means it has left. All taskbars share
+    // one thread, so one call covers every strip.
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd, SettleOnWindowThread, nullptr);
     }
 
     {
