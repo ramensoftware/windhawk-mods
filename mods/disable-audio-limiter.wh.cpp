@@ -29,8 +29,6 @@ or reboot.
 #include <vector>
 #include <algorithm>
 
-namespace {
-
 constexpr wchar_t kTargetPathSuffix[] =
     L"classes\\clsid\\{d69e0717-dd4b-4b25-997a-da813833b8ac}\\inprocserver32";
 
@@ -93,9 +91,6 @@ bool ShouldBlock(const wchar_t* apiName, HKEY hKey,
 bool IsDefaultValueName(LPCWSTR name) { return !name || !*name; }
 bool IsDefaultValueNameA(LPCSTR name) { return !name || !*name; }
 
-}  // namespace
-
-// ---- RegQueryValueExW ----
 using RegQueryValueExW_t = decltype(&RegQueryValueExW);
 RegQueryValueExW_t RegQueryValueExW_Original;
 
@@ -110,57 +105,14 @@ LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey, LPCWSTR lpValueName,
                                       lpData, lpcbData);
 }
 
-// ---- RegQueryValueExA ----
-using RegQueryValueExA_t = decltype(&RegQueryValueExA);
-RegQueryValueExA_t RegQueryValueExA_Original;
-
-LSTATUS WINAPI RegQueryValueExA_Hook(HKEY hKey, LPCSTR lpValueName,
-                                      LPDWORD lpReserved, LPDWORD lpType,
-                                      LPBYTE lpData, LPDWORD lpcbData) {
-    if (IsDefaultValueNameA(lpValueName) &&
-        ShouldBlock(L"RegQueryValueExA", hKey)) {
-        return ERROR_ACCESS_DENIED;
-    }
-    return RegQueryValueExA_Original(hKey, lpValueName, lpReserved, lpType,
-                                      lpData, lpcbData);
-}
-
-// ---- Legacy RegQueryValueW/A (also read the (Default) value) ----
-using RegQueryValueW_t = decltype(&RegQueryValueW);
-RegQueryValueW_t RegQueryValueW_Original;
-
-LSTATUS WINAPI RegQueryValueW_Hook(HKEY hKey, LPCWSTR lpSubKey,
-                                    LPWSTR lpValue, PLONG lpcbValue) {
-    if (ShouldBlock(L"RegQueryValueW", hKey, lpSubKey ? lpSubKey : L"")) {
-        return ERROR_ACCESS_DENIED;
-    }
-    return RegQueryValueW_Original(hKey, lpSubKey, lpValue, lpcbValue);
-}
-
-using RegQueryValueA_t = decltype(&RegQueryValueA);
-RegQueryValueA_t RegQueryValueA_Original;
-
-LSTATUS WINAPI RegQueryValueA_Hook(HKEY hKey, LPCSTR lpSubKey, LPSTR lpValue,
-                                    PLONG lpcbValue) {
-    if (ShouldBlock(L"RegQueryValueA", hKey, AnsiToWide(lpSubKey))) {
-        return ERROR_ACCESS_DENIED;
-    }
-    return RegQueryValueA_Original(hKey, lpSubKey, lpValue, lpcbValue);
-}
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Init: Block CLSID InProcServer32 default value read mod");
 
     pNtQueryKey = (NtQueryKey_t)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey");
 
-    Wh_SetFunctionHook((void*)RegQueryValueExW, (void*)RegQueryValueExW_Hook,
-                        (void**)&RegQueryValueExW_Original);
-    Wh_SetFunctionHook((void*)RegQueryValueExA, (void*)RegQueryValueExA_Hook,
-                        (void**)&RegQueryValueExA_Original);
-    Wh_SetFunctionHook((void*)RegQueryValueW, (void*)RegQueryValueW_Hook,
-                        (void**)&RegQueryValueW_Original);
-    Wh_SetFunctionHook((void*)RegQueryValueA, (void*)RegQueryValueA_Hook,
-                        (void**)&RegQueryValueA_Original);
+    Wh_SetFunctionHook((void*)GetProcAddress(LoadLibrary(L"kernelbase.dll"), "RegQueryValueExW"), (void*)RegQueryValueExW_Hook, (void**)&RegQueryValueExW_Original);
 
     return TRUE;
+   
 }
