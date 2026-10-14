@@ -9,7 +9,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lwinhttp
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lwinhttp
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,17 +29,26 @@ Replaces the Windows 11 taskbar clock with a clock face inspired by the
 
 ## Weather
 
-Weather comes from [Open-Meteo](https://open-meteo.com/) (free, no API key).
-Set a city name or `latitude,longitude` in the settings. If the location is
-left empty, it's approximated from your public IP address using
-[ipwho.is](https://ipwho.is/), or [GeoJS](https://www.geojs.io/) if that fails.
-Turn the weather line off in the settings if you don't want the mod to make any
-network requests.
+The weather line is off by default, and the mod makes no network requests until
+it's turned on. To show it, enable **Show weather** in the settings and enter a
+city name or `latitude,longitude` as the location. Weather then comes from
+[Open-Meteo](https://open-meteo.com/) (free, no API key), and a city name is
+looked up with Open-Meteo's geocoding service.
+
+Alternatively, enable **Detect location from IP address** to leave the location
+empty. Your public IP address is then sent to [ipwho.is](https://ipwho.is/), or
+to [GeoJS](https://www.geojs.io/) if that fails, to approximate your location.
 
 ## Fonts
 
 The default font is Bahnschrift, which ships with Windows. Any installed font
 can be used, e.g. a monospaced one such as Cascadia Mono, or a dot matrix font.
+
+## Other clock mods
+
+This mod hides the original clock text and draws its own clock face, so changes
+from other clock mods, such as Taskbar Clock Customization, aren't visible
+while it's enabled.
 */
 // ==/WindhawkModReadme==
 
@@ -93,13 +102,20 @@ can be used, e.g. a monospaced one such as Cascadia Mono, or a dot matrix font.
     Fill color of the day pill and the weather bubble, e.g. #D71921 for Nothing
     red. Leave empty to use the text color.
 - weather:
-  - enabled: true
+  - enabled: false
     $name: Show weather
+    $description: >-
+      Shows the current weather from Open-Meteo (open-meteo.com). Requires a
+      location below.
   - location: ""
     $name: Location
     $description: >-
       A city name (e.g. Shanghai) or latitude,longitude (e.g. 31.23,121.47).
-      Leave empty to approximate the location from your IP address.
+  - detectLocation: false
+    $name: Detect location from IP address
+    $description: >-
+      If the location is empty, approximate it from your public IP address. The
+      IP address is sent to ipwho.is, or to get.geojs.io if that fails.
   - fahrenheit: false
     $name: Use Fahrenheit
   - updateMinutes: 15
@@ -161,10 +177,18 @@ struct Settings {
     CursorMode cursor = CursorMode::Blink;
     std::optional<winrt::Windows::UI::Color> textColor;
     std::optional<winrt::Windows::UI::Color> accentColor;
-    bool weatherEnabled = true;
+    bool weatherEnabled = false;
     std::wstring weatherLocation;
+    bool weatherDetectLocation = false;
     bool weatherFahrenheit = false;
     int weatherUpdateMinutes = 15;
+
+    // Whether the weather can be fetched at all: it's opt-in, and the location
+    // is only detected from the IP address if that's explicitly enabled.
+    bool ShouldFetchWeather() const {
+        return weatherEnabled &&
+               (!weatherLocation.empty() || weatherDetectLocation);
+    }
 };
 
 // Accessed from the taskbar UI thread once the mod is initialized.
@@ -239,7 +263,7 @@ Settings LoadSettings() {
                                            : 500;
 
     int fontSize = Wh_GetIntSetting(L"fontSize");
-    s.fontSize = fontSize < 6 ? 13 : fontSize > 40 ? 40 : fontSize;
+    s.fontSize = fontSize < 6 ? 6 : fontSize > 40 ? 40 : fontSize;
 
     s.use24Hour = Wh_GetIntSetting(L"use24Hour");
     s.showSeconds = Wh_GetIntSetting(L"showSeconds");
@@ -254,6 +278,7 @@ Settings LoadSettings() {
 
     s.weatherEnabled = Wh_GetIntSetting(L"weather.enabled");
     s.weatherLocation = Trim(str(L"weather.location"));
+    s.weatherDetectLocation = Wh_GetIntSetting(L"weather.detectLocation");
     s.weatherFahrenheit = Wh_GetIntSetting(L"weather.fahrenheit");
     int updateMinutes = Wh_GetIntSetting(L"weather.updateMinutes");
     s.weatherUpdateMinutes =
@@ -282,28 +307,37 @@ struct Coordinates {
 std::mutex g_weatherMutex;
 WeatherData g_weather;
 
-// Guards starting and stopping the weather thread.
+// Guards starting and stopping the weather thread. The thread object isn't
+// destroyed at process exit, where Wh_ModUninit isn't called and destroying a
+// joinable std::thread would terminate the process.
 std::mutex g_weatherThreadMutex;
-std::thread g_weatherThread;
+[[clang::no_destroy]] std::optional<std::thread> g_weatherThread;
 HANDLE g_weatherStopEvent;
 std::atomic<bool> g_weatherThreadStarted;
 
-std::optional<std::string> HttpsGet(PCWSTR host,
+// State shared by the requests of the weather thread.
+struct WeatherContext {
+    HINTERNET session;
+    HANDLE stopEvent;
+
+    bool IsStopping() const {
+        return WaitForSingleObject(stopEvent, 0) != WAIT_TIMEOUT;
+    }
+};
+
+std::optional<std::string> HttpsGet(const WeatherContext& context,
+                                    PCWSTR host,
                                     const std::wstring& pathAndQuery) {
     std::optional<std::string> result;
 
-    HINTERNET session =
-        WinHttpOpen(L"MicrographicsClock-WindhawkMod/1.0",
-                    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
-                    WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) {
+    // Each request can take a while on a bad network, so check for a pending
+    // stop before starting a new one.
+    if (context.IsStopping()) {
         return result;
     }
 
-    WinHttpSetTimeouts(session, 5000, 5000, 5000, 8000);
-
-    HINTERNET connect =
-        WinHttpConnect(session, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET connect = WinHttpConnect(context.session, host,
+                                       INTERNET_DEFAULT_HTTPS_PORT, 0);
     HINTERNET request =
         connect ? WinHttpOpenRequest(connect, L"GET", pathAndQuery.c_str(),
                                      nullptr, WINHTTP_NO_REFERER,
@@ -357,7 +391,6 @@ std::optional<std::string> HttpsGet(PCWSTR host,
     if (connect) {
         WinHttpCloseHandle(connect);
     }
-    WinHttpCloseHandle(session);
 
     return result;
 }
@@ -541,16 +574,23 @@ std::wstring FormatNumber(double value, int decimals) {
     return result;
 }
 
-std::optional<Coordinates> ResolveLocation(const std::wstring& location) {
+std::optional<Coordinates> ResolveLocation(const WeatherContext& context,
+                                           const std::wstring& location,
+                                           bool detectLocation) {
     if (location.empty()) {
-        // Approximate the location from the public IP address.
-        if (auto body = HttpsGet(L"ipwho.is",
+        if (!detectLocation) {
+            return std::nullopt;
+        }
+        // Approximate the location from the public IP address, which the user
+        // opted into.
+        if (auto body = HttpsGet(context, L"ipwho.is",
                                  L"/?fields=success,latitude,longitude")) {
             if (auto c = CoordinatesFromJson(*body)) {
                 return c;
             }
         }
-        if (auto body = HttpsGet(L"get.geojs.io", L"/v1/ip/geo.json")) {
+        if (auto body =
+                HttpsGet(context, L"get.geojs.io", L"/v1/ip/geo.json")) {
             if (auto c = CoordinatesFromJson(*body)) {
                 return c;
             }
@@ -563,7 +603,7 @@ std::optional<Coordinates> ResolveLocation(const std::wstring& location) {
         return c;
     }
 
-    auto body = HttpsGet(L"geocoding-api.open-meteo.com",
+    auto body = HttpsGet(context, L"geocoding-api.open-meteo.com",
                          L"/v1/search?count=1&format=json&name=" +
                              UrlEncode(location));
     if (body) {
@@ -578,7 +618,8 @@ std::optional<Coordinates> ResolveLocation(const std::wstring& location) {
     return std::nullopt;
 }
 
-std::optional<WeatherData> FetchWeather(const Coordinates& coordinates,
+std::optional<WeatherData> FetchWeather(const WeatherContext& context,
+                                        const Coordinates& coordinates,
                                         bool fahrenheit) {
     std::wstring path =
         L"/v1/forecast?current=temperature_2m,weather_code,is_day&latitude=" +
@@ -588,7 +629,7 @@ std::optional<WeatherData> FetchWeather(const Coordinates& coordinates,
         path += L"&temperature_unit=fahrenheit";
     }
 
-    auto body = HttpsGet(L"api.open-meteo.com", path);
+    auto body = HttpsGet(context, L"api.open-meteo.com", path);
     if (!body) {
         return std::nullopt;
     }
@@ -617,10 +658,23 @@ std::optional<WeatherData> FetchWeather(const Coordinates& coordinates,
 
 void WeatherThreadProc(HANDLE stopEvent,
                        std::wstring location,
+                       bool detectLocation,
                        bool fahrenheit,
                        int updateMinutes) {
     constexpr ULONGLONG kMinRetryMs = 30 * 1000;
     constexpr ULONGLONG kMaxRetryMs = 10 * 60 * 1000;
+
+    HINTERNET session =
+        WinHttpOpen(L"MicrographicsClock-WindhawkMod/1.0",
+                    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
+                    WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) {
+        Wh_Log(L"WinHttpOpen failed: %u", GetLastError());
+        return;
+    }
+    WinHttpSetTimeouts(session, 5000, 5000, 5000, 8000);
+
+    WeatherContext context{session, stopEvent};
 
     std::optional<Coordinates> coordinates;
     ULONGLONG retryMs = kMinRetryMs;
@@ -628,10 +682,10 @@ void WeatherThreadProc(HANDLE stopEvent,
     for (;;) {
         bool ok = false;
         if (!coordinates) {
-            coordinates = ResolveLocation(location);
+            coordinates = ResolveLocation(context, location, detectLocation);
         }
         if (coordinates) {
-            if (auto data = FetchWeather(*coordinates, fahrenheit)) {
+            if (auto data = FetchWeather(context, *coordinates, fahrenheit)) {
                 std::lock_guard<std::mutex> lock(g_weatherMutex);
                 g_weather = *data;
                 ok = true;
@@ -650,6 +704,7 @@ void WeatherThreadProc(HANDLE stopEvent,
         // Wait in slices and compare against the tick count, which keeps
         // advancing while the computer sleeps, so that the weather is
         // refreshed soon after waking up.
+        bool stopping = false;
         ULONGLONG deadline = GetTickCount64() + delay;
         for (;;) {
             ULONGLONG now = GetTickCount64();
@@ -660,16 +715,23 @@ void WeatherThreadProc(HANDLE stopEvent,
             DWORD slice =
                 remaining > 30000 ? 30000 : static_cast<DWORD>(remaining);
             if (WaitForSingleObject(stopEvent, slice) != WAIT_TIMEOUT) {
-                return;
+                stopping = true;
+                break;
             }
         }
+        if (stopping) {
+            break;
+        }
     }
+
+    WinHttpCloseHandle(session);
 }
 
 void StopWeatherThread() {
-    if (g_weatherThread.joinable()) {
+    if (g_weatherThread) {
         SetEvent(g_weatherStopEvent);
-        g_weatherThread.join();
+        g_weatherThread->join();
+        g_weatherThread.reset();
     }
     if (g_weatherStopEvent) {
         CloseHandle(g_weatherStopEvent);
@@ -679,17 +741,18 @@ void StopWeatherThread() {
 
 void StartWeatherThread(const Settings& settings) {
     StopWeatherThread();
-    if (!settings.weatherEnabled) {
+    if (!settings.ShouldFetchWeather()) {
         return;
     }
     g_weatherStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!g_weatherStopEvent) {
         return;
     }
-    g_weatherThread =
-        std::thread(WeatherThreadProc, g_weatherStopEvent,
-                    settings.weatherLocation, settings.weatherFahrenheit,
-                    settings.weatherUpdateMinutes);
+    g_weatherThread.emplace(WeatherThreadProc, g_weatherStopEvent,
+                            settings.weatherLocation,
+                            settings.weatherDetectLocation,
+                            settings.weatherFahrenheit,
+                            settings.weatherUpdateMinutes);
 }
 
 WeatherData GetWeatherSnapshot() {
@@ -894,8 +957,8 @@ using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
                                                           void** result);
 CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
 
-using TaskbarHost_FrameHeight_t = int(WINAPI*)(void* pThis);
-TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original;
+// Only read as code bytes, never called.
+void* TaskbarHost_FrameHeight_Original;
 
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
@@ -975,16 +1038,45 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd, bool secondary) {
 
     XamlRoot result = nullptr;
 
-    // Reference: TaskbarHost::FrameHeight
-    // 48:83EC 28 | sub rsp,28
-    // 48:83C1 48 | add rcx,48
-    const BYTE* b = reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
-    if (taskbarHostSharedPtr[0] && IsReadableMemory(b, 8) && b[0] == 0x48 &&
-        b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 && b[5] == 0x83 &&
-        b[6] == 0xC1 && b[7] <= 0x7F) {
-        size_t taskbarElementIUnknownOffset = b[7];
+    // The offset of the taskbar element in TaskbarHost, decoded from the start
+    // of TaskbarHost::FrameHeight.
+    std::optional<size_t> taskbarElementIUnknownOffset;
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = static_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
+        if (IsReadableMemory(b, 8) && b[0] == 0x48 && b[1] == 0x83 &&
+            b[2] == 0xEC && b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1 &&
+            b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        }
+    }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p =
+            static_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+        if (IsReadableMemory(p, sizeof(DWORD) * 4) && p[0] == 0xD503237F &&
+            (p[1] & 0xFFC07FFF) == 0xA9807BFD && p[2] == 0x910003FD &&
+            (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
+
+    if (!taskbarElementIUnknownOffset) {
+        Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+    }
+
+    if (taskbarHostSharedPtr[0] && taskbarElementIUnknownOffset) {
         void* slot = static_cast<BYTE*>(taskbarHostSharedPtr[0]) +
-                     taskbarElementIUnknownOffset;
+                     *taskbarElementIUnknownOffset;
         if (IsReadableMemory(slot, sizeof(IUnknown*))) {
             IUnknown* taskbarElementIUnknown = *static_cast<IUnknown**>(slot);
             if (taskbarElementIUnknown) {
@@ -997,8 +1089,6 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd, bool secondary) {
                 }
             }
         }
-    } else {
-        Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
     }
 
     if (taskbarHostSharedPtr[1]) {
@@ -1072,11 +1162,20 @@ struct ClockInstance {
     std::wstring renderedTime;
 };
 
-// The following are only accessed from the taskbar UI thread.
-std::vector<ClockInstance> g_instances;
-DispatcherTimer g_timer{nullptr};
+// The following are only accessed from the taskbar UI thread. They hold XAML
+// objects, which must not be released on another thread when the process
+// exits, so they're never destroyed automatically. They're released in
+// StopClockUi on unload.
+[[clang::no_destroy]] std::optional<std::vector<ClockInstance>> g_instances{
+    std::in_place};
+[[clang::no_destroy]] DispatcherTimer g_timer{nullptr};
 winrt::event_token g_timerTickToken;
 unsigned g_tickCounter;
+int g_startupScansLeft;
+
+// Whether new clocks are reported by the DateTimeIconContent::OnApplyTemplate
+// hook.
+std::atomic<bool> g_clockHookApplied;
 
 struct DisplayState {
     std::wstring weekday;
@@ -1122,7 +1221,7 @@ DisplayState GetDisplayState(const SYSTEMTIME& time,
         state.time += time.wHour < 12 ? L" AM" : L" PM";
     }
 
-    if (g_settings.weatherEnabled && weather.valid) {
+    if (g_settings.ShouldFetchWeather() && weather.valid) {
         auto description = DescribeWeather(weather.code, weather.isDay);
         state.hasWeather = true;
         // U+00B0, the degree sign.
@@ -1494,7 +1593,7 @@ void InjectIntoClock(FrameworkElement const& dateTimeIconContent) {
         return;
     }
 
-    for (const auto& instance : g_instances) {
+    for (const auto& instance : *g_instances) {
         if (instance.container == container) {
             return;
         }
@@ -1532,7 +1631,7 @@ void InjectIntoClock(FrameworkElement const& dateTimeIconContent) {
     children.Append(root);
     instance.root = root;
 
-    g_instances.push_back(std::move(instance));
+    g_instances->push_back(std::move(instance));
 
     Wh_Log(L"Replaced a taskbar clock");
 }
@@ -1581,29 +1680,46 @@ void ScanForClocks() {
 // Drops clocks which are no longer part of a taskbar, e.g. after a monitor
 // was disconnected.
 void PruneInstances() {
-    for (size_t i = g_instances.size(); i-- > 0;) {
-        if (!g_instances[i].container.IsLoaded()) {
-            RestoreInstance(g_instances[i]);
-            g_instances.erase(g_instances.begin() + i);
+    auto& instances = *g_instances;
+    for (size_t i = instances.size(); i-- > 0;) {
+        if (!instances[i].container.IsLoaded()) {
+            RestoreInstance(instances[i]);
+            instances.erase(instances.begin() + i);
         }
+    }
+}
+
+void UpdateClocks() {
+    SYSTEMTIME time;
+    GetLocalTime(&time);
+    WeatherData weather = GetWeatherSnapshot();
+
+    for (auto& instance : *g_instances) {
+        UpdateInstance(instance, time, weather);
     }
 }
 
 void RefreshClocks(bool forceScan) {
     PruneInstances();
 
-    // New clocks appear rarely, there's no need to look for them every second.
-    if (forceScan || g_instances.empty() || g_tickCounter++ % 4 == 0) {
+    // With the DateTimeIconContent::OnApplyTemplate hook, new clocks are
+    // reported as they're created, and the taskbar is only scanned at startup
+    // for clocks which already exist, retrying for a few seconds in case the
+    // taskbar isn't ready yet. Without the hook, e.g. if its symbol wasn't
+    // found, look for new clocks every few seconds instead.
+    bool scan = forceScan;
+    if (g_instances->empty() && g_startupScansLeft > 0) {
+        g_startupScansLeft--;
+        scan = true;
+    } else if (!g_clockHookApplied && g_tickCounter++ % 4 == 0) {
+        scan = true;
+    }
+
+    if (scan) {
         ScanForClocks();
     }
 
-    SYSTEMTIME time;
-    GetLocalTime(&time);
-    WeatherData weather = GetWeatherSnapshot();
-
-    for (auto& instance : g_instances) {
-        UpdateInstance(instance, time, weather);
-    }
+    UpdateClocks();
 }
 
 void OnTimerTick() {
@@ -1635,6 +1751,8 @@ void StartClockUi() {
     if (g_unloading || g_timer) {
         return;
     }
+
+    g_startupScansLeft = 10;
 
     // Started here rather than at initialization, to only make network
     // requests in the explorer process which hosts the taskbar.
@@ -1672,10 +1790,13 @@ void StopClockUi() {
         g_timer = nullptr;
     }
 
-    for (auto& instance : g_instances) {
-        RestoreInstance(instance);
+    if (g_instances) {
+        for (auto& instance : *g_instances) {
+            RestoreInstance(instance);
+        }
+        // Release the XAML objects here, on the taskbar thread.
+        g_instances.reset();
     }
-    g_instances.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1802,6 +1923,126 @@ bool HookTaskbarDllSymbols() {
                                       ARRAYSIZE(taskbarDllHooks));
 }
 
+using DateTimeIconContent_OnApplyTemplate_t = HRESULT(WINAPI*)(void* pThis);
+DateTimeIconContent_OnApplyTemplate_t
+    DateTimeIconContent_OnApplyTemplate_Original;
+HRESULT WINAPI DateTimeIconContent_OnApplyTemplate_Hook(void* pThis) {
+    Wh_Log(L">");
+
+    HRESULT ret = DateTimeIconContent_OnApplyTemplate_Original(pThis);
+
+    if (g_unloading) {
+        return ret;
+    }
+
+    FrameworkElement dateTimeIconContent = nullptr;
+    static_cast<IUnknown*>(pThis)->QueryInterface(
+        winrt::guid_of<FrameworkElement>(), winrt::put_abi(dateTimeIconContent));
+    if (!dateTimeIconContent) {
+        return ret;
+    }
+
+    // A clock was created, e.g. for a new monitor or a rebuilt taskbar. This
+    // runs on the taskbar thread.
+    try {
+        if (!g_timer) {
+            // Scans for all clocks, including this one.
+            StartClockUi();
+        } else if (g_instances) {
+            InjectIntoClock(dateTimeIconContent);
+            UpdateClocks();
+        }
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Failed to replace a clock: %08X", e.code().value);
+    } catch (...) {
+        Wh_Log(L"Failed to replace a clock");
+    }
+
+    return ret;
+}
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
+    HRSRC resource =
+        FindResource(module, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    HGLOBAL global = resource ? LoadResource(module, resource) : nullptr;
+    void* data = global ? LockResource(global) : nullptr;
+    void* fixedFileInfo = nullptr;
+    UINT length = 0;
+    if (!data || !VerQueryValue(data, L"\\", &fixedFileInfo, &length) ||
+        length == 0) {
+        return nullptr;
+    }
+    return static_cast<VS_FIXEDFILEINFO*>(fixedFileInfo);
+}
+
+// The module which implements the system tray's XAML types. It depends on the
+// Windows build.
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
+    if (!module) {
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // Starting with Taskbar.View.dll 2604, the system tray types are in
+            // SystemTray.dll.
+            VS_FIXEDFILEINFO* info = GetModuleVersionInfo(module);
+            WORD major = info ? HIWORD(info->dwFileVersionMS) : 0;
+            if (!major || major >= 2604) {
+                module = nullptr;
+            }
+        }
+    }
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+    return module;
+}
+
+std::atomic<bool> g_systemTrayModuleHooked;
+
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        // Optional: without it, new clocks are found by scanning the taskbar.
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::DateTimeIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
+            &DateTimeIconContent_OnApplyTemplate_Original,
+            DateTimeIconContent_OnApplyTemplate_Hook,
+            true,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, symbolHooks,
+                                    ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed for the system tray module");
+        return false;
+    }
+
+    if (!DateTimeIconContent_OnApplyTemplate_Original) {
+        Wh_Log(L"DateTimeIconContent::OnApplyTemplate not found");
+        return false;
+    }
+
+    return true;
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module && !g_systemTrayModuleHooked &&
+        GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+        if (HookSystemTraySymbols(module)) {
+            Wh_ApplyHookOperations();
+            g_clockHookApplied = true;
+        }
+    }
+    return module;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -1809,6 +2050,23 @@ BOOL Wh_ModInit() {
 
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
+    }
+
+    // The system tray module is usually loaded with the taskbar, which might
+    // happen after the mod is loaded.
+    if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+        g_systemTrayModuleHooked = true;
+        // Hooks set here are applied once Wh_ModInit returns, before the clocks
+        // are replaced in Wh_ModAfterInit.
+        g_clockHookApplied = HookSystemTraySymbols(systemTrayModule);
+    } else {
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            reinterpret_cast<decltype(&LoadLibraryExW)>(
+                GetProcAddress(kernelBaseModule, "LoadLibraryExW"));
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
     }
 
     return TRUE;
@@ -1851,6 +2109,7 @@ void Wh_ModSettingsChanged() {
     bool weatherChanged =
         settings.weatherEnabled != g_settings.weatherEnabled ||
         settings.weatherLocation != g_settings.weatherLocation ||
+        settings.weatherDetectLocation != g_settings.weatherDetectLocation ||
         settings.weatherFahrenheit != g_settings.weatherFahrenheit ||
         settings.weatherUpdateMinutes != g_settings.weatherUpdateMinutes;
 
@@ -1860,7 +2119,7 @@ void Wh_ModSettingsChanged() {
 
         if (g_timer) {
             try {
-                RefreshClocks(true);
+                RefreshClocks(false);
             } catch (winrt::hresult_error const& e) {
                 Wh_Log(L"Refresh failed: %08X", e.code().value);
             } catch (...) {
