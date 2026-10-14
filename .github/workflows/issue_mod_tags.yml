@@ -33,6 +33,11 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (!contains(join(github.event.issue.labels.*.name, ' '), 'mod/') &&
        !contains(github.event.issue.labels.*.name, 'new-mod-idea'))
+    # The secrets are in this environment, so that no other job can use them.
+    # A run isn't a deployment, so none is recorded.
+    environment:
+      name: issue_mod_tags
+      deployment: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
