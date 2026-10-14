@@ -571,7 +571,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791579828000,
+        "updated": 1791954056000,
         "users": 28
       },
       "metadata": {
@@ -586,7 +586,7 @@
           "explorer.exe"
         ],
         "name": "Animated Cross-Desktop Activation",
-        "version": "0.6.0"
+        "version": "0.6.1"
       }
     },
     "antigravity-portable": {
@@ -11947,19 +11947,19 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1779783069000,
+        "updated": 1791954051000,
         "users": 34
       },
       "metadata": {
         "author": "winui64",
-        "compilerOptions": "-lshell32 -lshlwapi",
-        "description": "Replaces the Winver dialog with a custom executable",
+        "compilerOptions": "-lshell32 -lole32",
+        "description": "Replaces Winver with an executable, command, or Shell app",
         "github": "https://github.com/winui64",
         "include": [
           "winver.exe"
         ],
-        "name": "Replace Winver With EXE",
-        "version": "1.0"
+        "name": "Winver Redirector",
+        "version": "1.1"
       }
     },
     "resizable-discord": {
@@ -12931,6 +12931,31 @@
         "license": "MIT",
         "name": "Spoof MachineGuid",
         "version": "1.0"
+      }
+    },
+    "spotlight-launcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791954046000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791954046000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "David Ravelo",
+        "compilerOptions": "-lole32 -lshell32 -luser32 -lgdi32 -ld2d1 -ldwrite -luuid -ladvapi32 -lwindowscodecs -lpropsys -lversion",
+        "description": "Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.",
+        "github": "https://github.com/DavidRaveloU",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Spotlight Launcher",
+        "version": "0.5.11"
       }
     },
     "standard-title-bar-colors": {
@@ -19388,18 +19413,18 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791821042000,
+        "updated": 1791954041000,
         "users": 34
       },
       "metadata": {
         "author": "XandriW",
-        "description": "When an app opens a folder or uses Show in folder, reuse an existing Explorer window for that folder and select the requested file instead of opening a duplicate window.",
+        "description": "Stop File Explorer from opening duplicate windows. If a folder is already open, reuse that window instead. \"Show in folder\" also selects the requested file.",
         "github": "https://github.com/xandri19wang",
         "include": [
           "explorer.exe"
         ],
         "name": "SameFolderOnly",
-        "version": "4.1.5"
+        "version": "4.1.6"
       }
     },
     "xp-timedate-cpl-fix": {

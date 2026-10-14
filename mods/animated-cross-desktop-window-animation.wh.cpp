@@ -2,7 +2,7 @@
 // @id              animated-cross-desktop-window-animation
 // @name            Animated Cross-Desktop Activation
 // @description     Animates activation-driven virtual desktop switches and suppresses transient replacement-window switches.
-// @version         0.6.0
+// @version         0.6.1
 // @author          meteoni
 // @github          https://github.com/Meteoni
 // @include         explorer.exe
@@ -13,6 +13,9 @@
 // ==WindhawkModReadme==
 /*
 # Animated Cross-Desktop Activation
+
+![Showcase](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/animated-cross-desktop-window-animation/animated-cross-desktop-window-animation.gif)
+_See the mod in action_
 
 Windows can jump to another virtual desktop without the normal desktop-switch
 animation when an application activates an existing window on that desktop.

@@ -2,12 +2,171 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-13T21:02:48.000Z</updated>
+    <updated>2026-10-14T05:00:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Animated Cross-Desktop Activation 0.6.1]]></title>
+        <id>https://windhawk.net/mods/animated-cross-desktop-window-animation#c31f8f9fa7635fc6a1d55ca34602c6245d3bde3d</id>
+        <link href="https://windhawk.net/mods/animated-cross-desktop-window-animation"/>
+        <updated>2026-10-14T05:00:56.000Z</updated>
+        <content type="html"><![CDATA[<p>Added a GIF to demonstrate the effect of this mod.</p>]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Winver Redirector 1.1]]></title>
+        <id>https://windhawk.net/mods/replace-winver-with-exe#495375bad903b6ea67fbfd51fc255f52fe1bc9c8</id>
+        <link href="https://windhawk.net/mods/replace-winver-with-exe"/>
+        <updated>2026-10-14T05:00:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved code structure</li>
+<li>Added more features, such as replacing winver.exe with another executable, command, or Shell app.</li>
+</ul>]]></content>
+        <author>
+            <name>winui64</name>
+            <uri>https://github.com/winui64</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spotlight Launcher 0.5.11]]></title>
+        <id>https://windhawk.net/mods/spotlight-launcher#002d01efc7998c0c2c45cd7f0a44650aef7f3955</id>
+        <link href="https://windhawk.net/mods/spotlight-launcher"/>
+        <updated>2026-10-14T05:00:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="spotlightlauncher">Spotlight Launcher</h1>
+<p>A fast, keyboard-driven application launcher for Windows, packaged as a <a href="https://windhawk.net">Windhawk</a> tool mod.</p>
+<p>Press <strong>Alt + Space</strong>, type a few letters, press <strong>Enter</strong>. That is the whole idea.</p>
+<p>Spotlight Launcher indexes the same applications you see in the Start menu (classic programs and Microsoft Store / MSIX apps) and filters them as you type. It runs in its own <code>windhawk.exe</code> process, so it never gets injected into Explorer and cannot affect the shell.</p>
+<hr />
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="main">Main</h3>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Desktop.png" alt="Spotlight Launcher in action" /></p>
+<p>The search bar over the desktop, with the default <strong>Midnight</strong> colour and <strong>Acrylic</strong> effect. A short query already filtered a handful of results, with the matching letters highlighted. This is the launcher's first impression.</p>
+<h3 id="detailspanel">Details panel</h3>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Details.png" alt="Details panel" /></p>
+<p>An app selected with the details panel open on the right (<strong>Ctrl + I</strong>): the actions list and the technical info table.</p>
+<h3 id="lookandfeel">Look and feel</h3>
+<p>These are some of the built-in looks (themes): the <strong>Aurora</strong> effect in three colours, plus <strong>Frosted</strong>, <strong>Glass</strong> and <strong>Mica</strong>.</p>
+<p>| Theme | Preview |
+| --- | --- |
+| <strong>Aurora</strong> &middot; Amber | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Amber.png" alt="Aurora, amber" /> |
+| <strong>Aurora</strong> &middot; Emerald | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Emerald.png" alt="Aurora, emerald" /> |
+| <strong>Aurora</strong> &middot; Violet | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Violet.png" alt="Aurora, violet" /> |
+| <strong>Frosted</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Frosted.png" alt="Frosted" /> |
+| <strong>Glass</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Glass.png" alt="Glass" /> |
+| <strong>Mica</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Mica.png" alt="Mica" /> |</p>
+<p>The rest (the <strong>Acrylic</strong> and <strong>Solid</strong> effects and the remaining colours — Midnight blue, Graphite, Black, Teal, Rose, Crimson, Sky, Lavender, White) are covered below in the Features section.</p>
+<hr />
+<h2 id="features">Features</h2>
+<h3 id="instantforgivingsearch">Instant, forgiving search</h3>
+<ul>
+<li>Filters classic programs and Microsoft Store apps as you type.</li>
+<li>Case- and accent-insensitive.</li>
+<li>Multi-word queries (<code>visual code</code>) and acronyms (<code>vsc</code> finds <em>Visual Studio Code</em>).</li>
+<li>Matching letters are highlighted in the result.</li>
+<li>Results show a friendly name plus the real target (exe, <code>.lnk</code>, MSIX package).</li>
+</ul>
+<h3 id="keyboardfirst">Keyboard-first</h3>
+<p>Everything is reachable without touching the mouse.</p>
+<p>| Shortcut | Action |
+| --- | --- |
+| <strong>Alt + Space</strong> | Open / close the search bar (configurable) |
+| <strong>↑ / ↓ / Tab</strong> | Move the selection |
+| <strong>Enter</strong> | Open the selected app |
+| <strong>Esc</strong> | Close the details panel, then the search bar |
+| <strong>Ctrl + Enter</strong> | Open the file location |
+| <strong>Ctrl + Shift + Enter</strong> | Run as administrator |
+| <strong>Ctrl + Shift + C</strong> | Copy the path |
+| <strong>Ctrl + P</strong> | Properties |
+| <strong>Ctrl + Shift + R</strong> | Remove from recents |
+| <strong>Ctrl + I</strong> | Toggle the details panel (configurable) |
+| <strong>Ctrl + R</strong> | Reindex the app list |
+| Mouse wheel | Scroll the list without changing the selection |
+| Mouse hover | Highlight the row under the cursor |</p>
+<p><strong>Alt + Space</strong> is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it. Apps like PowerToys Run make the same trade-off.</p>
+<h3 id="detailspanel-1">Details panel</h3>
+<p>Press <strong>Ctrl + I</strong> (or <strong>Ctrl + K</strong> / <strong>Ctrl + Space</strong> / <strong>F4</strong>) with an app selected to reveal a right-hand panel with actions and technical data. The actions also work with the panel closed. File actions are only offered for desktop apps; Store (MSIX) apps only expose <em>open</em> and <em>remove from recents</em>.</p>
+<h3 id="appearance">Appearance</h3>
+<ul>
+<li>Six background effects (<strong>Acrylic</strong>, <strong>Mica</strong>, <strong>Glass</strong>, <strong>Frosted</strong>, <strong>Aurora</strong>, <strong>Solid</strong>) and 12 colours.</li>
+<li>Effects capture what is behind the bar on open, blur it and composite it inside the rounded card (tint, grain, highlights, gradients) — so they look the same on Windows 10 and 11 without undocumented DWM APIs.</li>
+<li>Adjustable panel opacity, blur strength and layout.</li>
+<li>Adapts to the DPI of each monitor.</li>
+<li>The bar can sit anywhere from against the top edge to against the bottom edge of the screen.</li>
+</ul>
+<h3 id="freshwithoutfuss">Fresh without fuss</h3>
+<ul>
+<li><strong>Automatic</strong> index updates watch the Start menu folders and re-read the list when an app is installed or removed, with a light periodic fallback for Store apps.</li>
+<li>Can also re-index on every open or on a fixed interval (1 / 3 / 5 / 10 minutes).</li>
+<li>Installers write an "Uninstall …" shortcut for everything they install; the mod inspects what each shortcut actually runs and hides the uninstallers and documentation, while keeping real tools whose names merely contain "uninstall".</li>
+<li>If reindexing finishes with the search bar already open, the list updates by itself.</li>
+<li>Only what Windows lists as an app appears: a portable program without a shortcut in the Start menu is not indexed. A freshly installed app may take a few seconds to appear, until Windows registers its shortcut.</li>
+</ul>
+<h3 id="safebydesign">Safe by design</h3>
+<ul>
+<li>Runs as a Windhawk <strong>tool</strong> mod in its own process, not inside Explorer.</li>
+<li><strong>Disable in fullscreen</strong>: the hotkey stays quiet while a fullscreen window (a game, a video player, a fullscreen browser) is focused.</li>
+<li>If another app already owns the shortcut, the mod warns you instead of fighting over it.</li>
+</ul>
+<hr />
+<h2 id="installation">Installation</h2>
+<ol>
+<li>Install <a href="https://windhawk.net">Windhawk</a> (Windows 10 or 11).</li>
+<li>In Windhawk, open <strong>Mods</strong> and search for <strong>Spotlight Launcher</strong>, then click <strong>Install</strong>.</li>
+<li>Press <strong>Alt + Space</strong> to open it. Change the shortcut, position, effect and colour from the mod's <strong>Settings</strong> tab.</li>
+</ol>
+<h3 id="fromsource">From source</h3>
+<ol>
+<li>Download <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/blob/main/spotlight-launcher.wh.cpp"><code>spotlight-launcher.wh.cpp</code></a>.</li>
+<li>In Windhawk, choose <strong>Create a new mod</strong>, replace the editor contents with the file and <strong>Save</strong>.</li>
+<li>Install it from your local mods list.</li>
+</ol>
+<hr />
+<h2 id="contributing">Contributing</h2>
+<p>Contributions are welcome — bug reports, fixes, new features and translations alike. See the <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk">repository</a> for details.</p>
+<h3 id="reportingabug">Reporting a bug</h3>
+<p>Open an <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/issues">issue</a> and include:</p>
+<ul>
+<li>Windows build (<code>winver</code>) and Windhawk version.</li>
+<li>The mod version (shown in the README header / settings).</li>
+<li>Steps to reproduce it and what you expected instead.</li>
+<li>A screenshot or short clip when the problem is visual.</li>
+</ul>
+<h3 id="sendingapullrequest">Sending a pull request</h3>
+<ol>
+<li>Fork the repository and create a branch from <code>main</code>, e.g. <code>fix/acrylic-on-win10</code>.</li>
+<li>Make your change in <code>spotlight-launcher.wh.cpp</code> (C++23, Windhawk tool mod).</li>
+<li>Bump <code>@version</code> in the mod header when behaviour changes.</li>
+<li>Confirm it compiles and test it on the Windows versions you can reach.</li>
+<li>Open a pull request against <code>main</code> describing <strong>what</strong> changed and <strong>why</strong>.</li>
+</ol>
+<p>Keep pull requests focused: one bug or feature per PR is much easier to review and merge.</p>
+<hr />
+<h2 id="license">License</h2>
+<p>Released under the <strong>MIT License</strong>. See <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/blob/main/LICENSE">LICENSE</a>.</p>
+<p>Copyright (c) 2026-present David Ravelo.</p>]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[SameFolderOnly 4.1.6]]></title>
+        <id>https://windhawk.net/mods/xandriw-explorer-select-interceptor#f84557687abb7a0746a6782c211327ef1f8655a7</id>
+        <link href="https://windhawk.net/mods/xandriw-explorer-select-interceptor"/>
+        <updated>2026-10-14T05:00:41.000Z</updated>
+        <content type="html"><![CDATA[<p>Rewrote the description and README in plain English.</p>
+<p>Clarified folder reuse, file selection, Shift bypass, and limitations.</p>]]></content>
+        <author>
+            <name>XandriW</name>
+            <uri>https://github.com/xandri19wang</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win10 Taskbar Search State Refresh on Win11 24H2+ 1.0.0]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-search-state-refresh-on-win11-24h2#6eb45d5c4c3d686d4943f8e3f2affb9570b2e41a</id>
@@ -961,229 +1120,6 @@ Taskbar Fluent Media Player Windhawk mod.</li>
         <author>
             <name>Rubens Nascimento</name>
             <uri>https://github.com/chambber</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Extension during renaming 1.0]]></title>
-        <id>https://windhawk.net/mods/hide-extension-during-rename#6563d37ad83286401c72981375d9e138df07be49</id>
-        <link href="https://windhawk.net/mods/hide-extension-during-rename"/>
-        <updated>2026-10-12T13:04:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Ever wanted to get rid of a file extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?.
-This mod dynamically hides file extensions during inline file renaming in File Explorer, Desktop and "Save As" operations and restores it when you're done renaming.</p>
-<h3 id="keyfeatures">Key Features</h3>
-<ul>
-<li><strong>Save As Dialogs:</strong>      Automatically hides file extensions from the default filename text box when saving files.</li>
-<li><strong>Inline File Renaming:</strong> Hides file extensions while editing item names on the Desktop or inside File Explorer (<code>SHELLDLL_DefView</code>, <code>SysListView32</code>, <code>DirectUIHWND</code>).</li>
-<li><strong>Warning Prevention:</strong>   Intercepts window messages (<code>WM_GETTEXT</code>) upon committing a rename to silently re-attach the original extension,
-                        avoiding the native Windows "If you change a file name extension, the file might become unusable" warning prompt.</li>
-</ul>
-<p><strong>Things to Note:</strong></p>
-<ol>
-<li>This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps (e.g., WinRAR, 7-Zip).</li>
-<li>If you want to change a file's extension, you can do so inside the file's properties.</li>
-<li>If you type a dot at the end of a file name followed by any Windows registered extension (e.g., changing <code>document.txt</code> to <code>document.pdf</code>), it will trigger the Windows extension change warning prompt, however non-registered extensions won't change the file type.</li>
-</ol>
-<h3 id="knownlimitations">Known Limitations</h3>
-<ul>
-<li><strong>Folders Ending in Registered Extensions:</strong> Folders whose names explicitly end in a registered file extension (e.g., a folder named <code>Backup.zip</code> or <code>github.com</code>) will have its trailing extension hidden during inline renaming.</li>
-<li><strong>Why this happens:</strong> Windows reuses the exact same generic Win32 <code>Edit</code> control for both files and directories (folders). When an inline rename is triggered, the mod interacts with <code>SetWindowTextW</code> and receives only a window handle and a string. There is no native API or context provided by the shell at that moment to distinguish whether the text box belongs to a file or a folder. While the full folder name is safely preserved and restored upon commit, inline editing will temporarily treat the extension-like suffix as hidable.</li>
-</ul>
-<p><img src="https://i.imgur.com/iy9dyzq.gif" alt="Mod Demo" /></p>]]></content>
-        <author>
-            <name>AuralSX</name>
-            <uri>https://github.com/AuralSX</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 1507 Start Menu Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-1507-start-menu-recreation#2b9300548f60dd4ebb43e9aa5d77230f0c37f6bd</id>
-        <link href="https://windhawk.net/mods/win10-1507-start-menu-recreation"/>
-        <updated>2026-10-12T12:02:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows101507rtmstartmenurecreation">Windows 10 1507 (RTM) Start Menu Recreation</h1>
-<p>This mod is a best-effort recreation of the Windows 10 RTM (1507) Start menu. The mod does not
-theme or modify the native Start menu: it builds its own menu window inside
-Explorer and opens it instead of the native one.</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10startmenu.png" alt="Screenshot" /></p>
-<p>This modification has been tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>App lists</strong>: Most used, Recently added, All apps (A–Z with folders) and
-type-to-search. The list is refreshed automatically when shortcuts are added or
-removed from the Start menu folders, and periodically for Store apps.</li>
-<li><strong>Tiles</strong>: default groups built from the apps actually installed, drag and drop
-with live preview and collision-free reflow, pin/unpin, four tile sizes, and a
-purely cosmetic simulated "live tile" flip (no network, no real data).</li>
-<li><strong>Account and power menus</strong>, Explorer pinned places, lock, sign out, sleep,
-hibernate (only when available), shut down and restart.</li>
-<li><strong>Resizable</strong> window with a reversible slide animation, 95% opacity and
-per-monitor DPI awareness.</li>
-<li><strong>Keyboard</strong>: Win key opens/closes the menu; typing searches; Enter launches the
-first result; Esc closes. There is no arrow-key navigation yet.</li>
-<li>Layout, window size and launch counts are stored in Windhawk's mod storage.
-Nothing is written outside of it.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Default tile groups include only apps found on the system. A missing legacy app
-makes a group smaller or absent; that is expected, not a defect.</li>
-<li>The menu is opened by intercepting the Win key and clicks on the Start button
-with low-level hooks that run on a dedicated thread. Clicks are only intercepted
-when a taskbar window is actually under the cursor, so fullscreen apps covering
-the taskbar keep receiving their clicks.</li>
-<li>At sign-in, Windhawk must be running with this mod enabled. Portable installs
-need a Startup-folder shortcut to <code>windhawk.exe -tray-only</code>.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdmnistratoX - Testing on Windows 11 25H2 and providing technical references</li>
-<li>m417z - Windows 11 Start Menu Styler (technical reference)</li>
-<li>bbmaster123 - Windows 10 theme for Windows 11 Start Menu Styler (technical reference)</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 "Open with" Dialog Restorer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win7-open-with-dialog#9ddd428ab7a309d44c665addda817eddc656eef1</id>
-        <link href="https://windhawk.net/mods/win7-open-with-dialog"/>
-        <updated>2026-10-12T11:01:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed a problem that did not allow to save a program as default option when choosing “Always use” (credits to Budgeto for the report)</li>
-<li>Fixed a graphic anomaly (credits to Susie Deltarune for reporting)</li>
-<li>Improved the logging</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Magic Pointer 1.0.1]]></title>
-        <id>https://windhawk.net/mods/magic-pointer#bc7a9d84ea4986925be09f770a2cee39ebbe2eb8</id>
-        <link href="https://windhawk.net/mods/magic-pointer"/>
-        <updated>2026-10-12T10:04:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="magicpointer">Magic Pointer</h1>
-<p>The Magic Pointer from Google's Googlebooks, on Windows: an AI mouse cursor.
-Wiggle the mouse, then point at anything on screen, select it, and ask Gemini
-about it, search it with Google Lens, copy its text or translate it.</p>
-<p><img src="https://raw.githubusercontent.com/rono-zeroseven/windhawk-mods/0a3b052e38da866ce5312754be9bec0e5364caea/assets/magic-pointer/preview.png" alt="Magic Pointer with a sample selection and question" /></p>
-<p><em>Native preview with a sample selection; browser actions work without an API key.</em></p>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li><strong>Shake the mouse</strong>, or swipe back and forth on the touchpad. The keyboard
-shortcut (<strong>Win+Shift+G</strong> by default) works too.</li>
-<li><strong>Point and select.</strong> Hover over a button, image, link or paragraph to
-outline it, then click to select it. Or click and drag to select any area.</li>
-<li><strong>Ask.</strong> A card opens next to your selection. Type a question and press
-Enter, or pick a suggestion. With a Gemini API key, the <strong>Translate</strong> button
-on the card translates the text in your selection into your Windows
-language, or into the language you pick in the settings.</li>
-</ol>
-<p>Press <strong>Esc</strong> or <strong>right-click</strong> to put the Magic Pointer away. It also leaves
-on its own when the mouse stays still for a while.</p>
-<h2 id="gemini">Gemini</h2>
-<p>Add a free Gemini API key (https://aistudio.google.com/apikey) in the
-settings and answers stream right into the card. You can ask follow-up
-questions. Enable <strong>Smart suggestions</strong> to have Gemini suggest up to three
-things to do with each selection; this is off by default.
-Drag over an answer to select text, then press Ctrl+C or right-click to copy.
-The <strong>Copy</strong> button copies the whole answer, including while it is streaming.</p>
-<p>It also works without a key: <strong>Send</strong> (or <strong>Ask in Gemini</strong>) opens
-Gemini in your browser, types your question into its message box and pastes
-your selections there as PNG files. It waits for the new Gemini page to finish
-loading, never uses a Gemini tab that was already open, and never presses
-Enter: review the draft and send it when ready. If something couldn't be
-added, the card comes back and says what to do, usually to click Gemini's
-message box and press Ctrl+V. You can also search with Google Lens or copy the
-image and its recognized text.</p>
-<p>With a key, the <strong>Ask in Gemini</strong> button in the card's top row (the arrow
-leaving a window) carries on in Gemini's own app instead of in the card: it
-types the question you have started to write, or else the last one you asked
-here, and attaches every selection.</p>
-<p>Gemini and Google Lens open in your Windows default browser, or in the one you
-pick with the <strong>Browser</strong> setting: Chrome, Edge, Firefox, Brave, Zen, Opera,
-Vivaldi, LibreWolf, Waterfox, Floorp, or any other browser through the path of
-its program. The draft is only typed into a window of that browser, and only
-once the browser itself reports that the page is Gemini's chat. Chrome, Edge,
-Firefox and Zen have been tried; the others share their engines. Like
-Chromium-based browsers, Firefox-based ones turn on their accessibility support
-when it's used.</p>
-<h2 id="textrecognition">Text recognition</h2>
-<p>Every selection is read with the OCR built into Windows 10 and 11, entirely
-on your PC. Copy the text with the <strong>Aa</strong> button, and Gemini gets it as extra
-context. OCR uses the languages installed in Windows.</p>
-<h2 id="privacyandtemporaryfiles">Privacy and temporary files</h2>
-<p>Summoning the pointer, selecting an area and copying its image or text stay
-on your PC with the default settings. The mod contacts Google's services
-when you use these features:</p>
-<ul>
-<li>With an API key, <strong>Send</strong>, a suggestion chip or <strong>Translate</strong> sends your
-selected regions as JPEG images (up to 1536 pixels on the longest side),
-their UI Automation names and recognized text, your question and the card's
-conversation to <code>generativelanguage.googleapis.com</code> over HTTPS. Follow-up
-questions include the selections and conversation again.</li>
-<li><strong>Smart suggestions</strong> is off by default. If you enable it with an API key,
-every selection is uploaded as soon as you make or add it, even if you only
-intend to copy its text or search it with Lens. The suggestion request sends
-the selection images and text, without the card's conversation.</li>
-<li><strong>Ask in Gemini</strong> (also <strong>Send</strong> without an API key) opens
-<code>gemini.google.com/app</code> and puts your question and selection PNG files into
-a new draft. Attaching files can upload them before you send the draft; the
-mod leaves sending the message to you.</li>
-<li><strong>Search with Google Lens</strong> opens a temporary local HTML page containing
-your selection as a PNG (up to 1000 pixels on the longest side). That page
-immediately uploads the image to <code>lens.google.com/v3/upload</code> when it opens.</li>
-</ul>
-<p>Under Google's <a href="https://ai.google.dev/gemini-api/terms">Gemini API terms</a>,
-free-tier submissions and responses, including images, may be used to improve
-Google's products and machine learning, and may be read by human reviewers in
-most regions. The terms describe regional exceptions and different treatment
-for paid services. Avoid sending sensitive, confidential or personal content
-through the free tier.</p>
-<p>Browser handoff PNGs (<code>gemini-selection-*.png</code>) and Lens HTML pages are written
-temporarily to the mod's Windhawk storage folder, normally under
-<code>%ProgramData%\Windhawk</code>. This folder is shared across Windows accounts.
-PNGs are scheduled for deletion after 30 minutes and Lens pages after 10
-minutes; both are also deleted when the mod is disabled. Files left by an
-interrupted process are cleaned up on the next start once they expire. A file held open by another program may delay
-deletion. <strong>Copy image</strong> and browser handoff also put the selection on the
-Windows clipboard; clipboard history follows your Windows settings.</p>
-<h2 id="lookandfeel">Look and feel</h2>
-<ul>
-<li>The card and the hint sit on Windows' live frosted glass (acrylic) with
-rounded corners, so they follow whatever is behind them, even as it changes.
-Turning off <em>Transparency effects</em> in Windows, or <em>Glass effect</em> here,
-switches them to solid colors, as does a Windows older than 10 version 1803.</li>
-<li>Pick any <strong>glow color</strong>: <code>#4285F4</code>, <code>66,133,244</code>, a name like <code>purple</code>,
-<code>accent</code> for your Windows accent color, or <code>rainbow</code> for Google's colors.</li>
-<li><strong>Dim outside the selection</strong> darkens the surrounding screen only while you
-drag a rectangle. The area inside stays clear.</li>
-</ul>
-<h2 id="gamesandotherapps">Games and other apps</h2>
-<p>Shaking is ignored while a game, video or presentation fills the screen, and
-in any app on the <em>Excluded apps</em> list (for example <code>RobloxPlayerBeta.exe</code>,
-<code>C:\Games\*</code> or a window title).</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Runs as a <em>tool mod</em> in its own background process. It doesn't inject into
-other programs and never changes your system cursors.</li>
-<li>Uses Windhawk's standard host without requesting UIAccess. Highlighting
-controls and browser handoff are subject to Windows' restrictions on
-interacting with elevated apps.</li>
-<li>Works on every Windows version Windhawk runs on, on x64, ARM64 and 32-bit
-systems, and supports multiple monitors with per-monitor display scaling.</li>
-<li>Shakes are detected from raw mouse input, so nothing runs while the mouse is
-idle and the mouse itself is never slowed down.</li>
-<li><em>Highlight what you point at</em> reads the layout of the app under the pointer
-through UI Automation, the accessibility API. Chromium-based browsers turn
-on their accessibility support when it's used, which costs a little memory.
-Turn it off if you prefer: click and drag always works.</li>
-</ul>]]></content>
-        <author>
-            <name>Rono</name>
-            <uri>https://github.com/rono-zeroseven</uri>
         </author>
     </entry>
 </feed>

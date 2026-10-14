@@ -2,12 +2,134 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-13T21:02:48.000Z</updated>
+    <updated>2026-10-14T05:00:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Spotlight Launcher 0.5.11]]></title>
+        <id>https://windhawk.net/mods/spotlight-launcher#002d01efc7998c0c2c45cd7f0a44650aef7f3955</id>
+        <link href="https://windhawk.net/mods/spotlight-launcher"/>
+        <updated>2026-10-14T05:00:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="spotlightlauncher">Spotlight Launcher</h1>
+<p>A fast, keyboard-driven application launcher for Windows, packaged as a <a href="https://windhawk.net">Windhawk</a> tool mod.</p>
+<p>Press <strong>Alt + Space</strong>, type a few letters, press <strong>Enter</strong>. That is the whole idea.</p>
+<p>Spotlight Launcher indexes the same applications you see in the Start menu (classic programs and Microsoft Store / MSIX apps) and filters them as you type. It runs in its own <code>windhawk.exe</code> process, so it never gets injected into Explorer and cannot affect the shell.</p>
+<hr />
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="main">Main</h3>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Desktop.png" alt="Spotlight Launcher in action" /></p>
+<p>The search bar over the desktop, with the default <strong>Midnight</strong> colour and <strong>Acrylic</strong> effect. A short query already filtered a handful of results, with the matching letters highlighted. This is the launcher's first impression.</p>
+<h3 id="detailspanel">Details panel</h3>
+<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Details.png" alt="Details panel" /></p>
+<p>An app selected with the details panel open on the right (<strong>Ctrl + I</strong>): the actions list and the technical info table.</p>
+<h3 id="lookandfeel">Look and feel</h3>
+<p>These are some of the built-in looks (themes): the <strong>Aurora</strong> effect in three colours, plus <strong>Frosted</strong>, <strong>Glass</strong> and <strong>Mica</strong>.</p>
+<p>| Theme | Preview |
+| --- | --- |
+| <strong>Aurora</strong> &middot; Amber | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Amber.png" alt="Aurora, amber" /> |
+| <strong>Aurora</strong> &middot; Emerald | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Emerald.png" alt="Aurora, emerald" /> |
+| <strong>Aurora</strong> &middot; Violet | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Violet.png" alt="Aurora, violet" /> |
+| <strong>Frosted</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Frosted.png" alt="Frosted" /> |
+| <strong>Glass</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Glass.png" alt="Glass" /> |
+| <strong>Mica</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Mica.png" alt="Mica" /> |</p>
+<p>The rest (the <strong>Acrylic</strong> and <strong>Solid</strong> effects and the remaining colours — Midnight blue, Graphite, Black, Teal, Rose, Crimson, Sky, Lavender, White) are covered below in the Features section.</p>
+<hr />
+<h2 id="features">Features</h2>
+<h3 id="instantforgivingsearch">Instant, forgiving search</h3>
+<ul>
+<li>Filters classic programs and Microsoft Store apps as you type.</li>
+<li>Case- and accent-insensitive.</li>
+<li>Multi-word queries (<code>visual code</code>) and acronyms (<code>vsc</code> finds <em>Visual Studio Code</em>).</li>
+<li>Matching letters are highlighted in the result.</li>
+<li>Results show a friendly name plus the real target (exe, <code>.lnk</code>, MSIX package).</li>
+</ul>
+<h3 id="keyboardfirst">Keyboard-first</h3>
+<p>Everything is reachable without touching the mouse.</p>
+<p>| Shortcut | Action |
+| --- | --- |
+| <strong>Alt + Space</strong> | Open / close the search bar (configurable) |
+| <strong>↑ / ↓ / Tab</strong> | Move the selection |
+| <strong>Enter</strong> | Open the selected app |
+| <strong>Esc</strong> | Close the details panel, then the search bar |
+| <strong>Ctrl + Enter</strong> | Open the file location |
+| <strong>Ctrl + Shift + Enter</strong> | Run as administrator |
+| <strong>Ctrl + Shift + C</strong> | Copy the path |
+| <strong>Ctrl + P</strong> | Properties |
+| <strong>Ctrl + Shift + R</strong> | Remove from recents |
+| <strong>Ctrl + I</strong> | Toggle the details panel (configurable) |
+| <strong>Ctrl + R</strong> | Reindex the app list |
+| Mouse wheel | Scroll the list without changing the selection |
+| Mouse hover | Highlight the row under the cursor |</p>
+<p><strong>Alt + Space</strong> is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it. Apps like PowerToys Run make the same trade-off.</p>
+<h3 id="detailspanel-1">Details panel</h3>
+<p>Press <strong>Ctrl + I</strong> (or <strong>Ctrl + K</strong> / <strong>Ctrl + Space</strong> / <strong>F4</strong>) with an app selected to reveal a right-hand panel with actions and technical data. The actions also work with the panel closed. File actions are only offered for desktop apps; Store (MSIX) apps only expose <em>open</em> and <em>remove from recents</em>.</p>
+<h3 id="appearance">Appearance</h3>
+<ul>
+<li>Six background effects (<strong>Acrylic</strong>, <strong>Mica</strong>, <strong>Glass</strong>, <strong>Frosted</strong>, <strong>Aurora</strong>, <strong>Solid</strong>) and 12 colours.</li>
+<li>Effects capture what is behind the bar on open, blur it and composite it inside the rounded card (tint, grain, highlights, gradients) — so they look the same on Windows 10 and 11 without undocumented DWM APIs.</li>
+<li>Adjustable panel opacity, blur strength and layout.</li>
+<li>Adapts to the DPI of each monitor.</li>
+<li>The bar can sit anywhere from against the top edge to against the bottom edge of the screen.</li>
+</ul>
+<h3 id="freshwithoutfuss">Fresh without fuss</h3>
+<ul>
+<li><strong>Automatic</strong> index updates watch the Start menu folders and re-read the list when an app is installed or removed, with a light periodic fallback for Store apps.</li>
+<li>Can also re-index on every open or on a fixed interval (1 / 3 / 5 / 10 minutes).</li>
+<li>Installers write an "Uninstall …" shortcut for everything they install; the mod inspects what each shortcut actually runs and hides the uninstallers and documentation, while keeping real tools whose names merely contain "uninstall".</li>
+<li>If reindexing finishes with the search bar already open, the list updates by itself.</li>
+<li>Only what Windows lists as an app appears: a portable program without a shortcut in the Start menu is not indexed. A freshly installed app may take a few seconds to appear, until Windows registers its shortcut.</li>
+</ul>
+<h3 id="safebydesign">Safe by design</h3>
+<ul>
+<li>Runs as a Windhawk <strong>tool</strong> mod in its own process, not inside Explorer.</li>
+<li><strong>Disable in fullscreen</strong>: the hotkey stays quiet while a fullscreen window (a game, a video player, a fullscreen browser) is focused.</li>
+<li>If another app already owns the shortcut, the mod warns you instead of fighting over it.</li>
+</ul>
+<hr />
+<h2 id="installation">Installation</h2>
+<ol>
+<li>Install <a href="https://windhawk.net">Windhawk</a> (Windows 10 or 11).</li>
+<li>In Windhawk, open <strong>Mods</strong> and search for <strong>Spotlight Launcher</strong>, then click <strong>Install</strong>.</li>
+<li>Press <strong>Alt + Space</strong> to open it. Change the shortcut, position, effect and colour from the mod's <strong>Settings</strong> tab.</li>
+</ol>
+<h3 id="fromsource">From source</h3>
+<ol>
+<li>Download <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/blob/main/spotlight-launcher.wh.cpp"><code>spotlight-launcher.wh.cpp</code></a>.</li>
+<li>In Windhawk, choose <strong>Create a new mod</strong>, replace the editor contents with the file and <strong>Save</strong>.</li>
+<li>Install it from your local mods list.</li>
+</ol>
+<hr />
+<h2 id="contributing">Contributing</h2>
+<p>Contributions are welcome — bug reports, fixes, new features and translations alike. See the <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk">repository</a> for details.</p>
+<h3 id="reportingabug">Reporting a bug</h3>
+<p>Open an <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/issues">issue</a> and include:</p>
+<ul>
+<li>Windows build (<code>winver</code>) and Windhawk version.</li>
+<li>The mod version (shown in the README header / settings).</li>
+<li>Steps to reproduce it and what you expected instead.</li>
+<li>A screenshot or short clip when the problem is visual.</li>
+</ul>
+<h3 id="sendingapullrequest">Sending a pull request</h3>
+<ol>
+<li>Fork the repository and create a branch from <code>main</code>, e.g. <code>fix/acrylic-on-win10</code>.</li>
+<li>Make your change in <code>spotlight-launcher.wh.cpp</code> (C++23, Windhawk tool mod).</li>
+<li>Bump <code>@version</code> in the mod header when behaviour changes.</li>
+<li>Confirm it compiles and test it on the Windows versions you can reach.</li>
+<li>Open a pull request against <code>main</code> describing <strong>what</strong> changed and <strong>why</strong>.</li>
+</ol>
+<p>Keep pull requests focused: one bug or feature per PR is much easier to review and merge.</p>
+<hr />
+<h2 id="license">License</h2>
+<p>Released under the <strong>MIT License</strong>. See <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/blob/main/LICENSE">LICENSE</a>.</p>
+<p>Copyright (c) 2026-present David Ravelo.</p>]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win10 Taskbar Search State Refresh on Win11 24H2+ 1.0.0]]></title>
         <id>https://windhawk.net/mods/win10-taskbar-search-state-refresh-on-win11-24h2#6eb45d5c4c3d686d4943f8e3f2affb9570b2e41a</id>
@@ -1277,201 +1399,6 @@ Windhawk debug logging and check for initialization or compatibility errors.</p>
         <author>
             <name>Salyts</name>
             <uri>https://github.com/Salyts</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chinese Holiday Calendar 0.21]]></title>
-        <id>https://windhawk.net/mods/chinese-holiday-calendar#c3f657ac9b83f60e2cb7561b9ab66c5c517ae2bb</id>
-        <link href="https://windhawk.net/mods/chinese-holiday-calendar"/>
-        <updated>2026-10-11T13:03:13.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="">中国节假日日历</h1>
-<p><img src="https://i.imgur.com/SBafHNL.png" alt="Chinese Holiday Calendar View" /></p>
-<p>Windows 11 的日历（点击任务栏右下角时间/日期弹出）默认只在数字下方显示农历或节气。这个 mod 会把
-你提供的节假日数据写进日历的日期单元格：</p>
-<ul>
-<li><strong>放假日</strong>：文字换成数据里的节日名（如"国庆节"，颜色默认蓝色）。</li>
-<li><strong>调休上班日</strong>：文字默认换成"补班"（颜色默认红色）。</li>
-<li>把"替换农历文字"关掉，就保留系统原本的农历/节气文字，只用颜色区分放假和调休。</li>
-<li>其余日期保持系统原本的农历/节气显示，完全不动。</li>
-</ul>
-<p>日历里没有可以放额外元素的容器（日期单元格只有"日期数字 + 农历文字"两个文本），而且系统会在切换
-月份后异步重写农历文字，所以 mod 只用颜色和文字本身来表示放假/补班。</p>
-<h2 id="-1">使用前提</h2>
-<p>mod 是往日期单元格里的<strong>第二行文字</strong>写的，也就是系统显示农历/节气的那一行，所以任务栏日历要打开
-"其他日历"这一行：设置 → 时间和语言 → 日期和时间 → "在任务栏中显示其他日历"，选中"简体中文
-（农历）"。把它关掉的话，日期格子里很可能就没有可写的那一行，日历上也就看不出放假/调休（真遇到
-这种情况，日志里会说明）。</p>
-<p>另外，"这一格是哪一天"是按格子代表的本地日期算出来的，跟格子布置在哪个时区无关，所以在东八区、
-欧美时区都不会差一天。</p>
-<h2 id="-2">数据来源</h2>
-<p><strong>这个 mod 默认不联网，也不内置任何节假日数据，不存在内置的接口地址。</strong> 它只读你在设置里填的那个
-地址；地址留空时，它一个请求也不发，日历保持系统原本的样子。</p>
-<p>要让它显示节假日，请填一个 <strong>iCalendar（<code>.ics</code>）订阅地址</strong>，并且这个订阅源的事件要带"休"/"班"标记，
-形如：</p>
-<pre><code>BEGIN:VEVENT
-DTSTART;VALUE=DATE:20260215
-DTEND;VALUE=DATE:20260224
-SUMMARY:春节（休）
-END:VEVENT
-</code></pre>
-<p>一个可以直接用的示例地址是 <code>https://holiday.ailcc.com/api/holiday/ics</code>（一次返回多年数据，事件里
-带（休）/（班）标记）。它只是示例：mod 不会自己去访问它，除非你把这个地址填进设置里；任何其他符合
-上面格式的 ICS 订阅源也一样可用。</p>
-<p>解析规则：</p>
-<ul>
-<li>只有 <code>SUMMARY</code> 里带"（休）"或"（班）"标记的条目才算数：带"（休）"的按放假日显示（文字用
-<code>SUMMARY</code> 里的节日名），带"（班）"的按调休上班日显示。没有标记的条目（节气、传统节日、洋节等）
-会被忽略，所以它们不会被误标成放假。日期用的是事件写的那一天：<code>DTSTART</code>/<code>DTEND</code> 带不带时间都
-可以，时间部分会被忽略（所以 <code>20260215</code>、<code>2026-02-15</code>、<code>20260215T000000Z</code> 都读作 2 月 15 日）。</li>
-<li><code>DTEND</code> 是<strong>不含</strong>的那一天，和 RFC 5545 一致：上面这条表示 2 月 15 日到 23 日放假。没写 <code>DTEND</code>
-的事件按它开始的那一天处理。</li>
-<li>每个日期都会先检查是否真的存在（含闰年）：<code>20260231</code> 这种不存在的日期整条丢掉，而不是"顺手"挪到
-3 月 3 日；写了 <code>DTEND</code> 却解析不出来、或结束日期不比开始日期晚的事件也会被丢掉（日志里有一条计数）。</li>
-<li>只在填了地址之后才会去取数据，之后默认每 24 小时（可改）刷新一次；请求失败时保留上次的数据，
-10 分钟后重试。取不到数据（没填地址、没网、地址失效）时，日历保持系统原本的样子，不会变成一片
-空白，也不会报错刷屏。</li>
-</ul>
-<h2 id="-3">颜色</h2>
-<p>两个颜色设置填颜色值，默认是"放假蓝 <code>4EA1FF</code>、调休红 <code>FF5A5A</code>"。可以填 <code>RRGGBB</code>、<code>#RRGGBB</code>、
-<code>AARRGGBB</code> 或 <code>#AARRGGBB</code>。Windhawk 1.7.3 的设置界面没有颜色选择器，只能手填颜色值；想把颜色调准，
-可以先在画图之类的工具里取到十六进制值再填进来。只想改颜色、不改文字，把"替换农历文字"关掉即可。</p>
-<p>mod 只给自己标过的格子改颜色，并且在第一次改色之前记下这个文本块原来的前景色（本地值），
-需要还原时原样写回去；原本没有本地值就清掉，让样式和继承来的颜色重新生效。所以像"相邻月份
-的日期被系统调暗"这种由系统自己设的本地颜色，不会被 mod 弄丢。</p>
-<h2 id="-4">关于识别</h2>
-<p>日期单元格不是被"通知"来的：mod 在日历窗口自己的 UI 线程上直接读 XAML 树（<code>Window::Current()</code>
-往下走），每一轮复查都重新找一遍，所以不注入任何东西，也用不到 XAML 诊断。</p>
-<p>定位"农历文字"（Windows 11 里叫 <code>LunarTextBlock</code>）同样是每轮重新遍历单元格的视觉树：单元格一共
-只有三四个子元素，走一遍很便宜，但可以保证不会往系统已经换掉的旧文本块里写字。日期数字是单元格
-里唯一的纯数字文本，mod 永远不会动它。万一某个 Windows 版本改了模板结构，mod 会退回按字号自动识别，
-并在日志里打印一次单元格结构（元素类型、名称、文字、字号）供排查。</p>
-<p>mod 只替换农历文字的内容和颜色，不改动单元格的结构，也不会重复写入同一个单元格。系统在切换月份后
-会异步重写农历文字，有时连文字块本身都会换掉，所以 mod 会在日历变化之后的几秒内逐秒复查单元格：
-只有发现放假/补班的文字被系统覆盖时才会再写一次，其余单元格不做任何写入。复查由"日历窗口出现或
-被显示、日期变化、文字变化、数据或设置变化"触发，并且在连续几秒没有任何写入之后自己停下来——
-系统的日历即使关掉了也仍然被 shell 留着，定时器不能一直跑下去。</p>
-<h2 id="-5">致谢</h2>
-<p>日历窗口的定位方式来自 lonfro 的
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp">Agenda in Calendar View</a>
-（GPL-3.0），<code>RunFromWindowThread</code> 这类跨线程调用沿用 m417z 的
-<a href="https://github.com/m417z/my-windhawk-mods">Windows 11 Notification Center Styler</a>。</p>
-<p>mod <strong>不使用 XAML 诊断（<code>InitializeXamlDiagnosticsEx</code>）</strong>，所以在同一个进程里可以和
-Windows 11 Notification Center Styler、UWPSpy 这类同样用诊断的工具一起用。</p>
-<hr />
-<h1 id="chineseholidaycalendarenglish">Chinese Holiday Calendar (English)</h1>
-<p>Shows Chinese statutory holidays and adjusted workdays inside the Windows 11
-calendar flyout, the one that opens when you click the taskbar clock, using the
-holiday data you point it at.</p>
-<ul>
-<li><strong>Days off</strong>: the line under the day number is replaced with the holiday name
-from the data source (for example <code>国庆节</code>) and drawn in blue by default.</li>
-<li><strong>Adjusted workdays (调休)</strong>: replaced with <code>补班</code> and drawn in red by default.</li>
-<li><strong>Replace the lunar text = off</strong>: keeps the system's own lunar date or solar
-term and only changes the colour.</li>
-<li><strong>Every other day</strong>: left exactly as the system draws it.</li>
-</ul>
-<h2 id="requirements">Requirements</h2>
-<p>The mod writes into the <strong>second line of a day cell</strong> - the lunar date or solar term the
-system prints there - so the taskbar calendar has to show that line: Settings -&gt; Time &amp;
-language -&gt; Date &amp; time -&gt; "Show additional calendars in the taskbar", with Simplified
-Chinese (Lunar) selected. With it switched off, a day cell may have no text to write into,
-and nothing extra appears on the calendar (the log says so when that happens).</p>
-<p>The date a cell stands for is worked out from the cell itself rather than from the local
-time zone of the machine, so no holiday lands a day early or late west of UTC either.</p>
-<h2 id="whyitworksthewayitdoes">Why it works the way it does</h2>
-<p>A day cell of that calendar contains only two texts, the day number and one
-lunar-text block, and there is no container to put an extra element in. Inserting
-an element makes the shell rebuild the day cells over and over (measured: 470
-insertions in 37 seconds, and an empty calendar afterwards), so the mod says
-everything with the existing text and its colour. The shell also rewrites its own
-lunar text asynchronously after a month change, which is why the mod re-checks
-the visible cells once a second, for a few seconds after everything which can
-start such a rewrite, and only writes when a cell no longer shows what it wants.
-The re-check is started by the calendar window appearing or being shown, by the date
-or the text of a cell changing, and by the data or the settings changing; it stops
-itself after five passes without a write, because the shell keeps the day cells of a
-closed flyout alive and a timer which only stopped when they went away would never
-stop.</p>
-<p>The colour of a day is written only into a cell the mod is marking, and the value
-the cell had before the first write is remembered (the local value of
-<code>Foreground</code>) so that it can be put back exactly; a cell which had no local value
-gets the property cleared, so that its style and inherited colour apply again.
-Clearing the property looks the same most of the time, but not always: a value
-the shell sets on the element itself - it dims the days of the neighbouring
-months that way - would be lost instead of restored. Whether a colour on the label
-is the mod's own is decided by the brush object and not by the colour it holds, so
-the mod never saves its own colour as an original one, and never takes away a
-colour the shell has set since.</p>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Meaning |
-| --- | --- |
-| Data source (ICS) | Any iCalendar (.ics) URL whose events carry a day-off or workday marker. Empty by default, and then the mod fetches nothing at all and the calendar is left as it is. |
-| Refresh interval (hours) | How long fetched data is reused (default 24 h). Only used while a data source is set. |
-| Replace the lunar text | On: replace the text (default). Off: keep the lunar text, colour only. |
-| Day-off text | Empty means the holiday name from the feed. <code>{name}</code> is expanded too. |
-| Adjusted-workday text | Default <code>补班</code>. Empty means keep the lunar text, colour only. <code>{name}</code> shows the name of the holiday the workday belongs to (a 国庆 workday would read <code>国庆节</code>). |
-| Day-off colour | <code>RRGGBB</code>, <code>#RRGGBB</code>, <code>AARRGGBB</code> or <code>#AARRGGBB</code>. |
-| Workday colour | Same as above. |</p>
-<p>Windhawk 1.7.3 has no colour picker for mod settings, so the two colours are typed
-by hand, in one of the forms above.</p>
-<h2 id="datasource">Data source</h2>
-<p>The mod ships with no holiday data and no built-in service address: it reads only
-the address you enter, and with an empty address (the default) it makes no request
-at all and the calendar stays exactly as Windows draws it.</p>
-<p>Enter the address of an <strong>iCalendar (<code>.ics</code>) feed whose events carry a day-off or
-workday marker</strong>, for example:</p>
-<pre><code>BEGIN:VEVENT
-DTSTART;VALUE=DATE:20260215
-DTEND;VALUE=DATE:20260224
-SUMMARY:春节（休）
-END:VEVENT
-</code></pre>
-<p>One feed which works this way is <code>https://holiday.ailcc.com/api/holiday/ics</code> (several
-years at once, with the day-off and workday markers). It is an example: the mod does
-not contact it - or anything else - unless you paste that address into the settings.
-Any other feed in the format above works as well.</p>
-<ul>
-<li>Only events whose <code>SUMMARY</code> carries a full-width or half-width "day off" or
-"workday" marker are used: a day-off marker marks a holiday, with the festival
-name taken from the <code>SUMMARY</code>, and a workday marker an adjusted workday. Entries
-without a marker - solar terms, traditional festivals, foreign holidays - are
-ignored, so they are never mistaken for a holiday. The date an event names is
-used: a time part in <code>DTSTART</code>/<code>DTEND</code> is accepted and ignored, so <code>20260215</code>,
-<code>2026-02-15</code> and <code>20260215T000000Z</code> all mean 15 February.</li>
-<li><code>DTEND</code> is exclusive, as in RFC 5545: the event above is 15 to 23 February. An
-event without a <code>DTEND</code> is the single day it starts on.</li>
-<li>Every date is checked for being a date which exists, leap years included:
-<code>20260231</code> is dropped instead of being walked into 3 March, and an event whose
-<code>DTEND</code> cannot be parsed, or which is not after its <code>DTSTART</code>, is dropped as well
-(a log line counts those).</li>
-<li>Data is fetched once an address is set, and reused for 24 hours (configurable); a
-failed request keeps the previous data and is retried after 10 minutes, and a
-feed may describe at most 20000 dates in total.</li>
-</ul>
-<p>Deliberately not supported: recurrence rules (<code>RRULE</code>, <code>EXDATE</code> and
-<code>RECURRENCE-ID</code> are read as the single occurrence the event names, and a one-time
-log line says so), UTC offset conversion (a date-time is taken as the date it
-names), and any badge or corner marker inside a cell.</p>
-<h2 id="howitfindsthecalendar">How it finds the calendar</h2>
-<p>Nothing reports a day cell to the mod: it reads the XAML tree of the calendar window on
-that window's own UI thread (<code>Window::Current()</code> and down) and finds the day cells again
-on every pass. Nothing is injected and no XAML diagnostics are involved.</p>
-<p>Inside a day cell, the mod walks the three or four children on every pass, never writes
-to the day number (it is the only all-digit text in a cell), prefers the block the
-calendar names <code>LunarTextBlock</code>, falls back to the smallest text that has content, and
-remembers the element it wrote to by interface pointer so that a block the shell has
-already replaced is not written to any more.</p>
-<h2 id="credits">Credits</h2>
-<p>The way the calendar window is found follows lonfro's
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp">Agenda in Calendar View</a>
-(GPL-3.0); the cross-thread helpers such as <code>RunFromWindowThread</code> follow m417z's
-<a href="https://github.com/m417z/my-windhawk-mods">Windows 11 Notification Center Styler</a>.</p>
-<p>The mod does <strong>not</strong> use XAML Diagnostics (<code>InitializeXamlDiagnosticsEx</code>), so it can be
-used together with Windows 11 Notification Center Styler and tools such as UWPSpy, which
-use it themselves.</p>]]></content>
-        <author>
-            <name>dcsmf</name>
-            <uri>https://github.com/dcsmf</uri>
         </author>
     </entry>
 </feed>
