@@ -191,51 +191,15 @@ static ToolTipArea LookupRegisteredToolTip(void* pToolTip) {
     return ToolTipArea::Unknown;
 }
 
-static bool IsCursorInOverflowFlyout() {
-    POINT pt{};
-    if (GetCursorPos(&pt)) {
-        HWND hWnd = WindowFromPoint(pt);
-        while (hWnd) {
-            WCHAR className[64] = {0};
-            if (GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
-                if (wcsstr(className, L"Overflow") != nullptr) {
-                    return true;
-                }
-            }
-            hWnd = GetAncestor(hWnd, GA_PARENT);
+static bool IsInNotificationAreaOverflow(
+    const winrt::Windows::UI::Xaml::DependencyObject& element) {
+    for (auto current = element; current;
+         current = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(
+             current)) {
+        if (winrt::get_class_name(current) ==
+            L"SystemTray.NotificationAreaOverflow") {
+            return true;
         }
-    }
-    return false;
-}
-
-static bool IsInsideNotificationOverflow(
-    winrt::Windows::UI::Xaml::DependencyObject current) {
-    if (!current) {
-        return false;
-    }
-    for (int depth = 0; current && depth < 20; depth++) {
-        winrt::hstring className = winrt::get_class_name(current);
-        if (!className.empty()) {
-            std::wstring_view sv{className};
-            if (sv.find(L"NotificationAreaOverflow") !=
-                    std::wstring_view::npos ||
-                sv.find(L"NotifyIconOverflow") != std::wstring_view::npos ||
-                sv.find(L"OverflowFlyout") != std::wstring_view::npos) {
-                return true;
-            }
-        }
-        if (auto fe =
-                current.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-            winrt::hstring name = fe.Name();
-            if (!name.empty()) {
-                std::wstring_view svName{name};
-                if (svName.find(L"Overflow") != std::wstring_view::npos) {
-                    return true;
-                }
-            }
-        }
-        current = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(
-            current);
     }
     return false;
 }
@@ -277,21 +241,12 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
 
     // 2. Fast-path: check call stack caller module
     ToolTipArea callerArea = IdentifyCallerArea();
-    if (callerArea != ToolTipArea::Unknown) {
-        if (callerArea == ToolTipArea::SystemTray &&
-            IsCursorInOverflowFlyout()) {
-            callerArea = ToolTipArea::TrayOverflow;
-        }
-        RegisterToolTip(pThis, callerArea);
-        return callerArea;
+    if (callerArea == ToolTipArea::TaskbarApp) {
+        RegisterToolTip(pThis, ToolTipArea::TaskbarApp);
+        return ToolTipArea::TaskbarApp;
     }
 
     // 3. Fallback: inspect PlacementTarget runtime class & visual tree
-    if (IsCursorInOverflowFlyout()) {
-        RegisterToolTip(pThis, ToolTipArea::TrayOverflow);
-        return ToolTipArea::TrayOverflow;
-    }
-
     try {
         winrt::Windows::UI::Xaml::Controls::ToolTip toolTip{nullptr};
         winrt::copy_from_abi(toolTip, pThis);
@@ -299,7 +254,7 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
             winrt::Windows::UI::Xaml::UIElement target =
                 toolTip.PlacementTarget();
             if (target) {
-                if (IsInsideNotificationOverflow(target)) {
+                if (IsInNotificationAreaOverflow(target)) {
                     RegisterToolTip(pThis, ToolTipArea::TrayOverflow);
                     return ToolTipArea::TrayOverflow;
                 }
@@ -309,15 +264,6 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
                     winrt::hstring name = winrt::get_class_name(current);
                     if (!name.empty()) {
                         std::wstring_view sv{name};
-                        if (sv.find(L"NotificationAreaOverflow") !=
-                                std::wstring_view::npos ||
-                            sv.find(L"NotifyIconOverflow") !=
-                                std::wstring_view::npos ||
-                            sv.find(L"OverflowFlyout") !=
-                                std::wstring_view::npos) {
-                            RegisterToolTip(pThis, ToolTipArea::TrayOverflow);
-                            return ToolTipArea::TrayOverflow;
-                        }
                         if (sv.find(L"SystemTray") != std::wstring_view::npos ||
                             sv.find(L"Tray") != std::wstring_view::npos ||
                             sv.find(L"Clock") != std::wstring_view::npos ||
@@ -332,19 +278,6 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
                             return ToolTipArea::TaskbarApp;
                         }
                     }
-                    if (auto fe = current.try_as<
-                                  winrt::Windows::UI::Xaml::FrameworkElement>()) {
-                        winrt::hstring elemName = fe.Name();
-                        if (!elemName.empty()) {
-                            std::wstring_view svName{elemName};
-                            if (svName.find(L"Overflow") !=
-                                std::wstring_view::npos) {
-                                RegisterToolTip(pThis,
-                                                ToolTipArea::TrayOverflow);
-                                return ToolTipArea::TrayOverflow;
-                            }
-                        }
-                    }
                     current = winrt::Windows::UI::Xaml::Media::
                         VisualTreeHelper::GetParent(current);
                 }
@@ -352,6 +285,11 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
         }
     } catch (...) {
         Wh_Log(L"> IdentifyToolTipArea exception caught");
+    }
+
+    if (callerArea == ToolTipArea::SystemTray) {
+        RegisterToolTip(pThis, ToolTipArea::SystemTray);
+        return ToolTipArea::SystemTray;
     }
 
     return ToolTipArea::TaskbarApp;
@@ -681,7 +619,19 @@ static void __cdecl PositionTaskbarTooltip_Hook(void* pToolTip,
     void* pIToolTip =
         pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
 
-    bool isOverflow = IsCursorInOverflowFlyout();
+    bool isOverflow = false;
+    void* pITarget = pTarget ? *(reinterpret_cast<void**>(pTarget)) : nullptr;
+    if (pITarget) {
+        try {
+            winrt::Windows::UI::Xaml::FrameworkElement target{nullptr};
+            winrt::copy_from_abi(target, pITarget);
+            if (target && IsInNotificationAreaOverflow(target)) {
+                isOverflow = true;
+            }
+        } catch (...) {
+            Wh_Log(L"> Target inspection caught exception");
+        }
+    }
 
     if (pIToolTip) {
         RegisterToolTip(pIToolTip, isOverflow ? ToolTipArea::TrayOverflow
@@ -730,9 +680,19 @@ static void __cdecl ApplyTaskbarTooltipPlacement_Tray_Hook(
     if (pIToolTip) {
         area = LookupRegisteredToolTip(pIToolTip);
         if (area == ToolTipArea::Unknown) {
-            if (IsCursorInOverflowFlyout()) {
-                area = ToolTipArea::TrayOverflow;
-            } else {
+            try {
+                winrt::Windows::UI::Xaml::Controls::ToolTip toolTip{nullptr};
+                winrt::copy_from_abi(toolTip, pIToolTip);
+                if (toolTip) {
+                    auto target = toolTip.PlacementTarget();
+                    if (target && IsInNotificationAreaOverflow(target)) {
+                        area = ToolTipArea::TrayOverflow;
+                    } else {
+                        area = ToolTipArea::SystemTray;
+                    }
+                }
+            } catch (...) {
+                Wh_Log(L"> PlacementTarget inspection caught exception");
                 area = ToolTipArea::SystemTray;
             }
             RegisterToolTip(pIToolTip, area);
@@ -879,22 +839,8 @@ static IconView_UpdateOuterToolTipPlacement_t
 static void __cdecl IconView_UpdateOuterToolTipPlacement_Hook(void* pThis,
                                                               bool isHover) {
     EnsurePutIsOpenHooked();
-    if (!isHover) {
-        if (IconView_UpdateOuterToolTipPlacement_Original) {
-            IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
-        }
-        return;
-    }
-
-    bool hideTray =
-        g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed);
-    bool hideDrawer =
-        g_settings.hideTrayOverflowTooltips.load(std::memory_order_relaxed);
-
-    if (!hideTray || (!hideDrawer && IsCursorInOverflowFlyout())) {
-        if (IconView_UpdateOuterToolTipPlacement_Original) {
-            IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
-        }
+    if (IconView_UpdateOuterToolTipPlacement_Original) {
+        IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
     }
 }
 
