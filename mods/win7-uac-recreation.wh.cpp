@@ -4,8 +4,10 @@
 // @description     This mod recreates the Windows 7/8.1 UAC prompt on Windows 10 and Windows 11 without replacing system files and the secure desktop
 // @version         1.0.0
 // @author          babamohammed
+// @github          https://github.com/babamohammed2022
 // @include         consent.exe
-// @compilerOptions -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32
+// @architecture    x86-64
+// @compilerOptions -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -13,9 +15,9 @@
 
 # Windows 7/8.1 UAC Recreation
 
-This mod hides the modern UAC (User Account Control) prompt of Windows 10 and Windows 11 to make a recreation of the one from Windows 7/8.1 (and Windows 10 1507-1607) appear (which is a very similar dialog in these versions) The secure desktop stays on, and the decision stays Windows': the answer is handed back to the prompt Windows itself created, and the native prompt comes back on any doubt. System files are not replaced and system settings are not changed.
+This mod makes the UAC (User Account Control) prompt of Windows 10 and Windows 11 become the one from Windows 7/8.1, which is a very similar dialog in both versions. The secure desktop stays on, and the decision stays Windows': the answer is handed back to the prompt Windows itself created, and the native prompt comes back on any doubt. System files are not replaced and system settings are not changed.
 
-This is a best-effort recreation. Where a piece of the original information cannot be read, it is left out instead of guessed. Password prompts are always left to Windows. The blue link at the bottom is not drawn. Persian and Arabic are translated, but the layout is not mirrored.
+This is a best-effort recreation. Where a piece of the original information cannot be read, it is left out instead of guessed. Credential prompts are never replaced: the native Windows flow remains the only source of a decision. Windows can host consent and credential screens in the same XAML window class, so in the recommended all-app scope with the native prompt set to **Moved off screen**, that XAML candidate, if it has no Win32 edit control, may be moved off screen briefly while UI Automation classifies it. The early move is used only when the documented UIA2 timeouts are available: each provider connection/transaction is capped at 250 ms and the harvest has a 500 ms budget. If UIA2 cannot bound the call, or exposes credential signals, returns no usable harvest, expires, is cancelled, or cannot map buttons confidently, the native window is restored and the replacement is not shown. The blue link at the bottom is not drawn. Persian and Arabic are translated, but the layout is not mirrored.
 
 This mod has been tested on **Windows 10 21H2**, **Windows 11 24H2** and **Windows 11 25H2**.
 
@@ -25,7 +27,27 @@ This mod has been tested on **Windows 10 21H2**, **Windows 11 24H2** and **Windo
 
 The **Dialog skin** setting selects one of four looks: Windows 7 (Basic Theme), Windows 7 Aero (Custom Theme), Windows 8.1 (Native System Theme), or Windows 10 (versions 1507-1607, Flat Icons). Windows 7 Aero is an additional customized theme that uses the complete built-in Windows 7 shield set for verified, question-mark, and exclamation states; it is not the original Windows 7 desktop theme. The Windows 8.1 verified shield uses the supplied image with its white background removed. On Windows 7, Windows 7 Aero, and Windows 8.1, the blue question-mark shield is used for a trusted third-party publisher; a publisher identified as Microsoft Windows keeps the selected theme's verified shield. The supplied transparent orange shield matches an orange banner in Windows 7 Basic and Windows 8.1. Flat Icons always uses the blue Windows shield while the banner retains its warning color. Button drawing remains independently configurable.
 
-When the native prompt says the publisher is unknown, the mod may replace that value only if Windows verifies the file's signature and the verified signer certificate supplies a name. Unsupported verification results are not treated as proof that a file is unsigned; without a trusted signer name, the native value is kept.
+### Screenshots
+
+## Windows 7 (Basic) 
+
+![Windows 7 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uac.PNG)
+
+## Windows 7 (Aero)
+
+![Windows 7 Aero UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uacaero.PNG)
+
+## Windows 8.1 
+
+![Windows 8.1 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81uac.PNG)
+
+## Windows 10 (1507-1607)
+![Windows 10 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10uac.PNG)
+
+
+The publisher and file-origin text are copied only from clearly labelled values exposed by the native prompt. The mod does not inspect executable signatures or infer a publisher from a path. When the native prompt does not expose a clearly labelled program location, a generic application icon is used. Manual banner and shield choices can keep or increase caution, but cannot make a native warning look verified.
+
+A diagnostics dump is written only when explicitly enabled, to Windhawk's mod-specific storage directory. It can contain prompt text and command-line details; enable it only when needed.
 
 ## Installation
 
@@ -72,7 +94,7 @@ If any issues are encountered, please report them to the author of the mod.
   - aero: The Windows 7 Aero buttons, painted by the mod
 - bannerShield: auto
   $name: Which shield is shown
-  $description: "This setting chooses the shield for non-flat themes. An orange banner always uses its matching warning shield; Flat Icons always uses the blue Windows shield."
+  $description: "This setting chooses the shield for non-flat themes. A manual choice cannot replace a more cautious native shield; Flat Icons keeps the blue Windows shield."
   $options:
   - auto: Automatic (recommended)
   - verified: Verified shield
@@ -80,7 +102,7 @@ If any issues are encountered, please report them to the author of the mod.
   - exclamation: Amber exclamation mark
 - bannerColour: auto
   $name: Banner colour
-  $description: "This setting chooses the banner colour. Automatic mode follows the publisher and the native Yes-button state; manual choices affect appearance only and never approve or deny a request."
+  $description: "This setting chooses the banner colour. A manual choice cannot turn a native warning or blocked request blue; it never approves or denies a request."
   $options:
   - auto: Automatic (recommended)
   - blue: Always blue
@@ -93,9 +115,6 @@ If any issues are encountered, please report them to the author of the mod.
   - offscreen: Moved off screen (recommended)
   - hidden: Hidden
   - inPlace: Left where it is, behind the Windows 7 dialog
-- readRequestBlock: true
-  $name: Read the elevation request
-  $description: "This setting allows the elevation request to be read, read-only, so that the real program icon and the File origin line can be shown. When it is off, the stock icon is used and that line is left out."
 - promptTimeoutMs: 10000
   $name: How long to wait for the prompt (milliseconds)
   $description: "This setting is how long the mod waits for the prompt window to exist before leaving the Windows prompt alone. A slower machine needs longer than a fast one."
@@ -116,13 +135,7 @@ If any issues are encountered, please report them to the author of the mod.
   $description: "This setting writes a detailed log of what the mod does, to the Windhawk log and to DebugView. It is intended for diagnosing a problem."
 - dumpDiagnostics: false
   $name: Write a diagnostics dump (nothing is touched)
-  $description: "This setting writes a text file with the desktops, the windows found and the prompt's own content. While it is on, the mod only observes: the Windows prompt is never replaced."
-- dumpPath: "C:\\Windows\\Temp\\win7uac-dump.txt"
-  $name: Dump file path
-  $description: "This setting is the path of the diagnostics dump above."
-- dumpRequestBlock: false
-  $name: Write the raw elevation request to the log (diagnosing only)
-  $description: "This setting writes the raw elevation request to the log. The request can contain file names and user names, so it is intended for diagnosis only."
+  $description: "This setting writes a diagnostic text file to Windhawk's private mod storage, including the desktops, windows and native prompt content. While enabled, the mod only observes."
 - promptDetection: watchers
   $name: How the prompt is found (advanced)
   $description: "This setting chooses how the prompt is found. The default watches both desktops; the other two exist for diagnosing."
@@ -139,9 +152,7 @@ If any issues are encountered, please report them to the author of the mod.
 #include <oleauto.h>
 #include <shellapi.h>
 #include <new>
-// initguid.h turns the GUIDs that the headers below merely declare (IID_IImageList,
-// WINTRUST_ACTION_GENERIC_VERIFY_V2) into definitions of this translation unit, which is what the
-// mod needs: it refers to them by name and must not depend on a library that happens to carry them.
+// initguid.h defines the shell/UI Automation GUIDs used by this translation unit.
 #include <initguid.h>
 #include <commctrl.h>
 // The shell's image lists (IImageList), and the header that declares SHGetImageList and the
@@ -175,65 +186,16 @@ If any issues are encountered, please report them to the author of the mod.
 #define TDLGEBS_EXPANDEDHOVER 5
 #define TDLGEBS_EXPANDEDPRESSED 6
 #endif
-// WinVerifyTrust and its structures: reading the digital signature of the elevated file with the
-// documented API. The function itself is taken from wintrust.dll at run time (see VerifySignature).
-#include <wintrust.h>
-#include <wincrypt.h>
-#include <softpub.h>
 #include <windowsx.h>
 #include <psapi.h>
 #include <stdio.h>
 #include <wchar.h>
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <windhawk_api.h>
-
-// Windhawk writes one pointer inside this DLL - `InternalWhModPtr`, an `inline void*` in its own
-// header - and every API this mod calls hands it back to the engine. The engine finds it with
-// GetProcAddress; when it does not, it logs "InternalWhModPtr not found" and leaves it null, and
-// from then on every Wh_Log / Wh_GetIntSetting / Wh_SetFunctionHook of this mod would pass a null
-// mod pointer to the engine.
-//
-// That has been seen in the field on one machine and on no other mod of the twelve loaded in the
-// same log, so it is treated as a real possibility rather than a theoretical one. The pointer is
-// read here, once, through the same header the engine injects, and when it is null the mod stays
-// inert: no setting is read, no hook is set, the native prompt is left exactly as it is. That is
-// the outcome this mod promises whenever it cannot do its job, and it is better than calling into
-// the engine with nothing to identify ourselves with.
-//
-// The symbol is looked up by name and never declared here, so this compiles the same way with an
-// older engine header that does not have it.
-static bool WhEngineLinkUsable() {
-    static int cached = -1;
-    if (cached >= 0) return cached != 0;
-    HMODULE self = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       (LPCWSTR)&WhEngineLinkUsable, &self);
-    void* p = self ? (void*)GetProcAddress(self, "InternalWhModPtr") : nullptr;
-    // The engine leaves the variable at zero when it could not find it; a non-null address with a
-    // null value in it is the same case, and reading it is safe because the variable is ours.
-    if (p && *(void* const*)p) {
-        cached = 1;
-    } else {
-        cached = 0;
-        // No Wh_Log here: the log call is one of the things that would go through the very pointer
-        // that is missing. OutputDebugString needs nobody.
-        OutputDebugStringW(L"[win7uac] the Windhawk engine did not publish its mod pointer "
-                           L"(InternalWhModPtr) -> the mod stays inert and the Windows prompt is "
-                           L"left alone; reinstalling the mod in Windhawk fixes this\n");
-    }
-    return cached != 0;
-}
-
-#if __has_include(<windhawk_utils.h>)
-#include <windhawk_utils.h>
-#define HAVE_UTILS 1
-#else
-#define HAVE_UTILS 0
-#endif
 
 #if __has_include(<uiautomation.h>)
 #include <uiautomation.h>
@@ -291,8 +253,6 @@ struct Settings {
     std::wstring appsWhitelist;   // App list
     int windowTheme;        // 0 Win7 Basic, 1 custom Win7 Aero, 2 Win8.1 native, 3 Win10 flat
     int style;              // Button style: 0 drawn by Windows, 1 Windows 7 Aero buttons
-    BOOL readRequestBlock;
-    BOOL dumpRequestBlock;
     int bannerShield;        // 0 auto, 1 verified shield, 2 question-mark shield, 3 exclamation
     int nativeWindowMode;   // The Windows prompt: 0 moved off screen, 1 hidden, 2 in place
     int detectTimeoutMs;    // How long to wait for the prompt (milliseconds)
@@ -306,7 +266,6 @@ struct Settings {
     WCHAR noHotkey[8];
     BOOL debugLog;
     BOOL dumpUiTree;        // Write a diagnostics dump (dumpDiagnostics)
-    WCHAR dumpPath[MAX_PATH];
 };
 
 // The settings are published as one immutable snapshot and read without a lock: the interface
@@ -387,8 +346,6 @@ static void FillSettings(Settings& out) {
     static const WCHAR* kWindowThemeIds[] = {
         L"win7Basic", L"win7Aero", L"win81Native", L"win10Flat"};
     out.windowTheme = ReadChoice(L"windowTheme", kWindowThemeIds, ARRAYSIZE(kWindowThemeIds), WindowThemeWin7Basic);
-    out.readRequestBlock = Wh_GetIntSetting(L"readRequestBlock");
-    out.dumpRequestBlock = Wh_GetIntSetting(L"dumpRequestBlock");
     out.debugLog = Wh_GetIntSetting(L"debugLog");
     out.dumpUiTree = Wh_GetIntSetting(L"dumpDiagnostics");
 
@@ -432,9 +389,6 @@ static void FillSettings(Settings& out) {
     wcsncpy_s(out.noHotkey, *s ? s : L"", _TRUNCATE);
     Wh_FreeStringSetting(s);
 
-    s = Wh_GetStringSetting(L"dumpPath");
-    wcsncpy_s(out.dumpPath, *s ? s : L"C:\\Windows\\Temp\\win7uac-dump.txt", _TRUNCATE);
-    Wh_FreeStringSetting(s);
 }
 
 //------------------------------------------------------------------------------
@@ -464,14 +418,6 @@ static void Dbg(const WCHAR* fmt, ...) {
 static void Log(const WCHAR* fmt, ...) {
     va_list a; va_start(a, fmt);
     LogV(fmt, a, TRUE);
-    va_end(a);
-}
-
-// The same log without the debug output. The exception handler uses it, because a logger that
-// raised the exception it is reporting would go on reporting itself for ever.
-static void LogQuiet(const WCHAR* fmt, ...) {
-    va_list a; va_start(a, fmt);
-    LogV(fmt, a, FALSE);
     va_end(a);
 }
 
@@ -523,76 +469,10 @@ static std::wstring Basename(const std::wstring& path) {
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
-// Crash telemetry (LOGGING ONLY)
-//
-// A vectored exception handler is installed when debugLog is on. It writes the exception
-// code, the faulting module+RVA and a short stack trace to the log and then lets the
-// exception continue its normal course: it never handles it, never swallows it and changes
-// nothing about the consent flow. It exists so a crash can be located from the log alone.
-//
-// Two rules keep it honest and cheap. Informational exceptions - the ones Windows itself uses
-// as a channel rather than as a fault - are counted and never logged; and a fault is reported
-// once per place it happens, not once per occurrence.
+// Status names for native and COM return codes
 //------------------------------------------------------------------------------
 
 static const WCHAR* g_step = L"init";
-
-static void FormatAddress(void* addr, WCHAR* out, size_t cch) {
-    HMODULE mods[512];
-    DWORD needed = 0;
-    if (EnumProcessModules(GetCurrentProcess(), mods, sizeof(mods), &needed)) {
-        int n = (int)(needed / sizeof(HMODULE));
-        for (int i = 0; i < n && i < (int)ARRAYSIZE(mods); i++) {
-            MODULEINFO mi = {};
-            if (!GetModuleInformation(GetCurrentProcess(), mods[i], &mi, sizeof(mi))) continue;
-            BYTE* base = (BYTE*)mi.lpBaseOfDll;
-            BYTE* a = (BYTE*)addr;
-            if (a >= base && a < base + mi.SizeOfImage) {
-                WCHAR name[MAX_PATH] = L"";
-                GetModuleFileNameW(mods[i], name, ARRAYSIZE(name));
-                swprintf_s(out, cch, L"%s+0x%llX", Basename(name).c_str(),
-                           (unsigned long long)(a - base));
-                return;
-            }
-        }
-    }
-    swprintf_s(out, cch, L"%p (module unknown)", addr);
-}
-
-static USHORT(WINAPI* g_captureStack)(ULONG, ULONG, PVOID*, PULONG) = nullptr;
-
-// The exception codes that are not crashes. Windows raises an exception to hand the text of
-// `OutputDebugString` to whoever is listening (0x40010006 and 0x4001000A) - and this mod's own
-// log goes that way on every single line; the C++ runtime raises 0xE06D7363 for every `throw`
-// it is about to handle; a debugger's breakpoint and single step are 0x80000003 and 0x80000004
-// (an RPC call that failed is unwound with an exception too, and gets its own one-line report,
-// because that failure is exactly what a report about a prompt that never appeared needs).
-// Reporting those as
-// crashes is not a diagnosis, it is noise: on one machine it turned a log of 24 real lines into
-// 584 lines that said `exception`.
-static bool ExceptionIsInformational(DWORD code) {
-    if (code >= 0x40010000u && code <= 0x400100FFu) return true;   // OutputDebugString's own
-    if (code == 0x406D1388u) return true;                          // SetThreadName
-    if (code == 0xE06D7363u) return true;                          // a C++ exception
-    if (code == 0x80000003u || code == 0x80000004u) return true;   // breakpoint, single step
-    return false;
-}
-
-// One report per fault *site*, not per fault: a fault that repeats fifty times is one sentence of
-// information, and fifty identical stack traces are none. Sixteen distinct places is more than
-// any diagnosis of this mod has needed; past that the logger falls silent rather than fill the
-// log again.
-static bool FaultSiteAlreadyReported(DWORD code, void* addr) {
-    static struct { DWORD code; void* addr; } seen[16] = {};
-    static int count = 0;
-    for (int i = 0; i < count; i++)
-        if (seen[i].code == code && seen[i].addr == addr) return true;
-    if (count >= (int)ARRAYSIZE(seen)) return true;
-    seen[count].code = code;
-    seen[count].addr = addr;
-    count++;
-    return false;
-}
 
 // The names Windows itself gives to the codes that can end up in this log: a line saying
 // `0x000006C6` is a puzzle, the same line saying `RPC_S_INVALID_BOUND` is a diagnosis - and it is
@@ -624,75 +504,6 @@ static const WCHAR* ErrorCodeName(DWORD code) {
     case 0xC0000374u: return L"STATUS_HEAP_CORRUPTION";
     case 0xC0000409u: return L"STATUS_STACK_BUFFER_OVERRUN";
     default: return L"";
-    }
-}
-
-// The RPC error range (1700..1800). A call that fails is unwound by the RPC runtime with an
-// exception: it is a failure of a call, never a crash of the process, and the log says which.
-static bool ExceptionCodeIsRpc(DWORD code) {
-    return code >= 0x000006A4u && code <= 0x0000070Fu;
-}
-
-static volatile LONG g_exceptionsIgnored = 0;
-
-static LONG CALLBACK ExceptionLogger(EXCEPTION_POINTERS* ep) {
-    static volatile LONG busy = 0;
-    if (InterlockedCompareExchange(&busy, 1, 0) != 0) return EXCEPTION_CONTINUE_SEARCH;
-    if (ep && ep->ExceptionRecord) {
-        const DWORD code = ep->ExceptionRecord->ExceptionCode;
-        void* addr = ep->ExceptionRecord->ExceptionAddress;
-        if (ExceptionIsInformational(code)) {
-            // By far the common path - every line this mod logs arrives here - so nothing is done
-            // on it but the count: no module walk, no stack, no logging, no debug output.
-            InterlockedIncrement(&g_exceptionsIgnored);
-        } else if (!FaultSiteAlreadyReported(code, addr)) {
-            WCHAR where[320] = L"";
-            FormatAddress(addr, where, ARRAYSIZE(where));
-            const WCHAR* name = ErrorCodeName(code);
-            const long ignored = (long)InterlockedCompareExchange(&g_exceptionsIgnored, 0, 0);
-            // LogQuiet, never Log: OutputDebugString from inside this handler would raise the
-            // very exception being reported. An RPC call that failed is not a crash and is not
-            // labelled as one - it is the line that names the error the user may be seeing.
-            if (ExceptionCodeIsRpc(code))
-                LogQuiet(L"[rpc] the RPC runtime unwound a failed call: 0x%08X %s at %s, last "
-                         L"step: %s (%ld informational exceptions passed over)", code,
-                         *name ? name : L"(no name for this code)", where, g_step, ignored);
-            else
-                LogQuiet(L"[crash] exception 0x%08X %s at %s, last step: %s (%ld informational "
-                         L"exceptions passed over before this one)", code,
-                         *name ? name : L"(no name for this code)", where, g_step, ignored);
-
-            if (!g_captureStack) {
-                HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-                if (ntdll)
-                    g_captureStack = (USHORT(WINAPI*)(ULONG, ULONG, PVOID*, PULONG))
-                        GetProcAddress(ntdll, "RtlCaptureStackBackTrace");
-            }
-            if (g_captureStack) {
-                void* frames[16] = {};
-                USHORT n = g_captureStack(0, ARRAYSIZE(frames), frames, nullptr);
-                for (USHORT i = 0; i < n && i < 8; i++) {
-                    WCHAR line[320] = L"";
-                    FormatAddress(frames[i], line, ARRAYSIZE(line));
-                    LogQuiet(L"[crash]   frame %u: %s", (unsigned)i, line);
-                }
-            }
-        }
-    }
-    InterlockedExchange(&busy, 0);
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-static PVOID g_excLogger = nullptr;
-
-static void InstallExceptionLogger() {
-    if (!g_excLogger) g_excLogger = AddVectoredExceptionHandler(1, ExceptionLogger);
-}
-
-static void RemoveExceptionLogger() {
-    if (g_excLogger) {
-        RemoveVectoredExceptionHandler(g_excLogger);
-        g_excLogger = nullptr;
     }
 }
 
@@ -901,13 +712,21 @@ struct WatcherCtx {
     const WCHAR* name;
     HDESK desktop;
     DWORD tid;
-    HANDLE thread;
     HWINEVENTHOOK hook;
 };
 
 static WatcherCtx g_watchers[2] = { {kDesktopDefault}, {kDesktopWinlogon} };
 
 static CRITICAL_SECTION g_cs;
+class CsLock {
+public:
+    explicit CsLock(CRITICAL_SECTION& cs) : cs_(cs) { EnterCriticalSection(&cs_); }
+    ~CsLock() { LeaveCriticalSection(&cs_); }
+    CsLock(const CsLock&) = delete;
+    CsLock& operator=(const CsLock&) = delete;
+private:
+    CRITICAL_SECTION& cs_;
+};
 // These three are written by the watcher and read by the session under g_cs, and they are emptied
 // in the unload path (see ReleaseGlobalState): their destructors must not run at process exit,
 // where static destruction happens under the loader lock.
@@ -916,46 +735,103 @@ static CRITICAL_SECTION g_cs;
 [[clang::no_destroy]] static std::wstring g_userDesktopAppClass;
 static volatile LONG g_userDesktopAppReady = 0;
 
-// Every thread this mod creates is registered here, handle and all, and waited for before the DLL
-// can be unloaded: a thread that outlives the code it runs is the one crash this mod must never
-// have. g_threadsActive is the count of threads that have not returned yet - the unload path
-// reports it when it is not zero, which turns a silent unload bug into a log line.
+static HANDLE g_stopEvent = nullptr;             // cancels the UI/session loops during unload
+static HANDLE g_watcherStopEvent = nullptr;      // watcher threads stop after the UI is quiescent
+static HANDLE g_candidateEvent = nullptr;        // wakes the UI when a watcher records a window
+static HANDLE g_threadsIdleEvent = nullptr;      // signalled only when all tracked mod threads exit
+static HANDLE g_hookIdleEvent = nullptr;         // signalled when no detour call remains in flight
+static HANDLE g_nativeCallReturnedEvent = nullptr;
+static HANDLE g_uiIdleEvent = nullptr;           // replacement UI has completed all window/UIA work
+
+static void CloseLifecycleEvents() {
+    HANDLE* events[] = {&g_stopEvent, &g_watcherStopEvent, &g_candidateEvent,
+                        &g_threadsIdleEvent, &g_hookIdleEvent,
+                        &g_nativeCallReturnedEvent, &g_uiIdleEvent};
+    for (HANDLE* event : events) {
+        if (*event) CloseHandle(*event);
+        *event = nullptr;
+    }
+}
+
+static bool g_csInitialized = false;
+
+static bool InitializeLifecycleEvents() {
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_watcherStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_candidateEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_threadsIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    g_hookIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    g_nativeCallReturnedEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    g_uiIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (g_stopEvent && g_watcherStopEvent && g_candidateEvent && g_threadsIdleEvent &&
+        g_hookIdleEvent && g_nativeCallReturnedEvent && g_uiIdleEvent)
+        return true;
+    Log(L"creating lifecycle events failed: %u", GetLastError());
+    CloseLifecycleEvents();
+    return false;
+}
+
+static bool StopRequested() {
+    return g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0;
+}
+
+// Every thread this mod creates is registered here, and the unload path waits for every one of
+// them without a timeout. Completed slots are reclaimed before a new prompt, so repeated UAC
+// requests do not exhaust a fixed registry. The idle event is the final guard if a handle cannot be
+// stored: no thread can outlive the DLL merely because the registry was full.
 #define W7UAC_MAX_THREADS 8
 static HANDLE g_modThreads[W7UAC_MAX_THREADS] = {};
-static volatile LONG g_modThreadSlots = 0;
 static volatile LONG g_threadsActive = 0;
+
+static void ModThreadStarting() {
+    if (InterlockedIncrement(&g_threadsActive) == 1 && g_threadsIdleEvent)
+        ResetEvent(g_threadsIdleEvent);
+}
+
+static void ModThreadFinished() {
+    LONG left = InterlockedDecrement(&g_threadsActive);
+    if (left <= 0) {
+        InterlockedExchange(&g_threadsActive, 0);
+        if (g_threadsIdleEvent) SetEvent(g_threadsIdleEvent);
+    }
+}
 
 static void TrackModThread(HANDLE thread, const WCHAR* what) {
     if (!thread) return;
-    LONG slot = InterlockedIncrement(&g_modThreadSlots) - 1;
-    if (slot < W7UAC_MAX_THREADS) {
-        g_modThreads[slot] = thread;
-        return;
+    LONG freeSlot = -1;
+    {
+        CsLock lock(g_cs);
+        for (LONG i = 0; i < W7UAC_MAX_THREADS; i++) {
+            if (g_modThreads[i] && WaitForSingleObject(g_modThreads[i], 0) == WAIT_OBJECT_0) {
+                CloseHandle(g_modThreads[i]);
+                g_modThreads[i] = nullptr;
+            }
+            if (!g_modThreads[i] && freeSlot < 0) freeSlot = i;
+        }
+        if (freeSlot >= 0) {
+            g_modThreads[freeSlot] = thread;
+        } else {
+            // Closing a thread handle does not terminate it; the idle event still tracks it.
+            CloseHandle(thread);
+        }
     }
-    // Not reached with the threads a prompt creates (two watchers plus one interface thread, out of
-    // eight slots), but if it ever is: the handle is left open on purpose. The caller waits for this
-    // thread right after starting it, and closing the handle here would make that wait fail at
-    // once and tear the session down under a thread that is still running. One handle left open in
-    // a process that is about to exit costs nothing.
-    InterlockedDecrement(&g_modThreadSlots);
-    Log(L"%s: more than %d threads - this one cannot be waited for at unload", what,
-        W7UAC_MAX_THREADS);
+    if (freeSlot < 0)
+        Log(L"%s: the thread registry is full; unload will wait on the global idle event", what);
 }
 
-static void WaitForModThreads(DWORD timeoutMs) {
-    LONG slots = InterlockedCompareExchange(&g_modThreadSlots, 0, 0);
-    if (slots > W7UAC_MAX_THREADS) slots = W7UAC_MAX_THREADS;
-    for (LONG i = 0; i < slots; i++) {
-        HANDLE h = (HANDLE)InterlockedExchangePointer((PVOID volatile*)&g_modThreads[i], nullptr);
+static void WaitForModThreads() {
+    for (LONG i = 0; i < W7UAC_MAX_THREADS; i++) {
+        HANDLE h = nullptr;
+        {
+            CsLock lock(g_cs);
+            h = g_modThreads[i];
+            g_modThreads[i] = nullptr;
+        }
         if (!h) continue;
-        if (WaitForSingleObject(h, timeoutMs) != WAIT_OBJECT_0)
-            Log(L"a thread of this mod was still running after %lu ms", (unsigned long)timeoutMs);
+        WaitForSingleObject(h, INFINITE);
         CloseHandle(h);
     }
-    LONG stillRunning = InterlockedCompareExchange(&g_threadsActive, 0, 0);
-    if (stillRunning != 0)
-        Log(L"%ld thread(s) of this mod reported themselves as still running at unload",
-            (long)stillRunning);
+    if (g_threadsIdleEvent) WaitForSingleObject(g_threadsIdleEvent, INFINITE);
 }
 
 static volatile LONG g_inHook = 0;             // a consent prompt is in flight
@@ -998,16 +874,10 @@ static bool IsKnownPromptClass(const WCHAR* cls) {
     }
     return false;
 }
-
-// The narrower list the *instant ejection* works from. The generic classes above are there so that
-// the log and the harvest recognise every shape a prompt has had; moving a window on the strength
-// of one of them is a different matter, because this process also owns windows that are not the
-// prompt at all - a message box is a `#32770`, and the XAML stack can carry other `CoreWindow`s.
-// These two are the consent prompt's own hosts and nothing else: the XAML island of Windows 10 and
-// 11 (both the 21H2 and the 24H2 builds of consent.exe use it) and the classic consent dialog.
-static bool IsConsentHostClass(const WCHAR* cls) {
-    return cls && (wcscmp(cls, L"Credential Dialog Xaml Host") == 0 ||
-                   wcscmp(cls, L"CredDialogClass") == 0);
+// Only this shared XAML host needs the pre-UIA move to reduce the observed modern-prompt flash.
+// Its class name is not evidence that the screen is consent rather than credentials.
+static bool IsCredentialXamlHostClass(const WCHAR* cls) {
+    return cls && wcscmp(cls, L"Credential Dialog Xaml Host") == 0;
 }
 
 static thread_local int g_curWatcher = -1;
@@ -1039,8 +909,11 @@ static void AddCandidate(HWND hwnd, DWORD pid, const WCHAR* cls) {
     WCHAR title[256] = L"";      // the same size as PromptCandidate::title
     GetWindowTextW(hwnd, title, ARRAYSIZE(title));
 
-    EnterCriticalSection(&g_cs);
-    if (g_candidates.size() < 32) {
+    bool logIt = false;
+    bool known = false;
+    {
+    CsLock lock(g_cs);
+    if (!StopRequested() && g_candidates.size() < 32) {
         PromptCandidate c = {};
         c.hwnd = hwnd;
         c.pid = pid;
@@ -1050,14 +923,13 @@ static void AddCandidate(HWND hwnd, DWORD pid, const WCHAR* cls) {
         c.desktop = w.desktop;
         wcsncpy_s(c.desktopName, w.name, _TRUNCATE);
         g_candidates.push_back(c);
+        if (g_candidateEvent) SetEvent(g_candidateEvent);
     }
     // The line is written once per window, and only while the log is not yet full: the dedup runs
     // under the same lock as the list, the printing does not. The lock taken above is still held
     // here on purpose - a CRITICAL_SECTION is recursive, so a second Enter would have gone through
     // and the single Leave below would have left the lock taken for good, with every other thread
     // waiting on it forever.
-    bool logIt = false;
-    bool known = false;
     for (int i = 0; i < g_loggedCandidateCount; i++) {
         if (g_loggedCandidates[i] == hwnd) {
             known = true;
@@ -1068,7 +940,7 @@ static void AddCandidate(HWND hwnd, DWORD pid, const WCHAR* cls) {
         g_loggedCandidates[g_loggedCandidateCount++] = hwnd;
         logIt = true;
     }
-    LeaveCriticalSection(&g_cs);
+    }
     if (logIt) Dbg(L"watcher[%s]: candidate hwnd=%p pid=%lu class='%s'", w.name, hwnd, pid, cls);
 }
 
@@ -1078,18 +950,17 @@ static void AddCandidate(HWND hwnd, DWORD pid, const WCHAR* cls) {
 [[clang::no_destroy]] static std::vector<std::wstring> g_rejectLog;
 
 static void NoteForeignWindow(HWND hwnd, DWORD pid, const WCHAR* cls) {
-    EnterCriticalSection(&g_cs);
+    CsLock lock(g_cs);
     if (g_rejectLog.size() < 40) {
         WCHAR line[320];
         swprintf_s(line, L"hwnd=%p pid=%lu class='%s'", hwnd, pid, cls);
         g_rejectLog.push_back(line);
     }
-    LeaveCriticalSection(&g_cs);
 }
 
 // Same parking lot as NoteForeignWindow, for the plumbing windows of consent.exe itself.
 static void NoteInternalWindow(HWND hwnd, DWORD pid, const WCHAR* cls) {
-    EnterCriticalSection(&g_cs);
+    CsLock lock(g_cs);
     if (g_rejectLog.size() < 40) {
         WCHAR line[320];
         swprintf_s(line, L"internal plumbing, never used: hwnd=%p pid=%lu class='%s'", hwnd, pid,
@@ -1097,7 +968,6 @@ static void NoteInternalWindow(HWND hwnd, DWORD pid, const WCHAR* cls) {
         if (std::find(g_rejectLog.begin(), g_rejectLog.end(), line) == g_rejectLog.end())
             g_rejectLog.push_back(line);
     }
-    LeaveCriticalSection(&g_cs);
     Dbg(L"ignoring the consent process's own plumbing window class='%s'", cls);
 }
 
@@ -1105,9 +975,10 @@ static void NoteInternalWindow(HWND hwnd, DWORD pid, const WCHAR* cls) {
 // flow put on its desktops: its own plumbing, and the windows of every other process.
 static void LogSeenWindows(const WCHAR* what) {
     std::vector<std::wstring> copy;
-    EnterCriticalSection(&g_cs);
-    copy = g_rejectLog;
-    LeaveCriticalSection(&g_cs);
+    {
+        CsLock lock(g_cs);
+        copy = g_rejectLog;
+    }
     if (copy.empty()) return;
     size_t shown = copy.size() < 12 ? copy.size() : 12;
     Log(L"%s: %u window(s) parked, first %u shown", what, (unsigned)copy.size(),
@@ -1115,13 +986,9 @@ static void LogSeenWindows(const WCHAR* what) {
     for (size_t i = 0; i < shown; i++) Log(L"  %s", copy[i].c_str());
 }
 
-// The instant ejection. It is defined with the session bookkeeping below and declared here
-// because the watcher is where this process's own prompt is first seen (EjectTheNativePromptAtOnce).
-static void EjectTheNativePromptAtOnce(HWND hwnd);
-
 static void CALLBACK WinEventProcBody(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                       LONG idChild, DWORD, DWORD) {
-    if (!hwnd || idObject != OBJID_WINDOW) return;
+    if (!hwnd || idObject != OBJID_WINDOW || StopRequested()) return;
     if (InterlockedCompareExchange(&g_inHook, 0, 0) == 0) return;
     if (g_curWatcher < 0) return;              // not one of our watcher threads
     if (event != EVENT_OBJECT_CREATE && event != EVENT_OBJECT_SHOW &&
@@ -1142,10 +1009,8 @@ static void CALLBACK WinEventProcBody(HWINEVENTHOOK, DWORD event, HWND hwnd, LON
     }
 
     if (pid == GetCurrentProcessId()) {
-        // This process's own prompt window leaves the screen in the very event that announced it:
-        // nothing else has to run first (see EjectTheNativePromptAtOnce). Only the prompt's own
-        // host class is ejected on sight, never a window this process happens to own.
-        if (IsConsentHostClass(cls)) EjectTheNativePromptAtOnce(hwnd);
+        // The watcher records discovery only. The UI/session thread is the sole owner of moves and
+        // restores, so a late event cannot re-hide a prompt after a fail-open decision.
         AddCandidate(hwnd, pid, cls);
     } else {
         // Identity gate: a foreign window is never harvested and never clicked. It is noted
@@ -1233,10 +1098,11 @@ static void CaptureUserDesktopApp() {
         cls = ctx.cls;
     }
 
-    EnterCriticalSection(&g_cs);
-    g_userDesktopApp = exe;
-    g_userDesktopAppClass = cls;
-    LeaveCriticalSection(&g_cs);
+    {
+        CsLock lock(g_cs);
+        g_userDesktopApp = exe;
+        g_userDesktopAppClass = cls;
+    }
     InterlockedExchange(&g_userDesktopAppReady, 1);
     Dbg(L"user desktop app: '%s' (class '%s')", exe.c_str(), cls.c_str());
 }
@@ -1251,18 +1117,36 @@ static DWORD WINAPI IdentityThreadProc(LPVOID param) {
 #if W7UAC_HAS_EXCEPTIONS
     try {
         DWORD r = IdentityThreadProcBody(param);
-        InterlockedDecrement(&g_threadsActive);
+        ModThreadFinished();
         return r;
     } catch (...) {
         Log(L"exception while capturing the user desktop app: nothing else is affected");
-        InterlockedDecrement(&g_threadsActive);
+        ModThreadFinished();
         return 0;
     }
 #else
     DWORD r = IdentityThreadProcBody(param);
-    InterlockedDecrement(&g_threadsActive);
+    ModThreadFinished();
     return r;
 #endif
+}
+
+static void MarkWatcherStopped(WatcherCtx* w, bool closeDesktop) {
+    if (!w) return;
+    HWINEVENTHOOK hook = nullptr;
+    HDESK desk = nullptr;
+    {
+        CsLock lock(g_cs);
+        hook = w->hook;
+        w->hook = nullptr;
+        w->tid = 0;
+        if (closeDesktop) {
+            desk = w->desktop;
+            w->desktop = nullptr;
+        }
+    }
+    if (hook) UnhookWinEvent(hook);
+    if (desk) CloseDesktop(desk);
 }
 
 static DWORD WINAPI WatcherProcBody(LPVOID param) {
@@ -1271,98 +1155,100 @@ static DWORD WINAPI WatcherProcBody(LPVOID param) {
 
     HDESK desk = OpenDesktopByName(w->name);
     if (!desk) return 0;
-    w->desktop = desk;
-
-    // SetThreadDesktop only works while this thread has no window and no installed hook.
     if (!SetThreadDesktop(desk)) {
         Log(L"watcher[%s]: SetThreadDesktop failed: %u", w->name, GetLastError());
         CloseDesktop(desk);
-        w->desktop = nullptr;
         return 0;
     }
 
-    // The range carries the events the prompt announces itself with - created, shown - and every
-    // move: the last one is what lets the mod put the window away again the instant the system
-    // decides to place it somewhere else (see EjectTheNativePromptAtOnce).
+    MSG msg = {};
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // create this thread's message queue
+    {
+        CsLock lock(g_cs);
+        w->desktop = desk;
+        w->tid = GetCurrentThreadId();
+    }
+
+    // OUTOFCONTEXT keeps the callback in this process; the watcher only records windows and never
+    // moves or hides the native prompt.
     HWINEVENTHOOK hook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
                                          WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!hook) {
         Log(L"watcher[%s]: SetWinEventHook failed: %u", w->name, GetLastError());
-        CloseDesktop(desk);
-        w->desktop = nullptr;
+        // Keep the desktop handle available to the session's enumeration fallback. It is closed
+        // only after the session has finished, even though this watcher could not install its hook.
+        MarkWatcherStopped(w, false);
         return 0;
     }
-
-    w->hook = hook;
-    w->tid = GetCurrentThreadId();
-    Log(L"watcher[%s]: active (desktop handle %p, tid=%lu)", w->name, (void*)desk, w->tid);
-
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.hwnd == nullptr && msg.message == WM_PROMPT_STARTED) {
-            CaptureUserDesktopApp();
-            continue;
-        }
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+    {
+        CsLock lock(g_cs);
+        w->hook = hook;
     }
-    UnhookWinEvent(hook);
+    Log(L"watcher[%s]: active (desktop handle %p, tid=%lu)", w->name, (void*)desk,
+        GetCurrentThreadId());
+
+    for (;;) {
+        HANDLE stop = g_watcherStopEvent;
+        DWORD wait = MsgWaitForMultipleObjects(stop ? 1 : 0, stop ? &stop : nullptr, FALSE,
+                                               INFINITE, QS_ALLINPUT);
+        if (stop && wait == WAIT_OBJECT_0) break;
+        if (wait == WAIT_FAILED) {
+            Log(L"watcher[%s]: message wait failed: %u", w->name, GetLastError());
+            break;
+        }
+        if (wait != WAIT_OBJECT_0 + (stop ? 1 : 0)) continue;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) goto watcher_done;
+            if (msg.hwnd == nullptr && msg.message == WM_PROMPT_STARTED) {
+                CaptureUserDesktopApp();
+                continue;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+watcher_done:
+    // By contract g_watcherStopEvent is signalled only after the UI/session no longer holds or
+    // enumerates this shared desktop handle. Unexpected exits retain the handle for unload cleanup.
+    MarkWatcherStopped(w, g_watcherStopEvent &&
+                              WaitForSingleObject(g_watcherStopEvent, 0) == WAIT_OBJECT_0);
     return 0;
 }
 
-// The wrapper of the watcher thread: the body above it, and the count of running threads of this
-// mod decremented on every way out of it, the normal one included.
 static DWORD WINAPI WatcherProc(LPVOID param) {
 #if W7UAC_HAS_EXCEPTIONS
     try {
         DWORD r = WatcherProcBody(param);
-        InterlockedDecrement(&g_threadsActive);
+        ModThreadFinished();
         return r;
     } catch (...) {
         Log(L"exception in the watcher thread: the watcher stops, the Windows prompt is untouched");
-        InterlockedDecrement(&g_threadsActive);
+        MarkWatcherStopped((WatcherCtx*)param, false);
+        ModThreadFinished();
         return 0;
     }
 #else
     DWORD r = WatcherProcBody(param);
-    InterlockedDecrement(&g_threadsActive);
+    ModThreadFinished();
     return r;
 #endif
 }
 
 static void StartWatchers() {
     for (auto& w : g_watchers) {
-        InterlockedIncrement(&g_threadsActive);
-        w.thread = CreateThread(nullptr, 0, WatcherProc, &w, 0, nullptr);
-        if (!w.thread) {
-            InterlockedDecrement(&g_threadsActive);
+        ModThreadStarting();
+        HANDLE thread = CreateThread(nullptr, 0, WatcherProc, &w, 0, nullptr);
+        if (!thread) {
+            ModThreadFinished();
             Log(L"watcher[%s]: CreateThread failed: %u", w.name, GetLastError());
             continue;
         }
-        TrackModThread(w.thread, w.name);
+        TrackModThread(thread, w.name);
     }
 }
 
 static void StopWatchers() {
-    for (auto& w : g_watchers) {
-        if (w.thread) {
-            if (w.tid) PostThreadMessageW(w.tid, WM_QUIT, 0, 0);
-            if (WaitForSingleObject(w.thread, 2000) != WAIT_OBJECT_0)
-                Log(L"watcher[%s]: did not stop in time", w.name);
-            // Waited for, not closed: this handle is one of the tracked ones and WaitForModThreads
-            // closes it. Both places closing it was a double close on the same value.
-            w.thread = nullptr;
-            w.tid = 0;
-        }
-        w.hook = nullptr;
-        // The desktop handle opened at the start of the thread lives as long as the mod does (the
-        // session enumerates the two desktops through these handles); it is closed here, with the
-        // last thread that could have used it already waited for.
-        if (w.desktop) {
-            CloseDesktop(w.desktop);
-            w.desktop = nullptr;
-        }
-    }
+    if (g_watcherStopEvent) SetEvent(g_watcherStopEvent);
 }
 
 //------------------------------------------------------------------------------
@@ -1389,20 +1275,23 @@ struct PromptInfo {
     std::wstring questionText;    // the prompt's own wording, mapped onto the Win7 rows
     std::wstring appText;
     std::wstring publisherText;
+    bool publisherLabelled = false;
+    bool publisherVerifiedLabelled = false;
     std::vector<UiElement> elements;
     std::vector<std::wstring> texts;
     std::vector<std::wstring> detailTexts;   // what the native "Show details" pane reveals
-    std::vector<std::wstring> paths;
-    std::wstring appPath;      // the file being elevated, when the prompt says which one
-    std::wstring originText;   // Windows 7's "File origin" row
+    std::vector<UiElement> detailElements;     // native details, with text and bounding rectangles
+    std::wstring programPath;   // only from the native, explicitly labelled Program location row
+    std::wstring originText;   // only from the native, explicitly labelled File origin row
+    int nativeBannerState = 2; // derived from the native publisher and Yes-button state only
+    int nativeShieldVariant = 1;
     UiElement* yes = nullptr;
     UiElement* no = nullptr;
     bool buttonsConfident = false;
     bool yesEnabled = false;
+    bool noEnabled = false;
     bool credentialVariant = false;
     bool sawUnknownAuthor = false;   // the prompt says the author is unknown, not just the publisher
-    bool publisherFromSignature = false; // trusted signer name replaces only an unknown/missing value
-    int signatureState = -1;   // 0 trusted, 1 unsigned, 2 present but not valid/trusted, -1 unknown
     int shieldVariant = 0;     // 0 verified, 1 blue question mark, 2 amber exclamation
     int bannerState = 1;      // 1 blue, 2 yellow, 3 red
     const WCHAR* harvestSource = L"none";
@@ -1482,11 +1371,19 @@ static bool HarvestWin32(HWND hWnd, PromptInfo& info) {
 
 #if HAVE_UIA
 static IUIAutomation* g_uia = nullptr;
+static IUIAutomation2* g_uia2 = nullptr;
+static constexpr DWORD EARLY_UIA_CONNECTION_TIMEOUT_MS = 250;
+static constexpr DWORD EARLY_UIA_TRANSACTION_TIMEOUT_MS = 250;
+static constexpr DWORD EARLY_UIA_HARVEST_BUDGET_MS = 500;
+static thread_local DWORD g_uiaHarvestDeadline = 0;
+static thread_local bool g_uiaHarvestDeadlineExpired = false;
+static thread_local bool g_uiaHarvestIncomplete = false;
 [[clang::no_destroy]] static std::vector<IUIAutomationElement*> g_uiaRefs;
 
 static void UiaRelease() {
     for (auto* e : g_uiaRefs) if (e) e->Release();
     g_uiaRefs.clear();
+    if (g_uia2) { g_uia2->Release(); g_uia2 = nullptr; }
     if (g_uia) { g_uia->Release(); g_uia = nullptr; }
 }
 
@@ -1502,88 +1399,210 @@ static bool UiaInit() {
     return true;
 }
 
-static void ElementToInfo(IUIAutomationElement* el, UiElement& out) {
-    if (!el) return;
+// IUIAutomation2 exposes documented provider-connection and transaction timeouts. Save and
+// restore the caller's values so this short conservative classification pass doesn't change the
+// later details-reading behavior or any other UIA client.
+static bool UiaSetEarlyTimeouts(DWORD* oldConnectionMs, DWORD* oldTransactionMs) {
+    if (!oldConnectionMs || !oldTransactionMs || !UiaInit()) return false;
+    if (!g_uia2) {
+        HRESULT hr = g_uia->QueryInterface(IID_PPV_ARGS(&g_uia2));
+        if (FAILED(hr) || !g_uia2) {
+            Log(L"UIA2 timeout interface unavailable (0x%08X); pre-UIA move disabled", hr);
+            g_uia2 = nullptr;
+            return false;
+        }
+    }
+
+    HRESULT getConnection = g_uia2->get_ConnectionTimeout(oldConnectionMs);
+    HRESULT getTransaction = g_uia2->get_TransactionTimeout(oldTransactionMs);
+    if (FAILED(getConnection) || FAILED(getTransaction)) {
+        Log(L"UIA2 timeout values unavailable (connection=0x%08X transaction=0x%08X); "
+            L"pre-UIA move disabled", getConnection, getTransaction);
+        return false;
+    }
+
+    HRESULT setConnection = g_uia2->put_ConnectionTimeout(EARLY_UIA_CONNECTION_TIMEOUT_MS);
+    HRESULT setTransaction = g_uia2->put_TransactionTimeout(EARLY_UIA_TRANSACTION_TIMEOUT_MS);
+    if (FAILED(setConnection) || FAILED(setTransaction)) {
+        g_uia2->put_ConnectionTimeout(*oldConnectionMs);
+        g_uia2->put_TransactionTimeout(*oldTransactionMs);
+        Log(L"UIA2 bounded timeout setup failed (connection=0x%08X transaction=0x%08X); "
+            L"pre-UIA move disabled", setConnection, setTransaction);
+        return false;
+    }
+    return true;
+}
+
+static void UiaRestoreTimeouts(DWORD oldConnectionMs, DWORD oldTransactionMs) {
+    if (!g_uia2) return;
+    HRESULT restoreConnection = g_uia2->put_ConnectionTimeout(oldConnectionMs);
+    HRESULT restoreTransaction = g_uia2->put_TransactionTimeout(oldTransactionMs);
+    if (FAILED(restoreConnection) || FAILED(restoreTransaction)) {
+        Log(L"UIA2 timeout restoration failed (connection=0x%08X transaction=0x%08X)",
+            restoreConnection, restoreTransaction);
+    }
+}
+
+static HRESULT UiaRecordResult(HRESULT hr) {
+    if (hr == static_cast<HRESULT>(UIA_E_TIMEOUT)) g_uiaHarvestDeadlineExpired = true;
+    if (g_uiaHarvestDeadline && FAILED(hr)) g_uiaHarvestIncomplete = true;
+    return hr;
+}
+
+static bool UiaHarvestMustAbort() {
+    if (StopRequested() || g_uiaHarvestDeadlineExpired || g_uiaHarvestIncomplete) return true;
+    if (!g_uiaHarvestDeadline) return false;
+    if ((LONG)(GetTickCount() - g_uiaHarvestDeadline) < 0) return false;
+    g_uiaHarvestDeadlineExpired = true;
+    return true;
+}
+
+struct UiaHarvestDeadlineScope {
+    DWORD oldDeadline;
+    bool oldExpired;
+    bool oldIncomplete;
+
+    explicit UiaHarvestDeadlineScope(bool bounded)
+        : oldDeadline(g_uiaHarvestDeadline), oldExpired(g_uiaHarvestDeadlineExpired),
+          oldIncomplete(g_uiaHarvestIncomplete) {
+        g_uiaHarvestDeadline = bounded ? GetTickCount() + EARLY_UIA_HARVEST_BUDGET_MS : 0;
+        g_uiaHarvestDeadlineExpired = false;
+        g_uiaHarvestIncomplete = false;
+    }
+
+    ~UiaHarvestDeadlineScope() {
+        g_uiaHarvestDeadline = oldDeadline;
+        g_uiaHarvestDeadlineExpired = oldExpired;
+        g_uiaHarvestIncomplete = oldIncomplete;
+    }
+};
+
+template <typename T>
+struct UiaComReleaser {
+    void operator()(T* value) const { if (value) value->Release(); }
+};
+
+static void ElementToInfo(IUIAutomationElement* el, UiElement& out, bool keepReference = true) {
+    if (!el || UiaHarvestMustAbort()) return;
     BSTR b = nullptr;
-    if (SUCCEEDED(el->get_CurrentName(&b)) && b) { out.name = b; SysFreeString(b); }
+    HRESULT hr = UiaRecordResult(el->get_CurrentName(&b));
+    if (SUCCEEDED(hr) && b) out.name = b;
+    if (b) SysFreeString(b);
+    if (UiaHarvestMustAbort()) return;
+
     b = nullptr;
-    if (SUCCEEDED(el->get_CurrentAutomationId(&b)) && b) { out.automationId = b; SysFreeString(b); }
+    hr = UiaRecordResult(el->get_CurrentAutomationId(&b));
+    if (SUCCEEDED(hr) && b) out.automationId = b;
+    if (b) SysFreeString(b);
+    if (UiaHarvestMustAbort()) return;
+
     b = nullptr;
-    if (SUCCEEDED(el->get_CurrentClassName(&b)) && b) { out.className = b; SysFreeString(b); }
+    hr = UiaRecordResult(el->get_CurrentClassName(&b));
+    if (SUCCEEDED(hr) && b) out.className = b;
+    if (b) SysFreeString(b);
+    if (UiaHarvestMustAbort()) return;
 
     CONTROLTYPEID t = 0;
-    el->get_CurrentControlType(&t);
-    out.type = t;
-
+    hr = UiaRecordResult(el->get_CurrentControlType(&t));
+    if (SUCCEEDED(hr)) out.type = t;
+    if (UiaHarvestMustAbort()) return;
     BOOL v = TRUE;
-    el->get_CurrentIsEnabled(&v);
+    hr = UiaRecordResult(el->get_CurrentIsEnabled(&v));
     out.enabled = v;
-
-    // Note: UI Automation has no "IsDefault" property (UIA_IsDefaultPropertyId does not
-    // exist). The default button is taken from DM_GETDEFID, from the localized button name
-    // or from the position of the buttons.
+    if (UiaHarvestMustAbort()) return;
     VARIANT var;
     VariantInit(&var);
-    if (SUCCEEDED(el->GetCurrentPropertyValue(UIA_IsPasswordPropertyId, &var)) &&
-        var.vt == VT_BOOL && var.boolVal != VARIANT_FALSE)
+    HRESULT propertyHr = UiaRecordResult(el->GetCurrentPropertyValue(UIA_IsPasswordPropertyId, &var));
+    if (SUCCEEDED(propertyHr) && var.vt == VT_BOOL && var.boolVal != VARIANT_FALSE)
         out.isPassword = TRUE;
     VariantClear(&var);
-
+    if (UiaHarvestMustAbort()) return;
     RECT rc = {};
-    if (SUCCEEDED(el->get_CurrentBoundingRectangle(&rc))) out.rect = rc;
+    if (SUCCEEDED(UiaRecordResult(el->get_CurrentBoundingRectangle(&rc)))) out.rect = rc;
+    if (UiaHarvestMustAbort()) return;
 
-    el->AddRef();
-    g_uiaRefs.push_back(el);
-    out.element = el;
+    if (keepReference) {
+        el->AddRef();
+#if W7UAC_HAS_EXCEPTIONS
+        try {
+            g_uiaRefs.push_back(el);
+        } catch (...) {
+            el->Release();
+            throw;
+        }
+#else
+        g_uiaRefs.push_back(el);
+#endif
+        out.element = el;
+    }
 }
 
 static void WalkTree(IUIAutomationTreeWalker* walker, IUIAutomationElement* el,
-                     std::vector<UiElement>& out, int depth, int* budget) {
-    if (!el || depth > 6 || *budget <= 0) return;
-    IUIAutomationElement* child = nullptr;
-    if (FAILED(walker->GetFirstChildElement(el, &child)) || !child) return;
+                     std::vector<UiElement>& out, int depth, int* budget,
+                     bool keepReferences = true) {
+    if (!el || depth > 6 || *budget <= 0 || UiaHarvestMustAbort()) return;
+    IUIAutomationElement* firstRaw = nullptr;
+    HRESULT firstHr = UiaRecordResult(walker->GetFirstChildElement(el, &firstRaw));
+    std::unique_ptr<IUIAutomationElement, UiaComReleaser<IUIAutomationElement>> child(firstRaw);
+    if (UiaHarvestMustAbort() || FAILED(firstHr) || !child) return;
     while (child && *budget > 0) {
+        if (UiaHarvestMustAbort()) return;
         (*budget)--;
         UiElement e;
-        ElementToInfo(child, e);
-        out.push_back(e);
-        WalkTree(walker, child, out, depth + 1, budget);
-        IUIAutomationElement* next = nullptr;
-        if (FAILED(walker->GetNextSiblingElement(child, &next))) next = nullptr;
-        child = next;
+        ElementToInfo(child.get(), e, keepReferences);
+        if (UiaHarvestMustAbort()) return;
+        out.push_back(std::move(e));
+        WalkTree(walker, child.get(), out, depth + 1, budget, keepReferences);
+        if (UiaHarvestMustAbort()) return;
+        IUIAutomationElement* nextRaw = nullptr;
+        HRESULT nextHr = UiaRecordResult(walker->GetNextSiblingElement(child.get(), &nextRaw));
+        std::unique_ptr<IUIAutomationElement, UiaComReleaser<IUIAutomationElement>> next(nextRaw);
+        if (UiaHarvestMustAbort()) return;
+        child = std::move(next);
+        if (FAILED(nextHr)) child.reset();
     }
 }
 
-static bool HarvestUia(HWND hWnd, PromptInfo& info) {
-    if (!UiaInit()) return false;
-    IUIAutomationElement* root = nullptr;
-    if (FAILED(g_uia->ElementFromHandle(hWnd, &root)) || !root) return false;
+static bool HarvestUia(HWND hWnd, PromptInfo& info, bool boundedForEarlyTakeover = false,
+                       bool* deadlineExpired = nullptr) {
+    UiaHarvestDeadlineScope deadlineScope(boundedForEarlyTakeover);
+    if (deadlineExpired) *deadlineExpired = false;
+    auto aborted = [&]() {
+        if (!UiaHarvestMustAbort()) return false;
+        if (deadlineExpired) *deadlineExpired = g_uiaHarvestDeadlineExpired;
+        return true;
+    };
+
+    if (!UiaInit() || aborted()) return false;
+    IUIAutomationElement* rootRaw = nullptr;
+    HRESULT rootHr = UiaRecordResult(g_uia->ElementFromHandle(hWnd, &rootRaw));
+    std::unique_ptr<IUIAutomationElement, UiaComReleaser<IUIAutomationElement>> root(rootRaw);
+    if (aborted() || FAILED(rootHr) || !root) return false;
 
     UiElement rootInfo;
-    ElementToInfo(root, rootInfo);
-    info.elements.push_back(rootInfo);
+    ElementToInfo(root.get(), rootInfo);
+    if (aborted()) return false;
+    info.elements.push_back(std::move(rootInfo));
 
-    IUIAutomationTreeWalker* walker = nullptr;
-    if (FAILED(g_uia->get_RawViewWalker(&walker)) || !walker) return false;
+    IUIAutomationTreeWalker* walkerRaw = nullptr;
+    HRESULT walkerHr = UiaRecordResult(g_uia->get_RawViewWalker(&walkerRaw));
+    std::unique_ptr<IUIAutomationTreeWalker, UiaComReleaser<IUIAutomationTreeWalker>> walker(walkerRaw);
+    if (aborted() || FAILED(walkerHr) || !walker) return false;
 
     int budget = 250;
-    WalkTree(walker, root, info.elements, 0, &budget);
-    walker->Release();
-
-    std::vector<UiElement*> buttons;
+    WalkTree(walker.get(), root.get(), info.elements, 0, &budget, true);
+    if (aborted()) return false;
     for (auto& e : info.elements) {
         if (e.type == UIA_EditControlTypeId || e.isPassword) info.credentialVariant = true;
-        if (e.type == UIA_ButtonControlTypeId && !e.name.empty()) buttons.push_back(&e);
-        else if (!e.name.empty()) info.texts.push_back(e.name);
+        if (e.type != UIA_ButtonControlTypeId && !e.name.empty()) info.texts.push_back(e.name);
     }
-
-    // Names, never positions (see ResolveButtons, which runs on the merged set).
-
     info.harvestSource = L"uia";
     return true;
 }
 #else
-static bool HarvestUia(HWND, PromptInfo&) { return false; }
+static bool UiaSetEarlyTimeouts(DWORD*, DWORD*) { return false; }
+static void UiaRestoreTimeouts(DWORD, DWORD) {}
+static bool HarvestUia(HWND, PromptInfo&, bool = false, bool* = nullptr) { return false; }
 static void UiaRelease() {}
 #endif
 
@@ -1618,6 +1637,103 @@ static void SplitLabelValue(const std::wstring& t, std::wstring& label, std::wst
     while (!label.empty() && (label.back() == L' ' || label.back() == L'\t')) label.pop_back();
     while (!value.empty() && (value.front() == L' ' || value.front() == L'\t')) value.erase(0, 1);
     while (!value.empty() && (value.back() == L' ' || value.back() == L'\t')) value.pop_back();
+}
+
+static bool IsPathLike(const std::wstring& t);
+static bool IsJunkText(const std::wstring& t);
+
+static std::wstring NormalizeFieldLabel(std::wstring label) {
+    label = ToLower(Trim(label));
+    while (!label.empty() && (label.back() == L':' || label.back() == L' ' ||
+                              label.back() == L'\t'))
+        label.pop_back();
+    return label;
+}
+
+static bool FieldLabelMatches(const std::wstring& actual, const WCHAR* expected) {
+    return expected && NormalizeFieldLabel(actual) == NormalizeFieldLabel(expected);
+}
+
+// A row may publish its label and value in one UIA element or in adjacent elements on the
+// same line. Do not infer a path from arbitrary text: the label must match the native field.
+static bool FindNativeFieldValue(const std::vector<UiElement>& elements, const WCHAR* expectedLabel,
+                                 std::wstring* value) {
+    if (!expectedLabel || !value) return false;
+    for (const auto& labelElement : elements) {
+        if (labelElement.name.empty()) continue;
+        std::wstring splitLabel, splitValue;
+        SplitLabelValue(labelElement.name, splitLabel, splitValue);
+        if (!splitLabel.empty() && FieldLabelMatches(splitLabel, expectedLabel) &&
+            !Trim(splitValue).empty()) {
+            *value = Trim(splitValue);
+            return true;
+        }
+        if (!FieldLabelMatches(labelElement.name, expectedLabel)) continue;
+
+        const UiElement* best = nullptr;
+        LONG bestDx = 0;
+        for (const auto& candidate : elements) {
+            if (&candidate == &labelElement || candidate.name.empty() || IsJunkText(candidate.name))
+                continue;
+            std::wstring candidateLabel, candidateValue;
+            SplitLabelValue(candidate.name, candidateLabel, candidateValue);
+            if (!candidateLabel.empty()) continue;  // never use another field's label as a value
+            const LONG dy = candidate.rect.top > labelElement.rect.top
+                                ? candidate.rect.top - labelElement.rect.top
+                                : labelElement.rect.top - candidate.rect.top;
+            if (dy > 10) continue;
+            const LONG dx = candidate.rect.left - labelElement.rect.left;
+            if (dx <= 0) continue;
+            if (!best || dx < bestDx) {
+                best = &candidate;
+                bestDx = dx;
+            }
+        }
+        if (best) {
+            *value = Trim(best->name);
+            return !value->empty();
+        }
+    }
+    return false;
+}
+
+static std::wstring NativeProgramPath(const std::wstring& rawValue) {
+    std::wstring path = Trim(rawValue);
+    if (path.size() >= 2 && path.front() == L'"' && path.back() == L'"')
+        path = path.substr(1, path.size() - 2);
+    if (path.empty() || path.size() >= 32767 || !IsPathLike(path)) return L"";
+    for (WCHAR ch : path) if (ch < 32) return L"";
+    size_t dot = path.find_last_of(L'.');
+    if (dot == std::wstring::npos) return L"";
+    std::wstring ext = ToLower(path.substr(dot));
+    if (ext != L".exe" && ext != L".msc" && ext != L".cpl" && ext != L".dll") return L"";
+    return path;
+}
+
+static void MapNativePromptFields(PromptInfo& info) {
+    info.originText.clear();
+    info.programPath.clear();
+    if (!g_loc) return;
+
+    std::wstring value;
+    if (FindNativeFieldValue(info.detailElements, g_loc->origin, &value) ||
+        FindNativeFieldValue(info.elements, g_loc->origin, &value))
+        info.originText = Trim(value);
+
+    value.clear();
+    if (FindNativeFieldValue(info.detailElements, g_loc->programLocation, &value) ||
+        FindNativeFieldValue(info.elements, g_loc->programLocation, &value))
+        info.programPath = NativeProgramPath(value);
+}
+
+static bool IsNativeFieldRow(const std::wstring& row, const WCHAR* label,
+                             const std::wstring& value) {
+    std::wstring splitLabel, splitValue;
+    SplitLabelValue(row, splitLabel, splitValue);
+    if ((!splitLabel.empty() && FieldLabelMatches(splitLabel, label)) ||
+        FieldLabelMatches(row, label))
+        return true;
+    return !value.empty() && Trim(row) == Trim(value);
 }
 
 // The prompt's own chrome: its window title. It is a legitimate string of the prompt, but it
@@ -1682,6 +1798,28 @@ static const WCHAR* kPubRowWords[] = {
     L"editore", L"publisher", L"herausgeber", L"\u00e9diteur", L"editeur", L"editor",
     L"uitgever", L"wydawca",
 };
+static const WCHAR* kVerifiedPublisherWords[] = {
+    L"verified", L"verificato", L"verificata", L"verifiziert", L"v\u00e9rifi\u00e9",
+    L"verifie", L"verificado", L"verificada", L"geverifieerd", L"zweryfikowany",
+    L"do\u011frulanm\u0131\u015f", L"\u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u044b\u0439",
+    L"\u78ba\u8a8d\u6e08\u307f", L"\ud655\uc778\ub41c", L"\u0938\u0924\u094d\u092f\u093e\u092a\u093f\u0924",
+    L"\u0645\u0648\u062b\u0651\u0642",
+};
+
+static const WCHAR* kUnverifiedPublisherWords[] = {
+    L"unverified", L"not verified", L"non verificato", L"non verificata",
+    L"nicht verifiziert", L"non v\u00e9rifi\u00e9", L"non verifie", L"no verificado",
+    L"no verificada", L"n\u00e3o verificado", L"nao verificado", L"niet geverifieerd",
+    L"niezweryfikowany", L"do\u011frulanmam\u0131\u015f", L"\u043d\u0435\u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u044b\u0439",
+    L"\u672a\u78ba\u8a8d", L"\ubbf8\ud655\uc778", L"\u063a\u064a\u0631 \u0645\u0648\u062b\u0651\u0642",
+};
+
+static bool LooksLikeVerifiedPublisherLabel(const std::wstring& label) {
+    if (TextHasAnyWord(label, kUnverifiedPublisherWords, ARRAYSIZE(kUnverifiedPublisherWords)))
+        return false;
+    return TextHasAnyWord(label, kVerifiedPublisherWords, ARRAYSIZE(kVerifiedPublisherWords));
+}
+
 static const WCHAR* kLinkWords[] = {
     L"show details", L"hide details", L"mostra dettagli", L"nascondi dettagli", L"dettagli",
     L"details", L"d\u00e9tails", L"detalles", L"detalhes", L"help me decide",
@@ -1748,6 +1886,10 @@ struct RowText {
 // inside the same element ("Editore verificato: Microsoft Windows") or in the element to the
 // right of the label, on the same line. That is what this function follows.
 static void MapPromptRows(PromptInfo& info) {
+    info.appText.clear();
+    info.publisherText.clear();
+    info.publisherLabelled = false;
+    info.publisherVerifiedLabelled = false;
     std::vector<RowText> rows;
     for (const auto& e : info.elements) {
         if (e.name.empty() || e.type == UIA_ButtonControlTypeId) continue;
@@ -1807,11 +1949,17 @@ static void MapPromptRows(PromptInfo& info) {
             pubLabel = &r;
     }
     if (appLabel) valueOf(*appLabel, info.appText);
-    if (pubLabel) valueOf(*pubLabel, info.publisherText);
+    if (pubLabel && valueOf(*pubLabel, info.publisherText)) {
+        info.publisherLabelled = true;
+        std::wstring label, ignoredValue;
+        SplitLabelValue(pubLabel->t, label, ignoredValue);
+        if (label.empty()) label = pubLabel->t;
+        info.publisherVerifiedLabelled = LooksLikeVerifiedPublisherLabel(label);
+    }
 
-    // Fallback: this prompt exposes no labels at all, only values. Then the rows are taken in
+    // Fallback: this prompt exposes no labels at all, only values. The application name may be
     // reading order, skipping the question, the chrome, the links and the help button.
-    if (info.appText.empty() || info.publisherText.empty()) {
+    if (info.appText.empty()) {
         std::vector<const RowText*> rest, restAll;
         for (const auto& r : rows) {
             if (r.t == question || IsJunkText(r.t)) continue;
@@ -1831,7 +1979,6 @@ static void MapPromptRows(PromptInfo& info) {
         std::sort(restAll.begin(), restAll.end(), byPosition);
         auto fill = [&](const std::vector<const RowText*>& v) {
             if (info.appText.empty() && !v.empty()) info.appText = v[0]->t;
-            if (info.publisherText.empty() && v.size() >= 2) info.publisherText = v[1]->t;
         };
         fill(rest);
         fill(restAll);          // last resort: the title itself is better than an empty row
@@ -1843,435 +1990,6 @@ static void MapPromptRows(PromptInfo& info) {
     if (InterlockedCompareExchange(&g_mappingLogged, 1, 0) == 0)
         Dbg(L"text mapping: question='%s' app='%s' publisher='%s'", info.questionText.c_str(),
             info.appText.c_str(), info.publisherText.c_str());
-}
-
-static bool EndsWithExecExt(const std::wstring& t) {
-    size_t dot = t.find_last_of(L'.');
-    if (dot == std::wstring::npos) return false;
-    std::wstring ext = ToLower(t.substr(dot));
-    return ext == L".exe" || ext == L".msc" || ext == L".cpl" || ext == L".bat" ||
-           ext == L".cmd";
-}
-
-// AppInfo starts consent.exe as "consent.exe <parent pid> <size> <pointer>" and the block that
-// pointer refers to is mapped into this process as well: it is the request being displayed, and
-// the file to elevate is in it. Its *layout* is not documented, so nothing is assumed about it:
-// the block is only scanned for a raw UTF-16 path that ends in .exe and exists on disk. The
-// region is checked with VirtualQuery first and the scan is bounded, so an unreadable or foreign
-// block is simply ignored - never followed blindly.
-static std::wstring ScanBlockForExecutablePath(const WCHAR* block, size_t cch) {
-    for (size_t i = 0; i + 4 < cch; i++) {
-        bool drive = ((block[i] >= L'A' && block[i] <= L'Z') ||
-                      (block[i] >= L'a' && block[i] <= L'z')) &&
-                     block[i + 1] == L':' && (block[i + 2] == L'\\' || block[i + 2] == L'/');
-        bool unc = (block[i] == L'\\' && block[i + 1] == L'\\');
-        if (!drive && !unc) continue;
-
-        WCHAR cand[320] = L"";
-        size_t n = 0;
-        while (i + n < cch && n < ARRAYSIZE(cand) - 1) {
-            WCHAR c = block[i + n];
-            if (c < 0x20 || c == L'"') break;       // end of the string / of the field
-            cand[n++] = c;
-        }
-        if (n < 8) continue;
-        cand[n] = 0;
-        std::wstring s = cand;
-        if (!EndsWithExecExt(s)) {
-            // The run may carry trailing junk: cut it after the last ".exe".
-            size_t dot = ToLower(s).rfind(L".exe");
-            if (dot == std::wstring::npos) continue;
-            s = s.substr(0, dot + 4);
-        }
-        if (GetFileAttributesW(s.c_str()) != INVALID_FILE_ATTRIBUTES) return s;
-    }
-    return std::wstring();
-}
-
-// The raw bytes of the request block, for the diagnosis of a path that is not found in it. Off
-// by default: the block belongs to an elevation request and can carry file names and user names.
-static void DumpRequestBlock(const BYTE* data, size_t n) {
-    WCHAR tmp[8];
-    std::wstring line;
-    for (size_t i = 0; i < n; i += 16) {
-        line.clear();
-        for (size_t j = i; j < i + 16 && j < n; j++) {
-            swprintf_s(tmp, ARRAYSIZE(tmp), L"%02X ", (unsigned)data[j]);
-            line += tmp;
-        }
-        Dbg(L"request block +%04u: %s", (unsigned)i, line.c_str());
-    }
-}
-
-// The same search for the 8 bit encodings: a run of printable bytes that looks like a path is
-// converted and checked, trying UTF-8 first and the ANSI code page of the machine after it.
-// Only a path that really exists on disk is accepted, as in the UTF-16 scan.
-static std::wstring ScanBlockForExecutablePathAnsi(const BYTE* data, size_t n) {
-    char cand[320];
-    for (size_t i = 0; i + 8 < n; i++) {
-        BYTE c = data[i];
-        bool drive = ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) && data[i + 1] == ':' &&
-                     (data[i + 2] == '\\' || data[i + 2] == '/');
-        bool unc = (c == '\\' && data[i + 1] == '\\');
-        if (!drive && !unc) continue;
-
-        size_t m = 0;
-        while (i + m < n && m < ARRAYSIZE(cand) - 1) {
-            BYTE b = data[i + m];
-            if (b < 0x20 || b > 0x7E || b == '"') break;
-            cand[m++] = (char)b;
-        }
-        if (m < 8) continue;
-        cand[m] = 0;
-        std::string a(cand);
-        std::string lower = a;
-        for (auto& ch : lower) ch = (char)tolower((unsigned char)ch);
-        size_t dot = lower.rfind(".exe");
-        if (dot == std::string::npos) continue;
-        if (dot + 4 != a.size()) a = a.substr(0, dot + 4);   // trailing junk after the .exe
-
-        const UINT cps[2] = {CP_UTF8, CP_ACP};
-        for (int k = 0; k < 2; k++) {
-            WCHAR wide[320] = L"";
-            int w = MultiByteToWideChar(cps[k], cps[k] == CP_UTF8 ? MB_ERR_INVALID_CHARS : 0,
-                                        a.c_str(), -1, wide, ARRAYSIZE(wide));
-            if (w <= 1) continue;
-            if (!EndsWithExecExt(wide)) continue;
-            if (GetFileAttributesW(wide) != INVALID_FILE_ATTRIBUTES) return std::wstring(wide);
-        }
-    }
-    return std::wstring();
-}
-
-// The two SIDs are compared by hand: same length, same bytes. Nothing here depends on a helper
-// that might not be declared, and nothing is assumed about the token beyond TokenUser.
-static size_t SidLength(PSID s) {
-    if (!s) return 0;
-    return 8 + (size_t)((const BYTE*)s)[1] * 4;
-}
-
-static bool SameSid(PSID a, PSID b) {
-    size_t la = SidLength(a), lb = SidLength(b);
-    return la != 0 && la == lb && memcmp(a, b, la) == 0;
-}
-
-// Memory of another process is only ever read when that process belongs to the same user as this
-// one. The query is done with PROCESS_QUERY_LIMITED_INFORMATION, the least access that answers
-// the question; if it cannot be answered, the answer is no.
-static bool SameUserProcess(DWORD pid) {
-    if (!pid || pid == GetCurrentProcessId()) return false;
-    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!h) {
-        Dbg(L"request block: OpenProcess(%lu, QUERY_LIMITED) failed: %u", (unsigned long)pid,
-            GetLastError());
-        return false;
-    }
-    HANDLE mine = nullptr, theirs = nullptr;
-    bool same = false;
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mine) &&
-        OpenProcessToken(h, TOKEN_QUERY, &theirs)) {
-        BYTE b1[256] = {}, b2[256] = {};
-        DWORD n1 = 0, n2 = 0;
-        if (GetTokenInformation(mine, TokenUser, b1, sizeof(b1), &n1) &&
-            GetTokenInformation(theirs, TokenUser, b2, sizeof(b2), &n2))
-            same = SameSid(((TOKEN_USER*)b1)->User.Sid, ((TOKEN_USER*)b2)->User.Sid);
-    }
-    if (mine) CloseHandle(mine);
-    if (theirs) CloseHandle(theirs);
-    CloseHandle(h);
-    return same;
-}
-
-// One bounded read of the request block. ReadProcessMemory is the documented way: a stale or
-// foreign pointer gives FALSE and an error code, never an access violation inside consent.exe.
-// Nothing is written and nothing is executed - this is a read of a structure that describes an
-// elevation request, and the same read consent.exe itself performs.
-static bool ReadBlockBounded(DWORD pid, const void* base, size_t size, std::vector<BYTE>& out,
-                             const WCHAR** where) {
-    bool self = (pid == GetCurrentProcessId());
-    if (self) {
-        MEMORY_BASIC_INFORMATION mbi = {};
-        if (VirtualQuery(base, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
-        if (mbi.State != MEM_COMMIT || (mbi.Protect & PAGE_GUARD) ||
-            (mbi.Protect & PAGE_NOACCESS))
-            return false;
-    }
-    HANDLE h = self ? GetCurrentProcess() : OpenProcess(PROCESS_VM_READ, FALSE, pid);
-    if (!h) {
-        Dbg(L"request block: OpenProcess(%lu, PROCESS_VM_READ) failed: %u", (unsigned long)pid,
-            GetLastError());
-        return false;
-    }
-    out.assign(size, 0);
-    SIZE_T got = 0;
-    BOOL ok = ReadProcessMemory(h, base, out.data(), size, &got);
-    DWORD err = ok ? 0u : GetLastError();
-    if (!self) CloseHandle(h);
-    if (!ok || !got) {
-        Dbg(L"request block: ReadProcessMemory in pid %lu at %p failed: %u", (unsigned long)pid,
-            base, err);
-        out.clear();
-        return false;
-    }
-    out.resize((size_t)got);
-    *where = self ? L"this process" : L"the requesting process";
-    return true;
-}
-
-static std::wstring TargetPathFromRequestBlock() {
-    if (!g_settings.readRequestBlock) {
-        Dbg(L"AppInfo request block: reading is switched off in the settings");
-        return std::wstring();
-    }
-    const WCHAR* cl = GetCommandLineW();
-    if (!cl) return std::wstring();
-
-    std::vector<std::wstring> args;
-    std::wstring cmd = cl;
-    size_t pos = 0;
-    while (pos < cmd.size()) {
-        std::wstring token;
-        if (cmd[pos] == L' ') { pos++; continue; }
-        if (cmd[pos] == L'"') {
-            size_t end = cmd.find(L'"', pos + 1);
-            if (end == std::wstring::npos) break;
-            token = cmd.substr(pos + 1, end - pos - 1);
-            pos = end + 1;
-        } else {
-            size_t sp = cmd.find(L' ', pos);
-            token = cmd.substr(pos,
-                               (sp == std::wstring::npos) ? std::wstring::npos : sp - pos);
-            pos = (sp == std::wstring::npos) ? cmd.size() : sp + 1;
-        }
-        args.push_back(token);
-    }
-    // <exe> <pid> <size> <pointer>
-    if (args.size() < 4) {
-        Dbg(L"AppInfo request block: no <size> <pointer> arguments on the command line");
-        return std::wstring();
-    }
-
-    ULONGLONG size = wcstoull(args[2].c_str(), nullptr, 10);
-    ULONGLONG addr = wcstoull(args[3].c_str(), nullptr, 16);
-    if (!size || size < 16 || size > 0x10000 || !addr) {
-        Dbg(L"AppInfo request block: unusable arguments on the command line (size=%llu addr=%p)",
-            (unsigned long long)size, (const void*)(ULONG_PTR)addr);
-        return std::wstring();
-    }
-
-    const void* base = (const void*)(ULONG_PTR)addr;
-    DWORD requesterPid = (DWORD)wcstoul(args[1].c_str(), nullptr, 10);
-    size_t want = (size_t)((size > 4096) ? 4096 : size);
-
-    // The pointer on the command line does not have to be ours: in the runs seen so far it points
-    // into the process that asked for the elevation (the pid right there on the command line,
-    // before the size), and in consent.exe's own address space that page is free. So the block is
-    // looked for here first and then in that process - same user only, read-only, bounded.
-    std::vector<BYTE> block;
-    const WCHAR* where = L"?";
-    bool have = ReadBlockBounded(GetCurrentProcessId(), base, want, block, &where);
-    if (!have && requesterPid && requesterPid != GetCurrentProcessId()) {
-        Dbg(L"AppInfo request block: not in this process -> trying the requesting pid %lu",
-            (unsigned long)requesterPid);
-        if (SameUserProcess(requesterPid))
-            have = ReadBlockBounded(requesterPid, base, want, block, &where);
-        else
-            Dbg(L"AppInfo request block: pid %lu is not a process of this user - not read",
-                (unsigned long)requesterPid);
-    }
-    if (!have) {
-        Dbg(L"AppInfo request block: unreadable at %p (size %llu, requester pid %lu)", base,
-            (unsigned long long)size, (unsigned long)requesterPid);
-        return std::wstring();
-    }
-    Dbg(L"AppInfo request block: %u bytes read at %p (size on the command line %llu) from %s",
-        (unsigned)block.size(), base, (unsigned long long)size, where);
-    if (g_settings.dumpRequestBlock) DumpRequestBlock(block.data(), block.size());
-
-    // The layout of the block is not documented by Microsoft, so nothing is assumed about it: it
-    // is only scanned as text, in both the encodings a structure of this kind can carry, and
-    // only a path that exists on disk is accepted.
-    std::wstring found = ScanBlockForExecutablePath((const WCHAR*)block.data(), block.size() / 2);
-    if (found.empty()) found = ScanBlockForExecutablePathAnsi(block.data(), block.size());
-    if (found.empty())
-        Dbg(L"AppInfo request block: no existing path found in it (turn dumpRequestBlock on to "
-            L"see the bytes)");
-    else
-        Dbg(L"AppInfo request block: path '%s'", found.c_str());
-    return found;
-}
-
-// ---------------------------------------------------------------------------------------------
-// The digital signature of the elevated file, read with WinVerifyTrust - the documented API for
-// exactly this question. wintrust.dll is loaded at run time, so nothing is added to the linker
-// flags, and the answer only decides which shield the banner shows: nothing here approves,
-// refuses or changes anything.
-// ---------------------------------------------------------------------------------------------
-enum SignatureState {
-    SigUnknown = -1,   // no file to read, or wintrust is not usable
-    SigTrusted = 0,    // signed, and the chain is trusted
-    SigUnsigned = 1,   // no signature at all
-    SigInvalid = 2,    // a signature is there and is not valid, not trusted, or distrusted
-};
-
-typedef LONG (WINAPI *WinVerifyTrustFn)(HWND, GUID*, LPVOID);
-
-typedef CRYPT_PROVIDER_DATA* (WINAPI *WTHelperProvDataFromStateDataFn)(HANDLE);
-typedef CRYPT_PROVIDER_SGNR* (WINAPI *WTHelperGetProvSignerFromChainFn)(
-    CRYPT_PROVIDER_DATA*, DWORD, BOOL, DWORD);
-typedef CRYPT_PROVIDER_CERT* (WINAPI *WTHelperGetProvCertFromChainFn)(
-    CRYPT_PROVIDER_SGNR*, DWORD);
-
-// Read the signer identity from the state belonging to a successful WinVerifyTrust call. These
-// documented WinTrust helpers are resolved dynamically; if a build does not publish them, the
-// native "Unknown" value is kept. The certificate is never trusted by this helper alone: this
-// function is called only after the Authenticode provider has returned success.
-static std::wstring TrustedSignerNameFromState(HMODULE wintrust, HANDLE state) {
-    if (!wintrust || !state) return L"";
-    auto getProvider = (WTHelperProvDataFromStateDataFn)GetProcAddress(
-        wintrust, "WTHelperProvDataFromStateData");
-    auto getSigner = (WTHelperGetProvSignerFromChainFn)GetProcAddress(
-        wintrust, "WTHelperGetProvSignerFromChain");
-    auto getCert = (WTHelperGetProvCertFromChainFn)GetProcAddress(
-        wintrust, "WTHelperGetProvCertFromChain");
-    if (!getProvider || !getSigner || !getCert) return L"";
-
-    CRYPT_PROVIDER_DATA* provider = getProvider(state);
-    if (!provider) return L"";
-    CRYPT_PROVIDER_SGNR* signer = getSigner(provider, 0, FALSE, 0);
-    if (!signer || signer->dwError != ERROR_SUCCESS) return L"";
-    CRYPT_PROVIDER_CERT* cert = getCert(signer, 0);
-    if (!cert || cert->dwError != ERROR_SUCCESS || !cert->pCert) return L"";
-
-    WCHAR name[256] = {};
-    DWORD required = CertGetNameStringW(cert->pCert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr,
-                                        nullptr, 0);
-    if (required < 2 || required > ARRAYSIZE(name)) return L"";
-    DWORD written = CertGetNameStringW(cert->pCert, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, nullptr,
-                                       name, required);
-    if (written < 2 || written > required) return L"";
-    std::wstring result = Trim(name);
-    if (result.empty() || result.size() > 255 || IsJunkText(result)) return L"";
-    for (WCHAR ch : result) {
-        if (ch < 32) return L"";
-    }
-    return result;
-}
-
-static int VerifySignatureState(const std::wstring& path, std::wstring* verifiedSignerName) {
-    if (verifiedSignerName) verifiedSignerName->clear();
-    if (path.empty()) return SigUnknown;
-    static WinVerifyTrustFn fn = nullptr;
-    static HMODULE wintrust = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        wintrust = LoadLibraryExW(L"wintrust.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (wintrust) fn = (WinVerifyTrustFn)GetProcAddress(wintrust, "WinVerifyTrust");
-        if (!fn) Dbg(L"signature: wintrust.dll is not usable - the state stays unknown");
-    }
-    if (!fn) return SigUnknown;
-
-    WINTRUST_FILE_INFO file = {};
-    file.cbStruct = sizeof(file);
-    file.pcwszFilePath = path.c_str();
-
-    WINTRUST_DATA data = {};
-    data.cbStruct = sizeof(data);
-    data.dwUIChoice = WTD_UI_NONE;                 // never a dialog of its own
-    data.fdwRevocationChecks = WTD_REVOKE_NONE;    // no network round trip: the prompt must not wait
-    data.dwUnionChoice = WTD_CHOICE_FILE;
-    data.pFile = &file;
-    data.dwStateAction = WTD_STATEACTION_VERIFY;
-    data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL;   // documented: the cache only, never the wire
-
-    GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-    LONG status = fn(nullptr, &action, &data);
-
-    if (status == ERROR_SUCCESS && verifiedSignerName) {
-#if W7UAC_HAS_EXCEPTIONS
-        try {
-            *verifiedSignerName = TrustedSignerNameFromState(wintrust, data.hWVTStateData);
-        } catch (...) {
-            verifiedSignerName->clear();
-            Dbg(L"signature: the verified signer name could not be copied; the prompt text is kept");
-        }
-#else
-        *verifiedSignerName = TrustedSignerNameFromState(wintrust, data.hWVTStateData);
-#endif
-    }
-
-    // Release provider state only after the optional, read-only signer lookup above.
-    data.dwStateAction = WTD_STATEACTION_CLOSE;
-    fn(nullptr, &action, &data);
-
-    if (status == ERROR_SUCCESS) return SigTrusted;
-    DWORD code = (DWORD)status;
-    if (code == (DWORD)TRUST_E_NOSIGNATURE) {
-        Dbg(L"signature: WinVerifyTrust reports no signature (0x%08X)", (unsigned)code);
-        return SigUnsigned;
-    }
-    if (code == (DWORD)TRUST_E_SUBJECT_FORM_UNKNOWN ||
-        code == (DWORD)TRUST_E_PROVIDER_UNKNOWN ||
-        code == (DWORD)TRUST_E_ACTION_UNKNOWN) {
-        Dbg(L"signature: WinVerifyTrust cannot evaluate this subject/provider (0x%08X); state "
-            L"unknown, not unsigned", (unsigned)code);
-        return SigUnknown;
-    }
-    return SigInvalid;
-}
-
-// The file that is being elevated, from the places that actually carry it: the block AppInfo
-// hands to consent.exe, and the strings the prompt publishes (unfolded or not). A path that does
-// not exist is only accepted when nothing better is there, and nothing is ever invented.
-static std::wstring FindTargetPath(const PromptInfo& info, const WCHAR** source) {
-    *source = L"none";
-    for (const auto& p : info.paths) {
-        if (EndsWithExecExt(p) && GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            *source = L"a string of the prompt";
-            return p;
-        }
-    }
-    for (const auto& p : info.paths) {
-        if (EndsWithExecExt(p)) {
-            *source = L"a string of the prompt (not readable on disk)";
-            return p;
-        }
-    }
-
-    std::wstring fromBlock = TargetPathFromRequestBlock();
-    if (!fromBlock.empty()) {
-        *source = L"the AppInfo request block";
-        return fromBlock;
-    }
-
-    // Last resort: a path on consent.exe's own command line. Current builds pass the request as
-    // a pointer instead of as text, so this usually finds nothing but consent.exe itself.
-    const WCHAR* cl = GetCommandLineW();
-    std::wstring cmd = cl ? cl : L"";
-    size_t pos = 0;
-    while (pos < cmd.size()) {
-        std::wstring token;
-        if (cmd[pos] == L' ') { pos++; continue; }
-        if (cmd[pos] == L'"') {
-            size_t end = cmd.find(L'"', pos + 1);
-            if (end == std::wstring::npos) break;
-            token = cmd.substr(pos + 1, end - pos - 1);
-            pos = end + 1;
-        } else {
-            size_t sp = cmd.find(L' ', pos);
-            token = cmd.substr(pos,
-                               (sp == std::wstring::npos) ? std::wstring::npos : sp - pos);
-            pos = (sp == std::wstring::npos) ? cmd.size() : sp + 1;
-        }
-        if (!EndsWithExecExt(token)) continue;
-        if (ContainsI(token, L"consent.exe")) continue;      // that one is us
-        if (GetFileAttributesW(token.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            *source = L"the command line";
-            return token;
-        }
-    }
-    return std::wstring();
 }
 
 // "Yes" and "No" are resolved here, on the finished element set, from the buttons' own text.
@@ -2295,6 +2013,7 @@ static void ResolveButtons(PromptInfo& info) {
     }
     info.buttonsConfident = (info.yes && info.no && info.yes != info.no);
     info.yesEnabled = info.yes ? (info.yes->enabled != FALSE) : false;
+    info.noEnabled = info.no ? (info.no->enabled != FALSE) : false;
 
     if (info.no && info.hDefaultButton) {
         RECT dr = {};
@@ -2310,55 +2029,59 @@ static void ResolveButtons(PromptInfo& info) {
             L"fails open rather than guessing", info.yes ? 1 : 0, info.no ? 1 : 0);
 }
 
-static void FinishHarvest(PromptInfo& info) {
-    ResolveButtons(info);
-
-    for (const auto& t : info.texts) {
-        if (t.find(L":\\") != std::wstring::npos || t.find(L"\\\\") != std::wstring::npos)
-            info.paths.push_back(t);
-    }
-
-    // Which of the prompt's own strings belongs to which Windows 7 row.
-    MapPromptRows(info);
-
-    // Which file is being elevated. It feeds the program icon, the "File origin" line and the
-    // details pane, so it is looked for in two places and never invented.
-    const WCHAR* pathSource = L"none";
-    info.appPath = FindTargetPath(info, &pathSource);
-    info.originText = info.appPath;
-    if (info.appPath.empty()) {
-        // The paths this build can read are the strings the prompt publishes and the block
-        // AppInfo passes on the command line. When neither carries the file, the log says so
-        // instead of pretending: the third info line stays away and the stock icon is used.
-        const WCHAR* cl = GetCommandLineW();
-        Dbg(L"elevated file: none of the readable sources carry it (request block reading=%d, "
-            L"command line='%s')", g_settings.readRequestBlock ? 1 : 0, cl ? cl : L"");
-    } else {
-        Dbg(L"elevated file: source=%s path='%s'", pathSource, info.appPath.c_str());
-    }
-
-    // Windows 7 paints the banner from the publisher: blue when the publisher is verified,
-    // amber (with black text) when it is not. The decision is therefore taken from the publisher
-    // row that was really mapped - a stray "unknown publisher" elsewhere in the tree must not
-    // repaint a signed program in amber.
+// Derive recreated trust cues only from the native publisher label and native button state. This is
+// run once after the initial harvest and again after expanding native details, because an unknown
+// warning there may only become visible in the second pass.
+static void UpdateNativeTrustCues(PromptInfo& info, bool* publisherKnownOut = nullptr,
+                                  bool* unknownWordingOut = nullptr) {
     bool sawUnknownWording = false;
     for (const auto& t : info.texts) {
         if (TextHasAnyWord(t, kUnknownWords, ARRAYSIZE(kUnknownWords))) sawUnknownWording = true;
     }
-    // "Autore sconosciuto" is not "Editore sconosciuto": the row that carries the publisher also
-    // says which of the two the prompt is talking about, and the two get different shields.
+    for (const auto& t : info.detailTexts) {
+        if (TextHasAnyWord(t, kUnknownWords, ARRAYSIZE(kUnknownWords))) sawUnknownWording = true;
+    }
     info.sawUnknownAuthor = TextHasAnyWord(info.publisherText, kAuthorWords,
                                            ARRAYSIZE(kAuthorWords));
-    bool publisherKnown = !info.sawUnknownAuthor && !IsUnknownPublisherValue(info.publisherText);
-    if (info.yes && !info.yesEnabled) {
-        info.bannerState = 3;                       // the native Yes button is disabled: blocked
-    } else {
-        // An unmapped or explicitly unknown publisher is never promoted to the blue state merely
-        // because the prompt exposed a value such as the single word "Unknown".
-        info.bannerState = publisherKnown ? 1 : 2;
-    }
-    if (g_settings.bannerOverride >= 1 && g_settings.bannerOverride <= 3)
+    const bool publisherKnown = info.publisherLabelled && info.publisherVerifiedLabelled &&
+                                !sawUnknownWording && !info.sawUnknownAuthor &&
+                                !IsUnknownPublisherValue(info.publisherText);
+    info.nativeBannerState = !info.yesEnabled ? 3 : (publisherKnown ? 1 : 2);
+    info.bannerState = info.nativeBannerState;
+    if (g_settings.bannerOverride >= info.nativeBannerState &&
+        g_settings.bannerOverride <= 3) {
         info.bannerState = g_settings.bannerOverride;
+    } else if (g_settings.bannerOverride >= 1 && g_settings.bannerOverride < info.nativeBannerState) {
+        Dbg(L"banner colour override would look more trusted than the native prompt -> ignored");
+    }
+
+    int nativeShield = 0;
+    if (info.nativeBannerState >= 2)
+        nativeShield = info.sawUnknownAuthor ? 2 : 1;
+    else if (!IsWindowsPublisherText(info.publisherText))
+        nativeShield = 1;
+    if (info.nativeBannerState == 3) nativeShield = 2;
+    info.nativeShieldVariant = nativeShield;
+    info.shieldVariant = nativeShield;
+    if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3) {
+        const int requestedShield = g_settings.bannerShield - 1;
+        if (requestedShield >= nativeShield)
+            info.shieldVariant = requestedShield;
+        else
+            Dbg(L"shield override would look more trusted than the native prompt -> ignored");
+    }
+    if (publisherKnownOut) *publisherKnownOut = publisherKnown;
+    if (unknownWordingOut) *unknownWordingOut = sawUnknownWording;
+}
+
+static void FinishHarvest(PromptInfo& info) {
+    MapPromptRows(info);
+    ResolveButtons(info);
+    MapNativePromptFields(info);
+
+    bool publisherKnown = false;
+    bool sawUnknownWording = false;
+    UpdateNativeTrustCues(info, &publisherKnown, &sawUnknownWording);
 
     // A prompt that asks for a password is a credential prompt whatever else it looks like. The
     // word is checked in the languages this dialog is localized in, on the prompt's own texts.
@@ -2375,14 +2098,14 @@ static void FinishHarvest(PromptInfo& info) {
         }
     }
 
-    Dbg(L"harvest(%s): publisher='%s' known=%d unknownWording=%d path='%s'",
+    Dbg(L"harvest(%s): publisher='%s' known=%d unknownWording=%d",
         info.harvestSource, info.publisherText.c_str(), publisherKnown ? 1 : 0,
-        sawUnknownWording ? 1 : 0, info.appPath.c_str());
+        sawUnknownWording ? 1 : 0);
     Log(L"harvest(%s): elements=%d texts=%d confident=%d yesEnabled=%d banner=%d cred=%d "
-        L"(publisher mapped=%d, unknown wording seen=%d, file path found=%d)",
+        L"(publisher mapped=%d, unknown wording seen=%d)",
         info.harvestSource, (int)info.elements.size(), (int)info.texts.size(),
         info.buttonsConfident, info.yesEnabled, info.bannerState, info.credentialVariant,
-        publisherKnown ? 1 : 0, sawUnknownWording ? 1 : 0, info.appPath.empty() ? 0 : 1);
+        publisherKnown ? 1 : 0, sawUnknownWording ? 1 : 0);
 }
 
 //------------------------------------------------------------------------------
@@ -2396,10 +2119,11 @@ struct Identity {
 };
 
 static void CollectIdentity(Identity& id) {
-    EnterCriticalSection(&g_cs);
-    id.userDesktopApp = g_userDesktopApp;
-    id.userDesktopAppClass = g_userDesktopAppClass;
-    LeaveCriticalSection(&g_cs);
+    {
+        CsLock lock(g_cs);
+        id.userDesktopApp = g_userDesktopApp;
+        id.userDesktopAppClass = g_userDesktopAppClass;
+    }
 
     const WCHAR* cl = GetCommandLineW();
     std::wstring cmd = cl ? cl : L"";
@@ -2920,6 +2644,7 @@ struct UiState {
     HICON shieldSmall = nullptr;
     HICON shieldBig = nullptr;
     HICON appIcon = nullptr;
+    bool appIconIsGeneric = false;
     // The theme manager's handle for the task dialog class, opened once for the dialog and closed
     // with it: it is the fallback that draws the "Show details" expander when the embedded Windows
     // 7 art cannot be decoded (see ExpandoTheme and ChevronArtIcon). The flag records that the
@@ -3848,20 +3573,17 @@ static void BuildDetailsPane(const PromptInfo& info) {
         AddDetailRow(std::wstring(g_loc->publisher) + L" " + info.publisherText);
     if (!info.originText.empty())
         AddDetailRow(std::wstring(g_loc->origin) + L" " + info.originText);
+    if (!info.programPath.empty())
+        AddDetailRow(std::wstring(g_loc->programLocation) + L" " + info.programPath);
 
-    // Everything the original screen showed when it was unfolded, then the paths the prompt
-    // published, then the file that is being elevated.
+    // Everything the native prompt showed when it was unfolded; labelled field fragments above
+    // are combined only after their native label/value relationship has been verified.
     for (const auto& t : info.detailTexts) {
         std::wstring row = Trim(t);
         if (row == info.appText || row == info.publisherText || row == info.questionText) continue;
-        if (info.publisherFromSignature) {
-            std::wstring detailLabel, detailValue;
-            SplitLabelValue(row, detailLabel, detailValue);
-            if (IsUnknownPublisherValue(detailValue) &&
-                (LooksLikePublisher(detailLabel) || LooksLikePublisher(row) ||
-                 IsUnknownPublisherValue(row)))
-                continue;   // the verified signer has replaced the native unknown-publisher row
-        }
+        if (IsNativeFieldRow(row, g_loc->origin, info.originText) ||
+            IsNativeFieldRow(row, g_loc->programLocation, info.programPath))
+            continue;
         // The window title and the labels of the prompt's own controls are its chrome, not
         // information about the request: the pane carries what the screen carries, not its
         // buttons.
@@ -3884,12 +3606,6 @@ static void BuildDetailsPane(const PromptInfo& info) {
         if (NameIsDetails(row)) continue;
         AddDetailRow(row);
     }
-    for (const auto& p : info.paths) {
-        if (p.empty()) continue;
-        AddDetailRow(p);
-    }
-    if (!info.appPath.empty())
-        AddDetailRow(std::wstring(g_loc->programLocation) + L" " + info.appPath);
 
     if (g_ui.details.empty()) AddDetailRow(g_loc->noExtraInfo);
     if (g_ui.details.empty()) g_ui.details.push_back(L"-");
@@ -3979,34 +3695,35 @@ static void LogPromptElements(const PromptInfo& info) {
 }
 
 #if HAVE_UIA
-// Every name in the prompt's tree, texts only: no element list is touched, so the pointers the
-// buttons live on (yes/no, resolved on the frozen set) stay valid.
-static void CollectNativeTexts(HWND hNative, std::vector<std::wstring>& out) {
+static bool CollectNativeElements(HWND hNative, std::vector<UiElement>& out) {
     out.clear();
-    if (!UiaInit()) return;
-    IUIAutomationElement* root = nullptr;
-    if (FAILED(g_uia->ElementFromHandle(hNative, &root)) || !root) return;
-    IUIAutomationTreeWalker* walker = nullptr;
-    if (SUCCEEDED(g_uia->get_RawViewWalker(&walker)) && walker) {
-        std::vector<UiElement> extra;
-        int budget = 300;
-        WalkTree(walker, root, extra, 0, &budget);
-        walker->Release();
-        for (const auto& e : extra)
-            if (!e.name.empty()) out.push_back(e.name);
-    }
-    root->Release();
+    if (!UiaInit()) return false;
+    IUIAutomationElement* rootRaw = nullptr;
+    if (FAILED(g_uia->ElementFromHandle(hNative, &rootRaw)) || !rootRaw) return false;
+    std::unique_ptr<IUIAutomationElement, UiaComReleaser<IUIAutomationElement>> root(rootRaw);
+    IUIAutomationTreeWalker* walkerRaw = nullptr;
+    if (FAILED(g_uia->get_RawViewWalker(&walkerRaw)) || !walkerRaw) return false;
+    std::unique_ptr<IUIAutomationTreeWalker, UiaComReleaser<IUIAutomationTreeWalker>> walker(walkerRaw);
+    int budget = 300;
+    WalkTree(walker.get(), root.get(), out, 0, &budget, false);
+    return !out.empty();
 }
 #else
-static void CollectNativeTexts(HWND, std::vector<std::wstring>& out) { out.clear(); }
+static bool CollectNativeElements(HWND, std::vector<UiElement>& out) {
+    out.clear();
+    return false;
+}
 #endif
 
 static void HarvestNativeDetails(PromptInfo& info) {
     info.detailTexts.clear();
-    if (!info.hNative || !IsWindow(info.hNative)) return;
+    info.detailElements.clear();
+    if (!info.hNative || !IsWindow(info.hNative) || StopRequested()) return;
 
+    std::vector<UiElement> beforeElements;
+    CollectNativeElements(info.hNative, beforeElements);
     std::vector<std::wstring> before;
-    CollectNativeTexts(info.hNative, before);
+    for (const auto& e : beforeElements) if (!e.name.empty()) before.push_back(e.name);
 
     UiElement* target = nullptr;
     for (auto& e : info.elements) {
@@ -4015,10 +3732,11 @@ static void HarvestNativeDetails(PromptInfo& info) {
         break;
     }
     if (!target) {
-        // Nothing that looks like a details control: the element list goes into the log, so this
-        // build's own wording can be read instead of guessed.
         Dbg(L"native details: no 'Show details' control found by its text");
         LogPromptElements(info);
+        info.detailElements = std::move(beforeElements);
+        info.detailTexts = std::move(before);
+        MapNativePromptFields(info);
         return;
     }
     Dbg(L"native details: control '%s' (type=%d)", target->name.c_str(), (int)target->type);
@@ -4029,18 +3747,29 @@ static void HarvestNativeDetails(PromptInfo& info) {
     if (!invoked) invoked = RelayViaWin32(info.hNative, target->name);
     if (!invoked) {
         Log(L"native details: the 'Show details' control could not be activated");
+        info.detailElements = std::move(beforeElements);
+        info.detailTexts = std::move(before);
+        MapNativePromptFields(info);
         return;
     }
-    // The expanded view is built asynchronously: it is read as soon as it has grown, and the wait
-    // is bounded (about 300 ms) so a prompt with nothing to reveal never delays the dialog.
-    size_t prev = before.size();
-    for (int i = 0; i < 5; i++) {
-        Sleep(60);
-        CollectNativeTexts(info.hNative, info.detailTexts);
-        if (info.detailTexts.size() > before.size()) break;      // the view grew: take it
-        if (i >= 2 && info.detailTexts.size() == prev) break;     // nothing is coming
-        prev = info.detailTexts.size();
+
+    size_t previousCount = before.size();
+    for (int i = 0; i < 5 && !StopRequested(); i++) {
+        if (g_stopEvent && WaitForSingleObject(g_stopEvent, 60) == WAIT_OBJECT_0) break;
+        std::vector<UiElement> current;
+        CollectNativeElements(info.hNative, current);
+        info.detailElements = std::move(current);
+        info.detailTexts.clear();
+        for (const auto& e : info.detailElements) if (!e.name.empty()) info.detailTexts.push_back(e.name);
+        if (info.detailTexts.size() > before.size()) break;
+        if (i >= 2 && info.detailTexts.size() == previousCount) break;
+        previousCount = info.detailTexts.size();
     }
+    if (info.detailElements.empty()) {
+        info.detailElements = std::move(beforeElements);
+        info.detailTexts = std::move(before);
+    }
+    MapNativePromptFields(info);
     Dbg(L"native details: %d text(s) in the prompt after expanding (%d before)",
         (int)info.detailTexts.size(), (int)before.size());
 }
@@ -4054,7 +3783,6 @@ static void HarvestDetailsSafely(PromptInfo& info) {
         HarvestNativeDetails(info);
     } catch (...) {
         Log(L"reading the prompt's own details failed -> the pane keeps what it already has");
-        info.detailTexts.clear();
     }
 #else
     HarvestNativeDetails(info);
@@ -4270,7 +3998,7 @@ static void PaintWin7Ui(HWND hWnd) {
     std::wstring question = g_loc->question;
     std::wstring appName, publisher;
     if (g_ui.info) {
-        if (!g_ui.info->publisherFromSignature && !g_ui.info->questionText.empty())
+        if (!g_ui.info->questionText.empty())
             question = g_ui.info->questionText;
         appName = g_ui.info->appText;
         publisher = g_ui.info->publisherText;
@@ -4544,26 +4272,23 @@ static void RefreshDetailsOnDemand() {
     size_t paneBefore = g_ui.details.size();
     HarvestDetailsSafely(*info);
 
-    const WCHAR* src = L"none";
-    std::wstring again = FindTargetPath(*info, &src);
-    if (!again.empty() && again != info->appPath) {
-        info->appPath = again;
-        info->originText = again;
-        Dbg(L"details on demand: the file is '%s' (source: %s)", again.c_str(), src);
-    }
+    MapNativePromptFields(*info);
     BuildDetailsPane(*info);
     g_ui.detailsFromNative = !info->detailTexts.empty();
 
     // Whatever was learned now has to reach the screen: the icon of the program (if it was not
     // known when the dialog was built) and the third info row, which did not exist before.
-    if (!g_ui.appIcon && !info->appPath.empty()) {
-        std::vector<std::wstring> one;
-        one.push_back(info->appPath);
-        g_ui.appIcon = LoadAppIcon(one, ScaleFor(32, g_ui.dpi), &g_ui.appIconSize);
-        if (g_ui.appIcon)
-            Dbg(L"details on demand: program icon taken from '%s' (%d px art)", info->appPath.c_str(),
-                g_ui.appIconSize);
-        BuildAppIconBitmap();
+    if (g_ui.appIconIsGeneric && !info->programPath.empty()) {
+        std::vector<std::wstring> one{info->programPath};
+        HICON nativeIcon = LoadAppIcon(one, ScaleFor(32, g_ui.dpi), &g_ui.appIconSize);
+        if (nativeIcon) {
+            if (g_ui.appIcon) DestroyIcon(g_ui.appIcon);
+            g_ui.appIcon = nativeIcon;
+            g_ui.appIconIsGeneric = false;
+            Dbg(L"details on demand: program icon taken from labelled native path '%s' (%d px art)",
+                info->programPath.c_str(), g_ui.appIconSize);
+            BuildAppIconBitmap();
+        }
     }
     if (g_ui.hwnd) {
         g_ui.baseHeight = BaseClientHeight(g_ui.dpi);
@@ -4585,16 +4310,8 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         int smallArt = ShieldArtSize(ScaleFor(16, g_ui.dpi));
         g_ui.shieldSmall = LoadSkinShieldIcon(smallArt, 0, nullptr);
         int art = ShieldArtSize(ScaleFor(44, g_ui.dpi));
-        int variant = 0;
-        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3)
-            variant = g_settings.bannerShield - 1;
-        else if (g_ui.info)
-            variant = g_ui.info->shieldVariant;
-        // An orange banner always carries its matching exclamation shield, even if a manual
-        // shield override was selected. Flat Icons is the exception: it remains consistently blue.
-        if (g_settings.windowTheme != WindowThemeWin10Flat && g_ui.info &&
-            g_ui.info->bannerState == 2)
-            variant = 2;
+        int variant = g_ui.info ? g_ui.info->shieldVariant : 0;
+        // The state already includes the native prompt and the safety-clamped user choice.
         g_ui.shieldBig = LoadSkinShieldIcon(art, variant, &g_ui.shieldSize);
         if (!g_ui.shieldBig && g_settings.windowTheme != WindowThemeWin10Flat) {
             g_ui.shieldBig = LoadShieldIcon(art, variant);
@@ -4605,21 +4322,21 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             g_settings.windowTheme, variant);
         // The real icon of the elevated file when the prompt tells us which file it is; the
         // stock "application" icon - the one Windows 7 uses for an unknown program - otherwise.
-        if (g_ui.info && !g_ui.info->appPath.empty()) {
-            std::vector<std::wstring> one;
-            one.push_back(g_ui.info->appPath);
+        if (g_ui.info && !g_ui.info->programPath.empty()) {
+            std::vector<std::wstring> one{g_ui.info->programPath};
             g_ui.appIcon = LoadAppIcon(one, ScaleFor(32, g_ui.dpi), &g_ui.appIconSize);
             if (g_ui.appIcon)
-                Dbg(L"program icon taken from '%s' (%d px art, drawn 1:1)",
-                    g_ui.info->appPath.c_str(), g_ui.appIconSize);
+                Dbg(L"program icon taken from labelled native path '%s' (%d px art, drawn 1:1)",
+                    g_ui.info->programPath.c_str(), g_ui.appIconSize);
             BuildAppIconBitmap();
         }
-        if (!g_ui.appIcon && g_ui.info)
-            g_ui.appIcon = LoadAppIcon(g_ui.info->paths, ScaleFor(32, g_ui.dpi), &g_ui.appIconSize);
         if (!g_ui.appIcon) {
             g_ui.appIcon = LoadGenericAppIcon(ScaleFor(32, g_ui.dpi));
             g_ui.appIconSize = ScaleFor(32, g_ui.dpi);
-            Dbg(L"program icon: stock application icon (no usable path in the prompt)");
+            g_ui.appIconIsGeneric = true;
+            Dbg(L"program icon: stock application icon (no clearly labelled native path)");
+        } else {
+            g_ui.appIconIsGeneric = false;
         }
         BuildAppIconBitmap();
 
@@ -4662,6 +4379,7 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         if (g_ui.hDetails) SendMessageW(g_ui.hDetails, WM_SETFONT, (WPARAM)g_ui.fontNormal, TRUE);
 
         if (g_ui.info && !g_ui.info->yesEnabled && g_ui.hYes) EnableWindow(g_ui.hYes, FALSE);
+        if (g_ui.info && !g_ui.info->noEnabled && g_ui.hNo) EnableWindow(g_ui.hNo, FALSE);
         if (!HasDetailsRow() && g_ui.hDetails) ShowWindow(g_ui.hDetails, SW_HIDE);
         LayoutControls(hWnd);
         SetFocus(g_ui.hNo ? g_ui.hNo : hWnd);
@@ -4848,12 +4566,11 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         }
         break;
     case WM_CLOSE:
-        // The X of the native title bar (and Alt+F4) is a decision, exactly like the X of the
-        // native prompt: it means "No". The paths that must not decide anything - the panic
-        // hotkey, the watchdog, the consent flow ending by itself - set g_ui.done first.
+        // The X of the native title bar (and Alt+F4) is a user decision: it means "No". Panic,
+        // watchdog, native completion and unload are not decisions; they set done or signal stop.
         if (!g_ui.done) {
             g_ui.done = true;
-            if (g_ui.result == RESULT_NO_DECISION && !NativeCallFinished()) {
+            if (!StopRequested() && g_ui.result == RESULT_NO_DECISION && !NativeCallFinished()) {
                 Log(L"the dialog was closed from the title bar -> No");
                 g_ui.result = IDC_W7UAC_NO;
             }
@@ -4890,68 +4607,174 @@ static LRESULT CALLBACK UiWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
 #endif
 }
 
+static HINSTANCE g_modInstance = nullptr;
+static bool g_uiClassRegistered = false;
+
 static bool RegisterUiClass() {
-    static bool registered = false;
-    if (registered) return true;
+    if (g_uiClassRegistered) return true;
+    if (!g_modInstance) return false;
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = UiWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = g_modInstance;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = WIN7UAC_CLASS;
     if (!RegisterClassExW(&wc)) return false;
-    registered = true;
+    g_uiClassRegistered = true;
     return true;
+}
+
+static void UnregisterUiClass() {
+    if (!g_uiClassRegistered || !g_modInstance) return;
+    if (UnregisterClassW(WIN7UAC_CLASS, g_modInstance)) {
+        g_uiClassRegistered = false;
+    } else {
+        Log(L"UnregisterClassW failed after all dialog threads stopped: %u", GetLastError());
+    }
 }
 
 //------------------------------------------------------------------------------
 // Session
 //------------------------------------------------------------------------------
 
-static HWND g_hNativePrompt = nullptr;
-static HANDLE g_uiThread = nullptr;      // the replacement-UI thread (one prompt at a time)
+static HWND g_hNativePrompt = nullptr;  // published atomically to the asynchronous state callback
+static DWORD g_uiOwnerThreadId = 0;
+
+static HWND NativePromptHandle() {
+    return (HWND)InterlockedCompareExchangePointer((PVOID volatile*)&g_hNativePrompt, nullptr,
+                                                   nullptr);
+}
+
+static void SetNativePromptHandle(HWND hwnd) {
+    InterlockedExchangePointer((PVOID volatile*)&g_hNativePrompt, hwnd);
+}
 
 static RECT g_nativeOriginalRect = {};
 static bool g_nativeMoved = false;
-// When the consent hook was entered: the clock the instant ejection is reported against.
-static DWORD g_requestTick = 0;
-
-static void RestoreNativePrompt() {
-    if (g_hNativePrompt && g_nativeMoved && IsWindow(g_hNativePrompt)) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(g_hNativePrompt, &pid);
-        if (pid != GetCurrentProcessId()) {
-            g_nativeMoved = false;
-            return;
-        }
-        Log(L"restoring the native prompt window");
-        SetWindowPos(g_hNativePrompt, HWND_TOPMOST, g_nativeOriginalRect.left,
-                     g_nativeOriginalRect.top,
-                     g_nativeOriginalRect.right - g_nativeOriginalRect.left,
-                     g_nativeOriginalRect.bottom - g_nativeOriginalRect.top,
-                     SWP_SHOWWINDOW | SWP_NOACTIVATE);
-        SetForegroundWindow(g_hNativePrompt);
+static bool RestoreNativePrompt() {
+    if (!g_uiOwnerThreadId || GetCurrentThreadId() != g_uiOwnerThreadId) {
+        Log(L"refusing to restore the native prompt from a non-owner thread");
+        return false;
     }
+    HWND native = NativePromptHandle();
+    if (!g_nativeMoved) return true;
+    if (!native) {
+        Log(L"cannot restore the native prompt: its window handle is unavailable");
+        return false;
+    }
+    if (!IsWindow(native)) {
+        // The consent call may already have finished and destroyed its prompt.
+        g_nativeMoved = false;
+        return true;
+    }
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(native, &pid) || pid != GetCurrentProcessId()) {
+        Log(L"the native prompt handle is no longer a window of this process; it was not moved "
+            L"or restored");
+        g_nativeMoved = false;
+        return false;
+    }
+
+    const int width = g_nativeOriginalRect.right - g_nativeOriginalRect.left;
+    const int height = g_nativeOriginalRect.bottom - g_nativeOriginalRect.top;
+    if (width <= 0 || height <= 0) {
+        Log(L"cannot restore the native prompt: the saved rectangle is invalid");
+        return false;
+    }
+
+    Log(L"restoring the native prompt window");
+    BOOL restored = SetWindowPos(native, HWND_TOPMOST, g_nativeOriginalRect.left,
+                                 g_nativeOriginalRect.top, width, height,
+                                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    if (!restored) {
+        const DWORD firstError = GetLastError();
+        Log(L"SetWindowPos restoring the native prompt failed (%u); retrying without a z-order "
+            L"change", firstError);
+        restored = SetWindowPos(native, nullptr, g_nativeOriginalRect.left,
+                                g_nativeOriginalRect.top, width, height,
+                                SWP_SHOWWINDOW | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    if (!restored) {
+        const DWORD error = GetLastError();
+        // This is a visibility fallback only; it cannot put an off-screen window back at its
+        // saved position, so keep the moved state set and report that restoration is incomplete.
+        ShowWindow(native, SW_SHOW);
+        Log(L"SetWindowPos could not restore the native prompt (%u); the prompt may remain "
+            L"off-screen", error);
+        return false;
+    }
+    if (!IsWindowVisible(native)) {
+        ShowWindow(native, SW_SHOW);
+        if (!IsWindowVisible(native)) {
+            Log(L"the native prompt remained hidden after restoration");
+            return false;
+        }
+    }
+
     g_nativeMoved = false;
+    if (!SetForegroundWindow(native))
+        Dbg(L"SetForegroundWindow did not activate the restored native prompt");
+    return true;
 }
 
-static void TakeOverNativePrompt(HWND h) {
-    if (!h || !IsWindow(h)) return;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(h, &pid);
-    if (pid != GetCurrentProcessId()) {
-        Log(L"refusing to move a window that is not ours (%p)", h);
-        return;
+static bool TakeOverNativePrompt(HWND h) {
+    if (!g_uiOwnerThreadId || GetCurrentThreadId() != g_uiOwnerThreadId) {
+        Log(L"refusing to move the native prompt from a non-owner thread");
+        return false;
     }
-    // The position to restore is the one the window had before it was first taken over: the
-    // function can be called again while the window is already off screen.
-    if (!g_nativeMoved) GetWindowRect(h, &g_nativeOriginalRect);
-    if (g_settings.nativeWindowMode == 2) { g_nativeMoved = false; return; }
-    if (g_settings.nativeWindowMode == 1) ShowWindow(h, SW_HIDE);
-    else SetWindowPos(h, nullptr, -32000, -32000, 0, 0,
-                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    if (StopRequested() || !h || !IsWindow(h)) return false;
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(h, &pid) || pid != GetCurrentProcessId()) {
+        Log(L"refusing to move a window that is not ours (%p)", h);
+        return false;
+    }
+
+    HWND current = NativePromptHandle();
+    if (g_nativeMoved && current != h) {
+        if (!RestoreNativePrompt() || g_nativeMoved) {
+            Log(L"the previously moved prompt could not be restored; refusing to take over another "
+                L"window");
+            return false;
+        }
+    }
+
+    RECT original = {};
+    if (!g_nativeMoved) {
+        if (!GetWindowRect(h, &original)) {
+            Log(L"GetWindowRect for the native prompt failed (%u); leaving the native prompt "
+                L"untouched", GetLastError());
+            return false;
+        }
+        if (original.right <= original.left || original.bottom <= original.top) {
+            Log(L"GetWindowRect returned an invalid native-prompt rectangle; leaving it untouched");
+            return false;
+        }
+        g_nativeOriginalRect = original;
+    }
+
+    SetNativePromptHandle(h);
+    if (g_settings.nativeWindowMode == 2) {
+        // A live settings change may select in-place mode after an earlier takeover. Keep the
+        // restore obligation in that case; only a prompt that was never moved has nothing to undo.
+        return true;
+    }
+
+    if (g_settings.nativeWindowMode == 1) {
+        ShowWindow(h, SW_HIDE);
+        if (IsWindowVisible(h)) {
+            Log(L"ShowWindow(SW_HIDE) did not hide the native prompt; leaving it native");
+            return false;
+        }
+    } else if (!SetWindowPos(h, nullptr, -32000, -32000, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+        Log(L"SetWindowPos moving the native prompt off-screen failed (%u); leaving it native",
+            GetLastError());
+        return false;
+    }
+
     g_nativeMoved = true;
+    return true;
 }
 
 // The documented way to follow the state of another window: an event hook, not a poll. The system
@@ -4966,7 +4789,7 @@ static void TakeOverNativePrompt(HWND h) {
 static void CALLBACK PromptStateProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                      LONG, DWORD, DWORD) {
     if (idObject != OBJID_WINDOW || !hwnd) return;
-    if (hwnd != g_hNativePrompt) return;      // only the prompt this session is replacing
+    if (hwnd != NativePromptHandle()) return; // only the prompt this session is replacing
     HWND dlg = g_ui.hwnd;
     if (!dlg) return;
     PostMessageW(dlg, WM_W7UAC_STATECHANGED, event, 0);
@@ -4975,61 +4798,24 @@ static void CALLBACK PromptStateProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG
 // A window that was moved off screen by this mod is still "visible" for IsWindowVisible, so the
 // check asks where it is: only a prompt that is really on screen has to be taken away again.
 static bool NativePromptOnScreen() {
-    if (!g_hNativePrompt || !IsWindow(g_hNativePrompt)) return false;
-    if (!IsWindowVisible(g_hNativePrompt)) return false;
+    HWND native = NativePromptHandle();
+    if (!native || !IsWindow(native)) return false;
+    if (!IsWindowVisible(native)) return false;
     RECT r = {};
-    if (!GetWindowRect(g_hNativePrompt, &r)) return false;
+    if (!GetWindowRect(native, &r)) return false;
     return r.left > -30000;
 }
 
-// The instant ejection. The watcher calls it the moment this process's own prompt window shows
-// itself - and again whenever the system moves that window somewhere else: the window is off the
-// screen within the same event, which on the machine this was written for is a handful of
-// milliseconds after the system's own prompt appeared, long before any of the reading work (UI
-// Automation, the digital signature, the dialog's own strings) has run.
-//
-// Nothing here is irreversible and nothing touches the window's messages: it is only moved - or
-// hidden, when the setting asks for that - with documented calls, the place it had is remembered,
-// and a session that then decides *not* to replace the UI hands it back untouched
-// (GiveNativePromptBack). A window that is off screen is still alive, still enabled and still
-// reachable through UI Automation, which is what the rest of the session works on.
-static void EjectTheNativePromptAtOnce(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd)) return;
-    if (g_settings.relayMode != 1 || g_settings.dumpUiTree) return;   // observe: never touched
-    if (g_settings.nativeWindowMode == 2) return;                     // leave it in place
-    if (!IsWindowVisible(hwnd)) return;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != GetCurrentProcessId()) return;
-
-    if (g_nativeMoved && g_hNativePrompt == hwnd) {
-        // It is already away: the only reason to act again is that the system has put it back on
-        // screen, and then it goes away again in the same event - the log only says it once.
-        if (!NativePromptOnScreen()) return;
-        Dbg(L"the native prompt came back on screen -> off it goes again");
-        TakeOverNativePrompt(hwnd);
-        return;
-    }
-
-    RECT rc = {};
-    if (!GetWindowRect(hwnd, &rc)) return;
-    if (rc.right - rc.left < 160 || rc.bottom - rc.top < 90) return;  // not the prompt yet
-
-    const unsigned long ms = g_requestTick ? (unsigned long)(GetTickCount() - g_requestTick) : 0;
-    g_hNativePrompt = hwnd;
-    TakeOverNativePrompt(hwnd);
-    if (g_nativeMoved)
-        Log(L"the native prompt left the screen %lu ms after the request (%s)", ms,
-            g_settings.nativeWindowMode == 1 ? L"hidden" : L"moved off screen");
-}
-
-// The other end of the instant ejection: a session that decides against replacing the UI - the app
+// The fail-open path for a session that decides against replacing the UI - the app
 // is not in the whitelist, the prompt wants credentials, its buttons could not be identified, no
 // usable window was found at all - gives the window back where it was, and the focus with it,
 // before the native flow continues. RestoreNativePrompt is a no-op when nothing was ever moved.
 static void GiveNativePromptBack() {
+    // A second attempt covers transient Win32 failures while still keeping all window work on the
+    // UI owner thread. Never clear the handle while the window may still be off-screen.
     RestoreNativePrompt();
-    g_hNativePrompt = nullptr;
+    if (g_nativeMoved) RestoreNativePrompt();
+    if (!g_nativeMoved) SetNativePromptHandle(nullptr);
 }
 
 
@@ -5063,28 +4849,83 @@ static void EnumerateCurrentDesktop(std::vector<PromptCandidate>& out) {
 }
 
 static bool WaitForAnyCandidate(int timeoutMs) {
-    DWORD start = GetTickCount();
+    const DWORD start = GetTickCount();
     for (;;) {
-        EnterCriticalSection(&g_cs);
-        bool have = !g_candidates.empty();
-        LeaveCriticalSection(&g_cs);
+        if (StopRequested()) return false;
+        bool have = false;
+        {
+            CsLock lock(g_cs);
+            have = !g_candidates.empty();
+        }
         if (have) return true;
-        if (GetTickCount() - start >= (DWORD)timeoutMs) return false;
-        Sleep(20);
+        const DWORD elapsed = GetTickCount() - start;
+        if (elapsed >= (DWORD)timeoutMs) return false;
+        if (!g_candidateEvent || !g_stopEvent) return false;
+        HANDLE waits[2] = {g_stopEvent, g_candidateEvent};
+        DWORD wait = WaitForMultipleObjects(2, waits, FALSE, (DWORD)timeoutMs - elapsed);
+        if (wait == WAIT_OBJECT_0) return false;
+        if (wait == WAIT_FAILED) {
+            Log(L"waiting for a prompt candidate failed: %u", GetLastError());
+            return false;
+        }
     }
 }
 
+static bool GetDiagnosticsDumpPath(std::wstring* output) {
+    if (!output) return false;
+    WCHAR storage[MAX_PATH * 4] = L"";
+    const size_t copied = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
+    if (!copied || copied >= ARRAYSIZE(storage) || !storage[0]) {
+        Log(L"diagnostics dump: Wh_GetModStoragePath returned no usable storage path");
+        return false;
+    }
+
+    DWORD attributes = GetFileAttributesW(storage);
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        if (!CreateDirectoryW(storage, nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
+            Log(L"diagnostics dump: cannot create the mod storage directory (error %u)",
+                GetLastError());
+            return false;
+        }
+        attributes = GetFileAttributesW(storage);
+    }
+    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        Log(L"diagnostics dump: the mod storage path is not a directory");
+        return false;
+    }
+
+    *output = storage;
+    if (!output->empty() && output->back() != L'\\' && output->back() != L'/')
+        output->push_back(L'\\');
+    *output += L"win7-uac-recreation-diagnostics.txt";
+    return true;
+}
+
 static void WriteDump(const std::wstring& content) {
-    HANDLE h = CreateFileW(g_settings.dumpPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
-        Log(L"cannot write the dump to %s", g_settings.dumpPath);
+    std::wstring path;
+    if (!GetDiagnosticsDumpPath(&path)) return;
+    if (content.size() > (size_t)(MAXDWORD / sizeof(WCHAR))) {
+        Log(L"diagnostics dump is too large to write");
         return;
     }
+
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        Log(L"cannot write the diagnostics dump (error %u)", GetLastError());
+        return;
+    }
+    const DWORD bytes = (DWORD)(content.size() * sizeof(WCHAR));
     DWORD written = 0;
-    WriteFile(h, content.c_str(), (DWORD)(content.size() * sizeof(WCHAR)), &written, nullptr);
+    const BOOL ok = WriteFile(h, content.c_str(), bytes, &written, nullptr);
+    const DWORD writeError = ok ? ERROR_SUCCESS : GetLastError();
     CloseHandle(h);
-    Log(L"dump written to %s", g_settings.dumpPath);
+    if (!ok || written != bytes) {
+        Log(L"diagnostics dump write was incomplete (error %u, %lu/%lu bytes)", writeError,
+            (unsigned long)written, (unsigned long)bytes);
+        return;
+    }
+    Log(L"diagnostics dump written to Windhawk mod storage: %s", path.c_str());
 }
 
 static void AppendLine(std::wstring& s, const WCHAR* fmt, ...) {
@@ -5111,9 +4952,11 @@ static std::wstring BuildDump(const PromptInfo& info, bool harvested, const Iden
     for (const auto& t : id.cmdLineTokens) AppendLine(d, L"cmd line token: %s", t.c_str());
 
     AppendLine(d, L"\r\n=== candidate windows ===");
-    EnterCriticalSection(&g_cs);
-    std::vector<PromptCandidate> list = g_candidates;
-    LeaveCriticalSection(&g_cs);
+    std::vector<PromptCandidate> list;
+    {
+        CsLock lock(g_cs);
+        list = g_candidates;
+    }
     for (const auto& c : list) {
         if (!IsWindow(c.hwnd)) {
             AppendLine(d, L"hwnd=%p pid=%lu (vanished before the dump)", c.hwnd, c.pid);
@@ -5129,9 +4972,11 @@ static std::wstring BuildDump(const PromptInfo& info, bool harvested, const Iden
 
     AppendLine(d, L"\r\n=== other processes' windows seen while the prompt was pending ===");
     AppendLine(d, L"(recorded only: they are never enumerated, never harvested, never clicked)");
-    EnterCriticalSection(&g_cs);
-    std::vector<std::wstring> foreign = g_rejectLog;
-    LeaveCriticalSection(&g_cs);
+    std::vector<std::wstring> foreign;
+    {
+        CsLock lock(g_cs);
+        foreign = g_rejectLog;
+    }
     for (const auto& f : foreign) AppendLine(d, L"%s", f.c_str());
 
     if (!harvested) {
@@ -5197,11 +5042,38 @@ static bool ElementUsable(const PromptInfo& info, const UiElement* e) {
     return e >= first && e < (first + info.elements.size());
 }
 
+static bool HasUsableReplacementAnswer(const PromptInfo& info) {
+    const bool yes = ElementUsable(info, info.yes) && info.yesEnabled && g_ui.hYes &&
+                     IsWindow(g_ui.hYes) && IsWindowEnabled(g_ui.hYes);
+    const bool no = ElementUsable(info, info.no) && info.noEnabled && g_ui.hNo &&
+                    IsWindow(g_ui.hNo) && IsWindowEnabled(g_ui.hNo);
+    return yes || no;
+}
+
+static thread_local bool g_uiComInitialized = false;
+
+static bool InitializeUiCom() {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (SUCCEEDED(hr)) {
+        g_uiComInitialized = true;
+        return true;
+    }
+    Log(L"CoInitializeEx for the UI session failed (0x%08X); UI Automation may be unavailable", hr);
+    return false;
+}
+
+static void UninitializeUiCom() {
+    if (!g_uiComInitialized) return;
+    CoUninitialize();
+    g_uiComInitialized = false;
+}
+
 static DWORD WINAPI UiSessionRunInner() {
     g_step = L"session: start";
-    EnterCriticalSection(&g_cs);
-    g_rejectLog.clear();
-    LeaveCriticalSection(&g_cs);
+    {
+        CsLock lock(g_cs);
+        g_rejectLog.clear();
+    }
     g_ui.details.clear();
     g_ui.detailsFromNative = false;
     g_ui.detailsAttempts = 0;
@@ -5211,6 +5083,7 @@ static DWORD WINAPI UiSessionRunInner() {
     g_ui.done = false;
     InterlockedExchange(&g_mappingLogged, 0);
 
+    if (StopRequested()) return 0;
     bool useEnumeration = (g_settings.detection == 1);
     g_step = L"session: waiting for the prompt window";
     if (useEnumeration) {
@@ -5221,6 +5094,7 @@ static DWORD WINAPI UiSessionRunInner() {
             LogSeenWindows(L"windows parked");
             return 0;
         }
+        if (StopRequested()) return 0;
         // The watchers saw nothing: fall back to enumerating both desktops directly.
         Log(L"no candidate window from the watchers within %d ms -> enumerating the desktops",
             g_settings.detectTimeoutMs);
@@ -5236,10 +5110,13 @@ static DWORD WINAPI UiSessionRunInner() {
     std::vector<HDESK> desktops;
     std::vector<std::wstring> desktopNames;
     if (useEnumeration) {
-        for (const auto& w : g_watchers) {
-            if (!w.desktop) continue;
-            desktops.push_back(w.desktop);
-            desktopNames.push_back(w.name);
+        {
+            CsLock lock(g_cs);
+            for (const auto& w : g_watchers) {
+                if (!w.desktop) continue;
+                desktops.push_back(w.desktop);
+                desktopNames.push_back(w.name);
+            }
         }
         if (desktops.empty()) {
             // Polling mode: no watcher opened anything, so this thread opens the desktops.
@@ -5252,7 +5129,7 @@ static DWORD WINAPI UiSessionRunInner() {
             }
         }
     } else {
-        EnterCriticalSection(&g_cs);
+        CsLock lock(g_cs);
         for (const auto& c : g_candidates) {
             if (!c.desktop) continue;
             if (std::find(desktops.begin(), desktops.end(), c.desktop) == desktops.end()) {
@@ -5260,12 +5137,11 @@ static DWORD WINAPI UiSessionRunInner() {
                 desktopNames.push_back(c.desktopName);
             }
         }
-        LeaveCriticalSection(&g_cs);
     }
 
     // UI Automation is used while *choosing* the prompt, not only afterwards, so COM must be
     // initialised on this thread before the search starts.
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    InitializeUiCom();
 
     PromptInfo info;
     bool haveInfo = false;
@@ -5281,6 +5157,9 @@ static DWORD WINAPI UiSessionRunInner() {
     // Says out loud which windows were looked at and dismissed, so that the log alone
     // answers the question "did the real prompt even appear?".
     std::vector<HWND> skipLogged;
+    bool earlyTakeover = false;
+    HWND earlyTakeoverHandle = nullptr;
+    HWND earlyTakeoverTried = nullptr;
     auto logSkip = [&](HWND h, const WCHAR* cls, const RECT* rc, const WCHAR* why) {
         if (std::find(skipLogged.begin(), skipLogged.end(), h) != skipLogged.end()) return;
         skipLogged.push_back(h);
@@ -5291,7 +5170,7 @@ static DWORD WINAPI UiSessionRunInner() {
             Log(L"window not usable: hwnd=%p class='%s' (%s)", h, cls, why);
     };
 
-    for (size_t di = 0; di < desktops.size() && !confident; di++) {
+    for (size_t di = 0; di < desktops.size() && !confident && !StopRequested(); di++) {
         DWORD sliceDeadline = GetTickCount() + sliceMs;
         if ((LONG)(sliceDeadline - overallDeadline) > 0) sliceDeadline = overallDeadline;
         // Move this thread to the prompt's desktop *before* creating any window: this is
@@ -5307,15 +5186,15 @@ static DWORD WINAPI UiSessionRunInner() {
         g_step = L"session: harvesting the prompt";
 
         for (;;) {
+            if (StopRequested()) break;
             // The prompt can only be replaced while the native call is still running.
             if (NativeCallFinished() && !haveInfo) break;
             std::vector<PromptCandidate> list;
             if (useEnumeration) {
                 EnumerateCurrentDesktop(list);
             } else {
-                EnterCriticalSection(&g_cs);
+                CsLock lock(g_cs);
                 list = g_candidates;
-                LeaveCriticalSection(&g_cs);
             }
 
             // Newest first: the real prompt is created after any interim dialog.
@@ -5342,6 +5221,13 @@ static DWORD WINAPI UiSessionRunInner() {
                 PromptInfo attempt;
                 bool haveWin32 = HarvestWin32(it->hwnd, attempt);
                 attempt.hNative = it->hwnd;
+                if (attempt.credentialVariant && earlyTakeover &&
+                    earlyTakeoverHandle == it->hwnd) {
+                    Dbg(L"native edit control indicates a credential prompt -> restoring immediately");
+                    GiveNativePromptBack();
+                    earlyTakeover = false;
+                    earlyTakeoverHandle = nullptr;
+                }
                 {
                     WCHAR t[512] = L"";
                     GetWindowTextW(it->hwnd, t, ARRAYSIZE(t));
@@ -5351,12 +5237,70 @@ static DWORD WINAPI UiSessionRunInner() {
                     Log(L"known prompt window: class='%s' hwnd=%p win32 children=%s", it->cls,
                         it->hwnd, haveWin32 ? L"yes" : L"no");
                 }
+
+                // Reduce the XAML consent-window flash by moving a known candidate before the
+                // slower UIA harvest, but only after the quick Win32 pass. An edit control is a
+                // credential signal and prevents this move. "Credential Dialog Xaml Host" is
+                // shared by consent and credential screens, so the remaining credential check can
+                // only happen through UIA. The early move is allowed only when documented UIA2
+                // timeouts can bound that classification; unavailable/failed/expired harvesting or
+                // uncertain buttons restores the native window and fails open. A credential screen
+                // can still be off-screen briefly during this bounded classification; it is never
+                // replaced and the native flow remains the sole source of a decision.
+                DWORD earlyUiaOldConnectionMs = 0;
+                DWORD earlyUiaOldTransactionMs = 0;
+                bool earlyUiaTimeoutsSet = false;
+                if (!earlyTakeover && earlyTakeoverTried != it->hwnd && ours &&
+                    g_settings.whitelistMode == 1 && g_settings.relayMode != 0 &&
+                    !g_settings.dumpUiTree && g_settings.nativeWindowMode == 0 &&
+                    !attempt.credentialVariant && IsCredentialXamlHostClass(it->cls)) {
+                    earlyTakeoverTried = it->hwnd;
+                    if (UiaSetEarlyTimeouts(&earlyUiaOldConnectionMs,
+                                            &earlyUiaOldTransactionMs)) {
+                        earlyUiaTimeoutsSet = true;
+                        if (TakeOverNativePrompt(it->hwnd) && g_nativeMoved) {
+                            earlyTakeover = true;
+                            earlyTakeoverHandle = it->hwnd;
+                            Dbg(L"known native prompt moved off screen before bounded UIA harvest");
+                        } else {
+                            UiaRestoreTimeouts(earlyUiaOldConnectionMs,
+                                               earlyUiaOldTransactionMs);
+                            earlyUiaTimeoutsSet = false;
+                        }
+                    } else {
+                        Dbg(L"bounded UIA2 timeouts unavailable -> keeping the XAML prompt visible "
+                            L"until after UIA harvest");
+                    }
+                }
+
                 if (ours) {
                     // The XAML prompt has no Win32 children and no dialog default button, so
                     // UI Automation is the only source for its texts and its buttons. It runs
                     // on the window of consent.exe itself and nowhere else.
                     PromptInfo u;
-                    if (HarvestUia(it->hwnd, u)) {
+                    bool earlyClassifying = earlyTakeover && earlyTakeoverHandle == it->hwnd;
+                    bool uiaDeadlineExpired = false;
+                    bool uiaHarvested = HarvestUia(it->hwnd, u, earlyClassifying,
+                                                  &uiaDeadlineExpired);
+                    if (earlyUiaTimeoutsSet) {
+                        UiaRestoreTimeouts(earlyUiaOldConnectionMs, earlyUiaOldTransactionMs);
+                        earlyUiaTimeoutsSet = false;
+                    }
+                    bool earlyClassificationFailed = earlyClassifying &&
+                        (!uiaHarvested || uiaDeadlineExpired || StopRequested());
+                    if (earlyClassificationFailed) {
+                        Dbg(L"bounded UIA classification failed, expired, or was cancelled -> "
+                            L"restoring and failing open");
+                        GiveNativePromptBack();
+                        earlyTakeover = false;
+                        earlyTakeoverHandle = nullptr;
+                        attempt.elements.clear();
+                        attempt.texts.clear();
+                        attempt.buttonsConfident = false;
+                        attempt.yes = nullptr;
+                        attempt.no = nullptr;
+                    }
+                    if (uiaHarvested && !earlyClassificationFailed) {
                         u.hNative = it->hwnd;
                         u.windowTitle = attempt.windowTitle;
                         if (!haveWin32) {
@@ -5366,10 +5310,6 @@ static DWORD WINAPI UiSessionRunInner() {
                                 if (std::find(attempt.texts.begin(), attempt.texts.end(), t) ==
                                     attempt.texts.end())
                                     attempt.texts.push_back(t);
-                            for (const auto& pp : u.paths)
-                                if (std::find(attempt.paths.begin(), attempt.paths.end(), pp) ==
-                                    attempt.paths.end())
-                                    attempt.paths.push_back(pp);
                             // The UIA elements are appended, never aliased: a pointer into
                             // the other vector would not survive this block. The buttons are
                             // resolved again, by name, on the merged set (ResolveButtons).
@@ -5386,13 +5326,48 @@ static DWORD WINAPI UiSessionRunInner() {
                             attempt.harvestSource = L"win32+uia";
                         }
                     }
+                    if (attempt.credentialVariant && earlyTakeover &&
+                        earlyTakeoverHandle == it->hwnd) {
+                        Dbg(L"UIA identified a credential prompt -> restoring immediately");
+                        GiveNativePromptBack();
+                        earlyTakeover = false;
+                        earlyTakeoverHandle = nullptr;
+                    }
                 }
                 if (attempt.elements.empty()) {
                     Dbg(L"nothing harvested from hwnd=%p class='%s' (win32=%s)", it->hwnd,
                         it->cls, haveWin32 ? L"partial" : L"none");
+                    if (earlyTakeover && earlyTakeoverHandle == it->hwnd) {
+                        GiveNativePromptBack();
+                        earlyTakeover = false;
+                        earlyTakeoverHandle = nullptr;
+                    }
                     continue;
                 }
                 FinishHarvest(attempt);
+
+                // Keep the former post-harvest takeover as the fallback whenever the early XAML
+                // path wasn't used: known prompts move only after buttons are confident and
+                // credentials are excluded.
+                if (!earlyTakeover && ours && g_settings.whitelistMode == 1 &&
+                    g_settings.relayMode != 0 && !g_settings.dumpUiTree &&
+                    g_settings.nativeWindowMode != 2 && IsKnownPromptClass(it->cls) &&
+                    attempt.buttonsConfident && !attempt.credentialVariant) {
+                    if (TakeOverNativePrompt(it->hwnd) && g_nativeMoved) {
+                        earlyTakeover = true;
+                        earlyTakeoverHandle = it->hwnd;
+                        Dbg(L"confirmed native prompt moved off screen before identity/details work");
+                    }
+                }
+
+                if (earlyTakeover && earlyTakeoverHandle == it->hwnd &&
+                    (attempt.credentialVariant || !attempt.buttonsConfident)) {
+                    Dbg(L"early candidate was credential-bearing or not positively identified -> "
+                        L"restoring the native window");
+                    GiveNativePromptBack();
+                    earlyTakeover = false;
+                    earlyTakeoverHandle = nullptr;
+                }
 
                 int btnCount = 0;
                 for (const auto& e : attempt.elements)
@@ -5405,6 +5380,11 @@ static DWORD WINAPI UiSessionRunInner() {
                 if (!haveInfo) better = true;
                 else if (ours != infoOurs) better = ours;   // always prefer our own window
                 else better = (!info.buttonsConfident && attempt.buttonsConfident);
+                if (!better && earlyTakeover && earlyTakeoverHandle == it->hwnd) {
+                    GiveNativePromptBack();
+                    earlyTakeover = false;
+                    earlyTakeoverHandle = nullptr;
+                }
                 if (better) {
                     WCHAR d[256] = L"";
                     DescribePrompt(it->hwnd, attempt, d, ARRAYSIZE(d));
@@ -5424,24 +5404,28 @@ static DWORD WINAPI UiSessionRunInner() {
                     desktopNames[di].c_str(), (unsigned long)sliceMs);
                 break;
             }
-            Sleep(25);   // the prompt is looked for every 25 ms while it is not found
+            if (g_stopEvent && WaitForSingleObject(g_stopEvent, 25) == WAIT_OBJECT_0) break;
         }
     }
 
     if (!haveInfo) {
-        EnterCriticalSection(&g_cs);
-        unsigned cand = (unsigned)g_candidates.size(), oursN = 0, visN = 0;
-        for (const auto& c : g_candidates) {
+        unsigned cand = 0, oursN = 0, visN = 0;
+        std::vector<PromptCandidate> snapshot;
+        {
+            CsLock lock(g_cs);
+            snapshot = g_candidates;
+        }
+        cand = (unsigned)snapshot.size();
+        for (const auto& c : snapshot) {
             if (c.ours) oursN++;
             if (IsWindow(c.hwnd) && IsWindowVisible(c.hwnd)) visN++;
         }
-        LeaveCriticalSection(&g_cs);
         Log(L"no usable prompt window found (native call %s) -> fail open; candidates=%u ours=%u "
             L"visible=%u",
             NativeCallFinished() ? L"already returned" : L"still running", cand, oursN, visN);
         LogSeenWindows(L"windows parked");
         GiveNativePromptBack();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
 
@@ -5465,10 +5449,16 @@ static DWORD WINAPI UiSessionRunInner() {
                 for (const auto& t : u.texts)
                     if (std::find(info.texts.begin(), info.texts.end(), t) == info.texts.end())
                         info.texts.push_back(t);
-                for (const auto& pp : u.paths)
-                    if (std::find(info.paths.begin(), info.paths.end(), pp) == info.paths.end())
-                        info.paths.push_back(pp);
+                if (u.credentialVariant) info.credentialVariant = true;
                 info.harvestSource = L"win32+uia";
+            }
+            if (info.credentialVariant && earlyTakeover &&
+                earlyTakeoverHandle == info.hNative) {
+                Dbg(L"credential prompt detected in the follow-up harvest -> restoring it "
+                    L"immediately");
+                GiveNativePromptBack();
+                earlyTakeover = false;
+                earlyTakeoverHandle = nullptr;
             }
         }
     }
@@ -5484,7 +5474,7 @@ static DWORD WINAPI UiSessionRunInner() {
                                   : L"Replace the UAC prompt is off");
         GiveNativePromptBack();
         UiaRelease();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
 
@@ -5497,7 +5487,7 @@ static DWORD WINAPI UiSessionRunInner() {
             L"wording) -> the recreated dialog is not shown and the native one is given back");
         GiveNativePromptBack();
         UiaRelease();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
     if (!info.buttonsConfident) {
@@ -5505,7 +5495,7 @@ static DWORD WINAPI UiSessionRunInner() {
             infoOurs ? L"yes" : L"no");
         GiveNativePromptBack();
         UiaRelease();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
 
@@ -5517,25 +5507,37 @@ static DWORD WINAPI UiSessionRunInner() {
             wl < 0 ? L"identity undecidable" : L"no match");
         GiveNativePromptBack();
         UiaRelease();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
     if (g_settings.whitelistMode == 2 && wl == 1) {
         Log(L"app matched the exception list (%s) -> native UI left in place", matchedBy.c_str());
         GiveNativePromptBack();
         UiaRelease();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
     Log(L"replacing the UI (whitelist match: %s)",
         matchedBy.empty() ? L"mode 1 (all apps)" : matchedBy.c_str());
 
-    // The native window leaves the screen now, before the recreated dialog is even built: the two
-    // prompts are never on screen together, and the Windows 10 window has the shortest possible
-    // life. It is only moved (not hidden), so the UI Automation harvest and the relay keep
-    // working on it, and it is put back untouched if anything here fails open.
+    // In the recommended all-apps scope a known native candidate may already be off screen while
+    // UIA finishes classifying it; credential signals and uncertain/incomplete harvesting restore
+    // it before any replacement is shown. Other scopes wait for the whitelist decision first.
     g_step = L"session: taking the native prompt off screen";
-    TakeOverNativePrompt(info.hNative);
+    if (StopRequested()) {
+        GiveNativePromptBack();
+        UiaRelease();
+        UninitializeUiCom();
+        return 0;
+    }
+    if (!(earlyTakeover && earlyTakeoverHandle == info.hNative) &&
+        !TakeOverNativePrompt(info.hNative)) {
+        Log(L"the native prompt could not be safely taken over -> fail open");
+        GiveNativePromptBack();
+        UiaRelease();
+        UninitializeUiCom();
+        return 0;
+    }
 
     // What the original screen shows behind its own "Show details": the control is expanded with
     // a click on the prompt's own UI and the texts that appear are read with UI Automation. That
@@ -5546,77 +5548,37 @@ static DWORD WINAPI UiSessionRunInner() {
     if (info.detailTexts.empty()) {
         // The XAML tree of the prompt can still be filling in this early: one retry, 250 ms later,
         // before the dialog is built. Nothing here is ever retried again on its own.
-        Sleep(250);
+        if (g_stopEvent && WaitForSingleObject(g_stopEvent, 250) == WAIT_OBJECT_0) {
+            GiveNativePromptBack();
+            UiaRelease();
+            UninitializeUiCom();
+            return 0;
+        }
         HarvestDetailsSafely(info);
     }
     g_ui.detailsFromNative = !info.detailTexts.empty();
-    {
-        const WCHAR* pathSource = L"none";
-        std::wstring again = FindTargetPath(info, &pathSource);
-        if (!again.empty() && again != info.appPath) {
-            info.appPath = again;
-            info.originText = again;
-            Dbg(L"elevated file (from the native details): source=%s path='%s'", pathSource,
-                again.c_str());
-        }
+    MapNativePromptFields(info);
+    bool publisherKnownAfterDetails = false;
+    bool unknownWordingAfterDetails = false;
+    UpdateNativeTrustCues(info, &publisherKnownAfterDetails, &unknownWordingAfterDetails);
+    Dbg(L"native trust cues after details: banner=%d shield=%d verified=%d unknownWording=%d",
+        info.bannerState, info.shieldVariant, publisherKnownAfterDetails ? 1 : 0,
+        unknownWordingAfterDetails ? 1 : 0);
+    BuildDetailsPane(info);
+    if (StopRequested()) {
+        GiveNativePromptBack();
+        UiaRelease();
+        UninitializeUiCom();
+        return 0;
     }
-    // Which shield the banner shows. Both sources are read-only: the prompt's own wording and
-    // WinVerifyTrust's result for the elevated file. A trusted signer name is used only to repair
-    // an empty/unknown publisher row; an unsupported or untrusted result never invents a name.
-    g_step = L"session: reading the digital signature";
-    std::wstring verifiedSignerName;
-    bool publisherNeedsVerification = IsUnknownPublisherValue(info.publisherText) &&
-                                      !info.sawUnknownAuthor;
-    if (!info.appPath.empty())
-        info.signatureState = VerifySignatureState(
-            info.appPath, publisherNeedsVerification ? &verifiedSignerName : nullptr);
-    if (info.signatureState == SigTrusted && publisherNeedsVerification &&
-        !verifiedSignerName.empty()) {
-        std::wstring nativePublisher = info.publisherText;
-        info.publisherText = verifiedSignerName;
-        info.publisherFromSignature = true;
-        if (g_settings.bannerOverride == 0 && !(info.yes && !info.yesEnabled))
-            info.bannerState = 1;
-        Dbg(L"publisher: native value '%s' replaced with verified signer '%s'",
-            nativePublisher.c_str(), info.publisherText.c_str());
-        BuildDetailsPane(info);
-    }
-    {
-        bool unconfirmed = (info.bannerState == 2) ||
-                           (!info.publisherFromSignature && IsUnknownPublisherValue(info.publisherText)) ||
-                           info.signatureState == SigUnsigned ||
-                           info.signatureState == SigInvalid;
-        int variant = 0;
-        if (unconfirmed)
-            variant = info.sawUnknownAuthor ? 2 : 1;
-        else if (info.bannerState == 1 && !IsWindowsPublisherText(info.publisherText))
-            variant = 1;   // a trusted third-party publisher uses the blue question-mark shield
-        if (info.bannerState == 3) variant = 2;   // the native Yes is disabled: the strongest state
-        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3)
-            variant = g_settings.bannerShield - 1;
-        info.shieldVariant = variant;
-        Log(L"banner shield: %s (publisher %s, signature %s, author %s)",
-            variant == 0 ? L"the verified shield"
-                         : (variant == 1 ? L"the question-mark shield"
-                                         : L"the exclamation shield"),
-            unconfirmed ? L"not confirmed" : L"verified",
-            info.signatureState == SigTrusted ? L"trusted"
-                                              : (info.signatureState == SigUnsigned
-                                                     ? L"absent"
-                                                     : (info.signatureState == SigInvalid
-                                                            ? L"present but not valid"
-                                                            : L"unknown")),
-            info.sawUnknownAuthor ? L"unknown" : L"known");
-    }
-
     g_ui.info = &info;
-    g_hNativePrompt = info.hNative;
+    SetNativePromptHandle(info.hNative);
 
     if (!RegisterUiClass()) {
         Log(L"RegisterClassEx failed -> fail open");
-        RestoreNativePrompt();
+        GiveNativePromptBack();
         UiaRelease();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
 
@@ -5642,12 +5604,12 @@ static DWORD WINAPI UiSessionRunInner() {
 
     g_ui.hwnd = CreateWindowExW(exStyle, WIN7UAC_CLASS,
         info.windowTitle.empty() ? g_loc->title : info.windowTitle.c_str(), style, 0, 0, w, h,
-        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        nullptr, nullptr, g_modInstance, nullptr);
     if (!g_ui.hwnd) {
         Log(L"CreateWindowEx failed -> fail open");
-        RestoreNativePrompt();
+        GiveNativePromptBack();
         UiaRelease();
-        CoUninitialize();
+        UninitializeUiCom();
         return 0;
     }
 
@@ -5671,8 +5633,8 @@ static DWORD WINAPI UiSessionRunInner() {
     // then woken only by that window and its own children, and not by everything else consent.exe
     // creates while the request is alive.
     DWORD promptPid = 0;
-    DWORD promptThread =
-        g_hNativePrompt ? GetWindowThreadProcessId(g_hNativePrompt, &promptPid) : 0;
+    HWND nativePrompt = NativePromptHandle();
+    DWORD promptThread = nativePrompt ? GetWindowThreadProcessId(nativePrompt, &promptPid) : 0;
     g_ui.hStateHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
                                       PromptStateProc, promptPid, promptThread,
                                       WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNTHREAD);
@@ -5692,10 +5654,29 @@ static DWORD WINAPI UiSessionRunInner() {
     // The native window is put away only now, when our dialog is complete: moving it while
     // the dialog library is still positioning it is what disturbed the prompt before.
     g_step = L"session: taking over the native window";
-    TakeOverNativePrompt(info.hNative);
-    g_step = L"session: showing the Win7 dialog";
-    ShowWindow(g_ui.hwnd, SW_SHOW);
-    SetForegroundWindow(g_ui.hwnd);
+    if (!StopRequested()) {
+        if (!TakeOverNativePrompt(info.hNative)) {
+            Log(L"the native prompt could not be kept safely out of the way -> fail open");
+            if (g_ui.hStateHook) {
+                UnhookWinEvent(g_ui.hStateHook);
+                g_ui.hStateHook = nullptr;
+            }
+            if (g_ui.hwnd && IsWindow(g_ui.hwnd)) DestroyWindow(g_ui.hwnd);
+            g_ui.done = true;
+            g_ui.result = RESULT_NO_DECISION;
+            g_ui.info = nullptr;
+            GiveNativePromptBack();
+            UiaRelease();
+            UninitializeUiCom();
+            return 0;
+        }
+        g_step = L"session: showing the Win7 dialog";
+        ShowWindow(g_ui.hwnd, SW_SHOW);
+        SetForegroundWindow(g_ui.hwnd);
+    } else {
+        g_ui.result = RESULT_NO_DECISION;
+        g_ui.done = true;
+    }
     g_ui.shownAt = GetTickCount();
     // The client area the dialog actually got, against the one the layout was computed for, and
     // how many rows the details pane is holding: one line in the log that answers, without a
@@ -5712,69 +5693,126 @@ static DWORD WINAPI UiSessionRunInner() {
     RegisterPanicHotkey();
 
     g_step = L"session: message loop";
-    // One second, not fifty milliseconds: the state of the native prompt arrives as an event (see
-    // PromptStateProc) and sets this to zero, so the check below runs the instant there is
-    // something to see. What is left for the timer is the watchdog and the notice line.
     DWORD nextProbe = GetTickCount() + 1000;
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        DWORD now = GetTickCount();
-        if (msg.message == WM_W7UAC_STATECHANGED) nextProbe = 0;
-        if (now >= nextProbe) {
-            nextProbe = now + 1000;
-            // The consent flow can end while our dialog is up, either because the call has
-            // returned or because the native window is gone: then there is nothing left to
-            // decide on and the Windows 7 dialog must not stay on screen.
-            if (NativeCallFinished() || !IsWindow(info.hNative)) {
-                Log(L"the consent flow ended while the Win7 dialog was up -> closing it");
-                g_ui.result = RESULT_NO_DECISION;
-                g_ui.done = true;
-                PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
-                continue;
-            }
-            if (!g_ui.done && g_settings.watchdogSeconds > 0 && !info.buttonsConfident &&
-                now - g_ui.shownAt > (DWORD)g_settings.watchdogSeconds * 1000) {
-                Log(L"watchdog: the native buttons are still not usable after %d s -> fail open",
-                    g_settings.watchdogSeconds);
-                g_ui.result = RESULT_NO_DECISION;
-                g_ui.done = true;
-                PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
-                continue;
-            }
-            if (!g_ui.notice.empty() && (LONG)(now - g_ui.noticeUntil) >= 0) {
-                g_ui.notice.clear();
-                InvalidateRect(g_ui.hwnd, nullptr, TRUE);
-            }
-            if (g_settings.nativeWindowMode != 2 && NativePromptOnScreen()) {
-                // The native window puts itself back on screen while the request is alive. Every
-                // pass takes it away again, so the two prompts are never on screen together for
-                // longer than one tick - which is what makes the replacement look authentic.
-                Dbg(L"the native prompt became visible again -> moving it away");
-                TakeOverNativePrompt(info.hNative);
-                if (g_ui.hwnd) SetForegroundWindow(g_ui.hwnd);
-            }
-        }
-        if (msg.message == WM_HOTKEY && msg.wParam == IDC_W7UAC_PANIC) {
-            Log(L"panic hotkey: closing the Windows 7 dialog and giving the native prompt back");
+    MSG msg = {};
+    auto probePromptState = [&](DWORD now) {
+        nextProbe = now + 1000;
+        if (NativeCallFinished() || !IsWindow(info.hNative)) {
+            Log(L"the consent flow ended while the Win7 dialog was up -> closing it");
             g_ui.result = RESULT_NO_DECISION;
             g_ui.done = true;
             PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
+            return;
+        }
+        if (!g_ui.done && g_settings.watchdogSeconds > 0 &&
+            !HasUsableReplacementAnswer(info) &&
+            now - g_ui.shownAt > (DWORD)g_settings.watchdogSeconds * 1000) {
+            Log(L"watchdog: no enabled replacement answer after %d s -> fail open",
+                g_settings.watchdogSeconds);
+            g_ui.result = RESULT_NO_DECISION;
+            g_ui.done = true;
+            PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
+            return;
+        }
+        if (!g_ui.notice.empty() && (LONG)(now - g_ui.noticeUntil) >= 0) {
+            g_ui.notice.clear();
+            InvalidateRect(g_ui.hwnd, nullptr, TRUE);
+        }
+        if (g_settings.nativeWindowMode != 2 && NativePromptOnScreen()) {
+            // The event callback reports the change; this owner-thread check performs the move.
+            Dbg(L"the native prompt became visible again -> moving it away");
+            if (!TakeOverNativePrompt(info.hNative)) {
+                Log(L"the native prompt could not be safely re-hidden -> closing the replacement "
+                    L"without a decision");
+                g_ui.result = RESULT_NO_DECISION;
+                g_ui.done = true;
+                if (g_ui.hwnd && IsWindow(g_ui.hwnd)) PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
+                return;
+            }
+            if (g_ui.hwnd) SetForegroundWindow(g_ui.hwnd);
+        }
+    };
+
+    HANDLE stop = g_stopEvent;
+    HANDLE returned = g_nativeCallReturnedEvent;
+    HANDLE waits[2] = {stop, returned};
+    for (;;) {
+        if (StopRequested()) {
+            Log(L"unload requested: closing the recreated dialog without deciding");
+            g_ui.result = RESULT_NO_DECISION;
+            g_ui.done = true;
+            if (g_ui.hwnd && IsWindow(g_ui.hwnd)) DestroyWindow(g_ui.hwnd);
+            break;
+        }
+
+        DWORD wait = (stop && returned)
+                         ? MsgWaitForMultipleObjects(2, waits, FALSE, 1000, QS_ALLINPUT)
+                         : WAIT_FAILED;
+        if (wait == WAIT_OBJECT_0) {
+            g_ui.result = RESULT_NO_DECISION;
+            g_ui.done = true;
+            if (g_ui.hwnd && IsWindow(g_ui.hwnd)) DestroyWindow(g_ui.hwnd);
+            break;
+        }
+        if (wait == WAIT_OBJECT_0 + 1) {
+            // The hooked native call completed. This is an event, not a cross-thread PostMessage
+            // through a potentially stale HWND.
+            if (NativeCallFinished()) {
+                g_ui.result = RESULT_NO_DECISION;
+                g_ui.done = true;
+                if (g_ui.hwnd && IsWindow(g_ui.hwnd)) DestroyWindow(g_ui.hwnd);
+                break;
+            }
             continue;
         }
-        if (!IsDialogMessageW(g_ui.hwnd, &msg)) {
-            if (msg.message == WM_KEYDOWN && (msg.wParam == VK_RETURN || msg.wParam == VK_ESCAPE)) {
-                // Windows 7 semantics: Enter activates the default button, "No", and Esc cancels,
-                // which on this dialog is also "No". These are only reached when the dialog
-                // manager did not already turn them into a command for a focused control.
-                g_ui.result = IDC_W7UAC_NO;
+        if (wait == WAIT_TIMEOUT) {
+            DWORD now = GetTickCount();
+            if ((LONG)(now - nextProbe) >= 0) probePromptState(now);
+            continue;
+        }
+        if (wait != WAIT_OBJECT_0 + 2) {
+            Log(L"the dialog message wait failed (%u) -> fail open", GetLastError());
+            g_ui.result = RESULT_NO_DECISION;
+            g_ui.done = true;
+            if (g_ui.hwnd && IsWindow(g_ui.hwnd)) DestroyWindow(g_ui.hwnd);
+            break;
+        }
+
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) goto ui_message_loop_done;
+            if (StopRequested()) {
+                g_ui.result = RESULT_NO_DECISION;
+                g_ui.done = true;
+                if (g_ui.hwnd && IsWindow(g_ui.hwnd)) DestroyWindow(g_ui.hwnd);
+                goto ui_message_loop_done;
+            }
+
+            DWORD now = GetTickCount();
+            const bool forceProbe = msg.message == WM_W7UAC_STATECHANGED;
+            if (forceProbe || (LONG)(now - nextProbe) >= 0) probePromptState(now);
+            if (msg.message == WM_HOTKEY && msg.wParam == IDC_W7UAC_PANIC) {
+                Log(L"panic hotkey: closing the Windows 7 dialog and giving the native prompt back");
+                g_ui.result = RESULT_NO_DECISION;
                 g_ui.done = true;
                 PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
                 continue;
             }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+            if (!IsDialogMessageW(g_ui.hwnd, &msg)) {
+                if (msg.message == WM_KEYDOWN &&
+                    (msg.wParam == VK_RETURN || msg.wParam == VK_ESCAPE)) {
+                    // Windows 7 semantics: Enter activates the default button, "No", and Esc
+                    // cancels, which on this dialog is also "No".
+                    g_ui.result = IDC_W7UAC_NO;
+                    g_ui.done = true;
+                    PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
+                    continue;
+                }
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
         }
     }
+ui_message_loop_done:
 
     if (g_ui.hStateHook) {
         // Unhooked by the thread that installed it, which is the only thread allowed to.
@@ -5787,6 +5825,7 @@ static DWORD WINAPI UiSessionRunInner() {
     }
 
     g_step = L"session: relay";
+    if (StopRequested()) g_ui.result = RESULT_NO_DECISION;
     const WCHAR* failReason = nullptr;
     if (!infoOurs) {
         failReason = L"the prompt window is not ours";
@@ -5806,28 +5845,35 @@ static DWORD WINAPI UiSessionRunInner() {
             if (!relayed) failReason = L"no relay mechanism available for Yes";
         }
     } else if (g_ui.result == IDC_W7UAC_NO) {
-        bool relayed = RelayViaWin32(info.hNative, info.no->name) || RelayViaUia(info.no);
-        if (!relayed && g_settings.noHotkey[0]) {
-            PostMessageW(info.hNative, WM_SYSKEYDOWN, (WPARAM)towupper(g_settings.noHotkey[0]), 0);
-            PostMessageW(info.hNative, WM_SYSKEYUP, (WPARAM)towupper(g_settings.noHotkey[0]), 0);
-            relayed = true;
+        if (!info.noEnabled) {
+            failReason = L"the native No button is disabled";
+        } else {
+            bool relayed = RelayViaWin32(info.hNative, info.no->name) || RelayViaUia(info.no);
+            if (!relayed && g_settings.noHotkey[0]) {
+                PostMessageW(info.hNative, WM_SYSKEYDOWN, (WPARAM)towupper(g_settings.noHotkey[0]), 0);
+                PostMessageW(info.hNative, WM_SYSKEYUP, (WPARAM)towupper(g_settings.noHotkey[0]), 0);
+                relayed = true;
+            }
+            if (!relayed) failReason = L"no relay mechanism available for No";
         }
-        if (!relayed) failReason = L"no relay mechanism available for No";
     } else {
         failReason = L"the Windows 7 dialog was closed without a decision";
     }
 
     if (failReason) {
         Log(L"fail open: %s", failReason);
-        RestoreNativePrompt();
+        GiveNativePromptBack();
     } else {
-        DWORD t0 = GetTickCount();
-        while (GetTickCount() - t0 < 8000 &&
-               InterlockedCompareExchange(&g_originalReturned, 0, 0) == 0)
-            Sleep(20);
-        if (InterlockedCompareExchange(&g_originalReturned, 0, 0) == 0) {
-            Log(L"the native prompt did not finish after the relay -> restoring it (fail open)");
-            RestoreNativePrompt();
+        HANDLE waitHandles[2] = {g_stopEvent, g_nativeCallReturnedEvent};
+        DWORD wait = (g_stopEvent && g_nativeCallReturnedEvent)
+                         ? WaitForMultipleObjects(2, waitHandles, FALSE, 8000)
+                         : WAIT_FAILED;
+        if (StopRequested() || wait != WAIT_OBJECT_0 + 1) {
+            Log(L"the native call did not finish after the relay, or unload was requested -> "
+                L"restoring the native prompt (fail open)");
+            GiveNativePromptBack();
+        } else {
+            GiveNativePromptBack();
         }
     }
 
@@ -5835,7 +5881,7 @@ static DWORD WINAPI UiSessionRunInner() {
     g_ui.done = true;
     g_ui.info = nullptr;      // the PromptInfo lives on this thread's stack: nothing may look at it later
     UiaRelease();
-    CoUninitialize();
+    UninitializeUiCom();
     return 0;
 }
 
@@ -5865,7 +5911,9 @@ static DWORD WINAPI UiSessionRun() {
         DestroyWindow(g_ui.hwnd);
     g_ui.hwnd = nullptr;
     g_ui.done = true;
-    RestoreNativePrompt();
+    GiveNativePromptBack();
+    UiaRelease();
+    UninitializeUiCom();
     return 0;
 #else
     return UiSessionRunInner();
@@ -5875,11 +5923,18 @@ static DWORD WINAPI UiSessionRun() {
 // One replacement session at a time: a second prompt while ours is up is left native.
 static volatile LONG g_uiRunning = 0;
 
+class UiOwnerThreadScope {
+public:
+    UiOwnerThreadScope() { g_uiOwnerThreadId = GetCurrentThreadId(); }
+    ~UiOwnerThreadScope() { g_uiOwnerThreadId = 0; }
+};
+
 static DWORD WINAPI UiThreadProcBody(LPVOID) {
     if (InterlockedCompareExchange(&g_uiRunning, 1, 0) != 0) {
         Log(L"a replacement session is already running -> leaving this prompt native");
         return 0;
     }
+    UiOwnerThreadScope owner;
     DWORD r = UiSessionRun();
     InterlockedExchange(&g_uiRunning, 0);
     return r;
@@ -5889,19 +5944,35 @@ static DWORD WINAPI UiThreadProc(LPVOID param) {
 #if W7UAC_HAS_EXCEPTIONS
     try {
         DWORD r = UiThreadProcBody(param);
-        InterlockedDecrement(&g_threadsActive);
+        if (g_uiIdleEvent) SetEvent(g_uiIdleEvent);
+        ModThreadFinished();
         return r;
     } catch (...) {
-        // The session has a net of its own; this one is for what happens around it, and the prompt
-        // is handed back here rather than left in the hands of a thread that is going away.
         Log(L"exception in the interface thread: giving the Windows prompt back");
-        RestoreNativePrompt();
-        InterlockedDecrement(&g_threadsActive);
+        g_uiOwnerThreadId = GetCurrentThreadId();
+        if (g_ui.hStateHook) {
+            UnhookWinEvent(g_ui.hStateHook);
+            g_ui.hStateHook = nullptr;
+        }
+        if (g_ui.hotkeyId) {
+            UnregisterHotKey(nullptr, g_ui.hotkeyId);
+            g_ui.hotkeyId = 0;
+        }
+        if (g_ui.hwnd && IsWindow(g_ui.hwnd)) DestroyWindow(g_ui.hwnd);
+        g_ui.hwnd = nullptr;
+        UiaRelease();
+        UninitializeUiCom();
+        GiveNativePromptBack();
+        g_uiOwnerThreadId = 0;
+        InterlockedExchange(&g_uiRunning, 0);
+        if (g_uiIdleEvent) SetEvent(g_uiIdleEvent);
+        ModThreadFinished();
         return 0;
     }
 #else
     DWORD r = UiThreadProcBody(param);
-    InterlockedDecrement(&g_threadsActive);
+    if (g_uiIdleEvent) SetEvent(g_uiIdleEvent);
+    ModThreadFinished();
     return r;
 #endif
 }
@@ -5910,93 +5981,175 @@ static DWORD WINAPI UiThreadProc(LPVOID param) {
 // Hook
 //------------------------------------------------------------------------------
 
-// CredUIPromptForWindowsCredentialsWorker is internal: no public prototype exists. On x64
-// the first four arguments travel in RCX/RDX/R8/R9 and the rest on the stack, so declaring
-// and forwarding ten pointer-sized arguments preserves the call exactly (all of them are
-// integer/pointer/enum - no floating point).
-// Sixteen pointer-sized arguments. Ten of them were not enough: the eleven the worker reads beyond
-// the tenth were whatever the compiler happened to leave in those stack slots, which is how the
-// original call came back with ERROR_INVALID_PARAMETER (0x57) on some machines. The number here is
-// the number that is forwarded, and the two must always match the list at every call site.
+// Keep the existing hook declaration at sixteen pointer-sized arguments and forward every argument
+// unchanged. No undocumented argument meaning is inferred here; do not change the count or calling
+// convention without authoritative ABI evidence.
 typedef ULONG (WINAPI *CredPromptWorker_t)(PVOID, PVOID, PVOID, PVOID, PVOID, PVOID, PVOID, PVOID,
                                            PVOID, PVOID, PVOID, PVOID, PVOID, PVOID, PVOID, PVOID);
 static CredPromptWorker_t g_credPromptWorker_orig = nullptr;
+static void* g_hookTarget = nullptr;
+static bool g_hookInstalled = false;
+
+static void SignalNativeCallReturned() {
+    InterlockedExchange(&g_originalReturned, 1);
+    if (g_nativeCallReturnedEvent) SetEvent(g_nativeCallReturnedEvent);
+}
+
+static volatile LONG g_hookActiveCalls = 0;
+
+// Count every entry into the detour, including pass-through/re-entrant calls. The event is only a
+// wake-up mechanism; teardown also checks the count around ResetEvent so a fast return cannot leave
+// it stale and make unload miss an in-flight call.
+struct HookCallGuard {
+    HookCallGuard() {
+        if (InterlockedIncrement(&g_hookActiveCalls) == 1 && g_hookIdleEvent)
+            ResetEvent(g_hookIdleEvent);
+    }
+    ~HookCallGuard() {
+        const LONG left = InterlockedDecrement(&g_hookActiveCalls);
+        if (left <= 0) {
+            InterlockedExchange(&g_hookActiveCalls, 0);
+            if (g_hookIdleEvent) SetEvent(g_hookIdleEvent);
+        }
+    }
+};
+
+static void WaitForHookCalls() {
+    if (!g_hookIdleEvent) return;
+    for (;;) {
+        if (InterlockedCompareExchange(&g_hookActiveCalls, 0, 0) == 0) {
+            SetEvent(g_hookIdleEvent);
+            return;
+        }
+        ResetEvent(g_hookIdleEvent);
+        if (InterlockedCompareExchange(&g_hookActiveCalls, 0, 0) == 0) {
+            SetEvent(g_hookIdleEvent);
+            return;
+        }
+        const DWORD wait = WaitForSingleObject(g_hookIdleEvent, INFINITE);
+        if (wait != WAIT_OBJECT_0) {
+            Log(L"waiting for in-flight hook calls failed (%u); retrying", GetLastError());
+        }
+    }
+}
+
+struct HookExecutionGuard {
+    ~HookExecutionGuard() { InterlockedExchange(&g_inHook, 0); }
+};
+
+static DWORD PrimaryWatcherThreadId() {
+    CsLock lock(g_cs);
+    return g_watchers[0].tid;
+}
+
+static void CloseRemainingWatcherDesktops() {
+    HDESK desks[ARRAYSIZE(g_watchers)] = {};
+    {
+        CsLock lock(g_cs);
+        for (size_t i = 0; i < ARRAYSIZE(g_watchers); i++) {
+            desks[i] = g_watchers[i].desktop;
+            g_watchers[i].desktop = nullptr;
+            g_watchers[i].tid = 0;
+            g_watchers[i].hook = nullptr;
+        }
+    }
+    for (HDESK desk : desks) if (desk) CloseDesktop(desk);
+}
 
 static ULONG WINAPI CredPromptWorkerHook(PVOID a1, PVOID a2, PVOID a3, PVOID a4, PVOID a5,
                                          PVOID a6, PVOID a7, PVOID a8, PVOID a9, PVOID a10,
                                          PVOID a11, PVOID a12, PVOID a13, PVOID a14, PVOID a15,
                                          PVOID a16) {
+    HookCallGuard callGuard;
     if (InterlockedCompareExchange(&g_inHook, 1, 0) != 0)
         return g_credPromptWorker_orig(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16);
 
+    HookExecutionGuard hookGuard;
     g_step = L"hook: prompt requested";
     InterlockedExchange(&g_originalReturned, 0);
+    if (g_nativeCallReturnedEvent) ResetEvent(g_nativeCallReturnedEvent);
+
+    // Once teardown has started, the detour is only a pass-through. The native prompt remains in
+    // charge; no watcher, UI thread or secondary decision path is started.
+    if (StopRequested()) {
+        ULONG result = g_credPromptWorker_orig(a1, a2, a3, a4, a5, a6, a7, a8,
+                                               a9, a10, a11, a12, a13, a14, a15, a16);
+        SignalNativeCallReturned();
+        return result;
+    }
 
     if (g_settings.detection == 2) {
-        // Hook-only mode: this exists purely to answer one question - does the native prompt
-        // still come up with the mod loaded? Nothing is opened, nothing is enumerated, no
-        // window is created; only the return value of the native call is logged.
+        // Hook-only mode deliberately leaves all UI and desktop work to Windows.
         g_step = L"hook-only pass-through";
         DWORD tOnly = GetTickCount();
-        ULONG rOnly = g_credPromptWorker_orig(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16);
+        ULONG rOnly = g_credPromptWorker_orig(a1, a2, a3, a4, a5, a6, a7, a8,
+                                               a9, a10, a11, a12, a13, a14, a15, a16);
+        SignalNativeCallReturned();
         Log(L"hook-only mode: the native call returned (0x%08X) after %lu ms%s", rOnly,
             (unsigned long)(GetTickCount() - tOnly),
             rOnly == ERROR_INVALID_PARAMETER ? L" (ERROR_INVALID_PARAMETER)" : L"");
         if (rOnly != ERROR_SUCCESS && rOnly != ERROR_CANCELLED)
-            Log(L"hook-only mode: the failure is the native code's own - none of the mod's "
-                L"replacement logic ran: args %p %p %p %p %p %p %p %p %p %p %p %p %p %p %p %p, "
-                L"last error %u",
+            Log(L"hook-only mode: native failure; no replacement logic ran: args %p %p %p %p "
+                L"%p %p %p %p %p %p %p %p %p %p %p %p, last error %u",
                 a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16,
                 (unsigned)GetLastError());
-        InterlockedExchange(&g_inHook, 0);
         return rOnly;
     }
 
-    g_requestTick = GetTickCount();
     Log(L"consent prompt requested (replaceUAC=%d)", g_settings.relayMode);
-    EnterCriticalSection(&g_cs);
-    g_candidates.clear();
-    g_userDesktopApp.clear();
-    g_userDesktopAppClass.clear();
-    ResetCandidateLog();          // the log of the candidates starts over with the new prompt
-    LeaveCriticalSection(&g_cs);
+    {
+        CsLock lock(g_cs);
+        g_candidates.clear();
+        if (g_candidateEvent) ResetEvent(g_candidateEvent);
+        g_userDesktopApp.clear();
+        g_userDesktopAppClass.clear();
+        ResetCandidateLog();
+    }
     InterlockedExchange(&g_userDesktopAppReady, 0);
-    if (g_watchers[0].tid) {
-        PostThreadMessageW(g_watchers[0].tid, WM_PROMPT_STARTED, 0, 0);
-    } else {
-        // Polling mode: capture the identity on a thread of its own, so that the consent
-        // thread (which still has to switch desktop) never makes a GUI call itself.
-        InterlockedIncrement(&g_threadsActive);
+
+    DWORD watcherTid = PrimaryWatcherThreadId();
+    bool identityQueued = false;
+    if (watcherTid) {
+        identityQueued = PostThreadMessageW(watcherTid, WM_PROMPT_STARTED, 0, 0) != FALSE;
+        if (!identityQueued)
+            Log(L"watcher identity message could not be posted (%u); using a helper thread",
+                GetLastError());
+    }
+    if (!identityQueued) {
+        ModThreadStarting();
         HANDLE hId = CreateThread(nullptr, 0, IdentityThreadProc, nullptr, 0, nullptr);
         if (hId) {
-            // The handle is kept (see TrackModThread) instead of being closed here: this thread is
-            // waited for before the DLL is unloaded. Closing the handle the moment it was created
-            // was what made the unload path unable to see it at all.
             TrackModThread(hId, L"identity");
         } else {
-            InterlockedDecrement(&g_threadsActive);
-            Log(L"polling mode: the identity thread could not be started: %u", GetLastError());
+            ModThreadFinished();
+            Log(L"identity thread could not be started: %u", GetLastError());
         }
     }
 
-    InterlockedIncrement(&g_threadsActive);
-    HANDLE hThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
-    if (hThread) {
-        InterlockedExchangePointer((PVOID volatile*)&g_uiThread, hThread);
-        // Also in the registry, so the unload path waits for it even if the handle above has been
-        // taken over by a later session.
-        TrackModThread(hThread, L"interface");
+    bool uiStarted = false;
+    if (!StopRequested()) {
+        if (g_uiIdleEvent) ResetEvent(g_uiIdleEvent);
+        ModThreadStarting();
+        HANDLE uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
+        if (uiThread) {
+            TrackModThread(uiThread, L"interface");
+            uiStarted = true;
+        } else {
+            ModThreadFinished();
+            if (g_uiIdleEvent) SetEvent(g_uiIdleEvent);
+            Log(L"the replacement UI thread could not be started: %u", GetLastError());
+        }
     } else {
-        InterlockedDecrement(&g_threadsActive);
-        Log(L"the replacement UI thread could not be started");
+        Log(L"teardown started before the replacement UI; leaving this request native");
     }
 
     g_step = L"hook: calling the original worker";
     DWORD tWorker = GetTickCount();
-    ULONG result = g_credPromptWorker_orig(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16);
+    ULONG result = g_credPromptWorker_orig(a1, a2, a3, a4, a5, a6, a7, a8,
+                                           a9, a10, a11, a12, a13, a14, a15, a16);
 
     g_step = L"hook: the original returned";
-    InterlockedExchange(&g_originalReturned, 1);
+    SignalNativeCallReturned();
     {
         const WCHAR* rname = ErrorCodeName(result);
         Log(L"the original call returned (0x%08X %s) after %lu ms", result,
@@ -6004,82 +6157,51 @@ static ULONG WINAPI CredPromptWorkerHook(PVOID a1, PVOID a2, PVOID a3, PVOID a4,
             (unsigned long)(GetTickCount() - tWorker));
     }
     if (result == ERROR_CANCELLED) {
-        // The ordinary "No", and not a failure of anything: either the user answered the native
-        // prompt directly, or the answer this mod relayed was No.
         Dbg(L"the original call ended with ERROR_CANCELLED (0x000004C7): the prompt was answered "
             L"with No, or closed");
     } else if (result != ERROR_SUCCESS) {
-        // The prompt's own code refused the call. Not one of the ten arguments was touched on
-        // the way in, so they are written down here as they arrived - as addresses, never the
-        // buffers behind them - with this thread's last error and the number of windows the
-        // watcher has seen. That is what tells a prompt that never existed apart from one that
-        // was created and then withdrawn.
         int seen = 0;
-        EnterCriticalSection(&g_cs);
-        seen = (int)g_candidates.size();
-        LeaveCriticalSection(&g_cs);
+        {
+            CsLock lock(g_cs);
+            seen = (int)g_candidates.size();
+        }
         Log(L"the original call failed inside its own code: args %p %p %p %p %p %p %p %p %p %p, "
             L"last error %u, windows seen %d",
             a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, (unsigned)GetLastError(), seen);
-        // Said plainly, because this is the one failure that has nothing to do with this mod:
-        // Windows did not manage to create a prompt of its own, so there was nothing to replace
-        // and nothing was answered. The line above is the code the error dialog shows.
         Log(L"Windows did not create a prompt of its own: the failure is inside Windows' own call, "
             L"before any of this mod's code ran. Nothing was replaced and nothing was answered. "
             L"If the same elevation fails with this mod disabled in Windhawk too, it is not this "
             L"mod.");
     }
 
-    if (g_ui.hwnd && IsWindow(g_ui.hwnd)) {
-        Log(L"the original call returned while our dialog is up -> closing it");
-        PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
-    }
-    if (hThread) {
-        WaitForSingleObject(hThread, 15000);
-        // Deliberately not closed here. The handle belongs to the thread registry, which waits for
-        // it and closes it once, at unload (WaitForModThreads). Closing it here as well closed the
-        // same value twice: the second close lands on whatever handle the process reused in the
-        // meantime. Clearing g_uiThread is enough - it only says "no session is running".
-        InterlockedCompareExchangePointer((PVOID volatile*)&g_uiThread, nullptr, hThread);
-    }
+    if (uiStarted && g_uiIdleEvent)
+        WaitForSingleObject(g_uiIdleEvent, INFINITE);
     g_step = L"hook: teardown";
-    RestoreNativePrompt();
-    g_hNativePrompt = nullptr;
-    InterlockedExchange(&g_inHook, 0);
     return result;
 }
 
-#if HAVE_UTILS
-// Log-only hooks on the consent orchestrator, optional and skipped if the symbol is missing
-// (GetConsent exists only in 21H2; CuiGetTokenForApp changed signature between the builds).
-typedef ULONG (WINAPI *DiagFn10_t)(PVOID, PVOID, PVOID, PVOID, PVOID, PVOID, PVOID, PVOID,
-                                   PVOID, PVOID);
-static DiagFn10_t g_diagGetConsent_orig = nullptr;
-static DiagFn10_t g_diagGetTokenForApp_orig = nullptr;
-
-static ULONG WINAPI DiagGetConsentHook(PVOID a1, PVOID a2, PVOID a3, PVOID a4, PVOID a5,
-                                       PVOID a6, PVOID a7, PVOID a8, PVOID a9, PVOID a10) {
-    Dbg(L"GetConsent (%p, %p)", a1, a2);
-    return g_diagGetConsent_orig(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10);
-}
-
-static ULONG WINAPI DiagGetTokenForAppHook(PVOID a1, PVOID a2, PVOID a3, PVOID a4, PVOID a5,
-                                           PVOID a6, PVOID a7, PVOID a8, PVOID a9, PVOID a10) {
-    Dbg(L"CuiGetTokenForApp");
-    return g_diagGetTokenForApp_orig(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10);
-}
-#endif
-
 BOOL Wh_ModInit() {
     g_step = L"mod init";
-    // Before anything else, and before the lock: every line below this one reads a setting or
-    // writes to the engine log, and both go through the engine's mod pointer.
-    if (!WhEngineLinkUsable()) return TRUE;
-    // Initialize shared state before any failure branch, so the unload path can always enter the
-    // lock even when a later setup step fails.
     InitializeCriticalSection(&g_cs);
+    g_csInitialized = true;
+    if (!InitializeLifecycleEvents()) {
+        DeleteCriticalSection(&g_cs);
+        g_csInitialized = false;
+        return FALSE;
+    }
+
     LoadSettings();
     InitLocale();
+
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(&CredPromptWorkerHook), &g_modInstance)) {
+        Log(L"could not obtain the mod DLL HINSTANCE: %u", GetLastError());
+        CloseLifecycleEvents();
+        DeleteCriticalSection(&g_cs);
+        g_csInitialized = false;
+        return FALSE;
+    }
 
     WCHAR deskName[64] = L"";
     GetDesktopName(GetThreadDesktop(GetCurrentThreadId()), deskName, ARRAYSIZE(deskName));
@@ -6088,21 +6210,19 @@ BOOL Wh_ModInit() {
         g_settings.relayMode, g_settings.whitelistMode, g_settings.detection,
         g_settings.dumpUiTree, deskName);
 
-    // Said out loud, because it is the one setting that makes the mod look broken: in observe or
-    // dump mode the native prompt is everything that will appear, by design. The log names the
-    // setting that did it rather than leaving the next question open.
     if (g_settings.dumpUiTree || g_settings.relayMode == 0)
         Log(L"observe mode: %s -> the Windows 7 dialog will NOT be shown and the native prompt is "
             L"left alone; turn Replace the UAC prompt on and Write a diagnostics dump off to "
-        L"replace the UI",
+            L"replace the UI",
             g_settings.dumpUiTree ? L"Write a diagnostics dump is on"
                                   : L"Replace the UAC prompt is off");
-
-    if (g_settings.debugLog) InstallExceptionLogger();
 
     HMODULE credui = LoadLibraryExW(L"credui.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!credui) {
         Log(L"credui.dll not loadable -> mod inactive");
+        CloseLifecycleEvents();
+        DeleteCriticalSection(&g_cs);
+        g_csInitialized = false;
         return FALSE;
     }
 
@@ -6110,41 +6230,26 @@ BOOL Wh_ModInit() {
         (CredPromptWorker_t)GetProcAddress(credui, "CredUIPromptForWindowsCredentialsWorker");
     if (!worker) {
         Log(L"CredUIPromptForWindowsCredentialsWorker not exported -> mod inactive");
+        FreeLibrary(credui);
+        CloseLifecycleEvents();
+        DeleteCriticalSection(&g_cs);
+        g_csInitialized = false;
         return FALSE;
     }
 
     if (!Wh_SetFunctionHook((void*)worker, (void*)CredPromptWorkerHook,
                             (void**)&g_credPromptWorker_orig)) {
         Log(L"Wh_SetFunctionHook failed -> mod inactive");
+        FreeLibrary(credui);
+        CloseLifecycleEvents();
+        DeleteCriticalSection(&g_cs);
+        g_csInitialized = false;
         return FALSE;
     }
+    g_hookTarget = (void*)worker;
+    g_hookInstalled = true;
     Log(L"hooked credui!CredUIPromptForWindowsCredentialsWorker at %p", (void*)worker);
 
-#if HAVE_UTILS
-    static WindhawkUtils::SYMBOL_HOOK diagHooks[] = {
-        {
-            {L"?GetConsent@@YAKPEAUHWND__@@PEBU_CREDUI_CONTEXT@@@Z"},     // 21H2 only
-            (void**)&g_diagGetConsent_orig,
-            (void*)DiagGetConsentHook,
-            true,
-        },
-        {
-            {
-                L"?CuiGetTokenForApp@@YAKPEAUHINSTANCE__@@PEAU_CONSENTUI_PARAM_HEADER@@PEAU_CREDUI_CONTEXT@@KW4_AUTO_APPROVE_TYPE@@KW4_AM_SCAN_RESULT@@PEAPEAX5@Z",  // 21H2
-                L"?CuiGetTokenForApp@@YAKPEAUHINSTANCE__@@PEAU_CONSENTUI_PARAM_HEADER@@PEAU_CREDUI_CONTEXT@@KW4_AUTO_APPROVE_TYPE@@KW4_AM_SCAN_RESULT@@PEBDPEAPEAX6@Z",  // 24H2
-            },
-            (void**)&g_diagGetTokenForApp_orig,
-            (void*)DiagGetTokenForAppHook,
-            true,
-        },
-    };
-    WindhawkUtils::HookSymbols(GetModuleHandleW(nullptr), diagHooks, ARRAYSIZE(diagHooks));
-#endif
-
-    // The threads are the last thing that starts, and only now that the hook is in place: every
-    // branch above that gives up (credui.dll, the export, the hook itself) returns FALSE to a
-    // process that is exactly as it was, with no thread of this mod running in it. A thread left
-    // behind by a mod the loader is about to unmap is the one failure that cannot be survived.
     if (g_settings.detection == 0) {
         StartWatchers();
     } else {
@@ -6169,30 +6274,45 @@ void Wh_ModSettingsChanged() {
 // thread to be inside the relay of a click at this very moment. Windhawk calls it before
 // Wh_ModUninit, and the hooks are removed only after both have returned.
 void Wh_ModBeforeUninit() {
+    if (!g_csInitialized) return;
     Dbg(L"before uninit (last step: %s)", g_step);
 
-    if (g_ui.hwnd && IsWindow(g_ui.hwnd)) PostMessageW(g_ui.hwnd, WM_CLOSE, 0, 0);
+    // Cancel UI/session work first. The UI thread owns all native-window changes and will restore
+    // the untouched native prompt before it exits; WM_CLOSE is not used as an implicit No here.
+    if (g_stopEvent) SetEvent(g_stopEvent);
 
-    // Waited for, but not closed here: this handle is one of the tracked ones and is closed by
-    // WaitForModThreads, so no handle is ever closed twice.
-    HANDLE t = (HANDLE)InterlockedCompareExchangePointer((PVOID volatile*)&g_uiThread, nullptr,
-                                                        nullptr);
-    if (t && WaitForSingleObject(t, 3000) != WAIT_OBJECT_0)
-        Log(L"the replacement UI thread did not stop in time");
+    // The documented Windhawk hook APIs are valid here, before Wh_ModBeforeUninit returns. Remove
+    // the detour so no new caller can enter while the in-flight call is being drained.
+    if (g_hookInstalled && g_hookTarget) {
+        const BOOL removed = Wh_RemoveFunctionHook(g_hookTarget);
+        const BOOL applied = Wh_ApplyHookOperations();
+        if (!removed || !applied)
+            Log(L"hook removal/apply reported failure (remove=%d apply=%d); Windhawk will also "
+                L"perform its normal hook teardown", removed, applied);
+        g_hookInstalled = false;
+    }
 
-    RestoreNativePrompt();
+    WaitForHookCalls();
+    if (g_uiIdleEvent) WaitForSingleObject(g_uiIdleEvent, INFINITE);
+
+    // The shared desktop handles remain open until the UI is finished. Only then are the watchers
+    // stopped, and the registry waits for every watcher/identity/UI thread without a timeout.
+    StopWatchers();
+    WaitForModThreads();
+    CloseRemainingWatcherDesktops();
 }
 
 // The containers of the globals that carry [[clang::no_destroy]] are emptied here, once every
 // thread of the mod has been waited for and the prompt has been given back: what the process exit
 // would otherwise do under the loader lock is done here, on a thread that owns nothing else.
 static void ReleaseGlobalState() {
-    EnterCriticalSection(&g_cs);
-    std::vector<PromptCandidate>().swap(g_candidates);
-    std::vector<std::wstring>().swap(g_rejectLog);
-    std::wstring().swap(g_userDesktopApp);
-    std::wstring().swap(g_userDesktopAppClass);
-    LeaveCriticalSection(&g_cs);
+    {
+        CsLock lock(g_cs);
+        std::vector<PromptCandidate>().swap(g_candidates);
+        std::vector<std::wstring>().swap(g_rejectLog);
+        std::wstring().swap(g_userDesktopApp);
+        std::wstring().swap(g_userDesktopAppClass);
+    }
 #if HAVE_UIA
     // Only the vector: its elements are interface pointers of the harvesting thread, which releases
     // them on its own thread (UiaRelease). Releasing them from here would be worse than letting the
@@ -6206,14 +6326,23 @@ static void ReleaseGlobalState() {
 
 void Wh_ModUninit() {
     Dbg(L"uninit (last step: %s)", g_step);
+    if (!g_csInitialized) {
+        CloseLifecycleEvents();
+        return;
+    }
 
-    // No interface work is done here: the window, the interface thread and the native prompt were
-    // dealt with in Wh_ModBeforeUninit, while the hook was still in place.
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    WaitForHookCalls();
+    if (g_uiIdleEvent) WaitForSingleObject(g_uiIdleEvent, INFINITE);
     StopWatchers();
-    WaitForModThreads(3000);
+    WaitForModThreads();
+    CloseRemainingWatcherDesktops();
+
     ReleaseGlobalState();
-    RemoveExceptionLogger();
-    // Last: every GDI+ object of the dialog was disposed with it (FreeUiResources), so the library
-    // can be stopped and unloaded here.
+    UnregisterUiClass();
     GdiplusStop();
+    CloseLifecycleEvents();
+    DeleteCriticalSection(&g_cs);
+    g_csInitialized = false;
 }
+
