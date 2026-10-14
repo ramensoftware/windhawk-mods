@@ -19,42 +19,45 @@
 /*
 # Vietnamese Lunar Calendar & Horoscope
 
-Integrates the **Vietnamese Lunar Calendar (Lịch Vạn Niên)** and **Daily Horoscope (Tử Vi)** directly into the Windows 11 taskbar clock, clock tooltip, and calendar flyout without requiring Windows auxiliary calendar settings.
+Integrates the **Vietnamese Lunar Calendar (Lịch Vạn Niên, UTC+7)** and **Daily Horoscope (Tử Vi)** directly into the Windows 11 taskbar clock, clock tooltip, and calendar flyout without requiring Windows auxiliary calendar settings.
 
 Only **Windows 11** is supported.
 
-![Screenshot](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/screenshot1.png)
+![Taskbar clock and horoscope tooltip](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/screenshot1.png)
 
-Screenshot 1
+Taskbar clock with lunar date and detailed horoscope tooltip
 
-![Screenshot](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/screenshot2.png)
+![Calendar flyout with lunar dates and horoscope page](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/screenshot2.png)
 
-Screenshot 2
+Calendar flyout with Vietnamese lunar dates, holidays, and interactive horoscope view
 
 ## Features
 
 1. **Taskbar Clock (`explorer.exe`)**
-   * **Top line:** Time, Vietnamese weekday abbreviation, and solar day/month (e.g., `14:46 - T4, 14/10`).
-   * **Bottom line:** Lunar day/month (with automatic leap-month detection) and the Sexagenary year name (e.g., `05/09 Bính Ngọ`).
+   * Preserves your system time format (12/24-hour clock and seconds) while appending the weekday and solar date on the top line (e.g., `14:46 - T4, 14/10`) and displaying the Vietnamese lunar date with the Sexagenary year on the bottom line (e.g., `05/09 Bính Ngọ`).
+   * Can be toggled off or switched to preserve the default top line in the mod settings.
 2. **Detailed Horoscope Tooltip (`explorer.exe`)**
    * Hovering over the taskbar clock appends a full Vietnamese almanac breakdown:
      * Lunar date, Sexagenary year, and special Vietnamese holidays/events.
      * Four Pillars (Bát Tự): Hour, Day, Month, and Year stems and branches (Can Chi).
      * Five Elements destiny (Ngũ Hành Nạp Âm), 12 Auspicious/Inauspicious stars (Hoàng Đạo / Hắc Đạo), and 12 Day Officers (Thập Nhị Trực).
      * Six Auspicious Hours (Giờ Hoàng Đạo) of the day.
-     * Daily recommendations (Việc Nên & Việc Kỵ), conflicting zodiac signs (Tuổi xung), and auspicious travel directions (Hướng xuất hành).
+     * Daily recommendations (Good for / Avoid), conflicting zodiac signs (Tuổi xung), and auspicious travel directions (Hướng xuất hành).
 3. **Calendar Flyout Grid & Header (`ShellExperienceHost.exe` / `ShellHost.exe`)**
    * Displays the full Vietnamese lunar date in the calendar header (`CalendarHeader`) and beneath each solar day cell, even when *"Don't show additional calendars"* is selected in Windows Settings.
    * Color-codes traditional Vietnamese solar holidays, lunar holidays, and major festivals (Tết Nguyên Đán, Rằm tháng Giêng, Giỗ Tổ Hùng Vương, Vu Lan, Trung Thu, etc.).
 4. **Interactive Horoscope Detail View**
    * Clicking any date cell in the calendar flyout opens a dedicated almanac and horoscope page for that specific date, with a back button (`←`) to return to the month grid.
+5. **Bilingual Support (English & Vietnamese)**
+   * Automatically follows your Windows UI language (Vietnamese on `vi-VN` systems, English otherwise) or can be manually selected in settings.
 
 ## Compatibility Note
 
-Because this mod customizes the taskbar clock text, clock tooltip, and calendar flyout day cells, enabling it alongside **Taskbar Clock Customization** or **Chinese Holiday Calendar** will cause the mods to overwrite each other's text.
+Because this mod customizes the taskbar clock text, clock tooltip, and calendar flyout day cells, enabling those respective features alongside **Taskbar Clock Customization** or **Chinese Holiday Calendar** will cause the mods to overwrite each other's text. You can disable individual features in this mod's settings to use them side by side.
 
 ## Credits
 
+* Astronomical Vietnamese lunar calendar calculation based on **Hồ Ngọc Đức**'s UTC+7 algorithm.
 * Calendar flyout injection plumbing adapted from [Chinese Holiday Calendar](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/chinese-holiday-calendar.wh.cpp) by **dcsmf**.
 * Taskbar clock and tooltip hooks adapted from [Taskbar Clock Customization](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-clock-customization.wh.cpp) by **m417z**.
 
@@ -62,16 +65,54 @@ Because this mod customizes the taskbar clock text, clock tooltip, and calendar 
 
 # Lịch Âm Việt Nam & Tử Vi Vạn Niên (Tiếng Việt)
 
-Tích hợp **Lịch Vạn Niên (Âm lịch Việt Nam)** và **Tử Vi hàng ngày** trực tiếp vào đồng hồ Taskbar, hộp chú thích (Tooltip) và khay Lịch của **Windows 11** mà không cần bật lịch phụ tiếng Trung trong Cài đặt Windows.
+Tích hợp **Lịch Vạn Niên (Âm lịch Việt Nam chuẩn múi giờ UTC+7)** và **Tử Vi hàng ngày** trực tiếp vào đồng hồ Taskbar, hộp chú thích (Tooltip) và khay Lịch của **Windows 11** mà không cần bật lịch phụ tiếng Trung trong Cài đặt Windows.
 
 ## Tính năng chính
 
-1. **Đồng hồ Âm - Dương trên thanh Taskbar:** Hiển thị `Giờ:Phút - Thứ, Ngày/Tháng` ở dòng trên và `Ngày/Tháng Âm lịch + Năm Can Chi` ở dòng dưới.
+1. **Đồng hồ Âm - Dương trên thanh Taskbar:** Giữ nguyên định dạng giờ của hệ thống (12h/24h và hiển thị giây), kết hợp Thứ + Ngày/Tháng Dương lịch ở dòng trên và `Ngày/Tháng Âm lịch + Năm Can Chi` ở dòng dưới.
 2. **Bảng Bát Tự & Tử Vi trong hộp chú thích (Tooltip):** Khi rê chuột vào đồng hồ góc phải, hộp chú thích hiển thị đầy đủ ngày Âm lịch, Bát tự (Giờ, Ngày, Tháng, Năm Can Chi), Mệnh ngày (Nạp âm), Sao Hoàng Đạo/Hắc Đạo, Thập Nhị Trực, 6 Giờ Hoàng Đạo, Việc Nên/Kỵ và Hướng xuất hành.
 3. **Khay Lịch Vạn Niên & Đánh dấu Ngày Lễ:** Tự động hiển thị ngày Âm lịch dưới từng ô ngày Dương lịch và tô màu đỏ theo đúng chuẩn Lịch Bloc Việt Nam (Lễ Dương lịch, Lễ Âm lịch, Tết Nguyên Đán, Rằm/Mùng 1).
 4. **Tra cứu Tử Vi theo ngày bất kỳ:** Click vào một ô ngày bất kỳ trên khay lịch để mở trang chi tiết Bát Tự & Tử Vi của ngày đó (bấm nút `←` để quay lại lưới lịch).
+5. **Tùy chỉnh linh hoạt:** Từng tính năng (Đồng hồ Taskbar, Tooltip, Khay lịch, Trang Tử Vi) và ngôn ngữ hiển thị đều có thể bật/tắt riêng trong phần Cài đặt của mod.
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- language: auto
+  $name: Display language
+  $name:vi-VN: Ngôn ngữ hiển thị
+  $description: Language used for labels, weekdays, and horoscope descriptions.
+  $description:vi-VN: Ngôn ngữ dùng cho các nhãn, thứ trong tuần và nội dung tử vi.
+  $options:
+  - auto: System default (Auto)
+  - en: English
+  - vi: Tiếng Việt (Vietnamese)
+  $options:vi-VN:
+  - auto: Mặc định hệ thống (Tự động)
+  - en: Tiếng Anh (English)
+  - vi: Tiếng Việt
+- enableTaskbarClock: true
+  $name: Show lunar date on taskbar clock
+  $name:vi-VN: Hiển thị Âm lịch trên đồng hồ Taskbar
+  $description: Display the lunar date on the taskbar clock. Disable this option if you use Taskbar Clock Customization.
+  $description:vi-VN: Hiển thị ngày Âm lịch trên đồng hồ Taskbar. Hãy tắt tùy chọn này nếu bạn dùng chung với mod Taskbar Clock Customization.
+- taskbarClockSolarOnTop: true
+  $name: Show weekday and solar date on top clock line
+  $name:vi-VN: Gộp Thứ và Ngày/Tháng Dương lịch lên dòng trên đồng hồ
+  $description: When enabled, shows "Time - Weekday, DD/MM" on the top line and the lunar date on the bottom line. When disabled, keeps the top line as Time only and shows "Solar date • Lunar date" on the bottom line.
+  $description:vi-VN: Khi bật, dòng trên hiển thị "Giờ - Thứ, Ngày/Tháng" và dòng dưới hiển thị Âm lịch. Khi tắt, dòng trên chỉ hiện Giờ và dòng dưới hiện "Dương lịch • Âm lịch".
+- enableTaskbarTooltip: true
+  $name: Show horoscope & almanac in clock tooltip
+  $name:vi-VN: Hiển thị Tử Vi & Bát Tự trong hộp chú thích (Tooltip) đồng hồ
+- enableCalendarFlyout: true
+  $name: Show lunar dates & holidays in calendar flyout
+  $name:vi-VN: Hiển thị Âm lịch & ngày lễ trong khay Lịch
+- enableHoroscopePage: true
+  $name: Open horoscope detail page when clicking a date
+  $name:vi-VN: Mở trang chi tiết Tử Vi khi bấm vào ngày trên lịch
+*/
+// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
@@ -97,7 +138,6 @@ using namespace std::string_view_literals;
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Globalization.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
@@ -117,6 +157,60 @@ thread_local bool g_initializedForThread = false;
 std::atomic<bool> g_shuttingDown{false};
 
 #define FORMATTED_BUFFER_SIZE 256
+
+////////////////////////////////////////////////////////////////////////////////
+// Settings & Localization
+
+enum class ModLanguage { Auto, English, Vietnamese };
+
+struct ModSettings {
+    ModLanguage language = ModLanguage::Auto;
+    bool enableTaskbarClock = true;
+    bool taskbarClockSolarOnTop = true;
+    bool enableTaskbarTooltip = true;
+    bool enableCalendarFlyout = true;
+    bool enableHoroscopePage = true;
+};
+
+std::mutex g_settingsMutex;
+ModSettings g_settings;
+
+void LoadSettings() {
+    ModSettings s;
+    WindhawkUtils::StringSetting lang = WindhawkUtils::StringSetting::make(L"language");
+    if (_wcsicmp(lang.get(), L"vi") == 0) {
+        s.language = ModLanguage::Vietnamese;
+    } else if (_wcsicmp(lang.get(), L"en") == 0) {
+        s.language = ModLanguage::English;
+    } else {
+        s.language = ModLanguage::Auto;
+    }
+
+    s.enableTaskbarClock = Wh_GetIntSetting(L"enableTaskbarClock") != 0;
+    s.taskbarClockSolarOnTop = Wh_GetIntSetting(L"taskbarClockSolarOnTop") != 0;
+    s.enableTaskbarTooltip = Wh_GetIntSetting(L"enableTaskbarTooltip") != 0;
+    s.enableCalendarFlyout = Wh_GetIntSetting(L"enableCalendarFlyout") != 0;
+    s.enableHoroscopePage = Wh_GetIntSetting(L"enableHoroscopePage") != 0;
+
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_settings = s;
+}
+
+ModSettings GetSettings() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return g_settings;
+}
+
+bool UseVietnameseLabels(ModSettings const& settings) {
+    if (settings.language == ModLanguage::Vietnamese) return true;
+    if (settings.language == ModLanguage::English) return false;
+    LANGID langId = GetUserDefaultUILanguage();
+    return PRIMARYLANGID(langId) == LANG_VIETNAMESE;
+}
+
+PCWSTR PickText(bool vi, PCWSTR viText, PCWSTR enText) {
+    return vi ? viText : enText;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // String & Date Utilities
@@ -172,7 +266,8 @@ int32_t DateKeyFromDateTime(wf::DateTime const& dateTime) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Vietnamese Lunar Calendar, Holidays & Horoscope Calculations
+// Pure Arithmetic Vietnamese Lunar Calendar (Hồ Ngọc Đức Algorithm, UTC+7)
+// Eliminates WinRT Calendar objects and fixes UTC+7 vs UTC+8 new-moon differences.
 
 const PCWSTR CAN_10[] = {
     L"Giáp", L"Ất", L"Bính", L"Đinh", L"Mậu", L"Kỷ", L"Canh", L"Tân", L"Nhâm", L"Quý"
@@ -187,117 +282,155 @@ std::wstring GetCanChiYear(int year) {
     return std::wstring(CAN_10[canIdx]) + L" " + CHI_12[chiIdx];
 }
 
-const int LEAP_MONTHS_100_YEARS[] = {
-    // 2000 - 2009
-    0, 4, 0, 0, 2, 0, 7, 0, 0, 5,
-    // 2010 - 2019
-    0, 0, 4, 0, 9, 0, 0, 6, 0, 0,
-    // 2020 - 2029
-    4, 0, 0, 2, 0, 6, 0, 0, 5, 0,
-    // 2030 - 2039
-    0, 3, 0, 11, 0, 0, 6, 0, 0, 5,
-    // 2040 - 2049
-    0, 0, 2, 0, 7, 0, 0, 5, 0, 0,
-    // 2050 - 2059
-    3, 0, 8, 0, 0, 6, 0, 0, 4, 0,
-    // 2060 - 2069
-    0, 3, 0, 7, 0, 0, 5, 0, 0, 4,
-    // 2070 - 2079
-    0, 8, 0, 0, 6, 0, 0, 4, 0, 0,
-    // 2080 - 2089
-    3, 0, 7, 0, 0, 5, 0, 0, 4, 0,
-    // 2090 - 2099
-    8, 0, 0, 6, 0, 0, 4, 0, 0, 3
-};
-
-int GetLeapMonthIndex(int lunarYear) {
-    if (lunarYear < 2000 || lunarYear > 2099) return 0;
-    return LEAP_MONTHS_100_YEARS[lunarYear - 2000];
-}
-
-thread_local winrt::Windows::Globalization::Calendar t_gregorianCal{nullptr};
-thread_local winrt::Windows::Globalization::Calendar t_lunarCal{nullptr};
-
-void GetLunarDateWinRT_ForDate(int sYear, int sMonth, int sDay,
-                               int& lDay, int& lMonth, int& lYear,
-                               bool& isLeap, std::wstring& canChi) {
-    try {
-        if (!t_gregorianCal) {
-            t_gregorianCal = winrt::Windows::Globalization::Calendar();
-            t_gregorianCal.ChangeCalendarSystem(
-                winrt::Windows::Globalization::CalendarIdentifiers::Gregorian());
-        }
-        if (!t_lunarCal) {
-            t_lunarCal = winrt::Windows::Globalization::Calendar();
-            t_lunarCal.ChangeCalendarSystem(
-                winrt::Windows::Globalization::CalendarIdentifiers::ChineseLunar());
-        }
-
-        t_gregorianCal.Year(sYear);
-        t_gregorianCal.Month(sMonth);
-        t_gregorianCal.Day(sDay);
-        t_lunarCal.SetDateTime(t_gregorianCal.GetDateTime());
-
-        lDay = t_lunarCal.Day();
-        int rawMonth = t_lunarCal.Month();
-
-        lYear = sYear;
-        if (rawMonth >= 10 && sMonth <= 2) {
-            lYear--;
-        }
-
-        canChi = GetCanChiYear(lYear);
-        int leapMonth = GetLeapMonthIndex(lYear);
-        isLeap = false;
-
-        if (leapMonth > 0) {
-            if (rawMonth == leapMonth + 1) {
-                lMonth = leapMonth;
-                isLeap = true;
-            } else if (rawMonth > leapMonth + 1) {
-                lMonth = rawMonth - 1;
-            } else {
-                lMonth = rawMonth;
-            }
-        } else {
-            lMonth = rawMonth;
-        }
-    } catch (...) {
-        lDay = sDay;
-        lMonth = sMonth;
-        lYear = sYear;
-        isLeap = false;
-        canChi = GetCanChiYear(sYear);
-    }
-}
-
-void GetLunarDateToday(int& lDay, int& lMonth, int& lYear, bool& isLeap, std::wstring& canChi) {
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    GetLunarDateWinRT_ForDate(st.wYear, st.wMonth, st.wDay, lDay, lMonth, lYear, isLeap, canChi);
-}
-
-std::wstring FormatTaskbarLunarDate(int sYear, int sMonth, int sDay) {
-    int lDay, lMonth, lYear;
-    bool isLeap;
-    std::wstring canChi;
-    GetLunarDateWinRT_ForDate(sYear, sMonth, sDay, lDay, lMonth, lYear, isLeap, canChi);
-
-    WCHAR buffer[128]{};
-    if (isLeap) {
-        _snwprintf_s(buffer, _TRUNCATE, L"%02d/%02d (Nhuận) %s", lDay, lMonth, canChi.c_str());
-    } else {
-        _snwprintf_s(buffer, _TRUNCATE, L"%02d/%02d %s", lDay, lMonth, canChi.c_str());
-    }
-    return buffer;
-}
-
 int CalculateJDN(int sDay, int sMonth, int sYear) {
     int a = (14 - sMonth) / 12;
     int y = sYear + 4800 - a;
     int m = sMonth + 12 * a - 3;
     return sDay + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045;
 }
+
+constexpr double kPi = 3.14159265358979323846;
+
+int IntFloor(double d) {
+    return static_cast<int>(std::floor(d));
+}
+
+double NewMoonJDN(int k) {
+    double T = k / 1236.85;
+    double T2 = T * T;
+    double T3 = T2 * T;
+    double dr = kPi / 180.0;
+    double Jd1 = 2415020.75933 + 29.53058868 * k + 0.0001178 * T2 - 0.000000155 * T3;
+    Jd1 += 0.00033 * std::sin((166.56 + 132.87 * T - 0.009173 * T2) * dr);
+    double M = 359.2242 + 29.10535608 * k - 0.0000333 * T2 - 0.00000347 * T3;
+    double Mpr = 306.0253 + 385.81691806 * k + 0.0107306 * T2 + 0.00001236 * T3;
+    double F = 21.2964 + 390.67050646 * k - 0.0016528 * T2 - 0.00000239 * T3;
+    double C1 = (0.1734 - 0.000393 * T) * std::sin(M * dr) + 0.0021 * std::sin(2 * dr * M);
+    C1 = C1 - 0.4068 * std::sin(Mpr * dr) + 0.0161 * std::sin(dr * 2 * Mpr);
+    C1 = C1 - 0.0004 * std::sin(dr * 3 * Mpr);
+    C1 = C1 + 0.0104 * std::sin(dr * 2 * F) - 0.0051 * std::sin(dr * (M + Mpr));
+    C1 = C1 - 0.0074 * std::sin(dr * (M - Mpr)) + 0.0004 * std::sin(dr * (2 * F + M));
+    C1 = C1 - 0.0004 * std::sin(dr * (2 * F - M)) - 0.0006 * std::sin(dr * (2 * F + Mpr));
+    C1 = C1 + 0.0010 * std::sin(dr * (2 * F - Mpr)) + 0.0005 * std::sin(dr * (2 * Mpr + M));
+    double deltat;
+    if (T < -11) {
+        deltat = 0.001 + 0.000839 * T + 0.0002261 * T2 - 0.00000845 * T3 - 0.000000081 * T * T3;
+    } else {
+        deltat = -0.000278 + 0.000265 * T + 0.000262 * T2;
+    }
+    return Jd1 + C1 - deltat;
+}
+
+int GetNewMoonDay(int k, double timeZone) {
+    return IntFloor(NewMoonJDN(k) + 0.5 + timeZone / 24.0);
+}
+
+double SunLongitudeRadians(double jdn) {
+    double T = (jdn - 2451545.0) / 36525.0;
+    double T2 = T * T;
+    double dr = kPi / 180.0;
+    double M = 357.52910 + 35999.05030 * T - 0.0001559 * T2 - 0.00000048 * T * T2;
+    double L0 = 280.46645 + 36000.76983 * T + 0.0003032 * T2;
+    double DL = (1.914600 - 0.004817 * T - 0.000014 * T2) * std::sin(dr * M);
+    DL += (0.019993 - 0.000101 * T) * std::sin(dr * 2 * M) + 0.000290 * std::sin(dr * 3 * M);
+    double L = (L0 + DL) * dr;
+    L -= kPi * 2 * IntFloor(L / (kPi * 2));
+    return L;
+}
+
+int GetSunLongitudeSector(int dayNumber, double timeZone) {
+    return IntFloor(SunLongitudeRadians(dayNumber - 0.5 - timeZone / 24.0) / kPi * 6.0);
+}
+
+int GetLunarMonth11(int yy, double timeZone) {
+    int off = CalculateJDN(31, 12, yy) - 2415021;
+    int k = IntFloor(off / 29.530588853);
+    int nm = GetNewMoonDay(k, timeZone);
+    int sunLong = GetSunLongitudeSector(nm, timeZone);
+    if (sunLong >= 9) {
+        nm = GetNewMoonDay(k - 1, timeZone);
+    }
+    return nm;
+}
+
+int GetLeapMonthOffset(int a11, double timeZone) {
+    int k = IntFloor((a11 - 2415021.076998695) / 29.530588853 + 0.5);
+    int last = 0;
+    int i = 1;
+    int arc = GetSunLongitudeSector(GetNewMoonDay(k + i, timeZone), timeZone);
+    do {
+        last = arc;
+        i++;
+        arc = GetSunLongitudeSector(GetNewMoonDay(k + i, timeZone), timeZone);
+    } while (arc != last && i < 14);
+    return i - 1;
+}
+
+void GetVietnameseLunarDate(int sYear, int sMonth, int sDay,
+                            int& lDay, int& lMonth, int& lYear,
+                            bool& isLeap, std::wstring& canChi) {
+    constexpr double kVietnamTimeZone = 7.0;
+    int dayNumber = CalculateJDN(sDay, sMonth, sYear);
+    int k = IntFloor((dayNumber - 2415021.076998695) / 29.530588853);
+    int monthStart = GetNewMoonDay(k + 1, kVietnamTimeZone);
+    if (monthStart > dayNumber) {
+        monthStart = GetNewMoonDay(k, kVietnamTimeZone);
+    }
+    int a11 = GetLunarMonth11(sYear, kVietnamTimeZone);
+    int b11 = a11;
+    if (a11 >= monthStart) {
+        lYear = sYear;
+        a11 = GetLunarMonth11(sYear - 1, kVietnamTimeZone);
+    } else {
+        lYear = sYear + 1;
+        b11 = GetLunarMonth11(sYear + 1, kVietnamTimeZone);
+    }
+    lDay = dayNumber - monthStart + 1;
+    int diff = IntFloor((monthStart - a11) / 29.0);
+    isLeap = false;
+    lMonth = diff + 11;
+    if (b11 - a11 > 365) {
+        int leapMonthDiff = GetLeapMonthOffset(a11, kVietnamTimeZone);
+        if (diff >= leapMonthDiff) {
+            lMonth = diff + 10;
+            if (diff == leapMonthDiff) {
+                isLeap = true;
+            }
+        }
+    }
+    if (lMonth > 12) {
+        lMonth -= 12;
+    }
+    if (lMonth >= 11 && diff < 4) {
+        lYear -= 1;
+    }
+    canChi = GetCanChiYear(lYear);
+}
+
+void GetLunarDateToday(int& lDay, int& lMonth, int& lYear, bool& isLeap, std::wstring& canChi) {
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    GetVietnameseLunarDate(st.wYear, st.wMonth, st.wDay, lDay, lMonth, lYear, isLeap, canChi);
+}
+
+std::wstring FormatTaskbarLunarDate(int sYear, int sMonth, int sDay, bool vi) {
+    int lDay, lMonth, lYear;
+    bool isLeap;
+    std::wstring canChi;
+    GetVietnameseLunarDate(sYear, sMonth, sDay, lDay, lMonth, lYear, isLeap, canChi);
+
+    WCHAR buffer[128]{};
+    if (isLeap) {
+        _snwprintf_s(buffer, _TRUNCATE, L"%02d/%02d (%s) %s",
+                     lDay, lMonth, PickText(vi, L"Nhuận", L"Leap"), canChi.c_str());
+    } else {
+        _snwprintf_s(buffer, _TRUNCATE, L"%02d/%02d %s", lDay, lMonth, canChi.c_str());
+    }
+    return buffer;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Holidays & Horoscope Data Tables (Bilingual Vietnamese & English)
 
 enum class HolidayScope { None, SolarOnly, LunarOnly, Both };
 
@@ -306,8 +439,9 @@ struct VietnameseHolidayResult {
     std::wstring names;
 };
 
-// Single unified table for both holiday names and color scopes
-VietnameseHolidayResult EvaluateVietnameseHoliday(int sDay, int sMonth, int lDay, int lMonth, bool isLeap) {
+VietnameseHolidayResult EvaluateVietnameseHoliday(int sDay, int sMonth,
+                                                  int lDay, int lMonth,
+                                                  bool isLeap, bool vi) {
     VietnameseHolidayResult res;
     bool highlightSolar = false;
     bool highlightLunar = false;
@@ -321,45 +455,46 @@ VietnameseHolidayResult EvaluateVietnameseHoliday(int sDay, int sMonth, int lDay
         int day;
         int month;
         HolidayScope scope;
-        PCWSTR name;
+        PCWSTR viName;
+        PCWSTR enName;
     };
 
     static const HolidayEntry kSolarHolidays[] = {
-        { 1,  1, HolidayScope::Both,      L"Tết Dương lịch" },
-        { 14, 2, HolidayScope::SolarOnly, L"Lễ Tình nhân (Valentine)" },
-        { 8,  3, HolidayScope::SolarOnly, L"Quốc tế Phụ nữ" },
-        { 26, 3, HolidayScope::SolarOnly, L"Thành lập Đoàn TNCS HCM" },
-        { 30, 4, HolidayScope::SolarOnly, L"Ngày Giải phóng miền Nam" },
-        { 1,  5, HolidayScope::SolarOnly, L"Quốc tế Lao động" },
-        { 1,  6, HolidayScope::SolarOnly, L"Quốc tế Thiếu nhi" },
-        { 2,  9, HolidayScope::SolarOnly, L"Quốc khánh Việt Nam" },
-        { 20, 10, HolidayScope::SolarOnly, L"Ngày Phụ nữ Việt Nam" },
-        { 20, 11, HolidayScope::SolarOnly, L"Ngày Nhà giáo Việt Nam" },
-        { 24, 11, HolidayScope::SolarOnly, L"Ngày Văn hóa Việt Nam" },
-        { 22, 12, HolidayScope::SolarOnly, L"Thành lập QĐND Việt Nam" },
-        { 24, 12, HolidayScope::SolarOnly, L"Đêm Giáng Sinh" },
-        { 25, 12, HolidayScope::SolarOnly, L"Lễ Giáng Sinh (Noel)" },
+        { 1,  1,  HolidayScope::Both,      L"Tết Dương lịch",             L"New Year's Day" },
+        { 14, 2,  HolidayScope::SolarOnly, L"Lễ Tình nhân (Valentine)",   L"Valentine's Day" },
+        { 8,  3,  HolidayScope::SolarOnly, L"Quốc tế Phụ nữ",             L"International Women's Day" },
+        { 26, 3,  HolidayScope::SolarOnly, L"Thành lập Đoàn TNCS HCM",    L"Youth Union Foundation Day" },
+        { 30, 4,  HolidayScope::SolarOnly, L"Ngày Giải phóng miền Nam",   L"Reunification Day" },
+        { 1,  5,  HolidayScope::SolarOnly, L"Quốc tế Lao động",           L"International Workers' Day" },
+        { 1,  6,  HolidayScope::SolarOnly, L"Quốc tế Thiếu nhi",          L"International Children's Day" },
+        { 2,  9,  HolidayScope::SolarOnly, L"Quốc khánh Việt Nam",        L"Vietnam National Day" },
+        { 20, 10, HolidayScope::SolarOnly, L"Ngày Phụ nữ Việt Nam",       L"Vietnamese Women's Day" },
+        { 20, 11, HolidayScope::SolarOnly, L"Ngày Nhà giáo Việt Nam",     L"Vietnamese Teachers' Day" },
+        { 24, 11, HolidayScope::SolarOnly, L"Ngày Văn hóa Việt Nam",      L"Vietnam Cultural Heritage Day" },
+        { 22, 12, HolidayScope::SolarOnly, L"Thành lập QĐND Việt Nam",    L"People's Army Foundation Day" },
+        { 24, 12, HolidayScope::SolarOnly, L"Đêm Giáng Sinh",             L"Christmas Eve" },
+        { 25, 12, HolidayScope::SolarOnly, L"Lễ Giáng Sinh (Noel)",       L"Christmas Day" },
     };
 
     static const HolidayEntry kLunarHolidays[] = {
-        { 1,  1, HolidayScope::Both,      L"Mùng 1 Tết Nguyên Đán" },
-        { 2,  1, HolidayScope::Both,      L"Mùng 2 Tết Nguyên Đán" },
-        { 3,  1, HolidayScope::Both,      L"Mùng 3 Tết Nguyên Đán" },
-        { 15, 1, HolidayScope::Both,      L"Tết Nguyên Tiêu (Rằm tháng Giêng)" },
-        { 3,  3, HolidayScope::None,      L"Tết Hàn Thực" },
-        { 10, 3, HolidayScope::LunarOnly, L"Giỗ Tổ Hùng Vương" },
-        { 15, 4, HolidayScope::LunarOnly, L"Lễ Phật Đản" },
-        { 5,  5, HolidayScope::LunarOnly, L"Tết Đoan Ngọ" },
-        { 15, 7, HolidayScope::Both,      L"Lễ Vu Lan (Rằm tháng Bảy)" },
-        { 15, 8, HolidayScope::Both,      L"Tết Trung Thu (Rằm tháng Tám)" },
-        { 23, 12, HolidayScope::LunarOnly, L"Tiễn Ông Công Ông Táo" },
-        { 29, 12, HolidayScope::Both,      L"Tất niên / Giao thừa" },
-        { 30, 12, HolidayScope::Both,      L"Tất niên / Giao thừa" },
+        { 1,  1,  HolidayScope::Both,      L"Mùng 1 Tết Nguyên Đán",              L"Lunar New Year (Tết - Day 1)" },
+        { 2,  1,  HolidayScope::Both,      L"Mùng 2 Tết Nguyên Đán",              L"Lunar New Year (Tết - Day 2)" },
+        { 3,  1,  HolidayScope::Both,      L"Mùng 3 Tết Nguyên Đán",              L"Lunar New Year (Tết - Day 3)" },
+        { 15, 1,  HolidayScope::Both,      L"Tết Nguyên Tiêu (Rằm tháng Giêng)",  L"First Full Moon Festival (Tết Nguyên Tiêu)" },
+        { 3,  3,  HolidayScope::None,      L"Tết Hàn Thực",                       L"Cold Food Festival (Tết Hàn Thực)" },
+        { 10, 3,  HolidayScope::LunarOnly, L"Giỗ Tổ Hùng Vương",                  L"Hùng Kings' Commemoration Day" },
+        { 15, 4,  HolidayScope::LunarOnly, L"Lễ Phật Đản",                        L"Buddha's Birthday (Lễ Phật Đản)" },
+        { 5,  5,  HolidayScope::LunarOnly, L"Tết Đoan Ngọ",                       L"Mid-Year Festival (Tết Đoan Ngọ)" },
+        { 15, 7,  HolidayScope::Both,      L"Lễ Vu Lan (Rằm tháng Bảy)",          L"Vu Lan Festival (Ghost Festival)" },
+        { 15, 8,  HolidayScope::Both,      L"Tết Trung Thu (Rằm tháng Tám)",      L"Mid-Autumn Festival (Tết Trung Thu)" },
+        { 23, 12, HolidayScope::LunarOnly, L"Tiễn Ông Công Ông Táo",              L"Kitchen Guardians Day (Ông Công Ông Táo)" },
+        { 29, 12, HolidayScope::Both,      L"Tất niên / Giao thừa",               L"Lunar New Year's Eve (Tất niên)" },
+        { 30, 12, HolidayScope::Both,      L"Tất niên / Giao thừa",               L"Lunar New Year's Eve (Giao thừa)" },
     };
 
     for (const auto& entry : kSolarHolidays) {
         if (sDay == entry.day && sMonth == entry.month) {
-            addName(entry.name);
+            addName(PickText(vi, entry.viName, entry.enName));
             if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::SolarOnly) highlightSolar = true;
             if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::LunarOnly) highlightLunar = true;
         }
@@ -369,15 +504,15 @@ VietnameseHolidayResult EvaluateVietnameseHoliday(int sDay, int sMonth, int lDay
         bool matchedLunarFestival = false;
         for (const auto& entry : kLunarHolidays) {
             if (lDay == entry.day && lMonth == entry.month) {
-                addName(entry.name);
+                addName(PickText(vi, entry.viName, entry.enName));
                 matchedLunarFestival = true;
                 if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::SolarOnly) highlightSolar = true;
                 if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::LunarOnly) highlightLunar = true;
             }
         }
         if (!matchedLunarFestival) {
-            if (lDay == 1) addName(L"Ngày Mùng 1 (Sóc)");
-            else if (lDay == 15) addName(L"Ngày Rằm (Vọng)");
+            if (lDay == 1) addName(PickText(vi, L"Ngày Mùng 1 (Sóc)", L"New Moon Day (Mùng 1)"));
+            else if (lDay == 15) addName(PickText(vi, L"Ngày Rằm (Vọng)", L"Full Moon Day (Ngày Rằm)"));
         }
     }
 
@@ -411,23 +546,25 @@ struct ComputedHoroscope {
     std::wstring specialHoliday;
 };
 
-// Shared calculation for both the taskbar tooltip and the interactive calendar page
-ComputedHoroscope ComputeHoroscopeForDate(int sYear, int sMonth, int sDay, int hour = 0) {
+ComputedHoroscope ComputeHoroscopeForDate(int sYear, int sMonth, int sDay, bool vi, int hour = 0) {
     ComputedHoroscope info;
     info.sYear = sYear;
     info.sMonth = sMonth;
     info.sDay = sDay;
 
-    GetLunarDateWinRT_ForDate(sYear, sMonth, sDay,
-                              info.lDay, info.lMonth, info.lYear,
-                              info.isLeap, info.yearCanChi);
+    GetVietnameseLunarDate(sYear, sMonth, sDay,
+                           info.lDay, info.lMonth, info.lYear,
+                           info.isLeap, info.yearCanChi);
 
     int jdn = CalculateJDN(sDay, sMonth, sYear);
 
-    static const PCWSTR kWeekdaysFull[] = {
+    static const PCWSTR kWeekdaysVi[] = {
         L"Thứ Hai", L"Thứ Ba", L"Thứ Tư", L"Thứ Năm", L"Thứ Sáu", L"Thứ Bảy", L"Chủ Nhật"
     };
-    info.weekdayStr = kWeekdaysFull[jdn % 7];
+    static const PCWSTR kWeekdaysEn[] = {
+        L"Monday", L"Tuesday", L"Wednesday", L"Thursday", L"Friday", L"Saturday", L"Sunday"
+    };
+    info.weekdayStr = vi ? kWeekdaysVi[jdn % 7] : kWeekdaysEn[jdn % 7];
 
     int canDayIdx = (jdn + 9) % 10;
     int chiDayIdx = (jdn + 1) % 12;
@@ -441,25 +578,41 @@ ComputedHoroscope ComputeHoroscopeForDate(int sYear, int sMonth, int sDay, int h
     int canHourIdx = ((canDayIdx % 5) * 2 + chiHourIdx) % 10;
     info.hourCanChi = std::wstring(CAN_10[canHourIdx]) + L" " + CHI_12[chiHourIdx];
 
-    static const PCWSTR kNapAm[30] = {
-        L"Hải Trung Kim (Vàng trong biển)",       L"Lô Trung Hỏa (Lửa trong lò)",
-        L"Đại Lâm Mộc (Gỗ rừng già)",             L"Lộ Bàng Thổ (Đất ven đường)",
-        L"Kiếm Phong Kim (Vàng mũi kiếm)",        L"Sơn Đầu Hỏa (Lửa đầu núi)",
-        L"Giản Hạ Thủy (Nước dưới khe)",          L"Thành Đầu Thổ (Đất tường thành)",
-        L"Bạch Lạp Kim (Vàng chân đèn)",          L"Dương Liễu Mộc (Gỗ cây liễu)",
-        L"Tuyền Trung Thủy (Nước trong suối)",    L"Ốc Thượng Thổ (Đất mái nhà)",
-        L"Tích Lịch Hỏa (Lửa sấm sét)",           L"Tùng Bách Mộc (Gỗ tùng bách)",
-        L"Trường Lưu Thủy (Nước chảy dài)",       L"Sa Trung Kim (Vàng trong cát)",
-        L"Sơn Hạ Hỏa (Lửa dưới núi)",             L"Bình Địa Mộc (Gỗ đồng bằng)",
-        L"Bích Thượng Thổ (Đất tò vò)",           L"Kim Bạch Kim (Vàng pha bạc)",
-        L"Phúc Đăng Hỏa (Lửa đèn chụp)",          L"Thiên Hà Thủy (Nước ngân hà)",
-        L"Đại Trạch Thổ (Đất nền nhà)",           L"Thoa Xuyến Kim (Vàng trang sức)",
-        L"Tang Đố Mộc (Gỗ cây dâu)",              L"Đại Khê Thủy (Nước khe lớn)",
-        L"Sa Trung Thổ (Đất pha cát)",            L"Thiên Thượng Hỏa (Lửa trên trời)",
-        L"Thạch Lựu Mộc (Gỗ cây lựu)",            L"Đại Hải Thủy (Nước biển lớn)"
+    struct BilingualText { PCWSTR vi; PCWSTR en; };
+    static const BilingualText kNapAm[30] = {
+        { L"Hải Trung Kim (Vàng trong biển)",    L"Hải Trung Kim (Sea Metal)" },
+        { L"Lô Trung Hỏa (Lửa trong lò)",        L"Lô Trung Hỏa (Furnace Fire)" },
+        { L"Đại Lâm Mộc (Gỗ rừng già)",          L"Đại Lâm Mộc (Forest Wood)" },
+        { L"Lộ Bàng Thổ (Đất ven đường)",        L"Lộ Bàng Thổ (Roadside Earth)" },
+        { L"Kiếm Phong Kim (Vàng mũi kiếm)",     L"Kiếm Phong Kim (Sword Metal)" },
+        { L"Sơn Đầu Hỏa (Lửa đầu núi)",          L"Sơn Đầu Hỏa (Mountain Fire)" },
+        { L"Giản Hạ Thủy (Nước dưới khe)",       L"Giản Hạ Thủy (Stream Water)" },
+        { L"Thành Đầu Thổ (Đất tường thành)",    L"Thành Đầu Thổ (Fortress Earth)" },
+        { L"Bạch Lạp Kim (Vàng chân đèn)",       L"Bạch Lạp Kim (Candlestick Metal)" },
+        { L"Dương Liễu Mộc (Gỗ cây liễu)",       L"Dương Liễu Mộc (Willow Wood)" },
+        { L"Tuyền Trung Thủy (Nước trong suối)", L"Tuyền Trung Thủy (Spring Water)" },
+        { L"Ốc Thượng Thổ (Đất mái nhà)",        L"Ốc Thượng Thổ (Roof Earth)" },
+        { L"Tích Lịch Hỏa (Lửa sấm sét)",        L"Tích Lịch Hỏa (Thunderbolt Fire)" },
+        { L"Tùng Bách Mộc (Gỗ tùng bách)",       L"Tùng Bách Mộc (Pine Wood)" },
+        { L"Trường Lưu Thủy (Nước chảy dài)",    L"Trường Lưu Thủy (River Water)" },
+        { L"Sa Trung Kim (Vàng trong cát)",      L"Sa Trung Kim (Sand Metal)" },
+        { L"Sơn Hạ Hỏa (Lửa dưới núi)",          L"Sơn Hạ Hỏa (Foothill Fire)" },
+        { L"Bình Địa Mộc (Gỗ đồng bằng)",        L"Bình Địa Mộc (Plain Wood)" },
+        { L"Bích Thượng Thổ (Đất tò vò)",        L"Bích Thượng Thổ (Wall Earth)" },
+        { L"Kim Bạch Kim (Vàng pha bạc)",        L"Kim Bạch Kim (Gold Foil Metal)" },
+        { L"Phúc Đăng Hỏa (Lửa đèn chụp)",       L"Phúc Đăng Hỏa (Lamp Fire)" },
+        { L"Thiên Hà Thủy (Nước ngân hà)",       L"Thiên Hà Thủy (Celestial Water)" },
+        { L"Đại Trạch Thổ (Đất nền nhà)",        L"Đại Trạch Thổ (Marsh Earth)" },
+        { L"Thoa Xuyến Kim (Vàng trang sức)",    L"Thoa Xuyến Kim (Jewelry Metal)" },
+        { L"Tang Đố Mộc (Gỗ cây dâu)",           L"Tang Đố Mộc (Mulberry Wood)" },
+        { L"Đại Khê Thủy (Nước khe lớn)",        L"Đại Khê Thủy (Rapids Water)" },
+        { L"Sa Trung Thổ (Đất pha cát)",         L"Sa Trung Thổ (Sand Earth)" },
+        { L"Thiên Thượng Hỏa (Lửa trên trời)",   L"Thiên Thượng Hỏa (Solar Fire)" },
+        { L"Thạch Lựu Mộc (Gỗ cây lựu)",         L"Thạch Lựu Mộc (Pomegranate Wood)" },
+        { L"Đại Hải Thủy (Nước biển lớn)",       L"Đại Hải Thủy (Ocean Water)" },
     };
     int hoaGiapIdx = (6 * canDayIdx - 5 * chiDayIdx + 60) % 60;
-    info.napAmStr = kNapAm[hoaGiapIdx / 2];
+    info.napAmStr = PickText(vi, kNapAm[hoaGiapIdx / 2].vi, kNapAm[hoaGiapIdx / 2].en);
 
     struct StarInfo { PCWSTR name; bool isHoangDao; };
     static const StarInfo kStars[12] = {
@@ -475,25 +628,43 @@ ComputedHoroscope ComputeHoroscopeForDate(int sYear, int sMonth, int sDay, int h
     info.starName = kStars[starIdx].name;
     info.isHoangDao = kStars[starIdx].isHoangDao;
 
-    struct TrucInfo { PCWSTR name; PCWSTR goodFor; PCWSTR badFor; };
+    struct TrucInfo {
+        PCWSTR name;
+        PCWSTR goodVi;
+        PCWSTR badVi;
+        PCWSTR goodEn;
+        PCWSTR badEn;
+    };
     static const TrucInfo kTruc[12] = {
-        { L"Kiến",  L"Xuất hành, nhậm chức, cầu tài, ký kết",         L"Động thổ, đào đất, mở kho" },
-        { L"Trừ",   L"Thanh tẩy, chữa bệnh, dọn dẹp, cầu bình an",    L"Khai trương lớn, đi xa" },
-        { L"Mãn",   L"Cúng tế, cầu tài lộc, khai trương, mở kho",      L"Kiện tụng, tranh chấp" },
-        { L"Bình",  L"Tu sửa, bàn bạc công việc, giao dịch, cưới hỏi", L"Khởi công lớn, thưa kiện" },
-        { L"Định",  L"Ký hợp đồng, cầu danh, nhập học, mưu sự",        L"Xuất hành xa, kiện tụng" },
-        { L"Chấp",  L"Xây dựng, tu tạo, lập khế ước, tuyển dụng",     L"Xuất tiền lớn, dọn nhà" },
-        { L"Phá",   L"Phá dỡ, giải quyết việc tồn đọng, chữa bệnh",    L"Khai trương, cưới hỏi, ký kết" },
-        { L"Nguy",  L"Tế tự, cầu an, nghỉ ngơi, cẩn trọng đi lại",     L"Mạo hiểm, khởi công, đi sông nước" },
-        { L"Thành", L"Khai trương, nhập học, cưới hỏi, cầu tài lộc",   L"Kiện tụng, tranh cãi" },
-        { L"Thu",   L"Thu hoạch, tích trữ, đòi nợ, cất giữ tài sản",   L"Khởi công mới, xuất hành xa" },
-        { L"Khai",  L"Khai trương, động thổ, xuất hành, nhậm chức",    L"An táng, tranh chấp" },
-        { L"Bế",    L"Đắp đê, tu bổ, cất giữ tài vật, lập kế hoạch",   L"Khai trương, xuất hành xa" }
+        { L"Kiến",  L"Xuất hành, nhậm chức, cầu tài, ký kết",         L"Động thổ, đào đất, mở kho",
+                    L"Travel, starting a role, signing contracts",     L"Groundbreaking, excavation" },
+        { L"Trừ",   L"Thanh tẩy, chữa bệnh, dọn dẹp, cầu bình an",    L"Khai trương lớn, đi xa",
+                    L"Cleansing, medical treatment, decluttering",     L"Grand openings, long journeys" },
+        { L"Mãn",   L"Cúng tế, cầu tài lộc, khai trương, mở kho",      L"Kiện tụng, tranh chấp",
+                    L"Prayers, wealth seeking, business opening",      L"Litigation, disputes" },
+        { L"Bình",  L"Tu sửa, bàn bạc công việc, giao dịch, cưới hỏi", L"Khởi công lớn, thưa kiện",
+                    L"Repairs, negotiations, trading, weddings",       L"Major construction, lawsuits" },
+        { L"Định",  L"Ký hợp đồng, cầu danh, nhập học, mưu sự",        L"Xuất hành xa, kiện tụng",
+                    L"Contracts, enrollment, long-term planning",      L"Long-distance travel, lawsuits" },
+        { L"Chấp",  L"Xây dựng, tu tạo, lập khế ước, tuyển dụng",     L"Xuất tiền lớn, dọn nhà",
+                    L"Building, renovations, hiring, agreements",      L"Large expenses, moving house" },
+        { L"Phá",   L"Phá dỡ, giải quyết việc tồn đọng, chữa bệnh",    L"Khai trương, cưới hỏi, ký kết",
+                    L"Demolition, resolving backlog, medical care",    L"Grand openings, weddings, contracts" },
+        { L"Nguy",  L"Tế tự, cầu an, nghỉ ngơi, cẩn trọng đi lại",     L"Mạo hiểm, khởi công, đi sông nước",
+                    L"Prayers for peace, rest, cautious travel",       L"High-risk activities, construction" },
+        { L"Thành", L"Khai trương, nhập học, cưới hỏi, cầu tài lộc",   L"Kiện tụng, tranh cãi",
+                    L"Grand openings, study, weddings, investments",   L"Litigation, arguments" },
+        { L"Thu",   L"Thu hoạch, tích trữ, đòi nợ, cất giữ tài sản",   L"Khởi công mới, xuất hành xa",
+                    L"Harvesting, saving, collecting debts",           L"Starting new projects, long trips" },
+        { L"Khai",  L"Khai trương, động thổ, xuất hành, nhậm chức",    L"An táng, tranh chấp",
+                    L"Grand openings, groundbreaking, travel",         L"Burials, disputes" },
+        { L"Bế",    L"Đắp đê, tu bổ, cất giữ tài vật, lập kế hoạch",   L"Khai trương, xuất hành xa",
+                    L"Maintenance, saving assets, planning",           L"Grand openings, long journeys" },
     };
     int trucIdx = (chiDayIdx - chiMonthIdx + 12) % 12;
     info.trucName = kTruc[trucIdx].name;
-    info.goodFor = kTruc[trucIdx].goodFor;
-    info.badFor = kTruc[trucIdx].badFor;
+    info.goodFor = PickText(vi, kTruc[trucIdx].goodVi, kTruc[trucIdx].goodEn);
+    info.badFor = PickText(vi, kTruc[trucIdx].badVi, kTruc[trucIdx].badEn);
 
     static const PCWSTR kGioHoangDao[6] = {
         L"Tý (23-1h), Sửu (1-3h), Mão (5-7h), Ngọ (11-13h), Thân (15-17h), Dậu (17-19h)",
@@ -511,71 +682,121 @@ ComputedHoroscope ComputeHoroscopeForDate(int sYear, int sMonth, int sDay, int h
     info.tuoiXung = std::wstring(CAN_10[xungCan1]) + L" " + CHI_12[xungChiIdx] +
                     L", " + CAN_10[xungCan2] + L" " + CHI_12[xungChiIdx];
 
-    static const PCWSTR kHuongHyThan[10] = {
-        L"Đông Bắc", L"Tây Bắc", L"Tây Nam", L"Chính Nam", L"Đông Nam",
-        L"Đông Bắc", L"Tây Bắc", L"Tây Nam", L"Chính Nam", L"Đông Nam"
+    static const BilingualText kHuongHyThan[10] = {
+        { L"Đông Bắc", L"Northeast" }, { L"Tây Bắc",  L"Northwest" },
+        { L"Tây Nam",  L"Southwest" }, { L"Chính Nam", L"South" },
+        { L"Đông Nam", L"Southeast" }, { L"Đông Bắc", L"Northeast" },
+        { L"Tây Bắc",  L"Northwest" }, { L"Tây Nam",  L"Southwest" },
+        { L"Chính Nam", L"South" },    { L"Đông Nam", L"Southeast" },
     };
-    static const PCWSTR kHuongTaiThan[10] = {
-        L"Đông Nam", L"Đông Nam", L"Chính Đông", L"Chính Đông", L"Chính Bắc",
-        L"Chính Nam", L"Tây Nam", L"Tây Nam", L"Chính Tây", L"Tây Bắc"
+    static const BilingualText kHuongTaiThan[10] = {
+        { L"Đông Nam",  L"Southeast" }, { L"Đông Nam",  L"Southeast" },
+        { L"Chính Đông", L"East" },     { L"Chính Đông", L"East" },
+        { L"Chính Bắc", L"North" },     { L"Chính Nam", L"South" },
+        { L"Tây Nam",   L"Southwest" }, { L"Tây Nam",   L"Southwest" },
+        { L"Chính Tây", L"West" },      { L"Tây Bắc",   L"Northwest" },
     };
-    info.huongHyThan = kHuongHyThan[canDayIdx];
-    info.huongTaiThan = kHuongTaiThan[canDayIdx];
+    info.huongHyThan = PickText(vi, kHuongHyThan[canDayIdx].vi, kHuongHyThan[canDayIdx].en);
+    info.huongTaiThan = PickText(vi, kHuongTaiThan[canDayIdx].vi, kHuongTaiThan[canDayIdx].en);
 
     info.specialHoliday = EvaluateVietnameseHoliday(
-        sDay, sMonth, info.lDay, info.lMonth, info.isLeap).names;
+        sDay, sMonth, info.lDay, info.lMonth, info.isLeap, vi).names;
 
     return info;
 }
 
-std::wstring FormatTooltipHoroscope() {
+std::wstring FormatTooltipHoroscope(ModSettings const& settings) {
+    bool vi = UseVietnameseLabels(settings);
     SYSTEMTIME st{};
     GetLocalTime(&st);
-    ComputedHoroscope h = ComputeHoroscopeForDate(st.wYear, st.wMonth, st.wDay, st.wHour);
+    ComputedHoroscope h = ComputeHoroscopeForDate(st.wYear, st.wMonth, st.wDay, vi, st.wHour);
 
     WCHAR lunarHeader[256]{};
-    if (h.isLeap) {
-        _snwprintf_s(lunarHeader, _TRUNCATE,
-                     L"📅 Âm lịch: Ngày %02d Tháng %02d (Nhuận) Năm %s",
-                     h.lDay, h.lMonth, h.yearCanChi.c_str());
+    if (vi) {
+        if (h.isLeap) {
+            _snwprintf_s(lunarHeader, _TRUNCATE,
+                         L"📅 Âm lịch: Ngày %02d Tháng %02d (Nhuận) Năm %s",
+                         h.lDay, h.lMonth, h.yearCanChi.c_str());
+        } else {
+            _snwprintf_s(lunarHeader, _TRUNCATE,
+                         L"📅 Âm lịch: Ngày %02d Tháng %02d Năm %s (%02d/%02d/%d)",
+                         h.lDay, h.lMonth, h.yearCanChi.c_str(), h.lDay, h.lMonth, h.lYear);
+        }
     } else {
-        _snwprintf_s(lunarHeader, _TRUNCATE,
-                     L"📅 Âm lịch: Ngày %02d Tháng %02d Năm %s (%02d/%02d/%d)",
-                     h.lDay, h.lMonth, h.yearCanChi.c_str(), h.lDay, h.lMonth, h.lYear);
+        if (h.isLeap) {
+            _snwprintf_s(lunarHeader, _TRUNCATE,
+                         L"📅 Lunar Date: %02d/%02d/%d (Leap Month, Year of %s)",
+                         h.lDay, h.lMonth, h.lYear, h.yearCanChi.c_str());
+        } else {
+            _snwprintf_s(lunarHeader, _TRUNCATE,
+                         L"📅 Lunar Date: %02d/%02d/%d (Year of %s)",
+                         h.lDay, h.lMonth, h.lYear, h.yearCanChi.c_str());
+        }
     }
 
-    std::wstring holidayLine = h.specialHoliday.empty()
-                                   ? L""
-                                   : (L"\r\n🎉 Sự kiện: " + h.specialHoliday);
+    std::wstring holidayLine;
+    if (!h.specialHoliday.empty()) {
+        holidayLine = std::wstring(vi ? L"\r\n🎉 Sự kiện: " : L"\r\n🎉 Event: ") + h.specialHoliday;
+    }
 
     WCHAR buffer[2048]{};
-    _snwprintf_s(
-        buffer, _TRUNCATE,
-        L"%s%s"
-        L"\r\n🐉 Bát tự: Giờ %s • Ngày %s • Tháng %s • Năm %s"
-        L"\r\n☯ Mệnh ngày: %s"
-        L"\r\n%s %s (%s) • Trực: %s"
-        L"\r\n⏰ Giờ Hoàng Đạo: %s"
-        L"\r\n🔮 Tử vi (Nên): %s"
-        L"\r\n⛔ Việc Kỵ: %s"
-        L"\r\n🧭 Tuổi xung: %s • Xuất hành: %s (Hỷ), %s (Tài)",
-        lunarHeader,
-        holidayLine.c_str(),
-        h.hourCanChi.c_str(),
-        h.dayCanChi.c_str(),
-        h.monthCanChi.c_str(),
-        h.yearCanChi.c_str(),
-        h.napAmStr,
-        h.isHoangDao ? L"🌟" : L"⚪",
-        h.starName,
-        h.isHoangDao ? L"Ngày Tốt" : L"Ngày Hắc Đạo",
-        h.trucName,
-        h.gioHoangDao,
-        h.goodFor,
-        h.badFor,
-        h.tuoiXung.c_str(),
-        h.huongHyThan,
-        h.huongTaiThan);
+    if (vi) {
+        _snwprintf_s(
+            buffer, _TRUNCATE,
+            L"%s%s"
+            L"\r\n🐉 Bát tự: Giờ %s • Ngày %s • Tháng %s • Năm %s"
+            L"\r\n☯ Mệnh ngày: %s"
+            L"\r\n%s %s (%s) • Trực: %s"
+            L"\r\n⏰ Giờ Hoàng Đạo: %s"
+            L"\r\n🔮 Tử vi (Nên): %s"
+            L"\r\n⛔ Việc Kỵ: %s"
+            L"\r\n🧭 Tuổi xung: %s • Xuất hành: %s (Hỷ), %s (Tài)",
+            lunarHeader,
+            holidayLine.c_str(),
+            h.hourCanChi.c_str(),
+            h.dayCanChi.c_str(),
+            h.monthCanChi.c_str(),
+            h.yearCanChi.c_str(),
+            h.napAmStr,
+            h.isHoangDao ? L"🌟" : L"⚪",
+            h.starName,
+            h.isHoangDao ? L"Ngày Tốt" : L"Ngày Hắc Đạo",
+            h.trucName,
+            h.gioHoangDao,
+            h.goodFor,
+            h.badFor,
+            h.tuoiXung.c_str(),
+            h.huongHyThan,
+            h.huongTaiThan);
+    } else {
+        _snwprintf_s(
+            buffer, _TRUNCATE,
+            L"%s%s"
+            L"\r\n🐉 Four Pillars: Hour %s • Day %s • Month %s • Year %s"
+            L"\r\n☯ Element: %s"
+            L"\r\n%s %s (%s) • Officer (Trực): %s"
+            L"\r\n⏰ Auspicious Hours: %s"
+            L"\r\n🔮 Good for: %s"
+            L"\r\n⛔ Avoid: %s"
+            L"\r\n🧭 Clash: %s • Directions: %s (Joy), %s (Wealth)",
+            lunarHeader,
+            holidayLine.c_str(),
+            h.hourCanChi.c_str(),
+            h.dayCanChi.c_str(),
+            h.monthCanChi.c_str(),
+            h.yearCanChi.c_str(),
+            h.napAmStr,
+            h.isHoangDao ? L"🌟" : L"⚪",
+            h.starName,
+            h.isHoangDao ? L"Auspicious" : L"Inauspicious",
+            h.trucName,
+            h.gioHoangDao,
+            h.goodFor,
+            h.badFor,
+            h.tuoiXung.c_str(),
+            h.huongHyThan,
+            h.huongTaiThan);
+    }
 
     return buffer;
 }
@@ -591,54 +812,91 @@ struct HoroscopePageData {
     std::wstring lineXungHuong;
 };
 
-HoroscopePageData BuildHoroscopePageData(int32_t key) {
+HoroscopePageData BuildHoroscopePageData(int32_t key, bool vi) {
     HoroscopePageData out;
     int sYear = key / 10000;
     int sMonth = (key / 100) % 100;
     int sDay = key % 100;
 
-    ComputedHoroscope h = ComputeHoroscopeForDate(sYear, sMonth, sDay);
+    ComputedHoroscope h = ComputeHoroscopeForDate(sYear, sMonth, sDay, vi);
 
     WCHAR buf[512]{};
     _snwprintf_s(buf, _TRUNCATE, L"%s, %02d/%02d/%d", h.weekdayStr, sDay, sMonth, sYear);
     out.headerSolar = buf;
 
-    if (h.isLeap) {
-        _snwprintf_s(buf, _TRUNCATE, L"Âm lịch: %02d/%02d (Nhuận) Năm %s",
-                     h.lDay, h.lMonth, h.yearCanChi.c_str());
+    if (vi) {
+        if (h.isLeap) {
+            _snwprintf_s(buf, _TRUNCATE, L"Âm lịch: %02d/%02d (Nhuận) Năm %s",
+                         h.lDay, h.lMonth, h.yearCanChi.c_str());
+        } else {
+            _snwprintf_s(buf, _TRUNCATE, L"Âm lịch: %02d/%02d/%d (%s)",
+                         h.lDay, h.lMonth, h.lYear, h.yearCanChi.c_str());
+        }
     } else {
-        _snwprintf_s(buf, _TRUNCATE, L"Âm lịch: %02d/%02d/%d (%s)",
-                     h.lDay, h.lMonth, h.lYear, h.yearCanChi.c_str());
+        if (h.isLeap) {
+            _snwprintf_s(buf, _TRUNCATE, L"Lunar: %02d/%02d/%d (Leap, Year of %s)",
+                         h.lDay, h.lMonth, h.lYear, h.yearCanChi.c_str());
+        } else {
+            _snwprintf_s(buf, _TRUNCATE, L"Lunar: %02d/%02d/%d (Year of %s)",
+                         h.lDay, h.lMonth, h.lYear, h.yearCanChi.c_str());
+        }
     }
     out.headerLunar = buf;
     if (!h.specialHoliday.empty()) {
         out.headerLunar += L"  •  🎉 " + h.specialHoliday;
     }
 
-    _snwprintf_s(buf, _TRUNCATE, L"🐉 Ngày %s  •  Tháng %s  •  Năm %s",
-                 h.dayCanChi.c_str(), h.monthCanChi.c_str(), h.yearCanChi.c_str());
-    out.lineCanChi = buf;
+    if (vi) {
+        _snwprintf_s(buf, _TRUNCATE, L"🐉 Ngày %s  •  Tháng %s  •  Năm %s",
+                     h.dayCanChi.c_str(), h.monthCanChi.c_str(), h.yearCanChi.c_str());
+        out.lineCanChi = buf;
 
-    _snwprintf_s(buf, _TRUNCATE, L"☯ Mệnh: %s\n%s %s (%s)  •  Trực: %s",
-                 h.napAmStr,
-                 h.isHoangDao ? L"🌟" : L"⚪",
-                 h.starName,
-                 h.isHoangDao ? L"Ngày Tốt" : L"Hắc Đạo",
-                 h.trucName);
-    out.lineMenhTruc = buf;
+        _snwprintf_s(buf, _TRUNCATE, L"☯ Mệnh: %s\n%s %s (%s)  •  Trực: %s",
+                     h.napAmStr,
+                     h.isHoangDao ? L"🌟" : L"⚪",
+                     h.starName,
+                     h.isHoangDao ? L"Ngày Tốt" : L"Hắc Đạo",
+                     h.trucName);
+        out.lineMenhTruc = buf;
 
-    _snwprintf_s(buf, _TRUNCATE, L"⏰ Giờ Hoàng Đạo: %s", h.gioHoangDao);
-    out.lineGioHoangDao = buf;
+        _snwprintf_s(buf, _TRUNCATE, L"⏰ Giờ Hoàng Đạo: %s", h.gioHoangDao);
+        out.lineGioHoangDao = buf;
 
-    _snwprintf_s(buf, _TRUNCATE, L"🔮 Tử vi (Nên): %s", h.goodFor);
-    out.lineTuViNen = buf;
+        _snwprintf_s(buf, _TRUNCATE, L"🔮 Tử vi (Nên): %s", h.goodFor);
+        out.lineTuViNen = buf;
 
-    _snwprintf_s(buf, _TRUNCATE, L"⛔ Việc Kỵ: %s", h.badFor);
-    out.lineTuViKy = buf;
+        _snwprintf_s(buf, _TRUNCATE, L"⛔ Việc Kỵ: %s", h.badFor);
+        out.lineTuViKy = buf;
 
-    _snwprintf_s(buf, _TRUNCATE, L"🧭 Tuổi xung: %s  •  Hỷ thần: %s, Tài thần: %s",
-                 h.tuoiXung.c_str(), h.huongHyThan, h.huongTaiThan);
-    out.lineXungHuong = buf;
+        _snwprintf_s(buf, _TRUNCATE, L"🧭 Tuổi xung: %s  •  Hỷ thần: %s, Tài thần: %s",
+                     h.tuoiXung.c_str(), h.huongHyThan, h.huongTaiThan);
+        out.lineXungHuong = buf;
+    } else {
+        _snwprintf_s(buf, _TRUNCATE, L"🐉 Day %s  •  Month %s  •  Year %s",
+                     h.dayCanChi.c_str(), h.monthCanChi.c_str(), h.yearCanChi.c_str());
+        out.lineCanChi = buf;
+
+        _snwprintf_s(buf, _TRUNCATE, L"☯ Element: %s\n%s %s (%s)  •  Officer (Trực): %s",
+                     h.napAmStr,
+                     h.isHoangDao ? L"🌟" : L"⚪",
+                     h.starName,
+                     h.isHoangDao ? L"Auspicious" : L"Inauspicious",
+                     h.trucName);
+        out.lineMenhTruc = buf;
+
+        _snwprintf_s(buf, _TRUNCATE, L"⏰ Auspicious Hours: %s", h.gioHoangDao);
+        out.lineGioHoangDao = buf;
+
+        _snwprintf_s(buf, _TRUNCATE, L"🔮 Good for: %s", h.goodFor);
+        out.lineTuViNen = buf;
+
+        _snwprintf_s(buf, _TRUNCATE, L"⛔ Avoid: %s", h.badFor);
+        out.lineTuViKy = buf;
+
+        _snwprintf_s(buf, _TRUNCATE, L"🧭 Clash: %s  •  Directions: %s (Joy), %s (Wealth)",
+                     h.tuoiXung.c_str(), h.huongHyThan, h.huongTaiThan);
+        out.lineXungHuong = buf;
+    }
 
     return out;
 }
@@ -1070,6 +1328,8 @@ void OnLabelTextChanged(wux::DependencyObject const& sender) {
 }
 
 void OpenHoroscopeForDateKey(int32_t key) {
+    ModSettings settings = GetSettings();
+    if (!settings.enableCalendarFlyout || !settings.enableHoroscopePage) return;
     if (g_shuttingDown || !IsValidDate(key / 10000, (key / 100) % 100, key % 100)) return;
     if (key == t_selectedHoroscopeKey && t_horoscopePage.pageBorder.get() &&
         t_horoscopePage.renderedKey == key) return;
@@ -1081,6 +1341,19 @@ void OpenHoroscopeForDateKey(int32_t key) {
 
 void EnsureCalendarViewSelectionHooked(wuxc::CalendarView const& calView) {
     if (!calView) return;
+    ModSettings settings = GetSettings();
+    if (!settings.enableHoroscopePage) {
+        if (t_selectedDatesChangedToken.value != 0) {
+            try { calView.SelectedDatesChanged(t_selectedDatesChangedToken); } catch (...) {}
+            t_selectedDatesChangedToken = {};
+        }
+        if (t_hasSavedSelectionMode) {
+            try { calView.SelectionMode(t_savedSelectionMode); } catch (...) {}
+            t_hasSavedSelectionMode = false;
+        }
+        return;
+    }
+
     if (t_calendarView.get() == calView && t_selectedDatesChangedToken.value != 0) return;
 
     if (auto prev = t_calendarView.get()) {
@@ -1125,7 +1398,9 @@ bool IsOwnLunarCellText(std::wstring const& text) {
 }
 
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
-    if (!item) return;
+    ModSettings settings = GetSettings();
+    if (!settings.enableCalendarFlyout || !item) return;
+
     int32_t key = DateKeyFromDateTime(item.Date());
     if (!key) return;
 
@@ -1195,14 +1470,19 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     int lDay, lMonth, lYear;
     bool isLeap;
     std::wstring canChi;
-    GetLunarDateWinRT_ForDate(year, month, day, lDay, lMonth, lYear, isLeap, canChi);
+    GetVietnameseLunarDate(year, month, day, lDay, lMonth, lYear, isLeap, canChi);
 
+    bool vi = UseVietnameseLabels(settings);
     WCHAR buffer[64]{};
-    if (isLeap) _snwprintf_s(buffer, _TRUNCATE, L"%d/%d (Nhuận)", lDay, lMonth);
-    else _snwprintf_s(buffer, _TRUNCATE, L"%d/%d", lDay, lMonth);
+    if (isLeap) {
+        _snwprintf_s(buffer, _TRUNCATE, L"%d/%d (%s)",
+                     lDay, lMonth, PickText(vi, L"Nhuận", L"Leap"));
+    } else {
+        _snwprintf_s(buffer, _TRUNCATE, L"%d/%d", lDay, lMonth);
+    }
     std::wstring desired = buffer;
 
-    HolidayScope scope = EvaluateVietnameseHoliday(day, month, lDay, lMonth, isLeap).scope;
+    HolidayScope scope = EvaluateVietnameseHoliday(day, month, lDay, lMonth, isLeap, vi).scope;
     bool colorSolar = (scope == HolidayScope::Both || scope == HolidayScope::SolarOnly);
     bool colorLunar = (scope == HolidayScope::Both || scope == HolidayScope::LunarOnly);
 
@@ -1517,6 +1797,11 @@ void RestoreHoroscopeCalendarChildren() {
 }
 
 void UpdateHoroscopePageOnCurrentThread() {
+    ModSettings settings = GetSettings();
+    if (!settings.enableCalendarFlyout || !settings.enableHoroscopePage) {
+        t_selectedHoroscopeKey = 0;
+    }
+
     if (t_selectedHoroscopeKey != 0) EnsureHoroscopePageCreated();
 
     auto hostGrid = t_horoscopePage.hostGrid.get();
@@ -1529,7 +1814,8 @@ void UpdateHoroscopePageOnCurrentThread() {
     static thread_local bool loggedUpdateError = false;
     try {
         if (showDetail) {
-            HoroscopePageData data = BuildHoroscopePageData(t_selectedHoroscopeKey);
+            bool vi = UseVietnameseLabels(settings);
+            HoroscopePageData data = BuildHoroscopePageData(t_selectedHoroscopeKey, vi);
             if (auto tb = t_horoscopePage.titleSolar.get()) tb.Text(data.headerSolar);
             if (auto tb = t_horoscopePage.titleLunar.get()) tb.Text(data.headerLunar);
             if (auto tb = t_horoscopePage.rowCanChi.get()) tb.Text(data.lineCanChi);
@@ -1576,6 +1862,9 @@ void UpdateHoroscopePageOnCurrentThread() {
 // Scoped Calendar Header Lookup (Grid#CalendarCenterGrid > StackPanel#CalendarHeader)
 
 void UpdateHeaderLabelOnCurrentThread() {
+    ModSettings settings = GetSettings();
+    if (!settings.enableCalendarFlyout) return;
+
     wuxc::Panel headerPanel = t_headerState.headerPanel.get();
     if (!headerPanel) return;
 
@@ -1589,14 +1878,12 @@ void UpdateHeaderLabelOnCurrentThread() {
                 auto child = wuxm::VisualTreeHelper::GetChild(headerPanel, i);
                 if (!child) continue;
 
-                // Direct TextBlock child of StackPanel#CalendarHeader is the auxiliary calendar header
                 if (auto tb = child.try_as<wuxc::TextBlock>()) {
                     headerLabel = tb;
                     t_headerState.createdByMod = (ElementName(tb) == kCustomHeaderLunarName);
                     break;
                 }
 
-                // Find the primary date TextBlock inside the CalendarHeader's Button for theme brush reference
                 if (!primaryButtonTextBlock) {
                     std::vector<FoundElement> sub;
                     CollectDescendants(child, sub);
@@ -1617,7 +1904,6 @@ void UpdateHeaderLabelOnCurrentThread() {
                 } catch (...) {}
             }
 
-            // If no auxiliary header TextBlock exists in StackPanel#CalendarHeader, create one
             if (!headerLabel) {
                 wuxc::TextBlock newHeaderLunar;
                 newHeaderLunar.Name(kCustomHeaderLunarName);
@@ -1647,11 +1933,24 @@ void UpdateHeaderLabelOnCurrentThread() {
         std::wstring canChi;
         GetLunarDateToday(lDay, lMonth, lYear, isLeap, canChi);
 
+        bool vi = UseVietnameseLabels(settings);
         WCHAR buffer[128]{};
-        if (isLeap) {
-            _snwprintf_s(buffer, _TRUNCATE, L"%d Tháng %d (Nhuận) Năm %s", lDay, lMonth, canChi.c_str());
+        if (vi) {
+            if (isLeap) {
+                _snwprintf_s(buffer, _TRUNCATE, L"%d Tháng %d (Nhuận) Năm %s",
+                             lDay, lMonth, canChi.c_str());
+            } else {
+                _snwprintf_s(buffer, _TRUNCATE, L"%d Tháng %d Năm %s",
+                             lDay, lMonth, canChi.c_str());
+            }
         } else {
-            _snwprintf_s(buffer, _TRUNCATE, L"%d Tháng %d Năm %s", lDay, lMonth, canChi.c_str());
+            if (isLeap) {
+                _snwprintf_s(buffer, _TRUNCATE, L"Lunar: Day %d, Month %d (Leap), Year of %s",
+                             lDay, lMonth, canChi.c_str());
+            } else {
+                _snwprintf_s(buffer, _TRUNCATE, L"Lunar: Day %d, Month %d, Year of %s",
+                             lDay, lMonth, canChi.c_str());
+            }
         }
 
         std::wstring desired = buffer;
@@ -1719,6 +2018,7 @@ thread_local ULONGLONG t_lastCalendarOpenedTick = 0;
 
 void OnCalendarOpenedOnCurrentThread();
 void InitializeForCurrentThread();
+void UninitializeDayItemsForCurrentThread();
 
 void RegisterCalendarTriggersOnCurrentThread() {
     try {
@@ -1808,7 +2108,6 @@ void CollectDayItemsFromElement(wux::DependencyObject const& root,
     budget--;
 
     std::wstring name = ElementName(root);
-    // Never walk into NotificationCenterGrid
     if (name == L"NotificationCenterGrid") return;
     if (name == L"CalendarCenterGrid") insideCalendarCenter = true;
 
@@ -1862,6 +2161,8 @@ void OnCalendarOpenedOnCurrentThread() {
 
     t_selectedHoroscopeKey = 0;
 
+    if (!GetSettings().enableCalendarFlyout) return;
+
     RegisterCalendarTriggersOnCurrentThread();
     SweepDayItems();
     StartSweepTimer();
@@ -1869,6 +2170,12 @@ void OnCalendarOpenedOnCurrentThread() {
 }
 
 void SweepDayItems() {
+    ModSettings settings = GetSettings();
+    if (!settings.enableCalendarFlyout) {
+        UninitializeDayItemsForCurrentThread();
+        return;
+    }
+
     t_applyWrote = false;
     InitializeForCurrentThread();
     RegisterCalendarTriggersOnCurrentThread();
@@ -2003,9 +2310,6 @@ void UninitializeDayItemsForCurrentThread() {
     decltype(t_dayItems)().swap(t_dayItems);
     decltype(t_labelOwners)().swap(t_labelOwners);
 
-    t_gregorianCal = nullptr;
-    t_lunarCal = nullptr;
-
     t_sweepQuietTicks = 0;
     try { if (t_sweepTimer) t_sweepTimer.Stop(); } catch (...) {}
     t_sweepTimerRevoker.revoke();
@@ -2057,7 +2361,10 @@ void WINAPI ClockSystemTrayIconDataModel2_RefreshIcon_Hook(LPVOID pThis, LPVOID 
 void AppendHoroscopeToToolTipString(LPVOID tooltipPtrPtr) {
     if (!tooltipPtrPtr || !*(void**)tooltipPtrPtr) return;
 
-    std::wstring extraLine = FormatTooltipHoroscope();
+    ModSettings settings = GetSettings();
+    if (!settings.enableTaskbarTooltip) return;
+
+    std::wstring extraLine = FormatTooltipHoroscope(settings);
     if (extraLine.empty()) return;
     size_t extraLength = extraLine.size();
 
@@ -2187,7 +2494,11 @@ bool HookSystemTraySymbols(HMODULE module) {
             true,
         },
     };
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed for system tray module");
+        return false;
+    }
+    return true;
 }
 
 VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
@@ -2222,8 +2533,6 @@ HMODULE GetSystemTrayModuleHandle() {
     if (!module) {
         module = GetModuleHandleW(L"Taskbar.View.dll");
         if (module) {
-            // Starting with Taskbar.View.dll 2604.x, the SystemTray types moved
-            // out of Taskbar.View.dll into SystemTray.dll.
             VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(module, nullptr);
             WORD moduleMajor = fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
             if (!moduleMajor || moduleMajor >= 2604) {
@@ -2258,22 +2567,39 @@ int WINAPI GetTimeFormatEx_Hook(LPCWSTR lpLocaleName,
                                 LPWSTR lpTimeStr,
                                 int cchTime) {
     if (t_inRefreshIcon && !t_inGetTimeToolTipString) {
-        if (!cchTime) {
-            return FORMATTED_BUFFER_SIZE;
+        ModSettings settings = GetSettings();
+        if (settings.enableTaskbarClock && settings.taskbarClockSolarOnTop) {
+            if (!cchTime) {
+                return FORMATTED_BUFFER_SIZE;
+            }
+
+            // Preserve user's 12/24-hour setting and seconds via GetTimeFormatEx_Original
+            WCHAR origTime[128]{};
+            GetTimeFormatEx_Original(lpLocaleName, dwFlags, lpTime, lpFormat,
+                                     origTime, ARRAYSIZE(origTime));
+
+            SYSTEMTIME st{};
+            if (lpTime) {
+                st = *lpTime;
+            } else {
+                GetLocalTime(&st);
+            }
+
+            WCHAR weekdayBuf[32]{};
+            if (UseVietnameseLabels(settings)) {
+                static const PCWSTR kWeekdaysVi[] = {
+                    L"CN", L"T2", L"T3", L"T4", L"T5", L"T6", L"T7"
+                };
+                wcscpy_s(weekdayBuf, (st.wDayOfWeek < 7) ? kWeekdaysVi[st.wDayOfWeek] : L"");
+            } else {
+                GetDateFormatEx_Original(lpLocaleName, DATE_AUTOLAYOUT, &st, L"ddd",
+                                         weekdayBuf, ARRAYSIZE(weekdayBuf), nullptr);
+            }
+
+            _snwprintf_s(lpTimeStr, cchTime, _TRUNCATE, L"%s - %s, %02d/%02d",
+                         origTime, weekdayBuf, st.wDay, st.wMonth);
+            return static_cast<int>(wcslen(lpTimeStr)) + 1;
         }
-        SYSTEMTIME st{};
-        if (lpTime) {
-            st = *lpTime;
-        } else {
-            GetLocalTime(&st);
-        }
-        static const PCWSTR kWeekdays[] = {
-            L"CN", L"T2", L"T3", L"T4", L"T5", L"T6", L"T7"
-        };
-        PCWSTR weekday = (st.wDayOfWeek < 7) ? kWeekdays[st.wDayOfWeek] : L"";
-        _snwprintf_s(lpTimeStr, cchTime, _TRUNCATE, L"%02d:%02d - %s, %02d/%02d",
-                     st.wHour, st.wMinute, weekday, st.wDay, st.wMonth);
-        return static_cast<int>(wcslen(lpTimeStr)) + 1;
     }
     return GetTimeFormatEx_Original(lpLocaleName, dwFlags, lpTime, lpFormat, lpTimeStr, cchTime);
 }
@@ -2286,18 +2612,34 @@ int WINAPI GetDateFormatEx_Hook(LPCWSTR lpLocaleName,
                                 int cchDate,
                                 LPCWSTR lpCalendar) {
     if (t_inRefreshIcon && !t_inGetTimeToolTipString && !(dwFlags & DATE_LONGDATE)) {
-        if (!cchDate) {
-            return FORMATTED_BUFFER_SIZE;
+        ModSettings settings = GetSettings();
+        if (settings.enableTaskbarClock) {
+            if (!cchDate) {
+                return FORMATTED_BUFFER_SIZE;
+            }
+
+            SYSTEMTIME st{};
+            if (lpDate) {
+                st = *lpDate;
+            } else {
+                GetLocalTime(&st);
+            }
+
+            bool vi = UseVietnameseLabels(settings);
+            std::wstring lunarStr = FormatTaskbarLunarDate(st.wYear, st.wMonth, st.wDay, vi);
+
+            if (settings.taskbarClockSolarOnTop) {
+                _snwprintf_s(lpDateStr, cchDate, _TRUNCATE, L"%s", lunarStr.c_str());
+            } else {
+                // Keep the user's locale short date and append the lunar date
+                WCHAR origDate[128]{};
+                GetDateFormatEx_Original(lpLocaleName, dwFlags, lpDate, lpFormat,
+                                         origDate, ARRAYSIZE(origDate), lpCalendar);
+                _snwprintf_s(lpDateStr, cchDate, _TRUNCATE, L"%s • %s",
+                             origDate, lunarStr.c_str());
+            }
+            return static_cast<int>(wcslen(lpDateStr)) + 1;
         }
-        SYSTEMTIME st{};
-        if (lpDate) {
-            st = *lpDate;
-        } else {
-            GetLocalTime(&st);
-        }
-        std::wstring lunarStr = FormatTaskbarLunarDate(st.wYear, st.wMonth, st.wDay);
-        _snwprintf_s(lpDateStr, cchDate, _TRUNCATE, L"%s", lunarStr.c_str());
-        return static_cast<int>(wcslen(lpDateStr)) + 1;
     }
     return GetDateFormatEx_Original(lpLocaleName, dwFlags, lpDate, lpFormat, lpDateStr, cchDate, lpCalendar);
 }
@@ -2553,10 +2895,20 @@ std::vector<HWND> GetCalendarWindows() {
 
 template <typename Prototype>
 bool InstallHook(HMODULE module, PCSTR functionName, Prototype* hook, Prototype** original) {
-    if (!module) return false;
+    if (!module) {
+        Wh_Log(L"Module is null when hooking %S", functionName);
+        return false;
+    }
     Prototype* target = reinterpret_cast<Prototype*>(GetProcAddress(module, functionName));
-    if (!target) return false;
-    return WindhawkUtils::SetFunctionHook(target, hook, original);
+    if (!target) {
+        Wh_Log(L"Failed to resolve %S", functionName);
+        return false;
+    }
+    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
+        Wh_Log(L"Failed to set function hook for %S", functionName);
+        return false;
+    }
+    return true;
 }
 
 BOOL Wh_ModInit() {
@@ -2581,6 +2933,8 @@ BOOL Wh_ModInit() {
             break;
     }
 
+    LoadSettings();
+
     if (g_target == Target::Explorer) {
         if (HMODULE sysTrayModule = GetSystemTrayModuleHandle()) {
             g_systemTrayModuleHooked = true;
@@ -2588,7 +2942,10 @@ BOOL Wh_ModInit() {
         }
 
         HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
-        if (!kernelBaseModule) return FALSE;
+        if (!kernelBaseModule) {
+            Wh_Log(L"Failed to get kernelbase.dll handle");
+            return FALSE;
+        }
         InstallHook(kernelBaseModule, "LoadLibraryExW", LoadLibraryExW_Hook, &LoadLibraryExW_Original);
         InstallHook(kernelBaseModule, "GetTimeFormatEx", GetTimeFormatEx_Hook, &GetTimeFormatEx_Original);
         InstallHook(kernelBaseModule, "GetDateFormatEx", GetDateFormatEx_Hook, &GetDateFormatEx_Original);
@@ -2638,4 +2995,26 @@ void Wh_ModUninit() {
         RunFromWindowThread(hCoreWnd, [](PVOID) { UninitializeForCurrentThread(); }, nullptr);
     }
     UnhookPendingPostHooks();
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+    if (g_target == Target::Explorer) {
+        RefreshTaskbarClock();
+        return;
+    }
+    for (auto hCoreWnd : GetCalendarWindows()) {
+        RunFromWindowThread(
+            hCoreWnd,
+            [](PVOID) {
+                if (!GetSettings().enableCalendarFlyout) {
+                    UninitializeDayItemsForCurrentThread();
+                } else {
+                    t_horoscopePage.renderedKey = -1;
+                    SweepDayItems();
+                    StartSweepTimer();
+                }
+            },
+            nullptr);
+    }
 }
