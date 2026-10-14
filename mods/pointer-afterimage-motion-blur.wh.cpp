@@ -69,23 +69,23 @@ path, so it looks like a camera motion blur rather than a trail.
 
 // ==WindhawkModSettings==
 /*
-- opacity: 92
+- opacity: 50
   $name: Trail opacity (%)
   $description: 1-100. How solid the blur is right behind the pointer.
-- drawSpeed: 3
+- drawSpeed: 29
   $name: Minimum blur speed (cm/s)
   $description: >-
     0-50. Slower movements draw no blur (it would sit under the pointer anyway)
     and use almost no CPU. 0 draws at any speed.
-- trailMs: 30
+- trailMs: 25
   $name: Trail length (ms)
   $description: 10-150. How far back in time the blur reaches.
-- hideWhenFast: false
+- hideWhenFast: true
   $name: Hide the real cursor when moving very fast
   $description: >-
     Swaps the system cursors for an invisible one while you move fast, and
     restores your cursor scheme afterwards.
-- hideSpeed: 40
+- hideSpeed: 30
   $name: Hide above speed (cm/s)
   $description: 20-300. Measured on the main monitor; the same hand speed on every monitor.
 - pauseInFullscreen: true
@@ -143,7 +143,7 @@ static std::atomic<bool> g_drawFailed;   // the overlay could not draw: then nev
 static std::atomic<bool> g_monStale, g_spritesStale;   // display or cursor settings changed
 static std::atomic<bool> g_recheck;      // settings or the active window changed: look at the window in front now
 static std::atomic<bool> g_paused;       // a fullscreen app is in front
-static std::atomic<bool> g_drawing;      // the mouse moves faster than the draw speed: the blur is drawn
+static std::atomic<bool> g_drawing;      // the blur is drawn: above the minimum blur speed, or while the cursor is hidden
 static std::atomic<HCURSOR> g_pictureOf; // the cursor whose picture the blur has: hiding waits until it is the current one
 static std::atomic<bool> g_stop;
 static std::atomic<HWND> g_wnd;          // the overlay window (owned by the render thread)
@@ -285,6 +285,7 @@ static DWORD WINAPI SampleThread(void*) {
     double hidePxPerCm = 38;    // turns the hide speed (cm/s on the main monitor) into px/s on the monitor in use
     LONGLONG lastMove = 0, lastFast = 0, lastDrawn = 0, lastLook = -1000, crossedAt = 0;
     bool paused = false, timerHigh = false, adminFront = false;
+    bool fastEnough = false;    // above the minimum blur speed (switched only after 16 ms past the line)
     while (!g_stop) {
         // The window in front: whenever another window is activated (the shell hook says so, administrator windows
         // included), and every half second while the mouse moves, as an app can also go fullscreen in place.
@@ -409,20 +410,16 @@ static DWORD WINAPI SampleThread(void*) {
                 if (i > j) recentPath += d;
             }
             double speed = dt >= 4 ? path * 1000.0 / dt : 0;
-            double drawAt = g_drawSpeedCm * hidePxPerCm * (g_drawing ? 0.5 : 1);
+            double drawAt = g_drawSpeedCm * hidePxPerCm * (fastEnough ? 0.5 : 1);
             bool want = g_histN > 1 && (g_drawSpeedCm == 0 || (dt >= 4 && speed >= drawAt));
-            if (want == g_drawing || g_histN < 2 || g_drawSpeedCm == 0) {
+            if (want == fastEnough || g_histN < 2 || g_drawSpeedCm == 0) {
                 crossedAt = 0;
-                g_drawing = want;
+                fastEnough = want;
             } else if (!crossedAt) {
                 crossedAt = now;
             } else if (now - crossedAt >= 16) {
                 crossedAt = 0;
-                g_drawing = want;
-            }
-            if (changed && g_drawing) {   // new mouse position, fast enough: draw now
-                lastDrawn = now;
-                SetEvent(g_moved);
+                fastEnough = want;
             }
             bool wasHidden = g_hideWanted;
             if (!g_hideWhenFast || g_drawFailed) {
@@ -431,9 +428,7 @@ static DWORD WINAPI SampleThread(void*) {
                 double hide = g_hideSpeedCm * hidePxPerCm;   // px/s on this monitor, the same hand speed everywhere
                 LONGLONG recentDt = now - g_hist[j].t;
                 double recent = recentDt >= 4 ? recentPath * 1000.0 / recentDt : speed;
-                // Only while the blur is drawn, with the picture of this very cursor: once the real cursor is swapped for
-                // the invisible one, its picture can no longer be taken.
-                if (speed > hide && g_drawing && g_pictureOf == g_curHandle) {
+                if (speed > hide) {
                     g_hideWanted = true;
                     lastFast = now;
                 } else if (g_hideWanted && recent < hide * 0.5 && now - lastFast > HOLD_MS) {
@@ -441,8 +436,14 @@ static DWORD WINAPI SampleThread(void*) {
                 }
             }
             if (g_hideWanted && now - lastMove > HOLD_MS + SHOW_WINDOW_MS) g_hideWanted = false;   // stopped
-            if (g_hideWanted && !g_drawing) g_hideWanted = false;   // never hidden without the blur
             if (g_hideWanted != wasHidden) SetEvent(g_hideChanged);
+            // The minimum blur speed only decides drawing; hiding goes by its own speed. A hidden cursor always gets its
+            // blur, so the pointer never disappears.
+            g_drawing = fastEnough || g_hideWanted;
+            if ((changed || g_hideWanted != wasHidden) && g_drawing) {   // draw now
+                lastDrawn = now;
+                SetEvent(g_moved);
+            }
         }
         bool hidden = g_hideWanted;
         LeaveCriticalSection(&g_gate);
@@ -458,7 +459,8 @@ static DWORD WINAPI SampleThread(void*) {
             // Sleep until the mouse moves or another window is activated; while an app hides the cursor, just look once
             // per report. While a window with more rights is in front no mouse reports arrive, so look at the cursor
             // every 10 ms instead, and every 100 ms once the mouse has been still for a second.
-            if (g_drawing) {   // the trail has faded: the next movement starts below the minimum blur speed again
+            if (fastEnough) {   // the trail has faded: the next movement starts below the minimum blur speed again
+                fastEnough = false;
                 g_drawing = false;
                 crossedAt = 0;
             }
@@ -483,8 +485,11 @@ static DWORD WINAPI HideThread(void*) {
     while (!g_stop) {
         EnterCriticalSection(&g_gate);
         bool want = g_hideWanted;
+        HCURSOR cur = g_curHandle;
         LeaveCriticalSection(&g_gate);
-        if (want && !g_blankActive) {
+        // Swap only once the blur has this cursor's picture: from the invisible one it can't be taken. The render thread
+        // takes it on its next frame (a few ms) and wakes this thread.
+        if (want && !g_blankActive && g_pictureOf == cur) {
             SetBlank(true);
             for (UINT id : ids) {
                 HCURSOR c = CreateCursor(nullptr, 0, 0, 32, 32, andMask, xorMask);
@@ -848,7 +853,10 @@ static bool Render() {
         sp = GetSprite(handle, size);
         if (sp) {
             g_lastSprite = sp;
-            g_pictureOf = handle;
+            if (g_pictureOf != handle) {   // the hider may be waiting for this picture
+                g_pictureOf = handle;
+                SetEvent(g_hideChanged);
+            }
         } else {
             sp = g_lastSprite;
         }
@@ -885,10 +893,13 @@ static bool Render() {
         if (k < 1) k = 1;
         for (int c = 0; c < k && n < COPY_BUF; c++) {
             double t = (double)c / k;
-            double life = 1.0 - (now - (a.t + (b.t - a.t) * t)) / trail;
-            if (life <= 0) continue;
-            life *= life;   // steeper fade
-            double alpha = peak * life * step / cover;   // copies overlap by about cover/step: each gets that share
+            double age = (now - (a.t + (b.t - a.t) * t)) / trail;   // 0 at the pointer, 1 at the end of the trail
+            if (age >= 1) continue;
+            double life = 1.0 - age * age;   // nearly full strength behind the pointer, fading out toward the end
+            // About cover/step copies overlap at each point; layered on top of each other they add up to the target
+            // opacity when each has 1 - (1 - target)^(step/cover).
+            double target = peak * life, overlap = cover / step;
+            double alpha = overlap > 1 ? 1 - pow(1 - target, 1 / overlap) : target;
             if (alpha * 255 < 0.5) continue;
             copies[n++] = {(int)lround(a.x + dx * t) - hx - minX, (int)lround(a.y + dy * t) - hy - minY,
                            alpha > 1 ? 1.0f : (float)alpha};
