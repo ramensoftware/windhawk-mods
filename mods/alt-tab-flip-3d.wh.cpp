@@ -1886,8 +1886,6 @@ bool IsSwitchableWindow(HWND hwnd, const WindowFilter& filter, bool* hidden) {
     return true;
 }
 
-// Whether the window belongs to one of the excluded apps, by process name or
-// window class name.
 // The full path of the window's program, or empty.
 std::wstring GetWindowProcessPath(HWND hwnd) {
     DWORD processId = 0;
@@ -1905,6 +1903,8 @@ std::wstring GetWindowProcessPath(HWND hwnd) {
     return gotPath ? std::wstring(path, size) : std::wstring();
 }
 
+// Whether the window belongs to one of the excluded apps, by process name or
+// window class name.
 bool IsExcludedApp(HWND hwnd, const std::vector<std::wstring>& excluded) {
     if (excluded.empty()) {
         return false;
@@ -2415,6 +2415,7 @@ class Switcher {
     bool EnsureChain(EffectChain& chain);
 
     com_ptr<ID2D1Bitmap1> GetIconBitmap(HWND hwnd);
+    void LookUpAppNames(const std::vector<HWND>& windows);
     void RefreshIcons();
     com_ptr<IWICBitmap> ReadIconPixels(HICON icon);
     com_ptr<IWICBitmap> ReadAppIconPixels(HWND hwnd);
@@ -4247,6 +4248,14 @@ void Switcher::ShowOverlay() {
             item->placeholder = CreatePlaceholder(*item);
         }
     }
+    // Usually found after an earlier session already.
+    if (ShowsAppName(m_settings.style)) {
+        std::vector<HWND> windows;
+        for (const auto& item : m_items) {
+            windows.push_back(item->hwnd);
+        }
+        LookUpAppNames(windows);
+    }
     m_accent = GetAccentColor();
     m_redraw = true;
 
@@ -5708,16 +5717,13 @@ void Switcher::DrawCaption(float t) {
                                                         ellipsis.put());
             m_appNameFormat->SetTrimming(&trimming, ellipsis.get());
         }
-        // Looked up once per window: it asks the shell, which can take a
-        // moment the first time.
-        auto it = m_appNames.find(item.hwnd);
-        if (it == m_appNames.end()) {
-            it = m_appNames.emplace(item.hwnd, GetAppName(item.hwnd)).first;
-        }
+        // Looked up before the session opened (see LookUpAppNames), never
+        // during a frame.
+        const auto it = m_appNames.find(item.hwnd);
+        const std::wstring name = it != m_appNames.end() ? it->second : L"";
         if (FAILED(m_dwriteFactory->CreateTextLayout(
-                it->second.c_str(), (UINT32)it->second.size(),
-                m_appNameFormat.get(), m_width * 0.6f, fontSize * 2,
-                m_appNameLayout.put()))) {
+                name.c_str(), (UINT32)name.size(), m_appNameFormat.get(),
+                m_width * 0.6f, fontSize * 2, m_appNameLayout.put()))) {
             m_appNameLayout = nullptr;
         }
     }
@@ -6063,12 +6069,35 @@ com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
     return entry.bitmap;
 }
 
+// The app names of the windows that don't have one yet, for the iTab
+// captions. Asking the shell can take a moment, so it's done outside the
+// animation: after a session for the windows it showed (see RefreshIcons),
+// and before a session opens for new ones (see ShowOverlay).
+void Switcher::LookUpAppNames(const std::vector<HWND>& windows) {
+    for (HWND hwnd : windows) {
+        if (!m_appNames.contains(hwnd)) {
+            m_appNames.emplace(hwnd, GetAppName(hwnd));
+        }
+    }
+}
+
 // Forgets closed windows and picks up icons that changed.
 void Switcher::RefreshIcons() {
     std::erase_if(m_iconCache,
                   [](const auto& entry) { return !IsWindow(entry.first); });
     std::erase_if(m_appNames,
                   [](const auto& entry) { return !IsWindow(entry.first); });
+    for (int i = 0; i < kShortcutCount; i++) {
+        if (m_settings.shortcutOn[i] &&
+            ShowsAppName(m_settings.shortcutStyle[i])) {
+            std::vector<HWND> windows;
+            for (const auto& [hwnd, entry] : m_iconCache) {
+                windows.push_back(hwnd);
+            }
+            LookUpAppNames(windows);
+            break;
+        }
+    }
 
     for (auto& [hwnd, entry] : m_iconCache) {
         HICON icon = GetWindowIcon(hwnd);
