@@ -1,15 +1,17 @@
 // ==WindhawkMod==
 // @id              vietnamese-lunar-calendar
 // @name            Vietnamese Lunar Calendar & Horoscope
-// @description     Hiển thị Âm lịch trên Taskbar, Tử Vi trong Tooltip khi rê chuột vào đồng hồ, và Lịch Vạn Niên trên khay Lịch
-// @version         2.0.1
+// @name:vi-VN      Lịch Âm Việt Nam & Tử Vi Vạn Niên
+// @description     Displays the Vietnamese Lunar Calendar, traditional holidays, Sexagenary cycle (Can Chi), and daily Horoscope (Tử Vi) on the Windows 11 taskbar clock, tooltip, and calendar flyout
+// @description:vi-VN Hiển thị Âm lịch Việt Nam, ngày lễ truyền thống, Bát tự Can Chi và Tử Vi hàng ngày trên đồng hồ Taskbar, hộp chú thích và khay Lịch Windows 11
+// @version         1.0.0
 // @author          caotu2k5
 // @github          https://github.com/caotu2k5
 // @include         explorer.exe
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -17,165 +19,107 @@
 /*
 # Vietnamese Lunar Calendar & Horoscope
 
-Bộ công cụ **Lịch Vạn Niên & Tử Vi Việt Nam** tích hợp toàn diện vào giao diện gốc của Windows 10, Windows 11, hoạt động độc lập mà **không cần bật Lịch phụ tiếng Trung** trong Cài đặt Windows.
+Integrates the **Vietnamese Lunar Calendar (Lịch Vạn Niên)** and **Daily Horoscope (Tử Vi)** directly into the Windows 11 taskbar clock, clock tooltip, and calendar flyout without requiring Windows auxiliary calendar settings.
 
-Github: caotu2k5
+Only **Windows 11** is supported.
 
-## ✨ Tính năng chính
+![Screenshot](https://raw.githubusercontent.com/caotu2k5/windhawk-mods/main/main/screenshot1.png)
 
-### 1. Đồng hồ Âm - Dương trên thanh Taskbar (`explorer.exe`)
-* **Dòng trên:** Hiển thị Giờ:Phút, Thứ tiếng Việt và Ngày/Tháng Dương lịch (VD: `14:46 - T4, 14/10`).
-* **Dòng dưới:** Hiển thị Ngày/Tháng Âm lịch (tự động nhận diện tháng Nhuận) kèm năm Can Chi (VD: `05/09 Bính Ngọ`).
+Screenshot 1
 
-### 2. Bảng Bát Tự & Tử Vi trong hộp Tooltip khi rê chuột vào đồng hồ
-Khi di chuột lên đồng hồ góc phải Taskbar, hộp chú thích (Tooltip) sẽ tự động hiển thị:
-* 📅 **Âm lịch chi tiết:** Ngày, Tháng, Năm Can Chi và tên Ngày lễ/Sự kiện trong năm.
-* 🐉 **Bát tự (Tứ trụ):** Giờ Can Chi • Ngày Can Chi • Tháng Can Chi • Năm Can Chi.
-* ☯ **Ngũ hành & Trực/Sao:** Mệnh ngày (30 Nạp âm), 12 Sao Hoàng Đạo / Hắc Đạo và Thập Nhị Trực.
-* ⏰ **Giờ Hoàng Đạo:** 6 khung giờ tốt trong ngày để xuất hành, thực hiện việc quan trọng.
-* 🔮 **Tử vi (Nên & Kỵ):** Gợi ý các việc cát lợi nên làm và các việc cần tránh trong ngày.
-* 🧭 **Phong thủy ngày:** Tuổi xung khắc trong ngày và hướng xuất hành đón Hỷ Thần, Tài Thần.
+![Screenshot](https://raw.githubusercontent.com/caotu2k5/windhawk-mods/main/main/screenshot2.png)
 
-### 3. Khay Lịch Âm Việt Nam & Đánh dấu Ngày Lễ (`ShellExperienceHost.exe` / `ShellHost.exe`)
-* Tự động tạo và căn chỉnh dòng ngày Âm lịch bên dưới số ngày Dương lịch trên lưới lịch Windows 11 (kể cả khi chọn *"Không hiển thị các lịch khác"* trong Settings).
-* Hiển thị dòng tiêu đề Âm lịch tiếng Việt trên Header (VD: `5 Tháng 9 Năm Bính Ngọ`).
-* **Phân loại màu sắc ngày lễ chuẩn Lịch Bloc Việt Nam:**
-  * 🔴 **Đỏ cả số Dương và chữ Âm:** Tết Dương lịch (1/1), Tết Nguyên Đán (Mùng 1–3, 29–30 Tết), Rằm tháng Giêng, Lễ Vu Lan (15/7 ÂL), Tết Trung Thu (15/8 ÂL).
-  * 🔴 **Chỉ đỏ số Dương lịch:** Các ngày lễ Dương lịch Việt Nam & Quốc tế (14/2, 8/3, 26/3, 30/4, 1/5, 1/6, 2/9, 20/10, 20/11, 24/11, 22/12, 24–25/12) — giữ nguyên màu trung tính cho dòng Âm lịch bên dưới.
-  * 🔴 **Chỉ đỏ dòng Âm lịch:** Giỗ Tổ Hùng Vương (10/3 ÂL), Lễ Phật Đản (15/4 ÂL), Tết Đoan Ngọ (5/5 ÂL), Ông Công Ông Táo (23/12 ÂL).
+Screenshot 2
 
-### 4. Trang Chi tiết Tử Vi khi Click vào từng ô ngày
-* Khi bấm chọn một ngày bất kỳ trên khay lịch mở rộng, giao diện sẽ chuyển sang **Trang tra cứu Tử Vi & Can Chi** của riêng ngày hôm đó.
-* Hỗ trợ nút **`←`** ở góc trên bên trái để quay lại lưới lịch tháng nhanh chóng.
+## Features
+
+1. **Taskbar Clock (`explorer.exe`)**
+   * **Top line:** Time, Vietnamese weekday abbreviation, and solar day/month (e.g., `14:46 - T4, 14/10`).
+   * **Bottom line:** Lunar day/month (with automatic leap-month detection) and the Sexagenary year name (e.g., `05/09 Bính Ngọ`).
+2. **Detailed Horoscope Tooltip (`explorer.exe`)**
+   * Hovering over the taskbar clock appends a full Vietnamese almanac breakdown:
+     * Lunar date, Sexagenary year, and special Vietnamese holidays/events.
+     * Four Pillars (Bát Tự): Hour, Day, Month, and Year stems and branches (Can Chi).
+     * Five Elements destiny (Ngũ Hành Nạp Âm), 12 Auspicious/Inauspicious stars (Hoàng Đạo / Hắc Đạo), and 12 Day Officers (Thập Nhị Trực).
+     * Six Auspicious Hours (Giờ Hoàng Đạo) of the day.
+     * Daily recommendations (Việc Nên & Việc Kỵ), conflicting zodiac signs (Tuổi xung), and auspicious travel directions (Hướng xuất hành).
+3. **Calendar Flyout Grid & Header (`ShellExperienceHost.exe` / `ShellHost.exe`)**
+   * Displays the full Vietnamese lunar date in the calendar header (`CalendarHeader`) and beneath each solar day cell, even when *"Don't show additional calendars"* is selected in Windows Settings.
+   * Color-codes traditional Vietnamese solar holidays, lunar holidays, and major festivals (Tết Nguyên Đán, Rằm tháng Giêng, Giỗ Tổ Hùng Vương, Vu Lan, Trung Thu, etc.).
+4. **Interactive Horoscope Detail View**
+   * Clicking any date cell in the calendar flyout opens a dedicated almanac and horoscope page for that specific date, with a back button (`←`) to return to the month grid.
+
+## Compatibility Note
+
+Because this mod customizes the taskbar clock text, clock tooltip, and calendar flyout day cells, enabling it alongside **Taskbar Clock Customization** or **Chinese Holiday Calendar** will cause the mods to overwrite each other's text.
+
+## Credits
+
+* Calendar flyout injection plumbing adapted from [Chinese Holiday Calendar](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/chinese-holiday-calendar.wh.cpp) by **dcsmf**.
+* Taskbar clock and tooltip hooks adapted from [Taskbar Clock Customization](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-clock-customization.wh.cpp) by **m417z**.
+
+---
+
+# Lịch Âm Việt Nam & Tử Vi Vạn Niên (Tiếng Việt)
+
+Tích hợp **Lịch Vạn Niên (Âm lịch Việt Nam)** và **Tử Vi hàng ngày** trực tiếp vào đồng hồ Taskbar, hộp chú thích (Tooltip) và khay Lịch của **Windows 11** mà không cần bật lịch phụ tiếng Trung trong Cài đặt Windows.
+
+## Tính năng chính
+
+1. **Đồng hồ Âm - Dương trên thanh Taskbar:** Hiển thị `Giờ:Phút - Thứ, Ngày/Tháng` ở dòng trên và `Ngày/Tháng Âm lịch + Năm Can Chi` ở dòng dưới.
+2. **Bảng Bát Tự & Tử Vi trong hộp chú thích (Tooltip):** Khi rê chuột vào đồng hồ góc phải, hộp chú thích hiển thị đầy đủ ngày Âm lịch, Bát tự (Giờ, Ngày, Tháng, Năm Can Chi), Mệnh ngày (Nạp âm), Sao Hoàng Đạo/Hắc Đạo, Thập Nhị Trực, 6 Giờ Hoàng Đạo, Việc Nên/Kỵ và Hướng xuất hành.
+3. **Khay Lịch Vạn Niên & Đánh dấu Ngày Lễ:** Tự động hiển thị ngày Âm lịch dưới từng ô ngày Dương lịch và tô màu đỏ theo đúng chuẩn Lịch Bloc Việt Nam (Lễ Dương lịch, Lễ Âm lịch, Tết Nguyên Đán, Rằm/Mùng 1).
+4. **Tra cứu Tử Vi theo ngày bất kỳ:** Click vào một ô ngày bất kỳ trên khay lịch để mở trang chi tiết Bát Tự & Tử Vi của ngày đó (bấm nút `←` để quay lại lưới lịch).
 */
 // ==/WindhawkModReadme==
 
+#include <windhawk_utils.h>
+
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <cwctype>
+#include <memory>
 #include <mutex>
+#include <string>
 #include <string_view>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 using namespace std::string_view_literals;
 
 #undef GetCurrentTime
 
-#include <winrt/Windows.UI.Core.h>
-#include <winrt/Windows.UI.Input.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Input.h>
-#include <winrt/Windows.Globalization.h>
-
-thread_local bool g_initializedForThread;
-
-#pragma region winrt_hpp
-
 #include <Unknwn.h>
 #include <winrt/base.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Globalization.h>
+#include <winrt/Windows.System.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
-
-namespace winrt {
-    namespace Windows {
-        namespace Foundation {}
-        namespace UI::Xaml {}
-    }
-}
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
 
 namespace wf = winrt::Windows::Foundation;
 namespace wuc = winrt::Windows::UI::Core;
 namespace wux = winrt::Windows::UI::Xaml;
-
-#pragma endregion
-
-#include <windhawk_utils.h>
-#include <chrono>
-#include <cstdlib>
-#include <cwctype>
-#include <memory>
-#include <optional>
-#include <string>
-#include <unordered_map>
-#include <utility>
-
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.System.h>
-#include <winrt/Windows.UI.Text.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
-#include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.h>
-
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
+thread_local bool g_initializedForThread = false;
+std::atomic<bool> g_shuttingDown{false};
+
+#define FORMATTED_BUFFER_SIZE 256
+
 ////////////////////////////////////////////////////////////////////////////////
-// Settings
-struct Settings {
-    std::wstring dataSourceUrl;
-    int refreshIntervalHours = 24;
-    bool replaceText = true;
-    std::wstring offDayText;
-    std::wstring workdayText = L"Bù";
-    winrt::Windows::UI::Color offDayColor{255, 78, 161, 255};
-    winrt::Windows::UI::Color workdayColor{255, 255, 90, 90};
-};
-
-std::mutex g_settingsMutex;
-std::shared_ptr<const Settings> g_settings = std::make_shared<Settings>();
-
-std::shared_ptr<const Settings> GetSettings() {
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return g_settings;
-}
-
-std::wstring ReadStringSetting(PCWSTR name) {
-    const WindhawkUtils::StringSetting value = WindhawkUtils::StringSetting::make(name);
-    return std::wstring(value.get());
-}
-
-std::optional<winrt::Windows::UI::Color> ParseHexColor(std::wstring const& text) {
-    std::wstring value;
-    for (wchar_t c : text) { if (!iswspace(c)) value += c; }
-    if (!value.empty() && value[0] == L'#') value = value.substr(1);
-    if (value.size() != 6 && value.size() != 8) return std::nullopt;
-
-    auto hexDigit = [](wchar_t c) -> int {
-        if (c >= L'0' && c <= L'9') return c - L'0';
-        if (c >= L'a' && c <= L'f') return c - L'a' + 10;
-        if (c >= L'A' && c <= L'F') return c - L'A' + 10;
-        return -1;
-    };
-
-    uint8_t bytes[4] = {0xFF, 0x00, 0x00, 0x00};
-    size_t offset = value.size() == 8 ? 0 : 1;
-    for (size_t i = 0; i + 1 < value.size(); i += 2) {
-        int hi = hexDigit(value[i]); int lo = hexDigit(value[i + 1]);
-        if (hi < 0 || lo < 0) return std::nullopt;
-        bytes[offset + i / 2] = static_cast<uint8_t>((hi << 4) | lo);
-    }
-    return winrt::Windows::UI::Color{bytes[0], bytes[1], bytes[2], bytes[3]};
-}
-
-winrt::Windows::UI::Color ReadColorSetting(PCWSTR name, winrt::Windows::UI::Color fallback) {
-    if (auto color = ParseHexColor(ReadStringSetting(name))) return *color;
-    return fallback;
-}
-
-void LoadSettings() {
-    auto settings = std::make_shared<Settings>();
-    settings->dataSourceUrl = ReadStringSetting(L"dataSourceUrl");
-    settings->refreshIntervalHours = Wh_GetIntSetting(L"refreshIntervalHours");
-    settings->replaceText = Wh_GetIntSetting(L"replaceText") != 0;
-    settings->offDayText = ReadStringSetting(L"offDayText");
-    settings->workdayText = ReadStringSetting(L"workdayText");
-    settings->offDayColor = ReadColorSetting(L"offDayColor", Settings{}.offDayColor);
-    settings->workdayColor = ReadColorSetting(L"workdayColor", Settings{}.workdayColor);
-
-    if (settings->refreshIntervalHours < 1) settings->refreshIntervalHours = 1;
-    { std::lock_guard<std::mutex> lock(g_settingsMutex); g_settings = settings; }
-}
+// String & Date Utilities
 
 std::wstring TrimWhitespace(std::wstring const& text) {
     size_t begin = 0, end = text.size();
@@ -184,313 +128,63 @@ std::wstring TrimWhitespace(std::wstring const& text) {
     return text.substr(begin, end - begin);
 }
 
-std::wstring Utf8ToWide(const char* data, size_t length) {
-    if (!data || !length) return {};
-    int size = MultiByteToWideChar(CP_UTF8, 0, data, static_cast<int>(length), nullptr, 0);
-    if (size <= 0) return {};
-    std::wstring result(static_cast<size_t>(size), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, data, static_cast<int>(length), result.data(), size);
-    return result;
+int32_t MakeDateKey(int year, int month, int day) {
+    return year * 10000 + month * 100 + day;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Date Logic
-struct HolidayInfo { std::wstring name; bool isOffDay = false; };
-using HolidayMap = std::unordered_map<int32_t, HolidayInfo>;
-
-int32_t MakeDateKey(int year, int month, int day) { return year * 10000 + month * 100 + day; }
 int DaysInMonth(int year, int month) {
     if (month < 1 || month > 12) return 0;
     static const int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     if (month == 2 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) return 29;
     return kDays[month - 1];
 }
+
 bool IsValidDate(int year, int month, int day) {
     if (year < 1900 || year > 9999) return false;
     return day >= 1 && day <= DaysInMonth(year, month);
 }
-int32_t ParseDateKey(std::wstring const& text) {
-    std::vector<int> parts; std::wstring current;
-    for (wchar_t c : text) {
-        if (c >= L'0' && c <= L'9') current += c;
-        else if (!current.empty()) { parts.push_back((int)wcstol(current.c_str(), nullptr, 10)); current.clear(); }
-    }
-    if (!current.empty()) parts.push_back((int)wcstol(current.c_str(), nullptr, 10));
 
-    int year = 0, month = 0, day = 0;
-    if (!parts.empty() && parts[0] >= 10000101) {
-        int value = parts[0]; year = value / 10000; month = (value / 100) % 100; day = value % 100;
-    } else if (parts.size() >= 3) { year = parts[0]; month = parts[1]; day = parts[2]; } else return 0;
-
-    if (!IsValidDate(year, month, day)) return 0;
-    return MakeDateKey(year, month, day);
-}
-int32_t NextDateKey(int32_t key) {
-    int year = key / 10000, month = (key / 100) % 100, day = key % 100;
-    int days = DaysInMonth(year, month);
-    if (days == 0) return 0;
-    day++;
-    if (day > days) { day = 1; month++; if (month > 12) { month = 1; year++; } }
-    return MakeDateKey(year, month, day);
-}
-
-std::mutex g_holidaysMutex;
-HolidayMap g_holidays;
-bool LookupHoliday(int32_t key, HolidayInfo& out) {
-    std::lock_guard<std::mutex> lock(g_holidaysMutex);
-    auto it = g_holidays.find(key);
-    if (it == g_holidays.end()) return false;
-    out = it->second; return true;
-}
-void StoreHolidays(HolidayMap parsed) {
-    std::lock_guard<std::mutex> lock(g_holidaysMutex); g_holidays = std::move(parsed);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// iCalendar parsing
-std::vector<std::wstring> SplitIcsLines(std::wstring const& text) {
-    std::vector<std::wstring> lines; std::wstring current;
-    auto flush = [&]() {
-        if (current.empty()) return;
-        if ((current[0] == L' ' || current[0] == L'\t') && !lines.empty()) lines.back() += current.substr(1);
-        else lines.push_back(current);
-        current.clear();
-    };
-    for (size_t i = 0; i < text.size(); i++) {
-        wchar_t c = text[i];
-        if (c == L'\r' || c == L'\n') { flush(); if (c == L'\r' && i + 1 < text.size() && text[i + 1] == L'\n') i++; }
-        else current += c;
-    }
-    flush(); return lines;
-}
-
-std::wstring UnescapeIcsText(std::wstring const& text) {
-    std::wstring result;
-    for (size_t i = 0; i < text.size(); i++) {
-        if (text[i] != L'\\' || i + 1 >= text.size()) { result += text[i]; continue; }
-        switch (text[++i]) {
-            case L'n': case L'N': result += L' '; break;
-            case L'\\': result += L'\\'; break;
-            case L';': result += L';'; break;
-            case L',': result += L','; break;
-            default: result += text[i]; break;
-        }
-    }
-    return result;
-}
-
-bool ClassifyIcsSummary(std::wstring const& summary, std::wstring& name, bool& isOffDay) {
-    std::wstring text = UnescapeIcsText(summary);
-    isOffDay = true;
-    struct Marker { const wchar_t* text; bool isOffDay; };
-    static const Marker kMarkers[] = {
-        {L"（补班）", false}, {L"(补班)", false}, {L"【补班】", false}, {L"[补班]", false},
-        {L"（班）", false},   {L"(班)", false},   {L"【班】", false},   {L"[班]", false},
-        {L"（休）", true},    {L"(休)", true},    {L"【休】", true},    {L"[休]", true},
-        {L"（放假）", true},  {L"(放假)", true},
-    };
-    bool marked = false;
-    for (const auto& marker : kMarkers) {
-        size_t pos = text.find(marker.text);
-        if (pos != std::wstring::npos) { text.erase(pos, wcslen(marker.text)); isOffDay = marker.isOffDay; marked = true; break; }
-    }
-    if (!marked) {
-        std::wstring trimmed = TrimWhitespace(text);
-        if (trimmed.size() >= 2) {
-            wchar_t last = trimmed[trimmed.size() - 1]; wchar_t before = trimmed[trimmed.size() - 2];
-            if ((last == L'休' || last == L'班') && (iswspace(before) || before == L'-' || before == L'/' || before == L'·' || before == L'—')) {
-                isOffDay = last == L'休'; marked = true; text = trimmed.substr(0, trimmed.size() - 1);
-            }
-        }
-    }
-    if (!marked) return false;
-    name = TrimWhitespace(text); return !name.empty();
-}
-
-std::atomic<bool> g_loggedRecurrence{false};
-constexpr size_t kMaxHolidayDates = 20000;
-
-bool ParseIcs(std::wstring const& text, HolidayMap& out) {
-    auto lines = SplitIcsLines(text);
-    bool inEvent = false, hasRecurrence = false, hitDateLimit = false, hasEnd = false;
-    size_t droppedRanges = 0, added = 0; int32_t start = 0, end = 0;
-    std::wstring summary;
-
-    auto flushEvent = [&]() {
-        if (!start) return;
-        if (added >= kMaxHolidayDates) { hitDateLimit = true; return; }
-        std::wstring name; bool isOffDay = true;
-        if (!ClassifyIcsSummary(summary, name, isOffDay)) return;
-        if (!hasEnd) end = NextDateKey(start);
-        else if (end <= start) { droppedRanges++; return; }
-        for (int32_t key = start; key && key < end; key = NextDateKey(key)) {
-            if (added >= kMaxHolidayDates) { hitDateLimit = true; break; }
-            HolidayInfo info; info.name = name; info.isOffDay = isOffDay;
-            out[key] = std::move(info); added++;
-        }
-    };
-
-    for (const auto& line : lines) {
-        if (line == L"BEGIN:VEVENT") { inEvent = true; start = 0; end = 0; hasEnd = false; summary.clear(); continue; }
-        if (line == L"END:VEVENT") { if (inEvent) flushEvent(); inEvent = false; continue; }
-        if (!inEvent) continue;
-        size_t colon = line.find(L':'); if (colon == std::wstring::npos) continue;
-        std::wstring name = line.substr(0, colon); std::wstring value = line.substr(colon + 1);
-        size_t semicolon = name.find(L';'); if (semicolon != std::wstring::npos) name = name.substr(0, semicolon);
-        if (name == L"DTSTART") start = ParseDateKey(value);
-        else if (name == L"DTEND") { end = ParseDateKey(value); hasEnd = true; }
-        else if (name == L"SUMMARY") summary = value;
-        else if (name == L"RRULE" || name == L"EXDATE" || name == L"RECURRENCE-ID") hasRecurrence = true;
-    }
-    return !out.empty();
-}
-
-bool ParseHolidayData(std::wstring const& body, HolidayMap& out) {
-    if (body.find(L"BEGIN:VEVENT") == std::wstring::npos && body.find(L"BEGIN:VCALENDAR") == std::wstring::npos) return false;
-    return ParseIcs(body, out);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Background fetching
-void SweepDayItems();
-void StartSweepTimer();
-void RefreshCalendarOnUiThreads();
-
-std::mutex g_workerThreadMutex;
-std::atomic<HANDLE> g_hWorkerThread{nullptr};
-std::atomic<HANDLE> g_hWorkEvent{nullptr};
-std::atomic<HANDLE> g_hStopEvent{nullptr};
-std::atomic<bool> g_fetchPending{false};
-std::atomic<bool> g_shuttingDown{false};
-std::mutex g_fetchStateMutex;
-ULONGLONG g_lastFetchAttemptTick = 0;
-bool g_haveData = false;
-constexpr ULONGLONG kFetchRetryDelayMs = 10 * 60 * 1000;
-
-bool FetchHolidayData() {
-    const std::shared_ptr<const Settings> settings = GetSettings();
-    { std::lock_guard<std::mutex> lock(g_fetchStateMutex); g_lastFetchAttemptTick = GetTickCount64(); }
-    if (settings->dataSourceUrl.empty()) return false;
-    const WH_URL_CONTENT* content = Wh_GetUrlContent(settings->dataSourceUrl.c_str(), nullptr);
-    if (!content) return false;
-    std::wstring body;
-    bool ok = content->statusCode == 200 && content->data && content->length;
-    if (ok) body = Utf8ToWide(content->data, content->length);
-    Wh_FreeUrlContent(content);
-    if (!ok || body.empty()) return false;
-    HolidayMap parsed;
-    if (!ParseHolidayData(body, parsed)) return false;
-    StoreHolidays(std::move(parsed));
-    { std::lock_guard<std::mutex> lock(g_fetchStateMutex); g_haveData = true; }
-    return true;
-}
-
-DWORD WINAPI WorkerThreadProc(LPVOID) {
-    while (true) {
-        HANDLE stopEvent = g_hStopEvent.load(); HANDLE workEvent = g_hWorkEvent.load();
-        if (!stopEvent || !workEvent) break;
-        HANDLE events[2] = {stopEvent, workEvent};
-        DWORD result = WaitForMultipleObjects(2, events, FALSE, INFINITE);
-        if (result == WAIT_OBJECT_0 || result != WAIT_OBJECT_0 + 1) break;
-        g_fetchPending = false;
-        if (FetchHolidayData()) RefreshCalendarOnUiThreads();
-    }
-    return 0;
-}
-
-void StartWorkerThread() {
-    std::lock_guard<std::mutex> lock(g_workerThreadMutex);
-    if (g_hWorkerThread.load() || g_shuttingDown) return;
-    HANDLE workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    HANDLE stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!workEvent || !stopEvent) { if (workEvent) CloseHandle(workEvent); if (stopEvent) CloseHandle(stopEvent); return; }
-    g_hWorkEvent.store(workEvent); g_hStopEvent.store(stopEvent);
-    HANDLE thread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
-    if (!thread) { g_hWorkEvent.store(nullptr); g_hStopEvent.store(nullptr); CloseHandle(workEvent); CloseHandle(stopEvent); return; }
-    g_hWorkerThread.store(thread);
-}
-
-void StopWorkerThread() {
-    HANDLE workerThread, workEvent, stopEvent;
-    {
-        std::lock_guard<std::mutex> lock(g_workerThreadMutex);
-        workerThread = g_hWorkerThread.exchange(nullptr);
-        workEvent = g_hWorkEvent.exchange(nullptr);
-        stopEvent = g_hStopEvent.exchange(nullptr);
-        if (stopEvent) SetEvent(stopEvent);
-    }
-    if (workerThread) { WaitForSingleObject(workerThread, INFINITE); CloseHandle(workerThread); }
-    if (workEvent) CloseHandle(workEvent);
-    if (stopEvent) CloseHandle(stopEvent);
-}
-
-void RequestHolidayData() {
-    const std::shared_ptr<const Settings> settings = GetSettings();
-    if (g_shuttingDown || settings->dataSourceUrl.empty()) return;
-    if (!g_hWorkerThread.load()) StartWorkerThread();
-    const ULONGLONG refreshInterval = static_cast<ULONGLONG>(settings->refreshIntervalHours) * 60ULL * 60ULL * 1000ULL;
-    {
-        std::lock_guard<std::mutex> lock(g_fetchStateMutex);
-        if (g_lastFetchAttemptTick) {
-            ULONGLONG interval = g_haveData ? refreshInterval : kFetchRetryDelayMs;
-            if (GetTickCount64() - g_lastFetchAttemptTick < interval) return;
-        }
-    }
-    if (g_fetchPending.exchange(true)) return;
-    if (HANDLE workEvent = g_hWorkEvent.load()) { if (SetEvent(workEvent)) return; }
-    { std::lock_guard<std::mutex> lock(g_fetchStateMutex); g_lastFetchAttemptTick = GetTickCount64(); }
-    g_fetchPending = false;
-}
-
-void ResetHolidayData() {
-    { std::lock_guard<std::mutex> lock(g_fetchStateMutex); g_lastFetchAttemptTick = 0; g_haveData = false; }
-    { std::lock_guard<std::mutex> lock(g_holidaysMutex); g_holidays.clear(); }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// UI Logic & Vietnamese Lunar Conversion
 int32_t DateKeyFromDateTime(wf::DateTime const& dateTime) {
-    ULARGE_INTEGER uli; uli.QuadPart = static_cast<ULONGLONG>(dateTime.time_since_epoch().count());
-    FILETIME fileTime; fileTime.dwLowDateTime = uli.LowPart; fileTime.dwHighDateTime = uli.HighPart;
+    ULARGE_INTEGER uli;
+    uli.QuadPart = static_cast<ULONGLONG>(dateTime.time_since_epoch().count());
+    FILETIME fileTime;
+    fileTime.dwLowDateTime = uli.LowPart;
+    fileTime.dwHighDateTime = uli.HighPart;
     SYSTEMTIME systemTimeUtc{};
     if (!FileTimeToSystemTime(&fileTime, &systemTimeUtc)) return 0;
     SYSTEMTIME systemTimeLocal{};
     if (!SystemTimeToTzSpecificLocalTime(nullptr, &systemTimeUtc, &systemTimeLocal)) return 0;
+
     auto ticksOf = [](SYSTEMTIME const& systemTime, ULONGLONG& ticks) -> bool {
-        FILETIME fileTimeOfSystemTime{}; if (!SystemTimeToFileTime(&systemTime, &fileTimeOfSystemTime)) return false;
-        ULARGE_INTEGER value; value.LowPart = fileTimeOfSystemTime.dwLowDateTime; value.HighPart = fileTimeOfSystemTime.dwHighDateTime;
-        ticks = value.QuadPart; return true;
+        FILETIME ft{};
+        if (!SystemTimeToFileTime(&systemTime, &ft)) return false;
+        ULARGE_INTEGER value;
+        value.LowPart = ft.dwLowDateTime;
+        value.HighPart = ft.dwHighDateTime;
+        ticks = value.QuadPart;
+        return true;
     };
+
     ULONGLONG localTicks = 0, utcTicks = 0;
     if (!ticksOf(systemTimeLocal, localTicks) || !ticksOf(systemTimeUtc, utcTicks)) return 0;
     const SYSTEMTIME& date = localTicks < utcTicks ? systemTimeUtc : systemTimeLocal;
     return MakeDateKey(date.wYear, date.wMonth, date.wDay);
 }
 
-// --- [BẮT ĐẦU: LOGIC ÂM LỊCH & TỬ VI VẠN NIÊN] ---
-#define FORMATTED_BUFFER_SIZE 256
+////////////////////////////////////////////////////////////////////////////////
+// Vietnamese Lunar Calendar, Holidays & Horoscope Calculations
 
-template <size_t N>
-struct FormattedString {
-    DWORD formatIndex = 0;
-    WCHAR buffer[N]{};
+const PCWSTR CAN_10[] = {
+    L"Giáp", L"Ất", L"Bính", L"Đinh", L"Mậu", L"Kỷ", L"Canh", L"Tân", L"Nhâm", L"Quý"
+};
+const PCWSTR CHI_12[] = {
+    L"Tý", L"Sửu", L"Dần", L"Mão", L"Thìn", L"Tỵ", L"Ngọ", L"Mùi", L"Thân", L"Dậu", L"Tuất", L"Hợi"
 };
 
-DWORD g_formatIndex = 1;
-FormattedString<FORMATTED_BUFFER_SIZE> g_lunarFullFormatted;
-FormattedString<FORMATTED_BUFFER_SIZE> g_lunarCanChiOnly;
-FormattedString<FORMATTED_BUFFER_SIZE> g_lunarDateOnly;
-FormattedString<FORMATTED_BUFFER_SIZE> g_lunarHoroscopeShort;
-FormattedString<2048> g_lunarHoroscopeFull;
-
-const std::wstring CAN[] = { L"Canh", L"Tân", L"Nhâm", L"Quý", L"Giáp", L"Ất", L"Bính", L"Đinh", L"Mậu", L"Kỷ" };
-const std::wstring CHI[] = { L"Thân", L"Dậu", L"Tuất", L"Hợi", L"Tý", L"Sửu", L"Dần", L"Mão", L"Thìn", L"Tỵ", L"Ngọ", L"Mùi" };
-
-const PCWSTR CAN_10[] = { L"Giáp", L"Ất", L"Bính", L"Đinh", L"Mậu", L"Kỷ", L"Canh", L"Tân", L"Nhâm", L"Quý" };
-const PCWSTR CHI_12[] = { L"Tý", L"Sửu", L"Dần", L"Mão", L"Thìn", L"Tỵ", L"Ngọ", L"Mùi", L"Thân", L"Dậu", L"Tuất", L"Hợi" };
-
 std::wstring GetCanChiYear(int year) {
-    return CAN[year % 10] + L" " + CHI[year % 12];
+    int canIdx = ((year + 6) % 10 + 10) % 10;
+    int chiIdx = ((year + 8) % 12 + 12) % 12;
+    return std::wstring(CAN_10[canIdx]) + L" " + CHI_12[chiIdx];
 }
 
 const int LEAP_MONTHS_100_YEARS[] = {
@@ -517,84 +211,26 @@ const int LEAP_MONTHS_100_YEARS[] = {
 };
 
 int GetLeapMonthIndex(int lunarYear) {
-    if (lunarYear < 2000 || lunarYear > 2099) {
-        return 0;
-    }
+    if (lunarYear < 2000 || lunarYear > 2099) return 0;
     return LEAP_MONTHS_100_YEARS[lunarYear - 2000];
-}
-
-struct LunarDateCache {
-    WORD sYear = 0, sMonth = 0, sDay = 0;
-    int lDay = 1, lMonth = 1, lYear = 2000;
-    bool isLeap = false;
-    std::wstring canChi;
-} g_lunarCache;
-
-void GetLunarDateWinRT(int& lDay, int& lMonth, int& lYear, bool& isLeap, std::wstring& canChi) {
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-
-    if (g_lunarCache.sYear == st.wYear &&
-        g_lunarCache.sMonth == st.wMonth &&
-        g_lunarCache.sDay == st.wDay &&
-        !g_lunarCache.canChi.empty()) {
-        lDay = g_lunarCache.lDay;
-        lMonth = g_lunarCache.lMonth;
-        lYear = g_lunarCache.lYear;
-        isLeap = g_lunarCache.isLeap;
-        canChi = g_lunarCache.canChi;
-        return;
-    }
-
-    try {
-        winrt::Windows::Globalization::Calendar cal;
-        cal.ChangeCalendarSystem(winrt::Windows::Globalization::CalendarIdentifiers::ChineseLunar());
-        cal.SetToNow();
-
-        lDay = cal.Day();
-        int rawMonth = cal.Month();
-
-        lYear = st.wYear;
-        if (rawMonth >= 10 && st.wMonth <= 2) {
-            lYear--;
-        }
-
-        canChi = GetCanChiYear(lYear);
-        int leapMonth = GetLeapMonthIndex(lYear);
-        isLeap = false;
-
-        if (leapMonth > 0) {
-            if (rawMonth == leapMonth + 1) {
-                lMonth = leapMonth;
-                isLeap = true;
-            } else if (rawMonth > leapMonth + 1) {
-                lMonth = rawMonth - 1;
-            } else {
-                lMonth = rawMonth;
-            }
-        } else {
-            lMonth = rawMonth;
-        }
-
-        g_lunarCache = { st.wYear, st.wMonth, st.wDay, lDay, lMonth, lYear, isLeap, canChi };
-    } catch (...) {
-        lDay = st.wDay; lMonth = st.wMonth; lYear = st.wYear; isLeap = false;
-        canChi = L"";
-    }
 }
 
 thread_local winrt::Windows::Globalization::Calendar t_gregorianCal{nullptr};
 thread_local winrt::Windows::Globalization::Calendar t_lunarCal{nullptr};
 
-void GetLunarDateWinRT_ForDate(int sYear, int sMonth, int sDay, int& lDay, int& lMonth, int& lYear, bool& isLeap, std::wstring& canChi) {
+void GetLunarDateWinRT_ForDate(int sYear, int sMonth, int sDay,
+                               int& lDay, int& lMonth, int& lYear,
+                               bool& isLeap, std::wstring& canChi) {
     try {
         if (!t_gregorianCal) {
             t_gregorianCal = winrt::Windows::Globalization::Calendar();
-            t_gregorianCal.ChangeCalendarSystem(winrt::Windows::Globalization::CalendarIdentifiers::Gregorian());
+            t_gregorianCal.ChangeCalendarSystem(
+                winrt::Windows::Globalization::CalendarIdentifiers::Gregorian());
         }
         if (!t_lunarCal) {
             t_lunarCal = winrt::Windows::Globalization::Calendar();
-            t_lunarCal.ChangeCalendarSystem(winrt::Windows::Globalization::CalendarIdentifiers::ChineseLunar());
+            t_lunarCal.ChangeCalendarSystem(
+                winrt::Windows::Globalization::CalendarIdentifiers::ChineseLunar());
         }
 
         t_gregorianCal.Year(sYear);
@@ -627,8 +263,33 @@ void GetLunarDateWinRT_ForDate(int sYear, int sMonth, int sDay, int& lDay, int& 
             lMonth = rawMonth;
         }
     } catch (...) {
-        lDay = sDay; lMonth = sMonth; lYear = sYear; isLeap = false; canChi = L"";
+        lDay = sDay;
+        lMonth = sMonth;
+        lYear = sYear;
+        isLeap = false;
+        canChi = GetCanChiYear(sYear);
     }
+}
+
+void GetLunarDateToday(int& lDay, int& lMonth, int& lYear, bool& isLeap, std::wstring& canChi) {
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    GetLunarDateWinRT_ForDate(st.wYear, st.wMonth, st.wDay, lDay, lMonth, lYear, isLeap, canChi);
+}
+
+std::wstring FormatTaskbarLunarDate(int sYear, int sMonth, int sDay) {
+    int lDay, lMonth, lYear;
+    bool isLeap;
+    std::wstring canChi;
+    GetLunarDateWinRT_ForDate(sYear, sMonth, sDay, lDay, lMonth, lYear, isLeap, canChi);
+
+    WCHAR buffer[128]{};
+    if (isLeap) {
+        _snwprintf_s(buffer, _TRUNCATE, L"%02d/%02d (Nhuận) %s", lDay, lMonth, canChi.c_str());
+    } else {
+        _snwprintf_s(buffer, _TRUNCATE, L"%02d/%02d %s", lDay, lMonth, canChi.c_str());
+    }
+    return buffer;
 }
 
 int CalculateJDN(int sDay, int sMonth, int sYear) {
@@ -638,305 +299,147 @@ int CalculateJDN(int sDay, int sMonth, int sYear) {
     return sDay + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045;
 }
 
-std::wstring GetVietnameseHolidayName(int sDay, int sMonth, int lDay, int lMonth, bool isLeap) {
+enum class HolidayScope { None, SolarOnly, LunarOnly, Both };
+
+struct VietnameseHolidayResult {
+    HolidayScope scope = HolidayScope::None;
     std::wstring names;
-    auto addName = [&](PCWSTR n) {
-        if (!names.empty()) names += L" • ";
-        names += n;
-    };
-
-    if (sDay == 1 && sMonth == 1) addName(L"Tết Dương lịch");
-    else if (sDay == 14 && sMonth == 2) addName(L"Lễ Tình nhân (Valentine)");
-    else if (sDay == 8 && sMonth == 3) addName(L"Quốc tế Phụ nữ");
-    else if (sDay == 26 && sMonth == 3) addName(L"Thành lập Đoàn TNCS HCM");
-    else if (sDay == 30 && sMonth == 4) addName(L"Ngày Giải phóng miền Nam");
-    else if (sDay == 1 && sMonth == 5) addName(L"Quốc tế Lao động");
-    else if (sDay == 1 && sMonth == 6) addName(L"Quốc tế Thiếu nhi");
-    else if (sDay == 2 && sMonth == 9) addName(L"Quốc khánh Việt Nam");
-    else if (sDay == 20 && sMonth == 10) addName(L"Ngày Phụ nữ Việt Nam");
-    else if (sDay == 20 && sMonth == 11) addName(L"Ngày Nhà giáo Việt Nam");
-    else if (sDay == 24 && sMonth == 11) addName(L"Ngày Văn hóa Việt Nam");
-    else if (sDay == 22 && sMonth == 12) addName(L"Thành lập QĐND Việt Nam");
-    else if (sDay == 24 && sMonth == 12) addName(L"Đêm Giáng Sinh");
-    else if (sDay == 25 && sMonth == 12) addName(L"Lễ Giáng Sinh (Noel)");
-
-    if (!isLeap) {
-        if (lDay == 1 && lMonth == 1) addName(L"Mùng 1 Tết Nguyên Đán");
-        else if (lDay == 2 && lMonth == 1) addName(L"Mùng 2 Tết Nguyên Đán");
-        else if (lDay == 3 && lMonth == 1) addName(L"Mùng 3 Tết Nguyên Đán");
-        else if (lDay == 15 && lMonth == 1) addName(L"Tết Nguyên Tiêu (Rằm tháng Giêng)");
-        else if (lDay == 3 && lMonth == 3) addName(L"Tết Hàn Thực");
-        else if (lDay == 10 && lMonth == 3) addName(L"Giỗ Tổ Hùng Vương");
-        else if (lDay == 15 && lMonth == 4) addName(L"Lễ Phật Đản");
-        else if (lDay == 5 && lMonth == 5) addName(L"Tết Đoan Ngọ");
-        else if (lDay == 15 && lMonth == 7) addName(L"Lễ Vu Lan (Rằm tháng Bảy)");
-        else if (lDay == 15 && lMonth == 8) addName(L"Tết Trung Thu (Rằm tháng Tám)");
-        else if (lDay == 23 && lMonth == 12) addName(L"Tiễn Ông Công Ông Táo");
-        else if ((lDay == 29 || lDay == 30) && lMonth == 12) addName(L"Tất niên / Giao thừa");
-        else if (lDay == 1) addName(L"Ngày Mùng 1 (Sóc)");
-        else if (lDay == 15) addName(L"Ngày Rằm (Vọng)");
-    }
-
-    return names;
-}
-
-// Hiển thị trên Taskbar: "05/09 Bính Ngọ"
-PCWSTR GetLunarFullFormatted() {
-    if (g_lunarFullFormatted.formatIndex != g_formatIndex) {
-        int lDay, lMonth, lYear;
-        bool isLeap;
-        std::wstring canChi;
-        GetLunarDateWinRT(lDay, lMonth, lYear, isLeap, canChi);
-
-        if (isLeap) {
-            swprintf_s(g_lunarFullFormatted.buffer, L"%02d/%02d (Nhuận) %s", lDay, lMonth, canChi.c_str());
-        } else {
-            swprintf_s(g_lunarFullFormatted.buffer, L"%02d/%02d %s", lDay, lMonth, canChi.c_str());
-        }
-        g_lunarFullFormatted.formatIndex = g_formatIndex;
-    }
-    return g_lunarFullFormatted.buffer;
-}
-
-PCWSTR GetLunarCanChiOnly() {
-    if (g_lunarCanChiOnly.formatIndex != g_formatIndex) {
-        int lDay, lMonth, lYear;
-        bool isLeap;
-        std::wstring canChi;
-        GetLunarDateWinRT(lDay, lMonth, lYear, isLeap, canChi);
-
-        wcscpy_s(g_lunarCanChiOnly.buffer, canChi.c_str());
-        g_lunarCanChiOnly.formatIndex = g_formatIndex;
-    }
-    return g_lunarCanChiOnly.buffer;
-}
-
-PCWSTR GetLunarDateOnly() {
-    if (g_lunarDateOnly.formatIndex != g_formatIndex) {
-        int lDay, lMonth, lYear;
-        bool isLeap;
-        std::wstring canChi;
-        GetLunarDateWinRT(lDay, lMonth, lYear, isLeap, canChi);
-
-        if (isLeap) {
-            swprintf_s(g_lunarDateOnly.buffer, L"%02d/%02d (Nhuận)", lDay, lMonth);
-        } else {
-            swprintf_s(g_lunarDateOnly.buffer, L"%02d/%02d", lDay, lMonth);
-        }
-        g_lunarDateOnly.formatIndex = g_formatIndex;
-    }
-    return g_lunarDateOnly.buffer;
-}
-
-PCWSTR GetLunarHoroscopeShort() {
-    if (g_lunarHoroscopeShort.formatIndex != g_formatIndex) {
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-
-        int lDay, lMonth, lYear;
-        bool isLeap;
-        std::wstring yearCanChi;
-        GetLunarDateWinRT(lDay, lMonth, lYear, isLeap, yearCanChi);
-
-        int jdn = CalculateJDN(st.wDay, st.wMonth, st.wYear);
-        int canDayIdx = (jdn + 9) % 10;
-        int chiDayIdx = (jdn + 1) % 12;
-
-        static const PCWSTR kStarsShort[12] = {
-            L"Thanh Long Hoàng Đạo", L"Minh Đường Hoàng Đạo", L"Thiên Hình Hắc Đạo", L"Chu Tước Hắc Đạo",
-            L"Kim Quỹ Hoàng Đạo",    L"Kim Đường Hoàng Đạo",  L"Bạch Hổ Hắc Đạo",    L"Ngọc Đường Hoàng Đạo",
-            L"Thiên Lao Hắc Đạo",    L"Nguyên Vũ Hắc Đạo",    L"Tư Mệnh Hoàng Đạo",  L"Câu Trận Hắc Đạo"
-        };
-        int thanhLongStartChi = ((lMonth - 1) % 6) * 2;
-        int starIdx = (chiDayIdx - thanhLongStartChi + 12) % 12;
-
-        swprintf_s(g_lunarHoroscopeShort.buffer, L"Ngày %s %s • %s",
-                   CAN_10[canDayIdx], CHI_12[chiDayIdx], kStarsShort[starIdx]);
-        g_lunarHoroscopeShort.formatIndex = g_formatIndex;
-    }
-    return g_lunarHoroscopeShort.buffer;
-}
-
-// Nội dung Âm lịch + Can Chi + Tử Vi hiển thị trong hộp Tooltip khi rê chuột vào đồng hồ Taskbar
-PCWSTR GetLunarHoroscopeFull() {
-    if (g_lunarHoroscopeFull.formatIndex != g_formatIndex) {
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-
-        int lDay, lMonth, lYear;
-        bool isLeap;
-        std::wstring yearCanChi;
-        GetLunarDateWinRT(lDay, lMonth, lYear, isLeap, yearCanChi);
-
-        int jdn = CalculateJDN(st.wDay, st.wMonth, st.wYear);
-
-        int canDayIdx = (jdn + 9) % 10;
-        int chiDayIdx = (jdn + 1) % 12;
-        std::wstring dayCanChi = std::wstring(CAN_10[canDayIdx]) + L" " + CHI_12[chiDayIdx];
-
-        int canMonthIdx = (lYear * 12 + lMonth + 3) % 10;
-        int chiMonthIdx = (lMonth + 1) % 12;
-        std::wstring monthCanChi = std::wstring(CAN_10[canMonthIdx]) + L" " + CHI_12[chiMonthIdx];
-
-        int chiHourIdx = ((st.wHour + 1) / 2) % 12;
-        int canHourIdx = ((canDayIdx % 5) * 2 + chiHourIdx) % 10;
-        std::wstring hourCanChi = std::wstring(CAN_10[canHourIdx]) + L" " + CHI_12[chiHourIdx];
-
-        static const PCWSTR kNapAm[30] = {
-            L"Hải Trung Kim (Vàng trong biển)",       L"Lô Trung Hỏa (Lửa trong lò)",
-            L"Đại Lâm Mộc (Gỗ rừng già)",             L"Lộ Bàng Thổ (Đất ven đường)",
-            L"Kiếm Phong Kim (Vàng mũi kiếm)",        L"Sơn Đầu Hỏa (Lửa đầu núi)",
-            L"Giản Hạ Thủy (Nước dưới khe)",          L"Thành Đầu Thổ (Đất tường thành)",
-            L"Bạch Lạp Kim (Vàng chân đèn)",          L"Dương Liễu Mộc (Gỗ cây liễu)",
-            L"Tuyền Trung Thủy (Nước trong suối)",    L"Ốc Thượng Thổ (Đất mái nhà)",
-            L"Tích Lịch Hỏa (Lửa sấm sét)",           L"Tùng Bách Mộc (Gỗ tùng bách)",
-            L"Trường Lưu Thủy (Nước chảy dài)",       L"Sa Trung Kim (Vàng trong cát)",
-            L"Sơn Hạ Hỏa (Lửa dưới núi)",             L"Bình Địa Mộc (Gỗ đồng bằng)",
-            L"Bích Thượng Thổ (Đất tò vò)",           L"Kim Bạch Kim (Vàng pha bạc)",
-            L"Phúc Đăng Hỏa (Lửa đèn chụp)",          L"Thiên Hà Thủy (Nước ngân hà)",
-            L"Đại Trạch Thổ (Đất nền nhà)",           L"Thoa Xuyến Kim (Vàng trang sức)",
-            L"Tang Đố Mộc (Gỗ cây dâu)",              L"Đại Khê Thủy (Nước khe lớn)",
-            L"Sa Trung Thổ (Đất pha cát)",            L"Thiên Thượng Hỏa (Lửa trên trời)",
-            L"Thạch Lựu Mộc (Gỗ cây lựu)",            L"Đại Hải Thủy (Nước biển lớn)"
-        };
-        int hoaGiapIdx = (6 * canDayIdx - 5 * chiDayIdx + 60) % 60;
-        PCWSTR napAmStr = kNapAm[hoaGiapIdx / 2];
-
-        struct StarInfo { PCWSTR name; bool isHoangDao; };
-        static const StarInfo kStars[12] = {
-            { L"Thanh Long Hoàng Đạo", true },  { L"Minh Đường Hoàng Đạo", true },
-            { L"Thiên Hình Hắc Đạo", false },   { L"Chu Tước Hắc Đạo", false },
-            { L"Kim Quỹ Hoàng Đạo", true },     { L"Kim Đường Hoàng Đạo", true },
-            { L"Bạch Hổ Hắc Đạo", false },      { L"Ngọc Đường Hoàng Đạo", true },
-            { L"Thiên Lao Hắc Đạo", false },    { L"Nguyên Vũ Hắc Đạo", false },
-            { L"Tư Mệnh Hoàng Đạo", true },     { L"Câu Trận Hắc Đạo", false }
-        };
-        int thanhLongStartChi = ((lMonth - 1) % 6) * 2;
-        int starIdx = (chiDayIdx - thanhLongStartChi + 12) % 12;
-        const StarInfo& star = kStars[starIdx];
-
-        struct TrucInfo { PCWSTR name; PCWSTR goodFor; PCWSTR badFor; };
-        static const TrucInfo kTruc[12] = {
-            { L"Kiến",  L"Xuất hành, nhậm chức, cầu tài, ký kết",         L"Động thổ, đào đất, mở kho" },
-            { L"Trừ",   L"Thanh tẩy, chữa bệnh, dọn dẹp, cầu bình an",    L"Khai trương lớn, đi xa" },
-            { L"Mãn",   L"Cúng tế, cầu tài lộc, khai trương, mở kho",      L"Kiện tụng, tranh chấp" },
-            { L"Bình",  L"Tu sửa, bàn bạc công việc, giao dịch, cưới hỏi", L"Khởi công lớn, thưa kiện" },
-            { L"Định",  L"Ký hợp đồng, cầu danh, nhập học, mưu sự",        L"Xuất hành xa, kiện tụng" },
-            { L"Chấp",  L"Xây dựng, tu tạo, lập khế ước, tuyển dụng",     L"Xuất tiền lớn, dọn nhà" },
-            { L"Phá",   L"Phá dỡ, giải quyết việc tồn đọng, chữa bệnh",    L"Khai trương, cưới hỏi, ký kết" },
-            { L"Nguy",  L"Tế tự, cầu an, nghỉ ngơi, cẩn trọng đi lại",     L"Mạo hiểm, khởi công, đi sông nước" },
-            { L"Thành", L"Khai trương, nhập học, cưới hỏi, cầu tài lộc",   L"Kiện tụng, tranh cãi" },
-            { L"Thu",   L"Thu hoạch, tích trữ, đòi nợ, cất giữ tài sản",   L"Khởi công mới, xuất hành xa" },
-            { L"Khai",  L"Khai trương, động thổ, xuất hành, nhậm chức",    L"An táng, tranh chấp" },
-            { L"Bế",    L"Đắp đê, tu bổ, cất giữ tài vật, lập kế hoạch",   L"Khai trương, xuất hành xa" }
-        };
-        int trucIdx = (chiDayIdx - chiMonthIdx + 12) % 12;
-        const TrucInfo& truc = kTruc[trucIdx];
-
-        static const PCWSTR kGioHoangDao[6] = {
-            L"Tý (23-1h), Sửu (1-3h), Mão (5-7h), Ngọ (11-13h), Thân (15-17h), Dậu (17-19h)",
-            L"Dần (3-5h), Mão (5-7h), Tỵ (9-11h), Thân (15-17h), Tuất (19-21h), Hợi (21-23h)",
-            L"Tý (23-1h), Sửu (1-3h), Thìn (7-9h), Tỵ (9-11h), Mùi (13-15h), Tuất (19-21h)",
-            L"Tý (23-1h), Dần (3-5h), Mão (5-7h), Ngọ (11-13h), Mùi (13-15h), Dậu (17-19h)",
-            L"Dần (3-5h), Thìn (7-9h), Tỵ (9-11h), Thân (15-17h), Dậu (17-19h), Hợi (21-23h)",
-            L"Sửu (1-3h), Thìn (7-9h), Ngọ (11-13h), Mùi (13-15h), Tuất (19-21h), Hợi (21-23h)"
-        };
-        PCWSTR gioTotStr = kGioHoangDao[chiDayIdx % 6];
-
-        int xungChiIdx = (chiDayIdx + 6) % 12;
-        int xungCan1 = (canDayIdx + 4) % 10;
-        int xungCan2 = (canDayIdx + 6) % 10;
-        std::wstring tuoiXung = std::wstring(CAN_10[xungCan1]) + L" " + CHI_12[xungChiIdx] +
-                                L", " + CAN_10[xungCan2] + L" " + CHI_12[xungChiIdx];
-
-        static const PCWSTR kHuongHyThan[10] = {
-            L"Đông Bắc", L"Tây Bắc", L"Tây Nam", L"Chính Nam", L"Đông Nam",
-            L"Đông Bắc", L"Tây Bắc", L"Tây Nam", L"Chính Nam", L"Đông Nam"
-        };
-        static const PCWSTR kHuongTaiThan[10] = {
-            L"Đông Nam", L"Đông Nam", L"Chính Đông", L"Chính Đông", L"Chính Bắc",
-            L"Chính Nam", L"Tây Nam", L"Tây Nam", L"Chính Tây", L"Tây Bắc"
-        };
-
-        std::wstring holidayStr = GetVietnameseHolidayName(st.wDay, st.wMonth, lDay, lMonth, isLeap);
-        std::wstring holidayLine = holidayStr.empty() ? L"" : (L"\r\n🎉 Sự kiện: " + holidayStr);
-
-        wchar_t lunarHeader[256];
-        if (isLeap) {
-            swprintf_s(lunarHeader, L"📅 Âm lịch: Ngày %02d Tháng %02d (Nhuận) Năm %s", lDay, lMonth, yearCanChi.c_str());
-        } else {
-            swprintf_s(lunarHeader, L"📅 Âm lịch: Ngày %02d Tháng %02d Năm %s (%02d/%02d/%d)", lDay, lMonth, yearCanChi.c_str(), lDay, lMonth, lYear);
-        }
-
-        swprintf_s(
-            g_lunarHoroscopeFull.buffer,
-            L"%s%s"
-            L"\r\n🐉 Bát tự: Giờ %s • Ngày %s • Tháng %s • Năm %s"
-            L"\r\n☯ Mệnh ngày: %s"
-            L"\r\n%s %s (%s) • Trực: %s"
-            L"\r\n⏰ Giờ Hoàng Đạo: %s"
-            L"\r\n🔮 Tử vi (Nên): %s"
-            L"\r\n⛔ Việc Kỵ: %s"
-            L"\r\n🧭 Tuổi xung: %s • Xuất hành: %s (Hỷ), %s (Tài)",
-            lunarHeader,
-            holidayLine.c_str(),
-            hourCanChi.c_str(),
-            dayCanChi.c_str(),
-            monthCanChi.c_str(),
-            yearCanChi.c_str(),
-            napAmStr,
-            star.isHoangDao ? L"🌟" : L"⚪",
-            star.name,
-            star.isHoangDao ? L"Ngày Tốt" : L"Ngày Hắc Đạo",
-            truc.name,
-            gioTotStr,
-            truc.goodFor,
-            truc.badFor,
-            tuoiXung.c_str(),
-            kHuongHyThan[canDayIdx],
-            kHuongTaiThan[canDayIdx]);
-
-        g_lunarHoroscopeFull.formatIndex = g_formatIndex;
-    }
-    return g_lunarHoroscopeFull.buffer;
-}
-
-struct HoroscopePageData {
-    std::wstring headerSolar;
-    std::wstring headerLunar;
-    std::wstring lineCanChi;
-    std::wstring lineMenhTruc;
-    std::wstring lineGioHoangDao;
-    std::wstring lineTuViNen;
-    std::wstring lineTuViKy;
-    std::wstring lineXungHuong;
 };
 
-HoroscopePageData BuildHoroscopePageData(int32_t key) {
-    HoroscopePageData out;
-    int sYear = key / 10000;
-    int sMonth = (key / 100) % 100;
-    int sDay = key % 100;
+// Single unified table for both holiday names and color scopes
+VietnameseHolidayResult EvaluateVietnameseHoliday(int sDay, int sMonth, int lDay, int lMonth, bool isLeap) {
+    VietnameseHolidayResult res;
+    bool highlightSolar = false;
+    bool highlightLunar = false;
 
-    int lDay, lMonth, lYear;
-    bool isLeap;
+    auto addName = [&](PCWSTR name) {
+        if (!res.names.empty()) res.names += L" • ";
+        res.names += name;
+    };
+
+    struct HolidayEntry {
+        int day;
+        int month;
+        HolidayScope scope;
+        PCWSTR name;
+    };
+
+    static const HolidayEntry kSolarHolidays[] = {
+        { 1,  1, HolidayScope::Both,      L"Tết Dương lịch" },
+        { 14, 2, HolidayScope::SolarOnly, L"Lễ Tình nhân (Valentine)" },
+        { 8,  3, HolidayScope::SolarOnly, L"Quốc tế Phụ nữ" },
+        { 26, 3, HolidayScope::SolarOnly, L"Thành lập Đoàn TNCS HCM" },
+        { 30, 4, HolidayScope::SolarOnly, L"Ngày Giải phóng miền Nam" },
+        { 1,  5, HolidayScope::SolarOnly, L"Quốc tế Lao động" },
+        { 1,  6, HolidayScope::SolarOnly, L"Quốc tế Thiếu nhi" },
+        { 2,  9, HolidayScope::SolarOnly, L"Quốc khánh Việt Nam" },
+        { 20, 10, HolidayScope::SolarOnly, L"Ngày Phụ nữ Việt Nam" },
+        { 20, 11, HolidayScope::SolarOnly, L"Ngày Nhà giáo Việt Nam" },
+        { 24, 11, HolidayScope::SolarOnly, L"Ngày Văn hóa Việt Nam" },
+        { 22, 12, HolidayScope::SolarOnly, L"Thành lập QĐND Việt Nam" },
+        { 24, 12, HolidayScope::SolarOnly, L"Đêm Giáng Sinh" },
+        { 25, 12, HolidayScope::SolarOnly, L"Lễ Giáng Sinh (Noel)" },
+    };
+
+    static const HolidayEntry kLunarHolidays[] = {
+        { 1,  1, HolidayScope::Both,      L"Mùng 1 Tết Nguyên Đán" },
+        { 2,  1, HolidayScope::Both,      L"Mùng 2 Tết Nguyên Đán" },
+        { 3,  1, HolidayScope::Both,      L"Mùng 3 Tết Nguyên Đán" },
+        { 15, 1, HolidayScope::Both,      L"Tết Nguyên Tiêu (Rằm tháng Giêng)" },
+        { 3,  3, HolidayScope::None,      L"Tết Hàn Thực" },
+        { 10, 3, HolidayScope::LunarOnly, L"Giỗ Tổ Hùng Vương" },
+        { 15, 4, HolidayScope::LunarOnly, L"Lễ Phật Đản" },
+        { 5,  5, HolidayScope::LunarOnly, L"Tết Đoan Ngọ" },
+        { 15, 7, HolidayScope::Both,      L"Lễ Vu Lan (Rằm tháng Bảy)" },
+        { 15, 8, HolidayScope::Both,      L"Tết Trung Thu (Rằm tháng Tám)" },
+        { 23, 12, HolidayScope::LunarOnly, L"Tiễn Ông Công Ông Táo" },
+        { 29, 12, HolidayScope::Both,      L"Tất niên / Giao thừa" },
+        { 30, 12, HolidayScope::Both,      L"Tất niên / Giao thừa" },
+    };
+
+    for (const auto& entry : kSolarHolidays) {
+        if (sDay == entry.day && sMonth == entry.month) {
+            addName(entry.name);
+            if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::SolarOnly) highlightSolar = true;
+            if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::LunarOnly) highlightLunar = true;
+        }
+    }
+
+    if (!isLeap) {
+        bool matchedLunarFestival = false;
+        for (const auto& entry : kLunarHolidays) {
+            if (lDay == entry.day && lMonth == entry.month) {
+                addName(entry.name);
+                matchedLunarFestival = true;
+                if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::SolarOnly) highlightSolar = true;
+                if (entry.scope == HolidayScope::Both || entry.scope == HolidayScope::LunarOnly) highlightLunar = true;
+            }
+        }
+        if (!matchedLunarFestival) {
+            if (lDay == 1) addName(L"Ngày Mùng 1 (Sóc)");
+            else if (lDay == 15) addName(L"Ngày Rằm (Vọng)");
+        }
+    }
+
+    if (highlightSolar && highlightLunar) res.scope = HolidayScope::Both;
+    else if (highlightSolar) res.scope = HolidayScope::SolarOnly;
+    else if (highlightLunar) res.scope = HolidayScope::LunarOnly;
+    else res.scope = HolidayScope::None;
+
+    return res;
+}
+
+struct ComputedHoroscope {
+    int sDay = 1, sMonth = 1, sYear = 2000;
+    int lDay = 1, lMonth = 1, lYear = 2000;
+    bool isLeap = false;
+    PCWSTR weekdayStr = L"";
+    std::wstring hourCanChi;
+    std::wstring dayCanChi;
+    std::wstring monthCanChi;
     std::wstring yearCanChi;
-    GetLunarDateWinRT_ForDate(sYear, sMonth, sDay, lDay, lMonth, lYear, isLeap, yearCanChi);
+    PCWSTR napAmStr = L"";
+    PCWSTR starName = L"";
+    bool isHoangDao = false;
+    PCWSTR trucName = L"";
+    PCWSTR goodFor = L"";
+    PCWSTR badFor = L"";
+    PCWSTR gioHoangDao = L"";
+    std::wstring tuoiXung;
+    PCWSTR huongHyThan = L"";
+    PCWSTR huongTaiThan = L"";
+    std::wstring specialHoliday;
+};
+
+// Shared calculation for both the taskbar tooltip and the interactive calendar page
+ComputedHoroscope ComputeHoroscopeForDate(int sYear, int sMonth, int sDay, int hour = 0) {
+    ComputedHoroscope info;
+    info.sYear = sYear;
+    info.sMonth = sMonth;
+    info.sDay = sDay;
+
+    GetLunarDateWinRT_ForDate(sYear, sMonth, sDay,
+                              info.lDay, info.lMonth, info.lYear,
+                              info.isLeap, info.yearCanChi);
 
     int jdn = CalculateJDN(sDay, sMonth, sYear);
 
     static const PCWSTR kWeekdaysFull[] = {
         L"Thứ Hai", L"Thứ Ba", L"Thứ Tư", L"Thứ Năm", L"Thứ Sáu", L"Thứ Bảy", L"Chủ Nhật"
     };
-    PCWSTR weekdayStr = kWeekdaysFull[jdn % 7];
+    info.weekdayStr = kWeekdaysFull[jdn % 7];
 
     int canDayIdx = (jdn + 9) % 10;
     int chiDayIdx = (jdn + 1) % 12;
-    std::wstring dayCanChi = std::wstring(CAN_10[canDayIdx]) + L" " + CHI_12[chiDayIdx];
+    info.dayCanChi = std::wstring(CAN_10[canDayIdx]) + L" " + CHI_12[chiDayIdx];
 
-    int canMonthIdx = (lYear * 12 + lMonth + 3) % 10;
-    int chiMonthIdx = (lMonth + 1) % 12;
-    std::wstring monthCanChi = std::wstring(CAN_10[canMonthIdx]) + L" " + CHI_12[chiMonthIdx];
+    int canMonthIdx = (info.lYear * 12 + info.lMonth + 3) % 10;
+    int chiMonthIdx = (info.lMonth + 1) % 12;
+    info.monthCanChi = std::wstring(CAN_10[canMonthIdx]) + L" " + CHI_12[chiMonthIdx];
+
+    int chiHourIdx = ((hour + 1) / 2) % 12;
+    int canHourIdx = ((canDayIdx % 5) * 2 + chiHourIdx) % 10;
+    info.hourCanChi = std::wstring(CAN_10[canHourIdx]) + L" " + CHI_12[chiHourIdx];
 
     static const PCWSTR kNapAm[30] = {
         L"Hải Trung Kim (Vàng trong biển)",       L"Lô Trung Hỏa (Lửa trong lò)",
@@ -956,7 +459,7 @@ HoroscopePageData BuildHoroscopePageData(int32_t key) {
         L"Thạch Lựu Mộc (Gỗ cây lựu)",            L"Đại Hải Thủy (Nước biển lớn)"
     };
     int hoaGiapIdx = (6 * canDayIdx - 5 * chiDayIdx + 60) % 60;
-    PCWSTR napAmStr = kNapAm[hoaGiapIdx / 2];
+    info.napAmStr = kNapAm[hoaGiapIdx / 2];
 
     struct StarInfo { PCWSTR name; bool isHoangDao; };
     static const StarInfo kStars[12] = {
@@ -967,9 +470,10 @@ HoroscopePageData BuildHoroscopePageData(int32_t key) {
         { L"Thiên Lao Hắc Đạo", false },    { L"Nguyên Vũ Hắc Đạo", false },
         { L"Tư Mệnh Hoàng Đạo", true },     { L"Câu Trận Hắc Đạo", false }
     };
-    int thanhLongStartChi = ((lMonth - 1) % 6) * 2;
+    int thanhLongStartChi = ((info.lMonth - 1) % 6) * 2;
     int starIdx = (chiDayIdx - thanhLongStartChi + 12) % 12;
-    const StarInfo& star = kStars[starIdx];
+    info.starName = kStars[starIdx].name;
+    info.isHoangDao = kStars[starIdx].isHoangDao;
 
     struct TrucInfo { PCWSTR name; PCWSTR goodFor; PCWSTR badFor; };
     static const TrucInfo kTruc[12] = {
@@ -987,7 +491,9 @@ HoroscopePageData BuildHoroscopePageData(int32_t key) {
         { L"Bế",    L"Đắp đê, tu bổ, cất giữ tài vật, lập kế hoạch",   L"Khai trương, xuất hành xa" }
     };
     int trucIdx = (chiDayIdx - chiMonthIdx + 12) % 12;
-    const TrucInfo& truc = kTruc[trucIdx];
+    info.trucName = kTruc[trucIdx].name;
+    info.goodFor = kTruc[trucIdx].goodFor;
+    info.badFor = kTruc[trucIdx].badFor;
 
     static const PCWSTR kGioHoangDao[6] = {
         L"Tý (23-1h), Sửu (1-3h), Mão (5-7h), Ngọ (11-13h), Thân (15-17h), Dậu (17-19h)",
@@ -997,13 +503,13 @@ HoroscopePageData BuildHoroscopePageData(int32_t key) {
         L"Dần (3-5h), Thìn (7-9h), Tỵ (9-11h), Thân (15-17h), Dậu (17-19h), Hợi (21-23h)",
         L"Sửu (1-3h), Thìn (7-9h), Ngọ (11-13h), Mùi (13-15h), Tuất (19-21h), Hợi (21-23h)"
     };
-    PCWSTR gioTotStr = kGioHoangDao[chiDayIdx % 6];
+    info.gioHoangDao = kGioHoangDao[chiDayIdx % 6];
 
     int xungChiIdx = (chiDayIdx + 6) % 12;
     int xungCan1 = (canDayIdx + 4) % 10;
     int xungCan2 = (canDayIdx + 6) % 10;
-    std::wstring tuoiXung = std::wstring(CAN_10[xungCan1]) + L" " + CHI_12[xungChiIdx] +
-                            L", " + CAN_10[xungCan2] + L" " + CHI_12[xungChiIdx];
+    info.tuoiXung = std::wstring(CAN_10[xungCan1]) + L" " + CHI_12[xungChiIdx] +
+                    L", " + CAN_10[xungCan2] + L" " + CHI_12[xungChiIdx];
 
     static const PCWSTR kHuongHyThan[10] = {
         L"Đông Bắc", L"Tây Bắc", L"Tây Nam", L"Chính Nam", L"Đông Nam",
@@ -1013,115 +519,162 @@ HoroscopePageData BuildHoroscopePageData(int32_t key) {
         L"Đông Nam", L"Đông Nam", L"Chính Đông", L"Chính Đông", L"Chính Bắc",
         L"Chính Nam", L"Tây Nam", L"Tây Nam", L"Chính Tây", L"Tây Bắc"
     };
+    info.huongHyThan = kHuongHyThan[canDayIdx];
+    info.huongTaiThan = kHuongTaiThan[canDayIdx];
 
-    wchar_t buf[512];
-    swprintf_s(buf, L"%s, %02d/%02d/%d", weekdayStr, sDay, sMonth, sYear);
+    info.specialHoliday = EvaluateVietnameseHoliday(
+        sDay, sMonth, info.lDay, info.lMonth, info.isLeap).names;
+
+    return info;
+}
+
+std::wstring FormatTooltipHoroscope() {
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    ComputedHoroscope h = ComputeHoroscopeForDate(st.wYear, st.wMonth, st.wDay, st.wHour);
+
+    WCHAR lunarHeader[256]{};
+    if (h.isLeap) {
+        _snwprintf_s(lunarHeader, _TRUNCATE,
+                     L"📅 Âm lịch: Ngày %02d Tháng %02d (Nhuận) Năm %s",
+                     h.lDay, h.lMonth, h.yearCanChi.c_str());
+    } else {
+        _snwprintf_s(lunarHeader, _TRUNCATE,
+                     L"📅 Âm lịch: Ngày %02d Tháng %02d Năm %s (%02d/%02d/%d)",
+                     h.lDay, h.lMonth, h.yearCanChi.c_str(), h.lDay, h.lMonth, h.lYear);
+    }
+
+    std::wstring holidayLine = h.specialHoliday.empty()
+                                   ? L""
+                                   : (L"\r\n🎉 Sự kiện: " + h.specialHoliday);
+
+    WCHAR buffer[2048]{};
+    _snwprintf_s(
+        buffer, _TRUNCATE,
+        L"%s%s"
+        L"\r\n🐉 Bát tự: Giờ %s • Ngày %s • Tháng %s • Năm %s"
+        L"\r\n☯ Mệnh ngày: %s"
+        L"\r\n%s %s (%s) • Trực: %s"
+        L"\r\n⏰ Giờ Hoàng Đạo: %s"
+        L"\r\n🔮 Tử vi (Nên): %s"
+        L"\r\n⛔ Việc Kỵ: %s"
+        L"\r\n🧭 Tuổi xung: %s • Xuất hành: %s (Hỷ), %s (Tài)",
+        lunarHeader,
+        holidayLine.c_str(),
+        h.hourCanChi.c_str(),
+        h.dayCanChi.c_str(),
+        h.monthCanChi.c_str(),
+        h.yearCanChi.c_str(),
+        h.napAmStr,
+        h.isHoangDao ? L"🌟" : L"⚪",
+        h.starName,
+        h.isHoangDao ? L"Ngày Tốt" : L"Ngày Hắc Đạo",
+        h.trucName,
+        h.gioHoangDao,
+        h.goodFor,
+        h.badFor,
+        h.tuoiXung.c_str(),
+        h.huongHyThan,
+        h.huongTaiThan);
+
+    return buffer;
+}
+
+struct HoroscopePageData {
+    std::wstring headerSolar;
+    std::wstring headerLunar;
+    std::wstring lineCanChi;
+    std::wstring lineMenhTruc;
+    std::wstring lineGioHoangDao;
+    std::wstring lineTuViNen;
+    std::wstring lineTuViKy;
+    std::wstring lineXungHuong;
+};
+
+HoroscopePageData BuildHoroscopePageData(int32_t key) {
+    HoroscopePageData out;
+    int sYear = key / 10000;
+    int sMonth = (key / 100) % 100;
+    int sDay = key % 100;
+
+    ComputedHoroscope h = ComputeHoroscopeForDate(sYear, sMonth, sDay);
+
+    WCHAR buf[512]{};
+    _snwprintf_s(buf, _TRUNCATE, L"%s, %02d/%02d/%d", h.weekdayStr, sDay, sMonth, sYear);
     out.headerSolar = buf;
 
-    std::wstring specialName = GetVietnameseHolidayName(sDay, sMonth, lDay, lMonth, isLeap);
-    HolidayInfo icsInfo;
-    if (LookupHoliday(key, icsInfo) && !icsInfo.name.empty()) {
-        if (!specialName.empty()) specialName += L" • ";
-        specialName += icsInfo.name;
-    }
-
-    if (isLeap) {
-        swprintf_s(buf, L"Âm lịch: %02d/%02d (Nhuận) Năm %s", lDay, lMonth, yearCanChi.c_str());
+    if (h.isLeap) {
+        _snwprintf_s(buf, _TRUNCATE, L"Âm lịch: %02d/%02d (Nhuận) Năm %s",
+                     h.lDay, h.lMonth, h.yearCanChi.c_str());
     } else {
-        swprintf_s(buf, L"Âm lịch: %02d/%02d/%d (%s)", lDay, lMonth, lYear, yearCanChi.c_str());
+        _snwprintf_s(buf, _TRUNCATE, L"Âm lịch: %02d/%02d/%d (%s)",
+                     h.lDay, h.lMonth, h.lYear, h.yearCanChi.c_str());
     }
     out.headerLunar = buf;
-    if (!specialName.empty()) {
-        out.headerLunar += L"  •  🎉 " + specialName;
+    if (!h.specialHoliday.empty()) {
+        out.headerLunar += L"  •  🎉 " + h.specialHoliday;
     }
 
-    swprintf_s(buf, L"🐉 Ngày %s  •  Tháng %s  •  Năm %s",
-               dayCanChi.c_str(), monthCanChi.c_str(), yearCanChi.c_str());
+    _snwprintf_s(buf, _TRUNCATE, L"🐉 Ngày %s  •  Tháng %s  •  Năm %s",
+                 h.dayCanChi.c_str(), h.monthCanChi.c_str(), h.yearCanChi.c_str());
     out.lineCanChi = buf;
 
-    swprintf_s(buf, L"☯ Mệnh: %s\n%s %s (%s)  •  Trực: %s",
-               napAmStr,
-               star.isHoangDao ? L"🌟" : L"⚪",
-               star.name,
-               star.isHoangDao ? L"Ngày Tốt" : L"Hắc Đạo",
-               truc.name);
+    _snwprintf_s(buf, _TRUNCATE, L"☯ Mệnh: %s\n%s %s (%s)  •  Trực: %s",
+                 h.napAmStr,
+                 h.isHoangDao ? L"🌟" : L"⚪",
+                 h.starName,
+                 h.isHoangDao ? L"Ngày Tốt" : L"Hắc Đạo",
+                 h.trucName);
     out.lineMenhTruc = buf;
 
-    swprintf_s(buf, L"⏰ Giờ Hoàng Đạo: %s", gioTotStr);
+    _snwprintf_s(buf, _TRUNCATE, L"⏰ Giờ Hoàng Đạo: %s", h.gioHoangDao);
     out.lineGioHoangDao = buf;
 
-    swprintf_s(buf, L"🔮 Tử vi (Nên): %s", truc.goodFor);
+    _snwprintf_s(buf, _TRUNCATE, L"🔮 Tử vi (Nên): %s", h.goodFor);
     out.lineTuViNen = buf;
 
-    swprintf_s(buf, L"⛔ Việc Kỵ: %s", truc.badFor);
+    _snwprintf_s(buf, _TRUNCATE, L"⛔ Việc Kỵ: %s", h.badFor);
     out.lineTuViKy = buf;
 
-    swprintf_s(buf, L"🧭 Tuổi xung: %s  •  Hỷ thần: %s, Tài thần: %s",
-               tuoiXung.c_str(), kHuongHyThan[canDayIdx], kHuongTaiThan[canDayIdx]);
+    _snwprintf_s(buf, _TRUNCATE, L"🧭 Tuổi xung: %s  •  Hỷ thần: %s, Tài thần: %s",
+                 h.tuoiXung.c_str(), h.huongHyThan, h.huongTaiThan);
     out.lineXungHuong = buf;
 
     return out;
 }
-// --- [KẾT THÚC: LOGIC ÂM LỊCH & TỬ VI VẠN NIÊN] ---
 
-// --- [PHÂN LOẠI MỨC ĐỘ LỄ VIỆT NAM] ---
-enum class HolidayScope { None, SolarOnly, LunarOnly, Both };
-
-HolidayScope GetVietnameseHolidayScope(int sDay, int sMonth, int lDay, int lMonth, bool isLeap) {
-    HolidayScope scope = HolidayScope::None;
-
-    if (sDay == 1 && sMonth == 1) scope = HolidayScope::Both;
-    if (!isLeap) {
-        if ((lDay >= 1 && lDay <= 3) && lMonth == 1) scope = HolidayScope::Both;
-        if ((lDay == 29 || lDay == 30) && lMonth == 12) scope = HolidayScope::Both;
-        if (lDay == 15 && (lMonth == 1 || lMonth == 7 || lMonth == 8)) scope = HolidayScope::Both;
-    }
-    if (scope == HolidayScope::Both) return scope;
-
-    if ((sDay == 14 && sMonth == 2) || (sDay == 8 && sMonth == 3) ||
-        (sDay == 26 && sMonth == 3) || (sDay == 30 && sMonth == 4) ||
-        (sDay == 1 && sMonth == 5) || (sDay == 1 && sMonth == 6) ||
-        (sDay == 2 && sMonth == 9) || (sDay == 20 && sMonth == 10) ||
-        (sDay == 20 && sMonth == 11) || (sDay == 24 && sMonth == 11) ||
-        (sDay == 22 && sMonth == 12) || (sDay == 24 && sMonth == 12) ||
-        (sDay == 25 && sMonth == 12)) {
-        return HolidayScope::SolarOnly;
-    }
-
-    if (!isLeap) {
-        if ((lDay == 10 && lMonth == 3) || (lDay == 15 && lMonth == 4) ||
-            (lDay == 5 && lMonth == 5) || (lDay == 23 && lMonth == 12)) {
-            return HolidayScope::LunarOnly;
-        }
-    }
-
-    return HolidayScope::None;
-}
-// -------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////
+// Calendar Flyout XAML Manipulation
 
 constexpr PCWSTR kLunarTextBlockName = L"LunarTextBlock";
 constexpr PCWSTR kCustomCellLunarName = L"CustomCellLunar";
 constexpr PCWSTR kCustomHeaderLunarName = L"CustomHeaderLunar";
 constexpr PCWSTR kCustomHoroscopePageName = L"CustomHoroscopePageOverlay";
-struct FoundElement { wux::DependencyObject element{nullptr}; int depth = 0; };
+
+struct FoundElement {
+    wux::DependencyObject element{nullptr};
+    int depth = 0;
+};
 
 void LogCalendarException(PCWSTR operation) noexcept {
     try {
         throw;
     } catch (winrt::hresult_error const& error) {
-        Wh_Log(L"[VNCalendar] %s: HRESULT=0x%08X, %s", operation,
+        Wh_Log(L"%s: HRESULT=0x%08X, %s", operation,
                static_cast<unsigned int>(error.code().value), error.message().c_str());
     } catch (...) {
-        Wh_Log(L"[VNCalendar] %s: unknown exception", operation);
+        Wh_Log(L"%s: unknown exception", operation);
     }
 }
 
 void CollectDescendants(wux::DependencyObject const& root, std::vector<FoundElement>& out) {
     out.push_back({root, 0});
     for (size_t i = 0; i < out.size() && i < 256; i++) {
-        wux::DependencyObject current = out[i].element; int depth = out[i].depth;
+        wux::DependencyObject current = out[i].element;
+        int depth = out[i].depth;
         if (!current || depth > 24) continue;
-        int count = 0; try { count = wuxm::VisualTreeHelper::GetChildrenCount(current); } catch (...) { continue; }
+        int count = 0;
+        try { count = wuxm::VisualTreeHelper::GetChildrenCount(current); } catch (...) { continue; }
         for (int childIndex = 0; childIndex < count; childIndex++) {
             wux::DependencyObject child = nullptr;
             try { child = wuxm::VisualTreeHelper::GetChild(current, childIndex); } catch (...) { continue; }
@@ -1144,19 +697,29 @@ std::wstring ElementText(wuxc::TextBlock const& textBlock) {
 
 bool IsNumberText(std::wstring const& text) {
     if (text.empty()) return false;
-    for (wchar_t c : text) { if (c < L'0' || c > L'9') return false; }
+    for (wchar_t c : text) {
+        if (c < L'0' || c > L'9') return false;
+    }
     return true;
-}
-
-bool DayItemHasContent(wuxc::CalendarViewDayItem const& item) {
-    try { return wuxm::VisualTreeHelper::GetChildrenCount(item) > 0; } catch (...) {}
-    return false;
 }
 
 thread_local bool t_applyWrote = false;
 thread_local int32_t t_selectedHoroscopeKey = 0;
 thread_local winrt::weak_ref<wuxc::CalendarView> t_calendarView{nullptr};
 thread_local winrt::event_token t_selectedDatesChangedToken{};
+thread_local wuxc::CalendarViewSelectionMode t_savedSelectionMode =
+    wuxc::CalendarViewSelectionMode::None;
+thread_local bool t_hasSavedSelectionMode = false;
+
+struct HeaderState {
+    winrt::weak_ref<wuxc::Panel> headerPanel{nullptr};
+    winrt::weak_ref<wuxc::TextBlock> headerLabel{nullptr};
+    bool createdByMod = false;
+    bool hasSavedState = false;
+    std::wstring savedText;
+    wux::Visibility savedVisibility = wux::Visibility::Visible;
+};
+thread_local HeaderState t_headerState;
 
 struct HiddenCalendarChild {
     winrt::weak_ref<wux::UIElement> element{nullptr};
@@ -1182,6 +745,8 @@ struct HoroscopePageControls {
 };
 thread_local HoroscopePageControls t_horoscopePage;
 
+void SweepDayItems();
+void StartSweepTimer();
 void UpdateHoroscopePageOnCurrentThread();
 void OpenHoroscopeForDateKey(int32_t key);
 
@@ -1239,7 +804,87 @@ void EnsureDualLineSpacing(wuxc::CalendarViewDayItem const& item,
     } catch (...) {}
 }
 
-void FindBothTextBlocks(wuxc::CalendarViewDayItem const& item, wuxc::TextBlock& solarOut, wuxc::TextBlock& lunarOut) {
+struct ColorState {
+    wuxm::Brush savedForeground{nullptr};
+    bool hasSavedForeground = false;
+    bool savedForegroundWasLocal = false;
+    wuxm::Brush ownBrush{nullptr};
+    bool hadColor = false;
+};
+
+struct DayCell {
+    winrt::weak_ref<wuxc::CalendarViewDayItem> item{nullptr};
+    winrt::weak_ref<wuxc::TextBlock> lunarLabel{nullptr};
+    winrt::weak_ref<wuxc::TextBlock> solarLabel{nullptr};
+    winrt::weak_ref<wuxc::Panel> createdParentPanel{nullptr};
+    bool createdByMod = false;
+
+    int64_t lunarLabelChangedToken = 0;
+    std::wstring savedText;
+    bool hasSavedText = false;
+    wux::Visibility savedVisibility = wux::Visibility::Visible;
+    bool hasSavedVisibility = false;
+    std::wstring appliedText;
+
+    ColorState lunarColor;
+    ColorState solarColor;
+    ColorState itemColor;
+    wuxm::Brush normalForeground{nullptr};
+
+    int32_t key = 0;
+    int64_t dateChangedToken = 0;
+    bool busy = false;
+};
+
+struct TrackedDayItem {
+    void* id = nullptr;
+    winrt::weak_ref<wuxc::CalendarViewDayItem> item{nullptr};
+};
+
+constexpr size_t kMaxTrackedDayItems = 512;
+thread_local std::unordered_map<void*, std::unique_ptr<DayCell>> t_cells;
+thread_local std::vector<TrackedDayItem> t_dayItems;
+thread_local std::unordered_map<void*, winrt::weak_ref<wuxc::CalendarViewDayItem>> t_labelOwners;
+
+void ApplyToDayItem(wuxc::CalendarViewDayItem const& item);
+
+void* CellId(wuxc::CalendarViewDayItem const& item) {
+    return winrt::get_abi(item);
+}
+
+DayCell& CellFor(wuxc::CalendarViewDayItem const& item) {
+    std::unique_ptr<DayCell>& entry = t_cells[CellId(item)];
+    if (entry && entry->item.get() != item) entry = nullptr;
+    if (!entry) {
+        entry = std::make_unique<DayCell>();
+        entry->item = winrt::make_weak(item);
+    }
+    return *entry;
+}
+
+void TrackDayItem(wuxc::CalendarViewDayItem const& item) {
+    void* id = winrt::get_abi(item);
+    for (auto it = t_dayItems.begin(); it != t_dayItems.end(); ++it) {
+        if (it->id != id) continue;
+        if (it->item.get()) {
+            TrackedDayItem tracked = *it;
+            t_dayItems.erase(it);
+            t_dayItems.push_back(tracked);
+        } else {
+            it->item = winrt::make_weak(item);
+        }
+        return;
+    }
+    if (t_dayItems.size() >= kMaxTrackedDayItems) {
+        t_dayItems.erase(t_dayItems.begin());
+    }
+    t_dayItems.push_back({id, winrt::make_weak(item)});
+}
+
+void FindOrCreateLunarTextBlock(wuxc::CalendarViewDayItem const& item,
+                                DayCell& cell,
+                                wuxc::TextBlock& solarOut,
+                                wuxc::TextBlock& lunarOut) {
     solarOut = nullptr;
     lunarOut = nullptr;
     wuxc::Panel containerPanel = nullptr;
@@ -1276,6 +921,20 @@ void FindBothTextBlocks(wuxc::CalendarViewDayItem const& item, wuxc::TextBlock& 
     }
 
     if (lunarOut) {
+        if (!cell.createdByMod && ElementName(lunarOut) != kCustomCellLunarName) {
+            if (!cell.hasSavedVisibility) {
+                try {
+                    cell.savedVisibility = lunarOut.Visibility();
+                    cell.hasSavedVisibility = true;
+                } catch (...) {}
+            }
+            if (!cell.hasSavedText) {
+                try {
+                    cell.savedText = lunarOut.Text().c_str();
+                    cell.hasSavedText = true;
+                } catch (...) {}
+            }
+        }
         try {
             if (lunarOut.Visibility() != wux::Visibility::Visible) {
                 lunarOut.Visibility(wux::Visibility::Visible);
@@ -1303,71 +962,12 @@ void FindBothTextBlocks(wuxc::CalendarViewDayItem const& item, wuxc::TextBlock& 
 
                 parentPanel.Children().Append(newLunar);
                 lunarOut = newLunar;
+                cell.createdByMod = true;
+                cell.createdParentPanel = winrt::make_weak(parentPanel);
                 t_applyWrote = true;
             }
         } catch (...) {}
     }
-}
-
-struct ColorState {
-    wuxm::Brush savedForeground{nullptr};
-    bool hasSavedForeground = false;
-    bool savedForegroundWasLocal = false;
-    wuxm::Brush ownBrush{nullptr};
-    bool hadColor = false;
-};
-
-struct DayCell {
-    winrt::weak_ref<wuxc::CalendarViewDayItem> item{nullptr};
-    
-    winrt::weak_ref<wuxc::TextBlock> lunarLabel{nullptr};
-    winrt::weak_ref<wuxc::TextBlock> solarLabel{nullptr};
-    
-    int64_t lunarLabelChangedToken = 0;
-    std::wstring savedText;
-    bool hasSavedText = false;
-    std::wstring appliedText;
-    
-    ColorState lunarColor;
-    ColorState solarColor;
-    ColorState itemColor;
-    wuxm::Brush normalForeground{nullptr};
-
-    int32_t key = 0;
-    int64_t dateChangedToken = 0;
-    bool busy = false;
-};
-
-struct TrackedDayItem { void* id = nullptr; winrt::weak_ref<wuxc::CalendarViewDayItem> item{nullptr}; };
-constexpr size_t kMaxTrackedDayItems = 512;
-thread_local std::unordered_map<void*, std::unique_ptr<DayCell>> t_cells;
-thread_local std::vector<TrackedDayItem> t_dayItems;
-thread_local std::unordered_map<void*, winrt::weak_ref<wuxc::CalendarViewDayItem>> t_labelOwners;
-thread_local bool t_loggedMissingTextBlock = false;
-thread_local bool t_loggedTrackLimit = false;
-thread_local winrt::weak_ref<wuxc::TextBlock> t_headerLabel{nullptr};
-
-void ApplyToDayItem(wuxc::CalendarViewDayItem const& item);
-
-void* CellId(wuxc::CalendarViewDayItem const& item) { return winrt::get_abi(item); }
-
-DayCell& CellFor(wuxc::CalendarViewDayItem const& item) {
-    std::unique_ptr<DayCell>& entry = t_cells[CellId(item)];
-    if (entry && entry->item.get() != item) entry = nullptr;
-    if (!entry) { entry = std::make_unique<DayCell>(); entry->item = winrt::make_weak(item); }
-    return *entry;
-}
-
-void TrackDayItem(wuxc::CalendarViewDayItem const& item) {
-    void* id = winrt::get_abi(item);
-    for (auto it = t_dayItems.begin(); it != t_dayItems.end(); ++it) {
-        if (it->id != id) continue;
-        if (it->item.get()) { TrackedDayItem tracked = *it; t_dayItems.erase(it); t_dayItems.push_back(tracked); } 
-        else { it->item = winrt::make_weak(item); }
-        return;
-    }
-    if (t_dayItems.size() >= kMaxTrackedDayItems) t_dayItems.erase(t_dayItems.begin());
-    t_dayItems.push_back({id, winrt::make_weak(item)});
 }
 
 bool SameBrush(wuxm::Brush const& left, wuxm::Brush const& right) {
@@ -1384,7 +984,9 @@ bool IsOwnControlBrush(wuxc::Control const& ctrl, wuxm::Brush const& ownBrush) {
     try { return SameBrush(ctrl.Foreground(), ownBrush); } catch (...) { return false; }
 }
 
-wuxm::Brush SetForegroundIfDifferent(wuxc::TextBlock const& textBlock, winrt::Windows::UI::Color const& color, wuxm::Brush const& previousOwn) {
+wuxm::Brush SetForegroundIfDifferent(wuxc::TextBlock const& textBlock,
+                                     winrt::Windows::UI::Color const& color,
+                                     wuxm::Brush const& previousOwn) {
     try {
         if (auto current = textBlock.Foreground().try_as<wuxm::SolidColorBrush>()) {
             if (current.Color() == color) return SameBrush(current, previousOwn) ? previousOwn : nullptr;
@@ -1396,7 +998,9 @@ wuxm::Brush SetForegroundIfDifferent(wuxc::TextBlock const& textBlock, winrt::Wi
     } catch (...) { return nullptr; }
 }
 
-wuxm::Brush SetControlForegroundIfDifferent(wuxc::Control const& ctrl, winrt::Windows::UI::Color const& color, wuxm::Brush const& previousOwn) {
+wuxm::Brush SetControlForegroundIfDifferent(wuxc::Control const& ctrl,
+                                            winrt::Windows::UI::Color const& color,
+                                            wuxm::Brush const& previousOwn) {
     try {
         if (auto current = ctrl.Foreground().try_as<wuxm::SolidColorBrush>()) {
             if (current.Color() == color) return SameBrush(current, previousOwn) ? previousOwn : nullptr;
@@ -1414,7 +1018,8 @@ void SaveForeground(ColorState& state, wuxc::TextBlock const& label) {
         if (IsOwnBrush(label, state.ownBrush)) return;
         wf::IInspectable value = label.ReadLocalValue(wuxc::TextBlock::ForegroundProperty());
         if (auto brush = value.try_as<wuxm::Brush>()) {
-            state.savedForeground = brush; state.savedForegroundWasLocal = true;
+            state.savedForeground = brush;
+            state.savedForegroundWasLocal = true;
         }
         state.hasSavedForeground = true;
     } catch (...) {}
@@ -1426,7 +1031,8 @@ void SaveControlForeground(ColorState& state, wuxc::Control const& ctrl) {
         if (IsOwnControlBrush(ctrl, state.ownBrush)) return;
         wf::IInspectable value = ctrl.ReadLocalValue(wuxc::Control::ForegroundProperty());
         if (auto brush = value.try_as<wuxm::Brush>()) {
-            state.savedForeground = brush; state.savedForegroundWasLocal = true;
+            state.savedForeground = brush;
+            state.savedForegroundWasLocal = true;
         }
         state.hasSavedForeground = true;
     } catch (...) {}
@@ -1457,7 +1063,10 @@ void RestoreControlForeground(wuxc::Control const& ctrl, ColorState& state) {
 void OnLabelTextChanged(wux::DependencyObject const& sender) {
     auto it = t_labelOwners.find(winrt::get_abi(sender));
     if (it == t_labelOwners.end()) return;
-    if (auto item = it->second.get()) { ApplyToDayItem(item); StartSweepTimer(); }
+    if (auto item = it->second.get()) {
+        ApplyToDayItem(item);
+        StartSweepTimer();
+    }
 }
 
 void OpenHoroscopeForDateKey(int32_t key) {
@@ -1465,18 +1074,9 @@ void OpenHoroscopeForDateKey(int32_t key) {
     if (key == t_selectedHoroscopeKey && t_horoscopePage.pageBorder.get() &&
         t_horoscopePage.renderedKey == key) return;
 
-    Wh_Log(L"[VNCalendar] Open date: %d", key);
     t_selectedHoroscopeKey = key;
     UpdateHoroscopePageOnCurrentThread();
     StartSweepTimer();
-}
-
-void OnDayItemClicked(wuxc::CalendarViewDayItem const& item) {
-    if (!item) return;
-    try {
-        int32_t key = DateKeyFromDateTime(item.Date());
-        OpenHoroscopeForDateKey(key);
-    } catch (...) { LogCalendarException(L"Day item tapped"); }
 }
 
 void EnsureCalendarViewSelectionHooked(wuxc::CalendarView const& calView) {
@@ -1492,6 +1092,10 @@ void EnsureCalendarViewSelectionHooked(wuxc::CalendarView const& calView) {
     t_calendarView = winrt::make_weak(calView);
 
     try {
+        if (!t_hasSavedSelectionMode) {
+            t_savedSelectionMode = calView.SelectionMode();
+            t_hasSavedSelectionMode = true;
+        }
         if (calView.SelectionMode() == wuxc::CalendarViewSelectionMode::None) {
             calView.SelectionMode(wuxc::CalendarViewSelectionMode::Single);
         }
@@ -1516,58 +1120,45 @@ void EnsureCalendarViewSelectionHooked(wuxc::CalendarView const& calView) {
     } catch (...) { LogCalendarException(L"Register SelectedDatesChanged"); }
 }
 
-bool IsOwnText(std::wstring const& text, Settings const& settings) {
-    if (text.empty()) return false;
-    if (text == settings.workdayText || text == settings.offDayText) return true;
-    if (text.find(L"/") != std::wstring::npos) return true;
-    std::lock_guard<std::mutex> lock(g_holidaysMutex);
-    for (const auto& entry : g_holidays) { if (entry.second.name == text) return true; }
-    return false;
-}
-
-std::wstring ExpandName(std::wstring const& text, std::wstring const& name) {
-    if (text.empty()) return {};
-    std::wstring result; size_t pos = 0;
-    for (;;) {
-        size_t found = text.find(L"{name}", pos);
-        if (found == std::wstring::npos) { result.append(text, pos, std::wstring::npos); break; }
-        result.append(text, pos, found - pos); result += name; pos = found + 6;
-    }
-    return result;
+bool IsOwnLunarCellText(std::wstring const& text) {
+    return !text.empty() && text.find(L'/') != std::wstring::npos;
 }
 
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
-    const std::shared_ptr<const Settings> settings = GetSettings();
     if (!item) return;
     int32_t key = DateKeyFromDateTime(item.Date());
     if (!key) return;
 
     DayCell& cell = CellFor(item);
     if (cell.busy) return;
-    cell.busy = true; struct BusyGuard { bool& busy; ~BusyGuard() { busy = false; } } guard{cell.busy};
+    cell.busy = true;
+    struct BusyGuard { bool& busy; ~BusyGuard() { busy = false; } } guard{cell.busy};
 
     if (cell.key != key) {
         cell.key = key;
-        cell.savedText.clear();
         cell.appliedText.clear();
-        cell.hasSavedText = false;
+        if (!cell.createdByMod) {
+            cell.savedText.clear();
+            cell.hasSavedText = false;
+        }
     }
-
-    HolidayInfo info; const bool hasInfo = LookupHoliday(key, info);
 
     if (cell.dateChangedToken == 0) {
         try {
             cell.dateChangedToken = item.RegisterPropertyChangedCallback(
                 wuxc::CalendarViewDayItem::DateProperty(),
                 [](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
-                    if (auto dayItem = sender.try_as<wuxc::CalendarViewDayItem>()) { ApplyToDayItem(dayItem); StartSweepTimer(); }
+                    if (auto dayItem = sender.try_as<wuxc::CalendarViewDayItem>()) {
+                        ApplyToDayItem(dayItem);
+                        StartSweepTimer();
+                    }
                 });
         } catch (...) {}
     }
 
     wuxc::TextBlock solarLabel = nullptr;
     wuxc::TextBlock lunarLabel = nullptr;
-    FindBothTextBlocks(item, solarLabel, lunarLabel);
+    FindOrCreateLunarTextBlock(item, cell, solarLabel, lunarLabel);
 
     if (!lunarLabel) return;
 
@@ -1578,63 +1169,64 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
             }
             t_labelOwners.erase(winrt::get_abi(previous));
         }
-        cell.lunarLabelChangedToken = 0; 
+        cell.lunarLabelChangedToken = 0;
         cell.lunarLabel = winrt::make_weak(lunarLabel);
         if (solarLabel) cell.solarLabel = winrt::make_weak(solarLabel);
-        
-        cell.savedText.clear(); cell.appliedText.clear(); cell.hasSavedText = false;
-        cell.lunarColor = ColorState(); cell.solarColor = ColorState(); cell.normalForeground = nullptr;
+
+        cell.appliedText.clear();
+        cell.lunarColor = ColorState();
+        cell.solarColor = ColorState();
+        cell.normalForeground = nullptr;
         t_labelOwners[winrt::get_abi(lunarLabel)] = winrt::make_weak(item);
 
         try {
             cell.lunarLabelChangedToken = lunarLabel.RegisterPropertyChangedCallback(
-                wuxc::TextBlock::TextProperty(), [](wux::DependencyObject const& sender, wux::DependencyProperty const&) { OnLabelTextChanged(sender); });
+                wuxc::TextBlock::TextProperty(),
+                [](wux::DependencyObject const& sender, wux::DependencyProperty const&) {
+                    OnLabelTextChanged(sender);
+                });
         } catch (...) {}
     }
 
-    int year = key / 10000; int month = (key / 100) % 100; int day = key % 100;
-    
-    int lDay, lMonth, lYear; bool isLeap; std::wstring canChi;
+    int year = key / 10000;
+    int month = (key / 100) % 100;
+    int day = key % 100;
+
+    int lDay, lMonth, lYear;
+    bool isLeap;
+    std::wstring canChi;
     GetLunarDateWinRT_ForDate(year, month, day, lDay, lMonth, lYear, isLeap, canChi);
-    
-    wchar_t buffer[64];
-    if (isLeap) swprintf_s(buffer, L"%d/%d (Nhuận)", lDay, lMonth);
-    else swprintf_s(buffer, L"%d/%d", lDay, lMonth);
+
+    WCHAR buffer[64]{};
+    if (isLeap) _snwprintf_s(buffer, _TRUNCATE, L"%d/%d (Nhuận)", lDay, lMonth);
+    else _snwprintf_s(buffer, _TRUNCATE, L"%d/%d", lDay, lMonth);
     std::wstring desired = buffer;
 
-    HolidayScope scope = GetVietnameseHolidayScope(day, month, lDay, lMonth, isLeap);
+    HolidayScope scope = EvaluateVietnameseHoliday(day, month, lDay, lMonth, isLeap).scope;
     bool colorSolar = (scope == HolidayScope::Both || scope == HolidayScope::SolarOnly);
     bool colorLunar = (scope == HolidayScope::Both || scope == HolidayScope::LunarOnly);
 
-    bool useIcsColorOnLunar = hasInfo && (scope == HolidayScope::None);
-    if (hasInfo && settings->replaceText && scope != HolidayScope::SolarOnly) {
-        if (info.isOffDay) desired = settings->offDayText.empty() ? info.name : ExpandName(settings->offDayText, info.name);
-        else desired = ExpandName(settings->workdayText, info.name);
-    }
-
     std::wstring current = ElementText(lunarLabel);
-
     if (!desired.empty() && current != desired) {
-        if (current != cell.appliedText && !IsOwnText(current, *settings)) {
-            cell.savedText = current; cell.hasSavedText = true;
+        if (!cell.createdByMod && current != cell.appliedText && !IsOwnLunarCellText(current)) {
+            cell.savedText = current;
+            cell.hasSavedText = true;
         }
-        try { lunarLabel.Text(desired); t_applyWrote = true; } catch (...) {}
-    } else if (desired.empty() && !cell.appliedText.empty() && current == cell.appliedText) {
-        try { if (cell.hasSavedText) { lunarLabel.Text(cell.savedText); t_applyWrote = true; } } catch (...) {}
-        cell.hasSavedText = false;
+        try {
+            lunarLabel.Text(desired);
+            t_applyWrote = true;
+        } catch (...) {}
     }
     cell.appliedText = desired;
 
-    EnsureDualLineSpacing(item, solarLabel, lunarLabel, cell.savedText.empty());
+    EnsureDualLineSpacing(item, solarLabel, lunarLabel, cell.createdByMod || cell.savedText.empty());
 
-    winrt::Windows::UI::Color redColor{255, 255, 90, 90}; 
-    winrt::Windows::UI::Color icsColor = info.isOffDay ? settings->offDayColor : settings->workdayColor;
+    winrt::Windows::UI::Color redColor{255, 255, 90, 90};
 
     if (!cell.normalForeground && !cell.lunarColor.hadColor) {
         try { cell.normalForeground = lunarLabel.Foreground(); } catch (...) {}
     }
 
-    // 1. Ép màu Lịch Dương
     if (colorSolar) {
         SaveControlForeground(cell.itemColor, item);
         cell.itemColor.ownBrush = SetControlForegroundIfDifferent(item, redColor, cell.itemColor.ownBrush);
@@ -1656,15 +1248,13 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         }
     }
 
-    // 2. Ép màu Lịch Âm
-    if (colorLunar || useIcsColorOnLunar) {
+    if (colorLunar) {
         SaveForeground(cell.lunarColor, lunarLabel);
-        winrt::Windows::UI::Color targetColor = colorLunar ? redColor : icsColor;
-        cell.lunarColor.ownBrush = SetForegroundIfDifferent(lunarLabel, targetColor, cell.lunarColor.ownBrush);
+        cell.lunarColor.ownBrush = SetForegroundIfDifferent(lunarLabel, redColor, cell.lunarColor.ownBrush);
         cell.lunarColor.hadColor = true;
     } else if (colorSolar) {
         SaveForeground(cell.lunarColor, lunarLabel);
-        winrt::Windows::UI::Color normalColor{255, 210, 210, 210};
+        winrt::Windows::UI::Color normalColor{255, 180, 180, 180};
         if (cell.normalForeground) {
             if (auto scb = cell.normalForeground.try_as<wuxm::SolidColorBrush>()) {
                 if (scb.Color() != redColor) normalColor = scb.Color();
@@ -1679,7 +1269,8 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Trang Chi Tiết Tử Vi & Lịch Vạn Niên
+// Horoscope Detail Overlay Page
+
 wuxc::Grid FindCalendarRootGrid() {
     if (auto existing = t_horoscopePage.hostGrid.get()) {
         return existing;
@@ -1719,11 +1310,13 @@ wuxc::Grid FindCalendarRootGrid() {
     return nullptr;
 }
 
-wuxc::Border CreateLineSection(wuxc::TextBlock& textBlockOut, wuxm::Brush const& textBrush) {
+wuxc::Border CreateLineSection(wuxc::TextBlock& textBlockOut,
+                               wuxm::Brush const& textBrush,
+                               winrt::Windows::UI::Color const& dividerColor) {
     wuxc::Border rowBorder;
     rowBorder.Padding({6, 6, 6, 7});
     rowBorder.BorderThickness({0, 0, 0, 1});
-    rowBorder.BorderBrush(wuxm::SolidColorBrush(winrt::Windows::UI::Color{38, 255, 255, 255}));
+    rowBorder.BorderBrush(wuxm::SolidColorBrush(dividerColor));
 
     wuxc::TextBlock tb;
     tb.FontSize(12.5);
@@ -1760,17 +1353,36 @@ void EnsureHoroscopePageCreated() {
             }
         }
 
-        wuxm::Brush fgBrush = wuxm::SolidColorBrush(winrt::Windows::UI::Color{255, 245, 245, 245});
-        if (auto hdr = t_headerLabel.get()) {
+        bool isLightTheme = false;
+        if (auto fe = hostGrid.try_as<wux::FrameworkElement>()) {
+            try {
+                isLightTheme = (fe.ActualTheme() == wux::ElementTheme::Light);
+            } catch (...) {}
+        }
+
+        wuxm::Brush fgBrush = wuxm::SolidColorBrush(
+            isLightTheme ? winrt::Windows::UI::Color{255, 24, 24, 24}
+                         : winrt::Windows::UI::Color{255, 245, 245, 245});
+        if (auto hdr = t_headerState.headerLabel.get()) {
             try { fgBrush = hdr.Foreground(); } catch (...) {}
         }
+
+        winrt::Windows::UI::Color pageBgColor =
+            isLightTheme ? winrt::Windows::UI::Color{18, 0, 0, 0}
+                         : winrt::Windows::UI::Color{22, 255, 255, 255};
+        winrt::Windows::UI::Color dividerColor =
+            isLightTheme ? winrt::Windows::UI::Color{38, 0, 0, 0}
+                         : winrt::Windows::UI::Color{38, 255, 255, 255};
+        winrt::Windows::UI::Color accentLunarColor =
+            isLightTheme ? winrt::Windows::UI::Color{255, 196, 43, 28}
+                         : winrt::Windows::UI::Color{255, 255, 125, 125};
 
         wuxc::Border pageBorder;
         pageBorder.Name(kCustomHoroscopePageName);
         pageBorder.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
         pageBorder.VerticalAlignment(wux::VerticalAlignment::Stretch);
         pageBorder.Padding({14, 10, 14, 10});
-        pageBorder.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Color{22, 255, 255, 255}));
+        pageBorder.Background(wuxm::SolidColorBrush(pageBgColor));
         pageBorder.CornerRadius({8, 8, 8, 8});
         pageBorder.Visibility(wux::Visibility::Collapsed);
 
@@ -1791,7 +1403,6 @@ void EnsureHoroscopePageCreated() {
         pageLayout.RowDefinitions().Append(rowDivider);
         pageLayout.RowDefinitions().Append(rowBody);
 
-        // 1. Thanh Header trên cùng: [ ← ] + Tiêu đề Ngày Dương / Âm
         wuxc::Grid topBar;
         wuxc::ColumnDefinition colBack;
         colBack.Width(wux::GridLengthHelper::Auto());
@@ -1830,7 +1441,7 @@ void EnsureHoroscopePageCreated() {
         wuxc::TextBlock titleLunar;
         titleLunar.FontSize(12.5);
         titleLunar.Margin({0, 2, 0, 0});
-        titleLunar.Foreground(wuxm::SolidColorBrush(winrt::Windows::UI::Color{255, 255, 125, 125}));
+        titleLunar.Foreground(wuxm::SolidColorBrush(accentLunarColor));
         titleLunar.TextWrapping(wux::TextWrapping::Wrap);
 
         titleStack.Children().Append(titleSolar);
@@ -1841,29 +1452,28 @@ void EnsureHoroscopePageCreated() {
         wuxc::Grid::SetRow(topBar, 0);
         pageLayout.Children().Append(topBar);
 
-        // 2. Đường kẻ ngang phân cách
         wuxc::Border headerLine;
         headerLine.Height(1.0);
         headerLine.Margin({0, 0, 0, 4});
-        headerLine.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Color{65, 255, 255, 255}));
+        headerLine.Background(wuxm::SolidColorBrush(dividerColor));
         wuxc::Grid::SetRow(headerLine, 1);
         pageLayout.Children().Append(headerLine);
 
-        // 3. Các dòng thông tin chi tiết Tử Vi & Can Chi
         wuxc::ScrollViewer scrollViewer;
         scrollViewer.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
         scrollViewer.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
 
         wuxc::StackPanel listStack;
-        wuxc::TextBlock tbCanChi{nullptr}, tbMenhTruc{nullptr}, tbGio{nullptr}, tbNen{nullptr}, tbKy{nullptr}, tbXung{nullptr};
+        wuxc::TextBlock tbCanChi{nullptr}, tbMenhTruc{nullptr}, tbGio{nullptr},
+                        tbNen{nullptr}, tbKy{nullptr}, tbXung{nullptr};
 
-        listStack.Children().Append(CreateLineSection(tbCanChi, fgBrush));
-        listStack.Children().Append(CreateLineSection(tbMenhTruc, fgBrush));
-        listStack.Children().Append(CreateLineSection(tbGio, fgBrush));
-        listStack.Children().Append(CreateLineSection(tbNen, fgBrush));
-        listStack.Children().Append(CreateLineSection(tbKy, fgBrush));
+        listStack.Children().Append(CreateLineSection(tbCanChi, fgBrush, dividerColor));
+        listStack.Children().Append(CreateLineSection(tbMenhTruc, fgBrush, dividerColor));
+        listStack.Children().Append(CreateLineSection(tbGio, fgBrush, dividerColor));
+        listStack.Children().Append(CreateLineSection(tbNen, fgBrush, dividerColor));
+        listStack.Children().Append(CreateLineSection(tbKy, fgBrush, dividerColor));
 
-        wuxc::Border lastRow = CreateLineSection(tbXung, fgBrush);
+        wuxc::Border lastRow = CreateLineSection(tbXung, fgBrush, dividerColor);
         lastRow.BorderThickness({0, 0, 0, 0});
         listStack.Children().Append(lastRow);
 
@@ -1886,7 +1496,6 @@ void EnsureHoroscopePageCreated() {
         t_horoscopePage.rowXungHuong = winrt::make_weak(tbXung);
         t_horoscopePage.renderedKey = 0;
         loggedCreateError = false;
-        Wh_Log(L"[VNCalendar] Horoscope page created");
     } catch (...) {
         if (!loggedCreateError) {
             LogCalendarException(L"Create horoscope page");
@@ -1964,134 +1573,85 @@ void UpdateHoroscopePageOnCurrentThread() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Quét và Ghi Đè Lên Tiêu Đề Header
+// Scoped Calendar Header Lookup (Grid#CalendarCenterGrid > StackPanel#CalendarHeader)
+
 void UpdateHeaderLabelOnCurrentThread() {
-    auto window = wux::Window::Current(); if (!window) return;
-    auto root = window.Content().try_as<wux::FrameworkElement>(); if (!root) return;
-    wuxc::TextBlock headerLabel = t_headerLabel.get();
-    wuxc::TextBlock solarDateHeader = nullptr;
+    wuxc::Panel headerPanel = t_headerState.headerPanel.get();
+    if (!headerPanel) return;
+
+    wuxc::TextBlock headerLabel = t_headerState.headerLabel.get();
 
     if (!headerLabel) {
-        std::vector<wux::DependencyObject> queue;
-        queue.push_back(root);
-        size_t head = 0;
+        try {
+            wuxc::TextBlock primaryButtonTextBlock = nullptr;
+            int count = wuxm::VisualTreeHelper::GetChildrenCount(headerPanel);
+            for (int i = 0; i < count; i++) {
+                auto child = wuxm::VisualTreeHelper::GetChild(headerPanel, i);
+                if (!child) continue;
 
-        while (head < queue.size() && queue.size() < 2000) {
-            auto current = queue[head++];
-
-            if (auto cv = current.try_as<wuxc::CalendarView>()) {
-                EnsureCalendarViewSelectionHooked(cv);
-                continue;
-            }
-            if (current.try_as<wuxc::CalendarViewDayItem>()) {
-                continue;
-            }
-
-            if (auto textBlock = current.try_as<wuxc::TextBlock>()) {
-                std::wstring name = ElementName(textBlock);
-                std::wstring text;
-                try { text = textBlock.Text().c_str(); } catch (...) {}
-
-                if (name == kCustomHeaderLunarName ||
-                    name.find(L"Lunar") != std::wstring::npos ||
-                    name.find(L"Additional") != std::wstring::npos ||
-                    name.find(L"Secondary") != std::wstring::npos ||
-                    text.find(L"月") != std::wstring::npos ||
-                    text.find(L"Năm ") != std::wstring::npos ||
-                    text.find(L"Tý") != std::wstring::npos || text.find(L"Sửu") != std::wstring::npos ||
-                    text.find(L"Dần") != std::wstring::npos || text.find(L"Mão") != std::wstring::npos ||
-                    text.find(L"Thìn") != std::wstring::npos || text.find(L"Tỵ") != std::wstring::npos ||
-                    text.find(L"Ngọ") != std::wstring::npos || text.find(L"Mùi") != std::wstring::npos ||
-                    text.find(L"Thân") != std::wstring::npos || text.find(L"Dậu") != std::wstring::npos ||
-                    text.find(L"Tuất") != std::wstring::npos || text.find(L"Hợi") != std::wstring::npos) {
-                    headerLabel = textBlock;
-                    t_headerLabel = winrt::make_weak(textBlock);
+                // Direct TextBlock child of StackPanel#CalendarHeader is the auxiliary calendar header
+                if (auto tb = child.try_as<wuxc::TextBlock>()) {
+                    headerLabel = tb;
+                    t_headerState.createdByMod = (ElementName(tb) == kCustomHeaderLunarName);
                     break;
                 }
 
-                if (!solarDateHeader &&
-                    (text.find(L"Thứ") != std::wstring::npos ||
-                     text.find(L"Chủ Nhật") != std::wstring::npos ||
-                     text.find(L"Chủ nhật") != std::wstring::npos ||
-                     text.find(L", ") != std::wstring::npos)) {
-                    solarDateHeader = textBlock;
+                // Find the primary date TextBlock inside the CalendarHeader's Button for theme brush reference
+                if (!primaryButtonTextBlock) {
+                    std::vector<FoundElement> sub;
+                    CollectDescendants(child, sub);
+                    for (const auto& f : sub) {
+                        if (auto innerTb = f.element.try_as<wuxc::TextBlock>()) {
+                            primaryButtonTextBlock = innerTb;
+                            break;
+                        }
+                    }
                 }
             }
 
-            int count = 0;
-            try { count = wuxm::VisualTreeHelper::GetChildrenCount(current); } catch (...) {}
-            for (int i = 0; i < count; i++) {
+            if (headerLabel && !t_headerState.createdByMod && !t_headerState.hasSavedState) {
                 try {
-                    auto child = wuxm::VisualTreeHelper::GetChild(current, i);
-                    if (child) queue.push_back(child);
+                    t_headerState.savedText = headerLabel.Text().c_str();
+                    t_headerState.savedVisibility = headerLabel.Visibility();
+                    t_headerState.hasSavedState = true;
                 } catch (...) {}
             }
-        }
 
-        if (!headerLabel && solarDateHeader) {
-            try {
-                wux::DependencyObject parent = wuxm::VisualTreeHelper::GetParent(solarDateHeader);
-                wuxc::Panel headerPanel = nullptr;
-                wux::DependencyObject childInPanel = solarDateHeader;
-                for (int depth = 0; depth < 4 && parent; depth++) {
-                    if (auto panel = parent.try_as<wuxc::Panel>()) {
-                        headerPanel = panel;
-                        break;
-                    }
-                    childInPanel = parent;
-                    parent = wuxm::VisualTreeHelper::GetParent(parent);
+            // If no auxiliary header TextBlock exists in StackPanel#CalendarHeader, create one
+            if (!headerLabel) {
+                wuxc::TextBlock newHeaderLunar;
+                newHeaderLunar.Name(kCustomHeaderLunarName);
+                newHeaderLunar.FontSize(13.5);
+                newHeaderLunar.Opacity(0.85);
+                newHeaderLunar.Margin({12, 0, 12, 6});
+                if (primaryButtonTextBlock) {
+                    try {
+                        newHeaderLunar.Foreground(primaryButtonTextBlock.Foreground());
+                    } catch (...) {}
                 }
 
-                if (headerPanel) {
-                    int count = wuxm::VisualTreeHelper::GetChildrenCount(headerPanel);
-                    bool passedSolar = false;
-                    for (int i = 0; i < count; i++) {
-                        auto sibling = wuxm::VisualTreeHelper::GetChild(headerPanel, i);
-                        if (sibling == childInPanel) {
-                            passedSolar = true;
-                            continue;
-                        }
-                        if (passedSolar) {
-                            if (auto tb = sibling.try_as<wuxc::TextBlock>()) {
-                                headerLabel = tb;
-                                break;
-                            }
-                        }
-                    }
+                headerPanel.Children().Append(newHeaderLunar);
+                headerLabel = newHeaderLunar;
+                t_headerState.createdByMod = true;
+            }
 
-                    if (!headerLabel) {
-                        wuxc::TextBlock newHeaderLunar;
-                        newHeaderLunar.Name(kCustomHeaderLunarName);
-                        newHeaderLunar.FontSize(14.0);
-                        newHeaderLunar.Opacity(0.85);
-                        newHeaderLunar.Margin({0, 2, 0, 0});
-                        try {
-                            newHeaderLunar.Foreground(solarDateHeader.Foreground());
-                        } catch (...) {}
-
-                        headerPanel.Children().Append(newHeaderLunar);
-                        headerLabel = newHeaderLunar;
-                    }
-
-                    if (headerLabel) {
-                        t_headerLabel = winrt::make_weak(headerLabel);
-                    }
-                }
-            } catch (...) {}
-        }
+            if (headerLabel) {
+                t_headerState.headerLabel = winrt::make_weak(headerLabel);
+            }
+        } catch (...) {}
     }
 
     if (headerLabel) {
         int lDay, lMonth, lYear;
         bool isLeap;
         std::wstring canChi;
-        GetLunarDateWinRT(lDay, lMonth, lYear, isLeap, canChi);
+        GetLunarDateToday(lDay, lMonth, lYear, isLeap, canChi);
 
-        wchar_t buffer[128];
+        WCHAR buffer[128]{};
         if (isLeap) {
-            swprintf_s(buffer, L"%d Tháng %d (Nhuận) Năm %s", lDay, lMonth, canChi.c_str());
+            _snwprintf_s(buffer, _TRUNCATE, L"%d Tháng %d (Nhuận) Năm %s", lDay, lMonth, canChi.c_str());
         } else {
-            swprintf_s(buffer, L"%d Tháng %d Năm %s", lDay, lMonth, canChi.c_str());
+            _snwprintf_s(buffer, _TRUNCATE, L"%d Tháng %d Năm %s", lDay, lMonth, canChi.c_str());
         }
 
         std::wstring desired = buffer;
@@ -2115,16 +1675,19 @@ void UpdateHeaderLabelOnCurrentThread() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Keeping the calendar up to date & Bắt tọa độ Click qua CoreWindow
+// Keeping the Calendar Flyout Up to Date
+
 thread_local winrt::Windows::System::DispatcherQueueTimer t_sweepTimer{nullptr};
 thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker t_sweepTimerRevoker;
-constexpr int kSweepIntervalMs = 100;
-constexpr int kSweepQuietTicksToStop = 20;
+constexpr int kSweepIntervalMs = 1000;
+constexpr int kSweepQuietTicksToStop = 5;
 thread_local int t_sweepQuietTicks = 0;
 
 void StopSweepTimer() {
     t_sweepQuietTicks = 0;
-    if (t_sweepTimer) { try { t_sweepTimer.Stop(); } catch (...) {} }
+    if (t_sweepTimer) {
+        try { t_sweepTimer.Stop(); } catch (...) {}
+    }
 }
 
 void StartSweepTimer() {
@@ -2136,50 +1699,12 @@ void StartSweepTimer() {
             t_sweepTimer = dispatcherQueue.CreateTimer();
             t_sweepTimer.Interval(std::chrono::milliseconds{kSweepIntervalMs});
             t_sweepTimerRevoker = t_sweepTimer.Tick(
-                winrt::auto_revoke, [](winrt::Windows::System::DispatcherQueueTimer const&, wf::IInspectable const&) { SweepDayItems(); });
+                winrt::auto_revoke,
+                [](winrt::Windows::System::DispatcherQueueTimer const&, wf::IInspectable const&) {
+                    SweepDayItems();
+                });
         }
         if (!t_sweepTimer.IsRunning()) t_sweepTimer.Start();
-    } catch (...) {}
-}
-
-void OnCoreWindowPointerReleased(wuc::PointerEventArgs const& args) {
-    try {
-        wf::Point pt = args.CurrentPoint().Position();
-
-        if (t_selectedHoroscopeKey != 0) {
-            if (auto backBtn = t_horoscopePage.backButton.get()) {
-                float w = static_cast<float>(backBtn.ActualWidth());
-                float h = static_cast<float>(backBtn.ActualHeight());
-                if (w > 0 && h > 0) {
-                    wf::Rect bounds = backBtn.TransformToVisual(nullptr).TransformBounds({0, 0, w, h});
-                    if (pt.X >= bounds.X && pt.X <= bounds.X + bounds.Width &&
-                        pt.Y >= bounds.Y && pt.Y <= bounds.Y + bounds.Height) {
-                        t_selectedHoroscopeKey = 0;
-                        UpdateHoroscopePageOnCurrentThread();
-                        StartSweepTimer();
-                    }
-                }
-            }
-            return;
-        }
-
-        for (const auto& tracked : t_dayItems) {
-            auto item = tracked.item.get();
-            if (!item) continue;
-            try {
-                if (item.Visibility() != wux::Visibility::Visible) continue;
-                float w = static_cast<float>(item.ActualWidth());
-                float h = static_cast<float>(item.ActualHeight());
-                if (w <= 0 || h <= 0) continue;
-
-                wf::Rect bounds = item.TransformToVisual(nullptr).TransformBounds({0, 0, w, h});
-                if (pt.X >= bounds.X && pt.X <= bounds.X + bounds.Width &&
-                    pt.Y >= bounds.Y && pt.Y <= bounds.Y + bounds.Height) {
-                    OnDayItemClicked(item);
-                    break;
-                }
-            } catch (...) {}
-        }
     } catch (...) {}
 }
 
@@ -2187,11 +1712,11 @@ struct CoreWindowTriggers {
     wuc::CoreWindow coreWindow{nullptr};
     winrt::event_token activatedToken{};
     winrt::event_token visibilityChangedToken{};
-    winrt::event_token pointerReleasedToken{};
 };
 thread_local CoreWindowTriggers t_windowTriggers;
 constexpr ULONGLONG kCalendarOpenedDebounceMs = 500;
 thread_local ULONGLONG t_lastCalendarOpenedTick = 0;
+
 void OnCalendarOpenedOnCurrentThread();
 void InitializeForCurrentThread();
 
@@ -2203,15 +1728,13 @@ void RegisterCalendarTriggersOnCurrentThread() {
         t_windowTriggers.coreWindow = coreWindow;
         t_windowTriggers.activatedToken = coreWindow.Activated(
             [](wuc::CoreWindow const&, wuc::WindowActivatedEventArgs const& args) {
-                if (args.WindowActivationState() != wuc::CoreWindowActivationState::Deactivated) OnCalendarOpenedOnCurrentThread();
+                if (args.WindowActivationState() != wuc::CoreWindowActivationState::Deactivated) {
+                    OnCalendarOpenedOnCurrentThread();
+                }
             });
         t_windowTriggers.visibilityChangedToken = coreWindow.VisibilityChanged(
             [](wuc::CoreWindow const&, wuc::VisibilityChangedEventArgs const& args) {
                 if (args.Visible()) OnCalendarOpenedOnCurrentThread();
-            });
-        t_windowTriggers.pointerReleasedToken = coreWindow.PointerReleased(
-            [](wuc::CoreWindow const&, wuc::PointerEventArgs const& args) {
-                OnCoreWindowPointerReleased(args);
             });
     } catch (...) {}
 }
@@ -2222,7 +1745,6 @@ void UnregisterCalendarTriggersOnCurrentThread() {
         if (coreWindow) {
             if (t_windowTriggers.activatedToken.value != 0) coreWindow.Activated(t_windowTriggers.activatedToken);
             if (t_windowTriggers.visibilityChangedToken.value != 0) coreWindow.VisibilityChanged(t_windowTriggers.visibilityChangedToken);
-            if (t_windowTriggers.pointerReleasedToken.value != 0) coreWindow.PointerReleased(t_windowTriggers.pointerReleasedToken);
         }
     } catch (...) {}
     t_windowTriggers = {};
@@ -2233,19 +1755,25 @@ thread_local winrt::event_token t_layoutUpdatedToken{};
 thread_local ULONGLONG t_layoutUpdatedStartTick = 0;
 thread_local ULONGLONG t_lastLayoutUpdatedPassTick = 0;
 constexpr ULONGLONG kLayoutUpdatedWatchMs = 5000;
-constexpr ULONGLONG kLayoutUpdatedThrottleMs = 100;
+constexpr ULONGLONG kLayoutUpdatedThrottleMs = 150;
 
 void RevokeLayoutUpdatedWatch() {
     if (t_layoutUpdatedToken.value != 0) {
         auto element = t_layoutUpdatedElement;
-        if (element) { try { element.LayoutUpdated(t_layoutUpdatedToken); } catch (...) {} }
+        if (element) {
+            try { element.LayoutUpdated(t_layoutUpdatedToken); } catch (...) {}
+        }
     }
-    t_layoutUpdatedToken = {}; t_layoutUpdatedElement = nullptr;
+    t_layoutUpdatedToken = {};
+    t_layoutUpdatedElement = nullptr;
 }
 
 void OnCalendarLayoutUpdatedOnCurrentThread() {
     const ULONGLONG now = GetTickCount64();
-    if (now - t_layoutUpdatedStartTick > kLayoutUpdatedWatchMs) { RevokeLayoutUpdatedWatch(); return; }
+    if (now - t_layoutUpdatedStartTick > kLayoutUpdatedWatchMs) {
+        RevokeLayoutUpdatedWatch();
+        return;
+    }
     if (now - t_lastLayoutUpdatedPassTick < kLayoutUpdatedThrottleMs) return;
     t_lastLayoutUpdatedPassTick = now;
     SweepDayItems();
@@ -2255,30 +1783,56 @@ void OnCalendarLayoutUpdatedOnCurrentThread() {
 void WatchCalendarLayoutOnCurrentThread() {
     if (t_layoutUpdatedToken.value != 0) return;
     try {
-        auto window = wux::Window::Current(); if (!window) return;
-        auto root = window.Content().try_as<wux::FrameworkElement>(); if (!root) return;
-        t_layoutUpdatedElement = root; t_layoutUpdatedStartTick = GetTickCount64(); t_lastLayoutUpdatedPassTick = 0;
-        t_layoutUpdatedToken = root.LayoutUpdated([](wf::IInspectable const&, wf::IInspectable const&) { OnCalendarLayoutUpdatedOnCurrentThread(); });
+        auto window = wux::Window::Current();
+        if (!window) return;
+        auto root = window.Content().try_as<wux::FrameworkElement>();
+        if (!root) return;
+        t_layoutUpdatedElement = root;
+        t_layoutUpdatedStartTick = GetTickCount64();
+        t_lastLayoutUpdatedPassTick = 0;
+        t_layoutUpdatedToken = root.LayoutUpdated(
+            [](wf::IInspectable const&, wf::IInspectable const&) {
+                OnCalendarLayoutUpdatedOnCurrentThread();
+            });
     } catch (...) { RevokeLayoutUpdatedWatch(); }
 }
 
 constexpr size_t kMaxScannedElements = 16384;
 constexpr int kMaxScanDepth = 96;
-thread_local bool t_loggedNoWindow = false;
 
-void CollectDayItemsFromElement(wux::DependencyObject const& root, size_t& budget, int depth) {
+void CollectDayItemsFromElement(wux::DependencyObject const& root,
+                                size_t& budget,
+                                int depth,
+                                bool insideCalendarCenter) {
     if (!root || budget == 0 || depth > kMaxScanDepth) return;
     budget--;
+
+    std::wstring name = ElementName(root);
+    // Never walk into NotificationCenterGrid
+    if (name == L"NotificationCenterGrid") return;
+    if (name == L"CalendarCenterGrid") insideCalendarCenter = true;
+
+    if (insideCalendarCenter && name == L"CalendarHeader") {
+        if (auto panel = root.try_as<wuxc::Panel>()) {
+            t_headerState.headerPanel = winrt::make_weak(panel);
+        }
+    }
+
     if (auto cv = root.try_as<wuxc::CalendarView>()) {
         EnsureCalendarViewSelectionHooked(cv);
     }
-    if (auto dayItem = root.try_as<wuxc::CalendarViewDayItem>()) { TrackDayItem(dayItem); return; }
+
+    if (auto dayItem = root.try_as<wuxc::CalendarViewDayItem>()) {
+        TrackDayItem(dayItem);
+        return;
+    }
+
     int count = 0;
     try { count = wuxm::VisualTreeHelper::GetChildrenCount(root); } catch (...) { return; }
     for (int childIndex = 0; childIndex < count; childIndex++) {
         wux::DependencyObject child = nullptr;
         try { child = wuxm::VisualTreeHelper::GetChild(root, childIndex); } catch (...) { continue; }
-        CollectDayItemsFromElement(child, budget, depth + 1);
+        CollectDayItemsFromElement(child, budget, depth + 1, insideCalendarCenter);
     }
 }
 
@@ -2288,10 +1842,14 @@ void CollectDayItemsOnCurrentThread() {
     if (!window) return;
     try {
         size_t budget = kMaxScannedElements;
-        if (auto content = window.Content()) CollectDayItemsFromElement(content, budget, 0);
+        if (auto content = window.Content()) {
+            CollectDayItemsFromElement(content, budget, 0, false);
+        }
         for (auto popup : wuxm::VisualTreeHelper::GetOpenPopups(window)) {
             if (budget == 0) break;
-            if (auto child = popup.Child()) CollectDayItemsFromElement(child, budget, 0);
+            if (auto child = popup.Child()) {
+                CollectDayItemsFromElement(child, budget, 0, false);
+            }
         }
     } catch (...) {}
 }
@@ -2308,7 +1866,6 @@ void OnCalendarOpenedOnCurrentThread() {
     SweepDayItems();
     StartSweepTimer();
     WatchCalendarLayoutOnCurrentThread();
-    RequestHolidayData();
 }
 
 void SweepDayItems() {
@@ -2321,7 +1878,10 @@ void SweepDayItems() {
 
     for (size_t i = 0; i < t_dayItems.size();) {
         auto item = t_dayItems[i].item.get();
-        if (!item) { t_dayItems.erase(t_dayItems.begin() + i); continue; }
+        if (!item) {
+            t_dayItems.erase(t_dayItems.begin() + i);
+            continue;
+        }
         ApplyToDayItem(item);
         i++;
     }
@@ -2329,10 +1889,12 @@ void SweepDayItems() {
     UpdateHoroscopePageOnCurrentThread();
 
     for (auto it = t_cells.begin(); it != t_cells.end();) {
-        if (it->second->item.get()) ++it; else it = t_cells.erase(it);
+        if (it->second->item.get()) ++it;
+        else it = t_cells.erase(it);
     }
     for (auto it = t_labelOwners.begin(); it != t_labelOwners.end();) {
-        if (it->second.get()) ++it; else it = t_labelOwners.erase(it);
+        if (it->second.get()) ++it;
+        else it = t_labelOwners.erase(it);
     }
 
     if (t_applyWrote) t_sweepQuietTicks = 0;
@@ -2344,35 +1906,52 @@ void UninitializeDayItemsForCurrentThread() {
         if (t_selectedDatesChangedToken.value != 0) {
             try { calView.SelectedDatesChanged(t_selectedDatesChangedToken); } catch (...) {}
         }
+        if (t_hasSavedSelectionMode) {
+            try { calView.SelectionMode(t_savedSelectionMode); } catch (...) {}
+        }
     }
     t_selectedDatesChangedToken = {};
+    t_hasSavedSelectionMode = false;
     t_calendarView = nullptr;
 
     for (auto& entry : t_cells) {
         DayCell& cell = *entry.second;
         auto item = cell.item.get();
-        if (!item) continue;
-        if (cell.dateChangedToken != 0) {
-            try { item.UnregisterPropertyChangedCallback(wuxc::CalendarViewDayItem::DateProperty(), cell.dateChangedToken); } catch (...) {}
-            cell.dateChangedToken = 0;
+        if (item) {
+            if (cell.dateChangedToken != 0) {
+                try { item.UnregisterPropertyChangedCallback(wuxc::CalendarViewDayItem::DateProperty(), cell.dateChangedToken); } catch (...) {}
+                cell.dateChangedToken = 0;
+            }
+            try {
+                if (cell.itemColor.hadColor) RestoreControlForeground(item, cell.itemColor);
+            } catch (...) {}
         }
-        try {
-            if (cell.itemColor.hadColor) RestoreControlForeground(item, cell.itemColor);
-        } catch (...) {}
-        
+
         if (auto lunarLabel = cell.lunarLabel.get()) {
             if (cell.lunarLabelChangedToken) {
                 try { lunarLabel.UnregisterPropertyChangedCallback(wuxc::TextBlock::TextProperty(), cell.lunarLabelChangedToken); } catch (...) {}
                 cell.lunarLabelChangedToken = 0;
             }
-            try {
-                lunarLabel.RenderTransform(nullptr);
-                lunarLabel.ClearValue(wux::FrameworkElement::MarginProperty());
-                if (cell.hasSavedText) lunarLabel.Text(cell.savedText);
-                if (cell.lunarColor.hadColor) RestoreForeground(lunarLabel, cell.lunarColor);
-            } catch (...) {}
+            if (cell.createdByMod) {
+                if (auto parentPanel = cell.createdParentPanel.get()) {
+                    try {
+                        uint32_t idx = 0;
+                        if (parentPanel.Children().IndexOf(lunarLabel, idx)) {
+                            parentPanel.Children().RemoveAt(idx);
+                        }
+                    } catch (...) {}
+                }
+            } else {
+                try {
+                    lunarLabel.RenderTransform(nullptr);
+                    lunarLabel.ClearValue(wux::FrameworkElement::MarginProperty());
+                    if (cell.hasSavedText) lunarLabel.Text(cell.savedText);
+                    if (cell.hasSavedVisibility) lunarLabel.Visibility(cell.savedVisibility);
+                    if (cell.lunarColor.hadColor) RestoreForeground(lunarLabel, cell.lunarColor);
+                } catch (...) {}
+            }
         }
-        
+
         if (auto solarLabel = cell.solarLabel.get()) {
             try {
                 solarLabel.RenderTransform(nullptr);
@@ -2381,6 +1960,25 @@ void UninitializeDayItemsForCurrentThread() {
             } catch (...) {}
         }
     }
+
+    if (auto headerLabel = t_headerState.headerLabel.get()) {
+        if (t_headerState.createdByMod) {
+            if (auto headerPanel = t_headerState.headerPanel.get()) {
+                try {
+                    uint32_t idx = 0;
+                    if (headerPanel.Children().IndexOf(headerLabel, idx)) {
+                        headerPanel.Children().RemoveAt(idx);
+                    }
+                } catch (...) {}
+            }
+        } else if (t_headerState.hasSavedState) {
+            try {
+                headerLabel.Text(t_headerState.savedText);
+                headerLabel.Visibility(t_headerState.savedVisibility);
+            } catch (...) {}
+        }
+    }
+    t_headerState = {};
 
     RestoreHoroscopeCalendarChildren();
     if (auto backButton = t_horoscopePage.backButton.get()) {
@@ -2404,9 +2002,10 @@ void UninitializeDayItemsForCurrentThread() {
     decltype(t_cells)().swap(t_cells);
     decltype(t_dayItems)().swap(t_dayItems);
     decltype(t_labelOwners)().swap(t_labelOwners);
-    
-    t_headerLabel = nullptr; 
-    
+
+    t_gregorianCal = nullptr;
+    t_lunarCal = nullptr;
+
     t_sweepQuietTicks = 0;
     try { if (t_sweepTimer) t_sweepTimer.Stop(); } catch (...) {}
     t_sweepTimerRevoker.revoke();
@@ -2417,15 +2016,18 @@ void UninitializeDayItemsForCurrentThread() {
 // Taskbar Clock & Tooltip Horoscope (explorer.exe)
 
 std::atomic<bool> g_systemTrayModuleHooked{false};
-std::atomic<bool> g_tooltipSymbolActive{false};
+thread_local bool t_inRefreshIcon = false;
 thread_local bool t_inGetTimeToolTipString = false;
-thread_local ULONGLONG t_lastLongDateTooltipTick = 0;
 
 using GetTimeFormatEx_t = decltype(&GetTimeFormatEx);
 GetTimeFormatEx_t GetTimeFormatEx_Original;
 
 using GetDateFormatEx_t = decltype(&GetDateFormatEx);
 GetDateFormatEx_t GetDateFormatEx_Original;
+
+using ClockSystemTrayIconDataModel_RefreshIcon_t = void(WINAPI*)(LPVOID pThis, LPVOID param1);
+ClockSystemTrayIconDataModel_RefreshIcon_t ClockSystemTrayIconDataModel_RefreshIcon_Original;
+ClockSystemTrayIconDataModel_RefreshIcon_t ClockSystemTrayIconDataModel2_RefreshIcon_Original;
 
 using ClockSystemTrayIconDataModel_GetTimeToolTipString_t =
     LPVOID(WINAPI*)(LPVOID pThis, LPVOID, LPVOID, LPVOID, LPVOID);
@@ -2440,14 +2042,24 @@ ClockSystemTrayIconDataModel_GetTimeToolTipString_t
 ClockSystemTrayIconDataModel_GetTimeToolTipString_t
     ClockSystemTrayIconDataModel_GetTimeToolTipString_Legacy_Original;
 
-// Bơm toàn bộ nội dung Âm lịch + Can Chi + Tử Vi vào hộp Tooltip khi rê chuột vào đồng hồ
+void WINAPI ClockSystemTrayIconDataModel_RefreshIcon_Hook(LPVOID pThis, LPVOID param1) {
+    t_inRefreshIcon = true;
+    ClockSystemTrayIconDataModel_RefreshIcon_Original(pThis, param1);
+    t_inRefreshIcon = false;
+}
+
+void WINAPI ClockSystemTrayIconDataModel2_RefreshIcon_Hook(LPVOID pThis, LPVOID param1) {
+    t_inRefreshIcon = true;
+    ClockSystemTrayIconDataModel2_RefreshIcon_Original(pThis, param1);
+    t_inRefreshIcon = false;
+}
+
 void AppendHoroscopeToToolTipString(LPVOID tooltipPtrPtr) {
     if (!tooltipPtrPtr || !*(void**)tooltipPtrPtr) return;
 
-    g_formatIndex++;
-    PCWSTR extraLine = GetLunarHoroscopeFull();
-    if (!extraLine || !*extraLine) return;
-    size_t extraLength = wcslen(extraLine);
+    std::wstring extraLine = FormatTooltipHoroscope();
+    if (extraLine.empty()) return;
+    size_t extraLength = extraLine.size();
 
     auto separator = L"\r\n\r\n"sv;
 
@@ -2481,7 +2093,7 @@ void AppendHoroscopeToToolTipString(LPVOID tooltipPtrPtr) {
     tooltipHeaderNew->length += static_cast<uint32_t>(separator.length());
 
     memcpy(tooltipHeaderNew->buffer + tooltipHeaderNew->length,
-           extraLine, sizeof(wchar_t) * extraLength);
+           extraLine.data(), sizeof(wchar_t) * extraLength);
     tooltipHeaderNew->length += static_cast<uint32_t>(extraLength);
 
     tooltipHeaderNew->buffer[tooltipHeaderNew->length] = L'\0';
@@ -2491,7 +2103,6 @@ void AppendHoroscopeToToolTipString(LPVOID tooltipPtrPtr) {
 LPVOID InvokeGetTimeToolTipStringHook(
     LPVOID pThis, LPVOID p1, LPVOID p2, LPVOID p3, LPVOID p4,
     ClockSystemTrayIconDataModel_GetTimeToolTipString_t original) {
-    g_tooltipSymbolActive = true;
     t_inGetTimeToolTipString = true;
     LPVOID ret = original(pThis, p1, p2, p3, p4);
     AppendHoroscopeToToolTipString(ret);
@@ -2535,6 +2146,17 @@ bool HookSystemTraySymbols(HMODULE module) {
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
+            &ClockSystemTrayIconDataModel_RefreshIcon_Original,
+            ClockSystemTrayIconDataModel_RefreshIcon_Hook,
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel2::RefreshIcon(class SystemTrayTelemetry::ClockUpdate &))"},
+            &ClockSystemTrayIconDataModel2_RefreshIcon_Original,
+            ClockSystemTrayIconDataModel2_RefreshIcon_Hook,
+            true,
+        },
+        {
             {LR"(private: struct winrt::hstring __cdecl winrt::SystemTray::implementation::ClockSystemTrayIconDataModel::GetTimeToolTipString(struct _SYSTEMTIME const &,struct _SYSTEMTIME const &,class SystemTrayTelemetry::ClockUpdate &))"},
             &ClockSystemTrayIconDataModel_GetTimeToolTipString_Original,
             ClockSystemTrayIconDataModel_GetTimeToolTipString_Hook,
@@ -2568,10 +2190,50 @@ bool HookSystemTraySymbols(HMODULE module) {
     return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
 }
 
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResourceW(hModule, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValueW(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return static_cast<VS_FIXEDFILEINFO*>(pFixedFileInfo);
+}
+
 HMODULE GetSystemTrayModuleHandle() {
     HMODULE module = GetModuleHandleW(L"SystemTray.dll");
-    if (!module) module = GetModuleHandleW(L"Taskbar.View.dll");
-    if (!module) module = GetModuleHandleW(L"ExplorerExtensions.dll");
+    if (!module) {
+        module = GetModuleHandleW(L"Taskbar.View.dll");
+        if (module) {
+            // Starting with Taskbar.View.dll 2604.x, the SystemTray types moved
+            // out of Taskbar.View.dll into SystemTray.dll.
+            VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor = fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                module = nullptr;
+            }
+        }
+    }
+    if (!module) {
+        module = GetModuleHandleW(L"ExplorerExtensions.dll");
+    }
     return module;
 }
 
@@ -2589,54 +2251,29 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     return module;
 }
 
-bool IsCallStackFromSystemTray() {
-    if (g_shuttingDown) return false;
-
-    HMODULE hSysTray = GetModuleHandleW(L"SystemTray.dll");
-    HMODULE hTaskbarView = GetModuleHandleW(L"Taskbar.View.dll");
-    HMODULE hExpExt = GetModuleHandleW(L"ExplorerExtensions.dll");
-    if (!hSysTray && !hTaskbarView && !hExpExt) return false;
-
-    void* frames[8];
-    WORD count = CaptureStackBackTrace(0, ARRAYSIZE(frames), frames, nullptr);
-    for (WORD i = 0; i < count; i++) {
-        HMODULE hMod = nullptr;
-        if (GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                reinterpret_cast<LPCWSTR>(frames[i]), &hMod) &&
-            hMod) {
-            if ((hSysTray && hMod == hSysTray) ||
-                (hTaskbarView && hMod == hTaskbarView) ||
-                (hExpExt && hMod == hExpExt)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 int WINAPI GetTimeFormatEx_Hook(LPCWSTR lpLocaleName,
                                 DWORD dwFlags,
                                 CONST SYSTEMTIME* lpTime,
                                 LPCWSTR lpFormat,
                                 LPWSTR lpTimeStr,
                                 int cchTime) {
-    if (!t_inGetTimeToolTipString && IsCallStackFromSystemTray()) {
+    if (t_inRefreshIcon && !t_inGetTimeToolTipString) {
         if (!cchTime) {
             return FORMATTED_BUFFER_SIZE;
         }
-        SYSTEMTIME st;
-        GetLocalTime(&st);
+        SYSTEMTIME st{};
+        if (lpTime) {
+            st = *lpTime;
+        } else {
+            GetLocalTime(&st);
+        }
         static const PCWSTR kWeekdays[] = {
             L"CN", L"T2", L"T3", L"T4", L"T5", L"T6", L"T7"
         };
         PCWSTR weekday = (st.wDayOfWeek < 7) ? kWeekdays[st.wDayOfWeek] : L"";
-        int written = swprintf_s(lpTimeStr, cchTime, L"%02d:%02d - %s, %02d/%02d",
-                                 st.wHour, st.wMinute, weekday, st.wDay, st.wMonth);
-        if (written >= 0) {
-            return written + 1;
-        }
+        _snwprintf_s(lpTimeStr, cchTime, _TRUNCATE, L"%02d:%02d - %s, %02d/%02d",
+                     st.wHour, st.wMinute, weekday, st.wDay, st.wMonth);
+        return static_cast<int>(wcslen(lpTimeStr)) + 1;
     }
     return GetTimeFormatEx_Original(lpLocaleName, dwFlags, lpTime, lpFormat, lpTimeStr, cchTime);
 }
@@ -2648,19 +2285,19 @@ int WINAPI GetDateFormatEx_Hook(LPCWSTR lpLocaleName,
                                 LPWSTR lpDateStr,
                                 int cchDate,
                                 LPCWSTR lpCalendar) {
-    if (!t_inGetTimeToolTipString &&
-        !(dwFlags & DATE_LONGDATE) &&
-        (!lpFormat || (_wcsicmp(lpFormat, L"dddd") != 0 && _wcsicmp(lpFormat, L"ddd") != 0)) &&
-        IsCallStackFromSystemTray()) {
+    if (t_inRefreshIcon && !t_inGetTimeToolTipString && !(dwFlags & DATE_LONGDATE)) {
         if (!cchDate) {
             return FORMATTED_BUFFER_SIZE;
         }
-        g_formatIndex++;
-        PCWSTR lunarStr = GetLunarFullFormatted();
-        int written = swprintf_s(lpDateStr, cchDate, L"%s", lunarStr);
-        if (written >= 0) {
-            return written + 1;
+        SYSTEMTIME st{};
+        if (lpDate) {
+            st = *lpDate;
+        } else {
+            GetLocalTime(&st);
         }
+        std::wstring lunarStr = FormatTaskbarLunarDate(st.wYear, st.wMonth, st.wDay);
+        _snwprintf_s(lpDateStr, cchDate, _TRUNCATE, L"%s", lunarStr.c_str());
+        return static_cast<int>(wcslen(lpDateStr)) + 1;
     }
     return GetDateFormatEx_Original(lpLocaleName, dwFlags, lpDate, lpFormat, lpDateStr, cchDate, lpCalendar);
 }
@@ -2681,15 +2318,16 @@ void RefreshTaskbarClock() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Process plumbing
-enum class Target { Explorer, ShellExperienceHost, ShellHost, };
+// Process Plumbing
+
+enum class Target { Explorer, ShellExperienceHost, ShellHost };
 Target g_target = Target::ShellExperienceHost;
 std::atomic<UINT> g_runFromWindowThreadViaPostMessageMsg{0};
 
 UINT RunFromWindowThreadViaPostMessageMsg() {
     UINT message = g_runFromWindowThreadViaPostMessageMsg.load();
     if (!message) {
-        message = RegisterWindowMessage(L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
+        message = RegisterWindowMessageW(L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
         g_runFromWindowThreadViaPostMessageMsg.store(message);
     }
     return message;
@@ -2697,23 +2335,36 @@ UINT RunFromWindowThreadViaPostMessageMsg() {
 
 std::mutex g_pendingPostHooksMutex;
 std::vector<HHOOK> g_pendingPostHooks;
-void RememberPendingPostHook(HHOOK hook) { std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex); g_pendingPostHooks.push_back(hook); }
+
+void RememberPendingPostHook(HHOOK hook) {
+    std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
+    g_pendingPostHooks.push_back(hook);
+}
+
 void ForgetPendingPostHook(HHOOK hook) {
     std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
     for (auto it = g_pendingPostHooks.begin(); it != g_pendingPostHooks.end(); ++it) {
-        if (*it == hook) { g_pendingPostHooks.erase(it); break; }
+        if (*it == hook) {
+            g_pendingPostHooks.erase(it);
+            break;
+        }
     }
 }
+
 void UnhookPendingPostHooks() {
     std::vector<HHOOK> hooks;
-    { std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex); hooks.swap(g_pendingPostHooks); }
+    {
+        std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
+        hooks.swap(g_pendingPostHooks);
+    }
     for (HHOOK hook : hooks) UnhookWindowsHookEx(hook);
 }
 
 void DrainPendingRunFromWindowThreadPostsOnCurrentThread() {
     const UINT message = g_runFromWindowThreadViaPostMessageMsg.load();
     if (!message) return;
-    MSG msg; while (PeekMessage(&msg, nullptr, message, message, PM_REMOVE)) {}
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, message, message, PM_REMOVE)) {}
 }
 
 void InitializeForCurrentThread() {
@@ -2734,52 +2385,78 @@ void UninitializeForCurrentThread() {
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
 bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam) {
-    static const UINT runFromWindowThreadRegisteredMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    struct RUN_FROM_WINDOW_THREAD_PARAM { RunFromWindowThreadProc_t proc; PVOID procParam; };
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) return false;
-    if (dwThreadId == GetCurrentThreadId()) { proc(procParam); return true; }
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
 
-    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-        if (nCode == HC_ACTION) {
-            const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-            if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                RUN_FROM_WINDOW_THREAD_PARAM* param = (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
-                param->proc(param->procParam);
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    auto* param = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(cwp->lParam);
+                    param->proc(param->procParam);
+                }
             }
-        }
-        return CallNextHookEx(nullptr, nCode, wParam, lParam);
-    }, nullptr, dwThreadId);
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
     if (!hook) return false;
 
-    RUN_FROM_WINDOW_THREAD_PARAM param; param.proc = proc; param.procParam = procParam;
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+    RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam};
+    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0, reinterpret_cast<LPARAM>(&param));
     UnhookWindowsHookEx(hook);
     return true;
 }
 
 bool RunFromWindowThreadViaPostMessage(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam) {
-    struct RUN_FROM_WINDOW_THREAD_PARAM { RunFromWindowThreadProc_t proc; PVOID procParam; HHOOK hook; };
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+        HHOOK hook;
+    };
     const UINT message = RunFromWindowThreadViaPostMessageMsg();
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     if (dwThreadId == 0) return false;
 
-    HHOOK hook = SetWindowsHookEx(WH_GETMESSAGE, [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-        if (nCode == HC_ACTION && wParam == PM_REMOVE) {
-            MSG* msg = (MSG*)lParam;
-            if (msg->message == g_runFromWindowThreadViaPostMessageMsg.load()) {
-                auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)msg->lParam;
-                if (param) { ForgetPendingPostHook(param->hook); param->proc(param->procParam); UnhookWindowsHookEx(param->hook); delete param; msg->lParam = 0; }
+    HHOOK hook = SetWindowsHookExW(
+        WH_GETMESSAGE,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION && wParam == PM_REMOVE) {
+                MSG* msg = reinterpret_cast<MSG*>(lParam);
+                if (msg->message == g_runFromWindowThreadViaPostMessageMsg.load()) {
+                    auto* param = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(msg->lParam);
+                    if (param) {
+                        ForgetPendingPostHook(param->hook);
+                        param->proc(param->procParam);
+                        UnhookWindowsHookEx(param->hook);
+                        delete param;
+                        msg->lParam = 0;
+                    }
+                }
             }
-        }
-        return CallNextHookEx(nullptr, nCode, wParam, lParam);
-    }, nullptr, dwThreadId);
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
     if (!hook) return false;
 
-    auto* param = new RUN_FROM_WINDOW_THREAD_PARAM{ .proc = proc, .procParam = procParam, .hook = hook, };
+    auto* param = new RUN_FROM_WINDOW_THREAD_PARAM{proc, procParam, hook};
     RememberPendingPostHook(hook);
-    if (!PostMessage(hWnd, message, 0, (LPARAM)param)) {
-        ForgetPendingPostHook(hook); UnhookWindowsHookEx(hook); delete param; return false;
+    if (!PostMessageW(hWnd, message, 0, reinterpret_cast<LPARAM>(param))) {
+        ForgetPendingPostHook(hook);
+        UnhookWindowsHookEx(hook);
+        delete param;
+        return false;
     }
     return true;
 }
@@ -2792,28 +2469,48 @@ bool IsCalendarWindowClass(PCWSTR className) {
     }
 }
 
-void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
+void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName) {
     if (g_shuttingDown) return;
     BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
     if (!bTextualClassName || !IsCalendarWindowClass(lpClassName)) return;
-    RunFromWindowThreadViaPostMessage(hWnd, [](PVOID) { InitializeForCurrentThread(); OnCalendarOpenedOnCurrentThread(); }, nullptr);
+    RunFromWindowThreadViaPostMessage(
+        hWnd,
+        [](PVOID) {
+            InitializeForCurrentThread();
+            OnCalendarOpenedOnCurrentThread();
+        },
+        nullptr);
 }
 
-using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam, DWORD dwBand);
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+                                           DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                                           HWND hWndParent, HMENU hMenu, HINSTANCE hInstance,
+                                           PVOID lpParam, DWORD dwBand);
 CreateWindowInBand_t CreateWindowInBand_Original;
-HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam, DWORD dwBand) {
-    HWND hWnd = CreateWindowInBand_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (!hWnd) return hWnd;
-    OnWindowCreated(hWnd, lpClassName, __FUNCTION__);
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+                                    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                                    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance,
+                                    PVOID lpParam, DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                            X, Y, nWidth, nHeight, hWndParent, hMenu,
+                                            hInstance, lpParam, dwBand);
+    if (hWnd) OnWindowCreated(hWnd, lpClassName);
     return hWnd;
 }
 
-using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam, DWORD dwBand, DWORD dwTypeFlags);
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+                                             DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                                             HWND hWndParent, HMENU hMenu, HINSTANCE hInstance,
+                                             PVOID lpParam, DWORD dwBand, DWORD dwTypeFlags);
 CreateWindowInBandEx_t CreateWindowInBandEx_Original;
-HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam, DWORD dwBand, DWORD dwTypeFlags) {
-    HWND hWnd = CreateWindowInBandEx_Original(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
-    if (!hWnd) return hWnd;
-    OnWindowCreated(hWnd, lpClassName, __FUNCTION__);
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+                                      DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                                      HWND hWndParent, HMENU hMenu, HINSTANCE hInstance,
+                                      PVOID lpParam, DWORD dwBand, DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                              X, Y, nWidth, nHeight, hWndParent, hMenu,
+                                              hInstance, lpParam, dwBand, dwTypeFlags);
+    if (hWnd) OnWindowCreated(hWnd, lpClassName);
     return hWnd;
 }
 
@@ -2822,7 +2519,7 @@ void OnWindowShown(HWND hWnd) {
     DWORD dwProcessId = 0;
     if (!hWnd || !GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) return;
     WCHAR szClassName[32];
-    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0 || !IsCalendarWindowClass(szClassName)) return;
+    if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0 || !IsCalendarWindowClass(szClassName)) return;
     RunFromWindowThreadViaPostMessage(hWnd, [](PVOID) { OnCalendarOpenedOnCurrentThread(); }, nullptr);
 }
 
@@ -2835,25 +2532,23 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 }
 
 std::vector<HWND> GetCalendarWindows() {
-    struct ENUM_WINDOWS_PARAM { std::vector<HWND>* hWnds; };
+    struct ENUM_WINDOWS_PARAM {
+        std::vector<HWND>* hWnds;
+    };
     std::vector<HWND> hWnds;
     ENUM_WINDOWS_PARAM param = {&hWnds};
-    EnumWindows([](HWND hWnd, LPARAM lParam) -> BOOL {
-        ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
-        DWORD dwProcessId = 0;
-        if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) return TRUE;
-        WCHAR szClassName[32];
-        if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) return TRUE;
-        if (IsCalendarWindowClass(szClassName)) param.hWnds->push_back(hWnd);
-        return TRUE;
-    }, (LPARAM)&param);
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& param = *reinterpret_cast<ENUM_WINDOWS_PARAM*>(lParam);
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) return TRUE;
+            WCHAR szClassName[32];
+            if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) return TRUE;
+            if (IsCalendarWindowClass(szClassName)) param.hWnds->push_back(hWnd);
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&param));
     return hWnds;
-}
-
-void RefreshCalendarOnUiThreads() {
-    for (HWND hCoreWnd : GetCalendarWindows()) {
-        RunFromWindowThread(hCoreWnd, [](PVOID) { SweepDayItems(); StartSweepTimer(); }, nullptr);
-    }
 }
 
 template <typename Prototype>
@@ -2861,17 +2556,17 @@ bool InstallHook(HMODULE module, PCSTR functionName, Prototype* hook, Prototype*
     if (!module) return false;
     Prototype* target = reinterpret_cast<Prototype*>(GetProcAddress(module, functionName));
     if (!target) return false;
-    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) return false;
-    return true;
+    return WindhawkUtils::SetFunctionHook(target, hook, original);
 }
 
 BOOL Wh_ModInit() {
     g_shuttingDown = false;
     g_target = Target::ShellExperienceHost;
     WCHAR moduleFilePath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
+    switch (GetModuleFileNameW(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
         case 0:
-        case ARRAYSIZE(moduleFilePath): return FALSE;
+        case ARRAYSIZE(moduleFilePath):
+            return FALSE;
         default:
             if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
                 moduleFileName++;
@@ -2880,7 +2575,9 @@ BOOL Wh_ModInit() {
                 } else if (_wcsicmp(moduleFileName, L"ShellHost.exe") == 0) {
                     g_target = Target::ShellHost;
                 }
-            } else return FALSE;
+            } else {
+                return FALSE;
+            }
             break;
     }
 
@@ -2898,9 +2595,8 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    LoadSettings();
     RunFromWindowThreadViaPostMessageMsg();
-    HMODULE user32Module = LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE user32Module = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     InstallHook(user32Module, "CreateWindowInBand", CreateWindowInBand_Hook, &CreateWindowInBand_Original);
     InstallHook(user32Module, "CreateWindowInBandEx", CreateWindowInBandEx_Hook, &CreateWindowInBandEx_Original);
     InstallHook(user32Module, "ShowWindow", ShowWindow_Hook, &ShowWindow_Original);
@@ -2922,9 +2618,14 @@ void Wh_ModAfterInit() {
         return;
     }
     for (auto hCoreWnd : GetCalendarWindows()) {
-        RunFromWindowThread(hCoreWnd, [](PVOID) { InitializeForCurrentThread(); OnCalendarOpenedOnCurrentThread(); }, nullptr);
+        RunFromWindowThread(
+            hCoreWnd,
+            [](PVOID) {
+                InitializeForCurrentThread();
+                OnCalendarOpenedOnCurrentThread();
+            },
+            nullptr);
     }
-    RequestHolidayData();
 }
 
 void Wh_ModUninit() {
@@ -2933,22 +2634,8 @@ void Wh_ModUninit() {
         RefreshTaskbarClock();
         return;
     }
-    StopWorkerThread();
     for (auto hCoreWnd : GetCalendarWindows()) {
         RunFromWindowThread(hCoreWnd, [](PVOID) { UninitializeForCurrentThread(); }, nullptr);
     }
     UnhookPendingPostHooks();
-}
-
-void Wh_ModSettingsChanged() {
-    if (g_target == Target::Explorer) {
-        RefreshTaskbarClock();
-        return;
-    }
-    const std::wstring previousUrl = GetSettings()->dataSourceUrl;
-    LoadSettings();
-    const std::shared_ptr<const Settings> settings = GetSettings();
-    if (settings->dataSourceUrl != previousUrl) ResetHolidayData();
-    RefreshCalendarOnUiThreads();
-    RequestHolidayData();
 }
