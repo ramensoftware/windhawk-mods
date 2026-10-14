@@ -2893,6 +2893,34 @@
         "version": "1.1"
       }
     },
+    "coin-stock-monitor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791961377000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1791961377000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "jayll1303",
+        "compilerOptions": "-lgdi32 -luser32 -lwinhttp",
+        "description": "Shows stock and crypto prices on the Windows 11 taskbar, with a configurable price API, symbol list, colors and entry-price percentage",
+        "github": "https://github.com/jayll1303",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Coin & Stock Monitor",
+        "version": "1.1.0"
+      }
+    },
     "color-picker-dialog-hex-input": {
       "details": {
         "defaultSorting": 4880,

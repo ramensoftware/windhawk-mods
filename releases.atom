@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-14T06:21:12.000Z</updated>
+    <updated>2026-10-14T07:02:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Coin & Stock Monitor 1.1.0]]></title>
+        <id>https://windhawk.net/mods/coin-stock-monitor#466bc6c1a6e9a7ca517547b61ecaf891ef0eedc6</id>
+        <link href="https://windhawk.net/mods/coin-stock-monitor"/>
+        <updated>2026-10-14T07:02:57.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="coinstockmonitor">Coin &amp; Stock Monitor</h1>
+<p><img src="https://raw.githubusercontent.com/jayll1303/coin-stock-monitor/main/docs/screenshot.png" alt="Taskbar screenshot" /></p>
+<p>Shows live stock and crypto prices on the left side of the taskbar.</p>
+<p>Prices come from a configurable JSON API. The default is the Yahoo Finance chart
+API, which works without an API key for both stocks (<code>AAPL</code>, <code>VNM.VN</code>) and crypto
+(<code>BTC-USD</code>, <code>ETH-USD</code>).</p>
+<h2 id="networkaccess">Network access</h2>
+<p>This mod sends HTTPS requests from <code>explorer.exe</code> to the URL set in <strong>Price API URL</strong>.
+By default that is <code>query1.finance.yahoo.com</code>. It sends one request per symbol (up to
+4) at startup, then once every <strong>Refresh interval</strong> (default 60 seconds). Each request
+identifies the mod by name in its User-Agent header. No other data is sent. To
+stop all requests, disable the mod.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Price API URL</strong> - requested once per symbol. <code>{symbol}</code> is replaced with the
+URL-encoded symbol.</li>
+<li><strong>Price JSON key</strong> - the key whose numeric value is the price in the response.
+Yahoo Finance uses <code>regularMarketPrice</code>.</li>
+<li><strong>Symbols</strong> - comma-separated list, shown in order. At most 4 symbols, shown 2
+per line.</li>
+<li><strong>Entry prices</strong> - comma-separated <code>SYMBOL=PRICE</code> pairs. When a symbol has an
+entry price, its price and signed percentage change from the entry are shown.
+The color is the gain color when the price is at or above the entry, and the
+loss color otherwise.</li>
+<li><strong>Text alignment</strong> - left or right inside the monitor area.</li>
+<li><strong>Left offset</strong> and <strong>Monitor width</strong> - position and size of the monitor area, in
+pixels from the left edge of the taskbar.</li>
+<li><strong>Text color</strong> - <code>#RRGGBB</code> for symbols and prices without an entry price. The
+default is green. Leave empty to follow the taskbar theme.</li>
+<li><strong>Gain color</strong> and <strong>Loss color</strong> - <code>#RRGGBB</code> colors for prices and percentages
+compared with entry prices.</li>
+<li><strong>Refresh interval</strong> - seconds between fetches (minimum 15).</li>
+</ul>
+<p>Changing any setting reloads the mod.</p>
+<h3 id="examplecoingecko">Example: CoinGecko</h3>
+<ul>
+<li>Price API URL: <code>https://api.coingecko.com/api/v3/simple/price?ids={symbol}&amp;vs_currencies=usd</code></li>
+<li>Price JSON key: <code>usd</code></li>
+<li>Symbols: <code>bitcoin,ethereum</code> (CoinGecko coin ids, not ticker symbols)</li>
+<li>Entry prices: <code>bitcoin=60000</code> (use the same ids as Symbols)</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Horizontal taskbar on the primary monitor only.</li>
+<li>The monitor is placed by pixel offset, so it assumes the Start button is centered.
+With a left-aligned Start button, the monitor overlaps Start.</li>
+<li>If the taskbar has many apps or a wide Start area, reduce <strong>Monitor width</strong> so
+the monitor does not cover the task list.</li>
+<li>Pixel values are for 100% display scaling.</li>
+</ul>]]></content>
+        <author>
+            <name>jayll1303</name>
+            <uri>https://github.com/jayll1303</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Virtual Desktop Swipe Taskbar Fix 1.0.5]]></title>
         <id>https://windhawk.net/mods/virtual-desktop-swipe-taskbar-fix#3b5992685827bfee26b0ac55c6770b6a1b0b60a7</id>
@@ -1371,19 +1431,6 @@ Windhawk debug logging and check for initialization or compatibility errors.</p>
         <author>
             <name>enesky</name>
             <uri>https://github.com/enesky</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Drag to Delete 1.0.0]]></title>
-        <id>https://windhawk.net/mods/drag-to-delete#e0fb78e5479452c6e429b883817632946f47a367</id>
-        <link href="https://windhawk.net/mods/drag-to-delete"/>
-        <updated>2026-10-11T20:01:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="dragtodelete">Drag to Delete</h1>
-<p>Drag files onto a floating target to move them to the Recycle Bin.</p>
-<p><img src="https://i.imgur.com/bKMRf5A.gif" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>iMAboud</name>
-            <uri>https://github.com/iMAboud</uri>
         </author>
     </entry>
 </feed>
