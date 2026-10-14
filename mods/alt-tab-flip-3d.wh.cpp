@@ -23,10 +23,6 @@
 
 **English** | [Português](#português)
 
-Made in Brazil by **caliberda** · bugs and ideas: [an issue on
-GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram [@cesar.kali](https://www.instagram.com/cesar.kali) ·
-[caliberda.com.br](https://caliberda.com.br)
-
 Brings back the Windows Vista **Flip 3D** window switcher on Windows 11, with
 smooth, spring-based animations inspired by macOS.
 
@@ -34,14 +30,24 @@ Press **Alt+Tab** and your windows fly from their real positions into a 3D
 stack, one behind the other, showing their **live content**. Keep Alt held and
 flip through them; release Alt and the chosen window flies back into place.
 
+Made in Brazil by **caliberda** · bugs and ideas: [an issue on
+GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram [@cesar.kali](https://www.instagram.com/cesar.kali) ·
+[caliberda.com.br](https://caliberda.com.br)
+
 ## Animation styles
 
-![All animation styles](https://i.imgur.com/WtbqDRW.png)
+![All animation styles](https://i.imgur.com/CYIiLdx.png)
 
 * **Flip 3D**: the Windows Vista stack, receding up and to the left.
 * **Cascade**: a deck of windows tilted backwards, receding upwards.
 * **Cover Flow**: the selected window faces you, the others are turned on
   both sides.
+* **iTab**: Cover Flow on a glossy floor. The windows stand on it and are
+  reflected in it, the ones on the sides turned almost edge-on and packed
+  close together, with the title centered under them and a scroll bar
+  showing where you are in the list. Four versions: on a black floor of its
+  own or on your *Background* setting, each with the app's name under the
+  title or with the title only.
 * **Carousel**: a 3D ring of windows that rotates around its center.
 * **Grid**: every window side by side, like Mission Control.
 * **Helix**: a 3D spiral that turns and rises as you flip.
@@ -102,7 +108,7 @@ previous window without showing the stack, just like the native switcher.
 * **[Aero Flip 3D Recreation](https://windhawk.net/mods/aero-flip3d-recreation)**
   brings Flip 3D back on **Win+Tab**. This mod replaces **Alt+Tab** instead,
   draws the windows with real perspective from their live content, and adds
-  thirteen more 3D layouts. Both can be installed together, since they use
+  fourteen more 3D layouts. Both can be installed together, since they use
   different shortcuts, unless the *Shortcut* setting here includes Win+Tab.
 * **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
   and **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
@@ -176,11 +182,6 @@ Portuguese or your own language.
 
 ## Português
 
-Feito no Brasil por **caliberda** · pode falar comigo em português · bugs e
-ideias: [uma issue no
-GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram
-[@cesar.kali](https://www.instagram.com/cesar.kali) · [caliberda.com.br](https://caliberda.com.br)
-
 Traz de volta o alternador de janelas **Flip 3D** do Windows Vista para o
 Windows 11, com animações suaves baseadas em molas, inspiradas no macOS.
 
@@ -188,14 +189,24 @@ Pressione **Alt+Tab** e suas janelas voam de suas posições reais para uma pilh
 3D, uma atrás da outra, mostrando o **conteúdo ao vivo**. Segure o Alt e vá
 passando por elas; solte o Alt e a janela escolhida volta voando para o lugar.
 
+Feito no Brasil por **caliberda** · pode falar comigo em português · bugs e
+ideias: [uma issue no
+GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram
+[@cesar.kali](https://www.instagram.com/cesar.kali) · [caliberda.com.br](https://caliberda.com.br)
+
 ### Estilos de animação
 
-![Todos os estilos de animação](https://i.imgur.com/WtbqDRW.png)
+![Todos os estilos de animação](https://i.imgur.com/CYIiLdx.png)
 
 * **Flip 3D**: a pilha do Windows Vista, indo para cima e para a esquerda.
 * **Cascata**: um baralho de janelas inclinado para trás, subindo.
 * **Cover Flow**: a janela escolhida fica de frente, as outras viradas dos
   dois lados.
+* **iTab**: o Cover Flow sobre um chão brilhante. As janelas ficam em pé
+  nele e refletidas nele, as dos lados viradas quase de perfil e bem
+  juntas, com o título centralizado embaixo e uma barra de rolagem mostrando
+  onde você está na lista. Quatro versões: num chão preto próprio ou no seu
+  *Fundo*, cada uma com o nome do app embaixo do título ou só com o título.
 * **Carrossel**: um anel 3D de janelas que gira em volta do centro.
 * **Grade**: todas as janelas lado a lado, como o Mission Control.
 * **Hélice**: uma espiral 3D que gira e sobe enquanto você troca.
@@ -256,7 +267,7 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
 * O **[Aero Flip 3D Recreation](https://windhawk.net/mods/aero-flip3d-recreation)**
   traz o Flip 3D de volta no **Win+Tab**. Este mod substitui o **Alt+Tab**,
   desenha as janelas com perspectiva real a partir do conteúdo ao vivo e tem
-  mais treze layouts 3D. Os dois podem ficar instalados juntos, porque usam
+  mais quatorze layouts 3D. Os dois podem ficar instalados juntos, porque usam
   atalhos diferentes, a menos que a configuração *Atalho* daqui inclua o
   Win+Tab.
 * O **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
@@ -343,6 +354,10 @@ escrever em português.
   - flip3d: Flip 3D (Vista stack)
   - cascade: Cascade
   - coverflow: Cover Flow
+  - itab: iTab (glossy black floor, title and app name)
+  - itabTitle: iTab (glossy black floor, title only)
+  - itabBackground: iTab (your background, title and app name)
+  - itabBackgroundTitle: iTab (your background, title only)
   - carousel: Carousel
   - grid: Grid (Mission Control)
   - helix: Helix
@@ -364,6 +379,10 @@ escrever em português.
   - flip3d: Flip 3D (pilha do Vista)
   - cascade: Cascata
   - coverflow: Cover Flow
+  - itab: iTab (chão preto brilhante, título e nome do app)
+  - itabTitle: iTab (chão preto brilhante, só o título)
+  - itabBackground: iTab (seu fundo, título e nome do app)
+  - itabBackgroundTitle: iTab (seu fundo, só o título)
   - carousel: Carrossel
   - grid: Grade (Mission Control)
   - helix: Hélice
@@ -415,6 +434,10 @@ escrever em português.
   - flip3d: Flip 3D (Vista stack)
   - cascade: Cascade
   - coverflow: Cover Flow
+  - itab: iTab (glossy black floor, title and app name)
+  - itabTitle: iTab (glossy black floor, title only)
+  - itabBackground: iTab (your background, title and app name)
+  - itabBackgroundTitle: iTab (your background, title only)
   - carousel: Carousel
   - grid: Grid (Mission Control)
   - helix: Helix
@@ -436,6 +459,10 @@ escrever em português.
   - flip3d: Flip 3D (pilha do Vista)
   - cascade: Cascata
   - coverflow: Cover Flow
+  - itab: iTab (chão preto brilhante, título e nome do app)
+  - itabTitle: iTab (chão preto brilhante, só o título)
+  - itabBackground: iTab (seu fundo, título e nome do app)
+  - itabBackgroundTitle: iTab (seu fundo, só o título)
   - carousel: Carrossel
   - grid: Grade (Mission Control)
   - helix: Hélice
@@ -477,6 +504,10 @@ escrever em português.
       - flip3d: Flip 3D (Vista stack)
       - cascade: Cascade
       - coverflow: Cover Flow
+      - itab: iTab (glossy black floor, title and app name)
+      - itabTitle: iTab (glossy black floor, title only)
+      - itabBackground: iTab (your background, title and app name)
+      - itabBackgroundTitle: iTab (your background, title only)
       - carousel: Carousel
       - grid: Grid (Mission Control)
       - helix: Helix
@@ -498,6 +529,10 @@ escrever em português.
       - flip3d: Flip 3D (pilha do Vista)
       - cascade: Cascata
       - coverflow: Cover Flow
+      - itab: iTab (chão preto brilhante, título e nome do app)
+      - itabTitle: iTab (chão preto brilhante, só o título)
+      - itabBackground: iTab (seu fundo, título e nome do app)
+      - itabBackgroundTitle: iTab (seu fundo, só o título)
       - carousel: Carrossel
       - grid: Grade (Mission Control)
       - helix: Hélice
@@ -561,8 +596,8 @@ escrever em português.
 - background: blur
   $name: Background
   $name:pt-BR: Fundo
-  $description: What is shown behind the stack. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred
-  $description:pt-BR: O que aparece atrás da pilha. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada
+  $description: What is shown behind the stack. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred. The iTab styles with a glossy black floor have a background of their own
+  $description:pt-BR: O que aparece atrás da pilha. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada. Os estilos iTab com chão preto brilhante têm um fundo próprio
   $options:
   - blur: Blurred wallpaper
   - wallpaper: Wallpaper
@@ -591,8 +626,8 @@ escrever em português.
 - titlePosition: bottom
   $name: Title position
   $name:pt-BR: Posição do título
-  $description: Where the title of the window in front is shown. Not used by the 2D styles
-  $description:pt-BR: Onde o título da janela da frente aparece. Não vale para os estilos 2D
+  $description: Where the title of the window in front is shown. Not used by the 2D styles, nor by the iTab styles, whose title is always centered under the windows
+  $description:pt-BR: Onde o título da janela da frente aparece. Não vale para os estilos 2D, nem para os estilos iTab, que sempre mostram o título centralizado embaixo das janelas
   $options:
   - bottom: Bottom of the screen
   - belowWindow: Right below the selected window
@@ -602,8 +637,8 @@ escrever em português.
 - shadows: true
   $name: Window shadows
   $name:pt-BR: Sombras das janelas
-  $description: Soft shadows under the windows in the stack
-  $description:pt-BR: Sombras suaves sob as janelas da pilha
+  $description: Soft shadows under the windows in the stack. The iTab styles show reflections instead
+  $description:pt-BR: Sombras suaves sob as janelas da pilha. Os estilos iTab mostram reflexos no lugar
 - includeMinimized: true
   $name: Include minimized windows
   $name:pt-BR: Incluir janelas minimizadas
@@ -643,20 +678,20 @@ escrever em português.
   - all: Todas as janelas
   - selected: Só a janela escolhida
   - none: Nenhuma (mais leve)
-- frameRate: screenPlus20
+- frameRate: screen
   $name: Frame rate limit
   $name:pt-BR: Limite de quadros por segundo
-  $description: Caps the animation's frame rate, which lightens the load on slower PCs and laptops. Each screen uses its own refresh rate. "+ 20 FPS" only goes above it where the graphics driver doesn't hold frames back to the refresh rate (for example with vertical sync turned off)
-  $description:pt-BR: Limita os quadros por segundo da animação, o que alivia PCs mais fracos e notebooks. Cada tela usa a própria taxa de atualização. O "+ 20 FPS" só passa dela onde o driver de vídeo não segura os quadros na taxa da tela (por exemplo, com a sincronização vertical desligada)
+  $description: Caps the animation's frame rate, which lightens the load on slower PCs and laptops. Each screen uses its own refresh rate. "+ 20 FPS" draws a few frames more than the screen shows, which costs more; it only goes above the refresh rate where the graphics driver doesn't hold frames back to it (for example with vertical sync turned off)
+  $description:pt-BR: Limita os quadros por segundo da animação, o que alivia PCs mais fracos e notebooks. Cada tela usa a própria taxa de atualização. O "+ 20 FPS" desenha alguns quadros a mais do que a tela mostra, o que pesa mais; ele só passa da taxa da tela onde o driver de vídeo não segura os quadros nela (por exemplo, com a sincronização vertical desligada)
   $options:
-  - screenPlus20: Screen refresh rate + 20 FPS
   - screen: Screen refresh rate
+  - screenPlus20: Screen refresh rate + 20 FPS
   - "90": About 90 FPS
   - "60": About 60 FPS
   - "30": About 30 FPS
   $options:pt-BR:
-  - screenPlus20: Taxa de atualização da tela + 20 FPS
   - screen: Taxa de atualização da tela
+  - screenPlus20: Taxa de atualização da tela + 20 FPS
   - "90": Cerca de 90 FPS
   - "60": Cerca de 60 FPS
   - "30": Cerca de 30 FPS
@@ -713,6 +748,7 @@ escrever em português.
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <windhawk_utils.h>
@@ -761,6 +797,12 @@ constexpr PROPERTYKEY kPKEY_AppUserModel_ID = {
      0x4b39,
      {0xa8, 0xd0, 0xe1, 0xd4, 0x2d, 0xe1, 0xd5, 0xf3}},
     5};
+constexpr PROPERTYKEY kPKEY_FileDescription = {
+    {0x0cef7d53,
+     0xfa64,
+     0x11d1,
+     {0xa2, 0x03, 0x00, 0x00, 0xf8, 0x1f, 0xed, 0xee}},
+    3};
 
 using CreateDirect3D11DeviceFromDXGIDevice_t = HRESULT(WINAPI*)(IDXGIDevice*,
                                                                 ::IInspectable**);
@@ -844,6 +886,13 @@ enum class AnimationStyle {
     Flip3D,
     Cascade,
     CoverFlow,
+    // Cover Flow on a glossy floor, with reflections and a caption (see
+    // IsITabStyle). On a black floor or the background setting, with the
+    // app's name under the title or not.
+    ITab,
+    ITabTitle,
+    ITabBackground,
+    ITabBackgroundTitle,
     Carousel,
     Grid,
     Helix,
@@ -935,6 +984,10 @@ Settings LoadSettings() {
         {L"flip3d", AnimationStyle::Flip3D},
         {L"cascade", AnimationStyle::Cascade},
         {L"coverflow", AnimationStyle::CoverFlow},
+        {L"itab", AnimationStyle::ITab},
+        {L"itabTitle", AnimationStyle::ITabTitle},
+        {L"itabBackground", AnimationStyle::ITabBackground},
+        {L"itabBackgroundTitle", AnimationStyle::ITabBackgroundTitle},
         {L"carousel", AnimationStyle::Carousel},
         {L"grid", AnimationStyle::Grid},
         {L"helix", AnimationStyle::Helix},
@@ -1175,6 +1228,27 @@ bool IsPanelStyle(AnimationStyle style) {
 // keeps its form.
 bool IsSolidStyle(AnimationStyle style) {
     return style == AnimationStyle::Cube || style == AnimationStyle::Sphere;
+}
+
+// Cover Flow standing on a glossy floor: the windows rest on it and are
+// reflected in it, with a caption and a scroll bar under them.
+bool IsITabStyle(AnimationStyle style) {
+    return style == AnimationStyle::ITab ||
+           style == AnimationStyle::ITabTitle ||
+           style == AnimationStyle::ITabBackground ||
+           style == AnimationStyle::ITabBackgroundTitle;
+}
+
+// iTab styles with a black floor of their own instead of the background
+// setting.
+bool HasBlackFloor(AnimationStyle style) {
+    return style == AnimationStyle::ITab || style == AnimationStyle::ITabTitle;
+}
+
+// iTab styles whose caption has the app's name under the title.
+bool ShowsAppName(AnimationStyle style) {
+    return style == AnimationStyle::ITab ||
+           style == AnimationStyle::ITabBackground;
 }
 
 double NowSeconds() {
@@ -1751,6 +1825,15 @@ bool ShowHiddenWindow(HWND hwnd, DWORD cloaked, const WindowFilter& filter) {
     if (!filter.desktops || cloaked != DWM_CLOAKED_SHELL) {
         return false;
     }
+    // A packaged app is shown by its frame. Its window leaves the frame when
+    // the app is minimized or suspended, and is then a hidden top-level
+    // window of its own. (Frames left behind by closed apps are on no
+    // desktop, see below.)
+    WCHAR className[64];
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+        wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0) {
+        return false;
+    }
     GUID desktop{};
     BOOL current = FALSE;
     if (FAILED(filter.desktops->GetWindowDesktopId(hwnd, &desktop)) ||
@@ -1759,16 +1842,7 @@ bool ShowHiddenWindow(HWND hwnd, DWORD cloaked, const WindowFilter& filter) {
                                                                 &current))) {
         return false;
     }
-    if (!(current ? filter.managerHidden : filter.otherDesktops)) {
-        return false;
-    }
-    // Suspended or closed packaged apps leave their frame behind, hidden,
-    // without the app's window inside.
-    WCHAR className[64];
-    return !GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
-           wcscmp(className, L"ApplicationFrameWindow") != 0 ||
-           FindWindowExW(hwnd, nullptr, L"Windows.UI.Core.CoreWindow",
-                         nullptr);
+    return current ? filter.managerHidden : filter.otherDesktops;
 }
 
 // Whether the window belongs in the switcher. Also returns whether it's
@@ -1814,6 +1888,23 @@ bool IsSwitchableWindow(HWND hwnd, const WindowFilter& filter, bool* hidden) {
 
 // Whether the window belongs to one of the excluded apps, by process name or
 // window class name.
+// The full path of the window's program, or empty.
+std::wstring GetWindowProcessPath(HWND hwnd) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return {};
+    }
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    const bool gotPath =
+        QueryFullProcessImageNameW(process, 0, path, &size) != FALSE;
+    CloseHandle(process);
+    return gotPath ? std::wstring(path, size) : std::wstring();
+}
+
 bool IsExcludedApp(HWND hwnd, const std::vector<std::wstring>& excluded) {
     if (excluded.empty()) {
         return false;
@@ -1837,24 +1928,73 @@ bool IsExcludedApp(HWND hwnd, const std::vector<std::wstring>& excluded) {
         }
     }
 
-    DWORD processId = 0;
-    GetWindowThreadProcessId(hwnd, &processId);
-    HANDLE process =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-    if (!process) {
+    const std::wstring path = GetWindowProcessPath(hwnd);
+    if (path.empty()) {
         return false;
     }
-    WCHAR path[MAX_PATH];
-    DWORD size = ARRAYSIZE(path);
-    const bool gotPath =
-        QueryFullProcessImageNameW(process, 0, path, &size) != FALSE;
-    CloseHandle(process);
-    if (!gotPath) {
-        return false;
-    }
-    PCWSTR fileName = wcsrchr(path, L'\\');
-    const std::wstring name = ToLower(fileName ? fileName + 1 : path);
+    const size_t slash = path.rfind(L'\\');
+    const std::wstring name =
+        ToLower(slash == std::wstring::npos ? path : path.substr(slash + 1));
     return std::find(excluded.begin(), excluded.end(), name) != excluded.end();
+}
+
+// The AppUserModelID the shell groups the window by, if the window has one
+// of its own (packaged apps do).
+std::wstring GetWindowAppId(HWND hwnd) {
+    com_ptr<IPropertyStore> store;
+    if (FAILED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(store.put())))) {
+        return {};
+    }
+    std::wstring appId;
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    if (SUCCEEDED(store->GetValue(kPKEY_AppUserModel_ID, &value)) &&
+        value.vt == VT_LPWSTR && value.pwszVal) {
+        appId = value.pwszVal;
+    }
+    PropVariantClear(&value);
+    return appId;
+}
+
+// The app's name, as the Start menu or the file's description shows it.
+std::wstring GetAppName(HWND hwnd) {
+    const std::wstring appId = GetWindowAppId(hwnd);
+    if (!appId.empty()) {
+        com_ptr<IShellItem> app;
+        LPWSTR name = nullptr;
+        if (SUCCEEDED(SHCreateItemInKnownFolder(kFOLDERID_AppsFolder, 0,
+                                                appId.c_str(),
+                                                IID_PPV_ARGS(app.put()))) &&
+            SUCCEEDED(app->GetDisplayName(SIGDN_NORMALDISPLAY, &name))) {
+            std::wstring result = name;
+            CoTaskMemFree(name);
+            return result;
+        }
+    }
+
+    const std::wstring path = GetWindowProcessPath(hwnd);
+    if (path.empty()) {
+        return {};
+    }
+    com_ptr<IShellItem2> file;
+    LPWSTR description = nullptr;
+    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+                                              IID_PPV_ARGS(file.put()))) &&
+        SUCCEEDED(file->GetString(kPKEY_FileDescription, &description))) {
+        std::wstring result = description;
+        CoTaskMemFree(description);
+        if (!result.empty()) {
+            return result;
+        }
+    }
+    // The file name, without the folder and the extension.
+    const size_t slash = path.rfind(L'\\');
+    std::wstring name =
+        slash == std::wstring::npos ? path : path.substr(slash + 1);
+    if (const size_t dot = name.rfind(L'.'); dot != std::wstring::npos) {
+        name.resize(dot);
+    }
+    return name;
 }
 
 // Bars and docks (YASB, WindowSill and similar) look like normal windows to
@@ -2257,7 +2397,12 @@ class Switcher {
 
     void RenderFrame();
     void DrawCard(const DrawEntry& entry, float t);
+    float FloorScreenY() const;
+    void DrawFloor(float cover);
+    void DrawReflections(float t);
+    bool EnsureTitleLayout(int index, float fontSize);
     void DrawTitle(float t);
+    void DrawCaption(float t);
     void ComputePanelLayout();
     D2D1_RECT_F SelectionCell(float* opacity) const;
     void DrawPanelBack(float t);
@@ -2425,6 +2570,16 @@ class Switcher {
     float m_frontX = 0, m_frontY = 0;
     float m_stepX = 0, m_stepY = 0, m_stepZ = 0;
     int m_gridColumns = 1, m_gridRows = 1;
+    // iTab styles: the floor the windows stand on, from the screen center.
+    float m_floorY = 0;
+    // iTab styles: the fading of the reflections, the light on the black
+    // floor, the app names under the titles (kept across sessions, like the
+    // icons) and the caption's second line.
+    com_ptr<ID2D1LinearGradientBrush> m_reflectionFade;
+    com_ptr<ID2D1RadialGradientBrush> m_floorLight;
+    std::unordered_map<HWND, std::wstring> m_appNames;
+    com_ptr<IDWriteTextFormat> m_appNameFormat;
+    com_ptr<IDWriteTextLayout> m_appNameLayout;
 
     // Panel styles: each window's cell and the parts inside it, the panel
     // around them, and the classic style's title box.
@@ -2738,6 +2893,10 @@ void Switcher::ReleaseDeviceResources() {
     m_titleLayout = nullptr;
     m_titleFormat = nullptr;
     m_titleIndex = -1;
+    m_appNameLayout = nullptr;
+    m_appNameFormat = nullptr;
+    m_reflectionFade = nullptr;
+    m_floorLight = nullptr;
     m_background = nullptr;
     m_backgroundKey.clear();
     // The bitmaps belong to the device, the icons' pixels don't.
@@ -3250,6 +3409,7 @@ void Switcher::OnStart(WPARAM flags) {
     if (m_dpiScale != dpiY / 96.0f) {
         m_dpiScale = dpiY / 96.0f;
         m_titleFormat = nullptr;
+        m_appNameFormat = nullptr;
     }
 
     CollectWindows();
@@ -3753,8 +3913,8 @@ void Switcher::DrawCloseButton(float t) {
 }
 
 struct EnumWindowsContext {
-    std::vector<HWND> windows;
-    std::vector<HWND> hiddenWindows;
+    // The window, and whether it's hidden (see WindowFilter).
+    std::vector<std::pair<HWND, bool>> windows;
     const Settings* settings;
     const WindowFilter* filter;
 };
@@ -3767,10 +3927,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         (settings.includeMinimized || !IsIconic(hwnd)) &&
         !(settings.hideBars && IsBarWindow(hwnd)) &&
         !IsExcludedApp(hwnd, settings.excludedApps)) {
-        context->windows.push_back(hwnd);
-        if (hidden) {
-            context->hiddenWindows.push_back(hwnd);
-        }
+        context->windows.push_back({hwnd, hidden});
     }
     return context->windows.size() < (size_t)settings.maxWindows;
 }
@@ -3795,27 +3952,26 @@ void Switcher::CollectWindows() {
         m_filter.desktops = m_desktops.get();
     }
 
-    EnumWindowsContext context{{}, {}, &m_settings, &m_filter};
+    EnumWindowsContext context{{}, &m_settings, &m_filter};
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&context));
 
     // EnumWindows returns the Z order, which puts topmost windows first. The
     // foreground window must come first, like in the native switcher.
     HWND foreground = GetForegroundWindow();
-    auto it =
-        std::find(context.windows.begin(), context.windows.end(), foreground);
+    auto it = std::find_if(context.windows.begin(), context.windows.end(),
+                           [foreground](const auto& window) {
+                               return window.first == foreground;
+                           });
     if (it != context.windows.end()) {
         std::rotate(context.windows.begin(), it, it + 1);
     }
 
     m_items.clear();
-    for (HWND hwnd : context.windows) {
+    for (const auto& [hwnd, hidden] : context.windows) {
         auto item = std::make_unique<Item>();
         item->hwnd = hwnd;
         item->minimized = IsIconic(hwnd);
-        item->hidden =
-            std::find(context.hiddenWindows.begin(),
-                      context.hiddenWindows.end(),
-                      hwnd) != context.hiddenWindows.end();
+        item->hidden = hidden;
         if (!GetWindowBounds(hwnd, item->minimized, &item->rect)) {
             continue;
         }
@@ -4072,8 +4228,10 @@ void Switcher::ShowOverlay() {
         HandleDeviceLost();
         return;
     }
-    // Before the background, which is the wallpaper if this fails.
-    if (m_settings.background == BackgroundMode::LiveDesktop) {
+    // Before the background, which is the wallpaper if this fails. The black
+    // floor styles have their own background.
+    if (m_settings.background == BackgroundMode::LiveDesktop &&
+        !HasBlackFloor(m_settings.style)) {
         ShowBackdrop();
     }
     UpdateBackground();
@@ -4275,6 +4433,25 @@ void Switcher::ComputeLayout() {
             m_stepX = m_width * 0.075f * spacing;
             m_stepY = 0;
             m_stepZ = m_width * 0.22f;  // How far back the sides are.
+            break;
+
+        case AnimationStyle::ITab:
+        case AnimationStyle::ITabTitle:
+        case AnimationStyle::ITabBackground:
+        case AnimationStyle::ITabBackgroundTitle:
+            // Proportions of the selected window's width W: the first side
+            // window is 0.8 W from the middle, each next one 0.19 W further,
+            // all 0.4 W back, standing on the floor. Close enough that their
+            // content stays readable. W leaves room for about five windows on
+            // each side.
+            m_boxWidth = m_width * 0.30f;
+            m_boxHeight = m_height * 0.42f;
+            m_floorY = m_height * 0.14f;
+            m_frontX = m_boxWidth * 0.80f;  // Distance of the first side window.
+            m_frontY = 0;
+            m_stepX = m_boxWidth * 0.19f * spacing;
+            m_stepY = 0;
+            m_stepZ = m_boxWidth * 0.40f;  // How far back the sides are.
             break;
 
         case AnimationStyle::Carousel:
@@ -4491,6 +4668,26 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
                 std::clamp(rel, -1.0f, 1.0f) * std::min(tilt * 2.2f, 1.3f);
             pose.brightness = 1 - inner * 0.2f - std::min(outer * 0.04f, 0.3f);
             pose.opacity = std::clamp(8 - distance, 0.0f, 1.0f);
+            break;
+        }
+
+        case AnimationStyle::ITab:
+        case AnimationStyle::ITabTitle:
+        case AnimationStyle::ITabBackground:
+        case AnimationStyle::ITabBackgroundTitle: {
+            // The selected window faces the viewer. The others are turned
+            // 60 degrees to face the middle (their edge nearer the middle
+            // farther away), side by side, each a little further back so the
+            // ones nearer the middle cover them. Their bottom edges rest on
+            // the floor.
+            const float inner = std::min(distance, 1.0f);
+            const float outer = std::max(distance - 1, 0.0f);
+            pose.x = side * (inner * m_frontX + outer * m_stepX);
+            pose.y = m_floorY - item.Height() * fit / 2;
+            pose.z = inner * m_stepZ + outer * m_width * 0.012f;
+            pose.angleY = -std::clamp(rel, -1.0f, 1.0f) * 1.05f;
+            pose.brightness = 1 - inner * 0.1f - std::min(outer * 0.03f, 0.3f);
+            pose.opacity = std::clamp(10 - distance, 0.0f, 1.0f);
             break;
         }
 
@@ -5299,7 +5496,8 @@ void Switcher::DrawCard(const DrawEntry& entry, float t) {
                          0, 0, 0, 0);
     chain.color->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, colorMatrix);
 
-    if (m_settings.shadows && t > 0.01f) {
+    // The iTab styles have reflections instead.
+    if (m_settings.shadows && t > 0.01f && !IsITabStyle(m_settings.style)) {
         const float depth =
             m_focal / std::max(m_focal + entry.pose.z, m_focal * 0.05f);
         chain.shadow->SetValue(D2D1_SHADOW_PROP_BLUR_STANDARD_DEVIATION,
@@ -5330,6 +5528,258 @@ void Switcher::DrawCard(const DrawEntry& entry, float t) {
     }
 }
 
+// Where the iTab styles' floor is on the screen.
+float Switcher::FloorScreenY() const {
+    // The window size setting zooms around the screen center (see
+    // BuildDrawList), the floor too.
+    return m_height / 2 + m_floorY * m_settings.windowSize;
+}
+
+// The black floor of the iTab styles, lit a little where the windows stand.
+void Switcher::DrawFloor(float cover) {
+    const D2D1_RECT_F screen{0, 0, m_width, m_height};
+    m_brush->SetColor(D2D1::ColorF(0, 0, 0, cover));
+    m_ctx->FillRectangle(screen, m_brush.get());
+
+    if (!m_floorLight) {
+        const D2D1_GRADIENT_STOP stops[] = {
+            {0, D2D1::ColorF(0.16f, 0.16f, 0.18f, 1)},
+            {1, D2D1::ColorF(0, 0, 0, 0)},
+        };
+        com_ptr<ID2D1GradientStopCollection> collection;
+        if (FAILED(m_ctx->CreateGradientStopCollection(stops, ARRAYSIZE(stops),
+                                                       collection.put())) ||
+            FAILED(m_ctx->CreateRadialGradientBrush(
+                D2D1::RadialGradientBrushProperties({0, 0}, {0, 0}, 1, 1),
+                D2D1::BrushProperties(), collection.get(),
+                m_floorLight.put()))) {
+            return;
+        }
+    }
+    m_floorLight->SetCenter({m_width / 2, FloorScreenY()});
+    m_floorLight->SetRadiusX(m_width * 0.55f);
+    m_floorLight->SetRadiusY(m_height * 0.16f);
+    m_floorLight->SetOpacity(cover);
+    m_ctx->FillRectangle(screen, m_floorLight.get());
+}
+
+// The iTab styles' reflections: each window mirrored under its bottom edge,
+// fading out further down the floor. Drawn before the windows, in the same
+// order.
+void Switcher::DrawReflections(float t) {
+    const float opacity = t * t;
+    if (opacity < 0.01f) {
+        return;
+    }
+    if (!m_reflectionFade) {
+        const D2D1_GRADIENT_STOP stops[] = {
+            {0, D2D1::ColorF(1, 1, 1, 0.42f)},
+            {1, D2D1::ColorF(1, 1, 1, 0)},
+        };
+        com_ptr<ID2D1GradientStopCollection> collection;
+        if (FAILED(m_ctx->CreateGradientStopCollection(stops, ARRAYSIZE(stops),
+                                                       collection.put())) ||
+            FAILED(m_ctx->CreateLinearGradientBrush(
+                D2D1::LinearGradientBrushProperties({0, 0}, {0, 1}),
+                D2D1::BrushProperties(), collection.get(),
+                m_reflectionFade.put()))) {
+            return;
+        }
+    }
+    const float floor = FloorScreenY();
+    m_reflectionFade->SetStartPoint({0, floor});
+    m_reflectionFade->SetEndPoint({0, floor + m_height * 0.20f});
+
+    m_ctx->PushLayer(
+        D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr,
+                               D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                               D2D1::IdentityMatrix(), 1.0f,
+                               m_reflectionFade.get()),
+        nullptr);
+    for (const DrawEntry& entry : m_drawList) {
+        Item& item = *entry.item;
+        // The second chain, used only by the stacked styles.
+        EffectChain& chain = item.chains[1];
+        ID2D1Bitmap1* bitmap =
+            item.content ? item.content.get() : item.placeholder.get();
+        if (!bitmap || !EnsureChain(chain)) {
+            continue;
+        }
+        if (chain.input != bitmap) {
+            chain.transform->SetInput(0, bitmap);
+            chain.input = bitmap;
+        }
+
+        // The window turned upside down around its bottom edge: its bottom
+        // row touches the floor.
+        Pose mirror = entry.pose;
+        mirror.y += item.Height() * mirror.scale * mirror.squeeze;
+        const Quad quad = Project(mirror, item.Width(), item.Height());
+        const Quad flipped{{quad.p[3], quad.p[2], quad.p[1], quad.p[0]}};
+        const D2D1_SIZE_F size = bitmap->GetSize();
+        chain.transform->SetValue(
+            kTransform3DPropTransformMatrix,
+            RectToQuadMatrix(size.width, size.height, flipped));
+
+        const float b = entry.pose.brightness * 0.9f;
+        const D2D1_MATRIX_5X4_F colorMatrix =
+            D2D1::Matrix5x4F(b, 0, 0, 0,                             //
+                             0, b, 0, 0,                             //
+                             0, 0, b, 0,                             //
+                             0, 0, 0, entry.pose.opacity * opacity,  //
+                             0, 0, 0, 0);
+        chain.color->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, colorMatrix);
+        m_ctx->DrawImage(chain.color.get());
+    }
+    m_ctx->PopLayer();
+}
+
+// The iTab styles' caption: a scroll bar showing where the selected window
+// is in the list, and above it the title, with the app's name under it.
+void Switcher::DrawCaption(float t) {
+    const int count = (int)m_items.size();
+    const float opacity = t * t;
+    if (!count || opacity < 0.01f) {
+        return;
+    }
+    const float fontSize = std::round(21 * m_dpiScale);
+    const float barY = std::round(std::min(FloorScreenY() + m_height * 0.29f,
+                                           m_height - fontSize * 1.5f));
+
+    if (count > 1) {
+        const float barWidth = std::round(m_width * 0.34f);
+        const float barHeight = std::round(10 * m_dpiScale);
+        const float left = std::round((m_width - barWidth) / 2);
+        const float radius = barHeight / 2;
+        const D2D1_ROUNDED_RECT track{
+            {left, barY - radius, left + barWidth, barY + radius},
+            radius,
+            radius};
+        m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.08f * opacity));
+        m_ctx->FillRoundedRectangle(track, m_brush.get());
+        m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.28f * opacity));
+        m_ctx->DrawRoundedRectangle(track, m_brush.get(),
+                                    std::max(1.0f, m_dpiScale));
+
+        const float inset = std::round(2 * m_dpiScale);
+        const float room = barWidth - inset * 2;
+        const float thumbWidth = std::max(room / count, barHeight * 3);
+        const float position = std::min(
+            PositiveMod((float)m_scroll, (float)count) / (count - 1), 1.0f);
+        const float thumbLeft = left + inset + (room - thumbWidth) * position;
+        const D2D1_ROUNDED_RECT thumb{{thumbLeft, barY - radius + inset,
+                                       thumbLeft + thumbWidth,
+                                       barY + radius - inset},
+                                      radius - inset,
+                                      radius - inset};
+        m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.62f * opacity));
+        m_ctx->FillRoundedRectangle(thumb, m_brush.get());
+    }
+
+    if (!m_settings.showTitle) {
+        return;
+    }
+    // Visible while settled, faded out while flipping.
+    const double nearest = std::round(m_scroll);
+    const float settle =
+        1 - std::clamp((float)std::fabs(m_scroll - nearest) * 3, 0.0f, 1.0f);
+    const float textOpacity = opacity * settle;
+    const int index = PositiveMod((long long)nearest, count);
+    if (textOpacity < 0.01f || !EnsureTitleLayout(index, fontSize)) {
+        return;
+    }
+    const Item& item = *m_items[index];
+
+    const bool appName = ShowsAppName(m_settings.style);
+    if (appName && !m_appNameLayout) {
+        if (!m_appNameFormat) {
+            if (FAILED(m_dwriteFactory->CreateTextFormat(
+                    L"Segoe UI Variable Text", nullptr,
+                    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL, std::round(fontSize * 0.8f),
+                    L"", m_appNameFormat.put()))) {
+                return;
+            }
+            m_appNameFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            const DWRITE_TRIMMING trimming{
+                DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+            com_ptr<IDWriteInlineObject> ellipsis;
+            m_dwriteFactory->CreateEllipsisTrimmingSign(m_appNameFormat.get(),
+                                                        ellipsis.put());
+            m_appNameFormat->SetTrimming(&trimming, ellipsis.get());
+        }
+        // Looked up once per window: it asks the shell, which can take a
+        // moment the first time.
+        auto it = m_appNames.find(item.hwnd);
+        if (it == m_appNames.end()) {
+            it = m_appNames.emplace(item.hwnd, GetAppName(item.hwnd)).first;
+        }
+        if (FAILED(m_dwriteFactory->CreateTextLayout(
+                it->second.c_str(), (UINT32)it->second.size(),
+                m_appNameFormat.get(), m_width * 0.6f, fontSize * 2,
+                m_appNameLayout.put()))) {
+            m_appNameLayout = nullptr;
+        }
+    }
+
+    const float lineGap = std::round(fontSize * 1.35f);
+    const float titleY =
+        barY - std::round(fontSize * 1.6f) - (appName ? lineGap : 0);
+    auto drawCentered = [&](IDWriteTextLayout* layout, float centerY,
+                            D2D1_COLOR_F color) {
+        DWRITE_TEXT_METRICS metrics;
+        layout->GetMetrics(&metrics);
+        const D2D1_POINT_2F origin{
+            std::round(m_width / 2 - metrics.width / 2 - metrics.left),
+            std::round(centerY - metrics.height / 2 - metrics.top)};
+        m_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.55f * textOpacity));
+        m_ctx->DrawTextLayout({origin.x, origin.y + 2}, layout,
+                              m_brush.get());
+        color.a *= textOpacity;
+        m_brush->SetColor(color);
+        m_ctx->DrawTextLayout(origin, layout, m_brush.get());
+    };
+    drawCentered(m_titleLayout.get(), titleY, D2D1::ColorF(1, 1, 1, 1));
+    if (appName && m_appNameLayout) {
+        drawCentered(m_appNameLayout.get(), titleY + lineGap,
+                     D2D1::ColorF(0.72f, 0.72f, 0.74f, 1));
+    }
+}
+
+// The title of the item at index, laid out for the 3D styles.
+bool Switcher::EnsureTitleLayout(int index, float fontSize) {
+    if (!m_titleFormat) {
+        if (FAILED(m_dwriteFactory->CreateTextFormat(
+                L"Segoe UI Variable Display", nullptr,
+                DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, fontSize, L"",
+                m_titleFormat.put()))) {
+            return false;
+        }
+        m_titleFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        const DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                                       0, 0};
+        com_ptr<IDWriteInlineObject> ellipsis;
+        m_dwriteFactory->CreateEllipsisTrimmingSign(m_titleFormat.get(),
+                                                    ellipsis.put());
+        m_titleFormat->SetTrimming(&trimming, ellipsis.get());
+        m_titleLayout = nullptr;
+    }
+
+    if (index != m_titleIndex || !m_titleLayout) {
+        m_titleLayout = nullptr;
+        m_appNameLayout = nullptr;
+        m_titleIndex = index;
+        const std::wstring& title = m_items[index]->title;
+        if (FAILED(m_dwriteFactory->CreateTextLayout(
+                title.c_str(), (UINT32)title.size(), m_titleFormat.get(),
+                m_width * 0.6f, fontSize * 2, m_titleLayout.put()))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void Switcher::DrawTitle(float t) {
     if (!m_settings.showTitle || m_items.empty()) {
         return;
@@ -5348,33 +5798,8 @@ void Switcher::DrawTitle(float t) {
     const Item& item = *m_items[index];
 
     const float fontSize = std::round(21 * m_dpiScale);
-    if (!m_titleFormat) {
-        if (FAILED(m_dwriteFactory->CreateTextFormat(
-                L"Segoe UI Variable Display", nullptr,
-                DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL, fontSize, L"",
-                m_titleFormat.put()))) {
-            return;
-        }
-        m_titleFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-        const DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER,
-                                       0, 0};
-        com_ptr<IDWriteInlineObject> ellipsis;
-        m_dwriteFactory->CreateEllipsisTrimmingSign(m_titleFormat.get(),
-                                                    ellipsis.put());
-        m_titleFormat->SetTrimming(&trimming, ellipsis.get());
-        m_titleLayout = nullptr;
-    }
-
-    if (index != m_titleIndex || !m_titleLayout) {
-        m_titleLayout = nullptr;
-        m_titleIndex = index;
-        if (FAILED(m_dwriteFactory->CreateTextLayout(
-                item.title.c_str(), (UINT32)item.title.size(),
-                m_titleFormat.get(), m_width * 0.6f, fontSize * 2,
-                m_titleLayout.put()))) {
-            return;
-        }
+    if (!EnsureTitleLayout(index, fontSize)) {
+        return;
     }
 
     DWRITE_TEXT_METRICS metrics;
@@ -5545,21 +5970,30 @@ void Switcher::RenderFrame() {
     // uncovers them only near the end while closing, when the cards are
     // almost in place.
     const float cover = 1 - (1 - t) * (1 - t) * (1 - t);
-    if (m_background) {
-        m_ctx->DrawBitmap(m_background.get(), screen, cover,
-                          D2D1_INTERPOLATION_MODE_LINEAR);
-    }
-    if (!m_desktopThumbnails.empty()) {
-        SetBackdropOpacity(cover);
-    }
-    if (m_settings.dimOpacity > 0) {
-        m_brush->SetColor(D2D1::ColorF(0, 0, 0, m_settings.dimOpacity * t));
-        m_ctx->FillRectangle(screen, m_brush.get());
+    if (HasBlackFloor(m_settings.style)) {
+        DrawFloor(cover);
+    } else {
+        if (m_background) {
+            m_ctx->DrawBitmap(m_background.get(), screen, cover,
+                              D2D1_INTERPOLATION_MODE_LINEAR);
+        }
+        if (!m_desktopThumbnails.empty()) {
+            SetBackdropOpacity(cover);
+        }
+        if (m_settings.dimOpacity > 0) {
+            m_brush->SetColor(
+                D2D1::ColorF(0, 0, 0, m_settings.dimOpacity * t));
+            m_ctx->FillRectangle(screen, m_brush.get());
+        }
     }
 
     const bool panel = IsPanelStyle(m_settings.style);
+    const bool itab = IsITabStyle(m_settings.style);
     if (panel) {
         DrawPanelBack(t);
+    }
+    if (itab) {
+        DrawReflections(t);
     }
     for (const DrawEntry& entry : m_drawList) {
         DrawCard(entry, t);
@@ -5568,7 +6002,9 @@ void Switcher::RenderFrame() {
         DrawPanelFront(t);
     }
     DrawCloseButton(t);
-    if (!panel) {
+    if (itab) {
+        DrawCaption(t);
+    } else if (!panel) {
         DrawTitle(t);
     }
 
@@ -5631,6 +6067,8 @@ com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
 void Switcher::RefreshIcons() {
     std::erase_if(m_iconCache,
                   [](const auto& entry) { return !IsWindow(entry.first); });
+    std::erase_if(m_appNames,
+                  [](const auto& entry) { return !IsWindow(entry.first); });
 
     for (auto& [hwnd, entry] : m_iconCache) {
         HICON icon = GetWindowIcon(hwnd);
@@ -5676,18 +6114,7 @@ com_ptr<IWICBitmap> Switcher::ReadIconPixels(HICON icon) {
 // Packaged (UWP) apps, hosted in an ApplicationFrameWindow, usually have no
 // window icon. Their icon comes from the shell, by the app's AppUserModelID.
 com_ptr<IWICBitmap> Switcher::ReadAppIconPixels(HWND hwnd) {
-    com_ptr<IPropertyStore> store;
-    if (FAILED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(store.put())))) {
-        return nullptr;
-    }
-    std::wstring appId;
-    PROPVARIANT value;
-    PropVariantInit(&value);
-    if (SUCCEEDED(store->GetValue(kPKEY_AppUserModel_ID, &value)) &&
-        value.vt == VT_LPWSTR && value.pwszVal) {
-        appId = value.pwszVal;
-    }
-    PropVariantClear(&value);
+    const std::wstring appId = GetWindowAppId(hwnd);
     if (appId.empty()) {
         return nullptr;
     }
@@ -5878,6 +6305,10 @@ bool IsSolidColorBackground() {
 }
 
 void Switcher::UpdateBackground() {
+    // Not drawn (see RenderFrame); the picture is kept for the next session.
+    if (HasBlackFloor(m_settings.style)) {
+        return;
+    }
     if (m_settings.background == BackgroundMode::Dim ||
         !m_desktopThumbnails.empty()) {
         m_background = nullptr;
