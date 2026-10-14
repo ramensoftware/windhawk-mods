@@ -2,7 +2,7 @@
 // @id windhawk-mawaqit
 // @name Mawaqit Prayer Clock
 // @description Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.
-// @version 0.6.8.4
+// @version 0.6.9-rc1
 // @author HHeitlager
 // @github https://github.com/hheitlager
 // @include explorer.exe
@@ -26,6 +26,22 @@ Mawaqit prayer clock with live countdown, prayer schedule popup, and customizabl
 - Native XAML taskbar integration with reserved layout space for anchored positions
 - Automatic or manual clock height, four-sided margins and padding, tray gap, corner radius, and font size
 - Background schedule updates through native WinHTTP, with configurable refresh interval
+
+## Network access and cached schedules
+This mod connects to **https://mawaqit.net** over HTTPS to retrieve the public
+prayer schedule for the mosque identifier configured in Settings. The request
+is an HTTP GET for `https://mawaqit.net/<language>/<mosque-identifier>`;
+no account or authentication is required. The server can observe the request
+and normal connection information such as your IP address.
+
+The schedule is stored in Windhawk's mod-specific storage. A valid cached
+schedule is reused when Explorer restarts, until the configured refresh interval
+expires (24 hours by default; adjustable from 1 to 168 hours). The mod also
+requests a fresh schedule when the mosque or refresh interval changes.
+If a download fails, it retries after one hour. An empty, expired, mismatched,
+or unusable cache causes a download at startup. The mod reads schedule data
+from the public Mawaqit webpage, so changes to that page can interrupt updates.
+
 - Live settings updates without restarting Explorer
 
 ## Screenshots
@@ -107,15 +123,11 @@ with or endorsed by Mawaqit.
     $description: Automatically close popup after 1–300 seconds. Opening it again resets the timer.
   $name: Popup settings
 - AdvancedCustomization:
-  - AdvancedOptions: false
-    $name: Show advanced options
-    $description: Show additional settings for updates, layout, and colors.
   - ModSettingsAdvanced:
     - RefreshHours: 24
       $name: Refresh interval (hours)
       $description: Choose how often the prayer schedule is updated from Mawaqit (1–168 hours).
     $name: Mod settings
-    #! $showIf: {AdvancedOptions: true}
   - LayoutSettings:
     - Width: 0
       $name: Width
@@ -139,7 +151,6 @@ with or endorsed by Mawaqit.
       $name: Fontsize
       $description: Adjust the clock's text size (10–24 px). This does not affect the popup.
     $name: Layout settings
-    #! $showIf: {AdvancedOptions: true}
   - CustomThemeSettings:
     - CustomPillBackground: "#211E32"
       $name: Pill background
@@ -162,7 +173,6 @@ with or endorsed by Mawaqit.
     - CustomPopupFooter: "#A29DBB"
       $name: Popup footer
     $name: Custom theme settings
-    #! $showIf: {AdvancedOptions: true}
   $name: Advanced customization
 */
 // ==/WindhawkModSettings==
@@ -752,6 +762,13 @@ inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
 
 }  // namespace folder_menus_taskbar_xaml
 
+// Windhawk-managed per-mod cache, removed when the mod is uninstalled.
+static std::wstring CacheDir() {
+    WCHAR path[MAX_PATH]{};
+    if (!Wh_GetModStoragePath(path, ARRAYSIZE(path))) return L"";
+    return path;
+}
+
 namespace NativeUpdater {
 
 static void fail(const char* s){throw std::runtime_error(s);}
@@ -820,7 +837,7 @@ static bool Run(const std::wstring& mosque) {
   const J& entry=month.key(std::to_string(d));if(entry.kind!=J::Arr||entry.a.size()!=6)fail("Invalid calendar day");
   sched<<date(year,m,d);for(int i:{0,2,3,4,5}){const J& t=entry.idx(i);if(t.kind!=J::Str||!validTime(t.s))fail("Invalid prayer time");sched<<'|'<<t.s;}sched<<'\n';
  }}
- wchar_t base[MAX_PATH];if(!GetEnvironmentVariableW(L"LOCALAPPDATA",base,MAX_PATH))fail("LOCALAPPDATA unavailable");std::wstring dir=std::wstring(base)+L"\\EmberveilMawaqit";if(!CreateDirectoryW(dir.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)fail("Cannot create cache folder");
+ std::wstring dir=CacheDir();if(dir.empty())fail("Windhawk mod storage unavailable");if(!CreateDirectoryW(dir.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)fail("Cannot create cache folder");
  // Retain existing Hijri date metadata only if it is from the same mosque and day.
  std::string hijri="",hijriSource="unavailable";std::wstring old=dir+L"\\metadata.json";
  {HANDLE h=CreateFileW(old.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);if(h!=INVALID_HANDLE_VALUE){DWORD sz=GetFileSize(h,nullptr);if(sz<65536){std::string data(sz,0);DWORD got=0;if(ReadFile(h,data.data(),sz,&got,nullptr)){try{Parser mp{data};J prev=mp.value();if(prev.key("mosqueIdentifier").s==narrow(slug)&&prev.key("localDate").s==date(now.wYear,now.wMonth,now.wDay)){hijri=prev.key("hijriDate").s;hijriSource=prev.key("hijriDateSource").s;}}catch(...){}}}CloseHandle(h);}}
@@ -843,9 +860,8 @@ static std::vector<Prayer> g_today,g_tomorrow;
 static std::wstring DateKey(const SYSTEMTIME& t){wchar_t b[16];swprintf(b,16,L"%04u-%02u-%02u",t.wYear,t.wMonth,t.wDay);return b;}
 
 static std::wstring CachePath(){
- wchar_t base[MAX_PATH]={}; DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",base,MAX_PATH);
- if(!n||n>=MAX_PATH)return L"";
- return std::wstring(base)+L"\\EmberveilMawaqit\\schedule.txt";
+ std::wstring dir=CacheDir();
+ return dir.empty()?L"":dir+L"\\schedule.txt";
 }
 
 static std::wstring Utf8ToWide(const std::string& s) {
@@ -963,6 +979,9 @@ namespace taskwin = folder_menus_taskbar_window;
 namespace taskxaml = folder_menus_taskbar_xaml;
 
 static std::atomic<bool> g_stopping{false};
+// TrayUI::StartTaskbar can recreate XAML without restarting explorer.exe.
+static std::atomic<bool> g_taskbarRebuildPending{false};
+
 static slot::Lease g_lease{};
 static winrt::weak_ref<FrameworkElement> g_placeholder;
 static winrt::weak_ref<Panel> g_parent;
@@ -1040,8 +1059,9 @@ static HANDLE g_stopEvent=nullptr,g_refreshEvent=nullptr;
 static HANDLE g_updateWorker=nullptr;
 static HANDLE g_countdownWorker=nullptr;
 static void UpdateClockOnUiThread();
-static TextBlock g_prayerText{nullptr},g_countdownText{nullptr};
-static Grid g_pill{nullptr};
+[[clang::no_destroy]] static TextBlock g_prayerText{nullptr};
+[[clang::no_destroy]] static TextBlock g_countdownText{nullptr};
+[[clang::no_destroy]] static Grid g_pill{nullptr};
 static HWND g_popup=nullptr;
 static winrt::event_token g_tapToken{};
 static bool g_tapRegistered=false;
@@ -1076,7 +1096,14 @@ static PopupColors PopupTheme(){
 }
 static void PaintPrayerPopup(HWND hwnd){
  PAINTSTRUCT ps{};HDC dc=BeginPaint(hwnd,&ps);if(!dc)return;
- RECT r{};GetClientRect(hwnd,&r);auto colors=PopupTheme();
+ // Draw in a fixed 270x252 logical coordinate space. The GDI viewport
+ // scales the entire popup, including text, consistently with its DPI size.
+ RECT client{};GetClientRect(hwnd,&client);
+ int savedDc=SaveDC(dc);
+ SetMapMode(dc,MM_ANISOTROPIC);
+ SetWindowExtEx(dc,270,252,nullptr);
+ SetViewportExtEx(dc,client.right-client.left,client.bottom-client.top,nullptr);
+ RECT r{0,0,270,252};auto colors=PopupTheme();
  HBRUSH bg=CreateSolidBrush(colors.bg);FillRect(dc,&r,bg);DeleteObject(bg);
  HPEN border=CreatePen(PS_SOLID,1,colors.border);HGDIOBJ prevPen=SelectObject(dc,border);
  HGDIOBJ oldBrush=SelectObject(dc,GetStockObject(NULL_BRUSH));Rectangle(dc,0,0,r.right,r.bottom);
@@ -1107,69 +1134,25 @@ static void PaintPrayerPopup(HWND hwnd){
    line(time,20,y,r.right-20,23,colors.text,DT_RIGHT);
  }
  line(g_label+L" - in "+g_countdown,12,bottomRule+5,r.right-12,24,colors.footer,DT_CENTER);
- SelectObject(dc,oldFont);DeleteObject(font);EndPaint(hwnd,&ps);
+ SelectObject(dc,oldFont);DeleteObject(font);RestoreDC(dc,savedDc);EndPaint(hwnd,&ps);
 }
-// A low-level mouse hook receives mouse-down events even when clicking a
-// taskbar control that does not activate another top-level window.
-// Never swallow input or touch XAML from the hook callback.
-static HHOOK g_popupMouseHook=nullptr;
-static constexpr UINT kPopupOutsideClick=WM_APP+47;
-
-static bool PointInsidePill(POINT screenPoint) {
-    HWND taskbar=taskwin::FindCurrentProcessTaskbarWnd();
-    if(!taskbar || !g_pill) return false;
-    try {
-        RECT bar{};GetWindowRect(taskbar,&bar);
-        auto transform=g_pill.TransformToVisual(nullptr);
-        auto origin=transform.TransformPoint({0,0});
-        auto corner=transform.TransformPoint({(float)g_pill.ActualWidth(),
-                                              (float)g_pill.ActualHeight()});
-        double scale=(double)GetDpiForWindow(taskbar)/96.0;
-        RECT pill{
-            bar.left+(LONG)std::lround(origin.X*scale),
-            bar.top+(LONG)std::lround(origin.Y*scale),
-            bar.left+(LONG)std::lround(corner.X*scale),
-            bar.top+(LONG)std::lround(corner.Y*scale)
-        };
-        return pill.right>pill.left && pill.bottom>pill.top &&
-               PtInRect(&pill,screenPoint);
-    }catch(...) {return false;}
-}
-static LRESULT CALLBACK PopupMouseHookProc(int code,WPARAM wp,LPARAM lp) {
-    if(code==HC_ACTION && (wp==WM_LBUTTONDOWN || wp==WM_RBUTTONDOWN ||
-                            wp==WM_MBUTTONDOWN || wp==WM_XBUTTONDOWN) &&
-       g_popup && IsWindowVisible(g_popup)) {
-        auto data=reinterpret_cast<MSLLHOOKSTRUCT const*>(lp);
-        if(data) {
-            RECT bounds{};GetWindowRect(g_popup,&bounds);
-            if(!PtInRect(&bounds,data->pt) && !PointInsidePill(data->pt))
-                PostMessageW(g_popup,kPopupOutsideClick,0,0);
-        }
-    }
-    return CallNextHookEx(g_popupMouseHook,code,wp,lp);
-}
-static void StopPopupMouseHook(){
-    if(g_popupMouseHook){UnhookWindowsHookEx(g_popupMouseHook);g_popupMouseHook=nullptr;}
-}
-static void HidePrayerPopup(){
+// The popup is an activatable flyout: Windows notifies it when focus leaves.
+// No session-wide mouse hook or cross-application Escape polling is needed.
+static ULONGLONG g_popupLastDeactivated=0;
+static void HidePrayerPopup(bool deactivated=false){
     g_popupAutoCloseDeadline=0;
-    if(g_popup && IsWindow(g_popup))ShowWindow(g_popup,SW_HIDE);
-    StopPopupMouseHook();
-}
-static void StartPopupMouseHook(){
-    StopPopupMouseHook();
-    HMODULE module=nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                        reinterpret_cast<LPCWSTR>(&PopupMouseHookProc),&module);
-    g_popupMouseHook=SetWindowsHookExW(WH_MOUSE_LL,PopupMouseHookProc,module,0);
-    if(!g_popupMouseHook)
-        Wh_Log(L"[Mawaqit] Mouse hook installation failed: %lu",GetLastError());
+    if(g_popup && IsWindow(g_popup)){
+        KillTimer(g_popup,1);
+        ShowWindow(g_popup,SW_HIDE);
+    }
+    if(deactivated)g_popupLastDeactivated=GetTickCount64();
 }
 static LRESULT CALLBACK PrayerPopupProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
  switch(msg){
- case WM_MOUSEACTIVATE:return MA_NOACTIVATE;
- case kPopupOutsideClick:HidePrayerPopup();return 0;
+ case WM_ACTIVATE:
+   if(LOWORD(wp)==WA_INACTIVE && IsWindowVisible(hwnd))
+       HidePrayerPopup(true);
+   return 0;
  case WM_KEYDOWN:
    if(wp==VK_ESCAPE){HidePrayerPopup();return 0;}
    break;
@@ -1178,9 +1161,6 @@ static LRESULT CALLBACK PrayerPopupProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
  case WM_CLOSE:HidePrayerPopup();return 0;
  case WM_TIMER:{
    if(wp==1){
-     // WS_EX_NOACTIVATE keeps focus in the previously active application.
-     // Poll Escape's transition bit to support dismissal without stealing focus.
-     if(GetAsyncKeyState(VK_ESCAPE)&1){HidePrayerPopup();return 0;}
      if(g_popupAutoCloseDeadline && GetTickCount64()>=g_popupAutoCloseDeadline){
        Wh_Log(L"[Mawaqit] Popup auto-close timeout reached");
        HidePrayerPopup();return 0;
@@ -1188,7 +1168,7 @@ static LRESULT CALLBACK PrayerPopupProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
      InvalidateRect(hwnd,nullptr,FALSE);
    }return 0;
  }
- case WM_DESTROY:StopPopupMouseHook();KillTimer(hwnd,1);if(g_popup==hwnd)g_popup=nullptr;return 0;
+ case WM_DESTROY:KillTimer(hwnd,1);if(g_popup==hwnd)g_popup=nullptr;return 0;
  }
  return DefWindowProcW(hwnd,msg,wp,lp);
 }
@@ -1196,7 +1176,6 @@ static wchar_t g_popupClassName[128]{};
 static HINSTANCE g_popupClassInstance=nullptr;
 static bool g_popupClassRegistered=false;
 static void DestroyPrayerPopup(){
-    StopPopupMouseHook();
     if(g_popup){DestroyWindow(g_popup);g_popup=nullptr;}
     if(g_popupClassRegistered){
         if(!UnregisterClassW(g_popupClassName,g_popupClassInstance))
@@ -1207,6 +1186,8 @@ static void DestroyPrayerPopup(){
 [[maybe_unused]] static void TogglePrayerPopup(){
 
  if(!g_enablePopup){Wh_Log(L"[Mawaqit] Popup click ignored: disabled by settings");return;}
+ // A pill click may have just deactivated the flyout. Do not reopen it.
+ if(g_popupLastDeactivated && GetTickCount64()-g_popupLastDeactivated<300)return;
  if(g_popup && IsWindowVisible(g_popup)){HidePrayerPopup();return;}
  if(!g_popup){
 
@@ -1238,12 +1219,11 @@ static void DestroyPrayerPopup(){
        g_popupClassRegistered=true;
    }
 
-   g_popup=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_TOPMOST,
+   g_popup=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,
        g_popupClassName,L"Mawaqit Prayer Times",WS_POPUP,0,0,270,252,nullptr,nullptr,wc.hInstance,nullptr);
 
    if(!g_popup){Wh_Log(L"[Mawaqit] Popup creation failed: %lu",GetLastError());return;}
 
-   SetTimer(g_popup,1,150,nullptr);
 
  }
 
@@ -1256,30 +1236,38 @@ static void DestroyPrayerPopup(){
  RECT monitor{};MONITORINFO mi{};mi.cbSize=sizeof(mi);
  HMONITOR mon=MonitorFromWindow(taskbar?taskbar:g_popup,MONITOR_DEFAULTTONEAREST);
  if(GetMonitorInfoW(mon,&mi))monitor=mi.rcMonitor;
- constexpr int w=270,h=252;
+ // Win32 window rectangles are physical pixels; XAML coordinates are DIPs.
+ UINT dpi=taskbar?GetDpiForWindow(taskbar):96;
+ if(!dpi)dpi=96;
+ const double scale=static_cast<double>(dpi)/96.0;
+ const int w=MulDiv(270,dpi,96),h=MulDiv(252,dpi,96);
+ const int edgeGap=MulDiv(5,dpi,96);
+ const int screenMargin=MulDiv(4,dpi,96);
  bool top=bar.top<=monitor.top+10;
  int x=bar.left+(bar.right-bar.left-w)/2;
  // Center below the XAML pill if possible, otherwise use taskbar center.
  if(g_pill){
    try{auto transform=g_pill.TransformToVisual(nullptr);auto pt=transform.TransformPoint({0,0});
-       x=bar.left+(int)pt.X+(int)g_pill.ActualWidth()/2-w/2;}catch(...){}
+       x=bar.left+(int)std::lround((pt.X+g_pill.ActualWidth()/2.0)*scale)-w/2;}catch(...){}
  }
- int y=top?bar.bottom+5:bar.top-h-5;
- x=std::max<int>(monitor.left+4,std::min<int>(x,monitor.right-w-4));
- y=std::max<int>(monitor.top+4,std::min<int>(y,monitor.bottom-h-4));
+ int y=top?bar.bottom+edgeGap:bar.top-h-edgeGap;
+ x=std::max<int>(monitor.left+screenMargin,std::min<int>(x,monitor.right-w-screenMargin));
+ y=std::max<int>(monitor.top+screenMargin,std::min<int>(y,monitor.bottom-h-screenMargin));
  // Clip the Win32 popup itself, not only its painted background.
  // The region is owned by the window after a successful SetWindowRgn call.
 
- HRGN rounded=CreateRoundRectRgn(0,0,w+1,h+1,18,18);
+ HRGN rounded=CreateRoundRectRgn(0,0,w+1,h+1,MulDiv(18,dpi,96),MulDiv(18,dpi,96));
  if(rounded && !SetWindowRgn(g_popup,rounded,FALSE))DeleteObject(rounded);
 
- SetWindowPos(g_popup,HWND_TOPMOST,x,y,w,h,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+ SetWindowPos(g_popup,HWND_TOPMOST,x,y,w,h,SWP_SHOWWINDOW);
+ SetForegroundWindow(g_popup);
+ SetFocus(g_popup);
+ SetTimer(g_popup,1,150,nullptr);
  // Arm only after the popup becomes visible; a subsequent opening re-arms.
  int autoClose=g_popupAutoCloseSeconds.load();
  g_popupAutoCloseDeadline=autoClose>0?GetTickCount64()+static_cast<ULONGLONG>(autoClose)*1000:0;
  Wh_Log(L"[Mawaqit] Popup opened: auto-close=%d seconds",autoClose);
 
- StartPopupMouseHook();
 
  InvalidateRect(g_popup,nullptr,FALSE);
 
@@ -1603,13 +1591,14 @@ static void InsertOnUiThread() {
         if(fe && fe.Name()==kSlotName) {Wh_Log(L"[Mawaqit] Slot already exists");return;}
     }
     // Slot is resolved from the selected position before creating XAML content.
+    // Layout settings are DIPs, so XAML performs monitor DPI scaling.
     double dpi=96.0;
     if(auto wnd=taskwin::FindCurrentProcessTaskbarWnd()) dpi=(double)GetDpiForWindow(wnd);
-    double widthDip=(double)g_width*96.0/dpi;
+    double widthDip=(double)g_width;
     Grid box;
     box.Name(kSlotName);
-    box.Width(widthDip+(double)g_trayGap*96.0/dpi);
-    box.Height(g_pillHeight>0?std::min((double)g_pillHeight*96.0/dpi,48.0):30.0);
+    box.Width(widthDip+(double)g_trayGap);
+    box.Height(g_pillHeight>0?(double)g_pillHeight:30.0);
     box.HorizontalAlignment(HorizontalAlignment::Center);
     box.VerticalAlignment(VerticalAlignment::Center);
     auto palette=ResolvePillPalette(g_theme);
@@ -1617,18 +1606,18 @@ static void InsertOnUiThread() {
     background.Color(palette.background);
     Border pillSurface;
     pillSurface.Background(background);
-    double radius=(double)g_cornerRadius*96.0/dpi;
+    double radius=(double)g_cornerRadius;
     pillSurface.CornerRadius({radius,radius,radius,radius});
-    pillSurface.Margin({0,0,(double)g_trayGap*96.0/dpi,0});
+    pillSurface.Margin({0,0,(double)g_trayGap,0});
     // Position offsets are visual only; the native slot remains reserved.
     TranslateTransform offset;
-    offset.X((double)(g_margins.left-g_margins.right)*96.0/dpi);
-    offset.Y((double)(g_margins.top-g_margins.bottom)*96.0/dpi);
+    offset.X((double)(g_margins.left-g_margins.right));
+    offset.Y((double)(g_margins.top-g_margins.bottom));
     pillSurface.RenderTransform(offset);
-    pillSurface.Padding({(double)g_padding.left*96.0/dpi,
-                         (double)g_padding.top*96.0/dpi,
-                         (double)g_padding.right*96.0/dpi,
-                         (double)g_padding.bottom*96.0/dpi});
+    pillSurface.Padding({(double)g_padding.left,
+                         (double)g_padding.top,
+                         (double)g_padding.right,
+                         (double)g_padding.bottom});
     pillSurface.HorizontalAlignment(HorizontalAlignment::Stretch);
     pillSurface.VerticalAlignment(VerticalAlignment::Stretch);
     // XAML text controls in the native taskbar layout.
@@ -1637,14 +1626,14 @@ static void InsertOnUiThread() {
     content.HorizontalAlignment(HorizontalAlignment::Center);
     content.VerticalAlignment(VerticalAlignment::Center);
     TextBlock prayer;
-    prayer.FontSize((double)g_fontSize*96.0/dpi);
+    prayer.FontSize((double)g_fontSize);
     prayer.VerticalAlignment(VerticalAlignment::Center);
     prayer.Margin({5,0,4,0});
     SolidColorBrush foreground;
     foreground.Color(palette.foreground);
     prayer.Foreground(foreground);
     TextBlock countdown;
-    countdown.FontSize((double)g_fontSize*96.0/dpi);
+    countdown.FontSize((double)g_fontSize);
     countdown.VerticalAlignment(VerticalAlignment::Center);
     countdown.Margin({4,0,5,0});
     SolidColorBrush accent;
@@ -1656,7 +1645,7 @@ static void InsertOnUiThread() {
     if(g_theme==L"custom") {
         TextBlock separator;
         separator.Text(L"|");
-        separator.FontSize((double)g_fontSize*96.0/dpi);
+        separator.FontSize((double)g_fontSize);
         separator.VerticalAlignment(VerticalAlignment::Center);
         separator.Margin({0,0,0,0});
         SolidColorBrush separatorBrush;
@@ -1744,8 +1733,42 @@ static DWORD WINAPI StartWorker(void*) {
 }
 static HANDLE g_worker=nullptr;
 
+// Runs only on the taskbar XAML thread. Re-resolve the live parent rather
+// than trusting weak references to the previous taskbar visual tree.
+static void EnsureTaskbarSlotOnUiThread() {
+    if (g_stopping.load()) return;
+    int index = -1;
+    auto parent = ResolvePositionParent(index);
+    if (!parent) return; // New taskbar tree may still be initializing.
+    bool present = false;
+    for (auto child : parent.Children()) {
+        auto element = child.try_as<FrameworkElement>();
+        if (element && element.Name() == kSlotName) {
+            present = true;
+            break;
+        }
+    }
+    if (present) {
+        g_taskbarRebuildPending.store(false, std::memory_order_release);
+        return;
+    }
+    Wh_Log(L"[Mawaqit] Taskbar slot missing after recreation; restoring");
+    RemoveOnUiThread();
+    InsertOnUiThread();
+    // Keep checking if insertion was deferred because the tree is incomplete.
+    g_taskbarRebuildPending.store(false, std::memory_order_release);
+}
+
 static void UpdateClockOnUiThread() {
     if(g_stopping.load())return;
+    // Check occasionally even without a StartTaskbar notification: some
+    // Windows shell changes replace the XAML tree through other paths.
+    static unsigned healthTick = 0;
+    if (g_taskbarRebuildPending.exchange(false, std::memory_order_acq_rel) ||
+        ++healthTick >= 5) {
+        healthTick = 0;
+        EnsureTaskbarSlotOnUiThread();
+    }
     UpdateCountdown();
     auto prayer=g_prayerText;
     auto countdown=g_countdownText;
@@ -1772,12 +1795,80 @@ static DWORD WINAPI CountdownWorker(void*) {
     return 0;
 }
 
+// Return remaining cache lifetime only when it belongs to the selected mosque,
+// includes today's date, and both cache files are present.
+static DWORD FreshScheduleCacheRemainingMs(const std::wstring& mosque, int hours) {
+    try {
+        std::wstring dir=CacheDir();if(dir.empty())return 0;
+        std::wstring slug;NativeUpdater::normalize(mosque,slug);
+        std::ifstream metadata((dir+L"\\metadata.json").c_str(),std::ios::binary);
+        if(!metadata)return 0;
+        std::string json((std::istreambuf_iterator<char>(metadata)),std::istreambuf_iterator<char>());
+        if(json.size()>65536)return 0;
+        NativeUpdater::Parser parser{json};auto root=parser.value();
+        if(root.key("mosqueIdentifier").s!=NativeUpdater::narrow(slug))return 0;
+        SYSTEMTIME now;GetLocalTime(&now);
+        if(root.key("scheduleYear").s!=std::to_string(now.wYear))return 0;
+        std::wstring schedulePath=dir+L"\\schedule.txt";
+        std::ifstream schedule(schedulePath.c_str(),std::ios::binary);
+        if(!schedule)return 0;
+        std::string today=NativeUpdater::date(now.wYear,now.wMonth,now.wDay)+"|";
+        bool found=false;std::string line;
+        while(std::getline(schedule,line))if(line.compare(0,today.size(),today)==0){found=true;break;}
+        if(!found)return 0;
+        WIN32_FILE_ATTRIBUTE_DATA attrs{};
+        if(!GetFileAttributesExW((dir+L"\\metadata.json").c_str(),GetFileExInfoStandard,&attrs))return 0;
+        FILETIME current;GetSystemTimeAsFileTime(&current);
+        ULARGE_INTEGER updated{},nowTicks{};
+        updated.LowPart=attrs.ftLastWriteTime.dwLowDateTime;updated.HighPart=attrs.ftLastWriteTime.dwHighDateTime;
+        nowTicks.LowPart=current.dwLowDateTime;nowTicks.HighPart=current.dwHighDateTime;
+        if(nowTicks.QuadPart<updated.QuadPart)return 0;
+        ULONGLONG elapsedMs=(nowTicks.QuadPart-updated.QuadPart)/10000ULL;
+        ULONGLONG lifetimeMs=(ULONGLONG)hours*60*60*1000;
+        return elapsedMs<lifetimeMs?(DWORD)(lifetimeMs-elapsedMs):0;
+    }catch(...){return 0;}
+}
+
+// A schedule covers one calendar year. Never sleep past local New Year's
+// midnight with the previous year's data, even when the refresh interval
+// (or its remaining cached lifetime) would otherwise cross that boundary.
+// A short December 31 check also accommodates clock adjustments and sleep.
+static DWORD LimitRefreshDelayAtYearEnd(DWORD delay) {
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+    if(now.wMonth!=12 || now.wDay!=31)return delay;
+    ULONGLONG secondsLeft=(23u-now.wHour)*3600ULL+
+                           (59u-now.wMinute)*60ULL+(60u-now.wSecond);
+    // Wake just after midnight, allowing Windows to advance the local date.
+    ULONGLONG untilNewYearMs=(secondsLeft+2ULL)*1000ULL;
+    DWORD capped=(DWORD)std::min<ULONGLONG>(untilNewYearMs,3600000ULL);
+    return std::min(delay,capped);
+}
+
 static DWORD WINAPI ScheduleWorker(void*) {
-    DWORD delay=0;
+    std::wstring initialMosque;int initialHours;
+    AcquireSRWLockShared(&g_settingsLock);
+    initialMosque=g_mosque;initialHours=g_refreshHours;
+    ReleaseSRWLockShared(&g_settingsLock);
+    DWORD delay=FreshScheduleCacheRemainingMs(initialMosque,initialHours);
+    if(delay)Wh_Log(L"[Mawaqit] Fresh cached schedule; next download in %lu ms",(unsigned long)delay);
     while(!g_stopping.load()) {
         HANDLE events[]={g_stopEvent,g_refreshEvent};
-        DWORD result=WaitForMultipleObjects(2,events,FALSE,delay);
+        DWORD result=WaitForMultipleObjects(2,events,FALSE,LimitRefreshDelayAtYearEnd(delay));
         if(result==WAIT_OBJECT_0 || result==WAIT_FAILED)return 0;
+        // A capped wait may expire before midnight. Recheck the cache and
+        // retain its remaining lifetime instead of downloading every hour.
+        if(result==WAIT_TIMEOUT && delay>3600000u) {
+            SYSTEMTIME current{};GetLocalTime(&current);
+            if(current.wMonth==12 && current.wDay==31) {
+                std::wstring cachedMosque;int cachedHours;
+                AcquireSRWLockShared(&g_settingsLock);
+                cachedMosque=g_mosque;cachedHours=g_refreshHours;
+                ReleaseSRWLockShared(&g_settingsLock);
+                DWORD remaining=FreshScheduleCacheRemainingMs(cachedMosque,cachedHours);
+                if(remaining) {delay=remaining;continue;}
+            }
+        }
         std::wstring mosque;int hours;
         AcquireSRWLockShared(&g_settingsLock);
         mosque=g_mosque;hours=g_refreshHours;
@@ -1862,7 +1953,11 @@ BOOL Wh_ModInit() {
     g_refreshEvent=CreateEventW(nullptr,FALSE,FALSE,nullptr);
     if(!g_stopEvent||!g_refreshEvent) return FALSE;
     folder_menus_dispatch::SetExceptionLogger(LogException);
-    if(!taskxaml::HookTaskbarSymbols(nullptr)) {
+    if(!taskxaml::HookTaskbarSymbols([]() {
+        // Hook may fire while Explorer is constructing the new taskbar.
+        // Defer all XAML access to the regular UI-thread countdown tick.
+        g_taskbarRebuildPending.store(true, std::memory_order_release);
+    })) {
         Wh_Log(L"[Mawaqit] Failed to hook taskbar symbols");return FALSE;
     }
     return TRUE;
@@ -1874,8 +1969,12 @@ void Wh_ModAfterInit() {
 }
 void Wh_ModSettingsChanged() {
     Wh_Log(L"[Mawaqit] Settings change received; rebuilding native slot");
-    LoadModSettings();
+    // Keep UI-owned settings and XAML rebuild on the same taskbar thread.
+    // Previously LoadModSettings() ran on the Windhawk settings callback thread,
+    // racing with UI reads of g_theme, g_position and layout values.
+    // The schedule worker independently snapshots mosque/interval under g_settingsLock.
     bool dispatched=OnTaskbarThread([](void*){
+        LoadModSettings();
         if(g_popup && IsWindowVisible(g_popup)){
             if(!g_enablePopup) HidePrayerPopup();
             else {
