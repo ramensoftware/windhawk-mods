@@ -111,6 +111,8 @@ Tích hợp **Lịch Vạn Niên (Âm lịch Việt Nam chuẩn múi giờ UTC+7
 - enableHoroscopePage: true
   $name: Open horoscope detail page when clicking a date
   $name:vi-VN: Mở trang chi tiết Tử Vi khi bấm vào ngày trên lịch
+  $description: Requires "Show lunar dates & holidays in calendar flyout" to be enabled.
+  $description:vi-VN: Yêu cầu phải bật tùy chọn "Hiển thị Âm lịch & ngày lễ trong khay Lịch" ở trên.
 */
 // ==/WindhawkModSettings==
 
