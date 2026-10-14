@@ -279,6 +279,8 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 #include <string.h>
 #include <stdarg.h>
 #include <wchar.h>
+#include <regex>
+#include <string_view>
 
 // ======================================================================
 //  PART 1: Leftify (caption buttons on the left, icon and title layout)
@@ -605,6 +607,60 @@ static SetInset_t SetInsetTop_Orig, SetInsetLeft_Orig, SetInsetRight_Orig;
 static DoHitTest_t DoHitTest_Orig;
 static bool g_hasPosHook = false;
 
+// ---------------- HWND of a CTopLevelWindow, taken from DWM's own data ----------------
+// CTopLevelWindow::GetWindowData() returns a CWindowData*, which stores the HWND.
+// The offset of that member is derived at init from CWindowData::IsGhostWindow
+// (see DeriveHwndOffset); if it can't be derived, no HWND is available.
+typedef void* (WINAPI *GetWindowData_t)(void*);
+static GetWindowData_t GetWindowData_Orig;
+static void* IsGhostWindow_Func;
+static size_t g_hwndOffset = SIZE_MAX;
+
+static size_t OffsetFromAssemblyRegex(void* func, size_t defValue, const std::regex& re, int limit) {
+    BYTE* p = (BYTE*)func;
+    for (int i = 0; i < limit; i++) {
+        WH_DISASM_RESULT result;
+        if (!Wh_Disasm(p, &result)) break;
+        p += result.length;
+        std::string_view s = result.text;
+        if (s == "ret") break;
+        std::match_results<std::string_view::const_iterator> match;
+        if (std::regex_match(s.begin(), s.end(), match, re)) {
+            return std::stoull(match[1], nullptr, 16);
+        }
+    }
+    Wh_Log(L"HWND offset: pattern not found in %p", func);
+    return defValue;
+}
+
+static void DeriveHwndOffset() {
+    if (!IsGhostWindow_Func || !GetWindowData_Orig) {
+        Wh_Log(L"HWND lookup unavailable: GetWindowData or IsGhostWindow symbol not found");
+        return;
+    }
+    // IsGhostWindow loads this->hwnd as its first argument to GetPropW, so the first
+    // load whose base register is the `this` pointer (rcx on x64, x0 on ARM64) is the HWND member.
+    g_hwndOffset = OffsetFromAssemblyRegex(
+        IsGhostWindow_Func, SIZE_MAX,
+#if defined(_M_X64)
+        std::regex(R"(mov \w+, \[rcx\+0x([0-9a-f]+)\])", std::regex_constants::icase),
+#elif defined(_M_ARM64)
+        std::regex(R"(ldr\s+\w+, \[x0, #0x([0-9a-f]+)\])", std::regex_constants::icase),
+#else
+#error "Unsupported architecture"
+#endif
+        10);
+    Wh_Log(L"CWindowData HWND offset = 0x%zx", g_hwndOffset);
+}
+
+static HWND HwndFromTopLevelWindow(void* pThis) {
+    if (g_hwndOffset == SIZE_MAX || !GetWindowData_Orig || !pThis) return nullptr;
+    void* data = GetWindowData_Orig(pThis);
+    if (!data) return nullptr;
+    HWND h = *(HWND*)((BYTE*)data + g_hwndOffset);
+    return IsWindow(h) ? h : nullptr;
+}
+
 // ---------------- per-window button rectangles (window-local X) ----------------
 struct WinLayout { void* win; int left[4]; int right[4]; int band; bool valid; };
 static WinLayout g_winLayouts[64];
@@ -651,8 +707,8 @@ static bool GetWinLayout(void* win, int* l, int* r, int* band) {
     return ok;
 }
 
-// ---------------- per-window HWND cache + title-text state ----------------
-struct HwndCache { void* win; HWND hwnd; HWND hashHwnd; unsigned hash; bool hasHash; };
+// ---------------- per-window title-text state ----------------
+struct HwndCache { void* win; HWND hashHwnd; unsigned hash; bool hasHash; };
 static HwndCache g_hwndCache[64];
 static int g_hwndCacheNext = 0;
 static SRWLOCK g_hwndLock = SRWLOCK_INIT;
@@ -666,22 +722,6 @@ static HwndCache* FindOrCreateCacheLocked(void* win) {
     *e = HwndCache{};
     e->win = win;
     return e;
-}
-
-static void StoreHwnd(void* win, HWND hwnd) {
-    AcquireSRWLockExclusive(&g_hwndLock);
-    FindOrCreateCacheLocked(win)->hwnd = hwnd;
-    ReleaseSRWLockExclusive(&g_hwndLock);
-}
-
-static HWND LookupHwnd(void* win) {
-    HWND h = nullptr;
-    AcquireSRWLockShared(&g_hwndLock);
-    for (int i = 0; i < 64; i++) {
-        if (g_hwndCache[i].win == win) { h = g_hwndCache[i].hwnd; break; }
-    }
-    ReleaseSRWLockShared(&g_hwndLock);
-    return h;
 }
 
 static void SetTitleState(void* win, HWND hashHwnd, unsigned hash) {
@@ -747,72 +787,6 @@ static VisEntry* GetEntry(void* v) {
     *e = VisEntry{};
     e->v = v;
     return e;
-}
-
-// ---------------- window lookup (tolerant) ----------------
-struct FindCtx {
-    RECT tb;
-    int expectedInset;
-    HWND best;
-    int bestErr;
-    bool exact;
-    RECT win;
-};
-
-static BOOL CALLBACK FindWindowProc(HWND hwnd, LPARAM lp) {
-    FindCtx* c = (FindCtx*)lp;
-    if (!IsWindowVisible(hwnd)) return TRUE;
-    RECT r;
-    if (!GetWindowRect(hwnd, &r)) return TRUE;
-    int il = c->tb.left - r.left;
-    int ir = r.right - c->tb.right;
-    int dy = c->tb.top - r.top;
-    if (il < 0 || il > 24 || ir < 0 || ir > 24 || dy < 0 || dy > 40) return TRUE;
-    int err = abs(il - c->expectedInset) + abs(ir - c->expectedInset);
-    if (err > 12) return TRUE;
-    if (!c->best || err < c->bestErr) {
-        c->best = hwnd;
-        c->bestErr = err;
-        c->exact = (il == ir);
-        c->win = r;
-    }
-    return TRUE;
-}
-
-// Fallback: visible titled window whose WIDTH is closest, ignoring position
-struct WidthCtx {
-    int winW;
-    int x, y;
-    HWND fg;
-    HWND best;
-    long bestCost;
-    int tol;        // max allowed width difference
-    bool strict;    // also require the window position to match the title bar
-    int tbTop;
-};
-
-static BOOL CALLBACK FindByWidthProc(HWND hwnd, LPARAM lp) {
-    WidthCtx* c = (WidthCtx*)lp;
-    if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
-    if (GetWindowTextLengthW(hwnd) <= 0) return TRUE;
-    // Only windows that really have a caption (WS_CAPTION) can own this title
-    // bar. Without this check, a caption-less window of similar width (e.g. a
-    // fullscreen/popup window during a tiling transition) was matched and
-    // cached, which gave a wrong width and shifted the buttons.
-    if ((GetWindowLongW(hwnd, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) return TRUE;
-    RECT r;
-    if (!GetWindowRect(hwnd, &r)) return TRUE;
-    int dw = abs((r.right - r.left) - c->winW);
-    if (dw > c->tol) return TRUE;
-    if (c->strict && (abs(r.left - c->x) > 12 || r.top > c->tbTop + 5 || r.top < c->tbTop - 45))
-        return TRUE;
-    long cost = dw * 4L + abs(r.left - c->x) + abs(r.top - c->y);
-    if (hwnd == c->fg) cost -= 40;
-    if (!c->best || cost < c->bestCost) {
-        c->best = hwnd;
-        c->bestCost = cost;
-    }
-    return TRUE;
 }
 
 // ---------------- title/icon repositioning ----------------
@@ -981,84 +955,23 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
     if (tbW <= 0 || tbW > 20000) return false;
     if (tb.left < -20000) return false;  // minimized / offscreen representation (thumbnail)
 
-    FindCtx ctx = {};
-    ctx.tb = tb;
-    ctx.expectedInset = (b == 8) ? 8 : baseOut + 1;
-    EnumWindows(FindWindowProc, (LPARAM)&ctx);
+    int expectedInset = (b == 8) ? 8 : baseOut + 1;
 
-    int winW = (ctx.best && ctx.exact) ? (ctx.win.right - ctx.win.left)
-                                       : (tbW + 2 * ctx.expectedInset);
+    // Window width: estimated from the title bar, then corrected with the real
+    // rect of the HWND that DWM itself stores for this window. The tolerance
+    // guards against the rect being out of sync with DWM mid-resize.
+    int winW = tbW + 2 * expectedInset;
+    HWND hwndUsed = HwndFromTopLevelWindow(pThis);
+    if (hwndUsed) {
+        RECT wr;
+        if (GetWindowRect(hwndUsed, &wr) && abs((wr.right - wr.left) - winW) <= 40) {
+            winW = wr.right - wr.left;
+        }
+    }
 
-    // Resolve the HWND (only needed to measure the title text).
+    // The HWND is only needed to measure the title text.
     bool needHwnd = g_settings.moveTitle && !g_settings.hideTitle &&
                     TitleWidthMatters();
-    HWND hwndUsed = ctx.best;
-    const wchar_t* via = L"match";
-    if (ctx.best) {
-        StoreHwnd(pThis, ctx.best);
-    } else {
-        // No window matched the title bar insets. The width estimate
-        // (tbW + 2*inset) can be off by ~16px for some windows (e.g. About
-        // Windows, or windows being tiled/moved), which shifts every button.
-        // Try to find the real window and use its true width.
-        int estW = winW;
-        RECT cr;
-        bool resolved = false;
-
-        // 1) The HWND we matched earlier for this very window object. Its real
-        //    width is authoritative (also correct after the window was resized).
-        HWND cached = LookupHwnd(pThis);
-        if (cached && IsWindow(cached) && IsWindowVisible(cached) &&
-            GetWindowRect(cached, &cr) && abs((cr.right - cr.left) - winW) <= 40) {
-            hwndUsed = cached;
-            winW = cr.right - cr.left;
-            via = L"cache";
-            resolved = true;
-        }
-
-        // 2) Search by width AND position.
-        if (!resolved) {
-            WidthCtx sc = {};
-            sc.winW = winW;
-            sc.x = tb.left - ctx.expectedInset;
-            sc.y = tb.top - 3;
-            sc.tbTop = tb.top;
-            sc.fg = GetForegroundWindow();
-            sc.tol = 40;
-            sc.strict = true;
-            EnumWindows(FindByWidthProc, (LPARAM)&sc);
-            if (sc.best && GetWindowRect(sc.best, &cr)) {
-                hwndUsed = sc.best;
-                winW = cr.right - cr.left;
-                via = L"strict";
-                StoreHwnd(pThis, sc.best);
-                resolved = true;
-            }
-        }
-
-        // 3) Search by width only. The real width of the found window is used,
-        //    and the HWND is cached for the next layout.
-        if (!resolved) {
-            WidthCtx wc = {};
-            wc.winW = winW;
-            wc.x = tb.left - ctx.expectedInset;
-            wc.y = tb.top - 3;
-            wc.fg = GetForegroundWindow();
-            wc.tol = 24;
-            EnumWindows(FindByWidthProc, (LPARAM)&wc);
-            if (wc.best && GetWindowRect(wc.best, &cr)) {
-                hwndUsed = wc.best;
-                winW = cr.right - cr.left;
-                via = L"width";
-                StoreHwnd(pThis, wc.best);
-                resolved = true;
-            } else {
-                via = needHwnd ? L"none" : L"estimate";
-            }
-        }
-        DebugLog(L"[Hwnd] this=%p via=%s hwnd=%p estW=%d winW=%d tb=(%ld,%ld,%ld,%ld)",
-                 pThis, via, hwndUsed, estW, winW, tb.left, tb.top, tb.right, tb.bottom);
-    }
 
     // Excluded apps keep the default Windows layout (buttons on the right).
     // Returning false here is the same as any other layout failure.
@@ -1162,12 +1075,12 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
                      pThis, hwndUsed, rr.left, rr.top, rr.right, rr.bottom, rr.right - rr.left,
                      tb.left, tb.top, tb.right, tb.bottom,
                      (unsigned long)GetWindowLongW(hwndUsed, GWL_STYLE), (int)IsZoomed(hwndUsed),
-                     winW, ctx.expectedInset);
+                     winW, expectedInset);
         }
     }
 
     DebugLog(L"[Layout] this=%p closeOnly=%d a=%d b=%d base=%d W=%d match=%d exact=%d hwnd=%p dpi=%d buttonEnd=%d close=[%d,%d] max=[%d,%d] min=[%d,%d] band=%d",
-             pThis, (int)closeOnly, a, b, baseOut, winW, (int)(ctx.best != nullptr), (int)(ctx.best && ctx.exact), hwndUsed, dpi,
+             pThis, (int)closeOnly, a, b, baseOut, winW, (int)(hwndUsed != nullptr), (int)(hwndUsed != nullptr), hwndUsed, dpi,
              x, bl[3], br[3], bl[2], br[2], bl[1], br[1], b + a + 2);
     return true;
 }
@@ -1214,7 +1127,8 @@ static long PosAndSizes_Hook(void* p) {
 // layout BEFORE the text update (so the text is built for the final box) and
 // again AFTER it (in case DWM touched the layout meanwhile).
 static bool TitleDependsOnText() {
-    return g_settings.moveTitle && g_hasPosHook && TitleWidthMatters();
+    // Without a window handle the title width can't be measured, so a text change needs no relayout.
+    return g_settings.moveTitle && g_hasPosHook && g_hwndOffset != SIZE_MAX && TitleWidthMatters();
 }
 
 static void DoRelayout(void* pThis, const wchar_t* tag) {
@@ -2840,6 +2754,11 @@ BOOL Wh_ModInit() {
         { { LR"(public: void __cdecl CTopLevelWindow::OnTitleUpdated(void))" },
           (void**)&OnTitleUpdated_Orig, (void*)OnTitleUpdated_Hook, true },
 
+        // ---- HWND lookup (address only, no hook) ----
+        { { LR"(public: class CWindowData * __cdecl CTopLevelWindow::GetWindowData(void)const )" },
+          (void**)&GetWindowData_Orig, nullptr, true },
+        { { LR"(public: bool __cdecl CWindowData::IsGhostWindow(struct HWND__ * *)const )" },
+          (void**)&IsGhostWindow_Func, nullptr, true },
         // ---- Glyph painter ----
         { { LR"(public: long __cdecl CButton::SetVisualStates(class CBitmapSourceArray const &,class CBitmapSourceArray const &,float))" },
           (void**)&SetVisualStates_Orig, (void*)SetVisualStates_Hook, true },
@@ -2859,6 +2778,7 @@ BOOL Wh_ModInit() {
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
     g_hasPosHook = (PosAndSizes_Orig != nullptr);
+    DeriveHwndOffset();
 
     if (!g_updateBmp) Wh_Log(L"CBitmapSource::Update not found, custom button styles will not be painted");
     return ok;
