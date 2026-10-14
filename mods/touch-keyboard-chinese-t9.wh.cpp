@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         2.8.5
+// @version         2.8.9
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @twitter         NekoMirra
@@ -203,8 +203,7 @@ HRESULT RegularizeHook(void* self, void* event) {
     WCHAR layoutName[128]{};
     const bool isTwelveLayout = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
                                 wcsstr(layoutName, L"12key") != nullptr;
-    const bool isTwelveAlpha = isTwelveLayout && wcsstr(layoutName, L"alpha") != nullptr;
-    if (isTwelveAlpha) {
+    if (isTwelveLayout) {
         if (channel != 4 && originalEnsureChannel) {
             originalEnsureChannel(self, 4);
             *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
@@ -228,11 +227,6 @@ HRESULT RegularizeHook(void* self, void* event) {
             Wh_SetIntValue(L"native-normalized-key", normVk);
             Wh_SetIntValue(L"native-reg-key-after", normVk);
         }
-    } else if (!isTwelveAlpha && channel == 4 && originalEnsureChannel) {
-        originalEnsureChannel(self, 1);
-        *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 1;
-        channel = 1;
-        Wh_SetIntValue(L"native-reg-channel-switched", 1);
     }
     return result;
 }
@@ -243,11 +237,9 @@ HRESULT DefaultChannelHook(void* self, bool off, size_t* channel) {
         WCHAR layoutName[128]{};
         if (Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
             wcsstr(layoutName, L"12key") != nullptr) {
-            const bool isTwelveAlpha = wcsstr(layoutName, L"alpha") != nullptr;
-            const size_t targetCh = isTwelveAlpha ? 4 : 1;
-            *channel = targetCh;
-            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetCh);
-            Wh_SetIntValue(L"native-default-channel", static_cast<int>(targetCh));
+            *channel = 4;
+            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
+            Wh_SetIntValue(L"native-default-channel", 4);
         }
     }
     return res;
@@ -277,21 +269,16 @@ HRESULT ProcessStringHook(void* self, const void* event) {
     Wh_SetIntValue(L"native-process-count", ++processCount);
     void* pinyinBase = static_cast<BYTE*>(self) - 136;
     size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(pinyinBase) + 112);
-    WCHAR layoutName[128]{};
-    const bool isNarrow12 = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
-                            wcsstr(layoutName, L"12key") != nullptr;
     auto* data = static_cast<const BYTE*>(event);
     const WORD flags = *reinterpret_cast<const WORD*>(data + 34);
     const bool hardware = (flags & 0x4010) == 0x10 && (flags & 5) != 0 && (flags & 5) != 5;
-    const bool isTwelveAlpha = isNarrow12 && wcsstr(layoutName, L"alpha") != nullptr;
-    if (!hardware && isTwelveAlpha && channel != 4 && originalEnsureChannel) {
+    WCHAR layoutName[128]{};
+    const bool isNarrow12 = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                            wcsstr(layoutName, L"12key") != nullptr;
+    if (!hardware && isNarrow12 && channel != 4 && originalEnsureChannel) {
         originalEnsureChannel(pinyinBase, 4);
         *reinterpret_cast<DWORD*>(static_cast<BYTE*>(pinyinBase) + 164) = 4;
         channel = 4;
-    } else if (!hardware && !isTwelveAlpha && channel == 4 && originalEnsureChannel) {
-        originalEnsureChannel(pinyinBase, 1);
-        *reinterpret_cast<DWORD*>(static_cast<BYTE*>(pinyinBase) + 164) = 1;
-        channel = 1;
     }
     Wh_SetIntValue(L"native-process-channel", static_cast<int>(channel));
     auto* text = reinterpret_cast<const NativeString*>(event);
@@ -345,10 +332,10 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
     Wh_SetIntValue(L"native-cand-raw-flags", properties.flags);
     Wh_SetIntValue(L"native-cand-raw-mode", properties.mode);
     WCHAR layoutName[128]{};
-    const bool isTwelveAlpha = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
-                               wcsstr(layoutName, L"12key") != nullptr &&
-                               wcsstr(layoutName, L"alpha") != nullptr;
-    const bool isTwelve = isTwelveAlpha &&
+    const bool isTwelveLayout = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                                wcsstr(layoutName, L"12key") != nullptr;
+    const bool isTwelve = isTwelveLayout ||
+                          (Wh_GetIntValue(L"native-layout-channel", 0) == 4) ||
                           ((properties.type & 0xFF) == 11 || properties.type == 11 || properties.type == 2 || properties.type == 0);
     QueryScope scope(static_cast<BYTE*>(self), isTwelve);
     if (isTwelve) {
@@ -375,10 +362,10 @@ HRESULT DecideHook(void* self, WORD first) {
     Wh_SetIntValue(L"native-decide-call-count", ++decideCallCount);
     Wh_SetIntValue(L"native-decide-char", first);
     WCHAR layoutName[128]{};
-    const bool isTwelveAlpha = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
-                               wcsstr(layoutName, L"12key") != nullptr &&
-                               wcsstr(layoutName, L"alpha") != nullptr;
-    const bool isTwelve = isTwelveAlpha && twelveQuery;
+    const bool isTwelveLayout = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                                wcsstr(layoutName, L"12key") != nullptr;
+    const bool isTwelve = twelveQuery || isTwelveLayout ||
+                          (Wh_GetIntValue(L"native-layout-channel", 0) == 4);
     static unsigned int s_lastConsumedLongSeq = 0;
     const unsigned int currentLongSeq = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-seq", 0));
     const unsigned int longDigit = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-digit", 0));
@@ -633,6 +620,9 @@ void ModeHook(void* self, HSTRING mode, int view) {
     Wh_SetStringValue(L"native-front-mode",
                       WindowsGetStringRawBuffer(mode, nullptr));
     Wh_SetIntValue(L"native-front-view", view);
+    if (view == 1 || view == 4 || view == 0) {
+        Wh_SetStringValue(L"native-layout-name", L"zh-cn.narrow12key.alpha.0");
+    }
     originalMode(self, mode, view);
 }
 
@@ -694,14 +684,13 @@ void OnReleaseActionHook(void* self, void* action) {
     if (action) {
         auto* data = static_cast<BYTE*>(action);
         WCHAR layoutName[128]{};
-        const bool isTwelveAlpha = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
-                                   wcsstr(layoutName, L"12key") != nullptr &&
-                                   wcsstr(layoutName, L"alpha") != nullptr;
+        const bool isTwelve = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                              wcsstr(layoutName, L"12key") != nullptr;
         void* keyCtrl = *reinterpret_cast<void**>(data + 56);
-        if (isTwelveAlpha && priorHandlingState == 1) {
+        if (isTwelve && priorHandlingState == 1) {
             data[144] = 1;
             Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
-        } else if (isTwelveAlpha && priorHandlingState == 0 && data[144] == 0 && keyCtrl && originalGetKeyData) {
+        } else if (isTwelve && priorHandlingState == 0 && data[144] == 0 && keyCtrl && originalGetKeyData) {
             void* keyData = originalGetKeyData(keyCtrl);
             if (keyData && originalGetVirtualKey) {
                 const unsigned char vk = originalGetVirtualKey(keyData);
@@ -714,25 +703,19 @@ void OnReleaseActionHook(void* self, void* action) {
                         data[144] = 1;
                         Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
                     }
-                }
-                using ReleaseFn = ULONG (*)(void*);
-                reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(keyData))[2])(keyData);
-            }
-        } else if (!isTwelveAlpha && data[144] == 0 && keyCtrl && originalGetKeyData) {
-            void* keyData = originalGetKeyData(keyCtrl);
-            if (keyData && originalGetVirtualKey) {
-                const unsigned char vk = originalGetVirtualKey(keyData);
-                BYTE digit = 0;
-                if (vk >= '0' && vk <= '9') {
-                    digit = vk;
-                } else if (vk >= 0x60 && vk <= 0x69) {
-                    digit = static_cast<BYTE>('0' + vk - 0x60);
-                }
-                if (digit != 0) {
-                    keybd_event(digit, 0, 0, 0);
-                    keybd_event(digit, 0, KEYEVENTF_KEYUP, 0);
-                    data[144] = 1;
-                    Wh_SetIntValue(L"native-front-numeric-direct-injected", digit);
+                } else {
+                    BYTE digit = 0;
+                    if (vk >= '0' && vk <= '9') {
+                        digit = vk;
+                    } else if (vk >= 0x60 && vk <= 0x69) {
+                        digit = static_cast<BYTE>('0' + vk - 0x60);
+                    }
+                    if (digit != 0) {
+                        keybd_event(digit, 0, 0, 0);
+                        keybd_event(digit, 0, KEYEVENTF_KEYUP, 0);
+                        data[144] = 1;
+                        Wh_SetIntValue(L"native-front-numeric-direct-injected", digit);
+                    }
                 }
                 using ReleaseFn = ULONG (*)(void*);
                 reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(keyData))[2])(keyData);
@@ -1076,7 +1059,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        285);
+        289);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
