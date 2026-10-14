@@ -8787,13 +8787,14 @@
         "ratingUsers": 91,
         "reviews": 4,
         "trendingSorting": 171.7,
-        "updated": 1791540273000,
+        "updated": 1791957725000,
         "users": 1717
       },
       "metadata": {
         "author": "caliberda",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lwindowscodecs -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv",
         "description": "Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)",
+        "donateUrl": "https://livepix.gg/caliberda",
         "github": "https://github.com/cesarkali",
         "homepage": "https://caliberda.com.br",
         "include": [
@@ -8802,7 +8803,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Ilha e Dock estilo Mac",
-        "version": "1.0.0"
+        "version": "2.0.0"
       },
       "metadataEnglish": {
         "description": "An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)",
@@ -8891,7 +8892,7 @@
         "ratingUsers": 11,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791799494000,
+        "updated": 1791957729000,
         "users": 97
       },
       "metadata": {
@@ -8903,7 +8904,7 @@
           "windhawk.exe"
         ],
         "name": "Magic Pointer",
-        "version": "1.0.1"
+        "version": "1.0.2"
       }
     },
     "magnifier-headless": {
