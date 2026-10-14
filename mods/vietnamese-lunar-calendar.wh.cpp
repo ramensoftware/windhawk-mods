@@ -1340,36 +1340,38 @@ void OpenHoroscopeForDateKey(int32_t key) {
 }
 
 void EnsureCalendarViewSelectionHooked(wuxc::CalendarView const& calView) {
-    if (!calView) return;
     ModSettings settings = GetSettings();
     if (!settings.enableHoroscopePage) {
-        if (t_selectedDatesChangedToken.value != 0) {
-            try { calView.SelectedDatesChanged(t_selectedDatesChangedToken); } catch (...) {}
-            t_selectedDatesChangedToken = {};
+        if (auto hooked = t_calendarView.get()) {
+            if (t_selectedDatesChangedToken.value != 0) {
+                try { hooked.SelectedDatesChanged(t_selectedDatesChangedToken); } catch (...) {}
+            }
+            if (t_hasSavedSelectionMode) {
+                try { hooked.SelectionMode(t_savedSelectionMode); } catch (...) {}
+            }
         }
-        if (t_hasSavedSelectionMode) {
-            try { calView.SelectionMode(t_savedSelectionMode); } catch (...) {}
-            t_hasSavedSelectionMode = false;
-        }
+        t_selectedDatesChangedToken = {};
+        t_hasSavedSelectionMode = false;
+        t_calendarView = nullptr;
         return;
     }
 
-    if (t_calendarView.get() == calView && t_selectedDatesChangedToken.value != 0) return;
+    if (!calView || ElementName(calView) == L"CustomCalendarView") return;
 
-    if (auto prev = t_calendarView.get()) {
-        if (t_selectedDatesChangedToken.value != 0) {
-            try { prev.SelectedDatesChanged(t_selectedDatesChangedToken); } catch (...) {}
+    if (auto hooked = t_calendarView.get()) {
+        if (hooked != calView || t_selectedDatesChangedToken.value != 0) {
+            return;
         }
     }
+
     t_selectedDatesChangedToken = {};
+    t_hasSavedSelectionMode = false;
     t_calendarView = winrt::make_weak(calView);
 
     try {
-        if (!t_hasSavedSelectionMode) {
-            t_savedSelectionMode = calView.SelectionMode();
-            t_hasSavedSelectionMode = true;
-        }
-        if (calView.SelectionMode() == wuxc::CalendarViewSelectionMode::None) {
+        t_savedSelectionMode = calView.SelectionMode();
+        t_hasSavedSelectionMode = true;
+        if (t_savedSelectionMode == wuxc::CalendarViewSelectionMode::None) {
             calView.SelectionMode(wuxc::CalendarViewSelectionMode::Single);
         }
         t_selectedDatesChangedToken = calView.SelectedDatesChanged(
@@ -2108,7 +2110,7 @@ void CollectDayItemsFromElement(wux::DependencyObject const& root,
     budget--;
 
     std::wstring name = ElementName(root);
-    if (name == L"NotificationCenterGrid") return;
+    if (name == L"NotificationCenterGrid" || name == L"CustomCalendarView") return;
     if (name == L"CalendarCenterGrid") insideCalendarCenter = true;
 
     if (insideCalendarCenter && name == L"CalendarHeader") {
@@ -2117,8 +2119,10 @@ void CollectDayItemsFromElement(wux::DependencyObject const& root,
         }
     }
 
-    if (auto cv = root.try_as<wuxc::CalendarView>()) {
-        EnsureCalendarViewSelectionHooked(cv);
+    if (insideCalendarCenter) {
+        if (auto cv = root.try_as<wuxc::CalendarView>()) {
+            EnsureCalendarViewSelectionHooked(cv);
+        }
     }
 
     if (auto dayItem = root.try_as<wuxc::CalendarViewDayItem>()) {
@@ -2934,8 +2938,13 @@ BOOL Wh_ModInit() {
     }
 
     LoadSettings();
+    ModSettings settings = GetSettings();
 
     if (g_target == Target::Explorer) {
+        if (!settings.enableTaskbarClock && !settings.enableTaskbarTooltip) {
+            return FALSE;
+        }
+
         if (HMODULE sysTrayModule = GetSystemTrayModuleHandle()) {
             g_systemTrayModuleHooked = true;
             HookSystemTraySymbols(sysTrayModule);
@@ -2950,6 +2959,10 @@ BOOL Wh_ModInit() {
         InstallHook(kernelBaseModule, "GetTimeFormatEx", GetTimeFormatEx_Hook, &GetTimeFormatEx_Original);
         InstallHook(kernelBaseModule, "GetDateFormatEx", GetDateFormatEx_Hook, &GetDateFormatEx_Original);
         return TRUE;
+    }
+
+    if (!settings.enableCalendarFlyout) {
+        return FALSE;
     }
 
     RunFromWindowThreadViaPostMessageMsg();
