@@ -110,7 +110,7 @@ static DWORD ShellProcessId() {
     return pid;
 }
 
-static bool IsTaskViewHost(HWND window, RECT* bounds = nullptr) {
+static bool IsShellXamlHost(HWND window) {
     if (!window || !IsWindowVisible(window)) return false;
     WCHAR cls[80] = {};
     if (!GetClassNameW(window, cls, ARRAYSIZE(cls)) ||
@@ -119,6 +119,11 @@ static bool IsTaskViewHost(HWND window, RECT* bounds = nullptr) {
     GetWindowThreadProcessId(window, &pid);
     const DWORD shellPid = ShellProcessId();
     if (!shellPid || pid != shellPid) return false;
+    return true;
+}
+
+static bool IsTaskViewHost(HWND window, RECT* bounds = nullptr) {
+    if (!IsShellXamlHost(window)) return false;
     RECT rect = {};
     MONITORINFO monitor = {sizeof(monitor)};
     if (!GetWindowRect(window, &rect) ||
@@ -134,24 +139,22 @@ static bool IsTaskViewHost(HWND window, RECT* bounds = nullptr) {
 
 struct TaskViewHost {
     HWND hwnd;
-    RECT bounds;
 };
 // Both WinEvent callbacks and the mouse hook run on the mouse thread.
 static TaskViewHost g_hosts[32] = {};
 static HWINEVENTHOOK g_hostEvents = nullptr;
 
 static void UpdateTaskViewHost(HWND hwnd) {
-    RECT bounds = {};
-    const bool host = IsTaskViewHost(hwnd, &bounds);
+    const bool host = IsShellXamlHost(hwnd);
     int freeSlot = -1;
     for (int i = 0; i < ARRAYSIZE(g_hosts); ++i) {
         if (g_hosts[i].hwnd == hwnd) {
-            g_hosts[i] = host ? TaskViewHost{hwnd, bounds} : TaskViewHost{};
+            g_hosts[i] = host ? TaskViewHost{hwnd} : TaskViewHost{};
             return;
         }
         if (!g_hosts[i].hwnd && freeSlot == -1) freeSlot = i;
     }
-    if (host && freeSlot != -1) g_hosts[freeSlot] = {hwnd, bounds};
+    if (host && freeSlot != -1) g_hosts[freeSlot] = {hwnd};
 }
 
 static BOOL CALLBACK CacheTaskViewHost(HWND hwnd, LPARAM) {
@@ -164,26 +167,20 @@ static void CALLBACK HostEvent(HWINEVENTHOOK, DWORD event, HWND hwnd,
     if (!hwnd || object != OBJID_WINDOW || child != CHILDID_SELF) return;
     if (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY) {
         for (auto& host : g_hosts) if (host.hwnd == hwnd) host = {};
-    } else if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_LOCATIONCHANGE) {
+    } else if (event == EVENT_OBJECT_SHOW) {
         UpdateTaskViewHost(hwnd);
     }
 }
 
 static HWND TaskViewAt(POINT pt) {
-    // No enumeration, cross-thread window messages, or UIA inside the LL hook.
-    for (const auto& host : g_hosts)
-        if (host.hwnd && PtInRect(&host.bounds, pt)) return host.hwnd;
-    return nullptr;
-}
-
-static void MonitorName(HMONITOR monitor, WCHAR* out, size_t chars) {
-    MONITORINFOEXW info = {};
-    info.cbSize = sizeof(info);
-    if (monitor && GetMonitorInfoW(monitor, &info)) {
-        StringCchPrintfW(out, chars, L"%s", info.szDevice);
-    } else {
-        StringCchCopyW(out, chars, L"unknown");
+    // Validate only cached shell hosts; no enumeration, window messages or UIA.
+    // SHOW can arrive before the host receives its full monitor-sized bounds.
+    for (const auto& host : g_hosts) {
+        RECT bounds = {};
+        if (host.hwnd && IsTaskViewHost(host.hwnd, &bounds) && PtInRect(&bounds, pt))
+            return host.hwnd;
     }
+    return nullptr;
 }
 
 struct WindowMatch {
@@ -705,35 +702,22 @@ static LRESULT CALLBACK MouseHook(int code, WPARAM msg, LPARAM param) {
                     Probe* probe = new (std::nothrow) Probe{p, g_startMonitor, seq};
                     if (probe && !PostThreadMessageW(g_workerId, kInspect, reinterpret_cast<WPARAM>(probe), 0))
                         delete probe;
-                    WCHAR mon[80], note[250];
-                    MonitorName(g_startMonitor, mon, ARRAYSIZE(mon));
-                    StringCchPrintfW(note, ARRAYSIZE(note),
-                        L"DOWN #%ld x=%ld y=%ld monitor=%s", seq, p.x, p.y, mon);
-                    Wh_Log(L"%s", note);
+                    Wh_Log(L"DOWN #%ld x=%ld y=%ld", seq, p.x, p.y);
                 }
             } else if (g_dragging && msg == WM_MOUSEMOVE) {
                 HMONITOR newMon = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
                 if (newMon != g_lastMonitor) {
-                    WCHAR mon[80], note[250];
-                    MonitorName(newMon, mon, ARRAYSIZE(mon));
-                    StringCchPrintfW(note, ARRAYSIZE(note),
-                        L"CROSS x=%ld y=%ld into=%s taskview=%s",
-                        p.x, p.y, mon, TaskViewAt(p) ? L"yes" : L"no");
-                    Wh_Log(L"%s", note);
+                    Wh_Log(L"CROSS x=%ld y=%ld taskview=%s", p.x, p.y,
+                           TaskViewAt(p) ? L"yes" : L"no");
                     g_lastMonitor = newMon;
                 }
             } else if (g_dragging && (msg == WM_LBUTTONUP || msg == WM_RBUTTONDOWN)) {
                 HMONITOR dest = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
-                WCHAR mon[80], note[300];
-                MonitorName(dest, mon, ARRAYSIZE(mon));
                 const bool overTaskView = TaskViewAt(p) != nullptr;
                 const DWORD elapsed = GetTickCount() - g_startTick;
-                StringCchPrintfW(note, ARRAYSIZE(note),
-                    L"UP x=%ld y=%ld monitor=%s cross=%s taskview=%s durationMs=%lu",
-                    p.x, p.y, mon,
-                    dest == g_startMonitor ? L"no" : L"yes",
-                    overTaskView ? L"yes" : L"no", elapsed);
-                Wh_Log(L"%s", note);
+                Wh_Log(L"UP x=%ld y=%ld cross=%s taskview=%s durationMs=%lu",
+                       p.x, p.y, dest == g_startMonitor ? L"no" : L"yes",
+                       overTaskView ? L"yes" : L"no", elapsed);
                 const LONG deltaX = p.x - g_startPt.x;
                 const LONG deltaY = p.y - g_startPt.y;
                 const bool travelled = (deltaX >= 40 || deltaX <= -40 ||
@@ -767,7 +751,7 @@ static DWORD WINAPI MouseThread(void*) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG msg = {};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    g_hostEvents = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE,
+    g_hostEvents = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
         nullptr, HostEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     if (g_hostEvents) EnumWindows(CacheTaskViewHost, 0);
     HMODULE module = nullptr;
