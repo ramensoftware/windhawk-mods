@@ -2,7 +2,7 @@
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
 // @description     Suppresses native Windows 11 XAML hover tooltips in Explorer, with selective area filtering for taskbar apps and system tray icons.
-// @version         1.1.0
+// @version         1.2.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -37,6 +37,7 @@ If you also wish to hide application window preview thumbnails, use the [Disable
 
 - **Hide Taskbar Application Tooltips**: Suppresses hover tooltips and labels appearing over pinned or running taskbar application buttons.
 - **Hide System Tray & Status Tooltips**: Suppresses hover tooltips over system status icons (Network, Volume, Battery, and Clock).
+- **Hide System Tray Overflow Tooltips**: Suppresses hover tooltips for hidden application icons inside the system tray overflow drawer. When turned off, tooltips remain visible for apps in the drawer.
 
 ## Compatibility
 
@@ -61,6 +62,12 @@ If you find this mod useful, you can support its development and maintenance:
   $description: >-
     Suppresses hover tooltips over system status icons (Network, Volume,
     Battery, and Clock).
+- hideTrayOverflowTooltips: true
+  $name: Hide System Tray Overflow Tooltips
+  $description: >-
+    Suppresses hover tooltips for hidden application icons inside the system
+    tray overflow drawer. When turned off, tooltips remain visible for apps in
+    the drawer.
 */
 // ==/WindhawkModSettings==
 
@@ -107,6 +114,7 @@ static thread_local int t_tooltipScopeDepth = 0;
 struct Settings {
     std::atomic<bool> hideTaskbarAppTooltips{true};
     std::atomic<bool> hideSystemTrayTooltips{true};
+    std::atomic<bool> hideTrayOverflowTooltips{true};
 } g_settings;
 
 static void LoadSettings() {
@@ -115,6 +123,9 @@ static void LoadSettings() {
         std::memory_order_relaxed);
     g_settings.hideSystemTrayTooltips.store(
         Wh_GetIntSetting(L"hideSystemTrayTooltips") != 0,
+        std::memory_order_relaxed);
+    g_settings.hideTrayOverflowTooltips.store(
+        Wh_GetIntSetting(L"hideTrayOverflowTooltips") != 0,
         std::memory_order_relaxed);
 }
 
@@ -131,10 +142,12 @@ enum class ToolTipArea {
     Unknown,
     TaskbarApp,
     SystemTray,
+    TrayOverflow,
 };
 
 static std::unordered_set<void*> s_taskbarToolTips;
 static std::unordered_set<void*> s_systemTrayToolTips;
+static std::unordered_set<void*> s_trayOverflowToolTips;
 static std::mutex s_toolTipsMutex;
 
 static void RegisterToolTip(void* pToolTip, ToolTipArea area) {
@@ -142,10 +155,22 @@ static void RegisterToolTip(void* pToolTip, ToolTipArea area) {
         return;
     }
     std::lock_guard<std::mutex> lock(s_toolTipsMutex);
+    constexpr size_t kMaxTrackedToolTips = 500;
     if (area == ToolTipArea::TaskbarApp) {
+        if (s_taskbarToolTips.size() >= kMaxTrackedToolTips) {
+            s_taskbarToolTips.clear();
+        }
         s_taskbarToolTips.insert(pToolTip);
     } else if (area == ToolTipArea::SystemTray) {
+        if (s_systemTrayToolTips.size() >= kMaxTrackedToolTips) {
+            s_systemTrayToolTips.clear();
+        }
         s_systemTrayToolTips.insert(pToolTip);
+    } else if (area == ToolTipArea::TrayOverflow) {
+        if (s_trayOverflowToolTips.size() >= kMaxTrackedToolTips) {
+            s_trayOverflowToolTips.clear();
+        }
+        s_trayOverflowToolTips.insert(pToolTip);
     }
 }
 
@@ -154,6 +179,9 @@ static ToolTipArea LookupRegisteredToolTip(void* pToolTip) {
         return ToolTipArea::Unknown;
     }
     std::lock_guard<std::mutex> lock(s_toolTipsMutex);
+    if (s_trayOverflowToolTips.find(pToolTip) != s_trayOverflowToolTips.end()) {
+        return ToolTipArea::TrayOverflow;
+    }
     if (s_taskbarToolTips.find(pToolTip) != s_taskbarToolTips.end()) {
         return ToolTipArea::TaskbarApp;
     }
@@ -161,6 +189,55 @@ static ToolTipArea LookupRegisteredToolTip(void* pToolTip) {
         return ToolTipArea::SystemTray;
     }
     return ToolTipArea::Unknown;
+}
+
+static bool IsCursorInOverflowFlyout() {
+    POINT pt{};
+    if (GetCursorPos(&pt)) {
+        HWND hWnd = WindowFromPoint(pt);
+        while (hWnd) {
+            WCHAR className[64] = {0};
+            if (GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+                if (wcsstr(className, L"Overflow") != nullptr) {
+                    return true;
+                }
+            }
+            hWnd = GetAncestor(hWnd, GA_PARENT);
+        }
+    }
+    return false;
+}
+
+static bool IsInsideNotificationOverflow(
+    winrt::Windows::UI::Xaml::DependencyObject current) {
+    if (!current) {
+        return false;
+    }
+    for (int depth = 0; current && depth < 20; depth++) {
+        winrt::hstring className = winrt::get_class_name(current);
+        if (!className.empty()) {
+            std::wstring_view sv{className};
+            if (sv.find(L"NotificationAreaOverflow") !=
+                    std::wstring_view::npos ||
+                sv.find(L"NotifyIconOverflow") != std::wstring_view::npos ||
+                sv.find(L"OverflowFlyout") != std::wstring_view::npos) {
+                return true;
+            }
+        }
+        if (auto fe =
+                current.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
+            winrt::hstring name = fe.Name();
+            if (!name.empty()) {
+                std::wstring_view svName{name};
+                if (svName.find(L"Overflow") != std::wstring_view::npos) {
+                    return true;
+                }
+            }
+        }
+        current = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(
+            current);
+    }
+    return false;
 }
 
 static ToolTipArea IdentifyCallerArea() {
@@ -198,14 +275,23 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
         return cached;
     }
 
-    // 2. Check call stack caller module
+    // 2. Fast-path: check call stack caller module
     ToolTipArea callerArea = IdentifyCallerArea();
     if (callerArea != ToolTipArea::Unknown) {
+        if (callerArea == ToolTipArea::SystemTray &&
+            IsCursorInOverflowFlyout()) {
+            callerArea = ToolTipArea::TrayOverflow;
+        }
         RegisterToolTip(pThis, callerArea);
         return callerArea;
     }
 
-    // 3. Inspect PlacementTarget runtime class & visual tree
+    // 3. Fallback: inspect PlacementTarget runtime class & visual tree
+    if (IsCursorInOverflowFlyout()) {
+        RegisterToolTip(pThis, ToolTipArea::TrayOverflow);
+        return ToolTipArea::TrayOverflow;
+    }
+
     try {
         winrt::Windows::UI::Xaml::Controls::ToolTip toolTip{nullptr};
         winrt::copy_from_abi(toolTip, pThis);
@@ -213,11 +299,25 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
             winrt::Windows::UI::Xaml::UIElement target =
                 toolTip.PlacementTarget();
             if (target) {
+                if (IsInsideNotificationOverflow(target)) {
+                    RegisterToolTip(pThis, ToolTipArea::TrayOverflow);
+                    return ToolTipArea::TrayOverflow;
+                }
+
                 winrt::Windows::UI::Xaml::DependencyObject current = target;
-                for (int depth = 0; current && depth < 10; depth++) {
+                for (int depth = 0; current && depth < 16; depth++) {
                     winrt::hstring name = winrt::get_class_name(current);
                     if (!name.empty()) {
                         std::wstring_view sv{name};
+                        if (sv.find(L"NotificationAreaOverflow") !=
+                                std::wstring_view::npos ||
+                            sv.find(L"NotifyIconOverflow") !=
+                                std::wstring_view::npos ||
+                            sv.find(L"OverflowFlyout") !=
+                                std::wstring_view::npos) {
+                            RegisterToolTip(pThis, ToolTipArea::TrayOverflow);
+                            return ToolTipArea::TrayOverflow;
+                        }
                         if (sv.find(L"SystemTray") != std::wstring_view::npos ||
                             sv.find(L"Tray") != std::wstring_view::npos ||
                             sv.find(L"Clock") != std::wstring_view::npos ||
@@ -232,24 +332,21 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
                             return ToolTipArea::TaskbarApp;
                         }
                     }
+                    if (auto fe = current.try_as<
+                                  winrt::Windows::UI::Xaml::FrameworkElement>()) {
+                        winrt::hstring elemName = fe.Name();
+                        if (!elemName.empty()) {
+                            std::wstring_view svName{elemName};
+                            if (svName.find(L"Overflow") !=
+                                std::wstring_view::npos) {
+                                RegisterToolTip(pThis,
+                                                ToolTipArea::TrayOverflow);
+                                return ToolTipArea::TrayOverflow;
+                            }
+                        }
+                    }
                     current = winrt::Windows::UI::Xaml::Media::
                         VisualTreeHelper::GetParent(current);
-                }
-
-                // 4. Physical screen coordinate fallback (System Tray is on the rightmost 30%)
-                if (auto fe = target.try_as<
-                              winrt::Windows::UI::Xaml::FrameworkElement>()) {
-                    auto transform = fe.TransformToVisual(nullptr);
-                    auto pt = transform.TransformPoint(
-                        winrt::Windows::Foundation::Point{0, 0});
-                    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                    if (screenWidth > 0) {
-                        ToolTipArea area = (pt.X > (screenWidth * 0.70f))
-                                               ? ToolTipArea::SystemTray
-                                               : ToolTipArea::TaskbarApp;
-                        RegisterToolTip(pThis, area);
-                        return area;
-                    }
                 }
             }
         }
@@ -257,8 +354,6 @@ static ToolTipArea IdentifyToolTipArea(void* pThis) {
         Wh_Log(L"> IdentifyToolTipArea exception caught");
     }
 
-    // Default fallback: In Explorer taskbar, any tooltip not explicitly
-    // identified as System Tray belongs to taskbar apps / shell UI.
     return ToolTipArea::TaskbarApp;
 }
 
@@ -356,28 +451,32 @@ static std::atomic<bool> g_putIsOpenHooked{false};
 
 static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
     if (value) {
-        // Fast paths based on settings
         bool hideApps =
             g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed);
         bool hideTray =
             g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed);
+        bool hideDrawer =
+            g_settings.hideTrayOverflowTooltips.load(std::memory_order_relaxed);
 
-        if (hideApps && hideTray) {
-            // Both suppressed: suppress with zero overhead
+        if (hideApps && hideTray && hideDrawer) {
+            // All suppressed: suppress with zero overhead
             return S_OK;
         }
 
-        if (!hideApps && !hideTray) {
-            // Both unsuppressed: allow opening
+        if (!hideApps && !hideTray && !hideDrawer) {
+            // All unsuppressed: allow opening
             if (g_toolTipPutIsOpenOriginal) {
                 return g_toolTipPutIsOpenOriginal(pThis, value);
             }
             return S_OK;
         }
 
-        // Selective case: one enabled, one disabled
         ToolTipArea area = IdentifyToolTipArea(pThis);
-        if (area == ToolTipArea::SystemTray) {
+        if (area == ToolTipArea::TrayOverflow) {
+            if (hideDrawer) {
+                return S_OK;
+            }
+        } else if (area == ToolTipArea::SystemTray) {
             if (hideTray) {
                 return S_OK;
             }
@@ -581,16 +680,27 @@ static void __cdecl PositionTaskbarTooltip_Hook(void* pToolTip,
     EnsurePutIsOpenHooked();
     void* pIToolTip =
         pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
+
+    bool isOverflow = IsCursorInOverflowFlyout();
+
     if (pIToolTip) {
-        RegisterToolTip(pIToolTip, ToolTipArea::SystemTray);
+        RegisterToolTip(pIToolTip, isOverflow ? ToolTipArea::TrayOverflow
+                                              : ToolTipArea::SystemTray);
     }
-    if (!g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)) {
+
+    bool shouldHide =
+        isOverflow ? g_settings.hideTrayOverflowTooltips.load(
+                         std::memory_order_relaxed)
+                   : g_settings.hideSystemTrayTooltips.load(
+                         std::memory_order_relaxed);
+    if (!shouldHide) {
         if (PositionTaskbarTooltip_Original) {
             PositionTaskbarTooltip_Original(pToolTip, pTarget, location, b1,
                                             b2);
         }
         return;
     }
+
     ToolTipScope scope;
     if (!SuppressToolTip(pToolTip) && PositionTaskbarTooltip_Original) {
         PositionTaskbarTooltip_Original(pToolTip, pTarget, location, b1, b2);
@@ -615,16 +725,34 @@ static void __cdecl ApplyTaskbarTooltipPlacement_Tray_Hook(
     EnsurePutIsOpenHooked();
     void* pIToolTip =
         pToolTip ? *(reinterpret_cast<void**>(pToolTip)) : nullptr;
+
+    ToolTipArea area = ToolTipArea::SystemTray;
     if (pIToolTip) {
-        RegisterToolTip(pIToolTip, ToolTipArea::SystemTray);
+        area = LookupRegisteredToolTip(pIToolTip);
+        if (area == ToolTipArea::Unknown) {
+            if (IsCursorInOverflowFlyout()) {
+                area = ToolTipArea::TrayOverflow;
+            } else {
+                area = ToolTipArea::SystemTray;
+            }
+            RegisterToolTip(pIToolTip, area);
+        }
     }
-    if (!g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)) {
+
+    bool shouldHide =
+        (area == ToolTipArea::TrayOverflow)
+            ? g_settings.hideTrayOverflowTooltips.load(
+                  std::memory_order_relaxed)
+            : g_settings.hideSystemTrayTooltips.load(
+                  std::memory_order_relaxed);
+    if (!shouldHide) {
         if (ApplyTaskbarTooltipPlacement_Tray_Original) {
             ApplyTaskbarTooltipPlacement_Tray_Original(pToolTip, location,
                                                        size1, size2);
         }
         return;
     }
+
     ToolTipScope scope;
     if (!SuppressToolTip(pToolTip) &&
         ApplyTaskbarTooltipPlacement_Tray_Original) {
@@ -751,7 +879,19 @@ static IconView_UpdateOuterToolTipPlacement_t
 static void __cdecl IconView_UpdateOuterToolTipPlacement_Hook(void* pThis,
                                                               bool isHover) {
     EnsurePutIsOpenHooked();
-    if (!g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)) {
+    if (!isHover) {
+        if (IconView_UpdateOuterToolTipPlacement_Original) {
+            IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
+        }
+        return;
+    }
+
+    bool hideTray =
+        g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed);
+    bool hideDrawer =
+        g_settings.hideTrayOverflowTooltips.load(std::memory_order_relaxed);
+
+    if (!hideTray || (!hideDrawer && IsCursorInOverflowFlyout())) {
         if (IconView_UpdateOuterToolTipPlacement_Original) {
             IconView_UpdateOuterToolTipPlacement_Original(pThis, isHover);
         }
@@ -954,13 +1094,23 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L"> Settings changed");
     LoadSettings();
-    Wh_Log(L"> Updated settings: hideTaskbarApp=%d, hideSystemTray=%d",
-           g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed) ? 1
-                                                                             : 0,
-           g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed) ? 1
-                                                                             : 0);
+    Wh_Log(L"> Updated settings: hideTaskbarApp=%d, hideSystemTray=%d, "
+           L"hideTrayOverflow=%d",
+           g_settings.hideTaskbarAppTooltips.load(std::memory_order_relaxed)
+               ? 1
+               : 0,
+           g_settings.hideSystemTrayTooltips.load(std::memory_order_relaxed)
+               ? 1
+               : 0,
+           g_settings.hideTrayOverflowTooltips.load(std::memory_order_relaxed)
+               ? 1
+               : 0);
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"> Uninitializing Hide Taskbar Tooltips mod");
+    std::lock_guard<std::mutex> lock(s_toolTipsMutex);
+    s_taskbarToolTips.clear();
+    s_systemTrayToolTips.clear();
+    s_trayOverflowToolTips.clear();
 }
