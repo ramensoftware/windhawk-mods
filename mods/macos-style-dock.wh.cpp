@@ -19,10 +19,23 @@ A dock as close to macOS as possible, while still working the way Windows
 does. Icons sit on a frosted-glass dock and grow as the pointer passes over
 them.
 
-Windows 11 only. This mod is not designed to be used with other taskbar mods.
-
 Later I plan on splitting the Start Menu and Status Bar into a "Menu Bar" and
 sticking it to the top of the display.
+
+## Compatibility
+
+- Windows 11 only, with the taskbar at the bottom of the screen.
+- x64 PCs only for now; ARM64 isn't supported yet.
+- The "Small taskbar buttons" setting isn't supported.
+- Not designed to be used with other taskbar mods. In particular:
+  - It sets the taskbar's height and icon size itself, so don't combine it
+    with "Taskbar height and icon size", "Mac Island & Dock" or "Taskbar Dock
+    Animation".
+  - It uses XAML diagnostics to reach the taskbar's buttons, and only one
+    program can do that at a time, so it can't run together with "Windows 11
+    Taskbar Styler", TranslucentTB or UWPSpy.
+- If Windows' Smart App Control is on, it blocks this mod (as it does all
+  Windhawk mods), because the mod is compiled on your PC and isn't signed.
 
 The taskbar height code is based on m417z's "Taskbar height and icon size"
 mod (GPL-3.0).
@@ -59,6 +72,7 @@ mod (GPL-3.0).
 #include <charconv>
 #include <chrono>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <list>
 #include <regex>
@@ -190,7 +204,10 @@ void RestoreSpacing(Button const& b) {
     }
 }
 
-std::list<Button> g_buttons;
+// Globals holding XAML objects are marked no_destroy: when Explorer exits,
+// XAML shuts down before globals are destroyed, and destroying them then
+// could crash it. ResetAll empties them when the mod is unloaded.
+[[clang::no_destroy]] std::list<Button> g_buttons;
 
 float GetRowOffsetY(wux::DependencyObject const& row);
 void PlaceIndicator(wux::FrameworkElement const& button, float s);
@@ -228,8 +245,8 @@ struct RowItem {
     float shift = 0;
 };
 
-std::vector<RowItem> g_row;
-winrt::weak_ref<wux::UIElement> g_rowParent;
+[[clang::no_destroy]] std::vector<RowItem> g_row;
+[[clang::no_destroy]] winrt::weak_ref<wux::UIElement> g_rowParent;
 
 // Latest pointer state. Pointer events only write these; the per-frame
 // update below reads them.
@@ -244,7 +261,7 @@ struct HiddenBackground {
     double originalOpacity = 1.0;
 };
 
-std::list<HiddenBackground> g_backgrounds;
+[[clang::no_destroy]] std::list<HiddenBackground> g_backgrounds;
 
 // Makes the taskbar's background invisible (opacity 0), remembering how to
 // put it back. Opacity rather than Collapsed, so it still catches clicks on
@@ -306,7 +323,7 @@ struct HiddenHighlight {
     int64_t opacityToken = 0, visibilityToken = 0;
 };
 
-std::vector<HiddenHighlight> g_highlights;
+[[clang::no_destroy]] std::vector<HiddenHighlight> g_highlights;
 
 void ApplyHighlightHidden(wux::UIElement const& el) {
     if (el.Opacity() != 0) el.Opacity(0);
@@ -369,7 +386,7 @@ struct IconImage {
     int64_t widthToken = 0, heightToken = 0;
 };
 
-std::list<IconImage> g_iconImages;
+[[clang::no_destroy]] std::list<IconImage> g_iconImages;
 
 void ApplyIconSize(wux::FrameworkElement const& el) {
     // Width() is NaN when unset, and NaN != anything, so this also covers it.
@@ -604,7 +621,7 @@ struct Plate {
     wux::FrameworkElement::SizeChanged_revoker panelSizeChanged;
 };
 
-std::list<Plate> g_plates;
+[[clang::no_destroy]] std::list<Plate> g_plates;
 
 Plate* GetRowPlate(wux::DependencyObject const& row) {
     if (!row) return nullptr;
@@ -850,7 +867,7 @@ struct Indicator {
     wux::FrameworkElement::SizeChanged_revoker sizeChanged;
 };
 
-std::list<Indicator> g_indicators;
+[[clang::no_destroy]] std::list<Indicator> g_indicators;
 
 void PlaceIndicator(wux::FrameworkElement const& button, float s) {
     wux::FrameworkElement el{nullptr};
@@ -1121,9 +1138,9 @@ void OnLeave(wux::FrameworkElement const&) {
 }
 
 // Shared handlers. They must be the same objects for AddHandler/RemoveHandler.
-wf::IInspectable g_enterHandler{nullptr};
-wf::IInspectable g_leaveHandler{nullptr};
-wf::IInspectable g_hitAreaHandler{nullptr};
+[[clang::no_destroy]] wf::IInspectable g_enterHandler{nullptr};
+[[clang::no_destroy]] wf::IInspectable g_leaveHandler{nullptr};
+[[clang::no_destroy]] wf::IInspectable g_hitAreaHandler{nullptr};
 
 void EnsureHandlers() {
     if (g_enterHandler) return;
@@ -1267,6 +1284,10 @@ void ResetAll() {
 
 thread_local bool g_reportCompositionDiagAsDisabled = false;
 
+// The thread subscribing to the taskbar's visual tree (see AdviseAsync). The
+// mod waits for it before unloading, so it never runs code that's gone.
+std::atomic<HANDLE> g_adviseThread = nullptr;
+
 class VisualTreeWatcher
     : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile> {
 public:
@@ -1290,7 +1311,13 @@ public:
             delete holder;
             return 0;
         }, holder, 0, nullptr);
-        if (t) CloseHandle(t); else delete holder;
+        if (!t) {
+            delete holder;
+            return;
+        }
+        // Kept so Wh_ModUninit can wait for it (an earlier one, if any, is
+        // long finished).
+        if (HANDLE old = g_adviseThread.exchange(t)) CloseHandle(old);
     }
 
     void Unadvise() {
@@ -1357,7 +1384,7 @@ private:
     winrt::com_ptr<IXamlDiagnostics> m_diag;
 };
 
-winrt::com_ptr<VisualTreeWatcher> g_watcher;
+[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_watcher;
 
 // {C1B6E4A2-58D3-4F7E-9A21-6E0B3D7C9F45}
 constexpr CLSID CLSID_DockTAP = {
@@ -1866,7 +1893,47 @@ bool HookTaskbarDllSymbols() {
     return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
-bool HookTaskbarViewSymbols(HMODULE module) {
+// The system tray's hooks. Newer builds keep the tray in SystemTray.dll,
+// older ones in Taskbar.View.dll (see TaskbarViewHasTray).
+std::vector<WindhawkUtils::SYMBOL_HOOK> GetTrayHooks() {
+    // SystemTray.dll, Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK trayHooks[] = {
+        {
+            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
+            &SystemTrayController_GetFrameSize_Original,
+            SystemTrayController_GetFrameSize_Hook,
+            true,
+        },
+        {
+            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
+            &SystemTraySecondaryController_GetFrameSize_Original,
+            SystemTraySecondaryController_GetFrameSize_Hook,
+            true,
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTrayController::UpdateFrameSize(void))"},
+            &SystemTrayController_UpdateFrameSize_Original,
+            SystemTrayController_UpdateFrameSize_Hook,
+            true,
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void))"},
+            &SystemTraySecondaryController_UpdateFrameSize_Original,
+            SystemTraySecondaryController_UpdateFrameSize_Hook,
+            true,
+        },
+        {
+            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const )"},
+            &SystemTrayFrame_Height_Original,
+            SystemTrayFrame_Height_Hook,
+            true,
+        },
+    };
+    return {std::make_move_iterator(std::begin(trayHooks)),
+            std::make_move_iterator(std::end(trayHooks))};
+}
+
+bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
     // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
@@ -1980,46 +2047,22 @@ bool HookTaskbarViewSymbols(HMODULE module) {
             true,
         },
     };
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) return false;
+    // On builds where the tray is in Taskbar.View.dll too, its hooks go in the
+    // same call, so the module's symbols are only looked up once.
+    using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
+    std::vector<COMBINED_SH> allHooks(std::make_move_iterator(std::begin(taskbarViewHooks)),
+                                      std::make_move_iterator(std::end(taskbarViewHooks)));
+    if (withTray) {
+        for (auto& hook : GetTrayHooks()) allHooks.push_back(std::move(hook));
+    }
+    if (!WindhawkUtils::HookSymbols(module, allHooks.data(), allHooks.size())) return false;
     if (TaskListButton_IconHeight_Address) GetIconHeightOffset();  // find it up front
     return true;
 }
 
 bool HookTraySymbols(HMODULE module) {
-    // SystemTray.dll, Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK trayHooks[] = {
-        {
-            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
-            &SystemTrayController_GetFrameSize_Original,
-            SystemTrayController_GetFrameSize_Hook,
-            true,
-        },
-        {
-            {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
-            &SystemTraySecondaryController_GetFrameSize_Original,
-            SystemTraySecondaryController_GetFrameSize_Hook,
-            true,
-        },
-        {
-            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTrayController::UpdateFrameSize(void))"},
-            &SystemTrayController_UpdateFrameSize_Original,
-            SystemTrayController_UpdateFrameSize_Hook,
-            true,
-        },
-        {
-            {LR"(private: void __cdecl winrt::SystemTray::implementation::SystemTraySecondaryController::UpdateFrameSize(void))"},
-            &SystemTraySecondaryController_UpdateFrameSize_Original,
-            SystemTraySecondaryController_UpdateFrameSize_Hook,
-            true,
-        },
-        {
-            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IFrameworkElement<struct winrt::SystemTray::SystemTrayFrame>::Height(double)const )"},
-            &SystemTrayFrame_Height_Original,
-            SystemTrayFrame_Height_Hook,
-            true,
-        },
-    };
-    return WindhawkUtils::HookSymbols(module, trayHooks, ARRAYSIZE(trayHooks));
+    auto systemTrayHooks = GetTrayHooks();
+    return WindhawkUtils::HookSymbols(module, systemTrayHooks.data(), systemTrayHooks.size());
 }
 
 // Taskbar.View.dll before version 2604 contains the system tray too; newer
@@ -2043,11 +2086,9 @@ bool HookTaskbarModules() {
     bool hooked = false;
     if (HMODULE view = GetModuleHandle(L"Taskbar.View.dll");
         view && !g_taskbarViewHooked.exchange(true)) {
-        HookTaskbarViewSymbols(view);
-        if (!GetModuleHandle(L"SystemTray.dll") && TaskbarViewHasTray(view) &&
-            !g_trayHooked.exchange(true)) {
-            HookTraySymbols(view);
-        }
+        bool withTray = !GetModuleHandle(L"SystemTray.dll") && TaskbarViewHasTray(view) &&
+                        !g_trayHooked.exchange(true);
+        HookTaskbarViewSymbols(view, withTray);
         hooked = true;
     }
     if (HMODULE tray = GetModuleHandle(L"SystemTray.dll");
@@ -2121,22 +2162,33 @@ void Wh_ModAfterInit() {
     if (g_taskbarHeight > 0) ApplyTaskbarHeight();
 }
 
-void Wh_ModUninit() {
-    // Put the taskbar back to its normal height and icons while the hooks are
-    // still in.
-    if (g_taskbarHeight > 0) {
-        g_taskbarHeight = 0;
-        g_iconLoadSize = 0;
-        ApplyTaskbarHeight();
+// Runs before the hooks are removed, which the taskbar needs to go back to its
+// normal height and icon size.
+void Wh_ModBeforeUninit() {
+    // If the visual tree subscription is still running, let it finish first.
+    if (HANDLE t = g_adviseThread.exchange(nullptr)) {
+        WaitForSingleObject(t, INFINITE);
+        CloseHandle(t);
     }
 
+    // Undo the changes to the taskbar's elements first, so that when it goes
+    // back to its normal size below, it sizes its icons itself, with nothing
+    // of ours left to override that.
     if (HWND tb = FindTaskbar()) {
         RunFromWindowThread(tb, [](void*) {
             ResetAll();
             if (g_watcher) { g_watcher->Unadvise(); g_watcher = nullptr; }
         }, nullptr);
     }
+
+    if (g_taskbarHeight > 0) {
+        g_taskbarHeight = 0;
+        g_iconLoadSize = 0;
+        ApplyTaskbarHeight();
+    }
 }
+
+void Wh_ModUninit() {}
 
 void Wh_ModSettingsChanged() {
     int oldTaskbarHeight = g_taskbarHeight;
