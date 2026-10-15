@@ -5735,9 +5735,32 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
 }
 
 static void StartAudioCapture() {
-    if (g_audioRunning.exchange(true, std::memory_order_acq_rel)) {
+    // The overlay thread owns this lifecycle. Never start a new worker after
+    // shutdown has begun, even if a previous worker cleared its running flag.
+    if (!g_running.load(std::memory_order_acquire))
         return;
+
+    if (g_audioRunning.load(std::memory_order_acquire))
+        return;
+
+    // AudioCaptureThreadProc can clear g_audioRunning just before returning
+    // after an initialization failure. Reap that generation before setting
+    // the flag for a replacement; otherwise the old thread could clear the
+    // new worker's flag, or its handle could be overwritten and leaked.
+    if (g_hAudioThread) {
+        if (g_hAudioEvent)
+            SetEvent(g_hAudioEvent);
+        WaitForSingleObject(g_hAudioThread, INFINITE);
+        CloseHandle(g_hAudioThread);
+        g_hAudioThread = nullptr;
     }
+
+    // Shutdown may have begun while the previous generation was being joined.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    if (g_audioRunning.exchange(true, std::memory_order_acq_rel))
+        return;
 
     if (!g_hAudioEvent)
         g_hAudioEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -5747,6 +5770,8 @@ static void StartAudioCapture() {
         return;
     }
 
+    // The event may have been signaled while reaping a failed worker.
+    ResetEvent(g_hAudioEvent);
     g_hAudioThread = CreateThread(
         nullptr,
         0,
@@ -5759,7 +5784,6 @@ static void StartAudioCapture() {
         g_audioRunning.store(false, std::memory_order_release);
         CloseHandle(g_hAudioEvent);
         g_hAudioEvent = nullptr;
-    } else {
     }
 }
 
@@ -8878,6 +8902,40 @@ static DWORD WINAPI AlbumColorThreadProc(LPVOID) {
 }
 
 static void StartAlbumColorCapture() {
+    // Worker lifecycle is owned by the overlay thread. Do not restart a worker
+    // after shutdown has begun, even if its running flag is already clear.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    if (g_albumColorRunning.load(std::memory_order_acquire))
+        return;
+
+    // Reap any previous generation before resetting its stop event or
+    // overwriting its handle. Signal both events so a stale worker can leave
+    // waits promptly, then release those events only after it has exited.
+    if (g_hAlbumColorThread) {
+        if (g_hAlbumColorStopEvent)
+            SetEvent(g_hAlbumColorStopEvent);
+        if (g_hAlbumColorWakeEvent)
+            SetEvent(g_hAlbumColorWakeEvent);
+        WaitForSingleObject(g_hAlbumColorThread, INFINITE);
+        CloseHandle(g_hAlbumColorThread);
+        g_hAlbumColorThread = nullptr;
+
+        if (g_hAlbumColorStopEvent) {
+            CloseHandle(g_hAlbumColorStopEvent);
+            g_hAlbumColorStopEvent = nullptr;
+        }
+        if (g_hAlbumColorWakeEvent) {
+            CloseHandle(g_hAlbumColorWakeEvent);
+            g_hAlbumColorWakeEvent = nullptr;
+        }
+    }
+
+    // Shutdown may have begun while the previous generation was being joined.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
     if (g_albumColorRunning.exchange(true, std::memory_order_acq_rel))
         return;
 
@@ -26472,13 +26530,10 @@ BOOL Wh_ModInit() {
 }
 
 static void SignalWorkerShutdown() {
-    // Stop advertising audio/album work immediately, but do not touch their
-    // plain-global HANDLEs here. The overlay thread owns those worker handles
-    // and signals/joins them during its own teardown, avoiding a shutdown race
-    // with Start/StopAudioCapture or Start/StopAlbumColorCapture.
-    g_audioRunning.store(false, std::memory_order_release);
-    g_albumColorRunning.store(false, std::memory_order_release);
-
+    // Audio and album worker state/handles are owned exclusively by the overlay
+    // thread. Do not clear their running flags here: a concurrent overlay tick
+    // could otherwise mistake a still-live worker for a stopped one and replace
+    // its handle. The overlay exit path signals, joins, and closes both workers.
     g_lyricsRunning.store(false, std::memory_order_release);
     if (g_hLyricsStopEvent)
         SetEvent(g_hLyricsStopEvent);
