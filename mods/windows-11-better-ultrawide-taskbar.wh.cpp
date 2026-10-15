@@ -6451,9 +6451,16 @@ float4 ps(VertexOutput input) : SV_Target {
             if (SUCCEEDED(DwmGetWindowAttribute(
                     window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked)
                 continue;
-            RECT rect{}, intersection{};
-            if (!GetWindowRect(window, &rect) ||
-                !IntersectRect(&intersection, &rect, &dockStrip)) continue;
+            RECT rect{}, visible{}, intersection{};
+            if (!GetWindowRect(window, &rect)) continue;
+            // The window rect includes the invisible resize border, so a
+            // maximized or snapped window next to the taskbar would qualify
+            // and paint its edge rows into the strip. Qualify by the visible
+            // frame; the texture is still placed on the window rect.
+            if (FAILED(DwmGetWindowAttribute(window, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                             &visible, sizeof(visible))))
+                visible = rect;
+            if (!IntersectRect(&intersection, &visible, &dockStrip)) continue;
             result.push_back({window, rect});
             if (result.size() == kMaxAppSources) break;
         }
