@@ -55,7 +55,7 @@ These screenshots were captured using a macro. The same macro can generate fresh
 
 thanks for using my mod :D
 
-**Windows 11 only.**
+**Windows 11 supported; Windows 10 support is experimental and uses its built-in Segoe MDL2 Assets icon font.**
 
 Pressing the top grip quickly reveals the real window without starting a drag.
 Move while holding to drag it with its native decorations and a short
@@ -3652,7 +3652,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
         m_overviewButtonFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
     }
     if(!m_overviewSymbolFormat) {
-        if(FAILED(m_dwriteFactory->CreateTextFormat(L"Segoe Fluent Icons",nullptr,DWRITE_FONT_WEIGHT_NORMAL,
+        if(FAILED(m_dwriteFactory->CreateTextFormat(CoverTabbyIconFont(),nullptr,DWRITE_FONT_WEIGHT_NORMAL,
             DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,13*m_dpiScale,L"",m_overviewSymbolFormat.put()))) return;
         m_overviewSymbolFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
         m_overviewSymbolFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -4544,7 +4544,7 @@ void Switcher::DrawIconContext(float opacity) {
         if(FAILED(m_dwriteFactory->CreateTextFormat(m_settings.fontFamily.c_str(),nullptr,
             DWRITE_FONT_WEIGHT_NORMAL,DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,
             13*ui,L"",m_iconMenuText.put())) ||
-           FAILED(m_dwriteFactory->CreateTextFormat(L"Segoe Fluent Icons",nullptr,
+           FAILED(m_dwriteFactory->CreateTextFormat(CoverTabbyIconFont(),nullptr,
             DWRITE_FONT_WEIGHT_NORMAL,DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,
             14*ui,L"",m_iconMenuSymbols.put()))) return;
         m_iconMenuText->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -6758,7 +6758,7 @@ void Switcher::DrawHoverControls(float t) {
             m_hoverTextFormat->SetTrimming(&trimming, ellipsis.get());
         }
         if (!m_controlSymbolFormat) {
-            if (FAILED(m_dwriteFactory->CreateTextFormat(L"Segoe Fluent Icons", nullptr,
+            if (FAILED(m_dwriteFactory->CreateTextFormat(CoverTabbyIconFont(), nullptr,
                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
                 13 * ui, L"", m_controlSymbolFormat.put()))) return;
             m_controlSymbolFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -7355,7 +7355,7 @@ void Switcher::DrawSearchStyle(float opacity) {
             const D2D1_RECT_F pin{close.right,y+2*ui,x+cardWidth-4*ui,y+26*ui};
             if(titleHovered) {m_simpleCloseRects[index]=close;m_simplePinRects[index]=pin;}
             if(!m_enchantedSymbols) {
-                m_dwriteFactory->CreateTextFormat(L"Segoe Fluent Icons",nullptr,DWRITE_FONT_WEIGHT_NORMAL,DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,12*ui,L"",m_enchantedSymbols.put());
+                m_dwriteFactory->CreateTextFormat(CoverTabbyIconFont(),nullptr,DWRITE_FONT_WEIGHT_NORMAL,DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,12*ui,L"",m_enchantedSymbols.put());
                 if(m_enchantedSymbols) m_enchantedSymbols->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             }
             const D2D1_RECT_F buttons[]={close,pin};
@@ -8681,8 +8681,19 @@ void WhTool_ModSettingsChanged() {
 ////////////////////////////////////////////////////////////////////////////////
 } // namespace covertabby
 
+// Use the native Windows icon font, avoiding any font installation on Windows 10.
+static PCWSTR CoverTabbyIconFont() {
+    using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto fn = ntdll ? reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
+    OSVERSIONINFOW version{};
+    version.dwOSVersionInfoSize = sizeof(version);
+    const bool win11 = fn && fn(&version) == 0 && version.dwMajorVersion == 10 && version.dwBuildNumber >= 22000;
+    return win11 ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
+}
+
 // RtlGetVersion reports the real OS build independently of app manifests.
-static bool IsSupportedWindows11() {
+static bool IsSupportedWindowsVersion() {
     using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     auto getVersion = ntdll ? reinterpret_cast<RtlGetVersionFn>(
@@ -8690,7 +8701,7 @@ static bool IsSupportedWindows11() {
     OSVERSIONINFOW version{};
     version.dwOSVersionInfoSize = sizeof(version);
     return getVersion && getVersion(&version) == 0 &&
-        version.dwMajorVersion == 10 && version.dwBuildNumber >= 22000;
+        version.dwMajorVersion == 10 && version.dwBuildNumber >= 10240;
 }
 
 // Explorer only forwards its Alt+Tab hotkey; rendering and input ownership live in the tool process.
@@ -8897,7 +8908,7 @@ void StartExplorerPart() {
 
 
 BOOL Init() {
-    if (!IsSupportedWindows11()) return FALSE;
+    if (!IsSupportedWindowsVersion()) return FALSE;
     StartExplorerPart();return g_explorerThread!=nullptr;
 }
 void Restart() {StopExplorerPart();StartExplorerPart();}
@@ -8923,7 +8934,7 @@ BOOL Wh_ModInit() {
         return CoverTabbyShellBridge::Init();
     }
 
-    if (!IsSupportedWindows11()) return FALSE;
+    if (!IsSupportedWindowsVersion()) return FALSE;
     WCHAR hostPath[MAX_PATH]{};GetModuleFileNameW(nullptr,hostPath,ARRAYSIZE(hostPath));
     PCWSTR hostName=wcsrchr(hostPath,L'\\');hostName=hostName?hostName+1:hostPath;
     if (_wcsicmp(hostName,L"windhawk.exe") && _wcsicmp(hostName,L"windhawk-mod.exe")) return FALSE;
