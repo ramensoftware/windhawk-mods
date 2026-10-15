@@ -399,7 +399,7 @@ HRESULT DecideHook(void* self, WORD first) {
 WH_HOOK_SYMBOLS_OPTIONS SymbolOptions() {
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
-        options.onlineCacheUrl = L"";
+    options.noUndecoratedSymbols = TRUE;
     return options;
 }
 
@@ -604,19 +604,20 @@ std::atomic<unsigned> frontNskCount{0};
 std::atomic<unsigned> frontNotifyMsgCount{0};
 
 bool IsTwelve(HSTRING mode) {
+    if (!mode) return true;
     UINT32 length = 0;
     const wchar_t* text = WindowsGetStringRawBuffer(mode, &length);
-    return length == 11 && CompareStringOrdinal(text, length, L"narrow12key",
-                                                11, TRUE) == CSTR_EQUAL;
+    if (!text || length == 0) return true;
+    return wcsstr(text, L"narrow") != nullptr || wcsstr(text, L"12key") != nullptr;
 }
 
 bool AvailabilityHook(void* self, HSTRING mode) {
-    const bool result = originalAvailability(self, mode);
-    if (g_enabled.load() && IsTwelve(mode)) {
+    if (IsTwelve(mode)) {
         Wh_SetStringValue(L"native-front-mode", L"narrow12key");
+        Wh_SetIntValue(L"native-front-avail-hook-hit", 1);
         return true;
     }
-    return result;
+    return originalAvailability(self, mode);
 }
 
 void ModeHook(void* self, HSTRING mode, int view) {
@@ -956,13 +957,20 @@ void InjectKeyHook(void* self, void* keyControl, HSTRING text, void* point, unsi
 }
 
 bool InstallFrontend(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK textinputDllHooks[] = {
+    auto options = NativeT9::SymbolOptions();
+    // TextInput.dll
+    WindhawkUtils::SYMBOL_HOOK availHook[] = {
         {{L"?IsNarrowModeAvailableInternal@"
           L"ChineseSimplifiedModeAvailabilityStrategy@Controls@"
           L"TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
           L"AEAA_NPE$AAVString@Platform@@@Z"},
          &originalAvailability,
          AvailabilityHook},
+    };
+    WindhawkUtils::HookSymbols(module, availHook, 1, &options);
+
+    // TextInput.dll
+    WindhawkUtils::SYMBOL_HOOK textinputDllHooks[] = {
         {{L"?SetKeyboardModeView@?QITextFrameworkAdapter@Common@TextInput@"
           L"Experiences@ComposableShell@WindowsInternal@@"
           L"SystemInputProcessorTextFrameworkAdapter@TextFramework@"
@@ -1069,10 +1077,7 @@ bool InstallFrontend(HMODULE module) {
          &originalIsEmojiViewEnabled,
          IsEmojiViewEnabledHook},
     };
-    auto options = NativeT9::SymbolOptions();
-    for (size_t i = 0; i < ARRAYSIZE(textinputDllHooks); ++i) {
-        WindhawkUtils::HookSymbols(module, &textinputDllHooks[i], 1, &options);
-    }
+    WindhawkUtils::HookSymbols(module, textinputDllHooks, ARRAYSIZE(textinputDllHooks), &options);
     return true;
 }
 }  // namespace
