@@ -1289,42 +1289,6 @@ inline std::wstring Format(double v, const Locale& loc) {
     return out;
 }
 
-inline std::wstring FormatScientific(double v, const Locale& loc, int digits = 6) {
-    if (!std::isfinite(v)) return L"—";
-    wchar_t buf[64] = {};
-    swprintf(buf, ARRAYSIZE(buf), L"%.*e", digits, v);
-    std::wstring s = buf;
-    for (wchar_t& ch : s) {
-        if (ch == L'.') ch = loc.decimal;
-    }
-    return s;
-}
-
-inline std::wstring FormatHex(double v) {
-    if (!std::isfinite(v) || v != std::floor(v)) return L"";
-    long long iv = (long long)v;
-    wchar_t buf[32] = {};
-    if (iv < 0) {
-        swprintf(buf, ARRAYSIZE(buf), L"-0x%llx", (unsigned long long)(-iv));
-    } else {
-        swprintf(buf, ARRAYSIZE(buf), L"0x%llx", (unsigned long long)iv);
-    }
-    return buf;
-}
-
-inline std::wstring FormatBinary(double v) {
-    if (!std::isfinite(v) || v != std::floor(v) || v < 0) return L"";
-    unsigned long long u = (unsigned long long)v;
-    if (u == 0) return L"0b0";
-    std::wstring bits;
-    while (u) {
-        bits.push_back((u & 1) ? L'1' : L'0');
-        u >>= 1;
-    }
-    std::reverse(bits.begin(), bits.end());
-    return L"0b" + bits;
-}
-
 }  // namespace Calc
 
 // ===== Design constants (in DIP; they are multiplied by the monitor scale) =====
@@ -1770,11 +1734,9 @@ static std::wstring FoldString(const std::wstring& s) {
 }
 
 static std::wstring GetStringSetting(const wchar_t* name) {
-    PCWSTR s = Wh_GetStringSetting(name);
-    std::wstring r = s ? s : L"";
-    if (s) {
-        Wh_FreeStringSetting(s);
-    }
+    PCWSTR s = Wh_GetStringSetting(name);  // never returns NULL
+    std::wstring r = s;
+    Wh_FreeStringSetting(s);
     return r;
 }
 
@@ -3981,16 +3943,15 @@ static float EffectTintAlpha() {
     return std::clamp(AcrylicTintAlpha() * GetEffectParams().tintMul, 0.f, 1.f);
 }
 
-// ---- API no documentada (SetWindowCompositionAttribute + WCA_ACCENT_POLICY) ----
+// ---- Undocumented API (SetWindowCompositionAttribute + WCA_ACCENT_POLICY) ----
 enum LvAccentState {
-    LV_ACCENT_DISABLED = 0,
     LV_ACCENT_ACRYLICBLURBEHIND = 4,
 };
 
 struct LvAccentPolicy {
     int AccentState;
     int AccentFlags;
-    DWORD GradientColor;  // ABGR: alpha = opacidad del tinte
+    DWORD GradientColor;  // ABGR: alpha = tint opacity
     DWORD AnimationId;
 };
 
@@ -4002,16 +3963,14 @@ struct LvWinCompAttrData {
 
 typedef BOOL(WINAPI* LvSetWindowCompositionAttribute_t)(HWND, LvWinCompAttrData*);
 
-static HWND g_liveWnd = nullptr;                    // ventana del acrylic (debajo de g_hwnd)
-static bool g_liveSupported = false;                // API presente y Windows >= 1803
+static HWND g_liveWnd = nullptr;                    // acrylic window (below g_hwnd)
+static bool g_liveSupported = false;                // API present and Windows >= 1803
 static LvSetWindowCompositionAttribute_t g_pSetWCA = nullptr;
-static int g_liveAlpha = -1;                        // cache del alpha aplicado
-static bool g_liveRgnValid = false;
-static HWND g_livePanel = nullptr;                  // acrylic del panel de detalles
-static bool g_liveWin11 = false;                    // Windows 11: esquinas redondeadas por DWM
+static HWND g_livePanel = nullptr;                  // acrylic of the details panel
+static bool g_liveWin11 = false;                    // Windows 11: corners rounded by DWM
 typedef HRESULT(WINAPI* LvDwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
 static LvDwmSetWindowAttribute_t g_pDwmSetAttr = nullptr;
-static int g_liveRgnSize[2][2] = {};                // Windows 10: tamaño de la última región
+static int g_liveRgnSize[2][2] = {};                // Windows 10: size of the last region
 
 static bool UseLive() {
     if (!g_liveSupported || !g_cfg.liveAcrylic) return false;
@@ -4034,20 +3993,20 @@ static LRESULT CALLBACK LiveWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
         case WM_NCHITTEST:
-            return HTTRANSPARENT;  // la ventana de arriba (g_hwnd) recibe el input
+            return HTTRANSPARENT;  // the top window (g_hwnd) receives the input
     }
     return DefWindowProcW(h, m, w, l);
 }
 
 static HWND LiveCreateOne(HINSTANCE hInst) {
-    // Sin WS_EX_LAYERED: DWM ignora regiones y el acrylic en ventanas layered.
+    // No WS_EX_LAYERED: DWM ignores regions and acrylic on layered windows.
     HWND h = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
                              L"SpotlightLauncherBackdrop", L"", WS_POPUP, 0, 0, 100, 100, nullptr,
                              nullptr, hInst, nullptr);
     if (h && g_pDwmSetAttr && g_liveWin11) {
         const DWORD pref = 2;  // DWMWCP_ROUND
         g_pDwmSetAttr(h, 33 /*DWMWA_WINDOW_CORNER_PREFERENCE*/, &pref, sizeof(pref));
-        const DWORD none = 0xFFFFFFFE;  // DWMWA_COLOR_NONE: sin borde del sistema
+        const DWORD none = 0xFFFFFFFE;  // DWMWA_COLOR_NONE: no system border
         g_pDwmSetAttr(h, 34 /*DWMWA_BORDER_COLOR*/, &none, sizeof(none));
     }
     return h;
@@ -4068,7 +4027,7 @@ static bool LiveCreate(HINSTANCE hInst) {
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = LiveWndProc;
     wc.hInstance = hInst;
-    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);  // negro = transparente para DWM
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);  // black = transparent for DWM
     wc.lpszClassName = L"SpotlightLauncherBackdrop";
     RegisterClassExW(&wc);
 
@@ -4092,12 +4051,12 @@ static void LiveDestroy() {
     }
 }
 
-// Tinte + acrylic en tiempo real.
+// Tint + real-time acrylic.
 static void LiveApplyAccent() {
     if (!g_pSetWCA) return;
     auto to8 = [](float v) { return (DWORD)std::clamp((int)std::lround(v * 255.f), 0, 255); };
     DWORD a = to8(EffectTintAlpha());
-    if (a == 0) a = 1;  // el acrylic no soporta opacidad 0
+    if (a == 0) a = 1;  // acrylic does not support zero opacity
     LvAccentPolicy p = {};
     p.AccentState = LV_ACCENT_ACRYLICBLURBEHIND;
     p.AccentFlags = 0;
@@ -4110,12 +4069,10 @@ static void LiveApplyAccent() {
 static void LiveHide() {
     if (g_liveWnd && IsWindowVisible(g_liveWnd)) ShowWindow(g_liveWnd, SW_HIDE);
     if (g_livePanel && IsWindowVisible(g_livePanel)) ShowWindow(g_livePanel, SW_HIDE);
-    g_liveRgnValid = false;
-    g_liveAlpha = -1;
     memset(g_liveRgnSize, 0, sizeof(g_liveRgnSize));
 }
 
-// Grano: se separa de EnsureBackdropBrushes (ver paso 4).
+// Grain: kept separate from EnsureBackdropBrushes.
 static void EnsureNoiseBrush() {
     if (g_noiseBrush || !g_rt) return;
     const int N = 128;
@@ -4125,7 +4082,7 @@ static void EnsureNoiseBrush() {
         s ^= s << 13;
         s ^= s >> 17;
         s ^= s << 5;
-        const uint32_t a = 22;  // grano base ~8.6%; cada efecto lo escala con noiseMul
+        const uint32_t a = 22;  // base grain ~8.6%; each effect scales it with noiseMul
         const uint32_t c = (s & 0xFF) * a / 255;
         p = (a << 24) | (c << 16) | (c << 8) | c;
     }
@@ -4184,12 +4141,12 @@ static bool CaptureBackdrop(int x, int y, int w, int h) {
     return true;
 }
 
-// ---- Glass en tiempo real ----
-// Glass usa poco blur, así que el acrylic de DWM (blur fijo y alto) no sirve. En su lugar se
-// vuelve a capturar el escritorio varias veces por segundo mientras la barra está abierta. Para
-// que la captura no incluya la propia barra, la ventana se excluye de la captura de pantalla
-// (WDA_EXCLUDEFROMCAPTURE, Windows 10 2004+). Si Windows no lo permite, Glass queda estático.
-static const UINT kGlassRefreshMs = 16;  // ~60 capturas por segundo para reducir el retraso
+// ---- Real-time Glass ----
+// Glass uses little blur, so DWM's acrylic (fixed, strong blur) does not fit. Instead the desktop
+// is captured again several times per second while the bar is open. So that the capture does not
+// include the bar itself, the window is excluded from screen capture
+// (WDA_EXCLUDEFROMCAPTURE, Windows 10 2004+). If Windows does not allow it, Glass stays static.
+static const UINT kGlassRefreshMs = 16;  // ~60 captures per second to reduce lag
 typedef BOOL(WINAPI* SetWindowDisplayAffinity_t)(HWND, DWORD);
 static bool g_glassCaptureOk = false;
 
@@ -4198,8 +4155,8 @@ static bool UseGlassLive() {
     return g_cfg.effect == BgEffect::Glass && g_glassCaptureOk;
 }
 
-// Se llama al abrir. Solo con Glass la ventana se excluye de la captura (así las capturas de
-// pantalla y grabaciones siguen viendo la barra con los demás efectos).
+// Called on open. Only with Glass is the window excluded from capture (so screenshots and
+// recordings still see the bar with the other effects).
 static void ApplyCaptureAffinity() {
     static SetWindowDisplayAffinity_t fn = [] {
         HMODULE u = GetModuleHandleW(L"user32.dll");
@@ -4217,8 +4174,8 @@ static void ApplyCaptureAffinity() {
 
 static void RefreshGlassBackdrop() {
     if (!UseGlassLive() || !g_hwnd || g_bmpW <= 0 || g_bmpH <= 0) return;
-    // La superficie ya está en pantalla (con el desplazamiento de la animación): se captura
-    // exactamente lo que hay debajo de ella.
+    // The surface is already on screen (with the animation offset): capture exactly what is
+    // underneath it.
     CaptureBackdrop(g_winX, g_winY + (int)std::lround(g_offY), g_bmpW, g_bmpH);
     MarkDirty();
 }
@@ -4869,9 +4826,9 @@ static void EnsureGlow() {
     MakeFadeBrush(g_pal.accent2, g_pal.light ? 0.26f : 0.30f, D2D1::Point2F(1, 1), g_glow2);
 }
 
-// Cada ventana de acrylic mide exactamente lo mismo que su card (nada de márgenes), así que no
-// depende de recortar con SetWindowRgn (DWM lo ignora con el acrylic). Las esquinas redondeadas
-// las pone DWM en Windows 11 (DWMWCP_ROUND) y en Windows 10 una región como respaldo.
+// Each acrylic window is exactly the size of its card (no margins), so it does not depend on
+// clipping with SetWindowRgn (DWM ignores it with acrylic). The rounded corners come from DWM on
+// Windows 11 (DWMWCP_ROUND) and from a region as a fallback on Windows 10.
 static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
     if (!wnd) return;
     if (w < 4 || h < 4) {
@@ -4883,20 +4840,20 @@ static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
         g_liveRgnSize[idx][1] = h;
         const int d = (int)std::lround(kRadius * (float)g_scale * 2.f);
         HRGN rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d);
-        SetWindowRgn(wnd, rgn, TRUE);  // el sistema se queda con rgn
+        SetWindowRgn(wnd, rgn, TRUE);  // the system takes ownership of rgn
     }
     UINT flags = SWP_NOACTIVATE;
     if (!IsWindowVisible(wnd)) flags |= SWP_SHOWWINDOW;
-    // insertAfter = g_hwnd  ->  queda justo DEBAJO de g_hwnd.
+    // insertAfter = g_hwnd  ->  ends up right BELOW g_hwnd.
     SetWindowPos(wnd, g_hwnd, x, y, w, h, flags);
 }
 
-// Llamar desde Present(): mantiene la ventana del acrylic alineada con g_hwnd.
+// Call from Present(): keeps the acrylic window aligned with g_hwnd.
 static void LiveSync() {
     if (!g_liveWnd) return;
 
-    // Sin WS_EX_LAYERED no hay fade global. El acrylic aparece cuando la card ya es visible a
-    // ~40% y desaparece al empezar a cerrarse (la capa de arriba sí hace fade completo).
+    // Without WS_EX_LAYERED there is no global fade. The acrylic appears once the card is already
+    // ~40% visible and disappears as soon as it starts closing (the top layer does fade fully).
     if (g_alpha < 0.4) {
         if (IsWindowVisible(g_liveWnd)) ShowWindow(g_liveWnd, SW_HIDE);
         if (g_livePanel && IsWindowVisible(g_livePanel)) ShowWindow(g_livePanel, SW_HIDE);
@@ -4924,7 +4881,7 @@ static void LiveSync() {
     }
 }
 
-// Sombra que NO pinta dentro de la card (si no, taparía el acrylic de la ventana de abajo).
+// Shadow that does NOT paint inside the card (otherwise it would cover the acrylic window below).
 static void DrawShadowRing(float x, float y, float w, float h, float alpha) {
     if (!g_d2d || !g_rt) return;
     const float s = (float)g_scale;
@@ -4996,14 +4953,14 @@ static void DrawCard(float x, float y, float w, float h, float alpha) {
     D2D1_ROUNDED_RECT card = D2D1::RoundedRect(D2D1::RectF(x, y, x + w, y + h), kRadius * s, kRadius * s);
 
     if (live) {
-        // El fondo y el tinte los pone DWM en g_liveWnd. Aquí solo va una capa casi invisible
-        // (alpha ~3/255) para que esta ventana siga recibiendo el mouse sobre la card.
+        // DWM provides the background and tint in g_liveWnd. Only a nearly invisible layer goes
+        // here (alpha ~3/255) so that this window keeps receiving the mouse over the card.
         FillRR(x, y, x + w, y + h, kRadius * s, D2D1::ColorF(0, 0, 0, 1), 0.012f);
         if (ep.veil > 0.f) {
             FillRR(x, y, x + w, y + h, kRadius * s, D2D1::ColorF(1.f, 1.f, 1.f, 1.f), ep.veil * alpha);
         }
         if (ep.glow) DrawGlow(card, x, y, w, h, alpha);
-        if (g_cfg.effect != BgEffect::Acrylic) {  // el acrylic de DWM ya trae su propio grano
+        if (g_cfg.effect != BgEffect::Acrylic) {  // DWM's acrylic already has its own grain
             EnsureNoiseBrush();
             if (g_noiseBrush && ep.noiseMul > 0.f) {
                 g_noiseBrush->SetOpacity(std::min(1.f, alpha * ep.noiseMul));
@@ -5039,7 +4996,7 @@ static void DrawCard(float x, float y, float w, float h, float alpha) {
         g_rt->FillRoundedRectangle(&body, g_gradBrush);
     }
 
-    // El borde antialiased tapa el borde "dentado" que deja la región de DWM.
+    // The antialiased border hides the "jagged" edge that the DWM region leaves.
     SetBrush(g_pal.border, alpha);
     D2D1_ROUNDED_RECT outer = D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + h - 0.5f),
                                                 kRadius * s, kRadius * s);
@@ -5206,9 +5163,15 @@ static void DrawDetailsPanel(AppEntry& app, const AppDetails& d) {
     const float ph = (float)DetailsPanelH() * s;   // always the same as the search bar
     const float pad = kPanelPad * s;
 
-    DrawCard(ox, oy, pw, ph, a);
+    // With live acrylic the DWM window behind the panel is only pw * a wide while it opens or
+    // closes (see LiveSync), so it sweeps. The card's own layers (shadow, veil, glow, grain, rim,
+    // border) and the content clip use that same width; at full width they would only fade and
+    // would not follow the window.
+    const float cardW = UseLive() ? std::max(1.f, pw * a) : pw;
 
-    D2D1_RECT_F clip = D2D1::RectF(ox, oy, ox + pw, oy + ph);
+    DrawCard(ox, oy, cardW, ph, a);
+
+    D2D1_RECT_F clip = D2D1::RectF(ox, oy, ox + cardW, oy + ph);
     g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
 
     const float icon = 44 * s;
@@ -5936,7 +5899,7 @@ static void ShowLauncher() {
         return;
     }
     LoadPalette();
-    // Con acrylic en vivo en Windows 11 las esquinas las redondea DWM (radio fijo ~8 px).
+    // With live acrylic on Windows 11, DWM rounds the corners (fixed radius ~8 px).
     kRadius = (UseLive() && g_liveWin11) ? 8.f : 20.f;
     if (!EnsureTarget()) {
         return;
@@ -5993,8 +5956,6 @@ static void ShowLauncher() {
     // Acrylic: capture the desktop now, with the window still hidden.
     PrepareBackdrop();
     if (UseLive()) {
-        g_liveRgnValid = false;
-        g_liveAlpha = -1;
         LiveApplyAccent();
     }
 
