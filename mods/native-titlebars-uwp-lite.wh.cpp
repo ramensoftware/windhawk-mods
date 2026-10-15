@@ -2,7 +2,7 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars Lite
 // @description     Enables native titlebars in UWP apps
-// @version         1.3.0
+// @version         1.4.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
@@ -337,6 +337,20 @@ void DestroyTitlebarIcons(HWND hWnd)
     RemovePropW(hWnd, L"NativeTitlebarIconSet");
 }
 
+typedef bool (* CTitleBar__UpdateBorderVisibilityAndMargins_t)(void *);
+
+CTitleBar__UpdateBorderVisibilityAndMargins_t CTitleBar__UpdateBorderVisibilityAndMargins_orig;
+
+bool __fastcall CTitleBar__UpdateBorderVisibilityAndMargins_hook(
+
+    void *pThis
+
+){
+
+    return 0;
+
+}
+
 LRESULT CALLBACK SubclassProc(
     HWND hWnd,
     UINT uMsg,
@@ -432,6 +446,52 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
     return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
 }
 
+typedef __int64 (* CTitleBar_ShowTitleBar_t)(void *, INT64, INT64, float);
+
+CTitleBar_ShowTitleBar_t CTitleBar_ShowTitleBar_orig;
+
+__int64 __fastcall CTitleBar_ShowTitleBar_hook(
+
+    void *pThis,
+
+    INT64 a2,
+
+    INT64 a3,
+
+    float a4
+
+)
+
+{
+
+    return 0;
+
+}
+
+typedef bool (* CTitleBar_HandleTitleBarMessage_t)(void *, HWND, UINT, WPARAM, LPARAM, INT64);
+
+CTitleBar_HandleTitleBarMessage_t CTitleBar_HandleTitleBarMessage_orig;
+
+bool __fastcall CTitleBar_HandleTitleBarMessage_hook(
+
+    void *pThis,
+
+    HWND hWnd,
+
+    UINT msg,
+
+    WPARAM wParam,
+
+    LPARAM lParam,
+
+    INT64 a6
+
+){
+
+    return false;
+
+}
+
 BOOL Wh_ModInit()
 {
     InitializeCriticalSection(&g_csSubclassedWindows);
@@ -460,6 +520,13 @@ BOOL Wh_ModInit()
             (void *)CTitleBar__PaintButton_hook,
             false
         },
+        {
+            {L"private: bool __cdecl CTitleBar::UpdateBorderVisibilityAndMargins(void)"},
+            (void **)&CTitleBar__UpdateBorderVisibilityAndMargins_orig,
+            (void *)CTitleBar__UpdateBorderVisibilityAndMargins_hook,
+            false
+        } 
+        
     };
 
     return WindhawkUtils::HookSymbols(
