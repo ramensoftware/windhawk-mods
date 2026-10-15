@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.75
+// @version         0.3.76
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -5000,6 +5000,7 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         decltype(item.Size()) poolSize{};
         decltype(item.Size()) contentSize{};
         decltype(item.Size()) textureSize{};
+        RECT latestTexels{};
         std::chrono::steady_clock::time_point lastFrame{};
         std::atomic<bool> active{};
         std::atomic<bool> closed{};
@@ -6074,6 +6075,7 @@ float4 ps(VertexOutput input) : SV_Target {
         requestedSources.clear();
         auto source = std::make_shared<Source>();
         source->rect = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+        source->latestTexels = source->rect;
         source->contentSize = source->textureSize = {
             static_cast<int32_t>(width), static_cast<int32_t>(height)};
         D3D11_TEXTURE2D_DESC description{};
@@ -6711,15 +6713,9 @@ float4 ps(VertexOutput input) : SV_Target {
                 Wh_Log(L"[UWLIQUID] compositor changed %lu -> %lu; replacing %zu capture sessions",
                        compositorProcess, compositor, sources.size());
             if (compositor) compositorProcess = compositor;
-            // A frame can report a grown ContentSize on a surface still sized
-            // for the old pool; Recreate only helps if another frame follows.
-            // A static window sends none, so recycle the session instead.
             auto now = std::chrono::steady_clock::now();
             for (auto const& source : sources)
-                if (restarted || source->closed || (source->latest &&
-                    (source->textureSize.Width != source->contentSize.Width ||
-                     source->textureSize.Height != source->contentSize.Height) &&
-                    now - source->lastFrame > std::chrono::milliseconds(100)))
+                if (restarted || source->closed || StaleLocked(*source, now))
                     stale.push_back(source);
         }
         EnsureGeometryCapture(restarted);
@@ -6863,6 +6859,98 @@ float4 ps(VertexOutput input) : SV_Target {
         try { if (frame) frame.Close(); } catch (...) {}
     }
 
+    bool StripSourceLocked(Source const& source) const {
+        return lens.bodyMode == 0 && source.window && source.window == GetShellWindow();
+    }
+
+    RECT NeededTexelsLocked(Source const& source) const {
+        RECT shown{}, texels{};
+        if (!IntersectRect(&shown, &source.rect, &taskbarRect)) return texels;
+        LONGLONG sourceWidth = source.rect.right - source.rect.left;
+        LONGLONG sourceHeight = source.rect.bottom - source.rect.top;
+        auto floorDiv = [](LONGLONG n, LONGLONG d) { return LONG(n / d); };
+        auto ceilDiv = [](LONGLONG n, LONGLONG d) { return LONG((n + d - 1) / d); };
+        constexpr LONG bilinearGuard = 1;
+        RECT needed{
+            floorDiv(LONGLONG(shown.left - source.rect.left) * source.contentSize.Width, sourceWidth) - bilinearGuard,
+            floorDiv(LONGLONG(shown.top - source.rect.top) * source.contentSize.Height, sourceHeight) - bilinearGuard,
+            ceilDiv(LONGLONG(shown.right - source.rect.left) * source.contentSize.Width, sourceWidth) + bilinearGuard,
+            ceilDiv(LONGLONG(shown.bottom - source.rect.top) * source.contentSize.Height, sourceHeight) + bilinearGuard};
+        RECT valid{0, 0, source.textureSize.Width, source.textureSize.Height};
+        IntersectRect(&texels, &needed, &valid);
+        return texels;
+    }
+
+    // A frame can report a grown ContentSize on a surface still sized for the
+    // old pool; Recreate only helps if another frame follows. A static window
+    // sends none, so recycle the session instead.
+    bool StaleLocked(Source const& source, std::chrono::steady_clock::time_point now) const {
+        if (!source.latest || now - source.lastFrame <= std::chrono::milliseconds(100)) return false;
+        return source.textureSize.Width != source.contentSize.Width ||
+               source.textureSize.Height != source.contentSize.Height ||
+               StripMissesTaskbarLocked(source);
+    }
+
+    bool StripMissesTaskbarLocked(Source const& source) const {
+        RECT needed = NeededTexelsLocked(source), covered{};
+        return !IsRectEmpty(&needed) &&
+               !(IntersectRect(&covered, &needed, &source.latestTexels) && EqualRect(&covered, &needed));
+    }
+
+    bool StoreFrameLocked(std::shared_ptr<Source> const& source, ID3D11Texture2D* texture,
+                          decltype(Source::contentSize) contentSize, RECT const* currentRect) {
+        D3D11_TEXTURE2D_DESC captured{};
+        texture->GetDesc(&captured);
+        UINT validWidth = std::min<UINT>(contentSize.Width, captured.Width);
+        UINT validHeight = std::min<UINT>(contentSize.Height, captured.Height);
+        if (!validWidth || !validHeight) return false;
+        source->contentSize = contentSize;
+        source->textureSize = {static_cast<int32_t>(validWidth),
+                               static_cast<int32_t>(validHeight)};
+        if (currentRect) source->rect = *currentRect;
+        RECT copied{0, 0, LONG(validWidth), LONG(validHeight)};
+        if (StripSourceLocked(*source)) {
+            RECT strip = NeededTexelsLocked(*source);
+            if (!IsRectEmpty(&strip)) copied = strip;
+        }
+        UINT copyWidth = copied.right - copied.left;
+        UINT copyHeight = copied.bottom - copied.top;
+        D3D11_TEXTURE2D_DESC latest{};
+        if (source->latest) source->latest->GetDesc(&latest);
+        if (!source->latest || !source->latestView ||
+            latest.Width != copyWidth || latest.Height != copyHeight ||
+            latest.Format != captured.Format) {
+            D3D11_TEXTURE2D_DESC owned = captured;
+            owned.Width = copyWidth;
+            owned.Height = copyHeight;
+            owned.Usage = D3D11_USAGE_DEFAULT;
+            owned.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            owned.CPUAccessFlags = 0;
+            owned.MiscFlags = 0;
+            owned.MipLevels = 1;
+            owned.ArraySize = 1;
+            winrt::com_ptr<ID3D11Texture2D> newTexture;
+            winrt::com_ptr<ID3D11ShaderResourceView> newView;
+            winrt::check_hresult(device->CreateTexture2D(
+                &owned, nullptr, newTexture.put()));
+            winrt::check_hresult(device->CreateShaderResourceView(
+                newTexture.get(), nullptr, newView.put()));
+            source->latest = std::move(newTexture);
+            source->latestView = std::move(newView);
+        }
+        // WGC can drop frames. DirtyRegions describes only the current
+        // update, so applying deltas leaves permanent stale pixels when an
+        // earlier update was missed. ReportOnly surfaces contain the full
+        // image; replace our snapshot on every delivered frame.
+        D3D11_BOX box{UINT(copied.left), UINT(copied.top), 0,
+                      UINT(copied.right), UINT(copied.bottom), 1};
+        context->CopySubresourceRegion(
+            source->latest.get(), 0, 0, 0, 0, texture, 0, &box);
+        source->latestTexels = copied;
+        source->lastFrame = std::chrono::steady_clock::now();
+        return true;
+    }
+
     void OnFrame(std::shared_ptr<Source> const& source,
                  capture::Direct3D11CaptureFramePool const& sender) {
         capture::Direct3D11CaptureFrame frame{nullptr};
@@ -6886,12 +6974,6 @@ float4 ps(VertexOutput input) : SV_Target {
             winrt::com_ptr<ID3D11Texture2D> texture;
             winrt::check_hresult(access->GetInterface(
                 __uuidof(ID3D11Texture2D), texture.put_void()));
-            D3D11_TEXTURE2D_DESC captured{};
-            texture->GetDesc(&captured);
-            UINT validWidth = std::min<UINT>(contentSize.Width, captured.Width);
-            UINT validHeight = std::min<UINT>(contentSize.Height, captured.Height);
-            if (!validWidth || !validHeight) return;
-
             RECT currentRect{};
             // Free-threaded WGC callbacks inherit the process DPI default, not
             // the UI thread's context. Textures and compositor bounds are in
@@ -6904,42 +6986,9 @@ float4 ps(VertexOutput input) : SV_Target {
                 !source->active.load(std::memory_order_acquire) ||
                 std::find(sources.begin(), sources.end(), source) == sources.end())
                 return;
-
-            D3D11_TEXTURE2D_DESC latest{};
-            if (source->latest) source->latest->GetDesc(&latest);
-            if (!source->latest || !source->latestView ||
-                latest.Width != validWidth || latest.Height != validHeight ||
-                latest.Format != captured.Format) {
-                D3D11_TEXTURE2D_DESC owned = captured;
-                owned.Width = validWidth;
-                owned.Height = validHeight;
-                owned.Usage = D3D11_USAGE_DEFAULT;
-                owned.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-                owned.CPUAccessFlags = 0;
-                owned.MiscFlags = 0;
-                owned.MipLevels = 1;
-                owned.ArraySize = 1;
-                winrt::com_ptr<ID3D11Texture2D> newTexture;
-                winrt::com_ptr<ID3D11ShaderResourceView> newView;
-                winrt::check_hresult(device->CreateTexture2D(
-                    &owned, nullptr, newTexture.put()));
-                winrt::check_hresult(device->CreateShaderResourceView(
-                    newTexture.get(), nullptr, newView.put()));
-                source->latest = std::move(newTexture);
-                source->latestView = std::move(newView);
-            }
-            // WGC can drop frames. DirtyRegions describes only the current
-            // update, so applying deltas leaves permanent stale pixels when an
-            // earlier update was missed. ReportOnly surfaces contain the full
-            // image; replace our snapshot on every delivered frame.
-            D3D11_BOX box{0, 0, 0, validWidth, validHeight, 1};
-            context->CopySubresourceRegion(
-                source->latest.get(), 0, 0, 0, 0, texture.get(), 0, &box);
-            source->contentSize = contentSize;
-            source->textureSize = {static_cast<int32_t>(validWidth),
-                                   static_cast<int32_t>(validHeight)};
-            source->lastFrame = std::chrono::steady_clock::now();
-            if (haveRect) source->rect = currentRect;
+            if (!StoreFrameLocked(source, texture.get(), contentSize,
+                                  haveRect ? &currentRect : nullptr))
+                return;
             if (source->poolSize.Width != contentSize.Width ||
                 source->poolSize.Height != contentSize.Height) {
                 recreateSize = contentSize;
@@ -7007,22 +7056,27 @@ float4 ps(VertexOutput input) : SV_Target {
             int sourceWidth = source.rect.right - source.rect.left;
             int sourceHeight = source.rect.bottom - source.rect.top;
             if (sourceWidth <= 0 || sourceHeight <= 0) continue;
-            RECT validRect = source.rect;
-            validRect.right = validRect.left + MulDiv(
-                sourceWidth, source.textureSize.Width, source.contentSize.Width);
-            validRect.bottom = validRect.top + MulDiv(
-                sourceHeight, source.textureSize.Height, source.contentSize.Height);
+            RECT const& copied = source.latestTexels;
+            RECT validRect{
+                source.rect.left + MulDiv(copied.left, sourceWidth, source.contentSize.Width),
+                source.rect.top + MulDiv(copied.top, sourceHeight, source.contentSize.Height),
+                source.rect.left + MulDiv(copied.right, sourceWidth, source.contentSize.Width),
+                source.rect.top + MulDiv(copied.bottom, sourceHeight, source.contentSize.Height)};
             RECT intersection{};
             if (!IntersectRect(&intersection, &validRect, &taskbarRect)) continue;
             // A growing item can exceed its old pool for one frame. Clip the
             // unavailable area instead of stretching the valid subrectangle.
+            int copiedWidth = copied.right - copied.left;
+            int copiedHeight = copied.bottom - copied.top;
             float inverseWidth = float(source.contentSize.Width) /
-                                 (sourceWidth * float(source.textureSize.Width));
+                                 (sourceWidth * float(copiedWidth));
             float inverseHeight = float(source.contentSize.Height) /
-                                  (sourceHeight * float(source.textureSize.Height));
+                                  (sourceHeight * float(copiedHeight));
             CopyConstants copy{};
-            copy.offset[0] = (intersection.left - source.rect.left) * inverseWidth;
-            copy.offset[1] = (intersection.top - source.rect.top) * inverseHeight;
+            copy.offset[0] = (intersection.left - source.rect.left) * inverseWidth -
+                             float(copied.left) / copiedWidth;
+            copy.offset[1] = (intersection.top - source.rect.top) * inverseHeight -
+                             float(copied.top) / copiedHeight;
             copy.scale[0] = (intersection.right - intersection.left) * inverseWidth;
             copy.scale[1] = (intersection.bottom - intersection.top) * inverseHeight;
             context->UpdateSubresource(
