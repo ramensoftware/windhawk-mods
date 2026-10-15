@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         3.4.0
+// @version         3.5.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @twitter         NekoMirra
@@ -181,6 +181,8 @@ HRESULT OnKeyDownHook(void* self, void* context, void* args) {
     return originalOnKeyDown(self, context, args);
 }
 
+static wchar_t g_currentLayout[128]{};
+
 HRESULT RegularizeHook(void* self, void* event) {
     const unsigned rCount = ++regEntryCount;
     Wh_SetIntValue(L"native-reg-entry-count", rCount);
@@ -206,18 +208,31 @@ HRESULT RegularizeHook(void* self, void* event) {
     if (text->length > 0)
         Wh_SetIntValue(L"native-reg-char", text->data()[0]);
     Wh_SetIntValue(L"native-reg-key", *reinterpret_cast<WORD*>(data + 92));
-    auto* key = reinterpret_cast<WORD*>(data + 92);
-    const bool isNineKey = (*key >= 0x62 && *key <= 0x69);
-    if (isNineKey) {
+    const bool isSymbols = (wcsstr(g_currentLayout, L"symbolsnumeric") != nullptr);
+    if (!isSymbols) {
         if (channel != 4 && originalEnsureChannel) {
             originalEnsureChannel(self, 4);
             *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
             channel = 4;
             Wh_SetIntValue(L"native-reg-channel-switched", 4);
         }
-        *reinterpret_cast<WORD*>(data + 40) = *key;
-        Wh_SetIntValue(L"native-normalized-count", ++normalized);
-        Wh_SetIntValue(L"native-normalized-key", *key);
+        auto* key = reinterpret_cast<WORD*>(data + 92);
+        WORD normVk = 0;
+        if (*key >= '1' && *key <= '9') {
+            normVk = static_cast<WORD>(VK_NUMPAD0 + *key - '0');
+        } else if (text->length == 1 && text->data()[0] >= L'1' && text->data()[0] <= L'9') {
+            normVk = static_cast<WORD>(VK_NUMPAD0 + text->data()[0] - L'0');
+        } else if (*key >= 0x61 && *key <= 0x69) {
+            normVk = *key;
+        }
+        if (normVk != 0) {
+            Wh_SetIntValue(L"native-reg-key-before", *key);
+            *key = normVk;
+            *reinterpret_cast<WORD*>(data + 40) = normVk;
+            Wh_SetIntValue(L"native-normalized-count", ++normalized);
+            Wh_SetIntValue(L"native-normalized-key", normVk);
+            Wh_SetIntValue(L"native-reg-key-after", normVk);
+        }
     } else {
         if (channel != 1 && originalEnsureChannel) {
             originalEnsureChannel(self, 1);
@@ -232,8 +247,9 @@ HRESULT RegularizeHook(void* self, void* event) {
 HRESULT DefaultChannelHook(void* self, bool off, size_t* channel) {
     const HRESULT res = originalDefaultChannel(self, off, channel);
     if (!off && channel) {
-        const bool isTwelveAlpha = (Wh_GetIntValue(L"native-is-twelve-alpha", 1) != 0);
-        const size_t targetChan = isTwelveAlpha ? 4 : 1;
+        const bool isTwelve = (wcsstr(g_currentLayout, L"12key") != nullptr) &&
+                              (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr);
+        const size_t targetChan = isTwelve ? 4 : 1;
         *channel = targetChan;
         *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetChan);
         Wh_SetIntValue(L"native-default-channel", static_cast<int>(targetChan));
@@ -244,19 +260,19 @@ HRESULT DefaultChannelHook(void* self, bool off, size_t* channel) {
 HRESULT LayoutHook(void* self, const NativeString* layout) {
     Wh_SetIntValue(L"native-layout-count", ++layoutCount);
     if (layout && layout->length > 0 && layout->length < 100) {
+        wcsncpy_s(g_currentLayout, layout->data(), _TRUNCATE);
         Wh_SetStringValue(L"native-layout-name", layout->data());
     }
     const HRESULT res = originalLayout(self, layout);
-    const bool isTwelveAlpha = (Wh_GetIntValue(L"native-is-twelve-alpha", 1) != 0);
-    const size_t targetChan = isTwelveAlpha ? 4 : 1;
+    const bool isTwelve = (wcsstr(g_currentLayout, L"12key") != nullptr) &&
+                          (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr);
+    const size_t targetChan = isTwelve ? 4 : 1;
     const size_t curChan = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
     if (curChan != targetChan && originalEnsureChannel) {
         originalEnsureChannel(self, targetChan);
         *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetChan);
     }
     Wh_SetIntValue(L"native-layout-channel", static_cast<int>(targetChan));
-    const size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
-    Wh_SetIntValue(L"native-layout-channel", static_cast<int>(channel));
     return res;
 }
 
@@ -267,8 +283,9 @@ HRESULT ProcessStringHook(void* self, const void* event) {
     const WORD flags = *reinterpret_cast<const WORD*>(data + 34);
     const bool hardware = (flags & 0x4010) == 0x10 && (flags & 5) != 0 && (flags & 5) != 5;
     const WORD key = *reinterpret_cast<const WORD*>(data + 92);
-    const bool isNineKey = (key >= 0x62 && key <= 0x69);
-    const size_t targetChan = isNineKey ? 4 : 1;
+    const bool isTwelve = (wcsstr(g_currentLayout, L"12key") != nullptr) &&
+                          (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr);
+    const size_t targetChan = isTwelve ? 4 : 1;
     if (!hardware && channel != targetChan && originalEnsureChannel) {
         originalEnsureChannel(self, targetChan);
         *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetChan);
@@ -325,7 +342,8 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
     Wh_SetIntValue(L"native-cand-raw-type", properties.type);
     Wh_SetIntValue(L"native-cand-raw-flags", properties.flags);
     Wh_SetIntValue(L"native-cand-raw-mode", properties.mode);
-    const bool isTwelve = ((Wh_GetIntValue(L"native-layout-channel", 0) == 4) ||
+    const bool isTwelve = (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr) &&
+                          ((Wh_GetIntValue(L"native-layout-channel", 0) == 4) ||
                           ((properties.type & 0xFF) == 11 || properties.type == 11 || properties.type == 2 || properties.type == 0));
     QueryScope scope(static_cast<BYTE*>(self), isTwelve);
     if (isTwelve) {
@@ -351,7 +369,8 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
 HRESULT DecideHook(void* self, WORD first) {
     Wh_SetIntValue(L"native-decide-call-count", ++decideCallCount);
     Wh_SetIntValue(L"native-decide-char", first);
-    const bool isTwelve = twelveQuery || (Wh_GetIntValue(L"native-layout-channel", 0) == 4);
+    const bool isTwelve = (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr) &&
+                          (twelveQuery || (Wh_GetIntValue(L"native-layout-channel", 0) == 4));
     static unsigned int s_lastConsumedLongSeq = 0;
     const unsigned int currentLongSeq = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-seq", 0));
     const unsigned int longDigit = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-digit", 0));
@@ -1000,7 +1019,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        340);
+        350);
     Wh_SetIntValue(L"native-is-twelve-alpha", 1);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
