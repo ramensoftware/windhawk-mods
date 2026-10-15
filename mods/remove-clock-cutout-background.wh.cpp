@@ -535,3 +535,4 @@ void Wh_ModUninit() {
         g_gdiplusToken = 0;
     }
 }
+
