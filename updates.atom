@@ -2,12 +2,125 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-15T18:31:59.000Z</updated>
+    <updated>2026-10-15T19:03:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Windows Audio Limiter 1.0]]></title>
+        <id>https://windhawk.net/mods/disable-audio-limiter#5b3cb48c0878eae050751c3343edc10d3e494a05</id>
+        <link href="https://windhawk.net/mods/disable-audio-limiter"/>
+        <updated>2026-10-15T19:03:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablewindowsaudiolimiter">Disable Windows Audio Limiter</h1>
+<p>Windows has a built-in audio adjustment mechanism that decreases the volume for a few seconds after a loud click or increases if a video or audio has dropped volume.
+This mod disables this adjustment.</p>
+<p>After mod start, restart the Windows audio service, executing with admin privileges:</p>
+<p><code>net stop audiosrv</code></p>
+<p><code>net start audiosrv</code></p>
+<p>or reboot.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[BubbleGlass Screensaver 1.7.6]]></title>
+        <id>https://windhawk.net/mods/bubble-glass-saver#1537caa51c413521c503304baa63526d45bf2525</id>
+        <link href="https://windhawk.net/mods/bubble-glass-saver"/>
+        <updated>2026-10-15T19:02:57.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="bubbleglassscreensaver">BubbleGlass Screensaver</h1>
+<p>A transparent, animated soap-bubble screensaver for the Windows desktop.</p>
+<p>BubbleGlass shows colorful, iridescent soap bubbles directly above the live
+Windows desktop after a period of inactivity. The desktop stays visible and
+live underneath (per-pixel alpha layered window), and any keyboard or mouse
+activity dismisses the saver instantly. Rendering targets smooth 60 FPS even
+on large multi-monitor desktops.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://i.imgur.com/Nh5EyFe.png" alt="BubbleGlass Screensaver preview" /></p>
+<p><img src="https://i.imgur.com/gCsmdj6.gif" alt="BubbleGlass Screensaver animated preview" /></p>
+<p><em>Soap bubbles drifting over the live Windows desktop. The optional diagnostics
+overlay shows real-time FPS, frame time, jitter and rendering performance.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Transparent overlay above the live desktop - wallpaper, windows and video
+remain visible underneath.</li>
+<li>Smooth 60 FPS animation with QPC-based frame pacing and motion timing.</li>
+<li>Thin-film iridescent bubbles: rainbow interference arcs, membrane rim,
+specular highlight, hotspot and a faint opposite-side reflection.</li>
+<li>Organic wobble, slowly changing interference colors, optional subtle shadow.</li>
+<li>Gradual spawning, size variation, natural drift and optional turbulence.</li>
+<li>Bubble-to-bubble collisions (lightly damped) plus wall bouncing or edge
+wrapping.</li>
+<li>Configurable lifetime with an animated pop effect (expansion, flash,
+expanding ring).</li>
+<li>Primary-monitor or full multi-monitor mode.</li>
+<li>Instant dismissal on keystroke, click, mouse wheel or mouse movement (with a
+small movement threshold). Input is never swallowed.</li>
+<li>Fullscreen video playback (including fullscreen browser video) is intentionally
+supported: bubbles remain above the live, moving video.</li>
+<li>Windows presentation mode is suppressed when reported by Windows. Other
+fullscreen states are not automatically blocked to preserve video playback.</li>
+<li>Hidden automatically while the session is locked, disconnected or the
+display is off.</li>
+<li>Optional on-screen performance diagnostics and Windhawk/DbgView logging.</li>
+<li>No permanent clock or date elements.</li>
+</ul>
+<h2 id="howitworks">How It Works</h2>
+<p>BubbleGlass watches keyboard/mouse idle time. After the configured timeout it
+creates a click-through, topmost layered window and composites
+premultiplied-per-pixel-alpha bubbles over the desktop with
+<code>UpdateLayeredWindowIndirect</code>. Bubbles are drawn with GDI+ into per-bubble
+sprites that are cached and refreshed on a small time budget; only changed
+areas are cleared and presented (dirty rectangles). Low-level input hooks run
+on a dedicated thread and only while the saver is visible.</p>
+<h2 id="performance">Performance</h2>
+<p>The renderer targets 60 FPS; actual speed depends on resolution, bubble count
+and bubble sizes. The largest tuning levers are bubble count, maximum bubble
+size, sprite refresh interval, iridescence and total desktop area.</p>
+<p>Enable <strong>Show internal performance stats</strong> for the FPS / frame-time / jitter
+overlay, and <strong>Log performance stats to Windhawk/DbgView</strong> for one summary
+line per second. Every option (timeout, bubble count and size, motion,
+physics, lifetime, pop, appearance, performance, diagnostics) is described in
+the settings UI.</p>
+<h2 id="usage">Usage</h2>
+<ol>
+<li>Install and enable the BubbleGlass Screensaver mod.</li>
+<li>Configure the inactivity timeout and appearance.</li>
+<li>Leave the computer idle; BubbleGlass appears automatically.</li>
+<li>Move the mouse or press a key to dismiss it.</li>
+</ol>
+<p>No separate <code>.scr</code> screensaver file is required.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>BubbleGlass intentionally keeps the Windows desktop visible underneath; it
+is not a full-screen scene replacement like classic screensavers.</li>
+<li>The dismissing keystroke or click is also delivered to the focused
+application (input is never swallowed).</li>
+<li>Fullscreen video is intentionally allowed. Automatic suppression of every
+fullscreen app would also block this core feature. Windows presentation mode
+is suppressed when detectable; gamepad-only input may not reset Windows idle
+time, so fullscreen games are not guaranteed to suppress the saver.</li>
+<li>BubbleGlass never appears while the session is locked or display is off.</li>
+<li>Bubble sizes and the diagnostics overlay use raw pixels (no DPI scaling).</li>
+<li>"Span all monitors" uses the virtual-screen bounding rectangle; on
+mixed-size or offset monitor layouts parts of that rectangle may not be on
+any display.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<p>Designed for Windows 11 and Windhawk. Runs as a dedicated Windhawk tool-mod
+process - no <code>.scr</code> screensaver file and no winlogon injection. Rendering
+uses standard GDI/GDI+ and layered-window APIs (no DirectX or GPU API).</p>
+<h2 id="credits">Credits</h2>
+<p>Developed and tested by <strong>SilverAmd</strong>, with iterative performance analysis,
+profiling and optimization focused on smooth frame pacing, large desktop
+resolutions, multi-monitor support and low rendering overhead.</p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Fancy Task View Cross-Monitor Drag 0.7.0]]></title>
         <id>https://windhawk.net/mods/fancy-taskview-cross-monitor-drag#7d8699ddf863f280eeeac9bbcbdd7527eef7d423</id>
@@ -785,83 +898,6 @@ stops if the required symbols or layout cannot be recognized.</p>]]></content>
         <author>
             <name>XandriW</name>
             <uri>https://github.com/xandri19wang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win10 Taskbar Search State Refresh on Win11 24H2+ 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-taskbar-search-state-refresh-on-win11-24h2#6eb45d5c4c3d686d4943f8e3f2affb9570b2e41a</id>
-        <link href="https://windhawk.net/mods/win10-taskbar-search-state-refresh-on-win11-24h2"/>
-        <updated>2026-10-13T21:02:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="win10taskbarsearchstaterefresh">Win10 Taskbar Search State Refresh</h1>
-<p>This mod addresses an issue where the legacy Windows 10 taskbar, running inside a Windows 11
-system, does not always redraw when the taskbar Search setting (hidden / icon / box) is changed.
-It monitors the setting and triggers the taskbar to apply it immediately. This modification has
-been tested on Windows 11 24H2.</p>
-<p>Note: for a complete Windows 10 taskbar experience on Windows 11 24H2 / 25H2, install the
-<a href="https://windhawk.net/mods/win10-taskbar-on-win11-24h2">Windows 10 taskbar on Windows 11 24H2</a>
-mod first. That mod downloads and runs the Windows 10 explorer.exe (10.0.19039) as the shell;
-this mod only works on top of that shell and does nothing on the stock Windows 11 taskbar.</p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>It monitors <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Search\SearchboxTaskbarMode</code>
-(0 = hidden, 1 = icon, 2 = box, 3 = icon and label) via a registry notification, with a
-one-second poll as a fallback in case a notification is missed.</li>
-<li>When the value changes, it sends <code>WM_SETTINGCHANGE</code> with <code>"TraySettings"</code> to <code>Shell_TrayWnd</code>
-and <code>Shell_SecondaryTrayWnd</code> of this process. This is the single method that reliably makes
-the Windows 10 taskbar reload its settings, including the search mode, on shell build
-10.0.19039. The message is sent twice with a short gap so a momentarily busy explorer still
-catches it.</li>
-<li>The message is never broadcast system-wide: only the taskbar windows of this process are
-targeted. No fake <code>SPI_SETWORKAREA</code> and no UI Automation are used.</li>
-<li>The startup refresh is skipped on a normal explorer start (the taskbar reads the value itself
-when it is created) and only runs when the mod is enabled while the taskbar is already running.</li>
-<li>Every refresh is written to the Windhawk log.</li>
-</ul>
-<h2 id="searchiconandlabelapproximation">"Search icon and label" (approximation)</h2>
-<p>The Windows 10 taskbar only supports three states: hidden, icon, and box. "Search icon and label"
-(value 3) is a Windows 11 option that the Windows 10 taskbar does not implement, so by default
-selecting it changes nothing there. As the closest equivalent, this mod makes the taskbar interpret
-value 3 as 2 (search box). This applies only to reads performed inside explorer.exe: the registry
-value itself is never modified, and the Windows 11 Settings page continues to show the user's
-choice. It is an approximation, not a true "icon and label" layout. It can be disabled with
-<code>labelAsBox</code>.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><code>labelAsBox</code>: treat "Search icon and label" as the search box (see above).</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>This mod never restarts explorer and never writes to the registry. The "icon and label" mapping is
-performed by adjusting the value as returned to explorer.exe (RegQueryValueExW / RegGetValueW);
-if the taskbar reads the value by other means, the mapping will not take effect.</li>
-<li>The mod does nothing on the stock Windows 11 shell (build 22000+); it exits at load time.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer List Zebra Stripes 0.13.0]]></title>
-        <id>https://windhawk.net/mods/explorer-zebra-stripes#a1c3167ae48bdb1ef697094a1375fd07a0b0fb54</id>
-        <link href="https://windhawk.net/mods/explorer-zebra-stripes"/>
-        <updated>2026-10-13T19:02:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerlistzebrastripes">Explorer List Zebra Stripes</h1>
-<p><img src="https://raw.githubusercontent.com/DarkionAvey/windhawk-explorer-zebra-stripes/refs/heads/main/screenshot.png" alt="Screenshot" /></p>
-<p>Adds alternating stripes to compact file-list items in Explorer, including
-Details and List views.</p>
-<h2 id="colors">Colors</h2>
-<p>Supports #RRGGBB and dynamic system color names: <code>accent</code>, <code>background</code>,
-<code>foreground</code>, <code>highlight</code>, <code>highlighttext</code>, <code>window</code>, <code>windowtext</code>, <code>buttonface</code>,
-<code>buttontext</code>, <code>hotlight</code>, <code>graytext</code>.</p>
-<p><code>accent</code> uses the Windows DWM colorization color. <code>background</code> and
-<code>foreground</code> are theme-aware neutral colors (high-contrast aware); other
-system names use Win32 system colors.</p>
-<p>Opacity is a percentage: 0 = invisible, 100 = fully opaque. </p>
-<p>Mod was tested on Windows 11 24H2 &amp; 26H2.</p>]]></content>
-        <author>
-            <name>DarkionAvey</name>
-            <uri>https://github.com/DarkionAvey</uri>
         </author>
     </entry>
 </feed>
