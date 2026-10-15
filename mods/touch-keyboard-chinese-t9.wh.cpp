@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         2.8.9
+// @version         3.0.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @twitter         NekoMirra
@@ -630,7 +630,6 @@ void OnReleaseActionHook(void* self, void* action) {
     const unsigned count = ++frontReleaseCount;
     Wh_SetIntValue(L"native-front-release-count", count);
     int priorHandlingState = 5;
-    bool isEmojiOrCategory = false;
     if (action) {
         auto* data = static_cast<BYTE*>(action);
         Wh_SetIntValue(L"native-front-release-handled-before", data[144]);
@@ -640,47 +639,13 @@ void OnReleaseActionHook(void* self, void* action) {
             priorHandlingState = originalGetPressedKeyHandlingState(self, keyCtrl);
         }
         Wh_SetIntValue(L"native-front-release-state", priorHandlingState);
-
-        if (keyCtrl && originalGetKeyData && originalGetRecognizedText) {
-            void* keyData = originalGetKeyData(keyCtrl);
-            if (keyData) {
-                HSTRING hName = originalGetRecognizedText(keyData);
-                if (hName) {
-                    UINT32 len = 0;
-                    const wchar_t* buf = WindowsGetStringRawBuffer(hName, &len);
-                    if (buf && len > 0) {
-                        Wh_SetStringValue(L"native-front-last-key-name", buf);
-                        if (wcsstr(buf, L"Emoji") || wcsstr(buf, L"EMOJI") || wcsstr(buf, L"emoji") ||
-                            wcsstr(buf, L"Category") || wcsstr(buf, L"CATEGORY") ||
-                            wcsstr(buf, L"category") || wcsstr(buf, L"More") ||
-                            wcsstr(buf, L"MORE")) {
-                            isEmojiOrCategory = true;
-                        }
-                    }
-                    WindowsDeleteString(hName);
-                }
-                using ReleaseFn = ULONG (*)(void*);
-                reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(keyData))[2])(keyData);
-            }
-        }
-    }
-
-    if (isEmojiOrCategory) {
-        if (action) {
-            static_cast<BYTE*>(action)[144] = 1;
-        }
-        keybd_event(VK_LWIN, 0, 0, 0);
-        keybd_event(VK_OEM_PERIOD, 0, 0, 0);
-        keybd_event(VK_OEM_PERIOD, 0, KEYEVENTF_KEYUP, 0);
-        keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0);
-        Wh_SetIntValue(L"native-front-emoji-triggered", 1);
-        return;
     }
 
     {
         ReleaseActionScope scope;
         originalOnReleaseAction(self, action);
     }
+
     if (action) {
         auto* data = static_cast<BYTE*>(action);
         WCHAR layoutName[128]{};
@@ -702,19 +667,6 @@ void OnReleaseActionHook(void* self, void* action) {
                         WindowsDeleteString(hStr);
                         data[144] = 1;
                         Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
-                    }
-                } else {
-                    BYTE digit = 0;
-                    if (vk >= '0' && vk <= '9') {
-                        digit = vk;
-                    } else if (vk >= 0x60 && vk <= 0x69) {
-                        digit = static_cast<BYTE>('0' + vk - 0x60);
-                    }
-                    if (digit != 0) {
-                        keybd_event(digit, 0, 0, 0);
-                        keybd_event(digit, 0, KEYEVENTF_KEYUP, 0);
-                        data[144] = 1;
-                        Wh_SetIntValue(L"native-front-numeric-direct-injected", digit);
                     }
                 }
                 using ReleaseFn = ULONG (*)(void*);
@@ -1059,7 +1011,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        289);
+        300);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
