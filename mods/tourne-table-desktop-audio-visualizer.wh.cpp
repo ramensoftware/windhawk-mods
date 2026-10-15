@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id                  tourne-table-desktop-audio-visualizer
 // @name                Tourne'Table [Audio Visualizer]
-// @description         A real-time audio visualizer for the Windows desktop: every bar its own frequency band, a Direct3D 11 renderer that idles to nothing, a right-click menu for live settings, My Styles, a Media Card, and setups you can share with the community. Runs as its own process, on the desktop, in the taskbar or in a panel.
+// @description         A real-time audio visualizer for the Windows desktop: every bar its own frequency band, a Direct3D 11 renderer that idles to nothing, live right-click settings, My Styles, a Media Card and shareable setups.
 // @description:ru-RU   Аудиовизуализатор реального времени для рабочего стола Windows. Расширенные настройки без ущерба для экономии ресурсов. Практически безинтерфейсный (near-headless) поток рендеринга с оптимизацией процессора для захвата звука.
 // @version             2.1.0
 // @author              USER-TOURNE
@@ -1741,10 +1741,7 @@ PCWSTR VizSettingString(PCWSTR name) {
 
 void VizSettingFree(PCWSTR s) { delete[] s; }
 
-// From here on, settings come through the layer.
-#define Wh_GetIntSetting VizSettingInt
-#define Wh_GetStringSetting VizSettingString
-#define Wh_FreeStringSetting VizSettingFree
+// From here on, settings come through the layer: call VizSetting* instead of Wh_Get*Setting.
 
 #ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
 #define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
@@ -2874,7 +2871,7 @@ void ReportSettingWarning(PCWSTR group, PCWSTR name, const std::wstring& detail)
 // back here as empty text: that number is used until the setting is saved
 // again.
 float ReadSizeSetting(PCWSTR key, float lo, float hi, float def) {
-    PCWSTR str = Wh_GetStringSetting(key);
+    PCWSTR str = VizSettingString(key);
     float v = def;
     bool ok = false;
     if (str && *str) {
@@ -2889,16 +2886,16 @@ float ReadSizeSetting(PCWSTR key, float lo, float hi, float def) {
             ok = true;
         }
     }
-    Wh_FreeStringSetting(str);
+    VizSettingFree(str);
     if (!ok) {
-        int n = Wh_GetIntSetting(key);
+        int n = VizSettingInt(key);
         if (n != 0) v = (float)n;
     }
     return std::clamp(v, lo, hi);
 }
 
 float ReadNumberSetting(PCWSTR key, PCWSTR group, PCWSTR name, float def, float lo, float hi) {
-    PCWSTR str = Wh_GetStringSetting(key);
+    PCWSTR str = VizSettingString(key);
     float result = def;
 
     WCHAR* end = nullptr;
@@ -2923,14 +2920,14 @@ float ReadNumberSetting(PCWSTR key, PCWSTR group, PCWSTR name, float def, float 
         result = (float)parsed;
     }
 
-    Wh_FreeStringSetting(str);
+    VizSettingFree(str);
     return result;
 }
 
 // Reads a color setting, reporting the exact accepted formats on failure.
 void ReadColorSetting(PCWSTR key, PCWSTR group, PCWSTR name, BYTE defA, BYTE defR, BYTE defG,
                       BYTE defB, BYTE* a, BYTE* r, BYTE* g, BYTE* b) {
-    PCWSTR str = Wh_GetStringSetting(key);
+    PCWSTR str = VizSettingString(key);
     if (!ParseColorHex(str, a, r, g, b)) {
         *a = defA; *r = defR; *g = defG; *b = defB;
         WCHAR using_[64];
@@ -2938,7 +2935,7 @@ void ReadColorSetting(PCWSTR key, PCWSTR group, PCWSTR name, BYTE defA, BYTE def
         ReportSettingIssue(group, name, str,
                            L"#AARRGGBB, #RRGGBB, rgba(r, g, b, a) or rgb(r, g, b)", using_);
     }
-    Wh_FreeStringSetting(str);
+    VizSettingFree(str);
 }
 
 // Reads a "one value, or four space-separated values" box (padding, corner
@@ -2947,7 +2944,7 @@ void ReadColorSetting(PCWSTR key, PCWSTR group, PCWSTR name, BYTE defA, BYTE def
 // horizontal/vertical, and it doesn't.
 void ReadQuadSetting(PCWSTR key, PCWSTR group, PCWSTR name, PCWSTR meaning, float def,
                      bool allowNegative, float out[4]) {
-    PCWSTR str = Wh_GetStringSetting(key);
+    PCWSTR str = VizSettingString(key);
     out[0] = out[1] = out[2] = out[3] = def;
 
     float v[4] = {def, def, def, def};
@@ -2964,7 +2961,7 @@ void ReadQuadSetting(PCWSTR key, PCWSTR group, PCWSTR name, PCWSTR meaning, floa
         ReportSettingIssue(group, name, str, expected, using_);
     }
 
-    Wh_FreeStringSetting(str);
+    VizSettingFree(str);
 }
 
 // Reads one of the "how much has to be covered" dropdowns. Stored as a string
@@ -2972,7 +2969,7 @@ void ReadQuadSetting(PCWSTR key, PCWSTR group, PCWSTR name, PCWSTR meaning, floa
 // -- same as the FFT Size dropdown. Picking from a list means it can't normally
 // be wrong, but a hand-edited settings file still can be.
 int ReadThresholdPercentSetting(PCWSTR key, PCWSTR group, PCWSTR name, int def) {
-    PCWSTR str = Wh_GetStringSetting(key);
+    PCWSTR str = VizSettingString(key);
     int v = (str && *str) ? _wtoi(str) : 0;
 
     if (v < 5 || v > 100) {
@@ -2983,7 +2980,7 @@ int ReadThresholdPercentSetting(PCWSTR key, PCWSTR group, PCWSTR name, int def) 
         v = def;
     }
 
-    Wh_FreeStringSetting(str);
+    VizSettingFree(str);
     return v;
 }
 
@@ -2991,7 +2988,7 @@ int ReadThresholdPercentSetting(PCWSTR key, PCWSTR group, PCWSTR name, int def) 
 // built-in glyph" -- but a path that's set and wrong is silent breakage, since
 // the fallback looks identical to having left it blank.
 std::wstring ReadIconPathSetting(PCWSTR key, PCWSTR group, PCWSTR name) {
-    PCWSTR str = Wh_GetStringSetting(key);
+    PCWSTR str = VizSettingString(key);
     std::wstring path = str ? str : L"";
 
     // Users paste paths out of Explorer's address bar or "Copy as path", both of
@@ -3014,7 +3011,7 @@ std::wstring ReadIconPathSetting(PCWSTR key, PCWSTR group, PCWSTR name) {
         }
     }
 
-    Wh_FreeStringSetting(str);
+    VizSettingFree(str);
     return path;
 }
 
@@ -18519,12 +18516,12 @@ std::wstring VizOneLine(std::wstring v) {
 
 // What a setting is now (an imported setup's value, else the settings page's), as text.
 std::wstring VizSettingNow(const VizSetupKey& k) {
-    if (!k.text) return std::to_wstring(Wh_GetIntSetting(k.name));
-    PCWSTR s = Wh_GetStringSetting(k.name);
+    if (!k.text) return std::to_wstring(VizSettingInt(k.name));
+    PCWSTR s = VizSettingString(k.name);
     std::wstring v = s ? s : L"";
-    Wh_FreeStringSetting(s);
+    VizSettingFree(s);
     if (v.empty() && *k.def) {  // (a size saved as a whole number before 2.1)
-        int n = Wh_GetIntSetting(k.name);
+        int n = VizSettingInt(k.name);
         if (n) v = std::to_wstring(n);
     }
     return v;
@@ -19615,15 +19612,15 @@ void CreateMessageWindow() {
 void LoadSettings() {
     g_settingsIssues.clear();
     VizLoadMenuOverrides();
-    g_settings.showSettingsErrors = Wh_GetIntSetting(L"validation.showErrors") != 0;
+    g_settings.showSettingsErrors = VizSettingInt(L"validation.showErrors") != 0;
 
-    PCWSTR shape = Wh_GetStringSetting(L"appearance.shape");
+    PCWSTR shape = VizSettingString(L"appearance.shape");
     VizParseShape(shape, &g_settings.shape, &g_settings.style);
-    Wh_FreeStringSetting(shape);
-    g_settings.reflection = std::clamp(Wh_GetIntSetting(L"appearance.reflection"), 0, 100);
-    g_settings.fxGlow = std::clamp(Wh_GetIntSetting(L"appearance.fxGlow"), 0, 100);
+    VizSettingFree(shape);
+    g_settings.reflection = std::clamp(VizSettingInt(L"appearance.reflection"), 0, 100);
+    g_settings.fxGlow = std::clamp(VizSettingInt(L"appearance.fxGlow"), 0, 100);
     g_settings.fxGlowRadius = ReadSizeSetting(L"appearance.fxGlowRadius", 0.5f, 32.f, 6.f);
-    g_settings.fxBloom = std::clamp(Wh_GetIntSetting(L"appearance.fxBloom"), 0, 100);
+    g_settings.fxBloom = std::clamp(VizSettingInt(L"appearance.fxBloom"), 0, 100);
     g_settings.fxBloomRadius = ReadSizeSetting(L"appearance.fxBloomRadius", 4.f, 64.f, 16.f);
     g_settings.fxOutlineWidth = ReadNumberSetting(L"appearance.fxOutlineWidth", L"Appearance", L"Outline Width", 0.f, 0.f, 16.f);
     {
@@ -19633,25 +19630,25 @@ void LoadSettings() {
         ReadColorSetting(L"appearance.fxShadowColor", L"Appearance", L"Shadow Color", 255, 0, 0, 0,
                          &dummy, &g_settings.fxShadowR, &g_settings.fxShadowG, &g_settings.fxShadowB);
     }
-    g_settings.fxShadow = std::clamp(Wh_GetIntSetting(L"appearance.fxShadow"), 0, 100);
+    g_settings.fxShadow = std::clamp(VizSettingInt(L"appearance.fxShadow"), 0, 100);
     g_settings.fxShadowX = ReadNumberSetting(L"appearance.fxShadowX", L"Appearance", L"Shadow Offset X", 2.f, -32.f, 32.f);
     g_settings.fxShadowY = ReadNumberSetting(L"appearance.fxShadowY", L"Appearance", L"Shadow Offset Y", 3.f, -32.f, 32.f);
     g_settings.fxShadowSoft = ReadNumberSetting(L"appearance.fxShadowSoftness", L"Appearance", L"Shadow Softness", 4.f, 0.f, 32.f);
-    g_settings.barHollow = Wh_GetIntSetting(L"appearance.barHollow") != 0;
+    g_settings.barHollow = VizSettingInt(L"appearance.barHollow") != 0;
     g_settings.barHollowWidth = ReadSizeSetting(L"appearance.barHollowWidth", 0.25f, 16.f, 1.5f);
     g_settings.barDash = ReadSizeSetting(L"appearance.barDash", 0.f, 200.f, 0.f);
     g_settings.barDashGap = ReadSizeSetting(L"appearance.barDashGap", 0.f, 200.f, 2.f);
     g_settings.barTilt = ReadSizeSetting(L"appearance.barTilt", -60.f, 60.f, 0.f);
     g_settings.barMirrorGap = ReadSizeSetting(L"appearance.barMirrorGap", 0.f, 400.f, 0.f);
-    g_settings.afterimage = std::clamp(Wh_GetIntSetting(L"appearance.afterimage"), 0, 100);
+    g_settings.afterimage = std::clamp(VizSettingInt(L"appearance.afterimage"), 0, 100);
     g_settings.afterimageSeconds = ReadSizeSetting(L"appearance.afterimageLength", 0.1f, 10.f, 1.2f);
 
-    PCWSTR orientation = Wh_GetStringSetting(L"appearance.orientation");
+    PCWSTR orientation = VizSettingString(L"appearance.orientation");
     g_settings.orientation =
         (wcscmp(orientation, L"vertical") == 0) ? VizOrientation::Vertical : VizOrientation::Horizontal;
-    Wh_FreeStringSetting(orientation);
+    VizSettingFree(orientation);
 
-    g_settings.barCount = std::clamp(Wh_GetIntSetting(L"appearance.barCount"), 1, VIZ_BARS_MAX);
+    g_settings.barCount = std::clamp(VizSettingInt(L"appearance.barCount"), 1, VIZ_BARS_MAX);
     g_settings.barWidth = ReadSizeSetting(L"appearance.barWidth", 0.1f, 400.f, 6.f);
     g_settings.barGap = ReadSizeSetting(L"appearance.barGap", 0.f, 400.f, 4.f);
     g_settings.barMaxSize = ReadSizeSetting(L"appearance.barMaxSize", 2.f, 4000.f, 140.f);
@@ -19667,7 +19664,7 @@ void LoadSettings() {
         g_settings.barRadiusBL = v[3];
     }
 
-    PCWSTR colorMode = Wh_GetStringSetting(L"appearance.colorMode");
+    PCWSTR colorMode = VizSettingString(L"appearance.colorMode");
     g_settings.colorMode = (wcscmp(colorMode, L"gradient") == 0)          ? VizColorMode::Gradient
                            : (wcscmp(colorMode, L"reactive_gradient") == 0) ? VizColorMode::ReactiveGradient
                            : (wcscmp(colorMode, L"accent") == 0)            ? VizColorMode::Accent
@@ -19677,7 +19674,7 @@ void LoadSettings() {
                            : (wcscmp(colorMode, L"rainbow") == 0)           ? VizColorMode::RainbowCycle
                            : (wcscmp(colorMode, L"tourne") == 0)            ? VizColorMode::Tourne
                                                                              : VizColorMode::Solid;
-    Wh_FreeStringSetting(colorMode);
+    VizSettingFree(colorMode);
 
     ReadColorSetting(L"appearance.color", L"Appearance", L"Color", 255, 255, 255, 255,
                      &g_settings.colorA, &g_settings.colorR, &g_settings.colorG, &g_settings.colorB);
@@ -19688,40 +19685,40 @@ void LoadSettings() {
                      255, 0, 180, 255,
                      &g_settings.grad2A, &g_settings.grad2R, &g_settings.grad2G, &g_settings.grad2B);
 
-    g_settings.sensitivity = std::clamp(Wh_GetIntSetting(L"appearance.sensitivity"), 0, 300);
+    g_settings.sensitivity = std::clamp(VizSettingInt(L"appearance.sensitivity"), 0, 300);
 
-    PCWSTR sensCurve = Wh_GetStringSetting(L"appearance.sensitivityCurve");
+    PCWSTR sensCurve = VizSettingString(L"appearance.sensitivityCurve");
     g_settings.sensitivityCurve = (wcscmp(sensCurve, L"exponential") == 0) ? VizSensitivityCurve::Exponential
                                  : (wcscmp(sensCurve, L"power") == 0)      ? VizSensitivityCurve::Power
                                                                            : VizSensitivityCurve::Knee;
-    Wh_FreeStringSetting(sensCurve);
+    VizSettingFree(sensCurve);
 
     g_settings.inputGainDb =
-        (float)std::clamp(Wh_GetIntSetting(L"appearance.inputGain"), -24, 24);
-    g_settings.autoGain = Wh_GetIntSetting(L"appearance.autoGain") != 0;
+        (float)std::clamp(VizSettingInt(L"appearance.inputGain"), -24, 24);
+    g_settings.autoGain = VizSettingInt(L"appearance.autoGain") != 0;
     g_settings.autoGainMaxDb =
-        (float)std::clamp(Wh_GetIntSetting(L"appearance.autoGainMaxBoost"), 0, 24);
+        (float)std::clamp(VizSettingInt(L"appearance.autoGainMaxBoost"), 0, 24);
 
-    g_settings.smoothing = std::clamp(Wh_GetIntSetting(L"appearance.smoothing"), 0, 100);
+    g_settings.smoothing = std::clamp(VizSettingInt(L"appearance.smoothing"), 0, 100);
 
-    PCWSTR eq = Wh_GetStringSetting(L"appearance.eqPreset");
+    PCWSTR eq = VizSettingString(L"appearance.eqPreset");
     g_settings.eq = (wcscmp(eq, L"bass") == 0)       ? VizEQ::Bass
                    : (wcscmp(eq, L"rock") == 0)       ? VizEQ::Rock
                    : (wcscmp(eq, L"pop") == 0)        ? VizEQ::Pop
                    : (wcscmp(eq, L"jazz") == 0)       ? VizEQ::Jazz
                    : (wcscmp(eq, L"electronic") == 0) ? VizEQ::Electronic
                                                        : VizEQ::Default;
-    Wh_FreeStringSetting(eq);
+    VizSettingFree(eq);
 
     g_settings.horizontalPosition = ReadNumberSetting(L"position.horizontalPosition", L"Position",
                                                       L"Horizontal Position", 50.0f, 0.0f, 100.0f);
     g_settings.verticalPosition = ReadNumberSetting(L"position.verticalPosition", L"Position",
                                                     L"Vertical Position", 88.0f, 0.0f, 100.0f);
-    g_settings.monitor = std::max(1, Wh_GetIntSetting(L"position.monitor"));
+    g_settings.monitor = std::max(1, VizSettingInt(L"position.monitor"));
 
-    g_settings.keyMoveEnabled = Wh_GetIntSetting(L"interaction.keyMoveEnabled") != 0;
+    g_settings.keyMoveEnabled = VizSettingInt(L"interaction.keyMoveEnabled") != 0;
 
-    PCWSTR keyMoveModifier = Wh_GetStringSetting(L"interaction.keyMoveModifier");
+    PCWSTR keyMoveModifier = VizSettingString(L"interaction.keyMoveModifier");
     g_settings.keyMoveModifier =
         (wcscmp(keyMoveModifier, L"ctrl_shift") == 0) ? (VIZ_MOD_CTRL | VIZ_MOD_SHIFT)
         : (wcscmp(keyMoveModifier, L"alt_shift") == 0) ? (VIZ_MOD_ALT | VIZ_MOD_SHIFT)
@@ -19732,38 +19729,38 @@ void LoadSettings() {
         : (wcscmp(keyMoveModifier, L"shift") == 0)     ? (unsigned)VIZ_MOD_SHIFT
         : (wcscmp(keyMoveModifier, L"win") == 0)       ? (unsigned)VIZ_MOD_WIN
                                                        : (VIZ_MOD_CTRL | VIZ_MOD_ALT);
-    Wh_FreeStringSetting(keyMoveModifier);
+    VizSettingFree(keyMoveModifier);
 
-    PCWSTR keyMoveKeys = Wh_GetStringSetting(L"interaction.keyMoveKeys");
+    PCWSTR keyMoveKeys = VizSettingString(L"interaction.keyMoveKeys");
     g_settings.keyMoveKeys = (wcscmp(keyMoveKeys, L"arrows") == 0) ? VizKeyMoveKeys::Arrows
                             : (wcscmp(keyMoveKeys, L"wasd") == 0)  ? VizKeyMoveKeys::Wasd
                                                                    : VizKeyMoveKeys::Both;
-    Wh_FreeStringSetting(keyMoveKeys);
+    VizSettingFree(keyMoveKeys);
 
     g_settings.keyMoveStep = ReadSizeSetting(L"interaction.keyMoveStep", 0.01f, 500.f, 1.f);
     g_settings.keyMoveFastStep = ReadSizeSetting(L"interaction.keyMoveFastStep", 0.01f, 500.f, 10.f);
 
-    PCWSTR keyMoveFastKey = Wh_GetStringSetting(L"interaction.keyMoveFastKey");
+    PCWSTR keyMoveFastKey = VizSettingString(L"interaction.keyMoveFastKey");
     g_settings.keyMoveFastKey = (wcscmp(keyMoveFastKey, L"ctrl") == 0)  ? (unsigned)VIZ_MOD_CTRL
                                : (wcscmp(keyMoveFastKey, L"alt") == 0)  ? (unsigned)VIZ_MOD_ALT
                                : (wcscmp(keyMoveFastKey, L"win") == 0)  ? (unsigned)VIZ_MOD_WIN
                                : (wcscmp(keyMoveFastKey, L"none") == 0) ? (unsigned)VIZ_MOD_NONE
                                                                         : (unsigned)VIZ_MOD_SHIFT;
-    Wh_FreeStringSetting(keyMoveFastKey);
+    VizSettingFree(keyMoveFastKey);
     {
-        PCWSTR v = Wh_GetStringSetting(L"interaction.keyMoveFineKey");
+        PCWSTR v = VizSettingString(L"interaction.keyMoveFineKey");
         g_settings.keyMoveFineKey = (wcscmp(v, L"shift") == 0) ? (unsigned)VIZ_MOD_SHIFT
                                   : (wcscmp(v, L"ctrl") == 0)  ? (unsigned)VIZ_MOD_CTRL
                                   : (wcscmp(v, L"alt") == 0)   ? (unsigned)VIZ_MOD_ALT
                                   : (wcscmp(v, L"win") == 0)   ? (unsigned)VIZ_MOD_WIN
                                                                : (unsigned)VIZ_MOD_NONE;
-        Wh_FreeStringSetting(v);
-        v = Wh_GetStringSetting(L"interaction.keyMoveFineStep");
+        VizSettingFree(v);
+        v = VizSettingString(L"interaction.keyMoveFineStep");
         float f = v ? (float)_wtof(v) : 0.f;
         g_settings.keyMoveFineStep = (f > 0.f) ? std::clamp(f, 1.0f / 64.0f, 1.0f) : 0.25f;
-        Wh_FreeStringSetting(v);
+        VizSettingFree(v);
         g_settings.keyMoveFine = false;  // a quick setting only
-        g_settings.pixelSnap = Wh_GetIntSetting(L"position.pixelSnap") != 0;
+        g_settings.pixelSnap = VizSettingInt(L"position.pixelSnap") != 0;
     }
 
     // A single-key modifier turns everyday shortcuts into visualizer moves, and
@@ -19812,27 +19809,27 @@ void LoadSettings() {
         g_settings.keyMoveFastKey = VIZ_MOD_NONE;
     }
 
-    g_settings.dragEnabled = Wh_GetIntSetting(L"interaction.dragEnabled") != 0;
+    g_settings.dragEnabled = VizSettingInt(L"interaction.dragEnabled") != 0;
     {
-        PCWSTR host = Wh_GetStringSetting(L"position.host");
+        PCWSTR host = VizSettingString(L"position.host");
         g_settings.hostTaskbar = wcscmp(host, L"taskbar") == 0;
         g_settings.hostPanel = wcscmp(host, L"panel") == 0;
-        Wh_FreeStringSetting(host);
-        PCWSTR backdrop = Wh_GetStringSetting(L"position.panelBackdrop");
+        VizSettingFree(host);
+        PCWSTR backdrop = VizSettingString(L"position.panelBackdrop");
         g_settings.panelBackdrop = wcscmp(backdrop, L"none") == 0 ? 0 : wcscmp(backdrop, L"mica") == 0 ? 2 : 1;
-        Wh_FreeStringSetting(backdrop);
-        PCWSTR hotkey = Wh_GetStringSetting(L"position.panelHotkey");
+        VizSettingFree(backdrop);
+        PCWSTR hotkey = VizSettingString(L"position.panelHotkey");
         g_settings.panelHotkey = hotkey ? hotkey : L"";
-        Wh_FreeStringSetting(hotkey);
+        VizSettingFree(hotkey);
     }
-    g_settings.splitEnabled = Wh_GetIntSetting(L"position.split") != 0;
-    g_settings.splitAt = std::clamp((float)Wh_GetIntSetting(L"position.splitAt"), 1.f, 99.f);
-    g_settings.splitGap = std::clamp((float)Wh_GetIntSetting(L"position.splitGap"), -8000.f, 8000.f);
-    g_settings.splitShift = std::clamp((float)Wh_GetIntSetting(L"position.splitShift"), -8000.f, 8000.f);
+    g_settings.splitEnabled = VizSettingInt(L"position.split") != 0;
+    g_settings.splitAt = std::clamp((float)VizSettingInt(L"position.splitAt"), 1.f, 99.f);
+    g_settings.splitGap = std::clamp((float)VizSettingInt(L"position.splitGap"), -8000.f, 8000.f);
+    g_settings.splitShift = std::clamp((float)VizSettingInt(L"position.splitShift"), -8000.f, 8000.f);
     {
-        PCWSTR app = Wh_GetStringSetting(L"position.dockApp");
+        PCWSTR app = VizSettingString(L"position.dockApp");
         std::wstring a = app ? app : L"";
-        Wh_FreeStringSetting(app);
+        VizSettingFree(app);
         while (!a.empty() && iswspace(a.back())) a.pop_back();
         size_t b = 0;
         while (b < a.size() && iswspace(a[b])) b++;
@@ -19840,39 +19837,39 @@ void LoadSettings() {
         for (auto& ch : a) ch = (WCHAR)towlower(ch);
         if (a.size() > 4 && a.compare(a.size() - 4, 4, L".exe") == 0) a.resize(a.size() - 4);
         g_settings.dockApp = a;
-        PCWSTR side = Wh_GetStringSetting(L"position.dockSide");
+        PCWSTR side = VizSettingString(L"position.dockSide");
         g_settings.dockSide = !wcscmp(side, L"above") ? 1 : !wcscmp(side, L"left") ? 2 : !wcscmp(side, L"right") ? 3 : 0;
-        Wh_FreeStringSetting(side);
-        PCWSTR align = Wh_GetStringSetting(L"position.dockAlign");
+        VizSettingFree(side);
+        PCWSTR align = VizSettingString(L"position.dockAlign");
         g_settings.dockAlign = !wcscmp(align, L"start") ? 0 : !wcscmp(align, L"end") ? 2 : 1;
-        Wh_FreeStringSetting(align);
-        g_settings.dockGap = std::clamp((float)Wh_GetIntSetting(L"position.dockGap"), -400.f, 400.f);
-        g_settings.dockShift = std::clamp((float)Wh_GetIntSetting(L"position.dockShift"), -4000.f, 4000.f);
+        VizSettingFree(align);
+        g_settings.dockGap = std::clamp((float)VizSettingInt(L"position.dockGap"), -400.f, 400.f);
+        g_settings.dockShift = std::clamp((float)VizSettingInt(L"position.dockShift"), -4000.f, 4000.f);
     }
-    g_settings.dragSnap = Wh_GetIntSetting(L"interaction.dragSnap") != 0;
-    g_settings.dragSnapDistance = std::clamp((float)Wh_GetIntSetting(L"interaction.dragSnapDistance"), 1.f, 64.f);
+    g_settings.dragSnap = VizSettingInt(L"interaction.dragSnap") != 0;
+    g_settings.dragSnapDistance = std::clamp((float)VizSettingInt(L"interaction.dragSnapDistance"), 1.f, 64.f);
 
-    PCWSTR dragModifier = Wh_GetStringSetting(L"interaction.dragModifier");
+    PCWSTR dragModifier = VizSettingString(L"interaction.dragModifier");
     g_settings.dragModifier = (wcscmp(dragModifier, L"none") == 0)  ? VizDragModifier::None
                              : (wcscmp(dragModifier, L"alt") == 0)   ? VizDragModifier::Alt
                              : (wcscmp(dragModifier, L"shift") == 0) ? VizDragModifier::Shift
                              : (wcscmp(dragModifier, L"win") == 0)   ? VizDragModifier::Win
                                                                      : VizDragModifier::Ctrl;
-    Wh_FreeStringSetting(dragModifier);
+    VizSettingFree(dragModifier);
 
-    PCWSTR dragButton = Wh_GetStringSetting(L"interaction.dragButton");
+    PCWSTR dragButton = VizSettingString(L"interaction.dragButton");
     g_settings.dragButton = (wcscmp(dragButton, L"left") == 0)  ? VizDragButton::Left
                            : (wcscmp(dragButton, L"right") == 0) ? VizDragButton::Right
                                                                   : VizDragButton::Middle;
-    Wh_FreeStringSetting(dragButton);
+    VizSettingFree(dragButton);
 
-    PCWSTR verticalAnchor = Wh_GetStringSetting(L"appearance.verticalAnchor");
+    PCWSTR verticalAnchor = VizSettingString(L"appearance.verticalAnchor");
     g_settings.verticalAnchor = (wcscmp(verticalAnchor, L"top")    == 0) ? VizAnchor::Top
                               : (wcscmp(verticalAnchor, L"middle") == 0) ? VizAnchor::Middle
                                                                          : VizAnchor::Bottom;
-    Wh_FreeStringSetting(verticalAnchor);
+    VizSettingFree(verticalAnchor);
 
-    g_settings.backgroundEnabled = Wh_GetIntSetting(L"background.enabled") != 0;
+    g_settings.backgroundEnabled = VizSettingInt(L"background.enabled") != 0;
 
     ReadColorSetting(L"background.color", L"Background", L"Color", 0x60, 0, 0, 0,
                      &g_settings.bgA, &g_settings.bgR, &g_settings.bgG, &g_settings.bgB);
@@ -19900,7 +19897,7 @@ void LoadSettings() {
         g_settings.bgRadiusBR = v[2];
         g_settings.bgRadiusBL = v[3];
     }
-    g_settings.bgBlur = std::max(0, Wh_GetIntSetting(L"background.blur"));
+    g_settings.bgBlur = std::max(0, VizSettingInt(L"background.blur"));
     g_settings.bgBorderSize = ReadSizeSetting(L"background.borderSize", 0.f, 100.f, 0.f);
 
     ReadColorSetting(L"background.borderColor", L"Background", L"Border Color", 0x40, 255, 255, 255,
@@ -19908,34 +19905,34 @@ void LoadSettings() {
                      &g_settings.borderB);
 
     // 0 = match the display (the engine thread reads the refresh rate).
-    g_settings.targetFps = std::max(0, Wh_GetIntSetting(L"performance.targetFps"));
-    g_settings.pauseOnFullscreen = Wh_GetIntSetting(L"performance.pauseOnFullscreen") != 0;
-    g_settings.pauseWhenSilentSeconds = std::max(0, Wh_GetIntSetting(L"performance.pauseWhenSilentSeconds"));
-    g_settings.deepIdle = Wh_GetIntSetting(L"performance.deepIdle") != 0;
-    g_perfStatsEnabled.store(Wh_GetIntSetting(L"performance.perfStats") != 0, std::memory_order_relaxed);
+    g_settings.targetFps = std::max(0, VizSettingInt(L"performance.targetFps"));
+    g_settings.pauseOnFullscreen = VizSettingInt(L"performance.pauseOnFullscreen") != 0;
+    g_settings.pauseWhenSilentSeconds = std::max(0, VizSettingInt(L"performance.pauseWhenSilentSeconds"));
+    g_settings.deepIdle = VizSettingInt(L"performance.deepIdle") != 0;
+    g_perfStatsEnabled.store(VizSettingInt(L"performance.perfStats") != 0, std::memory_order_relaxed);
 
-    g_settings.peakHoldEnabled = Wh_GetIntSetting(L"appearance.peakHoldEnabled") != 0;
+    g_settings.peakHoldEnabled = VizSettingInt(L"appearance.peakHoldEnabled") != 0;
 
     ReadColorSetting(L"appearance.peakHoldColor", L"Appearance", L"Peak Hold Cap Color",
                      255, 0, 180, 255,
                      &g_settings.peakHoldA, &g_settings.peakHoldR, &g_settings.peakHoldG,
                      &g_settings.peakHoldB);
-    g_settings.beatFlashEnabled = Wh_GetIntSetting(L"appearance.beatFlashEnabled") != 0;
+    g_settings.beatFlashEnabled = VizSettingInt(L"appearance.beatFlashEnabled") != 0;
 
     ReadColorSetting(L"appearance.beatFlashColor", L"Appearance", L"Beat Flash Color",
                      255, 255, 255, 255,
                      &g_settings.beatFlashA, &g_settings.beatFlashR, &g_settings.beatFlashG,
                      &g_settings.beatFlashB);
 
-    g_settings.beatFlashIntensity = std::clamp(Wh_GetIntSetting(L"appearance.beatFlashIntensity"), 0, 300);
-    g_settings.rainbowSpeed = std::clamp(Wh_GetIntSetting(L"appearance.rainbowSpeed"), 1, 300);
+    g_settings.beatFlashIntensity = std::clamp(VizSettingInt(L"appearance.beatFlashIntensity"), 0, 300);
+    g_settings.rainbowSpeed = std::clamp(VizSettingInt(L"appearance.rainbowSpeed"), 1, 300);
 
-    g_settings.nowPlayingEnabled = Wh_GetIntSetting(L"appearance.nowPlayingEnabled") != 0;
+    g_settings.nowPlayingEnabled = VizSettingInt(L"appearance.nowPlayingEnabled") != 0;
     ReadColorSetting(L"appearance.nowPlayingColor", L"Appearance", L"Now Playing Text Color",
                      255, 255, 255, 255,
                      &g_settings.nowPlayingA, &g_settings.nowPlayingR, &g_settings.nowPlayingG,
                      &g_settings.nowPlayingB);
-    PCWSTR nowPlayingFont = Wh_GetStringSetting(L"appearance.nowPlayingFont");
+    PCWSTR nowPlayingFont = VizSettingString(L"appearance.nowPlayingFont");
     g_settings.nowPlayingFont = (nowPlayingFont && *nowPlayingFont) ? nowPlayingFont : L"Segoe UI";
     // Only worth checking when the text is actually going to be drawn -- an
     // unused font name being wrong isn't something to interrupt anyone over.
@@ -19951,10 +19948,10 @@ void LoadSettings() {
         g_fontCheckPending = false;
         if (g_messageWnd) KillTimer(g_messageWnd, TIMER_ID_MSG_FONT_RECHECK);
     }
-    Wh_FreeStringSetting(nowPlayingFont);
+    VizSettingFree(nowPlayingFont);
     g_settings.nowPlayingFontSize = ReadSizeSetting(L"appearance.nowPlayingFontSize", 6.f, 400.f, 16.f);
     g_settings.nowPlayingDisplaySeconds =
-        std::max(0, Wh_GetIntSetting(L"appearance.nowPlayingDisplaySeconds"));
+        std::max(0, VizSettingInt(L"appearance.nowPlayingDisplaySeconds"));
 
     // Clamped rather than free: each pixel of offset widens the render surface
     // by the same amount, so a stray extra zero shouldn't silently cost memory
@@ -19986,50 +19983,50 @@ void LoadSettings() {
                      &g_settings.pfBgBorderA, &g_settings.pfBgBorderR,
                      &g_settings.pfBgBorderG, &g_settings.pfBgBorderB);
 
-    g_settings.autoHideEnabled = Wh_GetIntSetting(L"performance.autoHideEnabled") != 0;
-    g_settings.autoHideDelaySeconds = std::max(0, Wh_GetIntSetting(L"performance.autoHideDelaySeconds"));
-    g_settings.pauseWhenObscured = Wh_GetIntSetting(L"performance.pauseWhenObscured") != 0;
+    g_settings.autoHideEnabled = VizSettingInt(L"performance.autoHideEnabled") != 0;
+    g_settings.autoHideDelaySeconds = std::max(0, VizSettingInt(L"performance.autoHideDelaySeconds"));
+    g_settings.pauseWhenObscured = VizSettingInt(L"performance.pauseWhenObscured") != 0;
     g_settings.obscuredThresholdPercent =
         ReadThresholdPercentSetting(L"performance.obscuredThresholdPercent", L"Performance",
                                     L"Pause When Covered - Threshold", 100);
 
-    PCWSTR fftSizeStr = Wh_GetStringSetting(L"appearance.fftSize");
+    PCWSTR fftSizeStr = VizSettingString(L"appearance.fftSize");
     int fftSize = _wtoi(fftSizeStr);
     g_settings.fftSize = (fftSize == 1024 || fftSize == 2048 || fftSize == 4096 || fftSize == 8192)
                               ? fftSize : 2048;
-    Wh_FreeStringSetting(fftSizeStr);
+    VizSettingFree(fftSizeStr);
 
-    PCWSTR freqScale = Wh_GetStringSetting(L"appearance.freqScale");
+    PCWSTR freqScale = VizSettingString(L"appearance.freqScale");
     g_settings.freqScale = (wcscmp(freqScale, L"linear") == 0) ? VizFreqScale::Linear
                           : (wcscmp(freqScale, L"mel") == 0)   ? VizFreqScale::Mel
                           : (wcscmp(freqScale, L"bark") == 0)  ? VizFreqScale::Bark
                           : (wcscmp(freqScale, L"erb") == 0)   ? VizFreqScale::Erb
                                                                 : VizFreqScale::Log;
-    Wh_FreeStringSetting(freqScale);
+    VizSettingFree(freqScale);
 
-    g_settings.peakFreqEnabled = Wh_GetIntSetting(L"appearance.peakFreqEnabled") != 0;
+    g_settings.peakFreqEnabled = VizSettingInt(L"appearance.peakFreqEnabled") != 0;
 
-    PCWSTR pfH = Wh_GetStringSetting(L"appearance.peakFreqAlignH");
+    PCWSTR pfH = VizSettingString(L"appearance.peakFreqAlignH");
     g_settings.peakFreqAlignH = (wcscmp(pfH, L"left") == 0)   ? VizTextAlignH::Left
                               : (wcscmp(pfH, L"center") == 0) ? VizTextAlignH::Center
                                                               : VizTextAlignH::Right;
-    Wh_FreeStringSetting(pfH);
+    VizSettingFree(pfH);
 
-    PCWSTR pfV = Wh_GetStringSetting(L"appearance.peakFreqAlignV");
+    PCWSTR pfV = VizSettingString(L"appearance.peakFreqAlignV");
     g_settings.peakFreqAlignV = (wcscmp(pfV, L"above") == 0)  ? VizTextAlignV::Above
                               : (wcscmp(pfV, L"middle") == 0) ? VizTextAlignV::Middle
                               : (wcscmp(pfV, L"bottom") == 0) ? VizTextAlignV::Bottom
                               : (wcscmp(pfV, L"below") == 0)  ? VizTextAlignV::Below
                                                               : VizTextAlignV::Top;
-    Wh_FreeStringSetting(pfV);
+    VizSettingFree(pfV);
     g_settings.oscilloscopeMultibandEnabled =
-        Wh_GetIntSetting(L"appearance.oscilloscopeMultibandEnabled") != 0;
+        VizSettingInt(L"appearance.oscilloscopeMultibandEnabled") != 0;
     g_settings.oscilloscopeWindowMs =
-        std::clamp(Wh_GetIntSetting(L"appearance.oscilloscopeWindowMs"), 5, 250);
+        std::clamp(VizSettingInt(L"appearance.oscilloscopeWindowMs"), 5, 250);
     g_settings.oscilloscopeDamping =
-        std::clamp(Wh_GetIntSetting(L"appearance.oscilloscopeDamping"), 0, 100);
+        std::clamp(VizSettingInt(L"appearance.oscilloscopeDamping"), 0, 100);
 
-    g_settings.mediaControlsEnabled = Wh_GetIntSetting(L"media_controls.enabled") != 0;
+    g_settings.mediaControlsEnabled = VizSettingInt(L"media_controls.enabled") != 0;
 
     ReadColorSetting(L"media_controls.iconColor", L"Media Controls", L"Icon Color",
                      255, 255, 255, 255,
@@ -20047,9 +20044,9 @@ void LoadSettings() {
 
     g_settings.mediaIconSize = ReadSizeSetting(L"media_controls.iconSize", 8.f, 256.f, 32.f);
     {
-        PCWSTR layout = Wh_GetStringSetting(L"media_controls.layout");
+        PCWSTR layout = VizSettingString(L"media_controls.layout");
         g_settings.mediaCard = layout && wcscmp(layout, L"card") == 0;
-        Wh_FreeStringSetting(layout);
+        VizSettingFree(layout);
     }
     ReadColorSetting(L"media_controls.cardBackground", L"Media Controls", L"Card Background", 158, 10, 10, 13,
                      &g_settings.cardBgA, &g_settings.cardBgR, &g_settings.cardBgG, &g_settings.cardBgB);
@@ -20059,10 +20056,10 @@ void LoadSettings() {
     g_settings.cardRadius = ReadSizeSetting(L"media_controls.cardCornerRadius", 0.f, 64.f, 12.f);
     g_settings.cardArtSize = ReadSizeSetting(L"media_controls.cardArtSize", 0.f, 600.f, 0.f);
     {
-        PCWSTR acc = Wh_GetStringSetting(L"media_controls.cardAccent");
+        PCWSTR acc = VizSettingString(L"media_controls.cardAccent");
         g_settings.cardAccentSource = !acc ? 0 : wcscmp(acc, L"custom") == 0 ? 1 : wcscmp(acc, L"album") == 0 ? 2
                                     : wcscmp(acc, L"windows") == 0 ? 3 : 0;
-        Wh_FreeStringSetting(acc);
+        VizSettingFree(acc);
     }
     ReadColorSetting(L"media_controls.cardAccentColor", L"Media Controls", L"Card Accent Color", 255, 255, 255, 255,
                      &g_settings.cardAccentA, &g_settings.cardAccentR, &g_settings.cardAccentG, &g_settings.cardAccentB);
@@ -20079,11 +20076,11 @@ void LoadSettings() {
                      L"Backing Plate Border Color", 0x40, 255, 255, 255,
                      &g_settings.mediaPlateBorderA, &g_settings.mediaPlateBorderR,
                      &g_settings.mediaPlateBorderG, &g_settings.mediaPlateBorderB);
-    g_settings.mediaHideWhenCovered = Wh_GetIntSetting(L"media_controls.hideWhenCovered") != 0;
+    g_settings.mediaHideWhenCovered = VizSettingInt(L"media_controls.hideWhenCovered") != 0;
     {
-        PCWSTR z = Wh_GetStringSetting(L"media_controls.stacking");
+        PCWSTR z = VizSettingString(L"media_controls.stacking");
         g_settings.mediaOnTop = wcscmp(z, L"normal") != 0;
-        Wh_FreeStringSetting(z);
+        VizSettingFree(z);
     }
     g_settings.mediaCoveredThresholdPercent =
         ReadThresholdPercentSetting(L"media_controls.coveredThresholdPercent", L"Media Controls",
@@ -20096,35 +20093,35 @@ void LoadSettings() {
         ReadNumberSetting(L"media_controls.verticalPosition", L"Media Controls",
                           L"Vertical Position", 95.0f, 0.0f, 100.0f);
 
-    PCWSTR renderDevice = Wh_GetStringSetting(L"hardware.renderDevice");
+    PCWSTR renderDevice = VizSettingString(L"hardware.renderDevice");
     g_settings.renderDevice = (wcscmp(renderDevice, L"integrated") == 0) ? VizRenderDevice::Integrated
                             : (wcscmp(renderDevice, L"discrete") == 0)   ? VizRenderDevice::Discrete
                             : (wcscmp(renderDevice, L"cpu") == 0)        ? VizRenderDevice::Cpu
                                                                          : VizRenderDevice::Auto;
-    Wh_FreeStringSetting(renderDevice);
+    VizSettingFree(renderDevice);
 
     // ---- 2.0: Workload, Renderer, Opaque Panel --------------------------------------
     {
-        PCWSTR v = Wh_GetStringSetting(L"hardware.workload");
+        PCWSTR v = VizSettingString(L"hardware.workload");
         g_settings.workload = (wcscmp(v, L"gpu") == 0)   ? VizWorkload::Gpu
                             : (wcscmp(v, L"cpu") == 0)   ? VizWorkload::Cpu
                             : (wcscmp(v, L"npu") == 0)   ? VizWorkload::Npu
                                                          : VizWorkload::Hybrid;
-        Wh_FreeStringSetting(v);
-        v = Wh_GetStringSetting(L"hardware.renderer");
+        VizSettingFree(v);
+        v = VizSettingString(L"hardware.renderer");
         g_settings.renderer = (wcscmp(v, L"direct2d") == 0) ? VizRenderer::Direct2D : VizRenderer::D3D11;
-        Wh_FreeStringSetting(v);
-        v = Wh_GetStringSetting(L"hardware.opaquePanel");
+        VizSettingFree(v);
+        v = VizSettingString(L"hardware.opaquePanel");
         g_settings.opaquePanel = (wcscmp(v, L"off") == 0) ? VizOpaquePanel::Off : VizOpaquePanel::Auto;
-        Wh_FreeStringSetting(v);
+        VizSettingFree(v);
     }
 
     // ---- 2.0: Analysis ------------------------------------------------------------------
     {
         auto str = [](PCWSTR key, auto&& fn) {
-            PCWSTR v = Wh_GetStringSetting(key);
+            PCWSTR v = VizSettingString(key);
             fn(v ? v : L"");
-            Wh_FreeStringSetting(v);
+            VizSettingFree(v);
         };
         str(L"analysis.engine", [](PCWSTR v) {
             g_settings.engine = (wcscmp(v, L"classic") == 0) ? VizEngineKind::Classic : VizEngineKind::Precision;
@@ -20138,11 +20135,11 @@ void LoadSettings() {
             int f = _wtoi(v);
             g_settings.octaveFraction = (f == 1 || f == 3 || f == 6 || f == 12 || f == 24) ? f : 6;
         });
-        g_settings.minFreq = std::clamp(Wh_GetIntSetting(L"analysis.minFrequency"), 10, 1000);
-        g_settings.maxFreq = std::clamp(Wh_GetIntSetting(L"analysis.maxFrequency"), 1000, 21000);
+        g_settings.minFreq = std::clamp(VizSettingInt(L"analysis.minFrequency"), 10, 1000);
+        g_settings.maxFreq = std::clamp(VizSettingInt(L"analysis.maxFrequency"), 1000, 21000);
         if (g_settings.maxFreq <= g_settings.minFreq * 2) g_settings.maxFreq = std::max(1000, g_settings.minFreq * 4);
         {
-            int a4 = Wh_GetIntSetting(L"analysis.tuningA4");
+            int a4 = VizSettingInt(L"analysis.tuningA4");
             g_settings.tuningA4 = (float)((a4 >= 400 && a4 <= 480) ? a4 : 440);
         }
         str(L"analysis.weighting", [](PCWSTR v) {
@@ -20176,8 +20173,8 @@ void LoadSettings() {
                                : (wcscmp(v, L"side") == 0)    ? VizChannel::Side
                                                               : VizChannel::Mix;
         });
-        g_settings.dbFloor = std::clamp(Wh_GetIntSetting(L"analysis.dbFloor"), -120, -20);
-        g_settings.dbCeiling = std::clamp(Wh_GetIntSetting(L"analysis.dbCeiling"), -60, 0);
+        g_settings.dbFloor = std::clamp(VizSettingInt(L"analysis.dbFloor"), -120, -20);
+        g_settings.dbCeiling = std::clamp(VizSettingInt(L"analysis.dbCeiling"), -60, 0);
         if (g_settings.dbCeiling - g_settings.dbFloor < 10) {
             ReportSettingIssue(L"Analysis", L"Display Ceiling (dBFS)", std::to_wstring(g_settings.dbCeiling).c_str(),
                                L"at least 10 dB above Display Floor", L"Display Floor + 10");
@@ -20192,9 +20189,9 @@ void LoadSettings() {
                                   : (wcscmp(v, L"custom") == 0)     ? VizBallisticsPreset::Custom
                                                                     : VizBallisticsPreset::Snappy;
         });
-        g_settings.attackMs = std::clamp(Wh_GetIntSetting(L"analysis.attackMs"), 1, 500);
-        g_settings.releaseDbPerSec = std::clamp(Wh_GetIntSetting(L"analysis.releaseDbPerSecond"), 1, 200);
-        g_settings.peakHoldMs = std::clamp(Wh_GetIntSetting(L"analysis.peakHoldMs"), 0, 5000);
+        g_settings.attackMs = std::clamp(VizSettingInt(L"analysis.attackMs"), 1, 500);
+        g_settings.releaseDbPerSec = std::clamp(VizSettingInt(L"analysis.releaseDbPerSecond"), 1, 200);
+        g_settings.peakHoldMs = std::clamp(VizSettingInt(L"analysis.peakHoldMs"), 0, 5000);
         str(L"analysis.peakFall", [](PCWSTR v) {
             g_settings.peakFall = (wcscmp(v, L"linear") == 0) ? VizPeakFall::Linear : VizPeakFall::Gravity;
         });
@@ -20204,7 +20201,7 @@ void LoadSettings() {
                                : (wcscmp(v, L"both") == 0)            ? VizReadout::Both
                                                                       : VizReadout::Frequency;
         });
-        g_settings.loudnessResetOnTrack = Wh_GetIntSetting(L"analysis.loudnessResetOnTrack") != 0;
+        g_settings.loudnessResetOnTrack = VizSettingInt(L"analysis.loudnessResetOnTrack") != 0;
 
         // ---- 2.0: audio source, media widget, Terminal ------------------------------
         str(L"audio.source", [](PCWSTR v) {
@@ -20213,9 +20210,9 @@ void LoadSettings() {
                                                                            : L"";
         });
         if (g_settings.audioSourceKey == L"named") {
-            PCWSTR raw = Wh_GetStringSetting(L"audio.deviceName");
+            PCWSTR raw = VizSettingString(L"audio.deviceName");
             std::wstring name = raw ? raw : L"";
-            Wh_FreeStringSetting(raw);
+            VizSettingFree(raw);
             while (!name.empty() && iswspace(name.front())) name.erase(name.begin());
             while (!name.empty() && iswspace(name.back())) name.pop_back();
             if (name.empty()) {
@@ -20246,8 +20243,8 @@ void LoadSettings() {
                          &g_settings.npArtistB);
         str(L"appearance.textRendering", [](PCWSTR v) { g_settings.textPixel = wcscmp(v, L"pixel") == 0; });
 
-        g_settings.progressEnabled = Wh_GetIntSetting(L"progress.enabled") != 0;
-        g_settings.progressSeek = Wh_GetIntSetting(L"progress.clickToSeek") != 0;
+        g_settings.progressEnabled = VizSettingInt(L"progress.enabled") != 0;
+        g_settings.progressSeek = VizSettingInt(L"progress.clickToSeek") != 0;
         str(L"progress.seekAppsMode", [](PCWSTR v) { g_settings.progressSeekOnlyListed = wcscmp(v, L"only") == 0; });
         str(L"progress.seekApps", [](PCWSTR v) {
             g_settings.progressSeekApps.clear();
@@ -20303,15 +20300,15 @@ void LoadSettings() {
         });
         str(L"terminal.font", [](PCWSTR v) { g_settings.termFont = *v ? v : L"Consolas"; });
         g_settings.termFontSize = ReadSizeSetting(L"terminal.fontSize", 6.f, 96.f, 14.f);
-        g_settings.termRows = std::clamp(Wh_GetIntSetting(L"terminal.rows"), 2, 128);
-        g_settings.termMeterColumns = std::clamp(Wh_GetIntSetting(L"terminal.meterColumns"), 20, 200);
-        g_settings.termHotThreshold = std::clamp(Wh_GetIntSetting(L"terminal.hotThreshold"), 1, 100);
-        g_settings.termScrollRate = std::clamp(Wh_GetIntSetting(L"terminal.scrollRate"), 1, 120);
+        g_settings.termRows = std::clamp(VizSettingInt(L"terminal.rows"), 2, 128);
+        g_settings.termMeterColumns = std::clamp(VizSettingInt(L"terminal.meterColumns"), 20, 200);
+        g_settings.termHotThreshold = std::clamp(VizSettingInt(L"terminal.hotThreshold"), 1, 100);
+        g_settings.termScrollRate = std::clamp(VizSettingInt(L"terminal.scrollRate"), 1, 120);
         // Any one character each (2.1): ASCII as itself, anything else as a
         // custom glyph code. The font has to have it.
         g_termCustomGlyphs.clear();
         auto glyph = [](PCWSTR key, PCWSTR name, wchar_t def) {
-            PCWSTR v = Wh_GetStringSetting(key);
+            PCWSTR v = VizSettingString(key);
             std::vector<std::wstring> gs = VizTermSplitGlyphs(v ? v : L"");
             wchar_t c = 0;
             if (!gs.empty() && gs[0] != L" ") c = VizTermCodeFor(gs[0]);
@@ -20320,7 +20317,7 @@ void LoadSettings() {
                 ReportSettingIssue(L"Terminal", name, v ? v : L"", L"one character", d);
                 c = def;
             }
-            Wh_FreeStringSetting(v);
+            VizSettingFree(v);
             return c;
         };
         g_settings.termColumnGlyph = glyph(L"terminal.columnGlyph", L"Column Glyph", L'#');
@@ -20383,9 +20380,9 @@ void LoadSettings() {
 
     {
         // Same quote-stripping as the icon paths: "Copy as path" brings quotes.
-        PCWSTR raw = Wh_GetStringSetting(L"hardware.npuRuntimePath");
+        PCWSTR raw = VizSettingString(L"hardware.npuRuntimePath");
         std::wstring path = raw ? raw : L"";
-        Wh_FreeStringSetting(raw);
+        VizSettingFree(raw);
         while (!path.empty() && (path.front() == L'"' || path.front() == L' ')) path.erase(path.begin());
         while (!path.empty() && (path.back() == L'"' || path.back() == L' ' || path.back() == L'\\'))
             path.pop_back();
@@ -20402,11 +20399,11 @@ void LoadSettings() {
         g_settings.npuRuntimePath = path;
     }
 
-    PCWSTR smoothMode = Wh_GetStringSetting(L"hardware.smoothMode");
+    PCWSTR smoothMode = VizSettingString(L"hardware.smoothMode");
     g_settings.smoothMode = (wcscmp(smoothMode, L"on") == 0)    ? VizSmoothMode::On
                           : (wcscmp(smoothMode, L"off") == 0)   ? VizSmoothMode::Off
                                                                 : VizSmoothMode::Auto;
-    Wh_FreeStringSetting(smoothMode);
+    VizSettingFree(smoothMode);
 
     // The NPU worker reads only its own copies, taken here.
     ttnpu::Configure(g_settings.workload == VizWorkload::Npu, g_settings.npuRuntimePath);
