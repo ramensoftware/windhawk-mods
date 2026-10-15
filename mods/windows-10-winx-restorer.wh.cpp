@@ -1,112 +1,98 @@
 // ==WindhawkMod==
 // @id              windows-10-winx-restorer
 // @name            Windows 10 Win+X restorer on Win11 24H2
-// @description     This mod restores the Windows 10 power user menu (Win+X) when the Windows 10 taskbar runs on Windows 11 24H2 or 25H2
-// @version         1.0.0
+// @description     This mod restores a Windows 10-style Win+X menu on Windows 11, with immersive or native Win32 styling and support for legacy and modern taskbars
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @architecture    x86-64
 // @include         explorer.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -lcomctl32 -lole32 -ladvapi32 -lpowrprof
+// @compilerOptions -luser32 -lgdi32 -lshell32 -lcomctl32 -lole32 -loleaut32 -ladvapi32 -lpowrprof
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Windows 10 Win+X restorer on Win11 24H2
+# Windows 10 Win+X restorer
 
-This mod restores the power user menu (Win+X), without touching the registry and without replacing system files.
+This mod restores a Windows 10-style power user menu on Windows 11.
+Open it with **Win+X** or by **right-clicking the Start button**.
 
-Win+X opens the Windows 10 style menu of this mod on every chord; the native menu is not called into play.
+The menu can be used with both the Windows 11 taskbar and a legacy Windows 10
+taskbar. Clicking Start normally or pressing the Windows key alone is not
+replaced: these actions continue to open the regular Start menu.
 
-The menu is a recreation of the Windows 10 power user menu (Programs and Features, Power Options,
-Event Viewer, System, Device Manager, Network Connections, Disk Management, Computer Management,
-Terminal, Terminal (Admin), Task Manager, Settings, File Explorer, Run, Shut down or sign
-out, Desktop), localized in the same languages as the rebuilt Windows 10 shell menus.
+## Features
 
-This mod has been tested on Windows 11 24H2.
+- **Immersive menu:** a recreated Windows 10-style menu with light and dark themes.
+- **Native Win32 menu:** a standard Windows popup menu with system menu metrics.
+  Dark colours are painted locally on this menu and its submenus only.
+- **Menu positioning:** open next to Start or at the mouse pointer, with adjustable
+  horizontal and vertical offsets.
+- **Hide Shut down or sign out:** remove the power submenu for a Windows 8-like layout.
+- **PowerShell fallback:** use Windows PowerShell and Windows PowerShell (Admin)
+  when the Windows Terminal executable is unavailable.
+- **Localized entries:** menu labels follow the Windows display language for the
+  languages supported by the mod.
 
-## Screenshot 
+## Settings
 
-![winx.png](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winx.png)
+Choose a menu style, select the menu colour theme, and adjust the position
+as needed. The menu style affects appearance only: the mod replaces Win+X while
+it is active regardless of the chosen style.
 
-## How it works
+The power submenu and the PowerShell fallback can be configured independently.
+The colour theme also applies to Win32 mode: Auto follows the Windows app theme,
+Light keeps the standard system menu, and Dark uses local owner-drawn colours.
+High-contrast mode keeps the system Win32 appearance for accessibility.
+No process-wide dark-mode preference is changed, and the Dark mode context menus
+mod is not required. Settings apply to the next menu opening.
 
-* A dedicated thread owns the low-level input hooks and only pumps messages. Nothing slow
-  and nothing that can block runs on the hook thread, so Windows never removes the hook for
-  exceeding `LowLevelHooksTimeout` and system input is never held up: a hook posts a private
-  message and the thread does the work. The mouse hook looks at right button events only
-  and resolves the Start button from the click with local queries, so a mouse move costs
-  nothing.
-* The menu opens on the taskbar the request came from: a right-click on the Start button of
-  a secondary taskbar opens it there, while the Win+X chord opens it on the primary taskbar,
-  as Windows 10 does.
-* The menu is created on a thread of the mod, with an owner window of that thread: the
-  taskbar thread is never used to show it, and no window of the shell is subclassed.
-  `TrackPopupMenuEx` runs a modal loop on the thread that calls it, and doing that on the
-  taskbar thread froze the private shell for as long as the menu was on screen (the
-  desktop went black for seconds and the tray flyouts stopped answering).
-* Only one menu can be open at a time, and the thread that shows it is joined when the
-  mod is disabled or updated: an open menu is cancelled, so the mod is never unloaded
-  while one of its threads is still running its code.
-* Nothing is written to the registry. The mod acts only inside the Windows 10 shell
-  process, i.e. an `explorer.exe` that is not `%SystemRoot%\explorer.exe`, and its hooks
-  are armed only in the process that owns the taskbar (`Shell_TrayWnd`). The process
-  image is read with `QueryFullProcessImageNameW`, which is not affected by the
-  `GetModuleFileNameW` hook of the Fake Explorer path mod that the Windows 10 taskbar
-  requires.
+## Requirements and compatibility
 
-## Using the keyboard
+Designed for Windows 11 24H2 and 25H2, x64. Native shell interception uses symbols
+matching the installed Windows components. The first initialization may require
+internet access to download symbols; the mod will not initialize if a required
+symbol cannot be resolved.
 
-The arrow keys and Enter work as in any menu. Pressing a letter chooses the entry whose label
-starts with that letter, when exactly one entry of the open menu does: the items are
-owner-drawn, so the mod answers `WM_MENUCHAR` itself. An ambiguous letter is ignored rather
-than guessed - in the power submenu, for example, R chooses Restart while S does nothing,
-because Sign out, Sleep and Shut down all start with it. The "Shut down or sign out" entry
-opens a submenu, which a letter does not choose: the arrows do.
-
-## Limitations
-
-* While an elevated window has focus, the low-level hooks of a non-elevated Explorer do not
-  receive keystrokes (UIPI), so Win+X reaches the native handler instead of this mod.
-* Only the primary taskbar is used for the Win+X chord, which is what Windows 10 does.
-
-## Requirements
-
-This mod requires the mod [Win10 taskbar on Win11 24H2 or 25H2](https://windhawk.net/mods/win10-taskbar-on-win11-24h2):
-the Windows 10 taskbar must be present, and with it the mod Fake Explorer path, which that
-mod requires. In the Windows 11 shell this mod does nothing and is not kept loaded.
+The immersive appearance is recreated, rather than loading the original Windows
+10 menu component. Compatibility can depend on the Windows build and other mods
+that modify Start, the taskbar, or Win+X. Disable the mod to restore shell handling.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- WinXMenuAnchor: start
-  $name: Where the menu opens
-  $description: start = glued to the Start button, like Windows 10; cursor = at the mouse
-    pointer.
+- WinXMenuSkin: immersive
+  $name: Menu style
+  $description: This setting changes the appearance of the restored menu, not which shell or taskbar it replaces.
   $options:
-  - start: Start button (Windows 10)
-  - cursor: Mouse pointer
-- WinXMenuOffsetX: 0
-  $name: Horizontal offset (px)
-  $description: >-
-    Moves the menu to the right (or to the left with a negative value) from the
-    position where Windows 10 opens it.
-- WinXMenuOffsetY: 0
-  $name: Vertical offset (px)
-  $description: >-
-    Moves the menu down (or up with a negative value) from the position where
-    Windows 10 opens it.
+  - immersive: Windows 10-style immersive menu
+  - win32: Native Windows menu (Win32)
 - WinXMenuTheme: auto
-  $name: Win+X menu colours
-  $description: >-
-    auto = the Windows 10 menu follows the Windows app theme (light or dark);
-    light = the Windows 10 light menu (F9F9F9, black text); dark = the Windows 10
-    dark menu (2B2B2B, white text).
+  $name: Menu theme
+  $description: This setting selects the colour theme of the generated menu only. Dark Win32 colours are scoped to this menu and its submenus; other Explorer menus are not changed.
   $options:
-  - auto: Follow Windows
-  - light: Windows 10 light
-  - dark: Windows 10 dark
+  - auto: Follow the Windows app theme
+  - light: Light
+  - dark: Dark
+- WinXMenuAnchor: start
+  $name: Menu position
+  $description: This setting chooses whether the menu opens next to Start or at the mouse pointer.
+  $options:
+  - start: Next to the Start button
+  - cursor: At the mouse pointer
+- WinXMenuOffsetX: 0
+  $name: Horizontal offset (pixels)
+  $description: This setting adjusts the Start-anchored horizontal position. Negative values move left; positive values move right.
+- WinXMenuOffsetY: 0
+  $name: Vertical offset (pixels)
+  $description: This setting adjusts the Start-anchored vertical position. Negative values move up; positive values move down.
+- WinXHideShutdown: false
+  $name: Hide "Shut down or sign out"
+  $description: This setting removes the power submenu and its preceding separator for a Windows 8-like layout.
+- WinXTerminalFallback: true
+  $name: Use PowerShell when Terminal is unavailable
+  $description: This setting replaces both Terminal entries with Windows PowerShell when wt.exe cannot be found, including the administrator entry.
 */
 // ==/WindhawkModSettings==
 
@@ -118,8 +104,12 @@ mod requires. In the Windows 11 shell this mod does nothing and is not kept load
 #include <objbase.h>
 #include <powrprof.h>
 #include <shldisp.h>
+#include <uiautomation.h>
 #include <atomic>
 #include <cwctype>
+#include <cwchar>
+#include <cstring>
+#include <climits>
 #include <new>
 #include <vector>
 
@@ -234,6 +224,16 @@ struct ItemData {
     wchar_t text[128];
     bool separator;
     bool submenu;
+    // Native profile only: restore the HMENU before releasing drawing metadata.
+    HMENU menu = nullptr;
+    UINT position = 0;
+    UINT originalType = 0;
+    ULONG_PTR originalData = 0;
+};
+
+struct MenuBackground {
+    HMENU menu;
+    HBRUSH original;
 };
 
 struct Session {
@@ -255,6 +255,7 @@ struct Session {
     COLORREF separator = RGB(205, 205, 205);
     COLORREF hotFill = RGB(229, 229, 229);
     int itemHeight = 0;
+    bool nativeMetrics = false; // dark Win32 profile: system font/rows, not immersive layout
     // Proportions measured on the Windows 10 reference screenshot at 100% DPI and
     // used as they are, so the recreation has the proportions of the
     // original: 32 px rows, text 32 px inside the item rectangle, the submenu chevron
@@ -266,8 +267,9 @@ struct Session {
     int chevronInset = 0;
     int separatorInset = 0;
     std::vector<ItemData*> items;
+    std::vector<MenuBackground> backgrounds; // only used by the native profile
 };
-static Session* g_session = nullptr;
+static thread_local Session* g_session = nullptr;
 
 // Which scheme the menu uses. "Auto" follows the Windows app theme (Settings >
 // Personalization > Colors); "Light" / "Dark" force the Windows 10 light or dark
@@ -306,6 +308,35 @@ static ThemeHandle OpenMenuTheme(HWND owner, int dpi) noexcept {
 }
 
 static void End(Session& s) noexcept {
+    if (s.nativeMetrics) {
+        // All popup windows have closed before this cleanup. Detach our item-data
+        // pointers and background brush while they are still alive; only then
+        // release the GDI objects. This also rolls back a failed native Begin.
+        for (ItemData* d : s.items) {
+            MENUITEMINFOW current = {};
+            current.cbSize = sizeof(current);
+            current.fMask = MIIM_DATA;
+            if (GetMenuItemInfoW(d->menu, d->position, TRUE, &current) &&
+                current.dwItemData == reinterpret_cast<ULONG_PTR>(d)) {
+                MENUITEMINFOW restore = {};
+                restore.cbSize = sizeof(restore);
+                restore.fMask = MIIM_FTYPE | MIIM_DATA;
+                restore.fType = d->originalType;
+                restore.dwItemData = d->originalData;
+                SetMenuItemInfoW(d->menu, d->position, TRUE, &restore);
+            }
+        }
+        for (const MenuBackground& back : s.backgrounds) {
+            MENUINFO restore = {};
+            restore.cbSize = sizeof(restore);
+            restore.fMask = MIM_BACKGROUND;
+            if (GetMenuInfo(back.menu, &restore) && restore.hbrBack == s.brush) {
+                restore.hbrBack = back.original;
+                SetMenuInfo(back.menu, &restore);
+            }
+        }
+        s.backgrounds.clear();
+    }
     for (ItemData* d : s.items) delete d;
     s.items.clear();
     if (s.brush) { DeleteObject(s.brush); s.brush = nullptr; }
@@ -313,18 +344,32 @@ static void End(Session& s) noexcept {
     if (s.theme && g_api.closeTheme) { g_api.closeTheme(s.theme); s.theme = nullptr; }
 }
 
-static void Prepare(Session& s, HMENU menu) noexcept {
+static bool Prepare(Session& s, HMENU menu) noexcept {
     const int count = GetMenuItemCount(menu);
+    if (s.nativeMetrics && count < 0) return false;
     for (int i = 0; i < count; ++i) {
         wchar_t buffer[128] = {};
         MENUITEMINFOW info = {};
         info.cbSize = sizeof(info);
-        info.fMask = MIIM_FTYPE | MIIM_STRING | MIIM_SUBMENU;
+        info.fMask = MIIM_FTYPE | MIIM_STRING | MIIM_SUBMENU |
+                     (s.nativeMetrics ? MIIM_DATA : 0);
         info.dwTypeData = buffer;
         info.cch = _countof(buffer) - 1;
-        if (!GetMenuItemInfoW(menu, i, TRUE, &info)) continue;
+        if (!GetMenuItemInfoW(menu, i, TRUE, &info)) {
+            if (s.nativeMetrics) return false;
+            continue;
+        }
         ItemData* data = new (std::nothrow) ItemData{};
-        if (!data) continue;
+        if (!data) {
+            if (s.nativeMetrics) return false;
+            continue;
+        }
+        if (s.nativeMetrics) {
+            data->menu = menu;
+            data->position = static_cast<UINT>(i);
+            data->originalType = info.fType;
+            data->originalData = info.dwItemData;
+        }
         data->separator = (info.fType & MFT_SEPARATOR) != 0;
         data->submenu = info.hSubMenu != nullptr;
         wcsncpy_s(data->text, buffer, _TRUNCATE);
@@ -335,19 +380,27 @@ static void Prepare(Session& s, HMENU menu) noexcept {
         set.fMask = MIIM_FTYPE | MIIM_DATA;
         set.fType = info.fType | MFT_OWNERDRAW;
         set.dwItemData = reinterpret_cast<ULONG_PTR>(data);
-        SetMenuItemInfoW(menu, i, TRUE, &set);
-        if (info.hSubMenu) Prepare(s, info.hSubMenu);
+        const BOOL changed = SetMenuItemInfoW(menu, i, TRUE, &set);
+        if (s.nativeMetrics && !changed) return false;
+        if (info.hSubMenu && !Prepare(s, info.hSubMenu)) return false;
     }
     MENUINFO mi = {};
     mi.cbSize = sizeof(mi);
     mi.fMask = MIM_BACKGROUND;
+    if (s.nativeMetrics) {
+        if (!GetMenuInfo(menu, &mi)) return false;
+        s.backgrounds.push_back({menu, mi.hbrBack});
+    }
     mi.hbrBack = s.brush;                               // theme background, never null
-    SetMenuInfo(menu, &mi);
+    const BOOL changed = SetMenuInfo(menu, &mi);
+    return !s.nativeMetrics || changed;
 }
 
-static bool Begin(Session& s, HMENU menu, HWND owner, UINT dpiHint) noexcept {
-    if (!owner || !LoadApi()) return false;
+static bool Begin(Session& s, HMENU menu, HWND owner, UINT dpiHint,
+                  bool nativeMetrics = false) noexcept {
+    if (!owner || (!nativeMetrics && !LoadApi())) return false;
     s.owner = owner;
+    s.nativeMetrics = nativeMetrics;
     // The menu is measured with the scale of the monitor it opens on. The owner
     // window is parked off-screen (see GetWinXMenuOwnerWindow), so its own DPI is
     // that of the primary monitor, which is the wrong one for a secondary taskbar
@@ -358,14 +411,23 @@ static bool Begin(Session& s, HMENU menu, HWND owner, UINT dpiHint) noexcept {
     // Windows 10 constants for the selected scheme: they stay in place if the
     // theme cannot be opened or does not carry a colour, so both themes are
     // supported even on builds where the immersive menu theme is missing.
-    s.light = IsLightTheme();
+    s.light = nativeMetrics ? false : IsLightTheme();
     s.fill = s.light ? RGB(249, 249, 249) : RGB(43, 43, 43);
     s.textNormal = s.light ? RGB(0, 0, 0) : RGB(255, 255, 255);
     s.textDisabled = s.light ? RGB(120, 120, 120) : RGB(160, 160, 160);
     s.separator = s.light ? RGB(205, 205, 205) : RGB(128, 128, 128);
     s.hotFill = s.light ? RGB(229, 229, 229) : RGB(65, 65, 65);
-    s.theme = OpenMenuTheme(owner, s.dpi);
-    if (!s.theme) {
+    if (nativeMetrics) {
+        // Palette inspired by dark-menus. Deliberately no SetPreferredAppMode,
+        // FlushMenuThemes, uxtheme ordinals, or hooks of global drawing APIs.
+        s.fill = RGB(44, 44, 44);
+        s.textNormal = RGB(255, 255, 255);
+        s.textDisabled = RGB(170, 170, 170);
+        s.hotFill = RGB(69, 69, 69);
+        s.separator = RGB(80, 80, 80);
+    }
+    s.theme = nativeMetrics ? nullptr : OpenMenuTheme(owner, s.dpi);
+    if (!s.theme && !nativeMetrics) {
         // No immersive theme on this build: paint the menu with the Windows 10
         // colours anyway instead of falling back to a plain popup.
         Wh_Log(L"[menu] immersive theme unavailable: the menu keeps the Windows 10 %s colours",
@@ -373,16 +435,34 @@ static bool Begin(Session& s, HMENU menu, HWND owner, UINT dpiHint) noexcept {
     }
 
     HDC dc = GetDC(owner);
-    if (!s.theme || !g_api.getFont ||
-        FAILED(g_api.getFont(s.theme, dc, kPartItem, 0, kPropFont, &s.font)) ||
-        s.font.lfHeight == 0) {
-        NONCLIENTMETRICSW info = {};
-        info.cbSize = sizeof(info);
-        if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(info), &info, 0))
-            s.font = info.lfMenuFont;
-        else
+    if (nativeMetrics) {
+        NONCLIENTMETRICSW metrics = {};
+        metrics.cbSize = sizeof(metrics);
+        if (SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(metrics),
+                                       &metrics, 0, static_cast<UINT>(s.dpi))) {
+            s.font = metrics.lfMenuFont;
+        } else if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics),
+                                         &metrics, 0)) {
+            s.font = metrics.lfMenuFont;
+            const UINT systemDpi = GetDpiForSystem();
+            if (systemDpi) s.font.lfHeight = MulDiv(s.font.lfHeight, s.dpi, systemDpi);
+        }
+        if (!s.font.lfHeight) {
             s.font.lfHeight = -MulDiv(9, s.dpi, 72);
-        wcscpy_s(s.font.lfFaceName, LF_FACESIZE, L"Segoe UI");
+            wcscpy_s(s.font.lfFaceName, L"Segoe UI");
+        }
+    } else {
+        if (!s.theme || !g_api.getFont ||
+            FAILED(g_api.getFont(s.theme, dc, kPartItem, 0, kPropFont, &s.font)) ||
+            s.font.lfHeight == 0) {
+            NONCLIENTMETRICSW info = {};
+            info.cbSize = sizeof(info);
+            if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(info), &info, 0))
+                s.font = info.lfMenuFont;
+            else
+                s.font.lfHeight = -MulDiv(9, s.dpi, 72);
+            wcscpy_s(s.font.lfFaceName, LF_FACESIZE, L"Segoe UI");
+        }
     }
     if (s.theme) {
         // A theme colour is accepted only when the call succeeded: a failed
@@ -446,10 +526,19 @@ static bool Begin(Session& s, HMENU menu, HWND owner, UINT dpiHint) noexcept {
     s.padRight = MulDiv(10, s.dpi, 96);
     s.chevronInset = MulDiv(4, s.dpi, 96);
     s.separatorInset = MulDiv(8, s.dpi, 96);
+    if (nativeMetrics) {
+        s.itemHeight = GetSystemMetricsForDpi(SM_CYMENU, static_cast<UINT>(s.dpi));
+        const int nativeMin = textHeight + MulDiv(6, s.dpi, 96);
+        if (s.itemHeight < nativeMin) s.itemHeight = nativeMin;
+        s.padLeft = GetSystemMetricsForDpi(SM_CXMENUCHECK, static_cast<UINT>(s.dpi)) +
+                    MulDiv(6, s.dpi, 96);
+        s.padRight = MulDiv(12, s.dpi, 96);
+        s.chevronInset = MulDiv(8, s.dpi, 96);
+        s.separatorInset = MulDiv(3, s.dpi, 96);
+    }
     s.brush = CreateSolidBrush(s.fill);
     if (!s.hfont || !s.brush) return false;
-    Prepare(s, menu);
-    return true;
+    return Prepare(s, menu);
 }
 
 static bool Owns(const Session* s, const ItemData* d) noexcept {
@@ -462,7 +551,7 @@ static bool Owns(const Session* s, const ItemData* d) noexcept {
 static void Measure(Session* s, HWND hwnd, MEASUREITEMSTRUCT* m, const ItemData* d) noexcept {
     if (d->separator) {
         m->itemWidth = 1;
-        m->itemHeight = MulDiv(9, s->dpi, 96);
+        m->itemHeight = MulDiv(s->nativeMetrics ? 7 : 9, s->dpi, 96);
         return;
     }
     int width = 0;
@@ -479,7 +568,7 @@ static void Measure(Session* s, HWND hwnd, MEASUREITEMSTRUCT* m, const ItemData*
     if (d->submenu) width += s->chevronInset + MulDiv(14, s->dpi, 96);
     // 242 px plus the ~16 px gutter the shell keeps on the right of the item
     // rectangle gives the 258 px wide menu of the Windows 10 reference screenshot.
-    const int minWidth = MulDiv(242, s->dpi, 96);
+    const int minWidth = s->nativeMetrics ? 0 : MulDiv(242, s->dpi, 96);
     // Upper bounds, so a wrong measurement can never produce a menu that covers
     // the screen.
     const int maxWidth = MulDiv(520, s->dpi, 96);
@@ -495,7 +584,7 @@ static void Draw(Session* s, DRAWITEMSTRUCT* di, const ItemData* d) noexcept {
     HDC dc = di->hDC;
     RECT rc = di->rcItem;
     // Start every item from a clean clip region: the submenu rows take their own
-    // rectangle out of the clip below (it is the documented way of stopping the
+    // rectangle out of the clip below (to keep the
     // shell from painting a second arrow on top of ours), and a clip left over from
     // an earlier paint of the same row would otherwise erase parts of this one.
     SelectClipRgn(dc, nullptr);
@@ -538,32 +627,54 @@ static void Draw(Session* s, DRAWITEMSTRUCT* di, const ItemData* d) noexcept {
             textColor = hotText;
     }
     HGDIOBJ old = SelectObject(dc, s->hfont);
-    SetBkMode(dc, TRANSPARENT);
-    SetTextColor(dc, textColor);
+    const int previousBkMode = SetBkMode(dc, TRANSPARENT);
+    const COLORREF previousTextColor = SetTextColor(dc, textColor);
     RECT tr = rc;
     tr.left += s->padLeft;
     tr.right -= s->padRight;
     DrawTextW(dc, d->text, -1, &tr, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_HIDEPREFIX);
     if (d->submenu) {
-        // One chevron only: the shell glyph Windows 10 shows for a submenu, at the
-        // same distance from the right edge (see the reference screenshot).
-        RECT ar = rc;
-        ar.right -= s->chevronInset;
-        HFONT arrowFont = CreateFontW(s->font.lfHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                      DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
-                                      L"Segoe MDL2 Assets");
-        if (arrowFont) {
-            SelectObject(dc, arrowFont);
-            DrawTextW(dc, L"\xE76C", -1, &ar, DT_SINGLELINE | DT_VCENTER | DT_RIGHT);
-            SelectObject(dc, s->hfont);
-            DeleteObject(arrowFont);
+        if (s->nativeMetrics) {
+            // A native-sized triangular arrow, using this row's text colour.
+            const int size = MulDiv(4, s->dpi, 96);
+            const int right = static_cast<int>(rc.right) - s->chevronInset;
+            const int centerY = static_cast<int>((rc.top + rc.bottom) / 2);
+            POINT points[3] = {{right - size, centerY - size},
+                               {right, centerY}, {right - size, centerY + size}};
+            HBRUSH arrow = CreateSolidBrush(textColor);
+            if (arrow) {
+                HGDIOBJ previousBrush = SelectObject(dc, arrow);
+                HGDIOBJ previousPen = SelectObject(dc, GetStockObject(NULL_PEN));
+                Polygon(dc, points, _countof(points));
+                SelectObject(dc, previousPen);
+                SelectObject(dc, previousBrush);
+                DeleteObject(arrow);
+            }
+        } else {
+            // One chevron only: the shell glyph Windows 10 shows for a submenu, at the
+            // same distance from the right edge (see the reference screenshot).
+            RECT ar = rc;
+            ar.right -= s->chevronInset;
+            HFONT arrowFont = CreateFontW(s->font.lfHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                          DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
+                                          L"Segoe MDL2 Assets");
+            if (arrowFont) {
+                SelectObject(dc, arrowFont);
+                DrawTextW(dc, L"\xE76C", -1, &ar, DT_SINGLELINE | DT_VCENTER | DT_RIGHT);
+                SelectObject(dc, s->hfont);
+                DeleteObject(arrowFont);
+            }
         }
     }
     if (old) SelectObject(dc, old);
+    if (s->nativeMetrics) {
+        SetBkMode(dc, previousBkMode);
+        SetTextColor(dc, previousTextColor);
+    }
     if (d->submenu) {
         // One arrow, not two. The shell paints its own submenu arrow after
         // WM_DRAWITEM has returned, on top of the chevron drawn just above: the
-        // documented way to stop it is to take the item rectangle out of the clip
+        // local workaround is to take this item rectangle out of the clip
         // region of this DC before returning, so only our chevron survives.
         ExcludeClipRect(dc, rc.left, rc.top, rc.right, rc.bottom);
     }
@@ -610,6 +721,7 @@ static bool MatchMenuChar(Session* s, HMENU menu, wchar_t ch, UINT& posOut) {
 static LRESULT CALLBACK OwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                   UINT_PTR, DWORD_PTR) {
     Session* s = g_session;
+    if (s && s->owner != hwnd) return DefSubclassProc(hwnd, msg, wParam, lParam);
     if (s && msg == WM_MEASUREITEM && lParam) {
         auto* m = reinterpret_cast<MEASUREITEMSTRUCT*>(lParam);
         const auto* d = reinterpret_cast<const ItemData*>(m->itemData);
@@ -625,6 +737,12 @@ static LRESULT CALLBACK OwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             return TRUE;
         }
     } else if (s && msg == WM_MENUCHAR) {
+        if (s->nativeMetrics) {
+            bool ownedMenu = false;
+            for (const ItemData* item : s->items)
+                if (item->menu == reinterpret_cast<HMENU>(lParam)) ownedMenu = true;
+            if (!ownedMenu) return DefSubclassProc(hwnd, msg, wParam, lParam);
+        }
         // LOWORD(wParam) is the character the user pressed, lParam the active menu.
         // What the system wants back with MNC_EXECUTE is the position of the entry
         // in that menu, and with TPM_RETURNCMD Track then returns its identifier.
@@ -636,18 +754,24 @@ static LRESULT CALLBACK OwnerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
-// Like TrackPopupMenuEx with TPM_RETURNCMD, but with immersive items. It must be
-// called from the thread that owns "owner"; when no theme can be opened it shows
-// the standard popup.
-static UINT Track(HMENU menu, HWND owner, int x, int y, UINT flags, UINT dpi) noexcept {
+// Shared owner-draw tracker: immersive by default, native-sized dark profile
+// when nativeMetrics is true. Uses HMENU and TrackPopupMenuEx in both cases. Must be
+// called from the thread that owns "owner". Missing themes use our colour palette;
+// a missing owner subclass falls back to an ordinary menu before items are altered.
+static UINT Track(HMENU menu, HWND owner, int x, int y, UINT flags, UINT dpi,
+                  bool nativeMetrics = false) noexcept {
     flags = (flags & ~TPM_NONOTIFY) | TPM_RETURNCMD;
     Session session;
-    if (g_session || !Begin(session, menu, owner, dpi)) {
+    if (g_session || !SetWindowSubclass(owner, OwnerProc, kSubclassId, 0))
+        return static_cast<UINT>(TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    if (!Begin(session, menu, owner, dpi, nativeMetrics)) {
+        if (nativeMetrics)
+            Wh_Log(L"[menu] native dark setup failed; restoring our menu and using the system palette");
+        RemoveWindowSubclass(owner, OwnerProc, kSubclassId);
         End(session);
         return static_cast<UINT>(TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
     }
     g_session = &session;
-    SetWindowSubclass(owner, OwnerProc, kSubclassId, 0);
     const UINT result = static_cast<UINT>(TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
     RemoveWindowSubclass(owner, OwnerProc, kSubclassId);
     g_session = nullptr;
@@ -658,41 +782,87 @@ static UINT Track(HMENU menu, HWND owner, int x, int y, UINT flags, UINT dpi) no
 }  // namespace ImmersiveMenu
 
 
-// ---------------------------------------------------------------------------
-// Module settings and the process this mod acts in
-// ---------------------------------------------------------------------------
-static bool g_winXMenuAnchorCursor = false;
-static int g_winXMenuOffsetX = 0;
-static int g_winXMenuOffsetY = 0;
+namespace NativeMenu {
 
-// The Windows 10 shell: an explorer.exe that is not %SystemRoot%\explorer.exe. The
-// Windows 11 shell is left completely alone.
-//
-// The image path is read with QueryFullProcessImageNameW and not with
-// GetModuleFileNameW(nullptr, ...): the Win10 taskbar mod requires the "Fake
-// Explorer path" mod, which hooks GetModuleFileNameW in every explorer.exe and
-// makes it report %SystemRoot%\explorer.exe, so while that hook is in place the
-// Windows 10 shell would look like the Windows 11 one. QueryFullProcessImageNameW
-// is not hooked, and its answer cannot change during the lifetime of the process,
-// so it is read once, in Wh_ModInit.
-static bool IsLegacyShellProcess() {
-    wchar_t path[1024] = {};
-    DWORD pathChars = static_cast<DWORD>(_countof(path));
-    if (!QueryFullProcessImageNameW(GetCurrentProcess(), 0, path, &pathChars) || !pathChars) {
-        Wh_Log(L"[winx] the process image could not be read (%lu)", GetLastError());
-        return false;
-    }
-    wchar_t systemRoot[MAX_PATH] = {};
-    const DWORD rootLength = GetEnvironmentVariableW(L"SystemRoot", systemRoot, _countof(systemRoot));
-    if (!rootLength || rootLength >= _countof(systemRoot)) return false;
-    const size_t rootChars = wcslen(systemRoot);
-    if (pathChars == rootChars + 13 && _wcsnicmp(path, systemRoot, rootChars) == 0 &&
-        _wcsicmp(path + rootChars, L"\\explorer.exe") == 0) {
-        return false;
+// Only the HMENU trees explicitly created and marked by this mod are eligible.
+// Never change menus by class name alone or by globally detouring SetMenuInfo.
+static const int kOwnedMenuTag = 0;
+
+static bool MarkOwnedTree(HMENU menu) noexcept {
+    MENUINFO info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = MIM_MENUDATA;
+    info.dwMenuData = reinterpret_cast<ULONG_PTR>(&kOwnedMenuTag);
+    if (!SetMenuInfo(menu, &info)) return false;
+    const int count = GetMenuItemCount(menu);
+    for (int i = 0; i < count; ++i) {
+        HMENU child = GetSubMenu(menu, i);
+        if (child && !MarkOwnedTree(child)) return false;
     }
     return true;
 }
 
+static bool IsOwnedTree(HMENU menu) noexcept {
+    MENUINFO info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = MIM_MENUDATA;
+    if (!GetMenuInfo(menu, &info) ||
+        info.dwMenuData != reinterpret_cast<ULONG_PTR>(&kOwnedMenuTag)) return false;
+    const int count = GetMenuItemCount(menu);
+    if (count < 0) return false;
+    for (int i = 0; i < count; ++i) {
+        HMENU child = GetSubMenu(menu, i);
+        if (child && !IsOwnedTree(child)) return false;
+    }
+    return true;
+}
+
+static bool IsHighContrast() noexcept {
+    HIGHCONTRASTW info = {};
+    info.cbSize = sizeof(info);
+    // If the accessibility state cannot be queried, keep the stock palette too.
+    return !SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(info), &info, 0) ||
+           (info.dwFlags & HCF_HIGHCONTRASTON);
+}
+
+static UINT Track(HMENU menu, HWND owner, int x, int y, UINT flags, UINT dpi) noexcept {
+    wchar_t ownerClass[64] = {};
+    const bool ownWindow = owner &&
+        GetWindowThreadProcessId(owner, nullptr) == GetCurrentThreadId() &&
+        GetClassNameW(owner, ownerClass, _countof(ownerClass)) &&
+        !wcscmp(ownerClass, L"Windows10WinXRestorer.MenuOwner");
+    if (!ownWindow || !IsOwnedTree(menu)) {
+        Wh_Log(L"[menu] win32 scoped theme rejected: owner/menu is not ours");
+        return static_cast<UINT>(TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    }
+    if (IsHighContrast() || ImmersiveMenu::IsLightTheme()) {
+        Wh_Log(L"[menu] win32 palette: system (light/high contrast), root %p", menu);
+        return static_cast<UINT>(TrackPopupMenuEx(menu, flags, x, y, owner, nullptr));
+    }
+    Wh_Log(L"[menu] win32 palette: dark; ONLY owned root %p and its submenus", menu);
+    // Still an HMENU/TrackPopupMenuEx popup with native metrics. Only its own
+    // entries are owner-drawn for colour; the 32-pixel immersive layout is NOT used.
+    // The owner subclass is removed when tracking ends. No app-wide preference,
+    // registry writes, permanent window subclass, or extra API detour is installed.
+    return ImmersiveMenu::Track(menu, owner, x, y, flags, dpi, true);
+}
+
+} // namespace NativeMenu
+
+
+// ---------------------------------------------------------------------------
+// Module settings and the process this mod acts in
+// ---------------------------------------------------------------------------
+static std::atomic<bool> g_winXMenuAnchorCursor{false};
+static std::atomic<int> g_winXMenuOffsetX{0};
+static std::atomic<int> g_winXMenuOffsetY{0};
+static std::atomic<bool> g_winXMenuSkinWin32{false};
+static std::atomic<bool> g_winXHideShutdown{false};
+static std::atomic<bool> g_winXTerminalFallback{true};
+
+// No executable-path or shell-style gate: normal Windows 11 explorer.exe and
+// private legacy explorer.exe copies are both eligible. Only the visible taskbar
+// owner arms input hooks, so ordinary folder processes stay idle.
 // The Shell_TrayWnd of this process, or null. FindWindowW is not enough: the
 // Windows 10 shell is a private copy of explorer.exe and can have sibling processes
 // started from the same folder, and only one of them owns the taskbar. Enumerating
@@ -705,7 +875,7 @@ static BOOL CALLBACK FindOwnTaskbarProc(HWND hwnd, LPARAM param) {
     }
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(hwnd)) return TRUE;
     *reinterpret_cast<HWND*>(param) = hwnd;
     return FALSE;
 }
@@ -725,10 +895,14 @@ static bool OwnsTaskbarWindow() {
 }
 
 static void LoadSettings() {
-    auto value = WindhawkUtils::StringSetting::make(L"WinXMenuAnchor");
+    WindhawkUtils::StringSetting value(Wh_GetStringSetting(L"WinXMenuAnchor"));
     g_winXMenuAnchorCursor = _wcsicmp(value.get(), L"cursor") == 0;
     g_winXMenuOffsetX = (int)Wh_GetIntSetting(L"WinXMenuOffsetX");
     g_winXMenuOffsetY = (int)Wh_GetIntSetting(L"WinXMenuOffsetY");
+    WindhawkUtils::StringSetting skin(Wh_GetStringSetting(L"WinXMenuSkin"));
+    g_winXMenuSkinWin32 = _wcsicmp(skin.get(), L"win32") == 0;
+    g_winXHideShutdown = Wh_GetIntSetting(L"WinXHideShutdown") != 0;
+    g_winXTerminalFallback = Wh_GetIntSetting(L"WinXTerminalFallback") != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -755,7 +929,7 @@ static std::atomic<HWND> g_winXMenuOwnerWindow{nullptr};
 static bool g_winXSwallowXUp = false;
 static bool g_winXXHeld = false;   // X is physically down: auto-repeat is ignored
 static bool g_winXMouseHookInstalled = false;
-static DWORD g_servicesThreadId = 0;
+static std::atomic<DWORD> g_servicesThreadId{0};
 // The thread that shows the menu. It is created by the services thread and joined
 // by Wh_ModUninit: the mod image must not be unloaded while the menu is on screen
 // or while the chosen entry is being opened.
@@ -992,16 +1166,22 @@ static void ClearWinXInputRoutes() {
 
 // startButton is the button the right-click came from, or null for the keyboard
 // chord: the menu opens on the taskbar the request came from.
-static bool PostWinXContextRequestFromHook(HWND startButton) {
+enum class WinXRequestSource : WPARAM {
+    KeyboardChord = 1,
+    StartRightClick = 2,
+    ModernMenuEntry = 3,
+};
+
+static bool PostWinXContextRequestFromHook(HWND startButton, WinXRequestSource source) {
     // The menu is not shown from here: this runs inside a low-level hook and
     // TrackPopupMenuEx blocks the thread. Windows removes a hook that does not answer
     // within LowLevelHooksTimeout (~300 ms), so the work is handed to the services
     // thread, which starts the menu thread.
-    return g_servicesThreadId &&
-           PostThreadMessageW(g_servicesThreadId, g_winXRouteMessage, 0,
+    const DWORD thread = g_servicesThreadId.load(std::memory_order_acquire);
+    return !g_unloading.load(std::memory_order_acquire) && thread &&
+           PostThreadMessageW(thread, g_winXRouteMessage, static_cast<WPARAM>(source),
                               reinterpret_cast<LPARAM>(startButton));
 }
-static bool IsPopupMenuForeground();
 
 // ---------------------------------------------------------------------------
 // Sets g_winXMenuOpen for exactly as long as the menu is on screen, whatever
@@ -1048,6 +1228,119 @@ static bool CloseWinXMenuIfOpen() {
 //
 // The root window may be the taskbar of any monitor: Windows 10 shows a Start button
 // on the secondary taskbars too, and a right-click on any of them opens the menu.
+// A XAML Start button has no child HWND or control ID. UI Automation is queried
+// only from this MTA worker, never inside a low-level hook or on the taskbar thread.
+// Publish a bounded cache; the input hook uses TryAcquireSRWLockShared so it cannot
+// stall waiting for UI Automation. No guessed "first 48 pixels" hit area is used.
+struct StartRectEntry { HWND taskbar; RECT rect; };
+static SRWLOCK g_startRectLock = SRWLOCK_INIT;
+static StartRectEntry g_startRects[16] = {};
+static unsigned g_startRectCount = 0;
+static HANDLE g_startDiscoveryThread = nullptr;
+
+static bool CachedStartRect(HWND taskbar, RECT* rect) {
+    if (!TryAcquireSRWLockShared(&g_startRectLock)) return false;
+    bool found = false;
+    for (unsigned i = 0; i < g_startRectCount; ++i) {
+        if (g_startRects[i].taskbar == taskbar) {
+            *rect = g_startRects[i].rect;
+            found = true;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_startRectLock);
+    return found;
+}
+
+struct DiscoveryBatch {
+    IUIAutomation* automation;
+    IUIAutomationCondition* condition;
+    StartRectEntry entries[16];
+    unsigned count;
+};
+
+static BOOL CALLBACK DiscoverStartRectProc(HWND taskbar, LPARAM param) {
+    auto* batch = reinterpret_cast<DiscoveryBatch*>(param);
+    if (g_unloading.load() || batch->count == _countof(batch->entries)) return FALSE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(taskbar, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(taskbar)) return TRUE;
+    wchar_t cls[64] = {};
+    GetClassNameW(taskbar, cls, _countof(cls));
+    if (_wcsicmp(cls, L"Shell_TrayWnd") && _wcsicmp(cls, L"Shell_SecondaryTrayWnd"))
+        return TRUE;
+
+    RECT rect = {};
+    HWND legacy = FindStartButtonInTaskbar(taskbar);
+    bool haveRect = legacy && GetWindowRect(legacy, &rect);
+    if (!haveRect && batch->automation && batch->condition) {
+        IUIAutomationElement* root = nullptr;
+        if (SUCCEEDED(batch->automation->ElementFromHandle(taskbar, &root)) && root) {
+            IUIAutomationElement* start = nullptr;
+            if (SUCCEEDED(root->FindFirst(TreeScope_Descendants, batch->condition, &start)) && start) {
+                BOOL offscreen = TRUE;
+                haveRect = SUCCEEDED(start->get_CurrentIsOffscreen(&offscreen)) && !offscreen &&
+                           SUCCEEDED(start->get_CurrentBoundingRectangle(&rect));
+                start->Release();
+            }
+            root->Release();
+        }
+    }
+    RECT taskbarRect = {}, intersection = {};
+    if (haveRect && rect.right > rect.left && rect.bottom > rect.top &&
+        GetWindowRect(taskbar, &taskbarRect) &&
+        IntersectRect(&intersection, &rect, &taskbarRect)) {
+        batch->entries[batch->count++] = {taskbar, intersection};
+    }
+    return TRUE;
+}
+
+static DWORD WINAPI StartDiscoveryThread(LPVOID stopEventParam) {
+    const HANDLE stop = static_cast<HANDLE>(stopEventParam);
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IUIAutomation* automation = nullptr;
+    IUIAutomationCondition* condition = nullptr;
+    // Explicit CLSID avoids a dependency on libuuid.
+    const CLSID clsid = {0xff48dba4, 0x60ef, 0x4201,
+                        {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
+    if (SUCCEEDED(com)) {
+        HRESULT hr = CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER,
+                                      IID_PPV_ARGS(&automation));
+        if (SUCCEEDED(hr) && automation) {
+            VARIANT value;
+            VariantInit(&value);
+            value.vt = VT_BSTR;
+            value.bstrVal = SysAllocString(L"StartButton");
+            if (value.bstrVal)
+                automation->CreatePropertyCondition(UIA_AutomationIdPropertyId, value, &condition);
+            VariantClear(&value);
+        }
+        if (!condition) Wh_Log(L"[winx] UI Automation unavailable; legacy Start detection only");
+    }
+    unsigned previousCount = UINT_MAX;
+    do {
+        DiscoveryBatch batch{};
+        batch.automation = automation;
+        batch.condition = condition;
+        if (OwnsTaskbarWindow())
+            EnumWindows(DiscoverStartRectProc, reinterpret_cast<LPARAM>(&batch));
+        AcquireSRWLockExclusive(&g_startRectLock);
+        g_startRectCount = batch.count;
+        for (unsigned i = 0; i < batch.count; ++i) g_startRects[i] = batch.entries[i];
+        ReleaseSRWLockExclusive(&g_startRectLock);
+        if (batch.count != previousCount) {
+            Wh_Log(L"[winx] cached Start button rectangles: %u", batch.count);
+            previousCount = batch.count;
+        }
+    } while (WaitForSingleObject(stop, 1000) == WAIT_TIMEOUT && !g_unloading.load());
+    if (condition) condition->Release();
+    if (automation) automation->Release();
+    if (SUCCEEDED(com)) CoUninitialize();
+    return 0;
+}
+
+static std::atomic<bool> g_modernNativeGuard{false};
+
 static HWND WinXStartButtonFromPoint(const POINT& point) {
     const HWND hit = WindowFromPoint(point);
     if (!hit) return nullptr;
@@ -1073,7 +1366,203 @@ static HWND WinXStartButtonFromPoint(const POINT& point) {
             return hwnd;
         }
     }
+    RECT startRect = {};
+    // With a native guard, let the shell identify a XAML Start request and catch
+    // actual menu creation in ShowStartButtonContextMenuAsync. UIA is for placement.
+    // Keep Win32 button interception above for legacy shells with broken Win+X.
+    if (!g_modernNativeGuard.load(std::memory_order_acquire) &&
+        CachedStartRect(root, &startRect) && PtInRect(&startRect, point))
+        return root;
     return nullptr;
+}
+
+// Native Win+X guards. These are private Microsoft PDB symbols, NOT a documented
+// Windows API. Resolve the exact decorated symbol in the PDB matching the loaded
+// image; do not reuse offsets from another build, and do not patch a coroutine.
+// Audited menu entry samples: Taskbar.View.dll 2124.12106.10.0 and 2608.26001.200.0.
+// Do NOT hook CLauncherTipContextMenu::ShowLauncherTipContextMenu: on an audited
+// Windows 11 24H2 image it is a feature-usage reporting stub returning S_OK,
+// not a request to create a menu. The original method must remain untouched.
+
+struct NativeModulePins {
+    HMODULE view = nullptr;
+    ~NativeModulePins() {
+        // Static destruction happens when Windhawk releases the mod DLL, after
+        // its function hooks have been removed. Keep target images alive until then.
+        if (view) FreeLibrary(view);
+    }
+};
+static NativeModulePins g_nativeModulePins;
+
+// Microsoft x64 ABI audit: each non-trivial, one-pointer WinRT value parameter
+// is passed indirectly as the address of an owned temporary. fire_and_forget is
+// empty and returns in the low byte of RAX in the audited images. Use an explicit
+// ABI thunk, not fake projected C++ types with the wrong destructor semantics.
+// These signatures are only used for the exact decorated x64 symbol below.
+using ShowStartButtonContextMenuAsync_t = BYTE(WINAPI*)(void*, void*, void*, void*);
+static ShowStartButtonContextMenuAsync_t ShowStartButtonContextMenuAsync_Original = nullptr;
+using ViewCoordinatorComPtrDestructor_t = void(WINAPI*)(void*);
+static ViewCoordinatorComPtrDestructor_t ViewCoordinatorComPtrDestructor = nullptr;
+static_assert(sizeof(void*) == 8, "Native Win+X interception requires x64");
+
+// Only a context already identified as Start by the shell reaches the modern
+// guard. The pointer is used for monitor selection, NEVER to decide if it is Start.
+static HWND NativeRequestTaskbar(const POINT* shellPoint) {
+    POINT point = {};
+    if (shellPoint) point = *shellPoint;
+    else GetCursorPos(&point);
+    HWND hit = WindowFromPoint(point);
+    HWND root = hit ? GetAncestor(hit, GA_ROOT) : nullptr;
+    DWORD pid = 0;
+    if (root) GetWindowThreadProcessId(root, &pid);
+    wchar_t cls[64] = {};
+    if (root && pid == GetCurrentProcessId() && GetClassNameW(root, cls, _countof(cls)) &&
+        (!_wcsicmp(cls, L"Shell_TrayWnd") || !_wcsicmp(cls, L"Shell_SecondaryTrayWnd")))
+        return root;
+    return FindOwnTaskbarWindow();
+}
+
+static void RedirectNativeWinX(const wchar_t* source, const POINT* point) {
+    Wh_Log(L"[winx-native] suppressed %s; redirecting to the mod", source);
+    if (!CloseWinXMenuIfOpen() && !PostWinXContextRequestFromHook(NativeRequestTaskbar(point), WinXRequestSource::ModernMenuEntry))
+        Wh_Log(L"[winx-native] ERROR: request queue unavailable; native menu stays suppressed");
+}
+
+// The first three projected parameters contain COM interface pointers. Destroy
+// only their temporary reference, not the caller's original projected objects.
+// memcpy avoids type-punning an opaque projected wrapper as an IUnknown**.
+static void DestroyProjectedTemporary(void* slot) {
+    if (!slot) return;
+    // This ABI slot holds one pointer, not the pointed-to COM object.
+    constexpr std::size_t kPointerBytes = sizeof(void*);
+    IUnknown* object = nullptr;
+    std::memcpy(&object, slot, kPointerBytes);
+    void* empty = nullptr;
+    std::memcpy(slot, &empty, kPointerBytes);
+    if (object) object->Release();
+}
+
+static BYTE WINAPI ShowStartButtonContextMenuAsync_Hook(
+    void* elementTemporary, void* modelTemporary,
+    void* frameTemporary, void* coordinatorTemporary) {
+    if (g_unloading.load(std::memory_order_acquire))
+        return ShowStartButtonContextMenuAsync_Original(
+            elementTemporary, modelTemporary, frameTemporary, coordinatorTemporary);
+
+    // Leave TaskbarController::OnStartContextRequested completely untouched.
+    // Its original checks decide whether there is an actual Win+X request.
+    // Only this real menu-creation entry point is replaced, before allocation
+    // or execution of the native coroutine. No partially started coroutine is
+    // abandoned and ordinary Start/Win-key notifications are not redirected.
+    RedirectNativeWinX(L"ContextMenus::ShowStartButtonContextMenuAsync", nullptr);
+    DestroyProjectedTemporary(elementTemporary);
+    DestroyProjectedTemporary(modelTemporary);
+    DestroyProjectedTemporary(frameTemporary);
+    // ViewCoordinator is an implementation object, not an IUnknown interface
+    // pointer. Use its own matching-PDB com_ptr destructor, never a guessed vtable.
+    if (coordinatorTemporary) ViewCoordinatorComPtrDestructor(coordinatorTemporary);
+    return 0;
+}
+
+static void* FindExactNativeSymbol(HMODULE module, const wchar_t* decorated) {
+    wchar_t path[MAX_PATH] = {};
+    GetModuleFileNameW(module, path, _countof(path));
+    Wh_Log(L"[winx-native] resolving %s in %s", decorated, path);
+    WH_FIND_SYMBOL_OPTIONS options = {};
+    options.optionsSize = sizeof(options);
+    options.symbolServer = nullptr; // Windhawk's default: Microsoft public symbols.
+    options.noUndecoratedSymbols = TRUE;
+    WH_FIND_SYMBOL symbol = {};
+    HANDLE search = Wh_FindFirstSymbol(module, &options, &symbol);
+    if (!search) {
+        Wh_Log(L"[winx-native] ERROR: matching PDB could not be enumerated for %s", path);
+        return nullptr;
+    }
+    void* address = nullptr;
+    do {
+        if (symbol.symbolDecorated && !wcscmp(symbol.symbolDecorated, decorated)) {
+            address = symbol.address;
+            break;
+        }
+    } while (Wh_FindNextSymbol(search, &symbol));
+    Wh_FindCloseSymbol(search);
+    if (address)
+        Wh_Log(L"[winx-native] exact symbol resolved at %p", address);
+    else
+        Wh_Log(L"[winx-native] ERROR: required symbol is absent in this build: %s", decorated);
+    return address;
+}
+
+static HMODULE GetNativeTaskbarView(bool* imageExists) {
+    *imageExists = false;
+    HMODULE module = nullptr;
+    // GetModuleHandleEx increments the reference count, unlike GetModuleHandle.
+    if (GetModuleHandleExW(0, L"Taskbar.View.dll", &module) ||
+        GetModuleHandleExW(0, L"ExplorerExtensions.dll", &module)) {
+        *imageExists = true;
+        return module;
+    }
+    wchar_t windows[MAX_PATH] = {};
+    UINT n = GetSystemWindowsDirectoryW(windows, _countof(windows));
+    if (!n || n >= _countof(windows)) return nullptr;
+    static const wchar_t* paths[] = {
+        L"\\SystemApps\\MicrosoftWindows.Client.Core_cw5n1h2txyewy\\Taskbar.View.dll",
+        L"\\SystemApps\\MicrosoftWindows.Client.Core_cw5n1h2txyewy\\Core\\Taskbar.View.dll",
+        L"\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\Taskbar.View.dll",
+        L"\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\ExplorerExtensions.dll",
+    };
+    for (const wchar_t* suffix : paths) {
+        wchar_t path[MAX_PATH] = {};
+        _snwprintf_s(path, _countof(path), _TRUNCATE, L"%s%s", windows, suffix);
+        const DWORD attrs = GetFileAttributesW(path);
+        if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        *imageExists = true;
+        module = LoadLibraryExW(path, nullptr,
+                               LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        if (module) return module;
+        Wh_Log(L"[winx-native] ERROR: cannot load %s (%lu)", path, GetLastError());
+    }
+    return nullptr;
+}
+
+static bool InstallNativeWinXGuards() {
+    bool viewImageExists = false;
+    g_nativeModulePins.view = GetNativeTaskbarView(&viewImageExists);
+    // On Windows 11 a missing view image is an unsupported configuration,
+    // not permission to claim that modern native suppression is active.
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+    auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
+    OSVERSIONINFOW os = {};
+    os.dwOSVersionInfoSize = sizeof(os);
+    const bool windows11 = rtlGetVersion && rtlGetVersion(&os) == 0 && os.dwBuildNumber >= 22000;
+    if ((viewImageExists || windows11) && !g_nativeModulePins.view) {
+        Wh_Log(L"[winx-native] ERROR: required Windows 11 taskbar view could not be loaded");
+        return false;
+    }
+    // Resolve every required entry point and lifetime helper before registering
+    // any detour. A missing symbol is an initialization error, not a reason to
+    // bypass the controller's normal Start-state checks.
+    void* modern = nullptr;
+    if (g_nativeModulePins.view) {
+        modern = FindExactNativeSymbol(g_nativeModulePins.view,
+            L"?ShowStartButtonContextMenuAsync@ContextMenus@implementation@Taskbar@winrt@@YA?AUfire_and_forget@4@UFrameworkElement@Xaml@UI@Windows@4@UTaskbarModel@Shell@8WindowsUdk@4@UTaskbarFrame@34@U?$com_ptr@UViewCoordinator@implementation@Taskbar@winrt@@@4@@Z");
+        void* destructor = FindExactNativeSymbol(g_nativeModulePins.view,
+            L"??1?$com_ptr@UViewCoordinator@implementation@Taskbar@winrt@@@winrt@@QEAA@XZ");
+        if (!modern || !destructor) return false;
+        ViewCoordinatorComPtrDestructor =
+            reinterpret_cast<ViewCoordinatorComPtrDestructor_t>(destructor);
+    }
+    if (modern && !Wh_SetFunctionHook(modern,
+            reinterpret_cast<void*>(ShowStartButtonContextMenuAsync_Hook),
+            reinterpret_cast<void**>(&ShowStartButtonContextMenuAsync_Original))) {
+        Wh_Log(L"[winx-native] ERROR: could not register the modern Win+X guard");
+        return false;
+    }
+    g_modernNativeGuard.store(modern != nullptr, std::memory_order_release);
+    Wh_Log(L"[winx-native] modern menu guard registered: %s; legacy method is NOT hooked",
+           modern ? L"yes" : L"no view on this system");
+    return true;
 }
 
 static LRESULT CALLBACK WinXLowLevelKeyboardProc(int nCode, WPARAM wParam,
@@ -1111,7 +1600,8 @@ static LRESULT CALLBACK WinXLowLevelKeyboardProc(int nCode, WPARAM wParam,
                 if (repeat) return 1;
                 // Win+X opens the menu on the primary taskbar, as Windows 10 does,
                 // so no Start button is passed: the services thread resolves it.
-                if (!CloseWinXMenuIfOpen()) PostWinXContextRequestFromHook(nullptr);
+                if (!CloseWinXMenuIfOpen())
+                    PostWinXContextRequestFromHook(nullptr, WinXRequestSource::KeyboardChord);
 
                 // The shell must not see the chord. A dummy key (VK 0xE8, unassigned,
                 // injected and therefore ignored by this hook) keeps the release of
@@ -1142,27 +1632,20 @@ static LRESULT CALLBACK WinXLowLevelMouseProc(int nCode, WPARAM wParam,
         const auto* mouse = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
         if (!(mouse->flags & LLMHF_INJECTED)) {
             if (wParam == WM_RBUTTONDOWN) {
-                if (WinXStartButtonFromPoint(mouse->pt) && !IsPopupMenuForeground()) {
+                if (WinXStartButtonFromPoint(mouse->pt)) {
                     g_winXRightButtonDownOnStart = true;
                     return 1;
                 }
             } else if (g_winXRightButtonDownOnStart) {
                 g_winXRightButtonDownOnStart = false;
                 if (!CloseWinXMenuIfOpen())
-                    PostWinXContextRequestFromHook(WinXStartButtonFromPoint(mouse->pt));
+                    PostWinXContextRequestFromHook(WinXStartButtonFromPoint(mouse->pt),
+                                                  WinXRequestSource::StartRightClick);
                 return 1;
             }
         }
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
-}
-
-static bool IsPopupMenuForeground() {
-    HWND foreground = GetForegroundWindow();
-    if (!foreground) return false;
-    wchar_t cls[64] = {};
-    return GetClassNameW(foreground, cls, _countof(cls)) &&
-           _wcsicmp(cls, L"#32768") == 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1282,7 +1765,7 @@ static HWND GetWinXMenuOwnerWindow() {
     }
 
     // 1x1 off-screen popup, never activated by the user: it only anchors the menu.
-    HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+    HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW,
                                 kWinXOwnerClassName, L"", WS_POPUP,
                                 -32000, -32000, 1, 1, nullptr, nullptr,
                                 g_winXOwnerClassModule, nullptr);
@@ -1317,10 +1800,10 @@ static void UpdateWinXInputRoutes() {
 
     const ULONGLONG now = GetTickCount64();
     if (now < nextCheck) return;
-    nextCheck = now + 2500;
+    nextCheck = now + 500;
 
     // The hooks are system-wide, so they are armed only in the process that owns the
-    // taskbar. Until the taskbar of the Windows 10 shell is there, the mod does
+    // taskbar. Until a visible taskbar of this explorer.exe is there, the mod does
     // nothing.
     if (!OwnsTaskbarWindow()) {
         ClearWinXInputRoutes();
@@ -1346,7 +1829,7 @@ static void UpdateWinXInputRoutes() {
                g_winXKeyboardHookInstalled ? L"yes" : L"no",
                g_winXMouseHookInstalled ? L"yes" : L"no");
     } else if (!routeReported) {
-        // The hooks are retried every 2.5 s, so this line is a status note rather
+        // The hooks are retried every 500 ms, so this line is a status note rather
         // than a give-up message.
         routeReported = true;
         Wh_Log(L"[winx] no input hook is installed yet: it is retried every few seconds");
@@ -1522,8 +2005,9 @@ static WinXMenuAnchor ComputeWinXMenuAnchor(HWND startButton) {
     }
 
     RECT buttonRect = {};
-    const bool haveButton = startButton && IsWindow(startButton) &&
-                            GetWindowRect(startButton, &buttonRect);
+    bool haveButton = startButton && startButton != taskbar && IsWindow(startButton) &&
+                      GetWindowRect(startButton, &buttonRect);
+    if (!haveButton && taskbar) haveButton = CachedStartRect(taskbar, &buttonRect);
     const bool taskbarVertical =
         taskbar && (taskbarRect.bottom - taskbarRect.top) >
                        (taskbarRect.right - taskbarRect.left);
@@ -1578,8 +2062,19 @@ static WinXMenuAnchor ComputeWinXMenuAnchor(HWND startButton) {
     return anchor;
 }
 
+static bool IsTerminalInstalled() {
+    wchar_t path[MAX_PATH] = {};
+    const DWORD n = SearchPathW(nullptr, L"wt.exe", nullptr, _countof(path), path, nullptr);
+    if (!n || n >= _countof(path)) return false;
+    const DWORD attrs = GetFileAttributesW(path);
+    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
 static void ShowCustomWinXMenuHere(HWND startButton) {
     const UiLangId lang = DetectUiLang();
+    const bool usePowerShell = g_winXTerminalFallback.load() && !IsTerminalInstalled();
+    const bool hideShutdown = g_winXHideShutdown.load();
+    const bool win32Skin = g_winXMenuSkinWin32.load();
     
     // Create popup menu with all WIN+X entries
     ScopedMenu menu(CreatePopupMenu());
@@ -1689,18 +2184,37 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
     // Same order as the Windows 10 Win+X menu, with its two separators: after the
     // administrative terminal and before "Shut down or sign out".
     for (size_t i = 0; i < _countof(items); i++) {
+        if (hideShutdown && i == 14) continue;
         if (i == 10 || i == 14) AppendMenuW(menu.get(), MF_SEPARATOR, 0, nullptr);
         if (i == 14) {
             HMENU sub = CreatePopupMenu();
             if (sub) {
                 for (UINT k = 0; k < 4; k++)
                     AppendMenuW(sub, MF_STRING, 101 + k, kPowerText[k][lang]);
-                AppendMenuW(menu.get(), MF_POPUP | MF_STRING, (UINT_PTR)sub, items[i].text[lang]);
-                continue;
+                if (!AppendMenuW(menu.get(), MF_POPUP | MF_STRING,
+                                 (UINT_PTR)sub, items[i].text[lang])) DestroyMenu(sub);
             }
+            // Never turn a failed power submenu into an unrelated executable item.
+            continue;
+        }
+        if (usePowerShell && (i == 8 || i == 9)) {
+            wchar_t text[192] = {};
+            if (i == 8) {
+                wcscpy_s(text, L"Windows PowerShell");
+            } else {
+                // Keep the localized elevation suffix from Terminal (Admin).
+                const wchar_t* suffix = wcschr(items[i].text[lang], L'(');
+                _snwprintf_s(text, _countof(text), _TRUNCATE,
+                             L"Windows PowerShell %s", suffix ? suffix : L"(Admin)");
+            }
+            AppendMenuW(menu.get(), MF_STRING, (UINT)(i + 1), text);
+            continue;
         }
         AppendMenuW(menu.get(), MF_STRING, (UINT)(i + 1), items[i].text[lang]);
     }
+
+    if (win32Skin && !NativeMenu::MarkOwnedTree(menu.get()))
+        Wh_Log(L"[menu] could not mark the owned Win+X menu tree (%lu)", GetLastError());
 
     // Anchor: the Windows 10 position, resolved from the taskbar and the Start
     // button at show time. The raw cursor is used only when there is no taskbar:
@@ -1727,14 +2241,31 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
     // chord can tell "already open" from "not open" (see WinXMenuOpenScope).
     Wh_Log(L"[winx] menu on thread %lu, owner 0x%p", GetCurrentThreadId(), (void*)owner);
 
-    const WinXMenuOpenScope menuOpen(owner);
-    const UINT selected = ImmersiveMenu::Track(menu.get(), owner, pt.x, pt.y,
-                                               TPM_RIGHTBUTTON | alignFlags,
-                                               anchor.dpi);
-    PostMessageW(owner, WM_NULL, 0, 0);
+    UINT selected = 0;
+    {
+        const WinXMenuOpenScope menuOpen(owner);
+        // Rendering remains independent of input interception. Light Win32 mode
+        // stays system-rendered; dark Win32 mode paints only our owned menu items.
+        const UINT flags = TPM_RIGHTBUTTON | TPM_RETURNCMD | alignFlags;
+        Wh_Log(L"[winx] skin: %s, PowerShell fallback: %s, hide power: %s",
+               win32Skin ? L"win32" : L"immersive",
+               usePowerShell ? L"yes" : L"no", hideShutdown ? L"yes" : L"no");
+        selected = win32Skin
+            ? NativeMenu::Track(menu.get(), owner, pt.x, pt.y, flags, anchor.dpi)
+            : ImmersiveMenu::Track(menu.get(), owner, pt.x, pt.y, flags, anchor.dpi);
+        PostMessageW(owner, WM_NULL, 0, 0);
+    } // A launched command is not an open menu.
+
 
     if (selected >= 101 && selected <= 104)
         RunWinXCommand(kPowerCmd[selected - 101]);
+    else if ((selected == 9 || selected == 10) && usePowerShell) {
+        wchar_t path[MAX_PATH] = {};
+        const UINT n = GetSystemDirectoryW(path, _countof(path));
+        if (n && n < _countof(path) &&
+            wcscat_s(path, L"\\WindowsPowerShell\\v1.0\\powershell.exe") == 0)
+            RunCommand(path, nullptr, selected == 10 ? L"runas" : L"open", L"PowerShell");
+    }
     else if (selected > 0 && selected <= _countof(items))
         RunWinXCommand(items[selected - 1].command);
 }
@@ -1806,7 +2337,18 @@ static void ShowCustomWinXMenu(HWND startButton) {
 // Handles a Win+X request posted by the input hooks, with a short debounce so that a
 // burst of requests opens one menu. startButton is the button a right-click came
 // from, or null for the keyboard chord.
-static void HandleWinXRequest(HWND startButton) {
+static void HandleWinXRequest(HWND startButton, WinXRequestSource source) {
+    // A call to a deprecated shell stub is NOT a fourth request source.
+    const wchar_t* sourceName = nullptr;
+    switch (source) {
+        case WinXRequestSource::KeyboardChord: sourceName = L"keyboard Win+X"; break;
+        case WinXRequestSource::StartRightClick: sourceName = L"Start right-click (HWND)"; break;
+        case WinXRequestSource::ModernMenuEntry: sourceName = L"modern menu creation entry"; break;
+        default:
+            Wh_Log(L"[winx] unknown request source rejected");
+            return;
+    }
+    Wh_Log(L"[winx] request source: %s", sourceName);
     static ULONGLONG lastRequest = 0;
 
     const ULONGLONG now = GetTickCount64();
@@ -1847,12 +2389,16 @@ public:
 // ---------------------------------------------------------------------------
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_servicesThread = nullptr;
+static HANDLE g_servicesReadyEvent = nullptr;
 
 static DWORD WINAPI ExplorerServicesThread(LPVOID) {
     ScopedWinXServiceStateReset stateReset;
     g_servicesThreadId = GetCurrentThreadId();
     MSG queueInit{};
     PeekMessageW(&queueInit, nullptr, 0, 0, PM_NOREMOVE);
+    // Wh_ModInit waits for an actual queue, not an arbitrary startup sleep. The
+    // PDB detours must have somewhere to post as soon as Windhawk enables them.
+    if (g_servicesReadyEvent) SetEvent(g_servicesReadyEvent);
 
     // Arms the hooks as soon as this process owns the taskbar, and keeps them armed
     // from then on.
@@ -1861,20 +2407,26 @@ static DWORD WINAPI ExplorerServicesThread(LPVOID) {
            g_winXKeyboardHook.IsInstalled() ? L"ready" : L"unavailable",
            g_winXMouseHook.IsInstalled() ? L"ready" : L"unavailable");
 
-    // UpdateWinXInputRoutes does its work at most every 2.5 s (that is its own
+    // UpdateWinXInputRoutes does its work at most every 500 ms (that is its own
     // throttle), so that is also how long this thread sleeps when nothing is posted
     // to it; a shorter timeout would only wake it to do nothing. A request posted by
     // a hook, and the stop event, wake it immediately whatever the timeout is.
     for (;;) {
         const DWORD waitResult = MsgWaitForMultipleObjectsEx(
             g_stopEvent ? 1 : 0, g_stopEvent ? &g_stopEvent : nullptr,
-            2500, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            500, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         if (g_stopEvent && waitResult == WAIT_OBJECT_0) break;
 
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (msg.message == g_winXRouteMessage)
-                HandleWinXRequest(reinterpret_cast<HWND>(msg.lParam));
+            if (msg.message == g_winXRouteMessage) {
+                if (!g_unloading.load())
+                    HandleWinXRequest(reinterpret_cast<HWND>(msg.lParam),
+                                      static_cast<WinXRequestSource>(msg.wParam));
+            } else {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
         }
 
         // The taskbar can appear after this thread starts (and be recreated later):
@@ -1890,9 +2442,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
     Wh_Log(L"[winx] init");
 
-    if (!IsLegacyShellProcess()) {
-        // The Windows 11 shell: the mod is not kept loaded there.
-        Wh_Log(L"[winx] this process is not the Windows 10 shell: nothing to do");
+    g_unloading.store(false, std::memory_order_release);
+    Wh_Log(L"[winx] preparing native suppression for both legacy and modern taskbars");
+    if (!InstallNativeWinXGuards()) {
+        Wh_Log(L"[winx-native] INIT FAILED: native suppression is NOT available; mod not activated");
         return FALSE;
     }
 
@@ -1906,9 +2459,39 @@ BOOL Wh_ModInit() {
         return FALSE;
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        Wh_Log(L"[winx] stop event could not be created (%lu)", GetLastError());
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
+    g_servicesReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_servicesReadyEvent) {
+        Wh_Log(L"[winx] services-ready event failed (%lu)", GetLastError());
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
+    g_startDiscoveryThread = CreateThread(nullptr, 0, StartDiscoveryThread,
+                                          g_stopEvent, 0, nullptr);
+    if (!g_startDiscoveryThread) {
+        Wh_Log(L"[winx] Start discovery thread failed (%lu)", GetLastError());
+        CloseHandle(g_servicesReadyEvent);
+        g_servicesReadyEvent = nullptr;
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
     g_servicesThread = CreateThread(nullptr, 0, ExplorerServicesThread, nullptr, 0, nullptr);
     if (!g_servicesThread) {
         Wh_Log(L"[winx] services thread not created (%lu)", GetLastError());
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_startDiscoveryThread, INFINITE);
+        CloseHandle(g_startDiscoveryThread);
+        g_startDiscoveryThread = nullptr;
+        CloseHandle(g_servicesReadyEvent);
+        g_servicesReadyEvent = nullptr;
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
@@ -1916,7 +2499,31 @@ BOOL Wh_ModInit() {
         UnregisterWinXOwnerWindowClass();
         return FALSE;
     }
+    if (WaitForSingleObject(g_servicesReadyEvent, 5000) != WAIT_OBJECT_0) {
+        Wh_Log(L"[winx-native] INIT FAILED: services message queue did not become ready");
+        g_unloading.store(true);
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_servicesThread, INFINITE);
+        WaitForSingleObject(g_startDiscoveryThread, INFINITE);
+        CloseHandle(g_servicesThread);
+        CloseHandle(g_startDiscoveryThread);
+        CloseHandle(g_servicesReadyEvent);
+        CloseHandle(g_stopEvent);
+        g_servicesThread = nullptr;
+        g_startDiscoveryThread = nullptr;
+        g_servicesReadyEvent = nullptr;
+        g_stopEvent = nullptr;
+        UnregisterWinXOwnerWindowClass();
+        return FALSE;
+    }
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    // According to the Windhawk SDK, pending detours are applied after Init and
+    // before this callback. No delayed symbol installation is scheduled here.
+    Wh_Log(L"[winx-native] ACTIVE: modern menu guard %s; legacy method untouched; request queue ready",
+           g_modernNativeGuard.load() ? L"yes" : L"not present");
 }
 
 void Wh_ModBeforeUninit() {
@@ -1928,6 +2535,14 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    // Be safe even if the host did not call BeforeUninit first.
+    g_unloading.store(true, std::memory_order_release);
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    if (g_startDiscoveryThread) {
+        WaitForSingleObject(g_startDiscoveryThread, INFINITE);
+        CloseHandle(g_startDiscoveryThread);
+        g_startDiscoveryThread = nullptr;
+    }
     if (g_servicesThread) {
         // No timeout: the thread is waved off through its event, and it never waits on
         // anything this thread holds. Joining it first also means that no new menu
@@ -1957,6 +2572,10 @@ void Wh_ModUninit() {
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
+    }
+    if (g_servicesReadyEvent) {
+        CloseHandle(g_servicesReadyEvent);
+        g_servicesReadyEvent = nullptr;
     }
     UnregisterWinXOwnerWindowClass();
     g_servicesThreadId = 0;
