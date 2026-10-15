@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              what-when-where-notes
-// @name            WHAT WHEN WHERE NOTES MOD
+// @name            What When Where Notes
 // @description     Multi-row notes with a centered title and editable note lines.
 // @version         1.3.2
 // @author          SilverAmd
@@ -12,10 +12,10 @@
 
 // ==WindhawkModReadme==
 /*
-# WHAT WHEN WHERE NOTES MOD
+# What When Where Notes
 
 A customizable desktop note overlay for Windows, powered by Windhawk.
-Organize reminders in three editable parts: **WHAT - WHEN - WHERE**.
+Organize reminders in three editable parts: **What - When - Where**.
 
 ## Screenshots
 
@@ -41,13 +41,13 @@ Click the colored circle next to a task to change its state:
 
 - ⚪ **Gray — Open:** The task has not been started.
 - 🔴 **Red — In Progress:** Work on the task is underway.
-- 🟢 **Green — Completed:** WHAT, WHEN and WHERE are struck through.
+- 🟢 **Green — Completed:** What, When and Where are struck through.
 
 **Cycle:** ⚪ Open → 🔴 In Progress → 🟢 Completed → ⚪ Open. Each task's status is saved across Windhawk restarts.
 
 ## Features
 
-- Up to **14 numbered note rows** with independently editable WHAT, WHEN and WHERE fields.
+- Up to **14 numbered note rows** with independently editable What, When and Where fields.
 - Optional centered title, adjustable fonts, spacing and colors.
 - Three status states for each row: **gray** (open), **red** (in progress), and **green** (done). Completed notes are struck through.
 - Add rows, remove the last row, or delete a selected row.
@@ -57,7 +57,7 @@ Click the colored circle next to a task to change its state:
 
 ## Using the notes
 
-- **Click** a WHAT, WHEN or WHERE field to edit it. Press **Enter** to save or **Esc** to cancel. Leaving the edit field also saves.
+- **Click** a What, When or Where field to edit it. Press **Enter** to save or **Esc** to cancel. Leaving the edit field also saves.
 - Click **+** to add a row (up to the configured maximum) or **-** to remove the last row.
 - Click the **X** next to a row to delete that row. At least one row is kept.
 - Click a **status circle** to cycle through open, in progress and done.
@@ -76,16 +76,16 @@ Open **Settings** to customize the initial position, always-on-top mode, title, 
 - Designed for **Windows / Windhawk**.
 - Runs as a Windhawk **tool mod**, using a dedicated `windhawk.exe` helper process.
 - The overlay is implemented with the Windows API and GDI.
-- Source code and license: see the project's GitHub repository.
+- Source code and license: [GitHub repository](https://github.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD).
 
 ## Project background and relation to Easy Notes
 
 This mod is an independent Windows/Windhawk implementation inspired by the
-original ToDoLite / WHAT WHEN WHERE Rainmeter project by the same author:
+original ToDoLite / What When Where Rainmeter project by the same author:
 https://forum.rainmeter.net/viewtopic.php?t=42543#p215957
 
 Unlike free-form desktop sticky notes, this mod displays a structured three-field
-task list (WHAT / WHEN / WHERE) with distinct Open / In Progress / Completed
+task list (What / When / Where) with distinct Open / In Progress / Completed
 states. The current version is intentionally focused on that workflow.
 
 ## Author
@@ -108,7 +108,7 @@ states. The current version is intentionally focused on that workflow.
 - title:
   - enabled: true
     $name: Show title
-  - text: "WHAT WHEN WHERE NOTES"
+  - text: "What When Where Notes"
     $name: Title text
   - gap: 18
     $name: Gap below title
@@ -119,13 +119,13 @@ states. The current version is intentionally focused on that workflow.
 - notes:
   - note1DefaultText: "What"
     $name: Default note 1
-    $description: "WHAT"
+    $description: "What"
   - note2DefaultText: "When"
     $name: Default note 2
-    $description: "WHEN"
+    $description: "When"
   - note3DefaultText: "Where"
     $name: Default note 3
-    $description: "WHERE"
+    $description: "Where"
   - separator1: "-"
     $name: Separator 1
     $description: "Between note 1 and note 2."
@@ -239,7 +239,7 @@ struct Settings {
     int maxRows = MAX_ROWS;
 
     bool titleEnabled = true;
-    std::wstring titleText = L"WHAT WHEN WHERE NOTES";
+    std::wstring titleText = L"What When Where Notes";
     int titleGap = 18;
     std::wstring titleColorHex = L"#0000FF";
 
