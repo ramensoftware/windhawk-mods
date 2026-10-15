@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-15T19:03:01.000Z</updated>
+    <updated>2026-10-15T21:02:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.2.0]]></title>
+        <id>https://windhawk.net/mods/hide-taskbar-tooltips#e3976aca5c5f511878e4beefdc2e9ef65cd5565b</id>
+        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
+        <updated>2026-10-15T21:02:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <code>hideTrayOverflowTooltips</code> setting (enabled by default) to suppress hover tooltips for hidden icons inside the system tray overflow drawer.</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Windows Audio Limiter 1.0]]></title>
         <id>https://windhawk.net/mods/disable-audio-limiter#5b3cb48c0878eae050751c3343edc10d3e494a05</id>
@@ -886,18 +899,6 @@ stops if the required symbols or layout cannot be recognized.</p>]]></content>
         <author>
             <name>David Ravelo</name>
             <uri>https://github.com/DavidRaveloU</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SameFolderOnly 4.1.6]]></title>
-        <id>https://windhawk.net/mods/xandriw-explorer-select-interceptor#f84557687abb7a0746a6782c211327ef1f8655a7</id>
-        <link href="https://windhawk.net/mods/xandriw-explorer-select-interceptor"/>
-        <updated>2026-10-14T05:00:41.000Z</updated>
-        <content type="html"><![CDATA[<p>Rewrote the description and README in plain English.</p>
-<p>Clarified folder reuse, file selection, Shift bypass, and limitations.</p>]]></content>
-        <author>
-            <name>XandriW</name>
-            <uri>https://github.com/xandri19wang</uri>
         </author>
     </entry>
 </feed>

@@ -7794,7 +7794,7 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 2.010219313681494,
-        "updated": 1791741892000,
+        "updated": 1792098128000,
         "users": 104
       },
       "metadata": {
@@ -7811,7 +7811,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Hide Taskbar Tooltips",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "hide-titlebar-elements": {
