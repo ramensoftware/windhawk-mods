@@ -9,7 +9,7 @@
 // @github          https://github.com/CYoJkoY
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ladvapi32 -ld2d1 -lole32 -lgdi32 -lshell32
+// @compilerOptions -ladvapi32 -ld2d1 -lole32 -lgdi32 -lshell32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,9 +17,9 @@
 # Cursor Tail
 
 Cursor Tail adds a smooth, tapered motion-blur trail behind the mouse pointer
-when it moves quickly, with optional click and scroll feedback for clearer
-interaction cues. All effects use a transparent Direct2D overlay, independently
-of the application under the pointer.
+when it moves quickly, with optional click ripples and animated directional
+scroll-wheel arrows for clearer interaction cues. All effects use a transparent
+Direct2D overlay, independently of the application under the pointer.
 
 ## Preview
 
@@ -34,7 +34,7 @@ of the application under the pointer.
 - **Custom appearance:** Configure trail color, outline color, gradient, and optional glow.
 - **Adaptive color:** Automatically sample the active cursor image and prefer colors with sufficient contrast against the screen background.
 - **Fade-out:** Smoothly fade the trail after the pointer slows down.
-- **Interaction feedback:** Optional expanding ripples for left, right, and middle clicks, plus direction-specific scroll-wheel pulses. These effects can run without a motion trail.
+- **Interaction feedback:** Optional expanding rings for left, right, and middle clicks, plus animated arrows that travel up or down with the scroll direction. These effects can run without a motion trail.
 - **Per-app rules:** Enable or disable the trail for selected executables.
 - **Fullscreen suppression:** Automatically hide the trail for exclusive or borderless fullscreen applications and restore it after fullscreen ends.
 
@@ -44,7 +44,7 @@ of the application under the pointer.
 
 The outline can either be derived automatically from the trail luminance or set to a fixed hexadecimal color.
 
-**Screen capture:** Auto mode reads the screen background around the pointer, and that sample must not pick up the overlay's own pixels. While Auto mode is active the entire overlay is therefore excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE`), including click and scroll ripples. Manual color mode never reads the screen, so the overlay stays capturable and its effects show up normally in captures.
+**Screen capture:** Auto mode reads the screen background around the pointer, and that sample must not pick up the overlay's own pixels. While Auto mode is active the entire overlay is therefore excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE`), including click rings and directional wheel arrows. Manual color mode never reads the screen, so the overlay stays capturable and its effects show up normally in captures.
 
 ## Per-app rules
 
@@ -64,25 +64,25 @@ The trail is suppressed when the foreground application reports a D3D fullscreen
 
 ## Performance
 
-Mouse movement and foreground changes wake the worker from an indefinite wait during ordinary idle, avoiding periodic cursor polling. Sampling runs at 125 Hz while an effect is active; a bounded 60 Hz fallback is used if raw input or foreground notifications are unavailable, or if a higher-integrity foreground window prevents raw input. Layered-window submission is paced separately at 60 FPS while actively moving and 30 FPS while fading. Input reports that fall inside the short wake-throttling window are coalesced and handled by a one-shot timer, and the idle back buffer is released after five seconds. Background luminance sampling is additionally limited by both time and cursor travel distance so repeated screen captures are avoided during short, fast sampling intervals. The back buffer and Direct2D resources are reused between frames and resized only when the required trail bounds grow beyond the current buffer.
+Mouse movement and foreground changes wake the worker from an indefinite wait during ordinary idle, avoiding periodic cursor polling. Sampling runs at 125 Hz while an effect is active. If raw input or foreground notifications are unavailable, or a higher-integrity foreground window blocks raw input, fallback polling samples every 10 ms for one second after detected movement, then backs off to 100 ms while idle. Layered-window submission is paced separately at 60 FPS while actively moving and 30 FPS while fading. Raw input reports that fall inside the short wake-throttling window are coalesced and handled by a one-shot timer, and the idle back buffer is released after five seconds. Background luminance sampling enforces a 50 ms minimum interval and also requires cursor travel before taking another screen sample. The back buffer and Direct2D resources are reused between frames and resized only when the required trail bounds grow beyond the current buffer.
 
 ## Related mods
 
-Windhawk also ships **Cursor Motion Blur**, **Mouse Trail**, **Simple Cursor Trail**, and **Pointer Afterimage Motion Blur**, all of which overlap with cursor-trail behavior. Cursor Tail began as a fork of Cursor Motion Blur (see Attribution); its configurable appearance and runtime behavior have since diverged, but whether it should remain a separate catalog entry is for the upstream maintainer to decide:
+Cursor Tail shares the general cursor-trail space with other Windhawk mods, but focuses on event-driven sampling with pixel-per-second thresholds, a configurable two-layer ribbon, cursor-image color candidates with contrast-aware selection, per-app rules, fullscreen suppression, and optional motion-specific acceleration/turn cues. Click rings and directional wheel arrows are optional and disabled by default.
 
-- **Sampling and timing:** event-driven input wakeups with bounded sampling while active, plus a separate render cadence. Pointer speed is normalised to pixels per second, so trigger and stop thresholds keep their meaning when the sample rate changes.
-- **Appearance:** separately configurable minimum/maximum outer and core widths, an optional gradient fill and an optional glow layer on top of the plain two-layer ribbon.
-- **Adaptive color:** cursor-image color extraction with histogram ranking, contrast selection against the sampled background luminance, and automatic or manual outline colors.
-- **Context awareness:** per-app `exe=on|off` rules and fullscreen suppression (D3D exclusive or borderless) with an exit confirmation delay.
-- **Interaction layer:** optional, button-specific click ripples and scroll-direction pulses rendered through the same bounded Direct2D backbuffer, without a particle subsystem. The low-level mouse hook is installed only while one of these effects is enabled.
-- **Motion cues:** optional fixed-capacity acceleration streaks and direction-change chevrons, with cooldowns and bounded lifetimes. Large movement intervals can insert a configurable number of trail samples to reduce visual gaps.
+- **Sampling and timing:** input-driven wakeups with bounded sampling while active, plus a separate render cadence. Trigger and stop speeds are measured in pixels per second rather than pixels per sample.
+- **Appearance:** separately configurable outer/core widths, optional gradient and glow, and automatic or manual outline colors.
+- **Adaptive color:** cursor-image color extraction with histogram ranking, contrast-aware selection, and hysteresis to avoid rapid color switching near the contrast boundary.
+- **Context awareness:** per-app `exe=on|off` rules and fullscreen suppression for exclusive or borderless applications.
+- **Interaction layer:** optional button-specific click rings and animated up/down scroll arrows. Interaction events use asynchronous raw mouse input instead of a system-wide low-level mouse hook.
+- **Motion cues:** optional fixed-capacity acceleration streaks and direction-change chevrons, plus bounded interpolation for large movement gaps.
+
+Comparable mods include:
 
 - [**Cursor Motion Blur**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-motion-blur.wh.cpp): the original basis for Cursor Tail, with a tapered motion-blur ribbon.
-- [**Mouse Trail**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/mouse-trail.wh.cpp): a ribbon-style trail with glow and cursor-extracted color.
+- [**Mouse Trail**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/mouse-trail.wh.cpp): a ribbon-style trail with glow and cursor-extracted color; it also provides an expanding click ring.
 - [**Simple Cursor Trail**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-trail.wh.cpp): a simpler line trail with a head-to-tail gradient.
 - [**Pointer Afterimage Motion Blur**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/pointer-afterimage-motion-blur.wh.cpp): an afterimage-based motion blur with event-driven sampling.
-
-Cursor Tail remains functionally close to the existing trail mods. Its future direction should be evaluated with the upstream maintainer and original mod author rather than on a claim of being a wholly distinct category.
 
 ## Attribution
 
@@ -257,15 +257,15 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
 
 - Interaction:
     - click_feedback_enabled: false
-      $name: Mouse click ripples
-      $name:zh-CN: 鼠标点击波纹
-      $description: Show an expanding ripple when the left, right, or middle mouse button is pressed. The mouse hook is installed only while click or wheel feedback is enabled.
-      $description:zh-CN: 按下鼠标左键、右键或中键时显示扩散波纹。仅在启用点击或滚轮反馈时安装鼠标钩子。
+      $name: Mouse click rings
+      $name:zh-CN: 鼠标点击圆环
+      $description: Show an expanding ring when the left, right, or middle mouse button is pressed. Click feedback uses asynchronous raw mouse input and does not install a low-level mouse hook.
+      $description:zh-CN: 按下鼠标左键、右键或中键时显示扩散圆环。点击反馈使用异步原始鼠标输入，不会安装低级鼠标钩子。
     - wheel_feedback_enabled: false
       $name: Scroll-wheel feedback
       $name:zh-CN: 滚轮反馈
-      $description: Show a ripple when the wheel scrolls up or down, using a separate color for each direction.
-      $description:zh-CN: 滚轮向上或向下滚动时显示波纹，并为两个方向分别设置颜色。
+      $description: Show an animated arrow that moves up or down with the wheel direction, using a separate color for each direction.
+      $description:zh-CN: 滚轮向上或向下滚动时显示随方向移动的箭头，并为两个方向分别设置颜色。
     - left_click_color: "#00D7FF"
       $name: Left-click color
       $name:zh-CN: 左键颜色
@@ -284,33 +284,43 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
     - wheel_up_color: "#7CFF6B"
       $name: Scroll-up color
       $name:zh-CN: 向上滚动颜色
-      $description: Hexadecimal RGB color used when the wheel scrolls up.
-      $description:zh-CN: 滚轮向上滚动时使用的十六进制 RGB 颜色。
+      $description: Hexadecimal RGB color used by the upward-moving scroll arrow.
+      $description:zh-CN: 向上移动的滚轮箭头使用的十六进制 RGB 颜色。
     - wheel_down_color: "#A78BFA"
       $name: Scroll-down color
       $name:zh-CN: 向下滚动颜色
-      $description: Hexadecimal RGB color used when the wheel scrolls down.
-      $description:zh-CN: 滚轮向下滚动时使用的十六进制 RGB 颜色。
+      $description: Hexadecimal RGB color used by the downward-moving scroll arrow.
+      $description:zh-CN: 向下移动的滚轮箭头使用的十六进制 RGB 颜色。
+    - wheel_arrow_size: 18
+      $name: Scroll-arrow size
+      $name:zh-CN: 滚轮箭头大小
+      $description: Overall size of the animated scroll arrow in pixels. Range 6-40.
+      $description:zh-CN: 滚轮动画箭头的整体大小，单位为像素。范围为 6-40。
+    - wheel_arrow_distance: 32
+      $name: Scroll-arrow travel distance
+      $name:zh-CN: 滚轮箭头移动距离
+      $description: Distance travelled by each scroll arrow during its animation, in pixels. Range 8-120.
+      $description:zh-CN: 滚轮箭头在动画过程中移动的距离，单位为像素。范围为 8-120。
     - ripple_radius: 36
-      $name: Ripple radius
-      $name:zh-CN: 波纹半径
-      $description: Maximum ripple radius in pixels. Range 10-200.
-      $description:zh-CN: 波纹的最大半径，单位为像素。范围为 10-200。
+      $name: Click-ring radius
+      $name:zh-CN: 点击圆环半径
+      $description: Maximum radius of the expanding click ring in pixels. Range 10-200.
+      $description:zh-CN: 点击扩散圆环的最大半径，单位为像素。范围为 10-200。
     - ripple_duration_ms: 420
-      $name: Ripple duration
-      $name:zh-CN: 波纹持续时间
-      $description: Duration of each ripple in milliseconds. Range 100-2000.
-      $description:zh-CN: 每个波纹的动画持续时间，单位为毫秒。范围为 100-2000。
-    - ripple_width: 2
-      $name: Ripple stroke width
-      $name:zh-CN: 波纹线宽
-      $description: Stroke width of the ripple outline in pixels. Range 1-10.
-      $description:zh-CN: 波纹轮廓的线宽，单位为像素。范围为 1-10。
+      $name: Feedback duration
+      $name:zh-CN: 交互反馈持续时间
+      $description: Duration of each click ring or scroll arrow in milliseconds. Range 100-2000.
+      $description:zh-CN: 每个点击圆环或滚轮箭头的动画持续时间，单位为毫秒。范围为 100-2000。
+    - ripple_width: 3
+      $name: Interaction stroke width
+      $name:zh-CN: 交互线条粗细
+      $description: Stroke width of click-ring outlines and scroll arrows in pixels. Range 1-10.
+      $description:zh-CN: 点击圆环轮廓与滚轮箭头的线宽，单位为像素。范围为 1-10。
     - ripple_opacity: 78
-      $name: Ripple opacity
-      $name:zh-CN: 波纹不透明度
-      $description: Starting opacity of each ripple, from 5 to 100 percent.
-      $description:zh-CN: 每个波纹初始的不透明度，范围为 5%-100%。
+      $name: Feedback opacity
+      $name:zh-CN: 交互反馈不透明度
+      $description: Starting opacity of each click ring or scroll arrow, from 5 to 100 percent.
+      $description:zh-CN: 每个点击圆环或滚轮箭头的初始不透明度，范围为 5%-100%。
   $name: Interaction
   $name:zh-CN: 交互反馈
 
@@ -385,6 +395,7 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
 #include <math.h>
 #include <cmath>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <cwctype>
 
 #include <algorithm>
@@ -403,7 +414,6 @@ constexpr UINT kSettingsChangedMessage = WM_APP + 1;
 constexpr int kTargetFrameRate = 125;
 constexpr int kActiveRenderFrameRate = 60;
 constexpr int kFadeRenderFrameRate = 30;
-constexpr int kFallbackFrameRate = 60;
 constexpr DWORD kInputWakeThrottleMs = 8;
 constexpr DWORD kFullscreenStrongCheckIntervalMs = 100;
 constexpr DWORD kFullscreenExitConfirmMs = 500;
@@ -419,6 +429,10 @@ constexpr int kBackgroundSampleGrid = 5;
 constexpr DWORD kBackgroundResampleIntervalMs = 50;
 constexpr LONG kBackgroundResampleDistancePx = 20;
 constexpr float kMinColorContrast = 3.0f;
+constexpr float kAutoColorHysteresisContrast = 2.5f;
+constexpr DWORD kFallbackActivePollIntervalMs = 10;
+constexpr DWORD kFallbackIdlePollIntervalMs = 100;
+constexpr DWORD kFallbackIdleDelayMs = 1000;
 constexpr uint8_t kCursorAlphaThreshold = 96;
 constexpr uint32_t kFallbackCoreColor = 0x00FFFFFF;
 constexpr uint32_t kFallbackOuterColor = 0x00000000;
@@ -448,6 +462,9 @@ bool g_pollingFallback = true;
 bool g_currentIntegrityLevelAttempted = false;
 bool g_currentIntegrityLevelKnown = false;
 DWORD g_currentIntegrityLevelRid = SECURITY_MANDATORY_MEDIUM_RID;
+POINT g_fallbackCursorPosition = {};
+DWORD g_fallbackLastMovementTick = 0;
+bool g_fallbackCursorPositionValid = false;
 LONGLONG g_nextSampleDeadline = 0;
 LONGLONG g_lastRawInputWakeQpc = 0;
 HWINEVENTHOOK g_foregroundEventHook = nullptr;
@@ -542,8 +559,10 @@ uint32_t g_middleClickRGB = 0x00FFD166;
 uint32_t g_wheelUpRGB = 0x007CFF6B;
 uint32_t g_wheelDownRGB = 0x00A78BFA;
 float g_rippleRadius = 36.0f;
+float g_wheelArrowSize = 18.0f;
+float g_wheelArrowDistance = 32.0f;
 int g_rippleDurationMs = 420;
-float g_rippleStrokeWidth = 2.0f;
+float g_rippleStrokeWidth = 3.0f;
 float g_rippleOpacity = 0.78f;
 int g_accelerationAccentEnabled = 0;
 int g_turnAccentEnabled = 0;
@@ -556,10 +575,17 @@ float g_motionAccentOpacity = 0.82f;
 int g_maxInterpolationSteps = 4;
 uint32_t g_motionAccentRGB = 0x00FFD166;
 
+enum class RippleKind : uint8_t {
+    Click,
+    WheelUp,
+    WheelDown,
+};
+
 struct RippleEffect {
     POINT center = {};
     LONGLONG startQpc = 0;
     uint32_t color = 0x0000D7FF;
+    RippleKind kind = RippleKind::Click;
     bool active = false;
 };
 
@@ -582,8 +608,6 @@ RippleEffect g_ripples[kMaxActiveRipples] = {};
 int g_nextRippleSlot = 0;
 MotionAccent g_motionAccents[kMaxActiveMotionAccents] = {};
 int g_nextMotionAccentSlot = 0;
-HHOOK g_mouseHook = nullptr;
-HMODULE g_mouseHookModule = nullptr;
 
 struct AppRule { std::wstring exe; bool enabled; };
 std::vector<AppRule> g_appRules;
@@ -816,49 +840,39 @@ static bool GetProcessExeName(DWORD pid, std::wstring& out) {
     return true;
 }
 
-static void ParseAppRuleText(const wchar_t* text) {
+static void ParseAppRuleEntry(const wchar_t* text) {
     if (!text) return;
 
-    const std::wstring input(text);
-    size_t start = 0;
-    while (start <= input.size()) {
-        size_t end = input.find_first_of(L"\r\n", start);
-        if (end == std::wstring::npos) end = input.size();
-        std::wstring ruleText = input.substr(start, end - start);
-        const size_t comment = ruleText.find(L'#');
-        if (comment != std::wstring::npos) ruleText.resize(comment);
-        const size_t equals = ruleText.find(L'=');
-        if (equals != std::wstring::npos) {
-            std::wstring exe = ruleText.substr(0, equals);
-            std::wstring value = ruleText.substr(equals + 1);
-            const auto trim = [](std::wstring& value) {
-                const size_t first = value.find_first_not_of(L" \t");
-                if (first == std::wstring::npos) {
-                    value.clear();
-                    return;
-                }
-                const size_t last = value.find_last_not_of(L" \t");
-                value = value.substr(first, last - first + 1);
-            };
-            trim(exe);
-            trim(value);
+    std::wstring ruleText(text);
+    const size_t comment = ruleText.find(L'#');
+    if (comment != std::wstring::npos) ruleText.resize(comment);
+    const size_t equals = ruleText.find(L'=');
+    if (equals == std::wstring::npos) return;
 
-            const bool enabled = _wcsicmp(value.c_str(), L"on") == 0
-                || value == L"1"
-                || _wcsicmp(value.c_str(), L"true") == 0
-                || _wcsicmp(value.c_str(), L"yes") == 0;
-            const bool disabled = _wcsicmp(value.c_str(), L"off") == 0
-                || value == L"0"
-                || _wcsicmp(value.c_str(), L"false") == 0
-                || _wcsicmp(value.c_str(), L"no") == 0;
-            if (!exe.empty() && (enabled || disabled)) {
-                g_appRules.push_back({ToLowerW(exe), enabled});
-            }
+    std::wstring exe = ruleText.substr(0, equals);
+    std::wstring value = ruleText.substr(equals + 1);
+    const auto trim = [](std::wstring& item) {
+        const size_t first = item.find_first_not_of(L" \t");
+        if (first == std::wstring::npos) {
+            item.clear();
+            return;
         }
+        const size_t last = item.find_last_not_of(L" \t");
+        item = item.substr(first, last - first + 1);
+    };
+    trim(exe);
+    trim(value);
 
-        if (end == input.size()) break;
-        start = input.find_first_not_of(L"\r\n", end);
-        if (start == std::wstring::npos) break;
+    const bool enabled = _wcsicmp(value.c_str(), L"on") == 0
+        || value == L"1"
+        || _wcsicmp(value.c_str(), L"true") == 0
+        || _wcsicmp(value.c_str(), L"yes") == 0;
+    const bool disabled = _wcsicmp(value.c_str(), L"off") == 0
+        || value == L"0"
+        || _wcsicmp(value.c_str(), L"false") == 0
+        || _wcsicmp(value.c_str(), L"no") == 0;
+    if (!exe.empty() && (enabled || disabled)) {
+        g_appRules.push_back({ToLowerW(exe), enabled});
     }
 }
 
@@ -877,14 +891,7 @@ static void ParseAppRules() {
         }
 
         consecutiveEmptyEntries = 0;
-        ParseAppRuleText(value);
-    }
-
-    // Existing installs may still have the former multiline string stored.
-    if (g_appRules.empty()) {
-        WindhawkUtils::StringSetting legacySetting =
-            WindhawkUtils::StringSetting::make(L"Application.app_rules");
-        ParseAppRuleText(legacySetting.get());
+        ParseAppRuleEntry(value);
     }
 }
 
@@ -907,6 +914,7 @@ static int CheckAppRuleCached(HWND foreground) {
     return g_cachedAppRule;
 }
 
+static void ClearRipples();
 static void ClearMotionAccents();
 static void ResetMotionCueTracking();
 
@@ -971,7 +979,10 @@ void LoadSettings() {
     g_autoResampleInterval = std::clamp(Wh_GetIntSetting(L"Color.auto_resample_interval"), 0, kAutoResampleIntervalMaxMs);
     g_clickFeedbackEnabled = std::clamp(Wh_GetIntSetting(L"Interaction.click_feedback_enabled"), 0, 1);
     g_wheelFeedbackEnabled = std::clamp(Wh_GetIntSetting(L"Interaction.wheel_feedback_enabled"), 0, 1);
+    if (!g_clickFeedbackEnabled && !g_wheelFeedbackEnabled) ClearRipples();
     g_rippleRadius = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Interaction.ripple_radius"), 10, 200));
+    g_wheelArrowSize = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Interaction.wheel_arrow_size"), 6, 40));
+    g_wheelArrowDistance = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Interaction.wheel_arrow_distance"), 8, 120));
     g_rippleDurationMs = std::clamp(Wh_GetIntSetting(L"Interaction.ripple_duration_ms"), 100, 2000);
     g_rippleStrokeWidth = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Interaction.ripple_width"), 1, 10));
     g_rippleOpacity = std::clamp(Wh_GetIntSetting(L"Interaction.ripple_opacity"), 5, 100) / 100.0f;
@@ -1201,7 +1212,7 @@ static bool HasActiveRipples(LONGLONG nowQpc) {
     return UpdateRippleState(nowQpc) > 0;
 }
 
-static void AddRipple(const POINT& center, uint32_t color) {
+static void AddRipple(const POINT& center, uint32_t color, RippleKind kind = RippleKind::Click) {
     int selectedSlot = -1;
     for (int offset = 0; offset < kMaxActiveRipples; ++offset) {
         const int candidateSlot = (g_nextRippleSlot + offset) % kMaxActiveRipples;
@@ -1217,87 +1228,11 @@ static void AddRipple(const POINT& center, uint32_t color) {
     ripple.center = center;
     ripple.startQpc = QpcNow();
     ripple.color = color;
+    ripple.kind = kind;
     ripple.active = true;
     g_interactionPending = true;
     if (g_inputWakeEvent) SetEvent(g_inputWakeEvent);
 }
-
-static LRESULT CALLBACK LowLevelMouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && lParam != 0) {
-        const auto* mouseInfo = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-        uint32_t rippleColor = 0;
-        bool shouldRipple = false;
-        switch (wParam) {
-        case WM_LBUTTONDOWN:
-            shouldRipple = g_clickFeedbackEnabled != 0;
-            rippleColor = g_leftClickRGB;
-            break;
-        case WM_RBUTTONDOWN:
-            shouldRipple = g_clickFeedbackEnabled != 0;
-            rippleColor = g_rightClickRGB;
-            break;
-        case WM_MBUTTONDOWN:
-            shouldRipple = g_clickFeedbackEnabled != 0;
-            rippleColor = g_middleClickRGB;
-            break;
-        case WM_MOUSEWHEEL:
-            if (g_wheelFeedbackEnabled != 0) {
-                const SHORT wheelDelta = static_cast<SHORT>(HIWORD(mouseInfo->mouseData));
-                if (wheelDelta != 0) {
-                    shouldRipple = true;
-                    rippleColor = wheelDelta > 0 ? g_wheelUpRGB : g_wheelDownRGB;
-                }
-            }
-            break;
-        default:
-            break;
-        }
-        if (shouldRipple) AddRipple(mouseInfo->pt, rippleColor);
-    }
-    return CallNextHookEx(g_mouseHook, code, wParam, lParam);
-}
-
-static void ReleaseMouseHook() {
-    if (g_mouseHook) {
-        if (!UnhookWindowsHookEx(g_mouseHook)) {
-            Wh_Log(L"UnhookWindowsHookEx failed: %lu", GetLastError());
-            return;
-        }
-        g_mouseHook = nullptr;
-    }
-    if (g_mouseHookModule) {
-        FreeLibrary(g_mouseHookModule);
-        g_mouseHookModule = nullptr;
-    }
-}
-
-static void SyncMouseHook() {
-    const bool shouldInstall = g_clickFeedbackEnabled != 0 || g_wheelFeedbackEnabled != 0;
-    if (!shouldInstall) {
-        ReleaseMouseHook();
-        ClearRipples();
-        return;
-    }
-    if (g_mouseHook) return;
-
-    HMODULE hookModule = nullptr;
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            reinterpret_cast<LPCWSTR>(&LowLevelMouseHookProc),
-            &hookModule)) {
-        Wh_Log(L"GetModuleHandleExW for mouse hook failed: %lu", GetLastError());
-        return;
-    }
-    HHOOK mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseHookProc, hookModule, 0);
-    if (!mouseHook) {
-        Wh_Log(L"SetWindowsHookExW failed: %lu", GetLastError());
-        FreeLibrary(hookModule);
-        return;
-    }
-    g_mouseHookModule = hookModule;
-    g_mouseHook = mouseHook;
-}
-
 
 static bool RegisterMouseRawInput(HWND hwnd, bool enable) {
     RAWINPUTDEVICE mouse = {};
@@ -1409,40 +1344,66 @@ static void CALLBACK ForegroundChanged(
     if (g_inputWakeEvent) SetEvent(g_inputWakeEvent);
 }
 
+static void ResetFallbackPollTracking() {
+    POINT point = {};
+    g_fallbackCursorPositionValid = GetCursorPos(&point) != FALSE;
+    if (g_fallbackCursorPositionValid) g_fallbackCursorPosition = point;
+    g_fallbackLastMovementTick = GetTickCount() - kFallbackIdleDelayMs;
+}
+
+static LONGLONG GetFallbackPollIntervalTicks() {
+    POINT point = {};
+    const DWORD now = GetTickCount();
+    if (GetCursorPos(&point)) {
+        if (!g_fallbackCursorPositionValid) {
+            g_fallbackCursorPosition = point;
+            g_fallbackCursorPositionValid = true;
+            g_fallbackLastMovementTick = now - kFallbackIdleDelayMs;
+        } else if (point.x != g_fallbackCursorPosition.x
+            || point.y != g_fallbackCursorPosition.y) {
+            g_fallbackCursorPosition = point;
+            g_fallbackLastMovementTick = now;
+        }
+    }
+
+    const DWORD intervalMs = now - g_fallbackLastMovementTick < kFallbackIdleDelayMs
+        ? kFallbackActivePollIntervalMs
+        : kFallbackIdlePollIntervalMs;
+    return std::max<LONGLONG>(
+        1, g_qpcFrequency * static_cast<LONGLONG>(intervalMs) / 1000);
+}
+
 static void RefreshForegroundInputState() {
+    const bool wasPollingFallback = g_pollingFallback;
     g_elevatedForeground = IsHigherRightsWindow(GetForegroundWindow());
     g_pollingFallback = !g_rawInputRegistered || !g_foregroundEventHook || g_elevatedForeground;
+    if (g_pollingFallback && !wasPollingFallback) ResetFallbackPollTracking();
     g_foregroundChangePending = false;
 }
 
 static void ResetAutoColorSamplingCache();
 
-static bool UpdateCursorMonitorDpi(HWND hwnd, const POINT& cursorPoint) {
+static bool UpdateCursorMonitorDpi(const POINT& cursorPoint) {
     const HMONITOR monitor = MonitorFromPoint(cursorPoint, MONITOR_DEFAULTTONEAREST);
     if (!monitor || monitor == g_cursorMonitor) return false;
 
-    ResetAutoColorSamplingCache();
-    HideOverlay();
-    if (hwnd && IsWindow(hwnd)
-        && !SetWindowPos(
-            hwnd,
-            nullptr,
-            cursorPoint.x,
-            cursorPoint.y,
-            1,
-            1,
-            SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW)) {
-        Wh_Log(L"SetWindowPos for DPI transition failed: %lu", GetLastError());
-        g_currentDpiScale = 1.0f;
-        g_cursorDpi = 96;
-        g_cursorMonitor = monitor;
-        return true;
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    const HRESULT dpiResult = GetDpiForMonitor(
+        monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    if (FAILED(dpiResult) || dpiX == 0) {
+        Wh_Log(L"GetDpiForMonitor failed: 0x%08X", static_cast<unsigned int>(dpiResult));
+        dpiX = 96;
     }
 
     g_cursorMonitor = monitor;
-    const UINT dpi = hwnd && IsWindow(hwnd) ? GetDpiForWindow(hwnd) : 96;
-    g_cursorDpi = dpi > 0 ? dpi : 96;
+    ResetAutoColorSamplingCache();
+    const UINT newDpi = dpiX > 0 ? dpiX : 96;
+    if (newDpi == g_cursorDpi) return false;
+
+    g_cursorDpi = newDpi;
     g_currentDpiScale = std::clamp(static_cast<float>(g_cursorDpi) / 96.0f, 0.5f, 4.0f);
+    HideOverlay();
     return true;
 }
 
@@ -1894,11 +1855,16 @@ static float SampleBackgroundLuminance(DWORD now, POINT center) {
         const int64_t distanceThreshold = kBackgroundResampleDistancePx;
         // Short-circuit large coordinate deltas before squaring them; the final
         // squared-distance comparison only runs when both deltas are below 20.
+        // A time limit is mandatory, while cursor travel is an additional gate
+        // so high-speed movement cannot trigger a capture on every sample.
         const bool movedFarEnough =
             dx <= -distanceThreshold || dx >= distanceThreshold ||
             dy <= -distanceThreshold || dy >= distanceThreshold ||
             dx * dx + dy * dy >= distanceThreshold * distanceThreshold;
-        if (!movedFarEnough && now - g_backgroundLuminanceUpdated < kBackgroundResampleIntervalMs) return g_backgroundLuminance;
+        if (now - g_backgroundLuminanceUpdated < kBackgroundResampleIntervalMs
+            || !movedFarEnough) {
+            return g_backgroundLuminance;
+        }
     }
 
     const int size = kBackgroundSampleRadius * 2 + 1;
@@ -2007,6 +1973,16 @@ static void UpdateTrailColorIfNeeded(DWORD now) {
         || fabsf(background - g_lastAutoColorPickLuminance) >= kAutoColorLuminanceChangeThreshold;
     if (!refreshCandidates && !backgroundChanged) return;
 
+    // Keep the existing color when it still has acceptable contrast. Using a
+    // lower hold threshold than the selection threshold prevents color flapping.
+    if (!refreshCandidates
+        && ContrastRatio(RgbLuminance(g_currentCoreRGB), background)
+            >= kAutoColorHysteresisContrast) {
+        g_lastAutoColorPickLuminance = background;
+        g_autoColorPickLuminanceValid = true;
+        return;
+    }
+
     // In Auto mode the overlay is excluded from screen capture, so the sample
     // can't pick up the trail's own pixels and the window need not be hidden.
     for (const ColorCandidate& candidate : g_cachedCursorColorCandidates) {
@@ -2067,8 +2043,16 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
     // These values originate from integer settings, so no floating-point round-up is needed.
     const float scaledRippleRadius = g_rippleRadius * g_currentDpiScale;
     const float scaledRippleStrokeWidth = g_rippleStrokeWidth * g_currentDpiScale;
+    const float scaledWheelArrowSize = g_wheelArrowSize * g_currentDpiScale;
+    const float scaledWheelArrowDistance = g_wheelArrowDistance * g_currentDpiScale;
     const LONG ripplePadding = static_cast<LONG>(
         scaledRippleRadius + scaledRippleStrokeWidth + kRenderPadding * g_currentDpiScale + 1.0f);
+    const LONG wheelArrowPadding = static_cast<LONG>(ceilf(
+        scaledWheelArrowDistance * 0.5f
+        + scaledWheelArrowSize * 0.65f
+        + scaledRippleStrokeWidth
+        + kRenderPadding * g_currentDpiScale
+        + 2.0f));
     const MotionAccent* newestMotionAccent = nullptr;
     for (const MotionAccent& accent : g_motionAccents) {
         if (accent.active && (!newestMotionAccent || accent.startQpc > newestMotionAccent->startQpc)) {
@@ -2116,11 +2100,14 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
                 continue;
             }
         }
+        const LONG effectPadding = ripple.kind == RippleKind::Click
+            ? ripplePadding
+            : wheelArrowPadding;
         const RECT rippleBounds = {
-            ripple.center.x - ripplePadding,
-            ripple.center.y - ripplePadding,
-            ripple.center.x + ripplePadding,
-            ripple.center.y + ripplePadding,
+            ripple.center.x - effectPadding,
+            ripple.center.y - effectPadding,
+            ripple.center.x + effectPadding,
+            ripple.center.y + effectPadding,
         };
         includeBounds(rippleBounds);
     }
@@ -2274,6 +2261,38 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
         const float alpha = g_rippleOpacity * remaining * remaining;
         if (alpha < 0.005f) continue;
 
+        if (ripple.kind != RippleKind::Click) {
+            // Scroll arrows move in the same direction as the requested wheel action.
+            const float direction = ripple.kind == RippleKind::WheelUp ? -1.0f : 1.0f;
+            const float arrowCenterY = static_cast<float>(ripple.center.y)
+                + direction * scaledWheelArrowDistance * (easedProgress - 0.5f);
+            const float arrowSize = scaledWheelArrowSize * (0.88f + 0.12f * remaining);
+            const D2D1_POINT_2F arrowTip = D2D1::Point2F(
+                static_cast<float>(ripple.center.x),
+                arrowCenterY + direction * arrowSize * 0.5f);
+            const D2D1_POINT_2F arrowLeft = D2D1::Point2F(
+                arrowTip.x - arrowSize * 0.31f,
+                arrowTip.y - direction * arrowSize * 0.29f);
+            const D2D1_POINT_2F arrowRight = D2D1::Point2F(
+                arrowTip.x + arrowSize * 0.31f,
+                arrowTip.y - direction * arrowSize * 0.29f);
+            const D2D1_POINT_2F shaftStart = D2D1::Point2F(
+                arrowTip.x,
+                arrowCenterY - direction * arrowSize * 0.42f);
+            const D2D1_POINT_2F shaftEnd = D2D1::Point2F(
+                arrowTip.x,
+                arrowCenterY + direction * arrowSize * 0.20f);
+
+            g_rippleBrush->SetColor(ToColorF(ripple.color, alpha));
+            g_renderTarget->DrawLine(
+                shaftStart, shaftEnd, g_rippleBrush, scaledRippleStrokeWidth, g_strokeStyle);
+            g_renderTarget->DrawLine(
+                arrowTip, arrowLeft, g_rippleBrush, scaledRippleStrokeWidth, g_strokeStyle);
+            g_renderTarget->DrawLine(
+                arrowTip, arrowRight, g_rippleBrush, scaledRippleStrokeWidth, g_strokeStyle);
+            continue;
+        }
+
         g_rippleBrush->SetColor(ToColorF(ripple.color, alpha));
         g_renderTarget->DrawEllipse(
             D2D1::Ellipse(
@@ -2285,7 +2304,7 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
             g_rippleBrush,
             scaledRippleStrokeWidth,
             g_strokeStyle);
-        g_rippleBrush->SetColor(ToColorF(ripple.color, alpha * 0.48f));
+        g_rippleBrush->SetColor(ToColorF(ripple.color, alpha * 0.58f));
         const float innerRadius = radius * 0.58f;
         g_renderTarget->DrawEllipse(
             D2D1::Ellipse(
@@ -2295,7 +2314,7 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
                 innerRadius,
                 innerRadius),
             g_rippleBrush,
-            std::max(g_currentDpiScale, scaledRippleStrokeWidth * 0.65f),
+            std::max(g_currentDpiScale * 1.5f, scaledRippleStrokeWidth * 0.78f),
             g_strokeStyle);
     }
 
@@ -2328,8 +2347,8 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
 }
 
 // Pointer speed in pixels per second, derived from the real elapsed time between
-// samples. The loop runs at 125 Hz while active and 30 Hz while idle, so a
-// pixels-per-sample threshold would mean something different at each rate.
+// samples. The worker is event-driven while idle and samples at up to 125 Hz while
+// effects are active, so a pixels-per-sample threshold would vary with the cadence.
 static float PointerSpeedPxPerSecond(const POINT& point, LONGLONG nowQpc) {
     const LONGLONG elapsedTicks = nowQpc - g_lastSampleQpc;
     g_lastSampleQpc = nowQpc;
@@ -2346,7 +2365,7 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
     POINT point = {};
     if (!GetCursorPos(&point)) return false;
     const LONGLONG sampleQpc = QpcNow();
-    if (UpdateCursorMonitorDpi(hwnd, point)) {
+    if (UpdateCursorMonitorDpi(point)) {
         ResetTrailState();
         ResetMotionCueTracking();
         g_lastPos = point;
@@ -2426,6 +2445,43 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         if (readResult != static_cast<UINT>(-1)
             && rawInput.header.dwType == RIM_TYPEMOUSE) {
             const RAWMOUSE& mouse = rawInput.data.mouse;
+            const USHORT buttons = mouse.usButtonFlags;
+            const USHORT clickDownMask = RI_MOUSE_LEFT_BUTTON_DOWN
+                | RI_MOUSE_RIGHT_BUTTON_DOWN
+                | RI_MOUSE_MIDDLE_BUTTON_DOWN;
+            const bool clickEvent = g_clickFeedbackEnabled
+                && (buttons & clickDownMask) != 0;
+            const bool wheelEvent = g_wheelFeedbackEnabled
+                && (buttons & RI_MOUSE_WHEEL) != 0;
+            if (clickEvent || wheelEvent) {
+                POINT interactionPoint = {};
+                if (GetCursorPos(&interactionPoint)) {
+                    if (g_clickFeedbackEnabled) {
+                        if (buttons & RI_MOUSE_LEFT_BUTTON_DOWN) {
+                            AddRipple(interactionPoint, g_leftClickRGB);
+                        }
+                        if (buttons & RI_MOUSE_RIGHT_BUTTON_DOWN) {
+                            AddRipple(interactionPoint, g_rightClickRGB);
+                        }
+                        if (buttons & RI_MOUSE_MIDDLE_BUTTON_DOWN) {
+                            AddRipple(interactionPoint, g_middleClickRGB);
+                        }
+                    }
+                    if (wheelEvent) {
+                        const SHORT wheelDelta = static_cast<SHORT>(mouse.usButtonData);
+                        if (wheelDelta != 0) {
+                            const RippleKind kind = wheelDelta > 0
+                                ? RippleKind::WheelUp
+                                : RippleKind::WheelDown;
+                            AddRipple(
+                                interactionPoint,
+                                wheelDelta > 0 ? g_wheelUpRGB : g_wheelDownRGB,
+                                kind);
+                        }
+                    }
+                }
+            }
+
             const bool moved = mouse.lLastX != 0
                 || mouse.lLastY != 0
                 || (mouse.usFlags & MOUSE_MOVE_ABSOLUTE) != 0;
@@ -2538,7 +2594,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     HideOverlay();
     POINT initialCursorPosition = {};
     if (GetCursorPos(&initialCursorPosition)) {
-        UpdateCursorMonitorDpi(hwnd, initialCursorPosition);
+        UpdateCursorMonitorDpi(initialCursorPosition);
         g_lastPos = initialCursorPosition;
     }
     g_lastSampleQpc = QpcNow();
@@ -2575,12 +2631,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         Wh_Log(L"SetWinEventHook(EVENT_SYSTEM_FOREGROUND) failed: %lu", GetLastError());
     }
     RefreshForegroundInputState();
-    SyncMouseHook();
 
     const LONGLONG simulationTicks =
         FrameIntervalTicks(qpcFrequency.QuadPart, kTargetFrameRate);
-    const LONGLONG fallbackTicks =
-        FrameIntervalTicks(qpcFrequency.QuadPart, kFallbackFrameRate);
     const LONGLONG activeRenderTicks =
         FrameIntervalTicks(qpcFrequency.QuadPart, kActiveRenderFrameRate);
     const LONGLONG fadeRenderTicks =
@@ -2592,7 +2645,6 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     while (running) {
         if (g_settingsDirty.exchange(false, std::memory_order_acq_rel)) {
             LoadSettings();
-            SyncMouseHook();
         }
 
         const LONGLONG currentQpc = QpcNow();
@@ -2619,7 +2671,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
             } else if (g_nextSampleDeadline <= currentQpc) {
                 const LONGLONG interval = (trailActive || rippleActive)
                     ? simulationTicks
-                    : fallbackTicks;
+                    : GetFallbackPollIntervalTicks();
                 g_nextSampleDeadline = currentQpc + interval;
             }
             timerDeadline = g_nextSampleDeadline;
@@ -2693,7 +2745,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                     g_nextSampleDeadline = eventQpc + simulationTicks;
                 } else {
                     g_nextSampleDeadline = g_pollingFallback
-                        ? eventQpc + fallbackTicks
+                        ? eventQpc + GetFallbackPollIntervalTicks()
                         : 0;
                 }
                 (void)rendered;
@@ -2728,7 +2780,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                                 ? activeRenderTicks
                                 : fadeRenderTicks);
                     }
-                } else if (movementQpc >= g_nextSampleDeadline) {
+                } else if (movementQpc >= g_nextSampleDeadline || !activeBeforeMovement) {
                     const bool renderFrame = movementQpc >= nextRenderDeadline;
                     SmearFrame(hwnd, GetTickCount(), renderFrame);
                     const LONGLONG sampledQpc = QpcNow();
@@ -2737,7 +2789,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                         || HasActiveRipples(sampledQpc)
                         || HasActiveMotionAccents(sampledQpc);
                     g_nextSampleDeadline = sampledQpc
-                        + (activeAfterMovement ? simulationTicks : (g_pollingFallback ? fallbackTicks : 0));
+                        + (activeAfterMovement
+                            ? simulationTicks
+                            : (g_pollingFallback ? GetFallbackPollIntervalTicks() : 0));
                     if (activeAfterMovement && (renderFrame || sampledQpc >= nextRenderDeadline)) {
                         nextRenderDeadline = sampledQpc
                             + ((g_isSmearing || g_historyCount >= 2)
@@ -2774,7 +2828,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                     }
                     g_nextSampleDeadline = sampledQpc + simulationTicks;
                 } else if (g_pollingFallback) {
-                    g_nextSampleDeadline = sampledQpc + fallbackTicks;
+                    g_nextSampleDeadline = sampledQpc + GetFallbackPollIntervalTicks();
                 } else {
                     g_nextSampleDeadline = 0;
                 }
@@ -2812,7 +2866,6 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         RegisterMouseRawInput(hwnd, false);
         g_rawInputRegistered = false;
     }
-    ReleaseMouseHook();
     ClearRipples();
     HideOverlay();
     ReleaseBackbuffer();
