@@ -1,19 +1,20 @@
 // ==WindhawkMod==
-// @id              remove-clock-cutout-background
-// @name            Remove Legacy Clock Square Cutout & Animated Custom Image
-// @description     Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs, with full animated GIF and PNG replacement support.
-// @version         3.2.0
-// @author          awnaise
-// @github          https://github.com/awnaise
-// @include         explorer.exe
-// @include         rundll32.exe
-// @compilerOptions -lgdiplus -lcomctl32 -lgdi32 -luser32
+// @id             remove-clock-cutout-background
+// @name           Remove Legacy Clock Square Cutout & Animated Custom Image
+// @description    Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs, with full animated GIF and PNG replacement support.
+// @version        3.2.0
+// @author         awnaise
+// @github         https://github.com/awnaise
+// @include        explorer.exe
+// @include        rundll32.exe
+// @compilerOptions -lgdiplus -lcomctl32 -lgdi32 -luser32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
 /*
 - customImagePath: ""
   $name: "Custom Clock Image (Path to PNG or Animated GIF)"
+  $description: "Absolute path to a static image or animated GIF (PNG, JPEG, BMP, etc.) to replace the clock face. Leave empty to only remove the square cutout background."
 */
 // ==/WindhawkModSettings==
 
@@ -29,12 +30,14 @@ masking with smart dark-mode dialog sampling, plus full animated GIF replacement
 #include <windows.h>
 #include <commctrl.h>
 #include <gdiplus.h>
+#include <shlwapi.h>
 #include <windhawk_utils.h>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 #include <string>
 #include <memory>
+#include <optional>
 
 using namespace Gdiplus;
 
@@ -59,7 +62,8 @@ struct CachedImage {
     std::vector<UINT> delays;
 };
 
-std::unordered_map<std::wstring, CachedImage> g_imageCache;
+// Safe destruction under process exit using [[clang::no_destroy]]
+[[clang::no_destroy]] std::optional<std::unordered_map<std::wstring, CachedImage>> g_imageCache{std::in_place};
 std::mutex g_imageMutex;
 
 // Per-window animation state
@@ -71,15 +75,37 @@ struct WindowAnimState {
 std::unordered_map<HWND, WindowAnimState> g_windowAnims;
 std::mutex g_windowAnimsMutex;
 
-// Retrieve or load cached image with safe frame and delay checks
+// Retrieve or load cached image from memory stream to prevent file locking
 CachedImage* GetCachedImage(const wchar_t* path) {
     std::lock_guard<std::mutex> lock(g_imageMutex);
-    auto it = g_imageCache.find(path);
-    if (it != g_imageCache.end()) {
+    auto it = g_imageCache->find(path);
+    if (it != g_imageCache->end()) {
         return &it->second;
     }
 
-    auto newImg = std::make_unique<Image>(path);
+    HANDLE file = CreateFileW(path, GENERIC_READ,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              nullptr, OPEN_EXISTING, 0, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return nullptr;
+
+    std::vector<BYTE> data;
+    LARGE_INTEGER size{};
+    DWORD read = 0;
+    if (GetFileSizeEx(file, &size) && size.QuadPart > 0 && size.QuadPart < 64 * 1024 * 1024) {
+        data.resize((size_t)size.QuadPart);
+        if (!ReadFile(file, data.data(), (DWORD)data.size(), &read, nullptr) || read != data.size()) {
+            data.clear();
+        }
+    }
+    CloseHandle(file);
+    if (data.empty()) return nullptr;
+
+    IStream* stream = SHCreateMemStream(data.data(), (UINT)data.size());
+    if (!stream) return nullptr;
+
+    auto newImg = std::make_unique<Image>(stream);
+    stream->Release();
+
     if (newImg->GetLastStatus() != Ok) {
         return nullptr;
     }
@@ -90,7 +116,6 @@ CachedImage* GetCachedImage(const wchar_t* path) {
         std::vector<GUID> dimensionIDs(dimensionCount);
         newImg->GetFrameDimensionsList(dimensionIDs.data(), dimensionCount);
         
-        // Check if Time dimension exists for animation
         bool hasTimeDimension = false;
         for (const auto& guid : dimensionIDs) {
             if (guid == FrameDimensionTime) {
@@ -110,7 +135,7 @@ CachedImage* GetCachedImage(const wchar_t* path) {
                         UINT* delays = (UINT*)pItem->value;
                         UINT numDelays = propertySize / sizeof(UINT);
                         for (UINT i = 0; i < ci.frameCount && i < numDelays; ++i) {
-                            UINT delay = delays[i] * 10; // convert hundredths of a second to milliseconds
+                            UINT delay = delays[i] * 10;
                             if (delay < 30) delay = 100;
                             ci.delays.push_back(delay);
                         }
@@ -121,17 +146,15 @@ CachedImage* GetCachedImage(const wchar_t* path) {
         }
     }
 
-    // Fallback default delays if needed
     while (ci.delays.size() < ci.frameCount) {
         ci.delays.push_back(100);
     }
 
     ci.img = std::move(newImg);
-    g_imageCache[path] = std::move(ci);
-    return &g_imageCache[path];
+    (*g_imageCache)[path] = std::move(ci);
+    return &(*g_imageCache)[path];
 }
 
-// Known clock window classes that should strictly be targeted
 bool IsKnownClockClass(const wchar_t* szClass) {
     if (!szClass) return false;
     return (wcsicmp(szClass, L"ClockWndMain") == 0 ||
@@ -139,7 +162,6 @@ bool IsKnownClockClass(const wchar_t* szClass) {
             wcsicmp(szClass, L"ClockWndClass") == 0);
 }
 
-// Targets analog clock controls
 bool IsAnalogClockControl(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return false;
 
@@ -156,7 +178,6 @@ bool IsAnalogClockControl(HWND hwnd) {
     return IsKnownClockClass(szClass);
 }
 
-// Dynamically samples the parent container's actual background pixel color
 COLORREF GetParentBgColor(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return GetSysColor(COLOR_3DFACE);
 
@@ -237,7 +258,6 @@ COLORREF GetParentBgColor(HWND hwnd) {
     return GetSysColor(COLOR_3DFACE);
 }
 
-// Renders animated GIF frames or static images/masks safely
 void ApplySmoothMaskToDC(HDC hdc, HWND hwnd, int w, int h) {
     if (!hdc || w <= 20 || h <= 20 || g_bInMask) return;
     g_bInMask = true;
@@ -273,7 +293,6 @@ void ApplySmoothMaskToDC(HDC hdc, HWND hwnd, int w, int h) {
                 UINT delay = cached->delays[frameIndex];
                 SetTimer(hwnd, 9999, delay, NULL);
             } else {
-                // Single-frame image (PNG, JPEG, etc.)
                 graphics.DrawImage(cached->img.get(), 0, 0, w, h);
                 renderedCustomImage = true;
             }
@@ -502,6 +521,11 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+void Wh_ModSettingsChanged() {
+    std::lock_guard<std::mutex> lock(g_imageMutex);
+    g_imageCache->clear();
+}
+
 void Wh_ModUninit() {
     std::vector<std::pair<HWND, bool>> windows;
     {
@@ -515,14 +539,14 @@ void Wh_ModUninit() {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClockSubclassProc);
         if (addedComposited) {
             SetWindowLongW(hwnd, GWL_EXSTYLE,
-                           GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+                         GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
         }
         InvalidateRect(hwnd, NULL, TRUE);
     }
 
     {
         std::lock_guard<std::mutex> lock(g_imageMutex);
-        g_imageCache.clear();
+        g_imageCache.reset();
     }
 
     {
@@ -535,4 +559,3 @@ void Wh_ModUninit() {
         g_gdiplusToken = 0;
     }
 }
-
