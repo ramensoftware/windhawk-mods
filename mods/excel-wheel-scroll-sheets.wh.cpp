@@ -4,7 +4,7 @@
 // @name:zh-CN      Excel 滚轮切换工作表
 // @description     Scroll the sheet tab strip with the vertical wheel and switch sheets with the horizontal wheel
 // @description:zh-CN 使用原生箭头滚动标签栏，左右拨动一次切换一张工作表
-// @version         0.5.4
+// @version         0.5.5
 // @author          youareanimal
 // @github          https://github.com/youareanimal
 // @homepage        https://github.com/youareanimal/excel-wheel-scroll-sheets
@@ -25,41 +25,17 @@ For 64-bit desktop Excel on Windows:
 - Vertical wheel over the bottom sheet tabs scrolls the tab strip without changing the active sheet.
 - Horizontal wheel over the worksheet or sheet tabs activates the adjacent visible sheet.
 - The tab strip uses Excel's native navigation arrows and animation. If the arrows cannot be used, it falls back to `ScrollWorkbookTabs`.
-- Repeated same-direction horizontal wheel messages are grouped with a 200 ms quiet period by default; the first switch is immediate.
+- Repeated same-direction horizontal wheel messages are grouped with a 50 ms quiet period by default; the first switch is immediate.
 - Hidden sheets are skipped. Modified wheel input and ordinary vertical worksheet scrolling keep Excel's behavior.
+
+Horizontal input over non-tab points in the bottom 64 DIP retains Excel's behavior, including a narrow strip of cells above the tab row.
+The horizontal quiet period accepts 50–2000 ms. Reversal switches immediately.
+Vertical direct switching defaults to 150 ms; reverse direction and wraparound are off by default.
 
 Settings allow direct sheet activation instead of tab scrolling, reversing direction, disabling horizontal switching, and optional wraparound.
 No macros are required. Activating a sheet can trigger existing workbook activation events, just like clicking a tab.
 Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions and 32-bit Excel have not been tested.
 
----
-
-# Excel 滚轮切换工作表
-
-默认操作：标签栏上下滚轮平滑滚动标签；点击标签切换工作表。
-单元格区域左右滚轮切换到相邻的可见工作表。
-
-标签栏滚动使用左下角左右箭头的原生操作路径和动画，
-不再使用图像覆盖或淡入淡出。滚动不改变当前工作表。
-左右拨动产生的连续同方向信号会合并，一次拨动只切换一张。
-
-将鼠标放到 Excel 底部的工作表标签上，根据“滚轮行为”选择：
-
-- 直接切换工作表：向下切换到下一张可见工作表，向上切换到上一张。
-  隐藏的工作表会跳过。
-- 只滚动标签栏：向下显示右侧标签，向上显示左侧标签；当前工作表保持不变，
-  找到目标标签后点击进入。
-
-单元格区域的上下滚轮仍然滚动表格内容。左右滚轮切换可以单独关闭，
-关闭后恢复 Excel 原来的横向滚动。水平滚动条、状态栏或功能区保留原有行为。
-单元格编辑、查找对话框或其他窗口占用焦点时不进行切换。
-
-只适用于 Windows 桌面版 64 位 Excel。通过 Excel 自身的工作表对象切换，
-不需要启用宏，也不会更改工作簿中的数据。切换工作表会触发工作簿自身已有
-的工作表激活事件，与手动点击标签一样。
-
-左右拨动防重复默认 200 毫秒：同方向连续信号合并为一次拨动，
-停顿后再次切换，反方向立即切换。标签栏直接切换模式的间隔仍为 150 毫秒。
 */
 // ==/WindhawkModReadme==
 
@@ -79,11 +55,11 @@ Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions 
   $name:zh-CN: 使用 Excel 原生标签滚动
   $description: Use Excel's native navigation arrows and animation. When disabled, scroll the tab strip directly.
   $description:zh-CN: 使用左下角左右箭头相同的滚动方式，动画速度由 Excel 决定。关闭后直接按标签滚动。
-- horizontalGestureMs: 200
+- horizontalGestureMs: 50
   $name: Horizontal gesture quiet period (milliseconds)
   $name:zh-CN: 左右拨动防重复（毫秒）
-  $description: "Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Valid range: 150–2000 ms (values outside are clamped); default 200."
-  $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。有效范围 150–2000 毫秒（超出会被限制）；默认 200。
+  $description: "Group repeated same-direction input until this quiet period elapses. Reversal switches immediately. Valid range: 50–2000 ms (values outside are clamped); default 50."
+  $description:zh-CN: 同方向连续信号视为一次拨动，停顿达到此时长后可再次切换；反向拨动立即切换。有效范围 50–2000 毫秒（超出会被限制）；默认 50。
 - horizontalSwitching: true
   $name: Switch sheets with the horizontal wheel
   $name:zh-CN: 左右滚轮切换工作表
@@ -119,7 +95,7 @@ std::atomic<bool> g_scrollTabs{false};
 std::atomic<bool> g_horizontal{true};
 std::atomic<unsigned> g_throttle{150};
 std::atomic<bool> g_smooth{true};
-std::atomic<unsigned> g_horizontalGestureMs{200};
+std::atomic<unsigned> g_horizontalGestureMs{50};
 // Debug output is handled by Windhawk logging; no synchronous mod-storage writes.
 void LogDiagnostic(PCWSTR name, int value) {
     Wh_Log(L"%ls=%d",name,value);
@@ -589,7 +565,7 @@ void LoadSettings() {
     g_scrollTabs = wcscmp(WindhawkUtils::StringSetting::make(L"wheelAction"),L"scroll")==0;
     g_horizontal = Wh_GetIntSetting(L"horizontalSwitching") != 0;
     g_smooth = Wh_GetIntSetting(L"smoothAnimation") != 0;
-    g_horizontalGestureMs = std::clamp(Wh_GetIntSetting(L"horizontalGestureMs"),150,2000);
+    g_horizontalGestureMs = std::clamp(Wh_GetIntSetting(L"horizontalGestureMs"),50,2000);
     g_reverse = Wh_GetIntSetting(L"reverseDirection") != 0;
     g_wrap = Wh_GetIntSetting(L"wrapAround") != 0;
     g_throttle = std::clamp(Wh_GetIntSetting(L"throttleMs"), 0, 5000);
