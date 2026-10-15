@@ -9074,6 +9074,35 @@
         "version": "1.14"
       }
     },
+    "micrographics-taskbar-clock": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792047610000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792047610000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "SAM2WOW",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -lwinhttp",
+        "description": "Replaces the Windows 11 taskbar clock with a Nothing OS 5 \"Micrographics\" style clock: pill badges, a block cursor and a weather line",
+        "github": "https://github.com/SAM2WOW",
+        "homepage": "https://github.com/SAM2WOW/micrographics-taskbar-clock",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Micrographics Taskbar Clock",
+        "version": "1.0"
+      }
+    },
     "micromanager": {
       "details": {
         "defaultSorting": 9540,
@@ -19126,6 +19155,33 @@
         "license": "MIT",
         "name": "Windows Animations",
         "version": "1.3.7"
+      }
+    },
+    "windows-terminal-start-minimized": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792047605000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792047605000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caliberda",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "When Windows Terminal opens at sign-in, it starts minimized or straight in the notification area. Requires Terminal's \"Launch on machine startup\" option",
+        "donateUrl": "https://livepix.gg/caliberda",
+        "github": "https://github.com/cesarkali",
+        "homepage": "https://caliberda.com.br",
+        "include": [
+          "WindowsTerminal.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows Terminal Start Minimized",
+        "version": "1.0.0"
       }
     },
     "windows-update-control-panel-restorer": {

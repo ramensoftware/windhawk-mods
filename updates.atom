@@ -2,12 +2,181 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-15T06:04:12.000Z</updated>
+    <updated>2026-10-15T07:00:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Micrographics Taskbar Clock 1.0]]></title>
+        <id>https://windhawk.net/mods/micrographics-taskbar-clock#d4ee5f65a63f19962d025831b57cde6d010d9de9</id>
+        <link href="https://windhawk.net/mods/micrographics-taskbar-clock"/>
+        <updated>2026-10-15T07:00:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="micrographicstaskbarclock">Micrographics Taskbar Clock</h1>
+<p>Replaces the Windows 11 taskbar clock with a clock face inspired by the
+"Micrographics" clock of Nothing OS 5.</p>
+<p><img src="https://raw.githubusercontent.com/SAM2WOW/micrographics-taskbar-clock/main/images/taskbar.png" alt="Screenshot" /></p>
+<ul>
+<li>Weekday, day of month in a filled pill, month in an outlined pill, the time
+and a block cursor.</li>
+<li>Temperature, a weather icon and the current conditions in a speech bubble.</li>
+<li>Follows the taskbar's light/dark text color automatically, on every monitor.</li>
+<li>Clicking the clock still opens the notification center and calendar.</li>
+</ul>
+<h2 id="weather">Weather</h2>
+<p>The weather line is off by default, and the mod makes no network requests until
+it's turned on. To show it, enable <strong>Show weather</strong> in the settings and enter a
+city name or <code>latitude,longitude</code> as the location. Weather then comes from
+<a href="https://open-meteo.com/">Open-Meteo</a> (free, no API key), and a city name is
+looked up with Open-Meteo's geocoding service.</p>
+<p>Alternatively, enable <strong>Detect location from IP address</strong> to leave the location
+empty. Your public IP address is then sent to <a href="https://ipwho.is/">ipwho.is</a>, or
+to <a href="https://www.geojs.io/">GeoJS</a> if that fails, to approximate your location.</p>
+<h2 id="fonts">Fonts</h2>
+<p>The default font is Bahnschrift, which ships with Windows. Any installed font
+can be used, e.g. a monospaced one such as Cascadia Mono, or a dot matrix font.</p>
+<h2 id="otherclockmods">Other clock mods</h2>
+<p>This mod hides the original clock text and draws its own clock face, so changes
+from other clock mods, such as Taskbar Clock Customization, aren't visible
+while it's enabled.</p>]]></content>
+        <author>
+            <name>SAM2WOW</name>
+            <uri>https://github.com/SAM2WOW</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Terminal Start Minimized 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windows-terminal-start-minimized#ac640abc86e6254e47dee54ac7447d100a45ac0d</id>
+        <link href="https://windhawk.net/mods/windows-terminal-start-minimized"/>
+        <updated>2026-10-15T07:00:05.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsterminalstartminimized">Windows Terminal Start Minimized</h1>
+<p><strong>English</strong> | <a href="#português">Português</a></p>
+<p>Made in Brazil by <strong>caliberda</strong> · bugs and ideas: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">an issue on
+GitHub</a> · Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
+<a href="https://caliberda.com.br">caliberda.com.br</a></p>
+<p>When Windows Terminal opens at sign-in, this mod makes it start <strong>minimized</strong>,
+or straight in the <strong>notification area</strong>, instead of on the screen.</p>
+<h2 id="requiredturnonterminalsoptions">Required: turn on Terminal's options</h2>
+<p>The mod works through Terminal's own options and never changes them, so it
+<strong>does nothing until you turn them on</strong>. Open Terminal's settings (<code>Ctrl+,</code>):</p>
+<ol>
+<li><strong>Required:</strong> <strong>Startup</strong> &gt; <strong>Launch on machine startup</strong> (called <strong>Launch
+at login</strong> in newer versions). <a href="https://learn.microsoft.com/windows/terminal/customize-settings/startup#launch-on-machine-startup">Microsoft's
+guide</a>.
+Terminal must also be on in Windows <strong>Settings</strong> &gt; <strong>Apps</strong> &gt; <strong>Startup</strong>.</li>
+<li><strong>To start in the notification area:</strong> <strong>Appearance</strong> &gt; <strong>Hide Terminal in
+the notification area when it is minimized</strong>. <a href="https://learn.microsoft.com/windows/terminal/customize-settings/interaction#minimize-to-notification-area">Microsoft's
+guide</a>.
+Without it, Terminal starts minimized on the taskbar.</li>
+</ol>
+<p>Then sign out and back in (or restart) to see it work.</p>
+<h2 id="whatchanges">What changes</h2>
+<p>Without the mod, Terminal opens on the screen at sign-in even with both options
+on, and only goes to the notification area after you minimize it. With the mod:</p>
+<ul>
+<li>With option 2 on, it goes straight to the notification area, without showing
+on the screen.</li>
+<li>With option 2 off, it starts minimized on the taskbar.</li>
+</ul>
+<p>It doesn't take the focus from what you're doing. Click its icon to bring it
+back, in the size Terminal would have used (maximized, if Terminal is set to
+launch maximized).</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod runs only inside Windows Terminal. When Windows starts Terminal through
+its <strong>Launch on machine startup</strong> option, the windows of that launch (one, or
+one per window when Terminal restores your last session) are shown minimized
+instead of on the screen. Opening Terminal any other way (Start menu, taskbar,
+<code>wt</code> command, a shortcut) isn't changed, even right after you sign in.</p>
+<p>The mod stops acting when you bring back one of those windows, or one minute
+after Terminal started.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Only the Microsoft Store (packaged) version of Terminal has the <strong>Launch on
+machine startup</strong> option. The portable (zip) version is left unchanged.</li>
+<li>If Windhawk starts after Terminal, the mod can't act on that sign-in.</li>
+</ul>
+<h2 id="contact">Contact</h2>
+<p>I'm <strong>caliberda</strong>, a developer from Brazil. Write in English, Portuguese or
+your own language.</p>
+<ul>
+<li><strong>Bugs and ideas: an issue on GitHub</strong>, the best way: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">report a
+bug</a> or <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">suggest an
+idea</a>.
+It mentions me (@cesarkali), so I see it.</li>
+<li><strong>Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a></strong>: to talk to me
+and follow my projects.</li>
+<li><strong><a href="https://caliberda.com.br">caliberda.com.br</a></strong>: my site, with my other
+projects and a Discord link.</li>
+</ul>
+<hr />
+<h2 id="portugus">Português</h2>
+<p>Feito no Brasil por <strong>caliberda</strong> · pode falar comigo em português · bugs e
+ideias: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">uma issue no
+GitHub</a> · Instagram
+<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> · <a href="https://caliberda.com.br">caliberda.com.br</a></p>
+<p>Quando o Windows Terminal abre no logon, este mod faz ele <strong>já iniciar
+minimizado</strong>, ou direto na <strong>área de notificação</strong>, em vez de aparecer na tela.</p>
+<h3 id="obrigatrioligueasopesdoterminal">Obrigatório: ligue as opções do Terminal</h3>
+<p>O mod funciona pelas opções do próprio Terminal e nunca as altera, então ele
+<strong>não faz nada até você ligá-las</strong>. Abra as configurações do Terminal
+(<code>Ctrl+,</code>):</p>
+<ol>
+<li><strong>Obrigatório:</strong> <strong>Inicialização</strong> &gt; <strong>Iniciar na inicialização da
+máquina</strong> (chamada <strong>Iniciar no logon</strong> nas versões mais novas). <a href="https://learn.microsoft.com/pt-br/windows/terminal/customize-settings/startup#launch-on-machine-startup">Guia da
+Microsoft</a>.
+O Terminal também precisa estar ligado em <strong>Configurações</strong> do Windows &gt;
+<strong>Aplicativos</strong> &gt; <strong>Inicialização</strong>.</li>
+<li><strong>Para iniciar na área de notificação:</strong> <strong>Aparência</strong> &gt; <strong>Ocultar o
+Terminal na área de notificação quando estiver minimizado</strong>. <a href="https://learn.microsoft.com/pt-br/windows/terminal/customize-settings/interaction#minimize-to-notification-area">Guia da
+Microsoft</a>.
+Sem ela, o Terminal inicia minimizado na barra de tarefas.</li>
+</ol>
+<p>Depois, saia da conta e entre de novo (ou reinicie) para ver funcionando.</p>
+<h3 id="oquemuda">O que muda</h3>
+<p>Sem o mod, o Terminal abre na tela no logon mesmo com as duas opções ligadas, e
+só vai para a área de notificação depois que você o minimiza. Com o mod:</p>
+<ul>
+<li>Com a opção 2 ligada, ele vai direto para a área de notificação, sem aparecer
+na tela.</li>
+<li>Com a opção 2 desligada, ele inicia minimizado na barra de tarefas.</li>
+</ul>
+<p>Ele não tira o foco do que você está fazendo. Clique no ícone dele para
+trazê-lo de volta, no tamanho que o Terminal usaria (maximizado, se o Terminal
+estiver configurado para abrir maximizado).</p>
+<h3 id="comofunciona">Como funciona</h3>
+<p>O mod roda só dentro do Windows Terminal. Quando o Windows abre o Terminal pela
+opção <strong>Iniciar na inicialização da máquina</strong>, as janelas dessa inicialização
+(uma, ou uma por janela quando o Terminal restaura a última sessão) aparecem
+minimizadas em vez de na tela. Abrir o Terminal de outro jeito (menu Iniciar,
+barra de tarefas, comando <code>wt</code>, um atalho) não muda, mesmo logo depois de você
+entrar.</p>
+<p>O mod para de agir quando você traz de volta uma dessas janelas, ou um minuto
+depois de o Terminal iniciar.</p>
+<h3 id="limitaesconhecidas">Limitações conhecidas</h3>
+<ul>
+<li>Só a versão da Microsoft Store (empacotada) do Terminal tem a opção
+<strong>Iniciar na inicialização da máquina</strong>. A versão portátil (zip) não muda.</li>
+<li>Se o Windhawk iniciar depois do Terminal, o mod não consegue agir naquele
+logon.</li>
+</ul>
+<h3 id="contato">Contato</h3>
+<p>Sou o <strong>caliberda</strong>, desenvolvedor brasileiro. Pode escrever em português.</p>
+<ul>
+<li><strong>Bugs e ideias: uma issue no GitHub</strong>, o melhor caminho: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">relatar um
+bug</a> ou <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">sugerir uma
+ideia</a>.
+Ela já me marca (@cesarkali), então eu vejo.</li>
+<li><strong>Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a></strong>: para conversar
+comigo e acompanhar meus projetos.</li>
+<li><strong><a href="https://caliberda.com.br">caliberda.com.br</a></strong>: meu site, com meus outros
+projetos e um link para o Discord.</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.7.1]]></title>
         <id>https://windhawk.net/mods/alt-tab-flip-3d#b2813a1c76395983542ac7cbbb8561f99e7c6912</id>
@@ -650,157 +819,6 @@ well. Point at a banner to pause the countdown while it matters.</li>
         <author>
             <name>nikitor32</name>
             <uri>https://github.com/nikitor32</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mond Desktop Clock 3.5]]></title>
-        <id>https://windhawk.net/mods/mond-desktop-clock#d546070d720a18714a4dba2eb05c936b2227ea51</id>
-        <link href="https://windhawk.net/mods/mond-desktop-clock"/>
-        <updated>2026-10-13T10:03:45.000Z</updated>
-        <content type="html"><![CDATA[<p>A universal desktop clock widget inspired by the <a href="https://www.deviantart.com/hiphopium">Mond Rainmeter skin by HipHopium</a>. It runs in a dedicated tool process, not in Explorer.</p>
-<hr />
-<p><strong>Differentiating Feature Set</strong>
-While many desk clock widgets offer customizable styles, Mond provides unparalleled granular control over every character. Unlike standard overlays, we allow for <strong>per-letter customization</strong>, letting you set unique colors and shadows for individual characters within the day, date, or time (e.g., coloring only the 'S' in September). This level of detail, combined with multi-row support and precise offset controls, makes Mond a highly flexible styling tool.</p>
-<hr />
-<p>The clock shows the weekday, date, and time in three independently styled rows. Drag it to position it; enable position locking to prevent accidental movement.</p>
-<p><img src="https://i.imgur.com/dj71eKl.png" alt="Mond Desktop Clock on the desktop" /></p>
-<p><img src="https://i.imgur.com/ux3bwti.png" alt="Mond Desktop Clock alternate layout" /></p>
-<p><strong>Key Features & Advanced Customization:</strong></p>
-<ul>
-<li><strong>Three Independent Rows:</strong> Display Weekday, Date, and Time in separate, independently configurable rows.</li>
-<li><strong>Granular Letter Control:</strong> Set individual colors and shadow offsets for every single character in the day, date, or time.</li>
-<li><strong>Advanced Typography:</strong> Full control over font families (Quicksand, Anurati, etc.), size, bold/italic styling, letter spacing, and per-row horizontal offsets.</li>
-<li><strong>Layout Flexibility:</strong> Select a "Main Heading" row to automatically reorder the display (e.g., Date on top, Weekday below).</li>
-<li><strong>Position Management:</strong> Drag-and-drop placement with saved positions shared across all monitors connected to your PC.</li>
-</ul>
-<p><strong>Styling & Fonts:</strong>
-Fonts must be installed in Windows. Missing fonts are silently substituted by Windows. We support advanced typography using:</p>
-<ul>
-<li><a href="https://fonts.google.com/specimen/Quicksand">Quicksand</a></li>
-<li><a href="https://www.dafont.com/anurati.font">Anurati</a></li>
-</ul>
-<p><strong>Coloring & Formatting:</strong></p>
-<ul>
-<li>Separate text and shadow colors are available for the overall row, but individual letter overrides take precedence.</li>
-<li>Per-letter styles are indexed by 1-based character position from left to right (including spaces).</li>
-<li>The date displays without a comma.</li>
-<li>Colours accept <code>#RRGGBB</code> or <code>#AARRGGBB</code>; the alpha component in the latter form is ignored.</li>
-</ul>]]></content>
-        <author>
-            <name>Elmidin Mahmud</name>
-            <uri>https://github.com/elmidin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Wobble 1.0.0]]></title>
-        <id>https://windhawk.net/mods/window-wobble#9674ac4e7339530fdd264f1ee8424e8afabc249f</id>
-        <link href="https://windhawk.net/mods/window-wobble"/>
-        <updated>2026-10-13T07:01:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowwobble">Window Wobble</h1>
-<p>KDE-style spring-physics window dragging. Grab a title bar and the window
-follows your cursor like jelly - the title bar keeps up, the body trails
-behind, and it settles with a wobble when you let go.</p>
-<p><img src="https://raw.githubusercontent.com/heyjeay/window-wobble/main/docs/preview.gif" alt="Window Wobble in action" /></p>
-<p>Hold <strong>Shift</strong> (configurable) while grabbing to move a window normally.</p>
-<p>Licensed GPL-3.0-or-later: you are free to use, study, modify and share it,
-and any version you distribute must stay open under the same terms.</p>
-<h2 id="howthisdiffersfromthewobblywindowsmod">How this differs from the Wobbly Windows mod</h2>
-<p><a href="https://windhawk.net/mods/wobbly-windows">Wobbly Windows</a> does the same
-effect from inside <code>dwm.exe</code>, using private uDWM symbols. That is the better
-place to do it: the content stays live, and it can wobble on snapping and
-resizing too, not just dragging.</p>
-<p>This mod does <strong>not</strong> touch <code>dwm.exe</code>. It runs in the application's own
-process and draws the effect on its own Direct3D overlay. Pick whichever
-trade you prefer:</p>
-<p><strong>Reasons to use this one</strong></p>
-<ul>
-<li>No changes to Windhawk's process inclusion list - it works once enabled</li>
-<li>Nothing is injected into the compositor, so a fault here cannot take the
-desktop down with it; at worst one application is affected</li>
-<li>No dependency on private, undocumented DWM symbols, so a Windows update
-changing uDWM internals cannot break it</li>
-</ul>
-<p><strong>Reasons to use the other one</strong></p>
-<ul>
-<li>Window content stays live; here it is a snapshot, so a playing video
-appears frozen for the length of the drag</li>
-<li>It wobbles on snap and resize as well as drag</li>
-<li>One copy in the compositor, rather than a small overlay per application</li>
-</ul>
-<p><strong>Questions, problems or ideas?</strong> Join the Discord
-(https://discord.gg/8wwfPxfMWA) or open an issue
-(https://github.com/heyjeay/window-wobble/issues).</p>
-<h2 id="howitworks">How it works</h2>
-<h3 id="inplainterms">In plain terms</h3>
-<ol>
-<li>You press on a title bar, and the mod quietly takes a photograph of the
-whole window.</li>
-<li>The real window is made invisible. Not minimised, not moved - just not
-drawn. Its taskbar button stays exactly where it was.</li>
-<li>The photograph is pinned to an invisible grid, like a sheet of rubber, and
-shown in the window's place. The top edge of the sheet is stiff and keeps
-up with your cursor; further down it gets floppier. That is the whole
-trick - the body lags behind the title bar because the bottom of the sheet
-is softer than the top.</li>
-<li>All the while you are dragging, the mod is just moving that rubber sheet
-around and letting the springs do what springs do.</li>
-<li>When you let go, the real window is moved to where you dropped it while it
-is still invisible, then made visible again <em>underneath</em> the photograph.
-Only once it is safely back does the photograph disappear, so you never
-catch the swap happening.</li>
-</ol>
-<p>Two things follow from this, and they are the reason for the bypass key. The
-window content is a photograph for as long as you hold it, so a playing video
-looks frozen. And because the mod is doing the dragging instead of Windows,
-Windows' own dragging features do not happen - see the section above.</p>
-<h3 id="underthehood">Under the hood</h3>
-<p>A title-bar press is caught at <code>DispatchMessage</code>, with <code>DefWindowProc</code> as a
-backup and <code>WM_SYSCOMMAND</code>/<code>SC_MOVE</code> alongside for apps that draw their own
-title bars. The mod then runs its own move loop in place of the one Windows
-would start: the window is captured with <code>PrintWindow(PW_RENDERFULLCONTENT)</code>,
-cloaked so it leaves composition entirely, and a spring mesh of that capture
-is drawn on a Direct3D 11 + DirectComposition overlay until you let go.</p>
-<p>The mesh is two layers of springs: a control spring pulling each vertex back
-to its rest position, with the stiffness falling off down the rows, and
-springs between neighbouring vertices so the grid holds together instead of
-turning to taffy. On release the control springs are switched to a stiff,
-overdamped pair so it snaps back rather than ringing.</p>
-<p>The drag runs on one persistent worker thread per process, never in the
-message pump: <code>PrintWindow(PW_RENDERFULLCONTENT)</code> renders through DWM and
-needs the window's own thread pumping, so doing it inline deadlocks against
-the very loop that invoked it.</p>
-<p>Only top-level windows are touched, and only ones DWM will cloak. Anything
-else is handed back to Windows, which then runs its own move loop as usual.</p>
-<h2 id="whatyougiveupduringawobbledrag">What you give up during a wobble drag</h2>
-<p>The mod replaces Windows' move loop, so for the windows it animates these do
-not happen:</p>
-<ul>
-<li>Aero Snap (dragging to a screen edge or the top)</li>
-<li>the Snap Layouts bar at the top of the screen</li>
-<li>restoring a snapped window's previous size when you drag it out</li>
-<li>shake to minimize</li>
-<li><code>WM_ENTERSIZEMOVE</code> / <code>WM_MOVING</code> / <code>WM_EXITSIZEMOVE</code>, which docking UIs
-such as Visual Studio's tool windows use to show drop targets</li>
-</ul>
-<p>Hold the bypass key (<strong>Shift</strong> by default) while grabbing to get all of that
-back for a drag.</p>
-<h2 id="excludedprocesses">Excluded processes</h2>
-<p>Shell and UI-host processes are excluded, since none of them own a window you
-would drag: <code>sihost.exe</code>, <code>RuntimeBroker.exe</code>, <code>StartMenuExperienceHost.exe</code>,
-<code>ShellExperienceHost.exe</code>, <code>SearchHost.exe</code>, <code>TextInputHost.exe</code>,
-<code>ApplicationFrameHost.exe</code> and <code>NVDisplay.Container.exe</code>.</p>
-<p>Windhawk never injects into the critical system processes (<code>csrss.exe</code>,
-<code>dwm.exe</code>, <code>lsass.exe</code> and the rest), so those need no entry here.</p>
-<h2 id="notes">Notes</h2>
-<p>Window content is a snapshot for the duration of the drag, so a playing video
-appears frozen while you hold it. This is inherent to the approach - capturing
-live content per frame is far more expensive than one <code>PrintWindow</code>.</p>
-<p>The Direct3D device and the overlay are released after a few seconds without
-a drag, so an application you dragged once does not hold them for the rest of
-its life. They are rebuilt on the next drag, which costs a few milliseconds.</p>]]></content>
-        <author>
-            <name>HeyJeay</name>
-            <uri>https://github.com/heyjeay</uri>
         </author>
     </entry>
 </feed>
