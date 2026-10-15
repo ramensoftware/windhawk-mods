@@ -6,7 +6,7 @@
 // @author          Zach Vaughn
 // @github          https://github.com/zachvdev
 // @include         explorer.exe
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -19,6 +19,12 @@ A dock as close to macOS as possible, while still working the way Windows
 does. Icons sit on a frosted-glass dock and grow as the pointer passes over
 them.
 
+Unlike "Taskbar Dock Animation", which magnifies the stock taskbar's icons,
+and "Mac Island & Dock", which replaces the taskbar with a separate dock
+window, this mod restyles the real taskbar: a frosted plate, larger icons
+loaded at high resolution, a taller taskbar and repositioned running
+indicators.
+
 Later I plan on splitting the Start Menu and Status Bar into a "Menu Bar" and
 sticking it to the top of the display.
 
@@ -27,13 +33,15 @@ sticking it to the top of the display.
 - Windows 11 only, with the taskbar at the bottom of the screen.
 - x64 PCs only for now; ARM64 isn't supported yet.
 - The "Small taskbar buttons" setting isn't supported.
-- Not designed to be used with other taskbar mods. In particular:
-  - It sets the taskbar's height and icon size itself, so don't combine it
-    with "Taskbar height and icon size", "Mac Island & Dock" or "Taskbar Dock
-    Animation".
-  - It uses XAML diagnostics to reach the taskbar's buttons, and only one
-    program can do that at a time, so it can't run together with "Windows 11
-    Taskbar Styler", TranslucentTB or UWPSpy.
+- The taskbar is made tall enough for fully magnified icons, so maximized
+  windows get a little less space. Lower Dock Size or Magnification to make
+  it shorter.
+- Icons are loaded at high resolution on Windows 11 with the October 2024
+  update (KB5044384) or later. On older builds, magnified icons are blurrier.
+- Not designed to be used with other taskbar mods. In particular, it sets
+  the taskbar's height and icon size and animates its icons itself, so don't
+  combine it with "Taskbar height and icon size", "Taskbar Dock Animation",
+  "Taskbar Dock Animation Plus" or "Mac Island & Dock".
 - If Windows' Smart App Control is on, it blocks this mod (as it does all
   Windhawk mods), because the mod is compiled on your PC and isn't signed.
 
@@ -44,9 +52,9 @@ mod (GPL-3.0).
 
 // ==WindhawkModSettings==
 /*
-- dockSize: 85
+- dockSize: 55
   $name: Dock Size (0-100)
-  $description: Size of the icons and the dock. (Default = 85)
+  $description: Size of the icons and the dock, from 18px to 73px icons. (Default = 55)
 - magnification: 60
   $name: Magnification (0-100)
   $description: How much the icons grow when hovered. (Default = 60)
@@ -64,9 +72,6 @@ mod (GPL-3.0).
 
 #include <windhawk_utils.h>
 
-#include <ocidl.h>
-#include <xamlOM.h>
-
 #include <algorithm>
 #include <atomic>
 #include <charconv>
@@ -75,6 +80,7 @@ mod (GPL-3.0).
 #include <iterator>
 #include <limits>
 #include <list>
+#include <optional>
 #include <regex>
 #include <vector>
 #include <string_view>
@@ -105,7 +111,7 @@ namespace wuc = winrt::Windows::UI::Composition;
 namespace wge = winrt::Windows::Graphics::Effects;
 
 // ---- Settings, as the user set them ----
-int g_dockSize = 85;           // 0-100
+int g_dockSize = 55;           // 0-100
 float g_scale = 1.6f;          // from Magnification: 0-100 -> 1.0-2.0
 int g_dockTint = 25;           // 0-100
 int g_dockBlur = 15;           // 0-100
@@ -114,7 +120,8 @@ int g_animationMs = 125;
 // ---- Sizes derived from the settings (see ComputeSizes) ----
 float g_iconSize = 39.0f;
 float g_radius = 130.0f;       // effect radius
-float g_buttonMargin = 4.0f;   // per side; negative pulls buttons together
+float g_buttonWidth = 47.0f;   // widened to fit the icon (see ApplyButtonWidth)
+float g_buttonMargin = 2.5f;   // per side; negative pulls buttons together
 float g_dockHeight = 65.0f;
 float g_dockSidePadding = 15.0f;
 float g_dockRadius = 20.0f;
@@ -125,6 +132,7 @@ float g_iconLoadSize = 63;     // resolution icons are loaded at; 0 = Windows' o
 constexpr float kStockIconSize = 24;      // Windows 11 taskbar icon size
 constexpr float kStockButtonWidth = 44;   // Windows 11 taskbar button width
 constexpr int kMinTaskbarHeight = 40;     // keeps the clock from being squashed
+constexpr float kButtonIconPadding = 8;   // a button is at least its icon + this wide
 
 // Fixed tuning, found by testing. Both are given for the stock 24px icon and
 // scale with the dock.
@@ -133,24 +141,26 @@ constexpr float kIconSpacing = 4;         // on the old 0-10 scale: gap = icon /
 
 void ComputeSizes() {
     // Exponential, so every step of the slider feels the same:
-    // 0 -> 12px, 50 -> 24px (Windows' own size), 100 -> 48px.
-    float icon = std::round(kStockIconSize * std::exp2((g_dockSize - 50) / 50.0f));
+    // 0 -> 18px, 20 -> 24px (Windows' own size), 55 -> 39px, 100 -> 73px.
+    float icon = std::round(kStockIconSize * std::exp2((g_dockSize - 20) / 50.0f));
     g_iconSize = icon;
 
     // Ratios that give the original look (40px dock, 12px corners, 4px gap)
     // at the stock 24px icon.
     g_dockHeight = std::round(icon * 5 / 3);
     // Space between the outermost icons and the dock's ends: 15px at the
-    // default 39px icon (Dock Size 85).
+    // default 39px icon (Dock Size 55).
     g_dockSidePadding = std::round(icon * 0.385f);
     g_dockRadius = std::round(g_dockHeight * 0.3f);
     g_dockBottomGap = std::round(icon / 6);
     g_radius = kEffectRadius * icon / kStockIconSize;
 
+    // Buttons stay at the stock width unless the icon needs more room.
     // Visible gap between icons, scaled with the icons. The margins make
     // every button take up exactly icon + gap.
+    g_buttonWidth = std::max(kStockButtonWidth, icon + kButtonIconPadding);
     float gap = kIconSpacing * icon / 12;
-    g_buttonMargin = (icon + gap - kStockButtonWidth) / 2;
+    g_buttonMargin = (icon + gap - g_buttonWidth) / 2;
 
     // Icons are loaded at the largest size they're ever shown at: fully
     // magnified. Shown smaller, they're scaled down, which stays sharp.
@@ -175,11 +185,17 @@ void ComputeSizes() {
 // ---------------------------------------------------------------------------
 
 struct Button {
-    InstanceHandle handle = 0;
     winrt::weak_ref<wux::FrameworkElement> element;
     wf::IInspectable originalMargin{nullptr};  // local value, may be UnsetValue
     int64_t marginToken = 0;
     wux::FrameworkElement::SizeChanged_revoker sizeChanged;
+    // The button's template root, widened to fit the icon (ApplyButtonWidth).
+    winrt::weak_ref<wux::FrameworkElement> root;
+    wf::IInspectable originalRootMinWidth{nullptr};
+    // Its icon column, for app buttons (ApplyIconColumn): the taskbar's own
+    // width, and the one we last set.
+    double originalIconColumn = 0;
+    double appliedIconColumn = 0;
 };
 
 // Side margins set the space between buttons: negative pulls neighbors
@@ -204,10 +220,12 @@ void RestoreSpacing(Button const& b) {
     }
 }
 
-// Globals holding XAML objects are marked no_destroy: when Explorer exits,
-// XAML shuts down before globals are destroyed, and destroying them then
-// could crash it. ResetAll empties them when the mod is unloaded.
-[[clang::no_destroy]] std::list<Button> g_buttons;
+// Containers holding event revokers or XAML objects are marked no_destroy:
+// when Explorer exits, XAML shuts down before globals are destroyed, and
+// destroying them then could crash it. They're wrapped in std::optional so
+// that ResetAll can destroy them when the mod is unloaded (.reset()).
+// Globals holding only weak references and plain values don't need this.
+[[clang::no_destroy]] std::optional<std::list<Button>> g_buttons{std::in_place};
 
 float GetRowOffsetY(wux::DependencyObject const& row);
 void PlaceIndicator(wux::FrameworkElement const& button, float s);
@@ -245,8 +263,8 @@ struct RowItem {
     float shift = 0;
 };
 
-[[clang::no_destroy]] std::vector<RowItem> g_row;
-[[clang::no_destroy]] winrt::weak_ref<wux::UIElement> g_rowParent;
+std::vector<RowItem> g_row;
+winrt::weak_ref<wux::UIElement> g_rowParent;
 
 // Latest pointer state. Pointer events only write these; the per-frame
 // update below reads them.
@@ -256,24 +274,22 @@ float g_pointerX = 0;
 // ---- Hidden taskbar background ----
 
 struct HiddenBackground {
-    InstanceHandle handle = 0;
     winrt::weak_ref<wux::FrameworkElement> element;
     double originalOpacity = 1.0;
 };
 
-[[clang::no_destroy]] std::list<HiddenBackground> g_backgrounds;
+std::list<HiddenBackground> g_backgrounds;
 
 // Makes the taskbar's background invisible (opacity 0), remembering how to
 // put it back. Opacity rather than Collapsed, so it still catches clicks on
 // the taskbar's empty space.
-void HideBackground(InstanceHandle handle, wux::FrameworkElement const& el) {
-    // The thumbnail-preview flyout uses the same control type; only hide the
-    // taskbar's own one.
+void HideBackground(wux::FrameworkElement const& el) {
     if (el.Name() != L"BackgroundControl") return;
+    g_backgrounds.remove_if([](HiddenBackground const& b) { return !b.element.get(); });
     for (auto& b : g_backgrounds) {
-        if (b.handle == handle) return;
+        if (b.element.get() == el) return;
     }
-    g_backgrounds.push_back({handle, winrt::make_weak(el), el.Opacity()});
+    g_backgrounds.push_back({winrt::make_weak(el), el.Opacity()});
     el.Opacity(0);
     Wh_Log(L"Taskbar background hidden");
 }
@@ -289,22 +305,31 @@ void RestoreBackgrounds() {
     g_backgrounds.clear();
 }
 
-// The taskbar app/system button `el` sits inside, at most `maxDepth` levels
-// up, or null.
-wux::FrameworkElement FindTaskbarButton(wux::FrameworkElement const& el, int maxDepth = 4) {
-    wux::DependencyObject current = wuxm::VisualTreeHelper::GetParent(el);
-    for (int depth = 0; current && depth < maxDepth; depth++) {
-        auto name = winrt::get_class_name(current);
-        if (name == L"Taskbar.TaskListButton" || name == L"Taskbar.ExperienceToggleButton") {
+// ---- Finding the taskbar's elements ----
+
+// Calls `f` for every element under `parent`, at most `depth` levels down.
+// `f` returns false to skip that element's own children.
+template <typename F>
+void ForEachDescendant(wux::DependencyObject const& parent, int depth, F& f) {
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; i++) {
+        auto child = wuxm::VisualTreeHelper::GetChild(parent, i);
+        bool descend = true;
+        if (auto el = child.try_as<wux::FrameworkElement>()) descend = f(el);
+        if (descend && depth > 1) ForEachDescendant(child, depth - 1, f);
+    }
+}
+
+// The taskbar (Taskbar.TaskbarFrame) that `el` is in, or null.
+wux::FrameworkElement FindTaskbarFrame(wux::FrameworkElement const& el) {
+    wux::DependencyObject current = el;
+    for (int depth = 0; current && depth < 20; depth++) {
+        if (winrt::get_class_name(current) == L"Taskbar.TaskbarFrame") {
             return current.try_as<wux::FrameworkElement>();
         }
         current = wuxm::VisualTreeHelper::GetParent(current);
     }
     return nullptr;
-}
-
-bool IsInsideTaskbarButton(wux::FrameworkElement const& el, int maxDepth = 4) {
-    return (bool)FindTaskbarButton(el, maxDepth);
 }
 
 // ---- Button highlight ----
@@ -323,7 +348,7 @@ struct HiddenHighlight {
     int64_t opacityToken = 0, visibilityToken = 0;
 };
 
-[[clang::no_destroy]] std::vector<HiddenHighlight> g_highlights;
+std::vector<HiddenHighlight> g_highlights;
 
 void ApplyHighlightHidden(wux::UIElement const& el) {
     if (el.Opacity() != 0) el.Opacity(0);
@@ -331,8 +356,6 @@ void ApplyHighlightHidden(wux::UIElement const& el) {
 }
 
 void HideHighlight(wux::FrameworkElement const& el) {
-    // Only the dock buttons' own; other controls use the same names.
-    if (!IsInsideTaskbarButton(el)) return;
     // Forget the highlights of buttons that are gone.
     g_highlights.erase(std::remove_if(g_highlights.begin(), g_highlights.end(),
                                       [](HiddenHighlight& h) { return !h.element.get(); }),
@@ -379,14 +402,13 @@ void RestoreHighlights() {
 // sharp as long as that source is big enough.
 
 struct IconImage {
-    InstanceHandle handle = 0;
     winrt::weak_ref<wux::FrameworkElement> element;
     wf::IInspectable originalWidth{nullptr};   // local values, may be UnsetValue
     wf::IInspectable originalHeight{nullptr};
     int64_t widthToken = 0, heightToken = 0;
 };
 
-[[clang::no_destroy]] std::list<IconImage> g_iconImages;
+[[clang::no_destroy]] std::optional<std::list<IconImage>> g_iconImages{std::in_place};
 
 void ApplyIconSize(wux::FrameworkElement const& el) {
     // Width() is NaN when unset, and NaN != anything, so this also covers it.
@@ -394,13 +416,11 @@ void ApplyIconSize(wux::FrameworkElement const& el) {
     if (el.Height() != g_iconSize) el.Height(g_iconSize);
 }
 
-void TrackIconImage(InstanceHandle handle, wux::FrameworkElement const& el) {
-    if (!IsInsideTaskbarButton(el, 6)) return;
-    for (auto& i : g_iconImages) {
-        if (i.handle == handle) return;
+void TrackIconImage(wux::FrameworkElement const& el) {
+    for (auto& i : *g_iconImages) {
+        if (i.element.get() == el) return;
     }
-    auto& i = g_iconImages.emplace_back();
-    i.handle = handle;
+    auto& i = g_iconImages->emplace_back();
     i.element = winrt::make_weak(el);
     i.originalWidth = el.ReadLocalValue(wux::FrameworkElement::WidthProperty());
     i.originalHeight = el.ReadLocalValue(wux::FrameworkElement::HeightProperty());
@@ -440,8 +460,8 @@ void ReleaseIconImage(IconImage const& i) {
 }
 
 void RestoreIconImages() {
-    for (auto& i : g_iconImages) ReleaseIconImage(i);
-    g_iconImages.clear();
+    for (auto& i : *g_iconImages) ReleaseIconImage(i);
+    g_iconImages->clear();
 }
 
 // A visible taskbar button and where it sits inside its row.
@@ -456,7 +476,7 @@ struct Icon {
 // All visible tracked buttons whose parent is `parent`.
 std::vector<Icon> GetIcons(wux::UIElement const& parent) {
     std::vector<Icon> icons;
-    for (auto& b : g_buttons) {
+    for (auto& b : *g_buttons) {
         auto other = b.element.get();
         if (!other || other.Visibility() != wux::Visibility::Visible ||
             other.ActualWidth() <= 0) {
@@ -606,10 +626,7 @@ struct Plate {
     wuxc::Grid root{nullptr};                // gets positioned and sized
     wuxc::Border blurHost{nullptr};
     wuxc::Border tint{nullptr};
-    // Invisible strip behind the icons, the dock's width and the taskbar's
-    // full height. The buttons don't touch each other, so without it the
-    // pointer "leaves" the dock in the gaps between them.
-    wuxc::Border hitArea{nullptr};
+    winrt::weak_ref<wux::FrameworkElement> frame;  // the taskbar it's in
     wuc::CompositionRoundedRectangleGeometry blurShape{nullptr};
     float appliedBlur = -1;
     float baseLeft = 0, baseWidth = 0;       // size when nothing is magnified
@@ -621,11 +638,11 @@ struct Plate {
     wux::FrameworkElement::SizeChanged_revoker panelSizeChanged;
 };
 
-[[clang::no_destroy]] std::list<Plate> g_plates;
+[[clang::no_destroy]] std::optional<std::list<Plate>> g_plates{std::in_place};
 
 Plate* GetRowPlate(wux::DependencyObject const& row) {
     if (!row) return nullptr;
-    for (auto& p : g_plates) {
+    for (auto& p : *g_plates) {
         if (p.row.get() == row) return &p;
     }
     return nullptr;
@@ -642,7 +659,6 @@ float GetRowOffsetY(wux::DependencyObject const& row) {
 int g_platesDirtyFrames = 0;
 
 void StartFrames();
-void SubscribeHitArea(wux::FrameworkElement const& el);
 
 void MarkPlatesDirty() {
     g_platesDirtyFrames = 3;
@@ -676,7 +692,7 @@ void ApplyPlateLook(Plate& p) {
 void EnsurePlate(wux::FrameworkElement const& button) {
     auto row = wuxm::VisualTreeHelper::GetParent(button).try_as<wux::FrameworkElement>();
     if (!row) return;
-    for (auto& p : g_plates) {
+    for (auto& p : *g_plates) {
         if (p.row.get() == row) return;
     }
     auto rowParent = wuxm::VisualTreeHelper::GetParent(row);
@@ -703,35 +719,20 @@ void EnsurePlate(wux::FrameworkElement const& button) {
     root.Children().Append(blurHost);
     root.Children().Append(tint);  // later children draw on top
 
-    // A transparent background makes it catch the pointer; invisible otherwise.
-    wuxc::Border hitArea;
-    hitArea.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
-    hitArea.HorizontalAlignment(wux::HorizontalAlignment::Left);
-    hitArea.VerticalAlignment(wux::VerticalAlignment::Stretch);
-    hitArea.Visibility(wux::Visibility::Collapsed);
-    if (panel.try_as<wuxc::Grid>()) {
-        wuxc::Grid::SetRowSpan(hitArea, 100);
-        wuxc::Grid::SetColumnSpan(hitArea, 100);
-    }
-
-    // Insert both right before the icon row: drawn above whatever comes
-    // earlier (the taskbar background), below the icons, which get the
-    // pointer first wherever they are.
+    // Insert it right before the icon row: drawn above whatever comes earlier
+    // (the taskbar background), below the icons.
     uint32_t index = 0;
     if (!panel.Children().IndexOf(row, index)) index = 0;
     panel.Children().InsertAt(index, root);
-    panel.Children().InsertAt(index, hitArea);
     Wh_Log(L"[plate] inserted at index %u of %u children", index, panel.Children().Size());
 
-    auto& p = g_plates.emplace_back();
+    auto& p = g_plates->emplace_back();
     p.row = winrt::make_weak(row.as<wux::UIElement>());
     p.panel = winrt::make_weak(panel);
     p.root = root;
     p.blurHost = blurHost;
     p.tint = tint;
-    p.hitArea = hitArea;
     ApplyPlateLook(p);
-    SubscribeHitArea(hitArea);
 
     auto onSize = [](wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
         MarkPlatesDirty();
@@ -760,11 +761,18 @@ void MeasurePlate(Plate& p) {
     auto panel = p.panel.get();
     if (!row || !panel || !p.root) return;
 
+    // The taskbar it's in, for the pointer hooks. Looked up here, once it's
+    // surely in the tree.
+    if (!p.frame.get()) {
+        if (auto frame = FindTaskbarFrame(row.as<wux::FrameworkElement>())) {
+            p.frame = winrt::make_weak(frame);
+        }
+    }
+
     auto icons = GetIcons(row);
     if (icons.empty()) {
         Wh_Log(L"[plate] measure: no visible icons");
         p.root.Visibility(wux::Visibility::Collapsed);
-        if (p.hitArea) p.hitArea.Visibility(wux::Visibility::Collapsed);
         return;
     }
 
@@ -804,7 +812,6 @@ void MeasurePlate(Plate& p) {
     if (std::isnan(current) || std::fabs(current - height) > 0.5) p.root.Height(height);
     p.left = p.width = -1;  // force ApplyPlate to write
     p.root.Visibility(wux::Visibility::Visible);
-    if (p.hitArea) p.hitArea.Visibility(wux::Visibility::Visible);
 
     // Re-apply every icon's transform so the new offset and dock bottom take
     // effect, keeping any magnification currently in progress.
@@ -826,17 +833,13 @@ void ApplyPlate(Plate& p, float extra) {
     if (std::fabs(left - p.left) > 0.25f || std::fabs(width - p.width) > 0.25f) {
         p.root.Margin({left, p.top, 0, 0});
         p.root.Width(width);
-        if (p.hitArea) {
-            p.hitArea.Margin({left, 0, 0, 0});
-            p.hitArea.Width(width);
-        }
         p.left = left;
         p.width = width;
     }
 }
 
 void RemovePlates() {
-    for (auto& p : g_plates) {
+    for (auto& p : *g_plates) {
         p.rowSizeChanged.revoke();
         p.panelSizeChanged.revoke();
         if (p.blurHost) {
@@ -847,12 +850,9 @@ void RemovePlates() {
         if (panel && p.root) {
             uint32_t index;
             if (panel.Children().IndexOf(p.root, index)) panel.Children().RemoveAt(index);
-            if (p.hitArea && panel.Children().IndexOf(p.hitArea, index)) {
-                panel.Children().RemoveAt(index);
-            }
         }
     }
-    g_plates.clear();
+    g_plates->clear();
 }
 
 // ---- Running indicators ----
@@ -861,17 +861,16 @@ void RemovePlates() {
 // normal size, centered under the icon, just above the bottom of the dock.
 
 struct Indicator {
-    InstanceHandle handle = 0;
     winrt::weak_ref<wux::FrameworkElement> element;
     winrt::weak_ref<wux::FrameworkElement> button;
     wux::FrameworkElement::SizeChanged_revoker sizeChanged;
 };
 
-[[clang::no_destroy]] std::list<Indicator> g_indicators;
+[[clang::no_destroy]] std::optional<std::list<Indicator>> g_indicators{std::in_place};
 
 void PlaceIndicator(wux::FrameworkElement const& button, float s) {
     wux::FrameworkElement el{nullptr};
-    for (auto& i : g_indicators) {
+    for (auto& i : *g_indicators) {
         if (i.button.get() == button) {
             el = i.element.get();
             break;
@@ -914,14 +913,11 @@ void PlaceIndicator(wux::FrameworkElement const& button, float s) {
     visual.Properties().InsertVector3(L"Translation", {0, ty, 0});
 }
 
-void TrackIndicator(InstanceHandle handle, wux::FrameworkElement const& el) {
-    auto button = FindTaskbarButton(el, 6);
-    if (!button) return;
-    for (auto& i : g_indicators) {
-        if (i.handle == handle) return;
+void TrackIndicator(wux::FrameworkElement const& el, wux::FrameworkElement const& button) {
+    for (auto& i : *g_indicators) {
+        if (i.element.get() == el) return;
     }
-    auto& i = g_indicators.emplace_back();
-    i.handle = handle;
+    auto& i = g_indicators->emplace_back();
     i.element = winrt::make_weak(el);
     i.button = winrt::make_weak(button);
     // Laid out for the first time, or wider for the active app: re-place it.
@@ -935,7 +931,7 @@ void TrackIndicator(InstanceHandle handle, wux::FrameworkElement const& el) {
 }
 
 void RestoreIndicators() {
-    for (auto& i : g_indicators) {
+    for (auto& i : *g_indicators) {
         i.sizeChanged.revoke();
         if (auto el = i.element.get()) {
             try {
@@ -946,7 +942,7 @@ void RestoreIndicators() {
             } catch (...) {}
         }
     }
-    g_indicators.clear();
+    g_indicators->clear();
 }
 
 // (Re)builds the list of icons in `parent`. Icons that were already in the
@@ -993,6 +989,8 @@ winrt::event_token g_frameToken{};
 bool g_frameRunning = false;
 std::chrono::steady_clock::time_point g_lastFrame;
 
+void ScanTaskbars();
+
 void StopFrames() {
     if (!g_frameRunning) return;
     wuxm::CompositionTarget::Rendering(g_frameToken);
@@ -1013,20 +1011,23 @@ void OnFrame() {
         alpha = 1.0f - std::exp(-dt / tau);
     }
 
-    // 0. Create missing plates and re-measure them if buttons recently came,
-    //    went or were laid out. Done here rather than when buttons are
-    //    reported, because the taskbar doesn't like its tree being changed
-    //    mid-report.
+    // 0. If buttons recently came, went or were laid out: find any the hooks
+    //    haven't reported, create missing plates and re-measure them. Done
+    //    here rather than in the hooks, because the taskbar doesn't like its
+    //    tree being changed while it's updating a button.
     if (g_platesDirtyFrames > 0) {
         g_platesDirtyFrames--;
-        for (auto& b : g_buttons) {
+        try { ScanTaskbars(); } catch (...) {
+            Wh_Log(L"ScanTaskbars failed: 0x%08X", winrt::to_hresult());
+        }
+        for (auto& b : *g_buttons) {
             if (auto el = b.element.get()) {
                 try { EnsurePlate(el); } catch (...) {
                     Wh_Log(L"EnsurePlate failed: 0x%08X", winrt::to_hresult());
                 }
             }
         }
-        for (auto& p : g_plates) MeasurePlate(p);
+        for (auto& p : *g_plates) MeasurePlate(p);
     }
 
     // 0b. Re-read where the row's icons are, in their current order, so the
@@ -1085,7 +1086,7 @@ void OnFrame() {
 
     // 3. Widen the plate under the current row by the same total.
     auto rowParent = g_rowParent.get();
-    for (auto& p : g_plates) {
+    for (auto& p : *g_plates) {
         ApplyPlate(p, rowParent && p.row.get() == rowParent ? total : 0);
     }
 
@@ -1108,104 +1109,13 @@ void StartFrames() {
     g_frameRunning = true;
 }
 
-// ---- Pointer events: just record where the pointer is ----
+// ---- Taskbar buttons ----
 
-// The pointer is over the row of icons `row` (on a button, or in the dock
-// between them).
-void OnPointerOverRow(wux::UIElement const& row, wuxi::PointerRoutedEventArgs const& e) {
-    if (g_rowParent.get() != row) {
-        BuildRow(row);
-        if (!g_rowParent.get()) return;
+Button& OnButtonAdded(wux::FrameworkElement const& el) {
+    for (auto& b : *g_buttons) {
+        if (b.element.get() == el) return b;
     }
-    g_pointerX = e.GetCurrentPoint(row).Position().X;
-    g_pointerOver = true;
-    StartFrames();
-}
-
-// The pointer is over a button.
-void OnPointer(wux::FrameworkElement const& el, wuxi::PointerRoutedEventArgs const& e) {
-    auto row = wuxm::VisualTreeHelper::GetParent(el).try_as<wux::UIElement>();
-    if (!row) return;
-    OnPointerOverRow(row, e);
-}
-
-void OnLeave(wux::FrameworkElement const&) {
-    // If the pointer moved onto the next icon, or into the dock between
-    // icons, its enter event right after this sets g_pointerOver back to true
-    // before the next frame.
-    g_pointerOver = false;
-    StartFrames();
-}
-
-// Shared handlers. They must be the same objects for AddHandler/RemoveHandler.
-[[clang::no_destroy]] wf::IInspectable g_enterHandler{nullptr};
-[[clang::no_destroy]] wf::IInspectable g_leaveHandler{nullptr};
-[[clang::no_destroy]] wf::IInspectable g_hitAreaHandler{nullptr};
-
-void EnsureHandlers() {
-    if (g_enterHandler) return;
-    // Used for both PointerEntered and PointerMoved.
-    g_enterHandler = winrt::box_value(wuxi::PointerEventHandler(
-        [](wf::IInspectable const& sender, wuxi::PointerRoutedEventArgs const& e) {
-            try {
-                if (auto el = sender.try_as<wux::FrameworkElement>()) OnPointer(el, e);
-            } catch (...) {}
-        }));
-    // Pointer over a plate's hit area: treat it as being over that row.
-    g_hitAreaHandler = winrt::box_value(wuxi::PointerEventHandler(
-        [](wf::IInspectable const& sender, wuxi::PointerRoutedEventArgs const& e) {
-            try {
-                for (auto& p : g_plates) {
-                    if (p.hitArea && p.hitArea == sender) {
-                        if (auto row = p.row.get()) OnPointerOverRow(row, e);
-                        return;
-                    }
-                }
-            } catch (...) {}
-        }));
-    g_leaveHandler = winrt::box_value(wuxi::PointerEventHandler(
-        [](wf::IInspectable const& sender, wuxi::PointerRoutedEventArgs const&) {
-            try {
-                if (auto el = sender.try_as<wux::FrameworkElement>()) OnLeave(el);
-            } catch (...) {}
-        }));
-}
-
-void Subscribe(wux::FrameworkElement const& el, bool add) {
-    // handledEventsToo = true: the button marks its own pointer events as
-    // handled, which would otherwise hide them from us.
-    if (add) {
-        el.AddHandler(wux::UIElement::PointerEnteredEvent(), g_enterHandler, true);
-        el.AddHandler(wux::UIElement::PointerMovedEvent(), g_enterHandler, true);
-        el.AddHandler(wux::UIElement::PointerExitedEvent(), g_leaveHandler, true);
-        el.AddHandler(wux::UIElement::PointerCanceledEvent(), g_leaveHandler, true);
-        el.AddHandler(wux::UIElement::PointerCaptureLostEvent(), g_leaveHandler, true);
-    } else {
-        el.RemoveHandler(wux::UIElement::PointerEnteredEvent(), g_enterHandler);
-        el.RemoveHandler(wux::UIElement::PointerMovedEvent(), g_enterHandler);
-        el.RemoveHandler(wux::UIElement::PointerExitedEvent(), g_leaveHandler);
-        el.RemoveHandler(wux::UIElement::PointerCanceledEvent(), g_leaveHandler);
-        el.RemoveHandler(wux::UIElement::PointerCaptureLostEvent(), g_leaveHandler);
-    }
-}
-
-// A plate's hit area reports the pointer for its row (see EnsurePlate).
-void SubscribeHitArea(wux::FrameworkElement const& el) {
-    EnsureHandlers();
-    el.AddHandler(wux::UIElement::PointerEnteredEvent(), g_hitAreaHandler, true);
-    el.AddHandler(wux::UIElement::PointerMovedEvent(), g_hitAreaHandler, true);
-    el.AddHandler(wux::UIElement::PointerExitedEvent(), g_leaveHandler, true);
-    el.AddHandler(wux::UIElement::PointerCanceledEvent(), g_leaveHandler, true);
-}
-
-void OnButtonAdded(InstanceHandle handle, wux::FrameworkElement const& el) {
-    for (auto& b : g_buttons) {
-        if (b.handle == handle) return;
-    }
-    EnsureHandlers();
-    Subscribe(el, true);
-    auto& b = g_buttons.emplace_back();
-    b.handle = handle;
+    auto& b = g_buttons->emplace_back();
     b.element = winrt::make_weak(el);
     b.originalMargin = el.ReadLocalValue(wux::FrameworkElement::MarginProperty());
     // A button for a newly opened app is still being set up when we see it;
@@ -1224,32 +1134,182 @@ void OnButtonAdded(InstanceHandle handle, wux::FrameworkElement const& el) {
         [](wf::IInspectable const&, wux::SizeChangedEventArgs const&) { MarkPlatesDirty(); });
     ApplySpacing(el);
     MarkPlatesDirty();  // the plate is created on the next frame
+    return b;
 }
 
-// Undoes OnButtonAdded for one button. Also matters when the taskbar later
-// reuses the same button for another app: it starts from a clean state.
+// Makes the button wide enough for the dock's icon. The taskbar keeps its
+// buttons at the stock width, since its layout code sees the stock 24px icon,
+// and that cuts off bigger icons. The button's template root (for app
+// buttons, "IconPanel") is given a minimum width instead, the way "Taskbar
+// Labels" widens buttons; the button sizes itself to fit.
+void ApplyButtonWidth(Button& b, wux::FrameworkElement const& button) {
+    auto root = b.root.get();
+    if (!root) {
+        if (wuxm::VisualTreeHelper::GetChildrenCount(button) == 0) return;  // no template yet
+        root = wuxm::VisualTreeHelper::GetChild(button, 0).try_as<wux::FrameworkElement>();
+        if (!root) return;
+        b.root = winrt::make_weak(root);
+        b.originalRootMinWidth = root.ReadLocalValue(wux::FrameworkElement::MinWidthProperty());
+    }
+    if (root.MinWidth() != g_buttonWidth) root.MinWidth(g_buttonWidth);
+}
+
+// App buttons' template root ("IconPanel") is a grid whose first column holds
+// the icon. The taskbar sizes that column for the stock icon (in
+// TaskListButton::UpdateIconColumnDefinition, hooked below), which cuts off
+// bigger icons whatever the button's width, so it's widened to fill the
+// button. Not needed when the column sizes itself, or isn't there.
+void ApplyIconColumn(Button& b) {
+    auto root = b.root.get();
+    auto grid = root ? root.try_as<wuxc::Grid>() : nullptr;
+    if (!grid) return;
+    auto columns = grid.ColumnDefinitions();
+    if (columns.Size() == 0) return;
+    auto column = columns.GetAt(0);
+    auto width = column.Width();
+    if (width.GridUnitType != wux::GridUnitType::Pixel) return;
+
+    // A value we didn't set is the taskbar's own (it sets it again on updates).
+    if (width.Value != b.appliedIconColumn) b.originalIconColumn = width.Value;
+    auto padding = grid.Padding();
+    double target = std::max(b.originalIconColumn,
+                             (double)g_buttonWidth - padding.Left - padding.Right);
+    if (width.Value != target) column.Width({target, wux::GridUnitType::Pixel});
+    b.appliedIconColumn = target;
+}
+
+// Undoes OnButtonAdded for one button.
 void ReleaseButton(Button& b) {
     b.sizeChanged.revoke();
     auto el = b.element.get();
     if (!el) return;
-    Subscribe(el, false);
     if (b.marginToken) {
         el.UnregisterPropertyChangedCallback(wux::FrameworkElement::MarginProperty(),
                                              b.marginToken);
         b.marginToken = 0;
     }
     RestoreSpacing(b);
+    if (auto root = b.root.get()) {
+        if (b.originalIconColumn > 0) {
+            if (auto grid = root.try_as<wuxc::Grid>(); grid && grid.ColumnDefinitions().Size()) {
+                auto column = grid.ColumnDefinitions().GetAt(0);
+                if (column.Width().Value == b.appliedIconColumn) {
+                    column.Width({b.originalIconColumn, wux::GridUnitType::Pixel});
+                }
+            }
+        }
+        RestoreLocalValue(root, wux::FrameworkElement::MinWidthProperty(),
+                          b.originalRootMinWidth);
+    }
 }
 
-void OnButtonRemoved(InstanceHandle handle) {
-    bool removed = false;
-    g_buttons.remove_if([&](Button& b) {
-        if (b.handle != handle) return false;
-        try { ReleaseButton(b); } catch (...) {}
-        removed = true;
+// Everything the mod changes in one taskbar button (an app, Start, Task
+// View...): its spacing, icon, running indicator and highlights. Safe to call
+// again; whatever is already handled is skipped.
+void ProcessButton(wux::FrameworkElement const& button) {
+    Button& b = OnButtonAdded(button);
+    ApplyButtonWidth(b, button);
+    ApplyIconColumn(b);
+    auto visit = [&](wux::FrameworkElement const& el) {
+        auto name = el.Name();
+        if (name == L"Icon") {
+            TrackIconImage(el);
+        } else if (name == L"RunningIndicator") {
+            TrackIndicator(el, button);
+        } else if ((name == L"BackgroundElement" || name == L"MultiWindowElement") &&
+                   el.try_as<wuxc::Border>()) {
+            HideHighlight(el);
+        }
         return true;
-    });
-    if (removed) MarkPlatesDirty();
+    };
+    ForEachDescendant(button, 6, visit);
+}
+
+// ---- Taskbars ----
+// Each taskbar (one per monitor) is a Taskbar.TaskbarFrame. The hooks report
+// them, and on the next frames their trees are walked for every button and
+// the background (see ScanTaskbars). That also catches buttons that existed
+// before the mod loaded, which the button hooks may not have reported yet.
+
+std::vector<winrt::weak_ref<wux::FrameworkElement>> g_frames;
+
+void NoteTaskbarFrame(wux::FrameworkElement const& frame) {
+    if (!frame) return;
+    for (auto& f : g_frames) {
+        if (f.get() == frame) return;
+    }
+    g_frames.push_back(winrt::make_weak(frame));
+    Wh_Log(L"Taskbar found");
+    MarkPlatesDirty();
+}
+
+void ScanTaskbars() {
+    // Forget whatever is gone.
+    g_frames.erase(std::remove_if(g_frames.begin(), g_frames.end(),
+                                  [](auto& f) { return !f.get(); }),
+                   g_frames.end());
+    g_buttons->remove_if([](Button const& b) { return !b.element.get(); });
+    g_iconImages->remove_if([](IconImage const& i) { return !i.element.get(); });
+    g_indicators->remove_if([](Indicator const& i) { return !i.element.get(); });
+
+    auto visit = [](wux::FrameworkElement const& el) {
+        auto type = winrt::get_class_name(el);
+        if (type == L"Taskbar.TaskListButton" || type == L"Taskbar.ExperienceToggleButton") {
+            ProcessButton(el);
+            return false;
+        }
+        if (type == L"Taskbar.TaskbarBackground") {
+            HideBackground(el);
+            return false;
+        }
+        return true;
+    };
+    for (auto& f : g_frames) {
+        if (auto frame = f.get()) ForEachDescendant(frame, 12, visit);
+    }
+}
+
+// ---- Pointer (reported by the TaskbarFrame hooks) ----
+
+// The pointer moved over a taskbar. It counts as over the dock when it's
+// within the plate's width (as currently widened by magnification), gaps
+// between icons included.
+void OnTaskbarPointerMoved(wux::FrameworkElement const& frame,
+                           wuxi::PointerRoutedEventArgs const& e) {
+    NoteTaskbarFrame(frame);
+    Plate* plate = nullptr;
+    for (auto& p : *g_plates) {
+        if (p.frame.get() == frame) {
+            plate = &p;
+            break;
+        }
+    }
+    wux::UIElement row{nullptr};
+    bool over = false;
+    if (plate && plate->width > 0 && plate->root.Visibility() == wux::Visibility::Visible) {
+        row = plate->row.get();
+        auto panel = plate->panel.get();
+        if (row && panel) {
+            float x = e.GetCurrentPoint(panel).Position().X;
+            over = x >= plate->left && x <= plate->left + plate->width;
+        }
+    }
+    if (!over) {
+        if (g_pointerOver) {
+            g_pointerOver = false;
+            StartFrames();
+        }
+        return;
+    }
+    if (g_rowParent.get() != row) BuildRow(row);
+    g_pointerX = e.GetCurrentPoint(row).Position().X;
+    g_pointerOver = true;
+    StartFrames();
+}
+
+void OnTaskbarPointerExited() {
+    g_pointerOver = false;
+    StartFrames();
 }
 
 void ResetAll() {
@@ -1258,7 +1318,7 @@ void ResetAll() {
     RestoreBackgrounds();
     RestoreHighlights();
     RestoreIconImages();
-    for (auto& b : g_buttons) {
+    for (auto& b : *g_buttons) {
         if (auto el = b.element.get()) {
             try {
                 ReleaseButton(b);
@@ -1270,214 +1330,16 @@ void ResetAll() {
         }
     }
     RestoreIndicators();
-    g_buttons.clear();
     g_row.clear();
     g_rowParent = nullptr;
-    g_enterHandler = nullptr;
-    g_leaveHandler = nullptr;
-    g_hitAreaHandler = nullptr;
-}
-
-// ---------------------------------------------------------------------------
-// XAML diagnostics plumbing (attaches to the taskbar's visual tree)
-// ---------------------------------------------------------------------------
-
-thread_local bool g_reportCompositionDiagAsDisabled = false;
-
-// The thread subscribing to the taskbar's visual tree (see AdviseAsync). The
-// mod waits for it before unloading, so it never runs code that's gone.
-std::atomic<HANDLE> g_adviseThread = nullptr;
-
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2, winrt::non_agile> {
-public:
-    explicit VisualTreeWatcher(winrt::com_ptr<::IUnknown> const& site)
-        : m_diag(site.as<IXamlDiagnostics>()) {}
-
-    void AdviseAsync() {
-        auto* holder = new winrt::com_ptr<VisualTreeWatcher>();
-        holder->copy_from(this);
-        HANDLE t = CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
-            auto* holder = static_cast<winrt::com_ptr<VisualTreeWatcher>*>(p);
-            try {
-                g_reportCompositionDiagAsDisabled = true;
-                HRESULT hr = (*holder)->m_diag.as<IVisualTreeService3>()
-                                 ->AdviseVisualTreeChange(holder->get());
-                g_reportCompositionDiagAsDisabled = false;
-                Wh_Log(L"AdviseVisualTreeChange: 0x%08X", hr);
-            } catch (...) {
-                g_reportCompositionDiagAsDisabled = false;
-            }
-            delete holder;
-            return 0;
-        }, holder, 0, nullptr);
-        if (!t) {
-            delete holder;
-            return;
-        }
-        // Kept so Wh_ModUninit can wait for it (an earlier one, if any, is
-        // long finished).
-        if (HANDLE old = g_adviseThread.exchange(t)) CloseHandle(old);
-    }
-
-    void Unadvise() {
-        try { m_diag.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this); } catch (...) {}
-    }
-
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation, VisualElement element,
-                                                 VisualMutationType mutation) override {
-        try {
-            std::wstring_view type = element.Type ? element.Type : L"";
-            if (mutation == Add) {
-                bool isButton = type == L"Taskbar.TaskListButton" ||
-                                type == L"Taskbar.ExperienceToggleButton";
-                bool isBackground = type == L"Taskbar.TaskbarBackground";
-                std::wstring_view name = element.Name ? element.Name : L"";
-                bool isHighlight = type == L"Windows.UI.Xaml.Controls.Border" &&
-                                   (name == L"BackgroundElement" || name == L"MultiWindowElement");
-                bool isIcon = name == L"Icon";
-                bool isIndicator = name == L"RunningIndicator";
-                if (!isButton && !isBackground && !isHighlight && !isIcon && !isIndicator) {
-                    return S_OK;
-                }
-
-                wf::IInspectable insp;
-                winrt::check_hresult(m_diag->GetIInspectableFromHandle(
-                    element.Handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(insp))));
-                if (auto fe = insp.try_as<wux::FrameworkElement>()) {
-                    if (isButton) OnButtonAdded(element.Handle, fe);
-                    else if (isBackground) HideBackground(element.Handle, fe);
-                    else if (isHighlight) HideHighlight(fe);
-                    else if (isIcon) TrackIconImage(element.Handle, fe);
-                    else TrackIndicator(element.Handle, fe);
-                }
-            } else if (mutation == Remove) {
-                OnButtonRemoved(element.Handle);
-                // Put removed elements back the way they were: the taskbar
-                // may reuse them for another app, and they're tracked afresh
-                // when they come back.
-                g_backgrounds.remove_if([&](HiddenBackground const& b) {
-                    if (b.handle != element.Handle) return false;
-                    RestoreHidden(b);
-                    return true;
-                });
-                g_iconImages.remove_if([&](IconImage const& i) {
-                    if (i.handle != element.Handle) return false;
-                    ReleaseIconImage(i);
-                    return true;
-                });
-                g_indicators.remove_if(
-                    [&](Indicator const& i) { return i.handle == element.Handle; });
-            }
-        } catch (...) {
-            Wh_Log(L"OnVisualTreeChange error: 0x%08X", winrt::to_hresult());
-        }
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle, VisualElementState,
-                                                    LPCWSTR) override {
-        return S_OK;
-    }
-
-private:
-    winrt::com_ptr<IXamlDiagnostics> m_diag;
-};
-
-[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_watcher;
-
-// {C1B6E4A2-58D3-4F7E-9A21-6E0B3D7C9F45}
-constexpr CLSID CLSID_DockTAP = {
-    0xc1b6e4a2, 0x58d3, 0x4f7e, {0x9a, 0x21, 0x6e, 0x0b, 0x3d, 0x7c, 0x9f, 0x45}};
-
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (LPCWSTR)&GetCurrentModuleHandle, &module)) {
-        return nullptr;
-    }
-    return module;
-}
-
-class DockTAP : public winrt::implements<DockTAP, IObjectWithSite, winrt::non_agile> {
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(::IUnknown* site) override {
-        try {
-            if (g_watcher) { g_watcher->Unadvise(); g_watcher = nullptr; }
-            m_site.copy_from(site);
-            if (m_site) {
-                FreeLibrary(GetCurrentModuleHandle());  // balance IXDE's LoadLibrary
-                g_watcher = winrt::make_self<VisualTreeWatcher>(m_site);
-                g_watcher->AdviseAsync();
-            }
-            return S_OK;
-        } catch (...) {
-            return winrt::to_hresult();
-        }
-    }
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void** ppv) override {
-        if (!m_site) { *ppv = nullptr; return E_FAIL; }
-        return m_site->QueryInterface(riid, ppv);
-    }
-private:
-    winrt::com_ptr<::IUnknown> m_site;
-};
-
-class DockTAPFactory : public winrt::implements<DockTAPFactory, IClassFactory, winrt::non_agile> {
-public:
-    HRESULT STDMETHODCALLTYPE CreateInstance(::IUnknown* outer, REFIID riid, void** ppv) override {
-        try {
-            *ppv = nullptr;
-            if (outer) return CLASS_E_NOAGGREGATION;
-            return winrt::make_self<DockTAP>().as<IObjectWithSite>()->QueryInterface(riid, ppv);
-        } catch (...) {
-            return winrt::to_hresult();
-        }
-    }
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) override { return S_OK; }
-};
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-extern "C" __declspec(dllexport) HRESULT STDAPICALLTYPE
-DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
-    try {
-        if (rclsid == CLSID_DockTAP) {
-            *ppv = nullptr;
-            return winrt::make_self<DockTAPFactory>().as<IClassFactory>()->QueryInterface(riid, ppv);
-        }
-        return CLASS_E_CLASSNOTAVAILABLE;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-}
-#pragma clang diagnostic pop
-
-bool g_tapInjected = false;
-
-void InjectTAP() {
-    if (g_tapInjected) return;
-
-    WCHAR path[MAX_PATH];
-    if (!GetModuleFileName(GetCurrentModuleHandle(), path, ARRAYSIZE(path))) return;
-
-    HMODULE hXaml = LoadLibraryEx(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hXaml) return;
-
-    using IXDE_t = HRESULT(WINAPI*)(LPCWSTR, DWORD, LPCWSTR, LPCWSTR, CLSID, LPCWSTR);
-    auto ixde = (IXDE_t)GetProcAddress(hXaml, "InitializeXamlDiagnosticsEx");
-    if (!ixde) return;
-
-    HRESULT hr = E_FAIL;
-    for (int i = 1; i <= 10000; i++) {
-        WCHAR name[64];
-        swprintf(name, ARRAYSIZE(name), L"VisualDiagConnection%d", i);
-        hr = ixde(name, GetCurrentProcessId(), L"", path, CLSID_DockTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) break;
-    }
-    Wh_Log(L"InitializeXamlDiagnosticsEx: 0x%08X", hr);
-    if (SUCCEEDED(hr)) g_tapInjected = true;
+    g_frames.clear();
+    // Last, since everything above still reads them (see the no_destroy note
+    // at g_buttons). Nothing touches them after this: the hooks check
+    // g_unloading, and every callback and event handler is removed above.
+    g_buttons.reset();
+    g_iconImages.reset();
+    g_plates.reset();
+    g_indicators.reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -1526,55 +1388,73 @@ HWND FindTaskbar() {
     return result;
 }
 
-// Catch the taskbar's XAML island being created (e.g. after Explorer restarts).
-using CreateWindowInBand_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int,
-                                           HWND, HMENU, HINSTANCE, PVOID, DWORD);
-CreateWindowInBand_t CreateWindowInBand_Original;
-HWND WINAPI CreateWindowInBand_Hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWORD style, int x,
-                                    int y, int w, int h, HWND parent, HMENU menu,
-                                    HINSTANCE inst, PVOID param, DWORD band) {
-    HWND hWnd = CreateWindowInBand_Original(ex, cls, name, style, x, y, w, h, parent, menu,
-                                            inst, param, band);
-    if (hWnd && parent && !g_tapInjected && ((ULONG_PTR)cls & ~(ULONG_PTR)0xFFFF) &&
-        _wcsicmp(cls, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0) {
-        WCHAR parentCls[32];
-        if (GetClassName(parent, parentCls, ARRAYSIZE(parentCls)) &&
-            _wcsicmp(parentCls, L"Shell_TrayWnd") == 0) {
-            InjectTAP();
+// ---------------------------------------------------------------------------
+// Reaching the taskbar's elements from its own code
+// ---------------------------------------------------------------------------
+// The taskbar's button and frame classes are XAML elements. In a hook on one
+// of their methods, the element is the interface at pThis + 3 pointers (the
+// same as in "Taskbar Labels").
+
+// Set while the mod unloads, so the hooks stop touching the taskbar.
+std::atomic<bool> g_unloading = false;
+
+wux::FrameworkElement ElementFromThis(void* pThis) {
+    winrt::Windows::Foundation::IUnknown unknown;
+    winrt::copy_from_abi(unknown, (void**)pThis + 3);
+    return unknown.try_as<wux::FrameworkElement>();
+}
+
+// A taskbar app button (TaskListButton) updated itself: apply the dock's
+// changes to it right away, before it's drawn, and note its taskbar so the
+// rest is found on the next frames.
+void OnTaskListButtonUpdated(void* pThis) {
+    if (g_unloading) return;
+    try {
+        if (auto button = ElementFromThis(pThis)) {
+            ProcessButton(button);
+            NoteTaskbarFrame(FindTaskbarFrame(button));
         }
+    } catch (...) {
+        Wh_Log(L"Button update failed: 0x%08X", winrt::to_hresult());
     }
-    return hWnd;
 }
 
-// Report XAML composition diagnostics as disabled while advising; they aren't
-// thread-safe and can corrupt Explorer's heap (same as Taskbar Styler).
-using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
-RegOpenKeyExW_t RegOpenKeyExW_Original;
-LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY key, LPCWSTR sub, DWORD opt, REGSAM sam, PHKEY out) {
-    LSTATUS r = RegOpenKeyExW_Original(key, sub, opt, sam, out);
-    if (r == ERROR_SUCCESS || !g_reportCompositionDiagAsDisabled || key != HKEY_LOCAL_MACHINE ||
-        !sub || _wcsicmp(sub, L"Software\\Microsoft\\XAML\\Debug") != 0) {
-        return r;
-    }
-    return RegOpenKeyExW_Original(HKEY_LOCAL_MACHINE, L"Software\\Microsoft", opt, sam, out);
+// ---- The pointer over the taskbar (as in "Taskbar Dock Animation") ----
+
+using TaskbarFrame_OnPointer_t = int(WINAPI*)(void* pThis, void* pArgs);
+
+// The TaskbarFrame these hooks were called for, or null for any other class.
+wux::FrameworkElement TaskbarFrameFromThis(void* pThis) {
+    wux::FrameworkElement element{nullptr};
+    ((::IUnknown*)pThis)->QueryInterface(winrt::guid_of<wux::FrameworkElement>(),
+                                         winrt::put_abi(element));
+    if (!element || winrt::get_class_name(element) != L"Taskbar.TaskbarFrame") return nullptr;
+    return element;
 }
 
-using RegQueryValueExW_t = decltype(&RegQueryValueExW);
-RegQueryValueExW_t RegQueryValueExW_Original;
-LSTATUS WINAPI RegQueryValueExW_Hook(HKEY key, LPCWSTR name, LPDWORD res, LPDWORD type,
-                                     LPBYTE data, LPDWORD size) {
-    if (!g_reportCompositionDiagAsDisabled || !name ||
-        _wcsicmp(name, L"DisableCompositionDiag") != 0) {
-        return RegQueryValueExW_Original(key, name, res, type, data, size);
-    }
-    if (type) *type = REG_DWORD;
-    if (data && (!size || *size < sizeof(DWORD))) {
-        if (size) *size = sizeof(DWORD);
-        return ERROR_MORE_DATA;
-    }
-    if (data) *(DWORD*)data = 1;
-    if (size) *size = sizeof(DWORD);
-    return ERROR_SUCCESS;
+TaskbarFrame_OnPointer_t TaskbarFrame_OnPointerMoved_Original;
+int WINAPI TaskbarFrame_OnPointerMoved_Hook(void* pThis, void* pArgs) {
+    int result = TaskbarFrame_OnPointerMoved_Original(pThis, pArgs);
+    if (g_unloading) return result;
+    try {
+        if (auto frame = TaskbarFrameFromThis(pThis)) {
+            wuxi::PointerRoutedEventArgs args{nullptr};
+            ((::IUnknown*)pArgs)->QueryInterface(
+                winrt::guid_of<wuxi::PointerRoutedEventArgs>(), winrt::put_abi(args));
+            if (args) OnTaskbarPointerMoved(frame, args);
+        }
+    } catch (...) {}
+    return result;
+}
+
+TaskbarFrame_OnPointer_t TaskbarFrame_OnPointerExited_Original;
+int WINAPI TaskbarFrame_OnPointerExited_Hook(void* pThis, void* pArgs) {
+    int result = TaskbarFrame_OnPointerExited_Original(pThis, pArgs);
+    if (g_unloading) return result;
+    try {
+        if (TaskbarFrameFromThis(pThis)) OnTaskbarPointerExited();
+    } catch (...) {}
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -1691,8 +1571,13 @@ void WINAPI TaskbarController_UpdateFrameHeight_Hook(void* pThis) {
 
     TaskbarController_UpdateFrameHeight_Original(pThis);
 
-    // The grid holding the frame has a height of its own; keep it matching.
     if (!frame) return;
+    // A taskbar, found as soon as its height is set (at startup too).
+    if (!g_unloading) {
+        try { NoteTaskbarFrame(frame); } catch (...) {}
+    }
+
+    // The grid holding the frame has a height of its own; keep it matching.
     try {
         auto grid = wuxm::VisualTreeHelper::GetParent(frame).try_as<wux::FrameworkElement>();
         if (grid) {
@@ -1790,11 +1675,32 @@ void WithStockIconHeight(void* pThis, F original) {
         WithStockIconHeight(pThis, [=] { TaskListButton_##name##_Original(pThis); }); \
     }
 
-STOCK_ICON_HEIGHT_HOOK(UpdateButtonPadding)
-STOCK_ICON_HEIGHT_HOOK(UpdateVisualStates)
 STOCK_ICON_HEIGHT_HOOK(UpdateMultiWindowClip)
 STOCK_ICON_HEIGHT_HOOK(CreateMultiWindowClip)
 STOCK_ICON_HEIGHT_HOOK(UpdateBadge)
+
+// These two also run whenever a button is set up or changes state (hover,
+// active window, a second window...), which is when the dock applies its
+// changes to it (see OnTaskListButtonUpdated).
+VoidMethod_t TaskListButton_UpdateButtonPadding_Original;
+void WINAPI TaskListButton_UpdateButtonPadding_Hook(void* pThis) {
+    WithStockIconHeight(pThis, [=] { TaskListButton_UpdateButtonPadding_Original(pThis); });
+    OnTaskListButtonUpdated(pThis);
+}
+
+VoidMethod_t TaskListButton_UpdateVisualStates_Original;
+void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
+    WithStockIconHeight(pThis, [=] { TaskListButton_UpdateVisualStates_Original(pThis); });
+    OnTaskListButtonUpdated(pThis);
+}
+
+// Sets the width of the button's icon column back to the stock one; widen it
+// again right after (see ApplyIconColumn).
+VoidMethod_t TaskListButton_UpdateIconColumnDefinition_Original;
+void WINAPI TaskListButton_UpdateIconColumnDefinition_Hook(void* pThis) {
+    TaskListButton_UpdateIconColumnDefinition_Original(pThis);
+    OnTaskListButtonUpdated(pThis);
+}
 
 using TaskListButton_OverlayIcon_t = void(WINAPI*)(void* pThis, void* stream);
 TaskListButton_OverlayIcon_t TaskListButton_OverlayIcon_Original;
@@ -1970,6 +1876,18 @@ bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
             TaskbarController_UpdateFrameHeight_Hook,
             true,
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
+            &TaskbarFrame_OnPointerMoved_Original,
+            TaskbarFrame_OnPointerMoved_Hook,
+            true,
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerExited(void *))"},
+            &TaskbarFrame_OnPointerExited_Original,
+            TaskbarFrame_OnPointerExited_Hook,
+            true,
+        },
 
         // Icon resolution
         {
@@ -2000,6 +1918,12 @@ bool HookTaskbarViewSymbols(HMODULE module, bool withTray) {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
             TaskListButton_UpdateVisualStates_Hook,
+            true,
+        },
+        {
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateIconColumnDefinition(void))"},
+            &TaskListButton_UpdateIconColumnDefinition_Original,
+            TaskListButton_UpdateIconColumnDefinition_Hook,
             true,
         },
         {
@@ -2136,52 +2060,33 @@ BOOL Wh_ModInit() {
     if (!HookTaskbarDllSymbols()) Wh_Log(L"taskbar.dll hooks failed; height won't change");
     HookTaskbarModules();
 
-    if (HMODULE user32 = GetModuleHandle(L"user32.dll")) {
-        if (auto p = GetProcAddress(user32, "CreateWindowInBand")) {
-            Wh_SetFunctionHook((void*)p, (void*)CreateWindowInBand_Hook,
-                               (void**)&CreateWindowInBand_Original);
-        }
-    }
     if (HMODULE kb = GetModuleHandle(L"kernelbase.dll")) {
-        if (auto p = GetProcAddress(kb, "RegOpenKeyExW")) {
-            Wh_SetFunctionHook((void*)p, (void*)RegOpenKeyExW_Hook, (void**)&RegOpenKeyExW_Original);
-        }
-        if (auto p = GetProcAddress(kb, "RegQueryValueExW")) {
-            Wh_SetFunctionHook((void*)p, (void*)RegQueryValueExW_Hook,
-                               (void**)&RegQueryValueExW_Original);
-        }
         if (auto p = GetProcAddress(kb, "LoadLibraryExW")) {
-            Wh_SetFunctionHook((void*)p, (void*)LoadLibraryExW_Hook,
-                               (void**)&LoadLibraryExW_Original);
+            WindhawkUtils::SetFunctionHook((LoadLibraryExW_t)p, LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
         }
     }
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (HWND tb = FindTaskbar()) {
-        RunFromWindowThread(tb, [](void*) { InjectTAP(); }, nullptr);
-    }
+    // Besides the height, this makes the taskbar update all its buttons, which
+    // runs the hooks that find them (and the taskbars they're in).
     if (g_taskbarHeight > 0) ApplyTaskbarHeight();
 }
 
 // Runs before the hooks are removed, which the taskbar needs to go back to its
 // normal height and icon size.
 void Wh_ModBeforeUninit() {
-    // If the visual tree subscription is still running, let it finish first.
-    if (HANDLE t = g_adviseThread.exchange(nullptr)) {
-        WaitForSingleObject(t, INFINITE);
-        CloseHandle(t);
-    }
+    // The hooks stay in place until after this; stop them from applying the
+    // dock's changes again.
+    g_unloading = true;
 
     // Undo the changes to the taskbar's elements first, so that when it goes
     // back to its normal size below, it sizes its icons itself, with nothing
     // of ours left to override that.
     if (HWND tb = FindTaskbar()) {
-        RunFromWindowThread(tb, [](void*) {
-            ResetAll();
-            if (g_watcher) { g_watcher->Unadvise(); g_watcher = nullptr; }
-        }, nullptr);
+        RunFromWindowThread(tb, [](void*) { ResetAll(); }, nullptr);
     }
 
     if (g_taskbarHeight > 0) {
@@ -2191,26 +2096,30 @@ void Wh_ModBeforeUninit() {
     }
 }
 
-void Wh_ModUninit() {}
-
 void Wh_ModSettingsChanged() {
     int oldTaskbarHeight = g_taskbarHeight;
     float oldIconLoadSize = g_iconLoadSize;
-    LoadSettings();
-    // Scale settings are read every frame; the plate's look needs a refresh.
-    if (HWND tb = FindTaskbar()) {
-        RunFromWindowThread(tb, [](void*) {
-            for (auto& p : g_plates) {
+    // The frame loop and the hooks read the settings on the taskbar thread, so
+    // they're loaded there too. Scale settings are read every frame; the
+    // plate's look, the spacing and the icon sizes need a refresh.
+    HWND tb = FindTaskbar();
+    bool ran = tb && RunFromWindowThread(tb, [](void*) {
+            LoadSettings();
+            for (auto& p : *g_plates) {
                 if (p.root) {
                     try { ApplyPlateLook(p); } catch (...) {}
                 }
             }
-            for (auto& b : g_buttons) {
+            for (auto& b : *g_buttons) {
                 if (auto el = b.element.get()) {
-                    try { ApplySpacing(el); } catch (...) {}
+                    try {
+                        ApplySpacing(el);
+                        ApplyButtonWidth(b, el);
+                        ApplyIconColumn(b);
+                    } catch (...) {}
                 }
             }
-            for (auto& i : g_iconImages) {
+            for (auto& i : *g_iconImages) {
                 if (auto el = i.element.get()) {
                     try { ApplyIconSize(el); } catch (...) {}
                 }
@@ -2219,7 +2128,7 @@ void Wh_ModSettingsChanged() {
             g_rowParent = nullptr;
             MarkPlatesDirty();
         }, nullptr);
-    }
+    if (!ran) LoadSettings();
     if (g_taskbarHeight != oldTaskbarHeight || g_iconLoadSize != oldIconLoadSize) {
         ApplyTaskbarHeight();
     }
