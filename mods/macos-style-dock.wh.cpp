@@ -15,8 +15,9 @@
 /*
 # MacOS Style Dock
 
-A dock as close to macOS as possible, while still working the way Windows does.
-Icons sit on a frosted-glass dock and grow as the pointer passes over them.
+A dock as close to macOS as possible, while still working the way Windows
+does. Icons sit on a frosted-glass dock and grow as the pointer passes over
+them.
 
 Windows 11 only. This mod is not designed to be used with other taskbar mods.
 
@@ -1851,7 +1852,7 @@ bool HookTaskbarDllSymbols() {
     HMODULE module = LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return false;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: void __cdecl TrayUI::_StuckTrayChange(void))"},
             &TrayUI__StuckTrayChange_Original,
@@ -1862,11 +1863,11 @@ bool HookTaskbarDllSymbols() {
             TrayUI__HandleSettingChange_Hook,
         },
     };
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 bool HookTaskbarViewSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(public: static double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &TaskbarConfiguration_GetFrameSize_Original,
@@ -1978,13 +1979,14 @@ bool HookTaskbarViewSymbols(HMODULE module) {
             true,
         },
     };
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) return false;
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) return false;
     if (TaskListButton_IconHeight_Address) GetIconHeightOffset();  // find it up front
     return true;
 }
 
 bool HookTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // SystemTray.dll, Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK trayHooks[] = {
         {
             {LR"(private: double __cdecl winrt::SystemTray::implementation::SystemTrayController::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &SystemTrayController_GetFrameSize_Original,
@@ -2016,7 +2018,7 @@ bool HookTraySymbols(HMODULE module) {
             true,
         },
     };
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, trayHooks, ARRAYSIZE(trayHooks));
 }
 
 // Taskbar.View.dll before version 2604 contains the system tray too; newer
