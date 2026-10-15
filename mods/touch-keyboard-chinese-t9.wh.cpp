@@ -2,10 +2,9 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         3.5.0
+// @version         3.0.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
-// @twitter         NekoMirra
 // @include         TextInputHost.exe
 // @include         ctfmon.exe
 // @architecture    x86-64
@@ -14,22 +13,11 @@
 
 // ==WindhawkModReadme==
 /*
-# 系统触摸键盘中文九宫格 (Windows 11 Touch Keyboard Chinese T9 / 12-Key)
-
-在 Windows 11 系统触摸键盘中重新启用并完整接通原生微软拼音的十二键/九宫格（narrow12key）输入法。
-
-## 功能特性
-- **原生九宫格拼音输入**：短按按键正常产生中文汉字候选词。
-- **长按纯数字候选**：长按九键按键时仅输出该数字候选，松手不产生二次输入。
-- **数字面板直接输入**：切换到数字键盘时，数字直接上屏，不再弹出多余的拼音候选词。
-- **原生表情符号面板唤起**：点击表情按钮及更多符号直接呼出与输入面板上方候选栏同款的原生 Windows 11 表情符号面板（支持表情、颜文字与全套 Unicode 符号），彻底避免跳转到空白占位界面。
-- **稳定性与防闪退**：内置多层防御，自动拦截 Windows 11 在渲染狭窄九键及符号多页布局时的空指针与内部未适配断言，运行稳定流畅。
-
-## 使用方法
-1. 安装并启用本模组；
-2. 确保当前输入法为 **中文（简体）- 微软拼音**；
-3. 从任务栏唤起系统触摸键盘；
-4. 点击键盘左上角的齿轮设置菜单 -> 键盘布局 -> 选择 **「十二键」** 即可。
+# 系统触摸键盘中文九宫格
+在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
+- 采用原生 TSF3 通道与微软拼音原生十二键 Profile，无需第三方输入法；
+- 短按产生中文拼音候选词，长按产生数字候选；
+- 采用纯原生软件注入，不注入任何模拟硬件键盘事件，输入法进程稳定长驻。
 */
 // ==/WindhawkModReadme==
 
@@ -39,9 +27,9 @@
   $name: 启用原生中文九宫格
 */
 // ==/WindhawkModSettings==
+
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <intrin.h>
 #include <winstring.h>
 #include <atomic>
 #include <string>
@@ -50,9 +38,6 @@ namespace {
 std::atomic<bool> g_enabled{true};
 HMODULE ownedDecoder;
 }  // namespace
-#include <bcrypt.h>
-#include <cstddef>
-#include <cstring>
 
 namespace NativeT9 {
 struct NativeString {
@@ -62,82 +47,83 @@ struct NativeString {
     } storage;
     size_t length;
     size_t capacity;
+
     const wchar_t* data() const {
         return capacity < 8 ? storage.local : storage.pointer;
     }
 };
 static_assert(sizeof(NativeString) == 32);
+
 using Regularize = HRESULT (*)(void*, void*);
 using DecideMode = HRESULT (*)(void*, WORD);
 using Candidates = HRESULT (*)(void*, void*, void**);
-using NativeInsert = HRESULT (*)(void*, const void*);
-using ProcessString = HRESULT (*)(void*, const void*);
-using ChannelHandle = HRESULT (*)(void*, const void*, bool*, bool*);
-using VKeyHandle = HRESULT (*)(void*, const void*, bool*, bool*);
-using ChcOpic = HRESULT (*)(void*, int);
-using RequestSuggestion = HRESULT (*)(void*, const wchar_t*, unsigned int, void*, void*, bool);
-using LayoutChange = HRESULT (*)(void*, const NativeString*);
-using EnsureChannelFn = HRESULT (*)(void*, size_t);
+using EnsureChannel = HRESULT (*)(void*, size_t);
 using DefaultChannel = HRESULT (*)(void*, bool, size_t*);
-using OnKeyDownFn = HRESULT (*)(void*, void*, void*);
+using Layout = HRESULT (*)(void*, const NativeString*);
+using ProcessStringKey = HRESULT (*)(void*, const void*);
+using ChannelHandleStringKey = HRESULT (*)(void*, const void*, bool*, bool*);
+using VKeyHandleStringKey = HRESULT (*)(void*, const void*, bool*, bool*);
+using InsertVKey = HRESULT (*)(void*, const void*);
+using OnChcOpic = HRESULT (*)(void*, int);
+using RequestSuggestion = HRESULT (*)(void*, const wchar_t*, unsigned int, void*, void*, bool);
+using OnKeyDown = HRESULT (*)(void*, void*, void*);
+
 Regularize originalRegularize;
 DecideMode originalDecide;
 Candidates originalCandidates;
-NativeInsert originalInsert;
-ProcessString originalProcess;
-ChannelHandle originalChannelHandle;
-VKeyHandle originalVKeyHandle;
-ChcOpic originalChcOpic;
-RequestSuggestion originalRequestSuggestion;
-LayoutChange originalLayout;
-EnsureChannelFn originalEnsureChannel;
+EnsureChannel originalEnsureChannel;
 DefaultChannel originalDefaultChannel;
-OnKeyDownFn originalOnKeyDown;
-std::atomic<unsigned> serviceKeyDownCount{0};
-std::atomic<unsigned> regEntryCount{0};
+Layout originalLayout;
+ProcessStringKey originalProcess;
+ChannelHandleStringKey originalChannelHandle;
+VKeyHandleStringKey originalVKeyHandle;
+InsertVKey originalInsert;
+OnChcOpic originalChcOpic;
+RequestSuggestion originalRequestSuggestion;
+OnKeyDown originalOnKeyDown;
+
 BYTE* qwertyProfile;
 BYTE* twelveProfile;
 void* pinyinVtable;
+
 std::atomic<unsigned> normalized{0};
+std::atomic<unsigned> decoded{0};
+std::atomic<unsigned> serviceKeyDownCount{0};
+std::atomic<unsigned> regEntryCount{0};
+std::atomic<unsigned> candCallCount{0};
+std::atomic<unsigned> decideCallCount{0};
+std::atomic<unsigned> layoutCount{0};
 std::atomic<unsigned> processCount{0};
 std::atomic<unsigned> channelCount{0};
 std::atomic<unsigned> vkeyCount{0};
 std::atomic<unsigned> insertedCount{0};
 std::atomic<unsigned> chcOpicCount{0};
 std::atomic<unsigned> rsbsCount{0};
-std::atomic<unsigned> candCallCount{0};
-std::atomic<unsigned> decideCallCount{0};
-std::atomic<unsigned> layoutCount{0};
-std::atomic<unsigned> decoded{0};
+
 thread_local bool twelveQuery = false;
 
-// MTF 对单个解码对象串行查询；不同对象的并发查询用 TLS 隔离来源。
 struct QueryScope {
-    explicit QueryScope(BYTE* data, bool isTwelve)
-        : previousQuery(twelveQuery), pData(data), previousMode(0), modified(false) {
-        twelveQuery = isTwelve;
-        if (isTwelve && pData) {
-            auto* pMode = reinterpret_cast<DWORD*>(pData + 304712);
-            previousMode = *pMode;
-            if (previousMode == 0) {
-                *pMode = 4;
-                *reinterpret_cast<BYTE*>(pData + 32) = 1;
-                modified = true;
-            }
+    QueryScope(BYTE* decoder, bool value)
+        : previous(twelveQuery), decoderPtr(decoder), previousProfile(nullptr) {
+        twelveQuery = value;
+        if (value && decoderPtr && twelveProfile) {
+            BYTE** current = reinterpret_cast<BYTE**>(decoderPtr + 57640);
+            previousProfile = *current;
+            *current = twelveProfile;
+            Wh_SetIntValue(L"native-profile-switched", 1);
         }
     }
     ~QueryScope() {
-        twelveQuery = previousQuery;
-        if (modified && pData) {
-            *reinterpret_cast<DWORD*>(pData + 304712) = previousMode;
-            *reinterpret_cast<BYTE*>(pData + 32) = (previousMode == 4 || previousMode == 5) ? 1 : 0;
+        twelveQuery = previous;
+        if (previousProfile && decoderPtr) {
+            *reinterpret_cast<BYTE**>(decoderPtr + 57640) = previousProfile;
         }
     }
-    bool previousQuery;
-    BYTE* pData;
-    DWORD previousMode;
-    bool modified;
+    bool previous;
+    BYTE* decoderPtr;
+    BYTE* previousProfile;
 };
+
 struct QueryProperties {
     DWORD type;
     DWORD flags;
@@ -147,15 +133,25 @@ struct QueryProperties {
 };
 
 bool CodeMatches(const void* function, ULONG size, const char* expected) {
-    BCRYPT_ALG_HANDLE algorithm = nullptr;
-    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM,
-                                    nullptr, 0) < 0)
+    if (!function || size == 0)
         return false;
-    BYTE digest[32];
-    const NTSTATUS status =
-        BCryptHash(algorithm, nullptr, 0,
-                   const_cast<PUCHAR>(static_cast<const BYTE*>(function)), size,
-                   digest, sizeof(digest));
+    BCRYPT_ALG_HANDLE algorithm{};
+    NTSTATUS status = BCryptOpenAlgorithmProvider(
+        &algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+    if (status < 0)
+        return false;
+    BCRYPT_HASH_HANDLE hash{};
+    status = BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0);
+    if (status < 0) {
+        BCryptCloseAlgorithmProvider(algorithm, 0);
+        return false;
+    }
+    status = BCryptHashData(
+        hash, static_cast<UCHAR*>(const_cast<void*>(function)), size, 0);
+    UCHAR digest[32]{};
+    if (status >= 0)
+        status = BCryptFinishHash(hash, digest, sizeof(digest), 0);
+    BCryptDestroyHash(hash);
     BCryptCloseAlgorithmProvider(algorithm, 0);
     if (status < 0)
         return false;
@@ -168,20 +164,11 @@ bool CodeMatches(const void* function, ULONG size, const char* expected) {
     return strcmp(actual, expected) == 0;
 }
 
-// self 属于当前同步文档回调，不缓存跨文档指针。物理输入保持原生返回值。
-inline bool IsTwelveAlphaLayout(const wchar_t* layoutName) {
-    if (!layoutName || layoutName[0] == L'\0') return false;
-    return wcsstr(layoutName, L"12key") != nullptr &&
-           wcsstr(layoutName, L"symbolsnumeric") == nullptr;
-}
-
 HRESULT OnKeyDownHook(void* self, void* context, void* args) {
     const unsigned count = ++serviceKeyDownCount;
     Wh_SetIntValue(L"native-service-key-down-count", count);
     return originalOnKeyDown(self, context, args);
 }
-
-static wchar_t g_currentLayout[128]{};
 
 HRESULT RegularizeHook(void* self, void* event) {
     const unsigned rCount = ++regEntryCount;
@@ -208,8 +195,10 @@ HRESULT RegularizeHook(void* self, void* event) {
     if (text->length > 0)
         Wh_SetIntValue(L"native-reg-char", text->data()[0]);
     Wh_SetIntValue(L"native-reg-key", *reinterpret_cast<WORD*>(data + 92));
-    const bool isSymbols = (wcsstr(g_currentLayout, L"symbolsnumeric") != nullptr);
-    if (!isSymbols) {
+    WCHAR layoutName[128]{};
+    const bool isTwelveLayout = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                                wcsstr(layoutName, L"12key") != nullptr;
+    if (isTwelveLayout) {
         if (channel != 4 && originalEnsureChannel) {
             originalEnsureChannel(self, 4);
             *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
@@ -233,13 +222,6 @@ HRESULT RegularizeHook(void* self, void* event) {
             Wh_SetIntValue(L"native-normalized-key", normVk);
             Wh_SetIntValue(L"native-reg-key-after", normVk);
         }
-    } else {
-        if (channel != 1 && originalEnsureChannel) {
-            originalEnsureChannel(self, 1);
-            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 1;
-            channel = 1;
-            Wh_SetIntValue(L"native-reg-channel-switched", 1);
-        }
     }
     return result;
 }
@@ -247,12 +229,13 @@ HRESULT RegularizeHook(void* self, void* event) {
 HRESULT DefaultChannelHook(void* self, bool off, size_t* channel) {
     const HRESULT res = originalDefaultChannel(self, off, channel);
     if (!off && channel) {
-        const bool isTwelve = (wcsstr(g_currentLayout, L"12key") != nullptr) &&
-                              (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr);
-        const size_t targetChan = isTwelve ? 4 : 1;
-        *channel = targetChan;
-        *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetChan);
-        Wh_SetIntValue(L"native-default-channel", static_cast<int>(targetChan));
+        WCHAR layoutName[128]{};
+        if (Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+            wcsstr(layoutName, L"12key") != nullptr) {
+            *channel = 4;
+            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
+            Wh_SetIntValue(L"native-default-channel", 4);
+        }
     }
     return res;
 }
@@ -260,40 +243,41 @@ HRESULT DefaultChannelHook(void* self, bool off, size_t* channel) {
 HRESULT LayoutHook(void* self, const NativeString* layout) {
     Wh_SetIntValue(L"native-layout-count", ++layoutCount);
     if (layout && layout->length > 0 && layout->length < 100) {
-        wcsncpy_s(g_currentLayout, layout->data(), _TRUNCATE);
         Wh_SetStringValue(L"native-layout-name", layout->data());
     }
     const HRESULT res = originalLayout(self, layout);
-    const bool isTwelve = (wcsstr(g_currentLayout, L"12key") != nullptr) &&
-                          (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr);
-    const size_t targetChan = isTwelve ? 4 : 1;
-    const size_t curChan = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
-    if (curChan != targetChan && originalEnsureChannel) {
-        originalEnsureChannel(self, targetChan);
-        *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetChan);
+    WCHAR layoutName[128]{};
+    if (Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+        wcsstr(layoutName, L"12key") != nullptr) {
+        const size_t curChan = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
+        if (curChan != 4 && originalEnsureChannel) {
+            originalEnsureChannel(self, 4);
+            *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
+        }
     }
-    Wh_SetIntValue(L"native-layout-channel", static_cast<int>(targetChan));
+    const size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
+    Wh_SetIntValue(L"native-layout-channel", static_cast<int>(channel));
     return res;
 }
 
 HRESULT ProcessStringHook(void* self, const void* event) {
     Wh_SetIntValue(L"native-process-count", ++processCount);
-    size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
+    void* pinyinBase = static_cast<BYTE*>(self) - 136;
+    size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(pinyinBase) + 112);
     auto* data = static_cast<const BYTE*>(event);
     const WORD flags = *reinterpret_cast<const WORD*>(data + 34);
     const bool hardware = (flags & 0x4010) == 0x10 && (flags & 5) != 0 && (flags & 5) != 5;
-    const WORD key = *reinterpret_cast<const WORD*>(data + 92);
-    const bool isTwelve = (wcsstr(g_currentLayout, L"12key") != nullptr) &&
-                          (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr);
-    const size_t targetChan = isTwelve ? 4 : 1;
-    if (!hardware && channel != targetChan && originalEnsureChannel) {
-        originalEnsureChannel(self, targetChan);
-        *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetChan);
-        channel = targetChan;
+    WCHAR layoutName[128]{};
+    const bool isNarrow12 = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                            wcsstr(layoutName, L"12key") != nullptr;
+    if (!hardware && isNarrow12 && channel != 4 && originalEnsureChannel) {
+        originalEnsureChannel(pinyinBase, 4);
+        *reinterpret_cast<DWORD*>(static_cast<BYTE*>(pinyinBase) + 164) = 4;
+        channel = 4;
     }
     Wh_SetIntValue(L"native-process-channel", static_cast<int>(channel));
     auto* text = reinterpret_cast<const NativeString*>(event);
-    Wh_SetIntValue(L"native-process-key", key);
+    Wh_SetIntValue(L"native-process-key", *reinterpret_cast<const WORD*>(data + 92));
     Wh_SetIntValue(L"native-process-flags", flags);
     if (text->length > 0)
         Wh_SetIntValue(L"native-process-char", text->data()[0]);
@@ -342,9 +326,12 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
     Wh_SetIntValue(L"native-cand-raw-type", properties.type);
     Wh_SetIntValue(L"native-cand-raw-flags", properties.flags);
     Wh_SetIntValue(L"native-cand-raw-mode", properties.mode);
-    const bool isTwelve = (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr) &&
-                          ((Wh_GetIntValue(L"native-layout-channel", 0) == 4) ||
-                          ((properties.type & 0xFF) == 11 || properties.type == 11 || properties.type == 2 || properties.type == 0));
+    WCHAR layoutName[128]{};
+    const bool isTwelveLayout = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                                wcsstr(layoutName, L"12key") != nullptr;
+    const bool isTwelve = isTwelveLayout ||
+                          (Wh_GetIntValue(L"native-layout-channel", 0) == 4) ||
+                          ((properties.type & 0xFF) == 11 || properties.type == 11 || properties.type == 2 || properties.type == 0);
     QueryScope scope(static_cast<BYTE*>(self), isTwelve);
     if (isTwelve) {
         Wh_SetIntValue(L"native-twelve-query-flags", properties.flags);
@@ -369,8 +356,11 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
 HRESULT DecideHook(void* self, WORD first) {
     Wh_SetIntValue(L"native-decide-call-count", ++decideCallCount);
     Wh_SetIntValue(L"native-decide-char", first);
-    const bool isTwelve = (wcsstr(g_currentLayout, L"symbolsnumeric") == nullptr) &&
-                          (twelveQuery || (Wh_GetIntValue(L"native-layout-channel", 0) == 4));
+    WCHAR layoutName[128]{};
+    const bool isTwelveLayout = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                                wcsstr(layoutName, L"12key") != nullptr;
+    const bool isTwelve = twelveQuery || isTwelveLayout ||
+                          (Wh_GetIntValue(L"native-layout-channel", 0) == 4);
     static unsigned int s_lastConsumedLongSeq = 0;
     const unsigned int currentLongSeq = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-seq", 0));
     const unsigned int longDigit = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-digit", 0));
@@ -386,13 +376,13 @@ HRESULT DecideHook(void* self, WORD first) {
         auto* reading = *reinterpret_cast<BYTE**>(data + 22152);
         if (!manager || !reading)
             return E_UNEXPECTED;
-        *reinterpret_cast<BYTE**>(manager) = twelveProfile;
-        *reinterpret_cast<BYTE**>(data + 57608) = twelveProfile;
-        *reinterpret_cast<int*>(reading + 4396) = 2;
-        *reinterpret_cast<BYTE**>(reading + 8064) = twelveProfile + 28;
-        *reinterpret_cast<BYTE**>(reading + 8072) = twelveProfile + 540;
-        Wh_SetIntValue(L"native-decoded-count", ++decoded);
-        return 0;
+        void** readingVtbl = *reinterpret_cast<void***>(reading);
+        void** managerVtbl = *reinterpret_cast<void***>(manager);
+        using ResetFn = HRESULT (*)(void*);
+        using AddFn = HRESULT (*)(void*, WORD);
+        reinterpret_cast<ResetFn>(readingVtbl[2])(reading);
+        reinterpret_cast<AddFn>(readingVtbl[4])(reading, first);
+        return reinterpret_cast<AddFn>(managerVtbl[4])(manager, first);
     }
     return originalDecide(self, first);
 }
@@ -438,8 +428,8 @@ bool InstallService(HMODULE module) {
                                     &options))
         return false;
     if (!CodeMatches(
-            reinterpret_cast<void*>(originalRegularize), 0x213,
-            "a5eaa8b59796a8181280a5a79489a74a75994357a6d140908a5e0a4f23026278"))
+            reinterpret_cast<void*>(originalRegularize), 0x915,
+            "1c261eef81180b031b2c45155f8be009fa5695015b67e20b33b00e31846175e1"))
         return false;
     if (!CodeMatches(
             reinterpret_cast<void*>(originalDefaultChannel), 0x19,
@@ -478,11 +468,13 @@ bool InstallService(HMODULE module) {
             "7d4d2a14deffbe6578d15ae5c069bcdd40905de8da11e938e9967956cd418ece"))
         return false;
     if (!CodeMatches(
-            reinterpret_cast<void*>(originalOnKeyDown), 0x6b6,
-            "91e1bf21e466cf3a9f53d578c490214f74abada736e90f0939ace40b9af7db7c"))
+            reinterpret_cast<void*>(originalOnKeyDown), 0x3cb,
+            "bfa7075c2763264c8d50b4ea547537b830d1d784a929ba26a472c67623910385"))
         return false;
     return WindhawkUtils::SetFunctionHook(originalRegularize, RegularizeHook,
                                           &originalRegularize) &&
+           WindhawkUtils::SetFunctionHook(originalOnKeyDown, OnKeyDownHook,
+                                          &originalOnKeyDown) &&
            WindhawkUtils::SetFunctionHook(originalDefaultChannel, DefaultChannelHook,
                                           &originalDefaultChannel) &&
            WindhawkUtils::SetFunctionHook(originalLayout, LayoutHook,
@@ -498,23 +490,19 @@ bool InstallService(HMODULE module) {
            WindhawkUtils::SetFunctionHook(originalChcOpic, ChcOpicHook,
                                           &originalChcOpic) &&
            WindhawkUtils::SetFunctionHook(originalRequestSuggestion, RequestSuggestionHook,
-                                          &originalRequestSuggestion) &&
-           WindhawkUtils::SetFunctionHook(originalOnKeyDown, OnKeyDownHook,
-                                          &originalOnKeyDown);
+                                          &originalRequestSuggestion);
 }
-
 
 bool InstallDecoder(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK symbols[] = {
-        {{L"?GetCandidates@ChsPinyinDS@@UEAAJPEAUIMtfSuggestionInputQuery@@"
-          L"PEAPEAUIMtfSuggestionList@@@Z"},
+        {{L"?DecideInputMode@ProfileManager@ChsPinyinDS@@IEAAJW4InputType@Mtf@"
+          L"2@G@Z"},
+         &originalDecide},
+        {{L"?CreateCandidates@CandidateManager@ChsPinyinDS@@UEAAJPEAUICandidatesQuery@Mtf@2@PEAPEAUICandidatesList@52@@Z"},
          &originalCandidates},
-        {{L"?DecideInputMode@ChsPinyinDS@@AEAAJG@Z"}, &originalDecide},
-        {{L"?s_InputModeProfileQwerty@InputModeProfileManager@TaihangCore@@"
-          L"0UInputModeProfile@2@A"},
+        {{L"?Qwerty@KeyboardProfile@ChsPinyinDS@@2V12@A"},
          &qwertyProfile},
-        {{L"?s_InputModeProfile12Key@InputModeProfileManager@TaihangCore@@"
-          L"0UInputModeProfile@2@A"},
+        {{L"?TwelveKey@KeyboardProfile@ChsPinyinDS@@2V12@A"},
          &twelveProfile},
     };
     auto options = SymbolOptions();
@@ -536,48 +524,39 @@ bool InstallDecoder(HMODULE module) {
 }
 }  // namespace NativeT9
 
-
 namespace {
 using Availability = bool (*)(void*, HSTRING);
 using ModeView = void (*)(void*, HSTRING, int);
-using OnPressActionFn = void (*)(void*, void*);
-using OnPressAndHoldActionFn = void (*)(void*, void*);
-using OnReleaseActionFn = void (*)(void*, void*);
-using HandleFlowerKeyReleaseFn = void (*)(void*, void*);
-using InjectKeyWithoutKeyControlFn = void (*)(void*, void*, void*, unsigned int);
-using InjectKeyFn = void (*)(void*, void*, HSTRING, void*, unsigned __int64, int);
-using GetDirectionFn = int (*)(void*);
-using GetHeightFn = int (*)(void*);
-using IsDictionaryReadyFn = bool (*)(void*, void*);
-using NotifyUIMessageFn = void (*)(void*, int, int, int, int, void*);
+using ActionFn = void (*)(void*, void*);
+using GetPressedKeyHandlingStateFn = int (*)(void*, void*);
 using GetKeyDataFn = void* (*)(void*);
 using GetVirtualKeyFn = unsigned char (*)(void*);
-using GetStateFn = int (*)(void*, void*);
-using AcquireFn = void* (*)(HSTRING, int, void*, int, int, unsigned __int64, void*);
-using NotifyStringKeyFn = void (*)(void*, unsigned int, unsigned int, HSTRING, int, int, unsigned int);
-using GetBlockPageCountFn = unsigned int (*)(void*, HSTRING);
-using InitializeGroupModelFn = void (*)(void*, void*, void*, void*, void*, void*, void*, void*, void*, char, int, void*, void*, void*);
+using InjectKeyWithoutKeyControlFn = void (*)(void*, HSTRING, void*, bool);
+using GetKeyTemplateNameFn = HSTRING (*)(void*, void*);
+using SetKeyTemplateNameFn = void (*)(void*, void*, HSTRING);
+using GetKeyWidthFactorFn = float (*)(void*, void*);
+using GetKeyHeightFactorFn = float (*)(void*, void*);
+using NotifyStringKeyFn = void (*)(void*, void*, int);
+using GetBlockPageCountFn = int (*)(void*);
+using InitializeGroupModelFn = void (*)(void*, void*);
 using IsSubTypeFn = bool (*)(void*, int);
-using GetRecognizedTextFn = HSTRING (*)(void*);
+using GetRecognizedTextFn = void* (*)(void*);
 using GetSecondaryLabelFontScalingFn = float (*)(void*);
 using IsEmojiViewEnabledFn = bool (*)(void*);
 
 Availability originalAvailability;
 ModeView originalMode;
-OnPressActionFn originalOnPressAction;
-OnPressAndHoldActionFn originalOnPressAndHoldAction;
-OnReleaseActionFn originalOnReleaseAction;
-HandleFlowerKeyReleaseFn originalHandleFlowerKeyRelease;
-InjectKeyWithoutKeyControlFn originalInjectKeyWithoutKeyControl;
-InjectKeyFn originalInjectKey;
-GetDirectionFn originalGetDirection;
-GetHeightFn originalGetHeight;
-IsDictionaryReadyFn originalIsDictionaryReady;
-NotifyUIMessageFn originalNotifyUIMessage;
+ActionFn originalOnPressAction;
+ActionFn originalOnPressAndHoldAction;
+ActionFn originalOnReleaseAction;
+GetPressedKeyHandlingStateFn originalGetPressedKeyHandlingState;
 GetKeyDataFn originalGetKeyData;
 GetVirtualKeyFn originalGetVirtualKey;
-GetStateFn originalGetPressedKeyHandlingState;
-AcquireFn originalAcquire;
+InjectKeyWithoutKeyControlFn originalInjectKeyWithoutKeyControl;
+GetKeyTemplateNameFn originalGetKeyTemplateName;
+SetKeyTemplateNameFn originalSetKeyTemplateName;
+GetKeyWidthFactorFn originalGetKeyWidthFactor;
+GetKeyHeightFactorFn originalGetKeyHeightFactor;
 NotifyStringKeyFn originalNotifyStringKey;
 GetBlockPageCountFn originalGetBlockPageCount;
 InitializeGroupModelFn originalInitializeGroupModel;
@@ -625,12 +604,8 @@ void ModeHook(void* self, HSTRING mode, int view) {
     Wh_SetStringValue(L"native-front-mode",
                       WindowsGetStringRawBuffer(mode, nullptr));
     Wh_SetIntValue(L"native-front-view", view);
-    const bool isAlpha = (view == 1 || view == 4 || view == 0);
-    Wh_SetIntValue(L"native-is-twelve-alpha", isAlpha ? 1 : 0);
-    if (isAlpha) {
+    if (view == 1 || view == 4 || view == 0) {
         Wh_SetStringValue(L"native-layout-name", L"zh-cn.narrow12key.alpha.0");
-    } else {
-        Wh_SetStringValue(L"native-layout-name", L"zh-cn.narrow12key.symbolsnumeric.0");
     }
     originalMode(self, mode, view);
 }
@@ -657,24 +632,25 @@ void OnReleaseActionHook(void* self, void* action) {
 
     if (action) {
         auto* data = static_cast<BYTE*>(action);
+        WCHAR layoutName[128]{};
+        const bool isTwelve = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+                              wcsstr(layoutName, L"12key") != nullptr;
         void* keyCtrl = *reinterpret_cast<void**>(data + 56);
-        if (keyCtrl && originalGetKeyData) {
+        if (isTwelve && priorHandlingState == 1) {
+            data[144] = 1;
+            Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
+        } else if (isTwelve && priorHandlingState == 0 && data[144] == 0 && keyCtrl && originalGetKeyData) {
             void* keyData = originalGetKeyData(keyCtrl);
             if (keyData && originalGetVirtualKey) {
                 const unsigned char vk = originalGetVirtualKey(keyData);
                 if (vk >= 0x62 && vk <= 0x69) {
-                    if (priorHandlingState == 0 && data[144] == 0) {
-                        wchar_t digitStr[2] = { static_cast<wchar_t>(L'0' + vk - 0x60), 0 };
-                        HSTRING hStr = nullptr;
-                        if (SUCCEEDED(WindowsCreateString(digitStr, 1, &hStr))) {
-                            originalInjectKeyWithoutKeyControl(self, hStr, keyData, 255);
-                            WindowsDeleteString(hStr);
-                            data[144] = 1;
-                            Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
-                        }
-                    } else if (priorHandlingState == 1) {
+                    wchar_t digitStr[2] = { static_cast<wchar_t>(L'0' + vk - 0x60), 0 };
+                    HSTRING hStr = nullptr;
+                    if (SUCCEEDED(WindowsCreateString(digitStr, 1, &hStr))) {
+                        originalInjectKeyWithoutKeyControl(self, hStr, keyData, 255);
+                        WindowsDeleteString(hStr);
                         data[144] = 1;
-                        Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
+                        Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
                     }
                 }
                 using ReleaseFn = ULONG (*)(void*);
@@ -696,30 +672,29 @@ void OnPressAndHoldActionHook(void* self, void* action) {
     g_inPressAndHold = false;
 }
 
-
-int DirectionHook(void* self) {
-    if (!self)
-        return 0;
-    const int val = originalGetDirection(self);
-    if (val >= 30) {
-        Wh_SetIntValue(L"native-front-dir-30-intercepted", val);
-        return 0;
+HSTRING GetKeyTemplateNameHook(void* self, void* keyData) {
+    HSTRING result = originalGetKeyTemplateName(self, keyData);
+    if (!keyData || !originalGetVirtualKey)
+        return result;
+    const unsigned char vk = originalGetVirtualKey(keyData);
+    if (vk >= 0x62 && vk <= 0x69) {
+        WCHAR layoutName[128]{};
+        if (Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
+            wcsstr(layoutName, L"12key") != nullptr) {
+            HSTRING fixedTemplate = nullptr;
+            if (SUCCEEDED(WindowsCreateString(
+                    L"ModernUX2TwelveKeySecondaryLabelKeyStyle", 40,
+                    &fixedTemplate))) {
+                if (originalSetKeyTemplateName)
+                    originalSetKeyTemplateName(self, keyData, fixedTemplate);
+                Wh_SetIntValue(L"native-front-template-fixed", 1);
+                return fixedTemplate;
+            }
+        }
     }
-    if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-dir-val", val);
-        Wh_SetIntValue(L"native-front-dir-count", ++frontDirCount);
-    }
-    return val;
+    return result;
 }
 
-int HeightHook(void* self) {
-    const int val = originalGetHeight(self);
-    if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-height-val", val);
-        Wh_SetIntValue(L"native-front-height-count", ++frontHeightCount);
-    }
-    return val;
-}
 float GetSecondaryLabelFontScalingHook(void* self) {
     WCHAR layoutName[128]{};
     if (Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
@@ -729,165 +704,26 @@ float GetSecondaryLabelFontScalingHook(void* self) {
     }
     return originalGetSecondaryLabelFontScaling(self);
 }
+
 bool IsEmojiViewEnabledHook(void* self) {
     Wh_SetIntValue(L"native-front-emoji-view-enabled", 1);
     return true;
 }
-int GetPressedKeyHandlingStateHook(void* self, void* keyControl) {
-    return originalGetPressedKeyHandlingState(self, keyControl);
-}
-HSTRING GetRecognizedTextHook(void* self) {
-    return originalGetRecognizedText(self);
+
+void InitializeGroupModelHook(void* self, void* param) {
+    originalInitializeGroupModel(self, param);
 }
 
-bool IsDictionaryReadyHook(void* self, void* str) {
-    const bool res = originalIsDictionaryReady(self, str);
-    if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-dict-ready-res", res ? 1 : 0);
-        Wh_SetIntValue(L"native-front-dict-ready-count", ++frontDictReadyCount);
-    }
-    return res;
-}
-
-void NotifyUIMessageHook(void* self, int a2, int a3, int a4, int a5, void* a6) {
-    if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-notify-a2", a2);
-        Wh_SetIntValue(L"native-front-notify-a3", a3);
-        Wh_SetIntValue(L"native-front-notify-a4", a4);
-        Wh_SetIntValue(L"native-front-notify-count", ++frontNotifyMsgCount);
-    }
-    originalNotifyUIMessage(self, a2, a3, a4, a5, a6);
-}
-void* KeyDataHook(void* self) {
-    return originalGetKeyData(self);
-}
-
-unsigned char VirtualKeyHook(void* self) {
-    const unsigned char val = originalGetVirtualKey(self);
-    if (g_releaseDepth != 0) {
-        Wh_SetIntValue(L"native-front-vk-val", val);
-        Wh_SetIntValue(L"native-front-vk-count", ++frontVkGetCount);
-    }
-    return val;
-}
-unsigned int GetBlockPageCountHook(void* self, HSTRING block) {
-    if (!self) {
-        Wh_SetIntValue(L"native-front-block-page-null-intercepted", 1);
-        return 0;
-    }
-    return originalGetBlockPageCount(self, block);
-}
-void InitializeGroupModelHook(void* self, void* a2, void* a3, void* a4, void* a5, void* a6, void* a7, void* a8, void* a9, char a10, int a11, void* a12, void* a13, void* a14) {
-    originalInitializeGroupModel(self, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14);
-    if (self) {
-        auto* data = static_cast<BYTE*>(self);
-        void** keySet104 = reinterpret_cast<void**>(data + 104);
-        void** keySet128 = reinterpret_cast<void**>(data + 128);
-        if (*keySet104 == nullptr && *keySet128 != nullptr) {
-            *keySet104 = *keySet128;
-            using AddRefFn = ULONG (*)(void*);
-            reinterpret_cast<AddRefFn>((*reinterpret_cast<void***>(*keySet104))[1])(*keySet104);
-            Wh_SetIntValue(L"native-front-keyset-fixed", 1);
-        }
-    }
-}
 bool IsSubTypeHook(void* self, int subType) {
-    if (subType == 19) {
-        const uintptr_t ret = reinterpret_cast<uintptr_t>(__builtin_return_address(0));
-        const uintptr_t base = reinterpret_cast<uintptr_t>(GetModuleHandleW(L"TextInput.dll"));
-        if (base != 0 && (ret - base) == 0x000a8115) {
-            Wh_SetIntValue(L"native-front-subtype-intercepted", 19);
-            return false;
-        }
+    if (subType == 2) {
+        Wh_SetIntValue(L"native-front-subtype2-intercepted", 1);
+        return false;
     }
     return originalIsSubType(self, subType);
 }
-void* AcquireHook(HSTRING text, int viewState, void* keyData, int virtualKey, int flags, unsigned __int64 a6, void* a7) {
-    const unsigned count = ++frontAcquireCount;
-    Wh_SetIntValue(L"native-front-acq-count", count);
-    Wh_SetIntValue(L"native-front-acq-vk-in", virtualKey);
-    if (virtualKey == 0 && keyData && originalGetVirtualKey) {
-        const unsigned char vk = originalGetVirtualKey(keyData);
-        if (vk != 0) {
-            virtualKey = vk;
-            Wh_SetIntValue(L"native-front-acq-vk-fixed", virtualKey);
-        }
-    }
-    return originalAcquire(text, viewState, keyData, virtualKey, flags, a6, a7);
-}
-void NotifyStringKeyHook(void* self, unsigned int qualifiers, unsigned int key, HSTRING text, int x, int y, unsigned int time) {
-    const unsigned count = ++frontNskCount;
-    Wh_SetIntValue(L"native-front-nsk-count", count);
-    Wh_SetIntValue(L"native-front-nsk-key-in", key);
-    Wh_SetIntValue(L"native-front-nsk-qual", qualifiers);
-    if (text) {
-        UINT32 len = 0;
-        const wchar_t* buf = WindowsGetStringRawBuffer(text, &len);
-        if (buf && len > 0) {
-            Wh_SetIntValue(L"native-front-nsk-char", buf[0]);
-        }
-    }
-    originalNotifyStringKey(self, qualifiers, key, text, x, y, time);
-}
 
-
-
-void HandleFlowerKeyReleaseHook(void* self, void* action) {
-    const unsigned count = ++frontFlowerCount;
-    Wh_SetIntValue(L"native-front-flower-count", count);
-    if (action) {
-        auto* data = static_cast<BYTE*>(action);
-        Wh_SetIntValue(L"native-front-flower-f80", *reinterpret_cast<DWORD*>(data + 80));
-        Wh_SetIntValue(L"native-front-flower-f84", *reinterpret_cast<DWORD*>(data + 84));
-        Wh_SetIntValue(L"native-front-flower-has-str", *reinterpret_cast<void**>(data + 64) != nullptr ? 1 : 0);
-    }
-    originalHandleFlowerKeyRelease(self, action);
-}
-
-void InjectKeyWithoutKeyControlHook(void* self, void* str, void* keyData, unsigned int a4) {
-    const unsigned count = ++frontInjectKcCount;
-    Wh_SetIntValue(L"native-front-inject-kc-count", count);
-    Wh_SetIntValue(L"native-front-inject-kc-a4", a4);
-    Wh_SetIntValue(L"native-front-inject-kc-has-data", keyData != nullptr ? 1 : 0);
-    Wh_SetIntValue(L"native-front-inject-kc-has-str", str != nullptr ? 1 : 0);
-    if (g_inPressAndHold && str) {
-        auto hStr = reinterpret_cast<HSTRING>(str);
-        UINT32 len = 0;
-        const wchar_t* buf = WindowsGetStringRawBuffer(hStr, &len);
-        if (buf && len == 1 && buf[0] >= L'2' && buf[0] <= L'9') {
-            static std::atomic<unsigned int> s_longPressSeq{0};
-            Wh_SetIntValue(L"native-t9-long-digit", buf[0]);
-            Wh_SetIntValue(L"native-t9-long-seq", ++s_longPressSeq);
-        }
-    }
-    originalInjectKeyWithoutKeyControl(self, str, keyData, a4);
-}
-
-void InjectKeyHook(void* self, void* keyControl, HSTRING text, void* point, unsigned __int64 a5, int flags) {
-    const unsigned count = ++frontInjectKeyCount;
-    Wh_SetIntValue(L"native-front-inj-key-count", count);
-    Wh_SetIntValue(L"native-front-inj-key-flags", flags);
-    if (text) {
-        UINT32 len = 0;
-        const wchar_t* buf = WindowsGetStringRawBuffer(text, &len);
-        if (buf && len > 0) {
-            Wh_SetIntValue(L"native-front-inj-key-char", buf[0]);
-        }
-    }
-    if (keyControl && originalGetKeyData) {
-        void* keyData = originalGetKeyData(keyControl);
-        if (keyData) {
-            if (originalGetDirection)
-                Wh_SetIntValue(L"native-front-inj-key-dir", originalGetDirection(keyData));
-            if (originalGetHeight)
-                Wh_SetIntValue(L"native-front-inj-key-height", originalGetHeight(keyData));
-            if (originalGetVirtualKey)
-                Wh_SetIntValue(L"native-front-inj-key-vk", originalGetVirtualKey(keyData));
-            using ReleaseFn = ULONG (*)(void*);
-            reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(keyData))[2])(keyData);
-        }
-    }
-    originalInjectKey(self, keyControl, text, point, a5, flags);
+void* GetRecognizedTextHook(void* self) {
+    return originalGetRecognizedText(self);
 }
 
 bool InstallFrontend(HMODULE module) {
@@ -920,71 +756,33 @@ bool InstallFrontend(HMODULE module) {
           L"WindowsInternal@@MEAAXPE$AAVSingleKeyAction@23456@@Z"},
          &originalOnReleaseAction,
          OnReleaseActionHook},
-        {{L"?HandleFlowerKeyRelease@WideNarrowChineseSimplifiedKeyActionHandler@"
-          L"Controls@TextInputUndocked@Experiences@ComposableShell@"
-          L"WindowsInternal@@MEAAXPE$AAVFlowerKeyAction@23456@@Z"},
-         &originalHandleFlowerKeyRelease,
-         HandleFlowerKeyReleaseHook},
-        {{L"?InjectKeyWithoutKeyControl@DefaultKeyActionHandlerImpl@Controls@"
-          L"TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
-          L"IEAAXPE$AAVString@Platform@@PE$AAUIKeyboardKeyData@LayoutData@"
-          L"Common@TextInput@456@I@Z"},
-         &originalInjectKeyWithoutKeyControl,
-         InjectKeyWithoutKeyControlHook},
-        {{L"?InjectKey@DefaultKeyActionHandlerImpl@Controls@TextInputUndocked@"
-          L"Experiences@ComposableShell@WindowsInternal@@MEAAXPE$AAUIKeyboardKeyControl@"
-          L"TouchKeyboardUX@@PE$AAVString@Platform@@VPoint@Foundation@Windows@@_K"
-          L"W4TextInputKeyEventFlag@Common@TextInput@456@@Z"},
-         &originalInjectKey,
-         InjectKeyHook},
-        {{L"?get@Direction@IViewPositionAndSizeManagerTransferringXYFocusEventArgs@"
-          L"TouchKeyboardUX@@UE$AAA?AW4DirectionalNavigationDirection@Common@"
-          L"TextInput@Experiences@ComposableShell@WindowsInternal@@XZ"},
-         &originalGetDirection,
-         DirectionHook},
-        {{L"?get@HandwritingLineHeight@IPenAndInkSettings@Inking@Input@UI@"
-          L"Windows@@UE$AAA?AW413456@XZ"},
-         &originalGetHeight,
-         HeightHook},
-        {{L"?IsDictionaryReady@ITextFrameworkAdapter@Common@TextInput@"
-          L"Experiences@ComposableShell@WindowsInternal@@UE$AAA_NPE$AAVString@"
-          L"Platform@@@Z"},
-         &originalIsDictionaryReady,
-         IsDictionaryReadyHook},
-        {{L"?NotifyInputUIMessage@ITextFrameworkAdapter@Common@TextInput@"
-          L"Experiences@ComposableShell@WindowsInternal@@UE$AAAXW4"
-          L"TextInputCandidateControlId@23456@IW4TextInputKeyboardMessageKind@"
-          L"23456@IP$01E$ABV?$Array@E$00@Platform@@@Z"},
-         &originalNotifyUIMessage,
-         NotifyUIMessageHook},
-        {{L"?get@KeyData@IKeyboardKeyControl@TouchKeyboardUX@@UE$AAAPE$AAUIKeyboardKeyData@LayoutData@Common@TextInput@Experiences@ComposableShell@WindowsInternal@@XZ"},
-         &originalGetKeyData,
-         KeyDataHook},
-        {{L"?get@VirtualKey@IKeyboardKeyData@LayoutData@Common@TextInput@Experiences@ComposableShell@WindowsInternal@@UE$AAAEXZ"},
-         &originalGetVirtualKey,
-         VirtualKeyHook},
-        {{L"?Acquire@KeyboardKeyEventArgs@Controls@TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@SAPE$AAV123456@PE$AAVString@Platform@@W4KeyViewState@TouchKeyboardUX@@PE$AAUIKeyboardKeyData@LayoutData@Common@TextInput@456@W4VirtualKey@System@Windows@@W4TextInputKeyEventFlag@Common@TextInput@456@_KAEBVPoint@Foundation@Windows@@@Z"},
-         &originalAcquire,
-         AcquireHook},
-        {{L"?NotifyStringKey@ISystemInputProcessor@TextFramework@TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@UE$AAAXIIPE$AAVString@Platform@@HHI@Z"},
-         &originalNotifyStringKey,
-         NotifyStringKeyHook},
-        {{L"?GetPressedKeyHandlingState@DefaultKeyActionHandlerImpl@Controls@"
-          L"TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
-          L"IEAA?AW4HandlingState@123456@PE$AAUIKeyboardKeyControl@TouchKeyboardUX@@@Z"},
-         &originalGetPressedKeyHandlingState,
-         GetPressedKeyHandlingStateHook},
-        {{L"?GetBlockPageCount@IKeyboardKeySet@LayoutData@Common@TextInput@"
-          L"Experiences@ComposableShell@WindowsInternal@@UE$AAAIPE$AAVString@Platform@@@Z"},
-         &originalGetBlockPageCount,
-         GetBlockPageCountHook},
+        {{L"?GetPressedKeyHandlingState@WideNarrowChineseSimplifiedKeyActionHandler@"
+          L"Controls@TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
+          L"AEAA?AW4PressedKeyHandlingState@12345@PE$AAVIKeyboardKeyControl@LayoutData@"
+          L"Common@TextInput@45@@Z"},
+         &originalGetPressedKeyHandlingState},
+        {{L"?GetKeyData@IKeyboardKeyControl@LayoutData@Common@TextInput@"
+          L"Experiences@ComposableShell@WindowsInternal@@UE$AAAPE$AAVIKeyboardKeyData@"
+          L"23456@XZ"},
+         &originalGetKeyData},
+        {{L"?get_VirtualKey@IKeyboardKeyData@LayoutData@Common@TextInput@"
+          L"Experiences@ComposableShell@WindowsInternal@@UE$AAAEXZ"},
+         &originalGetVirtualKey},
+        {{L"?InjectKeyWithoutKeyControl@WideNarrowChineseSimplifiedKeyActionHandler@"
+          L"Controls@TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
+          L"IEAAXPE$AAVString@Platform@@PE$AAVIKeyboardKeyData@LayoutData@Common@"
+          L"TextInput@345@_N@Z"},
+         &originalInjectKeyWithoutKeyControl},
+        {{L"?get_KeyTemplateName@IKeyboardKeyControl@LayoutData@Common@TextInput@"
+          L"Experiences@ComposableShell@WindowsInternal@@UE$AAAPE$AAVString@Platform@@XZ"},
+         &originalGetKeyTemplateName,
+         GetKeyTemplateNameHook},
+        {{L"?put_KeyTemplateName@IKeyboardKeyControl@LayoutData@Common@TextInput@"
+          L"Experiences@ComposableShell@WindowsInternal@@UE$AAAXPE$AAVString@Platform@@@Z"},
+         &originalSetKeyTemplateName},
         {{L"?Initialize@KeyboardGridGroupModel@Controls@TextInputUndocked@"
-          L"Experiences@ComposableShell@WindowsInternal@@QE$AAAXPE$AAUIKeyboardFrameGroup@"
-          L"LayoutData@Common@TextInput@456@PE$AAUIKeyboardFrameRow@89TextInput@456@11"
-          L"PE$AAUIKeyboardKeySet@89TextInput@456@22PE$AAUIKeyboardCategorySet@89"
-          L"TextInput@456@_NW4CoreTextInputScope@Core@Text@UI@Windows@@PE$AAUIInputPanelTemplateManager@"
-          L"TouchKeyboardUX@@PE$AAUITextInputSettingsManager@9TextInput@456@PE$AAUIInputPanelModel@"
-          L"TouchKeyboardUX@@@Z"},
+          L"Experiences@ComposableShell@WindowsInternal@@QEAAXPE$AAVKeyboardGrid@"
+          L"LayoutData@Common@TextInput@345@@Z"},
          &originalInitializeGroupModel,
          InitializeGroupModelHook},
         {{L"?IsSubType@IKeyboardKeyData@LayoutData@Common@TextInput@"
@@ -1009,6 +807,7 @@ bool InstallFrontend(HMODULE module) {
                                       &options);
 }
 }  // namespace
+
 BOOL Wh_ModInit() {
     g_enabled.store(Wh_GetIntSetting(L"enabled") != 0);
     wchar_t procPath[MAX_PATH]{};
@@ -1019,8 +818,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        350);
-    Wh_SetIntValue(L"native-is-twelve-alpha", 1);
+        300);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
@@ -1043,91 +841,44 @@ BOOL Wh_ModInit() {
         Wh_SetIntValue(L"native-front-notify-a3", 0);
         Wh_SetIntValue(L"native-front-notify-a4", 0);
         Wh_SetIntValue(L"native-front-notify-count", 0);
-        Wh_SetIntValue(L"native-front-flower-count", 0);
-        Wh_SetIntValue(L"native-front-flower-f80", 0);
-        Wh_SetIntValue(L"native-front-flower-f84", 0);
-        Wh_SetIntValue(L"native-front-flower-has-str", 0);
-        Wh_SetIntValue(L"native-front-inject-kc-count", 0);
+        Wh_SetIntValue(L"native-front-inj-key-vk", -1);
+        Wh_SetIntValue(L"native-front-inj-key-char", 0);
+        Wh_SetIntValue(L"native-front-inj-key-flags", 0);
+        Wh_SetIntValue(L"native-front-inj-key-dir", -1);
+        Wh_SetIntValue(L"native-front-inj-key-height", -1);
+        Wh_SetIntValue(L"native-front-inj-key-count", 0);
         Wh_SetIntValue(L"native-front-inject-kc-a4", 0);
         Wh_SetIntValue(L"native-front-inject-kc-has-data", 0);
         Wh_SetIntValue(L"native-front-inject-kc-has-str", 0);
-        Wh_SetIntValue(L"native-front-inj-key-count", 0);
-        Wh_SetIntValue(L"native-front-inj-key-flags", 0);
-        Wh_SetIntValue(L"native-front-inj-key-char", 0);
-        Wh_SetIntValue(L"native-front-inj-key-dir", -1);
-        Wh_SetIntValue(L"native-front-inj-key-height", -1);
-        Wh_SetIntValue(L"native-front-inj-key-vk", -1);
-        Wh_SetIntValue(L"native-front-vk-val", -1);
-        Wh_SetIntValue(L"native-front-vk-count", 0);
-        Wh_SetIntValue(L"native-front-acq-count", 0);
-        Wh_SetIntValue(L"native-front-acq-vk-in", 0);
-        Wh_SetIntValue(L"native-front-acq-vk-fixed", 0);
-        Wh_SetIntValue(L"native-front-nsk-count", 0);
-        Wh_SetIntValue(L"native-front-nsk-key-in", 0);
-        Wh_SetIntValue(L"native-front-nsk-key-fixed", 0);
+        Wh_SetIntValue(L"native-front-inject-kc-count", 0);
+        Wh_SetIntValue(L"native-front-nsk-key-in", -1);
         Wh_SetIntValue(L"native-front-nsk-char", 0);
         Wh_SetIntValue(L"native-front-nsk-qual", 0);
-        Wh_SetIntValue(L"native-front-release-suppressed-raw", 0);
-        Wh_SetIntValue(L"native-cand-result-count", 0);
-        Wh_SetIntValue(L"native-cand-res", -1);
-        Wh_SetIntValue(L"native-front-press-count", 0);
-        Wh_SetIntValue(L"native-front-release-state", 0);
-        Wh_SetIntValue(L"native-front-release-suppressed-long", 0);
-        Wh_SetIntValue(L"native-t9-long-seq", 0);
-        Wh_SetIntValue(L"native-t9-long-consumed", 0);
-        Wh_SetIntValue(L"native-t9-long-digit", 0);
-        Wh_SetIntValue(L"native-front-block-page-null-intercepted", 0);
-        Wh_SetIntValue(L"native-front-keyset-fixed", 0);
-        Wh_SetIntValue(L"native-front-subtype-intercepted", 0);
-        Wh_SetIntValue(L"native-front-dir-30-intercepted", 0);
-        Wh_SetIntValue(L"native-front-emoji-triggered", 0);
-        Wh_SetStringValue(L"native-front-last-key-name", L"");
-        Wh_SetIntValue(L"native-front-scaling-fixed", 0);
-        Wh_SetIntValue(L"native-front-emoji-view-enabled", 0);
+        Wh_SetIntValue(L"native-front-nsk-key-fixed", 0);
+        Wh_SetIntValue(L"native-front-nsk-count", 0);
         Wh_SetIntValue(L"native-front-numeric-direct-injected", 0);
-        return InstallFrontend(front);
+        Wh_SetIntValue(L"native-front-release-suppressed-raw", 0);
+        Wh_SetIntValue(L"native-front-release-suppressed-long", 0);
+        const bool readyFront = InstallFrontend(front);
+        if (!readyFront) {
+            Wh_Log(L"[中文九键] 前端接口挂钩失败");
+        }
+        return readyFront;
     }
-#if !defined(_M_X64) && !defined(__x86_64__)
-    Wh_Log(L"[中文九键] 当前私有接口仅核验 x64，拒绝加载其他架构");
-    return FALSE;
-#else
+
     HMODULE service = GetModuleHandleW(L"InputService.dll");
     if (!service) {
-        wchar_t sysDir[MAX_PATH];
-        if (GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir))) {
-            const std::wstring svcPath = std::wstring(sysDir) + L"\\InputService.dll";
-            service = LoadLibraryExW(svcPath.c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        }
+        service = LoadLibraryW(L"InputService.dll");
     }
-    if (!service)
+    if (!service) {
         return FALSE;
-    wchar_t directory[MAX_PATH];
-    const UINT length = GetSystemDirectoryW(directory, ARRAYSIZE(directory));
-    if (!length || length >= ARRAYSIZE(directory))
+    }
+    ownedDecoder = LoadLibraryW(L"ChsPinyinDS.dll");
+    if (!ownedDecoder) {
         return FALSE;
-    const std::wstring path =
-        std::wstring(directory) + L"\\InputMethod\\CHS\\ChsPinyinDS.dll";
-    ownedDecoder = LoadLibraryExW(
-        path.c_str(), nullptr,
-        LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-    if (!ownedDecoder)
-        return FALSE;
-    Wh_SetIntValue(L"native-process-count", 0);
-    Wh_SetIntValue(L"native-channel-count", 0);
-    Wh_SetIntValue(L"native-vkey-count", 0);
-    Wh_SetIntValue(L"native-insert-count", 0);
-    Wh_SetIntValue(L"native-chc-opic-count", 0);
-    Wh_SetIntValue(L"native-rsbs-count", 0);
-    Wh_SetIntValue(L"native-cand-call-count", 0);
-    Wh_SetIntValue(L"native-decide-call-count", 0);
-    Wh_SetIntValue(L"native-layout-count", 0);
-    Wh_SetIntValue(L"native-reg-channel-switched", 0);
-    Wh_SetIntValue(L"native-default-channel", 0);
+    }
     Wh_SetIntValue(L"native-normalized-count", 0);
     Wh_SetIntValue(L"native-decoded-count", 0);
-    Wh_SetIntValue(L"native-service-key-down-count", 0);
-    Wh_SetIntValue(L"native-reg-entry-count", 0);
-    Wh_SetIntValue(L"native-reg-entry-key", 0);
     const bool readyService = NativeT9::InstallService(service) &&
                               NativeT9::InstallDecoder(ownedDecoder);
     if (!readyService) {
@@ -1136,7 +887,6 @@ BOOL Wh_ModInit() {
         Wh_Log(L"[中文九键] 原生接口或函数版本校验失败");
     }
     return readyService;
-#endif
 }
 
 void Wh_ModAfterInit() {
@@ -1144,12 +894,15 @@ void Wh_ModAfterInit() {
         frontProcess ? L"native-front-ready" : L"native-service-ready",
         GetCurrentProcessId());
 }
+
 void Wh_ModSettingsChanged() {
     g_enabled.store(Wh_GetIntSetting(L"enabled") != 0);
 }
+
 void Wh_ModBeforeUninit() {
     g_enabled.store(false);
 }
+
 void Wh_ModUninit() {
     if (ownedDecoder)
         FreeLibrary(ownedDecoder);
