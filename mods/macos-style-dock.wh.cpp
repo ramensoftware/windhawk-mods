@@ -1867,7 +1867,8 @@ bool HookTaskbarDllSymbols() {
 }
 
 bool HookTaskbarViewSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(public: static double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
             &TaskbarConfiguration_GetFrameSize_Original,
@@ -1979,7 +1980,7 @@ bool HookTaskbarViewSymbols(HMODULE module) {
             true,
         },
     };
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks))) return false;
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) return false;
     if (TaskListButton_IconHeight_Address) GetIconHeightOffset();  // find it up front
     return true;
 }
