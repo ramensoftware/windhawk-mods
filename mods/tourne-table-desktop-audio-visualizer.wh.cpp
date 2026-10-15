@@ -3326,7 +3326,7 @@ bool VizTaskbarOverlaps(const RECT& rc, bool aboveStrip) {
         bool hit;
     } ctx{&hits, false};
     EnumWindows(
-        [](HWND w, LPARAM lp) -> BOOL {
+        [](HWND w, LPARAM lp) __stdcall -> BOOL {
             auto* c = (Ctx*)lp;
             if (!(*c->fn)(w)) return TRUE;
             c->hit = true;
