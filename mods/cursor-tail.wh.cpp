@@ -27,7 +27,9 @@ of the application under the pointer.
 
 ## Features
 
-- **Speed-reactive trail:** Width, opacity, and effective length respond to pointer velocity. Trigger and stop speeds are configured in pixels per second, so they mean the same thing whether the loop is sampling at 125 Hz or at the 30 Hz idle rate.
+- **Speed-reactive trail:** Width, opacity, and effective length respond to pointer velocity. Trigger and stop speeds are configured in pixels per second, so they remain meaningful when the sampling rate changes.
+- **Continuous fast-motion paths:** A configurable, hard-bounded interpolation step count fills large gaps between samples without allocating extra memory in the draw loop.
+- **Motion accents:** Optional acceleration streaks and sharp-turn chevrons provide different cues for sudden speed changes and direction changes. Both are disabled by default.
 - **Smooth motion:** Historical cursor samples can be smoothed with Chaikin subdivision for a continuous ribbon.
 - **Custom appearance:** Configure trail color, outline color, gradient, and optional glow.
 - **Adaptive color:** Automatically sample the active cursor image and prefer colors with sufficient contrast against the screen background.
@@ -73,6 +75,7 @@ Windhawk also ships **Cursor Motion Blur**, **Mouse Trail**, **Simple Cursor Tra
 - **Adaptive color:** cursor-image color extraction with histogram ranking, contrast selection against the sampled background luminance, and automatic or manual outline colors.
 - **Context awareness:** per-app `exe=on|off` rules and fullscreen suppression (D3D exclusive or borderless) with an exit confirmation delay.
 - **Interaction layer:** optional, button-specific click ripples and scroll-direction pulses rendered through the same bounded Direct2D backbuffer, without a particle subsystem. The low-level mouse hook is installed only while one of these effects is enabled.
+- **Motion cues:** optional fixed-capacity acceleration streaks and direction-change chevrons, with cooldowns and bounded lifetimes. Large movement intervals can insert a configurable number of trail samples to reduce visual gaps.
 
 - [**Cursor Motion Blur**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-motion-blur.wh.cpp): the original basis for Cursor Tail, with a tapered motion-blur ribbon.
 - [**Mouse Trail**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/mouse-trail.wh.cpp): a ribbon-style trail with glow and cursor-extracted color.
@@ -311,6 +314,60 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
   $name: Interaction
   $name:zh-CN: 交互反馈
 
+- Motion:
+    - acceleration_accent_enabled: false
+      $name: Acceleration burst accents
+      $name:zh-CN: 加速爆发提示
+      $description: Show short speed streaks when the pointer accelerates sharply above the trail trigger speed. Disabled by default.
+      $description:zh-CN: 指针超过拖尾触发速度并出现明显加速时，短暂绘制速度线。默认关闭。
+    - turn_accent_enabled: false
+      $name: Sharp-turn accents
+      $name:zh-CN: 急转弯提示
+      $description: Show a brief directional chevron when the pointer makes a sharp turn at high speed. Disabled by default.
+      $description:zh-CN: 指针高速移动时发生急转弯，会短暂绘制方向标记。默认关闭。
+    - fast_move_interpolation: true
+      $name: Fast-move interpolation
+      $name:zh-CN: 快速移动轨迹补点
+      $description: Insert a bounded number of intermediate trail samples when the pointer moves a long distance between samples.
+      $description:zh-CN: 相邻采样点距离较大时，在轨迹中插入数量受限的中间采样点。
+    - acceleration_threshold: 40000
+      $name: Acceleration threshold
+      $name:zh-CN: 加速度阈值
+      $description: Minimum speed increase per second required for a burst accent, in pixels per second squared. Range 3000-100000.
+      $description:zh-CN: 触发加速提示所需的最小速度变化率，单位为像素每秒平方。范围 3000-100000。
+    - turn_angle_degrees: 75
+      $name: Turn angle threshold
+      $name:zh-CN: 转向角度阈值
+      $description: Minimum direction change required for a turn accent, in degrees. Range 45-150.
+      $description:zh-CN: 触发急转弯提示所需的最小方向变化角度，单位为度。范围 45-150。
+    - motion_accent_duration_ms: 260
+      $name: Motion accent duration
+      $name:zh-CN: 运动提示持续时间
+      $description: How long acceleration and turn accents remain visible. Range 80-1000 ms.
+      $description:zh-CN: 加速和转向提示的显示时长。范围 80-1000 毫秒。
+    - motion_accent_size: 14
+      $name: Motion accent size
+      $name:zh-CN: 运动提示大小
+      $description: Approximate size of the acceleration streaks and turn chevrons, in pixels. Range 4-40.
+      $description:zh-CN: 加速速度线和转向标记的大致尺寸，单位为像素。范围 4-40。
+    - motion_accent_color: "#FFD166"
+      $name: Motion accent color
+      $name:zh-CN: 运动提示颜色
+      $description: Hexadecimal RGB color used for acceleration and turn accents.
+      $description:zh-CN: 加速和转向提示使用的十六进制 RGB 颜色。
+    - motion_accent_opacity: 82
+      $name: Motion accent opacity
+      $name:zh-CN: 运动提示不透明度
+      $description: Maximum opacity of acceleration and turn accents, from 10 to 100 percent.
+      $description:zh-CN: 加速和转向提示的最大不透明度，范围为 10%-100%。
+    - max_interpolation_steps: 4
+      $name: Maximum interpolation steps
+      $name:zh-CN: 最大补点数量
+      $description: Maximum intermediate samples inserted for one long movement. Range 1-6.
+      $description:zh-CN: 单次长距离移动最多插入的中间采样数量。范围 1-6。
+  $name: Motion
+  $name:zh-CN: 运动反馈
+
 - Application:
     - app_rules: [""]
       $name: Per-app rules
@@ -326,6 +383,7 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
 #include <windhawk_utils.h>
 #include <d2d1.h>
 #include <math.h>
+#include <cmath>
 #include <shellapi.h>
 #include <cwctype>
 
@@ -369,6 +427,11 @@ constexpr int kBackbufferGrowthGranularity = 64;
 constexpr int kMaxActiveRipples = 12;
 constexpr float kRippleInitialRadius = 4.0f;
 constexpr int kMaxRippleClusterRadiusPx = 512;
+constexpr int kMaxActiveMotionAccents = 8;
+constexpr float kFastMoveInterpolationSpacingPx = 28.0f;
+constexpr DWORD kMotionResumeGapMs = 120;
+constexpr DWORD kAccelerationAccentCooldownMs = 140;
+constexpr DWORD kTurnAccentCooldownMs = 130;
 
 std::atomic<HWND> g_overlayHwnd{nullptr};
 HANDLE g_threadHandle = nullptr;
@@ -398,6 +461,14 @@ LONGLONG g_qpcFrequency = 0;
 bool g_isSmearing = false;
 int g_lowVelocityFrames = 0;
 float g_fadeAlpha = 0.0f;
+POINT g_lastMotionCuePoint = {};
+LONGLONG g_lastMotionCueQpc = 0;
+float g_lastMotionCueSpeed = 0.0f;
+float g_lastMotionDirectionX = 0.0f;
+float g_lastMotionDirectionY = 0.0f;
+bool g_hasPreviousMotionCueSample = false;
+LONGLONG g_lastAccelerationAccentQpc = 0;
+LONGLONG g_lastTurnAccentQpc = 0;
 float g_smoothedSpeedNorm = 0.0f;
 float g_frozenSpeedNorm = 0.5f;
 bool g_windowVisible = false;
@@ -474,6 +545,16 @@ float g_rippleRadius = 36.0f;
 int g_rippleDurationMs = 420;
 float g_rippleStrokeWidth = 2.0f;
 float g_rippleOpacity = 0.78f;
+int g_accelerationAccentEnabled = 0;
+int g_turnAccentEnabled = 0;
+int g_fastMoveInterpolationEnabled = 1;
+int g_accelerationThreshold = 40000;
+int g_turnAngleDegrees = 75;
+int g_motionAccentDurationMs = 260;
+float g_motionAccentSize = 14.0f;
+float g_motionAccentOpacity = 0.82f;
+int g_maxInterpolationSteps = 4;
+uint32_t g_motionAccentRGB = 0x00FFD166;
 
 struct RippleEffect {
     POINT center = {};
@@ -482,8 +563,25 @@ struct RippleEffect {
     bool active = false;
 };
 
+enum class MotionAccentKind : uint8_t {
+    Acceleration,
+    Turn,
+};
+
+struct MotionAccent {
+    POINT center = {};
+    float directionX = 1.0f;
+    float directionY = 0.0f;
+    float intensity = 1.0f;
+    LONGLONG startQpc = 0;
+    MotionAccentKind kind = MotionAccentKind::Acceleration;
+    bool active = false;
+};
+
 RippleEffect g_ripples[kMaxActiveRipples] = {};
 int g_nextRippleSlot = 0;
+MotionAccent g_motionAccents[kMaxActiveMotionAccents] = {};
+int g_nextMotionAccentSlot = 0;
 HHOOK g_mouseHook = nullptr;
 HMODULE g_mouseHookModule = nullptr;
 
@@ -809,6 +907,9 @@ static int CheckAppRuleCached(HWND foreground) {
     return g_cachedAppRule;
 }
 
+static void ClearMotionAccents();
+static void ResetMotionCueTracking();
+
 void LoadSettings() {
     g_triggerVelocity = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Behavior.trigger_velocity"), 50, 20000));
     g_stopVelocity = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Behavior.stop_velocity"), 50, 20000));
@@ -884,6 +985,17 @@ void LoadSettings() {
     g_middleClickRGB = readInteractionColor(L"Interaction.middle_click_color", 0x00FFD166);
     g_wheelUpRGB = readInteractionColor(L"Interaction.wheel_up_color", 0x007CFF6B);
     g_wheelDownRGB = readInteractionColor(L"Interaction.wheel_down_color", 0x00A78BFA);
+    g_accelerationAccentEnabled = std::clamp(Wh_GetIntSetting(L"Motion.acceleration_accent_enabled"), 0, 1);
+    g_turnAccentEnabled = std::clamp(Wh_GetIntSetting(L"Motion.turn_accent_enabled"), 0, 1);
+    g_fastMoveInterpolationEnabled = std::clamp(Wh_GetIntSetting(L"Motion.fast_move_interpolation"), 0, 1);
+    g_accelerationThreshold = std::clamp(Wh_GetIntSetting(L"Motion.acceleration_threshold"), 3000, 100000);
+    g_motionAccentOpacity = std::clamp(Wh_GetIntSetting(L"Motion.motion_accent_opacity"), 10, 100) / 100.0f;
+    g_turnAngleDegrees = std::clamp(Wh_GetIntSetting(L"Motion.turn_angle_degrees"), 45, 150);
+    g_motionAccentDurationMs = std::clamp(Wh_GetIntSetting(L"Motion.motion_accent_duration_ms"), 80, 1000);
+    g_motionAccentSize = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Motion.motion_accent_size"), 4, 40));
+    g_maxInterpolationSteps = std::clamp(Wh_GetIntSetting(L"Motion.max_interpolation_steps"), 1, 6);
+    g_motionAccentRGB = readInteractionColor(L"Motion.motion_accent_color", 0x00FFD166);
+    ResetMotionCueTracking();
     ParseAppRules();
     g_cachedForegroundWindow = nullptr;
     g_cachedAppRule = 0;
@@ -903,6 +1015,170 @@ static void ClearRipples() {
     }
     g_nextRippleSlot = 0;
     g_interactionPending = false;
+}
+
+static void ClearMotionAccents() {
+    for (MotionAccent& accent : g_motionAccents) accent.active = false;
+    g_nextMotionAccentSlot = 0;
+}
+
+static void ResetMotionCueTracking() {
+    ClearMotionAccents();
+    g_lastMotionCuePoint = {};
+    g_lastMotionCueQpc = 0;
+    g_lastMotionCueSpeed = 0.0f;
+    g_lastMotionDirectionX = 0.0f;
+    g_lastMotionDirectionY = 0.0f;
+    g_hasPreviousMotionCueSample = false;
+    g_lastAccelerationAccentQpc = 0;
+    g_lastTurnAccentQpc = 0;
+}
+
+static void AddMotionAccent(
+    const POINT& center,
+    float directionX,
+    float directionY,
+    float intensity,
+    MotionAccentKind kind) {
+    int selectedSlot = -1;
+    for (int offset = 0; offset < kMaxActiveMotionAccents; ++offset) {
+        const int candidateSlot = (g_nextMotionAccentSlot + offset) % kMaxActiveMotionAccents;
+        if (!g_motionAccents[candidateSlot].active) {
+            selectedSlot = candidateSlot;
+            break;
+        }
+    }
+    if (selectedSlot < 0) selectedSlot = g_nextMotionAccentSlot;
+    g_nextMotionAccentSlot = (selectedSlot + 1) % kMaxActiveMotionAccents;
+
+    MotionAccent& accent = g_motionAccents[selectedSlot];
+    accent.center = center;
+    accent.directionX = directionX;
+    accent.directionY = directionY;
+    accent.intensity = std::clamp(intensity, 0.5f, 1.8f);
+    accent.startQpc = QpcNow();
+    accent.kind = kind;
+    accent.active = true;
+}
+
+static int UpdateMotionAccentState(LONGLONG nowQpc) {
+    const LONGLONG durationTicks = std::max<LONGLONG>(
+        1, g_qpcFrequency * static_cast<LONGLONG>(g_motionAccentDurationMs) / 1000);
+    int activeCount = 0;
+    for (MotionAccent& accent : g_motionAccents) {
+        if (!accent.active) continue;
+        const LONGLONG elapsedTicks = nowQpc - accent.startQpc;
+        if (elapsedTicks < 0 || elapsedTicks >= durationTicks) {
+            accent.active = false;
+            continue;
+        }
+        ++activeCount;
+    }
+    return activeCount;
+}
+
+static bool HasActiveMotionAccents(LONGLONG nowQpc) {
+    return UpdateMotionAccentState(nowQpc) > 0;
+}
+
+static void UpdateMotionCueTracking(const POINT& point, LONGLONG nowQpc) {
+    if (!g_accelerationAccentEnabled && !g_turnAccentEnabled) {
+        g_lastMotionCuePoint = point;
+        g_lastMotionCueQpc = nowQpc;
+        g_lastMotionCueSpeed = 0.0f;
+        g_lastMotionDirectionX = 0.0f;
+        g_lastMotionDirectionY = 0.0f;
+        g_hasPreviousMotionCueSample = false;
+        return;
+    }
+
+    if (!g_hasPreviousMotionCueSample) {
+        g_lastMotionCuePoint = point;
+        g_lastMotionCueQpc = nowQpc;
+        g_lastMotionCueSpeed = 0.0f;
+        g_lastMotionDirectionX = 0.0f;
+        g_lastMotionDirectionY = 0.0f;
+        g_hasPreviousMotionCueSample = true;
+        return;
+    }
+
+    const LONGLONG elapsedTicks = nowQpc - g_lastMotionCueQpc;
+    const LONGLONG resumeGapTicks = std::max<LONGLONG>(
+        1, g_qpcFrequency * static_cast<LONGLONG>(kMotionResumeGapMs) / 1000);
+    if (elapsedTicks <= 0 || elapsedTicks > resumeGapTicks) {
+        // Never turn the time spent idle into an apparent acceleration or turn.
+        g_lastMotionCuePoint = point;
+        g_lastMotionCueQpc = nowQpc;
+        g_lastMotionCueSpeed = 0.0f;
+        g_lastMotionDirectionX = 0.0f;
+        g_lastMotionDirectionY = 0.0f;
+        g_hasPreviousMotionCueSample = true;
+        return;
+    }
+
+    const float dx = static_cast<float>(point.x - g_lastMotionCuePoint.x);
+    const float dy = static_cast<float>(point.y - g_lastMotionCuePoint.y);
+    const float distance = sqrtf(dx * dx + dy * dy);
+    const float elapsedSeconds = static_cast<float>(elapsedTicks)
+        / static_cast<float>(std::max<LONGLONG>(1, g_qpcFrequency));
+    const float speed = distance / std::max(elapsedSeconds, 0.001f);
+    if (distance >= 2.0f) {
+        const float directionX = dx / distance;
+        const float directionY = dy / distance;
+        const float acceleration =
+            (speed - g_lastMotionCueSpeed) / std::max(elapsedSeconds, 0.001f);
+        const LONGLONG accelerationCooldown = std::max<LONGLONG>(
+            1, g_qpcFrequency * static_cast<LONGLONG>(kAccelerationAccentCooldownMs) / 1000);
+        const LONGLONG turnCooldown = std::max<LONGLONG>(
+            1, g_qpcFrequency * static_cast<LONGLONG>(kTurnAccentCooldownMs) / 1000);
+
+        if (g_accelerationAccentEnabled
+            && speed >= g_triggerVelocity
+            && acceleration >= static_cast<float>(g_accelerationThreshold)
+            && (g_lastAccelerationAccentQpc == 0
+                || nowQpc - g_lastAccelerationAccentQpc >= accelerationCooldown)) {
+            AddMotionAccent(
+                point,
+                directionX,
+                directionY,
+                acceleration / static_cast<float>(g_accelerationThreshold),
+                MotionAccentKind::Acceleration);
+            g_lastAccelerationAccentQpc = nowQpc;
+        }
+
+        const float previousDirectionLength = sqrtf(
+            g_lastMotionDirectionX * g_lastMotionDirectionX
+            + g_lastMotionDirectionY * g_lastMotionDirectionY);
+        if (g_turnAccentEnabled
+            && g_lastMotionCueSpeed >= g_triggerVelocity
+            && speed >= g_triggerVelocity
+            && previousDirectionLength > 0.5f
+            && (g_lastTurnAccentQpc == 0
+                || nowQpc - g_lastTurnAccentQpc >= turnCooldown)) {
+            const float dot = std::clamp(
+                g_lastMotionDirectionX * directionX + g_lastMotionDirectionY * directionY,
+                -1.0f,
+                1.0f);
+            const float angleThreshold = cosf(
+                static_cast<float>(g_turnAngleDegrees) * 3.14159265358979323846f / 180.0f);
+            if (dot <= angleThreshold) {
+                AddMotionAccent(
+                    point,
+                    directionX,
+                    directionY,
+                    std::clamp((1.0f - dot) * 0.9f, 0.5f, 1.8f),
+                    MotionAccentKind::Turn);
+                g_lastTurnAccentQpc = nowQpc;
+            }
+        }
+
+        g_lastMotionDirectionX = directionX;
+        g_lastMotionDirectionY = directionY;
+    }
+
+    g_lastMotionCuePoint = point;
+    g_lastMotionCueQpc = nowQpc;
+    g_lastMotionCueSpeed = speed;
 }
 
 static int UpdateRippleState(LONGLONG nowQpc) {
@@ -1445,7 +1721,7 @@ static int GetEffectiveTailLength(float speedNorm) {
     return std::max(2, static_cast<int>(g_tailLength * (0.55f + 0.45f * std::clamp(speedNorm, 0.0f, 1.0f))));
 }
 
-void UpdateTrailState(const POINT& point, float velocity) {
+void UpdateTrailState(const POINT& previousPoint, const POINT& point, float velocity) {
     if (velocity > g_triggerVelocity && !g_isSmearing) {
         g_isSmearing = true;
         g_lowVelocityFrames = 0;
@@ -1462,8 +1738,25 @@ void UpdateTrailState(const POINT& point, float velocity) {
     if (g_isSmearing) {
         const float target = std::clamp((velocity - g_stopVelocity) / (g_triggerVelocity * 2.0f), 0.0f, 1.0f);
         g_smoothedSpeedNorm = g_smoothedSpeedNorm * 0.55f + target * 0.45f;
-        HistoryPushFront(point);
-        while (g_historyCount > g_tailLength) HistoryPopBack();
+        const float dx = static_cast<float>(point.x - previousPoint.x);
+        const float dy = static_cast<float>(point.y - previousPoint.y);
+        const float distance = sqrtf(dx * dx + dy * dy);
+        int interpolationSteps = 1;
+        if (g_fastMoveInterpolationEnabled && distance > kFastMoveInterpolationSpacingPx) {
+            const int requiredSteps = static_cast<int>(ceilf(distance / kFastMoveInterpolationSpacingPx));
+            interpolationSteps = std::clamp(requiredSteps, 1, g_maxInterpolationSteps + 1);
+        }
+        // History is stored newest-first, so push the interpolated path toward
+        // the current endpoint in ascending order. Work is capped at six points.
+        for (int step = 1; step <= interpolationSteps; ++step) {
+            const float progress = static_cast<float>(step) / interpolationSteps;
+            const POINT sample = {
+                static_cast<LONG>(std::lround(previousPoint.x + dx * progress)),
+                static_cast<LONG>(std::lround(previousPoint.y + dy * progress)),
+            };
+            HistoryPushFront(sample);
+            while (g_historyCount > g_tailLength) HistoryPopBack();
+        }
     } else if (g_fadeEnabled) {
         g_fadeAlpha *= g_fadeDecay;
         if (g_fadeAlpha < kFadeCutoff || g_historyCount < 2) {
@@ -1747,7 +2040,8 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
     }
 
     const int activeRippleCount = UpdateRippleState(nowQpc);
-    if (!drawTrail && activeRippleCount == 0) return false;
+    const int activeMotionAccentCount = UpdateMotionAccentState(nowQpc);
+    if (!drawTrail && activeRippleCount == 0 && activeMotionAccentCount == 0) return false;
 
     RECT bounds = {};
     bool hasBounds = false;
@@ -1775,6 +2069,34 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
     const float scaledRippleStrokeWidth = g_rippleStrokeWidth * g_currentDpiScale;
     const LONG ripplePadding = static_cast<LONG>(
         scaledRippleRadius + scaledRippleStrokeWidth + kRenderPadding * g_currentDpiScale + 1.0f);
+    const MotionAccent* newestMotionAccent = nullptr;
+    for (const MotionAccent& accent : g_motionAccents) {
+        if (accent.active && (!newestMotionAccent || accent.startQpc > newestMotionAccent->startQpc)) {
+            newestMotionAccent = &accent;
+        }
+    }
+    const float scaledMotionAccentSize = g_motionAccentSize * g_currentDpiScale;
+    const LONG motionAccentPadding = static_cast<LONG>(
+        ceilf(scaledMotionAccentSize * 2.4f + kRenderPadding * g_currentDpiScale + 2.0f));
+    for (const MotionAccent& accent : g_motionAccents) {
+        if (!accent.active) continue;
+        if (newestMotionAccent) {
+            const int64_t deltaX = static_cast<int64_t>(accent.center.x) - newestMotionAccent->center.x;
+            const int64_t deltaY = static_cast<int64_t>(accent.center.y) - newestMotionAccent->center.y;
+            if (deltaX < -kMaxRippleClusterRadiusPx || deltaX > kMaxRippleClusterRadiusPx
+                || deltaY < -kMaxRippleClusterRadiusPx || deltaY > kMaxRippleClusterRadiusPx) {
+                continue;
+            }
+        }
+        const RECT accentBounds = {
+            accent.center.x - motionAccentPadding,
+            accent.center.y - motionAccentPadding,
+            accent.center.x + motionAccentPadding,
+            accent.center.y + motionAccentPadding,
+        };
+        includeBounds(accentBounds);
+    }
+
     const RippleEffect* newestRipple = nullptr;
     for (const RippleEffect& ripple : g_ripples) {
         if (ripple.active && (!newestRipple || ripple.startQpc > newestRipple->startQpc)) {
@@ -1864,6 +2186,75 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
         }
         DrawTrailStroke(g_renderTarget, coreBrush, coreHalf, true);
         g_renderTarget->PopLayer();
+    }
+
+    const LONGLONG accentDurationTicks = std::max<LONGLONG>(
+        1, g_qpcFrequency * static_cast<LONGLONG>(g_motionAccentDurationMs) / 1000);
+    for (const MotionAccent& accent : g_motionAccents) {
+        if (!accent.active) continue;
+        const LONGLONG deltaX = newestMotionAccent
+            ? static_cast<LONGLONG>(accent.center.x) - newestMotionAccent->center.x
+            : 0;
+        const LONGLONG deltaY = newestMotionAccent
+            ? static_cast<LONGLONG>(accent.center.y) - newestMotionAccent->center.y
+            : 0;
+        if (newestMotionAccent
+            && (deltaX < -kMaxRippleClusterRadiusPx || deltaX > kMaxRippleClusterRadiusPx
+                || deltaY < -kMaxRippleClusterRadiusPx || deltaY > kMaxRippleClusterRadiusPx)) {
+            continue;
+        }
+        const LONGLONG elapsedTicks = nowQpc - accent.startQpc;
+        if (elapsedTicks < 0 || elapsedTicks >= accentDurationTicks) continue;
+        const float progress = std::clamp(
+            static_cast<float>(elapsedTicks) / static_cast<float>(accentDurationTicks),
+            0.0f,
+            1.0f);
+        const float remaining = 1.0f - progress;
+        const float alpha = g_motionAccentOpacity * accent.intensity * remaining * remaining;
+        if (alpha < 0.005f) continue;
+
+        const float directionX = accent.directionX;
+        const float directionY = accent.directionY;
+        const float normalX = -directionY;
+        const float normalY = directionX;
+        const float size = scaledMotionAccentSize
+            * (0.82f + 0.18f * remaining)
+            * std::clamp(accent.intensity, 0.5f, 1.8f);
+        const D2D1_POINT_2F center = D2D1::Point2F(
+            static_cast<float>(accent.center.x),
+            static_cast<float>(accent.center.y));
+        const auto pointAlong = [&](float along, float normal) {
+            return D2D1::Point2F(
+                center.x + directionX * along + normalX * normal,
+                center.y + directionY * along + normalY * normal);
+        };
+
+        g_rippleBrush->SetColor(ToColorF(g_motionAccentRGB, std::clamp(alpha, 0.0f, 1.0f)));
+        const float stroke = std::max(1.0f, g_currentDpiScale * (1.45f - 0.55f * progress));
+        if (accent.kind == MotionAccentKind::Acceleration) {
+            for (int streak = -1; streak <= 1; ++streak) {
+                const float lateral = static_cast<float>(streak) * size * 0.48f;
+                const float startAlong = -size * 0.12f;
+                const float endAlong = -size * (0.82f + 0.22f * static_cast<float>(streak + 1));
+                g_renderTarget->DrawLine(
+                    pointAlong(startAlong, lateral),
+                    pointAlong(endAlong, lateral),
+                    g_rippleBrush,
+                    stroke,
+                    g_strokeStyle);
+            }
+        } else {
+            const D2D1_POINT_2F tip = pointAlong(size * 0.35f, 0.0f);
+            const D2D1_POINT_2F leftWing = pointAlong(-size * 0.52f, size * 0.62f);
+            const D2D1_POINT_2F rightWing = pointAlong(-size * 0.52f, -size * 0.62f);
+            g_renderTarget->DrawLine(tip, leftWing, g_rippleBrush, stroke, g_strokeStyle);
+            g_renderTarget->DrawLine(tip, rightWing, g_rippleBrush, stroke, g_strokeStyle);
+            const D2D1_POINT_2F innerTip = pointAlong(size * 0.04f, 0.0f);
+            const D2D1_POINT_2F innerLeft = pointAlong(-size * 0.45f, size * 0.34f);
+            const D2D1_POINT_2F innerRight = pointAlong(-size * 0.45f, -size * 0.34f);
+            g_renderTarget->DrawLine(innerTip, innerLeft, g_rippleBrush, stroke * 0.7f, g_strokeStyle);
+            g_renderTarget->DrawLine(innerTip, innerRight, g_rippleBrush, stroke * 0.7f, g_strokeStyle);
+        }
     }
 
     const LONGLONG durationTicks = std::max<LONGLONG>(
@@ -1957,6 +2348,7 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
     const LONGLONG sampleQpc = QpcNow();
     if (UpdateCursorMonitorDpi(hwnd, point)) {
         ResetTrailState();
+        ResetMotionCueTracking();
         g_lastPos = point;
         g_lastSampleQpc = sampleQpc;
     }
@@ -1972,6 +2364,7 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
 
     if (appRule < 0) {
         ResetTrailState();
+        ResetMotionCueTracking();
         ClearRipples();
         parkSample();
         HideOverlay();
@@ -1982,6 +2375,7 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
     const bool fullscreenActive = UpdateFullscreenState(now, foreground, point);
     if (fullscreenActive && appRule == 0) {
         ResetTrailState();
+        ResetMotionCueTracking();
         ClearRipples();
         parkSample();
         HideOverlay();
@@ -1991,15 +2385,18 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
 
     const bool wasSmearing = g_isSmearing;
     const int previousHistoryCount = g_historyCount;
+    const POINT previousPoint = g_lastPos;
     const float velocity = PointerSpeedPxPerSecond(point, sampleQpc);
-    UpdateTrailState(point, velocity);
+    UpdateMotionCueTracking(point, sampleQpc);
+    UpdateTrailState(previousPoint, point, velocity);
     MaybeReleaseIdleBackbuffer(now);
     if (g_isSmearing || g_historyCount >= 2) UpdateTrailColorIfNeeded(now);
 
     const bool stateChanged = wasSmearing != g_isSmearing
         || (previousHistoryCount >= 2) != (g_historyCount >= 2);
     const bool hasRipples = HasActiveRipples(sampleQpc);
-    if (g_historyCount < 2 && !hasRipples) {
+    const bool hasMotionAccents = HasActiveMotionAccents(sampleQpc);
+    if (g_historyCount < 2 && !hasRipples && !hasMotionAccents) {
         HideOverlay();
         return false;
     }
@@ -2200,7 +2597,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
 
         const LONGLONG currentQpc = QpcNow();
         const bool trailActive = g_isSmearing || g_historyCount >= 2;
-        const bool rippleActive = HasActiveRipples(currentQpc);
+        const bool rippleActive = HasActiveRipples(currentQpc) || HasActiveMotionAccents(currentQpc);
         const LONGLONG inputWakeInterval = std::max<LONGLONG>(
             1,
             g_qpcFrequency * static_cast<LONGLONG>(kInputWakeThrottleMs) / 1000);
@@ -2285,7 +2682,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                 const bool forceRender = interactionTriggered;
                 const bool rendered = SmearFrame(hwnd, GetTickCount(), forceRender);
                 const bool activeAfterEvent =
-                    g_isSmearing || g_historyCount >= 2 || HasActiveRipples(QpcNow());
+                    g_isSmearing || g_historyCount >= 2
+                    || HasActiveRipples(QpcNow())
+                    || HasActiveMotionAccents(QpcNow());
                 if (activeAfterEvent) {
                     nextRenderDeadline = eventQpc
                         + (g_isSmearing || g_historyCount >= 2
@@ -2302,7 +2701,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                 g_rawMouseMovementPending = false;
                 const LONGLONG movementQpc = QpcNow();
                 const bool activeBeforeMovement =
-                    g_isSmearing || g_historyCount >= 2 || HasActiveRipples(movementQpc);
+                    g_isSmearing || g_historyCount >= 2
+                    || HasActiveRipples(movementQpc)
+                    || HasActiveMotionAccents(movementQpc);
 
                 if (!activeBeforeMovement && !g_pollingFallback) {
                     // Bound the first post-idle interval instead of dividing by
@@ -2316,7 +2717,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                     SmearFrame(hwnd, GetTickCount(), renderFrame);
                     const LONGLONG sampledQpc = QpcNow();
                     const bool activeAfterMovement =
-                        g_isSmearing || g_historyCount >= 2 || HasActiveRipples(sampledQpc);
+                        g_isSmearing || g_historyCount >= 2
+                        || HasActiveRipples(sampledQpc)
+                        || HasActiveMotionAccents(sampledQpc);
                     g_nextSampleDeadline = sampledQpc
                         + (activeAfterMovement ? simulationTicks : 0);
                     if (activeAfterMovement && (renderFrame || sampledQpc >= nextRenderDeadline)) {
@@ -2330,7 +2733,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                     SmearFrame(hwnd, GetTickCount(), renderFrame);
                     const LONGLONG sampledQpc = QpcNow();
                     const bool activeAfterMovement =
-                        g_isSmearing || g_historyCount >= 2 || HasActiveRipples(sampledQpc);
+                        g_isSmearing || g_historyCount >= 2
+                        || HasActiveRipples(sampledQpc)
+                        || HasActiveMotionAccents(sampledQpc);
                     g_nextSampleDeadline = sampledQpc
                         + (activeAfterMovement ? simulationTicks : (g_pollingFallback ? fallbackTicks : 0));
                     if (activeAfterMovement && (renderFrame || sampledQpc >= nextRenderDeadline)) {
@@ -2347,7 +2752,8 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         if (timerNeeded && waitResult == WAIT_OBJECT_0 + 2) {
             if (sampleTimerNeeded) {
                 const LONGLONG sampleNow = QpcNow();
-                const bool interactionActiveBeforeFrame = HasActiveRipples(sampleNow);
+                const bool interactionActiveBeforeFrame =
+                    HasActiveRipples(sampleNow) || HasActiveMotionAccents(sampleNow);
                 const bool renderFrame =
                     (g_isSmearing || g_historyCount >= 2 || interactionActiveBeforeFrame)
                     && sampleNow >= nextRenderDeadline;
@@ -2355,7 +2761,8 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
                 g_rawMouseMovementPending = false;
 
                 const LONGLONG sampledQpc = QpcNow();
-                const bool interactionActive = HasActiveRipples(sampledQpc);
+                const bool interactionActive =
+                    HasActiveRipples(sampledQpc) || HasActiveMotionAccents(sampledQpc);
                 const bool active = g_isSmearing;
                 const bool fading = !active && g_historyCount >= 2;
                 if (active || fading || interactionActive) {
