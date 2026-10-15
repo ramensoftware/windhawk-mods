@@ -157,6 +157,22 @@ same general taskbar background use case.
 - detection:
   - fullscreenAsMaximized: true
     $name: Treat fullscreen windows as maximized
+
+  - largeWindowEnabled: true
+    $name: Treat large windows as maximized
+
+  - areaThreshold: 80
+    $name: Area threshold (%)
+    $description: A window is considered large if its area reaches this percentage of the monitor area.
+
+  - widthThreshold: 90
+    $name: Width threshold (%)
+    $description: A window is considered large if its width reaches this percentage of the monitor width.
+
+  - heightThreshold: 90
+    $name: Height threshold (%)
+    $description: A window is considered large if its height reaches this percentage of the monitor height.
+
   $name: Detection
 */
 // ==/WindhawkModSettings==
@@ -176,8 +192,8 @@ same general taskbar background use case.
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.ViewManagement.h>
-#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/base.h>
@@ -246,6 +262,11 @@ struct Settings {
     Appearance otherInteraction;
     int animationDurationMs = 220;
     bool fullscreenAsMaximized = true;
+
+    bool largeWindowEnabled = true;
+    int areaThreshold = 80;
+    int widthThreshold = 90;
+    int heightThreshold = 90;
 };
 
 struct ShellActivity {
@@ -305,7 +326,8 @@ using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
 using TaskListButton_UpdateButtonPadding_t = void(WINAPI*)(void*);
-TaskListButton_UpdateButtonPadding_t TaskListButton_UpdateButtonPadding_Original;
+TaskListButton_UpdateButtonPadding_t
+    TaskListButton_UpdateButtonPadding_Original;
 
 using ExperienceToggleButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 ExperienceToggleButton_UpdateVisualStates_t
@@ -362,8 +384,7 @@ Appearance LoadAppearance(PCWSTR prefix,
         appearance.style = ParseStyle(style);
     }
 
-    appearance.opacity =
-        appearance.style == AppearanceStyle::clear ? 0 : 255;
+    appearance.opacity = appearance.style == AppearanceStyle::clear ? 0 : 255;
 
     return appearance;
 }
@@ -380,17 +401,29 @@ void LoadSettings() {
         LoadAppearance(L"startOpened", true, true, AppearanceStyle::fallback);
     settings.searchOpened =
         LoadAppearance(L"searchOpened", true, true, AppearanceStyle::fallback);
-    settings.taskViewOpened =
-        LoadAppearance(L"taskViewOpened", true, true, AppearanceStyle::fallback);
-    settings.trayFlyoutOpened =
-        LoadAppearance(L"trayFlyoutOpened", true, true, AppearanceStyle::fallback);
-    settings.otherInteraction =
-        LoadAppearance(L"otherInteraction", true, false, AppearanceStyle::fallback);
+    settings.taskViewOpened = LoadAppearance(L"taskViewOpened", true, true,
+                                             AppearanceStyle::fallback);
+    settings.trayFlyoutOpened = LoadAppearance(L"trayFlyoutOpened", true, true,
+                                               AppearanceStyle::fallback);
+    settings.otherInteraction = LoadAppearance(L"otherInteraction", true, false,
+                                               AppearanceStyle::fallback);
 
     settings.animationDurationMs =
         ClampInt(Wh_GetIntSetting(L"animation.durationMs"), 0, 5000);
     settings.fullscreenAsMaximized =
         Wh_GetIntSetting(L"detection.fullscreenAsMaximized") != 0;
+
+    settings.largeWindowEnabled =
+        Wh_GetIntSetting(L"detection.largeWindowEnabled") != 0;
+
+    settings.areaThreshold =
+        ClampInt(Wh_GetIntSetting(L"detection.areaThreshold"), 0, 100);
+
+    settings.widthThreshold =
+        ClampInt(Wh_GetIntSetting(L"detection.widthThreshold"), 0, 100);
+
+    settings.heightThreshold =
+        ClampInt(Wh_GetIntSetting(L"detection.heightThreshold"), 0, 100);
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = settings;
@@ -437,17 +470,16 @@ typedef enum GRAPHICS_EFFECT_PROPERTY_MAPPING {
 DECLARE_INTERFACE_IID_(IGraphicsEffectD2D1Interop,
                        IUnknown,
                        "2FC57384-A068-44D7-A331-30982FCF7177") {
-    STDMETHOD(GetEffectId)(_Out_ GUID* id) PURE;
+    STDMETHOD(GetEffectId)(_Out_ GUID * id) PURE;
     STDMETHOD(GetNamedPropertyMapping)
-    (LPCWSTR name,
-     _Out_ UINT* index,
-     _Out_ GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) PURE;
-    STDMETHOD(GetPropertyCount)(_Out_ UINT* count) PURE;
+    (LPCWSTR name, _Out_ UINT * index,
+     _Out_ GRAPHICS_EFFECT_PROPERTY_MAPPING * mapping) PURE;
+    STDMETHOD(GetPropertyCount)(_Out_ UINT * count) PURE;
     STDMETHOD(GetProperty)
-    (UINT index, _Outptr_ winrt::impl::abi_t<wf::IPropertyValue>** value) PURE;
-    STDMETHOD(GetSource)(UINT index,
-                         _Outptr_ IGraphicsEffectSource** source) PURE;
-    STDMETHOD(GetSourceCount)(_Out_ UINT* count) PURE;
+    (UINT index, _Outptr_ winrt::impl::abi_t<wf::IPropertyValue> * *value) PURE;
+    STDMETHOD(GetSource)(UINT index, _Outptr_ IGraphicsEffectSource * *source)
+        PURE;
+    STDMETHOD(GetSourceCount)(_Out_ UINT * count) PURE;
 };
 
 }  // namespace Effects
@@ -465,11 +497,10 @@ inline constexpr winrt::guid
         0x44D7,
         {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
 
-struct CompositeEffect
-    : winrt::implements<CompositeEffect,
-                        wge::IGraphicsEffect,
-                        wge::IGraphicsEffectSource,
-                        awge::IGraphicsEffectD2D1Interop> {
+struct CompositeEffect : winrt::implements<CompositeEffect,
+                                           wge::IGraphicsEffect,
+                                           wge::IGraphicsEffectSource,
+                                           awge::IGraphicsEffectD2D1Interop> {
     HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
         if (!id) {
             return E_INVALIDARG;
@@ -518,13 +549,14 @@ struct CompositeEffect
         return winrt::to_hresult();
     }
 
-    HRESULT STDMETHODCALLTYPE GetSource(UINT index,
-                                        awge::IGraphicsEffectSource** source)
-        noexcept override try {
+    HRESULT STDMETHODCALLTYPE
+    GetSource(UINT index,
+              awge::IGraphicsEffectSource** source) noexcept override try {
         if (!source) {
             return E_INVALIDARG;
         }
-        winrt::copy_to_abi(Sources.at(index), *reinterpret_cast<void**>(source));
+        winrt::copy_to_abi(Sources.at(index),
+                           *reinterpret_cast<void**>(source));
         return S_OK;
     } catch (...) {
         return winrt::to_hresult();
@@ -538,26 +570,21 @@ struct CompositeEffect
         return S_OK;
     }
 
-    winrt::hstring Name() {
-        return name;
-    }
+    winrt::hstring Name() { return name; }
 
-    void Name(winrt::hstring value) {
-        name = value;
-    }
+    void Name(winrt::hstring value) { name = value; }
 
     std::vector<wge::IGraphicsEffectSource> Sources;
     D2D1_COMPOSITE_MODE Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
 
-private:
+   private:
     winrt::hstring name = L"CompositeEffect";
 };
 
-struct FloodEffect
-    : winrt::implements<FloodEffect,
-                        wge::IGraphicsEffect,
-                        wge::IGraphicsEffectSource,
-                        awge::IGraphicsEffectD2D1Interop> {
+struct FloodEffect : winrt::implements<FloodEffect,
+                                       wge::IGraphicsEffect,
+                                       wge::IGraphicsEffectSource,
+                                       awge::IGraphicsEffectD2D1Interop> {
     HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
         if (!id) {
             return E_INVALIDARG;
@@ -599,11 +626,11 @@ struct FloodEffect
             return E_BOUNDS;
         }
         *value = wf::PropertyValue::CreateSingleArray({
-                     Color.R / 255.0f,
-                     Color.G / 255.0f,
-                     Color.B / 255.0f,
-                     Color.A / 255.0f,
-                 })
+                                                          Color.R / 255.0f,
+                                                          Color.G / 255.0f,
+                                                          Color.B / 255.0f,
+                                                          Color.A / 255.0f,
+                                                      })
                      .as<winrt::impl::abi_t<wf::IPropertyValue>>()
                      .detach();
         return S_OK;
@@ -611,9 +638,8 @@ struct FloodEffect
         return winrt::to_hresult();
     }
 
-    HRESULT STDMETHODCALLTYPE GetSource(UINT,
-                                        awge::IGraphicsEffectSource** source)
-        noexcept override {
+    HRESULT STDMETHODCALLTYPE
+    GetSource(UINT, awge::IGraphicsEffectSource** source) noexcept override {
         if (!source) {
             return E_INVALIDARG;
         }
@@ -628,17 +654,13 @@ struct FloodEffect
         return S_OK;
     }
 
-    winrt::hstring Name() {
-        return name;
-    }
+    winrt::hstring Name() { return name; }
 
-    void Name(winrt::hstring value) {
-        name = value;
-    }
+    void Name(winrt::hstring value) { name = value; }
 
     winrt::Windows::UI::Color Color{};
 
-private:
+   private:
     winrt::hstring name = L"FloodEffect";
 };
 
@@ -705,11 +727,10 @@ struct GaussianBlurEffect
                              .detach();
                 break;
             case D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION:
-                *value =
-                    wf::PropertyValue::CreateUInt32(
-                        static_cast<UINT32>(Optimization))
-                        .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                        .detach();
+                *value = wf::PropertyValue::CreateUInt32(
+                             static_cast<UINT32>(Optimization))
+                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
+                             .detach();
                 break;
             case D2D1_GAUSSIANBLUR_PROP_BORDER_MODE:
                 *value = wf::PropertyValue::CreateUInt32(
@@ -726,9 +747,9 @@ struct GaussianBlurEffect
         return winrt::to_hresult();
     }
 
-    HRESULT STDMETHODCALLTYPE GetSource(UINT index,
-                                        awge::IGraphicsEffectSource** source)
-        noexcept override {
+    HRESULT STDMETHODCALLTYPE
+    GetSource(UINT index,
+              awge::IGraphicsEffectSource** source) noexcept override {
         if (!source) {
             return E_INVALIDARG;
         }
@@ -747,13 +768,9 @@ struct GaussianBlurEffect
         return S_OK;
     }
 
-    winrt::hstring Name() {
-        return name;
-    }
+    winrt::hstring Name() { return name; }
 
-    void Name(winrt::hstring value) {
-        name = value;
-    }
+    void Name(winrt::hstring value) { name = value; }
 
     wge::IGraphicsEffectSource Source{nullptr};
     float BlurAmount = 3.0f;
@@ -761,13 +778,13 @@ struct GaussianBlurEffect
         MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED;
     D2D1_BORDER_MODE BorderMode = D2D1_BORDER_MODE_SOFT;
 
-private:
+   private:
     winrt::hstring name = L"GaussianBlurEffect";
 };
 
 class DynamicXamlBlurBrush
     : public Media::XamlCompositionBrushBaseT<DynamicXamlBlurBrush> {
-public:
+   public:
     DynamicXamlBlurBrush(UIElement element,
                          float blurAmount,
                          winrt::Windows::UI::Color tint)
@@ -789,7 +806,7 @@ public:
         }
     }
 
-private:
+   private:
     wuc::CompositionBrush CreateEffectBrush() {
         auto backdropBrush = compositor.CreateBackdropBrush();
 
@@ -889,7 +906,8 @@ bool IsTransparentBrush(Media::Brush brush) {
 bool IsBackgroundStroke(Shapes::Rectangle rectangle) {
     try {
         auto frameworkElement = rectangle.try_as<FrameworkElement>();
-        return frameworkElement && frameworkElement.Name() == L"BackgroundStroke";
+        return frameworkElement &&
+               frameworkElement.Name() == L"BackgroundStroke";
     } catch (...) {
         return false;
     }
@@ -1019,8 +1037,8 @@ void ApplyNativeDefaultAppearance(Shapes::Rectangle rectangle,
 
     if (parentGrid) {
         if (refreshStyle || !parentGrid.Background()) {
-            parentGrid.Background(MakeNativeTaskbarBrush(parentGrid,
-                                                         animationOpacity));
+            parentGrid.Background(
+                MakeNativeTaskbarBrush(parentGrid, animationOpacity));
         } else if (auto brush = parentGrid.Background()) {
             brush.Opacity(static_cast<double>(animationOpacity) / 255.0);
         }
@@ -1085,13 +1103,11 @@ void ApplyAppearanceToElement(Shapes::Rectangle rectangle,
         if (restoreOriginal) {
             if (HasUsableNativeCapture(originalFill,
                                        originalParentBackground)) {
-                RestoreCapturedAppearance(rectangle, originalFill,
-                                          originalParentBackground,
-                                          originalOpacity, parentGrid,
-                                          refreshStyle, 255);
+                RestoreCapturedAppearance(
+                    rectangle, originalFill, originalParentBackground,
+                    originalOpacity, parentGrid, refreshStyle, 255);
             } else {
-                ApplyNativeDefaultAppearance(rectangle, parentGrid,
-                                             nativeFill,
+                ApplyNativeDefaultAppearance(rectangle, parentGrid, nativeFill,
                                              nativeParentBackground,
                                              nativeOpacity, refreshStyle, 255);
             }
@@ -1099,16 +1115,14 @@ void ApplyAppearanceToElement(Shapes::Rectangle rectangle,
         }
 
         if (appearance.style == AppearanceStyle::captured) {
-            RestoreCapturedAppearance(rectangle, originalFill,
-                                      originalParentBackground, originalOpacity,
-                                      parentGrid, refreshStyle,
-                                      appearance.opacity);
+            RestoreCapturedAppearance(
+                rectangle, originalFill, originalParentBackground,
+                originalOpacity, parentGrid, refreshStyle, appearance.opacity);
             return;
         } else if (appearance.style == AppearanceStyle::native) {
             ApplyNativeDefaultAppearance(rectangle, parentGrid, nativeFill,
                                          nativeParentBackground, nativeOpacity,
-                                         refreshStyle,
-                                         appearance.opacity);
+                                         refreshStyle, appearance.opacity);
             return;
         } else if (appearance.style == AppearanceStyle::clear) {
             if (refreshStyle) {
@@ -1130,14 +1144,12 @@ void ApplyAppearanceToElement(Shapes::Rectangle rectangle,
             }
         }
 
-        const bool hideStroke =
-            isBackgroundStroke &&
-            (appearance.style == AppearanceStyle::clear ||
-             appearance.style == AppearanceStyle::blur ||
-             appearance.style == AppearanceStyle::acrylic);
-        rectangle.Opacity(hideStroke ? 0.0
-                                     : static_cast<double>(appearance.opacity) /
-                                           255.0);
+        const bool hideStroke = isBackgroundStroke &&
+                                (appearance.style == AppearanceStyle::clear ||
+                                 appearance.style == AppearanceStyle::blur ||
+                                 appearance.style == AppearanceStyle::acrylic);
+        rectangle.Opacity(
+            hideStroke ? 0.0 : static_cast<double>(appearance.opacity) / 255.0);
     } catch (const winrt::hresult_error& ex) {
         Wh_Log(L"Failed to apply taskbar background: %08X %s", ex.code(),
                ex.message().c_str());
@@ -1228,19 +1240,15 @@ void DispatchApplyAppearance(const Appearance& appearance,
                 TrackedBackgroundElement originalInfo =
                     GetOriginalElementInfo(abi);
                 const bool refreshStyle =
-                    restoreOriginal ||
-                    !originalInfo.hasAppliedAppearance ||
+                    restoreOriginal || !originalInfo.hasAppliedAppearance ||
                     originalInfo.appliedStyle != appearance.style;
-                ApplyAppearanceToElement(rectangle, appearance,
-                                         originalInfo.originalFill,
-                                         originalInfo.originalParentBackground,
-                                         originalInfo.originalOpacity,
-                                         originalInfo.nativeFill,
-                                         originalInfo.nativeParentBackground,
-                                         originalInfo.nativeOpacity,
-                                         originalInfo.parentGrid,
-                                         refreshStyle,
-                                         restoreOriginal);
+                ApplyAppearanceToElement(
+                    rectangle, appearance, originalInfo.originalFill,
+                    originalInfo.originalParentBackground,
+                    originalInfo.originalOpacity, originalInfo.nativeFill,
+                    originalInfo.nativeParentBackground,
+                    originalInfo.nativeOpacity, originalInfo.parentGrid,
+                    refreshStyle, restoreOriginal);
                 StoreAppliedAppearance(abi, appearance.style, restoreOriginal);
             }
 
@@ -1363,8 +1371,7 @@ bool IsTaskbarBackgroundRectangle(FrameworkElement element) {
         return false;
     }
 
-    if (winrt::get_class_name(element) !=
-        L"Windows.UI.Xaml.Shapes.Rectangle") {
+    if (winrt::get_class_name(element) != L"Windows.UI.Xaml.Shapes.Rectangle") {
         return false;
     }
 
@@ -1413,8 +1420,7 @@ void RegisterBackgroundElement(FrameworkElement element) {
             CapturedBackgroundAppearance nativeAppearance =
                 CaptureNativeAppearance(rectangle, parentGrid);
             tracked.nativeFill = nativeAppearance.fill;
-            tracked.nativeParentBackground =
-                nativeAppearance.parentBackground;
+            tracked.nativeParentBackground = nativeAppearance.parentBackground;
             tracked.nativeOpacity = nativeAppearance.opacity;
             tracked.abi = abi;
             elements.push_back(std::move(tracked));
@@ -1424,28 +1430,23 @@ void RegisterBackgroundElement(FrameworkElement element) {
 
     if (added) {
         Wh_Log(L"Found taskbar background element: %s#%s",
-               winrt::get_class_name(element).c_str(),
-               element.Name().c_str());
+               winrt::get_class_name(element).c_str(), element.Name().c_str());
 
         const ActiveAppearance activeAppearance = GetActiveAppearance();
         if (activeAppearance.hasValue) {
-            TrackedBackgroundElement originalInfo =
-                GetOriginalElementInfo(abi);
+            TrackedBackgroundElement originalInfo = GetOriginalElementInfo(abi);
             const bool refreshStyle =
                 activeAppearance.restoreOriginal ||
                 !originalInfo.hasAppliedAppearance ||
-                originalInfo.appliedStyle !=
-                    activeAppearance.appearance.style;
-            ApplyAppearanceToElement(rectangle, activeAppearance.appearance,
-                                     originalInfo.originalFill,
-                                     originalInfo.originalParentBackground,
-                                     originalInfo.originalOpacity,
-                                     originalInfo.nativeFill,
-                                     originalInfo.nativeParentBackground,
-                                     originalInfo.nativeOpacity,
-                                     originalInfo.parentGrid,
-                                     refreshStyle,
-                                     activeAppearance.restoreOriginal);
+                originalInfo.appliedStyle != activeAppearance.appearance.style;
+            ApplyAppearanceToElement(
+                rectangle, activeAppearance.appearance,
+                originalInfo.originalFill,
+                originalInfo.originalParentBackground,
+                originalInfo.originalOpacity, originalInfo.nativeFill,
+                originalInfo.nativeParentBackground, originalInfo.nativeOpacity,
+                originalInfo.parentGrid, refreshStyle,
+                activeAppearance.restoreOriginal);
             StoreAppliedAppearance(abi, activeAppearance.appearance.style,
                                    activeAppearance.restoreOriginal);
         }
@@ -1467,8 +1468,8 @@ void ScanTaskbarBackgroundsRecursive(FrameworkElement element, int depth = 32) {
     }
 
     for (int i = 0; i < childrenCount; i++) {
-        auto child =
-            Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
         if (child) {
             ScanTaskbarBackgroundsRecursive(child, depth - 1);
         }
@@ -1505,8 +1506,7 @@ void QueueScanFromElement(void* pThis) {
         }
 
         auto weakElement = winrt::make_weak(element);
-        dispatcher.RunAsync(Core::CoreDispatcherPriority::Low,
-                            [weakElement]() {
+        dispatcher.RunAsync(Core::CoreDispatcherPriority::Low, [weakElement]() {
             try {
                 auto element = weakElement.get();
                 if (element) {
@@ -1520,9 +1520,10 @@ void QueueScanFromElement(void* pThis) {
                             break;
                         }
 
-                        auto parent = Media::VisualTreeHelper::GetParent(current);
-                        current =
-                            parent ? parent.try_as<FrameworkElement>() : nullptr;
+                        auto parent =
+                            Media::VisualTreeHelper::GetParent(current);
+                        current = parent ? parent.try_as<FrameworkElement>()
+                                         : nullptr;
                     }
                 }
             } catch (...) {
@@ -1536,8 +1537,8 @@ void QueueScanFromElement(void* pThis) {
 
 bool IsWindowCloaked(HWND hwnd) {
     DWORD cloaked = 0;
-    HRESULT hr = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked,
-                                       sizeof(cloaked));
+    HRESULT hr =
+        DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
     return SUCCEEDED(hr) && cloaked != 0;
 }
 
@@ -1547,7 +1548,8 @@ bool HasUsableRect(HWND hwnd, RECT* rect) {
         return false;
     }
 
-    if (localRect.right <= localRect.left || localRect.bottom <= localRect.top) {
+    if (localRect.right <= localRect.left ||
+        localRect.bottom <= localRect.top) {
         return false;
     }
 
@@ -1578,11 +1580,13 @@ bool IsIgnoredShellWindowClass(PCWSTR className) {
            _wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
            _wcsicmp(className, L"XamlExplorerHostIslandWindow_WASDK") == 0 ||
            _wcsicmp(className,
-                    L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 ||
+                    L"Windows.UI.Composition.DesktopWindowContentBridge") ==
+               0 ||
            _wcsicmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-           _wcsicmp(className,
-                    L"Microsoft.UI.Content.PopupWindowSiteBridge") == 0 ||
-           _wcsicmp(className, L"Windows.UI.Input.InputSite.WindowClass") == 0 ||
+           _wcsicmp(className, L"Microsoft.UI.Content.PopupWindowSiteBridge") ==
+               0 ||
+           _wcsicmp(className, L"Windows.UI.Input.InputSite.WindowClass") ==
+               0 ||
            _wcsicmp(className, L"NotifyIconOverflowWindow") == 0 ||
            _wcsicmp(className, L"TaskListThumbnailWnd") == 0 ||
            _wcsicmp(className, L"MultitaskingViewFrame") == 0 ||
@@ -1811,6 +1815,12 @@ bool IsUserCandidateWindow(HWND hwnd) {
 
 struct EnumMaximizedContext {
     bool fullscreenAsMaximized;
+
+    bool largeWindowEnabled;
+    double areaThreshold;
+    double widthThreshold;
+    double heightThreshold;
+
     const std::vector<TaskbarWindow>* taskbars;
     bool found;
 };
@@ -1830,6 +1840,44 @@ bool MonitorMatchesTaskbar(HMONITOR monitor,
     return false;
 }
 
+bool IsLargeWindow(HWND hwnd,
+                   HMONITOR monitor,
+                   double areaThreshold,
+                   double widthThreshold,
+                   double heightThreshold) {
+    RECT rect{};
+    if (!HasUsableRect(hwnd, &rect)) {
+        return false;
+    }
+
+    MONITORINFO monitorInfo{.cbSize = sizeof(monitorInfo)};
+    if (!GetMonitorInfoW(monitor, &monitorInfo)) {
+        return false;
+    }
+
+    const RECT& m = monitorInfo.rcMonitor;
+
+    const double windowWidth = rect.right - rect.left;
+    const double windowHeight = rect.bottom - rect.top;
+
+    const double monitorWidth = m.right - m.left;
+    const double monitorHeight = m.bottom - m.top;
+
+    if (monitorWidth <= 0 || monitorHeight <= 0) {
+        return false;
+    }
+
+    const double widthRatio = windowWidth / monitorWidth * 100.0;
+
+    const double heightRatio = windowHeight / monitorHeight * 100.0;
+
+    const double areaRatio =
+        (windowWidth * windowHeight) / (monitorWidth * monitorHeight) * 100.0;
+
+    return areaRatio >= areaThreshold || widthRatio >= widthThreshold ||
+           heightRatio >= heightThreshold;
+}
+
 BOOL CALLBACK EnumMaximizedProc(HWND hwnd, LPARAM lParam) {
     auto* context = reinterpret_cast<EnumMaximizedContext*>(lParam);
     if (context->found || !IsUserCandidateWindow(hwnd)) {
@@ -1842,8 +1890,11 @@ BOOL CALLBACK EnumMaximizedProc(HWND hwnd, LPARAM lParam) {
     }
 
     if (IsZoomed(hwnd) ||
-        (context->fullscreenAsMaximized &&
-         monitor && RectCoversMonitor(hwnd, monitor))) {
+        (context->fullscreenAsMaximized && monitor &&
+         RectCoversMonitor(hwnd, monitor)) ||
+        (context->largeWindowEnabled && monitor &&
+         IsLargeWindow(hwnd, monitor, context->areaThreshold,
+                       context->widthThreshold, context->heightThreshold))) {
         context->found = true;
         return FALSE;
     }
@@ -1852,8 +1903,19 @@ BOOL CALLBACK EnumMaximizedProc(HWND hwnd, LPARAM lParam) {
 }
 
 bool HasMaximizedWindow(bool fullscreenAsMaximized,
+                        bool largeWindowEnabled,
+                        double areaThreshold,
+                        double widthThreshold,
+                        double heightThreshold,
                         const std::vector<TaskbarWindow>& taskbars) {
-    EnumMaximizedContext context{fullscreenAsMaximized, &taskbars, false};
+    EnumMaximizedContext context{fullscreenAsMaximized,
+                                 largeWindowEnabled,
+                                 areaThreshold,
+                                 widthThreshold,
+                                 heightThreshold,
+                                 &taskbars,
+                                 false};
+
     EnumWindows(EnumMaximizedProc, reinterpret_cast<LPARAM>(&context));
     return context.found;
 }
@@ -1917,8 +1979,7 @@ Appearance GetAppearanceForState(const Settings& settings,
         appearance.style = AppearanceStyle::captured;
     }
 
-    appearance.opacity =
-        appearance.style == AppearanceStyle::clear ? 0 : 255;
+    appearance.opacity = appearance.style == AppearanceStyle::clear ? 0 : 255;
 
     return appearance;
 }
@@ -1926,8 +1987,10 @@ Appearance GetAppearanceForState(const Settings& settings,
 StateResolution ResolveState(const Settings& settings,
                              const ShellActivity& shellActivity,
                              const std::vector<TaskbarWindow>& taskbars) {
-    const bool hasMaximizedWindow =
-        HasMaximizedWindow(settings.fullscreenAsMaximized, taskbars);
+    const bool hasMaximizedWindow = HasMaximizedWindow(
+        settings.fullscreenAsMaximized, settings.largeWindowEnabled,
+        settings.areaThreshold, settings.widthThreshold,
+        settings.heightThreshold, taskbars);
 
     if (shellActivity.taskViewOpened && settings.taskViewOpened.enabled) {
         return {TaskbarDynamicState::taskViewOpened, L"taskViewOpened",
@@ -2033,10 +2096,9 @@ void WinEventThreadProc() {
         Wh_Log(L"Failed to hook window object events");
     }
 
-    HWINEVENTHOOK locationEventHook =
-        SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE,
-                        EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, 0,
-                        0, WINEVENT_OUTOFCONTEXT);
+    HWINEVENTHOOK locationEventHook = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+        WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!locationEventHook) {
         Wh_Log(L"Failed to hook window location events");
     }
@@ -2127,8 +2189,7 @@ void WorkerLoop() {
     const ULONGLONG workerStartTick = GetTickCount64();
     ULONGLONG animationStartTick = GetTickCount64();
     ShellActivity shellActivity{};
-    StateResolution resolution{TaskbarDynamicState::desktop, L"desktop",
-                               false};
+    StateResolution resolution{TaskbarDynamicState::desktop, L"desktop", false};
     constexpr int frameTimeMs = 1000 / 60;
 
     while (!g_stopWorker) {
@@ -2147,14 +2208,14 @@ void WorkerLoop() {
 
             const TaskbarDynamicState state = resolution.state;
             if (!g_hasLoggedState || g_lastLoggedState != state) {
-                Wh_Log(L"Taskbar state: %s (%s; taskView=%d start=%d "
-                       L"search=%d tray=%d max=%d other=%d)",
-                       StateName(state), resolution.reason,
-                       shellActivity.taskViewOpened, shellActivity.startOpened,
-                       shellActivity.searchOpened,
-                       shellActivity.trayFlyoutOpened,
-                       resolution.hasMaximizedWindow,
-                       shellActivity.otherInteraction);
+                Wh_Log(
+                    L"Taskbar state: %s (%s; taskView=%d start=%d "
+                    L"search=%d tray=%d max=%d other=%d)",
+                    StateName(state), resolution.reason,
+                    shellActivity.taskViewOpened, shellActivity.startOpened,
+                    shellActivity.searchOpened, shellActivity.trayFlyoutOpened,
+                    resolution.hasMaximizedWindow,
+                    shellActivity.otherInteraction);
                 g_lastLoggedState = state;
                 g_hasLoggedState = true;
             }
@@ -2193,32 +2254,29 @@ void WorkerLoop() {
 
         double progress = 1.0;
         if (settings.animationDurationMs > 0) {
-            progress =
-                static_cast<double>(now - animationStartTick) /
-                static_cast<double>(settings.animationDurationMs);
+            progress = static_cast<double>(now - animationStartTick) /
+                       static_cast<double>(settings.animationDurationMs);
             progress = std::clamp(progress, 0.0, 1.0);
         }
 
         const bool visibleStyleChange =
             settings.animationDurationMs > 0 &&
             animationStartAppearance.style != targetAppearance.style &&
-            animationStartAppearance.opacity > 0 && targetAppearance.opacity > 0;
+            animationStartAppearance.opacity > 0 &&
+            targetAppearance.opacity > 0;
 
         if (visibleStyleChange && progress < 0.5) {
             currentAppearance = animationStartAppearance;
             const BYTE floorOpacity =
                 std::min<BYTE>(animationStartAppearance.opacity, 245);
-            currentAppearance.opacity =
-                InterpolateOpacity(animationStartAppearance.opacity,
-                                   floorOpacity,
-                                   progress * 2.0);
+            currentAppearance.opacity = InterpolateOpacity(
+                animationStartAppearance.opacity, floorOpacity, progress * 2.0);
         } else if (visibleStyleChange) {
             currentAppearance = targetAppearance;
             const BYTE floorOpacity =
                 std::min<BYTE>(targetAppearance.opacity, 245);
-            currentAppearance.opacity =
-                InterpolateOpacity(floorOpacity, targetAppearance.opacity,
-                                   (progress - 0.5) * 2.0);
+            currentAppearance.opacity = InterpolateOpacity(
+                floorOpacity, targetAppearance.opacity, (progress - 0.5) * 2.0);
         } else {
             currentAppearance = targetAppearance;
             currentAppearance.opacity =
@@ -2237,15 +2295,13 @@ void WorkerLoop() {
 
         if (animationDone) {
             std::unique_lock<std::mutex> lock(g_detectionMutex);
-            g_detectionCondition.wait(lock, [] {
-                return g_stopWorker || g_detectionPending.load();
-            });
+            g_detectionCondition.wait(
+                lock, [] { return g_stopWorker || g_detectionPending.load(); });
         } else {
             std::unique_lock<std::mutex> lock(g_detectionMutex);
             g_detectionCondition.wait_for(
-                lock, std::chrono::milliseconds(frameTimeMs), [] {
-                    return g_stopWorker || g_detectionPending.load();
-                });
+                lock, std::chrono::milliseconds(frameTimeMs),
+                [] { return g_stopWorker || g_detectionPending.load(); });
         }
     }
 
@@ -2347,14 +2403,13 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
-        auto loadLibraryExW =
-            reinterpret_cast<LoadLibraryExW_t>(
-                GetProcAddress(kernelbase, "LoadLibraryExW"));
+        auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
+            GetProcAddress(kernelbase, "LoadLibraryExW"));
         if (!loadLibraryExW) {
             Wh_Log(L"Failed to find LoadLibraryExW");
             return FALSE;
         }
-
+                                               
         WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
     }
