@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-uac-recreation
 // @name            Windows 7/8.1 UAC Recreation
-// @description     This mod recreates the Windows 7/8.1 UAC prompt on Windows 10 and Windows 11 without replacing system files and the secure desktop
+// @description     This mod recreates the Windows 7/8.1 User Account Control prompt on Windows 10 and Windows 11 without replacing system files or disabling the secure desktop.
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -9,73 +9,118 @@
 // @architecture    x86-64
 // @compilerOptions -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
-
 # Windows 7/8.1 UAC Recreation
 
-This mod replaces the UAC (User Account Control) prompt on Windows 10 and Windows 11 with a recreation of the classic one from Windows 7/8.1.
 
-The secure desktop remains active, and Windows still makes the final decision. The answer is passed back to the original prompt, and if anything goes wrong, the native Windows prompt comes back. System files are not replaced and system settings are not changed.
+This mod is intended to recreate the user interface of the User Account Control (UAC) prompt of Windows 7 and Windows 8.1 on Windows 10 and Windows 11.
 
-This is a best-effort recreation. If some information cannot be read, it is left out rather than guessed. Credential prompts are never replaced and the native Windows flow always remains the only source of a decision. In the recommended all-app scope with the native prompt set to **Moved off screen**, a XAML candidate without a Win32 edit control may be moved off screen briefly while UI Automation classifies it.
+This modification operates exclusively at the presentation layer. The decision logic, the secure desktop, and the native authentication flow remain unchanged and under the exclusive control of the operating system.
 
-The original version reports tests on **Windows 10 21H2**, **Windows 11 24H2** and **Windows 11 25H2**.
+## Features
 
-`Ctrl+Shift+F10` restores the native prompt at any time, without deciding anything.
+This modification presents the following features:
 
-## Appearance
+- Four selectable graphical themes: Windows 7 (Basic), Windows 7 Aero (custom), Windows 8.1 (native), and Windows 10 (versions 1507–1607, flat icons).
+- Automatic restoration of the native prompt in the event of an anomaly, without any decision being expressed.
+- No replacement of system files.
+- No modification of system settings.
+- Full preservation of the secure desktop.
+- Exclusion of credential prompts from any form of replacement.
+- Banner colour and shield conforming to the native verdict of the operating system.
+- Display of the actual icon of the program requesting elevation, where available.
+- "Show details" section populated exclusively with information read from the native prompt.
 
-The **Dialog skin** setting offers four looks:
+## Emergency Shortcut
 
-- **Windows 7 (Basic Theme)**
-- **Windows 7 Aero (Custom Theme)** — uses the full built-in Windows 7 shield set for verified, question-mark, and exclamation states. It is not the original Windows 7 desktop theme.
-- **Windows 8.1 (Native System Theme)** — the verified shield uses the supplied image with its white background removed.
-- **Windows 10 (1507-1607, Flat Icons)** — always uses the blue Windows shield while the banner keeps its warning color.
+The key combination `Ctrl+Shift+F10` causes the immediate closure of the recreated dialog and the restoration of the native prompt, without any decision being expressed regarding the elevation request.
 
-On Windows 7, Windows 7 Aero, and Windows 8.1, a trusted third-party publisher gets the blue question-mark shield. A publisher identified as Microsoft Windows keeps the selected theme's verified shield. The supplied transparent orange shield matches an orange banner in Windows 7 Basic and Windows 8.1. Button drawing remains independently configurable.
+## Graphical Appearance
 
-### Screenshots
+The following screenshots illustrate the four available themes.
 
-## Windows 7 (Basic) 
-
+### Windows 7 (Basic)
 ![Windows 7 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uac.PNG)
 
-## Windows 7 (Aero)
-
+### Windows 7 Aero
 ![Windows 7 Aero UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uacaero.PNG)
 
-## Windows 8.1 
-
+### Windows 8.1
 ![Windows 8.1 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81uac.PNG)
 
-## Windows 10 (1507-1607)
-
+### Windows 10 (1507–1607)
 ![Windows 10 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10uac.PNG)
 
+## Installation Procedure
 
-The banner colour, shield, and publisher label try to follow the native prompt's verdict: blue and the "Verified publisher:" label appear only when the native publisher row says the publisher is verified. Anything else — including a prompt whose state could not be read — is drawn amber with the plain "Publisher:" label. The mod can show the publisher name it read, but it never shows a request as more trusted than Windows does. The manual colour and shield settings can only make the prompt look more cautious.
+It is noted that Windhawk excludes the `consent.exe` process by default. In order to allow the modification to function correctly, it is necessary to authorise it explicitly by means of the following procedure:
 
-A diagnostics dump is written only when explicitly enabled, to Windhawk's mod-specific storage directory. It can contain prompt text and command-line details; enable it only when needed.
+1. Access Windhawk.
+2. Select **Settings**.
+3. Select **Advanced settings**.
+4. Select **More advanced settings**.
+5. Locate the **Process inclusion list** entry.
+6. Add the `consent.exe` entry.
+7. Install and enable the modification.
 
-## Installation
+In the absence of such authorisation, the modification produces no effect.
 
-Windhawk excludes consent.exe by default, so it has to be allowed:
+## Available Settings
 
-**Settings > Advanced settings > More advanced settings > Process inclusion list** → add `consent.exe`.
+This modification settings are accessible through the Windhawk interface and are listed below.
 
-Without that, the mod does nothing.
+| Setting | Description |
+|---|---|
+| **Dialog skin** | Allows selection of the graphical theme from among Windows 7 Basic, Windows 7 Aero, Windows 8.1, and Windows 10 (1507–1607). |
+| **Replace the UAC prompt** | Determines whether the modification replaces the native prompt or merely observes it, recording events in the log. |
+| **Which apps get the Classic UAC prompt** | Allows application of the modification to all applications, exclusively to those listed, or to all except those listed. |
+| **App list** | List of application names, separated by semicolons, used by the preceding setting. |
+| **Button style** | Allows selection of the button style: drawn by the operating system or painted by the modification in Aero style. |
+| **Which shield is shown** | Allows selection of the displayed shield: automatic, verified, question mark, or exclamation mark. |
+| **Banner colour** | Allows selection of the banner colour: automatic, blue, yellow, or red. Manual selections may exclusively render the prompt more cautious. |
+| **The Windows prompt, while the Windows 7 one is on screen** | Allows determination of the position of the native prompt while the recreated prompt is displayed: moved off screen or hidden. |
+| **Read the elevation request** | Allows reading of the elevation request in order to display the actual program icon and the "File origin" line. |
+| **How long to wait for the prompt** | Determines the waiting time, expressed in milliseconds, before leaving the native prompt unchanged. |
+| **Watchdog** | Determines the time, expressed in seconds, after which the recreated dialog closes itself automatically if no response is possible. |
+| **Panic hotkey** | Allows definition of the key combination for immediate restoration of the native prompt. The default value is `Ctrl+Shift+F10`. |
+| **Extra Yes/No key** | Allows definition of an advanced shortcut, in the form Alt+letter, to be sent to the original prompt if no other response is possible. |
+| **Debug log** | Allows writing of a detailed log of the modification's operations. |
+| **Write a diagnostics dump** | Allows writing of a text file containing diagnostic information. In this mode the modification operates exclusively in observation. |
+| **Write the raw elevation request to the log** | Allows writing of the raw elevation request to the log. It may contain file names and user names. |
+| **How the prompt is found** | Allows selection of the prompt detection method: desktop watchers (recommended), polling, or hook only. |
 
-If any issues are encountered, please report them to the author of the mod.
+## Behavioral Notes
+
+- The banner colour is determined by the native publisher row: blue exclusively in the presence of a verified publisher, amber in every other case.
+- The displayed shield conforms to the selected theme and the native verdict. Manual selections may exclusively render the prompt more cautious, never more trusted.
+- In the presence of an elevation request relating to Regedit, the program name row is normalised to the localised name of the Registry Editor. Verified publisher status is attributed exclusively following confirmation, by the operating system, of the signature of the system file. A native row explicitly relating to an unknown or unverified publisher is never overridden.
+- Diagnostic files may contain prompt text and command-line details. Their activation is recommended exclusively when necessary.
+
+## Known Limitations
+
+- A XAML candidate without a Win32 edit control may be temporarily moved off screen during classification by means of UI Automation.
+- Where certain information cannot be read from the native prompt, it is omitted and not inferred.
+
+## Verified Systems
+The modification has been tested on:
+
+- Windows 10 21H2
+- Windows 11 24H2
+- Windows 11 25H2
 
 ## Credits
 
-- AdministratoX - Testing on Windows 11 24H2 and Windows 11 25H2
-- Microsoft - Documentation
-- m417z - Technical reference
+- **AdministratoX** — Verification on Windows 11 24H2 and Windows 11 25H2
+- **Microsoft** — Documentation
+- **m417z** — Technical reference
+
+## Reporting of Anomalies
+
+If any anomalies are encountered, please report them to the author. It is recommended to attach the debug log and, where necessary, the diagnostic file.
 */
 // ==/WindhawkModReadme==
-
 // ==WindhawkModSettings==
 /*
 - windowTheme: win7Basic
@@ -1277,18 +1322,10 @@ static DWORD WINAPI IdentityThreadProc(LPVOID param) {
 #endif
 }
 
-// The event hook alone can be late (a XAML window is created, shown and placed in several steps);
-// while a prompt is pending the watcher also sweeps its desktop every few milliseconds, so the
-// native consent window leaves the screen at once, before it is ever painted.
-static BOOL CALLBACK SweepConsentHostProc(HWND h, LPARAM) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(h, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;
-    WCHAR cls[128] = L"";
-    GetClassNameW(h, cls, ARRAYSIZE(cls));
-    if (IsConsentHostClass(cls)) EjectTheNativePromptAtOnce(h);
-    return TRUE;
-}
+// Prompt discovery is event-driven. The in-process CreateWindowExW hook parks the native host
+// before the caller can show it, while this WinEvent hook covers the later SHOW/LOCATIONCHANGE
+// events in case consent repositions the host. There is deliberately no desktop sweep here: a
+// prompt can remain pending for minutes, and a timer would turn that wait into needless polling.
 
 static DWORD WINAPI WatcherProcBody(LPVOID param) {
     WatcherCtx* w = (WatcherCtx*)param;
@@ -1307,8 +1344,8 @@ static DWORD WINAPI WatcherProcBody(LPVOID param) {
     }
 
     // The range carries the events the prompt announces itself with - created, shown - and every
-    // move: the last one is what lets the mod put the window away again the instant the system
-    // decides to place it somewhere else (see EjectTheNativePromptAtOnce).
+    // move. The CreateWindowExW hook normally handles the first placement synchronously; this
+    // event path handles a later move without waking up on a timer.
     HWINEVENTHOOK hook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
                                          WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!hook) {
@@ -1324,16 +1361,8 @@ static DWORD WINAPI WatcherProcBody(LPVOID param) {
 
     MSG msg;
     while (!StopRequested()) {
-        bool sweeping = InterlockedCompareExchange(&g_inHook, 0, 0) != 0 &&
-                        InterlockedCompareExchange(&g_promptGivenBack, 0, 0) == 0 &&
-                        g_settings.relayMode == 1 && !g_settings.dumpUiTree &&
-                        g_settings.nativeWindowMode != 2;
-        DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_stopEvent, sweeping ? 3 : INFINITE,
-                                                 QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        if (wait == WAIT_TIMEOUT) {
-            EnumDesktopWindows(desk, SweepConsentHostProc, 0);
-            continue;
-        }
+        DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_stopEvent, INFINITE, QS_ALLINPUT,
+                                                 MWMO_INPUTAVAILABLE);
         if (wait != WAIT_OBJECT_0 + 1) break;
         if (!PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) continue;
         if (msg.message == WM_QUIT) break;
@@ -1438,8 +1467,14 @@ struct PromptInfo {
     bool buttonsConfident = false;
     bool yesEnabled = false;
     bool credentialVariant = false;
-    bool systemFileConfirmed = false;        // regedit.exe confirmed by its system path
-    bool publisherVerifiedByWindows = false; // the native publisher row itself says "verified"
+    bool systemFileConfirmed = false;        // the prompt itself showed %SystemRoot%\regedit.exe; signature is still checked
+    bool publisherVerifiedByWindows = false; // native verified row, or the signature-backed Regedit exception
+    bool publisherRowLabelSeen = false;      // a labelled publisher row was present
+    bool publisherRowValueReadable = false;   // its value was actually mapped, not fallback text
+    bool publisherRowLabelRejected = false;  // its label was rejected by LabelSaysVerified
+    bool sawUnknownWording = false;          // explicit unknown publisher/author wording in native text
+    bool regeditDetected = false;            // native text identifies Registry Editor; presentation is deferred
+    bool regeditOverrideApplied = false;     // the narrow path/signature-backed presentation is active
     bool sawUnknownAuthor = false;   // the prompt says the author is unknown, not just the publisher
     bool publisherFromSignature = false; // original compatibility recovery behavior
     int signatureState = -1;
@@ -1645,11 +1680,13 @@ static bool HarvestUia(HWND, PromptInfo&) { return false; }
 static void UiaRelease() {}
 #endif
 
-// "Editore verificato: ...", "Verified publisher: ...", "Editore sconosciuto" and friends:
+// "Editore verificato: ...", "Autore verificato: ...", "Verified publisher: ...",
+// "Editore sconosciuto" and friends:
 // the row that carries the publisher is recognised by its own words, not by its position.
 static bool LooksLikePublisher(const std::wstring& t) {
     static const WCHAR* kWords[] = {
-        L"publisher", L"editore", L"verlag", L"\u00e9diteur", L"editor", L"verificato",
+        L"publisher", L"editore", L"autore", L"author", L"autor", L"auteur",
+        L"verlag", L"\u00e9diteur", L"editor", L"verificato",
         L"verified", L"signiert", L"firmado", L"unknown", L"sconosciuto", L"unbekannt",
         L"inconnu", L"desconocido", L"desconhecido",
     };
@@ -1737,7 +1774,8 @@ static const WCHAR* kAppRowWords[] = {
     L"nombre del programa", L"nome do programa", L"nazwa programu",
 };
 static const WCHAR* kPubRowWords[] = {
-    L"editore", L"publisher", L"herausgeber", L"\u00e9diteur", L"editeur", L"editor",
+    L"editore", L"autore", L"author", L"autor", L"auteur", L"publisher",
+    L"herausgeber", L"\u00e9diteur", L"editeur", L"editor",
     L"uitgever", L"wydawca",
 };
 static const WCHAR* kLinkWords[] = {
@@ -1794,6 +1832,18 @@ static const WCHAR* kNotVerifiedWords[] = {L"unverified", L"non verificato", L"n
 static bool LabelSaysVerified(const std::wstring& label) {
     if (TextHasAnyWord(label, kNotVerifiedWords, ARRAYSIZE(kNotVerifiedWords))) return false;
     return TextHasAnyWord(label, kVerifiedWords, ARRAYSIZE(kVerifiedWords));
+}
+
+// A details expansion can expose the label and value as separate strings, so retain the small
+// set of unambiguous standalone publisher labels as evidence even without row geometry.
+static bool IsStandalonePublisherLabel(const std::wstring& text) {
+    std::wstring value = ToLower(Trim(text));
+    static const WCHAR* kLabels[] = {L"publisher", L"editore", L"herausgeber",
+                                     L"éditeur", L"editeur", L"uitgever", L"wydawca",
+                                     L"editor"};
+    for (const WCHAR* label : kLabels)
+        if (value == label) return true;
+    return TextHasAnyWord(value, kNotVerifiedWords, ARRAYSIZE(kNotVerifiedWords));
 }
 
 // The two bottom links of the prompt, in the languages this mod ships strings for. They are
@@ -1868,18 +1918,35 @@ static void MapPromptRows(PromptInfo& info) {
     const RowText* appLabel = nullptr;
     const RowText* pubLabel = nullptr;
     std::wstring pubValue;
+    bool publisherLabelSeen = false;
+    bool publisherLabelRejected = false;
     for (const auto& r : rows) {
         if (IsJunkText(r.t) || r.t == question) continue;
         bool isAppRow = TextHasAnyWord(r.t, kAppRowWords, ARRAYSIZE(kAppRowWords));
         if (!appLabel && isAppRow) appLabel = &r;
         // A publisher row is accepted only when a value is found for it ("Registry Editor" has
-        // no colon and nothing to its right, so it is skipped and scanning goes on).
-        if (!pubLabel && !isAppRow &&
+        // no colon and nothing to its right, so it is skipped and scanning goes on). A colon-labelled
+        // row is recorded even when its value is unreadable: it is still explicit native evidence.
+        if (!isAppRow &&
             (TextHasAnyWord(r.t, kPubRowWords, ARRAYSIZE(kPubRowWords)) || LooksLikePublisher(r.t))) {
+            std::wstring lbl, ignoredValue;
+            SplitLabelValue(r.t, lbl, ignoredValue);
             std::wstring v;
-            if (valueOf(r, v)) { pubLabel = &r; pubValue = v; }
+            bool hasValue = valueOf(r, v);
+            // Do not mistake an unlabeled program name such as "Registry Editor" for a
+            // publisher row. A no-colon row is evidence only when it yielded a value or is an
+            // unambiguous standalone publisher label.
+            if (hasValue || !lbl.empty() || IsStandalonePublisherLabel(r.t)) {
+                const std::wstring label = lbl.empty() ? r.t : lbl;
+                publisherLabelSeen = true;
+                if (!LabelSaysVerified(label)) publisherLabelRejected = true;
+            }
+            if (!pubLabel && hasValue) { pubLabel = &r; pubValue = v; }
         }
     }
+    info.publisherRowLabelSeen = publisherLabelSeen;
+    info.publisherRowValueReadable = (pubLabel != nullptr);
+    info.publisherRowLabelRejected = publisherLabelRejected;
     if (appLabel) valueOf(*appLabel, info.appText);
     if (pubLabel) {
         info.publisherText = pubValue;
@@ -2354,6 +2421,190 @@ static std::wstring FindTargetPath(const PromptInfo& info, const WCHAR** source)
     return std::wstring();
 }
 
+// An explicit unknown value is evidence too, even when the row mapper could not attach it to a
+// label. This is kept separate from the presentation fields because the Regedit exception is only
+// allowed after all native text currently available has been checked.
+static bool TextListHasUnknownWording(const std::vector<std::wstring>& texts) {
+    for (const auto& t : texts)
+        if (TextHasAnyWord(t, kUnknownWords, ARRAYSIZE(kUnknownWords))) return true;
+    return false;
+}
+
+static bool TextListHasRejectedPublisherLabel(const std::vector<std::wstring>& texts) {
+    for (const auto& t : texts) {
+        std::wstring label, value;
+        SplitLabelValue(t, label, value);
+        // Without a colon there is no reliable way to tell a standalone program name such as
+        // "Registry Editor" from a row label. MapPromptRows has the geometry for that case;
+        // details have only text, so require an explicit label/value form or an unambiguous
+        // standalone publisher label here.
+        if (label.empty()) {
+            if (!IsStandalonePublisherLabel(t)) continue;
+            label = Trim(t);
+        }
+        if (!TextHasAnyWord(label, kPubRowWords, ARRAYSIZE(kPubRowWords)) &&
+            !LooksLikePublisher(label) && !IsStandalonePublisherLabel(label))
+            continue;
+        if (!LabelSaysVerified(label)) return true;
+    }
+    return false;
+}
+
+static bool PromptHasUnknownWording(const PromptInfo& info) {
+    if (TextListHasUnknownWording(info.texts) ||
+        TextListHasUnknownWording(info.detailTexts))
+        return true;
+    if (!info.publisherText.empty() &&
+        (TextHasAnyWord(info.publisherText, kUnknownWords, ARRAYSIZE(kUnknownWords)) ||
+         IsUnknownPublisherValue(info.publisherText)))
+        return true;
+    return false;
+}
+
+static std::wstring NormalizePathForCompare(std::wstring path) {
+    path = Trim(path);
+    while (!path.empty() && (path.front() == L'"' || path.front() == L'\'')) path.erase(0, 1);
+    while (!path.empty() && (path.back() == L'"' || path.back() == L'\'' ||
+                             path.back() == L' ' || path.back() == L'\t'))
+        path.pop_back();
+
+    std::wstring lower = ToLower(path);
+    if (lower.compare(0, 12, L"%systemroot%") == 0) {
+        WCHAR expanded[32768] = L"";
+        DWORD n = ExpandEnvironmentStringsW(path.c_str(), expanded, ARRAYSIZE(expanded));
+        if (n > 1 && n < ARRAYSIZE(expanded)) path.assign(expanded, n - 1);
+    }
+    if (path.compare(0, 4, L"\\\\?\\") == 0 || path.compare(0, 4, L"\\??\\") == 0)
+        path.erase(0, 4);
+    for (auto& c : path) if (c == L'/') c = L'\\';
+    while (path.size() > 1 && path.back() == L'\\') path.pop_back();
+    return ToLower(path);
+}
+
+// Extracts a real path from a row that may carry a localized label before it, then compares it
+// with the actual Windows-directory copy of regedit.exe. Merely seeing the word "regedit" is not
+// enough: the native prompt must expose this exact system path.
+static bool PathTextIsSystemRegedit(const std::wstring& text, const std::wstring& expected,
+                                    std::wstring* shown) {
+    std::wstring lower = ToLower(text);
+    size_t search = 0;
+    while (search < text.size()) {
+        size_t start = std::wstring::npos;
+        auto take = [&](size_t candidate) {
+            if (candidate != std::wstring::npos &&
+                (start == std::wstring::npos || candidate < start))
+                start = candidate;
+        };
+        take(lower.find(L"%systemroot%", search));
+        take(lower.find(L"\\\\", search));
+        for (size_t i = search; i + 2 < text.size(); i++) {
+            WCHAR c = text[i];
+            if (((c >= L'A' && c <= L'Z') || (c >= L'a' && c <= L'z')) &&
+                text[i + 1] == L':' && (text[i + 2] == L'\\' || text[i + 2] == L'/')) {
+                take(i);
+                break;
+            }
+        }
+        if (start == std::wstring::npos) return false;
+        size_t dot = lower.find(L".exe", start);
+        if (dot == std::wstring::npos) return false;
+        std::wstring candidate = text.substr(start, dot + 4 - start);
+        if (NormalizePathForCompare(candidate) == expected) {
+            if (shown) *shown = candidate;
+            return true;
+        }
+        search = start + 1;
+    }
+    return false;
+}
+
+static bool PromptShowsSystemRegeditPath(const PromptInfo& info, std::wstring* path) {
+    WCHAR win[MAX_PATH] = L"";
+    if (!GetWindowsDirectoryW(win, ARRAYSIZE(win))) return false;
+    std::wstring expected = NormalizePathForCompare(std::wstring(win) + L"\\regedit.exe");
+    const std::vector<std::wstring>* sources[] = {&info.paths, &info.texts, &info.detailTexts};
+    for (const auto* source : sources) {
+        for (const auto& text : *source) {
+            std::wstring shown;
+            if (PathTextIsSystemRegedit(text, expected, &shown)) {
+                if (path) *path = std::wstring(win) + L"\\regedit.exe";
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// The native tree can map an adjacent value to the program row (the observed result was
+// "Verticale" for C:\Windows\regedit.exe). That is an unacceptable presentation failure: the
+// program-name row is not a trust decision, so normalize it for every supported mod language as
+// soon as the request is identified as Registry Editor. The publisher/signature override remains
+// separately gated below.
+static const WCHAR* LocalizedRegeditName() {
+    if (!_wcsicmp(g_loc->lang, L"it")) return L"Editor del Registro";
+    if (!_wcsicmp(g_loc->lang, L"de")) return L"Registrierungs-Editor";
+    if (!_wcsicmp(g_loc->lang, L"fr")) return L"\u00c9diteur du Registre";
+    if (!_wcsicmp(g_loc->lang, L"es")) return L"Editor del Registro";
+    if (!_wcsicmp(g_loc->lang, L"pt")) return L"Editor do Registro";
+    if (!_wcsicmp(g_loc->lang, L"nl")) return L"Register-editor";
+    if (!_wcsicmp(g_loc->lang, L"pl")) return L"Edytor rejestru";
+    if (!_wcsicmp(g_loc->lang, L"ru")) return L"\u0420\u0435\u0434\u0430\u043a\u0442\u043e\u0440 \u0440\u0435\u0435\u0441\u0442\u0440\u0430";
+    if (!_wcsicmp(g_loc->lang, L"ja")) return L"\u30ec\u30b8\u30b9\u30c8\u30ea \u30a8\u30c7\u30a3\u30bf\u30fc";
+    if (!_wcsicmp(g_loc->lang, L"ko")) return L"\ub808\uc9c0\uc2a4\ud2b8\ub9ac \ud3b8\uc9d1\uae30";
+    if (!_wcsicmp(g_loc->lang, L"hi")) return L"\u0930\u091c\u093f\u0938\u094d\u091f\u094d\u0930\u0940 \u0938\u0902\u092a\u093e\u0926\u0915";
+    if (!_wcsicmp(g_loc->lang, L"tr")) return L"Kay\u0131t Defteri D\u00fczenleyicisi";
+    if (!_wcsicmp(g_loc->lang, L"fa")) return L"\u0648\u06cc\u0631\u0627\u06cc\u0634\u06af\u0631 \u0631\u062c\u06cc\u0633\u062a\u0631\u06cc";
+    if (!_wcsicmp(g_loc->lang, L"ar")) return L"\u0645\u062d\u0631\u0631 \u0627\u0644\u0633\u062c\u0644";
+    return L"Registry Editor";
+}
+
+static void ApplyRegeditNameOverride(PromptInfo& info) {
+    if (info.regeditDetected) info.appText = LocalizedRegeditName();
+}
+
+static bool ApplyRegeditOverrideIfSafe(PromptInfo& info) {
+    if (!info.regeditDetected || info.regeditOverrideApplied) return false;
+
+    info.sawUnknownWording = PromptHasUnknownWording(info);
+    bool rejectedLabel = info.publisherRowLabelRejected ||
+                         TextListHasRejectedPublisherLabel(info.detailTexts);
+    // A value without a readable publisher label is treated as unreadable. A labelled row is not
+    // overridden unless it is absent, empty, or otherwise unavailable; a label rejected by
+    // LabelSaysVerified is explicit contrary evidence and always blocks the exception.
+    bool publisherRowMissingOrUnreadable = !info.publisherRowLabelSeen ||
+                                             !info.publisherRowValueReadable;
+    if (!publisherRowMissingOrUnreadable || info.sawUnknownWording || rejectedLabel) {
+        Dbg(L"regedit presentation not applied: native publisher evidence is present, unknown, "
+            L"or explicitly unverified (row=%d rejected=%d unknown=%d)",
+            info.publisherRowLabelSeen ? 1 : 0, rejectedLabel ? 1 : 0,
+            info.sawUnknownWording ? 1 : 0);
+        return false;
+    }
+
+    std::wstring systemPath;
+    if (!PromptShowsSystemRegeditPath(info, &systemPath)) {
+        Dbg(L"regedit text found, but the prompt did not show the system path -> no override");
+        return false;
+    }
+
+    // The name-only normalization above is also repeated here so the gated path keeps the same
+    // localized value when it supplies the publisher/path presentation.
+    info.appText = LocalizedRegeditName();
+    info.publisherText = L"Microsoft Windows";
+    info.appPath = systemPath;
+    info.originText = systemPath;
+    info.systemFileConfirmed = true;       // path identity only; VerifySignatureState still runs
+    info.regeditOverrideApplied = true;
+    info.publisherVerifiedByWindows = false; // becomes true only after a trusted signature result
+    info.publisherFromSignature = false;
+    info.sawUnknownAuthor = false;
+    info.signatureState = SigUnknown;
+    info.bannerState = (info.yes && !info.yesEnabled) ? 3 : 2;
+    Dbg(L"regedit presentation allowed: prompt showed '%s'; publisher row was missing or unreadable; "
+        L"the system file will still be verified", systemPath.c_str());
+    return true;
+}
+
 // "Yes" and "No" are resolved here, on the finished element set, from the buttons' own text.
 // Nothing is carried across a vector that has been appended to, and a button that cannot be
 // recognised by its own text leaves the pair incomplete: the mod then fails open instead of
@@ -2390,7 +2641,9 @@ static void ResolveButtons(PromptInfo& info) {
             L"fails open rather than guessing", info.yes ? 1 : 0, info.no ? 1 : 0);
 }
 
-// The publisher shown is the one in the native publisher row; nothing is forced by program name.
+// The publisher shown is the one in the native publisher row. The only presentation exception is
+// the signature-backed Regedit path, and it is applied only when the native publisher row is
+// missing or unreadable and no explicit unknown/unverified wording is present.
 static void FinishHarvest(PromptInfo& info) {
     ResolveButtons(info);
 
@@ -2431,63 +2684,23 @@ static void FinishHarvest(PromptInfo& info) {
         for (const auto& t : info.texts) if (isRegeditText(t)) { isRegedit = true; break; }
     if (!isRegedit)
         for (const auto& t : info.detailTexts) if (isRegeditText(t)) { isRegedit = true; break; }
+    if (!isRegedit)
+        for (const auto& p : info.paths) if (isRegeditText(p)) { isRegedit = true; break; }
     if (!isRegedit && !info.publisherText.empty() && isRegeditText(info.publisherText))
         isRegedit = true;
 
-    if (isRegedit) {
-        // --- Program name: localized according to the active mod language ---
-        // g_loc->lang points to the language selected by InitLocale().
-        const WCHAR* regeditName = L"Registry Editor";                 // en (default)
-        if      (_wcsicmp(g_loc->lang, L"it") == 0) regeditName = L"Editor del Registro";
-        else if (_wcsicmp(g_loc->lang, L"de") == 0) regeditName = L"Registrierungs-Editor";
-        else if (_wcsicmp(g_loc->lang, L"fr") == 0) regeditName = L"\u00c9diteur du Registre";
-        else if (_wcsicmp(g_loc->lang, L"es") == 0) regeditName = L"Editor del Registro";
-        else if (_wcsicmp(g_loc->lang, L"pt") == 0) regeditName = L"Editor do Registro";
-        else if (_wcsicmp(g_loc->lang, L"nl") == 0) regeditName = L"Register-editor";
-        else if (_wcsicmp(g_loc->lang, L"pl") == 0) regeditName = L"Edytor rejestru";
-        else if (_wcsicmp(g_loc->lang, L"ru") == 0) regeditName = L"\u0420\u0435\u0434\u0430\u043a\u0442\u043e\u0440 \u0440\u0435\u0435\u0441\u0442\u0440\u0430";
-        else if (_wcsicmp(g_loc->lang, L"ja") == 0) regeditName = L"\u30ec\u30b8\u30b9\u30c8\u30ea \u30a8\u30c7\u30a3\u30bf\u30fc";
-        else if (_wcsicmp(g_loc->lang, L"ko") == 0) regeditName = L"\ub808\uc9c0\uc2a4\ud2b8\ub9ac \ud3b8\uc9d1\uae30";
-        else if (_wcsicmp(g_loc->lang, L"hi") == 0) regeditName = L"\u0930\u091c\u093f\u0938\u094d\u091f\u094d\u0930\u0940 \u0938\u0902\u092a\u093e\u0926\u0915";
-        else if (_wcsicmp(g_loc->lang, L"tr") == 0) regeditName = L"Kay\u0131t Defteri D\u00fczenleyicisi";
-        else if (_wcsicmp(g_loc->lang, L"fa") == 0) regeditName = L"\u0648\u06cc\u0631\u0627\u06cc\u0634\u06af\u0631 \u0631\u062c\u06cc\u0633\u062a\u0631\u06cc";
-        else if (_wcsicmp(g_loc->lang, L"ar") == 0) regeditName = L"\u0645\u062d\u0631\u0631 \u0627\u0644\u0633\u062c\u0644";
-        info.appText = regeditName;
+    info.regeditDetected = isRegedit;
+    ApplyRegeditNameOverride(info);
+    info.sawUnknownWording = PromptHasUnknownWording(info);
+    // The Regedit presentation is deliberately deferred until the native details have been read.
+    // That prevents a later-expanded "unknown" or unverified publisher row from being hidden by
+    // the compatibility name match.
 
-        // --- Publisher: "Microsoft Windows" is a proper noun, never translated ---
-        info.publisherText = L"Microsoft Windows";
-
-        // --- Real path, so the correct icon is used ---
-        WCHAR win[MAX_PATH] = L"";
-        if (GetWindowsDirectoryW(win, ARRAYSIZE(win))) {
-            std::wstring p = std::wstring(win) + L"\\regedit.exe";
-            if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                info.appPath = p;
-                info.originText = p;
-            }
-        }
-
-        // --- Banner and shield state: forced to the "signed / verified" case ---
-        // bannerState 1 = blue, shieldVariant 0 = blue shield (NEVER question mark),
-        // signatureState SigTrusted = keeps "unconfirmed" from triggering later on.
-        if (!(info.yes && !info.yesEnabled))
-            info.bannerState = 1;
-        info.shieldVariant = 0;
-        info.sawUnknownAuthor = false;
-        info.publisherFromSignature = false;
-        info.signatureState = SigTrusted;
-        info.publisherVerifiedByWindows = true;
-        info.systemFileConfirmed = true;
-
-        Dbg(L"regedit detected (lang=%s): forcing appText='%s', publisher='Microsoft Windows', "
-            L"shield=verified (blue), banner=1 (blue), signature=trusted",
-            g_loc->lang, info.appText.c_str());
-    }
     // ------------------------------------------------------------------------
 
     // Which file is being elevated. It feeds the program icon, the "File origin" line and the
     // details pane, so it is looked for in two places and never invented.
-    if (!isRegedit) {
+    if (!info.regeditOverrideApplied) {
         const WCHAR* pathSource = L"none";
         info.appPath = FindTargetPath(info, &pathSource);
         info.originText = info.appPath;
@@ -2504,10 +2717,7 @@ static void FinishHarvest(PromptInfo& info) {
     // amber (with black text) when it is not. The decision is therefore taken from the publisher
     // row that was really mapped - a stray "unknown publisher" elsewhere in the tree must not
     // repaint a signed program in amber.
-    bool sawUnknownWording = false;
-    for (const auto& t : info.texts) {
-        if (TextHasAnyWord(t, kUnknownWords, ARRAYSIZE(kUnknownWords))) sawUnknownWording = true;
-    }
+    bool sawUnknownWording = info.sawUnknownWording;
     info.sawUnknownAuthor = TextHasAnyWord(info.publisherText, kAuthorWords,
                                            ARRAYSIZE(kAuthorWords));
     bool publisherKnown = info.publisherVerifiedByWindows && !info.sawUnknownAuthor && !IsUnknownPublisherValue(info.publisherText);
@@ -5180,11 +5390,10 @@ static bool NativePromptOnScreen() {
     return r.left > -30000;
 }
 
-// The instant ejection. The watcher calls it the moment this process's own prompt window shows
-// itself - and again whenever the system moves that window somewhere else: the window is off the
-// screen within the same event, which on the machine this was written for is a handful of
-// milliseconds after the system's own prompt appeared, long before any of the reading work (UI
-// Automation, the dialog's own strings) has run.
+// The instant ejection. The CreateWindowExW hook calls it before the native host can be shown,
+// and the watcher calls it again whenever the system moves that window somewhere else. The window
+// is therefore parked before UI Automation and the rest of the reading work begin, with no timer
+// keeping either desktop busy while the prompt is pending.
 //
 // Nothing here is irreversible and nothing touches the window's messages: it is only moved - or
 // hidden, when the setting asks for that - with documented calls, the place it had is remembered,
@@ -5219,6 +5428,39 @@ static void EjectTheNativePromptAtOnce(HWND hwnd) {
     if (g_nativeMoved)
         Log(L"the native prompt left the screen %lu ms after the request (%s)", ms,
             g_settings.nativeWindowMode == 1 ? L"hidden" : L"moved off screen");
+}
+
+// The native XAML host is created by consent.exe itself. Parking it at the return of
+// CreateWindowExW is earlier than any SHOW event and avoids making the desktop watcher responsible
+// for catching a transient on-screen frame. The WinEvent watcher remains as a no-polling safety net
+// for later LOCATIONCHANGE events.
+typedef HWND(WINAPI* CreateWindowExW_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int,
+                                        HWND, HMENU, HINSTANCE, LPVOID);
+static CreateWindowExW_t g_createWindowExW_orig = nullptr;
+
+static HWND WINAPI CreateWindowExWHook(DWORD exStyle, LPCWSTR className, LPCWSTR windowName,
+                                       DWORD style, int x, int y, int width, int height,
+                                       HWND parent, HMENU menu, HINSTANCE instance, LPVOID param) {
+    HWND hwnd = g_createWindowExW_orig(exStyle, className, windowName, style, x, y, width, height,
+                                       parent, menu, instance, param);
+    if (!hwnd) return hwnd;
+
+    WCHAR cls[128] = L"";
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (g_settings.detection != 2 && IsConsentHostClass(cls))
+        EjectTheNativePromptAtOnce(hwnd);
+    return hwnd;
+}
+
+static void InstallNativeCreateHook() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    FARPROC target = user32 ? GetProcAddress(user32, "CreateWindowExW") : nullptr;
+    if (!target || !Wh_SetFunctionHook((void*)target, (void*)CreateWindowExWHook,
+                                       (void**)&g_createWindowExW_orig)) {
+        Log(L"CreateWindowExW hook unavailable -> WinEvent discovery remains active (no polling)");
+        return;
+    }
+    Log(L"hooked user32!CreateWindowExW for synchronous consent-host parking");
 }
 
 static void GiveNativePromptBack() {
@@ -5743,6 +5985,13 @@ static DWORD WINAPI UiSessionRunInner() {
         }
     }
 
+    // Recheck the native evidence after expanding the details. The compatibility name match is
+    // allowed to run only when no unknown/unverified publisher row was revealed by that expansion.
+    info.sawUnknownWording = PromptHasUnknownWording(info);
+    if (ApplyRegeditOverrideIfSafe(info))
+        Log(L"Regedit compatibility presentation enabled only after the native path/evidence "
+            L"checks; signature verification is still required");
+
     // *** FIX 1: build the details pane HERE, before the signature check, so the
     //     three mapped rows are always present. The signature check may add the
     //     verified signer and rebuild the pane again. ***
@@ -5752,13 +6001,34 @@ static DWORD WINAPI UiSessionRunInner() {
         (int)g_ui.details.size(), (int)info.detailTexts.size());
 
     g_step = L"session: reading the digital signature";
-    if (!info.appPath.empty() && !info.systemFileConfirmed)
+    // systemFileConfirmed means only that the prompt named the system path. It never bypasses
+    // WinVerifyTrust: even this tightly gated compatibility exception must earn its verified
+    // presentation from the file's actual signature.
+    if (!info.appPath.empty())
         info.signatureState = VerifySignatureState(info.appPath, nullptr);
+
+    if (info.regeditOverrideApplied) {
+        bool trusted = info.signatureState == SigTrusted;
+        info.publisherVerifiedByWindows = trusted;
+        if (!(info.yes && !info.yesEnabled))
+            info.bannerState = trusted ? 1 : 2;
+        if (g_settings.bannerOverride >= 1 && g_settings.bannerOverride <= 3 &&
+            g_settings.bannerOverride > info.bannerState)
+            info.bannerState = g_settings.bannerOverride;
+        Log(L"Regedit compatibility presentation: system path=%d signature=%s -> %s",
+            info.systemFileConfirmed ? 1 : 0,
+            trusted ? L"trusted" : L"not trusted/unknown",
+            trusted ? L"verified publisher" : L"plain publisher");
+        // The publisher label in the details pane follows the final, signature-backed state too.
+        BuildDetailsPane(info);
+    }
+
     {
         bool unconfirmed = (info.bannerState == 2) ||
                            (!info.publisherVerifiedByWindows) ||
-                           (info.signatureState == SigUnsigned && !info.systemFileConfirmed) ||
-                           info.signatureState == SigInvalid;
+                           (info.signatureState == SigUnsigned) ||
+                           info.signatureState == SigInvalid ||
+                           (info.regeditOverrideApplied && info.signatureState != SigTrusted);
         int variant = 0;
         if (unconfirmed)
             variant = info.sawUnknownAuthor ? 2 : 1;
@@ -6263,6 +6533,7 @@ BOOL Wh_ModInit() {
     };
     LoadSettings();
     InitLocale();
+    InstallNativeCreateHook();
 
     WCHAR deskName[64] = L"";
     GetDesktopName(GetThreadDesktop(GetCurrentThreadId()), deskName, ARRAYSIZE(deskName));
