@@ -5,7 +5,6 @@
 // @version         2.8.7
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
-// @twitter         NekoMirra
 // @include         TextInputHost.exe
 // @include         ctfmon.exe
 // @architecture    x86-64
