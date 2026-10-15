@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         3.0.0
+// @version         3.6.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @include         TextInputHost.exe
@@ -526,6 +526,8 @@ bool InstallDecoder(HMODULE module) {
 
 namespace {
 using Availability = bool (*)(void*, HSTRING);
+using IsAvailableFn = bool (*)(void*, HSTRING, void*, HSTRING, bool*);
+IsAvailableFn originalIsAvailable;
 using ModeView = void (*)(void*, HSTRING, int);
 using ActionFn = void (*)(void*, void*);
 using GetPressedKeyHandlingStateFn = int (*)(void*, void*);
@@ -595,6 +597,17 @@ bool AvailabilityHook(void* self, HSTRING mode) {
     const bool result = originalAvailability(self, mode);
     if (g_enabled.load() && IsTwelve(mode)) {
         Wh_SetStringValue(L"native-front-mode", L"narrow12key");
+        return true;
+    }
+    return result;
+}
+
+bool IsAvailableHook(void* self, HSTRING mode, void* sizeMgr, HSTRING param3, bool* outBool) {
+    const bool result = originalIsAvailable(self, mode, sizeMgr, param3, outBool);
+    if (g_enabled.load() && IsTwelve(mode)) {
+        if (outBool) *outBool = true;
+        Wh_SetStringValue(L"native-front-mode", L"narrow12key");
+        Wh_SetIntValue(L"native-front-is-available-hooked", 1);
         return true;
     }
     return result;
@@ -734,6 +747,12 @@ bool InstallFrontend(HMODULE module) {
           L"AEAA_NPE$AAVString@Platform@@@Z"},
          &originalAvailability,
          AvailabilityHook},
+        {{L"?IsAvailable@ChineseSimplifiedModeAvailabilityStrategy@Controls@"
+          L"TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
+          L"UEAA_NPE$AAVString@Platform@@PE$AAUIInputPanelSizePositionManager@"
+          L"TouchKeyboardUX@@0PEA_N@Z"},
+         &originalIsAvailable,
+         IsAvailableHook},
         {{L"?SetKeyboardModeView@?QITextFrameworkAdapter@Common@TextInput@"
           L"Experiences@ComposableShell@WindowsInternal@@"
           L"SystemInputProcessorTextFrameworkAdapter@TextFramework@"
@@ -818,7 +837,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        300);
+        360);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
