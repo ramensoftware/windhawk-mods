@@ -396,16 +396,9 @@ HRESULT DecideHook(void* self, WORD first) {
     return originalDecide(self, first);
 }
 
-WH_HOOK_SYMBOLS_OPTIONS SymbolOptions() {
-    WH_HOOK_SYMBOLS_OPTIONS options{};
-    options.optionsSize = sizeof(options);
-    options.noUndecoratedSymbols = TRUE;
-    options.onlineCacheUrl = L"";
-    return options;
-}
 
 bool InstallService(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    WindhawkUtils::SYMBOL_HOOK inputserviceDllHooks[] = {
         {{L"?RegularizeStringKey@InputMethodBase@ChxIME@@IEBAJPEAUSTRING_KEY_"
           L"EVENT@2@@Z"},
          &originalRegularize},
@@ -432,9 +425,8 @@ bool InstallService(HMODULE module) {
         {{L"?OnKeyDown@InputMethodHostTSF3@ChxIME@@AEAAJPEAUICoreTextInputMethodContext@Core@Text@UI@Windows@@PEAUICoreTextKeyEventArgs@4567@@Z"},
          &originalOnKeyDown},
     };
-    auto options = SymbolOptions();
-    if (!WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols),
-                                    &options))
+    if (!WindhawkUtils::HookSymbols(module, inputserviceDllHooks,
+                                    ARRAYSIZE(inputserviceDllHooks), nullptr))
         return false;
     if (!CodeMatches(
             reinterpret_cast<void*>(originalRegularize), 0x213,
@@ -504,7 +496,7 @@ bool InstallService(HMODULE module) {
 
 
 bool InstallDecoder(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    WindhawkUtils::SYMBOL_HOOK chspinyindsDllHooks[] = {
         {{L"?GetCandidates@ChsPinyinDS@@UEAAJPEAUIMtfSuggestionInputQuery@@"
           L"PEAPEAUIMtfSuggestionList@@@Z"},
          &originalCandidates},
@@ -516,9 +508,8 @@ bool InstallDecoder(HMODULE module) {
           L"0UInputModeProfile@2@A"},
          &twelveProfile},
     };
-    auto options = SymbolOptions();
-    if (!WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols),
-                                    &options))
+    if (!WindhawkUtils::HookSymbols(module, chspinyindsDllHooks,
+                                    ARRAYSIZE(chspinyindsDllHooks), nullptr))
         return false;
     if (!CodeMatches(
             reinterpret_cast<void*>(originalDecide), 0x1f3,
@@ -936,7 +927,7 @@ void InjectKeyHook(void* self, void* keyControl, HSTRING text, void* point, unsi
 }
 
 bool InstallFrontend(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    WindhawkUtils::SYMBOL_HOOK textinputDllHooks[] = {
         {{L"?IsNarrowModeAvailableInternal@"
           L"ChineseSimplifiedModeAvailabilityStrategy@Controls@"
           L"TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
@@ -1049,9 +1040,8 @@ bool InstallFrontend(HMODULE module) {
          &originalIsEmojiViewEnabled,
          IsEmojiViewEnabledHook},
     };
-    auto options = NativeT9::SymbolOptions();
-    return WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols),
-                                      &options);
+    return WindhawkUtils::HookSymbols(module, textinputDllHooks,
+                                      ARRAYSIZE(textinputDllHooks), nullptr);
 }
 }  // namespace
 BOOL Wh_ModInit() {
