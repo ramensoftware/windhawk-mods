@@ -2,9 +2,9 @@
 // @id              cursor-tail
 // @name            Cursor Tail
 // @name:zh-CN      光标拖尾
-// @description     Adds a smooth, speed-reactive motion-blur trail to the mouse cursor.
-// @description:zh-CN 为鼠标指针添加平滑、随速度变化的运动模糊拖尾。
-// @version         3.12
+// @description     Adds a speed-reactive cursor trail with optional interaction feedback.
+// @description:zh-CN 为鼠标指针添加速度响应式拖尾与可选的交互反馈。
+// @version         3.13
 // @author          CYoJkoY
 // @github          https://github.com/CYoJkoY
 // @license         MIT
@@ -17,8 +17,9 @@
 # Cursor Tail
 
 Cursor Tail adds a smooth, tapered motion-blur trail behind the mouse pointer
-when it moves quickly. The trail is rendered in a transparent overlay window
-with Direct2D, so it works independently of the application under the pointer.
+when it moves quickly, with optional click and scroll feedback for clearer
+interaction cues. All effects use a transparent Direct2D overlay, independently
+of the application under the pointer.
 
 ## Preview
 
@@ -31,6 +32,7 @@ with Direct2D, so it works independently of the application under the pointer.
 - **Custom appearance:** Configure trail color, outline color, gradient, and optional glow.
 - **Adaptive color:** Automatically sample the active cursor image and prefer colors with sufficient contrast against the screen background.
 - **Fade-out:** Smoothly fade the trail after the pointer slows down.
+- **Interaction feedback:** Optional expanding ripples for left, right, and middle clicks, plus direction-specific scroll-wheel pulses. These effects can run without a motion trail.
 - **Per-app rules:** Enable or disable the trail for selected executables.
 - **Fullscreen suppression:** Automatically hide the trail for exclusive or borderless fullscreen applications and restore it after fullscreen ends.
 
@@ -40,7 +42,7 @@ with Direct2D, so it works independently of the application under the pointer.
 
 The outline can either be derived automatically from the trail luminance or set to a fixed hexadecimal color.
 
-**Screen capture:** Auto mode reads the screen background around the pointer, and that sample must not pick up the trail's own pixels. While Auto mode is active the overlay is therefore excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE`), which means the trail does not appear in screenshots, screen recordings or screen shares. Manual color mode never reads the screen, so the overlay stays capturable and the trail shows up normally in captures.
+**Screen capture:** Auto mode reads the screen background around the pointer, and that sample must not pick up the overlay's own pixels. While Auto mode is active the entire overlay is therefore excluded from screen capture (`WDA_EXCLUDEFROMCAPTURE`), including click and scroll ripples. Manual color mode never reads the screen, so the overlay stays capturable and its effects show up normally in captures.
 
 ## Per-app rules
 
@@ -70,8 +72,9 @@ Windhawk also ships **Cursor Motion Blur** and **Mouse Trail**, which cover simi
 - **Appearance:** separately configurable minimum/maximum outer and core widths, an optional gradient fill and an optional glow layer on top of the plain two-layer ribbon.
 - **Adaptive color:** cursor-image color extraction with histogram ranking, contrast selection against the sampled background luminance, and automatic or manual outline colors.
 - **Context awareness:** per-app `exe=on|off` rules and fullscreen suppression (D3D exclusive or borderless) with an exit confirmation delay.
+- **Interaction layer:** optional, button-specific click ripples and scroll-direction pulses rendered through the same bounded Direct2D backbuffer, without a particle subsystem. The low-level mouse hook is installed only while one of these effects is enabled.
 
-Users who want the original, minimal behavior should stay on Cursor Motion Blur. Cursor Tail is for users who want the additional appearance, adaptive color and per-app controls.
+Users who want the original, minimal behavior should stay on Cursor Motion Blur. Cursor Tail is for users who want a more configurable motion trail, adaptive color, per-app rules, and optional click/scroll feedback.
 
 ## Attribution
 
@@ -244,6 +247,65 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
   $name: Effects
   $name:zh-CN: 效果
 
+- Interaction:
+    - click_feedback_enabled: false
+      $name: Mouse click ripples
+      $name:zh-CN: 鼠标点击波纹
+      $description: Show an expanding ripple when the left, right, or middle mouse button is pressed. The mouse hook is installed only while click or wheel feedback is enabled.
+      $description:zh-CN: 按下鼠标左键、右键或中键时显示扩散波纹。仅在启用点击或滚轮反馈时安装鼠标钩子。
+    - wheel_feedback_enabled: false
+      $name: Scroll-wheel feedback
+      $name:zh-CN: 滚轮反馈
+      $description: Show a ripple when the wheel scrolls up or down, using a separate color for each direction.
+      $description:zh-CN: 滚轮向上或向下滚动时显示波纹，并为两个方向分别设置颜色。
+    - left_click_color: "#00D7FF"
+      $name: Left-click color
+      $name:zh-CN: 左键颜色
+      $description: Hexadecimal RGB color used for left-button presses.
+      $description:zh-CN: 左键按下时使用的十六进制 RGB 颜色。
+    - right_click_color: "#FF4C8B"
+      $name: Right-click color
+      $name:zh-CN: 右键颜色
+      $description: Hexadecimal RGB color used for right-button presses.
+      $description:zh-CN: 右键按下时使用的十六进制 RGB 颜色。
+    - middle_click_color: "#FFD166"
+      $name: Middle-click color
+      $name:zh-CN: 中键颜色
+      $description: Hexadecimal RGB color used for middle-button presses.
+      $description:zh-CN: 中键按下时使用的十六进制 RGB 颜色。
+    - wheel_up_color: "#7CFF6B"
+      $name: Scroll-up color
+      $name:zh-CN: 向上滚动颜色
+      $description: Hexadecimal RGB color used when the wheel scrolls up.
+      $description:zh-CN: 滚轮向上滚动时使用的十六进制 RGB 颜色。
+    - wheel_down_color: "#A78BFA"
+      $name: Scroll-down color
+      $name:zh-CN: 向下滚动颜色
+      $description: Hexadecimal RGB color used when the wheel scrolls down.
+      $description:zh-CN: 滚轮向下滚动时使用的十六进制 RGB 颜色。
+    - ripple_radius: 36
+      $name: Ripple radius
+      $name:zh-CN: 波纹半径
+      $description: Maximum ripple radius in pixels. Range 10-200.
+      $description:zh-CN: 波纹的最大半径，单位为像素。范围为 10-200。
+    - ripple_duration_ms: 420
+      $name: Ripple duration
+      $name:zh-CN: 波纹持续时间
+      $description: Duration of each ripple in milliseconds. Range 100-2000.
+      $description:zh-CN: 每个波纹的动画持续时间，单位为毫秒。范围为 100-2000。
+    - ripple_width: 2
+      $name: Ripple stroke width
+      $name:zh-CN: 波纹线宽
+      $description: Stroke width of the ripple outline in pixels. Range 1-10.
+      $description:zh-CN: 波纹轮廓的线宽，单位为像素。范围为 1-10。
+    - ripple_opacity: 78
+      $name: Ripple opacity
+      $name:zh-CN: 波纹不透明度
+      $description: Starting opacity of each ripple, from 5 to 100 percent.
+      $description:zh-CN: 每个波纹初始的不透明度，范围为 5%-100%。
+  $name: Interaction
+  $name:zh-CN: 交互反馈
+
 - Application:
     - app_rules: ""
       $name: Per-app rules
@@ -298,10 +360,14 @@ constexpr uint32_t kFallbackCoreColor = 0x00FFFFFF;
 constexpr uint32_t kFallbackOuterColor = 0x00000000;
 constexpr DWORD kBackbufferIdleReleaseDelayMs = 5000;
 constexpr int kBackbufferGrowthGranularity = 64;
+constexpr int kMaxActiveRipples = 12;
+constexpr float kRippleInitialRadius = 4.0f;
+constexpr int kMaxRippleClusterRadiusPx = 512;
 
 std::atomic<HWND> g_overlayHwnd{nullptr};
 HANDLE g_threadHandle = nullptr;
 HANDLE g_stopEvent = nullptr;
+HANDLE g_interactionEvent = nullptr;
 std::atomic_bool g_settingsDirty{false};
 
 POINT g_history[kHistoryCapacity] = {};
@@ -322,6 +388,7 @@ ID2D1DCRenderTarget* g_renderTarget = nullptr;
 ID2D1SolidColorBrush* g_outerBrush = nullptr;
 ID2D1SolidColorBrush* g_coreBrush = nullptr;
 ID2D1SolidColorBrush* g_glowBrush = nullptr;
+ID2D1SolidColorBrush* g_rippleBrush = nullptr;
 ID2D1LinearGradientBrush* g_gradientBrush = nullptr;
 ID2D1GradientStopCollection* g_gradientStops = nullptr;
 ID2D1StrokeStyle* g_strokeStyle = nullptr;
@@ -368,6 +435,30 @@ uint32_t g_currentOuterRGB = kFallbackOuterColor;
 DWORD g_lastAutoColorUpdate = 0;
 HCURSOR g_lastAutoColorCursor = nullptr;
 bool g_autoColorInitialized = false;
+
+int g_clickFeedbackEnabled = 0;
+int g_wheelFeedbackEnabled = 0;
+uint32_t g_leftClickRGB = 0x0000D7FF;
+uint32_t g_rightClickRGB = 0x00FF4C8B;
+uint32_t g_middleClickRGB = 0x00FFD166;
+uint32_t g_wheelUpRGB = 0x007CFF6B;
+uint32_t g_wheelDownRGB = 0x00A78BFA;
+float g_rippleRadius = 36.0f;
+int g_rippleDurationMs = 420;
+float g_rippleStrokeWidth = 2.0f;
+float g_rippleOpacity = 0.78f;
+
+struct RippleEffect {
+    POINT center = {};
+    LONGLONG startQpc = 0;
+    uint32_t color = 0x0000D7FF;
+    bool active = false;
+};
+
+RippleEffect g_ripples[kMaxActiveRipples] = {};
+int g_nextRippleSlot = 0;
+HHOOK g_mouseHook = nullptr;
+HMODULE g_mouseHookModule = nullptr;
 
 struct AppRule { std::wstring exe; bool enabled; };
 std::vector<AppRule> g_appRules;
@@ -492,6 +583,7 @@ void ReleaseRenderResources() {
     if (g_gradientBrush) { g_gradientBrush->Release(); g_gradientBrush = nullptr; }
     if (g_gradientStops) { g_gradientStops->Release(); g_gradientStops = nullptr; }
     if (g_strokeStyle) { g_strokeStyle->Release(); g_strokeStyle = nullptr; }
+    if (g_rippleBrush) { g_rippleBrush->Release(); g_rippleBrush = nullptr; }
     if (g_glowBrush) { g_glowBrush->Release(); g_glowBrush = nullptr; }
     if (g_coreBrush) { g_coreBrush->Release(); g_coreBrush = nullptr; }
     if (g_outerBrush) { g_outerBrush->Release(); g_outerBrush = nullptr; }
@@ -706,6 +798,22 @@ void LoadSettings() {
         g_manualOutlineRGB = ParseHexColor(value.get(), parsed) ? parsed : kFallbackOuterColor;
     }
     g_autoResampleInterval = std::clamp(Wh_GetIntSetting(L"Color.auto_resample_interval"), 0, kAutoResampleIntervalMaxMs);
+    g_clickFeedbackEnabled = std::clamp(Wh_GetIntSetting(L"Interaction.click_feedback_enabled"), 0, 1);
+    g_wheelFeedbackEnabled = std::clamp(Wh_GetIntSetting(L"Interaction.wheel_feedback_enabled"), 0, 1);
+    g_rippleRadius = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Interaction.ripple_radius"), 10, 200));
+    g_rippleDurationMs = std::clamp(Wh_GetIntSetting(L"Interaction.ripple_duration_ms"), 100, 2000);
+    g_rippleStrokeWidth = static_cast<float>(std::clamp(Wh_GetIntSetting(L"Interaction.ripple_width"), 1, 10));
+    g_rippleOpacity = std::clamp(Wh_GetIntSetting(L"Interaction.ripple_opacity"), 5, 100) / 100.0f;
+    const auto readInteractionColor = [](const wchar_t* settingPath, uint32_t fallbackColor) {
+        uint32_t parsedColor = 0;
+        WindhawkUtils::StringSetting value = WindhawkUtils::StringSetting::make(settingPath);
+        return ParseHexColor(value.get(), parsedColor) ? parsedColor : fallbackColor;
+    };
+    g_leftClickRGB = readInteractionColor(L"Interaction.left_click_color", 0x0000D7FF);
+    g_rightClickRGB = readInteractionColor(L"Interaction.right_click_color", 0x00FF4C8B);
+    g_middleClickRGB = readInteractionColor(L"Interaction.middle_click_color", 0x00FFD166);
+    g_wheelUpRGB = readInteractionColor(L"Interaction.wheel_up_color", 0x007CFF6B);
+    g_wheelDownRGB = readInteractionColor(L"Interaction.wheel_down_color", 0x00A78BFA);
     {
         WindhawkUtils::StringSetting value =
             WindhawkUtils::StringSetting::make(L"Application.app_rules");
@@ -720,6 +828,130 @@ void LoadSettings() {
     if (g_trailColorMode == 0) g_currentCoreRGB = g_manualColorRGB;
     g_currentOuterRGB = ResolveOutlineColor(g_currentCoreRGB);
     ApplyOverlayCaptureAffinity();
+}
+
+
+static void ClearRipples() {
+    for (RippleEffect& ripple : g_ripples) {
+        ripple.active = false;
+    }
+    g_nextRippleSlot = 0;
+}
+
+static int UpdateRippleState(LONGLONG nowQpc) {
+    const LONGLONG durationTicks = std::max<LONGLONG>(
+        1, g_qpcFrequency * static_cast<LONGLONG>(g_rippleDurationMs) / 1000);
+    int activeCount = 0;
+    for (RippleEffect& ripple : g_ripples) {
+        if (!ripple.active) continue;
+        const LONGLONG elapsedTicks = nowQpc - ripple.startQpc;
+        if (elapsedTicks >= durationTicks || elapsedTicks < 0) {
+            ripple.active = false;
+            continue;
+        }
+        ++activeCount;
+    }
+    return activeCount;
+}
+
+static bool HasActiveRipples(LONGLONG nowQpc) {
+    return UpdateRippleState(nowQpc) > 0;
+}
+
+static void AddRipple(const POINT& center, uint32_t color) {
+    int selectedSlot = -1;
+    for (int offset = 0; offset < kMaxActiveRipples; ++offset) {
+        const int candidateSlot = (g_nextRippleSlot + offset) % kMaxActiveRipples;
+        if (!g_ripples[candidateSlot].active) {
+            selectedSlot = candidateSlot;
+            break;
+        }
+    }
+    if (selectedSlot < 0) selectedSlot = g_nextRippleSlot;
+    g_nextRippleSlot = (selectedSlot + 1) % kMaxActiveRipples;
+
+    RippleEffect& ripple = g_ripples[selectedSlot];
+    ripple.center = center;
+    ripple.startQpc = QpcNow();
+    ripple.color = color;
+    ripple.active = true;
+    if (g_interactionEvent) SetEvent(g_interactionEvent);
+}
+
+static LRESULT CALLBACK LowLevelMouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION && lParam != 0) {
+        const auto* mouseInfo = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+        uint32_t rippleColor = 0;
+        bool shouldRipple = false;
+        switch (wParam) {
+        case WM_LBUTTONDOWN:
+            shouldRipple = g_clickFeedbackEnabled != 0;
+            rippleColor = g_leftClickRGB;
+            break;
+        case WM_RBUTTONDOWN:
+            shouldRipple = g_clickFeedbackEnabled != 0;
+            rippleColor = g_rightClickRGB;
+            break;
+        case WM_MBUTTONDOWN:
+            shouldRipple = g_clickFeedbackEnabled != 0;
+            rippleColor = g_middleClickRGB;
+            break;
+        case WM_MOUSEWHEEL:
+            if (g_wheelFeedbackEnabled != 0) {
+                const SHORT wheelDelta = static_cast<SHORT>(HIWORD(mouseInfo->mouseData));
+                if (wheelDelta != 0) {
+                    shouldRipple = true;
+                    rippleColor = wheelDelta > 0 ? g_wheelUpRGB : g_wheelDownRGB;
+                }
+            }
+            break;
+        default:
+            break;
+        }
+        if (shouldRipple) AddRipple(mouseInfo->pt, rippleColor);
+    }
+    return CallNextHookEx(g_mouseHook, code, wParam, lParam);
+}
+
+static void ReleaseMouseHook() {
+    if (g_mouseHook) {
+        if (!UnhookWindowsHookEx(g_mouseHook)) {
+            Wh_Log(L"UnhookWindowsHookEx failed: %lu", GetLastError());
+            return;
+        }
+        g_mouseHook = nullptr;
+    }
+    if (g_mouseHookModule) {
+        FreeLibrary(g_mouseHookModule);
+        g_mouseHookModule = nullptr;
+    }
+}
+
+static void SyncMouseHook() {
+    const bool shouldInstall = g_clickFeedbackEnabled != 0 || g_wheelFeedbackEnabled != 0;
+    if (!shouldInstall) {
+        ReleaseMouseHook();
+        ClearRipples();
+        return;
+    }
+    if (g_mouseHook) return;
+
+    HMODULE hookModule = nullptr;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(&LowLevelMouseHookProc),
+            &hookModule)) {
+        Wh_Log(L"GetModuleHandleExW for mouse hook failed: %lu", GetLastError());
+        return;
+    }
+    HHOOK mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseHookProc, hookModule, 0);
+    if (!mouseHook) {
+        Wh_Log(L"SetWindowsHookExW failed: %lu", GetLastError());
+        FreeLibrary(hookModule);
+        return;
+    }
+    g_mouseHookModule = hookModule;
+    g_mouseHook = mouseHook;
 }
 
 static bool CoversMonitor(HWND hwnd) {
@@ -821,7 +1053,7 @@ bool EnsureBackbuffer(int width, int height, HDC referenceDc) {
 }
 
 static void MaybeReleaseIdleBackbuffer(DWORD now) {
-    if (g_isSmearing || g_historyCount > 0) {
+    if (g_isSmearing || g_historyCount > 0 || HasActiveRipples(QpcNow())) {
         g_backbufferIdleSince = 0;
         return;
     }
@@ -851,6 +1083,8 @@ bool EnsureD2DResources() {
     hr = g_renderTarget->CreateSolidColorBrush(ToColorF(g_currentCoreRGB, 1.0f), &g_coreBrush);
     if (FAILED(hr)) { ReleaseRenderResources(); return false; }
     hr = g_renderTarget->CreateSolidColorBrush(ToColorF(g_glowRGB, g_glowAlpha), &g_glowBrush);
+    if (FAILED(hr)) { ReleaseRenderResources(); return false; }
+    hr = g_renderTarget->CreateSolidColorBrush(ToColorF(g_leftClickRGB, 1.0f), &g_rippleBrush);
     if (FAILED(hr)) { ReleaseRenderResources(); return false; }
     D2D1_STROKE_STYLE_PROPERTIES strokeProperties = {};
     strokeProperties.startCap = D2D1_CAP_STYLE_ROUND;
@@ -1195,19 +1429,76 @@ static void UpdateTrailColorIfNeeded(DWORD now) {
     g_currentOuterRGB = ResolveOutlineColor(g_currentCoreRGB);
 }
 
-bool RenderTrail(HWND hwnd) {
-    if (g_historyCount < 2) return false;
+bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
+    bool drawTrail = g_historyCount >= 2;
     const float speed = g_speedScaling ? (g_isSmearing ? g_smoothedSpeedNorm : g_frozenSpeedNorm) : 1.0f;
     const int renderLength = GetEffectiveTailLength(speed);
-    SmoothTrail(g_smoothIterations, renderLength);
-    if (g_renderCache.smoothed.size() < 2) return false;
     const float outerHalf = g_widthMin + (g_widthMax - g_widthMin) * speed;
     const float coreHalf = g_coreWidthMin + (g_coreWidthMax - g_coreWidthMin) * speed;
     const float alphaScale = g_alphaMin + (g_alphaMax - g_alphaMin) * speed;
-    const float alpha = alphaScale * g_fadeAlpha;
-    if (alpha < 0.02f) return false;
-    const float boundsHalf = g_glowEnabled ? outerHalf * std::max(1.0f, g_glowWidthFactor) : outerHalf;
-    const RECT bounds = CalculateTrailBounds(boundsHalf);
+    const float trailAlpha = alphaScale * g_fadeAlpha;
+
+    if (drawTrail) {
+        SmoothTrail(g_smoothIterations, renderLength);
+        drawTrail = g_renderCache.smoothed.size() >= 2 && trailAlpha >= 0.02f;
+    }
+
+    const int activeRippleCount = UpdateRippleState(nowQpc);
+    if (!drawTrail && activeRippleCount == 0) return false;
+
+    RECT bounds = {};
+    bool hasBounds = false;
+    const auto includeBounds = [&bounds, &hasBounds](const RECT& candidate) {
+        if (!hasBounds) {
+            bounds = candidate;
+            hasBounds = true;
+            return;
+        }
+        bounds.left = std::min(bounds.left, candidate.left);
+        bounds.top = std::min(bounds.top, candidate.top);
+        bounds.right = std::max(bounds.right, candidate.right);
+        bounds.bottom = std::max(bounds.bottom, candidate.bottom);
+    };
+
+    if (drawTrail) {
+        const float boundsHalf = g_glowEnabled
+            ? outerHalf * std::max(1.0f, g_glowWidthFactor)
+            : outerHalf;
+        includeBounds(CalculateTrailBounds(boundsHalf));
+    }
+
+    // These values originate from integer settings, so no floating-point round-up is needed.
+    const LONG ripplePadding = static_cast<LONG>(
+        g_rippleRadius + g_rippleStrokeWidth + kRenderPadding + 1.0f);
+    const RippleEffect* newestRipple = nullptr;
+    for (const RippleEffect& ripple : g_ripples) {
+        if (ripple.active && (!newestRipple || ripple.startQpc > newestRipple->startQpc)) {
+            newestRipple = &ripple;
+        }
+    }
+    for (const RippleEffect& ripple : g_ripples) {
+        if (!ripple.active) continue;
+        // A single layered window must submit one rectangular bitmap. Avoid a
+        // huge allocation if interactions occur on distant monitors in quick
+        // succession; keep rendering the most recent local cluster instead.
+        if (newestRipple) {
+            const int64_t deltaX = static_cast<int64_t>(ripple.center.x) - newestRipple->center.x;
+            const int64_t deltaY = static_cast<int64_t>(ripple.center.y) - newestRipple->center.y;
+            if (deltaX < -kMaxRippleClusterRadiusPx || deltaX > kMaxRippleClusterRadiusPx
+                || deltaY < -kMaxRippleClusterRadiusPx || deltaY > kMaxRippleClusterRadiusPx) {
+                continue;
+            }
+        }
+        const RECT rippleBounds = {
+            ripple.center.x - ripplePadding,
+            ripple.center.y - ripplePadding,
+            ripple.center.x + ripplePadding,
+            ripple.center.y + ripplePadding,
+        };
+        includeBounds(rippleBounds);
+    }
+    if (!hasBounds) return false;
+
     const int width = bounds.right - bounds.left;
     const int height = bounds.bottom - bounds.top;
     HDC screen = GetScreenDC();
@@ -1217,10 +1508,10 @@ bool RenderTrail(HWND hwnd) {
         if (FAILED(g_renderTarget->BindDC(g_backBufferDc, &bindRect))) return false;
         g_dcBound = true;
     }
+
     g_renderTarget->BeginDraw();
-    g_renderTarget->SetTransform(D2D1::Matrix3x2F::Translation(-static_cast<float>(bounds.left), -static_cast<float>(bounds.top)));
-    // The clip rectangle is transformed into backbuffer coordinates by the
-    // translation above, limiting clearing and drawing to the submitted frame.
+    g_renderTarget->SetTransform(D2D1::Matrix3x2F::Translation(
+        -static_cast<float>(bounds.left), -static_cast<float>(bounds.top)));
     const D2D1_RECT_F clipBounds = D2D1::RectF(
         static_cast<float>(bounds.left),
         static_cast<float>(bounds.top),
@@ -1228,35 +1519,97 @@ bool RenderTrail(HWND hwnd) {
         static_cast<float>(bounds.bottom));
     g_renderTarget->PushAxisAlignedClip(clipBounds, D2D1_ANTIALIAS_MODE_ALIASED);
     g_renderTarget->Clear(D2D1::ColorF(0, 0, 0, 0));
-    g_outerBrush->SetColor(ToColorF(g_currentOuterRGB, alpha));
-    g_glowBrush->SetColor(ToColorF(g_glowRGB, g_glowAlpha * alpha));
-    g_coreBrush->SetColor(ToColorF(g_currentCoreRGB, std::min(1.0f, alpha * 1.02f)));
-    if (g_glowEnabled) DrawTrailStroke(g_renderTarget, g_glowBrush, outerHalf * std::max(1.0f, g_glowWidthFactor), true);
-    DrawTrailStroke(g_renderTarget, g_outerBrush, outerHalf, true);
-    ID2D1Brush* coreBrush = g_coreBrush;
-    if (g_gradientEnabled && EnsureGradientBrush()) {
-        g_gradientBrush->SetStartPoint(g_renderCache.smoothed.front());
-        g_gradientBrush->SetEndPoint(g_renderCache.smoothed.back());
-        g_gradientBrush->SetOpacity(alpha);
-        coreBrush = g_gradientBrush;
+
+    if (drawTrail) {
+        g_outerBrush->SetColor(ToColorF(g_currentOuterRGB, trailAlpha));
+        g_glowBrush->SetColor(ToColorF(g_glowRGB, g_glowAlpha * trailAlpha));
+        g_coreBrush->SetColor(ToColorF(g_currentCoreRGB, std::min(1.0f, trailAlpha * 1.02f)));
+        if (g_glowEnabled) {
+            DrawTrailStroke(
+                g_renderTarget,
+                g_glowBrush,
+                outerHalf * std::max(1.0f, g_glowWidthFactor),
+                true);
+        }
+        DrawTrailStroke(g_renderTarget, g_outerBrush, outerHalf, true);
+        ID2D1Brush* coreBrush = g_coreBrush;
+        if (g_gradientEnabled && EnsureGradientBrush()) {
+            g_gradientBrush->SetStartPoint(g_renderCache.smoothed.front());
+            g_gradientBrush->SetEndPoint(g_renderCache.smoothed.back());
+            g_gradientBrush->SetOpacity(trailAlpha);
+            coreBrush = g_gradientBrush;
+        }
+        DrawTrailStroke(g_renderTarget, coreBrush, coreHalf, true);
     }
-    DrawTrailStroke(g_renderTarget, coreBrush, coreHalf, true);
+
+    const LONGLONG durationTicks = std::max<LONGLONG>(
+        1, g_qpcFrequency * static_cast<LONGLONG>(g_rippleDurationMs) / 1000);
+    for (const RippleEffect& ripple : g_ripples) {
+        if (!ripple.active) continue;
+        const LONGLONG elapsedTicks = nowQpc - ripple.startQpc;
+        if (elapsedTicks < 0 || elapsedTicks >= durationTicks) continue;
+        const float progress = std::clamp(
+            static_cast<float>(elapsedTicks) / static_cast<float>(durationTicks),
+            0.0f,
+            1.0f);
+        const float easedProgress = progress * (2.0f - progress);
+        const float radius = kRippleInitialRadius
+            + (g_rippleRadius - kRippleInitialRadius) * easedProgress;
+        const float remaining = 1.0f - progress;
+        const float alpha = g_rippleOpacity * remaining * remaining;
+        if (alpha < 0.005f) continue;
+
+        g_rippleBrush->SetColor(ToColorF(ripple.color, alpha));
+        g_renderTarget->DrawEllipse(
+            D2D1::Ellipse(
+                D2D1::Point2F(
+                    static_cast<float>(ripple.center.x),
+                    static_cast<float>(ripple.center.y)),
+                radius,
+                radius),
+            g_rippleBrush,
+            g_rippleStrokeWidth,
+            g_strokeStyle);
+        g_rippleBrush->SetColor(ToColorF(ripple.color, alpha * 0.48f));
+        const float innerRadius = radius * 0.58f;
+        g_renderTarget->DrawEllipse(
+            D2D1::Ellipse(
+                D2D1::Point2F(
+                    static_cast<float>(ripple.center.x),
+                    static_cast<float>(ripple.center.y)),
+                innerRadius,
+                innerRadius),
+            g_rippleBrush,
+            std::max(1.0f, g_rippleStrokeWidth * 0.65f),
+            g_strokeStyle);
+    }
+
     g_renderTarget->PopAxisAlignedClip();
     g_renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-    const HRESULT hr = g_renderTarget->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) {
+    const HRESULT drawResult = g_renderTarget->EndDraw();
+    if (drawResult == D2DERR_RECREATE_TARGET) {
         ReleaseRenderResources();
         return false;
     }
-    if (FAILED(hr)) return false;
+    if (FAILED(drawResult)) return false;
+
     BLENDFUNCTION blend = {};
     blend.BlendOp = AC_SRC_OVER;
     blend.SourceConstantAlpha = 255;
     blend.AlphaFormat = AC_SRC_ALPHA;
     POINT position = {bounds.left, bounds.top};
     SIZE size = {width, height};
-    POINT source = {0, 0};
-    return UpdateLayeredWindow(hwnd, screen, &position, &size, g_backBufferDc, &source, 0, &blend, ULW_ALPHA) != FALSE;
+    POINT bufferOrigin = {0, 0};
+    return UpdateLayeredWindow(
+        hwnd,
+        screen,
+        &position,
+        &size,
+        g_backBufferDc,
+        &bufferOrigin,
+        0,
+        &blend,
+        ULW_ALPHA) != FALSE;
 }
 
 // Pointer speed in pixels per second, derived from the real elapsed time between
@@ -1281,41 +1634,49 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
     const HWND foreground = GetForegroundWindow();
     const int appRule = CheckAppRuleCached(foreground);
     // While the trail is suppressed the pointer still moves. Keep the previous
-    // position and the sample timestamp current so that resuming doesn't report
-    // the whole suppressed movement as a single fast jump, which would trip the
-    // trigger speed immediately.
+    // position and sample timestamp current so a later resume cannot interpret
+    // the suppressed movement as one unusually fast cursor jump.
     const auto parkSample = [&] {
         g_lastPos = point;
         g_lastSampleQpc = sampleQpc;
     };
+
     if (appRule < 0) {
         ResetTrailState();
+        ClearRipples();
         parkSample();
         HideOverlay();
         MaybeReleaseIdleBackbuffer(now);
         return false;
     }
-    // Always keep the fullscreen state up to date; an `exe=on` rule only
-    // overrides whether the result suppresses the trail.
+
     const bool fullscreenActive = UpdateFullscreenState(now, foreground);
     if (fullscreenActive) {
         parkSample();
-        MaybeReleaseIdleBackbuffer(now);
-        if (appRule == 0) return false;
+        if (appRule == 0) {
+            ClearRipples();
+            HideOverlay();
+            MaybeReleaseIdleBackbuffer(now);
+            return false;
+        }
     }
+
     const bool wasSmearing = g_isSmearing;
     const int previousHistoryCount = g_historyCount;
     const float velocity = PointerSpeedPxPerSecond(point, sampleQpc);
     UpdateTrailState(point, velocity);
     MaybeReleaseIdleBackbuffer(now);
     if (g_isSmearing || g_historyCount >= 2) UpdateTrailColorIfNeeded(now);
-    const bool stateChanged = wasSmearing != g_isSmearing || (previousHistoryCount >= 2) != (g_historyCount >= 2);
-    if (g_historyCount < 2) {
+
+    const bool stateChanged = wasSmearing != g_isSmearing
+        || (previousHistoryCount >= 2) != (g_historyCount >= 2);
+    const bool hasRipples = HasActiveRipples(sampleQpc);
+    if (g_historyCount < 2 && !hasRipples) {
         HideOverlay();
         return false;
     }
     if (!renderFrame && !stateChanged) return false;
-    if (!RenderTrail(hwnd)) {
+    if (!RenderOverlay(hwnd, sampleQpc)) {
         HideOverlay();
         return false;
     }
@@ -1429,6 +1790,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         CoUninitialize();
         return 0;
     }
+    SyncMouseHook();
     const LONGLONG simulationTicks = FrameIntervalTicks(qpcFrequency.QuadPart, kTargetFrameRate);
     const LONGLONG idleTicks = FrameIntervalTicks(qpcFrequency.QuadPart, kIdleFrameRate);
     const LONGLONG activeRenderTicks = FrameIntervalTicks(qpcFrequency.QuadPart, kActiveRenderFrameRate);
@@ -1437,25 +1799,39 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     MSG message = {};
     bool running = true;
     while (running) {
-        if (g_settingsDirty.exchange(false, std::memory_order_acq_rel)) LoadSettings();
-        const bool idle = !g_isSmearing && g_historyCount < 2;
+        if (g_settingsDirty.exchange(false, std::memory_order_acq_rel)) {
+            LoadSettings();
+            SyncMouseHook();
+        }
+        const bool idle = !g_isSmearing && g_historyCount < 2 && !HasActiveRipples(QpcNow());
         const LONGLONG simulationInterval = idle ? idleTicks : simulationTicks;
         const LONGLONG sampleDeadline = QpcNow() + simulationInterval;
         if (!ArmFrameTimer(frameTimer, sampleDeadline, qpcFrequency.QuadPart)) break;
-        HANDLE handles[] = {g_stopEvent, frameTimer};
+        HANDLE handles[] = {g_stopEvent, g_interactionEvent, frameTimer};
         const DWORD waitResult = MsgWaitForMultipleObjectsEx(ARRAYSIZE(handles), handles, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         if (waitResult == WAIT_OBJECT_0) {
             running = false;
             continue;
         }
         if (waitResult == WAIT_OBJECT_0 + 1) {
+            const LONGLONG interactionNow = QpcNow();
+            SmearFrame(hwnd, GetTickCount(), true);
+            const bool interactionActive = HasActiveRipples(QpcNow());
+            const bool quickFrame = g_isSmearing || g_historyCount >= 2 || interactionActive;
+            nextRenderDeadline = interactionNow + (quickFrame ? activeRenderTicks : fadeRenderTicks);
+            continue;
+        }
+        if (waitResult == WAIT_OBJECT_0 + 2) {
             const LONGLONG sampleNow = QpcNow();
-            const bool renderFrame = (g_isSmearing || g_historyCount >= 2) && sampleNow >= nextRenderDeadline;
+            const bool interactionActiveBeforeFrame = HasActiveRipples(sampleNow);
+            const bool renderFrame = (g_isSmearing || g_historyCount >= 2 || interactionActiveBeforeFrame)
+                && sampleNow >= nextRenderDeadline;
             const bool rendered = SmearFrame(hwnd, GetTickCount(), renderFrame);
+            const bool interactionActive = HasActiveRipples(QpcNow());
             const bool active = g_isSmearing;
             const bool fading = !active && g_historyCount >= 2;
-            if (active || fading) {
-                const LONGLONG interval = active ? activeRenderTicks : fadeRenderTicks;
+            if (active || fading || interactionActive) {
+                const LONGLONG interval = (active || interactionActive) ? activeRenderTicks : fadeRenderTicks;
                 if (rendered || sampleNow >= nextRenderDeadline) nextRenderDeadline = sampleNow + interval;
             } else {
                 nextRenderDeadline = sampleNow + fadeRenderTicks;
@@ -1477,6 +1853,8 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     }
     CancelWaitableTimer(frameTimer);
     CloseHandle(frameTimer);
+    ReleaseMouseHook();
+    ClearRipples();
     HideOverlay();
     ReleaseBackbuffer();
     ReleaseBackgroundSampler();
@@ -1496,8 +1874,16 @@ BOOL WhTool_ModInit() {
     LoadSettings();
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) return FALSE;
+    g_interactionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_interactionEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+        return FALSE;
+    }
     g_threadHandle = CreateThread(nullptr, 0, OverlayThreadProc, nullptr, 0, nullptr);
     if (!g_threadHandle) {
+        CloseHandle(g_interactionEvent);
+        g_interactionEvent = nullptr;
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return FALSE;
@@ -1511,6 +1897,10 @@ void WhTool_ModUninit() {
         WaitForSingleObject(g_threadHandle, INFINITE);
         CloseHandle(g_threadHandle);
         g_threadHandle = nullptr;
+    }
+    if (g_interactionEvent) {
+        CloseHandle(g_interactionEvent);
+        g_interactionEvent = nullptr;
     }
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
