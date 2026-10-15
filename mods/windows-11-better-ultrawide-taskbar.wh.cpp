@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.74
+// @version         0.3.75
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -3782,26 +3782,33 @@ winrt::Windows::Foundation::Rect PlanVerticalClip(
             static_cast<float>(bottom - top)};
 }
 
-bool IsTaskbarIconSizeModuleName(std::wstring_view name) {
+bool IsModModuleName(std::wstring_view name, std::wstring_view id) {
     if (auto separator = name.find_last_of(L"\\/");
         separator != std::wstring_view::npos)
         name.remove_prefix(separator + 1);
     if (name.starts_with(L"local@")) name.remove_prefix(6);
-    return name.starts_with(L"taskbar-icon-size_") &&
+    return name.starts_with(id) && name.substr(id.size()).starts_with(L'_') &&
            name.ends_with(L".dll");
 }
 
-bool TaskbarIconSizeLoaded() {
+bool ModLoaded(std::span<const std::wstring_view> ids) {
     HANDLE snapshot = CreateToolhelp32Snapshot(
         TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
     if (snapshot == INVALID_HANDLE_VALUE) return false;
     MODULEENTRY32W module{};
     module.dwSize = sizeof(module);
     bool found = Module32FirstW(snapshot, &module);
-    while (found && !IsTaskbarIconSizeModuleName(module.szModule))
+    while (found && std::none_of(ids.begin(), ids.end(), [&](auto id) {
+               return IsModModuleName(module.szModule, id);
+           }))
         found = Module32NextW(snapshot, &module);
     CloseHandle(snapshot);
     return found;
+}
+
+bool TaskbarIconSizeLoaded() {
+    constexpr std::wstring_view id = L"taskbar-icon-size";
+    return ModLoaded({&id, 1});
 }
 
 DockInsets GetDockInsets(HWND taskbar, double height) {
@@ -4163,7 +4170,7 @@ double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int taskbarSize) {
 
 // ---- taskbar.dll symbol lookup and XAML root discovery ------------------
 // Same taskbar.dll root lookup used by hide-start-button and
-// taskbar-centered-start-split-icons. Resolve functions without hooking them.
+// taskbar-centered-start-split-icons.
 void* g_taskBandVtable{};
 void* g_secondaryTaskBandVtable{};
 using GetTaskbarHost_t = void*(WINAPI*)(void*, void**);
@@ -11314,6 +11321,55 @@ LRESULT QueryCurrentTray(HWND taskbar) {
     return 0;
 }
 
+std::optional<float> ButtonShift(HMONITOR monitor) {
+    if (!monitor || g_busy) return {};
+    Root* match{};
+    for (auto& root : g_roots) {
+        if (root.retired || MonitorFromWindow(root.taskbar, MONITOR_DEFAULTTONULL) != monitor) continue;
+        if (match) return {};
+        match = &root;
+    }
+    if (!match || !match->buttonsFollower) return {};
+    auto repeater = match->buttonsTranslation.element;
+    auto parent = Media::VisualTreeHelper::GetParent(repeater).try_as<FrameworkElement>();
+    if (!parent) return {};
+    double shift = repeater.TransformToVisual(parent).TransformPoint({0, 0}).X - repeater.ActualOffset().x;
+    double scale = match->frame.XamlRoot().RasterizationScale();
+    if (!std::isfinite(shift * scale) || std::abs(shift) > match->hostWidth) return {};
+    return static_cast<float>(shift * scale);
+}
+
+// Each of these also rewrites the jump list's X, so adding our shift would move
+// it twice.
+constexpr std::wstring_view kJumpListAnchorMods[] = {
+    L"taskbar-margin", L"taskbar-split", L"taskbar-multirow",
+    L"taskbar-vertical", L"taskbar-jump-list-on-cursor-pos"};
+
+using ComputeJumpViewPosition_t = HRESULT(WINAPI*)(
+    void*, void*, int, winrt::Windows::Foundation::Point*, HorizontalAlignment*, VerticalAlignment*);
+ComputeJumpViewPosition_t ComputeJumpViewPosition_Original;
+HRESULT WINAPI ComputeJumpViewPosition_Hook(
+    void* self, void* group, int index, winrt::Windows::Foundation::Point* point,
+    HorizontalAlignment* horizontal, VerticalAlignment* vertical) {
+    ActiveScope active;
+    HRESULT hr = ComputeJumpViewPosition_Original(self, group, index, point, horizontal, vertical);
+    if (FAILED(hr) || g_stopping) return hr;
+    if (GetCurrentThreadId() != g_ownerThread) {
+        static std::atomic<bool> reported;
+        if (g_ownerThread && !reported.exchange(true))
+            Wh_Log(L"[UWJUMP] called off the taskbar UI thread tid=%lu owner=%lu; native position kept",
+                   GetCurrentThreadId(), g_ownerThread.load());
+        return hr;
+    }
+    if (ModLoaded(kJumpListAnchorMods)) return hr;
+    try {
+        auto monitor = MonitorFromPoint({std::lround(point->X), std::lround(point->Y)},
+                                        MONITOR_DEFAULTTONULL);
+        if (auto shift = ButtonShift(monitor)) point->X += *shift;
+    } catch (...) { Wh_Log(L"[UWJUMP] shift sample failed hr=%08X", winrt::to_hresult().value); }
+    return hr;
+}
+
 void DiscoverExisting(HWND taskbar);
 bool QueueTaskbarDiscovery(HWND taskbar);
 void ApplySavedSettings(HWND editor);
@@ -11648,8 +11704,13 @@ bool ResolveStartupSymbols() {
          &GetSecondaryTaskbarHost_Original},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &g_frameHeight},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &Decref_Original},
+        {{LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
+         &ComputeJumpViewPosition_Original, ComputeJumpViewPosition_Hook,
+         true},
     };
     if (!WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols))) return false;
+    Wh_Log(L"[UWJUMP] jump-list anchor hook %s",
+           ComputeJumpViewPosition_Original ? L"resolved" : L"unavailable; jump lists stay native");
     BYTE code[8]{};
     if (!ReadLocal(g_frameHeight, code) || !HostElementOffset(code, g_hostElementOffset)) {
         Wh_Log(L"[UWPOS] unsupported TaskbarHost::FrameHeight; startup lookup refused");
