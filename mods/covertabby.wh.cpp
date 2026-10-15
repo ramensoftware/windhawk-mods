@@ -8952,7 +8952,7 @@ static BOOL Init() {
 #if !defined(_M_IX86)
     HMODULE twinui = LoadLibraryW(L"twinui.pcshell.dll");
     if (twinui) {
-        WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
             {{LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
                 (void**)&originalXamlShow, (void*)XamlShowHook, true},
             {{LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
@@ -8960,7 +8960,7 @@ static BOOL Init() {
         };
         // Use locally cached symbols; never wait for network downloads during startup.
         WH_HOOK_SYMBOLS_OPTIONS options{sizeof(options), L"", FALSE, L""};
-        if (!WindhawkUtils::HookSymbols(twinui, hooks, ARRAYSIZE(hooks), &options))
+        if (!WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks), &options))
             Wh_Log(L"Explorer native Alt+Tab symbols unavailable; message relay remains active");
         FreeLibrary(twinui);
     }
