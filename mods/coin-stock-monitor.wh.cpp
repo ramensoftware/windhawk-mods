@@ -2,7 +2,7 @@
 // @id              coin-stock-monitor
 // @name            Coin & Stock Monitor
 // @description     Shows stock and crypto prices on the Windows 11 taskbar, with a configurable price API, symbol list, colors and entry-price percentage
-// @version         1.2.0
+// @version         1.2.1
 // @author          jayll1303
 // @github          https://github.com/jayll1303
 // @license         MIT
@@ -39,8 +39,10 @@ stop all requests, disable the mod.
   Yahoo Finance uses `regularMarketPrice`.
 * **Symbols** - separated by `|`, shown in order. At most 4 symbols, shown 2 per line.
 * **Entry prices** - `SYMBOL=PRICE` pairs separated by `|`. Use `.` as the decimal
-  separator. Commas are ignored, so `12,005` means `12005`. When a symbol has an
-  entry price, its price and signed percentage change from the entry are shown.
+  separator. A comma is accepted only as a thousands separator, followed by exactly
+  three digits, so `12,005` means `12005` and `0,45` is rejected. Lists saved with
+  commas by older versions still work. When a symbol has an entry price, its price
+  and signed percentage change from the entry are shown.
   The color is the gain color when the price is at or above the entry, and the
   loss color otherwise.
 * **Text alignment** - left or right inside the monitor area.
@@ -94,9 +96,10 @@ Changing any setting reloads the mod.
   $name: Entry prices
   $description: >-
     SYMBOL=PRICE pairs, separated by |, e.g. BTC-USD=60000|AAPL=300. Use . as the
-    decimal separator. Commas are ignored, so 12,005 means 12005. Symbols with an
-    entry price show the signed percentage change from it. Symbols without one show
-    only the price.
+    decimal separator. A comma is accepted only as a thousands separator, followed
+    by exactly three digits, so 12,005 means 12005 and 0,45 is rejected. Lists saved
+    with commas by older versions still work. Symbols with an entry price show the
+    signed percentage change from it. Symbols without one show only the price.
 - TextAlign: left
   $name: Text alignment
   $description: >-
@@ -236,12 +239,13 @@ std::wstring Trim(const std::wstring& text) {
     return text.substr(first, last - first + 1);
 }
 
-// Splits on '|', so commas can appear inside a value, such as 12,005.
-std::vector<std::wstring> SplitList(const std::wstring& list) {
+// Splits on any of the characters in `separators`, trims the items and drops empty ones.
+std::vector<std::wstring> SplitList(const std::wstring& list,
+                                    const wchar_t* separators) {
     std::vector<std::wstring> items;
     size_t start = 0;
     while (start <= list.size()) {
-        size_t end = list.find(L'|', start);
+        size_t end = list.find_first_of(separators, start);
         if (end == std::wstring::npos) {
             end = list.size();
         }
@@ -254,10 +258,40 @@ std::vector<std::wstring> SplitList(const std::wstring& list) {
     return items;
 }
 
-// Parses a number with '.' as the decimal separator. Commas are ignored as thousands
-// separators, so "12,005" reads as 12005. The classic locale keeps the result the same
-// whatever the system locale is.
+// Splits an EntryPrices list into SYMBOL=PRICE entries. Entries are separated by '|'.
+// Lists saved by older versions use commas, so a comma also starts a new entry when
+// the text after it is a SYMBOL=PRICE pair. Otherwise it is a thousands separator:
+// "NVL.VN=12,005,AAPL=300" reads as NVL.VN=12,005 and AAPL=300.
+std::vector<std::wstring> SplitEntryPrices(const std::wstring& list) {
+    std::vector<std::wstring> entries;
+    for (const std::wstring& item : SplitList(list, L"|")) {
+        bool first = true;
+        for (const std::wstring& part : SplitList(item, L",")) {
+            if (!first && part.find(L'=') == std::wstring::npos) {
+                entries.back() += L"," + part;
+            } else {
+                entries.push_back(part);
+            }
+            first = false;
+        }
+    }
+    return entries;
+}
+
+// Parses a number with '.' as the decimal separator. A comma is accepted only as a
+// thousands separator, followed by exactly three digits, so "12,005" reads as 12005.
+// A decimal comma such as "0,45" is rejected instead of being read as 45. The classic
+// locale keeps the result the same whatever the system locale is.
 bool ParseDecimal(std::wstring text, double& value) {
+    for (size_t comma = text.find(L','); comma != std::wstring::npos;
+         comma = text.find(L',', comma + 1)) {
+        size_t groupEnd = text.find_first_not_of(L"0123456789", comma + 1);
+        size_t digits =
+            (groupEnd == std::wstring::npos ? text.size() : groupEnd) - comma - 1;
+        if (digits != 3) {
+            return false;
+        }
+    }
     text.erase(std::remove(text.begin(), text.end(), L','), text.end());
     std::wistringstream stream(Trim(text));
     stream.imbue(std::locale::classic());
@@ -267,7 +301,7 @@ bool ParseDecimal(std::wstring text, double& value) {
 
 std::vector<EntryPrice> ParseEntryPrices(const std::wstring& list) {
     std::vector<EntryPrice> entries;
-    for (const std::wstring& item : SplitList(list)) {
+    for (const std::wstring& item : SplitEntryPrices(list)) {
         size_t equals = item.find(L'=');
         if (equals == std::wstring::npos) {
             Wh_Log(L"Entry price without '=': %s", item.c_str());
@@ -335,11 +369,7 @@ bool ParsePrice(const std::string& body,
     if (pos == std::string::npos) {
         return false;
     }
-    size_t start = pos + needle.size();
-    while (start < body.size() && body[start] == ' ') {
-        ++start;
-    }
-    std::istringstream stream(body.substr(start, 32));
+    std::istringstream stream(body.substr(pos + needle.size(), 32));
     stream.imbue(std::locale::classic());
     return static_cast<bool>(stream >> price);
 }
@@ -866,7 +896,8 @@ COLORREF ColorSetting(PCWSTR name, COLORREF fallback) {
 void LoadSettings() {
     g_settings.apiUrl = StringSetting::make(L"ApiUrl").get();
     g_settings.priceKey = ToUtf8(StringSetting::make(L"PriceKey").get());
-    g_settings.symbols = SplitList(StringSetting::make(L"Symbols").get());
+    // Symbols never contain commas, so lists saved by older versions still work.
+    g_settings.symbols = SplitList(StringSetting::make(L"Symbols").get(), L"|,");
     if (g_settings.symbols.size() > kMaxSymbols) {
         Wh_Log(L"Only the first %u symbols are shown", static_cast<unsigned>(kMaxSymbols));
         g_settings.symbols.resize(kMaxSymbols);
