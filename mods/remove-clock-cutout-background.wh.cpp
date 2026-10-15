@@ -21,8 +21,8 @@
 // ==WindhawkModReadme==
 /*
 Removes the light square background behind the analog clock in StartAllBack
-and classic Windows Date/Time flyouts (timedate.cpl) using OS-level 
-double buffering (WS_EX_COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
+and classic Windows Date/Time flyouts (timedate.cpl) using OS-level 
+double buffering (WS_EX_COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
 masking with smart dark-mode dialog sampling, plus full animated GIF and PNG replacement support.
 
 ### Custom Image / GIF Demonstration
