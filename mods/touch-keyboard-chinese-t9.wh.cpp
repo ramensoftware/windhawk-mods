@@ -537,6 +537,8 @@ bool InstallDecoder(HMODULE module) {
 
 namespace {
 using Availability = bool (*)(void*, HSTRING);
+using IsAvailableOnModeSwitcherFn = bool (*)(void*, HSTRING);
+IsAvailableOnModeSwitcherFn originalIsAvailableOnModeSwitcher;
 using ModeView = void (*)(void*, HSTRING, int);
 using OnPressActionFn = void (*)(void*, void*);
 using OnPressAndHoldActionFn = void (*)(void*, void*);
@@ -619,6 +621,13 @@ bool AvailabilityHook(void* self, HSTRING mode) {
     }
     return originalAvailability(self, mode);
 }
+bool IsAvailableOnModeSwitcherHook(void* self, HSTRING mode) {
+    if (IsTwelve(mode)) {
+        return true;
+    }
+    return originalIsAvailableOnModeSwitcher(self, mode);
+}
+
 
 void ModeHook(void* self, HSTRING mode, int view) {
     Wh_SetStringValue(L"native-front-mode",
@@ -978,6 +987,11 @@ bool InstallFrontend(HMODULE module) {
           L"LayoutData@23456@@Z"},
          &originalMode,
          ModeHook},
+        {{L"?IsAvailableOnModeSwitcher@?QIInputPanelTemplateManager@TouchKeyboardUX@@"
+          L"InputPanelTemplateManager@Controls@TextInputUndocked@Experiences@"
+          L"ComposableShell@WindowsInternal@@UE$AAA_NPE$AAVString@Platform@@@Z"},
+         &originalIsAvailableOnModeSwitcher,
+         IsAvailableOnModeSwitcherHook},
         {{L"?OnPressAction@WideNarrowChineseSimplifiedKeyActionHandler@"
           L"Controls@TextInputUndocked@Experiences@ComposableShell@"
           L"WindowsInternal@@MEAAXPE$AAVSingleKeyAction@23456@@Z"},
