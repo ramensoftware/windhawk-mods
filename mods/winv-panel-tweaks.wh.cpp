@@ -739,7 +739,7 @@ std::atomic<bool> g_inputAppHooked;
 
 bool HookInputApp(HMODULE module) {
     // clang-format off
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK inputAppDllHooks[] = {
         {
             {LR"(private: void __cdecl WindowsInternal::ComposableShell::Experiences::TextInputUndocked::InputApp::ExpressiveSuggestionUIPage::ResetControlSize(class Windows::Foundation::Size))"},
             &ResetControlSize_Original,
@@ -747,7 +747,8 @@ bool HookInputApp(HMODULE module) {
         },
     };
     // clang-format on
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(module, inputAppDllHooks,
+                                      ARRAYSIZE(inputAppDllHooks))) {
         Wh_Log(L"Couldn't hook InputApp.dll, the panel size can't be changed");
         return false;
     }
