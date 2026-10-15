@@ -2657,6 +2657,11 @@ static void FinishHarvest(PromptInfo& info) {
     // ------------------------------------------------------------------------
     // REGEDIT DETECTION (hardcoded, across all 15 languages of the mod).
     // ------------------------------------------------------------------------
+    // This section is fundamental. After multiple attempts of trying to avoid it, there
+    // have been various regressions on the author's side, such as the name of regedit being shown 
+    // as "Verticale". This is not acceptable for a mod that tries to recreate a feature. For this reason,
+    // this override is kept unless someone who knows a proper method (and has tested it on Windows 10 or Windows 11)
+    // provides it.
     auto isRegeditText = [](const std::wstring& t) {
         return ContainsI(t, L"regedit")
             || ContainsI(t, L"Registry Editor")          // en
