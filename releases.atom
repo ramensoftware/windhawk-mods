@@ -2,12 +2,128 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-15T07:00:10.000Z</updated>
+    <updated>2026-10-15T18:31:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Fancy Task View Cross-Monitor Drag 0.7.0]]></title>
+        <id>https://windhawk.net/mods/fancy-taskview-cross-monitor-drag#7d8699ddf863f280eeeac9bbcbdd7527eef7d423</id>
+        <link href="https://windhawk.net/mods/fancy-taskview-cross-monitor-drag"/>
+        <updated>2026-10-15T18:31:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fancytaskviewcrossmonitordrag">Fancy Task View Cross-Monitor Drag</h1>
+<p>Move windows between monitors by dragging their thumbnails in Windows 11 Task View (<code>Win + Tab</code>).</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Drag a Task View window thumbnail from one monitor to another.</li>
+<li>Remember window size and position separately for each monitor.</li>
+<li>Configure first-time window sizing and positioning.</li>
+<li>Choose whether Task View stays open, closes, or closes and reopens after a move.</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Task View may continue displaying the original thumbnail placement until reopened.</li>
+<li>Virtual desktop assignments do not change.</li>
+<li>Elevated or protected windows may not accept movement requests.</li>
+<li>Some applications adjust their own dimensions when changing monitors.</li>
+<li>Window positions are remembered while the mod is running.</li>
+<li>Windows with duplicate titles on the source monitor cannot be identified.</li>
+<li>A thumbnail whose name differs from its window title cannot be identified.</li>
+</ul>]]></content>
+        <author>
+            <name>His Fanciness</name>
+            <uri>https://github.com/HisFanciness</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8/8.1 Display Switch Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win8-display-switch-recreation#183ccb4a266611edc7ed6139f5b077e2c04f13ec</id>
+        <link href="https://windhawk.net/mods/win8-display-switch-recreation"/>
+        <updated>2026-10-15T18:31:53.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows881displayswitchrecreation">Windows 8/8.1 Display Switch Recreation</h1>
+<blockquote>
+  <p><strong>IMPORTANT:</strong> This modification runs in <code>explorer.exe</code> and does not require adding the critical
+  <code>dwm.exe</code> process to Windhawk's inclusion list. When an elevated window or a secure desktop is
+  active, Windows may not deliver keyboard input to Explorer; in that case the native Project
+  flyout remains available.</p>
+</blockquote>
+<p>This mod recreates the Windows 8/8.1 display switch panel (the <strong>Second screen</strong> flyout in
+Windows 8 and the <strong>Project</strong> pane in Windows 8.1) on Windows 10 and Windows 11. It uses the
+real Windows display configuration and does not replace system files, patch the graphics driver,
+or modify native display binaries. Topology changes and <strong>Set as main display</strong> use documented
+Windows APIs and persist like the native Project flyout. This modification has been tested on Windows 10 21H2 and Windows 11 24H2.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8display.png" alt="Windows 8/8.1 Display Switch screenshot" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Four native display modes: <strong>PC screen only</strong>, <strong>Duplicate</strong>, <strong>Extend</strong>, and <strong>Second screen only</strong>.</li>
+<li>Live display state with monitor hotplug and Settings-app changes reflected while the panel is open.</li>
+<li>Windows 8.1-style layout, embedded icons, accent color, per-monitor DPI support, and translations
+for English, Italian, Spanish, French, Portuguese, German, Russian, Simplified Chinese, Japanese,
+and Korean.</li>
+<li>Right-click commands: <strong>Set as main display</strong>, <strong>Detect displays</strong>, <strong>More settings</strong>, and
+<strong>Copy monitor information</strong>.</li>
+<li>Keyboard controls: <code>Win+P</code> to open or toggle, <code>Left</code>/<code>Right</code>/<code>Up</code>/<code>Down</code> to select, <code>Enter</code> or
+<code>Space</code> to apply, <code>1</code>-<code>4</code> for direct selection, <code>F5</code> to detect displays, and <code>Esc</code> to dismiss.</li>
+<li>While the panel is open, repeated <code>Win+P</code> presses cycle through the modes; releasing Win applies
+the selected mode and closes the panel.</li>
+<li>Click-outside and foreground-change dismissal, plus a status line for display API errors.</li>
+<li>The Windows 8/8.1 <strong>Devices > Second screen/Project</strong> route and a no-argument
+<code>DisplaySwitch.exe</code> launch replace the native <code>DisplaySwitchUIWnd</code>; direct commands such as
+<code>DisplaySwitch.exe /extend</code> remain untouched.</li>
+</ul>
+<h2 id="winpinputpath">Win+P input path</h2>
+<p>When enabled, the mod installs one narrow <code>WH_KEYBOARD_LL</code> hook in the main <code>explorer.exe</code> process.
+It consumes only the physical <code>Win+P</code> sequence, passes injected input and every other key through,
+and sends private messages to the panel. The hook is removed when the setting is disabled or the mod
+is unloaded. If an elevated window or a secure desktop is active, the hook may not receive the input;
+the native Windows Project flyout is intentionally preserved in that case.</p>
+<p>The panel loads only in the Explorer process that owns the shell window, so separate folder-window
+processes do not create duplicate panels.</p>
+<h2 id="windowsapis">Windows APIs</h2>
+<p>The panel uses documented public APIs:</p>
+<p>| Purpose | API |
+| --- | --- |
+| Read paths, topology, and monitor names | <code>QueryDisplayConfig</code>, <code>GetDisplayConfigBufferSizes</code>, <code>DisplayConfigGetDeviceInfo</code> |
+| Apply or validate a topology | <code>SetDisplayConfig</code> with <code>SDC_APPLY</code>, <code>SDC_VALIDATE</code>, and the topology flags |
+| Detect displays | <code>SetDisplayConfig</code> with <code>SDC_USE_DATABASE_CURRENT</code> |
+| Set the primary display | <code>ChangeDisplaySettingsEx</code> with <code>CDS_SET_PRIMARY</code> and <code>CDS_UPDATEREGISTRY</code> |
+| Monitor information and DPI | <code>EnumDisplayMonitors</code>, <code>GetMonitorInfo</code>, <code>EnumDisplaySettingsEx</code>, <code>GetDpiForMonitor</code> |
+| Other display settings | <code>ms-settings:display</code> deep links |
+| Replace another native Project flyout | <code>SetWinEventHook(EVENT_SYSTEM_FOREGROUND)</code> and <code>DisplaySwitchUIWnd</code> detection |
+| Error reporting | documented return codes and <code>FormatMessage</code> |</p>
+<p>The mod does not write arbitrary registry values, call driver-private interfaces, launch
+<code>DisplaySwitch.exe</code>, or undo user-requested display changes when disabled. <code>ERROR_ACCESS_DENIED</code>
+is shown in the panel when the current session cannot change the display configuration.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Open with Win+P</strong>: replace the native Project flyout and supported native entry points.</li>
+<li><strong>Panel color</strong>: accent, Charcoal, or Custom color.</li>
+<li><strong>Full-height pane</strong>: use the Windows 8.1 full-height layout or fit the content.</li>
+<li><strong>Validate before applying</strong>: validate the topology with <code>SDC_VALIDATE</code> before applying it.</li>
+<li><strong>Allow path persistence</strong>: add <code>SDC_PATH_PERSIST_IF_REQUIRED</code> when applying a topology.</li>
+<li><strong>Disable unavailable options</strong>: gray out modes that require more than one connected display.</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>The mod cannot make a topology work when the display driver does not support it.</li>
+<li>Wireless-display discovery remains part of the native Windows Connect experience.</li>
+<li>Resolution, refresh rate, orientation, HDR, and the embedded artwork are not re-created or changed.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>AdministratoX</strong> — Metro UI interface template.</li>
+<li><strong>Meteoni</strong> — <code>IsMainExplorerProcess</code> pattern.</li>
+<li>The Windows 8/8.1 Search Charm Recreation mod — panel, animation, light dismiss, z-band,
+context-menu, and translation components.</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Micrographics Taskbar Clock 1.0]]></title>
         <id>https://windhawk.net/mods/micrographics-taskbar-clock#d4ee5f65a63f19962d025831b57cde6d010d9de9</id>
@@ -1234,133 +1350,6 @@ Requests not launched through a supported explorer.exe command line are unaffect
         <author>
             <name>XandriW</name>
             <uri>https://github.com/xandri19wang</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray Agenda 1.0.0]]></title>
-        <id>https://windhawk.net/mods/tray-agenda#79d3e45e63490531703180aff5fc9f5bbebb5f73</id>
-        <link href="https://windhawk.net/mods/tray-agenda"/>
-        <updated>2026-10-12T13:04:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="trayagenda">Tray Agenda</h1>
-<p><img src="https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/widget.png" alt="Tray widget" /></p>
-<p><img src="https://raw.githubusercontent.com/chambber/tray-agenda/55ec9a66eb459d45779657b0640f303dd7fff4c9/docs/popup.png" alt="Popup agenda" /></p>
-<p>A compact agenda widget for the Windows 11 system tray, with a Notion-Calendar-style
-popup and native Windows reminders. It reads <strong>Google Calendar</strong> (up to 4 accounts) and
-<strong>ICS feeds</strong> directly. There is no helper program: the mod signs in with your own Google
-OAuth client and keeps only read-only refresh tokens, encrypted with Windows DPAPI in
-Windhawk's mod storage.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Tray widget showing the current or next meeting. An event starting within the
-reminder lead time takes over from the one in progress. Out-of-office events never
-win over an overlapping regular event.</li>
-<li>Popup agenda grouped by day, with a dotted bar for events you have not answered or
-accepted tentatively.</li>
-<li>Join buttons for Google Meet, Zoom and Microsoft Teams links.</li>
-<li>Native Windows toast reminders for <strong>accepted</strong> events, once before the start
-(10 minutes by default) and again at the start time. Out-of-office events are never
-announced. The toast has a <strong>Join</strong> button when the event has a meeting link.</li>
-<li>Several sources at once: up to 4 Google accounts plus ICS feed URLs (Google secret
-address, Outlook/Microsoft 365 published calendar, Apple, Nextcloud, …). The same
-meeting appearing in two sources is shown once.</li>
-</ul>
-<h2 id="setup">Setup</h2>
-<p>You need a Google Cloud OAuth client of type <em>Desktop app</em>. It is free and takes a few
-minutes. Every user creates their own, so nothing is shared with anyone else.</p>
-<ol>
-<li>Open <a href="https://console.cloud.google.com/">https://console.cloud.google.com/</a> and create a project (or pick one).</li>
-<li>Go to <strong>APIs & Services > Library</strong>, search for <strong>Google Calendar API</strong> and click
-<strong>Enable</strong>.</li>
-<li>Go to <strong>APIs & Services > OAuth consent screen</strong> (called <em>Google Auth Platform</em> in
-newer consoles). Choose <strong>External</strong>, fill in an app name and your email, and save.</li>
-<li>Under <strong>Audience</strong> (or <em>Test users</em>), add your own Google account as a test user.
-To avoid Google expiring the sign-in every 7 days, set the publishing status to
-<strong>In production</strong>. For personal use Google shows an "unverified app" warning that
-you can accept.</li>
-<li>Go to <strong>Credentials > Create credentials > OAuth client ID</strong>, choose <strong>Desktop app</strong>
-and create it. Copy the <strong>Client ID</strong> and <strong>Client secret</strong>.</li>
-<li>In this mod's settings paste the client ID and secret.</li>
-<li>Click the widget in the tray and choose <strong>Sign in with Google</strong>. Approve the
-read-only calendar access in your browser.</li>
-</ol>
-<p>By default the mod reads the calendars ticked in Google Calendar. To pick specific
-calendars, add their IDs (shown in each calendar's settings) to <em>Calendar IDs</em>.</p>
-<p>To connect another Google account (for example a work account), open the popup and choose
-<strong>Add Google account</strong>; sign in with the other account in the browser. The same OAuth client
-works for every account. If your organisation restricts third-party apps, a Workspace admin
-may need to allow the client. <strong>Sign out …</strong> entries remove one account at a time.</p>
-<h2 id="icsfeeds">ICS feeds</h2>
-<p>Add secret calendar URLs under <em>ICS feed URLs</em>, one per item, as <code>https://...</code> or
-<code>Label|https://...</code> (<code>webcal://</code> also works). ICS carries no accept/decline status, so by
-default every timed feed event gets reminders; turn that off with <em>Remind for ICS feed
-events</em>. Recurring events, exceptions, RECURRENCE-ID overrides and IANA or Windows time
-zones are supported. Feed URLs are stored as plain text in Windhawk's settings, like any
-other setting, so treat them as secrets.</p>
-<h2 id="privacyandsecurity">Privacy and security</h2>
-<ul>
-<li>The mod requests only <code>calendar.events.readonly</code> and <code>calendar.calendarlist.readonly</code>.</li>
-<li>Sign-in uses the system browser, a loopback redirect on <code>127.0.0.1</code> and PKCE. The
-refresh token is encrypted with DPAPI for your Windows account.</li>
-<li>The client secret you paste is stored in Windhawk's settings, like any other mod
-setting. For a Desktop-app client it is not a confidential secret.</li>
-<li>Network traffic goes to Google over HTTPS and to the ICS feed URLs you configure (HTTPS
-only, no credentials in the URL; up to 4 redirects are followed, which may lead to other
-HTTPS hosts). Nothing is sent until you configure an OAuth client and sign in, or add an
-ICS URL. Meeting links are shown only if they match a strict allowlist: Google Meet,
-<code>zoom.us</code> and Microsoft Teams join URLs.</li>
-<li>Reminders use their own notification identity, so they appear as "Tray Agenda". The first time a
-reminder is about to be shown, the mod writes <code>HKCU\Software\Classes\AppUserModelId\TrayAgenda</code>
-(display name only), and Windows adds
-<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\TrayAgenda</code>. Nothing is
-written if no reminder is ever shown (for example with <em>Reminder notifications</em> off). Both keys are
-deleted when the mod is disabled or unloaded. Explorer exiting (sign-out, shutdown, restart, crash)
-does not run that path, so after a session with a reminder the keys stay until the mod next loads
-into Explorer (and for good if the mod or Windhawk is removed while the mod is not loaded). For the
-same reason, per-app notification choices made in Windows Settings are reset at every sign-in or
-Explorer restart; use the mod's own <em>Reminder notifications</em> setting instead.</li>
-<li><em>Sign out …</em> in the popup removes that account's stored token and revokes it at Google.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Windows 11 only. Reminders follow your Windows notification and Focus settings. The widget
-is shown on the primary taskbar only.</li>
-<li>Taskbar XAML-root and tray insertion strategy is adapted from Salyts' MIT-licensed
-Taskbar Fluent Media Player Windhawk mod.</li>
-</ul>]]></content>
-        <author>
-            <name>Rubens Nascimento</name>
-            <uri>https://github.com/chambber</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Extension during renaming 1.0]]></title>
-        <id>https://windhawk.net/mods/hide-extension-during-rename#6563d37ad83286401c72981375d9e138df07be49</id>
-        <link href="https://windhawk.net/mods/hide-extension-during-rename"/>
-        <updated>2026-10-12T13:04:25.000Z</updated>
-        <content type="html"><![CDATA[<p>Ever wanted to get rid of a file extension when trying to save a file on your computer or rename something on your PC while keeping the file type intact?.
-This mod dynamically hides file extensions during inline file renaming in File Explorer, Desktop and "Save As" operations and restores it when you're done renaming.</p>
-<h3 id="keyfeatures">Key Features</h3>
-<ul>
-<li><strong>Save As Dialogs:</strong>      Automatically hides file extensions from the default filename text box when saving files.</li>
-<li><strong>Inline File Renaming:</strong> Hides file extensions while editing item names on the Desktop or inside File Explorer (<code>SHELLDLL_DefView</code>, <code>SysListView32</code>, <code>DirectUIHWND</code>).</li>
-<li><strong>Warning Prevention:</strong>   Intercepts window messages (<code>WM_GETTEXT</code>) upon committing a rename to silently re-attach the original extension,
-                        avoiding the native Windows "If you change a file name extension, the file might become unusable" warning prompt.</li>
-</ul>
-<p><strong>Things to Note:</strong></p>
-<ol>
-<li>This mod targets native Windows File Explorer, Desktop, and standard file dialogs. It does not handle inline renaming inside third-party apps (e.g., WinRAR, 7-Zip).</li>
-<li>If you want to change a file's extension, you can do so inside the file's properties.</li>
-<li>If you type a dot at the end of a file name followed by any Windows registered extension (e.g., changing <code>document.txt</code> to <code>document.pdf</code>), it will trigger the Windows extension change warning prompt, however non-registered extensions won't change the file type.</li>
-</ol>
-<h3 id="knownlimitations">Known Limitations</h3>
-<ul>
-<li><strong>Folders Ending in Registered Extensions:</strong> Folders whose names explicitly end in a registered file extension (e.g., a folder named <code>Backup.zip</code> or <code>github.com</code>) will have its trailing extension hidden during inline renaming.</li>
-<li><strong>Why this happens:</strong> Windows reuses the exact same generic Win32 <code>Edit</code> control for both files and directories (folders). When an inline rename is triggered, the mod interacts with <code>SetWindowTextW</code> and receives only a window handle and a string. There is no native API or context provided by the shell at that moment to distinguish whether the text box belongs to a file or a folder. While the full folder name is safely preserved and restored upon commit, inline editing will temporarily treat the extension-like suffix as hidable.</li>
-</ul>
-<p><img src="https://i.imgur.com/iy9dyzq.gif" alt="Mod Demo" /></p>]]></content>
-        <author>
-            <name>AuralSX</name>
-            <uri>https://github.com/AuralSX</uri>
         </author>
     </entry>
 </feed>

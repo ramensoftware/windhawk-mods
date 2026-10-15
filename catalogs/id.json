@@ -6555,6 +6555,30 @@
         "version": "1.0.0"
       }
     },
+    "fancy-taskview-cross-monitor-drag": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792089119000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792089119000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "His Fanciness",
+        "compilerOptions": "-luser32 -lole32 -loleaut32 -luuid -lshell32 -lshcore",
+        "description": "Move windows between monitors from Windows 11 Task View",
+        "github": "https://github.com/HisFanciness",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Fancy Task View Cross-Monitor Drag",
+        "version": "0.7.0"
+      }
+    },
     "fancyzones-winshift-hotkey": {
       "details": {
         "defaultSorting": 850,
@@ -10765,7 +10789,7 @@
         "rating": 9,
         "ratingBreakdown": [0, 2, 4, 6, 47],
         "ratingUsers": 59,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 123.46940448220694,
         "updated": 1791835383000,
         "users": 4709
@@ -18475,6 +18499,31 @@
         ],
         "license": "MIT",
         "name": "Windows 7 Window Animations Restorer",
+        "version": "1.0.0"
+      }
+    },
+    "win8-display-switch-recreation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792089113000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792089113000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "babamohammed",
+        "compilerOptions": "-lgdi32 -luser32 -lshell32 -lole32 -ldwmapi -lshcore -lshlwapi -lcrypt32 -lwindowscodecs -lmsimg32 -lcomctl32",
+        "description": "This mod recreates the Windows 8/8.1 Display Switch (Second screen / Project) pane on Windows 10 and Windows 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Windows 8/8.1 Display Switch Recreation",
         "version": "1.0.0"
       }
     },
