@@ -2,12 +2,12 @@
 // @id              window-geometry-memory
 // @name            Where I Left It
 // @description     Remembers each app's window position and size, restores it when the app opens again, and keeps open windows reachable when your display setup changes
-// @version         1.0
+// @version         1.1
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -ldwmapi
+// @compilerOptions -luser32 -lgdi32 -ldwmapi -ladvapi32
 // ==/WindhawkMod==
 
 // Source code is published under the MIT license.
@@ -56,7 +56,11 @@ list are remembered or moved.
   application insists on its own placement, the mod tries once more and then
   stops fighting it.
 * Each app's saved geometry can remember its position and its size separately,
-  per app, in the settings.
+  per app, in the settings. With **Restore size** off, a window is placed but not
+  resized, so an app that sizes itself to its content keeps that size; with
+  **Restore position** off, it is sized where it opened. Both are still recorded
+  while off, so switching a box back on brings back the last position or size
+  that window had rather than a value frozen at the moment it was switched off.
 
 ## Out of scope in v1
 
@@ -104,10 +108,16 @@ list are remembered or moved.
 ## Diagnostics
 
 Turn on **Write a diagnostics journal** in the settings and the mod appends a
-line to `window-geometry-journal.txt` in its storage folder for every save,
+line to `window-geometry-journal-<SID>.txt` in its storage folder for every save,
 restore and decision, with the exact rectangle and monitor involved. It is the
 fastest way to see why a particular window was or was not restored, and it is
 worth attaching to a bug report. It is off by default.
+
+Both files carry the signed-in user's SID in their names, because a tool mod runs
+one process per signed-in session while the storage folder is shared by the whole
+machine. Without the SID, two users signed in at once would each overwrite the
+other's saved geometry -- and the file lists window titles, which should not be
+readable from another session.
 */
 // ==/WindhawkModReadme==
 
@@ -127,11 +137,15 @@ worth attaching to a bug report. It is off by default.
     - RestorePosition: true
       $name: Restore position
       $description: >-
-        Remember and restore this app's window position and monitor.
+        Remember and restore this app's window position and monitor. Turn it off
+        and the window is still sized, but stays wherever it opens; its position
+        is still recorded, so turning it back on restores the last one it had.
     - RestoreSize: true
       $name: Restore size
       $description: >-
-        Remember and restore this app's window size.
+        Remember and restore this app's window size. Turn it off and the window
+        is still placed, but keeps the size it opens with; its size is still
+        recorded, so turning it back on restores the last one it had.
   $name: Apps to manage
   $description: >-
     Opt-in list. Only windows belonging to the executables listed here are
@@ -139,11 +153,11 @@ worth attaching to a bug report. It is off by default.
 - diagnosticsLog: false
   $name: Write a diagnostics journal
   $description: >-
-    Appends a line to window-geometry-journal.txt in this mod's storage folder for
-    every save, restore and verdict, with the exact rectangle and monitor
-    involved. Intended for validating behaviour and for bug reports, since the
-    stored geometry file is written lazily and shared by every tracked app.
-    Off by default.
+    Appends a line to window-geometry-journal-<SID>.txt in this mod's storage
+    folder for every save, restore and decision, with the exact rectangle and
+    monitor involved. Intended for validating behaviour and for bug reports:
+    the stored geometry file is written lazily and holds every tracked app for
+    this user. Off by default.
 - clearStoredData: none
   $name: Clear stored data
   $description: >-
@@ -351,6 +365,13 @@ struct WindowIdentity {
     // the title is often not set yet, and titles change during a window's life.
     std::wstring normalizedTitle;
     int ordinal = 0;
+    // Whether this app's remembered position and size may be used. Carried with
+    // the identity because every restore and relayout decision needs it, and it is
+    // resolved once, from the allowlist entry that matched, when the window is
+    // first seen. Defaults are "yes" so that an identity built without an
+    // allowlist match behaves exactly as it did before the flags were read.
+    bool restorePosition = true;
+    bool restoreSize = true;
 };
 
 // Worker-thread-only state. Every function below that touches these runs on the
@@ -363,7 +384,17 @@ static std::unordered_map<HWND, WindowIdentity> g_identityCache;
 static std::map<std::tuple<std::wstring, std::wstring, std::wstring>,
                 std::set<int>>
     g_liveOrdinals;
-static std::vector<std::wstring> g_allowlist;
+// One allowlist entry: the executable to match, and which parts of its remembered
+// geometry the mod may use. The flags used to be declared in the settings and
+// described in the readme while no code read them, so unticking "Restore size"
+// changed nothing -- found in review.
+struct AllowlistEntry {
+    std::wstring exe;  // lowercased, as before
+    bool restorePosition = true;
+    bool restoreSize = true;
+};
+
+static std::vector<AllowlistEntry> g_allowlist;
 static bool g_allowlistIsEmpty = true;
 
 // Assigned in creation order within the session and persisted with the geometry
@@ -814,6 +845,131 @@ static GeoRect ClampRectToWorkArea(const GeoRect& rect,
 // closed and reopened in a different order their geometry can swap; that is
 // inherent to matching identical titles, and a benign miss is preferable to
 // restoring the wrong window's geometry.
+// Which parts of a remembered rectangle an app is allowed to use. Both default to
+// on: the settings entry ships both toggled on, and a window whose allowlist entry
+// says nothing keeps the behaviour it had before the flags were read.
+struct RestoreFlags {
+    bool restorePosition = true;
+    bool restoreSize = true;
+};
+
+// Built field by field rather than with braces: this struct has default member
+// initializers, and brace-initializing such a struct is a C++14 feature. The mod
+// is compiled by Windhawk's own toolchain, so it is not worth depending on.
+static RestoreFlags MakeRestoreFlags(bool restorePosition, bool restoreSize) {
+    RestoreFlags flags;
+    flags.restorePosition = restorePosition;
+    flags.restoreSize = restoreSize;
+    return flags;
+}
+
+// Composes the rectangle to apply from the remembered one and the window's own.
+//
+// "Restore size off" means the window keeps the size it has now and takes only the
+// position; "restore position off" means it keeps where it is and takes only the
+// size. Applying the flags here, rather than at capture, is deliberate: both
+// components are still recorded, so turning a flag back on gives the window the
+// size or position it last had, instead of a value frozen whenever the flag was
+// switched off.
+static GeoRect ApplyRestoreFlags(const GeoRect& target, const GeoRect& current,
+                                 const RestoreFlags& flags) {
+    GeoRect result = target;
+
+    if (!flags.restoreSize) {
+        result.right = result.left + GeoRectWidth(current);
+        result.bottom = result.top + GeoRectHeight(current);
+    }
+
+    if (!flags.restorePosition) {
+        long width = GeoRectWidth(result);
+        long height = GeoRectHeight(result);
+        result.left = current.left;
+        result.top = current.top;
+        result.right = current.left + width;
+        result.bottom = current.top + height;
+    }
+
+    return result;
+}
+
+static std::wstring FormatRestoreFlags(const RestoreFlags& flags) {
+    if (flags.restorePosition && flags.restoreSize) {
+        return L"position+size";
+    }
+    if (flags.restorePosition) {
+        return L"position";
+    }
+    if (flags.restoreSize) {
+        return L"size";
+    }
+    return L"none";
+}
+
+// WINDOWPLACEMENT's rcNormalPosition is in *workspace* coordinates, which differ
+// from the screen coordinates every other rectangle in this mod uses by the
+// thickness of the taskbar when the taskbar sits on the top or left edge -- the
+// default on Windows 10, and reachable on Windows 11 with a taskbar mod. Storing it
+// unchanged (as r15 did) meant a window closed while maximized came back shifted by
+// that amount, and the next save read the already-shifted rectangle, so the window
+// drifted further on every maximize-and-reopen. The conversion is a no-op with a
+// bottom or right taskbar, which is why no field run on this machine could see it.
+static GeoRect PlacementRectToScreen(const GeoRect& rect, const GeoRect& monitor,
+                                     const GeoRect& work) {
+    const long dx = work.left - monitor.left;
+    const long dy = work.top - monitor.top;
+    return {rect.left + dx, rect.top + dy, rect.right + dx, rect.bottom + dy};
+}
+
+// The store and the journal carry the signed-in user's SID in their names. A tool
+// mod runs one process per signed-in session, but Wh_GetModStoragePath is a single
+// machine-wide folder, so before this the store was shared: with two users signed
+// in (fast user switching) each session's flush replaced the other's data, and each
+// user's window titles were readable from the other session. The prefix before the
+// extension is unchanged, so the field script's search still finds the files.
+// The text form of a security identifier, from its parts: "S-<revision>-<authority>"
+// followed by one "-<n>" per sub-authority, which is what the file names below are
+// built from.
+//
+// The parts come in separately rather than as a SID* because this is the half that
+// can be wrong -- the authority is a big-endian six-byte value and the sub-authorities
+// are 32-bit words -- and it is therefore the half worth testing. The struct
+// unpacking in SidToString is the other half and is four lines long.
+//
+// Written by hand rather than with ConvertSidToStringSidW on purpose. That function
+// needs sddl.h, which is not among the headers a Windhawk mod gets, so calling it
+// compiled here and failed on the user's machine: the local syntax check links
+// against our own stand-in headers, and the stand-in had declared it. Everything
+// used below is plain arithmetic over values the caller has already read.
+//
+// Documented form note: an identifier authority larger than 32 bits is rendered in
+// hexadecimal by the SID documentation. A process token's authority is 5 on every
+// installation this mod runs on (16 for a mandatory label, 15 for an app package),
+// so that rendering is not reachable here and this keeps one decimal path instead --
+// a longer string than the canonical one only if the impossible happens, and a
+// usable file name either way.
+static std::wstring FormatSidString(unsigned revision, unsigned long long authority,
+                                    const std::vector<unsigned long>& subAuthorities) {
+    std::wstring text = L"S-" + std::to_wstring(revision) + L"-" +
+                        std::to_wstring(authority);
+    for (unsigned long sub : subAuthorities) {
+        text += L"-" + std::to_wstring(sub);
+    }
+    return text;
+}
+
+static std::wstring PerUserFileName(const std::wstring& baseName,
+                                    const std::wstring& sid) {
+    if (sid.empty()) {
+        return baseName;
+    }
+
+    size_t dot = baseName.find_last_of(L'.');
+    if (dot == std::wstring::npos) {
+        return baseName + L"-" + sid;
+    }
+    return baseName.substr(0, dot) + L"-" + sid + baseName.substr(dot);
+}
+
 static int AllocateOrdinal(const std::set<int>& liveOrdinals) {
     int candidate = 0;
     for (int live : liveOrdinals) {  // std::set iterates in ascending order
@@ -1931,36 +2087,48 @@ static void LoadAllowlist() {
     // Reads entries until the first empty one, which is also how the settings
     // default (one empty template entry) ends up meaning "track nothing".
     for (int i = 0;; i++) {
-        PCWSTR entry = Wh_GetStringSetting(L"allowlist[%d].Exe", i);
-        if (!entry || !*entry) {
-            Wh_FreeStringSetting(entry);
+        PCWSTR exe = Wh_GetStringSetting(L"allowlist[%d].Exe", i);
+        if (!exe || !*exe) {
+            Wh_FreeStringSetting(exe);
             break;
         }
 
-        std::wstring value(entry);
-        Wh_FreeStringSetting(entry);
+        AllowlistEntry entry;
+        entry.exe = exe;
+        Wh_FreeStringSetting(exe);
+        ToLowerInPlace(entry.exe);
 
-        ToLowerInPlace(value);
-        g_allowlist.push_back(value);
+        // Read for every entry, so that a flag left at its default and a flag
+        // explicitly set to the same value are indistinguishable -- which is what
+        // the settings UI shows.
+        entry.restorePosition =
+            Wh_GetIntSetting(L"allowlist[%d].RestorePosition", i) != 0;
+        entry.restoreSize =
+            Wh_GetIntSetting(L"allowlist[%d].RestoreSize", i) != 0;
+
+        g_allowlist.push_back(std::move(entry));
     }
 
     g_allowlistIsEmpty = g_allowlist.empty();
 }
 
-static bool MatchesAllowlist(const std::wstring& exePath,
-                             const std::wstring& exeName) {
+// The matched entry, or nullptr. Returning the entry rather than a bool is what
+// carries the per-app flags into the identity: this is the one place that knows
+// both which window this is and what the user asked for it.
+static const AllowlistEntry* FindAllowlistEntry(const std::wstring& exePath,
+                                                const std::wstring& exeName) {
     std::wstring lowerPath = exePath;
     std::wstring lowerName = exeName;
     ToLowerInPlace(lowerPath);
     ToLowerInPlace(lowerName);
 
-    for (const std::wstring& entry : g_allowlist) {
-        if (entry == lowerName || entry == lowerPath) {
-            return true;
+    for (const AllowlistEntry& entry : g_allowlist) {
+        if (entry.exe == lowerName || entry.exe == lowerPath) {
+            return &entry;
         }
     }
 
-    return false;
+    return nullptr;
 }
 
 // --- Window inspection ------------------------------------------------------
@@ -2077,7 +2245,8 @@ static bool ResolveIdentity(HWND hwnd, WindowIdentity& identity,
         }
     }
 
-    if (!MatchesAllowlist(exePath, exeName)) {
+    const AllowlistEntry* allowlistEntry = FindAllowlistEntry(exePath, exeName);
+    if (!allowlistEntry) {
         *reason = L"not in the allowlist (add the app under 'Apps to manage')";
         return false;
     }
@@ -2105,6 +2274,11 @@ static bool ResolveIdentity(HWND hwnd, WindowIdentity& identity,
     identity.className.assign(className, (size_t)classNameLength);
     identity.normalizedTitle = std::move(title);
     identity.ordinal = NextOrdinal(identity);
+    // The per-app switches travel with the window from here on, so the restore and
+    // the relayout both see the entry that matched rather than re-reading the
+    // settings from the event thread.
+    identity.restorePosition = allowlistEntry->restorePosition;
+    identity.restoreSize = allowlistEntry->restoreSize;
     return true;
 }
 
@@ -2322,6 +2496,105 @@ static int FindMonitorIndexByHandle(HMONITOR monitor) {
 
 // --- Geometry store I/O -----------------------------------------------------
 
+// --- Per-user storage -------------------------------------------------------
+//
+// Wh_GetModStoragePath is a single machine-wide folder, and a tool mod runs one
+// process per signed-in session. Before this, every session wrote the same
+// window-geometry.json: with two users signed in, each flush replaced the other
+// user's entries -- and the file, like the journal, carries executable paths and
+// window titles, so each user's document names were readable from the other
+// session. Both files and the clear-action latch therefore carry the signed-in
+// user's SID.
+//
+// The SID comes from this process's own token, and the conversion is hand-written
+// rather than a call into sddl.h -- see FormatSidString for why.
+//
+// Reads the bytes of a SID into the parts FormatSidString renders. Kept out of the
+// tested core because it is the only part that has to know what a SID looks like;
+// SID and SID_IDENTIFIER_AUTHORITY are declared in winnt.h, which windows.h pulls
+// in, so unlike ConvertSidToStringSidW this needs no header of its own.
+//
+// The count is checked against SID_MAX_SUB_AUTHORITIES (15) before anything is read
+// through it: this is a pointer into a token buffer, and a count that large can only
+// mean the buffer is not what it claims to be.
+static std::wstring SidToString(PSID sid) {
+    if (!sid) {
+        return std::wstring();
+    }
+
+    const SID* parsed = reinterpret_cast<const SID*>(sid);
+    if (parsed->SubAuthorityCount > 15) {
+        return std::wstring();
+    }
+
+    unsigned long long authority = 0;
+    for (int i = 0; i < 6; i++) {
+        authority = (authority << 8) | parsed->IdentifierAuthority.Value[i];
+    }
+
+    std::vector<unsigned long> subAuthorities;
+    subAuthorities.reserve(parsed->SubAuthorityCount);
+    for (unsigned i = 0; i < parsed->SubAuthorityCount; i++) {
+        subAuthorities.push_back(parsed->SubAuthority[i]);
+    }
+
+    return FormatSidString(parsed->Revision, authority, subAuthorities);
+}
+
+// Read once and cached: the SID cannot change while the process lives, and the
+// readers run on two threads (init and the event thread).
+static std::wstring CurrentUserSid() {
+    static bool attempted = false;
+    static std::wstring cached;
+
+    if (attempted) {
+        return cached;
+    }
+    attempted = true;
+
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"[GEOM] OpenProcessToken failed (error %lu); storing under the "
+               L"shared name", GetLastError());
+        return cached;
+    }
+
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    if (size > 0) {
+        std::vector<BYTE> buffer(size);
+        if (GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+            auto* user = reinterpret_cast<TOKEN_USER*>(buffer.data());
+            cached = SidToString(user->User.Sid);
+        }
+    }
+
+    CloseHandle(token);
+
+    if (cached.empty()) {
+        // Without a SID the mod still works; it simply falls back to the shared
+        // name it used before. Logged rather than silent, because that fallback
+        // re-introduces the multi-user behaviour this exists to prevent.
+        Wh_Log(L"[GEOM] the user SID could not be read; storing under the shared "
+               L"name (each signed-in user will share it)");
+    }
+
+    return cached;
+}
+
+// Built once: the latch key is used on every settings change.
+static const std::wstring& PerUserLatchValueName() {
+    static std::wstring name;
+    if (name.empty()) {
+        const std::wstring sid = CurrentUserSid();
+        // No SID: the name from before the per-user change, so a value latched by
+        // an earlier build is still seen and the setting is not re-fired.
+        name = sid.empty() ? std::wstring(kClearLatchValueName)
+                           : std::wstring(kClearLatchValueName) + L"-" + sid;
+    }
+    return name;
+}
+
 static bool BuildGeometryStorePath(PWSTR buffer, size_t bufferSize) {
     size_t len = Wh_GetModStoragePath(buffer, bufferSize);
     if (len == 0 || len + 1 >= bufferSize) {
@@ -2329,14 +2602,66 @@ static bool BuildGeometryStorePath(PWSTR buffer, size_t bufferSize) {
         return false;
     }
 
+    const std::wstring fileName =
+        PerUserFileName(kGeometryStoreFileName, CurrentUserSid());
+
     // len is the length without the terminating null, so append in its place.
     if (swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                   kGeometryStoreFileName) < 0) {
+                   fileName.c_str()) < 0) {
         Wh_Log(L"Stored geometry path is too long");
         return false;
     }
 
     return true;
+}
+
+// The name this mod used before the store was made per-user. Read-only: it exists
+// so that a store written by an earlier build is adopted rather than orphaned.
+static bool BuildLegacyGeometryStorePath(PWSTR buffer, size_t bufferSize) {
+    size_t len = Wh_GetModStoragePath(buffer, bufferSize);
+    if (len == 0 || len + 1 >= bufferSize) {
+        return false;
+    }
+    if (swprintf_s(buffer + len, bufferSize - len, L"\\%s",
+                   kGeometryStoreFileName) < 0) {
+        return false;
+    }
+    return true;
+}
+
+// Adopts a store written before the per-user names existed, by renaming it to this
+// user's name -- and only when this user has no store of their own. Renaming rather
+// than copying is what keeps the result correct for everybody: the file is the
+// shared one, so exactly one session may claim it, and the first session to load
+// after the upgrade is the only candidate. If the rename fails, the file is left
+// alone and this session starts with no remembered geometry: silently reading
+// another user's titles is worse than a one-time loss of remembered positions.
+static void AdoptLegacyStoreIfPresent() {
+    WCHAR perUserPath[MAX_PATH];
+    WCHAR legacyPath[MAX_PATH];
+
+    if (!BuildGeometryStorePath(perUserPath, ARRAYSIZE(perUserPath)) ||
+        !BuildLegacyGeometryStorePath(legacyPath, ARRAYSIZE(legacyPath))) {
+        return;
+    }
+
+    if (GetFileAttributesW(perUserPath) != INVALID_FILE_ATTRIBUTES) {
+        return;  // this user already has a store
+    }
+    if (GetFileAttributesW(legacyPath) == INVALID_FILE_ATTRIBUTES) {
+        return;  // nothing to adopt: a fresh install
+    }
+
+    if (MoveFileExW(legacyPath, perUserPath, 0)) {
+        Wh_Log(L"[GEOM] adopted the pre-upgrade store as this user's own");
+        AppendDiagnosticsJournal(
+            L"STORE-ADOPT legacy store renamed to the per-user name");
+    } else {
+        Wh_Log(L"[GEOM] the pre-upgrade store could not be adopted (error %lu); "
+               L"this session starts with no remembered geometry", GetLastError());
+        AppendDiagnosticsJournal(
+            L"STORE-ADOPT legacy store left in place (rename failed)");
+    }
 }
 
 static constexpr DWORD kStoreFlushDelayMs = 2000;
@@ -2501,7 +2826,13 @@ static bool g_diagnosticsLog = false;
 // code did. It carries its own id anyway, so that the id in a journal line always
 // names one exact file -- the alternative is two different files both claiming to
 // be r14, which is how a stale build starts reading like a defect.
-static constexpr PCWSTR kJournalBuild = L"r15-2026-09-22";
+//
+// r16-2026-10-14 carries the three fixes from the pull request review: the per-app
+// position and size switches are now read and applied (they were declared and
+// documented but reached no code), the placement rectangle of a minimized or
+// maximized window is converted out of workspace coordinates before it is stored,
+// and the store, the journal and the clear-action latch are per signed-in user.
+static constexpr PCWSTR kJournalBuild = L"r16-2026-10-14";
 
 // The journal flag has to be known before the store is loaded, because the load
 // itself journals a line. Reading it only in ApplySettingsOnEventThread -- which
@@ -2516,8 +2847,11 @@ static bool BuildJournalPath(PWSTR buffer, size_t bufferSize) {
     if (len == 0 || len + 1 >= bufferSize) {
         return false;
     }
+    const std::wstring fileName =
+        PerUserFileName(kDiagnosticsJournalFileName, CurrentUserSid());
+
     if (swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                   kDiagnosticsJournalFileName) < 0) {
+                   fileName.c_str()) < 0) {
         return false;
     }
     return true;
@@ -2551,6 +2885,8 @@ static void AppendDiagnosticsJournal(const std::wstring& line) {
 
 static void LoadGeometryStore() {
     g_store = GeometryStore();
+
+    AdoptLegacyStoreIfPresent();
 
     WCHAR path[MAX_PATH];
     if (!BuildGeometryStorePath(path, ARRAYSIZE(path))) {
@@ -2667,6 +3003,87 @@ static int FindOrCreateConfigId() {
     int id = config.id;
     g_store.configs.push_back(std::move(config));
     return id;
+}
+
+// The monitor a window is currently on. Used when reading the window's own
+// rectangle, which the positions and sizes have to be measured against.
+static const MonitorView* CurrentMonitorView(HWND hwnd) {
+    HMONITOR handle = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    int index = FindMonitorIndexByHandle(handle);
+    if (index < 0) {
+        // Stale cache, e.g. a display change that has not been processed yet.
+        RefreshMonitorViews();
+        index = FindMonitorIndexByHandle(handle);
+    }
+    return index >= 0 ? &g_monitors[(size_t)index] : nullptr;
+}
+
+// The rectangle that represents where a window is, in the coordinates this mod
+// stores and applies: a normal window's screen rectangle, or the normal rectangle
+// of a minimized or maximized one -- converted out of workspace coordinates, which
+// is the difference between a window that stays put and one that drifts down the
+// screen on a taskbar-at-the-top machine.
+//
+// *showCommand receives the placement's show state when the rectangle came from
+// GetWindowPlacement, and is left alone otherwise; the save path uses it to record
+// whether the window was maximized.
+static bool WindowOwnRect(HWND hwnd, const MonitorView& monitor, GeoRect& rect,
+                          UINT* showCommand) {
+    if (IsIconic(hwnd) || IsZoomed(hwnd)) {
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
+        if (!GetWindowPlacement(hwnd, &placement)) {
+            return false;
+        }
+
+        const GeoRect normal{placement.rcNormalPosition.left,
+                             placement.rcNormalPosition.top,
+                             placement.rcNormalPosition.right,
+                             placement.rcNormalPosition.bottom};
+        rect = PlacementRectToScreen(normal, monitor.pixelRect, monitor.workRect);
+
+        if (showCommand) {
+            *showCommand = placement.showCmd;
+        }
+        return true;
+    }
+
+    RECT raw{};
+    if (!GetWindowRect(hwnd, &raw)) {
+        return false;
+    }
+    rect = {raw.left, raw.top, raw.right, raw.bottom};
+    return true;
+}
+
+// Applies an app's position/size switches to a target rectangle, using the
+// window's own rectangle as the other operand. Shared by the restore and the
+// relayout, so the two cannot disagree about what "keep the current size" means.
+//
+// positionRequired is the one thing that can override "Restore position" being
+// off: a window whose monitor has just disappeared has to be moved onto a monitor
+// that exists, or it becomes unreachable. That move is a rescue, not a remembered
+// position, so it is not the setting's business -- and it is the only case where
+// the setting loses.
+static GeoRect ApplyOwnRestoreFlags(HWND hwnd, const WindowIdentity& identity,
+                                    const GeoRect& target,
+                                    const GeoRect& currentRect,
+                                    bool positionRequired) {
+    const RestoreFlags flags = MakeRestoreFlags(
+        identity.restorePosition || positionRequired, identity.restoreSize);
+    if (flags.restorePosition && flags.restoreSize) {
+        return target;
+    }
+
+    GeoRect own = currentRect;
+    if (const MonitorView* ownMonitor = CurrentMonitorView(hwnd)) {
+        // Best effort: if the window's own rectangle cannot be read, the caller's
+        // rectangle (a GetWindowRect) is the fallback, which is correct for every
+        // normal window.
+        WindowOwnRect(hwnd, *ownMonitor, own, nullptr);
+    }
+
+    return ApplyRestoreFlags(target, own, flags);
 }
 
 // --- Restore and settle -----------------------------------------------------
@@ -2904,6 +3321,14 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
     }
     GeoRect currentRect{current.left, current.top, current.right, current.bottom};
 
+    // The per-app switches, applied to the rectangle about to be used rather than
+    // to what was stored. This is what makes "Restore size" off mean something:
+    // before, both the restore and the relayout set the size regardless of it.
+    // There is no rescue to force here: this is a restore of a remembered
+    // position, which is exactly what the setting governs.
+    target = ApplyOwnRestoreFlags(hwnd, identity, target, currentRect,
+                                  /*positionRequired=*/false);
+
     bool maximize = entry->state == L"maximized";
     if (!maximize &&
         GeoRectsApproxEqual(currentRect, target, kApplyTolerancePixels)) {
@@ -2911,11 +3336,14 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
     }
 
     Wh_Log(L"[GEOM] RESTORE exe=%s monitor=%s rule=%s coords=%s clamp=%s "
-           L"state=%s target=(%ld,%ld,%ld,%ld)",
+           L"state=%s flags=%s target=(%ld,%ld,%ld,%ld)",
            identity.exeName.c_str(), monitor.gdiName.c_str(),
            MonitorRuleName(resolution.rule),
            exactConfiguration ? L"pixels" : L"normalized",
            clamped ? L"yes" : L"no", maximize ? L"maximized" : L"normal",
+           FormatRestoreFlags(MakeRestoreFlags(identity.restorePosition,
+                                                    identity.restoreSize))
+               .c_str(),
            target.left, target.top, target.right, target.bottom);
 
     AppendDiagnosticsJournal(
@@ -2927,6 +3355,13 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
         std::to_wstring(target.bottom) + L") state=" +
         (maximize ? L"maximized" : L"normal") + L" clamp=" +
         (clamped ? L"yes" : L"no") +
+        // Which halves of the remembered geometry this restore was allowed to
+        // apply. The journal is the only place a field run can read it from, and
+        // "the setting did nothing" and "the setting did something" look identical
+        // in the rectangle alone when the window happened to be in the right place.
+        L" flags=" +
+        FormatRestoreFlags(MakeRestoreFlags(identity.restorePosition,
+                                           identity.restoreSize)) +
         // The same DPI sanity field the relayout path logs (Q3): the ratio of the
         // DPI this window reports now to the DPI stored with its geometry. Logged
         // here as well so that one field answers the question for every decision
@@ -3026,6 +3461,19 @@ static void RunRelayoutPass() {
             target = ClampRectToWorkArea(target, targetMonitor.workRect);
         }
 
+        // The same per-app switches as the restore path: an app the user told the
+        // mod not to resize must not be resized by a display change either. The
+        // clamp above still applies -- keeping a window reachable is not the same
+        // as restoring its size.
+        //
+        // With "Restore position" off the window keeps its current position, with
+        // one exception: if its monitor is the one that vanished, the move is the
+        // rescue and it happens anyway. Otherwise the setting would leave the
+        // window on a monitor that no longer exists, which the readme promises
+        // never happens -- and the user cannot get it back by dragging it.
+        target = ApplyOwnRestoreFlags(hwnd, identity, target, currentRect,
+                                      /*positionRequired=*/plan.originGone);
+
         // The Q2/Q3 sanity field: logged, never applied. Normalized mapping may
         // already be DPI-correct, and an unverified multiply on top of a mechanism
         // that might be right is how two wrongs cancel out in testing and
@@ -3038,12 +3486,15 @@ static void RunRelayoutPass() {
             FormatDpiRatio(entry ? entry->dpiAtSave : 0, currentDpi);
 
         Wh_Log(L"[GEOM] RELAYOUT exe=%s ordinal=%d rule=%s origin=(%ld,%ld,%ld,"
-               L"%ld) target=(%ld,%ld,%ld,%ld) dpiRatio=%s clamp=%s",
+               L"%ld) target=(%ld,%ld,%ld,%ld) dpiRatio=%s clamp=%s flags=%s",
                identity.exeName.c_str(), identity.ordinal,
                MonitorRuleName(plan.rule), plan.originRect.left,
                plan.originRect.top, plan.originRect.right, plan.originRect.bottom,
                target.left, target.top, target.right, target.bottom,
-               dpiRatio.c_str(), clamped ? L"yes" : L"no");
+               dpiRatio.c_str(), clamped ? L"yes" : L"no",
+               FormatRestoreFlags(MakeRestoreFlags(identity.restorePosition,
+                                                   identity.restoreSize))
+                   .c_str());
 
         AppendDiagnosticsJournal(
             L"RELAYOUT exe=" + identity.exeName + L" ordinal=" +
@@ -3057,7 +3508,10 @@ static void RunRelayoutPass() {
             std::to_wstring(target.top) + L"," +
             std::to_wstring(target.right) + L"," +
             std::to_wstring(target.bottom) + L") dpiRatio=" + dpiRatio +
-            L" clamp=" + (clamped ? L"yes" : L"no"));
+            L" clamp=" + (clamped ? L"yes" : L"no") + L" flags=" +
+            FormatRestoreFlags(
+                MakeRestoreFlags(identity.restorePosition,
+                                 identity.restoreSize)));
 
         moved++;
 
@@ -3165,43 +3619,34 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
         return;
     }
 
-    // Minimized and maximized windows report a rect that is not usable as
-    // "where the user left it": minimized windows report roughly -32000, and a
-    // maximized window's GetWindowRect covers the whole monitor. Both cases use
-    // the placement's normal rect instead. A window that is minimized at close
-    // therefore comes back at its normal size rather than minimized.
-    RECT rect{};
-    std::wstring state = L"normal";
-    if (IsIconic(hwnd) || IsZoomed(hwnd)) {
-        WINDOWPLACEMENT placement{};
-        placement.length = sizeof(placement);
-        if (!GetWindowPlacement(hwnd, &placement)) {
-            return;
-        }
-        rect = placement.rcNormalPosition;
-        state = (placement.showCmd == SW_SHOWMAXIMIZED) ? L"maximized"
-                                                        : L"normal";
-    } else if (!GetWindowRect(hwnd, &rect)) {
+    // The window's own rectangle, in one place: a normal window's screen rect, or
+    // the converted normal rect of a minimized or maximized one (minimized windows
+    // report roughly -32000, and a maximized window's GetWindowRect covers the whole
+    // monitor, so neither is usable as "where the user left it"). A window that is
+    // minimized at close therefore comes back at its normal size rather than
+    // minimized.
+    //
+    // The monitor is resolved FIRST because that conversion needs it. The
+    // coordinates the placement reports are workspace coordinates -- see
+    // PlacementRectToScreen -- and they differ from screen coordinates whenever the
+    // taskbar is not at the bottom or the right, so they cannot be converted without
+    // knowing which monitor's work area they are relative to.
+    const MonitorView* monitorView = CurrentMonitorView(hwnd);
+    if (!monitorView) {
         return;
     }
+    const MonitorView& monitor = *monitorView;
 
-    GeoRect geometry{rect.left, rect.top, rect.right, rect.bottom};
+    GeoRect geometry{};
+    UINT showCommand = 0;
+    if (!WindowOwnRect(hwnd, monitor, geometry, &showCommand)) {
+        return;
+    }
+    const std::wstring state = (showCommand == SW_SHOWMAXIMIZED) ? L"maximized"
+                                                                 : L"normal";
     if (GeoRectWidth(geometry) <= 0 || GeoRectHeight(geometry) <= 0) {
         return;
     }
-
-    HMONITOR monitorHandle =
-        MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    int monitorIndex = FindMonitorIndexByHandle(monitorHandle);
-    if (monitorIndex < 0) {
-        // Stale cache, e.g. a display change we have not processed yet.
-        RefreshMonitorViews();
-        monitorIndex = FindMonitorIndexByHandle(monitorHandle);
-        if (monitorIndex < 0) {
-            return;
-        }
-    }
-    const MonitorView& monitor = g_monitors[(size_t)monitorIndex];
 
     long long now = (long long)time(nullptr);
     int configId = FindOrCreateConfigId();
@@ -3241,10 +3686,13 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
     EnsureSettleTimer();
 
     Wh_Log(L"[GEOM] SAVED exe=%s class=%s ordinal=%d rect=(%ld,%ld,%ld,%ld) "
-           L"state=%s monitor=%s",
+           L"state=%s monitor=%s flags=%s",
            identity.exeName.c_str(), identity.className.c_str(),
            identity.ordinal, geometry.left, geometry.top, geometry.right,
-           geometry.bottom, state.c_str(), monitor.gdiName.c_str());
+           geometry.bottom, state.c_str(), monitor.gdiName.c_str(),
+           FormatRestoreFlags(MakeRestoreFlags(identity.restorePosition,
+                                               identity.restoreSize))
+               .c_str());
 
     AppendDiagnosticsJournal(
         L"SAVED exe=" + identity.exeName + L" class=" + identity.className +
@@ -3253,7 +3701,10 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
         L" rect=(" + std::to_wstring(geometry.left) + L"," +
         std::to_wstring(geometry.top) + L"," + std::to_wstring(geometry.right) +
         L"," + std::to_wstring(geometry.bottom) + L") state=" + state +
-        L" monitor=" + monitor.key + L" configId=" + std::to_wstring(configId));
+        L" monitor=" + monitor.key + L" configId=" + std::to_wstring(configId) +
+        L" flags=" +
+        FormatRestoreFlags(MakeRestoreFlags(identity.restorePosition,
+                                           identity.restoreSize)));
 }
 
 // The settle sequence for a maximized target. Kept separate from the
@@ -3827,11 +4278,19 @@ static void ApplySettingsOnEventThread() {
     // Logging the effective allowlist makes a misconfigured entry (a typo, or a
     // name that does not match the real executable) obvious from the log alone.
     std::wstring joined;
-    for (const std::wstring& entry : g_allowlist) {
+    for (const AllowlistEntry& entry : g_allowlist) {
         if (!joined.empty()) {
             joined += L", ";
         }
-        joined += entry;
+        joined += entry.exe;
+        if (!entry.restorePosition || !entry.restoreSize) {
+            // Worth naming in the log: "why does this app keep its size?" is
+            // answered by the entry it matched, not by the mod's behaviour.
+            joined += L" (";
+            joined += FormatRestoreFlags(
+                MakeRestoreFlags(entry.restorePosition, entry.restoreSize));
+            joined += L")";
+        }
     }
     Wh_Log(L"[GEOM] allowlist loaded: %s", joined.c_str());
 }
@@ -4002,22 +4461,27 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
 
 static void ClearGeometryStore() {
     WCHAR path[MAX_PATH];
-    if (!BuildGeometryStorePath(path, ARRAYSIZE(path))) {
-        return;
+    if (BuildGeometryStorePath(path, ARRAYSIZE(path))) {
+        // "Nothing to clear" is a normal outcome, not an error.
+        if (DeleteFileW(path)) {
+            Wh_Log(L"Cleared stored data: %s", path);
+        } else {
+            DWORD error = GetLastError();
+            if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) {
+                Wh_Log(L"Failed to clear stored data (error %u): %s", error,
+                       path);
+            }
+        }
     }
 
-    // The store doesn't exist until the storage milestone, so "nothing to
-    // clear" is the expected outcome for now and is not an error.
-    if (DeleteFileW(path)) {
-        Wh_Log(L"Cleared stored data: %s", path);
-        return;
-    }
-
-    DWORD error = GetLastError();
-    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
-        Wh_Log(L"No stored data to clear: %s", path);
-    } else {
-        Wh_Log(L"Failed to clear stored data (error %u): %s", error, path);
+    // The pre-upgrade shared store as well, and this is not optional: the load
+    // adopts that file when this user has no store of their own, so a clear that
+    // left it in place would be undone -- the data would come straight back on
+    // the next launch, which is the worst possible bug for a "forget this" action.
+    WCHAR legacyPath[MAX_PATH];
+    if (BuildLegacyGeometryStorePath(legacyPath, ARRAYSIZE(legacyPath)) &&
+        DeleteFileW(legacyPath)) {
+        Wh_Log(L"Cleared the pre-upgrade shared store: %s", legacyPath);
     }
 }
 
@@ -4032,6 +4496,28 @@ static void ClearGeometryStore() {
 //
 // Deliberately independent of the "enabled" master switch: clearing is a
 // maintenance action, and users need it while the mod is off.
+// The clear-action latch, read under this user's name, with the pre-r16 shared
+// name as a fallback.
+//
+// The fallback is not a nicety. This runs on every load, including the first load
+// after the upgrade, and the per-user name has never been written before. Without
+// it, a latch of "this clear was already handled" would be invisible -- and if the
+// dropdown was left on "clear now" (Windhawk cannot reset it, so it stays where the
+// user left it), the mod would fire the clear again on the very load that adopted
+// the store, wiping the data the upgrade was supposed to preserve.
+static int ReadClearLatch(PCWSTR perUserName) {
+    int latch = (int)Wh_GetIntValue(perUserName, kClearLatchNone);
+    if (latch == kClearLatchNone) {
+        int legacy = (int)Wh_GetIntValue(kClearLatchValueName, kClearLatchNone);
+        if (legacy != kClearLatchNone) {
+            Wh_Log(L"[GEOM] honouring the clear-action latch written before this "
+                   L"build made it per user");
+            return legacy;
+        }
+    }
+    return latch;
+}
+
 static void ApplyClearStoredDataAction() {
     PCWSTR requestedAction = Wh_GetStringSetting(L"clearStoredData");
     if (!requestedAction) {
@@ -4041,11 +4527,12 @@ static void ApplyClearStoredDataAction() {
     bool requestedClear = wcscmp(requestedAction, L"clearNow") == 0;
     Wh_FreeStringSetting(requestedAction);
 
-    int latch = (int)Wh_GetIntValue(kClearLatchValueName, kClearLatchNone);
+    PCWSTR latchName = PerUserLatchValueName().c_str();
+    int latch = ReadClearLatch(latchName);
 
     if (!requestedClear) {
         if (latch != kClearLatchNone) {
-            Wh_SetIntValue(kClearLatchValueName, kClearLatchNone);
+            Wh_SetIntValue(latchName, kClearLatchNone);
         }
         return;
     }
@@ -4054,7 +4541,7 @@ static void ApplyClearStoredDataAction() {
         return;
     }
 
-    if (!Wh_SetIntValue(kClearLatchValueName, kClearLatchHandled)) {
+    if (!Wh_SetIntValue(latchName, kClearLatchHandled)) {
         // Worth surfacing: without the latch the next settings save would clear
         // again.
         Wh_Log(L"Failed to latch the clear action; it may run again on the next "
