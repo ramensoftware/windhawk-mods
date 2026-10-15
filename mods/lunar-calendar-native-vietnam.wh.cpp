@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              win11-lunar-calendar-native
-// @name            Windows 11 Native Lunar Calendar
+// @id              lunar-calendar-native-vietnam
+// @name            Lunar Calendar Native Vietnam
 // @description     Hiển thị lịch âm trực tiếp trên ô lịch Windows 11, bôi đỏ ngày lễ, cuối tuần, mùng 1, rằm và sự kiện quan trọng. Giữ nguyên 100% giao diện gốc.
 // @version         1.0.1
 // @author          Mhale
@@ -8,7 +8,7 @@
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject 
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
