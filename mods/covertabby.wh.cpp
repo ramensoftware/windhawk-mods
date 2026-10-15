@@ -485,6 +485,8 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+static PCWSTR CoverTabbyIconFont();
+
 #include <roapi.h>
 #include <winstring.h>
 #include <hidsdi.h>
