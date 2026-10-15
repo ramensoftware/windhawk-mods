@@ -52,9 +52,13 @@ camera icon has a slash through it while the webcam is off; click it to switch. 
 rename a webcam, but **Webcam → Rename…** gives it a name to show on the widget.
 
 Turning the webcam off works like **Disable device** in Device Manager: no app can use it until it's
-turned back on. Windows only lets administrators do that, so each switch shows a Windows prompt
-asking to allow "PnP Utility" (Microsoft's `pnputil.exe`), unless Windhawk itself runs as
-administrator.
+turned back on. It stays off after a restart, and after the mod is turned off or removed. To turn it
+back on without the mod, open Device Manager, find the webcam under **Cameras** (or **Imaging
+devices**), right-click it and choose **Enable device**.
+
+Windows only lets administrators turn devices on and off, so each switch runs Microsoft's PnP Utility
+(`pnputil.exe`) as administrator, which may show a Windows prompt asking to allow it, depending on
+your User Account Control settings.
 
 ## Linking with Taskbar RDP Launcher
 
@@ -65,8 +69,10 @@ hides the other takes its place.
 
 ## Settings
 
-The sections, the click rotation and the webcam settings are kept in
-`%APPDATA%\AudioFlipper\settings.txt`.
+The sections, the click rotation and the webcam settings are kept in the mod's storage, which
+Windhawk removes along with the mod. The first time it runs, the mod takes on the settings of the
+AudioFlipper app, if you have it (from `%APPDATA%\AudioFlipper\settings.txt`, which it doesn't
+change). Use the app or the mod, not both: each shows its own widget.
 */
 // ==/WindhawkModReadme==
 
@@ -82,10 +88,11 @@ The sections, the click rotation and the webcam settings are kept in
 #include <propidl.h>
 #include <setupapi.h>
 #include <cfgmgr32.h>
-#include <taskschd.h>
+#include <dbt.h>
 #include <gdiplus.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cwctype>
 #include <functional>
@@ -100,13 +107,16 @@ namespace {
 const wchar_t kSelfApp[] = L"AudioFlipper";
 const wchar_t kPartnerApp[] = L"RDPLauncher";
 const wchar_t kWidgetClassName[] = L"AudioFlipper.Mod.Widget";
+const wchar_t kPartnerWidgetClassName[] = L"RDPLauncher.Mod.Widget";
+const wchar_t kWidgetTitle[] = L"Taskbar Audio Flipper";
 
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// Shared by the AudioFlipper and RDPLauncher mods (the same code is in both):
-// the taskbar widget window, popups, menus, the text prompt, the link between
-// the two widgets, settings files and launching programs.
+// Shared by the AudioFlipper and RDPLauncher mods (the same code is in both, each
+// keeping the parts it uses): the taskbar widget window, popups, menus, the text
+// prompt, the link between the two widgets, the mod's storage and launching
+// programs.
 
 namespace gp = Gdiplus;
 
@@ -127,11 +137,36 @@ std::wstring Trim(const std::wstring& text) {
     return text.substr(start, end - start);
 }
 
-
 bool EqualsIgnoreCase(const std::wstring& a, const std::wstring& b) {
     return _wcsicmp(a.c_str(), b.c_str()) == 0;
 }
 
+std::vector<std::wstring> Split(const std::wstring& text, wchar_t separator) {
+    std::vector<std::wstring> parts;
+    size_t start = 0;
+    while (true) {
+        size_t end = text.find(separator, start);
+        std::wstring part = text.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+        if (!part.empty()) {
+            parts.push_back(part);
+        }
+        if (end == std::wstring::npos) {
+            return parts;
+        }
+        start = end + 1;
+    }
+}
+
+std::wstring Join(const std::vector<std::wstring>& parts, const std::wstring& separator) {
+    std::wstring joined;
+    for (size_t i = 0; i < parts.size(); i++) {
+        if (i > 0) {
+            joined += separator;
+        }
+        joined += parts[i];
+    }
+    return joined;
+}
 
 std::wstring Utf8ToWide(const std::string& text) {
     if (text.empty()) {
@@ -141,16 +176,6 @@ std::wstring Utf8ToWide(const std::string& text) {
     std::wstring wide(length, L'\0');
     MultiByteToWideChar(CP_UTF8, 0, text.data(), (int)text.size(), wide.data(), length);
     return wide;
-}
-
-std::string WideToUtf8(const std::wstring& text) {
-    if (text.empty()) {
-        return {};
-    }
-    int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(), nullptr, 0, nullptr, nullptr);
-    std::string narrow(length, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(), narrow.data(), length, nullptr, nullptr);
-    return narrow;
 }
 
 std::wstring KnownFolder(REFKNOWNFOLDERID folder) {
@@ -163,10 +188,22 @@ std::wstring KnownFolder(REFKNOWNFOLDERID folder) {
     return result;
 }
 
-std::wstring SystemFolder() {
+bool IsWow64() {
+    BOOL wow64 = FALSE;
+    return IsWow64Process(GetCurrentProcess(), &wow64) && wow64;
+}
+
+std::wstring WindowsFolder() {
     WCHAR path[MAX_PATH];
-    UINT length = GetSystemDirectoryW(path, MAX_PATH);
-    return length > 0 && length < MAX_PATH ? std::wstring(path, length) : L"C:\\Windows\\System32";
+    UINT length = GetSystemWindowsDirectoryW(path, MAX_PATH);
+    return length > 0 && length < MAX_PATH ? std::wstring(path, length) : L"C:\\Windows";
+}
+
+// System32, for starting the programs in it. Windhawk 1.7 runs tool mods in its 32-bit
+// windhawk.exe, where Windows redirects System32 to the 32-bit SysWOW64; "Sysnative" reaches the
+// real System32 from there. Windhawk 2.0 runs them 64-bit, where System32 is the real one.
+std::wstring NativeSystemFolder() {
+    return WindowsFolder() + (IsWow64() ? L"\\Sysnative" : L"\\System32");
 }
 
 std::wstring ExpandEnvironment(const std::wstring& text) {
@@ -178,20 +215,6 @@ std::wstring ExpandEnvironment(const std::wstring& text) {
     ExpandEnvironmentStringsW(text.c_str(), expanded.data(), length);
     expanded.resize(wcslen(expanded.c_str()));
     return expanded;
-}
-
-
-std::wstring DirectoryOf(const std::wstring& path) {
-    size_t slash = path.find_last_of(L"\\/");
-    return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
-}
-
-
-
-void CreateDirectories(const std::wstring& path) {
-    if (!path.empty()) {
-        SHCreateDirectoryExW(nullptr, path.c_str(), nullptr);
-    }
 }
 
 bool ReadFileBytes(const std::wstring& path, std::string& bytes) {
@@ -211,31 +234,8 @@ bool ReadFileBytes(const std::wstring& path, std::string& bytes) {
     return ok;
 }
 
-// Writes over a file, keeping its attributes: Windows won't recreate a hidden
-// file (like Default.rdp) in place, so it's unhidden meanwhile.
-bool WriteFileBytes(const std::wstring& path, const std::string& bytes) {
-    CreateDirectories(DirectoryOf(path));
-    DWORD attributes = GetFileAttributesW(path.c_str());
-    // Overwriting a hidden file needs the attribute cleared first (and put back after). A read-only
-    // one stays read-only, so writing it fails.
-    bool restore = attributes != INVALID_FILE_ATTRIBUTES && (attributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM));
-    if (restore) {
-        SetFileAttributesW(path.c_str(), attributes & ~(FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM));
-    }
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    bool ok = file != INVALID_HANDLE_VALUE;
-    if (ok) {
-        DWORD written = 0;
-        ok = bytes.empty() || (WriteFile(file, bytes.data(), (DWORD)bytes.size(), &written, nullptr) && written == bytes.size());
-        CloseHandle(file);
-    }
-    if (restore) {
-        SetFileAttributesW(path.c_str(), attributes);
-    }
-    return ok;
-}
-
-// Lines of a text file in UTF-8 or UTF-16 (with a byte order mark), as .NET reads them.
+// Lines of a text file in UTF-8 or UTF-16 (with a byte order mark), as .NET reads them: the app's
+// settings.txt to import.
 bool ReadTextLines(const std::wstring& path, std::vector<std::wstring>& lines) {
     std::string bytes;
     if (!ReadFileBytes(path, bytes)) {
@@ -267,22 +267,6 @@ bool ReadTextLines(const std::wstring& path, std::vector<std::wstring>& lines) {
         lines.push_back(line);
     }
     return true;
-}
-
-// Writes lines as UTF-8 without a byte order mark (as the apps' settings files are) or as UTF-16
-// with one (as Remote Desktop Connection writes .rdp files).
-bool WriteTextLines(const std::wstring& path, const std::vector<std::wstring>& lines, bool utf16) {
-    std::wstring text;
-    for (const std::wstring& line : lines) {
-        text += line;
-        text += L"\r\n";
-    }
-    if (utf16) {
-        std::string bytes("\xFF\xFE", 2);
-        bytes.append((const char*)text.data(), text.size() * sizeof(wchar_t));
-        return WriteFileBytes(path, bytes);
-    }
-    return WriteFileBytes(path, WideToUtf8(text));
 }
 
 // "key=value" lines, as in the apps' settings.txt files.
@@ -325,11 +309,6 @@ bool ParseInt(const std::wstring& value, int& result) {
     return true;
 }
 
-// .NET writes booleans as "True"/"False".
-std::wstring BoolText(bool value) {
-    return value ? L"True" : L"False";
-}
-
 // Menu text: "&" would underline the next letter.
 std::wstring MenuText(const std::wstring& text) {
     std::wstring escaped;
@@ -343,28 +322,105 @@ std::wstring MenuText(const std::wstring& text) {
 }
 
 // ---------------------------------------------------------------------------
+// The mod's storage. Windhawk keeps one for the whole PC (and removes it with the mod), while the
+// mod runs separately for each signed-in Windows user, so each user's values are kept apart under
+// their SID.
+
+namespace Storage {
+
+std::wstring UserSid() {
+    std::wstring sid;
+    HANDLE token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+        DWORD size = 0;
+        PWSTR text = nullptr;
+        if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+            ConvertSidToStringSidW(((TOKEN_USER*)buffer)->User.Sid, &text)) {
+            sid = text;
+            LocalFree(text);
+        }
+        CloseHandle(token);
+    }
+    return sid.empty() ? L"User" : sid;
+}
+
+std::wstring ValueName(const wchar_t* name) {
+    return UserSid() + L"." + name;
+}
+
+int GetInt(const wchar_t* name, int fallback) {
+    return Wh_GetIntValue(ValueName(name).c_str(), fallback);
+}
+
+bool SetInt(const wchar_t* name, int value) {
+    return Wh_SetIntValue(ValueName(name).c_str(), value);
+}
+
+std::wstring GetString(const wchar_t* name) {
+    std::vector<WCHAR> buffer(256 * 1024);
+    size_t length = Wh_GetStringValue(ValueName(name).c_str(), buffer.data(), buffer.size());
+    return std::wstring(buffer.data(), std::min(length, buffer.size()));
+}
+
+bool SetString(const wchar_t* name, const std::wstring& value) {
+    return Wh_SetStringValue(ValueName(name).c_str(), value.c_str());
+}
+
+}  // namespace Storage
+
+// ---------------------------------------------------------------------------
 // Windows settings and processes
 
-bool ReadPersonalizeFlag(const wchar_t* valueName, bool fallback) {
+bool ReadUserFlag(const wchar_t* key, const wchar_t* valueName, bool fallback) {
     DWORD value = 0;
     DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                     valueName, RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS) {
+    if (RegGetValueW(HKEY_CURRENT_USER, key, valueName, RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS) {
         return fallback;
     }
     return value != 0;
 }
 
-// "Choose your default Windows mode", which the taskbar follows.
+// The Windows settings the widget and popups follow. They're read once, and again when Windows
+// says a setting changed (WM_SETTINGCHANGE), rather than on every placement update or paint.
+struct ShellSettings {
+    bool lightTaskbar = false;      // "Choose your default Windows mode", which the taskbar follows.
+    bool lightApps = true;          // "Choose your default app mode", which the popups follow.
+    bool iconsLeftAligned = false;  // Taskbar icons left-aligned rather than centered (Windows 11).
+
+    static ShellSettings Read() {
+        const wchar_t* personalize = L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+        ShellSettings settings;
+        settings.lightTaskbar = ReadUserFlag(personalize, L"SystemUsesLightTheme", false);
+        settings.lightApps = ReadUserFlag(personalize, L"AppsUseLightTheme", true);
+        settings.iconsLeftAligned =
+            !ReadUserFlag(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarAl", true);
+        return settings;
+    }
+};
+
+ShellSettings& CurrentShellSettings() {
+    static ShellSettings settings = ShellSettings::Read();
+    return settings;
+}
+
+void RefreshShellSettings() {
+    CurrentShellSettings() = ShellSettings::Read();
+}
+
 bool TaskbarUsesLightTheme() {
-    return ReadPersonalizeFlag(L"SystemUsesLightTheme", false);
+    return CurrentShellSettings().lightTaskbar;
 }
 
-// "Choose your default app mode", which the popups follow.
 bool AppsUseLightTheme() {
-    return ReadPersonalizeFlag(L"AppsUseLightTheme", true);
+    return CurrentShellSettings().lightApps;
 }
 
+bool TaskbarIconsLeftAligned() {
+    return CurrentShellSettings().iconsLeftAligned;
+}
+
+// Whether Windhawk runs as administrator (only a portable Windhawk started that way does).
 bool IsProcessElevated() {
     static int elevated = -1;
     if (elevated < 0) {
@@ -382,72 +438,21 @@ bool IsProcessElevated() {
     return elevated == 1;
 }
 
-struct LaunchOptions {
-    bool hidden = false;
-    // Windhawk may run as administrator; programs opened for the user shouldn't, so they're
-    // started as children of the desktop (Explorer), which gives them its ordinary rights.
-    bool asUser = true;
-};
-
-// Starts a program. Returns its process handle (to close) in *process when asked for.
-bool Launch(const std::wstring& exe, const std::wstring& arguments, const LaunchOptions& options,
-            HANDLE* process = nullptr, DWORD* processId = nullptr) {
+// Starts a program, hidden if asked. Returns its process handle (to close) in *process when asked for.
+bool Launch(const std::wstring& exe, const std::wstring& arguments, bool hidden = false, HANDLE* process = nullptr) {
     std::wstring commandLine = L"\"" + exe + L"\"" + (arguments.empty() ? L"" : L" " + arguments);
     std::vector<wchar_t> commandBuffer(commandLine.begin(), commandLine.end());
     commandBuffer.push_back(L'\0');
-
-    STARTUPINFOEXW startup{};
-    startup.StartupInfo.cb = sizeof(STARTUPINFOW);
-    if (options.hidden) {
-        startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
-        startup.StartupInfo.wShowWindow = SW_HIDE;
+    STARTUPINFOW startup{sizeof(startup)};
+    if (hidden) {
+        startup.dwFlags = STARTF_USESHOWWINDOW;
+        startup.wShowWindow = SW_HIDE;
     }
-
-    HANDLE parent = nullptr;
-    std::vector<BYTE> attributeBuffer;
-    DWORD flags = 0;
-    if (options.asUser && IsProcessElevated()) {
-        DWORD shellProcessId = 0;
-        if (HWND shell = GetShellWindow()) {
-            GetWindowThreadProcessId(shell, &shellProcessId);
-        }
-        if (shellProcessId) {
-            parent = OpenProcess(PROCESS_CREATE_PROCESS, FALSE, shellProcessId);
-        }
-        SIZE_T size = 0;
-        if (parent) {
-            InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
-            attributeBuffer.resize(size);
-            auto attributes = (LPPROC_THREAD_ATTRIBUTE_LIST)attributeBuffer.data();
-            if (InitializeProcThreadAttributeList(attributes, 1, 0, &size)) {
-                if (UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &parent,
-                                              sizeof(parent), nullptr, nullptr)) {
-                    startup.lpAttributeList = attributes;
-                    startup.StartupInfo.cb = sizeof(STARTUPINFOEXW);
-                    flags |= EXTENDED_STARTUPINFO_PRESENT;
-                } else {
-                    DeleteProcThreadAttributeList(attributes);
-                }
-            }
-        }
-    }
-
     PROCESS_INFORMATION info{};
-    BOOL started = CreateProcessW(exe.c_str(), commandBuffer.data(), nullptr, nullptr, FALSE, flags, nullptr,
-                                  nullptr, &startup.StartupInfo, &info);
-    if (startup.lpAttributeList) {
-        DeleteProcThreadAttributeList(startup.lpAttributeList);
-    }
-    if (parent) {
-        CloseHandle(parent);
-    }
-    if (!started) {
+    if (!CreateProcessW(exe.c_str(), commandBuffer.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &info)) {
         return false;
     }
     CloseHandle(info.hThread);
-    if (processId) {
-        *processId = info.dwProcessId;
-    }
     if (process) {
         *process = info.hProcess;
     } else {
@@ -456,60 +461,10 @@ bool Launch(const std::wstring& exe, const std::wstring& arguments, const Launch
     return true;
 }
 
-// Opens a document, a URI like ms-settings:sound, or a program, as Explorer would.
-bool OpenWithShell(const std::wstring& target, const std::wstring& arguments = L"") {
-    return (INT_PTR)ShellExecuteW(nullptr, L"open", target.c_str(), arguments.empty() ? nullptr : arguments.c_str(),
-                                  nullptr, SW_SHOWNORMAL) > 32;
+// Opens a URI like ms-settings:sound, as Explorer would.
+bool OpenWithShell(const std::wstring& target) {
+    return (INT_PTR)ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL) > 32;
 }
-
-// A mutex both the mod and the app's exe use to keep to one widget. Anyone may open it, so the
-// exe (not running as administrator) still sees one the mod made while Windhawk is.
-class SingleInstance {
-public:
-    explicit SingleInstance(const wchar_t* name) : name_(name) {}
-
-    ~SingleInstance() {
-        if (mutex_) {
-            if (owned_) {
-                ReleaseMutex(mutex_);
-            }
-            CloseHandle(mutex_);
-        }
-    }
-
-    // True once this is the only copy; false while the app's exe is running.
-    bool TryAcquire() {
-        if (owned_) {
-            return true;
-        }
-        if (!mutex_) {
-            PSECURITY_DESCRIPTOR descriptor = nullptr;
-            SECURITY_ATTRIBUTES security{sizeof(security)};
-            if (ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:(A;;GA;;;WD)(A;;GA;;;SY)S:(ML;;NW;;;LW)",
-                                                                     SDDL_REVISION_1, &descriptor, nullptr)) {
-                security.lpSecurityDescriptor = descriptor;
-            }
-            mutex_ = CreateMutexW(descriptor ? &security : nullptr, FALSE, name_);
-            DWORD error = GetLastError();
-            if (descriptor) {
-                LocalFree(descriptor);
-            }
-            if (!mutex_) {
-                // The exe running as administrator made the mutex, which only administrators may
-                // open; anything else, carry on without it.
-                return error != ERROR_ACCESS_DENIED;
-            }
-        }
-        DWORD result = WaitForSingleObject(mutex_, 0);
-        owned_ = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
-        return owned_;
-    }
-
-private:
-    const wchar_t* name_;
-    HANDLE mutex_ = nullptr;
-    bool owned_ = false;
-};
 
 // ---------------------------------------------------------------------------
 // Taskbar
@@ -535,17 +490,6 @@ bool TryGetVisibleTaskbar(RECT& bar, RECT& monitor) {
     RECT visible{};
     IntersectRect(&visible, &bar, &monitor);
     return width > height && height > 0 && visible.bottom - visible.top >= height - 2;
-}
-
-// Whether the taskbar icons are left-aligned rather than centered (a Windows 11 setting).
-bool TaskbarIconsLeftAligned() {
-    DWORD value = 1;
-    DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                     L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS) {
-        return false;
-    }
-    return value == 0;
 }
 
 // Whether a full-screen app (game, video, presentation) is in front on the monitor.
@@ -754,17 +698,46 @@ LRESULT CALLBACK ForwardingWindowProc(HWND hwnd, UINT message, WPARAM wParam, LP
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
+// The mod's own module (its DLL), which its window classes belong to.
+HINSTANCE ModuleInstance() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&ModuleInstance, &module);
+    return module;
+}
+
+// The window classes registered so far, to unregister when the UI thread ends.
+std::vector<std::wstring>& RegisteredClasses() {
+    static std::vector<std::wstring> classes;
+    return classes;
+}
+
 // Registers a window class whose windows forward their messages to an object of type T, passed
-// as the creation parameter.
+// as the creation parameter. Returns its name, or null if it couldn't be registered.
 template <typename T>
 const wchar_t* RegisterForwardingClass(const wchar_t* name) {
+    std::vector<std::wstring>& classes = RegisteredClasses();
+    if (std::find(classes.begin(), classes.end(), name) != classes.end()) {
+        return name;
+    }
     WNDCLASSEXW windowClass{sizeof(windowClass)};
-    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.hInstance = ModuleInstance();
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = name;
     windowClass.lpfnWndProc = ForwardingWindowProc<T>;
-    RegisterClassExW(&windowClass);  // Fails harmlessly when it's already registered.
+    if (!RegisterClassExW(&windowClass)) {
+        Wh_Log(L"Couldn't register window class %s: error %u", name, GetLastError());
+        return nullptr;
+    }
+    classes.push_back(name);
     return name;
+}
+
+void UnregisterWindowClasses() {
+    for (const std::wstring& name : RegisteredClasses()) {
+        UnregisterClassW(name.c_str(), ModuleInstance());
+    }
+    RegisteredClasses().clear();
 }
 
 // A hidden window for timers and for results posted back from worker threads.
@@ -774,8 +747,9 @@ public:
     std::function<void(UINT_PTR timer)> onTimer;
 
     bool Create(const wchar_t* className) {
-        CreateWindowExW(0, RegisterForwardingClass<MessageWindow>(className), L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
-                        nullptr, GetModuleHandleW(nullptr), this);
+        if (const wchar_t* registered = RegisterForwardingClass<MessageWindow>(className)) {
+            CreateWindowExW(0, registered, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, ModuleInstance(), this);
+        }
         return hwnd_ != nullptr;
     }
 
@@ -928,9 +902,10 @@ public:
 
 protected:
     bool CreatePopup(const wchar_t* className) {
-        CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                        RegisterForwardingClass<PopupWindow>(className), L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
-                        GetModuleHandleW(nullptr), this);
+        if (const wchar_t* registered = RegisterForwardingClass<PopupWindow>(className)) {
+            CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, registered, L"", WS_POPUP, 0, 0, 1, 1, nullptr,
+                            nullptr, ModuleInstance(), this);
+        }
         if (!hwnd_) {
             return false;
         }
@@ -1299,80 +1274,91 @@ std::optional<std::wstring> PromptForText(const std::wstring& title, const std::
 }
 
 // ---------------------------------------------------------------------------
-// The link between AudioFlipper's and RDPLauncher's widgets (the same in both, and in both apps'
-// exes). Linked, they sit side by side as one widget, in the order chosen, with a divider
-// between them, and dragging either moves both.
+// The link between the Taskbar Audio Flipper and Taskbar RDP Launcher widgets (the same in both
+// mods). Linked, they sit side by side as one widget, in the order chosen, with a divider between
+// them, and dragging either moves both.
 //
-// The link (on or off, which app is on the left, and where the pair is) is kept in
-// HKCU\Software\TaskbarWidgetLink, which both read. Each widget window is titled
-// "<app> taskbar widget" so the other can find it, read its width and post it a message whenever
-// something changes; each also re-checks on its own placement timer.
+// Each mod keeps its own copy of the link (on or off, which widget is on the left, and where the
+// pair is) in its storage, and shows it to the other as properties of its widget window, stamped
+// with when it last changed: the newer copy wins. Each widget finds the other by its window class
+// and posts it a message whenever its link, size or place changes.
 
 namespace WidgetLink {
 
-const wchar_t kKeyPath[] = L"Software\\TaskbarWidgetLink";
-
 struct State {
     bool linked = false;
-    std::wstring leftApp;  // "AudioFlipper" or "RDPLauncher".
-    int offset = -1;       // The pair's left edge from the taskbar's left edge; negative for the default.
+    bool selfOnLeft = true;
+    int offset = -1;  // The pair's left edge from the taskbar's left edge; negative for the default.
+    int stamp = 0;    // When it last changed, in seconds since 2020: the newer copy wins.
 
-    bool SelfOnLeft() const { return leftApp != kPartnerApp; }
+    // As one number, the way it's stored and shown to the other widget (as seen from this side).
+    int Pack() const { return (linked ? 1 : 0) | (selfOnLeft ? 2 : 0) | (std::max(-1, offset) + 1) << 2; }
+
+    static State Unpack(int packed, int stamp) {
+        return State{(packed & 1) != 0, (packed & 2) != 0, (packed >> 2) - 1, stamp};
+    }
+
+    // The same link as the other widget sees it.
+    State Mirrored() const { return State{linked, !selfOnLeft, offset, stamp}; }
 };
 
-std::wstring WindowTitle(const wchar_t* app) {
-    return std::wstring(app) + L" taskbar widget";
-}
+const wchar_t kStateProperty[] = L"TaskbarWidgetLink.Mod.State";
+const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.Stamp";
 
 // Posted to the other widget when the link, or this widget's size or place, changes.
 UINT ChangedMessage() {
-    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Changed");
+    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.Changed");
     return message;
 }
 
-State Read() {
-    State state;
-    HKEY key;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kKeyPath, 0, KEY_READ, &key) != ERROR_SUCCESS) {
-        return state;
-    }
-    DWORD linked = 0;
-    DWORD size = sizeof(linked);
-    if (RegGetValueW(key, nullptr, L"Linked", RRF_RT_REG_DWORD, nullptr, &linked, &size) == ERROR_SUCCESS) {
-        state.linked = linked != 0;
-    }
-    WCHAR text[64] = {};
-    size = sizeof(text);
-    if (RegGetValueW(key, nullptr, L"Left", RRF_RT_REG_SZ, nullptr, text, &size) == ERROR_SUCCESS) {
-        state.leftApp = text;
-    }
-    text[0] = 0;
-    size = sizeof(text);
-    int offset;
-    if (RegGetValueW(key, nullptr, L"Offset", RRF_RT_REG_SZ, nullptr, text, &size) == ERROR_SUCCESS && ParseInt(text, offset)) {
-        state.offset = offset;
-    }
-    RegCloseKey(key);
-    return state;
+// A stamp for a change made now, newer than the given one even within the same second.
+int NewStamp(int newerThan) {
+    SYSTEMTIME epoch{2020, 1, 3, 1};
+    FILETIME epochTime;
+    FILETIME now;
+    SystemTimeToFileTime(&epoch, &epochTime);
+    GetSystemTimeAsFileTime(&now);
+    ULARGE_INTEGER start{{epochTime.dwLowDateTime, epochTime.dwHighDateTime}};
+    ULARGE_INTEGER current{{now.dwLowDateTime, now.dwHighDateTime}};
+    int seconds = current.QuadPart > start.QuadPart ? (int)((current.QuadPart - start.QuadPart) / 10000000) : 0;
+    return std::max(seconds, newerThan + 1);
 }
 
-void WriteOffset(int offset) {
-    std::wstring text = std::to_wstring(offset);
-    RegSetKeyValueW(HKEY_CURRENT_USER, kKeyPath, L"Offset", REG_SZ, text.c_str(), (DWORD)((text.size() + 1) * sizeof(wchar_t)));
+State Load() {
+    return State::Unpack(Storage::GetInt(L"Link", 0), Storage::GetInt(L"LinkStamp", 0));
 }
 
-void Write(bool linked, const std::wstring& leftApp, int offset) {
-    DWORD value = linked ? 1 : 0;
-    RegSetKeyValueW(HKEY_CURRENT_USER, kKeyPath, L"Linked", REG_DWORD, &value, sizeof(value));
-    RegSetKeyValueW(HKEY_CURRENT_USER, kKeyPath, L"Left", REG_SZ, leftApp.c_str(), (DWORD)((leftApp.size() + 1) * sizeof(wchar_t)));
-    WriteOffset(offset);
+void Save(const State& state) {
+    Storage::SetInt(L"Link", state.Pack());
+    Storage::SetInt(L"LinkStamp", state.stamp);
+}
+
+// Shows this widget's copy of the link on its window, for the other widget to read.
+void Publish(HWND window, const State& state) {
+    SetPropW(window, kStateProperty, (HANDLE)(INT_PTR)state.Pack());
+    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)state.stamp);
+}
+
+void Unpublish(HWND window) {
+    RemovePropW(window, kStateProperty);
+    RemovePropW(window, kStampProperty);
 }
 
 HWND FindPartner() {
-    return FindWindowW(nullptr, WindowTitle(kPartnerApp).c_str());
+    return FindWindowW(kPartnerWidgetClassName, nullptr);
 }
 
-// Whether the other app (or its mod) is running with a version that can link.
+// The other widget's copy of the link, as this widget sees it, if it's running.
+std::optional<State> ReadPartner() {
+    HWND window = FindPartner();
+    if (!window || !GetPropW(window, kStampProperty)) {
+        return std::nullopt;
+    }
+    return State::Unpack((int)(INT_PTR)GetPropW(window, kStateProperty), (int)(INT_PTR)GetPropW(window, kStampProperty))
+        .Mirrored();
+}
+
+// Whether the other mod is running, to link with.
 bool PartnerRunning() {
     return FindPartner() != nullptr;
 }
@@ -1427,17 +1413,21 @@ public:
 
     // Called with the widget's new offset after it's been dragged (while not linked).
     std::function<void(int offset)> onOffsetChanged;
+    // Called when devices are added or removed, or turned on or off.
+    std::function<void()> onDevicesChanged;
 
     bool Create(int offset) {
         offset_ = offset;
-        std::wstring title = WidgetLink::WindowTitle(kSelfApp);
-        CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
-                        RegisterForwardingClass<TaskbarWidget>(kWidgetClassName), title.c_str(), WS_POPUP, 0, 0, 1, 1,
-                        nullptr, nullptr, GetModuleHandleW(nullptr), this);
+        link_ = WidgetLink::Load();
+        if (const wchar_t* registered = RegisterForwardingClass<TaskbarWidget>(kWidgetClassName)) {
+            CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, registered, kWidgetTitle, WS_POPUP,
+                            0, 0, 1, 1, nullptr, nullptr, ModuleInstance(), this);
+        }
         if (!hwnd_) {
             return false;
         }
-        // Windhawk may run as administrator; let the other widget's and the shell's messages through.
+        // Only needed when Windhawk itself runs as administrator (a portable Windhawk started that
+        // way): lets the other widget's and the shell's messages through to the widget.
         ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
         appBarMessage_ = RegisterWindowMessageW((std::wstring(kSelfApp) + L".AppBarNotification").c_str());
         ChangeWindowMessageFilterEx(hwnd_, appBarMessage_, MSGFLT_ALLOW, nullptr);
@@ -1445,6 +1435,11 @@ public:
         data.hWnd = hwnd_;
         data.uCallbackMessage = appBarMessage_;
         SHAppBarMessage(ABM_NEW, &data);
+        // Take the other widget's copy of the link if it changed more recently, and let it know
+        // this one is here.
+        WidgetLink::Publish(hwnd_, link_);
+        SyncLink();
+        WidgetLink::NotifyPartner();
         return true;
     }
 
@@ -1453,10 +1448,15 @@ public:
             return;
         }
         SetShown(false);
+        if (linkSavePending_) {
+            WidgetLink::Save(link_);
+        }
         APPBARDATA data{sizeof(data)};
         data.hWnd = hwnd_;
         SHAppBarMessage(ABM_REMOVE, &data);
+        WidgetLink::Unpublish(hwnd_);
         DestroyWindow(hwnd_);
+        WidgetLink::NotifyPartner();  // So it takes the pair's place.
     }
 
     HWND Handle() const { return hwnd_; }
@@ -1497,11 +1497,12 @@ public:
     // Re-renders after the content changed (and resizes if its width did).
     void ContentChanged() { UpdatePlacement(true); }
 
-    // Links this widget with the other app's, with this one on the given side, or unlinks them.
+    const WidgetLink::State& Link() const { return link_; }
+
+    // Links this widget with the other mod's, with this one on the given side, or unlinks them.
     void SetLink(bool linked, bool selfOnLeft) {
-        WidgetLink::State current = WidgetLink::Read();
-        int groupOffset = current.offset;
-        if (linked && !current.linked) {
+        int groupOffset = link_.offset;
+        if (linked && !link_.linked) {
             // Start the pair where the leftmost of the two widgets is now.
             RECT bounds = Bounds();
             int left = Visible() ? bounds.left : taskbar_.left + std::max(0, offset_);
@@ -1511,7 +1512,7 @@ public:
             }
             groupOffset = std::max(0, left - (int)taskbar_.left);
         }
-        WidgetLink::Write(linked, selfOnLeft ? kSelfApp : kPartnerApp, groupOffset);
+        ChangeLink(WidgetLink::State{linked, selfOnLeft, groupOffset});
         UpdatePlacement(true);
         WidgetLink::NotifyPartner();
     }
@@ -1528,7 +1529,8 @@ public:
 
     bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
         if (message == WidgetLink::ChangedMessage()) {
-            // The other app's widget moved, changed size, or changed the link.
+            // The other widget moved, changed size, or changed the link.
+            SyncLink();
             UpdatePlacement(false);
             return true;
         }
@@ -1547,6 +1549,10 @@ public:
             case WM_TIMER:
                 if (wParam == kPlacementTimer) {
                     UpdatePlacement(false);
+                } else if (wParam == kLinkSaveTimer) {
+                    KillTimer(hwnd_, kLinkSaveTimer);
+                    linkSavePending_ = false;
+                    WidgetLink::Save(link_);
                 } else {
                     OnTimer(wParam);
                 }
@@ -1573,7 +1579,9 @@ public:
                 }
                 int dragged = std::max(0, dragStartOffset_ + distance);
                 if (wasLinked_) {
-                    WidgetLink::WriteOffset(dragged);  // Moves the pair; the other widget follows when told.
+                    WidgetLink::State moved = link_;
+                    moved.offset = dragged;
+                    ChangeLink(moved);  // Moves the pair; the other widget follows when told.
                 } else {
                     offset_ = dragged;
                 }
@@ -1584,8 +1592,7 @@ public:
                 trackingMouse_ = false;
                 OnHoverLeave();
                 return true;
-            case WM_LBUTTONDOWN:
-            case WM_LBUTTONDBLCLK: {
+            case WM_LBUTTONDOWN: {
                 SetCapture(hwnd_);
                 POINT cursor;
                 GetCursorPos(&cursor);
@@ -1645,8 +1652,18 @@ public:
                 }
                 return true;
             }
+            case WM_DEVICECHANGE:
+                // Windows tells every top-level window when a device is added or removed, or turned
+                // on or off (as Device Manager does).
+                if (wParam == DBT_DEVNODES_CHANGED && onDevicesChanged) {
+                    onDevicesChanged();
+                }
+                return false;
             case WM_DISPLAYCHANGE:
+                UpdatePlacement(true);
+                return false;
             case WM_SETTINGCHANGE:
+                RefreshShellSettings();
                 UpdatePlacement(true);
                 return false;
         }
@@ -1691,7 +1708,7 @@ protected:
         if (!shown_ || !TryGetVisibleTaskbar(bar, monitor) || IsFullScreenAppActive(monitor, hwnd_, shellReportsFullScreen_)) {
             if (IsWindowVisible(hwnd_)) {
                 ShowWindow(hwnd_, SW_HIDE);
-                if (WidgetLink::Read().linked) {
+                if (link_.linked) {
                     WidgetLink::NotifyPartner();  // So it takes the pair's place.
                 }
             }
@@ -1720,33 +1737,32 @@ protected:
         int width = std::min(LayOut(), barWidth);
         taskbar_ = bar;
 
-        WidgetLink::State link = WidgetLink::Read();
         RECT bounds = Bounds();
-        if (wasLinked_ && !link.linked && IsWindowVisible(hwnd_)) {
+        if (wasLinked_ && !link_.linked && IsWindowVisible(hwnd_)) {
             // Just unlinked: stay where the pair left this widget.
             offset_ = std::max(0, (int)(bounds.left - bar.left));
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
             }
         }
-        wasLinked_ = link.linked;
+        wasLinked_ = link_.linked;
 
         int x;
         int partnerWidth = 0;
-        if (link.linked) {
-            // Side by side with the other app's widget, wherever the pair was put.
+        if (link_.linked) {
+            // Side by side with the other widget, wherever the pair was put.
             RECT partner;
             if (WidgetLink::TryGetPartnerBounds(partner)) {
                 partnerWidth = partner.right - partner.left;
             }
-            int groupOffset = link.offset >= 0 ? link.offset : DefaultOffset(barWidth, width + partnerWidth);
-            x = WidgetLink::PlaceInGroup(bar.left, barWidth, width, partnerWidth, link.SelfOnLeft(), groupOffset, groupLeft_);
+            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, width + partnerWidth);
+            x = WidgetLink::PlaceInGroup(bar.left, barWidth, width, partnerWidth, link_.selfOnLeft, groupOffset, groupLeft_);
         } else {
             int preferredOffset = offset_ >= 0 ? offset_ : DefaultOffset(barWidth, width);
             x = bar.left + std::max(0, std::min(preferredOffset, barWidth - width));
             groupLeft_ = x;
         }
-        bool divider = partnerWidth > 0 && !link.SelfOnLeft();
+        bool divider = partnerWidth > 0 && !link_.selfOnLeft;
         RECT target{x, bar.top, x + width, bar.bottom};
 
         bool moved = !EqualRect(&target, &bounds) || !IsWindowVisible(hwnd_);
@@ -1757,7 +1773,7 @@ protected:
         if (!IsWindowVisible(hwnd_)) {
             ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         }
-        if (moved && link.linked) {
+        if (moved && link_.linked) {
             WidgetLink::NotifyPartner();  // So it moves up against this widget.
         }
         OnPlaced();
@@ -1768,12 +1784,44 @@ protected:
 
 private:
     static constexpr UINT_PTR kPlacementTimer = 1;
+    static constexpr UINT_PTR kLinkSaveTimer = 3;
+
+    // A change to the link made here: it's stamped as the newest copy, shown to the other widget,
+    // and saved once it settles (a drag changes it on every mouse move).
+    void ChangeLink(WidgetLink::State state) {
+        int newerThan = link_.stamp;
+        if (std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner()) {
+            newerThan = std::max(newerThan, partner->stamp);
+        }
+        state.stamp = WidgetLink::NewStamp(newerThan);
+        link_ = state;
+        WidgetLink::Publish(hwnd_, link_);
+        SaveLinkSoon();
+    }
+
+    // Takes the other widget's copy of the link when it changed more recently than this one's.
+    void SyncLink() {
+        std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner();
+        if (partner && partner->stamp > link_.stamp) {
+            link_ = *partner;
+            WidgetLink::Publish(hwnd_, link_);
+            SaveLinkSoon();
+        }
+    }
+
+    void SaveLinkSoon() {
+        linkSavePending_ = true;
+        SetTimer(hwnd_, kLinkSaveTimer, 1000, nullptr);
+    }
 
     // Keeps where a drag left the widget (or the pair).
     void EndDrag() {
         if (wasLinked_) {
-            WidgetLink::WriteOffset(groupLeft_ - taskbar_.left);  // Where the pair ended up after clamping.
+            WidgetLink::State moved = link_;
+            moved.offset = groupLeft_ - taskbar_.left;  // Where the pair ended up after clamping.
+            ChangeLink(moved);
             Render();
+            WidgetLink::NotifyPartner();
         } else {
             offset_ = Bounds().left - taskbar_.left;  // Where it ended up after clamping.
             Render();
@@ -1877,8 +1925,10 @@ private:
     int dragStartOffset_ = 0;
     int wheelRemainder_ = 0;
     int groupLeft_ = 0;  // Left edge of the linked pair on screen (or of this widget alone).
+    WidgetLink::State link_;
+    bool linkSavePending_ = false;
     bool wasLinked_ = false;
-    bool dividerAtLeft_ = false;  // Linked, with the other app's widget on the left.
+    bool dividerAtLeft_ = false;  // Linked, with the other widget on the left.
 };
 
 // The flyout shown above a part of the widget while hovering it. It stays open while the mouse is
@@ -1977,9 +2027,8 @@ protected:
     bool cursorEntered_ = false;
 };
 
-// Runs the UI on its own thread with a message loop, for WhTool_ModInit/WhTool_ModUninit.
-// Worker threads (reading display numbers, switching the webcam) whose results come back to the UI
-// thread as messages. Finished ones are closed as new ones start.
+// Worker threads (switching the webcam) whose results come back to the UI thread as messages.
+// Finished ones are closed as new ones start.
 class WorkerThreads {
 public:
     bool Start(LPTHREAD_START_ROUTINE run, void* parameter) {
@@ -2018,10 +2067,11 @@ private:
     std::vector<HANDLE> threads_;
 };
 
+// Runs the UI on its own thread with a message loop, for WhTool_ModInit/WhTool_ModUninit.
 class UiThread {
 public:
     // run is called on the new thread (with COM and GDI+ set up) and returns an object that lives
-    // until the mod is unloaded.
+    // until the mod is unloaded, or null if it couldn't start. Returns whether it started.
     bool Start(std::function<std::shared_ptr<void>()> run) {
         run_ = std::move(run);
         ready_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -2029,8 +2079,7 @@ public:
         if (!thread_) {
             return false;
         }
-        WaitForSingleObject(ready_, 10000);
-        return true;
+        return WaitForSingleObject(ready_, 10000) == WAIT_OBJECT_0 && started_;
     }
 
     void Stop() {
@@ -2047,22 +2096,24 @@ public:
 private:
     static DWORD WINAPI ThreadProc(void* parameter) {
         auto self = (UiThread*)parameter;
-        // Real pixels everywhere, scaled per display.
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         ULONG_PTR gdiplusToken = 0;
         gp::GdiplusStartupInput startup;
         gp::GdiplusStartup(&gdiplusToken, &startup, nullptr);
         MSG message;
         PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // Creates the message queue.
-        SetEvent(self->ready_);
         {
             std::shared_ptr<void> app = self->run_();
-            while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
+            self->started_ = app != nullptr;
+            SetEvent(self->ready_);
+            if (app) {
+                while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
             }
         }
+        UnregisterWindowClasses();
         gp::GdiplusShutdown(gdiplusToken);
         if (SUCCEEDED(com)) {
             CoUninitialize();
@@ -2074,6 +2125,7 @@ private:
     HANDLE thread_ = nullptr;
     HANDLE ready_ = nullptr;
     DWORD threadId_ = 0;
+    bool started_ = false;
 };
 
 }  // namespace
@@ -2146,6 +2198,76 @@ public:
 
 private:
     T* pointer_ = nullptr;
+};
+
+const IID kIidMMNotificationClient = {0x7991EEC9, 0x7E89, 0x4D85, {0x83, 0x90, 0x6C, 0x70, 0x3C, 0xEC, 0x60, 0xC0}};
+const IID kIidAudioEndpointVolumeCallback = {0x657804FA, 0xD6AD, 0x4496, {0x8A, 0x60, 0x35, 0x27, 0x52, 0xAF, 0x4F, 0x89}};
+
+// Tells the UI thread, by posting a message to a window, when something the widget shows has
+// changed: the default devices, a device's name or icon, or the default devices' volume or mute.
+// Windows calls it on its own threads. While a message waits to be handled, no more are posted;
+// Handled lets them through again.
+class AudioChangeListener final : public IMMNotificationClient, public IAudioEndpointVolumeCallback {
+public:
+    AudioChangeListener(HWND window, UINT message) : window_(window), message_(message) {}
+
+    void Handled() { pending_ = false; }
+
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG references = --references_;
+        if (references == 0) {
+            delete this;
+        }
+        return references;
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (iid == IID_IUnknown || iid == kIidMMNotificationClient) {
+            *object = static_cast<IMMNotificationClient*>(this);
+        } else if (iid == kIidAudioEndpointVolumeCallback) {
+            *object = static_cast<IAudioEndpointVolumeCallback*>(this);
+        } else {
+            *object = nullptr;
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { return Changed(); }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { return Changed(); }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { return Changed(); }
+
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow, ERole role, LPCWSTR) override {
+        return role == eConsole ? Changed() : S_OK;
+    }
+
+    // Only for the names and icon; Windows reports many other properties changing as well.
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY key) override {
+        for (const PROPERTYKEY& shown : {kKeyFriendlyName, kKeyEndpointName, kKeyInterfaceName, kKeyIconPath, kKeyFormFactor}) {
+            if (key.fmtid == shown.fmtid && key.pid == shown.pid) {
+                return Changed();
+            }
+        }
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override { return Changed(); }
+
+private:
+    HRESULT Changed() {
+        if (!pending_.exchange(true)) {
+            PostMessageW(window_, message_, 0, 0);
+        }
+        return S_OK;
+    }
+
+    HWND window_;
+    UINT message_;
+    std::atomic<ULONG> references_{1};
+    std::atomic<bool> pending_{false};
 };
 
 enum class DeviceKind { Speakers, Headphones, Headset, Display, Microphone };
@@ -2247,6 +2369,36 @@ public:
         CoCreateInstance(kClsidMMDeviceEnumerator, nullptr, CLSCTX_ALL, kIidMMDeviceEnumerator, (void**)enumerator_.Put());
     }
 
+    ~AudioDevices() {
+        for (CachedVolume& cache : volumes_) {
+            ForgetVolume(cache);
+        }
+        if (listener_) {
+            if (enumerator_) {
+                enumerator_->UnregisterEndpointNotificationCallback(listener_);
+            }
+            listener_->Release();
+        }
+    }
+
+    AudioDevices(const AudioDevices&) = delete;
+    AudioDevices& operator=(const AudioDevices&) = delete;
+
+    // Posts the message to the window when the default devices, their names, icons, volume or mute
+    // change, or devices come and go. ChangeHandled lets the next one through.
+    void Listen(HWND window, UINT message) {
+        listener_ = new AudioChangeListener(window, message);
+        if (enumerator_) {
+            enumerator_->RegisterEndpointNotificationCallback(listener_);
+        }
+    }
+
+    void ChangeHandled() {
+        if (listener_) {
+            listener_->Handled();
+        }
+    }
+
     // Enabled, connected devices in that direction, sorted by name.
     std::vector<AudioDevice> ActiveDevices(EDataFlow flow) {
         std::vector<AudioDevice> devices;
@@ -2284,22 +2436,20 @@ public:
 
     // The default device in that direction with its volume, or nothing if there's none. When it
     // can't be read (usually the device was unplugged between calls), sets failed so the caller can
-    // keep what it had; the next poll starts over.
+    // keep what it had; the next change starts over.
     std::optional<AudioStatus> DefaultStatus(EDataFlow flow, bool* failed = nullptr) {
         CachedVolume& cache = volumes_[flow == eCapture ? 1 : 0];
         ComPtr<IMMDevice> device;
         AudioStatus status;
         auto fail = [&]() -> std::optional<AudioStatus> {
-            cache.control.Reset();
-            cache.deviceId.clear();
+            ForgetVolume(cache);
             if (failed) {
                 *failed = true;
             }
             return std::nullopt;
         };
         if (!enumerator_ || FAILED(enumerator_->GetDefaultAudioEndpoint(flow, eConsole, device.Put()))) {
-            cache.control.Reset();
-            cache.deviceId.clear();
+            ForgetVolume(cache);
             return std::nullopt;
         }
         // The name and icon are read every time so renames in Windows show up straight away.
@@ -2307,11 +2457,15 @@ public:
             return fail();
         }
         if (!cache.control || cache.deviceId != status.device.id) {
-            cache.control.Reset();
+            // A new default device: listen to its volume instead of the last one's.
+            ForgetVolume(cache);
             if (FAILED(device->Activate(kIidAudioEndpointVolume, CLSCTX_ALL, nullptr, (void**)cache.control.Put()))) {
                 return fail();
             }
             cache.deviceId = status.device.id;
+            if (listener_) {
+                cache.control->RegisterControlChangeNotify(listener_);
+            }
         }
         BOOL muted = FALSE;
         if (FAILED(cache.control->GetMasterVolumeLevelScalar(&status.level)) || FAILED(cache.control->GetMute(&muted))) {
@@ -2359,15 +2513,15 @@ public:
     }
 
     // Sets the default device's volume (0 to 1), unmuting it like the Windows volume slider does.
-    // Called for every slider movement, so it reuses the volume control from the last poll.
+    // Called for every slider movement, so it reuses the default device's volume control, which is
+    // swapped for the new one's as soon as Windows says the default device changed.
     void SetDefaultVolume(EDataFlow flow, float level) {
         CachedVolume& cache = volumes_[flow == eCapture ? 1 : 0];
         if (!cache.control && !DefaultStatus(flow)) {
             return;
         }
         if (!SetVolume(cache.control.Get(), level, level > 0)) {
-            cache.control.Reset();  // The device went away; the next poll picks up the new default.
-            cache.deviceId.clear();
+            ForgetVolume(cache);  // The device went away; the next change picks up the new default.
         }
     }
 
@@ -2376,6 +2530,14 @@ private:
         std::wstring deviceId;
         ComPtr<IAudioEndpointVolume> control;
     };
+
+    void ForgetVolume(CachedVolume& cache) {
+        if (cache.control && listener_) {
+            cache.control->UnregisterControlChangeNotify(listener_);
+        }
+        cache.control.Reset();
+        cache.deviceId.clear();
+    }
 
     static bool SetVolume(IAudioEndpointVolume* volume, float level, bool unmute) {
         if (FAILED(volume->SetMasterVolumeLevelScalar(std::max(0.0f, std::min(1.0f, level)), nullptr))) {
@@ -2389,8 +2551,9 @@ private:
     }
 
     ComPtr<IMMDeviceEnumerator> enumerator_;
-    // The default device's volume control, per direction, kept between polls and only reactivated
-    // when the default device changes.
+    AudioChangeListener* listener_ = nullptr;
+    // The default device's volume control, per direction, kept between refreshes and only
+    // reactivated when the default device changes.
     CachedVolume volumes_[2];
 };
 
@@ -2470,26 +2633,25 @@ std::shared_ptr<gp::Bitmap> IconToBitmap(HICON icon) {
     return result;
 }
 
-// Device icons by size and icon path. Emptied before GDI+ shuts down (ClearDeviceIcons).
-std::map<std::wstring, std::shared_ptr<gp::Bitmap>>& DeviceIconCache() {
-    static std::map<std::wstring, std::shared_ptr<gp::Bitmap>> cache;
-    return cache;
-}
+// The devices' Windows icons, loaded once for each size and icon path. Owned by the app, so they're
+// gone before GDI+ shuts down.
+class DeviceIcons {
+public:
+    // The icon at the given pixel size, or null if it can't be loaded.
+    gp::Bitmap* Get(const std::wstring& iconPath, int size);
 
-void ClearDeviceIcons() {
-    DeviceIconCache().clear();
-}
+private:
+    std::map<std::wstring, std::shared_ptr<gp::Bitmap>> cache_;
+};
 
-// The device's Windows icon at the given pixel size, or null if it can't be loaded.
-gp::Bitmap* DeviceIcon(const std::wstring& iconPath, int size) {
-    std::map<std::wstring, std::shared_ptr<gp::Bitmap>>& cache = DeviceIconCache();
+gp::Bitmap* DeviceIcons::Get(const std::wstring& iconPath, int size) {
     if (Trim(iconPath).empty() || size <= 0) {
         return nullptr;
     }
     std::wstring key = std::to_wstring(size) + L"|" + iconPath;
-    auto found = cache.find(key);
-    if (found != cache.end()) {
-        return found->second.get();  // Failures are cached too, so they aren't retried on every poll.
+    auto found = cache_.find(key);
+    if (found != cache_.end()) {
+        return found->second.get();  // Failures are kept too, so they aren't retried on every paint.
     }
     // Icon paths look like "%SystemRoot%\System32\mmres.dll,-3011"; a negative index is a resource ID.
     std::wstring file = Trim(iconPath);
@@ -2512,7 +2674,7 @@ gp::Bitmap* DeviceIcon(const std::wstring& iconPath, int size) {
         bitmap = IconToBitmap(icon);
         DestroyIcon(icon);
     }
-    cache[key] = bitmap;
+    cache_[key] = bitmap;
     return bitmap.get();
 }
 
@@ -2529,8 +2691,9 @@ void DrawMuteBadge(gp::Graphics& graphics, const gp::RectF& bounds) {
 
 // Draws the device's Windows icon, or a glyph when there's no device or its icon can't be loaded.
 // Muted devices are faded, with a mute badge.
-void DrawDeviceIcon(gp::Graphics& graphics, const std::optional<AudioStatus>& status, const gp::RectF& bounds, const gp::Color& glyphColor) {
-    gp::Bitmap* icon = status ? DeviceIcon(status->device.iconPath, (int)std::min(bounds.Width, bounds.Height)) : nullptr;
+void DrawDeviceIcon(gp::Graphics& graphics, DeviceIcons& icons, const std::optional<AudioStatus>& status, const gp::RectF& bounds,
+                    const gp::Color& glyphColor) {
+    gp::Bitmap* icon = status ? icons.Get(status->device.iconPath, (int)std::min(bounds.Width, bounds.Height)) : nullptr;
     bool muted = status && status->muted;
     if (!icon) {
         DrawGlyph(graphics, GlyphFor(status), bounds, muted ? WithAlpha(115, glyphColor) : glyphColor);
@@ -2567,13 +2730,30 @@ bool DevNodeEnabled(DEVINST devInst) {
     return !((status & DN_HAS_PROBLEM) && problem == CM_PROB_DISABLED);
 }
 
+// Whether the device can capture video. Webcams can; scanners, which share the "Imaging devices"
+// setup class with older webcams, can't. Turned-off webcams count too.
+bool CapturesVideo(const std::wstring& instanceId) {
+    // KSCATEGORY_VIDEO_CAMERA, and KSCATEGORY_CAPTURE for drivers from before Windows 10 had it.
+    const GUID categories[] = {{0xE5323777, 0xF976, 0x4F5B, {0x9B, 0x55, 0xB9, 0x46, 0x99, 0xC4, 0x6E, 0x44}},
+                               {0x65E8773D, 0x8F56, 0x11D0, {0xA3, 0xB9, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96}}};
+    for (const GUID& category : categories) {
+        ULONG size = 0;
+        if (CM_Get_Device_Interface_List_SizeW(&size, (LPGUID)&category, (DEVINSTID_W)instanceId.c_str(),
+                                               CM_GET_DEVICE_INTERFACE_LIST_ALL_DEVICES) == CR_SUCCESS &&
+            size > 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Connected webcams, including turned-off ones, sorted by name.
 std::vector<Webcam> GetWebcams() {
     // Device setup classes webcams install under: "Cameras", and "Imaging devices" for older drivers.
-    const GUID classes[] = {{0xCA3E7AB9, 0xB4C3, 0x4AE6, {0x82, 0x51, 0x57, 0x9E, 0xF9, 0x33, 0x89, 0x0F}},
-                            {0x6BDD1FC6, 0x810F, 0x11D0, {0xBE, 0xC7, 0x08, 0x00, 0x2B, 0xE2, 0x09, 0x2F}}};
+    const GUID cameraClass = {0xCA3E7AB9, 0xB4C3, 0x4AE6, {0x82, 0x51, 0x57, 0x9E, 0xF9, 0x33, 0x89, 0x0F}};
+    const GUID imagingClass = {0x6BDD1FC6, 0x810F, 0x11D0, {0xBE, 0xC7, 0x08, 0x00, 0x2B, 0xE2, 0x09, 0x2F}};
     std::vector<Webcam> webcams;
-    for (const GUID& classGuid : classes) {
+    for (const GUID& classGuid : {cameraClass, imagingClass}) {
         HDEVINFO set = SetupDiGetClassDevsW(&classGuid, nullptr, nullptr, DIGCF_PRESENT);
         if (set == INVALID_HANDLE_VALUE) {
             continue;
@@ -2582,7 +2762,8 @@ std::vector<Webcam> GetWebcams() {
         for (DWORD index = 0; SetupDiEnumDeviceInfo(set, index, &device); index++) {
             WCHAR id[512] = {};
             if (!SetupDiGetDeviceInstanceIdW(set, &device, id, ARRAYSIZE(id), nullptr) ||
-                std::any_of(webcams.begin(), webcams.end(), [&](const Webcam& w) { return w.instanceId == id; })) {
+                std::any_of(webcams.begin(), webcams.end(), [&](const Webcam& w) { return w.instanceId == id; }) ||
+                (!IsEqualGUID(classGuid, cameraClass) && !CapturesVideo(id))) {
                 continue;
             }
             Webcam webcam;
@@ -2606,7 +2787,8 @@ std::vector<Webcam> GetWebcams() {
     return webcams;
 }
 
-// Whether the webcam is turned on, or nothing when it isn't connected. Cheap enough to poll.
+// Whether the webcam is turned on, or nothing when it isn't connected. Cheap enough to check on
+// every device change.
 std::optional<bool> WebcamEnabled(const std::wstring& instanceId) {
     DEVINST devInst = 0;
     if (instanceId.empty() || CM_Locate_DevNodeW(&devInst, (DEVINSTID_W)instanceId.c_str(), CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS) {
@@ -2628,77 +2810,32 @@ DWORD WaitForExitCode(HANDLE process) {
     return exitCode;
 }
 
-const CLSID kClsidTaskScheduler = {0x0F87369F, 0xA4E5, 0x4CFC, {0xBD, 0x3E, 0x73, 0xE6, 0x15, 0x45, 0x72, 0xDD}};
-const IID kIidTaskService = {0x2FABA4C7, 0x4DA9, 0x4013, {0x96, 0x97, 0x20, 0xCC, 0x3F, 0xD4, 0x0F, 0x85}};
-
-// Runs AudioFlipper.exe's scheduled task that turns the webcam on or off (set up with its "Switch
-// without asking each time"; starting one needs no prompt) and waits for the webcam to change.
-// Nothing when the tasks aren't set up (or were deleted), to fall back to the UAC prompt.
-std::optional<WebcamChange> RunWebcamTask(const std::wstring& instanceId, bool enable) {
-    ComPtr<ITaskService> service;
-    VARIANT empty;
-    VariantInit(&empty);
-    if (FAILED(CoCreateInstance(kClsidTaskScheduler, nullptr, CLSCTX_INPROC_SERVER, kIidTaskService, (void**)service.Put())) ||
-        FAILED(service->Connect(empty, empty, empty, empty))) {
-        return std::nullopt;
-    }
-    ComPtr<ITaskFolder> folder;
-    ComPtr<IRegisteredTask> task;
-    ComPtr<IRunningTask> running;
-    BSTR root = SysAllocString(L"\\");
-    BSTR name = SysAllocString(enable ? L"AudioFlipper Webcam On" : L"AudioFlipper Webcam Off");
-    bool started = SUCCEEDED(service->GetFolder(root, folder.Put())) && SUCCEEDED(folder->GetTask(name, task.Put())) &&
-                   SUCCEEDED(task->Run(empty, running.Put()));
-    SysFreeString(root);
-    SysFreeString(name);
-    if (!started) {
-        return std::nullopt;
-    }
-    // The task runs in the background; watch for the webcam to change.
-    for (int waited = 0; waited < 10000; waited += 200) {
-        if (WebcamEnabled(instanceId) == enable) {
-            return WebcamChange::Done;
-        }
-        Sleep(200);
-    }
-    LONG result = 0;
-    if (SUCCEEDED(task->get_LastTaskResult(&result)) && result == (LONG)kErrorSuccessRebootRequired) {
-        return WebcamChange::RestartNeeded;
-    }
-    return WebcamChange::Failed;
-}
-
 // Turns the webcam on or off. Runs on a worker thread (with COM): it may wait for a UAC prompt,
 // which comes up over the owner window.
-WebcamChange SetWebcamEnabled(const std::wstring& instanceId, bool enable, bool useTasks, HWND owner) {
+WebcamChange SetWebcamEnabled(const std::wstring& instanceId, bool enable, HWND owner) {
     // Only ever hand pnputil the ID of a webcam that's actually connected, never anything else read
-    // from the settings file, since it runs with administrator rights.
+    // from the mod's storage, since it runs with administrator rights.
     std::vector<Webcam> webcams = GetWebcams();
     if (instanceId.empty() || instanceId.find(L'"') != std::wstring::npos ||
         std::none_of(webcams.begin(), webcams.end(), [&](const Webcam& w) { return w.instanceId == instanceId; })) {
         return WebcamChange::Failed;
     }
 
-    if (useTasks) {
-        if (std::optional<WebcamChange> result = RunWebcamTask(instanceId, enable)) {
-            return *result;
-        }
-    }
-
-    std::wstring pnputil = SystemFolder() + L"\\pnputil.exe";
     std::wstring arguments = (enable ? L"/enable-device \"" : L"/disable-device \"") + instanceId + L"\"";
     DWORD exitCode = 1;
     if (IsProcessElevated()) {
         // Windhawk runs as administrator, so no prompt is needed.
         HANDLE process = nullptr;
-        LaunchOptions options;
-        options.hidden = true;
-        options.asUser = false;
-        if (!Launch(pnputil, arguments, options, &process)) {
+        if (!Launch(NativeSystemFolder() + L"\\pnputil.exe", arguments, true, &process)) {
             return WebcamChange::Failed;
         }
         exitCode = WaitForExitCode(process);
     } else {
+        // pnputil.exe is only in the real System32. A request to run it as administrator is carried
+        // out by a 64-bit Windows service, which doesn't know the "Sysnative" alias that reaches
+        // System32 from 32-bit Windhawk. So the request names System32, with the redirection to
+        // SysWOW64 turned off on this thread while it's made, so it's found there too.
+        std::wstring pnputil = WindowsFolder() + L"\\System32\\pnputil.exe";
         SHELLEXECUTEINFOW execute{sizeof(execute)};
         execute.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
         execute.hwnd = owner;
@@ -2706,8 +2843,15 @@ WebcamChange SetWebcamEnabled(const std::wstring& instanceId, bool enable, bool 
         execute.lpFile = pnputil.c_str();
         execute.lpParameters = arguments.c_str();
         execute.nShow = SW_HIDE;
-        if (!ShellExecuteExW(&execute) || !execute.hProcess) {
-            return GetLastError() == ERROR_CANCELLED ? WebcamChange::Cancelled : WebcamChange::Failed;  // "No" on the UAC prompt.
+        PVOID redirection = nullptr;
+        bool redirectionOff = IsWow64() && Wow64DisableWow64FsRedirection(&redirection);
+        bool started = ShellExecuteExW(&execute) && execute.hProcess;
+        DWORD error = GetLastError();
+        if (redirectionOff) {
+            Wow64RevertWow64FsRedirection(redirection);
+        }
+        if (!started) {
+            return error == ERROR_CANCELLED ? WebcamChange::Cancelled : WebcamChange::Failed;  // "No" on the UAC prompt.
         }
         exitCode = WaitForExitCode(execute.hProcess);
     }
@@ -2719,7 +2863,8 @@ WebcamChange SetWebcamEnabled(const std::wstring& instanceId, bool enable, bool 
 }
 
 // ---------------------------------------------------------------------------
-// Settings, shared with AudioFlipper.exe: %APPDATA%\AudioFlipper\settings.txt.
+// Settings, kept in the mod's storage. The first time the mod runs for a user, it takes on
+// AudioFlipper.exe's settings from %APPDATA%\AudioFlipper\settings.txt, which it only reads.
 
 struct Settings {
     bool switchCommunications = true;       // Also make the new output the default communications device.
@@ -2732,13 +2877,10 @@ struct Settings {
     int taskbarOffset = -1;
     std::wstring webcamId;
     std::wstring webcamName;
-    std::wstring webcamTasksId;  // The webcam AudioFlipper.exe's no-prompt tasks are set up for.
     std::vector<std::wstring> excluded;
     // Names given to webcams (Windows has no way to rename one), by device instance ID, in the
     // order they were given.
     std::vector<std::pair<std::wstring, std::wstring>> webcamNicknames;
-
-    static std::wstring Path() { return KnownFolder(FOLDERID_RoamingAppData) + L"\\AudioFlipper\\settings.txt"; }
 
     bool SwitchesCommunications(EDataFlow flow) const { return flow == eCapture ? switchInputCommunications : switchCommunications; }
 
@@ -2787,7 +2929,54 @@ struct Settings {
     }
 
     void Load() {
-        for (const auto& [key, value] : ReadSettingsFile(Path())) {
+        if (!Storage::GetInt(L"Imported", 0)) {
+            Import();
+            Save();
+            Storage::SetInt(L"Imported", 1);
+            return;
+        }
+        switchCommunications = Storage::GetInt(L"SwitchCommunications", switchCommunications) != 0;
+        switchInputCommunications = Storage::GetInt(L"SwitchInputCommunications", switchInputCommunications) != 0;
+        showPopup = Storage::GetInt(L"ShowPopup", showPopup) != 0;
+        volumeDing = Storage::GetInt(L"VolumeDing", volumeDing) != 0;
+        showOutput = Storage::GetInt(L"ShowOutput", showOutput) != 0;
+        showInput = Storage::GetInt(L"ShowInput", showInput) != 0;
+        showWebcam = Storage::GetInt(L"ShowWebcam", showWebcam) != 0;
+        taskbarOffset = Storage::GetInt(L"TaskbarOffset", taskbarOffset);
+        webcamId = Storage::GetString(L"WebcamId");
+        webcamName = Storage::GetString(L"WebcamName");
+        for (const std::wstring& id : Split(Storage::GetString(L"Excluded"), L'\n')) {
+            SetExcluded(id, true);
+        }
+        for (const std::wstring& line : Split(Storage::GetString(L"WebcamNicknames"), L'\n')) {
+            AddNicknameLine(line);
+        }
+    }
+
+    bool Save() const {
+        std::vector<std::wstring> nicknameLines;
+        for (const auto& [id, nickname] : webcamNicknames) {
+            nicknameLines.push_back(id + L"\t" + nickname);
+        }
+        bool saved = Storage::SetInt(L"SwitchCommunications", switchCommunications);
+        saved = Storage::SetInt(L"SwitchInputCommunications", switchInputCommunications) && saved;
+        saved = Storage::SetInt(L"ShowPopup", showPopup) && saved;
+        saved = Storage::SetInt(L"VolumeDing", volumeDing) && saved;
+        saved = Storage::SetInt(L"ShowOutput", showOutput) && saved;
+        saved = Storage::SetInt(L"ShowInput", showInput) && saved;
+        saved = Storage::SetInt(L"ShowWebcam", showWebcam) && saved;
+        saved = Storage::SetInt(L"TaskbarOffset", taskbarOffset) && saved;
+        saved = Storage::SetString(L"WebcamId", webcamId) && saved;
+        saved = Storage::SetString(L"WebcamName", webcamName) && saved;
+        saved = Storage::SetString(L"Excluded", Join(excluded, L"\n")) && saved;
+        return Storage::SetString(L"WebcamNicknames", Join(nicknameLines, L"\n")) && saved;
+    }
+
+private:
+    // AudioFlipper.exe's settings.txt has "key=value" lines.
+    void Import() {
+        std::wstring path = KnownFolder(FOLDERID_RoamingAppData) + L"\\AudioFlipper\\settings.txt";
+        for (const auto& [key, value] : ReadSettingsFile(path)) {
             if (key == L"SwitchCommunications") {
                 switchCommunications = ParseBool(value, switchCommunications);
             } else if (key == L"ShowPopup") {
@@ -2807,18 +2996,7 @@ struct Settings {
             } else if (key == L"WebcamName") {
                 webcamName = value;
             } else if (key == L"WebcamNickname") {
-                // "<instance ID><tab><name>"; device instance IDs never contain tabs.
-                size_t tab = value.find(L'\t');
-                if (tab != std::wstring::npos && tab > 0 && tab < value.size() - 1) {
-                    std::wstring id = value.substr(0, tab);
-                    if (!WebcamNickname(id)) {
-                        webcamNicknames.emplace_back(id, value.substr(tab + 1));
-                    } else {
-                        SetWebcamNickname(id, value.substr(tab + 1));
-                    }
-                }
-            } else if (key == L"WebcamTasksId") {
-                webcamTasksId = value;
+                AddNicknameLine(value);
             } else if (key == L"TaskbarOffset") {
                 ParseInt(value, taskbarOffset);
             } else if (key == L"Exclude") {
@@ -2827,28 +3005,12 @@ struct Settings {
         }
     }
 
-    bool Save() const {
-        std::vector<std::wstring> lines{
-            L"# AudioFlipper settings",
-            L"SwitchCommunications=" + BoolText(switchCommunications),
-            L"ShowPopup=" + BoolText(showPopup),
-            L"ShowOutput=" + BoolText(showOutput),
-            L"ShowInput=" + BoolText(showInput),
-            L"VolumeDing=" + BoolText(volumeDing),
-            L"SwitchInputCommunications=" + BoolText(switchInputCommunications),
-            L"TaskbarOffset=" + std::to_wstring(taskbarOffset),
-            L"ShowWebcam=" + BoolText(showWebcam),
-            L"WebcamId=" + webcamId,
-            L"WebcamName=" + webcamName,
-            L"WebcamTasksId=" + webcamTasksId,
-        };
-        for (const std::wstring& id : excluded) {
-            lines.push_back(L"Exclude=" + id);
+    // "<instance ID><tab><name>"; device instance IDs never contain tabs.
+    void AddNicknameLine(const std::wstring& line) {
+        size_t tab = line.find(L'\t');
+        if (tab != std::wstring::npos && tab > 0 && tab < line.size() - 1) {
+            SetWebcamNickname(line.substr(0, tab), line.substr(tab + 1));
         }
-        for (const auto& [id, nickname] : webcamNicknames) {
-            lines.push_back(L"WebcamNickname=" + id + L"\t" + nickname);
-        }
-        return WriteTextLines(Path(), lines, false);
     }
 };
 
@@ -2896,6 +3058,8 @@ public:
     std::function<void()> onVolumeChangeFinished;     // When the slider is let go.
     std::function<void(int notches)> onVolumeSteps;
     std::function<void()> onMute;
+
+    explicit VolumeFlyout(DeviceIcons& icons) : icons_(icons) {}
 
     bool Create() { return CreatePopup(L"AudioFlipper.Mod.VolumeFlyout"); }
 
@@ -3020,7 +3184,7 @@ protected:
                             (float)Px(4));
         }
         float iconSize = (float)Px(24);
-        DrawDeviceIcon(graphics, status_,
+        DrawDeviceIcon(graphics, icons_, status_,
                        gp::RectF(button.left + (button.right - button.left - iconSize) / 2, button.top + (button.bottom - button.top - iconSize) / 2,
                                  iconSize, iconSize),
                        colors.foreground);
@@ -3085,6 +3249,7 @@ private:
         }
     }
 
+    DeviceIcons& icons_;
     std::optional<AudioStatus> status_;
     std::unique_ptr<gp::Font> titleFont_;
     std::unique_ptr<gp::Font> detailFont_;
@@ -3129,6 +3294,8 @@ public:
     std::function<void(EDataFlow)> onVolumeChangeFinished;
     std::function<void()> onWebcamToggle;
     std::function<void()> onMenu;
+
+    explicit AfWidget(DeviceIcons& icons) : icons_(icons), flyout_(icons) {}
 
     bool Create(int offset) {
         if (!TaskbarWidget::Create(offset) || !flyout_.Create()) {
@@ -3439,7 +3606,7 @@ private:
 
         float middle = height / 2.0f;
         float iconSize = (float)Px(24);
-        DrawDeviceIcon(graphics, status, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
+        DrawDeviceIcon(graphics, icons_, status, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
 
         float textLeft = section.x + (float)Px(44);
         float textWidth = section.x + section.width - textLeft - Px(10);
@@ -3457,6 +3624,7 @@ private:
         }
     }
 
+    DeviceIcons& icons_;
     VolumeFlyout flyout_;
     std::vector<Section> sections_;
     std::map<std::wstring, int> measuredWidths_;
@@ -3473,7 +3641,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// The app: polls the default devices and the webcam, updates the widget and runs the menu.
+// The app: follows the default devices and the webcam, updates the widget and runs the menu.
 
 class AfApp {
 public:
@@ -3484,27 +3652,20 @@ public:
         }
         messages_.onTimer = [this](UINT_PTR timer) { OnTimer(timer); };
         messages_.onMessage = [this](UINT message, WPARAM wParam, LPARAM lParam) { OnMessage(message, wParam, lParam); };
-        // AudioFlipper.exe and the mod show the same widget; while the exe runs, the mod waits.
-        if (!instance_.TryAcquire()) {
-            Wh_Log(L"AudioFlipper.exe is running; waiting for it to exit");
-            SetTimer(messages_.Handle(), kWaitForAppTimer, 3000, nullptr);
-            return true;
-        }
+        audio_.Listen(messages_.Handle(), kAudioChangedMessage);
         return StartWidget();
     }
 
     ~AfApp() {
         widget_.Destroy();
         workers_.WaitAll(5000);
-        ClearDeviceIcons();
     }
 
 private:
-    static constexpr UINT_PTR kRefreshTimer = 1;
     static constexpr UINT_PTR kVolumeRefreshTimer = 2;
     static constexpr UINT_PTR kDingTimer = 3;
-    static constexpr UINT_PTR kWaitForAppTimer = 4;
     static constexpr UINT kWebcamChangedMessage = WM_APP + 1;
+    static constexpr UINT kAudioChangedMessage = WM_APP + 2;
     static constexpr int kVolumeStepPercent = 2;  // Same step as the Windows volume flyout.
 
     struct WebcamRequest {
@@ -3513,7 +3674,6 @@ private:
         std::wstring instanceId;
         std::wstring name;
         bool enable;
-        bool useTasks;
         WebcamChange result = WebcamChange::Failed;
     };
 
@@ -3521,6 +3681,7 @@ private:
         if (!widget_.Create(settings_.taskbarOffset) || !popup_.Create()) {
             return false;
         }
+        widget_.onDevicesChanged = [this]() { RefreshWebcam(); };
         widget_.onOffsetChanged = [this](int offset) {
             settings_.taskbarOffset = offset;
             Save();
@@ -3545,16 +3706,11 @@ private:
         RefreshStatus(false);
         RefreshWebcam();
         widget_.SetSections(settings_.showOutput, settings_.showInput);
-        SetTimer(messages_.Handle(), kRefreshTimer, 500, nullptr);
         return true;
     }
 
     void OnTimer(UINT_PTR timer) {
         switch (timer) {
-            case kRefreshTimer:
-                RefreshStatus(false);
-                RefreshWebcam();
-                break;
             case kVolumeRefreshTimer:
                 KillTimer(messages_.Handle(), kVolumeRefreshTimer);
                 volumeRefreshPending_ = false;
@@ -3563,21 +3719,14 @@ private:
             case kDingTimer:
                 Ding();
                 break;
-            case kWaitForAppTimer:
-                if (instance_.TryAcquire()) {
-                    KillTimer(messages_.Handle(), kWaitForAppTimer);
-                    LoadSettings();  // The exe may have changed them.
-                    StartWidget();
-                }
-                break;
         }
     }
 
     void LoadSettings() {
         settings_ = Settings();
         settings_.Load();
-        // The exe can turn off both the output and input sections, since it has its tray icon; the
-        // widget is the mod's only way in, so one stays shown.
+        // The app (imported from) can turn off both the output and input sections, since it has its
+        // tray icon; the widget is the mod's only way in, so one stays shown.
         if (!settings_.showOutput && !settings_.showInput) {
             settings_.showOutput = true;
         }
@@ -3585,11 +3734,11 @@ private:
 
     void Save() {
         if (!settings_.Save()) {
-            popup_.ShowMessage(L"Couldn't save settings", Settings::Path());
+            popup_.ShowMessage(L"Couldn't save settings", L"Windhawk couldn't store the mod's settings.");
         }
     }
 
-    // Polls the default output and input with their volumes, updating the widget when anything
+    // Reads the default output and input with their volumes, updating the widget when anything
     // changed. The popup is for the output: it's shown when asked to, or when the output was changed
     // elsewhere, but only while the widget isn't showing the output already.
     void RefreshStatus(bool showPopup) {
@@ -3626,14 +3775,14 @@ private:
         content.level = output->Percent();
         content.levelMuted = output->muted;
         AudioStatus status = *output;
-        content.icon = [status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
-            DrawDeviceIcon(graphics, status, bounds, color);
+        content.icon = [this, status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
+            DrawDeviceIcon(graphics, icons_, status, bounds, color);
         };
         popup_.Show(content, 1800);
     }
 
-    // Slider drags and fast scrolling change the volume dozens of times a second; refresh the widget
-    // at a steady rate instead of after every change.
+    // Slider drags and fast scrolling change the volume dozens of times a second, and Windows reports
+    // each change; refresh the widget at a steady rate instead of after every one.
     void RefreshSoon() {
         if (!volumeRefreshPending_) {
             volumeRefreshPending_ = true;
@@ -3706,7 +3855,7 @@ private:
     }
 
     // Names the webcam in AudioFlipper. Windows has no way to rename a webcam, so this is
-    // AudioFlipper's own name for it, shown on the widget and in the menu (and AudioFlipper.exe's).
+    // AudioFlipper's own name for it, shown on the widget and in the menu.
     void RenameWebcam(const Webcam& webcam) {
         std::optional<std::wstring> name = PromptForText(
             L"Rename webcam",
@@ -3734,7 +3883,7 @@ private:
     static DWORD WINAPI WebcamThread(void* parameter) {
         auto request = (WebcamRequest*)parameter;
         HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        request->result = SetWebcamEnabled(request->instanceId, request->enable, request->useTasks, request->owner);
+        request->result = SetWebcamEnabled(request->instanceId, request->enable, request->owner);
         if (SUCCEEDED(com)) {
             CoUninitialize();
         }
@@ -3759,8 +3908,7 @@ private:
         // Windows only shows a UAC prompt up front for the foreground app (otherwise it just flashes
         // on the taskbar), and the widget never takes focus by itself.
         SetForegroundWindow(widget_.Handle());
-        auto request = new WebcamRequest{messages_.Handle(), widget_.Handle(), settings_.webcamId, name, !*enabled,
-                                         !settings_.webcamTasksId.empty() && settings_.webcamTasksId == settings_.webcamId};
+        auto request = new WebcamRequest{messages_.Handle(), widget_.Handle(), settings_.webcamId, name, !*enabled};
         if (!workers_.Start(WebcamThread, request)) {
             delete request;
             webcamBusy_ = false;
@@ -3769,6 +3917,11 @@ private:
     }
 
     void OnMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == kAudioChangedMessage) {
+            audio_.ChangeHandled();
+            RefreshSoon();
+            return;
+        }
         if (message != kWebcamChangedMessage) {
             return;
         }
@@ -3793,7 +3946,7 @@ private:
         submenu.Add(L"Show on taskbar", [this, isOutput, shown]() {
             (isOutput ? settings_.showOutput : settings_.showInput) = !shown;
             Save();
-            RefreshStatus(false);  // Poll first so a newly shown section appears with its device straight away.
+            RefreshStatus(false);  // Read the devices first so a newly shown section appears with its device straight away.
             widget_.SetSections(settings_.showOutput, settings_.showInput);
         }, shown, !shown || otherShown);
         submenu.AddSeparator();
@@ -3840,7 +3993,7 @@ private:
         // The classic Sound control panel (Playback or Recording tab), where a device can be renamed or
         // given a different icon via right-click > Properties.
         submenu.Add(L"Rename or change device icons…", [isOutput]() {
-            Launch(SystemFolder() + L"\\control.exe", isOutput ? L"mmsys.cpl,,0" : L"mmsys.cpl,,1", LaunchOptions{});
+            Launch(NativeSystemFolder() + L"\\control.exe", isOutput ? L"mmsys.cpl,,0" : L"mmsys.cpl,,1");
         });
         submenu.Add(L"Sound settings…", []() { OpenWithShell(L"ms-settings:sound"); });
     }
@@ -3892,13 +4045,13 @@ private:
         AddAudioMenu(menu, eCapture);
         AddWebcamMenu(menu);
 
-        // Linking the widget with RDPLauncher's into one, on either side; offered while RDPLauncher
-        // is running (or they're linked).
-        WidgetLink::State link = WidgetLink::Read();
+        // Linking the widget with Taskbar RDP Launcher's into one, on either side; offered while that
+        // mod is running (or they're linked).
+        const WidgetLink::State& link = widget_.Link();
         if (link.linked || WidgetLink::PartnerRunning()) {
             menu.AddSeparator();
             Menu& linkMenu = menu.AddSubmenu(std::wstring(L"Link with ") + kPartnerApp);
-            bool selfOnLeft = link.SelfOnLeft();
+            bool selfOnLeft = link.selfOnLeft;
             linkMenu.Add(L"Not linked", [this, selfOnLeft]() { widget_.SetLink(false, selfOnLeft); }, !link.linked);
             linkMenu.Add(std::wstring(kPartnerApp) + L" on the left", [this]() { widget_.SetLink(true, false); }, link.linked && !selfOnLeft);
             linkMenu.Add(std::wstring(kPartnerApp) + L" on the right", [this]() { widget_.SetLink(true, true); }, link.linked && selfOnLeft);
@@ -3912,10 +4065,10 @@ private:
     }
 
     Settings settings_;
-    SingleInstance instance_{L"Local\\AudioFlipper.SingleInstance"};
     AudioDevices audio_;
     MessageWindow messages_;
-    AfWidget widget_;
+    DeviceIcons icons_;  // Before the windows that draw them, so it's destroyed after them.
+    AfWidget widget_{icons_};
     MessagePopup popup_;
     WorkerThreads workers_;
     std::optional<AudioStatus> lastOutput_;
@@ -3935,6 +4088,7 @@ BOOL WhTool_ModInit() {
         auto app = std::make_shared<AfApp>();
         if (!app->Start()) {
             Wh_Log(L"Couldn't start");
+            return nullptr;
         }
         return app;
     });
