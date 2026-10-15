@@ -39,12 +39,20 @@ sometimes docked keeps separate buttons for the desk and for the road.
 ## How it connects
 
 - Computers added by name connect with `mstsc /v:<computer>`, like typing the computer into Remote
-  Desktop Connection, after setting the display options in the settings Remote Desktop Connection
-  uses for that (`Default.rdp` in Documents; a copy from before the first change is kept in
-  `%LOCALAPPDATA%\RDPLauncher`). Since the April 2026 Windows update, Remote Desktop shows a security
-  warning every time an .rdp file is opened, but not for computers typed in, so this avoids it.
+  Desktop Connection. Since the April 2026 Windows update, Remote Desktop shows a security warning
+  every time an .rdp file is opened, but not for computers typed in, so this avoids it.
+
+  Remote Desktop Connection takes the display options for these from its own settings file,
+  `Default.rdp` in Documents. So just before the session starts, the mod sets `screen mode id`,
+  `use multimon`, `span monitors` and `selectedmonitors` there (creating the file, hidden, if there
+  isn't one), and as soon as the session ends, it puts back what they were. It notes what they were
+  in its own storage first, so if Windhawk is closed during a session, they're put back the next
+  time the mod starts; if the mod is turned off during a session, they're put back right away. A
+  setting you change in Remote Desktop Connection in the meantime is left as you set it.
 - Saved .rdp files are never changed: the mod opens a copy with the display options set (and gets
-  the warning, as any .rdp file does).
+  the warning, as any .rdp file does), and deletes the copy when the session ends. If the file is
+  signed and its signature covers the display options, the copy goes without the signature, so
+  Remote Desktop shows it as from an unknown publisher.
 - Remote Desktop numbers displays its own way (not as Windows Settings does), so the first time you
   connect on some of your displays, the mod reads Remote Desktop's list (`mstsc /l`, whose box may
   flash) and remembers it until your displays change. **Read display numbers again** in the menu
@@ -59,7 +67,10 @@ hides the other takes its place.
 
 ## Settings
 
-The computers, their names and the display buttons are kept in `%APPDATA%\RDPLauncher\settings.txt`.
+The computers, their names and the display buttons are kept in the mod's storage, which Windhawk
+removes along with the mod. The first time it runs, the mod takes on the computers and display
+buttons of the RDPLauncher app, if you have it (from `%APPDATA%\RDPLauncher\settings.txt`, which it
+doesn't change). Use the app or the mod, not both: each shows its own widget.
 */
 // ==/WindhawkModReadme==
 
@@ -92,13 +103,16 @@ namespace {
 const wchar_t kSelfApp[] = L"RDPLauncher";
 const wchar_t kPartnerApp[] = L"AudioFlipper";
 const wchar_t kWidgetClassName[] = L"RDPLauncher.Mod.Widget";
+const wchar_t kPartnerWidgetClassName[] = L"AudioFlipper.Mod.Widget";
+const wchar_t kWidgetTitle[] = L"Taskbar RDP Launcher";
 
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// Shared by the AudioFlipper and RDPLauncher mods (the same code is in both):
-// the taskbar widget window, popups, menus, the text prompt, the link between
-// the two widgets, settings files and launching programs.
+// Shared by the AudioFlipper and RDPLauncher mods (the same code is in both, each
+// keeping the parts it uses): the taskbar widget window, popups, menus, the text
+// prompt, the link between the two widgets, the mod's storage and launching
+// programs.
 
 namespace gp = Gdiplus;
 
@@ -172,16 +186,6 @@ std::wstring Utf8ToWide(const std::string& text) {
     return wide;
 }
 
-std::string WideToUtf8(const std::wstring& text) {
-    if (text.empty()) {
-        return {};
-    }
-    int length = WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(), nullptr, 0, nullptr, nullptr);
-    std::string narrow(length, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(), narrow.data(), length, nullptr, nullptr);
-    return narrow;
-}
-
 std::wstring KnownFolder(REFKNOWNFOLDERID folder) {
     PWSTR path = nullptr;
     std::wstring result;
@@ -192,12 +196,23 @@ std::wstring KnownFolder(REFKNOWNFOLDERID folder) {
     return result;
 }
 
-std::wstring SystemFolder() {
-    WCHAR path[MAX_PATH];
-    UINT length = GetSystemDirectoryW(path, MAX_PATH);
-    return length > 0 && length < MAX_PATH ? std::wstring(path, length) : L"C:\\Windows\\System32";
+bool IsWow64() {
+    BOOL wow64 = FALSE;
+    return IsWow64Process(GetCurrentProcess(), &wow64) && wow64;
 }
 
+std::wstring WindowsFolder() {
+    WCHAR path[MAX_PATH];
+    UINT length = GetSystemWindowsDirectoryW(path, MAX_PATH);
+    return length > 0 && length < MAX_PATH ? std::wstring(path, length) : L"C:\\Windows";
+}
+
+// System32, for starting the programs in it. Windhawk 1.7 runs tool mods in its 32-bit
+// windhawk.exe, where Windows redirects System32 to the 32-bit SysWOW64; "Sysnative" reaches the
+// real System32 from there. Windhawk 2.0 runs them 64-bit, where System32 is the real one.
+std::wstring NativeSystemFolder() {
+    return WindowsFolder() + (IsWow64() ? L"\\Sysnative" : L"\\System32");
+}
 
 bool FileExists(const std::wstring& path) {
     DWORD attributes = GetFileAttributesW(path.c_str());
@@ -243,31 +258,31 @@ bool ReadFileBytes(const std::wstring& path, std::string& bytes) {
     return ok;
 }
 
-// Writes over a file, keeping its attributes: Windows won't recreate a hidden
-// file (like Default.rdp) in place, so it's unhidden meanwhile.
+// Writes a file in one step: the new content goes to a file next to it, which then takes its place,
+// so a failed write never leaves it empty or cut short. A file being replaced keeps its attributes
+// (Default.rdp is hidden); a read-only one stays as it was, and writing it fails.
 bool WriteFileBytes(const std::wstring& path, const std::string& bytes) {
     CreateDirectories(DirectoryOf(path));
-    DWORD attributes = GetFileAttributesW(path.c_str());
-    // Overwriting a hidden file needs the attribute cleared first (and put back after). A read-only
-    // one stays read-only, so writing it fails.
-    bool restore = attributes != INVALID_FILE_ATTRIBUTES && (attributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM));
-    if (restore) {
-        SetFileAttributesW(path.c_str(), attributes & ~(FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM));
+    std::wstring temporary = path + L".new";
+    HANDLE file = CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
     }
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    bool ok = file != INVALID_HANDLE_VALUE;
+    DWORD written = 0;
+    bool ok = bytes.empty() || (WriteFile(file, bytes.data(), (DWORD)bytes.size(), &written, nullptr) && written == bytes.size());
+    CloseHandle(file);
     if (ok) {
-        DWORD written = 0;
-        ok = bytes.empty() || (WriteFile(file, bytes.data(), (DWORD)bytes.size(), &written, nullptr) && written == bytes.size());
-        CloseHandle(file);
+        ok = FileExists(path) ? ReplaceFileW(path.c_str(), temporary.c_str(), nullptr, REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)
+                              : MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
     }
-    if (restore) {
-        SetFileAttributesW(path.c_str(), attributes);
+    if (!ok) {
+        DeleteFileW(temporary.c_str());
     }
     return ok;
 }
 
-// Lines of a text file in UTF-8 or UTF-16 (with a byte order mark), as .NET reads them.
+// Lines of a text file in UTF-8 or UTF-16 (with a byte order mark), as .NET reads them: .rdp files,
+// and the app's settings.txt to import.
 bool ReadTextLines(const std::wstring& path, std::vector<std::wstring>& lines) {
     std::string bytes;
     if (!ReadFileBytes(path, bytes)) {
@@ -301,20 +316,16 @@ bool ReadTextLines(const std::wstring& path, std::vector<std::wstring>& lines) {
     return true;
 }
 
-// Writes lines as UTF-8 without a byte order mark (as the apps' settings files are) or as UTF-16
-// with one (as Remote Desktop Connection writes .rdp files).
-bool WriteTextLines(const std::wstring& path, const std::vector<std::wstring>& lines, bool utf16) {
+// Writes lines as UTF-16 with a byte order mark, as Remote Desktop Connection writes .rdp files.
+bool WriteTextLines(const std::wstring& path, const std::vector<std::wstring>& lines) {
     std::wstring text;
     for (const std::wstring& line : lines) {
         text += line;
         text += L"\r\n";
     }
-    if (utf16) {
-        std::string bytes("\xFF\xFE", 2);
-        bytes.append((const char*)text.data(), text.size() * sizeof(wchar_t));
-        return WriteFileBytes(path, bytes);
-    }
-    return WriteFileBytes(path, WideToUtf8(text));
+    std::string bytes("\xFF\xFE", 2);
+    bytes.append((const char*)text.data(), text.size() * sizeof(wchar_t));
+    return WriteFileBytes(path, bytes);
 }
 
 // "key=value" lines, as in the apps' settings.txt files.
@@ -334,16 +345,6 @@ std::vector<std::pair<std::wstring, std::wstring>> ReadSettingsFile(const std::w
     return entries;
 }
 
-bool ParseBool(const std::wstring& value, bool fallback) {
-    if (EqualsIgnoreCase(value, L"true")) {
-        return true;
-    }
-    if (EqualsIgnoreCase(value, L"false")) {
-        return false;
-    }
-    return fallback;
-}
-
 bool ParseInt(const std::wstring& value, int& result) {
     if (value.empty()) {
         return false;
@@ -355,11 +356,6 @@ bool ParseInt(const std::wstring& value, int& result) {
     }
     result = (int)parsed;
     return true;
-}
-
-// .NET writes booleans as "True"/"False".
-std::wstring BoolText(bool value) {
-    return value ? L"True" : L"False";
 }
 
 // Menu text: "&" would underline the next letter.
@@ -375,105 +371,127 @@ std::wstring MenuText(const std::wstring& text) {
 }
 
 // ---------------------------------------------------------------------------
+// The mod's storage. Windhawk keeps one for the whole PC (and removes it with the mod), while the
+// mod runs separately for each signed-in Windows user, so each user's values and files are kept
+// apart under their SID.
+
+namespace Storage {
+
+std::wstring UserSid() {
+    std::wstring sid;
+    HANDLE token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+        DWORD size = 0;
+        PWSTR text = nullptr;
+        if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+            ConvertSidToStringSidW(((TOKEN_USER*)buffer)->User.Sid, &text)) {
+            sid = text;
+            LocalFree(text);
+        }
+        CloseHandle(token);
+    }
+    return sid.empty() ? L"User" : sid;
+}
+
+std::wstring ValueName(const wchar_t* name) {
+    return UserSid() + L"." + name;
+}
+
+int GetInt(const wchar_t* name, int fallback) {
+    return Wh_GetIntValue(ValueName(name).c_str(), fallback);
+}
+
+bool SetInt(const wchar_t* name, int value) {
+    return Wh_SetIntValue(ValueName(name).c_str(), value);
+}
+
+std::wstring GetString(const wchar_t* name) {
+    std::vector<WCHAR> buffer(256 * 1024);
+    size_t length = Wh_GetStringValue(ValueName(name).c_str(), buffer.data(), buffer.size());
+    return std::wstring(buffer.data(), std::min(length, buffer.size()));
+}
+
+bool SetString(const wchar_t* name, const std::wstring& value) {
+    return Wh_SetStringValue(ValueName(name).c_str(), value.c_str());
+}
+
+void Delete(const wchar_t* name) {
+    Wh_DeleteValue(ValueName(name).c_str());
+}
+
+// The user's folder in the mod's storage, for files.
+std::wstring Folder() {
+    WCHAR path[MAX_PATH];
+    size_t length = Wh_GetModStoragePath(path, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) {
+        return {};
+    }
+    return std::wstring(path, length) + L"\\" + UserSid();
+}
+
+}  // namespace Storage
+
+// ---------------------------------------------------------------------------
 // Windows settings and processes
 
-bool ReadPersonalizeFlag(const wchar_t* valueName, bool fallback) {
+bool ReadUserFlag(const wchar_t* key, const wchar_t* valueName, bool fallback) {
     DWORD value = 0;
     DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                     valueName, RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS) {
+    if (RegGetValueW(HKEY_CURRENT_USER, key, valueName, RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS) {
         return fallback;
     }
     return value != 0;
 }
 
-// "Choose your default Windows mode", which the taskbar follows.
-bool TaskbarUsesLightTheme() {
-    return ReadPersonalizeFlag(L"SystemUsesLightTheme", false);
-}
+// The Windows settings the widget and popups follow. They're read once, and again when Windows
+// says a setting changed (WM_SETTINGCHANGE), rather than on every placement update or paint.
+struct ShellSettings {
+    bool lightTaskbar = false;      // "Choose your default Windows mode", which the taskbar follows.
+    bool lightApps = true;          // "Choose your default app mode", which the popups follow.
+    bool iconsLeftAligned = false;  // Taskbar icons left-aligned rather than centered (Windows 11).
 
-// "Choose your default app mode", which the popups follow.
-bool AppsUseLightTheme() {
-    return ReadPersonalizeFlag(L"AppsUseLightTheme", true);
-}
-
-bool IsProcessElevated() {
-    static int elevated = -1;
-    if (elevated < 0) {
-        elevated = 0;
-        HANDLE token = nullptr;
-        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-            TOKEN_ELEVATION elevation{};
-            DWORD size = 0;
-            if (GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size)) {
-                elevated = elevation.TokenIsElevated ? 1 : 0;
-            }
-            CloseHandle(token);
-        }
+    static ShellSettings Read() {
+        const wchar_t* personalize = L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
+        ShellSettings settings;
+        settings.lightTaskbar = ReadUserFlag(personalize, L"SystemUsesLightTheme", false);
+        settings.lightApps = ReadUserFlag(personalize, L"AppsUseLightTheme", true);
+        settings.iconsLeftAligned =
+            !ReadUserFlag(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", L"TaskbarAl", true);
+        return settings;
     }
-    return elevated == 1;
-}
-
-struct LaunchOptions {
-    bool hidden = false;
-    // Windhawk may run as administrator; programs opened for the user shouldn't, so they're
-    // started as children of the desktop (Explorer), which gives them its ordinary rights.
-    bool asUser = true;
 };
 
-// Starts a program. Returns its process handle (to close) in *process when asked for.
-bool Launch(const std::wstring& exe, const std::wstring& arguments, const LaunchOptions& options,
-            HANDLE* process = nullptr, DWORD* processId = nullptr) {
+ShellSettings& CurrentShellSettings() {
+    static ShellSettings settings = ShellSettings::Read();
+    return settings;
+}
+
+void RefreshShellSettings() {
+    CurrentShellSettings() = ShellSettings::Read();
+}
+
+bool TaskbarUsesLightTheme() {
+    return CurrentShellSettings().lightTaskbar;
+}
+
+bool AppsUseLightTheme() {
+    return CurrentShellSettings().lightApps;
+}
+
+bool TaskbarIconsLeftAligned() {
+    return CurrentShellSettings().iconsLeftAligned;
+}
+
+// Starts a program. Returns its process handle (to close) in *process, and its ID in *processId,
+// when asked for.
+bool Launch(const std::wstring& exe, const std::wstring& arguments, HANDLE* process = nullptr, DWORD* processId = nullptr) {
     std::wstring commandLine = L"\"" + exe + L"\"" + (arguments.empty() ? L"" : L" " + arguments);
     std::vector<wchar_t> commandBuffer(commandLine.begin(), commandLine.end());
     commandBuffer.push_back(L'\0');
-
-    STARTUPINFOEXW startup{};
-    startup.StartupInfo.cb = sizeof(STARTUPINFOW);
-    if (options.hidden) {
-        startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
-        startup.StartupInfo.wShowWindow = SW_HIDE;
-    }
-
-    HANDLE parent = nullptr;
-    std::vector<BYTE> attributeBuffer;
-    DWORD flags = 0;
-    if (options.asUser && IsProcessElevated()) {
-        DWORD shellProcessId = 0;
-        if (HWND shell = GetShellWindow()) {
-            GetWindowThreadProcessId(shell, &shellProcessId);
-        }
-        if (shellProcessId) {
-            parent = OpenProcess(PROCESS_CREATE_PROCESS, FALSE, shellProcessId);
-        }
-        SIZE_T size = 0;
-        if (parent) {
-            InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
-            attributeBuffer.resize(size);
-            auto attributes = (LPPROC_THREAD_ATTRIBUTE_LIST)attributeBuffer.data();
-            if (InitializeProcThreadAttributeList(attributes, 1, 0, &size)) {
-                if (UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &parent,
-                                              sizeof(parent), nullptr, nullptr)) {
-                    startup.lpAttributeList = attributes;
-                    startup.StartupInfo.cb = sizeof(STARTUPINFOEXW);
-                    flags |= EXTENDED_STARTUPINFO_PRESENT;
-                } else {
-                    DeleteProcThreadAttributeList(attributes);
-                }
-            }
-        }
-    }
-
+    STARTUPINFOW startup{sizeof(startup)};
     PROCESS_INFORMATION info{};
-    BOOL started = CreateProcessW(exe.c_str(), commandBuffer.data(), nullptr, nullptr, FALSE, flags, nullptr,
-                                  nullptr, &startup.StartupInfo, &info);
-    if (startup.lpAttributeList) {
-        DeleteProcThreadAttributeList(startup.lpAttributeList);
-    }
-    if (parent) {
-        CloseHandle(parent);
-    }
-    if (!started) {
+    if (!CreateProcessW(exe.c_str(), commandBuffer.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &info)) {
         return false;
     }
     CloseHandle(info.hThread);
@@ -487,56 +505,6 @@ bool Launch(const std::wstring& exe, const std::wstring& arguments, const Launch
     }
     return true;
 }
-
-
-// A mutex both the mod and the app's exe use to keep to one widget. Anyone may open it, so the
-// exe (not running as administrator) still sees one the mod made while Windhawk is.
-class SingleInstance {
-public:
-    explicit SingleInstance(const wchar_t* name) : name_(name) {}
-
-    ~SingleInstance() {
-        if (mutex_) {
-            if (owned_) {
-                ReleaseMutex(mutex_);
-            }
-            CloseHandle(mutex_);
-        }
-    }
-
-    // True once this is the only copy; false while the app's exe is running.
-    bool TryAcquire() {
-        if (owned_) {
-            return true;
-        }
-        if (!mutex_) {
-            PSECURITY_DESCRIPTOR descriptor = nullptr;
-            SECURITY_ATTRIBUTES security{sizeof(security)};
-            if (ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:(A;;GA;;;WD)(A;;GA;;;SY)S:(ML;;NW;;;LW)",
-                                                                     SDDL_REVISION_1, &descriptor, nullptr)) {
-                security.lpSecurityDescriptor = descriptor;
-            }
-            mutex_ = CreateMutexW(descriptor ? &security : nullptr, FALSE, name_);
-            DWORD error = GetLastError();
-            if (descriptor) {
-                LocalFree(descriptor);
-            }
-            if (!mutex_) {
-                // The exe running as administrator made the mutex, which only administrators may
-                // open; anything else, carry on without it.
-                return error != ERROR_ACCESS_DENIED;
-            }
-        }
-        DWORD result = WaitForSingleObject(mutex_, 0);
-        owned_ = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
-        return owned_;
-    }
-
-private:
-    const wchar_t* name_;
-    HANDLE mutex_ = nullptr;
-    bool owned_ = false;
-};
 
 // ---------------------------------------------------------------------------
 // Taskbar
@@ -562,17 +530,6 @@ bool TryGetVisibleTaskbar(RECT& bar, RECT& monitor) {
     RECT visible{};
     IntersectRect(&visible, &bar, &monitor);
     return width > height && height > 0 && visible.bottom - visible.top >= height - 2;
-}
-
-// Whether the taskbar icons are left-aligned rather than centered (a Windows 11 setting).
-bool TaskbarIconsLeftAligned() {
-    DWORD value = 1;
-    DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                     L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &value, &size) != ERROR_SUCCESS) {
-        return false;
-    }
-    return value == 0;
 }
 
 // Whether a full-screen app (game, video, presentation) is in front on the monitor.
@@ -651,20 +608,6 @@ void DrawRoundedRect(gp::Graphics& graphics, const gp::Color& color, const gp::R
     AddRoundedRect(path, rect, radius);
     gp::Pen pen(color, width);
     graphics.DrawPath(&pen, &path);
-}
-
-// A rectangle with fully rounded ends.
-void FillPill(gp::Graphics& graphics, const gp::Color& color, const gp::RectF& rect) {
-    if (rect.Width <= 0 || rect.Height <= 0) {
-        return;
-    }
-    float diameter = std::min(rect.Width, rect.Height);
-    gp::GraphicsPath path;
-    path.AddArc(rect.X, rect.Y, diameter, diameter, 90, 180);
-    path.AddArc(rect.GetRight() - diameter, rect.Y, diameter, diameter, 270, 180);
-    path.CloseFigure();
-    gp::SolidBrush brush(color);
-    graphics.FillPath(&brush, &path);
 }
 
 // The Windows icon font: Segoe Fluent Icons on Windows 11, Segoe MDL2 Assets on Windows 10.
@@ -748,17 +691,17 @@ std::unique_ptr<gp::Font> MakeFont(const wchar_t* family, float pixels) {
 
 // Popup colors for the "default app mode" (light or dark) chosen in Windows.
 struct Palette {
-    gp::Color background, foreground, secondary, accent, track, border, hover, thumbRing, onAccent;
+    gp::Color background, foreground, secondary, accent, track, border, hover, onAccent;
 
     static Palette Current() {
         if (AppsUseLightTheme()) {
             return {Argb(255, 243, 243, 243), Argb(255, 27, 27, 27), Argb(255, 96, 96, 96),
                     Argb(255, 0, 95, 184), Argb(255, 196, 196, 196), Argb(255, 213, 213, 213),
-                    Argb(14, 0, 0, 0), Argb(255, 255, 255, 255), Argb(255, 255, 255, 255)};
+                    Argb(14, 0, 0, 0), Argb(255, 255, 255, 255)};
         }
         return {Argb(255, 32, 32, 32), Argb(255, 255, 255, 255), Argb(255, 197, 197, 197),
                 Argb(255, 96, 205, 255), Argb(255, 80, 80, 80), Argb(255, 58, 58, 58),
-                Argb(16, 255, 255, 255), Argb(255, 69, 69, 69), Argb(255, 0, 0, 0)};
+                Argb(16, 255, 255, 255), Argb(255, 0, 0, 0)};
     }
 };
 
@@ -790,17 +733,46 @@ LRESULT CALLBACK ForwardingWindowProc(HWND hwnd, UINT message, WPARAM wParam, LP
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
+// The mod's own module (its DLL), which its window classes belong to.
+HINSTANCE ModuleInstance() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&ModuleInstance, &module);
+    return module;
+}
+
+// The window classes registered so far, to unregister when the UI thread ends.
+std::vector<std::wstring>& RegisteredClasses() {
+    static std::vector<std::wstring> classes;
+    return classes;
+}
+
 // Registers a window class whose windows forward their messages to an object of type T, passed
-// as the creation parameter.
+// as the creation parameter. Returns its name, or null if it couldn't be registered.
 template <typename T>
 const wchar_t* RegisterForwardingClass(const wchar_t* name) {
+    std::vector<std::wstring>& classes = RegisteredClasses();
+    if (std::find(classes.begin(), classes.end(), name) != classes.end()) {
+        return name;
+    }
     WNDCLASSEXW windowClass{sizeof(windowClass)};
-    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.hInstance = ModuleInstance();
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = name;
     windowClass.lpfnWndProc = ForwardingWindowProc<T>;
-    RegisterClassExW(&windowClass);  // Fails harmlessly when it's already registered.
+    if (!RegisterClassExW(&windowClass)) {
+        Wh_Log(L"Couldn't register window class %s: error %u", name, GetLastError());
+        return nullptr;
+    }
+    classes.push_back(name);
     return name;
+}
+
+void UnregisterWindowClasses() {
+    for (const std::wstring& name : RegisteredClasses()) {
+        UnregisterClassW(name.c_str(), ModuleInstance());
+    }
+    RegisteredClasses().clear();
 }
 
 // A hidden window for timers and for results posted back from worker threads.
@@ -810,8 +782,9 @@ public:
     std::function<void(UINT_PTR timer)> onTimer;
 
     bool Create(const wchar_t* className) {
-        CreateWindowExW(0, RegisterForwardingClass<MessageWindow>(className), L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
-                        nullptr, GetModuleHandleW(nullptr), this);
+        if (const wchar_t* registered = RegisterForwardingClass<MessageWindow>(className)) {
+            CreateWindowExW(0, registered, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, ModuleInstance(), this);
+        }
         return hwnd_ != nullptr;
     }
 
@@ -943,9 +916,6 @@ public:
                 }
                 OnMouseUp({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
                 return true;
-            case WM_MOUSEWHEEL:
-                OnWheel(GET_WHEEL_DELTA_WPARAM(wParam));
-                return true;
             case WM_TIMER:
                 OnTimer(wParam);
                 return true;
@@ -964,9 +934,10 @@ public:
 
 protected:
     bool CreatePopup(const wchar_t* className) {
-        CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                        RegisterForwardingClass<PopupWindow>(className), L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
-                        GetModuleHandleW(nullptr), this);
+        if (const wchar_t* registered = RegisterForwardingClass<PopupWindow>(className)) {
+            CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, registered, L"", WS_POPUP, 0, 0, 1, 1, nullptr,
+                            nullptr, ModuleInstance(), this);
+        }
         if (!hwnd_) {
             return false;
         }
@@ -1006,7 +977,6 @@ protected:
     virtual void OnMouseLeave() {}
     virtual void OnMouseDown(POINT point) {}
     virtual void OnMouseUp(POINT point) {}
-    virtual void OnWheel(int delta) {}
     virtual void OnTimer(UINT_PTR timer) {}
 
     float scale_ = 1;
@@ -1015,23 +985,15 @@ protected:
     bool handCursor_ = false;
 };
 
-// The small popup in the bottom corner with a title and a line or two of detail, which hides
-// itself after a moment. An icon callback can draw something other than a warning sign, and
-// level (0-100) adds a level bar instead of the detail.
+// The small popup in the bottom corner with a warning sign, a title and a line or two of detail,
+// which hides itself after a moment.
 class MessagePopup : public PopupWindow {
 public:
-    struct Content {
-        std::wstring title;
-        std::wstring detail;
-        std::function<void(gp::Graphics&, const gp::RectF&, const gp::Color&)> icon;
-        int level = -1;
-        bool levelMuted = false;
-    };
-
     bool Create() { return CreatePopup(L"WidgetMessagePopup"); }
 
-    void Show(const Content& content, int visibleMilliseconds = 4000) {
-        content_ = content;
+    void ShowMessage(const std::wstring& title, const std::wstring& detail) {
+        title_ = title;
+        detail_ = detail;
         POINT cursor;
         GetCursorPos(&cursor);
         SetScaleFor(cursor);
@@ -1042,14 +1004,7 @@ public:
         int height = Px(kHeight);
         Place(info.rcWork.right - width - Px(12), info.rcWork.bottom - height - Px(12), kWidth, kHeight);
         ShowNoActivate();
-        SetTimer(hwnd_, 1, visibleMilliseconds, nullptr);
-    }
-
-    void ShowMessage(const std::wstring& title, const std::wstring& detail) {
-        Content content;
-        content.title = title;
-        content.detail = detail;
-        Show(content);
+        SetTimer(hwnd_, 1, 4000, nullptr);
     }
 
 protected:
@@ -1072,31 +1027,15 @@ protected:
         if (!titleFont_) {
             OnScaleChanged();
         }
-        gp::RectF iconBounds((float)Px(18), (float)Px(26), (float)Px(32), (float)Px(32));
-        if (content_.icon) {
-            content_.icon(graphics, iconBounds, colors.foreground);
-        } else {
-            DrawGlyph(graphics, kGlyphWarning, gp::RectF(iconBounds.X, iconBounds.Y + Px(2), (float)Px(28), (float)Px(28)), colors.foreground);
-        }
+        DrawGlyph(graphics, kGlyphWarning, gp::RectF((float)Px(18), (float)Px(28), (float)Px(28), (float)Px(28)), colors.foreground);
         float textLeft = (float)Px(66);
         float textWidth = width - textLeft - Px(18);
-        DrawTextLine(graphics, content_.title, *titleFont_, colors.foreground, gp::RectF(textLeft, (float)Px(12), textWidth, (float)Px(24)));
-        if (content_.level >= 0) {
-            float labelWidth = (float)Px(48);
-            DrawTextLine(graphics, content_.levelMuted ? L"Muted" : std::to_wstring(content_.level) + L"%", *detailFont_,
-                         colors.secondary, gp::RectF(width - Px(18) - labelWidth, (float)Px(40), labelWidth, (float)Px(22)), TextAlign::Right);
-            gp::RectF bar(textLeft, (float)Px(49), textWidth - labelWidth - Px(10), (float)Px(4));
-            FillPill(graphics, colors.track, bar);
-            if (!content_.levelMuted) {
-                FillPill(graphics, colors.accent, gp::RectF(bar.X, bar.Y, bar.Width * std::min(100, content_.level) / 100.0f, bar.Height));
-            }
-        } else {
-            DrawTextBlock(graphics, content_.detail, *detailFont_, colors.secondary,
-                          gp::RectF(textLeft, (float)Px(38), textWidth, (float)Px(36)));
-        }
+        DrawTextLine(graphics, title_, *titleFont_, colors.foreground, gp::RectF(textLeft, (float)Px(12), textWidth, (float)Px(24)));
+        DrawTextBlock(graphics, detail_, *detailFont_, colors.secondary, gp::RectF(textLeft, (float)Px(38), textWidth, (float)Px(36)));
     }
 
-    Content content_;
+    std::wstring title_;
+    std::wstring detail_;
     std::unique_ptr<gp::Font> titleFont_;
     std::unique_ptr<gp::Font> detailFont_;
 };
@@ -1335,80 +1274,91 @@ std::optional<std::wstring> PromptForText(const std::wstring& title, const std::
 }
 
 // ---------------------------------------------------------------------------
-// The link between AudioFlipper's and RDPLauncher's widgets (the same in both, and in both apps'
-// exes). Linked, they sit side by side as one widget, in the order chosen, with a divider
-// between them, and dragging either moves both.
+// The link between the Taskbar Audio Flipper and Taskbar RDP Launcher widgets (the same in both
+// mods). Linked, they sit side by side as one widget, in the order chosen, with a divider between
+// them, and dragging either moves both.
 //
-// The link (on or off, which app is on the left, and where the pair is) is kept in
-// HKCU\Software\TaskbarWidgetLink, which both read. Each widget window is titled
-// "<app> taskbar widget" so the other can find it, read its width and post it a message whenever
-// something changes; each also re-checks on its own placement timer.
+// Each mod keeps its own copy of the link (on or off, which widget is on the left, and where the
+// pair is) in its storage, and shows it to the other as properties of its widget window, stamped
+// with when it last changed: the newer copy wins. Each widget finds the other by its window class
+// and posts it a message whenever its link, size or place changes.
 
 namespace WidgetLink {
 
-const wchar_t kKeyPath[] = L"Software\\TaskbarWidgetLink";
-
 struct State {
     bool linked = false;
-    std::wstring leftApp;  // "AudioFlipper" or "RDPLauncher".
-    int offset = -1;       // The pair's left edge from the taskbar's left edge; negative for the default.
+    bool selfOnLeft = true;
+    int offset = -1;  // The pair's left edge from the taskbar's left edge; negative for the default.
+    int stamp = 0;    // When it last changed, in seconds since 2020: the newer copy wins.
 
-    bool SelfOnLeft() const { return leftApp != kPartnerApp; }
+    // As one number, the way it's stored and shown to the other widget (as seen from this side).
+    int Pack() const { return (linked ? 1 : 0) | (selfOnLeft ? 2 : 0) | (std::max(-1, offset) + 1) << 2; }
+
+    static State Unpack(int packed, int stamp) {
+        return State{(packed & 1) != 0, (packed & 2) != 0, (packed >> 2) - 1, stamp};
+    }
+
+    // The same link as the other widget sees it.
+    State Mirrored() const { return State{linked, !selfOnLeft, offset, stamp}; }
 };
 
-std::wstring WindowTitle(const wchar_t* app) {
-    return std::wstring(app) + L" taskbar widget";
-}
+const wchar_t kStateProperty[] = L"TaskbarWidgetLink.Mod.State";
+const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.Stamp";
 
 // Posted to the other widget when the link, or this widget's size or place, changes.
 UINT ChangedMessage() {
-    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Changed");
+    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.Changed");
     return message;
 }
 
-State Read() {
-    State state;
-    HKEY key;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kKeyPath, 0, KEY_READ, &key) != ERROR_SUCCESS) {
-        return state;
-    }
-    DWORD linked = 0;
-    DWORD size = sizeof(linked);
-    if (RegGetValueW(key, nullptr, L"Linked", RRF_RT_REG_DWORD, nullptr, &linked, &size) == ERROR_SUCCESS) {
-        state.linked = linked != 0;
-    }
-    WCHAR text[64] = {};
-    size = sizeof(text);
-    if (RegGetValueW(key, nullptr, L"Left", RRF_RT_REG_SZ, nullptr, text, &size) == ERROR_SUCCESS) {
-        state.leftApp = text;
-    }
-    text[0] = 0;
-    size = sizeof(text);
-    int offset;
-    if (RegGetValueW(key, nullptr, L"Offset", RRF_RT_REG_SZ, nullptr, text, &size) == ERROR_SUCCESS && ParseInt(text, offset)) {
-        state.offset = offset;
-    }
-    RegCloseKey(key);
-    return state;
+// A stamp for a change made now, newer than the given one even within the same second.
+int NewStamp(int newerThan) {
+    SYSTEMTIME epoch{2020, 1, 3, 1};
+    FILETIME epochTime;
+    FILETIME now;
+    SystemTimeToFileTime(&epoch, &epochTime);
+    GetSystemTimeAsFileTime(&now);
+    ULARGE_INTEGER start{{epochTime.dwLowDateTime, epochTime.dwHighDateTime}};
+    ULARGE_INTEGER current{{now.dwLowDateTime, now.dwHighDateTime}};
+    int seconds = current.QuadPart > start.QuadPart ? (int)((current.QuadPart - start.QuadPart) / 10000000) : 0;
+    return std::max(seconds, newerThan + 1);
 }
 
-void WriteOffset(int offset) {
-    std::wstring text = std::to_wstring(offset);
-    RegSetKeyValueW(HKEY_CURRENT_USER, kKeyPath, L"Offset", REG_SZ, text.c_str(), (DWORD)((text.size() + 1) * sizeof(wchar_t)));
+State Load() {
+    return State::Unpack(Storage::GetInt(L"Link", 0), Storage::GetInt(L"LinkStamp", 0));
 }
 
-void Write(bool linked, const std::wstring& leftApp, int offset) {
-    DWORD value = linked ? 1 : 0;
-    RegSetKeyValueW(HKEY_CURRENT_USER, kKeyPath, L"Linked", REG_DWORD, &value, sizeof(value));
-    RegSetKeyValueW(HKEY_CURRENT_USER, kKeyPath, L"Left", REG_SZ, leftApp.c_str(), (DWORD)((leftApp.size() + 1) * sizeof(wchar_t)));
-    WriteOffset(offset);
+void Save(const State& state) {
+    Storage::SetInt(L"Link", state.Pack());
+    Storage::SetInt(L"LinkStamp", state.stamp);
+}
+
+// Shows this widget's copy of the link on its window, for the other widget to read.
+void Publish(HWND window, const State& state) {
+    SetPropW(window, kStateProperty, (HANDLE)(INT_PTR)state.Pack());
+    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)state.stamp);
+}
+
+void Unpublish(HWND window) {
+    RemovePropW(window, kStateProperty);
+    RemovePropW(window, kStampProperty);
 }
 
 HWND FindPartner() {
-    return FindWindowW(nullptr, WindowTitle(kPartnerApp).c_str());
+    return FindWindowW(kPartnerWidgetClassName, nullptr);
 }
 
-// Whether the other app (or its mod) is running with a version that can link.
+// The other widget's copy of the link, as this widget sees it, if it's running.
+std::optional<State> ReadPartner() {
+    HWND window = FindPartner();
+    if (!window || !GetPropW(window, kStampProperty)) {
+        return std::nullopt;
+    }
+    return State::Unpack((int)(INT_PTR)GetPropW(window, kStateProperty), (int)(INT_PTR)GetPropW(window, kStampProperty))
+        .Mirrored();
+}
+
+// Whether the other mod is running, to link with.
 bool PartnerRunning() {
     return FindPartner() != nullptr;
 }
@@ -1463,17 +1413,21 @@ public:
 
     // Called with the widget's new offset after it's been dragged (while not linked).
     std::function<void(int offset)> onOffsetChanged;
+    // Called when displays are added, removed or rearranged.
+    std::function<void()> onDisplaysChanged;
 
     bool Create(int offset) {
         offset_ = offset;
-        std::wstring title = WidgetLink::WindowTitle(kSelfApp);
-        CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
-                        RegisterForwardingClass<TaskbarWidget>(kWidgetClassName), title.c_str(), WS_POPUP, 0, 0, 1, 1,
-                        nullptr, nullptr, GetModuleHandleW(nullptr), this);
+        link_ = WidgetLink::Load();
+        if (const wchar_t* registered = RegisterForwardingClass<TaskbarWidget>(kWidgetClassName)) {
+            CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, registered, kWidgetTitle, WS_POPUP,
+                            0, 0, 1, 1, nullptr, nullptr, ModuleInstance(), this);
+        }
         if (!hwnd_) {
             return false;
         }
-        // Windhawk may run as administrator; let the other widget's and the shell's messages through.
+        // Only needed when Windhawk itself runs as administrator (a portable Windhawk started that
+        // way): lets the other widget's and the shell's messages through to the widget.
         ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
         appBarMessage_ = RegisterWindowMessageW((std::wstring(kSelfApp) + L".AppBarNotification").c_str());
         ChangeWindowMessageFilterEx(hwnd_, appBarMessage_, MSGFLT_ALLOW, nullptr);
@@ -1481,6 +1435,11 @@ public:
         data.hWnd = hwnd_;
         data.uCallbackMessage = appBarMessage_;
         SHAppBarMessage(ABM_NEW, &data);
+        // Take the other widget's copy of the link if it changed more recently, and let it know
+        // this one is here.
+        WidgetLink::Publish(hwnd_, link_);
+        SyncLink();
+        WidgetLink::NotifyPartner();
         return true;
     }
 
@@ -1489,10 +1448,15 @@ public:
             return;
         }
         SetShown(false);
+        if (linkSavePending_) {
+            WidgetLink::Save(link_);
+        }
         APPBARDATA data{sizeof(data)};
         data.hWnd = hwnd_;
         SHAppBarMessage(ABM_REMOVE, &data);
+        WidgetLink::Unpublish(hwnd_);
         DestroyWindow(hwnd_);
+        WidgetLink::NotifyPartner();  // So it takes the pair's place.
     }
 
     HWND Handle() const { return hwnd_; }
@@ -1533,11 +1497,12 @@ public:
     // Re-renders after the content changed (and resizes if its width did).
     void ContentChanged() { UpdatePlacement(true); }
 
-    // Links this widget with the other app's, with this one on the given side, or unlinks them.
+    const WidgetLink::State& Link() const { return link_; }
+
+    // Links this widget with the other mod's, with this one on the given side, or unlinks them.
     void SetLink(bool linked, bool selfOnLeft) {
-        WidgetLink::State current = WidgetLink::Read();
-        int groupOffset = current.offset;
-        if (linked && !current.linked) {
+        int groupOffset = link_.offset;
+        if (linked && !link_.linked) {
             // Start the pair where the leftmost of the two widgets is now.
             RECT bounds = Bounds();
             int left = Visible() ? bounds.left : taskbar_.left + std::max(0, offset_);
@@ -1547,7 +1512,7 @@ public:
             }
             groupOffset = std::max(0, left - (int)taskbar_.left);
         }
-        WidgetLink::Write(linked, selfOnLeft ? kSelfApp : kPartnerApp, groupOffset);
+        ChangeLink(WidgetLink::State{linked, selfOnLeft, groupOffset});
         UpdatePlacement(true);
         WidgetLink::NotifyPartner();
     }
@@ -1564,7 +1529,8 @@ public:
 
     bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
         if (message == WidgetLink::ChangedMessage()) {
-            // The other app's widget moved, changed size, or changed the link.
+            // The other widget moved, changed size, or changed the link.
+            SyncLink();
             UpdatePlacement(false);
             return true;
         }
@@ -1583,6 +1549,10 @@ public:
             case WM_TIMER:
                 if (wParam == kPlacementTimer) {
                     UpdatePlacement(false);
+                } else if (wParam == kLinkSaveTimer) {
+                    KillTimer(hwnd_, kLinkSaveTimer);
+                    linkSavePending_ = false;
+                    WidgetLink::Save(link_);
                 } else {
                     OnTimer(wParam);
                 }
@@ -1609,7 +1579,9 @@ public:
                 }
                 int dragged = std::max(0, dragStartOffset_ + distance);
                 if (wasLinked_) {
-                    WidgetLink::WriteOffset(dragged);  // Moves the pair; the other widget follows when told.
+                    WidgetLink::State moved = link_;
+                    moved.offset = dragged;
+                    ChangeLink(moved);  // Moves the pair; the other widget follows when told.
                 } else {
                     offset_ = dragged;
                 }
@@ -1620,8 +1592,7 @@ public:
                 trackingMouse_ = false;
                 OnHoverLeave();
                 return true;
-            case WM_LBUTTONDOWN:
-            case WM_LBUTTONDBLCLK: {
+            case WM_LBUTTONDOWN: {
                 SetCapture(hwnd_);
                 POINT cursor;
                 GetCursorPos(&cursor);
@@ -1682,7 +1653,13 @@ public:
                 return true;
             }
             case WM_DISPLAYCHANGE:
+                if (onDisplaysChanged) {
+                    onDisplaysChanged();
+                }
+                UpdatePlacement(true);
+                return false;
             case WM_SETTINGCHANGE:
+                RefreshShellSettings();
                 UpdatePlacement(true);
                 return false;
         }
@@ -1727,7 +1704,7 @@ protected:
         if (!shown_ || !TryGetVisibleTaskbar(bar, monitor) || IsFullScreenAppActive(monitor, hwnd_, shellReportsFullScreen_)) {
             if (IsWindowVisible(hwnd_)) {
                 ShowWindow(hwnd_, SW_HIDE);
-                if (WidgetLink::Read().linked) {
+                if (link_.linked) {
                     WidgetLink::NotifyPartner();  // So it takes the pair's place.
                 }
             }
@@ -1756,33 +1733,32 @@ protected:
         int width = std::min(LayOut(), barWidth);
         taskbar_ = bar;
 
-        WidgetLink::State link = WidgetLink::Read();
         RECT bounds = Bounds();
-        if (wasLinked_ && !link.linked && IsWindowVisible(hwnd_)) {
+        if (wasLinked_ && !link_.linked && IsWindowVisible(hwnd_)) {
             // Just unlinked: stay where the pair left this widget.
             offset_ = std::max(0, (int)(bounds.left - bar.left));
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
             }
         }
-        wasLinked_ = link.linked;
+        wasLinked_ = link_.linked;
 
         int x;
         int partnerWidth = 0;
-        if (link.linked) {
-            // Side by side with the other app's widget, wherever the pair was put.
+        if (link_.linked) {
+            // Side by side with the other widget, wherever the pair was put.
             RECT partner;
             if (WidgetLink::TryGetPartnerBounds(partner)) {
                 partnerWidth = partner.right - partner.left;
             }
-            int groupOffset = link.offset >= 0 ? link.offset : DefaultOffset(barWidth, width + partnerWidth);
-            x = WidgetLink::PlaceInGroup(bar.left, barWidth, width, partnerWidth, link.SelfOnLeft(), groupOffset, groupLeft_);
+            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, width + partnerWidth);
+            x = WidgetLink::PlaceInGroup(bar.left, barWidth, width, partnerWidth, link_.selfOnLeft, groupOffset, groupLeft_);
         } else {
             int preferredOffset = offset_ >= 0 ? offset_ : DefaultOffset(barWidth, width);
             x = bar.left + std::max(0, std::min(preferredOffset, barWidth - width));
             groupLeft_ = x;
         }
-        bool divider = partnerWidth > 0 && !link.SelfOnLeft();
+        bool divider = partnerWidth > 0 && !link_.selfOnLeft;
         RECT target{x, bar.top, x + width, bar.bottom};
 
         bool moved = !EqualRect(&target, &bounds) || !IsWindowVisible(hwnd_);
@@ -1793,7 +1769,7 @@ protected:
         if (!IsWindowVisible(hwnd_)) {
             ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         }
-        if (moved && link.linked) {
+        if (moved && link_.linked) {
             WidgetLink::NotifyPartner();  // So it moves up against this widget.
         }
         OnPlaced();
@@ -1804,12 +1780,44 @@ protected:
 
 private:
     static constexpr UINT_PTR kPlacementTimer = 1;
+    static constexpr UINT_PTR kLinkSaveTimer = 3;
+
+    // A change to the link made here: it's stamped as the newest copy, shown to the other widget,
+    // and saved once it settles (a drag changes it on every mouse move).
+    void ChangeLink(WidgetLink::State state) {
+        int newerThan = link_.stamp;
+        if (std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner()) {
+            newerThan = std::max(newerThan, partner->stamp);
+        }
+        state.stamp = WidgetLink::NewStamp(newerThan);
+        link_ = state;
+        WidgetLink::Publish(hwnd_, link_);
+        SaveLinkSoon();
+    }
+
+    // Takes the other widget's copy of the link when it changed more recently than this one's.
+    void SyncLink() {
+        std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner();
+        if (partner && partner->stamp > link_.stamp) {
+            link_ = *partner;
+            WidgetLink::Publish(hwnd_, link_);
+            SaveLinkSoon();
+        }
+    }
+
+    void SaveLinkSoon() {
+        linkSavePending_ = true;
+        SetTimer(hwnd_, kLinkSaveTimer, 1000, nullptr);
+    }
 
     // Keeps where a drag left the widget (or the pair).
     void EndDrag() {
         if (wasLinked_) {
-            WidgetLink::WriteOffset(groupLeft_ - taskbar_.left);  // Where the pair ended up after clamping.
+            WidgetLink::State moved = link_;
+            moved.offset = groupLeft_ - taskbar_.left;  // Where the pair ended up after clamping.
+            ChangeLink(moved);
             Render();
+            WidgetLink::NotifyPartner();
         } else {
             offset_ = Bounds().left - taskbar_.left;  // Where it ended up after clamping.
             Render();
@@ -1913,8 +1921,10 @@ private:
     int dragStartOffset_ = 0;
     int wheelRemainder_ = 0;
     int groupLeft_ = 0;  // Left edge of the linked pair on screen (or of this widget alone).
+    WidgetLink::State link_;
+    bool linkSavePending_ = false;
     bool wasLinked_ = false;
-    bool dividerAtLeft_ = false;  // Linked, with the other app's widget on the left.
+    bool dividerAtLeft_ = false;  // Linked, with the other widget on the left.
 };
 
 // The flyout shown above a part of the widget while hovering it. It stays open while the mouse is
@@ -1949,8 +1959,6 @@ public:
 protected:
     virtual int LogicalWidth() = 0;
     virtual int LogicalHeight() = 0;
-    // Keeps the flyout open (while dragging a slider, for example).
-    virtual bool HoldOpen() { return false; }
 
     void OnTimer(UINT_PTR timer) override {
         if (timer == kHideCheckTimer) {
@@ -1962,11 +1970,7 @@ protected:
 
     void OnMouseEnter() override { cursorEntered_ = true; }
 
-    void OnMouseLeave() override {
-        if (!HoldOpen()) {
-            Hide();
-        }
-    }
+    void OnMouseLeave() override { Hide(); }
 
     void PositionAboveAnchor() {
         MONITORINFO info{sizeof(info)};
@@ -1981,9 +1985,6 @@ protected:
 
     // Backs up WM_MOUSELEAVE, which Windows doesn't always send, and handles the trip up from the widget.
     void HideWhenCursorLeaves() {
-        if (HoldOpen()) {
-            return;
-        }
         POINT cursor;
         GetCursorPos(&cursor);
         RECT bounds = Bounds();
@@ -2013,8 +2014,7 @@ protected:
     bool cursorEntered_ = false;
 };
 
-// Runs the UI on its own thread with a message loop, for WhTool_ModInit/WhTool_ModUninit.
-// Worker threads (reading display numbers, switching the webcam) whose results come back to the UI
+// Worker threads (reading Remote Desktop's display numbers) whose results come back to the UI
 // thread as messages. Finished ones are closed as new ones start.
 class WorkerThreads {
 public:
@@ -2036,8 +2036,7 @@ public:
         return true;
     }
 
-    // Gives any still running (one may be waiting on a UAC prompt) a little time to finish, well
-    // within the time the mod has to unload.
+    // Gives any still running a little time to finish, well within the time the mod has to unload.
     void WaitAll(DWORD milliseconds) {
         DWORD start = GetTickCount();
         for (HANDLE thread : threads_) {
@@ -2054,10 +2053,11 @@ private:
     std::vector<HANDLE> threads_;
 };
 
+// Runs the UI on its own thread with a message loop, for WhTool_ModInit/WhTool_ModUninit.
 class UiThread {
 public:
     // run is called on the new thread (with COM and GDI+ set up) and returns an object that lives
-    // until the mod is unloaded.
+    // until the mod is unloaded, or null if it couldn't start. Returns whether it started.
     bool Start(std::function<std::shared_ptr<void>()> run) {
         run_ = std::move(run);
         ready_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -2065,8 +2065,7 @@ public:
         if (!thread_) {
             return false;
         }
-        WaitForSingleObject(ready_, 10000);
-        return true;
+        return WaitForSingleObject(ready_, 10000) == WAIT_OBJECT_0 && started_;
     }
 
     void Stop() {
@@ -2083,22 +2082,24 @@ public:
 private:
     static DWORD WINAPI ThreadProc(void* parameter) {
         auto self = (UiThread*)parameter;
-        // Real pixels everywhere, scaled per display.
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         ULONG_PTR gdiplusToken = 0;
         gp::GdiplusStartupInput startup;
         gp::GdiplusStartup(&gdiplusToken, &startup, nullptr);
         MSG message;
         PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // Creates the message queue.
-        SetEvent(self->ready_);
         {
             std::shared_ptr<void> app = self->run_();
-            while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-                TranslateMessage(&message);
-                DispatchMessageW(&message);
+            self->started_ = app != nullptr;
+            SetEvent(self->ready_);
+            if (app) {
+                while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
             }
         }
+        UnregisterWindowClasses();
         gp::GdiplusShutdown(gdiplusToken);
         if (SUCCEEDED(com)) {
             CoUninitialize();
@@ -2110,6 +2111,7 @@ private:
     HANDLE thread_ = nullptr;
     HANDLE ready_ = nullptr;
     DWORD threadId_ = 0;
+    bool started_ = false;
 };
 
 }  // namespace
@@ -2171,12 +2173,9 @@ Displays GetDisplays() {
         device.cb = sizeof(device);
     }
 
+    // Windhawk's process is per-monitor DPI aware, so these are physical pixels.
     Displays displays;
-    DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     EnumDisplayMonitors(nullptr, nullptr, AddDisplay, (LPARAM)&displays);
-    if (previous) {
-        SetThreadDpiAwarenessContext(previous);
-    }
     for (size_t i = 0; i < displays.size(); i++) {
         auto found = outputIndexes.find(ToLower(displays[i].deviceName));
         displays[i].outputIndex = found != outputIndexes.end() ? found->second : (int)i;
@@ -2364,15 +2363,7 @@ std::wstring DescribeCount(size_t count) {
 using DisplayIds = std::map<std::wstring, int>;  // By display key.
 
 std::wstring MstscPath() {
-    return SystemFolder() + L"\\mstsc.exe";
-}
-
-std::wstring AppDataFolder() {
-    return KnownFolder(FOLDERID_LocalAppData) + L"\\RDPLauncher";
-}
-
-std::wstring DisplayIdsLogPath() {
-    return AppDataFolder() + L"\\display-numbers.log";
+    return NativeSystemFolder() + L"\\mstsc.exe";
 }
 
 bool CoversAll(const DisplayIds& ids, const Displays& displays) {
@@ -2509,6 +2500,7 @@ std::vector<DWORD> MstscProcessIds() {
 
 struct WindowSearch {
     DWORD processId;
+    bool handedOver;  // The process exited without showing anything.
     const std::vector<DWORD>* alreadyRunning;
     std::map<DWORD, bool>* checkedProcesses;
     std::vector<HWND> found;
@@ -2519,9 +2511,10 @@ BOOL CALLBACK CollectMstscWindow(HWND window, LPARAM data) {
     DWORD owner = 0;
     GetWindowThreadProcessId(window, &owner);
     bool candidate = owner == search->processId;
-    // The box normally belongs to the process just started, but accept a dialog from any mstsc
-    // that wasn't already running, in case it hands the work over.
-    if (!candidate && ClassOf(window) == L"#32770" &&
+    // The box belongs to the process just started. Only if that exits without showing anything
+    // (handing the work over) is a dialog from another mstsc that wasn't already running accepted,
+    // so a Remote Desktop dialog the user has open is left alone.
+    if (!candidate && search->handedOver && ClassOf(window) == L"#32770" &&
         std::find(search->alreadyRunning->begin(), search->alreadyRunning->end(), owner) == search->alreadyRunning->end()) {
         auto checked = search->checkedProcesses->find(owner);
         if (checked == search->checkedProcesses->end()) {
@@ -2559,15 +2552,18 @@ std::wstring ReadMonitorList(std::wstring& log, HANDLE cancel, bool& cancelled) 
     std::map<HWND, DWORD> firstSeen;
     HANDLE process = nullptr;
     DWORD processId = 0;
-    if (!Launch(MstscPath(), L"/l", LaunchOptions{}, &process, &processId)) {
+    if (!Launch(MstscPath(), L"/l", &process, &processId)) {
         log += L"mstsc /l didn't start.\r\n";
         return {};
     }
 
     std::wstring result;
     DWORD start = GetTickCount();
+    bool handedOver = false;
     while (GetTickCount() - start < 5000) {
-        WindowSearch search{processId, &alreadyRunning, &checkedProcesses, {}};
+        bool exited = WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
+        handedOver = handedOver || (exited && firstSeen.empty());
+        WindowSearch search{processId, handedOver, &alreadyRunning, &checkedProcesses, {}};
         EnumWindows(CollectMstscWindow, (LPARAM)&search);
         for (HWND window : search.found) {
             if (!firstSeen.count(window)) {
@@ -2593,7 +2589,6 @@ std::wstring ReadMonitorList(std::wstring& log, HANDLE cancel, bool& cancelled) 
         if (!result.empty()) {
             break;
         }
-        bool exited = WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
         if (exited && firstSeen.empty() && GetTickCount() - start > 1500) {
             break;
         }
@@ -2686,7 +2681,7 @@ DisplayIds MatchDisplayIds(const std::wstring& text, const Displays& displays) {
 }
 
 // Reads Remote Desktop's display IDs. Takes up to a few seconds; runs on a worker thread. When
-// they can't all be read, writes what was found to display-numbers.log.
+// they can't all be read, logs what was found (seen with logging turned on for the mod).
 DisplayIds QueryDisplayIds(const Displays& displays, HANDLE cancel) {
     std::wstring log;
     bool cancelled;
@@ -2701,8 +2696,9 @@ DisplayIds QueryDisplayIds(const Displays& displays, HANDLE cancel) {
             log += L"  " + display.deviceName + L" (output " + std::to_wstring(display.outputIndex) + L"): " + display.Key() +
                    (display.primary ? L", main" : L"") + L"\r\n";
         }
-        CreateDirectories(AppDataFolder());
-        WriteFileBytes(DisplayIdsLogPath(), WideToUtf8(log));
+        for (const std::wstring& line : Split(log, L'\n')) {
+            Wh_Log(L"%s", Trim(line).c_str());
+        }
     }
     return ids;
 }
@@ -2725,9 +2721,19 @@ public:
         return typeEnd == std::wstring::npos ? std::wstring() : line.substr(typeEnd + 1);
     }
 
+    // A setting's whole line, or nothing when the file doesn't have it.
+    std::optional<std::wstring> Line(const std::wstring& name) const {
+        int index = IndexOf(name);
+        return index >= 0 ? std::optional<std::wstring>(lines_[index]) : std::nullopt;
+    }
+
     // Sets a setting; type is "i" for numbers and "s" for text.
     void Set(const std::wstring& name, const std::wstring& type, const std::wstring& value) {
-        std::wstring line = name + L":" + type + L":" + value;
+        SetLine(name, name + L":" + type + L":" + value);
+    }
+
+    // Sets a setting to a whole line, as Line returned it.
+    void SetLine(const std::wstring& name, const std::wstring& line) {
         int index = IndexOf(name);
         if (index >= 0) {
             lines_[index] = line;
@@ -2764,7 +2770,12 @@ public:
     }
 
     // Saves the file as UTF-16, like Remote Desktop Connection does, keeping its attributes.
-    bool Save(const std::wstring& path) const { return WriteTextLines(path, lines_, true); }
+    bool Save(const std::wstring& path) const { return WriteTextLines(path, lines_); }
+
+    // Whether there are any settings left in it.
+    bool Empty() const {
+        return std::all_of(lines_.begin(), lines_.end(), [](const std::wstring& line) { return Trim(line).empty(); });
+    }
 
 private:
     // Setting names ignore case, and "signscope" writes them in a different style ("Full Address"
@@ -2857,89 +2868,60 @@ std::vector<std::wstring> RecentComputers() {
 }
 
 // ---------------------------------------------------------------------------
-// Settings, shared with RDPLauncher.exe: %APPDATA%\RDPLauncher\settings.txt.
+// Settings, kept in the mod's storage. The first time the mod runs for a user, it takes on
+// RDPLauncher.exe's settings from %APPDATA%\RDPLauncher\settings.txt, which it only reads.
 
 struct Settings {
     std::vector<Connection> connections;
     std::wstring currentConnectionKey;
-    bool showOnTaskbar = true;  // The app's; the mod always shows the widget (turn the mod off instead).
     int taskbarOffset = -1;
     std::map<std::wstring, std::vector<Choice>> displayButtons;  // By setup key.
     std::map<std::wstring, DisplayIds> displayIds;               // By outputs key.
 
-    static std::wstring Path() { return KnownFolder(FOLDERID_RoamingAppData) + L"\\RDPLauncher\\settings.txt"; }
-
     void Load() {
-        for (const auto& [key, value] : ReadSettingsFile(Path())) {
-            if (key == L"Connection") {
-                // Connection=<key>|<name it was given>, or just the key.
-                size_t bar = value.find(L'|');
-                std::optional<Connection> connection = Connection::FromKey(bar == std::wstring::npos ? value : value.substr(0, bar));
-                if (connection && !FindConnection(connection->Key())) {
-                    if (bar != std::wstring::npos) {
-                        connection->customName = Trim(value.substr(bar + 1));
-                    }
-                    connections.push_back(*connection);
-                }
-            } else if (key == L"CurrentConnection") {
-                currentConnectionKey = value;
-            } else if (key == L"ShowOnTaskbar") {
-                showOnTaskbar = ParseBool(value, showOnTaskbar);
-            } else if (key == L"TaskbarOffset") {
-                ParseInt(value, taskbarOffset);
-            } else if (key == L"DisplayButton") {
-                // DisplayButton=<setup key>|<display key>;<display key>…, one line per button.
-                size_t bar = value.find(L'|');
-                if (bar != std::wstring::npos && bar > 0) {
-                    Choice choice = Split(value.substr(bar + 1), L';');
-                    if (!choice.empty()) {
-                        displayButtons[value.substr(0, bar)].push_back(choice);
-                    }
-                }
-            } else if (key == L"DisplayIds") {
-                // DisplayIds=<outputs key>|<display key>=<id>;<display key>=<id>…
-                size_t bar = value.find(L'|');
-                if (bar != std::wstring::npos && bar > 0) {
-                    DisplayIds ids;
-                    for (const std::wstring& pair : Split(value.substr(bar + 1), L';')) {
-                        size_t equals = pair.find_last_of(L'=');
-                        int id;
-                        if (equals != std::wstring::npos && equals > 0 && ParseInt(pair.substr(equals + 1), id)) {
-                            ids[pair.substr(0, equals)] = id;
-                        }
-                    }
-                    if (!ids.empty()) {
-                        displayIds[value.substr(0, bar)] = ids;
-                    }
-                }
-            }
+        if (!Storage::GetInt(L"Imported", 0)) {
+            Import();
+            Save();
+            Storage::SetInt(L"Imported", 1);
+            return;
+        }
+        for (const std::wstring& line : Split(Storage::GetString(L"Connections"), L'\n')) {
+            AddConnectionLine(line);
+        }
+        currentConnectionKey = Storage::GetString(L"CurrentConnection");
+        taskbarOffset = Storage::GetInt(L"TaskbarOffset", -1);
+        for (const std::wstring& line : Split(Storage::GetString(L"DisplayButtons"), L'\n')) {
+            AddDisplayButtonLine(line);
+        }
+        for (const std::wstring& line : Split(Storage::GetString(L"DisplayIds"), L'\n')) {
+            AddDisplayIdsLine(line);
         }
     }
 
     bool Save() const {
-        std::vector<std::wstring> lines{
-            L"# RDPLauncher settings",
-            L"ShowOnTaskbar=" + BoolText(showOnTaskbar),
-            L"TaskbarOffset=" + std::to_wstring(taskbarOffset),
-            L"CurrentConnection=" + currentConnectionKey,
-        };
+        std::vector<std::wstring> connectionLines;
         for (const Connection& connection : connections) {
-            lines.push_back(L"Connection=" + connection.Key() +
-                            (Trim(connection.customName).empty() ? L"" : L"|" + Trim(connection.customName)));
+            connectionLines.push_back(connection.Key() + (Trim(connection.customName).empty() ? L"" : L"|" + Trim(connection.customName)));
         }
+        std::vector<std::wstring> buttonLines;
         for (const auto& [setup, buttons] : displayButtons) {
             for (const Choice& button : buttons) {
-                lines.push_back(L"DisplayButton=" + setup + L"|" + Join(button, L";"));
+                buttonLines.push_back(setup + L"|" + Join(button, L";"));
             }
         }
+        std::vector<std::wstring> idLines;
         for (const auto& [outputs, ids] : displayIds) {
             std::vector<std::wstring> pairs;
             for (const auto& [display, id] : ids) {
                 pairs.push_back(display + L"=" + std::to_wstring(id));
             }
-            lines.push_back(L"DisplayIds=" + outputs + L"|" + Join(pairs, L";"));
+            idLines.push_back(outputs + L"|" + Join(pairs, L";"));
         }
-        return WriteTextLines(Path(), lines, false);
+        bool saved = Storage::SetString(L"Connections", Join(connectionLines, L"\n"));
+        saved = Storage::SetString(L"CurrentConnection", currentConnectionKey) && saved;
+        saved = Storage::SetInt(L"TaskbarOffset", taskbarOffset) && saved;
+        saved = Storage::SetString(L"DisplayButtons", Join(buttonLines, L"\n")) && saved;
+        return Storage::SetString(L"DisplayIds", Join(idLines, L"\n")) && saved;
     }
 
     Connection* FindConnection(const std::wstring& key) {
@@ -2972,6 +2954,71 @@ struct Settings {
             currentConnectionKey = connections.empty() ? L"" : connections[0].Key();
         }
     }
+
+private:
+    // RDPLauncher.exe's settings.txt has "key=value" lines; the values of its Connection,
+    // DisplayButton and DisplayIds lines are the lines of the mod's values with those names.
+    void Import() {
+        std::wstring path = KnownFolder(FOLDERID_RoamingAppData) + L"\\RDPLauncher\\settings.txt";
+        for (const auto& [key, value] : ReadSettingsFile(path)) {
+            if (key == L"Connection") {
+                AddConnectionLine(value);
+            } else if (key == L"CurrentConnection") {
+                currentConnectionKey = value;
+            } else if (key == L"TaskbarOffset") {
+                ParseInt(value, taskbarOffset);
+            } else if (key == L"DisplayButton") {
+                AddDisplayButtonLine(value);
+            } else if (key == L"DisplayIds") {
+                AddDisplayIdsLine(value);
+            }
+        }
+        if (!connections.empty()) {
+            Wh_Log(L"Imported %d computers from %s", (int)connections.size(), path.c_str());
+        }
+    }
+
+    // <connection key>|<name it was given>, or just the key.
+    void AddConnectionLine(const std::wstring& line) {
+        size_t bar = line.find(L'|');
+        std::optional<Connection> connection = Connection::FromKey(bar == std::wstring::npos ? line : line.substr(0, bar));
+        if (connection && !FindConnection(connection->Key())) {
+            if (bar != std::wstring::npos) {
+                connection->customName = Trim(line.substr(bar + 1));
+            }
+            connections.push_back(*connection);
+        }
+    }
+
+    // <setup key>|<display key>;<display key>…, one line per button.
+    void AddDisplayButtonLine(const std::wstring& line) {
+        size_t bar = line.find(L'|');
+        if (bar != std::wstring::npos && bar > 0) {
+            Choice choice = Split(line.substr(bar + 1), L';');
+            if (!choice.empty()) {
+                displayButtons[line.substr(0, bar)].push_back(choice);
+            }
+        }
+    }
+
+    // <outputs key>|<display key>=<id>;<display key>=<id>…
+    void AddDisplayIdsLine(const std::wstring& line) {
+        size_t bar = line.find(L'|');
+        if (bar == std::wstring::npos || bar == 0) {
+            return;
+        }
+        DisplayIds ids;
+        for (const std::wstring& pair : Split(line.substr(bar + 1), L';')) {
+            size_t equals = pair.find_last_of(L'=');
+            int id;
+            if (equals != std::wstring::npos && equals > 0 && ParseInt(pair.substr(equals + 1), id)) {
+                ids[pair.substr(0, equals)] = id;
+            }
+        }
+        if (!ids.empty()) {
+            displayIds[line.substr(0, bar)] = ids;
+        }
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -2980,16 +3027,18 @@ struct Settings {
 // Since April 2026 Windows shows a security warning every time an .rdp file is opened, but not
 // for a computer typed into Remote Desktop Connection or given with "mstsc /v". So a computer
 // added by name is started with /v, after setting the displays in the settings Remote Desktop
-// Connection uses for that (Default.rdp, which its own Display tab changes too). A saved .rdp file
-// is copied with the displays set and the copy is opened, leaving the original as it was.
+// Connection uses for that: Default.rdp in Documents, which its own Display tab changes too. Its
+// display settings go back to what they were as soon as the session ends (DefaultRdpChange). A
+// saved .rdp file is copied with the displays set and the copy is opened, leaving the original as
+// it was; the copy is deleted when the session ends.
 
 std::wstring DefaultRdpPath() {
     return KnownFolder(FOLDERID_Documents) + L"\\Default.rdp";
 }
 
-const std::vector<std::wstring>& DisplaySettingNames() {
-    static const std::vector<std::wstring> names{L"screen mode id", L"use multimon", L"span monitors", L"selectedmonitors"};
-    return names;
+std::wstring SessionsFolder() {
+    std::wstring storage = Storage::Folder();
+    return storage.empty() ? std::wstring() : storage + L"\\Sessions";
 }
 
 std::wstring SafeFileName(const std::wstring& name) {
@@ -3001,70 +3050,247 @@ std::wstring SafeFileName(const std::wstring& name) {
     return safe.empty() ? L"Remote Desktop" : safe;
 }
 
-// Starts a full-screen session on the displays with the given IDs (the session's main display
-// first), or on all displays when there are none. Returns an error message, or nothing.
-std::optional<std::wstring> StartFullScreen(const Connection& connection, const std::vector<int>* displayIds) {
-    auto setDisplays = [&](RdpFile& file) {
-        file.Set(L"screen mode id", L"i", L"2");
-        file.Set(L"use multimon", L"i", L"1");
-        file.Set(L"span monitors", L"i", L"0");
-        if (displayIds) {
-            std::vector<std::wstring> ids;
-            for (int id : *displayIds) {
-                ids.push_back(std::to_wstring(id));
-            }
-            file.Set(L"selectedmonitors", L"s", Join(ids, L","));
-        } else {
-            file.Remove(L"selectedmonitors");
+// A display setting in an .rdp file; no value means the setting is left out.
+struct RdpSetting {
+    std::wstring name;
+    std::wstring type;  // "i" for numbers, "s" for text.
+    std::optional<std::wstring> value;
+};
+
+// The settings for a full-screen session on the displays with the given IDs (the session's main
+// display first), or on all displays when there are none.
+std::vector<RdpSetting> FullScreenSettings(const std::vector<int>* displayIds) {
+    std::optional<std::wstring> selected;
+    if (displayIds) {
+        std::vector<std::wstring> ids;
+        for (int id : *displayIds) {
+            ids.push_back(std::to_wstring(id));
         }
+        selected = Join(ids, L",");
+    }
+    return {{L"screen mode id", L"i", L"2"},
+            {L"use multimon", L"i", L"1"},
+            {L"span monitors", L"i", L"0"},
+            {L"selectedmonitors", L"s", selected}};
+}
+
+void ApplySettings(RdpFile& file, const std::vector<RdpSetting>& settings) {
+    for (const RdpSetting& setting : settings) {
+        if (setting.value) {
+            file.Set(setting.name, setting.type, *setting.value);
+        } else {
+            file.Remove(setting.name);
+        }
+    }
+}
+
+// The display settings the mod changed in Default.rdp, kept in its storage until they've been put
+// back: whether the file was there, and for each setting its line from before (nothing when the
+// file didn't have it) and the values the mod has given it since. A setting is only put back while
+// it still has one of those values, so a change made in Remote Desktop Connection meanwhile stays.
+struct DefaultRdpChange {
+    struct Setting {
+        std::optional<std::wstring> lineBefore;
+        std::vector<std::optional<std::wstring>> valuesGiven;
     };
 
+    bool fileExisted = true;
+    std::map<std::wstring, Setting> settings;  // By name.
+
+    // Stored as lines: "existed" or "created", then "<name>\t<line before>\t<value given>…" for each
+    // setting, where each line or value is "=" and its text, or "-" for none.
+    static std::optional<DefaultRdpChange> Load() {
+        std::vector<std::wstring> lines = Split(Storage::GetString(L"DefaultRdpChange"), L'\n');
+        if (lines.empty()) {
+            return std::nullopt;
+        }
+        DefaultRdpChange change;
+        change.fileExisted = lines[0] != L"created";
+        for (size_t i = 1; i < lines.size(); i++) {
+            std::vector<std::wstring> fields = Split(lines[i], L'\t');
+            if (fields.size() < 2) {
+                continue;
+            }
+            Setting& setting = change.settings[fields[0]];
+            setting.lineBefore = Decode(fields[1]);
+            for (size_t j = 2; j < fields.size(); j++) {
+                setting.valuesGiven.push_back(Decode(fields[j]));
+            }
+        }
+        return change;
+    }
+
+    bool Save() const {
+        std::vector<std::wstring> lines{fileExisted ? L"existed" : L"created"};
+        for (const auto& [name, setting] : settings) {
+            std::wstring line = name + L"\t" + Encode(setting.lineBefore);
+            for (const std::optional<std::wstring>& value : setting.valuesGiven) {
+                line += L"\t" + Encode(value);
+            }
+            lines.push_back(line);
+        }
+        return Storage::SetString(L"DefaultRdpChange", Join(lines, L"\n"));
+    }
+
+    static void Forget() { Storage::Delete(L"DefaultRdpChange"); }
+
+private:
+    static std::wstring Encode(const std::optional<std::wstring>& text) { return text ? L"=" + *text : L"-"; }
+
+    static std::optional<std::wstring> Decode(const std::wstring& field) {
+        return field[0] == L'=' ? std::optional<std::wstring>(field.substr(1)) : std::nullopt;
+    }
+};
+
+// Sets the display settings in Default.rdp for a session started with /v. What it had before is
+// noted first (unless that's noted already, from a session that hasn't ended), so it can be put
+// back even if Windhawk is closed before the session ends.
+std::optional<std::wstring> SetDefaultRdpDisplays(const std::vector<RdpSetting>& settings) {
+    std::wstring path = DefaultRdpPath();
+    bool existed = FileExists(path);
+    RdpFile file;
+    // Never replace the settings with just the display ones because they couldn't be read
+    // (OneDrive hasn't downloaded the file, or Remote Desktop Connection is writing it).
+    if (existed && !file.Load(path)) {
+        return L"Couldn't read " + path;
+    }
+    std::optional<DefaultRdpChange> change = DefaultRdpChange::Load();
+    if (!change) {
+        change = DefaultRdpChange();
+        change->fileExisted = existed;
+    }
+    for (const RdpSetting& setting : settings) {
+        auto [entry, added] = change->settings.try_emplace(setting.name);
+        if (added) {
+            entry->second.lineBefore = file.Line(setting.name);
+        }
+        std::vector<std::optional<std::wstring>>& given = entry->second.valuesGiven;
+        if (std::find(given.begin(), given.end(), setting.value) == given.end()) {
+            given.push_back(setting.value);
+        }
+    }
+    if (!change->Save()) {
+        return std::wstring(L"Couldn't note Remote Desktop's display settings to put them back later.");
+    }
+    ApplySettings(file, settings);
+    if (!file.Save(path)) {
+        return L"Couldn't write " + path;
+    }
+    if (!existed) {
+        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_HIDDEN);  // As Remote Desktop Connection keeps it.
+    }
+    return std::nullopt;
+}
+
+// Puts Default.rdp's display settings back to what they were before the mod changed them, those
+// that still have a value the mod gave them. Then forgets the change, unless keepNote is set: a
+// session that's still running may save Default.rdp when it ends, so it's checked again next time.
+void RestoreDefaultRdp(bool keepNote) {
+    std::optional<DefaultRdpChange> change = DefaultRdpChange::Load();
+    if (!change) {
+        return;
+    }
+    std::wstring path = DefaultRdpPath();
+    if (FileExists(path)) {
+        RdpFile file;
+        if (!file.Load(path)) {
+            Wh_Log(L"Couldn't read %s to put its display settings back", path.c_str());
+            return;
+        }
+        bool changed = false;
+        for (const auto& [name, setting] : change->settings) {
+            std::optional<std::wstring> value = file.Get(name);
+            if (std::find(setting.valuesGiven.begin(), setting.valuesGiven.end(), value) == setting.valuesGiven.end()) {
+                continue;  // Changed since, in Remote Desktop Connection: that stays.
+            }
+            if (setting.lineBefore) {
+                file.SetLine(name, *setting.lineBefore);
+            } else {
+                file.Remove(name);
+            }
+            changed = true;
+        }
+        // A Default.rdp the mod created goes again, unless Remote Desktop Connection saved its own
+        // settings in it meanwhile.
+        bool done = !change->fileExisted && file.Empty() ? DeleteFileW(path.c_str()) : !changed || file.Save(path);
+        if (!done) {
+            Wh_Log(L"Couldn't put the display settings back in %s", path.c_str());
+            return;
+        }
+    }
+    if (!keepNote) {
+        DefaultRdpChange::Forget();
+    }
+}
+
+// A session that was started: Remote Desktop Connection's process, and what to tidy up when it ends.
+struct StartedSession {
+    HANDLE process = nullptr;
+    std::wstring copy;           // The .rdp copy it was opened from.
+    bool setDefaultRdp = false;  // Started with /v, after setting the displays in Default.rdp.
+};
+
+// Starts a full-screen session on the displays with the given IDs (the session's main display
+// first), or on all displays when there are none. Returns an error message, or nothing.
+std::optional<std::wstring> StartFullScreen(const Connection& connection, const std::vector<int>* displayIds,
+                                            StartedSession& started) {
+    std::vector<RdpSetting> settings = FullScreenSettings(displayIds);
     if (!connection.rdpFile.empty()) {
         RdpFile file;
         if (!file.Load(connection.rdpFile)) {
             return L"Couldn't read " + connection.rdpFile;
         }
-        file.DropSignatureIfCovers(DisplaySettingNames());
-        setDisplays(file);
+        std::vector<std::wstring> names;
+        for (const RdpSetting& setting : settings) {
+            names.push_back(setting.name);
+        }
+        file.DropSignatureIfCovers(names);
+        ApplySettings(file, settings);
         // Remote Desktop Connection shows the file name in its title bar, so name it after the connection.
-        std::wstring copy = AppDataFolder() + L"\\Sessions\\" + SafeFileName(connection.Name()) + L".rdp";
-        if (!file.Save(copy)) {
+        std::wstring folder = SessionsFolder();
+        std::wstring copy = folder + L"\\" + SafeFileName(connection.Name()) + L".rdp";
+        if (folder.empty() || !file.Save(copy)) {
             return L"Couldn't write " + copy;
         }
-        if (!Launch(MstscPath(), L"\"" + copy + L"\"", LaunchOptions{})) {
+        if (!Launch(MstscPath(), L"\"" + copy + L"\"", &started.process)) {
+            DeleteFileW(copy.c_str());
             return std::wstring(L"Remote Desktop Connection didn't start.");
         }
+        started.copy = copy;
         return std::nullopt;
     }
 
-    std::wstring defaults = DefaultRdpPath();
-    bool existed = FileExists(defaults);
-    RdpFile file;
-    if (existed) {
-        // Never replace the settings with just the display ones because they couldn't be read
-        // (OneDrive hasn't downloaded the file, or Remote Desktop Connection is writing it).
-        if (!file.Load(defaults)) {
-            return L"Couldn't read " + defaults;
-        }
-        // A copy of Default.rdp from before it was first changed.
-        std::wstring backup = AppDataFolder() + L"\\Default.rdp.backup";
-        if (!FileExists(backup)) {
-            CreateDirectories(AppDataFolder());
-            CopyFileW(defaults.c_str(), backup.c_str(), TRUE);
-        }
+    // Computer names typed in have no spaces (the add dialog doesn't take them), but ones from Remote
+    // Desktop Connection's recent list aren't checked, so the name is quoted, and can't have a quote.
+    if (connection.host.find(L'"') != std::wstring::npos) {
+        return L"Remote Desktop can't connect to " + connection.host;
     }
-    setDisplays(file);
-    if (!file.Save(defaults)) {
-        return L"Couldn't write " + defaults;
+    if (std::optional<std::wstring> error = SetDefaultRdpDisplays(settings)) {
+        return error;
     }
-    if (!existed) {
-        SetFileAttributesW(defaults.c_str(), FILE_ATTRIBUTE_HIDDEN);  // As Remote Desktop Connection keeps it.
-    }
-    // Computer names have no spaces (the add dialog doesn't take them).
-    if (!Launch(MstscPath(), L"/v:" + connection.host, LaunchOptions{})) {
+    started.setDefaultRdp = true;
+    if (!Launch(MstscPath(), L"/v:\"" + connection.host + L"\"", &started.process)) {
         return std::wstring(L"Remote Desktop Connection didn't start.");
     }
     return std::nullopt;
+}
+
+// Deletes the .rdp copies sessions were started from that are still there (when Windhawk was
+// closed before they ended).
+void DeleteSessionCopies() {
+    std::wstring folder = SessionsFolder();
+    if (folder.empty()) {
+        return;
+    }
+    WIN32_FIND_DATAW found;
+    HANDLE search = FindFirstFileW((folder + L"\\*.rdp").c_str(), &found);
+    if (search == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    do {
+        DeleteFileW((folder + L"\\" + found.cFileName).c_str());
+    } while (FindNextFileW(search, &found));
+    FindClose(search);
 }
 
 // Opens the connection's settings in Remote Desktop Connection, to change the ones other than
@@ -3072,7 +3298,7 @@ std::optional<std::wstring> StartFullScreen(const Connection& connection, const 
 bool EditConnection(const Connection& connection) {
     std::wstring path = connection.rdpFile.empty() ? DefaultRdpPath() : connection.rdpFile;
     // Without a Default.rdp yet, just open Remote Desktop Connection; it saves one on connecting.
-    return Launch(MstscPath(), FileExists(path) ? L"/edit \"" + path + L"\"" : L"", LaunchOptions{});
+    return Launch(MstscPath(), FileExists(path) ? L"/edit \"" + path + L"\"" : L"");
 }
 
 }  // namespace
@@ -3579,12 +3805,9 @@ public:
         }
         messages_.onTimer = [this](UINT_PTR timer) { OnTimer(timer); };
         messages_.onMessage = [this](UINT message, WPARAM wParam, LPARAM lParam) { OnMessage(message, wParam, lParam); };
-        // RDPLauncher.exe and the mod show the same widget; while the exe runs, the mod waits.
-        if (!instance_.TryAcquire()) {
-            Wh_Log(L"RDPLauncher.exe is running; waiting for it to exit");
-            SetTimer(messages_.Handle(), kWaitForAppTimer, 3000, nullptr);
-            return true;
-        }
+        // Tidy up after sessions that were still running when Windhawk was last closed.
+        RestoreDefaultRdp(false);
+        DeleteSessionCopies();
         return StartWidget();
     }
 
@@ -3593,15 +3816,32 @@ public:
         SetEvent(cancel_);  // A display-number read in progress closes mstsc and stops.
         workers_.WaitAll(5000);
         CloseHandle(cancel_);
+        bool sessionUsesDefaultRdp = false;
+        for (const std::unique_ptr<Session>& session : sessions_) {
+            UnregisterWaitEx(session->wait, INVALID_HANDLE_VALUE);
+            CloseHandle(session->process);
+            sessionUsesDefaultRdp = sessionUsesDefaultRdp || session->setDefaultRdp;
+        }
+        // Turned off during a session: put Default.rdp back now anyway.
+        RestoreDefaultRdp(sessionUsesDefaultRdp);
     }
 
 private:
-    static constexpr UINT_PTR kRefreshTimer = 1;
+    static constexpr UINT_PTR kDisplaysSettledTimer = 1;
     static constexpr UINT_PTR kCooldownTimer = 2;
-    static constexpr UINT_PTR kWaitForAppTimer = 3;
     static constexpr UINT kIdsReadMessage = WM_APP + 1;
+    static constexpr UINT kSessionEndedMessage = WM_APP + 2;
     // Keeps a button busy for a moment after starting a session, so a double-click starts one session.
     static constexpr UINT kStartCooldownMilliseconds = 2000;
+
+    // A running session, watched for its end.
+    struct Session {
+        HWND replyTo;
+        HANDLE process;
+        HANDLE wait;
+        std::wstring copy;
+        bool setDefaultRdp;
+    };
 
     struct IdsQuery {
         HWND replyTo;
@@ -3626,6 +3866,12 @@ private:
         return 0;
     }
 
+    // Runs on a thread pool thread when a session's Remote Desktop Connection exits.
+    static VOID CALLBACK OnSessionExited(PVOID parameter, BOOLEAN) {
+        auto session = (Session*)parameter;
+        PostMessageW(session->replyTo, kSessionEndedMessage, 0, (LPARAM)session);
+    }
+
     bool StartWidget() {
         if (!widget_.Create(settings_.taskbarOffset) || !popup_.Create()) {
             return false;
@@ -3633,6 +3879,12 @@ private:
         widget_.onOffsetChanged = [this](int offset) {
             settings_.taskbarOffset = offset;
             Save();
+        };
+        widget_.onDisplaysChanged = [this]() {
+            RefreshDisplays();
+            RefreshWidget();
+            // Monitor names can show up a moment later; look again once things have settled.
+            SetTimer(messages_.Handle(), kDisplaysSettledTimer, 1500, nullptr);
         };
         widget_.onConnect = [this](int button) { ConnectWithButton(button); };
         widget_.onConnectionClicked = [this]() {
@@ -3650,32 +3902,28 @@ private:
         RefreshDisplays();
         ConnectionChanged();
         widget_.SetShown(true);
-        SetTimer(messages_.Handle(), kRefreshTimer, 1000, nullptr);
         return true;
     }
 
     void OnTimer(UINT_PTR timer) {
-        if (timer == kRefreshTimer) {
+        if (timer == kDisplaysSettledTimer) {
+            KillTimer(messages_.Handle(), kDisplaysSettledTimer);
+            displayDetails_.clear();  // Reads the monitor names again.
             RefreshDisplays();
             RefreshWidget();
         } else if (timer == kCooldownTimer) {
             EndStart();
-        } else if (timer == kWaitForAppTimer && instance_.TryAcquire()) {
-            KillTimer(messages_.Handle(), kWaitForAppTimer);
-            settings_ = Settings();
-            settings_.Load();  // The exe may have changed them.
-            StartWidget();
         }
     }
 
     void Save() {
         if (!settings_.Save()) {
-            popup_.ShowMessage(L"Couldn't save settings", Settings::Path());
+            popup_.ShowMessage(L"Couldn't save settings", L"Windhawk couldn't store the mod's settings.");
         }
     }
 
-    // Notices displays being added, removed or rearranged, and picks the display buttons for the
-    // new arrangement.
+    // Notices displays being added, removed or rearranged (told by WM_DISPLAYCHANGE), and picks the
+    // display buttons for the new arrangement.
     void RefreshDisplays() {
         Displays current = GetDisplays();
         std::wstring key = SetupKey(current);
@@ -3715,6 +3963,9 @@ private:
                                  std::to_wstring(busyButton_);
         for (const Choice& button : content.buttons) {
             signature += L"\n" + Join(button, L";");
+        }
+        for (const LocalDisplay& display : displays_) {
+            signature += L"\n" + display.name;
         }
         if (signature != lastSignature_) {
             lastSignature_ = signature;
@@ -3769,6 +4020,10 @@ private:
     }
 
     void OnMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == kSessionEndedMessage) {
+            OnSessionEnded((Session*)lParam);
+            return;
+        }
         if (message != kIdsReadMessage) {
             return;
         }
@@ -3779,7 +4034,7 @@ private:
         } else {
             unreadableOutputs_.insert(query->outputsKey);
             popup_.ShowMessage(L"Couldn't read Remote Desktop's display numbers",
-                               L"Guessed them. Details: %LOCALAPPDATA%\\RDPLauncher\\display-numbers.log");
+                               L"Guessed them. To see why, turn on logging for the mod in Windhawk and try again.");
         }
         Connection* connection = settings_.FindConnection(query->connectionKey);
         if (!connection) {
@@ -3796,12 +4051,58 @@ private:
 
     // Starts the session and keeps the button busy for a moment.
     void Finish(const Connection& connection, const std::vector<int>* displayIds) {
-        if (std::optional<std::wstring> error = StartFullScreen(connection, displayIds)) {
+        StartedSession started;
+        std::optional<std::wstring> error = StartFullScreen(connection, displayIds, started);
+        if (started.process) {
+            WatchSession(started);
+        } else if (started.setDefaultRdp) {
+            RestoreDefaultRdpWhenNoSessions();
+        }
+        if (error) {
             popup_.ShowMessage(L"Couldn't start Remote Desktop", *error);
             EndStart();
             return;
         }
         SetTimer(messages_.Handle(), kCooldownTimer, kStartCooldownMilliseconds, nullptr);
+    }
+
+    // Watches for the session to end, to tidy up after it.
+    void WatchSession(const StartedSession& started) {
+        auto session = std::make_unique<Session>(Session{messages_.Handle(), started.process, nullptr, started.copy, started.setDefaultRdp});
+        if (!RegisterWaitForSingleObject(&session->wait, session->process, OnSessionExited, session.get(), INFINITE,
+                                         WT_EXECUTEONLYONCE)) {
+            // It can't be watched; the next start of the mod tidies up.
+            CloseHandle(session->process);
+            return;
+        }
+        sessions_.push_back(std::move(session));
+    }
+
+    // A session ended: deletes its .rdp copy (unless another session uses one by the same name),
+    // and puts Default.rdp's display settings back once no session needs them.
+    void OnSessionEnded(Session* ended) {
+        auto found = std::find_if(sessions_.begin(), sessions_.end(), [&](const std::unique_ptr<Session>& s) { return s.get() == ended; });
+        if (found == sessions_.end()) {
+            return;
+        }
+        std::unique_ptr<Session> session = std::move(*found);
+        sessions_.erase(found);
+        UnregisterWaitEx(session->wait, INVALID_HANDLE_VALUE);
+        CloseHandle(session->process);
+        if (!session->copy.empty() && std::none_of(sessions_.begin(), sessions_.end(), [&](const std::unique_ptr<Session>& s) {
+                return EqualsIgnoreCase(s->copy, session->copy);
+            })) {
+            DeleteFileW(session->copy.c_str());
+        }
+        if (session->setDefaultRdp) {
+            RestoreDefaultRdpWhenNoSessions();
+        }
+    }
+
+    void RestoreDefaultRdpWhenNoSessions() {
+        if (std::none_of(sessions_.begin(), sessions_.end(), [](const std::unique_ptr<Session>& s) { return s->setDefaultRdp; })) {
+            RestoreDefaultRdp(false);
+        }
     }
 
     void EndStart() {
@@ -3977,13 +4278,13 @@ private:
         menu.Add(L"Reset display buttons", [this]() { ResetDisplayButtons(); }, false, settings_.displayButtons.count(setupKey_) > 0);
         menu.Add(L"Read display numbers again", [this]() { ReadDisplayIdsAgain(); }, false, displays_.size() > 1);
 
-        // Linking the widget with AudioFlipper's into one, on either side; offered while AudioFlipper
-        // is running (or they're linked).
-        WidgetLink::State link = WidgetLink::Read();
+        // Linking the widget with Taskbar Audio Flipper's into one, on either side; offered while that
+        // mod is running (or they're linked).
+        const WidgetLink::State& link = widget_.Link();
         if (link.linked || WidgetLink::PartnerRunning()) {
             menu.AddSeparator();
             Menu& linkMenu = menu.AddSubmenu(std::wstring(L"Link with ") + kPartnerApp);
-            bool selfOnLeft = link.SelfOnLeft();
+            bool selfOnLeft = link.selfOnLeft;
             linkMenu.Add(L"Not linked", [this, selfOnLeft]() { widget_.SetLink(false, selfOnLeft); }, !link.linked);
             linkMenu.Add(std::wstring(kPartnerApp) + L" on the left", [this]() { widget_.SetLink(true, false); }, link.linked && !selfOnLeft);
             linkMenu.Add(std::wstring(kPartnerApp) + L" on the right", [this]() { widget_.SetLink(true, true); }, link.linked && selfOnLeft);
@@ -3998,7 +4299,6 @@ private:
     }
 
     Settings settings_;
-    SingleInstance instance_{L"Local\\RDPLauncher.SingleInstance"};
     MessageWindow messages_;
     RdpWidget widget_;
     MessagePopup popup_;
@@ -4013,6 +4313,7 @@ private:
     // Arrangements of outputs whose display IDs "mstsc /l" didn't give this time; they're guessed
     // instead of making every connection wait for it again.
     std::set<std::wstring> unreadableOutputs_;
+    std::vector<std::unique_ptr<Session>> sessions_;
     bool starting_ = false;
     int busyButton_ = -1;
 };
@@ -4027,6 +4328,7 @@ BOOL WhTool_ModInit() {
         auto app = std::make_shared<RdpApp>();
         if (!app->Start()) {
             Wh_Log(L"Couldn't start");
+            return nullptr;
         }
         return app;
     });
