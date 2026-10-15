@@ -2,7 +2,7 @@
 // @id              desktop-draggable-widgets
 // @name            JonaOS Draggable Desktop Widgets
 // @description     Draggable widgets with transparent, light, and dark themes. You can add a custom folder path in the mod settings to open your desired music folder.
-// @version         7.2
+// @version         7.3
 // @author          Jona like it, code it
 // @github          https://github.com/Stunning-dev
 // @include         windhawk.exe
@@ -14,6 +14,8 @@
 /*
 # JonaOS Draggable Desktop Widgets
 View Calendar, Time, Battery, Open your Music easily and fast without need of navigating through folders to reach Music folder, and Control Volume really fast by dragging the slider. Dragging moves them to any position on the Desktop and positions are remembered, the Quick Settings shortcuts need Windows 11 (Windows 10 falls back to full Settings pages), and the panel is primary-monitor only.
+![gif](https://i.imgur.com/3UgbTey.gif)
+*Music Visualizers animate when audio is detected*
 ![image](https://i.imgur.com/QsdEEBq.png)
 *Volume and Battery widgets can be made Horizontal, Vertical and Round*
 ![image](https://i.imgur.com/OT1h1u1.png)
@@ -132,9 +134,29 @@ View Calendar, Time, Battery, Open your Music easily and fast without need of na
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <endpointvolume.h>
+#include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <shlobj.h>
 #include <shellapi.h>
+
+// Windhawk currently builds with MinGW headers where IAudioMeterInformation
+// can be only forward-declared in endpointvolume.h. Complete the COM interface
+// so Release() and GetPeakValue() are valid member calls.
+#if defined(__MINGW32__)
+__CRT_UUID_DECL(IAudioMeterInformation,
+                0xC02216F6, 0x8C67, 0x4B5B,
+                0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64)
+
+MIDL_INTERFACE("C02216F6-8C67-4B5B-9D00-D008E73E0064")
+IAudioMeterInformation : public IUnknown {
+public:
+    virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* pfPeak) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetMeteringChannelCount(UINT* pnChannelCount) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetChannelsPeakValues(
+        UINT u32ChannelCount, float* afPeakValues) = 0;
+    virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD* pdwHardwareSupportMask) = 0;
+};
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -147,7 +169,9 @@ namespace {
 constexpr int kDesignW = 390;
 constexpr int kDesignH = 620;
 constexpr UINT_PTR kTickTimer = 1;
+constexpr UINT_PTR kVisualizerTimer = 2;
 constexpr DWORD kTimerMs = 1000;
+constexpr DWORD kVisualizerTimerMs = 80;
 constexpr UINT kSettingsChangedMessage = WM_APP + 1;
 constexpr UINT kVolumeChangedMessage   = WM_APP + 2;
 constexpr UINT kAudioDeviceChangedMessage = WM_APP + 3;
@@ -478,8 +502,15 @@ int g_lastRenderedMinute = -1;
 IMMDeviceEnumerator*          g_audioEnumerator = nullptr;
 IMMDevice*                    g_audioDevice = nullptr;
 IAudioEndpointVolume*         g_endpointVolume = nullptr;
+IAudioMeterInformation*       g_audioMeter = nullptr;
 IAudioEndpointVolumeCallback* g_volumeCallback = nullptr;
 IMMNotificationClient*        g_audioNotificationClient = nullptr;
+
+constexpr int kMusicBarCount = 7;
+constexpr float kMusicRestHeights[kMusicBarCount] = {24.0f, 52.0f, 34.0f, 68.0f, 46.0f, 58.0f, 28.0f};
+float g_musicBarHeights[kMusicBarCount] = {24.0f, 52.0f, 34.0f, 68.0f, 46.0f, 58.0f, 28.0f};
+float g_musicBarTargets[kMusicBarCount] = {24.0f, 52.0f, 34.0f, 68.0f, 46.0f, 58.0f, 28.0f};
+unsigned int g_musicRandomSeed = 0x6C8E9CF5u;
 
 struct RenderSurface {
     HDC      memDc      = nullptr;
@@ -1072,7 +1103,7 @@ float VolumeLevelFromPoint(PointF pt, bool continuingDrag) {
 
 // ── Audio / battery COM helpers (unchanged from original) ─────────────────────
 
-class VolumeEndpointCallback : public IAudioEndpointVolumeCallback {
+class VolumeEndpointCallback final : public IAudioEndpointVolumeCallback {
 public:
     ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&m_refCount); }
     ULONG STDMETHODCALLTYPE Release() override {
@@ -1102,7 +1133,7 @@ private:
     volatile LONG m_refCount = 1;
 };
 
-class AudioNotificationClient : public IMMNotificationClient {
+class AudioNotificationClient final : public IMMNotificationClient {
 public:
     ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&m_refCount); }
     ULONG STDMETHODCALLTYPE Release() override {
@@ -1138,6 +1169,10 @@ void ReleaseAudioEndpoint() {
         g_endpointVolume->Release();
         g_endpointVolume = nullptr;
     }
+    if (g_audioMeter) {
+        g_audioMeter->Release();
+        g_audioMeter = nullptr;
+    }
     if (g_audioDevice) { g_audioDevice->Release(); g_audioDevice = nullptr; }
 }
 
@@ -1166,6 +1201,9 @@ bool BindAudioEndpoint() {
     hr = g_audioDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
                                  reinterpret_cast<void**>(&g_endpointVolume));
     if (FAILED(hr)) { ReleaseAudioEndpoint(); return false; }
+    hr = g_audioDevice->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr,
+                                 reinterpret_cast<void**>(&g_audioMeter));
+    if (FAILED(hr)) g_audioMeter = nullptr;
     if (!g_volumeCallback) g_volumeCallback = new VolumeEndpointCallback();
     if (g_volumeCallback)  g_endpointVolume->RegisterControlChangeNotify(g_volumeCallback);
     return true;
@@ -1200,6 +1238,40 @@ void SetSystemVolume(float level) {
     if (!g_endpointVolume) BindAudioEndpoint();
     if (g_endpointVolume)  g_endpointVolume->SetMasterVolumeLevelScalar(level, nullptr);
     g_volumeLevel = level;
+}
+
+float NextMusicRandom01() {
+    g_musicRandomSeed = g_musicRandomSeed * 1664525u + 1013904223u;
+    return static_cast<float>((g_musicRandomSeed >> 8) & 0x00FFFFFFu) / 16777215.0f;
+}
+
+bool RefreshMusicVisualizer() {
+    if (!g_audioMeter) BindAudioEndpoint();
+
+    float peak = 0.0f;
+    const bool audioActive =
+        g_audioMeter &&
+        SUCCEEDED(g_audioMeter->GetPeakValue(&peak)) &&
+        peak > 0.015f;
+
+    for (int i = 0; i < kMusicBarCount; ++i) {
+        if (audioActive) {
+            const float minimum = 14.0f + peak * 8.0f;
+            const float maximum = 38.0f + peak * 40.0f;
+            g_musicBarTargets[i] = minimum + NextMusicRandom01() * (maximum - minimum);
+        } else {
+            g_musicBarTargets[i] = kMusicRestHeights[i];
+        }
+    }
+
+    bool changed = false;
+    const float smoothing = audioActive ? 0.45f : 0.18f;
+    for (int i = 0; i < kMusicBarCount; ++i) {
+        const float oldHeight = g_musicBarHeights[i];
+        g_musicBarHeights[i] += (g_musicBarTargets[i] - g_musicBarHeights[i]) * smoothing;
+        if (std::fabs(g_musicBarHeights[i] - oldHeight) > 0.1f) changed = true;
+    }
+    return changed;
 }
 
 bool RefreshBattery() {
@@ -1580,14 +1652,14 @@ void DrawMusic(Graphics& g, const Widget& widget) {
     SolidBrush blue  (MaterialIconColor(theme, liquidGlass, Color(235, 80,  160, 255)));
     SolidBrush cyan  (MaterialIconColor(theme, liquidGlass, Color(235, 60,  220, 240)));
     SolidBrush yellow(theme ? MaterialThemeHeaderColor(theme) : liquidGlass ? LiquidGlassTextColor(240) : Color(255, 255, 210, 38));
-    int heights[] = {24, 52, 34, 68, 46, 58, 28};
     const float barW  = 9;
     const float gap   = 8;
-    const float total = 7 * barW + 6 * gap;
+    const float total = kMusicBarCount * barW + (kMusicBarCount - 1) * gap;
     const float x0    = rc.X + (rc.Width - total) / 2.0f;
     const float baseY = rc.Y + 93;
-    for (int i = 0; i < 7; ++i) {
-        RectF bar(x0 + i * (barW + gap), baseY - heights[i], barW, static_cast<float>(heights[i]));
+    for (int i = 0; i < kMusicBarCount; ++i) {
+        const float height = Clamp(g_musicBarHeights[i], 12.0f, 78.0f);
+        RectF bar(x0 + i * (barW + gap), baseY - height, barW, height);
         if (jp) {
             SolidBrush jbar(jp->musicBars[i]);
             DrawRoundedRectangle(g, bar, 4, jbar);
@@ -1998,20 +2070,28 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             MARGINS margins = {-1};
             DwmExtendFrameIntoClientArea(hwnd, &margins);
             SetTimer(hwnd, kTickTimer, kTimerMs, nullptr);
+            SetTimer(hwnd, kVisualizerTimer, kVisualizerTimerMs, nullptr);
             UpdateScale();
             ApplyDefaultWidgetLayout();
             LoadWidgetPositions();
             InitAudio();
             RefreshVolume();
+            RefreshMusicVisualizer();
             RefreshBattery();
             Render();
             return 0;
         }
 
         case WM_TIMER: {
-            bool batteryChanged = RefreshBattery();
-            if (batteryChanged || CurrentMinuteKey() != g_lastRenderedMinute) {
-                Render();
+            if (wParam == kTickTimer) {
+                bool batteryChanged = RefreshBattery();
+                if (batteryChanged || CurrentMinuteKey() != g_lastRenderedMinute) {
+                    Render();
+                }
+            } else if (wParam == kVisualizerTimer) {
+                if (RefreshMusicVisualizer()) {
+                    Render();
+                }
             }
             return 0;
         }
@@ -2031,6 +2111,7 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         case kAudioDeviceChangedMessage:
             BindAudioEndpoint();
             RefreshVolume();
+            RefreshMusicVisualizer();
             Render();
             return 0;
 
@@ -2144,6 +2225,7 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         case WM_DESTROY:
             SaveWidgetPositions();
             KillTimer(hwnd, kTickTimer);
+            KillTimer(hwnd, kVisualizerTimer);
             ShutdownAudio();
             DestroyRenderSurface();
             g_hwnd = nullptr;
