@@ -9,23 +9,31 @@
 // @architecture    x86-64
 // @compilerOptions -luser32 -lgdi32 -lole32 -loleaut32 -luuid -lshell32 -lcomctl32 -lpsapi -luxtheme -lcrypt32
 // ==/WindhawkMod==
-
 // ==WindhawkModReadme==
 /*
 
 # Windows 7/8.1 UAC Recreation
 
-This mod makes the UAC (User Account Control) prompt of Windows 10 and Windows 11 become the one from Windows 7/8.1, which is a very similar dialog in both versions. The secure desktop stays on, and the decision stays Windows': the answer is handed back to the prompt Windows itself created, and the native prompt comes back on any doubt. System files are not replaced and system settings are not changed.
+This mod replaces the UAC (User Account Control) prompt on Windows 10 and Windows 11 with a recreation of the classic one from Windows 7/8.1.
 
-This is a best-effort recreation. Where a piece of the original information cannot be read, it is left out instead of guessed. Credential prompts are never replaced: the native Windows flow remains the only source of a decision. Windows can host consent and credential screens in the same XAML window class, so in the recommended all-app scope with the native prompt set to **Moved off screen**, that XAML candidate, if it has no Win32 edit control, may be moved off screen briefly while UI Automation classifies it. UI Automation uses the documented UIA2 connection/transaction timeouts of 250 ms; these are per-call timeouts, not a hard bound for the entire harvest. The native candidate can be moved before classification and is restored on fallback. If UIA2 cannot bound the call, or exposes credential signals, returns no usable harvest, is stopped, or cannot map buttons confidently, the native window is restored and the replacement is not shown. The blue link at the bottom is not drawn. Persian and Arabic are translated, but the layout is not mirrored.
+The secure desktop remains active, and Windows still makes the final decision. The answer is passed back to the original prompt, and if anything goes wrong, the native Windows prompt comes back. System files are not replaced and system settings are not changed.
 
-The original version reports tests on **Windows 10 21H2**, **Windows 11 24H2** and **Windows 11 25H2**. This revised source requires fresh Windows secure-desktop regression testing before release.
+This is a best-effort recreation. If some information cannot be read, it is left out rather than guessed. Credential prompts are never replaced and the native Windows flow always remains the only source of a decision. In the recommended all-app scope with the native prompt set to **Moved off screen**, a XAML candidate without a Win32 edit control may be moved off screen briefly while UI Automation classifies it.
 
-`Ctrl+Shift+F10` gives the native prompt back at any time, without deciding anything.
+The original version reports tests on **Windows 10 21H2**, **Windows 11 24H2** and **Windows 11 25H2**.
+
+`Ctrl+Shift+F10` restores the native prompt at any time, without deciding anything.
 
 ## Appearance
 
-The **Dialog skin** setting selects one of four looks: Windows 7 (Basic Theme), Windows 7 Aero (Custom Theme), Windows 8.1 (Native System Theme), or Windows 10 (versions 1507-1607, Flat Icons). Windows 7 Aero is an additional customized theme that uses the complete built-in Windows 7 shield set for verified, question-mark, and exclamation states; it is not the original Windows 7 desktop theme. The Windows 8.1 verified shield uses the supplied image with its white background removed. On Windows 7, Windows 7 Aero, and Windows 8.1, the blue question-mark shield is used for a trusted third-party publisher; a publisher identified as Microsoft Windows keeps the selected theme's verified shield. The supplied transparent orange shield matches an orange banner in Windows 7 Basic and Windows 8.1. Flat Icons always uses the blue Windows shield while the banner retains its warning color. Button drawing remains independently configurable.
+The **Dialog skin** setting offers four looks:
+
+- **Windows 7 (Basic Theme)**
+- **Windows 7 Aero (Custom Theme)** — uses the full built-in Windows 7 shield set for verified, question-mark, and exclamation states. It is not the original Windows 7 desktop theme.
+- **Windows 8.1 (Native System Theme)** — the verified shield uses the supplied image with its white background removed.
+- **Windows 10 (1507-1607, Flat Icons)** — always uses the blue Windows shield while the banner keeps its warning color.
+
+On Windows 7, Windows 7 Aero, and Windows 8.1, a trusted third-party publisher gets the blue question-mark shield. A publisher identified as Microsoft Windows keeps the selected theme's verified shield. The supplied transparent orange shield matches an orange banner in Windows 7 Basic and Windows 8.1. Button drawing remains independently configurable.
 
 ### Screenshots
 
@@ -42,16 +50,21 @@ The **Dialog skin** setting selects one of four looks: Windows 7 (Basic Theme), 
 ![Windows 8.1 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81uac.PNG)
 
 ## Windows 10 (1507-1607)
+
 ![Windows 10 UAC prompt](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10uac.PNG)
 
 
-Publisher recovery, the Regedit compatibility override, executable-path recovery, banner colours and shield overrides have been restored to the behavior of the user-supplied original. On builds where native text harvesting is incomplete, the original heuristics and signature recovery are used. These are compatibility fallbacks, not proof that Windows reported the same publisher or evaluated the same file. The Regedit override is deliberately retained at the user's request.
+The banner colour, shield, and publisher label try to follow the native prompt's verdict: blue and the "Verified publisher:" label appear only when the native publisher row says the publisher is verified. Anything else — including a prompt whose state could not be read — is drawn amber with the plain "Publisher:" label. The mod can show the publisher name it read, but it never shows a request as more trusted than Windows does. The manual colour and shield settings can only make the prompt look more cautious.
 
 A diagnostics dump is written only when explicitly enabled, to Windhawk's mod-specific storage directory. It can contain prompt text and command-line details; enable it only when needed.
 
 ## Installation
 
-Windhawk excludes consent.exe by default, so it has to be allowed: **Settings > Advanced settings > More advanced settings > Process inclusion list** -> add `consent.exe`. Without that the mod does nothing.
+Windhawk excludes consent.exe by default, so it has to be allowed:
+
+**Settings > Advanced settings > More advanced settings > Process inclusion list** → add `consent.exe`.
+
+Without that, the mod does nothing.
 
 If any issues are encountered, please report them to the author of the mod.
 
@@ -94,7 +107,7 @@ If any issues are encountered, please report them to the author of the mod.
   - aero: The Windows 7 Aero buttons, painted by the mod
 - bannerShield: auto
   $name: Which shield is shown
-  $description: "This setting chooses the shield for non-flat themes. An orange banner always uses its matching warning shield; Flat Icons always uses the blue Windows shield."
+  $description: "This setting chooses the shield for non-flat themes. An orange banner always uses its matching warning shield; Flat Icons always uses the blue Windows shield. A manual choice can only make the shield more cautious, never more trusted."
   $options:
   - auto: Automatic (recommended)
   - verified: Verified shield
@@ -102,7 +115,7 @@ If any issues are encountered, please report them to the author of the mod.
   - exclamation: Amber exclamation mark
 - bannerColour: auto
   $name: Banner colour
-  $description: "This setting chooses the banner colour. Automatic mode follows the publisher and the native Yes-button state; manual choices affect appearance only and never approve or deny a request."
+  $description: "This setting chooses the banner colour. Automatic mode follows the publisher and the native Yes-button state; manual choices can only make the banner more cautious (blue, then yellow, then red), never more trusted, and never approve or deny a request."
   $options:
   - auto: Automatic (recommended)
   - blue: Always blue
@@ -814,6 +827,28 @@ static void InitLocale() {
     Dbg(L"UI language: %s", g_loc->lang);
 }
 
+// "Verified publisher:" only when Windows' own row says so; otherwise the plain "Publisher:".
+static const WCHAR* PublisherLabelFor(bool verified) {
+    if (!g_loc) return L"Publisher:";
+    if (verified) return g_loc->publisher;
+    const WCHAR* l = g_loc->lang;
+    if (!_wcsicmp(l, L"it")) return L"Editore:";
+    if (!_wcsicmp(l, L"de")) return L"Herausgeber:";
+    if (!_wcsicmp(l, L"fr")) return L"\u00c9diteur :";
+    if (!_wcsicmp(l, L"es")) return L"Editor:";
+    if (!_wcsicmp(l, L"pt")) return L"Editor:";
+    if (!_wcsicmp(l, L"nl")) return L"Uitgever:";
+    if (!_wcsicmp(l, L"pl")) return L"Wydawca:";
+    if (!_wcsicmp(l, L"ru")) return L"\u0418\u0437\u0434\u0430\u0442\u0435\u043b\u044c:";
+    if (!_wcsicmp(l, L"fa")) return L"\u0646\u0627\u0634\u0631:";
+    if (!_wcsicmp(l, L"ar")) return L"\u0627\u0644\u0646\u0627\u0634\u0631:";
+    if (!_wcsicmp(l, L"tr")) return L"Yay\u0131mc\u0131:";
+    if (!_wcsicmp(l, L"ja")) return L"\u767a\u884c\u5143:";
+    if (!_wcsicmp(l, L"ko")) return L"\uac8c\uc2dc\uc790:";
+    if (!_wcsicmp(l, L"hi")) return L"\u092a\u094d\u0930\u0915\u093e\u0936\u0915:";
+    return L"Publisher:";
+}
+
 //------------------------------------------------------------------------------
 // Desktop helpers
 //------------------------------------------------------------------------------
@@ -1242,6 +1277,19 @@ static DWORD WINAPI IdentityThreadProc(LPVOID param) {
 #endif
 }
 
+// The event hook alone can be late (a XAML window is created, shown and placed in several steps);
+// while a prompt is pending the watcher also sweeps its desktop every few milliseconds, so the
+// native consent window leaves the screen at once, before it is ever painted.
+static BOOL CALLBACK SweepConsentHostProc(HWND h, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+    WCHAR cls[128] = L"";
+    GetClassNameW(h, cls, ARRAYSIZE(cls));
+    if (IsConsentHostClass(cls)) EjectTheNativePromptAtOnce(h);
+    return TRUE;
+}
+
 static DWORD WINAPI WatcherProcBody(LPVOID param) {
     WatcherCtx* w = (WatcherCtx*)param;
     g_curWatcher = (int)(w - g_watchers);
@@ -1276,7 +1324,16 @@ static DWORD WINAPI WatcherProcBody(LPVOID param) {
 
     MSG msg;
     while (!StopRequested()) {
-        DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_stopEvent, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        bool sweeping = InterlockedCompareExchange(&g_inHook, 0, 0) != 0 &&
+                        InterlockedCompareExchange(&g_promptGivenBack, 0, 0) == 0 &&
+                        g_settings.relayMode == 1 && !g_settings.dumpUiTree &&
+                        g_settings.nativeWindowMode != 2;
+        DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_stopEvent, sweeping ? 3 : INFINITE,
+                                                 QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (wait == WAIT_TIMEOUT) {
+            EnumDesktopWindows(desk, SweepConsentHostProc, 0);
+            continue;
+        }
         if (wait != WAIT_OBJECT_0 + 1) break;
         if (!PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) continue;
         if (msg.message == WM_QUIT) break;
@@ -1381,6 +1438,8 @@ struct PromptInfo {
     bool buttonsConfident = false;
     bool yesEnabled = false;
     bool credentialVariant = false;
+    bool systemFileConfirmed = false;        // regedit.exe confirmed by its system path
+    bool publisherVerifiedByWindows = false; // the native publisher row itself says "verified"
     bool sawUnknownAuthor = false;   // the prompt says the author is unknown, not just the publisher
     bool publisherFromSignature = false; // original compatibility recovery behavior
     int signatureState = -1;
@@ -1700,6 +1759,7 @@ static const WCHAR* kUnknownWords[] = {
     L"nieznany wydawca", L"nieznany", L"onbekende uitgever", L"onbekend",
     L"\u043d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439",
     L"\u4e0d\u660e\u306a\u767a\u884c\u5143", L"\u4e0d\u660e", L"\u672a\u77e5\u53d1\u5e03\u8005", L"\u672a\u77e5",
+    L"bilinmeyen yay\u0131mc\u0131", L"bilinmeyen", L"\u0646\u0627\u0634\u0631 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641", L"\u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641", L"\u0646\u0627\u0634\u0631 \u0646\u0627\u0634\u0646\u0627\u0633", L"\u0646\u0627\u0634\u0646\u0627\u0633", L"\u0905\u091c\u094d\u091e\u093e\u0924 \u092a\u094d\u0930\u0915\u093e\u0936\u0915", L"\u0905\u091c\u094d\u091e\u093e\u0924", L"\uc54c \uc218 \uc5c6\ub294 \uac8c\uc2dc\uc790", L"\uc54c \uc218 \uc5c6\ub294", L"\uc54c \uc218 \uc5c6\uc74c",
 };
 
 static bool IsUnknownPublisherValue(const std::wstring& text) {
@@ -1725,6 +1785,15 @@ static bool IsUnknownPublisherValue(const std::wstring& text) {
 static bool IsWindowsPublisherText(const std::wstring& text) {
     std::wstring value = ToLower(Trim(text));
     return value == L"windows" || value.find(L"microsoft windows") != std::wstring::npos;
+}
+
+static const WCHAR* kVerifiedWords[] = {L"verified", L"verificato", L"verifiziert", L"v\u00e9rifi\u00e9", L"comprobado", L"verificado", L"geverifieerd", L"zweryfikowany", L"\u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043d", L"\u78ba\u8a8d\u6e08\u307f", L"\ud655\uc778\ub41c", L"do\u011frulanm\u0131\u015f", L"\u062a\u0623\u06cc\u06cc\u062f", L"\u0627\u0644\u0645\u0639\u062a\u0645\u062f", L"\u0938\u0924\u094d\u092f\u093e\u092a\u093f\u0924"};
+static const WCHAR* kNotVerifiedWords[] = {L"unverified", L"non verificato", L"nicht verifiziert", L"non v\u00e9rifi\u00e9", L"no verificado", L"no comprobado", L"n\u00e3o verificado", L"nao verificado", L"niet geverifieerd", L"niet-geverifieerd", L"niezweryfikowany", L"\u043d\u0435\u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043d", L"\u043d\u0435\u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434", L"\u672a\u78ba\u8a8d", L"\ud655\uc778\ub418\uc9c0 \uc54a\uc740", L"do\u011frulanmam\u0131\u015f", L"\u063a\u064a\u0631 \u0645\u0639\u062a\u0645\u062f", L"\u062a\u0623\u06cc\u06cc\u062f \u0646\u0634\u062f\u0647"};
+
+// True only when the label of the native publisher row says "verified" in the prompt's language.
+static bool LabelSaysVerified(const std::wstring& label) {
+    if (TextHasAnyWord(label, kNotVerifiedWords, ARRAYSIZE(kNotVerifiedWords))) return false;
+    return TextHasAnyWord(label, kVerifiedWords, ARRAYSIZE(kVerifiedWords));
 }
 
 // The two bottom links of the prompt, in the languages this mod ships strings for. They are
@@ -1798,15 +1867,27 @@ static void MapPromptRows(PromptInfo& info) {
 
     const RowText* appLabel = nullptr;
     const RowText* pubLabel = nullptr;
+    std::wstring pubValue;
     for (const auto& r : rows) {
         if (IsJunkText(r.t) || r.t == question) continue;
-        if (!appLabel && TextHasAnyWord(r.t, kAppRowWords, ARRAYSIZE(kAppRowWords))) appLabel = &r;
-        if (!pubLabel && (TextHasAnyWord(r.t, kPubRowWords, ARRAYSIZE(kPubRowWords)) ||
-                          LooksLikePublisher(r.t)))
-            pubLabel = &r;
+        bool isAppRow = TextHasAnyWord(r.t, kAppRowWords, ARRAYSIZE(kAppRowWords));
+        if (!appLabel && isAppRow) appLabel = &r;
+        // A publisher row is accepted only when a value is found for it ("Registry Editor" has
+        // no colon and nothing to its right, so it is skipped and scanning goes on).
+        if (!pubLabel && !isAppRow &&
+            (TextHasAnyWord(r.t, kPubRowWords, ARRAYSIZE(kPubRowWords)) || LooksLikePublisher(r.t))) {
+            std::wstring v;
+            if (valueOf(r, v)) { pubLabel = &r; pubValue = v; }
+        }
     }
     if (appLabel) valueOf(*appLabel, info.appText);
-    if (pubLabel) valueOf(*pubLabel, info.publisherText);
+    if (pubLabel) {
+        info.publisherText = pubValue;
+        std::wstring lbl, val;
+        SplitLabelValue(pubLabel->t, lbl, val);
+        info.publisherVerifiedByWindows =
+            LabelSaysVerified(lbl.empty() ? pubLabel->t : lbl) && !IsUnknownPublisherValue(pubValue);
+    }
 
     // Fallback: this prompt exposes no labels at all, only values. Then the rows are taken in
     // reading order, skipping the question, the chrome, the links and the help button.
@@ -2309,36 +2390,7 @@ static void ResolveButtons(PromptInfo& info) {
             L"fails open rather than guessing", info.yes ? 1 : 0, info.no ? 1 : 0);
 }
 
-// Build-specific compatibility mapping restored from the user-supplied source.
-    // ------------------------------------------------------------------------
-    // REGEDIT COMPATIBILITY OVERRIDE — WHY IT IS KEPT
-    //
-    // Keeping the Regedit override is essential because on Windows 10 and 11 the native UAC
-    // prompt no longer exposes the structured information that Windows 7 and 8.1 used to show:
-    // no coloured banner, no verified/question/exclamation shield, no "Verified publisher"
-    // label, and often not even the path of the elevated file, which stays hidden behind
-    // "Show details" or is replaced by a dependency path.
-    //
-    // The mod must therefore recreate that presentation from what the prompt still provides,
-    // and for Regedit the only reliable signal is the localized program name, because the
-    // harvested path is unreliable and the signature of the elevated file is not always
-    // readable.
-    //
-    // Without the override, Regedit falls back to the normal logic and shows random text —
-    // the publisher mapped by LooksLikePublisher picks the first row containing words like
-    // "editor", and the banner turns amber for a program Windows itself treats as signed by
-    // Microsoft.
-    //
-    // The override exists precisely to fill that gap: it recognises Regedit by name, verifies
-    // that the real %SystemRoot%\regedit.exe exists and is signed by Microsoft, and only then
-    // forces the verified state with a blue banner and "Microsoft Windows" as the publisher.
-    // The path and signature verification is what keeps the override honest: the name alone
-    // is a hint, the signed file at the system path is the proof.
-    //
-    // Removing it without a replacement tested on the target build does not eliminate a risk —
-    // it eliminates a feature, and leaves the user with a prompt that shows wrong information
-    // for one of the most used programs on the system.
-    // ------------------------------------------------------------------------
+// The publisher shown is the one in the native publisher row; nothing is forced by program name.
 static void FinishHarvest(PromptInfo& info) {
     ResolveButtons(info);
 
@@ -2424,6 +2476,8 @@ static void FinishHarvest(PromptInfo& info) {
         info.sawUnknownAuthor = false;
         info.publisherFromSignature = false;
         info.signatureState = SigTrusted;
+        info.publisherVerifiedByWindows = true;
+        info.systemFileConfirmed = true;
 
         Dbg(L"regedit detected (lang=%s): forcing appText='%s', publisher='Microsoft Windows', "
             L"shield=verified (blue), banner=1 (blue), signature=trusted",
@@ -2456,20 +2510,18 @@ static void FinishHarvest(PromptInfo& info) {
     }
     info.sawUnknownAuthor = TextHasAnyWord(info.publisherText, kAuthorWords,
                                            ARRAYSIZE(kAuthorWords));
-    bool publisherKnown = !info.sawUnknownAuthor && !IsUnknownPublisherValue(info.publisherText);
+    bool publisherKnown = info.publisherVerifiedByWindows && !info.sawUnknownAuthor && !IsUnknownPublisherValue(info.publisherText);
 
-    // For regedit the publisher is already forced to "Microsoft Windows" and
-    // signatureState=SigTrusted: so publisherKnown=true and bannerState stays 1 (blue).
-    // Nothing else is touched here.
-    if (!isRegedit) {
-        if (info.yes && !info.yesEnabled) {
-            info.bannerState = 3;                       // the native Yes button is disabled: blocked
-        } else {
-            info.bannerState = publisherKnown ? 1 : 2;
-        }
-        if (g_settings.bannerOverride >= 1 && g_settings.bannerOverride <= 3)
-            info.bannerState = g_settings.bannerOverride;
+    // Blue only when Windows' own publisher row says "verified"; everything else is amber.
+    if (info.yes && !info.yesEnabled) {
+        info.bannerState = 3;                       // the native Yes button is disabled: blocked
+    } else {
+        info.bannerState = publisherKnown ? 1 : 2;
     }
+    // A manual choice can only make the prompt look more cautious (1 blue < 2 amber < 3 red).
+    if (g_settings.bannerOverride >= 1 && g_settings.bannerOverride <= 3 &&
+        g_settings.bannerOverride > info.bannerState)
+        info.bannerState = g_settings.bannerOverride;
 
     // A prompt that asks for a password is a credential prompt whatever else it looks like.
     static const WCHAR* kPasswordWords[] = {L"password", L"passwort", L"mot de passe",
@@ -3953,7 +4005,7 @@ static void BuildDetailsPane(const PromptInfo& info) {
     if (!info.appText.empty())
         AddDetailRow(std::wstring(g_loc->programName) + L" " + info.appText);
     if (!info.publisherText.empty())
-        AddDetailRow(std::wstring(g_loc->publisher) + L" " + info.publisherText);
+        AddDetailRow(std::wstring(PublisherLabelFor(info.publisherVerifiedByWindows)) + L" " + info.publisherText);
     if (!info.originText.empty())
         AddDetailRow(std::wstring(g_loc->origin) + L" " + info.originText);
 
@@ -4400,7 +4452,9 @@ static void PaintWin7Ui(HWND hWnd) {
     // One label/value pair per line: program, publisher, and - when the prompt says which file it
     // is elevating - the origin of the file. The third line is not decoration: it is exactly what
     // the modern prompt hides behind "show details".
-    const WCHAR* labels[3] = {g_loc->programName, g_loc->publisher, g_loc->origin};
+    const WCHAR* labels[3] = {g_loc->programName,
+                              PublisherLabelFor(g_ui.info && g_ui.info->publisherVerifiedByWindows),
+                              g_loc->origin};
     std::wstring values[3];
     values[0] = appName;
     values[1] = publisher;
@@ -4693,11 +4747,10 @@ static LRESULT CALLBACK UiWndProcBody(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         int smallArt = ShieldArtSize(ScaleFor(16, g_ui.dpi));
         g_ui.shieldSmall = LoadSkinShieldIcon(smallArt, 0, nullptr);
         int art = ShieldArtSize(ScaleFor(44, g_ui.dpi));
-        int variant = 0;
-        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3)
+        int variant = g_ui.info ? g_ui.info->shieldVariant : 0;
+        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3 &&
+            g_settings.bannerShield - 1 > variant)
             variant = g_settings.bannerShield - 1;
-        else if (g_ui.info)
-            variant = g_ui.info->shieldVariant;
         // An orange banner always carries its matching exclamation shield, even if a manual
         // shield override was selected. Flat Icons is the exception: it remains consistently blue.
         if (g_settings.windowTheme != WindowThemeWin10Flat && g_ui.info &&
@@ -5026,6 +5079,7 @@ static HANDLE g_uiThread = nullptr;      // the replacement-UI thread (one promp
 
 static RECT g_nativeOriginalRect = {};
 static bool g_nativeMoved = false;
+static bool g_nativeRectValid = false;   // a real on-screen rect of the prompt was captured
 // When the consent hook was entered: the clock the instant ejection is reported against.
 static DWORD g_requestTick = 0;
 
@@ -5043,11 +5097,22 @@ static void RestoreNativePrompt() {
         Log(L"restoring the native prompt window");
         // The bypass was set under g_nativeCs before this move. All watcher state uses
         // that same recursive lock, so a late location event cannot start a new takeover.
-        BOOL restored = SetWindowPos(g_hNativePrompt, HWND_TOPMOST, g_nativeOriginalRect.left,
-                     g_nativeOriginalRect.top,
-                     g_nativeOriginalRect.right - g_nativeOriginalRect.left,
-                     g_nativeOriginalRect.bottom - g_nativeOriginalRect.top,
-                     SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        BOOL restored;
+        if (g_nativeRectValid) {
+            restored = SetWindowPos(g_hNativePrompt, HWND_TOPMOST, g_nativeOriginalRect.left,
+                         g_nativeOriginalRect.top,
+                         g_nativeOriginalRect.right - g_nativeOriginalRect.left,
+                         g_nativeOriginalRect.bottom - g_nativeOriginalRect.top,
+                         SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        } else {
+            RECT cur = {}, wa = {};
+            GetWindowRect(g_hNativePrompt, &cur);
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
+            restored = SetWindowPos(g_hNativePrompt, HWND_TOPMOST,
+                         wa.left + ((wa.right - wa.left) - (cur.right - cur.left)) / 2,
+                         wa.top + ((wa.bottom - wa.top) - (cur.bottom - cur.top)) / 2, 0, 0,
+                         SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        }
         SetForegroundWindow(g_hNativePrompt);
         if (restored) g_nativeMoved = false;
         else Log(L"native restore failed: %u", GetLastError());
@@ -5067,7 +5132,15 @@ static void TakeOverNativePrompt(HWND h) {
     g_hNativePrompt = h;
     // The position to restore is the one the window had before it was first taken over: the
     // function can be called again while the window is already off screen.
-    if (!g_nativeMoved && !GetWindowRect(h, &g_nativeOriginalRect)) return;
+    {
+        // Remember the last place the prompt really had on screen (it can be re-placed by the system).
+        RECT cur = {};
+        if (GetWindowRect(h, &cur) && cur.left > -30000 && cur.right - cur.left >= 160 &&
+            cur.bottom - cur.top >= 90) {
+            g_nativeOriginalRect = cur;
+            g_nativeRectValid = true;
+        }
+    }
     if (g_settings.nativeWindowMode == 2) { g_nativeMoved = false; return; }
     if (g_settings.nativeWindowMode == 1) {
         g_nativeMoved = ShowWindowAsync(h, SW_HIDE) != FALSE;
@@ -5127,7 +5200,6 @@ static void EjectTheNativePromptAtOnce(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     if (g_settings.relayMode != 1 || g_settings.dumpUiTree) return;   // observe: never touched
     if (g_settings.nativeWindowMode == 2) return;                     // leave it in place
-    if (!IsWindowVisible(hwnd)) return;
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (pid != GetCurrentProcessId()) return;
@@ -5140,10 +5212,6 @@ static void EjectTheNativePromptAtOnce(HWND hwnd) {
         TakeOverNativePrompt(hwnd);
         return;
     }
-
-    RECT rc = {};
-    if (!GetWindowRect(hwnd, &rc)) return;
-    if (rc.right - rc.left < 160 || rc.bottom - rc.top < 90) return;  // not the prompt yet
 
     const unsigned long ms = g_requestTick ? (unsigned long)(GetTickCount() - g_requestTick) : 0;
     g_hNativePrompt = hwnd;
@@ -5684,29 +5752,12 @@ static DWORD WINAPI UiSessionRunInner() {
         (int)g_ui.details.size(), (int)info.detailTexts.size());
 
     g_step = L"session: reading the digital signature";
-    std::wstring verifiedSignerName;
-    bool publisherNeedsVerification = IsUnknownPublisherValue(info.publisherText) &&
-                                      !info.sawUnknownAuthor;
-    if (!info.appPath.empty())
-        info.signatureState = VerifySignatureState(
-            info.appPath, publisherNeedsVerification ? &verifiedSignerName : nullptr);
-    if (info.signatureState == SigTrusted && publisherNeedsVerification &&
-        !verifiedSignerName.empty()) {
-        std::wstring nativePublisher = info.publisherText;
-        info.publisherText = verifiedSignerName;
-        info.publisherFromSignature = true;
-        if (g_settings.bannerOverride == 0 && !(info.yes && !info.yesEnabled))
-            info.bannerState = 1;
-        Dbg(L"publisher: native value '%s' replaced with verified signer '%s'",
-            nativePublisher.c_str(), info.publisherText.c_str());
-        // *** FIX 2: rebuild the pane after the publisher was replaced, so the
-        //     old "unknown publisher" row is dropped and the new name appears. ***
-        BuildDetailsPane(info);
-    }
+    if (!info.appPath.empty() && !info.systemFileConfirmed)
+        info.signatureState = VerifySignatureState(info.appPath, nullptr);
     {
         bool unconfirmed = (info.bannerState == 2) ||
-                           (!info.publisherFromSignature && IsUnknownPublisherValue(info.publisherText)) ||
-                           info.signatureState == SigUnsigned ||
+                           (!info.publisherVerifiedByWindows) ||
+                           (info.signatureState == SigUnsigned && !info.systemFileConfirmed) ||
                            info.signatureState == SigInvalid;
         int variant = 0;
         if (unconfirmed)
@@ -5714,8 +5765,9 @@ static DWORD WINAPI UiSessionRunInner() {
         else if (info.bannerState == 1 && !IsWindowsPublisherText(info.publisherText))
             variant = 1;
         if (info.bannerState == 3) variant = 2;
-        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3)
-            variant = g_settings.bannerShield - 1;
+        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3 &&
+            g_settings.bannerShield - 1 > variant)
+            variant = g_settings.bannerShield - 1;      // a manual choice can only be more cautious
         info.shieldVariant = variant;
         Log(L"banner shield: %s (publisher %s, signature %s, author %s)",
             variant == 0 ? L"the verified shield"
@@ -6033,6 +6085,26 @@ static DWORD WINAPI UiThreadProc(LPVOID param) {
 // Hook
 //------------------------------------------------------------------------------
 
+// Calls currently inside CredPromptWorkerHook. Unloading waits until none is left, because the
+// original worker returns into the hook's own stack frame, which must still be mapped.
+static volatile LONG g_hookCalls = 0;
+struct HookCallGuard {
+    HookCallGuard() { InterlockedIncrement(&g_hookCalls); }
+    ~HookCallGuard() { InterlockedDecrement(&g_hookCalls); }
+    HookCallGuard(const HookCallGuard&) = delete;
+    HookCallGuard& operator=(const HookCallGuard&) = delete;
+};
+static void WaitForHookCalls() {
+    bool logged = false;
+    while (InterlockedCompareExchange(&g_hookCalls, 0, 0) > 0) {
+        if (!logged) {
+            logged = true;
+            Log(L"unload: waiting for a call still inside the hook to return");
+        }
+        Sleep(10);
+    }
+}
+
 // Undocumented worker ABI: retain the existing sixteen-argument forwarding hook on x64.
 // This is not proof of the worker's real prototype. Do not replace it with another guessed
 // argument count; a narrower hook requires per-build ABI evidence and Windows testing.
@@ -6044,12 +6116,14 @@ static ULONG WINAPI CredPromptWorkerHook(PVOID a1, PVOID a2, PVOID a3, PVOID a4,
                                          PVOID a6, PVOID a7, PVOID a8, PVOID a9, PVOID a10,
                                          PVOID a11, PVOID a12, PVOID a13, PVOID a14, PVOID a15,
                                          PVOID a16) {
+    HookCallGuard hookGuard;
     if (StopRequested() || InterlockedCompareExchange(&g_inHook, 1, 0) != 0)
         return g_credPromptWorker_orig(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16);
 
     g_step = L"hook: prompt requested";
     InterlockedExchange(&g_originalReturned, 0);
     InterlockedExchange(&g_promptGivenBack, 0); // reset only at the start of a request
+    g_nativeRectValid = false;
 
     if (g_settings.detection == 2) {
         // Hook-only mode: this exists purely to answer one question - does the native prompt
@@ -6275,6 +6349,7 @@ void Wh_ModBeforeUninit() {
         Log(L"the replacement UI thread did not stop in time");
 
     RestoreNativePrompt();
+    WaitForHookCalls();   // the native prompt is back, so a pending call can finish
 }
 
 // The containers of the globals that carry [[clang::no_destroy]] are emptied here, once every
@@ -6300,6 +6375,7 @@ static void ReleaseGlobalState() {
 
 void Wh_ModUninit() {
     Dbg(L"uninit (last step: %s)", g_step);
+    WaitForHookCalls();
 
     // No interface work is done here: the window, the interface thread and the native prompt were
     // dealt with in Wh_ModBeforeUninit, while the hook was still in place.
