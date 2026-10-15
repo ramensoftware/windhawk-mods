@@ -1,3 +1,15 @@
+## 1.7.1 ([Oct 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b2813a1c76395983542ac7cbbb8561f99e7c6912/mods/alt-tab-flip-3d.wh.cpp))
+
+* New "Extra shortcuts" list, each item with a style of its own: Win+Ctrl+Tab, which keeps the switcher open like Ctrl+Alt+Tab (the original Flip 3D shortcut; off by default), and Ctrl+Alt+Tab, to give it a style of its own (#5946, #5947). Win+Ctrl+Tab also works when a program running as administrator is in front.
+* New "Show windows hidden by window managers" setting: windows that tiling window managers such as komorebi hide on their other workspaces can be shown, like in the native Alt+Tab, and picking one brings its workspace back (#6040).
+* New "Virtual desktops" setting: follows the Windows setting for Alt+Tab by default, or shows only the current desktop or all of them. Picking a window on another desktop switches to it. Store apps (Settings, Calculator) on other desktops or minimized are listed once.
+* Four new "iTab" styles: Cover Flow on a glossy floor, with the windows reflected in it, the title and the app's name centered under them, and a scroll bar. On a black floor of their own or on the Background setting, with the app's name or with the title only.
+* New "Live desktop" background: the real desktop behind the stack, with animated wallpapers (Wallpaper Engine, Lively Wallpaper) still playing.
+* New "Screen refresh rate + 20 FPS" frame rate option, per screen.
+* Frames are evenly paced on every screen. Before, some PCs drew 2-3 times more frames than the screen shows, or unevenly with screens of different refresh rates.
+* An open switcher at rest (Ctrl+Alt+Tab or Win+Ctrl+Tab left open) no longer draws anything, and a quick Alt+Tab does less work.
+* README: a new picture with every style, and a Contact section.
+
 ## 1.7.0 ([Oct 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8a2982e08b1096b64c08a9623a90b5c94bd9555e/mods/alt-tab-flip-3d.wh.cpp))
 
 * Minimized windows that sometimes stayed minimized when picked, like console windows (cmd), are now restored reliably (#5955).

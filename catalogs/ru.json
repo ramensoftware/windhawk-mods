@@ -413,13 +413,14 @@
         "ratingUsers": 101,
         "reviews": 1,
         "trendingSorting": 82.5240320519968,
-        "updated": 1791536618000,
+        "updated": 1792044252000,
         "users": 2731
       },
       "metadata": {
         "author": "caliberda",
         "compilerOptions": "-ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32 -ladvapi32",
         "description": "Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows",
+        "donateUrl": "https://livepix.gg/caliberda",
         "github": "https://github.com/cesarkali",
         "homepage": "https://caliberda.com.br",
         "include": [
@@ -428,7 +429,7 @@
         ],
         "license": "MIT",
         "name": "Alt+Tab Flip 3D (Vista Style)",
-        "version": "1.7.0"
+        "version": "1.7.1"
       }
     },
     "alt-tab-hide-ghost-windows": {
@@ -5382,7 +5383,7 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791723802000,
+        "updated": 1792044243000,
         "users": 36
       },
       "metadata": {
@@ -5391,14 +5392,14 @@
         ],
         "author": "ArvindSaini978",
         "compilerOptions": "-lole32 -loleaut32 -lshlwapi -lgdiplus -lgdi32",
-        "description": "Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.",
+        "description": "Customizable keyboard shortcuts for File Explorer: open terminal, copy paths, create files/folders, toggle hidden items, and launch apps with hotkeys.",
         "github": "https://github.com/ArvindSaini978",
         "include": [
           "explorer.exe"
         ],
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
-        "version": "1.6.0"
+        "version": "1.7.0"
       }
     },
     "explorer-details-better-file-sizes": {
@@ -12841,7 +12842,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791403224000,
+        "updated": 1792044248000,
         "users": 72
       },
       "metadata": {
@@ -12849,13 +12850,13 @@
           "x86-64"
         ],
         "author": "pajs",
-        "description": "Removes the delay before the snap layouts flyout appears when hovering the maximize button",
+        "description": "Controls the delay before the snap layouts flyout appears and hides",
         "github": "https://github.com/pajs",
         "include": [
           "explorer.exe"
         ],
         "name": "Snap Flyout Instant",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "snap-restore-position": {

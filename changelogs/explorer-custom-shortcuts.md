@@ -1,3 +1,13 @@
+## 1.7.0 ([Oct 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a62f085f428edfe603914cee262a1088ea22da03/mods/explorer-custom-shortcuts.wh.cpp))
+
+* Added `%base` and `%basename` tokens to extract filenames without extensions.
+* Added `internal:openWithCode` (selection-aware with 10-folder/50-file caps) and `internal:openDirInCode` for VS Code integration.
+* Added support for shorthand `int:` prefix alongside `internal:`.
+* Added full-word parameter aliases (`%name`, `%dir`, `%count`, `%parent`) and literal percent escape (`%%`).
+* Added on-screen error notifications for invalid internal commands.
+* Consolidated internal command documentation with a single tip callout.
+* Updated settings descriptions and streamlined documentation sections.
+
 ## 1.6.0 ([Oct 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b60ad5890be359ed15f9b610f1649afba7bb4e05/mods/explorer-custom-shortcuts.wh.cpp))
 
 * **Feature (Internal Commands)**: Added `internal:newSmartFile` to create a blank, extensionless file that enters inline rename directly for quick creation of code and config files (`.js`, `.py`, `.json`, `.cpp`, `.md`, etc.).
