@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         2.8.6
+// @version         2.8.7
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @twitter         NekoMirra
@@ -45,6 +45,7 @@
 #include <winstring.h>
 #include <atomic>
 #include <string>
+#include <vector>
 
 namespace {
 std::atomic<bool> g_enabled{true};
@@ -712,6 +713,27 @@ void OnReleaseActionHook(void* self, void* action) {
                     keybd_event(digit, 0, KEYEVENTF_KEYUP, 0);
                     data[144] = 1;
                     Wh_SetIntValue(L"native-front-numeric-direct-injected", digit);
+                } else if (originalGetRecognizedText) {
+                    HSTRING hName = originalGetRecognizedText(keyData);
+                    if (hName) {
+                        UINT32 len = 0;
+                        const wchar_t* buf = WindowsGetStringRawBuffer(hName, &len);
+                        if (buf && len > 0) {
+                            std::vector<INPUT> inputs(len * 2);
+                            for (UINT32 i = 0; i < len; ++i) {
+                                inputs[i * 2].type = INPUT_KEYBOARD;
+                                inputs[i * 2].ki.wScan = buf[i];
+                                inputs[i * 2].ki.dwFlags = KEYEVENTF_UNICODE;
+                                inputs[i * 2 + 1].type = INPUT_KEYBOARD;
+                                inputs[i * 2 + 1].ki.wScan = buf[i];
+                                inputs[i * 2 + 1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+                            }
+                            SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+                            data[144] = 1;
+                            Wh_SetIntValue(L"native-front-symbol-injected", buf[0]);
+                        }
+                        WindowsDeleteString(hName);
+                    }
                 }
                 using ReleaseFn = ULONG (*)(void*);
                 reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(keyData))[2])(keyData);
@@ -1054,7 +1076,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        286);
+        287);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
