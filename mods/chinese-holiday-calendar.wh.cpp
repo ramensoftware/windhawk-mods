@@ -1589,6 +1589,65 @@ bool g_haveData = false;
 // whole refresh interval.
 constexpr ULONGLONG kFetchRetryDelayMs = 10 * 60 * 1000;
 
+// Normalize an ICS feed URL and ensure it uses HTTP or HTTPS.
+std::wstring NormalizeIcsUrl(std::wstring const& url) {
+    if (url.empty()) {
+        return url;
+    }
+
+    std::wstring s = url;
+
+    // Trim whitespace
+    size_t begin = 0;
+    while (begin < s.size() && iswspace(s[begin])) {
+        begin++;
+    }
+    size_t end = s.size();
+    while (end > begin && iswspace(s[end - 1])) {
+        end--;
+    }
+    s = s.substr(begin, end - begin);
+
+    // Whitespace-only input trims to nothing: report it as unusable instead of
+    // falling through and building a bare "https://".
+    if (s.empty()) {
+        return s;
+    }
+
+    // Extract and normalize the URL scheme.
+    size_t colonSlashSlash = s.find(L"://");
+    if (colonSlashSlash != std::wstring::npos) {
+        std::wstring scheme;
+        for (size_t i = 0; i < colonSlashSlash; i++) {
+            if (iswalpha(s[i])) {
+                scheme += (wchar_t) towlower(s[i]);
+            } else {
+                scheme.clear();
+                break;
+            }
+        }
+        if (!scheme.empty()) {
+            if (scheme == L"https" || scheme == L"http") {
+                return s;
+            }
+            if (scheme == L"webcal") {
+                return L"http" + s.substr(colonSlashSlash);
+            }
+            if (scheme == L"webcals") {
+                return L"https" + s.substr(colonSlashSlash);
+            }
+        }
+    }
+
+    // Preserve protocol-relative URLs and default them to HTTPS.
+    if (s.size() >= 2 && s[0] == L'/' && s[1] == L'/') {
+        return L"https:" + s;
+    }
+
+    // Assume HTTPS when no supported scheme is specified.
+    return L"https://" + s;
+}
+
 // Fetching and parsing both happen on the worker thread: Wh_GetUrlContent blocks on
 // network I/O, and doing that on a UI thread would hold up the taskbar. A parse which
 // fails does not overwrite the data which is already there, so the calendar keeps
@@ -1607,13 +1666,20 @@ bool FetchHolidayData() {
         return false;
     }
 
-    // The address is used exactly as it was entered. It used to have a "{year}"
-    // placeholder expanded into it, which nothing documented and no caller could reach,
-    // so it is gone: a feed is expected to carry the years it has at once.
-    Wh_Log(L"Fetching %s", settings->dataSourceUrl.c_str());
+    const std::wstring url = NormalizeIcsUrl(settings->dataSourceUrl);
+    if (url.empty()) {
+        return false;
+    }
+
+    if (url != settings->dataSourceUrl) {
+        Wh_Log(L"Using normalized URL: %s (was: %s)",
+               url.c_str(), settings->dataSourceUrl.c_str());
+    } else {
+        Wh_Log(L"Fetching %s", url.c_str());
+    }
 
     const WH_URL_CONTENT* content =
-        Wh_GetUrlContent(settings->dataSourceUrl.c_str(), nullptr);
+        Wh_GetUrlContent(url.c_str(), nullptr);
     if (!content) {
         Wh_Log(L"Wh_GetUrlContent returned null");
         return false;
