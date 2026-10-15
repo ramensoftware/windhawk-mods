@@ -9,7 +9,7 @@
 // @donateUrl           https://ko-fi.com/tourne
 // @license             MIT
 // @include             windhawk.exe
-// @compilerOptions     -lcabinet -lurlmon -ldxgi -ld2d1 -ld3d11 -ldcomp -ldwmapi -ldwrite -lgdi32 -lshcore -lshlwapi -lole32 -lshell32 -lksuser -lwindowscodecs -lruntimeobject -lwindowsapp -luuid -luser32 -ladvapi32 -lcomctl32 -lcomdlg32
+// @compilerOptions     -lcabinet -ldxgi -ld2d1 -ld3d11 -ldcomp -ldwmapi -ldwrite -lgdi32 -lshcore -lshlwapi -lole32 -lshell32 -lksuser -lwindowscodecs -lruntimeobject -lwindowsapp -luuid -luser32 -ladvapi32 -lcomctl32 -lcomdlg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -47,9 +47,9 @@ Tourne'Table doesn't live inside `explorer.exe`. It runs as its own dedicated pr
 
 ## ✧ NEW IN 2.0 AND 2.1
 
-2.1 is the build that runs inside Tourne Desktop, as a Windhawk mod of its own. It replaces the 1.x release and the 2.0 betas (turn those off: only one Tourne'Table should run). The performance figures further down were measured on 1.x and haven't been re-measured on 2.x yet.
+2.1 replaces 1.x. If you ran one of the 2.0 test builds from GitHub, turn it off: only one Tourne'Table should run. If you also use **Tourne Desktop** (my separate desktop app, not part of Windhawk), its taskbar counts as the taskbar for Place In = Taskbar, and it can show, hide or pin the panel through the window message `TourneTable.Panel`. The performance figures further down were measured on 1.x and haven't been re-measured on 2.x yet.
 
-**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** lists the setups people have shared in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/tree/main/community) (read only when you press it) and opens a ready GitHub issue to share yours. Your audio device, hotkeys, file paths and hardware never go in a setup. Browse them all on the [community page](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
+**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** opens the setups people have shared in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/tree/main/community) in your browser (bring one in with **Paste code** or **Open file**; the mod itself never goes online) or opens a ready GitHub issue to share yours. Your audio device, hotkeys, file paths and hardware never go in a setup. Browse them all on the [community page](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
 
 **Every bar is its own measurement now.** Up to 1.5 the analysis split the sound into 7 fixed bands and every bar interpolated between those 7 numbers, so Bar Count and FFT Size changed how many bars you saw, not how much they knew. The new **Precision** engine gives each bar its own frequency band with its own edges, measured straight from the spectrum:
 
@@ -61,7 +61,7 @@ Tourne'Table doesn't live inside `explorer.exe`. It runs as its own dedicated pr
 
 The 1.4 analysis is still there as **Analysis Engine = Classic**.
 
-**You choose where the work runs.** **Workload** is GPU, CPU or Hybrid: Hybrid analyses on the CPU and draws on the GPU (the cheapest split almost everywhere), GPU does both on the graphics chip, CPU does both on the processor. NPU stays as an experimental option.
+**You choose where the work runs.** **Workload** is GPU, CPU or Hybrid: Hybrid analyses on the CPU and draws on the GPU (the cheapest split almost everywhere), GPU does both on the graphics chip, CPU does both on the processor.
 
 **A new renderer built to cost next to nothing.** **Renderer = Direct3D 11** draws everything from one tiny shader and a buffer of bar heights, **skips any frame where nothing moved**, keeps the text on its own surface that only redraws when the text changes, and tells Windows when the panel is opaque so it copies instead of blending. When audio stops, drawing stops, and after a few more seconds of silence the audio stream itself stops (**Deep Idle**). The 1.5 Direct2D path is still there for comparison.
 
@@ -73,13 +73,13 @@ The 1.4 analysis is still there as **Analysis Engine = Classic**.
 
 **Glow and Bloom.** A soft halo around every bar, worked out in the same shader pass that draws it, and a lens-style bloom from a quarter-size blur that only runs on frames that change. Direct3D 11 renderer.
 
-**A Media Card.** Media Controls > Layout = Card: album art with previous / play / next on hover, a seek bar, one-click output switching and a volume slider. Theme its background, border, corner radius, art size and accent (icon colour, custom, album art or your Windows accent).
+**A Media Card.** Media Controls > Layout = Card: album art with previous / play / next on hover, a seek bar, one-click output switching and a volume slider. The output button changes the **Windows default output** for every app (through the same undocumented Windows interface sound-switcher tools use), and the slider sets the **system master volume**; both act only when you click, drag or scroll them, and both stay as set after the mod is turned off, like any change made in Windows' own sound settings. Theme its background, border, corner radius, art size and accent (icon colour, custom, album art or your Windows accent).
 
 **My Styles.** Right-click > My Styles > Style Editor: mix a base style, colours, bar sizes, reflection, glow and bloom while the visualizer previews it live, save it under a name, and pick it from the menu any time.
 
 **Finer looks.** Outline and Shadow around every bar; bar modifiers Hollow, Dashed, Tilt, Afterimage (a slowly falling trail) and Mirror Gap; scale numbers on Spectrogram and VU Needles; album colours that ease in; any Unicode character in Terminal. Reflection now works on both renderers.
 
-**Exact sizes.** Bar width, gap, height, padding, borders, radii, fonts and offsets take decimals (turn Pixel Snap off to keep the fractions).
+**Exact sizes.** Bar width, gap, height, padding, borders, radii, fonts and offsets take decimals down to 0.01, and so do Sensitivity, Smoothing, Input Gain, Blur, Glow, Bloom, Shadow, Reflection, Afterimage, Beat Flash Intensity, Rainbow Speed and the dock, split and snap distances (turn Pixel Snap off to keep the fractions). The Style Editor's sliders step by 0.01 with the arrow keys.
 
 **Placement.** Drag snaps to the screen's edges and centre, the taskbar, the tray and the Start button (hold Shift to place freely). Position > Place In = Taskbar puts it inside the taskbar. Position > Dock To App keeps the visualizer beside an app's window as it moves, and Split Into Two Pieces cuts it in two, e.g. either side of the taskbar's centred icons, at almost no cost.
 
@@ -470,7 +470,6 @@ There are two jobs in this mod, and they can run on different silicon: **analysi
 - **Hybrid** *(default)*: analysis on the CPU, drawing on the GPU. Analysis is a fraction of a percent of one core, and the GPU draws for almost nothing, so this is the cheapest split on nearly every PC.
 - **GPU**: the analysis runs on the graphics chip as well, in four small compute passes that feed the drawing directly, so the CPU only copies audio and nothing comes back each frame but 8 bytes of statistics. Needs the Precision engine and the Direct3D 11 renderer, and uses at most FFT Size 4096. Worth trying on a strong iGPU; measure it against Hybrid rather than assume.
 - **CPU**: analysis and drawing both on the processor (drawing in software, through WARP). The GPU is left with nothing but Windows' own compositing. Fine for a small widget; a full-width strip at a high frame rate is real CPU work.
-- **NPU** *(experimental)*: the FFTs run on an Intel AI Boost NPU, drawing on the GPU. See the NPU section below for why this rarely saves anything.
 
 **Drawing Device**: Which GPU draws.
 - **Auto** *(default)*: the GPU your chosen monitor is plugged into. On a laptop with two GPUs, or a desktop with the iGPU left on, drawing on the *other* one means every frame gets copied across to the GPU that scans it out, which is exactly the kind of uneven frame time this mod is trying to avoid. Auto asks Windows which GPU owns that screen and uses it, and follows if the answer changes.
@@ -489,8 +488,6 @@ If the GPU is ever lost mid-session (a driver update, a driver reset, a laptop s
 
 **Opaque Panel**: When the background panel can't show anything behind it (**Blur** on, or a panel colour with full alpha) and **Auto-Hide** is off, the Direct3D 11 renderer creates the panel's surface with alpha ignored and lets the compositor cut the rounded corners. Windows then copies those pixels instead of blending them every frame; Chromium measured the same switch at 3.12 W against 2.28 W. **Off** always blends, for comparison.
 
-**NPU Runtime Folder**: Where Intel's OpenVINO runtime lives. Blank searches the usual places. Only read when Workload is NPU.
-
 **Smooth Mode**: Frame timing locked to the display, and motion on elapsed time. **Auto** *(default)* turns it on when drawing runs on an integrated GPU or the CPU; **On** works on any GPU and is worth trying on a discrete one too; **Off** is the 1.4 timing. What it changes:
 
 - **Frame timing locked to the display.** The 1.4 loop asks for a frame every `1000 / Target FPS` milliseconds and lets the timer's wake-up latency pile up, which is why 144 requested measured 141.7 delivered. On a 144 Hz panel that is a couple of refreshes every second with no new frame: a repeat, which you see as a hitch. Smooth Mode schedules from Windows' own composition clock instead, places every frame half a refresh away from the deadline on either side, and never accumulates drift.
@@ -504,32 +501,6 @@ If the GPU is ever lost mid-session (a driver update, a driver reset, a laptop s
 ![Oscilloscope closeup](https://raw.githubusercontent.com/USER-TOURNE/Tourne-Style/main/windhawk-mods/tourne-table/media/4.gif)
 
 *The same shape in a warm colour: the Oscilloscope picks up Color Mode like every other shape.*
-
-# ◇ RUNNING THE ANALYSIS ON AN NPU (EXPERIMENTAL)
-
-Written against an **Alienware Aurora ACT1250** (the 2025 Aurora: Core Ultra 7 265K / 265KF or Ultra 9 285K, RTX 50-series), but it applies to any Intel Core Ultra machine.
-
-**Read this first: it almost certainly won't save power.** An NPU is a matrix-multiply engine. It wins when the work is a large, dense block of multiply-accumulates that runs continuously, like a neural network. An FFT is neither: to run on the NPU it has to be rewritten as matrix multiplies, which is roughly 25 times more arithmetic than an FFT, and every call has a fixed start-up cost the FFT is far too small to pay back. Calling it once per frame also keeps the NPU from power-gating between calls. Meanwhile the CPU does the whole analysis in well under 1% of one core. More bars don't change that: with the Precision engine every bar adds up its own bins once per frame, so 240 bars cost the same as 7.
-
-It stays as an option because the plumbing is the hard, reusable part (finding the runtime, compiling off the audio path, proving the result against a known answer, falling back to the CPU with a reason), and because the NPU's real use in a visualizer is still to come: neural models such as note transcription (a piano-roll mode, note names on musical bars) or stem separation (colour each bar by whether drums, bass or vocals drive it). Those are dense, continuous matrix work, which is what an NPU is for.
-
-**What's in there.** Arrow Lake desktop chips carry Intel's NPU 3, sold as *Intel AI Boost*: about 13 TOPS, the same generation as Meteor Lake, and present on K, KF and F models alike (the F only drops the iGPU). It is a separate block from both the CPU cores and the GPU, built for large batches of multiply-accumulates in low precision (FP16 / INT8).
-
-**Making sure it's on.**
-1. Device Manager should have a **Neural processors** category with **Intel(R) AI Boost** under it. Task Manager on Windows 11 24H2 and later also shows an **NPU** graph on the Performance tab.
-2. If it's missing, install the **Intel NPU driver** (from Dell's support page for the Aurora, or Intel's own "Intel NPU Driver - Windows" download). It needs Windows 11.
-3. Still missing after that: check the BIOS for an NPU / AI Boost switch. Some Arrow Lake firmware ships one, and Intel's own guidance for Windows 10 machines is to turn the NPU off there.
-
-**Giving this mod a way to talk to it.** Intel exposes the NPU through its **OpenVINO** runtime, which this mod loads at runtime if it's present. Nothing is bundled and nothing is installed for you. Any of these works:
-- Download the OpenVINO archive for Windows from Intel and extract it (to `C:\Program Files (x86)\Intel\openvino_<version>` is the conventional spot, which the mod searches on its own), or
-- `pip install openvino` into a Python install (the mod searches the usual Python locations too), or
-- put the folder holding `openvino_c.dll` into **NPU Runtime Folder**.
-
-Use an OpenVINO version at least as new as the one your NPU driver's release notes name. Then set **Workload** to **NPU**. The Windhawk log says what happened: which runtime and device it found, how long the model took to compile, and every 30 seconds the mean and worst NPU time per FFT. If anything is missing, the settings-problems window says which piece and what to do, and the analysis stays on the CPU in the meantime.
-
-> **64-bit only.** OpenVINO ships 64-bit builds only. Windhawk 1.x runs tool mods in a 32-bit process, so there the NPU option reports that and stays on the CPU.
-
-**How it works.** The FFT is rewritten as matrix multiplies (a "four-step" DFT: a DFT down the columns, a twiddle multiply, a DFT along the rows). The model is generated in memory for your FFT Size, compiled for the NPU once, and checked against a known answer before it's trusted. Its output feeds exactly the same band maths as the CPU path, for either engine, so the bars look identical. Measure it with HWiNFO against Hybrid, the same way the CPU figures above were measured, and keep whichever costs less.
 
 # ▲ WHERE THE EFFICIENCY COMES FROM
 
@@ -587,7 +558,7 @@ Every present hands Windows' compositor a new buffer and wakes it to blend that 
 
 - **Playing**: one wake per frame.
 - **Silent** (after Pause When Silent): wakes only when audio arrives or four times a second, and presents nothing unless something changes.
-- **Deep Idle** (five seconds later): the loopback stream itself is stopped, and Windows' own peak meter is read four times a second instead. A running capture stream registers an audio power request, which can hold the PC out of sleep (check `powercfg /requests`); a stopped one doesn't. The engine thread also asks Windows for efficiency-core scheduling (EcoQoS) while idle, and opts out of it while playing so frame pacing stays tight.
+- **Deep Idle** (five seconds later): the loopback stream itself is stopped, and Windows' own peak meter is read four times a second instead. A running capture stream registers an audio power request, which can hold the PC out of sleep (check `powercfg /requests`); a stopped one doesn't. The engine thread also asks Windows for efficiency-core scheduling (EcoQoS) while idle, and leaves the choice to Windows while playing.
 
 ### 11. Less for the compositor to blend *(2.0, Direct3D 11 renderer)*
 
@@ -715,16 +686,16 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
         - vu: VU Needles (two analog meters, L and R)
         - stereo_field: Stereo Field (left above, right below)
         - particles: Particles (bars plus sparks on each beat)
-    - reflection: 0
+    - reflection: '0'
       $name: Reflection
       $description: 0-100. Mirrors the bars onto a floor beneath them, fading out over this percentage of Bar Max Size. Horizontal bars anchored to the bottom only, with the bar shapes, LED Meter, Line Spectrum and Particles. Both renderers (Direct2D draws it on the CPU, so it costs a little more there)
-    - fxGlow: 0
+    - fxGlow: '0'
       $name: Glow
       $description: 0-100. A soft halo around each bar, dot, line and spark, worked out in the same shader pass that draws them, so it costs next to nothing. Direct3D 11 renderer only
     - fxGlowRadius: '6'
       $name: Glow Radius
       $description: 1-32 pixels. How far the halo reaches. Decimals allowed; turn Pixel Snap (Position) off to keep the fractions
-    - fxBloom: 0
+    - fxBloom: '0'
       $name: Bloom
       $description: 0-100. Light bleeding out of the whole picture, like a camera lens, from a blurred copy at a quarter of the size added back on top. A little GPU work, and only on frames that change. Direct3D 11 renderer only
     - fxBloomRadius: '16'
@@ -736,7 +707,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - fxOutlineColor: '#B0FFFFFF'
       $name: Outline Color
       $description: '#AARRGGBB or #RRGGBB. The outline fades with the bar it belongs to'
-    - fxShadow: 0
+    - fxShadow: '0'
       $name: Shadow
       $description: 0-100. A drop shadow behind each bar, dot and line, worked out in the same shader pass as Glow, so it costs next to nothing. Both renderers
     - fxShadowColor: '#000000'
@@ -769,7 +740,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - barMirrorGap: '0'
       $name: Mirror Gap
       $description: Pixels, decimals allowed. With Anchor = Middle the bars already grow both ways from a centre line; this pulls the two halves apart, like a waveform with a spine. Bar shapes, Direct3D 11 renderer
-    - afterimage: 0
+    - afterimage: '0'
       $name: Afterimage
       $description: 0-100. A see-through trail behind each bar that jumps up with it and sinks back slowly. With Peak Hold on, the caps sit on the trail. Bar shapes, Direct3D 11 renderer; keeps the analysis on the CPU (Hybrid)
     - afterimageLength: '1.2'
@@ -821,7 +792,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - gradientColor2: '#FF00B4FF'
       $name: Gradient Color 2
       $description: 'End color for Gradient and Reactive Gradient modes. Format is #AARRGGBB, #RRGGBB, rgba(r, g, b, a), or rgb(r, g, b)'
-    - sensitivity: 150
+    - sensitivity: '150'
       $name: Sensitivity
       $description: How hard the bars react to audio. Range 0-300. Past a point, raising this mostly makes quiet passages louder rather than making loud passages hit any harder, since loud signal is already at max bar height, see Sensitivity Curve
     - sensitivityCurve: knee
@@ -831,16 +802,16 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
         - exponential: Exponential (Soft)
         - knee: Knee (Balanced)
         - power: Power (Headroom)
-    - inputGain: 0
+    - inputGain: '0'
       $name: Input Gain (dB)
       $description: A fixed level adjustment applied to the captured audio before anything else. Range -24 to +24, where 0 leaves the signal exactly as captured. Loopback capture sees each app's own volume slider but not the Windows master slider, so a music app sitting at 40% reads as quiet no matter how loud the system sounds. This is the control for that. Unlike Sensitivity it also scales the Oscilloscope waveform
     - autoGain: false
       $name: Auto Gain
       $description: Continuously adapts the level so quiet sources still fill the bars, without retuning Sensitivity per app or per track. Boost only, so loud material behaves exactly as it does with this off. Held steady through silence, which means the noise floor is never lifted and idle shutdown still works normally
-    - autoGainMaxBoost: 12
+    - autoGainMaxBoost: '12'
       $name: Auto Gain Max Boost (dB)
       $description: The ceiling on how far Auto Gain may lift a quiet signal. Range 0 to 24. Lower it if quiet passages are getting flattened more than you want, raise it if a very quiet source still will not fill the bars. Only used when Auto Gain is on
-    - smoothing: 0
+    - smoothing: '0'
       $name: Motion Smoothing
       $description: Slows down how quickly bars rise and fall toward the target level, at the cost of a bit of lag. 0 is the original snappy response; higher values trade responsiveness for a steadier, easier-to-read motion -- helpful when bars are small on the desktop and fast jitter is hard to track
     - eqPreset: default
@@ -892,10 +863,10 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - oscilloscopeMultibandEnabled: false
       $name: Multiband Oscilloscope Coloring
       $description: Tints the Oscilloscope trace by which part of the spectrum (low/mid/high) is currently dominant, overriding Color Mode for that shape
-    - oscilloscopeWindowMs: 24
+    - oscilloscopeWindowMs: '24'
       $name: Oscilloscope Time Window (ms)
       $description: How much audio the trace shows end to end, in milliseconds. Range 5 to 250. Low values stretch out individual wave cycles and look like a hardware scope; high values compress more of the signal into the same width and read as a rolling envelope. This is a real time base, independent of FFT Size, so changing frequency resolution no longer changes what the trace looks like. Around 150 to 180 is close to what FFT Size 8192 used to give. Only affects the Oscilloscope shape
-    - oscilloscopeDamping: 0
+    - oscilloscopeDamping: '0'
       $name: Oscilloscope Damping
       $description: Slows how fast the trace changes shape, without slowing how often it is drawn. Range 0 to 100. 0 is the raw trace, redrawn every frame. Higher values ease each point toward its new position so the waveform moves slowly enough to follow with your eyes, which is what makes a wide time window legible rather than busy. Pair it with a high Time Window. Costs nothing and does not change your frame rate. Only affects the Oscilloscope shape
     - verticalAnchor: bottom
@@ -917,10 +888,10 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - beatFlashColor: '#FFFFFFFF'
       $name: Beat Flash Color
       $description: 'Color bars flash toward on a beat. Accepts #AARRGGBB, #RRGGBB, rgba(r, g, b, a) with alpha 0-1, or rgb(r, g, b). Alpha controls how strong the flash gets even at full intensity -- lower it for a subtler tint instead of a full color swap'
-    - beatFlashIntensity: 80
+    - beatFlashIntensity: '80'
       $name: Beat Flash Intensity
       $description: How quickly a beat reaches full Beat Flash Color. Only used when Beat Flash is on
-    - rainbowSpeed: 40
+    - rainbowSpeed: '40'
       $name: Rainbow Cycle Speed
       $description: Only used when Color Mode is Rainbow Cycle
     - nowPlayingEnabled: false
@@ -935,7 +906,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - nowPlayingFontSize: '16'
       $name: Now Playing Font Size
       $description: Text size, in points. Decimals allowed; turn Pixel Snap (Position) off to keep the fractions
-    - nowPlayingDisplaySeconds: 6
+    - nowPlayingDisplaySeconds: '6'
       $name: Now Playing Display Seconds
       $description: How long the text stays visible after a track changes, before fading out. 0 keeps it on screen all the time, like a media widget
     - nowPlayingOffsetX: '0'
@@ -1076,7 +1047,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - meterColumns: 40
       $name: Meter Width
       $description: Width of the Meters style, in characters
-    - hotThreshold: 75
+    - hotThreshold: '75'
       $name: Hot Threshold (%)
       $description: Above this share of full height a character turns the Hot Color
     - columnGlyph: '#'
@@ -1088,7 +1059,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - ramp: ' .:-=+*#%@'
       $name: Waterfall Ramp
       $description: 'Characters from quiet to loud for the Waterfall, any characters, e.g. " ░▒▓█" or " ·•●". Up to 128 different non-ASCII characters across all three settings'
-    - scrollRate: 20
+    - scrollRate: '20'
       $name: Waterfall Speed
       $description: Lines per second
     - lowColor: '#FF33FF66'
@@ -1125,13 +1096,13 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
         - '6': 1/6 octave
         - '12': 1/12 octave (semitone)
         - '24': 1/24 octave (quarter tone)
-    - minFrequency: 20
+    - minFrequency: '20'
       $name: Min Frequency (Hz)
       $description: Bottom of the analysed range. Range 10 to 1000
-    - maxFrequency: 20000
+    - maxFrequency: '20000'
       $name: Max Frequency (Hz)
       $description: Top of the analysed range. Range 1000 to 21000; anything above the device's Nyquist limit is trimmed automatically
-    - tuningA4: 440
+    - tuningA4: '440'
       $name: Tuning (A4, Hz)
       $description: Reference pitch for the Musical layout. Range 400 to 480
     - weighting: z
@@ -1186,10 +1157,10 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
         - right: Right
         - mid: Mid (L+R)
         - side: Side (L-R)
-    - dbFloor: -72
+    - dbFloor: '-72'
       $name: Display Floor (dBFS)
       $description: The level that draws as an empty bar. Range -120 to -20. Lower shows quieter detail, at the cost of noise and hiss showing too
-    - dbCeiling: -12
+    - dbCeiling: '-12'
       $name: Display Ceiling (dBFS)
       $description: The level that draws as a full bar, before Sensitivity. Range -60 to 0. A full-scale sine is 0 dBFS; loud modern music sits around -20 per third-octave band
     - ballistics: snappy
@@ -1203,13 +1174,13 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
         - ppm_ebu: PPM, EBU (Type II)
         - ppm_din: PPM, DIN (Type I)
         - custom: Custom
-    - attackMs: 10
+    - attackMs: '10'
       $name: Custom Attack (ms)
       $description: Rise time constant for Ballistics = Custom. Range 1 to 500
-    - releaseDbPerSecond: 20
+    - releaseDbPerSecond: '20'
       $name: Custom Release (dB/s)
       $description: Fall rate for Ballistics = Custom. Range 1 to 200
-    - peakHoldMs: 500
+    - peakHoldMs: '500'
       $name: Peak Hold Time (ms)
       $description: How long a peak cap hangs before it falls. Range 0 to 5000. Only used with Peak Hold Caps on
     - peakFall: gravity
@@ -1277,29 +1248,29 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
         - start: Start (left or top)
         - center: Centre
         - end: End (right or bottom)
-    - dockGap: 0
+    - dockGap: '0'
       $name: Dock Gap
       $description: Pixels between the window and the visualizer. Negative overlaps
-    - dockShift: 0
+    - dockShift: '0'
       $name: Dock Shift
       $description: Pixels to slide it along the side from the alignment above
     - split: false
       $name: Split Into Two Pieces
       $description: Cuts the visualizer in two and moves the second piece by the gap and shift below, e.g. to sit either side of the taskbar's centred icons or a monitor bezel. Works with every shape and both renderers and costs next to nothing (Windows moves the piece; nothing is drawn twice). The background panel is cut at the same place. Drag, the right-click menu and Click to Seek answer on the first piece only
-    - splitAt: 50
+    - splitAt: '50'
       $name: Split Point
       $description: Percent of the way along where the cut goes. With bars it lands in the gap between two bars
-    - splitGap: 200
+    - splitGap: '200'
       $name: Split Gap
       $description: Pixels the second piece moves along the visualizer (right, or down when vertical). Negative moves it back
-    - splitShift: 0
+    - splitShift: '0'
       $name: Split Shift
       $description: Pixels the second piece moves across it (down, or right when vertical)
   $name: Position
 - interaction:
-    - keyMoveEnabled: true
+    - keyMoveEnabled: false
       $name: Enable Keyboard Move
-      $description: Hold the modifier below and tap a direction key to nudge the visualizer one pixel at a time, the way a window manager moves a tiled window. This is the precise way to place it -- it lands exactly where you put it, with no cursor to keep up with. Hold the Fast Key as well to jump by the larger step instead. The same combo with 1, 2, 3 or 4 switches what the direction keys steer -- 1 the visualizer, 2 the Now Playing text, 3 the frequency readout, 4 the Media Controls strip -- so everything movable is placed with one shortcut, and the choice sticks until you change it. Modifier + Home resets whichever is selected. Worth knowing -- the visualizer and the strip store a percentage that REPLACES their Position settings, so those fields stop having any effect until you reset; the two text overlays instead store a delta ADDED to their Offset settings, so those fields always still count. Also, if the strip is currently parked by Hide When Covered, nudging it still works but you will not see it move until it comes back
+      $description: Off by default. While it is off the mod doesn't watch the keyboard at all. Hold the modifier below and tap a direction key to nudge the visualizer one pixel at a time, the way a window manager moves a tiled window. This is the precise way to place it -- it lands exactly where you put it, with no cursor to keep up with. Hold the Fast Key as well to jump by the larger step instead. The same combo with 1, 2, 3 or 4 switches what the direction keys steer -- 1 the visualizer, 2 the Now Playing text, 3 the frequency readout, 4 the Media Controls strip -- so everything movable is placed with one shortcut, and the choice sticks until you change it. Modifier + Home resets whichever is selected. Worth knowing -- the visualizer and the strip store a percentage that REPLACES their Position settings, so those fields stop having any effect until you reset; the two text overlays instead store a delta ADDED to their Offset settings, so those fields always still count. Also, if the strip is currently parked by Hide When Covered, nudging it still works but you will not see it move until it comes back
     - keyMoveModifier: ctrl_alt
       $name: Keyboard Move Modifier
       $description: Held down while tapping a direction key. Use a two-key combo. This mod swallows the keypress outright, so the app underneath does not fall back to its own behaviour -- it simply never hears about it. With a one-key modifier that means real losses -- Ctrl with WASD eats Ctrl+A and, worse, Ctrl+S, so a save you think you made silently does not happen. Ctrl with arrows eats word-by-word cursor movement. Pick a one-key modifier and the mod will warn you on load listing exactly what you gave up
@@ -1357,7 +1328,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - dragSnap: true
       $name: Snap While Dragging
       $description: While dragging, the visualizer's edges and centre catch on the screen's edges and centre, the taskbar's edge, the tray and the Start button. Hold Shift (Alt when Shift is the drag key) to place it freely
-    - dragSnapDistance: 8
+    - dragSnapDistance: '8'
       $name: Snap Distance
       $description: How close, in pixels, an edge has to come before it snaps
     - dragModifier: ctrl
@@ -1479,7 +1450,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
       $description: Distance in from the panel's top or bottom edge, in pixels. Only used with a panel anchor. Decimals allowed; the media controls round to whole pixels
     - layout: strip
       $name: Layout
-      $description: Strip is the three buttons. Card is a small media card in the same place, sized from Icon Size and Icon Spacing - the album art (hover it for previous / play / next), a seek bar (click or drag), a speaker button that switches the Windows default output in one click, and a volume slider (drag it, or scroll anywhere on the card)
+      $description: Strip is the three buttons. Card is a small media card in the same place, sized from Icon Size and Icon Spacing - the album art (hover it for previous / play / next), a seek bar (click or drag), a speaker button that switches the Windows default output device for all apps in one click, and a volume slider that sets the system master volume (drag it, or scroll anywhere on the card)
       $options:
         - strip: Strip (three buttons)
         - card: Card (art, seek, output, volume)
@@ -1523,7 +1494,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - cornerRadius: '14'
       $name: Corner Radius
       $description: Roundness of the panel corners, in pixels. One value for all corners, or four space-separated values for top-left, top-right, bottom-right, bottom-left
-    - blur: 0
+    - blur: '0'
       $name: Blur
       $description: Gaussian blur strength behind the panel, in pixels. 0 disables it. Computed once and cached, not redrawn every frame, so raising this has minimal ongoing CPU cost
     - borderSize: '0'
@@ -1540,7 +1511,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - pauseOnFullscreen: true
       $name: Pause On Fullscreen
       $description: Stops rendering while any window is fullscreen, since the visualizer would be hidden behind it anyway
-    - pauseWhenSilentSeconds: 10
+    - pauseWhenSilentSeconds: '10'
       $name: Pause When Silent (seconds)
       $description: After this long without audio, drawing drops to a trickle that presents nothing unless something actually changes. 0 disables this behavior, and Deep Idle with it
     - deepIdle: true
@@ -1552,7 +1523,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
     - autoHideEnabled: false
       $name: Auto-Hide When Idle
       $description: Fades the whole visualizer out after prolonged silence, instead of just idling
-    - autoHideDelaySeconds: 15
+    - autoHideDelaySeconds: '15'
       $name: Auto-Hide Delay (seconds)
       $description: How long to wait after audio goes silent before fading the visualizer out. Only used when Auto-Hide When Idle is on
     - pauseWhenObscured: false
@@ -1586,12 +1557,11 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
 - hardware:
     - workload: hybrid
       $name: Workload
-      $description: Where the work runs. Hybrid analyses on the CPU, which is a fraction of a percent of one core, and draws on the GPU, the cheapest split on almost every PC. GPU moves the analysis onto the graphics chip too, so the CPU only copies audio. CPU does everything on the processor, drawing included (software rendering), leaving the GPU nothing but Windows' own compositing. NPU runs the FFTs on an Intel AI Boost NPU and is experimental; see the readme for why it rarely saves power
+      $description: Where the work runs. Hybrid analyses on the CPU, which is a fraction of a percent of one core, and draws on the GPU, the cheapest split on almost every PC. GPU moves the analysis onto the graphics chip too, so the CPU only copies audio. CPU does everything on the processor, drawing included (software rendering), leaving the GPU nothing but Windows' own compositing.
       $options:
         - hybrid: Hybrid - CPU analysis, GPU drawing (recommended)
         - gpu: GPU - analysis and drawing on the GPU
         - cpu: CPU - everything on the processor
-        - npu: NPU analysis, GPU drawing (experimental)
     - renderDevice: auto
       $name: Drawing Device
       $description: Which GPU draws. Auto uses the one your chosen monitor is plugged into, which avoids copying every frame from one GPU to another and is the right answer almost everywhere. Integrated and Discrete force a GPU type, and fall back to Auto (with a warning) if this PC does not have one. CPU draws in software, the same as Workload = CPU
@@ -1612,9 +1582,6 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
       $options:
         - auto: Auto
         - 'off': 'Off'
-    - npuRuntimePath: ''
-      $name: NPU Runtime Folder
-      $description: The folder that contains openvino_c.dll, or the root of an extracted OpenVINO archive. Leave blank to search the usual places - INTEL_OPENVINO_DIR, Program Files\Intel\openvino*, a pip-installed openvino package, and PATH. Only used when Workload is NPU
     - smoothMode: auto
       $name: Smooth Mode
       $description: Frame timing locked to the display's refresh so every frame lands on its own refresh, and motion that scales with real elapsed time. Target FPS is rounded to an even fraction of the refresh rate (60 on a 144 Hz screen runs at 72) because that is what makes motion even. With the Direct2D renderer it also bakes the panel and batches the bars. Auto turns it on when drawing runs on an integrated GPU or the CPU. On works with any GPU. Off is the 1.4 timing
@@ -1657,14 +1624,12 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
 #include <commctrl.h>
 #include <commdlg.h>
 #include <compressapi.h>
-#include <urlmon.h>
 #include <tlhelp32.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cwctype>
-#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -1686,7 +1651,7 @@ using namespace winrt::Windows::Storage::Streams;
 
 using Microsoft::WRL::ComPtr;
 
-// ---- Shared setups (2.3): the layer an imported setup sits in -------------------------------------
+// ---- Shared setups: the layer an imported setup sits in -------------------------------------
 // Every setting is read through here. An imported setup's values (the mod value "sharedSetup", as
 // key=value lines) come first, then the settings page; quick settings still go on top of both.
 // Reset Quick Settings clears it, and the settings page's values come back.
@@ -1761,13 +1726,14 @@ void VizSettingFree(PCWSTR s) { delete[] s; }
 #define WM_APP_MEDIA_REPAINT (WM_APP + 4)
 #define WM_APP_REQUEST_SAVE_POSITION (WM_APP + 5)
 #define WM_APP_FORCE_REDRAW (WM_APP + 6)
-// Hardware section. A worker thread (NPU build) or the render path (device
+// Hardware section. A worker thread or the render path (device
 // loss) can't touch the settings-issue list or rebuild D3D objects itself, so
 // both hand the job to the message window, which lives on the UI thread.
 #define WM_APP_HW_NOTICE (WM_APP + 7)        // lParam: heap std::wstring*, owned by receiver
 #define WM_APP_REBUILD_DEVICE (WM_APP + 8)   // wParam: 1 = device was lost
 #define WM_APP_CONTEXT_MENU (WM_APP + 9)     // wParam, lParam: screen x, y
 #define WM_APP_PANEL_FIT (WM_APP + 10)       // Place In = Panel: size the window to the box
+#define WM_APP_SEEK_AT (WM_APP + 12)         // Click to Seek; wParam: screen x
 #define OVERLAY_WINDOW_CLASS (L"DesktopAudioVisOverlay_" WH_MOD_ID)
 #define MESSAGE_WINDOW_CLASS (L"DesktopAudioVisMessage_" WH_MOD_ID)
 #define MEDIA_WINDOW_CLASS (L"DesktopAudioVisMedia_" WH_MOD_ID)
@@ -1802,7 +1768,7 @@ enum class VizMoveTarget { Visualizer, NowPlaying, PeakFreq, MediaControls };
 enum class VizRenderDevice { Auto, Integrated, Discrete, Cpu };
 enum class VizSmoothMode { Auto, On, Off };
 // 2.0. Where the work runs; which analysis core; which renderer.
-enum class VizWorkload { Hybrid, Gpu, Cpu, Npu };
+enum class VizWorkload { Hybrid, Gpu, Cpu };
 enum class VizRenderer { D3D11, Direct2D };
 enum class VizOpaquePanel { Auto, Off };
 enum class VizEngineKind { Precision, Classic };
@@ -1836,12 +1802,12 @@ struct Settings {
     BYTE colorA = 255, colorR = 255, colorG = 255, colorB = 255;
     BYTE grad1A = 255, grad1R = 30, grad1G = 215, grad1B = 96;
     BYTE grad2A = 255, grad2R = 0, grad2G = 180, grad2B = 255;
-    int sensitivity = 150;
+    float sensitivity = 150;
     VizSensitivityCurve sensitivityCurve = VizSensitivityCurve::Knee;
     float inputGainDb = 0.0f;
     bool autoGain = false;
     float autoGainMaxDb = 12.0f;
-    int smoothing = 0;
+    float smoothing = 0;
     VizEQ eq = VizEQ::Default;
 
     float horizontalPosition = 50.0f;
@@ -1849,7 +1815,7 @@ struct Settings {
     int monitor = 1;
     VizAnchor verticalAnchor = VizAnchor::Bottom;
 
-    bool keyMoveEnabled = true;
+    bool keyMoveEnabled = false;
     unsigned keyMoveModifier = VIZ_MOD_CTRL | VIZ_MOD_ALT;
     VizKeyMoveKeys keyMoveKeys = VizKeyMoveKeys::Both;
     float keyMoveStep = 1;
@@ -1862,7 +1828,7 @@ struct Settings {
 
     bool dragEnabled = false;
     bool hostTaskbar = false;         // Position > Place In = Taskbar
-    bool hostPanel = false;           // Position > Place In = Panel (2.2)
+    bool hostPanel = false;           // Position > Place In = Panel
     int panelBackdrop = 1;            // 0 clear, 1 acrylic, 2 mica
     std::wstring panelHotkey;
     bool splitEnabled = false;        // show the visualizer as two pieces
@@ -1883,26 +1849,26 @@ struct Settings {
     BYTE bgA = 0x60, bgR = 0, bgG = 0, bgB = 0;
     float bgPaddingL = 24, bgPaddingR = 24, bgPaddingT = 24, bgPaddingB = 24;
     float bgRadiusTL = 14.0f, bgRadiusTR = 14.0f, bgRadiusBR = 14.0f, bgRadiusBL = 14.0f;
-    int bgBlur = 0;
+    float bgBlur = 0;
     float bgBorderSize = 0;
     BYTE borderA = 0x40, borderR = 255, borderG = 255, borderB = 255;
 
     int targetFps = 60;
     bool pauseOnFullscreen = true;
-    int pauseWhenSilentSeconds = 10;
+    float pauseWhenSilentSeconds = 10;
 
     bool peakHoldEnabled = false;
     BYTE peakHoldA = 255, peakHoldR = 0, peakHoldG = 180, peakHoldB = 255;
     bool beatFlashEnabled = false;
     BYTE beatFlashA = 255, beatFlashR = 255, beatFlashG = 255, beatFlashB = 255;
-    int beatFlashIntensity = 80;
-    int rainbowSpeed = 40;
+    float beatFlashIntensity = 80;
+    float rainbowSpeed = 40;
 
     bool nowPlayingEnabled = false;
     BYTE nowPlayingA = 255, nowPlayingR = 255, nowPlayingG = 255, nowPlayingB = 255;
     std::wstring nowPlayingFont = L"Segoe UI";
     float nowPlayingFontSize = 16;
-    int nowPlayingDisplaySeconds = 6;
+    float nowPlayingDisplaySeconds = 6;
     float nowPlayingOffsetY = 0;
     float nowPlayingOffsetX = 0;
     float peakFreqOffsetY = 0;
@@ -1923,7 +1889,7 @@ struct Settings {
     BYTE pfBgBorderA = 0x40, pfBgBorderR = 255, pfBgBorderG = 255, pfBgBorderB = 255;
 
     bool autoHideEnabled = false;
-    int autoHideDelaySeconds = 15;
+    float autoHideDelaySeconds = 15;
     bool pauseWhenObscured = false;
     int obscuredThresholdPercent = 100;
 
@@ -1933,8 +1899,8 @@ struct Settings {
     VizTextAlignH peakFreqAlignH = VizTextAlignH::Right;
     VizTextAlignV peakFreqAlignV = VizTextAlignV::Top;
     bool oscilloscopeMultibandEnabled = false;
-    int oscilloscopeWindowMs = 24;
-    int oscilloscopeDamping = 0;
+    float oscilloscopeWindowMs = 24;
+    float oscilloscopeDamping = 0;
 
     bool mediaControlsEnabled = false;
     BYTE mediaIconColorA = 255, mediaIconColorR = 255, mediaIconColorG = 255, mediaIconColorB = 255;
@@ -1965,7 +1931,6 @@ struct Settings {
     float mediaVerticalPosition = 95.0f;
 
     VizRenderDevice renderDevice = VizRenderDevice::Auto;
-    std::wstring npuRuntimePath;
     VizSmoothMode smoothMode = VizSmoothMode::Auto;
     VizWorkload workload = VizWorkload::Hybrid;
     VizRenderer renderer = VizRenderer::D3D11;
@@ -1976,7 +1941,7 @@ struct Settings {
     VizEngineKind engine = VizEngineKind::Precision;
     VizBandLayout bandLayout = VizBandLayout::Scale;
     int octaveFraction = 6;
-    int minFreq = 20, maxFreq = 20000;
+    float minFreq = 20, maxFreq = 20000;
     float tuningA4 = 440.f;
     VizWeighting weighting = VizWeighting::Z;
     float tiltDbPerOct = 1.5f;
@@ -1985,10 +1950,10 @@ struct Settings {
     VizWindowKind window = VizWindowKind::Hann;
     int bassDetail = 2;
     VizChannel channel = VizChannel::Mix;
-    int dbFloor = -72, dbCeiling = -12;
+    float dbFloor = -72, dbCeiling = -12;
     VizBallisticsPreset ballistics = VizBallisticsPreset::Snappy;
-    int attackMs = 10, releaseDbPerSec = 20;
-    int peakHoldMs = 500;
+    float attackMs = 10, releaseDbPerSec = 20;
+    float peakHoldMs = 500;
     VizPeakFall peakFall = VizPeakFall::Gravity;
     VizReadout readout = VizReadout::Frequency;
     bool loudnessResetOnTrack = true;
@@ -1999,19 +1964,19 @@ struct Settings {
 
     // Styles (2.1): picked from the Shape list on top of an internal shape.
     VizStyle style = VizStyle::None;
-    int reflection = 0;  // %, of Bar Max Size
-    int fxGlow = 0, fxBloom = 0;
+    float reflection = 0;  // %, of Bar Max Size
+    float fxGlow = 0, fxBloom = 0;
     float fxBloomRadius = 16;
     float fxGlowRadius = 6;  // FX (2.1)
     float fxOutlineWidth = 0.f;  // px
     BYTE fxOutlineA = 0xB0, fxOutlineR = 255, fxOutlineG = 255, fxOutlineB = 255;
-    int fxShadow = 0;  // %
+    float fxShadow = 0;  // %
     BYTE fxShadowR = 0, fxShadowG = 0, fxShadowB = 0;
     float fxShadowX = 2.f, fxShadowY = 3.f, fxShadowSoft = 4.f;  // px
     bool barHollow = false;
     float barHollowWidth = 1.5f, barDash = 0.f, barDashGap = 2.f, barTilt = 0.f;  // px, px, px, degrees
     float barMirrorGap = 0.f;  // px
-    int afterimage = 0;  // %
+    float afterimage = 0;  // %
     float afterimageSeconds = 1.2f;
 
     // Media widget (2.0).
@@ -2040,11 +2005,11 @@ struct Settings {
     float termFontSize = 14;
     int termRows = 16;
     int termMeterColumns = 40;
-    int termHotThreshold = 75;
+    float termHotThreshold = 75;
     wchar_t termColumnGlyph = L'#';
     wchar_t termPeakGlyph = L'-';
     std::wstring termRamp = L" .:-=+*#%@";
-    int termScrollRate = 20;
+    float termScrollRate = 20;
     BYTE termDimA = 255, termDimR = 0x1E, termDimG = 0x6B, termDimB = 0x34;
     BYTE termLowA = 255, termLowR = 0x33, termLowG = 0xFF, termLowB = 0x66;
     BYTE termHighA = 255, termHighR = 0xFF, termHighG = 0x3B, termHighB = 0x3B;
@@ -2095,15 +2060,17 @@ std::atomic<float> g_mediaOverrideH{50.0f};
 std::atomic<float> g_mediaOverrideV{95.0f};
 
 std::atomic<HWND> g_overlayWnd{nullptr};
-// Place In = Panel (2.2): whether the current overlay window is the panel,
+// Place In = Panel: whether the current overlay window is the panel,
 // and the panel's own state (kept in the "panel" mod value).
 bool g_overlayInPanel = false;
+// RegisterWindowMessage("TourneTable.Panel"): wParam 0 toggles the panel, 1 shows, 2 hides, 3 toggles
+// Keep on Top. Tourne Desktop sends it from its taskbar; any other launcher or script can too.
+UINT g_panelMsg = 0;
 bool g_panelHidden = false;
 bool g_panelPinned = false;
 float g_panelZoom = 1.0f;
 RECT g_panelRect{0, 0, 0, 0};  // empty until placed once
 int g_panelSizingW = 0, g_panelSizingH = 0;  // non-zero while an edge is being dragged
-UINT g_panelMsg = 0;  // RegisterWindowMessage("TourneTable.Panel")
 ComPtr<IDXGISwapChain1> g_swapChain;
 ComPtr<ID2D1DeviceContext> g_dc;
 ComPtr<IDCompositionDevice> g_compositionDevice;
@@ -2292,9 +2259,6 @@ inline float VizPx(float v) {
 FILETIME g_lastWallpaperTime = {};
 std::atomic<HMONITOR> g_cachedMonitor{nullptr};
 
-std::atomic<bool> g_captureRunning{false};
-std::thread* g_captureThread = nullptr;
-HANDLE g_captureEvent = nullptr;
 std::atomic<bool> g_deviceChanged{false};
 
 // Per-band energy and oscilloscope waveform are each produced as a whole array
@@ -2397,7 +2361,7 @@ std::mutex g_nowPlayingMutex;
 std::wstring g_nowPlayingDisplay;
 std::wstring g_nowPlayingTitle, g_nowPlayingArtist;  // the parts, for the two-line layout
 
-// ---- track timeline: begin (src/tests_features/test_timeline.cpp compiles this block from v2b.cpp)
+// ---- track timeline: begin
 // Track timeline from the media session, for the progress bar: start, end and
 // position in 100 ns units, and the tick at which the position was current.
 // Between updates the bar extrapolates while playing, since most players only
@@ -2637,18 +2601,15 @@ HMONITOR GetMonitorById(int monitorId) {
     return monitorResult;
 }
 
-// ---- DXCore: adapter classification and NPU discovery -------------------------
+// ---- DXCore: adapter classification -------------------------------------------
 //
-// DXGI can enumerate GPUs but can't say which one is integrated, and can't see
-// an NPU at all: NPUs are compute-only (MCDM) devices with no display engine,
-// so they never show up as a DXGI adapter. DXCore sees both. It ships in the
+// DXGI can enumerate GPUs but can't say which one is integrated. DXCore can. It ships in the
 // box from Windows 10 2004 on, but the toolchain's headers don't carry it, so
 // it is loaded at runtime and the handful of methods used here are declared
 // by hand, in vtable order, from the Windows SDK's dxcore_interface.h. Only
 // the leading methods are declared, and nothing past the last one is called.
 //
-// None of this runs per frame: it runs when the device is created and when the
-// NPU path explains why it can't start.
+// None of this runs per frame: it runs when the device is created.
 namespace ttdxcore {
 
 enum : uint32_t {
@@ -2681,19 +2642,8 @@ struct IAdapterFactory : public IUnknown {
 
 static const GUID kIID_Factory = {
     0x78ee5945, 0xc36e, 0x4b13, {0xa6, 0x69, 0x00, 0x5d, 0xd1, 0x1c, 0x0f, 0x06}};
-static const GUID kIID_List = {
-    0x526c7776, 0x40e9, 0x459b, {0xb7, 0x11, 0xf3, 0x2a, 0xd7, 0x6d, 0xfc, 0x28}};
 static const GUID kIID_Adapter = {
     0xf0db4c7f, 0xfe5a, 0x42a2, {0xbd, 0x62, 0xf2, 0xa6, 0xcf, 0x6f, 0xc8, 0x3e}};
-static const GUID kAttrD3D11Graphics = {
-    0x8c47866b, 0x7583, 0x450d, {0xf0, 0xf0, 0x6b, 0xad, 0xa8, 0x95, 0xaf, 0x4b}};
-static const GUID kAttrD3D12Graphics = {
-    0x0c9ece4d, 0x2f6e, 0x4f01, {0x8c, 0x96, 0xe8, 0x9e, 0x33, 0x1b, 0x47, 0xb1}};
-static const GUID kAttrGenericML = {
-    0xb71b0d41, 0x1088, 0x422f, {0xa2, 0x7c, 0x02, 0x50, 0xb7, 0xd3, 0xa9, 0x88}};
-// Windows 11 24H2 and later. Older builds simply return an empty list for it.
-static const GUID kAttrHardwareNpu = {
-    0xd46140c4, 0xadd7, 0x451b, {0x9e, 0x56, 0x06, 0xfe, 0x8c, 0x3b, 0x58, 0xed}};
 
 typedef HRESULT(WINAPI* CreateFactoryFn)(REFIID riid, void** ppvFactory);
 
@@ -2735,41 +2685,6 @@ inline std::wstring AdapterDescription(IAdapter* adapter) {
     std::wstring wide(wlen > 0 ? wlen : 0, L'\0');
     if (wlen > 0) MultiByteToWideChar(CP_ACP, 0, narrow.c_str(), (int)narrow.size(), wide.data(), wlen);
     return wide;
-}
-
-// Name of the first NPU Windows can see, e.g. "Intel(R) AI Boost", or empty.
-// Used to tell "the NPU is there but the runtime isn't" apart from "Windows
-// doesn't see an NPU at all", which need very different fixes.
-inline std::wstring FindNpuName() {
-    ComPtr<IAdapterFactory> factory = CreateFactory();
-    if (!factory) return L"";
-
-    auto firstMatching = [&](const GUID& attr, bool skipGraphics) -> std::wstring {
-        ComPtr<IAdapterList> list;
-        if (FAILED(factory->CreateAdapterList(1, &attr, kIID_List, (void**)list.GetAddressOf())) ||
-            !list) {
-            return L"";
-        }
-        uint32_t count = list->GetAdapterCount();
-        for (uint32_t i = 0; i < count; i++) {
-            ComPtr<IAdapter> adapter;
-            if (FAILED(list->GetAdapter(i, kIID_Adapter, (void**)adapter.GetAddressOf())) || !adapter)
-                continue;
-            // Every GPU also advertises generic ML, so on builds that predate
-            // the NPU attribute the only tell is "compute-only, no graphics".
-            if (skipGraphics && (adapter->IsAttributeSupported(kAttrD3D12Graphics) ||
-                                 adapter->IsAttributeSupported(kAttrD3D11Graphics))) {
-                continue;
-            }
-            std::wstring name = AdapterDescription(adapter.Get());
-            if (!name.empty()) return name;
-        }
-        return L"";
-    };
-
-    std::wstring name = firstMatching(kAttrHardwareNpu, false);
-    if (name.empty()) name = firstMatching(kAttrGenericML, true);
-    return name;
 }
 
 }  // namespace ttdxcore
@@ -3280,6 +3195,7 @@ int ComputeRectCoveragePercent(const RECT& targetIn) {
                 if (_wcsicmp(cls, L"Progman") == 0 || _wcsicmp(cls, L"WorkerW") == 0 ||
                     _wcsicmp(cls, L"Shell_TrayWnd") == 0 ||
                     _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+                    _wcsnicmp(cls, L"TourneTaskbar", 13) == 0 ||
                     _wcsicmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
                     _wcsicmp(cls, L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 ||
                     _wcsicmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
@@ -3380,6 +3296,44 @@ bool IsMediaStripCovered() {
 
     int threshold = std::clamp(g_settings.mediaCoveredThresholdPercent, 5, 100);
     return ComputeRectCoveragePercent(strip) >= threshold;
+}
+
+// Windows' taskbar, or Tourne Desktop's (see VizMenuHook).
+bool VizIsTaskbarWindow(HWND w) {
+    WCHAR cls[64] = {};
+    if (!GetClassNameW(w, cls, ARRAYSIZE(cls))) return false;
+    return wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+           wcsncmp(cls, L"TourneTaskbar", 13) == 0;
+}
+
+// Whether a visible taskbar overlaps rc. With aboveStrip, only one stacked
+// above the media window counts. A taskbar is topmost, so media controls placed
+// over one have to be topmost too, and come back up when the taskbar is raised
+// (a click on it does that), or clicks meant for them land on the taskbar.
+bool VizTaskbarOverlaps(const RECT& rc, bool aboveStrip) {
+    auto hits = [&](HWND w) {
+        RECT r, x;
+        return IsWindowVisible(w) && VizIsTaskbarWindow(w) && GetWindowRect(w, &r) && IntersectRect(&x, &r, &rc);
+    };
+    if (aboveStrip) {
+        if (!g_mediaWnd) return false;
+        for (HWND w = GetWindow(g_mediaWnd, GW_HWNDPREV); w; w = GetWindow(w, GW_HWNDPREV))
+            if (hits(w)) return true;
+        return false;
+    }
+    struct Ctx {
+        decltype(hits)* fn;
+        bool hit;
+    } ctx{&hits, false};
+    EnumWindows(
+        [](HWND w, LPARAM lp) -> BOOL {
+            auto* c = (Ctx*)lp;
+            if (!(*c->fn)(w)) return TRUE;
+            c->hit = true;
+            return FALSE;
+        },
+        (LPARAM)&ctx);
+    return ctx.hit;
 }
 
 void RefreshAccentColorCache() {
@@ -3594,7 +3548,11 @@ void RefreshMediaPlaybackStatus(GlobalSystemMediaTransportControlsSession const&
         auto info = session.GetPlaybackInfo();
         bool playing = info && info.PlaybackStatus() ==
             GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+        bool was = g_mediaIsPlaying.load(std::memory_order_relaxed);
         VizTimelineSetPlaying(gen, playing);  // also sets g_mediaIsPlaying
+        // Some players send PlaybackInfoChanged every second or so with
+        // nothing changed; only a play/pause change needs the controls redrawn.
+        if (playing == was) return;
     } catch (...) {}
     if (g_mediaWnd) PostMessage(g_mediaWnd, WM_APP_MEDIA_REPAINT, 0, 0);
 }
@@ -3719,7 +3677,7 @@ std::atomic<bool> g_mediaCmdPending{false};
 std::atomic<int> g_mediaCmdQueued{-1};
 
 void SendMediaCommand(int cmd) {
-    g_mediaCmdQueued.store(cmd, std::memory_order_relaxed);
+    g_mediaCmdQueued.store(cmd);
 
     bool expected = false;
     if (!g_mediaCmdPending.compare_exchange_strong(expected, true))
@@ -3732,24 +3690,34 @@ void SendMediaCommand(int cmd) {
         g_mediaCmdThread = nullptr;
     }
 
+    // The thread runs every command queued while it works (the latest one, if
+    // several came in), so a seek on release isn't dropped while the seek on
+    // press is still in flight.
     g_mediaCmdThread = new std::thread([]() {
-        int cmd = g_mediaCmdQueued.load(std::memory_order_relaxed);
-        try {
-            winrt::init_apartment(winrt::apartment_type::multi_threaded);
-            auto mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-            if (mgr) {
-                auto session = mgr.GetCurrentSession();
-                if (session) {
-                    if (cmd == 0)      session.TrySkipPreviousAsync().get();
-                    else if (cmd == 1) session.TryTogglePlayPauseAsync().get();
-                    else if (cmd == 2) session.TrySkipNextAsync().get();
-                    else if (cmd == 3)
-                        session.TryChangePlaybackPositionAsync(g_mediaSeekTicks.load(std::memory_order_relaxed)).get();
-                }
+        try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
+        for (;;) {
+            int cmd = g_mediaCmdQueued.exchange(-1);
+            if (cmd < 0) {
+                g_mediaCmdPending.store(false);
+                // A command that arrived just now, after its caller saw us still busy.
+                if (g_mediaCmdQueued.load() >= 0 && !g_mediaCmdPending.exchange(true)) continue;
+                break;
             }
-        } catch (...) {}
+            try {
+                auto mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+                if (mgr) {
+                    auto session = mgr.GetCurrentSession();
+                    if (session) {
+                        if (cmd == 0)      session.TrySkipPreviousAsync().get();
+                        else if (cmd == 1) session.TryTogglePlayPauseAsync().get();
+                        else if (cmd == 2) session.TrySkipNextAsync().get();
+                        else if (cmd == 3)
+                            session.TryChangePlaybackPositionAsync(g_mediaSeekTicks.load(std::memory_order_relaxed)).get();
+                    }
+                }
+            } catch (...) {}
+        }
         try { winrt::uninit_apartment(); } catch (...) {}
-        g_mediaCmdPending.store(false, std::memory_order_relaxed);
     });
 }
 
@@ -4592,8 +4560,11 @@ void RepositionAndRepaintMediaControls() {
     // Stacking: only touch the z-order when it is wrong. Raising it on every
     // repaint put the card back over its own open menus.
     const bool isTop = (GetWindowLongPtr(g_mediaWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-    const bool wantTop = g_settings.mediaOnTop && !g_menuOpen.load(std::memory_order_acquire);
-    UINT zFlags = (isTop == wantTop) ? SWP_NOZORDER : 0;
+    const RECT want{x, y, x + width, y + height};
+    const bool overTaskbar = VizTaskbarOverlaps(want, false);
+    const bool wantTop = (g_settings.mediaOnTop || overTaskbar) && !g_menuOpen.load(std::memory_order_acquire);
+    const bool buried = wantTop && overTaskbar && VizTaskbarOverlaps(want, true);
+    UINT zFlags = (isTop == wantTop && !buried) ? SWP_NOZORDER : 0;
     BOOL posOk = SetWindowPos(g_mediaWnd, wantTop ? HWND_TOPMOST : HWND_NOTOPMOST, x, y, width, height,
                               SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER | zFlags);
 
@@ -4706,9 +4677,9 @@ void CreateMediaControlWindow() {
         Wh_Log(L"[Media] CreateWindowEx failed, error %u", GetLastError());
         return;
     }
-    Wh_Log(L"[Media] Window created hwnd=%p enabled=%d iconSize=%d spacing=%d pos=(%.2f,%.2f) monitor=%d",
-           (void*)g_mediaWnd, (int)g_settings.mediaControlsEnabled, g_settings.mediaIconSize,
-           g_settings.mediaIconSpacing, g_settings.mediaHorizontalPosition,
+    Wh_Log(L"[Media] Window created hwnd=%p enabled=%d iconSize=%.2f spacing=%.2f pos=(%.2f,%.2f) monitor=%d",
+           (void*)g_mediaWnd, (int)g_settings.mediaControlsEnabled, (double)g_settings.mediaIconSize,
+           (double)g_settings.mediaIconSpacing, g_settings.mediaHorizontalPosition,
            g_settings.mediaVerticalPosition, g_settings.monitor);
 
     RecreateMediaControlResources();
@@ -5409,7 +5380,7 @@ public:
     // Runs the FFT for each tier that has enough new data, then rebuilds the
     // band levels. Returns true if anything was recomputed.
     //
-    // fftOverride lets the caller run the transform somewhere else (the NPU):
+    // fftOverride lets the caller run the transform somewhere else:
     // it gets the windowed block and must fill re/im with bins 0..N/2, or
     // return false to fall back to the CPU FFT.
     template <typename FftOverride>
@@ -5952,907 +5923,6 @@ private:
 };
 
 }  // namespace ttdsp
-
-// ---- NPU audio analysis (Workload = NPU) ----------------------------------------
-//
-// What the NPU can and can't do here. An NPU is a matrix-multiply engine with
-// no graphics pipeline: it can't rasterise a bar or present a frame, so
-// drawing always stays on Drawing Device. What it can take is the FFT, as long
-// as the FFT is written as matrix multiplies, which is the shape of work an
-// NPU is built for.
-//
-// The FFT is expressed as a "four-step" DFT. With N = N1 * N2 and the input
-// laid out as an N1 x N2 matrix (row-major, so no reshuffling of the samples):
-//
-//   Y = F1 . x          N1-point DFT down each column   (two real matmuls)
-//   Z = Y (*) T         twiddle factors, elementwise    (complex multiply)
-//   X = [Zre|Zim] . G   N2-point DFT along each row     (one real matmul)
-//
-// G packs the complex N2-point DFT as a real 2*N2 x 2*N2 block matrix, so the
-// last step is a single matmul that emits [Xre|Xim]. Bin k = k1 + N1*k2 lands
-// at row k1, column k2 (real) and N2 + k2 (imaginary). For N = 8192 that is
-// 64 x 128, and the constant matrices total about 350 KB.
-//
-// F1 and G carry 1/N1 and 1/N2, so the NPU computes X/N. Intel's NPU runs in
-// FP16, whose ceiling is 65504; unnormalised, an 8192-point bin can reach
-// 8192 times the input level and would overflow. The CPU multiplies N back
-// in, so everything downstream of VizFFT sees exactly the numbers it always
-// has.
-//
-// The model is built in memory as ONNX and handed to Intel's OpenVINO runtime,
-// which is how Intel exposes its NPU. OpenVINO is loaded at runtime through its
-// flat C API, so nothing here links against it and the mod still builds and
-// runs on machines without it. ONNX rather than OpenVINO's own IR because ONNX
-// carries its weights inline: IR would need a weights tensor created through
-// an element-type enum whose numbering has changed between OpenVINO releases.
-// Input and output tensors are the request's own, for the same reason.
-//
-// An honest note on cost, because this mod is built around measuring it: the
-// CPU FFT is already a fraction of a millisecond per block, roughly 90 blocks a
-// second at FFT Size 1024. Moving it to the NPU frees that CPU time but wakes
-// the NPU at the same rate, so whether package power goes down is something to
-// measure on your own machine, not something to assume. The log reports mean
-// and worst-case NPU time per block every 30 s for exactly that reason.
-namespace ttnpu {
-
-// ---- ONNX ModelProto writer --------------------------------------------------
-// Just enough protobuf to emit one ModelProto. Field numbers are from
-// onnx/onnx.proto: ModelProto{ir_version=1, producer_name=2, graph=7,
-// opset_import=8}, GraphProto{node=1, name=2, initializer=5, input=11,
-// output=12}, NodeProto{input=1, output=2, name=3, op_type=4, attribute=5},
-// AttributeProto{name=1, i=3, type=20}, TensorProto{dims=1, data_type=2,
-// name=8, raw_data=9}, ValueInfoProto{name=1, type=2}, TypeProto{tensor_type=1},
-// TypeProto.Tensor{elem_type=1, shape=2}, TensorShapeProto{dim=1},
-// Dimension{dim_value=1}, OperatorSetIdProto{domain=1, version=2}.
-struct Pb {
-    std::string b;
-    void Varint(uint64_t v) {
-        while (v >= 0x80) {
-            b.push_back((char)((v & 0x7F) | 0x80));
-            v >>= 7;
-        }
-        b.push_back((char)v);
-    }
-    void Key(uint32_t field, uint32_t wire) { Varint(((uint64_t)field << 3) | wire); }
-    void Int(uint32_t field, int64_t v) {
-        Key(field, 0);
-        Varint((uint64_t)v);
-    }
-    void Bytes(uint32_t field, const void* p, size_t n) {
-        Key(field, 2);
-        Varint(n);
-        b.append((const char*)p, n);
-    }
-    void Str(uint32_t field, const char* s) { Bytes(field, s, strlen(s)); }
-    void Msg(uint32_t field, const Pb& m) { Bytes(field, m.b.data(), m.b.size()); }
-};
-
-constexpr int64_t kOnnxFloat = 1;      // TensorProto.DataType.FLOAT
-constexpr int64_t kOnnxAttrInt = 2;    // AttributeProto.AttributeType.INT
-constexpr int64_t kOnnxIrVersion = 7;  // IR_VERSION_2020_5_8, the first to allow opset 13
-constexpr int64_t kOnnxOpset = 13;
-
-inline Pb OnnxInitializer(const char* name, int rows, int cols, const std::vector<float>& data) {
-    Pb t;
-    t.Int(1, rows);
-    t.Int(1, cols);
-    t.Int(2, kOnnxFloat);
-    t.Str(8, name);
-    // raw_data is little-endian by spec, which is the native order on every
-    // Windows target.
-    t.Bytes(9, data.data(), data.size() * sizeof(float));
-    return t;
-}
-
-inline Pb OnnxValueInfo(const char* name, int rows, int cols) {
-    Pb d0, d1, shape, tensorType, type, vi;
-    d0.Int(1, rows);
-    d1.Int(1, cols);
-    shape.Msg(1, d0);
-    shape.Msg(1, d1);
-    tensorType.Int(1, kOnnxFloat);
-    tensorType.Msg(2, shape);
-    type.Msg(1, tensorType);
-    vi.Str(1, name);
-    vi.Msg(2, type);
-    return vi;
-}
-
-inline Pb OnnxNode(const char* op, const char* in0, const char* in1, const char* out,
-                   bool hasAxis = false, int64_t axis = 0) {
-    Pb n;
-    n.Str(1, in0);
-    n.Str(1, in1);
-    n.Str(2, out);
-    n.Str(3, out);
-    n.Str(4, op);
-    if (hasAxis) {
-        Pb a;
-        a.Str(1, "axis");
-        a.Int(3, axis);
-        a.Int(20, kOnnxAttrInt);
-        n.Msg(5, a);
-    }
-    return n;
-}
-
-// Splits an FFT size into the N1 x N2 factors used by the four-step layout.
-// Near-square keeps every constant matrix small.
-inline bool SplitSize(int n, int* n1, int* n2) {
-    switch (n) {
-        case 1024: *n1 = 32; *n2 = 32; return true;
-        case 2048: *n1 = 32; *n2 = 64; return true;
-        case 4096: *n1 = 64; *n2 = 64; return true;
-        case 8192: *n1 = 64; *n2 = 128; return true;
-    }
-    return false;
-}
-
-// The whole model: input "x" [N1, N2] float, output "y" [N1, 2*N2] float.
-inline std::string BuildDftModel(int n1, int n2) {
-    const long long n = (long long)n1 * n2;
-    const double tau = 6.283185307179586476925;
-
-    // Angles are reduced with integer arithmetic before the trig call, so
-    // large index products don't lose precision in the argument.
-    std::vector<float> f1re((size_t)n1 * n1), f1im((size_t)n1 * n1);
-    for (int k1 = 0; k1 < n1; k1++) {
-        for (int j = 0; j < n1; j++) {
-            double ang = tau * (double)(((long long)k1 * j) % n1) / (double)n1;
-            f1re[(size_t)k1 * n1 + j] = (float)(cos(ang) / n1);
-            f1im[(size_t)k1 * n1 + j] = (float)(-sin(ang) / n1);
-        }
-    }
-
-    std::vector<float> tre((size_t)n1 * n2), tim((size_t)n1 * n2);
-    for (int k1 = 0; k1 < n1; k1++) {
-        for (int j = 0; j < n2; j++) {
-            double ang = tau * (double)(((long long)k1 * j) % n) / (double)n;
-            tre[(size_t)k1 * n2 + j] = (float)cos(ang);
-            tim[(size_t)k1 * n2 + j] = (float)(-sin(ang));
-        }
-    }
-
-    // G = [[F2re, F2im], [-F2im, F2re]], so [Zre | Zim] . G = [Xre | Xim].
-    const int g = 2 * n2;
-    std::vector<float> gm((size_t)g * g);
-    for (int j = 0; j < n2; j++) {
-        for (int k = 0; k < n2; k++) {
-            double ang = tau * (double)(((long long)j * k) % n2) / (double)n2;
-            float fr = (float)(cos(ang) / n2);
-            float fi = (float)(-sin(ang) / n2);
-            gm[(size_t)j * g + k] = fr;
-            gm[(size_t)j * g + n2 + k] = fi;
-            gm[(size_t)(n2 + j) * g + k] = -fi;
-            gm[(size_t)(n2 + j) * g + n2 + k] = fr;
-        }
-    }
-
-    Pb graph;
-    graph.Msg(1, OnnxNode("MatMul", "f1re", "x", "yre"));
-    graph.Msg(1, OnnxNode("MatMul", "f1im", "x", "yim"));
-    graph.Msg(1, OnnxNode("Mul", "yre", "tre", "a"));
-    graph.Msg(1, OnnxNode("Mul", "yim", "tim", "b"));
-    graph.Msg(1, OnnxNode("Sub", "a", "b", "zre"));
-    graph.Msg(1, OnnxNode("Mul", "yre", "tim", "c"));
-    graph.Msg(1, OnnxNode("Mul", "yim", "tre", "d"));
-    graph.Msg(1, OnnxNode("Add", "c", "d", "zim"));
-    graph.Msg(1, OnnxNode("Concat", "zre", "zim", "z", true, 1));
-    graph.Msg(1, OnnxNode("MatMul", "z", "g", "y"));
-    graph.Str(2, "tourne_table_dft");
-    graph.Msg(5, OnnxInitializer("f1re", n1, n1, f1re));
-    graph.Msg(5, OnnxInitializer("f1im", n1, n1, f1im));
-    graph.Msg(5, OnnxInitializer("tre", n1, n2, tre));
-    graph.Msg(5, OnnxInitializer("tim", n1, n2, tim));
-    graph.Msg(5, OnnxInitializer("g", g, g, gm));
-    graph.Msg(11, OnnxValueInfo("x", n1, n2));
-    graph.Msg(12, OnnxValueInfo("y", n1, g));
-
-    Pb opset;
-    opset.Str(1, "");
-    opset.Int(2, kOnnxOpset);
-
-    // Order matters for one reason: OpenVINO sniffs the format by reading the
-    // first three top-level fields and wants three different ones.
-    Pb model;
-    model.Int(1, kOnnxIrVersion);
-    model.Str(2, "TourneTable");
-    model.Msg(7, graph);
-    model.Msg(8, opset);
-    return model.b;
-}
-
-// Bin k of the four-step output, scaled back up to VizFFT's (unnormalised)
-// units. y is [N1, 2*N2] row-major.
-inline void UnpackBins(const float* y, int n1, int n2, std::vector<float>& re,
-                       std::vector<float>& im) {
-    const int n = n1 * n2;
-    const int stride = 2 * n2;
-    const float scale = (float)n;
-    for (int k = 0; k < n / 2; k++) {
-        int k1 = k % n1, k2 = k / n1;
-        re[k] = y[k1 * stride + k2] * scale;
-        im[k] = y[k1 * stride + n2 + k2] * scale;
-    }
-}
-
-// ---- OpenVINO C API, resolved at runtime ----------------------------------------
-// Signatures are copied from openvino/c/*.h. ov_status_e is a plain enum (0 =
-// OK). Every handle is opaque, so they are all void* here.
-struct OvDevices {
-    char** devices;
-    size_t size;
-};
-struct OvVersion {
-    const char* buildNumber;
-    const char* description;
-};
-struct OvApi {
-    HMODULE lib = nullptr;
-    int (*core_create)(void** core) = nullptr;
-    void (*core_free)(void* core) = nullptr;
-    int (*core_get_available_devices)(const void* core, OvDevices* devices) = nullptr;
-    void (*available_devices_free)(OvDevices* devices) = nullptr;
-    int (*core_read_model_from_memory_buffer)(const void* core, const char* model, size_t len,
-                                              const void* weights, void** outModel) = nullptr;
-    int (*core_compile_model)(const void* core, const void* model, const char* device,
-                              size_t propertyArgsSize, void** compiled, ...) = nullptr;
-    void (*model_free)(void* model) = nullptr;
-    int (*compiled_model_create_infer_request)(const void* compiled, void** request) = nullptr;
-    void (*compiled_model_free)(void* compiled) = nullptr;
-    int (*infer_request_get_input_tensor_by_index)(const void* request, size_t idx,
-                                                   void** tensor) = nullptr;
-    int (*infer_request_get_output_tensor_by_index)(const void* request, size_t idx,
-                                                    void** tensor) = nullptr;
-    int (*infer_request_infer)(void* request) = nullptr;
-    void (*infer_request_free)(void* request) = nullptr;
-    int (*tensor_data)(const void* tensor, void** data) = nullptr;
-    int (*tensor_get_byte_size)(const void* tensor, size_t* size) = nullptr;
-    void (*tensor_free)(void* tensor) = nullptr;
-    // Optional: absent from older runtimes, only used for nicer log lines.
-    int (*core_get_property)(const void* core, const char* device, const char* key,
-                             char** value) = nullptr;
-    void (*free_string)(const char* s) = nullptr;
-    const char* (*get_last_err_msg)() = nullptr;
-    int (*get_openvino_version)(OvVersion* v) = nullptr;
-    void (*version_free)(OvVersion* v) = nullptr;
-};
-
-struct Engine {
-    void* compiled = nullptr;
-    void* request = nullptr;
-    void* in = nullptr;
-    void* out = nullptr;
-    int n = 0, n1 = 0, n2 = 0;
-};
-
-// Shared state. The capture thread never takes this lock on its hot path: it
-// owns one Engine outright and only reaches for the lock when it needs a new
-// one, which is at start-up and on an FFT Size change.
-std::mutex g_mutex;
-std::condition_variable g_cv;
-std::thread* g_worker = nullptr;
-bool g_shutdown = false;
-bool g_enabled = false;
-bool g_runtimeRetry = false;  // set by Configure, consumed by the worker
-std::wstring g_runtimePath;  // copy of the setting, taken on the UI thread
-int g_wantSize = 0;          // FFT size the capture thread is asking for
-int g_builtSize = 0;         // size of the engine that currently exists, 0 if none
-int g_failedSize = 0;        // size whose build failed; not retried until settings change
-Engine* g_pending = nullptr; // built (or handed back after a pause), not in use
-std::wstring g_lastNotice;
-
-// Runtime and core: created by the worker, live for the process, and touched
-// by the worker thread only (Shutdown frees the core after joining it). The
-// DLLs are never unloaded -- OpenVINO's thread pool doesn't survive being
-// pulled out from under it, and the process exits right after the mod unloads
-// anyway.
-OvApi g_api;
-void* g_core = nullptr;
-bool g_runtimeAttempted = false;
-bool g_runtimeReady = false;
-std::wstring g_runtimeDir;
-std::wstring g_runtimeError;
-std::string g_deviceName;  // FULL_DEVICE_NAME, e.g. "Intel(R) AI Boost"
-
-// Hands a message to the UI thread for the settings-problems summary, once per
-// distinct message per settings change.
-inline void Notice(const std::wstring& msg) {
-    Wh_Log(L"[NPU] %s", msg.c_str());
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (msg == g_lastNotice) return;
-        g_lastNotice = msg;
-    }
-    HWND wnd = g_messageWnd;
-    if (!wnd) return;
-    auto* heap = new std::wstring(msg);
-    if (!PostMessage(wnd, WM_APP_HW_NOTICE, 0, (LPARAM)heap)) delete heap;
-}
-
-inline std::wstring Widen(const char* s) {
-    if (!s) return L"";
-    int len = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
-    if (len <= 1) return L"";
-    std::wstring w(len - 1, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s, -1, w.data(), len);
-    return w;
-}
-
-inline std::wstring LastOvError(int status) {
-    WCHAR buf[64];
-    swprintf_s(buf, L"status %d", status);
-    std::wstring out = buf;
-    if (g_api.get_last_err_msg) {
-        const char* m = g_api.get_last_err_msg();
-        if (m && *m) {
-            std::wstring w = Widen(m);
-            // OpenVINO's messages carry a full C++ backtrace-ish preamble;
-            // the first line is the useful part.
-            size_t nl = w.find_first_of(L"\r\n");
-            if (nl != std::wstring::npos) w.resize(nl);
-            if (w.size() > 300) w.resize(300);
-            out += L": " + w;
-        }
-    }
-    return out;
-}
-
-inline bool DirHasRuntime(const std::wstring& dir) {
-    if (dir.empty()) return false;
-    DWORD attr = GetFileAttributesW((dir + L"\\openvino_c.dll").c_str());
-    return attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-inline std::wstring EnvVar(PCWSTR name) {
-    WCHAR buf[MAX_PATH * 2];
-    DWORD n = GetEnvironmentVariableW(name, buf, ARRAYSIZE(buf));
-    return (n > 0 && n < ARRAYSIZE(buf)) ? std::wstring(buf, n) : std::wstring();
-}
-
-// Directories matching parent\pattern, newest-looking (highest name) first.
-inline std::vector<std::wstring> GlobDirs(const std::wstring& parent, PCWSTR pattern) {
-    std::vector<std::wstring> out;
-    if (parent.empty()) return out;
-    WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileW((parent + L"\\" + pattern).c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return out;
-    do {
-        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && fd.cFileName[0] != L'.')
-            out.push_back(parent + L"\\" + fd.cFileName);
-    } while (FindNextFileW(h, &fd));
-    FindClose(h);
-    std::sort(out.begin(), out.end(), [](const std::wstring& a, const std::wstring& b) {
-        return _wcsicmp(a.c_str(), b.c_str()) > 0;
-    });
-    return out;
-}
-
-// Every place OpenVINO's C runtime is commonly found, most specific first.
-inline std::vector<std::wstring> CandidateDirs(const std::wstring& userPath) {
-    std::vector<std::wstring> dirs;
-    auto addRoot = [&](const std::wstring& root) {
-        if (root.empty()) return;
-        dirs.push_back(root);                                   // the folder itself
-        dirs.push_back(root + L"\\runtime\\bin\\intel64\\Release");  // extracted archive
-        dirs.push_back(root + L"\\openvino\\libs");             // a site-packages folder
-        dirs.push_back(root + L"\\libs");                       // the openvino package folder
-    };
-
-    addRoot(userPath);
-    addRoot(EnvVar(L"INTEL_OPENVINO_DIR"));
-
-    for (PCWSTR base : {L"ProgramFiles(x86)", L"ProgramFiles", L"ProgramW6432"}) {
-        std::wstring pf = EnvVar(base);
-        for (const auto& d : GlobDirs(pf + L"\\Intel", L"openvino*")) addRoot(d);
-    }
-    // Not C:\Intel or C:\openvino*: any user can create folders at the root
-    // of C:, and a DLL loaded from one would run inside Windhawk. An archive
-    // extracted there still works through NPU Runtime Folder.
-
-    // pip: per-user and all-users CPython installs, plus `pip install --user`.
-    std::wstring localApp = EnvVar(L"LOCALAPPDATA");
-    for (const auto& py : GlobDirs(localApp + L"\\Programs\\Python", L"Python3*"))
-        dirs.push_back(py + L"\\Lib\\site-packages\\openvino\\libs");
-    for (PCWSTR base : {L"ProgramFiles", L"ProgramW6432"}) {
-        for (const auto& py : GlobDirs(EnvVar(base), L"Python3*"))
-            dirs.push_back(py + L"\\Lib\\site-packages\\openvino\\libs");
-    }
-    for (const auto& py : GlobDirs(EnvVar(L"APPDATA") + L"\\Python", L"Python3*"))
-        dirs.push_back(py + L"\\site-packages\\openvino\\libs");
-
-    // Finally PATH, the way setupvars.bat leaves things.
-    WCHAR found[MAX_PATH];
-    if (SearchPathW(nullptr, L"openvino_c.dll", nullptr, ARRAYSIZE(found), found, nullptr)) {
-        std::wstring p = found;
-        size_t slash = p.find_last_of(L"\\/");
-        if (slash != std::wstring::npos) dirs.push_back(p.substr(0, slash));
-    }
-    return dirs;
-}
-
-template <class T>
-inline bool Resolve(HMODULE lib, const char* name, T& fn) {
-    fn = (T)(void*)GetProcAddress(lib, name);
-    return fn != nullptr;
-}
-
-inline bool LoadRuntimeFrom(const std::wstring& dir, std::wstring* err) {
-    // The extracted archive keeps TBB (which openvino.dll imports) in a sibling
-    // tree rather than next to it; pip puts everything in one folder. Both
-    // directories are added to this process's DLL search for the loads below
-    // and for the plugins OpenVINO loads later. The cookies are kept for the
-    // life of the process, like the DLLs themselves.
-    AddDllDirectory(dir.c_str());
-    WCHAR tbb[MAX_PATH * 2];
-    if (GetFullPathNameW((dir + L"\\..\\..\\..\\3rdparty\\tbb\\bin").c_str(), ARRAYSIZE(tbb), tbb,
-                         nullptr)) {
-        DWORD attr = GetFileAttributesW(tbb);
-        if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) AddDllDirectory(tbb);
-    }
-
-    std::wstring dll = dir + L"\\openvino_c.dll";
-    HMODULE lib = LoadLibraryExW(dll.c_str(), nullptr,
-                                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
-                                     LOAD_LIBRARY_SEARCH_USER_DIRS);
-    if (!lib) {
-        WCHAR buf[96];
-        swprintf_s(buf, L"Windows error %lu", GetLastError());
-        *err = L"Found " + dll + L" but it would not load (" + buf +
-               L"). Usually a missing dependency: an incomplete copy, or a 32-bit/ARM build.";
-        return false;
-    }
-
-    OvApi api;
-    api.lib = lib;
-    bool ok = Resolve(lib, "ov_core_create", api.core_create) &&
-              Resolve(lib, "ov_core_free", api.core_free) &&
-              Resolve(lib, "ov_core_get_available_devices", api.core_get_available_devices) &&
-              Resolve(lib, "ov_available_devices_free", api.available_devices_free) &&
-              Resolve(lib, "ov_core_read_model_from_memory_buffer",
-                      api.core_read_model_from_memory_buffer) &&
-              Resolve(lib, "ov_core_compile_model", api.core_compile_model) &&
-              Resolve(lib, "ov_model_free", api.model_free) &&
-              Resolve(lib, "ov_compiled_model_create_infer_request",
-                      api.compiled_model_create_infer_request) &&
-              Resolve(lib, "ov_compiled_model_free", api.compiled_model_free) &&
-              Resolve(lib, "ov_infer_request_get_input_tensor_by_index",
-                      api.infer_request_get_input_tensor_by_index) &&
-              Resolve(lib, "ov_infer_request_get_output_tensor_by_index",
-                      api.infer_request_get_output_tensor_by_index) &&
-              Resolve(lib, "ov_infer_request_infer", api.infer_request_infer) &&
-              Resolve(lib, "ov_infer_request_free", api.infer_request_free) &&
-              Resolve(lib, "ov_tensor_data", api.tensor_data) &&
-              Resolve(lib, "ov_tensor_get_byte_size", api.tensor_get_byte_size) &&
-              Resolve(lib, "ov_tensor_free", api.tensor_free);
-    if (!ok) {
-        *err = L"The OpenVINO runtime in " + dir +
-               L" is too old: reading a model from memory needs OpenVINO 2023.1 or newer.";
-        return false;
-    }
-    Resolve(lib, "ov_core_get_property", api.core_get_property);
-    Resolve(lib, "ov_free", api.free_string);
-    Resolve(lib, "ov_get_last_err_msg", api.get_last_err_msg);
-    Resolve(lib, "ov_get_openvino_version", api.get_openvino_version);
-    Resolve(lib, "ov_version_free", api.version_free);
-
-    g_api = api;
-    g_runtimeDir = dir;
-    return true;
-}
-
-// Loads the runtime and creates the core, once per process. Runs on the
-// worker thread only. On failure the reason is kept, and a later settings
-// change (a corrected folder, say) gets one fresh attempt.
-inline bool EnsureRuntime(const std::wstring& userPath, std::wstring* err) {
-    if (g_runtimeReady) return true;
-    if (g_runtimeAttempted) {
-        *err = g_runtimeError;
-        return false;
-    }
-    g_runtimeAttempted = true;
-
-#if !defined(_WIN64)
-    std::wstring npu = ttdxcore::FindNpuName();
-    g_runtimeError =
-        L"NPU analysis needs a 64-bit Windhawk tool process, because OpenVINO only ships "
-        L"64-bit. This one is 32-bit (Windhawk 1.x runs tool mods that way). " +
-        (npu.empty() ? std::wstring(L"")
-                     : L"Windows does see your NPU (" + npu + L"), so it will work on a 64-bit host. ") +
-        L"Staying on the CPU.";
-    *err = g_runtimeError;
-    return false;
-#else
-    std::wstring loadErr;
-    bool loaded = false;
-    for (const auto& dir : CandidateDirs(userPath)) {
-        if (!DirHasRuntime(dir)) continue;
-        if (LoadRuntimeFrom(dir, &loadErr)) {
-            loaded = true;
-            break;
-        }
-    }
-    if (!loaded) {
-        std::wstring npu = ttdxcore::FindNpuName();
-        if (!loadErr.empty()) {
-            g_runtimeError = loadErr;
-        } else if (!userPath.empty()) {
-            g_runtimeError = L"No openvino_c.dll in \"" + userPath +
-                             L"\" (or its runtime\\bin\\intel64\\Release folder).";
-        } else {
-            g_runtimeError = L"The OpenVINO runtime isn't installed, or isn't anywhere this mod looks.";
-        }
-        g_runtimeError +=
-            npu.empty()
-                ? L" Windows doesn't report an NPU either - check Device Manager for a \"Neural "
-                  L"processors\" entry; if it's missing, install the Intel NPU driver and check the "
-                  L"BIOS for an NPU / AI Boost switch."
-                : L" Windows does see your NPU (" + npu +
-                      L"), so only the runtime is missing: extract the OpenVINO archive from "
-                      L"Intel (or pip install openvino) and point NPU Runtime Folder at it.";
-        g_runtimeError += L" Staying on the CPU.";
-        *err = g_runtimeError;
-        return false;
-    }
-
-    int st = g_api.core_create(&g_core);
-    if (st != 0 || !g_core) {
-        g_runtimeError = L"OpenVINO loaded from " + g_runtimeDir + L" but could not start (" +
-                         LastOvError(st) + L"). Staying on the CPU.";
-        *err = g_runtimeError;
-        g_core = nullptr;
-        return false;
-    }
-
-    OvDevices devices{};
-    bool hasNpu = false;
-    std::wstring deviceList;
-    if (g_api.core_get_available_devices(g_core, &devices) == 0) {
-        for (size_t i = 0; i < devices.size; i++) {
-            const char* d = devices.devices[i];
-            if (!d) continue;
-            if (!deviceList.empty()) deviceList += L", ";
-            deviceList += Widen(d);
-            if (strncmp(d, "NPU", 3) == 0) hasNpu = true;
-        }
-        g_api.available_devices_free(&devices);
-    }
-    if (!hasNpu) {
-        std::wstring npu = ttdxcore::FindNpuName();
-        g_runtimeError = L"OpenVINO (" + g_runtimeDir + L") is working but lists no NPU (it sees: " +
-                         (deviceList.empty() ? std::wstring(L"nothing") : deviceList) + L"). " +
-                         (npu.empty() ? std::wstring(L"Windows doesn't report one either - install the "
-                                                     L"Intel NPU driver and check the BIOS.")
-                                      : L"Windows does see " + npu +
-                                            L", so the NPU driver and this OpenVINO are likely "
-                                            L"mismatched: update the Intel NPU driver, or use the "
-                                            L"OpenVINO version its release notes name.") +
-                         L" Staying on the CPU.";
-        *err = g_runtimeError;
-        return false;
-    }
-
-    if (g_api.core_get_property && g_api.free_string) {
-        char* name = nullptr;
-        if (g_api.core_get_property(g_core, "NPU", "FULL_DEVICE_NAME", &name) == 0 && name) {
-            g_deviceName = name;
-            g_api.free_string(name);
-        }
-    }
-    std::wstring version;
-    if (g_api.get_openvino_version && g_api.version_free) {
-        OvVersion v{};
-        if (g_api.get_openvino_version(&v) == 0) {
-            version = Widen(v.buildNumber);
-            g_api.version_free(&v);
-        }
-    }
-    Wh_Log(L"[NPU] OpenVINO %s from %s, NPU: %s", version.c_str(), g_runtimeDir.c_str(),
-           g_deviceName.empty() ? L"(unnamed)" : Widen(g_deviceName.c_str()).c_str());
-    g_runtimeReady = true;
-    return true;
-#endif
-}
-
-inline void FreeEngine(Engine* e) {
-    if (!e) return;
-    if (e->in) g_api.tensor_free(e->in);
-    if (e->out) g_api.tensor_free(e->out);
-    if (e->request) g_api.infer_request_free(e->request);
-    if (e->compiled) g_api.compiled_model_free(e->compiled);
-    delete e;
-}
-
-// One inference. `windowed` may alias `re`: it is copied in before anything is
-// written back.
-inline bool Run(Engine* e, const float* windowed, std::vector<float>& re, std::vector<float>& im) {
-    void* inData = nullptr;
-    void* outData = nullptr;
-    if (g_api.tensor_data(e->in, &inData) != 0 || !inData) return false;
-    memcpy(inData, windowed, (size_t)e->n * sizeof(float));
-    if (g_api.infer_request_infer(e->request) != 0) return false;
-    if (g_api.tensor_data(e->out, &outData) != 0 || !outData) return false;
-    UnpackBins((const float*)outData, e->n1, e->n2, re, im);
-    return true;
-}
-
-// Compiles the model for one FFT size on the NPU and proves it against a known
-// answer before anything relies on it. Worker thread only.
-inline bool BuildEngine(int n, Engine** out, std::wstring* err) {
-    int n1 = 0, n2 = 0;
-    if (!SplitSize(n, &n1, &n2)) {
-        *err = L"Unsupported FFT size for the NPU path.";
-        return false;
-    }
-
-    LARGE_INTEGER f, t0, t1;
-    QueryPerformanceFrequency(&f);
-    QueryPerformanceCounter(&t0);
-
-    std::string onnx = BuildDftModel(n1, n2);
-    void* model = nullptr;
-    int st = g_api.core_read_model_from_memory_buffer(g_core, onnx.data(), onnx.size(), nullptr, &model);
-    if (st != 0 || !model) {
-        *err = L"OpenVINO rejected the FFT model (" + LastOvError(st) + L"). Staying on the CPU.";
-        return false;
-    }
-
-    auto* e = new Engine();
-    e->n = n;
-    e->n1 = n1;
-    e->n2 = n2;
-    // LATENCY: one request in flight at a time, which is exactly this workload.
-    // If a runtime refuses the hint, compile again with its defaults rather
-    // than give up over a tuning knob.
-    st = g_api.core_compile_model(g_core, model, "NPU", 2, &e->compiled, "PERFORMANCE_HINT",
-                                  "LATENCY");
-    if (st != 0 || !e->compiled) {
-        Wh_Log(L"[NPU] compile with LATENCY hint failed (%s), retrying with defaults",
-               LastOvError(st).c_str());
-        e->compiled = nullptr;
-        st = g_api.core_compile_model(g_core, model, "NPU", 0, &e->compiled);
-    }
-    g_api.model_free(model);
-    if (st != 0 || !e->compiled) {
-        e->compiled = nullptr;
-        FreeEngine(e);
-        *err = L"The NPU couldn't compile the FFT model (" + LastOvError(st) + L"). Staying on the CPU.";
-        return false;
-    }
-    if (g_api.compiled_model_create_infer_request(e->compiled, &e->request) != 0 || !e->request ||
-        g_api.infer_request_get_input_tensor_by_index(e->request, 0, &e->in) != 0 || !e->in ||
-        g_api.infer_request_get_output_tensor_by_index(e->request, 0, &e->out) != 0 || !e->out) {
-        FreeEngine(e);
-        *err = L"The NPU compiled the FFT model but wouldn't create a request for it. Staying on the CPU.";
-        return false;
-    }
-
-    // Shapes are fixed by the model, so a size mismatch means the runtime did
-    // something unexpected with the I/O precision; refuse rather than guess.
-    size_t inBytes = 0, outBytes = 0;
-    g_api.tensor_get_byte_size(e->in, &inBytes);
-    g_api.tensor_get_byte_size(e->out, &outBytes);
-    if (inBytes != (size_t)n * sizeof(float) || outBytes != (size_t)n * 2 * sizeof(float)) {
-        FreeEngine(e);
-        WCHAR buf[160];
-        swprintf_s(buf, L"Unexpected NPU tensor sizes (%zu in, %zu out). Staying on the CPU.", inBytes,
-                   outBytes);
-        *err = buf;
-        return false;
-    }
-
-    // Known-answer test: a cosine at bin 5 must come back as a single real
-    // line of height N/2 and nothing much anywhere else. This catches a wrong
-    // layout, a precision problem, or a driver that quietly returns zeros.
-    std::vector<float> probe(n), re(n, 0.f), im(n, 0.f);
-    for (int i = 0; i < n; i++) probe[i] = (float)cos(6.283185307179586 * 5.0 * i / n);
-    if (!Run(e, probe.data(), re, im)) {
-        FreeEngine(e);
-        *err = L"The NPU failed its first test run. Staying on the CPU.";
-        return false;
-    }
-    float half = n * 0.5f, worst = 0.f;
-    for (int k = 1; k < n / 2; k++) {
-        if (k == 5) continue;
-        worst = std::max(worst, sqrtf(re[k] * re[k] + im[k] * im[k]));
-    }
-    float peakErr = fabsf(re[5] - half) / half;
-    if (!(peakErr < 0.03f) || !(worst < 0.02f * half) || !(fabsf(im[5]) < 0.02f * half)) {
-        FreeEngine(e);
-        WCHAR buf[200];
-        swprintf_s(buf,
-                   L"The NPU's FFT didn't match the reference (peak off by %.1f%%, leakage %.1f%%). "
-                   L"Staying on the CPU.",
-                   peakErr * 100.f, worst / half * 100.f);
-        *err = buf;
-        return false;
-    }
-
-    QueryPerformanceCounter(&t1);
-    Wh_Log(L"[NPU] FFT %d ready on %s: compiled and verified in %.0f ms (peak error %.2f%%, "
-           L"leakage %.2f%%)",
-           n, g_deviceName.empty() ? L"NPU" : Widen(g_deviceName.c_str()).c_str(),
-           (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)f.QuadPart, peakErr * 100.f,
-           worst / half * 100.f);
-    *out = e;
-    return true;
-}
-
-inline void WorkerProc() {
-    SetThreadDescription(GetCurrentThread(), L"TourneTable-NPU");
-    std::unique_lock<std::mutex> lock(g_mutex);
-    for (;;) {
-        g_cv.wait(lock, [] {
-            return g_shutdown || (g_enabled && g_wantSize > 0 && g_wantSize != g_builtSize &&
-                                  g_wantSize != g_failedSize);
-        });
-        if (g_shutdown) break;
-
-        int n = g_wantSize;
-        std::wstring path = g_runtimePath;
-        if (g_runtimeRetry) {
-            // A settings change since the last failure: one fresh attempt at
-            // finding and loading the runtime.
-            g_runtimeRetry = false;
-            if (!g_runtimeReady) g_runtimeAttempted = false;
-        }
-        lock.unlock();
-
-        std::wstring err;
-        Engine* e = nullptr;
-        bool ok = EnsureRuntime(path, &err) && BuildEngine(n, &e, &err);
-
-        lock.lock();
-        if (g_shutdown) {
-            if (e) FreeEngine(e);
-            break;
-        }
-        if (ok) {
-            if (g_pending) FreeEngine(g_pending);
-            g_pending = e;
-            g_builtSize = n;
-            g_failedSize = 0;
-        } else {
-            g_failedSize = n;
-            lock.unlock();
-            Notice(err);
-            lock.lock();
-        }
-    }
-}
-
-// UI thread, from LoadSettings. Cheap; safe to call on every settings change.
-inline void Configure(bool enabled, const std::wstring& runtimePath) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    bool changed = enabled != g_enabled || runtimePath != g_runtimePath;
-    g_enabled = enabled;
-    g_runtimePath = runtimePath;
-    if (changed) {
-        // A settings change is the user's way of saying "try again": clear the
-        // failure so the next block retries, and let the same notice show again.
-        g_failedSize = 0;
-        g_lastNotice.clear();
-        g_runtimeRetry = true;
-    }
-    if (enabled && !g_worker && !g_shutdown) g_worker = new std::thread(WorkerProc);
-    g_cv.notify_all();
-}
-
-// Capture-thread side. One per capture thread; owns its engine outright.
-struct Session {
-    Engine* engine = nullptr;
-    LONGLONG qpcFreq = 0;
-    LONGLONG statSince = 0;
-    LONGLONG statTotal = 0, statWorst = 0;
-    unsigned statCount = 0;
-};
-
-// Runs one FFT block on the NPU. Returns false whenever the CPU should do it
-// instead (not ready yet, not enabled, failed); never blocks on a compile.
-inline bool Analyze(Session& s, int n, const float* windowed, std::vector<float>& re,
-                    std::vector<float>& im) {
-    if (s.engine && s.engine->n != n) {
-        FreeEngine(s.engine);
-        s.engine = nullptr;
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_builtSize = g_pending ? g_pending->n : 0;
-    }
-    if (!s.engine) {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        if (g_pending && g_pending->n == n) {
-            s.engine = g_pending;
-            g_pending = nullptr;
-        } else if (g_wantSize != n) {
-            g_wantSize = n;
-            g_cv.notify_all();
-        }
-        if (!s.engine) return false;
-    }
-
-    if (!s.qpcFreq) {
-        LARGE_INTEGER f;
-        QueryPerformanceFrequency(&f);
-        s.qpcFreq = f.QuadPart;
-    }
-    LARGE_INTEGER t0, t1;
-    QueryPerformanceCounter(&t0);
-    if (!Run(s.engine, windowed, re, im)) {
-        FreeEngine(s.engine);
-        s.engine = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            g_builtSize = g_pending ? g_pending->n : 0;
-            g_failedSize = n;
-        }
-        Notice(L"An NPU inference call failed mid-stream (driver reset or device removed?). Back on "
-               L"the CPU; change any setting to retry.");
-        return false;
-    }
-    QueryPerformanceCounter(&t1);
-
-    LONGLONG dt = t1.QuadPart - t0.QuadPart;
-    if (!s.statSince) s.statSince = t1.QuadPart;
-    s.statTotal += dt;
-    s.statWorst = std::max(s.statWorst, dt);
-    s.statCount++;
-    if (t1.QuadPart - s.statSince >= 30 * s.qpcFreq) {
-        Wh_Log(L"[NPU] %u blocks in the last 30 s, mean %.3f ms, worst %.3f ms per block", s.statCount,
-               (double)s.statTotal * 1000.0 / (double)s.qpcFreq / (double)s.statCount,
-               (double)s.statWorst * 1000.0 / (double)s.qpcFreq);
-        s.statSince = t1.QuadPart;
-        s.statTotal = s.statWorst = 0;
-        s.statCount = 0;
-    }
-    return true;
-}
-
-// Capture thread exit (pause, device change, unload): hand the engine back so
-// resuming doesn't pay for another compile.
-inline void EndSession(Session& s) {
-    if (!s.engine) return;
-    std::lock_guard<std::mutex> lock(g_mutex);
-    if (!g_pending && !g_shutdown) {
-        g_pending = s.engine;
-    } else {
-        FreeEngine(s.engine);
-        g_builtSize = g_pending ? g_pending->n : 0;
-    }
-    s.engine = nullptr;
-}
-
-// Unload. The capture thread must already have stopped.
-inline void Shutdown() {
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_shutdown = true;
-    }
-    g_cv.notify_all();
-    bool joined = true;
-    if (g_worker) {
-        // A compile in flight can't be cancelled; don't hold unload hostage to
-        // it. The process exits right after this, which ends the thread.
-        if (WaitForSingleObject(g_worker->native_handle(), 3000) == WAIT_OBJECT_0) {
-            g_worker->join();
-        } else {
-            g_worker->detach();
-            joined = false;
-        }
-        delete g_worker;
-        g_worker = nullptr;
-    }
-    if (!joined) return;
-    std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_pending) {
-        FreeEngine(g_pending);
-        g_pending = nullptr;
-    }
-    if (g_core && g_api.core_free) {
-        g_api.core_free(g_core);
-        g_core = nullptr;
-    }
-}
-
-}  // namespace ttnpu
 
 // ---- Performance Stats (2.0) -----------------------------------------------------------
 //
@@ -7533,7 +6603,6 @@ public:
         if (enum_ && notify_ && notifyRegistered_) enum_->UnregisterEndpointNotificationCallback(notify_);
         if (notify_) notify_->Release();
         notify_ = nullptr;
-        ttnpu::EndSession(npuSession_);
         enum_.Reset();
         if (audioEvent_) CloseHandle(audioEvent_);
         audioEvent_ = nullptr;
@@ -7963,7 +7032,7 @@ private:
             if (m < 0) m += RING_CAP;
             return ring_[m];
         };
-        int windowMs = std::clamp(g_settings.oscilloscopeWindowMs, 5, 250);
+        float windowMs = std::clamp(g_settings.oscilloscopeWindowMs, 5.f, 250.f);
         int span = (int)((double)sampleRate_ * (double)windowMs / 1000.0);
         span = std::clamp(span, VIZ_WAVE_SAMPLES, RING_CAP / 2);
         // Trigger on the nearest rising zero crossing before the window's
@@ -8032,9 +7101,7 @@ private:
                 im_[i] = 0.f;
             }
             ringCount_ -= currentFftSize_ / 2;
-            bool analysedOnNpu = cfg_.workload == VizWorkload::Npu &&
-                                 ttnpu::Analyze(npuSession_, currentFftSize_, re_.data(), re_, im_);
-            if (!analysedOnNpu) VizFFT(re_, im_);
+            VizFFT(re_, im_);
 
             float t_sens = g_settings.sensitivity / 100.0f;
             float sliderGain = (t_sens <= 1.0f) ? 0.25f + t_sens * t_sens * 2.75f : 3.0f + (t_sens - 1.0f) * 4.0f;
@@ -8175,21 +7242,9 @@ private:
         }
         if (silent && settled_) return false;
 
-        auto npu = [this](const float* windowed, int n, float* re, float* im) -> bool {
-            if (cfg_.workload != VizWorkload::Npu) return false;
-            npuRe_.resize(n);
-            npuIm_.resize(n);
-            if (!ttnpu::Analyze(npuSession_, n, windowed, npuRe_, npuIm_)) return false;
-            for (int k = 0; k < n / 2; k++) {
-                re[k] = npuRe_[k];
-                im[k] = npuIm_[k];
-            }
-            re[n / 2] = im[n / 2] = 0.f;  // the NPU model leaves out the Nyquist bin
-            return true;
-        };
         bool fresh = false;
         if (!silentFinal_) {
-            fresh = spec_.Analyze(force || silent, npu);
+            fresh = spec_.Analyze(force || silent, [](const float*, int, float*, float*) { return false; });
             if (silent) silentFinal_ = true;
             if (fresh) {
                 VizPerf(kPerfAnalyses);
@@ -8341,7 +7396,6 @@ private:
     int currentFftSize_ = 0;
     float bandEnv_[VIZ_NUM_BANDS] = {};
     float agcPeakEnv_ = 0.f, agcGain_ = 1.f, prevBassEnv_ = 0.f;
-    ttnpu::Session npuSession_;
 
     // Precision
     VizEngineConfig cfg_;
@@ -8352,7 +7406,7 @@ private:
     bool bandBass_[VIZ_BARS_MAX] = {};
     float agcDb_ = 0.f, loudEnvDb_ = -200.f, bassSlow_ = 0.f;
     VizBandFrame frame_;
-    std::vector<float> mono_, zeros_, npuRe_, npuIm_;
+    std::vector<float> mono_, zeros_;
     long long zeroRun_ = 0, silentNeeded_ = 1LL << 62;  // digital silence, see PrecisionFrame
     bool silentFinal_ = false, settled_ = false, gpuSilentFlushed_ = false, wakeFromSilence_ = false;
 
@@ -8367,7 +7421,9 @@ private:
 // The capture "thread" is now a state of the engine thread. These keep their
 // 1.5 names and meaning for the callers (pause on fullscreen, resume, unload):
 // Start asks for the stream, Stop asks for it to be closed and waits until it
-// is, then clears the bars, exactly as joining the old thread did.
+// is. Closing clears the bars (Close -> ResetAnalysis), on the engine thread:
+// the bars have exactly one writer, because two publishers racing on the
+// seqlock can leave its count odd, and every reader would then spin forever.
 void StartVizCaptureThread() {
     g_captureWanted.store(true);
     if (g_engineWake) SetEvent(g_engineWake);
@@ -8377,10 +7433,6 @@ void StopVizCaptureThread() {
     g_captureWanted.store(false);
     if (g_engineWake) SetEvent(g_engineWake);
     if (g_engineClosed && g_audioOpen.load()) WaitForSingleObject(g_engineClosed, 1500);
-    float zeroBands[VIZ_NUM_BANDS] = {};
-    PublishBands(zeroBands);
-    VizBandFrame empty;
-    PublishBandFrame(empty);
 }
 
 int VizEffectiveBarCount();
@@ -8398,7 +7450,8 @@ void UpdateVisualizerTargets() {
     auto eq = GetVizEQMultipliers(g_settings.eq);
 
     auto sampleBands = [&](float t) -> float {
-        float pos = t * (VIZ_NUM_BANDS - 1);
+        // warpT can return a hair over 1 (HzToBandPos gives VIZ_NUM_BANDS at the top edge).
+        float pos = std::clamp(t, 0.f, 1.f) * (VIZ_NUM_BANDS - 1);
         int lo = (int)pos;
         int hi = std::min(lo + 1, VIZ_NUM_BANDS - 1);
         return bands[lo] * (1.f - (pos - (float)lo)) + bands[hi] * (pos - (float)lo);
@@ -8654,14 +7707,23 @@ void VizComputeBarFrame() {
 
 // Copies what the engine thread needs out of the settings, as one value, and
 // tells it. UI thread, from LoadSettings.
+bool VizStyleNeedsCpuBars();
+// Set by the Direct3D 11 renderer when the GPU analysis passes can't start on
+// this device, so the engine analyses on the CPU instead. UI thread only.
+bool g_gpuAnalysisFailed = false;
+
 void VizPublishEngineConfig() {
     VizEngineConfig c;
     c.precision = g_settings.engine == VizEngineKind::Precision;
     c.workload = g_settings.workload;
-    // GPU analysis needs both the Precision engine and the Direct3D 11
-    // renderer; without either it is Hybrid (LoadSettings has said why).
+    // GPU analysis needs the Precision engine, the Direct3D 11 renderer, a
+    // style whose bars are drawn from GPU levels, and passes that started;
+    // otherwise it is Hybrid (LoadSettings or the renderer has said why). The
+    // same test as the renderer's gpuWork, or the engine would publish nothing
+    // and the bars would sit at idle height.
     if (c.workload == VizWorkload::Gpu &&
-        (!c.precision || g_settings.renderer != VizRenderer::D3D11 || g_settings.shape == VizShape::Terminal))
+        (!c.precision || g_settings.renderer != VizRenderer::D3D11 || g_settings.shape == VizShape::Terminal ||
+         VizStyleNeedsCpuBars() || g_gpuAnalysisFailed))
         c.workload = VizWorkload::Hybrid;
     auto& s = c.spec;
     s.fftSize = g_settings.fftSize;
@@ -9446,7 +8508,7 @@ void VizTermMeterLevels(float out[4]) {
     for (int i = 0; i < 4; i++) out[i] = std::clamp(out[i], 0.f, 1.f);
 }
 
-// ---- waterfall scroll: begin (src/tests_features/test_waterfall.cpp compiles this block from v2b.cpp)
+// ---- waterfall scroll: begin
 // Scrolls the waterfall history (rows x cols, row 0 newest) down by `steps`
 // rows and writes the current levels (`newest`, clamped at 0) into row 0. The
 // rows a multi-row step opens up between the new row 0 and the previous newest
@@ -9499,7 +8561,7 @@ void VizBuildTermGridCells() {
     VizTermGrid& g = g_termGrid;
     VizTermGridSize(&g.cols, &g.rows);
     g.cells.assign((size_t)g.cols * g.rows, TermCell(L' ', 0));
-    const float hot = std::clamp(g_settings.termHotThreshold, 1, 100) / 100.0f;
+    const float hot = std::clamp(g_settings.termHotThreshold, 1.f, 100.f) / 100.0f;
     auto at = [&](int c, int r) -> uint32_t& { return g.cells[(size_t)r * g.cols + c]; };
 
     if (g_settings.termStyle == VizTermStyle::Meters) {
@@ -9534,7 +8596,7 @@ void VizBuildTermGridCells() {
         }
         // Scroll by whole rows at the configured rate; the newest row always
         // shows the current levels, so the top line stays live between steps.
-        g_termScrollAcc += g_frameDt * (float)std::clamp(g_settings.termScrollRate, 1, 120);
+        g_termScrollAcc += g_frameDt * std::clamp(g_settings.termScrollRate, 1.f, 120.f);
         int steps = std::min((int)g_termScrollAcc, g.rows);
         g_termScrollAcc -= (float)(int)g_termScrollAcc;
         VizTermScrollHistory(g_termHistory.data(), g.rows, g.cols, steps, g_vizPeak);
@@ -9723,7 +8785,7 @@ bool VizReflectionActive() {
            s == VizShape::Breathe || s == VizShape::Dots;
 }
 
-float VizReflectionDepth(float maxSize) { return maxSize * std::clamp(g_settings.reflection, 0, 100) / 100.f; }
+float VizReflectionDepth(float maxSize) { return maxSize * std::clamp(g_settings.reflection, 0.f, 100.f) / 100.f; }
 
 // ---- Scale numbers -----------------------------------------------------------------------
 // The Spectrogram legend's quarter ticks and the VU faces carry numbers. They
@@ -11127,8 +10189,12 @@ void RequestPositionOverrideSave() {
 
 bool ModKeysHeld(unsigned flags) {
     if (flags == VIZ_MOD_NONE) return false;
+    // Right Alt is AltGr on many layouts, which Windows reports as Ctrl + Alt
+    // (AltGr+2 is @ on a Nordic keyboard). Never treat it as a modifier, so
+    // typing those characters always reaches the app.
+    if (GetAsyncKeyState(VK_RMENU) & 0x8000) return false;
     if ((flags & VIZ_MOD_CTRL)  && !(GetAsyncKeyState(VK_CONTROL) & 0x8000)) return false;
-    if ((flags & VIZ_MOD_ALT)   && !(GetAsyncKeyState(VK_MENU)    & 0x8000)) return false;
+    if ((flags & VIZ_MOD_ALT)   && !(GetAsyncKeyState(VK_LMENU)   & 0x8000)) return false;
     if ((flags & VIZ_MOD_SHIFT) && !(GetAsyncKeyState(VK_SHIFT)   & 0x8000)) return false;
     if ((flags & VIZ_MOD_WIN)   && !((GetAsyncKeyState(VK_LWIN) & 0x8000) ||
                                      (GetAsyncKeyState(VK_RWIN) & 0x8000))) return false;
@@ -11297,14 +10363,25 @@ void ResetMoveTarget(VizMoveTarget target) {
     if (g_overlayWnd) PostMessage(g_overlayWnd, WM_APP_FORCE_REDRAW, 0, 0);
 }
 
+// Keys whose press the hook swallowed; only their releases are swallowed, so
+// an app never sees a release without its press or a press without its release.
+bool g_keyMoveSwallowed[256] = {};  // input hook thread only
+
 LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
+        bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+        if (isUp && kb->vkCode < 256 && g_keyMoveSwallowed[kb->vkCode]) {
+            g_keyMoveSwallowed[kb->vkCode] = false;
+            return 1;
+        }
+    }
     if (nCode == HC_ACTION && !g_unloading.load(std::memory_order_relaxed) &&
         g_settings.keyMoveEnabled) {
         KBDLLHOOKSTRUCT* kb = (KBDLLHOOKSTRUCT*)lParam;
         bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
-        bool isUp   = (wParam == WM_KEYUP   || wParam == WM_SYSKEYUP);
 
-        if ((isDown || isUp) && !g_fullscreenPaused.load(std::memory_order_relaxed) &&
+        if (isDown && kb->vkCode < 256 && !g_fullscreenPaused.load(std::memory_order_relaxed) &&
             ModKeysHeld(g_settings.keyMoveModifier)) {
             int dx = 0, dy = 0;
             if (KeyMoveDirection(kb->vkCode, &dx, &dy)) {
@@ -11327,8 +10404,7 @@ LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                         NudgeTextOverlayPx(g_keyMoveTarget, dx * step, dy * step);
                     }
                 }
-                // Swallow the key-up too, so an app underneath never sees a
-                // release for a press it was never told about.
+                g_keyMoveSwallowed[kb->vkCode] = true;  // its release is swallowed too
                 return 1;
             }
 
@@ -11347,6 +10423,7 @@ LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                            : g_keyMoveTarget == VizMoveTarget::MediaControls ? L"media controls"
                                                                             : L"visualizer");
                 }
+                g_keyMoveSwallowed[kb->vkCode] = true;
                 return 1;
             }
 
@@ -11359,6 +10436,7 @@ LRESULT CALLBACK MoveKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     ResetMoveTarget(g_keyMoveTarget);
                     Wh_Log(L"[KeyMove] reset target %d", (int)g_keyMoveTarget);
                 }
+                g_keyMoveSwallowed[kb->vkCode] = true;
                 return 1;
             }
         }
@@ -11378,7 +10456,8 @@ bool VizDesktopUnderPoint(POINT pt) {
     WCHAR cls[32] = {};
     GetClassNameW(root, cls, ARRAYSIZE(cls));
     if (g_overlayInPanel && root == g_overlayWnd) return true;
-    // (Tourne Desktop's own bars too: their empty space between segments takes clicks, so it's what's under it)
+    // Tourne Desktop (the author's separate desktop app, not in the catalog) can draw its own taskbar over
+    // Windows' one; the empty space between its segments takes clicks, so it counts as the taskbar too.
     if (g_settings.hostTaskbar && (wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
                                    wcsncmp(cls, L"TourneTaskbar", 13) == 0))
         return true;
@@ -11434,31 +10513,35 @@ bool VizMenuHook(WPARAM wParam, const MSLLHOOKSTRUCT* info) {
 // ---- Click to Seek (2.1) -----------------------------------------------------------------
 // A left press on the progress bar jumps there; dragging and releasing jumps
 // again where it's let go. The cursor moves freely meanwhile (moves are
-// never swallowed). The app list is checked against running processes at
-// most every 3 s, and only on a press that lands on the bar.
-bool VizSeekAppsAllow() {
+// never swallowed). The hook only decides and posts: the app list is checked
+// by the message window's 1-second timer (a process snapshot every 3 s, only
+// while Click to Seek has a list), and the seek itself runs on that thread.
+std::atomic<bool> g_seekAppsAllowed{true};
+
+void VizSeekAppsRefresh() {
     const auto& apps = g_settings.progressSeekApps;
-    if (apps.empty()) return true;
-    static ULONGLONG s_tick = 0;
-    static bool s_anyRunning = false;
-    ULONGLONG now = GetTickCount64();
-    if (s_tick == 0 || now - s_tick > 3000) {
-        s_tick = now;
-        s_anyRunning = false;
-        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (snap != INVALID_HANDLE_VALUE) {
-            PROCESSENTRY32W pe = {sizeof(pe)};
-            for (BOOL more = Process32FirstW(snap, &pe); more && !s_anyRunning; more = Process32NextW(snap, &pe)) {
-                std::wstring n = pe.szExeFile;
-                for (auto& ch : n) ch = (WCHAR)towlower(ch);
-                if (n.size() > 4 && n.compare(n.size() - 4, 4, L".exe") == 0) n.resize(n.size() - 4);
-                for (const auto& a : apps)
-                    if (n == a) s_anyRunning = true;
-            }
-            CloseHandle(snap);
-        }
+    if (!g_settings.progressSeek || apps.empty()) {
+        g_seekAppsAllowed.store(true, std::memory_order_relaxed);
+        return;
     }
-    return g_settings.progressSeekOnlyListed ? s_anyRunning : !s_anyRunning;
+    static ULONGLONG s_tick = 0;
+    ULONGLONG now = GetTickCount64();
+    if (s_tick != 0 && now - s_tick < 3000) return;
+    s_tick = now;
+    bool anyRunning = false;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe = {sizeof(pe)};
+        for (BOOL more = Process32FirstW(snap, &pe); more && !anyRunning; more = Process32NextW(snap, &pe)) {
+            std::wstring n = pe.szExeFile;
+            for (auto& ch : n) ch = (WCHAR)towlower(ch);
+            if (n.size() > 4 && n.compare(n.size() - 4, 4, L".exe") == 0) n.resize(n.size() - 4);
+            for (const auto& a : apps)
+                if (n == a) anyRunning = true;
+        }
+        CloseHandle(snap);
+    }
+    g_seekAppsAllowed.store(g_settings.progressSeekOnlyListed ? anyRunning : !anyRunning, std::memory_order_relaxed);
 }
 
 void VizSeekAtX(LONG x) {
@@ -11466,15 +10549,22 @@ void VizSeekAtX(LONG x) {
     if (r > l) CardSeek((float)(x - l) / (float)(r - l));
 }
 
+void VizPostSeek(LONG x) {
+    if (g_messageWnd) PostMessage(g_messageWnd, WM_APP_SEEK_AT, (WPARAM)(int)x, 0);
+}
+
 bool VizSeekHook(WPARAM wParam, const MSLLHOOKSTRUCT* info) {
     static bool s_seeking = false;
     if (s_seeking) {
         if (wParam == WM_LBUTTONUP) {
             s_seeking = false;
-            VizSeekAtX(info->pt.x);
+            VizPostSeek(info->pt.x);
             return true;
         }
-        return false;
+        // A press while we think the button is still down: its release was
+        // lost (Win+L, a UAC prompt), so the earlier seek is over.
+        if (wParam != WM_LBUTTONDOWN) return false;
+        s_seeking = false;
     }
     if (wParam != WM_LBUTTONDOWN || !g_settings.progressSeek || !g_seekRectValid.load(std::memory_order_relaxed))
         return false;
@@ -11485,9 +10575,11 @@ bool VizSeekHook(WPARAM wParam, const MSLLHOOKSTRUCT* info) {
     if (pt.x < g_seekRectL.load(std::memory_order_relaxed) || pt.x >= g_seekRectR.load(std::memory_order_relaxed) ||
         pt.y < g_seekRectT.load(std::memory_order_relaxed) || pt.y >= g_seekRectB.load(std::memory_order_relaxed))
         return false;
-    if (!g_tlValid.load(std::memory_order_relaxed) || !VizDesktopUnderPoint(pt) || !VizSeekAppsAllow()) return false;
+    if (!g_tlValid.load(std::memory_order_relaxed) || !g_seekAppsAllowed.load(std::memory_order_relaxed) ||
+        !VizDesktopUnderPoint(pt))
+        return false;
     s_seeking = true;
-    VizSeekAtX(pt.x);
+    VizPostSeek(pt.x);
     return true;
 }
 
@@ -11512,9 +10604,17 @@ LRESULT CALLBACK DragMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 return 1;
             }
         } else {
+            // Moves go through: the cursor travels with the visualizer, and
+            // UpdateDrag works from the absolute position against the start.
             if (wParam == WM_MOUSEMOVE) {
                 UpdateDrag(info->pt);
-                return 1;
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            }
+            // A second press of the drag button: the release of the first one
+            // never came (see VizDesktopSwitchProc), so that drag is over.
+            if (wParam == downMsg) {
+                EndDrag();
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
             }
             if (wParam == upMsg) {
                 POINT pt = info->pt;
@@ -11555,6 +10655,15 @@ HHOOK g_moveKeyboardHook = nullptr;
 HANDLE g_inputHookThread = nullptr;
 DWORD g_inputHookThreadId = 0;
 
+// Win+L, Ctrl+Alt+Del and UAC prompts switch to a secure desktop, and a button
+// released there never reaches the mouse hook. A drag left running would keep
+// moving the visualizer with the cursor after unlocking, so a desktop switch
+// ends it. Runs on the input hook thread.
+void CALLBACK VizDesktopSwitchProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+    if (g_dragInProgress) EndDrag();
+}
+constexpr UINT WM_APP_KEYMOVE_SYNC = WM_APP + 90;  // thread message to the input hook thread
+
 // Both low-level input hooks run on this thread, deliberately kept away from
 // the UI thread that also handles WM_APP_RENDER_TICK. Direct2D's Present() can
 // block that thread for real time each frame; a hook living there has its
@@ -11567,25 +10676,40 @@ DWORD WINAPI InputHookThreadProc(LPVOID) {
     HINSTANCE hInst = (HINSTANCE)GetCurrentModuleHandle();
 
     g_dragMouseHook = SetWindowsHookEx(WH_MOUSE_LL, DragMouseHookProc, hInst, 0);
+    HWINEVENTHOOK desktopSwitch = SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
+                                                  VizDesktopSwitchProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!g_dragMouseHook) {
         Wh_Log(L"[Drag] SetWindowsHookEx(WH_MOUSE_LL) failed, error=%lu", GetLastError());
     }
 
-    g_moveKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, MoveKeyboardHookProc, hInst, 0);
-    if (!g_moveKeyboardHook) {
-        Wh_Log(L"[KeyMove] SetWindowsHookEx(WH_KEYBOARD_LL) failed, error=%lu", GetLastError());
-    }
-
-    if (!g_dragMouseHook && !g_moveKeyboardHook) return 1;
+    // The keyboard hook exists only while Keyboard Move is on; turning it on
+    // or off in the settings posts WM_APP_KEYMOVE_SYNC here.
+    auto syncKeyboardHook = [hInst] {
+        bool want = g_settings.keyMoveEnabled;
+        if (want && !g_moveKeyboardHook) {
+            g_moveKeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, MoveKeyboardHookProc, hInst, 0);
+            if (!g_moveKeyboardHook)
+                Wh_Log(L"[KeyMove] SetWindowsHookEx(WH_KEYBOARD_LL) failed, error=%lu", GetLastError());
+        } else if (!want && g_moveKeyboardHook) {
+            UnhookWindowsHookEx(g_moveKeyboardHook);
+            g_moveKeyboardHook = nullptr;
+        }
+    };
+    syncKeyboardHook();
 
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (!msg.hwnd && msg.message == WM_APP_KEYMOVE_SYNC) {
+            syncKeyboardHook();
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
     // Low-level hooks have to be removed by the thread that installed them,
     // which is why this happens here rather than in UninitInputHooks.
+    if (desktopSwitch) UnhookWinEvent(desktopSwitch);
     if (g_dragMouseHook) {
         UnhookWindowsHookEx(g_dragMouseHook);
         g_dragMouseHook = nullptr;
@@ -11595,6 +10719,12 @@ DWORD WINAPI InputHookThreadProc(LPVOID) {
         g_moveKeyboardHook = nullptr;
     }
     return 0;
+}
+
+// Settings changed: let the input thread add or remove the keyboard hook
+// (a low-level hook has to be set and removed by the thread that owns it).
+void VizSyncKeyboardHook() {
+    if (g_inputHookThreadId) PostThreadMessage(g_inputHookThreadId, WM_APP_KEYMOVE_SYNC, 0, 0);
 }
 
 void InitInputHooks() {
@@ -14961,6 +14091,10 @@ bool Render(const FrameInputs& in) {
     if (gpuWork) {
         int st = EnsureGpuAnalysis();
         gpuOk = st > 0;
+        if ((st < 0) != g_gpuAnalysisFailed && st != 0) {
+            g_gpuAnalysisFailed = st < 0;
+            VizPublishEngineConfig();
+        }
         if (st < 0 && !g.gpuWarned) {
             g.gpuWarned = true;
             ReportSettingWarning(L"Hardware", L"Workload",
@@ -15172,9 +14306,9 @@ bool Render(const FrameInputs& in) {
     if (g_settings.colorMode == VizColorMode::RainbowCycle) MixF(hash, in.rainbowBase, 2.f);
     if (g_settings.beatFlashEnabled) MixF(hash, pulse, 128.f);
     Mix(hash, in.dragPause);
-    Mix(hash, (uint64_t)style * 1009u + (uint64_t)g_settings.reflection);
+    Mix(hash, (uint64_t)style * 1009u + (uint64_t)lroundf(g_settings.reflection * 100.f));
     for (int k = 0; k < 4; k++) MixF(hash, f.vu[k], 2048.f);
-    Mix(hash, (uint64_t)g_settings.fxGlow * 1000003u + (uint64_t)g_settings.fxBloom * 1009u);
+    Mix(hash, (uint64_t)lroundf(g_settings.fxGlow * 100.f) * 1000003u + (uint64_t)lroundf(g_settings.fxBloom * 100.f) * 1009u);
     MixF(hash, g_settings.fxGlowRadius + g_settings.fxBloomRadius * 257.f, 64.f);
     MixF(hash, f.fxLineW, 64.f);
     for (int k = 0; k < 4; k++) MixF(hash, f.fxLineColor[k] + f.fxShadowColor[k] * 7.f, 1024.f);
@@ -15770,7 +14904,7 @@ void VizBuildTextFrame(VizTextFrame& t) {
     if (g_settings.nowPlayingEnabled && g_dwriteTextFormat && g_nowPlayingBrush) {
         ULONGLONG changedAt = g_nowPlayingChangedTick.load(std::memory_order_relaxed);
         ULONGLONG npElapsed = GetTickCount64() - changedAt;
-        ULONGLONG showMs = (ULONGLONG)std::max(0, g_settings.nowPlayingDisplaySeconds) * 1000ULL;
+        ULONGLONG showMs = (ULONGLONG)(std::max(0.f, g_settings.nowPlayingDisplaySeconds) * 1000.f);
         constexpr ULONGLONG kNpFadeMs = 800;
         if (changedAt != 0 && showMs == 0)
             t.npAlpha = 1.0f;  // Display Seconds 0: always shown, a widget rather than a toast
@@ -16075,8 +15209,8 @@ bool RenderVisualizerD3D(float sceneAlpha) {
     const float scaleGap = VizPx((float)std::max(0.f, g_settings.barGap));
     const float scaleThick = scaleBars * (scaleBarW + scaleGap) - scaleGap;
     if (scale) {
-        ttgfx::Mix(key, 7u + (uint64_t)g_settings.style * 131u + (uint64_t)(g_settings.dbFloor + 200) * 1009u +
-                            (uint64_t)(g_settings.dbCeiling + 200) * 65537u + (uint64_t)g_settings.engine);
+        ttgfx::Mix(key, 7u + (uint64_t)g_settings.style * 131u + (uint64_t)lroundf((g_settings.dbFloor + 200) * 100) * 1009u +
+                            (uint64_t)lroundf((g_settings.dbCeiling + 200) * 100) * 65537u + (uint64_t)g_settings.engine);
         ttgfx::MixF(key, scaleMax, 64.f);
         ttgfx::MixF(key, scaleThick, 64.f);
         ttgfx::Mix(key, scaleHorizontal ? 1u : 2u);
@@ -16148,7 +15282,7 @@ void RenderVisualizer() {
     float sceneAlpha = 1.0f;
     if (g_settings.autoHideEnabled) {
         ULONGLONG idleMs = GetTickCount64() - g_lastAudibleTickMs.load(std::memory_order_relaxed);
-        ULONGLONG delayMs = (ULONGLONG)std::max(0, g_settings.autoHideDelaySeconds) * 1000ULL;
+        ULONGLONG delayMs = (ULONGLONG)(std::max(0.f, g_settings.autoHideDelaySeconds) * 1000.f);
         constexpr ULONGLONG kFadeMs = 1500;
         if (idleMs > delayMs) {
             ULONGLONG fadeElapsed = idleMs - delayMs;
@@ -16953,9 +16087,8 @@ struct VizVsyncSchedule {
     }
 };
 
-// Thread-scoped quality of service. While playing, the engine thread opts out
-// of execution-speed throttling so frame pacing stays tight on a hybrid CPU;
-// while idle it asks for EcoQoS, so the trickle and the meter reads run on
+// Thread-scoped quality of service. While playing, Windows schedules the
+// engine thread as it sees fit; while idle it asks for EcoQoS, so the trickle and the meter reads run on
 // efficiency cores at low clocks. Thread-scoped on purpose: nothing about the
 // process changes. SetThreadInformation is resolved at runtime (Windows 8+;
 // the power-throttling class needs Windows 10 1709, and older builds simply
@@ -16968,11 +16101,11 @@ void VizThreadEcoQoS(bool eco) {
     static SetThreadInformationFn fn =
         (SetThreadInformationFn)(void*)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadInformation");
     if (!fn) return;
-    // E2 (to be decided with [Perf] / HWiNFO numbers, not yet): while playing
-    // this still opts out of throttling (HighQoS). The alternative is
-    // {1, eco ? 0x1u : 0x0u, eco ? 0x1u : 0x0u}, "let the system manage",
-    // which keeps the thread off forced P-core / boost scheduling.
-    PowerThrottlingState st = {1, 0x1 /* EXECUTION_SPEED */, eco ? 0x1u : 0x0u};
+    // While playing this lets the system manage the thread instead of opting
+    // out of throttling (HighQoS), so it isn't forced onto performance cores
+    // and boost clocks. Measured at 144 fps: about 0.03 ms of engine work per
+    // wake and well under 1 ms of rendering per frame, against a 6.9 ms frame.
+    PowerThrottlingState st = {1, eco ? 0x1u : 0x0u /* EXECUTION_SPEED */, eco ? 0x1u : 0x0u};
     fn(GetCurrentThread(), 3 /* ThreadPowerThrottling */, &st, sizeof(st));
 }
 
@@ -17083,12 +16216,12 @@ void RenderThreadProc() {
 
         // ---- Idle ladder ----------------------------------------------------------
         ULONGLONG idleMs = now - g_lastAudibleTickMs.load(std::memory_order_relaxed);
-        ULONGLONG silentAfter = (ULONGLONG)std::max(0, g_settings.pauseWhenSilentSeconds) * 1000ULL;
+        ULONGLONG silentAfter = (ULONGLONG)(std::max(0.f, g_settings.pauseWhenSilentSeconds) * 1000.f);
         bool silent = g_settings.pauseWhenSilentSeconds > 0 && idleMs > silentAfter;
         // An auto-hide fade in progress still wants full frames.
         bool fading = false;
         if (g_settings.autoHideEnabled) {
-            ULONGLONG d = (ULONGLONG)std::max(0, g_settings.autoHideDelaySeconds) * 1000ULL;
+            ULONGLONG d = (ULONGLONG)(std::max(0.f, g_settings.autoHideDelaySeconds) * 1000.f);
             fading = idleMs > d && idleMs < d + 2000;
         }
         g_slowMode = silent && !fading;
@@ -17300,7 +16433,7 @@ void ResumeFromFullscreen() {
     }
 }
 
-// ---- Place In = Panel (2.2) -------------------------------------------------
+// ---- Place In = Panel -------------------------------------------------
 
 void VizPanelLoad() {
     WCHAR buf[160] = {};
@@ -17748,8 +16881,7 @@ static const VizMenuOption kBallistics[] = {
     {L"snappy", L"Snappy"}, {L"smooth", L"Smooth"},       {L"analyzer", L"Analyzer (20 dB/s)"},
     {L"vu", L"VU"},         {L"ppm_ebu", L"PPM, EBU"},    {L"ppm_din", L"PPM, DIN"}};
 static const VizMenuOption kWorkloads[] = {
-    {L"hybrid", L"Hybrid (CPU analysis, GPU drawing)"}, {L"gpu", L"GPU"}, {L"cpu", L"CPU"},
-    {L"npu", L"NPU (experimental)"}};
+    {L"hybrid", L"Hybrid (CPU analysis, GPU drawing)"}, {L"gpu", L"GPU"}, {L"cpu", L"CPU"}};
 static const VizMenuOption kRenderers[] = {{L"d3d11", L"Direct3D 11"}, {L"direct2d", L"Direct2D (1.5)"}};
 static const VizMenuOption kFps[] = {{L"0", L"Match display"}, {L"30", L"30"}, {L"60", L"60"},
                                      {L"120", L"120"},         {L"144", L"144"}, {L"240", L"240"}};
@@ -17794,7 +16926,7 @@ void VizApplyMenuOverrides() {
                                   : is(L"ppm_din") ? VizBallisticsPreset::PpmDin : VizBallisticsPreset::Snappy;
         } else if (k == L"workload") {
             g_settings.workload = is(L"gpu") ? VizWorkload::Gpu : is(L"cpu") ? VizWorkload::Cpu
-                                : is(L"npu") ? VizWorkload::Npu : VizWorkload::Hybrid;
+                                                     : VizWorkload::Hybrid;
         } else if (k == L"renderer") {
             g_settings.renderer = is(L"direct2d") ? VizRenderer::Direct2D : VizRenderer::D3D11;
         } else if (k == L"targetFps") {
@@ -17834,13 +16966,13 @@ void VizApplyMenuOverrides() {
             float rad = std::clamp((float)_wtof(v), 0.f, 100.f);
             g_settings.barRadiusTL = g_settings.barRadiusTR = g_settings.barRadiusBR = g_settings.barRadiusBL = rad;
         } else if (k == L"reflection") {
-            g_settings.reflection = std::clamp(_wtoi(v), 0, 100);
+            g_settings.reflection = std::clamp((float)_wtof(v), 0.f, 100.f);
         } else if (k == L"fxGlow") {
-            g_settings.fxGlow = std::clamp(_wtoi(v), 0, 100);
+            g_settings.fxGlow = std::clamp((float)_wtof(v), 0.f, 100.f);
         } else if (k == L"fxGlowRadius") {
             g_settings.fxGlowRadius = std::clamp((float)_wtof(v), 0.5f, 32.f);
         } else if (k == L"fxBloom") {
-            g_settings.fxBloom = std::clamp(_wtoi(v), 0, 100);
+            g_settings.fxBloom = std::clamp((float)_wtof(v), 0.f, 100.f);
         } else if (k == L"fxBloomRadius") {
             g_settings.fxBloomRadius = std::clamp((float)_wtof(v), 4.f, 64.f);
         } else if (k == L"color") {
@@ -17897,7 +17029,7 @@ enum : UINT {
     kMenuPresetBase = 5000,  // + saved style index
 };
 
-// Saved styles and the Style Editor (p3_editor.cpp).
+// Saved styles and the Style Editor.
 std::vector<std::wstring> VizStylePresetNames();
 bool VizApplyStylePreset(const std::wstring& name);
 void VizOpenStyleEditor();
@@ -18057,14 +17189,13 @@ void VizShowContextMenu(POINT pt) {
     AppendMenuW(menu, MF_STRING | (g_menuOverrides.empty() && g_setupLayer.empty() ? MF_GRAYED : 0), kMenuReset, reset.c_str());
 
     // A menu only closes on an outside click when its owner is foreground.
-    // The right-click went to the desktop (the hook swallowed it), so borrow
-    // the foreground thread's input state long enough to take foreground.
-    HWND fg = GetForegroundWindow();
-    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    DWORD me = GetCurrentThreadId();
-    bool attached = fgThread && fgThread != me && AttachThreadInput(me, fgThread, TRUE);
+    // The right-click went to the desktop (the hook swallowed it), so Windows
+    // would refuse SetForegroundWindow. An empty SendInput makes this process
+    // the one that sent the last input, which allows it, without attaching to
+    // another app's input queue (that could hang if the app isn't responding).
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(g_messageWnd);
-    if (attached) AttachThreadInput(me, fgThread, FALSE);
 
     // While the menu is up the mouse hook passes every click through, so a
     // right-click elsewhere closes it instead of being swallowed.
@@ -18151,7 +17282,7 @@ static std::wstring VizHexColor(BYTE a, BYTE r, BYTE g, BYTE b) {
 static // A size as text: '6', '1.25', never '6.000000'.
 std::wstring VizNumText(float v) {
     WCHAR b[32];
-    swprintf_s(b, L"%g", std::round(v * 1000.f) / 1000.f);
+    swprintf_s(b, L"%g", std::round(v * 100.f) / 100.f);
     return b;
 }
 
@@ -18167,10 +17298,10 @@ std::wstring VizLookValue(const std::wstring& key) {
     if (key == L"barGap") return VizNumText(s.barGap);
     if (key == L"barMaxSize") return VizNumText(s.barMaxSize);
     if (key == L"barRadius") return VizNumText(s.barRadiusTL);
-    if (key == L"reflection") return std::to_wstring(s.reflection);
-    if (key == L"fxGlow") return std::to_wstring(s.fxGlow);
+    if (key == L"reflection") return VizNumText(s.reflection);
+    if (key == L"fxGlow") return VizNumText(s.fxGlow);
     if (key == L"fxGlowRadius") return VizNumText(s.fxGlowRadius);
-    if (key == L"fxBloom") return std::to_wstring(s.fxBloom);
+    if (key == L"fxBloom") return VizNumText(s.fxBloom);
     if (key == L"fxBloomRadius") return VizNumText(s.fxBloomRadius);
     return L"";
 }
@@ -18254,7 +17385,7 @@ bool VizApplyStylePreset(const std::wstring& name) {
     return true;
 }
 
-// ---- Sharing setups (2.3) ----
+// ---- Sharing setups ----
 // A setup is plain text anyone can read: a first line, its name and the parts it carries, then the
 // settings in those parts that differ from the defaults, then quick settings as quick.<key>. It goes
 // around as a file (.ttstyle), as a one-line code (TT2: and the text packed, for chats), or through
@@ -18270,14 +17401,14 @@ struct VizSetupKey {
 };
 static const VizSetupKey kSetupKeys[] = {
     {L"appearance.shape", L"stereo", true, 1},
-    {L"appearance.reflection", L"0", false, 1},
-    {L"appearance.fxGlow", L"0", false, 1},
+    {L"appearance.reflection", L"0", true, 1},
+    {L"appearance.fxGlow", L"0", true, 1},
     {L"appearance.fxGlowRadius", L"6", true, 1},
-    {L"appearance.fxBloom", L"0", false, 1},
+    {L"appearance.fxBloom", L"0", true, 1},
     {L"appearance.fxBloomRadius", L"16", true, 1},
     {L"appearance.fxOutlineWidth", L"0", true, 1},
     {L"appearance.fxOutlineColor", L"#B0FFFFFF", true, 1},
-    {L"appearance.fxShadow", L"0", false, 1},
+    {L"appearance.fxShadow", L"0", true, 1},
     {L"appearance.fxShadowColor", L"#000000", true, 1},
     {L"appearance.fxShadowX", L"2", true, 1},
     {L"appearance.fxShadowY", L"3", true, 1},
@@ -18288,7 +17419,7 @@ static const VizSetupKey kSetupKeys[] = {
     {L"appearance.barDashGap", L"2", true, 1},
     {L"appearance.barTilt", L"0", true, 1},
     {L"appearance.barMirrorGap", L"0", true, 1},
-    {L"appearance.afterimage", L"0", false, 1},
+    {L"appearance.afterimage", L"0", true, 1},
     {L"appearance.afterimageLength", L"1.2", true, 1},
     {L"appearance.orientation", L"horizontal", true, 1},
     {L"appearance.barCount", L"32", false, 1},
@@ -18301,12 +17432,12 @@ static const VizSetupKey kSetupKeys[] = {
     {L"appearance.color", L"#FFFFFFFF", true, 1},
     {L"appearance.gradientColor1", L"#FF1ED760", true, 1},
     {L"appearance.gradientColor2", L"#FF00B4FF", true, 1},
-    {L"appearance.sensitivity", L"150", false, 2},
+    {L"appearance.sensitivity", L"150", true, 2},
     {L"appearance.sensitivityCurve", L"knee", true, 2},
-    {L"appearance.inputGain", L"0", false, 2},
+    {L"appearance.inputGain", L"0", true, 2},
     {L"appearance.autoGain", L"0", false, 2},
-    {L"appearance.autoGainMaxBoost", L"12", false, 2},
-    {L"appearance.smoothing", L"0", false, 2},
+    {L"appearance.autoGainMaxBoost", L"12", true, 2},
+    {L"appearance.smoothing", L"0", true, 2},
     {L"appearance.eqPreset", L"default", true, 2},
     {L"appearance.fftSize", L"2048", true, 2},
     {L"appearance.freqScale", L"log", true, 2},
@@ -18314,20 +17445,20 @@ static const VizSetupKey kSetupKeys[] = {
     {L"appearance.peakFreqAlignH", L"right", true, 4},
     {L"appearance.peakFreqAlignV", L"top", true, 4},
     {L"appearance.oscilloscopeMultibandEnabled", L"0", false, 2},
-    {L"appearance.oscilloscopeWindowMs", L"24", false, 2},
-    {L"appearance.oscilloscopeDamping", L"0", false, 2},
+    {L"appearance.oscilloscopeWindowMs", L"24", true, 2},
+    {L"appearance.oscilloscopeDamping", L"0", true, 2},
     {L"appearance.verticalAnchor", L"bottom", true, 1},
     {L"appearance.peakHoldEnabled", L"0", false, 1},
     {L"appearance.peakHoldColor", L"#FF00B4FF", true, 1},
     {L"appearance.beatFlashEnabled", L"0", false, 1},
     {L"appearance.beatFlashColor", L"#FFFFFFFF", true, 1},
-    {L"appearance.beatFlashIntensity", L"80", false, 1},
-    {L"appearance.rainbowSpeed", L"40", false, 1},
+    {L"appearance.beatFlashIntensity", L"80", true, 1},
+    {L"appearance.rainbowSpeed", L"40", true, 1},
     {L"appearance.nowPlayingEnabled", L"0", false, 4},
     {L"appearance.nowPlayingColor", L"#FFFFFFFF", true, 4},
     {L"appearance.nowPlayingFont", L"Segoe UI", true, 4},
     {L"appearance.nowPlayingFontSize", L"16", true, 4},
-    {L"appearance.nowPlayingDisplaySeconds", L"6", false, 4},
+    {L"appearance.nowPlayingDisplaySeconds", L"6", true, 4},
     {L"appearance.nowPlayingOffsetX", L"0", true, 4},
     {L"appearance.nowPlayingOffsetY", L"0", true, 4},
     {L"appearance.nowPlayingBgColor", L"#00000000", true, 4},
@@ -18358,11 +17489,11 @@ static const VizSetupKey kSetupKeys[] = {
     {L"terminal.fontSize", L"14", true, 1},
     {L"terminal.rows", L"16", false, 1},
     {L"terminal.meterColumns", L"40", false, 1},
-    {L"terminal.hotThreshold", L"75", false, 1},
+    {L"terminal.hotThreshold", L"75", true, 1},
     {L"terminal.columnGlyph", L"#", true, 1},
     {L"terminal.peakGlyph", L"-", true, 1},
     {L"terminal.ramp", L" .:-=+*#%@", true, 1},
-    {L"terminal.scrollRate", L"20", false, 1},
+    {L"terminal.scrollRate", L"20", true, 1},
     {L"terminal.lowColor", L"#FF33FF66", true, 1},
     {L"terminal.highColor", L"#FFFF3B3B", true, 1},
     {L"terminal.dimColor", L"#FF1E6B34", true, 1},
@@ -18370,9 +17501,9 @@ static const VizSetupKey kSetupKeys[] = {
     {L"analysis.engine", L"precision", true, 2},
     {L"analysis.bandLayout", L"scale", true, 2},
     {L"analysis.octaveFraction", L"6", true, 2},
-    {L"analysis.minFrequency", L"20", false, 2},
-    {L"analysis.maxFrequency", L"20000", false, 2},
-    {L"analysis.tuningA4", L"440", false, 2},
+    {L"analysis.minFrequency", L"20", true, 2},
+    {L"analysis.maxFrequency", L"20000", true, 2},
+    {L"analysis.tuningA4", L"440", true, 2},
     {L"analysis.weighting", L"z", true, 2},
     {L"analysis.tilt", L"1.5", true, 2},
     {L"analysis.detector", L"rms", true, 2},
@@ -18380,12 +17511,12 @@ static const VizSetupKey kSetupKeys[] = {
     {L"analysis.window", L"hann", true, 2},
     {L"analysis.bassDetail", L"2", true, 2},
     {L"analysis.channel", L"mix", true, 2},
-    {L"analysis.dbFloor", L"-72", false, 2},
-    {L"analysis.dbCeiling", L"-12", false, 2},
+    {L"analysis.dbFloor", L"-72", true, 2},
+    {L"analysis.dbCeiling", L"-12", true, 2},
     {L"analysis.ballistics", L"snappy", true, 2},
-    {L"analysis.attackMs", L"10", false, 2},
-    {L"analysis.releaseDbPerSecond", L"20", false, 2},
-    {L"analysis.peakHoldMs", L"500", false, 2},
+    {L"analysis.attackMs", L"10", true, 2},
+    {L"analysis.releaseDbPerSecond", L"20", true, 2},
+    {L"analysis.peakHoldMs", L"500", true, 2},
     {L"analysis.peakFall", L"gravity", true, 2},
     {L"analysis.readout", L"frequency", true, 4},
     {L"analysis.loudnessResetOnTrack", L"1", false, 4},
@@ -18396,12 +17527,12 @@ static const VizSetupKey kSetupKeys[] = {
     {L"position.pixelSnap", L"1", false, 8},
     {L"position.dockSide", L"below", true, 8},
     {L"position.dockAlign", L"center", true, 8},
-    {L"position.dockGap", L"0", false, 8},
-    {L"position.dockShift", L"0", false, 8},
+    {L"position.dockGap", L"0", true, 8},
+    {L"position.dockShift", L"0", true, 8},
     {L"position.split", L"0", false, 8},
-    {L"position.splitAt", L"50", false, 8},
-    {L"position.splitGap", L"200", false, 8},
-    {L"position.splitShift", L"0", false, 8},
+    {L"position.splitAt", L"50", true, 8},
+    {L"position.splitGap", L"200", true, 8},
+    {L"position.splitShift", L"0", true, 8},
     {L"media_controls.enabled", L"0", false, 4},
     {L"media_controls.iconColor", L"#FFFFFFFF", true, 4},
     {L"media_controls.iconSize", L"32", true, 4},
@@ -18431,7 +17562,7 @@ static const VizSetupKey kSetupKeys[] = {
     {L"background.color", L"#60000000", true, 1},
     {L"background.padding", L"24", true, 1},
     {L"background.cornerRadius", L"14", true, 1},
-    {L"background.blur", L"0", false, 1},
+    {L"background.blur", L"0", true, 1},
     {L"background.borderSize", L"0", true, 1},
     {L"background.borderColor", L"#40FFFFFF", true, 1},
     {L"performance.targetFps", L"60", false, 2},
@@ -18451,7 +17582,6 @@ static const VizQuickPart kQuickParts[] = {
     {L"progress", kPartExtras},   {L"mediaControls", kPartExtras}, {L"readout", kPartExtras}, {L"pixelSnap", kPartPlace},
 };
 
-static const wchar_t kCommunityFiles[] = L"https://raw.githubusercontent.com/USER-TOURNE/Tourne-Style/main/community/setups/";
 static const wchar_t kCommunityFolder[] = L"https://github.com/USER-TOURNE/Tourne-Style/tree/main/community/setups";
 static const wchar_t kCommunityIssue[] = L"https://github.com/USER-TOURNE/Tourne-Style/issues/new";
 
@@ -18777,77 +17907,8 @@ bool VizOpenSetupFile(HWND owner, std::wstring* text) {
 }
 
 // ---- The community list: setups in a folder of the Tourne-Style repository on GitHub ----
-// index.txt there has a line per setup, "file|name|author|about". Nothing is fetched until the
-// Community button is pressed, and then only those small text files.
-struct VizCommunityItem {
-    std::wstring file, name, author;
-};
-constexpr UINT WM_APP_SHARE_LIST = WM_APP + 60;   // wParam: reached; lParam: std::vector<VizCommunityItem>*
-constexpr UINT WM_APP_SHARE_SETUP = WM_APP + 61;  // lParam: std::wstring* (empty: not reached)
-
-bool VizFetchText(const std::wstring& url, std::wstring* out) {
-    IStream* stream = nullptr;
-    if (url.rfind(L"https://", 0) != 0 || FAILED(URLOpenBlockingStreamW(nullptr, url.c_str(), &stream, 0, nullptr)) || !stream)
-        return false;
-    std::string data;
-    char buf[8192];
-    for (;;) {
-        ULONG got = 0;
-        HRESULT hr = stream->Read(buf, sizeof(buf), &got);
-        if (FAILED(hr) || !got) break;
-        data.append(buf, got);
-        if (data.size() > 256 * 1024) break;
-    }
-    stream->Release();
-    if (data.empty() || data.size() > 256 * 1024) return false;
-    *out = VizShareWide(data);
-    return true;
-}
-
-bool VizCommunityFileName(const std::wstring& f) {
-    if (f.size() < 9 || f.size() > 80 || f.compare(f.size() - 8, 8, L".ttstyle") != 0) return false;
-    for (wchar_t c : f)
-        if (!(iswalnum(c) || c == L'-' || c == L'_' || c == L'.')) return false;
-    return f.find(L"..") == std::wstring::npos;
-}
-
-void VizFetchCommunityList(HWND notify) {
-    std::thread([notify] {
-        HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        auto* items = new std::vector<VizCommunityItem>;
-        std::wstring text;
-        bool ok = VizFetchText(std::wstring(kCommunityFiles) + L"index.txt?t=" + std::to_wstring(GetTickCount64()), &text);
-        for (size_t pos = 0; ok && pos < text.size() && items->size() < 200;) {
-            size_t nl = text.find(L'\n', pos);
-            if (nl == std::wstring::npos) nl = text.size();
-            std::wstring line = text.substr(pos, nl - pos);
-            pos = nl + 1;
-            while (!line.empty() && iswspace(line.back())) line.pop_back();
-            if (line.empty() || line[0] == L'#') continue;
-            std::wstring parts[4];
-            size_t at = 0;
-            for (int i = 0; i < 4; i++) {
-                size_t bar = i < 3 ? line.find(L'|', at) : std::wstring::npos;
-                parts[i] = line.substr(at, bar == std::wstring::npos ? std::wstring::npos : bar - at);
-                if (bar == std::wstring::npos) break;
-                at = bar + 1;
-            }
-            if (VizCommunityFileName(parts[0])) items->push_back({parts[0], parts[1].substr(0, 60), parts[2].substr(0, 40)});
-        }
-        if (SUCCEEDED(com)) CoUninitialize();
-        if (!PostMessageW(notify, WM_APP_SHARE_LIST, ok, (LPARAM)items)) delete items;
-    }).detach();
-}
-
-void VizFetchCommunitySetup(HWND notify, const std::wstring& file) {
-    std::thread([notify, file] {
-        HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        auto* text = new std::wstring;
-        if (!VizFetchText(std::wstring(kCommunityFiles) + file, text)) text->clear();
-        if (SUCCEEDED(com)) CoUninitialize();
-        if (!PostMessageW(notify, WM_APP_SHARE_SETUP, 0, (LPARAM)text)) delete text;
-    }).detach();
-}
+// The mod never downloads anything itself: Community opens the folder in the browser, and a setup
+// found there comes in with Paste code or Open file.
 
 std::wstring VizUrlEncode(const std::wstring& w) {
     std::string s = VizShareUtf8(w);
@@ -18889,7 +17950,6 @@ enum : int {
     kIdPartLook, kIdPartMotion, kIdPartExtras, kIdPartPlace,
 };
 constexpr UINT_PTR kShareTimer = 2;
-bool s_communityBusy = false;
 
 // The ticked parts (Look, Motion, Extras, Place).
 unsigned EditorParts(HWND hWnd) {
@@ -18911,14 +17971,15 @@ struct EditorSlider {
     const wchar_t* key;
     const wchar_t* label;
     int lo, hi;
-    int scale;  // slider steps per unit: 10 moves in tenths of a pixel
+    int scale;  // slider steps per unit: 100 moves in hundredths
 };
+// Every slider steps by 0.01 (arrow keys), 0.1 (Page Up / Down) or freely by dragging.
 const EditorSlider kSliders[] = {
-    {L"barWidth", L"Bar width", 1, 40, 10},       {L"barGap", L"Bar gap", 0, 30, 10},
-    {L"barMaxSize", L"Height", 10, 400, 1},       {L"barRadius", L"Corner radius", 0, 20, 10},
-    {L"reflection", L"Reflection", 0, 100, 1},    {L"fxGlow", L"Glow", 0, 100, 1},
-    {L"fxGlowRadius", L"Glow radius", 1, 32, 10}, {L"fxBloom", L"Bloom", 0, 100, 1},
-    {L"fxBloomRadius", L"Bloom radius", 4, 64, 1},
+    {L"barWidth", L"Bar width", 1, 40, 100},       {L"barGap", L"Bar gap", 0, 30, 100},
+    {L"barMaxSize", L"Height", 10, 400, 100},      {L"barRadius", L"Corner radius", 0, 20, 100},
+    {L"reflection", L"Reflection", 0, 100, 100},   {L"fxGlow", L"Glow", 0, 100, 100},
+    {L"fxGlowRadius", L"Glow radius", 1, 32, 100}, {L"fxBloom", L"Bloom", 0, 100, 100},
+    {L"fxBloomRadius", L"Bloom radius", 4, 64, 100},
 };
 HFONT s_editorFont = nullptr;
 COLORREF s_customColors[16] = {};
@@ -19026,17 +18087,21 @@ void EditorBuild(HWND hWnd) {
     y += rowH;
     for (int i = 0; i < (int)ARRAYSIZE(kSliders); i++) {
         label(kSliders[i].label);
-        HWND tb = add(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, ctlX - px(4), y, ctlW - px(36), px(26),
+        HWND tb = add(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, ctlX - px(4), y, ctlW - px(44), px(26),
                       kIdSliderBase + i);
-        SendMessageW(tb, TBM_SETRANGE, FALSE, MAKELPARAM(kSliders[i].lo * kSliders[i].scale, kSliders[i].hi * kSliders[i].scale));
-        add(L"STATIC", L"", SS_RIGHT, ctlX + ctlW - px(36), y + px(5), px(36), px(20), kIdSliderBase + 100 + i);
+        // MIN / MAX rather than SETRANGE: positions above 32767 don't fit its packed words.
+        SendMessageW(tb, TBM_SETRANGEMIN, FALSE, kSliders[i].lo * kSliders[i].scale);
+        SendMessageW(tb, TBM_SETRANGEMAX, FALSE, kSliders[i].hi * kSliders[i].scale);
+        SendMessageW(tb, TBM_SETLINESIZE, 0, 1);
+        SendMessageW(tb, TBM_SETPAGESIZE, 0, kSliders[i].scale / 10);
+        add(L"STATIC", L"", SS_RIGHT, ctlX + ctlW - px(44), y + px(5), px(44), px(20), kIdSliderBase + 100 + i);
         y += px(28);
     }
     y += px(4);
     add(L"STATIC",
         L"Changes apply at once. Reset Quick Settings in the right-click menu returns to the settings page. "
         L"Reflection, Glow and Bloom need the Direct3D 11 renderer. Share carries the ticked parts; your audio "
-        L"device, hotkeys and file paths stay out. Community reads its list from GitHub only when pressed.",
+        L"device, hotkeys and file paths stay out. Community opens GitHub in your browser.",
         SS_LEFT, L, y, labelW + ctlW, px(80), -1);
     y += px(88);
     RECT rc = {0, 0, labelW + ctlW + L * 2, y};
@@ -19113,10 +18178,20 @@ LRESULT CALLBACK StyleEditorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 VizImportSetup(hWnd, text, EditorParts(hWnd));
                 EditorSync(hWnd);
             } else if (id == kIdShareCommunity) {
-                if (s_communityBusy) return 0;
-                s_communityBusy = true;
-                SetDlgItemTextW(hWnd, kIdShareCommunity, L"Loading...");
-                VizFetchCommunityList(hWnd);
+                HMENU m = CreatePopupMenu();
+                AppendMenuW(m, MF_STRING, 1001, L"Browse Community Setups (opens GitHub)");
+                AppendMenuW(m, MF_STRING, 1000, L"Share Mine to the Community...");
+                RECT rc = {};
+                GetWindowRect(GetDlgItem(hWnd, kIdShareCommunity), &rc);
+                UINT cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, rc.left, rc.bottom, 0, hWnd, nullptr);
+                DestroyMenu(m);
+                if (cmd == 1000) {
+                    unsigned parts = EditorParts(hWnd);
+                    if (parts) VizShareToCommunity(hWnd, parts, EditorSetupName(hWnd));
+                    else MessageBeep(MB_ICONWARNING);
+                } else if (cmd == 1001) {
+                    ShellExecuteW(nullptr, L"open", kCommunityFolder, nullptr, nullptr, SW_SHOWNORMAL);
+                }
             } else if (id == kIdLoad || id == kIdSave || id == kIdDelete) {
                 WCHAR name[64] = {};
                 GetDlgItemTextW(hWnd, kIdPreset, name, ARRAYSIZE(name));
@@ -19138,54 +18213,12 @@ LRESULT CALLBACK StyleEditorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             }
             return 0;
         }
-        case WM_APP_SHARE_LIST: {
-            std::unique_ptr<std::vector<VizCommunityItem>> items((std::vector<VizCommunityItem>*)lParam);
-            s_communityBusy = false;
-            SetDlgItemTextW(hWnd, kIdShareCommunity, L"Community");
-            HMENU m = CreatePopupMenu();
-            if (!wParam) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"Couldn't reach the community list");
-            else if (items->empty()) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"No community setups yet");
-            for (size_t i = 0; i < items->size() && i < 60; i++) {
-                const auto& it = (*items)[i];
-                std::wstring text = (it.name.empty() ? it.file : it.name) + (it.author.empty() ? L"" : L"  (by " + it.author + L")");
-                AppendMenuW(m, MF_STRING, 1 + i, text.c_str());
-            }
-            AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-            AppendMenuW(m, MF_STRING, 1000, L"Share Mine to the Community...");
-            AppendMenuW(m, MF_STRING, 1001, L"Open the Community Folder");
-            RECT rc = {};
-            GetWindowRect(GetDlgItem(hWnd, kIdShareCommunity), &rc);
-            UINT cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, rc.left, rc.bottom, 0, hWnd, nullptr);
-            DestroyMenu(m);
-            if (cmd >= 1 && cmd <= items->size() && cmd <= 60) {
-                s_communityBusy = true;
-                SetDlgItemTextW(hWnd, kIdShareCommunity, L"Loading...");
-                VizFetchCommunitySetup(hWnd, (*items)[cmd - 1].file);
-            } else if (cmd == 1000) {
-                unsigned parts = EditorParts(hWnd);
-                if (parts) VizShareToCommunity(hWnd, parts, EditorSetupName(hWnd));
-                else MessageBeep(MB_ICONWARNING);
-            } else if (cmd == 1001) {
-                ShellExecuteW(nullptr, L"open", kCommunityFolder, nullptr, nullptr, SW_SHOWNORMAL);
-            }
-            return 0;
-        }
-        case WM_APP_SHARE_SETUP: {
-            std::unique_ptr<std::wstring> text((std::wstring*)lParam);
-            s_communityBusy = false;
-            SetDlgItemTextW(hWnd, kIdShareCommunity, L"Community");
-            if (text->empty()) MessageBoxW(hWnd, L"Couldn't get that setup from GitHub.", L"Tourne'Table", MB_OK | MB_ICONWARNING);
-            else VizImportSetup(hWnd, *text, EditorParts(hWnd));
-            EditorSync(hWnd);
-            return 0;
-        }
         case WM_CLOSE:
             DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
             KillTimer(hWnd, kApplyTimer);
             KillTimer(hWnd, kShareTimer);
-            s_communityBusy = false;
             g_styleEditorWnd = nullptr;
             return 0;
     }
@@ -19270,7 +18303,7 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             }
             return 0;
 
-        // A worker thread (the NPU build) has something to tell the user. It
+        // A worker thread has something to tell the user. It
         // arrives here so it can go through the same settings-problems summary
         // as everything else, which is only safe on this thread.
         case WM_APP_HW_NOTICE: {
@@ -19357,6 +18390,7 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     FlushSettingsIssues();
                 }
             } else if (wParam == TIMER_ID_MSG_FULLSCREEN_WATCH) {
+                VizSeekAppsRefresh();
                 // The media strip is a plain layered window living alongside
                 // whatever else is topmost, and it's the one piece of this mod
                 // that has to survive in that crowd -- another app taking
@@ -19397,7 +18431,11 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                             !(g_overlayInPanel && g_panelHidden) &&
                             (!IsWindowVisible(g_mediaWnd) ||
                              (g_settings.mediaOnTop &&
-                              !(GetWindowLongPtr(g_mediaWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)))) {
+                              !(GetWindowLongPtr(g_mediaWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)) ||
+                             [] {
+                                 RECT r;
+                                 return GetWindowRect(g_mediaWnd, &r) && VizTaskbarOverlaps(r, true);
+                             }())) {
                             Wh_Log(L"[Media] window not visible/topmost, re-asserting");
                             RepositionAndRepaintMediaControls();
                         }
@@ -19440,8 +18478,14 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             if (!g_unloading) VizShowContextMenu(POINT{(LONG)(int)wParam, (LONG)(int)lParam});
             return 0;
 
+        case WM_APP_SEEK_AT:
+            if (!g_unloading) VizSeekAtX((LONG)(int)wParam);
+            return 0;
+
+
         case WM_DESTROY:
             VizDockStop();
+            s_cardVol.Reset();  // a COM object of this thread's apartment: released before CoUninitialize
             g_messageWnd = nullptr;
             return 0;
 
@@ -19617,10 +18661,10 @@ void LoadSettings() {
     PCWSTR shape = VizSettingString(L"appearance.shape");
     VizParseShape(shape, &g_settings.shape, &g_settings.style);
     VizSettingFree(shape);
-    g_settings.reflection = std::clamp(VizSettingInt(L"appearance.reflection"), 0, 100);
-    g_settings.fxGlow = std::clamp(VizSettingInt(L"appearance.fxGlow"), 0, 100);
+    g_settings.reflection = ReadSizeSetting(L"appearance.reflection", 0.f, 100.f, 0.f);
+    g_settings.fxGlow = ReadSizeSetting(L"appearance.fxGlow", 0.f, 100.f, 0.f);
     g_settings.fxGlowRadius = ReadSizeSetting(L"appearance.fxGlowRadius", 0.5f, 32.f, 6.f);
-    g_settings.fxBloom = std::clamp(VizSettingInt(L"appearance.fxBloom"), 0, 100);
+    g_settings.fxBloom = ReadSizeSetting(L"appearance.fxBloom", 0.f, 100.f, 0.f);
     g_settings.fxBloomRadius = ReadSizeSetting(L"appearance.fxBloomRadius", 4.f, 64.f, 16.f);
     g_settings.fxOutlineWidth = ReadNumberSetting(L"appearance.fxOutlineWidth", L"Appearance", L"Outline Width", 0.f, 0.f, 16.f);
     {
@@ -19630,7 +18674,7 @@ void LoadSettings() {
         ReadColorSetting(L"appearance.fxShadowColor", L"Appearance", L"Shadow Color", 255, 0, 0, 0,
                          &dummy, &g_settings.fxShadowR, &g_settings.fxShadowG, &g_settings.fxShadowB);
     }
-    g_settings.fxShadow = std::clamp(VizSettingInt(L"appearance.fxShadow"), 0, 100);
+    g_settings.fxShadow = ReadSizeSetting(L"appearance.fxShadow", 0.f, 100.f, 0.f);
     g_settings.fxShadowX = ReadNumberSetting(L"appearance.fxShadowX", L"Appearance", L"Shadow Offset X", 2.f, -32.f, 32.f);
     g_settings.fxShadowY = ReadNumberSetting(L"appearance.fxShadowY", L"Appearance", L"Shadow Offset Y", 3.f, -32.f, 32.f);
     g_settings.fxShadowSoft = ReadNumberSetting(L"appearance.fxShadowSoftness", L"Appearance", L"Shadow Softness", 4.f, 0.f, 32.f);
@@ -19640,7 +18684,7 @@ void LoadSettings() {
     g_settings.barDashGap = ReadSizeSetting(L"appearance.barDashGap", 0.f, 200.f, 2.f);
     g_settings.barTilt = ReadSizeSetting(L"appearance.barTilt", -60.f, 60.f, 0.f);
     g_settings.barMirrorGap = ReadSizeSetting(L"appearance.barMirrorGap", 0.f, 400.f, 0.f);
-    g_settings.afterimage = std::clamp(VizSettingInt(L"appearance.afterimage"), 0, 100);
+    g_settings.afterimage = ReadSizeSetting(L"appearance.afterimage", 0.f, 100.f, 0.f);
     g_settings.afterimageSeconds = ReadSizeSetting(L"appearance.afterimageLength", 0.1f, 10.f, 1.2f);
 
     PCWSTR orientation = VizSettingString(L"appearance.orientation");
@@ -19685,7 +18729,7 @@ void LoadSettings() {
                      255, 0, 180, 255,
                      &g_settings.grad2A, &g_settings.grad2R, &g_settings.grad2G, &g_settings.grad2B);
 
-    g_settings.sensitivity = std::clamp(VizSettingInt(L"appearance.sensitivity"), 0, 300);
+    g_settings.sensitivity = ReadSizeSetting(L"appearance.sensitivity", 0.f, 300.f, 150.f);
 
     PCWSTR sensCurve = VizSettingString(L"appearance.sensitivityCurve");
     g_settings.sensitivityCurve = (wcscmp(sensCurve, L"exponential") == 0) ? VizSensitivityCurve::Exponential
@@ -19694,12 +18738,12 @@ void LoadSettings() {
     VizSettingFree(sensCurve);
 
     g_settings.inputGainDb =
-        (float)std::clamp(VizSettingInt(L"appearance.inputGain"), -24, 24);
+        ReadSizeSetting(L"appearance.inputGain", -24.f, 24.f, 0.f);
     g_settings.autoGain = VizSettingInt(L"appearance.autoGain") != 0;
     g_settings.autoGainMaxDb =
-        (float)std::clamp(VizSettingInt(L"appearance.autoGainMaxBoost"), 0, 24);
+        ReadSizeSetting(L"appearance.autoGainMaxBoost", 0.f, 24.f, 12.f);
 
-    g_settings.smoothing = std::clamp(VizSettingInt(L"appearance.smoothing"), 0, 100);
+    g_settings.smoothing = ReadSizeSetting(L"appearance.smoothing", 0.f, 100.f, 0.f);
 
     PCWSTR eq = VizSettingString(L"appearance.eqPreset");
     g_settings.eq = (wcscmp(eq, L"bass") == 0)       ? VizEQ::Bass
@@ -19717,6 +18761,7 @@ void LoadSettings() {
     g_settings.monitor = std::max(1, VizSettingInt(L"position.monitor"));
 
     g_settings.keyMoveEnabled = VizSettingInt(L"interaction.keyMoveEnabled") != 0;
+    VizSyncKeyboardHook();
 
     PCWSTR keyMoveModifier = VizSettingString(L"interaction.keyMoveModifier");
     g_settings.keyMoveModifier =
@@ -19823,9 +18868,9 @@ void LoadSettings() {
         VizSettingFree(hotkey);
     }
     g_settings.splitEnabled = VizSettingInt(L"position.split") != 0;
-    g_settings.splitAt = std::clamp((float)VizSettingInt(L"position.splitAt"), 1.f, 99.f);
-    g_settings.splitGap = std::clamp((float)VizSettingInt(L"position.splitGap"), -8000.f, 8000.f);
-    g_settings.splitShift = std::clamp((float)VizSettingInt(L"position.splitShift"), -8000.f, 8000.f);
+    g_settings.splitAt = ReadSizeSetting(L"position.splitAt", 1.f, 99.f, 50.f);
+    g_settings.splitGap = ReadSizeSetting(L"position.splitGap", -8000.f, 8000.f, 200.f);
+    g_settings.splitShift = ReadSizeSetting(L"position.splitShift", -8000.f, 8000.f, 0.f);
     {
         PCWSTR app = VizSettingString(L"position.dockApp");
         std::wstring a = app ? app : L"";
@@ -19843,11 +18888,11 @@ void LoadSettings() {
         PCWSTR align = VizSettingString(L"position.dockAlign");
         g_settings.dockAlign = !wcscmp(align, L"start") ? 0 : !wcscmp(align, L"end") ? 2 : 1;
         VizSettingFree(align);
-        g_settings.dockGap = std::clamp((float)VizSettingInt(L"position.dockGap"), -400.f, 400.f);
-        g_settings.dockShift = std::clamp((float)VizSettingInt(L"position.dockShift"), -4000.f, 4000.f);
+        g_settings.dockGap = ReadSizeSetting(L"position.dockGap", -400.f, 400.f, 0.f);
+        g_settings.dockShift = ReadSizeSetting(L"position.dockShift", -4000.f, 4000.f, 0.f);
     }
     g_settings.dragSnap = VizSettingInt(L"interaction.dragSnap") != 0;
-    g_settings.dragSnapDistance = std::clamp((float)VizSettingInt(L"interaction.dragSnapDistance"), 1.f, 64.f);
+    g_settings.dragSnapDistance = ReadSizeSetting(L"interaction.dragSnapDistance", 1.f, 64.f, 8.f);
 
     PCWSTR dragModifier = VizSettingString(L"interaction.dragModifier");
     g_settings.dragModifier = (wcscmp(dragModifier, L"none") == 0)  ? VizDragModifier::None
@@ -19897,7 +18942,7 @@ void LoadSettings() {
         g_settings.bgRadiusBR = v[2];
         g_settings.bgRadiusBL = v[3];
     }
-    g_settings.bgBlur = std::max(0, VizSettingInt(L"background.blur"));
+    g_settings.bgBlur = ReadSizeSetting(L"background.blur", 0.f, 250.f, 0.f);
     g_settings.bgBorderSize = ReadSizeSetting(L"background.borderSize", 0.f, 100.f, 0.f);
 
     ReadColorSetting(L"background.borderColor", L"Background", L"Border Color", 0x40, 255, 255, 255,
@@ -19907,7 +18952,7 @@ void LoadSettings() {
     // 0 = match the display (the engine thread reads the refresh rate).
     g_settings.targetFps = std::max(0, VizSettingInt(L"performance.targetFps"));
     g_settings.pauseOnFullscreen = VizSettingInt(L"performance.pauseOnFullscreen") != 0;
-    g_settings.pauseWhenSilentSeconds = std::max(0, VizSettingInt(L"performance.pauseWhenSilentSeconds"));
+    g_settings.pauseWhenSilentSeconds = ReadSizeSetting(L"performance.pauseWhenSilentSeconds", 0.f, 86400.f, 10.f);
     g_settings.deepIdle = VizSettingInt(L"performance.deepIdle") != 0;
     g_perfStatsEnabled.store(VizSettingInt(L"performance.perfStats") != 0, std::memory_order_relaxed);
 
@@ -19924,8 +18969,8 @@ void LoadSettings() {
                      &g_settings.beatFlashA, &g_settings.beatFlashR, &g_settings.beatFlashG,
                      &g_settings.beatFlashB);
 
-    g_settings.beatFlashIntensity = std::clamp(VizSettingInt(L"appearance.beatFlashIntensity"), 0, 300);
-    g_settings.rainbowSpeed = std::clamp(VizSettingInt(L"appearance.rainbowSpeed"), 1, 300);
+    g_settings.beatFlashIntensity = ReadSizeSetting(L"appearance.beatFlashIntensity", 0.f, 300.f, 80.f);
+    g_settings.rainbowSpeed = ReadSizeSetting(L"appearance.rainbowSpeed", 1.f, 300.f, 40.f);
 
     g_settings.nowPlayingEnabled = VizSettingInt(L"appearance.nowPlayingEnabled") != 0;
     ReadColorSetting(L"appearance.nowPlayingColor", L"Appearance", L"Now Playing Text Color",
@@ -19951,7 +18996,7 @@ void LoadSettings() {
     VizSettingFree(nowPlayingFont);
     g_settings.nowPlayingFontSize = ReadSizeSetting(L"appearance.nowPlayingFontSize", 6.f, 400.f, 16.f);
     g_settings.nowPlayingDisplaySeconds =
-        std::max(0, VizSettingInt(L"appearance.nowPlayingDisplaySeconds"));
+        ReadSizeSetting(L"appearance.nowPlayingDisplaySeconds", 0.f, 86400.f, 6.f);
 
     // Clamped rather than free: each pixel of offset widens the render surface
     // by the same amount, so a stray extra zero shouldn't silently cost memory
@@ -19984,7 +19029,7 @@ void LoadSettings() {
                      &g_settings.pfBgBorderG, &g_settings.pfBgBorderB);
 
     g_settings.autoHideEnabled = VizSettingInt(L"performance.autoHideEnabled") != 0;
-    g_settings.autoHideDelaySeconds = std::max(0, VizSettingInt(L"performance.autoHideDelaySeconds"));
+    g_settings.autoHideDelaySeconds = ReadSizeSetting(L"performance.autoHideDelaySeconds", 0.f, 86400.f, 15.f);
     g_settings.pauseWhenObscured = VizSettingInt(L"performance.pauseWhenObscured") != 0;
     g_settings.obscuredThresholdPercent =
         ReadThresholdPercentSetting(L"performance.obscuredThresholdPercent", L"Performance",
@@ -20022,9 +19067,9 @@ void LoadSettings() {
     g_settings.oscilloscopeMultibandEnabled =
         VizSettingInt(L"appearance.oscilloscopeMultibandEnabled") != 0;
     g_settings.oscilloscopeWindowMs =
-        std::clamp(VizSettingInt(L"appearance.oscilloscopeWindowMs"), 5, 250);
+        ReadSizeSetting(L"appearance.oscilloscopeWindowMs", 5.f, 250.f, 24.f);
     g_settings.oscilloscopeDamping =
-        std::clamp(VizSettingInt(L"appearance.oscilloscopeDamping"), 0, 100);
+        ReadSizeSetting(L"appearance.oscilloscopeDamping", 0.f, 100.f, 0.f);
 
     g_settings.mediaControlsEnabled = VizSettingInt(L"media_controls.enabled") != 0;
 
@@ -20105,7 +19150,6 @@ void LoadSettings() {
         PCWSTR v = VizSettingString(L"hardware.workload");
         g_settings.workload = (wcscmp(v, L"gpu") == 0)   ? VizWorkload::Gpu
                             : (wcscmp(v, L"cpu") == 0)   ? VizWorkload::Cpu
-                            : (wcscmp(v, L"npu") == 0)   ? VizWorkload::Npu
                                                          : VizWorkload::Hybrid;
         VizSettingFree(v);
         v = VizSettingString(L"hardware.renderer");
@@ -20135,12 +19179,12 @@ void LoadSettings() {
             int f = _wtoi(v);
             g_settings.octaveFraction = (f == 1 || f == 3 || f == 6 || f == 12 || f == 24) ? f : 6;
         });
-        g_settings.minFreq = std::clamp(VizSettingInt(L"analysis.minFrequency"), 10, 1000);
-        g_settings.maxFreq = std::clamp(VizSettingInt(L"analysis.maxFrequency"), 1000, 21000);
-        if (g_settings.maxFreq <= g_settings.minFreq * 2) g_settings.maxFreq = std::max(1000, g_settings.minFreq * 4);
+        g_settings.minFreq = ReadSizeSetting(L"analysis.minFrequency", 10.f, 1000.f, 20.f);
+        g_settings.maxFreq = ReadSizeSetting(L"analysis.maxFrequency", 1000.f, 21000.f, 20000.f);
+        if (g_settings.maxFreq <= g_settings.minFreq * 2) g_settings.maxFreq = std::max(1000.f, g_settings.minFreq * 4);
         {
-            int a4 = VizSettingInt(L"analysis.tuningA4");
-            g_settings.tuningA4 = (float)((a4 >= 400 && a4 <= 480) ? a4 : 440);
+            float a4 = ReadSizeSetting(L"analysis.tuningA4", 0.f, 1000.f, 440.f);
+            g_settings.tuningA4 = (a4 >= 400.f && a4 <= 480.f) ? a4 : 440.f;
         }
         str(L"analysis.weighting", [](PCWSTR v) {
             g_settings.weighting = (wcscmp(v, L"a") == 0) ? VizWeighting::A
@@ -20173,10 +19217,10 @@ void LoadSettings() {
                                : (wcscmp(v, L"side") == 0)    ? VizChannel::Side
                                                               : VizChannel::Mix;
         });
-        g_settings.dbFloor = std::clamp(VizSettingInt(L"analysis.dbFloor"), -120, -20);
-        g_settings.dbCeiling = std::clamp(VizSettingInt(L"analysis.dbCeiling"), -60, 0);
+        g_settings.dbFloor = ReadSizeSetting(L"analysis.dbFloor", -120.f, -20.f, -72.f);
+        g_settings.dbCeiling = ReadSizeSetting(L"analysis.dbCeiling", -60.f, 0.f, -12.f);
         if (g_settings.dbCeiling - g_settings.dbFloor < 10) {
-            ReportSettingIssue(L"Analysis", L"Display Ceiling (dBFS)", std::to_wstring(g_settings.dbCeiling).c_str(),
+            ReportSettingIssue(L"Analysis", L"Display Ceiling (dBFS)", VizNumText(g_settings.dbCeiling).c_str(),
                                L"at least 10 dB above Display Floor", L"Display Floor + 10");
             g_settings.dbCeiling = g_settings.dbFloor + 10;
         }
@@ -20189,9 +19233,9 @@ void LoadSettings() {
                                   : (wcscmp(v, L"custom") == 0)     ? VizBallisticsPreset::Custom
                                                                     : VizBallisticsPreset::Snappy;
         });
-        g_settings.attackMs = std::clamp(VizSettingInt(L"analysis.attackMs"), 1, 500);
-        g_settings.releaseDbPerSec = std::clamp(VizSettingInt(L"analysis.releaseDbPerSecond"), 1, 200);
-        g_settings.peakHoldMs = std::clamp(VizSettingInt(L"analysis.peakHoldMs"), 0, 5000);
+        g_settings.attackMs = ReadSizeSetting(L"analysis.attackMs", 1.f, 500.f, 10.f);
+        g_settings.releaseDbPerSec = ReadSizeSetting(L"analysis.releaseDbPerSecond", 1.f, 200.f, 20.f);
+        g_settings.peakHoldMs = ReadSizeSetting(L"analysis.peakHoldMs", 0.f, 5000.f, 500.f);
         str(L"analysis.peakFall", [](PCWSTR v) {
             g_settings.peakFall = (wcscmp(v, L"linear") == 0) ? VizPeakFall::Linear : VizPeakFall::Gravity;
         });
@@ -20302,8 +19346,8 @@ void LoadSettings() {
         g_settings.termFontSize = ReadSizeSetting(L"terminal.fontSize", 6.f, 96.f, 14.f);
         g_settings.termRows = std::clamp(VizSettingInt(L"terminal.rows"), 2, 128);
         g_settings.termMeterColumns = std::clamp(VizSettingInt(L"terminal.meterColumns"), 20, 200);
-        g_settings.termHotThreshold = std::clamp(VizSettingInt(L"terminal.hotThreshold"), 1, 100);
-        g_settings.termScrollRate = std::clamp(VizSettingInt(L"terminal.scrollRate"), 1, 120);
+        g_settings.termHotThreshold = ReadSizeSetting(L"terminal.hotThreshold", 1.f, 100.f, 75.f);
+        g_settings.termScrollRate = ReadSizeSetting(L"terminal.scrollRate", 1.f, 120.f, 20.f);
         // Any one character each (2.1): ASCII as itself, anything else as a
         // custom glyph code. The font has to have it.
         g_termCustomGlyphs.clear();
@@ -20378,35 +19422,13 @@ void LoadSettings() {
         }
     }
 
-    {
-        // Same quote-stripping as the icon paths: "Copy as path" brings quotes.
-        PCWSTR raw = VizSettingString(L"hardware.npuRuntimePath");
-        std::wstring path = raw ? raw : L"";
-        VizSettingFree(raw);
-        while (!path.empty() && (path.front() == L'"' || path.front() == L' ')) path.erase(path.begin());
-        while (!path.empty() && (path.back() == L'"' || path.back() == L' ' || path.back() == L'\\'))
-            path.pop_back();
-        if (!path.empty() && g_settings.workload == VizWorkload::Npu) {
-            DWORD attr = GetFileAttributes(path.c_str());
-            if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-                ReportSettingIssue(L"Hardware", L"NPU Runtime Folder", path.c_str(),
-                                   L"a folder that exists (the one holding openvino_c.dll, or the "
-                                   L"root of the extracted OpenVINO archive)",
-                                   L"the automatic search");
-                path.clear();
-            }
-        }
-        g_settings.npuRuntimePath = path;
-    }
-
     PCWSTR smoothMode = VizSettingString(L"hardware.smoothMode");
     g_settings.smoothMode = (wcscmp(smoothMode, L"on") == 0)    ? VizSmoothMode::On
                           : (wcscmp(smoothMode, L"off") == 0)   ? VizSmoothMode::Off
                                                                 : VizSmoothMode::Auto;
     VizSettingFree(smoothMode);
 
-    // The NPU worker reads only its own copies, taken here.
-    ttnpu::Configure(g_settings.workload == VizWorkload::Npu, g_settings.npuRuntimePath);
+    g_gpuAnalysisFailed = false;  // tried again with the new settings
     VizPublishEngineConfig();
     // Smooth Mode's Auto depends on the device, which may not exist yet on the
     // first load; InitDirectX resolves it again once it does.
@@ -20498,8 +19520,6 @@ void WhTool_ModUninit() {
     UnregisterStyleEditorClass();
 
     StopVizCaptureThread();
-    // After the engine thread, which hands its NPU engine back on the way out.
-    ttnpu::Shutdown();
     if (g_engineWake) {
         CloseHandle(g_engineWake);
         g_engineWake = nullptr;
