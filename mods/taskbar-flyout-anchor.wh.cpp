@@ -20,6 +20,8 @@ them, instead of at a fixed position. Useful with custom taskbar layouts (for
 example a centered dock made with Windows 11 Taskbar Styler) where the system
 tray is no longer at the right edge of the screen.
 
+![Notification Center and Quick Settings anchored above their taskbar buttons](https://raw.githubusercontent.com/mariogomesbarbosa/windhawk-taskbar-flyout-anchor/main/assets/taskbar-flyout-anchor-example.png)
+
 Covered flyouts:
 
 * Hidden icons (the tray overflow, opened by the chevron).
