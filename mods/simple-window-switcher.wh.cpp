@@ -86,13 +86,13 @@ the upward launcher independently.
 
 | Gesture | Action |
 | --- | --- |
-| Three-finger horizontal swipe while closed | Open normal mode, drag to navigate, and release the gesture (including a stable one-finger anchor) to activate the selection. |
+| Three-finger horizontal swipe while closed | Select the single adjacent MRU entry immediately. Release before the hold threshold activates it without revealing the UI; hold to reveal normal mode, then drag to navigate. Selection wraps at list boundaries. |
 | Three-finger upward swipe while closed | Open sticky mode when the upward launcher is enabled. |
 | Three-finger drag while open | Navigate entries and rows without wrapping past the spatial edges. In sticky mode, lifting after a drag leaves the switcher open. |
 | Fresh stationary three-finger tap in sticky mode | Activate the selection after lifting from the previous swipe. |
 | Fresh upward swipe in sticky mode | Expand the selected application group, when grouping is enabled and it has multiple windows. |
 | Fresh downward swipe in sticky mode | Leave an expanded group, or dismiss the main switcher without selecting a window. |
-| Short stationary two-finger tap while open | Close the selected entry. |
+| Short stationary two-finger tap while open | Close the selected entry. Sticky mode keeps the switcher open and retains focus while the close request completes. |
 
 In sticky mode, start a horizontal drag before turning vertically to navigate
 rows without executing the fresh up/down commands. Outside a session, downward
@@ -118,15 +118,12 @@ available to select or cancel.
   matching Windows shell symbols and is available only on 64-bit architectures.
   Native Windows gestures can interfere when these mechanisms are unavailable;
   keyboard and mouse controls remain available.
-- On systems supporting the touchpad-parameter API (documented for
-  [Windows 11 24H2 and later](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-touchpad_parameters_v1)),
-  Windows' two-finger right-click tap is temporarily disabled during the active
-  switcher session and its previous value is restored afterward. This is a live
-  change, without saving a Windows preference. A recovery record lets the mod
-  retry restoration on its next start in the same Windows logon session after
-  an unexpected exit. If the API or recovery storage is unavailable, or the
-  change fails, the fallback relies on receiving the corresponding mouse events;
-  a tap outside the switcher can otherwise right-click or dismiss it.
+  - A two-finger tap while the switcher is active closes the selected entry,
+    regardless of cursor position. Sticky mode retains the visible session through
+    the close request. The raw reader identifies the tap before its promoted
+    right-click can dismiss the switcher; ordinary physical right-clicks outside
+    the switcher still dismiss it. Legacy recovery data from older builds is
+    restored only when the switcher is inactive.
 - Mica requires Windows 11. The automatic theme uses Mica on Windows 11 and
   Acrylic on Windows 10; backdrop blur is a separate, optional setting.
 
@@ -728,7 +725,7 @@ available to select or cancel.
 - Accessibility:
     - showDelay: 0
       $name: Show Delay (ms)
-      $description: Delay in milliseconds before showing the switcher. Setting 0 (default) enables an automatic 75ms rapid-switch grace period that cleanly switches windows without flashing the UI during fast Alt+Tab taps.
+      $description: Delay in milliseconds before showing the switcher. Setting 0 (default) enables an automatic 75ms rapid-switch grace period that cleanly switches windows without flashing the UI during fast Alt+Tab taps. Touchpad horizontal swipe detection uses its own 125ms grace period.
     - scrollWheelBehavior: never
       $name: Scroll Wheel Activation
       $description: When the scroll wheel should be active.
@@ -942,6 +939,7 @@ namespace SwsSelectionProtocol {
 // Retry the selected-window activation briefly when foreground-lock rules reject
 // the first handoff after a raw touchpad session.
 #define SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID 112
+#define SWS_BACKDROP_RETRY_TIMER_ID 117
 // Marker expiry never extends the invisible foreground shield's lifetime.
 #define SWS_RAW_SWIPE_MARKER_EXPIRY_TIMER_ID 111
 // Short post-commit polling closes the gap when Start reuses an existing shell
@@ -959,6 +957,16 @@ namespace SwsSelectionProtocol {
 // Wait briefly before committing at one remaining contact so a reland can
 // continue the same physical stroke without making 3->2 an accidental commit.
 #define SWS_RAW_PARTIAL_RELEASE_GRACE_MS 60u
+// A short horizontal stroke selects one MRU neighbor without revealing the UI.
+// Longer holds reveal the normal switcher when this pending window expires.
+// Keep enough time for a deliberate hold while bounding hidden activation.
+#define SWS_TOUCHPAD_RAPID_PENDING_MS 750u
+// Defer outside right-button dismissal briefly so the raw reader can classify a
+// synthetic two-finger tap before the visible switcher is dismissed.
+#define SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_MS 150u
+// Raw evidence normally arrives before the promoted right-button event. Wait a
+// bounded interval when it does not, so touchpad input cannot focus the app first.
+#define SWS_TOUCHPAD_TWO_FINGER_EVIDENCE_WAIT_MS 40u
 // A stationary two-finger tap is owned only by a visible, interactive session.
 // Keep its promoted mouse pair briefly after lift, without retaining foreground.
 #define SWS_RAW_TAP_MAX_MS 300
@@ -967,6 +975,8 @@ namespace SwsSelectionProtocol {
 #define SWS_RAW_TWO_TAP_MOUSE_PAIR_MS 500u
 #define SWS_RAW_TWO_TAP_MOUSE_TIMER_ID 115
 #define SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID 116
+#define SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_TIMER_ID 118
+#define SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID 119
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
@@ -976,6 +986,8 @@ namespace SwsSelectionProtocol {
 #define WM_SWS_ICON_READY (WM_APP + 5)
 #define WM_SWS_MOUSE_COMMAND (WM_APP + 9)
 #define WM_SWS_NATIVE_TOUCHPAD (WM_APP + 8)
+#define WM_SWS_BACKDROP_READY (WM_APP + 11)
+#define WM_SWS_RAPID_TIMEOUT (WM_APP + 12)
 #define SWS_RAW_FRAME_QUEUE_FLAG 0x80000000u
 #define SWS_RAW_FRAME_QUEUE_INDEX_MASK 0xFFu
 #define SWS_RAW_FRAME_QUEUE_EPOCH_SHIFT 8u
@@ -1436,6 +1448,7 @@ static bool g_ctrlTapPending = false;
 static bool g_drillInAfterReveal = false;
 static bool g_isVisible = false, g_isSticky = false, g_isDarkMode = false;
 static bool g_isHidingSwitcher = false;
+static ULONGLONG g_showDelayDeadlineTick = 0;
 static bool g_recoveringShellFocus = false;
 static HFONT g_hFont = NULL;
 static HTHEME g_hTheme = NULL;
@@ -1471,6 +1484,9 @@ static Settings g_settings;
 // A small shared travel distance keeps the reveal/exit visible on non-layered
 // Mica/Acrylic windows, where a global HWND alpha is not available.
 #define SWS_PRESENTATION_OFFSET_PX 6
+// Keep initial presentation bounded. If blur misses this budget, omit it for
+// this session instead of attaching it after the switcher becomes visible.
+#define SWS_BACKDROP_PRESENTATION_BUDGET_MS 125u
 // g_hBackdropWnd is declared above, near the other switcher window handles.
 static bool g_backdropClassRegistered = false;
 static Gdiplus::Bitmap* g_backdropBitmap = NULL; // blurred backdrop, dim veil baked in
@@ -1479,16 +1495,51 @@ static HBITMAP g_backdropPaintBitmap = NULL;
 static HBITMAP g_backdropPaintOldBitmap = NULL;
 static SIZE g_backdropPaintSize = {};
 
-// The plate is fully applied before the switcher reveal. Its independent
-// 83 ms exit fade starts only after every switcher surface has been hidden.
+// The plate is presented with the switcher and follows its shared entrance and
+// exit timeline. It never appears later or remains after the switcher hides.
 static float g_backdropFadeAlpha = 0.0f;
-static OpacityMotionTrack g_backdropOpacity;
+static bool g_backdropEntranceFadeActive = false;
 static bool g_backdropExitFadeActive = false;
+static bool g_backdropPresentationResolved = false;
+
+struct BackdropBuildOutput {
+    Gdiplus::Bitmap* bitmap = nullptr;
+    HDC paintDC = nullptr;
+    HBITMAP paintBitmap = nullptr;
+    HBITMAP paintOldBitmap = nullptr;
+    SIZE paintSize = {};
+};
+
+struct BackdropBuildResult {
+    DWORD generation = 0;
+    bool success = false;
+    ULONGLONG elapsedMs = 0;
+    BackdropBuildOutput output;
+};
+
+struct BackdropBuildJob {
+    HWND target = nullptr;
+    DWORD generation = 0;
+    HANDLE cancel = nullptr;
+    int width = 0;
+    int height = 0;
+    int opacity = 0;
+    bool wallpaper = false;
+};
+
+static HANDLE g_hBackdropWorker = nullptr;
+static HANDLE g_hBackdropWorkerCancel = nullptr;
+static std::atomic<bool> g_backdropWorkerRunning{false};
+static std::atomic<bool> g_backdropWorkerShutdown{false};
+static std::atomic<DWORD> g_backdropGeneration{1};
+static bool g_backdropBuildRequested = false;
+static bool g_backdropBuildRetryPending = false;
+static bool g_isPendingShow = false;
+static ULONGLONG g_backdropBuildStartTick = 0;
 
 static bool AreAnimationsGloballyEnabled(); // defined further down
 static bool IsWin11OrGreater();             // defined further down
-static void StartOpacityMotion(OpacityMotionTrack& track, float current, float target);
-static bool StepOpacityMotion(OpacityMotionTrack& track, float& current, float dt);
+static void StartAnimationTicker();          // defined further down
 
 static bool BackdropBlurEnabled() { return wcscmp(g_settings.backdropBlurEffect, L"off") != 0; }
 static bool BackdropBlurUsesWallpaper() { return wcscmp(g_settings.backdropBlurEffect, L"acrylicWallpaper") == 0; }
@@ -1505,14 +1556,27 @@ static void BackdropFreeBitmap() {
     if (g_backdropBitmap) { delete g_backdropBitmap; g_backdropBitmap = NULL; }
 }
 
+static void BackdropFreeOutput(BackdropBuildOutput* output) {
+    if (!output) return;
+    if (output->paintDC && output->paintOldBitmap) {
+        SelectObject(output->paintDC, output->paintOldBitmap);
+    }
+    if (output->paintBitmap) DeleteObject(output->paintBitmap);
+    if (output->paintDC) DeleteDC(output->paintDC);
+    if (output->bitmap) delete output->bitmap;
+    *output = {};
+}
+
 // Resample once while the switcher is still hidden. A full-desktop bicubic
 // DrawImage inside WM_PAINT can occupy several reveal frames, especially on
 // high-resolution/multi-monitor desktops and on the repaint queued by show.
-static bool PrepareBackdropSurface(int w, int h) {
-    if (!g_backdropBitmap || w <= 0 || h <= 0) return false;
-    g_backdropPaintDC = CreateCompatibleDC(NULL);
-    if (!g_backdropPaintDC) {
-        BackdropFreeBitmap();
+static bool PrepareBackdropSurfaceForBitmap(Gdiplus::Bitmap* bitmap, int w, int h,
+                                            BackdropBuildOutput* output) {
+    if (!bitmap || !output || w <= 0 || h <= 0) return false;
+    output->bitmap = bitmap;
+    output->paintDC = CreateCompatibleDC(NULL);
+    if (!output->paintDC) {
+        BackdropFreeOutput(output);
         return false;
     }
     BITMAPINFO bmi = {};
@@ -1523,31 +1587,31 @@ static bool PrepareBackdropSurface(int w, int h) {
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
     void* bits = NULL;
-    g_backdropPaintBitmap = CreateDIBSection(g_backdropPaintDC, &bmi,
-                                            DIB_RGB_COLORS, &bits, NULL, 0);
-    if (!g_backdropPaintBitmap || !bits) {
-        BackdropFreeBitmap();
+    output->paintBitmap = CreateDIBSection(output->paintDC, &bmi,
+                                           DIB_RGB_COLORS, &bits, NULL, 0);
+    if (!output->paintBitmap || !bits) {
+        BackdropFreeOutput(output);
         return false;
     }
-    HGDIOBJ oldBitmap = SelectObject(g_backdropPaintDC, g_backdropPaintBitmap);
+    HGDIOBJ oldBitmap = SelectObject(output->paintDC, output->paintBitmap);
     if (!oldBitmap || oldBitmap == HGDI_ERROR) {
-        BackdropFreeBitmap();
+        BackdropFreeOutput(output);
         return false;
     }
-    g_backdropPaintOldBitmap = (HBITMAP)oldBitmap;
-    PatBlt(g_backdropPaintDC, 0, 0, w, h, BLACKNESS);
+    output->paintOldBitmap = (HBITMAP)oldBitmap;
+    PatBlt(output->paintDC, 0, 0, w, h, BLACKNESS);
     GdiFlush();
     Gdiplus::Status status;
     {
-        Gdiplus::Graphics graphics(g_backdropPaintDC);
-        graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        status = graphics.DrawImage(g_backdropBitmap, 0, 0, w, h);
+        Gdiplus::Graphics graphics(output->paintDC);
+        graphics.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+        status = graphics.DrawImage(bitmap, 0, 0, w, h);
     }
     if (status != Gdiplus::Ok) {
-        BackdropFreeBitmap();
+        BackdropFreeOutput(output);
         return false;
     }
-    g_backdropPaintSize = { w, h };
+    output->paintSize = { w, h };
     return true;
 }
 
@@ -1558,22 +1622,47 @@ static void BackdropApplyAlpha(HWND hWnd, float alpha) {
 }
 
 static void BackdropStopFade() {
+    g_backdropEntranceFadeActive = false;
     g_backdropExitFadeActive = false;
-    g_backdropOpacity = {};
+}
+
+static void BackdropStartEntranceFade(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    g_backdropExitFadeActive = false;
+    if (!AreAnimationsGloballyEnabled() || !g_settings.enableEntranceAnimation) {
+        g_backdropEntranceFadeActive = false;
+        BackdropApplyAlpha(hWnd, 1.0f);
+        return;
+    }
+    BackdropApplyAlpha(hWnd, 0.0f);
+    g_backdropEntranceFadeActive = true;
+    StartAnimationTicker();
 }
 
 static void BackdropStartExitFade(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return;
-    StartOpacityMotion(g_backdropOpacity, g_backdropFadeAlpha, 0.0f);
+    g_backdropEntranceFadeActive = false;
     g_backdropExitFadeActive = true;
 }
 
-static bool BackdropFadeTick(float dt) {
+static bool BackdropEntranceFadeTick(float alpha, bool animationActive) {
+    if (!g_backdropEntranceFadeActive || !g_hBackdropWnd ||
+        !IsWindowVisible(g_hBackdropWnd)) return false;
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    BackdropApplyAlpha(g_hBackdropWnd, alpha);
+    if (!animationActive) g_backdropEntranceFadeActive = false;
+    return g_backdropEntranceFadeActive;
+}
+
+static bool BackdropExitFadeTick(float alpha, bool animationActive) {
     if (!g_backdropExitFadeActive || !g_hBackdropWnd ||
         !IsWindowVisible(g_hBackdropWnd)) return false;
-    bool active = StepOpacityMotion(g_backdropOpacity, g_backdropFadeAlpha, dt);
-    BackdropApplyAlpha(g_hBackdropWnd, g_backdropFadeAlpha);
-    return active;
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    BackdropApplyAlpha(g_hBackdropWnd, alpha);
+    if (!animationActive) g_backdropExitFadeActive = false;
+    return g_backdropExitFadeActive;
 }
 
 static LRESULT CALLBACK BackdropWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -1674,7 +1763,8 @@ static void BackdropBoxBlurLine(const BYTE* base, BYTE* out, int len, size_t ste
 // approximate a gaussian without the blocky plateaus a single pass leaves behind (and
 // MinGW has no GDI+ 1.1 effect classes). The dim veil is baked in afterwards so the
 // backdrop is one opaque bitmap. Runs once per show, never per frame.
-static void BackdropBlurAndVeil(Gdiplus::Bitmap* bmp, int sw, int sh) {
+static bool BackdropBlurAndVeil(Gdiplus::Bitmap* bmp, int sw, int sh,
+                                int opacity, HANDLE cancel = nullptr) {
     const int R = SWS_BACKDROP_BLUR_RADIUS;
     Gdiplus::Rect full(0, 0, sw, sh);
     Gdiplus::BitmapData bd = {};
@@ -1685,10 +1775,18 @@ static void BackdropBlurAndVeil(Gdiplus::Bitmap* bmp, int sw, int sh) {
         memcpy(src.data(), bd.Scan0, stride * sh);
         for (int pass = 0; pass < SWS_BACKDROP_BLUR_PASSES; pass++) {
             for (int y = 0; y < sh; y++) {
+                if (cancel && WaitForSingleObject(cancel, 0) == WAIT_OBJECT_0) {
+                    bmp->UnlockBits(&bd);
+                    return false;
+                }
                 BackdropBoxBlurLine(src.data() + (size_t)y * stride, dst.data() + (size_t)y * stride,
                                     sw, 4, R);
             }
             for (int x = 0; x < sw; x++) {
+                if (cancel && WaitForSingleObject(cancel, 0) == WAIT_OBJECT_0) {
+                    bmp->UnlockBits(&bd);
+                    return false;
+                }
                 BackdropBoxBlurLine(dst.data() + (size_t)x * 4, src.data() + (size_t)x * 4,
                                     sh, stride, R);
             }
@@ -1698,9 +1796,10 @@ static void BackdropBlurAndVeil(Gdiplus::Bitmap* bmp, int sw, int sh) {
     }
 
     Gdiplus::Graphics g(bmp);
-    int a = g_settings.backdropBlurOpacity * 255 / 100;
+    int a = opacity * 255 / 100;
     Gdiplus::SolidBrush veil(Gdiplus::Color(a, 0, 0, 0));
     g.FillRectangle(&veil, full);
+    return true;
 }
 
 // Place the wallpaper inside one target rect (already in canvas units) the way the
@@ -1744,10 +1843,15 @@ struct BackdropMonitorCtx {
     Gdiplus::Image* src;
     DWORD style;
     int originX, originY;
+    HANDLE cancel;
 };
 static BackdropMonitorCtx s_backdropMonitorCtx;
 
 static BOOL CALLBACK BackdropMonitorEnumProc(HMONITOR hMon, HDC, LPRECT, LPARAM) {
+    if (s_backdropMonitorCtx.cancel &&
+        WaitForSingleObject(s_backdropMonitorCtx.cancel, 0) == WAIT_OBJECT_0) {
+        return FALSE;
+    }
     MONITORINFO mi = { sizeof(mi) };
     if (GetMonitorInfoW(hMon, &mi)) {
         float d = (float)SWS_BACKDROP_DOWNSCALE;
@@ -1762,13 +1866,17 @@ static BOOL CALLBACK BackdropMonitorEnumProc(HMONITOR hMon, HDC, LPRECT, LPARAM)
 }
 
 // Build the blurred wallpaper bitmap once per show ("wallpaper" mode).
-static void BuildBackdropWallpaper(int w, int h) {
-    BackdropFreeBitmap();
-    if (w <= 0 || h <= 0) return;
+static Gdiplus::Bitmap* BuildBackdropWallpaper(int w, int h, int opacity,
+                                                HANDLE cancel = nullptr) {
+    if (w <= 0 || h <= 0) return nullptr;
     WCHAR wp[MAX_PATH] = L"";
-    if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wp, 0) || !wp[0]) return;
+    if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wp, 0) || !wp[0]) {
+        return nullptr;
+    }
     Gdiplus::Bitmap src(wp);
-    if (src.GetLastStatus() != Gdiplus::Ok || src.GetWidth() == 0 || src.GetHeight() == 0) return;
+    if (src.GetLastStatus() != Gdiplus::Ok || src.GetWidth() == 0 || src.GetHeight() == 0) {
+        return nullptr;
+    }
 
     // HKCU\Control Panel\Desktop: 0 center, 1 tile, 2 stretch, 6 fit, 10 fill, 22 span.
     DWORD style = 10, tile = 0;
@@ -1787,6 +1895,10 @@ static void BuildBackdropWallpaper(int w, int h) {
 
     int sw = 0, sh = 0;
     Gdiplus::Bitmap* small = BackdropAllocCanvas(w, h, sw, sh);
+    if (cancel && WaitForSingleObject(cancel, 0) == WAIT_OBJECT_0) {
+        delete small;
+        return nullptr;
+    }
     {
         Gdiplus::Graphics g(small);
         g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -1796,20 +1908,23 @@ static void BuildBackdropWallpaper(int w, int h) {
         } else {
             s_backdropMonitorCtx = { &g, &src, style,
                                      GetSystemMetrics(SM_XVIRTUALSCREEN),
-                                     GetSystemMetrics(SM_YVIRTUALSCREEN) };
+                                     GetSystemMetrics(SM_YVIRTUALSCREEN), cancel };
             EnumDisplayMonitors(NULL, NULL, BackdropMonitorEnumProc, 0);
         }
     }
-    BackdropBlurAndVeil(small, sw, sh);
-    g_backdropBitmap = small;
+    if (!BackdropBlurAndVeil(small, sw, sh, opacity, cancel)) {
+        delete small;
+        return nullptr;
+    }
+    return small;
 }
 
 // Acrylic mode: blur a one-shot snapshot of the real desktop. The capture happens
 // while the switcher's own windows are still hidden, so the switcher never ends up
 // in its own backdrop.
-static void BuildBackdropSnapshot(int w, int h) {
-    BackdropFreeBitmap();
-    if (w <= 0 || h <= 0) return;
+static Gdiplus::Bitmap* BuildBackdropSnapshot(int w, int h, int opacity,
+                                               HANDLE cancel = nullptr) {
+    if (w <= 0 || h <= 0) return nullptr;
     // Runs before any SWS window is shown (see PrepareBackdropBlur), so the capture is
     // the clean desktop. No DwmFlush here on purpose: it can block the switcher thread
     // indefinitely, and that thread owns the Alt+Tab hotkeys and the low-level mouse
@@ -1817,30 +1932,255 @@ static void BuildBackdropSnapshot(int w, int h) {
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     HDC hScreen = GetDC(NULL);
-    if (!hScreen) return;
+    if (!hScreen) return nullptr;
+    int sw = 0, sh = 0;
+    Gdiplus::Bitmap* small = BackdropAllocCanvas(w, h, sw, sh);
     HDC hMem = CreateCompatibleDC(hScreen);
-    HBITMAP hBmp = hMem ? CreateCompatibleBitmap(hScreen, w, h) : NULL;
+    HBITMAP hBmp = hMem ? CreateCompatibleBitmap(hScreen, sw, sh) : NULL;
     BOOL captured = FALSE;
     if (hBmp) {
         HGDIOBJ hOld = SelectObject(hMem, hBmp);
-        captured = BitBlt(hMem, 0, 0, w, h, hScreen, vx, vy, SRCCOPY);
+        SetStretchBltMode(hMem, HALFTONE);
+        SetBrushOrgEx(hMem, 0, 0, NULL);
+        captured = StretchBlt(hMem, 0, 0, sw, sh, hScreen, vx, vy, w, h,
+                              SRCCOPY);
         SelectObject(hMem, hOld); // deselect before handing it to GDI+
     }
-    int sw = 0, sh = 0;
-    Gdiplus::Bitmap* small = NULL;
-    if (captured) {
-        small = BackdropAllocCanvas(w, h, sw, sh);
+    if (captured && small) {
         Gdiplus::Bitmap shot(hBmp, NULL); // borrowed handle, hBmp stays alive below
         Gdiplus::Graphics g(small);
-        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
         g.DrawImage(&shot, 0, 0, sw, sh);
+    } else if (small) {
+        delete small;
+        small = NULL;
     }
     if (hBmp) DeleteObject(hBmp);
     if (hMem) DeleteDC(hMem);
     ReleaseDC(NULL, hScreen);
-    if (!small) return;
-    BackdropBlurAndVeil(small, sw, sh);
-    g_backdropBitmap = small;
+    if (!small) return nullptr;
+    if (!BackdropBlurAndVeil(small, sw, sh, opacity, cancel)) {
+        delete small;
+        return nullptr;
+    }
+    return small;
+}
+
+static void ShowBackdropBlur();
+static void HideBackdropBlur();
+static void RequestBackdropBlurBuild();
+static bool BackdropWaitForReady(UINT budgetMs);
+
+static void BackdropReapWorker() {
+    if (!g_hBackdropWorker ||
+        WaitForSingleObject(g_hBackdropWorker, 0) != WAIT_OBJECT_0) {
+        return;
+    }
+    CloseHandle(g_hBackdropWorker);
+    g_hBackdropWorker = nullptr;
+    if (g_hBackdropWorkerCancel) {
+        CloseHandle(g_hBackdropWorkerCancel);
+        g_hBackdropWorkerCancel = nullptr;
+    }
+}
+
+static void BackdropCancelWorker() {
+    if (g_hBackdropWorkerCancel) SetEvent(g_hBackdropWorkerCancel);
+    g_backdropGeneration.fetch_add(1, std::memory_order_acq_rel);
+    g_backdropBuildRequested = false;
+}
+
+static void BackdropStopWorker() {
+    g_backdropWorkerShutdown.store(true, std::memory_order_release);
+    g_backdropBuildRetryPending = false;
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID);
+    if (g_hBackdropWorkerCancel) SetEvent(g_hBackdropWorkerCancel);
+    if (g_hBackdropWorker) {
+        WaitForSingleObject(g_hBackdropWorker, INFINITE);
+    }
+    BackdropReapWorker();
+    if (g_hSwitcher) {
+        MSG message = {};
+        while (PeekMessageW(&message, g_hSwitcher, WM_SWS_BACKDROP_READY,
+                            WM_SWS_BACKDROP_READY, PM_REMOVE)) {
+            auto* result = reinterpret_cast<BackdropBuildResult*>(message.lParam);
+            if (result) {
+                BackdropFreeOutput(&result->output);
+                delete result;
+            }
+        }
+    }
+}
+
+static DWORD WINAPI BackdropWorkerProc(LPVOID parameter) {
+    std::unique_ptr<BackdropBuildJob> job((BackdropBuildJob*)parameter);
+    std::unique_ptr<BackdropBuildResult> result(new BackdropBuildResult);
+    result->generation = job->generation;
+    const ULONGLONG startTick = GetTickCount64();
+    bool cancelled = WaitForSingleObject(job->cancel, 0) == WAIT_OBJECT_0;
+    if (!cancelled) {
+        Gdiplus::Bitmap* bitmap = job->wallpaper
+            ? BuildBackdropWallpaper(job->width, job->height, job->opacity, job->cancel)
+            : BuildBackdropSnapshot(job->width, job->height, job->opacity, job->cancel);
+        cancelled = WaitForSingleObject(job->cancel, 0) == WAIT_OBJECT_0;
+        if (bitmap && !cancelled &&
+            PrepareBackdropSurfaceForBitmap(bitmap, job->width, job->height,
+                                            &result->output)) {
+            result->success = true;
+        } else if (bitmap) {
+            delete bitmap;
+        }
+    }
+
+    result->elapsedMs = GetTickCount64() - startTick;
+    if (!g_backdropWorkerShutdown.load(std::memory_order_acquire)) {
+        BackdropBuildResult* postedResult = result.release();
+        if (!PostMessageW(job->target, WM_SWS_BACKDROP_READY, 0,
+                          reinterpret_cast<LPARAM>(postedResult))) {
+            result.reset(postedResult);
+        }
+    }
+    if (result) BackdropFreeOutput(&result->output);
+    g_backdropWorkerRunning.store(false, std::memory_order_release);
+    return 0;
+}
+
+static void HandleBackdropBuildResult(BackdropBuildResult* result) {
+    if (!result) return;
+    BackdropReapWorker();
+    Wh_Log(L"SWS: backdrop worker result generation=%u success=%d elapsed=%llu ms",
+           result->generation, result->success,
+           (unsigned long long)result->elapsedMs);
+    const bool current =
+        result->generation == g_backdropGeneration.load(std::memory_order_acquire) &&
+        g_backdropBuildRequested && !g_backdropWorkerShutdown.load(std::memory_order_acquire) &&
+        BackdropBlurEnabled();
+    if (!current || !result->success) {
+        const bool retry = g_backdropBuildRetryPending;
+        const bool failed = !result->success;
+        g_backdropBuildRetryPending = false;
+        if (current) g_backdropBuildRequested = false;
+        BackdropFreeOutput(&result->output);
+        delete result;
+        if (!g_backdropPresentationResolved &&
+            (retry || failed || (!current && (g_isVisible || g_isPendingShow))) &&
+            g_hSwitcher && BackdropBlurEnabled() &&
+            !g_backdropWorkerShutdown.load(std::memory_order_acquire)) {
+            SetTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID, 1, NULL);
+        }
+        return;
+    }
+
+    g_backdropBuildRequested = false;
+    BackdropFreeBitmap();
+    g_backdropBitmap = result->output.bitmap;
+    g_backdropPaintDC = result->output.paintDC;
+    g_backdropPaintBitmap = result->output.paintBitmap;
+    g_backdropPaintOldBitmap = result->output.paintOldBitmap;
+    g_backdropPaintSize = result->output.paintSize;
+    result->output = {};
+    delete result;
+
+}
+
+static void RequestBackdropBlurBuild() {
+    if (!BackdropBlurEnabled() || g_backdropWorkerShutdown.load(std::memory_order_acquire) ||
+        g_backdropBuildRequested || g_backdropPresentationResolved) {
+        return;
+    }
+    if (g_backdropBitmap && g_backdropPaintDC) {
+        int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (g_backdropPaintSize.cx == w && g_backdropPaintSize.cy == h) {
+            return;
+        }
+        BackdropFreeBitmap();
+    }
+    BackdropReapWorker();
+    if (g_hBackdropWorker) {
+        g_backdropBuildRetryPending = true;
+        return;
+    }
+
+    if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
+        RECT switcherRect = {}, virtualRect = {
+            GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        RECT overlap = {};
+        if (GetWindowRect(g_hSwitcher, &switcherRect) &&
+            IntersectRect(&overlap, &switcherRect, &virtualRect)) {
+            return;
+        }
+    }
+
+    int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (width <= 0 || height <= 0) return;
+    HANDLE cancel = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!cancel) return;
+    auto* job = new BackdropBuildJob;
+    job->target = g_hSwitcher;
+    job->generation = g_backdropGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+    job->cancel = cancel;
+    job->width = width;
+    job->height = height;
+    job->opacity = g_settings.backdropBlurOpacity;
+    job->wallpaper = BackdropBlurUsesWallpaper();
+
+    g_backdropBuildRequested = true;
+    g_backdropBuildStartTick = GetTickCount64();
+    Wh_Log(L"SWS: backdrop worker start generation=%u size=%dx%d mode=%s",
+           job->generation, width, height,
+           job->wallpaper ? L"wallpaper" : L"snapshot");
+    g_hBackdropWorkerCancel = cancel;
+    g_backdropWorkerRunning.store(true, std::memory_order_release);
+    g_hBackdropWorker = CreateThread(nullptr, 0, BackdropWorkerProc, job, 0, nullptr);
+    if (!g_hBackdropWorker) {
+        g_backdropWorkerRunning.store(false, std::memory_order_release);
+        g_hBackdropWorkerCancel = nullptr;
+        CloseHandle(cancel);
+        delete job;
+        g_backdropBuildRequested = false;
+        return;
+    }
+}
+
+// Wait only during hidden presentation staging. A late worker result is freed
+// without changing the already-presented switcher, keeping both surfaces timed
+// together instead of revealing the backdrop after the switcher.
+static bool BackdropWaitForReady(UINT budgetMs) {
+    if (!BackdropBlurEnabled()) return false;
+    if (g_backdropBitmap && g_backdropPaintDC) return true;
+    if (!g_hBackdropWorker) return false;
+
+    const ULONGLONG deadline = GetTickCount64() + budgetMs;
+    while (g_hBackdropWorker) {
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline) break;
+        DWORD remaining = (DWORD)(deadline - now);
+        DWORD waitResult = WaitForSingleObject(g_hBackdropWorker, remaining);
+        if (waitResult != WAIT_OBJECT_0) break;
+
+        MSG message = {};
+        while (g_hSwitcher && PeekMessageW(&message, g_hSwitcher,
+                                           WM_SWS_BACKDROP_READY,
+                                           WM_SWS_BACKDROP_READY, PM_REMOVE)) {
+            HandleBackdropBuildResult(
+                reinterpret_cast<BackdropBuildResult*>(message.lParam));
+        }
+        if (g_backdropBitmap && g_backdropPaintDC) return true;
+
+        // A completed worker normally leaves one posted result. If posting
+        // failed, retire its handle and resolve this presentation without blur.
+        if (g_hBackdropWorker &&
+            WaitForSingleObject(g_hBackdropWorker, 0) == WAIT_OBJECT_0) {
+            BackdropReapWorker();
+            g_backdropBuildRequested = false;
+            break;
+        }
+    }
+    return g_backdropBitmap && g_backdropPaintDC;
 }
 
 // Show the backdrop that PrepareBackdropBlur() already built, directly below the
@@ -1858,32 +2198,46 @@ static void ShowBackdropBlur() {
     int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
     if (g_backdropPaintSize.cx != w || g_backdropPaintSize.cy != h) return;
 
-    // Native switcher materials are visible even at frame-zero. Finish the
-    // backdrop first, so their reveal cannot get ahead of the desktop blur.
+    // Install surface below current switcher. Fade follows the shared
+    // presentation timeline after the first paint.
     BackdropStopFade();
-    BackdropApplyAlpha(g_hBackdropWnd, 1.0f);
+    BackdropApplyAlpha(g_hBackdropWnd, 0.0f);
     InvalidateRect(g_hBackdropWnd, NULL, FALSE);
 
     // Directly below the switcher: the switcher sits in the shell's system-tools band,
     // so this is above every app window yet still behind the switcher.
     SetWindowPos(g_hBackdropWnd, g_hSwitcher ? g_hSwitcher : HWND_TOPMOST, vx, vy, w, h,
                  SWP_NOACTIVATE);
-    UpdateWindow(g_hBackdropWnd);
     ShowWindow(g_hBackdropWnd, SW_SHOWNA);
-    // Showing a layered HWND can invalidate it again. Drain that initial
-    // cached paint before PresentSwitcherWindows starts the reveal clocks.
+    // Drain initial paint after showing. One synchronous paint is enough; a
+    // second UpdateWindow here only repeats full-screen blit work.
     UpdateWindow(g_hBackdropWnd);
-}
-
-// Called only after the switcher exit has retired its visible surfaces.
-static bool FadeOutBackdropBlur() {
-    if (!g_hBackdropWnd || !IsWindowVisible(g_hBackdropWnd) ||
-        !AreAnimationsGloballyEnabled() || g_backdropFadeAlpha <= 0.0f) return false;
-    BackdropStartExitFade(g_hBackdropWnd);
-    return g_backdropExitFadeActive;
+    if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (IsWindow(hMirror) && IsWindowVisible(hMirror)) {
+            SetWindowPos(hMirror, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+    if (g_hCloseBtnWnd && IsWindowVisible(g_hCloseBtnWnd)) {
+        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+    BackdropStartEntranceFade(g_hBackdropWnd);
+    Wh_Log(L"SWS: backdrop presented elapsed=%llu ms",
+           (unsigned long long)(g_backdropBuildStartTick
+                                    ? GetTickCount64() - g_backdropBuildStartTick
+                                    : 0));
 }
 
 static void HideBackdropBlur() {
+    g_backdropPresentationResolved = true;
+    BackdropCancelWorker();
+    g_backdropBuildRetryPending = false;
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID);
     if (g_hBackdropWnd && IsWindow(g_hBackdropWnd)) {
         BackdropStopFade();
         ShowWindow(g_hBackdropWnd, SW_HIDE);
@@ -1898,39 +2252,16 @@ static void HideBackdropBlur() {
 // the show fails afterwards, the prepared bitmap is simply never shown and HideSwitcher
 // frees it.
 static void PrepareBackdropBlur() {
-    if (!BackdropBlurEnabled()) return;
     if (g_hBackdropWnd && IsWindowVisible(g_hBackdropWnd)) {
-        // Stale backdrop from an interrupted session: never let it into the capture.
+        // A prior interrupted session must never contaminate a new snapshot.
         HideBackdropBlur();
+        g_backdropPresentationResolved = false;
     }
-    if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
-        // Native touchpad foreground handoff briefly shows the switcher at
-        // (-32000, -32000) before this capture. That staging window is outside
-        // the virtual desktop and cannot contaminate the snapshot; only skip
-        // when a visible SWS window actually intersects a display.
-        RECT switcherRect = {}, virtualRect = {
-            GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
-            GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
-            GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
-        RECT overlap = {};
-        if (GetWindowRect(g_hSwitcher, &switcherRect) &&
-            IntersectRect(&overlap, &switcherRect, &virtualRect)) {
-            // Unexpected state: skip the blur rather than capture a partial
-            // switcher into its own backdrop.
-            return;
-        }
-    }
-    int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    if (BackdropBlurUsesWallpaper()) {
-        BuildBackdropWallpaper(w, h);
-    } else {
-        BuildBackdropSnapshot(w, h);
-    }
-    PrepareBackdropSurface(w, h);
+    RequestBackdropBlurBuild();
 }
 
 static void DestroyBackdropWindow() {
+    BackdropStopWorker();
     BackdropFreeBitmap();
     if (g_hBackdropWnd) {
         BackdropStopFade();
@@ -1955,7 +2286,6 @@ static float g_animCloseBtnHoverAlpha = 0.0f;
 static bool g_isClosePressed = false;
 static HANDLE g_explorerIpcThread = NULL;
 static DWORD g_explorerIpcThreadId = 0;
-static bool g_isPendingShow = false;
 static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
 static int g_switcherBaseX = 0;
 static int g_switcherBaseY = 0;
@@ -2217,9 +2547,13 @@ static void SWS_UnregisterHotkeys();
 static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
 static void ApplyPresentationWindowRegion(HWND hWnd);
+static void RefreshNativePresentationCorners(HWND hWnd);
 static void CreateMirrorSwitchers();
 static void ShowMirrorSwitchers();
 static void HideSwitcher();
+static void EndTouchpadGesture();
+static bool RapidTouchpadLiftObserved();
+static void InvalidateRapidPendingTimer();
 static void ShowBackdropBlur();
 static void HideBackdropBlur();
 static void DestroyBackdropWindow();
@@ -2672,6 +3006,9 @@ struct PresentationRegionState {
     bool applied = false;
 };
 static std::map<HWND, PresentationRegionState> g_presentationRegions;
+// Win11's transient system backdrop owns rounded-corner clipping. Keep this
+// per HWND because mirrors and the main switcher can be recreated separately.
+static std::map<HWND, bool> g_nativeAcrylicWindows;
 static void SetSwitcherLayoutBounds(int x, int y, int w, int h,
                                     UINT flags = SWP_NOACTIVATE);
 
@@ -2771,6 +3108,7 @@ static void SetPresentationWindowLayout(HWND hWnd, int x, int y, int w, int h,
     RECT rect = { x, y, x + w, y + h };
     g_presentationWindows[hWnd] = { rect, GetPresentationDpiY(hWnd, rect) };
     PositionPresentationWindow(hWnd, flags);
+    RefreshNativePresentationCorners(hWnd);
     ApplyPresentationWindowRegion(hWnd);
 }
 
@@ -4728,12 +5066,6 @@ static void OnAnimationTick() {
         TickScope() { g_animTickInProgress = g_animFrameSampleActive = true; }
         ~TickScope() { g_animTickInProgress = g_animFrameSampleActive = false; }
     } tickScope;
-    // The switcher is already hidden during the final backdrop-only phase.
-    // Keep the exit guard and ticker alive without painting it back on screen.
-    if (g_backdropExitFadeActive) {
-        if (!BackdropFadeTick(dt)) CompleteExitAnimation();
-        return;
-    }
     UpdateMicrointeractionTargets();
 
     bool anyActive = false;
@@ -4744,6 +5076,16 @@ static void OnAnimationTick() {
 
     // 1. Shared entrance/exit timeline
     AdvancePresentationAnimation(dt);
+    const float backdropEntranceAlpha = ThemeIs(L"none")
+        ? CurrentPresentationAlpha() : g_animEntranceCurrentAlpha;
+    const float backdropExitAlpha = ThemeIs(L"none")
+        ? CurrentPresentationAlpha() : g_animExitCurrentAlpha;
+    if (BackdropEntranceFadeTick(backdropEntranceAlpha, g_animEntranceActive)) {
+        anyActive = true;
+    }
+    if (BackdropExitFadeTick(backdropExitAlpha, g_animExitActive)) {
+        anyActive = true;
+    }
     if (g_animEntranceActive || g_presentationOpacity.progress < 1.0f) anyActive = true;
 
     // 2. Scroll / Page Slide animation
@@ -4856,7 +5198,6 @@ static void OnAnimationTick() {
         if (g_animExitProgress <= 0.0f &&
             (!ThemeIs(L"none") || g_presentationOpacity.progress >= 1.0f)) {
             HideSwitcherPresentationWindows();
-            if (FadeOutBackdropBlur()) return;
             CompleteExitAnimation();
             return;
         } else {
@@ -5183,9 +5524,31 @@ static void ClearPresentationWindowRegion(HWND hWnd) {
     auto it = g_presentationRegions.find(hWnd);
     if (it == g_presentationRegions.end()) return;
     if (it->second.applied && IsWindow(hWnd)) {
-        SetWindowRgn(hWnd, NULL, FALSE);
+        SetWindowRgn(hWnd, NULL, TRUE);
     }
     g_presentationRegions.erase(it);
+}
+
+static void RefreshNativePresentationCorners(HWND hWnd) {
+    if (!hWnd || hWnd == g_hCloseBtnWnd || !IsWindow(hWnd) ||
+        !IsWin11OrGreater() || (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED) ||
+        (!ThemeIs(L"mica") && !ThemeIs(L"backdrop"))) {
+        return;
+    }
+
+    // Keep DWM preference aligned with configured/default radius. Legacy Acrylic
+    // also receives an explicit region below because it can bypass this hint.
+    INT cornerPreference = GetCornerPref();
+    HRESULT cornerHr = DwmSetWindowAttribute(
+        hWnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */,
+        &cornerPreference, sizeof(cornerPreference));
+    COLORREF none = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+    HRESULT borderHr = DwmSetWindowAttribute(
+        hWnd, 34 /* DWMWA_BORDER_COLOR */, &none, sizeof(none));
+    if (FAILED(cornerHr) || FAILED(borderHr)) {
+        Wh_Log(L"SWS: native corner attributes failed hwnd=%p corner=%08X border=%08X pref=%d",
+               hWnd, (unsigned)cornerHr, (unsigned)borderHr, cornerPreference);
+    }
 }
 
 static void ApplyPresentationWindowRegion(HWND hWnd) {
@@ -5193,16 +5556,31 @@ static void ApplyPresentationWindowRegion(HWND hWnd) {
 
     // Apply clipping only at layout boundaries. HideSwitcher leaves the region
     // untouched, avoiding a DWM shape transition while thumbnails are retired.
-    const bool useRegion = ThemeIs(L"mica") || ThemeIs(L"backdrop");
+    // Native Win11 Acrylic owns standard corner clipping. Legacy Acrylic and
+    // custom radii still need an explicit region.
+    const auto nativeAcrylic = g_nativeAcrylicWindows.find(hWnd);
+    const bool nativeAcrylicActive =
+        nativeAcrylic != g_nativeAcrylicWindows.end() && nativeAcrylic->second;
+    const bool micaCustomRegion =
+        ThemeIs(L"mica") && wcscmp(g_settings.cornerPreference, L"custom") == 0 &&
+        g_settings.customCornerRadius > 0 &&
+        (!g_customCornerRadiusModActive ||
+         g_settings.customCornerRadius != g_systemDwmRadius);
+    const bool backdropRegion = ThemeIs(L"backdrop") && !nativeAcrylicActive;
+    const bool backdropCustomRegion =
+        ThemeIs(L"backdrop") && nativeAcrylicActive &&
+        wcscmp(g_settings.cornerPreference, L"custom") == 0 &&
+        g_settings.customCornerRadius > 0;
+    const bool useRegion = backdropRegion || backdropCustomRegion || micaCustomRegion;
     if (!useRegion || (GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
         ClearPresentationWindowRegion(hWnd);
         return;
     }
 
-    RECT layout = {};
-    if (!GetPresentationLayoutRect(hWnd, &layout)) return;
-    int width = layout.right - layout.left;
-    int height = layout.bottom - layout.top;
+    RECT actual = {};
+    if (!GetWindowRect(hWnd, &actual)) return;
+    int width = actual.right - actual.left;
+    int height = actual.bottom - actual.top;
     int radiusDIP = 0;
     GetResolvedCornerRadiiDIP(&radiusDIP, nullptr);
     UINT dpi = QueryWindowDpi(hWnd);
@@ -5222,20 +5600,35 @@ static void ApplyPresentationWindowRegion(HWND hWnd) {
     auto& state = g_presentationRegions[hWnd];
     if (state.applied && state.width == width && state.height == height &&
         state.radius == radius) {
-        return;
+        RECT currentRegionBox = {};
+        int currentRegionType = GetWindowRgnBox(hWnd, &currentRegionBox);
+        if (currentRegionType != ERROR && currentRegionType != NULLREGION) {
+            return;
+        }
+        state.applied = false;
     }
 
     HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
                                      radius * 2, radius * 2);
     if (!region) return;
-    if (!SetWindowRgn(hWnd, region, FALSE)) {
+    SetLastError(ERROR_SUCCESS);
+    int setResult = SetWindowRgn(hWnd, region, TRUE);
+    if (!setResult) {
+        DWORD error = GetLastError();
         DeleteObject(region);
+        Wh_Log(L"SWS: Acrylic corner region failed hwnd=%p size=%dx%d dpi=%u radius=%d error=%u",
+               hWnd, width, height, dpi, radius, error);
         return;
     }
     state.width = width;
     state.height = height;
     state.radius = radius;
     state.applied = true;
+    RECT regionBox = {};
+    int regionType = GetWindowRgnBox(hWnd, &regionBox);
+    Wh_Log(L"SWS: Acrylic corner region hwnd=%p size=%dx%d dpi=%u radius=%d type=%d box=%d,%d-%d,%d",
+           hWnd, width, height, dpi, radius, regionType,
+           regionBox.left, regionBox.top, regionBox.right, regionBox.bottom);
 }
 
 static bool UseTaskRoundedCorners() {
@@ -6296,6 +6689,9 @@ static std::atomic<ULONGLONG> g_touchpadRawThreeFingerLastTick{0};
 static std::atomic<bool> g_touchpadTwoFingerCloseActive{false};
 static std::atomic<DWORD> g_touchpadRawTwoFingerNextSerial{0};
 static std::atomic<ULONGLONG> g_touchpadRawTwoFingerTapMouseState{0};
+static std::atomic<DWORD> g_touchpadRawTwoFingerTapConsumedSerial{0};
+static DWORD RawTwoFingerTapMouseRemainingMs(ULONGLONG state, ULONGLONG now);
+static void CancelTwoFingerTapDismiss();
 // Settings callbacks run outside the switcher thread. These atomics are the
 // cross-thread source of truth until WM_SWS_SETTINGS_CHANGED reloads the full
 // UI settings snapshot on the switcher thread.
@@ -6499,11 +6895,32 @@ static bool s_rawTwoFingerTapMoved = false;
 static ULONGLONG s_rawTwoFingerTapStartTick = 0;
 static int s_rawTwoFingerTapOriginX = 0;
 static int s_rawTwoFingerTapOriginY = 0;
+static bool s_twoFingerTapDismissPending = false;
+// A two-finger close is a command owned by the visible sticky session. Keep
+// that ownership through the selected window's asynchronous close/focus churn,
+// but never beyond the promoted mouse-pair grace.
+static DWORD s_stickyTwoFingerTapSerial = 0;
+static ULONGLONG s_stickyTwoFingerTapOwnershipDeadline = 0;
+static bool s_stickyTwoFingerTapCloseRequested = false;
+static bool s_stickyTwoFingerTapMousePairConsumed = false;
+static bool s_stickyTwoFingerTapFocusRestoreActive = false;
 static ULONGLONG s_rawTouchpadShieldFocusStartTick = 0;
 static HWND s_rawShieldRestoreForeground = NULL;
 static HWND s_touchpadActivationRetryTarget = NULL;
 static ULONGLONG s_touchpadActivationRetryDeadline = 0;
 static bool s_touchpadCommitActivation = false;
+static bool s_touchpadRapidPending = false;
+static ULONGLONG s_touchpadRapidPendingTick = 0;
+static ULONGLONG s_touchpadRapidPendingDeadline = 0;
+static ULONGLONG s_touchpadRapidPendingRawSerial = 0;
+static ULONG s_touchpadRapidPendingRawPhase = 0u;
+static int s_touchpadRapidPendingInitialIndex = -1;
+static int s_touchpadRapidPendingTargetIndex = -1;
+static int s_touchpadRapidPendingDirection = 0;
+static bool s_touchpadRapidPendingCommitted = false;
+static bool s_touchpadRapidRevealReanchorPending = false;
+static DWORD s_touchpadRapidPendingGeneration = 0;
+static UINT_PTR s_touchpadRapidPendingTimerId = 0;
 
 // A normal Alt session and a normal three-finger session are separate owners.
 // The switcher commits only after both owners have released.
@@ -6883,6 +7300,77 @@ static void ResetRawTwoFingerTap() {
     s_rawTwoFingerTapStartTick = 0;
     s_rawTwoFingerTapOriginX = 0;
     s_rawTwoFingerTapOriginY = 0;
+}
+
+static void CancelTwoFingerTapDismiss() {
+    s_twoFingerTapDismissPending = false;
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_TIMER_ID);
+    }
+}
+
+static bool RawTwoFingerTapEvidenceLive() {
+    return RawTwoFingerTapMouseRemainingMs(
+               g_touchpadRawTwoFingerTapMouseState.load(std::memory_order_acquire),
+               GetTickCount64()) != 0;
+}
+
+static DWORD RawTwoFingerTapMouseSerial() {
+    return (DWORD)(g_touchpadRawTwoFingerTapMouseState.load(
+        std::memory_order_acquire) >> 32);
+}
+
+static void ClearStickyTwoFingerTapOwnership() {
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID);
+    }
+    s_stickyTwoFingerTapSerial = 0;
+    s_stickyTwoFingerTapOwnershipDeadline = 0;
+    s_stickyTwoFingerTapCloseRequested = false;
+    s_stickyTwoFingerTapMousePairConsumed = false;
+    s_stickyTwoFingerTapFocusRestoreActive = false;
+}
+
+static bool StickyTwoFingerTapOwnershipLive() {
+    if (!s_stickyTwoFingerTapCloseRequested || !g_isSticky || !g_isVisible ||
+        g_animExitActive || g_isHidingSwitcher || !g_hSwitcher) {
+        if (s_stickyTwoFingerTapCloseRequested) ClearStickyTwoFingerTapOwnership();
+        return false;
+    }
+    if (GetTickCount64() >= s_stickyTwoFingerTapOwnershipDeadline) {
+        ClearStickyTwoFingerTapOwnership();
+        return false;
+    }
+    return true;
+}
+
+static void RetainStickyTwoFingerTapForeground() {
+    if (!StickyTwoFingerTapOwnershipLive() || s_stickyTwoFingerTapFocusRestoreActive) return;
+    HWND foreground = GetForegroundWindow();
+    if (IsSwitcherWindow(foreground)) return;
+    s_stickyTwoFingerTapFocusRestoreActive = true;
+    BringWindowToTop(g_hSwitcher);
+    BOOL restored = SetForegroundWindow(g_hSwitcher);
+    s_stickyTwoFingerTapFocusRestoreActive = false;
+    Wh_Log(L"SWS: retaining sticky switcher after two-finger close foreground=%p restored=%d active=%d",
+           foreground, restored, GetForegroundWindow() == g_hSwitcher);
+}
+
+static void BeginStickyTwoFingerTapOwnership() {
+    if (!g_isSticky || !g_isVisible || !g_hSwitcher) return;
+    ULONGLONG now = GetTickCount64();
+    s_stickyTwoFingerTapSerial = RawTwoFingerTapMouseSerial();
+    s_stickyTwoFingerTapOwnershipDeadline = now + SWS_RAW_TWO_TAP_MOUSE_PAIR_MS;
+    s_stickyTwoFingerTapCloseRequested = true;
+    s_stickyTwoFingerTapMousePairConsumed =
+        s_stickyTwoFingerTapSerial &&
+        g_touchpadRawTwoFingerTapConsumedSerial.load(std::memory_order_acquire) ==
+            s_stickyTwoFingerTapSerial;
+    SetTimer(g_hSwitcher, SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID,
+             SWS_RAW_TWO_TAP_MOUSE_PAIR_MS, nullptr);
+    Wh_Log(L"SWS: sticky two-finger close owned serial=%u pairConsumed=%d deadline=%llu",
+           s_stickyTwoFingerTapSerial, s_stickyTwoFingerTapMousePairConsumed,
+           (unsigned long long)s_stickyTwoFingerTapOwnershipDeadline);
 }
 
 static void CancelRawTouchpadStroke() {
@@ -11045,7 +11533,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
 }
 
 static void PaintSwitcherOverlay() {
-    if (!g_hCloseBtnWnd || !g_isVisible || g_backdropExitFadeActive) return;
+    if (!g_hCloseBtnWnd || !g_isVisible) return;
     if (g_animActive && !g_animTickInProgress && !g_animEntranceFrameZeroPending) return;
     AnchorPresentationOverlay();
     PositionPresentationWindow(g_hCloseBtnWnd);
@@ -11172,7 +11660,7 @@ static void DrawScrollTransitionFrame(HDC hdc, int w, int h, bool includeSelecti
 }
 
 static void PaintSwitcher() {
-    if (!g_hSwitcher || !g_isVisible || g_backdropExitFadeActive) return;
+    if (!g_hSwitcher || !g_isVisible) return;
     // Input handlers publish state immediately; an active ticker presents it at
     // the next deadline. Keep the initial entrance paint before first visibility.
     if (g_animActive && !g_animTickInProgress && !g_animEntranceFrameZeroPending) return;
@@ -11336,6 +11824,19 @@ static void CancelPendingShow() {
         KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
     }
+    InvalidateRapidPendingTimer();
+    g_showDelayDeadlineTick = 0;
+    s_touchpadRapidPending = false;
+    s_touchpadRapidPendingTick = 0;
+    s_touchpadRapidPendingDeadline = 0;
+    s_touchpadRapidPendingRawSerial = 0;
+    s_touchpadRapidPendingRawPhase = 0;
+    s_touchpadRapidPendingInitialIndex = -1;
+    s_touchpadRapidPendingTargetIndex = -1;
+    s_touchpadRapidPendingDirection = 0;
+    s_touchpadRapidPendingCommitted = false;
+    s_touchpadRapidRevealReanchorPending = false;
+    CancelTwoFingerTapDismiss();
     g_isPendingShow = false;
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
 }
@@ -11612,6 +12113,7 @@ enum class MouseCommandKind { Activity, Button, Wheel };
 struct MouseCommand {
     DWORD generation = 0;
     MouseCommandKind kind = MouseCommandKind::Activity;
+    UINT message = 0;
     POINT point{};
     int notches = 0;
     int action = 0;
@@ -11713,6 +12215,7 @@ static bool SuppressTwoFingerTapMouse(WPARAM message) {
         s_rawTwoFingerMouseButtonSerial = 0;
         s_rawTwoFingerMouseButtonDeadline = 0;
         if (!paired) return false; // Never consume an up whose down passed through.
+        g_touchpadRawTwoFingerTapConsumedSerial.store(serial, std::memory_order_release);
         ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
             std::memory_order_acquire);
         while ((DWORD)(state >> 32) == serial &&
@@ -11723,9 +12226,31 @@ static bool SuppressTwoFingerTapMouse(WPARAM message) {
     if (!TouchpadHandlingEnabled() || !g_touchpadReaderAvailable.load()) return false;
     ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
         std::memory_order_acquire);
-    if (!RawTwoFingerTapMouseRemainingMs(state, now)) return false;
+    DWORD remaining = RawTwoFingerTapMouseRemainingMs(state, now);
+    if (!remaining && g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire)) {
+        // The promoted mouse packet can win a few milliseconds over the raw
+        // reader's publication. Wait only on this visible-session path, then
+        // suppress before Windows can move focus to the underlying window.
+        const ULONGLONG waitStart = now;
+        const ULONGLONG waitDeadline =
+            waitStart + SWS_TOUCHPAD_TWO_FINGER_EVIDENCE_WAIT_MS;
+        do {
+            Sleep(1);
+            now = GetTickCount64();
+            state = g_touchpadRawTwoFingerTapMouseState.load(
+                std::memory_order_acquire);
+            remaining = RawTwoFingerTapMouseRemainingMs(state, now);
+        } while (!remaining && now < waitDeadline);
+        if (now != waitStart) {
+            Wh_Log(L"SWS: two-finger right-button evidence wait=%llu ms live=%d",
+                   (unsigned long long)(now - waitStart), remaining != 0);
+        }
+    }
+    if (!remaining) return false;
     s_rawTwoFingerMouseButtonSerial = (DWORD)(state >> 32);
     s_rawTwoFingerMouseButtonDeadline = now + SWS_RAW_TWO_TAP_MOUSE_PAIR_MS;
+    g_touchpadRawTwoFingerTapConsumedSerial.store(s_rawTwoFingerMouseButtonSerial,
+                                                  std::memory_order_release);
     return true;
 }
 
@@ -11758,6 +12283,21 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
          wParam == WM_MOUSEHWHEEL)) {
         s_mouseCancelsCtrlTap.store((ULONGLONG)generation << 32 | 1u,
                                     std::memory_order_release);
+    }
+    if (nCode == HC_ACTION && (flags & SWS_MOUSE_VISIBLE) &&
+        wParam == WM_RBUTTONDOWN) {
+        auto* mouse = (MSLLHOOKSTRUCT*)lParam;
+        MouseCommand command;
+        command.generation = generation;
+        command.kind = MouseCommandKind::Button;
+        command.message = (UINT)wParam;
+        command.point = mouse->pt;
+        command.tick = GetTickCount64();
+        if (QueueMouseCommand(command)) {
+            return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+        }
+        // A full command queue must not swallow a physical right-click.
+        return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
     }
     if (nCode == HC_ACTION && (flags & SWS_MOUSE_VISIBLE) &&
         (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN || wParam == WM_MBUTTONDOWN)) {
@@ -11921,6 +12461,8 @@ static void StopMouseHookThread() {
 // Show the switcher, its overlay and the mirrors, then start the entrance animation.
 // Kept in one place because both the pending-show reveal and the immediate show use it.
 static void PresentSwitcherWindows() {
+    Wh_Log(L"SWS: switcher presented backdrop=%d",
+           g_hBackdropWnd && IsWindowVisible(g_hBackdropWnd));
     // All HWNDs must carry frame zero before any of them becomes visible.
     ApplyPresentationWindowOffset();
     if (g_hCloseBtnWnd) {
@@ -11963,16 +12505,26 @@ static void RevealPendingSwitcher() {
         return;
     }
 
+    const bool rapidPending = s_touchpadRapidPending;
     KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
+    g_showDelayDeadlineTick = 0;
+    InvalidateRapidPendingTimer();
 
-    g_isPendingShow = false;
-    // The grace-period HWND may be visible off-screen. Hide it before moving
-    // native materials to their layout rect, which would otherwise reveal the
-    // switcher ahead of ShowBackdropBlur(). No session is visible during this
-    // synchronous staging step, so its focus loss cannot cancel the reveal.
-    if (BackdropBlurEnabled() && IsWindowVisible(g_hSwitcher)) {
+    // Keep every pending session hidden while the final material, style, layout,
+    // and frame-zero paint are staged. None changes WS_EX_LAYERED while visible,
+    // which otherwise exposes one unpainted frame before PresentSwitcherWindows().
+    if (IsWindowVisible(g_hSwitcher)) {
         ShowWindow(g_hSwitcher, SW_HIDE);
     }
+
+    // The raw reader can publish lift while the timer message is waiting in the
+    // UI queue. Commit before staging any visible frame in that case.
+    if (rapidPending && RapidTouchpadLiftObserved()) {
+        Wh_Log(L"SWS: rapid touchpad lift observed before reveal staging; committing hidden");
+        EndTouchpadGesture();
+        return;
+    }
+
     g_isVisible = true;
     BeginMouseUiSession();
     RefreshTouchpadGestureKinds();
@@ -12016,8 +12568,24 @@ static void RevealPendingSwitcher() {
     DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
 
+    // Build backdrop only after pending sessions have proved they need a visual
+    // reveal. Direct touchpad commits must not pay this cost before release.
+    PrepareBackdropBlur();
+    const bool backdropReady = BackdropWaitForReady(
+        SWS_BACKDROP_PRESENTATION_BUDGET_MS);
+
+    // Backdrop waiting blocks this message pump, so check the reader-owned
+    // release state again before material and window presentation can proceed.
+    if (rapidPending && RapidTouchpadLiftObserved()) {
+        Wh_Log(L"SWS: rapid touchpad lift observed after backdrop wait; committing hidden");
+        EndTouchpadGesture();
+        return;
+    }
+
+    g_backdropPresentationResolved = true;
+    g_backdropBuildRetryPending = false;
+    KillTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID);
     ApplyThemeToWindow(g_hSwitcher);
-    ApplySwitcherRegion();
 
     StartEntranceAnimation();
     SetPresentationWindowLayout(g_hSwitcher, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE);
@@ -12053,10 +12621,42 @@ static void RevealPendingSwitcher() {
         PaintSwitcherOverlay();
     }
 
+    // Layout, thumbnails, and frame-zero painting can also consume enough time
+    // for the raw lift to arrive. Never expose a frame after that release edge.
+    if (rapidPending && RapidTouchpadLiftObserved()) {
+        Wh_Log(L"SWS: rapid touchpad lift observed before presentation; committing hidden");
+        EndTouchpadGesture();
+        return;
+    }
+
+    if (rapidPending) {
+        // Ignore distance travelled during hidden rapid mode. The next raw
+        // report starts normal navigation from the position at reveal.
+        s_rawGestureAnchorX = s_rawLastFrameX;
+        s_rawGestureAnchorY = s_rawLastFrameY;
+        s_rawDirectionAnchorX = s_rawLastFrameX;
+        s_rawDirectionAnchorY = s_rawLastFrameY;
+        s_rawAppliedX = 0;
+        s_rawGestureAxis = 0;
+        s_rawVerticalTravelDir = 0;
+        s_rawRowTick = 0;
+    }
+    s_touchpadRapidPending = false;
+    s_touchpadRapidPendingTick = 0;
+    s_touchpadRapidPendingDeadline = 0;
+    s_touchpadRapidPendingRawSerial = 0;
+    s_touchpadRapidPendingRawPhase = 0;
+    s_touchpadRapidPendingInitialIndex = -1;
+    s_touchpadRapidPendingTargetIndex = -1;
+    s_touchpadRapidPendingDirection = 0;
+    s_touchpadRapidPendingCommitted = false;
+    s_touchpadRapidRevealReanchorPending = rapidPending;
+    g_isPendingShow = false;
+
     // Backdrop first (opt-in), then the switcher, its overlay and the mirrors in the
     // same message: presentation must never wait on a timer, or a lost tick would leave
     // the full-screen blur plate up with no switcher on top of it.
-    ShowBackdropBlur();
+    if (backdropReady) ShowBackdropBlur();
     PresentSwitcherWindows();
 
     if (!g_isSticky && !g_isTouchpadGestureActive) {
@@ -12079,9 +12679,10 @@ static void RevealPendingSwitcher() {
 }
 
 static void ApplyThemeToWindow(HWND hWnd) {
-    if (!ThemeIs(L"mica") && !ThemeIs(L"backdrop")) {
-        ClearPresentationWindowRegion(hWnd);
-    }
+    // Material/style changes invalidate the region cache. Layout reapplies the
+    // region after final geometry, so Acrylic never retains an old mask.
+    ClearPresentationWindowRegion(hWnd);
+    g_nativeAcrylicWindows[hWnd] = false;
     if (ThemeIs(L"none")) {
         // 1. Explicitly clear all DWM system backdrops on Windows 11
         if (IsWin11OrGreater()) {
@@ -12169,15 +12770,31 @@ static void ApplyThemeToWindow(HWND hWnd) {
             SendMessage(hWnd, WM_NCACTIVATE, TRUE, 0);
         }
     } else if (ThemeIs(L"backdrop")) {
-        // Clear Windows 11 hardware system backdrops to prevent Desktop Acrylic fallback interference
+        bool nativeAcrylic = false;
+        // Clear any previous system backdrop before selecting the material for
+        // this theme. This also prevents a stale Mica fallback from surviving a
+        // settings change.
         if (IsWin11OrGreater()) {
             int noneVal = 1; // DWMSBT_NONE
             DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &noneVal, sizeof(noneVal));
             int disableMica = 0;
             DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */, &disableMica, sizeof(disableMica));
+
+            // Native transient backdrop is Desktop Acrylic on Windows 11. It
+            // follows DWMWA_WINDOW_CORNER_PREFERENCE, unlike legacy accent
+            // Acrylic, which can render a square material surface.
+            int transientBackdrop = 3; // DWMSBT_TRANSIENTWINDOW
+            HRESULT hr = DwmSetWindowAttribute(
+                hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */,
+                &transientBackdrop, sizeof(transientBackdrop));
+            nativeAcrylic = SUCCEEDED(hr);
+            Wh_Log(L"SWS: native Acrylic backdrop hwnd=%p enabled=%d hr=0x%08X",
+                   hWnd, nativeAcrylic, (unsigned)hr);
         }
-        // SetWindowCompositionAttribute Acrylic blur behind (supported across Windows 10 and Windows 11)
-        if (g_SetWindowCompositionAttribute) {
+
+        // Keep legacy accent Acrylic for Windows 10 and unsupported Win11
+        // builds. It remains paired with the explicit region fallback.
+        if (!nativeAcrylic && g_SetWindowCompositionAttribute) {
             DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
             COLORREF bg = GetBgColor();
             ACCENT_POLICY accent = {};
@@ -12187,9 +12804,15 @@ static void ApplyThemeToWindow(HWND hWnd) {
             WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
             g_SetWindowCompositionAttribute(hWnd, &data);
         }
+        g_nativeAcrylicWindows[hWnd] = nativeAcrylic;
     }
 
-    MARGINS marGlassInset = ThemeIs(L"mica") ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
+    const bool nativeAcrylic =
+        ThemeIs(L"backdrop") && g_nativeAcrylicWindows[hWnd];
+    MARGINS marGlassInset =
+        (ThemeIs(L"mica") || nativeAcrylic)
+            ? MARGINS{-1, -1, -1, -1}
+            : MARGINS{0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(hWnd, &marGlassInset);
 
     SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
@@ -12230,6 +12853,7 @@ static void DestroyMirrorSwitchers() {
     for (HWND hMirror : g_hMirrorSwitchers) {
         g_presentationWindows.erase(hMirror);
         g_presentationRegions.erase(hMirror);
+        g_nativeAcrylicWindows.erase(hMirror);
         if (IsWindow(hMirror)) {
             ShowWindow(hMirror, SW_HIDE);
             DestroyWindow(hMirror);
@@ -12286,6 +12910,14 @@ static void ApplySwitcherRegion() {
 
 static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSource = nullptr) {
     const bool touchpadInvocation = g_isTouchpadGestureActive;
+    if (!g_isVisible && !g_isPendingShow && g_hBackdropWorker) {
+        // Retire a cancelled worker from the previous session before starting
+        // a new capture. This prevents an old result from consuming the new
+        // session's presentation budget.
+        BackdropCancelWorker();
+        WaitForSingleObject(g_hBackdropWorker, INFINITE);
+        BackdropReapWorker();
+    }
     InvalidateSwsFocusRecoverySession();
     ClearSwsSwitchAnimationSelection();
     // A new invocation supersedes a previous denied activation request.
@@ -12421,6 +13053,7 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
         cx + g_winW,
         cy + g_winH
     };
+    g_backdropPresentationResolved = false;
 
     if (!s_hWinEventHook) {
         s_hWinEventHook = SetWinEventHook(
@@ -12439,17 +13072,17 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
         );
     }
 
-    // Build the blurred backdrop now, while every SWS window is still hidden: the
-    // capture then sees the clean desktop and no SWS window can end up in its own
-    // backdrop (see PrepareBackdropBlur for the details).
-    PrepareBackdropBlur();
-
     constexpr int kRapidAltTabGraceThresholdMs = 75;
     int effectiveDelay = (!sticky && !immediate) ? ((g_settings.showDelay > 0) ? std::max(g_settings.showDelay, kRapidAltTabGraceThresholdMs) : kRapidAltTabGraceThresholdMs) : 0;
     if (effectiveDelay > 0) {
         g_isPendingShow = true;
         g_isVisible = false;
         RefreshTouchpadGestureKinds();
+        if (!g_isTouchpadGestureActive) {
+            // Let the backdrop worker use show-delay time without blocking the
+            // keyboard path. Rapid touchpad pending deliberately skips it.
+            PrepareBackdropBlur();
+        }
 
         if (ThemeIs(L"none")) {
             LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
@@ -12477,12 +13110,15 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
         if (!sticky && !g_isTouchpadGestureActive) {
             SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
         }
+        g_showDelayDeadlineTick = GetTickCount64() + effectiveDelay;
         SetTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID, effectiveDelay, NULL);
         return;
     }
 
     g_isPendingShow = false;
+    g_showDelayDeadlineTick = 0;
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
+    g_backdropPresentationResolved = false;
     if (BackdropBlurEnabled() && IsWindowVisible(g_hSwitcher)) {
         ShowWindow(g_hSwitcher, SW_HIDE);
     }
@@ -12490,8 +13126,15 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     BeginMouseUiSession();
     RefreshTouchpadGestureKinds();
 
+    // The switcher remains hidden here, so capture cannot contain its own surface.
+    // Keep this work out of the pending touchpad path above.
+    PrepareBackdropBlur();
+    const bool backdropReady = BackdropWaitForReady(
+        SWS_BACKDROP_PRESENTATION_BUDGET_MS);
+    g_backdropPresentationResolved = true;
+    g_backdropBuildRetryPending = false;
+    KillTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID);
     ApplyThemeToWindow(g_hSwitcher);
-    ApplySwitcherRegion();
 
     StartEntranceAnimation();
     SetPresentationWindowLayout(g_hSwitcher, cx, cy, g_winW, g_winH);
@@ -12514,7 +13157,7 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     // Backdrop first (opt-in), then the switcher, its overlay and the mirrors in the
     // same message: presentation must never wait on a timer, or a lost tick would leave
     // the full-screen blur plate up with no switcher on top of it.
-    ShowBackdropBlur();
+    if (backdropReady) ShowBackdropBlur();
     PresentSwitcherWindows();
 
     if (!sticky && !g_isTouchpadGestureActive) {
@@ -12525,6 +13168,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
 
 static void HideSwitcher() {
     if (g_isHidingSwitcher) return;
+    CancelTwoFingerTapDismiss();
+    ClearStickyTwoFingerTapOwnership();
     InvalidateSwsFocusRecoverySession();
     g_touchpadTwoFingerCloseActive.store(false);
     g_touchpadSwitcherActive.store(false);
@@ -12533,6 +13178,15 @@ static void HideSwitcher() {
     // candidate only after a complete lift and a fresh contact edge.
     PublishNativeSwipePolicy();
     g_isHidingSwitcher = true;
+    s_touchpadRapidPending = false;
+    s_touchpadRapidPendingTick = 0;
+    s_touchpadRapidPendingRawSerial = 0;
+    s_touchpadRapidPendingRawPhase = 0;
+    s_touchpadRapidPendingInitialIndex = -1;
+    s_touchpadRapidPendingTargetIndex = -1;
+    s_touchpadRapidPendingDirection = 0;
+    s_touchpadRapidPendingCommitted = false;
+    s_touchpadRapidRevealReanchorPending = false;
     PublishMouseHookPolicy();
     Wh_Log(L"SWS: hiding session (sticky=%d, raw=%d, tips=%d, foreground=%p)",
            g_isSticky, s_rawSessionOwned, s_rawGestureTips, GetForegroundWindow());
@@ -12804,6 +13458,8 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
 
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
+    CancelTwoFingerTapDismiss();
+    ClearStickyTwoFingerTapOwnership();
     g_touchpadTwoFingerCloseActive.store(false);
     if (!activateSelectedWindow) {
         s_touchpadCommitActivation = false;
@@ -12848,6 +13504,9 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     g_animEntranceCurrentAlpha = 1.0f;
 
     g_animExitActive = true;
+    if (g_hBackdropWnd && IsWindowVisible(g_hBackdropWnd)) {
+        BackdropStartExitFade(g_hBackdropWnd);
+    }
     PublishMouseHookPolicy();
     RefreshTouchpadGestureKinds();
     // Decreasing p at the entrance speed gives a remaining duration of 167ms*p.
@@ -14720,6 +15379,10 @@ static void QueueSwsFocusRecovery(HWND target, bool focusLost = false,
                                   bool shellRecovery = false) {
     if (!g_hSwitcher || g_animExitActive || g_isHidingSwitcher ||
         g_recoveringShellFocus) return;
+    if (StickyTwoFingerTapOwnershipLive()) {
+        RetainStickyTwoFingerTapForeground();
+        return;
+    }
     bool posted = s_swsFocusRecoveryRequest.generation == s_swsFocusRecoveryGeneration;
     if (!posted) {
         s_swsFocusRecoveryRequest = {};
@@ -14775,6 +15438,10 @@ static void RunSwsFocusRecovery(ULONG_PTR generation) {
     const auto request = s_swsFocusRecoveryRequest;
     s_swsFocusRecoveryRequest = {};
     if (!SwsFocusRecoverySessionCurrent(request) || g_recoveringShellFocus) return;
+    if (StickyTwoFingerTapOwnershipLive()) {
+        RetainStickyTwoFingerTapForeground();
+        return;
+    }
 
     if (SwsFocusRecoveryStillOwned(request)) {
         bool taskView = IsTaskViewWindow(request.shellWindow);
@@ -14841,6 +15508,12 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
         return;
     }
     if (!IsWindow(hwnd)) return;
+
+    if (event == EVENT_SYSTEM_FOREGROUND && StickyTwoFingerTapOwnershipLive() &&
+        !IsSwitcherWindow(hwnd)) {
+        RetainStickyTwoFingerTapForeground();
+        return;
+    }
 
     if ((event == EVENT_OBJECT_SHOW || event == 0x0003 /* EVENT_SYSTEM_FOREGROUND */) &&
         RawTouchpadShellSuppressionActive() && IsTaskViewWindow(hwnd)) {
@@ -15105,6 +15778,157 @@ static void ScheduleRawTouchpadShieldRelease() {
     if ((!s_rawTouchpadShieldActive && !s_rawSwipeMarkerActive) || !g_hSwitcher) return;
     s_rawTouchpadShieldReleasePending = true;
     SetTimer(g_hSwitcher, SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID, 220, NULL);
+}
+
+static void CALLBACK RapidPendingTimerProc(HWND hWnd, UINT, UINT_PTR timerId,
+                                           DWORD) {
+    if (timerId != s_touchpadRapidPendingTimerId || !s_touchpadRapidPending) {
+        return;
+    }
+    KillTimer(hWnd, timerId);
+    s_touchpadRapidPendingTimerId = 0;
+    PostMessageW(hWnd, WM_SWS_RAPID_TIMEOUT,
+                 (WPARAM)s_touchpadRapidPendingGeneration, 0);
+}
+
+static void InvalidateRapidPendingTimer() {
+    if (g_hSwitcher && s_touchpadRapidPendingTimerId) {
+        KillTimer(g_hSwitcher, s_touchpadRapidPendingTimerId);
+    }
+    s_touchpadRapidPendingTimerId = 0;
+    if (!++s_touchpadRapidPendingGeneration) ++s_touchpadRapidPendingGeneration;
+}
+
+static bool RapidTouchpadDeadlineReached(ULONGLONG uiTick) {
+    return s_touchpadRapidPendingDeadline &&
+           uiTick >= s_touchpadRapidPendingDeadline;
+}
+
+static void ArmRapidPendingTimer() {
+    if (!g_hSwitcher || !s_touchpadRapidPending) return;
+    if (s_touchpadRapidPendingTimerId) {
+        KillTimer(g_hSwitcher, s_touchpadRapidPendingTimerId);
+        s_touchpadRapidPendingTimerId = 0;
+    }
+    ULONGLONG now = GetTickCount64();
+    UINT remaining = RapidTouchpadDeadlineReached(now)
+                         ? 1u
+                         : (UINT)(s_touchpadRapidPendingDeadline - now);
+    s_touchpadRapidPendingTimerId = SetTimer(
+        g_hSwitcher, 0, remaining, RapidPendingTimerProc);
+    if (!s_touchpadRapidPendingTimerId) {
+        Wh_Log(L"SWS: rapid pending timer arm failed error=%u deadline=%llu now=%llu",
+               GetLastError(),
+               (unsigned long long)s_touchpadRapidPendingDeadline,
+               (unsigned long long)now);
+    }
+}
+
+static bool RapidTouchpadLiftObserved() {
+    if (!s_touchpadRapidPending) return false;
+    ULONGLONG state = g_touchpadRawThreeFingerState.load(std::memory_order_acquire);
+    ULONGLONG serial = RawThreeFingerStateSerial(state);
+    ULONG phase = RawThreeFingerStatePhase(state);
+    ULONGLONG stateTick = g_touchpadRawThreeFingerLastTick.load(
+        std::memory_order_acquire);
+    if (phase == SWS_RAW_THREE_PHASE_LIFTED ||
+        phase == SWS_RAW_THREE_PHASE_LOST) {
+        // A same-serial lift is the normal path. A newer serial is also a
+        // completed edge for this pending session, provided its timestamp is
+        // not older than the pending start.
+        return stateTick >= s_touchpadRapidPendingTick &&
+               (!s_touchpadRapidPendingRawSerial ||
+                serial >= s_touchpadRapidPendingRawSerial);
+    }
+    // The reader may publish its lift before the UI receives the frame. Keep
+    // the UI-side state as a fallback when the shared phase is still live.
+    return s_rawGestureTips == 0 && s_rawGestureSawThree;
+}
+
+static bool BeginRapidTouchpadPending(int initialStep, HWND invocationSource = nullptr,
+                                      ULONGLONG gestureStartTick = 0,
+                                      int physicalDirection = 0) {
+    if (!g_hSwitcher || g_isVisible || g_isPendingShow || g_animExitActive || g_isSticky) {
+        return false;
+    }
+
+    const ULONGLONG physicalStartTick = gestureStartTick;
+    const ULONGLONG startTick = GetTickCount64();
+    const ULONGLONG rawState = g_touchpadRawThreeFingerState.load(std::memory_order_acquire);
+    const ULONGLONG rawSerial = RawThreeFingerStateSerial(rawState);
+    const ULONG rawPhase = RawThreeFingerStatePhase(rawState);
+    g_isTouchpadGestureActive = true;
+    s_rawSessionOwned = true;
+    ShowSwitcher(false, false, invocationSource);
+    if (!g_isPendingShow) {
+        s_touchpadRapidPending = false;
+        s_touchpadRapidPendingTick = 0;
+        s_touchpadRapidPendingDeadline = 0;
+        s_touchpadRapidPendingRawSerial = 0;
+        s_touchpadRapidPendingRawPhase = 0;
+        s_touchpadRapidPendingInitialIndex = -1;
+        s_touchpadRapidPendingTargetIndex = -1;
+        s_touchpadRapidPendingDirection = 0;
+        s_touchpadRapidPendingCommitted = false;
+        return false;
+    }
+
+    // Start blur during the hidden detection window. Presentation still waits
+    // for the bounded budget at reveal, so it never appears late afterward.
+    PrepareBackdropBlur();
+    s_touchpadRapidPending = true;
+    s_touchpadRapidPendingTick = startTick;
+    s_touchpadRapidPendingDeadline =
+        startTick + SWS_TOUCHPAD_RAPID_PENDING_MS;
+    s_touchpadRapidPendingRawSerial = rawSerial;
+    s_touchpadRapidPendingRawPhase = rawPhase;
+    s_touchpadRapidPendingInitialIndex = g_selectedIndex;
+    s_touchpadRapidPendingDirection = initialStep ? (initialStep > 0 ? 1 : -1) :
+                                      (physicalDirection ? (physicalDirection > 0 ? 1 : -1) : 0);
+    s_touchpadRapidPendingTargetIndex = g_selectedIndex;
+    s_touchpadRapidPendingCommitted = false;
+    KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
+    g_showDelayDeadlineTick = 0;
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG uiAge = now >= startTick ? now - startTick : 0;
+    if (!s_touchpadRapidPendingDirection) {
+        s_touchpadRapidPending = false;
+        s_touchpadRapidPendingTick = 0;
+        s_touchpadRapidPendingDeadline = 0;
+        s_touchpadRapidPendingRawSerial = 0;
+        s_touchpadRapidPendingRawPhase = 0;
+        s_touchpadRapidPendingInitialIndex = -1;
+        s_touchpadRapidPendingTargetIndex = -1;
+        s_touchpadRapidPendingDirection = 0;
+        s_touchpadRapidPendingCommitted = false;
+        return false;
+    }
+    if (!g_windows.empty() && !s_touchpadRapidPendingCommitted) {
+        CycleLinear(s_touchpadRapidPendingDirection);
+        s_touchpadRapidPendingTargetIndex = g_selectedIndex;
+        s_touchpadRapidPendingCommitted = true;
+    }
+
+    ArmRapidPendingTimer();
+
+    BringWindowToTop(g_hSwitcher);
+    TapUnassignedKeyForForeground();
+    if (!ActivateRawTouchpadWindow()) {
+        ScheduleRawTouchpadForegroundRetry();
+    }
+    SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID,
+             SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
+    ULONGLONG physicalAge = physicalStartTick && now >= physicalStartTick
+                                ? now - physicalStartTick
+                                : 0;
+    Wh_Log(L"SWS: rapid touchpad pending step=%d physicalDirection=%d initial=%d target=%d committed=%d uiAge=%llu ms physicalAge=%llu ms deadline=%llu physicalStart=%llu rawSerial=%llu rawPhase=%u",
+           initialStep, physicalDirection, s_touchpadRapidPendingInitialIndex,
+           s_touchpadRapidPendingTargetIndex, s_touchpadRapidPendingCommitted,
+           (unsigned long long)uiAge, (unsigned long long)physicalAge,
+           (unsigned long long)s_touchpadRapidPendingDeadline,
+           (unsigned long long)physicalStartTick,
+           (unsigned long long)rawSerial, rawPhase);
+    return true;
 }
 
 // Raw HID controls fallback invocation and navigation. The typed native PTP
@@ -15410,16 +16234,51 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
         return;
     }
     if (event == 1 || event == 2 || event == 3) {
-        DWORD age = (DWORD)GetTickCount64() - (DWORD)GetMessageTime();
+        const ULONGLONG dispatchTick = GetTickCount64();
+        const DWORD messageTick = (DWORD)GetMessageTime();
+        DWORD age = (DWORD)dispatchTick - messageTick;
+        const bool replacingExit = g_animExitActive;
         if (age > SWS_NATIVE_TOUCHPAD_START_MAX_AGE_MS ||
             (event == 2 && !(policy & 4u)) || !NativeSwipeSourceGateActive() ||
-            g_isVisible || g_isPendingShow || g_animExitActive || g_isHidingSwitcher ||
+            (!replacingExit && (g_isVisible || g_isPendingShow)) || g_isHidingSwitcher ||
             ExplicitShellInputDown()) {
             return;
         }
+        ULONGLONG gestureStartTick = dispatchTick >= age ? dispatchTick - age : dispatchTick;
+        const bool rawReaderAvailable = g_touchpadReaderAvailable.load(std::memory_order_acquire) &&
+                                        !g_touchpadReaderStopping.load(std::memory_order_acquire);
+        const ULONGLONG rawState = g_touchpadRawThreeFingerState.load(
+            std::memory_order_acquire);
+        const ULONGLONG rawSerial = RawThreeFingerStateSerial(rawState);
+        const ULONG rawPhase = RawThreeFingerStatePhase(rawState);
+        const ULONGLONG rawStateTick = g_touchpadRawThreeFingerLastTick.load(
+            std::memory_order_acquire);
+        ULONGLONG rawStartDelta = 0;
+        if (rawStateTick >= gestureStartTick) {
+            rawStartDelta = rawStateTick - gestureStartTick;
+        } else {
+            rawStartDelta = gestureStartTick - rawStateTick;
+        }
+        const bool rawStartLive = rawReaderAvailable && rawSerial &&
+                                  rawPhase == SWS_RAW_THREE_PHASE_LIVE &&
+                                  rawStateTick && rawStartDelta <=
+                                      SWS_NATIVE_TOUCHPAD_START_MAX_AGE_MS;
+        const WCHAR* rawEvidence = !rawReaderAvailable ? L"unavailable" :
+                                    rawStartLive ? L"live" : L"stale";
+        if (!rawStartLive) {
+            Wh_Log(L"SWS: native PTP start using native fallback token=%u event=%u rawAvailable=%d rawSerial=%llu rawPhase=%u rawStateTick=%llu nativeStartTick=%llu rawStartDelta=%llu evidence=%s",
+                   token, event, rawReaderAvailable, (unsigned long long)rawSerial,
+                   rawPhase, (unsigned long long)rawStateTick,
+                   (unsigned long long)gestureStartTick,
+                   (unsigned long long)rawStartDelta, rawEvidence);
+        }
+        if (replacingExit) {
+            Wh_Log(L"SWS: fresh native touchpad start interrupts exit animation");
+            HideSwitcher();
+        }
         HWND source = GetForegroundWindow();
         s_nativeTouchpadInvocation = {token, epoch,
-            s_rawGestureSawThree && s_rawGestureTips > 0 &&
+            rawStartLive && s_rawGestureSawThree && s_rawGestureTips > 0 &&
                 GetTickCount64() - s_rawTouchpadLastFrameTick < 1000,
             event == 2};
         if (!ActivateNativeTouchpadWindow()) {
@@ -15444,28 +16303,43 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
             s_rawGestureSawThree = false;
             s_rawGestureArmed = false;
         }
-        ShowSwitcher(event == 2, true, source);
+        const bool horizontal = event != 2;
+        int initialStep = event == 3 ? 1 : -1;
+        if (g_settings.reverseScrollDirection) initialStep = -initialStep;
+        const int physicalDirection = horizontal ? (event == 3 ? 1 : -1) : 0;
+        const int rapidDirection = g_settings.reverseScrollDirection
+                                       ? -physicalDirection
+                                       : physicalDirection;
+        bool openedRapidPending = horizontal &&
+            BeginRapidTouchpadPending(
+                s_nativeTouchpadInvocation.rawAdopted ? 0 : initialStep, source,
+                gestureStartTick, rapidDirection);
+        if (!horizontal) {
+            ShowSwitcher(true, true, source);
+        }
         if (!s_nativeTouchpadInvocation.token ||
             s_nativeTouchpadInvocation.epoch != s_nativeTouchpadRelayEpoch.load() ||
-            !TouchpadHandlingEnabled() || g_touchpadReaderStopping.load() || !g_isVisible ||
+            !TouchpadHandlingEnabled() || g_touchpadReaderStopping.load() ||
+            ((!g_isVisible && !g_isPendingShow) ||
+             (horizontal && !openedRapidPending)) ||
             GetForegroundWindow() != g_hSwitcher) {
             HideSwitcher();
             return;
         }
         PromoteRawTouchpadShieldToSession();
         PublishRawSwipe();
-        if (!s_nativeTouchpadInvocation.rawAdopted && event != 2) {
-            int step = event == 3 ? 1 : -1;
-            if (g_settings.reverseScrollDirection) step = -step;
-            NavigateRawTouchpad(true, step, 0);
+        if (horizontal && !s_nativeTouchpadInvocation.rawAdopted) {
+            // Rapid mode already selected the adjacent target. Subsequent raw
+            // travel starts from that target after the hold reveal.
+            s_rawAppliedX = 0;
         }
         // The native boundary opens the switcher; it must not also apply a
         // second step after raw HID has already adopted the stroke.
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
         SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, nullptr);
-        Wh_Log(L"SWS: native PTP invoked (direction=%u token=%u epoch=%u rawAdopted=%d rawReady=%d)",
+        Wh_Log(L"SWS: native PTP invoked (direction=%u token=%u epoch=%u rawAdopted=%d rawEvidence=%s rawReady=%d rapidPending=%d)",
                event, token, epoch, s_nativeTouchpadInvocation.rawAdopted,
-               (policy & 2u) != 0);
+               rawEvidence, (policy & 2u) != 0, openedRapidPending);
         return;
     }
     if ((event != SWS_NATIVE_TOUCHPAD_END && event != SWS_NATIVE_TOUCHPAD_CANCEL) ||
@@ -15493,6 +16367,17 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     }
     int prevTips = s_rawGestureTips;
     s_rawGestureTips = (int)tips;
+
+    if (tips > 0 && prevTips == 0 && s_stickyTwoFingerTapCloseRequested) {
+        Wh_Log(L"SWS: new raw touchpad gesture retires sticky two-finger close ownership");
+        ClearStickyTwoFingerTapOwnership();
+    }
+
+    // A synthetic right-button down can arrive before the HID frame reaches
+    // this queue. Raw tap evidence wins over outside-click dismissal.
+    if (s_twoFingerTapDismissPending && RawTwoFingerTapEvidenceLive()) {
+        CancelTwoFingerTapDismiss();
+    }
 
     if (!TouchpadHandlingEnabled() ||
         !g_touchpadReaderAvailable.load()) {
@@ -15608,6 +16493,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     if (tips == 0) {
         if (closeTwoFingerTap && g_selectedIndex >= 0 &&
             g_selectedIndex < (int)g_windows.size()) {
+            if (g_isSticky) BeginStickyTwoFingerTapOwnership();
             CloseSwitcherEntry(g_selectedIndex);
             return;
         }
@@ -15655,6 +16541,23 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
 
     int x = (int)(packedPos & 0xFFFF);
     int y = (int)((packedPos >> 16) & 0xFFFF);
+    if (s_touchpadRapidRevealReanchorPending) {
+        s_touchpadRapidRevealReanchorPending = false;
+        if (prevTips == SWS_RAW_SWIPE_FINGERS) {
+            s_rawGestureAnchorX = x;
+            s_rawGestureAnchorY = y;
+            s_rawDirectionAnchorX = x;
+            s_rawDirectionAnchorY = y;
+            s_rawGestureAxis = 0;
+            s_rawVerticalTravelDir = 0;
+            s_rawAppliedX = 0;
+            s_rawRowTick = 0;
+            s_rawLastFrameX = x;
+            s_rawLastFrameY = y;
+            s_rawGestureMoved = true;
+            return;
+        }
+    }
     if (prevTips != SWS_RAW_SWIPE_FINGERS) {
         if (!s_rawGestureSawThree) {
             s_rawGestureSawThree = true;
@@ -15690,7 +16593,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             } else {
                 KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
             }
-            if (g_isPendingShow) RevealPendingSwitcher();
+            if (g_isPendingShow && !s_touchpadRapidPending) RevealPendingSwitcher();
             SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
         }
         if (s_nativeTouchpadInvocation.token) {
@@ -15714,6 +16617,36 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     if (abs(x - s_rawTapOriginX) > SWS_RAW_TAP_SLOP ||
         abs(y - s_rawTapOriginY) > SWS_RAW_TAP_SLOP) {
         s_rawGestureMoved = true;
+    }
+
+    // Rapid mode commits one adjacent neighbor immediately, then stays hidden
+    // until its UI-clock deadline. Capture timestamps can predate that start.
+    if (s_touchpadRapidPending) {
+        const ULONGLONG uiNow = GetTickCount64();
+        if (RapidTouchpadLiftObserved()) {
+            Wh_Log(L"SWS: rapid transition state=committing reason=lift captureTick=%llu uiTick=%llu pendingTick=%llu deadline=%llu",
+                   (unsigned long long)now, (unsigned long long)uiNow,
+                   (unsigned long long)s_touchpadRapidPendingTick,
+                   (unsigned long long)s_touchpadRapidPendingDeadline);
+            EndTouchpadGesture();
+            return;
+        }
+        if (!RapidTouchpadDeadlineReached(uiNow)) {
+            s_rawLastFrameX = x;
+            s_rawLastFrameY = y;
+            s_lastTouchpadScrollTick.store(uiNow, std::memory_order_release);
+            if (g_hSwitcher) {
+                SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID,
+                         SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
+            }
+            return;
+        }
+        Wh_Log(L"SWS: rapid transition state=revealing reason=deadline captureTick=%llu uiTick=%llu pendingTick=%llu deadline=%llu",
+               (unsigned long long)now, (unsigned long long)uiNow,
+               (unsigned long long)s_touchpadRapidPendingTick,
+               (unsigned long long)s_touchpadRapidPendingDeadline);
+        RevealPendingSwitcher();
+        return;
     }
 
     // A clamped or mirrored position (padding edges) arrives as a huge move between two
@@ -15799,16 +16732,21 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             want = s_rawAppliedX - 1;
         }
         int delta = want - s_rawAppliedX;
-        if (!delta) {
+        int openingDirection = delta ? delta : (dx > 0 ? 1 : -1);
+        if (!delta && sessionOpen) {
             return;
         }
         s_rawAppliedX = want;
+        bool openedRapidPending = false;
         if (!sessionOpen) {
             if (s_rawSwipePassedToWindows) return;
             // No hotkey and no Explorer grant here: make this process eligible for the
             // foreground before opening, or the commit could not activate the selection.
             s_rawSessionOwned = true;
-            BeginTouchpadGesture(0);
+            int initialStep = g_settings.reverseScrollDirection ? -openingDirection : openingDirection;
+            openedRapidPending = BeginRapidTouchpadPending(
+                initialStep, nullptr, now, openingDirection > 0 ? 1 : -1);
+            if (!openedRapidPending) BeginTouchpadGesture(0);
             if (!g_isVisible && !g_isPendingShow) return;
             PromoteRawTouchpadShieldToSession();
             PublishRawSwipe();
@@ -15819,16 +16757,21 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
                 ActivateRawTouchpadWindow();
             }
             Wh_Log(L"SWS: raw gesture opened (switcher foreground=%d)", GetForegroundWindow() == g_hSwitcher);
-            // A previous session can end with the fingers still down (idle backstop): the
-            // new session maps from where the hand is now.
-            s_rawGestureAnchorX = x;
-            s_rawGestureAnchorY = y;
-            s_rawAppliedX = 0;
+            if (openedRapidPending) {
+                // BeginRapidTouchpadPending already committed the one neighbor.
+                s_rawGestureMoved = true;
+                return;
+            } else {
+                // A previous session can end with the fingers still down (idle backstop):
+                // the new session maps from where the hand is now.
+                s_rawGestureAnchorX = x;
+                s_rawGestureAnchorY = y;
+                s_rawAppliedX = 0;
+            }
         }
         s_rawGestureMoved = true;
-        // The opening report establishes entry 0 and the new drag origin.
-        // Only an already-open session navigates, but both paths must refresh
-        // the idle timer below after promoting the touchpad shield.
+        // The opening report establishes the first direct target. An already-open
+        // session follows subsequent finger movement through spatial navigation.
         if (sessionOpen) {
             if (g_settings.reverseScrollDirection) {
                 delta = -delta;
@@ -16005,6 +16948,23 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
             return 0;
         }
+        if (command.kind == MouseCommandKind::Button) {
+            if (command.message == WM_RBUTTONDOWN && g_isVisible && !g_animExitActive) {
+                if (IsSwitcherWindow(WindowFromPoint(command.point))) return 0;
+                bool rawEvidence = RawTwoFingerTapEvidenceLive();
+                Wh_Log(L"SWS: outside right-button command rawEvidence=%d closeActive=%d foreground=%p",
+                       rawEvidence,
+                       g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire),
+                       GetForegroundWindow());
+                s_twoFingerTapDismissPending = true;
+                SetTimer(hWnd, SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_TIMER_ID,
+                         SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_MS, NULL);
+                if (rawEvidence) {
+                    CancelTwoFingerTapDismiss();
+                }
+            }
+            return 0;
+        }
         if (command.kind == MouseCommandKind::Wheel) {
             if (!g_isVisible || g_animExitActive) return 0;
             s_lastTouchpadScrollTick.store(command.tick, std::memory_order_release);
@@ -16024,6 +16984,45 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     if (uMsg == WM_SWS_NATIVE_TOUCHPAD) {
         if (hWnd == g_hSwitcher) HandleNativeTouchpadBoundary((DWORD)wParam, (DWORD)lParam);
+        return 0;
+    }
+    if (uMsg == WM_SWS_BACKDROP_READY) {
+        if (hWnd == g_hSwitcher) {
+            HandleBackdropBuildResult(reinterpret_cast<BackdropBuildResult*>(lParam));
+        } else {
+            auto* result = reinterpret_cast<BackdropBuildResult*>(lParam);
+            if (result) {
+                BackdropFreeOutput(&result->output);
+                delete result;
+            }
+        }
+        return 0;
+    }
+    if (uMsg == WM_SWS_RAPID_TIMEOUT) {
+        DWORD generation = (DWORD)wParam;
+        if (!s_touchpadRapidPending ||
+            generation != s_touchpadRapidPendingGeneration) {
+            Wh_Log(L"SWS: ignored stale rapid timeout generation=%u current=%u pending=%d",
+                   generation, s_touchpadRapidPendingGeneration,
+                   s_touchpadRapidPending);
+            return 0;
+        }
+        ULONGLONG now = GetTickCount64();
+        if (!RapidTouchpadDeadlineReached(now)) {
+            ArmRapidPendingTimer();
+            return 0;
+        }
+        if (RapidTouchpadLiftObserved()) {
+            Wh_Log(L"SWS: rapid transition state=committing reason=timeout-lift uiTick=%llu deadline=%llu",
+                   (unsigned long long)now,
+                   (unsigned long long)s_touchpadRapidPendingDeadline);
+            EndTouchpadGesture();
+        } else {
+            Wh_Log(L"SWS: rapid transition state=revealing reason=timeout uiTick=%llu deadline=%llu",
+                   (unsigned long long)now,
+                   (unsigned long long)s_touchpadRapidPendingDeadline);
+            RevealPendingSwitcher();
+        }
         return 0;
     }
     if (uMsg == WM_SWS_ICON_READY) {
@@ -16093,7 +17092,44 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             return 0;
         }
 
+        if (wParam == SWS_BACKDROP_RETRY_TIMER_ID) {
+            KillTimer(hWnd, SWS_BACKDROP_RETRY_TIMER_ID);
+            if ((g_isVisible || g_isPendingShow) && BackdropBlurEnabled()) {
+                RequestBackdropBlurBuild();
+            }
+            return 0;
+        }
+
+        if (wParam == SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_TIMER_ID) {
+            KillTimer(hWnd, SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_TIMER_ID);
+            if (!s_twoFingerTapDismissPending) return 0;
+            s_twoFingerTapDismissPending = false;
+            bool rawEvidence = RawTwoFingerTapEvidenceLive();
+            Wh_Log(L"SWS: two-finger dismissal classify rawEvidence=%d foreground=%p",
+                   rawEvidence, GetForegroundWindow());
+            if (g_isVisible && !g_animExitActive && !rawEvidence) {
+                StartExitAnimation(false);
+            }
+            return 0;
+        }
+
+        if (wParam == SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID) {
+            ClearStickyTwoFingerTapOwnership();
+            Wh_Log(L"SWS: sticky two-finger close ownership expired");
+            return 0;
+        }
+
         if (wParam == SWS_SHOW_DELAY_TIMER_ID) {
+            if (s_touchpadRapidPending) {
+                Wh_Log(L"SWS: ignored stale normal show-delay timer during rapid pending");
+                return 0;
+            }
+            ULONGLONG now = GetTickCount64();
+            if (g_showDelayDeadlineTick && now < g_showDelayDeadlineTick) {
+                SetTimer(hWnd, SWS_SHOW_DELAY_TIMER_ID,
+                         (UINT)(g_showDelayDeadlineTick - now), NULL);
+                return 0;
+            }
             RevealPendingSwitcher();
             return 0;
         }
@@ -16708,6 +17744,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         RefreshTouchpadGestureKinds();
         return 0;
     case WM_SWS_SETTINGS_CHANGED:
+        ClearStickyTwoFingerTapOwnership();
         if (g_isVisible || g_isPendingShow) HideSwitcher();
         CancelRawTouchpadStroke();
         s_rawTouchpadLastFrameTick = 0;
@@ -16965,6 +18002,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewActive = (HWND)lParam;
             HWND hCheck = hNewActive ? hNewActive : GetForegroundWindow();
+            if (StickyTwoFingerTapOwnershipLive()) {
+                RetainStickyTwoFingerTapForeground();
+                return 0;
+            }
             if (RawTouchpadShellSuppressionActive() && hCheck && IsNativeSwitcherWindow(hCheck)) {
                 QueueSwsFocusRecovery(hCheck, false, false, true);
                 return 0;
@@ -17013,6 +18054,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewFocus = (HWND)wParam;
             HWND hCheck = hNewFocus ? hNewFocus : GetForegroundWindow();
+            if (StickyTwoFingerTapOwnershipLive()) {
+                RetainStickyTwoFingerTapForeground();
+                return 0;
+            }
             if (RawTouchpadShellSuppressionActive() && hCheck && IsNativeSwitcherWindow(hCheck)) {
                 QueueSwsFocusRecovery(hCheck, false, false, true);
                 return 0;
@@ -17063,6 +18108,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     case WM_CLOSE: return 0;
     case WM_DESTROY:
         if (hWnd != g_hSwitcher) return 0;
+        ClearStickyTwoFingerTapOwnership();
         FinishAnimations();
         StopAnimationTicker();
         FreeCachedBuffers();
@@ -18833,6 +19879,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 
 thread_exit:
     StopMouseHookThread();
+    ClearStickyTwoFingerTapOwnership();
     g_touchpadTwoFingerCloseActive.store(false);
     RecoverLegacyTwoFingerTapOverride(false);
     StopWindowIconWorker();
@@ -18847,6 +19894,7 @@ thread_exit:
     g_touchpadTwoFingerCloseActive.store(false);
     RestoreTwoFingerTapOverrideBeforeExit();
     g_touchpadRawTwoFingerTapMouseState.store(0);
+    g_touchpadRawTwoFingerTapConsumedSerial.store(0, std::memory_order_release);
     s_rawTwoFingerMouseButtonSerial = 0;
     s_rawTwoFingerMouseButtonDeadline = 0;
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID);
@@ -18870,6 +19918,7 @@ thread_exit:
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
     ReleaseTouchpadGestureTakeover();
     g_presentationRegions.clear();
+    g_nativeAcrylicWindows.clear();
     g_presentationWindows.clear();
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
     if (g_hFont) { DeleteObject(g_hFont); g_hFont = NULL; }
@@ -19031,8 +20080,10 @@ static void UpdateRawTwoFingerTapMouseEvidence(TouchpadReaderStroke& stroke,
         // Every fresh stroke retires the prior release tail, including a new
         // outside tap after dismissal. Windows owns that new stroke normally.
         g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        g_touchpadRawTwoFingerTapConsumedSerial.store(0, std::memory_order_release);
         stroke.twoFingerTapMouseSerial = 0;
-        if (tips == 2 && g_touchpadTwoFingerCloseActive.load()) {
+        bool closeActive = g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire);
+        if (tips == 2 && closeActive) {
             DWORD serial = ++g_touchpadRawTwoFingerNextSerial;
             if (!serial) serial = ++g_touchpadRawTwoFingerNextSerial;
             stroke.twoFingerTapMouseSerial = serial;
@@ -19042,6 +20093,8 @@ static void UpdateRawTwoFingerTapMouseEvidence(TouchpadReaderStroke& stroke,
             g_touchpadRawTwoFingerTapMouseState.store(
                 EncodeRawTwoFingerTapMouseState(serial, now + SWS_RAW_TAP_MAX_MS),
                 std::memory_order_release);
+            Wh_Log(L"SWS: two-finger raw start serial=%u closeActive=%d pos=%d,%d",
+                   serial, closeActive, x, y);
         }
     } else if (stroke.twoFingerTapMouseSerial) {
         bool tap = now - stroke.twoFingerTapStartTick <= SWS_RAW_TAP_MAX_MS &&
@@ -19049,6 +20102,9 @@ static void UpdateRawTwoFingerTapMouseEvidence(TouchpadReaderStroke& stroke,
                    (!tips || (abs(x - stroke.twoFingerTapOriginX) <= SWS_RAW_TAP_SLOP &&
                               abs(y - stroke.twoFingerTapOriginY) <= SWS_RAW_TAP_SLOP));
         if (!tap) {
+            Wh_Log(L"SWS: two-finger raw tap invalid serial=%u tips=%u age=%llu",
+                   stroke.twoFingerTapMouseSerial, tips,
+                   (unsigned long long)(now - stroke.twoFingerTapStartTick));
             stroke.twoFingerTapMouseSerial = 0;
             g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
         } else if (tips == 0) {
@@ -19062,6 +20118,8 @@ static void UpdateRawTwoFingerTapMouseEvidence(TouchpadReaderStroke& stroke,
                                                           now + SWS_RAW_TWO_TAP_MOUSE_GRACE_MS),
                     std::memory_order_acq_rel);
             }
+            Wh_Log(L"SWS: two-finger raw lift serial=%u grace=%u",
+                   stroke.twoFingerTapMouseSerial, SWS_RAW_TWO_TAP_MOUSE_GRACE_MS);
             stroke.twoFingerTapMouseSerial = 0;
         }
     }
@@ -19083,6 +20141,7 @@ static void TouchpadReaderSetAvailable(bool available) {
         }
         ClearRawSwipeMarkerPropertyFromReader();
         g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        g_touchpadRawTwoFingerTapConsumedSerial.store(0, std::memory_order_release);
         if (activeStroke) *activeStroke = {};
         g_touchpadActiveDevice = nullptr;
     }
