@@ -2,7 +2,7 @@
 // @id              explorer-zebra-stripes
 // @name            Explorer List Zebra Stripes
 // @description     Add stripes for Details and List items in File Explorer
-// @version         0.14.1
+// @version         0.14.2
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -92,6 +92,7 @@ constexpr int kMaxSupportedDpi = 768;
 constexpr int kCompactRowMinHeight = 19;  // At kReferenceDpi.
 constexpr int kCompactRowMaxHeight = 52;  // At kReferenceDpi.
 constexpr int kMaxAncestryDepth = 8;
+constexpr int kMaxWindowAncestryDepth = 16;
 constexpr int kMaxIdentityCodeUnits = 2048; // Virtual shell names may exceed MAX_PATH.
 // Every eligible row is at most 52 logical pixels high, even at maximum DPI.
 // Keep a defensive cap if the row-classification contract ever changes.
@@ -106,6 +107,11 @@ constexpr DWORD kThemeEventProbeMs = 200;
 constexpr DWORD kFileNameAtomProbeMs = 250;
 constexpr DWORD kParentTreeCacheMs = 250;
 constexpr DWORD kResizeHistoryMs = 5000;
+// Smooth scrolling can continue to paint after the input message was handled.
+constexpr DWORD kScrollPaintGraceMs = 750;
+// WM_PAINT normally separates batches; these cover sent/nonstandard paints.
+constexpr DWORD kStripePaintIdleGapMs = 50;
+constexpr int kStripePaintIndexWrap = 8;
 constexpr size_t kWidthHistorySlots = 128;
 constexpr size_t kParentHistorySlots = 32;
 static_assert((kWidthHistorySlots & (kWidthHistorySlots - 1)) == 0);
@@ -244,6 +250,11 @@ thread_local bool g_inColumnDrag = false;
 thread_local bool g_repaintOnRelease = false;
 
 thread_local unsigned g_dragGeneration = 0;
+// These are only used by the Explorer UI thread which dispatches/paints a view.
+// No per-item message processing or additional window hooks are required.
+thread_local unsigned g_paintPass = 1;
+thread_local DWORD g_lastScrollMessage = 0;
+thread_local bool g_scrollbarDrag = false;
 std::atomic<unsigned> g_generation{1};
 // Small, allocation-free per-thread caches. All entries are non-owning.
 // The generation and short expiry avoid retaining stale tree classification
@@ -263,6 +274,7 @@ struct ParentTreeHistory {
     unsigned generation;
     bool inTree;
     const void* listScope;
+    const void* scopeContext;
 };
 // Per-thread row geometry history.
 thread_local RowWidthHistory g_widthHistory[kWidthHistorySlots]{};
@@ -596,10 +608,11 @@ bool IsCompactListItemHeight(const RECT& row, int dpi) {
 // The parent cache is shared by the tree filter and parity resolver, avoiding
 // another DirectUI ancestry walk per painted row.
 bool IsInNavigationTree(void* element, DWORD now, unsigned generation,
-                        const void** listScope) {
+                        const void** listScope, const void** scopeContext) {
     void* first = g_parent(element);
     if (!first) {
         *listScope = nullptr;
+        *scopeContext = nullptr;
         return false;
     }
     const auto key = reinterpret_cast<std::uintptr_t>(first);
@@ -607,10 +620,12 @@ bool IsInNavigationTree(void* element, DWORD now, unsigned generation,
     if (slot.parent == first && slot.generation == generation &&
         now - slot.tick < kParentTreeCacheMs) {
         *listScope = slot.listScope;
+        *scopeContext = slot.scopeContext;
         return slot.inTree;
     }
     bool inTree = false;
     const void* owner = first;
+    const void* ownerParent = nullptr;
     void* p = first;
     for (int i = 0; p && i < kMaxAncestryDepth; ++i) {
         const int role = g_role(p);
@@ -620,57 +635,115 @@ bool IsInNavigationTree(void* element, DWORD now, unsigned generation,
         }
         if (role == ROLE_SYSTEM_LIST) {
             owner = p;
+            // Only one extra parent lookup per 250 ms ancestry-cache miss.
+            // A reallocated list at the same address often has a new owner.
+            ownerParent = g_parent(p);
             break;
         }
         void* next = g_parent(p);
+        if (p == first) ownerParent = next;
         if (next == p) break;
         p = next;
     }
-    slot = {first, now, generation, inTree, owner};
+    slot = {first, now, generation, inTree, owner, ownerParent};
     *listScope = owner;
+    *scopeContext = ownerParent;
     return inTree;
 }
 
-// Element::GetIndex describes DirectUI's *visual* children, and may be
-// reassigned as smooth scrolling realizes/recycles rows. Never use it as the
-// sole stripe identity: doing so makes the same file alternate light/dark
-// while a scroll thumb is being dragged.
-//
-// Instead, keep the original alternating ordinal as the INITIAL assignment
-// for a file and remember it by its displayed name within the owning list.
-// A matching file keeps this parity despite later GetIndex changes. Cache
-// misses use the current view's parity correction learned from cache hits,
-// so newly realized rows stay aligned with their previously painted neighbors.
-// This stores only a 64-bit text fingerprint, not file paths or strings.
-// All state is bounded, has no paint-time heap allocations, and is reset on
-// settings reload. A 4-way set-associative table limits collision eviction.
+// GetIndex is viewport-relative in some Explorer builds. Reusing the raw
+// index while scrolling flips the color of a file; blindly retaining each
+// file's old parity breaks alternation after sorting/inserting/deleting rows.
+// Use the scope's current index-to-parity bias as the authority for ordinary
+// paints. Only scrolling is allowed to re-anchor that bias from a cached file.
+// A visible duplicate name is marked ambiguous instead of being forced to
+// share the same cached parity. No filenames, paths or paint-time allocations.
 struct StableStripeEntry {
     const void* scope = nullptr;
     std::uint64_t nameHash = 0;
     unsigned generation = 0;
+    unsigned scopeSerial = 0;
     DWORD lastUsed = 0;
+    unsigned seenPaint = 0;
+    int seenIndex = -1;
     BYTE parity = 0;
+    bool ambiguous = false;
 };
 struct StripeScopeBias {
     const void* scope = nullptr;
+    const void* context = nullptr;
     unsigned generation = 0;
+    unsigned serial = 0;
+    std::uint64_t viewEpoch = 0;
     DWORD lastUsed = 0;
+    DWORD threadId = 0;
+    unsigned paintPass = 0;
+    unsigned paintSerial = 0;
+    int lastIndex = -1;
     BYTE bias = 0;
+    bool anchoredThisPaint = false;
 };
-// Retain the 32K-entry table: reducing its capacity would evict file identities
-// sooner in large folders and could reintroduce a stripe flip on scroll-back.
-// ~1 MiB in Explorer, static storage, no allocations or strings per row.
+// Keep the 32K-entry, 4-way cache for large directories. The scope serial
+// prevents an evicted scope's old entries from matching a newly reused slot.
 constexpr size_t kStripeCacheSets = 8192;
 constexpr size_t kStripeWays = 4;
 constexpr size_t kScopeSlots = 64;
+static_assert((kStripeCacheSets & (kStripeCacheSets - 1)) == 0);
 SRWLOCK g_stripeIdentityLock = SRWLOCK_INIT;
 std::array<StableStripeEntry, kStripeCacheSets * kStripeWays> g_stripeEntries{};
 std::array<StripeScopeBias, kScopeSlots> g_stripeBiases{};
+unsigned g_nextScopeSerial = 0; // Protected by g_stripeIdentityLock.
 std::atomic<int> g_identityFallbackSamples{0};
-// Nearly all rows on an Explorer UI thread belong to the same list. Cache the
-// previous bias slot's INDEX (not a pointer): the actual entry is always
-// validated under g_stripeIdentityLock before use, even after eviction/reset.
+// The cached index is always revalidated under the global identity lock.
 thread_local size_t g_recentBiasSlot = kScopeSlots;
+
+// The folder-view HWND has its own epoch, so different Explorer tabs on the
+// same UI thread don't invalidate each other's stripe identities. Window
+// properties disappear with the HWND and handle address reuse safely.
+// No Shell COM queries or paint-time allocations are necessary.
+constexpr PCWSTR kFolderViewEpochProperty =
+    L"Windhawk.ExplorerZebraStripes.FolderViewEpoch";
+std::atomic<std::uintptr_t> g_nextFolderViewEpoch{0};
+thread_local std::uintptr_t g_fallbackViewEpoch = 0;
+thread_local std::uintptr_t g_paintViewEpoch = 0;
+
+std::uintptr_t NextFolderViewEpoch() {
+    return g_nextFolderViewEpoch.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
+std::uintptr_t FallbackFolderViewEpoch() {
+    if (!g_fallbackViewEpoch)
+        g_fallbackViewEpoch = NextFolderViewEpoch();
+    return g_fallbackViewEpoch;
+}
+
+std::uintptr_t EpochForFolderView(HWND hwnd) {
+    if (!hwnd) return 0;
+    auto epoch = reinterpret_cast<std::uintptr_t>(
+        GetPropW(hwnd, kFolderViewEpochProperty));
+    if (epoch) return epoch;
+    epoch = NextFolderViewEpoch();
+    return SetPropW(hwnd, kFolderViewEpochProperty,
+                    reinterpret_cast<HANDLE>(epoch)) ? epoch : 0;
+}
+
+// Called only for WM_PAINT, never once per item. The paint callback can read
+// g_paintViewEpoch directly without looking at its potentially offscreen HDC.
+HWND FolderViewAncestor(HWND hwnd) {
+    HWND root = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+    wchar_t rootClass[64]{};
+    if (!root || !GetClassNameW(root, rootClass, ARRAYSIZE(rootClass)) ||
+        _wcsicmp(rootClass, L"CabinetWClass") != 0)
+        return nullptr;
+    for (int i = 0; hwnd && i < kMaxWindowAncestryDepth;
+         ++i, hwnd = GetParent(hwnd)) {
+        wchar_t cls[64]{};
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+            _wcsicmp(cls, L"SHELLDLL_DefView") == 0)
+            return hwnd;
+    }
+    return nullptr;
+}
 
 std::uint64_t HashFileName(PCWSTR name) {
     if (!name || !*name) return 0;
@@ -698,8 +771,7 @@ std::uint64_t HashElementName(void* element, ContentStringFn getter) {
 
 std::uint64_t GetRowIdentity(void* element, DWORD now) {
     // DirectUI's FileName child is preferred over the parent row's accessible
-    // name: it identifies the actual file even if the parent reports a generic
-    // listitem label or a state-dependent accessibility description.
+    // name: it identifies the file better than a state-dependent row label.
     if (g_findDescendent && g_strToID) {
         ATOM atom = g_fileNameAtom.load(std::memory_order_acquire);
         if (!atom) {
@@ -724,12 +796,15 @@ std::uint64_t GetRowIdentity(void* element, DWORD now) {
     return HashElementName(element, g_getAccName);
 }
 
-// Call only for real file-list rows, after navigation/tree/height checks.
-// The cache stores BOTH stripe and non-stripe assignments, so an old white
-// item cannot suddenly become dark as DirectUI shifts its visual indices.
-int StableRowParity(void* element, const void* scope, int visualIndex,
+// Call only after geometry/tree checks; both striped and unstriped rows are
+// needed to detect changes in order. A normal repaint adjusts stale entries
+// to the current order immediately. During scrolling, cached items establish
+// the same offset for the entire paint batch, preserving per-file stripes.
+int StableRowParity(void* element, const void* scope,
+                    const void* scopeContext, int visualIndex,
                     DWORD now, unsigned generation) {
-    const std::uint64_t name = GetRowIdentity(element, now);
+    if (visualIndex < 0) return -1;
+    const std::uint64_t name = scope ? GetRowIdentity(element, now) : 0;
     if (!name || !scope) {
         if (g_diagnostics.load(std::memory_order_relaxed)) {
             const int n = g_identityFallbackSamples.fetch_add(
@@ -738,65 +813,120 @@ int StableRowParity(void* element, const void* scope, int visualIndex,
                               L"(sample=%d, view=%d, index=%d); raw-index fallback",
                               n, scope != nullptr, visualIndex);
         }
-        return visualIndex < 0 ? -1 : (visualIndex & 1);
+        if (!scope) return visualIndex & 1;
+        // With no name, use the current view bias instead of an unrelated
+        // raw index. Other named rows still establish scroll continuity.
+    }
+    // WM_PAINT supplies the exact view. Internal paints use the last view
+    // observed on this UI thread, without any per-row Window or Shell call.
+    const std::uint64_t viewEpoch = g_paintViewEpoch ?
+        g_paintViewEpoch : FallbackFolderViewEpoch();
+    AcquireSRWLockExclusive(&g_stripeIdentityLock);
+    StripeScopeBias* bias = nullptr;
+    if (g_recentBiasSlot < kScopeSlots) {
+        auto& candidate = g_stripeBiases[g_recentBiasSlot];
+        if (candidate.scope == scope && candidate.context == scopeContext &&
+            candidate.generation == generation &&
+            candidate.viewEpoch == viewEpoch)
+            bias = &candidate;
+    }
+    if (!bias) {
+        StripeScopeBias* victim = nullptr;
+        for (auto& b : g_stripeBiases) {
+            if (b.scope == scope && b.context == scopeContext &&
+                b.generation == generation && b.viewEpoch == viewEpoch) {
+                bias = &b;
+                break;
+            }
+            if (!victim || !b.scope || b.generation != generation ||
+                (b.scope == scope &&
+                 (b.context != scopeContext || b.viewEpoch != viewEpoch)) ||
+                (victim->scope && victim->generation == generation &&
+                 static_cast<DWORD>(now - b.lastUsed) >
+                 static_cast<DWORD>(now - victim->lastUsed)))
+                victim = &b;
+        }
+        if (!bias) {
+            bias = victim;
+            // A new scope starts at the view's normal odd/even index phase.
+            // The next observed scroll can learn its viewport-relative offset.
+            const unsigned serial = ++g_nextScopeSerial ? g_nextScopeSerial
+                                                         : ++g_nextScopeSerial;
+            *bias = {};
+            bias->scope = scope;
+            bias->context = scopeContext;
+            bias->generation = generation;
+            bias->serial = serial;
+            bias->viewEpoch = viewEpoch;
+        }
+        g_recentBiasSlot = static_cast<size_t>(bias - g_stripeBiases.data());
+    }
+    const DWORD previous = bias->lastUsed;
+    const DWORD threadId = GetCurrentThreadId();
+    const bool newPaint = bias->threadId != threadId ||
+        bias->paintPass != g_paintPass || !previous ||
+        now - previous >= kStripePaintIdleGapMs ||
+        (bias->lastIndex >= kStripePaintIndexWrap &&
+         visualIndex <= bias->lastIndex - kStripePaintIndexWrap);
+    if (newPaint) {
+        bias->threadId = threadId;
+        bias->paintPass = g_paintPass;
+        ++bias->paintSerial;
+        if (!bias->paintSerial) ++bias->paintSerial;
+        bias->anchoredThisPaint = false;
+    }
+    bias->lastUsed = now;
+    bias->lastIndex = visualIndex;
+    if (!name) {
+        const int parity = (visualIndex & 1) ^ bias->bias;
+        ReleaseSRWLockExclusive(&g_stripeIdentityLock);
+        return parity;
     }
     const std::uintptr_t s = reinterpret_cast<std::uintptr_t>(scope);
     const size_t set = static_cast<size_t>(
         (name ^ (name >> 32) ^ (s >> 4) ^ (s >> 17)) & (kStripeCacheSets - 1));
-    AcquireSRWLockExclusive(&g_stripeIdentityLock);
     StableStripeEntry* entry = nullptr;
     StableStripeEntry* victim = nullptr;
     for (size_t way = 0; way < kStripeWays; ++way) {
         auto& e = g_stripeEntries[set * kStripeWays + way];
         if (e.scope == scope && e.nameHash == name &&
-            e.generation == generation) {
+            e.generation == generation && e.scopeSerial == bias->serial) {
             entry = &e;
             break;
         }
         if (!victim || e.generation != generation || !e.scope ||
+            (e.scope == scope && e.scopeSerial != bias->serial) ||
             (victim->scope && victim->generation == generation &&
-             static_cast<LONG>(now - e.lastUsed) >
-             static_cast<LONG>(now - victim->lastUsed))) {
+             static_cast<DWORD>(now - e.lastUsed) >
+             static_cast<DWORD>(now - victim->lastUsed)))
             victim = &e;
-        }
     }
-    StripeScopeBias* bias = nullptr;
-    // Most calls take this O(1) fast path instead of scanning 64 scopes.
-    if (g_recentBiasSlot < kScopeSlots) {
-        auto& candidate = g_stripeBiases[g_recentBiasSlot];
-        if (candidate.scope == scope && candidate.generation == generation)
-            bias = &candidate;
+    // The scroll signal comes from our existing DispatchMessageW hook. Only
+    // during a scroll can a uniformly shifted set of cached indices change
+    // the viewport bias. Otherwise sorting, deletion and insertion must
+    // *correct* the old assignments rather than endlessly moving the bias.
+    const bool scrolling = g_lastScrollMessage &&
+        now - g_lastScrollMessage < kScrollPaintGraceMs;
+    if (entry && !entry->ambiguous && scrolling &&
+        !bias->anchoredThisPaint && entry->seenPaint != bias->paintSerial) {
+        bias->bias = static_cast<BYTE>(entry->parity ^ (visualIndex & 1));
+        bias->anchoredThisPaint = true;
     }
-    if (!bias) {
-        StripeScopeBias* biasVictim = nullptr;
-        for (auto& b : g_stripeBiases) {
-            if (b.scope == scope && b.generation == generation) {
-                bias = &b;
-                break;
-            }
-            if (!biasVictim || !b.scope || b.generation != generation ||
-                (biasVictim->scope && biasVictim->generation == generation &&
-                 static_cast<DWORD>(now - b.lastUsed) >
-                 static_cast<DWORD>(now - biasVictim->lastUsed)))
-                biasVictim = &b;
-        }
-        if (!bias) {
-            bias = biasVictim;
-            *bias = {scope, generation, now, 0};
-        }
-        g_recentBiasSlot = static_cast<size_t>(bias - g_stripeBiases.data());
-    }
-    bias->lastUsed = now;
-    int parity = -1;
+    const BYTE parity = static_cast<BYTE>((visualIndex & 1) ^ bias->bias);
     if (entry) {
-        // The identity wins over ANY transient change in GetIndex.
-        parity = entry->parity;
+        // Two different row positions displaying the same name during one
+        // paint indicate ambiguous search results. Do not let those distinct
+        // files repeatedly flip one shared cache entry's parity.
+        if (entry->seenPaint == bias->paintSerial &&
+            entry->seenIndex != visualIndex)
+            entry->ambiguous = true;
+        entry->parity = parity;
         entry->lastUsed = now;
-        if (visualIndex >= 0)
-            bias->bias = static_cast<BYTE>(parity ^ (visualIndex & 1));
-    } else if (visualIndex >= 0) {
-        parity = (visualIndex & 1) ^ bias->bias;
-        *victim = {scope, name, generation, now, static_cast<BYTE>(parity)};
+        entry->seenPaint = bias->paintSerial;
+        entry->seenIndex = visualIndex;
+    } else {
+        *victim = {scope, name, generation, bias->serial, now,
+                   bias->paintSerial, visualIndex, parity, false};
     }
     ReleaseSRWLockExclusive(&g_stripeIdentityLock);
     return parity;
@@ -1119,9 +1249,11 @@ void PaintBackgroundHook(void* element, HDC dc, void* value,
     const unsigned generation = g_generation.load(std::memory_order_relaxed);
     SyncDragGeneration(generation);
     const void* listScope = nullptr;
-    if (IsInNavigationTree(element, now, generation, &listScope)) return;
-    const int stableParity = StableRowParity(element, listScope, index,
-                                             now, generation);
+    const void* scopeContext = nullptr;
+    if (IsInNavigationTree(element, now, generation, &listScope,
+                           &scopeContext)) return;
+    const int stableParity = StableRowParity(element, listScope, scopeContext,
+                                             index, now, generation);
     if (stableParity < 0 ||
         stableParity != g_parity.load(std::memory_order_relaxed)) return;
     // Maintain per-row history even when the mouse isn't down. The first
@@ -1196,7 +1328,62 @@ void RepaintAfterDrag(HWND sender) {
 // first, then invalidate the affected Explorer window if a drag just ended.
 
 LRESULT WINAPI DispatchMessageHook(const MSG* msg) {
+    const std::uintptr_t previousPaintViewEpoch = g_paintViewEpoch;
+    if (msg && msg->message == WM_PAINT) {
+        // One ancestor walk per posted paint, not per DirectUI row. This
+        // distinguishes tabs even when they share an Explorer UI thread.
+        const HWND view = FolderViewAncestor(msg->hwnd);
+        g_paintViewEpoch = EpochForFolderView(view);
+        if (g_paintViewEpoch)
+            g_fallbackViewEpoch = g_paintViewEpoch;
+    }
+    // Delimit a batch before Explorer runs its paint callbacks, rather than
+    // resetting the stripe bias for each row in the middle of the batch.
+    if (msg) {
+        const UINT message = msg->message;
+        if (message == WM_PAINT) {
+            ++g_paintPass;
+            if (!g_paintPass) ++g_paintPass;
+        } else if (message == WM_VSCROLL || message == WM_HSCROLL ||
+                   message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL ||
+                   message == WM_POINTERWHEEL || message == WM_POINTERHWHEEL ||
+                   message == WM_GESTURE ||
+                   (message == WM_KEYDOWN &&
+                    (msg->wParam == VK_UP || msg->wParam == VK_DOWN ||
+                     msg->wParam == VK_NEXT || msg->wParam == VK_PRIOR ||
+                     msg->wParam == VK_HOME || msg->wParam == VK_END))) {
+            g_lastScrollMessage = GetTickCount();
+        } else if (message == WM_LBUTTONDOWN) {
+            // Clicking a column heading to sort must terminate scroll grace.
+            g_lastScrollMessage = 0;
+            g_scrollbarDrag = false;
+            if (msg->hwnd) {
+                wchar_t cls[32]{};
+                if (GetClassNameW(msg->hwnd, cls, ARRAYSIZE(cls)) &&
+                    _wcsicmp(cls, L"ScrollBar") == 0) {
+                    g_scrollbarDrag = true;
+                } else {
+                    // Native scrollbar thumb messages may be sent rather than
+                    // dispatched. Detect thumb drags once at mouse-down only.
+                    SCROLLBARINFO info{};
+                    info.cbSize = sizeof(info);
+                    if ((GetScrollBarInfo(msg->hwnd, OBJID_VSCROLL, &info) &&
+                         PtInRect(&info.rcScrollBar, msg->pt)) ||
+                        (GetScrollBarInfo(msg->hwnd, OBJID_HSCROLL, &info) &&
+                         PtInRect(&info.rcScrollBar, msg->pt)))
+                        g_scrollbarDrag = true;
+                }
+            }
+        } else if (message == WM_MOUSEMOVE && g_scrollbarDrag &&
+                   (msg->wParam & MK_LBUTTON)) {
+            g_lastScrollMessage = GetTickCount();
+        } else if (message == WM_LBUTTONUP || message == WM_CAPTURECHANGED ||
+                   message == WM_CANCELMODE) {
+            g_scrollbarDrag = false;
+        }
+    }
     LRESULT result = g_dispatchOriginal(msg);
+    g_paintViewEpoch = previousPaintViewEpoch;
     if (!msg) return result;
     const UINT m = msg->message;
     SyncDragGeneration(g_generation.load(std::memory_order_relaxed));
@@ -1240,9 +1427,10 @@ bool IsFolderDefView(HWND hwnd) {
     return pid == GetCurrentProcessId();
 }
 
-// The sentinel is on a window-creation path, never on DispatchMessageW.
-// It does no allocation or synchronous hook installation on Explorer's UI
-// thread. Its only job is to queue the one-time activation on a folder window.
+// Before activation this hook queues the first folder's painter. Afterwards
+// it only stamps new SHELLDLL_DefView windows so cached row identities from
+// a previous folder cannot be mistaken for those in a reused DirectUI tree.
+// No synchronous hook installation or Shell lookup runs on the UI thread.
 VOID CALLBACK ActivateOnWorker(PTP_CALLBACK_INSTANCE, void*, PTP_WORK);
 void QueueFolderActivation() {
     AcquireSRWLockExclusive(&g_activationLock);
@@ -1280,6 +1468,10 @@ HWND WINAPI CreateWindowExWHook(DWORD exStyle, LPCWSTR className,
             GetWindowThreadProcessId(hwnd, &pid);
             if (pid == GetCurrentProcessId()) QueueFolderActivation();
         } else if (IsFolderDefView(hwnd)) {
+            // New view, new identity; this property is attached to the HWND,
+            // not all tabs on its owning Explorer UI thread.
+            const auto epoch = EpochForFolderView(hwnd);
+            if (epoch) g_fallbackViewEpoch = epoch;
             QueueFolderActivation();
         }
     }
@@ -1362,13 +1554,12 @@ bool InstallFolderPainter() {
     }
     if (g_stopping.load(std::memory_order_acquire)) return false;
 
-    // Apply all changes together, including retiring the creation sentinel.
-    // Wh_ApplyHookOperations is slow, hence the worker instead of Explorer UI.
+    // Keep the very cheap window-creation sentinel to notice subsequent
+    // folder-view replacement. Hook changes still run on the worker.
     if (!WindhawkUtils::SetFunctionHook(bg, PaintBackgroundHook,
                                          &g_backgroundOriginal) ||
         !WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageHook,
                                          &g_dispatchOriginal) ||
-        !Wh_RemoveFunctionHook(reinterpret_cast<void*>(CreateWindowExW)) ||
         !Wh_ApplyHookOperations()) {
         Wh_Log(L"Zebra: hook registration failed");
         return false;
@@ -1411,7 +1602,7 @@ VOID CALLBACK ActivateOnWorker(PTP_CALLBACK_INSTANCE, void*, PTP_WORK) {
 } // namespace
 BOOL Wh_ModInit() {
     // Windhawk must load the mod into explorer.exe, but ordinary shell startup
-    // gets only this temporary window-creation hook. No active paint hooks,
+    // gets only the lightweight window-creation hook. No active paint hooks,
     // DirectUI loads, graphics buffers, registry handles or worker threads.
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook,
                                          &g_createWindowOriginal)) {
@@ -1457,7 +1648,28 @@ void Wh_ModBeforeUninit() {
     }
 }
 
+BOOL CALLBACK RemoveFolderViewEpochChild(HWND hwnd, LPARAM) {
+    wchar_t cls[64]{};
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+        _wcsicmp(cls, L"SHELLDLL_DefView") == 0)
+        RemovePropW(hwnd, kFolderViewEpochProperty);
+    return TRUE;
+}
+
+BOOL CALLBACK RemoveFolderViewEpochWindow(HWND hwnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+    wchar_t cls[64]{};
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+        _wcsicmp(cls, L"CabinetWClass") == 0)
+        EnumChildWindows(hwnd, RemoveFolderViewEpochChild, 0);
+    return TRUE;
+}
+
 void Wh_ModUninit() {
+    if (g_nextFolderViewEpoch.load(std::memory_order_relaxed))
+        EnumWindows(RemoveFolderViewEpochWindow, 0);
     FreePersonalizeNotification();
     FreeRoundedShapes();
     FreeBlendSource();
