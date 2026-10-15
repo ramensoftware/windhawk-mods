@@ -1182,7 +1182,7 @@ inline bool TryConversion(const std::wstring& input, const Locale& loc, const Co
             out.insertable = ps;
             out.display = ps + L" " + dst->sym;
             if (other != prim) {
-                out.display += (primaryBin ? L"  (decimal " : L"  (binario ") + Format(other, loc) +
+                out.display += (primaryBin ? L"  (decimal " : L"  (binary ") + Format(other, loc) +
                                 L" " + dst->sym + L")";
             }
             return true;
@@ -2063,7 +2063,7 @@ static void RenderAll() {
 }
 
 static bool Init() {
-    RenderAll();
+    if (g_eng.samples.empty()) RenderAll();
     Engine& e = g_eng;
     e.dll = LoadLibraryW(L"xaudio2_9.dll");
     if (!e.dll) e.dll = LoadLibraryW(L"xaudio2_8.dll");
@@ -2082,6 +2082,9 @@ static bool Init() {
     for (int i = 0; i < kVoices; ++i) {
         if (FAILED(e.engine->CreateSourceVoice(&e.voices[i], &e.fmt))) e.voices[i] = nullptr;
     }
+    // XAudio2 starts its engine on creation: keep it stopped (no audio thread / render stream)
+    // until the bar opens with sounds enabled.
+    e.engine->StopEngine();
     e.ready = true;
     return true;
 }
@@ -2098,6 +2101,22 @@ static void Shutdown() {
     }
     if (e.dll) { FreeLibrary(e.dll); e.dll = nullptr; }
     e.ready = false;
+}
+
+// The engine only runs while the bar is open and sounds are enabled.
+static void Resume() { if (g_eng.engine && g_cfg.sounds) g_eng.engine->StartEngine(); }
+static void Suspend() { if (g_eng.engine) g_eng.engine->StopEngine(); }
+
+// Creates the engine only when sounds are on; releases it completely when they are off.
+static void Configure() {
+    if (g_cfg.sounds) {
+        if (!g_eng.ready) {
+            Shutdown();  // clean up any partial init before retrying
+            Init();
+        }
+    } else {
+        Shutdown();
+    }
 }
 
 static void ApplyVolume() {
@@ -2522,9 +2541,37 @@ static void UpdateCalc() {
     }
 }
 
+// SID of the current user. Windhawk's Wh_Get/SetIntValue storage is machine-wide in a regular
+// install, and each signed-in user runs their own tool process, so put the SID in the value
+// names; otherwise "Recent" and "Suggestions" would be shared by every account on the PC.
+static std::wstring CurrentUserSid() {
+    static std::wstring sid;
+    if (!sid.empty()) return sid;
+    HANDLE token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token) && token) {
+        DWORD size = 0;
+        GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+        if (size > 0) {
+            std::vector<BYTE> buf(size);
+            TOKEN_USER* user = reinterpret_cast<TOKEN_USER*>(buf.data());
+            if (GetTokenInformation(token, TokenUser, user, size, &size) && user->User.Sid) {
+                LPWSTR str = nullptr;
+                if (ConvertSidToStringSidW(user->User.Sid, &str) && str) {
+                    sid = str;
+                    LocalFree(str);
+                }
+            }
+        }
+        CloseHandle(token);
+    }
+    if (sid.empty()) sid = L"shared";  // fallback: degrade to machine-wide if the SID fails
+    return sid;
+}
+
 // ===== Calculator history (persisted in the mod's local storage) =====
 
-static const wchar_t* const kCalcHistKey = L"calc.history";
+// Per-user names: Windhawk storage is machine-wide, so the SID keeps accounts separate.
+static std::wstring CalcHistKey() { return L"calc.history_" + CurrentUserSid(); }
 static const size_t kCalcHistMax = 10;
 
 static void TrimHistField(std::wstring& s) {
@@ -2536,7 +2583,7 @@ static void TrimHistField(std::wstring& s) {
 static void LoadCalcHistory() {
     g_calcHist.clear();
     wchar_t buf[8192] = {};
-    size_t n = Wh_GetStringValue(kCalcHistKey, buf, ARRAYSIZE(buf));
+    size_t n = Wh_GetStringValue(CalcHistKey().c_str(), buf, ARRAYSIZE(buf));
     if (n == 0) return;
     std::wstring all(buf, n);
     size_t start = 0;
@@ -2575,16 +2622,16 @@ static void SaveCalcHistory() {
         all += L'\t';
         all += g_calcHist[i].insVal.empty() ? g_calcHist[i].resFmt : g_calcHist[i].insVal;
     }
-    Wh_SetStringValue(kCalcHistKey, all.c_str());
+    Wh_SetStringValue(CalcHistKey().c_str(), all.c_str());
 }
 
 // "ans": the last committed result, persisted so it survives a restart.
-static const wchar_t* const kCalcAnsKey = L"calc.ans";
+static std::wstring CalcAnsKey() { return L"calc.ans_" + CurrentUserSid(); }
 
 static void LoadCalcAns() {
     g_calcHasAns = false;
     wchar_t buf[64] = {};
-    size_t n = Wh_GetStringValue(kCalcAnsKey, buf, ARRAYSIZE(buf));
+    size_t n = Wh_GetStringValue(CalcAnsKey().c_str(), buf, ARRAYSIZE(buf));
     if (n == 0) return;
     double v = 0.0;
     if (Calc::detail::ParseCleanDecimal(buf, v)) {
@@ -2598,7 +2645,7 @@ static void SetCalcAns(double v) {
     g_calcHasAns = true;
     wchar_t buf[64] = {};
     swprintf(buf, ARRAYSIZE(buf), L"%.17g", v);
-    Wh_SetStringValue(kCalcAnsKey, buf);
+    Wh_SetStringValue(CalcAnsKey().c_str(), buf);
 }
 
 // Records a calculation the user committed (pressed Enter on). Repeating an expression moves it
@@ -3564,33 +3611,6 @@ static void MaybeReindexInBackground() {
     }
 }
 
-// SID of the current user. Windhawk's Wh_Get/SetIntValue storage is machine-wide in a regular
-// install, and each signed-in user runs their own tool process, so put the SID in the value
-// names; otherwise "Recent" and "Suggestions" would be shared by every account on the PC.
-static std::wstring CurrentUserSid() {
-    static std::wstring sid;
-    if (!sid.empty()) return sid;
-    HANDLE token = nullptr;
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token) && token) {
-        DWORD size = 0;
-        GetTokenInformation(token, TokenUser, nullptr, 0, &size);
-        if (size > 0) {
-            std::vector<BYTE> buf(size);
-            TOKEN_USER* user = reinterpret_cast<TOKEN_USER*>(buf.data());
-            if (GetTokenInformation(token, TokenUser, user, size, &size) && user->User.Sid) {
-                LPWSTR str = nullptr;
-                if (ConvertSidToStringSidW(user->User.Sid, &str) && str) {
-                    sid = str;
-                    LocalFree(str);
-                }
-            }
-        }
-        CloseHandle(token);
-    }
-    if (sid.empty()) sid = L"shared";  // fallback: degrade to machine-wide if the SID fails
-    return sid;
-}
-
 static std::wstring UsageKey(const std::wstring& id) {
     uint64_t h = 1469598103934665603ULL;
     for (wchar_t c : id) {
@@ -4468,6 +4488,7 @@ static void OnTextChanged() {
     RunSearch();
     g_sel = 0;
     g_scrollTarget = 0;
+    UpdateTargets(false, /*followSelection=*/true);  // layout/selection follow the new results
     g_copiedAt = -1e9;  // typing again clears the calculator "Copied" flash
     if (g_hwnd) KillTimer(g_hwnd, TIMER_COPY);
     ResetBlink();
@@ -5393,7 +5414,7 @@ static void DrawCalcHistory(float cx, float listTop, float cw) {
         const float resRight = rowX1 - 14 * s - hintW;
 
         // The result takes the width it needs (up to ~62% of the row) so longer values such as
-        // "1,000 MB  (binario 1,024 MB)" stay readable; the expression gets what is left.
+        // "1,000 MB  (binary 1,024 MB)" stay readable; the expression gets what is left.
         const std::wstring res = L"= " + g_calcHist[i].resFmt;
         const float maxResW = (rowX1 - rowX0) * 0.62f;
         const float resW = std::min(TextWidth(res.c_str(), g_fmtHint) + 6 * s, maxResW);
@@ -5849,6 +5870,7 @@ static void FinishHide() {
     g_lastHide = NowSec();
     ReleaseBackdrop();
     ReleaseResultLayouts();
+    Sound::Suspend();
     MaybeReindexInBackground();  // changes detected while it was open
 }
 
@@ -5950,6 +5972,7 @@ static void ShowLauncher() {
     Present();
     ShowWindow(g_hwnd, SW_SHOW);
     ForceForeground(g_hwnd);
+    Sound::Resume();
     Sound::OnOpen();
 
     SetTimer(g_hwnd, TIMER_BLINK, 530, nullptr);
@@ -6339,6 +6362,7 @@ static bool HandleKeyDown(WPARAM vk) {
                 g_calcPending = false;
                 UpdateCalc();
                 RunSearch();
+                UpdateTargets(false, /*followSelection=*/true);
             }
             // A highlighted history row inserts its result into the expression. This works for any
             // recognised maths text, valid or still being composed (e.g. "2+2+").
@@ -6564,6 +6588,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 g_histScroll = 0;
                 UpdateCalc();
                 RunSearch();
+                UpdateTargets(false, /*followSelection=*/true);
                 MarkDirty();
             } else if (wp == TIMER_GLASS) {
                 if (g_vis == Vis::Hidden || !UseGlassLive()) {
@@ -6748,6 +6773,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         case WM_APP_SETTINGS: {
             const bool oldHideUtility = g_cfg.hideUtility;
             LoadSettings();
+            Sound::Configure();
             Sound::ApplyVolume();
             if (g_cfg.hideUtility != oldHideUtility) {
                 g_menuDirty = true;  // the index must be rebuilt to apply this
@@ -6782,7 +6808,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     LoadCalcHistory();
     LoadCalcAns();
     LoadPalette();
-    Sound::Init();
+    if (g_cfg.sounds) Sound::Init();
     Sound::ApplyVolume();
 
     HINSTANCE hInst = GetModuleHandleW(nullptr);
