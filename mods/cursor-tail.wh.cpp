@@ -9,7 +9,7 @@
 // @github          https://github.com/CYoJkoY
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -lole32 -lgdi32 -lshell32
+// @compilerOptions -ladvapi32 -ld2d1 -lole32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -46,35 +46,40 @@ The outline can either be derived automatically from the trail luminance or set 
 
 ## Per-app rules
 
-Use one rule per line:
+Use one rule per entry in the settings list:
 
 `program.exe=on`
 
 `program.exe=off`
 
-Lines beginning with `#` are comments. Executable names are matched case-insensitively.
+Entries beginning with `#` are comments. Executable names are matched case-insensitively.
 
 Rules follow the foreground window. An `exe=off` rule suppresses the trail everywhere on screen while that application has focus. An `exe=on` rule also overrides fullscreen suppression, so a force-enabled application keeps its trail even when it reports a fullscreen state.
 
 ## Fullscreen behavior
 
-The trail is suppressed when the foreground application reports a D3D fullscreen state or when a borderless, captionless window covers its monitor. Leaving fullscreen must remain stable for 500 ms before the trail is shown again, which reduces flicker during application transitions.
+The trail is suppressed when the foreground application reports a D3D fullscreen state or when a borderless, captionless window covers the monitor under the pointer. Desktop shell windows are excluded, and a fullscreen app on another monitor does not suppress the trail where the pointer currently resides. Leaving fullscreen must remain stable for 500 ms before suppression ends, which reduces flicker during application transitions.
 
 ## Performance
 
-Cursor state is sampled at 125 Hz while the trail is active and backs off to 30 Hz when the trail is fully idle. Layered-window submission is paced separately at 60 FPS while actively moving and 30 FPS while fading. Background luminance sampling is additionally limited by both time and cursor travel distance so repeated screen captures are avoided during short, fast sampling intervals. The back buffer and Direct2D resources are reused between frames and resized only when the required trail bounds grow beyond the current buffer.
+Mouse movement and foreground changes wake the worker from an indefinite wait during ordinary idle, avoiding periodic cursor polling. Sampling runs at 125 Hz while an effect is active; a bounded 60 Hz fallback is used if raw input or foreground notifications are unavailable, or if a higher-integrity foreground window prevents raw input. Layered-window submission is paced separately at 60 FPS while actively moving and 30 FPS while fading. Input reports that fall inside the short wake-throttling window are coalesced and handled by a one-shot timer, and the idle back buffer is released after five seconds. Background luminance sampling is additionally limited by both time and cursor travel distance so repeated screen captures are avoided during short, fast sampling intervals. The back buffer and Direct2D resources are reused between frames and resized only when the required trail bounds grow beyond the current buffer.
 
 ## Related mods
 
-Windhawk also ships **Cursor Motion Blur** and **Mouse Trail**, which cover similar ground. Cursor Tail began as a fork of Cursor Motion Blur (see Attribution) and keeps its speed-gated, tapered-ribbon look, but it is submitted as a separate mod because the runtime and the feature set have diverged:
+Windhawk also ships **Cursor Motion Blur**, **Mouse Trail**, **Simple Cursor Trail**, and **Pointer Afterimage Motion Blur**, all of which overlap with cursor-trail behavior. Cursor Tail began as a fork of Cursor Motion Blur (see Attribution); its configurable appearance and runtime behavior have since diverged, but whether it should remain a separate catalog entry is for the upstream maintainer to decide:
 
-- **Sampling and timing:** a dedicated 125 Hz sampling loop that backs off to 30 Hz while idle, with layered-window submission paced separately at 60 FPS while moving and 30 FPS while fading, instead of a single `USER_TIMER_MINIMUM` timer. Pointer speed is normalised to pixels per second, so the trigger and stop thresholds keep their meaning when the sample rate changes.
+- **Sampling and timing:** event-driven input wakeups with bounded sampling while active, plus a separate render cadence. Pointer speed is normalised to pixels per second, so trigger and stop thresholds keep their meaning when the sample rate changes.
 - **Appearance:** separately configurable minimum/maximum outer and core widths, an optional gradient fill and an optional glow layer on top of the plain two-layer ribbon.
 - **Adaptive color:** cursor-image color extraction with histogram ranking, contrast selection against the sampled background luminance, and automatic or manual outline colors.
 - **Context awareness:** per-app `exe=on|off` rules and fullscreen suppression (D3D exclusive or borderless) with an exit confirmation delay.
 - **Interaction layer:** optional, button-specific click ripples and scroll-direction pulses rendered through the same bounded Direct2D backbuffer, without a particle subsystem. The low-level mouse hook is installed only while one of these effects is enabled.
 
-Users who want the original, minimal behavior should stay on Cursor Motion Blur. Cursor Tail is for users who want a more configurable motion trail, adaptive color, per-app rules, and optional click/scroll feedback.
+- [**Cursor Motion Blur**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-motion-blur.wh.cpp): the original basis for Cursor Tail, with a tapered motion-blur ribbon.
+- [**Mouse Trail**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/mouse-trail.wh.cpp): a ribbon-style trail with glow and cursor-extracted color.
+- [**Simple Cursor Trail**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-trail.wh.cpp): a simpler line trail with a head-to-tail gradient.
+- [**Pointer Afterimage Motion Blur**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/pointer-afterimage-motion-blur.wh.cpp): an afterimage-based motion blur with event-driven sampling.
+
+Cursor Tail remains functionally close to the existing trail mods. Its future direction should be evaluated with the upstream maintainer and original mod author rather than on a claim of being a wholly distinct category.
 
 ## Attribution
 
@@ -307,11 +312,11 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
   $name:zh-CN: 交互反馈
 
 - Application:
-    - app_rules: ""
+    - app_rules: [""]
       $name: Per-app rules
       $name:zh-CN: 按应用规则
-      $description: One rule per line using `exe=on` or `exe=off`. Lines beginning with `#` are comments. Executable names are matched case-insensitively.
-      $description:zh-CN: 每行一个规则，格式为 `exe=on` 或 `exe=off`。以 `#` 开头的行为注释。可执行文件名不区分大小写。
+      $description: One rule per entry, `program.exe=on` or `program.exe=off`. Entries beginning with `#` are comments. Executable names are matched case-insensitively.
+      $description:zh-CN: 每个条目填写一条规则，格式为 `program.exe=on` 或 `program.exe=off`。以 `#` 开头的条目为注释。可执行文件名不区分大小写。
   $name: Application
   $name:zh-CN: 应用程序
 */
@@ -338,9 +343,10 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
 
 constexpr UINT kSettingsChangedMessage = WM_APP + 1;
 constexpr int kTargetFrameRate = 125;
-constexpr int kIdleFrameRate = 30;
 constexpr int kActiveRenderFrameRate = 60;
 constexpr int kFadeRenderFrameRate = 30;
+constexpr int kFallbackFrameRate = 60;
+constexpr DWORD kInputWakeThrottleMs = 8;
 constexpr DWORD kFullscreenStrongCheckIntervalMs = 100;
 constexpr DWORD kFullscreenExitConfirmMs = 500;
 constexpr LONG kFullscreenTolerancePx = 2;
@@ -367,8 +373,21 @@ constexpr int kMaxRippleClusterRadiusPx = 512;
 std::atomic<HWND> g_overlayHwnd{nullptr};
 HANDLE g_threadHandle = nullptr;
 HANDLE g_stopEvent = nullptr;
-HANDLE g_interactionEvent = nullptr;
+HANDLE g_inputWakeEvent = nullptr;
 std::atomic_bool g_settingsDirty{false};
+bool g_interactionPending = false;
+bool g_rawInputRegistered = false;
+bool g_rawInputWakePending = false;
+bool g_rawMouseMovementPending = false;
+bool g_foregroundChangePending = false;
+bool g_elevatedForeground = false;
+bool g_pollingFallback = true;
+bool g_currentIntegrityLevelAttempted = false;
+bool g_currentIntegrityLevelKnown = false;
+DWORD g_currentIntegrityLevelRid = SECURITY_MANDATORY_MEDIUM_RID;
+LONGLONG g_nextSampleDeadline = 0;
+LONGLONG g_lastRawInputWakeQpc = 0;
+HWINEVENTHOOK g_foregroundEventHook = nullptr;
 
 POINT g_history[kHistoryCapacity] = {};
 int g_historyHead = 0;
@@ -385,6 +404,8 @@ bool g_windowVisible = false;
 
 ID2D1Factory* g_d2dFactory = nullptr;
 ID2D1DCRenderTarget* g_renderTarget = nullptr;
+ID2D1Layer* g_trailOpacityLayer = nullptr;
+ID2D1Layer* g_glowOpacityLayer = nullptr;
 ID2D1SolidColorBrush* g_outerBrush = nullptr;
 ID2D1SolidColorBrush* g_coreBrush = nullptr;
 ID2D1SolidColorBrush* g_glowBrush = nullptr;
@@ -403,8 +424,8 @@ int g_cachedHeight = 0;
 DWORD g_backbufferIdleSince = 0;
 HDC g_screenDc = nullptr;
 
-float g_triggerVelocity = 25.0f;
-float g_stopVelocity = 10.0f;
+float g_triggerVelocity = 3000.0f;
+float g_stopVelocity = 1200.0f;
 int g_tailOffsetX = 6;
 int g_tailOffsetY = 10;
 int g_tailLength = 10;
@@ -413,8 +434,8 @@ float g_widthMin = 4.0f;
 float g_widthMax = 14.0f;
 float g_coreWidthMin = 2.0f;
 float g_coreWidthMax = 9.0f;
-float g_alphaMin = 0.45f;
-float g_alphaMax = 0.90f;
+float g_alphaMin = 0.39f;
+float g_alphaMax = 0.77f;
 float g_taperPower = 1.0f;
 int g_smoothIterations = 2;
 int g_gradientEnabled = 0;
@@ -435,6 +456,12 @@ uint32_t g_currentOuterRGB = kFallbackOuterColor;
 DWORD g_lastAutoColorUpdate = 0;
 HCURSOR g_lastAutoColorCursor = nullptr;
 bool g_autoColorInitialized = false;
+float g_lastAutoColorPickLuminance = 0.5f;
+bool g_autoColorPickLuminanceValid = false;
+
+HMONITOR g_cursorMonitor = nullptr;
+UINT g_cursorDpi = 96;
+float g_currentDpiScale = 1.0f;
 
 int g_clickFeedbackEnabled = 0;
 int g_wheelFeedbackEnabled = 0;
@@ -580,6 +607,8 @@ static LONGLONG QpcNow() {
 static uint32_t ResolveOutlineColor(uint32_t core);
 
 void ReleaseRenderResources() {
+    if (g_glowOpacityLayer) { g_glowOpacityLayer->Release(); g_glowOpacityLayer = nullptr; }
+    if (g_trailOpacityLayer) { g_trailOpacityLayer->Release(); g_trailOpacityLayer = nullptr; }
     if (g_gradientBrush) { g_gradientBrush->Release(); g_gradientBrush = nullptr; }
     if (g_gradientStops) { g_gradientStops->Release(); g_gradientStops = nullptr; }
     if (g_strokeStyle) { g_strokeStyle->Release(); g_strokeStyle = nullptr; }
@@ -689,34 +718,75 @@ static bool GetProcessExeName(DWORD pid, std::wstring& out) {
     return true;
 }
 
-static void ParseAppRules(const wchar_t* text) {
-    g_appRules.clear();
+static void ParseAppRuleText(const wchar_t* text) {
     if (!text) return;
+
     const std::wstring input(text);
     size_t start = 0;
     while (start <= input.size()) {
         size_t end = input.find_first_of(L"\r\n", start);
         if (end == std::wstring::npos) end = input.size();
-        std::wstring line = input.substr(start, end - start);
-        const size_t comment = line.find(L'#');
-        if (comment != std::wstring::npos) line.resize(comment);
-        const size_t equals = line.find(L'=');
+        std::wstring ruleText = input.substr(start, end - start);
+        const size_t comment = ruleText.find(L'#');
+        if (comment != std::wstring::npos) ruleText.resize(comment);
+        const size_t equals = ruleText.find(L'=');
         if (equals != std::wstring::npos) {
-            std::wstring exe = line.substr(0, equals);
-            std::wstring value = line.substr(equals + 1);
+            std::wstring exe = ruleText.substr(0, equals);
+            std::wstring value = ruleText.substr(equals + 1);
             const auto trim = [](std::wstring& value) {
                 const size_t first = value.find_first_not_of(L" \t");
-                if (first == std::wstring::npos) { value.clear(); return; }
+                if (first == std::wstring::npos) {
+                    value.clear();
+                    return;
+                }
                 const size_t last = value.find_last_not_of(L" \t");
                 value = value.substr(first, last - first + 1);
             };
             trim(exe);
             trim(value);
-            if (!exe.empty()) g_appRules.push_back({ToLowerW(exe), value == L"on" || value == L"1" || value == L"true" || value == L"yes"});
+
+            const bool enabled = _wcsicmp(value.c_str(), L"on") == 0
+                || value == L"1"
+                || _wcsicmp(value.c_str(), L"true") == 0
+                || _wcsicmp(value.c_str(), L"yes") == 0;
+            const bool disabled = _wcsicmp(value.c_str(), L"off") == 0
+                || value == L"0"
+                || _wcsicmp(value.c_str(), L"false") == 0
+                || _wcsicmp(value.c_str(), L"no") == 0;
+            if (!exe.empty() && (enabled || disabled)) {
+                g_appRules.push_back({ToLowerW(exe), enabled});
+            }
         }
+
         if (end == input.size()) break;
         start = input.find_first_not_of(L"\r\n", end);
         if (start == std::wstring::npos) break;
+    }
+}
+
+static void ParseAppRules() {
+    g_appRules.clear();
+
+    constexpr int kMaxAppRuleEntries = 64;
+    int consecutiveEmptyEntries = 0;
+    for (int index = 0; index < kMaxAppRuleEntries; ++index) {
+        WindhawkUtils::StringSetting setting =
+            WindhawkUtils::StringSetting::make(L"Application.app_rules[%d]", index);
+        const wchar_t* value = setting.get();
+        if (!value || !*value) {
+            if (++consecutiveEmptyEntries >= 2) break;
+            continue;
+        }
+
+        consecutiveEmptyEntries = 0;
+        ParseAppRuleText(value);
+    }
+
+    // Existing installs may still have the former multiline string stored.
+    if (g_appRules.empty()) {
+        WindhawkUtils::StringSetting legacySetting =
+            WindhawkUtils::StringSetting::make(L"Application.app_rules");
+        ParseAppRuleText(legacySetting.get());
     }
 }
 
@@ -814,11 +884,7 @@ void LoadSettings() {
     g_middleClickRGB = readInteractionColor(L"Interaction.middle_click_color", 0x00FFD166);
     g_wheelUpRGB = readInteractionColor(L"Interaction.wheel_up_color", 0x007CFF6B);
     g_wheelDownRGB = readInteractionColor(L"Interaction.wheel_down_color", 0x00A78BFA);
-    {
-        WindhawkUtils::StringSetting value =
-            WindhawkUtils::StringSetting::make(L"Application.app_rules");
-        ParseAppRules(value.get());
-    }
+    ParseAppRules();
     g_cachedForegroundWindow = nullptr;
     g_cachedAppRule = 0;
     g_renderCache.ReserveForTailLength(g_tailLength);
@@ -836,6 +902,7 @@ static void ClearRipples() {
         ripple.active = false;
     }
     g_nextRippleSlot = 0;
+    g_interactionPending = false;
 }
 
 static int UpdateRippleState(LONGLONG nowQpc) {
@@ -875,7 +942,8 @@ static void AddRipple(const POINT& center, uint32_t color) {
     ripple.startQpc = QpcNow();
     ripple.color = color;
     ripple.active = true;
-    if (g_interactionEvent) SetEvent(g_interactionEvent);
+    g_interactionPending = true;
+    if (g_inputWakeEvent) SetEvent(g_inputWakeEvent);
 }
 
 static LRESULT CALLBACK LowLevelMouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
@@ -954,14 +1022,171 @@ static void SyncMouseHook() {
     g_mouseHook = mouseHook;
 }
 
-static bool CoversMonitor(HWND hwnd) {
+
+static bool RegisterMouseRawInput(HWND hwnd, bool enable) {
+    RAWINPUTDEVICE mouse = {};
+    mouse.usUsagePage = 0x01;  // HID_USAGE_PAGE_GENERIC
+    mouse.usUsage = 0x02;      // HID_USAGE_GENERIC_MOUSE
+    mouse.dwFlags = enable ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    mouse.hwndTarget = enable ? hwnd : nullptr;
+
+    if (!RegisterRawInputDevices(&mouse, 1, sizeof(mouse))) {
+        Wh_Log(L"RegisterRawInputDevices(%d) failed: %lu", enable, GetLastError());
+        return false;
+    }
+    return true;
+}
+
+static bool ReadTokenIntegrityRid(HANDLE tokenHandle, DWORD& integrityRid) {
+    DWORD requiredSize = 0;
+    if (GetTokenInformation(
+            tokenHandle,
+            TokenIntegrityLevel,
+            nullptr,
+            0,
+            &requiredSize)
+        || GetLastError() != ERROR_INSUFFICIENT_BUFFER
+        || requiredSize < sizeof(TOKEN_MANDATORY_LABEL)) {
+        return false;
+    }
+
+    std::vector<BYTE> tokenInfo(requiredSize);
+    if (!GetTokenInformation(
+            tokenHandle,
+            TokenIntegrityLevel,
+            tokenInfo.data(),
+            requiredSize,
+            &requiredSize)) {
+        return false;
+    }
+
+    const auto* mandatoryLabel =
+        reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(tokenInfo.data());
+    PSID integritySid = mandatoryLabel->Label.Sid;
+    if (!integritySid || !IsValidSid(integritySid)) return false;
+
+    PUCHAR subAuthorityCount = GetSidSubAuthorityCount(integritySid);
+    if (!subAuthorityCount || *subAuthorityCount == 0) return false;
+    PDWORD ridValue = GetSidSubAuthority(
+        integritySid,
+        static_cast<DWORD>(*subAuthorityCount - 1));
+    if (!ridValue) return false;
+
+    integrityRid = *ridValue;
+    return true;
+}
+
+static void CacheCurrentIntegrityLevel() {
+    if (g_currentIntegrityLevelAttempted) return;
+    g_currentIntegrityLevelAttempted = true;
+
+    HANDLE tokenHandle = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tokenHandle)) {
+        Wh_Log(L"OpenProcessToken(current process) failed: %lu", GetLastError());
+        return;
+    }
+
+    g_currentIntegrityLevelKnown =
+        ReadTokenIntegrityRid(tokenHandle, g_currentIntegrityLevelRid);
+    CloseHandle(tokenHandle);
+    if (!g_currentIntegrityLevelKnown) {
+        Wh_Log(L"Unable to read current process token integrity level");
+    }
+}
+
+// Raw input is normally unavailable while a higher-integrity window has
+// focus. Compare token integrity levels and use bounded sampling when the
+// target integrity cannot be established safely.
+static bool IsHigherRightsWindow(HWND hwnd) {
+    CacheCurrentIntegrityLevel();
+    if (!g_currentIntegrityLevelKnown) return true;
+    if (!hwnd) return false;
+
+    DWORD processId = 0;
+    if (!GetWindowThreadProcessId(hwnd, &processId) || !processId) return false;
+
+    HANDLE processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!processHandle) return true;
+
+    HANDLE tokenHandle = nullptr;
+    if (!OpenProcessToken(processHandle, TOKEN_QUERY, &tokenHandle)) {
+        CloseHandle(processHandle);
+        return true;
+    }
+
+    DWORD foregroundIntegrityRid = 0;
+    const bool integrityKnown = ReadTokenIntegrityRid(tokenHandle, foregroundIntegrityRid);
+    CloseHandle(tokenHandle);
+    CloseHandle(processHandle);
+    return !integrityKnown || foregroundIntegrityRid > g_currentIntegrityLevelRid;
+}
+
+static void CALLBACK ForegroundChanged(
+    HWINEVENTHOOK,
+    DWORD,
+    HWND,
+    LONG,
+    LONG,
+    DWORD,
+    DWORD) {
+    g_foregroundChangePending = true;
+    if (g_inputWakeEvent) SetEvent(g_inputWakeEvent);
+}
+
+static void RefreshForegroundInputState() {
+    g_elevatedForeground = IsHigherRightsWindow(GetForegroundWindow());
+    g_pollingFallback = !g_rawInputRegistered || !g_foregroundEventHook || g_elevatedForeground;
+    g_foregroundChangePending = false;
+}
+
+static void ResetAutoColorSamplingCache();
+
+static bool UpdateCursorMonitorDpi(HWND hwnd, const POINT& cursorPoint) {
+    const HMONITOR monitor = MonitorFromPoint(cursorPoint, MONITOR_DEFAULTTONEAREST);
+    if (!monitor || monitor == g_cursorMonitor) return false;
+
+    ResetAutoColorSamplingCache();
+    HideOverlay();
+    if (hwnd && IsWindow(hwnd)
+        && !SetWindowPos(
+            hwnd,
+            nullptr,
+            cursorPoint.x,
+            cursorPoint.y,
+            1,
+            1,
+            SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW)) {
+        Wh_Log(L"SetWindowPos for DPI transition failed: %lu", GetLastError());
+        g_currentDpiScale = 1.0f;
+        g_cursorDpi = 96;
+        g_cursorMonitor = monitor;
+        return true;
+    }
+
+    g_cursorMonitor = monitor;
+    const UINT dpi = hwnd && IsWindow(hwnd) ? GetDpiForWindow(hwnd) : 96;
+    g_cursorDpi = dpi > 0 ? dpi : 96;
+    g_currentDpiScale = std::clamp(static_cast<float>(g_cursorDpi) / 96.0f, 0.5f, 4.0f);
+    return true;
+}
+
+static bool IsDesktopShellWindow(HWND hwnd) {
+    wchar_t className[64] = {};
+    const int length = GetClassNameW(hwnd, className, ARRAYSIZE(className));
+    if (length <= 0) return false;
+    return _wcsicmp(className, L"Progman") == 0
+        || _wcsicmp(className, L"WorkerW") == 0;
+}
+
+static bool CoversMonitor(HWND hwnd, HMONITOR cursorMonitor) {
     const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CAPTION) != 0) return false;
     RECT windowRect = {};
     if (!GetWindowRect(hwnd, &windowRect)) return false;
-    const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    const HMONITOR windowMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!cursorMonitor || windowMonitor != cursorMonitor) return false;
     MONITORINFO monitorInfo = {sizeof(monitorInfo)};
-    if (!GetMonitorInfoW(monitor, &monitorInfo)) return false;
+    if (!GetMonitorInfoW(windowMonitor, &monitorInfo)) return false;
     return windowRect.left <= monitorInfo.rcMonitor.left + kFullscreenTolerancePx
         && windowRect.top <= monitorInfo.rcMonitor.top + kFullscreenTolerancePx
         && windowRect.right >= monitorInfo.rcMonitor.right - kFullscreenTolerancePx
@@ -974,8 +1199,16 @@ static bool CheckStrongFullscreenSignal() {
     return SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_RUNNING_D3D_FULL_SCREEN;
 }
 
-static bool IsFullscreenCandidate(DWORD now, HWND hwnd) {
-    if (!hwnd || hwnd == GetDesktopWindow() || hwnd == GetShellWindow() || IsIconic(hwnd) || !IsWindowVisible(hwnd)) return false;
+static bool IsFullscreenCandidate(DWORD now, HWND hwnd, POINT cursorPoint) {
+    if (!hwnd || hwnd == GetDesktopWindow() || hwnd == GetShellWindow()
+        || IsDesktopShellWindow(hwnd) || IsIconic(hwnd) || !IsWindowVisible(hwnd)) {
+        return false;
+    }
+
+    const HMONITOR cursorMonitor = MonitorFromPoint(cursorPoint, MONITOR_DEFAULTTONEAREST);
+    const HMONITOR windowMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!cursorMonitor || windowMonitor != cursorMonitor) return false;
+
     if (hwnd != g_fullscreenForegroundWindow) {
         g_fullscreenForegroundWindow = hwnd;
         g_lastFullscreenStrongCheck = 0;
@@ -983,37 +1216,55 @@ static bool IsFullscreenCandidate(DWORD now, HWND hwnd) {
         g_fullscreenCoversMonitor = false;
         g_fullscreenFalseSince = 0;
     }
-    // Window geometry can't meaningfully change at the 125 Hz sampling rate, so
-    // the whole query is refreshed on the same 100 ms gate as the shell query.
+
+    // Window geometry and the shell's D3D state do not need to be queried on
+    // every input report, even though fullscreen transitions are event-driven.
     if (now - g_lastFullscreenStrongCheck >= kFullscreenStrongCheckIntervalMs) {
         g_lastFullscreenStrongCheck = now;
         g_fullscreenStrongSignal = CheckStrongFullscreenSignal();
-        g_fullscreenCoversMonitor = CoversMonitor(hwnd);
+        g_fullscreenCoversMonitor = CoversMonitor(hwnd, cursorMonitor);
     }
     return g_fullscreenStrongSignal || g_fullscreenCoversMonitor;
 }
 
-static bool UpdateFullscreenState(DWORD now, HWND foreground) {
-    const bool candidate = IsFullscreenCandidate(now, foreground);
+static bool UpdateFullscreenState(DWORD now, HWND foreground, POINT cursorPoint) {
+    const HMONITOR cursorMonitor = MonitorFromPoint(cursorPoint, MONITOR_DEFAULTTONEAREST);
+    const HMONITOR foregroundMonitor = foreground
+        ? MonitorFromWindow(foreground, MONITOR_DEFAULTTONEAREST)
+        : nullptr;
+    const bool isDesktopShell = !foreground
+        || foreground == GetDesktopWindow()
+        || foreground == GetShellWindow()
+        || IsDesktopShellWindow(foreground);
+    const bool pointerLeftFullscreenMonitor =
+        cursorMonitor && foregroundMonitor && cursorMonitor != foregroundMonitor;
+
+    // The desktop shell is never a fullscreen app. Likewise, a fullscreen
+    // window on another monitor must not suppress an overlay under the pointer.
+    // These transitions are immediate; ordinary same-monitor fullscreen exit
+    // still uses the 500 ms confirmation below to avoid flicker.
+    if (isDesktopShell || pointerLeftFullscreenMonitor) {
+        g_fullscreenSuppressed = false;
+        g_fullscreenFalseSince = 0;
+        return false;
+    }
+
+    const bool candidate = IsFullscreenCandidate(now, foreground, cursorPoint);
     if (candidate) {
         g_fullscreenFalseSince = 0;
-        if (!g_fullscreenSuppressed) {
-            g_fullscreenSuppressed = true;
-            ResetTrailState();
-            HideOverlay();
-        }
+        g_fullscreenSuppressed = true;
         return true;
     }
+
     if (g_fullscreenSuppressed) {
         if (g_fullscreenFalseSince == 0) g_fullscreenFalseSince = now;
         if (now - g_fullscreenFalseSince >= kFullscreenExitConfirmMs) {
             g_fullscreenSuppressed = false;
             g_fullscreenFalseSince = 0;
-            ResetTrailState();
-            HideOverlay();
         }
         return g_fullscreenSuppressed;
     }
+
     g_fullscreenFalseSince = 0;
     return false;
 }
@@ -1082,8 +1333,12 @@ bool EnsureD2DResources() {
     if (FAILED(hr)) { ReleaseRenderResources(); return false; }
     hr = g_renderTarget->CreateSolidColorBrush(ToColorF(g_currentCoreRGB, 1.0f), &g_coreBrush);
     if (FAILED(hr)) { ReleaseRenderResources(); return false; }
-    hr = g_renderTarget->CreateSolidColorBrush(ToColorF(g_glowRGB, g_glowAlpha), &g_glowBrush);
+    hr = g_renderTarget->CreateSolidColorBrush(ToColorF(g_glowRGB, 1.0f), &g_glowBrush);
     if (FAILED(hr)) { ReleaseRenderResources(); return false; }
+    hr = g_renderTarget->CreateLayer(nullptr, &g_trailOpacityLayer);
+    if (FAILED(hr) || !g_trailOpacityLayer) { ReleaseRenderResources(); return false; }
+    hr = g_renderTarget->CreateLayer(nullptr, &g_glowOpacityLayer);
+    if (FAILED(hr) || !g_glowOpacityLayer) { ReleaseRenderResources(); return false; }
     hr = g_renderTarget->CreateSolidColorBrush(ToColorF(g_leftClickRGB, 1.0f), &g_rippleBrush);
     if (FAILED(hr)) { ReleaseRenderResources(); return false; }
     D2D1_STROKE_STYLE_PROPERTIES strokeProperties = {};
@@ -1130,7 +1385,9 @@ void SmoothTrail(int iterations, int renderLength) {
     const int pointCount = std::min(g_historyCount, std::max(renderLength, 2));
     for (int i = 0; i < pointCount; ++i) {
         const POINT& point = HistoryAt(i);
-        current.push_back(D2D1::Point2F(static_cast<float>(point.x + g_tailOffsetX), static_cast<float>(point.y + g_tailOffsetY)));
+        current.push_back(D2D1::Point2F(
+            static_cast<float>(point.x) + static_cast<float>(g_tailOffsetX) * g_currentDpiScale,
+            static_cast<float>(point.y) + static_cast<float>(g_tailOffsetY) * g_currentDpiScale));
     }
     for (int iteration = 0; iteration < iterations && current.size() >= 3; ++iteration) {
         next.clear();
@@ -1221,12 +1478,16 @@ void UpdateTrailState(const POINT& point, float velocity) {
 
 struct ColorCandidate { uint32_t rgb; int count; };
 
-static bool ExtractCursorColorCandidates(std::vector<ColorCandidate>& out) {
+static HCURSOR g_cachedCursorCandidateHandle = nullptr;
+static std::vector<ColorCandidate> g_cachedCursorColorCandidates;
+static bool g_cachedCursorCandidatesReady = false;
+constexpr float kAutoColorLuminanceChangeThreshold = 0.04f;
+
+static bool ExtractCursorColorCandidates(HCURSOR cursorHandle, std::vector<ColorCandidate>& out) {
     out.clear();
-    CURSORINFO cursorInfo = {sizeof(cursorInfo)};
-    if (!GetCursorInfo(&cursorInfo) || !(cursorInfo.flags & CURSOR_SHOWING) || !cursorInfo.hCursor) return false;
+    if (!cursorHandle) return false;
     ICONINFO iconInfo = {};
-    if (!GetIconInfo(cursorInfo.hCursor, &iconInfo)) return false;
+    if (!GetIconInfo(cursorHandle, &iconInfo)) return false;
     const auto cleanup = [&] {
         if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
         if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
@@ -1307,6 +1568,13 @@ bool g_backgroundLuminanceValid = false;
 POINT g_backgroundLuminanceCenter = {0, 0};
 DWORD g_backgroundLuminanceUpdated = 0;
 float g_backgroundLuminance = 0.5f;
+
+static void ResetAutoColorSamplingCache() {
+    g_backgroundLuminanceValid = false;
+    g_backgroundLuminanceCenter = {0, 0};
+    g_backgroundLuminanceUpdated = 0;
+    g_autoColorPickLuminanceValid = false;
+}
 
 static void ReleaseBackgroundSampler() {
     if (g_backgroundSamplerDc) {
@@ -1395,46 +1663,81 @@ static void UpdateTrailColorIfNeeded(DWORD now) {
         g_currentOuterRGB = ResolveOutlineColor(g_currentCoreRGB);
         return;
     }
+
     CURSORINFO cursorInfo = {sizeof(cursorInfo)};
-    const bool cursorInfoAvailable = GetCursorInfo(&cursorInfo);
-    bool resample = !g_autoColorInitialized;
-    if (!resample && cursorInfoAvailable) {
-        if (g_autoResampleInterval > 0) resample = now - g_lastAutoColorUpdate >= static_cast<DWORD>(g_autoResampleInterval);
-        else if (cursorInfo.hCursor != g_lastAutoColorCursor) resample = now - g_lastAutoColorUpdate >= kMinCursorChangeResampleIntervalMs;
-    }
-    if (!resample) return;
-    if (cursorInfoAvailable) g_lastAutoColorCursor = cursorInfo.hCursor;
-    g_lastAutoColorUpdate = now;
-    g_autoColorInitialized = true;
-    POINT point = {};
-    if (!GetCursorPos(&point)) return;
-    std::vector<ColorCandidate> candidates;
-    if (!ExtractCursorColorCandidates(candidates) || candidates.empty()) {
+    if (!GetCursorInfo(&cursorInfo) || !(cursorInfo.flags & CURSOR_SHOWING) || !cursorInfo.hCursor) {
+        g_lastAutoColorCursor = nullptr;
+        g_autoColorInitialized = true;
+        g_autoColorPickLuminanceValid = false;
+        g_cachedCursorCandidateHandle = nullptr;
+        g_cachedCursorColorCandidates.clear();
+        g_cachedCursorCandidatesReady = false;
         g_currentCoreRGB = kFallbackCoreColor;
         g_currentOuterRGB = ResolveOutlineColor(g_currentCoreRGB);
         return;
     }
-    // In Auto mode the overlay is excluded from screen capture, so the sample
-    // can't pick up the trail's own pixels and the window doesn't need to be
-    // hidden (which would make a visible trail blink on every resample).
+
+    const HCURSOR cursorHandle = cursorInfo.hCursor;
+    const bool cursorChanged = !g_autoColorInitialized || cursorHandle != g_lastAutoColorCursor;
+    const bool intervalElapsed = g_autoResampleInterval > 0
+        && now - g_lastAutoColorUpdate >= static_cast<DWORD>(g_autoResampleInterval);
+    const bool refreshCandidates = cursorChanged || intervalElapsed
+        || !g_cachedCursorCandidatesReady
+        || g_cachedCursorCandidateHandle != cursorHandle;
+
+    POINT point = {};
+    if (!GetCursorPos(&point)) return;
+
+    // SampleBackgroundLuminance already throttles screen reads by both time and
+    // cursor travel. Use its cached value to adapt contrast without re-reading
+    // the cursor bitmap when only the content beneath the pointer changed.
     const float background = SampleBackgroundLuminance(now, point);
-    for (const auto& candidate : candidates) {
+
+    if (refreshCandidates) {
+        g_cachedCursorColorCandidates.clear();
+        g_cachedCursorCandidatesReady = true;
+        g_cachedCursorCandidateHandle = cursorHandle;
+        ExtractCursorColorCandidates(cursorHandle, g_cachedCursorColorCandidates);
+        g_lastAutoColorCursor = cursorHandle;
+        g_lastAutoColorUpdate = now;
+        g_autoColorInitialized = true;
+    }
+
+    if (g_cachedCursorColorCandidates.empty()) {
+        g_currentCoreRGB = kFallbackCoreColor;
+        g_currentOuterRGB = ResolveOutlineColor(g_currentCoreRGB);
+        g_autoColorPickLuminanceValid = false;
+        return;
+    }
+
+    const bool backgroundChanged = !g_autoColorPickLuminanceValid
+        || fabsf(background - g_lastAutoColorPickLuminance) >= kAutoColorLuminanceChangeThreshold;
+    if (!refreshCandidates && !backgroundChanged) return;
+
+    // In Auto mode the overlay is excluded from screen capture, so the sample
+    // can't pick up the trail's own pixels and the window need not be hidden.
+    for (const ColorCandidate& candidate : g_cachedCursorColorCandidates) {
         if (ContrastRatio(RgbLuminance(candidate.rgb), background) >= kMinColorContrast) {
             g_currentCoreRGB = candidate.rgb;
             g_currentOuterRGB = ResolveOutlineColor(candidate.rgb);
+            g_lastAutoColorPickLuminance = background;
+            g_autoColorPickLuminanceValid = true;
             return;
         }
     }
+
     g_currentCoreRGB = kFallbackCoreColor;
     g_currentOuterRGB = ResolveOutlineColor(g_currentCoreRGB);
+    g_lastAutoColorPickLuminance = background;
+    g_autoColorPickLuminanceValid = true;
 }
 
 bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
     bool drawTrail = g_historyCount >= 2;
     const float speed = g_speedScaling ? (g_isSmearing ? g_smoothedSpeedNorm : g_frozenSpeedNorm) : 1.0f;
     const int renderLength = GetEffectiveTailLength(speed);
-    const float outerHalf = g_widthMin + (g_widthMax - g_widthMin) * speed;
-    const float coreHalf = g_coreWidthMin + (g_coreWidthMax - g_coreWidthMin) * speed;
+    const float outerHalf = (g_widthMin + (g_widthMax - g_widthMin) * speed) * g_currentDpiScale;
+    const float coreHalf = (g_coreWidthMin + (g_coreWidthMax - g_coreWidthMin) * speed) * g_currentDpiScale;
     const float alphaScale = g_alphaMin + (g_alphaMax - g_alphaMin) * speed;
     const float trailAlpha = alphaScale * g_fadeAlpha;
 
@@ -1468,8 +1771,10 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
     }
 
     // These values originate from integer settings, so no floating-point round-up is needed.
+    const float scaledRippleRadius = g_rippleRadius * g_currentDpiScale;
+    const float scaledRippleStrokeWidth = g_rippleStrokeWidth * g_currentDpiScale;
     const LONG ripplePadding = static_cast<LONG>(
-        g_rippleRadius + g_rippleStrokeWidth + kRenderPadding + 1.0f);
+        scaledRippleRadius + scaledRippleStrokeWidth + kRenderPadding * g_currentDpiScale + 1.0f);
     const RippleEffect* newestRipple = nullptr;
     for (const RippleEffect& ripple : g_ripples) {
         if (ripple.active && (!newestRipple || ripple.startQpc > newestRipple->startQpc)) {
@@ -1521,25 +1826,44 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
     g_renderTarget->Clear(D2D1::ColorF(0, 0, 0, 0));
 
     if (drawTrail) {
-        g_outerBrush->SetColor(ToColorF(g_currentOuterRGB, trailAlpha));
-        g_glowBrush->SetColor(ToColorF(g_glowRGB, g_glowAlpha * trailAlpha));
-        g_coreBrush->SetColor(ToColorF(g_currentCoreRGB, std::min(1.0f, trailAlpha * 1.02f)));
+        const D2D1_LAYER_PARAMETERS trailLayerParameters = D2D1::LayerParameters(
+            clipBounds,
+            nullptr,
+            D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+            D2D1::IdentityMatrix(),
+            std::clamp(trailAlpha, 0.0f, 1.0f));
+        g_renderTarget->PushLayer(&trailLayerParameters, g_trailOpacityLayer);
+
         if (g_glowEnabled) {
+            const D2D1_LAYER_PARAMETERS glowLayerParameters = D2D1::LayerParameters(
+                clipBounds,
+                nullptr,
+                D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                D2D1::IdentityMatrix(),
+                std::clamp(g_glowAlpha, 0.0f, 1.0f));
+            g_renderTarget->PushLayer(&glowLayerParameters, g_glowOpacityLayer);
+            g_glowBrush->SetColor(ToColorF(g_glowRGB, 1.0f));
             DrawTrailStroke(
                 g_renderTarget,
                 g_glowBrush,
                 outerHalf * std::max(1.0f, g_glowWidthFactor),
                 true);
+            g_renderTarget->PopLayer();
         }
+
+        g_outerBrush->SetColor(ToColorF(g_currentOuterRGB, 1.0f));
+        g_coreBrush->SetColor(ToColorF(g_currentCoreRGB, 1.0f));
         DrawTrailStroke(g_renderTarget, g_outerBrush, outerHalf, true);
+
         ID2D1Brush* coreBrush = g_coreBrush;
         if (g_gradientEnabled && EnsureGradientBrush()) {
             g_gradientBrush->SetStartPoint(g_renderCache.smoothed.front());
             g_gradientBrush->SetEndPoint(g_renderCache.smoothed.back());
-            g_gradientBrush->SetOpacity(trailAlpha);
+            g_gradientBrush->SetOpacity(1.0f);
             coreBrush = g_gradientBrush;
         }
         DrawTrailStroke(g_renderTarget, coreBrush, coreHalf, true);
+        g_renderTarget->PopLayer();
     }
 
     const LONGLONG durationTicks = std::max<LONGLONG>(
@@ -1553,8 +1877,8 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
             0.0f,
             1.0f);
         const float easedProgress = progress * (2.0f - progress);
-        const float radius = kRippleInitialRadius
-            + (g_rippleRadius - kRippleInitialRadius) * easedProgress;
+        const float radius = (kRippleInitialRadius
+            + (g_rippleRadius - kRippleInitialRadius) * easedProgress) * g_currentDpiScale;
         const float remaining = 1.0f - progress;
         const float alpha = g_rippleOpacity * remaining * remaining;
         if (alpha < 0.005f) continue;
@@ -1568,7 +1892,7 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
                 radius,
                 radius),
             g_rippleBrush,
-            g_rippleStrokeWidth,
+            scaledRippleStrokeWidth,
             g_strokeStyle);
         g_rippleBrush->SetColor(ToColorF(ripple.color, alpha * 0.48f));
         const float innerRadius = radius * 0.58f;
@@ -1580,7 +1904,7 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
                 innerRadius,
                 innerRadius),
             g_rippleBrush,
-            std::max(1.0f, g_rippleStrokeWidth * 0.65f),
+            std::max(g_currentDpiScale, scaledRippleStrokeWidth * 0.65f),
             g_strokeStyle);
     }
 
@@ -1631,6 +1955,11 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
     POINT point = {};
     if (!GetCursorPos(&point)) return false;
     const LONGLONG sampleQpc = QpcNow();
+    if (UpdateCursorMonitorDpi(hwnd, point)) {
+        ResetTrailState();
+        g_lastPos = point;
+        g_lastSampleQpc = sampleQpc;
+    }
     const HWND foreground = GetForegroundWindow();
     const int appRule = CheckAppRuleCached(foreground);
     // While the trail is suppressed the pointer still moves. Keep the previous
@@ -1650,15 +1979,14 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
         return false;
     }
 
-    const bool fullscreenActive = UpdateFullscreenState(now, foreground);
-    if (fullscreenActive) {
+    const bool fullscreenActive = UpdateFullscreenState(now, foreground, point);
+    if (fullscreenActive && appRule == 0) {
+        ResetTrailState();
+        ClearRipples();
         parkSample();
-        if (appRule == 0) {
-            ClearRipples();
-            HideOverlay();
-            MaybeReleaseIdleBackbuffer(now);
-            return false;
-        }
+        HideOverlay();
+        MaybeReleaseIdleBackbuffer(now);
+        return false;
     }
 
     const bool wasSmearing = g_isSmearing;
@@ -1689,11 +2017,48 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
     case kSettingsChangedMessage:
         g_settingsDirty.store(true, std::memory_order_release);
         return 0;
+    case WM_INPUT: {
+        RAWINPUT rawInput = {};
+        UINT rawInputSize = sizeof(rawInput);
+        const UINT readResult = GetRawInputData(
+            reinterpret_cast<HRAWINPUT>(lParam),
+            RID_INPUT,
+            &rawInput,
+            &rawInputSize,
+            sizeof(RAWINPUTHEADER));
+        if (readResult != static_cast<UINT>(-1)
+            && rawInput.header.dwType == RIM_TYPEMOUSE) {
+            const RAWMOUSE& mouse = rawInput.data.mouse;
+            const bool moved = mouse.lLastX != 0
+                || mouse.lLastY != 0
+                || (mouse.usFlags & MOUSE_MOVE_ABSOLUTE) != 0;
+            if (moved) {
+                g_rawMouseMovementPending = true;
+                const LONGLONG currentQpc = QpcNow();
+                const LONGLONG wakeInterval = std::max<LONGLONG>(
+                    1, g_qpcFrequency * kInputWakeThrottleMs / 1000);
+                if (!g_rawInputWakePending
+                    && (g_lastRawInputWakeQpc == 0
+                        || currentQpc - g_lastRawInputWakeQpc >= wakeInterval)) {
+                    g_lastRawInputWakeQpc = currentQpc;
+                    g_rawInputWakePending = true;
+                    if (g_inputWakeEvent) SetEvent(g_inputWakeEvent);
+                }
+            }
+        }
+        // Windows requires DefWindowProc for foreground RIM_INPUT cleanup.
+        return DefWindowProcW(hwnd, message, wParam, lParam);
+    }
     case WM_DISPLAYCHANGE:
         ReleaseBackbuffer();
         ReleaseBackgroundSampler();
         ReleaseScreenDC();
         g_lastFullscreenStrongCheck = 0;
+        g_nextSampleDeadline = 0;
+        g_cursorMonitor = nullptr;
+        g_cursorDpi = 96;
+        g_currentDpiScale = 1.0f;
+        ResetAutoColorSamplingCache();
         return 0;
     case WM_CLOSE:
         DestroyWindow(hwnd);
@@ -1705,6 +2070,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         return DefWindowProcW(hwnd, message, wParam, lParam);
     }
 }
+
 
 static bool ArmFrameTimer(HANDLE timer, LONGLONG deadline, LONGLONG frequency) {
     const LONGLONG now = QpcNow();
@@ -1723,7 +2089,6 @@ static LONGLONG FrameIntervalTicks(LONGLONG frequency, int frameRate) {
 DWORD WINAPI OverlayThreadProc(LPVOID) {
     const HRESULT coResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(coResult)) return 0;
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     LARGE_INTEGER qpcFrequency = {};
     if (!QueryPerformanceFrequency(&qpcFrequency) || qpcFrequency.QuadPart <= 0) {
         CoUninitialize();
@@ -1735,8 +2100,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         CoUninitialize();
         return 0;
     }
+
     HINSTANCE instance = GetModuleHandle(nullptr);
-    const wchar_t className[] = L"SmearFrameOverlayClass";
+    const wchar_t className[] = L"CursorTailOverlayWindowClass";
     WNDCLASSW windowClass = {};
     windowClass.lpfnWndProc = OverlayWndProc;
     windowClass.hInstance = instance;
@@ -1748,10 +2114,11 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         CoUninitialize();
         return 0;
     }
+
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         className,
-        L"SmearOverlay",
+        L"CursorTailOverlay",
         WS_POPUP,
         0,
         0,
@@ -1768,18 +2135,25 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         CoUninitialize();
         return 0;
     }
+
     g_overlayHwnd.store(hwnd, std::memory_order_release);
     ApplyOverlayCaptureAffinity();
     HideOverlay();
-    GetCursorPos(&g_lastPos);
+    POINT initialCursorPosition = {};
+    if (GetCursorPos(&initialCursorPosition)) {
+        UpdateCursorMonitorDpi(hwnd, initialCursorPosition);
+        g_lastPos = initialCursorPosition;
+    }
     g_lastSampleQpc = QpcNow();
-    g_fullscreenForegroundWindow = GetForegroundWindow();
+    g_fullscreenForegroundWindow = nullptr;
     g_lastFullscreenStrongCheck = 0;
     g_fullscreenStrongSignal = false;
     g_fullscreenSuppressed = false;
     g_fullscreenFalseSince = 0;
     if (g_settingsDirty.exchange(false, std::memory_order_acq_rel)) LoadSettings();
-    HANDLE frameTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+
+    HANDLE frameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
     if (!frameTimer) frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
     if (!frameTimer) {
         DestroyWindow(hwnd);
@@ -1790,55 +2164,221 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         CoUninitialize();
         return 0;
     }
+
+    g_rawInputRegistered = RegisterMouseRawInput(hwnd, true);
+    g_foregroundEventHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_FOREGROUND,
+        nullptr,
+        ForegroundChanged,
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT);
+    if (!g_foregroundEventHook) {
+        Wh_Log(L"SetWinEventHook(EVENT_SYSTEM_FOREGROUND) failed: %lu", GetLastError());
+    }
+    RefreshForegroundInputState();
     SyncMouseHook();
-    const LONGLONG simulationTicks = FrameIntervalTicks(qpcFrequency.QuadPart, kTargetFrameRate);
-    const LONGLONG idleTicks = FrameIntervalTicks(qpcFrequency.QuadPart, kIdleFrameRate);
-    const LONGLONG activeRenderTicks = FrameIntervalTicks(qpcFrequency.QuadPart, kActiveRenderFrameRate);
-    const LONGLONG fadeRenderTicks = FrameIntervalTicks(qpcFrequency.QuadPart, kFadeRenderFrameRate);
+
+    const LONGLONG simulationTicks =
+        FrameIntervalTicks(qpcFrequency.QuadPart, kTargetFrameRate);
+    const LONGLONG fallbackTicks =
+        FrameIntervalTicks(qpcFrequency.QuadPart, kFallbackFrameRate);
+    const LONGLONG activeRenderTicks =
+        FrameIntervalTicks(qpcFrequency.QuadPart, kActiveRenderFrameRate);
+    const LONGLONG fadeRenderTicks =
+        FrameIntervalTicks(qpcFrequency.QuadPart, kFadeRenderFrameRate);
     LONGLONG nextRenderDeadline = QpcNow();
     MSG message = {};
     bool running = true;
+
     while (running) {
         if (g_settingsDirty.exchange(false, std::memory_order_acq_rel)) {
             LoadSettings();
             SyncMouseHook();
         }
-        const bool idle = !g_isSmearing && g_historyCount < 2 && !HasActiveRipples(QpcNow());
-        const LONGLONG simulationInterval = idle ? idleTicks : simulationTicks;
-        const LONGLONG sampleDeadline = QpcNow() + simulationInterval;
-        if (!ArmFrameTimer(frameTimer, sampleDeadline, qpcFrequency.QuadPart)) break;
-        HANDLE handles[] = {g_stopEvent, g_interactionEvent, frameTimer};
-        const DWORD waitResult = MsgWaitForMultipleObjectsEx(ARRAYSIZE(handles), handles, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+
+        const LONGLONG currentQpc = QpcNow();
+        const bool trailActive = g_isSmearing || g_historyCount >= 2;
+        const bool rippleActive = HasActiveRipples(currentQpc);
+        const LONGLONG inputWakeInterval = std::max<LONGLONG>(
+            1,
+            g_qpcFrequency * static_cast<LONGLONG>(kInputWakeThrottleMs) / 1000);
+        const bool inputCatchUpNeeded =
+            g_rawMouseMovementPending && !g_rawInputWakePending;
+        const bool sampleTimerNeeded =
+            trailActive || rippleActive || g_pollingFallback || inputCatchUpNeeded;
+        bool trimTimerNeeded = false;
+
+        LONGLONG timerDeadline = 0;
+        if (sampleTimerNeeded) {
+            if (inputCatchUpNeeded && !trailActive && !rippleActive && !g_pollingFallback) {
+                // If the input wake was coalesced by the throttle, schedule one
+                // bounded wake rather than waiting indefinitely and losing the
+                // final sub-interval of a short movement burst.
+                g_nextSampleDeadline = std::max(
+                    currentQpc + 1,
+                    g_lastRawInputWakeQpc + inputWakeInterval);
+            } else if (g_nextSampleDeadline <= currentQpc) {
+                const LONGLONG interval = (trailActive || rippleActive)
+                    ? simulationTicks
+                    : fallbackTicks;
+                g_nextSampleDeadline = currentQpc + interval;
+            }
+            timerDeadline = g_nextSampleDeadline;
+        } else if (g_backBufferDc && g_backBufferBitmap) {
+            MaybeReleaseIdleBackbuffer(GetTickCount());
+            if (g_backBufferDc && g_backBufferBitmap) {
+                const DWORD nowTicks = GetTickCount();
+                const DWORD elapsed = nowTicks - g_backbufferIdleSince;
+                const DWORD remaining = elapsed >= kBackbufferIdleReleaseDelayMs
+                    ? 1
+                    : kBackbufferIdleReleaseDelayMs - elapsed;
+                timerDeadline = QpcNow()
+                    + std::max<LONGLONG>(
+                        1,
+                        g_qpcFrequency * static_cast<LONGLONG>(remaining) / 1000);
+                trimTimerNeeded = true;
+            }
+        }
+
+        const bool timerNeeded = sampleTimerNeeded || trimTimerNeeded;
+        if (timerNeeded) {
+            if (!ArmFrameTimer(frameTimer, timerDeadline, qpcFrequency.QuadPart)) break;
+        } else {
+            CancelWaitableTimer(frameTimer);
+        }
+
+        HANDLE handles[] = {g_stopEvent, g_inputWakeEvent, frameTimer};
+        const DWORD handleCount = timerNeeded ? 3 : 2;
+        const DWORD waitResult = MsgWaitForMultipleObjectsEx(
+            handleCount,
+            handles,
+            INFINITE,
+            QS_ALLINPUT,
+            MWMO_INPUTAVAILABLE);
+
         if (waitResult == WAIT_OBJECT_0) {
             running = false;
             continue;
         }
+
         if (waitResult == WAIT_OBJECT_0 + 1) {
-            const LONGLONG interactionNow = QpcNow();
-            SmearFrame(hwnd, GetTickCount(), true);
-            const bool interactionActive = HasActiveRipples(QpcNow());
-            const bool quickFrame = g_isSmearing || g_historyCount >= 2 || interactionActive;
-            nextRenderDeadline = interactionNow + (quickFrame ? activeRenderTicks : fadeRenderTicks);
-            continue;
-        }
-        if (waitResult == WAIT_OBJECT_0 + 2) {
-            const LONGLONG sampleNow = QpcNow();
-            const bool interactionActiveBeforeFrame = HasActiveRipples(sampleNow);
-            const bool renderFrame = (g_isSmearing || g_historyCount >= 2 || interactionActiveBeforeFrame)
-                && sampleNow >= nextRenderDeadline;
-            const bool rendered = SmearFrame(hwnd, GetTickCount(), renderFrame);
-            const bool interactionActive = HasActiveRipples(QpcNow());
-            const bool active = g_isSmearing;
-            const bool fading = !active && g_historyCount >= 2;
-            if (active || fading || interactionActive) {
-                const LONGLONG interval = (active || interactionActive) ? activeRenderTicks : fadeRenderTicks;
-                if (rendered || sampleNow >= nextRenderDeadline) nextRenderDeadline = sampleNow + interval;
-            } else {
-                nextRenderDeadline = sampleNow + fadeRenderTicks;
+            g_rawInputWakePending = false;
+            const bool foregroundChanged = g_foregroundChangePending;
+            const bool interactionTriggered = g_interactionPending;
+            const bool rawMovement = g_rawMouseMovementPending;
+            g_interactionPending = false;
+
+            if (foregroundChanged) {
+                RefreshForegroundInputState();
+                // Recheck the new foreground immediately. UpdateFullscreenState
+                // retains normal same-monitor exit hysteresis but releases
+                // suppression for the desktop shell or a different cursor monitor.
+                g_fullscreenForegroundWindow = nullptr;
+                g_lastFullscreenStrongCheck = 0;
+            }
+
+            if (foregroundChanged || interactionTriggered) {
+                g_rawMouseMovementPending = false;
+                const LONGLONG eventQpc = QpcNow();
+                const bool forceRender = interactionTriggered;
+                const bool rendered = SmearFrame(hwnd, GetTickCount(), forceRender);
+                const bool activeAfterEvent =
+                    g_isSmearing || g_historyCount >= 2 || HasActiveRipples(QpcNow());
+                if (activeAfterEvent) {
+                    nextRenderDeadline = eventQpc
+                        + (g_isSmearing || g_historyCount >= 2
+                            ? activeRenderTicks
+                            : fadeRenderTicks);
+                    g_nextSampleDeadline = eventQpc + simulationTicks;
+                } else {
+                    g_nextSampleDeadline = g_pollingFallback
+                        ? eventQpc + fallbackTicks
+                        : 0;
+                }
+                (void)rendered;
+            } else if (rawMovement) {
+                g_rawMouseMovementPending = false;
+                const LONGLONG movementQpc = QpcNow();
+                const bool activeBeforeMovement =
+                    g_isSmearing || g_historyCount >= 2 || HasActiveRipples(movementQpc);
+
+                if (!activeBeforeMovement && !g_pollingFallback) {
+                    // Bound the first post-idle interval instead of dividing by
+                    // the entire idle duration. This retains the first movement
+                    // burst even when no second hardware report follows it.
+                    const LONGLONG initialSampleTicks = std::max<LONGLONG>(
+                        1,
+                        g_qpcFrequency * static_cast<LONGLONG>(kInputWakeThrottleMs) / 2000);
+                    g_lastSampleQpc = movementQpc - initialSampleTicks;
+                    const bool renderFrame = movementQpc >= nextRenderDeadline;
+                    SmearFrame(hwnd, GetTickCount(), renderFrame);
+                    const LONGLONG sampledQpc = QpcNow();
+                    const bool activeAfterMovement =
+                        g_isSmearing || g_historyCount >= 2 || HasActiveRipples(sampledQpc);
+                    g_nextSampleDeadline = sampledQpc
+                        + (activeAfterMovement ? simulationTicks : 0);
+                    if (activeAfterMovement && (renderFrame || sampledQpc >= nextRenderDeadline)) {
+                        nextRenderDeadline = sampledQpc
+                            + ((g_isSmearing || g_historyCount >= 2)
+                                ? activeRenderTicks
+                                : fadeRenderTicks);
+                    }
+                } else if (movementQpc >= g_nextSampleDeadline) {
+                    const bool renderFrame = movementQpc >= nextRenderDeadline;
+                    SmearFrame(hwnd, GetTickCount(), renderFrame);
+                    const LONGLONG sampledQpc = QpcNow();
+                    const bool activeAfterMovement =
+                        g_isSmearing || g_historyCount >= 2 || HasActiveRipples(sampledQpc);
+                    g_nextSampleDeadline = sampledQpc
+                        + (activeAfterMovement ? simulationTicks : (g_pollingFallback ? fallbackTicks : 0));
+                    if (activeAfterMovement && (renderFrame || sampledQpc >= nextRenderDeadline)) {
+                        nextRenderDeadline = sampledQpc
+                            + ((g_isSmearing || g_historyCount >= 2)
+                                ? activeRenderTicks
+                                : fadeRenderTicks);
+                    }
+                }
             }
             continue;
         }
-        if (waitResult == WAIT_OBJECT_0 + ARRAYSIZE(handles)) {
+
+        if (timerNeeded && waitResult == WAIT_OBJECT_0 + 2) {
+            if (sampleTimerNeeded) {
+                const LONGLONG sampleNow = QpcNow();
+                const bool interactionActiveBeforeFrame = HasActiveRipples(sampleNow);
+                const bool renderFrame =
+                    (g_isSmearing || g_historyCount >= 2 || interactionActiveBeforeFrame)
+                    && sampleNow >= nextRenderDeadline;
+                const bool rendered = SmearFrame(hwnd, GetTickCount(), renderFrame);
+                g_rawMouseMovementPending = false;
+
+                const LONGLONG sampledQpc = QpcNow();
+                const bool interactionActive = HasActiveRipples(sampledQpc);
+                const bool active = g_isSmearing;
+                const bool fading = !active && g_historyCount >= 2;
+                if (active || fading || interactionActive) {
+                    const LONGLONG interval = (active || interactionActive)
+                        ? activeRenderTicks
+                        : fadeRenderTicks;
+                    if (rendered || sampledQpc >= nextRenderDeadline) {
+                        nextRenderDeadline = sampledQpc + interval;
+                    }
+                    g_nextSampleDeadline = sampledQpc + simulationTicks;
+                } else if (g_pollingFallback) {
+                    g_nextSampleDeadline = sampledQpc + fallbackTicks;
+                } else {
+                    g_nextSampleDeadline = 0;
+                }
+            } else if (trimTimerNeeded) {
+                MaybeReleaseIdleBackbuffer(GetTickCount());
+                g_nextSampleDeadline = 0;
+            }
+            continue;
+        }
+
+        if (waitResult == WAIT_OBJECT_0 + handleCount) {
             while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
                 if (message.message == WM_QUIT) {
                     running = false;
@@ -1849,10 +2389,22 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
             }
             continue;
         }
+
         break;
     }
+
     CancelWaitableTimer(frameTimer);
     CloseHandle(frameTimer);
+    if (g_foregroundEventHook) {
+        if (!UnhookWinEvent(g_foregroundEventHook)) {
+            Wh_Log(L"UnhookWinEvent failed: %lu", GetLastError());
+        }
+        g_foregroundEventHook = nullptr;
+    }
+    if (g_rawInputRegistered && hwnd) {
+        RegisterMouseRawInput(hwnd, false);
+        g_rawInputRegistered = false;
+    }
     ReleaseMouseHook();
     ClearRipples();
     HideOverlay();
@@ -1874,16 +2426,16 @@ BOOL WhTool_ModInit() {
     LoadSettings();
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) return FALSE;
-    g_interactionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_interactionEvent) {
+    g_inputWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_inputWakeEvent) {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return FALSE;
     }
     g_threadHandle = CreateThread(nullptr, 0, OverlayThreadProc, nullptr, 0, nullptr);
     if (!g_threadHandle) {
-        CloseHandle(g_interactionEvent);
-        g_interactionEvent = nullptr;
+        CloseHandle(g_inputWakeEvent);
+        g_inputWakeEvent = nullptr;
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return FALSE;
@@ -1898,9 +2450,9 @@ void WhTool_ModUninit() {
         CloseHandle(g_threadHandle);
         g_threadHandle = nullptr;
     }
-    if (g_interactionEvent) {
-        CloseHandle(g_interactionEvent);
-        g_interactionEvent = nullptr;
+    if (g_inputWakeEvent) {
+        CloseHandle(g_inputWakeEvent);
+        g_inputWakeEvent = nullptr;
     }
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
@@ -1938,7 +2490,11 @@ void WINAPI EntryPoint_Hook() {
 
 BOOL Wh_ModInit() {
     DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) return FALSE;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -1948,59 +2504,89 @@ BOOL Wh_ModInit() {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0
-            || wcscmp(argv[i], L"-service-start") == 0
-            || wcscmp(argv[i], L"-service-stop") == 0) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
             isExcluded = true;
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
             break;
         }
     }
+
     LocalFree(argv);
-    if (isExcluded) return FALSE;
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
-        if (!WhTool_ModInit()) ExitProcess(1);
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
-    if (isToolModProcess) return FALSE;
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
-    WCHAR commandLine[
-        MAX_PATH + 2 +
-        (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -2009,57 +2595,52 @@ void Wh_ModAfterInit() {
             return;
         }
     }
+
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken,
-        LPCWSTR lpApplicationName,
-        LPWSTR lpCommandLine,
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes,
-        WINBOOL bInheritHandles,
-        DWORD dwCreationFlags,
-        LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
+
     STARTUPINFO si{
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(
-            nullptr,
-            currentProcessPath,
-            commandLine,
-            nullptr,
-            nullptr,
-            FALSE,
-            NORMAL_PRIORITY_CLASS,
-            nullptr,
-            nullptr,
-            &si,
-            &pi,
-            nullptr)) {
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) return;
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) return;
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
