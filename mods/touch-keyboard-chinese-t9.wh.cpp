@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         3.6.0
+// @version         4.0.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @include         TextInputHost.exe
@@ -526,8 +526,6 @@ bool InstallDecoder(HMODULE module) {
 
 namespace {
 using Availability = bool (*)(void*, HSTRING);
-using IsAvailableFn = bool (*)(void*, HSTRING, void*, HSTRING, bool*);
-IsAvailableFn originalIsAvailable;
 using ModeView = void (*)(void*, HSTRING, int);
 using ActionFn = void (*)(void*, void*);
 using GetPressedKeyHandlingStateFn = int (*)(void*, void*);
@@ -602,16 +600,6 @@ bool AvailabilityHook(void* self, HSTRING mode) {
     return result;
 }
 
-bool IsAvailableHook(void* self, HSTRING mode, void* sizeMgr, HSTRING param3, bool* outBool) {
-    const bool result = originalIsAvailable(self, mode, sizeMgr, param3, outBool);
-    if (g_enabled.load() && IsTwelve(mode)) {
-        if (outBool) *outBool = true;
-        Wh_SetStringValue(L"native-front-mode", L"narrow12key");
-        Wh_SetIntValue(L"native-front-is-available-hooked", 1);
-        return true;
-    }
-    return result;
-}
 
 void ModeHook(void* self, HSTRING mode, int view) {
     Wh_SetStringValue(L"native-front-mode",
@@ -652,7 +640,7 @@ void OnReleaseActionHook(void* self, void* action) {
         if (isTwelve && priorHandlingState == 1) {
             data[144] = 1;
             Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
-        } else if (isTwelve && priorHandlingState == 0 && data[144] == 0 && keyCtrl && originalGetKeyData) {
+        } else if (isTwelve && priorHandlingState != 1 && data[144] == 0 && keyCtrl && originalGetKeyData) {
             void* keyData = originalGetKeyData(keyCtrl);
             if (keyData && originalGetVirtualKey) {
                 const unsigned char vk = originalGetVirtualKey(keyData);
@@ -747,12 +735,6 @@ bool InstallFrontend(HMODULE module) {
           L"AEAA_NPE$AAVString@Platform@@@Z"},
          &originalAvailability,
          AvailabilityHook},
-        {{L"?IsAvailable@ChineseSimplifiedModeAvailabilityStrategy@Controls@"
-          L"TextInputUndocked@Experiences@ComposableShell@WindowsInternal@@"
-          L"UEAA_NPE$AAVString@Platform@@PE$AAUIInputPanelSizePositionManager@"
-          L"TouchKeyboardUX@@0PEA_N@Z"},
-         &originalIsAvailable,
-         IsAvailableHook},
         {{L"?SetKeyboardModeView@?QITextFrameworkAdapter@Common@TextInput@"
           L"Experiences@ComposableShell@WindowsInternal@@"
           L"SystemInputProcessorTextFrameworkAdapter@TextFramework@"
@@ -822,8 +804,14 @@ bool InstallFrontend(HMODULE module) {
          IsEmojiViewEnabledHook},
     };
     auto options = NativeT9::SymbolOptions();
-    return WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols),
-                                      &options);
+    DWORD failedMask = 0;
+    for (size_t i = 0; i < ARRAYSIZE(symbols); ++i) {
+        if (!WindhawkUtils::HookSymbols(module, &symbols[i], 1, &options)) {
+            failedMask |= (1 << i);
+        }
+    }
+    Wh_SetIntValue(L"native-front-failed-mask", static_cast<int>(failedMask));
+    return (failedMask & 1) == 0;
 }
 }  // namespace
 
@@ -837,13 +825,14 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        360);
+        400);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
             front = LoadLibraryW(L"TextInput.dll");
         }
         if (!front) {
+            Wh_SetIntValue(L"native-front-install-result", 2);
             return FALSE;
         }
         Wh_SetIntValue(L"native-front-release-count", 0);
@@ -879,6 +868,7 @@ BOOL Wh_ModInit() {
         Wh_SetIntValue(L"native-front-release-suppressed-raw", 0);
         Wh_SetIntValue(L"native-front-release-suppressed-long", 0);
         const bool readyFront = InstallFrontend(front);
+        Wh_SetIntValue(L"native-front-install-result", readyFront ? 1 : 0);
         if (!readyFront) {
             Wh_Log(L"[中文九键] 前端接口挂钩失败");
         }
@@ -890,16 +880,25 @@ BOOL Wh_ModInit() {
         service = LoadLibraryW(L"InputService.dll");
     }
     if (!service) {
+        Wh_SetIntValue(L"native-service-install-result", 2);
         return FALSE;
     }
-    ownedDecoder = LoadLibraryW(L"ChsPinyinDS.dll");
+    ownedDecoder = GetModuleHandleW(L"ChsPinyinDS.dll");
     if (!ownedDecoder) {
+        ownedDecoder = LoadLibraryW(L"C:\\Windows\\System32\\InputMethod\\CHS\\ChsPinyinDS.dll");
+    }
+    if (!ownedDecoder) {
+        ownedDecoder = LoadLibraryW(L"ChsPinyinDS.dll");
+    }
+    if (!ownedDecoder) {
+        Wh_SetIntValue(L"native-service-install-result", 3);
         return FALSE;
     }
     Wh_SetIntValue(L"native-normalized-count", 0);
     Wh_SetIntValue(L"native-decoded-count", 0);
     const bool readyService = NativeT9::InstallService(service) &&
                               NativeT9::InstallDecoder(ownedDecoder);
+    Wh_SetIntValue(L"native-service-install-result", readyService ? 1 : 0);
     if (!readyService) {
         FreeLibrary(ownedDecoder);
         ownedDecoder = nullptr;
