@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         3.3.0
+// @version         3.4.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @twitter         NekoMirra
@@ -206,31 +206,18 @@ HRESULT RegularizeHook(void* self, void* event) {
     if (text->length > 0)
         Wh_SetIntValue(L"native-reg-char", text->data()[0]);
     Wh_SetIntValue(L"native-reg-key", *reinterpret_cast<WORD*>(data + 92));
-    const bool isTwelveAlpha = (Wh_GetIntValue(L"native-is-twelve-alpha", 1) != 0);
-    if (isTwelveAlpha) {
+    auto* key = reinterpret_cast<WORD*>(data + 92);
+    const bool isNineKey = (*key >= 0x62 && *key <= 0x69);
+    if (isNineKey) {
         if (channel != 4 && originalEnsureChannel) {
             originalEnsureChannel(self, 4);
             *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = 4;
             channel = 4;
             Wh_SetIntValue(L"native-reg-channel-switched", 4);
         }
-        auto* key = reinterpret_cast<WORD*>(data + 92);
-        WORD normVk = 0;
-        if (*key >= '1' && *key <= '9') {
-            normVk = static_cast<WORD>(VK_NUMPAD0 + *key - '0');
-        } else if (text->length == 1 && text->data()[0] >= L'1' && text->data()[0] <= L'9') {
-            normVk = static_cast<WORD>(VK_NUMPAD0 + text->data()[0] - L'0');
-        } else if (*key >= 0x61 && *key <= 0x69) {
-            normVk = *key;
-        }
-        if (normVk != 0) {
-            Wh_SetIntValue(L"native-reg-key-before", *key);
-            *key = normVk;
-            *reinterpret_cast<WORD*>(data + 40) = normVk;
-            Wh_SetIntValue(L"native-normalized-count", ++normalized);
-            Wh_SetIntValue(L"native-normalized-key", normVk);
-            Wh_SetIntValue(L"native-reg-key-after", normVk);
-        }
+        *reinterpret_cast<WORD*>(data + 40) = *key;
+        Wh_SetIntValue(L"native-normalized-count", ++normalized);
+        Wh_SetIntValue(L"native-normalized-key", *key);
     } else {
         if (channel != 1 && originalEnsureChannel) {
             originalEnsureChannel(self, 1);
@@ -275,22 +262,21 @@ HRESULT LayoutHook(void* self, const NativeString* layout) {
 
 HRESULT ProcessStringHook(void* self, const void* event) {
     Wh_SetIntValue(L"native-process-count", ++processCount);
-    void* pinyinBase = static_cast<BYTE*>(self) - 136;
-    size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(pinyinBase) + 112);
+    size_t channel = *reinterpret_cast<size_t*>(static_cast<BYTE*>(self) + 112);
     auto* data = static_cast<const BYTE*>(event);
     const WORD flags = *reinterpret_cast<const WORD*>(data + 34);
     const bool hardware = (flags & 0x4010) == 0x10 && (flags & 5) != 0 && (flags & 5) != 5;
-    const bool isTwelveAlpha = (Wh_GetIntValue(L"native-is-twelve-alpha", 1) != 0);
-    const size_t targetChan = isTwelveAlpha ? 4 : 1;
+    const WORD key = *reinterpret_cast<const WORD*>(data + 92);
+    const bool isNineKey = (key >= 0x62 && key <= 0x69);
+    const size_t targetChan = isNineKey ? 4 : 1;
     if (!hardware && channel != targetChan && originalEnsureChannel) {
         originalEnsureChannel(self, targetChan);
         *reinterpret_cast<DWORD*>(static_cast<BYTE*>(self) + 164) = static_cast<DWORD>(targetChan);
         channel = targetChan;
     }
     Wh_SetIntValue(L"native-process-channel", static_cast<int>(channel));
-    Wh_SetIntValue(L"native-process-channel", static_cast<int>(channel));
     auto* text = reinterpret_cast<const NativeString*>(event);
-    Wh_SetIntValue(L"native-process-key", *reinterpret_cast<const WORD*>(data + 92));
+    Wh_SetIntValue(L"native-process-key", key);
     Wh_SetIntValue(L"native-process-flags", flags);
     if (text->length > 0)
         Wh_SetIntValue(L"native-process-char", text->data()[0]);
@@ -339,9 +325,7 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
     Wh_SetIntValue(L"native-cand-raw-type", properties.type);
     Wh_SetIntValue(L"native-cand-raw-flags", properties.flags);
     Wh_SetIntValue(L"native-cand-raw-mode", properties.mode);
-    const bool isTwelveAlpha = (Wh_GetIntValue(L"native-is-twelve-alpha", 1) != 0);
-    const bool isTwelve = isTwelveAlpha &&
-                          ((Wh_GetIntValue(L"native-layout-channel", 0) == 4) ||
+    const bool isTwelve = ((Wh_GetIntValue(L"native-layout-channel", 0) == 4) ||
                           ((properties.type & 0xFF) == 11 || properties.type == 11 || properties.type == 2 || properties.type == 0));
     QueryScope scope(static_cast<BYTE*>(self), isTwelve);
     if (isTwelve) {
@@ -367,8 +351,7 @@ HRESULT CandidatesHook(void* self, void* query, void** list) {
 HRESULT DecideHook(void* self, WORD first) {
     Wh_SetIntValue(L"native-decide-call-count", ++decideCallCount);
     Wh_SetIntValue(L"native-decide-char", first);
-    const bool isTwelveAlpha = (Wh_GetIntValue(L"native-is-twelve-alpha", 1) != 0);
-    const bool isTwelve = isTwelveAlpha && (twelveQuery || (Wh_GetIntValue(L"native-layout-channel", 0) == 4));
+    const bool isTwelve = twelveQuery || (Wh_GetIntValue(L"native-layout-channel", 0) == 4);
     static unsigned int s_lastConsumedLongSeq = 0;
     const unsigned int currentLongSeq = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-seq", 0));
     const unsigned int longDigit = static_cast<unsigned int>(Wh_GetIntValue(L"native-t9-long-digit", 0));
@@ -655,46 +638,24 @@ void OnReleaseActionHook(void* self, void* action) {
 
     if (action) {
         auto* data = static_cast<BYTE*>(action);
-        const bool isTwelve = (Wh_GetIntValue(L"native-is-twelve-alpha", 1) != 0);
         void* keyCtrl = *reinterpret_cast<void**>(data + 56);
-        if (isTwelve && priorHandlingState == 1) {
-            data[144] = 1;
-            Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
-        } else if (isTwelve && priorHandlingState == 0 && data[144] == 0 && keyCtrl && originalGetKeyData) {
+        if (keyCtrl && originalGetKeyData) {
             void* keyData = originalGetKeyData(keyCtrl);
             if (keyData && originalGetVirtualKey) {
                 const unsigned char vk = originalGetVirtualKey(keyData);
                 if (vk >= 0x62 && vk <= 0x69) {
-                    wchar_t digitStr[2] = { static_cast<wchar_t>(L'0' + vk - 0x60), 0 };
-                    HSTRING hStr = nullptr;
-                    if (SUCCEEDED(WindowsCreateString(digitStr, 1, &hStr))) {
-                        originalInjectKeyWithoutKeyControl(self, hStr, keyData, 255);
-                        WindowsDeleteString(hStr);
+                    if (priorHandlingState == 0 && data[144] == 0) {
+                        wchar_t digitStr[2] = { static_cast<wchar_t>(L'0' + vk - 0x60), 0 };
+                        HSTRING hStr = nullptr;
+                        if (SUCCEEDED(WindowsCreateString(digitStr, 1, &hStr))) {
+                            originalInjectKeyWithoutKeyControl(self, hStr, keyData, 255);
+                            WindowsDeleteString(hStr);
+                            data[144] = 1;
+                            Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
+                        }
+                    } else if (priorHandlingState == 1) {
                         data[144] = 1;
-                        Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
-                    }
-                }
-                using ReleaseFn = ULONG (*)(void*);
-                reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(keyData))[2])(keyData);
-            }
-        } else if (!isTwelve && priorHandlingState == 0 && data[144] == 0 && keyCtrl && originalGetKeyData) {
-            void* keyData = originalGetKeyData(keyCtrl);
-            if (keyData && originalGetVirtualKey) {
-                const unsigned char vk = originalGetVirtualKey(keyData);
-                wchar_t digitChar = 0;
-                if (vk >= '0' && vk <= '9') {
-                    digitChar = static_cast<wchar_t>(vk);
-                } else if (vk >= 0x60 && vk <= 0x69) {
-                    digitChar = static_cast<wchar_t>(L'0' + vk - 0x60);
-                }
-                if (digitChar != 0 && originalInjectKeyWithoutKeyControl) {
-                    wchar_t digitStr[2] = { digitChar, 0 };
-                    HSTRING hStr = nullptr;
-                    if (SUCCEEDED(WindowsCreateString(digitStr, 1, &hStr))) {
-                        originalInjectKeyWithoutKeyControl(self, hStr, keyData, 255);
-                        WindowsDeleteString(hStr);
-                        data[144] = 1;
-                        Wh_SetIntValue(L"native-front-numeric-direct-injected", digitChar);
+                        Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
                     }
                 }
                 using ReleaseFn = ULONG (*)(void*);
@@ -1039,7 +1000,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        330);
+        340);
     Wh_SetIntValue(L"native-is-twelve-alpha", 1);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
