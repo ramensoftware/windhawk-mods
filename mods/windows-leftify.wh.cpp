@@ -75,6 +75,8 @@ To pin the icon to the left edge of the window instead of right after the button
 ### Hide window icon and title
 Use *Hide window icon and title* to hide only the icon, only the title, or both.
 
+Turn off *Icon responds to click and double-click* if you don't want the window icon to open the window menu on click or close the window on double-click. The icon then behaves like an empty part of the title bar.
+
 | Hide icon only | Hide title only | Hide both |
 |----------------|-----------------|-----------|
 | ![Hide icon only](https://i.imgur.com/KPXmVYy.png) | ![Hide title only](https://i.imgur.com/e1M8jnX.png) | ![Hide both](https://i.imgur.com/GMB5Wjq.png) |
@@ -123,7 +125,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 
 ## Important notes
 
-- When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open).
+- When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open). Until then, a button can look wrong or be missing after the mod is turned off, for example the maximize button when the mod was turned on while a window was maximized and turned off before it was restored. dwm.exe is never restarted twice within 30 seconds, and the mod refuses to load if dwm.exe started 4 or more times within a minute.
 - The circles or custom images are global. Excluded apps keep them too; only their layout stays at the Windows default.
 - The mod hooks internal, undocumented functions of `uDWM.dll`. A Windows update can change them and stop the mod until it is updated.
 - If you report a bug, turn on *Write debug log* and attach the Windhawk log output.
@@ -202,6 +204,9 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
     - icon: Hide icon only
     - title: Hide title only
     - both: Hide both
+  - iconClickable: true
+    $name: Icon responds to click and double-click
+    $description: "On = default Windows behavior: clicking the icon opens the window menu and double-clicking it closes the window. Off = the icon acts like an empty part of the title bar (drag, double-click to maximize or restore)."
   $name: Icon and title text
   $description: Where the window icon and the title text are placed.
 - exclusions:
@@ -259,7 +264,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
     $description: Optional. Full path of an image file; overrides the folder for this button.
   - restartDwmOnUnload: false
     $name: Restart dwm.exe when the mod is unloaded
-    $description: "Off (recommended): painted glyphs stay until dwm.exe restarts. On: dwm.exe is terminated on every unload (recompile, disable, Windhawk restart); the screen flickers, and repeated restarts in a short time can be dangerous."
+    $description: "Off (recommended): the painted glyphs stay until dwm.exe restarts, so after the mod is turned off a button can look wrong or be missing. On: dwm.exe is terminated when the mod is unloaded (disable, recompile, Windhawk restart) so the original glyphs come back; the screen flickers briefly and apps stay open. dwm.exe is never restarted twice within 30 seconds."
   $name: Button style
   $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.
 - debugLog: false
@@ -295,12 +300,17 @@ static struct {
     int centerNudge;
     bool hideIcon, hideTitle, debugLog;
     bool showDialogClose;
+    bool iconClickable;
     int dialogAlign;
 } g_settings;
 
 // Alignment correction (px) for windows that only have a close button
 // (About Windows, message boxes, Run, ...). Not user-configurable.
 static const int kCloseOnlyOffset = -1;
+
+// Set while the mod is being unloaded: layouts are no longer changed, windows go back to default
+static volatile LONG g_unloading = 0;
+static volatile LONG g_unloadRelayouts = 0;
 
 static int Clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -344,7 +354,7 @@ static void LoadExclusions();
 
 static void LoadSettings() {
     g_settings.moveButtons = Wh_GetIntSetting(L"buttons.moveButtons") != 0;
-    g_settings.leftMargin = Wh_GetIntSetting(L"buttons.leftMargin");
+    g_settings.leftMargin = Clamp(Wh_GetIntSetting(L"buttons.leftMargin"), 0, 300);
     g_settings.explorerMargin = Clamp(Wh_GetIntSetting(L"explorerTabs.buttonsExtraMargin"), -50, 300);
     g_settings.order = GetChoice(L"buttons.order", kOrderKeys, 3);
     g_settings.showDialogClose = Wh_GetIntSetting(L"buttons.showDialogClose") != 0;
@@ -373,6 +383,7 @@ static void LoadSettings() {
     g_settings.hideTitle = hm && (wcscmp(hm, L"title") == 0 || wcscmp(hm, L"both") == 0);
     Wh_FreeStringSetting(hm);
 
+    g_settings.iconClickable = Wh_GetIntSetting(L"titleText.iconClickable") != 0;
     g_settings.debugLog = Wh_GetIntSetting(L"debugLog") != 0;
 
     LoadExclusions();
@@ -662,12 +673,12 @@ static HWND HwndFromTopLevelWindow(void* pThis) {
 }
 
 // ---------------- per-window button rectangles (window-local X) ----------------
-struct WinLayout { void* win; int left[4]; int right[4]; int band; bool valid; };
+struct WinLayout { void* win; HWND hwnd; int left[4]; int right[4]; int band; bool valid; };
 static WinLayout g_winLayouts[64];
 static int g_winLayoutNext = 0;
 static SRWLOCK g_layoutLock = SRWLOCK_INIT;
 
-static void StoreWinLayout(void* win, const int* l, const int* r, int band) {
+static void StoreWinLayout(void* win, const int* l, const int* r, int band, HWND hwnd) {
     AcquireSRWLockExclusive(&g_layoutLock);
     WinLayout* e = nullptr;
     for (int i = 0; i < 64; i++) {
@@ -679,6 +690,7 @@ static void StoreWinLayout(void* win, const int* l, const int* r, int band) {
         e->win = win;
     }
     for (int t = 1; t <= 3; t++) { e->left[t] = l[t]; e->right[t] = r[t]; }
+    e->hwnd = hwnd;
     e->band = band;
     e->valid = true;
     ReleaseSRWLockExclusive(&g_layoutLock);
@@ -939,10 +951,6 @@ static void SetInsetRight_Hook(void* v, int value) {
     SetInsetRight_Orig(v, value);
 }
 
-static void GetTitleBarInfo_Hook(void* pThis, TITLEBARINFOEX* info, bool* flag) {
-    GetTitleBarInfo_Orig(pThis, info, flag);
-}
-
 // ---------------- layout ----------------
 static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
     struct { TITLEBARINFOEX t; BYTE pad[256]; } buf = {};
@@ -1066,7 +1074,7 @@ static bool ComputeLayout(void* pThis, int a, int b, int baseOut) {
         br[t] = winW - t_seq.outBefore[t];
         bl[t] = br[t] - w[t];
     }
-    StoreWinLayout(pThis, bl, br, b + a + 2);
+    StoreWinLayout(pThis, bl, br, b + a + 2, hwndUsed);
 
     if (g_settings.debugLog && hwndUsed) {
         RECT rr = {};
@@ -1089,7 +1097,9 @@ static long UpdateNCAreaButton_Hook(void* pThis, int type, int a, int b, int* pO
     if (type == 3) {
         t_seq = Seq{};
         ClearWinLayout(pThis);
-        if (a > 0 && pOut && (g_settings.moveButtons || g_settings.moveTitle)) {
+        if (g_unloading) {
+            InterlockedIncrement(&g_unloadRelayouts);
+        } else if (a > 0 && pOut && (g_settings.moveButtons || g_settings.moveTitle)) {
             ComputeLayout(pThis, a, b, *pOut);
         }
     }
@@ -1201,6 +1211,13 @@ static bool DoHitTest_Hook(void* pThis, const POINT* pt, void** ppVisual, unsign
     if (!r || !pt || !pFlags) return r;
 
     unsigned int code = *pFlags;
+    if (code == 3 && !g_settings.iconClickable) {   // HTSYSMENU: the icon, which the mod may have moved anywhere in the title bar
+        int l0[4] = {}, r0[4] = {}, b0 = 0;
+        if (GetWinLayout(pThis, l0, r0, &b0)) {
+            *pFlags = 2;   // HTCAPTION
+            return r;
+        }
+    }
     int type = (code == 20) ? 3 : (code == 9) ? 2 : (code == 8) ? 1 : 0;
     if (!type) return r;
 
@@ -1235,6 +1252,7 @@ static bool DoHitTest_Hook(void* pThis, const POINT* pt, void** ppVisual, unsign
 // ======================================================================
 
 static volatile LONG g_tlEnabled = 1;
+static volatile LONG g_painterBroken = 0;   // 1 = DWM object layout did not match, the painter stays off
 static volatile LONG g_restartOnUnload = 0;
 static volatile LONG g_debug = 0;
 static volatile LONG g_everPainted = 0;
@@ -1280,7 +1298,7 @@ static void LoadIcons();
 static void TL_LoadSettings() {
     g_debug = Wh_GetIntSetting(L"debugLog") ? 1 : 0;
     PCWSTR style = Wh_GetStringSetting(L"buttonStyle.style");
-    g_tlEnabled = (style && wcscmp(style, L"windows") != 0) ? 1 : 0;
+    g_tlEnabled = (style && wcscmp(style, L"windows") != 0 && !g_painterBroken) ? 1 : 0;
     Wh_FreeStringSetting(style);
     g_restartOnUnload = Wh_GetIntSetting(L"buttonStyle.restartDwmOnUnload") ? 1 : 0;
 
@@ -1330,6 +1348,24 @@ static bool Readable(const void* p, SIZE_T n) {
     if (!p || !VirtualQuery(p, &mbi, sizeof(mbi))) return false;
     if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) return false;
     return (const char*)p + n <= (const char*)mbi.BaseAddress + mbi.RegionSize;
+}
+
+// Layout check before the painter reads or writes a glyph object: the vtable must belong to
+// uDWM.dll, the size must be small, and the atlas rect must have the same size as the object.
+// (Verified on all 24 objects in the debug log.) If this fails, the painter turns itself off.
+static bool AddressInUdwm(const void* p) {
+    HMODULE m = nullptr;
+    return p && GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCWSTR)p, &m) && m && m == GetModuleHandleW(L"udwm.dll");
+}
+
+static bool LooksLikeBitmapSource(const void* obj) {
+    if (!Readable(obj, 0x70)) return false;
+    if (!AddressInUdwm(*(void* const*)obj)) return false;
+    const unsigned* d = (const unsigned*)obj;
+    if (d[6] < 4 || d[6] > 64 || d[7] < 4 || d[7] > 64) return false;
+    return d[22] - d[20] == d[6] && d[23] - d[21] == d[7];
 }
 
 // ---------------- registry of arrays and glyph objects ----------------
@@ -1432,6 +1468,25 @@ static bool RegisterPair(const void* a, const void* b, float f) {
     const void* vb[4] = {};
     if (!ReadArr(a, va) || !ReadArr(b, vb)) return false;
     if (!vb[0] || !Readable(vb[0], 0x70)) return false;   // empty/odd arrays: ignore
+    if (g_painterBroken) return false;
+    {
+        bool known = false;
+        AcquireSRWLockShared(&g_arrLock);
+        for (int i = 0; i < g_arrCount; i++) {
+            if (g_arr[i].kind == 'B' && g_arr[i].bm[0] == vb[0]) { known = true; break; }
+        }
+        ReleaseSRWLockShared(&g_arrLock);
+        if (!known) {
+            for (int i = 0; i < 4; i++) {
+                if (vb[i] && !LooksLikeBitmapSource(vb[i])) {
+                    g_painterBroken = 1;
+                    g_tlEnabled = 0;
+                    Wh_Log(L"[Painter] unexpected CBitmapSource layout (obj=%p), painter disabled", vb[i]);
+                    return false;
+                }
+            }
+        }
+    }
 
     bool isNew = false;
     int set = -1, role = -1;
@@ -1449,6 +1504,21 @@ static bool RegisterPair(const void* a, const void* b, float f) {
         set = g_curSet;
         int idx = g_curSetCount++;
         role = DetectRole(va[0], vb[0], idx == 1 ? 1 : 0);
+        // A glyph that an earlier session already moved to its cell (y >= 808) keeps its role:
+        // the cell column says which button it is (0 minimize, 1 restore, 2 maximize, 3 close)
+        {
+            const unsigned* movedRc = (const unsigned*)vb[0];
+            if (movedRc[21] >= 808 && movedRc[20] >= 1) {
+                unsigned cellKind = (movedRc[20] - 1) / 16;
+                if (cellKind == 0) role = 0;
+                else if (cellKind == 1 || cellKind == 2) role = 1;
+                else if (cellKind == 3) role = 2;
+            }
+        }        
+        // Creation order inside a set is minimize, maximize/restore, close. With a maximized
+        // window the middle glyph is the 12x12 restore glyph, which looks like minimize by size.
+        // So the second glyph of a set that was not detected as close is the middle button.
+        if (idx == 1 && role == 0) role = 1;
         memcpy(g_arr[g_arrCount].bm, vb, sizeof(vb));
         g_arr[g_arrCount].kind = 'B'; g_arr[g_arrCount].set = set; g_arr[g_arrCount].role = role;
         g_arrCount++;
@@ -1929,11 +1999,14 @@ static void PaintAtlas() {
     BYTE* px = (BYTE*)calloc((size_t)W * H, 4);
     if (!px) { ReleaseSRWLockExclusive(&g_paintLock); return; }
 
+    bool painted[4][4] = {};   // [cell kind][state]: cells drawn from glyphs registered in this session
     for (int i = 0; i < n; i++) {
         int x0 = (int)snap[i].rc[0], y0 = (int)snap[i].rc[1];
         int w = (int)snap[i].rc[2] - x0, h = (int)snap[i].rc[3] - y0;
         if (w < 4 || h < 4 || w > 64 || h > 64) continue;
         if (x0 < 0 || y0 < 0 || x0 + w > W || y0 + h > H) continue;
+        if (y0 >= 808 && snap[i].state >= 0 && snap[i].state < 4)
+            painted[CellKind(snap[i].role, snap[i].sz[0])][snap[i].state] = true;        
         BYTE cell[64 * 64 * 4];
         if (!RenderCustomCell(cell, w, h, snap[i].role, snap[i].state, snap[i].sz[0]))
             RenderGlyph(cell, w, h, snap[i].role, snap[i].state);
@@ -1941,6 +2014,24 @@ static void PaintAtlas() {
             memcpy(px + ((size_t)(y0 + y) * W + x0) * 4, cell + y * w * 4, (size_t)w * 4);
         }
     }
+    // A glyph moved to its cell by an earlier session may not be registered in this one
+    // (for example the maximize glyph when the mod was turned on while a window was maximized).
+    // The cells are at fixed positions, so draw every cell that this session did not paint.
+    for (int kind = 0; kind < 4; kind++) {
+        for (int st = 0; st < 4; st++) {
+            if (painted[kind][st]) continue;
+            int w = (kind == 2) ? 14 : 12, h = 12;
+            int x0 = 1 + 16 * kind, y0 = 808 + 14 * st;
+            if (x0 + w > W || y0 + h > H) continue;
+            int role = (kind == 0) ? 0 : (kind == 3 ? 2 : 1);
+            BYTE cell[64 * 64 * 4];
+            if (!RenderCustomCell(cell, w, h, role, st, (unsigned)w))
+                RenderGlyph(cell, w, h, role, st);
+            for (int y = 0; y < h; y++) {
+                memcpy(px + ((size_t)(y0 + y) * W + x0) * 4, cell + y * w * 4, (size_t)w * 4);
+            }
+        }
+    }    
 
     HRESULT hrInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     IWICImagingFactory* fac = nullptr;
@@ -1991,8 +2082,60 @@ static void ProcessPending() {
 }
 
 static void RestartDwm() {
+    // Never restart dwm.exe twice within 30 seconds (protects against restart loops)
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULONGLONG now = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    ULONGLONG last = 0;
+    Wh_GetBinaryValue(L"lastDwmRestart", &last, sizeof(last));
+    if (last && now >= last && now - last < 30ULL * 10000000ULL) {
+        Wh_Log(L"[Restore] restart skipped: dwm.exe was restarted less than 30 seconds ago");
+        return;
+    }
+    Wh_SetBinaryValue(L"lastDwmRestart", &now, sizeof(now));
     LogCat(2, 40, L"[Restore] restarting dwm.exe");
     TerminateProcess(GetCurrentProcess(), 1);
+}
+
+// ---------------- forget freed glyph objects ----------------
+// CBitmapSource::~CBitmapSource runs on every free. Drop the object from our
+// registries so a later object at the same address is not mistaken for a known one.
+static bool ForgetBitmapSource(const void* obj) {
+    if (!obj) return false;
+    bool removed = false;
+
+    AcquireSRWLockExclusive(&g_glLock);
+    for (int i = 0; i < g_glN; i++) {
+        if (g_gl[i].obj == obj) {
+            g_gl[i] = g_gl[--g_glN];
+            i--;
+            removed = true;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_glLock);
+
+    AcquireSRWLockExclusive(&g_arrLock);
+    for (int i = 0; i < g_arrCount; i++) {
+        for (int s = 0; s < 4; s++) {
+            if (g_arr[i].bm[s] == obj) {
+                g_arr[i].bm[s] = nullptr;
+                removed = true;
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&g_arrLock);
+    return removed;
+}
+
+typedef void (*BmpDtor_t)(void*);
+static BmpDtor_t BmpDtor_Orig;
+static void BmpDtor_Hook(void* pThis) {
+    if (g_tlEnabled && (g_glN > 0 || g_arrCount > 0)) {
+        if (ForgetBitmapSource(pThis)) {
+            LogCat(4, 40, L"[Free] glyph object %p released, removed from registry", pThis);
+        }
+    }
+    BmpDtor_Orig(pThis);
 }
 
 // ---------------- painter hooks ----------------
@@ -2291,7 +2434,7 @@ static bool CallDwmDefWindowProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, LRESULT
     static DwmDefWindowProc_t pFn = nullptr;
     if (!pFn) {
         HMODULE hDwmApi = GetModuleHandleW(L"dwmapi.dll");
-        if (!hDwmApi) hDwmApi = LoadLibraryW(L"dwmapi.dll");
+        if (!hDwmApi) hDwmApi = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (hDwmApi) pFn = (DwmDefWindowProc_t)GetProcAddress(hDwmApi, "DwmDefWindowProc");
     }
     return pFn && pFn(h, msg, wp, lp, res) != 0;
@@ -2438,14 +2581,8 @@ static LRESULT CALLBACK CabinetSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, 
                 if (x >= b1 && x < b4) {
 
                     // Let DWM answer the hit-test so it keeps drawing the hover animation
-                    static DwmDefWindowProc_t pDwmDefWindowProc = nullptr;
-                    if (!pDwmDefWindowProc) {
-                        HMODULE hDwmApi = GetModuleHandleW(L"dwmapi.dll");
-                        if (!hDwmApi) hDwmApi = LoadLibraryW(L"dwmapi.dll");
-                        if (hDwmApi) pDwmDefWindowProc = (DwmDefWindowProc_t)GetProcAddress(hDwmApi, "DwmDefWindowProc");
-                    }
                     LRESULT lRes = 0;
-                    if (pDwmDefWindowProc && pDwmDefWindowProc(hwnd, msg, wParam, lParam, &lRes)) {
+                    if (CallDwmDefWindowProc(hwnd, msg, wParam, lParam, &lRes)) {
                         return lRes;
                     }
 
@@ -2688,6 +2825,7 @@ static BOOL ExplorerInit() {
 // ======================================================================
 //  Lifecycle (all parts)
 // ======================================================================
+static int RelayoutLaidOutWindows();
 void Wh_ModSettingsChanged() {
     if (g_isExplorer) {
         LoadSettings();
@@ -2700,10 +2838,53 @@ void Wh_ModSettingsChanged() {
     LoadSettings();       // Leftify (including the excluded apps lists)
     TL_LoadSettings();    // painter
     InterlockedExchange(&g_pending, 1);   // repaint on the next DWM-thread hook call
+    RelayoutLaidOutWindows();             // windows that are already open pick up the new settings    
+}
+
+// Makes DWM lay the window out again: a 1 px move is enough for maximized windows,
+// normal windows need a 1 px size change (a pure move does not trigger a new layout)
+static BOOL CALLBACK NudgeWindowProc(HWND h, LPARAM lp) {
+    if (!IsWindowVisible(h) || IsIconic(h)) return TRUE;
+    if ((GetWindowLongW(h, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) return TRUE;
+    if (IsHwndExcluded(h)) return TRUE;
+    RECT r;
+    if (!GetWindowRect(h, &r)) return TRUE;
+    int w = r.right - r.left, ht = r.bottom - r.top;
+    UINT base = SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
+    if (IsZoomed(h)) {
+        SetWindowPos(h, nullptr, r.left + 1, r.top, 0, 0, base | SWP_NOSIZE);
+        SetWindowPos(h, nullptr, r.left, r.top, 0, 0, base | SWP_NOSIZE);
+    } else {
+        SetWindowPos(h, nullptr, 0, 0, w + 1, ht, base | SWP_NOMOVE | SWP_FRAMECHANGED);
+        SetWindowPos(h, nullptr, 0, 0, w, ht, base | SWP_NOMOVE);
+    }
+    DebugLog(L"[Nudge] hwnd=%p zoomed=%d", h, (int)IsZoomed(h));
+    (*(int*)lp) += 2;
+    return TRUE;
+}
+
+// Nudges every visible window that has a title bar (not only the ones this mod has laid out)
+static int RelayoutLaidOutWindows() {
+    int n = 0;
+    EnumWindows(NudgeWindowProc, (LPARAM)&n);
+    return n;
+}
+
+// Called by Windhawk just before the mod is unloaded, while the hooks still work
+void Wh_ModBeforeUninit() {
+    if (g_isExplorer) return;
+    InterlockedExchange(&g_unloading, 1);
+    int n = RelayoutLaidOutWindows();
+    for (int i = 0; i < 25 && g_unloadRelayouts < n; i++) Sleep(20);   // wait up to ~0.5 second
+    Wh_Log(L"[Unload] relayout posted for %d nudge(s), %ld handled", n, (long)g_unloadRelayouts);
 }
 
 void Wh_ModAfterInit() {
-    if (g_isExplorer) EnumWindows(ExTopProc, 0);   // File Explorer windows that already exist
+    if (g_isExplorer) {
+        EnumWindows(ExTopProc, 0);   // File Explorer windows that already exist
+    } else {
+        RelayoutLaidOutWindows();    // windows that are already open get the new layout right away
+    }
 }
 
 void Wh_ModUninit() {
@@ -2716,6 +2897,32 @@ void Wh_ModUninit() {
     FreeIcons();
 }
 
+// Crash-loop guard: refuse to load when dwm.exe started 4 or more times within 60 seconds.
+// Recompiling the mod inside the same dwm.exe does not count (same process start time).
+static bool IsDwmRestartLoop() {
+    FILETIME ct, et, kt, ut, nowFt;
+    if (!GetProcessTimes(GetCurrentProcess(), &ct, &et, &kt, &ut)) return false;
+    GetSystemTimeAsFileTime(&nowFt);
+    ULONGLONG start = ((ULONGLONG)ct.dwHighDateTime << 32) | ct.dwLowDateTime;
+    ULONGLONG now = ((ULONGLONG)nowFt.dwHighDateTime << 32) | nowFt.dwLowDateTime;
+    const ULONGLONG kWindow = 60ULL * 10000000ULL;
+
+    ULONGLONG stored[8] = {};
+    size_t got = Wh_GetBinaryValue(L"dwmStartTimes", stored, sizeof(stored));
+    int storedN = (int)(got / sizeof(ULONGLONG));
+    if (storedN > 8) storedN = 8;
+
+    ULONGLONG keep[8] = {};
+    int n = 0;
+    for (int i = 0; i < storedN; i++) {
+        if (stored[i] != start && now >= stored[i] && now - stored[i] <= kWindow && n < 7)
+            keep[n++] = stored[i];
+    }
+    keep[n++] = start;
+    Wh_SetBinaryValue(L"dwmStartTimes", keep, n * sizeof(ULONGLONG));
+    return n >= 4;
+}
+
 BOOL Wh_ModInit() {
     // The mod runs in two processes: dwm.exe (buttons, glyphs) and explorer.exe (tab bar)
     wchar_t exePath[MAX_PATH] = L"";
@@ -2724,19 +2931,23 @@ BOOL Wh_ModInit() {
     exeName = exeName ? exeName + 1 : exePath;
     g_isExplorer = _wcsicmp(exeName, L"explorer.exe") == 0;
     if (g_isExplorer) return ExplorerInit();
+    if (IsDwmRestartLoop()) {
+        Wh_Log(L"dwm.exe started 4 or more times within a minute, the mod stays unloaded for safety");
+        return FALSE;
+    }
 
     LoadSettings();
     TL_LoadSettings();
 
     LoadUser32Procs();
 
-    HMODULE udwm = LoadLibraryW(L"uDWM.dll");
+    HMODULE udwm = GetModuleHandleW(L"udwm.dll");
     if (!udwm) return FALSE;
 
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         // ---- Leftify ----
         { { LR"(public: void __cdecl CTopLevelWindow::GetTitleBarInfo(struct tagTITLEBARINFOEX *,bool *))" },
-          (void**)&GetTitleBarInfo_Orig, (void*)GetTitleBarInfo_Hook, false },
+          (void**)&GetTitleBarInfo_Orig, nullptr, false },
         { { LR"(private: long __cdecl CTopLevelWindow::UpdateNCAreaButton(enum CTopLevelWindow::ButtonType,int,int,int *))" },
           (void**)&UpdateNCAreaButton_Orig, (void*)UpdateNCAreaButton_Hook, false },
         { { LR"(private: long __cdecl CTopLevelWindow::UpdateNCAreaPositionsAndSizes(void))" },
@@ -2774,6 +2985,9 @@ BOOL Wh_ModInit() {
         // Address only (no hook): called by PaintAtlas
         { { LR"(private: long __cdecl CBitmapSource::Update(struct IWICBitmap *))" },
           (void**)&g_updateBmp, nullptr, true },
+        // Frees of glyph objects: drop them from our registries
+        { { LR"(protected: virtual __cdecl CBitmapSource::~CBitmapSource(void))" },
+          (void**)&BmpDtor_Orig, (void*)BmpDtor_Hook, true },          
     };
 
     BOOL ok = WindhawkUtils::HookSymbols(udwm, udwmDllHooks, ARRAYSIZE(udwmDllHooks));
@@ -2781,5 +2995,6 @@ BOOL Wh_ModInit() {
     DeriveHwndOffset();
 
     if (!g_updateBmp) Wh_Log(L"CBitmapSource::Update not found, custom button styles will not be painted");
+    if (!BmpDtor_Orig) Wh_Log(L"CBitmapSource destructor not found, freed glyph objects are not tracked");     
     return ok;
 }
