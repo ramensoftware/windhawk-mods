@@ -524,7 +524,7 @@ BOOL Wh_ModInit()
             {L"private: bool __cdecl CTitleBar::UpdateBorderVisibilityAndMargins(void)"},
             (void **)&CTitleBar__UpdateBorderVisibilityAndMargins_orig,
             (void *)CTitleBar__UpdateBorderVisibilityAndMargins_hook,
-            false
+            true
         } 
         
     };
