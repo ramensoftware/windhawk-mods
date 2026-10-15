@@ -2,7 +2,7 @@
 // @id              coin-stock-monitor
 // @name            Coin & Stock Monitor
 // @description     Shows stock and crypto prices on the Windows 11 taskbar, with a configurable price API, symbol list, colors and entry-price percentage
-// @version         1.1.0
+// @version         1.2.0
 // @author          jayll1303
 // @github          https://github.com/jayll1303
 // @license         MIT
@@ -37,9 +37,9 @@ stop all requests, disable the mod.
   URL-encoded symbol.
 * **Price JSON key** - the key whose numeric value is the price in the response.
   Yahoo Finance uses `regularMarketPrice`.
-* **Symbols** - comma-separated list, shown in order. At most 4 symbols, shown 2
-  per line.
-* **Entry prices** - comma-separated `SYMBOL=PRICE` pairs. When a symbol has an
+* **Symbols** - separated by `|`, shown in order. At most 4 symbols, shown 2 per line.
+* **Entry prices** - `SYMBOL=PRICE` pairs separated by `|`. Use `.` as the decimal
+  separator. Commas are ignored, so `12,005` means `12005`. When a symbol has an
   entry price, its price and signed percentage change from the entry are shown.
   The color is the gain color when the price is at or above the entry, and the
   loss color otherwise.
@@ -58,7 +58,7 @@ Changing any setting reloads the mod.
 
 * Price API URL: `https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd`
 * Price JSON key: `usd`
-* Symbols: `bitcoin,ethereum` (CoinGecko coin ids, not ticker symbols)
+* Symbols: `bitcoin|ethereum` (CoinGecko coin ids, not ticker symbols)
 * Entry prices: `bitcoin=60000` (use the same ids as Symbols)
 
 ## Limitations
@@ -84,18 +84,19 @@ Changing any setting reloads the mod.
   $description: >-
     JSON key whose numeric value is the price in the API response. Yahoo Finance
     uses regularMarketPrice. CoinGecko uses the currency code, e.g. usd.
-- Symbols: BTC-USD,ETH-USD,AAPL
+- Symbols: BTC-USD|ETH-USD|AAPL
   $name: Symbols
   $description: >-
-    Comma-separated symbols to show, in order. At most 4 symbols, shown 2 per line.
+    Symbols to show, separated by |, in order. At most 4 symbols, shown 2 per line.
     Yahoo examples: BTC-USD, AAPL, VNM.VN, ^GSPC. For CoinGecko, use coin ids such
-    as bitcoin,ethereum.
+    as bitcoin|ethereum.
 - EntryPrices: ""
   $name: Entry prices
   $description: >-
-    Comma-separated SYMBOL=PRICE pairs, e.g. BTC-USD=60000,AAPL=300. Symbols
-    with an entry price show the signed percentage change from it. Symbols
-    without one show only the price.
+    SYMBOL=PRICE pairs, separated by |, e.g. BTC-USD=60000|AAPL=300. Use . as the
+    decimal separator. Commas are ignored, so 12,005 means 12005. Symbols with an
+    entry price show the signed percentage change from it. Symbols without one show
+    only the price.
 - TextAlign: left
   $name: Text alignment
   $description: >-
@@ -146,7 +147,9 @@ Changing any setting reloads the mod.
 #include <cstdlib>
 #include <cwchar>
 #include <iterator>
+#include <locale>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -233,11 +236,12 @@ std::wstring Trim(const std::wstring& text) {
     return text.substr(first, last - first + 1);
 }
 
+// Splits on '|', so commas can appear inside a value, such as 12,005.
 std::vector<std::wstring> SplitList(const std::wstring& list) {
     std::vector<std::wstring> items;
     size_t start = 0;
     while (start <= list.size()) {
-        size_t end = list.find(L',', start);
+        size_t end = list.find(L'|', start);
         if (end == std::wstring::npos) {
             end = list.size();
         }
@@ -250,6 +254,17 @@ std::vector<std::wstring> SplitList(const std::wstring& list) {
     return items;
 }
 
+// Parses a number with '.' as the decimal separator. Commas are ignored as thousands
+// separators, so "12,005" reads as 12005. The classic locale keeps the result the same
+// whatever the system locale is.
+bool ParseDecimal(std::wstring text, double& value) {
+    text.erase(std::remove(text.begin(), text.end(), L','), text.end());
+    std::wistringstream stream(Trim(text));
+    stream.imbue(std::locale::classic());
+    stream >> value;
+    return !stream.fail() && stream.eof();
+}
+
 std::vector<EntryPrice> ParseEntryPrices(const std::wstring& list) {
     std::vector<EntryPrice> entries;
     for (const std::wstring& item : SplitList(list)) {
@@ -259,8 +274,9 @@ std::vector<EntryPrice> ParseEntryPrices(const std::wstring& list) {
             continue;
         }
         std::wstring symbol = Trim(item.substr(0, equals));
-        double price = std::wcstod(item.c_str() + equals + 1, nullptr);
-        if (symbol.empty() || price <= 0) {
+        double price = 0;
+        if (!ParseDecimal(item.substr(equals + 1), price) || symbol.empty() ||
+            price <= 0) {
             Wh_Log(L"Invalid entry price: %s", item.c_str());
             continue;
         }
@@ -319,13 +335,13 @@ bool ParsePrice(const std::string& body,
     if (pos == std::string::npos) {
         return false;
     }
-    const char* start = body.c_str() + pos + needle.size();
-    while (*start == ' ') {
+    size_t start = pos + needle.size();
+    while (start < body.size() && body[start] == ' ') {
         ++start;
     }
-    char* end = nullptr;
-    price = std::strtod(start, &end);
-    return end != start;
+    std::istringstream stream(body.substr(start, 32));
+    stream.imbue(std::locale::classic());
+    return static_cast<bool>(stream >> price);
 }
 
 // Whole prices drop the decimals, and the integer part gets thousands separators,
