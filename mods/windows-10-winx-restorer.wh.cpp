@@ -12,14 +12,23 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 10 Win+X restorer
+# Windows 8.1/10 Power User Context Menu Restorer on Win11 24H2
 
-This mod restores a Windows 10-style power user menu on Windows 11.
+This mod restores a Windows 8.1/10-style power user menu on Windows 11.
 Open it with **Win+X** or by **right-clicking the Start button**.
 
 The menu can be used with both the Windows 11 taskbar and a legacy Windows 10
 taskbar. Clicking Start normally or pressing the Windows key alone is not
 replaced: these actions continue to open the regular Start menu.
+
+
+## Screenshot
+
+Immersive style (original screenshot):
+
+![Windows 10-style Win+X menu](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winx.png)
+
+Additionally, a Win32 styled one can be enabled in the mod's settings (as it was in Windows 8/8.1).
 
 ## Features
 
@@ -49,10 +58,11 @@ mod is not required. Settings apply to the next menu opening.
 
 ## Requirements and compatibility
 
-Designed for Windows 11 24H2 and 25H2, x64. Native shell interception uses symbols
+This mod is designed for Windows 11 24H2 and 25H2, x64. Native shell interception uses symbols
 matching the installed Windows components. The first initialization may require
-internet access to download symbols; the mod will not initialize if a required
-symbol cannot be resolved.
+internet access to download symbols. If modern symbols cannot be resolved, only
+the modern guard is disabled; the keyboard Win+X and legacy Start-button routes
+remain available.
 
 The immersive appearance is recreated, rather than loading the original Windows
 10 menu component. Compatibility can depend on the Windows build and other mods
@@ -1128,35 +1138,23 @@ static HWND FindNativeTaskbarStartButton() {
     return FindStartButtonInTaskbar(FindOwnTaskbarWindow());
 }
 
-class ScopedWindowsHook {
-public:
-    ScopedWindowsHook() = default;
-    ~ScopedWindowsHook() { Reset(); }
-    ScopedWindowsHook(const ScopedWindowsHook&) = delete;
-    ScopedWindowsHook& operator=(const ScopedWindowsHook&) = delete;
+// Only the services thread installs/unhooks these handles. There is deliberately
+// no global destructor that can call User32 during DLL_PROCESS_DETACH.
+static HHOOK g_winXKeyboardHook = nullptr;
+static HHOOK g_winXMouseHook = nullptr;
+static DWORD g_winXRouteRefreshMs = 500;
+static ULONGLONG g_servicesStartedAt = 0;
 
-    bool Install(int hookType, HOOKPROC callback, HMODULE module) {
-        if (hook_) return true;
-        hook_ = SetWindowsHookExW(hookType, callback, module, 0);
-        return hook_ != nullptr;
+static void ResetWinXInputHooks() {
+    if (g_winXKeyboardHook) {
+        UnhookWindowsHookEx(g_winXKeyboardHook);
+        g_winXKeyboardHook = nullptr;
     }
-    void Reset() {
-        if (hook_) {
-            UnhookWindowsHookEx(hook_);
-            hook_ = nullptr;
-        }
+    if (g_winXMouseHook) {
+        UnhookWindowsHookEx(g_winXMouseHook);
+        g_winXMouseHook = nullptr;
     }
-    bool IsInstalled() const { return hook_ != nullptr; }
-
-private:
-    HHOOK hook_ = nullptr;
-};
-
-// The input hooks are file-scope objects of the services thread, so a failed
-// installation is retried by the service loop instead of being given up for the
-// whole session, which would leave Win+X dead until the next sign-in.
-static ScopedWindowsHook g_winXKeyboardHook;
-static ScopedWindowsHook g_winXMouseHook;
+}
 
 static void ClearWinXInputRoutes() {
     g_winXKeyboardFallbackEnabled.store(false, std::memory_order_release);
@@ -1221,124 +1219,64 @@ static bool CloseWinXMenuIfOpen() {
     return true;
 }
 
-// The Start button under a point, or null. It runs inside the mouse hook, but only
-// for the right button events - never for a mouse move - and it uses local queries
-// only: WindowFromPoint, GetAncestor, GetClassNameW, GetWindowThreadProcessId and
-// GetDlgCtrlID send no message to any window, so nothing here can hold up input.
-//
-// The root window may be the taskbar of any monitor: Windows 10 shows a Start button
-// on the secondary taskbars too, and a right-click on any of them opens the menu.
-// A XAML Start button has no child HWND or control ID. UI Automation is queried
-// only from this MTA worker, never inside a low-level hook or on the taskbar thread.
-// Publish a bounded cache; the input hook uses TryAcquireSRWLockShared so it cannot
-// stall waiting for UI Automation. No guessed "first 48 pixels" hit area is used.
-struct StartRectEntry { HWND taskbar; RECT rect; };
-static SRWLOCK g_startRectLock = SRWLOCK_INIT;
-static StartRectEntry g_startRects[16] = {};
-static unsigned g_startRectCount = 0;
-static HANDLE g_startDiscoveryThread = nullptr;
-
-static bool CachedStartRect(HWND taskbar, RECT* rect) {
-    if (!TryAcquireSRWLockShared(&g_startRectLock)) return false;
-    bool found = false;
-    for (unsigned i = 0; i < g_startRectCount; ++i) {
-        if (g_startRects[i].taskbar == taskbar) {
-            *rect = g_startRects[i].rect;
-            found = true;
-            break;
-        }
-    }
-    ReleaseSRWLockShared(&g_startRectLock);
-    return found;
-}
-
-struct DiscoveryBatch {
-    IUIAutomation* automation;
-    IUIAutomationCondition* condition;
-    StartRectEntry entries[16];
-    unsigned count;
-};
-
-static BOOL CALLBACK DiscoverStartRectProc(HWND taskbar, LPARAM param) {
-    auto* batch = reinterpret_cast<DiscoveryBatch*>(param);
-    if (g_unloading.load() || batch->count == _countof(batch->entries)) return FALSE;
+// One on-demand lookup for the taskbar whose menu is being opened. This is
+// called by ComputeWinXMenuAnchor on the new menu thread BEFORE that thread
+// initializes its STA and creates any windows. UIA runs in a temporary MTA;
+// only a RECT survives it. No UIA calls run inside input hooks or on shell UI.
+static bool QueryStartButtonRectOnce(HWND taskbar, RECT* result) {
+    if (!taskbar || !result || g_unloading.load(std::memory_order_acquire)) return false;
     DWORD pid = 0;
     GetWindowThreadProcessId(taskbar, &pid);
-    if (pid != GetCurrentProcessId() || !IsWindowVisible(taskbar)) return TRUE;
-    wchar_t cls[64] = {};
-    GetClassNameW(taskbar, cls, _countof(cls));
-    if (_wcsicmp(cls, L"Shell_TrayWnd") && _wcsicmp(cls, L"Shell_SecondaryTrayWnd"))
-        return TRUE;
-
-    RECT rect = {};
-    HWND legacy = FindStartButtonInTaskbar(taskbar);
-    bool haveRect = legacy && GetWindowRect(legacy, &rect);
-    if (!haveRect && batch->automation && batch->condition) {
-        IUIAutomationElement* root = nullptr;
-        if (SUCCEEDED(batch->automation->ElementFromHandle(taskbar, &root)) && root) {
-            IUIAutomationElement* start = nullptr;
-            if (SUCCEEDED(root->FindFirst(TreeScope_Descendants, batch->condition, &start)) && start) {
-                BOOL offscreen = TRUE;
-                haveRect = SUCCEEDED(start->get_CurrentIsOffscreen(&offscreen)) && !offscreen &&
-                           SUCCEEDED(start->get_CurrentBoundingRectangle(&rect));
-                start->Release();
-            }
-            root->Release();
-        }
-    }
-    RECT taskbarRect = {}, intersection = {};
-    if (haveRect && rect.right > rect.left && rect.bottom > rect.top &&
-        GetWindowRect(taskbar, &taskbarRect) &&
-        IntersectRect(&intersection, &rect, &taskbarRect)) {
-        batch->entries[batch->count++] = {taskbar, intersection};
-    }
-    return TRUE;
-}
-
-static DWORD WINAPI StartDiscoveryThread(LPVOID stopEventParam) {
-    const HANDLE stop = static_cast<HANDLE>(stopEventParam);
+    if (pid != GetCurrentProcessId()) return false;
     const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(com)) return false;
+
     IUIAutomation* automation = nullptr;
     IUIAutomationCondition* condition = nullptr;
-    // Explicit CLSID avoids a dependency on libuuid.
+    IUIAutomationElement* root = nullptr;
+    IUIAutomationElement* start = nullptr;
+    RECT bounds = {};
+    bool haveBounds = false;
     const CLSID clsid = {0xff48dba4, 0x60ef, 0x4201,
                         {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
-    if (SUCCEEDED(com)) {
-        HRESULT hr = CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER,
-                                      IID_PPV_ARGS(&automation));
-        if (SUCCEEDED(hr) && automation) {
-            VARIANT value;
-            VariantInit(&value);
-            value.vt = VT_BSTR;
-            value.bstrVal = SysAllocString(L"StartButton");
-            if (value.bstrVal)
-                automation->CreatePropertyCondition(UIA_AutomationIdPropertyId, value, &condition);
-            VariantClear(&value);
+    if (SUCCEEDED(CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&automation))) && automation) {
+        VARIANT value;
+        VariantInit(&value);
+        value.vt = VT_BSTR;
+        value.bstrVal = SysAllocString(L"StartButton");
+        if (value.bstrVal)
+            automation->CreatePropertyCondition(UIA_AutomationIdPropertyId, value, &condition);
+        VariantClear(&value);
+        if (condition &&
+            SUCCEEDED(automation->ElementFromHandle(taskbar, &root)) && root &&
+            SUCCEEDED(root->FindFirst(TreeScope_Descendants, condition, &start)) && start) {
+            BOOL offscreen = TRUE;
+            haveBounds = SUCCEEDED(start->get_CurrentIsOffscreen(&offscreen)) && !offscreen &&
+                         SUCCEEDED(start->get_CurrentBoundingRectangle(&bounds));
         }
-        if (!condition) Wh_Log(L"[winx] UI Automation unavailable; legacy Start detection only");
     }
-    unsigned previousCount = UINT_MAX;
-    do {
-        DiscoveryBatch batch{};
-        batch.automation = automation;
-        batch.condition = condition;
-        if (OwnsTaskbarWindow())
-            EnumWindows(DiscoverStartRectProc, reinterpret_cast<LPARAM>(&batch));
-        AcquireSRWLockExclusive(&g_startRectLock);
-        g_startRectCount = batch.count;
-        for (unsigned i = 0; i < batch.count; ++i) g_startRects[i] = batch.entries[i];
-        ReleaseSRWLockExclusive(&g_startRectLock);
-        if (batch.count != previousCount) {
-            Wh_Log(L"[winx] cached Start button rectangles: %u", batch.count);
-            previousCount = batch.count;
-        }
-    } while (WaitForSingleObject(stop, 1000) == WAIT_TIMEOUT && !g_unloading.load());
+    if (start) start->Release();
+    if (root) root->Release();
     if (condition) condition->Release();
     if (automation) automation->Release();
-    if (SUCCEEDED(com)) CoUninitialize();
-    return 0;
+    CoUninitialize();
+
+    RECT taskbarBounds = {}, clipped = {};
+    GetWindowThreadProcessId(taskbar, &pid);
+    if (haveBounds && !g_unloading.load(std::memory_order_acquire) &&
+        pid == GetCurrentProcessId() && bounds.right > bounds.left && bounds.bottom > bounds.top &&
+        GetWindowRect(taskbar, &taskbarBounds) &&
+        IntersectRect(&clipped, &bounds, &taskbarBounds)) {
+        *result = clipped;
+        return true;
+    }
+    return false;
 }
 
+// The Start button under a point, or null. Low-level input hooks use only local
+// HWND queries, not UIA or a guessed XAML hit area. Modern XAML context requests
+// are identified by Explorer and intercepted at the real menu-creation entry.
 static std::atomic<bool> g_modernNativeGuard{false};
 
 static HWND WinXStartButtonFromPoint(const POINT& point) {
@@ -1366,39 +1304,22 @@ static HWND WinXStartButtonFromPoint(const POINT& point) {
             return hwnd;
         }
     }
-    RECT startRect = {};
-    // With a native guard, let the shell identify a XAML Start request and catch
-    // actual menu creation in ShowStartButtonContextMenuAsync. UIA is for placement.
-    // Keep Win32 button interception above for legacy shells with broken Win+X.
-    if (!g_modernNativeGuard.load(std::memory_order_acquire) &&
-        CachedStartRect(root, &startRect) && PtInRect(&startRect, point))
-        return root;
     return nullptr;
 }
 
 // Native Win+X guards. These are private Microsoft PDB symbols, NOT a documented
-// Windows API. Resolve the exact decorated symbol in the PDB matching the loaded
-// image; do not reuse offsets from another build, and do not patch a coroutine.
+// Windows API. Resolve full signatures against the loaded image with Windhawk's
+// cached symbol helper; never reuse offsets from another build or patch a coroutine.
 // Audited menu entry samples: Taskbar.View.dll 2124.12106.10.0 and 2608.26001.200.0.
 // Do NOT hook CLauncherTipContextMenu::ShowLauncherTipContextMenu: on an audited
 // Windows 11 24H2 image it is a feature-usage reporting stub returning S_OK,
 // not a request to create a menu. The original method must remain untouched.
 
-struct NativeModulePins {
-    HMODULE view = nullptr;
-    ~NativeModulePins() {
-        // Static destruction happens when Windhawk releases the mod DLL, after
-        // its function hooks have been removed. Keep target images alive until then.
-        if (view) FreeLibrary(view);
-    }
-};
-static NativeModulePins g_nativeModulePins;
-
 // Microsoft x64 ABI audit: each non-trivial, one-pointer WinRT value parameter
 // is passed indirectly as the address of an owned temporary. fire_and_forget is
 // empty and returns in the low byte of RAX in the audited images. Use an explicit
 // ABI thunk, not fake projected C++ types with the wrong destructor semantics.
-// These signatures are only used for the exact decorated x64 symbol below.
+// The full undecorated signatures below identify the same audited x64 symbols.
 using ShowStartButtonContextMenuAsync_t = BYTE(WINAPI*)(void*, void*, void*, void*);
 static ShowStartButtonContextMenuAsync_t ShowStartButtonContextMenuAsync_Original = nullptr;
 using ViewCoordinatorComPtrDestructor_t = void(WINAPI*)(void*);
@@ -1445,7 +1366,8 @@ static void DestroyProjectedTemporary(void* slot) {
 static BYTE WINAPI ShowStartButtonContextMenuAsync_Hook(
     void* elementTemporary, void* modelTemporary,
     void* frameTemporary, void* coordinatorTemporary) {
-    if (g_unloading.load(std::memory_order_acquire))
+    if (g_unloading.load(std::memory_order_acquire) ||
+        !g_modernNativeGuard.load(std::memory_order_acquire))
         return ShowStartButtonContextMenuAsync_Original(
             elementTemporary, modelTemporary, frameTemporary, coordinatorTemporary);
 
@@ -1464,105 +1386,114 @@ static BYTE WINAPI ShowStartButtonContextMenuAsync_Hook(
     return 0;
 }
 
-static void* FindExactNativeSymbol(HMODULE module, const wchar_t* decorated) {
-    wchar_t path[MAX_PATH] = {};
-    GetModuleFileNameW(module, path, _countof(path));
-    Wh_Log(L"[winx-native] resolving %s in %s", decorated, path);
-    WH_FIND_SYMBOL_OPTIONS options = {};
-    options.optionsSize = sizeof(options);
-    options.symbolServer = nullptr; // Windhawk's default: Microsoft public symbols.
-    options.noUndecoratedSymbols = TRUE;
-    WH_FIND_SYMBOL symbol = {};
-    HANDLE search = Wh_FindFirstSymbol(module, &options, &symbol);
-    if (!search) {
-        Wh_Log(L"[winx-native] ERROR: matching PDB could not be enumerated for %s", path);
-        return nullptr;
-    }
-    void* address = nullptr;
-    do {
-        if (symbol.symbolDecorated && !wcscmp(symbol.symbolDecorated, decorated)) {
-            address = symbol.address;
-            break;
-        }
-    } while (Wh_FindNextSymbol(search, &symbol));
-    Wh_FindCloseSymbol(search);
-    if (address)
-        Wh_Log(L"[winx-native] exact symbol resolved at %p", address);
-    else
-        Wh_Log(L"[winx-native] ERROR: required symbol is absent in this build: %s", decorated);
-    return address;
+// A single attempt per mod lifetime, including a cache miss / missing PDB.
+// Plain atomic state and SRWLOCK have no DLL-detach cleanup. The lock also fences
+// in-flight delayed registration before Wh_ModBeforeUninit is allowed to return.
+enum class NativeGuardState { WaitingForModule, Resolving, Ready, Unavailable };
+static std::atomic<NativeGuardState> g_nativeGuardState{NativeGuardState::WaitingForModule};
+static SRWLOCK g_nativeGuardLock = SRWLOCK_INIT;
+
+static HMODULE GetTaskbarViewModuleHandle() {
+    HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
+    if (!module) module = GetModuleHandleW(L"ExplorerExtensions.dll");
+    return module; // borrowed: Explorer owns the load and lifetime, not this mod
 }
 
-static HMODULE GetNativeTaskbarView(bool* imageExists) {
-    *imageExists = false;
-    HMODULE module = nullptr;
-    // GetModuleHandleEx increments the reference count, unlike GetModuleHandle.
-    if (GetModuleHandleExW(0, L"Taskbar.View.dll", &module) ||
-        GetModuleHandleExW(0, L"ExplorerExtensions.dll", &module)) {
-        *imageExists = true;
-        return module;
+static bool HookNativeTaskbarView(HMODULE module, bool applyNow) {
+#if !defined(_M_X64)
+    // The opaque WinRT entry thunk was audited only for x64.
+    (void)module;
+    (void)applyNow;
+    return false;
+#else
+    if (!module || g_unloading.load(std::memory_order_acquire) ||
+        g_nativeGuardState.load(std::memory_order_acquire) != NativeGuardState::WaitingForModule)
+        return false;
+    // Symbol loading may recursively load DLLs. Never block a reentrant loader
+    // callback on the same lock; AfterInit closes the initial load/watch race.
+    if (!TryAcquireSRWLockExclusive(&g_nativeGuardLock)) return false;
+    struct UnlockOnExit {
+        SRWLOCK* lock;
+        ~UnlockOnExit() { ReleaseSRWLockExclusive(lock); }
+    } unlock{&g_nativeGuardLock}; // local only; never a global DLL-detach destructor
+    if (g_unloading.load(std::memory_order_acquire) ||
+        g_nativeGuardState.load(std::memory_order_relaxed) != NativeGuardState::WaitingForModule) {
+        return false;
     }
-    wchar_t windows[MAX_PATH] = {};
-    UINT n = GetSystemWindowsDirectoryW(windows, _countof(windows));
-    if (!n || n >= _countof(windows)) return nullptr;
-    static const wchar_t* paths[] = {
-        L"\\SystemApps\\MicrosoftWindows.Client.Core_cw5n1h2txyewy\\Taskbar.View.dll",
-        L"\\SystemApps\\MicrosoftWindows.Client.Core_cw5n1h2txyewy\\Core\\Taskbar.View.dll",
-        L"\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\Taskbar.View.dll",
-        L"\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\ExplorerExtensions.dll",
+    g_nativeGuardState.store(NativeGuardState::Resolving, std::memory_order_release);
+
+    // Both full names identify the exact symbols preserved in our matching-PDB
+    // audit. The spaced variants differ only in demangler formatting, not ABI.
+    // Required destructor lookup and entry detour share ONE cached resolution.
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+        {
+            {LR"(public: __cdecl winrt::com_ptr<struct winrt::Taskbar::implementation::ViewCoordinator>::~com_ptr<struct winrt::Taskbar::implementation::ViewCoordinator>(void))"},
+            &ViewCoordinatorComPtrDestructor,
+        },
+        {
+            {
+                LR"(struct winrt::fire_and_forget __cdecl winrt::Taskbar::implementation::ContextMenus::ShowStartButtonContextMenuAsync(struct winrt::Windows::UI::Xaml::FrameworkElement,struct winrt::WindowsUdk::UI::Shell::TaskbarModel,struct winrt::Taskbar::TaskbarFrame,struct winrt::com_ptr<struct winrt::Taskbar::implementation::ViewCoordinator>))",
+                LR"(struct winrt::fire_and_forget __cdecl winrt::Taskbar::implementation::ContextMenus::ShowStartButtonContextMenuAsync(struct winrt::Windows::UI::Xaml::FrameworkElement, struct winrt::WindowsUdk::UI::Shell::TaskbarModel, struct winrt::Taskbar::TaskbarFrame, struct winrt::com_ptr<struct winrt::Taskbar::implementation::ViewCoordinator>))",
+            },
+            &ShowStartButtonContextMenuAsync_Original,
+            ShowStartButtonContextMenuAsync_Hook,
+        },
     };
-    for (const wchar_t* suffix : paths) {
-        wchar_t path[MAX_PATH] = {};
-        _snwprintf_s(path, _countof(path), _TRUNCATE, L"%s%s", windows, suffix);
-        const DWORD attrs = GetFileAttributesW(path);
-        if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) continue;
-        *imageExists = true;
-        module = LoadLibraryExW(path, nullptr,
-                               LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-        if (module) return module;
-        Wh_Log(L"[winx-native] ERROR: cannot load %s (%lu)", path, GetLastError());
-    }
-    return nullptr;
+    bool ok = WindhawkUtils::HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks)) &&
+              ViewCoordinatorComPtrDestructor && ShowStartButtonContextMenuAsync_Original;
+    if (g_unloading.load(std::memory_order_acquire)) ok = false;
+    // During Init Windhawk applies queued hooks itself. Delayed loader / AfterInit
+    // installation must commit them explicitly. Keep the thunk forwarding until
+    // both required pointers and (when needed) the commit have succeeded.
+    if (ok && applyNow) ok = Wh_ApplyHookOperations() != FALSE;
+    g_modernNativeGuard.store(ok, std::memory_order_release);
+    g_nativeGuardState.store(ok ? NativeGuardState::Ready : NativeGuardState::Unavailable,
+                            std::memory_order_release);
+    Wh_Log(L"[winx-native] modern guard %s; legacy entry untouched; keyboard route retained",
+           ok ? L"registered" : L"unavailable (matching symbols/setup failed)");
+    return ok;
+#endif
 }
 
-static bool InstallNativeWinXGuards() {
-    bool viewImageExists = false;
-    g_nativeModulePins.view = GetNativeTaskbarView(&viewImageExists);
-    // On Windows 11 a missing view image is an unsupported configuration,
-    // not permission to claim that modern native suppression is active.
-    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
-    auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
-        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
-    OSVERSIONINFOW os = {};
-    os.dwOSVersionInfoSize = sizeof(os);
-    const bool windows11 = rtlGetVersion && rtlGetVersion(&os) == 0 && os.dwBuildNumber >= 22000;
-    if ((viewImageExists || windows11) && !g_nativeModulePins.view) {
-        Wh_Log(L"[winx-native] ERROR: required Windows 11 taskbar view could not be loaded");
-        return false;
+static void HandleLoadedTaskbarView(HMODULE module) {
+    if (!g_unloading.load(std::memory_order_acquire) &&
+        g_nativeGuardState.load(std::memory_order_acquire) == NativeGuardState::WaitingForModule &&
+        module && GetTaskbarViewModuleHandle() == module)
+        HookNativeTaskbarView(module, true);
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR file, HANDLE fileHandle, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(file, fileHandle, flags);
+    // A data-file/resource mapping is not the executable module handle returned
+    // by GetModuleHandleW and therefore cannot pass the identity check.
+    HandleLoadedTaskbarView(module);
+    return module;
+}
+
+static void InstallNativeWinXGuards() {
+#if !defined(_M_X64)
+    g_nativeGuardState.store(NativeGuardState::Unavailable, std::memory_order_release);
+    Wh_Log(L"[winx-native] unaudited architecture: native guard disabled; keyboard/legacy routes retained");
+#else
+    if (HMODULE module = GetTaskbarViewModuleHandle()) {
+        HookNativeTaskbarView(module, false);
+        return;
     }
-    // Resolve every required entry point and lifetime helper before registering
-    // any detour. A missing symbol is an initialization error, not a reason to
-    // bypass the controller's normal Start-state checks.
-    void* modern = nullptr;
-    if (g_nativeModulePins.view) {
-        modern = FindExactNativeSymbol(g_nativeModulePins.view,
-            L"?ShowStartButtonContextMenuAsync@ContextMenus@implementation@Taskbar@winrt@@YA?AUfire_and_forget@4@UFrameworkElement@Xaml@UI@Windows@4@UTaskbarModel@Shell@8WindowsUdk@4@UTaskbarFrame@34@U?$com_ptr@UViewCoordinator@implementation@Taskbar@winrt@@@4@@Z");
-        void* destructor = FindExactNativeSymbol(g_nativeModulePins.view,
-            L"??1?$com_ptr@UViewCoordinator@implementation@Taskbar@winrt@@@winrt@@QEAA@XZ");
-        if (!modern || !destructor) return false;
-        ViewCoordinatorComPtrDestructor =
-            reinterpret_cast<ViewCoordinatorComPtrDestructor_t>(destructor);
+    // Do not load a shell component into a legacy shell or folder process. Observe
+    // Explorer's normal loader, then register the modern guard only if it loads it.
+    HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
+    auto loader = kernelbase ? reinterpret_cast<LoadLibraryExW_t>(
+        GetProcAddress(kernelbase, "LoadLibraryExW")) : nullptr;
+    if (!loader || !WindhawkUtils::SetFunctionHook(loader, LoadLibraryExW_Hook,
+                                                  &LoadLibraryExW_Original)) {
+        Wh_Log(L"[winx-native] loader watch unavailable; keyboard/legacy routes retained");
+        return;
     }
-    if (modern && !Wh_SetFunctionHook(modern,
-            reinterpret_cast<void*>(ShowStartButtonContextMenuAsync_Hook),
-            reinterpret_cast<void**>(&ShowStartButtonContextMenuAsync_Original))) {
-        Wh_Log(L"[winx-native] ERROR: could not register the modern Win+X guard");
-        return false;
-    }
-    g_modernNativeGuard.store(modern != nullptr, std::memory_order_release);
-    Wh_Log(L"[winx-native] modern menu guard registered: %s; legacy method is NOT hooked",
-           modern ? L"yes" : L"no view on this system");
-    return true;
+    Wh_Log(L"[winx-native] waiting for Explorer to load its taskbar view (no forced load)");
+#endif
 }
 
 static LRESULT CALLBACK WinXLowLevelKeyboardProc(int nCode, WPARAM wParam,
@@ -1652,22 +1583,23 @@ static LRESULT CALLBACK WinXLowLevelMouseProc(int nCode, WPARAM wParam,
 // Input-hook installation, retried by the services thread.
 // ---------------------------------------------------------------------------
 static bool EnsureWinXInputHooks() {
-    if (!g_winXKeyboardHook.IsInstalled() || !g_winXMouseHook.IsInstalled()) {
+    if (!g_winXKeyboardHook || !g_winXMouseHook) {
         HMODULE module = nullptr;
         const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
-        if (GetModuleHandleExW(flags, reinterpret_cast<LPCWSTR>(&g_winXHookModuleAnchor),
-                               &module)) {
-            if (!g_winXKeyboardHook.IsInstalled() &&
-                g_winXKeyboardHook.Install(WH_KEYBOARD_LL, WinXLowLevelKeyboardProc, module))
-                Wh_Log(L"[winx] Win+X keyboard hook installed");
-            if (!g_winXMouseHook.IsInstalled() &&
-                g_winXMouseHook.Install(WH_MOUSE_LL, WinXLowLevelMouseProc, module))
-                Wh_Log(L"[winx] Start right-click hook installed");
+        if (GetModuleHandleExW(flags, reinterpret_cast<LPCWSTR>(&g_winXHookModuleAnchor), &module)) {
+            if (!g_winXKeyboardHook) {
+                g_winXKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, WinXLowLevelKeyboardProc, module, 0);
+                if (g_winXKeyboardHook) Wh_Log(L"[winx] Win+X keyboard hook installed");
+            }
+            if (!g_winXMouseHook) {
+                g_winXMouseHook = SetWindowsHookExW(WH_MOUSE_LL, WinXLowLevelMouseProc, module, 0);
+                if (g_winXMouseHook) Wh_Log(L"[winx] Start right-click hook installed");
+            }
         }
     }
-    g_winXKeyboardHookInstalled = g_winXKeyboardHook.IsInstalled();
-    g_winXMouseHookInstalled = g_winXMouseHook.IsInstalled();
+    g_winXKeyboardHookInstalled = g_winXKeyboardHook != nullptr;
+    g_winXMouseHookInstalled = g_winXMouseHook != nullptr;
     return g_winXKeyboardHookInstalled || g_winXMouseHookInstalled;
 }
 
@@ -1731,24 +1663,13 @@ static void UnregisterWinXOwnerWindowClass() {
 
 static bool ForceForegroundWindow(HWND hwnd) {
     if (!hwnd) return false;
-    const HWND foreground = GetForegroundWindow();
-    if (foreground == hwnd) return true;
-    // The plain call comes first: the chord has just been pressed, so it is
-    // normally allowed and no input queue has to be touched.
-    if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd) return true;
-    DWORD foregroundPid = 0;
-    const DWORD foregroundThread =
-        foreground ? GetWindowThreadProcessId(foreground, &foregroundPid) : 0;
-    const DWORD ourThread = GetCurrentThreadId();
-    // The input queue is never attached to a thread of explorer.exe itself
-    // (taskbar or desktop): attaching and detaching there disturbs the focus state
-    // of the shell and can freeze it.
-    const bool attached = foregroundThread && foregroundThread != ourThread &&
-                          foregroundPid != GetCurrentProcessId() &&
-                          AttachThreadInput(ourThread, foregroundThread, TRUE);
-    const bool ok = SetForegroundWindow(hwnd) != FALSE;
-    if (attached) AttachThreadInput(ourThread, foregroundThread, FALSE);
-    return ok;
+    if (GetForegroundWindow() == hwnd) return true;
+    // A no-op input event is the established Windhawk low-level-hook focus
+    // pattern. No key/button is pressed and no input queues are attached.
+    // UIPI can still reject injection/focus; never bypass it with queue attachment.
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
+    return SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd;
 }
 
 // Creates the window that owns the menu, once per menu thread.
@@ -1800,7 +1721,11 @@ static void UpdateWinXInputRoutes() {
 
     const ULONGLONG now = GetTickCount64();
     if (now < nextCheck) return;
-    nextCheck = now + 500;
+    // Fast retries are bounded to startup; even a folder process which never
+    // owns a taskbar returns to the slow cadence after ten seconds.
+    const bool startupRetry = now - g_servicesStartedAt < 10000;
+    g_winXRouteRefreshMs = startupRetry && (!g_winXKeyboardHook || !g_winXMouseHook) ? 500 : 2500;
+    nextCheck = now + g_winXRouteRefreshMs;
 
     // The hooks are system-wide, so they are armed only in the process that owns the
     // taskbar. Until a visible taskbar of this explorer.exe is there, the mod does
@@ -1812,6 +1737,10 @@ static void UpdateWinXInputRoutes() {
     }
 
     EnsureWinXInputHooks();
+    if (g_winXKeyboardHook && g_winXMouseHook) {
+        g_winXRouteRefreshMs = 2500;
+        nextCheck = now + g_winXRouteRefreshMs;
+    }
 
     // The chord is deliberately NOT registered with RegisterHotKey: Win-key
     // combinations are reserved to the OS (the registration fails on most builds).
@@ -1829,7 +1758,7 @@ static void UpdateWinXInputRoutes() {
                g_winXKeyboardHookInstalled ? L"yes" : L"no",
                g_winXMouseHookInstalled ? L"yes" : L"no");
     } else if (!routeReported) {
-        // The hooks are retried every 500 ms, so this line is a status note rather
+        // Installation is retried on the service cadence, so this is a status note rather
         // than a give-up message.
         routeReported = true;
         Wh_Log(L"[winx] no input hook is installed yet: it is retried every few seconds");
@@ -2007,7 +1936,7 @@ static WinXMenuAnchor ComputeWinXMenuAnchor(HWND startButton) {
     RECT buttonRect = {};
     bool haveButton = startButton && startButton != taskbar && IsWindow(startButton) &&
                       GetWindowRect(startButton, &buttonRect);
-    if (!haveButton && taskbar) haveButton = CachedStartRect(taskbar, &buttonRect);
+    if (!haveButton && taskbar) haveButton = QueryStartButtonRectOnce(taskbar, &buttonRect);
     const bool taskbarVertical =
         taskbar && (taskbarRect.bottom - taskbarRect.top) >
                        (taskbarRect.right - taskbarRect.left);
@@ -2070,7 +1999,7 @@ static bool IsTerminalInstalled() {
     return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-static void ShowCustomWinXMenuHere(HWND startButton) {
+static void ShowCustomWinXMenuHere(const WinXMenuAnchor& anchor) {
     const UiLangId lang = DetectUiLang();
     const bool usePowerShell = g_winXTerminalFallback.load() && !IsTerminalInstalled();
     const bool hideShutdown = g_winXHideShutdown.load();
@@ -2216,10 +2145,8 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
     if (win32Skin && !NativeMenu::MarkOwnedTree(menu.get()))
         Wh_Log(L"[menu] could not mark the owned Win+X menu tree (%lu)", GetLastError());
 
-    // Anchor: the Windows 10 position, resolved from the taskbar and the Start
-    // button at show time. The raw cursor is used only when there is no taskbar:
-    // see ComputeWinXMenuAnchor.
-    const WinXMenuAnchor anchor = ComputeWinXMenuAnchor(startButton);
+    // The current opening's anchor was resolved on this same thread before STA
+    // initialization / window creation, allowing one safe MTA UIA lookup if needed.
     const POINT pt = anchor.point;
     const UINT alignFlags = anchor.flags;
     Wh_Log(L"[winx] anchor: %s -> (%ld,%ld)%s, dpi %u", anchor.source, pt.x, pt.y,
@@ -2235,7 +2162,8 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
         Wh_Log(L"[winx] no owner window for the menu: the request is dropped");
         return;
     }
-    ForceForegroundWindow(owner);
+    if (!ForceForegroundWindow(owner))
+        Wh_Log(L"[winx] foreground activation refused (Windows/UIPI); no input queues attached");
 
     // The flag is set for exactly as long as the menu is on screen, so a second
     // chord can tell "already open" from "not open" (see WinXMenuOpenScope).
@@ -2280,12 +2208,16 @@ static void ShowCustomWinXMenuHere(HWND startButton) {
 // with an owner window of its own (GetWinXMenuOwnerWindow is per-thread), and
 // destroys that window before exiting, on the only thread that can destroy it.
 //
-// COM is initialized here: ShellExecuteW, which opens most of the entries, requires
-// it on the calling thread, because shell namespaces (shell:::{GUID},
-// ms-settings:...) and elevated entries are activated through COM.
+// Placement is resolved first, before a window exists (UIA uses a temporary MTA).
+// Then COM STA is initialized for ShellExecuteW, shell namespaces, ms-settings,
+// and elevated entries. The owner window is destroyed before STA uninitialization.
 // ---------------------------------------------------------------------------
 static DWORD WINAPI WinXMenuThread(LPVOID parameter) {
     const HWND startButton = static_cast<HWND>(parameter);
+    if (g_unloading.load(std::memory_order_acquire)) return 0;
+    // UIA must run on a windowless MTA thread. Resolve the value-only anchor first;
+    // QueryStartButtonRectOnce releases its MTA before this thread becomes an STA.
+    const WinXMenuAnchor anchor = ComputeWinXMenuAnchor(startButton);
     const HRESULT comResult =
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (FAILED(comResult))
@@ -2300,7 +2232,7 @@ static DWORD WINAPI WinXMenuThread(LPVOID parameter) {
     } else {
         Wh_Log(L"[winx] menu thread %lu: showing the menu (the shell thread is not used)",
                GetCurrentThreadId());
-        ShowCustomWinXMenuHere(startButton);
+        ShowCustomWinXMenuHere(anchor);
     }
 
     DestroyWinXMenuOwnerWindow();
@@ -2371,8 +2303,7 @@ public:
     ScopedWinXServiceStateReset() = default;
     ~ScopedWinXServiceStateReset() {
         ClearWinXInputRoutes();
-        g_winXKeyboardHook.Reset();
-        g_winXMouseHook.Reset();
+        ResetWinXInputHooks();
         g_winXKeyboardHookInstalled = false;
         g_winXMouseHookInstalled = false;
         g_servicesThreadId = 0;
@@ -2394,6 +2325,7 @@ static HANDLE g_servicesReadyEvent = nullptr;
 static DWORD WINAPI ExplorerServicesThread(LPVOID) {
     ScopedWinXServiceStateReset stateReset;
     g_servicesThreadId = GetCurrentThreadId();
+    g_servicesStartedAt = GetTickCount64();
     MSG queueInit{};
     PeekMessageW(&queueInit, nullptr, 0, 0, PM_NOREMOVE);
     // Wh_ModInit waits for an actual queue, not an arbitrary startup sleep. The
@@ -2404,17 +2336,15 @@ static DWORD WINAPI ExplorerServicesThread(LPVOID) {
     // from then on.
     UpdateWinXInputRoutes();
     Wh_Log(L"[winx] input hooks: keyboard %s, Start right-click %s",
-           g_winXKeyboardHook.IsInstalled() ? L"ready" : L"unavailable",
-           g_winXMouseHook.IsInstalled() ? L"ready" : L"unavailable");
+           g_winXKeyboardHook ? L"ready" : L"unavailable",
+           g_winXMouseHook ? L"ready" : L"unavailable");
 
-    // UpdateWinXInputRoutes does its work at most every 500 ms (that is its own
-    // throttle), so that is also how long this thread sleeps when nothing is posted
-    // to it; a shorter timeout would only wake it to do nothing. A request posted by
-    // a hook, and the stop event, wake it immediately whatever the timeout is.
+    // Requests and shutdown wake this thread immediately. Idle refresh is 2.5 s
+    // once armed, or after bounded startup retries, not a permanent 500 ms poll.
     for (;;) {
         const DWORD waitResult = MsgWaitForMultipleObjectsEx(
             g_stopEvent ? 1 : 0, g_stopEvent ? &g_stopEvent : nullptr,
-            500, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            g_winXRouteRefreshMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         if (g_stopEvent && waitResult == WAIT_OBJECT_0) break;
 
         MSG msg;
@@ -2443,12 +2373,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L"[winx] init");
 
     g_unloading.store(false, std::memory_order_release);
-    Wh_Log(L"[winx] preparing native suppression for both legacy and modern taskbars");
-    if (!InstallNativeWinXGuards()) {
-        Wh_Log(L"[winx-native] INIT FAILED: native suppression is NOT available; mod not activated");
-        return FALSE;
-    }
-
     g_winXRouteMessage = RegisterWindowMessageW(kWinXRouteMessageName);
     if (!g_winXRouteMessage) {
         Wh_Log(L"[winx] the route message could not be registered (%lu)", GetLastError());
@@ -2472,24 +2396,10 @@ BOOL Wh_ModInit() {
         UnregisterWinXOwnerWindowClass();
         return FALSE;
     }
-    g_startDiscoveryThread = CreateThread(nullptr, 0, StartDiscoveryThread,
-                                          g_stopEvent, 0, nullptr);
-    if (!g_startDiscoveryThread) {
-        Wh_Log(L"[winx] Start discovery thread failed (%lu)", GetLastError());
-        CloseHandle(g_servicesReadyEvent);
-        g_servicesReadyEvent = nullptr;
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-        UnregisterWinXOwnerWindowClass();
-        return FALSE;
-    }
     g_servicesThread = CreateThread(nullptr, 0, ExplorerServicesThread, nullptr, 0, nullptr);
     if (!g_servicesThread) {
         Wh_Log(L"[winx] services thread not created (%lu)", GetLastError());
         SetEvent(g_stopEvent);
-        WaitForSingleObject(g_startDiscoveryThread, INFINITE);
-        CloseHandle(g_startDiscoveryThread);
-        g_startDiscoveryThread = nullptr;
         CloseHandle(g_servicesReadyEvent);
         g_servicesReadyEvent = nullptr;
         if (g_stopEvent) {
@@ -2504,24 +2414,23 @@ BOOL Wh_ModInit() {
         g_unloading.store(true);
         SetEvent(g_stopEvent);
         WaitForSingleObject(g_servicesThread, INFINITE);
-        WaitForSingleObject(g_startDiscoveryThread, INFINITE);
         CloseHandle(g_servicesThread);
-        CloseHandle(g_startDiscoveryThread);
         CloseHandle(g_servicesReadyEvent);
         CloseHandle(g_stopEvent);
         g_servicesThread = nullptr;
-        g_startDiscoveryThread = nullptr;
         g_servicesReadyEvent = nullptr;
         g_stopEvent = nullptr;
         UnregisterWinXOwnerWindowClass();
         return FALSE;
     }
+    InstallNativeWinXGuards();
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // According to the Windhawk SDK, pending detours are applied after Init and
-    // before this callback. No delayed symbol installation is scheduled here.
+    // Close the race where Explorer loaded the DLL between Init's handle check
+    // and activation of the loader watch. No forced load and no repeated PDB scan.
+    if (HMODULE module = GetTaskbarViewModuleHandle()) HandleLoadedTaskbarView(module);
     Wh_Log(L"[winx-native] ACTIVE: modern menu guard %s; legacy method untouched; request queue ready",
            g_modernNativeGuard.load() ? L"yes" : L"not present");
 }
@@ -2532,17 +2441,16 @@ void Wh_ModBeforeUninit() {
     // the thread that installed them (see ScopedWinXServiceStateReset).
     g_unloading.store(true, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent);
+    AcquireSRWLockExclusive(&g_nativeGuardLock);
+    ReleaseSRWLockExclusive(&g_nativeGuardLock);
 }
 
 void Wh_ModUninit() {
     // Be safe even if the host did not call BeforeUninit first.
     g_unloading.store(true, std::memory_order_release);
     if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_startDiscoveryThread) {
-        WaitForSingleObject(g_startDiscoveryThread, INFINITE);
-        CloseHandle(g_startDiscoveryThread);
-        g_startDiscoveryThread = nullptr;
-    }
+    AcquireSRWLockExclusive(&g_nativeGuardLock);
+    ReleaseSRWLockExclusive(&g_nativeGuardLock);
     if (g_servicesThread) {
         // No timeout: the thread is waved off through its event, and it never waits on
         // anything this thread holds. Joining it first also means that no new menu
