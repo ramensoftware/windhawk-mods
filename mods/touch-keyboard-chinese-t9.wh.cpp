@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         2.8.7
+// @version         2.8.6
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @include         TextInputHost.exe
@@ -396,6 +396,12 @@ HRESULT DecideHook(void* self, WORD first) {
     return originalDecide(self, first);
 }
 
+WH_HOOK_SYMBOLS_OPTIONS SymbolOptions() {
+    WH_HOOK_SYMBOLS_OPTIONS options{};
+    options.optionsSize = sizeof(options);
+        options.onlineCacheUrl = L"";
+    return options;
+}
 
 bool InstallService(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK inputserviceDllHooks[] = {
@@ -425,8 +431,9 @@ bool InstallService(HMODULE module) {
         {{L"?OnKeyDown@InputMethodHostTSF3@ChxIME@@AEAAJPEAUICoreTextInputMethodContext@Core@Text@UI@Windows@@PEAUICoreTextKeyEventArgs@4567@@Z"},
          &originalOnKeyDown},
     };
-    if (!WindhawkUtils::HookSymbols(module, inputserviceDllHooks,
-                                    ARRAYSIZE(inputserviceDllHooks), nullptr))
+    auto options = SymbolOptions();
+    if (!WindhawkUtils::HookSymbols(module, inputserviceDllHooks, ARRAYSIZE(inputserviceDllHooks),
+                                    &options))
         return false;
     if (!CodeMatches(
             reinterpret_cast<void*>(originalRegularize), 0x213,
@@ -508,8 +515,9 @@ bool InstallDecoder(HMODULE module) {
           L"0UInputModeProfile@2@A"},
          &twelveProfile},
     };
-    if (!WindhawkUtils::HookSymbols(module, chspinyindsDllHooks,
-                                    ARRAYSIZE(chspinyindsDllHooks), nullptr))
+    auto options = SymbolOptions();
+    if (!WindhawkUtils::HookSymbols(module, chspinyindsDllHooks, ARRAYSIZE(chspinyindsDllHooks),
+                                    &options))
         return false;
     if (!CodeMatches(
             reinterpret_cast<void*>(originalDecide), 0x1f3,
@@ -1061,8 +1069,11 @@ bool InstallFrontend(HMODULE module) {
          &originalIsEmojiViewEnabled,
          IsEmojiViewEnabledHook},
     };
-    return WindhawkUtils::HookSymbols(module, textinputDllHooks,
-                                      ARRAYSIZE(textinputDllHooks), nullptr);
+    auto options = NativeT9::SymbolOptions();
+    for (size_t i = 0; i < ARRAYSIZE(textinputDllHooks); ++i) {
+        WindhawkUtils::HookSymbols(module, &textinputDllHooks[i], 1, &options);
+    }
+    return true;
 }
 }  // namespace
 BOOL Wh_ModInit() {
@@ -1075,7 +1086,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        287);
+        286);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
