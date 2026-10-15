@@ -55,7 +55,7 @@ These screenshots were captured using a macro. The same macro can generate fresh
 
 thanks for using my mod :D
 
-**Requires Windows 11 for icons or symbols.**
+**Windows 11 only.**
 
 Pressing the top grip quickly reveals the real window without starting a drag.
 Move while holding to drag it with its native decorations and a short
@@ -4913,8 +4913,8 @@ bool Switcher::BeginOverviewWindowDrag(POINT clientPoint) {
         }
         m_dragChangedDesktop=true;
     }
-    if(!SetWindowPos(target,nullptr,outerLeft,outerTop,
-        outer.right-outer.left,outer.bottom-outer.top,SWP_NOACTIVATE|SWP_NOZORDER)) {
+    if(!SetWindowPos(target,HWND_TOPMOST,outerLeft,outerTop,
+        outer.right-outer.left,outer.bottom-outer.top,SWP_NOACTIVATE)) {
         RestoreDragWindow();return false;
     }
     m_dragMouseOffset={screenPoint.x-outerLeft,screenPoint.y-outerTop};
@@ -5028,11 +5028,11 @@ void Switcher::UpdateDragReveal() {
     const float height=(float)(m_dragVisibleRect.bottom-m_dragVisibleRect.top);
     const LONG left=(LONG)std::lround(m_dragVisibleRect.left-width*(scale-1)*0.5f);
     const LONG top=(LONG)std::lround(m_dragVisibleRect.top-height*(scale-1)*0.5f);
-    if (!SetWindowPos(m_dragWindow,nullptr,
+    if (!SetWindowPos(m_dragWindow,HWND_TOPMOST,
         left-m_dragFrameMargins.left,top-m_dragFrameMargins.top,
         (LONG)std::lround(width*scale)+m_dragFrameMargins.left+m_dragFrameMargins.right,
         (LONG)std::lround(height*scale)+m_dragFrameMargins.top+m_dragFrameMargins.bottom,
-        SWP_NOACTIVATE|SWP_NOZORDER)) RestoreDragWindow();
+        SWP_NOACTIVATE)) RestoreDragWindow();
     else if (progress>=1) m_dragRevealDone=true;
 }
 
@@ -5076,8 +5076,8 @@ bool Switcher::BeginWindowDrag(POINT screenPoint) {
     if (!GetWindowRect(target,&rect)) return false;
     const LONG left=rect.left+screenPoint.x-m_pressScreen.x;
     const LONG top=rect.top+screenPoint.y-m_pressScreen.y;
-    if (!SetWindowPos(target,nullptr,left,top,0,0,
-                      SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER)) return false;
+    if (!SetWindowPos(target,HWND_TOPMOST,left,top,0,0,
+                      SWP_NOSIZE|SWP_NOACTIVATE)) return false;
     const LONG settledLeft=m_dragVisibleRect.left-m_dragFrameMargins.left+
                            screenPoint.x-m_pressScreen.x;
     const LONG settledTop=m_dragVisibleRect.top-m_dragFrameMargins.top+
@@ -9461,4 +9461,3 @@ library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.
 
 */
-
