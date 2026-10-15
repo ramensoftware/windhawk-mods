@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         4.0.0
+// @version         4.1.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @include         TextInputHost.exe
@@ -633,25 +633,25 @@ void OnReleaseActionHook(void* self, void* action) {
 
     if (action) {
         auto* data = static_cast<BYTE*>(action);
-        WCHAR layoutName[128]{};
-        const bool isTwelve = Wh_GetStringValue(L"native-layout-name", layoutName, ARRAYSIZE(layoutName)) &&
-                              wcsstr(layoutName, L"12key") != nullptr;
         void* keyCtrl = *reinterpret_cast<void**>(data + 56);
-        if (isTwelve && priorHandlingState == 1) {
-            data[144] = 1;
-            Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
-        } else if (isTwelve && priorHandlingState != 1 && data[144] == 0 && keyCtrl && originalGetKeyData) {
+        if (keyCtrl && originalGetKeyData) {
             void* keyData = originalGetKeyData(keyCtrl);
             if (keyData && originalGetVirtualKey) {
                 const unsigned char vk = originalGetVirtualKey(keyData);
+                Wh_SetIntValue(L"native-front-vk-seen", vk);
                 if (vk >= 0x62 && vk <= 0x69) {
-                    wchar_t digitStr[2] = { static_cast<wchar_t>(L'0' + vk - 0x60), 0 };
-                    HSTRING hStr = nullptr;
-                    if (SUCCEEDED(WindowsCreateString(digitStr, 1, &hStr))) {
-                        originalInjectKeyWithoutKeyControl(self, hStr, keyData, 255);
-                        WindowsDeleteString(hStr);
+                    if (priorHandlingState == 1) {
                         data[144] = 1;
-                        Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
+                        Wh_SetIntValue(L"native-front-release-suppressed-long", 1);
+                    } else if (data[144] == 0) {
+                        wchar_t digitStr[2] = { static_cast<wchar_t>(L'0' + vk - 0x60), 0 };
+                        HSTRING hStr = nullptr;
+                        if (SUCCEEDED(WindowsCreateString(digitStr, 1, &hStr))) {
+                            originalInjectKeyWithoutKeyControl(self, hStr, keyData, 255);
+                            WindowsDeleteString(hStr);
+                            data[144] = 1;
+                            Wh_SetIntValue(L"native-front-release-suppressed-raw", vk);
+                        }
                     }
                 }
                 using ReleaseFn = ULONG (*)(void*);
@@ -825,7 +825,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        400);
+        410);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
