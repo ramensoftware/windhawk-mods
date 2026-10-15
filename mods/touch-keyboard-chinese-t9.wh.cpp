@@ -2,7 +2,7 @@
 // @id              touch-keyboard-chinese-t9
 // @name            系统触摸键盘中文九宫格
 // @description     在 Windows 11 系统触摸键盘中完整接通微软拼音原生十二键/九宫格输入法。
-// @version         4.1.0
+// @version         4.4.0
 // @author          NekoMirra
 // @github          https://github.com/NekoMirra
 // @include         TextInputHost.exe
@@ -425,12 +425,16 @@ bool InstallService(HMODULE module) {
     };
     auto options = SymbolOptions();
     if (!WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols),
-                                    &options))
+                                    &options)) {
+        Wh_SetIntValue(L"native-service-symbols-failed", 1);
         return false;
+    }
     if (!CodeMatches(
-            reinterpret_cast<void*>(originalRegularize), 0x915,
-            "1c261eef81180b031b2c45155f8be009fa5695015b67e20b33b00e31846175e1"))
+            reinterpret_cast<void*>(originalRegularize), 0x213,
+            "a5eaa8b59796a8181280a5a79489a74a75994357a6d140908a5e0a4f23026278")) {
+        Wh_SetIntValue(L"native-service-match-failed", 1);
         return false;
+    }
     if (!CodeMatches(
             reinterpret_cast<void*>(originalDefaultChannel), 0x19,
             "16d5d34487009bd4cdb1ba45b24e836fa16a2a1f13b0df0243a3dab3fc4ecd04"))
@@ -468,8 +472,8 @@ bool InstallService(HMODULE module) {
             "7d4d2a14deffbe6578d15ae5c069bcdd40905de8da11e938e9967956cd418ece"))
         return false;
     if (!CodeMatches(
-            reinterpret_cast<void*>(originalOnKeyDown), 0x3cb,
-            "bfa7075c2763264c8d50b4ea547537b830d1d784a929ba26a472c67623910385"))
+            reinterpret_cast<void*>(originalOnKeyDown), 0x6b6,
+            "91e1bf21e466cf3a9f53d578c490214f74abada736e90f0939ace40b9af7db7c"))
         return false;
     return WindhawkUtils::SetFunctionHook(originalRegularize, RegularizeHook,
                                           &originalRegularize) &&
@@ -507,16 +511,22 @@ bool InstallDecoder(HMODULE module) {
     };
     auto options = SymbolOptions();
     if (!WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols),
-                                    &options))
+                                    &options)) {
+        Wh_SetIntValue(L"native-decoder-symbols-failed", 1);
         return false;
+    }
     if (!CodeMatches(
             reinterpret_cast<void*>(originalDecide), 0x1f3,
-            "d2d9038ce0d8be4c4019eeb741bda43aece66f8e98de847011f10a8f63adc46e"))
+            "d2d9038ce0d8be4c4019eeb741bda43aece66f8e98de847011f10a8f63adc46e")) {
+        Wh_SetIntValue(L"native-decoder-match-failed", 1);
         return false;
+    }
     if (!CodeMatches(
             reinterpret_cast<void*>(originalCandidates), 0x2ed3,
-            "7e0b8b1dc419ec319a1bb3275cbc2e2735e21332a238cef6b25959c7dfcc0677"))
+            "7e0b8b1dc419ec319a1bb3275cbc2e2735e21332a238cef6b25959c7dfcc0677")) {
+        Wh_SetIntValue(L"native-decoder-match-failed", 2);
         return false;
+    }
     return WindhawkUtils::SetFunctionHook(originalCandidates, CandidatesHook,
                                           &originalCandidates) &&
            WindhawkUtils::SetFunctionHook(originalDecide, DecideHook,
@@ -825,7 +835,7 @@ BOOL Wh_ModInit() {
     Wh_SetIntValue(ready, 0);
     Wh_SetIntValue(
         frontProcess ? L"native-front-version" : L"native-service-version",
-        410);
+        440);
     if (frontProcess) {
         HMODULE front = GetModuleHandleW(L"TextInput.dll");
         if (!front) {
@@ -895,12 +905,13 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     Wh_SetIntValue(L"native-normalized-count", 0);
-    Wh_SetIntValue(L"native-decoded-count", 0);
-    const bool readyService = NativeT9::InstallService(service) &&
-                              NativeT9::InstallDecoder(ownedDecoder);
+    const bool readyService = NativeT9::InstallService(service);
+    Wh_SetIntValue(L"native-service-step1-service", readyService ? 1 : 0);
+    NativeT9::InstallDecoder(ownedDecoder);
     Wh_SetIntValue(L"native-service-install-result", readyService ? 1 : 0);
     if (!readyService) {
-        FreeLibrary(ownedDecoder);
+        if (ownedDecoder)
+            FreeLibrary(ownedDecoder);
         ownedDecoder = nullptr;
         Wh_Log(L"[中文九键] 原生接口或函数版本校验失败");
     }
