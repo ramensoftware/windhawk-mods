@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              ctrlg-group
+// @id              explorer-ctrlfn-newfolder
 // @name            Folder Creation & File Grouping
 // @description     Create single or batch folders with Ctrl+F+N, or group, copy and move selected files and folders with Ctrl+G. Includes folder templates, flexible naming, collision handling and Auto Grouping.
 // @version         0.12.71
