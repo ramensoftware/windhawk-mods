@@ -2,7 +2,7 @@
 // @id              explorer-zebra-stripes
 // @name            Explorer List Zebra Stripes
 // @description     Add stripes for Details and List items in File Explorer
-// @version         0.14.0
+// @version         0.14.1
 // @author          DarkionAvey
 // @include         explorer.exe
 // @architecture    x86-64
@@ -10,18 +10,27 @@
 // @github          https://github.com/DarkionAvey
 // @license         WTFPL
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Explorer List Zebra Stripes
+
 ![Screenshot](https://raw.githubusercontent.com/DarkionAvey/windhawk-explorer-zebra-stripes/refs/heads/main/screenshot.png)
+
 Adds alternating stripes to compact file-list items in Explorer, including Details and List views.
+
 ## Colors
+
 * Supports #RRGGBB and dynamic system color names: `accent`, `background`, `foreground`, `highlight`, `highlighttext`, `window`, `windowtext`, `buttonface`, `buttontext`, `hotlight`, `graytext`. `accent` uses the Windows DWM colorization color. `background` and `foreground` are theme-aware neutral colors (high-contrast aware); other system names use Win32 system colors.
 * Opacity is a percentage: 0 = invisible, 100 = fully opaque.
-Mod was tested on Windows 11 24H2 & 26H2. 
+
+Mod was tested on Windows 11 24H2 & 26H2.
 */
+
 // ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
+
 /*
 - useSameThemeSettings: false
   $name: Use light color and opacity for both themes
@@ -56,6 +65,7 @@ Mod was tested on Windows 11 24H2 & 26H2.
 - diagnostics: false
   $name: Log bounded resize/release and identity fallback details
   $description: Normally off to avoid per-row logging or diagnostic counters.
+
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -70,9 +80,11 @@ Mod was tested on Windows 11 24H2 & 26H2.
 #include <cwchar>
 #include <cstdint>
 #include <windhawk_utils.h>
+
 #ifndef REG_NOTIFY_THREAD_AGNOSTIC
 #define REG_NOTIFY_THREAD_AGNOSTIC 0x10000000L
 #endif
+
 namespace {
 constexpr int kReferenceDpi = 96;
 constexpr int kMinSupportedDpi = 72;
@@ -100,6 +112,7 @@ static_assert((kWidthHistorySlots & (kWidthHistorySlots - 1)) == 0);
 static_assert((kParentHistorySlots & (kParentHistorySlots - 1)) == 0);
 using PaintBackground_t = void(void*, HDC, void*, const RECT*,
                                const RECT*, const RECT*, const RECT*);
+
 using DispatchMessageW_t = decltype(&DispatchMessageW);
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 using IntFn = int (*)(void*);
@@ -115,7 +128,9 @@ CreateWindowExW_t g_createWindowOriginal = nullptr;
 // Until a real CabinetWClass folder view exists, only a one-shot window-
 // creation sentinel is hooked. No DirectUI, GDI, registry or message hook yet.
 SRWLOCK g_activationLock = SRWLOCK_INIT;
-CONDITION_VARIABLE g_activationCondition = CONDITION_VARIABLE_INIT;
+// Allocated only on the first folder activation. Windhawk must not unload
+// this image until its last threadpool callback has actually returned.
+PTP_WORK g_activationWork = nullptr;
 bool g_activationReady = false;
 bool g_activationQueued = false;
 bool g_activationInstalled = false;
@@ -137,10 +152,12 @@ std::atomic<DWORD> g_lastFileNameAtomProbe{0};
 HBRUSH g_dcBrush = nullptr;
 std::atomic<bool> g_enabled{false};
 std::atomic<bool> g_diagnostics{false};
+
 enum class ColorKind : int {
     Fixed, Accent, Background, Foreground, Highlight, HighlightText,
     Window, WindowText, ButtonFace, ButtonText, HotLight, GrayText
 };
+
 struct ColorSpec {
     ColorKind kind;
     COLORREF fixed;
@@ -154,14 +171,18 @@ std::atomic<DWORD> g_paintPixel{0xFFFFFFFF};
 // The original 1x1 source is retained for fast square/zero-radius rows.
 // Shared corner bitmaps below are only used when a stripe is rounded.
 SRWLOCK g_blendLock = SRWLOCK_INIT;
+
 HDC g_blendDC = nullptr;
+
 HBITMAP g_blendBitmap = nullptr;
+
 HGDIOBJ g_blendOldBitmap = nullptr;
 DWORD* g_blendBits = nullptr;
+
 DWORD g_blendCachedPixel = 0;
 // Each cache entry is keyed by its physical height, radius, AND exact
 // premultiplied color. A theme change never reuses stale colored caps.
-// Readers share the lock during AlphaBlend; misses rasterize only once.
+// GDI source DC blits are serialized; misses rasterize outside the lock.
 struct RoundedStripeShape {
     int height = 0;
     int twiceRadius = 0;
@@ -194,8 +215,11 @@ std::atomic_flag g_shapeBuildInProgress = ATOMIC_FLAG_INIT;
 std::atomic<DWORD> g_retryShapeAfter{0};
 std::atomic<BYTE> g_lightAlpha{255}, g_darkAlpha{255};
 // These are only accessed under g_paletteLock (slow refresh path).
+
 COLORREF g_lastSource = CLR_INVALID;
+
 int g_lastAlpha = -1;
+
 SRWLOCK g_paletteLock = SRWLOCK_INIT;
 std::atomic<bool> g_shareThemes{false};
 std::atomic<int> g_radius{8}, g_horizontal{0}, g_vertical{0};
@@ -206,19 +230,25 @@ std::atomic<DWORD> g_lastThemeCheck{0};
 // event separately for every row in one Explorer paint burst.
 std::atomic<DWORD> g_lastThemeEventProbe{0};
 HKEY g_personalizeKey = nullptr;
+
 HANDLE g_personalizeEvent = nullptr;
+
 constexpr PCWSTR kPersonalizePath =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
 std::atomic<int> g_diagnosticSamples{0};
 // Paint callbacks and posted mouse messages are handled on the same UI
 // thread. Keep independent drag state for each Explorer UI thread.
+
 thread_local bool g_inColumnDrag = false;
+
 thread_local bool g_repaintOnRelease = false;
+
 thread_local unsigned g_dragGeneration = 0;
 std::atomic<unsigned> g_generation{1};
 // Small, allocation-free per-thread caches. All entries are non-owning.
 // The generation and short expiry avoid retaining stale tree classification
 // when Explorer reuses DirectUI elements after navigation/tab changes.
+
 struct RowWidthHistory {
     const void* item;
     int index;
@@ -226,6 +256,7 @@ struct RowWidthHistory {
     DWORD tick;
     unsigned generation;
 };
+
 struct ParentTreeHistory {
     const void* parent;
     DWORD tick;
@@ -253,16 +284,20 @@ bool WidthChangedWhilePressed(void* item, int index, const RECT& row,
             row.right, now, generation};
     return changed;
 }
+
 int HexDigit(wchar_t c) {
     if (c >= L'0' && c <= L'9') return c - L'0';
     if (c >= L'A' && c <= L'F') return c - L'A' + 10;
     if (c >= L'a' && c <= L'f') return c - L'a' + 10;
     return -1;
 }
+
 // Parse only on setting changes, never while painting. No allocations.
+
 bool Matches(PCWSTR text, size_t length, PCWSTR keyword) {
     return wcslen(keyword) == length && _wcsnicmp(text, keyword, length) == 0;
 }
+
 ColorSpec ParseColorSpec(PCWSTR text, COLORREF fallback) {
     while (*text == L' ' || *text == L'\t') ++text;
     size_t len = wcslen(text);
@@ -297,16 +332,21 @@ ColorSpec ParseColorSpec(PCWSTR text, COLORREF fallback) {
         if (Matches(text, len, name.name)) return {name.kind, fallback};
     return {ColorKind::Fixed, fallback};
 }
+
 ColorSpec ReadColorSpec(PCWSTR key, COLORREF fallback) {
     auto setting = WindhawkUtils::StringSetting::make(key);
     return ParseColorSpec(setting.get(), fallback);
 }
+
 // Convert the UI's integer percentage to the native 0..255 scale with
 // round-to-nearest arithmetic; 0 => 0, 50 => 128, and 100 => exactly 255.
+
 BYTE PercentToByte(int percentage) {
     return static_cast<BYTE>((std::clamp(percentage, 0, 100) * 255 + 50) / 100);
 }
+
 // Use premultiplied BGRA, required for AC_SRC_ALPHA.
+
 DWORD PremultipliedPixel(COLORREF source, BYTE alpha) {
     const auto scale = [alpha](BYTE channel) -> DWORD {
         return (static_cast<DWORD>(channel) * alpha + 127) / 255;
@@ -316,6 +356,7 @@ DWORD PremultipliedPixel(COLORREF source, BYTE alpha) {
            (scale(GetGValue(source)) << 8) |
             scale(GetBValue(source));
 }
+
 bool InitBlendSource() {
     // Supplying a non-NULL DC avoids tying the source to Windhawk's
     // potentially short-lived initialization thread.
@@ -344,6 +385,7 @@ bool InitBlendSource() {
     *g_blendBits = 0;
     return true;
 }
+
 void FreeBlendSource() {
     if (g_blendDC && g_blendOldBitmap)
         SelectObject(g_blendDC, g_blendOldBitmap);
@@ -354,8 +396,10 @@ void FreeBlendSource() {
     g_blendOldBitmap = nullptr;
     g_blendBits = nullptr;
 }
+
 // RegNotifyChangeKeyValue registrations are one-shot. Thread agnosticism is
 // important because Windhawk can initialize the mod on a short-lived thread.
+
 void ArmPersonalizeNotification() {
     if (g_personalizeKey && g_personalizeEvent) {
         RegNotifyChangeKeyValue(g_personalizeKey, FALSE,
@@ -363,6 +407,7 @@ void ArmPersonalizeNotification() {
             g_personalizeEvent, TRUE);
     }
 }
+
 void InitPersonalizeNotification() {
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kPersonalizePath, 0,
                       KEY_QUERY_VALUE | KEY_NOTIFY, &g_personalizeKey)
@@ -370,12 +415,14 @@ void InitPersonalizeNotification() {
     g_personalizeEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     ArmPersonalizeNotification();
 }
+
 void FreePersonalizeNotification() {
     if (g_personalizeEvent) CloseHandle(g_personalizeEvent);
     if (g_personalizeKey) RegCloseKey(g_personalizeKey);
     g_personalizeEvent = nullptr;
     g_personalizeKey = nullptr;
 }
+
 void SyncDragGeneration(unsigned generation) {
     if (g_dragGeneration != generation) {
         g_dragGeneration = generation;
@@ -383,6 +430,7 @@ void SyncDragGeneration(unsigned generation) {
         g_repaintOnRelease = false;
     }
 }
+
 void LoadSettings() {
     g_diagnostics.store(Wh_GetIntSetting(L"diagnostics") != 0,
                         std::memory_order_relaxed);
@@ -416,8 +464,10 @@ void LoadSettings() {
     g_diagnosticSamples.store(0, std::memory_order_relaxed);
     g_generation.fetch_add(1, std::memory_order_relaxed);
 }
+
 // Color and appearance queries occur at initialization, settings changes,
 // Personalize notifications, and at most once per 3s as a fallback.
+
 COLORREF ResolveColor(ColorKind kind, COLORREF fixed, bool dark,
                       bool contrast, COLORREF accent) {
     switch (kind) {
@@ -438,6 +488,7 @@ COLORREF ResolveColor(ColorKind kind, COLORREF fixed, bool dark,
     default:                       return fixed;
     }
 }
+
 void RefreshColorsIfDue(DWORD now, bool forced = false) {
     DWORD previous = g_lastThemeCheck.load(std::memory_order_relaxed);
     const bool fallbackDue = !previous ||
@@ -510,9 +561,11 @@ void RefreshColorsIfDue(DWORD now, bool forced = false) {
     g_lastThemeCheck.store(now, std::memory_order_relaxed);
     ReleaseSRWLockExclusive(&g_paletteLock);
 }
+
 // Cheap geometry checks before any DirectUI method is called. No hardcoded
 // view-mode or minimum-width gate. A user-requested width filter is optional.
 // Keep arithmetic widened to handle large virtual desktop coordinates.
+
 bool HasPossibleRowGeometry(const RECT* rc) {
     if (!rc) return false;
     const auto width = static_cast<int64_t>(rc->right) - rc->left;
@@ -522,11 +575,13 @@ bool HasPossibleRowGeometry(const RECT* rc) {
            height <= kMaxRoundedBitmapHeight &&
            width >= g_minWidth.load(std::memory_order_relaxed);
 }
+
 int RowDpi(void* element) {
     const int dpi = g_dpi(element);
     // Guard a bad/unsupported DirectUI return rather than mis-draw.
     return dpi >= kMinSupportedDpi && dpi <= kMaxSupportedDpi ? dpi : kReferenceDpi;
 }
+
 bool IsCompactListItemHeight(const RECT& row, int dpi) {
     const auto height = static_cast<int64_t>(row.bottom) - row.top;
     // Retain a compact-item height guard (19..52 at 96 DPI) so large
@@ -669,14 +724,6 @@ std::uint64_t GetRowIdentity(void* element, DWORD now) {
     return HashElementName(element, g_getAccName);
 }
 
-void ClearStripeIdentities() {
-    AcquireSRWLockExclusive(&g_stripeIdentityLock);
-    for (auto& e : g_stripeEntries) e = {};
-    for (auto& b : g_stripeBiases) b = {};
-    g_identityFallbackSamples.store(0, std::memory_order_relaxed);
-    ReleaseSRWLockExclusive(&g_stripeIdentityLock);
-}
-
 // Call only for real file-list rows, after navigation/tree/height checks.
 // The cache stores BOTH stripe and non-stripe assignments, so an old white
 // item cannot suddenly become dark as DirectUI shifts its visual indices.
@@ -774,7 +821,12 @@ std::unique_ptr<RoundedStripeShape> CreateRoundedShape(int height,
     shape->pixel = pixel;
     const int width = 2 * shape->capWidth + 1;
     shape->bytes = static_cast<size_t>(width) * height * sizeof(DWORD);
-    shape->dc = CreateCompatibleDC(nullptr);
+    // The cache can outlive the Explorer UI thread that first paints a row.
+    // A NULL parent DC would make the memory DC die with that thread.
+    HDC screen = GetDC(nullptr);
+    if (!screen) return nullptr;
+    shape->dc = CreateCompatibleDC(screen);
+    ReleaseDC(nullptr, screen);
     if (!shape->dc) return nullptr;
     BITMAPINFO info{};
     info.bmiHeader.biSize = sizeof(info.bmiHeader);
@@ -883,10 +935,10 @@ bool BlendRoundedStripe(HDC dc, const RECT& dst, int twiceRadius,
                         DWORD pixel, bool flatRight, DWORD now) {
     const int height = dst.bottom - dst.top;
     const int width = dst.right - dst.left;
-    AcquireSRWLockShared(&g_roundedLock);
+    AcquireSRWLockExclusive(&g_roundedLock);
     RoundedStripeShape* shape = FindRoundedShape(height, twiceRadius, pixel);
     if (!shape) {
-        ReleaseSRWLockShared(&g_roundedLock);
+        ReleaseSRWLockExclusive(&g_roundedLock);
         const DWORD retry = g_retryShapeAfter.load(std::memory_order_relaxed);
         const bool canRetry = !retry || static_cast<std::int32_t>(now - retry) >= 0;
         if (canRetry && !g_shapeBuildInProgress.test_and_set(
@@ -925,11 +977,11 @@ bool BlendRoundedStripe(HDC dc, const RECT& dst, int twiceRadius,
             }
             g_shapeBuildInProgress.clear(std::memory_order_release);
         }
-        AcquireSRWLockShared(&g_roundedLock);
+        AcquireSRWLockExclusive(&g_roundedLock);
         shape = FindRoundedShape(height, twiceRadius, pixel);
     }
     if (!shape) {
-        ReleaseSRWLockShared(&g_roundedLock);
+        ReleaseSRWLockExclusive(&g_roundedLock);
         return false;
     }
     const int leftWidth = std::min(shape->capWidth, (width + 1) / 2);
@@ -955,7 +1007,7 @@ bool BlendRoundedStripe(HDC dc, const RECT& dst, int twiceRadius,
     patch(dst.left, leftWidth, 0, false);
     patch(dst.left + leftWidth, middleWidth, shape->capWidth, true);
     patch(dst.right - rightWidth, rightWidth, sourceWidth - rightWidth, false);
-    ReleaseSRWLockShared(&g_roundedLock);
+    ReleaseSRWLockExclusive(&g_roundedLock);
     // An entirely offscreen row is not an allocation/drawing failure.
     return drew || clip.right <= clip.left;
 }
@@ -1033,6 +1085,7 @@ bool DrawStripe(HDC dc, const RECT& nativeRow, int dpi, DWORD now,
                                           flatRight, now)) return true;
     return DrawSolidStripe(dc, dst, pixel);
 }
+
 void PaintBackgroundHook(void* element, HDC dc, void* value,
                          const RECT* rc, const RECT* b,
                          const RECT* c, const RECT* d) {
@@ -1096,7 +1149,9 @@ void PaintBackgroundHook(void* element, HDC dc, void* value,
         g_repaintOnRelease = true;
     }
 }
+
 // Only used at setup/settings changes/teardown (NEVER on a resize frame).
+
 BOOL CALLBACK InvalidateDirectUI(HWND hwnd, LPARAM) {
     wchar_t cls[64]{};
     if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
@@ -1105,6 +1160,7 @@ BOOL CALLBACK InvalidateDirectUI(HWND hwnd, LPARAM) {
         InvalidateRect(hwnd, nullptr, FALSE);
     return TRUE;
 }
+
 BOOL CALLBACK InvalidateExplorerWindow(HWND hwnd, LPARAM) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
@@ -1115,11 +1171,14 @@ BOOL CALLBACK InvalidateExplorerWindow(HWND hwnd, LPARAM) {
         EnumChildWindows(hwnd, InvalidateDirectUI, 0);
     return TRUE;
 }
+
 void RepaintExplorerOnce() {
     EnumWindows(InvalidateExplorerWindow, 0);
 }
+
 // Prefer the window containing the release message, rather than every
 // Explorer window. Fallback is also exactly one invalidation pass.
+
 void RepaintAfterDrag(HWND sender) {
     HWND root = sender ? GetAncestor(sender, GA_ROOT) : nullptr;
     if (root && IsWindow(root)) {
@@ -1132,8 +1191,10 @@ void RepaintAfterDrag(HWND sender) {
     }
     RepaintExplorerOnce();
 }
+
 // No persistent listeners or window subclasses. Process the original message
 // first, then invalidate the affected Explorer window if a drag just ended.
+
 LRESULT WINAPI DispatchMessageHook(const MSG* msg) {
     LRESULT result = g_dispatchOriginal(msg);
     if (!msg) return result;
@@ -1157,6 +1218,7 @@ LRESULT WINAPI DispatchMessageHook(const MSG* msg) {
     }
     return result;
 }
+
 template<typename T>
 T Export(HMODULE module, const char* symbol) {
     return reinterpret_cast<T>(GetProcAddress(module, symbol));
@@ -1181,14 +1243,18 @@ bool IsFolderDefView(HWND hwnd) {
 // The sentinel is on a window-creation path, never on DispatchMessageW.
 // It does no allocation or synchronous hook installation on Explorer's UI
 // thread. Its only job is to queue the one-time activation on a folder window.
-DWORD WINAPI ActivateOnWorker(void*);
+VOID CALLBACK ActivateOnWorker(PTP_CALLBACK_INSTANCE, void*, PTP_WORK);
 void QueueFolderActivation() {
     AcquireSRWLockExclusive(&g_activationLock);
     if (g_activationReady && !g_activationQueued &&
-        !g_activationAttempted && !g_stopping.load(std::memory_order_relaxed)) {
-        g_activationQueued = true;
-        if (!QueueUserWorkItem(ActivateOnWorker, nullptr, WT_EXECUTEDEFAULT))
-            g_activationQueued = false; // Retry at the next folder creation.
+        !g_activationAttempted && !g_stopping.load(std::memory_order_acquire)) {
+        if (!g_activationWork)
+            g_activationWork = CreateThreadpoolWork(ActivateOnWorker, nullptr, nullptr);
+        if (g_activationWork) {
+            g_activationQueued = true;
+            SubmitThreadpoolWork(g_activationWork);
+        }
+        // If allocation failed, retry on the next folder creation.
     }
     ReleaseSRWLockExclusive(&g_activationLock);
 }
@@ -1246,8 +1312,8 @@ bool AnyFolderViewExists() {
 }
 
 // Expensive initialization and both active hooks are deferred until a real
-// Explorer folder view exists. This worker can run on a transient threadpool
-// thread: no persistent thread, timer, polling loop or window subclass.
+// Explorer folder view exists. The tracked work object is joined at unload;
+// no permanent thread, timer, polling loop or window subclass is needed.
 bool InstallFolderPainter() {
     if (g_stopping.load(std::memory_order_acquire)) return false;
     LoadSettings();
@@ -1310,7 +1376,7 @@ bool InstallFolderPainter() {
     return true;
 }
 
-DWORD WINAPI ActivateOnWorker(void*) {
+VOID CALLBACK ActivateOnWorker(PTP_CALLBACK_INSTANCE, void*, PTP_WORK) {
     const bool installed = InstallFolderPainter();
     if (installed) {
         // A settings change during deferred initialization must not be lost.
@@ -1325,7 +1391,6 @@ DWORD WINAPI ActivateOnWorker(void*) {
             }
             g_settingsDirtyDuringActivation = false;
             ReleaseSRWLockExclusive(&g_activationLock);
-            ClearStripeIdentities();
             LoadSettings();
             RefreshColorsIfDue(GetTickCount(), true);
         }
@@ -1340,9 +1405,7 @@ DWORD WINAPI ActivateOnWorker(void*) {
     // resources every time a new folder opens. A mod reload can retry it.
     g_activationAttempted = true;
     g_activationQueued = false;
-    WakeAllConditionVariable(&g_activationCondition);
     ReleaseSRWLockExclusive(&g_activationLock);
-    return 0;
 }
 
 } // namespace
@@ -1357,6 +1420,7 @@ BOOL Wh_ModInit() {
     }
     return TRUE;
 }
+
 void Wh_ModAfterInit() {
     AcquireSRWLockExclusive(&g_activationLock);
     g_activationReady = true;
@@ -1364,6 +1428,7 @@ void Wh_ModAfterInit() {
     // Handles enabling the mod while an Explorer folder window is already up.
     if (AnyFolderViewExists()) QueueFolderActivation();
 }
+
 void Wh_ModSettingsChanged() {
     AcquireSRWLockExclusive(&g_activationLock);
     const bool installed = g_activationInstalled;
@@ -1371,25 +1436,29 @@ void Wh_ModSettingsChanged() {
         g_settingsDirtyDuringActivation = true;
     ReleaseSRWLockExclusive(&g_activationLock);
     if (!installed) return; // Dormant: settings load when the first view opens.
-    ClearStripeIdentities();
     LoadSettings();
     RefreshColorsIfDue(GetTickCount(), true);
     RepaintExplorerOnce();
 }
+
 void Wh_ModBeforeUninit() {
     g_stopping.store(true, std::memory_order_release);
     g_enabled.store(false, std::memory_order_release);
-    // Do not unload code or free a DirectUI module while a queued activation
-    // callback is still executing. No worker exists in the dormant state.
+    // Check/stop submissions under the same lock as QueueFolderActivation.
+    // WaitForThreadpoolWorkCallbacks waits for the callback's actual return,
+    // unlike a flag cleared by that callback before its return instruction.
     AcquireSRWLockExclusive(&g_activationLock);
-    while (g_activationQueued)
-        SleepConditionVariableSRW(&g_activationCondition, &g_activationLock,
-                                  INFINITE, 0);
+    PTP_WORK work = g_activationWork;
+    g_activationWork = nullptr;
     ReleaseSRWLockExclusive(&g_activationLock);
+    if (work) {
+        WaitForThreadpoolWorkCallbacks(work, FALSE);
+        CloseThreadpoolWork(work);
+    }
 }
+
 void Wh_ModUninit() {
     FreePersonalizeNotification();
-    if (g_activationInstalled) ClearStripeIdentities();
     FreeRoundedShapes();
     FreeBlendSource();
     if (g_dui) {
