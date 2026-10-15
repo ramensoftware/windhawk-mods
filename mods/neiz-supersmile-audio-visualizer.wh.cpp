@@ -2052,6 +2052,8 @@ static constexpr int EQ_LAYOUT_WIDGET_COUNT = 7;
 static bool EqIsLayoutWidgetPresent(int id);
 
 static std::array<EqLayoutWidgetState, EQ_LAYOUT_WIDGET_COUNT> g_eqLayoutWidgets{};
+static std::array<std::atomic<bool>, EQ_LAYOUT_WIDGET_COUNT>
+    g_eqLayoutWidgetPresenceSnapshot{};
 static bool g_eqLayoutLoaded = false;
 
 // The Disk section only needs album/session polling while the Player popup is
@@ -2313,6 +2315,26 @@ static constexpr UINT WM_VIZ_ALBUM_MEDIA_CHANGED = WM_APP + 0x2A3;
 static constexpr UINT WM_VIZ_OPEN_LAYOUT_EDITOR = WM_APP + 0x2A4;
 static constexpr UINT WM_VIZ_DEBUG_SYNC = WM_APP + 0x2A5;
 static constexpr UINT WM_VIZ_DEBUG_SAMPLE = WM_APP + 0x2A6;
+static constexpr UINT WM_VIZ_REFRESH_SERVICES = WM_APP + 0x2A8;
+static std::atomic<bool> g_overlayServicesRefreshPending{false};
+static std::atomic<bool> g_audioCaptureRestartRequested{false};
+
+static void RequestOverlayServicesRefresh(bool restartAudioCapture = false) {
+    HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
+    if (!overlay)
+        return;
+
+    if (restartAudioCapture)
+        g_audioCaptureRestartRequested.store(true, std::memory_order_release);
+
+    bool expected = false;
+    if (!g_overlayServicesRefreshPending.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        return;
+    }
+    if (!PostMessageW(overlay, WM_VIZ_REFRESH_SERVICES, 0, 0))
+        g_overlayServicesRefreshPending.store(false, std::memory_order_release);
+}
 
 static void WakeOverlayForAlbumMediaChange() {
     HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
@@ -2999,9 +3021,14 @@ static int EqReadTrayActionSetting(PCWSTR key, int fallback) {
     return result;
 }
 
-static void LoadSettings() {
-    LoadEqLayoutSettings();
-    LoadEqPopupPlacementSettings();
+static void LoadSettings(bool loadPlayerLayout = true) {
+    // Layout and popup placement are owned by the Player window thread after
+    // startup. Windhawk may invoke Wh_ModSettingsChanged from another thread,
+    // so settings refreshes must not reload/mutate those live UI structures.
+    if (loadPlayerLayout) {
+        LoadEqLayoutSettings();
+        LoadEqPopupPlacementSettings();
+    }
 
     const int rawTargetMonitor = Wh_GetIntSetting(L"Performance.targetMonitor");
     g_settings.barCount = std::clamp(Wh_GetIntSetting(L"Visualizer.barCount"), 1, VIZ_BANDS_MAX);
@@ -4367,46 +4394,34 @@ static bool InitProcessAudioClient(
         return false;
     }
 
-    // The async operation owns a COM reference to the completion handler until
-    // ActivateCompleted() returns. Never turn a DLL unload into an infinite wait.
-    // We poll in short slices so shutdown can abort this worker promptly; after
-    // disabling the callback event, the handler remains alive under COM until the
-    // outstanding async operation finally releases it.
-    constexpr DWORD kActivationWaitSliceMs = 100;
-    constexpr DWORD kActivationWaitMaxMs = 10000;
-    DWORD waitedMs = 0;
-    for (;;) {
-        const DWORD waitResult =
-            WaitForSingleObject(completedEvent, kActivationWaitSliceMs);
-        if (waitResult == WAIT_OBJECT_0)
-            break;
-        if (waitResult != WAIT_TIMEOUT) {
-            Wh_Log(L"Process loopback activation completion wait failed (pid=%lu)",
-                   static_cast<unsigned long>(processId));
-            handler->DisableEvent();
-            handler->Release();
-            CloseHandle(completedEvent);
-            return false;
-        }
+    // ActivateAudioInterfaceAsync may retain and invoke this handler after the
+    // audio worker is asked to stop. Do not release the handler/event while that
+    // callback is outstanding: its code and vtable live in this DLL, so unload
+    // must join this worker only after activation has completed.
+    DWORD waitResult = WAIT_TIMEOUT;
+    while (waitResult == WAIT_TIMEOUT) {
+        waitResult = WaitForSingleObject(completedEvent, 100);
+        // The shutdown flag deliberately does not cancel this wait. StopAudioCapture
+        // joins the worker, and therefore cannot let the module unload while COM
+        // can still call ActivateCompleted().
+    }
+    if (waitResult != WAIT_OBJECT_0) {
+        // A valid, owned event handle should not fail here. Keep waiting rather
+        // than releasing a possibly live callback target after an anomalous result.
+        Wh_Log(L"Process loopback activation completion wait returned %lu (pid=%lu); retrying",
+               static_cast<unsigned long>(waitResult),
+               static_cast<unsigned long>(processId));
+        do {
+            Sleep(100);
+            waitResult = WaitForSingleObject(completedEvent, INFINITE);
+        } while (waitResult != WAIT_OBJECT_0);
+    }
 
-        waitedMs += kActivationWaitSliceMs;
-        if (!g_audioRunning.load(std::memory_order_acquire)) {
-            Wh_Log(L"Process loopback activation aborted during audio shutdown (pid=%lu)",
-                   static_cast<unsigned long>(processId));
-            handler->DisableEvent();
-            handler->Release();
-            CloseHandle(completedEvent);
-            return false;
-        }
-
-        if (waitedMs >= kActivationWaitMaxMs) {
-            Wh_Log(L"Process loopback activation timed out (pid=%lu)",
-                   static_cast<unsigned long>(processId));
-            handler->DisableEvent();
-            handler->Release();
-            CloseHandle(completedEvent);
-            return false;
-        }
+    if (!g_audioRunning.load(std::memory_order_acquire)) {
+        handler->DisableEvent();
+        handler->Release();
+        CloseHandle(completedEvent);
+        return false;
     }
 
     const HRESULT activationResult = handler->Result();
@@ -9994,6 +10009,14 @@ static void ApplyDesktopVisualizerWindowVisibility(bool show) {
 static bool RefreshDesktopVisualizerRuntime(
     const VisualizerSettings& settings, bool forceVisibilityCheck = false) {
     DebugPerfScope debugScope(DEBUG_PERF_RUNTIME_REFRESH);
+
+    // The overlay thread exclusively owns the audio worker handles. A settings
+    // change only sets this request flag; stop/restart here on the owner thread.
+    if (g_audioCaptureRestartRequested.exchange(
+            false, std::memory_order_acq_rel)) {
+        StopAudioCapture();
+    }
+
     const ULONGLONG nowMs = GetTickCount64();
     if (forceVisibilityCheck ||
         nowMs - g_lastDesktopVisualizerVisibilityCheckMs >=
@@ -13613,12 +13636,36 @@ static constexpr int EQ_BUTTON_HEIGHT = 32;
 static constexpr int EQ_POPUP_TASKBAR_GAP = 16;
 static constexpr UINT kEqPopupAnimationTimerId = 0x4E53;
 static constexpr UINT kEqPopupAnimationIntervalMs = 16;
-static HWND g_eqPopupHwnd = nullptr;
+static HWND g_eqPopupHwnd = nullptr;  // Accessed directly only by the popup owner thread.
+static std::atomic<HWND> g_eqPopupHwndForRequests{nullptr};
 static constexpr UINT WM_EQ_ALBUM_ARTWORK_CHANGED = WM_APP + 0x2A7;
+static constexpr UINT WM_EQ_RENDER_TICK = WM_APP + 0x2A9;
+static std::atomic<bool> g_eqPopupRenderRequestPending{false};
+static std::atomic<bool> g_eqPopupAttributesUpdateRequested{false};
+static LRESULT CALLBACK EqTrayVolumeFlyoutProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+static constexpr wchar_t kEqTrayVolumeFlyoutClass[] = L"WindhawkEqTrayVolumeFlyout";
+static void RequestEqPopupRender(HWND popup = nullptr) {
+    if (!g_running.load(std::memory_order_acquire) ||
+        !g_eqPlayerPopupOpen.load(std::memory_order_acquire))
+        return;
+    if (!popup)
+        popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (!popup)
+        return;
+
+    bool expected = false;
+    if (!g_eqPopupRenderRequestPending.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        return;
+    }
+    if (!PostMessageW(popup, WM_EQ_RENDER_TICK, 0, 0))
+        g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+}
 static void WakeEqPopupForAlbumMediaChange() {
     if (!g_eqPlayerPopupOpen.load(std::memory_order_acquire))
         return;
-    HWND popup = g_eqPopupHwnd;
+    HWND popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
     if (popup && IsWindow(popup))
         PostMessageW(popup, WM_EQ_ALBUM_ARTWORK_CHANGED, 0, 0);
 }
@@ -13656,11 +13703,9 @@ struct EqPlayerMediaRenderCache {
 };
 static EqPlayerMediaRenderCache g_eqPlayerMediaRenderCache;
 
-// RenderEqPopup can be called both from the shared render thread and from
-// the popup/taskbar window thread. The persistent GDI surface therefore needs
-// one short critical section around the full render transaction.
-static std::mutex g_eqPlayerRenderMutex;
-static ULONGLONG g_eqLastScheduledRenderQpc = 0;
+// The persistent Player surface and all popup layout/render caches are owned by
+// the popup's window thread. Other threads request a coalesced WM_EQ_RENDER_TICK.
+static std::atomic<ULONGLONG> g_eqLastScheduledRenderQpc{0};
 // Keep the Player at its active cadence for a short grace period after
 // playback stops. Disk and other animated sections need a few frames to
 // finish their natural fade instead of stepping immediately into 5 FPS idle.
@@ -13791,9 +13836,10 @@ static bool ShouldRenderPlayerOnSchedulerTick() {
     const ULONGLONG minTicks = static_cast<ULONGLONG>(std::max(1.0,
         static_cast<double>(g_overlayQpcFrequency.QuadPart) / playerHz));
 
-    if (g_eqLastScheduledRenderQpc == 0 ||
-        nowQpc - g_eqLastScheduledRenderQpc >= minTicks) {
-        g_eqLastScheduledRenderQpc = nowQpc;
+    const ULONGLONG lastRenderQpc =
+        g_eqLastScheduledRenderQpc.load(std::memory_order_acquire);
+    if (lastRenderQpc == 0 || nowQpc - lastRenderQpc >= minTicks) {
+        g_eqLastScheduledRenderQpc.store(nowQpc, std::memory_order_release);
         return true;
     }
     return false;
@@ -14224,9 +14270,19 @@ static const EqLayoutWidgetState* EqGetLayoutWidgetConst(int id) {
     return nullptr;
 }
 
+static void PublishEqLayoutWidgetPresenceSnapshot() {
+    for (int i = 0; i < EQ_LAYOUT_WIDGET_COUNT; ++i) {
+        g_eqLayoutWidgetPresenceSnapshot[static_cast<size_t>(i)].store(
+            g_eqLayoutWidgets[static_cast<size_t>(i)].present,
+            std::memory_order_release);
+    }
+}
+
 static bool EqIsLayoutWidgetPresent(int id) {
-    const auto* w = EqGetLayoutWidgetConst(id);
-    return w && w->present;
+    if (id < 0 || id >= EQ_LAYOUT_WIDGET_COUNT)
+        return false;
+    return g_eqLayoutWidgetPresenceSnapshot[static_cast<size_t>(id)].load(
+        std::memory_order_acquire);
 }
 
 static void EqNormalizeLayoutZOrder() {
@@ -14319,6 +14375,7 @@ static void LoadEqLayoutSettings() {
         }
         EqNormalizeLayoutZOrder();
         g_eqLayoutLoaded = true;
+        PublishEqLayoutWidgetPresenceSnapshot();
         return;
     }
 
@@ -14372,6 +14429,9 @@ static void LoadEqLayoutSettings() {
 }
 
 static void SaveEqLayoutSettings() {
+    // Publish before persistent writes: Wh_SetIntValue can synchronously
+    // re-enter Wh_ModSettingsChanged on some Windhawk builds.
+    PublishEqLayoutWidgetPresenceSnapshot();
     Wh_SetIntValue(L"MediaEQ.layout.version", EQ_LAYOUT_STORAGE_VERSION);
     Wh_SetIntValue(L"MediaEQ.layout.canvas.w", EQ_LAYOUT_CANVAS_W);
     Wh_SetIntValue(L"MediaEQ.layout.canvas.h", EQ_LAYOUT_CANVAS_H);
@@ -14682,6 +14742,9 @@ static EqVolumeMetrics EqBuildVolumeMetrics(const RECT& r) {
 }
 
 static bool EqPointInVolumeMuteButton(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    x = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    y = static_cast<int>(std::lround(static_cast<double>(y) / scale));
     if (!EqIsLayoutWidgetPresent(EQ_LAYOUT_VOLUME))
         return false;
     const RECT r = EqGetLayoutRect(EQ_LAYOUT_VOLUME);
@@ -14690,6 +14753,9 @@ static bool EqPointInVolumeMuteButton(int x, int y) {
 }
 
 static bool EqPointInVolumeSlider(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    x = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    y = static_cast<int>(std::lround(static_cast<double>(y) / scale));
     if (!EqIsLayoutWidgetPresent(EQ_LAYOUT_VOLUME))
         return false;
     const RECT r = EqGetLayoutRect(EQ_LAYOUT_VOLUME);
@@ -14698,6 +14764,9 @@ static bool EqPointInVolumeSlider(int x, int y) {
 }
 
 static void EqSetVolumeFromPoint(int x, int y, bool force = false) {
+    const double scale = EqGetPopupDpiScale();
+    x = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    y = static_cast<int>(std::lround(static_cast<double>(y) / scale));
     const RECT r = EqGetLayoutRect(EQ_LAYOUT_VOLUME);
     if (r.right <= r.left || r.bottom <= r.top)
         return;
@@ -17657,6 +17726,8 @@ static void DestroyEqStaticWidgetCache() {
     g_eqMediaTextRenderCache = EqMediaTextRenderCache{};
     delete g_eqPresetWidgetRenderCache.bitmap;
     g_eqPresetWidgetRenderCache = EqPresetWidgetRenderCache{};
+    // unique_ptr's destructor must run before GdiplusShutdown, not at DLL unload.
+    g_eqLyricsRenderCache = EqLyricsRenderCache{};
 }
 
 static size_t BuildEqStaticWidgetCacheHash(const EqLayoutWidgetState& widget, bool dark, const RECT& r) {
@@ -18499,8 +18570,6 @@ static void RenderEqPopup(HWND hwnd) {
     if (!hwnd)
         return;
 
-    std::lock_guard<std::mutex> renderLock(g_eqPlayerRenderMutex);
-
     bool dark = true;
     int styleId = EQ_POPUP_STYLE_SYSTEM;
     EqPopupStyle style{};
@@ -18690,6 +18759,17 @@ static bool EqPointInLyricsWidget(int x, int y,
 
 static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+    case WM_EQ_RENDER_TICK:
+        g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+        if (g_eqPopupHwnd == hwnd &&
+            g_eqPlayerPopupOpen.load(std::memory_order_acquire)) {
+            if (g_eqPopupAttributesUpdateRequested.exchange(
+                    false, std::memory_order_acq_rel)) {
+                ApplyEqPopupWindowAttributes(hwnd);
+            }
+            RenderEqPopup(hwnd);
+        }
+        return 0;
     case WM_EQ_ALBUM_ARTWORK_CHANGED:
         RenderEqPopup(hwnd);
         return 0;
@@ -19196,11 +19276,8 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                             g_eqLyricsAutoFocusResumeTick = 0;
                         }
                         SaveEqLayoutSettings();
-                        if (deletedId == EQ_LAYOUT_DISK &&
-                            g_shellServicesStarted.load(std::memory_order_acquire) &&
-                            !IsAlbumColorCaptureNeeded()) {
-                            StopAlbumColorCapture();
-                        }
+                        if (deletedId == EQ_LAYOUT_DISK)
+                            RequestOverlayServicesRefresh();
                         RenderEqPopup(hwnd);
                         return 0;
                     }
@@ -19407,8 +19484,8 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 SaveEqLayoutSettings();
                 if (dragId == EQ_LAYOUT_LYRICS)
                     StartLyricsCapture();
-                if (dragId == EQ_LAYOUT_DISK && g_shellServicesStarted.load(std::memory_order_acquire))
-                    StartAlbumColorCapture();
+                if (dragId == EQ_LAYOUT_DISK)
+                    RequestOverlayServicesRefresh();
             }
             RenderEqPopup(hwnd);
             return 0;
@@ -19427,11 +19504,8 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                     g_eqLyricsScrollTrackKey.clear();
                 }
                 SaveEqLayoutSettings();
-                if (removedId == EQ_LAYOUT_DISK &&
-                    g_shellServicesStarted.load(std::memory_order_acquire) &&
-                    !IsAlbumColorCaptureNeeded()) {
-                    StopAlbumColorCapture();
-                }
+                if (removedId == EQ_LAYOUT_DISK)
+                    RequestOverlayServicesRefresh();
                 g_eqBuilderSelectedId=-1;
             } else {
                 SaveEqLayoutSettings();
@@ -19503,13 +19577,28 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         return 0;
     }
     case WM_DESTROY:
-                KillTimer(hwnd, kEqPopupPageAnimationTimerId);
+        KillTimer(hwnd, kEqPopupAnimationTimerId);
+        KillTimer(hwnd, kEqPopupPageAnimationTimerId);
         KillTimer(hwnd, kEqPresetPageAnimationTimerId);
         g_eqPageAnimationActive = false;
         g_eqPresetPageAnimationActive = false;
         if (g_eqMediaSeeking) {
             g_eqMediaSeeking = false;
             ReleaseCapture();
+        }
+        // DestroyEqPopup normally releases these before DestroyWindow. Keep a
+        // fallback for shell-driven window destruction so GDI+ objects never
+        // survive until static destructors run after GdiplusShutdown.
+        if (g_eqPopupHwnd == hwnd) {
+            g_eqPopupHwnd = nullptr;
+            g_eqPopupHwndForRequests.store(nullptr, std::memory_order_release);
+            g_eqPlayerPopupOpen.store(false, std::memory_order_release);
+            g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+            g_eqPopupAttributesUpdateRequested.store(false, std::memory_order_release);
+            DestroyEqDiskArtworkImage();
+            DestroyEqPlayerRenderSurface();
+            g_eqLastScheduledRenderQpc.store(0, std::memory_order_release);
+            RequestOverlayServicesRefresh();
         }
         return 0;
     case WM_CLOSE:
@@ -19522,7 +19611,9 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 }
 
 static bool RegisterEqWindowClasses(HINSTANCE instance) {
-    if (g_eqClassesRegistered) return true;
+    if (g_eqClassesRegistered)
+        return true;
+
     WNDCLASSW popupClass{};
     popupClass.lpfnWndProc = EqPopupProc;
     popupClass.hInstance = instance;
@@ -19540,6 +19631,20 @@ static bool RegisterEqWindowClasses(HINSTANCE instance) {
         return false;
     }
 
+    WNDCLASSEXW flyoutClass{};
+    flyoutClass.cbSize = sizeof(flyoutClass);
+    flyoutClass.lpfnWndProc = EqTrayVolumeFlyoutProc;
+    flyoutClass.hInstance = instance;
+    flyoutClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    flyoutClass.lpszClassName = kEqTrayVolumeFlyoutClass;
+    if (!RegisterClassExW(&flyoutClass)) {
+        // In particular, do not accept ERROR_CLASS_ALREADY_EXISTS: the class
+        // may still point into a previous, already-unloaded copy of this DLL.
+        UnregisterClassW(kEqNativeTrayWindowClass, instance);
+        UnregisterClassW(kEqPopupClass, instance);
+        return false;
+    }
+
     g_eqModuleHandle = instance;
     g_eqClassesRegistered = true;
     return true;
@@ -19551,7 +19656,7 @@ static void DestroyEqPopup() {
     // Permanent consumers (album colors / desktop Album Widget) can still keep
     // the shared worker alive through IsAlbumColorCaptureNeeded().
     g_eqPlayerPopupOpen.store(false, std::memory_order_release);
-    RefreshAudioConsumerDemand(GetSettingsSnapshot());
+    RequestOverlayServicesRefresh();
 
     if (g_eqDraggingBand >= 0) {
         SaveCustomEQSettings();
@@ -19571,7 +19676,10 @@ static void DestroyEqPopup() {
     SaveCustomEQSettings();
 
     HWND hwnd = g_eqPopupHwnd;
+    g_eqPopupHwndForRequests.store(nullptr, std::memory_order_release);
     g_eqPopupHwnd = nullptr;
+    g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+    g_eqPopupAttributesUpdateRequested.store(false, std::memory_order_release);
     g_eqHotBand = -1;
     g_eqHotPreset = -1;
     g_eqBuilderSelectedId = -1;
@@ -19592,19 +19700,13 @@ static void DestroyEqPopup() {
     g_eqPopupPlacementDragTarget = EQ_POPUP_PLACEMENT_DRAG_NONE;
     g_eqPopupPlacementDragOffsetX = 0;
     g_eqPopupPlacementDragOffsetY = 0;
-    {
-        std::lock_guard<std::mutex> renderLock(g_eqPlayerRenderMutex);
-        // The Disk renderer reads both the decoded artwork and its circular
-        // raster cache while holding this mutex; destroy them under the same
-        // lock so closing Player cannot free a bitmap mid-frame.
-        DestroyEqDiskArtworkImage();
-        DestroyEqPlayerRenderSurface();
-    }
-    g_eqLastScheduledRenderQpc = 0;
+    // This function runs on the popup's owner thread, so no renderer can be
+    // using these caches concurrently.
+    DestroyEqDiskArtworkImage();
+    DestroyEqPlayerRenderSurface();
+    g_eqLastScheduledRenderQpc.store(0, std::memory_order_release);
 
-    if (!IsAlbumColorCaptureNeeded())
-        StopAlbumColorCapture();
-
+    // Album/audio worker lifecycle is reconciled by the overlay thread.
     if (hwnd && IsWindow(hwnd))
         DestroyWindow(hwnd);
 }
@@ -19679,8 +19781,9 @@ static int EqPopupScalePx(int value, double scale) {
 
 static double EqGetPopupDpiScale() {
     UINT dpi = 96;
-    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
-        dpi = GetDpiForWindow(g_eqPopupHwnd);
+    const HWND popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (popup && IsWindow(popup))
+        dpi = GetDpiForWindow(popup);
     else if (g_eqTaskbarHwnd && IsWindow(g_eqTaskbarHwnd))
         dpi = GetDpiForWindow(g_eqTaskbarHwnd);
 
@@ -20020,7 +20123,7 @@ static bool EqIsCursorOverTrayButton() {
 }
 
 static void EqClosePopup() {
-    HWND hwnd = g_eqPopupHwnd;
+    HWND hwnd = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
     if (!hwnd || !IsWindow(hwnd))
         return;
 
@@ -20038,14 +20141,14 @@ static void EqClosePopup() {
 // floating above another surface (for example, Volume Mixer, Sound Settings,
 // the current media app, or the custom tray context menu).
 static void EqClosePlayerPopupForTrayNavigation() {
-    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
+    const HWND popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (popup && IsWindow(popup))
         EqClosePopup();
 }
 
 // Temporary volume flyout shown for volume-changing tray gestures. It is a
 // separate top-level window, so its position is tied to the actual tray button
 // rather than to the Player popup/layout.
-static constexpr wchar_t kEqTrayVolumeFlyoutClass[] = L"WindhawkEqTrayVolumeFlyout";
 static constexpr UINT_PTR kEqTrayVolumeFlyoutTimer = 0x4E71;
 static constexpr UINT kEqTrayVolumeFlyoutLifeMs = 1450;
 static constexpr UINT kEqTrayVolumeFlyoutFadeMs = 180;
@@ -20217,6 +20320,28 @@ static LRESULT CALLBACK EqTrayVolumeFlyoutProc(
     return DefWindowProcW(hwnd,msg,wParam,lParam);
 }
 
+static void EqDestroyTrayVolumeFlyoutOnOwnerThread() {
+    HWND hwnd = g_eqTrayVolumeFlyoutHwnd;
+    if (!hwnd || !IsWindow(hwnd)) {
+        g_eqTrayVolumeFlyoutHwnd = nullptr;
+        return;
+    }
+    const DWORD ownerThreadId = GetWindowThreadProcessId(hwnd, nullptr);
+    if (ownerThreadId == GetCurrentThreadId()) {
+        DestroyWindow(hwnd);
+        return;
+    }
+
+    struct Payload { HWND hwnd; } payload{hwnd};
+    if (!EqRunFromWindowThread(hwnd, [](void* raw) {
+            const HWND window = static_cast<Payload*>(raw)->hwnd;
+            if (window && IsWindow(window))
+                DestroyWindow(window);
+        }, &payload)) {
+        Wh_Log(L"EqDestroyTrayVolumeFlyoutOnOwnerThread: failed to marshal WM_DESTROY to owner thread");
+    }
+}
+
 static void EqShowTrayVolumeFlyout() {
     if (!g_running.load(std::memory_order_acquire) ||
         !GetSettingsSnapshot().showMediaEqTrayButton)
@@ -20289,14 +20414,8 @@ static void EqShowTrayVolumeFlyout() {
         InvalidateRect(g_eqTrayVolumeFlyoutHwnd,nullptr,FALSE);
         return;
     }
-    static bool registered=false;
-    if (!registered) {
-        WNDCLASSEXW wc{}; wc.cbSize=sizeof(wc); wc.lpfnWndProc=EqTrayVolumeFlyoutProc;
-        wc.hInstance=g_eqModuleHandle; wc.lpszClassName=kEqTrayVolumeFlyoutClass;
-        wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
-        if (!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return;
-        registered=true;
-    }
+    if (!g_eqClassesRegistered || !g_eqModuleHandle)
+        return;
     HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_LAYERED,
         kEqTrayVolumeFlyoutClass,L"",WS_POPUP,x,y,width,height,nullptr,nullptr,
         g_eqModuleHandle,nullptr);
@@ -20314,7 +20433,7 @@ static void EqShowTrayVolumeFlyout() {
 static void EqShowPopupForTrayRect(const RECT& buttonRect) {
     // XAML click events are not Windhawk function hooks, so a queued click may
     // still arrive after Wh_ModBeforeUninit has begun unloading the mod.
-    if (!g_running.load(std::memory_order_acquire))
+    if (!g_running.load(std::memory_order_acquire) || !g_eqClassesRegistered)
         return;
 
     try {
@@ -20371,18 +20490,12 @@ static void EqShowPopupForTrayRect(const RECT& buttonRect) {
             nullptr, nullptr, g_eqModuleHandle, nullptr);
         if (!g_eqPopupHwnd)
             return;
+        g_eqPopupHwndForRequests.store(g_eqPopupHwnd, std::memory_order_release);
 
         // The Disk section is demand-driven: only after the Player window has
         // been created do we allow the album/session worker to start for Disk.
         g_eqPlayerPopupOpen.store(true, std::memory_order_release);
-        RefreshAudioConsumerDemand(GetSettingsSnapshot());
-        if (g_shellServicesStarted.load(std::memory_order_acquire)) {
-            if (HasLiveAudioConsumer() &&
-                !g_audioRunning.load(std::memory_order_acquire))
-                StartAudioCapture();
-            if (IsAlbumColorCaptureNeeded())
-                StartAlbumColorCapture();
-        }
+        RequestOverlayServicesRefresh();
 
         ApplyEqPopupWindowAttributes(g_eqPopupHwnd);
         ShowWindow(g_eqPopupHwnd, SW_SHOWNOACTIVATE);
@@ -20399,6 +20512,7 @@ static void EqShowPopupForTrayRect(const RECT& buttonRect) {
         RenderEqPopup(g_eqPopupHwnd);
 
     } catch (...) {
+        g_eqPopupHwndForRequests.store(nullptr, std::memory_order_release);
         g_eqPopupHwnd = nullptr;
     }
 }
@@ -21185,6 +21299,11 @@ static void EqResetXamlStateOnly() {
 }
 
 static void EqRemoveXamlButtonOnUiThread() {
+    // The XAML tray button and its temporary volume flyout share this UI thread.
+    // Destroy the flyout synchronously before the module can be unloaded.
+    if (g_eqTrayVolumeFlyoutHwnd && IsWindow(g_eqTrayVolumeFlyoutHwnd))
+        EqDestroyTrayVolumeFlyoutOnOwnerThread();
+
     try {
         if (g_eqXamlParent && g_eqXamlButton) {
             if (auto button = g_eqXamlButton.try_as<Button>()) {
@@ -21811,6 +21930,8 @@ static bool EqHookTaskbarSymbols() {
 
 static void EqCleanupIntegration() {
     if (!g_eqIsWindows11) {
+        // On Windows 10 the flyout is owned by this overlay/native-tray thread.
+        EqDestroyTrayVolumeFlyoutOnOwnerThread();
         HWND trayMessageWindow = g_eqNativeTrayMessageHwnd;
         if (trayMessageWindow && IsWindow(trayMessageWindow)) {
             EqRunFromWindowThread(trayMessageWindow, [](void*) {
@@ -22235,7 +22356,10 @@ static void RenderDebugWindow(HWND hwnd) {
     const int refreshHz = static_cast<int>(std::max<UINT>(1, GetDisplayRefreshRateHz()));
     const double effectiveHz = GetEffectiveRenderFps(settings);
     const double periodMs = GetRenderSchedulerPeriodMs(settings);
-    const bool popupOpen = g_eqPopupHwnd && IsWindow(g_eqPopupHwnd);
+    const HWND playerPopup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    const bool popupOpen = playerPopup && IsWindow(playerPopup) &&
+        g_eqPlayerPopupOpen.load(std::memory_order_acquire);
     const bool audioRunning = g_audioRunning.load(std::memory_order_acquire);
     const bool fullscreen = g_fullscreenThrottleActive.load(std::memory_order_acquire);
     const bool idle = g_overlayIdle.load(std::memory_order_acquire);
@@ -22704,6 +22828,28 @@ static bool RebuildOverlayWindows(
     HWND desktopParent);
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+    case WM_VIZ_REFRESH_SERVICES: {
+        g_overlayServicesRefreshPending.store(false, std::memory_order_release);
+        if (!g_running.load(std::memory_order_acquire) ||
+            !g_shellServicesStarted.load(std::memory_order_acquire)) {
+            g_audioCaptureRestartRequested.store(false, std::memory_order_release);
+            return 0;
+        }
+
+        const VisualizerSettings settings = GetSettingsSnapshot();
+        const bool visible = RefreshDesktopVisualizerRuntime(settings, true);
+        if (IsAlbumColorCaptureNeeded())
+            StartAlbumColorCapture();
+        else
+            StopAlbumColorCapture();
+
+        g_currentOverlayTimerMs = visible
+            ? GetOverlayTimerIntervalMs(settings)
+            : kDesktopVisualizerVisibilityCheckMs;
+        ArmOverlayRenderTimer(settings, true);
+        return 0;
+    }
+
     case WM_VIZ_ALBUM_MEDIA_CHANGED: {
         const VisualizerSettings settings = GetSettingsSnapshot();
         g_currentOverlayTimerMs = GetOverlayTimerIntervalMs(settings);
@@ -22774,8 +22920,7 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                         button.InvalidateMeasure();
                     if (g_eqTaskbarHwnd)
                         InvalidateRect(g_eqTaskbarHwnd, nullptr, FALSE);
-                    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
-                        RenderEqPopup(g_eqPopupHwnd);
+                    RequestEqPopupRender();
                 } catch (...) {
                 }
             }, nullptr);
@@ -23651,6 +23796,11 @@ static bool RenderGpuVisualizerFrame(HWND hwnd, int w, int h) {
 }
 
 static void DestroyOverlayPresenters() {
+    // The context retains its currently selected swap-chain bitmap independently
+    // of each presenter's ComPtr; release that reference before destroying targets.
+    if (g_overlayD2DContext)
+        g_overlayD2DContext->SetTarget(nullptr);
+
     for (auto& p : g_overlayPresenters) {
         if (p.visual)
             p.visual->SetContent(nullptr);
@@ -23672,6 +23822,15 @@ static void DestroyOverlayPresenters() {
 
 static void ReleaseOverlayGraphics() {
     DestroyOverlayPresenters();
+
+    // These no_destroy globals must still be explicitly released on controlled
+    // unload. Release D2D before D3D because the D2D device holds the DXGI device.
+    if (g_overlayD2DContext)
+        g_overlayD2DContext->SetTarget(nullptr);
+    g_overlayD2DContext.Reset();
+    g_overlayD2DDevice.Reset();
+    g_overlayD2DFactory.Reset();
+
     g_overlayDComp.Reset();
     g_overlayDxgiFactory.Reset();
     g_overlayD3DContext.Reset();
@@ -24162,6 +24321,7 @@ static void DestroyAllOverlayWindows() {
     g_overlayBuiltRenderMode = OVERLAY_RENDER_ULW;
     g_hwndOverlay = nullptr;
     g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
+    g_overlayServicesRefreshPending.store(false, std::memory_order_release);
 }
 
 // Opaque holder for the raised desktop, following the recipe known to work
@@ -24480,9 +24640,11 @@ static double GetEffectiveRenderFps(const VisualizerSettings& settings) {
 static double GetRenderSchedulerPeriodMs(const VisualizerSettings& settings) {
     const bool visualizerVisible =
         settings.visualizerEnabled && g_desktopVisualizerVisible;
+    const HWND playerPopup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
     const bool playerOpen =
         g_eqPlayerPopupOpen.load(std::memory_order_acquire) &&
-        g_eqPopupHwnd && IsWindow(g_eqPopupHwnd);
+        playerPopup && IsWindow(playerPopup);
 
     if (!visualizerVisible && !playerOpen)
         return static_cast<double>(kDesktopVisualizerVisibilityCheckMs);
@@ -24621,6 +24783,18 @@ static void ProcessOverlayRenderTick() {
 
     const VisualizerSettings settings = GetSettingsSnapshot();
     const bool visible = RefreshDesktopVisualizerRuntime(settings);
+
+    // Player must keep refreshing independently of desktop-visualizer visibility.
+    // Its own open state also keeps GetRenderSchedulerPeriodMs at the Player cadence.
+    const HWND playerPopup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (g_eqPlayerPopupOpen.load(std::memory_order_acquire) &&
+        playerPopup && IsWindow(playerPopup) &&
+        ShouldRenderPlayerOnSchedulerTick()) {
+        RequestEqPopupRender(playerPopup);
+        g_debugPlayerFrames.fetch_add(1, std::memory_order_relaxed);
+    }
+
     if (!visible) {
         ArmOverlayRenderTimer(settings, true);
         return;
@@ -24676,13 +24850,6 @@ static void ProcessOverlayRenderTick() {
 
     if (renderedAny)
         g_debugVisualizerFrames.fetch_add(1, std::memory_order_relaxed);
-
-    if (g_eqPlayerPopupOpen.load(std::memory_order_acquire) &&
-        g_eqPopupHwnd && IsWindow(g_eqPopupHwnd) &&
-        ShouldRenderPlayerOnSchedulerTick()) {
-        RenderEqPopup(g_eqPopupHwnd);
-        g_debugPlayerFrames.fetch_add(1, std::memory_order_relaxed);
-    }
 
     g_debugOverlayTicks.fetch_add(1, std::memory_order_relaxed);
     const VisualizerSettings rescheduleSettings = GetSettingsSnapshot();
@@ -25930,7 +26097,9 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     // windows or worker threads until this Explorer process actually owns the
     // desktop and its taskbar. Secondary folder Explorers can otherwise stay
     // alive without a desktop and steal the Win10 tray icon from the real shell.
-    RegisterEqWindowClasses(wc.hInstance);
+    if (!RegisterEqWindowClasses(wc.hInstance)) {
+        Wh_Log(L"OverlayThreadProc: Player window class registration failed");
+    }
 
     HWND hParent = nullptr;
     HWND taskbar = nullptr;
@@ -26138,6 +26307,12 @@ overlay_exit:
     DisarmOverlayRenderTimer();
     CloseOverlayRenderTimer();
     g_shellServicesStarted.store(false, std::memory_order_release);
+
+    // This is the sole owner of audio/album worker lifecycle. Join them before
+    // closing popup windows or tearing down resources they can still publish.
+    StopAudioCapture();
+    StopAlbumColorCapture();
+
     if (g_layoutEditActive.load(std::memory_order_acquire))
         LayoutEditEnd(false);
     LayoutEditUnregisterClass(wc.hInstance);
@@ -26178,9 +26353,13 @@ static void EqUnregisterWindowClasses() {
     if (!g_eqClassesRegistered)
         return;
 
-    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
+    EqDestroyTrayVolumeFlyoutOnOwnerThread();
+    const HWND popup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (popup && IsWindow(popup))
         EqClosePopup();
 
+    UnregisterClassW(kEqTrayVolumeFlyoutClass, g_eqModuleHandle);
     UnregisterClassW(kEqNativeTrayWindowClass, g_eqModuleHandle);
     UnregisterClassW(kEqPopupClass, g_eqModuleHandle);
     g_eqClassesRegistered = false;
@@ -26252,7 +26431,9 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Wh_ModInit: using Windows 10 native notification-area EQ button (build %u)",
                g_eqWindowsBuildNumber);
     }
-    RegisterEqWindowClasses(GetCurrentModModuleHandle());
+    if (!RegisterEqWindowClasses(GetCurrentModModuleHandle())) {
+        Wh_Log(L"Wh_ModInit: Player window class registration failed; Player UI will stay unavailable until Explorer restarts");
+    }
     g_shellServicesStarted.store(false, std::memory_order_release);
     g_running.store(true, std::memory_order_release);
 
@@ -26280,36 +26461,27 @@ BOOL Wh_ModInit() {
 
     // Wh_ModInit can run in secondary Explorer processes. Shell-dependent
     // workers are started by OverlayThreadProc after it verifies desktop/taskbar
-    // ownership; keep these checks here as an additional lifecycle guard.
-    if (g_shellServicesStarted.load(std::memory_order_acquire)) {
-        if (IsAlbumColorCaptureNeeded())
-            StartAlbumColorCapture();
-        if (g_settings.lyricsEnabled ||
-            EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS)) {
-            StartLyricsCapture();
-        }
+    // ownership. Lyrics keeps its existing guarded startup path; audio/album
+    // worker handles remain exclusively owned by the overlay thread.
+    if (g_shellServicesStarted.load(std::memory_order_acquire) &&
+        (g_settings.lyricsEnabled ||
+         EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS))) {
+        StartLyricsCapture();
     }
     return TRUE;
 }
 
 static void SignalWorkerShutdown() {
-    // Phase 1 of shutdown: make every worker stop observable before waiting on
-    // any other thread. This is important because the overlay cleanup can touch
-    // Player/album state, and those workers must not remain blocked while the
-    // UI thread is being torn down.
+    // Stop advertising audio/album work immediately, but do not touch their
+    // plain-global HANDLEs here. The overlay thread owns those worker handles
+    // and signals/joins them during its own teardown, avoiding a shutdown race
+    // with Start/StopAudioCapture or Start/StopAlbumColorCapture.
     g_audioRunning.store(false, std::memory_order_release);
-    if (g_hAudioEvent)
-        SetEvent(g_hAudioEvent);
+    g_albumColorRunning.store(false, std::memory_order_release);
 
     g_lyricsRunning.store(false, std::memory_order_release);
     if (g_hLyricsStopEvent)
         SetEvent(g_hLyricsStopEvent);
-
-    g_albumColorRunning.store(false, std::memory_order_release);
-    if (g_hAlbumColorStopEvent)
-        SetEvent(g_hAlbumColorStopEvent);
-    if (g_hAlbumColorWakeEvent)
-        SetEvent(g_hAlbumColorWakeEvent);
 
     g_eqMediaRunning.store(false, std::memory_order_release);
     if (g_hEqMediaStopEvent)
@@ -26378,9 +26550,7 @@ void Wh_ModUninit() {
     // unconditionally joins a live handle even if its running flag was cleared
     // by the worker itself.
     StopLyricsCapture();
-    StopAlbumColorCapture();
     StopEqMediaCapture();
-    StopAudioCapture();
 
     if (g_hOverlayStopEvent) {
         CloseHandle(g_hOverlayStopEvent);
@@ -26431,7 +26601,7 @@ void Wh_ModSettingsChanged() {
         oldLyricsUseLocalLrcFiles = g_settings.lyricsUseLocalLrcFiles;
         oldLyricsLocalLrcFolder = g_settings.lyricsLocalLrcFolder;
         oldAlbumColorMode = IsAlbumColorCaptureNeeded();
-        LoadSettings();
+        LoadSettings(false);
     }
 
     int newAudioSource = 0;
@@ -26471,10 +26641,12 @@ void Wh_ModSettingsChanged() {
     }
 
 
+    const HWND popupForSettings =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
     if (oldPlayerPopupStyle != newPlayerPopupStyle &&
-        g_eqPopupHwnd && IsWindow(g_eqPopupHwnd)) {
-        ApplyEqPopupWindowAttributes(g_eqPopupHwnd);
-        RenderEqPopup(g_eqPopupHwnd);
+        popupForSettings && IsWindow(popupForSettings)) {
+        g_eqPopupAttributesUpdateRequested.store(true, std::memory_order_release);
+        RequestEqPopupRender(popupForSettings);
     }
 
     if (oldDebugMode != newDebugMode && g_hwndOverlay && IsWindow(g_hwndOverlay)) {
@@ -26509,17 +26681,8 @@ void Wh_ModSettingsChanged() {
         oldAudioSource != newAudioSource ||
         oldAudioApplicationName != newAudioApplicationName;
 
-    if (oldAlbumColorMode != newAlbumColorMode ||
-        audioSourceChanged) {
-        if (g_shellServicesStarted.load(std::memory_order_acquire)) {
-            if (newAlbumColorMode)
-                StartAlbumColorCapture();
-            else
-                StopAlbumColorCapture();
-        } else if (!newAlbumColorMode) {
-            StopAlbumColorCapture();
-        }
-    }
+    if (oldAlbumColorMode != newAlbumColorMode || audioSourceChanged)
+        RequestOverlayServicesRefresh(audioSourceChanged);
 
     const bool lyricsSourceChanged =
         oldLyricsUseLocalLrcFiles != newLyricsUseLocalLrcFiles ||
@@ -26547,18 +26710,8 @@ void Wh_ModSettingsChanged() {
         oldHideVisualizerWhenTargetApplicationNotRunning !=
             newHideVisualizerWhenTargetApplicationNotRunning;
 
-    if ((audioSourceChanged || desktopVisibilitySettingsChanged) &&
-        g_hwndOverlay && IsWindow(g_hwndOverlay)) {
-        const VisualizerSettings settings = GetSettingsSnapshot();
-        RefreshDesktopVisualizerRuntime(settings, true);
-    }
-
-    if (audioSourceChanged &&
-        g_shellServicesStarted.load(std::memory_order_acquire) &&
-        g_desktopVisualizerVisible) {
-        StopAudioCapture();
-        StartAudioCapture();
-    }
+    if (audioSourceChanged || desktopVisibilitySettingsChanged)
+        RequestOverlayServicesRefresh(audioSourceChanged);
 
     if (g_hwndOverlay) {
         PostMessageW(g_hwndOverlay, WM_VIZ_REBUILD_OVERLAYS, 0, 0);
