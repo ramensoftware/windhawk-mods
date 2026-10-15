@@ -2,7 +2,7 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         0.5.11
+// @version         0.6.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
@@ -18,7 +18,7 @@ A fast, keyboard-driven application launcher for Windows, packaged as a [Windhaw
 
 Press **Alt + Space**, type a few letters, press **Enter**. That is the whole idea.
 
-Spotlight Launcher indexes the same applications you see in the Start menu (classic programs and Microsoft Store / MSIX apps) and filters them as you type. It runs in its own `windhawk.exe` process, so it never gets injected into Explorer and cannot affect the shell.
+Spotlight Launcher indexes the same applications you see in the Start menu (both classic programs and Microsoft Store apps) and filters them as you type. It runs on its own, as a Windhawk mod, so it never runs inside File Explorer and cannot affect the way Windows works.
 
 ---
 
@@ -59,9 +59,9 @@ The rest (the **Acrylic** and **Solid** effects and the remaining colours — Mi
 
 * Filters classic programs and Microsoft Store apps as you type.
 * Case- and accent-insensitive.
-* Multi-word queries (`visual code`) and acronyms (`vsc` finds *Visual Studio Code*).
+* Multi-word queries (`visual code`) and acronyms (typing the initials of each word, like `vsc`).
 * Matching letters are highlighted in the result.
-* Results show a friendly name plus the real target (exe, `.lnk`, MSIX package).
+* Results show a friendly name plus the file or package they open.
 
 ### Keyboard-first
 
@@ -83,18 +83,27 @@ Everything is reachable without touching the mouse.
 | Mouse wheel | Scroll the list without changing the selection |
 | Mouse hover | Highlight the row under the cursor |
 
-**Alt + Space** is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it. Apps like PowerToys Run make the same trade-off.
+**Alt + Space** is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it.
 
 ### Details panel
 
-Press **Ctrl + I** (or **Ctrl + K** / **Ctrl + Space** / **F4**) with an app selected to reveal a right-hand panel with actions and technical data. The actions also work with the panel closed. File actions are only offered for desktop apps; Store (MSIX) apps only expose *open* and *remove from recents*.
+Press **Ctrl + I** (or **Ctrl + K** / **Ctrl + Space** / **F4**) with an app selected to reveal a right-hand panel with actions and extra details. The actions also work with the panel closed. File actions are only offered for classic programs; Microsoft Store apps only offer *open* and *remove from recents*.
+
+### Built-in calculator
+
+Type a calculation and the result appears as you go: a highlighted card at the top of the list shows it, and it is also shown faintly next to what you typed. Press **Enter** to copy the result; recent results are kept so you can reuse them. It only reacts when the whole text looks like a calculation, so ordinary searches are left alone.
+
+### Soft interface sounds
+
+Gentle sounds play as you use the launcher: a soft switch-like click when the bar opens (like a flashlight button), a tiny tick when the details panel opens and closes, and a soft, deep key sound as you type (each key sounds slightly different). Everything is generated inside the mod, so it needs no extra files and no internet connection. You can turn the sounds off or change their volume in the settings.
 
 ### Appearance
 
 * Six background effects (**Acrylic**, **Mica**, **Glass**, **Frosted**, **Aurora**, **Solid**) and 12 colours.
-* Effects capture what is behind the bar on open, blur it and composite it inside the rounded card (tint, grain, highlights, gradients) — so they look the same on Windows 10 and 11 without undocumented DWM APIs.
+* Each effect is built from a blurred view of whatever is behind the bar, finished with a colour tint, subtle grain and light highlights, so the bar looks the same on Windows 10 and 11.
+* **Live acrylic**: Acrylic, Frosted and Aurora follow what is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turning it off uses a single snapshot taken when the bar opens, which helps performance and saves battery. It is on by default and can be changed in the settings.
 * Adjustable panel opacity, blur strength and layout.
-* Adapts to the DPI of each monitor.
+* Looks sharp on every monitor, even high-resolution ones or a mix of several.
 * The bar can sit anywhere from against the top edge to against the bottom edge of the screen.
 
 ### Fresh without fuss
@@ -107,7 +116,7 @@ Press **Ctrl + I** (or **Ctrl + K** / **Ctrl + Space** / **F4**) with an app sel
 
 ### Safe by design
 
-* Runs as a Windhawk **tool** mod in its own process, not inside Explorer.
+* Runs as a Windhawk **tool** mod on its own, separate from File Explorer, so it cannot affect Windows itself.
 * **Disable in fullscreen**: the hotkey stays quiet while a fullscreen window (a game, a video player, a fullscreen browser) is focused.
 * If another app already owns the shortcut, the mod warns you instead of fighting over it.
 
@@ -164,7 +173,7 @@ Copyright (c) 2026-present David Ravelo.
 /*
 - Hotkey: alt+space
   $name: Keyboard shortcut
-  $description: Combination to open and close the search bar.
+  $description: Key combination that opens and closes the search bar.
   $options:
     - alt+space: Alt + Space
     - ctrl+space: Ctrl + Space
@@ -173,16 +182,16 @@ Copyright (c) 2026-present David Ravelo.
     - ctrl+shift+space: Ctrl + Shift + Space
 - VerticalPosition: 30
   $name: Vertical position (percentage of screen height)
-  $description: Where the search bar sits. 0 puts it against the top edge of the screen, 50 in the exact middle and 100 against the bottom edge (above the taskbar). Please note that this only applies to the search box in Compact mode. If you want it centered even in Expanded mode, adjust it to your preference.
+  $description: Where the search bar sits, as a percentage of the screen height. 0 sticks it to the very top, 50 centres it and 100 sits it just above the taskbar. In Compact mode only the search box appears at this height; in Expanded mode the bar grows downward from here, so raise or lower this value if you want it to look centred.
 - MaxResults: 8
   $name: Maximum results
-  $description: Maximum number of results the search returns. It does not change the height of the bar (which is fixed). It only caps how many results exist. The rest of the visible rows are reached by scrolling the list.
+  $description: How many apps the search shows at once. It does not change the height of the bar; when there are more matches, you reach the rest by scrolling the list.
 - Opacity: 90
   $name: Panel opacity (percentage)
-  $description: Between 70 and 100. It is the opacity of the color tint over the blurred background. 70 lets a lot of the background through and 100 makes the tint nearly opaque (Glass stays see-through). Ignored with "Solid", which is always fully opaque.
+  $description: How solid the colour of the bar is, from 70 to 100. A lower value lets more of the background show through and a higher value makes the colour stronger (Glass stays see-through in any case). Ignored with "Solid", which is always fully opaque.
 - Effect: acrylic
   $name: Background effect
-  $description: Look of the search bar background. The effects use a capture of what is behind it, taken on open. "Solid" applies no effect.
+  $description: The background style of the bar. Acrylic, Mica, Glass, Frosted and Aurora show a blurred view of whatever is behind the bar, each with its own look; "Solid" shows a plain colour with no blur.
   $options:
     - acrylic: Acrylic
     - mica: Mica
@@ -190,12 +199,15 @@ Copyright (c) 2026-present David Ravelo.
     - frosted: Frosted
     - aurora: Aurora
     - solid: Solid (no effect)
+- LiveAcrylic: true
+  $name: Live acrylic (real time)
+  $description: Keeps the background blur live. Acrylic, Frosted and Aurora follow whatever is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. Needs Windows 10 1803 or newer.
 - BlurAmount: 50
   $name: Blur strength (0 to 100)
-  $description: Multiplies each effect's own blur. 50 is normal, 0 reduces it to 40% (it is not turned off) and 100 raises it to 160%. The blur is only seen through the tint, so combine it with an Opacity below 100. Ignored with "Solid".
+  $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Ignored with "Solid".
 - Color: midnight
   $name: Color
-  $description: Color of the search bar. Each color defines the background, the selection accent and the highlighted letters.
+  $description: Colour scheme of the bar. Each colour sets the background colour, the selection highlight and the colour of the matching letters.
   $options:
     - midnight: Midnight blue
     - graphite: Graphite
@@ -211,10 +223,10 @@ Copyright (c) 2026-present David Ravelo.
     - lavender: Lavender
 - HideUtilityEntries: true
   $name: Hide uninstallers and documentation
-  $description: Hides the uninstaller shortcuts that installers create ("Uninstall X") and documentation shortcuts (Readme, help files, web links). It looks at what each shortcut really runs, so real programs that have "uninstall" in their name (for example, uninstaller tools) are kept.
+  $description: Hides the "Uninstall …" shortcuts and the readme, help and web-link shortcuts that installers add to the Start menu. It checks what each shortcut really opens, so genuine tools whose names merely contain "uninstall" are kept.
 - ReindexMode: auto
   $name: App index updates
-  $description: When the Start menu app list is re-read. Automatic detects installs and uninstalls as they happen and does not waste resources when there are no changes (recommended).
+  $description: How often the list of installed apps is refreshed. Automatic notices apps as they are installed or removed and stays idle when nothing changes, so it uses almost no resources (recommended).
   $options:
     - auto: Automatic
     - always: Every time it opens
@@ -224,13 +236,13 @@ Copyright (c) 2026-present David Ravelo.
     - min10: 10 minutes
 - ListMode: expanded
   $name: List mode
-  $description: Compact shows only the search bar until you type. Expanded shows your recent apps and suggestions when the search bar is empty.
+  $description: Compact shows only the search bar until you type. Expanded also shows your recent apps and suggestions while the search box is empty.
   $options:
     - compact: Compact
     - expanded: Expanded
 - DetailsKey: ctrl+i
   $name: Details panel shortcut
-  $description: Key to show or hide the actions and details panel for the selected app. If you pick Ctrl + Space, do not use that same combination as the global shortcut.
+  $description: Key that shows or hides the actions and details panel for the selected app. If you pick Ctrl + Space here, choose a different combination for the main shortcut so the two do not clash.
   $options:
     - ctrl+i: Ctrl + I
     - ctrl+k: Ctrl + K
@@ -238,7 +250,23 @@ Copyright (c) 2026-present David Ravelo.
     - f4: F4
 - DisableInFullscreen: true
   $name: Disable in fullscreen
-  $description: When on, the shortcut does nothing while the foreground window is in fullscreen (games, video players, fullscreen browsers). Also closes the search bar if the foreground window goes fullscreen while it is open.
+  $description: When on, the shortcut is ignored while a fullscreen window is focused (a game, a video player, a fullscreen browser). It also closes the bar if a fullscreen window takes over while the bar is open.
+- CalculatorEnabled: true
+  $name: Calculator
+  $description: While you type, the text is also tried as a calculation (for example "12*8", "100+15%" or "sqrt(2)+pi") and the result is shown. It only reacts when the whole text looks like a maths expression, so ordinary searches are left alone. Press Enter to copy the result, which is also saved to a small history you can reuse.
+- CalculatorStyle: both
+  $name: Calculator display
+  $description: How the result is shown. The card is a highlighted result at the top of the list, the inline text appears faintly right after what you typed, and "Both" shows the card and the inline text together.
+  $options:
+    - hero: Result card
+    - ghost: Inline text
+    - both: Card and inline text
+- SoundEnabled: true
+  $name: Interface sounds
+  $description: Soft sounds when the bar opens, when the details panel opens or closes, and as you type. They are generated inside the mod, so they work with no internet connection.
+- SoundVolume: 20
+  $name: Sound volume (0 to 100)
+  $description: How loud the interface sounds are. Ignored while interface sounds are turned off.
 */
 // ==/WindhawkModSettings==
 
@@ -262,6 +290,7 @@ Copyright (c) 2026-present David Ravelo.
 #include <d2d1.h>
 #include <d2d1helper.h>
 #include <dwrite.h>
+#include <xaudio2.h>
 
 #include <algorithm>
 #include <cmath>
@@ -272,6 +301,1007 @@ Copyright (c) 2026-present David Ravelo.
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <cstdio>
+#include <cwchar>
+#include <cstring>
+
+// ===== Inline calculator engine =====
+// A small self-contained arithmetic evaluator (tokenizer + recursive-descent parser). It is
+// never fed to another interpreter: it only recognises numbers, the four operations, powers,
+// percentages, factorials, a fixed set of functions and a few constants, so it is safe to run
+// on whatever the user types. Detection is strict (the whole string must parse and look like
+// maths) to avoid matching ordinary app names that merely contain numbers or symbols.
+namespace Calc {
+
+struct Locale {
+    wchar_t decimal = L'.';
+    wchar_t group = L',';
+    bool grouping = true;
+};
+
+inline Locale SystemLocale() {
+    Locale l;
+    wchar_t buf[8] = {};
+    if (GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_SDECIMAL, buf, ARRAYSIZE(buf)) > 1) {
+        l.decimal = buf[0];
+    }
+    int n = GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, buf, ARRAYSIZE(buf));
+    if (n > 1) {
+        l.group = buf[0];
+    } else {
+        l.grouping = false;
+    }
+    if (l.group == l.decimal) {
+        l.grouping = false;
+    }
+    return l;
+}
+
+enum class Status { NotMath, Ok, Error };
+
+struct Result {
+    Status status = Status::NotMath;
+    double value = 0.0;
+    std::wstring error;
+    // When set, the caller shows this text instead of formatting `value` (unit results, base
+    // conversions). It is not parseable by the evaluator, so `insertable` holds the plain form.
+    std::wstring display;
+    std::wstring insertable;
+};
+
+// Values supplied by the host: the previous result, so "ans" can be reused.
+struct Context {
+    bool hasAns = false;
+    double ans = 0.0;
+};
+
+// A unit: canonical symbol for display, the dimension it belongs to, and the affine transform to
+// and from the dimension's base unit (base = value * factor + offset).
+struct UnitDef {
+    const wchar_t* name;
+    const wchar_t* sym;
+    int dim;
+    double factor;
+    double offset;
+};
+
+// Dimensions (must match the `dim` field of the table below).
+enum {
+    DIM_LENGTH = 0,
+    DIM_MASS,
+    DIM_TIME,
+    DIM_DATA,
+    DIM_VOLUME,
+    DIM_SPEED,
+    DIM_AREA,
+    DIM_ANGLE,
+    DIM_PRESSURE,
+    DIM_ENERGY,
+    DIM_POWER,
+    DIM_TEMP,
+};
+
+inline const std::vector<UnitDef>& UnitTable() {
+    static const std::vector<UnitDef> t = {
+        // ---- length (base: metre) ----
+        {L"nm", L"nm", DIM_LENGTH, 1e-9, 0}, {L"um", L"µm", DIM_LENGTH, 1e-6, 0},
+        {L"mm", L"mm", DIM_LENGTH, 1e-3, 0}, {L"cm", L"cm", DIM_LENGTH, 1e-2, 0},
+        {L"dm", L"dm", DIM_LENGTH, 0.1, 0},  {L"m", L"m", DIM_LENGTH, 1, 0},
+        {L"km", L"km", DIM_LENGTH, 1000, 0}, {L"in", L"in", DIM_LENGTH, 0.0254, 0},
+        {L"inch", L"in", DIM_LENGTH, 0.0254, 0}, {L"ft", L"ft", DIM_LENGTH, 0.3048, 0},
+        {L"foot", L"ft", DIM_LENGTH, 0.3048, 0}, {L"yd", L"yd", DIM_LENGTH, 0.9144, 0},
+        {L"yard", L"yd", DIM_LENGTH, 0.9144, 0}, {L"mi", L"mi", DIM_LENGTH, 1609.344, 0},
+        {L"mile", L"mi", DIM_LENGTH, 1609.344, 0}, {L"nmi", L"nmi", DIM_LENGTH, 1852, 0},
+        // ---- mass (base: kilogram) ----
+        {L"mg", L"mg", DIM_MASS, 1e-6, 0}, {L"g", L"g", DIM_MASS, 1e-3, 0},
+        {L"kg", L"kg", DIM_MASS, 1, 0},    {L"t", L"t", DIM_MASS, 1000, 0},
+        {L"tonne", L"t", DIM_MASS, 1000, 0}, {L"lb", L"lb", DIM_MASS, 0.45359237, 0},
+        {L"lbs", L"lb", DIM_MASS, 0.45359237, 0}, {L"pound", L"lb", DIM_MASS, 0.45359237, 0},
+        {L"oz", L"oz", DIM_MASS, 0.028349523125, 0}, {L"ounce", L"oz", DIM_MASS, 0.028349523125, 0},
+        {L"st", L"st", DIM_MASS, 6.35029318, 0}, {L"stone", L"st", DIM_MASS, 6.35029318, 0},
+        // ---- time (base: second) ----
+        {L"ns", L"ns", DIM_TIME, 1e-9, 0}, {L"us", L"µs", DIM_TIME, 1e-6, 0},
+        {L"ms", L"ms", DIM_TIME, 1e-3, 0}, {L"s", L"s", DIM_TIME, 1, 0},
+        {L"sec", L"s", DIM_TIME, 1, 0},    {L"second", L"s", DIM_TIME, 1, 0},
+        {L"min", L"min", DIM_TIME, 60, 0}, {L"minute", L"min", DIM_TIME, 60, 0},
+        {L"h", L"h", DIM_TIME, 3600, 0},   {L"hr", L"h", DIM_TIME, 3600, 0},
+        {L"hour", L"h", DIM_TIME, 3600, 0}, {L"day", L"d", DIM_TIME, 86400, 0},
+        {L"week", L"wk", DIM_TIME, 604800, 0}, {L"year", L"yr", DIM_TIME, 31557600, 0},
+        // ---- data (base: byte) ----
+        {L"bit", L"bit", DIM_DATA, 0.125, 0}, {L"byte", L"B", DIM_DATA, 1, 0},
+        {L"kb", L"kB", DIM_DATA, 1000, 0},  {L"mb", L"MB", DIM_DATA, 1e6, 0},
+        {L"gb", L"GB", DIM_DATA, 1e9, 0},   {L"tb", L"TB", DIM_DATA, 1e12, 0},
+        {L"pb", L"PB", DIM_DATA, 1e15, 0},  {L"kib", L"KiB", DIM_DATA, 1024, 0},
+        {L"mib", L"MiB", DIM_DATA, 1048576, 0}, {L"gib", L"GiB", DIM_DATA, 1073741824.0, 0},
+        {L"tib", L"TiB", DIM_DATA, 1099511627776.0, 0},
+        // ---- volume (base: litre) ----
+        {L"ml", L"mL", DIM_VOLUME, 1e-3, 0}, {L"cl", L"cL", DIM_VOLUME, 1e-2, 0},
+        {L"dl", L"dL", DIM_VOLUME, 0.1, 0},  {L"l", L"L", DIM_VOLUME, 1, 0},
+        {L"liter", L"L", DIM_VOLUME, 1, 0},  {L"litre", L"L", DIM_VOLUME, 1, 0},
+        {L"m3", L"m³", DIM_VOLUME, 1000, 0}, {L"gal", L"gal", DIM_VOLUME, 3.785411784, 0},
+        {L"gallon", L"gal", DIM_VOLUME, 3.785411784, 0}, {L"qt", L"qt", DIM_VOLUME, 0.946352946, 0},
+        {L"pt", L"pt", DIM_VOLUME, 0.473176473, 0}, {L"cup", L"cup", DIM_VOLUME, 0.2365882365, 0},
+        {L"floz", L"fl oz", DIM_VOLUME, 0.0295735295625, 0},
+        // ---- speed (base: metre/second) ----
+        {L"mps", L"m/s", DIM_SPEED, 1, 0}, {L"kph", L"km/h", DIM_SPEED, 1000.0 / 3600, 0},
+        {L"kmh", L"km/h", DIM_SPEED, 1000.0 / 3600, 0}, {L"mph", L"mph", DIM_SPEED, 0.44704, 0},
+        {L"knot", L"kn", DIM_SPEED, 1000.0 / 3600 * 1.852, 0}, {L"fps", L"ft/s", DIM_SPEED, 0.3048, 0},
+        // ---- area (base: square metre) ----
+        {L"m2", L"m²", DIM_AREA, 1, 0}, {L"km2", L"km²", DIM_AREA, 1e6, 0},
+        {L"cm2", L"cm²", DIM_AREA, 1e-4, 0}, {L"ha", L"ha", DIM_AREA, 10000, 0},
+        {L"acre", L"ac", DIM_AREA, 4046.8564224, 0}, {L"sqm", L"m²", DIM_AREA, 1, 0},
+        {L"sqft", L"ft²", DIM_AREA, 0.09290304, 0},
+        // ---- angle (base: radian) ----
+        {L"rad", L"rad", DIM_ANGLE, 1, 0}, {L"deg", L"°", DIM_ANGLE, 3.14159265358979323846 / 180, 0},
+        {L"degree", L"°", DIM_ANGLE, 3.14159265358979323846 / 180, 0},
+        {L"grad", L"grad", DIM_ANGLE, 3.14159265358979323846 / 200, 0},
+        {L"turn", L"turn", DIM_ANGLE, 6.28318530717958647692, 0},
+        // ---- pressure (base: pascal) ----
+        {L"pa", L"Pa", DIM_PRESSURE, 1, 0}, {L"kpa", L"kPa", DIM_PRESSURE, 1000, 0},
+        {L"mpa", L"MPa", DIM_PRESSURE, 1e6, 0}, {L"bar", L"bar", DIM_PRESSURE, 1e5, 0},
+        {L"atm", L"atm", DIM_PRESSURE, 101325, 0}, {L"psi", L"psi", DIM_PRESSURE, 6894.757293168, 0},
+        {L"mmhg", L"mmHg", DIM_PRESSURE, 133.322387415, 0}, {L"torr", L"Torr", DIM_PRESSURE, 133.322368421, 0},
+        // ---- energy (base: joule) ----
+        {L"j", L"J", DIM_ENERGY, 1, 0}, {L"kj", L"kJ", DIM_ENERGY, 1000, 0},
+        {L"cal", L"cal", DIM_ENERGY, 4.184, 0}, {L"kcal", L"kcal", DIM_ENERGY, 4184, 0},
+        {L"wh", L"Wh", DIM_ENERGY, 3600, 0}, {L"kwh", L"kWh", DIM_ENERGY, 3.6e6, 0},
+        {L"ev", L"eV", DIM_ENERGY, 1.602176634e-19, 0}, {L"btu", L"BTU", DIM_ENERGY, 1055.05585262, 0},
+        // ---- power (base: watt) ----
+        {L"w", L"W", DIM_POWER, 1, 0}, {L"kw", L"kW", DIM_POWER, 1000, 0},
+        {L"hp", L"hp", DIM_POWER, 745.6998715823, 0},
+        // ---- temperature (base: kelvin) ----
+        {L"c", L"°C", DIM_TEMP, 1, 273.15}, {L"celsius", L"°C", DIM_TEMP, 1, 273.15},
+        {L"f", L"°F", DIM_TEMP, 5.0 / 9, 459.67 * 5.0 / 9}, {L"fahrenheit", L"°F", DIM_TEMP, 5.0 / 9, 459.67 * 5.0 / 9},
+        {L"k", L"K", DIM_TEMP, 1, 0}, {L"kelvin", L"K", DIM_TEMP, 1, 0},
+    };
+    return t;
+}
+
+namespace detail {
+
+enum class Tk { Num, Ident, Op, LP, RP, End };
+
+struct Token {
+    Tk kind = Tk::End;
+    double num = 0.0;
+    bool exponent = false;
+    std::wstring id;
+    wchar_t op = 0;
+};
+
+struct Value {
+    double v = 0.0;
+    bool percent = false;
+};
+
+inline bool IsDigit(wchar_t c) { return c >= L'0' && c <= L'9'; }
+// Value of a hex/base digit, or -1.
+inline int DigitVal(wchar_t c) {
+    if (c >= L'0' && c <= L'9') return c - L'0';
+    if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+    if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+    return -1;
+}
+inline bool IsAlpha(wchar_t c) {
+    return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z');
+}
+inline bool IsAlnum(wchar_t c) { return IsAlpha(c) || IsDigit(c); }
+
+inline bool IsConstant(const std::wstring& id, double& out) {
+    if (id == L"pi") { out = 3.14159265358979323846; return true; }
+    if (id == L"e") { out = 2.71828182845904523536; return true; }
+    if (id == L"tau") { out = 6.28318530717958647692; return true; }
+    if (id == L"phi") { out = 1.61803398874989484820; return true; }
+    if (id == L"\u03c0") { out = 3.14159265358979323846; return true; }
+    return false;
+}
+
+inline bool IsKeyword(const std::wstring& id) {
+    return id == L"mod" || id == L"of";
+}
+
+inline bool IsFunction(const std::wstring& id) {
+    static const wchar_t* const kFuncs[] = {
+        L"sqrt", L"cbrt", L"abs", L"round", L"floor", L"ceil", L"trunc",
+        L"sign", L"sin",  L"cos",  L"tan", L"asin",  L"acos", L"atan",
+        L"sinh", L"cosh", L"tanh", L"log",   L"ln",   L"log2", L"exp",
+        L"fact",
+    };
+    for (const wchar_t* f : kFuncs) {
+        if (id == f) return true;
+    }
+    return false;
+}
+
+inline bool ParseCleanDecimal(const std::wstring& s, double& out) {
+    size_t i = 0;
+    bool neg = false;
+    if (i < s.size() && (s[i] == L'-' || s[i] == L'+')) {
+        neg = s[i] == L'-';
+        i++;
+    }
+    double v = 0.0;
+    bool any = false;
+    while (i < s.size() && IsDigit(s[i])) {
+        v = v * 10.0 + (s[i] - L'0');
+        any = true;
+        i++;
+    }
+    if (i < s.size() && s[i] == L'.') {
+        i++;
+        double scale = 0.1;
+        while (i < s.size() && IsDigit(s[i])) {
+            v += (s[i] - L'0') * scale;
+            scale *= 0.1;
+            any = true;
+            i++;
+        }
+    }
+    if (!any || i != s.size()) return false;
+    out = neg ? -v : v;
+    return true;
+}
+
+inline int CountChar(const std::wstring& s, wchar_t c) {
+    int n = 0;
+    for (wchar_t x : s) {
+        if (x == c) n++;
+    }
+    return n;
+}
+
+// A run of digits/separators is interpreted with the user's decimal and grouping characters.
+// A single separator that is not the decimal character is treated as the decimal only when it
+// is not a plain thousands group (i.e. not exactly three digits after it).
+inline bool ParseNumberLiteral(const std::wstring& run, const Locale& loc, double& out) {
+    wchar_t dec = loc.decimal;
+    wchar_t alt = (dec == L'.') ? L',' : L'.';
+
+    int decCount = CountChar(run, dec);
+    int altCount = CountChar(run, alt);
+
+    bool altIsDecimal = false;
+    if (decCount == 0 && altCount > 0) {
+        if (altCount >= 2) {
+            altIsDecimal = false;
+        } else {
+            size_t p = run.find(alt);
+            size_t before = p;
+            size_t after = run.size() - p - 1;
+            altIsDecimal = !(after == 3 && before >= 1 && before <= 3);
+        }
+    }
+
+    std::wstring cleaned;
+    bool hasDecimal = false;
+    for (wchar_t c : run) {
+        if (IsDigit(c)) {
+            cleaned += c;
+        } else if (c == dec) {
+            if (hasDecimal) return false;
+            cleaned += L'.';
+            hasDecimal = true;
+        } else if (c == alt) {
+            if (altIsDecimal) {
+                if (hasDecimal) return false;
+                cleaned += L'.';
+                hasDecimal = true;
+            }
+        } else {
+            return false;
+        }
+    }
+    if (cleaned.empty() || cleaned == L".") return false;
+    return ParseCleanDecimal(cleaned, out);
+}
+
+// Maps typographic/Unicode look-alikes to the ASCII characters the lexer understands, so that
+// expressions pasted from documents, messages or web pages (e.g. "5−3" with U+2212, "3×4",
+// "6÷2", non-breaking spaces or full-width punctuation) still evaluate.
+inline wchar_t NormalizeMathChar(wchar_t c) {
+    switch (c) {
+        case 0x00A0:  // no-break space
+        case 0x2007:  // figure space
+        case 0x2008:  // punctuation space
+        case 0x2009:  // thin space
+        case 0x202F:  // narrow no-break space
+        case 0x205F:  // medium mathematical space
+        case 0x3000:  // ideographic space
+            return L' ';
+        case 0x2212:  // minus sign
+        case 0x2013:  // en dash
+        case 0x2014:  // em dash
+        case 0x2011:  // non-breaking hyphen
+        case 0xFE63:  // small hyphen-minus
+        case 0xFF0D:  // full-width hyphen-minus
+        case 0x2216:  // set minus
+            return L'-';
+        case 0x00D7:  // multiplication sign
+        case 0x2217:  // asterisk operator
+        case 0x22C5:  // dot operator
+        case 0x00B7:  // middle dot
+        case 0xFF0A:  // full-width asterisk
+            return L'*';
+        case 0x00F7:  // division sign
+        case 0x2215:  // division slash
+        case 0x2044:  // fraction slash
+        case 0xFF0F:  // full-width solidus
+            return L'/';
+        case 0xFF0B:  // full-width plus
+            return L'+';
+        case 0xFF05:  // full-width percent
+            return L'%';
+        case 0xFF01:  // full-width exclamation
+            return L'!';
+        case 0xFF08:  // full-width left parenthesis
+            return L'(';
+        case 0xFF09:  // full-width right parenthesis
+            return L')';
+        case 0xFF3E:  // full-width circumflex
+            return L'^';
+        default:
+            return c;
+    }
+}
+
+struct Lexed {
+    std::vector<Token> toks;
+    bool ok = true;
+    bool mathy = false;       // the input contains something that only makes sense as maths
+    bool knownIdents = true;  // every word is a known function, keyword or constant
+};
+
+inline Lexed Lex(const std::wstring& in, const Locale& loc, bool hasAns = false) {
+    Lexed out;
+    size_t i = 0;
+    const size_t n = in.size();
+    while (i < n) {
+        wchar_t c = NormalizeMathChar(in[i]);
+        if (c == L' ' || c == L'\t' || c == L'\r' || c == L'\n') {
+            i++;
+            continue;
+        }
+        // Radix-prefixed integers: 0xFF, 0b1010, 0o17 (case-insensitive prefixes/digits).
+        if (c == L'0' && i + 1 < n) {
+            const wchar_t p = in[i + 1];
+            const int base = (p == L'x' || p == L'X')   ? 16
+                             : (p == L'b' || p == L'B') ? 2
+                             : (p == L'o' || p == L'O') ? 8
+                                                        : 0;
+            if (base) {
+                size_t j = i + 2;
+                double val = 0.0;
+                bool any = false;
+                for (; j < n; ++j) {
+                    const int d = DigitVal(in[j]);
+                    if (d < 0 || d >= base) break;
+                    val = val * base + d;
+                    any = true;
+                }
+                if (any) {
+                    Token t;
+                    t.kind = Tk::Num;
+                    t.num = val;
+                    out.toks.push_back(t);
+                    out.mathy = true;
+                    i = j;
+                    continue;
+                }
+            }
+        }
+        if (IsDigit(c) || ((c == loc.decimal || c == (loc.decimal == L'.' ? L',' : L'.')) &&
+                           i + 1 < n && IsDigit(in[i + 1]))) {
+            size_t start = i;
+            while (i < n && (IsDigit(in[i]) || in[i] == L'.' || in[i] == L',')) i++;
+            std::wstring run = in.substr(start, i - start);
+            double val = 0.0;
+            if (!ParseNumberLiteral(run, loc, val)) {
+                out.ok = false;
+                return out;
+            }
+            bool usedExp = false;
+            if (i < n && (in[i] == L'e' || in[i] == L'E')) {
+                size_t save = i;
+                size_t j = i + 1;
+                if (j < n && (in[j] == L'+' || in[j] == L'-')) j++;
+                if (j < n && IsDigit(in[j])) {
+                    while (j < n && IsDigit(in[j])) j++;
+                    std::wstring es = in.substr(save + 1, j - save - 1);
+                    double ev = 0.0;
+                    if (ParseCleanDecimal(es, ev)) {
+                        val *= std::pow(10.0, ev);
+                        usedExp = true;
+                        i = j;
+                    }
+                }
+            }
+            if (usedExp) out.mathy = true;
+            Token t;
+            t.kind = Tk::Num;
+            t.num = val;
+            t.exponent = usedExp;
+            out.toks.push_back(t);
+            continue;
+        }
+        if (IsAlpha(c)) {
+            size_t start = i;
+            while (i < n && IsAlnum(in[i])) i++;
+            std::wstring id = in.substr(start, i - start);
+            for (wchar_t& ch : id) {
+                if (ch >= L'A' && ch <= L'Z') ch = (wchar_t)(ch - L'A' + L'a');
+            }
+            double cval = 0.0;
+            bool isKw = IsKeyword(id);
+            if (!IsFunction(id) && !isKw && !IsConstant(id, cval) && !(hasAns && id == L"ans")) {
+                out.knownIdents = false;
+            }
+            if (isKw) out.mathy = true;
+            Token t;
+            t.kind = Tk::Ident;
+            t.id = id;
+            out.toks.push_back(t);
+            continue;
+        }
+        if (c == L'+' || c == L'-' || c == L'*' || c == L'/' || c == L'^' || c == L'%' ||
+            c == L'!') {
+            Token t;
+            t.kind = Tk::Op;
+            t.op = c;
+            out.toks.push_back(t);
+            out.mathy = true;
+            i++;
+            continue;
+        }
+        if (c == L'(') {
+            Token t;
+            t.kind = Tk::LP;
+            out.toks.push_back(t);
+            out.mathy = true;
+            i++;
+            continue;
+        }
+        if (c == L')') {
+            Token t;
+            t.kind = Tk::RP;
+            out.toks.push_back(t);
+            out.mathy = true;
+            i++;
+            continue;
+        }
+        out.ok = false;
+        return out;
+    }
+    Token end;
+    end.kind = Tk::End;
+    out.toks.push_back(end);
+    return out;
+}
+
+struct Parser {
+    const std::vector<Token>& t;
+    size_t i = 0;
+    bool ok = true;
+    std::wstring err;
+    Context ctx;
+
+    explicit Parser(const std::vector<Token>& toks, const Context& c = Context{}) : t(toks), ctx(c) {}
+
+    const Token& Cur() const { return t[i]; }
+    void Adv() {
+        if (i + 1 < t.size()) i++;
+    }
+    void Fail(const std::wstring& m) {
+        if (ok) {
+            ok = false;
+            err = m;
+        }
+    }
+
+    double Factorial(double x) {
+        if (x < 0.0 || x != std::floor(x) || x > 170.0) {
+            Fail(L"factorial is only defined for whole numbers 0-170");
+            return 0.0;
+        }
+        double r = 1.0;
+        for (int k = 2; k <= (int)x; k++) r *= k;
+        return r;
+    }
+
+    double CallFunc(const std::wstring& id, double x) {
+        if (id == L"sqrt") { if (x < 0) { Fail(L"square root of a negative number"); return 0; } return std::sqrt(x); }
+        if (id == L"cbrt") return std::cbrt(x);
+        if (id == L"abs") return std::fabs(x);
+        if (id == L"round") return std::round(x);
+        if (id == L"floor") return std::floor(x);
+        if (id == L"ceil") return std::ceil(x);
+        if (id == L"trunc") return std::trunc(x);
+        if (id == L"sign") return (double)((x > 0) - (x < 0));
+        if (id == L"sin") return std::sin(x);
+        if (id == L"cos") return std::cos(x);
+        if (id == L"tan") return std::tan(x);
+        if (id == L"asin") { if (x < -1 || x > 1) { Fail(L"asin needs a value between -1 and 1"); return 0; } return std::asin(x); }
+        if (id == L"acos") { if (x < -1 || x > 1) { Fail(L"acos needs a value between -1 and 1"); return 0; } return std::acos(x); }
+        if (id == L"atan") return std::atan(x);
+        if (id == L"sinh") return std::sinh(x);
+        if (id == L"cosh") return std::cosh(x);
+        if (id == L"tanh") return std::tanh(x);
+        if (id == L"log") { if (x <= 0) { Fail(L"logarithm needs a positive value"); return 0; } return std::log10(x); }
+        if (id == L"ln") { if (x <= 0) { Fail(L"logarithm needs a positive value"); return 0; } return std::log(x); }
+        if (id == L"log2") { if (x <= 0) { Fail(L"logarithm needs a positive value"); return 0; } return std::log2(x); }
+        if (id == L"exp") return std::exp(x);
+        if (id == L"fact") return Factorial(x);
+        Fail(L"unknown function");
+        return 0.0;
+    }
+
+    Value ParsePrimary() {
+        Value r;
+        const Token& c = Cur();
+        if (c.kind == Tk::Num) {
+            r.v = c.num;
+            Adv();
+            return r;
+        }
+        if (c.kind == Tk::LP) {
+            Adv();
+            r = ParseExpr();
+            if (Cur().kind != Tk::RP) {
+                Fail(L"missing closing parenthesis");
+                return r;
+            }
+            Adv();
+            return r;
+        }
+        if (c.kind == Tk::Ident) {
+            std::wstring id = c.id;
+            Adv();
+            if (Cur().kind == Tk::LP) {
+                Adv();
+                Value a = ParseExpr();
+                if (Cur().kind != Tk::RP) {
+                    Fail(L"missing closing parenthesis");
+                    return r;
+                }
+                Adv();
+                r.v = CallFunc(id, a.v);
+                return r;
+            }
+            double cv = 0.0;
+            if (IsConstant(id, cv)) {
+                r.v = cv;
+                return r;
+            }
+            if (id == L"ans" && ctx.hasAns) {
+                r.v = ctx.ans;
+                return r;
+            }
+            Fail(L"unexpected name");
+            return r;
+        }
+        Fail(L"unexpected symbol");
+        return r;
+    }
+
+    Value ParsePostfix() {
+        Value r = ParsePrimary();
+        while (Cur().kind == Tk::Op && (Cur().op == L'%' || Cur().op == L'!')) {
+            wchar_t op = Cur().op;
+            Adv();
+            if (op == L'%') {
+                r.v = r.v / 100.0;
+                r.percent = true;
+            } else {
+                r.v = Factorial(r.v);
+                r.percent = false;
+            }
+        }
+        return r;
+    }
+
+    Value ParsePower() {
+        Value base = ParsePostfix();
+        if (Cur().kind == Tk::Op && Cur().op == L'^') {
+            Adv();
+            Value ex = ParseUnary();
+            Value r;
+            r.v = std::pow(base.v, ex.v);
+            r.percent = false;
+            return r;
+        }
+        return base;
+    }
+
+    Value ParseUnary() {
+        if (Cur().kind == Tk::Op && (Cur().op == L'+' || Cur().op == L'-')) {
+            wchar_t op = Cur().op;
+            Adv();
+            Value u = ParseUnary();
+            u.v = (op == L'-') ? -u.v : u.v;
+            u.percent = false;
+            return u;
+        }
+        return ParsePower();
+    }
+
+    Value ParseTerm() {
+        Value left = ParseUnary();
+        while (true) {
+            const Token& c = Cur();
+            bool isMul = c.kind == Tk::Op && (c.op == L'*' || c.op == L'/');
+            bool isWord = c.kind == Tk::Ident && IsKeyword(c.id);
+            if (!isMul && !isWord) break;
+            wchar_t op = isMul ? c.op : 0;
+            std::wstring word = isMul ? L"" : c.id;
+            Adv();
+            Value right = ParseUnary();
+            if (isMul) {
+                if (op == L'*') {
+                    left.v = left.v * right.v;
+                } else {
+                    if (right.v == 0.0) Fail(L"division by zero");
+                    left.v = left.v / right.v;
+                }
+            } else if (word == L"mod") {
+                if (right.v == 0.0) Fail(L"division by zero");
+                left.v = std::fmod(left.v, right.v);
+            } else {
+                left.v = left.v * right.v;  // "20% of 150"
+            }
+            left.percent = false;
+        }
+        return left;
+    }
+
+    Value ParseExpr() {
+        Value left = ParseTerm();
+        while (Cur().kind == Tk::Op && (Cur().op == L'+' || Cur().op == L'-')) {
+            wchar_t op = Cur().op;
+            Adv();
+            Value right = ParseTerm();
+            // "100 + 15%" adds 15% of the left side; otherwise a percentage is already a fraction.
+            double rhs = right.percent ? left.v * right.v : right.v;
+            left.v = (op == L'+') ? left.v + rhs : left.v - rhs;
+            left.percent = false;
+        }
+        return left;
+    }
+};
+
+}  // namespace detail
+
+// Core expression evaluation. `requireMathy` is false for the numeric part of a conversion, where
+// a bare number (e.g. "10" in "10 km to miles") must still evaluate.
+inline Result EvalCore(const std::wstring& input, const Locale& loc, const Context& ctx,
+                       bool requireMathy) {
+    Result res;
+    detail::Lexed lx = detail::Lex(input, loc, ctx.hasAns);
+    if (!lx.ok) return res;
+    if (!lx.knownIdents) return res;
+
+    // Count tokens and detect a lone constant. A single well-known constant with two or more
+    // letters ("pi", "tau", "phi", "ans") is a calculation by itself, so typing it shows its
+    // value. Single letters are excluded so that "e" still searches normally.
+    const detail::Token* only = nullptr;
+    size_t count = 0;
+    for (const auto& t : lx.toks) {
+        if (t.kind == detail::Tk::End) continue;
+        only = &t;
+        ++count;
+    }
+    if (count == 0) return res;
+    bool loneConstant = false;
+    if (count == 1 && only->kind == detail::Tk::Ident) {
+        double cv = 0.0;
+        loneConstant = only->id.size() >= 2 &&
+                       (detail::IsConstant(only->id, cv) || (ctx.hasAns && only->id == L"ans"));
+    }
+    if (requireMathy && !lx.mathy && !loneConstant) return res;
+
+    detail::Parser p(lx.toks, ctx);
+    detail::Value v = p.ParseExpr();
+    if (!p.ok) {
+        res.status = Status::Error;
+        res.error = p.err;
+        return res;
+    }
+    if (p.Cur().kind != detail::Tk::End) {
+        res.status = Status::Error;
+        res.error = L"could not read the whole expression";
+        return res;
+    }
+    if (!std::isfinite(v.v)) {
+        res.status = Status::Error;
+        res.error = L"result is not a finite number";
+        return res;
+    }
+    res.status = Status::Ok;
+    res.value = v.v;
+    return res;
+}
+
+inline std::wstring Format(double v, const Locale& loc);  // defined below
+
+// ===== Unit / numeric-base conversions ("<value> to <target>") =====
+
+inline std::vector<std::wstring> SplitWords(const std::wstring& s) {
+    std::vector<std::wstring> out;
+    std::wstring cur;
+    for (wchar_t ch : s) {
+        wchar_t c = detail::NormalizeMathChar(ch);
+        if (c == L' ' || c == L'\t' || c == L'\r' || c == L'\n') {
+            if (!cur.empty()) { out.push_back(cur); cur.clear(); }
+        } else {
+            if (c >= L'A' && c <= L'Z') c = (wchar_t)(c - L'A' + L'a');
+            cur.push_back(c);
+        }
+    }
+    if (!cur.empty()) out.push_back(cur);
+    return out;
+}
+
+inline std::wstring JoinWords(const std::vector<std::wstring>& w, int a, int b) {
+    std::wstring s;
+    for (int i = a; i < b; ++i) {
+        if (!s.empty()) s += L' ';
+        s += w[i];
+    }
+    return s;
+}
+
+inline const UnitDef* FindUnit(const std::wstring& word) {
+    const auto& t = UnitTable();
+    for (const auto& u : t) {
+        if (word == u.name) return &u;
+    }
+    if (word.size() > 1 && word.back() == L's') {  // plural
+        const std::wstring sing = word.substr(0, word.size() - 1);
+        for (const auto& u : t) {
+            if (sing == u.name) return &u;
+        }
+    }
+    return nullptr;
+}
+
+inline int BaseTargetOf(const std::wstring& w) {
+    if (w == L"hex" || w == L"hexadecimal") return 16;
+    if (w == L"bin" || w == L"binary") return 2;
+    if (w == L"oct" || w == L"octal") return 8;
+    if (w == L"dec" || w == L"decimal") return 10;
+    return 0;
+}
+
+// Rank of a byte-based data unit (0 = byte, 1 = kilo, ... 5 = peta). `isBinNamed` is true for the
+// explicit binary names (KiB, MiB, ...). "bit" is deliberately excluded: the decimal/binary
+// ambiguity is about byte multiples, so bit conversions stay as a single value.
+inline bool DataRank(const std::wstring& name, int& rank, bool& isBinNamed) {
+    isBinNamed = false;
+    if (name == L"byte") { rank = 0; return true; }
+    if (name == L"kb") { rank = 1; return true; }
+    if (name == L"mb") { rank = 2; return true; }
+    if (name == L"gb") { rank = 3; return true; }
+    if (name == L"tb") { rank = 4; return true; }
+    if (name == L"pb") { rank = 5; return true; }
+    if (name == L"kib") { rank = 1; isBinNamed = true; return true; }
+    if (name == L"mib") { rank = 2; isBinNamed = true; return true; }
+    if (name == L"gib") { rank = 3; isBinNamed = true; return true; }
+    if (name == L"tib") { rank = 4; isBinNamed = true; return true; }
+    return false;
+}
+
+inline std::wstring FormatInBase(double v, int base) {
+    const bool neg = v < 0;
+    unsigned long long u = (unsigned long long)(neg ? -v : v);
+    static const wchar_t* const kDigits = L"0123456789ABCDEF";
+    std::wstring s;
+    do {
+        s.push_back(kDigits[u % base]);
+        u /= base;
+    } while (u);
+    std::reverse(s.begin(), s.end());
+    const wchar_t* prefix = (base == 16) ? L"0x" : (base == 2) ? L"0b" : (base == 8) ? L"0o" : L"";
+    return std::wstring(neg ? L"-" : L"") + prefix + s;
+}
+
+// Handles "<value> [unit] (to|as) <unit-or-base>". Returns true when it consumed the input (even
+// to report an error), false to let normal expression evaluation try instead.
+inline bool TryConversion(const std::wstring& input, const Locale& loc, const Context& ctx,
+                          Result& out) {
+    const std::vector<std::wstring> w = SplitWords(input);
+    if (w.size() < 3) return false;
+    int k = -1;
+    for (size_t idx = 1; idx + 1 < w.size(); ++idx) {
+        if (w[idx] == L"to" || w[idx] == L"as") { k = (int)idx; break; }
+    }
+    if (k < 0 || k + 2 != (int)w.size()) return false;  // right side must be a single word
+    const std::wstring target = w[k + 1];
+
+    // Numeric base target.
+    if (const int base = BaseTargetOf(target)) {
+        const Result l = EvalCore(JoinWords(w, 0, k), loc, ctx, /*requireMathy=*/false);
+        if (l.status != Status::Ok) return false;
+        if (l.value != std::floor(l.value) || !std::isfinite(l.value)) {
+            out.status = Status::Error;
+            out.error = L"a base conversion needs a whole number";
+            return true;
+        }
+        out.status = Status::Ok;
+        out.value = l.value;
+        out.display = FormatInBase(l.value, base);
+        out.insertable = out.display;
+        return true;
+    }
+
+    // Unit target.
+    const UnitDef* dst = FindUnit(target);
+    if (!dst) return false;
+
+    const int last = k - 1;
+    const UnitDef* src = FindUnit(w[last]);
+    std::wstring glueNum;
+    if (!src) {
+        // "10km" was kept as one word: split it into the number and the unit.
+        size_t cut = std::wstring::npos;
+        for (size_t p = 0; p < w[last].size(); ++p) {
+            if (w[last][p] >= L'a' && w[last][p] <= L'z') { cut = p; break; }
+        }
+        if (cut != std::wstring::npos && cut > 0) {
+            const UnitDef* s2 = FindUnit(w[last].substr(cut));
+            if (s2) { src = s2; glueNum = w[last].substr(0, cut); }
+        }
+    }
+    if (!src) return false;
+
+    std::wstring left = JoinWords(w, 0, last);
+    if (!glueNum.empty()) {
+        if (!left.empty()) left += L' ';
+        left += glueNum;
+    }
+    const Result l = EvalCore(left, loc, ctx, /*requireMathy=*/false);
+    if (l.status != Status::Ok) return false;
+    if (src->dim != dst->dim) {
+        out.status = Status::Error;
+        out.error = std::wstring(L"cannot convert ") + src->sym + L" to " + dst->sym;
+        return true;
+    }
+
+    // Data sizes are ambiguous: "GB" can mean 10^9 (decimal) or 2^30 (binary). Rather than ask the
+    // user to choose, show both interpretations of the same target unit. The primary value follows
+    // the naming convention the user typed (GiB/MiB -> binary, GB/MB -> decimal).
+    if (src->dim == DIM_DATA && dst->dim == DIM_DATA) {
+        int rs = 0, rd = 0;
+        bool binS = false, binD = false;
+        if (DataRank(src->name, rs, binS) && DataRank(dst->name, rd, binD)) {
+            const double dres = l.value * std::pow(1000.0, rs - rd);
+            const double bres = l.value * std::pow(1024.0, rs - rd);
+            const bool primaryBin = binS && binD;
+            const double prim = primaryBin ? bres : dres;
+            const double other = primaryBin ? dres : bres;
+            const std::wstring ps = Format(prim, loc);
+            out.status = Status::Ok;
+            out.value = prim;
+            out.insertable = ps;
+            out.display = ps + L" " + dst->sym;
+            if (other != prim) {
+                out.display += (primaryBin ? L"  (decimal " : L"  (binario ") + Format(other, loc) +
+                                L" " + dst->sym + L")";
+            }
+            return true;
+        }
+    }
+
+    const double baseVal = l.value * src->factor + src->offset;
+    const double conv = (baseVal - dst->offset) / dst->factor;
+    out.status = Status::Ok;
+    out.value = conv;
+    out.display = Format(conv, loc) + L" " + dst->sym;
+    out.insertable = Format(conv, loc);
+    return true;
+}
+
+inline Result Evaluate(const std::wstring& input, const Locale& loc = SystemLocale(),
+                       const Context& ctx = Context{}) {
+    Result res;
+    if (TryConversion(input, loc, ctx, res)) return res;
+    return EvalCore(input, loc, ctx, /*requireMathy=*/true);
+}
+
+namespace detail {
+
+inline std::wstring GroupInt(const std::wstring& digits, const Locale& loc) {
+    bool neg = !digits.empty() && digits[0] == L'-';
+    std::wstring d = neg ? digits.substr(1) : digits;
+    if (!loc.grouping || d.size() <= 3) return digits;
+    std::wstring out;
+    int count = 0;
+    for (int i = (int)d.size() - 1; i >= 0; --i) {
+        out.push_back(d[i]);
+        if (++count % 3 == 0 && i > 0) out.push_back(loc.group);
+    }
+    std::reverse(out.begin(), out.end());
+    return neg ? L"-" + out : out;
+}
+
+}  // namespace detail
+
+// Formats a value for display: no trailing zeros, thousands grouped and the decimal separator
+// taken from the user's Windows locale.
+inline std::wstring Format(double v, const Locale& loc) {
+    if (!std::isfinite(v)) return L"—";
+
+    bool integral =
+        std::fabs(v) < 1e15 && std::fabs(v - std::round(v)) < 1e-9 * std::max(1.0, std::fabs(v));
+    if (integral) {
+        long long iv = (long long)std::llround(v);
+        wchar_t buf[32] = {};
+        swprintf(buf, ARRAYSIZE(buf), L"%lld", iv);
+        return detail::GroupInt(buf, loc);
+    }
+
+    wchar_t buf[64] = {};
+    swprintf(buf, ARRAYSIZE(buf), L"%.12g", v);
+    std::wstring s = buf;
+
+    std::wstring mant = s;
+    std::wstring exp;
+    size_t epos = s.find_first_of(L"eE");
+    if (epos != std::wstring::npos) {
+        mant = s.substr(0, epos);
+        exp = s.substr(epos);
+    }
+
+    std::wstring ip = mant;
+    std::wstring fp;
+    size_t dot = mant.find(L'.');
+    if (dot != std::wstring::npos) {
+        ip = mant.substr(0, dot);
+        fp = mant.substr(dot + 1);
+    }
+    std::wstring out = detail::GroupInt(ip, loc);
+    if (!fp.empty()) {
+        out += loc.decimal;
+        out += fp;
+    }
+    out += exp;
+    return out;
+}
+
+inline std::wstring FormatScientific(double v, const Locale& loc, int digits = 6) {
+    if (!std::isfinite(v)) return L"—";
+    wchar_t buf[64] = {};
+    swprintf(buf, ARRAYSIZE(buf), L"%.*e", digits, v);
+    std::wstring s = buf;
+    for (wchar_t& ch : s) {
+        if (ch == L'.') ch = loc.decimal;
+    }
+    return s;
+}
+
+inline std::wstring FormatHex(double v) {
+    if (!std::isfinite(v) || v != std::floor(v)) return L"";
+    long long iv = (long long)v;
+    wchar_t buf[32] = {};
+    if (iv < 0) {
+        swprintf(buf, ARRAYSIZE(buf), L"-0x%llx", (unsigned long long)(-iv));
+    } else {
+        swprintf(buf, ARRAYSIZE(buf), L"0x%llx", (unsigned long long)iv);
+    }
+    return buf;
+}
+
+inline std::wstring FormatBinary(double v) {
+    if (!std::isfinite(v) || v != std::floor(v) || v < 0) return L"";
+    unsigned long long u = (unsigned long long)v;
+    if (u == 0) return L"0b0";
+    std::wstring bits;
+    while (u) {
+        bits.push_back((u & 1) ? L'1' : L'0');
+        u >>= 1;
+    }
+    std::reverse(bits.begin(), bits.end());
+    return L"0b" + bits;
+}
+
+}  // namespace Calc
 
 // ===== Design constants (in DIP; they are multiplied by the monitor scale) =====
 
@@ -281,11 +1311,13 @@ static const float kBarH = 64.f;
 static const float kRowH = 52.f;
 static const float kListPad = 8.f;
 static const float kEmptyRowH = 56.f;  // message row ("No results")
-static const float kRadius = 20.f;
+static float kRadius = 20.f;
 static const float kRowRadius = 12.f;
 static const float kIconSize = 32.f;
 static const float kFooterH = 40.f;    // footer with shortcuts (expanded only)
 static const float kSectionH = 26.f;   // section header ("Recent" / "Suggestions")
+static const float kHeroH = 84.f;      // calculator result card, reserved above the list
+static const float kHistRowH = 34.f;   // compact row for the calculator history
 
 // Details panel (card to the right of the search bar)
 static const float kPanelW = 320.f;
@@ -315,6 +1347,13 @@ static const wchar_t kTxtReindex[] = L"Reindex";
 static const wchar_t* const kReindexKeys[2] = {L"Ctrl", L"R"};
 static const wchar_t kTxtTypeApp[] = L"Application";
 static const wchar_t kTxtTypeStore[] = L"Store app";
+static const wchar_t kTxtCalcCopy[] = L"Copy result";
+static const wchar_t kTxtCalcCopied[] = L"Copied";
+static const wchar_t kTxtCalcAdd[] = L"Add to operation";
+static const wchar_t kTxtCalcEdit[] = L"Edit";
+static const wchar_t kTxtCalcDelete[] = L"Delete";
+static const wchar_t kTxtCalcClear[] = L"Clear history";
+static const wchar_t kTxtCalcHistory[] = L"History";
 
 static const UINT WM_APP_INDEX = WM_APP + 1;
 static const UINT WM_APP_ICON = WM_APP + 2;
@@ -330,6 +1369,9 @@ static const double kPi = 3.14159265358979323846;
 
 static const UINT_PTR TIMER_FRAME = 1;
 static const UINT_PTR TIMER_BLINK = 2;
+static const UINT_PTR TIMER_COPY = 3;  // clears the calculator "Copied" flash
+static const UINT_PTR TIMER_CALC = 4;  // debounce for calculator evaluation
+static const UINT_PTR TIMER_GLASS = 5; // refreshes the Glass backdrop while the bar is open
 static const int HOTKEY_ID = 1;
 
 // ===== Types =====
@@ -338,6 +1380,7 @@ enum class ReindexMode { Auto, Always, Interval };
 enum class ListMode { Compact, Expanded };
 enum class DetailsKey { CtrlI, CtrlK, CtrlSpace, F4 };
 enum class BgEffect { Acrylic, Mica, Glass, Frosted, Aurora, Solid };
+enum class CalcStyle { Hero, Ghost, Both };
 
 struct LauncherSettings {
     ListMode listMode = ListMode::Expanded;
@@ -351,9 +1394,14 @@ struct LauncherSettings {
     int opacityPct = 90;
     BgEffect effect = BgEffect::Acrylic;
     int blurPct = 50;     // 0..100 -> multiplies the effect's base blur (50 = x1)
+    bool liveAcrylic = true;  // DWM acrylic in real time (Acrylic / Frosted / Aurora)
     int colorIdx = 0;     // index in kColors
     bool hideUtility = true;
     bool disableFullscreen = true;  // ignore the shortcut while a fullscreen window is focused
+    bool calculatorEnabled = true;
+    CalcStyle calcStyle = CalcStyle::Both;
+    bool sounds = true;      // soft interface sounds (open, details panel, typing)
+    int soundVolume = 70;    // 0..100
 };
 
 struct AppEntry {
@@ -575,6 +1623,29 @@ static bool g_indexedOnce = false;
 static double g_lastIndexAt = -1e9;
 static bool g_menuDirty = true;  // the Start menu changed since the last reindex (UI thread)
 
+// Inline calculator (see namespace Calc): the result for the current text, its formatted form
+// (for the card, the inline text and the clipboard) and when it was last copied (for the flash).
+static Calc::Result g_calc;
+static std::wstring g_calcDisplay;
+static bool g_calcActive = false;
+static double g_copiedAt = -1e9;
+
+// Last committed result, exposed to expressions as "ans".
+static double g_calcAns = 0.0;
+static bool g_calcHasAns = false;
+
+// Calculator history: the last few calculations the user chose to keep (by pressing Enter).
+// Newest first; when it is full the oldest entry is dropped.
+struct CalcHistoryItem {
+    std::wstring expr;    // what the user typed
+    std::wstring resFmt;  // the formatted result (shown in the row)
+    std::wstring insVal;  // what "Add to operation" inserts (plain number for unit results)
+};
+static std::vector<CalcHistoryItem> g_calcHist;
+static int g_calcHistSel = -1;  // -1 = current result, otherwise the highlighted history row
+static double g_histScroll = 0;  // scroll offset (DIP) of the history list
+static bool g_calcPending = false;
+
 // Start menu watcher
 static HANDLE g_watchThread = nullptr;
 static HANDLE g_watchStop = nullptr;
@@ -716,6 +1787,7 @@ static void LoadSettings() {
                                         : BgEffect::Acrylic;
     }
     c.blurPct = std::clamp(Wh_GetIntSetting(L"BlurAmount"), 0, 100);
+    c.liveAcrylic = Wh_GetIntSetting(L"LiveAcrylic") != 0;
 
     {
         std::wstring col = GetStringSetting(L"Color");
@@ -753,8 +1825,330 @@ static void LoadSettings() {
         c.detailsKey = DetailsKey::CtrlI;
     }
 
+    c.calculatorEnabled = Wh_GetIntSetting(L"CalculatorEnabled") != 0;
+    {
+        std::wstring cs = GetStringSetting(L"CalculatorStyle");
+        c.calcStyle = (cs == L"hero")  ? CalcStyle::Hero
+                      : (cs == L"ghost") ? CalcStyle::Ghost
+                                         : CalcStyle::Both;
+    }
+
+    c.sounds = Wh_GetIntSetting(L"SoundEnabled") != 0;
+    c.soundVolume = std::clamp(Wh_GetIntSetting(L"SoundVolume"), 0, 100);
+
     g_cfg = c;
 }
+
+// ===== Interface sounds =====
+// Every sound is generated in code, so they need no audio files and no internet. Playback goes
+// through XAudio2 when it is available (it lets the short typing sounds overlap naturally); if it
+// is not present, the sounds are simply skipped. The sounds are deliberately quiet and short:
+// rounded switch-like clicks with a low-pass, no reverb and no bright tones. Typing is a deep,
+// creamy "thock" in the style of a lubed linear switch (Cherry MX Black), with a small difference
+// from key to key.
+namespace Sound {
+
+static const int kRate = 44100;
+static const int kVoices = 12;  // enough to overlap fast typing
+
+typedef HRESULT(WINAPI* XAudio2Create_t)(IXAudio2**, UINT32, XAUDIO2_PROCESSOR);
+
+struct Engine {
+    HMODULE dll = nullptr;
+    IXAudio2* engine = nullptr;
+    IXAudio2MasteringVoice* master = nullptr;
+    IXAudio2SourceVoice* voices[kVoices] = {};
+    int cursor = 0;
+    bool ready = false;
+    float volume = 0.7f;
+    WAVEFORMATEX fmt = {};
+    std::vector<std::vector<int16_t>> samples;
+};
+
+static Engine g_eng;
+static unsigned g_rng = 0x9E3779B9u;
+
+static double Rand01() {
+    g_rng = g_rng * 1664525u + 1013904223u;
+    return (double)((g_rng >> 8) & 0xFFFFFF) / 16777216.0;
+}
+
+// ---- Sound design -------------------------------------------------------------------------
+// The goal is "quiet and soft", like the click of a flashlight button: very short, rounded sounds
+// with no reverb, no bright partials and a low-pass on top so nothing ever feels sharp.
+//   AddTone  - a soft rounded body (a short sine whose pitch settles a little, like a plastic key
+//              being pressed) with an optional faint second partial.
+//   AddNoise - a tiny band-passed contact "tk", mixed in very low.
+// Finish() rounds the top with a low-pass, sets a deliberately low peak level and fades the tail.
+static const double kPi = 3.14159265358979323846;
+
+static std::vector<float> NewBuf(double sec) {
+    return std::vector<float>((size_t)(sec * kRate), 0.0f);
+}
+
+static void AddTone(std::vector<float>& buf, double startSec, double f0, double f1, double glideSec,
+                    double attackSec, double tau, double gain, double bright, double detuneCents) {
+    const int start = (int)(startSec * kRate);
+    if (start >= (int)buf.size()) return;
+    const double dt = 1.0 / kRate;
+    const double ratio[3] = {1.0, 2.0, 3.0};
+    const double amp[3] = {1.0, 0.42 * bright, 0.16 * bright};
+    const double up = std::pow(2.0, detuneCents / 1200.0), down = 1.0 / up;
+    double ph[3][2] = {};
+    int n = (int)((attackSec + tau * 7.0) * kRate);
+    for (int i = 0; i < n; ++i) {
+        const int idx = start + i;
+        if (idx >= (int)buf.size()) break;
+        const double t = i * dt;
+        const double g = glideSec > 0.0 ? 1.0 - std::exp(-t / glideSec) : 1.0;
+        const double f = f0 + (f1 - f0) * g;
+        double att = 1.0;
+        double dec = 0.0;
+        if (t < attackSec) {
+            const double a = t / attackSec;
+            att = a * a * (3.0 - 2.0 * a);
+        } else {
+            dec = t - attackSec;
+        }
+        double s = 0.0;
+        for (int k = 0; k < 3; ++k) {
+            if (amp[k] <= 0.0) continue;
+            const double fk = f * ratio[k];
+            ph[k][0] += 2.0 * kPi * fk * up * dt;
+            ph[k][1] += 2.0 * kPi * fk * down * dt;
+            const double env = att * std::exp(-dec * (1.0 + 0.9 * k) / tau);  // upper partials die first
+            s += amp[k] * env * 0.5 * (std::sin(ph[k][0]) + std::sin(ph[k][1]));
+        }
+        buf[idx] += (float)(s * gain);
+    }
+}
+
+static void AddNoise(std::vector<float>& buf, double startSec, double durSec, double fc0, double fc1,
+                     double Q, double attackSec, double tau, double gain) {
+    const int start = (int)(startSec * kRate);
+    const int n = (int)(durSec * kRate);
+    double low = 0.0, band = 0.0;
+    const double q = 1.0 / Q;
+    for (int i = 0; i < n; ++i) {
+        const int idx = start + i;
+        if (idx < 0 || idx >= (int)buf.size()) break;
+        const double t = (double)i / kRate;
+        const double x = (double)i / n;
+        const double fc = fc0 * std::pow(fc1 / fc0, x);
+        const double f = 2.0 * std::sin(kPi * fc / kRate);
+        g_rng = g_rng * 1664525u + 1013904223u;
+        const double in = (double)((g_rng >> 9) & 0x7FFF) / 16384.0 - 1.0;
+        low += f * band;
+        const double high = in - low - q * band;
+        band += f * high;
+        double env;
+        if (t < attackSec) {
+            const double a = t / attackSec;
+            env = a * a * (3.0 - 2.0 * a);
+        } else {
+            env = std::exp(-(t - attackSec) / tau);
+        }
+        buf[idx] += (float)(band * env * gain);
+    }
+}
+
+static void Finish(std::vector<float>& x, std::vector<int16_t>& out, double lpHz, double peak,
+                   double fadeSec) {
+    const double dt = 1.0 / kRate;
+    const double alpha = dt / (1.0 / (2.0 * kPi * lpHz) + dt);
+    double lp = 0.0, mx = 1e-9;
+    for (size_t i = 0; i < x.size(); ++i) {
+        lp += alpha * (x[i] - lp);
+        x[i] = (float)lp;
+        mx = std::max(mx, (double)std::fabs(x[i]));
+    }
+    const double scale = peak / mx;
+    int fade = std::min((int)(fadeSec * kRate), (int)x.size());
+    out.assign(x.size(), 0);
+    for (size_t i = 0; i < x.size(); ++i) {
+        double v = x[i] * scale;
+        const int fromEnd = (int)x.size() - 1 - (int)i;
+        if (fromEnd < fade) {
+            const double a = (double)fromEnd / fade;
+            v *= a * a * (3.0 - 2.0 * a);
+        }
+        out[i] = (int16_t)std::lround(std::clamp(v, -1.0, 1.0) * 32000.0);
+    }
+}
+
+// Typing has one sample per key: a-z (0-25), 0-9 (26-35), space (36) and four punctuation groups.
+enum { S_OPEN = 0, S_PANEL_ON = 1, S_PANEL_OFF = 2, S_TYPE = 3, S_TYPE_N = 41,
+       S_ERASE = S_TYPE + S_TYPE_N, S_ERASE_N = 2, S_COUNT = S_ERASE + S_ERASE_N };
+
+// Opening the bar: a soft two-stage switch click, press then a lighter release (flashlight button).
+static void RenderOpen(std::vector<int16_t>& out) {
+    std::vector<float> b = NewBuf(0.15);
+    AddTone(b, 0.000, 520.0, 330.0, 0.010, 0.0008, 0.014, 1.00, 0.12, 0.0);   // press: round body
+    AddNoise(b, 0.000, 0.012, 2400.0, 2400.0, 1.0, 0.0003, 0.0025, 0.30);     // soft contact
+    AddTone(b, 0.048, 760.0, 560.0, 0.008, 0.0006, 0.008, 0.32, 0.05, 0.0);   // release: lighter
+    AddNoise(b, 0.048, 0.008, 2800.0, 2800.0, 1.0, 0.0002, 0.0018, 0.12);
+    Finish(b, out, 3000.0, 0.24, 0.040);
+}
+
+// Details panel: one tiny tick, a little higher when it opens and a little lower when it closes.
+static void RenderPanel(std::vector<int16_t>& out, bool opening) {
+    std::vector<float> b = NewBuf(0.10);
+    if (opening) AddTone(b, 0.0, 420.0, 560.0, 0.014, 0.0008, 0.016, 1.00, 0.08, 0.0);
+    else         AddTone(b, 0.0, 520.0, 380.0, 0.014, 0.0008, 0.016, 1.00, 0.08, 0.0);
+    AddNoise(b, 0.0, 0.010, 2200.0, 2200.0, 1.0, 0.0003, 0.0020, 0.14);
+    Finish(b, out, 2800.0, opening ? 0.17 : 0.15, 0.030);
+}
+
+// Evenly spread, repeatable "random" numbers: every key always gets the same character.
+static double Hash01(int slot, int salt) {
+    const double k[8] = {0.6180339887, 0.7548776662, 0.5698402910, 0.8191725134,
+                         0.4142135624, 0.7320508076, 0.3247179572, 0.2360679775};
+    const double v = (slot + 1) * k[salt & 7] + 0.137 * salt;
+    return v - std::floor(v);
+}
+
+// Deep, creamy bottom-out: the soft "thock" of a well-lubed linear switch (Cherry MX Black style).
+// A low body that settles down on impact, a couple of quiet inharmonic case resonances for the
+// boxy colour, and a short, low-passed contact "clack" on top. Nothing bright: it is rounded on
+// purpose so it stays creamy instead of clicky.
+//   base     - resting pitch in Hz (lower = deeper)
+//   tauScale - scales how long it rings
+static void RenderTick(std::vector<int16_t>& out, double base, double tauScale, double peak) {
+    std::vector<float> b = NewBuf(0.10);
+    AddTone(b, 0.0, base * 1.20, base, 0.007, 0.0007, 0.021 * tauScale, 1.00, 0.12, 9.0);
+    AddTone(b, 0.0, base * 2.32, base * 2.12, 0.006, 0.0007, 0.011 * tauScale, 0.24, 0.0, 6.0);
+    AddTone(b, 0.0, base * 3.45, base * 3.18, 0.005, 0.0007, 0.007 * tauScale, 0.09, 0.0, 0.0);
+    AddNoise(b, 0.0, 0.011, 1600.0, 900.0, 0.9, 0.0003, 0.0020, 0.16);
+    Finish(b, out, 2400.0, peak, 0.020);
+}
+
+// Every key is the same deep thock with a slightly different pitch and ring, so typing has a
+// natural, creamy variety. The space bar is a touch lower and rounder.
+static void RenderType(std::vector<int16_t>& out, int slot) {
+    if (slot == 36) {  // space bar: lower and rounder
+        std::vector<float> b = NewBuf(0.13);
+        AddTone(b, 0.0, 155.0 * 1.20, 155.0, 0.008, 0.0008, 0.030, 1.00, 0.12, 9.0);
+        AddTone(b, 0.0, 155.0 * 2.32, 155.0 * 2.12, 0.007, 0.0008, 0.016, 0.22, 0.0, 6.0);
+        AddNoise(b, 0.0, 0.012, 1400.0, 800.0, 0.9, 0.0003, 0.0022, 0.16);
+        Finish(b, out, 2200.0, 0.090, 0.025);
+        return;
+    }
+    const double base = 190.0 * (0.90 + 0.20 * ((slot * 17) % 41) / 40.0);  // +-10% pitch, all different
+    const double tauScale = 0.90 + 0.20 * Hash01(slot, 3);
+    RenderTick(out, base, tauScale, 0.070 + 0.012 * Hash01(slot, 7));
+}
+
+// Which "key" a typed character uses.
+static int KeySlot(wchar_t c) {
+    if (c >= L'A' && c <= L'Z') c = (wchar_t)(c - L'A' + L'a');
+    if (c >= L'a' && c <= L'z') return (int)(c - L'a');
+    if (c >= L'0' && c <= L'9') return 26 + (int)(c - L'0');
+    if (c == L' ') return 36;
+    if (c > 127) return (int)(c % 26);  // accents, ñ, etc. share the letter keys
+    return 37 + (int)(c % 4);
+}
+
+// Backspace: the same thock, a bit lower and softer.
+static void RenderErase(std::vector<int16_t>& out, int v) {
+    RenderTick(out, 150.0 + 10.0 * v, 1.15, 0.065);
+}
+
+static void RenderAll() {
+    g_eng.samples.assign(S_COUNT, {});
+    RenderOpen(g_eng.samples[S_OPEN]);
+    RenderPanel(g_eng.samples[S_PANEL_ON], true);
+    RenderPanel(g_eng.samples[S_PANEL_OFF], false);
+    for (int i = 0; i < S_TYPE_N; ++i) RenderType(g_eng.samples[S_TYPE + i], i);
+    for (int i = 0; i < S_ERASE_N; ++i) RenderErase(g_eng.samples[S_ERASE + i], i);
+}
+
+static bool Init() {
+    RenderAll();
+    Engine& e = g_eng;
+    e.dll = LoadLibraryW(L"xaudio2_9.dll");
+    if (!e.dll) e.dll = LoadLibraryW(L"xaudio2_8.dll");
+    if (!e.dll) return false;
+    XAudio2Create_t create = (XAudio2Create_t)GetProcAddress(e.dll, "XAudio2Create");
+    if (!create) return false;
+    if (FAILED(create(&e.engine, 0, XAUDIO2_DEFAULT_PROCESSOR)) || !e.engine) return false;
+    if (FAILED(e.engine->CreateMasteringVoice(&e.master)) || !e.master) return false;
+    e.fmt.wFormatTag = WAVE_FORMAT_PCM;
+    e.fmt.nChannels = 1;
+    e.fmt.nSamplesPerSec = kRate;
+    e.fmt.wBitsPerSample = 16;
+    e.fmt.nBlockAlign = 2;
+    e.fmt.nAvgBytesPerSec = kRate * 2;
+    e.fmt.cbSize = 0;
+    for (int i = 0; i < kVoices; ++i) {
+        if (FAILED(e.engine->CreateSourceVoice(&e.voices[i], &e.fmt))) e.voices[i] = nullptr;
+    }
+    e.ready = true;
+    return true;
+}
+
+static void Shutdown() {
+    Engine& e = g_eng;
+    if (e.engine) {
+        for (int i = 0; i < kVoices; ++i) {
+            if (e.voices[i]) { e.voices[i]->DestroyVoice(); e.voices[i] = nullptr; }
+        }
+        if (e.master) { e.master->DestroyVoice(); e.master = nullptr; }
+        e.engine->Release();
+        e.engine = nullptr;
+    }
+    if (e.dll) { FreeLibrary(e.dll); e.dll = nullptr; }
+    e.ready = false;
+}
+
+static void ApplyVolume() {
+    g_eng.volume = (float)std::clamp(g_cfg.soundVolume, 0, 100) / 100.0f;
+}
+
+static void Play(int idx, double pitch, double gain) {
+    Engine& e = g_eng;
+    if (!e.ready || idx < 0 || idx >= (int)e.samples.size()) return;
+    std::vector<int16_t>& pcm = e.samples[idx];
+    if (pcm.empty()) return;
+    IXAudio2SourceVoice* v = e.voices[e.cursor];
+    e.cursor = (e.cursor + 1) % kVoices;
+    if (!v) return;
+    v->Stop(0);
+    v->FlushSourceBuffers();
+    v->SetFrequencyRatio((float)pitch);
+    v->SetVolume((float)(gain * e.volume));
+    XAUDIO2_BUFFER buf = {};
+    buf.AudioBytes = (UINT32)(pcm.size() * sizeof(int16_t));
+    buf.pAudioData = (const BYTE*)pcm.data();
+    buf.Flags = XAUDIO2_END_OF_STREAM;
+    if (FAILED(v->SubmitSourceBuffer(&buf))) return;
+    v->Start(0);
+}
+
+static bool On() { return g_cfg.sounds; }
+
+static int PickVariant(int n, int& last) {
+    int v = (int)(Rand01() * n) % n;
+    if (v == last) v = (v + 1) % n;  // never the same variant twice in a row
+    last = v;
+    return v;
+}
+
+static int g_lastErase = -1;
+
+static void OnOpen() { if (On()) Play(S_OPEN, 1.0, 1.0); }
+static void OnPanel(bool opening) { if (On()) Play(opening ? S_PANEL_ON : S_PANEL_OFF, 1.0, 1.0); }
+// c is the typed character; each key always sounds like itself (with a tiny human wobble).
+// With no character (paste) a random letter key is used.
+static void OnKey(wchar_t c = 0) {
+    if (!On()) return;
+    const int slot = c ? KeySlot(c) : (int)(Rand01() * 26.0) % 26;
+    Play(S_TYPE + slot, 0.985 + Rand01() * 0.03, 0.88 + Rand01() * 0.12);
+}
+static void OnErase() {
+    if (On()) Play(S_ERASE + PickVariant(S_ERASE_N, g_lastErase), 0.95 + Rand01() * 0.07, 0.85 + Rand01() * 0.15);
+}
+
+}  // namespace Sound
 
 static D2D1_COLOR_F Mix(const D2D1_COLOR_F& a, const D2D1_COLOR_F& b, float t, float alpha = 1.f) {
     return D2D1::ColorF(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, alpha);
@@ -859,7 +2253,7 @@ static int ScoreToken(const std::wstring& name,
         }
     }
 
-    // Acronyms: "vsc" -> Visual Studio Code
+    // Acronyms: the initials of each word in the name
     {
         std::vector<size_t> ini;
         for (size_t p = 0; p < n; ++p) {
@@ -1080,6 +2474,159 @@ static void BuildHome() {
     }
 }
 
+// ===== Calculator state =====
+
+// True when there is a valid result to offer (copy, inline text).
+static bool CalcOk() {
+    return g_calcActive && g_calc.status == Calc::Status::Ok;
+}
+
+// The result card is shown for a result or an error, unless the user asked for inline only.
+static bool HeroShown() {
+    return g_calcActive && g_cfg.calcStyle != CalcStyle::Ghost;
+}
+
+// The faint inline text is only shown for a real result, unless the user asked for the card only.
+static bool GhostShown() {
+    return CalcOk() && g_cfg.calcStyle != CalcStyle::Hero;
+}
+
+// Height (DIP) reserved above the list for the result card.
+static double HeroH() {
+    return HeroShown() ? kHeroH : 0.0;
+}
+
+// True when the calculation is actually visible (card or inline text).
+static bool CalcShown() {
+    return HeroShown() || GhostShown();
+}
+
+static void UpdateCalc() {
+    g_calc = Calc::Result();
+    g_calcDisplay.clear();
+    g_calcActive = false;
+    if (!g_cfg.calculatorEnabled || g_text.empty()) {
+        return;
+    }
+    Calc::Context ctx;
+    ctx.hasAns = g_calcHasAns;
+    ctx.ans = g_calcAns;
+    Calc::Result r = Calc::Evaluate(g_text, Calc::SystemLocale(), ctx);
+    if (r.status == Calc::Status::Ok) {
+        g_calc = r;
+        g_calcDisplay = r.display.empty() ? Calc::Format(r.value, Calc::SystemLocale()) : r.display;
+        g_calcActive = true;
+    } else if (r.status == Calc::Status::Error) {
+        g_calc = r;
+        g_calcActive = true;
+    }
+}
+
+// ===== Calculator history (persisted in the mod's local storage) =====
+
+static const wchar_t* const kCalcHistKey = L"calc.history";
+static const size_t kCalcHistMax = 10;
+
+static void TrimHistField(std::wstring& s) {
+    for (auto& c : s) {
+        if (c == L'\n' || c == L'\r' || c == L'\t') c = L' ';
+    }
+}
+
+static void LoadCalcHistory() {
+    g_calcHist.clear();
+    wchar_t buf[8192] = {};
+    size_t n = Wh_GetStringValue(kCalcHistKey, buf, ARRAYSIZE(buf));
+    if (n == 0) return;
+    std::wstring all(buf, n);
+    size_t start = 0;
+    while (start <= all.size() && g_calcHist.size() < kCalcHistMax) {
+        size_t nl = all.find(L'\n', start);
+        std::wstring line =
+            all.substr(start, nl == std::wstring::npos ? std::wstring::npos : nl - start);
+        start = (nl == std::wstring::npos) ? all.size() + 1 : nl + 1;
+        if (line.empty()) continue;
+        size_t tab1 = line.find(L'\t');
+        CalcHistoryItem it;
+        if (tab1 == std::wstring::npos) {
+            it.expr = line;
+        } else {
+            it.expr = line.substr(0, tab1);
+            size_t tab2 = line.find(L'\t', tab1 + 1);
+            if (tab2 == std::wstring::npos) {
+                it.resFmt = line.substr(tab1 + 1);
+            } else {
+                it.resFmt = line.substr(tab1 + 1, tab2 - tab1 - 1);
+                it.insVal = line.substr(tab2 + 1);
+            }
+        }
+        if (it.insVal.empty()) it.insVal = it.resFmt;
+        if (!it.expr.empty()) g_calcHist.push_back(it);
+    }
+}
+
+static void SaveCalcHistory() {
+    std::wstring all;
+    for (size_t i = 0; i < g_calcHist.size(); ++i) {
+        if (i) all += L'\n';
+        all += g_calcHist[i].expr;
+        all += L'\t';
+        all += g_calcHist[i].resFmt;
+        all += L'\t';
+        all += g_calcHist[i].insVal.empty() ? g_calcHist[i].resFmt : g_calcHist[i].insVal;
+    }
+    Wh_SetStringValue(kCalcHistKey, all.c_str());
+}
+
+// "ans": the last committed result, persisted so it survives a restart.
+static const wchar_t* const kCalcAnsKey = L"calc.ans";
+
+static void LoadCalcAns() {
+    g_calcHasAns = false;
+    wchar_t buf[64] = {};
+    size_t n = Wh_GetStringValue(kCalcAnsKey, buf, ARRAYSIZE(buf));
+    if (n == 0) return;
+    double v = 0.0;
+    if (Calc::detail::ParseCleanDecimal(buf, v)) {
+        g_calcAns = v;
+        g_calcHasAns = true;
+    }
+}
+
+static void SetCalcAns(double v) {
+    g_calcAns = v;
+    g_calcHasAns = true;
+    wchar_t buf[64] = {};
+    swprintf(buf, ARRAYSIZE(buf), L"%.17g", v);
+    Wh_SetStringValue(kCalcAnsKey, buf);
+}
+
+// Records a calculation the user committed (pressed Enter on). Repeating an expression moves it
+// back to the top instead of duplicating it. When the list is full the oldest entry is dropped.
+static void AddCalcHistory(const std::wstring& expr, const std::wstring& resFmt,
+                           const std::wstring& insVal) {
+    CalcHistoryItem it;
+    it.expr = expr;
+    it.resFmt = resFmt;
+    it.insVal = insVal.empty() ? resFmt : insVal;
+    TrimHistField(it.expr);
+    TrimHistField(it.resFmt);
+    TrimHistField(it.insVal);
+    if (it.expr.empty()) return;
+    for (size_t i = 0; i < g_calcHist.size();) {
+        if (g_calcHist[i].expr == it.expr) {
+            g_calcHist.erase(g_calcHist.begin() + i);
+        } else {
+            ++i;
+        }
+    }
+    g_calcHist.insert(g_calcHist.begin(), it);
+    if (g_calcHist.size() > kCalcHistMax) {
+        g_calcHist.resize(kCalcHistMax);
+    }
+    SaveCalcHistory();
+}
+
 static void RunSearch() {
     ReleaseResultLayouts();
     g_results.clear();
@@ -1090,6 +2637,13 @@ static void RunSearch() {
         if (g_cfg.listMode == ListMode::Expanded) {
             BuildHome();
         }
+        BuildRowOffsets();
+        return;
+    }
+
+    // A valid calculation is the only result: it is what Enter copies, so we do not mix it with
+    // app matches (a query like "2+2" should never launch an app that happened to match).
+    if (CalcOk()) {
         BuildRowOffsets();
         return;
     }
@@ -2345,11 +3899,11 @@ struct EffectParams {
 
 static EffectParams GetEffectParams() {
     switch (g_cfg.effect) {
-        case BgEffect::Mica:    return {70.0, 95, 1.35f, 0.5f, 0.00f, false, 1.0f};
+        case BgEffect::Mica:    return {70.0, 95, 1.35f, 0.2f, 0.00f, false, 1.0f};
         case BgEffect::Glass:   return {9.0, 150, 0.45f, 0.0f, 0.00f, false, 2.2f};
-        case BgEffect::Frosted: return {42.0, 100, 0.90f, 2.4f, 0.10f, false, 1.0f};
-        case BgEffect::Aurora:  return {30.0, 135, 0.85f, 0.8f, 0.00f, true, 1.2f};
-        default:                return {30.0, 125, 1.00f, 1.0f, 0.00f, false, 1.0f};
+        case BgEffect::Frosted: return {42.0, 100, 0.90f, 0.7f, 0.10f, false, 1.0f};
+        case BgEffect::Aurora:  return {30.0, 135, 0.85f, 0.32f, 0.00f, true, 1.2f};
+        default:                return {30.0, 125, 1.00f, 0.4f, 0.00f, false, 1.0f};
     }
 }
 
@@ -2366,6 +3920,166 @@ static float AcrylicTintAlpha() {
 static float EffectTintAlpha() {
     return std::clamp(AcrylicTintAlpha() * GetEffectParams().tintMul, 0.f, 1.f);
 }
+
+// ---- API no documentada (SetWindowCompositionAttribute + WCA_ACCENT_POLICY) ----
+enum LvAccentState {
+    LV_ACCENT_DISABLED = 0,
+    LV_ACCENT_ACRYLICBLURBEHIND = 4,
+};
+
+struct LvAccentPolicy {
+    int AccentState;
+    int AccentFlags;
+    DWORD GradientColor;  // ABGR: alpha = opacidad del tinte
+    DWORD AnimationId;
+};
+
+struct LvWinCompAttrData {
+    int Attrib;  // 19 = WCA_ACCENT_POLICY
+    PVOID pvData;
+    SIZE_T cbData;
+};
+
+typedef BOOL(WINAPI* LvSetWindowCompositionAttribute_t)(HWND, LvWinCompAttrData*);
+
+static HWND g_liveWnd = nullptr;                    // ventana del acrylic (debajo de g_hwnd)
+static bool g_liveSupported = false;                // API presente y Windows >= 1803
+static LvSetWindowCompositionAttribute_t g_pSetWCA = nullptr;
+static int g_liveAlpha = -1;                        // cache del alpha aplicado
+static bool g_liveRgnValid = false;
+static HWND g_livePanel = nullptr;                  // acrylic del panel de detalles
+static bool g_liveWin11 = false;                    // Windows 11: esquinas redondeadas por DWM
+typedef HRESULT(WINAPI* LvDwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
+static LvDwmSetWindowAttribute_t g_pDwmSetAttr = nullptr;
+static int g_liveRgnSize[2][2] = {};                // Windows 10: tamaño de la última región
+
+static bool UseLive() {
+    if (!g_liveSupported || !g_cfg.liveAcrylic) return false;
+    return g_cfg.effect == BgEffect::Acrylic || g_cfg.effect == BgEffect::Frosted ||
+           g_cfg.effect == BgEffect::Aurora;
+}
+
+static bool WindowsBuildAtLeast(DWORD build) {
+    typedef LONG(WINAPI * RtlGetVersion_t)(OSVERSIONINFOW*);
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    auto fn = nt ? (RtlGetVersion_t)GetProcAddress(nt, "RtlGetVersion") : nullptr;
+    if (!fn) return false;
+    OSVERSIONINFOW vi = {};
+    vi.dwOSVersionInfoSize = sizeof(vi);
+    return fn(&vi) == 0 && vi.dwBuildNumber >= build;
+}
+
+static LRESULT CALLBACK LiveWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    switch (m) {
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;  // la ventana de arriba (g_hwnd) recibe el input
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+static HWND LiveCreateOne(HINSTANCE hInst) {
+    // Sin WS_EX_LAYERED: DWM ignora regiones y el acrylic en ventanas layered.
+    HWND h = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+                             L"SpotlightLauncherBackdrop", L"", WS_POPUP, 0, 0, 100, 100, nullptr,
+                             nullptr, hInst, nullptr);
+    if (h && g_pDwmSetAttr && g_liveWin11) {
+        const DWORD pref = 2;  // DWMWCP_ROUND
+        g_pDwmSetAttr(h, 33 /*DWMWA_WINDOW_CORNER_PREFERENCE*/, &pref, sizeof(pref));
+        const DWORD none = 0xFFFFFFFE;  // DWMWA_COLOR_NONE: sin borde del sistema
+        g_pDwmSetAttr(h, 34 /*DWMWA_BORDER_COLOR*/, &none, sizeof(none));
+    }
+    return h;
+}
+
+static bool LiveCreate(HINSTANCE hInst) {
+    HMODULE u = GetModuleHandleW(L"user32.dll");
+    g_pSetWCA = u ? (LvSetWindowCompositionAttribute_t)GetProcAddress(u, "SetWindowCompositionAttribute")
+                  : nullptr;
+    g_liveSupported = g_pSetWCA && WindowsBuildAtLeast(17134);  // acrylic: 1803+
+    if (!g_liveSupported) return false;
+
+    g_liveWin11 = WindowsBuildAtLeast(22000);
+    HMODULE dm = LoadLibraryW(L"dwmapi.dll");
+    g_pDwmSetAttr = dm ? (LvDwmSetWindowAttribute_t)GetProcAddress(dm, "DwmSetWindowAttribute") : nullptr;
+
+    WNDCLASSEXW wc = {};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = LiveWndProc;
+    wc.hInstance = hInst;
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);  // negro = transparente para DWM
+    wc.lpszClassName = L"SpotlightLauncherBackdrop";
+    RegisterClassExW(&wc);
+
+    g_liveWnd = LiveCreateOne(hInst);
+    g_livePanel = LiveCreateOne(hInst);
+    if (!g_liveWnd) {
+        g_liveSupported = false;
+        return false;
+    }
+    return true;
+}
+
+static void LiveDestroy() {
+    if (g_livePanel) {
+        DestroyWindow(g_livePanel);
+        g_livePanel = nullptr;
+    }
+    if (g_liveWnd) {
+        DestroyWindow(g_liveWnd);
+        g_liveWnd = nullptr;
+    }
+}
+
+// Tinte + acrylic en tiempo real.
+static void LiveApplyAccent() {
+    if (!g_pSetWCA) return;
+    auto to8 = [](float v) { return (DWORD)std::clamp((int)std::lround(v * 255.f), 0, 255); };
+    DWORD a = to8(EffectTintAlpha());
+    if (a == 0) a = 1;  // el acrylic no soporta opacidad 0
+    LvAccentPolicy p = {};
+    p.AccentState = LV_ACCENT_ACRYLICBLURBEHIND;
+    p.AccentFlags = 0;
+    p.GradientColor = (a << 24) | (to8(g_pal.bg.b) << 16) | (to8(g_pal.bg.g) << 8) | to8(g_pal.bg.r);
+    LvWinCompAttrData d = {19 /*WCA_ACCENT_POLICY*/, &p, sizeof(p)};
+    if (g_liveWnd) g_pSetWCA(g_liveWnd, &d);
+    if (g_livePanel) g_pSetWCA(g_livePanel, &d);
+}
+
+static void LiveHide() {
+    if (g_liveWnd && IsWindowVisible(g_liveWnd)) ShowWindow(g_liveWnd, SW_HIDE);
+    if (g_livePanel && IsWindowVisible(g_livePanel)) ShowWindow(g_livePanel, SW_HIDE);
+    g_liveRgnValid = false;
+    g_liveAlpha = -1;
+    memset(g_liveRgnSize, 0, sizeof(g_liveRgnSize));
+}
+
+// Grano: se separa de EnsureBackdropBrushes (ver paso 4).
+static void EnsureNoiseBrush() {
+    if (g_noiseBrush || !g_rt) return;
+    const int N = 128;
+    std::vector<uint32_t> px((size_t)N * N);
+    uint32_t s = 0x9E3779B9u;
+    for (auto& p : px) {
+        s ^= s << 13;
+        s ^= s >> 17;
+        s ^= s << 5;
+        const uint32_t a = 22;  // grano base ~8.6%; cada efecto lo escala con noiseMul
+        const uint32_t c = (s & 0xFF) * a / 255;
+        p = (a << 24) | (c << 16) | (c << 8) | c;
+    }
+    D2D1_BITMAP_PROPERTIES bp = D2D1::BitmapProperties(
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96.f, 96.f);
+    if (SUCCEEDED(g_rt->CreateBitmap(D2D1::SizeU(N, N), px.data(), N * 4, &bp, &g_noiseBmp)) && g_noiseBmp) {
+        D2D1_BITMAP_BRUSH_PROPERTIES nbp = D2D1::BitmapBrushProperties(
+            D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+        g_rt->CreateBitmapBrush(g_noiseBmp, &nbp, nullptr, &g_noiseBrush);
+    }
+    if (!g_noiseBrush) SafeRelease(g_noiseBmp);
+}
+
+
 
 // Captures the desktop at (x, y, w, h) - screen pixels - and leaves it blurred in g_backPx.
 // The window must be HIDDEN, or it would show up in the capture itself.
@@ -2410,10 +4124,49 @@ static bool CaptureBackdrop(int x, int y, int w, int h) {
     return true;
 }
 
+// ---- Glass en tiempo real ----
+// Glass usa poco blur, así que el acrylic de DWM (blur fijo y alto) no sirve. En su lugar se
+// vuelve a capturar el escritorio varias veces por segundo mientras la barra está abierta. Para
+// que la captura no incluya la propia barra, la ventana se excluye de la captura de pantalla
+// (WDA_EXCLUDEFROMCAPTURE, Windows 10 2004+). Si Windows no lo permite, Glass queda estático.
+static const UINT kGlassRefreshMs = 16;  // ~60 capturas por segundo para reducir el retraso
+typedef BOOL(WINAPI* SetWindowDisplayAffinity_t)(HWND, DWORD);
+static bool g_glassCaptureOk = false;
+
+static bool UseGlassLive() {
+    if (!g_cfg.liveAcrylic) return false;
+    return g_cfg.effect == BgEffect::Glass && g_glassCaptureOk;
+}
+
+// Se llama al abrir. Solo con Glass la ventana se excluye de la captura (así las capturas de
+// pantalla y grabaciones siguen viendo la barra con los demás efectos).
+static void ApplyCaptureAffinity() {
+    static SetWindowDisplayAffinity_t fn = [] {
+        HMODULE u = GetModuleHandleW(L"user32.dll");
+        return u ? (SetWindowDisplayAffinity_t)GetProcAddress(u, "SetWindowDisplayAffinity") : nullptr;
+    }();
+    g_glassCaptureOk = false;
+    if (!fn || !g_hwnd) return;
+    const bool want = g_cfg.effect == BgEffect::Glass && g_cfg.liveAcrylic;
+    if (fn(g_hwnd, want ? 0x00000011 /*WDA_EXCLUDEFROMCAPTURE*/ : 0 /*WDA_NONE*/)) {
+        g_glassCaptureOk = want;
+    } else if (want) {
+        Wh_Log(L"Glass: SetWindowDisplayAffinity failed (%lu), using a static capture", GetLastError());
+    }
+}
+
+static void RefreshGlassBackdrop() {
+    if (!UseGlassLive() || !g_hwnd || g_bmpW <= 0 || g_bmpH <= 0) return;
+    // La superficie ya está en pantalla (con el desplazamiento de la animación): se captura
+    // exactamente lo que hay debajo de ella.
+    CaptureBackdrop(g_winX, g_winY + (int)std::lround(g_offY), g_bmpW, g_bmpH);
+    MarkDirty();
+}
+
 // Prepares the acrylic background for the next opening.
 static void PrepareBackdrop() {
-    if (g_cfg.effect == BgEffect::Solid) {
-        ReleaseBackdrop();
+    if (g_cfg.effect == BgEffect::Solid || UseLive()) {
+        ReleaseBackdrop();  // live acrylic: DWM blurs in real time, no capture needed
         return;
     }
     // DWM must stop compositing the window before capturing, or it shows up in the capture.
@@ -2447,28 +4200,7 @@ static bool EnsureBackdropBrushes() {
         }
         if (!g_backBrush) SafeRelease(g_backBmp);
     }
-    if (!g_noiseBrush) {
-        // Grain: 128x128 tile of random gray with ~3.5% opacity (premultiplied).
-        const int N = 128;
-        std::vector<uint32_t> px((size_t)N * N);
-        uint32_t s = 0x9E3779B9u;
-        for (auto& p : px) {
-            s ^= s << 13;
-            s ^= s >> 17;
-            s ^= s << 5;
-            const uint32_t a = 9;
-            const uint32_t c = (s & 0xFF) * a / 255;
-            p = (a << 24) | (c << 16) | (c << 8) | c;
-        }
-        D2D1_BITMAP_PROPERTIES bp = D2D1::BitmapProperties(
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96.f, 96.f);
-        if (SUCCEEDED(g_rt->CreateBitmap(D2D1::SizeU(N, N), px.data(), N * 4, &bp, &g_noiseBmp)) && g_noiseBmp) {
-            D2D1_BITMAP_BRUSH_PROPERTIES nbp = D2D1::BitmapBrushProperties(
-                D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
-            g_rt->CreateBitmapBrush(g_noiseBmp, &nbp, nullptr, &g_noiseBrush);
-        }
-        if (!g_noiseBrush) SafeRelease(g_noiseBmp);
-    }
+    EnsureNoiseBrush();
     return g_backBrush != nullptr;
 }
 
@@ -2573,8 +4305,9 @@ static bool EnsureSurface(double scale) {
 static int VisibleRows() {
     const int n = (int)g_results.size();
     if (n == 0) return 0;
-    // Available height for rows: expanded card minus the bar, the footer and both paddings.
-    const double rowsArea = ExpandedH() - kBarH - kFooterH - 2 * kListPad;
+    // Available height for rows: expanded card minus the bar, the footer, the calculator card
+    // and both paddings.
+    const double rowsArea = ExpandedH() - kBarH - kFooterH - 2 * kListPad - HeroH();
     int cap = (int)std::floor(rowsArea / kRowH);
     if (cap < 1) cap = 1;
     return std::min(n, cap);
@@ -2587,7 +4320,7 @@ static double ListRowsHeight() {
 
 // Height (DIP) of the visible rows area: below the bar, above the footer, minus the padding.
 static double ListViewportH() {
-    return ExpandedH() - kBarH - kFooterH - 2 * kListPad;
+    return ExpandedH() - kBarH - kFooterH - 2 * kListPad - HeroH();
 }
 
 // Inverse of RowOffset(): given a vertical position `v` (DIP, in the same coordinates as
@@ -2719,10 +4452,24 @@ static void SelectDelta(int d) {
 }
 
 static void OnTextChanged() {
+    // The calculator is debounced: clear its state now so typing feels instant (app searches
+    // update immediately) and only re-evaluate shortly after the user stops typing. That way
+    // typing "pith" never flashes the value of "pi" on the way.
+    g_calc = Calc::Result();
+    g_calcDisplay.clear();
+    g_calcActive = false;
+    g_calcHistSel = -1;
+    g_histScroll = 0;
+    g_calcPending = true;
+    if (g_hwnd) {
+        KillTimer(g_hwnd, TIMER_CALC);
+        SetTimer(g_hwnd, TIMER_CALC, 200, nullptr);
+    }
     RunSearch();
     g_sel = 0;
     g_scrollTarget = 0;
-    UpdateTargets(false, /*followSelection=*/true);
+    g_copiedAt = -1e9;  // typing again clears the calculator "Copied" flash
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_COPY);
     ResetBlink();
     MarkDirty();
 }
@@ -2878,6 +4625,11 @@ static AppDetails ComputeDetails(const AppEntry& a) {
         d.target.clear();  // MSIX apps are not launched or elevated by path
     } else if (d.target.empty()) {
         d.target = PathFromAppId(a.id);
+    }
+    // Shell namespace targets (e.g. File Explorer -> "::{...}This PC") are not files: hide the
+    // path and the file-based actions instead of showing the raw GUID.
+    if (d.target.size() >= 2 && d.target[0] == L':' && d.target[1] == L':') {
+        d.target.clear();
     }
 
     std::wstring version, company, arch, sizeText, modified;
@@ -3056,10 +4808,119 @@ static void EnsureGlow() {
     MakeFadeBrush(g_pal.accent2, g_pal.light ? 0.26f : 0.30f, D2D1::Point2F(1, 1), g_glow2);
 }
 
-// Card: shadow, body (effect), top sheen, outer border and an inner edge that gives volume.
+// Cada ventana de acrylic mide exactamente lo mismo que su card (nada de márgenes), así que no
+// depende de recortar con SetWindowRgn (DWM lo ignora con el acrylic). Las esquinas redondeadas
+// las pone DWM en Windows 11 (DWMWCP_ROUND) y en Windows 10 una región como respaldo.
+static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
+    if (!wnd) return;
+    if (w < 4 || h < 4) {
+        if (IsWindowVisible(wnd)) ShowWindow(wnd, SW_HIDE);
+        return;
+    }
+    if (!g_liveWin11 && (g_liveRgnSize[idx][0] != w || g_liveRgnSize[idx][1] != h)) {
+        g_liveRgnSize[idx][0] = w;
+        g_liveRgnSize[idx][1] = h;
+        const int d = (int)std::lround(kRadius * (float)g_scale * 2.f);
+        HRGN rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d);
+        SetWindowRgn(wnd, rgn, TRUE);  // el sistema se queda con rgn
+    }
+    UINT flags = SWP_NOACTIVATE;
+    if (!IsWindowVisible(wnd)) flags |= SWP_SHOWWINDOW;
+    // insertAfter = g_hwnd  ->  queda justo DEBAJO de g_hwnd.
+    SetWindowPos(wnd, g_hwnd, x, y, w, h, flags);
+}
+
+// Llamar desde Present(): mantiene la ventana del acrylic alineada con g_hwnd.
+static void LiveSync() {
+    if (!g_liveWnd) return;
+
+    // Sin WS_EX_LAYERED no hay fade global. El acrylic aparece cuando la card ya es visible a
+    // ~40% y desaparece al empezar a cerrarse (la capa de arriba sí hace fade completo).
+    if (g_alpha < 0.4) {
+        if (IsWindowVisible(g_liveWnd)) ShowWindow(g_liveWnd, SW_HIDE);
+        if (g_livePanel && IsWindowVisible(g_livePanel)) ShowWindow(g_livePanel, SW_HIDE);
+        return;
+    }
+
+    const float s = (float)g_scale;
+    float cx = 0, cy = 0;
+    MainOrigin(cx, cy);
+    const int baseX = g_winX;
+    const int baseY = g_winY + (int)std::lround(g_offY);
+
+    LivePlaceWindow(g_liveWnd, 0, baseX + (int)std::lround(cx), baseY + (int)std::lround(cy),
+                    (int)std::lround(kWidth * s), (int)std::lround(g_curH * s));
+
+    if (g_livePanel) {
+        const float a = (float)std::clamp(g_detailPos, 0.0, 1.0);
+        if (a > 0.02f) {
+            const float ox = cx + (kWidth + kPanelGap + (1.f - a) * 14.f) * s;
+            LivePlaceWindow(g_livePanel, 1, baseX + (int)std::lround(ox), baseY + (int)std::lround(cy),
+                            (int)std::lround(kPanelW * s * a), (int)std::lround(DetailsPanelH() * s));
+        } else if (IsWindowVisible(g_livePanel)) {
+            ShowWindow(g_livePanel, SW_HIDE);
+        }
+    }
+}
+
+// Sombra que NO pinta dentro de la card (si no, taparía el acrylic de la ventana de abajo).
+static void DrawShadowRing(float x, float y, float w, float h, float alpha) {
+    if (!g_d2d || !g_rt) return;
+    const float s = (float)g_scale;
+    ID2D1RoundedRectangleGeometry* cardG = nullptr;
+    if (FAILED(g_d2d->CreateRoundedRectangleGeometry(
+            D2D1::RoundedRect(D2D1::RectF(x, y, x + w, y + h), kRadius * s, kRadius * s), &cardG)) ||
+        !cardG) {
+        return;
+    }
+    const int kLayers = 6;
+    for (int k = kLayers; k >= 1; --k) {
+        const float e = k * 2.f * s;
+        const float a = g_pal.shadowAlpha * alpha * (1.f - (float)(k - 1) / kLayers);
+        ID2D1RoundedRectangleGeometry* outerG = nullptr;
+        ID2D1PathGeometry* ring = nullptr;
+        ID2D1GeometrySink* sink = nullptr;
+        if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(
+                D2D1::RoundedRect(D2D1::RectF(x - e, y - e + 4 * s, x + w + e, y + h + e + 4 * s),
+                                  kRadius * s + e, kRadius * s + e),
+                &outerG)) && outerG &&
+            SUCCEEDED(g_d2d->CreatePathGeometry(&ring)) && ring && SUCCEEDED(ring->Open(&sink)) && sink) {
+            outerG->CombineWithGeometry(cardG, D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink);
+            sink->Close();
+            SetBrush(D2D1::ColorF(0, 0, 0, 1), a);
+            g_rt->FillGeometry(ring, g_brush);
+        }
+        SafeRelease(sink);
+        SafeRelease(ring);
+        SafeRelease(outerG);
+    }
+    cardG->Release();
+}
+
+// Card: shadow, body (live DWM acrylic or captured effect), sheen, border, inner edge.
+static void DrawGlow(const D2D1_ROUNDED_RECT& card, float x, float y, float w, float h, float alpha) {
+    EnsureGlow();
+    if (g_glow1) {
+        g_glow1->SetStartPoint(D2D1::Point2F(x, y));
+        g_glow1->SetEndPoint(D2D1::Point2F(x + w, y + h));
+        g_glow1->SetOpacity(alpha);
+        g_rt->FillRoundedRectangle(&card, g_glow1);
+    }
+    if (g_glow2) {
+        g_glow2->SetStartPoint(D2D1::Point2F(x + w, y + h));
+        g_glow2->SetEndPoint(D2D1::Point2F(x, y));
+        g_glow2->SetOpacity(alpha);
+        g_rt->FillRoundedRectangle(&card, g_glow2);
+    }
+}
+
 static void DrawCard(float x, float y, float w, float h, float alpha) {
     const float s = (float)g_scale;
-    {
+    const bool live = UseLive();
+
+    if (live) {
+        DrawShadowRing(x, y, w, h, alpha);
+    } else {
         D2D1_COLOR_F black = D2D1::ColorF(0, 0, 0, 1);
         static const int kShadowLayers = 6;
         for (int k = kShadowLayers; k >= 1; --k) {
@@ -3068,11 +4929,27 @@ static void DrawCard(float x, float y, float w, float h, float alpha) {
             FillRR(x - e, y - e + 4 * s, x + w + e, y + h + e + 4 * s, kRadius * s + e, black, a);
         }
     }
+
     const EffectParams ep = GetEffectParams();
     const bool solid = g_cfg.effect == BgEffect::Solid;
     D2D1_ROUNDED_RECT card = D2D1::RoundedRect(D2D1::RectF(x, y, x + w, y + h), kRadius * s, kRadius * s);
-    if (!solid && EnsureBackdropBrushes()) {
-        // Layers: blurred background (opaque) -> veil -> color tint -> gradient -> grain.
+
+    if (live) {
+        // El fondo y el tinte los pone DWM en g_liveWnd. Aquí solo va una capa casi invisible
+        // (alpha ~3/255) para que esta ventana siga recibiendo el mouse sobre la card.
+        FillRR(x, y, x + w, y + h, kRadius * s, D2D1::ColorF(0, 0, 0, 1), 0.012f);
+        if (ep.veil > 0.f) {
+            FillRR(x, y, x + w, y + h, kRadius * s, D2D1::ColorF(1.f, 1.f, 1.f, 1.f), ep.veil * alpha);
+        }
+        if (ep.glow) DrawGlow(card, x, y, w, h, alpha);
+        if (g_cfg.effect != BgEffect::Acrylic) {  // el acrylic de DWM ya trae su propio grano
+            EnsureNoiseBrush();
+            if (g_noiseBrush && ep.noiseMul > 0.f) {
+                g_noiseBrush->SetOpacity(std::min(1.f, alpha * ep.noiseMul));
+                g_rt->FillRoundedRectangle(&card, g_noiseBrush);
+            }
+        }
+    } else if (!solid && EnsureBackdropBrushes()) {
         g_backBrush->SetOpacity(alpha);
         g_rt->FillRoundedRectangle(&card, g_backBrush);
         if (ep.veil > 0.f) {
@@ -3081,27 +4958,12 @@ static void DrawCard(float x, float y, float w, float h, float alpha) {
         D2D1_COLOR_F tint = g_pal.bg;
         tint.a = EffectTintAlpha();
         FillRR(x, y, x + w, y + h, kRadius * s, tint, alpha);
-        if (ep.glow) {
-            EnsureGlow();
-            if (g_glow1) {
-                g_glow1->SetStartPoint(D2D1::Point2F(x, y));
-                g_glow1->SetEndPoint(D2D1::Point2F(x + w, y + h));
-                g_glow1->SetOpacity(alpha);
-                g_rt->FillRoundedRectangle(&card, g_glow1);
-            }
-            if (g_glow2) {
-                g_glow2->SetStartPoint(D2D1::Point2F(x + w, y + h));
-                g_glow2->SetEndPoint(D2D1::Point2F(x, y));
-                g_glow2->SetOpacity(alpha);
-                g_rt->FillRoundedRectangle(&card, g_glow2);
-            }
-        }
+        if (ep.glow) DrawGlow(card, x, y, w, h, alpha);
         if (g_noiseBrush && ep.noiseMul > 0.f) {
             g_noiseBrush->SetOpacity(std::min(1.f, alpha * ep.noiseMul));
             g_rt->FillRoundedRectangle(&card, g_noiseBrush);
         }
     } else {
-        // Solid (opaque), or no capture available (normal translucent color).
         D2D1_COLOR_F c = g_pal.bg;
         if (solid) c.a = 1.f;
         FillRR(x, y, x + w, y + h, kRadius * s, c, alpha);
@@ -3116,6 +4978,7 @@ static void DrawCard(float x, float y, float w, float h, float alpha) {
         g_rt->FillRoundedRectangle(&body, g_gradBrush);
     }
 
+    // El borde antialiased tapa el borde "dentado" que deja la región de DWM.
     SetBrush(g_pal.border, alpha);
     D2D1_ROUNDED_RECT outer = D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + h - 0.5f),
                                                 kRadius * s, kRadius * s);
@@ -3127,6 +4990,8 @@ static void DrawCard(float x, float y, float w, float h, float alpha) {
                                                 kRadius * s - 1.f, kRadius * s - 1.f);
     g_rt->DrawRoundedRectangle(&inner, g_brush, 1.f);
 }
+
+
 
 static float TextWidth(const wchar_t* txt, IDWriteTextFormat* fmt) {
     if (!fmt || !txt || !*txt) return 0.f;
@@ -3212,6 +5077,7 @@ static void DrawRefreshIcon(float cx, float cy, float r, double angle, const D2D
 }
 
 // Card footer: separator, reindex button on the left and shortcut hints on the right.
+static bool CalcHistoryVisible();  // defined further down
 static void DrawFooter(float cx, float footerTop, float cw, bool hasSel) {
     const float s = (float)g_scale;
     SetBrush(g_pal.separator);
@@ -3225,6 +5091,15 @@ static void DrawFooter(float cx, float footerTop, float cw, bool hasSel) {
     const double angle = g_indexing ? std::fmod(NowSec() * 6.0, 2 * kPi) : 0.6;
     DrawRefreshIcon(btn.left + 18 * s, yMid, 6.5f * s, angle, g_hoverReindex ? g_pal.text : g_pal.textDim);
     DrawHint(kTxtReindex, kReindexKeys, 2, btn.right - 6 * s, yMid);
+
+    // The calculation owns the footer while its history is on screen: it offers removing the
+    // highlighted entry or clearing the whole history (same shortcut as "remove from recents").
+    if (CalcHistoryVisible()) {
+        const wchar_t* dk[3] = {L"Ctrl", L"Shift", L"R"};
+        const float x = cx + cw - 20 * s;
+        DrawHint(g_calcHistSel >= 0 ? kTxtCalcDelete : kTxtCalcClear, dk, 3, x, yMid);
+        return;
+    }
     if (!hasSel) return;
 
     const wchar_t* dk[2] = {L"Ctrl", L"I"};
@@ -3348,6 +5223,298 @@ static int HitAction(int mx, int my) {
     return -1;
 }
 
+// Canonical form used ONLY inside the cards (never in the search field, which always shows exactly
+// what the user typed): typographic maths symbols instead of the raw ones, and no spaces, so every
+// entry reads the same no matter how it was written or pasted.
+static bool IsCalcSymbol(wchar_t c);  // defined below
+
+// Renders an expression for the cards: operator glyphs become math symbols, spaces around
+// operators are dropped, but spaces between words (e.g. "10 km to miles") are kept.
+static std::wstring CalcDisplayExpr(const std::wstring& in) {
+    auto isSpace = [](wchar_t c) {
+        return c == L' ' || c == L'\t' || c == L'\r' || c == L'\n' || c == 0x00A0 || c == 0x2009;
+    };
+    auto isWord = [](wchar_t c) {
+        if (IsCalcSymbol(c)) return false;
+        return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'z') ||
+               (c >= L'A' && c <= L'Z') || c >= 0x80;
+    };
+    std::wstring out;
+    out.reserve(in.size());
+    for (size_t idx = 0; idx < in.size(); ++idx) {
+        const wchar_t c = Calc::detail::NormalizeMathChar(in[idx]);
+        if (isSpace(c)) {
+            const wchar_t prev = out.empty() ? 0 : out.back();
+            wchar_t next = 0;
+            for (size_t k = idx + 1; k < in.size(); ++k) {
+                const wchar_t nc = Calc::detail::NormalizeMathChar(in[k]);
+                if (!isSpace(nc)) { next = nc; break; }
+            }
+            if (isWord(prev) && isWord(next) && (out.empty() || out.back() != L' ')) {
+                out.push_back(L' ');
+            }
+            continue;
+        }
+        switch (c) {
+            case L'*': out.push_back(L'\u00D7'); break;  // ×
+            case L'/': out.push_back(L'\u00F7'); break;  // ÷
+            case L'-': out.push_back(L'\u2212'); break;  // −
+            default: out.push_back(c);
+        }
+    }
+    return out;
+}
+
+// The operator glyphs drawn in their own (lighter) colour inside the cards.
+static bool IsCalcSymbol(wchar_t c) {
+    return c == L'\u00D7' || c == L'\u00F7' || c == L'\u2212' || c == L'+' || c == L'^' ||
+           c == L'%' || c == L'!';
+}
+
+// Draws an expression with the operator glyphs in a lighter colour. Runs are measured and placed
+// manually so the two colours butt together; drawing is clipped to `maxX`.
+static void DrawCalcExpr(const std::wstring& expr, IDWriteTextFormat* fmt, const D2D1_COLOR_F& c,
+                         float alpha, float symAlpha, float x, float y0, float y1, float maxX) {
+    if (!fmt || expr.empty()) return;
+    size_t i = 0;
+    while (i < expr.size() && x < maxX) {
+        const bool sym = IsCalcSymbol(expr[i]);
+        size_t j = i;
+        while (j < expr.size() && IsCalcSymbol(expr[j]) == sym) ++j;
+        const std::wstring run = expr.substr(i, j - i);
+        const float w = TextWidth(run.c_str(), fmt);
+        DrawLabel(run, fmt, x, y0, std::min(x + w + 2, maxX), y1, c, sym ? symAlpha : alpha);
+        x += w;
+        i = j;
+    }
+}
+
+// Calculator result card, drawn in the space reserved above the list. It shows the typed
+// expression, the result (or a short error) and, on the right, how to copy it. After a copy it
+// briefly flashes "Copied".
+static void DrawCalcHero(float cx, float top, float cw) {
+    const float s = (float)g_scale;
+    const float pad = 14.f * s;
+    const float x0 = cx + 8 * s;
+    const float x1 = cx + cw - 8 * s;
+    const float y0 = top + kListPad * s;
+    const float y1 = y0 + (kHeroH - 2 * kListPad) * s;
+
+    FillRR(x0, y0, x1, y1, kRowRadius * s, g_pal.selection);
+    SetBrush(g_pal.border);
+    D2D1_ROUNDED_RECT b = D2D1::RoundedRect(
+        D2D1::RectF(x0 + 0.5f, y0 + 0.5f, x1 - 0.5f, y1 - 0.5f), kRowRadius * s, kRowRadius * s);
+    g_rt->DrawRoundedRectangle(&b, g_brush, 1.f);
+
+    const float midY = (y0 + y1) / 2;
+    const float textW = (x1 - 150 * s) - (x0 + pad);
+
+    D2D1_RECT_F clip = D2D1::RectF(x0, y0, x1 - 132 * s, y1);
+    g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
+
+    // Small expression on top, in the canonical card format with lighter operator glyphs.
+    DrawCalcExpr(CalcDisplayExpr(g_text), g_fmtTitle, g_pal.textDim, 0.9f, 0.5f, x0 + pad,
+                 y0 + 6 * s, midY + 2 * s, x0 + pad + textW);
+
+    if (CalcOk()) {
+        std::wstring res = L"= " + g_calcDisplay;
+        SetBrush(g_pal.text);
+        D2D1_RECT_F rr = D2D1::RectF(x0 + pad, midY - 2 * s, x0 + pad + textW, y1 - 4 * s);
+        g_rt->DrawText(res.c_str(), (UINT32)res.size(), g_fmtInput, &rr, g_brush);
+    } else {
+        SetBrush(g_pal.textDim);
+        D2D1_RECT_F rr = D2D1::RectF(x0 + pad, midY - 2 * s, x0 + pad + textW, y1 - 4 * s);
+        g_rt->DrawText(g_calc.error.c_str(), (UINT32)g_calc.error.size(), g_fmtTitle, &rr, g_brush);
+    }
+    g_rt->PopAxisAlignedClip();
+
+    // The action hint belongs to whatever is selected: the result card only shows it while the
+    // selection is on the result itself (not while a history row is selected).
+    if (CalcOk() && g_calcHistSel < 0) {
+        const bool copied = (NowSec() - g_copiedAt) < 1.4;
+        if (copied) {
+            SetBrush(g_pal.accent);
+            D2D1_RECT_F cr = D2D1::RectF(x1 - 120 * s, y0, x1 - pad, y1);
+            g_rt->DrawText(kTxtCalcCopied, (UINT32)wcslen(kTxtCalcCopied), g_fmtHint, &cr, g_brush);
+        } else {
+            const wchar_t* const keys[1] = {kTxtEnterGlyph};
+            DrawHint(kTxtCalcCopy, keys, 1, x1 - pad, midY);
+        }
+    }
+}
+
+// Compact, muted rows below the result card with recent calculations. They are deliberately
+// plainer than the result card (no border, dimmer text) so the two are not confused. Clicking a
+// row (or picking it with the arrows and Enter) inserts its result at the caret.
+static void ReplaceSelection(const std::wstring& s);  // defined further down
+
+static void DrawCalcHistory(float cx, float listTop, float cw) {
+    if (g_calcHist.empty()) return;
+    const float s = (float)g_scale;
+    const float origin = listTop + (kListPad + (float)HeroH()) * s;
+    const float cy = listTop - kBarH * s;
+    const float footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
+    const float listBottom = std::min(cy + (float)ExpandedH() * s, footerTop - kListPad * s);
+
+    const float rowX0 = cx + 8 * s;
+    const float rowX1 = cx + cw - 8 * s;
+    const float headerH = kSectionH * s;
+    const float rowH = kHistRowH * s;
+    const float firstY = origin + headerH - (float)g_histScroll * s;
+
+    // Clip the whole history to the area below the result card, so rows (and the header) slide
+    // under it while scrolling instead of drawing over it.
+    D2D1_RECT_F hclip = D2D1::RectF(cx, origin, cx + cw, listBottom);
+    g_rt->PushAxisAlignedClip(&hclip, D2D1_ANTIALIAS_MODE_ALIASED);
+
+    // Section label, scrolls with the rows (like the "Recent" / "Suggestions" headers).
+    SetBrush(g_pal.textDim);
+    const float headerY = origin - (float)g_histScroll * s;
+    D2D1_RECT_F hr = D2D1::RectF(rowX0 + 10 * s, headerY, rowX1, headerY + headerH);
+    g_rt->DrawText(kTxtCalcHistory, (UINT32)wcslen(kTxtCalcHistory), g_fmtSection, &hr, g_brush);
+
+    const int n = (int)g_calcHist.size();
+    for (int i = 0; i < n; ++i) {
+        const float y = firstY + (float)i * rowH;
+        if (y + rowH <= origin || y >= listBottom) continue;
+
+        const bool sel = (i == g_calcHistSel);
+        if (sel) {
+            FillRR(rowX0, y + 1, rowX1, y + rowH - 1, 8 * s, g_pal.text, 0.07f);
+        }
+
+        // The selected row shows its own action hints ("Edit [Tab]" and "Add to operation [Enter]");
+        // the others leave that space to the result text.
+        const wchar_t* const addKeys[1] = {kTxtEnterGlyph};
+        const wchar_t* const editKeys[1] = {L"Tab"};
+        const float hintW = sel ? HintWidth(kTxtCalcAdd, addKeys, 1) + 14 * s +
+                                      HintWidth(kTxtCalcEdit, editKeys, 1) + 10 * s
+                                : 0.f;
+        const float resRight = rowX1 - 14 * s - hintW;
+
+        // The result takes the width it needs (up to ~62% of the row) so longer values such as
+        // "1,000 MB  (binario 1,024 MB)" stay readable; the expression gets what is left.
+        const std::wstring res = L"= " + g_calcHist[i].resFmt;
+        const float maxResW = (rowX1 - rowX0) * 0.62f;
+        const float resW = std::min(TextWidth(res.c_str(), g_fmtHint) + 6 * s, maxResW);
+        const float resLeft = resRight - resW;
+
+        const float tx = rowX0 + 16 * s;
+        const float tw = std::max(0.f, (resLeft - 10 * s) - tx);
+        DrawCalcExpr(CalcDisplayExpr(g_calcHist[i].expr), g_fmtTitle, g_pal.text, 0.6f, 0.33f, tx, y,
+                     y + rowH, tx + tw);
+
+        SetBrush(g_pal.text, 0.5f);
+        D2D1_RECT_F rr = D2D1::RectF(resLeft, y, resRight, y + rowH);
+        g_rt->DrawText(res.c_str(), (UINT32)res.size(), g_fmtHint, &rr, g_brush);
+
+        if (sel) {
+            float hx = DrawHint(kTxtCalcAdd, addKeys, 1, rowX1 - 8 * s, y + rowH / 2);
+            DrawHint(kTxtCalcEdit, editKeys, 1, hx - 14 * s, y + rowH / 2);
+        }
+    }
+    g_rt->PopAxisAlignedClip();
+}
+
+// Height (DIP) available for the history rows (shared with the app list viewport).
+static double CalcHistViewportH() {
+    return ListViewportH();
+}
+
+static double CalcHistContentH() {
+    return kSectionH + (double)g_calcHist.size() * kHistRowH;
+}
+
+static void ClampHistScroll() {
+    const double maxScroll = std::max(0.0, CalcHistContentH() - CalcHistViewportH());
+    g_histScroll = std::clamp(g_histScroll, 0.0, maxScroll);
+}
+
+static void EnsureHistSelVisible() {
+    if (g_calcHistSel < 0) return;
+    const double top = kSectionH + g_calcHistSel * (double)kHistRowH;
+    const double bot = top + kHistRowH;
+    const double view = CalcHistViewportH();
+    if (top < g_histScroll) {
+        g_histScroll = top;
+    } else if (bot > g_histScroll + view) {
+        g_histScroll = bot - view;
+    }
+    ClampHistScroll();
+}
+
+// Index of the history row under a client point, or -1.
+static int HitCalcHistory(int mx, int my) {
+    if (!g_calcActive || g_calcHist.empty()) return -1;
+    const float s = (float)g_scale;
+    float cx = 0, cy = 0;
+    MainOrigin(cx, cy);
+    const float cw = kWidth * s;
+    if (mx < cx || mx > cx + cw) return -1;
+    const float origin = cy + (kBarH + kListPad + (float)HeroH()) * s;
+    const float footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
+    const float listBottom = std::min(cy + (float)ExpandedH() * s, footerTop - kListPad * s);
+    if (my < origin || my >= listBottom) return -1;
+    const float firstY = origin + kSectionH * s - (float)g_histScroll * s;
+    const int idx = (int)std::floor((my - firstY) / (kHistRowH * s));
+    if (idx < 0 || idx >= (int)g_calcHist.size()) return -1;
+    return idx;
+}
+
+static void InsertCalcHistory(int i) {
+    if (i < 0 || i >= (int)g_calcHist.size()) return;
+    const std::wstring& v = g_calcHist[i].insVal.empty() ? g_calcHist[i].resFmt
+                                                         : g_calcHist[i].insVal;
+    ReplaceSelection(v);
+}
+
+// Moves a history entry's original expression into the search field (replacing whatever is there)
+// so it can be edited. Bound to Tab while a history row is selected.
+static void EditCalcHistoryOp(int i) {
+    if (i < 0 || i >= (int)g_calcHist.size()) return;
+    const std::wstring e = g_calcHist[i].expr;
+    if (e.empty() || e.size() > 200) return;
+    g_text = e;
+    g_caret = g_anchor = (int)g_text.size();
+    OnTextChanged();
+}
+
+// The history is drawn (and interactive) whenever the text is a recognised maths expression and
+// no app results are shown: it stays visible while the user is still composing an expression
+// (a partial/errored one), so a previous result can be dropped into the current operation.
+static bool CalcHistoryVisible() {
+    return g_calcActive && g_results.empty() && !g_calcHist.empty();
+}
+
+// Removes one history entry (its position in the list is its index).
+static void DeleteCalcHistory(int i) {
+    if (i < 0 || i >= (int)g_calcHist.size()) return;
+    g_calcHist.erase(g_calcHist.begin() + i);
+    if (g_calcHistSel > i) {
+        --g_calcHistSel;
+    } else if (g_calcHistSel == i) {
+        g_calcHistSel = (i < (int)g_calcHist.size()) ? i : (int)g_calcHist.size() - 1;
+    }
+    if (g_calcHist.empty()) {
+        g_calcHistSel = -1;
+        g_histScroll = 0;
+    } else {
+        ClampHistScroll();
+        EnsureHistSelVisible();
+    }
+    SaveCalcHistory();
+    MarkDirty();
+}
+
+static void ClearCalcHistory() {
+    if (g_calcHist.empty()) return;
+    g_calcHist.clear();
+    g_calcHistSel = -1;
+    g_histScroll = 0;
+    SaveCalcHistory();
+    MarkDirty();
+}
+
 static void Render() {
     if (!g_dib || !g_dw || !EnsureTarget()) {
         return;
@@ -3441,6 +5608,17 @@ static void Render() {
                 SetBrush(g_pal.text);
                 g_rt->DrawTextLayout(D2D1::Point2F(ox, cy), tl, g_brush);
 
+                // Inline calculator result, faintly after the typed text.
+                if (GhostShown()) {
+                    float endX = 0, endY = 0;
+                    DWRITE_HIT_TEST_METRICS hmEnd = {};
+                    tl->HitTestTextPosition((UINT32)g_text.size(), FALSE, &endX, &endY, &hmEnd);
+                    std::wstring ghost = L"   = " + g_calcDisplay;
+                    SetBrush(g_pal.textDim, 0.75f);
+                    D2D1_RECT_F gr = D2D1::RectF(ox + endX, cy, fieldX + fieldW, cy + kBarH * s);
+                    g_rt->DrawText(ghost.c_str(), (UINT32)ghost.size(), g_fmtInput, &gr, g_brush);
+                }
+
                 if (g_caretOn && g_vis != Vis::Hiding) {
                     SetBrush(g_pal.text);
                     D2D1_RECT_F cr =
@@ -3463,6 +5641,11 @@ static void Render() {
         g_rt->FillRectangle(&sep, g_brush);
     }
 
+    // Calculator result card, in the space reserved above the list.
+    if (ch > kBarH * s + 2 && HeroShown()) {
+        DrawCalcHero(cx, listTop, cw);
+    }
+
     // The footer takes the end of the expanded height; the list ends just above it.
     const float footerTop = cy + (float)(ExpandedH() - kFooterH) * s;
     const float listBottom = std::min(cy + ch, footerTop - kListPad * s);
@@ -3470,7 +5653,7 @@ static void Render() {
     g_rt->PushAxisAlignedClip(&listClip, D2D1_ANTIALIAS_MODE_ALIASED);
 
     if (rows > 0) {
-        const float rowsOrigin = listTop + kListPad * s;
+        const float rowsOrigin = listTop + (kListPad + (float)HeroH()) * s;
         const float rowH = kRowH * s;
         const float rowX0 = cx + 8 * s;
         const float rowX1 = cx + cw - 8 * s;
@@ -3532,11 +5715,13 @@ static void Render() {
                 g_rt->DrawText(typeTxt, (UINT32)wcslen(typeTxt), g_fmtHint, &tr, g_brush);
             }
         }
+    } else if (g_calcActive) {
+        DrawCalcHistory(cx, listTop, cw);
     } else if (ch > kBarH * s + 8) {
         const wchar_t* msg = nullptr;
-        if (!g_tokens.empty()) {
+        if (!g_tokens.empty() && !CalcShown()) {
             msg = kTxtNoResults;
-        } else if (g_apps.empty() && !g_indexedOnce) {
+        } else if (g_apps.empty() && !g_indexedOnce && !CalcShown()) {
             msg = kTxtIndexing;
         }
         if (msg) {
@@ -3581,6 +5766,11 @@ static void Present() {
     bf.SourceConstantAlpha = (BYTE)std::clamp((int)std::lround(g_alpha * 255.0), 0, 255);
     bf.AlphaFormat = AC_SRC_ALPHA;
     UpdateLayeredWindow(g_hwnd, nullptr, &ptDst, &size, g_memDC, &ptSrc, 0, &bf, ULW_ALPHA);
+    if (UseLive()) {
+        LiveSync();
+    } else {
+        LiveHide();
+    }
 }
 
 // ===== Show / hide / per-frame animation =====
@@ -3646,7 +5836,15 @@ static void FinishHide() {
         g_frameTimerOn = false;
     }
     KillTimer(g_hwnd, TIMER_BLINK);
+    KillTimer(g_hwnd, TIMER_GLASS);
+    KillTimer(g_hwnd, TIMER_COPY);
+    KillTimer(g_hwnd, TIMER_CALC);
+    g_calcPending = false;
+    KillTimer(g_hwnd, TIMER_CALC);
+    KillTimer(g_hwnd, TIMER_CALC);
+    KillTimer(g_hwnd, TIMER_CALC);
     ShowWindow(g_hwnd, SW_HIDE);
+    LiveHide();
     g_vis = Vis::Hidden;
     g_lastHide = NowSec();
     ReleaseBackdrop();
@@ -3679,6 +5877,8 @@ static void ShowLauncher() {
         return;
     }
     LoadPalette();
+    // Con acrylic en vivo en Windows 11 las esquinas las redondea DWM (radio fijo ~8 px).
+    kRadius = (UseLive() && g_liveWin11) ? 8.f : 20.f;
     if (!EnsureTarget()) {
         return;
     }
@@ -3688,6 +5888,15 @@ static void ShowLauncher() {
     g_caret = g_anchor = 0;
     g_inputScroll = 0;
     g_caretOn = true;
+    g_copiedAt = -1e9;
+    g_calc = Calc::Result();
+    g_calcDisplay.clear();
+    g_calcActive = false;
+    g_calcPending = false;
+    g_calcHistSel = -1;
+    g_histScroll = 0;
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_COPY);
+    if (g_hwnd) KillTimer(g_hwnd, TIMER_CALC);
     g_lastMouse = {-1, -1};
     g_sel = 0;
     g_scrollTarget = 0;
@@ -3721,8 +5930,14 @@ static void ShowLauncher() {
     if (g_winX + g_bmpW > mi.rcMonitor.right) g_winX = mi.rcMonitor.right - g_bmpW;
     if (g_winX < mi.rcMonitor.left) g_winX = mi.rcMonitor.left;
 
+    ApplyCaptureAffinity();
     // Acrylic: capture the desktop now, with the window still hidden.
     PrepareBackdrop();
+    if (UseLive()) {
+        g_liveRgnValid = false;
+        g_liveAlpha = -1;
+        LiveApplyAccent();
+    }
 
     g_vis = Vis::Showing;
     g_visStart = NowSec();
@@ -3735,8 +5950,10 @@ static void ShowLauncher() {
     Present();
     ShowWindow(g_hwnd, SW_SHOW);
     ForceForeground(g_hwnd);
+    Sound::OnOpen();
 
     SetTimer(g_hwnd, TIMER_BLINK, 530, nullptr);
+    if (UseGlassLive()) SetTimer(g_hwnd, TIMER_GLASS, kGlassRefreshMs, nullptr);
     StartFrameTimer();
 
     if (!g_indexing && ShouldReindexOnOpen()) {
@@ -3839,6 +6056,13 @@ static void LaunchApp(int appIdx) {
         if (file.empty()) {
             file = PathFromAppId(a.id);
         }
+    }
+
+    // Some AppsFolder entries resolve to a shell namespace GUID rather than a file (File Explorer's
+    // target is "::{52205FD8-...}", the "This PC" folder), which cannot be started as a file. Drop
+    // it so the AUMID route below is used instead.
+    if (file.size() >= 2 && file[0] == L':' && file[1] == L':') {
+        file.clear();
     }
 
     if (!file.empty()) {
@@ -3975,6 +6199,7 @@ static void SetDetailsOpen(bool open) {
     }
     g_detailsOpen = open;
     g_hoverAction = -1;
+    Sound::OnPanel(open);
     UpdateTargets(false, /*followSelection=*/false);
     MarkDirty();
 }
@@ -4051,7 +6276,10 @@ static void PasteClipboard() {
     for (auto& c : s) {
         if (c == L'\r' || c == L'\n' || c == L'\t') c = L' ';
     }
-    if (!s.empty()) ReplaceSelection(s);
+    if (!s.empty()) {
+        ReplaceSelection(s);
+        Sound::OnKey();
+    }
 }
 
 static bool HandleKeyDown(WPARAM vk) {
@@ -4078,6 +6306,16 @@ static bool HandleKeyDown(WPARAM vk) {
         return true;
     }
     if (ctrl && shift && vk == 'R') {
+        // With the calculation history on screen this removes an entry (the highlighted one) or,
+        // when nothing is highlighted, clears the whole history. Otherwise it forgets the app.
+        if (CalcHistoryVisible()) {
+            if (g_calcHistSel >= 0) {
+                DeleteCalcHistory(g_calcHistSel);
+            } else {
+                ClearCalcHistory();
+            }
+            return true;
+        }
         RunActionOnSelection(ACT_FORGET);
         return true;
     }
@@ -4095,15 +6333,66 @@ static bool HandleKeyDown(WPARAM vk) {
             }
             return true;
         case VK_RETURN:
+            // If the debounced calculation has not run yet, run it now so Enter is immediate.
+            if (g_calcPending) {
+                if (g_hwnd) KillTimer(g_hwnd, TIMER_CALC);
+                g_calcPending = false;
+                UpdateCalc();
+                RunSearch();
+            }
+            // A highlighted history row inserts its result into the expression. This works for any
+            // recognised maths text, valid or still being composed (e.g. "2+2+").
+            if (CalcHistoryVisible() && g_calcHistSel >= 0 && g_calcHistSel < (int)g_calcHist.size()) {
+                InsertCalcHistory(g_calcHistSel);
+                return true;
+            }
+            // A calculation owns Enter while there is no app result to open: copy the result and
+            // keep the bar open so it can be refined or opened again.
+            if (CalcOk() && g_results.empty()) {
+                AddCalcHistory(g_text, g_calcDisplay, g_calc.insertable);
+                SetCalcAns(g_calc.value);
+                CopyTextToClipboard(g_calcDisplay);
+                g_copiedAt = NowSec();
+                g_histScroll = 0;
+                g_calcHistSel = -1;
+                SetTimer(g_hwnd, TIMER_COPY, 1400, nullptr);
+                MarkDirty();
+                return true;
+            }
             LaunchSelected();
             return true;
         case VK_DOWN:
+            if (CalcHistoryVisible()) {
+                if (g_calcHistSel < (int)g_calcHist.size() - 1) {
+                    ++g_calcHistSel;
+                    EnsureHistSelVisible();
+                    MarkDirty();
+                }
+                return true;
+            }
             SelectDelta(1);
             return true;
         case VK_UP:
+            if (CalcHistoryVisible() && g_calcHistSel >= 0) {
+                --g_calcHistSel;
+                if (g_calcHistSel < 0) {
+                    g_histScroll = 0;
+                } else {
+                    EnsureHistSelVisible();
+                }
+                MarkDirty();
+                return true;
+            }
             SelectDelta(-1);
             return true;
         case VK_TAB:
+            // With a history row selected, Tab pulls its original expression into the field so it
+            // can be edited (replacing whatever was typed). Otherwise it cycles the selection.
+            if (CalcHistoryVisible() && g_calcHistSel >= 0 &&
+                g_calcHistSel < (int)g_calcHist.size()) {
+                EditCalcHistoryOp(g_calcHistSel);
+                return true;
+            }
             SelectDelta(shift ? -1 : 1);
             return true;
         case VK_NEXT:
@@ -4135,17 +6424,21 @@ static bool HandleKeyDown(WPARAM vk) {
         case VK_BACK:
             if (hasSel) {
                 ReplaceSelection(L"");
+                Sound::OnErase();
             } else if (g_caret > 0) {
                 g_anchor = ctrl ? PrevWord(g_caret) : g_caret - 1;
                 ReplaceSelection(L"");
+                Sound::OnErase();
             }
             return true;
         case VK_DELETE:
             if (hasSel) {
                 ReplaceSelection(L"");
+                Sound::OnErase();
             } else if (g_caret < len) {
                 g_anchor = ctrl ? NextWord(g_caret) : g_caret + 1;
                 ReplaceSelection(L"");
+                Sound::OnErase();
             }
             return true;
         case 'A':
@@ -4189,7 +6482,7 @@ static int HitRow(int mx, int my) {
     if (rows <= 0) return -1;
     if (mx < cx || mx > cx + cw) return -1;
 
-    const float rowsOrigin = cy + (kBarH + kListPad) * s;
+    const float rowsOrigin = cy + (kBarH + kListPad + (float)HeroH()) * s;
     // The hit area is limited to what is really visible (rows area above the footer).
     const double hitH = std::min(ListRowsHeight(), ListViewportH());
     if (my < rowsOrigin || my >= rowsOrigin + (float)hitH * s) return -1;
@@ -4222,7 +6515,8 @@ static volatile LONG g_hotkeyWarnUp = 0;
 static DWORD WINAPI HotkeyWarningThread(LPVOID) {
     MessageBoxW(nullptr,
                 L"Spotlight Launcher could not register the keyboard shortcut because another "
-                L"application is already using it (for example PowerToys Run with Alt+Space).\n\n"
+                L"application is already using it (for example, Alt + Space is also the system "
+                L"shortcut for a window's menu).\n\n"
                 L"Change the shortcut in the mod settings or free that shortcut in the other "
                 L"application.",
                 L"Spotlight Launcher", MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
@@ -4260,6 +6554,23 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         case WM_TIMER:
             if (wp == TIMER_FRAME) {
                 OnFrame();
+            } else if (wp == TIMER_COPY) {
+                KillTimer(g_hwnd, TIMER_COPY);
+                MarkDirty();  // redraw without the "Copied" flash
+            } else if (wp == TIMER_CALC) {
+                KillTimer(g_hwnd, TIMER_CALC);
+                g_calcPending = false;
+                g_calcHistSel = -1;
+                g_histScroll = 0;
+                UpdateCalc();
+                RunSearch();
+                MarkDirty();
+            } else if (wp == TIMER_GLASS) {
+                if (g_vis == Vis::Hidden || !UseGlassLive()) {
+                    KillTimer(g_hwnd, TIMER_GLASS);
+                } else if (g_vis != Vis::Hiding) {
+                    RefreshGlassBackdrop();
+                }
             } else if (wp == TIMER_BLINK) {
                 if (g_vis == Vis::Shown && GetForegroundWindow() != g_hwnd &&
                     NowSec() - g_shownAt > 0.5) {
@@ -4294,6 +6605,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             if (c == L' ' && CtrlDown()) return 0;  // Ctrl+Space (panel shortcut) does not type
             if (c >= 32 && c != 127) {
                 ReplaceSelection(std::wstring(1, c));
+                Sound::OnKey(c);
             }
             return 0;
         }
@@ -4313,13 +6625,21 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 bool first = g_lastMouse.x == -1 && g_lastMouse.y == -1;
                 g_lastMouse = p;
                 if (!first) {
-                    int row = HitRow(p.x, p.y);
-                    if (row >= 0 && row != g_sel) {
-                        // Hover selects, and the view scrolls to keep the selected row
-                        // visible with one row of breathing room.
-                        g_sel = row;
-                        UpdateTargets(false, /*followSelection=*/true);
-                        MarkDirty();
+                    if (CalcHistoryVisible()) {
+                        const int h = HitCalcHistory(p.x, p.y);
+                        if (h != g_calcHistSel) {
+                            g_calcHistSel = h;
+                            MarkDirty();
+                        }
+                    } else {
+                        int row = HitRow(p.x, p.y);
+                        if (row >= 0 && row != g_sel) {
+                            // Hover selects, and the view scrolls to keep the selected row
+                            // visible with one row of breathing room.
+                            g_sel = row;
+                            UpdateTargets(false, /*followSelection=*/true);
+                            MarkDirty();
+                        }
                     }
                 }
             }
@@ -4338,6 +6658,13 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             // selection stays where it is (or follows the mouse hover, which is handled in
             // WM_MOUSEMOVE).
             const int delta = GET_WHEEL_DELTA_WPARAM(wp);
+            if (CalcHistoryVisible()) {
+                const double step = (delta > 0 ? -3.0 : 3.0) * (double)kHistRowH;
+                g_histScroll = std::max(0.0, g_histScroll + step);
+                ClampHistScroll();
+                MarkDirty();
+                return 0;
+            }
             const int rows = VisibleRows();
             const int n = (int)g_results.size();
             if (rows > 0 && n > 0) {
@@ -4358,6 +6685,13 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
             int act = HitAction(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             if (act >= 0) {
                 RunActionOnSelection(act);
+                return 0;
+            }
+            if (CalcHistoryVisible()) {
+                const int h = HitCalcHistory(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+                if (h >= 0) {
+                    InsertCalcHistory(h);
+                }
                 return 0;
             }
             int row = HitRow(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
@@ -4414,6 +6748,7 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         case WM_APP_SETTINGS: {
             const bool oldHideUtility = g_cfg.hideUtility;
             LoadSettings();
+            Sound::ApplyVolume();
             if (g_cfg.hideUtility != oldHideUtility) {
                 g_menuDirty = true;  // the index must be rebuilt to apply this
             }
@@ -4444,7 +6779,11 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     LoadSettings();
+    LoadCalcHistory();
+    LoadCalcAns();
     LoadPalette();
+    Sound::Init();
+    Sound::ApplyVolume();
 
     HINSTANCE hInst = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc = {};
@@ -4461,6 +6800,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     if (!g_hwnd) {
         return 1;
     }
+    LiveCreate(hInst);
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), nullptr,
                       (void**)&g_d2d);
@@ -4485,6 +6825,8 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
 
     StopWatcher();
     UnregisterHotKey(g_hwnd, HOTKEY_ID);
+    Sound::Shutdown();
+    LiveDestroy();
     DestroyWindow(g_hwnd);
     g_hwnd = nullptr;
     ReleaseTarget();
