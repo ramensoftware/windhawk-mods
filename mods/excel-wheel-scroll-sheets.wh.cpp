@@ -20,10 +20,22 @@
 /*
 # Excel Wheel Sheet Navigation
 
+This mod brings WPS-style mouse wheel navigation to Excel, making it easier and faster to browse sheet tabs and switch between worksheets in workbooks with many sheets.
+
+## Features
+
+1. **Tilt the wheel to switch worksheets**
+
+   With a mouse that supports left/right wheel tilt, such as the Logitech G502, tilt the wheel over the worksheet area to switch to the previous or next worksheet.
+
+2. **Scroll the wheel to browse sheet tabs**
+
+   Hover over the sheet tab bar at the bottom of Excel and scroll the wheel up or down to reveal tabs that are out of view. This scrolls the tab bar without changing the active worksheet—especially useful for workbooks with many sheets.
+
+## Compatibility and behavior
+
 For 64-bit desktop Excel on Windows:
 
-- Vertical wheel over the bottom sheet tabs scrolls the tab strip without changing the active sheet.
-- Horizontal wheel over the worksheet or sheet tabs activates the adjacent visible sheet.
 - The tab strip uses Excel's native navigation arrows and animation. If the arrows cannot be used, it falls back to `ScrollWorkbookTabs`.
 - Repeated same-direction horizontal wheel messages are grouped with a 50 ms quiet period by default; the first switch is immediate.
 - Hidden sheets are skipped. Modified wheel input and ordinary vertical worksheet scrolling keep Excel's behavior.
