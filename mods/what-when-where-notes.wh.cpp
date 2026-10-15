@@ -2,11 +2,11 @@
 // @id              what-when-where-notes
 // @name            WHAT WHEN WHERE NOTES MOD
 // @description     Multi-row notes with a centered title and editable note lines.
-// @version         1.3.1
+// @version         1.3.2
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -lshell32 -lcomctl32
+// @compilerOptions -lgdi32 -lshell32 -lcomctl32 -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -77,6 +77,16 @@ Open **Settings** to customize the initial position, always-on-top mode, title, 
 - Runs as a Windhawk **tool mod**, using a dedicated `windhawk.exe` helper process.
 - The overlay is implemented with the Windows API and GDI.
 - Source code and license: see the project's GitHub repository.
+
+## Project background and relation to Easy Notes
+
+This mod is an independent Windows/Windhawk implementation inspired by the
+original ToDoLite / WHAT WHEN WHERE Rainmeter project by the same author:
+https://forum.rainmeter.net/viewtopic.php?t=42543#p215957
+
+Unlike free-form desktop sticky notes, this mod displays a structured three-field
+task list (WHAT / WHEN / WHERE) with distinct Open / In Progress / Completed
+states. The current version is intentionally focused on that workflow.
 
 ## Author
 
@@ -177,6 +187,7 @@ Open **Settings** to customize the initial position, always-on-top mode, title, 
 #include <windowsx.h>
 #include <shellapi.h>
 #include <commctrl.h>
+#include <sddl.h>
 
 #include <algorithm>
 #include <string>
@@ -254,6 +265,9 @@ struct Settings {
 
 Settings g_settings;
 
+// Runtime data belongs to a Windows account, not the machine-wide mod store.
+std::wstring g_userPrefix;
+
 // Track the last configured coordinates independently from the saved drag
 // position so unrelated settings changes do not reposition the overlay.
 int g_configuredX = 60;
@@ -299,15 +313,16 @@ POINT g_dragStartMouse = {};
 POINT g_dragStartWindow = {};
 
 HANDLE g_overlayThread = nullptr;
-HANDLE g_toolModProcessMutex = nullptr;
-
-bool g_isToolModProcessLauncher = false;
+HANDLE g_overlayThreadReady = nullptr;
+DWORD g_overlayThreadId = 0;
 
 bool g_hoverAddButton = false;
 bool g_hoverRemoveButton = false;
 
 void ApplyLayoutAndRedraw(HWND hwnd);
 std::wstring MakeRowKey(int rowIndex, const wchar_t* suffix);
+void SetUserIntValue(const wchar_t* keyName, int value);
+int GetUserIntValue(const wchar_t* keyName, int defaultValue);
 
 int ScaledByNoteScale(int value);
 BOOL IsPointInRect(const RECT& rect, POINT pt);
@@ -345,8 +360,7 @@ void EnsureRowState() {
 }
 
 void SaveRowStatus() {
-    Wh_SetIntValue(
-        L"rowStatusCount",
+    SetUserIntValue(L"rowStatusCount",
         static_cast<int>(g_rowStatus.size()));
 
     for (size_t i = 0; i < g_rowStatus.size(); ++i) {
@@ -359,7 +373,7 @@ void SaveRowStatus() {
 
 void LoadRowStatus() {
     int count = std::clamp(
-        Wh_GetIntValue(L"rowStatusCount", 1),
+        GetUserIntValue(L"rowStatusCount", 1),
         1,
         MAX_ROWS);
 
@@ -393,6 +407,51 @@ bool HitTestStatusCircle(
     return IsPointInRect(
         g_rowStatusRect[rowIndex],
         point);
+}
+
+// A failed SID lookup must never fall back to shared machine-wide storage.
+bool InitUserPrefix() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"OpenProcessToken failed: %u", GetLastError());
+        return false;
+    }
+
+    alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE]{};
+    DWORD bytesNeeded = 0;
+    PWSTR sidText = nullptr;
+    bool result = GetTokenInformation(token, TokenUser, buffer, sizeof(buffer),
+                                      &bytesNeeded) != FALSE;
+    if (result) {
+        auto* tokenUser = reinterpret_cast<TOKEN_USER*>(buffer);
+        result = ConvertSidToStringSidW(tokenUser->User.Sid, &sidText) != FALSE;
+    }
+    if (result && sidText) {
+        g_userPrefix.assign(sidText);
+        g_userPrefix.append(L"_");
+        LocalFree(sidText);
+    }
+    CloseHandle(token);
+
+    if (g_userPrefix.empty()) {
+        Wh_Log(L"Unable to resolve user SID; refusing shared storage");
+        return false;
+    }
+    return true;
+}
+
+std::wstring MakeUserKey(const wchar_t* keyName) {
+    return g_userPrefix + keyName;
+}
+
+void SetUserIntValue(const wchar_t* keyName, int value) {
+    const auto key = MakeUserKey(keyName);
+    Wh_SetIntValue(key.c_str(), value);
+}
+
+int GetUserIntValue(const wchar_t* keyName, int defaultValue) {
+    const auto key = MakeUserKey(keyName);
+    return Wh_GetIntValue(key.c_str(), defaultValue);
 }
 
 int Scaled(int value) {
@@ -458,7 +517,7 @@ UINT ComputeHotkeyModifiers() {
 std::wstring MakeRowKey(int rowIndex, const wchar_t* suffix) {
     wchar_t key[64];
     swprintf_s(key, L"line%d_%s", rowIndex + 1, suffix);
-    return std::wstring(key);
+    return g_userPrefix + key;
 }
 
 int ClampRowCount(int count) {
@@ -466,8 +525,7 @@ int ClampRowCount(int count) {
 }
 
 void SaveRows() {
-    Wh_SetIntValue(
-        L"lineCount",
+    SetUserIntValue(L"lineCount",
         static_cast<int>(g_rows.size()));
 
     for (size_t i = 0; i < g_rows.size(); ++i) {
@@ -573,7 +631,7 @@ void DeleteRow(int rowIndex) {
 
 void LoadRows() {
     int count = std::clamp(
-    Wh_GetIntValue(L"lineCount", 1),
+    GetUserIntValue(L"lineCount", 1),
     1,
     g_settings.maxRows);
     g_rows.clear();
@@ -609,19 +667,19 @@ void LoadRows() {
 }
 
 void SaveAppearance() {
-    Wh_SetIntValue(L"lineColor", static_cast<int>(g_lineColor));
-    Wh_SetIntValue(L"alpha", g_alpha);
-    Wh_SetIntValue(L"scalePercent", g_scalePercent);
+    SetUserIntValue(L"lineColor", static_cast<int>(g_lineColor));
+    SetUserIntValue(L"alpha", g_alpha);
+    SetUserIntValue(L"scalePercent", g_scalePercent);
 }
 
 void SavePosition() {
-    Wh_SetIntValue(L"posX", g_settings.x);
-    Wh_SetIntValue(L"posY", g_settings.y);
+    SetUserIntValue(L"posX", g_settings.x);
+    SetUserIntValue(L"posY", g_settings.y);
 }
 
 void LoadSavedPosition() {
-    g_settings.x = Wh_GetIntValue(L"posX", g_settings.x);
-    g_settings.y = Wh_GetIntValue(L"posY", g_settings.y);
+    g_settings.x = GetUserIntValue(L"posX", g_settings.x);
+    g_settings.y = GetUserIntValue(L"posY", g_settings.y);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -714,7 +772,7 @@ void LoadSettings() {
 
 void LoadRuntimeState() {
     int count = std::clamp(
-        Wh_GetIntValue(L"lineCount", 1),
+        GetUserIntValue(L"lineCount", 1),
         1,
         g_settings.maxRows);
 
@@ -754,12 +812,12 @@ g_rowStatus.resize(count, ROW_STATUS_OPEN);
     EnsureValidRows();
     EnsureRowState();
 
-    int savedColor = Wh_GetIntValue(L"lineColor", -1);
+    int savedColor = GetUserIntValue(L"lineColor", -1);
     g_lineColor = (savedColor >= 0) ? static_cast<COLORREF>(savedColor) : g_settings.defaultColor;
 
-    g_alpha = std::clamp(Wh_GetIntValue(L"alpha", g_settings.defaultAlpha), 0, 255);
+    g_alpha = std::clamp(GetUserIntValue(L"alpha", g_settings.defaultAlpha), 0, 255);
     g_scalePercent = std::clamp(
-        Wh_GetIntValue(L"scalePercent", g_settings.defaultScalePercent),
+        GetUserIntValue(L"scalePercent", g_settings.defaultScalePercent),
         SCALE_MIN_PERCENT, SCALE_MAX_PERCENT);
 }
 
@@ -2004,6 +2062,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
         case WM_ERASEBKGND:
             return 1;
 
+        case WM_DPICHANGED:
+            // Rebuild fonts and hit-test geometry at the monitor's new DPI.
+            if (g_editHwnd) EndEdit(hwnd, true);
+            g_dpi = HIWORD(wParam);
+            RecreateFonts();
+            ApplyLayoutAndRedraw(hwnd);
+            return 0;
+
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
 
@@ -2311,6 +2377,7 @@ bool CreateOverlayWindow() {
 DWORD WINAPI OverlayThreadProc(LPVOID) {
     MSG msg{};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    if (g_overlayThreadReady) SetEvent(g_overlayThreadReady);
 
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
@@ -2344,9 +2411,20 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
 
-    g_overlayThread = CreateThread(nullptr, 0, OverlayThreadProc, nullptr, 0, nullptr);
+    if (!InitUserPrefix()) return FALSE;
+
+    g_overlayThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_overlayThreadReady) {
+        Wh_Log(L"CreateEventW failed: %u", GetLastError());
+        return FALSE;
+    }
+
+    g_overlayThread = CreateThread(nullptr, 0, OverlayThreadProc, nullptr,
+                                   0, &g_overlayThreadId);
     if (!g_overlayThread) {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
+        CloseHandle(g_overlayThreadReady);
+        g_overlayThreadReady = nullptr;
         return FALSE;
     }
 
@@ -2360,39 +2438,75 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    HWND hwnd = g_hwnd;
-    if (hwnd) {
-        PostMessageW(hwnd, WM_APP_CLEANUP, 0, 0);
-    }
-
     if (g_overlayThread) {
-        WaitForSingleObject(g_overlayThread, 2000);
+        // Either the message queue becomes ready or the thread exits early.
+        // Waiting for queue readiness avoids losing WM_QUIT during startup.
+        HANDLE waits[] = {g_overlayThreadReady, g_overlayThread};
+        DWORD result = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+        if (result == WAIT_OBJECT_0) {
+            if (!PostThreadMessageW(g_overlayThreadId, WM_QUIT, 0, 0)) {
+                Wh_Log(L"PostThreadMessageW WM_QUIT failed: %u", GetLastError());
+            }
+        }
+        WaitForSingleObject(g_overlayThread, INFINITE);
         CloseHandle(g_overlayThread);
         g_overlayThread = nullptr;
     }
+    if (g_overlayThreadReady) {
+        CloseHandle(g_overlayThreadReady);
+        g_overlayThreadReady = nullptr;
+    }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId = 0;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
-    for (int i = 1; i < argc - 1; ++i) {
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
             if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
@@ -2404,8 +2518,13 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
+    if (isExcluded) {
+        return FALSE;
+    }
+
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -2420,14 +2539,15 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        IMAGE_NT_HEADERS* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        DWORD entryPointRva = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) + entryPointRva;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -2440,22 +2560,59 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
-
-    WCHAR currentProcessPath[MAX_PATH]{};
-    if (!GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
-        Wh_Log(L"GetModuleFileName failed: %u", GetLastError());
+    if (!g_isToolModProcessLauncher) {
         return;
     }
 
-    WCHAR commandLine[MAX_PATH + 64]{};
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
 
-    STARTUPINFOW si{sizeof(si)};
-    PROCESS_INFORMATION pi{};
-    if (!CreateProcessW(currentProcessPath, commandLine, nullptr, nullptr, FALSE,
-        NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
-        Wh_Log(L"CreateProcess failed: %u", GetLastError());
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
@@ -2464,15 +2621,19 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModSettingsChanged();
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModUninit();
+    if (g_isToolModProcessLauncher) {
+        return;
     }
-}
 
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
 // clang-format on
