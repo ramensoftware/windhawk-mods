@@ -20,6 +20,8 @@ tabs for Most recently used, Emoji, GIF, Kaomoji, Symbols and Clipboard. This
 mod makes the panel bigger or smaller and hides the tabs you turn off in its
 settings.
 
+![A taller Win+V panel showing more clipboard entries, with only the Clipboard tab left](https://raw.githubusercontent.com/jayll1303/WindowsClipboardMods/main/images/winv-panel-tweaks-taller-clipboard-only.png)
+
 ## Panel size
 
 The panel is normally 360 x 400 (in display-scaled pixels). Width and height
