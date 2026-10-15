@@ -101,7 +101,7 @@ Gentle sounds play as you use the launcher: a soft switch-like click when the ba
 
 * Six background effects (**Acrylic**, **Mica**, **Glass**, **Frosted**, **Aurora**, **Solid**) and 12 colours.
 * Each effect is built from a blurred view of whatever is behind the bar, finished with a colour tint, subtle grain and light highlights, so the bar looks the same on Windows 10 and 11.
-* **Live acrylic**: Acrylic, Frosted and Aurora follow what is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turning it off uses a single snapshot taken when the bar opens, which helps performance and saves battery. It is on by default and can be changed in the settings.
+* **Live acrylic**: Acrylic, Frosted and Aurora follow what is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turning it off uses a single snapshot taken when the bar opens, which helps performance and saves battery. With Glass, live mode also hides the bar from screenshots, recordings and screen sharing. It is on by default and can be changed in the settings.
 * Adjustable panel opacity, blur strength and layout.
 * Looks sharp on every monitor, even high-resolution ones or a mix of several.
 * The bar can sit anywhere from against the top edge to against the bottom edge of the screen.
@@ -201,7 +201,7 @@ Copyright (c) 2026-present David Ravelo.
     - solid: Solid (no effect)
 - LiveAcrylic: true
   $name: Live acrylic (real time)
-  $description: Keeps the background blur live. Acrylic, Frosted and Aurora follow whatever is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. Needs Windows 10 1803 or newer.
+  $description: Keeps the background blur live. Acrylic, Frosted and Aurora follow whatever is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. With the Glass effect, live mode also hides the bar from screenshots, screen recordings and screen sharing. Needs Windows 10 1803 or newer.
 - BlurAmount: 50
   $name: Blur strength (0 to 100)
   $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Ignored with "Solid".
@@ -305,6 +305,10 @@ Copyright (c) 2026-present David Ravelo.
 #include <cwchar>
 #include <cstring>
 
+#ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
+#define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
+#endif
+
 // ===== Inline calculator engine =====
 // A small self-contained arithmetic evaluator (tokenizer + recursive-descent parser). It is
 // never fed to another interpreter: it only recognises numbers, the four operations, powers,
@@ -347,6 +351,8 @@ struct Result {
     // conversions). It is not parseable by the evaluator, so `insertable` holds the plain form.
     std::wstring display;
     std::wstring insertable;
+    // The input was just a constant such as "pi" or "ans". App matches take priority over it.
+    bool loneConstant = false;
 };
 
 // Values supplied by the host: the previous result, so "ans" can be reused.
@@ -653,6 +659,7 @@ struct Lexed {
 
 inline Lexed Lex(const std::wstring& in, const Locale& loc, bool hasAns = false) {
     Lexed out;
+    bool sawKeyword = false;
     size_t i = 0;
     const size_t n = in.size();
     while (i < n) {
@@ -735,7 +742,7 @@ inline Lexed Lex(const std::wstring& in, const Locale& loc, bool hasAns = false)
             if (!IsFunction(id) && !isKw && !IsConstant(id, cval) && !(hasAns && id == L"ans")) {
                 out.knownIdents = false;
             }
-            if (isKw) out.mathy = true;
+            if (isKw) sawKeyword = true;
             Token t;
             t.kind = Tk::Ident;
             t.id = id;
@@ -770,6 +777,13 @@ inline Lexed Lex(const std::wstring& in, const Locale& loc, bool hasAns = false)
         }
         out.ok = false;
         return out;
+    }
+    // "mod" / "of" only count as maths next to a number ("10 mod 3", "20 of 150"). Alone they are
+    // just the start of a name ("Office", "Mod Organizer") and must not show an error card.
+    if (sawKeyword) {
+        for (const Token& tk : out.toks) {
+            if (tk.kind == Tk::Num) { out.mathy = true; break; }
+        }
     }
     Token end;
     end.kind = Tk::End;
@@ -1016,6 +1030,7 @@ inline Result EvalCore(const std::wstring& input, const Locale& loc, const Conte
     }
     res.status = Status::Ok;
     res.value = v.v;
+    res.loneConstant = loneConstant;
     return res;
 }
 
@@ -1088,7 +1103,11 @@ inline bool DataRank(const std::wstring& name, int& rank, bool& isBinNamed) {
     return false;
 }
 
+// Values at or beyond 2^64 do not fit the unsigned conversion below (undefined behaviour).
+inline bool FitsInBase(double v) { return std::isfinite(v) && std::fabs(v) < 18446744073709551616.0; }
+
 inline std::wstring FormatInBase(double v, int base) {
+    if (!FitsInBase(v)) return L"";
     const bool neg = v < 0;
     unsigned long long u = (unsigned long long)(neg ? -v : v);
     static const wchar_t* const kDigits = L"0123456789ABCDEF";
@@ -1122,6 +1141,11 @@ inline bool TryConversion(const std::wstring& input, const Locale& loc, const Co
         if (l.value != std::floor(l.value) || !std::isfinite(l.value)) {
             out.status = Status::Error;
             out.error = L"a base conversion needs a whole number";
+            return true;
+        }
+        if (!FitsInBase(l.value)) {
+            out.status = Status::Error;
+            out.error = L"the number is too large for a base conversion";
             return true;
         }
         out.status = Status::Ok;
@@ -2065,8 +2089,8 @@ static void RenderAll() {
 static bool Init() {
     if (g_eng.samples.empty()) RenderAll();
     Engine& e = g_eng;
-    e.dll = LoadLibraryW(L"xaudio2_9.dll");
-    if (!e.dll) e.dll = LoadLibraryW(L"xaudio2_8.dll");
+    e.dll = LoadLibraryExW(L"xaudio2_9.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!e.dll) e.dll = LoadLibraryExW(L"xaudio2_8.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!e.dll) return false;
     XAudio2Create_t create = (XAudio2Create_t)GetProcAddress(e.dll, "XAudio2Create");
     if (!create) return false;
@@ -2104,7 +2128,15 @@ static void Shutdown() {
 }
 
 // The engine only runs while the bar is open and sounds are enabled.
-static void Resume() { if (g_eng.engine && g_cfg.sounds) g_eng.engine->StartEngine(); }
+// If there was no output device at startup, or the device was removed/changed (the engine then
+// reports a critical error), rebuild the engine here before starting it.
+static void Resume() {
+    if (!g_cfg.sounds) return;
+    Engine& e = g_eng;
+    if (e.ready && e.engine && SUCCEEDED(e.engine->StartEngine())) return;
+    Shutdown();
+    if (Init() && e.engine) e.engine->StartEngine();
+}
 static void Suspend() { if (g_eng.engine) g_eng.engine->StopEngine(); }
 
 // Creates the engine only when sounds are on; releases it completely when they are off.
@@ -2690,7 +2722,10 @@ static void RunSearch() {
 
     // A valid calculation is the only result: it is what Enter copies, so we do not mix it with
     // app matches (a query like "2+2" should never launch an app that happened to match).
-    if (CalcOk()) {
+    // Exception: a lone constant ("pi", "tau", "phi", "ans") only wins when no app matches,
+    // so typing the start of "Pinta" or "PicPick" keeps showing the apps.
+    const bool loneConst = CalcOk() && g_calc.loneConstant;
+    if (CalcOk() && !loneConst) {
         BuildRowOffsets();
         return;
     }
@@ -2727,6 +2762,11 @@ static void RunSearch() {
     // bar is fixed and rows that do not fit are reached by scrolling.
     if ((int)g_results.size() > g_cfg.maxRows) {
         g_results.resize((size_t)g_cfg.maxRows);
+    }
+    if (loneConst && !g_results.empty()) {
+        g_calc = Calc::Result();  // apps matched: drop the constant's result card
+        g_calcDisplay.clear();
+        g_calcActive = false;
     }
     BuildRowOffsets();
 }
@@ -3693,7 +3733,7 @@ typedef HRESULT(WINAPI* GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
 
 static double MonitorScale(HMONITOR mon) {
     static GetDpiForMonitor_t fn = [] {
-        HMODULE m = LoadLibraryW(L"shcore.dll");
+        HMODULE m = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return m ? (GetDpiForMonitor_t)GetProcAddress(m, "GetDpiForMonitor") : nullptr;
     }();
     UINT dx = 96, dy = 96;
@@ -3886,7 +3926,7 @@ static void BuildBackdrop(const uint32_t* src, int w, int h, int factor, double 
 
 static void WaitForCompositor() {
     typedef HRESULT(WINAPI * DwmFlush_t)();
-    HMODULE m = LoadLibraryW(L"dwmapi.dll");
+    HMODULE m = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (m) {
         auto fn = (DwmFlush_t)GetProcAddress(m, "DwmFlush");
         if (fn) fn();
@@ -4021,7 +4061,7 @@ static bool LiveCreate(HINSTANCE hInst) {
     if (!g_liveSupported) return false;
 
     g_liveWin11 = WindowsBuildAtLeast(22000);
-    HMODULE dm = LoadLibraryW(L"dwmapi.dll");
+    HMODULE dm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     g_pDwmSetAttr = dm ? (LvDwmSetWindowAttribute_t)GetProcAddress(dm, "DwmSetWindowAttribute") : nullptr;
 
     WNDCLASSEXW wc = {};
@@ -5861,9 +5901,6 @@ static void FinishHide() {
     KillTimer(g_hwnd, TIMER_COPY);
     KillTimer(g_hwnd, TIMER_CALC);
     g_calcPending = false;
-    KillTimer(g_hwnd, TIMER_CALC);
-    KillTimer(g_hwnd, TIMER_CALC);
-    KillTimer(g_hwnd, TIMER_CALC);
     ShowWindow(g_hwnd, SW_HIDE);
     LiveHide();
     g_vis = Vis::Hidden;
