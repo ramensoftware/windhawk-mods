@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              remove-clock-cutout-background
-// @name            Remove Legacy Clock Square Cutout
-// @description     Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs with flicker-free OS composition.
-// @version         3.1.0
+// @name            Remove Legacy Clock Square Cutout & Animated Custom Image
+// @description     Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs, with full animated GIF and PNG replacement support.
+// @version         3.2.0
 // @author          awnaise
 // @github          https://github.com/awnaise
 // @include         explorer.exe
@@ -10,30 +10,19 @@
 // @compilerOptions -lgdiplus -lcomctl32 -lgdi32 -luser32
 // ==/WindhawkMod==
 
+// ==WindhawkModSettings==
+/*
+- customImagePath: ""
+  $name: "Custom Clock Image (Path to PNG or Animated GIF)"
+*/
+// ==/WindhawkModSettings==
+
 // ==WindhawkModReadme==
 /*
 Removes the light square background behind the analog clock in StartAllBack
 and classic Windows Date/Time flyouts (timedate.cpl) using OS-level 
 double buffering (WS_EX_COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
-masking with smart dark-mode dialog sampling.
-
-### Screenshots
-
-#### StartAllBack Clock Flyout
-
-**Before:**
-![Before Flyout](https://i.imgur.com/f4Ku2hE.png)
-
-**After:**
-![After Flyout](https://i.imgur.com/IYWKYWx.png)
-
-#### Date & Time Dialog (timedate.cpl)
-
-**Before:**
-![Before Date and Time](https://i.imgur.com/xzkz1NF.png)
-
-**After:**
-![After Date and Time](https://i.imgur.com/ug6TxAf.png)
+masking with smart dark-mode dialog sampling, plus full animated GIF replacement.
 */
 // ==/WindhawkModReadme==
 
@@ -44,6 +33,8 @@ masking with smart dark-mode dialog sampling.
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <string>
+#include <memory>
 
 using namespace Gdiplus;
 
@@ -57,9 +48,88 @@ static ShowWindow_t pfnShowWindowOriginal = NULL;
 
 thread_local bool g_bInMask = false;
 
-// Global state tracking for subclassed windows: HWND -> added WS_EX_COMPOSITED flag
+// Global state tracking for subclassed windows
 std::mutex g_clockWindowsMutex;
 std::unordered_map<HWND, bool> g_clockWindows;
+
+// Cached image structure for animated GIF support
+struct CachedImage {
+    std::unique_ptr<Image> img;
+    UINT frameCount = 1;
+    std::vector<UINT> delays;
+};
+
+std::unordered_map<std::wstring, CachedImage> g_imageCache;
+std::mutex g_imageMutex;
+
+// Per-window animation state
+struct WindowAnimState {
+    std::wstring imagePath;
+    UINT currentFrame = 0;
+};
+
+std::unordered_map<HWND, WindowAnimState> g_windowAnims;
+std::mutex g_windowAnimsMutex;
+
+// Retrieve or load cached image with safe frame and delay checks
+CachedImage* GetCachedImage(const wchar_t* path) {
+    std::lock_guard<std::mutex> lock(g_imageMutex);
+    auto it = g_imageCache.find(path);
+    if (it != g_imageCache.end()) {
+        return &it->second;
+    }
+
+    auto newImg = std::make_unique<Image>(path);
+    if (newImg->GetLastStatus() != Ok) {
+        return nullptr;
+    }
+
+    CachedImage ci;
+    UINT dimensionCount = newImg->GetFrameDimensionsCount();
+    if (dimensionCount > 0) {
+        std::vector<GUID> dimensionIDs(dimensionCount);
+        newImg->GetFrameDimensionsList(dimensionIDs.data(), dimensionCount);
+        
+        // Check if Time dimension exists for animation
+        bool hasTimeDimension = false;
+        for (const auto& guid : dimensionIDs) {
+            if (guid == FrameDimensionTime) {
+                hasTimeDimension = true;
+                break;
+            }
+        }
+
+        if (hasTimeDimension) {
+            ci.frameCount = newImg->GetFrameCount(&FrameDimensionTime);
+            if (ci.frameCount > 1) {
+                UINT propertySize = newImg->GetPropertyItemSize(PropertyTagFrameDelay);
+                if (propertySize > 0) {
+                    PropertyItem* pItem = (PropertyItem*)malloc(propertySize);
+                    if (pItem) {
+                        newImg->GetPropertyItem(PropertyTagFrameDelay, propertySize, pItem);
+                        UINT* delays = (UINT*)pItem->value;
+                        UINT numDelays = propertySize / sizeof(UINT);
+                        for (UINT i = 0; i < ci.frameCount && i < numDelays; ++i) {
+                            UINT delay = delays[i] * 10; // convert hundredths of a second to milliseconds
+                            if (delay < 30) delay = 100;
+                            ci.delays.push_back(delay);
+                        }
+                        free(pItem);
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback default delays if needed
+    while (ci.delays.size() < ci.frameCount) {
+        ci.delays.push_back(100);
+    }
+
+    ci.img = std::move(newImg);
+    g_imageCache[path] = std::move(ci);
+    return &g_imageCache[path];
+}
 
 // Known clock window classes that should strictly be targeted
 bool IsKnownClockClass(const wchar_t* szClass) {
@@ -69,7 +139,7 @@ bool IsKnownClockClass(const wchar_t* szClass) {
             wcsicmp(szClass, L"ClockWndClass") == 0);
 }
 
-// Targets analog clock controls (StartAllBack flyout + timedate.cpl ClockWndMain/ClockCtl)
+// Targets analog clock controls
 bool IsAnalogClockControl(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return false;
 
@@ -79,12 +149,10 @@ bool IsAnalogClockControl(HWND hwnd) {
     wchar_t szClass[256] = {0};
     if (GetClassNameW(hwnd, szClass, 256) <= 0) return false;
 
-    // Explicitly exclude non-analog digital time pickers and tray clock controls
     if (wcsstr(szClass, L"TrayClock") != NULL) return false;
     if (wcsstr(szClass, L"DigitalClock") != NULL) return false;
     if (wcsicmp(szClass, L"SysDateTimePick32") == 0) return false;
 
-    // Strict class matching only to avoid painting over unrelated third-party controls
     return IsKnownClockClass(szClass);
 }
 
@@ -97,7 +165,6 @@ COLORREF GetParentBgColor(HWND hwnd) {
     if (!hParent) hParent = hwnd;
     if (!hRoot) hRoot = hParent;
 
-    // 1. Try querying the parent control/dialog brush
     HDC hdcChild = GetDC(hwnd);
     if (hdcChild) {
         HBRUSH hbr = (HBRUSH)SendMessageW(hParent, WM_CTLCOLORSTATIC, (WPARAM)hdcChild, (LPARAM)hwnd);
@@ -114,7 +181,6 @@ COLORREF GetParentBgColor(HWND hwnd) {
         ReleaseDC(hwnd, hdcChild);
     }
 
-    // 2. Sample safe empty background regions inside the dialog
     HDC hdcScreen = GetDC(NULL);
     if (hdcScreen) {
         RECT rcChild, rcParent, rcRoot;
@@ -122,7 +188,6 @@ COLORREF GetParentBgColor(HWND hwnd) {
         GetWindowRect(hParent, &rcParent);
         GetWindowRect(hRoot, &rcRoot);
 
-        // Detect if running in Dark Mode by sampling root window bottom margin
         COLORREF rootClr = GetPixel(hdcScreen, rcRoot.left + 20, rcRoot.bottom - 15);
         bool isDarkMode = false;
         if (rootClr != CLR_INVALID) {
@@ -172,60 +237,100 @@ COLORREF GetParentBgColor(HWND hwnd) {
     return GetSysColor(COLOR_3DFACE);
 }
 
-// Applies anti-aliased GDI+ corner mask
+// Renders animated GIF frames or static images/masks safely
 void ApplySmoothMaskToDC(HDC hdc, HWND hwnd, int w, int h) {
     if (!hdc || w <= 20 || h <= 20 || g_bInMask) return;
     g_bInMask = true;
 
-    COLORREF bgClr = GetParentBgColor(hwnd);
+    PCWSTR customImagePath = Wh_GetStringSetting(L"customImagePath");
+    bool renderedCustomImage = false;
 
-    Graphics graphics(hdc);
-    graphics.SetSmoothingMode(SmoothingModeAntiAlias);
-    graphics.SetPixelOffsetMode(PixelOffsetModeHighQuality);
+    if (customImagePath && customImagePath[0] != L'\0') {
+        CachedImage* cached = GetCachedImage(customImagePath);
+        if (cached && cached->img) {
+            Graphics graphics(hdc);
+            graphics.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+            graphics.SetSmoothingMode(SmoothingModeAntiAlias);
 
-    GraphicsPath path(FillModeAlternate);
-    path.AddRectangle(Rect(0, 0, w, h));
+            if (cached->frameCount > 1) {
+                UINT frameIndex = 0;
+                {
+                    std::lock_guard<std::mutex> lock(g_windowAnimsMutex);
+                    auto& animState = g_windowAnims[hwnd];
+                    if (animState.imagePath != customImagePath) {
+                        animState.imagePath = customImagePath;
+                        animState.currentFrame = 0;
+                    }
+                    frameIndex = animState.currentFrame % cached->frameCount;
+                }
 
-    wchar_t szClass[256] = {0};
-    GetClassNameW(hwnd, szClass, 256);
+                GUID frameDimension = FrameDimensionTime;
+                cached->img->SelectActiveFrame(&frameDimension, frameIndex);
 
-    REAL insetL = 0.5f;
-    REAL insetT = 0.5f;
-    REAL ew = (REAL)w;
-    REAL eh = (REAL)h;
+                graphics.DrawImage(cached->img.get(), 0, 0, w, h);
+                renderedCustomImage = true;
 
-    // Handle timedate.cpl ClockWndMain (142x144 canvas with a 130x130 clock face anchored upper-left)
-    if (wcsicmp(szClass, L"ClockWndMain") == 0) {
-        UINT dpi = GetDpiForWindow(hwnd);
-        if (dpi == 0) dpi = 96;
-        int nominalFace = MulDiv(130, (int)dpi, 96);
-
-        if (w >= nominalFace + 6 && h >= nominalFace + 6) {
-            ew = (REAL)nominalFace;
-            eh = (REAL)nominalFace;
-        } else {
-            ew = (REAL)w - 1.0f;
-            eh = (REAL)h - 1.0f;
+                UINT delay = cached->delays[frameIndex];
+                SetTimer(hwnd, 9999, delay, NULL);
+            } else {
+                // Single-frame image (PNG, JPEG, etc.)
+                graphics.DrawImage(cached->img.get(), 0, 0, w, h);
+                renderedCustomImage = true;
+            }
         }
-    } else {
-        bool isClassicClock = (wcsicmp(szClass, L"ClockCtl") == 0);
-        insetL = isClassicClock ? 1.0f : 0.5f;
-        insetT = isClassicClock ? 1.0f : 0.5f;
-        REAL insetR = isClassicClock ? 1.0f : 1.8f; 
-        REAL insetB = isClassicClock ? 1.0f : 1.8f; 
-
-        ew = (REAL)w - (insetL + insetR);
-        eh = (REAL)h - (insetT + insetB);
     }
+    Wh_FreeStringSetting((PWSTR)customImagePath);
 
-    RectF ellipseRect(insetL, insetT, ew, eh);
-    path.AddEllipse(ellipseRect);
+    if (!renderedCustomImage) {
+        COLORREF bgClr = GetParentBgColor(hwnd);
 
-    SolidBrush brush(Color(255, GetRValue(bgClr), GetGValue(bgClr), GetBValue(bgClr)));
-    graphics.FillPath(&brush, &path);
+        Graphics graphics(hdc);
+        graphics.SetSmoothingMode(SmoothingModeAntiAlias);
+        graphics.SetPixelOffsetMode(PixelOffsetModeHighQuality);
 
-    Pen pen(Color(255, GetRValue(bgClr), GetGValue(bgClr), GetBValue(bgClr)), 1.2f);
-    graphics.DrawEllipse(&pen, ellipseRect);
+        GraphicsPath path(FillModeAlternate);
+        path.AddRectangle(Rect(0, 0, w, h));
+
+        wchar_t szClass[256] = {0};
+        GetClassNameW(hwnd, szClass, 256);
+
+        REAL insetL = 0.5f;
+        REAL insetT = 0.5f;
+        REAL ew = (REAL)w;
+        REAL eh = (REAL)h;
+
+        if (wcsicmp(szClass, L"ClockWndMain") == 0) {
+            UINT dpi = GetDpiForWindow(hwnd);
+            if (dpi == 0) dpi = 96;
+            int nominalFace = MulDiv(130, (int)dpi, 96);
+
+            if (w >= nominalFace + 6 && h >= nominalFace + 6) {
+                ew = (REAL)nominalFace;
+                eh = (REAL)nominalFace;
+            } else {
+                ew = (REAL)w - 1.0f;
+                eh = (REAL)h - 1.0f;
+            }
+        } else {
+            bool isClassicClock = (wcsicmp(szClass, L"ClockCtl") == 0);
+            insetL = isClassicClock ? 1.0f : 0.5f;
+            insetT = isClassicClock ? 1.0f : 0.5f;
+            REAL insetR = isClassicClock ? 1.0f : 1.8f; 
+            REAL insetB = isClassicClock ? 1.0f : 1.8f; 
+
+            ew = (REAL)w - (insetL + insetR);
+            eh = (REAL)h - (insetT + insetB);
+        }
+
+        RectF ellipseRect(insetL, insetT, ew, eh);
+        path.AddEllipse(ellipseRect);
+
+        SolidBrush brush(Color(255, GetRValue(bgClr), GetGValue(bgClr), GetBValue(bgClr)));
+        graphics.FillPath(&brush, &path);
+
+        Pen pen(Color(255, GetRValue(bgClr), GetGValue(bgClr), GetBValue(bgClr)), 1.2f);
+        graphics.DrawEllipse(&pen, ellipseRect);
+    }
 
     g_bInMask = false;
 }
@@ -281,9 +386,34 @@ LRESULT CALLBACK ClockSubclassProc(
             return res;
         }
 
+        case WM_TIMER: {
+            if (wParam == 9999) {
+                PCWSTR customImagePath = Wh_GetStringSetting(L"customImagePath");
+                if (customImagePath && customImagePath[0] != L'\0') {
+                    CachedImage* cached = GetCachedImage(customImagePath);
+                    if (cached && cached->frameCount > 1) {
+                        std::lock_guard<std::mutex> lock(g_windowAnimsMutex);
+                        auto& animState = g_windowAnims[hwnd];
+                        animState.currentFrame = (animState.currentFrame + 1) % cached->frameCount;
+                        InvalidateRect(hwnd, NULL, FALSE);
+                    }
+                }
+                Wh_FreeStringSetting((PWSTR)customImagePath);
+                return 0;
+            }
+            break;
+        }
+
         case WM_NCDESTROY: {
-            std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
-            g_clockWindows.erase(hwnd);
+            KillTimer(hwnd, 9999);
+            {
+                std::lock_guard<std::mutex> lock1(g_clockWindowsMutex);
+                g_clockWindows.erase(hwnd);
+            }
+            {
+                std::lock_guard<std::mutex> lock2(g_windowAnimsMutex);
+                g_windowAnims.erase(hwnd);
+            }
             break;
         }
     }
@@ -367,7 +497,7 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(ShowWindow, HookedShowWindow, &pfnShowWindowOriginal);
 
     EnumWindows(ResetWindowRegionsProc, 0);
-    Wh_Log(L"Clock mask mod initialized successfully");
+    Wh_Log(L"Clock animated GIF mod initialized successfully");
 
     return TRUE;
 }
@@ -381,12 +511,23 @@ void Wh_ModUninit() {
     }
 
     for (auto [hwnd, addedComposited] : windows) {
+        KillTimer(hwnd, 9999);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClockSubclassProc);
         if (addedComposited) {
             SetWindowLongW(hwnd, GWL_EXSTYLE,
                            GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
         }
         InvalidateRect(hwnd, NULL, TRUE);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_imageMutex);
+        g_imageCache.clear();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_windowAnimsMutex);
+        g_windowAnims.clear();
     }
 
     if (g_gdiplusToken) {
