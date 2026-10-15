@@ -3,11 +3,13 @@
 // @name            CoverTabby
 // @description     An animated Alt+Tab switcher with live previews and multiple layouts
 // @version         0.22.14
-// @author          LTHC & Lone
+// @author          LTHC
 // @github          https://github.com/LoreTheHolyChip
 // @license         GPL-2.0-only
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lshell32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32 -lmsimg32 -lhid -lruntimeobject -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -luuid -lwindowscodecs -lshcore -lpdh -lpsapi
+// @include         windhawk.exe
+// @include         windhawk-mod.exe
+// @compilerOptions -ldwmapi -lgdi32 -loleaut32 -lole32 -lshell32 -lversion -ladvapi32 -lhid -lruntimeobject -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -luuid -lwindowscodecs -lshcore -lpdh -lpsapi
 // ==/WindhawkMod==
 
 // CoverTabby by LTHC (LoreTheHolyChip).
@@ -22,7 +24,7 @@ Replaces the alt+tab with a modded kind of the stardock alt tabby's layout.
 By **LTHC (LoreTheHolyChip)**. Version **0.22.14**.
 
 Win+Tab integration is experimental and disabled by default. Alt+Tab remains enabled.
-This build runs inside Explorer through Windhawk, without a separate executable.
+Explorer forwards Alt+Tab to the switcher running in Windhawk’s own tool process. No separate application needs to be installed.
 
 Credits: caliberda (MIT-licensed Alt+Tab Flip 3D renderer), Lone (touchpad integration),
 and the Simple Window Switcher contributors (HID parsing).
@@ -88,14 +90,14 @@ Language is detected at every start: Italian for an Italian Windows display lang
 ## Features
 Live previews, application icons, grouped windows, Pin / Unpin, hover close
 controls, reflections and smooth animations. Settings cover only the essentials. Hover Behavior offers Show Title, Select Window or None for unselected windows.
-Opening uses a quick stationary fade. On normal selection, the selected preview smoothly resizes and returns to the real window position, starting fast and slowing down at the end. The real window is hidden during this return animation and revealed at the end. The background fades in place while the remaining previews, icons and controls slide down and fade. Dragging keeps following the mouse instead.
+Opening uses a quick stationary fade. On normal selection, the selected preview smoothly resizes and returns to the real window position, starting fast and slowing down at the end. The real window remains visible beneath the topmost overlay throughout this return animation. The background fades in place while the remaining previews, icons and controls slide down and fade. Dragging keeps following the mouse instead.
 Hover Animation offers None, Lift, Enlarge or Lift + Enlarge. It is disabled for
 unselected windows when Hover Behavior is None. Click a preview to activate it.
 
 ## Search
-Press **Alt+S**, type a window title or application name, then press **Enter**.
+While CoverTabby is open, press **Alt+S**, type a window title or application name, then press **Enter**.
 Search Bar Scale changes the bar, icon and text together. Width adapts automatically.
-Disable Search Bar to remove its reserved space and center the content.
+Disable Search Bar to remove its reserved space and center the content. Search is unavailable in Windowed mode and Tiles.
 
 ## Virtual desktops
 In the Win+Tab overview, desktop cards include the Windows taskbar on the current
@@ -116,14 +118,14 @@ the window there without changing its position or size. The current desktop stay
 Use the mouse wheel to scroll the list when there are many desktops.
 
 ## Process information
-CPU, RAM and GPU appear below the selected application's icon and refresh twice per second.
+CPU, RAM and GPU appear below the selected application's icon and refresh approximately every 1.5 seconds while the selection is stable.
 These are metrics for the process owning the selected window, not its child processes.
 RAM shows the working set in MB/GB; its color uses the percentage of physical RAM.
 GPU reports the busiest GPU engine for that process, or N/A when counters are unavailable.
 Usage colors are green up to 10%, white below 35%, yellow below 50%, orange up to 75%, and red above 75%.
 Hover the selected preview to see relative process age at the top right, such as Opened 5 minutes ago. This is process age, not window age.
 The skull button beside Close kills the owning process, including its other windows,
-without a save prompt. Close continues to request normal application closure.
+after a second confirming click within four seconds. Unsaved work will be lost. Close continues to request normal application closure.
 
 ## Icon controls
 Hover an app icon for a small smooth lift, zoom and Windows accent background.
@@ -143,7 +145,7 @@ Mouse selection and wheel navigation are also supported.
 
 ### Performance and background
 
-Background Style offers Blur, Opaque and Transparent in Full and Windowed. Automatic preserves the old Background Blur setting. Transparent Background Opacity controls the tint without applying blur. Background During Energy Saver automatically switches to Opaque or Transparent while Windows saves energy; Keep Selected Background disables this override.
+Background Style offers Blur, Opaque and Transparent in Full and Windowed. Transparent Background Opacity controls the tint without applying blur. Background During Energy Saver automatically switches to Opaque or Transparent while Windows saves energy; Keep Selected Background disables this override.
 
 The selected preview starts first. Other live previews start progressively, and opening waits at most 45 ms for the selected capture after startup. Desktop blur is captured at up to 960 pixels on its longest side. Preview Cache reuses up to twelve 512-pixel snapshots (384 during Energy Saver), updated gradually only while the switcher is open. When closed, captures stop except for a window currently being held and dragged. Dragging, search, groups, controls and animations remain available. VSync is always enabled: the render loop waits on DXGI frame availability with a one-frame queue and has no fixed 60 FPS cap. The actual rate follows the display compositor and available GPU performance.
 
@@ -288,9 +290,9 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   $name: Search Bar
   $name:it-IT: "Barra di ricerca"
   $name:it: "Barra di ricerca"
-  $description: Enable the search bar and Alt+S. When disabled, remove its reserved space and center the content.
-  $description:it-IT: "Abilita la ricerca e Alt+S. Disattivandola, il suo spazio viene rimosso e il contenuto viene centrato."
-  $description:it: "Abilita la ricerca e Alt+S. Disattivandola, il suo spazio viene rimosso e il contenuto viene centrato."
+  $description: Enable the search bar and Alt+S while CoverTabby is open. Search is unavailable in Windowed mode and Tiles. When disabled, remove its reserved space and center the content.
+  $description:it-IT: "Abilita la ricerca e Alt+S mentre CoverTabby è aperto. Ricerca non disponibile in modalità finestra e Riquadri. Disattivandola, il suo spazio viene rimosso e il contenuto viene centrato."
+  $description:it: "Abilita la ricerca e Alt+S mentre CoverTabby è aperto. Ricerca non disponibile in modalità finestra e Riquadri. Disattivandola, il suo spazio viene rimosso e il contenuto viene centrato."
 - searchScale: 100
   $name: Search Bar Scale (%)
   $name:it-IT: "Dimensione della ricerca (%)"
@@ -373,25 +375,22 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - lift: "Solleva"
   - enlarge: "Ingrandisci"
   - liftEnlarge: "Solleva e ingrandisci"
-- backgroundStyle: automatic
+- backgroundStyle: blur
   $name: Background Style
   $name:it-IT: "Stile dello sfondo"
   $name:it: "Stile dello sfondo"
-  $description: Choose the background in both Full and Windowed. Automatic preserves the previous Background Blur setting.
-  $description:it-IT: "Scegli lo sfondo in entrambe le modalità. Automatico mantiene la precedente impostazione di sfocatura."
-  $description:it: "Scegli lo sfondo in entrambe le modalità. Automatico mantiene la precedente impostazione di sfocatura."
+  $description: Choose Blur, Opaque or Transparent for both Fullscreen and Windowed modes.
+  $description:it-IT: "Scegli Sfocato, Opaco o Trasparente in entrambe le modalità."
+  $description:it: "Scegli Sfocato, Opaco o Trasparente in entrambe le modalità."
   $options:
-  - automatic: Automatic
   - blur: Blur
   - opaque: Opaque
   - transparent: Transparent
   $options:it-IT:
-  - automatic: "Automatico"
   - blur: "Sfocato"
   - opaque: "Opaco"
   - transparent: "Trasparente"
   $options:it:
-  - automatic: "Automatico"
   - blur: "Sfocato"
   - opaque: "Opaco"
   - transparent: "Trasparente"
@@ -538,25 +537,10 @@ static COLORREF GetAccentColor() {
 
 
 
-static bool LoadBoolSetting(LPCWSTR settingName, bool defaultVal) {
-    PCWSTR s = Wh_GetStringSetting(settingName);
-    if (!s || !*s) {
-        if (s) Wh_FreeStringSetting(s);
-        return defaultVal;
-    }
-    Wh_FreeStringSetting(s);
+static bool LoadBoolSetting(LPCWSTR settingName, bool /*defaultVal*/) {
     return Wh_GetIntSetting(settingName) != 0;
 }
-
-
-
-static int LoadIntSetting(LPCWSTR settingName, int defaultVal) {
-    PCWSTR s = Wh_GetStringSetting(settingName);
-    if (!s || !*s) {
-        if (s) Wh_FreeStringSetting(s);
-        return defaultVal;
-    }
-    Wh_FreeStringSetting(s);
+static int LoadIntSetting(LPCWSTR settingName, int /*defaultVal*/) {
     return Wh_GetIntSetting(settingName);
 }
 
@@ -634,7 +618,6 @@ constexpr WPARAM kStartFromHotkey = 2;
 // Thread messages handled by the hook thread.
 constexpr UINT WM_HOOK_ENGAGE = WM_APP + 20;
 constexpr UINT WM_HOOK_DISENGAGE = WM_APP + 21;
-constexpr UINT WM_HOOK_RELEASE_WIN_MASK = WM_APP + 24;
 // Installs or removes the keyboard hook, following g_takeOver.
 constexpr UINT WM_HOOK_UPDATE = WM_APP + 22;
 
@@ -648,7 +631,6 @@ constexpr WPARAM kTextBackspace = 8;
 constexpr WPARAM kTextPaste = 22;
 
 constexpr WCHAR kOverlayClassName[] = L"WindhawkCoverTabbyOverlay";
-constexpr WCHAR kProxyClassName[] = L"WindhawkCoverTabbyProxy";
 // The overlay's title tells explorer whether the switcher can take over
 // Alt+Tab right now. FindWindow compares titles without sending messages.
 constexpr WCHAR kOverlayTitleIdle[] = L"CoverTabby";
@@ -657,7 +639,6 @@ constexpr WCHAR kOverlayTitleReady[] = L"CoverTabby (ready)";
 // wParam: kStartBackwards or 0.
 
 enum class MonitorMode { Cursor, ActiveWindow };
-enum class BackgroundMode { BlurredWallpaper, Wallpaper, Dim };
 
 enum class BackdropStyle { Blur, Opaque, Transparent };
 static int g_energySaverStatus=-1, g_batterySaverStatus=-1;
@@ -703,7 +684,6 @@ struct Settings {
     bool originalAnimations = false;
     bool disable3DWindows = false;
     bool darkBackground = true;
-    bool wallpaperMaterial = false;
     bool blurBackground = true;
     bool showDesktopCard = true;
     bool holdToPreview = false;
@@ -742,7 +722,7 @@ struct Settings {
     int iconSize = 46, iconSpacing = 64, visibleIcons = 11;
     float sideWindowScale = 1, sideWindowSpacing = 1;
     float sideWindowBrightness = 0.8f, sideWindowOpacity = 1;
-    bool compactCoverFlow = false;
+    static constexpr bool compactCoverFlow = true;
     bool reflections = true;
     bool groupPrograms = true;
     bool tileGrid = false;
@@ -756,9 +736,7 @@ struct Settings {
     float tiltRadians;
     float stackSpacing;
     int maxWindows;
-    BackgroundMode background;
     float blurAmount;
-    float dimOpacity;
     bool showTitle;
     bool shadows;
     bool includeMinimized;
@@ -767,7 +745,6 @@ struct Settings {
 
 Settings LoadSettings() {
     Settings s;
-    s.compactCoverFlow = true;
     const auto hoverAction = WindhawkUtils::StringSetting::make(L"hoverAction");
     s.hoverSelects = wcscmp(hoverAction, L"select") == 0;
     s.hoverShowsTitle = !s.hoverSelects && wcscmp(hoverAction, L"none") != 0;
@@ -804,8 +781,6 @@ Settings LoadSettings() {
     BackdropStyle selected=BackdropStyle::Blur;
     if (wcscmp(backdrop,L"opaque")==0) selected=BackdropStyle::Opaque;
     else if (wcscmp(backdrop,L"transparent")==0) selected=BackdropStyle::Transparent;
-    else if (wcscmp(backdrop,L"blur")!=0 && !::LoadBoolSetting(L"blurBackground",true))
-        selected=BackdropStyle::Opaque; // Migrate the old saved blur switch.
     const auto saverBackground=WindhawkUtils::StringSetting::make(L"energySaverBackground");
     s.energySaver=WindowsEnergySaverActive();
     s.backdropStyle=EffectiveBackdrop(selected,s.energySaver,wcscmp(saverBackground,L"unchanged")!=0,
@@ -837,7 +812,6 @@ Settings LoadSettings() {
         : D2D1::ColorF(0.953f, 0.953f, 0.953f, 1);
     s.backgroundOpacity=BackdropOpacity(s.backdropStyle,s.windowMode,s.transparentOpacity);
     s.compactMaterial = false;
-    s.wallpaperMaterial = false;
     const COLORREF accent = ::GetAccentColor();
     s.borderColor = s.highlightColor = D2D1::ColorF(
         GetRValue(accent) / 255.0f, GetGValue(accent) / 255.0f, GetBValue(accent) / 255.0f, 1);
@@ -860,9 +834,7 @@ Settings LoadSettings() {
     s.tiltRadians = 20 * 3.14159265f / 180.0f;
     s.stackSpacing = 1;
     s.maxWindows = 40;
-    s.background = BackgroundMode::BlurredWallpaper;
     s.blurAmount = 20;
-    s.dimOpacity = 0;
     s.windowBorders = s.showSwitcherBorder = true;
     s.hoverControls = s.showCloseButton = true;
     s.showTitle = s.showIcons = s.showThumbnails = true;
@@ -1023,26 +995,6 @@ void SendDummyKeyPress() {
 ////////////////////////////////////////////////////////////////////////////////
 // Low-level hooks (hook thread).
 
-static bool g_winMaskControlDown;
-
-static void HoldWinChordMask() {
-    if(g_winMaskControlDown || IsKeyDown(VK_CONTROL)) return;
-    // Keep Ctrl logically held until Windows has processed the physical Win-up.
-    // A quick Ctrl tap ends too early and the shell can still open Start.
-    INPUT input{};input.type=INPUT_KEYBOARD;input.ki.wVk=VK_LCONTROL;
-    input.ki.dwExtraInfo=kInjectedInputTag;
-    if(SendInput(1,&input,sizeof(input))==1) g_winMaskControlDown=true;
-    else Wh_Log(L"Win+Tab Start mask press failed: %u",GetLastError());
-}
-
-static void ReleaseWinChordMask() {
-    if(!g_winMaskControlDown) return;
-    INPUT input{};input.type=INPUT_KEYBOARD;input.ki.wVk=VK_LCONTROL;
-    input.ki.dwFlags=KEYEVENTF_KEYUP;input.ki.dwExtraInfo=kInjectedInputTag;
-    if(SendInput(1,&input,sizeof(input))==1) g_winMaskControlDown=false;
-    else Wh_Log(L"Win+Tab Start mask release failed: %u",GetLastError());
-}
-
 // Ends the session from any thread. Returns false if it was already ended.
 bool EndSwitching() {
     if (!g_switching.exchange(false)) {
@@ -1052,7 +1004,7 @@ bool EndSwitching() {
     return true;
 }
 
-void RefreshKeyboardHookPriority();
+
 
 LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code != HC_ACTION) {
@@ -1076,15 +1028,6 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
         if(keyDown && !shortcutHeld[vk-'0']) PostMessageW(g_overlayWnd,WM_APP+36,vk-'0',0);
         shortcutHeld[vk-'0']=keyDown;
         return 1;
-    }
-    // Reclaim hook priority at the start of each physical Alt chord, before
-    // Tab reaches a newer shell or application hook. Never renew for repeats.
-    static bool physicalAltHeld = false;
-    if (vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU) {
-        if (keyDown && !physicalAltHeld && g_takeOver) {
-            RefreshKeyboardHookPriority();
-        }
-        physicalAltHeld = keyDown;
     }
     // Track releases even outside CoverTabby, so a new physical press remains
     // distinct from Windows keyboard auto-repeat. Leave ordinary app input alone.
@@ -1133,8 +1076,6 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
             release[1].ki.wVk=kDummyVk;release[1].ki.dwFlags=KEYEVENTF_KEYUP;
             release[2].ki.wVk=(WORD)vk;release[2].ki.dwFlags=KEYEVENTF_KEYUP;
             const UINT sent=SendInput(3,release,sizeof(INPUT));
-            if(!leftWinDown && !rightWinDown)
-                PostThreadMessageW(g_hookThreadId,WM_HOOK_RELEASE_WIN_MASK,0,0);
             if(sent!=3) {
                 Wh_Log(L"Win+Tab masked release failed: %u",GetLastError());
                 return CallNextHookEx(nullptr,code,wParam,lParam);
@@ -1181,12 +1122,8 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
         PostMessageW(g_overlayWnd,WM_APP_SEARCH,0,0);
         // Fall through to the existing Unicode input path to retain this letter.
     }
-    if (keyDown && vk=='S' && !g_switching && !IsKeyDown(VK_SHIFT) &&
-        (kb->flags & LLKHF_ALTDOWN) && g_ready && g_takeOver && g_searchEnabled) {
-        if (!g_switching.exchange(true)) {
-            PostMessageW(g_overlayWnd,WM_APP_START,0,0);
-            PostThreadMessageW(g_hookThreadId,WM_HOOK_ENGAGE,0,0);
-        }
+    if (keyDown && vk=='S' && g_switching && !IsKeyDown(VK_SHIFT) &&
+        !IsKeyDown(VK_CONTROL) && (kb->flags & LLKHF_ALTDOWN) && g_ready && g_searchEnabled) {
         g_stickyControls=true;
         PostMessageW(g_overlayWnd,WM_APP_SEARCH,0,0);
         return 1;
@@ -1324,23 +1261,12 @@ void UpdateKeyboardHook() {
     }
 }
 
-void RefreshKeyboardHookPriority() {
-    // A shell or another switcher can install a newer hook above ours.
-    // Renew before Tab arrives; preserve the existing hook if renewal fails.
-    HHOOK replacement=SetWindowsHookExW(WH_KEYBOARD_LL,KeyboardProc,g_module,0);
-    if(!replacement) {Wh_Log(L"Keyboard hook renewal failed: %u",GetLastError());return;}
-    HHOOK previous=g_keyboardHook;g_keyboardHook=replacement;
-    if(previous) UnhookWindowsHookEx(previous);
-}
-
 DWORD WINAPI HookThreadProc(LPVOID parameter) {
     MSG msg;
     // Create the message queue before the creator continues.
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     UpdateKeyboardHook();
-    const UINT_PTR hookWatchdog=SetTimer(nullptr,0,5000,nullptr);
-    const UINT_PTR maskWatchdog=SetTimer(nullptr,0,250,nullptr);
     SetEvent((HANDLE)parameter);
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -1350,18 +1276,6 @@ DWORD WINAPI HookThreadProc(LPVOID parameter) {
         }
 
         switch (msg.message) {
-            case WM_TIMER:
-                if(msg.wParam==hookWatchdog && g_takeOver && !g_switching) RefreshKeyboardHookPriority();
-                if(msg.wParam==maskWatchdog && g_winMaskControlDown &&
-                    g_physicalWinKeys.load()==0 && !IsKeyDown(VK_LWIN) && !IsKeyDown(VK_RWIN)) {
-                    ReleaseWinChordMask();
-                    if(g_desktopWinHoldSession.exchange(false) && g_desktopOverviewHoldWin)
-                        PostMessageW(g_overlayWnd,WM_APP_DESKTOP_WIN_RELEASE,0,0);
-                }
-                break;
-            case WM_HOOK_RELEASE_WIN_MASK:
-                ReleaseWinChordMask();
-                break;
             case WM_HOOK_UPDATE:
                 UpdateKeyboardHook();
                 break;
@@ -1383,9 +1297,6 @@ DWORD WINAPI HookThreadProc(LPVOID parameter) {
         }
     }
 
-    if(hookWatchdog) KillTimer(nullptr,hookWatchdog);
-    if(maskWatchdog) KillTimer(nullptr,maskWatchdog);
-    ReleaseWinChordMask();
     if (g_mouseHook) {
         UnhookWindowsHookEx(g_mouseHook);
         g_mouseHook = nullptr;
@@ -1959,7 +1870,7 @@ public:
     ProcessStats Read(DWORD pid) {
         std::lock_guard<std::mutex> guard(m_mutex);
         const auto found=m_cache.find(pid);
-        if (found!=m_cache.end() && GetTickCount64()-found->second.sampledAt<2000) return found->second;
+        if (found!=m_cache.end() && GetTickCount64()-found->second.sampledAt<4000) return found->second;
         ProcessStats result; result.pid=pid; return result;
     }
     void Stop() {
@@ -2049,7 +1960,7 @@ private:
                 if (m_cache.size()>128) m_cache.clear();
                 m_cache[pid]=result;
             }
-            if (WaitForMultipleObjects(2,events,FALSE,500)==WAIT_OBJECT_0) break;
+            if (WaitForMultipleObjects(2,events,FALSE,1500)==WAIT_OBJECT_0) break;
         }
         if (query) PdhCloseQuery(query);
     }
@@ -2400,7 +2311,6 @@ class Switcher {
     void SaveHeldPreview(HWND target);
 
     void CollectWindows();
-    bool CreateProxy(Item& item);
     void StartCaptures();
     void ContinueCaptures(int budget);
     bool FirstFramesReady();
@@ -2416,8 +2326,6 @@ class Switcher {
     void BeginClose(bool commit);
     void ReopenDuringClose(bool backwards);
     void FinishClose();
-    void HideReturnWindow(HWND target,DWORD pid);
-    void RestoreReturnWindow();
     void EndSession();
     void ActivateWindow(HWND hwnd);
 
@@ -2520,6 +2428,20 @@ class Switcher {
     com_ptr<IDWriteTextFormat> m_statsFormat;
     float m_statsFontSize = 0, m_statsBottom = 0;
     double m_killErrorUntil = 0;
+    HWND m_killConfirmWindow=nullptr;
+    DWORD m_killConfirmPid=0;
+    ULONGLONG m_killConfirmCreation=0;
+    double m_killConfirmUntil=0;
+    bool ConfirmKill(const Item& item) {
+        const double now=NowSeconds();
+        if(m_killConfirmWindow==item.hwnd && m_killConfirmPid==item.pid &&
+            m_killConfirmCreation==item.processCreation && now<m_killConfirmUntil) {
+            m_killConfirmWindow=nullptr;m_killConfirmUntil=0;return true;
+        }
+        m_killConfirmWindow=item.hwnd;m_killConfirmPid=item.pid;
+        m_killConfirmCreation=item.processCreation;m_killConfirmUntil=now+4;
+        return false;
+    }
     HWND m_hwnd = nullptr;
     TouchStroke m_touchStroke;
     int m_touchTapCount=0;
@@ -2590,8 +2512,6 @@ class Switcher {
     // Normal selection returns the captured preview to its desktop rectangle.
     // The host expands temporarily so Windowed mode cannot clip that journey.
     bool m_returnActive=false;
-    HWND m_hiddenReturnWindow=nullptr;
-    DWORD m_hiddenReturnPid=0;
     DrawEntry m_returnEntry{};
     Quad m_returnFrom{}, m_returnTo{};
     D2D1_POINT_2F m_closeSceneOffset{};
@@ -2793,16 +2713,6 @@ bool Switcher::CreateOverlay() {
     if (!RegisterClassExW(&wc)) {
         Wh_Log(L"RegisterClassEx failed: %u", GetLastError());
         return false;
-    }
-
-    // Proxy windows only host a DWM thumbnail, they draw nothing themselves.
-    WNDCLASSEXW proxyClass{};
-    proxyClass.cbSize=sizeof(proxyClass);
-    proxyClass.lpfnWndProc = DefWindowProcW;
-    proxyClass.hInstance = g_module;
-    proxyClass.lpszClassName = kProxyClassName;
-    if (!RegisterClassExW(&proxyClass)) {
-        Wh_Log(L"RegisterClassEx failed: %u", GetLastError());
     }
 
     m_hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
@@ -3141,7 +3051,6 @@ void Switcher::Shutdown() {
         m_hwnd = nullptr;
     }
     UnregisterClassW(kOverlayClassName, g_module);
-    UnregisterClassW(kProxyClassName, g_module);
 }
 
 void Switcher::Run() {
@@ -3314,13 +3223,6 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
             if(number>=1 && number<=(int)m_items.size()) m_target=number-1;
             return 1;
         }
-        // Local preview automation: open persistently without injecting keys.
-        case WM_APP + 38:
-            if (!g_ready || !g_takeOver) return 0;
-            OnStart(kStartFromHotkey);
-            m_touchSession=true;g_switching=true;g_stickyControls=true;
-            PostThreadMessageW(g_hookThreadId,WM_HOOK_ENGAGE,0,0);
-            return 1;
         case WM_APP + 35:
             if (!g_ready || !g_takeOver) return 0;
             if (!g_switching.exchange(true)) {
@@ -4219,7 +4121,7 @@ void Switcher::OnStart(WPARAM flags) {
     m_simpleShortcutNumber=0; m_simpleShortcutTime=0;
     if(!m_settings.previewCache) m_windowSnapshots.clear();
     m_cursorTitleOpacity=0; m_cursorTitle.clear(); m_hoverTitleLayout=nullptr; m_hoverTitleFormat=nullptr;
-    m_statsBottom=0; m_killErrorUntil=0;
+    m_statsBottom=0; m_killErrorUntil=0; m_killConfirmWindow=nullptr; m_killConfirmUntil=0;
     m_hoverWindow=nullptr; m_hoverCandidate=nullptr;
     m_hoverSelectionArmed=true; m_lastHoverCursor={-10000,-10000};
     m_closeButton={}; m_killButton={}; m_pinButton={}; m_iconRects.clear();
@@ -4605,10 +4507,11 @@ void Switcher::RunIconContextAction(int action) {
     Item* target=nullptr;
     for(auto& item:m_items) if(item->hwnd==m_iconMenuWindow && item->pid==m_iconMenuPid &&
         item->processCreation==m_iconMenuCreation && !item->desktopPlaceholder) {target=item.get();break;}
-    DismissIconContext();
     DWORD pid=0;
     if(!target || target->windowGone || !IsWindow(target->hwnd) ||
         !GetWindowThreadProcessId(target->hwnd,&pid) || pid!=m_iconMenuPid) return;
+    if(action==1 && !ConfirmKill(*target)) return;
+    DismissIconContext();
     if(action==2) {
         if(m_pinned.contains(target->hwnd)) m_pinned.erase(target->hwnd);
         else m_pinned[target->hwnd]=true;
@@ -4676,7 +4579,7 @@ void Switcher::DrawIconContext(float opacity) {
     m_brush->SetColor(StyleColor(m_settings.borderColor,.25f*alpha));
     m_ctx->DrawLine({panel.left+8*ui,panel.top+32*ui},{panel.right-8*ui,panel.top+32*ui},m_brush.get(),ui);
     const bool pinned=m_pinned.contains(m_iconMenuWindow);
-    const wchar_t* labels[3]={Text(L"Close",L"Chiudi"),Text(L"Kill",L"Uccidi"),pinned ? Text(L"Unpin",L"Sblocca") : Text(L"Pin",L"Fissa")};
+    const wchar_t* labels[3]={Text(L"Close",L"Chiudi"),(m_killConfirmWindow==m_iconMenuWindow && NowSeconds()<m_killConfirmUntil ? Text(L"Confirm kill",L"Conferma arresto") : Text(L"Kill",L"Termina")),pinned ? Text(L"Unpin",L"Sblocca") : Text(L"Pin",L"Fissa")};
     const wchar_t* glyphs[3]={L"\uE8BB",L"\uE74D",pinned ? L"\uE77A" : L"\uE718"};
     for(int row=0;row<3;++row) {
         const auto r=m_iconMenuRows[row];
@@ -4807,6 +4710,7 @@ void Switcher::OnClick(POINT pt) {
     if (m_settings.hoverControls && m_hoverWindow && InRect(point,m_killButton)) {
         for (auto& item:m_items) {
             if (item->hwnd!=m_hoverWindow) continue;
+            if(!ConfirmKill(*item)) return;
             const bool killed=KillWindowProcess(item->hwnd,item->pid,item->processCreation);
             if (killed) {item->closeRequested=true;item->closeRequestedAt=NowSeconds();}
             else m_killErrorUntil=NowSeconds()+3;
@@ -5009,8 +4913,8 @@ bool Switcher::BeginOverviewWindowDrag(POINT clientPoint) {
         }
         m_dragChangedDesktop=true;
     }
-    if(!SetWindowPos(target,HWND_TOPMOST,outerLeft,outerTop,
-        outer.right-outer.left,outer.bottom-outer.top,SWP_NOACTIVATE)) {
+    if(!SetWindowPos(target,nullptr,outerLeft,outerTop,
+        outer.right-outer.left,outer.bottom-outer.top,SWP_NOACTIVATE|SWP_NOZORDER)) {
         RestoreDragWindow();return false;
     }
     m_dragMouseOffset={screenPoint.x-outerLeft,screenPoint.y-outerTop};
@@ -5124,11 +5028,11 @@ void Switcher::UpdateDragReveal() {
     const float height=(float)(m_dragVisibleRect.bottom-m_dragVisibleRect.top);
     const LONG left=(LONG)std::lround(m_dragVisibleRect.left-width*(scale-1)*0.5f);
     const LONG top=(LONG)std::lround(m_dragVisibleRect.top-height*(scale-1)*0.5f);
-    if (!SetWindowPos(m_dragWindow,HWND_TOPMOST,
+    if (!SetWindowPos(m_dragWindow,nullptr,
         left-m_dragFrameMargins.left,top-m_dragFrameMargins.top,
         (LONG)std::lround(width*scale)+m_dragFrameMargins.left+m_dragFrameMargins.right,
         (LONG)std::lround(height*scale)+m_dragFrameMargins.top+m_dragFrameMargins.bottom,
-        SWP_NOACTIVATE)) RestoreDragWindow();
+        SWP_NOACTIVATE|SWP_NOZORDER)) RestoreDragWindow();
     else if (progress>=1) m_dragRevealDone=true;
 }
 
@@ -5172,8 +5076,8 @@ bool Switcher::BeginWindowDrag(POINT screenPoint) {
     if (!GetWindowRect(target,&rect)) return false;
     const LONG left=rect.left+screenPoint.x-m_pressScreen.x;
     const LONG top=rect.top+screenPoint.y-m_pressScreen.y;
-    if (!SetWindowPos(target,HWND_TOPMOST,left,top,0,0,
-                      SWP_NOSIZE|SWP_NOACTIVATE)) return false;
+    if (!SetWindowPos(target,nullptr,left,top,0,0,
+                      SWP_NOSIZE|SWP_NOACTIVATE|SWP_NOZORDER)) return false;
     const LONG settledLeft=m_dragVisibleRect.left-m_dragFrameMargins.left+
                            screenPoint.x-m_pressScreen.x;
     const LONG settledTop=m_dragVisibleRect.top-m_dragFrameMargins.top+
@@ -5393,44 +5297,6 @@ void Switcher::CollectWindows() {
     }
 }
 
-bool Switcher::CreateProxy(Item& item) {
-    item.proxy = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
-        kProxyClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, g_module,
-        nullptr);
-    if (!item.proxy) {
-        return false;
-    }
-
-    BOOL disableTransitions = TRUE;
-    DwmSetWindowAttribute(item.proxy, DWMWA_TRANSITIONS_FORCEDISABLED,
-                          &disableTransitions, sizeof(disableTransitions));
-
-    SIZE size{};
-    if (FAILED(DwmRegisterThumbnail(item.proxy, item.hwnd, &item.thumbnail)) ||
-        FAILED(DwmQueryThumbnailSourceSize(item.thumbnail, &size)) ||
-        size.cx <= 0 || size.cy <= 0) {
-        return false;
-    }
-
-    DWM_THUMBNAIL_PROPERTIES properties{};
-    properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE |
-                         DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY;
-    properties.rcDestination = {0, 0, size.cx, size.cy};
-    properties.fVisible = TRUE;
-    properties.opacity = 255;
-    properties.fSourceClientAreaOnly = FALSE;
-    if (FAILED(DwmUpdateThumbnailProperties(item.thumbnail, &properties))) {
-        return false;
-    }
-
-    // To the left of all monitors, where nobody can see or click it.
-    const int x = GetSystemMetrics(SM_XVIRTUALSCREEN) - size.cx - 100;
-    const int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    return SetWindowPos(item.proxy, HWND_BOTTOM, x, y, size.cx, size.cy,
-                        SWP_NOACTIVATE | SWP_SHOWWINDOW);
-}
-
 void Switcher::StartCaptures() {
     if(m_settings.simpleStyle && m_settings.simpleStyle<4 && !m_desktopOverview) return;
     m_capturing=true;
@@ -5648,7 +5514,6 @@ void Switcher::Teardown() {
     m_overviewWindows.clear();m_overviewDesktops.clear();
     m_overviewSavedBackground=nullptr;m_overviewSavedBackgroundKey.clear();
     SetTouchpadOwnership(false);
-    RestoreReturnWindow();
     ClearPointerPress();
     // A held drag must survive hiding and tearing down the overlay.
     if (!m_dragMoving) RestoreDragWindow();
@@ -5707,7 +5572,7 @@ void Switcher::ShowOverlay() {
     }
     if (m_settings.blurBackground || (m_settings.simpleStyle && !m_desktopOverview)) {
         if(m_desktopOverview) UpdateBackground(true);
-        else if(m_settings.wallpaperMaterial) UpdateBackground(); else CaptureAcrylicBackdrop();
+        else CaptureAcrylicBackdrop();
     } else { m_background=nullptr; }
     if (!m_capturing) {
         StartCaptures();
@@ -5731,7 +5596,6 @@ void Switcher::ShowOverlay() {
 
 void Switcher::BeginClose(bool commit) {
     DismissIconContext();
-    RestoreReturnWindow();
     ClearPointerPress();
     if (m_dragWindow && !m_dragMoving) RestoreDragWindow();
     const double now = NowSeconds();
@@ -5772,7 +5636,7 @@ void Switcher::BeginClose(bool commit) {
             SetWindowPos(m_hwnd,HWND_TOPMOST,host.left,host.top,width,height,SWP_NOACTIVATE);
             m_returnActive=true;
             m_holdOffset={};m_holdExpanded=false;m_holdExitBitmap=nullptr;
-            HideReturnWindow(item->hwnd,item->pid);
+            // Keep the target visible; the topmost overlay covers the return animation.
         }
     }
     // Keep a full deceleration tail even if Alt is released during opening.
@@ -5789,7 +5653,6 @@ void Switcher::ReopenDuringClose(bool backwards) {
     m_holdWindow=nullptr;m_holdSince=0;m_holdAmount=0;m_holdFullAt=0;m_holdExpanded=false;m_holdOffset={};m_holdExitBitmap=nullptr;
     const double now=NowSeconds();
     const float current=m_open.Value(now);
-    RestoreReturnWindow();
     m_returnActive=false;
     m_returnEntry={};
     m_closeSceneOffset={};
@@ -5813,37 +5676,7 @@ void Switcher::ReopenDuringClose(bool backwards) {
     OnStep(backwards ? -1 : 1);
 }
 
-void Switcher::HideReturnWindow(HWND target,DWORD expectedPid) {
-    DWORD pid=0,cloaked=0;
-    if (!IsWindow(target) || !IsWindowVisible(target) || IsIconic(target) ||
-        !GetWindowThreadProcessId(target,&pid) || pid!=expectedPid ||
-        FAILED(DwmGetWindowAttribute(target,DWMWA_CLOAKED,&cloaked,sizeof(cloaked))) || cloaked) return;
-    // Hide the actual window instead of relying on DWM cloaking. Async show
-    // commands avoid waiting on an application's UI thread. SW_SHOWNA later
-    // preserves its current size and maximized state without stealing focus.
-    if (ShowWindowAsync(target,SW_HIDE)) {
-        m_hiddenReturnWindow=target;
-        m_hiddenReturnPid=pid;
-        DwmFlush();
-    }
-}
-
-void Switcher::RestoreReturnWindow() {
-    if (!m_hiddenReturnWindow) return;
-    const HWND target=m_hiddenReturnWindow;
-    const DWORD expectedPid=m_hiddenReturnPid;
-    m_hiddenReturnWindow=nullptr;
-    m_hiddenReturnPid=0;
-    DWORD pid=0;
-    if (IsWindow(target) && GetWindowThreadProcessId(target,&pid) && pid==expectedPid) {
-        if (!ShowWindowAsync(target,SW_SHOWNA))
-            Wh_Log(L"Could not show returning window: %u",GetLastError());
-        DwmFlush();
-    }
-}
-
 void Switcher::FinishClose() {
-    RestoreReturnWindow();
     if(m_commitDesktop) {
         const GUID destination=m_destinationDesktop;
         const HWND target=m_overviewSelectedWindow;const DWORD expectedPid=m_overviewSelectedPid;
@@ -6526,7 +6359,6 @@ void Switcher::DrawSimpleStyle(float t) {
     }
     if(m_state!=State::Closing && m_simpleRaised!=m_items[selected]->hwnd) {
         m_simpleRaised=m_items[selected]->hwnd;
-        if(!IsIconic(m_simpleRaised)) SetWindowPos(m_simpleRaised,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_ASYNCWINDOWPOS);
         SetWindowPos(m_hwnd,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
     }
 }
@@ -6938,7 +6770,9 @@ void Switcher::DrawHoverControls(float t) {
         m_brush->SetColor(foreground);
         m_ctx->DrawText(entry.item->title.c_str(), (UINT32)entry.item->title.size(),
             m_hoverTextFormat.get(), geometry.title, m_brush.get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
-        const std::wstring uptime=NowSeconds()<m_killErrorUntil
+        const std::wstring uptime=m_killConfirmWindow==entry.item->hwnd && NowSeconds()<m_killConfirmUntil
+            ? Text(L"Click Kill again: unsaved work will be lost",L"Premi ancora Termina: perderai i dati non salvati")
+            : NowSeconds()<m_killErrorUntil
             ? Text(L"Couldn't kill process",L"Impossibile uccidere il processo")
             : ProcessUptime(entry.item->processCreation,m_settings.italian);
         m_hoverTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
@@ -7006,7 +6840,7 @@ void Switcher::DrawHoverControls(float t) {
         if (m_settings.showCloseButton) {
             drawCaption(Text(L"Close",L"Chiudi"),entry.item->closeHoverAmount,
                 {geometry.close.left+4*ui,geometry.close.top,geometry.close.right-24*ui,geometry.close.bottom},true);
-            drawCaption(Text(L"Kill",L"Uccidi"),entry.item->killHoverAmount,
+            drawCaption(m_killConfirmWindow==entry.item->hwnd && NowSeconds()<m_killConfirmUntil ? Text(L"Confirm",L"Conferma") : Text(L"Kill",L"Termina"),entry.item->killHoverAmount,
                 {geometry.kill.left+4*ui,geometry.kill.top,geometry.kill.right-24*ui,geometry.kill.bottom},true);
         }
         return;
@@ -7752,9 +7586,9 @@ void Switcher::DrawHoldPreview(float opacity) {
                 }
                 const float center=(m_holdQuad.p[0].y+m_holdQuad.p[2].y)*.5f;
                 const float left=m_holdQuad.p[0].x+12*m_dpiScale,right=m_holdQuad.p[1].x-12*m_dpiScale;
-                DrawAnimatedUiText(m_holdMessageTitle,L"What are you looking at?",m_holdMessageFormat.get(),
+                DrawAnimatedUiText(m_holdMessageTitle,Text(L"Window minimized",L"Finestra ridotta a icona"),m_holdMessageFormat.get(),
                     {left,center-42*m_dpiScale,right,center},opacity);
-                DrawAnimatedUiText(m_holdMessageBody,L"This window is minimized so there isnt anything fun to see. Get out.",m_holdMessageFormat.get(),
+                DrawAnimatedUiText(m_holdMessageBody,Text(L"Restore this window to see its live preview.",L"Ripristina la finestra per vedere l’anteprima in tempo reale."),m_holdMessageFormat.get(),
                     {left,center,right,center+42*m_dpiScale},opacity);
             }
         }
@@ -8092,10 +7926,7 @@ void Switcher::RenderFrame() {
     if(windowMode)
         m_ctx->FillRoundedRectangle({{24*m_dpiScale,24*m_dpiScale,m_width-24*m_dpiScale,m_height-24*m_dpiScale},m_settings.panelRadius*m_dpiScale,m_settings.panelRadius*m_dpiScale},m_brush.get());
     else m_ctx->FillRectangle(screen,m_brush.get());
-    if (m_settings.dimOpacity > 0 && !windowMode) {
-        m_brush->SetColor(D2D1::ColorF(0, 0, 0, m_settings.dimOpacity * t));
-        m_ctx->FillRectangle(screen, m_brush.get());
-    }
+
 
     }
     // Background and content have separate closing animations. Keep the
@@ -8580,13 +8411,7 @@ void Switcher::CaptureAcrylicBackdrop() {
 }
 
 void Switcher::UpdateBackground(bool desktopOnly) {
-    const auto mode=desktopOnly ? BackgroundMode::BlurredWallpaper : m_settings.background;
-    if (mode == BackgroundMode::Dim) {
-        m_background = nullptr;
-        m_backgroundKey.clear();
-        return;
-    }
-
+    (void)desktopOnly;
     const UINT width = m_swapWidth;
     const UINT height = m_swapHeight;
 
@@ -8641,7 +8466,6 @@ void Switcher::UpdateBackground(bool desktopOnly) {
         path + L"|" + std::to_wstring(fileTime) + L"|" +
         std::to_wstring(width) + L"x" + std::to_wstring(height) + L"|" +
         std::to_wstring(color) + L"|" + std::to_wstring((int)position) + L"|" +
-        std::to_wstring((int)mode) + L"|" +
         std::to_wstring(m_settings.blurAmount);
     if (m_background && key == m_backgroundKey) {
         return;
@@ -8720,11 +8544,6 @@ void Switcher::UpdateBackground(bool desktopOnly) {
     HRESULT hr = m_ctx->EndDraw();
     m_ctx->SetTarget(nullptr);
     if (FAILED(hr)) {
-        return;
-    }
-
-    if (mode != BackgroundMode::BlurredWallpaper) {
-        m_background = composed;
         return;
     }
 
@@ -8819,7 +8638,7 @@ void InitModuleGlobals() {
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// The native switcher UI and input threads run inside Explorer.
+// The switcher UI and input threads run in Windhawk’s tool process.
 
 BOOL WhTool_ModInit() {
     Wh_Log(L">");
@@ -8874,118 +8693,407 @@ static bool IsSupportedWindows11() {
         version.dwMajorVersion == 10 && version.dwBuildNumber >= 22000;
 }
 
-// Explorer receives the system hotkey even when an elevated app has focus.
-// Relay it before Explorer dispatches it to the native Alt+Tab implementation.
+// Explorer only forwards its Alt+Tab hotkey; rendering and input ownership live in the tool process.
 namespace CoverTabbyShellBridge {
-static bool active = false;
-static std::atomic<bool> stopping{false};
-using GetMessageFn = decltype(&GetMessageW);
-static GetMessageFn originalGetMessage = nullptr;
-using PeekMessageFn = decltype(&PeekMessageW);
-static PeekMessageFn originalPeekMessage = nullptr;
-static bool Relay() {
-    HWND overlay = FindWindowW(covertabby::kOverlayClassName, covertabby::kOverlayTitleReady);
+constexpr PCWSTR kAltTabThreadName=L"Immersive Shell";
+constexpr DWORD kFindAltTabThreadIntervalMs=2000;
+constexpr DWORD kFindAltTabThreadMaxIntervalMs=60000;
+constexpr DWORD kWaitForTaskbarIntervalMs=1000;
+// Explorer thread only.
+HHOOK g_messageHook;
+HANDLE g_messageHookThread;  // To know when it ends.
+std::atomic<int> g_messageHookCalls;
+HANDLE g_explorerStopEvent;
+HANDLE g_explorerThread;
+
+// Hands the hotkey to the switcher. Returns false if the switcher isn't running
+// or can't take over Alt+Tab right now; the native switcher then opens.
+bool ForwardHotkey(WPARAM flags) {
+    HWND overlay=FindWindowW(covertabby::kOverlayClassName,covertabby::kOverlayTitleReady);
     if (!overlay) return false;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(overlay, &pid);
+    DWORD pid=0;GetWindowThreadProcessId(overlay,&pid);
     if (pid) AllowSetForegroundWindow(pid);
-    DWORD_PTR accepted = 0;
-    const WPARAM direction = (GetAsyncKeyState(VK_SHIFT) & 0x8000) ? covertabby::kStartBackwards : 0;
-    return SendMessageTimeoutW(overlay, WM_APP + 35, direction, 0,
-        SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &accepted) && accepted == 1;
+    return PostMessageW(overlay,WM_APP+35,flags,0)!=FALSE;
 }
-static void Filter(MSG* message) {
-    if (!message || message->message != WM_HOTKEY) return;
-    const UINT modifiers = LOWORD(message->lParam);
-    if (HIWORD(message->lParam) != VK_TAB || !(modifiers & MOD_ALT) ||
-        (modifiers & (MOD_CONTROL | MOD_WIN))) return;
-    if (Relay()) {
-        message->message = WM_NULL;
-        message->wParam = message->lParam = 0;
+LRESULT CALLBACK GetMessageProc(int code,WPARAM wParam,LPARAM lParam) {
+    ++g_messageHookCalls;
+    auto* msg=reinterpret_cast<MSG*>(lParam);
+    if (code==HC_ACTION && wParam==PM_REMOVE && msg && msg->message==WM_HOTKEY &&
+        HIWORD(msg->lParam)==VK_TAB) {
+        UINT modifiers=LOWORD(msg->lParam);
+        if ((modifiers&MOD_ALT) && !(modifiers&(MOD_CONTROL|MOD_WIN)) &&
+            ForwardHotkey((modifiers&MOD_SHIFT)?covertabby::kStartBackwards:0)) {
+            msg->message=WM_NULL;msg->wParam=0;msg->lParam=0;
+        }
     }
-}
-static BOOL WINAPI GetMessageHook(LPMSG message, HWND window, UINT minimum, UINT maximum) {
-    BOOL result = originalGetMessage(message, window, minimum, maximum);
-    if (result > 0 && !stopping.load()) Filter(message);
+    LRESULT result=CallNextHookEx(nullptr,code,wParam,lParam);
+    --g_messageHookCalls;
     return result;
 }
-static void BeforeUninit() {
-    stopping.store(true);
-    Wh_RemoveFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetMessageW"));
-    Wh_ApplyHookOperations();
+
+// The ID of explorer's thread that receives the hotkey, or 0 if it doesn't
+// exist now.
+DWORD FindAltTabThread() {
+    DWORD found = 0;
+    const DWORD processId = GetCurrentProcessId();
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) return;
-    THREADENTRY32 entry{}; entry.dwSize = sizeof(entry);
-    if (Thread32First(snapshot, &entry)) do {
-        if (entry.th32OwnerProcessID == GetCurrentProcessId())
-            PostThreadMessageW(entry.th32ThreadID, WM_NULL, 0, 0);
-    } while (Thread32Next(snapshot, &entry));
-    CloseHandle(snapshot);
-}
-static BOOL WINAPI PeekMessageHook(LPMSG message, HWND window, UINT minimum, UINT maximum, UINT flags) {
-    BOOL result = originalPeekMessage(message, window, minimum, maximum, flags);
-    if (result && (flags & PM_REMOVE)) Filter(message);
-    return result;
-}
-#if !defined(_M_IX86)
-using NativeShowFn = HRESULT(WINAPI*)(void*, void*, int, void*);
-static NativeShowFn originalXamlShow = nullptr;
-static NativeShowFn originalClassicShow = nullptr;
-static HRESULT WINAPI XamlShowHook(void* self, void* monitor, int flags, void* app) {
-    if (Relay()) return S_OK;
-    return originalXamlShow(self, monitor, flags, app);
-}
-static HRESULT WINAPI ClassicShowHook(void* self, void* monitor, int flags, void* app) {
-    if (Relay()) return S_OK;
-    return originalClassicShow(self, monitor, flags, app);
-}
-#endif
-static BOOL Init() {
-    active = true;
-    HMODULE user = GetModuleHandleW(L"user32.dll");
-    if (!user) return FALSE;
-    stopping.store(false);
-    const bool getHook = Wh_SetFunctionHook((void*)GetProcAddress(user, "GetMessageW"),
-        (void*)GetMessageHook, (void**)&originalGetMessage);
-    const bool peekHook = Wh_SetFunctionHook((void*)GetProcAddress(user, "PeekMessageW"),
-        (void*)PeekMessageHook, (void**)&originalPeekMessage);
-#if !defined(_M_IX86)
-    HMODULE twinui = LoadLibraryW(L"twinui.pcshell.dll");
-    if (twinui) {
-        // twinui.pcshell.dll
-        WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
-            {{LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-                (void**)&originalXamlShow, (void*)XamlShowHook, true},
-            {{LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-                (void**)&originalClassicShow, (void*)ClassicShowHook, true}
-        };
-        // Use locally cached symbols; never wait for network downloads during startup.
-        WH_HOOK_SYMBOLS_OPTIONS options{sizeof(options), L"", FALSE, L""};
-        if (!WindhawkUtils::HookSymbols(twinui, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks), &options))
-            Wh_Log(L"Explorer native Alt+Tab symbols unavailable; message relay remains active");
-        FreeLibrary(twinui);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return found;
     }
-#endif
-    Wh_Log(L"Explorer Alt+Tab bridge: PeekMessage=%d", peekHook);
-    return getHook && peekHook;
+
+    THREADENTRY32 entry{sizeof(entry)};
+    for (BOOL more = Thread32First(snapshot, &entry); more && !found;
+         more = Thread32Next(snapshot, &entry)) {
+        if (entry.th32OwnerProcessID != processId) {
+            continue;
+        }
+        HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE,
+                                   entry.th32ThreadID);
+        if (!thread) {
+            continue;
+        }
+        PWSTR name = nullptr;
+        if (SUCCEEDED(GetThreadDescription(thread, &name)) && name &&
+            wcscmp(name, kAltTabThreadName) == 0) {
+            found = entry.th32ThreadID;
+        }
+        if (name) {
+            LocalFree(name);
+        }
+        CloseHandle(thread);
+    }
+
+    CloseHandle(snapshot);
+    return found;
 }
+
+// Hooks the thread that receives the hotkey, if it exists now. Returns true if
+// it's hooked.
+bool HookAltTabThread() {
+    const DWORD threadId = FindAltTabThread();
+    if (!threadId) {
+        return false;
+    }
+    HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
+    if (!thread) {
+        return false;
+    }
+    // A thread of this process: no module (SetWindowsHookEx docs).
+    HHOOK hook =
+        SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, nullptr, threadId);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookEx(WH_GETMESSAGE) failed: %u", GetLastError());
+        CloseHandle(thread);
+        return false;
+    }
+    Wh_Log(L"Hooked explorer's thread %u (%s)", threadId, kAltTabThreadName);
+    g_messageHook = hook;
+    g_messageHookThread = thread;
+    return true;
 }
-static bool nativeStarted=false;
-BOOL Wh_ModInit() {
-    if(!IsSupportedWindows11())return FALSE;
+
+void UnhookAltTabThread() {
+    if (g_messageHook) {
+        UnhookWindowsHookEx(g_messageHook);
+        g_messageHook = nullptr;
+    }
+    if (g_messageHookThread) {
+        CloseHandle(g_messageHookThread);
+        g_messageHookThread = nullptr;
+    }
+
+    // Let calls already running on explorer's thread leave the module before
+    // it gets unloaded. No new calls can start after the hook is removed, so
+    // this always ends.
+    const ULONGLONG start = GetTickCount64();
+    bool logged = false;
+    while (g_messageHookCalls > 0) {
+        if (!logged && GetTickCount64() - start > 1000) {
+            Wh_Log(L"Still waiting for message hook calls to return");
+            logged = true;
+        }
+        Sleep(1);
+    }
+}
+
+DWORD WINAPI ExplorerThreadProc(LPVOID) {
+    // Only the shell process (the one with the taskbar) receives the hotkey.
+    // With "Launch folder windows in a separate process", folder windows run
+    // in other explorer processes, which have nothing to do.
+    for (;;) {
+        if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(taskbar, &processId);
+            if (processId != GetCurrentProcessId()) {
+                Wh_Log(L"Not the shell process, nothing to do");
+                return 0;
+            }
+            break;
+        }
+        // Explorer is still starting up.
+        if (WaitForSingleObject(g_explorerStopEvent,
+                                kWaitForTaskbarIntervalMs) != WAIT_TIMEOUT) {
+            return 0;
+        }
+    }
+
+    // Hooks the thread, and again if it's ever made anew. Until it's hooked,
+    // it's looked for again, less and less often.
+    DWORD interval = kFindAltTabThreadIntervalMs;
+    bool loggedMissing = false;
+    for (;;) {
+        if (!g_messageHook && !HookAltTabThread() && !loggedMissing) {
+            Wh_Log(L"Explorer's \"%s\" thread wasn't found yet",
+                   kAltTabThreadName);
+            loggedMissing = true;
+        }
+
+        const HANDLE events[] = {g_explorerStopEvent, g_messageHookThread};
+        const DWORD result = WaitForMultipleObjects(
+            g_messageHook ? 2 : 1, events, FALSE,
+            g_messageHook ? INFINITE : interval);
+        if (result == WAIT_TIMEOUT) {
+            interval = std::min(interval * 2, kFindAltTabThreadMaxIntervalMs);
+        } else if (result == WAIT_OBJECT_0 + 1) {
+            // The thread ended (its ID can be reused).
+            UnhookAltTabThread();
+            interval = kFindAltTabThreadIntervalMs;
+            loggedMissing = false;
+        } else {
+            break;
+        }
+    }
+
+    UnhookAltTabThread();
+    return 0;
+}
+
+void StopExplorerPart() {
+    if (g_explorerThread) {
+        SetEvent(g_explorerStopEvent);
+        WaitForSingleObject(g_explorerThread, INFINITE);
+        CloseHandle(g_explorerThread);
+        g_explorerThread = nullptr;
+    }
+    if (g_explorerStopEvent) {
+        CloseHandle(g_explorerStopEvent);
+        g_explorerStopEvent = nullptr;
+    }
+}
+
+// Doesn't wait for anything, so explorer's startup isn't delayed.
+void StartExplorerPart() {
+    g_explorerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_explorerStopEvent) {
+        return;
+    }
+    g_explorerThread =
+        CreateThread(nullptr, 0, ExplorerThreadProc, nullptr, 0, nullptr);
+    if (!g_explorerThread) {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        StopExplorerPart();
+    }
+}
+
+
+BOOL Init() {
+    if (!IsSupportedWindows11()) return FALSE;
+    StartExplorerPart();return g_explorerThread!=nullptr;
+}
+void Restart() {StopExplorerPart();StartExplorerPart();}
+}
+bool g_isExplorer=false;
+static bool IsCoverTabbyExplorerProcess() {
     WCHAR path[MAX_PATH]{};GetModuleFileNameW(nullptr,path,ARRAYSIZE(path));
-    auto name=wcsrchr(path,L'\\');name=name?name+1:path;
-    if(_wcsicmp(name,L"explorer.exe")!=0)return FALSE;
-    HWND taskbar=FindWindowW(L"Shell_TrayWnd",nullptr);DWORD owner=0;
-    if(taskbar)GetWindowThreadProcessId(taskbar,&owner);
-    if(owner&&owner!=GetCurrentProcessId())return FALSE;
-    Wh_SetIntValue(L"nativeHostPID",GetCurrentProcessId());Wh_SetIntValue(L"nativeReady",0);
-    return CoverTabbyShellBridge::Init();
+    PCWSTR name=wcsrchr(path,L'\\');name=name?name+1:path;
+    return _wcsicmp(name,L"explorer.exe")==0;
 }
-void Wh_ModAfterInit(){nativeStarted=covertabby::WhTool_ModInit()!=FALSE;Wh_SetIntValue(L"nativeReady",nativeStarted?1:0);}
-BOOL Wh_ModSettingsChanged(BOOL* reload){*reload=FALSE;if(nativeStarted)covertabby::WhTool_ModSettingsChanged();return TRUE;}
-void Wh_ModBeforeUninit(){if(nativeStarted){covertabby::WhTool_ModUninit();nativeStarted=false;}CoverTabbyShellBridge::BeforeUninit();Wh_SetIntValue(L"nativeReady",0);}
-void Wh_ModUninit(){}
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    // explorer.exe part.
+    if (IsCoverTabbyExplorerProcess()) {
+        g_isExplorer = true;
+        return CoverTabbyShellBridge::Init();
+    }
+
+    if (!IsSupportedWindows11()) return FALSE;
+    WCHAR hostPath[MAX_PATH]{};GetModuleFileNameW(nullptr,hostPath,ARRAYSIZE(hostPath));
+    PCWSTR hostName=wcsrchr(hostPath,L'\\');hostName=hostName?hostName+1:hostPath;
+    if (_wcsicmp(hostName,L"windhawk.exe") && _wcsicmp(hostName,L"windhawk-mod.exe")) return FALSE;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!covertabby::WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        CoverTabbyShellBridge::Restart();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    covertabby::WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        CoverTabbyShellBridge::StopExplorerPart();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    covertabby::WhTool_ModUninit();
+    ExitProcess(0);
+}
 
 /*
 THIRD-PARTY LICENSE NOTICES
