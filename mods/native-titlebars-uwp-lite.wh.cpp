@@ -446,52 +446,6 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
     return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
 }
 
-typedef __int64 (* CTitleBar_ShowTitleBar_t)(void *, INT64, INT64, float);
-
-CTitleBar_ShowTitleBar_t CTitleBar_ShowTitleBar_orig;
-
-__int64 __fastcall CTitleBar_ShowTitleBar_hook(
-
-    void *pThis,
-
-    INT64 a2,
-
-    INT64 a3,
-
-    float a4
-
-)
-
-{
-
-    return 0;
-
-}
-
-typedef bool (* CTitleBar_HandleTitleBarMessage_t)(void *, HWND, UINT, WPARAM, LPARAM, INT64);
-
-CTitleBar_HandleTitleBarMessage_t CTitleBar_HandleTitleBarMessage_orig;
-
-bool __fastcall CTitleBar_HandleTitleBarMessage_hook(
-
-    void *pThis,
-
-    HWND hWnd,
-
-    UINT msg,
-
-    WPARAM wParam,
-
-    LPARAM lParam,
-
-    INT64 a6
-
-){
-
-    return false;
-
-}
-
 BOOL Wh_ModInit()
 {
     InitializeCriticalSection(&g_csSubclassedWindows);
