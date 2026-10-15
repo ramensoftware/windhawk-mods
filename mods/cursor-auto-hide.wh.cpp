@@ -350,8 +350,12 @@ void LoadSettings(bool fromSettingsCallback) {
     UINT vk = 0;
     bool valid = false;
     // StringSetting frees the value it holds when it goes out of scope,
-    // so there is nothing to release by hand here.
-    WindhawkUtils::StringSetting toggleHotkeySetting(L"toggleHotkey");
+    // so there is nothing to release by hand here. The one-argument
+    // constructor does not read a setting, it takes ownership of whatever
+    // pointer it is given, so it has to be make() that calls
+    // Wh_GetStringSetting.
+    auto toggleHotkeySetting =
+        WindhawkUtils::StringSetting::make(L"toggleHotkey");
     std::wstring hotkeyText = toggleHotkeySetting.get();
     if (!hotkeyText.empty()) {
         valid = ParseHotkey(hotkeyText.c_str(), &modifiers, &vk);
