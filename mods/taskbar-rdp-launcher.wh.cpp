@@ -377,7 +377,7 @@ std::wstring MenuText(const std::wstring& text) {
 
 namespace Storage {
 
-std::wstring UserSid() {
+std::wstring ReadUserSid() {
     std::wstring sid;
     HANDLE token = nullptr;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
@@ -394,6 +394,12 @@ std::wstring UserSid() {
     return sid.empty() ? L"User" : sid;
 }
 
+// The user's SID, which stays the same for as long as the mod runs.
+const std::wstring& UserSid() {
+    static const std::wstring sid = ReadUserSid();
+    return sid;
+}
+
 std::wstring ValueName(const wchar_t* name) {
     return UserSid() + L"." + name;
 }
@@ -407,7 +413,7 @@ bool SetInt(const wchar_t* name, int value) {
 }
 
 std::wstring GetString(const wchar_t* name) {
-    std::vector<WCHAR> buffer(256 * 1024);
+    std::vector<WCHAR> buffer(64 * 1024);  // The computers and display buttons take a few KB.
     size_t length = Wh_GetStringValue(ValueName(name).c_str(), buffer.data(), buffer.size());
     return std::wstring(buffer.data(), std::min(length, buffer.size()));
 }
@@ -1063,9 +1069,6 @@ public:
         AppendMenuW(menu_, flags, actions_->size(), MenuText(text).c_str());
     }
 
-    // A line of text that can't be clicked, as a heading.
-    void AddHeading(const std::wstring& text) { AppendMenuW(menu_, MF_STRING | MF_GRAYED, 0, MenuText(text).c_str()); }
-
     void AddSeparator() { AppendMenuW(menu_, MF_SEPARATOR, 0, nullptr); }
 
     // A submenu; items added to it share this menu's actions.
@@ -1431,10 +1434,9 @@ public:
         ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
         appBarMessage_ = RegisterWindowMessageW((std::wstring(kSelfApp) + L".AppBarNotification").c_str());
         ChangeWindowMessageFilterEx(hwnd_, appBarMessage_, MSGFLT_ALLOW, nullptr);
-        APPBARDATA data{sizeof(data)};
-        data.hWnd = hwnd_;
-        data.uCallbackMessage = appBarMessage_;
-        SHAppBarMessage(ABM_NEW, &data);
+        taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
+        ChangeWindowMessageFilterEx(hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
+        RegisterAppBar();
         // Take the other widget's copy of the link if it changed more recently, and let it know
         // this one is here.
         WidgetLink::Publish(hwnd_, link_);
@@ -1460,8 +1462,6 @@ public:
     }
 
     HWND Handle() const { return hwnd_; }
-
-    int Offset() const { return offset_; }
 
     bool Visible() const { return hwnd_ && IsWindowVisible(hwnd_); }
 
@@ -1532,6 +1532,13 @@ public:
             // The other widget moved, changed size, or changed the link.
             SyncLink();
             UpdatePlacement(false);
+            return true;
+        }
+        if (taskbarCreatedMessage_ && message == taskbarCreatedMessage_) {
+            // Explorer started (again, or after the mod at sign-in) and knows no app bars yet.
+            shellReportsFullScreen_ = false;
+            RegisterAppBar();
+            UpdatePlacement(true);
             return true;
         }
         if (appBarMessage_ && message == appBarMessage_) {
@@ -1692,8 +1699,6 @@ protected:
 
     bool Pressed() const { return pressed_; }
 
-    bool LightTaskbar() const { return lightTaskbar_; }
-
     // Moves the widget onto the taskbar and above it, or hides it when it shouldn't show.
     void UpdatePlacement(bool contentChanged) {
         if (!hwnd_) {
@@ -1781,6 +1786,16 @@ protected:
 private:
     static constexpr UINT_PTR kPlacementTimer = 1;
     static constexpr UINT_PTR kLinkSaveTimer = 3;
+
+    // Registers the widget as an app bar (without reserving any space), for Windows' notice that a
+    // full-screen app opened or closed. Fails harmlessly when it's registered already, and when the
+    // taskbar isn't there yet; it's done again when the taskbar is created.
+    void RegisterAppBar() {
+        APPBARDATA data{sizeof(data)};
+        data.hWnd = hwnd_;
+        data.uCallbackMessage = appBarMessage_;
+        SHAppBarMessage(ABM_NEW, &data);
+    }
 
     // A change to the link made here: it's stamped as the newest copy, shown to the other widget,
     // and saved once it settles (a drag changes it on every mouse move).
@@ -1913,6 +1928,7 @@ private:
     bool lightTaskbar_ = false;
     bool shellReportsFullScreen_ = false;
     UINT appBarMessage_ = 0;
+    UINT taskbarCreatedMessage_ = 0;
     HWINEVENTHOOK foregroundHook_ = nullptr;
     bool trackingMouse_ = false;
     bool pressed_ = false;
