@@ -76,14 +76,21 @@ END:VEVENT
   填 `*`）。日期用的是事件写的那一天：`DTSTART`/`DTEND` 带不带时间都可以，时间部分会被
   忽略（所以 `20260215`、`2026-02-15`、`20260215T000000Z` 都读作 2 月 15 日）。
 - `DTEND` 是**不含**的那一天，和 RFC 5545 一致：上面这条表示 2 月 15 日到 23 日放假。没写 `DTEND`
-  的事件按它开始的那一天处理。
+  的事件按它开始的那一天处理；用 `DURATION`（如 `P3D`、`P1W`）写时长的事件按它算。
 - 每个日期都会先检查是否真的存在（含闰年）：`20260231` 这种不存在的日期整条丢掉，而不是"顺手"挪到
-  3 月 3 日；写了 `DTEND` 却解析不出来、或结束日期不比开始日期晚的事件也会被丢掉（日志里有一条计数）。
+  3 月 3 日；写了 `DTEND`/`DURATION` 却解析不出来、或结束日期不比开始日期晚的事件也会被丢掉
+  （日志里有一条计数）。
 - 只在填了地址之后才会去取数据，之后默认每 24 小时（可改）刷新一次；请求失败时保留上次的数据，
   10 分钟后重试。取不到数据（没填地址、没网、地址失效）时，日历保持系统原本的样子，不会变成一片
   空白，也不会报错刷屏。
 - 响应如果是 gzip 或 zlib 压缩的，会先解压再解析（上面那个苹果地址就是这么返回的）。其他压缩方式
   （brotli、zstd 之类）读不了：遇到时日志里会说明这一点，而不是把二进制当成文本乱读。
+
+从订阅源里读的东西：事件的 `DTSTART`/`DTEND`、用 `DURATION` 写的时长、`RDATE` 点名的那几天、
+`EXDATE` 排除掉的那几天，以及"每年重复"这一种 `RRULE`（`FREQ=YEARLY`，可带 `COUNT`、`UNTIL`、
+`INTERVAL`，最多再带 `BYMONTH`/`BYMONTHDAY` 且要和事件自己的日子一致）。**不做**的：其他形式的重复
+规则（`FREQ=MONTHLY` 之类，或带 `BYDAY` 这种部件）按事件写的那一天读，日志里说明一次；时区换算
+（事件写哪天就是哪天）；以及单元格里的角标。
 
 ## 高亮规则
 
@@ -250,11 +257,12 @@ the body.
   date an event names is used: a time part in `DTSTART`/`DTEND` is accepted and
   ignored, so `20260215`, `2026-02-15` and `20260215T000000Z` all mean 15 February.
 - `DTEND` is exclusive, as in RFC 5545: the event above is 15 to 23 February. An
-  event without a `DTEND` is the single day it starts on.
+  event without a `DTEND` is the single day it starts on, and a `DURATION` (`P3D`,
+  `P1W`) is read as the end it stands for.
 - Every date is checked for being a date which exists, leap years included:
   `20260231` is dropped instead of being walked into 3 March, and an event whose
-  `DTEND` cannot be parsed, or which is not after its `DTSTART`, is dropped as well
-  (a log line counts those).
+  `DTEND` or `DURATION` cannot be parsed, or which is not after its `DTSTART`, is
+  dropped as well (a log line counts those).
 - Data is fetched once an address is set, and reused for 24 hours (configurable); a
   failed request keeps the previous data and is retried after 10 minutes, and a
   feed may describe at most 20000 dates in total.
@@ -263,10 +271,14 @@ the body.
   server may pick) cannot be read: the log says so instead of the mod reading the
   bytes as text.
 
-Deliberately not supported: recurrence rules (`RRULE`, `EXDATE` and
-`RECURRENCE-ID` are read as the single occurrence the event names, and a one-time
-log line says so), UTC offset conversion (a date-time is taken as the date it
-names), and any badge or corner marker inside a cell.
+What is read of a feed: the `DTSTART`/`DTEND` of an event, a `DURATION` written instead of a
+`DTEND`, the days an `RDATE` names, the days an `EXDATE` leaves out, and the plain yearly
+`RRULE` - `FREQ=YEARLY`, with `COUNT`, `UNTIL`, `INTERVAL`, and at most `BYMONTH` and
+`BYMONTHDAY` naming the day the event already starts on. Deliberately not expanded: any
+other form of recurrence (`FREQ=MONTHLY` and the like, or a part such as `BYDAY`), which is
+read as the single occurrence its event names, with a one-time log line saying so; a time
+zone (the date an event names is the date used); and any badge or corner marker inside a
+cell.
 
 ## Highlight rules
 
@@ -1173,8 +1185,8 @@ bool ClassifyEventSummary(std::wstring const& summary,
     return true;
 }
 
-// Reported once per process: a source which uses these fields would show too few
-// dates, and the log line says why.
+// Reported once per process: a recurrence rule of a form the mod does not expand would
+// show too few dates, and the log line says why.
 std::atomic<bool> g_loggedRecurrence{false};
 
 // The most dates a feed may describe. The address of the data source can be
@@ -1183,71 +1195,225 @@ std::atomic<bool> g_loggedRecurrence{false};
 // the next refresh and the shutdown.
 constexpr size_t kMaxHolidayDates = 20000;
 
+// Whether a text is a word of the feed, ignoring case: the parts of a rule are written in
+// capitals by convention ("FREQ=YEARLY") and the mod does not care either way.
+bool SameWord(std::wstring const& text, PCWSTR word) {
+    const int length = static_cast<int>(wcslen(word));
+    return static_cast<int>(text.size()) == length &&
+           CompareStringOrdinal(text.c_str(), length, word, length, TRUE) == CSTR_EQUAL;
+}
+
+// Whether a number written in the feed reads as one, and is inside a range.
+bool ReadNumber(std::wstring const& text, int smallest, int largest, int& value) {
+    if (text.empty() || text.size() > 8) {
+        return false;
+    }
+    int number = 0;
+    for (wchar_t c : text) {
+        if (c < L'0' || c > L'9') {
+            return false;
+        }
+        number = number * 10 + (c - L'0');
+    }
+    if (number < smallest || number > largest) {
+        return false;
+    }
+    value = number;
+    return true;
+}
+
+// The number of days a DURATION names, for an event which writes its end that way instead
+// of with a DTEND. The time part of a duration is below a day and is not counted: the mod
+// reads dates and never looks at a time, so "PT12H" is the day the event starts on. False
+// is a value the mod cannot read, and the event is dropped then rather than given an end
+// nobody wrote.
+bool ParseDurationDays(std::wstring const& text, int& days) {
+    size_t i = 0;
+    if (i < text.size() && (text[i] == L'+' || text[i] == L'-')) {
+        if (text[i] == L'-') {
+            return false;  // an end before the start is not a range
+        }
+        i++;
+    }
+    if (i >= text.size() || text[i] != L'P') {
+        return false;
+    }
+    i++;
+
+    int total = 0;
+    bool inTimePart = false;
+    bool sawSomething = false;
+    while (i < text.size()) {
+        if (text[i] == L'T') {
+            inTimePart = true;
+            i++;
+            continue;
+        }
+        if (!iswdigit(text[i])) {
+            return false;
+        }
+        int number = 0;
+        while (i < text.size() && iswdigit(text[i])) {
+            number = number * 10 + (text[i] - L'0');
+            i++;
+        }
+        if (i >= text.size() || number > 10000) {
+            return false;  // a number which is not followed by a part of its own
+        }
+        const wchar_t part = text[i++];
+        if (part == L'W' && !inTimePart) {
+            total += number * 7;
+        } else if (part == L'D' && !inTimePart) {
+            total += number;
+        } else if ((part == L'H' || part == L'M' || part == L'S') && inTimePart) {
+            // Below a day: the mod reads dates.
+        } else {
+            return false;
+        }
+        sawSomething = true;
+    }
+
+    days = total;
+    return sawSomething;
+}
+
+// What an RRULE asks for. The mod expands the plain yearly form - a day of the year which
+// comes round every year, or every N years - because that is what a calendar of fixed
+// holidays is made of, and because it is the one form a date map can hold. Any other form
+// is marked "not simple" here and read as the single occurrence its event names, with the
+// log line saying so; pretending to expand one would be worse than saying that.
+struct YearlyRule {
+    bool asked = false;
+    bool simple = true;
+    int intervalYears = 1;
+    int count = 0;      // 0: no COUNT was written
+    int32_t until = 0;  // 0: no UNTIL was written
+    int byMonth = 0;    // 0: no BYMONTH was written
+    int byMonthDay = 0;
+};
+
+YearlyRule ParseYearlyRule(std::wstring const& value) {
+    YearlyRule rule;
+    rule.asked = true;
+
+    bool sawFrequency = false;
+    size_t pos = 0;
+    while (pos < value.size()) {
+        const size_t next = value.find(L';', pos);
+        const std::wstring part =
+            value.substr(pos, next == std::wstring::npos ? std::wstring::npos : next - pos);
+        pos = next == std::wstring::npos ? value.size() : next + 1;
+        if (part.empty()) {
+            continue;
+        }
+
+        const size_t equals = part.find(L'=');
+        if (equals == std::wstring::npos) {
+            rule.simple = false;
+            continue;
+        }
+        const std::wstring name = part.substr(0, equals);
+        const std::wstring partValue = part.substr(equals + 1);
+
+        if (SameWord(name, L"FREQ")) {
+            sawFrequency = true;
+            if (!SameWord(partValue, L"YEARLY")) {
+                rule.simple = false;
+            }
+        } else if (SameWord(name, L"INTERVAL")) {
+            if (!ReadNumber(partValue, 1, 1000, rule.intervalYears)) {
+                rule.simple = false;
+            }
+        } else if (SameWord(name, L"COUNT")) {
+            if (!ReadNumber(partValue, 1, 100000, rule.count)) {
+                rule.simple = false;
+            }
+        } else if (SameWord(name, L"UNTIL")) {
+            rule.until = ParseDateKey(partValue);
+            if (!rule.until) {
+                rule.simple = false;
+            }
+        } else if (SameWord(name, L"BYMONTH")) {
+            if (!ReadNumber(partValue, 1, 12, rule.byMonth)) {
+                rule.simple = false;
+            }
+        } else if (SameWord(name, L"BYMONTHDAY")) {
+            if (!ReadNumber(partValue, 1, 31, rule.byMonthDay)) {
+                rule.simple = false;
+            }
+        } else {
+            // BYDAY, BYWEEKNO, BYSETPOS, WKST and everything else: forms whose expansion
+            // is a calendar of its own, and which the mod does not pretend to read.
+            rule.simple = false;
+        }
+    }
+
+    if (!sawFrequency) {
+        rule.simple = false;
+    }
+    return rule;
+}
+
+// The dates a comma-separated value names, as RDATE and EXDATE write them. A value which
+// does not read as a date is skipped: a feed is not turned away for one field the mod
+// does not use anyway.
+void AppendDateKeys(std::wstring const& value, std::vector<int32_t>& keys) {
+    size_t pos = 0;
+    while (pos <= value.size()) {
+        const size_t comma = value.find(L',', pos);
+        const std::wstring part =
+            value.substr(pos, comma == std::wstring::npos ? std::wstring::npos : comma - pos);
+        const int32_t key = ParseDateKey(part);
+        if (key) {
+            keys.push_back(key);
+        }
+        if (comma == std::wstring::npos) {
+            break;
+        }
+        pos = comma + 1;
+    }
+}
+
 bool ParseIcs(std::wstring const& text,
               std::vector<HighlightRule> const& rules,
               HolidayMap& out) {
     auto lines = SplitIcsLines(text);
 
+    // One VEVENT as the feed wrote it. The events are collected before a date is drawn
+    // from any of them, because a yearly rule which names no end is expanded over the
+    // years the feed itself is about, and not over years of the mod's own choosing.
+    struct Event {
+        int32_t start = 0;
+        int32_t end = 0;
+        bool hasEnd = false;
+        int durationDays = 0;
+        // A field the mod could not read as what it says it is. No end is guessed for
+        // such an event, so it is dropped rather than given one.
+        bool broken = false;
+        std::wstring summary;
+        std::vector<int32_t> ownDates;       // RDATE
+        std::vector<int32_t> excludedDates;  // EXDATE
+        YearlyRule yearly;
+    };
+
+    std::vector<Event> events;
     bool inEvent = false;
-    bool hasRecurrence = false;
     bool hitDateLimit = false;
-    bool hasEnd = false;
     size_t droppedRanges = 0;
-    int32_t start = 0;
-    int32_t end = 0;
-    std::wstring summary;
-    size_t added = 0;
+    Event event;
 
     auto flushEvent = [&]() {
-        if (!start) {
-            return;
-        }
-        if (added >= kMaxHolidayDates) {
-            // An earlier event already filled the feed: this one is dropped.
-            hitDateLimit = true;
-            return;
-        }
-
-        HolidayInfo info;
-        if (!ClassifyEventSummary(summary, rules, info)) {
-            return;
-        }
-
-        if (!hasEnd) {
-            // No DTEND at all: a zero-length event, which is the single day it
-            // starts on. That is what a feed which spells out one day per event
-            // sends, and the only case which is read that way.
-            end = NextDateKey(start);
-        } else if (end <= start) {
-            // A DTEND which is there but does not make a range: it did not parse,
-            // or it is not later than DTSTART. The event is dropped instead of being
-            // read as a single day, because a wrong end would put the holiday name
-            // on dates the feed never named.
+        if (event.broken) {
             droppedRanges++;
-            return;
-        }
-
-        for (int32_t key = start; key && key < end; key = NextDateKey(key)) {
-            // The limit is looked at inside the loop as well: a single event
-            // which spans millions of days is what a limit at the start of the
-            // event does not catch.
-            if (added >= kMaxHolidayDates) {
-                hitDateLimit = true;
-                break;
-            }
-
-            out[key] = info;
-            added++;
+        } else if (event.start) {
+            events.push_back(std::move(event));
         }
     };
 
     for (const auto& line : lines) {
         if (line == L"BEGIN:VEVENT") {
             inEvent = true;
-            start = 0;
-            end = 0;
-            hasEnd = false;
-            summary.clear();
+            event = Event{};
             continue;
         }
         if (line == L"END:VEVENT") {
@@ -1274,25 +1440,191 @@ bool ParseIcs(std::wstring const& text,
         }
 
         if (name == L"DTSTART") {
-            start = ParseDateKey(value);
+            event.start = ParseDateKey(value);
         } else if (name == L"DTEND") {
-            end = ParseDateKey(value);
-            hasEnd = true;
+            event.end = ParseDateKey(value);
+            event.hasEnd = true;
+        } else if (name == L"DURATION") {
+            // An event may write how long it lasts instead of when it ends. A duration
+            // which cannot be read leaves the event with no end the mod knows, and an end
+            // nobody wrote is not guessed at.
+            if (!ParseDurationDays(value, event.durationDays)) {
+                event.broken = true;
+            }
         } else if (name == L"SUMMARY") {
-            summary = value;
-        } else if (name == L"RRULE" || name == L"EXDATE" ||
-                   name == L"RECURRENCE-ID") {
-            // A recurring event is read as the one occurrence it names. The kind of
-            // feed the README describes - one event per holiday period - doesn't use
-            // any of these fields.
-            hasRecurrence = true;
+            event.summary = value;
+        } else if (name == L"RDATE") {
+            AppendDateKeys(value, event.ownDates);
+        } else if (name == L"EXDATE") {
+            AppendDateKeys(value, event.excludedDates);
+        } else if (name == L"RRULE") {
+            event.yearly = ParseYearlyRule(value);
+        }
+        // RECURRENCE-ID and the rest of the fields of a feed are not read: an override of
+        // one occurrence carries the DTSTART of that occurrence, which is the day it
+        // stands for.
+    }
+
+    // The years the feed is about, which is what a yearly rule with no end of its own is
+    // expanded over: the mod neither invents a horizon of its own nor a date outside the
+    // span of the feed it was given.
+    int firstYear = 0;
+    int lastYear = 0;
+    auto noteYear = [&](int32_t key) {
+        if (!key) {
+            return;
+        }
+        const int year = key / 10000;
+        if (!firstYear || year < firstYear) {
+            firstYear = year;
+        }
+        if (year > lastYear) {
+            lastYear = year;
+        }
+    };
+    for (const auto& collected : events) {
+        noteYear(collected.start);
+        noteYear(collected.end);
+        for (int32_t key : collected.ownDates) {
+            noteYear(key);
+        }
+        for (int32_t key : collected.excludedDates) {
+            noteYear(key);
         }
     }
 
-    if (hasRecurrence && !g_loggedRecurrence.exchange(true)) {
-        Wh_Log(
-            L"The data source uses recurrence rules (RRULE, EXDATE or "
-            L"RECURRENCE-ID); only the occurrence each event names is read");
+    bool sawUnexpandedRecurrence = false;
+    size_t added = 0;
+
+    for (const auto& collected : events) {
+        if (added >= kMaxHolidayDates) {
+            // An earlier event already filled the feed: this one is dropped.
+            hitDateLimit = true;
+            break;
+        }
+
+        HolidayInfo info;
+        if (!ClassifyEventSummary(collected.summary, rules, info)) {
+            continue;
+        }
+
+        // Where the event ends, exclusive like a DTEND: the DTEND when it wrote one, the
+        // day its DURATION reaches to when it wrote that instead, and the single day it
+        // starts on when it wrote neither.
+        int32_t end = 0;
+        if (collected.hasEnd) {
+            if (collected.end <= collected.start) {
+                // A DTEND which is there but does not make a range: it did not parse, or
+                // it is not later than DTSTART. The event is dropped instead of being read
+                // as a single day, because a wrong end would put the holiday name on dates
+                // the feed never named.
+                droppedRanges++;
+                continue;
+            }
+            end = collected.end;
+        } else if (collected.durationDays > 0) {
+            end = collected.start;
+            for (int day = 0; day < collected.durationDays && end; day++) {
+                end = NextDateKey(end);
+            }
+            if (!end) {
+                droppedRanges++;
+                continue;
+            }
+        } else {
+            end = NextDateKey(collected.start);
+        }
+
+        auto isExcluded = [&collected](int32_t key) {
+            for (int32_t excluded : collected.excludedDates) {
+                if (excluded == key) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        auto addDate = [&](int32_t key) {
+            if (!key || isExcluded(key)) {
+                return;
+            }
+            out[key] = info;
+            added++;
+        };
+
+        for (int32_t key = collected.start; key && key < end; key = NextDateKey(key)) {
+            // The limit is looked at inside the loop as well: a single event which spans
+            // millions of days is what a limit at the start of the event does not catch.
+            if (added >= kMaxHolidayDates) {
+                hitDateLimit = true;
+                break;
+            }
+            addDate(key);
+        }
+
+        // The dates the event names of their own, which a feed writes as an RDATE: one
+        // event may be a list of days rather than a period, and they may sit outside it.
+        for (int32_t key : collected.ownDates) {
+            if (added >= kMaxHolidayDates) {
+                hitDateLimit = true;
+                break;
+            }
+            addDate(key);
+        }
+
+        // A yearly rule: the same day of the same month, the next year and the year after
+        // that, which is the form a calendar of fixed holidays is written in and the only
+        // one a map of dates can hold. BYMONTH and BYMONTHDAY of such a rule name the day
+        // the event already starts on; a rule which names another day, or which carries a
+        // part such as BYDAY, is left to the log line below and read as the occurrence its
+        // event names.
+        const int startMonth = (collected.start / 100) % 100;
+        const int startDay = collected.start % 100;
+        if (collected.yearly.asked) {
+            const bool plainYearly =
+                collected.yearly.simple &&
+                (collected.yearly.byMonth == 0 ||
+                 collected.yearly.byMonth == startMonth) &&
+                (collected.yearly.byMonthDay == 0 ||
+                 collected.yearly.byMonthDay == startDay);
+            if (!plainYearly) {
+                sawUnexpandedRecurrence = true;
+            } else {
+                const int startYear = collected.start / 10000;
+                // A rule which names an end of its own - a COUNT or an UNTIL - is expanded
+                // to that end; one which names neither is expanded over the years the feed
+                // itself covers, so that a date outside the feed is never invented.
+                const int lastYearToUse =
+                    (collected.yearly.count || collected.yearly.until) ? 9999 : lastYear;
+                int marked = 1;  // the day of the event itself
+                for (int year = startYear + collected.yearly.intervalYears;
+                     year <= lastYearToUse;
+                     year += collected.yearly.intervalYears) {
+                    if (collected.yearly.count && marked >= collected.yearly.count) {
+                        break;
+                    }
+                    if (added >= kMaxHolidayDates) {
+                        hitDateLimit = true;
+                        break;
+                    }
+                    // A year which has no such day is left out, which is what a rule of the
+                    // 29th of February runs into.
+                    if (!IsValidDate(year, startMonth, startDay)) {
+                        continue;
+                    }
+                    const int32_t key = MakeDateKey(year, startMonth, startDay);
+                    if (collected.yearly.until && key > collected.yearly.until) {
+                        break;
+                    }
+                    addDate(key);
+                    marked++;
+                }
+            }
+        }
+    }
+
+    if (sawUnexpandedRecurrence && !g_loggedRecurrence.exchange(true)) {
+        Wh_Log(L"A recurrence rule of the data source is not a plain yearly one; such an "
+               L"event is read as the one occurrence it names");
     }
 
     if (hitDateLimit) {
@@ -1302,8 +1634,8 @@ bool ParseIcs(std::wstring const& text,
     }
 
     if (droppedRanges) {
-        Wh_Log(L"%zu events are dropped: their DTEND is missing a date, or does "
-               L"not come after their DTSTART",
+        Wh_Log(L"%zu events are dropped: their DTEND or DURATION does not read as one, "
+               L"or their DTEND does not come after their DTSTART",
                droppedRanges);
     }
 
