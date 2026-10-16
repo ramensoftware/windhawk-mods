@@ -3927,8 +3927,13 @@ void ShowDockForNotification() {
                           winrt::Windows::Foundation::IInspectable const&) {
             DockScope scope(wnd);
             auto timer = sender.as<DispatcherTimer>();
-            if (!g_shownForNotification || g_trayShown || g_unloading ||
-                !g_dockWnd) {
+            // (A dock already let go: its window isn't the one in the
+            // globals, so nothing of another dock is touched.)
+            if (g_dockWnd != wnd) {
+                timer.Stop();
+                return;
+            }
+            if (!g_shownForNotification || g_trayShown || g_unloading) {
                 timer.Stop();
                 g_shownForNotification = false;
                 return;
@@ -4608,6 +4613,9 @@ void OnRendering(winrt::Windows::Foundation::IInspectable const&,
             }
             SetAppsArea(state->appsAreaMonitor, 0, 0);
             std::erase(g_ownClips, state->wnd);
+            if (state->notificationTimer) {
+                state->notificationTimer.Stop();
+            }
             return true;
         });
         for (auto& state : g_otherDocks) {
@@ -5002,21 +5010,6 @@ void ResetDockBehavior() {
         g_badgeTimer.Stop();
         g_badgeTimer = nullptr;
     }
-    // The dock shown for a notification goes back down.
-    if (g_notificationTimer) {
-        g_notificationTimer.Stop();
-        g_notificationTimer = nullptr;
-    }
-    if (g_shownForNotification) {
-        g_shownForNotification = false;
-        if (g_dockWnd) {
-            const RECT& hidden = g_notificationHiddenRect;
-            SetWindowPos(g_dockWnd, nullptr, hidden.left, hidden.top,
-                         hidden.right - hidden.left,
-                         hidden.bottom - hidden.top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-    }
 
     AcquireSRWLockExclusive(&g_badgeAppsLock);
     g_badgeApps.clear();
@@ -5036,8 +5029,23 @@ void ResetDockBehavior() {
 }
 
 // The taskbar in the globals (see DockScope): its handlers, icons, shadow
-// and cut go.
+// and cut go. A dock shown for a notification goes back down, and its timer
+// stops (a started DispatcherTimer would tick on after the unload).
 void ResetDockOfTaskbar() {
+    if (g_notificationTimer) {
+        g_notificationTimer.Stop();
+        g_notificationTimer = nullptr;
+    }
+    if (g_shownForNotification) {
+        g_shownForNotification = false;
+        if (g_dockWnd) {
+            const RECT& hidden = g_notificationHiddenRect;
+            SetWindowPos(g_dockWnd, nullptr, hidden.left, hidden.top,
+                         hidden.right - hidden.left,
+                         hidden.bottom - hidden.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
     g_layoutRevoker.revoke();
     if (auto target = g_pointerTarget.get()) {
         if (g_pointerHandler) {
@@ -16325,7 +16333,7 @@ std::wstring FindKomorebiTool(PCWSTR file, PCWSTR folder) {
         return path;
     }
     // (%ProgramW6432%: the island's process is 32-bit.)
-    for (const std::wstring place :
+    for (const std::wstring& place :
          {L"%ProgramW6432%\\" + std::wstring(folder) + L"\\bin\\" + file,
           L"%USERPROFILE%\\scoop\\shims\\" + std::wstring(file)}) {
         if (ExpandEnvironmentStrings(place.c_str(), path, MAX_PATH) &&
@@ -30446,12 +30454,18 @@ DWORD WINAPI KomorebiWatchThreadProc(LPVOID parameter) {
         // at once when it ends or the island starts it (not woken by its
         // folder, where it keeps writing its log).
         if (failures >= kKomorebiTries) {
+            // (Gone: looked at again at once. One that can't be opened, like
+            // komorebi run as administrator, is waited for all the same.)
             HANDLE running = OpenProcess(SYNCHRONIZE, FALSE, failedProcess);
+            const bool gone =
+                !running && GetLastError() == ERROR_INVALID_PARAMETER;
             DWORD woken = WAIT_TIMEOUT;
-            if (running) {
+            if (!gone) {
                 const HANDLE waits[] = {job->stop, job->kick, running};
-                woken = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE,
+                woken = WaitForMultipleObjects(running ? 3 : 2, waits, FALSE,
                                                30000);
+            }
+            if (running) {
                 CloseHandle(running);
             }
             if (woken != WAIT_OBJECT_0) {
@@ -31498,13 +31512,37 @@ class DropRegistration {
     HWND m_hwnd = nullptr;
 };
 
+// The Windows folder when the path is under System32 and this is the 32-bit
+// Windhawk process, which sees SysWOW64 there (empty otherwise).
+std::wstring Wow64WindowsFolderOf(const std::wstring& path) {
+    BOOL wow64 = FALSE;
+    WCHAR windows[MAX_PATH];
+    if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64 ||
+        !GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
+        return {};
+    }
+    const std::wstring system = std::wstring(windows) + L"\\System32";
+    if (_wcsnicmp(path.c_str(), system.c_str(), system.size()) != 0 ||
+        (path.size() != system.size() && path[system.size()] != L'\\')) {
+        return {};
+    }
+    return windows;
+}
+
 // A folder's own drop target (copies or moves what's dropped on it as
 // Explorer does: its questions for names already there, its progress, undone
-// with Ctrl+Z).
+// with Ctrl+Z). Under System32, through Sysnative: the copy runs on a thread
+// of this process, which would put the files in SysWOW64.
 winrt::com_ptr<IDropTarget> FolderDropTargetOf(const std::wstring& path) {
+    std::wstring parsed = path;
+    if (const std::wstring windows = Wow64WindowsFolderOf(path);
+        !windows.empty()) {
+        parsed = windows + L"\\Sysnative" +
+                 path.substr(windows.size() + wcslen(L"\\System32"));
+    }
     winrt::com_ptr<IShellItem> item;
     winrt::com_ptr<IDropTarget> target;
-    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+    if (SUCCEEDED(SHCreateItemFromParsingName(parsed.c_str(), nullptr,
                                               IID_PPV_ARGS(item.put())))) {
         item->BindToHandler(nullptr, kBHID_SFUIObject,
                             IID_PPV_ARGS(target.put()));
@@ -31528,20 +31566,13 @@ constexpr UINT kFolderOpenMs = 600;
 // explorer.exe: the 32-bit Windhawk process would open SysWOW64's copy (a
 // 32-bit cmd.exe, or nothing for what only the 64-bit one has).
 void OpenPath(const std::wstring& path) {
-    BOOL wow64 = FALSE;
-    WCHAR windows[MAX_PATH];
-    if (IsWow64Process(GetCurrentProcess(), &wow64) && wow64 &&
-        GetWindowsDirectory(windows, ARRAYSIZE(windows))) {
-        const std::wstring system = std::wstring(windows) + L"\\System32";
-        if (_wcsnicmp(path.c_str(), system.c_str(), system.size()) == 0 &&
-            (path.size() == system.size() || path[system.size()] == L'\\')) {
-            const std::wstring explorer =
-                std::wstring(windows) + L"\\explorer.exe";
-            const std::wstring quoted = L"\"" + path + L"\"";
-            ShellExecute(nullptr, L"open", explorer.c_str(), quoted.c_str(),
-                         nullptr, SW_SHOWNORMAL);
-            return;
-        }
+    if (const std::wstring windows = Wow64WindowsFolderOf(path);
+        !windows.empty()) {
+        const std::wstring explorer = windows + L"\\explorer.exe";
+        const std::wstring quoted = L"\"" + path + L"\"";
+        ShellExecute(nullptr, L"open", explorer.c_str(), quoted.c_str(),
+                     nullptr, SW_SHOWNORMAL);
+        return;
     }
     ShellExecute(nullptr, L"open", path.c_str(), nullptr, nullptr,
                  SW_SHOWNORMAL);
@@ -32136,12 +32167,24 @@ class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
             return;
         }
         m_dragOnce = 0;
+        // (Under System32, found with the redirection off for a moment, as
+        // the list was read: the 32-bit Windhawk process would look in
+        // SysWOW64. The app it's dropped on gets the System32 path.)
+        PVOID redirection = nullptr;
+        const bool unredirected =
+            !Wow64WindowsFolderOf(item->path).empty() &&
+            Wow64DisableWow64FsRedirection(&redirection) != FALSE;
         winrt::com_ptr<IShellItem> shellItem;
         winrt::com_ptr<IDataObject> data;
-        if (FAILED(SHCreateItemFromParsingName(item->path.c_str(), nullptr,
-                                               IID_PPV_ARGS(shellItem.put()))) ||
-            FAILED(shellItem->BindToHandler(nullptr, kBHID_DataObject,
-                                            IID_PPV_ARGS(data.put())))) {
+        const bool found =
+            SUCCEEDED(SHCreateItemFromParsingName(
+                item->path.c_str(), nullptr, IID_PPV_ARGS(shellItem.put()))) &&
+            SUCCEEDED(shellItem->BindToHandler(nullptr, kBHID_DataObject,
+                                               IID_PPV_ARGS(data.put())));
+        if (unredirected) {
+            Wow64RevertWow64FsRedirection(redirection);
+        }
+        if (!found) {
             return;
         }
         // (Its column may change while it's dragged: a folder opening under
@@ -34641,7 +34684,7 @@ IslandLook g_mainLook;
 int LoadMonitorProfile(const std::wstring& device);
 void SaveMonitorProfile(const std::wstring& device, int id);
 
-class Island : public DropTarget::Receiver {
+class Island final : public DropTarget::Receiver {
    public:
     bool Create();
     void Destroy();
