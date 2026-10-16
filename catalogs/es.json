@@ -11892,20 +11892,20 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791630219000,
+        "updated": 1792146673000,
         "users": 21
       },
       "metadata": {
         "author": "awnaise",
-        "compilerOptions": "-lgdiplus -lcomctl32 -lgdi32 -luser32",
-        "description": "Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs with flicker-free OS composition.",
+        "compilerOptions": "-lgdiplus -lcomctl32 -lgdi32 -luser32 -lshlwapi",
+        "description": "Removes the light square background behind the analog clock in StartAllBack and Date/Time dialogs, with full animated GIF and PNG replacement support.",
         "github": "https://github.com/awnaise",
         "include": [
           "explorer.exe",
           "rundll32.exe"
         ],
-        "name": "Remove Legacy Clock Square Cutout",
-        "version": "3.1.0"
+        "name": "Remove Legacy Clock Square Cutout & Animated Custom Image",
+        "version": "3.2.0"
       }
     },
     "remove-command-bar": {
