@@ -49,7 +49,7 @@ Tourne'Table doesn't live inside `explorer.exe`. It runs as its own dedicated pr
 
 2.1 replaces 1.x. If you ran one of the 2.0 test builds from GitHub, turn it off: only one Tourne'Table should run. If you also use **Tourne Desktop** (my separate desktop app, not part of Windhawk), its taskbar counts as the taskbar for Place In = Taskbar, and it can show, hide or pin the panel through the window message `TourneTable.Panel`. The performance figures further down were measured on 1.x and haven't been re-measured on 2.x yet.
 
-**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** opens the setups people have shared in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/tree/main/community) in your browser (bring one in with **Paste code** or **Open file**; the mod itself never goes online) or opens a ready GitHub issue to share yours. Your audio device, hotkeys, file paths and hardware never go in a setup. Browse them all on the [community page](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
+**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** opens the setups people have shared in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/tree/main/community) in your browser (bring one in with **Paste code** or **Open file**; the mod itself never goes online) or opens a ready GitHub issue to share yours. A setup carries every setting except the ones that belong to your PC: the audio device, icon files, panel hotkey, monitor, docked app and graphics card. Browse them all on the [community page](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
 
 **Every bar is its own measurement now.** Up to 1.5 the analysis split the sound into 7 fixed bands and every bar interpolated between those 7 numbers, so Bar Count and FFT Size changed how many bars you saw, not how much they knew. The new **Precision** engine gives each bar its own frequency band with its own edges, measured straight from the spectrum:
 
@@ -1695,7 +1695,8 @@ PCWSTR VizSettingString(PCWSTR name) {
     std::wstring v;
     if (const std::wstring* found = VizSetupFind(name)) {
         v = *found;
-    } else if (PCWSTR s = Wh_GetStringSetting(name)) {
+    } else {
+        PCWSTR s = Wh_GetStringSetting(name);
         v = s;
         Wh_FreeStringSetting(s);
     }
@@ -2095,6 +2096,9 @@ struct VizSplitState {
 } g_split;
 ComPtr<ID2D1SolidColorBrush> g_barBrush;
 ComPtr<ID2D1SolidColorBrush> g_barBrush2;
+// The Spectrogram style's history bitmap and the device context it was made on.
+ComPtr<ID2D1Bitmap> s_specBmp;
+ID2D1DeviceContext* s_specDc = nullptr;
 ComPtr<ID2D1SolidColorBrush> g_backgroundBrush;
 ComPtr<ID2D1SolidColorBrush> g_borderBrush;
 ComPtr<ID2D1Bitmap> g_wallpaperBitmap;
@@ -2788,24 +2792,19 @@ void ReportSettingWarning(PCWSTR group, PCWSTR name, const std::wstring& detail)
 float ReadSizeSetting(PCWSTR key, float lo, float hi, float def) {
     PCWSTR str = VizSettingString(key);
     float v = def;
-    bool ok = false;
-    if (str && *str) {
+    const bool empty = !(str && *str);
+    if (!empty) {
         WCHAR buf[64];
         wcsncpy_s(buf, str, _TRUNCATE);
         for (WCHAR* c = buf; *c; c++)
             if (*c == L',') *c = L'.';
         WCHAR* end = nullptr;
         double d = wcstod(buf, &end);
-        if (end != buf && std::isfinite(d)) {
-            v = (float)d;
-            ok = true;
-        }
+        if (end != buf && std::isfinite(d)) v = (float)d;
     }
     VizSettingFree(str);
-    if (!ok) {
-        int n = VizSettingInt(key);
-        if (n != 0) v = (float)n;
-    }
+    // Empty text is a number saved before 2.1, used as it is (0 included).
+    if (empty) v = (float)VizSettingInt(key);
     return std::clamp(v, lo, hi);
 }
 
@@ -3321,19 +3320,23 @@ bool VizTaskbarOverlaps(const RECT& rc, bool aboveStrip) {
             if (hits(w)) return true;
         return false;
     }
-    struct Ctx {
-        decltype(hits)* fn;
-        bool hit;
-    } ctx{&hits, false};
-    EnumWindows(
-        [](HWND w, LPARAM lp) __stdcall -> BOOL {
-            auto* c = (Ctx*)lp;
-            if (!(*c->fn)(w)) return TRUE;
-            c->hit = true;
-            return FALSE;
-        },
-        (LPARAM)&ctx);
-    return ctx.hit;
+    // The taskbars are found once a second at most, not on every repaint.
+    static std::vector<HWND> bars;
+    static ULONGLONG barsTick = 0;
+    ULONGLONG now = GetTickCount64();
+    if (!barsTick || now - barsTick >= 1000) {
+        barsTick = now;
+        bars.clear();
+        EnumWindows(
+            [](HWND w, LPARAM lp) __stdcall -> BOOL {
+                if (VizIsTaskbarWindow(w)) ((std::vector<HWND>*)lp)->push_back(w);
+                return TRUE;
+            },
+            (LPARAM)&bars);
+    }
+    for (HWND w : bars)
+        if (IsWindow(w) && hits(w)) return true;
+    return false;
 }
 
 void RefreshAccentColorCache() {
@@ -8100,11 +8103,14 @@ void PresentBlank();
 // change and for recovering from a lost device (driver update, TDR, a hybrid
 // laptop switching GPUs), which the 1.4 build had no answer to -- the
 // visualizer simply froze until the mod was restarted.
+void VizReleaseStyleResources();
+
 void VizRebuildRenderDevice(PCWSTR reason) {
     Wh_Log(L"[Hardware] rebuilding the render device: %s", reason);
     g_lastDeviceRebuildTick = GetTickCount64();
 
     ReleaseSwapChainResources();
+    VizReleaseStyleResources();
     ttgfx::ReleaseDevice();
     g_roundCapStrokeStyle.Reset();
     g_d2dDevice.Reset();
@@ -8138,6 +8144,7 @@ void VizCheckDeviceLost(HRESULT hrEndDraw, HRESULT hrPresent) {
 }
 
 void UninitDirectX() {
+    VizReleaseStyleResources();
     ttgfx::ReleaseDevice();
     g_dwriteTextFormat.Reset();
     g_dwriteFactory.Reset();
@@ -9286,8 +9293,8 @@ bool VizDrawStyleD2D(float blockX, float blockY, float totalWidth, float totalHe
     }
 
     if (st == VizStyle::Spectrogram) {
-        static ComPtr<ID2D1Bitmap> bmp;
-        static ID2D1DeviceContext* bmpDc = nullptr;
+        auto& bmp = s_specBmp;
+        auto& bmpDc = s_specDc;
         static uint32_t bmpSerial = 0;
         static std::vector<uint32_t> px;
         int w = g_vizSpecW, rows = kVizSpecRows;
@@ -9400,6 +9407,18 @@ ID2D1DeviceContext* s_reflDc = nullptr;
 float s_reflDpi = 96.f;
 const CLSID kVizClsidShadow = {0xC67EA361, 0x1863, 0x4E69, {0x89, 0xDB, 0x69, 0x5D, 0x3E, 0x9A, 0x5B, 0x6B}};
 }  // namespace
+
+// Drops what the styles and effects made on the old device, so a rebuild or
+// unload doesn't keep it alive. UI thread only.
+void VizReleaseStyleResources() {
+    s_reflBmp.Reset();
+    s_reflOld.Reset();
+    s_reflFade.Reset();
+    s_shadowFx.Reset();
+    s_reflDc = nullptr;
+    s_specBmp.Reset();
+    s_specDc = nullptr;
+}
 
 bool VizFxD2DBegin(bool fadeLayer) {
     if (fadeLayer || !g_dc || !(VizReflectionActive() || g_settings.fxShadow > 0)) return false;
@@ -17566,6 +17585,37 @@ static const VizSetupKey kSetupKeys[] = {
     {L"background.borderSize", L"0", true, 1},
     {L"background.borderColor", L"#40FFFFFF", true, 1},
     {L"performance.targetFps", L"60", false, 2},
+    // Behaviour goes in a setup too. Only what belongs to one PC stays out:
+    // the audio device, icon files, the panel hotkey, monitor, docked app and GPU.
+    {L"progress.clickToSeek", L"0", false, 4},
+    {L"progress.seekAppsMode", L"except", true, 4},
+    {L"progress.seekApps", L"", true, 4},
+    {L"interaction.keyMoveEnabled", L"0", false, 8},
+    {L"interaction.keyMoveModifier", L"ctrl_alt", true, 8},
+    {L"interaction.keyMoveKeys", L"both", true, 8},
+    {L"interaction.keyMoveStep", L"1", true, 8},
+    {L"interaction.keyMoveFastStep", L"10", true, 8},
+    {L"interaction.keyMoveFineStep", L"0.25", true, 8},
+    {L"interaction.keyMoveFineKey", L"none", true, 8},
+    {L"interaction.keyMoveFastKey", L"shift", true, 8},
+    {L"interaction.dragEnabled", L"0", false, 8},
+    {L"interaction.dragSnap", L"1", false, 8},
+    {L"interaction.dragSnapDistance", L"8", true, 8},
+    {L"interaction.dragModifier", L"ctrl", true, 8},
+    {L"interaction.dragButton", L"middle", true, 8},
+    {L"interaction.contextMenu", L"right_click", true, 8},
+    {L"performance.pauseOnFullscreen", L"1", false, 2},
+    {L"performance.pauseWhenSilentSeconds", L"10", true, 2},
+    {L"performance.deepIdle", L"1", false, 2},
+    {L"performance.perfStats", L"0", false, 2},
+    {L"performance.autoHideEnabled", L"0", false, 2},
+    {L"performance.autoHideDelaySeconds", L"15", true, 2},
+    {L"performance.pauseWhenObscured", L"0", false, 2},
+    {L"performance.obscuredThresholdPercent", L"100", true, 2},
+    {L"hardware.workload", L"hybrid", true, 2},
+    {L"hardware.renderer", L"d3d11", true, 2},
+    {L"hardware.opaquePanel", L"auto", true, 2},
+    {L"hardware.smoothMode", L"auto", true, 2},
 };
 
 struct VizQuickPart {
@@ -17651,8 +17701,7 @@ std::wstring VizSettingNow(const VizSetupKey& k) {
     std::wstring v = s ? s : L"";
     VizSettingFree(s);
     if (v.empty() && *k.def) {  // (a size saved as a whole number before 2.1)
-        int n = VizSettingInt(k.name);
-        if (n) v = std::to_wstring(n);
+        v = std::to_wstring(VizSettingInt(k.name));
     }
     return v;
 }
@@ -18101,7 +18150,7 @@ void EditorBuild(HWND hWnd) {
     add(L"STATIC",
         L"Changes apply at once. Reset Quick Settings in the right-click menu returns to the settings page. "
         L"Reflection, Glow and Bloom need the Direct3D 11 renderer. Share carries the ticked parts; your audio "
-        L"device, hotkeys and file paths stay out. Community opens GitHub in your browser.",
+        L"device, hotkey, monitor, docked app, GPU and file paths stay out. Community opens GitHub in your browser.",
         SS_LEFT, L, y, labelW + ctlW, px(80), -1);
     y += px(88);
     RECT rc = {0, 0, labelW + ctlW + L * 2, y};
