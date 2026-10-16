@@ -587,76 +587,61 @@ bool SafeReadPointer(const void* address, void** value) {
         }                                    \
     } while (0)
 
-bool IsKnownViewModelVtable(void* vftable) {
-    return vftable &&
-           (vftable == TaskListWindowViewModel_ITaskListWindowViewModel_vftable ||
-            vftable == TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable ||
-            vftable == TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable ||
-            vftable == TaskListGroupViewModel_ITaskListGroupViewModel_vftable);
-}
+enum class ViewModelKind { kNone, kWindow, kGroup };
 
-// Whether the object whose identity pointer is `object` is a
-// TaskListWindowViewModel or TaskListGroupViewModel. A C++/WinRT object
-// starts with one vtable pointer per implemented interface, so the known
-// vtables are among its first slots whichever interface comes first, and a
-// vtable address can only ever appear as an object's own slot.
-bool IsKnownViewModel(void* object) {
+// Decides whether the object behind `object` is a TaskListWindowViewModel or
+// a TaskListGroupViewModel from the known vtable it already points to. A
+// C++/WinRT object starts with one vtable pointer per implemented interface,
+// so one of the known vtables is among the first slots whichever interface
+// the pointer refers to.
+ViewModelKind GetViewModelKind(void* object) {
     auto slots = static_cast<void**>(object);
     for (int i = 0; i < 12; i++) {
         void* vftable = nullptr;
         if (!SafeReadPointer(&slots[i], &vftable)) {
-            return false;
+            break;
         }
-        if (IsKnownViewModelVtable(vftable)) {
-            return true;
+        if (!vftable) {
+            continue;
+        }
+        if (vftable == TaskListWindowViewModel_ITaskListWindowViewModel_vftable ||
+            vftable == TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable) {
+            return ViewModelKind::kWindow;
+        }
+        if (vftable == TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable ||
+            vftable == TaskListGroupViewModel_ITaskListGroupViewModel_vftable) {
+            return ViewModelKind::kGroup;
         }
     }
-    return false;
+    return ViewModelKind::kNone;
 }
 
-// Finds the interface sub-object whose vtable is `vftable`, scanning forward
-// and then backward from `object`. The pointer the items source hands out
-// may be an upcast interface pointer rather than the object's first slot, in
-// which case the wanted interface can sit before it (Taskbar Labels walks
-// backward from ITaskbarAppItemViewModel to ITaskListWindowViewModel for
-// that reason). Both directions are bounded and read through
-// SafeReadPointer, so a miss is harmless.
+// Finds the interface sub-object whose vtable is `vftable`, which must be a
+// vtable this object's kind actually has. The pointer the items source hands
+// out may be an upcast interface pointer rather than the object's first
+// slot, so the wanted interface can sit on either side of it (Taskbar Labels
+// walks backward from ITaskbarAppItemViewModel to ITaskListWindowViewModel
+// for that reason). Nearest slot first, so a slot of this object is always
+// found before anything outside it.
 void* FindInterfaceByVtable(void* object, void* vftable) {
     if (!object || !vftable) {
         return nullptr;
     }
 
     auto slots = static_cast<void**>(object);
-
-    for (int i = 0; i < 16; i++) {
-        void* value = nullptr;
-        if (!SafeReadPointer(&slots[i], &value)) {
-            break;
-        }
-        if (value == vftable) {
-            if (i > 0) {
-                static bool logged = false;
-                if (!logged) {
-                    logged = true;
-                    Wh_Log(L"Interface found %d slot(s) forward", i);
+    for (int distance = 0; distance <= 16; distance++) {
+        for (int i : {distance, -distance}) {
+            void* value = nullptr;
+            if (SafeReadPointer(&slots[i], &value) && value == vftable) {
+                if (i != 0) {
+                    static bool logged = false;
+                    if (!logged) {
+                        logged = true;
+                        Wh_Log(L"Interface found at slot %d", i);
+                    }
                 }
+                return &slots[i];
             }
-            return &slots[i];
-        }
-    }
-
-    for (int i = 1; i <= 16; i++) {
-        void* value = nullptr;
-        if (!SafeReadPointer(&slots[-i], &value)) {
-            break;
-        }
-        if (value == vftable) {
-            static bool logged = false;
-            if (!logged) {
-                logged = true;
-                Wh_Log(L"Interface found %d slot(s) backward", i);
-            }
-            return &slots[-i];
         }
     }
 
@@ -719,6 +704,7 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
     ButtonWindows result{ButtonWindowsState::kUnavailable, {}};
 
     winrt::com_ptr<IUnknown> viewModel;
+    ViewModelKind kind = ViewModelKind::kNone;
     try {
         auto repeater = GetHostingRepeater(button);
         if (repeater) {
@@ -731,7 +717,10 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
             }
 
             auto item = itemsSourceView.GetAt(index);
-            if (item && IsKnownViewModel(winrt::get_abi(item))) {
+            if (item) {
+                kind = GetViewModelKind(winrt::get_abi(item));
+            }
+            if (kind != ViewModelKind::kNone) {
                 viewModel.copy_from(static_cast<IUnknown*>(winrt::get_abi(item)));
             } else if (item) {
                 static std::atomic<bool> logged;
@@ -758,10 +747,18 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
         return result;
     }
 
-    // One window.
-    if (void* windowViewModel = FindInterfaceByVtable(
+    // One window. Only a window view model is searched for the window
+    // interface: a group view model never has that vtable, and a search for
+    // it there could only match outside the object.
+    if (kind == ViewModelKind::kWindow) {
+        void* windowViewModel = FindInterfaceByVtable(
             viewModel.get(),
-            TaskListWindowViewModel_ITaskListWindowViewModel_vftable)) {
+            TaskListWindowViewModel_ITaskListWindowViewModel_vftable);
+        if (!windowViewModel) {
+            LogOnce(L"Window view model: interface not found; title fallback");
+            return result;
+        }
+
         winrt::com_ptr<IUnknown> taskItem;
         HRESULT hr = ITaskListWindowViewModel_get_TaskItem(windowViewModel,
                                                            taskItem.put_void());
@@ -776,9 +773,15 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
     }
 
     // A group: all of its windows.
-    if (void* groupViewModel = FindInterfaceByVtable(
+    if (kind == ViewModelKind::kGroup) {
+        void* groupViewModel = FindInterfaceByVtable(
             viewModel.get(),
-            TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable)) {
+            TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable);
+        if (!groupViewModel) {
+            LogOnce(L"Group view model: interface not found; title fallback");
+            return result;
+        }
+
         result.state = ButtonWindowsState::kResolved;
         LogOnce(L"Resolved a group button through the view model");
 
@@ -814,9 +817,6 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
         return result;
     }
 
-    // A known view model whose interfaces were not found: this button falls
-    // back to title matching.
-    LogOnce(L"View model matched neither interface; using title fallback");
     return result;
 }
 
