@@ -62,6 +62,7 @@ static bool g_initOk = false;
 
 static bool g_armed = false;
 static bool g_waiting = false;
+static int g_waitRearms = 0;
 static HWND g_fgAtArm = nullptr;
 
 static int g_onlyOnWindowChange = 0;
@@ -90,6 +91,29 @@ static bool IsOverlay(HWND hwnd) {
         L"#32771",
     };
     for (const WCHAR* name : kOverlays) {
+        if (wcscmp(cls, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+// The Alt+Tab / Task View switcher hosts. While one is in front, the user has
+// not picked a window yet, so a pending wait should keep going.
+static bool IsSwitcher(HWND hwnd) {
+    if (!hwnd)
+        return false;
+
+    WCHAR cls[64] = {};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)))
+        return false;
+
+    static const WCHAR* kSwitchers[] = {
+        L"MultitaskingViewFrame",
+        L"XamlExplorerHostIslandWindow",
+        L"ForegroundStaging",
+        L"#32771",
+    };
+    for (const WCHAR* name : kSwitchers) {
         if (wcscmp(cls, name) == 0)
             return true;
     }
@@ -146,8 +170,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_TIMER:
         if (wParam == TIMER_WAIT) {
             KillTimer(hwnd, TIMER_WAIT);
-            if (g_waiting && IsOverlay(GetForegroundWindow())) {
-                // The switcher is still open (e.g. Ctrl+Alt+Tab): keep waiting.
+            if (g_waiting && g_waitRearms < 30 && IsSwitcher(GetForegroundWindow())) {
+                // The switcher is still open (e.g. Ctrl+Alt+Tab): keep waiting,
+                // but never indefinitely.
+                g_waitRearms++;
                 SetTimer(hwnd, TIMER_WAIT, WAIT_TIMEOUT_MS, nullptr);
             } else {
                 // No activation arrived after Alt release: give up, no late move.
@@ -178,18 +204,25 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             // Alt+Tab: arm, cancel any pending move, remember the current window.
             g_armed = true;
             g_waiting = false;
+            g_waitRearms = 0;
             g_fgAtArm = GetForegroundWindow();
             HWND hwnd = g_hwnd.load();
             if (hwnd)
                 KillTimer(hwnd, TIMER_WAIT);
         } else if (isDown && kbd->vkCode == VK_ESCAPE) {
+            // Cancel a pending wait too: Esc dismisses the open switcher.
             g_armed = false;
+            g_waiting = false;
+            HWND hwnd = g_hwnd.load();
+            if (hwnd)
+                KillTimer(hwnd, TIMER_WAIT);
         } else if (isUp && g_armed &&
                    (kbd->vkCode == VK_MENU || kbd->vkCode == VK_LMENU ||
                     kbd->vkCode == VK_RMENU)) {
             // Alt released: wait for the selected window to get focus.
             g_armed = false;
             g_waiting = true;
+            g_waitRearms = 0;
             HWND hwnd = g_hwnd.load();
             if (hwnd)
                 SetTimer(hwnd, TIMER_WAIT, WAIT_TIMEOUT_MS, nullptr);
