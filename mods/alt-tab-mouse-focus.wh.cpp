@@ -37,9 +37,6 @@ The mod runs as a tool mod in a dedicated process, so it does not inject into
 - onlyOnWindowChange: false
   $name: Only move when the window changes
   $description: If enabled, only move when the focused window actually changes.
-- timeoutMs: 2000
-  $name: Fallback timeout (ms)
-  $description: How long to keep waiting for the selected window to be focused before giving up.
 */
 // ==/WindhawkModSettings==
 
@@ -52,6 +49,9 @@ The mod runs as a tool mod in a dedicated process, so it does not inject into
 #define WM_ALT_TAB_QUIT   (WM_APP + 1)
 #define WM_ALT_TAB_RELOAD (WM_APP + 2)
 #define TIMER_WAIT 1
+// How long to wait for the selected window to become foreground after Alt is
+// released before giving up. Activation is normally immediate.
+#define WAIT_TIMEOUT_MS 1000
 
 static HHOOK g_kbHook = nullptr;
 static HWINEVENTHOOK g_weHook = nullptr;
@@ -65,14 +65,9 @@ static bool g_waiting = false;
 static HWND g_fgAtArm = nullptr;
 
 static int g_onlyOnWindowChange = 0;
-static int g_timeoutMs = 2000;
 
 static void LoadSettings() {
     g_onlyOnWindowChange = Wh_GetIntSetting(L"onlyOnWindowChange") ? 1 : 0;
-    g_timeoutMs = Wh_GetIntSetting(L"timeoutMs");
-
-    if (g_timeoutMs < 100) g_timeoutMs = 100;
-    if (g_timeoutMs > 10000) g_timeoutMs = 10000;
 }
 
 // System overlays that should never receive the cursor.
@@ -151,10 +146,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_TIMER:
         if (wParam == TIMER_WAIT) {
             KillTimer(hwnd, TIMER_WAIT);
-            if (g_waiting) {
-                // No foreground event arrived; fall back to the current window.
+            if (g_waiting && IsOverlay(GetForegroundWindow())) {
+                // The switcher is still open (e.g. Ctrl+Alt+Tab): keep waiting.
+                SetTimer(hwnd, TIMER_WAIT, WAIT_TIMEOUT_MS, nullptr);
+            } else {
+                // No activation arrived after Alt release: give up, no late move.
                 g_waiting = false;
-                MoveToWindow(GetForegroundWindow());
             }
         }
         return 0;
@@ -195,7 +192,7 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
             g_waiting = true;
             HWND hwnd = g_hwnd.load();
             if (hwnd)
-                SetTimer(hwnd, TIMER_WAIT, (UINT)g_timeoutMs, nullptr);
+                SetTimer(hwnd, TIMER_WAIT, WAIT_TIMEOUT_MS, nullptr);
         }
     }
     return CallNextHookEx(g_kbHook, nCode, wParam, lParam);
@@ -243,8 +240,9 @@ static DWORD WINAPI ThreadProc(LPVOID) {
         return 1;
     }
 
-    g_weHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, wc.hInstance,
-                               WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    g_weHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+                               WinEventProc, 0, 0,
+                               WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     if (!g_weHook) {
         Wh_Log(L"SetWinEventHook failed: %u", GetLastError());
         UnhookWindowsHookEx(g_kbHook);
