@@ -7,7 +7,7 @@
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWINVER=0x0A00 -lole32 -loleaut32 -lruntimeobject -ldwmapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,6 +18,12 @@ Underlines the label of every Windows 11 taskbar button that has a window
 currently shown on the desktop. Buttons whose windows are all minimized keep a
 plain label, so you can tell at a glance which apps actually have something
 open in front of you.
+
+![Labels underlined](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo.png)
+*Whole label*
+
+![First letter underlined](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo2.png)
+*First letter only*
 
 Requirements:
 
@@ -37,9 +43,10 @@ How it works:
   `TaskItem` / `TaskGroup` objects. The mod resolves every button's windows
   that way and judges them with `IsIconic` (plus DWM cloaking for windows on
   other virtual desktops). Win+D counts as minimized.
-* A WinEvent hook (minimize / restore / show / hide / destroy / cloak / name
-  change / foreground) invalidates the buttons; events are coalesced and every
-  button is re-evaluated on its own UI thread, on every taskbar.
+* A WinEvent hook (minimize / restore / show / hide / cloak, and foreground or
+  title changes when a setting needs them) invalidates the buttons; events are
+  coalesced and every button is re-evaluated on the taskbar thread, on every
+  taskbar.
 * The underline is the native `TextBlock` underline, so it follows the text
   color, trimming and theme. It can cover the whole label or just its first
   letter. It is removed when the mod is disabled.
@@ -54,23 +61,26 @@ How it works:
 - mode: open
   $name: What to underline
   $options:
-  - open: Buttons with at least one window shown on the desktop
-  - minimized: Buttons whose windows are all minimized (inverse)
+  - open: Buttons with a window shown on the desktop
+  - minimized: Buttons whose windows are all minimized
 - underlineStyle: full
   $name: Underline style
   $options:
   - full: The whole label
   - firstLetter: The first letter only
-- includeActive: true
-  $name: Count the foreground window as shown
-  $description: >-
-    When disabled, the active (foreground) window alone does not earn an
-    underline, since its button already has the active indicator.
 - groupRule: any
   $name: Buttons with several windows
+  $description: >-
+    Applies to "Buttons with a window shown on the desktop".
   $options:
   - any: Shown if any of the windows is shown
   - all: Shown only if every window is shown
+- includeActive: true
+  $name: Count the foreground window as shown
+  $description: >-
+    Applies to "Buttons with a window shown on the desktop". When disabled, a
+    button whose only shown window is the foreground one is not underlined,
+    since it already has the active indicator.
 - cloakedIsHidden: true
   $name: Treat cloaked windows as not shown
   $description: >-
@@ -81,11 +91,6 @@ How it works:
   $description: >-
     Window-state events are coalesced for this long before the buttons are
     re-evaluated. Win+M and Win+D fire dozens of events at once.
-- debugLog: false
-  $name: Debug - log every decision
-  $description: >-
-    Writes one line per button on every refresh (label, windows, state,
-    decision) to the mod log. Development aid only; noisy.
 */
 // ==/WindhawkModSettings==
 
@@ -93,28 +98,22 @@ How it works:
 
 #include <dwmapi.h>
 #include <inspectable.h>
-#include <shobjidl.h>
 
-#include <algorithm>
 #include <atomic>
 #include <cwctype>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Documents.h>
-#include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
@@ -124,8 +123,6 @@ How it works:
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 namespace Xaml = winrt::Windows::UI::Xaml;
-using winrt::Windows::System::DispatcherQueue;
-using winrt::Windows::System::DispatcherQueuePriority;
 using winrt::Windows::UI::Text::TextDecorations;
 
 #ifndef EVENT_OBJECT_CLOAKED
@@ -135,9 +132,9 @@ using winrt::Windows::UI::Text::TextDecorations;
 #define EVENT_OBJECT_UNCLOAKED 0x8018
 #endif
 
-// Posted to the event thread by the UI-thread hooks to request a deferred,
-// coalesced re-check (the hook often fires before WS_MINIMIZE is set).
-#define WM_APP_REQUEST_REFRESH (WM_APP + 1)
+// Posted to the event thread after a settings change, to re-register the
+// WinEvent hooks for the new settings.
+#define WM_APP_RECONFIGURE_HOOKS (WM_APP + 1)
 
 // Delay for the second pass that follows every coalesced refresh, to catch
 // window-state transitions that were still in flight during the first pass.
@@ -148,38 +145,37 @@ using winrt::Windows::UI::Text::TextDecorations;
 // ============================================================================
 
 enum class Mode { kOpen, kMinimized };
-enum class GroupRule { kAny, kAll };
 enum class UnderlineStyle { kFull, kFirstLetter };
+enum class GroupRule { kAny, kAll };
 
+// Read on the taskbar thread and the event thread; written on the taskbar
+// thread (LoadSettings runs there via RunFromWindowThread) and, before any
+// hook is applied, in Wh_ModInit.
 struct {
     Mode mode;
     UnderlineStyle underlineStyle;
-    bool includeActive;
     GroupRule groupRule;
+    bool includeActive;
     bool cloakedIsHidden;
     int refreshDelayMs;
-    bool debugLog;
 } g_settings;
 
 void LoadSettings() {
-    PCWSTR mode = Wh_GetStringSetting(L"mode");
+    auto mode = WindhawkUtils::StringSetting::make(L"mode");
     g_settings.mode =
-        wcscmp(mode, L"minimized") == 0 ? Mode::kMinimized : Mode::kOpen;
-    Wh_FreeStringSetting(mode);
+        wcscmp(mode.get(), L"minimized") == 0 ? Mode::kMinimized : Mode::kOpen;
 
-    PCWSTR underlineStyle = Wh_GetStringSetting(L"underlineStyle");
-    g_settings.underlineStyle = wcscmp(underlineStyle, L"firstLetter") == 0
-                                    ? UnderlineStyle::kFirstLetter
-                                    : UnderlineStyle::kFull;
-    Wh_FreeStringSetting(underlineStyle);
+    auto underlineStyle = WindhawkUtils::StringSetting::make(L"underlineStyle");
+    g_settings.underlineStyle =
+        wcscmp(underlineStyle.get(), L"firstLetter") == 0
+            ? UnderlineStyle::kFirstLetter
+            : UnderlineStyle::kFull;
+
+    auto groupRule = WindhawkUtils::StringSetting::make(L"groupRule");
+    g_settings.groupRule =
+        wcscmp(groupRule.get(), L"all") == 0 ? GroupRule::kAll : GroupRule::kAny;
 
     g_settings.includeActive = Wh_GetIntSetting(L"includeActive") != 0;
-
-    PCWSTR groupRule = Wh_GetStringSetting(L"groupRule");
-    g_settings.groupRule =
-        wcscmp(groupRule, L"all") == 0 ? GroupRule::kAll : GroupRule::kAny;
-    Wh_FreeStringSetting(groupRule);
-
     g_settings.cloakedIsHidden = Wh_GetIntSetting(L"cloakedIsHidden") != 0;
 
     int delay = Wh_GetIntSetting(L"refreshDelayMs");
@@ -189,8 +185,6 @@ void LoadSettings() {
         delay = 2000;
     }
     g_settings.refreshDelayMs = delay;
-
-    g_settings.debugLog = Wh_GetIntSetting(L"debugLog") != 0;
 }
 
 // ============================================================================
@@ -200,28 +194,109 @@ void LoadSettings() {
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 
-// Guards g_roots and g_labels. Never call into XAML while holding it.
-std::mutex g_mutex;
+// Everything below is touched on the taskbar thread only: the hooks run
+// there, and refresh, restore and settings reload are marshaled to it with
+// RunFromWindowThread. The containers hold XAML weak references, so they
+// must not be destroyed at process exit (see the Windhawk wiki, "Global
+// objects and process shutdown"); they are cleared on the taskbar thread
+// when the mod unloads instead.
 
-// One entry per XAML tree we have seen a TaskListButton in (one tree per
-// taskbar, i.e. per monitor). Every refresh pass enumerates the buttons from
-// the root, so recycled or newly created buttons are always found.
+// One entry per XAML tree we know of (one per taskbar). Every refresh pass
+// enumerates the buttons from the root, so recycled or newly created buttons
+// are always found.
 struct RootEntry {
     void* key;
     winrt::weak_ref<Xaml::DependencyObject> root;
-    DispatcherQueue queue;
 };
-std::vector<RootEntry> g_roots;
+[[clang::no_destroy]] std::optional<std::vector<RootEntry>> g_roots{
+    std::in_place};
 
-// Every LabelControl TextBlock we have touched, with what it looked like
-// before we did, so Wh_ModBeforeUninit can put it back exactly.
+// Every LabelControl TextBlock we subscribed to, so the subscription can be
+// removed when the mod unloads.
 struct LabelEntry {
     winrt::weak_ref<Xaml::Controls::TextBlock> label;
-    DispatcherQueue queue;
-    TextDecorations original;
     int64_t textChangedToken;
 };
-std::unordered_map<void*, LabelEntry> g_labels;
+[[clang::no_destroy]] std::optional<std::unordered_map<void*, LabelEntry>>
+    g_labels{std::in_place};
+
+// ============================================================================
+// Running code on the taskbar thread
+// ============================================================================
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
+    if (!hTaskbarWnd) {
+        return nullptr;
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hTaskbarWnd, &processId);
+    return processId == GetCurrentProcessId() ? hTaskbarWnd : nullptr;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+
+// Runs `proc` synchronously on the thread that owns `hWnd`. All taskbars,
+// primary and secondary, run on the Shell_TrayWnd thread, so one call covers
+// them all.
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         void* procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+bool RunOnTaskbarThread(RunFromWindowThreadProc_t proc, void* procParam) {
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd) {
+        return false;
+    }
+    return RunFromWindowThread(hTaskbarWnd, proc, procParam);
+}
 
 // ============================================================================
 // Window-state source
@@ -274,23 +349,19 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
-    // GetWindowText doesn't message foreign windows, so this cannot hang on a
-    // stuck app.
-    int length = GetWindowTextLengthW(hwnd);
+    // InternalGetWindowText never sends messages, unlike GetWindowText for
+    // windows of this process (each File Explorer window has its own thread,
+    // and a hung one would freeze the taskbar thread this runs on).
+    WCHAR title[1024];
+    int length = InternalGetWindowText(hwnd, title, ARRAYSIZE(title));
     if (length <= 0) {
         return TRUE;
     }
 
-    std::wstring title(static_cast<size_t>(length) + 1, L'\0');
-    length = GetWindowTextW(hwnd, title.data(), length + 1);
-    if (length <= 0) {
-        return TRUE;
-    }
-
-    title.resize(length);
-    snapshot->byTitleAll[title].push_back(hwnd);
+    std::wstring titleString(title, length);
+    snapshot->byTitleAll[titleString].push_back(hwnd);
     if (IsTaskbarCandidate(hwnd)) {
-        snapshot->byTitle[title].push_back(hwnd);
+        snapshot->byTitle[titleString].push_back(hwnd);
     }
     return TRUE;
 }
@@ -300,6 +371,20 @@ WindowSnapshot BuildWindowSnapshot() {
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&snapshot));
     return snapshot;
 }
+
+// Builds the title snapshot on first use only; the view-model bridge doesn't
+// need it at all.
+struct LazyWindowSnapshot {
+    const WindowSnapshot& get() {
+        if (!snapshot) {
+            snapshot.emplace(BuildWindowSnapshot());
+        }
+        return *snapshot;
+    }
+
+   private:
+    std::optional<WindowSnapshot> snapshot;
+};
 
 bool IsWindowShown(HWND hwnd) {
     // IsIconic is the source of truth. Win+D minimizes windows for real, so
@@ -326,59 +411,49 @@ bool ShouldUnderline(const std::vector<HWND>& windows) {
         return false;
     }
 
-    HWND foreground = g_settings.includeActive ? nullptr : GetForegroundWindow();
-
     size_t shownCount = 0;
-    bool foregroundSkipped = false;
     for (HWND hwnd : windows) {
-        if (!IsWindowShown(hwnd)) {
-            continue;
+        if (IsWindowShown(hwnd)) {
+            shownCount++;
         }
-
-        if (hwnd == foreground) {
-            // Shown, but the user doesn't want it to count on its own.
-            foregroundSkipped = true;
-            continue;
-        }
-
-        shownCount++;
     }
 
-    bool shown;
+    if (g_settings.mode == Mode::kMinimized) {
+        return shownCount == 0;
+    }
+
+    // Shown mode. The foreground window is shown by definition, but can be
+    // excluded from being the sole reason for an underline.
+    bool foregroundShown = false;
+    if (!g_settings.includeActive) {
+        HWND foreground = GetForegroundWindow();
+        for (HWND hwnd : windows) {
+            if (hwnd == foreground && IsWindowShown(hwnd)) {
+                foregroundShown = true;
+                break;
+            }
+        }
+    }
+    size_t shownBesidesForeground = shownCount - (foregroundShown ? 1 : 0);
+
     if (g_settings.groupRule == GroupRule::kAll) {
-        // For "all", the foreground window still counts as shown; it only
-        // stops counting as the *sole* reason under the "any" rule.
-        shown = shownCount + (foregroundSkipped ? 1 : 0) == windows.size();
-    } else {
-        shown = shownCount > 0;
+        return shownCount == windows.size() &&
+               (g_settings.includeActive || shownBesidesForeground > 0);
     }
 
-    return g_settings.mode == Mode::kOpen ? shown : !shown;
+    return shownBesidesForeground > 0;
 }
-
-// Builds the title snapshot on first use only; the view-model bridge below
-// doesn't need it at all.
-struct LazyWindowSnapshot {
-    const WindowSnapshot& get() {
-        if (!snapshot) {
-            snapshot.emplace(BuildWindowSnapshot());
-        }
-        return *snapshot;
-    }
-
-   private:
-    std::optional<WindowSnapshot> snapshot;
-};
 
 // ============================================================================
 // Button -> windows resolver, part 1: the taskbar's own view model
 // ============================================================================
 //
-// Every TaskListButton carries a ViewModel: a TaskListWindowViewModel for one
-// window, or a TaskListGroupViewModel for a combined group (always the case
-// with Taskbar Labels' "Show labels, combine taskbar buttons" mode). Both are
-// backed by WindowsUdk.UI.Shell objects that know their HWNDs. The symbols
-// and interface layouts below are the ones the Taskbar Labels mod uses.
+// Every TaskListButton is created by an ItemsRepeater for an item, and the
+// item is its view model: a TaskListWindowViewModel for one window, or a
+// TaskListGroupViewModel for a combined group (always the case with Taskbar
+// Labels' "Show labels, combine taskbar buttons" mode). Both are backed by
+// WindowsUdk.UI.Shell objects that know their HWNDs. The interface layouts
+// and symbols below are the ones the Taskbar Labels mod uses.
 
 // WindowsUdk.UI.Shell interfaces, declared up to the last used method. A WinRT
 // interface doesn't change once published, so a successful query by IID
@@ -423,11 +498,12 @@ struct ITaskGroup : public IInspectable {
 };
 
 // Taskbar.View.dll symbols, all optional: without them the title fallback
-// below is used.
+// is used.
 
 void* TaskListWindowViewModel_ITaskListWindowViewModel_vftable;
 void* TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable;
 void* TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable;
+void* TaskListGroupViewModel_ITaskListGroupViewModel_vftable;
 
 // produce<TaskListWindowViewModel, ITaskListWindowViewModel>::get_TaskItem
 using ITaskListWindowViewModel_get_TaskItem_t = HRESULT(WINAPI*)(void* pThis,
@@ -438,11 +514,6 @@ ITaskListWindowViewModel_get_TaskItem_t ITaskListWindowViewModel_get_TaskItem;
 using TaskListGroupViewModel_get_TaskGroup_t = HRESULT(WINAPI*)(void* pThis,
                                                                 void** taskGroup);
 TaskListGroupViewModel_get_TaskGroup_t TaskListGroupViewModel_get_TaskGroup;
-
-// The group view model's default interface; optional, only widens the search.
-void* TaskListGroupViewModel_ITaskListGroupViewModel_vftable;
-
-
 
 bool IsViewModelBridgeAvailable() {
     return TaskListWindowViewModel_ITaskListWindowViewModel_vftable &&
@@ -473,32 +544,6 @@ HWND GetTaskItemWindow(IUnknown* taskItemUnknown) {
     return hWnd;
 }
 
-// A C++/WinRT implementation object has one vtable pointer per implemented
-// interface, laid out consecutively. Given any interface pointer into the
-// object, this finds the sub-object whose vtable is `vftable`, scanning a
-// bounded window of slots around it (the Taskbar Labels mod does the same,
-// unbounded, to get from ITaskbarAppItemViewModel to
-// ITaskListWindowViewModel).
-void* FindInterfaceByVtable(void* anyInterface, void* vftable) {
-    if (!anyInterface || !vftable) {
-        return nullptr;
-    }
-
-    void** slots = static_cast<void**>(anyInterface);
-    for (int i = 0; i < 16; i++) {
-        if (slots[i] == vftable) {
-            return &slots[i];
-        }
-    }
-    for (int i = 1; i < 16; i++) {
-        if (slots[-i] == vftable) {
-            return &slots[-i];
-        }
-    }
-
-    return nullptr;
-}
-
 // Reads one pointer-sized value without faulting on a bad address.
 bool SafeReadPointer(const void* address, void** value) {
     SIZE_T read = 0;
@@ -515,23 +560,14 @@ bool IsKnownViewModelVtable(void* vftable) {
             vftable == TaskListGroupViewModel_ITaskListGroupViewModel_vftable);
 }
 
-// Whether `candidate` points into a TaskListWindowViewModel or
-// TaskListGroupViewModel. A C++/WinRT object starts with one vtable pointer
-// per implemented interface. For a pointer known to be an object's identity
-// (a resolved weak reference, an IInspectable) the known vtables are among
-// its first slots whichever interface comes first, so several are checked;
-// for a raw field pointer, which may point mid-object, only its own slot is.
-// A vtable address can only ever appear as an object's own slot, so a match
-// identifies the object type without ambiguity.
-bool IsKnownViewModelPointer(void* candidate, bool isObjectIdentity = false) {
-    auto address = reinterpret_cast<uintptr_t>(candidate);
-    if (!address || (address & 7) || address > 0x00007FFFFFFFFFFFull) {
-        return false;
-    }
-
-    auto slots = static_cast<void**>(candidate);
-    int limit = isObjectIdentity ? 12 : 1;
-    for (int i = 0; i < limit; i++) {
+// Whether the object whose identity pointer is `object` is a
+// TaskListWindowViewModel or TaskListGroupViewModel. A C++/WinRT object
+// starts with one vtable pointer per implemented interface, so the known
+// vtables are among its first slots whichever interface comes first, and a
+// vtable address can only ever appear as an object's own slot.
+bool IsKnownViewModel(void* object) {
+    auto slots = static_cast<void**>(object);
+    for (int i = 0; i < 12; i++) {
         void* vftable = nullptr;
         if (!SafeReadPointer(&slots[i], &vftable)) {
             return false;
@@ -540,14 +576,30 @@ bool IsKnownViewModelPointer(void* candidate, bool isObjectIdentity = false) {
             return true;
         }
     }
-
     return false;
 }
 
+// Finds the interface sub-object whose vtable is `vftable`, scanning forward
+// from the object's identity pointer (the Taskbar Labels mod does the same
+// walk between the view model's interfaces).
+void* FindInterfaceByVtable(void* object, void* vftable) {
+    if (!object || !vftable) {
+        return nullptr;
+    }
 
+    auto slots = static_cast<void**>(object);
+    for (int i = 0; i < 16; i++) {
+        void* value = nullptr;
+        if (!SafeReadPointer(&slots[i], &value)) {
+            break;
+        }
+        if (value == vftable) {
+            return &slots[i];
+        }
+    }
 
-
-
+    return nullptr;
+}
 
 // The ItemsRepeater hosting a button, or null when its parent isn't one.
 winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater GetHostingRepeater(
@@ -589,34 +641,44 @@ int GetRepeaterItemIndex(
     return -1;
 }
 
-// True for a button that sits in a repeater's tree without being one of its
-// realized items. Such a button isn't shown and has nothing to represent.
-bool IsUnrealizedRepeaterChild(const Xaml::FrameworkElement& button) {
-    try {
-        auto repeater = GetHostingRepeater(button);
-        if (!repeater) {
-            return false;
-        }
+enum class ButtonWindowsState {
+    kUnrealized,   // A recycled repeater child: not shown, nothing to do.
+    kUnavailable,  // No view model reachable; use the title fallback.
+    kResolved,     // `windows` holds the button's windows (possibly none).
+};
 
-        auto itemsSourceView = repeater.ItemsSourceView();
-        int count = itemsSourceView ? itemsSourceView.Count() : 0;
-        return GetRepeaterItemIndex(repeater, button, count) < 0;
-    } catch (...) {
-        return false;
-    }
-}
+struct ButtonWindows {
+    ButtonWindowsState state;
+    std::vector<HWND> windows;
+};
 
-// The item the ItemsRepeater hosting the button created it for: the
-// repeater owns the data, and with x:Bind templates the button itself keeps
-// no reference to it. Covers the taskbar's own repeater and the overflow
-// flyout's.
-winrt::com_ptr<IUnknown> ViewModelFromRepeater(
-    const Xaml::FrameworkElement& button) {
+// The windows behind a button, from its view model.
+ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
+    ButtonWindows result{ButtonWindowsState::kUnavailable, {}};
+
     winrt::com_ptr<IUnknown> viewModel;
-
     try {
         auto repeater = GetHostingRepeater(button);
-        if (!repeater) {
+        if (repeater) {
+            auto itemsSourceView = repeater.ItemsSourceView();
+            int count = itemsSourceView ? itemsSourceView.Count() : 0;
+            int index = GetRepeaterItemIndex(repeater, button, count);
+            if (index < 0) {
+                result.state = ButtonWindowsState::kUnrealized;
+                return result;
+            }
+
+            auto item = itemsSourceView.GetAt(index);
+            if (item && IsKnownViewModel(winrt::get_abi(item))) {
+                viewModel.copy_from(static_cast<IUnknown*>(winrt::get_abi(item)));
+            } else if (item) {
+                static std::atomic<bool> logged;
+                if (!logged.exchange(true)) {
+                    Wh_Log(L"Repeater item not recognized: %s",
+                           winrt::get_class_name(item).c_str());
+                }
+            }
+        } else {
             static std::atomic<bool> logged;
             if (!logged.exchange(true)) {
                 auto parent = Xaml::Media::VisualTreeHelper::GetParent(button);
@@ -624,96 +686,15 @@ winrt::com_ptr<IUnknown> ViewModelFromRepeater(
                        parent ? winrt::get_class_name(parent).c_str()
                               : L"(none)");
             }
-            return viewModel;
-        }
-
-        auto itemsSourceView = repeater.ItemsSourceView();
-        int count = itemsSourceView ? itemsSourceView.Count() : 0;
-        int index = GetRepeaterItemIndex(repeater, button, count);
-        if (index < 0) {
-            return viewModel;
-        }
-
-        auto item = itemsSourceView.GetAt(index);
-
-        // The view can return null for sources it reaches only through the
-        // bindable interfaces; read the source itself in that case.
-        if (!item) {
-            auto source = repeater.ItemsSource();
-            static std::atomic<bool> logged;
-            if (!logged.exchange(true)) {
-                Wh_Log(L"ItemsSourceView.GetAt(%d) is null; source class: %s",
-                       index,
-                       source ? winrt::get_class_name(source).c_str()
-                              : L"(none)");
-            }
-
-            if (source) {
-                if (auto vector = source.try_as<
-                        winrt::Windows::Foundation::Collections::IVector<
-                            winrt::Windows::Foundation::IInspectable>>()) {
-                    if (index < static_cast<int>(vector.Size())) {
-                        item = vector.GetAt(index);
-                    }
-                } else if (auto bindable = source.try_as<
-                               winrt::Windows::UI::Xaml::Interop::
-                                   IBindableVector>()) {
-                    if (index < static_cast<int>(bindable.Size())) {
-                        item = bindable.GetAt(index);
-                    }
-                }
-            }
-        }
-
-        if (!item) {
-            static std::atomic<bool> logged;
-            if (!logged.exchange(true)) {
-                Wh_Log(L"Repeater item %d unavailable from the source too",
-                       index);
-            }
-            return viewModel;
-        }
-
-        if (IsKnownViewModelPointer(winrt::get_abi(item),
-                                    /*isObjectIdentity=*/true)) {
-            viewModel.copy_from(static_cast<IUnknown*>(winrt::get_abi(item)));
-            return viewModel;
-        }
-
-        // Not a view model we know. Say what it is, once.
-        static std::atomic<bool> logged;
-        if (!logged.exchange(true)) {
-            Wh_Log(L"Repeater item not recognized: index=%d class=%s", index,
-                   winrt::get_class_name(item).c_str());
         }
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"Repeater lookup error: %08X",
                static_cast<unsigned int>(e.code()));
     }
 
-    return viewModel;
-}
-
-// The button's view model, or null.
-winrt::com_ptr<IUnknown> GetButtonViewModel(const Xaml::FrameworkElement& button) {
-    return ViewModelFromRepeater(button);
-}
-
-// The windows behind a button, from its view model. nullopt means the bridge
-// couldn't be used for this button and the caller should fall back; an empty
-// vector means the button has no windows (pinned, not running).
-std::optional<std::vector<HWND>> ResolveWindowsViaViewModel(
-    const Xaml::FrameworkElement& button) {
-    if (!IsViewModelBridgeAvailable()) {
-        return std::nullopt;
+    if (!viewModel || !IsViewModelBridgeAvailable()) {
+        return result;
     }
-
-    auto viewModel = GetButtonViewModel(button);
-    if (!viewModel) {
-        return std::nullopt;
-    }
-
-    std::vector<HWND> windows;
 
     // One window.
     if (void* windowViewModel = FindInterfaceByVtable(
@@ -724,28 +705,31 @@ std::optional<std::vector<HWND>> ResolveWindowsViaViewModel(
                                                            taskItem.put_void());
         if (SUCCEEDED(hr) && taskItem) {
             if (HWND hWnd = GetTaskItemWindow(taskItem.get())) {
-                windows.push_back(hWnd);
+                result.windows.push_back(hWnd);
             }
         }
-        return windows;
+        result.state = ButtonWindowsState::kResolved;
+        return result;
     }
 
     // A group: all of its windows.
     if (void* groupViewModel = FindInterfaceByVtable(
             viewModel.get(),
             TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable)) {
+        result.state = ButtonWindowsState::kResolved;
+
         winrt::com_ptr<IUnknown> taskGroupUnknown;
         HRESULT hr = TaskListGroupViewModel_get_TaskGroup(
             groupViewModel, taskGroupUnknown.put_void());
         if (FAILED(hr) || !taskGroupUnknown) {
-            return windows;
+            return result;
         }
 
         winrt::com_ptr<ITaskGroup> taskGroup;
         hr = taskGroupUnknown->QueryInterface(IID_ITaskGroup,
                                               taskGroup.put_void());
         if (FAILED(hr)) {
-            return windows;
+            return result;
         }
 
         // An IVectorView<TaskItem>, which has the same ABI.
@@ -759,23 +743,22 @@ std::optional<std::vector<HWND>> ResolveWindowsViaViewModel(
                 auto item = items.GetAt(i);
                 if (HWND hWnd = GetTaskItemWindow(
                         static_cast<IUnknown*>(winrt::get_abi(item)))) {
-                    windows.push_back(hWnd);
+                    result.windows.push_back(hWnd);
                 }
             }
         }
-        return windows;
+        return result;
     }
 
-    // Neither known view model (new build?): let the caller fall back.
-    return std::nullopt;
+    return result;
 }
 
 // ============================================================================
 // Button -> windows resolver, part 2: title matching (fallback)
 // ============================================================================
 //
-// Used only when the view-model symbols didn't resolve. Exact for "Never
-// combine", where the label is the window title; blind to combined groups.
+// Used only when the view model can't be reached. Exact for "Never combine",
+// where the label is the window title; blind to combined groups.
 
 const std::vector<HWND>* ResolveWindowsForLabel(
     const Xaml::Controls::TextBlock& label,
@@ -802,30 +785,17 @@ const std::vector<HWND>* ResolveWindowsForLabel(
 }
 
 // ============================================================================
-// XAML helpers (UI thread only)
+// XAML helpers (taskbar thread only)
 // ============================================================================
-
-// The taskbar runs in a XAML island, where DependencyObject.Dispatcher is
-// null. The thread's DispatcherQueue is the island-correct way to get back
-// onto the UI thread; it is agile, so it can be used from any thread later
-// on. This is only ever called on the UI thread (from the hooks or from a
-// refresh pass already running there), so "current thread" is the right one.
-DispatcherQueue GetCurrentUiQueue() {
-    DispatcherQueue queue = nullptr;
-    try {
-        queue = DispatcherQueue::GetForCurrentThread();
-    } catch (...) {
-    }
-    return queue;
-}
 
 bool IsTaskListButton(const Xaml::DependencyObject& element) {
     return winrt::get_class_name(element) == L"Taskbar.TaskListButton";
 }
 
-// Walks up to the top of the visual tree. Returns null if the element isn't
-// in a tree yet (it will be registered on a later refresh).
-Xaml::DependencyObject FindTreeRoot(const Xaml::DependencyObject& element) {
+// The topmost ancestor of `element`, or null if it has no parent and
+// `allowSelf` is false (an element that isn't in a tree yet).
+Xaml::DependencyObject FindTreeRoot(const Xaml::DependencyObject& element,
+                                    bool allowSelf) {
     Xaml::DependencyObject current = element;
     bool movedUp = false;
 
@@ -839,7 +809,7 @@ Xaml::DependencyObject FindTreeRoot(const Xaml::DependencyObject& element) {
         movedUp = true;
     }
 
-    return movedUp ? current : nullptr;
+    return (movedUp || allowSelf) ? current : nullptr;
 }
 
 // Collects every TaskListButton under `root` without descending into the
@@ -892,13 +862,6 @@ Xaml::Controls::TextBlock FindLabelControl(const Xaml::DependencyObject& root,
     return nullptr;
 }
 
-// ============================================================================
-// Renderer (UI thread only)
-// ============================================================================
-
-void ApplyToButton(const Xaml::FrameworkElement& button,
-                   LazyWindowSnapshot& snapshot);
-
 // The TaskListButton that owns a LabelControl, or null.
 Xaml::FrameworkElement FindOwningTaskListButton(
     const Xaml::DependencyObject& element) {
@@ -912,38 +875,38 @@ Xaml::FrameworkElement FindOwningTaskListButton(
     return nullptr;
 }
 
-// Records the label's original decoration and subscribes to its Text
-// property, so a title change re-evaluates the button even when the taskbar
-// doesn't refresh its visual states. Returns the original decoration.
+// ============================================================================
+// Renderer (taskbar thread only)
+// ============================================================================
+
+void ApplyToButton(const Xaml::FrameworkElement& button,
+                   LazyWindowSnapshot& snapshot);
+
 // Set while a label's text is re-set to rebuild its layout, so the Text
 // callback below ignores that write.
-thread_local bool t_rebuildingLabel = false;
+bool g_rebuildingLabel = false;
 
-// Returns true if the label was not tracked before.
+// Subscribes to the label's Text property once, so a title change
+// re-evaluates the button even when the taskbar doesn't refresh its visual
+// states. Returns true if the label was not tracked before.
 bool EnsureLabelTracked(const Xaml::Controls::TextBlock& label) {
     void* key = winrt::get_abi(label);
 
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        auto it = g_labels.find(key);
-        if (it != g_labels.end()) {
-            auto existing = it->second.label.get();
-            if (existing && existing == label) {
-                return false;
-            }
-
-            // Stale entry for a dead TextBlock whose address got reused.
-            g_labels.erase(it);
+    auto it = g_labels->find(key);
+    if (it != g_labels->end()) {
+        auto existing = it->second.label.get();
+        if (existing && existing == label) {
+            return false;
         }
-    }
 
-    TextDecorations original = label.TextDecorations();
-    DispatcherQueue queue = GetCurrentUiQueue();
+        // Stale entry for a dead TextBlock whose address got reused.
+        g_labels->erase(it);
+    }
 
     int64_t token = label.RegisterPropertyChangedCallback(
         Xaml::Controls::TextBlock::TextProperty(),
         [](const Xaml::DependencyObject& sender, const Xaml::DependencyProperty&) {
-            if (g_unloading || t_rebuildingLabel) {
+            if (g_unloading || g_rebuildingLabel) {
                 return;
             }
 
@@ -960,9 +923,7 @@ bool EnsureLabelTracked(const Xaml::Controls::TextBlock& label) {
             }
         });
 
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_labels.emplace(key, LabelEntry{winrt::make_weak(label), queue, original,
-                                     token});
+    g_labels->emplace(key, LabelEntry{winrt::make_weak(label), token});
     return true;
 }
 
@@ -978,25 +939,16 @@ bool HasUnderlineBit(TextDecorations value) {
             static_cast<uint32_t>(TextDecorations::Underline)) != 0;
 }
 
-// Sets or clears the Underline bit on the label, and nothing else, so a
-// theme's strikethrough survives.
-//
-// Setting works through the TextBlock property. Clearing does not: XAML
-// keeps drawing a decoration that was once applied to a TextBlock even after
-// the property reads back as None, because a "no decoration" value doesn't
-// rebuild the text layout. So clearing also rebuilds the inline content by
-// re-setting the text, which creates a fresh Run with no decoration, and
-// clears the bit on any Run that carries it.
 // Rebuilds the label's inline content from its text, which replaces any
 // Runs (and any cached text layout) with a single plain Run. Setting the
 // same string is a no-op, so the text is cleared first; both writes happen
 // before the next layout pass, so nothing flickers.
 void RebuildLabelText(const Xaml::Controls::TextBlock& label) {
     winrt::hstring text = label.Text();
-    t_rebuildingLabel = true;
+    g_rebuildingLabel = true;
     label.Text(L"");
     label.Text(text);
-    t_rebuildingLabel = false;
+    g_rebuildingLabel = false;
     label.InvalidateMeasure();
 }
 
@@ -1096,7 +1048,7 @@ void ApplyFirstLetterUnderline(const Xaml::Controls::TextBlock& label) {
         return run;
     };
 
-    t_rebuildingLabel = true;
+    g_rebuildingLabel = true;
     inlines.Clear();
     if (!head.empty()) {
         inlines.Append(makeRun(head, false));
@@ -1105,7 +1057,7 @@ void ApplyFirstLetterUnderline(const Xaml::Controls::TextBlock& label) {
     if (!tail.empty()) {
         inlines.Append(makeRun(tail, false));
     }
-    t_rebuildingLabel = false;
+    g_rebuildingLabel = false;
     label.InvalidateMeasure();
 }
 
@@ -1172,9 +1124,6 @@ void SetLabelUnderline(const Xaml::Controls::TextBlock& label,
     RebuildLabelText(label);
 }
 
-// "Plain" clears the Underline bit rather than restoring a remembered value,
-// so a stale capture (for example after a reload that couldn't restore) can
-// never leave an underline behind.
 void ApplyUnderline(const Xaml::Controls::TextBlock& label, bool underline) {
     // A label seen for the first time may still carry a decoration drawn by
     // an earlier session that the property no longer reports; rebuild it
@@ -1197,52 +1146,28 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
         return;
     }
 
+    ButtonWindows resolved = ResolveButtonWindows(button);
+
     // A recycled button isn't shown; leave it alone until the repeater reuses
     // it (its text changes then, which re-evaluates it).
-    if (IsUnrealizedRepeaterChild(button)) {
-        if (g_settings.debugLog) {
-            Wh_Log(L"[%s] skipped: not a realized repeater item",
-                   label.Text().c_str());
-        }
+    if (resolved.state == ButtonWindowsState::kUnrealized) {
         return;
     }
 
     bool underline = false;
-
-    auto windows = ResolveWindowsViaViewModel(button);
-    const std::vector<HWND>* byTitle = nullptr;
-    if (windows) {
-        underline = ShouldUnderline(*windows);
-    } else if ((byTitle = ResolveWindowsForLabel(label, snapshot.get()))) {
+    if (resolved.state == ButtonWindowsState::kResolved) {
+        underline = ShouldUnderline(resolved.windows);
+    } else if (const auto* byTitle =
+                   ResolveWindowsForLabel(label, snapshot.get())) {
         underline = ShouldUnderline(*byTitle);
-    }
-
-    if (g_settings.debugLog) {
-        const std::vector<HWND>* list = windows ? &*windows : byTitle;
-        std::wstring detail;
-        if (list) {
-            for (HWND hWnd : *list) {
-                WCHAR part[64];
-                swprintf_s(part, L" %p[%s%s%s]", hWnd,
-                           IsWindow(hWnd) ? L"" : L"dead,",
-                           IsIconic(hWnd) ? L"iconic" : L"shown",
-                           IsWindowCloaked(hWnd) ? L",cloaked" : L"");
-                detail += part;
-            }
-        }
-        Wh_Log(L"[%s] via %s:%s -> %s (td=%u before)", label.Text().c_str(),
-               windows ? L"vm" : (byTitle ? L"title" : L"none"),
-               detail.c_str(), underline ? L"underline" : L"plain",
-               static_cast<unsigned int>(label.TextDecorations()));
     }
 
     // Logged once per outcome, since the first button evaluated can run
     // before the bridge is fully set up.
     static std::atomic<bool> loggedViewModel, loggedFallback;
-    if (windows) {
+    if (resolved.state == ButtonWindowsState::kResolved) {
         if (!loggedViewModel.exchange(true)) {
-            Wh_Log(L"Resolver in use: view model (%zu window(s) for this button)",
-                   windows->size());
+            Wh_Log(L"Resolver in use: view model");
         }
     } else if (!loggedFallback.exchange(true)) {
         Wh_Log(L"Resolver in use: title matching (fallback)");
@@ -1252,79 +1177,45 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
 }
 
 // ============================================================================
-// Root registry and refresh passes
+// Root registry and refresh passes (taskbar thread only)
 // ============================================================================
 
-void StartEventThreadIfNeeded();
-void RequestDeferredRefresh();
-
-// Registers the tree containing `element`. Returns true if the tree is new.
-bool RegisterRootOf(const Xaml::DependencyObject& element) {
-    auto root = FindTreeRoot(element);
-    if (!root) {
-        return false;
-    }
-
+// Registers the tree whose topmost element is `root`. Returns true if the
+// tree is new.
+bool RegisterRoot(const Xaml::DependencyObject& root) {
     void* key = winrt::get_abi(root);
-    DispatcherQueue queue = GetCurrentUiQueue();
-    if (!queue) {
-        Wh_Log(L"No DispatcherQueue for this UI thread");
-        return false;
-    }
 
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        for (auto it = g_roots.begin(); it != g_roots.end();) {
-            if (it->key == key) {
-                auto existing = it->root.get();
-                if (existing && existing == root) {
-                    return false;
-                }
-
-                // Dead object at a reused address.
-                it = g_roots.erase(it);
-                continue;
+    for (auto it = g_roots->begin(); it != g_roots->end();) {
+        if (it->key == key) {
+            auto existing = it->root.get();
+            if (existing && existing == root) {
+                return false;
             }
-            ++it;
-        }
 
-        g_roots.push_back(RootEntry{key, winrt::make_weak(root), queue});
+            // Dead object at a reused address.
+            it = g_roots->erase(it);
+            continue;
+        }
+        ++it;
     }
 
+    g_roots->push_back(RootEntry{key, winrt::make_weak(root)});
     Wh_Log(L"Registered taskbar tree root: %s",
            winrt::get_class_name(root).c_str());
-    StartEventThreadIfNeeded();
     return true;
 }
 
-std::vector<DispatcherQueue> CollectQueues() {
-    std::vector<DispatcherQueue> result;
-
-    auto add = [&result](const DispatcherQueue& queue) {
-        if (!queue) {
-            return;
-        }
-        for (const auto& existing : result) {
-            if (existing == queue) {
-                return;
-            }
-        }
-        result.push_back(queue);
-    };
-
-    std::lock_guard<std::mutex> lock(g_mutex);
-    for (const auto& entry : g_roots) {
-        add(entry.queue);
+// Registers the tree containing `element`. Returns true if the tree is new.
+bool RegisterRootOf(const Xaml::DependencyObject& element, bool allowSelf) {
+    auto root = FindTreeRoot(element, allowSelf);
+    if (!root) {
+        return false;
     }
-    for (const auto& [key, entry] : g_labels) {
-        add(entry.queue);
-    }
-
-    return result;
+    return RegisterRoot(root);
 }
 
-// Re-evaluates every button in every tree that lives on the calling UI thread
-// and prunes entries whose objects are gone.
+// Re-evaluates every button in every known tree and prunes entries whose
+// objects are gone.
 void RefreshTreesOnCurrentThread() {
     if (g_unloading) {
         return;
@@ -1332,21 +1223,10 @@ void RefreshTreesOnCurrentThread() {
 
     LazyWindowSnapshot snapshot;
 
-    std::vector<std::pair<void*, winrt::weak_ref<Xaml::DependencyObject>>> roots;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        for (const auto& entry : g_roots) {
-            if (entry.queue.HasThreadAccess()) {
-                roots.emplace_back(entry.key, entry.root);
-            }
-        }
-    }
-
-    std::vector<void*> deadRoots;
-    for (const auto& [key, weakRoot] : roots) {
-        auto root = weakRoot.get();
+    for (auto it = g_roots->begin(); it != g_roots->end();) {
+        auto root = it->root.get();
         if (!root) {
-            deadRoots.push_back(key);
+            it = g_roots->erase(it);
             continue;
         }
 
@@ -1361,80 +1241,28 @@ void RefreshTreesOnCurrentThread() {
         } catch (...) {
             Wh_Log(L"Refresh error");
         }
+
+        ++it;
     }
 
-    // Prune labels owned by this thread whose TextBlock is gone.
-    std::vector<std::pair<void*, winrt::weak_ref<Xaml::Controls::TextBlock>>> labels;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        for (const auto& [key, entry] : g_labels) {
-            if (entry.queue.HasThreadAccess()) {
-                labels.emplace_back(key, entry.label);
-            }
-        }
-    }
-
-    std::vector<void*> deadLabels;
-    for (const auto& [key, weakLabel] : labels) {
-        if (!weakLabel.get()) {
-            deadLabels.push_back(key);
-        }
-    }
-
-    if (!deadRoots.empty() || !deadLabels.empty()) {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        for (void* key : deadRoots) {
-            for (auto it = g_roots.begin(); it != g_roots.end(); ++it) {
-                if (it->key == key) {
-                    g_roots.erase(it);
-                    break;
-                }
-            }
-        }
-        for (void* key : deadLabels) {
-            g_labels.erase(key);
+    for (auto it = g_labels->begin(); it != g_labels->end();) {
+        if (!it->second.label.get()) {
+            it = g_labels->erase(it);
+        } else {
+            ++it;
         }
     }
 }
 
-// Called from any thread. Posts one refresh pass per UI thread.
-void ScheduleRefreshAll() {
-    if (g_unloading) {
-        return;
-    }
-
-    for (const auto& queue : CollectQueues()) {
-        try {
-            bool enqueued = queue.TryEnqueue(DispatcherQueuePriority::Normal, [] {
-                if (!g_unloading) {
-                    RefreshTreesOnCurrentThread();
-                }
-            });
-            if (!enqueued) {
-                Wh_Log(L"TryEnqueue returned false");
-            }
-        } catch (const winrt::hresult_error& e) {
-            Wh_Log(L"TryEnqueue error: %08X", static_cast<unsigned int>(e.code()));
-        } catch (...) {
-            Wh_Log(L"TryEnqueue error");
-        }
-    }
+void WINAPI RefreshTreesProc(void*) {
+    RefreshTreesOnCurrentThread();
 }
 
-// Restores every label owned by the calling UI thread and drops it from the
-// registry. Used on unload.
-void RestoreLabelsOnCurrentThread() {
-    std::vector<std::pair<void*, LabelEntry>> entries;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        for (const auto& [key, entry] : g_labels) {
-            if (entry.queue.HasThreadAccess()) {
-                entries.emplace_back(key, entry);
-            }
-        }
-    }
-
-    for (const auto& [key, entry] : entries) {
+// Removes every label's subscription and decoration, and forgets all
+// trees. Runs synchronously on the taskbar thread while unloading, so no
+// delegate implemented by the mod stays registered afterwards.
+void WINAPI RestoreAndClearProc(void*) {
+    for (auto& [key, entry] : *g_labels) {
         try {
             if (auto label = entry.label.get()) {
                 label.UnregisterPropertyChangedCallback(
@@ -1445,17 +1273,198 @@ void RestoreLabelsOnCurrentThread() {
         } catch (...) {
             Wh_Log(L"Restore error");
         }
-
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_labels.erase(key);
     }
+
+    g_labels->clear();
+    g_roots->clear();
+}
+
+// ============================================================================
+// Finding the taskbars' XAML trees (taskbar.dll)
+// ============================================================================
+//
+// Buttons that existed before the mod loaded are only seen once one of the
+// hooked TaskListButton members runs for them. Instead of waiting for that,
+// the taskbar's XamlRoot is read directly from its TaskbarHost, the way the
+// Taskbar Multirow mod does, and the whole tree is evaluated at once.
+
+void* CTaskBand_ITaskListWndSite_vftable;
+
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
+
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
+                                                           void** result);
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+bool AreTaskbarDllSymbolsAvailable() {
+    return CTaskBand_ITaskListWndSite_vftable &&
+           CSecondaryTaskBand_ITaskListWndSite_vftable &&
+           CTaskBand_GetTaskbarHost_Original && TaskbarHost_FrameHeight_Original &&
+           CSecondaryTaskBand_GetTaskbarHost_Original &&
+           std__Ref_count_base__Decref_Original;
+}
+
+Xaml::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
+
+    auto* taskbarElementIUnknown =
+        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
+                      taskbarElementIUnknownOffset);
+
+    Xaml::FrameworkElement taskbarElement = nullptr;
+    taskbarElementIUnknown->QueryInterface(
+        winrt::guid_of<Xaml::FrameworkElement>(),
+        winrt::put_abi(taskbarElement));
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
+}
+
+Xaml::XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+Xaml::XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
+    HWND hTaskSwWnd =
+        (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CSecondaryTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                               taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+// Registers the XAML tree of every taskbar window on the calling (taskbar)
+// thread, then evaluates all their buttons.
+void WINAPI RegisterTaskbarTreesProc(void*) {
+    if (g_unloading || !AreTaskbarDllSymbolsAvailable()) {
+        return;
+    }
+
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM) -> BOOL {
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
+            }
+
+            Xaml::XamlRoot xamlRoot = nullptr;
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+                xamlRoot = GetTaskbarXamlRoot(hWnd);
+            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+                xamlRoot = GetSecondaryTaskbarXamlRoot(hWnd);
+            } else {
+                return TRUE;
+            }
+
+            if (!xamlRoot) {
+                Wh_Log(L"Getting XamlRoot failed");
+                return TRUE;
+            }
+
+            try {
+                if (auto content = xamlRoot.Content()) {
+                    RegisterRootOf(content, /*allowSelf=*/true);
+                }
+            } catch (const winrt::hresult_error& e) {
+                Wh_Log(L"Registering a taskbar tree failed: %08X",
+                       static_cast<unsigned int>(e.code()));
+            }
+
+            return TRUE;
+        },
+        0);
+
+    RefreshTreesOnCurrentThread();
 }
 
 // ============================================================================
 // WinEvent thread: invalidation signals, coalesced into refresh passes
 // ============================================================================
 
-std::atomic<bool> g_eventThreadStarted;
 HANDLE g_eventThread;
 HANDLE g_eventThreadReady;
 DWORD g_eventThreadId;
@@ -1463,13 +1472,14 @@ DWORD g_eventThreadId;
 // Only touched on the event thread.
 UINT_PTR g_refreshTimer;
 UINT_PTR g_followUpTimer;
+std::vector<HWINEVENTHOOK> g_winEventHooks;
 
 void CALLBACK RefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
     KillTimer(nullptr, id);
 
     if (id == g_refreshTimer) {
         g_refreshTimer = 0;
-        ScheduleRefreshAll();
+        RunOnTaskbarThread(RefreshTreesProc, nullptr);
 
         // Second pass a bit later: minimize/restore state can still be
         // changing during the first one.
@@ -1479,7 +1489,7 @@ void CALLBACK RefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
         }
     } else if (id == g_followUpTimer) {
         g_followUpTimer = 0;
-        ScheduleRefreshAll();
+        RunOnTaskbarThread(RefreshTreesProc, nullptr);
     }
 }
 
@@ -1491,7 +1501,7 @@ void ArmRefreshTimer() {
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK,
-                           DWORD event,
+                           DWORD,
                            HWND hwnd,
                            LONG idObject,
                            LONG idChild,
@@ -1501,52 +1511,69 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
         return;
     }
 
-    // Destroy events can't be checked for top-level-ness (the window is
-    // already gone); everything else is filtered to top-level windows.
-    if (event != EVENT_OBJECT_DESTROY && GetAncestor(hwnd, GA_ROOT) != hwnd) {
+    if (GetAncestor(hwnd, GA_ROOT) != hwnd) {
         return;
     }
 
     ArmRefreshTimer();
 }
 
-DWORD WINAPI EventThreadProc(LPVOID) {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+void UnhookWinEvents() {
+    for (HWINEVENTHOOK hook : g_winEventHooks) {
+        UnhookWinEvent(hook);
+    }
+    g_winEventHooks.clear();
+}
 
+// Registers the WinEvent ranges the current settings need. Minimize,
+// restore, show, hide and cloaking always; foreground changes only when the
+// foreground window is treated specially; title changes only when the title
+// fallback is in use (they are frequent, and with the view model a title
+// change doesn't change which windows a button has).
+void HookWinEvents() {
+    UnhookWinEvents();
+
+    struct Range {
+        DWORD min;
+        DWORD max;
+    };
+    std::vector<Range> ranges = {
+        {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
+        {EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE},
+        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
+    };
+    if (!g_settings.includeActive && g_settings.mode == Mode::kOpen) {
+        ranges.push_back({EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND});
+    }
+    if (!IsViewModelBridgeAvailable()) {
+        ranges.push_back({EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE});
+    }
+
+    for (const Range& range : ranges) {
+        HWINEVENTHOOK hook = SetWinEventHook(range.min, range.max, nullptr,
+                                             WinEventProc, 0, 0,
+                                             WINEVENT_OUTOFCONTEXT);
+        if (hook) {
+            g_winEventHooks.push_back(hook);
+        } else {
+            Wh_Log(L"SetWinEventHook failed for range %04X-%04X", range.min,
+                   range.max);
+        }
+    }
+}
+
+DWORD WINAPI EventThreadProc(LPVOID) {
     // Force the message queue into existence before signaling readiness, so
     // PostThreadMessage from other threads can't be lost.
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     SetEvent(g_eventThreadReady);
 
-    const struct {
-        DWORD min;
-        DWORD max;
-    } ranges[] = {
-        {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND},
-        {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
-        {EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE},  // DESTROY, SHOW, HIDE
-        {EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE},
-        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
-    };
-
-    HWINEVENTHOOK hooks[ARRAYSIZE(ranges)] = {};
-    for (size_t i = 0; i < ARRAYSIZE(ranges); i++) {
-        hooks[i] = SetWinEventHook(ranges[i].min, ranges[i].max, nullptr,
-                                   WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-        if (!hooks[i]) {
-            Wh_Log(L"SetWinEventHook failed for range %04X-%04X",
-                   ranges[i].min, ranges[i].max);
-        }
-    }
-
-    // Explorer was most likely already running; evaluate everything known so
-    // far once right away.
-    ScheduleRefreshAll();
+    HookWinEvents();
 
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        if (!msg.hwnd && msg.message == WM_APP_REQUEST_REFRESH) {
-            ArmRefreshTimer();
+        if (!msg.hwnd && msg.message == WM_APP_RECONFIGURE_HOOKS) {
+            HookWinEvents();
             continue;
         }
 
@@ -1563,60 +1590,48 @@ DWORD WINAPI EventThreadProc(LPVOID) {
         g_followUpTimer = 0;
     }
 
-    for (HWINEVENTHOOK hook : hooks) {
-        if (hook) {
-            UnhookWinEvent(hook);
-        }
-    }
-
-    CoUninitialize();
+    UnhookWinEvents();
     return 0;
 }
 
-void StartEventThreadIfNeeded() {
-    if (g_unloading || g_eventThreadStarted.exchange(true)) {
+void StartEventThread() {
+    if (g_eventThread) {
         return;
     }
 
     g_eventThreadReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!g_eventThreadReady) {
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
+        return;
+    }
+
     g_eventThread =
         CreateThread(nullptr, 0, EventThreadProc, nullptr, 0, &g_eventThreadId);
     if (!g_eventThread) {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
+        CloseHandle(g_eventThreadReady);
+        g_eventThreadReady = nullptr;
     }
 }
 
-// Asks the event thread for a coalesced re-check of everything. Safe to call
-// from the UI thread hooks; a no-op before the thread exists (its startup
-// does a full pass anyway).
-void RequestDeferredRefresh() {
-    if (g_eventThreadId && !g_unloading) {
-        PostThreadMessage(g_eventThreadId, WM_APP_REQUEST_REFRESH, 0, 0);
-    }
-}
-
+// Nothing in the event thread blocks for long (its only cross-thread call is
+// a SendMessage to the taskbar thread), so the waits here are unbounded: the
+// thread runs code of this DLL and must be gone before it is unmapped.
 void StopEventThread() {
     if (!g_eventThread) {
         return;
     }
 
-    if (g_eventThreadReady) {
-        WaitForSingleObject(g_eventThreadReady, 2000);
-    }
-
+    WaitForSingleObject(g_eventThreadReady, INFINITE);
     PostThreadMessage(g_eventThreadId, WM_QUIT, 0, 0);
-    if (WaitForSingleObject(g_eventThread, 3000) != WAIT_OBJECT_0) {
-        Wh_Log(L"Event thread did not exit in time");
-    }
+    WaitForSingleObject(g_eventThread, INFINITE);
 
     CloseHandle(g_eventThread);
     g_eventThread = nullptr;
     g_eventThreadId = 0;
 
-    if (g_eventThreadReady) {
-        CloseHandle(g_eventThreadReady);
-        g_eventThreadReady = nullptr;
-    }
+    CloseHandle(g_eventThreadReady);
+    g_eventThreadReady = nullptr;
 }
 
 // ============================================================================
@@ -1629,9 +1644,9 @@ std::atomic<bool> g_elementBroken;
 // Gets the XAML element from the TaskListButton implementation object. The
 // IInspectable of the composed XAML control sits at this offset in the
 // C++/WinRT implementation layout; the same technique is used by the
-// Taskbar Labels and Taskbar Icon Size mods. The class name is verified once
-// so an offset mismatch on a new build degrades to "mod does nothing" rather
-// than a crash.
+// Taskbar Labels and Taskbar Icon Size mods. The class name is checked once
+// so that a build where the offset points at some other XAML element is
+// noticed instead of silently decorating the wrong thing.
 Xaml::FrameworkElement TaskListButtonFromThis(void* pThis) {
     if (g_elementBroken) {
         return nullptr;
@@ -1670,18 +1685,14 @@ void OnTaskListButtonUpdated(void* pThis) {
             return;
         }
 
-        if (RegisterRootOf(element)) {
-            // First time we see this tree: decorate everything in it, which
-            // covers all the buttons that existed before the mod loaded.
+        if (RegisterRootOf(element, /*allowSelf=*/false)) {
+            // First time we see this tree (a taskbar created after the mod
+            // loaded, say): decorate everything in it.
             RefreshTreesOnCurrentThread();
         } else {
             LazyWindowSnapshot snapshot;
             ApplyToButton(element, snapshot);
         }
-
-        // The taskbar often refreshes a button a moment before the window's
-        // minimized state is actually committed; re-check shortly after.
-        RequestDeferredRefresh();
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"TaskListButton hook error: %08X",
                static_cast<unsigned int>(e.code()));
@@ -1721,15 +1732,15 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
             TaskListButton_UpdateVisualStates_Hook,
         },
-        // The two below are optional convenience triggers: they run for every
-        // button on layout/settings changes, which is how buttons that
-        // existed before the mod loaded get seen right after enabling.
+        // The two below are optional: they run for every button on
+        // layout/settings changes, which keeps labels right across those.
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateButtonPadding(void))"},
             &TaskListButton_UpdateButtonPadding_Original,
@@ -1782,8 +1793,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
-                                    ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, symbolHooks,
+                                    ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed for the taskbar view module");
         return false;
     }
@@ -1791,17 +1802,70 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     Wh_Log(L"Optional hooks: UpdateButtonPadding=%s UpdateIconColumnDefinition=%s",
            TaskListButton_UpdateButtonPadding_Original ? L"yes" : L"no",
            TaskListButton_UpdateIconColumnDefinition_Original ? L"yes" : L"no");
-    Wh_Log(L"View-model bridge: windowVM=%s get_TaskItem=%s groupVM=%s "
-           L"get_TaskGroup=%s",
-           TaskListWindowViewModel_ITaskListWindowViewModel_vftable ? L"yes"
-                                                                    : L"no",
-           ITaskListWindowViewModel_get_TaskItem ? L"yes" : L"no",
-           TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable ? L"yes"
-                                                                   : L"no",
-           TaskListGroupViewModel_get_TaskGroup ? L"yes" : L"no");
-    Wh_Log(L"Group VM default-interface vtable: %s",
-           TaskListGroupViewModel_ITaskListGroupViewModel_vftable ? L"yes"
-                                                                  : L"no");
+    Wh_Log(L"View-model bridge: %s",
+           IsViewModelBridgeAvailable() ? L"available"
+                                        : L"unavailable, using title matching");
+
+    return true;
+}
+
+bool HookTaskbarDllSymbols() {
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    // Addresses only, nothing is hooked. All optional: without them buttons
+    // that existed before the mod loaded are decorated as they refresh.
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+            nullptr,
+            true,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
+                                    ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed for taskbar.dll");
+        return false;
+    }
+
+    Wh_Log(L"Taskbar XAML root lookup: %s",
+           AreTaskbarDllSymbolsAvailable() ? L"available" : L"unavailable");
 
     return true;
 }
@@ -1825,208 +1889,14 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 // ============================================================================
-// Helpers
-// ============================================================================
-
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (!hTaskbarWnd) {
-        return nullptr;
-    }
-
-    DWORD processId = 0;
-    GetWindowThreadProcessId(hTaskbarWnd, &processId);
-    return processId == GetCurrentProcessId() ? hTaskbarWnd : nullptr;
-}
-
-// ----------------------------------------------------------------------------
-// Enable-time trigger
-// ----------------------------------------------------------------------------
-//
-// Buttons that existed before the mod loaded are only seen once one of the
-// hooked TaskListButton paths runs for any button; from that button the whole
-// tree is registered and decorated. The thing guaranteed to run
-// UpdateVisualStates is a change of a button's active state, so the probe
-// below flips the active button to another window and straight back. Both
-// changes are processed on the UI thread before the next composition frame,
-// so nothing visibly moves and the taskbar ends in the state it started in.
-// Secondary taskbars are fed from the same tray, so their trees register in
-// the same pass.
-//
-// Three stages, each only if the previous one didn't register a tree:
-//   1. ITaskbarList::ActivateTab - the documented COM path into
-//      CTaskBand/CTaskListWnd, independent of how the tray listens for real
-//      activations.
-//   2. The shell hook message (HSHELL_WINDOWACTIVATED) on Shell_TrayWnd.
-//   3. ITaskbarList::DeleteTab + AddTab on one window, which recreates its
-//      button and runs the button-creation path. Visible as a brief blip of
-//      that button, so it is the last resort.
-
-bool IsTreeRegistered() {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return !g_roots.empty();
-}
-
-struct ProbeWindows {
-    HWND foreground;  // Foreground window, if it has a taskbar button.
-    HWND other;       // Some other taskbar window, if any.
-    HWND desktop;
-};
-
-ProbeWindows PickProbeWindows() {
-    ProbeWindows result{};
-
-    result.desktop = GetShellWindow();
-    if (!result.desktop) {
-        result.desktop = GetDesktopWindow();
-    }
-
-    HWND foreground = GetForegroundWindow();
-    if (foreground && IsTaskbarCandidate(foreground)) {
-        result.foreground = foreground;
-    }
-
-    WindowSnapshot snapshot = BuildWindowSnapshot();
-    for (const auto& [title, windows] : snapshot.byTitle) {
-        for (HWND hwnd : windows) {
-            if (hwnd != foreground) {
-                result.other = hwnd;
-                break;
-            }
-        }
-        if (result.other) {
-            break;
-        }
-    }
-
-    return result;
-}
-
-winrt::com_ptr<ITaskbarList> CreateTaskbarList() {
-    winrt::com_ptr<ITaskbarList> list;
-    HRESULT hr = CoCreateInstance(__uuidof(TaskbarList), nullptr,
-                                  CLSCTX_INPROC_SERVER, IID_PPV_ARGS(list.put()));
-    if (FAILED(hr)) {
-        Wh_Log(L"CoCreateInstance(TaskbarList) failed: %08X",
-               static_cast<unsigned int>(hr));
-        return nullptr;
-    }
-
-    hr = list->HrInit();
-    if (FAILED(hr)) {
-        Wh_Log(L"ITaskbarList::HrInit failed: %08X",
-               static_cast<unsigned int>(hr));
-        return nullptr;
-    }
-
-    return list;
-}
-
-// Stage 1.
-void ProbeViaActivateTab(const ProbeWindows& windows) {
-    if (!windows.other || !windows.foreground) {
-        Wh_Log(L"ActivateTab probe skipped (need a foreground window with a "
-               L"button plus one other taskbar window)");
-        return;
-    }
-
-    auto list = CreateTaskbarList();
-    if (!list) {
-        return;
-    }
-
-    list->ActivateTab(windows.other);
-    list->ActivateTab(windows.foreground);
-    Wh_Log(L"ActivateTab probe sent, tree registered: %s",
-           IsTreeRegistered() ? L"yes" : L"no");
-}
-
-// Stage 2.
-void ProbeViaShellHook(HWND hTaskbarWnd, const ProbeWindows& windows) {
-    UINT shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
-    if (!shellHookMsg) {
-        return;
-    }
-
-    HWND probe = windows.other ? windows.other : windows.desktop;
-    HWND restore = windows.foreground ? windows.foreground : windows.desktop;
-    if (probe == restore) {
-        Wh_Log(L"Shell hook probe skipped (nothing to flip)");
-        return;
-    }
-
-    SendMessage(hTaskbarWnd, shellHookMsg, HSHELL_WINDOWACTIVATED,
-                reinterpret_cast<LPARAM>(probe));
-    SendMessage(hTaskbarWnd, shellHookMsg, HSHELL_WINDOWACTIVATED,
-                reinterpret_cast<LPARAM>(restore));
-    Wh_Log(L"Shell hook probe sent, tree registered: %s",
-           IsTreeRegistered() ? L"yes" : L"no");
-}
-
-// Stage 3.
-void ProbeViaRecreateButton(const ProbeWindows& windows) {
-    HWND target = windows.other ? windows.other : windows.foreground;
-    if (!target) {
-        Wh_Log(L"Recreate probe skipped (no taskbar window)");
-        return;
-    }
-
-    auto list = CreateTaskbarList();
-    if (!list) {
-        return;
-    }
-
-    list->DeleteTab(target);
-    list->AddTab(target);
-    if (target == windows.foreground) {
-        list->ActivateTab(target);
-    }
-    Wh_Log(L"Recreate probe sent, tree registered: %s",
-           IsTreeRegistered() ? L"yes" : L"no");
-}
-
-void NudgeTaskbar() {
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hTaskbarWnd) {
-        return;
-    }
-
-    if (IsTreeRegistered()) {
-        return;
-    }
-
-    // ITaskbarList is a plain in-process COM object; make sure this thread
-    // can create it.
-    HRESULT coInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-
-    ProbeWindows windows = PickProbeWindows();
-    Wh_Log(L"Probe windows: foreground=%p other=%p", windows.foreground,
-           windows.other);
-
-    ProbeViaActivateTab(windows);
-    if (!IsTreeRegistered()) {
-        ProbeViaShellHook(hTaskbarWnd, windows);
-    }
-    if (!IsTreeRegistered()) {
-        ProbeViaRecreateButton(windows);
-    }
-    if (!IsTreeRegistered()) {
-        Wh_Log(L"No probe reached a button; existing buttons will be picked "
-               L"up on their next refresh (hover or activation)");
-    }
-
-    if (SUCCEEDED(coInit)) {
-        CoUninitialize();
-    }
-}
-
-// ============================================================================
 // Mod entry points
 // ============================================================================
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    // No hook is applied yet, so this read of the settings can't race the
+    // taskbar thread; later reloads run on that thread.
     LoadSettings();
 
     if (HMODULE module = GetTaskbarViewModuleHandle()) {
@@ -2044,6 +1914,8 @@ BOOL Wh_ModInit() {
                                        LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
     }
+
+    HookTaskbarDllSymbols();
 
     return TRUE;
 }
@@ -2063,55 +1935,51 @@ void Wh_ModAfterInit() {
         }
     }
 
+    // Existing taskbars: read their XAML trees and evaluate every button.
+    // A taskbar that appears later is picked up by the hooks.
     if (g_taskbarViewDllLoaded) {
-        NudgeTaskbar();
+        RunOnTaskbarThread(RegisterTaskbarTreesProc, nullptr);
     }
+
+    StartEventThread();
 }
 
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
     g_unloading = true;
+
+    // Stop the invalidation source first, then undo everything on the
+    // taskbar thread synchronously: after this returns, no delegate of the
+    // mod is registered anywhere and no refresh is pending.
     StopEventThread();
-
-    // Put every label back on its own UI thread and wait for that to finish,
-    // because after this returns the mod's code is going away.
-    for (const auto& queue : CollectQueues()) {
-        HANDLE done = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-        if (!done) {
-            continue;
-        }
-
-        bool enqueued = false;
-        try {
-            enqueued = queue.TryEnqueue(DispatcherQueuePriority::High, [done] {
-                RestoreLabelsOnCurrentThread();
-                SetEvent(done);
-            });
-        } catch (...) {
-        }
-
-        if (!enqueued) {
-            Wh_Log(L"Label restore could not be dispatched");
-        } else if (WaitForSingleObject(done, 3000) != WAIT_OBJECT_0) {
-            Wh_Log(L"Label restore timed out on one UI thread");
-        }
-
-        CloseHandle(done);
-    }
-
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_roots.clear();
-    g_labels.clear();
+    RunOnTaskbarThread(RestoreAndClearProc, nullptr);
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    // Empty by now (cleared on the taskbar thread), unless that thread could
+    // not be reached; either way nothing may be left for the automatic
+    // destructors at process exit.
+    g_labels.reset();
+    g_roots.reset();
+}
+
+void WINAPI ReloadSettingsProc(void*) {
+    LoadSettings();
+    RefreshTreesOnCurrentThread();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    LoadSettings();
-    ScheduleRefreshAll();
+    // Settings are read on the taskbar thread, so reload them there.
+    if (!RunOnTaskbarThread(ReloadSettingsProc, nullptr)) {
+        LoadSettings();
+    }
+
+    if (g_eventThreadId) {
+        PostThreadMessage(g_eventThreadId, WM_APP_RECONFIGURE_HOOKS, 0, 0);
+    }
 }
