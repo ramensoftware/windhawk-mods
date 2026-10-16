@@ -50,7 +50,7 @@ See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 deskt
 - Choose a mosque identifier or Mawaqit URL in Settings.
   Search for your nearby mosque via e.g. [Google](https://www.google.com/search?q=mawaqit+mosque+near+me). 
   Accepted inputs include a bare mosque identifier and the full URL:
-  - `![UrlExample](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Mosque-Identifier.png)`
+  - ![UrlExample](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Mosque-Identifier.png)
 - Select an appearance theme and customize the widget as desired.
 - Custom color settings only apply when the Custom theme is selected.
 - Set popup auto-close to 0 to keep the popup open until dismissed.
@@ -793,8 +793,18 @@ inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter, P
     }
 
     DWORD_PTR ignored = 0;
-    BOOL delivered = SendMessageTimeoutW(window, message, 0, static_cast<LPARAM>(id),
-                                         SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &ignored);
+    BOOL delivered = FALSE;
+    if (timeoutMs == INFINITE)
+    {
+        // Shutdown must finish removing callbacks and windows before the mod unloads.
+        SendMessageW(window, message, 0, static_cast<LPARAM>(id));
+        delivered = TRUE;
+    }
+    else
+    {
+        delivered = SendMessageTimeoutW(window, message, 0, static_cast<LPARAM>(id),
+                                        SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &ignored);
+    }
     {
         std::lock_guard<std::mutex> lock(g_registryMutex);
         g_requests.erase(id);
@@ -869,20 +879,20 @@ inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)())
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &TrayUI_StartTaskbar_Original,
          TrayUI_StartTaskbar_Hook},
+        // Secondary symbols are optional. Never fail the working primary clock.
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CSecondaryTaskBand_ITaskListWndSite_vftable,
+         nullptr,
+         true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &CSecondaryTaskBand_GetTaskbarHost_Original,
+         nullptr,
+         true},
     };
     if (!WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks)))
         return false;
-    // Secondary symbols are optional. Never fail the working primary clock.
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
-        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &CSecondaryTaskBand_ITaskListWndSite_vftable},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-         &CSecondaryTaskBand_GetTaskbarHost_Original},
-    };
-    bool secondaryOk =
-        WindhawkUtils::HookSymbols(taskbar, taskbarDllSecondaryHooks,
-                           ARRAYSIZE(taskbarDllSecondaryHooks));
+    bool secondaryOk = CSecondaryTaskBand_ITaskListWndSite_vftable &&
+                       CSecondaryTaskBand_GetTaskbarHost_Original;
     Wh_Log(L"[Mawaqit][Monitor][Probe] secondary-symbols status=%s vtable=%p host=%p",
            secondaryOk ? L"ok" : L"missing", CSecondaryTaskBand_ITaskListWndSite_vftable,
            (void*)CSecondaryTaskBand_GetTaskbarHost_Original);
@@ -4103,9 +4113,13 @@ void Wh_ModUninit()
         CloseHandle(g_countdownWorker);
         g_countdownWorker = nullptr;
     }
-    if (taskwin::FindCurrentProcessTaskbarWnd() &&
-        !OnTaskbarThread([](void*) { RemoveOnUiThread(); }))
-        Wh_Log(L"[Mawaqit] Teardown could not reach taskbar thread");
+    if (HWND wnd = taskwin::FindCurrentProcessTaskbarWnd())
+    {
+        if (!folder_menus_dispatch::RunFromWindowThread(
+                wnd, [](void*) { RemoveOnUiThread(); }, nullptr,
+                L"Windhawk_Mawaqit_TaskbarDispatch", INFINITE))
+            Wh_Log(L"[Mawaqit] Teardown could not reach taskbar thread");
+    }
     if (g_refreshEvent)
     {
         CloseHandle(g_refreshEvent);
