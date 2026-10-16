@@ -57,45 +57,38 @@ INT64 __fastcall CTitleBar_Generic_hook(void *, void *, void *, void *) {return 
 
 static void HookAllCTitleBar(HMODULE hModule)
 {
-    static std::unordered_set<void *> g_hookedAddrs;
+    const size_t filterLen = wcslen(kBatchFilter);
+    std::unordered_set<void *> matched;
+    std::unordered_set<void *> foreign;
+
     WH_FIND_SYMBOL findSym = {};
     HANDLE hFind = Wh_FindFirstSymbol(hModule, nullptr, &findSym);
     if (!hFind)
-    {
-        Wh_Log(L"Wh_FindFirstSymbol failed");
         return;
-    }
-
-    int count = 0;
 
     do
     {
         if (!findSym.symbol || !findSym.address)
             continue;
 
-        if (!wcsstr(findSym.symbol, kBatchFilter))
-            continue;
-
-        // Deduplicate addresses (identical code folding)
-        if (!g_hookedAddrs.insert(findSym.address).second)
-            continue;
-
-        if (Wh_SetFunctionHook(findSym.address,
-                               (void *)CTitleBar_Generic_hook,
-                               nullptr))
-        {
-            Wh_Log(L"Hooked: %s", findSym.symbol);
-            count++;
-        }
-        else
-        {
-            Wh_Log(L"Failed to hook: %s", findSym.symbol);
-        }
+        // Prefix match: nested symbols (lambdas, dtor$/catch$ funclets) embed
+        // the method name but don't start with it.
+        if (wcsncmp(findSym.symbol, kBatchFilter, filterLen) == 0)
+            matched.insert(findSym.address);
+        else if (!wcsstr(findSym.symbol, L"CTitleBar::"))
+            foreign.insert(findSym.address);
     } while (Wh_FindNextSymbol(hFind, &findSym));
 
     Wh_FindCloseSymbol(hFind);
 
-    Wh_Log(L"Batch hooked %d CTitleBar functions", count);
+    for (void *address : matched)
+    {
+        // Folded with a function of another class - leave it alone.
+        if (foreign.contains(address))
+            continue;
+
+        Wh_SetFunctionHook(address, (void *)CTitleBar_Generic_hook, nullptr);
+    }
 }
 
 // ---------------------------------------------------------------------------
