@@ -287,6 +287,9 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 #include <wchar.h>
 #include <regex>
 #include <string_view>
+#include <algorithm>
+#include <unordered_map>
+#include <vector>
 
 // ======================================================================
 //  PART 1: Leftify (caption buttons on the left, icon and title layout)
@@ -674,47 +677,48 @@ static HWND HwndFromTopLevelWindow(void* pThis) {
 }
 
 // ---------------- per-window button rectangles (window-local X) ----------------
-struct WinLayout { void* win; HWND hwnd; int left[4]; int right[4]; int band; bool valid; };
-static WinLayout g_winLayouts[64];
-static int g_winLayoutNext = 0;
+struct WinLayout { HWND hwnd; int left[4]; int right[4]; int band; bool valid; };
+// One entry per CTopLevelWindow that this mod has laid out. No size limit: an entry is
+// only dropped when its window is gone (see StoreWinLayout).
+static std::unordered_map<void*, WinLayout> g_winLayouts;
 static SRWLOCK g_layoutLock = SRWLOCK_INIT;
 
 static void StoreWinLayout(void* win, const int* l, const int* r, int band, HWND hwnd) {
     AcquireSRWLockExclusive(&g_layoutLock);
-    WinLayout* e = nullptr;
-    for (int i = 0; i < 64; i++) {
-        if (g_winLayouts[i].win == win) { e = &g_winLayouts[i]; break; }
+    auto it = g_winLayouts.find(win);
+    if (it == g_winLayouts.end()) {
+        // A new window: forget the entries of windows that are gone
+        for (auto p = g_winLayouts.begin(); p != g_winLayouts.end();) {
+            if (!p->second.valid || (p->second.hwnd && !IsWindow(p->second.hwnd)))
+                p = g_winLayouts.erase(p);
+            else
+                ++p;
+        }
+        it = g_winLayouts.emplace(win, WinLayout{}).first;
     }
-    if (!e) {
-        e = &g_winLayouts[g_winLayoutNext];
-        g_winLayoutNext = (g_winLayoutNext + 1) % 64;
-        e->win = win;
-    }
-    for (int t = 1; t <= 3; t++) { e->left[t] = l[t]; e->right[t] = r[t]; }
-    e->hwnd = hwnd;
-    e->band = band;
-    e->valid = true;
+    WinLayout& e = it->second;
+    for (int t = 1; t <= 3; t++) { e.left[t] = l[t]; e.right[t] = r[t]; }
+    e.hwnd = hwnd;
+    e.band = band;
+    e.valid = true;
     ReleaseSRWLockExclusive(&g_layoutLock);
 }
 
 static void ClearWinLayout(void* win) {
     AcquireSRWLockExclusive(&g_layoutLock);
-    for (int i = 0; i < 64; i++) {
-        if (g_winLayouts[i].win == win) { g_winLayouts[i].valid = false; break; }
-    }
+    auto it = g_winLayouts.find(win);
+    if (it != g_winLayouts.end()) it->second.valid = false;
     ReleaseSRWLockExclusive(&g_layoutLock);
 }
 
 static bool GetWinLayout(void* win, int* l, int* r, int* band) {
     bool ok = false;
     AcquireSRWLockShared(&g_layoutLock);
-    for (int i = 0; i < 64; i++) {
-        if (g_winLayouts[i].win == win && g_winLayouts[i].valid) {
-            for (int t = 1; t <= 3; t++) { l[t] = g_winLayouts[i].left[t]; r[t] = g_winLayouts[i].right[t]; }
-            *band = g_winLayouts[i].band;
-            ok = true;
-            break;
-        }
+    auto it = g_winLayouts.find(win);
+    if (it != g_winLayouts.end() && it->second.valid) {
+        for (int t = 1; t <= 3; t++) { l[t] = it->second.left[t]; r[t] = it->second.right[t]; }
+        *band = it->second.band;
+        ok = true;
     }
     ReleaseSRWLockShared(&g_layoutLock);
     return ok;
@@ -2922,7 +2926,10 @@ void Wh_ModSettingsChanged() {
     InterlockedExchange(&g_pending, 1);   // repaint on the next DWM-thread hook call
     // Open windows only need a new layout when a layout setting changed
     if (LayoutSignature() != sigBefore) {
-        if (ExclSignature() != exclBefore) RelayoutAllWindows();
+        if (ExclSignature() != exclBefore) {
+            RelayoutLaidOutWindows();   // windows that are excluded by now go back to the default layout
+            RelayoutAllWindows();       // windows that are not excluded anymore get the new layout
+        }
         else RelayoutLaidOutWindows();
     } else if (PaintSignature() != paintBefore) {
         // Colors / style: DWM only repaints the buttons from its own hooks, so one
@@ -2934,10 +2941,12 @@ void Wh_ModSettingsChanged() {
 // Makes DWM lay the window out again: a 1 px move is enough for maximized windows,
 // normal windows need a 1 px size change (a pure move does not trigger a new layout).
 // A frame change alone (SWP_FRAMECHANGED without resize) does not make DWM lay out again.
-static void NudgeWindow(HWND h, int* count) {
+static void NudgeWindow(HWND h, int* count, bool ignoreExclusion = false) {
     if (!IsWindowVisible(h) || IsIconic(h)) return;
     if ((GetWindowLongW(h, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) return;
-    if (IsHwndExcluded(h)) return;
+    // Windows from the layout table are nudged even when they are excluded by now,
+    // so they go back to the default layout.
+    if (!ignoreExclusion && IsHwndExcluded(h)) return;
     RECT r;
     if (!GetWindowRect(h, &r)) return;
     int w = r.right - r.left, ht = r.bottom - r.top;
@@ -2961,23 +2970,18 @@ static BOOL CALLBACK NudgeWindowProc(HWND h, LPARAM lp) {
 // Windows this mod has laid out (taken from the layout table). Only these need a new
 // layout when a layout setting changes or when the mod is unloaded.
 static int RelayoutLaidOutWindows(bool onlyOne) {
-    HWND list[64];
-    int cnt = 0;
+    std::vector<HWND> list;
     AcquireSRWLockShared(&g_layoutLock);
-    for (int i = 0; i < 64; i++) {
-        if (!g_winLayouts[i].valid || !g_winLayouts[i].hwnd) continue;
-        HWND h = g_winLayouts[i].hwnd;
-        bool dup = false;
-        for (int k = 0; k < cnt; k++) {
-            if (list[k] == h) { dup = true; break; }
-        }
-        if (!dup) list[cnt++] = h;
+    for (const auto& kv : g_winLayouts) {
+        const WinLayout& e = kv.second;
+        if (!e.valid || !e.hwnd) continue;
+        if (std::find(list.begin(), list.end(), e.hwnd) == list.end()) list.push_back(e.hwnd);
     }
     ReleaseSRWLockShared(&g_layoutLock);
 
     int n = 0;
-    for (int i = 0; i < cnt; i++) {
-        if (IsWindow(list[i])) NudgeWindow(list[i], &n);
+    for (HWND h : list) {
+        if (IsWindow(h)) NudgeWindow(h, &n, true);
         if (onlyOne && n > 0) break;   // one nudged window is enough to trigger a repaint
     }
     return n;
