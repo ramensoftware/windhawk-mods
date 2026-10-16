@@ -175,15 +175,12 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
 /*
 - theme: full
   $name: Mode
-  $name:it-IT: "Modalità"
   $name:it: "Modalità"
   $description: Choose whether CoverTabby covers the monitor or uses a centered popup.
-  $description:it-IT: "Scegli se CoverTabby occupa lo schermo o appare in una finestra centrata."
   $description:it: "Scegli se CoverTabby occupa lo schermo o appare in una finestra centrata."
   $options:
   - full: Fullscreen
   - windowed: Windowed
-  $options:it-IT:
   - full: "Schermo intero"
   - windowed: "Finestra"
   $options:it:
@@ -191,10 +188,8 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - windowed: "Finestra"
 - style: normal
   $name: Styles
-  $name:it-IT: "Stili"
   $name:it: "Stili"
   $description: Choose the CoverTabby layout style.
-  $description:it-IT: "Scegli lo stile di disposizione delle finestre."
   $description:it: "Scegli lo stile di disposizione delle finestre."
   $options:
   - normal: Normal
@@ -204,7 +199,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - text: Text only
   - search: Search
   - enchanted: Windows 10/11 Enchanted
-  $options:it-IT:
   - normal: "Normale"
   - tiles: "Riquadri"
   - icons: "Solo icone"
@@ -222,17 +216,14 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - enchanted: "Windows 10/11 Enchanted"
 - enchantedMaterial: system
   $name: Material
-  $name:it-IT: "Materiale"
   $name:it: "Materiale"
   $description: Use the same panel material throughout Alt+Tab and the desktop overview.
-  $description:it-IT: "Usa lo stesso materiale per Alt+Tab e la panoramica desktop."
   $description:it: "Usa lo stesso materiale per Alt+Tab e la panoramica desktop."
   $options:
   - system: Follow Windows theme
   - dark: Dark
   - light: Light
   - acrylic: Acrylic
-  $options:it-IT:
   - system: "Segui tema Windows"
   - dark: "Scuro"
   - light: "Chiaro"
@@ -244,15 +235,12 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - acrylic: "Acrilico"
 - tileSelectedStyle: border
   $name: Tile Selected Style
-  $name:it-IT: "Stile del riquadro selezionato"
   $name:it: "Stile del riquadro selezionato"
   $description: Choose how the selected tile is shown.
-  $description:it-IT: "Scegli come evidenziare il riquadro selezionato."
   $description:it: "Scegli come evidenziare il riquadro selezionato."
   $options:
   - border: Add a border
   - bigger: Make it bigger
-  $options:it-IT:
   - border: "Aggiungi bordo"
   - bigger: "Ingrandisci"
   $options:it:
@@ -260,75 +248,55 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - bigger: "Ingrandisci"
 - groupWindows: true
   $name: Group Windows
-  $name:it-IT: "Raggruppa finestre"
   $name:it: "Raggruppa finestre"
   $description: Group windows by application. Use Up/Down to navigate within a group.
-  $description:it-IT: "Raggruppa le finestre per applicazione. Usa Su/Giù per spostarti nel gruppo."
   $description:it: "Raggruppa le finestre per applicazione. Usa Su/Giù per spostarti nel gruppo."
 - windowScale: 100
   $name: Windowed Scale (%)
-  $name:it-IT: "Dimensione della modalità finestra (%)"
   $name:it: "Dimensione della modalità finestra (%)"
   $description: Scale the entire Windowed popup. Full is unaffected. Range 25-200.
-  $description:it-IT: "Ridimensiona tutta la finestra di CoverTabby. Non modifica lo schermo intero. Intervallo 25-200."
   $description:it: "Ridimensiona tutta la finestra di CoverTabby. Non modifica lo schermo intero. Intervallo 25-200."
 - ignoreRepeatedNavigationKeys: true
   $name: Ignore Repeated Navigation Keys
-  $name:it-IT: "Ignora ripetizione dei tasti di navigazione"
   $name:it: "Ignora ripetizione dei tasti di navigazione"
   $description: Holding Tab, backtick or an arrow key navigates only once. Release and press again to navigate further.
-  $description:it-IT: "Tenere premuto Tab, accento grave o una freccia sposta la selezione una sola volta. Rilascia e premi di nuovo per continuare."
   $description:it: "Tenere premuto Tab, accento grave o una freccia sposta la selezione una sola volta. Rilascia e premi di nuovo per continuare."
 - typingAnimation: false
   $name: Typing animation
-  $name:it-IT: Animazione di scrittura
   $name:it: Animazione di scrittura
   $description: Animate newly typed search text. Disabled by default for immediate text feedback. This might impact CoverTabby's performance.
-  $description:it-IT: Anima il testo digitato nella ricerca. Disattivata per impostazione predefinita per mostrare subito il testo. Questa opzione potrebbe influire sulle prestazioni di CoverTabby.
   $description:it: Anima il testo digitato nella ricerca. Disattivata per impostazione predefinita per mostrare subito il testo. Questa opzione potrebbe influire sulle prestazioni di CoverTabby.
 - searchEnabled: true
   $name: Search Bar
-  $name:it-IT: "Barra di ricerca"
   $name:it: "Barra di ricerca"
   $description: Enable the search bar and Alt+S while CoverTabby is open. Search is unavailable in Windowed mode and Tiles. When disabled, remove its reserved space and center the content.
-  $description:it-IT: "Abilita la ricerca e Alt+S mentre CoverTabby è aperto. Ricerca non disponibile in modalità finestra e Riquadri. Disattivandola, il suo spazio viene rimosso e il contenuto viene centrato."
   $description:it: "Abilita la ricerca e Alt+S mentre CoverTabby è aperto. Ricerca non disponibile in modalità finestra e Riquadri. Disattivandola, il suo spazio viene rimosso e il contenuto viene centrato."
 - searchScale: 100
   $name: Search Bar Scale (%)
-  $name:it-IT: "Dimensione della ricerca (%)"
   $name:it: "Dimensione della ricerca (%)"
   $description: Scale the search bar, text and icon together. Width adapts to the text. Range 50-200.
-  $description:it-IT: "Ridimensiona insieme barra di ricerca, testo e icona. La larghezza segue il testo. Intervallo 50-200."
   $description:it: "Ridimensiona insieme barra di ricerca, testo e icona. La larghezza segue il testo. Intervallo 50-200."
 - iconScale: 140
   $name: Icon Scale (%)
-  $name:it-IT: "Dimensione delle icone (%)"
   $name:it: "Dimensione delle icone (%)"
   $description: Resize the application icons. Range 50-300.
-  $description:it-IT: "Ridimensiona le icone delle applicazioni. Intervallo 50-300."
   $description:it: "Ridimensiona le icone delle applicazioni. Intervallo 50-300."
 - enable3D: true
   $name: 3D Windows
-  $name:it-IT: "Finestre 3D"
   $name:it: "Finestre 3D"
   $description: Tilt side windows toward the selected preview. Disable for flat, darker side previews.
-  $description:it-IT: "Inclina le finestre laterali verso quella selezionata. Disattiva per anteprime laterali piatte e più scure."
   $description:it: "Inclina le finestre laterali verso quella selezionata. Disattiva per anteprime laterali piatte e più scure."
 - reflections: true
   $name: Reflections
-  $name:it-IT: "Riflessi"
   $name:it: "Riflessi"
   $description: Show reflections below the window previews.
-  $description:it-IT: "Mostra i riflessi sotto le anteprime delle finestre."
   $description:it: "Mostra i riflessi sotto le anteprime delle finestre."
 - animation: smooth
   $name: Animation Style
-  $name:it-IT: "Stile di animazione"
   $name:it: "Stile di animazione"
   $options:
   - smooth: Smooth
   - original: Original
-  $options:it-IT:
   - smooth: "Fluida"
   - original: "Originale"
   $options:it:
@@ -336,16 +304,13 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - original: "Originale"
 - hoverAction: title
   $name: Hover Behavior
-  $name:it-IT: "Comportamento al passaggio del mouse"
   $name:it: "Comportamento al passaggio del mouse"
   $description: Choose what happens when hovering an unselected window. Show Title displays its title above the cursor. Select Window selects it after a short delay. None does nothing.
-  $description:it-IT: "Scegli cosa accade sulle finestre non selezionate: mostra il titolo, seleziona dopo un breve ritardo oppure nessuna azione."
   $description:it: "Scegli cosa accade sulle finestre non selezionate: mostra il titolo, seleziona dopo un breve ritardo oppure nessuna azione."
   $options:
   - title: Show Title
   - select: Select Window
   - none: None
-  $options:it-IT:
   - title: "Mostra titolo"
   - select: "Seleziona finestra"
   - none: "Nessuno"
@@ -355,17 +320,14 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - none: "Nessuno"
 - hoverAnimation: lift
   $name: Hover Animation
-  $name:it-IT: "Animazione al passaggio del mouse"
   $name:it: "Animazione al passaggio del mouse"
   $description: Animate unselected window previews when hovering. Hover Behavior must be Title or Select Window.
-  $description:it-IT: "Anima le anteprime non selezionate al passaggio del mouse. Richiede Mostra titolo o Seleziona finestra."
   $description:it: "Anima le anteprime non selezionate al passaggio del mouse. Richiede Mostra titolo o Seleziona finestra."
   $options:
   - none: None
   - lift: Lift
   - enlarge: Enlarge
   - liftEnlarge: Lift + Enlarge
-  $options:it-IT:
   - none: "Nessuno"
   - lift: "Solleva"
   - enlarge: "Ingrandisci"
@@ -377,16 +339,13 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - liftEnlarge: "Solleva e ingrandisci"
 - backgroundStyle: blur
   $name: Background Style
-  $name:it-IT: "Stile dello sfondo"
   $name:it: "Stile dello sfondo"
   $description: Choose Blur, Opaque or Transparent for both Fullscreen and Windowed modes.
-  $description:it-IT: "Scegli Sfocato, Opaco o Trasparente in entrambe le modalità."
   $description:it: "Scegli Sfocato, Opaco o Trasparente in entrambe le modalità."
   $options:
   - blur: Blur
   - opaque: Opaque
   - transparent: Transparent
-  $options:it-IT:
   - blur: "Sfocato"
   - opaque: "Opaco"
   - transparent: "Trasparente"
@@ -396,30 +355,23 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - transparent: "Trasparente"
 - holdToPreview: false
   $name: Hold to Preview
-  $name:it-IT: "Tieni premuto per ingrandire"
   $name:it: "Tieni premuto per ingrandire"
   $description: Hold Alt on the same window for 5 seconds to slowly enlarge its live preview to fit the screen. Tab slides it left; releasing Alt returns it to the real window. Only available in styles with thumbnails.
-  $description:it-IT: "Tieni premuto Alt sulla stessa finestra per 5 secondi per ingrandire lentamente l’anteprima. Tab la fa scorrere; rilasciare Alt la riporta alla finestra reale. Solo negli stili con anteprime."
   $description:it: "Tieni premuto Alt sulla stessa finestra per 5 secondi per ingrandire lentamente l’anteprima. Tab la fa scorrere; rilasciare Alt la riporta alla finestra reale. Solo negli stili con anteprime."
 - showDesktopCard: true
   $name: Show Desktop Card
-  $name:it-IT: "Mostra riquadro Desktop"
   $name:it: "Mostra riquadro Desktop"
   $description: Add Show Desktop as the last CoverTabby card. Selecting it toggles the Windows desktop.
-  $description:it-IT: "Aggiunge Mostra desktop come ultimo riquadro. Selezionalo per mostrare o nascondere il desktop di Windows."
   $description:it: "Aggiunge Mostra desktop come ultimo riquadro. Selezionalo per mostrare o nascondere il desktop di Windows."
 - minimizedPreviewTint: accent
   $name: Minimized Preview Tint
-  $name:it-IT: "Colore delle anteprime ridotte a icona"
   $name:it: "Colore delle anteprime ridotte a icona"
   $description: Choose a transparent tint for minimized previews. None removes the tint and keeps automatic text contrast.
-  $description:it-IT: "Scegli una tinta trasparente per le anteprime delle finestre ridotte a icona. Nessuno rimuove la tinta e conserva il contrasto automatico."
   $description:it: "Scegli una tinta trasparente per le anteprime delle finestre ridotte a icona. Nessuno rimuove la tinta e conserva il contrasto automatico."
   $options:
   - accent: Accent
   - gray: Gray
   - none: None
-  $options:it-IT:
   - accent: "Colore principale"
   - gray: "Grigio"
   - none: "Nessuno"
@@ -429,23 +381,18 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - none: "Nessuno"
 - transparentOpacity: 35
   $name: Transparent Background Opacity (%)
-  $name:it-IT: "Opacità dello sfondo trasparente (%)"
   $name:it: "Opacità dello sfondo trasparente (%)"
   $description: Tint opacity without blur. Range 0-100. Only used for Transparent backgrounds.
-  $description:it-IT: "Opacità della tinta senza sfocatura. Intervallo 0-100. Si applica solo allo sfondo Trasparente."
   $description:it: "Opacità della tinta senza sfocatura. Intervallo 0-100. Si applica solo allo sfondo Trasparente."
 - energySaverBackground: opaque
   $name: Background During Energy Saver
-  $name:it-IT: "Sfondo durante il risparmio energetico"
   $name:it: "Sfondo durante il risparmio energetico"
   $description: Follow Windows Energy Saver automatically. All controls and animations remain available.
-  $description:it-IT: "Segue automaticamente il risparmio energetico di Windows. Controlli e animazioni restano disponibili."
   $description:it: "Segue automaticamente il risparmio energetico di Windows. Controlli e animazioni restano disponibili."
   $options:
   - opaque: Opaque
   - transparent: Transparent
   - unchanged: Keep Selected Background
-  $options:it-IT:
   - opaque: "Opaco"
   - transparent: "Trasparente"
   - unchanged: "Mantieni sfondo selezionato"
@@ -455,31 +402,23 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - unchanged: "Mantieni sfondo selezionato"
 - previewCache: true
   $name: Preview Cache
-  $name:it-IT: "Cache delle anteprime"
   $name:it: "Cache delle anteprime"
   $description: Reuse up to 12 small previews for faster opening. Updated only while CoverTabby is open. No background capture while closed.
-  $description:it-IT: "Riutilizza fino a 12 piccole anteprime. Si aggiornano solo mentre CoverTabby è aperto. Nessuna acquisizione in background quando è chiuso."
   $description:it: "Riutilizza fino a 12 piccole anteprime. Si aggiornano solo mentre CoverTabby è aperto. Nessuna acquisizione in background quando è chiuso."
 - touchpadGestures: true
   $name: Precision Touchpad Gestures
-  $name:it-IT: "Gesti del touchpad di precisione"
   $name:it: "Gesti del touchpad di precisione"
   $description: Three fingers from the bottom open CoverTabby; from the center upward close a window. Swipe sideways to navigate, down to dismiss, and tap to select. Disable if native Windows gestures conflict.
-  $description:it-IT: "Tre dita dal basso aprono CoverTabby; dal centro verso l’alto chiudono una finestra. Scorri lateralmente per navigare, verso il basso per uscire e tocca per selezionare. Disattiva in caso di conflitto con i gesti di Windows."
   $description:it: "Tre dita dal basso aprono CoverTabby; dal centro verso l’alto chiudono una finestra. Scorri lateralmente per navigare, verso il basso per uscire e tocca per selezionare. Disattiva in caso di conflitto con i gesti di Windows."
 - desktopOverviewHotkey: false
   $name: Win+Tab Desktop Overview
-  $name:it-IT: "Panoramica desktop con Win+Tab"
   $name:it: "Panoramica desktop con Win+Tab"
   $description: Open the fullscreen desktop overview with Win+Tab. Blur uses darkened wallpaper; other styles use opaque dark shading. Triple three-finger taps switch modes.
-  $description:it-IT: "Apre la panoramica desktop a schermo intero con Win+Tab. Funzione sperimentale, disattivata per impostazione predefinita. Tre tocchi rapidi con tre dita cambiano modalità."
   $description:it: "Apre la panoramica desktop a schermo intero con Win+Tab. Funzione sperimentale, disattivata per impostazione predefinita. Tre tocchi rapidi con tre dita cambiano modalità."
 - desktopOverviewHoldWin: true
   $name: Hold Win to Keep Desktop Overview Open
-  $name:it-IT: "Tieni premuto Win per mantenere la panoramica aperta"
   $name:it: "Tieni premuto Win per mantenere la panoramica aperta"
   $description: "Keep holding Win after Win+Tab. Press Tab again to select the next desktop, or Shift+Tab for the previous one. Release Win to activate the selection and close. Turn off to keep the overview open after releasing Win."
-  $description:it-IT: "Continua a tenere premuto Win dopo Win+Tab. Tab seleziona il desktop successivo, Maiusc+Tab quello precedente. Rilascia Win per attivare la selezione e chiudere. Disattiva per lasciare aperta la panoramica."
   $description:it: "Continua a tenere premuto Win dopo Win+Tab. Tab seleziona il desktop successivo, Maiusc+Tab quello precedente. Rilascia Win per attivare la selezione e chiudere. Disattiva per lasciare aperta la panoramica."
 */
 // ==/WindhawkModSettings==
