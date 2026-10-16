@@ -5957,6 +5957,34 @@
         "version": "1.5.7"
       }
     },
+    "explorer-properties-button": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792159284000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792159284000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "AnnAngela",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -luuid",
+        "description": "Add a Properties button to the Windows 11 File Explorer command bar, between Delete and Sort, opening the properties dialog of the current selection",
+        "github": "https://github.com/AnnAngela",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Properties Button",
+        "version": "1.0.0"
+      }
+    },
     "explorer-real-folder-paths": {
       "details": {
         "defaultSorting": 3350,

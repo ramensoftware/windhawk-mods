@@ -5976,6 +5976,38 @@
         "version": "1.5.7"
       }
     },
+    "explorer-properties-button": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792159284000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792159284000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "AnnAngela",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -luuid",
+        "description": "在 Windows 11 文件资源管理器命令栏（\"删除\"与\"排序\"按钮之间）添加属性按钮，点击打开当前选中项目的属性对话框",
+        "github": "https://github.com/AnnAngela",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "资源管理器属性按钮",
+        "version": "1.0.0"
+      },
+      "metadataEnglish": {
+        "description": "Add a Properties button to the Windows 11 File Explorer command bar, between Delete and Sort, opening the properties dialog of the current selection",
+        "name": "Explorer Properties Button"
+      }
+    },
     "explorer-real-folder-paths": {
       "details": {
         "defaultSorting": 3350,

@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-16T12:04:00.000Z</updated>
+    <updated>2026-10-16T14:01:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Properties Button 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-properties-button#032e419e893a9668ecd3624d7a71293d8a1f58c6</id>
+        <link href="https://windhawk.net/mods/explorer-properties-button"/>
+        <updated>2026-10-16T14:01:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerpropertiesbutton">Explorer Properties Button</h1>
+<p><img src="https://raw.githubusercontent.com/AnnAngela/windhawk-mods/main/explorer-properties-button/screenshot.png" alt="Explorer Properties Button" /></p>
+<p>Adds a <strong>Properties</strong> button to the Windows 11 File Explorer command bar,
+between the <strong>Delete</strong> and <strong>Sort</strong> buttons. Clicking it opens the properties
+dialog of the current selection:</p>
+<ul>
+<li><strong>Multiple selection</strong> - opens the combined properties dialog, just like
+the context menu's Properties entry.</li>
+<li><strong>Virtual locations</strong> - This PC, Recycle Bin, Quick Access and other items
+without a filesystem path work too.</li>
+<li><strong>No selection</strong> (configurable) - shows the properties of the current
+folder, or does nothing.</li>
+</ul>
+<p>The dialog opens via fast shell APIs (SHObjectProperties /
+SHMultiFileProperties) without building the shell context menu, so it appears
+without the delay that loading shell extensions would add. The context-menu
+properties verb is only used as a fallback for exotic locations.</p>
+<h1 id="systemrequirements">System requirements</h1>
+<p>Windows 11 24H2 / 25H2 or newer, with the WinAppSDK (WinUI 3) File Explorer
+command bar. Older versions (Windows 10, Windows 11 23H2 and earlier) use a
+completely different command bar; the mod stays silently disabled there.</p>
+<h1 id="howitworks">How it works</h1>
+<p>The mod hooks a couple of functions of File Explorer's own WinUI 3 code
+(FileExplorerExtensions.dll), gets the command bar from there, and inserts a
+WinRT-constructed AppBarButton into its PrimaryCommands. The button survives
+tab switches, navigation and new windows, and is cleanly removed when the mod
+is disabled. Clicks drive the shell lookups from a worker thread, so the
+Explorer UI stays responsive.</p>
+<p>File Explorer windows which were already open when the mod is enabled are
+handled too, but if the button doesn't show up in one of them right away,
+opening a new tab or navigating to another folder makes it appear.</p>
+<p>Implementation follows the Explorer Command Bar mod by DanRotaru from the
+official windhawk-mods repository.</p>
+<hr />
+<h1 id="">资源管理器属性按钮（中文说明）</h1>
+<p>在 Windows 11 文件资源管理器的命令栏（工具栏）上，"删除"和"排序"按钮之间添加一个"属性"按钮，点击后打开当前选中项目的属性对话框：</p>
+<ul>
+<li>支持多选：多选时与右键菜单里的"属性"一样，打开合并的属性对话框。</li>
+<li>支持虚拟位置：此电脑、回收站、Quick Access 等没有文件系统路径的项目也能正确打开属性。</li>
+<li>没有选中项时（可配置）：显示当前文件夹的属性，或什么都不做。</li>
+</ul>
+<p>属性对话框通过快速 Shell API（SHObjectProperties / SHMultiFileProperties）直接打开，不构建右键菜单，避免了加载 shell 扩展带来的延迟；右键菜单的"属性"动词仅作为特殊位置的兜底。</p>
+<h1 id="-1">系统要求</h1>
+<p>适用于 Windows 11 24H2 / 25H2 及以上使用 WinAppSDK (WinUI 3) 命令栏的文件资源管理器。旧版本（Windows 10、Windows 11 23H2 及更早）使用完全不同的命令栏实现，本 mod 会在其中安静地保持不启用状态。</p>
+<h1 id="-2">工作原理</h1>
+<p>本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入 PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时被干净移除。点击的 Shell 查询由独立工作线程驱动，资源管理器界面保持响应。</p>
+<p>启用本 mod 时已经打开的文件资源管理器窗口也会被处理；若某个已有窗口中按钮没有立即出现，打开一个新标签页或导航到其他文件夹即可让它出现。</p>
+<p>实现参考了官方仓库的 Explorer Command Bar mod（DanRotaru），在此致谢。</p>]]></content>
+        <author>
+            <name>AnnAngela</name>
+            <uri>https://github.com/AnnAngela</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.0]]></title>
         <id>https://windhawk.net/mods/winv-panel-tweaks#d7afc202adc5a0b927f4fc78e67e1a3e4230afaa</id>
@@ -1098,45 +1156,6 @@ well. Point at a banner to pause the countdown while it matters.</li>
         <author>
             <name>nikitor32</name>
             <uri>https://github.com/nikitor32</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mond Desktop Clock 3.5]]></title>
-        <id>https://windhawk.net/mods/mond-desktop-clock#d546070d720a18714a4dba2eb05c936b2227ea51</id>
-        <link href="https://windhawk.net/mods/mond-desktop-clock"/>
-        <updated>2026-10-13T10:03:45.000Z</updated>
-        <content type="html"><![CDATA[<p>A universal desktop clock widget inspired by the <a href="https://www.deviantart.com/hiphopium">Mond Rainmeter skin by HipHopium</a>. It runs in a dedicated tool process, not in Explorer.</p>
-<hr />
-<p><strong>Differentiating Feature Set</strong>
-While many desk clock widgets offer customizable styles, Mond provides unparalleled granular control over every character. Unlike standard overlays, we allow for <strong>per-letter customization</strong>, letting you set unique colors and shadows for individual characters within the day, date, or time (e.g., coloring only the 'S' in September). This level of detail, combined with multi-row support and precise offset controls, makes Mond a highly flexible styling tool.</p>
-<hr />
-<p>The clock shows the weekday, date, and time in three independently styled rows. Drag it to position it; enable position locking to prevent accidental movement.</p>
-<p><img src="https://i.imgur.com/dj71eKl.png" alt="Mond Desktop Clock on the desktop" /></p>
-<p><img src="https://i.imgur.com/ux3bwti.png" alt="Mond Desktop Clock alternate layout" /></p>
-<p><strong>Key Features & Advanced Customization:</strong></p>
-<ul>
-<li><strong>Three Independent Rows:</strong> Display Weekday, Date, and Time in separate, independently configurable rows.</li>
-<li><strong>Granular Letter Control:</strong> Set individual colors and shadow offsets for every single character in the day, date, or time.</li>
-<li><strong>Advanced Typography:</strong> Full control over font families (Quicksand, Anurati, etc.), size, bold/italic styling, letter spacing, and per-row horizontal offsets.</li>
-<li><strong>Layout Flexibility:</strong> Select a "Main Heading" row to automatically reorder the display (e.g., Date on top, Weekday below).</li>
-<li><strong>Position Management:</strong> Drag-and-drop placement with saved positions shared across all monitors connected to your PC.</li>
-</ul>
-<p><strong>Styling & Fonts:</strong>
-Fonts must be installed in Windows. Missing fonts are silently substituted by Windows. We support advanced typography using:</p>
-<ul>
-<li><a href="https://fonts.google.com/specimen/Quicksand">Quicksand</a></li>
-<li><a href="https://www.dafont.com/anurati.font">Anurati</a></li>
-</ul>
-<p><strong>Coloring & Formatting:</strong></p>
-<ul>
-<li>Separate text and shadow colors are available for the overall row, but individual letter overrides take precedence.</li>
-<li>Per-letter styles are indexed by 1-based character position from left to right (including spaces).</li>
-<li>The date displays without a comma.</li>
-<li>Colours accept <code>#RRGGBB</code> or <code>#AARRGGBB</code>; the alpha component in the latter form is ignored.</li>
-</ul>]]></content>
-        <author>
-            <name>Elmidin Mahmud</name>
-            <uri>https://github.com/elmidin</uri>
         </author>
     </entry>
 </feed>

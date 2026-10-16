@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-16T13:05:08.000Z</updated>
+    <updated>2026-10-16T14:01:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Properties Button 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-properties-button#032e419e893a9668ecd3624d7a71293d8a1f58c6</id>
+        <link href="https://windhawk.net/mods/explorer-properties-button"/>
+        <updated>2026-10-16T14:01:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerpropertiesbutton">Explorer Properties Button</h1>
+<p><img src="https://raw.githubusercontent.com/AnnAngela/windhawk-mods/main/explorer-properties-button/screenshot.png" alt="Explorer Properties Button" /></p>
+<p>Adds a <strong>Properties</strong> button to the Windows 11 File Explorer command bar,
+between the <strong>Delete</strong> and <strong>Sort</strong> buttons. Clicking it opens the properties
+dialog of the current selection:</p>
+<ul>
+<li><strong>Multiple selection</strong> - opens the combined properties dialog, just like
+the context menu's Properties entry.</li>
+<li><strong>Virtual locations</strong> - This PC, Recycle Bin, Quick Access and other items
+without a filesystem path work too.</li>
+<li><strong>No selection</strong> (configurable) - shows the properties of the current
+folder, or does nothing.</li>
+</ul>
+<p>The dialog opens via fast shell APIs (SHObjectProperties /
+SHMultiFileProperties) without building the shell context menu, so it appears
+without the delay that loading shell extensions would add. The context-menu
+properties verb is only used as a fallback for exotic locations.</p>
+<h1 id="systemrequirements">System requirements</h1>
+<p>Windows 11 24H2 / 25H2 or newer, with the WinAppSDK (WinUI 3) File Explorer
+command bar. Older versions (Windows 10, Windows 11 23H2 and earlier) use a
+completely different command bar; the mod stays silently disabled there.</p>
+<h1 id="howitworks">How it works</h1>
+<p>The mod hooks a couple of functions of File Explorer's own WinUI 3 code
+(FileExplorerExtensions.dll), gets the command bar from there, and inserts a
+WinRT-constructed AppBarButton into its PrimaryCommands. The button survives
+tab switches, navigation and new windows, and is cleanly removed when the mod
+is disabled. Clicks drive the shell lookups from a worker thread, so the
+Explorer UI stays responsive.</p>
+<p>File Explorer windows which were already open when the mod is enabled are
+handled too, but if the button doesn't show up in one of them right away,
+opening a new tab or navigating to another folder makes it appear.</p>
+<p>Implementation follows the Explorer Command Bar mod by DanRotaru from the
+official windhawk-mods repository.</p>
+<hr />
+<h1 id="">资源管理器属性按钮（中文说明）</h1>
+<p>在 Windows 11 文件资源管理器的命令栏（工具栏）上，"删除"和"排序"按钮之间添加一个"属性"按钮，点击后打开当前选中项目的属性对话框：</p>
+<ul>
+<li>支持多选：多选时与右键菜单里的"属性"一样，打开合并的属性对话框。</li>
+<li>支持虚拟位置：此电脑、回收站、Quick Access 等没有文件系统路径的项目也能正确打开属性。</li>
+<li>没有选中项时（可配置）：显示当前文件夹的属性，或什么都不做。</li>
+</ul>
+<p>属性对话框通过快速 Shell API（SHObjectProperties / SHMultiFileProperties）直接打开，不构建右键菜单，避免了加载 shell 扩展带来的延迟；右键菜单的"属性"动词仅作为特殊位置的兜底。</p>
+<h1 id="-1">系统要求</h1>
+<p>适用于 Windows 11 24H2 / 25H2 及以上使用 WinAppSDK (WinUI 3) 命令栏的文件资源管理器。旧版本（Windows 10、Windows 11 23H2 及更早）使用完全不同的命令栏实现，本 mod 会在其中安静地保持不启用状态。</p>
+<h1 id="-2">工作原理</h1>
+<p>本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入 PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时被干净移除。点击的 Shell 查询由独立工作线程驱动，资源管理器界面保持响应。</p>
+<p>启用本 mod 时已经打开的文件资源管理器窗口也会被处理；若某个已有窗口中按钮没有立即出现，打开一个新标签页或导航到其他文件夹即可让它出现。</p>
+<p>实现参考了官方仓库的 Explorer Command Bar mod（DanRotaru），在此致谢。</p>]]></content>
+        <author>
+            <name>AnnAngela</name>
+            <uri>https://github.com/AnnAngela</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove UWP titlebars Lite 1.4.0]]></title>
         <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a4c44e19cf76a635b3ecddac529fcdf1e83615ea</id>
@@ -858,27 +916,6 @@ Ela já me marca (@cesarkali), então eu vejo.</li>
 comigo e acompanhar meus projetos.</li>
 <li><strong><a href="https://caliberda.com.br">caliberda.com.br</a></strong>: meu site, com meus outros
 projetos e um link para o Discord.</li>
-</ul>]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.7.1]]></title>
-        <id>https://windhawk.net/mods/alt-tab-flip-3d#b2813a1c76395983542ac7cbbb8561f99e7c6912</id>
-        <link href="https://windhawk.net/mods/alt-tab-flip-3d"/>
-        <updated>2026-10-15T06:04:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New "Extra shortcuts" list, each item with a style of its own: Win+Ctrl+Tab, which keeps the switcher open like Ctrl+Alt+Tab (the original Flip 3D shortcut; off by default), and Ctrl+Alt+Tab, to give it a style of its own (#5946, #5947). Win+Ctrl+Tab also works when a program running as administrator is in front.</li>
-<li>New "Show windows hidden by window managers" setting: windows that tiling window managers such as komorebi hide on their other workspaces can be shown, like in the native Alt+Tab, and picking one brings its workspace back (#6040).</li>
-<li>New "Virtual desktops" setting: follows the Windows setting for Alt+Tab by default, or shows only the current desktop or all of them. Picking a window on another desktop switches to it. Store apps (Settings, Calculator) on other desktops or minimized are listed once.</li>
-<li>Four new "iTab" styles: Cover Flow on a glossy floor, with the windows reflected in it, the title and the app's name centered under them, and a scroll bar. On a black floor of their own or on the Background setting, with the app's name or with the title only.</li>
-<li>New "Live desktop" background: the real desktop behind the stack, with animated wallpapers (Wallpaper Engine, Lively Wallpaper) still playing.</li>
-<li>New "Screen refresh rate + 20 FPS" frame rate option, per screen.</li>
-<li>Frames are evenly paced on every screen. Before, some PCs drew 2-3 times more frames than the screen shows, or unevenly with screens of different refresh rates.</li>
-<li>An open switcher at rest (Ctrl+Alt+Tab or Win+Ctrl+Tab left open) no longer draws anything, and a quick Alt+Tab does less work.</li>
-<li>README: a new picture with every style, and a Contact section.</li>
 </ul>]]></content>
         <author>
             <name>caliberda</name>
