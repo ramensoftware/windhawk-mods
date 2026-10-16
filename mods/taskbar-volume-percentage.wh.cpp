@@ -355,7 +355,7 @@ static LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam)
 
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
-                         void* procParam) {
+                         void* procParam = nullptr) {
     static const UINT runFromWindowThreadRegisteredMsg =
         RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -389,10 +389,9 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-bool RunFromTaskbarThread(RunFromWindowThreadProc_t proc,
-                          void* procParam = nullptr) {
+bool RunFromTaskbarThread(RunFromWindowThreadProc_t proc) {
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    return hTaskbarWnd && RunFromWindowThread(hTaskbarWnd, proc, procParam);
+    return hTaskbarWnd && RunFromWindowThread(hTaskbarWnd, proc);
 }
 
 FrameworkElement GetParentElementByClassName(FrameworkElement const& element,
@@ -757,6 +756,8 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
     if (!tracked.isCustomLayoutConfigured) {
         return;
     }
+
+    containerGrid.ColumnDefinitions().Clear();
 
     if (tracked.hasIconOffset) {
         if (auto base = tracked.baseElement.get()) {
