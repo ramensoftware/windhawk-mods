@@ -2,12 +2,175 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-16T11:32:51.000Z</updated>
+    <updated>2026-10-16T12:04:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.0]]></title>
+        <id>https://windhawk.net/mods/winv-panel-tweaks#d7afc202adc5a0b927f4fc78e67e1a3e4230afaa</id>
+        <link href="https://windhawk.net/mods/winv-panel-tweaks"/>
+        <updated>2026-10-16T12:04:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winvpaneltweaks">Win+V Panel Tweaks</h1>
+<p>The Win+V clipboard panel and the Win+. emoji panel are the same panel, with
+tabs for Most recently used, Emoji, GIF, Kaomoji, Symbols and Clipboard. This
+mod makes the panel bigger or smaller and hides the tabs you turn off in its
+settings.</p>
+<p><img src="https://raw.githubusercontent.com/jayll1303/WindowsClipboardMods/main/images/winv-panel-tweaks-taller-clipboard-only.png" alt="A taller Win+V panel showing more clipboard entries, with only the Clipboard tab left" /></p>
+<h2 id="panelsize">Panel size</h2>
+<p>The panel is normally 360 x 400 (in display-scaled pixels). Width and height
+are scaled separately, e.g. width 150% and height 100% gives 540 x 400.
+Windows still keeps the panel within the space available on screen. A new
+size applies the next time the panel opens.</p>
+<p>By default the items keep their normal size, so a taller panel shows more
+clipboard entries and a wider one fits more emoji per row. Turn on "Scale
+content with the panel" to have the items grow with the panel instead.</p>
+<h2 id="tabs">Tabs</h2>
+<p>The Clipboard tab is always kept. Hiding a tab only removes its button: a
+shortcut that opens a view directly still opens it (e.g. Win+. still opens
+Emoji even when the Emoji tab is hidden).</p>
+<h2 id="howitworks">How it works</h2>
+<p>The panel is drawn by TextInputHost.exe. Its size is computed in
+<code>InputApp.dll</code>, which the mod hooks using Microsoft's public symbols, so the
+first start after installing may take a moment while Windhawk downloads them.</p>
+<p>The tab strip lives in a web page hosted in a WebView inside the panel. The
+same hook finds that WebView each time the panel opens and runs a small script
+in the page, which marks the chosen tabs as hidden in the page's own view
+model, re-applying it whenever the page resets them. Tweaks therefore show up
+the next time the panel opens after the mod is enabled.</p>
+<p>That page ships with Windows but Microsoft can update it separately. If it
+changes in a way the mod doesn't recognize, the mod leaves it alone and the
+panel keeps working as usual.</p>
+<p>Tested on Windows 11 25H2 (build 26200).</p>
+<p>Source and research notes: https://github.com/jayll1303/WindowsClipboardMods</p>]]></content>
+        <author>
+            <name>jayll1303</name>
+            <uri>https://github.com/jayll1303</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Audio Flipper 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-audio-flipper#50db4c4d6c2dd9c6822ad676c7787c78cd5aba4f</id>
+        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
+        <updated>2026-10-16T12:03:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaraudioflipper">Taskbar Audio Flipper</h1>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-audio-flipper/screenshot.png" alt="The widget on the taskbar, with its Output, Input and Webcam sections" /></p>
+<p>A taskbar widget, in the style of the Windows weather widget, for switching audio devices. It has
+up to three sections, which you can each show or hide:</p>
+<ul>
+<li><strong>Output</strong>: the active output device's icon, name and volume. Click it to switch to the next
+output (speakers → headset → monitor → …).</li>
+<li><strong>Input</strong>: the same for your microphone.</li>
+<li><strong>Webcam</strong>: the chosen webcam's name and whether it's on, with a camera icon. Click it to turn
+the webcam on or off.</li>
+</ul>
+<p>On the Output and Input sections:</p>
+<ul>
+<li><strong>Hover</strong>: a flyout opens above it with the device's name, a volume slider, and the device icon
+as a mute button, like the Windows 11 volume flyout.</li>
+<li><strong>Left-click</strong>: switch to the next device.</li>
+<li><strong>Scroll</strong>: turn the volume (or microphone level) up or down.</li>
+<li><strong>Middle-click</strong>: mute / unmute.</li>
+</ul>
+<p>After you change the output volume, the mod plays the Windows "Default Beep" ding at the new level,
+like Windows' own volume slider. Turn it off with <strong>Output → Ding when changing volume</strong>.</p>
+<p>Anywhere on the widget, <strong>right-click</strong> for the menu and <strong>drag</strong> left or right to move it along the
+taskbar. The <strong>Output</strong>, <strong>Input</strong> and <strong>Webcam</strong> submenus each have a <strong>Show on taskbar</strong> switch for
+their section, and the settings for it: picking a device directly, which devices are in the click
+rotation, whether to switch the communications device too, and links to the Windows settings.</p>
+<p>Devices are shown with the name and icon they have in the Windows Sound control panel. To change
+them, choose <strong>Rename or change device icons…</strong> in the <strong>Output</strong> or <strong>Input</strong> submenu, right-click a
+device, and choose <strong>Properties</strong>.</p>
+<h2 id="webcamonoff">Webcam on/off</h2>
+<p>Turn it on under <strong>Webcam → Show on taskbar</strong> and pick the webcam to control in the same menu. The
+camera icon has a slash through it while the webcam is off; click it to switch. Windows has no way to
+rename a webcam, but <strong>Webcam → Rename…</strong> gives it a name to show on the widget.</p>
+<p>Turning the webcam off works like <strong>Disable device</strong> in Device Manager: no app can use it until it's
+turned back on. It stays off after a restart, and after the mod is turned off or removed. To turn it
+back on without the mod, open Device Manager, find the webcam under <strong>Cameras</strong> (or <strong>Imaging
+devices</strong>), right-click it and choose <strong>Enable device</strong>.</p>
+<p>Windows only lets administrators turn devices on and off, so each switch runs Microsoft's PnP Utility
+(<code>pnputil.exe</code>) as administrator, which may show a Windows prompt asking to allow it, depending on
+your User Account Control settings.</p>
+<h2 id="linkingwithtaskbarrdplauncher">Linking with Taskbar RDP Launcher</h2>
+<p>With the Taskbar RDP Launcher mod running too, the two widgets can be joined into one: right-click
+either, choose <strong>Link with RDPLauncher</strong> (or <strong>Link with AudioFlipper</strong>) and which side it goes on.
+Linked, they sit side by side with a divider between them, dragging either moves both, and if one
+hides the other takes its place.</p>
+<h2 id="settings">Settings</h2>
+<p>The sections, the click rotation and the webcam settings are kept in the mod's storage, which
+Windhawk removes along with the mod. The first time it runs, the mod takes on the settings of the
+AudioFlipper app, if you have it (from <code>%APPDATA%\AudioFlipper\settings.txt</code>, which it doesn't
+change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar RDP Launcher 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-rdp-launcher#3c8dad353a8a45fa414a8a27e7ac46a0f403d48c</id>
+        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
+        <updated>2026-10-16T12:03:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarrdplauncher">Taskbar RDP Launcher</h1>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-rdp-launcher/screenshot.png" alt="The widget on the taskbar, with a computer and buttons for 1, 2 and 3 displays" /></p>
+<p>A taskbar widget, in the style of the Windows weather widget, that starts Remote Desktop
+full screen on as many of your displays as you want. Instead of editing <code>use multimon</code> and
+<code>selectedmonitors</code> in an .rdp file (after looking up the display numbers with <code>mstsc /l</code>), click a
+number.</p>
+<ul>
+<li><strong>Number buttons</strong>: click <strong>1</strong>, <strong>2</strong> or <strong>3</strong> to connect full screen on that many displays.
+There's one button for each display you have.</li>
+<li><strong>Hover a number</strong> to see a map of your displays, laid out the way they are on your desk. The
+ones that button uses are highlighted, and the session's main display (where the remote taskbar
+goes) has a bar along its bottom. <strong>Click a display to add it or take it off.</strong></li>
+<li><strong>The computer</strong> shows its address, or the name you gave it over its address. Click it (or scroll
+over it) to go to the next of your computers.</li>
+<li><strong>Right-click</strong> for the menu: add computers (by name, from a saved .rdp file, or from Remote
+Desktop Connection's recent list), rename or remove them, and open their Remote Desktop settings.</li>
+<li><strong>Drag</strong> the widget left or right to move it along the taskbar.</li>
+</ul>
+<p>Out of the box, <strong>1</strong> is your main display, <strong>2</strong> adds the display nearest to it, and so on up to
+all of them. The buttons are remembered for each arrangement of displays, so a laptop that's
+sometimes docked keeps separate buttons for the desk and for the road.</p>
+<h2 id="howitconnects">How it connects</h2>
+<ul>
+<li><p>Computers added by name connect with <code>mstsc /v:&lt;computer&gt;</code>, like typing the computer into Remote
+Desktop Connection. Since the April 2026 Windows update, Remote Desktop shows a security warning
+every time an .rdp file is opened, but not for computers typed in, so this avoids it.</p>
+<p>Remote Desktop Connection takes the display options for these from its own settings file,
+<code>Default.rdp</code> in Documents. So just before the session starts, the mod sets <code>screen mode id</code>,
+<code>use multimon</code>, <code>span monitors</code> and <code>selectedmonitors</code> there (creating the file, hidden, if there
+isn't one), and as soon as the session ends, it puts back what they were. It notes what they were
+in its own storage first, so if Windhawk is closed during a session, they're put back the next
+time the mod starts; if the mod is turned off during a session, they're put back right away. A
+setting you change in Remote Desktop Connection in the meantime is left as you set it.</p></li>
+<li><p>Saved .rdp files are never changed: the mod opens a copy with the display options set (and gets
+the warning, as any .rdp file does), and deletes the copy when the session ends. If the file is
+signed and its signature covers the display options, the copy goes without the signature, so
+Remote Desktop shows it as from an unknown publisher.</p></li>
+<li><p>Remote Desktop numbers displays its own way (not as Windows Settings does), so the first time you
+connect on some of your displays, the mod reads Remote Desktop's list (<code>mstsc /l</code>, whose box may
+flash) and remembers it until your displays change. <strong>Read display numbers again</strong> in the menu
+asks again.</p></li>
+</ul>
+<h2 id="linkingwithtaskbaraudioflipper">Linking with Taskbar Audio Flipper</h2>
+<p>With the Taskbar Audio Flipper mod running too, the two widgets can be joined into one: right-click
+either, choose <strong>Link with AudioFlipper</strong> (or <strong>Link with RDPLauncher</strong>) and which side it goes on.
+Linked, they sit side by side with a divider between them, dragging either moves both, and if one
+hides the other takes its place.</p>
+<h2 id="settings">Settings</h2>
+<p>The computers, their names and the display buttons are kept in the mod's storage, which Windhawk
+removes along with the mod. The first time it runs, the mod takes on the computers and display
+buttons of the RDPLauncher app, if you have it (from <code>%APPDATA%\RDPLauncher\settings.txt</code>, which it
+doesn't change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mawaqit Prayer Clock 0.6.9]]></title>
         <id>https://windhawk.net/mods/windhawk-mawaqit#94e338b1d2c90b55cb81a9882d1ee8d0be42a3c8</id>
@@ -974,254 +1137,6 @@ Fonts must be installed in Windows. Missing fonts are silently substituted by Wi
         <author>
             <name>Elmidin Mahmud</name>
             <uri>https://github.com/elmidin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Wobble 1.0.0]]></title>
-        <id>https://windhawk.net/mods/window-wobble#9674ac4e7339530fdd264f1ee8424e8afabc249f</id>
-        <link href="https://windhawk.net/mods/window-wobble"/>
-        <updated>2026-10-13T07:01:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowwobble">Window Wobble</h1>
-<p>KDE-style spring-physics window dragging. Grab a title bar and the window
-follows your cursor like jelly - the title bar keeps up, the body trails
-behind, and it settles with a wobble when you let go.</p>
-<p><img src="https://raw.githubusercontent.com/heyjeay/window-wobble/main/docs/preview.gif" alt="Window Wobble in action" /></p>
-<p>Hold <strong>Shift</strong> (configurable) while grabbing to move a window normally.</p>
-<p>Licensed GPL-3.0-or-later: you are free to use, study, modify and share it,
-and any version you distribute must stay open under the same terms.</p>
-<h2 id="howthisdiffersfromthewobblywindowsmod">How this differs from the Wobbly Windows mod</h2>
-<p><a href="https://windhawk.net/mods/wobbly-windows">Wobbly Windows</a> does the same
-effect from inside <code>dwm.exe</code>, using private uDWM symbols. That is the better
-place to do it: the content stays live, and it can wobble on snapping and
-resizing too, not just dragging.</p>
-<p>This mod does <strong>not</strong> touch <code>dwm.exe</code>. It runs in the application's own
-process and draws the effect on its own Direct3D overlay. Pick whichever
-trade you prefer:</p>
-<p><strong>Reasons to use this one</strong></p>
-<ul>
-<li>No changes to Windhawk's process inclusion list - it works once enabled</li>
-<li>Nothing is injected into the compositor, so a fault here cannot take the
-desktop down with it; at worst one application is affected</li>
-<li>No dependency on private, undocumented DWM symbols, so a Windows update
-changing uDWM internals cannot break it</li>
-</ul>
-<p><strong>Reasons to use the other one</strong></p>
-<ul>
-<li>Window content stays live; here it is a snapshot, so a playing video
-appears frozen for the length of the drag</li>
-<li>It wobbles on snap and resize as well as drag</li>
-<li>One copy in the compositor, rather than a small overlay per application</li>
-</ul>
-<p><strong>Questions, problems or ideas?</strong> Join the Discord
-(https://discord.gg/8wwfPxfMWA) or open an issue
-(https://github.com/heyjeay/window-wobble/issues).</p>
-<h2 id="howitworks">How it works</h2>
-<h3 id="inplainterms">In plain terms</h3>
-<ol>
-<li>You press on a title bar, and the mod quietly takes a photograph of the
-whole window.</li>
-<li>The real window is made invisible. Not minimised, not moved - just not
-drawn. Its taskbar button stays exactly where it was.</li>
-<li>The photograph is pinned to an invisible grid, like a sheet of rubber, and
-shown in the window's place. The top edge of the sheet is stiff and keeps
-up with your cursor; further down it gets floppier. That is the whole
-trick - the body lags behind the title bar because the bottom of the sheet
-is softer than the top.</li>
-<li>All the while you are dragging, the mod is just moving that rubber sheet
-around and letting the springs do what springs do.</li>
-<li>When you let go, the real window is moved to where you dropped it while it
-is still invisible, then made visible again <em>underneath</em> the photograph.
-Only once it is safely back does the photograph disappear, so you never
-catch the swap happening.</li>
-</ol>
-<p>Two things follow from this, and they are the reason for the bypass key. The
-window content is a photograph for as long as you hold it, so a playing video
-looks frozen. And because the mod is doing the dragging instead of Windows,
-Windows' own dragging features do not happen - see the section above.</p>
-<h3 id="underthehood">Under the hood</h3>
-<p>A title-bar press is caught at <code>DispatchMessage</code>, with <code>DefWindowProc</code> as a
-backup and <code>WM_SYSCOMMAND</code>/<code>SC_MOVE</code> alongside for apps that draw their own
-title bars. The mod then runs its own move loop in place of the one Windows
-would start: the window is captured with <code>PrintWindow(PW_RENDERFULLCONTENT)</code>,
-cloaked so it leaves composition entirely, and a spring mesh of that capture
-is drawn on a Direct3D 11 + DirectComposition overlay until you let go.</p>
-<p>The mesh is two layers of springs: a control spring pulling each vertex back
-to its rest position, with the stiffness falling off down the rows, and
-springs between neighbouring vertices so the grid holds together instead of
-turning to taffy. On release the control springs are switched to a stiff,
-overdamped pair so it snaps back rather than ringing.</p>
-<p>The drag runs on one persistent worker thread per process, never in the
-message pump: <code>PrintWindow(PW_RENDERFULLCONTENT)</code> renders through DWM and
-needs the window's own thread pumping, so doing it inline deadlocks against
-the very loop that invoked it.</p>
-<p>Only top-level windows are touched, and only ones DWM will cloak. Anything
-else is handed back to Windows, which then runs its own move loop as usual.</p>
-<h2 id="whatyougiveupduringawobbledrag">What you give up during a wobble drag</h2>
-<p>The mod replaces Windows' move loop, so for the windows it animates these do
-not happen:</p>
-<ul>
-<li>Aero Snap (dragging to a screen edge or the top)</li>
-<li>the Snap Layouts bar at the top of the screen</li>
-<li>restoring a snapped window's previous size when you drag it out</li>
-<li>shake to minimize</li>
-<li><code>WM_ENTERSIZEMOVE</code> / <code>WM_MOVING</code> / <code>WM_EXITSIZEMOVE</code>, which docking UIs
-such as Visual Studio's tool windows use to show drop targets</li>
-</ul>
-<p>Hold the bypass key (<strong>Shift</strong> by default) while grabbing to get all of that
-back for a drag.</p>
-<h2 id="excludedprocesses">Excluded processes</h2>
-<p>Shell and UI-host processes are excluded, since none of them own a window you
-would drag: <code>sihost.exe</code>, <code>RuntimeBroker.exe</code>, <code>StartMenuExperienceHost.exe</code>,
-<code>ShellExperienceHost.exe</code>, <code>SearchHost.exe</code>, <code>TextInputHost.exe</code>,
-<code>ApplicationFrameHost.exe</code> and <code>NVDisplay.Container.exe</code>.</p>
-<p>Windhawk never injects into the critical system processes (<code>csrss.exe</code>,
-<code>dwm.exe</code>, <code>lsass.exe</code> and the rest), so those need no entry here.</p>
-<h2 id="notes">Notes</h2>
-<p>Window content is a snapshot for the duration of the drag, so a playing video
-appears frozen while you hold it. This is inherent to the approach - capturing
-live content per frame is far more expensive than one <code>PrintWindow</code>.</p>
-<p>The Direct3D device and the overlay are released after a few seconds without
-a drag, so an application you dragged once does not hold them for the rest of
-its life. They are rebuilt on the next drag, which costs a few milliseconds.</p>]]></content>
-        <author>
-            <name>HeyJeay</name>
-            <uri>https://github.com/heyjeay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Excel Wheel Sheet Navigation 0.5.4]]></title>
-        <id>https://windhawk.net/mods/excel-wheel-scroll-sheets#40692524644502ed1427ca9a9c6a15a941d53aab</id>
-        <link href="https://windhawk.net/mods/excel-wheel-scroll-sheets"/>
-        <updated>2026-10-13T07:01:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="excelwheelsheetnavigation">Excel Wheel Sheet Navigation</h1>
-<p>For 64-bit desktop Excel on Windows:</p>
-<ul>
-<li>Vertical wheel over the bottom sheet tabs scrolls the tab strip without changing the active sheet.</li>
-<li>Horizontal wheel over the worksheet or sheet tabs activates the adjacent visible sheet.</li>
-<li>The tab strip uses Excel's native navigation arrows and animation. If the arrows cannot be used, it falls back to <code>ScrollWorkbookTabs</code>.</li>
-<li>Repeated same-direction horizontal wheel messages are grouped with a 200 ms quiet period by default; the first switch is immediate.</li>
-<li>Hidden sheets are skipped. Modified wheel input and ordinary vertical worksheet scrolling keep Excel's behavior.</li>
-</ul>
-<p>Settings allow direct sheet activation instead of tab scrolling, reversing direction, disabling horizontal switching, and optional wraparound.
-No macros are required. Activating a sheet can trigger existing workbook activation events, just like clicking a tab.
-Tested on one installation of 64-bit Microsoft 365 Excel; other Office versions and 32-bit Excel have not been tested.</p>
-<hr />
-<h1 id="excel">Excel 滚轮切换工作表</h1>
-<p>默认操作：标签栏上下滚轮平滑滚动标签；点击标签切换工作表。
-单元格区域左右滚轮切换到相邻的可见工作表。</p>
-<p>标签栏滚动使用左下角左右箭头的原生操作路径和动画，
-不再使用图像覆盖或淡入淡出。滚动不改变当前工作表。
-左右拨动产生的连续同方向信号会合并，一次拨动只切换一张。</p>
-<p>将鼠标放到 Excel 底部的工作表标签上，根据“滚轮行为”选择：</p>
-<ul>
-<li>直接切换工作表：向下切换到下一张可见工作表，向上切换到上一张。
-隐藏的工作表会跳过。</li>
-<li>只滚动标签栏：向下显示右侧标签，向上显示左侧标签；当前工作表保持不变，
-找到目标标签后点击进入。</li>
-</ul>
-<p>单元格区域的上下滚轮仍然滚动表格内容。左右滚轮切换可以单独关闭，
-关闭后恢复 Excel 原来的横向滚动。水平滚动条、状态栏或功能区保留原有行为。
-单元格编辑、查找对话框或其他窗口占用焦点时不进行切换。</p>
-<p>只适用于 Windows 桌面版 64 位 Excel。通过 Excel 自身的工作表对象切换，
-不需要启用宏，也不会更改工作簿中的数据。切换工作表会触发工作簿自身已有
-的工作表激活事件，与手动点击标签一样。</p>
-<p>左右拨动防重复默认 200 毫秒：同方向连续信号合并为一次拨动，
-停顿后再次切换，反方向立即切换。标签栏直接切换模式的间隔仍为 150 毫秒。</p>]]></content>
-        <author>
-            <name>youareanimal</name>
-            <uri>https://github.com/youareanimal</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[App Owned Frame 1.44]]></title>
-        <id>https://windhawk.net/mods/app-owned-frame#6f0a3b091c1e1f00b0fed647227a52a9f9af5313</id>
-        <link href="https://windhawk.net/mods/app-owned-frame"/>
-        <updated>2026-10-13T06:00:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="appownedframe">App Owned Frame</h1>
-<p>Some applications draw their own title bar. With the Windows classic theme,
-they can show an extra white border or a second system title bar. When maximized,
-their hidden frame edges can also become visible on the neighbouring monitor.</p>
-<p>This mod keeps the application's own frame and restores normal maximized-window
-clipping. It does not remove resizable-window styles, replace the application's
-buttons, change the client layout or run its own resize loop.</p>
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 11, build 22000 or later, and Windhawk 1.7.3 or later.</li>
-<li>An already enabled classic theme, for example
-<a href="https://windhawk.net/mods/classic-theme-enable">Classic Theme</a> or
-<a href="https://windhawk.net/mods/classic-theme-enable-with-extended-compatibility">Classic Theme Enable with extended compatibility</a>.
-This mod is a compatibility fix, not a classic-theme enabler.</li>
-</ul>
-<h2 id="defaultapplicationprofiles">Default application profiles</h2>
-<p>| Application | Default treatment |
-| --- | --- |
-| Discord | Remove the extra white frame; use the normal resize cursor with wider grips. |
-| ChatGPT and Claude | Fix the outer frame and maximized clipping without loading this mod into the app. |
-| Photoshop | Keep its own title bar and prepare it during startup. |
-| DaVinci Resolve | Keep its own title bar and colour a remaining resize gutter to match the dark UI. |</p>
-<p>These profiles were tested on the submitter's setup. App updates, Windows
-versions and other frame/DPI mods can affect the result.</p>
-<p>The dedicated helper and the in-process application hooks share one mod source.
-Windhawk 1.7.3 is the runtime tested on this setup; Windhawk 2.0 alpha has not
-yet been runtime-tested with this combined configuration.</p>
-<h2 id="addingorexcludinganapplication">Adding or excluding an application</h2>
-<ol>
-<li>Open this mod's <strong>Settings</strong> tab and add the executable filename or full path
-under <strong>Applications with their own frame</strong>. Wildcards <code>*</code> and <code>?</code> are supported.</li>
-<li>Leave <strong>Frame geometry</strong> on <strong>Automatic</strong> initially. Use <strong>Off</strong> to exclude an
-entry without deleting it. Only main resizable windows with an app-drawn title
-bar are handled; ordinary Windows captions, dialogs and tool windows are skipped.</li>
-<li>For an extra classic title bar like Photoshop or Resolve, enable
-<strong>Use the application's own title bar</strong>. Open this mod's <strong>Advanced</strong> tab,
-add the executable to the <strong>Custom process inclusion list</strong>, and save.</li>
-<li>For Chromium/Electron apps, <strong>Native resize hit testing</strong> is optional and also
-requires that Advanced inclusion entry. Enable it only after testing the app.
-Discord is included by default. Do not add Claude or ChatGPT to that list
-merely to fix their border; their default profiles intentionally stay external.</li>
-</ol>
-<p>The application list chooses which windows to treat. The Advanced inclusion
-list is needed only for features which load code into the application.
-When an enabled feature needs different hooks, saving settings reloads this
-mod in that process. Changing the grip size or colour does not require an app restart.</p>
-<h2 id="easierresizing">Easier resizing</h2>
-<p><strong>Easier resizing from all corners and edges</strong> widens the grab areas without
-drawing a frame. All four corners use the same size; edges use half that size.
-The size is in pixels at 100% scale and is adjusted for the window's monitor.</p>
-<p>Discord's native mode provides the usual hover resize cursor. For external-only
-apps the cursor changes when the drag starts, not while hovering. Larger grips
-extend into the window and can overlap the edge of a scrollbar or caption button;
-reduce the size or disable wider grips if this makes an app control hard to click.</p>
-<h2 id="otheroptionsandlimitations">Other options and limitations</h2>
-<ul>
-<li><strong>Residual resize gutter color</strong> paints only the remaining frame gutter, not
-client content. Resolve defaults to <code>#17181a</code>; leave it empty to disable.</li>
-<li><strong>Prepare the custom title bar at startup</strong> is enabled for Photoshop. Other
-apps must opt in after testing. It takes priority over the experimental
-<strong>Delegate caption painting to DWM</strong> option.</li>
-<li><strong>Remove system backdrop from the frame</strong> is for a remaining bright material
-edge and requires Windows 11 build 22621 or later.</li>
-<li>The external correction runs in a dedicated Windhawk process, not Explorer.
-A clean disable restores captured values. Scalar rollback data stays on each
-window if that helper crashes; reloading the mod recovers it after validating
-the application and former helper process identities. Unreadable original
-border/caption colours return to the system default.</li>
-<li>This does not fix unrelated application rendering bugs, DPI-projection bugs
-or conflicts with another mod which keeps rewriting the same frame state.
-No application/system light or dark setting is changed.</li>
-</ul>
-<h2 id="screenshots">Screenshots</h2>
-<p>Before: without the mod. After: with the mod. Provided by the submitter.</p>
-<h3 id="discord">Discord</h3>
-<p>| Before | After |
-| --- | --- |
-| <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforeDS.png" alt="Discord without the mod" /> | <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterDS.png" alt="Discord with the mod" /> |</p>
-<h3 id="photoshop">Photoshop</h3>
-<p>| Before | After |
-| --- | --- |
-| <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/beforePH.png" alt="Photoshop without the mod" /> | <img src="https://raw.githubusercontent.com/appEW/windhawk-mods/1e9ac8a344e1c10d659226d0cb77f9eca7134042/afterPH.png" alt="Photoshop with the mod" /> |</p>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
         </author>
     </entry>
 </feed>

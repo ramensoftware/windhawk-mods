@@ -13654,6 +13654,31 @@
         "version": "1.5.0"
       }
     },
+    "taskbar-audio-flipper": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792152235000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792152235000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Lucidic15",
+        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -luuid -lsetupapi -lcfgmgr32",
+        "description": "A taskbar widget that switches between your speakers, headsets and microphones with a click, and turns a webcam on and off",
+        "github": "https://github.com/Lucidic15",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Audio Flipper",
+        "version": "1.0.0"
+      }
+    },
     "taskbar-auto-hide-custom-activation-area": {
       "details": {
         "defaultSorting": 4563,
@@ -15250,6 +15275,31 @@
         "name": "Left Taskbar Quick Pin Dock",
         "twitter": "https://x.com/k_ashix",
         "version": "2.5.4"
+      }
+    },
+    "taskbar-rdp-launcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792152230000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792152230000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Lucidic15",
+        "compilerOptions": "-lgdiplus -lgdi32 -luser32 -lshell32 -lshcore -ldwmapi -ladvapi32 -lole32 -loleaut32 -luuid -lcomdlg32",
+        "description": "A taskbar widget that starts Remote Desktop full screen on the number of displays you pick",
+        "github": "https://github.com/Lucidic15",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar RDP Launcher",
+        "version": "1.0.0"
       }
     },
     "taskbar-recent-focus-highlight": {
@@ -19490,6 +19540,34 @@
         "license": "MIT",
         "name": "WinUI Context Menu Animation",
         "version": "1.0.1"
+      }
+    },
+    "winv-panel-tweaks": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792152240000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792152240000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "jayll1303",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Resize the Win+V clipboard / Win+. emoji panel and hide the tabs you don't use (Emoji, GIF, Kaomoji, Symbols, Most recently used)",
+        "github": "https://github.com/jayll1303",
+        "include": [
+          "TextInputHost.exe"
+        ],
+        "license": "MIT",
+        "name": "Win+V Panel Tweaks",
+        "version": "1.0.0"
       }
     },
     "winver-custom-text": {

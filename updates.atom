@@ -2,12 +2,175 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-16T11:32:51.000Z</updated>
+    <updated>2026-10-16T12:04:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.0]]></title>
+        <id>https://windhawk.net/mods/winv-panel-tweaks#d7afc202adc5a0b927f4fc78e67e1a3e4230afaa</id>
+        <link href="https://windhawk.net/mods/winv-panel-tweaks"/>
+        <updated>2026-10-16T12:04:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winvpaneltweaks">Win+V Panel Tweaks</h1>
+<p>The Win+V clipboard panel and the Win+. emoji panel are the same panel, with
+tabs for Most recently used, Emoji, GIF, Kaomoji, Symbols and Clipboard. This
+mod makes the panel bigger or smaller and hides the tabs you turn off in its
+settings.</p>
+<p><img src="https://raw.githubusercontent.com/jayll1303/WindowsClipboardMods/main/images/winv-panel-tweaks-taller-clipboard-only.png" alt="A taller Win+V panel showing more clipboard entries, with only the Clipboard tab left" /></p>
+<h2 id="panelsize">Panel size</h2>
+<p>The panel is normally 360 x 400 (in display-scaled pixels). Width and height
+are scaled separately, e.g. width 150% and height 100% gives 540 x 400.
+Windows still keeps the panel within the space available on screen. A new
+size applies the next time the panel opens.</p>
+<p>By default the items keep their normal size, so a taller panel shows more
+clipboard entries and a wider one fits more emoji per row. Turn on "Scale
+content with the panel" to have the items grow with the panel instead.</p>
+<h2 id="tabs">Tabs</h2>
+<p>The Clipboard tab is always kept. Hiding a tab only removes its button: a
+shortcut that opens a view directly still opens it (e.g. Win+. still opens
+Emoji even when the Emoji tab is hidden).</p>
+<h2 id="howitworks">How it works</h2>
+<p>The panel is drawn by TextInputHost.exe. Its size is computed in
+<code>InputApp.dll</code>, which the mod hooks using Microsoft's public symbols, so the
+first start after installing may take a moment while Windhawk downloads them.</p>
+<p>The tab strip lives in a web page hosted in a WebView inside the panel. The
+same hook finds that WebView each time the panel opens and runs a small script
+in the page, which marks the chosen tabs as hidden in the page's own view
+model, re-applying it whenever the page resets them. Tweaks therefore show up
+the next time the panel opens after the mod is enabled.</p>
+<p>That page ships with Windows but Microsoft can update it separately. If it
+changes in a way the mod doesn't recognize, the mod leaves it alone and the
+panel keeps working as usual.</p>
+<p>Tested on Windows 11 25H2 (build 26200).</p>
+<p>Source and research notes: https://github.com/jayll1303/WindowsClipboardMods</p>]]></content>
+        <author>
+            <name>jayll1303</name>
+            <uri>https://github.com/jayll1303</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Audio Flipper 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-audio-flipper#50db4c4d6c2dd9c6822ad676c7787c78cd5aba4f</id>
+        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
+        <updated>2026-10-16T12:03:55.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaraudioflipper">Taskbar Audio Flipper</h1>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-audio-flipper/screenshot.png" alt="The widget on the taskbar, with its Output, Input and Webcam sections" /></p>
+<p>A taskbar widget, in the style of the Windows weather widget, for switching audio devices. It has
+up to three sections, which you can each show or hide:</p>
+<ul>
+<li><strong>Output</strong>: the active output device's icon, name and volume. Click it to switch to the next
+output (speakers → headset → monitor → …).</li>
+<li><strong>Input</strong>: the same for your microphone.</li>
+<li><strong>Webcam</strong>: the chosen webcam's name and whether it's on, with a camera icon. Click it to turn
+the webcam on or off.</li>
+</ul>
+<p>On the Output and Input sections:</p>
+<ul>
+<li><strong>Hover</strong>: a flyout opens above it with the device's name, a volume slider, and the device icon
+as a mute button, like the Windows 11 volume flyout.</li>
+<li><strong>Left-click</strong>: switch to the next device.</li>
+<li><strong>Scroll</strong>: turn the volume (or microphone level) up or down.</li>
+<li><strong>Middle-click</strong>: mute / unmute.</li>
+</ul>
+<p>After you change the output volume, the mod plays the Windows "Default Beep" ding at the new level,
+like Windows' own volume slider. Turn it off with <strong>Output → Ding when changing volume</strong>.</p>
+<p>Anywhere on the widget, <strong>right-click</strong> for the menu and <strong>drag</strong> left or right to move it along the
+taskbar. The <strong>Output</strong>, <strong>Input</strong> and <strong>Webcam</strong> submenus each have a <strong>Show on taskbar</strong> switch for
+their section, and the settings for it: picking a device directly, which devices are in the click
+rotation, whether to switch the communications device too, and links to the Windows settings.</p>
+<p>Devices are shown with the name and icon they have in the Windows Sound control panel. To change
+them, choose <strong>Rename or change device icons…</strong> in the <strong>Output</strong> or <strong>Input</strong> submenu, right-click a
+device, and choose <strong>Properties</strong>.</p>
+<h2 id="webcamonoff">Webcam on/off</h2>
+<p>Turn it on under <strong>Webcam → Show on taskbar</strong> and pick the webcam to control in the same menu. The
+camera icon has a slash through it while the webcam is off; click it to switch. Windows has no way to
+rename a webcam, but <strong>Webcam → Rename…</strong> gives it a name to show on the widget.</p>
+<p>Turning the webcam off works like <strong>Disable device</strong> in Device Manager: no app can use it until it's
+turned back on. It stays off after a restart, and after the mod is turned off or removed. To turn it
+back on without the mod, open Device Manager, find the webcam under <strong>Cameras</strong> (or <strong>Imaging
+devices</strong>), right-click it and choose <strong>Enable device</strong>.</p>
+<p>Windows only lets administrators turn devices on and off, so each switch runs Microsoft's PnP Utility
+(<code>pnputil.exe</code>) as administrator, which may show a Windows prompt asking to allow it, depending on
+your User Account Control settings.</p>
+<h2 id="linkingwithtaskbarrdplauncher">Linking with Taskbar RDP Launcher</h2>
+<p>With the Taskbar RDP Launcher mod running too, the two widgets can be joined into one: right-click
+either, choose <strong>Link with RDPLauncher</strong> (or <strong>Link with AudioFlipper</strong>) and which side it goes on.
+Linked, they sit side by side with a divider between them, dragging either moves both, and if one
+hides the other takes its place.</p>
+<h2 id="settings">Settings</h2>
+<p>The sections, the click rotation and the webcam settings are kept in the mod's storage, which
+Windhawk removes along with the mod. The first time it runs, the mod takes on the settings of the
+AudioFlipper app, if you have it (from <code>%APPDATA%\AudioFlipper\settings.txt</code>, which it doesn't
+change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar RDP Launcher 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-rdp-launcher#3c8dad353a8a45fa414a8a27e7ac46a0f403d48c</id>
+        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
+        <updated>2026-10-16T12:03:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarrdplauncher">Taskbar RDP Launcher</h1>
+<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-rdp-launcher/screenshot.png" alt="The widget on the taskbar, with a computer and buttons for 1, 2 and 3 displays" /></p>
+<p>A taskbar widget, in the style of the Windows weather widget, that starts Remote Desktop
+full screen on as many of your displays as you want. Instead of editing <code>use multimon</code> and
+<code>selectedmonitors</code> in an .rdp file (after looking up the display numbers with <code>mstsc /l</code>), click a
+number.</p>
+<ul>
+<li><strong>Number buttons</strong>: click <strong>1</strong>, <strong>2</strong> or <strong>3</strong> to connect full screen on that many displays.
+There's one button for each display you have.</li>
+<li><strong>Hover a number</strong> to see a map of your displays, laid out the way they are on your desk. The
+ones that button uses are highlighted, and the session's main display (where the remote taskbar
+goes) has a bar along its bottom. <strong>Click a display to add it or take it off.</strong></li>
+<li><strong>The computer</strong> shows its address, or the name you gave it over its address. Click it (or scroll
+over it) to go to the next of your computers.</li>
+<li><strong>Right-click</strong> for the menu: add computers (by name, from a saved .rdp file, or from Remote
+Desktop Connection's recent list), rename or remove them, and open their Remote Desktop settings.</li>
+<li><strong>Drag</strong> the widget left or right to move it along the taskbar.</li>
+</ul>
+<p>Out of the box, <strong>1</strong> is your main display, <strong>2</strong> adds the display nearest to it, and so on up to
+all of them. The buttons are remembered for each arrangement of displays, so a laptop that's
+sometimes docked keeps separate buttons for the desk and for the road.</p>
+<h2 id="howitconnects">How it connects</h2>
+<ul>
+<li><p>Computers added by name connect with <code>mstsc /v:&lt;computer&gt;</code>, like typing the computer into Remote
+Desktop Connection. Since the April 2026 Windows update, Remote Desktop shows a security warning
+every time an .rdp file is opened, but not for computers typed in, so this avoids it.</p>
+<p>Remote Desktop Connection takes the display options for these from its own settings file,
+<code>Default.rdp</code> in Documents. So just before the session starts, the mod sets <code>screen mode id</code>,
+<code>use multimon</code>, <code>span monitors</code> and <code>selectedmonitors</code> there (creating the file, hidden, if there
+isn't one), and as soon as the session ends, it puts back what they were. It notes what they were
+in its own storage first, so if Windhawk is closed during a session, they're put back the next
+time the mod starts; if the mod is turned off during a session, they're put back right away. A
+setting you change in Remote Desktop Connection in the meantime is left as you set it.</p></li>
+<li><p>Saved .rdp files are never changed: the mod opens a copy with the display options set (and gets
+the warning, as any .rdp file does), and deletes the copy when the session ends. If the file is
+signed and its signature covers the display options, the copy goes without the signature, so
+Remote Desktop shows it as from an unknown publisher.</p></li>
+<li><p>Remote Desktop numbers displays its own way (not as Windows Settings does), so the first time you
+connect on some of your displays, the mod reads Remote Desktop's list (<code>mstsc /l</code>, whose box may
+flash) and remembers it until your displays change. <strong>Read display numbers again</strong> in the menu
+asks again.</p></li>
+</ul>
+<h2 id="linkingwithtaskbaraudioflipper">Linking with Taskbar Audio Flipper</h2>
+<p>With the Taskbar Audio Flipper mod running too, the two widgets can be joined into one: right-click
+either, choose <strong>Link with AudioFlipper</strong> (or <strong>Link with RDPLauncher</strong>) and which side it goes on.
+Linked, they sit side by side with a divider between them, dragging either moves both, and if one
+hides the other takes its place.</p>
+<h2 id="settings">Settings</h2>
+<p>The computers, their names and the display buttons are kept in the mod's storage, which Windhawk
+removes along with the mod. The first time it runs, the mod takes on the computers and display
+buttons of the RDPLauncher app, if you have it (from <code>%APPDATA%\RDPLauncher\settings.txt</code>, which it
+doesn't change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
+        <author>
+            <name>Lucidic15</name>
+            <uri>https://github.com/Lucidic15</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mawaqit Prayer Clock 0.6.9]]></title>
         <id>https://windhawk.net/mods/windhawk-mawaqit#94e338b1d2c90b55cb81a9882d1ee8d0be42a3c8</id>
@@ -723,97 +886,6 @@ projetos e um link para o Discord.</li>
         <author>
             <name>ArvindSaini978</name>
             <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Audio Hardware Volume Preset 1.3.0]]></title>
-        <id>https://windhawk.net/mods/audio-hardware-volume-preset#9ff243a5cae4724a61b55393e976db12d7bfdfd1</id>
-        <link href="https://windhawk.net/mods/audio-hardware-volume-preset"/>
-        <updated>2026-10-14T19:02:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="audiohardwarevolumepreset">Audio Hardware Volume Preset</h1>
-<p>Automatically sets your headphones, speakers, Bluetooth headsets, USB DACs, or
-any other audio playback hardware to a specific preset volume whenever they
-connect.</p>
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li><strong>Prevent Sudden Hearing Blasts:</strong> Never plug in headphones only to be blasted
-by 100% volume again.</li>
-<li><strong>Smart Hardware Matching:</strong> Supports flexible keyword and token matching. You
-can enter simple keywords (like <code>AirPods</code>, <code>Sony</code>, <code>DAC</code>, <code>Speakers</code>) or full
-device names.</li>
-<li><strong>Max Volume Safety Cap:</strong> Set a ceiling on the preset volume applied at
-connect time (up to 100%).</li>
-<li><strong>Global Fallback:</strong> Set any unrecognized audio device to a safe default
-volume (e.g., 30%).</li>
-<li><strong>Auto-Unmute:</strong> Optionally unmute the device on connection.</li>
-<li><strong>Intelligent Debouncing:</strong> Prevents duplicate triggers when Windows fires
-multiple rapid connection events.</li>
-<li><strong>Safe & Efficient:</strong> Runs as a dedicated background tool mod using standard Windows Core
-Audio event notifications (<code>IMMNotificationClient</code>). Zero polling, zero idle CPU
-usage.</li>
-</ul>
-<p><strong>Note:</strong> Volume presets are also applied when switching the default audio
-output between already-connected devices. The first matching custom rule wins,
-so place more specific rules before general ones.</p>]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Info 1.7.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-info#61383b397cd68d6ab9da69049518ef89ac492128</id>
-        <link href="https://windhawk.net/mods/taskbar-system-info"/>
-        <updated>2026-10-14T15:06:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p>Fix the widget disappearing in auto-sized dock taskbars when reserving space before the Start button.</p></li>
-<li><p>Restore the outer <code>Grid#WindhawkTaskbarSystemInfo</code> for Taskbar Styler selectors while retaining adaptive scaling inside it.</p></li>
-<li><p>Correct placement with taskbar padding, borders and constrained widths, including measured one-row layouts.</p></li>
-<li><p>Recover placement after available-width or relevant settings changes, and safely roll back rejected reservations.</p></li>
-<li><p>Prevent repeated dock growth/shrink cycles with saved right-side positions, and keep the move editor from offering space created by its own reservation.</p></li>
-</ul>]]></content>
-        <author>
-            <name>Yevhenii Starychenko</name>
-            <uri>https://github.com/starychenko</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 1507 Search Pane Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-1507-rtm-search-recreation#1acd570f98ddc79496b4f4e320e7e022f19f771c</id>
-        <link href="https://windhawk.net/mods/win10-1507-rtm-search-recreation"/>
-        <updated>2026-10-14T14:02:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows101507searchpane">Windows 10 1507 Search Pane</h1>
-<p>This mod provides a recreation of the Windows 10 1507 search pane experience in a standalone, DPI-aware window running in a dedicated tool process.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/win10search.png" alt="Windows 10 Search" /></p>
-<h2 id="whatthismoddoes">What this mod does</h2>
-<ul>
-<li>Provides a Home surface, a local Start-menu shortcut catalog, a searchable Settings category browser, and an optional Web search action.</li>
-<li>Search-only: it does not replace or draw the Start menu, and does not alter Cortana or the native search index.</li>
-<li>The Home, AllApps, and Settings icons use Segoe MDL2 Assets glyphs (Home U+E80F, AllApps U+E71D, Settings U+E713) rendered with GDI+. Application shortcut icons use Shell icon extraction.</li>
-<li>With <code>overTaskbar</code> enabled, a dedicated overlay window sits seamlessly over the taskbar search box while the search pane rests above the work area, matching the Windows 10 look and feel.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><code>searchHotkey</code>: Enables the fallback Ctrl+Alt+S shortcut (disabled by default because Ctrl+Alt conflicts with AltGr on international layouts like Polish AltGr+S and with application shortcuts such as JetBrains Settings).</li>
-<li><code>webSearch</code>: Shows or hides the Web footer action. When disabled, My stuff uses the full footer width.</li>
-<li><code>interceptSearch</code>: When enabled, clicking the taskbar search button/box or pressing Win+S / Win+Q opens this pane instead of Windows Search.</li>
-<li><code>overTaskbar</code>: Places a themed search bar overlay over the native taskbar search box while keeping the main search pane above the taskbar work area.</li>
-</ul>
-<h2 id="scopeandlimitations">Scope and limitations</h2>
-<ul>
-<li>The app catalog indexes Start-menu shortcuts; full file content indexing and UWP package enumeration are not included.</li>
-<li>The mod targets the Windows 10 1507 search interface design.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdmnistratoX - Technical inspiration</li>
-<li>m417z - Technical inspiration </li>
-<li>Microsoft - Documentation</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
