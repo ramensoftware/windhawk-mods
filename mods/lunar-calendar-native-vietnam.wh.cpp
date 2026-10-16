@@ -1,72 +1,137 @@
 // ==WindhawkMod==
 // @id              lunar-calendar-native-vietnam
-// @name            Lunar Calendar Native Vietnam
-// @description     Hiển thị lịch âm trực tiếp trên ô lịch Windows 11, bôi đỏ ngày lễ, cuối tuần, mùng 1, rằm và sự kiện quan trọng. Giữ nguyên 100% giao diện gốc.
-// @version         1.0.1
+// @name            Vietnamese Lunar & Holiday Calendar
+// @name:vi-VN      Lịch Âm & Ngày Lễ Việt Nam
+// @description     Displays Vietnamese lunar dates directly in the Windows 11 calendar flyout, with holiday, weekend, and custom event highlighting.
+// @description:vi-VN Hiển thị lịch âm trực tiếp trên ô lịch Windows 11, bôi đỏ ngày lễ, cuối tuần, mùng 1, rằm và sự kiện quan trọng.
+// @version         1.0.2
 // @author          Mhale
 // @github          https://github.com/PhTrien
 // @include         ShellExperienceHost.exe
 // @include         ShellHost.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject 
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @license         GPL-3.0-only
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Lịch Âm Gốc Cho Windows 11 (Windows 11 Native Lunar Calendar)
+# Vietnamese Lunar & Holiday Calendar / Lịch Âm & Ngày Lễ Việt Nam
 
 ![Screenshot](https://raw.githubusercontent.com/PhTrien/Native-Lunar-Calendar-Vietnam/main/img/Screenshot.png)
 
-Bản mod tích hợp lịch âm Việt Nam trực tiếp vào bảng lịch hệ thống Windows 11:
-* **Giữ nguyên 100% giao diện gốc:** Không sửa đổi thanh Thứ, không thêm đồng hồ đỏ, không ẩn thông báo hay bảng Focus. Giữ nguyên giao diện nguyên bản thanh lịch của Windows 11.
+## English
+
+This mod integrates the Vietnamese lunar calendar directly into the Windows 11 taskbar calendar flyout.
+
+### Features
+* **Preserves the native Windows 11 design language:** Integrates cleanly into the system calendar flyout without external floating overlays or heavy UI modifications.
+* **Full compatibility:** Works smoothly alongside **Windows 11 Notification Center Styler**, **Start Menu Styler**, and **Taskbar Styler**.
+* **Accurate Hồ Ngọc Đức lunar algorithm (UTC+7):** Accurately computes new moon days, solar terms, leap months, and lunar new year transitions.
+* **Holiday & festival names:** Shows short names of traditional Vietnamese holidays and international observances (Tết, Giỗ Tổ, 30/4, 2/9, Christmas, etc.).
+* **Custom events:** Add personal anniversaries, birthdays, and reminders (by solar or lunar date) directly in Settings.
+* **Weekend & special day highlighting:** Highlights Saturdays, Sundays, New Moon (1st), and Full Moon (15th) days.
+* **Modern today indicator:** Optional subtle translucent rounded square indicator for the current date.
+
+### Requirements & Setup
+For the most seamless experience, turn on secondary calendars in Windows:
+* Go to **Settings > Time & language > Date & time**.
+* Under **Show additional calendars in the taskbar**, select **Simplified Chinese (Lunar)** or **Traditional Chinese (Lunar)**.
+* Windows will provide the secondary calendar label in each day cell, which this mod automatically replaces with the Vietnamese lunar date, festivals, and events!
+
+---
+
+## Tiếng Việt
+
+Bản mod tích hợp lịch âm Việt Nam trực tiếp vào bảng lịch hệ thống Windows 11.
+
+### Tính năng nổi bật
+* **Hòa nhập với phong cách Windows 11:** Tích hợp liền mạch vào giao diện lịch Windows 11 gốc, không dùng cửa sổ nổi hay can thiệp nặng nề. Các tùy chọn làm nổi bật như viền bo góc ngày hiện tại hay bôi đỏ thứ cuối tuần có thể tùy chỉnh hoặc tắt trong Cài đặt.
 * **Tương thích hoàn toàn:** Hoạt động mượt mà cùng lúc với **Windows 11 Notification Center Styler**, **Start Menu Styler** và **Taskbar Styler**.
 * **Thuật toán âm lịch Hồ Ngọc Đức chuẩn xác (UTC+7):** Tính đúng ngày Sóc, điểm Hoàng kinh mặt trời, tháng nhuận và chuyển năm âm lịch.
-* **Bôi đỏ ngày Cuối tuần:** Tự động tô màu đỏ cho ngày Thứ Bảy và Chủ Nhật.
-* **Bôi đỏ Mùng 1 và Rằm (15 âm):** Giúp theo dõi ngày sóc vọng thuận tiện.
 * **Bôi đỏ & Tên ngày Lễ:** Hiển thị tên rút gọn các dịp lễ Tết truyền thống Việt Nam và ngày lễ quốc tế.
 * **Sự kiện quan trọng cá nhân:** Cho phép tạo danh sách ngày kỷ niệm, sinh nhật theo cả Dương lịch lẫn Âm lịch ngay trong Settings!
+* **Bôi đỏ ngày Cuối tuần, Mùng 1 và Rằm (15 âm):** Giúp theo dõi ngày sóc vọng thuận tiện.
+
+### Yêu cầu & Hướng dẫn cài đặt
+Để mod hoạt động tối ưu và ổn định nhất, khuyến khích bật lịch phụ trong Windows:
+* Mở **Settings > Time & language > Date & time**.
+* Tại mục **Show additional calendars in the taskbar**, chọn **Simplified Chinese (Lunar)** hoặc **Traditional Chinese (Lunar)**.
+* Windows sẽ tạo sẵn nhãn lịch phụ trong ô ngày, mod sẽ tự động thay thế phần chữ này bằng ngày âm lịch Việt Nam và tên ngày lễ!
+
+---
+
+## Credits / Lời cảm ơn
+
+This mod is based on the calendar plumbing and UI hooks from:
+* [Chinese Holiday Calendar](https://github.com/ramensoftware/windhawk-mods/tree/main/mods/chinese-holiday-calendar) by m417z (GPL-3.0-only)
+* [Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/tree/main/mods/agenda-in-calendar-view) by lonfro (GPL-3.0-only)
+* [Windows 11 Notification Center Styler](https://github.com/ramensoftware/windhawk-mods/tree/main/mods/windows-11-notification-center-styler) by m417z (GPL-3.0-only)
+* Vietnamese lunar calendar calculation algorithm by [Hồ Ngọc Đức](https://www.informatik.uni-leipzig.de/~duc/amlich/).
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - showLunarDate: true
-  $name: "Hiển thị âm lịch Việt Nam"
-  $description: "Hiển thị ngày âm lịch bên dưới mỗi số ngày dương lịch."
+  $name: "Show Vietnamese lunar calendar"
+  $description: "Display Vietnamese lunar date under each solar day number."
+  $name:vi-VN: "Hiển thị âm lịch Việt Nam"
+  $description:vi-VN: "Hiển thị ngày âm lịch bên dưới mỗi số ngày dương lịch."
 - useTransparentRoundedToday: true
-  $name: "Ngày hiện tại: Hình vuông bo góc trong suốt"
-  $description: "Thay thế hình tròn xanh đặc bằng hình vuông bo góc trong suốt hiện đại."
+  $name: "Current day: Modern rounded transparent square"
+  $description: "Replace the solid accent circle with a subtle transparent rounded square."
+  $name:vi-VN: "Ngày hiện tại: Hình vuông bo góc trong suốt"
+  $description:vi-VN: "Thay thế hình tròn xanh đặc bằng hình vuông bo góc trong suốt hiện đại."
 - showHolidayName: true
-  $name: "Hiển thị tên ngày lễ thay vì số ngày âm"
-  $description: "Hiển thị tên ngày lễ (ví dụ Phụ nữ VN, Tết Tây,...) để tránh nhầm số 20/10 dương với âm."
+  $name: "Show holiday name instead of lunar date"
+  $description: "Display the holiday or festival name instead of the numeric lunar day."
+  $name:vi-VN: "Hiển thị tên ngày lễ thay vì số ngày âm"
+  $description:vi-VN: "Hiển thị tên ngày lễ (ví dụ Phụ nữ VN, Tết Tây,...) để tránh nhầm số 20/10 dương với âm."
 - highlightHolidays: true
-  $name: "Bôi đỏ ngày Lễ Tết"
-  $description: "Tô màu đỏ và hiển thị tên các ngày lễ truyền thống (Tết, Giỗ Tổ, 30/4, 2/9, Giáng sinh,...)."
+  $name: "Highlight holidays and festivals"
+  $description: "Highlight traditional Vietnamese holidays and major international days in red."
+  $name:vi-VN: "Bôi đỏ ngày Lễ Tết"
+  $description:vi-VN: "Tô màu đỏ và hiển thị tên các ngày lễ truyền thống (Tết, Giỗ Tổ, 30/4, 2/9, Giáng sinh,...)."
 - highlightLunarSpecial: false
-  $name: "Bôi đỏ ngày Mùng 1 và Rằm (15 âm lịch)"
-  $description: "Làm nổi bật ngày Mùng 1 và ngày 15 âm lịch hàng tháng."
+  $name: "Highlight 1st and 15th lunar days"
+  $description: "Highlight the new moon (1st) and full moon (15th) of each lunar month."
+  $name:vi-VN: "Bôi đỏ ngày Mùng 1 và Rằm (15 âm lịch)"
+  $description:vi-VN: "Làm nổi bật ngày Mùng 1 và ngày 15 âm lịch hàng tháng."
 - highlightWeekendHeader: true
-  $name: "Bôi đỏ thứ cuối tuần (Thứ 7, CN)"
-  $description: "Bôi đỏ chữ B và C trên thanh thứ để dễ dàng nhận biết cột cuối tuần."
+  $name: "Highlight weekend header (Sat, Sun)"
+  $description: "Highlight Saturday and Sunday columns in the weekday header."
+  $name:vi-VN: "Bôi đỏ thứ cuối tuần (Thứ 7, CN)"
+  $description:vi-VN: "Bôi đỏ chữ B và C trên thanh thứ để dễ dàng nhận biết cột cuối tuần."
 - highlightWeekends: false
-  $name: "Bôi đỏ ngày cuối tuần trong lịch"
-  $description: "Làm nổi bật các con số ngày Thứ Bảy và Chủ Nhật trong bảng ngày (mặc định tắt)."
+  $name: "Highlight weekend day numbers"
+  $description: "Highlight Saturday and Sunday day numbers in the calendar grid (disabled by default)."
+  $name:vi-VN: "Bôi đỏ ngày cuối tuần trong lịch"
+  $description:vi-VN: "Làm nổi bật các con số ngày Thứ Bảy và Chủ Nhật trong bảng ngày (mặc định tắt)."
 - holidayColorHex: "#FF4D4F"
-  $name: "Màu sắc bôi đỏ (Mã HEX)"
-  $description: "Mã màu dùng để làm nổi bật ngày lễ, cuối tuần, mùng 1, rằm và sự kiện (mặc định #FF4D4F)."
-- lunarFontSize: 8
-  $name: "Cỡ chữ ngày âm lịch"
-  $description: "Cỡ chữ hiển thị ngày âm bên dưới số ngày dương (mặc định 8, từ 7 đến 12)."
+  $name: "Highlight color (HEX)"
+  $description: "Color code used to highlight holidays, weekends, special lunar days, and events."
+  $name:vi-VN: "Màu sắc bôi đỏ (Mã HEX)"
+  $description:vi-VN: "Mã màu dùng để làm nổi bật ngày lễ, cuối tuần, mùng 1, rằm và sự kiện (mặc định #FF4D4F)."
+- lunarFontSize: 12
+  $name: "Lunar date font size"
+  $description: "Font size of the lunar date text below the day number (default 12, 7-14)."
+  $name:vi-VN: "Cỡ chữ ngày âm lịch"
+  $description:vi-VN: "Cỡ chữ hiển thị ngày âm bên dưới số ngày dương (mặc định 12, từ 7 đến 14)."
 - customEvents:
-  - - date: "20/11"
-      $name: "Ngày (DD/MM hoặc DD/MM/YYYY)"
-    - name: "Nhà giáo VN"
-      $name: "Tên sự kiện"
+  - - date: "14/03"
+      $name: "Date (DD/MM or DD/MM/YYYY)"
+      $name:vi-VN: "Ngày (DD/MM hoặc DD/MM/YYYY)"
+    - name: "Pi Day"
+      $name: "Event name"
+      $name:vi-VN: "Tên sự kiện"
     - isLunar: false
-      $name: "Tính theo Âm lịch"
-  $name: "Danh sách sự kiện quan trọng"
-  $description: >-
-    Thêm các ngày kỷ niệm, sinh nhật (Ví dụ: 20/11 hoặc 15/08/2026).
+      $name: "Lunar calendar"
+      $name:vi-VN: "Tính theo Âm lịch"
+  $name: "Important custom events"
+  $description: "Add anniversaries, birthdays, or special events (e.g., 14/03 or 15/08/2026)."
+  $name:vi-VN: "Danh sách sự kiện quan trọng"
+  $description:vi-VN: "Thêm các ngày kỷ niệm, sinh nhật (Ví dụ: 14/03 hoặc 15/08/2026)."
 */
 // ==/WindhawkModSettings==
 
@@ -74,11 +139,8 @@ Bản mod tích hợp lịch âm Việt Nam trực tiếp vào bảng lịch h�
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
 #include <cwchar>
 #include <cwctype>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -93,14 +155,10 @@ Bản mod tích hợp lịch âm Việt Nam trực tiếp vào bảng lịch h�
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Globalization.h>
 #include <winrt/Windows.System.h>
-#include <winrt/Windows.UI.Core.h>
-#include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 
@@ -109,12 +167,10 @@ Bản mod tích hợp lịch âm Việt Nam trực tiếp vào bảng lịch h�
 namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
-namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuv = winrt::Windows::UI::ViewManagement;
 
 thread_local bool g_initializedForThread = false;
-std::atomic<uint64_t> g_settingsGeneration{1};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Settings & Custom Events
@@ -135,7 +191,7 @@ struct Settings {
     bool highlightWeekends = false;
     bool highlightLunarSpecial = false;
     bool highlightHolidays = true;
-    int lunarFontSize = 8;
+    int lunarFontSize = 12;
     winrt::Windows::UI::Color holidayColor{255, 255, 77, 79};  // #FF4D4F
     std::vector<CustomEvent> customEvents;
 };
@@ -225,30 +281,20 @@ void ParseCustomEventDate(std::wstring const& dateStr, int& outDay, int& outMont
     }
 }
 
-bool ReadBoolSetting(PCWSTR name, bool defaultValue) {
-    PCWSTR str = Wh_GetStringSetting(name);
-    if (!str || !*str) {
-        if (str) Wh_FreeStringSetting(str);
-        return defaultValue;
-    }
-    bool val = (wcscmp(str, L"0") != 0 && _wcsicmp(str, L"false") != 0);
-    Wh_FreeStringSetting(str);
-    return val;
-}
-
 void LoadSettings() {
     auto settings = std::make_shared<Settings>();
 
-    settings->showLunarDate = ReadBoolSetting(L"showLunarDate", true);
-    settings->useTransparentRoundedToday = ReadBoolSetting(L"useTransparentRoundedToday", true);
-    settings->showHolidayName = ReadBoolSetting(L"showHolidayName", true);
-    settings->highlightHolidays = ReadBoolSetting(L"highlightHolidays", true);
-    settings->highlightLunarSpecial = ReadBoolSetting(L"highlightLunarSpecial", false);
-    settings->highlightWeekendHeader = ReadBoolSetting(L"highlightWeekendHeader", true);
-    settings->highlightWeekends = ReadBoolSetting(L"highlightWeekends", false);
+    settings->showLunarDate = Wh_GetIntSetting(L"showLunarDate") != 0;
+    settings->useTransparentRoundedToday = Wh_GetIntSetting(L"useTransparentRoundedToday") != 0;
+    settings->showHolidayName = Wh_GetIntSetting(L"showHolidayName") != 0;
+    settings->highlightHolidays = Wh_GetIntSetting(L"highlightHolidays") != 0;
+    settings->highlightLunarSpecial = Wh_GetIntSetting(L"highlightLunarSpecial") != 0;
+    settings->highlightWeekendHeader = Wh_GetIntSetting(L"highlightWeekendHeader") != 0;
+    settings->highlightWeekends = Wh_GetIntSetting(L"highlightWeekends") != 0;
+
     settings->lunarFontSize = Wh_GetIntSetting(L"lunarFontSize");
     if (settings->lunarFontSize < 7 || settings->lunarFontSize > 14) {
-        settings->lunarFontSize = 8;
+        settings->lunarFontSize = 12;
     }
 
     if (auto c = ParseHexColor(ReadStringSetting(L"holidayColorHex"))) {
@@ -257,33 +303,30 @@ void LoadSettings() {
 
     // Đọc danh sách sự kiện tùy biến
     for (int i = 0;; i++) {
-        PCWSTR date = Wh_GetStringSetting(L"customEvents[%d].date", i);
-        if (!date || !*date) {
-            if (date) Wh_FreeStringSetting(date);
+        auto date = WindhawkUtils::StringSetting::make(
+            L"customEvents[%d].date", i);
+        if (!*date.get()) {
             break;
         }
 
-        PCWSTR name = Wh_GetStringSetting(L"customEvents[%d].name", i);
+        auto name = WindhawkUtils::StringSetting::make(
+            L"customEvents[%d].name", i);
         int isLunar = Wh_GetIntSetting(L"customEvents[%d].isLunar", i);
 
         CustomEvent evt;
         evt.isLunar = (isLunar != 0);
-        evt.name = (name && *name) ? name : L"Sự kiện";
-        ParseCustomEventDate(date, evt.day, evt.month, evt.year);
+        evt.name = *name.get() ? name.get() : L"Event";
+        ParseCustomEventDate(date.get(), evt.day, evt.month, evt.year);
 
         if (evt.day >= 1 && evt.day <= 31 && evt.month >= 1 && evt.month <= 12) {
             settings->customEvents.push_back(std::move(evt));
         }
-
-        Wh_FreeStringSetting(date);
-        if (name) Wh_FreeStringSetting(name);
     }
 
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         g_settings = settings;
     }
-    g_settingsGeneration.fetch_add(1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -436,7 +479,7 @@ struct VietnameseHoliday {
 };
 
 std::optional<VietnameseHoliday> GetVietnameseHoliday(
-    int solarDay, int solarMonth,
+    int dayNumber, int solarDay, int solarMonth, int solarYear,
     VietnameseLunarDateInfo const& lunar) {
     if (!lunar.leapMonth) {
         if (lunar.month == 1 && lunar.day == 1) return VietnameseHoliday{L"Tết", L"Mùng 1 Tết Nguyên Đán"};
@@ -451,10 +494,18 @@ std::optional<VietnameseHoliday> GetVietnameseHoliday(
         if (lunar.month == 7 && lunar.day == 15) return VietnameseHoliday{L"Vu Lan", L"Lễ Vu Lan (Rằm tháng 7)"};
         if (lunar.month == 8 && lunar.day == 15) return VietnameseHoliday{L"Trung thu", L"Tết Trung Thu (Rằm tháng 8)"};
         if (lunar.month == 12 && lunar.day == 23) return VietnameseHoliday{L"Ông Táo", L"Tiễn Ông Công Ông Táo (23/12 ÂL)"};
-        if (lunar.month == 12 && (lunar.day == 29 || lunar.day == 30)) return VietnameseHoliday{L"Tất niên", L"Tất Niên"};
+        if (lunar.month == 12 && (lunar.day == 29 || lunar.day == 30)) {
+            // Chỉ hiển thị "Tất niên" vào đúng ngày cuối cùng của năm âm lịch (ngày 29 hoặc 30 tùy tháng thiếu hay đủ)
+            VietnameseLunarDateInfo nextLunar;
+            if (VietnameseLunarDate(dayNumber + 1, solarYear, nextLunar)) {
+                if (nextLunar.month == 1 && nextLunar.day == 1) {
+                    return VietnameseHoliday{L"Tất niên", L"Tất Niên"};
+                }
+            }
+        }
     }
 
-    // Ngày lễ Dương lịch - Dùng tên chữ rõ ràng, tuyệt đối không dùng số "20/10", "20/11", "2/9" để tránh nhầm thành ngày âm lịch!
+    // Ngày lễ Dương lịch - Dùng tên chữ rõ ràng, tránh nhầm thành ngày âm lịch
     if (solarMonth == 1 && solarDay == 1) return VietnameseHoliday{L"Tết Tây", L"Tết Dương Lịch"};
     if (solarMonth == 2 && solarDay == 14) return VietnameseHoliday{L"Valentine", L"Lễ Tình Nhân"};
     if (solarMonth == 3 && solarDay == 8) return VietnameseHoliday{L"Quốc tế PN", L"Quốc tế Phụ nữ"};
@@ -476,9 +527,6 @@ struct DayDisplayInfo {
 
 DayDisplayInfo GetDayDisplayInfo(int32_t dateKey, Settings const& settings) {
     DayDisplayInfo out;
-    if (!settings.showLunarDate) {
-        return out;
-    }
 
     int year = dateKey / 10000;
     int month = (dateKey / 100) % 100;
@@ -494,20 +542,32 @@ DayDisplayInfo GetDayDisplayInfo(int32_t dateKey, Settings const& settings) {
     bool isLunarSpecial = (lunar.day == 1 || lunar.day == 15);
 
     // Mặc định: ngày 1 âm hoặc mùng 1 dương thì hiện Ngày/Tháng (thêm N nếu nhuận)
-    if (lunar.day == 1 || day == 1) {
-        out.label = std::to_wstring(lunar.day) + L"/" + std::to_wstring(lunar.month);
-        if (lunar.leapMonth) {
-            out.label += L"N";
+    if (settings.showLunarDate) {
+        if (lunar.day == 1 || day == 1) {
+            out.label = std::to_wstring(lunar.day) + L"/" + std::to_wstring(lunar.month);
+            if (lunar.leapMonth) {
+                out.label += L"N";
+            }
+        } else {
+            out.label = std::to_wstring(lunar.day);
         }
-    } else {
-        out.label = std::to_wstring(lunar.day);
     }
 
-    // Kiểm tra sự kiện quan trọng do người dùng tạo
+    // 1. Kiểm tra ngày lễ truyền thống & quốc tế
+    if (settings.highlightHolidays) {
+        if (auto holiday = GetVietnameseHoliday(dayNumber, day, month, year, lunar)) {
+            out.shouldHighlight = true;
+            if (settings.showHolidayName && holiday->shortLabel && holiday->shortLabel[0] != L'\0') {
+                out.label = holiday->shortLabel;
+            }
+        }
+    }
+
+    // 2. Kiểm tra sự kiện quan trọng cá nhân (Sự kiện người dùng có độ ưu tiên cao nhất, đè lên ngày lễ)
     for (const auto& evt : settings.customEvents) {
         bool match = false;
         if (evt.isLunar) {
-            if (evt.day == lunar.day && evt.month == lunar.month &&
+            if (!lunar.leapMonth && evt.day == lunar.day && evt.month == lunar.month &&
                 (evt.year == 0 || evt.year == lunar.year)) {
                 match = true;
             }
@@ -526,22 +586,12 @@ DayDisplayInfo GetDayDisplayInfo(int32_t dateKey, Settings const& settings) {
         }
     }
 
-    // Kiểm tra ngày lễ
-    if (settings.highlightHolidays) {
-        if (auto holiday = GetVietnameseHoliday(day, month, lunar)) {
-            out.shouldHighlight = true;
-            if (settings.showHolidayName && holiday->shortLabel && holiday->shortLabel[0] != L'\0') {
-                out.label = holiday->shortLabel;
-            }
-        }
-    }
-
-    // Kiểm tra cuối tuần (Thứ 7, CN)
+    // 3. Kiểm tra cuối tuần (Thứ 7, CN)
     if (settings.highlightWeekends && isWeekend) {
         out.shouldHighlight = true;
     }
 
-    // Kiểm tra Mùng 1 và Rằm (15 âm)
+    // 4. Kiểm tra Mùng 1 và Rằm (15 âm)
     if (settings.highlightLunarSpecial && isLunarSpecial) {
         out.shouldHighlight = true;
     }
@@ -566,11 +616,32 @@ int32_t DateKeyFromDateTime(wf::DateTime const& dateTime) {
     }
 
     SYSTEMTIME systemTimeLocal{};
-    if (!SystemTimeToTzSpecificLocalTime(nullptr, &systemTimeUtc, &systemTimeLocal)) {
-        return MakeDateKey(systemTimeUtc.wYear, systemTimeUtc.wMonth, systemTimeUtc.wDay);
+    if (!SystemTimeToTzSpecificLocalTime(nullptr, &systemTimeUtc,
+                                         &systemTimeLocal)) {
+        return 0;
     }
 
-    return MakeDateKey(systemTimeLocal.wYear, systemTimeLocal.wMonth, systemTimeLocal.wDay);
+    auto ticksOf = [](SYSTEMTIME const& systemTime, ULONGLONG& ticks) -> bool {
+        FILETIME fileTimeOfSystemTime{};
+        if (!SystemTimeToFileTime(&systemTime, &fileTimeOfSystemTime)) {
+            return false;
+        }
+        ULARGE_INTEGER value;
+        value.LowPart = fileTimeOfSystemTime.dwLowDateTime;
+        value.HighPart = fileTimeOfSystemTime.dwHighDateTime;
+        ticks = value.QuadPart;
+        return true;
+    };
+
+    ULONGLONG localTicks = 0;
+    ULONGLONG utcTicks = 0;
+    if (!ticksOf(systemTimeLocal, localTicks) || !ticksOf(systemTimeUtc, utcTicks)) {
+        return 0;
+    }
+
+    const SYSTEMTIME& date =
+        localTicks < utcTicks ? systemTimeUtc : systemTimeLocal;
+    return MakeDateKey(date.wYear, date.wMonth, date.wDay);
 }
 
 constexpr PCWSTR kLunarTextBlockName = L"WindhawkLunarText";
@@ -643,69 +714,115 @@ bool IsNumberText(std::wstring const& text) {
     return true;
 }
 
-// Tìm hoặc tự động TẠO MỚI TextBlock âm lịch vào bên trong panel của ô ngày
-wuxc::TextBlock FindOrCreateLabelTextBlock(wuxc::CalendarViewDayItem const& item,
-                                           wuxc::TextBlock const& dayNumTb,
-                                           void* preferredId) {
+// Tìm chính xác cặp TextBlock (số ngày dương và chữ âm lịch) trong ô ngày,
+// đồng thời dọn dẹp triệt để bất kỳ TextBlock chèn trùng lặp (kLunarTextBlockName) nào.
+void FindDayCellTextBlocks(wuxc::CalendarViewDayItem const& item,
+                           int solarDay,
+                           wuxc::TextBlock& outDayNum,
+                           wuxc::TextBlock& outLabel) {
+    outDayNum = nullptr;
+    outLabel = nullptr;
+
     std::vector<FoundElement> descendants;
     CollectDescendants(item, descendants);
 
-    // 1. Tìm TextBlock có tên kLunarTextBlockName đã tạo trước đó
+    wuxc::TextBlock dayNumTb = nullptr;
+    wuxc::TextBlock nativeLunarTb = nullptr;
+    std::vector<wuxc::TextBlock> insertedLunarTbs;
+    std::vector<wuxc::TextBlock> otherTbs;
+
     for (const auto& found : descendants) {
         if (auto tb = found.element.try_as<wuxc::TextBlock>()) {
-            if (ElementName(tb) == kLunarTextBlockName) {
-                return tb;
+            std::wstring name = ElementName(tb);
+            if (name == L"DayNumberTextBlock") {
+                dayNumTb = tb;
+            } else if (name == L"LunarTextBlock") {
+                nativeLunarTb = tb;
+            } else if (name == kLunarTextBlockName) {
+                insertedLunarTbs.push_back(tb);
+            } else {
+                otherTbs.push_back(tb);
             }
         }
     }
 
-    // 2. Tìm TextBlock phụ có sẵn trong template (nếu có)
-    std::vector<wuxc::TextBlock> candidates;
-    for (const auto& found : descendants) {
-        auto textBlock = found.element.try_as<wuxc::TextBlock>();
-        if (!textBlock || textBlock == dayNumTb || IsNumberText(ElementText(textBlock))) {
-            continue;
-        }
-        candidates.push_back(textBlock);
-    }
-
-    if (preferredId) {
-        for (const auto& candidate : candidates) {
-            if (winrt::get_abi(candidate) == preferredId) {
-                return candidate;
-            }
-        }
-    }
-
-    if (!candidates.empty()) {
-        wuxc::TextBlock best = nullptr;
-        double bestFontSize = 0;
-        bool bestHasText = false;
-        for (const auto& candidate : candidates) {
-            bool hasText = !ElementText(candidate).empty();
-            double fontSize = 0;
+    // 1. Nếu ô đã có LunarTextBlock chính thức của hệ thống Windows:
+    // Xóa ngay lập tức bất kỳ TextBlock chèn trùng (kLunarTextBlockName) nào để tránh lồng số!
+    if (nativeLunarTb) {
+        for (auto& inserted : insertedLunarTbs) {
             try {
-                fontSize = candidate.FontSize();
-            } catch (...) {
-            }
-
-            if (!best || (hasText != bestHasText && hasText) ||
-                (hasText == bestHasText && fontSize < bestFontSize)) {
-                best = candidate;
-                bestFontSize = fontSize;
-                bestHasText = hasText;
-            }
+                if (auto parent = wuxm::VisualTreeHelper::GetParent(inserted)) {
+                    if (auto panel = parent.try_as<wuxc::Panel>()) {
+                        uint32_t idx = 0;
+                        if (panel.Children().IndexOf(inserted, idx)) {
+                            panel.Children().RemoveAt(idx);
+                        }
+                    }
+                }
+            } catch (...) {}
         }
-        if (best) return best;
+        insertedLunarTbs.clear();
+        outLabel = nativeLunarTb;
+    } else if (!insertedLunarTbs.empty()) {
+        // Nếu không có native LunarTextBlock nhưng có kLunarTextBlockName:
+        // Giữ lại đúng 1 cái duy nhất, xóa các cái thừa
+        outLabel = insertedLunarTbs[0];
+        try {
+            outLabel.Visibility(wux::Visibility::Visible);
+        } catch (...) {}
+
+        for (size_t i = 1; i < insertedLunarTbs.size(); i++) {
+            try {
+                if (auto parent = wuxm::VisualTreeHelper::GetParent(insertedLunarTbs[i])) {
+                    if (auto panel = parent.try_as<wuxc::Panel>()) {
+                        uint32_t idx = 0;
+                        if (panel.Children().IndexOf(insertedLunarTbs[i], idx)) {
+                            panel.Children().RemoveAt(idx);
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
     }
 
-    // 3. Nếu chưa có TextBlock phụ nào (mặc định Windows 11 tắt lịch phụ),
-    // ta tìm Panel cha trực tiếp chứa dayNumTb và chèn TextBlock âm lịch vào!
-    wuxc::Panel hostPanel = nullptr;
-    if (dayNumTb) {
+    // 2. Xác định dayNumTb nếu chưa tìm thấy theo tên DayNumberTextBlock
+    if (!dayNumTb) {
+        std::wstring expectedDayStr = std::to_wstring(solarDay);
+        for (auto it = otherTbs.begin(); it != otherTbs.end(); ++it) {
+            if (ElementText(*it) == expectedDayStr) {
+                dayNumTb = *it;
+                otherTbs.erase(it);
+                break;
+            }
+        }
+    }
+    if (!dayNumTb && !otherTbs.empty()) {
+        size_t bestIdx = 0;
+        double maxFontSize = 0;
+        for (size_t i = 0; i < otherTbs.size(); i++) {
+            double fs = 0;
+            try { fs = otherTbs[i].FontSize(); } catch (...) {}
+            if (fs > maxFontSize) {
+                maxFontSize = fs;
+                bestIdx = i;
+            }
+        }
+        dayNumTb = otherTbs[bestIdx];
+        otherTbs.erase(otherTbs.begin() + bestIdx);
+    }
+
+    // 3. Nếu vẫn chưa có outLabel nhưng còn TextBlock phụ khác trong cell:
+    if (!outLabel && !otherTbs.empty()) {
+        outLabel = otherTbs[0];
+    }
+
+    // 4. Fallback: chỉ khi ô hoàn toàn chỉ có 1 TextBlock duy nhất (số ngày dương)
+    // thì mới tạo mới TextBlock kLunarTextBlockName bên trong Panel con của ô
+    if (!outLabel && dayNumTb) {
+        wuxc::Panel hostPanel = nullptr;
         try {
             auto parent = wuxm::VisualTreeHelper::GetParent(dayNumTb);
-            while (parent) {
+            while (parent && parent != item) {
                 if (auto p = parent.try_as<wuxc::Panel>()) {
                     hostPanel = p;
                     break;
@@ -713,27 +830,28 @@ wuxc::TextBlock FindOrCreateLabelTextBlock(wuxc::CalendarViewDayItem const& item
                 parent = wuxm::VisualTreeHelper::GetParent(parent);
             }
         } catch (...) {}
-    }
-    if (!hostPanel) {
-        for (const auto& found : descendants) {
-            if (auto p = found.element.try_as<wuxc::Panel>()) {
-                hostPanel = p;
-                break;
+
+        if (!hostPanel) {
+            for (const auto& found : descendants) {
+                if (found.element != item) {
+                    if (auto p = found.element.try_as<wuxc::Panel>()) {
+                        hostPanel = p;
+                        break;
+                    }
+                }
             }
         }
-    }
 
-    if (hostPanel) {
-        try {
-            auto newTb = wuxc::TextBlock();
-            newTb.Name(kLunarTextBlockName);
-            newTb.IsHitTestVisible(false);
-            newTb.HorizontalAlignment(wux::HorizontalAlignment::Center);
-            newTb.VerticalAlignment(wux::VerticalAlignment::Bottom);
-            newTb.TextAlignment(wux::TextAlignment::Center);
-            newTb.Margin(wux::Thickness{0, 0, 0, 2});
+        if (hostPanel) {
+            try {
+                auto newTb = wuxc::TextBlock();
+                newTb.Name(kLunarTextBlockName);
+                newTb.IsHitTestVisible(false);
+                newTb.HorizontalAlignment(wux::HorizontalAlignment::Center);
+                newTb.VerticalAlignment(wux::VerticalAlignment::Bottom);
+                newTb.TextAlignment(wux::TextAlignment::Center);
+                newTb.Margin(wux::Thickness{0, 0, 0, 2});
 
-            if (dayNumTb) {
                 try {
                     int row = wuxc::Grid::GetRow(dayNumTb);
                     int col = wuxc::Grid::GetColumn(dayNumTb);
@@ -746,17 +864,18 @@ wuxc::TextBlock FindOrCreateLabelTextBlock(wuxc::CalendarViewDayItem const& item
                         newTb.Foreground(fg);
                     }
                 } catch (...) {}
-            }
 
-            hostPanel.Children().Append(newTb);
-            return newTb;
-        } catch (...) {}
+                hostPanel.Children().Append(newTb);
+                outLabel = newTb;
+            } catch (...) {}
+        }
     }
 
-    return nullptr;
+    outDayNum = dayNumTb;
 }
 
 struct ColorLocker {
+    winrt::weak_ref<wuxc::TextBlock> textBlock{nullptr};
     int64_t token = 0;
     winrt::Windows::UI::Color targetColor{};
     wuxm::Brush originalBrush{nullptr};
@@ -785,6 +904,8 @@ void LockTextBlockColorStable(wuxc::TextBlock const& tb, winrt::Windows::UI::Col
         winrt::Windows::UI::Color targetCol{color.A, color.R, color.G, color.B};
 
         auto& locker = t_colorLockers[id];
+        locker.textBlock = winrt::make_weak(tb);
+
         if (!locker.hasOriginalBrush) {
             auto currentBrush = tb.Foreground();
             if (auto scb = currentBrush.try_as<wuxm::SolidColorBrush>()) {
@@ -864,7 +985,11 @@ void UnlockTextBlockColor(wuxc::TextBlock const& tb) {
                 if (it != t_colorLockers.end() && it->second.hasOriginalBrush && it->second.originalBrush) {
                     tb.Foreground(it->second.originalBrush);
                 } else {
-                    tb.Foreground(wuxm::SolidColorBrush(winrt::Windows::UI::Color{255, 255, 255, 255}));
+                    winrt::Windows::UI::Color fgColor{255, 255, 255, 255};
+                    try {
+                        fgColor = wuv::UISettings().GetColorValue(wuv::UIColorType::Foreground);
+                    } catch (...) {}
+                    tb.Foreground(wuxm::SolidColorBrush(fgColor));
                 }
             }
         }
@@ -888,7 +1013,6 @@ struct DayCell {
     int32_t key = 0;
     int32_t lastStyledKey = 0;
     bool lastIsToday = false;
-    uint64_t lastSettingsGen = 0;
 
     std::wstring savedText;
     bool hasSavedText = false;
@@ -910,6 +1034,7 @@ thread_local std::unordered_map<void*, winrt::weak_ref<wuxc::CalendarViewDayItem
 thread_local winrt::weak_ref<wuxc::CalendarView> t_calendarView{nullptr};
 
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item);
+void StartSweepTimer();
 
 void* CellId(wuxc::CalendarViewDayItem const& item) {
     return winrt::get_abi(item);
@@ -952,9 +1077,54 @@ void OnLabelTextChanged(wux::DependencyObject const& sender) {
         return;
     }
     if (auto item = it->second.get()) {
+        StartSweepTimer();
         ApplyToDayItem(item);
     }
 }
+
+// Bộ đệm cọ vẽ (SolidColorBrush) dùng chung để tránh cấp phát mới liên tục
+struct CachedBrushes {
+    winrt::Windows::UI::Color accentColor{};
+    winrt::Windows::UI::Color foregroundColor{};
+    wuxm::SolidColorBrush todayBgBrush{nullptr};
+    wuxm::SolidColorBrush todayHoverBgBrush{nullptr};
+    wuxm::SolidColorBrush todayPressedBgBrush{nullptr};
+    wuxm::SolidColorBrush todayBorderBrush{nullptr};
+    wuxm::SolidColorBrush foregroundBrush{nullptr};
+    bool valid = false;
+};
+thread_local CachedBrushes t_cachedBrushes;
+
+void UpdateCachedBrushesIfNeeded() {
+    winrt::Windows::UI::Color accentColor{255, 0, 120, 215};
+    winrt::Windows::UI::Color fgColor{255, 255, 255, 255};
+    try {
+        auto uiSettings = wuv::UISettings();
+        accentColor = uiSettings.GetColorValue(wuv::UIColorType::Accent);
+        fgColor = uiSettings.GetColorValue(wuv::UIColorType::Foreground);
+    } catch (...) {}
+
+    if (!t_cachedBrushes.valid ||
+        t_cachedBrushes.accentColor != accentColor ||
+        t_cachedBrushes.foregroundColor != fgColor) {
+        t_cachedBrushes.accentColor = accentColor;
+        t_cachedBrushes.foregroundColor = fgColor;
+
+        winrt::Windows::UI::Color todayBgColor{65, accentColor.R, accentColor.G, accentColor.B};
+        winrt::Windows::UI::Color todayHoverBgColor{105, accentColor.R, accentColor.G, accentColor.B};
+        winrt::Windows::UI::Color todayPressedBgColor{145, accentColor.R, accentColor.G, accentColor.B};
+        winrt::Windows::UI::Color todayBorderColor{180, accentColor.R, accentColor.G, accentColor.B};
+
+        t_cachedBrushes.todayBgBrush = wuxm::SolidColorBrush(todayBgColor);
+        t_cachedBrushes.todayHoverBgBrush = wuxm::SolidColorBrush(todayHoverBgColor);
+        t_cachedBrushes.todayPressedBgBrush = wuxm::SolidColorBrush(todayPressedBgColor);
+        t_cachedBrushes.todayBorderBrush = wuxm::SolidColorBrush(todayBorderColor);
+        t_cachedBrushes.foregroundBrush = wuxm::SolidColorBrush(fgColor);
+        t_cachedBrushes.valid = true;
+    }
+}
+
+thread_local bool t_applyWrote = false;
 
 void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     const std::shared_ptr<const Settings> settings = GetSettings();
@@ -989,6 +1159,8 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         cell.savedText.clear();
         cell.appliedText.clear();
         cell.hasSavedText = false;
+        cell.dayNumberLabel = nullptr;
+        cell.label = nullptr;
     }
 
     if (cell.dateChangedToken == 0) {
@@ -998,6 +1170,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
                 [](wux::DependencyObject const& sender,
                    wux::DependencyProperty const&) {
                     if (auto dayItem = sender.try_as<wuxc::CalendarViewDayItem>()) {
+                        StartSweepTimer();
                         ApplyToDayItem(dayItem);
                     }
                 });
@@ -1008,7 +1181,6 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     SYSTEMTIME now{};
     GetLocalTime(&now);
     const bool isToday = (key == MakeDateKey(now.wYear, now.wMonth, now.wDay));
-    const uint64_t currentGen = g_settingsGeneration.load();
 
     const DayDisplayInfo displayInfo = GetDayDisplayInfo(key, *settings);
     const bool shouldColorRed = displayInfo.shouldHighlight && !isToday;
@@ -1016,32 +1188,37 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     auto cachedDayNum = cell.dayNumberLabel.get();
     auto cachedLabel = cell.label.get();
 
-    // 1. Tìm TextBlock hiển thị số ngày dương (e.g. "15")
-    if (!cachedDayNum) {
-        std::vector<FoundElement> descendants;
-        CollectDescendants(item, descendants);
-        for (const FoundElement& found : descendants) {
-            if (auto tb = found.element.try_as<wuxc::TextBlock>()) {
-                if (IsNumberText(ElementText(tb))) {
-                    cachedDayNum = tb;
-                    cell.dayNumberLabel = winrt::make_weak(tb);
-                    break;
-                }
-            }
+    // Tìm và giải quyết chính xác cặp TextBlock của ô ngày.
+    // Nếu chưa có hoặc nhãn hiện tại là kLunarTextBlockName (có nguy cơ bị chèn đè lên LunarTextBlock gốc),
+    // luôn quét lại để ưu tiên LunarTextBlock gốc và dọn dẹp phần tử trùng lặp.
+    if (!cachedDayNum || !cachedLabel || ElementName(cachedLabel) == kLunarTextBlockName) {
+        wuxc::TextBlock dayNum = nullptr;
+        wuxc::TextBlock label = nullptr;
+        FindDayCellTextBlocks(item, key % 100, dayNum, label);
+        if (dayNum) {
+            cachedDayNum = dayNum;
+            cell.dayNumberLabel = winrt::make_weak(dayNum);
+        }
+        if (label) {
+            cachedLabel = label;
         }
     }
 
     // Nhẹ nhàng chỉnh số ngày dương nhích lên trên một chút để chừa chỗ cho chữ âm lịch bên dưới
-    if (cachedDayNum && settings->showLunarDate) {
+    if (cachedDayNum) {
         try {
-            cachedDayNum.VerticalAlignment(wux::VerticalAlignment::Top);
-            cachedDayNum.Margin(wux::Thickness{0, 2, 0, 0});
+            if (settings->showLunarDate) {
+                cachedDayNum.VerticalAlignment(wux::VerticalAlignment::Top);
+                cachedDayNum.Margin(wux::Thickness{0, 2, 0, 0});
+            } else {
+                cachedDayNum.ClearValue(wux::FrameworkElement::VerticalAlignmentProperty());
+                cachedDayNum.ClearValue(wux::FrameworkElement::MarginProperty());
+            }
         } catch (...) {
         }
     }
 
-    // 2. Tìm hoặc TẠO MỚI TextBlock âm lịch
-    wuxc::TextBlock label = cachedLabel ? cachedLabel : FindOrCreateLabelTextBlock(item, cachedDayNum, cell.labelId);
+    wuxc::TextBlock label = cachedLabel;
     if (!label) {
         return;
     }
@@ -1097,6 +1274,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         }
         if (std::fabs(label.FontSize() - wantedFontSize) > 0.1) {
             label.FontSize(wantedFontSize);
+            t_applyWrote = true;
         }
     } catch (...) {
     }
@@ -1110,12 +1288,14 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
         }
         try {
             label.Text(desired);
+            t_applyWrote = true;
         } catch (...) {
         }
     } else if (desired.empty() && !cell.appliedText.empty() && current == cell.appliedText) {
         try {
             if (cell.hasSavedText) {
                 label.Text(cell.savedText);
+                t_applyWrote = true;
             }
         } catch (...) {
         }
@@ -1124,30 +1304,27 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
 
     cell.appliedText = desired;
 
-    // 3. Đổi màu chữ (Bôi đỏ ngày lễ, cuối tuần, mùng 1, rằm, sự kiện)
+    UpdateCachedBrushesIfNeeded();
+
     // 3. Đổi màu chữ và tạo hình vuông bo góc trong suốt cho ngày hôm nay
     if (isToday) {
         UnlockTextBlockColor(cachedDayNum);
         UnlockTextBlockColor(label);
         try {
-            label.Foreground(wuxm::SolidColorBrush(winrt::Windows::UI::Color{255, 255, 255, 255}));
+            label.Foreground(t_cachedBrushes.foregroundBrush);
             label.Opacity(0.9);
         } catch (...) {}
 
-        if (settings->useTransparentRoundedToday) {
-            winrt::Windows::UI::Color accentColor{255, 0, 120, 215};
-            try {
-                accentColor = wuv::UISettings().GetColorValue(wuv::UIColorType::Accent);
-            } catch (...) {}
-
+        if (settings->useTransparentRoundedToday && (!cell.lastIsToday || cell.lastStyledKey != key)) {
             std::vector<FoundElement> descendants;
             CollectDescendants(item, descendants);
             for (const auto& found : descendants) {
                 if (auto b = found.element.try_as<wuxc::Border>()) {
                     try {
                         b.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
-                        b.BorderBrush(wuxm::SolidColorBrush(winrt::Windows::UI::Color{180, accentColor.R, accentColor.G, accentColor.B}));
+                        b.BorderBrush(t_cachedBrushes.todayBorderBrush);
                         b.BorderThickness(wux::Thickness{1.2, 1.2, 1.2, 1.2});
+                        t_applyWrote = true;
                     } catch (...) {}
                 }
             }
@@ -1162,6 +1339,7 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
                         b.ClearValue(wuxc::Border::CornerRadiusProperty());
                         b.ClearValue(wuxc::Border::BorderBrushProperty());
                         b.ClearValue(wuxc::Border::BorderThicknessProperty());
+                        t_applyWrote = true;
                     } catch (...) {}
                 }
             }
@@ -1189,7 +1367,6 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
 
     cell.lastStyledKey = key;
     cell.lastIsToday = isToday;
-    cell.lastSettingsGen = currentGen;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1199,10 +1376,24 @@ thread_local winrt::Windows::System::DispatcherQueueTimer t_sweepTimer{nullptr};
 thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker t_sweepTimerRevoker;
 
 constexpr int kSweepIntervalMs = 500;
+constexpr int kSweepQuietTicksToStop = 5;
+
+thread_local int t_sweepQuietTicks = 0;
 
 void SweepDayItems(bool forceFullTreeScan = false);
 
+void StopSweepTimer() {
+    t_sweepQuietTicks = 0;
+    if (t_sweepTimer) {
+        try {
+            t_sweepTimer.Stop();
+        } catch (...) {
+        }
+    }
+}
+
 void StartSweepTimer() {
+    t_sweepQuietTicks = 0;
     try {
         if (!t_sweepTimer) {
             auto dispatcherQueue =
@@ -1353,38 +1544,45 @@ void StyleWeekDayNames(wuxc::CalendarView const& cv, Settings const& settings) {
     }
 }
 
+thread_local bool t_calendarViewStyled = false;
+thread_local bool t_lastStyledTransparentToday = false;
+thread_local winrt::Windows::UI::Color t_lastCalendarAccentColor{};
+
 void StyleCalendarView(wuxc::CalendarView const& cv, Settings const& settings) {
     if (!cv) {
         return;
     }
     try {
         StyleWeekDayNames(cv, settings);
+
+        UpdateCachedBrushesIfNeeded();
+
         if (settings.useTransparentRoundedToday) {
-            // 1. Chuyển hình tròn ngày hôm nay thành hình vuông bo góc hiện đại
-            cv.CalendarItemCornerRadius(wux::CornerRadius{6, 6, 6, 6});
+            if (!t_calendarViewStyled || !t_lastStyledTransparentToday ||
+                t_lastCalendarAccentColor != t_cachedBrushes.accentColor) {
+                cv.CalendarItemCornerRadius(wux::CornerRadius{6, 6, 6, 6});
+                cv.TodayBackground(t_cachedBrushes.todayBgBrush);
+                cv.TodayHoverBackground(t_cachedBrushes.todayHoverBgBrush);
+                cv.TodayPressedBackground(t_cachedBrushes.todayPressedBgBrush);
+                cv.TodayForeground(t_cachedBrushes.foregroundBrush);
 
-            // 2. Lấy màu Accent của Windows để tạo nền trong suốt
-            winrt::Windows::UI::Color accentColor{255, 0, 120, 215};
-            try {
-                accentColor = wuv::UISettings().GetColorValue(wuv::UIColorType::Accent);
-            } catch (...) {
+                t_calendarViewStyled = true;
+                t_lastStyledTransparentToday = true;
+                t_lastCalendarAccentColor = t_cachedBrushes.accentColor;
+                t_applyWrote = true;
             }
-
-            // Nền trong suốt màu accent (~25% alpha để tạo hiệu ứng trong suốt tinh tế)
-            winrt::Windows::UI::Color todayBgColor{65, accentColor.R, accentColor.G, accentColor.B};
-            winrt::Windows::UI::Color todayHoverBgColor{105, accentColor.R, accentColor.G, accentColor.B};
-            winrt::Windows::UI::Color todayPressedBgColor{145, accentColor.R, accentColor.G, accentColor.B};
-
-            cv.TodayBackground(wuxm::SolidColorBrush(todayBgColor));
-            cv.TodayHoverBackground(wuxm::SolidColorBrush(todayHoverBgColor));
-            cv.TodayPressedBackground(wuxm::SolidColorBrush(todayPressedBgColor));
-            cv.TodayForeground(wuxm::SolidColorBrush(winrt::Windows::UI::Color{255, 255, 255, 255}));
         } else {
-            cv.ClearValue(wuxc::CalendarView::CalendarItemCornerRadiusProperty());
-            cv.ClearValue(wuxc::CalendarView::TodayBackgroundProperty());
-            cv.ClearValue(wuxc::CalendarView::TodayHoverBackgroundProperty());
-            cv.ClearValue(wuxc::CalendarView::TodayPressedBackgroundProperty());
-            cv.ClearValue(wuxc::CalendarView::TodayForegroundProperty());
+            if (t_calendarViewStyled && t_lastStyledTransparentToday) {
+                cv.ClearValue(wuxc::CalendarView::CalendarItemCornerRadiusProperty());
+                cv.ClearValue(wuxc::CalendarView::TodayBackgroundProperty());
+                cv.ClearValue(wuxc::CalendarView::TodayHoverBackgroundProperty());
+                cv.ClearValue(wuxc::CalendarView::TodayPressedBackgroundProperty());
+                cv.ClearValue(wuxc::CalendarView::TodayForegroundProperty());
+
+                t_calendarViewStyled = true;
+                t_lastStyledTransparentToday = false;
+                t_applyWrote = true;
+            }
         }
     } catch (...) {
     }
@@ -1394,6 +1592,7 @@ void InitializeForCurrentThread();
 
 void SweepDayItems(bool forceFullTreeScan) {
     InitializeForCurrentThread();
+    t_applyWrote = false;
 
     const auto settings = GetSettings();
 
@@ -1434,15 +1633,30 @@ void SweepDayItems(bool forceFullTreeScan) {
             it = t_labelOwners.erase(it);
         }
     }
+
+    for (auto it = t_colorLockers.begin(); it != t_colorLockers.end();) {
+        if (it->second.textBlock.get()) {
+            ++it;
+        } else {
+            it = t_colorLockers.erase(it);
+        }
+    }
+
+    if (t_applyWrote) {
+        t_sweepQuietTicks = 0;
+    } else if (++t_sweepQuietTicks >= kSweepQuietTicksToStop) {
+        StopSweepTimer();
+    }
 }
 
 void OnCalendarOpenedOnCurrentThread() {
     InitializeForCurrentThread();
-    SweepDayItems(true);
     StartSweepTimer();
+    SweepDayItems(true);
 }
 
 void UninitializeDayItemsForCurrentThread() {
+    // 1. Dọn dẹp trạng thái các ô ngày đã được style
     for (auto& entry : t_cells) {
         DayCell& cell = *entry.second;
         auto item = cell.item.get();
@@ -1479,8 +1693,24 @@ void UninitializeDayItemsForCurrentThread() {
                 cell.labelChangedToken = 0;
             }
             try {
+                label.ClearValue(wux::FrameworkElement::HorizontalAlignmentProperty());
+                label.ClearValue(wux::FrameworkElement::VerticalAlignmentProperty());
+                label.ClearValue(wuxc::TextBlock::TextAlignmentProperty());
+                label.ClearValue(wux::FrameworkElement::MarginProperty());
+                label.ClearValue(wuxc::TextBlock::TextTrimmingProperty());
+                label.ClearValue(wuxc::TextBlock::TextWrappingProperty());
+                label.ClearValue(wux::UIElement::OpacityProperty());
+                label.ClearValue(wuxc::TextBlock::ForegroundProperty());
+
                 if (ElementName(label) == kLunarTextBlockName) {
-                    label.Visibility(wux::Visibility::Collapsed);
+                    if (auto parent = wuxm::VisualTreeHelper::GetParent(label)) {
+                        if (auto panel = parent.try_as<wuxc::Panel>()) {
+                            uint32_t index = 0;
+                            if (panel.Children().IndexOf(label, index)) {
+                                panel.Children().RemoveAt(index);
+                            }
+                        }
+                    }
                 } else if (cell.hasSavedText) {
                     label.Text(cell.savedText);
                 }
@@ -1490,13 +1720,22 @@ void UninitializeDayItemsForCurrentThread() {
             } catch (...) {
             }
         }
+
+        // Hoàn nguyên viền hình vuông bo góc nếu có
+        std::vector<FoundElement> descendants;
+        CollectDescendants(item, descendants);
+        for (const auto& found : descendants) {
+            if (auto b = found.element.try_as<wuxc::Border>()) {
+                try {
+                    b.ClearValue(wuxc::Border::CornerRadiusProperty());
+                    b.ClearValue(wuxc::Border::BorderBrushProperty());
+                    b.ClearValue(wuxc::Border::BorderThicknessProperty());
+                } catch (...) {}
+            }
+        }
     }
 
-    decltype(t_cells)().swap(t_cells);
-    decltype(t_dayItems)().swap(t_dayItems);
-    decltype(t_labelOwners)().swap(t_labelOwners);
-    decltype(t_colorLockers)().swap(t_colorLockers);
-
+    // 2. Mở khóa màu các thứ trên thanh WeekDayNames trước khi xóa bộ nhớ locker
     if (auto calView = t_calendarView.get()) {
         try {
             std::vector<FoundElement> descendants;
@@ -1525,12 +1764,30 @@ void UninitializeDayItemsForCurrentThread() {
         } catch (...) {}
     }
 
-    try {
-        if (t_sweepTimer) {
-            t_sweepTimer.Stop();
+    // 3. Hủy đăng ký callback Foreground trên tất cả ColorLocker còn hoạt động
+    for (auto& [id, locker] : t_colorLockers) {
+        if (locker.active && locker.token) {
+            if (auto tb = locker.textBlock.get()) {
+                try {
+                    tb.UnregisterPropertyChangedCallback(
+                        wuxc::TextBlock::ForegroundProperty(), locker.token);
+                } catch (...) {}
+            }
+            locker.active = false;
+            locker.token = 0;
         }
-    } catch (...) {
     }
+
+    decltype(t_cells)().swap(t_cells);
+    decltype(t_dayItems)().swap(t_dayItems);
+    decltype(t_labelOwners)().swap(t_labelOwners);
+    decltype(t_colorLockers)().swap(t_colorLockers);
+
+    t_calendarViewStyled = false;
+    t_lastStyledTransparentToday = false;
+    t_cachedBrushes = {};
+
+    StopSweepTimer();
     t_sweepTimerRevoker.revoke();
     t_sweepTimer = nullptr;
 }
@@ -1538,12 +1795,6 @@ void UninitializeDayItemsForCurrentThread() {
 ////////////////////////////////////////////////////////////////////////////////
 // Process plumbing
 
-enum class Target {
-    ShellExperienceHost,
-    ShellHost,
-};
-
-Target g_target = Target::ShellExperienceHost;
 std::atomic<bool> g_shuttingDown{false};
 std::atomic<UINT> g_runFromWindowThreadViaPostMessageMsg{0};
 
@@ -1697,7 +1948,7 @@ bool RunFromWindowThreadViaPostMessage(HWND hWnd,
                         param->proc(param->procParam);
                         UnhookWindowsHookEx(param->hook);
                         delete param;
-                        msg = nullptr;
+                        msg->lParam = 0;
                     }
                 }
             }
@@ -1746,7 +1997,6 @@ void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName) {
     RunFromWindowThreadViaPostMessage(
         hWnd,
         [](PVOID) {
-            InitializeForCurrentThread();
             OnCalendarOpenedOnCurrentThread();
         },
         nullptr);
@@ -1896,8 +2146,8 @@ void RefreshCalendarOnUiThreads() {
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
-                SweepDayItems(true);
                 StartSweepTimer();
+                SweepDayItems(true);
             },
             nullptr);
     }
@@ -1909,14 +2159,20 @@ bool InstallHook(HMODULE module,
                  Prototype* hook,
                  Prototype** original) {
     if (!module) {
+        Wh_Log(L"InstallHook: module is null for %S", functionName);
         return false;
     }
     Prototype* target =
         reinterpret_cast<Prototype*>(GetProcAddress(module, functionName));
     if (!target) {
+        Wh_Log(L"InstallHook: GetProcAddress failed for %S", functionName);
         return false;
     }
-    return WindhawkUtils::SetFunctionHook(target, hook, original);
+    if (!WindhawkUtils::SetFunctionHook(target, hook, original)) {
+        Wh_Log(L"InstallHook: SetFunctionHook failed for %S", functionName);
+        return false;
+    }
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1926,17 +2182,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L"> Wh_ModInit Native Lunar Calendar");
 
     g_shuttingDown = false;
-    g_target = Target::ShellExperienceHost;
-
-    WCHAR moduleFilePath[MAX_PATH];
-    if (GetModuleFileName(nullptr, moduleFilePath, ARRAYSIZE(moduleFilePath))) {
-        if (PCWSTR moduleFileName = wcsrchr(moduleFilePath, L'\\')) {
-            moduleFileName++;
-            if (_wcsicmp(moduleFileName, L"ShellHost.exe") == 0) {
-                g_target = Target::ShellHost;
-            }
-        }
-    }
 
     LoadSettings();
     RunFromWindowThreadViaPostMessageMsg();
@@ -1959,7 +2204,6 @@ void Wh_ModAfterInit() {
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
-                InitializeForCurrentThread();
                 OnCalendarOpenedOnCurrentThread();
             },
             nullptr);
