@@ -2,12 +2,81 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-16T16:00:09.000Z</updated>
+    <updated>2026-10-16T17:01:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[What When Where Notes 1.3.2]]></title>
+        <id>https://windhawk.net/mods/what-when-where-notes#42b2e0d8841f564a666a6130fbf89d4929e0af53</id>
+        <link href="https://windhawk.net/mods/what-when-where-notes"/>
+        <updated>2026-10-16T17:01:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="whatwhenwherenotes">What When Where Notes</h1>
+<p>A customizable desktop note overlay for Windows, powered by Windhawk.
+Organize reminders in three editable parts: <strong>What - When - Where</strong>.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="taskoverviewandstatusindicators">Task overview and status indicators</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/status-yellow.png" alt="Task overview with numbered notes, gray red and green status circles, and completed tasks struck through" /></p>
+<h3 id="customcolorsandrowhighlighting">Custom colors and row highlighting</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/green-hover.png" alt="Green notes, pink heading and highlighted task row" /></p>
+<h3 id="editnotesdirectlyonthedesktop">Edit notes directly on the desktop</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/edit-note.png" alt="Editing the WHERE field inside the desktop overlay" /></p>
+<h3 id="rightclickcolorandtransparencymenu">Right-click color and transparency menu</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/color-transparency-menu.png" alt="Context menu for changing note color and transparency" /></p>
+<h2 id="taskstatusindicators">Task status indicators</h2>
+<p>Click the colored circle next to a task to change its state:</p>
+<ul>
+<li>⚪ <strong>Gray — Open:</strong> The task has not been started.</li>
+<li>🔴 <strong>Red — In Progress:</strong> Work on the task is underway.</li>
+<li>🟢 <strong>Green — Completed:</strong> What, When and Where are struck through.</li>
+</ul>
+<p><strong>Cycle:</strong> ⚪ Open → 🔴 In Progress → 🟢 Completed → ⚪ Open. Each task's status is saved across Windhawk restarts.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Up to <strong>14 numbered note rows</strong> with independently editable What, When and Where fields.</li>
+<li>Optional centered title, adjustable fonts, spacing and colors.</li>
+<li>Three status states for each row: <strong>gray</strong> (open), <strong>red</strong> (in progress), and <strong>green</strong> (done). Completed notes are struck through.</li>
+<li>Add rows, remove the last row, or delete a selected row.</li>
+<li>Move the overlay with a configurable drag-mode hotkey.</li>
+<li>Adjustable transparency and note color; optional always-on-top behavior.</li>
+<li>Saved notes, row statuses, position and display preferences persist across restarts.</li>
+</ul>
+<h2 id="usingthenotes">Using the notes</h2>
+<ul>
+<li><strong>Click</strong> a What, When or Where field to edit it. Press <strong>Enter</strong> to save or <strong>Esc</strong> to cancel. Leaving the edit field also saves.</li>
+<li>Click <strong>+</strong> to add a row (up to the configured maximum) or <strong>-</strong> to remove the last row.</li>
+<li>Click the <strong>X</strong> next to a row to delete that row. At least one row is kept.</li>
+<li>Click a <strong>status circle</strong> to cycle through open, in progress and done.</li>
+<li><strong>Right-click</strong> the overlay to open the color and transparency menu.</li>
+<li><strong>Mouse wheel</strong> over the overlay to scale it in 10% steps (20% to 320%); <strong>middle-click</strong> to reset the scale.</li>
+<li>Press <strong>Ctrl+Alt+N</strong> by default to toggle drag mode, then drag the overlay with the left mouse button. Press the hotkey again to exit drag mode.</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<p>Open <strong>Settings</strong> to customize the initial position, always-on-top mode, title, the three default note fields, separators, maximum row count, fonts, colors, default transparency, default scale, and the drag hotkey.</p>
+<p><strong>Note:</strong> Existing edited notes and saved display preferences are stored separately from the initial defaults. Changing a default does not automatically overwrite previously saved note rows. A previously dragged position is preserved when changing unrelated options. Editing X/Y settings explicitly moves the overlay to those new coordinates.</p>
+<h2 id="technicalinformation">Technical information</h2>
+<ul>
+<li>Designed for <strong>Windows / Windhawk</strong>.</li>
+<li>Runs as a Windhawk <strong>tool mod</strong>, using a dedicated <code>windhawk.exe</code> helper process.</li>
+<li>The overlay is implemented with the Windows API and GDI.</li>
+<li>Source code and license: <a href="https://github.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD">GitHub repository</a>.</li>
+</ul>
+<h2 id="projectbackgroundandrelationtoeasynotes">Project background and relation to Easy Notes</h2>
+<p>This mod is an independent Windows/Windhawk implementation inspired by the
+original ToDoLite / What When Where Rainmeter project by the same author:
+https://forum.rainmeter.net/viewtopic.php?t=42543#p215957</p>
+<p>Unlike free-form desktop sticky notes, this mod displays a structured three-field
+task list (What / When / Where) with distinct Open / In Progress / Completed
+states. The current version is intentionally focused on that workflow.</p>
+<h2 id="author">Author</h2>
+<p><strong>SilverAmd</strong></p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer List Zebra Stripes 0.14.2]]></title>
         <id>https://windhawk.net/mods/explorer-zebra-stripes#db6755f00eeee9b78c6d519b40d2bbf7f0b7ccf9</id>
@@ -766,43 +835,6 @@ context-menu, and translation components.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Micrographics Taskbar Clock 1.0]]></title>
-        <id>https://windhawk.net/mods/micrographics-taskbar-clock#d4ee5f65a63f19962d025831b57cde6d010d9de9</id>
-        <link href="https://windhawk.net/mods/micrographics-taskbar-clock"/>
-        <updated>2026-10-15T07:00:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="micrographicstaskbarclock">Micrographics Taskbar Clock</h1>
-<p>Replaces the Windows 11 taskbar clock with a clock face inspired by the
-"Micrographics" clock of Nothing OS 5.</p>
-<p><img src="https://raw.githubusercontent.com/SAM2WOW/micrographics-taskbar-clock/main/images/taskbar.png" alt="Screenshot" /></p>
-<ul>
-<li>Weekday, day of month in a filled pill, month in an outlined pill, the time
-and a block cursor.</li>
-<li>Temperature, a weather icon and the current conditions in a speech bubble.</li>
-<li>Follows the taskbar's light/dark text color automatically, on every monitor.</li>
-<li>Clicking the clock still opens the notification center and calendar.</li>
-</ul>
-<h2 id="weather">Weather</h2>
-<p>The weather line is off by default, and the mod makes no network requests until
-it's turned on. To show it, enable <strong>Show weather</strong> in the settings and enter a
-city name or <code>latitude,longitude</code> as the location. Weather then comes from
-<a href="https://open-meteo.com/">Open-Meteo</a> (free, no API key), and a city name is
-looked up with Open-Meteo's geocoding service.</p>
-<p>Alternatively, enable <strong>Detect location from IP address</strong> to leave the location
-empty. Your public IP address is then sent to <a href="https://ipwho.is/">ipwho.is</a>, or
-to <a href="https://www.geojs.io/">GeoJS</a> if that fails, to approximate your location.</p>
-<h2 id="fonts">Fonts</h2>
-<p>The default font is Bahnschrift, which ships with Windows. Any installed font
-can be used, e.g. a monospaced one such as Cascadia Mono, or a dot matrix font.</p>
-<h2 id="otherclockmods">Other clock mods</h2>
-<p>This mod hides the original clock text and draws its own clock face, so changes
-from other clock mods, such as Taskbar Clock Customization, aren't visible
-while it's enabled.</p>]]></content>
-        <author>
-            <name>SAM2WOW</name>
-            <uri>https://github.com/SAM2WOW</uri>
         </author>
     </entry>
 </feed>

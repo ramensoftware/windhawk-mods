@@ -2,12 +2,81 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-16T14:01:24.000Z</updated>
+    <updated>2026-10-16T17:01:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[What When Where Notes 1.3.2]]></title>
+        <id>https://windhawk.net/mods/what-when-where-notes#42b2e0d8841f564a666a6130fbf89d4929e0af53</id>
+        <link href="https://windhawk.net/mods/what-when-where-notes"/>
+        <updated>2026-10-16T17:01:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="whatwhenwherenotes">What When Where Notes</h1>
+<p>A customizable desktop note overlay for Windows, powered by Windhawk.
+Organize reminders in three editable parts: <strong>What - When - Where</strong>.</p>
+<h2 id="screenshots">Screenshots</h2>
+<h3 id="taskoverviewandstatusindicators">Task overview and status indicators</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/status-yellow.png" alt="Task overview with numbered notes, gray red and green status circles, and completed tasks struck through" /></p>
+<h3 id="customcolorsandrowhighlighting">Custom colors and row highlighting</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/green-hover.png" alt="Green notes, pink heading and highlighted task row" /></p>
+<h3 id="editnotesdirectlyonthedesktop">Edit notes directly on the desktop</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/edit-note.png" alt="Editing the WHERE field inside the desktop overlay" /></p>
+<h3 id="rightclickcolorandtransparencymenu">Right-click color and transparency menu</h3>
+<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/color-transparency-menu.png" alt="Context menu for changing note color and transparency" /></p>
+<h2 id="taskstatusindicators">Task status indicators</h2>
+<p>Click the colored circle next to a task to change its state:</p>
+<ul>
+<li>⚪ <strong>Gray — Open:</strong> The task has not been started.</li>
+<li>🔴 <strong>Red — In Progress:</strong> Work on the task is underway.</li>
+<li>🟢 <strong>Green — Completed:</strong> What, When and Where are struck through.</li>
+</ul>
+<p><strong>Cycle:</strong> ⚪ Open → 🔴 In Progress → 🟢 Completed → ⚪ Open. Each task's status is saved across Windhawk restarts.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Up to <strong>14 numbered note rows</strong> with independently editable What, When and Where fields.</li>
+<li>Optional centered title, adjustable fonts, spacing and colors.</li>
+<li>Three status states for each row: <strong>gray</strong> (open), <strong>red</strong> (in progress), and <strong>green</strong> (done). Completed notes are struck through.</li>
+<li>Add rows, remove the last row, or delete a selected row.</li>
+<li>Move the overlay with a configurable drag-mode hotkey.</li>
+<li>Adjustable transparency and note color; optional always-on-top behavior.</li>
+<li>Saved notes, row statuses, position and display preferences persist across restarts.</li>
+</ul>
+<h2 id="usingthenotes">Using the notes</h2>
+<ul>
+<li><strong>Click</strong> a What, When or Where field to edit it. Press <strong>Enter</strong> to save or <strong>Esc</strong> to cancel. Leaving the edit field also saves.</li>
+<li>Click <strong>+</strong> to add a row (up to the configured maximum) or <strong>-</strong> to remove the last row.</li>
+<li>Click the <strong>X</strong> next to a row to delete that row. At least one row is kept.</li>
+<li>Click a <strong>status circle</strong> to cycle through open, in progress and done.</li>
+<li><strong>Right-click</strong> the overlay to open the color and transparency menu.</li>
+<li><strong>Mouse wheel</strong> over the overlay to scale it in 10% steps (20% to 320%); <strong>middle-click</strong> to reset the scale.</li>
+<li>Press <strong>Ctrl+Alt+N</strong> by default to toggle drag mode, then drag the overlay with the left mouse button. Press the hotkey again to exit drag mode.</li>
+</ul>
+<h2 id="configuration">Configuration</h2>
+<p>Open <strong>Settings</strong> to customize the initial position, always-on-top mode, title, the three default note fields, separators, maximum row count, fonts, colors, default transparency, default scale, and the drag hotkey.</p>
+<p><strong>Note:</strong> Existing edited notes and saved display preferences are stored separately from the initial defaults. Changing a default does not automatically overwrite previously saved note rows. A previously dragged position is preserved when changing unrelated options. Editing X/Y settings explicitly moves the overlay to those new coordinates.</p>
+<h2 id="technicalinformation">Technical information</h2>
+<ul>
+<li>Designed for <strong>Windows / Windhawk</strong>.</li>
+<li>Runs as a Windhawk <strong>tool mod</strong>, using a dedicated <code>windhawk.exe</code> helper process.</li>
+<li>The overlay is implemented with the Windows API and GDI.</li>
+<li>Source code and license: <a href="https://github.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD">GitHub repository</a>.</li>
+</ul>
+<h2 id="projectbackgroundandrelationtoeasynotes">Project background and relation to Easy Notes</h2>
+<p>This mod is an independent Windows/Windhawk implementation inspired by the
+original ToDoLite / What When Where Rainmeter project by the same author:
+https://forum.rainmeter.net/viewtopic.php?t=42543#p215957</p>
+<p>Unlike free-form desktop sticky notes, this mod displays a structured three-field
+task list (What / When / Where) with distinct Open / In Progress / Completed
+states. The current version is intentionally focused on that workflow.</p>
+<h2 id="author">Author</h2>
+<p><strong>SilverAmd</strong></p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Properties Button 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-properties-button#032e419e893a9668ecd3624d7a71293d8a1f58c6</id>
@@ -1101,61 +1170,6 @@ system names use Win32 system colors.</p>
         <author>
             <name>DarkionAvey</name>
             <uri>https://github.com/DarkionAvey</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Toast auto-dismiss 1.0]]></title>
-        <id>https://windhawk.net/mods/toast-auto-dismiss#e30d7bd42160864d3934284b08907fc9997b0d92</id>
-        <link href="https://windhawk.net/mods/toast-auto-dismiss"/>
-        <updated>2026-10-13T11:04:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="toastautodismiss">Toast auto-dismiss</h1>
-<p>Windows 11 toast banners usually disappear on their own in about five
-seconds, but reminders and notifications from some apps can stay on the
-screen until you deal with them.</p>
-<p>The mod watches for toast banners and closes them after a configurable
-timeout (5 seconds by default). Closing works exactly like pressing the
-banner's own close (X) button: the notification is not lost, it stays in
-the notification center, and no app notification settings are changed.</p>
-<p>While the mouse pointer is over a banner, the countdown is paused, so
-the banner's own buttons (reply, dismiss, and similar) remain clickable
-for as long as needed.</p>
-<p>Windows has its own "Dismiss notifications after this amount of
-time" option (Settings &gt; Accessibility &gt; Visual effects, 5 seconds by
-default), but many toasts ignore it and stay on the screen until
-dismissed. The mod closes banners that ignore the system setting, and
-its timeout can also be shorter than the system's five seconds.</p>
-<p>The mod runs in a dedicated Windhawk process (as a tool mod) and does
-not inject into other applications.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Timeout (seconds)</strong> - the maximum time a banner stays on screen.
-Default: 5, set to 0 to disable the mod. Use a smaller value to make
-banners disappear faster, or a larger value as a safety net for
-notifications that get stuck on the screen. The value is limited to
-3600 seconds.</li>
-<li><strong>Pause while hovered</strong> - keep the banner while the pointer is over
-it. Default: on.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>The banner is a regular window owned by the Windows shell. The mod
-finds it by size and position in the bottom right corner of a monitor
-and closes it through UI Automation - the same interface screen readers
-use to press buttons. No hooks are installed, and no system files or
-registry keys are modified.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Banners are detected by their position in the bottom right corner
-of a monitor, so banners shown elsewhere are not closed. This
-includes banners moved to another corner or monitor (for example by
-the Notifications placement mod) and right-to-left languages, where
-banners appear in the bottom left corner.</li>
-<li>Toasts that are meant to stay on the screen until handled, such as
-incoming call or alarm notifications, are closed by the timeout as
-well. Point at a banner to pause the countdown while it matters.</li>
-</ul>]]></content>
-        <author>
-            <name>nikitor32</name>
-            <uri>https://github.com/nikitor32</uri>
         </author>
     </entry>
 </feed>

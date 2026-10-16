@@ -17622,6 +17622,31 @@
         "version": "3.1.1"
       }
     },
+    "what-when-where-notes": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792170077000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792170077000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "SilverAmd",
+        "compilerOptions": "-lgdi32 -lshell32 -lcomctl32 -ladvapi32",
+        "description": "Multi-row notes with a centered title and editable note lines.",
+        "github": "https://github.com/SilverAmd",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "What When Where Notes",
+        "version": "1.3.2"
+      }
+    },
     "widget-board-size-position": {
       "details": {
         "defaultSorting": 3100,
