@@ -147,6 +147,22 @@ def get_string_literals(code: str):
     return [_get_string_literal_value(x) for x in _iter_string_literals(code)]
 
 
+def get_literal_spans(code: str):
+    """The (start, end) offsets of the string and character literals in the
+    code, in order."""
+    spans = []
+    position = 0
+
+    while position < len(code):
+        if literal := _match_literal(code, position):
+            spans.append(literal.span())
+            position = literal.end()
+        else:
+            position = _skip_to_possible_literal_or_comment(code, position + 1)
+
+    return spans
+
+
 def get_string_literal_value(code: str):
     """The value of the code if it is a single string literal, otherwise None."""
     match = _STRING_LITERAL_PATTERN.fullmatch(code.strip())

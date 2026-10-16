@@ -26,6 +26,7 @@ from typing import Callable, Optional, TextIO, Tuple
 import yaml
 
 from extract_mod_symbols import get_mod_symbols
+from preprocessor import blank_comments, get_literal_spans
 
 DISALLOWED_AUTHORS = [
     # https://github.com/ramensoftware/windhawk-mods/pull/676
@@ -1792,6 +1793,73 @@ def validate_specific_keywords(path: Path, mod_source: str):
     return warnings
 
 
+MAX_LINE_LENGTH = 4096
+
+# A single long statement, such as a function call with many arguments, is
+# allowed. Only lines which pack several statements are limited.
+DENSE_CODE_LINE_MIN_STATEMENTS = 3
+DENSE_CODE_LINE_MAX_LENGTH = 150
+
+
+def get_code_lines(mod_source: str) -> list[str]:
+    """The lines of the source without comments, with each string or character
+    literal and each run of spaces and tabs shortened to a single character."""
+    code = blank_comments(mod_source)
+    parts = []
+    copied = 0
+    for start, end in get_literal_spans(code):
+        # Newlines inside a literal are kept so that the line numbers match.
+        parts.append(code[copied:start] + '"' + '\n' * code.count('\n', start, end))
+        copied = end
+    parts.append(code[copied:])
+    return re.sub(r'[ \t]+', ' ', ''.join(parts)).split('\n')
+
+
+def count_statements(code_line: str) -> int:
+    """The number of statements in the line, counted as the semicolons outside
+    of parentheses and brackets."""
+    depth = 0
+    statements = 0
+    for c in code_line:
+        if c in '([':
+            depth += 1
+        elif c in ')]':
+            depth = max(0, depth - 1)
+        elif c == ';' and depth == 0:
+            statements += 1
+    return statements
+
+
+def validate_line_lengths(path: Path, mod_source: str) -> int:
+    """Validate that lines, and the code in them, aren't overly long."""
+    warnings = 0
+
+    for line_num, line in enumerate(mod_source.split('\n'), start=1):
+        if len(line) > MAX_LINE_LENGTH:
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line is {len(line)} characters long, lines must not be longer'
+                f' than {MAX_LINE_LENGTH} characters',
+            )
+
+    for line_num, line in enumerate(get_code_lines(mod_source), start=1):
+        statements = count_statements(line)
+        if (
+            statements >= DENSE_CODE_LINE_MIN_STATEMENTS
+            and len(line) > DENSE_CODE_LINE_MAX_LENGTH
+        ):
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line packs {statements} statements into {len(line)} characters'
+                ' of code, which makes it difficult to review, please split it into'
+                f' multiple lines.',
+            )
+
+    return warnings
+
+
 def normalize_callback_param_types(params: str) -> str:
     """Strip parameter names and normalize whitespace/pointer style in a C parameter list."""
     p = re.sub(r'\s+', ' ', params.strip())
@@ -1884,6 +1952,7 @@ def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -
     warnings += validate_settings(path, mod_source)
     warnings += validate_symbol_hooks(path, mod_source)
     warnings += validate_specific_keywords(path, mod_source)
+    warnings += validate_line_lengths(path, mod_source)
     warnings += validate_callback_signatures(path, mod_source)
 
     return warnings
