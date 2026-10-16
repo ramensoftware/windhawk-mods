@@ -2,13 +2,14 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.8
+// @version         1.9
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
+// @license         MIT
 // @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32 -lversion
 // ==/WindhawkMod==
 
@@ -27,20 +28,22 @@
 * Hide the menu button or Spotify's custom window controls
 * Make Spotify's custom window controls transparent
 * Ignore the minimum window size set by Spotify
-* Change the playback speed
 * Enable transparent rendering to make the transparent parts of the web content transparent
 * Disable forced dark mode to prevent Spotify from forcing dark mode on the CEF UI & web contents
 * Force enable Chrome extension support
 * Block automatic updates
+* Change the playback speed (deprecated; specific old versions only)
 * Use the settings tab on the mod details page to configure the features
+* Screenshot with this mod's native title bar option + transparency option + [WMPotify](https://github.com/Ingan121/WMPotify) + [Aero10](https://www.deviantart.com/vaporvance/art/Aero10-Vista-Seven-909711949) + [OpenGlass](https://github.com/ALTaleX531/OpenGlass) (Windows 10 LTSC 2021)
+![Screenshot](https://raw.githubusercontent.com/Ingan121/WMPotify/refs/heads/master/screenshots/home_aero.png)
 ## Notes
-* Supported CEF versions: 90.4 to 146
+* Supported CEF versions: 90.4 to 151
     * This mod won't work with versions before 90.4
     * Newer versions may work, but they have not been tested.
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.88
+* Supported Spotify versions: 1.1.60 to 1.3.3
     * Newer versions may work, especially when the CEF version is within the supported versions above.
     * If some features, such as transparency or the theme JavaScript integration, don't work on a newly released Spotify version, it's because the CEF version has been updated to a version not yet supported by this mod,
     and thus those features have been disabled for stability and safety. You can try enabling the `Use unsafe methods on untested CEF versions` switch in the mod settings page to disable the safety feature,
@@ -108,7 +111,7 @@
     * Only available in mod version 1.6 and above; missing in older versions
     * Enables or disables transparent mode. Only works when the transparent rendering option is enabled, and native frames are disabled.
 * `setBackdrop(string: type)`
-    * Sets the backdrop type of the main window. Only works on Windows 11 when native frames are enabled.
+    * Sets the backdrop type of the main window. Only supported on Windows 11.
     * `type` can be one of the following values:
         * `"none"`: No backdrop (Only supported on mod version 1.6 and above; will throw an exception on older versions)
         * `"mica"`: Mica backdrop
@@ -195,9 +198,14 @@
   $name:ko-KR: 자동 업데이트 차단*
   $description: Prevents Spotify from updating itself. This has the same effect as "spicetify spotify-updates block".
   $description:ko-KR: Spotify가 스스로 업데이트하는 것을 방지합니다. "spicetify spotify-updates block"과 효과가 같습니다.
+- ignoreminsize: false
+  $name: Ignore minimum window size
+  $name:ko-KR: 최소 창 크기 무시
+  $description: Allows resizing the window below the minimum size set by Spotify
+  $description:ko-KR: Spotify가 정한 최소 크기 이하로 창의 크기를 조절하는 것을 허용합니다
 - playbackspeed: "1"
-  $name: Playback speed
-  $name:ko-KR: 재생 속도
+  $name: (Deprecated) Playback speed
+  $name:ko-KR: (지원 중단) 재생 속도
   $description: "Enter a decimal number. Value 1.0 represents a normal speed\n
     Requires an x64 version of the Spotify client between 1.2.36 and 1.2.66\n
     Spotify 1.2.36-1.2.44: The change will take effect from the next track\n
@@ -208,11 +216,6 @@
     Spotify 1.2.36-1.2.44: 변경 사항은 다음 트랙부터 적용됩니다\n
     Spotify 1.2.45+: 변경 사항은 즉시 적용됩니다\n
     다른 기기에서 재생하는 동안에는 사용할 수 없습니다"
-- ignoreminsize: false
-  $name: Ignore minimum window size
-  $name:ko-KR: 최소 창 크기 무시
-  $description: Allows resizing the window below the minimum size set by Spotify
-  $description:ko-KR: Spotify가 정한 최소 크기 이하로 창의 크기를 조절하는 것을 허용합니다
 - allowuntested: false
   $name: (Advanced) Use unsafe methods on untested CEF versions*
   $name:ko-KR: (고급) 검증되지 않은 CEF 버전에서 안전하지 않은 메서드 사용*
@@ -261,7 +264,8 @@
 142: 1.2.78-1.2.79
 143: 1.2.80-1.2.82
 144: 1.2.83-1.2.87
-146: 1.2.88
+146: 1.2.88-1.3.1
+151: 1.3.2-1.3.3
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -276,6 +280,9 @@ See https://www.spotify.com/opensource/ for more
 #include <regex>
 #include <string_view>
 #include <vector>
+#include <optional>
+#include <chrono>
+#include <atomic>
 #include <aclapi.h>
 #include <dwmapi.h>
 #include <sddl.h>
@@ -291,20 +298,8 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 146
+#define LAST_TESTED_CEF_VERSION 151
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
-
-// Win11 only DWM attributes for Windhawk 1.4
-#define DWMWA_USE_HOSTBACKDROPBRUSH 17
-#define DWMWA_SYSTEMBACKDROP_TYPE 38
-
-#define DWMSBT_MAINWINDOW 2
-#define DWMSBT_TRANSIENTWINDOW 3
-#define DWMSBT_TABBEDWINDOW 4
-
-#ifndef WS_EX_NOREDIRECTIONBITMAP // WH 1.4
-#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
-#endif
 
 struct cte_settings {
     BOOL showframe;
@@ -393,17 +388,24 @@ BOOL g_transparentMode = FALSE;
 double g_playbackSpeed = 1.0;
 int64_t g_currentTrackPlayer = NULL;
 
-DWORD g_lastRendererPid = NULL;
+std::atomic<DWORD> g_lastRendererPid = NULL;
 HANDLE g_hPipe = INVALID_HANDLE_VALUE;
-BOOL g_shouldClosePipe = FALSE;
-std::thread g_pipeThread;
+std::atomic<HANDLE> g_hClientPipe = INVALID_HANDLE_VALUE;
+std::atomic<BOOL> g_shouldClosePipe = FALSE;
+std::mutex g_pipeMutex;
+HANDLE g_stopEvent;
+[[clang::no_destroy]] std::optional<std::thread> g_pipeThread;
 
 std::condition_variable g_queryResponseCv;
 std::mutex g_ipcMutex;
-bool g_queryResponseReceived = false;
+unsigned short g_lastQueryId = 1;
+int g_queryResponseId = -1;
+bool g_pipeDisconnected = false;
 
 struct cte_queryResponse_t {
     BOOL success;
+    int queryId;
+
     BOOL isMaximized;
     BOOL isTopMost;
     BOOL isLayered;
@@ -819,24 +821,6 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 #pragma endregion
 
 #pragma region Memory patches
-// Windhawk 1.4 fallback (it targets Windows 7 by default)
-#if _WIN32_WINNT < 0x0A00
-inline void Wh_DeleteValue(const wchar_t* key) {
-    Wh_SetIntValue(key, -1);
-}
-#endif
-
-// From https://windhawk.net/mods/visual-studio-anti-rich-header
-std::string ReplaceAll(std::string str, const std::string& from, const std::string& to)
-{
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
-    }
-    return str;
-}
-
 // Pass an empty targetPatch to use it as a regex search
 // identifier: String to identify the match, used for caching
 // pbExecutable: Base address to search, pass EXE or DLL address
@@ -1165,8 +1149,8 @@ const char* search_function_instructions(std::wstring identifier, std::string_vi
 
 typedef uint64_t* __fastcall (*CreateTrackPlayer_t)(
     int64_t trackPlayer,
-    void* a2,
-    void* a3,
+    uint64_t* a2,
+    uint64_t* a3,
     double speed,
     unsigned int a5,
     unsigned int a6,
@@ -1251,7 +1235,7 @@ BOOL HookCreateTrackPlayer(char* pbExecutable, BOOL shouldFindSetPlaybackSpeed) 
     }
     if (addr == NULL) return FALSE;
     Wh_Log(L"Hooking CreateTrackPlayer at %p", addr);
-    Wh_SetFunctionHook((void*)addr, (void*)CreateTrackPlayer_hook, (void**)&CreateTrackPlayer_original);
+    WindhawkUtils::SetFunctionHook((CreateTrackPlayer_t)addr, CreateTrackPlayer_hook, &CreateTrackPlayer_original);
 
     // This only works on Spotify x64 1.2.45 and newer
     // Don't find SetPlaybackSpeed on a known unsupported version, as finding non-existent instructions will delay startup
@@ -1268,6 +1252,7 @@ BOOL HookCreateTrackPlayer(char* pbExecutable, BOOL shouldFindSetPlaybackSpeed) 
 #pragma endregion
 
 #pragma region CEF hooks
+// This is only called once, during window creation
 typedef int CEF_CALLBACK (*is_frameless_t)(struct _cef_window_delegate_t* self, struct _cef_window_t* window);
 int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _cef_window_t* window) {
     Wh_Log(L"is_frameless_hook");
@@ -1275,23 +1260,21 @@ int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _
 }
 
 typedef cef_size_t CEF_CALLBACK (*get_minimum_size_t)(struct _cef_view_delegate_t* self, struct _cef_view_t* view);
+get_minimum_size_t get_minimum_size_original;
+get_minimum_size_t* get_minimum_size_addr;
 cef_size_t CEF_CALLBACK get_minimum_size_hook(struct _cef_view_delegate_t* self, struct _cef_view_t* view) {
     //Wh_Log(L"get_minimum_size_hook");
-    cef_size_t* size = (cef_size_t*)calloc(1, sizeof(cef_size_t));
+    cef_size_t size = {};
     if (g_minWidth == -1 || g_minHeight == -1) {
-        if (cte_settings.ignoreminsize) {
-            size->width = 0;
-            size->height = 0;
-        } else {
-            size->width = 800;
-            size->height = 600;
+        if (!cte_settings.ignoreminsize) {
+            size = {800, 600};
         }
     } else {
         float dpi = GetDpiForWindowWithFallback(g_mainHwnd);
-        size->width = g_minWidth / (dpi / 96);
-        size->height = g_minHeight / (dpi / 96);
+        size.width = g_minWidth / (dpi / 96);
+        size.height = g_minHeight / (dpi / 96);
     }
-    return *size;
+    return size;
 }
 
 typedef cef_window_handle_t CEF_CALLBACK (*get_window_handle_t)(struct _cef_window_t* self);
@@ -1321,12 +1304,18 @@ _cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(cef_window_delegate_t
         if (g_mainHwnd == NULL) {
             g_mainHwnd = hWnd;
             if (g_isSpotify) {
-                delegate->base.base.get_minimum_size = get_minimum_size_hook;
+                get_minimum_size_original = delegate->base.base.get_minimum_size;
+                get_minimum_size_addr = &delegate->base.base.get_minimum_size;
+                *get_minimum_size_addr = get_minimum_size_hook;
                 if (!NO_RENDERER_INJECTION) {
-                    g_pipeThread = std::thread([=]() {
-                        CreateNamedPipeServer();
-                    });
-                    g_pipeThread.detach();
+                    g_stopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+                    if (g_stopEvent) {
+                        g_pipeThread = std::thread([=]() {
+                            CreateNamedPipeServer();
+                        });
+                    } else {
+                        Wh_Log(L"CreateEvent failed, GLE=%d", GetLastError());
+                    }
                 }
             }
         }
@@ -1359,6 +1348,7 @@ struct cte_control_container {
 
 int cnt = -1;
 
+// Only called during the main window creation
 typedef void CEF_CALLBACK (*add_child_view_t)(struct _cef_panel_t* self, struct _cef_view_t* view);
 add_child_view_t CEF_CALLBACK add_child_view_original;
 void CEF_CALLBACK add_child_view_hook(struct _cef_panel_t* self, struct _cef_view_t* view) {
@@ -1560,8 +1550,11 @@ BOOL WINAPI CreateProcessW_hook(
     );
 
     if (result && lpCommandLine) {
-        if (wcsstr(lpCommandLine, L"--type=renderer")) {
-            g_lastRendererPid = lpProcessInformation->dwProcessId;
+        if (wcsstr(lpCommandLine, L"--type=renderer") != NULL &&
+            wcsstr(lpCommandLine, L"--extension-process") == NULL &&
+            wcsstr(lpCommandLine, L"--top-chrome-webui") == NULL
+        ) {
+            g_lastRendererPid.store(lpProcessInformation->dwProcessId);
             Wh_Log(L"Renderer process detected");
         }
     }
@@ -1641,12 +1634,15 @@ BOOL WINAPI CreateProcessAsUserW_hook(
     );
 
     if (newEnv) {
-        delete newEnv;
+        delete[] newEnv;
     }
 
     if (result && lpCommandLine) {
-        if (wcsstr(lpCommandLine, L"--type=renderer")) {
-            g_lastRendererPid = lpProcessInformation->dwProcessId;
+        if (wcsstr(lpCommandLine, L"--type=renderer") != NULL &&
+            wcsstr(lpCommandLine, L"--extension-process") == NULL &&
+            wcsstr(lpCommandLine, L"--top-chrome-webui") == NULL
+        ) {
+            g_lastRendererPid.store(lpProcessInformation->dwProcessId);
             Wh_Log(L"Renderer process detected");
         }
     }
@@ -1828,12 +1824,28 @@ void HandleWindhawkComm(LPCWSTR command) {
         }
     #endif
     // /WH:Query
-    } else if (wcscmp(command, L"/WH:Query") == 0) {
+    } else if (wcsncmp(command, L"/WH:Query:", 10) == 0) {
         if (g_hPipe == INVALID_HANDLE_VALUE) {
             return;
         }
+
+        int queryId;
+        if (swscanf(command + 10, L"%d", &queryId) != 1) {
+            Wh_Log(L"Query ID missing!");
+            return;
+        }
+
+        OVERLAPPED overlapped = {};
+        overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (!overlapped.hEvent) {
+            Wh_Log(L"CreateEvent failed, GLE=%d", GetLastError());
+            return;
+        }
+        HANDLE waits[] = {overlapped.hEvent, g_stopEvent};
+
         wchar_t queryResponse[256];
-        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+        swprintf(queryResponse, 256, L"/WH:QueryResponse:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+            /* id */                   queryId,
             /* showframe */            cte_settings.showframe,
             /* showframeonothers */    cte_settings.showframeonothers,
             /* showmenu */             cte_settings.showmenu,
@@ -1861,7 +1873,38 @@ void HandleWindhawkComm(LPCWSTR command) {
             /* immediateSpeedChange */ SetPlaybackSpeed != NULL
         );
         DWORD bytesWritten;
-        WriteFile(g_hPipe, queryResponse, wcslen(queryResponse) * sizeof(wchar_t), &bytesWritten, NULL);
+        BOOL result = WriteFile(g_hPipe, queryResponse, wcslen(queryResponse) * sizeof(wchar_t), &bytesWritten, &overlapped);
+        if (!result) {
+            int error = GetLastError();
+            if (error != ERROR_IO_PENDING) {
+                Wh_Log(L"WriteFile failed, GLE=%d", error);
+                CloseHandle(overlapped.hEvent);
+                return;
+            }
+
+            // Wait for the write operation to complete
+            DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+            if (waitResult != WAIT_OBJECT_0) {
+                if (waitResult == WAIT_OBJECT_0 + 1) {
+                    Wh_Log(L"Stop event received");
+                } else {
+                    Wh_Log(L"Wait failed, GLE=%d", GetLastError());
+                }
+                CancelIoEx(g_hPipe, &overlapped);
+                GetOverlappedResult(g_hPipe, &overlapped, &bytesWritten, TRUE); // let the cancel complete
+                CloseHandle(overlapped.hEvent);
+                return;
+            }
+
+            if (!GetOverlappedResult(g_hPipe, &overlapped, &bytesWritten, FALSE)) {
+                error = GetLastError();
+                Wh_Log(L"GetOverlappedResult failed, GLE=%d", error);
+                CloseHandle(overlapped.hEvent);
+                return;
+            }
+        }
+        Wh_Log(L"QueryResponse send OK");
+        CloseHandle(overlapped.hEvent);
     }
 }
 
@@ -1943,7 +1986,15 @@ void CreateNamedPipeServer() {
     securityAttributes.lpSecurityDescriptor = pSecurityDescriptor;
     securityAttributes.bInheritHandle = TRUE;
 
-    while (!g_shouldClosePipe) {
+    while (!g_shouldClosePipe.load()) {
+        OVERLAPPED overlapped = {};
+        overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (!overlapped.hEvent) {
+            Wh_Log(L"CreateEvent failed, GLE=%d", GetLastError());
+            return;
+        }
+        HANDLE waits[] = {overlapped.hEvent, g_stopEvent};
+
         g_hPipe = CreateNamedPipe(
             PIPE_NAME,                                       // Pipe name
             PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,       // Read/Write access with overlapped I/O
@@ -1963,13 +2014,42 @@ void CreateNamedPipeServer() {
         }
 
         Wh_Log(L"Waiting for client to connect...");
-        BOOL connected = ConnectNamedPipe(g_hPipe, NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
+        BOOL connected = ConnectNamedPipe(g_hPipe, &overlapped);// ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
+
+        if (!connected) {
+            int error = GetLastError();
+            if (error == ERROR_IO_PENDING) {
+                DWORD bytes;
+                DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+                if (waitResult != WAIT_OBJECT_0) {
+                    if (waitResult == WAIT_OBJECT_0 + 1) {
+                        Wh_Log(L"Stop event received");
+                    } else {
+                        Wh_Log(L"Wait failed, GLE=%d", GetLastError());
+                    }
+                    CancelIoEx(g_hPipe, &overlapped);
+                    GetOverlappedResult(g_hPipe, &overlapped, &bytes, TRUE);
+                }
+
+                if (GetOverlappedResult(g_hPipe, &overlapped, &bytes, FALSE)) {
+                    connected = true;
+                } else {
+                    Wh_Log(L"GetOverlappedResult failed, GLE=%d", GetLastError());
+                }
+            } else if (error == ERROR_PIPE_CONNECTED) {
+                connected = true;
+            } else {
+                Wh_Log(L"ConnectNamedPipe failed, GLE=%d", GetLastError());
+            }
+        }
 
         if (connected) {
             DWORD clientPid = 0;
             if (GetNamedPipeClientProcessId(g_hPipe, &clientPid)) {
-                if (clientPid != g_lastRendererPid) {
-                    Wh_Log(L"Rejected pipe connection from unexpected PID: %lu (expected %lu)", clientPid, g_lastRendererPid);
+                DWORD expectedPid = g_lastRendererPid.load();
+                if (clientPid != expectedPid) {
+                    Wh_Log(L"Rejected pipe connection from unexpected PID: %lu (expected %lu)", clientPid, expectedPid);
+                    CloseHandle(overlapped.hEvent);
                     CloseHandle(g_hPipe);
                     continue;
                 }
@@ -1978,39 +2058,65 @@ void CreateNamedPipeServer() {
             Wh_Log(L"Client connected, waiting for message...");
             wchar_t buffer[512];
             DWORD bytesRead;
-            while (!g_shouldClosePipe) {
-                BOOL result = ReadFile(g_hPipe, buffer, sizeof(buffer) - sizeof(wchar_t), &bytesRead, NULL);
-                if (result) {
-                    if (bytesRead >= sizeof(buffer) - sizeof(wchar_t)) {
-                        Wh_Log(L"Buffer overflow detected");
-                        continue;
-                    }
-                    buffer[bytesRead / sizeof(wchar_t)] = L'\0';
-                    Wh_Log(L"Received message: %s", buffer);
-                    HandleWindhawkComm(buffer);
-                } else {
+            while (!g_shouldClosePipe.load()) {
+                BOOL result = ReadFile(g_hPipe, buffer, sizeof(buffer) - sizeof(wchar_t), &bytesRead, &overlapped);
+                if (!result) {
                     DWORD error = GetLastError();
-                    if (error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED) {
-                        Wh_Log(L"Client disconnected, GLE=%d", error);
+                    if (error != ERROR_IO_PENDING) {
+                        if (error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED) {
+                            Wh_Log(L"Client disconnected, GLE=%d", error);
+                        } else {
+                            Wh_Log(L"Unknown IPC error, GLE=%d", error);
+                        }
+                        break;
+                    }
+
+                    DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+                    if (waitResult != WAIT_OBJECT_0) {
+                        if (waitResult == WAIT_OBJECT_0 + 1) {
+                            Wh_Log(L"Stop event received");
+                        } else {
+                            Wh_Log(L"Wait failed, GLE=%d", GetLastError());
+                        }
+                        CancelIoEx(g_hPipe, &overlapped);
+                        GetOverlappedResult(g_hPipe, &overlapped, &bytesRead, TRUE); // let the cancel complete
+                        break;
+                    }
+
+                    if (!GetOverlappedResult(g_hPipe, &overlapped, &bytesRead, FALSE)) {
+                        Wh_Log(L"GetOverlappedResult failed, GLE=%d", GetLastError());
                         break;
                     }
                 }
+
+                if (bytesRead >= sizeof(buffer) - sizeof(wchar_t)) {
+                    Wh_Log(L"Buffer overflow detected");
+                    continue;
+                }
+                buffer[bytesRead / sizeof(wchar_t)] = L'\0';
+                Wh_Log(L"Received message: %s", buffer);
+                HandleWindhawkComm(buffer);
             }
-        } else {
-            Wh_Log(L"ConnectNamedPipe failed, GLE=%d", GetLastError());
         }
 
         Wh_Log(L"Closing pipe...");
+        CloseHandle(overlapped.hEvent);
         CloseHandle(g_hPipe);
         g_hPipe = INVALID_HANDLE_VALUE;
-        g_lastRendererPid = NULL;
     }
 
     LocalFree(pSecurityDescriptor);
 }
 
 int ConnectToNamedPipe() {
-    g_hPipe = CreateFile(
+    g_stopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!g_stopEvent) {
+        int gle = GetLastError();
+        Wh_Log(L"CreateEvent failed, GLE=%d", gle);
+        return gle;
+    }
+
+    HANDLE hPipe = CreateFile(
         PIPE_NAME,
         GENERIC_READ | GENERIC_WRITE,
         0,
@@ -2020,11 +2126,14 @@ int ConnectToNamedPipe() {
         NULL
     );
 
-    if (g_hPipe == INVALID_HANDLE_VALUE) {
+    if (hPipe == INVALID_HANDLE_VALUE) {
         int gle = GetLastError();
         Wh_Log(L"CreateFile failed, GLE=%d", gle);
+        CloseHandle(g_stopEvent);
         return gle;
     }
+
+    g_hClientPipe.store(hPipe);
 
     g_pipeThread = std::thread([]() {
         wchar_t buffer[512];
@@ -2035,122 +2144,187 @@ int ConnectToNamedPipe() {
             Wh_Log(L"CreateEvent failed, GLE=%d", GetLastError());
             return;
         }
+        HANDLE waits[] = {overlapped.hEvent, g_stopEvent};
 
-        while (!g_shouldClosePipe) {
-            BOOL result = ReadFile(g_hPipe, buffer, sizeof(buffer) - sizeof(wchar_t), &bytesRead, &overlapped);
-            if (!result && GetLastError() == ERROR_IO_PENDING) {
-                DWORD waitResult = WaitForSingleObject(overlapped.hEvent, INFINITE);
-                if (waitResult == WAIT_OBJECT_0) {
-                    if (GetOverlappedResult(g_hPipe, &overlapped, &bytesRead, FALSE)) {
-                        buffer[bytesRead / sizeof(wchar_t)] = L'\0';
-                        Wh_Log(L"Received message: %s", buffer);
-                        if (wcsncmp(buffer, L"/WH:QueryResponse:", 18) == 0) {
-                            if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
-                                &g_queryResponse.showframe,
-                                &g_queryResponse.showframeonothers,
-                                &g_queryResponse.showmenu,
-                                &g_queryResponse.showcontrols,
-                                &g_queryResponse.transparentcontrols,
-                                &g_queryResponse.transparentrendering,
-                                &g_queryResponse.ignoreminsize,
-                                &g_queryResponse.noforceddarkmode,
-                                &g_queryResponse.forceextensions,
-                                &g_queryResponse.blockupdates,
-                                &g_queryResponse.allowuntested,
-                                &g_queryResponse.isMaximized,
-                                &g_queryResponse.isTopMost,
-                                &g_queryResponse.isLayered,
-                                &g_queryResponse.isTransparent,
-                                &g_queryResponse.isThemingEnabled,
-                                &g_queryResponse.isDwmEnabled,
-                                &g_queryResponse.hwAccelerated,
-                                &g_queryResponse.minWidth,
-                                &g_queryResponse.minHeight,
-                                &g_queryResponse.titleLocked,
-                                &g_queryResponse.dpi,
-                                &g_queryResponse.speedModSupported,
-                                &g_queryResponse.playbackSpeed,
-                                &g_queryResponse.immediateSpeedChange) == 25
-                            ) {
-                                g_queryResponse.success = TRUE;
-                            }
-                            // Notify the condition variable
-                            {
-                                std::lock_guard<std::mutex> lock(g_ipcMutex);
-                                g_queryResponseReceived = true;
-                            }
-                            g_queryResponseCv.notify_one();
+        while (!g_shouldClosePipe.load()) {
+            HANDLE hPipe = g_hClientPipe.load();
+            BOOL result = ReadFile(hPipe, buffer, sizeof(buffer) - sizeof(wchar_t), &bytesRead, &overlapped);
+            if (!result) {
+                int error = GetLastError();
+                if (error == ERROR_IO_PENDING) {
+                    DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+                    if (waitResult != WAIT_OBJECT_0) {
+                        if (waitResult == WAIT_OBJECT_0 + 1) {
+                            Wh_Log(L"Stop event received");
+                        } else {
+                            Wh_Log(L"Wait failed, GLE=%d", GetLastError());
                         }
-                    } else {
-                        DWORD error = GetLastError();
-                        if (error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED) {
-                            Wh_Log(L"Server disconnected, GLE=%d", error);
-                            break;
-                        }
+                        CancelIoEx(hPipe, &overlapped);
+                        GetOverlappedResult(hPipe, &overlapped, &bytesRead, TRUE); // let the cancel complete
+                        break;
                     }
+
+                    if (!GetOverlappedResult(hPipe, &overlapped, &bytesRead, FALSE)) {
+                        Wh_Log(L"GetOverlappedResult failed, GLE=%d", GetLastError());
+                        break;
+                    }
+                } else {
+                    if (error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED) {
+                        Wh_Log(L"Server disconnected, GLE=%d", error);
+                    } else {
+                        Wh_Log(L"Unknown IPC error, GLE=%d", error);
+                    }
+                    break;
+                }
+            }
+
+            buffer[bytesRead / sizeof(wchar_t)] = L'\0';
+            Wh_Log(L"Received message: %s", buffer);
+            if (wcsncmp(buffer, L"/WH:QueryResponse:", 18) == 0) {
+                cte_queryResponse_t response = {};
+                if (swscanf(buffer + 18, L"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%lf:%d",
+                    &response.queryId,
+                    &response.showframe,
+                    &response.showframeonothers,
+                    &response.showmenu,
+                    &response.showcontrols,
+                    &response.transparentcontrols,
+                    &response.transparentrendering,
+                    &response.ignoreminsize,
+                    &response.noforceddarkmode,
+                    &response.forceextensions,
+                    &response.blockupdates,
+                    &response.allowuntested,
+                    &response.isMaximized,
+                    &response.isTopMost,
+                    &response.isLayered,
+                    &response.isTransparent,
+                    &response.isThemingEnabled,
+                    &response.isDwmEnabled,
+                    &response.hwAccelerated,
+                    &response.minWidth,
+                    &response.minHeight,
+                    &response.titleLocked,
+                    &response.dpi,
+                    &response.speedModSupported,
+                    &response.playbackSpeed,
+                    &response.immediateSpeedChange) == 26
+                ) {
+                    response.success = TRUE;
+                    // Notify the condition variable
+                    {
+                        std::lock_guard<std::mutex> lock(g_ipcMutex);
+                        g_queryResponse = response;
+                        g_queryResponseId = g_queryResponse.queryId;
+                    }
+                    g_queryResponseCv.notify_one();
                 }
             }
         }
+
+        {
+            std::lock_guard<std::mutex> lock(g_ipcMutex);
+            g_pipeDisconnected = true;
+        }
+        g_queryResponseCv.notify_all();
+
         CloseHandle(overlapped.hEvent);
-        CloseHandle(g_hPipe);
-        g_hPipe = INVALID_HANDLE_VALUE;
+        {
+            std::lock_guard lock(g_pipeMutex);
+            HANDLE hPipe = g_hClientPipe.exchange(INVALID_HANDLE_VALUE);
+            if (hPipe != INVALID_HANDLE_VALUE) {
+                CloseHandle(hPipe);
+            }
+        }
     });
-    g_pipeThread.detach();
 
     return 0;
 }
 
-int SendNamedPipeMessage(LPCWSTR message) {
-    if (g_hPipe == INVALID_HANDLE_VALUE) {
-        Wh_Log(L"SendNamedPipeMessage failed: pipe is not connected");
-        return ERROR_PIPE_NOT_CONNECTED;
-    }
+int SendNamedPipeMessage(LPCWSTR message, cte_queryResponse_t* response = NULL) {
+    {
+        std::unique_lock lock(g_pipeMutex);
 
-    DWORD bytesWritten;
-    size_t messageLength = wcslen(message) * sizeof(wchar_t);
-    Wh_Log(L"Sending message: %s", message);
+        HANDLE hPipe = g_hClientPipe.load();
+        if (hPipe == INVALID_HANDLE_VALUE) {
+            Wh_Log(L"SendNamedPipeMessage failed: pipe is not connected");
+            return ERROR_PIPE_NOT_CONNECTED;
+        }
 
-    OVERLAPPED overlapped = {};
-    overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!overlapped.hEvent) {
-        int gle = GetLastError();
-        Wh_Log(L"CreateEvent failed, GLE=%d", gle);
-        return gle;
-    }
+        DWORD bytesWritten;
+        size_t messageLength = wcslen(message) * sizeof(wchar_t);
+        Wh_Log(L"Sending message: %s", message);
 
-    BOOL result = WriteFile(g_hPipe, message, messageLength, &bytesWritten, &overlapped);
-    if (!result && GetLastError() != ERROR_IO_PENDING) {
-        int gle = GetLastError();
-        Wh_Log(L"WriteFile failed, GLE=%d", gle);
+        OVERLAPPED overlapped = {};
+        overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (!overlapped.hEvent) {
+            int gle = GetLastError();
+            Wh_Log(L"CreateEvent failed, GLE=%d", gle);
+            return gle;
+        }
+        HANDLE waits[] = {overlapped.hEvent, g_stopEvent};
+
+        BOOL result = WriteFile(hPipe, message, messageLength, &bytesWritten, &overlapped);
+        if (!result) {
+            int error = GetLastError();
+            if (error != ERROR_IO_PENDING) {
+                Wh_Log(L"WriteFile failed, GLE=%d", error);
+                CloseHandle(overlapped.hEvent);
+                return error;
+            }
+
+            // Wait for the write operation to complete
+            DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, 2000);
+            if (waitResult != WAIT_OBJECT_0) { // stop event
+                int error = GetLastError();
+                if (waitResult == WAIT_OBJECT_0 + 1) {
+                    Wh_Log(L"Stop event received");
+                    error = ERROR_OPERATION_ABORTED;
+                } else if (waitResult == WAIT_TIMEOUT) {
+                    Wh_Log(L"Query wait timed out");
+                    error = ERROR_TIMEOUT;
+                } else {
+                    Wh_Log(L"Wait failed, GLE=%d", error);
+                }
+                CancelIoEx(hPipe, &overlapped);
+                GetOverlappedResult(hPipe, &overlapped, &bytesWritten, TRUE); // let the cancel complete
+
+                CloseHandle(overlapped.hEvent);
+                return error;
+            }
+
+            if (!GetOverlappedResult(hPipe, &overlapped, &bytesWritten, FALSE)) {
+                error = GetLastError();
+                Wh_Log(L"GetOverlappedResult failed, GLE=%d", error);
+                CloseHandle(overlapped.hEvent);
+                return error;
+            }
+        }
+
+        Wh_Log(L"Message sent successfully");
         CloseHandle(overlapped.hEvent);
-        return gle;
     }
 
-    // Wait for the write operation to complete
-    DWORD waitResult = WaitForSingleObject(overlapped.hEvent, INFINITE);
-    if (waitResult != WAIT_OBJECT_0) {
-        int gle = GetLastError();
-        Wh_Log(L"WaitForSingleObject failed, GLE=%d", gle);
-        CloseHandle(overlapped.hEvent);
-        return gle;
-    }
-
-    // Check the result of the write operation
-    if (!GetOverlappedResult(g_hPipe, &overlapped, &bytesWritten, FALSE)) {
-        int gle = GetLastError();
-        Wh_Log(L"GetOverlappedResult failed, GLE=%d", gle);
-        CloseHandle(overlapped.hEvent);
-        return gle;
-    }
-
-    Wh_Log(L"Message sent successfully");
-    CloseHandle(overlapped.hEvent);
-
-    if (wcsncmp(message, L"/WH:Query", 9) == 0) {
+    if (wcsncmp(message, L"/WH:Query:", 10) == 0) {
         // Wait for the query response
         std::unique_lock<std::mutex> lock(g_ipcMutex);
-        g_queryResponseCv.wait(lock, [] { return g_queryResponseReceived; });
-        g_queryResponseReceived = false;
+
+        int queryId;
+        if (swscanf(message + 10, L"%d", &queryId) != 1) {
+            Wh_Log(L"Query ID missing!");
+            return ERROR_OPERATION_ABORTED;
+        }
+
+        g_queryResponseCv.wait_for(lock, std::chrono::seconds(2), [queryId] { return g_queryResponseId == queryId || g_pipeDisconnected; });
+        if (g_queryResponseId != queryId) {
+            if (g_pipeDisconnected) {
+                return ERROR_PIPE_NOT_CONNECTED;
+            }
+            return ERROR_TIMEOUT;
+        } else if (response) {
+            *response = g_queryResponse;
+        }
+        g_queryResponseId = -1;
     }
 
     return 0;
@@ -2159,7 +2333,7 @@ int SendNamedPipeMessage(LPCWSTR message) {
 int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception) {
     Wh_Log(L"WindhawkCommV8Handler called with name: %s", name->str);
     std::u16string nameStr(name->str, name->length);
-    if (g_hPipe == INVALID_HANDLE_VALUE) {
+    if (g_hClientPipe.load() == INVALID_HANDLE_VALUE) {
         cef_string_t* msg = GenerateCefString(u"Disconnected from the Windhawk mod running in the main process. Is the mod unloaded?");
         *exception = *msg;
         free(msg->str);
@@ -2356,40 +2530,40 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
         }
     #endif
     } else if (nameStr == u"query") {
-        ipcRes = SendNamedPipeMessage(L"/WH:Query");
-        if (g_queryResponse.success) {
+        cte_queryResponse_t response = {};
+        ipcRes = SendNamedPipeMessage((L"/WH:Query:" + std::to_wstring(g_lastQueryId++)).c_str(), &response);
+        if (ipcRes == 0 && response.success) {
             cef_v8value_t* retobj = cef_v8value_create_object(NULL, NULL);
             cef_v8value_t* configObj = cef_v8value_create_object(NULL, NULL);
-            AddValueToObj(configObj, u"showframe", cef_v8value_create_bool(g_queryResponse.showframe));
-            AddValueToObj(configObj, u"showframeonothers", cef_v8value_create_bool(g_queryResponse.showframeonothers));
-            AddValueToObj(configObj, u"showmenu", cef_v8value_create_bool(g_queryResponse.showmenu));
-            AddValueToObj(configObj, u"showcontrols", cef_v8value_create_bool(g_queryResponse.showcontrols));
-            AddValueToObj(configObj, u"transparentcontrols", cef_v8value_create_bool(g_queryResponse.transparentcontrols));
-            AddValueToObj(configObj, u"transparentrendering", cef_v8value_create_bool(g_queryResponse.transparentrendering));
-            AddValueToObj(configObj, u"ignoreminsize", cef_v8value_create_bool(g_queryResponse.ignoreminsize));
-            AddValueToObj(configObj, u"noforceddarkmode", cef_v8value_create_bool(g_queryResponse.noforceddarkmode));
-            AddValueToObj(configObj, u"forceextensions", cef_v8value_create_bool(g_queryResponse.forceextensions));
-            AddValueToObj(configObj, u"blockupdates", cef_v8value_create_bool(g_queryResponse.blockupdates));
-            AddValueToObj(configObj, u"allowuntested", cef_v8value_create_bool(g_queryResponse.allowuntested));
+            AddValueToObj(configObj, u"showframe", cef_v8value_create_bool(response.showframe));
+            AddValueToObj(configObj, u"showframeonothers", cef_v8value_create_bool(response.showframeonothers));
+            AddValueToObj(configObj, u"showmenu", cef_v8value_create_bool(response.showmenu));
+            AddValueToObj(configObj, u"showcontrols", cef_v8value_create_bool(response.showcontrols));
+            AddValueToObj(configObj, u"transparentcontrols", cef_v8value_create_bool(response.transparentcontrols));
+            AddValueToObj(configObj, u"transparentrendering", cef_v8value_create_bool(response.transparentrendering));
+            AddValueToObj(configObj, u"ignoreminsize", cef_v8value_create_bool(response.ignoreminsize));
+            AddValueToObj(configObj, u"noforceddarkmode", cef_v8value_create_bool(response.noforceddarkmode));
+            AddValueToObj(configObj, u"forceextensions", cef_v8value_create_bool(response.forceextensions));
+            AddValueToObj(configObj, u"blockupdates", cef_v8value_create_bool(response.blockupdates));
+            AddValueToObj(configObj, u"allowuntested", cef_v8value_create_bool(response.allowuntested));
             AddValueToObj(retobj, u"options", configObj);
-            AddValueToObj(retobj, u"isMaximized", cef_v8value_create_bool(g_queryResponse.isMaximized));
-            AddValueToObj(retobj, u"isTopMost", cef_v8value_create_bool(g_queryResponse.isTopMost));
-            AddValueToObj(retobj, u"isLayered", cef_v8value_create_bool(g_queryResponse.isLayered));
-            AddValueToObj(retobj, u"isTransparent", cef_v8value_create_bool(g_queryResponse.isTransparent));
-            AddValueToObj(retobj, u"isThemingEnabled", cef_v8value_create_bool(g_queryResponse.isThemingEnabled));
-            AddValueToObj(retobj, u"isDwmEnabled", cef_v8value_create_bool(g_queryResponse.isDwmEnabled));
-            AddValueToObj(retobj, u"hwAccelerated", cef_v8value_create_bool(g_queryResponse.hwAccelerated));
-            AddValueToObj(retobj, u"minWidth", cef_v8value_create_int(g_queryResponse.minWidth));
-            AddValueToObj(retobj, u"minHeight", cef_v8value_create_int(g_queryResponse.minHeight));
-            AddValueToObj(retobj, u"titleLocked", cef_v8value_create_bool(g_queryResponse.titleLocked));
-            AddValueToObj(retobj, u"dpi", cef_v8value_create_int(g_queryResponse.dpi));
-            AddValueToObj(retobj, u"speedModSupported", cef_v8value_create_bool(g_queryResponse.speedModSupported));
+            AddValueToObj(retobj, u"isMaximized", cef_v8value_create_bool(response.isMaximized));
+            AddValueToObj(retobj, u"isTopMost", cef_v8value_create_bool(response.isTopMost));
+            AddValueToObj(retobj, u"isLayered", cef_v8value_create_bool(response.isLayered));
+            AddValueToObj(retobj, u"isTransparent", cef_v8value_create_bool(response.isTransparent));
+            AddValueToObj(retobj, u"isThemingEnabled", cef_v8value_create_bool(response.isThemingEnabled));
+            AddValueToObj(retobj, u"isDwmEnabled", cef_v8value_create_bool(response.isDwmEnabled));
+            AddValueToObj(retobj, u"hwAccelerated", cef_v8value_create_bool(response.hwAccelerated));
+            AddValueToObj(retobj, u"minWidth", cef_v8value_create_int(response.minWidth));
+            AddValueToObj(retobj, u"minHeight", cef_v8value_create_int(response.minHeight));
+            AddValueToObj(retobj, u"titleLocked", cef_v8value_create_bool(response.titleLocked));
+            AddValueToObj(retobj, u"dpi", cef_v8value_create_int(response.dpi));
+            AddValueToObj(retobj, u"speedModSupported", cef_v8value_create_bool(response.speedModSupported));
             #ifdef _M_X64
-            AddValueToObj(retobj, u"playbackSpeed", cef_v8value_create_double(g_queryResponse.playbackSpeed));
-            AddValueToObj(retobj, u"immediateSpeedChange", cef_v8value_create_bool(g_queryResponse.immediateSpeedChange));
+            AddValueToObj(retobj, u"playbackSpeed", cef_v8value_create_double(response.playbackSpeed));
+            AddValueToObj(retobj, u"immediateSpeedChange", cef_v8value_create_bool(response.immediateSpeedChange));
             #endif
             *retval = retobj;
-            g_queryResponse.success = FALSE;
         } else {
             cef_string_t* msg = GenerateCefString(u"Error: Query response not received");
             *exception = *msg;
@@ -2408,34 +2582,37 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
     return TRUE;
 }
 
-cef_v8handler_t* cancelCosmosRequest_v8handler;
+std::vector<cef_v8handler_t*> cancelCosmosRequest_v8handlers;
+std::vector<cef_v8handler_t*> cancelEsperantoCall_v8handlers;
+std::vector<cef_v8handler_t*> _getSpotifyModule_v8handlers;
+cef_v8handler_t* last_cancelCosmosRequest_v8handler;
 typedef int CEF_CALLBACK (*v8func_exec_t)(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception);
-v8func_exec_t CEF_CALLBACK cancelCosmosRequest_original;
+v8func_exec_t CEF_CALLBACK cancelCosmosRequest_original; // These addresses are static (consistent on multiple function creations)
 v8func_exec_t CEF_CALLBACK cancelEsperantoCall_original;
 v8func_exec_t CEF_CALLBACK _getSpotifyModule_original;
 
 int InjectCTEV8Handler(cef_v8value_t* const* arguments, cef_v8value_t** retval) {
     cef_string_t* arg = arguments[0]->get_string_value(arguments[0]); // NULL when it's an empty string
-    if (arg != NULL && cancelCosmosRequest_v8handler != NULL && u"ctewh" == std::u16string(arg->str, arg->length)) {
+    if (arg != NULL && last_cancelCosmosRequest_v8handler != NULL && u"ctewh" == std::u16string(arg->str, arg->length)) {
         Wh_Log(L"CTEWH is being requested");
         cef_v8value_t* retobj = cef_v8value_create_object(NULL, NULL);
-        AddFunctionToObj(retobj, u"query", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"extendFrame", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"minimize", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"maximizeRestore", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"close", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"focus", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"setLayered", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"setTransparent", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"setBackdrop", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"resizeTo", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"setMinSize", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"setTopMost", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"setTitle", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"lockTitle", cancelCosmosRequest_v8handler);
-        AddFunctionToObj(retobj, u"openSpotifyMenu", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"query", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"extendFrame", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"minimize", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"maximizeRestore", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"close", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"focus", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setLayered", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setTransparent", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setBackdrop", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"resizeTo", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setMinSize", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setTopMost", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setTitle", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"lockTitle", last_cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"openSpotifyMenu", last_cancelCosmosRequest_v8handler);
         #ifdef _M_X64
-        AddFunctionToObj(retobj, u"setPlaybackSpeed", cancelCosmosRequest_v8handler);
+        AddFunctionToObj(retobj, u"setPlaybackSpeed", last_cancelCosmosRequest_v8handler);
         #endif
         cef_v8value_t* initialConfigObj = cef_v8value_create_object(NULL, NULL);
         AddValueToObj(initialConfigObj, u"showframe", cef_v8value_create_bool(cte_settings.showframe));
@@ -2493,6 +2670,17 @@ int CEF_CALLBACK _getSpotifyModule_hook(cef_v8handler_t* self, const cef_string_
     return _getSpotifyModule_original(self, name, object, argumentsCount, arguments, retval, exception);
 }
 
+void PruneV8Handlers(std::vector<cef_v8handler_t*>& handlers, v8func_exec_t original) {
+    std::erase_if(handlers, [original](cef_v8handler_t* h) {
+        if (!h->base.has_one_ref(&h->base)) {
+            return false;
+        }
+        h->execute = original;
+        h->base.release(&h->base);
+        return true;
+    });
+}
+
 cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](const cef_string_t* name, cef_v8handler_t* handler) -> cef_v8value_t* {
     Wh_Log(L"cef_v8value_create_function called with name: %s", name->str);
     // This function exists on all Spotify versions supported by this mod
@@ -2501,27 +2689,42 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
     // And libcef.dll does not expose a function to create an internally managed V8 handlers
 
     // ... Yes, I should've used this function for API access from the beginning, obviously
+    HANDLE hPipe = g_hClientPipe.load();
     if (u"cancelCosmosRequest" == std::u16string(name->str, name->length)) {
         Wh_Log(L"cancelCosmosRequest is being created");
-        if (g_hPipe == INVALID_HANDLE_VALUE) {
+        if (hPipe == INVALID_HANDLE_VALUE) {
             // API won't be available if the pipe is not connected
             return cef_v8value_create_function_original(name, handler);
         }
-        cancelCosmosRequest_original = handler->execute;
-        handler->execute = cancelCosmosRequest_hook;
-        cancelCosmosRequest_v8handler = handler;
+        if (handler->execute != cancelCosmosRequest_hook) {
+            cancelCosmosRequest_original = handler->execute;
+            handler->execute = cancelCosmosRequest_hook;
+            // Release handlers that only this mod hold reference
+            PruneV8Handlers(cancelCosmosRequest_v8handlers, cancelCosmosRequest_original);
+            // These V8 functions are created twice on page load (seems the first one is only used)
+            // And it gets called twice whenever the page reloads
+            // So save it in a vector and restore all on uninit
+            cancelCosmosRequest_v8handlers.push_back(handler);
+            handler->base.add_ref(&handler->base);
+            last_cancelCosmosRequest_v8handler = handler;
+        }
         return cef_v8value_create_function_original(name, handler);
     }
     // Originally _getSpotifyModule was hooked but that function was removed in Spotify 1.2.56, which was released while this mod was in development
     // So, we're hooking cancelEsperantoCall instead. The function choice and arguments are odd, as it was originally intended for _getSpotifyModule. Deal with it.
     if (u"cancelEsperantoCall" == std::u16string(name->str, name->length)) {
         Wh_Log(L"cancelEsperantoCall is being created");
-        if (g_hPipe == INVALID_HANDLE_VALUE) {
+        if (hPipe == INVALID_HANDLE_VALUE) {
             // API won't be available if the pipe is not connected
             return cef_v8value_create_function_original(name, handler);
         }
-        cancelEsperantoCall_original = handler->execute;
-        handler->execute = cancelEsperantoCall_hook;
+        if (handler->execute != cancelEsperantoCall_hook) {
+            cancelEsperantoCall_original = handler->execute;
+            handler->execute = cancelEsperantoCall_hook;
+            PruneV8Handlers(cancelEsperantoCall_v8handlers, cancelEsperantoCall_original);
+            cancelEsperantoCall_v8handlers.push_back(handler);
+            handler->base.add_ref(&handler->base);
+        }
         return cef_v8value_create_function_original(name, handler);
     }
     // And hook _getSpotifyModule too for 1.2.4-1.2.32 which lack cancelEsperantoCall
@@ -2529,12 +2732,17 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
     // But it's too late, 0.6 is already released without realizing that cancelEsperantoCall is only available on 1.2.33+
     if (u"_getSpotifyModule" == std::u16string(name->str, name->length)) {
         Wh_Log(L"_getSpotifyModule is being created");
-        if (g_hPipe == INVALID_HANDLE_VALUE) {
+        if (hPipe == INVALID_HANDLE_VALUE) {
             // API won't be available if the pipe is not connected
             return cef_v8value_create_function_original(name, handler);
         }
-        _getSpotifyModule_original = handler->execute;
-        handler->execute = _getSpotifyModule_hook;
+        if (handler->execute != _getSpotifyModule_hook) {
+            _getSpotifyModule_original = handler->execute;
+            handler->execute = _getSpotifyModule_hook;
+            PruneV8Handlers(_getSpotifyModule_v8handlers, _getSpotifyModule_original);
+            _getSpotifyModule_v8handlers.push_back(handler);
+            handler->base.add_ref(&handler->base);
+        }
     }
     return cef_v8value_create_function_original(name, handler);
 };
@@ -2573,8 +2781,7 @@ BOOL InitSpotifyRendererHooks(int major) {
         return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)cef_v8value_create_function, (void*)cef_v8value_create_function_hook,
-                       (void**)&cef_v8value_create_function_original);
+    WindhawkUtils::SetFunctionHook(cef_v8value_create_function, cef_v8value_create_function_hook, &cef_v8value_create_function_original);
 
     return TRUE;
 }
@@ -2595,21 +2802,19 @@ void LoadSettings() {
 }
 
 void ApplySpeedFromSettings(BOOL notifyInvalid = FALSE) {
-    PCWSTR newSpeedStr = Wh_GetStringSetting(L"playbackspeed");
-    Wh_Log(L"ApplySpeedFromSettings: %s", newSpeedStr);
-    if (*newSpeedStr == L'\0') {
+    auto newSpeedStr = WindhawkUtils::StringSetting::make(L"playbackspeed");
+    Wh_Log(L"ApplySpeedFromSettings: %s", newSpeedStr.get());
+    if (!*newSpeedStr) {
         g_playbackSpeed = 1;
         #ifdef _M_X64
             if (SetPlaybackSpeed != NULL && g_currentTrackPlayer != NULL) {
                 SetPlaybackSpeed(g_currentTrackPlayer, 1);
             }
         #endif
-        Wh_FreeStringSetting(newSpeedStr);
         return;
     }
     try {
-        double newSpeed = std::stod(newSpeedStr);
-        Wh_FreeStringSetting(newSpeedStr);
+        double newSpeed = std::stod(std::wstring(newSpeedStr));
         if (fabs(newSpeed - g_playbackSpeed) > 1e-6) {
             #ifdef _M_X64
                 if (CreateTrackPlayer_original == NULL) {
@@ -2638,12 +2843,10 @@ void ApplySpeedFromSettings(BOOL notifyInvalid = FALSE) {
         if (notifyInvalid) {
             MessageBoxW(NULL, L"Playback speed must be entered as a decimal number like 0.25, 1.0, or 1.5", L"CEF/Spotify Tweaks", MB_OK);
         }
-        Wh_FreeStringSetting(newSpeedStr);
     } catch (const std::out_of_range& e) {
         if (notifyInvalid) {
             MessageBoxW(NULL, L"Playback speed must be faster than 0 and less than or equal to 5.0", L"CEF/Spotify Tweaks", MB_OK);
         }
-        Wh_FreeStringSetting(newSpeedStr);
     }
 }
 
@@ -2736,7 +2939,8 @@ BOOL Wh_ModInit() {
         if (g_isSpotify && isInitialThread &&
             major >= 108 && isTestedVersion && !NO_RENDERER_INJECTION &&
             wcsstr(args, L"--type=renderer") != NULL &&
-            wcsstr(args, L"--extension-process") == NULL
+            wcsstr(args, L"--extension-process") == NULL &&
+            wcsstr(args, L"--top-chrome-webui") == NULL
         ) {
             return InitSpotifyRendererHooks(major);
         }
@@ -2760,26 +2964,16 @@ BOOL Wh_ModInit() {
     cef_panel_create_t cef_panel_create = (cef_panel_create_t)GetProcAddress(g_cefModule, "cef_panel_create");
     cef_urlrequest_create_t cef_urlrequest_create = (cef_urlrequest_create_t)GetProcAddress(g_cefModule, "cef_urlrequest_create");
 
-    Wh_SetFunctionHook((void*)cef_window_create_top_level,
-                       (void*)cef_window_create_top_level_hook,
-                       (void**)&cef_window_create_top_level_original);
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook,
-                       (void**)&CreateWindowExW_original);
+    WindhawkUtils::SetFunctionHook(cef_window_create_top_level, cef_window_create_top_level_hook, &cef_window_create_top_level_original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_original);
     if (g_isSpotify) {
-        Wh_SetFunctionHook((void*)cef_panel_create, (void*)cef_panel_create_hook,
-                           (void**)&cef_panel_create_original);
-        Wh_SetFunctionHook((void*)cef_urlrequest_create, (void*)cef_urlrequest_create_hook,
-                           (void**)&cef_urlrequest_create_original);
-        Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
-                           (void**)&SetWindowThemeAttribute_original);
-        Wh_SetFunctionHook((void*)DwmExtendFrameIntoClientArea, (void*)DwmExtendFrameIntoClientArea_hook,
-                           (void**)&DwmExtendFrameIntoClientArea_original);
-        Wh_SetFunctionHook((void*)SetWindowTextW, (void*)SetWindowTextW_hook,
-                           (void**)&SetWindowTextW_original);
-        Wh_SetFunctionHook((void*)CreateProcessW, (void*)CreateProcessW_hook,
-                           (void**)&CreateProcessW_original);
-        Wh_SetFunctionHook((void*)CreateProcessAsUserW, (void*)CreateProcessAsUserW_hook,
-                           (void**)&CreateProcessAsUserW_original);
+        WindhawkUtils::SetFunctionHook(cef_panel_create, cef_panel_create_hook, &cef_panel_create_original);
+        WindhawkUtils::SetFunctionHook(cef_urlrequest_create, cef_urlrequest_create_hook, &cef_urlrequest_create_original);
+        WindhawkUtils::SetFunctionHook(SetWindowThemeAttribute, SetWindowThemeAttribute_hook, &SetWindowThemeAttribute_original);
+        WindhawkUtils::SetFunctionHook(DwmExtendFrameIntoClientArea, DwmExtendFrameIntoClientArea_hook, &DwmExtendFrameIntoClientArea_original);
+        WindhawkUtils::SetFunctionHook(SetWindowTextW, SetWindowTextW_hook, &SetWindowTextW_original);
+        WindhawkUtils::SetFunctionHook(CreateProcessW, CreateProcessW_hook, &CreateProcessW_original);
+        WindhawkUtils::SetFunctionHook(CreateProcessAsUserW, CreateProcessAsUserW_hook, &CreateProcessAsUserW_original);
 
         char* pbExecutable = NULL;
         // Spotify 1.2.70 (CEF 138) introduced a separate Spotify.dll which contains the core logic
@@ -2842,7 +3036,6 @@ BOOL Wh_ModInit() {
 
         #ifdef _M_X64
         // Spotify 1.2.67+ hard blocked my way of changing the playback speed by calling the internal functions
-        // So disable this for now until a workaround is found
         if (major >= 122 && major < 138 && isTestedVersion &&
             spMajor == 1 && spMinor == 2 && spBuild < 67
         ) {
@@ -2856,40 +3049,62 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"BeforeUninit");
+    
+    g_shouldClosePipe.store(TRUE);
+
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+
+    if (g_pipeThread && g_pipeThread->joinable()) {
+        g_pipeThread->join();
+    }
+    g_pipeThread.reset();
+
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = NULL;
+    }
+}
+
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 
-    g_shouldClosePipe = TRUE;
-
     if (g_isSpotifyRenderer) {
         // Note: sandboxed renderers won't even respond to the uninit request and keep loaded until the renderer exits
-        if (g_hPipe != INVALID_HANDLE_VALUE) {
-            CloseHandle(g_hPipe);
-            g_hPipe = INVALID_HANDLE_VALUE;
+        // Unhook JS native functions
+        // (JS API functions will now just do nothing because the cosmos handler doesn't handle them)
+        for (auto& handler : cancelCosmosRequest_v8handlers) {
+            handler->execute = cancelCosmosRequest_original;
+            handler->base.release(&handler->base);
         }
-        if (g_pipeThread.joinable()) {
-            g_pipeThread.join();
+        for (auto& handler : cancelEsperantoCall_v8handlers) {
+            handler->execute = cancelEsperantoCall_original;
+            handler->base.release(&handler->base);
+        }
+        for (auto& handler : _getSpotifyModule_v8handlers) {
+            handler->execute = _getSpotifyModule_original;
+            handler->base.release(&handler->base);
         }
         return;
     }
 
-    if (g_hPipe != INVALID_HANDLE_VALUE) {
-        CancelIoEx(g_hPipe, NULL);
-        CloseHandle(g_hPipe);
-        g_hPipe = INVALID_HANDLE_VALUE;
-    }
-    if (g_pipeThread.joinable()) {
-        g_pipeThread.join();
-    }
-
     EnumWindows(UninitEnumWindowsProc, 1);
 
-    // Restore the original set_background_color functions to prevent crashes
-    // (Control colors hooks won't work till the app is restarted)
-    for (int i = 0; i < 3; i++) {
-        if (cte_controls[i].set_background_color_addr != NULL) {
-            *((set_background_color_t*)cte_controls[i].set_background_color_addr) = cte_controls[i].set_background_color_original;
+    if (IsWindow(g_mainHwnd)) {
+        // Restore the original set_background_color functions to prevent crashes
+        // (Control colors hooks will no longer work till the app is restarted)
+        for (int i = 0; i < 3; i++) {
+            if (cte_controls[i].set_background_color_addr != NULL) {
+                *((set_background_color_t*)cte_controls[i].set_background_color_addr) = cte_controls[i].set_background_color_original;
+            }
+        }
+        // This too
+        if (get_minimum_size_addr != NULL) {
+            *get_minimum_size_addr = get_minimum_size_original;
         }
     }
 }

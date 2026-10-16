@@ -5,11 +5,15 @@ PURPOSE:     Verifies the mod information in the modified mods.
 COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
 
+import hashlib
+import http.client
 import json
 import math
 import os
 import re
+import subprocess
 import sys
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -22,6 +26,7 @@ from typing import Callable, Optional, TextIO, Tuple
 import yaml
 
 from extract_mod_symbols import get_mod_symbols
+from preprocessor import blank_comments, get_literal_spans
 
 DISALLOWED_AUTHORS = [
     # https://github.com/ramensoftware/windhawk-mods/pull/676
@@ -84,6 +89,22 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
     'WhTool_ModSettingsChanged': ['void WhTool_ModSettingsChanged()'],
     'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
 }
+
+
+# A tool mod runs in Windhawk's own processes rather than being injected into
+# other programs. Its Windhawk targets must be exactly one of these sets.
+TOOL_MOD_ALLOWED_INCLUDES = [
+    ['windhawk.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-uiaccess.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-elevated.exe'],
+    [
+        'windhawk.exe',
+        'windhawk-mod.exe',
+        'windhawk-mod-uiaccess.exe',
+        'windhawk-mod-elevated.exe',
+    ],
+]
 
 
 # RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
@@ -209,18 +230,51 @@ def get_mod_file_metadata(
     return properties, warnings
 
 
+FETCH_ATTEMPTS = 3
+
+
+class FetchError(Exception):
+    """A fetch failed even after retries, most likely due to a transient network
+    problem rather than anything in the mod being validated."""
+
+
+def fetch_url(url: str, headers: Optional[dict[str, str]] = None) -> bytes:
+    """Fetch a URL, retrying connection errors and 5xx responses. 4xx responses
+    are raised as HTTPError right away so callers can treat 404 as "not found"."""
+    request = urllib.request.Request(url, headers=headers or {})
+    last_error: Optional[Exception] = None
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request) as response:
+                return response.read()
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                raise
+            last_error = e
+        except (OSError, http.client.HTTPException) as e:
+            last_error = e
+
+        if attempt < FETCH_ATTEMPTS:
+            print(f'Fetching {url} failed ({last_error!r}), retrying...')
+            time.sleep(2)
+
+    raise FetchError(
+        f'Failed to fetch {url} after {FETCH_ATTEMPTS} attempts ({last_error!r}).'
+        ' This is most likely a temporary network error unrelated to the mod'
+        ' itself, re-run the workflow to try again.'
+    )
+
+
 @cache
 def get_mod_author_data():
     url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 @cache
 def get_valid_license_identifiers_lowercase():
     url = 'https://spdx.org/licenses/licenses.json'
-    response = urllib.request.urlopen(url).read()
-    data = json.loads(response)
+    data = json.loads(fetch_url(url))
     return {license['licenseId'].lower() for license in data['licenses']}
 
 
@@ -233,8 +287,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
     """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}.wh.cpp'
-        response = urllib.request.urlopen(url)
-        content = response.read().decode('utf-8')
+        content = fetch_url(url).decode('utf-8')
 
         # Use existing robust metadata parser (no warnings needed for existing mods)
         properties, _ = get_mod_file_metadata(StringIO(content), warn_callback=None)
@@ -258,8 +311,7 @@ def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
-        response = urllib.request.urlopen(url)
-        data = json.loads(response.read())
+        data = json.loads(fetch_url(url))
         return [item['version'] for item in data]
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -346,10 +398,14 @@ class ModMetadataValidator:
         path: Path,
         properties: dict[ModPropertyKey, ModPropertyValue],
         expected_author: str,
+        expected_author_id: Optional[int],
+        mod_source: str,
     ):
         self.ctx = ValidationContext(path)
         self.properties = properties
         self.expected_author = expected_author
+        self.expected_author_id = expected_author_id
+        self.mod_source = mod_source
         self.mod_author_data = get_mod_author_data()
 
         # Extract mod ID and fetch existing mod data
@@ -369,6 +425,30 @@ class ModMetadataValidator:
             self.mod_author_data.get(self.github_url.lower())
             if self.github_url
             else None
+        )
+
+        # Another account on record with the id of the pull request author,
+        # meaning that the pull request author renamed their account.
+        self.renamed_from_github = None
+        if expected_author_id is not None:
+            expected_github = f'https://github.com/{expected_author}'.lower()
+            for other_github, other_data in self.mod_author_data.items():
+                if (
+                    other_data.get('githubId') == expected_author_id
+                    and other_github != expected_github
+                ):
+                    self.renamed_from_github = other_data['github']
+                    break
+
+    def renamed_account_note(self) -> str:
+        if not self.renamed_from_github:
+            return ''
+
+        return (
+            '\nNote: The GitHub user id of the pull request author matches the one'
+            f' on record for {self.renamed_from_github}, which suggests that the'
+            ' account was renamed. Renamed accounts require a manual update of the'
+            ' records, please mention the rename in the pull request.'
         )
 
     def property(
@@ -413,6 +493,7 @@ class ModMetadataValidator:
         self.validate_name()
         self.validate_description()
         self.validate_architecture()
+        self.validate_tool_mod()
 
         return self.ctx.warning_count()
 
@@ -434,6 +515,7 @@ class ModMetadataValidator:
                     ' them to submit the update instead.\n'
                     'For more information about submitting a mod update, refer to the'
                     ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                    + self.renamed_account_note()
                 )
 
         expected = f'https://github.com/{self.expected_author}'
@@ -455,6 +537,39 @@ class ModMetadataValidator:
                 ' submit the update instead.\n'
                 'For more information about submitting a mod update, refer to the'
                 ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                + self.renamed_account_note()
+            )
+        elif self.renamed_from_github and not self.author_data:
+            prop.warn(
+                f'@@ ({prop.value}) has no previous submissions.'
+                + self.renamed_account_note()
+            )
+
+        self.validate_github_id(prop)
+
+    def validate_github_id(self, prop: PropertyValidator):
+        """Validate that the GitHub account is the one on record, and not a new
+        account registered with the same name after the original was deleted."""
+        if self.expected_author_id is None or not self.author_data:
+            return
+
+        if prop.value.lower() != f'https://github.com/{self.expected_author}'.lower():
+            return
+
+        github_id = self.author_data.get('githubId')
+        if github_id is None:
+            prop.warn(
+                f'No GitHub user id is on record for {prop.value}, manual'
+                ' verification is required'
+            )
+        elif github_id != self.expected_author_id:
+            prop.warn(
+                'The GitHub user id of the pull request author'
+                f' ({self.expected_author_id}) doesn\'t match the one on record for'
+                f' {prop.value} ({github_id}).\n'
+                'This can happen if the original account was deleted, and a new'
+                ' account was registered with the same name. Only the original'
+                ' author of the mod is allowed to submit updates.'
             )
 
     def validate_id(self):
@@ -725,15 +840,62 @@ class ModMetadataValidator:
         if msg:
             prop.warn(msg.rstrip('\n'))
 
+    def validate_tool_mod(self):
+        """Validate the metadata of a tool mod: one that targets windhawk.exe
+        with a WhTool_ModInit entry point or a -tool-mod launcher, or any
+        windhawk-*.exe process."""
+        prop = self.property('include')
+        if not prop:
+            return
 
-def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
+        includes = {x.lower() for x in prop.value.split('\n') if x != ''}
+        windhawk_includes = {
+            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+        }
+        defines_tool_mod_init = (
+            re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
+            is not None
+        )
+        is_tool_mod = any(x != 'windhawk.exe' for x in windhawk_includes) or (
+            'windhawk.exe' in windhawk_includes
+            and (defines_tool_mod_init or '-tool-mod' in self.mod_source)
+        )
+        if not is_tool_mod:
+            return
+
+        if windhawk_includes not in [set(x) for x in TOOL_MOD_ALLOWED_INCLUDES]:
+            prop.warn(
+                'Tool mods must @@ exactly one of the following combinations of'
+                ' Windhawk processes:\n'
+                + '\n'.join(f'* {", ".join(x)}' for x in TOOL_MOD_ALLOWED_INCLUDES)
+            )
+        elif windhawk_includes == {'windhawk.exe'} and not defines_tool_mod_init:
+            prop.warn(
+                'Tool mods which @@ only windhawk.exe must define'
+                ' WhTool_ModInit, use the tool mod template:'
+                ' https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process'
+            )
+
+        arch_prop = self.property('architecture')
+        if arch_prop:
+            arch_prop.warn('@@ must not be specified for tool mods')
+
+
+def validate_metadata(
+    path: Path,
+    mod_source: str,
+    expected_author: str,
+    expected_author_id: Optional[int],
+) -> int:
     properties, initial_warnings = get_mod_file_metadata(
         StringIO(mod_source),
         warn_callback=lambda line, msg: add_warning(path, line, msg),
     )
 
     # Validate metadata properties
-    validator = ModMetadataValidator(path, properties, expected_author)
+    validator = ModMetadataValidator(
+        path, properties, expected_author, expected_author_id, mod_source
+    )
     metadata_warnings = validator.validate_all()
 
     # Validate file path
@@ -871,9 +1033,217 @@ def validate_marker_block(
 
 def validate_readme(path: Path, mod_source: str) -> int:
     """Validate the mod's README block."""
-    return validate_marker_block(
+    warnings = validate_marker_block(
         path, mod_source, 'WindhawkModReadme', 'README', required=True
     )
+    warnings += validate_readme_images(path, mod_source)
+    return warnings
+
+
+# Must match the patterns in scripts/archive_mod_images.py, which archives the
+# README images at the URL-derived paths. The script's image pattern is this one
+# restricted to the supported hosts. The image description excludes brackets so
+# that an unclosed one doesn't extend into the next link or image.
+ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S]+?)\s*\*/\s*^//[ \t]+==/WindhawkModReadme==[ \t]*$'
+ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\[\]]*\]\(\s*([^)]+?)\s*\)'
+ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
+
+# Images under this prefix are shown from their original URL instead of the
+# archived copy, so they may change after being archived.
+DIRECTLY_SERVED_IMAGE_URL_PREFIX = 'https://raw.githubusercontent.com/ramensoftware/'
+
+# The archive runs on Windows, and the images folder is several directories
+# deep, so the path is kept well within MAX_PATH.
+ARCHIVED_IMAGE_MAX_PATH_LENGTH = 200
+
+# Must match LOSSY_GIF_MIN_SIZE in scripts/archive_mod_images.py. GIFs this large
+# are compressed lossily when archived.
+LARGE_GIF_MIN_SIZE = 20 * 1024 * 1024
+LARGE_ANIMATED_WEBP_MIN_SIZE = 20 * 1024 * 1024
+LARGE_IMAGE_MIN_SIZE = 2 * 1024 * 1024
+
+# Must match ORIGINAL_HASHES_FILE_NAME in scripts/archive_mod_images.py.
+ARCHIVED_ORIGINAL_HASHES_PATH = 'original_hashes.json'
+
+WINDOWS_RESERVED_FILE_NAMES = {
+    'CON', 'PRN', 'AUX', 'NUL',
+    *(f'COM{i}' for i in range(1, 10)),
+    *(f'LPT{i}' for i in range(1, 10)),
+}
+
+
+def get_archived_image_path_error(path: str) -> Optional[str]:
+    """Return why the path, relative to the images folder, can't be used on
+    Windows, or None if it can."""
+    if len(path) > ARCHIVED_IMAGE_MAX_PATH_LENGTH:
+        return f'path is longer than {ARCHIVED_IMAGE_MAX_PATH_LENGTH} characters'
+
+    for component in path.split('/'):
+        if component in ('', '.', '..') or component.startswith('..'):
+            return f'path component "{component}" is not allowed'
+        invalid_chars = sorted(
+            {c for c in component if c in '<>:"\\|?*' or ord(c) < 0x20}
+        )
+        if invalid_chars:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in invalid_chars)
+            return f'path component "{component}" contains invalid characters ({chars})'
+        if component[-1] in '. ':
+            return f'path component "{component}" must not end with a dot or a space'
+        if component.split('.')[0].upper() in WINDOWS_RESERVED_FILE_NAMES:
+            return f'path component "{component}" is a reserved Windows file name'
+
+    return None
+
+
+def get_archived_image(path: str) -> Optional[bytes]:
+    """Return the archived image at the path relative to the images folder, or
+    None if it isn't archived."""
+    try:
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/images/{urllib.parse.quote(path)}'
+        return fetch_url(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def get_large_image_warning(image: bytes) -> Optional[str]:
+    """Return why the image is too large, or None if it isn't."""
+    size = len(image)
+    size_mb = f'{size / (1024 * 1024):.1f} MB'
+
+    if image.startswith((b'GIF87a', b'GIF89a')):
+        if size < LARGE_GIF_MIN_SIZE:
+            return None
+        return (
+            f'GIF is {size_mb}. GIFs of {LARGE_GIF_MIN_SIZE // (1024 * 1024)} MB'
+            ' or more are compressed lossily when archived, consider making it'
+            ' smaller, e.g. with a lower resolution or frame rate, or a shorter clip'
+        )
+
+    # An extended WebP file with the animation flag set.
+    if (
+        image[:4] == b'RIFF'
+        and image[8:16] == b'WEBPVP8X'
+        and len(image) > 20
+        and image[20] & 0x02
+    ):
+        if size < LARGE_ANIMATED_WEBP_MIN_SIZE:
+            return None
+        return (
+            f'Animated WebP is {size_mb}, consider making it smaller (under'
+            f' {LARGE_ANIMATED_WEBP_MIN_SIZE // (1024 * 1024)} MB), e.g. with a'
+            ' lower resolution or frame rate, or a shorter clip'
+        )
+
+    if size < LARGE_IMAGE_MIN_SIZE:
+        return None
+    return (
+        f'Image is {size_mb}, consider making it smaller (under'
+        f' {LARGE_IMAGE_MIN_SIZE // (1024 * 1024)} MB), e.g. with a lower'
+        ' resolution'
+    )
+
+
+@cache
+def get_archived_original_hashes() -> dict[str, str]:
+    """Return the SHA-256 of the original of each compressed archived image, by
+    its path relative to the images folder."""
+    data = get_archived_image(ARCHIVED_ORIGINAL_HASHES_PATH)
+    return json.loads(data) if data is not None else {}
+
+
+def validate_readme_images(path: Path, mod_source: str) -> int:
+    """Validate that the README images can be archived, and that the already
+    archived ones are unchanged."""
+    readme_match = re.search(ARCHIVED_README_PATTERN, mod_source, re.MULTILINE)
+    if not readme_match:
+        return 0
+
+    readme = readme_match.group(1)
+    warnings = 0
+
+    def line_of(pos: int) -> int:
+        return mod_source.count('\n', 0, readme_match.start(1) + pos) + 1
+
+    for match in re.finditer(r'<img\b', readme, re.IGNORECASE):
+        warnings += add_warning(
+            path,
+            line_of(match.start()),
+            'HTML <img> tags are not supported in the README, use Markdown'
+            ' image syntax: ![description](url)',
+        )
+
+    image_matches = list(re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme))
+
+    image_starts = {match.start() for match in image_matches}
+    for match in re.finditer(r'!\[', readme):
+        if match.start() not in image_starts:
+            warnings += add_warning(
+                path,
+                line_of(match.start()),
+                'Malformed Markdown image, expected: ![description](url)',
+            )
+
+    hosts = ', '.join(ARCHIVED_IMAGE_HOSTS)
+    for match in image_matches:
+        url = match.group(1)
+        line = line_of(match.start(1))
+
+        if not any(url.startswith(f'https://{host}/') for host in ARCHIVED_IMAGE_HOSTS):
+            warnings += add_warning(
+                path,
+                line,
+                f'Image host is not supported, images must be hosted on one of:'
+                f' {hosts}. Got: "{url}"',
+            )
+            continue
+
+        if not re.fullmatch(URL_PATTERN, url):
+            warnings += add_warning(path, line, f'Invalid image URL: "{url}"')
+            continue
+
+        image_path = urllib.parse.unquote(url.removeprefix('https://'))
+        if error := get_archived_image_path_error(image_path):
+            warnings += add_warning(
+                path, line, f'Image URL can\'t be archived, {error}: "{url}"'
+            )
+            continue
+
+        try:
+            image = fetch_url(url, headers={'User-Agent': 'Mozilla/5.0'})
+        except urllib.error.HTTPError as e:
+            warnings += add_warning(
+                path, line, f'Image URL returned HTTP {e.code}: "{url}"'
+            )
+            continue
+
+        if url.startswith(DIRECTLY_SERVED_IMAGE_URL_PREFIX):
+            continue
+
+        original_hash = get_archived_original_hashes().get(image_path)
+        if original_hash is not None:
+            # The archived copy is compressed, so the original's hash is compared.
+            archived = True
+            changed = hashlib.sha256(image).hexdigest() != original_hash
+        else:
+            archived_image = get_archived_image(image_path)
+            archived = archived_image is not None
+            changed = archived and archived_image != image
+
+        if not archived and (large_image_warning := get_large_image_warning(image)):
+            warnings += add_warning(path, line, f'{large_image_warning}: "{url}"')
+
+        if changed:
+            warnings += add_warning(
+                path,
+                line,
+                'Image differs from its archived copy. Images are archived once'
+                ' and are not updated, to have the image updated, use a'
+                f' different URL: "{url}"',
+            )
+
+    return warnings
 
 
 def validate_settings(path: Path, mod_source: str) -> int:
@@ -1234,8 +1604,7 @@ def get_all_mod_names() -> dict[str, str]:
 @cache
 def get_existing_windows_file_names():
     url = 'https://winbindex.m417z.com/data/filenames.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 def is_existing_windows_file_name(name: str):
@@ -1288,6 +1657,12 @@ def validate_symbol_hooks(path: Path, mod_source: str):
 
         previous_line = mod_source_lines[line_num - 2]
         targets_from_comment = get_target_modules_from_previous_line(previous_line)
+
+        if targets_from_comment and line_num > 2:
+            line_before_comment = mod_source_lines[line_num - 3].strip()
+            if line_before_comment.startswith('//') and line_before_comment.endswith(','):
+                warning_msg = 'List all target modules in a single comment line'
+                warnings += add_warning(path, line_num - 1, warning_msg)
 
         if target_from_name and targets_from_comment:
             warning_msg = (
@@ -1368,6 +1743,8 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
+        (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
+        (r'^\s*#\s*define\s+(?!WH_WINRT_WINUI2\b)W[Hh]_', 'Windhawk symbol redefinition', 'Avoid redefining Windhawk symbols'),
     ]
     # fmt: on
 
@@ -1381,7 +1758,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 warnings += add_warning(
-                    path, line_num, f'Line requires manual inspection for "{word}": {description}'
+                    path,
+                    line_num,
+                    f'Line requires manual inspection for "{word}": {description}',
                 )
 
         hidden_ws = [
@@ -1409,6 +1788,73 @@ def validate_specific_keywords(path: Path, mod_source: str):
                 line_num,
                 f'Line contains {len(control_chars)} control characters ({chars}),'
                 ' which are not allowed',
+            )
+
+    return warnings
+
+
+MAX_LINE_LENGTH = 4096
+
+# A single long statement, such as a function call with many arguments, is
+# allowed. Only lines which pack several statements are limited.
+DENSE_CODE_LINE_MIN_STATEMENTS = 3
+DENSE_CODE_LINE_MAX_LENGTH = 150
+
+
+def get_code_lines(mod_source: str) -> list[str]:
+    """The lines of the source without comments, with each string or character
+    literal and each run of spaces and tabs shortened to a single character."""
+    code = blank_comments(mod_source)
+    parts = []
+    copied = 0
+    for start, end in get_literal_spans(code):
+        # Newlines inside a literal are kept so that the line numbers match.
+        parts.append(code[copied:start] + '"' + '\n' * code.count('\n', start, end))
+        copied = end
+    parts.append(code[copied:])
+    return re.sub(r'[ \t]+', ' ', ''.join(parts)).split('\n')
+
+
+def count_statements(code_line: str) -> int:
+    """The number of statements in the line, counted as the semicolons outside
+    of parentheses and brackets."""
+    depth = 0
+    statements = 0
+    for c in code_line:
+        if c in '([':
+            depth += 1
+        elif c in ')]':
+            depth = max(0, depth - 1)
+        elif c == ';' and depth == 0:
+            statements += 1
+    return statements
+
+
+def validate_line_lengths(path: Path, mod_source: str) -> int:
+    """Validate that lines, and the code in them, aren't overly long."""
+    warnings = 0
+
+    for line_num, line in enumerate(mod_source.split('\n'), start=1):
+        if len(line) > MAX_LINE_LENGTH:
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line is {len(line)} characters long, lines must not be longer'
+                f' than {MAX_LINE_LENGTH} characters',
+            )
+
+    for line_num, line in enumerate(get_code_lines(mod_source), start=1):
+        statements = count_statements(line)
+        if (
+            statements >= DENSE_CODE_LINE_MIN_STATEMENTS
+            and len(line) > DENSE_CODE_LINE_MAX_LENGTH
+        ):
+            warnings += add_warning(
+                path,
+                line_num,
+                f'Line packs {statements} statements into {len(line)} characters'
+                ' of code, which makes it difficult to review, please split it into'
+                f' multiple lines.',
             )
 
     return warnings
@@ -1449,18 +1895,31 @@ def validate_callback_signatures(path: Path, mod_source: str):
             assert m, sig
             expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
 
-        # Match: previous word + whitespace + callback name + ( params ). The
-        # previous-word check naturally skips function calls (e.g. "= Wh_Mod..."
-        # or "(Wh_Mod...") since those aren't preceded by a bare identifier.
-        pattern = r'\b(\w+)\s+' + re.escape(callback_name) + r'\s*\(([^)]*)\)'
+        # Match: optional specifiers + return type + callback name + ( params ).
+        # Requiring a bare identifier before the name naturally skips function
+        # calls (e.g. "= Wh_Mod..." or "(Wh_Mod...").
+        pattern = (
+            r'((?:\b(?:static|extern(?:\s+"C")?|inline)\s+)*)\b(\w+)\s+'
+            + re.escape(callback_name)
+            + r'\s*\(([^)]*)\)'
+        )
         for match in re.finditer(pattern, mod_source):
             # Skip if inside a single-line comment.
             line_start = mod_source.rfind('\n', 0, match.start()) + 1
             if '//' in mod_source[line_start : match.start()]:
                 continue
 
-            return_type = match.group(1)
-            params = match.group(2)
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            specifiers, return_type, params = match.groups()
+
+            if specifiers:
+                warnings += add_warning(
+                    path,
+                    line_num,
+                    f'Unexpected "{" ".join(specifiers.split())}" before'
+                    f' {callback_name}',
+                )
+
             normalized_return_type = normalize_return_type(return_type)
             normalized_params = normalize_callback_param_types(params)
 
@@ -1470,7 +1929,6 @@ def validate_callback_signatures(path: Path, mod_source: str):
             ):
                 continue
 
-            line_num = 1 + mod_source[: match.start()].count('\n')
             expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
             warnings += add_warning(
                 path,
@@ -1483,33 +1941,93 @@ def validate_callback_signatures(path: Path, mod_source: str):
     return warnings
 
 
-def validate_mod_file(path: Path, pr_author: str) -> int:
+def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -> int:
     mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
         '\ufeff'
     )
 
     warnings = validate_encoding(path)
-    warnings += validate_metadata(path, mod_source, pr_author)
+    warnings += validate_metadata(path, mod_source, pr_author, pr_author_id)
     warnings += validate_readme(path, mod_source)
     warnings += validate_settings(path, mod_source)
     warnings += validate_symbol_hooks(path, mod_source)
     warnings += validate_specific_keywords(path, mod_source)
+    warnings += validate_line_lengths(path, mod_source)
     warnings += validate_callback_signatures(path, mod_source)
 
     return warnings
 
 
 def test_run():
-    if len(sys.argv) != 3:
-        print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
+    if len(sys.argv) not in [3, 4]:
+        print(
+            'Test run usage: pr_validation.py <mod_file_path> <pr_author>'
+            ' [pr_author_id]'
+        )
         sys.exit(1)
 
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = validate_mod_file(path, pr_author)
+    pr_author_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
+    warnings = validate_mod_file(path, pr_author, pr_author_id)
     if warnings > 0:
         print(f'Got {warnings} warnings')
+
+
+def validate_pr_changelog(pr_body: str) -> int:
+    """Mod updates must describe the changes in the PR description."""
+    markers_re = re.compile(
+        r'<!--\s*changelog:start\s*-->(.*?)<!--\s*changelog:end\s*-->',
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    # The sample items of the pull request template, which are to be replaced
+    # with the actual changes.
+    placeholder_item_re = re.compile(
+        r'^[ \t]*\*[ \t]*Changelog item \d+\.\.\.[ \t]*$', re.MULTILINE
+    )
+
+    template_hint = (
+        ' See the pull request template'
+        ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+    )
+
+    matches = markers_re.findall(pr_body)
+    if len(matches) != 1:
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'Mod updates must have a changelog in the PR description, between a single'
+            ' pair of the "<!-- changelog:start -->" and "<!-- changelog:end -->"'
+            f' markers, found {len(matches)} such pairs.' + template_hint,
+        )
+
+    changelog = placeholder_item_re.sub('', matches[0]).strip()
+    if changelog == '':
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'The changelog between the "<!-- changelog:start -->" and'
+            ' "<!-- changelog:end -->" markers in the PR description is empty,'
+            ' please describe the changes of this mod update.'
+            + template_hint,
+        )
+
+    print(f'Changelog:\n{changelog}')
+    return 0
+
+
+def get_pr_changes() -> list[tuple[str, Path]]:
+    """(status, path) pairs for the files changed by the pull request."""
+    # The checkout is GitHub's test merge commit, whose first parent is the tip
+    # of the base branch.
+    output = subprocess.check_output(
+        ['git', 'diff-tree', '-r', '-z', '--no-renames', '--name-status', 'HEAD^1', 'HEAD'],
+        text=True,
+    )
+    fields = output.split('\0')[:-1]
+    return [(status, Path(path)) for status, path in zip(fields[::2], fields[1::2])]
 
 
 def main():
@@ -1520,44 +2038,53 @@ def main():
     print('Validating PR...')
 
     pr_author = os.environ['PR_AUTHOR']
+    pr_author_id = int(os.environ['PR_AUTHOR_ID'])
     if pr_author in DISALLOWED_AUTHORS:
         sys.exit(f'Submissions from {pr_author} are not allowed')
 
     warnings = 0
 
-    paths = [Path(p) for p in json.loads(os.environ['ALL_CHANGED_AND_MODIFIED_FILES'])]
-    if len(paths) == 0:
+    changes = get_pr_changes()
+    if len(changes) == 0:
         sys.exit('No files changed')
 
-    added_count = int(os.environ['ADDED_FILES_COUNT'])
-    modified_count = int(os.environ['MODIFIED_FILES_COUNT'])
-    all_count = int(os.environ['ALL_CHANGED_AND_MODIFIED_FILES_COUNT'])
+    statuses = [status for status, _ in changes]
+    added_count = statuses.count('A')
+    modified_count = statuses.count('M')
+    all_count = len(changes)
 
     if (added_count, modified_count, all_count) not in [(1, 0, 1), (0, 1, 1)]:
         warnings += add_warning(
-            paths[0],
+            changes[0][1],
             1,
             'Must be one added or one modified file, got '
             f'{added_count=} {modified_count=} {all_count=}',
         )
 
-    if added_count != 0:
-        pr_body = os.environ.get('PR_BODY', '')
-        if '## Mod authorship' not in pr_body:
-            warnings += add_warning(
-                Path('.github/pull_request_template.md'),
-                1,
-                'New mod submissions must keep the "## Mod authorship" section from the'
-                ' pull request template'
-                ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
-                ' in the PR description, so reviewers know how the mod was authored.'
-                ' Please restore that section and fill it in.',
-            )
+    # The PR body is sent with CRLF line endings.
+    pr_body = os.environ.get('PR_BODY', '').replace('\r\n', '\n')
 
-    for path in paths:
+    if added_count != 0 and '## Mod authorship' not in pr_body:
+        warnings += add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'New mod submissions must keep the "## Mod authorship" section from the'
+            ' pull request template'
+            ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
+            ' in the PR description, so reviewers know how the mod was authored.'
+            ' Please restore that section and fill it in.',
+        )
+
+    if modified_count != 0:
+        warnings += validate_pr_changelog(pr_body)
+
+    for status, path in changes:
+        if status == 'D':
+            continue
+
         print(f'Checking {path=}')
 
-        path_warnings = validate_mod_file(path, pr_author)
+        path_warnings = validate_mod_file(path, pr_author, pr_author_id)
         warnings += path_warnings
 
         if path_warnings == 0:
@@ -1575,4 +2102,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except FetchError as e:
+        print(f'::error::{e}')
+        sys.exit(1)

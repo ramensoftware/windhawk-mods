@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win7-legacy-applet-restorer
-// @name            Windows 7 Legacy Applet Restorer
+// @name            Windows Vista/7 Legacy Applet Restorer
 // @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11 including optional additions
-// @version         3.1.0
+// @version         3.2.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -26,8 +26,11 @@ This mod restores a selection of classic Control Panel applets and task links in
 * Text to Speech
 * iSCSI Initiator
 * Game Controllers (joy.cpl)
+* Offline Files (cscui.dll)
 
 This mod aims to restore a series of Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
+
+The Offline Files entry is a best-effort restoration: it opens the classic Offline Files dialog (cscui.dll) as on Windows Vista/7, but on Windows 11 the dialog may show fewer tabs than the original, and the feature is not usable on Home editions.
 
 The mod also provides the ability to suppress obsolete or non-functional Control Panel items on Windows 10/11, such as "Company Settings Sync", Windows To Go, Infrared, and Work Folders, when the corresponding settings are enabled.
 
@@ -135,6 +138,10 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
 - enableGameControllers: true
   $name: Game Controllers
   $description: This setting adds the "Game Controllers" icon to Control Panel (under Hardware and Sound). Windows still ships the classic joy.cpl applet (joystick/gamepad test and calibration) but no longer lists it in Control Panel, so this is a self-built virtual entry whose name and description come from joy.cpl, whose classic gamepad icon is embedded in the mod (joy.cpl no longer exposes a usable icon resource on Windows 10/11), and which launches joy.cpl. Only added if joy.cpl is actually present.
+
+- enableOfflineFiles: true
+  $name: Offline Files
+  $description: This setting adds the classic "Offline Files" icon to Control Panel (under Network and Internet). Windows 10/11 still ships cscui.dll (the Offline Files dialog) but no longer lists it in Control Panel, so this is a self-built virtual entry whose name and description are hardcoded in the mod (English and a set of other languages, so nothing depends on the MUI files), whose classic folder icon is embedded in the mod, and which opens the dialog through rundll32 (the most backward-compatible launcher). Best-effort, so on Windows 11 the dialog may show fewer tabs than on Windows Vista/7, and the feature is not usable on Home editions. Only added if cscui.dll is actually present.
 
 - enableHomeGroup: false
   $name: HomeGroup
@@ -262,6 +269,7 @@ struct Settings {
     std::atomic<bool> enablePrintersAndFaxes;
     std::atomic<bool> enableIscsiInitiator;
     std::atomic<bool> enableGameControllers;
+    std::atomic<bool> enableOfflineFiles;
     std::atomic<bool> enableHomeGroup;
     // Tri-state (AppletMode): the user can override the automatic detection in
     // both directions, because "does Control Panel already show this applet?"
@@ -399,6 +407,10 @@ static std::atomic<bool> g_iscsiInitiatorExeExists{ false };
 // shell:::{259EF4B1-...} does nothing), but joy.cpl itself still ships and
 // opens normally, so the virtual entry launches joy.cpl directly.
 static std::atomic<bool> g_joyCplExists{ false };
+// True when cscui.dll (the Offline Files dialog) was found at init, in System32
+// or, as a second path, in SysWOW64. The virtual Offline Files entry launches
+// it through rundll32.
+static std::atomic<bool> g_offlineFilesDllExists{ false };
 // Path to the decoded embedded gamepad .ico lives next to its decoder
 // (EnsureJoyControllerIconFile, defined before InitDisplayNames) as
 // g_joyIconFilePath; it is filled in Wh_ModInit before InitDisplayNames runs.
@@ -882,6 +894,12 @@ static const std::wstring kGameControllersGuid  = L"{259ef4b1-e6c9-4176-b574-481
 // joy.cpl's own resources (localized by Windows for every UI language) and the
 // open command launches joy.cpl directly.
 static const std::wstring kGameControllersVirtualGuid = L"{b1e6c4a9-3d27-4f58-a9c6-2d71f4a8e063}";
+// Own, made-up CLSID for the *virtual* Offline Files entry. There is no real
+// registered CLSID for the applet (the dialog lives in cscui.dll and is opened
+// through rundll32 shell32.dll,Control_RunDLL cscui.dll,N), so this GUID is
+// also passed as the "real" GUID to AddVirtualApplet: it is never registered
+// in HKCR, so the registry lookup simply fails and the hardcoded name is used.
+static const std::wstring kOfflineFilesVirtualGuid = L"{91a8a4be-b5b5-4f7d-91cf-9a5608f6b665}";
 static const std::wstring kHomeGroupGuid           = L"{67ca7650-96e6-4fdd-bb43-a8e774f73a57}";
 static const std::wstring kDisplayGuid             = L"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}"; // Also used as RealDisplayGuid
 static const std::wstring kRealPersonalizationGuid = L"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}";
@@ -1778,9 +1796,24 @@ static std::vector<unsigned char> Base64Decode(const std::string& input) {
     return out;
 }
 
-// Decodes the embedded icon to a stable temp .ico file (created once) and
-// returns its path, or an empty string on failure. Reuses the task-links
-// mutex; re-creates the file if a previous temp cleanup removed it.
+// Returns the mod's dedicated storage directory (created if needed), with a
+// trailing backslash, or an empty string on failure. Files written here are
+// not subject to Storage Sense / Disk Cleanup and are removed by Windhawk
+// when the mod itself is removed, unlike files dropped in %TEMP%.
+static std::wstring ModStorageDir() {
+    wchar_t path[MAX_PATH * 2] = {};
+    const size_t len = Wh_GetModStoragePath(path, ARRAYSIZE(path));
+    if (!len || len >= ARRAYSIZE(path)) return L"";
+    CreateDirectoryW(path, nullptr);  // no-op if it already exists
+    return std::wstring(path) + L"\\";
+}
+
+// Decodes the embedded icon to a stable .ico file in the mod's storage
+// folder (created once) and returns its path, or an empty string on
+// failure. Reuses the task-links mutex; re-creates the file if a previous
+// cleanup removed it. Skips the decode/write entirely if the file is
+// already present, since a fresh process only has an empty in-memory cache,
+// not a missing file.
 std::wstring EnsureJoyControllerIconFile() {
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
     if (!g_joyIconFilePath.empty() &&
@@ -1788,6 +1821,17 @@ std::wstring EnsureJoyControllerIconFile() {
         return g_joyIconFilePath;
     }
     g_joyIconFilePath.clear();
+
+    const std::wstring dir = ModStorageDir();
+    if (dir.empty()) return L"";
+    const std::wstring path = dir + L"WindhawkGameControllers.ico";
+
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        // Already written by this or another process; no need to
+        // re-decode and rewrite it.
+        g_joyIconFilePath = path;
+        return g_joyIconFilePath;
+    }
 
     std::string b64;
     for (const char* part : kJoyControllerIconBase64) b64 += part;
@@ -1797,10 +1841,7 @@ std::wstring EnsureJoyControllerIconFile() {
         return L"";
     }
 
-    wchar_t tempPath[MAX_PATH] = {};
-    if (!GetTempPathW(MAX_PATH, tempPath)) return L"";
-    const std::wstring path = std::wstring(tempPath) + L"WindhawkGameControllers.ico";
-    const std::wstring tmp  = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
+    const std::wstring tmp = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
     {
         std::ofstream f(tmp.c_str(), std::ios::binary | std::ios::trunc);
         if (!f) return L"";
@@ -1809,12 +1850,493 @@ std::wstring EnsureJoyControllerIconFile() {
     }
     if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
         DeleteFileW(tmp.c_str());
-        Wh_Log(L"Game Controllers icon: failed to write the temp .ico file");
+        Wh_Log(L"Game Controllers icon: failed to write the .ico file");
         return L"";
     }
     g_joyIconFilePath = path;
     Wh_Log(L"Game Controllers icon written (bytes: %llu)", (unsigned long long)bytes.size());
     return g_joyIconFilePath;
+}
+
+// ===========================================================================
+// Offline Files: embedded icon + hardcoded texts
+// ===========================================================================
+// Same approach as the Game Controllers icon above: a base64-encoded,
+// multi-size .ico (16/24/32/48, PNG entries) decoded once to a temp file that
+// the virtual entry's DefaultIcon points at.
+static const char* kOfflineFilesIconBase64[] = {
+    "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"
+};
+
+static std::wstring g_offlineFilesIconFilePath;
+
+// Location of the cscui.dll found at init and the command that opens its
+// dialog. Written once by ResolveOfflineFilesTarget() in Wh_ModInit (before
+// any hook can run) and only read afterwards.
+static std::wstring g_offlineFilesDllPath;
+// Launch command WITHOUT the tab index (it ends with the comma before it);
+// BuildOfflineFilesCommand() appends the index: 0 General, 1 Disk Usage,
+// 2 Encryption, 3 Network, as in Windows Vista/7.
+static std::wstring g_offlineFilesLaunchBase;
+
+// RAII guard for a temp file: the file is deleted when the guard goes out of
+// scope (early return, failed rename, thrown exception) unless Release() was
+// called after the file reached its final destination.
+class ScopedTempFile {
+public:
+    explicit ScopedTempFile(std::wstring path) : path_(std::move(path)) {}
+    ScopedTempFile(const ScopedTempFile&) = delete;
+    ScopedTempFile& operator=(const ScopedTempFile&) = delete;
+    ~ScopedTempFile() { if (!path_.empty()) DeleteFileW(path_.c_str()); }
+    void Release() { path_.clear(); }
+private:
+    std::wstring path_;
+};
+
+// try/catch guarded: this is also reached from the registry hooks, so no C++
+// exception (e.g. std::bad_alloc) may unwind into Explorer.
+std::wstring EnsureOfflineFilesIconFile() {
+    try {
+        std::lock_guard<std::mutex> lock(g_taskLinksMutex);
+        if (!g_offlineFilesIconFilePath.empty() &&
+            GetFileAttributesW(g_offlineFilesIconFilePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            return g_offlineFilesIconFilePath;
+        }
+        g_offlineFilesIconFilePath.clear();
+
+        const std::wstring dir = ModStorageDir();
+        if (dir.empty()) return L"";
+        const std::wstring path = dir + L"WindhawkOfflineFiles.ico";
+
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            // Already written by this or another process; no need to
+            // re-decode and rewrite it.
+            g_offlineFilesIconFilePath = path;
+            return g_offlineFilesIconFilePath;
+        }
+
+        std::string b64;
+        for (const char* part : kOfflineFilesIconBase64) b64 += part;
+        std::vector<unsigned char> bytes = Base64Decode(b64);
+        if (bytes.empty()) {
+            Wh_Log(L"Offline Files icon: base64 decode produced no bytes");
+            return L"";
+        }
+
+        const std::wstring tmp = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
+
+        ScopedTempFile tmpGuard(tmp);
+        bool written = false;
+        {
+            std::ofstream f(tmp.c_str(), std::ios::binary | std::ios::trunc);
+            if (f) {
+                f.write(reinterpret_cast<const char*>(bytes.data()),
+                        static_cast<std::streamsize>(bytes.size()));
+                f.close();
+                written = !f.fail();
+            }
+        }
+        if (!written) {
+            Wh_Log(L"Offline Files icon: failed to write the .ico file");
+            return L"";
+        }
+        if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            Wh_Log(L"Offline Files icon: failed to move the .ico file into place");
+            return L"";
+        }
+        tmpGuard.Release();
+        g_offlineFilesIconFilePath = path;
+        Wh_Log(L"Offline Files icon written (bytes: %llu)", (unsigned long long)bytes.size());
+        return g_offlineFilesIconFilePath;
+    } catch (...) {
+        Wh_Log(L"Offline Files icon: exception while writing the icon file");
+        return L"";
+    }
+}
+
+static bool IsRegularFile(const std::wstring& path) {
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// Locates cscui.dll and builds the command that opens its dialog. Two
+// candidate locations, tried in order:
+//  1. System32: the normal case. The dialog is opened with the bare module
+//     name, the form that works unchanged from Windows Vista to Windows 11.
+//  2. SysWOW64: the 32-bit copy shipped on 64-bit Windows, opened with the
+//     32-bit rundll32.exe from the same folder so the bitness matches. Only a
+//     safety net in case the System32 copy is missing.
+// Returns false (and leaves both globals empty) when neither is usable.
+static bool ResolveOfflineFilesTarget() {
+    g_offlineFilesDllPath.clear();
+    g_offlineFilesLaunchBase.clear();
+    try {
+        wchar_t dir[MAX_PATH] = {};
+        UINT length = GetSystemDirectoryW(dir, MAX_PATH);
+        if (length > 0 && length < MAX_PATH) {
+            const std::wstring dll = std::wstring(dir) + L"\\cscui.dll";
+            if (IsRegularFile(dll)) {
+                g_offlineFilesDllPath = dll;
+                g_offlineFilesLaunchBase =
+                    L"rundll32.exe shell32.dll,Control_RunDLL cscui.dll,";
+                return true;
+            }
+        }
+        wchar_t wowDir[MAX_PATH] = {};
+        length = GetSystemWow64DirectoryW(wowDir, MAX_PATH);
+        if (length > 0 && length < MAX_PATH) {
+            const std::wstring base(wowDir);
+            const std::wstring dll = base + L"\\cscui.dll";
+            const std::wstring exe = base + L"\\rundll32.exe";
+            if (IsRegularFile(dll) && IsRegularFile(exe)) {
+                g_offlineFilesDllPath = dll;
+                g_offlineFilesLaunchBase =
+                    L"\"" + exe + L"\" shell32.dll,Control_RunDLL " + dll + L",";
+                return true;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Offline Files: exception while locating cscui.dll");
+        g_offlineFilesDllPath.clear();
+        g_offlineFilesLaunchBase.clear();
+    }
+    return false;
+}
+
+// Command that opens the Offline Files dialog on a given tab (see above).
+static std::wstring BuildOfflineFilesCommand(int tabIndex) {
+    return g_offlineFilesLaunchBase + std::to_wstring(tabIndex);
+}
+
+// Minimal XML escaping for text placed inside the task-links file.
+static std::string XmlEscapeUtf8(const std::string& text) {
+    std::string out;
+    out.reserve(text.size());
+    for (char c : text) {
+        switch (c) {
+            case '&': out += "&amp;"; break;
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            default:  out += c; break;
+        }
+    }
+    return out;
+}
+
+// Name/description of the Offline Files applet, hardcoded so the entry does
+// not depend on cscui.dll.mui.
+//  - The Italian texts are strings 45 and 7019 of cscui.dll.mui.
+//  - Every other row is a plain translation written for this mod (not
+//    extracted from Windows), covering the same languages as the rest of the
+//    mod. English is the fallback and must stay first.
+//  - A UI language without a row is resolved from cscui.dll's own string
+//    resources through SHLoadIndirectString, like the joy.cpl entry does, and
+//    falls back to English if that fails.
+// Locale matching is a prefix match, so more specific rows come first.
+struct OfflineFilesTexts {
+    const wchar_t* locale;
+    const wchar_t* name;
+    const wchar_t* infoTip;
+    const wchar_t* linkEncrypt;   // task link: "Encrypt your offline files"
+    const wchar_t* linkDisk;      // task link: "Manage disk space used by your offline files"
+};
+static const OfflineFilesTexts kOfflineFilesTexts[] = {
+    { L"en", L"Offline Files", L"Sync files between your computer and network folders.",
+      L"Encrypt your offline files", L"Manage disk space used by your offline files" },
+    { L"it", L"File offline", L"Sincronizza i file tra il computer in uso e le cartelle di rete.",
+      L"Crittografa i file offline", L"Gestisci lo spazio su disco utilizzato dai file offline" },
+    { L"es", L"Archivos sin conexión", L"Sincroniza archivos entre el equipo y las carpetas de red.",
+      L"Cifrar los archivos sin conexión", L"Administrar el espacio en disco que usan los archivos sin conexión" },
+    { L"fr", L"Fichiers hors connexion", L"Synchronisez les fichiers entre votre ordinateur et les dossiers réseau.",
+      L"Chiffrer vos fichiers hors connexion", L"Gérer l’espace disque utilisé par vos fichiers hors connexion" },
+    { L"de", L"Offlinedateien", L"Synchronisiert Dateien zwischen dem Computer und Netzwerkordnern.",
+      L"Offlinedateien verschlüsseln", L"Speicherplatz für Offlinedateien verwalten" },
+    { L"pt-PT", L"Ficheiros Offline", L"Sincronize ficheiros entre o computador e as pastas de rede.",
+      L"Encriptar os ficheiros offline", L"Gerir o espaço em disco utilizado pelos ficheiros offline" },
+    { L"pt", L"Arquivos Offline", L"Sincronize arquivos entre o computador e as pastas de rede.",
+      L"Criptografar os arquivos offline", L"Gerenciar o espaço em disco usado pelos arquivos offline" },
+    { L"nl", L"Offlinebestanden", L"Synchroniseer bestanden tussen de computer en netwerkmappen.",
+      L"Offlinebestanden versleutelen", L"Schijfruimte beheren die door offlinebestanden wordt gebruikt" },
+    { L"pl", L"Pliki offline", L"Synchronizuj pliki między komputerem a folderami sieciowymi.",
+      L"Szyfruj pliki offline", L"Zarządzaj miejscem na dysku używanym przez pliki offline" },
+    { L"ru", L"Автономные файлы", L"Синхронизация файлов между компьютером и сетевыми папками.",
+      L"Шифрование автономных файлов", L"Управление дисковым пространством, используемым автономными файлами" },
+    { L"uk", L"Автономні файли", L"Синхронізація файлів між комп’ютером і мережевими папками.",
+      L"Шифрування автономних файлів", L"Керування дисковим простором, що використовується автономними файлами" },
+    { L"tr", L"Çevrimdışı Dosyalar", L"Dosyaları bilgisayar ile ağ klasörleri arasında eşitleyin.",
+      L"Çevrimdışı dosyalarınızı şifreleyin", L"Çevrimdışı dosyaların kullandığı disk alanını yönetin" },
+    { L"ar", L"الملفات دون اتصال", L"مزامنة الملفات بين الكمبيوتر ومجلدات الشبكة.",
+      L"تشفير الملفات دون اتصال", L"إدارة مساحة القرص التي تستخدمها الملفات دون اتصال" },
+    { L"he", L"קבצים לא מקוונים", L"סנכרון קבצים בין המחשב לתיקיות רשת.",
+      L"הצפן את הקבצים הלא מקוונים", L"נהל את שטח הדיסק שבו משתמשים הקבצים הלא מקוונים" },
+    { L"ja", L"オフライン ファイル", L"コンピューターとネットワーク フォルダーの間でファイルを同期します。",
+      L"オフライン ファイルを暗号化する", L"オフライン ファイルが使用するディスク領域を管理する" },
+    { L"ko", L"오프라인 파일", L"컴퓨터와 네트워크 폴더 간에 파일을 동기화합니다.",
+      L"오프라인 파일 암호화", L"오프라인 파일이 사용하는 디스크 공간 관리" },
+    { L"zh-CN", L"脱机文件", L"在计算机和网络文件夹之间同步文件。",
+      L"加密脱机文件", L"管理脱机文件使用的磁盘空间" },
+    { L"zh-TW", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。",
+      L"加密離線檔案", L"管理離線檔案使用的磁碟空間" },
+    { L"zh-HK", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。",
+      L"加密離線檔案", L"管理離線檔案使用的磁碟空間" },
+    { L"cs", L"Soubory offline", L"Synchronizace souborů mezi počítačem a síťovými složkami.",
+      L"Šifrovat soubory offline", L"Spravovat místo na disku používané soubory offline" },
+    { L"da", L"Offlinefiler", L"Synkroniser filer mellem computeren og netværksmapper.",
+      L"Krypter dine offlinefiler", L"Administrer diskplads brugt af offlinefiler" },
+    { L"fi", L"Offline-tiedostot", L"Synkronoi tiedostot tietokoneen ja verkkokansioiden välillä.",
+      L"Salaa offline-tiedostot", L"Hallitse offline-tiedostojen käyttämää levytilaa" },
+    { L"el", L"Αρχεία χωρίς σύνδεση", L"Συγχρονισμός αρχείων μεταξύ του υπολογιστή και των φακέλων δικτύου.",
+      L"Κρυπτογράφηση των αρχείων χωρίς σύνδεση", L"Διαχείριση του χώρου στο δίσκο που χρησιμοποιείται από τα αρχεία χωρίς σύνδεση" },
+    { L"hu", L"Offline fájlok", L"Fájlok szinkronizálása a számítógép és a hálózati mappák között.",
+      L"Offline fájlok titkosítása", L"Az offline fájlok által használt lemezterület kezelése" },
+    { L"nb", L"Frakoblede filer", L"Synkroniser filer mellom datamaskinen og nettverksmapper.",
+      L"Krypter de frakoblede filene", L"Administrer diskplassen som brukes av frakoblede filer" },
+    { L"ro", L"Fișiere offline", L"Sincronizați fișierele între computer și folderele de rețea.",
+      L"Criptați fișierele offline", L"Gestionați spațiul pe disc utilizat de fișierele offline" },
+    { L"sv", L"Offlinefiler", L"Synkronisera filer mellan datorn och nätverksmappar.",
+      L"Kryptera offlinefiler", L"Hantera diskutrymme som används av offlinefiler" },
+    { L"vi", L"Tệp ngoại tuyến", L"Đồng bộ hóa tệp giữa máy tính và các thư mục mạng.",
+      L"Mã hóa tệp ngoại tuyến", L"Quản lý dung lượng đĩa được tệp ngoại tuyến sử dụng" },
+    { L"id", L"File Offline", L"Sinkronkan file antara komputer dan folder jaringan.",
+      L"Enkripsi file offline", L"Kelola ruang disk yang digunakan oleh file offline" },
+    { L"th", L"ไฟล์ออฟไลน์", L"ซิงค์ไฟล์ระหว่างคอมพิวเตอร์และโฟลเดอร์เครือข่าย",
+      L"เข้ารหัสไฟล์ออฟไลน์", L"จัดการพื้นที่ดิสก์ที่ไฟล์ออฟไลน์ใช้" },
+    { L"hi", L"ऑफ़लाइन फ़ाइलें", L"कंप्यूटर और नेटवर्क फ़ोल्डरों के बीच फ़ाइलें सिंक करें।",
+      L"ऑफ़लाइन फ़ाइलें एन्क्रिप्ट करें", L"ऑफ़लाइन फ़ाइलों द्वारा उपयोग किए जाने वाले डिस्क स्थान को प्रबंधित करें" },
+};
+
+// String ids of the applet name and description in cscui.dll's string table.
+static const int kOfflineFilesNameStringId = 45;
+static const int kOfflineFilesTipStringId  = 7019;
+
+struct OfflineFilesStrings {
+    std::wstring name;
+    std::wstring infoTip;
+};
+
+// Sanity check for a string resolved from the MUI: a wrong id must not put a
+// format string or a multi-line message on the Control Panel.
+static bool IsPlausibleOfflineFilesString(const std::wstring& text, size_t maxLength) {
+    return !text.empty() && text.size() <= maxLength &&
+           text.find_first_of(L"%\n<") == std::wstring::npos;
+}
+
+// Row of kOfflineFilesTexts for the current UI language, or nullptr when the
+// language has no row (or the lookup failed).
+static const OfflineFilesTexts* FindOfflineFilesTexts() {
+    try {
+        wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
+        if (!LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                              localeName, LOCALE_NAME_MAX_LENGTH, 0)) {
+            wcscpy_s(localeName, L"en-US");
+        }
+        for (const auto& candidate : kOfflineFilesTexts) {
+            const size_t prefixLength = wcslen(candidate.locale);
+            if (_wcsnicmp(localeName, candidate.locale, prefixLength) == 0 &&
+                (localeName[prefixLength] == L'\0' || localeName[prefixLength] == L'-')) {
+                return &candidate;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Offline Files: exception while matching the UI language");
+    }
+    return nullptr;
+}
+
+// The two classic Windows Vista task links shown under the Offline Files
+// entry. Always hardcoded; a language without a row gets English.
+static void GetOfflineFilesLinkLabels(std::wstring& encryptLabel, std::wstring& diskLabel) {
+    const OfflineFilesTexts* row = FindOfflineFilesTexts();
+    if (!row) row = &kOfflineFilesTexts[0];
+    encryptLabel = row->linkEncrypt;
+    diskLabel = row->linkDisk;
+}
+
+static OfflineFilesStrings GetOfflineFilesStrings() {
+    OfflineFilesStrings result{ kOfflineFilesTexts[0].name, kOfflineFilesTexts[0].infoTip };
+    try {
+        const OfflineFilesTexts* chosen = FindOfflineFilesTexts();
+        if (chosen && chosen->infoTip[0] != L'\0') {
+            result.name = chosen->name;
+            result.infoTip = chosen->infoTip;
+            return result;
+        }
+
+        const std::wstring module = g_offlineFilesDllPath.empty()
+            ? std::wstring(L"%SystemRoot%\\System32\\cscui.dll")
+            : g_offlineFilesDllPath;
+        const std::wstring prefix = L"@" + module + L",-";
+        const std::wstring name = ResolveIndirectString(prefix + std::to_wstring(kOfflineFilesNameStringId));
+        if (IsPlausibleOfflineFilesString(name, 64)) {
+            const std::wstring tip = ResolveIndirectString(prefix + std::to_wstring(kOfflineFilesTipStringId));
+            result.name = name;
+            result.infoTip = IsPlausibleOfflineFilesString(tip, 300) ? tip : std::wstring();
+            return result;
+        }
+        if (chosen) {
+            result.name = chosen->name;
+            result.infoTip.clear();
+        }
+    } catch (...) {
+        Wh_Log(L"Offline Files: exception while resolving the texts; using English");
+        result = { kOfflineFilesTexts[0].name, kOfflineFilesTexts[0].infoTip };
+    }
+    return result;
 }
 
 // Thread-safe accessor for readers (TryProvideValue and friends) that just
@@ -1907,12 +2429,10 @@ bool EnsureClassicTaskLinksFile() {
         g_classicTaskLinksFilePath.clear();
     }
 
-    wchar_t tempPath[MAX_PATH] = {};
-    DWORD length = GetTempPathW(MAX_PATH, tempPath);
-    if (!length || length >= MAX_PATH) return false;
+    const std::wstring dir = ModStorageDir();
+    if (dir.empty()) return false;
 
-    g_classicTaskLinksFilePath = std::wstring(tempPath) +
-                                L"WindhawkClassicPersonalizationTasks.xml";
+    g_classicTaskLinksFilePath = dir + L"WindhawkClassicPersonalizationTasks.xml";
 
     struct TaskLinkTexts {
         const wchar_t* locale;
@@ -2291,6 +2811,38 @@ bool EnsureClassicTaskLinksFile() {
                 "    <category id=\"2\"><sh:task idref=\"{D4F4A041-0D35-4CB6-A21F-BC1661200041}\"/></category>\n"
                 "  </application>\n";
         }
+        // Offline Files (self-built virtual entry): the two classic Windows
+        // Vista links shown under the icon ("Encrypt your offline files" and
+        // "Manage disk space used by your offline files"). Labels are hardcoded
+        // in every supported language; each link opens the same dialog as the
+        // icon, on the matching tab (2 Encryption, 1 Disk Usage), through the
+        // same rundll32 command.
+        if (VirtualAppletPresent(kOfflineFilesVirtualGuid)) {
+            try {
+                std::wstring encryptLabel, diskLabel;
+                GetOfflineFilesLinkLabels(encryptLabel, diskLabel);
+                const std::string appId = NarrowAscii(ToLower(kOfflineFilesVirtualGuid));
+                std::string block;
+                block += "  <!-- Offline Files (Network and Internet, Category 3) -->\n";
+                block += "  <application id=\"" + appId + "\">\n";
+                block += "    <sh:task id=\"{D4F4A042-0D35-4CB6-A21F-BC1661200042}\">"
+                         "<sh:name>" + XmlEscapeUtf8(WideToUtf8(encryptLabel)) + "</sh:name>"
+                         "<sh:keywords>offline;files;encrypt;encryption</sh:keywords>"
+                         "<sh:command>" + XmlEscapeUtf8(WideToUtf8(BuildOfflineFilesCommand(2))) +
+                         "</sh:command></sh:task>\n";
+                block += "    <sh:task id=\"{D4F4A043-0D35-4CB6-A21F-BC1661200043}\">"
+                         "<sh:name>" + XmlEscapeUtf8(WideToUtf8(diskLabel)) + "</sh:name>"
+                         "<sh:keywords>offline;files;disk space;cache</sh:keywords>"
+                         "<sh:command>" + XmlEscapeUtf8(WideToUtf8(BuildOfflineFilesCommand(1))) +
+                         "</sh:command></sh:task>\n";
+                block += "    <category id=\"3\"><sh:task idref=\"{D4F4A042-0D35-4CB6-A21F-BC1661200042}\"/>"
+                         "<sh:task idref=\"{D4F4A043-0D35-4CB6-A21F-BC1661200043}\"/></category>\n";
+                block += "  </application>\n";
+                virtualTaskBlock += block;
+            } catch (...) {
+                Wh_Log(L"Offline Files: exception while building the task links; skipped");
+            }
+        }
     }
     replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
 
@@ -2495,6 +3047,7 @@ void LoadSettings() {
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
     g_settings.enableIscsiInitiator.store(Wh_GetIntSetting(L"enableIscsiInitiator"));
     g_settings.enableGameControllers.store(Wh_GetIntSetting(L"enableGameControllers"));
+    g_settings.enableOfflineFiles.store(Wh_GetIntSetting(L"enableOfflineFiles"));
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
     g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
     g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
@@ -2686,6 +3239,31 @@ void InitDisplayNames() {
                               nullptr, kLegacyUnhideMonikerCount,
                               L"control.exe joy.cpl"))
             Wh_Log(L"Could not read Game Controllers' name/icon; virtual entry not created");
+    }
+    if (g_offlineFilesDllExists.load()) {
+        // Offline Files: no real CLSID exists for the applet, so the entry is
+        // fully self-built. English/Italian texts are hardcoded, the other
+        // languages come from cscui.dll's own resources (see
+        // GetOfflineFilesStrings), the icon is embedded, and the dialog is
+        // opened through rundll32 (works unchanged from Windows Vista to
+        // Windows 11; control.exe cannot be used because cscui.dll is not a
+        // .cpl). Category: Network and Internet, as in Windows Vista.
+        try {
+            const OfflineFilesStrings ofTexts = GetOfflineFilesStrings();
+            const std::wstring ofIcon = g_offlineFilesIconFilePath.empty()
+                ? g_offlineFilesDllPath + L",0"
+                : g_offlineFilesIconFilePath;
+            if (!AddVirtualApplet(kOfflineFilesVirtualGuid, kOfflineFilesVirtualGuid, kCategoryNetwork,
+                                  &g_settings.enableOfflineFiles,
+                                  ofTexts.name,
+                                  ofIcon,
+                                  ofTexts.infoTip,
+                                  nullptr, kLegacyUnhideMonikerCount,
+                                  BuildOfflineFilesCommand(0)))
+                Wh_Log(L"Could not create the Offline Files virtual entry");
+        } catch (...) {
+            Wh_Log(L"Offline Files: exception while creating the virtual entry; skipped");
+        }
     }
     Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
@@ -3091,6 +3669,9 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 if (a.guidLower == kGameControllersVirtualGuid) {
                     std::wstring ensured = EnsureJoyControllerIconFile();
                     if (!ensured.empty()) iconPath = ensured;
+                } else if (a.guidLower == kOfflineFilesVirtualGuid) {
+                    std::wstring ensured = EnsureOfflineFilesIconFile();
+                    if (!ensured.empty()) iconPath = ensured;
                 }
                 if (!iconPath.empty()) {
                     if (lpType) *lpType = REG_SZ;
@@ -3147,6 +3728,8 @@ std::vector<std::wstring> GetNamespaceClsids() {
         result.push_back(kIscsiInitiatorVirtualGuid);
     if (VirtualAppletPresent(kGameControllersVirtualGuid))
         result.push_back(kGameControllersVirtualGuid);
+    if (VirtualAppletPresent(kOfflineFilesVirtualGuid))
+        result.push_back(kOfflineFilesVirtualGuid);
     return result;
 }
 
@@ -4939,6 +5522,7 @@ BOOL Wh_ModInit() {
         wchar_t system32[MAX_PATH] = {};
         bool iscsiExeExists = false;
         bool joyCplExists = false;
+        bool offlineDllExists = false;
         if (GetSystemDirectoryW(system32, MAX_PATH)) {
             const std::wstring iscsicplPath = std::wstring(system32) + L"\\iscsicpl.exe";
             DWORD attributes = GetFileAttributesW(iscsicplPath.c_str());
@@ -4953,15 +5537,27 @@ BOOL Wh_ModInit() {
                             !(joyAttributes & FILE_ATTRIBUTE_DIRECTORY));
             Wh_Log(L"Game Controllers (joy.cpl): %s %s", joyCplPath.c_str(),
                    joyCplExists ? L"exists" : L"does not exist");
+
+            offlineDllExists = ResolveOfflineFilesTarget();
+            Wh_Log(L"Offline Files (cscui.dll): %s (%s)",
+                   offlineDllExists ? g_offlineFilesDllPath.c_str() : L"not found",
+                   offlineDllExists ? g_offlineFilesLaunchBase.c_str() : L"-");
         }
         g_iscsiInitiatorExeExists.store(iscsiExeExists);
         g_joyCplExists.store(joyCplExists);
+        g_offlineFilesDllExists.store(offlineDllExists);
     }
-    // Decode the embedded gamepad icon to a temp .ico up front (before
-    // InitDisplayNames builds the virtual entry that references it).
-    if (g_joyCplExists.load()) {
+    // Decode the embedded gamepad icon to a mod-storage .ico up front
+    // (before InitDisplayNames builds the virtual entry that references
+    // it). Only needed when the feature is actually enabled; a later live
+    // toggle is covered by the lazy re-ensure in TryProvideValue.
+    if (g_joyCplExists.load() && g_settings.enableGameControllers.load()) {
         if (EnsureJoyControllerIconFile().empty())
             Wh_Log(L"Game Controllers: embedded icon unavailable; entry will fall back to the default icon");
+    }
+    if (g_offlineFilesDllExists.load() && g_settings.enableOfflineFiles.load()) {
+        if (EnsureOfflineFilesIconFile().empty())
+            Wh_Log(L"Offline Files: embedded icon unavailable; entry will fall back to the cscui.dll icon");
     }
     g_realPersonalizationRegistered.store(IsRegisteredClsid(kRealPersonalizationGuid));
     g_realSystemRegistered.store(IsRegisteredClsid(kSystemGuid));
@@ -5216,6 +5812,11 @@ static void CleanupTempFiles() {
         DeleteFileW(g_joyIconFilePath.c_str());
         Wh_Log(L"Deleted Game Controllers icon file: %s", g_joyIconFilePath.c_str());
         g_joyIconFilePath.clear();
+    }
+    if (!g_offlineFilesIconFilePath.empty()) {
+        DeleteFileW(g_offlineFilesIconFilePath.c_str());
+        Wh_Log(L"Deleted Offline Files icon file: %s", g_offlineFilesIconFilePath.c_str());
+        g_offlineFilesIconFilePath.clear();
     }
 }
 

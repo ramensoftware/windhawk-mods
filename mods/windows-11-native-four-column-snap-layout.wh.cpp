@@ -2,7 +2,7 @@
 // @id           windows-11-native-four-column-snap-layout
 // @name         Windows 11 Native Four Column Snap Layout
 // @description  Adds an extra native Windows 11 Snap Layout with four equal vertical columns
-// @version      1.0
+// @version      1.1
 // @author       Hoffelhas
 // @github       https://github.com/Hoffelhas
 // @license      MIT
@@ -14,7 +14,9 @@
 /*
 # Windows 11 Native Four Column Snap Layout
 
-Add an extra native Windows 11 Snap Layout with four equal vertical columns. This is especially useful on ultrawide monitors, where four equal vertical zones make better use of the available horizontal screen space.
+Adds an extra native Windows 11 Snap Layout with four equal vertical columns.
+This is especially useful on ultrawide monitors, where four equal vertical
+zones make better use of the available horizontal screen space.
 
 ![Windows 11 four-column Snap Layout](https://i.imgur.com/a3sGZSk.png)
 
@@ -38,10 +40,10 @@ source layout isn't found, that layout set is left unchanged.
 
 Developed and tested on Windows 11 build **26200.9445** on x86-64.
 
-The mod is currently tested only on x86-64 Windows. Because Windhawk's
-`x86-64` architecture setting also allows loading into predefined native shell
-processes on ARM64 Windows, ARM64 may attempt to load the mod, but compatibility
-there has not been verified.
+ARM64 is currently unsupported. The mod hooks a private C++ function that
+returns a `std::vector` by value, and the hidden return-value ABI differs
+between x64 and ARM64. The mod therefore refuses to initialize when built
+natively for ARM64.
 
 If a Windows update changes the relevant private symbols or internal structure,
 Windhawk may be unable to load the mod until it is updated.
@@ -63,9 +65,10 @@ constexpr SIZE_T kSnapZoneSize = 0x38;
 constexpr SIZE_T kMaxReasonableLayoutCount = 32;
 constexpr SIZE_T kMaxReasonableZoneCount = 16;
 
-// The native Win+Z/maximize-button picker displays two layout previews per row
-// on the Windows implementation observed during development.
-constexpr SIZE_T kItemsPerRow = 2;
+// One additional visible picker row requires 78 logical units on the tested
+// build. get_PickerHeight returned the same native values at 100% and 150%
+// display scaling, so this behaves as a logical/DIP-like layout value.
+constexpr int kAdditionalLayoutRowHeight = 78;
 
 struct RawVector {
     void* first;
@@ -73,36 +76,44 @@ struct RawVector {
     void* end;
 };
 
-// SnapBarViewModel asks SnapModel::Layouts() more than once during one load.
-// Keep this state thread-local because it describes one synchronous Snap Bar
-// load operation on the current thread.
 thread_local bool g_inSnapBarLoad = false;
 thread_local bool g_snapBarCustomAdded = false;
 
-// The picker height is requested after its Layouts() call on the same thread
-// on the Windows implementation observed during development.
 thread_local bool g_flyoutCustomAdded = false;
 thread_local SIZE_T g_flyoutLayoutsBefore = 0;
 thread_local SIZE_T g_flyoutLayoutsAfter = 0;
 
-// Prevent duplicate SnapLayout.dll symbol-hook registration if multiple DLL
-// loads occur concurrently.
+// The picker exposes its combined LayoutsAndSuggestions collection as
+// IVector<IInspectable>. Since the IVector<IInspectable>::get_Size symbol is
+// generic, remember the exact vector pointer returned by this picker and only
+// accept size queries for that object.
+thread_local void* g_layoutsAndSuggestionsVector = nullptr;
+thread_local int g_layoutsAndSuggestionsCount = -1;
+
 std::atomic<bool> g_snapLayoutHookClaimed{false};
 
 // -----------------------------------------------------------------------------
 // Native SnapLayout.dll functions
 // -----------------------------------------------------------------------------
 
-using Layouts_t =
-    RawVector*(__cdecl*)(void* thisPtr, RawVector* returnBuffer);
+using Layouts_t = RawVector*(__cdecl*)(void* thisPtr, RawVector* returnBuffer);
 Layouts_t Layouts_Original = nullptr;
 
 using EmplaceLayout_t =
     void*(__cdecl*)(void* vectorThis, const void* sourceLayout);
 EmplaceLayout_t EmplaceLayout_Original = nullptr;
 
-using PickerHeight_t = int(__cdecl*)(void* thisPtr, int* value);
+using PickerHeight_t =
+    HRESULT(__cdecl*)(void* thisPtr, int* value);
 PickerHeight_t PickerHeight_Original = nullptr;
+
+using LayoutsAndSuggestions_t =
+    HRESULT(__cdecl*)(void* thisPtr, void** value);
+LayoutsAndSuggestions_t LayoutsAndSuggestions_Original = nullptr;
+
+using InspectableVectorSize_t =
+    HRESULT(__cdecl*)(void* thisPtr, unsigned int* value);
+InspectableVectorSize_t InspectableVectorSize_Original = nullptr;
 
 using SnapBarLoadLayouts_t =
     void(__cdecl*)(void* thisPtr, double scale, int options, bool flag);
@@ -115,12 +126,14 @@ SnapBarLoadLayouts_t SnapBarLoadLayouts_Original = nullptr;
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
-bool HookSnapLayoutDll(HMODULE module, bool applyHookOperations);
-
 // -----------------------------------------------------------------------------
-// Scope guard for Snap Bar thread-local state
+// Snap Bar state
 // -----------------------------------------------------------------------------
 
+// SnapModel::Layouts() is used by both the flyout and Snap Bar. The Snap Bar
+// can call it more than once during one LoadLayouts() operation, so keep
+// thread-local state for the duration of that call to append the custom layout
+// only once and to avoid applying flyout-specific logic to the Snap Bar path.
 class ScopedSnapBarState {
   public:
     ScopedSnapBarState()
@@ -144,7 +157,7 @@ class ScopedSnapBarState {
 };
 
 // -----------------------------------------------------------------------------
-// Raw SnapLayout / SnapZone helpers
+// Raw vector helpers
 // -----------------------------------------------------------------------------
 
 SIZE_T GetVectorCount(const RawVector* vec, SIZE_T elementSize) {
@@ -160,81 +173,99 @@ SIZE_T GetVectorCount(const RawVector* vec, SIZE_T elementSize) {
         return 0;
     }
 
-    const SIZE_T bytes = static_cast<SIZE_T>(last - first);
+    const SIZE_T sizeBytes =
+        static_cast<SIZE_T>(last - first);
+    const SIZE_T capacityBytes =
+        static_cast<SIZE_T>(end - first);
 
-    if (bytes % elementSize != 0) {
+    if (sizeBytes % elementSize != 0 ||
+        capacityBytes % elementSize != 0) {
         return 0;
     }
 
-    return bytes / elementSize;
+    return sizeBytes / elementSize;
 }
 
-bool GetZoneVector(const void* layout, BYTE** firstOut, SIZE_T* countOut) {
+bool GetZoneVector(
+    const void* layout,
+    BYTE** firstOut,
+    SIZE_T* countOut) {
     if (!layout || !firstOut || !countOut) {
         return false;
     }
 
-    void* first = nullptr;
-    void* last = nullptr;
-    void* end = nullptr;
+    // SnapLayout:
+    // +0x28 = std::vector<SnapZone>::begin
+    // +0x30 = std::vector<SnapZone>::end
+    // +0x38 = std::vector<SnapZone>::capacity end
+    RawVector zones{};
 
-    const auto* layoutBytes = reinterpret_cast<const BYTE*>(layout);
+    const BYTE* layoutBytes =
+        reinterpret_cast<const BYTE*>(layout);
 
-    memcpy(&first, layoutBytes + 0x28, sizeof(first));
-    memcpy(&last, layoutBytes + 0x30, sizeof(last));
-    memcpy(&end, layoutBytes + 0x38, sizeof(end));
+    memcpy(&zones.first,
+           layoutBytes + 0x28,
+           sizeof(zones.first));
 
-    if (!first || !last || !end) {
+    memcpy(&zones.last,
+           layoutBytes + 0x30,
+           sizeof(zones.last));
+
+    memcpy(&zones.end,
+           layoutBytes + 0x38,
+           sizeof(zones.end));
+
+    const SIZE_T count =
+        GetVectorCount(&zones, kSnapZoneSize);
+
+    if (count == 0 ||
+        count > kMaxReasonableZoneCount) {
         return false;
     }
 
-    auto* firstBytes = reinterpret_cast<BYTE*>(first);
-    auto* lastBytes = reinterpret_cast<BYTE*>(last);
-    auto* endBytes = reinterpret_cast<BYTE*>(end);
+    *firstOut =
+        reinterpret_cast<BYTE*>(zones.first);
 
-    if (lastBytes < firstBytes || endBytes < lastBytes) {
-        return false;
-    }
-
-    const SIZE_T bytes = static_cast<SIZE_T>(lastBytes - firstBytes);
-
-    if (bytes % kSnapZoneSize != 0) {
-        return false;
-    }
-
-    const SIZE_T count = bytes / kSnapZoneSize;
-
-    if (count > kMaxReasonableZoneCount) {
-        return false;
-    }
-
-    *firstOut = firstBytes;
     *countOut = count;
 
     return true;
 }
 
-unsigned int ReadU32(const void* base, SIZE_T offset) {
+unsigned int ReadU32(
+    const void* base,
+    SIZE_T offset) {
     unsigned int value = 0;
 
-    memcpy(&value,
-           reinterpret_cast<const BYTE*>(base) + offset,
-           sizeof(value));
+    memcpy(
+        &value,
+        reinterpret_cast<const BYTE*>(base) + offset,
+        sizeof(value));
 
     return value;
 }
 
-void WriteU32(void* base, SIZE_T offset, unsigned int value) {
-    memcpy(reinterpret_cast<BYTE*>(base) + offset,
-           &value,
-           sizeof(value));
+void WriteU32(
+    void* base,
+    SIZE_T offset,
+    unsigned int value) {
+    memcpy(
+        reinterpret_cast<BYTE*>(base) + offset,
+        &value,
+        sizeof(value));
 }
+
+// -----------------------------------------------------------------------------
+// Identify native 2x2 four-quadrant layout
+// -----------------------------------------------------------------------------
 
 bool IsNativeQuadrantLayout(const void* layout) {
     if (!layout) {
         return false;
     }
 
+    // SnapLayout:
+    // +0x20 = column count
+    // +0x24 = row count
     if (ReadU32(layout, 0x20) != 2 ||
         ReadU32(layout, 0x24) != 2) {
         return false;
@@ -243,17 +274,28 @@ bool IsNativeQuadrantLayout(const void* layout) {
     BYTE* zoneFirst = nullptr;
     SIZE_T zoneCount = 0;
 
-    if (!GetZoneVector(layout, &zoneFirst, &zoneCount) ||
+    if (!GetZoneVector(
+            layout,
+            &zoneFirst,
+            &zoneCount) ||
         zoneCount != 4) {
         return false;
     }
 
     bool found[2][2] = {};
 
-    for (SIZE_T i = 0; i < zoneCount; i++) {
+    for (SIZE_T i = 0;
+         i < zoneCount;
+         i++) {
         const BYTE* zone =
             zoneFirst + i * kSnapZoneSize;
 
+        // SnapZone:
+        // +0x20 = OriginColumn
+        // +0x24 = OriginRow
+        // +0x28 = ColumnSpan
+        // +0x2C = RowSpan
+        // +0x30 = GridUnitType, preserved from the native source layout.
         const unsigned int originColumn =
             ReadU32(zone, 0x20);
 
@@ -284,61 +326,57 @@ bool IsNativeQuadrantLayout(const void* layout) {
 }
 
 // -----------------------------------------------------------------------------
-// Convert a copied native quadrant layout to four equal vertical columns
+// Convert cloned quadrant layout to four columns
 // -----------------------------------------------------------------------------
 
 bool PatchToFourColumns(void* layout) {
     if (!IsNativeQuadrantLayout(layout)) {
         Wh_Log(
-            L"Copied source layout no longer matches the expected "
+            L"Copied source layout no longer matches expected "
             L"2x2 four-quadrant structure");
+
         return false;
     }
 
     BYTE* zoneFirst = nullptr;
     SIZE_T zoneCount = 0;
 
-    if (!GetZoneVector(layout, &zoneFirst, &zoneCount) ||
+    if (!GetZoneVector(
+            layout,
+            &zoneFirst,
+            &zoneCount) ||
         zoneCount != 4) {
         Wh_Log(
             L"Unexpected zone vector while patching custom layout");
+
         return false;
     }
 
-    // SnapLayout:
-    // +0x20 = column count
-    // +0x24 = row count
+    // Turn the cloned 2x2 grid into a 4x1 grid.
     WriteU32(layout, 0x20, 4);
     WriteU32(layout, 0x24, 1);
 
-    // SnapZone:
-    // +0x20 OriginColumn
-    // +0x24 OriginRow
-    // +0x28 ColumnSpan
-    // +0x2C RowSpan
-    // +0x30 GridUnitType -- preserved from the native source layout.
-    for (unsigned int i = 0; i < 4; i++) {
+    for (unsigned int i = 0;
+         i < 4;
+         i++) {
         BYTE* zone =
             zoneFirst + i * kSnapZoneSize;
 
-        WriteU32(zone, 0x20, i);
-        WriteU32(zone, 0x24, 0);
-        WriteU32(zone, 0x28, 1);
-        WriteU32(zone, 0x2C, 1);
+        WriteU32(zone, 0x20, i);  // OriginColumn
+        WriteU32(zone, 0x24, 0);  // OriginRow
+        WriteU32(zone, 0x28, 1);  // ColumnSpan
+        WriteU32(zone, 0x2C, 1);  // RowSpan
     }
 
     return true;
 }
 
 // -----------------------------------------------------------------------------
-// Find, deep-copy, and append the native quadrant layout
+// Clone and append custom layout
 // -----------------------------------------------------------------------------
 
 bool CloneAndAppendFourColumn(RawVector* vec) {
     if (!vec || !EmplaceLayout_Original) {
-        Wh_Log(
-            L"Can't append custom layout: invalid vector or unresolved "
-            L"emplace helper");
         return false;
     }
 
@@ -348,19 +386,24 @@ bool CloneAndAppendFourColumn(RawVector* vec) {
     if (count == 0 ||
         count > kMaxReasonableLayoutCount) {
         Wh_Log(
-            L"Can't inspect Snap Layout set: invalid layout count %zu",
+            L"Invalid Snap Layout count: %zu",
             count);
+
         return false;
     }
 
     const BYTE* vectorFirst =
-        reinterpret_cast<const BYTE*>(vec->first);
+        reinterpret_cast<const BYTE*>(
+            vec->first);
 
     SIZE_T sourceIndex = count;
 
-    for (SIZE_T i = 0; i < count; i++) {
+    for (SIZE_T i = 0;
+         i < count;
+         i++) {
         const BYTE* candidate =
-            vectorFirst + i * kSnapLayoutSize;
+            vectorFirst +
+            i * kSnapLayoutSize;
 
         if (IsNativeQuadrantLayout(candidate)) {
             sourceIndex = i;
@@ -370,35 +413,42 @@ bool CloneAndAppendFourColumn(RawVector* vec) {
 
     if (sourceIndex == count) {
         Wh_Log(
-            L"No compatible 2x2 four-quadrant source layout among %zu "
-            L"native layouts",
-            count);
+            L"No compatible native 2x2 four-zone layout found");
+
         return false;
     }
 
-    // This pointer is valid only until the insertion below. The native vector
-    // helper may reallocate the vector's backing storage.
+    // SnapLayout contains owning C++ objects including std::wstring and a
+    // nested std::vector<SnapZone>. Use SnapLayout.dll's own vector insertion
+    // helper so the clone uses the correct allocator-aware deep copy.
+    //
+    // The source pointer is only valid until insertion; the outer vector may
+    // reallocate during the call.
     const void* source =
-        vectorFirst + sourceIndex * kSnapLayoutSize;
+        vectorFirst +
+        sourceIndex * kSnapLayoutSize;
 
-    // Use SnapLayout.dll's own native vector helper so all non-trivial members,
-    // including the nested std::wstring and std::vector<SnapZone>, are copied
-    // with the correct allocator and ownership semantics.
     void* newLayout =
-        EmplaceLayout_Original(vec, source);
+        EmplaceLayout_Original(
+            vec,
+            source);
 
-    if (!newLayout) {
+    if (!newLayout ||
+        newLayout !=
+            reinterpret_cast<BYTE*>(vec->last) -
+                kSnapLayoutSize) {
         Wh_Log(
-            L"Failed to clone native Snap Layout");
+            L"Unexpected appended layout position");
+
         return false;
     }
 
-    // The source is fully validated immediately before the native deep copy,
-    // so failure here isn't expected. If it does happen, the clone remains in
-    // the vector because no verified erase helper is currently available.
     if (!PatchToFourColumns(newLayout)) {
+        // Don't attempt to resize or undo the private STL container if the
+        // mutation fails; the deep-copied layout itself remains valid.
         Wh_Log(
-            L"Native Snap Layout clone couldn't be converted");
+            L"Failed to convert cloned layout to four columns");
+
         return false;
     }
 
@@ -410,14 +460,16 @@ bool CloneAndAppendFourColumn(RawVector* vec) {
 }
 
 // -----------------------------------------------------------------------------
-// SnapLayout.dll hooks
+// Layout hook
 // -----------------------------------------------------------------------------
 
 RawVector* __cdecl Layouts_Hook(
     void* thisPtr,
     RawVector* returnBuffer) {
     RawVector* result =
-        Layouts_Original(thisPtr, returnBuffer);
+        Layouts_Original(
+            thisPtr,
+            returnBuffer);
 
     if (!result) {
         return result;
@@ -426,71 +478,166 @@ RawVector* __cdecl Layouts_Hook(
     if (g_inSnapBarLoad) {
         if (!g_snapBarCustomAdded) {
             g_snapBarCustomAdded =
-                CloneAndAppendFourColumn(result);
+                CloneAndAppendFourColumn(
+                    result);
         }
 
         return result;
     }
 
+    // Don't clear g_layoutsAndSuggestionsVector here. The picker can retrieve
+    // that interface before SnapModel::Layouts() is called and continue using
+    // the same vector afterward.
+    //
+    // Reset only the count so stale data from an earlier flyout can't affect
+    // the next height calculation.
+    g_layoutsAndSuggestionsCount = -1;
+
     g_flyoutLayoutsBefore =
-        GetVectorCount(result, kSnapLayoutSize);
+        GetVectorCount(
+            result,
+            kSnapLayoutSize);
 
     g_flyoutCustomAdded =
-        CloneAndAppendFourColumn(result);
+        CloneAndAppendFourColumn(
+            result);
 
     g_flyoutLayoutsAfter =
         g_flyoutCustomAdded
-            ? GetVectorCount(result, kSnapLayoutSize)
+            ? GetVectorCount(
+                  result,
+                  kSnapLayoutSize)
             : g_flyoutLayoutsBefore;
 
     return result;
 }
 
-int __cdecl PickerHeight_Hook(
+// -----------------------------------------------------------------------------
+// Picker's LayoutsAndSuggestions collection
+// -----------------------------------------------------------------------------
+
+HRESULT __cdecl LayoutsAndSuggestions_Hook(
     void* thisPtr,
-    int* value) {
-    const int hr =
-        PickerHeight_Original(thisPtr, value);
+    void** value) {
+    const HRESULT hr =
+        LayoutsAndSuggestions_Original(
+            thisPtr,
+            value);
 
-    // Layouts() and get_PickerHeight() are observed to execute synchronously on
-    // the same thread for the native Win+Z/maximize-button picker.
-    //
-    // Scale the complete native picker height proportionally rather than
-    // adding a fixed pixel count. This automatically follows display scaling.
-    if (hr == 0 &&
+    if (SUCCEEDED(hr) &&
         value &&
-        g_flyoutCustomAdded &&
-        g_flyoutLayoutsBefore > 0 &&
-        g_flyoutLayoutsAfter > g_flyoutLayoutsBefore) {
-        const SIZE_T rowsBefore =
-            (g_flyoutLayoutsBefore +
-             kItemsPerRow - 1) /
-            kItemsPerRow;
-
-        const SIZE_T rowsAfter =
-            (g_flyoutLayoutsAfter +
-             kItemsPerRow - 1) /
-            kItemsPerRow;
-
-        if (rowsAfter > rowsBefore) {
-            *value =
-                MulDiv(
-                    *value,
-                    static_cast<int>(rowsAfter),
-                    static_cast<int>(rowsBefore));
-        }
+        *value &&
+        !g_inSnapBarLoad) {
+        g_layoutsAndSuggestionsVector =
+            *value;
     }
 
     return hr;
 }
+
+// -----------------------------------------------------------------------------
+// IVector<IInspectable>::Size
+// -----------------------------------------------------------------------------
+
+HRESULT __cdecl InspectableVectorSize_Hook(
+    void* thisPtr,
+    unsigned int* value) {
+    const HRESULT hr =
+        InspectableVectorSize_Original(
+            thisPtr,
+            value);
+
+    if (SUCCEEDED(hr) &&
+        value &&
+        !g_inSnapBarLoad &&
+        thisPtr ==
+            g_layoutsAndSuggestionsVector) {
+        g_layoutsAndSuggestionsCount =
+            static_cast<int>(*value);
+    }
+
+    return hr;
+}
+
+// -----------------------------------------------------------------------------
+// Picker height
+// -----------------------------------------------------------------------------
+
+HRESULT __cdecl PickerHeight_Hook(
+    void* thisPtr,
+    int* value) {
+    const HRESULT hr =
+        PickerHeight_Original(
+            thisPtr,
+            value);
+
+    if (FAILED(hr) ||
+        !value ||
+        !g_flyoutCustomAdded ||
+        g_flyoutLayoutsBefore == 0 ||
+        g_flyoutLayoutsAfter !=
+            g_flyoutLayoutsBefore + 1 ||
+        g_layoutsAndSuggestionsCount <= 0) {
+        return hr;
+    }
+
+    // Windows selects the native picker arrangement before the custom card is
+    // appended.
+    //
+    // Verified on the tested build:
+    //   4 native layouts -> 2 items per row
+    //   6 native layouts -> 3 items per row
+    //
+    // Use Windows' own native layout count as the mode indicator instead of
+    // checking resolution or display size directly.
+    SIZE_T itemsPerRow = 0;
+
+    if (g_flyoutLayoutsBefore == 4) {
+        itemsPerRow = 2;
+    } else if (
+        g_flyoutLayoutsBefore == 6) {
+        itemsPerRow = 3;
+    } else {
+        // Unknown future/native picker arrangement. Don't guess.
+        return hr;
+    }
+
+    const SIZE_T combinedAfter =
+        static_cast<SIZE_T>(
+            g_layoutsAndSuggestionsCount);
+
+    // The custom Snap Layout contributes exactly one item to the combined
+    // LayoutsAndSuggestions collection.
+    const SIZE_T combinedBefore =
+        combinedAfter - 1;
+
+    const SIZE_T rowsBefore =
+        (combinedBefore +
+         itemsPerRow - 1) /
+        itemsPerRow;
+
+    const SIZE_T rowsAfter =
+        (combinedAfter +
+         itemsPerRow - 1) /
+        itemsPerRow;
+
+    if (rowsAfter > rowsBefore) {
+        *value +=
+            kAdditionalLayoutRowHeight;
+    }
+
+    return hr;
+}
+
+// -----------------------------------------------------------------------------
+// Snap Bar
+// -----------------------------------------------------------------------------
 
 void __cdecl SnapBarLoadLayouts_Hook(
     void* thisPtr,
     double scale,
     int options,
     bool flag) {
-    // Restore thread-local state even if the native C++/WinRT implementation
-    // exits via an exception.
     ScopedSnapBarState scopedState;
 
     SnapBarLoadLayouts_Original(
@@ -501,7 +648,7 @@ void __cdecl SnapBarLoadLayouts_Hook(
 }
 
 // -----------------------------------------------------------------------------
-// Late loading of SnapLayout.dll
+// Symbol hooks
 // -----------------------------------------------------------------------------
 
 bool HookSnapLayoutDll(
@@ -513,9 +660,10 @@ bool HookSnapLayoutDll(
 
     bool expected = false;
 
-    if (!g_snapLayoutHookClaimed.compare_exchange_strong(
-            expected,
-            true)) {
+    if (!g_snapLayoutHookClaimed
+             .compare_exchange_strong(
+                 expected,
+                 true)) {
         return true;
     }
 
@@ -540,6 +688,23 @@ bool HookSnapLayoutDll(
             },
             &PickerHeight_Original,
             PickerHeight_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SnapLayout::implementation::SnapLayoutPickerViewModel,struct winrt::SnapLayout::ISnapLayoutPickerViewModel>::get_LayoutsAndSuggestions(void * *))",
+            },
+            &LayoutsAndSuggestions_Original,
+            LayoutsAndSuggestions_Hook,
+            true,
+        },
+        {
+            {
+                LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::impl::inspectable_observable_vector<class std::vector<struct winrt::Windows::Foundation::IInspectable,class std::allocator<struct winrt::Windows::Foundation::IInspectable> >,struct winrt::impl::single_threaded_collection_base>,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> >::get_Size(unsigned int *))",
+            },
+            &InspectableVectorSize_Original,
+            InspectableVectorSize_Hook,
+            true,
         },
         {
             {
@@ -553,9 +718,10 @@ bool HookSnapLayoutDll(
     if (!WindhawkUtils::HookSymbols(
             module,
             snapLayoutDllHooks,
-            ARRAYSIZE(snapLayoutDllHooks))) {
+            ARRAYSIZE(
+                snapLayoutDllHooks))) {
         Wh_Log(
-            L"Failed to resolve one or more SnapLayout.dll symbols");
+            L"Failed to resolve one or more required SnapLayout.dll symbols");
 
         return false;
     }
@@ -567,11 +733,16 @@ bool HookSnapLayoutDll(
         !Wh_ApplyHookOperations()) {
         Wh_Log(
             L"Failed to apply SnapLayout.dll hook operations");
+
         return false;
     }
 
     return true;
 }
+
+// -----------------------------------------------------------------------------
+// Late SnapLayout.dll loading
+// -----------------------------------------------------------------------------
 
 void HandleSnapLayoutDllIfLoaded(
     bool applyHookOperations) {
@@ -580,7 +751,8 @@ void HandleSnapLayoutDllIfLoaded(
     }
 
     HMODULE module =
-        GetModuleHandleW(L"SnapLayout.dll");
+        GetModuleHandleW(
+            L"SnapLayout.dll");
 
     if (module) {
         HookSnapLayoutDll(
@@ -601,9 +773,11 @@ HMODULE WINAPI LoadLibraryExW_Hook(
 
     if (module &&
         !g_snapLayoutHookClaimed.load()) {
-        // Check the loaded-module state rather than relying on the filename
-        // passed to this call. SnapLayout.dll may also arrive as a dependency.
-        HandleSnapLayoutDllIfLoaded(true);
+        // Don't depend on the filename passed to LoadLibraryExW. Windows may
+        // load the module through a full path or another loader path. Re-check
+        // the actual process module list after a successful library load.
+        HandleSnapLayoutDllIfLoaded(
+            true);
     }
 
     return module;
@@ -616,8 +790,21 @@ HMODULE WINAPI LoadLibraryExW_Hook(
 // -----------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
+#if defined(_M_ARM64) || defined(__aarch64__)
+    // Layouts_Hook models the MSVC x64 ABI for a member function returning
+    // std::vector by value. Native ARM64 passes the indirect result in x8, so
+    // using the x64 prototype there would be unsafe.
+    Wh_Log(
+        L"ARM64 is not supported by this mod");
+
+    return FALSE;
+#endif
+
+    Wh_Log(L">");
+
     if (HMODULE snapLayoutModule =
-            GetModuleHandleW(L"SnapLayout.dll")) {
+            GetModuleHandleW(
+                L"SnapLayout.dll")) {
         if (!HookSnapLayoutDll(
                 snapLayoutModule,
                 false)) {
@@ -628,32 +815,37 @@ BOOL Wh_ModInit() {
     }
 
     HMODULE kernelBaseModule =
-        GetModuleHandleW(L"kernelbase.dll");
+        GetModuleHandleW(
+            L"kernelbase.dll");
 
     if (!kernelBaseModule) {
         Wh_Log(
             L"Failed to get kernelbase.dll");
+
         return FALSE;
     }
 
-    auto pKernelBaseLoadLibraryExW =
-        reinterpret_cast<decltype(&LoadLibraryExW)>(
+    auto pLoadLibraryExW =
+        reinterpret_cast<
+            decltype(&LoadLibraryExW)>(
             GetProcAddress(
                 kernelBaseModule,
                 "LoadLibraryExW"));
 
-    if (!pKernelBaseLoadLibraryExW) {
+    if (!pLoadLibraryExW) {
         Wh_Log(
             L"Failed to resolve kernelbase!LoadLibraryExW");
+
         return FALSE;
     }
 
     if (!WindhawkUtils::SetFunctionHook(
-            pKernelBaseLoadLibraryExW,
+            pLoadLibraryExW,
             LoadLibraryExW_Hook,
             &LoadLibraryExW_Original)) {
         Wh_Log(
             L"Failed to hook kernelbase!LoadLibraryExW");
+
         return FALSE;
     }
 
@@ -664,7 +856,8 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    // Close the race where SnapLayout.dll loads after the initial check but
-    // before the LoadLibraryExW hook becomes active.
-    HandleSnapLayoutDllIfLoaded(true);
+    Wh_Log(L">");
+
+    HandleSnapLayoutDllIfLoaded(
+        true);
 }

@@ -2,7 +2,7 @@
 // @id              aero-flip3d-recreation
 // @name            Aero Flip 3D Recreation
 // @description     This mod recreates the classic Windows Vista/7 Flip 3D effect in modern Windows versions
-// @version         1.1.0
+// @version         1.2.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         windhawk.exe
@@ -22,9 +22,9 @@ This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern
 
 It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.
 
-This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.
+To help the author improve the mod, feel free to send suggestions.
 
-The mod has been tested on Windows 10 1809.
+The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 24H2.
 ## Keyboard shortcuts
 
 | Shortcut | Action |
@@ -65,6 +65,7 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 - The native Alt+Tab window switcher is not modified and continues to work normally.
 - While the mod is enabled, the Win+Tab shortcut is redirected from the modern Task View interface to the classic Flip 3D experience.
 - To restore the original Windows Task View behavior, simply disable or uninstall the mod.
+- The minimized windows are not included in the animation.
 */
 // ==/WindhawkModReadme==
 
@@ -276,8 +277,7 @@ private:
 
 // Device context owner. Knows whether it must ReleaseDC (GetDC) or
 // DeleteDC (CreateCompatibleDC) and does the right thing on destruction.
-class ScopedDc {
-public:
+class ScopedDc {public:
     ScopedDc() = default;
 
     ~ScopedDc() {
@@ -878,6 +878,26 @@ inline int ClampInt(int value, int minValue, int maxValue) {
     return std::max(minValue, std::min(value, maxValue));
 }
 
+// Source-window aspect ratios used to size Flip 3D cards are clamped to
+// this range before use. Real windows span an extreme range: a panel
+// spanning several monitors, a thin vertical toolbar, a tall narrow
+// dialog. Feeding those raw ratios into the card-sizing math produces
+// absurd results -- a card many times wider than the deck, or one so
+// thin it's effectively invisible -- for windows that are otherwise
+// perfectly normal to include in the switcher. Clamping keeps every card
+// within a plausible window-shape range (roughly a tall narrow dialog at
+// one end to an ultrawide single window at the other) without changing
+// the layout for the vast majority of ordinary windows.
+constexpr double kMinCardAspectRatio = 0.4;  // e.g. a tall, narrow dialog.
+constexpr double kMaxCardAspectRatio = 2.5;  // e.g. an ultrawide window.
+
+inline double ClampCardAspectRatio(double aspect) {
+    if (!(aspect > 0.0) || !std::isfinite(aspect)) {
+        return 16.0 / 9.0;
+    }
+    return std::clamp(aspect, kMinCardAspectRatio, kMaxCardAspectRatio);
+}
+
 inline BYTE ClampByte(int value) {
     return static_cast<BYTE>(ClampInt(value, 0, 255));
 }
@@ -1102,13 +1122,16 @@ static bool GdiBudgetAllowsBitmaps(int needed = 8) {
     return used == 0 || used + static_cast<DWORD>(needed) < 8000;
 }
 
-static bool MemoryPressureAllowsSnapshot() {
+static bool MemoryPressureAllowsSnapshot(ULONGLONG extraBytes = 0) {
     MEMORYSTATUSEX status = {};
     status.dwLength = sizeof(status);
     if (!GlobalMemoryStatusEx(&status)) {
         return true;  // Cannot tell -> allow.
     }
-    return status.ullAvailPhys > 100ULL * 1024 * 1024;  // 100 MB free physical RAM.
+    // 100 MB free physical RAM headroom, plus whatever extra bitmap the
+    // caller is about to allocate (e.g. a full-virtual-desktop capture
+    // bitmap on multi-monitor setups).
+    return status.ullAvailPhys > 100ULL * 1024 * 1024 + extraBytes;
 }
 
 // Finds the real desktop window that hosts the icons/wallpaper
@@ -1136,11 +1159,94 @@ static HWND FindPlainDesktopWindow() {
     return progman;
 }
 
+// Captures the desktop background (WorkerW/Progman, or any other desktop
+// HWND) at the *source window's own native size* via PrintWindow, then
+// BitBlts the sub-rect that corresponds to the target monitor into memDc.
+//
+// Rationale: on multi-monitor setups, WorkerW/Progman spans the entire
+// virtual desktop, while the snapshot bitmap is sized to a single monitor
+// (see GetPrimaryMonitorRect() in the caller). Calling PrintWindow directly
+// into a single-monitor-sized bitmap forces GDI to squash the full
+// multi-monitor content into that smaller target, which is what produced
+// the "merged" wallpaper report (see ramensoftware/windhawk-mods#5490):
+// this is a coordinate/size mismatch, not a wallpaper-engine redirection
+// problem. Capturing at native size first and cropping afterwards fixes it
+// while still going through the same PrintWindow(PW_RENDERFULLCONTENT)
+// path that already works correctly for everyone else.
+static bool CaptureDesktopSnapshotViaPrintWindowNativeSize(HWND desktopHwnd,
+                                                             HDC screenDc,
+                                                             HDC memDc,
+                                                             const RECT& destRect,
+                                                             int width,
+                                                             int height) {
+    if (!desktopHwnd || !IsWindow(desktopHwnd) || !screenDc || !memDc ||
+        width <= 0 || height <= 0) {
+        return false;
+    }
+
+    RECT srcRect = {};
+    if (!GetWindowRect(desktopHwnd, &srcRect)) {
+        return false;
+    }
+    const int srcW = RectWidth(srcRect);
+    const int srcH = RectHeight(srcRect);
+    if (srcW <= 0 || srcH <= 0) {
+        return false;
+    }
+
+    // The crop rect we're about to BitBlt out of the native-size bitmap
+    // must lie entirely inside it. Normally true for Progman/WorkerW (whose
+    // rect covers the whole virtual desktop, a superset of any monitor),
+    // but not guaranteed for the GetDesktopWindow() fallback or an unusual
+    // WorkerW rect -- bail out (letting the caller fall through) rather
+    // than let BitBlt silently read outside the bitmap.
+    const int cropLeft = destRect.left - srcRect.left;
+    const int cropTop = destRect.top - srcRect.top;
+    if (cropLeft < 0 || cropTop < 0 || cropLeft + width > srcW ||
+        cropTop + height > srcH) {
+        return false;
+    }
+
+    // One extra bitmap, sized to the *native* (potentially whole-virtual-
+    // desktop) source rather than to a single monitor. Check the resource
+    // guards against that real size instead of trusting the caller's
+    // earlier, smaller-sized check.
+    const ULONGLONG extraBytes =
+        static_cast<ULONGLONG>(srcW) * static_cast<ULONGLONG>(srcH) * 4;
+    if (!GdiBudgetAllowsBitmaps(/*needed=*/9) ||
+        !MemoryPressureAllowsSnapshot(extraBytes)) {
+        return false;
+    }
+
+    ScopedBitmap full(CreateCompatibleBitmap(screenDc, srcW, srcH));
+    if (!full) {
+        return false;
+    }
+    ScopedDc fullDc = ScopedDc::compatible(screenDc);
+    if (!fullDc) {
+        return false;
+    }
+    ScopedSelectObject<HBITMAP> fullSel(fullDc.get(), full.get());
+    if (!fullSel.succeeded()) {
+        return false;
+    }
+
+    if (!PrintWindow(desktopHwnd, fullDc.get(), PW_RENDERFULLCONTENT)) {
+        return false;
+    }
+
+    return BitBlt(memDc, 0, 0, width, height, fullDc.get(), cropLeft, cropTop,
+                   SRCCOPY) != FALSE;
+}
+
 // Captures the real, currently-visible desktop (wallpaper + icons + taskbar)
 // into a GDI bitmap. All DCs and bitmaps are RAII-owned, so no early return
 // can leak. Must be called BEFORE the overlay window becomes visible,
 // otherwise the overlay itself would be captured.
 static void CaptureDesktopSnapshot() {
+    // Always start from a clean slate: CleanupFlipResourcesOnOverlayThread
+
+
     // Always start from a clean slate: CleanupFlipResourcesOnOverlayThread
     // releases the snapshot on every close, so there is never a stale bitmap
     // to reuse here.
@@ -1223,14 +1329,50 @@ static void CaptureDesktopSnapshot() {
         return hits >= kSampleCount;
     };
 
-    BOOL ok = PrintWindow(desktopHwnd, memDc.get(), PW_RENDERFULLCONTENT);
+    // On multi-monitor setups, WorkerW/Progman spans the entire virtual
+    // desktop, while `width`/`height` above are sized to a single monitor.
+    // PrintWindow rendering the full-size source directly into that
+    // smaller bitmap is exactly the coordinate/size mismatch that produced
+    // the "merged" wallpaper report (see ramensoftware/windhawk-mods#5490):
+    // capture at the source's native size first, then crop to the target
+    // monitor's rect.
+    //
+    // Capture order:
+    //   1. CaptureDesktopSnapshotViaPrintWindowNativeSize - PrintWindow at
+    //      native size, cropped via BitBlt to the target monitor.
+    //   2. PrintWindow directly into the destination bitmap - only when the
+    //      source window's rect already matches the destination size, i.e.
+    //      a single-monitor desktop HWND. Gated like this on purpose: if it
+    //      ran unconditionally as a fallback, a primary monitor with a dark
+    //      wallpaper would have its (correct) native-size capture rejected
+    //      by isBlankCapture(), fall into this branch, and get the exact
+    //      squashed-multi-monitor image the native-size path exists to
+    //      avoid.
+    //   3. Plain BitBlt from the screen DC - reads the real composited
+    //      desktop pixels directly, no window-specific redirection at all.
+    BOOL ok = CaptureDesktopSnapshotViaPrintWindowNativeSize(
+        desktopHwnd, screenDc.get(), memDc.get(), desktopRect, width, height)
+                  ? TRUE
+                  : FALSE;
     if (ok && isBlankCapture()) {
         ok = FALSE;
     }
     if (!ok) {
-        ok = PrintWindow(desktopHwnd, memDc.get(), 0);
-        if (ok && isBlankCapture()) {
-            ok = FALSE;
+        RECT srcRect = {};
+        const bool sourceMatchesTarget =
+            GetWindowRect(desktopHwnd, &srcRect) &&
+            RectWidth(srcRect) == width && RectHeight(srcRect) == height;
+        if (sourceMatchesTarget) {
+            ok = PrintWindow(desktopHwnd, memDc.get(), PW_RENDERFULLCONTENT);
+            if (ok && isBlankCapture()) {
+                ok = FALSE;
+            }
+            if (!ok) {
+                ok = PrintWindow(desktopHwnd, memDc.get(), 0);
+                if (ok && isBlankCapture()) {
+                    ok = FALSE;
+                }
+            }
         }
     }
     if (!ok) {
@@ -1752,6 +1894,14 @@ static bool IsFlipEligibleWindow(HWND hwnd) {
         return false;
     }
 
+    // Minimized windows produce a black thumbnail with the public DWM APIs
+    // alone: after minimization the compositor no longer reliably keeps the
+    // window surface, so the registered thumbnail stays empty/black.
+    // They are therefore excluded from the deck.
+    if (IsIconic(hwnd)) {
+        return false;
+    }
+
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     HWND owner = GetWindow(hwnd, GW_OWNER);
 
@@ -1870,12 +2020,16 @@ static void ApplySingleThumbnailProperties(FlipWindowEntry& entry) {
     }
 
     // DWM's documented thumbnail fit is uniform. Match the source aspect so
-    // the fallback is visually stable rather than stretching a card.
+    // the fallback is visually stable rather than stretching a card. The
+    // ratio is clamped (see ClampCardAspectRatio) so an oddly-shaped source
+    // window can't collapse the fit box to a sliver or blow it out past the
+    // destination rect.
     if (props.fVisible && entry.sourceSize.cx > 0 && entry.sourceSize.cy > 0) {
         const int boxW = RectWidth(props.rcDestination);
         const int boxH = RectHeight(props.rcDestination);
-        const double aspect = static_cast<double>(entry.sourceSize.cx) /
-                              static_cast<double>(entry.sourceSize.cy);
+        const double aspect = ClampCardAspectRatio(
+            static_cast<double>(entry.sourceSize.cx) /
+            static_cast<double>(entry.sourceSize.cy));
         int fitW = boxW;
         int fitH = std::max(1, static_cast<int>(std::lround(boxW / aspect)));
         if (fitH > boxH) {
@@ -2430,11 +2584,15 @@ static void ComputeSimulatedStackLayout(std::vector<FlipWindowEntry>& windows,
         Projected proj = Project(worldX, worldY, worldZ, fovYRadians);
 
         // 2. Aspect ratio from the real source window, so cards keep their
-        // true window proportions instead of being forced to 16:9.
+        // true window proportions instead of being forced to 16:9. Clamped
+        // (see ClampCardAspectRatio) so an extreme source shape -- a panel
+        // spanning several monitors, a thin vertical toolbar -- can't blow
+        // a card out to an absurd width or shrink it to a sliver.
         double aspect = 16.0 / 9.0;
         if (windows[i].sourceSize.cx > 0 && windows[i].sourceSize.cy > 0) {
-            aspect = static_cast<double>(windows[i].sourceSize.cx) /
-                     static_cast<double>(windows[i].sourceSize.cy);
+            aspect = ClampCardAspectRatio(
+                static_cast<double>(windows[i].sourceSize.cx) /
+                static_cast<double>(windows[i].sourceSize.cy));
         }
 
         // World height shrinks slightly for genuinely small/thin source

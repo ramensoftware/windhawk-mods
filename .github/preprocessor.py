@@ -68,6 +68,16 @@ _CHARACTER_LITERAL_PATTERN = re.compile(r"(?:u8|u|U|L)?'(?:\\.|[^'\\\n])+'")
 
 _IDENTIFIER_PATTERN = re.compile(r'[A-Za-z_]\w*')
 
+# A literal or a comment starts with one of these characters, or with a prefix
+# such as u8R which is followed by one.
+_LITERAL_OR_COMMENT_MARKER_PATTERN = re.compile(r'["\'/]')
+_MAX_LITERAL_PREFIX_LENGTH = 3
+
+# An escaped newline continues the comment onto the next line.
+_LINE_COMMENT_PATTERN = re.compile(r'//(?:\\\n|[^\n])*')
+
+_NON_NEWLINE_PATTERN = re.compile(r'[^\n]')
+
 
 def _get_string_literal_value(match: re.Match):
     return match.group(2) if match.group(2) is not None else match.group(3)
@@ -95,6 +105,16 @@ def _match_literal(code: str, position: int):
             or _match_character_literal(code, position))
 
 
+def _skip_to_possible_literal_or_comment(code: str, position: int):
+    """The first position at or after the given one where a literal or a comment
+    can start, or the end of the code."""
+    marker = _LITERAL_OR_COMMENT_MARKER_PATTERN.search(code, position)
+    if not marker:
+        return len(code)
+
+    return max(position, marker.start() - _MAX_LITERAL_PREFIX_LENGTH)
+
+
 def _find_string_literal(code: str, position: int):
     """The first string literal at or after the position.
 
@@ -109,7 +129,7 @@ def _find_string_literal(code: str, position: int):
         if match := _STRING_LITERAL_PATTERN.match(code, position):
             return match
 
-        position += 1
+        position = _skip_to_possible_literal_or_comment(code, position + 1)
 
     return None
 
@@ -125,6 +145,22 @@ def _iter_string_literals(code: str):
 def get_string_literals(code: str):
     """The values of the string literals in the code, in order."""
     return [_get_string_literal_value(x) for x in _iter_string_literals(code)]
+
+
+def get_literal_spans(code: str):
+    """The (start, end) offsets of the string and character literals in the
+    code, in order."""
+    spans = []
+    position = 0
+
+    while position < len(code):
+        if literal := _match_literal(code, position):
+            spans.append(literal.span())
+            position = literal.end()
+        else:
+            position = _skip_to_possible_literal_or_comment(code, position + 1)
+
+    return spans
 
 
 def get_string_literal_value(code: str):
@@ -205,7 +241,8 @@ def blank_comments(code: str):
     Offsets and line numbers are preserved, so positions in the result can be
     used to index into the original code.
     """
-    out = list(code)
+    parts = []
+    copied = 0
     position = 0
 
     while position < len(code):
@@ -221,34 +258,21 @@ def blank_comments(code: str):
             position = literal.end()
             continue
 
-        character = code[position]
-
-        if character == '/' and code[position + 1:position + 2] == '/':
-            while position < len(code):
-                # An escaped newline continues the comment onto the next line.
-                if (code[position] == '\\'
-                        and code[position + 1:position + 2] == '\n'):
-                    out[position] = ' '
-                    position += 2
-                    continue
-                if code[position] == '\n':
-                    break
-                out[position] = ' '
-                position += 1
-            continue
-
-        if character == '/' and code[position + 1:position + 2] == '*':
+        if code.startswith('//', position):
+            end = _LINE_COMMENT_PATTERN.match(code, position).end()
+        elif code.startswith('/*', position):
             end = code.find('*/', position + 2)
             end = len(code) if end < 0 else end + 2
-            for index in range(position, end):
-                if out[index] != '\n':
-                    out[index] = ' '
-            position = end
+        else:
+            position = _skip_to_possible_literal_or_comment(code, position + 1)
             continue
 
-        position += 1
+        parts.append(code[copied:position])
+        parts.append(_NON_NEWLINE_PATTERN.sub(' ', code[position:end]))
+        copied = position = end
 
-    return ''.join(out)
+    parts.append(code[copied:])
+    return ''.join(parts)
 
 
 class _UnsupportedExpression(Exception):

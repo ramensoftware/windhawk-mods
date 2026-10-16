@@ -2,7 +2,7 @@
 // @id              disable-folder-thumbnails
 // @name            Disable Folder Thumbnails
 // @description     Disable folder thumbnails while preserving file thumbnails.
-// @version         1.0
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -171,17 +171,16 @@ static HRESULT STDMETHODCALLTYPE GetThumbnail_Hook(
     );
 }
 
-BOOL Wh_ModInit()
+static bool InitializeHook()
 {
-    Wh_Log(L"Initializing folder-thumbnail suppression");
 
-    HRESULT initHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     bool mustUninitialize = SUCCEEDED(initHr);
 
     if (FAILED(initHr) && initHr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X",
                static_cast<UINT>(initHr));
-        return FALSE;
+        return false;
     }
 
     // CLSID_LocalThumbnailCache:
@@ -198,7 +197,7 @@ BOOL Wh_ModInit()
     HRESULT hr = CoCreateInstance(
         thumbnailCacheClsid,
         nullptr,
-        CLSCTX_INPROC_SERVER,
+        CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER,
         IID_PPV_ARGS(&cache)
     );
 
@@ -210,7 +209,7 @@ BOOL Wh_ModInit()
             CoUninitialize();
         }
 
-        return FALSE;
+        return false;
     }
 
     // IUnknown occupies slots 0–2.
@@ -248,6 +247,11 @@ BOOL Wh_ModInit()
         CoUninitialize();
     }
 
-
     return hooked;
+}
+
+BOOL Wh_ModInit()
+{
+    Wh_Log(L"Initializing folder-thumbnail suppression");
+    return InitializeHook() ? TRUE : FALSE;
 }
