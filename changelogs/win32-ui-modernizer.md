@@ -1,3 +1,55 @@
+## 1.0.4 ([Oct 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d7ef637639feef3112cf86684415661d4c1d58b6/mods/win32-ui-modernizer.wh.cpp))
+
+### Added
+- Option to start File Explorer's status bar beside the navigation pane, with or without the view buttons
+- Explorer's InfoBar restyled as WinUI's warning InfoBar
+- Experimental DirectWrite text for Explorer dialogs and file pickers, text and hotkey fields included
+- DirectWrite text for legacy toolbars, address bars and the Ribbon
+- DirectWrite text in the Registry Editor's values list
+- Registry Editor address bar and Edit borders styled after WinUI's TextBox
+- Navigation tree hover, pressed and selected states from WinUI's NavigationView
+- SysLink links drawn in WinUI's accent text color
+- Check box glyphs and check animation taken from WinUI's own CheckBox animation
+- Check animation for File Explorer item check boxes
+- Larger desktop item check boxes, clear of the selection ring
+
+### Changed
+- Settings reorganized, with some on/off options turned into choices
+- Split button chevrons, toolbar buttons, menu bar, tooltips, radios and links aligned with WinUI's colors
+- Check box and Registry Editor panel corners follow WinUI's radii
+- Dark-mode text now picks its color from the background it's actually drawn on, judged by APCA, instead of always turning light
+- Windows Installer (msiexec) is no longer excluded. The exclusion was added in 1.0.2 because dark mode turned installer text light on their light panels and background bitmaps; that text now takes its color from the background it is drawn on, so it stays readable
+- Tooltip text drawn with native composited alpha
+
+### Removed
+- AutoPlay dialog replacement
+- Collapsible navigation pane. It will soon be a standalone mod
+- External transparency compatibility option
+
+### Fixed
+- Black backgrounds behind navigation pane icons on first opening
+- File Explorer item check boxes overlapping the selection ring
+- Dark ring around desktop check boxes and the Folder Options tree's radios and check boxes
+- Disabled split buttons showing two chevrons
+- Desktop icon labels turning transparent without the DirectWrite option
+- Dark mode overriding high-contrast themes
+- Dark colors saved into Windows' color scheme, leaving list and edit fields dark after a contrast theme
+- White text on light backgrounds in dark mode (installers, Fonts thumbnails, app-painted cells)
+- Tree view tooltips with a light acrylic and unreadable text in dark mode
+- Composited text losing its alpha and opaque text masks coming out too light
+- Some styled text drawn about a quarter too large, and glow text returning the wrong height
+- Navigation pane edge line running over Explorer's InfoBar
+- White tree chevrons in light apps excluded from dark mode
+- Garbled address bar text in file pickers of GDI-scaled programs like MMC
+- 32-bit file pickers in dark mode losing item icons
+- Jumbo shortcut overlay missing in 32-bit Explorer
+- Rename box rendering under light Mica
+
+### Performance
+- Shell text, navigation pane glyphs and chevrons, and Registry Editor tree rows drawn from a CPU raster cache. Making scrolling noticeably smoother
+- Navigation pane animations and the pill paced to the compositor clock
+- Cached dark-mode lookups, text masks sized to the text instead of the window, and cheaper hot-path checks
+
 ## 1.0.3 ([Oct 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/50f4b88cfb44c00344966688db3b0a275614857b/mods/win32-ui-modernizer.wh.cpp))
 
 ### Added

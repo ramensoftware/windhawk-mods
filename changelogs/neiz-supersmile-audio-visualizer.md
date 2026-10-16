@@ -1,3 +1,13 @@
+## 1.2.0 ([Oct 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5a72d5ad93a08dc2701836d2302e929eee986677/mods/neiz-supersmile-audio-visualizer.wh.cpp))
+
+* Added a disk section, volume control, and a mini visualizer to the player.
+* Added player style selection.
+* Added player button position selection.
+* Added configurable actions for player button clicks.
+* Improved visualizer behavior.
+* Improved color transition speed in Album Color and Album Gradient modes when changing tracks.
+* Added smooth color transitions in Album Color and Album Gradient modes.
+
 ## 1.1.0 ([Oct 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d8d332cac51b2112390617ea31229fd76fb7df20/mods/neiz-supersmile-audio-visualizer.wh.cpp))
 
 * Replaced standalone EQ popup with a full Media & EQ overlay featuring playback controls, seek bar, and scrollable interactive lyrics.

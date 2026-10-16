@@ -9913,12 +9913,12 @@
         "ratingUsers": 42,
         "reviews": 0,
         "trendingSorting": 3.154521385312483,
-        "updated": 1790859803000,
+        "updated": 1792148516000,
         "users": 771
       },
       "metadata": {
         "author": "NeiZ",
-        "compilerOptions": "-lole32 -luuid -lmmdevapi -lksuser -lgdi32 -luser32 -lgdiplus -ldwmapi -lruntimeobject -lwindowsapp -lwinhttp -lshell32 -ld3d11 -ldxgi -ldcomp",
+        "compilerOptions": "-lole32 -luuid -lmmdevapi -lksuser -lgdi32 -luser32 -lgdiplus -ldwmapi -lruntimeobject -lwindowsapp -lwinhttp -lshell32 -ld3d11 -ldxgi -ldcomp -ld2d1",
         "description": "A highly customizable audio visualizer with synced lyrics, media controls and EQ, featuring optional network access to fetch lyrics from lrclib.net",
         "github": "https://github.com/NeiZqwe",
         "include": [
@@ -9926,7 +9926,7 @@
         ],
         "license": "MIT",
         "name": "Desktop Audio Visualizer Plus",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "neko-cat": {
@@ -11334,7 +11334,7 @@
         "ratingUsers": 66,
         "reviews": 0,
         "trendingSorting": 145.7,
-        "updated": 1791543631000,
+        "updated": 1792148504000,
         "users": 1457
       },
       "metadata": {
@@ -11344,11 +11344,12 @@
         "github": "https://github.com/sidlikesgrapess",
         "homepage": "https://github.com/sidlikesgrapess/CursorMotionBlur",
         "include": [
-          "windhawk.exe"
+          "windhawk.exe",
+          "explorer.exe"
         ],
         "license": "Unlicense",
         "name": "Pointer Afterimage Motion Blur",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "power-action-countdown": {
@@ -18027,16 +18028,15 @@
         "ratingUsers": 178,
         "reviews": 0,
         "trendingSorting": 0.9172864759573024,
-        "updated": 1790964201000,
+        "updated": 1792148509000,
         "users": 3201
       },
       "metadata": {
         "author": "crazyboyybs",
-        "compilerOptions": "-ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -lwinmm -lmsimg32 -lshcore -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdiplus -lruntimeobject",
+        "compilerOptions": "-ldwmapi -lusp10 -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lgdiplus",
         "description": "Moderniza elementos heredados de la interfaz Win32",
         "exclude": [
-          "dwm.exe",
-          "msiexec.exe"
+          "dwm.exe"
         ],
         "github": "https://github.com/crazyboyybs",
         "include": [
@@ -18044,7 +18044,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Modernizador de Interfaz Win32",
-        "version": "1.0.3"
+        "version": "1.0.4"
       },
       "metadataEnglish": {
         "description": "Modernizes legacy Win32 UI elements",
