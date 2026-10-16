@@ -127,6 +127,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 
 - When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open). Until then, a button can look wrong or be missing after the mod is turned off, for example the maximize button when the mod was turned on while a window was maximized and turned off before it was restored. dwm.exe is never restarted twice within 30 seconds, and the mod refuses to load if dwm.exe started 4 or more times within a minute.
 - The circles or custom images are global. Excluded apps keep them too; only their layout stays at the Windows default.
+- When the mod is turned on, every open window with a title bar is resized by 1 px and back so DWM lays it out again (excluded apps are skipped). Changing a layout setting or turning the mod off only does this for the windows the mod has laid out. Changing the button colors or style does it for one of those windows only (the circles are shared by all windows), and changing images or the debug log does not do it at all.
 - The mod hooks internal, undocumented functions of `uDWM.dll`. A Windows update can change them and stop the mod until it is updated.
 - If you report a bug, turn on *Write debug log* and attach the Windhawk log output.
 
@@ -2825,7 +2826,85 @@ static BOOL ExplorerInit() {
 // ======================================================================
 //  Lifecycle (all parts)
 // ======================================================================
-static int RelayoutLaidOutWindows();
+static int RelayoutLaidOutWindows(bool onlyOne = false);
+static int RelayoutAllWindows();
+
+static unsigned long long Fnv(unsigned long long h, unsigned long long v) {
+    h ^= v;
+    h *= 1099511628211ull;
+    return h;
+}
+
+// Hash of every setting that changes where DWM puts the buttons, icon and title,
+// including the exclusion lists. Colors, images, the restart option and the
+// debug log are not part of it, so changing them does not trigger a relayout.
+static unsigned long long LayoutSignature() {
+    unsigned long long h = 1469598103934665603ull;
+    h = Fnv(h, (unsigned long long)(long long)g_settings.moveButtons);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.leftMargin);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.explorerMargin);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.order);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.showDialogClose);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.titleAlign);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.dialogAlign);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.centerOnText);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.centerNudge);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.iconPosition);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.iconSide);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.titleGap);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.iconTitleGap);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.rightEdgeGap);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.hideIcon);
+    h = Fnv(h, (unsigned long long)(long long)g_settings.hideTitle);
+
+    AcquireSRWLockShared(&g_exclLock);
+    h = Fnv(h, (unsigned long long)g_exclExeN);
+    for (int i = 0; i < g_exclExeN; i++) {
+        for (const wchar_t* p = g_exclExe[i]; *p; p++) h = Fnv(h, (unsigned long long)*p);
+        h = Fnv(h, 0);
+    }
+    h = Fnv(h, (unsigned long long)g_exclClsN);
+    for (int i = 0; i < g_exclClsN; i++) {
+        for (const wchar_t* p = g_exclCls[i]; *p; p++) h = Fnv(h, (unsigned long long)*p);
+        h = Fnv(h, 0);
+    }
+    ReleaseSRWLockShared(&g_exclLock);
+    return h;
+}
+
+// Hash of the exclusion lists only: a window that was excluded and is not anymore
+// is not in the layout table yet, so it needs the all-windows relayout.
+static unsigned long long ExclSignature() {
+    unsigned long long h = 1469598103934665603ull;
+    AcquireSRWLockShared(&g_exclLock);
+    h = Fnv(h, (unsigned long long)g_exclExeN);
+    for (int i = 0; i < g_exclExeN; i++) {
+        for (const wchar_t* p = g_exclExe[i]; *p; p++) h = Fnv(h, (unsigned long long)*p);
+        h = Fnv(h, 0);
+    }
+    h = Fnv(h, (unsigned long long)g_exclClsN);
+    for (int i = 0; i < g_exclClsN; i++) {
+        for (const wchar_t* p = g_exclCls[i]; *p; p++) h = Fnv(h, (unsigned long long)*p);
+        h = Fnv(h, 0);
+    }
+    ReleaseSRWLockShared(&g_exclLock);
+    return h;
+}
+
+// Hash of the settings that change how the buttons are painted (not where they are).
+static unsigned long long PaintSignature() {
+    unsigned long long h = 1469598103934665603ull;
+    h = Fnv(h, (unsigned long long)(long long)g_tlEnabled);
+    for (int r = 0; r < 3; r++)
+        for (int c = 0; c < 3; c++)
+            h = Fnv(h, (unsigned long long)(long long)g_base[r][c]);
+    PCWSTR st = Wh_GetStringSetting(L"buttonStyle.style");
+    if (st) {
+        for (const wchar_t* p = st; *p; p++) h = Fnv(h, (unsigned long long)*p);
+    }
+    Wh_FreeStringSetting(st);
+    return h;
+}
 void Wh_ModSettingsChanged() {
     if (g_isExplorer) {
         LoadSettings();
@@ -2835,20 +2914,32 @@ void Wh_ModSettingsChanged() {
         EnumWindows(ExTopProc, 0);
         return;
     }
+    unsigned long long sigBefore = LayoutSignature();
+    unsigned long long exclBefore = ExclSignature();
+    unsigned long long paintBefore = PaintSignature();
     LoadSettings();       // Leftify (including the excluded apps lists)
     TL_LoadSettings();    // painter
     InterlockedExchange(&g_pending, 1);   // repaint on the next DWM-thread hook call
-    RelayoutLaidOutWindows();             // windows that are already open pick up the new settings    
+    // Open windows only need a new layout when a layout setting changed
+    if (LayoutSignature() != sigBefore) {
+        if (ExclSignature() != exclBefore) RelayoutAllWindows();
+        else RelayoutLaidOutWindows();
+    } else if (PaintSignature() != paintBefore) {
+        // Colors / style: DWM only repaints the buttons from its own hooks, so one
+        // window is nudged to trigger it. The glyph atlas is shared by all windows.
+        RelayoutLaidOutWindows(true);
+    }
 }
 
 // Makes DWM lay the window out again: a 1 px move is enough for maximized windows,
-// normal windows need a 1 px size change (a pure move does not trigger a new layout)
-static BOOL CALLBACK NudgeWindowProc(HWND h, LPARAM lp) {
-    if (!IsWindowVisible(h) || IsIconic(h)) return TRUE;
-    if ((GetWindowLongW(h, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) return TRUE;
-    if (IsHwndExcluded(h)) return TRUE;
+// normal windows need a 1 px size change (a pure move does not trigger a new layout).
+// A frame change alone (SWP_FRAMECHANGED without resize) does not make DWM lay out again.
+static void NudgeWindow(HWND h, int* count) {
+    if (!IsWindowVisible(h) || IsIconic(h)) return;
+    if ((GetWindowLongW(h, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) return;
+    if (IsHwndExcluded(h)) return;
     RECT r;
-    if (!GetWindowRect(h, &r)) return TRUE;
+    if (!GetWindowRect(h, &r)) return;
     int w = r.right - r.left, ht = r.bottom - r.top;
     UINT base = SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
     if (IsZoomed(h)) {
@@ -2859,12 +2950,42 @@ static BOOL CALLBACK NudgeWindowProc(HWND h, LPARAM lp) {
         SetWindowPos(h, nullptr, 0, 0, w, ht, base | SWP_NOMOVE);
     }
     DebugLog(L"[Nudge] hwnd=%p zoomed=%d", h, (int)IsZoomed(h));
-    (*(int*)lp) += 2;
+    (*count) += 2;
+}
+
+static BOOL CALLBACK NudgeWindowProc(HWND h, LPARAM lp) {
+    NudgeWindow(h, (int*)lp);
     return TRUE;
 }
 
-// Nudges every visible window that has a title bar (not only the ones this mod has laid out)
-static int RelayoutLaidOutWindows() {
+// Windows this mod has laid out (taken from the layout table). Only these need a new
+// layout when a layout setting changes or when the mod is unloaded.
+static int RelayoutLaidOutWindows(bool onlyOne) {
+    HWND list[64];
+    int cnt = 0;
+    AcquireSRWLockShared(&g_layoutLock);
+    for (int i = 0; i < 64; i++) {
+        if (!g_winLayouts[i].valid || !g_winLayouts[i].hwnd) continue;
+        HWND h = g_winLayouts[i].hwnd;
+        bool dup = false;
+        for (int k = 0; k < cnt; k++) {
+            if (list[k] == h) { dup = true; break; }
+        }
+        if (!dup) list[cnt++] = h;
+    }
+    ReleaseSRWLockShared(&g_layoutLock);
+
+    int n = 0;
+    for (int i = 0; i < cnt; i++) {
+        if (IsWindow(list[i])) NudgeWindow(list[i], &n);
+        if (onlyOne && n > 0) break;   // one nudged window is enough to trigger a repaint
+    }
+    return n;
+}
+
+// Every visible window with a title bar. Needed when the mod is turned on (nothing has
+// been laid out yet) and when the exclusion lists change.
+static int RelayoutAllWindows() {
     int n = 0;
     EnumWindows(NudgeWindowProc, (LPARAM)&n);
     return n;
@@ -2883,7 +3004,7 @@ void Wh_ModAfterInit() {
     if (g_isExplorer) {
         EnumWindows(ExTopProc, 0);   // File Explorer windows that already exist
     } else {
-        RelayoutLaidOutWindows();    // windows that are already open get the new layout right away
+        RelayoutAllWindows();        // nothing is laid out yet: windows that are already open get the new layout right away
     }
 }
 
