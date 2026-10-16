@@ -192,8 +192,16 @@ the taskbar.
     Programs and Features; a click on a folder shows what's in it in a
     column beside it, and so on deeper, like the Finder's columns, with a
     button back; "Open in Explorer" opens the column's folder, a click on a
-    file opens it with its app, and a folder's pin pins it; only names are
-    shown, read when shown), **wallpapers** from a folder you pick (its
+    file opens it with its app, and a folder's pin pins it; pinned ones are
+    dragged into another order, a folder is listed by name or newest first,
+    the box beside "Back" searches the folder shown (a name, or a type like
+    *.pdf), and a file or a folder dragged out of a column goes where it's
+    dropped, copied or moved as chosen: asked the first time, with
+    "Remember my choice", and in the island's settings; files can be
+    dropped on a folder in the panel too (from it, or from Explorer: held a
+    moment on the item, the panel opens; held on a folder, it opens), done
+    by Windows as in Explorer; only names are shown, read when shown and
+    again when they change), **wallpapers** from a folder you pick (its
     pictures' thumbnails; one chosen comes in with a transition, fade,
     circle, slide or zoom, chosen there too, placed as Windows places its
     wallpaper, and becomes that monitor's wallpaper; the mouse wheel on the
@@ -311,7 +319,7 @@ search, and Esc (or a click outside) closes them.
 | Profiles | Up to 10 profiles with the island's settings below (for work, for games, one with everything on): "+" beside the title saves the current ones, a click applies one, the one in use keeps every change made to the settings by itself, and a pencil renames one, saves the current settings in it or deletes it. A button on the pill switches them (off by default): a click lists them, and Shift and the mouse wheel on it go to the next one (shown under it, applied once Shift is let go). Notifications, notes and tasks aren't part of them (the pinned tray icons and their places are). |
 | Backup | "Export…" saves a file with the notes, tasks, keyboard shortcuts, calendar events, the agendas' links (a Google Calendar "secret address" too: keep the file private), pinned folders, the wallpapers' folder, profiles and the island's settings; "Import…" puts one back (the island starts again with it). They're kept by Windhawk on this computer only, so export them before formatting it; Windhawk keeps them for the whole computer, so every Windows account on it sees the same ones. |
 | Place | Where it sits (kept for each monitor); "Place and icons per app" (only for the Island style, the pill: the Fixed style and the bar keep one place and the same items for every app; for some apps, added from the open apps: a place, icons and their order, what's playing's parts, a clock (and whether it's kept in the middle), a distance from the edges and a size of their own); moving the pill by dragging it; standing upright on the left and right edges; hiding as its line until the mouse reaches it (at an edge), after the time chosen; its distance from the screen's edges. |
-| Look | The style (the pill; the pill keeping its room at its edge, so maximized windows stop beside it; or the bar), the colors (and your own: a click on "Fill", "Text" or "Icons" opens Windows' color dialog), the opacity, the frosted glass (the bar and the Fixed style's strip, without notches), colors following the app in front (its title bar's color when it has one, or its icon's main color, blending in as you switch apps; never read from the screen), the size, and panels as wide as the island. |
+| Look | The style (the pill; the pill keeping its room at its edge, so maximized windows stop beside it; or the bar), the colors (and your own: a click on "Fill", "Text" or "Icons" opens Windows' color dialog), the opacity, the frosted glass (the bar and the Fixed style's strip, without notches), colors following the app in front (its title bar's color when it has one, or its icon's main color, blending in as you switch apps; never read from the screen), the size, the icons' own size (all the pill's icons alike, so a big bar can keep small icons), and panels as wide as the island. |
 | Notches (Fixed style) | None, one in the middle, one at each top corner, or three; how big their curves are (75% by default, up to 200% for wide, sweeping curves); and hiding each one on its own (otherwise one line, on the bell's notch, opens them all). |
 | Animations | On or off, how many (all, partial, none), their speed, and the frames a second, for the island (the dock's are in Windhawk's settings; the island's start as those were). |
 | On the pill | The order of its items (drag them in the little pill; with notches, from one notch to another), the clock kept in the middle (the other items spread on both sides, keeping their order), and which items it shows: the control center, volume and battery (each with its percentage beside it, off by default), the bell, and (off by default) the power button, light and dark mode, the microphone, notes, tasks, keyboard shortcuts, the weather, updates, the profiles, the screen's brightness, the keyboard's language, the microphone, camera and location in use, USB drives (their icon and the notice when one is plugged in, both on by default), the virtual desktops, the app in focus on that monitor, folders and places, wallpapers (and their transition), and the processor, memory and video memory use. A pill longer than its screen stops short of the edges, and the mouse wheel slides along it (Shift+wheel over what's playing). |
@@ -561,10 +569,13 @@ usable), or as it is (all of it, or only its apps).
     "alarms only", so no app on Windows' priority list shows Windows' banner
     or plays its sound (calls, alarms and reminders still show and ring in
     the pill, with the island's buttons). Windows' is turned back
-    off when the island stops (from explorer if the island's process ends
-    unexpectedly, or at the next start after a crash); it's left alone if it
-    was already on. If it's turned off from Windows, it's left off and the
-    island works as usual until the option is turned on again.
+    off when the island stops or the mod is turned off or removed (from
+    explorer if the island's process ends unexpectedly, or at the next
+    start after the computer turned off with the island running); it's left
+    alone if it was already on. Only if the mod is removed while Windhawk
+    isn't running, after such a shutdown, can it stay on: turn it off in the
+    notification center (Win+N). If it's turned off from Windows, it's left
+    off and the island works as usual until the option is turned on again.
   * Replies go to the app the way Windows sends them from its own banners:
     through the notification handler the app registered.
   * The mod only goes online for what's turned on in the island's settings
@@ -807,7 +818,16 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
     pasta mostra o que tem dentro numa coluna ao lado, e assim por diante,
     como as colunas do Finder, com um botão de voltar; "Abrir no Explorador"
     abre a pasta da coluna, um clique num arquivo abre no app dele, e o
-    alfinete de uma pasta a fixa; só os nomes aparecem, lidos na hora),
+    alfinete de uma pasta a fixa; as fixadas são arrastadas para outra
+    ordem, uma pasta é listada por nome ou mais novos primeiro, a caixa ao
+    lado de "Voltar" busca na pasta mostrada (um nome, ou um tipo como
+    *.pdf), e um arquivo ou pasta arrastado de uma coluna vai para onde for
+    solto, copiado ou movido como escolhido: perguntado na primeira vez, com
+    "Lembrar minha escolha", e nas configurações da ilha; arquivos também
+    podem ser soltos numa pasta do painel (vindos dele ou do Explorador:
+    parado um instante no item, o painel abre; parado numa pasta, ela
+    abre), feito pelo Windows como no Explorador; só os nomes aparecem,
+    lidos na hora e de novo quando mudam),
     **papéis de parede** de uma pasta que você escolhe (as miniaturas das
     imagens; a escolhida entra com uma transição, esmaecer, círculo,
     deslizar ou zoom, escolhida ali também, posicionada como o Windows
@@ -929,7 +949,7 @@ limpa a busca, e o Esc (ou um clique fora) fecha.
 | Perfis | Até 10 perfis com as configurações da ilha abaixo (para trabalhar, para jogar, um com tudo ligado): o "+" ao lado do título salva as atuais, um clique aplica um, o perfil em uso guarda sozinho toda mudança feita nas configurações, e o lápis renomeia um perfil, salva nele as configurações atuais ou exclui. Um botão na pílula troca de perfil (desligado por padrão): um clique lista os perfis, e Shift e a roda do mouse em cima dele vão para o próximo (mostrado embaixo dele, aplicado quando o Shift é solto). As notificações, anotações e tarefas não fazem parte deles (os ícones fixados da bandeja e os lugares deles fazem). |
 | Backup | "Exportar…" salva um arquivo com as anotações, tarefas, atalhos do teclado, eventos do calendário, os links das agendas (o "endereço secreto" do Google Agenda também: guarde o arquivo só para você), pastas fixadas, a pasta dos papéis de parede, perfis e as configurações da ilha; "Importar…" coloca um de volta (a ilha recomeça com ele). Eles ficam guardados pelo Windhawk só neste computador, então exporte antes de formatar; o Windhawk guarda para o computador todo, então todas as contas do Windows nele veem os mesmos. |
 | Posição | Onde ela fica (guardado para cada monitor); "Posição e ícones por app" (só no estilo Ilha, a pílula: o estilo Fixa e a barra ficam num lugar só e com os mesmos itens para todos os apps; para alguns apps, escolhidos entre os apps abertos: uma posição, ícones e a ordem deles, as partes do que está tocando, um relógio (e se ele fica no meio), a distância das bordas e o tamanho só deles); mover a pílula arrastando; ficar em pé nas laterais; esconder na linha até o mouse chegar nela (numa borda), depois do tempo escolhido; a distância dela até as bordas da tela. |
-| Aparência | O estilo (a pílula; a pílula fixa, guardando o espaço dela na borda para as janelas maximizadas pararem ao lado; ou a barra), as cores (e as próprias: um clique em "Fundo", "Texto" ou "Ícones" abre a janela de cores do Windows), a opacidade, o vidro fosco (a barra e a faixa do estilo Fixa, sem entalhes), cores seguindo o app da frente (a cor da barra de título dele, quando tem, ou a cor principal do ícone, mudando suave ao trocar de app; nunca lida da tela), o tamanho, e painéis na largura da ilha. |
+| Aparência | O estilo (a pílula; a pílula fixa, guardando o espaço dela na borda para as janelas maximizadas pararem ao lado; ou a barra), as cores (e as próprias: um clique em "Fundo", "Texto" ou "Ícones" abre a janela de cores do Windows), a opacidade, o vidro fosco (a barra e a faixa do estilo Fixa, sem entalhes), cores seguindo o app da frente (a cor da barra de título dele, quando tem, ou a cor principal do ícone, mudando suave ao trocar de app; nunca lida da tela), o tamanho, o tamanho dos ícones (todos os ícones da pílula iguais, então uma barra grande pode ter ícones pequenos), e painéis na largura da ilha. |
 | Entalhes (estilo Fixa) | Nenhum, um no meio, um em cada canto de cima, ou três; o tamanho das curvas (75% por padrão, até 200% para curvas largas e abertas); e esconder cada um sozinho (senão, uma linha só, no entalhe do sino, abre todos). |
 | Animações | Ligadas ou não, quantas (todas, parciais, nenhuma), a velocidade e os quadros por segundo, da ilha (as da dock ficam nas configurações do Windhawk; as da ilha começam como aquelas estavam). |
 | Na pílula | A ordem dos itens (arraste-os na pilulinha; com entalhes, de um entalhe para outro), o relógio no meio (os outros itens se dividem dos dois lados, mantendo a ordem), e quais itens ela mostra: a central de controle, volume e bateria (cada um com a porcentagem ao lado, desligada por padrão), o sino, e (desligados por padrão) o botão de desligar, o modo claro e escuro, o microfone, anotações, tarefas, atalhos do teclado, o clima, atualizações, os perfis, o brilho da tela, o idioma do teclado, o microfone, a câmera e a localização em uso, os pendrives (o ícone e o aviso ao conectar, os dois ligados por padrão), as áreas de trabalho virtuais, o app em foco naquele monitor, pastas e locais, papéis de parede (e a transição deles), e o uso do processador, da memória e da memória de vídeo. Uma pílula maior que a tela para antes das bordas, e a roda do mouse desliza por ela (Shift+roda em cima do que está tocando). |
@@ -1187,9 +1207,12 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     o aviso do Windows nem toca o som dele (chamadas, alarmes e lembretes
     continuam aparecendo e tocando na pílula, com os botões da ilha). O do
     Windows é desligado de novo quando a ilha
-    para (pelo explorer, se o processo da ilha terminar de repente, ou no
-    próximo início depois de um travamento); ele não é mexido se já estava
-    ligado. Se for desligado pelo Windows, ele fica desligado e a ilha
+    para ou o mod é desativado ou removido (pelo explorer, se o processo da
+    ilha terminar de repente, ou no próximo início depois de o computador
+    desligar com a ilha rodando); ele não é mexido se já estava ligado. Só
+    se o mod for removido com o Windhawk fechado, depois de um desligamento
+    assim, ele pode ficar ligado: desligue na central de notificações
+    (Win+N). Se for desligado pelo Windows, ele fica desligado e a ilha
     funciona como de costume até a opção ser ligada de novo.
   * As respostas chegam ao app do jeito que o Windows as manda pelos avisos
     dele: pelo receptor de notificações que o app registrou.
@@ -1658,6 +1681,8 @@ struct {
     // sideways in the pill, 1 a grid of icons under it (like Windows'), 2 a
     // list with their names (see TrayListPanel).
     int islandTrayStyle;
+    // Files dragged out of the folders panel: 0 asked, 1 copied, 2 moved.
+    int islandFolderDrag;
     bool islandNetwork;
     bool islandVolume;
     bool islandBattery;
@@ -1791,6 +1816,9 @@ struct {
     bool islandOwnsNotifications;
     // The island's size (its text, icons and width), in percent.
     int islandSize;
+    // Its icons' own size (their room too, not the texts nor the island's
+    // height), in percent.
+    int islandIconSize;
     // The room between the island and the screen's edges (px at 100%).
     int islandGap;
     // On the monitor where the mouse is (several monitors).
@@ -3192,7 +3220,11 @@ Media::Brush CreateDockBackground() {
     brush.BackgroundSource(Media::AcrylicBackgroundSource::HostBackdrop);
     brush.TintColor(tint);
     brush.TintOpacity(g_settings.backgroundOpacity);
-    brush.FallbackColor(tint);
+    // Without the blur (transparency effects off, energy saver): the tint
+    // alone, as see-through as chosen (not solid whatever the option).
+    winrt::Windows::UI::Color fallback = tint;
+    fallback.A = (uint8_t)std::lround(255 * g_settings.backgroundOpacity);
+    brush.FallbackColor(fallback);
     return brush;
 }
 
@@ -3498,6 +3530,10 @@ winrt::weak_ref<FrameworkElement> g_pointerTarget;
 [[clang::no_destroy]] DispatcherTimer g_badgeTimer{nullptr};
 // The whole dock shown for a notification (see ShowDockForNotification).
 [[clang::no_destroy]] DispatcherTimer g_notificationTimer{nullptr};
+// The dock shown for a notification (see ShowDockForNotification), and where
+// it goes back to: each taskbar's own (see DockState).
+bool g_shownForNotification;
+RECT g_notificationHiddenRect;
 [[clang::no_destroy]] std::vector<
     VisualStateGroup::CurrentStateChanged_revoker>
     g_stateRevokers;
@@ -3555,6 +3591,9 @@ struct DockState {
     winrt::weak_ref<FrameworkElement> pointerTarget;
     FrameworkElement::LayoutUpdated_revoker layoutRevoker;
     bool isMain = false;
+    bool shownForNotification = false;
+    RECT notificationHiddenRect{};
+    DispatcherTimer notificationTimer{nullptr};
 };
 
 [[clang::no_destroy]] std::vector<std::unique_ptr<DockState>> g_otherDocks;
@@ -3589,6 +3628,9 @@ void SwapDockState(DockState& state) {
     std::swap(g_pointerTarget, state.pointerTarget);
     std::swap(g_layoutRevoker, state.layoutRevoker);
     std::swap(g_dockIsMain, state.isMain);
+    std::swap(g_shownForNotification, state.shownForNotification);
+    std::swap(g_notificationHiddenRect, state.notificationHiddenRect);
+    std::swap(g_notificationTimer, state.notificationTimer);
 }
 
 DockState* FindOtherDock(HWND wnd) {
@@ -3677,10 +3719,6 @@ void SlideTo(HWND hWnd, const RECT& target, int durationMs, bool show);
 // Whether the taskbar itself has the dock shown: it calls SlideWindow to
 // show and hide it (see TrayUI_SlideWindow_Hook).
 bool g_trayShown;
-// The mod showed the dock for a notification, without the taskbar knowing,
-// and where to put it back (see ShowDockForNotification).
-bool g_shownForNotification;
-RECT g_notificationHiddenRect;
 
 // How long the dock waits at most for a clicked app to open, in seconds.
 constexpr double kLaunchWaitSeconds = 6;
@@ -3883,9 +3921,11 @@ void ShowDockForNotification() {
     }
     g_notificationTimer = DispatcherTimer();
     g_notificationTimer.Interval(std::chrono::milliseconds(kNotificationShowMs));
+    // (The tick comes outside any dock's scope: this dock's state then.)
     g_notificationTimer.Tick(
-        [](winrt::Windows::Foundation::IInspectable const& sender,
-           winrt::Windows::Foundation::IInspectable const&) {
+        [wnd = g_dockWnd](winrt::Windows::Foundation::IInspectable const& sender,
+                          winrt::Windows::Foundation::IInspectable const&) {
+            DockScope scope(wnd);
             auto timer = sender.as<DispatcherTimer>();
             if (!g_shownForNotification || g_trayShown || g_unloading ||
                 !g_dockWnd) {
@@ -4135,9 +4175,15 @@ void WatchRunningState(FrameworkElement const& button) {
         if (group.Name() != L"RunningIndicatorStates") {
             continue;
         }
+        // (Its state now too: one already asking for attention, like an app
+        // flashing before the taskbar's style changed, still lets the
+        // transparent taskbar hide, see CTaskListWnd_PermitAutoHide_Hook.)
         if (DockIcon* icon = FindDockIcon(button)) {
             const auto state = group.CurrentState();
-            icon->open = state && state.Name() != L"NoRunningIndicator";
+            const std::wstring name = state ? state.Name().c_str() : L"";
+            icon->open = state && name != L"NoRunningIndicator";
+            icon->attention =
+                name.find(L"RequestingAttention") != std::wstring::npos;
         }
         g_stateRevokers.push_back(group.CurrentStateChanged(
             winrt::auto_revoke,
@@ -5792,6 +5838,9 @@ bool IsSnippingOn(HMONITOR monitor) {
            ProcessIsOneOf(processId, kSnippingPrograms);
 }
 
+// The island's process, told by its hello (see WatchIslandProcess).
+extern DWORD g_islandProcessId;
+
 // Whether a window covers the whole monitor like a full-screen app (games
 // in exclusive or borderless full screen, videos in full screen).
 // `windowsSaysBusy`: Windows itself takes a full-screen app to be running (a
@@ -5806,9 +5855,11 @@ bool CoversMonitor(HWND hWnd,
         return false;
     }
     DWORD processId = 0;
-    // Not the mod's own windows (the island, its panels).
+    // Not the mod's own windows (the dock's here; the island's, its panels
+    // and the wallpaper's transition, which covers the whole monitor).
     if (GetWindowThreadProcessId(hWnd, &processId) &&
-        processId == GetCurrentProcessId()) {
+        (processId == GetCurrentProcessId() ||
+         processId == g_islandProcessId)) {
         return false;
     }
     RECT rect;
@@ -7728,6 +7779,26 @@ constexpr GUID kFOLDERID_LocalAppData = {
     0x6fba,
     0x4fcf,
     {0x9d, 0x55, 0x7b, 0x8e, 0x7f, 0x15, 0x70, 0x91}};
+// The shell's handler giving an item's data, for dragging it (BHID_DataObject).
+constexpr GUID kBHID_DataObject = {
+    0xb8c0bd9f,
+    0xed24,
+    0x455c,
+    {0x83, 0xe6, 0xd5, 0x39, 0x0c, 0x4f, 0xe8, 0xc4}};
+// The shell's handler of an item's own objects (BHID_SFUIObject): a folder's
+// drop target, the one Explorer uses for files dropped on it.
+constexpr GUID kBHID_SFUIObject = {
+    0x3981e225,
+    0xf559,
+    0x11d3,
+    {0x8e, 0x3a, 0x00, 0xc0, 0x4f, 0x68, 0x37, 0xd5}};
+// Windows' picture of the files dragged, kept over a window they're dragged
+// over (CLSID_DragDropHelper).
+constexpr GUID kCLSID_DragDropHelper = {
+    0x4657278a,
+    0x411b,
+    0x11d2,
+    {0x83, 0x9a, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0xd0}};
 constexpr PROPERTYKEY kPKEY_AppUserModel_ID = {
     {0x9f4c2855,
      0x9f79,
@@ -7790,6 +7861,27 @@ std::wstring GetWindowAppId(HWND hWnd) {
         }
     }
     return appId;
+}
+
+// A text a window gives about its app for the taskbar
+// (PKEY_AppUserModel_*: 2 the command that starts it again, 4 its name), or
+// empty.
+std::wstring GetWindowAppText(HWND hWnd, DWORD id) {
+    std::wstring text;
+    winrt::com_ptr<IPropertyStore> store;
+    if (hWnd && SUCCEEDED(SHGetPropertyStoreForWindow(
+                    hWnd, IID_PPV_ARGS(store.put())))) {
+        PROPERTYKEY key = kPKEY_AppUserModel_ID;
+        key.pid = id;
+        PROPVARIANT value;
+        PropVariantInit(&value);
+        if (SUCCEEDED(store->GetValue(key, &value)) && value.vt == VT_LPWSTR &&
+            value.pwszVal) {
+            text = value.pwszVal;
+        }
+        PropVariantClear(&value);
+    }
+    return text;
 }
 
 // An app to remember things for (its place): its ID, or its program's path
@@ -7860,6 +7952,17 @@ std::wstring RegisteredAppValue(const std::wstring& appId,
     return {};
 }
 
+// A full path on one of this computer's drives (not a share, nor a drive
+// letter mapped to one: no connection to another computer).
+bool IsLocalDrivePath(const std::wstring& path) {
+    if (path.size() < 4 || !iswalpha(path[0]) || path[1] != L':' ||
+        path[2] != L'\\') {
+        return false;
+    }
+    const WCHAR root[] = {path[0], L':', L'\\', 0};
+    return GetDriveType(root) != DRIVE_REMOTE;
+}
+
 // The picture a notification sender registered (IconUri: a file, or a
 // resource of a package or of Windows), as a file; Windows' default picture
 // for its own notifications for one registered without any. Only a file on
@@ -7885,8 +7988,7 @@ std::wstring RegisteredAppPicture(const std::wstring& appId) {
                   ? resolved
                   : L"";
     }
-    if (uri.size() < 4 || !iswalpha(uri[0]) || uri[1] != L':' ||
-        uri[2] != L'\\') {
+    if (!IsLocalDrivePath(uri)) {
         return {};
     }
     return uri;
@@ -7973,8 +8075,7 @@ HBITMAP LoadAppIconBitmap(HWND hWnd, std::wstring appId, int size) {
     // An app known by its program file (a window without an ID of its own,
     // like Discord's): that file's icon (on a drive only, never a network
     // path).
-    if (!factory && appId.size() > 3 && iswalpha(appId[0]) &&
-        appId[1] == L':' && appId[2] == L'\\') {
+    if (!factory && IsLocalDrivePath(appId)) {
         SHCreateItemFromParsingName(appId.c_str(), nullptr,
                                     IID_PPV_ARGS(factory.put()));
     }
@@ -8598,7 +8699,9 @@ constexpr float kPillTopGap = 6;
 // kept between notches (each takes at most its share of the screen; the
 // wheel slides along the rest).
 constexpr float kNotchMinWidth = 56;
-constexpr float kNotchGap = 24;
+// Between two notches' curves at the most (they grow with their items until
+// they almost touch, see Island::NotchBodyMax).
+constexpr float kNotchTouchGap = 8;
 
 // A notch's shape: `body` hanging from the screen's top edge (at body.top),
 // round corners under it, and between each side and the edge a curve the
@@ -8679,9 +8782,14 @@ winrt::com_ptr<ID2D1PathGeometry> NotchGeometry(ID2D1Factory* factory,
 constexpr float kBarHeight = 28;
 constexpr float kIslandPadding = 12;
 constexpr float kIslandSpacing = 6;
+// Every icon on the pill the same size: the symbols (the media and control
+// center buttons, the arrows too) and the pictures (apps, tray icons, the app
+// in focus, what's playing's cover), at 100% of the icons' own size (see
+// islandIconSize; their room grows with them). The small one is for the
+// banner's own buttons.
 constexpr float kIslandIconSlot = 26;
-constexpr float kIslandSmallSlot = 20;
 constexpr float kIslandIconSize = 15;
+constexpr float kIslandPictureSize = 15;
 constexpr float kIslandSmallIconSize = 11;
 constexpr float kIslandTextSize = 13;
 // The minimized pill: a thin line against its edge, a bit bigger under the
@@ -8888,8 +8996,8 @@ struct IslandSlot {
     IslandItem item;
     D2D1_RECT_F rect;
     std::wstring text;
-    // 0: text, 1: icon, 2: small icon, 3: the app's icon (see App), 4: a
-    // tray icon (see TrayIcon).
+    // 0: text, 1: icon, 3: the app's icon (see App), 4: a tray icon (see
+    // TrayIcon).
     int font;
     // How far an app's icon has grown in (see Island::AppEntry).
     float scale = 1;
@@ -8982,7 +9090,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Accessibility", L"辅助功能"},
     {L"Add", L"添加"},
     {L"Add  (Enter)", L"添加  (Enter)"},
-    {L"Add a folder…", L"添加文件夹…"},
+    {L"Add a folder", L"添加文件夹"},
     {L"Add an open app", L"添加已打开的应用"},
     {L"Add controls", L"添加控件"},
     {L"Add note  (Ctrl+Enter)", L"添加笔记  (Ctrl+Enter)"},
@@ -9002,6 +9110,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Apps and tools", L"应用和工具"},
     {L"Apps with notifications", L"有通知的应用"},
     {L"Apps with unsaved work can stop it.", L"有未保存工作的应用可能会阻止它。"},
+    {L"Ask", L"询问"},
     {L"At most 8 buttons", L"最多 8 个按钮"},
     {L"At most 8 tiles", L"最多 8 个磁贴"},
     {L"Auto", L"自动"},
@@ -9035,9 +9144,9 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Cast", L"投屏"},
     {L"Changes are saved in the one in use · the pencil renames, saves or deletes", L"更改会自动保存到正在使用的配置文件 · 铅笔可重命名、保存或删除"},
     {L"Charging", L"正在充电"},
+    {L"Choose", L"选择"},
     {L"Choose a power plan", L"选择电源计划"},
     {L"Choose the folder with your pictures", L"选择存放图片的文件夹"},
-    {L"Choose…", L"选择…"},
     {L"Circle", L"圆形"},
     {L"City not found", L"未找到城市"},
     {L"Clear", L"晴"},
@@ -9049,6 +9158,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Clock", L"时钟"},
     {L"Clock and calendar (agendas: the calendar's gear)", L"时钟和日历（日程订阅：日历的齿轮）"},
     {L"Clock in the middle (the other items move around it)", L"时钟居中（其他项目围绕它重新排列）"},
+    {L"Close it to finish", L"关闭应用以完成"},
     {L"Clouds", L"云量"},
     {L"Color filters", L"颜色滤镜"},
     {L"Colors", L"颜色"},
@@ -9064,6 +9174,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Control center", L"控制中心"},
     {L"Control center buttons on the pill", L"胶囊上的控制中心按钮"},
     {L"Copied", L"已复制"},
+    {L"Copy", L"复制"},
     {L"Cores / threads", L"内核 / 线程"},
     {L"Corners", L"角落"},
     {L"Couldn't connect.", L"无法连接。"},
@@ -9116,20 +9227,23 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Even when minimized", L"即使最小化时"},
     {L"Event", L"事件"},
     {L"Events, ", L"事件，"},
+    {L"Export", L"导出"},
     {L"Export the island's backup", L"导出灵动岛备份"},
-    {L"Export…", L"导出…"},
     {L"Extend", L"扩展"},
     {L"Fade", L"淡入"},
     {L"Fan", L"风扇"},
     {L"Feels like", L"体感温度"},
     {L"File Explorer", L"文件资源管理器"},
+    {L"Files dragged out", L"拖出的文件"},
+    {L"Files dragged out of the folders", L"从文件夹拖出的文件"},
+    {L"Files dragged out of the island are:", L"从灵动岛拖出的文件："},
     {L"Fill", L"背景"},
     {L"Fixed", L"固定"},
     {L"Floating", L"浮动"},
     {L"Fog", L"雾"},
+    {L"Folder", L"文件夹"},
     {L"Folders and places", L"文件夹和位置"},
     {L"Folders and places (your shortcuts)", L"文件夹和位置（你的快捷方式）"},
-    {L"Folder…", L"文件夹…"},
     {L"Following the mouse is unavailable with notches on the main island.", L"主岛使用刘海时无法跟随鼠标。"},
     {L"Follows the mouse", L"跟随鼠标"},
     {L"Forget", L"忘记"},
@@ -9154,15 +9268,15 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Horizontal stack", L"水平堆叠"},
     {L"How many", L"数量"},
     {L"Humidity", L"湿度"},
+    {L"Icon size", L"图标大小"},
     {L"Icons", L"图标"},
-    {L"Icons before scrolling", L"滚动前显示的图标数"},
     {L"Icons of the apps with notifications", L"有通知的应用的图标"},
     {L"Icons that aren't pinned", L"未固定的图标"},
     {L"Ignored (not counted)", L"已忽略（不计数）"},
+    {L"Import", L"导入"},
     {L"Import a backup of the island", L"导入灵动岛备份"},
-    {L"Import a file…", L"导入文件…"},
+    {L"Import a file", L"导入文件"},
     {L"Import shortcuts (like komorebi's whkdrc)", L"导入快捷键（如 komorebi 的 whkdrc）"},
-    {L"Import…", L"导入…"},
     {L"In the pill", L"在胶囊中"},
     {L"In the terminal", L"在终端中"},
     {L"In use", L"使用中"},
@@ -9190,7 +9304,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"M D Y", L"月 日 年"},
     {L"Magnifier", L"放大镜"},
     {L"Main island", L"主灵动岛"},
-    {L"Manage profiles…", L"管理配置文件…"},
+    {L"Manage profiles", L"管理配置文件"},
     {L"Media buttons on the pill", L"胶囊上的媒体按钮"},
     {L"Memory", L"内存"},
     {L"Memory use (RAM)", L"内存使用率 (RAM)"},
@@ -9206,11 +9320,14 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Monocle (the window in focus fills the screen)", L"单窗口（焦点窗口占满屏幕）"},
     {L"Month as a number (9/10)", L"月份显示为数字 (9/10)"},
     {L"More Windows controls", L"更多 Windows 控件"},
-    {L"More in Explorer…", L"在资源管理器中查看更多…"},
+    {L"More in Explorer", L"在资源管理器中查看更多"},
     {L"Mostly clear", L"大部晴朗"},
+    {L"Move", L"移动"},
     {L"Move the pill by dragging it", L"拖动以移动胶囊"},
+    {L"Moved", L"移动"},
     {L"Music", L"音乐"},
     {L"Muted", L"已静音"},
+    {L"Name", L"名称"},
     {L"Narrator", L"讲述人"},
     {L"Needs Windows' transparency effects: click to open Personalization > Colors", L"需要 Windows 的透明效果：点击打开 个性化 > 颜色"},
     {L"Needs the date or the year on the clock", L"需要时钟显示日期或年份"},
@@ -9249,6 +9366,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Notches", L"刘海"},
     {L"Notes", L"笔记"},
     {L"Notes button", L"笔记按钮"},
+    {L"Nothing found", L"未找到"},
     {L"Nothing playing", L"没有正在播放的内容"},
     {L"Nothing to do", L"没有待办"},
     {L"Nothing waiting", L"没有待更新项"},
@@ -9281,6 +9399,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Open in Explorer", L"在资源管理器中打开"},
     {L"Open the Windows notification center", L"打开 Windows 通知中心"},
     {L"Order of the items", L"项目顺序"},
+    {L"Other apps' icons before scrolling", L"滚动前显示的其他应用图标数"},
     {L"Other apps' tray icons", L"其他应用的托盘图标"},
     {L"Output", L"输出"},
     {L"Overcast", L"阴"},
@@ -9325,10 +9444,10 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Reading…", L"正在读取…"},
     {L"Recycle Bin", L"回收站"},
     {L"Red", L"红色"},
+    {L"Remember my choice (it's in the island's settings)", L"记住我的选择（可在灵动岛设置中更改）"},
     {L"Reply", L"回复"},
     {L"Restart", L"重启"},
     {L"Restart now?", L"现在重启？"},
-    {L"Restart…", L"重启…"},
     {L"Rows", L"行"},
     {L"Safe to remove", L"可以安全移除"},
     {L"Same as main: changes here apply to it too · + creates this monitor's profile", L"与主岛相同：这里的更改也适用于主岛 · + 为此显示器创建配置"},
@@ -9345,6 +9464,7 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Screenshot notifications open the picture (in Explorer)", L"截图通知打开图片（在资源管理器中）"},
     {L"Scrolling", L"滚动"},
     {L"Search", L"搜索"},
+    {L"Search here (a name or *.pdf)", L"在此搜索（名称或 *.pdf）"},
     {L"Second screen only", L"仅第二屏幕"},
     {L"Seconds", L"秒"},
     {L"See it in a terminal", L"在终端中查看"},
@@ -9356,10 +9476,8 @@ constexpr std::pair<PCWSTR, PCWSTR> kChineseTexts[] = {
     {L"Showers", L"阵雨"},
     {L"Shut down", L"关机"},
     {L"Shut down now?", L"现在关机？"},
-    {L"Shut down…", L"关机…"},
     {L"Sign out", L"注销"},
     {L"Sign out now?", L"现在注销？"},
-    {L"Sign out…", L"注销…"},
     {L"Size", L"大小"},
     {L"Size and transparency", L"大小和透明度"},
     {L"Sleep", L"睡眠"},
@@ -9903,34 +10021,60 @@ std::vector<BrightnessMonitor> ReadBrightnessMonitors() {
 
 // From 0 to 100 (the screen's monitor's, or the first one's), -1 if no
 // monitor answers.
+// Only the monitors asked about are asked over DDC/CI (slow, and some
+// flicker).
 int ReadBrightness(HMONITOR screen) {
-    const auto list = ReadBrightnessMonitors();
-    for (const auto& monitor : list) {
-        if (monitor.screen == screen) {
-            return monitor.level;
+    int level = -1;
+    for (const bool any : {false, true}) {
+        if (!any && !screen) {
+            continue;
+        }
+        ForEachPhysicalMonitor(
+            [&](const PHYSICAL_MONITOR& one, int, HMONITOR monitor, int) {
+                DWORD minimum, current, maximum;
+                if (level >= 0 || (!any && monitor != screen) ||
+                    !GetMonitorBrightness(one.hPhysicalMonitor, &minimum,
+                                          &current, &maximum) ||
+                    maximum <= minimum) {
+                    return;
+                }
+                level = (int)std::lround(100.0 * (current - minimum) /
+                                         (maximum - minimum));
+            });
+        if (level >= 0) {
+            break;
         }
     }
-    return list.empty() ? -1 : list.front().level;
+    return level;
 }
+
+// Changes of the displays (WM_DISPLAYCHANGE), so a list of monitors read
+// before one is known to be old.
+std::atomic<int> g_displayChanges;
 
 constexpr int kMaxBrightnessMonitors = 8;
 
 // The levels asked for, by monitor (-1: left as it is), and for the
-// monitors of a screen.
-void WriteBrightness(const int (&levels)[kMaxBrightnessMonitors],
+// monitors of a screen. False if one asked didn't answer (turned off: still
+// a display for Windows, but its DDC/CI is gone).
+bool WriteBrightness(const int (&levels)[kMaxBrightnessMonitors],
                      HMONITOR screen,
                      int screenLevel) {
+    bool answered = true;
     ForEachPhysicalMonitor(
         [&](const PHYSICAL_MONITOR& one, int index, HMONITOR monitor, int) {
             const int level =
                 screenLevel >= 0 && monitor == screen ? screenLevel
                 : index < kMaxBrightnessMonitors      ? levels[index]
                                                       : -1;
+            if (level < 0) {
+                return;
+            }
             DWORD minimum, current, maximum;
-            if (level < 0 ||
-                !GetMonitorBrightness(one.hPhysicalMonitor, &minimum,
+            if (!GetMonitorBrightness(one.hPhysicalMonitor, &minimum,
                                       &current, &maximum) ||
                 maximum <= minimum) {
+                answered = false;
                 return;
             }
             SetMonitorBrightness(
@@ -9938,6 +10082,7 @@ void WriteBrightness(const int (&levels)[kMaxBrightnessMonitors],
                 minimum +
                     (DWORD)std::lround((maximum - minimum) * level / 100.0));
         });
+    return answered;
 }
 
 void OpenUri(PCWSTR uri) {
@@ -10144,17 +10289,47 @@ HANDLE g_islandProcessWait;
 DWORD g_islandProcessId;
 SRWLOCK g_islandWatchLock = SRWLOCK_INIT;
 
-VOID CALLBACK IslandProcessEndedCallback(PVOID, BOOLEAN) {
-    if (g_unloading || !GetUserIntValue(L"turnedDndOn", 0)) {
-        return;
-    }
+// (On a thread of its own: explorer's threads have their own apartments.)
+DWORD WINAPI TurnLeftoverDndOffThreadProc(LPVOID) {
     const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (SetDoNotDisturb(false)) {
+    if (GetUserIntValue(L"turnedDndOn", 0) && SetDoNotDisturb(false)) {
         SetUserIntValue(L"turnedDndOn", 0);
         Wh_Log(L"The island stopped: \"Do not disturb\" turned back off");
     }
     if (SUCCEEDED(init)) {
         CoUninitialize();
+    }
+    return 0;
+}
+
+VOID CALLBACK IslandProcessEndedCallback(PVOID, BOOLEAN) {
+    if (g_unloading) {
+        return;
+    }
+    TurnLeftoverDndOffThreadProc(nullptr);
+}
+
+// The explorer.exe part unloading (the mod turned off or removed) while no
+// island's process runs (it ended without turning "Do not disturb" back off,
+// and didn't start again): turned back off here, since nothing else would.
+void RestoreDndWithoutIsland() {
+    if (!GetUserIntValue(L"turnedDndOn", 0)) {
+        return;
+    }
+    // (Its mutex exists while it runs; one it can't open exists too.)
+    if (HANDLE running =
+            OpenMutex(SYNCHRONIZE, FALSE, L"windhawk-tool-mod_" WH_MOD_ID)) {
+        CloseHandle(running);
+        return;
+    }
+    if (GetLastError() == ERROR_ACCESS_DENIED) {
+        return;
+    }
+    if (HANDLE thread = CreateThread(nullptr, 0, TurnLeftoverDndOffThreadProc,
+                                     nullptr, 0, nullptr)) {
+        // (Its code is the mod's, so it ends before the mod unloads.)
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
 }
 
@@ -10355,6 +10530,11 @@ constexpr UINT kProfileSaveMs = 800;
 constexpr UINT_PTR kMediaOpenTimerId = 26;
 constexpr UINT kMediaOpenCheckMs = 100;
 constexpr double kMediaOpenSeconds = 1;
+// Files held on the folders' item while dragged: its panel opens; and a
+// moment after they left the item (gone to the panel, or not).
+constexpr UINT_PTR kFoldersDropTimerId = 27;
+constexpr UINT_PTR kFoldersDragLeftTimerId = 28;
+constexpr UINT kFoldersDragLeftMs = 300;
 constexpr UINT kMonitorCheckMs = 250;
 // How far the island stays open while it glides to another monitor (its
 // dot, see Island::AppearFade).
@@ -11448,6 +11628,11 @@ class Panel {
     virtual bool OnAppMessage(UINT, WPARAM, LPARAM) { return false; }
     // Before the window goes away.
     virtual void OnDestroy() {}
+    // Starting to close.
+    virtual void OnClose() {}
+    // Whether it stays open when another window takes the focus (closed
+    // otherwise, like a menu).
+    virtual bool StaysWhenDeactivated() const { return false; }
     // The mouse held by the window taken away (it closed, or another window
     // took it).
     virtual void OnCaptureLost() {}
@@ -11733,6 +11918,7 @@ void Panel::MoveTo(POINT anchor, D2D1_RECT_F source) {
 void Panel::Close() {
     if (m_target > 0) {
         m_target = 0;
+        OnClose();
         // Back behind the island (clicks in it may have brought it over).
         if (m_underIsland) {
             Raise();
@@ -11758,6 +11944,11 @@ bool Panel::Animate(double dt) {
         return false;
     }
     if (m_open <= 0 && m_openX <= 0 && m_target <= 0) {
+        // (Opened and closed again before a frame: its window, shown with
+        // its first frame, goes too.)
+        if (IsWindowVisible(m_hwnd)) {
+            ShowWindow(m_hwnd, SW_HIDE);
+        }
         return false;
     }
     bool moving;
@@ -12016,7 +12207,8 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
     switch (msg) {
         case WM_ACTIVATE:
             // Clicked somewhere else (not a dialog of its own).
-            if (LOWORD(wParam) == WA_INACTIVE && !m_dialogShown) {
+            if (LOWORD(wParam) == WA_INACTIVE && !m_dialogShown &&
+                !StaysWhenDeactivated()) {
                 Close();
             }
             break;
@@ -15290,7 +15482,7 @@ void CalendarPanel::DrawAgendas(ID2D1RenderTarget* target,
                      m_todayHeader, brush);
     const int colors[] = {kTodayRed, m_windowsAccent, m_todayColor};
     const PCWSTR names[] = {Tr(L"Red", L"Vermelho"), Tr(L"Windows", L"Windows"),
-                            Tr(L"Choose…", L"Escolher…")};
+                            Tr(L"Choose", L"Escolher")};
     for (size_t i = 0; i < m_todayChips.size(); i++) {
         const D2D1_RECT_F& chip = m_todayChips[i];
         const bool chosen = m_todayMode == (int)i;
@@ -16596,6 +16788,9 @@ enum class IslandPref {
     KomorebiLayout,
     FocusedApp,
     KomorebiHideEmpty,
+    // Files dragged out of the folders panel: 0 asked, 1 copied, 2 moved
+    // (chosen on its own row, see kChoiceFolderDrag).
+    FolderDrag,
 };
 
 struct IslandPrefInfo {
@@ -16806,6 +17001,9 @@ const IslandPrefInfo kIslandPrefs[] = {
      kGlyphKomorebiLayout,
      L"komorebi: hide the workspaces without windows",
      L"komorebi: esconder as áreas de trabalho sem janelas"},
+    // Chosen on its own row (see kChoiceFolderDrag).
+    {IslandPref::FolderDrag, L"islandFolderDrag", 0xE8C8,
+     L"Files dragged out", L"Arquivos arrastados para fora"},
 };
 
 // The groups of items on the pill, which can be put in another order in the
@@ -17389,6 +17587,11 @@ constexpr int kIslandSizeMin = 70;
 constexpr int kIslandSizeMax = 150;
 constexpr int kIslandSizeDefault = 100;
 constexpr int kIslandSizeStep = 5;
+// The icons' own size, in percent (see islandIconSize).
+constexpr int kIconSizeMin = 70;
+constexpr int kIconSizeMax = 150;
+constexpr int kIconSizeDefault = 100;
+constexpr int kIconSizeStep = 5;
 constexpr int kIslandGapMin = 0;
 constexpr int kIslandGapMax = 48;
 constexpr int kIslandGapDefault = 6;
@@ -17464,6 +17667,8 @@ enum ChoiceId {
     kChoiceWallpaper,
     // The Fixed style's notches (see islandNotches).
     kChoiceNotches,
+    // Files dragged out of the folders (see islandFolderDrag).
+    kChoiceFolderDrag,
     kChoiceCount
 };
 
@@ -17496,6 +17701,7 @@ int ChoiceCount(int id) {
             return 4;
         case kChoiceClockFormat:
         case kChoiceTrayStyle:
+        case kChoiceFolderDrag:
             return 3;
         case kChoiceWallpaper:
         case kChoiceNotches:
@@ -17515,8 +17721,8 @@ std::wstring ChoiceOption(int id, int index) {
             return index == 0 ? std::wstring(Tr(L"Screen", L"Tela"))
                               : std::to_wstring(kFrameRates[index]);
         case kChoiceBackup:
-            return index == 0 ? Tr(L"Export…", L"Exportar…")
-                              : Tr(L"Import…", L"Importar…");
+            return index == 0 ? Tr(L"Export", L"Exportar")
+                              : Tr(L"Import", L"Importar");
         case kChoiceColors:
             return index == kColorBackground ? Tr(L"Fill", L"Fundo")
                    : index == kColorText     ? Tr(L"Text", L"Texto")
@@ -17544,6 +17750,10 @@ std::wstring ChoiceOption(int id, int index) {
                    : index == 1 ? Tr(L"Middle", L"Meio")
                    : index == 2 ? Tr(L"Corners", L"Cantos")
                                 : Tr(L"Three", L"Três");
+        case kChoiceFolderDrag:
+            return index == 0   ? Tr(L"Ask", L"Perguntar")
+                   : index == 1 ? Tr(L"Copy", L"Copiar")
+                                : Tr(L"Move", L"Mover");
         default:
             return {};
     }
@@ -17568,6 +17778,8 @@ int ChoiceValue(int id) {
             return g_settings.wallpaperTransition;
         case kChoiceNotches:
             return g_settings.islandNotches;
+        case kChoiceFolderDrag:
+            return g_settings.islandFolderDrag;
         default:
             return -1;
     }
@@ -17594,6 +17806,8 @@ bool ChoiceDisabled(int id) {
             return !g_settings.islandWallpaper;
         case kChoiceNotches:
             return g_settings.islandBar || !g_settings.islandReserve;
+        case kChoiceFolderDrag:
+            return !g_settings.islandFolders;
         default:
             return true;
     }
@@ -17634,12 +17848,14 @@ void SetIslandGap(int pixels, bool keep);
 void SetIslandOpacity(int percent, bool keep);
 void SetAutoHideDelay(int tenths, bool keep);
 void SetNotchCurve(int percent, bool keep);
+void SetIconSize(int percent, bool keep);
 // A custom color chosen (see CustomColor): kept, and the custom colors
 // shown.
 void SetCustomColor(int color, int value);
 // The island's sliders' values (0 size, 1 room from the edges, 2 animation
-// speed, 3 tray icons, 4 the backgrounds' opacity, 5 the auto-hide's delay).
-constexpr int kIslandSliderCount = 7;
+// speed, 3 tray icons, 4 the backgrounds' opacity, 5 the auto-hide's delay,
+// 6 the notches' curves, 7 the icons' size).
+constexpr int kIslandSliderCount = 8;
 int IslandSliderValue(int slider);
 
 // How many tray icons the open list shows before it scrolls (see
@@ -18575,6 +18791,8 @@ struct BrightnessJob {
     std::atomic<HMONITOR> screen{nullptr};
     std::atomic<int> screenTarget{-1};
     std::atomic<bool> running{false};
+    // A monitor asked didn't answer: its list is read again (see OnOpen).
+    std::atomic<bool> missed{false};
 
     BrightnessJob() {
         for (auto& target : targets) {
@@ -18641,7 +18859,9 @@ DWORD WINAPI BrightnessThreadProc(LPVOID parameter) {
             any = any || levels[i] >= 0;
         }
         if (any) {
-            WriteBrightness(levels, job->screen, screenLevel);
+            if (!WriteBrightness(levels, job->screen, screenLevel)) {
+                job->missed = true;
+            }
             continue;
         }
         job->running = false;
@@ -18886,6 +19106,14 @@ class ControlPanel : public Panel {
     // while open, it shows the other one.
     // (View: one control's own view alone, from its button on the pill.)
     enum class Only { All, Sound, Battery, Display, View, Komorebi };
+    // The arrow back: not on the settings opened on their own (from the
+    // island's settings bubble), nor on a page opened alone from its icon on
+    // the pill (Wi-Fi, Bluetooth...: nothing to go back to; Escape or a click
+    // outside closes them), except the Wi-Fi password's (back to the list).
+    bool ShowsBack() const {
+        return m_view != View::Settings &&
+               (m_only != Only::View || m_view == View::Password);
+    }
     // The island's settings (from the island's settings bubble): shown now
     // if it's open, or when it opens next.
     void ShowSettings() {
@@ -19191,6 +19419,7 @@ class ControlPanel : public Panel {
     void DrawWifi(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawPassword(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawBluetooth(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
+    D2D1_RECT_F BluetoothButtonRect(const D2D1_RECT_F& row) const;
     void DrawProject(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     void DrawSettings(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush);
     // One control of the main view, at its place.
@@ -19475,6 +19704,8 @@ class ControlPanel : public Panel {
     std::shared_ptr<BrightnessJob> m_brightnessJob =
         std::make_shared<BrightnessJob>();
     ULONGLONG m_brightnessReadAt = 0;
+    // g_displayChanges when the list was read (its places are old after one).
+    int m_brightnessDisplays = 0;
     // The display mode (DISPLAYCONFIG_TOPOLOGY_*).
     int m_displayMode = 0;
     std::vector<AccessibilityItem> m_accessibility;
@@ -21105,13 +21336,13 @@ class PowerPanel : public Panel {
             case PowerAction::Sleep:
                 return Tr(L"Sleep", L"Suspender");
             case PowerAction::Restart:
-                return Tr(L"Restart…", L"Reiniciar…");
+                return Tr(L"Restart", L"Reiniciar");
             case PowerAction::ShutDown:
-                return Tr(L"Shut down…", L"Desligar…");
+                return Tr(L"Shut down", L"Desligar");
             case PowerAction::Lock:
                 return Tr(L"Lock", L"Bloquear");
             default:
-                return Tr(L"Sign out…", L"Sair…");
+                return Tr(L"Sign out", L"Sair");
         }
     }
 
@@ -21155,7 +21386,34 @@ class PowerPanel : public Panel {
         SetTimer(m_hwnd, kPowerTimerId + (UINT_PTR)action, 380, nullptr);
     }
 
-    float ConfirmHeight() const { return std::round(84 * m_scale); }
+    static PCWSTR Hint() {
+        return Tr(L"Apps with unsaved work can stop it.",
+                  L"Apps com trabalho não salvo podem impedir.");
+    }
+
+    // The question, the hint under it (on as many lines as it takes: never
+    // cut), then the buttons.
+    float HintHeight(float width) const {
+        winrt::com_ptr<IDWriteTextLayout> layout;
+        DWRITE_TEXT_METRICS metrics{};
+        PCWSTR hint = Hint();
+        if (!m_smallFormat || !m_dwrite ||
+            FAILED(m_dwrite->CreateTextLayout(hint, (UINT32)wcslen(hint),
+                                              m_smallFormat.get(), width,
+                                              10000, layout.put())) ||
+            FAILED(layout->GetMetrics(&metrics))) {
+            return std::round(16 * m_scale);
+        }
+        return std::ceil(metrics.height);
+    }
+
+    float ConfirmHeight(float width) const {
+        const float s = m_scale;
+        const float inner = std::round(10 * s);
+        return std::round(4 * s) + std::round(19 * s) +
+               HintHeight(width - inner * 2) + std::round(8 * s) +
+               std::round(28 * s) + inner;
+    }
 
     void Layout() {
         const float s = m_scale;
@@ -21170,7 +21428,7 @@ class PowerPanel : public Panel {
             m_rows[i] = {padding, y, width - padding, y + row};
             y += row;
             if (i == m_confirmShown) {
-                const float height = ConfirmHeight();
+                const float height = ConfirmHeight(width - padding * 2);
                 m_confirmRect = {padding, y, width - padding,
                                  y + height * room};
                 const float button = std::round(28 * s);
@@ -21289,8 +21547,7 @@ void PowerPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) {
                      {m_confirmRect.left + inner, top,
                       m_confirmRect.right - inner, top + std::round(18 * s)},
                      brush);
-    PCWSTR hint = Tr(L"Apps with unsaved work can stop it.",
-                     L"Apps com trabalho não salvo podem impedir.");
+    PCWSTR hint = Hint();
     brush->SetColor(Fg(0.55f));
     target->DrawText(hint, (UINT32)wcslen(hint), m_smallFormat.get(),
                      {m_confirmRect.left + inner, top + std::round(19 * s),
@@ -21502,7 +21759,7 @@ void ProfilesPanel::Draw(ID2D1RenderTarget* target,
                 false);
     }
     drawRow(m_manage, kHitManage, (WCHAR)0xE713,
-            Tr(L"Manage profiles…", L"Gerenciar perfis…"), false);
+            Tr(L"Manage profiles", L"Gerenciar perfis"), false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25253,7 +25510,7 @@ void ShortcutsPanel::Draw(ID2D1RenderTarget* target,
                    Tr(L"+  New shortcut", L"+  Novo atalho"), false,
                    m_hover.part == Part::New);
         DrawButton(target, brush, m_import,
-                   Tr(L"Import a file…", L"Importar arquivo…"), false,
+                   Tr(L"Import a file", L"Importar arquivo"), false,
                    m_hover.part == Part::Import,
                    m_importThread ? 0.5f : 1.0f);
         if (!m_importStatus.empty()) {
@@ -26496,7 +26753,9 @@ struct AppUpdate {
     std::wstring id;
     std::wstring version;
     std::wstring available;
-    // 0: waiting, 4: opened in a terminal.
+    // 0: waiting, 4: opened in a terminal, 5: updated in the terminal but
+    // still listed with the same version (an app that finishes its update
+    // when it closes, like VS Code while open).
     int state = 0;
     // Ticked, to update with the others ticked.
     bool ticked = false;
@@ -26824,6 +27083,10 @@ bool ListWindowsUpdates(std::vector<std::wstring>* titles) {
     return ok;
 }
 
+// The apps sent to the terminal, each with the version it was to get (see
+// AppUpdate::state 5). Under g_updatesLock.
+std::vector<std::pair<std::wstring, std::wstring>> g_updatesRun;
+
 // Opens winget in a terminal for these apps, one after the other (it stays
 // open to show how it went, and asks there for any terms to accept). With no
 // apps, the list itself (to see why it couldn't be read).
@@ -26854,6 +27117,10 @@ void UpdateInTerminal(const std::vector<std::wstring>& ids) {
         if (std::find(run.begin(), run.end(), app.id) != run.end()) {
             app.state = 4;
             app.ticked = false;
+            std::erase_if(g_updatesRun, [&](const auto& entry) {
+                return entry.first == app.id;
+            });
+            g_updatesRun.push_back({app.id, app.available});
         }
     }
     ReleaseSRWLockExclusive(&g_updatesLock);
@@ -26896,11 +27163,17 @@ DWORD WINAPI UpdatesThreadProc(LPVOID parameter) {
         return 0;
     }
     AcquireSRWLockExclusive(&g_updatesLock);
-    // The ones ticked stay ticked.
+    // The ones ticked stay ticked; one updated in the terminal still asking
+    // for the same version finishes when it closes.
     for (auto& app : apps) {
         for (const auto& before : g_updates.apps) {
             if (before.id == app.id) {
                 app.ticked = before.ticked;
+            }
+        }
+        for (const auto& [id, version] : g_updatesRun) {
+            if (id == app.id && version == app.available) {
+                app.state = 5;
             }
         }
     }
@@ -27146,7 +27419,8 @@ class UpdatesPanel : public EditingPanel {
 
     D2D1_RECT_F AppButton(const D2D1_RECT_F& row) const {
         const float s = m_scale;
-        return {row.right - std::round(108 * s), row.top + std::round(8 * s),
+        // (Wide enough for "Close it to finish" whole.)
+        return {row.right - std::round(136 * s), row.top + std::round(8 * s),
                 row.right, row.bottom - std::round(8 * s)};
     }
     // "Ignore" (or "Show again"), left of it.
@@ -27334,11 +27608,14 @@ void UpdatesPanel::Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) 
                        m_hover.part == Part::Ignore && m_hover.index == (int)i,
                        0.7f);
         const bool hover = m_hover.part == Part::App && m_hover.index == (int)i;
-        // Opened in a terminal: can be opened again.
+        // Opened in a terminal, or updated there but finishing when the app
+        // closes: can be opened again.
         DrawButton(target, brush, button,
-                   app.state == 4 ? Tr(L"In the terminal", L"No terminal")
-                                  : Tr(L"Update", L"Atualizar"),
-                   false, hover, app.state == 4 ? 0.6f : 1.0f);
+                   app.state == 4   ? Tr(L"In the terminal", L"No terminal")
+                   : app.state == 5 ? Tr(L"Close it to finish",
+                                         L"Feche para concluir")
+                                    : Tr(L"Update", L"Atualizar"),
+                   false, hover, app.state >= 4 ? 0.6f : 1.0f);
         if (i + 1 < m_appRows.size()) {
             brush->SetColor(Fg(0.07f));
             target->FillRectangle({row.left, row.bottom - 0.5f, row.right,
@@ -29726,6 +30003,144 @@ std::wstring KomorebiLayoutName(const KomorebiMonitor& monitor, bool paused) {
     return monitor.layout;
 }
 
+// The icons of komorebi's menu rows (a layout's place in kKomorebiLayouts,
+// then tiling, monocle and pause) and of tiling off (floating).
+constexpr int kKomorebiIconFloating = kKomorebiRows;
+
+// What the pill shows for a monitor, as an icon (see KomorebiLayoutName); -1
+// for a layout without one (a custom one).
+int KomorebiIconOf(const KomorebiMonitor& monitor, bool paused) {
+    if (paused) {
+        return kKomorebiRowPause;
+    }
+    if (monitor.monocle) {
+        return kKomorebiRowMonocle;
+    }
+    if (!monitor.tiling) {
+        return kKomorebiIconFloating;
+    }
+    for (int i = 0; i < kKomorebiLayoutCount; i++) {
+        if (monitor.layout == kKomorebiLayouts[i].id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// A komorebi icon (see KomorebiIconOf) around `middle`: a small screen split
+// the way the layout places the windows (like yasb's), in the brush's color.
+void DrawKomorebiIcon(ID2D1RenderTarget* target,
+                      ID2D1SolidColorBrush* brush,
+                      D2D1_POINT_2F middle,
+                      float scale,
+                      int icon) {
+    const float w = std::round(16 * scale);
+    const float h = std::round(12 * scale);
+    const float stroke = std::max(1.0f, 1.2f * scale);
+    const D2D1_RECT_F frame{std::round(middle.x - w / 2) + 0.5f,
+                            std::round(middle.y - h / 2) + 0.5f,
+                            std::round(middle.x - w / 2) + 0.5f + w,
+                            std::round(middle.y - h / 2) + 0.5f + h};
+    const float radius = 2 * scale;
+    auto x = [&](float f) { return frame.left + (frame.right - frame.left) * f; };
+    auto y = [&](float f) { return frame.top + (frame.bottom - frame.top) * f; };
+    // A line across the frame at `at`, from `from` to `to` (fractions).
+    auto vertical = [&](float at, float from = 0, float to = 1) {
+        target->DrawLine({x(at), y(from)}, {x(at), y(to)}, brush, stroke);
+    };
+    auto horizontal = [&](float at, float from = 0, float to = 1) {
+        target->DrawLine({x(from), y(at)}, {x(to), y(at)}, brush, stroke);
+    };
+    if (icon == kKomorebiRowPause) {
+        const float bar = std::round(3 * scale);
+        const float gap = std::round(3 * scale);
+        const float top = middle.y - h / 2;
+        target->FillRectangle({middle.x - gap / 2 - bar, top,
+                               middle.x - gap / 2, top + h},
+                              brush);
+        target->FillRectangle({middle.x + gap / 2, top,
+                               middle.x + gap / 2 + bar, top + h},
+                              brush);
+        return;
+    }
+    if (icon == kKomorebiIconFloating) {
+        // Two windows over each other, not tiled.
+        const D2D1_RECT_F back{frame.left, frame.top, x(0.7f), y(0.7f)};
+        const D2D1_RECT_F front{x(0.3f), y(0.3f), frame.right, frame.bottom};
+        target->DrawRoundedRectangle({back, radius, radius}, brush, stroke);
+        target->FillRoundedRectangle({front, radius, radius}, brush);
+        return;
+    }
+    // Scrolling: columns going past the screen's sides (no sides drawn).
+    if (icon == 8) {
+        horizontal(0);
+        horizontal(1);
+        vertical(0.18f);
+        vertical(0.82f);
+        return;
+    }
+    target->DrawRoundedRectangle({frame, radius, radius}, brush, stroke);
+    switch (icon) {
+        case 0:  // Columns.
+            vertical(1 / 3.0f);
+            vertical(2 / 3.0f);
+            break;
+        case 1:  // Rows.
+            horizontal(1 / 3.0f);
+            horizontal(2 / 3.0f);
+            break;
+        case 2:  // Grid.
+            vertical(0.5f);
+            horizontal(0.5f);
+            break;
+        case 3:  // BSP: each half split again.
+            vertical(0.5f);
+            horizontal(0.5f, 0.5f, 1);
+            vertical(0.75f, 0.5f, 1);
+            break;
+        case 4:  // Vertical stack: the main one on the left.
+            vertical(0.5f);
+            horizontal(0.5f, 0.5f, 1);
+            break;
+        case 5:  // Horizontal stack: the main one on top.
+            horizontal(0.5f);
+            vertical(0.5f, 0.5f, 1);
+            break;
+        case 6:  // Ultrawide: the main one in the middle.
+            vertical(0.25f);
+            vertical(0.75f);
+            horizontal(0.5f, 0.75f, 1);
+            break;
+        case 7:  // The main one on the right.
+            vertical(0.5f);
+            horizontal(0.5f, 0, 0.5f);
+            break;
+        case kKomorebiRowTiling: {
+            // Tiled: the screen split, one tile filled.
+            vertical(0.5f);
+            horizontal(0.5f, 0.5f, 1);
+            const float inset = stroke * 1.5f;
+            target->FillRectangle({frame.left + inset, frame.top + inset,
+                                   x(0.5f) - inset, frame.bottom - inset},
+                                  brush);
+            break;
+        }
+        case kKomorebiRowMonocle: {
+            // One window filling the screen.
+            const float inset = std::round(2.5f * scale);
+            target->FillRoundedRectangle(
+                {{frame.left + inset, frame.top + inset, frame.right - inset,
+                  frame.bottom - inset},
+                 radius / 2,
+                 radius / 2},
+                brush);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
 // A menu row's command for a monitor (its shown workspace), without moving
 // the focus; monocle takes the window in focus, so this monitor's first
 // when another one has it.
@@ -30026,6 +30441,25 @@ DWORD WINAPI KomorebiWatchThreadProc(LPVOID parameter) {
     DWORD failedProcess = 0;
     int failures = 0;
     while (WaitForSingleObject(job->stop, 0) == WAIT_TIMEOUT) {
+        // Given up on this komorebi for now (it didn't take the subscription,
+        // like one still starting at sign-in): tried again every 30 seconds,
+        // at once when it ends or the island starts it (not woken by its
+        // folder, where it keeps writing its log).
+        if (failures >= kKomorebiTries) {
+            HANDLE running = OpenProcess(SYNCHRONIZE, FALSE, failedProcess);
+            DWORD woken = WAIT_TIMEOUT;
+            if (running) {
+                const HANDLE waits[] = {job->stop, job->kick, running};
+                woken = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE,
+                                               30000);
+                CloseHandle(running);
+            }
+            if (woken != WAIT_OBJECT_0) {
+                failures = 0;
+                failedProcess = 0;
+            }
+            continue;
+        }
         // Watched before looking, so komorebi starting in between isn't
         // missed: its folder (or, before it has one, where it'll be made).
         const DWORD attributes = GetFileAttributes(data.c_str());
@@ -30044,11 +30478,16 @@ DWORD WINAPI KomorebiWatchThreadProc(LPVOID parameter) {
             failures = 0;
         }
         const std::wstring komorebic =
-            process && failures < kKomorebiTries ? FindKomorebic()
-                                                 : std::wstring();
-        if (!komorebic.empty()) {
+            process ? FindKomorebic() : std::wstring();
+        if (process) {
             if (change != INVALID_HANDLE_VALUE) {
                 FindCloseChangeNotification(change);
+            }
+            // (Running without its komorebic found: as given up.)
+            if (komorebic.empty()) {
+                failedProcess = process;
+                failures = kKomorebiTries;
+                continue;
             }
             // (A subscription komorebi drops at once counts as failed: no
             // command run over and over.)
@@ -30230,6 +30669,7 @@ void KomorebiPanel::Draw(ID2D1RenderTarget* target,
     const float s = m_scale;
     const float radius = std::round(9 * s);
     const float icon = std::round(34 * s);
+    // Each row: its icon, its name, and a check at the end when on.
     auto drawRow = [&](int row, PCWSTR name, bool checked) {
         if (row >= (int)m_rows.size()) {
             return;
@@ -30240,18 +30680,23 @@ void KomorebiPanel::Draw(ID2D1RenderTarget* target,
             brush->SetColor(Fg(0.09f * lit));
             target->FillRoundedRectangle({rect, radius, radius}, brush);
         }
+        brush->SetColor(checked ? Accent(1) : Fg(0.85f));
+        DrawKomorebiIcon(target, brush,
+                         {rect.left + icon / 2, (rect.top + rect.bottom) / 2},
+                         s, row);
+        const float checkWidth = std::round(28 * s);
         if (checked) {
             const WCHAR check = 0xE73E;
             brush->SetColor(Accent(1));
             target->DrawText(&check, 1, m_iconFormat.get(),
-                             {rect.left, rect.top, rect.left + icon,
+                             {rect.right - checkWidth, rect.top, rect.right,
                               rect.bottom},
                              brush);
         }
         brush->SetColor(Fg(0.95f));
         target->DrawText(name, (UINT32)wcslen(name), m_textFormat.get(),
                          {rect.left + icon, rect.top,
-                          rect.right - std::round(8 * s), rect.bottom},
+                          rect.right - checkWidth, rect.bottom},
                          brush);
     };
     for (int i = 0; i < kKomorebiLayoutCount; i++) {
@@ -30786,7 +31231,33 @@ struct FolderEntry {
     std::wstring path;
     // Pinned (in the first column).
     bool pinned = false;
+    // When it was last changed (a FILETIME), for sorting by date.
+    ULONGLONG modified = 0;
 };
+
+// A folder's items in the panel's order: folders, then files, then the
+// rest (drives, "More in Explorer"), each by name, or the newest first.
+void SortFolderItems(std::vector<FolderEntry>& items, bool byDate) {
+    auto group = [](const FolderEntry& item) {
+        return item.kind == FolderKind::Folder ? 0
+               : item.kind == FolderKind::File ? 1
+                                               : 2;
+    };
+    std::stable_sort(items.begin(), items.end(),
+                     [&](const FolderEntry& a, const FolderEntry& b) {
+                         if (group(a) != group(b)) {
+                             return group(a) < group(b);
+                         }
+                         if (group(a) == 2) {
+                             return false;
+                         }
+                         if (byDate && a.modified != b.modified) {
+                             return a.modified > b.modified;
+                         }
+                         return StrCmpLogicalW(a.name.c_str(),
+                                               b.name.c_str()) < 0;
+                     });
+}
 
 // Folders with more are cut (the rest opens in Explorer).
 constexpr size_t kFolderListMax = 200;
@@ -30801,7 +31272,257 @@ struct FolderListJob {
     int column;
     UINT generation;
     std::vector<FolderEntry> items;
+    bool byDate = false;
+    // Read again for a change in it (the column stays as it is meanwhile).
+    bool quiet = false;
 };
+// Tells the list a folder shown changed (wParam: the watched set's number,
+// lParam: the folder's place in it; see FolderWatchThreadProc).
+constexpr UINT WM_APP_FOLDER_CHANGED = WM_APP + 91;
+
+// The folders a folders' panel shows, watched while it's open (see
+// FoldersPanel::WatchColumns).
+struct FolderWatch {
+    HWND panel = nullptr;
+    // Stop (manual reset), and the set changed (automatic).
+    HANDLE stop = nullptr;
+    HANDLE kick = nullptr;
+    SRWLOCK lock = SRWLOCK_INIT;
+    // Under the lock.
+    std::vector<std::wstring> paths;
+    UINT set = 0;
+};
+
+// A name added, removed or changed in one of the folders (a file or a
+// folder, by anything) is posted to the panel; the set changed, they're
+// watched again. Only waits (FindFirstChangeNotification), nothing polled.
+DWORD WINAPI FolderWatchThreadProc(LPVOID parameter) {
+    auto* watch = (FolderWatch*)parameter;
+    // (The 32-bit Windhawk process would watch SysWOW64 for System32.)
+    PVOID redirection = nullptr;
+    const bool unredirected =
+        Wow64DisableWow64FsRedirection(&redirection) != FALSE;
+    bool stop = false;
+    while (!stop) {
+        AcquireSRWLockShared(&watch->lock);
+        const std::vector<std::wstring> paths = watch->paths;
+        const UINT set = watch->set;
+        ReleaseSRWLockShared(&watch->lock);
+        std::vector<HANDLE> waits{watch->stop, watch->kick};
+        std::vector<int> places;
+        for (size_t i = 0;
+             i < paths.size() && waits.size() < MAXIMUM_WAIT_OBJECTS; i++) {
+            HANDLE change = FindFirstChangeNotification(
+                paths[i].c_str(), FALSE,
+                FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME);
+            if (change != INVALID_HANDLE_VALUE) {
+                waits.push_back(change);
+                places.push_back((int)i);
+            }
+        }
+        for (;;) {
+            const DWORD woken = WaitForMultipleObjects(
+                (DWORD)waits.size(), waits.data(), FALSE, INFINITE);
+            const size_t k = woken - WAIT_OBJECT_0;
+            if (woken == WAIT_FAILED || k == 0) {
+                stop = true;
+                break;
+            }
+            if (k == 1) {
+                break;
+            }
+            if (k >= waits.size()) {
+                continue;
+            }
+            PostMessage(watch->panel, WM_APP_FOLDER_CHANGED, set,
+                        places[k - 2]);
+            // (A folder gone: no longer watched.)
+            if (!FindNextChangeNotification(waits[k])) {
+                FindCloseChangeNotification(waits[k]);
+                waits.erase(waits.begin() + k);
+                places.erase(places.begin() + (k - 2));
+            }
+        }
+        for (size_t k = 2; k < waits.size(); k++) {
+            FindCloseChangeNotification(waits[k]);
+        }
+    }
+    if (unredirected) {
+        Wow64RevertWow64FsRedirection(redirection);
+    }
+    return 0;
+}
+
+// Files dragged over one of the mod's windows (Windows' own drag, out of the
+// mod or out of another app): what they'd do there, asked of the window's
+// owner, with Windows' picture of them kept over the window. Registered on
+// the island's thread (OLE started there, see IslandThreadProc).
+class DropTarget final : public IDropTarget {
+   public:
+    class Receiver {
+       public:
+        // The files at `screen`: what they'd do (DROPEFFECT_NONE: nothing),
+        // out of what their source allows.
+        virtual DWORD DragOverAt(IDataObject* data,
+                                 POINT screen,
+                                 DWORD keys,
+                                 DWORD allowed) = 0;
+        // Gone out of the window (or the drag ended).
+        virtual void DragGone() = 0;
+        // Let go at `screen`: what was done.
+        virtual DWORD DropAt(IDataObject* data,
+                             POINT screen,
+                             DWORD keys,
+                             DWORD allowed) = 0;
+
+       protected:
+        ~Receiver() = default;
+    };
+
+    DropTarget(HWND hwnd, Receiver* owner) : m_hwnd(hwnd), m_owner(owner) {
+        CoCreateInstance(kCLSID_DragDropHelper, nullptr, CLSCTX_INPROC_SERVER,
+                         IID_PPV_ARGS(m_helper.put()));
+    }
+    // Its window going: nothing told to the owner any more.
+    void Forget() {
+        m_owner = nullptr;
+        m_data = nullptr;
+        m_helper = nullptr;
+    }
+
+    IFACEMETHODIMP QueryInterface(REFIID riid, void** object) override {
+        if (riid == IID_IUnknown || riid == IID_IDropTarget) {
+            *object = static_cast<IDropTarget*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    IFACEMETHODIMP_(ULONG) AddRef() override {
+        return InterlockedIncrement(&m_refs);
+    }
+    IFACEMETHODIMP_(ULONG) Release() override {
+        const ULONG refs = InterlockedDecrement(&m_refs);
+        if (!refs) {
+            delete this;
+        }
+        return refs;
+    }
+
+    IFACEMETHODIMP DragEnter(IDataObject* data,
+                             DWORD keys,
+                             POINTL pt,
+                             DWORD* effect) override {
+        m_data.copy_from(data);
+        POINT screen{pt.x, pt.y};
+        *effect = m_owner ? m_owner->DragOverAt(data, screen, keys, *effect)
+                          : DROPEFFECT_NONE;
+        if (m_helper) {
+            m_helper->DragEnter(m_hwnd, data, &screen, *effect);
+        }
+        return S_OK;
+    }
+    IFACEMETHODIMP DragOver(DWORD keys, POINTL pt, DWORD* effect) override {
+        POINT screen{pt.x, pt.y};
+        *effect = m_owner && m_data ? m_owner->DragOverAt(m_data.get(), screen,
+                                                          keys, *effect)
+                                    : DROPEFFECT_NONE;
+        if (m_helper) {
+            m_helper->DragOver(&screen, *effect);
+        }
+        return S_OK;
+    }
+    IFACEMETHODIMP DragLeave() override {
+        if (m_owner) {
+            m_owner->DragGone();
+        }
+        if (m_helper) {
+            m_helper->DragLeave();
+        }
+        m_data = nullptr;
+        return S_OK;
+    }
+    IFACEMETHODIMP Drop(IDataObject* data,
+                        DWORD keys,
+                        POINTL pt,
+                        DWORD* effect) override {
+        POINT screen{pt.x, pt.y};
+        // (The picture goes first: the folder's own drop may ask something.)
+        if (m_helper) {
+            m_helper->Drop(data, &screen, *effect);
+        }
+        *effect = m_owner ? m_owner->DropAt(data, screen, keys, *effect)
+                          : DROPEFFECT_NONE;
+        m_data = nullptr;
+        return S_OK;
+    }
+
+   private:
+    HWND m_hwnd;
+    Receiver* m_owner;
+    winrt::com_ptr<IDropTargetHelper> m_helper;
+    winrt::com_ptr<IDataObject> m_data;
+    ULONG m_refs = 1;
+};
+
+// A window taking Windows' drags, until Revoke (called while the window is
+// still there).
+class DropRegistration {
+   public:
+    void Register(HWND hwnd, DropTarget::Receiver* owner) {
+        if (m_target || !hwnd) {
+            return;
+        }
+        auto* target = new DropTarget(hwnd, owner);
+        if (SUCCEEDED(RegisterDragDrop(hwnd, target))) {
+            m_target = target;
+            m_hwnd = hwnd;
+        } else {
+            target->Release();
+        }
+    }
+    void Revoke() {
+        if (!m_target) {
+            return;
+        }
+        m_target->Forget();
+        RevokeDragDrop(m_hwnd);
+        m_target->Release();
+        m_target = nullptr;
+        m_hwnd = nullptr;
+    }
+
+   private:
+    DropTarget* m_target = nullptr;
+    HWND m_hwnd = nullptr;
+};
+
+// A folder's own drop target (copies or moves what's dropped on it as
+// Explorer does: its questions for names already there, its progress, undone
+// with Ctrl+Z).
+winrt::com_ptr<IDropTarget> FolderDropTargetOf(const std::wstring& path) {
+    winrt::com_ptr<IShellItem> item;
+    winrt::com_ptr<IDropTarget> target;
+    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+                                              IID_PPV_ARGS(item.put())))) {
+        item->BindToHandler(nullptr, kBHID_SFUIObject,
+                            IID_PPV_ARGS(target.put()));
+    }
+    return target;
+}
+
+// A path without its last backslash ("C:\" stays "C:"), to compare folders.
+std::wstring FolderKey(std::wstring path) {
+    while (!path.empty() && path.back() == L'\\') {
+        path.pop_back();
+    }
+    return path;
+}
+
+// Held this long on a folder (or the island's folders item) while dragging
+// files: it opens.
+constexpr UINT kFolderOpenMs = 600;
 
 // A file or a folder opened as the user would. Under System32 through
 // explorer.exe: the 32-bit Windhawk process would open SysWOW64's copy (a
@@ -30894,26 +31615,25 @@ DWORD WINAPI FolderListThreadProc(LPVOID parameter) {
                 (isFolder ? folders : files)
                     .push_back({isFolder ? FolderKind::Folder
                                          : FolderKind::File,
-                                data.cFileName, folder + data.cFileName});
+                                data.cFileName, folder + data.cFileName, false,
+                                ((ULONGLONG)data.ftLastWriteTime.dwHighDateTime
+                                 << 32) |
+                                    data.ftLastWriteTime.dwLowDateTime});
             } while (FindNextFile(find, &data));
             FindClose(find);
         }
         if (unredirected) {
             Wow64RevertWow64FsRedirection(redirection);
         }
-        auto byName = [](const FolderEntry& a, const FolderEntry& b) {
-            return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0;
-        };
-        std::sort(folders.begin(), folders.end(), byName);
-        std::sort(files.begin(), files.end(), byName);
         job->items = std::move(folders);
         job->items.insert(job->items.end(),
                           std::make_move_iterator(files.begin()),
                           std::make_move_iterator(files.end()));
+        SortFolderItems(job->items, job->byDate);
         if (more) {
             job->items.push_back(
                 {FolderKind::More,
-                 Tr(L"More in Explorer…", L"Mais no Explorador…"),
+                 Tr(L"More in Explorer", L"Mais no Explorador"),
                  job->path});
         }
     }
@@ -31002,21 +31722,34 @@ void SaveFolderPins(const std::vector<std::wstring>& pins) {
     Wh_SetStringValue(L"folderPins", text.c_str());
 }
 
-class FoldersPanel : public Panel {
+class FoldersPanel : public EditingPanel, public DropTarget::Receiver {
+   public:
+    // Opened under files dragged out of another app, it doesn't take the
+    // focus (a click elsewhere wouldn't close it): closed once they left it
+    // without being dropped (dropped, it stays to show them; a click in it
+    // and then elsewhere, or on the item, closes it).
+    void CloseIfDragLeft() {
+        if (IsOpen() && !m_filesOver && !m_keepOpen &&
+            GetForegroundWindow() != m_hwnd) {
+            Close();
+        }
+    }
+
    protected:
     void Prepare(float scale) override {
         if (!m_wic) {
             CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                              CLSCTX_INPROC_SERVER, IID_PPV_ARGS(m_wic.put()));
         }
-        if (scale != m_preparedScale) {
-            m_preparedScale = scale;
-            m_textFormat =
+        PrepareFormats(scale);
+        if (scale != m_rowScale) {
+            m_rowScale = scale;
+            m_rowFormat =
                 MakeFormat(L"Segoe UI Variable Text", DWRITE_FONT_WEIGHT_NORMAL,
                            12.5f * scale, DWRITE_TEXT_ALIGNMENT_LEADING);
-            m_iconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_rowIconFormat = MakeFormat(L"Segoe Fluent Icons",
                                       DWRITE_FONT_WEIGHT_NORMAL, 14 * scale);
-            m_smallIconFormat = MakeFormat(L"Segoe Fluent Icons",
+            m_rowSmallIconFormat = MakeFormat(L"Segoe Fluent Icons",
                                            DWRITE_FONT_WEIGHT_NORMAL,
                                            10 * scale);
             m_icons.clear();
@@ -31032,12 +31765,270 @@ class FoldersPanel : public Panel {
         LoadPins();
         m_hover = {-1, -1};
         m_buttonHover = RowButton::None;
+        EndPinDrag();
+        EndFileDrag();
+        ClearSearch();
+        m_asking = false;
+        m_askRemember = true;
+        m_dragOnce = 0;
+        m_arrivals.clear();
+        m_dropped.clear();
+        m_keepOpen = false;
+        m_slideFrom = 0;
+        m_leavingAt = 0;
+        m_dropSpot = {-1, -1};
+        m_drop.Register(m_hwnd, this);
+        m_shown = true;
         Layout();
+    }
+
+    // Files just dropped in it: it stays though the window they came from
+    // takes the focus (see DropAt), until it's clicked.
+    bool StaysWhenDeactivated() const override { return m_keepOpen; }
+
+    void OnClose() override {
+        m_shown = false;
+        m_keepOpen = false;
+        StopWatching();
+        KillTimer(m_hwnd, kFolderOpenTimerId);
+        KillTimer(m_hwnd, kFolderChangeTimerId);
+        m_changePending = false;
+    }
+
+    // A pinned row held: dragged up or down, it goes where it's let go (see
+    // OnMouseMove, OnMouseUp).
+    bool OnMouseDown(POINT pt) override {
+        // (Clicked: a panel like the others again, see m_keepOpen.)
+        m_keepOpen = false;
+        if (SearchShown() && PointInRect(pt, m_searchBox)) {
+            EditTextClick(m_search, m_searchEdit, pt);
+            g_lastTyped = NowSeconds();
+            return true;
+        }
+        RowButton button = RowButton::None;
+        const Spot spot = HitTest(pt, &button);
+        const FolderEntry* item = ItemAt(spot);
+        // A file or a folder held in a folder's column: dragged out once the
+        // mouse moves (see StartFileDrag).
+        if (spot.column > 0 && item && button == RowButton::None &&
+            (item->kind == FolderKind::File ||
+             item->kind == FolderKind::Folder) &&
+            !m_asking) {
+            m_fileDrag = spot;
+            m_fileFrom = pt;
+            SetCapture(m_hwnd);
+            return false;
+        }
+        if (spot.column != 0 || !item || !item->pinned ||
+            button != RowButton::None) {
+            return false;
+        }
+        m_dragRow = spot.row;
+        m_dropRow = spot.row;
+        m_dragFrom = pt;
+        m_dragging = false;
+        SetCapture(m_hwnd);
+        return false;
+    }
+
+    void OnCaptureLost() override {
+        if (m_dragRow >= 0) {
+            EndPinDrag();
+            Render();
+        }
+        m_fileDrag = {-1, -1};
+    }
+
+    // Typing searches the folder shown last (Escape clears it first).
+    bool OnKey(WPARAM key) override {
+        if (!SearchShown()) {
+            return false;
+        }
+        if (key == VK_ESCAPE) {
+            if (m_search.empty()) {
+                return false;
+            }
+            ClearSearch();
+            SearchAgain();
+            return true;
+        }
+        const std::wstring before = m_search;
+        const bool taken = EditTextKey(m_search, m_searchEdit, key);
+        if (taken && m_search != before) {
+            SearchAgain();
+        }
+        return taken;
+    }
+    bool OnChar(WCHAR c) override {
+        if (!SearchShown() || c == L'\r' || c == L'\n' || c == L'\t' ||
+            c == 0x1B) {
+            return false;
+        }
+        const bool taken = EditTextChar(m_search, m_searchEdit, c, 80, m_hwnd);
+        if (taken) {
+            SearchAgain();
+        }
+        return taken;
+    }
+    bool AnimateContents(double) override {
+        const bool typing = AnimateTyping(SearchShown(), false);
+        const double now = NowSeconds();
+        bool moving = false;
+        for (const auto& column : m_columns) {
+            moving = moving || now - column.shownAt < kRowsInSeconds ||
+                     (column.loading &&
+                      now - column.loadingSince < kReadingDelay);
+        }
+        std::erase_if(m_arrivals, [now](const auto& arrival) {
+            return now - arrival.second >= kRowInSeconds;
+        });
+        // (Dropped files never shown are let go after a minute.)
+        std::erase_if(m_dropped, [now](const Dropped& dropped) {
+            return dropped.seenAt ? now - dropped.seenAt >= kDroppedSeconds
+                                  : now - dropped.droppedAt > 60;
+        });
+        moving = moving || now - m_slideAt < kSlideSeconds ||
+                 now - m_leavingAt < kSlideSeconds ||
+                 std::any_of(m_dropped.begin(), m_dropped.end(),
+                             [](const Dropped& dropped) {
+                                 return dropped.seenAt > 0;
+                             });
+        return typing || moving || !m_arrivals.empty();
     }
 
     void Draw(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush) override;
 
+    // Files dragged over the panel (out of it, or out of Explorer, the
+    // desktop...): dropped on a folder (its row, or a column's own folder
+    // around its files), by that folder's own drop target. A folder held
+    // under them a moment opens beside it.
+    DWORD DragOverAt(IDataObject* data,
+                     POINT screen,
+                     DWORD keys,
+                     DWORD allowed) override {
+        IslandScope scope(Owner());
+        m_filesOver = true;
+        POINT pt = screen;
+        ScreenToClient(m_hwnd, &pt);
+        pt.x -= m_contentOffset.x;
+        pt.y -= m_contentOffset.y;
+        Spot spot{-1, -1};
+        const std::wstring folder = DropFolderAt(pt, &spot);
+        if (!(spot == m_dropSpot)) {
+            m_dropSpot = spot;
+            m_hover = {-1, -1};
+            KillTimer(m_hwnd, kFolderOpenTimerId);
+            if (Navigable(spot) && m_columns[spot.column].opened != spot.row) {
+                SetTimer(m_hwnd, kFolderOpenTimerId, kFolderOpenMs, nullptr);
+            }
+            Render();
+        }
+        const POINTL at{screen.x, screen.y};
+        if (folder != m_dropFolder) {
+            if (m_dropTarget) {
+                m_dropTarget->DragLeave();
+            }
+            m_dropTarget = nullptr;
+            m_dropFolder = folder;
+            DWORD effect = allowed;
+            if (!folder.empty()) {
+                m_dropTarget = FolderDropTargetOf(folder);
+                if (m_dropTarget &&
+                    FAILED(m_dropTarget->DragEnter(data, keys, at, &effect))) {
+                    m_dropTarget = nullptr;
+                }
+            }
+        }
+        DWORD effect = allowed;
+        if (!m_dropTarget ||
+            FAILED(m_dropTarget->DragOver(keys, at, &effect))) {
+            effect = DROPEFFECT_NONE;
+        }
+        return effect;
+    }
+    void DragGone() override {
+        IslandScope scope(Owner());
+        if (m_dropTarget) {
+            m_dropTarget->DragLeave();
+        }
+        EndDropHover();
+        CloseIfDragLeft();
+    }
+    DWORD DropAt(IDataObject* data,
+                 POINT screen,
+                 DWORD keys,
+                 DWORD allowed) override {
+        IslandScope scope(Owner());
+        DWORD effect = allowed;
+        // (Kept open from before: Windows' drop brings the window the files
+        // came from to the front meanwhile.)
+        const bool keptOpen = m_keepOpen;
+        m_keepOpen = true;
+        // (A move within a drive comes back as DROPEFFECT_NONE: Windows'
+        // "optimized move", telling the source not to delete them again.
+        // Dropped all the same.)
+        const bool dropped =
+            m_dropTarget &&
+            SUCCEEDED(m_dropTarget->Drop(data, keys, {screen.x, screen.y},
+                                         &effect));
+        if (!dropped) {
+            effect = DROPEFFECT_NONE;
+            m_keepOpen = keptOpen;
+        }
+        // Dropped: the panel stays, the folder they went in opens beside its
+        // row, and they're lit as they show up there.
+        const Spot spot = m_dropSpot;
+        const std::wstring folder = m_dropFolder;
+        if (dropped) {
+            NoteDropped(data, folder);
+        }
+        EndDropHover();
+        if (dropped && spot.row >= 0 && Navigable(spot) &&
+            m_columns[spot.column].opened != spot.row) {
+            OpenColumn(spot);
+        }
+        CloseIfDragLeft();
+        Render();
+        return effect;
+    }
+
     bool OnMouseMove(POINT pt) override {
+        if (m_fileDrag.column >= 0) {
+            const float reach = std::round(6 * m_scale);
+            if (std::abs(pt.x - m_fileFrom.x) < reach &&
+                std::abs(pt.y - m_fileFrom.y) < reach) {
+                return false;
+            }
+            const Spot spot = m_fileDrag;
+            EndFileDrag();
+            StartFileDrag(spot.column, spot.row);
+            return true;
+        }
+        if (m_asking) {
+            const int hover = AskHit(pt);
+            if (hover == m_askHover) {
+                return false;
+            }
+            m_askHover = hover;
+            return true;
+        }
+        if (m_dragRow >= 0 && !m_columns.empty()) {
+            if (!m_dragging && std::abs(pt.y - m_dragFrom.y) <
+                                   std::round(5 * m_scale)) {
+                return false;
+            }
+            m_dragging = true;
+            const Column& pins = m_columns[0];
+            const int row =
+                pins.top + (int)std::floor((pt.y - pins.rect.top) / m_rowHeight);
+            const int drop =
+                std::clamp(row, 0, std::max(0, (int)m_pins.size() - 1));
+            if (drop == m_dropRow) {
+                return false;
+            }
+            m_dropRow = drop;
+            return true;
+        }
         RowButton button = RowButton::None;
         const Spot hover = HitTest(pt, &button);
         if (hover == m_hover && button == m_buttonHover) {
@@ -31055,6 +32046,7 @@ class FoldersPanel : public Panel {
     }
 
     bool OnMouseUp(POINT pt) override;
+    bool OnTimer(UINT_PTR id) override;
 
     // The wheel scrolls the column under the mouse.
     bool OnWheel(int delta) override {
@@ -31093,6 +32085,9 @@ class FoldersPanel : public Panel {
     bool OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) override;
 
     void OnDestroy() override {
+        m_drop.Revoke();
+        m_dropTarget = nullptr;
+        StopWatching();
         // (A folder dialog still open is closed.) What the threads posted to
         // this window, about to go, is freed here.
         for (HANDLE& thread : m_threads) {
@@ -31111,6 +32106,261 @@ class FoldersPanel : public Panel {
     }
 
    private:
+    // Files dragged out: the question's parts (see AskHit).
+    static constexpr int kAskCopy = 1;
+    static constexpr int kAskMove = 2;
+    static constexpr int kAskRemember = 3;
+
+    void EndFileDrag() {
+        const bool held = m_fileDrag.column >= 0;
+        m_fileDrag = {-1, -1};
+        if (held && GetCapture() == m_hwnd) {
+            ReleaseCapture();
+        }
+    }
+
+    // A file or a folder dragged out, copied or moved as chosen (asked the
+    // first time: the question shows under the columns, then it's dragged
+    // again); Windows' own drag (its picture, the target's highlight).
+    void StartFileDrag(int column, int row) {
+        const FolderEntry* item = ItemAt({column, row});
+        if (!item) {
+            return;
+        }
+        const int choice =
+            m_dragOnce ? m_dragOnce : g_settings.islandFolderDrag;
+        if (choice == 0) {
+            m_asking = true;
+            m_askHover = 0;
+            Layout();
+            return;
+        }
+        m_dragOnce = 0;
+        winrt::com_ptr<IShellItem> shellItem;
+        winrt::com_ptr<IDataObject> data;
+        if (FAILED(SHCreateItemFromParsingName(item->path.c_str(), nullptr,
+                                               IID_PPV_ARGS(shellItem.put()))) ||
+            FAILED(shellItem->BindToHandler(nullptr, kBHID_DataObject,
+                                            IID_PPV_ARGS(data.put())))) {
+            return;
+        }
+        // (Its column may change while it's dragged: a folder opening under
+        // it, the list read again. The moved file's column follows by
+        // itself, see WatchColumns.)
+        m_dragOut = item->path;
+        DWORD effect = DROPEFFECT_NONE;
+        SHDoDragDrop(m_hwnd, data.get(), nullptr,
+                     choice == 2 ? DROPEFFECT_MOVE : DROPEFFECT_COPY, &effect);
+        m_dragOut.clear();
+    }
+
+    // The question's parts: its buttons and its box (0: none).
+    int AskHit(POINT pt) const {
+        return PointInRect(pt, m_askCopy)       ? kAskCopy
+               : PointInRect(pt, m_askMove)     ? kAskMove
+               : PointInRect(pt, m_askRememberRect) ? kAskRemember
+                                                : 0;
+    }
+
+    // The list threads that ended let go (each read starts one).
+    void ForgetEndedThreads() {
+        std::erase_if(m_threads, [](HANDLE thread) {
+            if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
+                CloseHandle(thread);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    // A folder's column read again (its rows as they are now; shown as they
+    // were until then, the new ones coming in).
+    void ReloadColumn(int index) {
+        const Column& column = m_columns[index];
+        if (column.path.empty() || column.loading) {
+            return;
+        }
+        auto* job = new FolderListJob{m_hwnd, column.path, index, m_generation,
+                                      {}, column.byDate, true};
+        ForgetEndedThreads();
+        if (HANDLE thread =
+                CreateThread(nullptr, 0, FolderListThreadProc, job, 0, nullptr)) {
+            m_threads.push_back(thread);
+        } else {
+            delete job;
+        }
+    }
+
+    // The folders shown are watched while the panel is open (only those, and
+    // only then, on a thread of their own): a file added, removed or renamed
+    // in one, by anything, reads its column again (see OnAppMessage,
+    // OnTimer).
+    void WatchColumns() {
+        std::vector<std::wstring> paths;
+        for (size_t i = 1; m_shown && i < m_columns.size(); i++) {
+            const std::wstring& path = m_columns[i].path;
+            if (!path.empty() && !path.starts_with(kPlacePrefix)) {
+                paths.push_back(path);
+            }
+        }
+        if (paths == m_watchedPaths) {
+            return;
+        }
+        if (paths.empty()) {
+            StopWatching();
+            return;
+        }
+        m_watchedPaths = paths;
+        if (m_watchThread) {
+            AcquireSRWLockExclusive(&m_watch->lock);
+            m_watch->paths = std::move(paths);
+            m_watchSet = ++m_watch->set;
+            ReleaseSRWLockExclusive(&m_watch->lock);
+            SetEvent(m_watch->kick);
+            return;
+        }
+        m_watch = std::make_unique<FolderWatch>();
+        m_watch->panel = m_hwnd;
+        m_watch->paths = std::move(paths);
+        m_watchSet = m_watch->set;
+        m_watch->stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        m_watch->kick = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+        if (m_watch->stop && m_watch->kick) {
+            m_watchThread = CreateThread(nullptr, 0, FolderWatchThreadProc,
+                                         m_watch.get(), 0, nullptr);
+        }
+        if (!m_watchThread) {
+            const std::vector<std::wstring> wanted = m_watchedPaths;
+            StopWatching();
+            // (Not tried again for the same folders.)
+            m_watchedPaths = wanted;
+        }
+    }
+    void StopWatching() {
+        if (m_watchThread) {
+            SetEvent(m_watch->stop);
+            WaitForSingleObject(m_watchThread, INFINITE);
+            CloseHandle(m_watchThread);
+            m_watchThread = nullptr;
+        }
+        if (m_watch) {
+            if (m_watch->stop) {
+                CloseHandle(m_watch->stop);
+            }
+            if (m_watch->kick) {
+                CloseHandle(m_watch->kick);
+            }
+            m_watch.reset();
+        }
+        m_watchedPaths.clear();
+    }
+
+    // The column's opened row found again by the folder shown beside it (its
+    // order or its contents changed); that folder gone, the columns after it
+    // go too. `scroll`: the row brought into view.
+    void FindOpened(size_t index, bool scroll) {
+        Column& column = m_columns[index];
+        if (index + 1 >= m_columns.size()) {
+            column.opened = -1;
+            return;
+        }
+        const std::wstring& path = m_columns[index + 1].path;
+        column.opened = -1;
+        for (size_t i = 0; i < column.items.size(); i++) {
+            if (!path.empty() && ItemPath(column.items[i]) == path) {
+                column.opened = (int)i;
+                break;
+            }
+        }
+        if (column.opened < 0) {
+            m_columns.resize(index + 1);
+            m_generation++;
+            m_first = m_columns.size() > kShownColumns
+                          ? m_columns.size() - kShownColumns
+                          : 0;
+            return;
+        }
+        if (scroll) {
+            const int shown = std::max(1, m_visibleRows - 1);
+            const int rows = (int)column.items.size();
+            column.top = std::clamp(column.opened - shown / 2, 0,
+                                    std::max(0, rows - shown));
+        }
+    }
+
+    // The search: in the folder shown last (the box beside "Back"), by name
+    // ("report") or by type ("*.pdf" or ".pdf").
+    bool SearchShown() const { return m_columns.size() > 1; }
+    void ClearSearch() {
+        m_search.clear();
+        m_searchEdit.Reset();
+    }
+    void ApplySearch() {
+        std::wstring query = m_search;
+        while (!query.empty() && query.back() == L' ') {
+            query.pop_back();
+        }
+        while (!query.empty() && query.front() == L' ') {
+            query.erase(0, 1);
+        }
+        std::wstring type;
+        if (query.starts_with(L"*.")) {
+            type = query.substr(1);
+        } else if (query.starts_with(L".") && query.size() > 1) {
+            type = query;
+        }
+        for (size_t i = 1; i < m_columns.size(); i++) {
+            Column& column = m_columns[i];
+            if (i + 1 < m_columns.size() || query.empty()) {
+                column.items = column.all;
+                continue;
+            }
+            column.items.clear();
+            for (const auto& item : column.all) {
+                const bool found =
+                    item.kind == FolderKind::More ||
+                    (!type.empty()
+                         ? item.name.size() >= type.size() &&
+                               _wcsicmp(item.name.c_str() + item.name.size() -
+                                            type.size(),
+                                        type.c_str()) == 0
+                         : MatchesSearch(item.name, query));
+                if (found) {
+                    column.items.push_back(item);
+                }
+            }
+            column.top = 0;
+        }
+    }
+
+    void EndPinDrag() {
+        const bool held = m_dragRow >= 0;
+        m_dragRow = m_dropRow = -1;
+        m_dragging = false;
+        if (held && GetCapture() == m_hwnd) {
+            ReleaseCapture();
+        }
+    }
+
+    // The pin shown on a row of the first column while one is dragged (the
+    // dragged one at the row it would go to).
+    int PinShownAt(int row) const {
+        if (!m_dragging || m_dragRow < 0 || row >= (int)m_pins.size()) {
+            return row;
+        }
+        if (row == m_dropRow) {
+            return m_dragRow;
+        }
+        int from = row;
+        if (m_dragRow < m_dropRow && row >= m_dragRow && row < m_dropRow) {
+            from = row + 1;
+        } else if (m_dragRow > m_dropRow && row > m_dropRow &&
+                   row <= m_dragRow) {
+            from = row - 1;
+        }
+        return from;
+    }
+
     // At most this many columns shown (the first ones slide away).
     static constexpr size_t kShownColumns = 3;
     static constexpr int kPickPin = 1;
@@ -31122,13 +32372,23 @@ class FoldersPanel : public Panel {
         bool operator==(const Spot&) const = default;
     };
     // The buttons at a row's end, under the mouse: a pinned one's "x", a
-    // folder's pin.
-    enum class RowButton { None, Remove, Pin };
+    // folder's pin, the order of a folder's items (on "Open in Explorer").
+    enum class RowButton { None, Remove, Pin, Sort };
     struct Column {
         // The folder it lists ("" for the pins).
         std::wstring path;
+        // What it shows (the search's matches in the last one), and all of
+        // what's in it.
         std::vector<FolderEntry> items;
+        std::vector<FolderEntry> all;
         bool loading = false;
+        // Its items newest first (otherwise by name; each column its own).
+        bool byDate = false;
+        // Since when it's read, and when its rows came in (see RowIn).
+        double loadingSince = 0;
+        double shownAt = 0;
+        // Changed meanwhile: read again (see MarkChanged).
+        bool changed = false;
         // The row opened beside it, and the first row shown.
         int opened = -1;
         int top = 0;
@@ -31175,6 +32435,213 @@ class FoldersPanel : public Panel {
         return place->open ? place->open : KnownFolderPath(place->folder);
     }
 
+    // The search changed: the rows it brings in come in (the ones kept stay
+    // still).
+    void SearchAgain() {
+        std::vector<std::wstring> before;
+        if (!m_columns.empty()) {
+            for (const auto& item : m_columns.back().items) {
+                before.push_back(item.path);
+            }
+        }
+        ApplySearch();
+        const double now = NowSeconds();
+        if (!m_columns.empty()) {
+            for (const auto& item : m_columns.back().items) {
+                if (std::find(before.begin(), before.end(), item.path) ==
+                    before.end()) {
+                    m_arrivals.push_back({item.path, now});
+                }
+            }
+        }
+        StartIslandAnimation();
+        Layout();
+    }
+
+    // Rows coming in: a column's, one after the other (opened, read, sorted;
+    // see Column::shownAt), or single ones (new in a folder, found by the
+    // search; see m_arrivals). From 0 to 1.
+    static constexpr double kRowInSeconds = 0.18;
+    static constexpr double kRowInStep = 0.015;
+    static constexpr int kRowInCascade = 10;
+    static constexpr double kRowsInSeconds =
+        kRowInSeconds + kRowInCascade * kRowInStep;
+    // "Reading..." only for a folder that takes this long (no flash).
+    static constexpr double kReadingDelay = 0.15;
+    float RowIn(const Column& column,
+                int shown,
+                const std::wstring& path,
+                double now) const {
+        double since =
+            now - column.shownAt - std::min(shown, kRowInCascade) * kRowInStep;
+        for (const auto& [arrived, at] : m_arrivals) {
+            if (arrived == path) {
+                since = std::min(since, now - at);
+            }
+        }
+        const double t = std::clamp(since / kRowInSeconds, 0.0, 1.0);
+        return (float)(1 - (1 - t) * (1 - t) * (1 - t));
+    }
+
+    // Where files dragged over the panel would go: a folder's row (a pinned
+    // one, a drive), or the column's own folder around its files; spot: the
+    // row (or {column, -3}: the whole column), also a row that only opens
+    // (This PC). Never where the file dragged out of the panel already is,
+    // or into itself.
+    std::wstring DropFolderAt(POINT pt, Spot* spot) const {
+        *spot = {-1, -1};
+        for (size_t i = m_first; i < m_columns.size(); i++) {
+            const Column& column = m_columns[i];
+            if (pt.x < column.rect.left || pt.x >= column.rect.right ||
+                pt.y < column.rect.top || pt.y >= column.rect.bottom) {
+                continue;
+            }
+            const int header = i > 0 ? 1 : 0;
+            const int shown = (int)((pt.y - column.rect.top) / m_rowHeight);
+            const int row = column.top + shown - header;
+            const FolderEntry* item =
+                shown >= header ? ItemAt({(int)i, row}) : nullptr;
+            std::wstring folder;
+            if (item && Navigable({(int)i, row})) {
+                *spot = {(int)i, row};
+                const FolderPlace* place =
+                    item->kind == FolderKind::Place ? FindFolderPlace(item->path)
+                                                    : nullptr;
+                if (item->kind == FolderKind::Folder ||
+                    item->kind == FolderKind::Drive ||
+                    (place && !place->open)) {
+                    folder = ItemPath(*item);
+                }
+            } else if (i > 0 && !column.loading && !column.path.empty() &&
+                       !column.path.starts_with(kPlacePrefix) &&
+                       (!item || item->kind == FolderKind::File ||
+                        item->kind == FolderKind::More)) {
+                *spot = {(int)i, -3};
+                folder = column.path;
+            }
+            if (!m_dragOut.empty() && !folder.empty()) {
+                const std::wstring key = FolderKey(folder);
+                const std::wstring out = FolderKey(m_dragOut);
+                const size_t slash = out.find_last_of(L'\\');
+                const std::wstring parent = slash == std::wstring::npos
+                                                ? std::wstring()
+                                                : out.substr(0, slash);
+                if (_wcsicmp(key.c_str(), parent.c_str()) == 0 ||
+                    _wcsicmp(key.c_str(), out.c_str()) == 0 ||
+                    (key.size() > out.size() && key[out.size()] == L'\\' &&
+                     _wcsnicmp(key.c_str(), out.c_str(), out.size()) == 0)) {
+                    *spot = {-1, -1};
+                    folder.clear();
+                }
+            }
+            return folder;
+        }
+        return {};
+    }
+    void EndDropHover() {
+        m_filesOver = false;
+        m_dropTarget = nullptr;
+        m_dropFolder.clear();
+        KillTimer(m_hwnd, kFolderOpenTimerId);
+        if (!(m_dropSpot == Spot{-1, -1})) {
+            m_dropSpot = {-1, -1};
+            Render();
+        }
+    }
+
+    // The columns shown slid by as many as went out of view on a side
+    // (opening a folder past the third column, or going back), from where
+    // they were (see ColumnSlide).
+    static constexpr double kSlideSeconds = 0.24;
+    void SlideColumns(size_t firstBefore) {
+        if (m_first == firstBefore) {
+            return;
+        }
+        m_slideFrom = ((float)m_first - (float)firstBefore) * m_columnStep;
+        m_slideAt = NowSeconds();
+        StartIslandAnimation();
+    }
+    float ColumnSlide(double now) const {
+        const double t =
+            std::clamp((now - m_slideAt) / kSlideSeconds, 0.0, 1.0);
+        return (float)(m_slideFrom * (1 - t) * (1 - t) * (1 - t));
+    }
+
+    // Files dropped in `folder` (their names, from Windows' list of them).
+    static constexpr double kDroppedSeconds = 1.6;
+    void NoteDropped(IDataObject* data, const std::wstring& folder) {
+        FORMATETC format{CF_HDROP, nullptr, DVASPECT_CONTENT, -1,
+                         TYMED_HGLOBAL};
+        STGMEDIUM medium{};
+        if (folder.empty() || FAILED(data->GetData(&format, &medium))) {
+            return;
+        }
+        if (auto drop = (HDROP)GlobalLock(medium.hGlobal)) {
+            const double now = NowSeconds();
+            const UINT count = DragQueryFile(drop, 0xFFFFFFFF, nullptr, 0);
+            for (UINT i = 0; i < count && i < 100; i++) {
+                std::wstring path(DragQueryFile(drop, i, nullptr, 0), L'\0');
+                DragQueryFile(drop, i, path.data(), (UINT)path.size() + 1);
+                const size_t slash = FolderKey(path).find_last_of(L'\\');
+                m_dropped.push_back({FolderKey(folder),
+                                     slash == std::wstring::npos
+                                         ? path
+                                         : FolderKey(path).substr(slash + 1),
+                                     now});
+            }
+            GlobalUnlock(medium.hGlobal);
+        }
+        ReleaseStgMedium(&medium);
+    }
+    // A column read: the files dropped in its folder lit now, the first of
+    // them brought into view.
+    void RevealDropped(size_t index) {
+        Column& column = m_columns[index];
+        const std::wstring folder = FolderKey(column.path);
+        bool shown = false;
+        for (auto& dropped : m_dropped) {
+            if (dropped.seenAt || _wcsicmp(dropped.folder.c_str(),
+                                           folder.c_str()) != 0) {
+                continue;
+            }
+            for (size_t k = 0; k < column.items.size(); k++) {
+                if (_wcsicmp(column.items[k].name.c_str(),
+                             dropped.name.c_str()) != 0) {
+                    continue;
+                }
+                dropped.seenAt = NowSeconds();
+                const int rows = std::max(1, m_visibleRows - 1);
+                const int row = (int)k;
+                if (!shown &&
+                    (row < column.top || row >= column.top + rows)) {
+                    column.top = std::clamp(
+                        row - rows / 2, 0,
+                        std::max(0, (int)column.items.size() - rows));
+                }
+                shown = true;
+                break;
+            }
+        }
+        if (shown) {
+            StartIslandAnimation();
+        }
+    }
+    // How lit a row is for a file just dropped (0 to 1).
+    float DroppedLit(const Column& column,
+                     const FolderEntry& item,
+                     double now) const {
+        for (const auto& dropped : m_dropped) {
+            if (dropped.seenAt > 0 &&
+                _wcsicmp(dropped.name.c_str(), item.name.c_str()) == 0 &&
+                _wcsicmp(dropped.folder.c_str(),
+                         FolderKey(column.path).c_str()) == 0) {
+                return (float)std::clamp(
+                    1 - (now - dropped.seenAt) / kDroppedSeconds, 0.0, 1.0);
+            }
+        }
+        return 0;
+    }
+
     void LoadPins() {
         // (Only the ones still known, so a row is its pin.)
         m_pins.clear();
@@ -31201,7 +32668,7 @@ class FoldersPanel : public Panel {
             }
         }
         pins.items.push_back({FolderKind::AddFolder,
-                              Tr(L"Add a folder…", L"Adicionar pasta…"), L""});
+                              Tr(L"Add a folder", L"Adicionar pasta"), L""});
         pins.items.push_back({FolderKind::WindowsPlaces,
                               Tr(L"Windows places", L"Locais do Windows"),
                               L""});
@@ -31212,7 +32679,19 @@ class FoldersPanel : public Panel {
     }
 
     // What's in a folder, in a column beside it (the ones after it go).
-    void OpenColumn(const Spot& spot) {
+    void OpenColumn(Spot spot) {
+        if (const FolderEntry* found = ItemAt(spot);
+            found && !m_search.empty() && spot.column > 0) {
+            const std::wstring path = found->path;
+            ClearSearch();
+            ApplySearch();
+            const auto& all = m_columns[spot.column].items;
+            for (size_t i = 0; i < all.size(); i++) {
+                if (all[i].path == path) {
+                    spot.row = (int)i;
+                }
+            }
+        }
         const FolderEntry* item = ItemAt(spot);
         if (!item || m_columns[spot.column].opened == spot.row) {
             return;
@@ -31233,18 +32712,15 @@ class FoldersPanel : public Panel {
                          Tr(place.english, place.portuguese), place.token});
                 }
             }
+            column.all = column.items;
+            column.shownAt = NowSeconds();
         } else {
             column.path = ItemPath(*item);
             column.loading = true;
+            column.loadingSince = NowSeconds();
             auto* job = new FolderListJob{m_hwnd, column.path,
                                           spot.column + 1, m_generation, {}};
-            std::erase_if(m_threads, [](HANDLE thread) {
-                if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
-                    CloseHandle(thread);
-                    return true;
-                }
-                return false;
-            });
+            ForgetEndedThreads();
             if (HANDLE thread = CreateThread(nullptr, 0, FolderListThreadProc,
                                              job, 0, nullptr)) {
                 m_threads.push_back(thread);
@@ -31253,11 +32729,16 @@ class FoldersPanel : public Panel {
                 column.loading = false;
             }
         }
+        const size_t first = m_first;
         m_columns.push_back(std::move(column));
         m_first = m_columns.size() > kShownColumns
                       ? m_columns.size() - kShownColumns
                       : 0;
+        ClearSearch();
+        ApplySearch();
+        StartIslandAnimation();
         Layout();
+        SlideColumns(first);
     }
 
     void Layout() {
@@ -31289,8 +32770,31 @@ class FoldersPanel : public Panel {
                                         padding + std::round(120 * s),
                                         padding + back}
                           : D2D1_RECT_F{};
-        m_size = {(LONG)(x - gap + padding),
-                  (LONG)std::ceil(padding * 2 + back + rows * row)};
+        // The search beside "Back", as long as the columns.
+        m_searchBox = back > 0 ? D2D1_RECT_F{m_back.right + gap * 2,
+                                             padding + std::round(2 * s),
+                                             x - gap,
+                                             padding + back - std::round(2 * s)}
+                               : D2D1_RECT_F{};
+        float height = padding * 2 + back + rows * row;
+        // The question about files dragged out, under the columns.
+        m_askRect = m_askCopy = m_askMove = m_askRememberRect = {};
+        if (m_asking) {
+            const float top = height - padding + gap;
+            const float button = std::round(30 * s);
+            const float right = x - gap;
+            m_askRect = {padding, top, right, top + std::round(96 * s)};
+            const float buttons = top + std::round(30 * s);
+            const float half = (right - padding - gap) / 2;
+            m_askCopy = {padding, buttons, padding + half, buttons + button};
+            m_askMove = {padding + half + gap, buttons, right, buttons + button};
+            m_askRememberRect = {padding, buttons + button + std::round(4 * s),
+                             right, top + std::round(96 * s)};
+            height = m_askRect.bottom + padding;
+        }
+        m_size = {(LONG)(x - gap + padding), (LONG)std::ceil(height)};
+        m_columnStep = width + gap;
+        WatchColumns();
     }
 
     Spot HitTest(POINT pt, RowButton* button) const {
@@ -31305,9 +32809,13 @@ class FoldersPanel : public Panel {
                 continue;
             }
             const int shown = (int)((pt.y - column.rect.top) / m_rowHeight);
-            // Row -2: "Open in Explorer" (above the items).
+            // Row -2: "Open in Explorer" (above the items), the order at its
+            // end.
             const int header = i > 0 ? 1 : 0;
             if (shown < header) {
+                if (pt.x >= column.rect.right - SortButtonWidth()) {
+                    *button = RowButton::Sort;
+                }
                 return {(int)i, -2};
             }
             const int row = column.top + shown - header;
@@ -31331,11 +32839,13 @@ class FoldersPanel : public Panel {
 
     ID2D1Bitmap* TypeIcon(ID2D1RenderTarget* target, const FolderEntry& item);
 
+    float SortButtonWidth() const { return std::round(76 * m_scale); }
+
     winrt::com_ptr<IWICImagingFactory> m_wic;
-    winrt::com_ptr<IDWriteTextFormat> m_textFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_iconFormat;
-    winrt::com_ptr<IDWriteTextFormat> m_smallIconFormat;
-    float m_preparedScale = 0;
+    winrt::com_ptr<IDWriteTextFormat> m_rowFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_rowIconFormat;
+    winrt::com_ptr<IDWriteTextFormat> m_rowSmallIconFormat;
+    float m_rowScale = 0;
     std::vector<std::wstring> m_pins;
     std::vector<Column> m_columns;
     size_t m_first = 0;
@@ -31346,6 +32856,66 @@ class FoldersPanel : public Panel {
     Spot m_hover{-1, -1};
     RowButton m_buttonHover = RowButton::None;
     D2D1_RECT_F m_back{};
+    // The search in the folder shown last (see ApplySearch).
+    std::wstring m_search;
+    TextEdit m_searchEdit;
+    D2D1_RECT_F m_searchBox{};
+    // A file or a folder held (to drag out), and where the mouse went down.
+    Spot m_fileDrag{-1, -1};
+    POINT m_fileFrom{};
+    // The question shown (copy or move?), its box and parts, the part under
+    // the mouse, "Remember my choice", and a choice for the next drag only.
+    bool m_asking = false;
+    D2D1_RECT_F m_askRect{}, m_askCopy{}, m_askMove{}, m_askRememberRect{};
+    int m_askHover = 0;
+    bool m_askRemember = true;
+    int m_dragOnce = 0;
+    // A pin held (its row), where it would go, and whether it moved yet.
+    int m_dragRow = -1;
+    int m_dropRow = -1;
+    POINT m_dragFrom{};
+    bool m_dragging = false;
+    // Open (its folders watched), and their watch: the thread, the folders
+    // and their set's number (see WatchColumns).
+    bool m_shown = false;
+    std::unique_ptr<FolderWatch> m_watch;
+    HANDLE m_watchThread = nullptr;
+    std::vector<std::wstring> m_watchedPaths;
+    UINT m_watchSet = 0;
+    // A change seen: the columns read again in a moment (once for many).
+    static constexpr UINT_PTR kFolderChangeTimerId = 42;
+    static constexpr UINT kFolderChangeMs = 300;
+    bool m_changePending = false;
+    // Files dragged over it: the window taking them, the folder they'd go
+    // in, its drop target, the row lit (opened after kFolderOpenMs), and the
+    // file dragged out of the panel itself.
+    static constexpr UINT_PTR kFolderOpenTimerId = 41;
+    DropRegistration m_drop;
+    std::wstring m_dropFolder;
+    winrt::com_ptr<IDropTarget> m_dropTarget;
+    Spot m_dropSpot{-1, -1};
+    bool m_filesOver = false;
+    std::wstring m_dragOut;
+    // Single rows coming in (their paths), since when (see RowIn).
+    std::vector<std::pair<std::wstring, double>> m_arrivals;
+    // Files dropped (on a folder of the panel): it stays open, and they're
+    // lit as they show up there (see NoteDropped, RevealDropped).
+    bool m_keepOpen = false;
+    struct Dropped {
+        std::wstring folder;
+        std::wstring name;
+        double droppedAt;
+        // When it showed in its folder's column (0: not yet).
+        double seenAt = 0;
+    };
+    std::vector<Dropped> m_dropped;
+    // The columns sliding by one (see SlideColumns), the step between two
+    // columns, and the column going back out (see OnMouseUp, Draw).
+    float m_slideFrom = 0;
+    double m_slideAt = 0;
+    float m_columnStep = 0;
+    Column m_leaving;
+    double m_leavingAt = 0;
     std::vector<HANDLE> m_threads;
     // Icons by type (an extension, or "\\" for folders).
     std::vector<std::pair<std::wstring, winrt::com_ptr<ID2D1Bitmap>>> m_icons;
@@ -31393,18 +32963,72 @@ ID2D1Bitmap* FoldersPanel::TypeIcon(ID2D1RenderTarget* target,
     return bitmap.get();
 }
 
-bool FoldersPanel::OnAppMessage(UINT msg, WPARAM, LPARAM lParam) {
+bool FoldersPanel::OnAppMessage(UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_APP_FOLDER_LIST) {
         std::unique_ptr<FolderListJob> job((FolderListJob*)lParam);
-        if (job->generation != m_generation ||
-            job->column >= (int)m_columns.size()) {
+        // (Read again: for the folder still shown there, whatever opened
+        // meanwhile.)
+        if (job->column >= (int)m_columns.size() ||
+            (job->quiet ? m_columns[job->column].path != job->path
+                        : job->generation != m_generation)) {
             return false;
         }
         Column& column = m_columns[job->column];
-        column.items = std::move(job->items);
+        // (The order switched while it was read.)
+        if (job->byDate != column.byDate) {
+            SortFolderItems(job->items, column.byDate);
+        }
+        const double now = NowSeconds();
+        if (job->quiet) {
+            for (const auto& item : job->items) {
+                if (std::none_of(column.all.begin(), column.all.end(),
+                                 [&](const FolderEntry& old) {
+                                     return old.path == item.path &&
+                                            old.kind == item.kind;
+                                 })) {
+                    m_arrivals.push_back({item.path, now});
+                }
+            }
+        } else {
+            column.shownAt = now;
+        }
+        const int top = column.top;
+        column.all = std::move(job->items);
         column.loading = false;
+        ApplySearch();
+        if (job->quiet) {
+            column.top =
+                std::clamp(top, 0, std::max(0, (int)column.items.size() - 1));
+            FindOpened(job->column, false);
+        }
+        if ((size_t)job->column < m_columns.size()) {
+            RevealDropped(job->column);
+        }
+        StartIslandAnimation();
         Layout();
         return true;
+    }
+    if (msg == WM_APP_FOLDER_CHANGED) {
+        // (From the folders watched now: their columns read again.)
+        if (!m_watch || (UINT)wParam != m_watchSet ||
+            (size_t)lParam >= m_watchedPaths.size()) {
+            return false;
+        }
+        const std::wstring changed =
+            FolderKey(m_watchedPaths[(size_t)lParam]);
+        bool marked = false;
+        for (size_t i = 1; i < m_columns.size(); i++) {
+            if (_wcsicmp(FolderKey(m_columns[i].path).c_str(),
+                         changed.c_str()) == 0) {
+                m_columns[i].changed = true;
+                marked = true;
+            }
+        }
+        if (marked && !m_changePending && m_shown) {
+            m_changePending = true;
+            SetTimer(m_hwnd, kFolderChangeTimerId, kFolderChangeMs, nullptr);
+        }
+        return false;
     }
     if (msg == WM_APP_FOLDER_PICKED) {
         std::unique_ptr<FolderPickJob> job((FolderPickJob*)lParam);
@@ -31422,24 +33046,139 @@ bool FoldersPanel::OnAppMessage(UINT msg, WPARAM, LPARAM lParam) {
     return false;
 }
 
+bool FoldersPanel::OnTimer(UINT_PTR id) {
+    // Files held on a folder: it opens beside it.
+    if (id == kFolderOpenTimerId) {
+        if (Navigable(m_dropSpot) &&
+            m_columns[m_dropSpot.column].opened != m_dropSpot.row) {
+            OpenColumn(m_dropSpot);
+            return true;
+        }
+        return false;
+    }
+    if (id == kFolderChangeTimerId) {
+        m_changePending = false;
+        for (size_t i = 1; i < m_columns.size(); i++) {
+            if (m_columns[i].changed) {
+                m_columns[i].changed = false;
+                ReloadColumn((int)i);
+            }
+        }
+    }
+    return false;
+}
+
 bool FoldersPanel::OnMouseUp(POINT pt) {
+    // Copy or move, asked once: kept if chosen to be remembered (in the
+    // island's settings too), otherwise for the next drag only.
+    if (m_asking) {
+        switch (AskHit(pt)) {
+            case kAskRemember:
+                m_askRemember = !m_askRemember;
+                return true;
+            case kAskCopy:
+            case kAskMove: {
+                const int choice = AskHit(pt) == kAskCopy ? 1 : 2;
+                if (m_askRemember) {
+                    SetIslandPref(IslandPref::FolderDrag, choice);
+                } else {
+                    m_dragOnce = choice;
+                }
+                m_asking = false;
+                Layout();
+                return true;
+            }
+            default:
+                break;
+        }
+    }
+    if (m_fileDrag.column >= 0) {
+        EndFileDrag();
+    }
+    // A pin let go after a drag: in its new place (kept).
+    if (m_dragRow >= 0) {
+        const int from = m_dragRow;
+        const int to = m_dropRow;
+        const bool dragged = m_dragging;
+        EndPinDrag();
+        if (dragged) {
+            if (from != to && from < (int)m_pins.size() &&
+                to < (int)m_pins.size()) {
+                std::wstring pin = std::move(m_pins[from]);
+                m_pins.erase(m_pins.begin() + from);
+                m_pins.insert(m_pins.begin() + to, std::move(pin));
+                SaveFolderPins(m_pins);
+                // The first column again, the rest as it was (an open
+                // pin's column follows it).
+                const int opened = m_columns[0].opened;
+                std::vector<Column> rest(m_columns.begin() + 1,
+                                         m_columns.end());
+                LoadPins();
+                if (opened >= 0) {
+                    m_columns[0].opened = opened == from ? to
+                                          : from < opened && opened <= to
+                                              ? opened - 1
+                                          : to <= opened && opened < from
+                                              ? opened + 1
+                                              : opened;
+                }
+                m_columns.insert(m_columns.end(), rest.begin(), rest.end());
+                m_first = m_columns.size() > kShownColumns
+                              ? m_columns.size() - kShownColumns
+                              : 0;
+                Layout();
+            }
+            return true;
+        }
+    }
     RowButton button = RowButton::None;
     const Spot spot = HitTest(pt, &button);
     // Back: the last column goes (the ones before it come back into view).
     if (spot.column == -2) {
         if (m_columns.size() > 1) {
+            // (It goes out sliding with the others, or fading where it was.)
+            m_leaving = std::move(m_columns.back());
+            m_leavingAt = NowSeconds();
             m_columns.pop_back();
             m_columns.back().opened = -1;
             m_generation++;
+            ClearSearch();
+            ApplySearch();
+            const size_t first = m_first;
             m_first = m_columns.size() > kShownColumns
                           ? m_columns.size() - kShownColumns
                           : 0;
             Layout();
+            SlideColumns(first);
+            if (m_first != first) {
+                const D2D1_RECT_F& last = m_columns.back().rect;
+                m_leaving.rect = {last.left + m_columnStep, last.top,
+                                  last.right + m_columnStep, last.bottom};
+            }
+            StartIslandAnimation();
         }
         return true;
     }
     if (spot.column < 0) {
         return false;
+    }
+    // The order of a folder's items (that column's own): by name, or the
+    // newest first.
+    if (spot.row == -2 && button == RowButton::Sort) {
+        Column& column = m_columns[spot.column];
+        column.byDate = !column.byDate;
+        SortFolderItems(column.all, column.byDate);
+        column.top = 0;
+        column.shownAt = NowSeconds();
+        ApplySearch();
+        // The folder opened beside it stays open (found again by its path,
+        // brought into view).
+        if ((size_t)spot.column + 1 < m_columns.size()) {
+            FindOpened(spot.column, true);
+        }
+        StartIslandAnimation();
+        Layout();
+        return true;
     }
     // "Open in Explorer": the column's folder.
     if (spot.row == -2) {
@@ -31524,16 +33263,18 @@ bool FoldersPanel::OnMouseUp(POINT pt) {
 
 void FoldersPanel::Draw(ID2D1RenderTarget* target,
                         ID2D1SolidColorBrush* brush) {
-    if (!m_textFormat || !m_iconFormat || !m_smallIconFormat) {
+    if (!m_rowFormat || !m_rowIconFormat || !m_rowSmallIconFormat) {
         return;
     }
     const float s = m_scale;
     const float radius = std::round(8 * s);
     const float icon = std::round(30 * s);
     const float iconSize = std::round(16 * s);
+    const double now = NowSeconds();
     auto drawRow = [&](const D2D1_RECT_F& row, bool lit, bool opened,
                        WCHAR glyph, ID2D1Bitmap* bitmap,
-                       const std::wstring& text, bool arrow, float alpha) {
+                       const std::wstring& text, bool arrow, float alpha,
+                       float endRoom = 0) {
         const float shown = Hover(row, lit);
         if (opened || shown > 0.01f) {
             brush->SetColor(opened ? Accent(0.2f) : Fg(0.09f * shown));
@@ -31546,27 +33287,82 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                                alpha);
         } else if (glyph) {
             brush->SetColor(Fg(0.85f * alpha));
-            target->DrawText(&glyph, 1, m_iconFormat.get(),
+            target->DrawText(&glyph, 1, m_rowIconFormat.get(),
                              {row.left, row.top, row.left + icon, row.bottom},
                              brush);
         }
         brush->SetColor(Fg(0.92f * alpha));
         // (Room for a folder's pin under the mouse.)
         const float right =
-            row.right - std::round(arrow ? (lit ? 50 : 22) : 8) * s;
-        target->DrawText(text.c_str(), (UINT32)text.size(), m_textFormat.get(),
+            row.right -
+            std::max<float>(endRoom,
+                            std::round(arrow ? (lit ? 50 : 22) : 8) * s);
+        target->DrawText(text.c_str(), (UINT32)text.size(), m_rowFormat.get(),
                          {row.left + icon + std::round(2 * s), row.top, right,
                           row.bottom},
                          brush);
         if (arrow) {
             const WCHAR next = 0xE76C;
             brush->SetColor(Fg(0.45f * alpha));
-            target->DrawText(&next, 1, m_smallIconFormat.get(),
+            target->DrawText(&next, 1, m_rowSmallIconFormat.get(),
                              {right, row.top, row.right - std::round(4 * s),
                               row.bottom},
                              brush);
         }
     };
+    // The search in the folder shown last.
+    if (SearchShown()) {
+        DrawTextBox(target, brush, m_searchBox, m_search, m_searchEdit,
+                    Tr(L"Search here (a name or *.pdf)",
+                       L"Buscar aqui (um nome ou *.pdf)"),
+                    true);
+    }
+    // Copy or move? (the first file dragged out).
+    if (m_asking) {
+        const float s = m_scale;
+        const float r = std::round(10 * s);
+        brush->SetColor(Fg(0.06f));
+        target->FillRoundedRectangle({m_askRect, r, r}, brush);
+        PCWSTR question = Tr(L"Files dragged out of the island are:",
+                             L"Arquivos arrastados para fora da ilha são:");
+        brush->SetColor(Fg(0.9f));
+        target->DrawText(question, (UINT32)wcslen(question),
+                         m_rowFormat.get(),
+                         {m_askRect.left + std::round(10 * s), m_askRect.top,
+                          m_askRect.right - std::round(10 * s),
+                          m_askRect.top + std::round(28 * s)},
+                         brush);
+        DrawButton(target, brush, m_askCopy, Tr(L"Copied", L"Copiados"), true,
+                   m_askHover == kAskCopy);
+        DrawButton(target, brush, m_askMove, Tr(L"Moved", L"Movidos"), true,
+                   m_askHover == kAskMove);
+        // "Remember my choice": a box, ticked or not.
+        const float box = std::round(14 * s);
+        const float middle = (m_askRememberRect.top + m_askRememberRect.bottom) / 2;
+        const D2D1_RECT_F tick{m_askRememberRect.left + std::round(10 * s),
+                               middle - box / 2,
+                               m_askRememberRect.left + std::round(10 * s) + box,
+                               middle + box / 2};
+        brush->SetColor(m_askRemember ? Accent(1) : Fg(0.5f));
+        if (m_askRemember) {
+            target->FillRoundedRectangle({tick, 3 * s, 3 * s}, brush);
+            const WCHAR check = 0xE73E;
+            brush->SetColor(AccentInk(1));
+            target->DrawText(&check, 1, m_rowSmallIconFormat.get(), tick,
+                             brush);
+        } else {
+            target->DrawRoundedRectangle({tick, 3 * s, 3 * s}, brush,
+                                         std::max(1.0f, s));
+        }
+        PCWSTR remember =
+            Tr(L"Remember my choice (it's in the island's settings)",
+               L"Lembrar minha escolha (fica nas configurações da ilha)");
+        brush->SetColor(Fg(m_askHover == kAskRemember ? 0.95f : 0.75f));
+        target->DrawText(remember, (UINT32)wcslen(remember), m_rowFormat.get(),
+                         {tick.right + std::round(8 * s), m_askRememberRect.top,
+                          m_askRememberRect.right, m_askRememberRect.bottom},
+                         brush);
+    }
     // The button back, with the folder shown last.
     if (m_back.right > m_back.left) {
         const std::wstring back =
@@ -31574,47 +33370,101 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
         drawRow(m_back, m_hover == Spot{-2, -2}, false, (WCHAR)0xE72B, nullptr,
                 back, false, 0.85f);
     }
-    for (size_t i = m_first; i < m_columns.size(); i++) {
-        const Column& column = m_columns[i];
-        const D2D1_RECT_F& area = column.rect;
+    // A column at `area` (`i`: its place, -1 for the one going out).
+    auto drawColumn = [&](const Column& column, int i,
+                          const D2D1_RECT_F& area) {
         float y = area.top;
-        if (i > 0) {
+        if (i != 0) {
             // A faint line between the columns.
             brush->SetColor(Fg(0.1f));
             target->FillRectangle({area.left - std::round(3 * s), area.top,
                                    area.left - std::round(2 * s), area.bottom},
                                   brush);
-            drawRow({area.left, y, area.right, y + m_rowHeight},
-                    m_hover == Spot{(int)i, -2}, false, (WCHAR)0xE8A7, nullptr,
+            const D2D1_RECT_F header{area.left, y, area.right,
+                                     y + m_rowHeight};
+            const bool onHeader = m_hover == Spot{(int)i, -2};
+            drawRow(header, onHeader && m_buttonHover != RowButton::Sort, false,
+                    (WCHAR)0xE8A7, nullptr,
                     Tr(L"Open in Explorer", L"Abrir no Explorador"), false,
-                    0.75f);
+                    0.75f, SortButtonWidth());
+            // The order: by name or by date, switched with a click.
+            {
+                const D2D1_RECT_F sort{header.right - SortButtonWidth(),
+                                       header.top + std::round(4 * s),
+                                       header.right,
+                                       header.bottom - std::round(4 * s)};
+                const bool sortLit =
+                    onHeader && m_buttonHover == RowButton::Sort;
+                const float sortRadius = (sort.bottom - sort.top) / 2;
+                brush->SetColor(Fg(0.06f + 0.08f * Hover(sort, sortLit)));
+                target->FillRoundedRectangle({sort, sortRadius, sortRadius},
+                                             brush);
+                const WCHAR glyph = 0xE8CB;
+                brush->SetColor(Fg(0.7f));
+                target->DrawText(&glyph, 1, m_rowSmallIconFormat.get(),
+                                 {sort.left + std::round(4 * s), sort.top,
+                                  sort.left + std::round(22 * s), sort.bottom},
+                                 brush);
+                PCWSTR order = column.byDate ? Tr(L"Date", L"Data")
+                                             : Tr(L"Name", L"Nome");
+                target->DrawText(order, (UINT32)wcslen(order),
+                                 m_rowFormat.get(),
+                                 {sort.left + std::round(24 * s), sort.top,
+                                  sort.right - std::round(4 * s), sort.bottom},
+                                 brush);
+            }
             y += m_rowHeight;
         }
-        if (column.loading) {
-            brush->SetColor(Fg(0.5f));
-            PCWSTR text = Tr(L"Reading…", L"Lendo…");
-            target->DrawText(text, (UINT32)wcslen(text), m_textFormat.get(),
-                             {area.left + icon, y, area.right,
-                              y + m_rowHeight},
-                             brush);
-            continue;
+        // Files held over the column's own folder: the column outlined.
+        if (m_dropSpot == Spot{(int)i, -3}) {
+            brush->SetColor(Accent(0.9f));
+            target->DrawRoundedRectangle(
+                {{area.left + s, area.top + s, area.right - s, area.bottom - s},
+                 radius, radius},
+                brush, std::max(1.0f, 1.5f * s));
         }
-        if (column.items.empty() && i > 0) {
+        if (column.loading) {
+            // (Only for a folder that takes a while.)
+            if (now - column.loadingSince >= kReadingDelay) {
+                brush->SetColor(Fg(0.5f));
+                PCWSTR text = Tr(L"Reading…", L"Lendo…");
+                target->DrawText(text, (UINT32)wcslen(text), m_rowFormat.get(),
+                                 {area.left + icon, y, area.right,
+                                  y + m_rowHeight},
+                                 brush);
+            }
+            return;
+        }
+        if (column.items.empty() && i != 0) {
             brush->SetColor(Fg(0.5f));
-            PCWSTR text = Tr(L"Empty", L"Vazia");
-            target->DrawText(text, (UINT32)wcslen(text), m_textFormat.get(),
+            PCWSTR text = !column.all.empty()
+                              ? Tr(L"Nothing found", L"Nada encontrado")
+                              : Tr(L"Empty", L"Vazia");
+            target->DrawText(text, (UINT32)wcslen(text), m_rowFormat.get(),
                              {area.left + icon, y, area.right,
                               y + m_rowHeight},
                              brush);
-            continue;
+            return;
         }
         for (int row = column.top; row < (int)column.items.size(); row++) {
             if (y + m_rowHeight > area.bottom + 0.5f) {
                 break;
             }
-            const FolderEntry& item = column.items[row];
-            const D2D1_RECT_F rect{area.left, y, area.right, y + m_rowHeight};
-            const bool lit = m_hover == Spot{(int)i, row};
+            // (The pins in the order they'd have, one being dragged.)
+            const int source = i == 0 ? PinShownAt(row) : row;
+            const FolderEntry& item = column.items[source];
+            // (Coming in: fading in as it rises into place.)
+            const float in = RowIn(column, row - column.top, item.path, now);
+            const float rise = (1 - in) * std::round(6 * s);
+            const D2D1_RECT_F rect{area.left, y + rise, area.right,
+                                   y + m_rowHeight + rise};
+            const bool held = i == 0 && m_dragging && row == m_dropRow;
+            // (Files held over it: lit too.)
+            const bool lit = held ||
+                             (!m_dragging && m_hover == Spot{(int)i, row}) ||
+                             m_dropSpot == Spot{(int)i, row};
+            // (A row's buttons only under the mouse, not under files.)
+            const bool buttons = lit && m_dropSpot == Spot{-1, -1};
             const FolderPlace* place =
                 item.kind == FolderKind::Place ||
                         item.kind == FolderKind::PlaceToPin
@@ -31637,21 +33487,27 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                         (item.kind == FolderKind::Folder && !item.pinned)
                     ? TypeIcon(target, item)
                     : nullptr;
-            const bool navigable = Navigable({(int)i, row});
-            drawRow(rect, lit, column.opened == row, bitmap ? 0 : glyph,
+            const bool navigable = i >= 0 && Navigable({(int)i, source});
+            // (Just dropped here: lit a moment as it shows.)
+            if (const float dropped = DroppedLit(column, item, now);
+                dropped > 0) {
+                brush->SetColor(Accent(0.35f * dropped));
+                target->FillRoundedRectangle({rect, radius, radius}, brush);
+            }
+            drawRow(rect, lit, column.opened == source, bitmap ? 0 : glyph,
                     bitmap, item.name,
-                    navigable && !(lit && item.pinned), 1);
+                    navigable && !(buttons && item.pinned), in);
             // A pinned row under the mouse: its "x"; a folder: its pin.
-            if (lit && item.pinned) {
+            if (buttons && item.pinned && !m_dragging) {
                 const WCHAR close = 0xE711;
                 brush->SetColor(m_buttonHover == RowButton::Remove
                                     ? D2D1::ColorF(1, 0.36f, 0.3f, 1)
                                     : Fg(0.55f));
-                target->DrawText(&close, 1, m_smallIconFormat.get(),
+                target->DrawText(&close, 1, m_rowSmallIconFormat.get(),
                                  {rect.right - std::round(28 * s), rect.top,
                                   rect.right - std::round(4 * s), rect.bottom},
                                  brush);
-            } else if (lit && item.kind == FolderKind::Folder) {
+            } else if (buttons && item.kind == FolderKind::Folder) {
                 const bool pinned =
                     std::find(m_pins.begin(), m_pins.end(), item.path) !=
                     m_pins.end();
@@ -31660,13 +33516,62 @@ void FoldersPanel::Draw(ID2D1RenderTarget* target,
                                 : m_buttonHover == RowButton::Pin
                                     ? Fg(0.95f)
                                     : Fg(0.5f));
-                target->DrawText(&pin, 1, m_smallIconFormat.get(),
+                target->DrawText(&pin, 1, m_rowSmallIconFormat.get(),
                                  {rect.right - std::round(50 * s), rect.top,
                                   rect.right - std::round(26 * s), rect.bottom},
                                  brush);
             }
             y += m_rowHeight;
         }
+    };
+    // The columns, sliding while one goes out of view on a side (the one
+    // leaving drawn too), kept between the panel's sides.
+    const float slide = ColumnSlide(now);
+    const bool leaving = now - m_leavingAt < kSlideSeconds;
+    const bool moving = slide != 0 || leaving;
+    D2D1_MATRIX_3X2_F base;
+    target->GetTransform(&base);
+    if (moving && m_first < m_columns.size()) {
+        const D2D1_RECT_F& first = m_columns[m_first].rect;
+        target->PushAxisAlignedClip(
+            {first.left - std::round(4 * s), first.top,
+             (float)m_size.cx - std::round(4 * s), (float)m_size.cy},
+            D2D1_ANTIALIAS_MODE_ALIASED);
+        target->SetTransform(D2D1::Matrix3x2F::Translation(slide, 0) * base);
+    }
+    if (slide > 0 && m_first > 0 && m_first < m_columns.size()) {
+        const D2D1_RECT_F& first = m_columns[m_first].rect;
+        drawColumn(m_columns[m_first - 1], (int)m_first - 1,
+                   {first.left - m_columnStep, first.top,
+                    first.right - m_columnStep, first.bottom});
+    }
+    for (size_t i = m_first; i < m_columns.size(); i++) {
+        drawColumn(m_columns[i], (int)i, m_columns[i].rect);
+    }
+    if (leaving) {
+        // (Fading where it was, when the others stay.)
+        const float alpha =
+            slide != 0
+                ? 1.0f
+                : (float)std::clamp(1 - (now - m_leavingAt) / kSlideSeconds,
+                                    0.0, 1.0);
+        winrt::com_ptr<ID2D1Layer> layer;
+        if (alpha < 0.999f) {
+            target->CreateLayer(nullptr, layer.put());
+            target->PushLayer(
+                D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr,
+                                      D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                      D2D1::IdentityMatrix(), alpha),
+                layer.get());
+        }
+        drawColumn(m_leaving, -1, m_leaving.rect);
+        if (layer) {
+            target->PopLayer();
+        }
+    }
+    if (moving && m_first < m_columns.size()) {
+        target->SetTransform(base);
+        target->PopAxisAlignedClip();
     }
 }
 
@@ -32078,11 +33983,30 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
         canvas.Finish();
     }
     const POINT position{change->monitor.left, change->monitor.top};
-    if (window && bitmap) {
+    // Just above the desktop: under the first window shown above it (an
+    // app's, or a taskbar, which isn't always on top while the desktop is in
+    // front: measured, the picture covered the second monitor's taskbar), not
+    // under a hidden one; the top of the windows not on top when none is.
+    auto placeOverDesktop = [window]() {
         HWND progman = FindWindow(L"Progman", nullptr);
         HWND above = progman ? GetWindow(progman, GW_HWNDPREV) : nullptr;
-        SetWindowPos(window, above ? above : HWND_BOTTOM, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        for (int i = 0; above && i < 1000 &&
+                        (above == window || !IsWindowVisible(above));
+             i++) {
+            above = GetWindow(above, GW_HWNDPREV);
+        }
+        const bool onTop =
+            above && (GetWindowLongPtr(above, GWL_EXSTYLE) & WS_EX_TOPMOST);
+        SetWindowPos(window, !progman ? HWND_BOTTOM : above && !onTop ? above
+                                                                      : HWND_TOP,
+                     0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    };
+    if (window && bitmap) {
+        // Not a full-screen app to the taskbar (it covers the whole monitor):
+        // measured, a taskbar left showing the desktop stopped being on top
+        // during the transition, under it (explorer's "NonRudeHWND" mark).
+        SetProp(window, L"NonRudeHWND", (HANDLE)TRUE);
+        placeOverDesktop();
         const float w = (float)size.cx;
         const float h = (float)size.cy;
         const D2D1_POINT_2F origin{
@@ -32157,6 +34081,7 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
             canvas.End(window, position, 1);
             if (!shown) {
                 ShowWindow(window, SW_SHOWNOACTIVATE);
+                placeOverDesktop();
                 shown = true;
             }
             if (t >= 1) {
@@ -32228,6 +34153,7 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
                                 nullptr, 0, &blend, ULW_ALPHA);
             Sleep(25);
         }
+        RemoveProp(window, L"NonRudeHWND");
         DestroyWindow(window);
     }
     bitmap = nullptr;
@@ -32602,7 +34528,7 @@ void WallpaperPanel::Draw(ID2D1RenderTarget* target,
     brush->SetColor(AccentLit(0.9f, lit));
     target->FillRoundedRectangle({m_folderButton, buttonRadius, buttonRadius},
                                  brush);
-    PCWSTR button = Tr(L"Folder…", L"Pasta…");
+    PCWSTR button = Tr(L"Folder", L"Pasta");
     brush->SetColor(AccentInk(1));
     target->DrawText(button, (UINT32)wcslen(button), m_buttonFormat.get(),
                      m_folderButton, brush);
@@ -32715,7 +34641,7 @@ IslandLook g_mainLook;
 int LoadMonitorProfile(const std::wstring& device);
 void SaveMonitorProfile(const std::wstring& device, int id);
 
-class Island {
+class Island : public DropTarget::Receiver {
    public:
     bool Create();
     void Destroy();
@@ -32727,6 +34653,18 @@ class Island {
     bool Animating() const { return m_animating; }
     void AnimationFrame();
     LRESULT HandleMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    // Files dragged over it (out of Explorer, the desktop...): held on the
+    // folders' item a moment, its panel opens, to drop them in a folder
+    // there. Nothing is dropped on the island itself.
+    DWORD DragOverAt(IDataObject* data,
+                     POINT screen,
+                     DWORD keys,
+                     DWORD allowed) override;
+    void DragGone() override;
+    DWORD DropAt(IDataObject* data,
+                 POINT screen,
+                 DWORD keys,
+                 DWORD allowed) override;
     void StartAnimating();
     // The drawing device was lost (see OnDrawingDeviceLost).
     void OnDeviceLost();
@@ -32934,6 +34872,8 @@ class Island {
     std::wstring VolumeGlyph();
     std::wstring BatteryGlyph();
     void UpdateFormats(float scale);
+    // The icons' size the formats were made for (see UpdateFormats).
+    int m_formatIconSize = 0;
     bool IsCovered() const;
     // The screen's scaling (m_scale also has the island's size in it).
     float m_dpiScale = 1;
@@ -32951,6 +34891,9 @@ class Island {
     int m_notchCount = 0;
     Island* m_notchBase = nullptr;
     std::vector<Island*> m_notchSiblings;
+    // How wide its body would be with all its items (see NotchBodyMax).
+    float m_notchWanted = 0;
+    float NotchBodyMax(float scale);
     // All the notches on its monitor (this one alone when not a notch).
     std::vector<Island*> NotchSet() {
         Island* base = m_notchBase ? m_notchBase : this;
@@ -33263,6 +35206,10 @@ class Island {
     KeyboardPanel m_keyboardPanel;
     DesktopsPanel m_desktopsPanel;
     FoldersPanel m_foldersPanel;
+    // Taking Windows' drags; files held on the folders' item (see
+    // DragOverAt).
+    DropRegistration m_drop;
+    bool m_dropOnFolders = false;
     WallpaperPanel m_wallpaperPanel;
     KomorebiPanel m_komorebiPanel;
     // A wallpaper coming in (see WallpaperChangeThreadProc), and the folder's
@@ -33649,6 +35596,10 @@ class Island {
         return place && place->gap >= 0 && !m_bar ? place->gap
                                                   : g_settings.islandGap;
     }
+    // The icons' scale: the island's, times their own size.
+    float IconScale() const {
+        return m_scale * g_settings.islandIconSize / 100.0f;
+    }
     int SizeWanted() const {
         const IslandPlace* place = FindAppPlace(m_placeApp);
         return place && place->size >= 0 && !m_bar ? place->size
@@ -33786,7 +35737,7 @@ class Island {
         }
         m_pillScrollTarget =
             std::clamp(m_pillScrollTarget +
-                           notches * 2 * kIslandIconSlot * m_scale,
+                           notches * 2 * kIslandIconSlot * IconScale(),
                        0.0, (double)m_pillOverflow);
         StartAnimating();
         return true;
@@ -34251,7 +36202,6 @@ bool IsSharedPref(IslandPref pref) {
     switch (pref) {
         case IslandPref::AllMonitors:
         case IslandPref::FollowMouse:
-        case IslandPref::Profiles:
         case IslandPref::Animations:
         case IslandPref::HideWindowsBanners:
         case IslandPref::OwnNotifications:
@@ -34271,6 +36221,7 @@ bool IsLookValue(PCWSTR name) {
     }
     for (PCWSTR look : {L"islandSize", L"islandGap", L"islandOpacity",
                         L"islandAutoHideDelay", L"islandNotchCurve",
+                        L"islandIconSize",
                         L"trayListIsland"}) {
         if (wcscmp(look, name) == 0) {
             return true;
@@ -34456,12 +36407,30 @@ void ControlPanel::OnOpen() {
     }
     // The radios' and the brightness's state come a moment later.
     SwitchRadio(-1, false);
-    // The monitor is asked once, and again only after a while: asking over
-    // DDC/CI can make some monitors flicker.
+    // The monitor is asked once, and again only after a while (asking over
+    // DDC/CI can make some monitors flicker), or once a monitor came or went
+    // (each slider knows its monitor by its place in the list).
+    // A monitor just plugged in answers only after a few seconds: fewer
+    // listed than there are (counted without asking them) is read again.
+    // One turned off (not answering a level set) is read again too.
     const ULONGLONG now = GetTickCount64();
+    int physical = 0;
+    ForEachPhysicalMonitor(
+        [&](const PHYSICAL_MONITOR&, int, HMONITOR, int) { physical++; });
+    const bool missed =
+        !m_brightnessJob->running && m_brightnessJob->missed.exchange(false);
     if (!m_brightnessJob->running &&
-        (!m_brightnessReadAt || now - m_brightnessReadAt > 10 * 60 * 1000)) {
+        (!m_brightnessReadAt || now - m_brightnessReadAt > 10 * 60 * 1000 ||
+         m_brightnessDisplays != g_displayChanges || missed ||
+         ((int)m_brightnessMonitors.size() < physical &&
+          now - m_brightnessReadAt > 2000))) {
         m_brightnessReadAt = now;
+        // (Not changed meanwhile through places that may be old: after a
+        // monitor came or went.)
+        if (m_brightnessDisplays != g_displayChanges) {
+            m_brightnessMonitors.clear();
+        }
+        m_brightnessDisplays = g_displayChanges;
         StartBrightnessWorker(BrightnessListProc);
     }
 }
@@ -36549,16 +38518,19 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
             WCHAR seconds[16];
             swprintf_s(seconds, L"%.1f s", size / 10.0);
             std::wstring name =
-                slider == 6 ? std::wstring(
-                                  Tr(L"Notch curves", L"Curvas dos entalhes")) +
+                slider == 7 ? std::wstring(
+                                  Tr(L"Icon size", L"Tamanho dos ícones")) +
                                   L" \u00B7 " + std::to_wstring(size) + L"%"
+                : slider == 6
+                    ? std::wstring(Tr(L"Notch curves", L"Curvas dos entalhes")) +
+                          L" \u00B7 " + std::to_wstring(size) + L"%"
                 : slider == 5
                     ? std::wstring(Tr(L"Hide after", L"Esconder depois de")) +
                           L" \u00B7 " + seconds
                 : slider == 4 ? std::wstring(Tr(L"Opacity", L"Opacidade")) +
                                     L" \u00B7 " + std::to_wstring(size) + L"%"
-                : slider == 3 ? std::wstring(Tr(L"Icons before scrolling",
-                                                L"Ícones antes de rolar")) +
+                : slider == 3 ? std::wstring(Tr(L"Other apps' icons before scrolling",
+                                                L"Ícones de outros apps antes de rolar")) +
                                     L" \u00B7 " + std::to_wstring(size)
                 : slider == 2 ? std::wstring(Tr(L"Speed", L"Velocidade")) +
                                     L" \u00B7 " + std::to_wstring(size) + L"%"
@@ -36598,7 +38570,10 @@ std::wstring ControlPanel::SettingName(const SettingEntry& entry) const {
                 : id == kChoiceWallpaper ? Tr(L"Wallpaper transition",
                                               L"Transição do papel de parede")
                 : id == kChoiceNotches   ? Tr(L"Notches", L"Entalhes")
-                                         : L"";
+                : id == kChoiceFolderDrag
+                    ? Tr(L"Files dragged out of the folders",
+                         L"Arquivos arrastados das pastas")
+                    : L"";
             if (otherIsland &&
                 (id == kChoiceAnimationLevel || id == kChoiceFrameRate)) {
                 name += Tr(L" (all monitors)", L" (todos os monitores)");
@@ -36723,7 +38698,10 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                 L"personalizadas";
             break;
         case SettingKind::Size:
-            text += entry.value == 6
+            text += entry.value == 7
+                        ? L" Icon size icons small big Tamanho dos ícones "
+                          L"pequenos grandes"
+                    : entry.value == 6
                         ? L" Notch curves round corners MacBook Curvas dos "
                           L"entalhes cantos redondos"
                     : entry.value == 5
@@ -36776,6 +38754,9 @@ std::wstring ControlPanel::SettingText(const SettingEntry& entry) const {
                     : entry.value == kChoiceNotches
                         ? L" Notches notch MacBook corners middle three Fixed "
                           L"Entalhes entalhe cantos meio três Fixa"
+                    : entry.value == kChoiceFolderDrag
+                        ? L" Folders drag files copy move ask Pastas arrastar "
+                          L"arquivos copiar mover perguntar"
                         : L"";
             break;
         case SettingKind::AppPlaces:
@@ -37007,6 +38988,7 @@ void ControlPanel::LayoutSettings() {
              kSectionColors},
             {(int)SettingKind::Label, 0, kSectionLook},
             {(int)SettingKind::Size, 0, kSectionLook},
+            {(int)SettingKind::Size, 7, kSectionLook},
             {(int)SettingKind::Size, 4, kSectionLook},
             {(int)SettingKind::Pref, (int)IslandPref::Frosted, kSectionLook},
             {(int)SettingKind::Pref, (int)IslandPref::PanelsFollow,
@@ -37047,6 +39029,7 @@ void ControlPanel::LayoutSettings() {
             {(int)SettingKind::Pref, (int)IslandPref::FocusedApp,
              kSectionDesktop},
             {(int)SettingKind::Pref, (int)IslandPref::Folders, kSectionDesktop},
+            {(int)SettingKind::Choice, kChoiceFolderDrag, kSectionDesktop, 1},
             {(int)SettingKind::Pref, (int)IslandPref::Wallpaper,
              kSectionDesktop},
             {(int)SettingKind::Choice, kChoiceWallpaper, kSectionDesktop, 1},
@@ -37673,7 +39656,7 @@ void ControlPanel::SaveControls() {
 
 ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
     if (m_view == View::Wifi || m_view == View::Bluetooth) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         const bool wifi = m_view == View::Wifi;
@@ -37841,7 +39824,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view == View::AppPlaces) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         if (!PointInRect(pt, m_appPlacesViewport)) {
@@ -37876,7 +39859,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view == View::Project || m_view == View::Accessibility) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         for (size_t i = 0; i < m_rows.size(); i++) {
@@ -37889,7 +39872,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view == View::Password) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         if (PointInRect(pt, m_eye)) {
@@ -37904,7 +39887,7 @@ ControlPanel::Hit ControlPanel::HitTest(POINT pt) const {
         return {};
     }
     if (m_view != View::Main) {
-        if (PointInRect(pt, m_back)) {
+        if (ShowsBack() && PointInRect(pt, m_back)) {
             return {Part::Back};
         }
         for (size_t i = 0; i < m_rows.size(); i++) {
@@ -38418,9 +40401,7 @@ void ControlPanel::DrawHeader(ID2D1RenderTarget* target,
                               ID2D1SolidColorBrush* brush,
                               PCWSTR title,
                               int toggle) {
-    // The settings open on their own (from the island's settings bubble):
-    // nothing to go back to there, Escape or a click outside closes them.
-    const bool back = m_view != View::Settings;
+    const bool back = ShowsBack();
     if (const float lit =
             back ? Hover(m_back, m_hover.part == Part::Back) : 0.0f;
         lit > 0.01f) {
@@ -38829,6 +40810,7 @@ constexpr IslandSlider kIslandSliders[kIslandSliderCount] = {
     {kAutoHideDelayMin, kAutoHideDelayMax, kAutoHideDelayDefault,
      kAutoHideDelayStep},
     {kNotchCurveMin, kNotchCurveMax, kNotchCurveDefault, kNotchCurveStep},
+    {kIconSizeMin, kIconSizeMax, kIconSizeDefault, kIconSizeStep},
 };
 
 // The apps with a place of their own, and the open ones to add.
@@ -39065,7 +41047,9 @@ void ControlPanel::DrawAppPlaces(ID2D1RenderTarget* target,
 // The island's own options: its style, its colors, and what it shows.
 // A slider moved: its value set (kept when `keep`).
 void SetIslandSlider(int slider, int value, bool keep) {
-    if (slider == 6) {
+    if (slider == 7) {
+        SetIconSize(value, keep);
+    } else if (slider == 6) {
         SetNotchCurve(value, keep);
     } else if (slider == 5) {
         SetAutoHideDelay(value, keep);
@@ -39086,7 +41070,8 @@ void SetIslandSlider(int slider, int value, bool keep) {
 }
 
 int IslandSliderValue(int slider) {
-    return slider == 6   ? g_settings.islandNotchCurve
+    return slider == 7   ? g_settings.islandIconSize
+           : slider == 6 ? g_settings.islandNotchCurve
            : slider == 5 ? g_settings.islandAutoHideDelay
            : slider == 4 ? g_islandOpacity
            : slider == 3 ? g_trayListIcons
@@ -39697,6 +41682,8 @@ std::wstring ControlPanel::DisabledReason(int index) {
             case kChoiceNotches:
                 return Tr(L"Only for the Fixed style",
                           L"Só no estilo Fixa");
+            case kChoiceFolderDrag:
+                return needs(IslandPref::Folders);
             default:
                 return {};
         }
@@ -39943,6 +41930,7 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                                     : id == kChoiceTrayStyle    ? 0xE712
                                     : id == kChoiceWallpaper    ? 0xE8B9
                                     : id == kChoiceNotches      ? 0xECA5
+                                    : id == kChoiceFolderDrag   ? 0xE8C8
                                                                 : 0;
                 // (Hard to read: in orange, like a warning.)
                 label(m_choiceRow[id], glyph, m_choiceRow[id].right,
@@ -40135,7 +42123,8 @@ void ControlPanel::DrawSettingEntry(ID2D1RenderTarget* target,
                     (slider == 5 && !g_settings.islandAutoHide) ||
                     (slider == 6 && NotchCountWanted() == 0);
                 label(sizeRow,
-                      slider == 6   ? 0xE8B4
+                      slider == 7   ? 0xE8E9
+                      : slider == 6 ? 0xE8B4
                       : slider == 5 ? 0xE916
                       : slider == 4 ? 0xE790
                       : slider == 3 ? 0xE8FD
@@ -40406,6 +42395,15 @@ void ControlPanel::DrawPassword(ID2D1RenderTarget* target,
     DrawStatus(target, brush);
 }
 
+// The "Disconnect" button at a device row's end (see DrawBluetooth).
+D2D1_RECT_F ControlPanel::BluetoothButtonRect(const D2D1_RECT_F& row) const {
+    const float s = m_scale;
+    const float height = std::round(26 * s);
+    const float middle = (row.top + row.bottom) / 2;
+    return {row.right - std::round(102 * s), std::round(middle - height / 2),
+            row.right - std::round(8 * s), std::round(middle + height / 2)};
+}
+
 void ControlPanel::DrawBluetooth(ID2D1RenderTarget* target,
                                  ID2D1SolidColorBrush* brush) {
     const float s = m_scale;
@@ -40431,10 +42429,23 @@ void ControlPanel::DrawBluetooth(ID2D1RenderTarget* target,
         target->DrawText(device.name.c_str(), (UINT32)device.name.size(),
                          m_subtitleFormat.get(),
                          {row.left + icon, row.top, right, row.bottom}, brush);
-        if (PCWSTR status = BluetoothStatusText(
-                device.connected, device.address == m_bluetoothAddress
-                                      ? m_bluetoothStep
-                                      : BluetoothStep::None)) {
+        const BluetoothStep step = device.address == m_bluetoothAddress
+                                       ? m_bluetoothStep
+                                       : BluetoothStep::None;
+        // Headphones or speakers connected: a button that disconnects them
+        // (as the row's click does).
+        if (device.audio && device.connected && step == BluetoothStep::None) {
+            PCWSTR text = Tr(L"Disconnect", L"Desconectar");
+            const D2D1_RECT_F button = BluetoothButtonRect(row);
+            const float round = (button.bottom - button.top) / 2;
+            brush->SetColor(Fg(0.10f + 0.08f * Hover(button, hover)));
+            target->FillRoundedRectangle({button, round, round}, brush);
+            brush->SetColor(Fg(0.95f));
+            target->DrawText(text, (UINT32)wcslen(text), m_linkFormat.get(),
+                             button, brush);
+            continue;
+        }
+        if (PCWSTR status = BluetoothStatusText(device.connected, step)) {
             brush->SetColor(Fg(0.5f));
             target->DrawText(status, (UINT32)wcslen(status),
                              m_linkFormat.get(),
@@ -41941,6 +43952,8 @@ bool ControlPanel::OnMouseUp(POINT pt) {
                 SetIslandPref(IslandPref::WallpaperTransition, index);
             } else if (id == kChoiceNotches) {
                 SetIslandPref(IslandPref::Notches, index);
+            } else if (id == kChoiceFolderDrag) {
+                SetIslandPref(IslandPref::FolderDrag, index);
             } else {
                 AnimationChoice choice = g_animationChoice;
                 (id == kChoiceAnimationLevel ? choice.level : choice.rate) =
@@ -45311,12 +47324,28 @@ NotificationPanel::CardMotion* NotificationPanel::Motion(long long id,
 // card's button, "Clear all"), like Windows' own list does: each by its tag
 // and group (ToastNotificationHistory, documented; it refuses an empty
 // group, like WhatsApp's); one without both only with all of its app's,
-// when every one of that app in the center is among them (nothing the
-// island's list doesn't show goes).
+// when every one of that app in the center is among them, by their IDs read
+// before any is removed (nothing the island's list doesn't show goes).
 void NotificationPanel::RemoveFromCenter(const std::vector<Notification>& gone) {
     using winrt::Windows::UI::Notifications::ToastNotificationManager;
-    std::vector<std::pair<std::wstring, int>> inCenter;
-    bool counted = false;
+    const bool anyUntagged =
+        std::any_of(gone.begin(), gone.end(), [](const Notification& n) {
+            return !n.appId.empty() && (n.tag.empty() || n.group.empty());
+        });
+    std::vector<std::pair<std::wstring, long long>> inCenter;
+    const bool read =
+        anyUntagged &&
+        ReadCenter(
+            "SELECT h.PrimaryId, n.Id FROM Notification n JOIN "
+            "NotificationHandler h ON h.RecordId = n.HandlerId WHERE "
+            "n.Type = 'toast'",
+            [&](void* statement) {
+                if (auto app =
+                        (PCWSTR)m_sqlite.column_text16(statement, 0)) {
+                    inCenter.push_back(
+                        {app, m_sqlite.column_int64(statement, 1)});
+                }
+            });
     std::vector<std::wstring> cleared;
     for (const auto& n : gone) {
         if (n.appId.empty()) {
@@ -45328,39 +47357,26 @@ void NotificationPanel::RemoveFromCenter(const std::vector<Notification>& gone) 
                                                            n.appId);
                 continue;
             }
-            if (std::any_of(cleared.begin(), cleared.end(),
-                            [&](const std::wstring& app) {
-                                return _wcsicmp(app.c_str(),
-                                                n.appId.c_str()) == 0;
-                            })) {
+            const auto sameApp = [&](const std::wstring& app) {
+                return _wcsicmp(app.c_str(), n.appId.c_str()) == 0;
+            };
+            if (!read ||
+                std::any_of(cleared.begin(), cleared.end(), sameApp)) {
                 continue;
             }
-            if (!counted) {
-                counted = true;
-                ReadCenter(
-                    "SELECT h.PrimaryId, COUNT(*) FROM Notification n JOIN "
-                    "NotificationHandler h ON h.RecordId = n.HandlerId WHERE "
-                    "n.Type = 'toast' GROUP BY h.PrimaryId",
-                    [&](void* statement) {
-                        if (auto app = (PCWSTR)m_sqlite.column_text16(
-                                statement, 0)) {
-                            inCenter.push_back(
-                                {app,
-                                 (int)m_sqlite.column_int64(statement, 1)});
-                        }
-                    });
-            }
-            int there = 0;
-            for (const auto& [app, count] : inCenter) {
-                if (_wcsicmp(app.c_str(), n.appId.c_str()) == 0) {
-                    there = count;
-                }
-            }
-            const auto here = std::count_if(
-                gone.begin(), gone.end(), [&](const Notification& other) {
-                    return _wcsicmp(other.appId.c_str(), n.appId.c_str()) == 0;
+            bool any = false;
+            const bool allGone = std::all_of(
+                inCenter.begin(), inCenter.end(), [&](const auto& entry) {
+                    if (!sameApp(entry.first)) {
+                        return true;
+                    }
+                    any = true;
+                    return std::any_of(gone.begin(), gone.end(),
+                                       [&](const Notification& other) {
+                                           return other.id == entry.second;
+                                       });
                 });
-            if (there > 0 && here >= there) {
+            if (any && allGone) {
                 ToastNotificationManager::History().Clear(n.appId);
                 cleared.push_back(n.appId);
             }
@@ -46785,6 +48801,8 @@ int GetIslandPref(IslandPref pref) {
             return g_settings.islandFocusedApp;
         case IslandPref::KomorebiHideEmpty:
             return g_settings.komorebiHideEmpty;
+        case IslandPref::FolderDrag:
+            return g_settings.islandFolderDrag;
         case IslandPref::WallpaperTransition:
             return g_settings.wallpaperTransition;
         case IslandPref::ActionNetwork:
@@ -46921,6 +48939,20 @@ void SetNotchCurve(int percent, bool keep) {
         return;
     }
     g_settings.islandNotchCurve = percent;
+    if (g_island && !g_applyingProfile) {
+        ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
+    }
+}
+
+void SetIconSize(int percent, bool keep) {
+    percent = std::clamp(percent, kIconSizeMin, kIconSizeMax);
+    if (keep) {
+        StoreProfileInt(L"islandIconSize", percent);
+    }
+    if (percent == g_settings.islandIconSize) {
+        return;
+    }
+    g_settings.islandIconSize = percent;
     if (g_island && !g_applyingProfile) {
         ForEachIsland([&](Island& island) { island.OnPreferencesChanged(); });
     }
@@ -47151,6 +49183,9 @@ void SetIslandPref(IslandPref pref, int value) {
             break;
         case IslandPref::KomorebiHideEmpty:
             g_settings.komorebiHideEmpty = on;
+            break;
+        case IslandPref::FolderDrag:
+            g_settings.islandFolderDrag = std::clamp(value, 0, 2);
             break;
         case IslandPref::WallpaperTransition:
             g_settings.wallpaperTransition =
@@ -47411,8 +49446,7 @@ constexpr ProfileText kProfileTexts[] = {
 };
 
 // Everything the island's settings choose, the tray icons pinned and their
-// places too (not its notifications, notes or tasks; not whether the
-// profiles' button is on).
+// places too (not its notifications, notes or tasks).
 // `texts`: the texts kept (another monitor's profile), not the stored ones.
 std::wstring CaptureProfile(
     const std::unordered_map<std::wstring, std::wstring>* texts = nullptr) {
@@ -47422,7 +49456,7 @@ std::wstring CaptureProfile(
                 L"\n";
     };
     for (const auto& info : kIslandPrefs) {
-        if (info.key && info.pref != IslandPref::Profiles) {
+        if (info.key) {
             number(info.key, GetIslandPref(info.pref));
         }
     }
@@ -47431,6 +49465,7 @@ std::wstring CaptureProfile(
     number(L"islandOpacity", g_islandOpacity);
     number(L"islandAutoHideDelay", g_settings.islandAutoHideDelay);
     number(L"islandNotchCurve", g_settings.islandNotchCurve);
+    number(L"islandIconSize", g_settings.islandIconSize);
     for (int i = 0; i < kCustomColors; i++) {
         number(kCustomColorKeys[i], g_customColors[i]);
     }
@@ -47703,6 +49738,7 @@ bool ApplyProfileSettings(
             ApplyThemeIndex(true);
         }
     }
+    // (Not the profiles' button: the one switching profiles stays.)
     for (const auto& info : kIslandPrefs) {
         if (!info.key || info.pref == IslandPref::Profiles) {
             continue;
@@ -47728,6 +49764,9 @@ bool ApplyProfileSettings(
     if (const auto it = numbers.find(L"islandNotchCurve");
         it != numbers.end()) {
         SetNotchCurve(it->second, true);
+    }
+    if (const auto it = numbers.find(L"islandIconSize"); it != numbers.end()) {
+        SetIconSize(it->second, true);
     }
     if (const auto it = numbers.find(L"trayListIsland"); it != numbers.end()) {
         SetTrayListIcons(it->second, true);
@@ -48150,6 +50189,9 @@ void SetIslandPrefValue(IslandPref pref, int value) {
         case IslandPref::KomorebiHideEmpty:
             g_settings.komorebiHideEmpty = on;
             break;
+        case IslandPref::FolderDrag:
+            g_settings.islandFolderDrag = std::clamp(value, 0, 2);
+            break;
         case IslandPref::WallpaperTransition:
             g_settings.wallpaperTransition =
                 std::clamp(value, 0, (int)WallpaperTransition::Count - 1);
@@ -48237,8 +50279,7 @@ IslandLook LookFromProfile(int id) {
     // island changing it later doesn't change this profile's monitor.
     std::wstring missing;
     for (const auto& info : kIslandPrefs) {
-        if (!info.key || IsSharedPref(info.pref) ||
-            info.pref == IslandPref::Profiles) {
+        if (!info.key || IsSharedPref(info.pref)) {
             continue;
         }
         if (const auto it = numbers.find(info.key); it != numbers.end()) {
@@ -48280,6 +50321,10 @@ IslandLook LookFromProfile(int id) {
         it != numbers.end()) {
         g_settings.islandNotchCurve =
             std::clamp(it->second, kNotchCurveMin, kNotchCurveMax);
+    }
+    if (const auto it = numbers.find(L"islandIconSize"); it != numbers.end()) {
+        g_settings.islandIconSize =
+            std::clamp(it->second, kIconSizeMin, kIconSizeMax);
     }
     if (const auto it = texts.find(L"islandOrder"); it != texts.end()) {
         if (std::vector<PillGroup> order = DecodePillOrder(it->second);
@@ -49796,6 +51841,7 @@ bool Island::Create() {
         return false;
     }
     SetWindowLongPtr(m_hwnd, GWLP_USERDATA, (LONG_PTR)this);
+    m_drop.Register(m_hwnd, this);
 
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
                                  m_d2d.put())) ||
@@ -50106,6 +52152,9 @@ void Island::Destroy() {
     m_tipDrawnKey.clear();
     m_barBlurred = false;
     if (m_hwnd) {
+        m_drop.Revoke();
+        KillTimer(m_hwnd, kFoldersDropTimerId);
+        KillTimer(m_hwnd, kFoldersDragLeftTimerId);
         KillTimer(m_hwnd, kIslandTimerId);
         DestroyWindow(m_hwnd);
         m_hwnd = nullptr;
@@ -50924,14 +52973,13 @@ void Island::DrawNetwork(ID2D1RenderTarget* target,
                          ID2D1SolidColorBrush* brush,
                          const IslandSlot& slot,
                          float opacity) {
-    IDWriteTextFormat* format =
-        slot.font == 2 ? m_smallIconFormat.get() : m_iconFormat.get();
+    IDWriteTextFormat* format = m_iconFormat.get();
     if (!format) {
         return;
     }
     const D2D1_POINT_2F center{(slot.rect.left + slot.rect.right) / 2,
                                (slot.rect.top + slot.rect.bottom) / 2};
-    const float full = std::round(kIslandIconSlot * m_scale);
+    const float full = std::round(kIslandIconSlot * IconScale());
     const D2D1_RECT_F rect{center.x - full / 2, slot.rect.top,
                            center.x + full / 2, slot.rect.bottom};
     auto drawGlyph = [&](const std::wstring& text, float alpha, float size) {
@@ -51265,11 +53313,12 @@ void Island::UpdateStatus() {
 }
 
 void Island::UpdateFormats(float scale) {
-    if (scale == m_scale && m_iconFormat && m_smallIconFormat &&
-        m_textFormat && m_badgeFormat) {
+    if (scale == m_scale && g_settings.islandIconSize == m_formatIconSize &&
+        m_iconFormat && m_smallIconFormat && m_textFormat && m_badgeFormat) {
         return;
     }
     m_scale = scale;
+    m_formatIconSize = g_settings.islandIconSize;
     m_iconFormat = nullptr;
     m_smallIconFormat = nullptr;
     m_textFormat = nullptr;
@@ -51283,7 +53332,7 @@ void Island::UpdateFormats(float scale) {
                                DWRITE_FONT_WEIGHT_NORMAL,
                                DWRITE_FONT_STYLE_NORMAL,
                                DWRITE_FONT_STRETCH_NORMAL,
-                               kIslandIconSize * scale, L"",
+                               kIslandIconSize * IconScale(), L"",
                                m_iconFormat.put());
     m_dwrite->CreateTextFormat(L"Segoe Fluent Icons", nullptr,
                                DWRITE_FONT_WEIGHT_NORMAL,
@@ -51415,8 +53464,8 @@ void Island::Layout() {
         scale);
     const float padding = std::round(kIslandPadding * scale);
     const float spacing = std::round(kIslandSpacing * scale);
-    const float iconSlot = std::round(kIslandIconSlot * scale);
-    const float smallSlot = std::round(kIslandSmallSlot * scale);
+    const float iconSlot = std::round(kIslandIconSlot * scale *
+                                      g_settings.islandIconSize / 100.0f);
 
     // The clock's width, measured with every figure as a 0, so that it stays
     // the same as the time changes.
@@ -51459,15 +53508,12 @@ void Island::Layout() {
 
     m_slots.clear();
     float x = 0;
-    auto addIcon = [&](IslandItem item, const std::wstring& glyph,
-                       bool small = false) {
+    auto addIcon = [&](IslandItem item, const std::wstring& glyph) {
         if (glyph.empty()) {
             return;
         }
-        const float slot = small ? smallSlot : iconSlot;
-        m_slots.push_back(
-            {item, {x, 0, x + slot, height}, glyph, small ? 2 : 1});
-        x += slot + spacing;
+        m_slots.push_back({item, {x, 0, x + iconSlot, height}, glyph, 1});
+        x += iconSlot + spacing;
     };
     // A percentage beside an item, as part of it (clicked, scrolled).
     auto addSideText = [&](IslandItem item, SideText& side) {
@@ -51743,20 +53789,19 @@ void Island::Layout() {
                 // What's playing, next to the bell, and its buttons: they take
                 // room as they grow in, so the pill widens with them.
                 auto addGrowing = [&](IslandItem item,
-                                      const std::wstring& glyph, bool small,
-                                      float room, float amount) {
+                                      const std::wstring& glyph, float room,
+                                      float amount) {
                     if (room <= 0.001f && amount <= 0.001f) {
                         return;
                     }
                     room = std::clamp(room, 0.0f, 1.0f);
-                    const float slot = small ? smallSlot : iconSlot;
                     IslandSlot entry{item,
-                                     {x, 0, x + slot * room, height},
+                                     {x, 0, x + iconSlot * room, height},
                                      glyph,
-                                     small ? 2 : 1};
+                                     1};
                     entry.scale = std::max(amount, 0.0f);
                     m_slots.push_back(entry);
-                    x += (slot + spacing) * room;
+                    x += (iconSlot + spacing) * room;
                 };
                 const float mediaRoom =
                     (float)std::clamp(m_mediaRoom, 0.0, 1.0);
@@ -51769,7 +53814,7 @@ void Island::Layout() {
                 const bool titleShown = !m_vertical && titleRoom > 0.001f &&
                                         (mediaRoom > 0.001f || media > 0.001f);
                 if (noteWanted && titleShown) {
-                    addGrowing(IslandItem::Media, {kGlyphMusic}, false,
+                    addGrowing(IslandItem::Media, {kGlyphMusic},
                                mediaRoom, media);
                 }
                 if (titleShown) {
@@ -51840,7 +53885,7 @@ void Island::Layout() {
                     m_slots.push_back(entry);
                     x += width + spacing * mediaRoom;
                 } else if (noteWanted) {
-                    addGrowing(IslandItem::Media, {kGlyphMusic}, false,
+                    addGrowing(IslandItem::Media, {kGlyphMusic},
                                mediaRoom, media);
                 }
                 const float buttonsRoom =
@@ -51849,11 +53894,11 @@ void Island::Layout() {
                     std::min(media, 1.0f) *
                     (float)std::clamp(m_mediaButtonsAmount, 0.0, 1.15);
                 addGrowing(IslandItem::MediaPrevious, {kGlyphPreviousTrack},
-                           true, buttonsRoom, buttons);
+                           buttonsRoom, buttons);
                 addGrowing(IslandItem::MediaPlayPause,
                            {m_mediaShown.playing ? kGlyphPause : kGlyphPlay},
-                           true, buttonsRoom, buttons);
-                addGrowing(IslandItem::MediaNext, {kGlyphNextTrack}, true,
+                           buttonsRoom, buttons);
+                addGrowing(IslandItem::MediaNext, {kGlyphNextTrack},
                            buttonsRoom, buttons);
                 break;
             }
@@ -52035,7 +54080,9 @@ void Island::Layout() {
                 // ("*"), ones with windows ("+"), empty ones (left out if
                 // chosen).
                 if (komorebi && !m_vertical && monitor->workspaces.size() > 1) {
-                    const float dot = std::round(12 * scale);
+                    // (Spaced like the other items: their shadows don't
+                    // meet.)
+                    const float dot = std::round(iconSlot * 0.7f);
                     for (int i = 0; i < (int)monitor->workspaces.size(); i++) {
                         const bool here = i == monitor->workspace;
                         const bool windows = monitor->workspaces[i].windows;
@@ -52049,16 +54096,24 @@ void Island::Layout() {
                                                    : windows ? L"+"
                                                              : L""),
                              kWorkspaceDotFont});
-                        x += dot;
+                        x += dot + spacing;
                     }
-                    x += spacing;
                 }
                 const std::wstring name =
                     komorebi
                         ? KomorebiLayoutName(*monitor, g_komorebiShown.paused)
                         : m_focusName;
+                // (komorebi's: "\x1" and its icon's number, see
+                // DrawKomorebiIcon; the desktop's: its glyph.)
+                const int komorebiIcon =
+                    komorebi ? KomorebiIconOf(*monitor, g_komorebiShown.paused)
+                             : -1;
                 const std::wstring icon =
-                    komorebi || m_focusDesktop ? std::wstring() : m_focusKey;
+                    komorebi ? (komorebiIcon >= 0
+                                    ? L"\x1" + std::to_wstring(komorebiIcon)
+                                    : std::wstring())
+                    : m_focusDesktop ? std::wstring()
+                                     : m_focusKey;
                 // Another name: the one before slides up and out.
                 if (name != width.name || icon != width.icon) {
                     if (!width.name.empty() && width.shown >= 0 &&
@@ -52110,8 +54165,7 @@ void Island::Layout() {
                     addIcon(IslandItem::QuickAction,
                             id == ControlId::Network && !m_networkGlyph.empty()
                                 ? m_networkGlyph
-                                : std::wstring(1, GetControlInfo(id).glyph),
-                            true);
+                                : std::wstring(1, GetControlInfo(id).glyph));
                     m_slots.back().action = action;
                 }
                 break;
@@ -52146,7 +54200,7 @@ void Island::Layout() {
     // line too.)
     const float tail = MinimizableAt(CurrentPlace()) &&
                                (!m_notchBase || g_settings.islandNotchEach)
-                           ? smallSlot + spacing
+                           ? iconSlot + spacing
                            : 0;
     const bool centered = PlaceClockCenter(orderPlace);
     bool slideGroups = false;
@@ -52268,7 +54322,7 @@ void Island::Layout() {
         if (place.y > 0.001 && place.y < 0.999) {
             glyph = place.x < 0.5 ? kGlyphPrevious : kGlyphNext;
         }
-        addIcon(IslandItem::Minimize, {glyph}, true);
+        addIcon(IslandItem::Minimize, {glyph});
     }
     float contentWidth = x - spacing;
     float clockMiddle = -1;
@@ -52338,15 +54392,25 @@ void Island::Layout() {
                                  insets.bottom)
                        : (float)(m_monitor.right - m_monitor.left -
                                  insets.left - insets.right);
-        // A notch: its share of the screen, so they never meet.
-        if (m_notch >= 0) {
-            along = along / std::max(1, m_notchCount) -
-                    NotchShoulderWidth() * 2 - std::round(kNotchGap * scale);
-        }
         // (Its items show between its round ends, where they're cut.)
         const float ends = std::max(0.0f, height / 2 - padding);
-        const float room = along - std::round(GapShown() * m_dpiScale) * 2 -
-                           padding * 2 - ends * 2 - std::round(24 * scale);
+        float room = along - std::round(GapShown() * m_dpiScale) * 2 -
+                     padding * 2 - ends * 2 - std::round(24 * scale);
+        // A notch: as long as its neighbors leave (they almost touch).
+        if (m_notch >= 0) {
+            const float wanted = std::max(contentWidth + padding * 2,
+                                          std::round(kNotchMinWidth * scale));
+            if (std::fabs(wanted - m_notchWanted) > 0.5f) {
+                m_notchWanted = wanted;
+                // (The others' room changes too.)
+                for (Island* notch : NotchSet()) {
+                    if (notch != this) {
+                        notch->StartAnimating();
+                    }
+                }
+            }
+            room = NotchBodyMax(scale) - padding * 2 - ends * 2;
+        }
         if (room > iconSlot * 2 && contentWidth > room) {
             m_pillOverflow = contentWidth - room;
             m_pillScrollTarget =
@@ -52545,6 +54609,45 @@ void Island::Layout() {
     pillY += (AtBottom() ? -1 : 1) * (top - margin) * folded;
     m_position = {(LONG)std::lround(pillX - shift),
                   (LONG)std::lround(pillY - pillTop)};
+}
+
+// A notch's longest body: as long as its items want, until it almost
+// touches its neighbors (a small gap between their curves); when they all
+// want more, each keeps its share of the screen (the middle one stays in
+// the middle). From the others' wanted lengths (their last layouts).
+float Island::NotchBodyMax(float scale) {
+    const RECT insets = TaskbarInsets();
+    const float width =
+        (float)(m_monitor.right - m_monitor.left - insets.left - insets.right);
+    const float curve = NotchShoulderWidth();
+    const float gap = std::round(kNotchTouchGap * scale);
+    float wanted[3] = {0, 0, 0};
+    for (Island* notch : NotchSet()) {
+        if (notch->m_notch >= 0 && notch->m_notch < 3) {
+            wanted[notch->m_notch] = notch->m_notchWanted;
+        }
+    }
+    if (m_notchCount <= 1) {
+        return std::max(0.0f, width - curve * 2 - gap * 2);
+    }
+    if (m_notchCount == 2) {
+        // Left and right: what the other one takes of its share is left.
+        const float both = width - curve * 2 - gap;
+        const float other = wanted[m_notch == 0 ? 2 : 0];
+        return std::max(0.0f, both - std::min(other, both / 2));
+    }
+    // Three: the middle one between the sides' needs (up to their shares),
+    // the sides on what the middle one leaves of each half.
+    const float all = width - curve * 4 - gap * 2;
+    const float share = all / 3;
+    const float sides =
+        std::max(std::min(wanted[0], share), std::min(wanted[2], share));
+    const float middleMax = std::max(0.0f, all - sides * 2);
+    if (m_notch == 1) {
+        return middleMax;
+    }
+    const float middle = std::min(std::max(wanted[1], 0.0f), middleMax);
+    return std::max(0.0f, (width - middle) / 2 - curve * 2 - gap);
 }
 
 // A notch: against the top edge (the left and right ones touching the
@@ -53371,6 +55474,7 @@ void Island::Render(bool force) {
     m_mediaMarquee = false;
     auto* target = m_canvas.target.get();
     const float scale = m_scale;
+    const float iconScale = IconScale();
 
     winrt::com_ptr<ID2D1SolidColorBrush> brush;
     // Opaque (only the glass theme lets what's behind show, by its own
@@ -54007,9 +56111,11 @@ void Island::Render(bool force) {
             const SlotFade slotFade{target, slot.alpha < 0.999f};
             // (An app's or a tray icon's by its key, what's playing's by its
             // part.)
+            // (komorebi's workspace dots each on its own too.)
             const bool byText = slot.item == IslandItem::App ||
                                 slot.item == IslandItem::TrayIcon ||
-                                slot.item == IslandItem::QuickAction;
+                                slot.item == IslandItem::QuickAction ||
+                                slot.item == IslandItem::KomorebiWorkspace;
             const bool byPart = slot.item == IslandItem::Media;
             const bool hovered =
                 (slot.item == m_hover ||
@@ -54081,12 +56187,12 @@ void Island::Render(bool force) {
                     m_press.target == (int)IslandItem::Media
                         ? (float)m_press.Amount(NowSeconds())
                         : 0.0f;
-                const float size = std::round(18 * scale) *
+                const float size = std::round(kIslandPictureSize * iconScale) *
                                    (1 - 0.15f * std::clamp(press, -0.3f, 1.0f));
                 const float middle = (slot.rect.top + slot.rect.bottom) / 2;
                 // Where the cover sits: from the note's middle to the left.
                 const float noteCenter =
-                    slot.rect.left + std::round(kIslandIconSlot * scale) / 2;
+                    slot.rect.left + std::round(kIslandIconSlot * iconScale) / 2;
                 const float coverCenter =
                     noteCenter + (slot.rect.left + std::round(2 * scale) +
                                   size / 2 - noteCenter) *
@@ -54314,8 +56420,15 @@ void Island::Render(bool force) {
                     const D2D1_RECT_F icon{iconLeft, slot.rect.top + shift,
                                            iconLeft + iconWidth,
                                            slot.rect.bottom + shift};
-                    if (!iconKey.empty()) {
-                        const float size = 16 * scale;
+                    if (iconKey.starts_with(L'\x1')) {
+                        brush->SetColor(FgIcon(0.95f * alpha));
+                        DrawKomorebiIcon(
+                            target, brush.get(),
+                            {(icon.left + icon.right) / 2,
+                             (icon.top + icon.bottom) / 2},
+                            iconScale, _wtoi(iconKey.c_str() + 1));
+                    } else if (!iconKey.empty()) {
+                        const float size = kIslandPictureSize * iconScale;
                         const float middleX = (icon.left + icon.right) / 2;
                         const float middleY = (icon.top + icon.bottom) / 2;
                         DrawAppIcon(target, brush.get(), iconKey,
@@ -54459,7 +56572,7 @@ void Island::Render(bool force) {
                     D2D1::Matrix3x2F::Scale(size, size, center) *
                     D2D1::Matrix3x2F::Rotation((float)m_themeTurn * 180,
                                                center));
-                const float full = std::round(kIslandIconSlot * scale);
+                const float full = std::round(kIslandIconSlot * iconScale);
                 const WCHAR glyph = 0xE7A1;
                 brush->SetColor(FgIcon(0.95f * contentOpacity *
                                        std::clamp(slot.scale, 0.0f, 1.0f)));
@@ -54489,7 +56602,7 @@ void Island::Render(bool force) {
             if (slot.font == 4) {
                 const TrayIcon* icon = FindTrayIcon(slot.text);
                 const float shown = std::max(slot.scale, 0.0f);
-                const float size = 16 * scale * shown;
+                const float size = kIslandPictureSize * iconScale * shown;
                 const float centerX = (slot.rect.left + slot.rect.right) / 2;
                 const float centerY = (slot.rect.top + slot.rect.bottom) / 2;
                 const D2D1_RECT_F rect{centerX - size / 2, centerY - size / 2,
@@ -54506,7 +56619,7 @@ void Island::Render(bool force) {
                         m_vertical ? trayList->rect.top : trayList->rect.left;
                     const float end = m_vertical ? trayList->rect.bottom
                                                  : trayList->rect.right;
-                    const float fade = kIslandIconSlot * scale * 1.2f;
+                    const float fade = kIslandIconSlot * iconScale * 1.2f;
                     if (m_trayMoreBefore) {
                         opacity *= std::clamp((center - start) / fade, 0.15f,
                                               1.0f);
@@ -54554,7 +56667,7 @@ void Island::Render(bool force) {
             }
             if (slot.font == 3) {
                 const float shown = std::max(slot.scale, 0.0f);
-                const float size = 18 * scale * shown;
+                const float size = kIslandPictureSize * iconScale * shown;
                 const float centerX = (slot.rect.left + slot.rect.right) / 2;
                 const float centerY = (slot.rect.top + slot.rect.bottom) / 2;
                 const D2D1_RECT_F icon{centerX - size / 2, centerY - size / 2,
@@ -54689,9 +56802,8 @@ void Island::Render(bool force) {
                                  m_iconFormat.get(), slot.rect, brush.get());
                 continue;
             }
-            auto* format = slot.font == 1   ? m_iconFormat.get()
-                           : slot.font == 2 ? m_smallIconFormat.get()
-                                            : m_textFormat.get();
+            auto* format =
+                slot.font == 1 ? m_iconFormat.get() : m_textFormat.get();
             if (!format) {
                 continue;
             }
@@ -54709,7 +56821,7 @@ void Island::Render(bool force) {
             float glyphOpacity = std::clamp(slot.scale, 0.0f, 1.0f);
             // Another icon for it (see m_glyphSwaps): the one before shrinks
             // and fades out as this one grows in.
-            if (slot.font == 1 || slot.font == 2) {
+            if (slot.font == 1) {
                 for (const auto& swap : m_glyphSwaps) {
                     if (swap.item != slot.item || swap.t <= 0.004 ||
                         swap.from.empty()) {
@@ -54719,9 +56831,7 @@ void Island::Render(bool force) {
                     const D2D1_POINT_2F middle{
                         (slot.rect.left + slot.rect.right) / 2,
                         (slot.rect.top + slot.rect.bottom) / 2};
-                    const float full = std::round(
-                        (slot.font == 2 ? kIslandSmallSlot : kIslandIconSlot) *
-                        scale);
+                    const float full = std::round(kIslandIconSlot * iconScale);
                     const float beforeScale =
                         std::max(glyphScale, 0.0f) * (0.6f + 0.4f * t);
                     target->SetTransform(D2D1::Matrix3x2F::Scale(
@@ -54746,13 +56856,13 @@ void Island::Render(bool force) {
                      (slot.rect.top + slot.rect.bottom) / 2}));
             }
             // (Icons in their own color, see FgIcon.)
-            auto* ink = slot.font == 1 || slot.font == 2 ? FgIcon : Fg;
+            auto* ink = slot.font == 1 ? FgIcon : Fg;
             brush->SetColor(
                 ink((slot.item == IslandItem::Minimize ? 0.6f : 0.95f) *
                     contentOpacity * glyphOpacity));
             // A control center button whose thing is on: on a round fill of
-            // the accent, in its ink (like the control center's tiles), seen
-            // whatever the colors.
+            // the icons' color, the glyph in the background's (seen whatever
+            // the colors, and colored like every other item).
             if (slot.item == IslandItem::QuickAction && slot.action >= 0 &&
                 slot.action < (int)ARRAYSIZE(kPillActions) &&
                 PillActionLit(kPillActions[slot.action].id)) {
@@ -54761,13 +56871,13 @@ void Island::Render(bool force) {
                     std::min(slot.rect.right - slot.rect.left,
                              slot.rect.bottom - slot.rect.top) *
                     0.42f;
-                brush->SetColor(Accent(lit));
+                brush->SetColor(FgIcon(0.95f * lit));
                 target->FillEllipse({{(slot.rect.left + slot.rect.right) / 2,
                                       (slot.rect.top + slot.rect.bottom) / 2},
                                      round,
                                      round},
                                     brush.get());
-                brush->SetColor(AccentInk(lit));
+                brush->SetColor(Bg(lit));
             }
             // Upright, the clock is two lines: the time, the date under it.
             if (slot.font == 0 && m_vertical && m_bannerTimeFormat) {
@@ -54834,10 +56944,7 @@ void Island::Render(bool force) {
             // squeezed into their room.
             D2D1_RECT_F glyphRect = slot.rect;
             if (slot.scale < 1) {
-                const float full =
-                    std::round((slot.font == 2 ? kIslandSmallSlot
-                                               : kIslandIconSlot) *
-                               scale);
+                const float full = std::round(kIslandIconSlot * iconScale);
                 const float centerX = (slot.rect.left + slot.rect.right) / 2;
                 glyphRect.left = centerX - full / 2;
                 glyphRect.right = centerX + full / 2;
@@ -55636,6 +57743,79 @@ std::wstring FocusedAppName(const std::wstring& key) {
                                                  : AppDisplayName(key);
 }
 
+// The app in focus as the taskbar knows it: by its ID when Windows lists the
+// app under it (Start, or a notification sender's registration); otherwise
+// (like Steam's window: "Valve.Steam.Client", listed nowhere, in its helper
+// steamwebhelper.exe) by the program the window says starts it again and the
+// name it gives (`name`, empty if none), or by its process's file.
+std::wstring FocusedAppKey(HWND window, std::wstring* name) {
+    name->clear();
+    std::wstring key = GetWindowAppId(window);
+    if (!key.empty()) {
+        winrt::com_ptr<IShellItem> item;
+        bool registered = false;
+        // (A packaged app's: its package's icon if not its own.)
+        if (key.find(L'!') != std::wstring::npos ||
+            SUCCEEDED(SHCreateItemInKnownFolder(kFOLDERID_AppsFolder, 0,
+                                                key.c_str(),
+                                                IID_PPV_ARGS(item.put()))) ||
+            (RegisteredAppValue(key, L"DisplayName", &registered),
+             registered)) {
+            return key;
+        }
+    }
+    // (The command may be a path with spaces and no quotes, like Steam's
+    // "C:\Program Files (x86)\Steam\steam.exe": the whole of it first; a
+    // program file that's there only.)
+    std::wstring program;
+    auto isProgram = [](const std::wstring& path) {
+        const DWORD attributes =
+            IsLocalDrivePath(path) ? GetFileAttributes(path.c_str())
+                                   : INVALID_FILE_ATTRIBUTES;
+        return attributes != INVALID_FILE_ATTRIBUTES &&
+               !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+    };
+    if (const std::wstring command = GetWindowAppText(window, 2);
+        !command.empty()) {
+        if (isProgram(command)) {
+            program = command;
+        } else {
+            int count = 0;
+            if (LPWSTR* parts = CommandLineToArgvW(command.c_str(), &count)) {
+                if (count > 0 && isProgram(parts[0])) {
+                    program = parts[0];
+                }
+                LocalFree(parts);
+            }
+        }
+    }
+    if (!program.empty()) {
+        *name = GetWindowAppText(window, 4);
+        if (!name->empty() && (*name)[0] == L'@') {
+            WCHAR resolved[256];
+            *name = SUCCEEDED(SHLoadIndirectString(name->c_str(), resolved,
+                                                   ARRAYSIZE(resolved),
+                                                   nullptr))
+                        ? resolved
+                        : L"";
+        }
+        return program;
+    }
+    // (Its process's file, as for a window without an ID.)
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (HANDLE process =
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
+        WCHAR path[MAX_PATH];
+        DWORD length = ARRAYSIZE(path);
+        if (QueryFullProcessImageName(process, 0, path, &length)) {
+            key = path;
+        }
+        CloseHandle(process);
+    }
+    return key;
+}
+
 // The app window on top on a screen (not the island's own, hidden,
 // minimized or on another desktop), for the app in focus before any focus
 // change says so; none if there isn't one.
@@ -55697,9 +57877,15 @@ void Island::NoteFocusedApp(HWND window) {
         MonitorFromWindow(window, MONITOR_DEFAULTTONULL) != m_monitorHandle) {
         return;
     }
+    // (Not the mod's own windows: a dialog of the island's, like its color
+    // picker or a backup's file dialog.)
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
     std::wstring key;
-    if (IsShellFlyout(window) || !IsAppWindow(window) ||
-        IsCloakedWindow(window) || (key = WindowAppKey(window)).empty()) {
+    std::wstring name;
+    if (processId == GetCurrentProcessId() || IsShellFlyout(window) ||
+        !IsAppWindow(window) || IsCloakedWindow(window) ||
+        (key = FocusedAppKey(window, &name)).empty()) {
         m_focusSkipped = window;
         return;
     }
@@ -55710,7 +57896,7 @@ void Island::NoteFocusedApp(HWND window) {
     }
     m_focusDesktop = false;
     m_focusKey = key;
-    m_focusName = FocusedAppName(key);
+    m_focusName = name.empty() ? FocusedAppName(key) : name;
     // (Its icon read now, not while drawing a frame.)
     if (m_canvas.target) {
         GetAppBitmap(m_focusKey);
@@ -56373,7 +58559,14 @@ ID2D1Bitmap* Island::GetAppBitmap(const std::wstring& appId) {
     winrt::com_ptr<ID2D1Bitmap> bitmap =
         LoadAppIcon(m_canvas.target.get(), m_wic.get(), m_hwnd, appId,
                     (int)std::round(32 * m_scale));
-    // Remembered even when missing, so it isn't looked up every frame.
+    // Remembered even when missing, so it isn't looked up every frame; the
+    // oldest are let go past a limit (every app focused for a day: those
+    // still shown are read again).
+    constexpr size_t kMostAppBitmaps = 64;
+    if (m_appBitmaps.size() >= kMostAppBitmaps) {
+        m_appBitmaps.erase(m_appBitmaps.begin(),
+                           m_appBitmaps.begin() + kMostAppBitmaps / 2);
+    }
     m_appBitmaps.push_back({appId, bitmap});
     return bitmap.get();
 }
@@ -59336,6 +61529,49 @@ bool Island::PressBannerReply(POINT pt) {
     return true;
 }
 
+DWORD Island::DragOverAt(IDataObject*, POINT screen, DWORD, DWORD) {
+    IslandScope scope(this);
+    POINT pt = screen;
+    ScreenToClient(m_hwnd, &pt);
+    std::wstring key;
+    const bool over = HitTest(pt, &key) == IslandItem::Folders;
+    if (over != m_dropOnFolders) {
+        m_dropOnFolders = over;
+        KillTimer(m_hwnd, kFoldersDropTimerId);
+        if (over && !m_foldersPanel.IsOpen()) {
+            SetTimer(m_hwnd, kFoldersDropTimerId, kFolderOpenMs, nullptr);
+        }
+        // (Lit while the files are on it.)
+        if (over) {
+            m_hover = IslandItem::Folders;
+        } else if (m_hover == IslandItem::Folders) {
+            m_hover = IslandItem::None;
+        }
+        StartAnimating();
+    }
+    return DROPEFFECT_NONE;
+}
+
+void Island::DragGone() {
+    IslandScope scope(this);
+    KillTimer(m_hwnd, kFoldersDropTimerId);
+    if (m_foldersPanel.IsOpen()) {
+        SetTimer(m_hwnd, kFoldersDragLeftTimerId, kFoldersDragLeftMs, nullptr);
+    }
+    if (m_dropOnFolders) {
+        m_dropOnFolders = false;
+        if (m_hover == IslandItem::Folders) {
+            m_hover = IslandItem::None;
+        }
+        StartAnimating();
+    }
+}
+
+DWORD Island::DropAt(IDataObject*, POINT, DWORD, DWORD) {
+    DragGone();
+    return DROPEFFECT_NONE;
+}
+
 // Mouse buttons: on a tray icon, passed on to its app (see ClickTrayIcon).
 // Elsewhere, a click (on release) is the island's own.
 void Island::OnMouseButton(UINT msg, LPARAM lParam) {
@@ -59631,7 +61867,7 @@ bool Island::PanelPlace(IslandItem item,
         from = clicked->rect;
     } else if (item == IslandItem::None) {
         const float middle = (m_pill.left + m_pill.right) / 2;
-        const float half = std::round(kIslandIconSlot * m_scale) / 2;
+        const float half = std::round(kIslandIconSlot * IconScale()) / 2;
         from = {middle - half, m_pill.top, middle + half, m_pill.bottom};
     } else {
         for (const auto& slot : m_slots) {
@@ -60139,6 +62375,9 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             CheckMonitor();
             return 0;
         case WM_DISPLAYCHANGE:
+            if (m_main) {
+                g_displayChanges++;
+            }
             // A monitor plugged in or out (or its handle changed): with one
             // on each monitor, they start again for the monitors there are
             // now. Another resolution only lays them out again.
@@ -60313,6 +62552,18 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             if (wParam == kInputMethodTimerId) {
                 KillTimer(m_hwnd, kInputMethodTimerId);
                 StartInputMethodQuery();
+                return 0;
+            }
+            if (wParam == kFoldersDropTimerId) {
+                KillTimer(m_hwnd, kFoldersDropTimerId);
+                if (m_dropOnFolders && !m_foldersPanel.IsOpen()) {
+                    TogglePanel(m_foldersPanel, IslandItem::Folders);
+                }
+                return 0;
+            }
+            if (wParam == kFoldersDragLeftTimerId) {
+                KillTimer(m_hwnd, kFoldersDragLeftTimerId);
+                m_foldersPanel.CloseIfDragLeft();
                 return 0;
             }
             if (wParam == kProfileSaveTimerId) {
@@ -61040,6 +63291,9 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const HRESULT comResult =
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // (Files dragged out of the folders' panel and dropped on the islands:
+    // Windows' drag and drop needs OLE, not only COM.)
+    const HRESULT oleResult = OleInitialize(nullptr);
 
     const bool classes = RegisterIslandClasses();
     if (classes) {
@@ -61164,6 +63418,9 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
         UnregisterIslandClasses();
     }
 
+    if (SUCCEEDED(oleResult)) {
+        OleUninitialize();
+    }
     if (SUCCEEDED(comResult)) {
         CoUninitialize();
     }
@@ -61430,6 +63687,9 @@ void LoadSettings() {
     g_settings.islandNotchCurve =
         std::clamp(Wh_GetIntValue(L"islandNotchCurve", kNotchCurveDefault),
                    kNotchCurveMin, kNotchCurveMax);
+    g_settings.islandIconSize =
+        std::clamp(Wh_GetIntValue(L"islandIconSize", kIconSizeDefault),
+                   kIconSizeMin, kIconSizeMax);
     g_settings.islandNotchEach = Wh_GetIntValue(L"islandNotchEach", 0) != 0;
     g_settings.islandGroupApps = Wh_GetIntValue(L"islandGroupApps", 1) != 0;
     g_settings.islandApps = Wh_GetIntValue(L"islandApps", 1) != 0;
@@ -61438,6 +63698,8 @@ void LoadSettings() {
     g_settings.islandFocusedApp = Wh_GetIntValue(L"islandFocusedApp", 0) != 0;
     g_settings.komorebiHideEmpty =
         Wh_GetIntValue(L"islandKomorebiHideEmpty", 1) != 0;
+    g_settings.islandFolderDrag =
+        std::clamp(Wh_GetIntValue(L"islandFolderDrag", 0), 0, 2);
     g_settings.islandScreenshotFolder =
         Wh_GetIntValue(L"islandScreenshotFolder", 0) != 0;
     g_settings.islandMediaWheel = Wh_GetIntValue(L"islandMediaWheel", 0) != 0;
@@ -61563,6 +63825,7 @@ void ExplorerModBeforeUninit() {
     StopWatchingTaskbarPlace();
     KeepTrayIcons();
     StopWatchingIslandProcess();
+    RestoreDndWithoutIsland();
     FreeIslandAppIcons();
     UpdateAutoHide();
     if (GetUserIntValue(L"explorerPartPid", 0) == (int)GetCurrentProcessId()) {
