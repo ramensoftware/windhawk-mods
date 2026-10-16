@@ -53,6 +53,7 @@ level, updated in real time.
 - **Volume font size**: Size in pixels for the volume text indicator. Set to `0` to use the default size.
 - **Prefix font size**: Size in pixels for the prefix text. Set to `0` to use the default size.
 - **Icon and logo size**: Size in pixels for native volume/mute icons and emoji icons. Set to `0` to use the Windows default size.
+- **Custom font family**: Name of any font installed in Windows (e.g. `JetBrains Mono`, `Fira Code`, `Bahnschrift`, `Consolas`, `Digital-7`). Leave empty to use the default taskbar font.
 - **Text vertical offset**: Vertical offset in pixels for the volume text. Positive values shift downward, negative values shift upward (default: `0`).
 - **Icon vertical offset**: Vertical offset in pixels for the native volume and mute icons. Positive values shift downward, negative values shift upward (default: `0`).
 
@@ -275,6 +276,8 @@ struct TrackedVolumeContent {
     winrt::weak_ref<Controls::TextBlock> subBlock;
     bool isCustomLayoutConfigured = false;
     bool lastDualBoxMode = false;
+    bool hasIconOffset = false;
+    bool hasTextOffset = false;
     winrt::Windows::Foundation::IInspectable origUnderlayVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayAlignment{nullptr};
@@ -286,7 +289,6 @@ struct TrackedVolumeContent {
     winrt::Windows::Foundation::IInspectable origContainerGridAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origContainerGridColumnSpacing{
         nullptr};
-    winrt::Windows::Foundation::IInspectable origContainerGridMargin{nullptr};
     winrt::Windows::Foundation::IInspectable origTextIconContentAlignment{
         nullptr};
     winrt::Windows::Foundation::IInspectable origBaseFontSize{nullptr};
@@ -379,11 +381,8 @@ bool RunFromWindowThread(HWND hWnd,
     param.proc = proc;
     param.procParam = procParam;
 
-    DWORD_PTR dwResult = 0;
-    SendMessageTimeout(hWnd, runFromWindowThreadRegisteredMsg, 0,
-                       reinterpret_cast<LPARAM>(&param),
-                       SMTO_ABORTIFHUNG | SMTO_NORMAL,
-                       2000, &dwResult);
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0,
+                reinterpret_cast<LPARAM>(&param));
 
     UnhookWindowsHookEx(hook);
 
@@ -550,6 +549,19 @@ double GetContainerWidth() {
     return CalculateAutoWidth();
 }
 
+void RestoreLocalProperty(
+    FrameworkElement const& target,
+    DependencyProperty const& dp,
+    winrt::Windows::Foundation::IInspectable const& orig) {
+    if (target) {
+        if (!orig || orig == DependencyProperty::UnsetValue()) {
+            target.ClearValue(dp);
+        } else {
+            target.SetValue(dp, orig);
+        }
+    }
+}
+
 void ApplyIconViewWidth(TrackedIconView& tracked,
                         FrameworkElement const& iconView) {
     double width = GetContainerWidth();
@@ -567,21 +579,13 @@ void ApplyIconViewWidth(TrackedIconView& tracked,
         iconView.Width(width);
         iconView.HorizontalAlignment(HorizontalAlignment::Center);
     } else if (tracked.hasCustomWidth) {
-        auto restoreProp =
-            [](FrameworkElement const& el, DependencyProperty const& dp,
-               winrt::Windows::Foundation::IInspectable const& orig) {
-                if (!orig || orig == DependencyProperty::UnsetValue()) {
-                    el.ClearValue(dp);
-                } else {
-                    el.SetValue(dp, orig);
-                }
-            };
-        restoreProp(iconView, FrameworkElement::MinWidthProperty(),
-                    tracked.origMinWidth);
-        restoreProp(iconView, FrameworkElement::WidthProperty(),
-                    tracked.origWidth);
-        restoreProp(iconView, FrameworkElement::HorizontalAlignmentProperty(),
-                    tracked.origAlignment);
+        RestoreLocalProperty(iconView, FrameworkElement::MinWidthProperty(),
+                             tracked.origMinWidth);
+        RestoreLocalProperty(iconView, FrameworkElement::WidthProperty(),
+                             tracked.origWidth);
+        RestoreLocalProperty(iconView,
+                             FrameworkElement::HorizontalAlignmentProperty(),
+                             tracked.origAlignment);
         tracked.hasCustomWidth = false;
     }
 }
@@ -689,19 +693,6 @@ TrackedVolumeContent* FindTrackedVolumeContent(
 
 constexpr double kDefaultIconFontSize = 16.0;
 
-void RestoreLocalProperty(
-    FrameworkElement const& target,
-    DependencyProperty const& dp,
-    winrt::Windows::Foundation::IInspectable const& orig) {
-    if (target) {
-        if (!orig || orig == DependencyProperty::UnsetValue()) {
-            target.ClearValue(dp);
-        } else {
-            target.SetValue(dp, orig);
-        }
-    }
-}
-
 void ApplyIconFontSize(
     FrameworkElement const& el,
     double size,
@@ -767,7 +758,17 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
         return;
     }
 
-    containerGrid.ColumnDefinitions().Clear();
+    if (tracked.hasIconOffset) {
+        if (auto base = tracked.baseElement.get()) {
+            RestoreLocalProperty(base, FrameworkElement::MarginProperty(),
+                                 tracked.origBaseMargin);
+        }
+        if (auto underlay = tracked.underlayElement.get()) {
+            RestoreLocalProperty(underlay, FrameworkElement::MarginProperty(),
+                                 tracked.origUnderlayMargin);
+        }
+        tracked.hasIconOffset = false;
+    }
 
     if (auto base = tracked.baseElement.get()) {
         RestoreLocalProperty(base, FrameworkElement::MinWidthProperty(),
@@ -779,8 +780,6 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                              tracked.origBaseAlignment);
         RestoreLocalProperty(base, Controls::Grid::ColumnProperty(),
                              tracked.origBaseColumn);
-        RestoreLocalProperty(base, FrameworkElement::MarginProperty(),
-                             tracked.origBaseMargin);
         if (FrameworkElement tbEl = FindChildByName(base, L"InnerTextBlock")) {
             if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
                 tb.ClearValue(Controls::TextBlock::TextAlignmentProperty());
@@ -800,8 +799,6 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                              tracked.origUnderlayAlignment);
         RestoreLocalProperty(underlay, Controls::Grid::ColumnProperty(),
                              tracked.origUnderlayColumn);
-        RestoreLocalProperty(underlay, FrameworkElement::MarginProperty(),
-                             tracked.origUnderlayMargin);
         if (FrameworkElement tbEl =
                 FindChildByName(underlay, L"InnerTextBlock")) {
             if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
@@ -818,17 +815,13 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                          tracked.origContainerGridAlignment);
     RestoreLocalProperty(containerGrid, Controls::Grid::ColumnSpacingProperty(),
                          tracked.origContainerGridColumnSpacing);
-    RestoreLocalProperty(containerGrid, FrameworkElement::MarginProperty(),
-                         tracked.origContainerGridMargin);
-    if (auto subBlock = tracked.subBlock.get()) {
-        subBlock.ClearValue(FrameworkElement::MarginProperty());
-    }
     if (auto tic = tracked.textIconContent.get()) {
         RestoreLocalProperty(tic,
                              FrameworkElement::HorizontalAlignmentProperty(),
                              tracked.origTextIconContentAlignment);
     }
 
+    tracked.hasTextOffset = false;
     tracked.lastDualBoxMode = false;
     tracked.lastNativeGlyph = false;
     tracked.isCustomLayoutConfigured = false;
@@ -1198,8 +1191,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                 base.ReadLocalValue(Controls::Grid::ColumnProperty());
             tracked->origBaseMinWidth =
                 base.ReadLocalValue(FrameworkElement::MinWidthProperty());
-            tracked->origBaseMargin =
-                base.ReadLocalValue(FrameworkElement::MarginProperty());
             if (FrameworkElement tbEl = FindChildByName(base, L"InnerTextBlock")) {
                 tracked->origBaseFontSize =
                     tbEl.ReadLocalValue(Controls::TextBlock::FontSizeProperty());
@@ -1214,8 +1205,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                 underlay.ReadLocalValue(Controls::Grid::ColumnProperty());
             tracked->origUnderlayMinWidth =
                 underlay.ReadLocalValue(FrameworkElement::MinWidthProperty());
-            tracked->origUnderlayMargin =
-                underlay.ReadLocalValue(FrameworkElement::MarginProperty());
             if (FrameworkElement tbEl =
                     FindChildByName(underlay, L"InnerTextBlock")) {
                 tracked->origUnderlayFontSize = tbEl.ReadLocalValue(
@@ -1226,8 +1215,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             FrameworkElement::HorizontalAlignmentProperty());
         tracked->origContainerGridColumnSpacing = containerGrid.ReadLocalValue(
             Controls::Grid::ColumnSpacingProperty());
-        tracked->origContainerGridMargin = containerGrid.ReadLocalValue(
-            FrameworkElement::MarginProperty());
         tracked->origTextIconContentAlignment = textIconContent.ReadLocalValue(
             FrameworkElement::HorizontalAlignmentProperty());
     }
@@ -1237,25 +1224,29 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         textIconContent.HorizontalAlignment(HorizontalAlignment::Center);
     }
 
-    RestoreLocalProperty(containerGrid, FrameworkElement::MarginProperty(),
-                         tracked->origContainerGridMargin);
-
-    auto applyIconOffset =
-        [&](FrameworkElement const& el,
-            winrt::Windows::Foundation::IInspectable const& origMargin) {
-            if (!el) {
-                return;
+    if (g_settings.iconVerticalOffset != 0) {
+        if (!tracked->hasIconOffset) {
+            tracked->origBaseMargin =
+                baseElement.ReadLocalValue(FrameworkElement::MarginProperty());
+            if (underlayElement) {
+                tracked->origUnderlayMargin = underlayElement.ReadLocalValue(
+                    FrameworkElement::MarginProperty());
             }
-            if (g_settings.iconVerticalOffset != 0) {
-                double off = static_cast<double>(g_settings.iconVerticalOffset);
-                el.Margin(Thickness{0, off, 0, -off});
-            } else {
-                RestoreLocalProperty(el, FrameworkElement::MarginProperty(),
-                                     origMargin);
-            }
-        };
-    applyIconOffset(baseElement, tracked->origBaseMargin);
-    applyIconOffset(underlayElement, tracked->origUnderlayMargin);
+            tracked->hasIconOffset = true;
+        }
+        double off = static_cast<double>(g_settings.iconVerticalOffset);
+        baseElement.Margin(Thickness{0, off, 0, -off});
+        if (underlayElement) {
+            underlayElement.Margin(Thickness{0, off, 0, -off});
+        }
+    } else if (tracked->hasIconOffset) {
+        RestoreLocalProperty(baseElement, FrameworkElement::MarginProperty(),
+                             tracked->origBaseMargin);
+        RestoreLocalProperty(underlayElement,
+                             FrameworkElement::MarginProperty(),
+                             tracked->origUnderlayMargin);
+        tracked->hasIconOffset = false;
+    }
 
     Controls::TextBlock subBlock =
         GetOrCreateSubBlock(*tracked, containerGrid, baseElement);
@@ -1263,8 +1254,10 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     if (g_settings.verticalOffset != 0) {
         double off = static_cast<double>(g_settings.verticalOffset);
         subBlock.Margin(Thickness{0, off, 0, -off});
-    } else {
+        tracked->hasTextOffset = true;
+    } else if (tracked->hasTextOffset) {
         subBlock.ClearValue(FrameworkElement::MarginProperty());
+        tracked->hasTextOffset = false;
     }
 
     ApplyIconFontSize(baseElement, g_settings.iconSize,
@@ -1956,7 +1949,7 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    auto cleanupTask = [](void* param) {
+    auto cleanupTask = [](void*) {
         if (g_autoRevokerList) {
             g_autoRevokerList->clear();
         }
@@ -1985,23 +1978,15 @@ void Wh_ModBeforeUninit() {
         g_volumeDataModels.clear();
         g_spatialSoundName.clear();
         g_maxObservedWidth = 0.0;
-
-        if (param) {
-            SetEvent(static_cast<HANDLE>(param));
-        }
     };
 
-    HANDLE hCleanupDone = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     bool cleanedUp = false;
-    if (RunFromTaskbarThread(cleanupTask, hCleanupDone)) {
-        if (hCleanupDone &&
-            WaitForSingleObject(hCleanupDone, 1000) == WAIT_OBJECT_0) {
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (RunFromTaskbarThread(cleanupTask)) {
             cleanedUp = true;
+            break;
         }
-    }
-
-    if (hCleanupDone) {
-        CloseHandle(hCleanupDone);
+        Sleep(50);
     }
 
     if (!cleanedUp) {
