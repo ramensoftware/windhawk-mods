@@ -873,6 +873,7 @@ inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)())
     if (!WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks)))
         return false;
     // Secondary symbols are optional. Never fail the working primary clock.
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CSecondaryTaskBand_ITaskListWndSite_vftable},
