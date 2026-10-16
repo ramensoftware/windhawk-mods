@@ -94,7 +94,7 @@ This modification settings are accessible through the Windhawk interface and are
 ## Behavioral Notes
 
 - The banner colour is determined by the native publisher row: blue exclusively in the presence of a verified publisher, amber in every other case.
-- The displayed shield conforms to the selected theme and the native verdict. Manual selections may exclusively render the prompt more cautious, never more trusted.
+- The displayed shield conforms to the selected theme and the native verdict. A manual selection that is more cautious than the automatic one is always applied; the verified shield can be asked for only where the operating system has verified the publisher, so that the prompt never shows more trust than Windows itself grants.
 - The signature of the elevated file is read from its embedded Authenticode signature and, when the file has none of its own, from the security catalog of the system: a component of Windows is catalog-signed, and the catalog is verified with the trust provider of the system, exactly like any other signed object. The verdict of the operating system is never contradicted by the mod's own check.
 - In the presence of an elevation request relating to Regedit, the program name row is normalised to the localised name of the Registry Editor. Verified publisher status is attributed exclusively following confirmation, by the operating system, of the signature of the system file. A native row explicitly relating to an unknown or unverified publisher is never overridden.
 - Diagnostic files may contain prompt text and command-line details. Their activation is recommended exclusively when necessary.
@@ -153,7 +153,7 @@ If any anomalies are encountered, please report them to the author. It is recomm
   - aero: The Windows 7 Aero buttons, painted by the mod
 - bannerShield: auto
   $name: Which shield is shown
-  $description: "This setting chooses the shield for non-flat themes. An orange banner always uses its matching warning shield; Flat Icons always uses the blue Windows shield. A manual choice can only make the shield more cautious, never more trusted."
+  $description: "This setting chooses the shield for non-flat themes. An orange banner always uses its matching warning shield; Flat Icons always uses the blue Windows shield. A manual choice that is more cautious than the automatic one is always applied; the verified shield can be asked for only when the operating system has verified the publisher, so that the prompt never shows more trust than Windows itself grants."
   $options:
   - auto: Automatic (recommended)
   - verified: Verified shield
@@ -3036,8 +3036,10 @@ static void FinishHarvest(PromptInfo& info) {
 
     // The native row says that the publisher is verified and names "Microsoft Windows": this is
     // a component of Windows, and Windows 7 gives it the full shield. The verdict is the
-    // operating system's own, and the mod's own signature check - which does not read the
-    // security catalogs of the system - must never contradict it.
+    // operating system's own, and the mod's own signature check must never contradict it: it
+    // can only make the prompt more cautious, never more trusted. The check reads the embedded
+    // Authenticode signature and, when there is none, the security catalog of the system, so
+    // that a component of Windows is not mistaken for an unsigned file.
     info.nativeWindowsComponent = publisherKnown && IsWindowsPublisherText(info.publisherText);
 
     // Blue only when Windows' own publisher row says "verified"; everything else is amber.
@@ -6372,9 +6374,23 @@ static DWORD WINAPI UiSessionRunInner() {
         else if (info.bannerState == 1 && !IsWindowsPublisherText(info.publisherText))
             variant = 1;
         if (info.bannerState == 3) variant = 2;
-        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3 &&
-            g_settings.bannerShield - 1 > variant)
-            variant = g_settings.bannerShield - 1;      // a manual choice can only be more cautious
+
+        // The manual choice. A choice that is more cautious than the automatic one is always
+        // applied. The "verified" one is applied only when the operating system itself has
+        // verified the publisher - the banner is blue and nothing contradicts the native row -
+        // so that the prompt can never show more trust than Windows itself grants. Before this,
+        // the setting could not do that at all: the automatic shield always won, and asking
+        // for the verified shield gave the question mark back.
+        if (g_settings.bannerShield >= 1 && g_settings.bannerShield <= 3) {
+            int chosen = g_settings.bannerShield - 1;
+            if (chosen > variant) {
+                variant = chosen;                       // more cautious: always allowed
+            } else if (chosen == 0 && variant != 0 && !unconfirmed && info.bannerState == 1) {
+                variant = 0;                            // the full Windows shield
+                Log(L"the manual choice asks for the verified shield: the native prompt has "
+                    L"verified the publisher, so the full Windows shield is shown");
+            }
+        }
         info.shieldVariant = variant;
         Log(L"banner shield: %s (publisher %s, signature %s, author %s)",
             variant == 0 ? L"the verified shield"
