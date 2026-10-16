@@ -2480,6 +2480,7 @@ muxc::AppBarButton CreateMenuButton(ActionItem const& item,
 
     auto ensureMenuEntries = [subItems = item.subItems, weakButton,
                               hasChildTokens](muxc::MenuFlyout const& menu) {
+        UiCallScope scope;
         if (!menu)
             return;
         try {
@@ -2714,6 +2715,7 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
         commandBar.ActualThemeChanged(
             winrt::auto_revoke,
             [](mux::FrameworkElement const& sender, wf::IInspectable const&) {
+                UiCallScope scope;
                 if (g_unloading)
                     return;
 
@@ -2770,6 +2772,7 @@ void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
         auto timerToken = selectionTimer.Tick([weakBar, anyLabelHasTokens](
                                                   wf::IInspectable const&,
                                                   wf::IInspectable const&) {
+            UiCallScope scope;
             if (g_unloading)
                 return;
 
@@ -3055,6 +3058,7 @@ using CommandBarManager_CommandBar_t = void(WINAPI*)(void* pThis,
 CommandBarManager_CommandBar_t CommandBarManager_CommandBar_Original;
 
 void WINAPI CommandBarManager_CommandBar_Hook(void* pThis, void* commandBar) {
+    UiCallScope scope;
     Wh_Log(L">");
     CommandBarManager_CommandBar_Original(pThis, commandBar);
     if (g_unloading || !commandBar)
