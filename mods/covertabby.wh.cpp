@@ -181,8 +181,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   $options:
   - full: Fullscreen
   - windowed: Windowed
-  - full: "Schermo intero"
-  - windowed: "Finestra"
   $options:it:
   - full: "Schermo intero"
   - windowed: "Finestra"
@@ -199,13 +197,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - text: Text only
   - search: Search
   - enchanted: Windows 10/11 Enchanted
-  - normal: "Normale"
-  - tiles: "Riquadri"
-  - icons: "Solo icone"
-  - list: "Senza anteprime"
-  - text: "Solo testo"
-  - search: "Ricerca"
-  - enchanted: "Windows 10/11 Enchanted"
   $options:it:
   - normal: "Normale"
   - tiles: "Riquadri"
@@ -224,10 +215,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - dark: Dark
   - light: Light
   - acrylic: Acrylic
-  - system: "Segui tema Windows"
-  - dark: "Scuro"
-  - light: "Chiaro"
-  - acrylic: "Acrilico"
   $options:it:
   - system: "Segui tema Windows"
   - dark: "Scuro"
@@ -241,8 +228,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   $options:
   - border: Add a border
   - bigger: Make it bigger
-  - border: "Aggiungi bordo"
-  - bigger: "Ingrandisci"
   $options:it:
   - border: "Aggiungi bordo"
   - bigger: "Ingrandisci"
@@ -297,8 +282,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   $options:
   - smooth: Smooth
   - original: Original
-  - smooth: "Fluida"
-  - original: "Originale"
   $options:it:
   - smooth: "Fluida"
   - original: "Originale"
@@ -311,9 +294,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - title: Show Title
   - select: Select Window
   - none: None
-  - title: "Mostra titolo"
-  - select: "Seleziona finestra"
-  - none: "Nessuno"
   $options:it:
   - title: "Mostra titolo"
   - select: "Seleziona finestra"
@@ -328,10 +308,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - lift: Lift
   - enlarge: Enlarge
   - liftEnlarge: Lift + Enlarge
-  - none: "Nessuno"
-  - lift: "Solleva"
-  - enlarge: "Ingrandisci"
-  - liftEnlarge: "Solleva e ingrandisci"
   $options:it:
   - none: "Nessuno"
   - lift: "Solleva"
@@ -346,9 +322,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - blur: Blur
   - opaque: Opaque
   - transparent: Transparent
-  - blur: "Sfocato"
-  - opaque: "Opaco"
-  - transparent: "Trasparente"
   $options:it:
   - blur: "Sfocato"
   - opaque: "Opaco"
@@ -372,9 +345,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - accent: Accent
   - gray: Gray
   - none: None
-  - accent: "Colore principale"
-  - gray: "Grigio"
-  - none: "Nessuno"
   $options:it:
   - accent: "Colore principale"
   - gray: "Grigio"
@@ -393,9 +363,6 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - opaque: Opaque
   - transparent: Transparent
   - unchanged: Keep Selected Background
-  - opaque: "Opaco"
-  - transparent: "Trasparente"
-  - unchanged: "Mantieni sfondo selezionato"
   $options:it:
   - opaque: "Opaco"
   - transparent: "Trasparente"
