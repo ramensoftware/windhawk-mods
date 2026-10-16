@@ -382,7 +382,7 @@ static std::map<std::tuple<std::wstring, std::wstring, std::wstring>,
 // One allowlist entry: the executable to match, and which parts of its remembered
 // geometry the mod may use.
 struct AllowlistEntry {
-    std::wstring exe;  // lowercased, as before
+    std::wstring exe;  // lowercased
     bool restorePosition = true;
     bool restoreSize = true;
 };
@@ -394,10 +394,8 @@ static bool g_allowlistIsEmpty = true;
 // entry, so a window can be matched to last session's geometry even after its
 // title changed (see the ordinal fallback in FindStoredWindowFor).
 //
-// Monotonic, never reusing an ordinal freed by a closed window: reusing one
-// would hand a new window the closed window's stored geometry, which is exactly
-// the "restored something wrong" case this mod must not do.
-// Defined in the GEOMETRY_CORE block below, kept there so the tests extract it.
+// Defined in the GEOMETRY_CORE block below, kept there so the tests extract it;
+// the allocation rule itself is documented with the definition.
 static int AllocateOrdinal(const std::set<int>& liveOrdinals);
 
 static std::tuple<std::wstring, std::wstring, std::wstring> OrdinalKeyOf(
@@ -663,7 +661,7 @@ struct MonitorResolution {
     MonitorMatchRule rule = MonitorMatchRule::None;
 };
 
-// Five-step monitor resolution from the M1 plan. First hit wins; a relative
+// Five-step monitor resolution. First hit wins; a relative
 // position match must be within kRelativeMatchTolerance on every component, and
 // otherwise we fall through to the primary monitor rather than guessing.
 static MonitorResolution ResolveTargetMonitor(
@@ -820,35 +818,6 @@ static GeoRect ClampRectToWorkArea(const GeoRect& rect,
     return clamped;
 }
 
-//
-// This must be lowest-free rather than monotonic. A monotonic counter gives a
-// reopened window a fresh, higher ordinal, and since matching requires the
-// stored ordinal to be equal, a window that is closed and reopened in the same
-// session can never match the entry saved moments earlier -- which is the
-// headline use case. Lowest-free lets a closed window's number be reused, so the
-// reopened window inherits exactly the geometry just stored for it.
-//
-// Concurrent windows still get distinct ordinals (0, 1, ...), so windows open at
-// the same time never share an entry. When several same-titled windows are
-// closed and reopened in a different order their geometry can swap; that is
-// inherent to matching identical titles, and a benign miss is preferable to
-// restoring the wrong window's geometry.
-// Ordinal for a new window: the lowest number no live window of the same key is
-// using.
-//
-// This must be lowest-free rather than monotonic. A monotonic counter gives a
-// reopened window a fresh, higher ordinal, and since matching requires the
-// stored ordinal to be equal, a window that is closed and reopened in the same
-// session can never match the entry saved moments earlier, which is the headline
-// use case. Lowest-free lets a closed window's number be reused, so the reopened
-// window inherits exactly the geometry just stored for it.
-//
-// Concurrent windows still get distinct ordinals (0, 1, ...), so windows open at
-// the same time never share an entry. When several same-titled windows are
-// closed and reopened in a different order their geometry can swap; that is
-// inherent to matching identical titles, and a benign miss is preferable to
-// restoring the wrong window's geometry.
-static int AllocateOrdinal(const std::set<int>& liveOrdinals);
 // Which parts of a remembered rectangle an app is allowed to use. Both default to
 // on: the settings entry ships both toggled on, and a window whose allowlist entry
 // says nothing keeps the behaviour it had before the flags were read.
@@ -857,14 +826,8 @@ struct RestoreFlags {
     bool restoreSize = true;
 };
 
-// Built field by field rather than with braces: this struct has default member
-// initializers, and brace-initializing such a struct is a C++14 feature. The mod
-// is compiled by Windhawk's own toolchain, so it is not worth depending on.
 static RestoreFlags MakeRestoreFlags(bool restorePosition, bool restoreSize) {
-    RestoreFlags flags;
-    flags.restorePosition = restorePosition;
-    flags.restoreSize = restoreSize;
-    return flags;
+    return RestoreFlags{restorePosition, restoreSize};
 }
 
 // Composes the rectangle to apply from the remembered one and the window's own.
@@ -913,10 +876,10 @@ static std::wstring FormatRestoreFlags(const RestoreFlags& flags) {
 // from the screen coordinates every other rectangle in this mod uses by the
 // thickness of the taskbar when the taskbar sits on the top or left edge -- the
 // default on Windows 10, and reachable on Windows 11 with a taskbar mod. Storing it
-// unchanged (as r15 did) meant a window closed while maximized came back shifted by
-// that amount, and the next save read the already-shifted rectangle, so the window
-// drifted further on every maximize-and-reopen. The conversion is a no-op with a
-// bottom or right taskbar, which is why no field run on this machine could see it.
+// unchanged meant a window closed while maximized came back shifted by that amount,
+// and the next save read the already-shifted rectangle, so the window drifted
+// further on every maximize-and-reopen. The conversion is a no-op with a bottom or
+// right taskbar.
 static GeoRect PlacementRectToScreen(const GeoRect& rect, const GeoRect& monitor,
                                      const GeoRect& work) {
     const long dx = work.left - monitor.left;
@@ -924,12 +887,11 @@ static GeoRect PlacementRectToScreen(const GeoRect& rect, const GeoRect& monitor
     return {rect.left + dx, rect.top + dy, rect.right + dx, rect.bottom + dy};
 }
 
-// The store and the journal carry the signed-in user's SID in their names. A tool
+// The store and the journal live in a folder named for the signed-in user. A tool
 // mod runs one process per signed-in session, but Wh_GetModStoragePath is a single
-// machine-wide folder, so before this the store was shared: with two users signed
-// in (fast user switching) each session's flush replaced the other's data, and each
-// user's window titles were readable from the other session. The prefix before the
-// extension is unchanged, so the field script's search still finds the files.
+// machine-wide folder, so before the folder existed the store was shared: with two
+// users signed in (fast user switching) each session's flush replaced the other's
+// data, and each user's window titles were readable from the other session.
 // The text form of a security identifier, from its parts: "S-<revision>-<authority>"
 // followed by one "-<n>" per sub-authority, which is what the file names below are
 // built from.
@@ -941,11 +903,11 @@ static GeoRect PlacementRectToScreen(const GeoRect& rect, const GeoRect& monitor
 //
 // Written by hand rather than with ConvertSidToStringSidW on purpose, and not
 // because that function is out of reach: sddl.h is available to a mod (the
-// desktop-sticky-notes mod includes it). The reason is that everything below is
-// plain arithmetic over values the caller has already read, so the part that can
-// be wrong is a pure function with unit tests over it, and the one call the mod
-// would otherwise need is a call that has to be linked against a library the
-// rest of this file does not use.
+// desktop-sticky-notes mod includes it) and advapi32 is linked here anyway: the
+// token calls and the access control lists come from it. The reason is that
+// everything below is plain arithmetic over values the caller has already read, so
+// the half that can be wrong is a pure function with unit tests over it, rather
+// than a call that allocates a string the caller then has to free.
 //
 // Documented form note: an identifier authority larger than 32 bits is rendered in
 // hexadecimal by the SID documentation. A process token's authority is 5 on every
@@ -1059,8 +1021,8 @@ static void PruneStore(GeometryStore& store, long long now) {
 // Exact match first. If that misses -- most often because the title changed
 // between sessions -- the ordinal fallback matches on executable, class and
 // ordinal, and only when exactly one stored entry matches, so an ambiguous case
-// yields no restore rather than a wrong one. That is the M1 failure bias: miss a
-// few windows, never restore something wrong.
+// yields no restore rather than a wrong one. The bias is deliberate: miss a few
+// windows, never restore something wrong.
 static const StoredWindow* FindStoredWindowFor(const GeometryStore& store,
                                               const std::wstring& exePath,
                                               const std::wstring& className,
@@ -1714,7 +1676,7 @@ static SettleAction DecideMaximizeSettle(const MaximizeSettle& state) {
                                  : SettleAction::Maximize;
 }
 
-// --- Display-change relayout (M2) -------------------------------------------
+// --- Display-change relayout -------------------------------------------------
 //
 // The second trigger for moving a window: the monitor layout changed while the
 // window was already open. Restore-on-show returns a window to the geometry the
@@ -1724,7 +1686,7 @@ static SettleAction DecideMaximizeSettle(const MaximizeSettle& state) {
 // except the DPI it was saved at.
 //
 // Everything here is decided before a single Win32 call, and is unit-tested the
-// same way the M1 rules are.
+// same way the restore rules are.
 
 // Whether two monitor sets describe the same arrangement. Compared unordered, on
 // identity and pixel rect -- the two things the relayout decision itself depends
@@ -1894,8 +1856,8 @@ struct RelayoutPlan {
 };
 
 // The per-window decision, from the pre-change snapshot and the live monitor
-// set. The window's current rect is mapped with the same normalized mapping M1
-// uses when the configuration does not match, for position and for size.
+// set. The window's current rect is mapped with the same normalized mapping the
+// restore path uses when the configuration does not match, for position and size.
 static RelayoutPlan ComputeRelayoutPlan(const std::vector<MonitorView>& previous,
                                         const std::vector<MonitorView>& current,
                                         const GeoRect& currentRect) {
@@ -2006,7 +1968,7 @@ static RelayoutSkip DecideRelayoutSkip(const RelayoutPlan& plan,
     return RelayoutSkip::None;
 }
 
-// Carryover Item 1: what to do with the "this window's moves are refused" set.
+// What to do with the "this window's moves are refused" set.
 // A window whose move was refused by UIPI still gets a DESTROY-time save, and
 // that save replaces the geometry the user chose with wherever the window
 // happened to be -- wrong for every later session. One refusal must silence that
@@ -2067,11 +2029,13 @@ static void ToLowerInPlace(std::wstring& value) {
 static void LoadAllowlist() {
     g_allowlist.clear();
 
-    // Reads entries until the first empty one, which is also how the settings
-    // default (one empty template entry) ends up meaning "track nothing".
     for (int i = 0;; i++) {
+        // An entry with nothing in it ends the list. Wh_GetStringSetting never
+        // returns NULL: an entry that is not there comes back as an empty string,
+        // which is also how the settings template's empty first entry means
+        // "track nothing".
         PCWSTR exe = Wh_GetStringSetting(L"allowlist[%d].Exe", i);
-        if (!exe || !*exe) {
+        if (!*exe) {
             Wh_FreeStringSetting(exe);
             break;
         }
@@ -2201,7 +2165,7 @@ static bool ResolveIdentity(HWND hwnd, WindowIdentity& identity,
 
     // PROCESS_QUERY_LIMITED_INFORMATION succeeds across integrity levels, so
     // elevated apps resolve here. A failure means a protected process, which is
-    // out of scope for M0.
+    // out of scope for this mod.
     HANDLE process =
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
     if (!process) {
@@ -2243,8 +2207,8 @@ static bool ResolveIdentity(HWND hwnd, WindowIdentity& identity,
     }
 
     // A window with no title is not something a user opens, moves and closes:
-    // every scaffolding window observed in the M1 log (adapter, input site, GDI+
-    // hook) had an empty title, while every real window had one. A window whose
+    // every scaffolding window seen while this was written (adapter, input site,
+    // GDI+ hook) had an empty title, while every real window had one. A window whose
     // title arrives after it is shown is picked up later, on MOVESIZEEND.
     std::wstring title = NormalizeWindowTitle(GetWindowTitle(hwnd));
     if (title.empty()) {
@@ -2660,10 +2624,16 @@ static bool BuildPrivateAcl(const std::vector<BYTE>& userSid,
     return true;
 }
 
-// Whether this user owns the folder. An existing folder is only written into
-// when they do: the storage folder it lives in is writable by every account, so
-// another user could create this folder first with a list of their own, and every
-// file written inside would inherit it.
+// Whether an existing folder is safe to write into.
+//
+// This user owning it is the case to establish: the storage folder it lives in is
+// writable by every account, so another user could create this folder first with a
+// list of their own, and every file written inside would inherit it. SYSTEM and
+// administrators are accepted as well, because a tool process that runs elevated
+// creates objects owned by the Administrators group rather than by the account
+// (the token's default owner), and both of those identities already have full
+// control through the folder's own list and can take ownership of anything on the
+// volume anyway. Neither is a way in for another standard user.
 static bool FolderOwnerIsCurrentUser(const std::wstring& path,
                                      const std::vector<BYTE>& userSid) {
     DWORD needed = 0;
@@ -2690,8 +2660,10 @@ static bool FolderOwnerIsCurrentUser(const std::wstring& path,
         return false;
     }
 
-    return EqualSid(owner, reinterpret_cast<PSID>(
-                               const_cast<BYTE*>(userSid.data()))) != FALSE;
+    PSID user = reinterpret_cast<PSID>(const_cast<BYTE*>(userSid.data()));
+    return EqualSid(owner, user) != FALSE ||
+           IsWellKnownSid(owner, WinBuiltinAdministratorsSid) != FALSE ||
+           IsWellKnownSid(owner, WinLocalSystemSid) != FALSE;
 }
 
 // Creates this user's folder, with a protected access control list of its own.
@@ -2715,7 +2687,15 @@ static bool EnsurePrivateFolder(const std::wstring& path,
         // inherited from the shared storage folder would be merged into it, and
         // every user on the machine would be back in.
         !SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED,
-                                      SE_DACL_PROTECTED)) {
+                                      SE_DACL_PROTECTED) ||
+        // Named explicitly rather than left to the token's default owner, which is
+        // the Administrators group whenever the tool process runs elevated. The
+        // folder would then be owned by Administrators for the rest of the install,
+        // and the owner check below would refuse it on every later start.
+        !SetSecurityDescriptorOwner(
+            &descriptor,
+            reinterpret_cast<PSID>(const_cast<BYTE*>(userSid.data())),
+            FALSE)) {
         Wh_Log(L"[GEOM] could not build the private folder's security descriptor");
         return false;
     }
@@ -2952,7 +2932,7 @@ static bool g_diagnosticsLog = false;
 // once looked complete while the lines being looked for were missing from it, which
 // cost a round of diagnosis. It identifies a verified behaviour, not every text
 // revision, so a run can be tied to the field result it belongs to.
-static constexpr PCWSTR kJournalBuild = L"r21-2026-10-16";
+static constexpr PCWSTR kJournalBuild = L"r22-2026-10-16";
 
 // The journal flag has to be known before the store is loaded, because the load
 // itself journals a line. Reading it only in ApplySettingsOnEventThread -- which
@@ -3282,8 +3262,8 @@ static void StopSettleTimerIfIdle(HWND messageWindow) {
     }
 }
 
-// Arms the debounced relayout pass. Called from the WM_DISPLAYCHANGE handler and
-// from the test-only hook, never from a tick: this is a debounce, not a poll.
+// Arms the debounced relayout pass. Called from the WM_DISPLAYCHANGE handler,
+// never from a tick: this is a debounce, not a poll.
 // Same rule as the settle timer above -- the timer belongs to the mod's own
 // message window, because SetTimer requires a window owned by the calling thread.
 static void ArmRelayoutTimer() {
@@ -3523,7 +3503,7 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
     IssueApply(hwnd, identity, target, currentRect, maximize, monitor.pixelRect);
 }
 
-// --- Display-change relayout pass (M2) --------------------------------------
+// --- Display-change relayout pass -------------------------------------------
 
 // Walks every window the mod is currently tracking and moves the ones whose
 // monitor changed underneath them. Run only from the debounce timer, never from
@@ -3601,10 +3581,11 @@ static void RunRelayoutPass() {
 
         const MonitorView& targetMonitor = g_monitors[(size_t)plan.targetIndex];
 
-        // M1's clamp policy, with one deliberate difference: configurationChanged
-        // is false. The mapped rectangle already refers to a monitor that exists,
-        // so the only question left is whether the title bar is reachable -- and a
-        // window the user deliberately hung off an edge has to survive a rescue.
+        // The clamp policy the restore path uses, with one deliberate difference:
+        // configurationChanged is false. The mapped rectangle already refers to a
+        // monitor that exists, so the only question left is whether the title bar
+        // is reachable -- and a window the user deliberately hung off an edge has
+        // to survive a rescue.
         bool clamped = ShouldClampRect(plan.target, targetMonitor.workRect,
                                        /*configurationChanged=*/false);
         GeoRect target = plan.target;
@@ -3667,8 +3648,8 @@ static void RunRelayoutPass() {
         // The existing apply path, fed from a new trigger: same asynchronous
         // move, same settle tick, same single retry, same journalled verdict. A
         // maximized window can only reach here after losing its monitor, and is
-        // put back the way M1 restores a maximized window -- move first, maximize
-        // once the move has been seen to land.
+        // put back the way the restore path restores one: move first, maximize once
+        // the move has been seen to land.
         IssueApply(hwnd, identity, target, currentRect, subject.maximized,
                    targetMonitor.pixelRect);
     }
@@ -3710,7 +3691,7 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
         return;
     }
 
-    // Carryover Item 1. A window whose move was refused (an elevated target
+    // A window whose move was refused (an elevated target
     // under UIPI) must not have the position it happens to be sitting at
     // recorded as the user's choice: that is what makes the next launch open
     // there instead of where it was asked to be. Journaled rather than silently
@@ -4220,7 +4201,7 @@ static void InstallHooks() {
     // other from being installed on a later reload.
     // EVENT_OBJECT_CREATE (0x8000), EVENT_OBJECT_DESTROY (0x8001) and
     // EVENT_OBJECT_SHOW (0x8002). EVENT_OBJECT_LOCATIONCHANGE is deliberately
-    // not registered: it is a storm of events and, per the design brief, is a
+    // not registered: it is a storm of events, and the job it would do here is a
     // save trigger rather than something to log.
     if (!g_hookWindows) {
         g_hookWindows = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
