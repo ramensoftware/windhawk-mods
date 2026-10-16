@@ -9074,6 +9074,31 @@
         "version": "1.0"
       }
     },
+    "maximized-window-margins": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792134095000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792134095000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Mário Barbosa",
+        "compilerOptions": "-lshcore",
+        "description": "Leaves a configurable gap around maximized windows, macOS style, by shrinking the desktop work area",
+        "github": "https://github.com/mariogomesbarbosa",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Maximized Window Margins",
+        "version": "1.0"
+      }
+    },
     "menu-tooltip-slide-animation": {
       "details": {
         "defaultSorting": 11200,
