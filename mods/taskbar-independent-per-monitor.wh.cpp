@@ -2,16 +2,17 @@
 // @id              taskbar-independent-per-monitor
 // @name            Independent taskbar per monitor
 // @name:de-DE      Eigenständige Taskleiste pro Monitor
-// @description     Each taskbar shows only the windows of its own monitor and has its own pinned items (Windows 11 only)
-// @description:de-DE Jede Taskleiste zeigt nur die Fenster ihres Monitors und hat eigene angeheftete Apps (nur Windows 11)
-// @version         1.5.0
+// @description     Each taskbar shows only the windows of its own monitor and has its own pinned items
+// @description:de-DE Jede Taskleiste zeigt nur die Fenster ihres Monitors und hat eigene angeheftete Apps
+// @version         1.6.0
 // @author          2ndSky95
 // @github          https://github.com/2ndSky95
 // @license         MIT
 // @include         explorer.exe
 // @include         sihost.exe
+// @include         RuntimeBroker.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,9 +31,13 @@ Each taskbar behaves like its own main taskbar.
 * Pin *Properties* can differ per taskbar.
 * Clicking the pin of a running app brings its window to the front (Shift+click
   or middle-click starts a new instance).
+* Each taskbar keeps its own order of buttons, also after a restart. New windows
+  are added at the end.
+* Drag a pin to another taskbar to move it there.
 
-Requires Windows 11 and *Show my taskbar on all displays*. Tested with *Combine
-taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
+Requires Windows 10 or 11 and *Show my taskbar on all displays*. Tested with
+*Combine taskbar buttons: Never*. Not compatible with *Disable grouping on the
+taskbar*.
 */
 // ==/WindhawkModReadme==
 
@@ -77,6 +82,8 @@ taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
 - foregroundFix: true
   $name: Bring running apps to the front
   $name:de-DE: Laufende Apps nach vorn holen
+  $description: Clicking a pin brings the app's window to the front instead of starting it again. Middle-click or Shift+click starts a new window, e.g. a second Firefox window for another monitor
+  $description:de-DE: Klick auf einen Pin holt das Fenster der App nach vorn, statt sie neu zu starten. Mittelklick oder Umschalt+Klick startet ein neues Fenster, z. B. ein zweites Firefox-Fenster für einen anderen Monitor
 - focusScope: anyMonitor
   $name: Windows that are brought to the front
   $name:de-DE: Fenster, die nach vorn geholt werden
@@ -86,9 +93,14 @@ taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
   $options:de-DE:
   - anyMonitor: Fenster auf jedem Monitor
   - thisMonitor: Nur Fenster auf dem Monitor der Taskleiste
+- launchOnClickedMonitor: true
+  $name: Open apps on the monitor of the clicked taskbar
+  $name:de-DE: Apps auf dem Monitor der angeklickten Taskleiste öffnen
+  $description: When a pinned app opens its window on another monitor, it is moved to the monitor of the taskbar that was clicked
+  $description:de-DE: Öffnet eine angeheftete App ihr Fenster auf einem anderen Monitor, wird es auf den Monitor der angeklickten Taskleiste verschoben
 - slideAnimation: true
-  $name: Slide animation when a window moves to another monitor
-  $name:de-DE: Gleit-Animation beim Monitorwechsel
+  $name: Slide animation when a window moves to another monitor (Windows 11)
+  $name:de-DE: Gleit-Animation beim Monitorwechsel (Windows 11)
 - showAppsOnAllTaskbars: true
   $name: Show taskbar apps on all taskbars
   $name:de-DE: Taskleisten-Apps auf allen Taskleisten anzeigen
@@ -104,6 +116,7 @@ taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
 #include <propsys.h>
 #include <psapi.h>
 #include <appmodel.h>
+#include <uiautomation.h>
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
@@ -130,6 +143,7 @@ struct {
     bool pinsEverywhere;  // every pin on every taskbar (no per-taskbar pins)
     int windowMode;       // 0 = own monitor only, 1 = primary shows all, 2 = all taskbars
     bool focusThisMonitor;  // bring to front only windows on the clicked taskbar's monitor
+    bool launchOnClickedMonitor;  // move the window of an app launched from a pin to that taskbar's monitor
     std::vector<std::wstring> alwaysAll;  // lowercase exe names shown on all taskbars
     bool showAppsOnAllTaskbars;  // report MMTaskbarMode=0 to taskbar.dll (see RegGetValueW_hook)
     std::vector<PinRule> rules;
@@ -542,7 +556,10 @@ static MonSelf_t GetMonitor_orig;
 using TaskCreatedInt_t = HRESULT (*)(void*, void*, void*, int);
 static TaskCreatedInt_t TaskCreatedInt_orig;
 static TaskCreated_t TaskIncl_orig;
-static TaskCreated_t TaskDestroyed_orig;
+// Windows 10 has a flags parameter (0 for a normal removal), Windows 11 ignores it
+using TaskDestroyed_t = HRESULT (*)(void*, void*, void*, int);
+static TaskDestroyed_t TaskDestroyed_orig;
+static bool g_win10 = false;  // no taskbar.dll: the taskbar code is in explorer.exe
 
 static std::mutex g_mx;
 static std::set<void*> g_bars;                 // tl pointers of all taskbars
@@ -566,6 +583,12 @@ static const UINT kMsgSync = WM_APP + 0x52;  // posted: re-apply all pins on the
 static const UINT_PTR kReevalTimerId = 1;
 static const UINT_PTR kApplyTimerId = 2;
 static const UINT_PTR kSyncTimerId = 3;
+static const UINT_PTR kOrderTimerId = 7;  // re-apply the pin order of each taskbar
+static const UINT_PTR kDragImageTimerId = 8;  // drag image follows the mouse
+static void DragImageTimerProc();
+static void DestroyDragImage();
+static void CreateDragImage(void* g, HMONITOR from);
+static void OrderTimerProc();
 static void SyncTimerProc();
 static void SyncAll();
 static const ULONG_PTR kCopyUnpinOne = 0x534B5031;  // WM_COPYDATA from the jump list ("SKP1")
@@ -579,6 +602,8 @@ static DWORD g_jumpTick = 0;
 static void* g_fakeGroup = nullptr;  // jump list showed "Pin" although pinned globally (AddRef)
 static std::wstring g_swallowAddKey;
 static DWORD g_swallowAddTick = 0;
+static std::wstring g_swallowRemoveKey;
+static DWORD g_swallowRemoveTick = 0;
 
 // Window handle of a button even if the window is already destroyed (for cleanup) - only if it
 // is definitely a CWindowTaskItem or a CImmersiveTaskItem (UWP apps such as Settings)
@@ -738,11 +763,15 @@ static DWORD g_swapHideTick = 0;  // plus: old button without exit animation
 
 static bool AddBar(void* tl);
 
+static void CheckLaunched(HWND h, void* g);
 static HRESULT TaskCreated_hook(void* self, void* g, void* item) {
     if (!g_unloading && !g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureMsgWnd();  // taskbar thread only
     if (!AddBar(self)) return TaskCreated_orig(self, g, item);  // unknown layout: don't filter
     if (item && g) {
-        if (HWND h = ItemWindow(item)) TrackWindow(h, g);
+        if (HWND h = ItemWindow(item)) {
+            TrackWindow(h, g);
+            CheckLaunched(h, g);
+        }
     }
     // Don't pass on a pin without a window that isn't allowed here at all.
     // Otherwise TaskCreated creates a button group itself and reports it to the XAML taskbar
@@ -870,6 +899,7 @@ static bool ItemOnBar(void* tl, void* g, HWND h) {
     return false;
 }
 
+static void QueueApply(void* g);
 static int PruneForeignItems(void* tl, void* g) {
     if (!pBtnGetNumItems || !pBtnGetTaskItem) return 0;
     HMONITOR bar = GetMonitor_orig(tl);
@@ -887,7 +917,7 @@ static int PruneForeignItems(void* tl, void* g) {
     }
     for (auto& [it, h] : foreign) {
         if (Pinned(g) && ShouldShow(tl, g, nullptr)) g_swapTick = g_swapHideTick = GetTickCount();  // pin stays here
-        TaskDestroyed_orig(tl, g, it);
+        TaskDestroyed_orig(tl, g, it, 0);
         std::lock_guard<std::mutex> l(g_mx);
         auto f = g_wins.find(h);
         if (f != g_wins.end()) f->second.bars.erase(bar);
@@ -895,6 +925,8 @@ static int PruneForeignItems(void* tl, void* g) {
     if (!foreign.empty())
         Wh_Log(L"-> Monitor %d: removed %d foreign window(s) (of %d) %.40ls", MonNumber(bar), (int)foreign.size(),
              cnt, AppOf(g));
+    // Windows 10 turns the removed buttons of a pinned app into pins only afterwards
+    if (g_win10 && !foreign.empty() && Pinned(g)) QueueApply(g);
     return (int)foreign.size();
 }
 // Check deferred: the visible taskbar (XAML) processes the insertion a bit later - removing
@@ -1008,17 +1040,20 @@ static HRESULT TaskIncl_hook(void* self, void* g, void* item) {
 static bool Pinned(void* g);
 static void RemovePinButton(void* tl, void* g);
 static bool OtherWindowOnBar(void* tl, void* g, HWND exclude);
+static void QueueApply(void* g);
 
-static HRESULT TaskDestroyed_hook(void* self, void* g, void* item) {
+static HRESULT TaskDestroyed_hook(void* self, void* g, void* item, int flags) {
     HWND h = ItemWindowRaw(item);  // the window may already be destroyed
     if (h) UntrackWindow(h);
     if (item && g && Pinned(g) && ShouldShow(self, g, nullptr)) g_swapTick = g_swapHideTick = GetTickCount();
-    HRESULT hr = TaskDestroyed_orig(self, g, item);
+    HRESULT hr = TaskDestroyed_orig(self, g, item, flags);
     // Last window of a pinned app closed -> Windows turns it into a pin.
     // Remove it again on taskbars where the pin isn't allowed.
     if (item && g && Pinned(g) && !ShouldShow(self, g, nullptr) &&
         !OtherWindowOnBar(self, g, h)) {
         RemovePinButton(self, g);
+        // Windows 10 turns the button into a pin only after this call: check again afterwards
+        if (g_win10) QueueApply(g);
     }
     return hr;
 }
@@ -1029,20 +1064,20 @@ static HRESULT TaskDestroyed_hook(void* self, void* g, void* item) {
 // Exception: a freshly pinned app on the primary taskbar - Windows must be allowed to
 // create the group there while reading the pins, otherwise it unpins it immediately
 // (_EnumPinnedItems). The follow-up (ApplyPinRule) removes the button afterwards.
+static int OrderedPos(void* tl, void* g, int pos);
 using SetOrder_t = void (*)(void*, void*, int);
 static SetOrder_t SetOrder_orig;
 static void SetOrder_hook(void* self, void* g, int pos) {
     if (g && pGetTBGroup && pGroupGetFlags && (pGroupGetFlags(g) & 0x1)) {
-        void* tl = nullptr;
-        {
-            std::lock_guard<std::mutex> l(g_mx);
-            if (g_bars.count(self)) tl = self;
-            else if (g_bars.count((char*)self + 0x28)) tl = (char*)self + 0x28;
-        }
+        void* tl = BarOf(self);
         if (tl && !ShouldShow(tl, g, nullptr)) {
             int i = -1;
             if (!pGetTBGroup((char*)tl - 0x28, g, &i)) return;
         }
+        // Windows 11 moves the button right away (after every change of the pin list, on every
+        // taskbar): put it at its place in this taskbar's own order instead of the global one.
+        // (Windows 10 only stores the value per app there, the sorting maps it.)
+        if (tl && !g_win10 && !g_s.pinsEverywhere) pos = OrderedPos(tl, g, pos);
     }
     SetOrder_orig(self, g, pos);
 }
@@ -1069,7 +1104,7 @@ static void RemovePinButton(void* tl, void* g) {
     struct Guard { Guard() { g_selfFlag = true; } ~Guard() { g_selfFlag = false; } } guard;
     bool was = Pinned(g);
     if (was && pGroupUpdateFlags) pGroupUpdateFlags(g, 0x1, 0);  // UpdateFlags(mask, value)
-    TaskDestroyed_orig(tl, g, nullptr);
+    TaskDestroyed_orig(tl, g, nullptr, 0);
     if (was && !Pinned(g) && pGroupUpdateFlags) pGroupUpdateFlags(g, 0x1, 0x1);
 }
 
@@ -1107,22 +1142,27 @@ static void ReevalWindow(HWND h, void* g, const std::set<void*>& bars) {
     int removed = 0, added = 0;
     for (void* tl : bars) {
         HMONITOR bm = GetMonitor_orig(tl);
+        // Windows 10: ask the taskbar itself - the remembered taskbars can be out of date there
+        // (e.g. after the monitors changed), then the button wouldn't be created again
+        bool has = g_win10 ? ItemOnBar(tl, g, h) : on.count(bm) != 0;
         if (WinAllowed(h, now, bm)) {
             allowed.insert(bm);
-            if (!on.count(bm)) { CreateOnBar((char*)tl - 0x28, g, item, 1); added++; }
-        } else if (!known || on.count(bm)) {
+            if (!has) { CreateOnBar((char*)tl - 0x28, g, item, 1); added++; }
+        } else if (!known || has) {
             if (pinned && ShouldShow(tl, g, nullptr)) g_swapTick = g_swapHideTick = GetTickCount();
             // remove the item that's actually on this taskbar (GetItemFromWindow may return
             // another object); without the button group list, fall back to the group's item
             std::vector<void*> onBar = ItemsOfWindowOnBar(tl, g, h);
             if (onBar.empty() && (g_dpaOffset <= 0 || !pBtnGetNumItems)) onBar.push_back(item);
-            for (void* it : onBar) TaskDestroyed_orig(tl, g, it);
+            for (void* it : onBar) TaskDestroyed_orig(tl, g, it, 0);
             if (pinned && !ShouldShow(tl, g, nullptr) && !OtherWindowOnBar(tl, g, h))
                 RemovePinButton(tl, g);
             removed++;
         }
     }
     ReleaseItem(item);
+    // Windows 10 turns a removed window button of a pinned app into a pin only afterwards
+    if (g_win10 && pinned && removed) QueueApply(g);
     Wh_Log(L"-> Window on monitor %d: removed from %d taskbar(s), created on %d", MonNumber(now), removed, added);
     std::lock_guard<std::mutex> l(g_mx);
     auto it = g_wins.find(h);
@@ -1193,10 +1233,9 @@ static void FrameTimerProc() {
 
 // Windows reports a monitor change itself before it shows the button on the new taskbar:
 // remember the direction for the sideways slide-in and re-evaluate the window
-using MonChanged_t = void (*)(void*, HWND);
-static MonChanged_t MonChanged_orig;
-static void MonChanged_hook(void* self, HWND h) {
-    HMONITOR now = h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
+// Before the original: remember the new monitor (and the direction). true = the window moved.
+static bool NoteMove(HWND h, HMONITOR& now) {
+    now = h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
     HMONITOR old = nullptr;
     bool moved = false;
     if (now) {
@@ -1213,13 +1252,36 @@ static void MonChanged_hook(void* self, HWND h) {
         g_moveDir = b.rcMonitor.left > a.rcMonitor.left ? 1 : -1;
         g_moveTick = GetTickCount();
     }
-    MonChanged_orig(self, h);
-    if (moved && !g_unloading) {
-        QueueReeval(h);
-        Wh_Log(L"-> Window %p moved to monitor %d", (void*)h, MonNumber(now));
-    }
+    return moved;
 }
 
+static void AfterMove(HWND h, HMONITOR now) {
+    if (g_unloading) return;
+    QueueReeval(h);
+    Wh_Log(L"-> Window %p moved to monitor %d", (void*)h, MonNumber(now));
+}
+
+using MonChanged_t = void (*)(void*, HWND);
+static MonChanged_t MonChanged_orig;
+static void MonChanged_hook(void* self, HWND h) {
+    HMONITOR now;
+    bool moved = NoteMove(h, now);
+    MonChanged_orig(self, h);
+    if (moved) AfterMove(h, now);
+}
+
+// Windows 10: CTaskBand::_HandleMonitorChanged(ITaskGroup*, ITaskItem*)
+using MonChanged10_t = void (*)(void*, void*, void*);
+static MonChanged10_t MonChanged10_orig;
+static void MonChanged10_hook(void* self, void* g, void* item) {
+    HWND h = ItemWindow(item);
+    HMONITOR now;
+    bool moved = NoteMove(h, now);
+    MonChanged10_orig(self, g, item);
+    if (moved) AfterMove(h, now);
+}
+
+static void* g_dragGroup = nullptr;  // pinned group being dragged to another taskbar (AddRef)
 static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_TIMER && wp == kReevalTimerId) {
         ReevalTimerProc();
@@ -1235,6 +1297,14 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     if (msg == WM_TIMER && wp == kSyncTimerId) {
         SyncTimerProc();
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == kDragImageTimerId) {
+        DragImageTimerProc();
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == kOrderTimerId) {
+        OrderTimerProc();
         return 0;
     }
     if (msg == WM_TIMER && wp == kApplyTimerId) {
@@ -1276,6 +1346,12 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(h, kSyncTimerId);
         KillTimer(h, kPruneTimerId);
         KillTimer(h, kFrameTimerId);
+        KillTimer(h, kOrderTimerId);
+        DestroyDragImage();
+        if (g_dragGroup) {
+            ((IUnknown*)g_dragGroup)->Release();
+            g_dragGroup = nullptr;
+        }
         g_frameTimer = false;
         ReleasePrune();
         ReleasePending();
@@ -1432,6 +1508,7 @@ static void QueueApply(void* g) {
 }
 
 static std::wstring g_newPinKey;
+static bool g_orderAfterApply = false;  // a pin got a place: sort the taskbars once its button is there
 
 static void ApplyTimerProc() {
     KillTimer(g_msgWnd, kApplyTimerId);
@@ -1442,6 +1519,10 @@ static void ApplyTimerProc() {
     for (void* g : v) {
         ApplyPinRule(g);
         ((IUnknown*)g)->Release();
+    }
+    if (g_orderAfterApply) {
+        g_orderAfterApply = false;
+        SetTimer(g_msgWnd, kOrderTimerId, 100, nullptr);
     }
 }
 
@@ -1582,6 +1663,728 @@ static void GroupsOfBar(void* tl, std::set<void*>& groups) {
 }
 
 
+// ---------- Button order per taskbar
+// Windows keeps ONE order for all apps: sorting on one taskbar changes it on all of them, after a
+// restart every taskbar shows the global order again, and an app that had a button before shows up
+// at its old place. The mod remembers the order of each taskbar ("pinOrder" = "n|entry>entry>...;",
+// pins and window buttons) and sorts the taskbar by it. New buttons go to the end.
+
+static std::wstring KeyOf(void* g);
+static std::mutex g_orderMx;
+static std::map<int, std::vector<std::wstring>> g_pinOrder;
+static bool g_orderLoaded = false;
+
+static void LoadPinOrderLocked() {
+    if (g_orderLoaded) return;
+    g_orderLoaded = true;
+    std::vector<wchar_t> buf(32768);
+    Wh_GetStringValue(L"pinOrder", buf.data(), buf.size());
+    std::wstring s = buf.data();
+    for (size_t pos = 0; pos < s.size();) {
+        size_t end = s.find(L';', pos);
+        if (end == std::wstring::npos) end = s.size();
+        std::wstring e = s.substr(pos, end - pos);
+        pos = end + 1;
+        size_t sep = e.find(L'|');
+        int n = _wtoi(e.c_str());
+        if (sep == std::wstring::npos || n < 1 || n > kMaxMon) continue;
+        std::vector<std::wstring> keys;
+        for (size_t p = sep + 1; p < e.size();) {
+            size_t q = e.find(L'>', p);
+            if (q == std::wstring::npos) q = e.size();
+            if (q > p) keys.push_back(e.substr(p, q - p));
+            p = q + 1;
+        }
+        g_pinOrder[n] = keys;
+    }
+}
+
+static void SavePinOrderLocked() {
+    std::wstring out;
+    for (auto& [n, keys] : g_pinOrder) {
+        out += std::to_wstring(n) + L"|";
+        for (size_t i = 0; i < keys.size(); i++) out += (i ? L">" : L"") + keys[i];
+        out += L";";
+    }
+    Wh_SetStringValue(L"pinOrder", out.c_str());
+}
+
+// Groups of a taskbar in their visual order (the button group list as Windows keeps it), without a
+// reference
+static std::vector<void*> BarGroups(void* tl) {
+    std::vector<void*> r;
+    if (g_dpaOffset <= 0 || !g_tb || !pGroupVft) return r;
+    char* dpa = *(char**)((char*)tl + g_dpaOffset);
+    if (!dpa || !Readable(dpa, 0x10)) return r;
+    int cnt = *(int*)dpa;
+    void** pp = *(void***)(dpa + 0x08);
+    if (cnt <= 0 || cnt > 2000 || !pp || !Readable(pp, cnt * sizeof(void*))) return r;
+    MODULEINFO mi{};
+    GetModuleInformation(GetCurrentProcess(), g_tb, &mi, sizeof(mi));
+    char* lo = (char*)mi.lpBaseOfDll;
+    char* hi = lo + mi.SizeOfImage;
+    for (int k = 0; k < cnt; k++) {
+        void* tbg = pp[k];
+        if (!tbg || !Readable(tbg, 8)) continue;
+        void** vt = *(void***)tbg;
+        if ((char*)vt < lo || (char*)vt >= hi || !Readable(vt, 7 * sizeof(void*))) continue;
+        auto getGroup = (void* (*)(void*))vt[6];
+        if ((char*)getGroup < lo || (char*)getGroup >= hi) continue;
+        void* g = getGroup(tbg);
+        if (g && Readable(g, sizeof(void*)) && *(void**)g == pGroupVft &&
+            std::find(r.begin(), r.end(), g) == r.end())
+            r.push_back(g);
+    }
+    return r;
+}
+
+// Entry of a group in the order of a taskbar: the app, "~app" for a window button of an app that
+// isn't pinned on this taskbar (forgotten when it's gone - opened again, it goes to the end)
+static bool ShouldShow(void* tl, void* g, void* item);
+static bool PinnedOn(void* tl, void* g) { return Pinned(g) && ShouldShow(tl, g, nullptr); }
+static std::wstring EntryOf(void* tl, void* g) { return (PinnedOn(tl, g) ? L"" : L"~") + KeyOf(g); }
+
+static std::vector<std::wstring> BarEntries(void* tl) {
+    std::vector<std::wstring> r;
+    for (void* g : BarGroups(tl)) r.push_back(EntryOf(tl, g));
+    return r;
+}
+
+// Place of a group in the order of taskbar tl (an app pinned or unpinned there while it has a window
+// keeps its place)
+static int RankIn(const std::vector<std::wstring>& v, void* g) {
+    std::wstring k = KeyOf(g);
+    for (size_t i = 0; i < v.size(); i++)
+        if (v[i] == k || (v[i].size() == k.size() + 1 && v[i][0] == L'~' && v[i].compare(1, k.size(), k) == 0))
+            return (int)i;
+    return -1;
+}
+
+// Bring the order of a taskbar up to date: buttons without a place follow at the end (in their
+// current order), window buttons that are gone are forgotten. Returns whether a pin's entry changed.
+static bool SyncOrderLocked(void* tl, std::vector<std::wstring>& v) {
+    std::vector<void*> groups = BarGroups(tl);
+    std::set<std::wstring> here;
+    bool changed = false;
+    for (void* g : groups) {
+        std::wstring e = EntryOf(tl, g);
+        here.insert(e);
+        int r = RankIn(v, g);
+        if (r < 0) {
+            v.push_back(e);
+            changed |= e[0] != L'~';
+        } else if (v[r] != e) {
+            v[r] = e;  // pinned or unpinned in the meantime
+            changed = true;
+        }
+    }
+    std::erase_if(v, [&](const std::wstring& e) { return e[0] == L'~' && !here.count(e); });
+    return changed;
+}
+
+// Remember a pin at a place of a taskbar (index = place in its button list, e.g. where it was
+// dropped): it follows the buttons in front of that place
+static void* GroupAtIndex(void* tl, int i);
+static void PlacePin(void* tl, const std::wstring& key, int index) {
+    int mon = tl ? MonNumber(GetMonitor_orig(tl)) : 0;
+    if (mon < 1 || key.empty() || index < 0 || g_s.pinsEverywhere) return;
+    std::vector<std::wstring> front;
+    char* dpa = g_dpaOffset > 0 ? *(char**)((char*)tl + g_dpaOffset) : nullptr;
+    int cnt = dpa && Readable(dpa, 0x10) ? *(int*)dpa : 0;
+    for (int i = 0; i < std::min(index, cnt); i++) {
+        void* g = GroupAtIndex(tl, i);
+        if (g && KeyOf(g) != key) front.push_back(EntryOf(tl, g));
+    }
+    std::lock_guard<std::mutex> l(g_orderMx);
+    LoadPinOrderLocked();
+    auto& v = g_pinOrder[mon];
+    SyncOrderLocked(tl, v);
+    std::erase(v, key);
+    std::erase(v, L"~" + key);
+    size_t at = 0;
+    for (auto& k : front) {
+        auto f = std::find(v.begin(), v.end(), k);
+        if (f != v.end()) at = std::max(at, (size_t)(f - v.begin()) + 1);
+    }
+    v.insert(v.begin() + at, key);
+    SavePinOrderLocked();
+    g_orderAfterApply = true;
+    Wh_Log(L"-> Pin placed at position %d on monitor %d: %ls", (int)at + 1, mon, key.c_str());
+}
+
+static int OrderedPos(void* tl, void* g, int pos) {
+    int mon = MonNumber(GetMonitor_orig(tl));
+    std::lock_guard<std::mutex> l(g_orderMx);
+    LoadPinOrderLocked();
+    auto it = g_pinOrder.find(mon);
+    if (it == g_pinOrder.end() || it->second.empty()) return pos;
+    int r = RankIn(it->second, g);
+    return r >= 0 ? r : (int)it->second.size() + pos;
+}
+
+// A taskbar sorts its buttons by CTaskGroup::GetVisualOrder - one value per app, the same on every
+// taskbar. While a taskbar sorts (UpdateVisualTaskOrder), its buttons get values that follow the order
+// remembered for this taskbar: pins and window buttons keep their places, new ones go to the end.
+using GetVisualOrder_t = int (*)(void*);
+static GetVisualOrder_t GetVisualOrder_orig;
+static std::map<void*, int>* g_visualMap = nullptr;  // only while a taskbar sorts, on its thread
+static DWORD g_visualThread = 0;
+static int GetVisualOrder_hook(void* g) {
+    if (g_visualMap && g_visualThread == GetCurrentThreadId()) {
+        auto it = g_visualMap->find(g);
+        if (it != g_visualMap->end()) return it->second;
+    }
+    return GetVisualOrder_orig(g);
+}
+
+static void* g_sortingBar = nullptr;  // taskbar on which the user drags a button right now
+static DWORD g_sortingTick = 0;
+
+// Values for the buttons of a taskbar while it sorts: their places in its order (Windows 11 only
+// gives values to buttons of the primary taskbar, -1 elsewhere)
+static void BuildVisualMap(void* tl, std::map<void*, int>& m) {
+    int mon = tl ? MonNumber(GetMonitor_orig(tl)) : 0;
+    if (mon < 1 || !GetVisualOrder_orig || g_s.pinsEverywhere || g_visualMap) return;
+    if (tl == g_sortingBar && GetTickCount() - g_sortingTick < 60000) {
+        // The user drags a button there: Windows moves it itself, its order stays as it is meanwhile
+        // (saved when the drag ends)
+        int k = 0;
+        for (void* g : BarGroups(tl)) m[g] = k++ - 10000;
+        return;
+    }
+    std::lock_guard<std::mutex> l(g_orderMx);
+    LoadPinOrderLocked();
+    auto& v = g_pinOrder[mon];
+    if (SyncOrderLocked(tl, v)) SavePinOrderLocked();
+    for (void* g : BarGroups(tl)) m[g] = RankIn(v, g) - 10000;
+}
+
+// Windows 10: UpdateVisualTaskOrder() sorts the buttons of the taskbar
+using UpdateVisual_t = void (*)(void*);
+static UpdateVisual_t UpdateVisual_orig;
+static void UpdateVisual_hook(void* self) {
+    std::map<void*, int> m;
+    BuildVisualMap(BarOf(self), m);
+    bool own = !m.empty();
+    if (own) {
+        g_visualThread = GetCurrentThreadId();
+        g_visualMap = &m;
+    }
+    UpdateVisual_orig(self);
+    if (own) g_visualMap = nullptr;
+}
+
+// Windows 11: UpdateVisualTaskOrder(group, order) sorts and moves the group in the XAML taskbar
+using UpdateVisual11_t = void (*)(void*, void*, int);
+static UpdateVisual11_t UpdateVisual11_orig;
+static void UpdateVisual11_hook(void* self, void* g, int order) {
+    std::map<void*, int> m;
+    BuildVisualMap(BarOf(self), m);
+    bool own = !m.empty();
+    if (own) {
+        g_visualThread = GetCurrentThreadId();
+        g_visualMap = &m;
+    }
+    UpdateVisual11_orig(self, g, order);
+    if (own) g_visualMap = nullptr;
+}
+
+// A new button on a taskbar: Windows inserts it at the place of its app in the global order (an app
+// that had a button before can show up in front). It's put at its place in this taskbar's order right
+// away instead - a new window button at the end - so nothing has to be sorted afterwards.
+using CreateTBGroup_t = void* (*)(void*, void*, int);
+static CreateTBGroup_t CreateTBGroup_orig;
+static void* CreateTBGroup_hook(void* self, void* g, int index) {
+    void* tl = BarOf(self);
+    int mon = tl ? MonNumber(GetMonitor_orig(tl)) : 0;
+    if (mon >= 1 && g && index >= 0 && !g_s.pinsEverywhere) {
+        std::vector<void*> groups = BarGroups(tl);
+        std::lock_guard<std::mutex> l(g_orderMx);
+        LoadPinOrderLocked();
+        auto& v = g_pinOrder[mon];
+        if (!PinnedOn(tl, g)) std::erase(v, KeyOf(g));  // not pinned here (any more): a new window goes to the end
+        SyncOrderLocked(tl, v);
+        int r = RankIn(v, g);
+        if (r < 0) {
+            v.push_back(EntryOf(tl, g));
+            r = (int)v.size() - 1;
+        }
+        int at = 0;
+        for (void* x : groups) at += x != g && RankIn(v, x) < r;
+        index = at;
+    }
+    return CreateTBGroup_orig(self, g, index);
+}
+
+// Put the buttons of a taskbar into its remembered order (after the startup sync)
+static void ApplyPinOrder(void* tl) {
+    if (!GetVisualOrder_orig || g_s.pinsEverywhere) return;
+    if (UpdateVisual_orig) {
+        UpdateVisual_hook(tl);
+    } else if (UpdateVisual11_orig) {
+        for (void* g : BarGroups(tl)) UpdateVisual11_hook(tl, g, GetVisualOrder_orig(g));
+    }
+}
+
+// The user sorted the buttons of a taskbar: remember its order. The other taskbars keep theirs
+// (without a remembered order they get a snapshot first).
+static void SaveBarOrder(void* tl) {
+    int n = tl ? MonNumber(GetMonitor_orig(tl)) : 0;
+    if (n < 1 || g_s.pinsEverywhere) return;
+    std::set<void*> bars;
+    {
+        std::lock_guard<std::mutex> l(g_mx);
+        bars = g_bars;
+    }
+    std::lock_guard<std::mutex> l(g_orderMx);
+    LoadPinOrderLocked();
+    for (void* b : bars) {
+        int bn = b != tl ? MonNumber(GetMonitor_orig(b)) : 0;
+        if (bn >= 1 && !g_pinOrder.count(bn)) g_pinOrder[bn] = BarEntries(b);
+    }
+    g_pinOrder[n] = BarEntries(tl);
+    SavePinOrderLocked();
+    Wh_Log(L"-> Order of monitor %d saved (%d buttons)", n, (int)g_pinOrder[n].size());
+}
+
+// ---------- Move a pin to another taskbar by dragging it there (Windows 10)
+// The taskbar drags its buttons itself (_StartDragGroup ... _FinishDragGroup, with mouse capture, so
+// the end is reported even outside of it). Released over another taskbar: the pin moves there.
+
+// Group of a button group (ITaskBtnGroup::GetGroup = vtable[6], as Windows calls it; no reference)
+static void* GroupOfBtnGroup(void* tbg) {
+    MODULEINFO mi{};
+    if (!tbg || !g_tb || !Readable(tbg, 8) || !GetModuleInformation(GetCurrentProcess(), g_tb, &mi, sizeof(mi)))
+        return nullptr;
+    char* lo = (char*)mi.lpBaseOfDll;
+    char* hi = lo + mi.SizeOfImage;
+    void** vt = *(void***)tbg;
+    if ((char*)vt < lo || (char*)vt >= hi || !Readable(vt, 7 * sizeof(void*))) return nullptr;
+    auto getGroup = (void* (*)(void*))vt[6];
+    if ((char*)getGroup < lo || (char*)getGroup >= hi) return nullptr;
+    void* g = getGroup(tbg);
+    return g && Readable(g, sizeof(void*)) && *(void**)g == pGroupVft ? g : nullptr;
+}
+
+// Group of the button group at index i of a taskbar (no reference)
+static void* GroupAtIndex(void* tl, int i) {
+    if (g_dpaOffset <= 0 || i < 0) return nullptr;
+    char* dpa = *(char**)((char*)tl + g_dpaOffset);
+    if (!dpa || !Readable(dpa, 0x10)) return nullptr;
+    int cnt = *(int*)dpa;
+    void** pp = *(void***)(dpa + 0x08);
+    if (i >= cnt || cnt > 2000 || !pp || !Readable(pp + i, sizeof(void*))) return nullptr;
+    return GroupOfBtnGroup(pp[i]);
+}
+
+// Windows 10: the hit test counts the entries of the buttons - a button with windows has one for itself
+// and one per window, a pin without a window one. Place in the button list of the entry at place task.
+static int GroupIndexOfTask(void* tl, int task) {
+    if (g_dpaOffset <= 0 || task < 0 || !pBtnGetNumItems) return -1;
+    char* dpa = *(char**)((char*)tl + g_dpaOffset);
+    if (!dpa || !Readable(dpa, 0x10)) return -1;
+    int cnt = *(int*)dpa;
+    void** pp = *(void***)(dpa + 0x08);
+    if (cnt < 0 || cnt > 2000 || !pp || !Readable(pp, cnt * sizeof(void*))) return -1;
+    for (int k = 0; k < cnt; k++) {
+        int items = GroupOfBtnGroup(pp[k]) ? pBtnGetNumItems(pp[k]) : 0;
+        int n = items > 0 ? items + 1 : 1;
+        if (task < n) return k;
+        task -= n;
+    }
+    return cnt;
+}
+
+// Monitor of the taskbar at the point (nullptr if there's none). By the taskbar window's rectangle:
+// with styled (shortened) taskbars the window under the point can be the desktop.
+struct TrayAt {
+    POINT pt;
+    HMONITOR mon;
+    HWND h;
+};
+static BOOL CALLBACK TrayAtProc(HWND h, LPARAM lp) {
+    auto* t = (TrayAt*)lp;
+    wchar_t cls[64];
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    RECT r;
+    if (pid == GetCurrentProcessId() && GetClassNameW(h, cls, ARRAYSIZE(cls)) &&
+        (!wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd")) && IsWindowVisible(h) &&
+        GetWindowRect(h, &r) && PtInRect(&r, t->pt)) {
+        t->mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        t->h = h;
+        return FALSE;
+    }
+    return TRUE;
+}
+static void ReadButtonsAsync(HWND tray);
+static int ButtonIndexAt(HWND tray, POINT pt);
+static HMONITOR TaskbarMonitorAt(POINT pt) {
+    TrayAt t{pt, nullptr, nullptr};
+    EnumWindows(TrayAtProc, (LPARAM)&t);
+    return t.mon;
+}
+
+static void* g_dragFrom = nullptr;   // its taskbar
+
+// CTaskListWnd::TaskIndexHitTest: button at a point of the taskbar (client coordinates). Its "this"
+// is the interface at object + 0x40 (Windows 10: "add rcx,-40h" at its start, checked at hook time).
+static int (*pTaskIndexHitTest)(void*, const POINT*) = nullptr;
+
+using StartDrag_t = void (*)(void*, int, int);
+static StartDrag_t StartDrag_orig;
+static void StartDrag_hook(void* self, int x, int y) {
+    if (g_dragGroup) ((IUnknown*)g_dragGroup)->Release();
+    g_dragGroup = nullptr;
+    g_dragFrom = BarOf(self);
+    g_sortingBar = g_dragFrom;
+    g_sortingTick = GetTickCount();
+    void* g = nullptr;
+    if (g_dragFrom && pTaskIndexHitTest) {
+        POINT p{x, y};
+        int i = pTaskIndexHitTest((char*)g_dragFrom - 0x28 + 0x40, &p);
+        g = GroupAtIndex(g_dragFrom, GroupIndexOfTask(g_dragFrom, i));
+    }
+    if (g && PinnedOn(g_dragFrom, g)) {
+        ((IUnknown*)g)->AddRef();
+        g_dragGroup = g;
+        CreateDragImage(g, g_dragFrom ? GetMonitor_orig(g_dragFrom) : nullptr);
+    }
+    StartDrag_orig(self, x, y);
+}
+
+static void SetRule(const std::wstring& key, unsigned m);
+static unsigned MaskOf(void* g);
+
+// ---------- Drag image: while a pin is dragged outside of its taskbar, its icon follows the mouse
+// (the taskbar only draws the drag within itself)
+static std::wstring GroupLinkPath(void* g);
+static HMONITOR TaskbarMonitorAt(POINT pt);
+static HWND g_dragImg = nullptr;
+static HMONITOR g_dragImgFrom = nullptr;
+static const int kDragImgSize = 48;
+static const wchar_t kDragImgClass[] = L"TaskbarIndependentPerMonitorDragImage";
+
+// Icon of a pinned app: from its shortcut, or from the Apps folder by app ID (packaged apps)
+static HBITMAP GroupIcon(void* g) {
+    IShellItemImageFactory* f = nullptr;
+    std::wstring lnk = GroupLinkPath(g);
+    if (!lnk.empty()) SHCreateItemFromParsingName(lnk.c_str(), nullptr, IID_PPV_ARGS(&f));
+    PCWSTR id = pGroupGetAppID ? pGroupGetAppID(g) : nullptr;
+    if (!f && id) {
+        std::wstring p = std::wstring(L"shell:AppsFolder\\") + id;
+        SHCreateItemFromParsingName(p.c_str(), nullptr, IID_PPV_ARGS(&f));
+    }
+    HBITMAP bmp = nullptr;
+    if (f) {
+        f->GetImage(SIZE{kDragImgSize, kDragImgSize}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bmp);
+        f->Release();
+    }
+    return bmp;
+}
+
+static void DestroyDragImage() {
+    if (g_msgWnd) KillTimer(g_msgWnd, kDragImageTimerId);
+    if (g_dragImg) DestroyWindow(g_dragImg);
+    g_dragImg = nullptr;
+}
+
+static void CreateDragImage(void* g, HMONITOR from) {
+    DestroyDragImage();
+    if (!g_msgWnd || g_unloading) return;
+    static bool registered = false;
+    if (!registered) {
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = DefWindowProcW;
+        wc.hInstance = ModInstance();
+        wc.lpszClassName = kDragImgClass;
+        registered = RegisterClassW(&wc) != 0;
+        if (!registered) return;
+    }
+    HBITMAP bmp = GroupIcon(g);
+    if (!bmp) return;
+    BITMAP bm{};
+    GetObjectW(bmp, sizeof(bm), &bm);
+    g_dragImg = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
+                                kDragImgClass, L"", WS_POPUP, 0, 0, bm.bmWidth, bm.bmHeight, nullptr, nullptr,
+                                ModInstance(), nullptr);
+    if (g_dragImg) {
+        HDC screen = GetDC(nullptr);
+        HDC mem = CreateCompatibleDC(screen);
+        HGDIOBJ old = SelectObject(mem, bmp);
+        POINT src{0, 0};
+        SIZE sz{bm.bmWidth, bm.bmHeight};
+        BLENDFUNCTION bf{AC_SRC_OVER, 0, 190, AC_SRC_ALPHA};  // slightly transparent, like Explorer's drag image
+        UpdateLayeredWindow(g_dragImg, screen, nullptr, &sz, mem, &src, 0, &bf, ULW_ALPHA);
+        SelectObject(mem, old);
+        DeleteDC(mem);
+        ReleaseDC(nullptr, screen);
+        g_dragImgFrom = from;
+        SetTimer(g_msgWnd, kDragImageTimerId, 15, nullptr);
+    }
+    DeleteObject(bmp);
+}
+
+// Follow the mouse; hidden while it's over the pin's own taskbar
+static void DragImageTimerProc() {
+    if (!g_dragImg) {
+        KillTimer(g_msgWnd, kDragImageTimerId);
+        return;
+    }
+    POINT pt;
+    GetCursorPos(&pt);
+    TrayAt t{pt, nullptr, nullptr};
+    EnumWindows(TrayAtProc, (LPARAM)&t);
+    bool show = t.mon != g_dragImgFrom;
+    if (show && t.h && !g_win10) ReadButtonsAsync(t.h);  // the place where it's dropped
+    RECT r;
+    GetWindowRect(g_dragImg, &r);
+    SetWindowPos(g_dragImg, HWND_TOPMOST, pt.x - (r.right - r.left) / 2, pt.y - (r.bottom - r.top) / 2, 0, 0,
+                 SWP_NOSIZE | SWP_NOACTIVATE | (show ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+}
+
+// Pin g was dragged from the taskbar on monitor from and released over the taskbar on monitor target:
+// it moves there (another taskbar only, pinned apps only), to the place index of its button list (-1: at the end)
+static void* BarOnMonitor(HMONITOR m);
+static bool MovePinTo(void* g, HMONITOR from, HMONITOR target, int index) {
+    if (!g || !from || !target || target == from || g_s.pinsEverywhere || !Pinned(g)) return false;
+    int a = MonNumber(from), b = MonNumber(target);
+    if (a < 1 || b < 1) return false;
+    unsigned m = (MaskOf(g) & ~(1u << (a - 1))) | (1u << (b - 1));
+    if (index >= 0) PlacePin(BarOnMonitor(target), KeyOf(g), index);
+    SetRule(KeyOf(g), m);
+    Wh_Log(L"-> Pin moved from monitor %d to %d (mask 0x%X): %ls", a, b, m, AppOf(g));
+    QueueApply(g);
+    return true;
+}
+
+// Windows 10: place in the button list of taskbar tl at a screen point, by the hit test of its task
+// list window (the button under the point, INT_MAX behind them; -1 if unknown)
+struct ListAt {
+    POINT pt;
+    HWND h;
+};
+static BOOL CALLBACK ListAtChild(HWND h, LPARAM lp) {
+    auto* t = (ListAt*)lp;
+    wchar_t cls[64];
+    RECT r;
+    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"MSTaskListWClass") && GetWindowRect(h, &r) &&
+        PtInRect(&r, t->pt)) {
+        t->h = h;
+        return FALSE;
+    }
+    return TRUE;
+}
+static BOOL CALLBACK ListAtTray(HWND h, LPARAM lp) {
+    wchar_t cls[64];
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid == GetCurrentProcessId() && GetClassNameW(h, cls, ARRAYSIZE(cls)) &&
+        (!wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd")))
+        EnumChildWindows(h, ListAtChild, lp);
+    return !((ListAt*)lp)->h;
+}
+static int DropIndex10(void* tl, POINT pt) {
+    if (!tl || !pTaskIndexHitTest) return -1;
+    ListAt t{pt, nullptr};
+    EnumWindows(ListAtTray, (LPARAM)&t);
+    if (!t.h || !ScreenToClient(t.h, &pt)) return -1;
+    int i = pTaskIndexHitTest((char*)tl - 0x28 + 0x40, &pt);
+    return i >= 0 ? GroupIndexOfTask(tl, i) : INT_MAX;  // behind the buttons: at the end
+}
+
+// Windows 10: a drag on a taskbar ended (the user sorted its buttons, or moved a pin away)
+using FinishDrag_t = void (*)(void*);
+static FinishDrag_t FinishDrag_orig;
+static void FinishDrag_hook(void* self) {
+    void* tl = BarOf(self);
+    void* g = g_dragGroup;
+    g_dragGroup = nullptr;
+    POINT pt{};
+    GetCursorPos(&pt);
+    HMONITOR target = TaskbarMonitorAt(pt);
+    HMONITOR from = tl ? GetMonitor_orig(tl) : nullptr;
+    DestroyDragImage();
+    FinishDrag_orig(self);
+    if (tl && (!target || target == from)) SaveBarOrder(tl);  // sorted on this taskbar (also window buttons)
+    g_sortingBar = nullptr;
+    if (g && tl == g_dragFrom) MovePinTo(g, from, target, DropIndex10(BarOnMonitor(target), pt));
+    if (g) ((IUnknown*)g)->Release();
+}
+
+// ---------- The same on Windows 11, where the XAML taskbar (Taskbar.View.dll) drags the buttons
+
+// Taskbar (tl) on a monitor, or nullptr
+static void* BarOnMonitor(HMONITOR m) {
+    std::lock_guard<std::mutex> l(g_mx);
+    for (void* tl : g_bars)
+        if (GetMonitor_orig(tl) == m) return tl;
+    return nullptr;
+}
+
+struct Float2 {  // same layout as winrt::Windows::Foundation::Point
+    float x, y;
+};
+using DragStarted11_t = void (*)(void*, Float2);
+static DragStarted11_t DragStarted11_orig;
+// TaskListButton::GetPositionInSet: 1-based place of the button on its taskbar (the XAML taskbar keeps
+// its buttons in the order of the taskbar's button group list)
+static int (*pPositionInSet)(void*) = nullptr;
+static void DragStarted11_hook(void* self, Float2 pt) {
+    if (g_dragGroup) ((IUnknown*)g_dragGroup)->Release();
+    g_dragGroup = nullptr;
+    POINT p{};
+    GetCursorPos(&p);
+    void* tl = BarOnMonitor(MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST));
+    g_dragFrom = tl;
+    g_sortingBar = tl;
+    g_sortingTick = GetTickCount();
+    int pos = tl && pPositionInSet ? pPositionInSet(self) : 0;
+    void* g = pos >= 1 ? GroupAtIndex(tl, pos - 1) : nullptr;
+    if (g && PinnedOn(tl, g)) {
+        ((IUnknown*)g)->AddRef();
+        g_dragGroup = g;
+        CreateDragImage(g, g_dragFrom ? GetMonitor_orig(g_dragFrom) : nullptr);
+    }
+    DragStarted11_orig(self, pt);
+}
+
+// Windows 11: the place of a drop among the buttons of a taskbar, from their positions as UI Automation
+// reports them (in the order of the taskbar's button list). They are read while a pin is dragged over
+// another taskbar, on a worker thread - the taskbar thread answers UI Automation itself - so that the place
+// is known right away when it's dropped.
+static std::mutex g_btnMx;
+static HWND g_btnTray = nullptr;      // taskbar of the last reading
+static std::vector<int> g_btnCenters;  // its buttons' centers (screen x)
+static DWORD g_btnTick = 0;
+static std::atomic<bool> g_btnReading{false};
+
+static DWORD WINAPI ReadButtonsThread(LPVOID p) {
+    HWND tray = (HWND)p;
+    std::vector<int> centers;
+    bool ok = false;
+    if (SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
+        IUIAutomation* uia = nullptr;
+        IUIAutomationElement* bar = nullptr;
+        IUIAutomationCondition* cond = nullptr;
+        IUIAutomationElementArray* all = nullptr;
+        VARIANT cls;
+        VariantInit(&cls);
+        cls.vt = VT_BSTR;
+        cls.bstrVal = SysAllocString(L"Taskbar.TaskListButtonAutomationPeer");
+        int n = 0;
+        if (cls.bstrVal &&
+            SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia))) &&
+            SUCCEEDED(uia->ElementFromHandle(tray, &bar)) && bar &&
+            SUCCEEDED(uia->CreatePropertyCondition(UIA_ClassNamePropertyId, cls, &cond)) &&
+            SUCCEEDED(bar->FindAll(TreeScope_Descendants, cond, &all)) && all && SUCCEEDED(all->get_Length(&n))) {
+            ok = true;
+            for (int i = 0; i < n; i++) {
+                IUIAutomationElement* e = nullptr;
+                RECT r{};
+                if (SUCCEEDED(all->GetElement(i, &e)) && e) {
+                    if (SUCCEEDED(e->get_CurrentBoundingRectangle(&r))) centers.push_back((r.left + r.right) / 2);
+                    e->Release();
+                }
+            }
+        }
+        if (all) all->Release();
+        if (cond) cond->Release();
+        if (bar) bar->Release();
+        if (uia) uia->Release();
+        VariantClear(&cls);
+        CoUninitialize();
+    }
+    if (ok) {
+        std::lock_guard<std::mutex> l(g_btnMx);
+        g_btnTray = tray;
+        g_btnCenters = centers;
+        g_btnTick = GetTickCount();
+    }
+    g_btnReading = false;
+    FreeLibraryAndExitThread(ModInstance(), 0);
+}
+
+// Read the buttons of a taskbar (at most every 250 ms, one reading at a time)
+static void ReadButtonsAsync(HWND tray) {
+    if (!tray || g_unloading) return;
+    {
+        std::lock_guard<std::mutex> l(g_btnMx);
+        if (g_btnTray == tray && GetTickCount() - g_btnTick < 250) return;
+    }
+    if (g_btnReading.exchange(true)) return;
+    HMODULE self = nullptr;
+    HANDLE t = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)&ReadButtonsThread, &self)) {
+        t = CreateThread(nullptr, 0, ReadButtonsThread, tray, 0, nullptr);
+        if (!t) FreeLibrary(self);
+    }
+    if (t) {
+        CloseHandle(t);
+    } else {
+        g_btnReading = false;
+    }
+}
+
+// Place at a point of a taskbar (number of its buttons left of it), -1 without a fresh reading
+static int ButtonIndexAt(HWND tray, POINT pt) {
+    std::lock_guard<std::mutex> l(g_btnMx);
+    if (!tray || g_btnTray != tray || GetTickCount() - g_btnTick > 3000) return -1;
+    int i = 0;
+    for (int c : g_btnCenters) i += c < pt.x;
+    return i;
+}
+
+using DragCompleted11_t = void (*)(void*);
+static DragCompleted11_t DragCompleted11_orig;
+static void DragCompleted11_hook(void* self) {
+    void* g = g_dragGroup;
+    g_dragGroup = nullptr;
+    POINT p{};
+    GetCursorPos(&p);
+    TrayAt t{p, nullptr, nullptr};
+    EnumWindows(TrayAtProc, (LPARAM)&t);
+    DestroyDragImage();
+    DragCompleted11_orig(self);
+    if (g_dragFrom && (!t.mon || t.mon == GetMonitor_orig(g_dragFrom))) SaveBarOrder(g_dragFrom);
+    g_sortingBar = nullptr;
+    if (g && g_dragFrom) MovePinTo(g, GetMonitor_orig(g_dragFrom), t.mon, ButtonIndexAt(t.h, p));
+    if (g) ((IUnknown*)g)->Release();
+}
+
+static bool RecentPinEvent();
+using PersistOrder_t = void (*)(void*);
+static PersistOrder_t PersistOrder_orig;
+static void PersistOrder_hook(void* self) {
+    void* tl = BarOf(self);
+    // Windows also persists after pinning, and the other taskbars after it moved their buttons to
+    // the new global order. Only a drag on this taskbar is the user sorting it (Windows 10: the drag
+    // itself; Windows 11: the taskbar under the mouse, not right after pinning or unpinning).
+    bool user = false;
+    if (FinishDrag_orig) {
+        user = false;  // saved when the drag ends (FinishDrag_hook)
+    } else if (tl && !RecentPinEvent()) {
+        POINT pt{};
+        GetCursorPos(&pt);
+        user = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST) == GetMonitor_orig(tl);
+    }
+    if (user) SaveBarOrder(tl);
+    PersistOrder_orig(self);
+    // then give every taskbar its own order back
+    if (g_msgWnd && !g_s.pinsEverywhere) SetTimer(g_msgWnd, kOrderTimerId, 250, nullptr);
+}
+
+static void OrderTimerProc() {
+    KillTimer(g_msgWnd, kOrderTimerId);
+    RefreshBars();
+    std::set<void*> bars;
+    {
+        std::lock_guard<std::mutex> l(g_mx);
+        bars = g_bars;
+    }
+    for (void* tl : bars) ApplyPinOrder(tl);
+}
+
 static void SyncAll() {
     if (!pGroupVft || !pGroupItemFromWindow || !GetMonitor_orig) return;
     RefreshBars();
@@ -1637,6 +2440,7 @@ static void SyncAll() {
         }
     }
     for (void* g : groups) ((IUnknown*)g)->Release();
+    for (void* tl : bars) ApplyPinOrder(tl);  // remembered pin order of each taskbar
     Wh_Log(L"-> Sync: %d groups, %d taskbars, window fixes %d, pins removed %d, pins added %d",
            (int)groups.size(), (int)bars.size(), moved, pinsOff, pinsOn);
 }
@@ -1668,6 +2472,11 @@ static void ForgetMonitor(int n) {
     std::erase_if(rules, [](auto& kv) { return kv.second == 0; });
     SavePinRules(rules);
     LoadRules();
+    {
+        std::lock_guard<std::mutex> l(g_orderMx);
+        LoadPinOrderLocked();
+        if (g_pinOrder.erase(n)) SavePinOrderLocked();
+    }
     std::wstring dir = BarLinkDir(n);
     if (!dir.empty()) {
         WIN32_FIND_DATAW fd;
@@ -1754,12 +2563,102 @@ static void RefreshLinkCopies(const std::wstring& orig) {
     Wh_Log(L"-> Shortcut changed, unchanged per-taskbar copies updated: %ls", name.c_str());
 }
 
+// Windows 10: the kind of click (CTaskListWnd::eCLICKACTION) of the last click on a button.
+// Launch only gets the same option value for every click there.
+using HandleClick_t = void (*)(void*, void*, int, int, int, int);
+static HandleClick_t HandleClick_orig;
+static int g_clickAction = -1;
+static DWORD g_clickTick = 0;
+static void HandleClick_hook(void* self, void* btnGroup, int index, int action, int a4, int a5) {
+    g_clickAction = action;
+    g_clickTick = GetTickCount();
+    HandleClick_orig(self, btnGroup, index, action, a4, a5);
+}
+
+// ---------- Open a launched app on the clicked taskbar's monitor
+// Apps open their window where they like (often on the primary monitor) - the button then shows up
+// on another taskbar than the pin that was clicked. The next new window of the app is moved to the
+// monitor of the clicked taskbar (same size and place on the monitor, maximized stays maximized).
+static std::wstring g_launchKey;
+static HMONITOR g_launchMon = nullptr;
+static DWORD g_launchTick = 0;
+
+static void NoteLaunch(void* g, HMONITOR mon) {
+    if (!g_s.launchOnClickedMonitor || !g) return;
+    g_launchKey = KeyOf(g);
+    g_launchMon = mon;
+    g_launchTick = GetTickCount();
+}
+
+struct MoveJob {
+    HWND h;
+    HMONITOR to;
+};
+
+static void MoveToMonitor(HWND h, HMONITOR to) {
+    HMONITOR from = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
+    WINDOWPLACEMENT wp{.length = sizeof(wp)};
+    if (from == to || !GetMonitorInfoW(from, &a) || !GetMonitorInfoW(to, &b) || !GetWindowPlacement(h, &wp)) return;
+    // the normal position in workspace coordinates: shift it by the difference of the work areas
+    RECT& r = wp.rcNormalPosition;
+    OffsetRect(&r, b.rcWork.left - a.rcWork.left, b.rcWork.top - a.rcWork.top);
+    int w = std::min(r.right - r.left, (LONG)(b.rcWork.right - b.rcWork.left));
+    int ht = std::min(r.bottom - r.top, (LONG)(b.rcWork.bottom - b.rcWork.top));
+    r.right = r.left + w;
+    r.bottom = r.top + ht;
+    if (wp.showCmd == SW_SHOWMINIMIZED) wp.showCmd = SW_SHOWNORMAL;
+    SetWindowPlacement(h, &wp);
+}
+
+static DWORD WINAPI MoveWindowThread(LPVOID p) {
+    MoveJob job = *(MoveJob*)p;
+    delete (MoveJob*)p;
+    // Many apps place their window themselves while starting (e.g. their saved position), some only
+    // after it is shown: move it once it's visible, and again if it jumps back within 2 seconds
+    // (for 3 seconds; stops as soon as the user drags with the mouse)
+    int moves = 0;
+    for (int i = 0; i < 30 && !g_unloading && IsWindow(job.h); i++) {
+        Sleep(100);
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) break;
+        if (!IsWindowVisible(job.h)) continue;
+        if (MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST) != job.to) {
+            MoveToMonitor(job.h, job.to);
+            moves++;
+        }
+    }
+    Wh_Log(L"-> Launched window %p: moved %d time(s), now on monitor %d", (void*)job.h, moves,
+           MonNumber(MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST)));
+    // the thread holds a reference to the mod, released only now: unloading never pulls the code away
+    FreeLibraryAndExitThread(ModInstance(), 0);
+}
+
+// A new window of a group: the launched app? Then move it to the clicked taskbar's monitor
+static void CheckLaunched(HWND h, void* g) {
+    if (g_launchKey.empty() || GetTickCount() - g_launchTick > 15000 || g_unloading) return;
+    if (KeyOf(g) != g_launchKey) return;
+    g_launchKey.clear();
+    if (MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) == g_launchMon) return;
+    HMODULE self = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)&MoveWindowThread, &self)) return;
+    auto* job = new MoveJob{h, g_launchMon};
+    if (HANDLE t = CreateThread(nullptr, 0, MoveWindowThread, job, 0, nullptr)) {
+        CloseHandle(t);
+        Wh_Log(L"-> Launched window %p: moving to monitor %d", (void*)h, MonNumber(g_launchMon));
+    } else {
+        delete job;
+        FreeLibrary(self);
+    }
+}
+
 using Launch_t = HRESULT (*)(void*, void*, const POINT*, int);
 static Launch_t Launch_orig;
 static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
     // App has a visible window: bring it to the front instead of relaunching
-    bool wantNew = opt != 0 || (GetAsyncKeyState(VK_SHIFT) & 0x8000) ||
-                   (GetAsyncKeyState(VK_MBUTTON) & 0x8000);
+    // Windows 10 passes the same option for every click: there the click action tells
+    // (3 = new instance: Shift+click or middle-click)
+    bool wantNew = g_win10 ? (g_clickAction == 3 && GetTickCount() - g_clickTick < 2000) : opt != 0;
+    wantNew = wantNew || (GetAsyncKeyState(VK_SHIFT) & 0x8000) || (GetAsyncKeyState(VK_MBUTTON) & 0x8000);
     // This taskbar's pin has its own (modified) shortcut -> launch it. If the app has its own
     // settings on any taskbar, focusing only brings windows from the own monitor
     // (otherwise e.g. Steam on M2 would bring the friends list from M1 instead of opening Steam).
@@ -1783,6 +2682,7 @@ static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
             Target tc;
             ResolveTarget(copy, tc);
             if (g_s.foregroundFix && !wantNew && !tc.hasArgs && TryActivateExisting(g, focusMon)) return S_OK;
+            NoteLaunch(g, clickMon);
             ShellExecuteW(nullptr, L"open", copy.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             Wh_Log(L"-> Launched own shortcut of monitor %d: %ls", mon, copy.c_str());
             return S_OK;
@@ -1791,6 +2691,7 @@ static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
     if (g_s.foregroundFix && g && !wantNew) {
         if (TryActivateExisting(g, focusMon)) return S_OK;
     }
+    NoteLaunch(g, clickMon);
     return Launch_orig(self, g, pt, opt);
 }
 
@@ -1845,6 +2746,7 @@ static unsigned MaskOf(void* g) {
 // only if mouse/keyboard was just used. Multiple calls (one per taskbar) count once.
 static std::wstring g_lastEvt;
 static DWORD g_lastEvtTick = 0;
+static bool RecentPinEvent() { return g_lastEvtTick && GetTickCount() - g_lastEvtTick < 3000; }
 static bool TakePinEvent(void* g, bool pin, std::wstring& key) {
     if (g_selfFlag || !g || !pGroupGetAppID) return false;
     DWORD now = GetTickCount();
@@ -1884,7 +2786,21 @@ static bool IsNewPin(void* g) {
 
 using GroupEvt_t = void (*)(void*, void*);
 static GroupEvt_t PinnedEvt_orig;
-static GroupEvt_t UnpinnedEvt_orig;
+// Windows 10 has a flags parameter, Windows 11 ignores it
+using UnpinnedEvt_t = void (*)(void*, void*, int);
+static UnpinnedEvt_t UnpinnedEvt_orig;
+
+// A shortcut (e.g. from the desktop) dropped on a taskbar to pin it there: it lands right away where it
+// was dropped (index = place in that taskbar's button list - the gap the taskbar showed while dragging)
+using InsertPinned_t = HRESULT (*)(void*, void*, void*, void*, int);
+static InsertPinned_t InsertPinned_orig;
+static HRESULT InsertPinned_hook(void* self, void* tl, void* data, void* g, int index) {
+    if (tl && g && Readable(tl, 8) && *(void**)tl == pTlVftUI && Readable(g, 8) && *(void**)g == pGroupVft)
+        PlacePin(tl, KeyOf(g), index);
+    HRESULT hr = InsertPinned_orig(self, tl, data, g, index);
+    if (SUCCEEDED(hr) && g_msgWnd && !g_s.pinsEverywhere) SetTimer(g_msgWnd, kOrderTimerId, 250, nullptr);
+    return hr;
+}
 
 static void PinnedEvt_hook(void* self, void* g) {
     std::wstring key;
@@ -1904,8 +2820,8 @@ static void PinnedEvt_hook(void* self, void* g) {
 }
 
 // Really unpinned globally (last taskbar, Start menu, ...): rule removed
-static void UnpinnedEvt_hook(void* self, void* g) {
-    UnpinnedEvt_orig(self, g);
+static void UnpinnedEvt_hook(void* self, void* g, int flags) {
+    UnpinnedEvt_orig(self, g, flags);
     std::wstring key;
     if (TakePinEvent(g, false, key)) {
         SetRule(key, 0);
@@ -1952,6 +2868,8 @@ static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
     Wh_Log(L"-> Additionally pinned on monitor %d (mask 0x%X, order kept): %ls", mon, m, AppOf(g));
     g_swallowAddKey = KeyOf(g);
     g_swallowAddTick = GetTickCount();
+    g_swallowRemoveKey = KeyOf(g);  // Windows 10 removes the old pin afterwards
+    g_swallowRemoveTick = GetTickCount();
     QueueApply(g);
     SetFakeGroup(nullptr);
     return true;
@@ -1959,6 +2877,12 @@ static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
 
 static LRESULT HandleUnpinOne(const wchar_t* app) {
     if (g_s.pinsEverywhere) return 0;  // pins are global: unpin normally
+    // The second half of an intercepted "additionally pin" (Windows 10): keep the pin
+    if (app && *app && !g_swallowRemoveKey.empty() && GetTickCount() - g_swallowRemoveTick < 5000 &&
+        Lower(app) == g_swallowRemoveKey) {
+        g_swallowRemoveKey.clear();
+        return 1;
+    }
     if (HandleExtraPin(app, nullptr)) return 1;
     void* g = g_jumpGroup;
     Wh_Log(L"-> Unpin request app=%ls jump=%.40ls age=%lu ms pinned=%d mask=0x%X mon=%d", app ? app : L"?",
@@ -2064,6 +2988,7 @@ static void LoadSettings() {
     auto windowMode = WindhawkUtils::StringSetting::make(L"windowMode");
     g_s.windowMode = !_wcsicmp(windowMode, L"all") ? 2 : !_wcsicmp(windowMode, L"primaryAll") ? 1 : 0;
     g_s.focusThisMonitor = _wcsicmp(WindhawkUtils::StringSetting::make(L"focusScope"), L"thisMonitor") == 0;
+    g_s.launchOnClickedMonitor = Wh_GetIntSetting(L"launchOnClickedMonitor") != 0;
     // "notepad.exe" matches the file name, a path matches the full path
     std::vector<std::wstring> always;
     for (int i = 0; i < 100; i++) {
@@ -2143,7 +3068,7 @@ static void NotifyTaskbar() {
 
 static void ApplyAppsMode() {
     NotifyTaskbar();  // also if the real value is 0: the taskbar may still use another mode
-    if (!ReadAdvancedDword(L"MMTaskbarEnabled", 0))
+    if (!ReadAdvancedDword(L"MMTaskbarEnabled", g_win10 ? 1 : 0))  // Windows 10: on if the value is missing
         Wh_Log(L"-> Note: \"Show my taskbar on all displays\" is off, there's only one taskbar");
 }
 
@@ -2160,11 +3085,39 @@ static void InitAppsModeHook() {
 // Explorer: if it only applies to one taskbar, the global unpin is skipped.
 
 static HRESULT (*pGetAppIDForPinned)(void*, PCIDLIST_ABSOLUTE, PWSTR*);
-using PinModify_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, PCIDLIST_ABSOLUTE, int);
+// Windows 10 hooks CPinnedList::InternalModify, which has a flags parameter (Windows 11 ignores it)
+using PinModify_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, PCIDLIST_ABSOLUTE, int, int);
 static PinModify_t PinModify_orig;
 
-static HRESULT PinModify_hook(void* self, PCIDLIST_ABSOLUTE from, PCIDLIST_ABSOLUTE to, int caller) {
-    if (from && !to) {
+// Ask Explorer whether pinning this item is only "additionally pin on this taskbar" (then the
+// mod handles it and the pin list stays unchanged). Sent as "path|aumid".
+static bool AskExtraPin(PCIDLIST_ABSOLUTE pidl) {
+    HWND w = FindWindowExW(HWND_MESSAGE, nullptr, kMsgClass, nullptr);
+    if (!w) return false;
+    wchar_t path[MAX_PATH] = {};
+    std::wstring data;
+    if (pidl) {
+        SHGetPathFromIDListW(pidl, path);
+        data = path;
+        IPropertyStore* ps = nullptr;
+        if (SUCCEEDED(SHGetPropertyStoreFromIDList(pidl, GPS_DEFAULT, IID_PPV_ARGS(&ps))) && ps) {
+            PROPVARIANT pv;
+            PropVariantInit(&pv);
+            if (SUCCEEDED(ps->GetValue(kAumid, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal) {
+                data += L'|';
+                data += pv.pwszVal;
+            }
+            PropVariantClear(&pv);
+            ps->Release();
+        }
+    }
+    DWORD_PTR r = 0;
+    COPYDATASTRUCT cd{0x534B5032, (DWORD)((data.size() + 1) * sizeof(wchar_t)), (void*)data.c_str()};  // "SKP2"
+    return SendMessageTimeoutW(w, WM_COPYDATA, 0, (LPARAM)&cd, SMTO_ABORTIFHUNG, 1500, &r) && r == 1;
+}
+
+static HRESULT PinModify_hook(void* self, PCIDLIST_ABSOLUTE from, PCIDLIST_ABSOLUTE to, int caller, int flags) {
+    if (from && !to && !flags) {  // flags 1 = MarkAsTombstone (Windows 10): not a user unpin
         PWSTR app = nullptr;
         if (pGetAppIDForPinned) pGetAppIDForPinned(self, from, &app);
         HWND w = FindWindowExW(HWND_MESSAGE, nullptr, kMsgClass, nullptr);
@@ -2181,6 +3134,11 @@ static HRESULT PinModify_hook(void* self, PCIDLIST_ABSOLUTE from, PCIDLIST_ABSOL
         if (onlyHere) return S_OK;
     }
     if (!from && to) {  // adding: does it belong to an intercepted "additionally pin"?
+        // Windows 10 appends the new pin first and removes the old one afterwards: decide here
+        if (g_win10 && AskExtraPin(to)) {
+            Wh_Log(L"-> Pin list: append (caller %d) - additional taskbar only", caller);
+            return S_OK;
+        }
         PWSTR app = nullptr;
         if (pGetAppIDForPinned) pGetAppIDForPinned(self, to, &app);
         HWND w = FindWindowExW(HWND_MESSAGE, nullptr, kMsgClass, nullptr);
@@ -2194,7 +3152,7 @@ static HRESULT PinModify_hook(void* self, PCIDLIST_ABSOLUTE from, PCIDLIST_ABSOL
         if (app) CoTaskMemFree(app);
         if (swallow) return S_OK;
     }
-    return PinModify_orig(self, from, to, caller);
+    return PinModify_orig(self, from, to, caller, flags);
 }
 
 // ---------- Animation (Taskbar.View.dll)
@@ -2301,10 +3259,16 @@ static void InitAnimationHooks() {
          (void**)&BtnHasLabel_orig, (void*)BtnHasLabel_hook, true},
         {{L"public: void __cdecl winrt::Taskbar::implementation::TaskListButton::Prepared(bool)"},
          (void**)&BtnPrepared_orig, (void*)BtnPrepared_hook, true},
+        {{L"private: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnDragStartedGesture(struct winrt::Windows::Foundation::Point)"},
+         (void**)&DragStarted11_orig, (void*)DragStarted11_hook, true},
+        {{L"private: void __cdecl winrt::Taskbar::implementation::TaskListButton::OnDragCompletedGesture(void)"},
+         (void**)&DragCompleted11_orig, (void*)DragCompleted11_hook, true},
+        {{L"public: int __cdecl winrt::Taskbar::implementation::TaskListButton::GetPositionInSet(void)"}, (void**)&pPositionInSet, nullptr, true},
     };
     WindhawkUtils::HookSymbols(tv, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
-    Wh_Log(L"-> Animation %ls, label fix %ls", (Entrance_orig && ExitAnim_orig) ? L"active" : L"partial",
-           (BtnHasLabel_orig && BtnPrepared_orig) ? L"active" : L"partial");
+    Wh_Log(L"-> Animation %ls, label fix %ls, pin drag %ls", (Entrance_orig && ExitAnim_orig) ? L"active" : L"partial",
+           (BtnHasLabel_orig && BtnPrepared_orig) ? L"active" : L"partial",
+           (DragStarted11_orig && DragCompleted11_orig && pPositionInSet) ? L"active" : L"MISSING");
 }
 
 // Pinning from the jump list (PinManager): if it's only "additionally on this taskbar", do it
@@ -2312,35 +3276,28 @@ static void InitAnimationHooks() {
 using PinTrusted_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, int);
 static PinTrusted_t PinTrusted_orig;
 static HRESULT PinTrusted_hook(void* self, PCIDLIST_ABSOLUTE pidl, int caller) {
-    HWND w = FindWindowExW(HWND_MESSAGE, nullptr, kMsgClass, nullptr);
-    DWORD_PTR r = 0;
-    bool extra = false;
-    if (w) {
-        wchar_t path[MAX_PATH] = {};
-        std::wstring data;
-        if (pidl) {
-            SHGetPathFromIDListW(pidl, path);
-            data = path;
-            IPropertyStore* ps = nullptr;
-            if (SUCCEEDED(SHGetPropertyStoreFromIDList(pidl, GPS_DEFAULT, IID_PPV_ARGS(&ps))) && ps) {
-                PROPVARIANT pv;
-                PropVariantInit(&pv);
-                if (SUCCEEDED(ps->GetValue(kAumid, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal) {
-                    data += L'|';
-                    data += pv.pwszVal;
-                }
-                PropVariantClear(&pv);
-                ps->Release();
-            }
-        }
-        COPYDATASTRUCT cd{0x534B5032, (DWORD)((data.size() + 1) * sizeof(wchar_t)), (void*)data.c_str()};  // "SKP2"
-        extra = SendMessageTimeoutW(w, WM_COPYDATA, 0, (LPARAM)&cd, SMTO_ABORTIFHUNG, 1500, &r) && r == 1;
-    }
+    bool extra = AskExtraPin(pidl);
     Wh_Log(L"-> PinManager: pin (caller %d)%ls", caller, extra ? L" - additional taskbar only" : L"");
     if (extra) return S_OK;
     return PinTrusted_orig(self, pidl, caller);
 }
 static bool InitPinListHooks() {
+    if (g_win10) {  // Windows 10: the pin list is in shell32.dll
+        HMODULE sh = GetModuleHandleW(L"shell32.dll");
+        if (!sh || g_pinListHooked.exchange(true)) return false;
+        // shell32.dll
+        WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+            {{L"public: virtual long __cdecl CPinnedList::GetAppIDForPinnedItem(struct _ITEMIDLIST_ABSOLUTE const *,unsigned short * *)"},
+             (void**)&pGetAppIDForPinned, nullptr, true},
+            // InternalModify: also reached by the jump list, which bypasses Modify
+            {{L"protected: long __cdecl CPinnedList::InternalModify(struct _ITEMIDLIST_ABSOLUTE const *,struct _ITEMIDLIST_ABSOLUTE const *,enum PINNEDLISTMODIFYCALLER,enum PinnedListModifyFlags)"},
+             (void**)&PinModify_orig, (void*)PinModify_hook, true},
+        };
+        WindhawkUtils::HookSymbols(sh, shell32Hooks, ARRAYSIZE(shell32Hooks));
+        Wh_Log(L"-> Pin list (%ls, shell32) %ls", FileName(GetCommandLineW()).c_str(),
+               PinModify_orig ? L"monitored" : L"NOT found");
+        return PinModify_orig != nullptr;
+    }
     HMODULE tw = GetModuleHandleW(L"twinui.pcshell.dll");
     if (!tw || g_pinListHooked.exchange(true)) return false;
     // twinui.pcshell.dll
@@ -2382,10 +3339,21 @@ static void InitLoadLibraryHook() {
     if (target) WindhawkUtils::SetFunctionHook((LoadLibraryExW_t)target, LoadLibraryExW_hook, &LoadLibraryExW_orig);
 }
 
+static bool HookWin11(HMODULE tb);
+static bool HookWin10(HMODULE tb);
+
 BOOL Wh_ModInit() {
+    // Windows 10 (build < 22000): the taskbar code is part of explorer.exe instead of taskbar.dll
+    RTL_OSVERSIONINFOW osv{.dwOSVersionInfoSize = sizeof(osv)};
+    auto rtlGetVersion = (LONG(WINAPI*)(RTL_OSVERSIONINFOW*))GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion");
+    if (rtlGetVersion) rtlGetVersion(&osv);
+    g_win10 = osv.dwMajorVersion == 10 && osv.dwBuildNumber < 22000;
     wchar_t exe[MAX_PATH];
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
-    if (_wcsicmp(FileName(exe).c_str(), L"explorer.exe") != 0) {  // sihost: pin list only
+    if (_wcsicmp(FileName(exe).c_str(), L"explorer.exe") != 0) {  // pin list only
+        // The jump list changes the pin list in sihost.exe (Windows 11) or in RuntimeBroker.exe
+        // (Windows 10) - not needed in the other one
+        if (_wcsicmp(FileName(exe).c_str(), g_win10 ? L"RuntimeBroker.exe" : L"sihost.exe") != 0) return FALSE;
         LoadSettings();
         if (!InitPinListHooks()) InitLoadLibraryHook();
         return TRUE;
@@ -2393,14 +3361,38 @@ BOOL Wh_ModInit() {
     g_isExplorer = true;
     LoadSettings();
     InitLinkRoot();
-    HMODULE tb = GetModuleHandleW(L"taskbar.dll");
+    HMODULE tb = g_win10 ? GetModuleHandleW(nullptr) : GetModuleHandleW(L"taskbar.dll");
     if (!tb) tb = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!tb) {
         Wh_Log(L"taskbar.dll not found");
         return FALSE;
     }
-
     g_tb = tb;
+    if (!(g_win10 ? HookWin10(tb) : HookWin11(tb))) {
+        Wh_Log(L"HookSymbols failed");
+        return FALSE;
+    }
+    InitDpaOffset();
+    Wh_Log(L"-> Windows %d, jump list pins %ls, startup sync %ls, pin events %ls, pin order %ls", g_win10 ? 10 : 11,
+           (pGroupUpdateFlags && ShowJump_orig && EnumPinned_orig) ? L"active" : L"INCOMPLETE",
+           (g_dpaOffset > 0 && pGroupVft && pGroupItemFromWindow && pBtnGetNumItems && pBtnGetTaskItem) ? L"active" : L"MISSING",
+           (PinnedEvt_orig && UnpinnedEvt_orig) ? L"active" : L"MISSING",
+           (GetVisualOrder_orig && PersistOrder_orig && (UpdateVisual_orig || UpdateVisual11_orig)) ? L"active" : L"MISSING");
+
+    InitPinListHooks();
+    if (g_win10) g_taskbarViewHooked = true;  // no XAML taskbar: nothing to animate
+    else InitAnimationHooks();
+    if (!g_pinListHooked || !g_taskbarViewHooked) InitLoadLibraryHook();
+    InitAppsModeHook();
+    g_initTick = GetTickCount();
+    // Taskbar is already up (mod update / loaded late): start right away, sync follows
+    if (RunOnTrayThread(EnsureMsgWnd)) Wh_Log(L"-> Taskbar already running - sync scheduled");
+    Wh_Log(L"v%ls active", WH_MOD_VERSION);
+    return TRUE;
+}
+
+static bool HookWin11(HMODULE tb) {
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         // required
         {{L"public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void)"},
@@ -2460,30 +3452,105 @@ BOOL Wh_ModInit() {
         // SetOrder_hook only acts if _GetTBGroupFromGroup was found
         {{L"public: virtual void __cdecl CTaskListWnd::SetRelativeTaskOrder(struct ITaskGroup *,int)"},
          (void**)&SetOrder_orig, (void*)SetOrder_hook, true},
+        {{L"public: virtual int __cdecl CTaskGroup::GetVisualOrder(void)"}, (void**)&GetVisualOrder_orig, (void*)GetVisualOrder_hook, true},
+        {{L"public: virtual void __cdecl CTaskListWnd::UpdateVisualTaskOrder(struct ITaskGroup *,int)"}, (void**)&UpdateVisual11_orig, (void*)UpdateVisual11_hook, true},
+        {{L"protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_CreateTBGroup(struct ITaskGroup *,int)"}, (void**)&CreateTBGroup_orig, (void*)CreateTBGroup_hook, true},
+        {{L"protected: void __cdecl CTaskListWnd::_PersistVisualOrder(void)"},
+         (void**)&PersistOrder_orig, (void*)PersistOrder_hook, true},
+        {{L"public: virtual long __cdecl CTaskBand::InsertPinnedItem(struct ITaskListUI *,struct IDataObject *,struct ITaskGroup *,int)"},
+         (void**)&InsertPinned_orig, (void*)InsertPinned_hook, true},
         {{L"public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup *)"},
          (void**)&PinnedEvt_orig, (void*)PinnedEvt_hook, true},
         {{L"public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *)"},
          (void**)&UnpinnedEvt_orig, (void*)UnpinnedEvt_hook, true},
     };
-    if (!WindhawkUtils::HookSymbols(tb, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
-        Wh_Log(L"HookSymbols failed");
-        return FALSE;
-    }
-    InitDpaOffset();
-    Wh_Log(L"-> Jump list pins %ls, startup sync %ls, pin events %ls",
-           (pGroupUpdateFlags && ShowJump_orig && EnumPinned_orig) ? L"active" : L"INCOMPLETE",
-           (g_dpaOffset > 0 && pGroupVft && pGroupItemFromWindow && pBtnGetNumItems && pBtnGetTaskItem) ? L"active" : L"MISSING",
-           (PinnedEvt_orig && UnpinnedEvt_orig) ? L"active" : L"MISSING");
+    return WindhawkUtils::HookSymbols(tb, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+}
 
-    InitPinListHooks();
-    InitAnimationHooks();
-    if (!g_pinListHooked || !g_taskbarViewHooked) InitLoadLibraryHook();
-    InitAppsModeHook();
-    g_initTick = GetTickCount();
-    // Taskbar is already up (mod update / loaded late): start right away, sync follows
-    if (RunOnTrayThread(EnsureMsgWnd)) Wh_Log(L"-> Taskbar already running - sync scheduled");
-    Wh_Log(L"v%ls active", WH_MOD_VERSION);
-    return TRUE;
+// Windows 10: same classes, but some functions have other parameters and some internal ones
+// only have their plain name in the symbols. CTaskListWnd::IsTaskAllowed doesn't exist - the
+// classic taskbar creates its buttons only through _TaskCreated, which the mod already filters.
+static bool HookWin10(HMODULE tb) {
+    // explorer.exe
+    WindhawkUtils::SYMBOL_HOOK explorerHooks[] = {
+        // required
+        {{L"public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void)"},
+         (void**)&pGroupGetAppID},
+        {{L"public: virtual unsigned long __cdecl CTaskGroup::GetFlags(void)const "},
+         (void**)&pGroupGetFlags},
+        {{L"public: virtual struct _ITEMIDLIST_ABSOLUTE const * __cdecl CTaskGroup::GetShortcutIDList(void)"},
+         (void**)&pGroupGetShortcutIDList},
+        {{L"public: virtual long __cdecl CTaskListWnd::TaskCreated(struct ITaskGroup *,struct ITaskItem *)"},
+         (void**)&TaskCreated_orig, (void*)TaskCreated_hook},
+        {{L"protected: long __cdecl CTaskListWnd::_TaskCreated(struct ITaskGroup *,struct ITaskItem *,int)"},
+         (void**)&TaskCreatedInt_orig, (void*)TaskCreatedInt_hook},
+        {{L"public: virtual long __cdecl CTaskListWnd::TaskInclusionChanged(struct ITaskGroup *,struct ITaskItem *)"},
+         (void**)&TaskIncl_orig, (void*)TaskIncl_hook},
+        {{L"public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *,enum TaskDestroyedFlags)"},
+         (void**)&TaskDestroyed_orig, (void*)TaskDestroyed_hook},
+        {{L"public: virtual struct HMONITOR__ * __cdecl CTaskListWnd::GetMonitor(void)"},
+         (void**)&GetMonitor_orig, (void*)GetMonitor_hook},
+        {{L"public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup *,struct tagPOINT const &,enum LaunchFromTaskbarOptions)"},
+         (void**)&Launch_orig, (void*)Launch_hook},
+        {{L"protected: void __cdecl CTaskListWnd::_HandleClick(struct ITaskBtnGroup *,int,enum CTaskListWnd::eCLICKACTION,int,int)"},
+         (void**)&HandleClick_orig, (void*)HandleClick_hook, true},
+        {{L"protected: void __cdecl CTaskBand::_HandleMonitorChanged(struct ITaskGroup *,struct ITaskItem *)"},
+         (void**)&MonChanged10_orig, (void*)MonChanged10_hook},
+        // optional
+        {{L"public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void)"},
+         (void**)&pItemGetWindow, nullptr, true},
+        {{L"const CWindowTaskItem::`vftable'{for `ITaskItem'}"}, (void**)&pWindowItemVft, nullptr, true},
+        {{L"public: virtual struct HWND__ * __cdecl CImmersiveTaskItem::GetWindow(void)"},
+         (void**)&pImmersiveItemGetWindow, nullptr, true},
+        {{L"const CImmersiveTaskItem::`vftable'{for `ITaskItem'}"}, (void**)&pImmersiveItemVft, nullptr, true},
+        {{L"public: virtual long __cdecl CTaskGroup::UpdateFlags(unsigned long,unsigned long)"},
+         (void**)&pGroupUpdateFlags, nullptr, true},
+        {{L"public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *)"},
+         (void**)&pGroupSetShortcut, nullptr, true},
+        {{L"public: virtual long __cdecl CTaskListWnd::ShowJumpView(struct ITaskGroup *,struct ITaskItem *,bool)"},
+         (void**)&ShowJump_orig, (void*)ShowJump_hook, true},
+        {{L"protected: long __cdecl CTaskBand::_EnumPinnedItems(bool)"}, (void**)&EnumPinned_orig, (void*)EnumPinned_hook, true},
+        {{L"protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *)"},
+         (void**)&pGetTBGroup, nullptr, true},
+        {{L"const CTaskGroup::`vftable'{for `ITaskGroup'}"}, (void**)&pGroupVft, nullptr, true},
+        {{L"const CTaskListWnd::`vftable'{for `ITaskListUI'}"}, (void**)&pTlVftUI, nullptr, true},
+        {{L"const CTaskListWnd::`vftable'{for `CImpWndProc'}"}, (void**)&pTlVftWnd, nullptr, true},
+        {{L"const CTaskListWnd::`vftable'{for `ITaskListSite'}"}, (void**)&pTlVftOther[0], nullptr, true},
+        {{L"const CTaskListWnd::`vftable'{for `IDropTarget'}"}, (void**)&pTlVftOther[1], nullptr, true},
+        {{L"const CTaskListWnd::`vftable'{for `IStateCapture'}"}, (void**)&pTlVftOther[2], nullptr, true},
+        {{L"const CTaskListWnd::`vftable'{for `IObjectWithSite'}"}, (void**)&pTlVftOther[3], nullptr, true},
+        {{L"const CTaskListWnd::`vftable'{for `CTaskUnknown'}"}, (void**)&pTlVftOther[4], nullptr, true},
+        {{L"public: virtual long __cdecl CTaskGroup::GetItemFromWindow(struct HWND__ *,struct ITaskItem * *)"},
+         (void**)&pGroupItemFromWindow, nullptr, true},
+        {{L"public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void)"}, (void**)&pBtnGetNumItems, nullptr, true},
+        {{L"public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int)"}, (void**)&pBtnGetTaskItem, nullptr, true},
+        {{L"public: virtual int __cdecl CTaskListWnd::GetButtonGroupCount(void)"}, (void**)&pGetButtonGroupCount, nullptr, true},
+        {{L"public: virtual void __cdecl CTaskListWnd::SetRelativeTaskOrder(struct ITaskGroup *,int)"},
+         (void**)&SetOrder_orig, (void*)SetOrder_hook, true},
+        {{L"public: virtual int __cdecl CTaskGroup::GetVisualOrder(void)"}, (void**)&GetVisualOrder_orig, (void*)GetVisualOrder_hook, true},
+        {{L"public: virtual void __cdecl CTaskListWnd::UpdateVisualTaskOrder(void)"}, (void**)&UpdateVisual_orig, (void*)UpdateVisual_hook, true},
+        {{L"protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_CreateTBGroup(struct ITaskGroup *,int)", L"CTaskListWnd::_CreateTBGroup"}, (void**)&CreateTBGroup_orig, (void*)CreateTBGroup_hook, true},
+        {{L"protected: void __cdecl CTaskListWnd::_StartDragGroup(int,int)"}, (void**)&StartDrag_orig, (void*)StartDrag_hook, true},
+        {{L"public: virtual int __cdecl CTaskListWnd::TaskIndexHitTest(struct tagPOINT const &)"}, (void**)&pTaskIndexHitTest, nullptr, true},
+        {{L"protected: void __cdecl CTaskListWnd::_FinishDragGroup(void)"}, (void**)&FinishDrag_orig, (void*)FinishDrag_hook, true},
+        {{L"protected: void __cdecl CTaskListWnd::_PersistVisualOrder(void)"},
+         (void**)&PersistOrder_orig, (void*)PersistOrder_hook, true},
+        {{L"public: virtual long __cdecl CTaskBand::InsertPinnedItem(struct ITaskListUI *,struct IDataObject *,struct ITaskGroup *,int)"},
+         (void**)&InsertPinned_orig, (void*)InsertPinned_hook, true},
+        {{L"public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup *)"},
+         (void**)&PinnedEvt_orig, (void*)PinnedEvt_hook, true},
+        {{L"public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *,enum HandleTaskGroupUnpinnedFlags)"},
+         (void**)&UnpinnedEvt_orig, (void*)UnpinnedEvt_hook, true},
+    };
+    if (!WindhawkUtils::HookSymbols(tb, explorerHooks, ARRAYSIZE(explorerHooks))) return false;
+    // TaskIndexHitTest is called with the interface at object + 0x40: only if its code says so
+    const unsigned char* p = (const unsigned char*)pTaskIndexHitTest;
+    bool ok = false;
+    for (int i = 0; p && i < 32 && Readable(p + i, 4); i++) {
+        if (p[i] == 0x48 && p[i + 1] == 0x83 && p[i + 2] == 0xC1 && p[i + 3] == 0xC0) ok = true;  // add rcx,-40h
+    }
+    if (!ok) pTaskIndexHitTest = nullptr;
+    return true;
 }
 
 void Wh_ModAfterInit() {
@@ -2527,6 +3594,7 @@ void Wh_ModUninit() {
         ReleaseWindows(true);
     }
     UnregisterClassW(kMsgClass, ModInstance());
+    UnregisterClassW(kDragImgClass, ModInstance());
     // The hooks are removed at this point: taskbar.dll reads the real setting again
     if (g_isExplorer) NotifyTaskbar();
     Wh_Log(L"Uninit");
