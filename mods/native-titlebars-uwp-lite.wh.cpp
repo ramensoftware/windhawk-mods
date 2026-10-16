@@ -2,11 +2,10 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars Lite
 // @description     Enables native titlebars in UWP apps
-// @version         1.4.0
+// @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
-// @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lpropsys -lgdiplus
 // ==/WindhawkMod==
@@ -15,8 +14,6 @@
 /*
 
 Replaces the UWP titlebars with native Win32 titlebars.
-
-This mod is focused on the Classic theme, so may produce sub-optimal results in other cases.
 
 ![Screenshot](https://i.imgur.com/oeCYWJY.png)
 
@@ -32,6 +29,11 @@ This mod is focused on the Classic theme, so may produce sub-optimal results in 
 #include <shlobj.h>
 #include <gdiplus.h>
 #include <vector>
+#include <unordered_set>
+
+#ifndef WM_POPUPSYSTEMMENU
+#define WM_POPUPSYSTEMMENU 0x0313
+#endif
 
 static const GUID BHID_SFUIObject_local =
     {0x3981e225, 0xf559, 0x11d3, {0x8e, 0x3a, 0x00, 0xc0, 0x4f, 0x68, 0x37, 0xd5}};
@@ -45,25 +47,57 @@ static const GUID IID_IExtractIconW_local =
 static const PROPERTYKEY PKEY_AppUserModel_ID_local =
     {{0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
 
-typedef INT64 (*CTitleBar__CreateTitleBarWindow_t)(void *);
-CTitleBar__CreateTitleBarWindow_t CTitleBar__CreateTitleBarWindow_orig;
-INT64 __fastcall CTitleBar__CreateTitleBarWindow_hook(void *pThis)
+// Substring that selects which symbols to hook in batch.
+
+static const WCHAR *const kBatchFilter = L"private: long __cdecl CTitleBar::_";
+
+static std::unordered_set<void *> g_hookedAddrs;
+
+INT64 __fastcall CTitleBar_Generic_hook(void *, void *, void *, void *) {return 0;}
+
+static void HookAllCTitleBar(HMODULE hModule)
 {
-    return 0;
+    WH_FIND_SYMBOL findSym = {};
+    HANDLE hFind = Wh_FindFirstSymbol(hModule, nullptr, &findSym);
+    if (!hFind)
+    {
+        Wh_Log(L"Wh_FindFirstSymbol failed");
+        return;
+    }
+
+    int count = 0;
+
+    do
+    {
+        if (!findSym.symbol || !findSym.address)
+            continue;
+
+        if (!wcsstr(findSym.symbol, kBatchFilter))
+            continue;
+
+        // Deduplicate addresses (identical code folding)
+        if (!g_hookedAddrs.insert(findSym.address).second)
+            continue;
+
+        if (Wh_SetFunctionHook(findSym.address,
+                               (void *)CTitleBar_Generic_hook,
+                               nullptr))
+        {
+            Wh_Log(L"Hooked: %s", findSym.symbol);
+            count++;
+        }
+        else
+        {
+            Wh_Log(L"Failed to hook: %s", findSym.symbol);
+        }
+    } while (Wh_FindNextSymbol(hFind, &findSym));
+
+    Wh_FindCloseSymbol(hFind);
+
+    Wh_Log(L"Batch hooked %d CTitleBar functions", count);
 }
 
-typedef INT64 (*CTitleBar__PaintButton_t)(INT64, INT64, INT64, UINT, int *, DWORD);
-CTitleBar__PaintButton_t CTitleBar__PaintButton_orig;
-INT64 __fastcall CTitleBar__PaintButton_hook(
-    INT64 a1,
-    INT64 a2,
-    INT64 a3,
-    UINT a4,
-    int *a5,
-    DWORD a6)
-{
-    return 0;
-}
+// ---------------------------------------------------------------------------
 
 static ULONG_PTR g_gdiplusToken = 0;
 
@@ -337,20 +371,6 @@ void DestroyTitlebarIcons(HWND hWnd)
     RemovePropW(hWnd, L"NativeTitlebarIconSet");
 }
 
-typedef bool (* CTitleBar__UpdateBorderVisibilityAndMargins_t)(void *);
-
-CTitleBar__UpdateBorderVisibilityAndMargins_t CTitleBar__UpdateBorderVisibilityAndMargins_orig;
-
-bool __fastcall CTitleBar__UpdateBorderVisibilityAndMargins_hook(
-
-    void *pThis
-
-){
-
-    return 0;
-
-}
-
 LRESULT CALLBACK SubclassProc(
     HWND hWnd,
     UINT uMsg,
@@ -363,6 +383,15 @@ LRESULT CALLBACK SubclassProc(
         DestroyTitlebarIcons(hWnd);
         ForgetSubclassedWindow(hWnd);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
+        if (uMsg == WM_NCRBUTTONDOWN ||
+        uMsg == WM_NCRBUTTONUP ||
+        uMsg == WM_NCLBUTTONDBLCLK ||
+        uMsg == WM_POPUPSYSTEMMENU ||
+        uMsg == WM_SYSCOMMAND)
+    {
+        return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
 
     if (uMsg == WM_NCPAINT || uMsg == WM_NCCALCSIZE)
@@ -461,32 +490,14 @@ BOOL Wh_ModInit()
         (void *)DwmExtendFrameIntoClientArea_hook,
         (void **)&DwmExtendFrameIntoClientArea_orig);
 
-    WindhawkUtils::SYMBOL_HOOK ApplicationFrame_dll_hooks[] = {
-        {
-            {L"private: long __cdecl CTitleBar::_CreateTitleBarWindow(void)"},
-            (void **)&CTitleBar__CreateTitleBarWindow_orig,
-            (void *)CTitleBar__CreateTitleBarWindow_hook,
-            false
-        },
-        {
-            {L"private: long __cdecl CTitleBar::_PaintButton(struct IDCompositionSurface *,enum CTitleBar::TitleBarControl,enum TITLE_BAR_BITMAP_TYPE,struct tagRECT const &,struct tagRECT const &)"},
-            (void **)&CTitleBar__PaintButton_orig,
-            (void *)CTitleBar__PaintButton_hook,
-            false
-        },
-        {
-            {L"private: bool __cdecl CTitleBar::UpdateBorderVisibilityAndMargins(void)"},
-            (void **)&CTitleBar__UpdateBorderVisibilityAndMargins_orig,
-            (void *)CTitleBar__UpdateBorderVisibilityAndMargins_hook,
-            true
-        } 
-        
-    };
+    HMODULE hAppFrame = LoadLibraryExW(L"ApplicationFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
-    return WindhawkUtils::HookSymbols(
-        LoadLibraryExW(L"ApplicationFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
-        ApplicationFrame_dll_hooks,
-        ARRAYSIZE(ApplicationFrame_dll_hooks));
+    if (hAppFrame)
+    {
+        HookAllCTitleBar(hAppFrame);
+    }
+
+    return TRUE;
 }
 
 void Wh_ModUninit()
