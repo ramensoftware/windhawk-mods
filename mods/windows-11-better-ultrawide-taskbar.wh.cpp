@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.76
+// @version         0.3.77
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -4161,9 +4161,11 @@ TaskbarConfiguration_GetFrameSize_t TaskbarConfiguration_GetFrameSize_Original;
 double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int taskbarSize) {
     double height = TaskbarConfiguration_GetFrameSize_Original(taskbarSize);
     double adjustment = DockFrameAdjustment(g_dockEdgeDistance);
-    if (!g_dockingDisabled && !TaskbarIconSizeLoaded() &&
+    // taskbar-icon-size returns an absolute height.
+    if (adjustment != 0 && !g_dockingDisabled &&
         (taskbarSize == 1 || taskbarSize == 2) &&
-        std::isfinite(height) && height > 0 && height + adjustment > 0)
+        std::isfinite(height) && height > 0 && height + adjustment > 0 &&
+        !TaskbarIconSizeLoaded())
         height += adjustment;
     return height;
 }
@@ -4818,7 +4820,10 @@ struct Root {
     RootLayoutSnapshot layout;
     bool retired{};
 };
-std::vector<Root> g_roots;  // Confined to the one observed taskbar UI thread.
+template <class T> void ReleaseVector(std::vector<T>& vector) { std::vector<T>().swap(vector); }
+// Globals marked no_destroy skip the CRT destructor, which at process exit
+// would release XAML and composition state after XAML has shut down.
+[[clang::no_destroy]] std::vector<Root> g_roots;  // Confined to the one observed taskbar UI thread.
 
 void PostItemStateRefresh() {
     if (g_stopping || g_busy || g_itemStateRefreshPending || !g_dispatch) return;
@@ -4856,7 +4861,7 @@ void RequestItemStateRefresh(uintptr_t owner) {
     }
 }
 
-std::vector<Root::TrayIconState> g_trayIcons; // Includes realized overflow views.
+[[clang::no_destroy]] std::vector<Root::TrayIconState> g_trayIcons; // Includes realized overflow views.
 struct LoadedTrayView {
     winrt::weak_ref<FrameworkElement> element;
     winrt::event_token sizeChanged{};
@@ -4898,7 +4903,6 @@ struct CompositorProcessCache {
     ULONGLONG nextProbe{};
     PTP_WORK work{};
     bool pending{},stopping{};
-    ~CompositorProcessCache() { Stop(); }
     DWORD Get() {
         std::lock_guard lock(mutex);
         auto now=GetTickCount64();
@@ -8096,7 +8100,7 @@ struct LiquidMotionBatch {
     CompositionScopedBatch batch{nullptr};
     winrt::event_token completed{};
 };
-std::vector<LiquidMotionBatch> g_liquidMotionBatches;  // Owner thread only.
+[[clang::no_destroy]] std::vector<LiquidMotionBatch> g_liquidMotionBatches;  // Owner thread only.
 winrt::event_token g_liquidRenderingToken{};
 bool g_liquidRenderingSubscribed{};
 unsigned g_liquidFinalFrames{};
@@ -8124,7 +8128,7 @@ void StopLiquidMotionTracking() noexcept {
         try { motion.batch.Completed(motion.completed); }
         catch (...) {}
     }
-    g_liquidMotionBatches.clear();
+    ReleaseVector(g_liquidMotionBatches);
     g_liquidFinalFrames = 0;
     SetLiquidMotionActive(false);
 }
@@ -8762,6 +8766,22 @@ bool IsAttentionStateName(std::wstring_view name) {
     return name.find(L"RequestingAttention") != std::wstring_view::npos;
 }
 
+// The search box's panel reports one visual state group, but reading it
+// dereferences null and crashes Explorer (windows-11-taskbar-styler skips the
+// same elements: the "Icon and label" search box and the 2025 pill layout).
+bool HasBrokenVisualStateGroups(FrameworkElement const& element) {
+    constexpr std::pair<std::wstring_view, std::wstring_view> kBroken[]{
+        {L"Taskbar.TaskListButtonPanel", L"Taskbar.SearchBoxLaunchListButton"},
+        {L"SearchUx.SearchUI.SearchButtonRootGrid", L"SearchUx.SearchUI.SearchPillButton"}};
+    auto name = winrt::get_class_name(element);
+    for (auto [child, parent] : kBroken) {
+        if (std::wstring_view(name) != child) continue;
+        auto owner = Media::VisualTreeHelper::GetParent(element).try_as<FrameworkElement>();
+        return owner && std::wstring_view(winrt::get_class_name(owner)) == parent;
+    }
+    return false;
+}
+
 // Observe the native groups once per button, including high contrast where the
 // private brush controller is released. A changed template replaces this owner.
 struct ButtonStateObserver {
@@ -8775,12 +8795,13 @@ struct ButtonStateObserver {
 
     void Attach(FrameworkElement const& element, uintptr_t owner, unsigned depth=4) {
         if (!element || !depth) return;
-        for (auto const& group : VisualStateManager::GetVisualStateGroups(element)) {
-            if (std::wstring_view(group.Name()).starts_with(L"UWPlate_")) continue;
-            auto notify=[owner](auto const&, auto const&) { RequestItemStateRefresh(owner); };
-            groups.push_back({group,group.CurrentStateChanging(winrt::auto_revoke,notify),
-                group.CurrentStateChanged(winrt::auto_revoke,notify)});
-        }
+        if (!HasBrokenVisualStateGroups(element))
+            for (auto const& group : VisualStateManager::GetVisualStateGroups(element)) {
+                if (std::wstring_view(group.Name()).starts_with(L"UWPlate_")) continue;
+                auto notify=[owner](auto const&, auto const&) { RequestItemStateRefresh(owner); };
+                groups.push_back({group,group.CurrentStateChanging(winrt::auto_revoke,notify),
+                    group.CurrentStateChanged(winrt::auto_revoke,notify)});
+            }
         int count=Media::VisualTreeHelper::GetChildrenCount(element);
         for (int i=0;i<count;++i)
             Attach(Media::VisualTreeHelper::GetChild(element,i).try_as<FrameworkElement>(),owner,depth-1);
@@ -8864,7 +8885,8 @@ struct PlateTemplateValues {
         // A distant ScrollViewer/ContentControl does not own the states of
         // arbitrary content. Only use the named part's actual template owner.
         auto templateOwner=control.try_as<Controls::IControlProtected>();
-        if(!templateOwner || templateOwner.GetTemplateChild(element.Name())!=element) return {};
+        if(!templateOwner || templateOwner.GetTemplateChild(element.Name())!=element ||
+           HasBrokenVisualStateGroups(root)) return {};
         auto result=std::make_shared<PlateTemplateValues>();
         result->managed=managed;
         result->element=element; result->control=control;
@@ -9163,42 +9185,43 @@ struct NativePlateFill : std::enable_shared_from_this<NativePlateFill> {
         // Color/opacity animations must retain the brush they already target.
         auto parent=Media::VisualTreeHelper::GetParent(plate).try_as<FrameworkElement>();
         for(unsigned depth=0;parent && depth<16;++depth) {
-            for(auto const& group:VisualStateManager::GetVisualStateGroups(parent)) {
-                if(std::wstring_view(group.Name()).starts_with(L"UWPlate_")) continue;
-                stateChanging.emplace_back(group,group.CurrentStateChanging(winrt::auto_revoke,
-                    [weak=weak_from_this(),groupWeak=winrt::make_weak(group)](auto const&,VisualStateChangedEventArgs const& args) {
-                        if(auto self=weak.lock()) {
-                            if(self->updating || !self->element) return;
-                            self->updating=true;
-                            try {
-                                auto group=groupWeak.get();
-                                for(size_t i=0;i<2;++i) {
-                                    if(self->templateValues && self->templateValues->managed[i+4] &&
-                                       self->TouchesBrush(args.NewState(),i,false)) {
-                                        // XAML promotes the animated brush to a local value,
-                                        // detaching TemplateBinding even without the mod.
-                                        // Release our setter so it cannot mask that animation.
-                                        self->templateValues->Remove(i+4);
-                                        self->templateValues->managed[i+4]=false;
-                                        self->original[i]=self->source[i];
-                                        self->binding[i]=nullptr;
-                                    }
-                                    bool entering=self->TouchesBrush(args.NewState(),i,true,group);
-                                    bool leaving=self->TouchesBrush(args.OldState(),i,true,group);
-                                    if(entering) {
-                                        self->brushStateOwner[i]=group;
-                                    } else if(leaving) {
-                                        self->RestoreProperty(i);
-                                        self->brushStateOwner[i]=nullptr;
+            if(!HasBrokenVisualStateGroups(parent))
+                for(auto const& group:VisualStateManager::GetVisualStateGroups(parent)) {
+                    if(std::wstring_view(group.Name()).starts_with(L"UWPlate_")) continue;
+                    stateChanging.emplace_back(group,group.CurrentStateChanging(winrt::auto_revoke,
+                        [weak=weak_from_this(),groupWeak=winrt::make_weak(group)](auto const&,VisualStateChangedEventArgs const& args) {
+                            if(auto self=weak.lock()) {
+                                if(self->updating || !self->element) return;
+                                self->updating=true;
+                                try {
+                                    auto group=groupWeak.get();
+                                    for(size_t i=0;i<2;++i) {
+                                        if(self->templateValues && self->templateValues->managed[i+4] &&
+                                           self->TouchesBrush(args.NewState(),i,false)) {
+                                            // XAML promotes the animated brush to a local value,
+                                            // detaching TemplateBinding even without the mod.
+                                            // Release our setter so it cannot mask that animation.
+                                            self->templateValues->Remove(i+4);
+                                            self->templateValues->managed[i+4]=false;
+                                            self->original[i]=self->source[i];
+                                            self->binding[i]=nullptr;
+                                        }
+                                        bool entering=self->TouchesBrush(args.NewState(),i,true,group);
+                                        bool leaving=self->TouchesBrush(args.OldState(),i,true,group);
+                                        if(entering) {
+                                            self->brushStateOwner[i]=group;
+                                        } else if(leaving) {
+                                            self->RestoreProperty(i);
+                                            self->brushStateOwner[i]=nullptr;
+                                        }
                                     }
                                 }
+                                catch (...) { Wh_Log(L"[UWITEM] state fill restore failed hr=%08X",winrt::to_hresult().value); }
+                                self->updating=false;
+                                self->ScheduleRefresh();
                             }
-                            catch (...) { Wh_Log(L"[UWITEM] state fill restore failed hr=%08X",winrt::to_hresult().value); }
-                            self->updating=false;
-                            self->ScheduleRefresh();
-                        }
-                    }));
-            }
+                        }));
+                }
             if(parent.try_as<Controls::Control>()) break;
             parent=Media::VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>();
         }
@@ -10115,7 +10138,7 @@ void ClearLoadedTrayViews() {
     }
     g_loadedTrayViews.clear();
     for (auto& state : g_trayIcons) RestoreTrayIconState(state);
-    g_trayIcons.clear();
+    ReleaseVector(g_trayIcons);
 }
 
 using NotifyIconLoaded_t = void(WINAPI*)(void*, TrayInspectable const&, RoutedEventArgs const&);
@@ -11595,7 +11618,7 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             g_panelLocationHook = nullptr;
         }
         for (auto& root : g_roots) RetireRoot(root);
-        g_roots.clear();
+        ReleaseVector(g_roots);
         ClearLoadedTrayViews();
         DestroyWindow(window);
         g_dispatch = nullptr;
@@ -11937,8 +11960,11 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, PanelDwmAttribute,
                                         &DwmSetWindowAttribute_Original)) return FALSE;
     DWORD alignment = 0, bytes = sizeof(alignment);
-    if (RegGetValue(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                    L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &alignment, &bytes) != ERROR_SUCCESS || alignment != 1) {
+    LSTATUS alignmentRead = RegGetValue(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                    L"TaskbarAl", RRF_RT_REG_DWORD, nullptr, &alignment, &bytes);
+    if (alignmentRead == ERROR_FILE_NOT_FOUND) {
+        Wh_Log(L"[UWPOS] TaskbarAl not set; using the Windows default, Center");
+    } else if (alignmentRead != ERROR_SUCCESS || alignment != 1) {
         Wh_Log(L"[UWPOS] centered native alignment required");
         return FALSE;
     }
