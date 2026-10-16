@@ -22,501 +22,287 @@
 
 ![Lunar & Holiday Calendar View](https://i.imgur.com/SBafHNL.png)
 
-Windows 11 的日历（点击任务栏右下角时间/日期弹出）默认只在数字下方显示农历或节气。这个 mod 会把你提供的
-节假日数据写进日历的日期单元格，标记哪些日子、怎么标记则由你自己写的规则决定：
+Windows 11 的日历（点击任务栏右下角的时间弹出）默认只在日期数字下面显示农历或节气。这个 mod 会把你填的
+节假日数据写进日期格子：哪些日子被标记、标成什么颜色和文字，全由你自己写的规则决定，所以任何国家的节假日
+都能用，不限于中国。
 
-- **放假/节日**：默认"休"标记的日子显示节日名（如"国庆节"），蓝色。
-- **调休上班日**：默认"班"标记的日子显示"补班"，红色。
-- 规则写在设置里，是一条列表：一项一类日子，每项填词、颜色、文字（见下文的"高亮规则"）。想把订阅源里的
-  **所有**事件都高亮（别国的节假日订阅源大多没有"休"/"班"这样的标记），加一项、词那栏填 `*` 就行。
-- 留空的栏表示不动：文字留空就保留系统原本的农历/节气文字、只用颜色区分；颜色留空就只换文字、
-  颜色保持系统原样。
-- 其余日期保持系统原本的农历/节气显示，完全不动。
+- **放假/节日**：默认"休"标到的日子显示节日名（如"国庆节"），蓝色。
+- **调休上班日**：默认"班"标到的日子显示"补班"，红色。
+- 其余日期保持系统原本的农历/节气显示。
 
 ## 使用前提
 
-mod 是往日期单元格里的**第二行文字**写的，也就是系统显示农历/节气的那一行，所以任务栏日历要打开
-"其他日历"这一行：设置 → 时间和语言 → 日期和时间 → "在任务栏中显示其他日历"，选中"简体中文
-（农历）"。把它关掉的话，日期格子里很可能就没有可写的那一行，日历上也就看不出放假/调休（真遇到
-这种情况，日志里会说明）。
+mod 是往日期格子里的**第二行**写的，也就是系统显示农历/节气的那一行，所以先把它打开：
 
-另外，"这一格是哪一天"是按格子代表的本地日期算出来的，跟格子布置在哪个时区无关，所以在东八区、
-欧美时区都不会差一天。
+设置 → 时间和语言 → 日期和时间 → "在任务栏中显示其他日历" → 选中"简体中文（农历）"
 
-## 工作原理
-
-日历里没有可以放额外元素的容器（日期单元格只有"日期数字 + 农历文字"两个文本），而且系统会在切换
-月份后异步重写农历文字，所以 mod 只用颜色和文字本身来表示放假/补班。
-
-mod 只替换农历文字的内容和颜色，不改动单元格的结构，也不会重复写入同一个单元格。系统在切换月份后
-会异步重写农历文字，有时连文字块本身都会换掉，所以 mod 会在日历变化之后的几秒内逐秒复查单元格：
-只有发现放假/补班的文字被系统覆盖时才会再写一次，其余单元格不做任何写入。复查由"日历窗口出现或
-被显示、日期变化、文字变化、数据或设置变化"触发，并且在连续几秒没有任何写入之后自己停下来——
-系统的日历即使关掉了也仍然被 shell 留着，定时器不能一直跑下去。
-
-改规则不用重新下载：mod 会把最近一次读到的订阅源内容留着，规则一改就照着新规则把已经读到的数据重新
-标一遍（日志里会记一条），只有换了订阅地址才会把旧数据丢掉。
+不打开这一行，日期格子里往往就没有可写的地方，日历上也看不出标记。
 
 ## 设置项
 
-| 设置 | 含义 |
+| 设置 | 填什么 |
 | --- | --- |
-| 数据来源（ICS 地址） | 一个 iCalendar（`.ics`）订阅地址。里面被"高亮规则"匹配到的事件会标在日历上；留空（默认）则 mod 一个请求也不发，日历保持系统原样。 |
-| 刷新间隔（小时） | 这段时间内不重复下载（默认 24 小时）。只在填了地址时才有意义。 |
-| 高亮规则 | 哪些事件被标记、标成什么颜色和文字：一张列表，一项一类日子，每项填词、颜色、文字（留空的栏表示不动）。见下文的"高亮规则"。 |
+| 数据来源 | 你的 `.ics` 订阅地址。**留空（默认）则什么都不显示**，mod 也不会联网。 |
+| 刷新间隔（小时） | 隔多久重新下载一次（默认 24 小时）。 |
+| 高亮规则 | 哪些日子被标记、标成什么颜色和文字。见下文。 |
+| 剔除的文字 | 从事件原文里删掉的那几段文字（默认 `（休）`、`（班）`）。见下文。 |
 
-## 数据来源
-
-**这个 mod 默认不联网，也不内置任何节假日数据，不存在内置的接口地址。** 它只读你在设置里填的那个
-地址；地址留空时，它一个请求也不发，日历保持系统原本的样子。
-
-要让它显示节假日，请填一个 **iCalendar（`.ics`）订阅地址**。事件的 `SUMMARY` 里出现你规则里的词
-（默认是"休"和"班"）才会被标记，形如：
-
-```
-BEGIN:VEVENT
-DTSTART;VALUE=DATE:20260215
-DTEND;VALUE=DATE:20260224
-SUMMARY:春节（休）
-END:VEVENT
-```
-
-一个可以直接用的示例地址是 `https://holiday.ailcc.com/api/holiday/ics`（一次返回多年数据，事件里
-带（休）/（班）标记）。它只是示例：mod 不会自己去访问它，除非你把这个地址填进设置里；任何其他符合
-上面格式的 ICS 订阅源也一样可用。
-
-另一个可用的示例是苹果 iCloud 的中国大陆节假日日历
-`https://p10-calendars.icloud.com/holiday/CN_zh.ics`：这个地址返回的响应是 gzip 压缩的，mod 会先
-解压再解析。
-
-解析规则：
-
-- 只有 `SUMMARY` 里出现你规则里的词（默认是"休"和"班"）的条目才会被标记：匹配到的那条规则决定这一
-  天的颜色和文字（默认放假日显示节日名、调休日显示"补班"）。一个词都没匹配上的条目（节气、传统
-  节日、洋节等）不标记，所以它们不会被误当成放假；想让它们也算上，加一条兜底规则就行（词那一栏
-  填 `*`）。日期用的是事件写的那一天：`DTSTART`/`DTEND` 带不带时间都可以，时间部分会被
-  忽略（所以 `20260215`、`2026-02-15`、`20260215T000000Z` 都读作 2 月 15 日）。
-- `DTEND` 是**不含**的那一天，和 RFC 5545 一致：上面这条表示 2 月 15 日到 23 日放假。没写 `DTEND`
-  的事件按它开始的那一天处理；用 `DURATION`（如 `P3D`、`P1W`）写时长的事件按它算。
-- 每个日期都会先检查是否真的存在（含闰年）：`20260231` 这种不存在的日期整条丢掉，而不是"顺手"挪到
-  3 月 3 日；写了 `DTEND`/`DURATION` 却解析不出来、或结束日期不比开始日期晚的事件也会被丢掉
-  （日志里有一条计数）。
-- 只在填了地址之后才会去取数据，之后默认每 24 小时（可改）刷新一次；请求失败时保留上次的数据，
-  10 分钟后重试。取不到数据（没填地址、没网、地址失效）时，日历保持系统原本的样子，不会变成一片
-  空白，也不会报错刷屏。
-- 响应如果是 gzip 或 zlib 压缩的，会先解压再解析（上面那个苹果地址就是这么返回的）。其他压缩方式
-  （brotli、zstd 之类）读不了：遇到时日志里会说明这一点，而不是把二进制当成文本乱读。
-
-从订阅源里读的东西：事件的 `DTSTART`/`DTEND`、用 `DURATION` 写的时长、`RDATE` 点名的那几天、
-`EXDATE` 排除掉的那几天，以及"每年重复"这一种 `RRULE`（`FREQ=YEARLY`，可带 `COUNT`、`UNTIL`、
-`INTERVAL`，最多再带 `BYMONTH`/`BYMONTHDAY` 且要和事件自己的日子一致）。**不做**的：其他形式的重复
-规则（`FREQ=MONTHLY` 之类，或带 `BYDAY` 这种部件）按事件写的那一天读，日志里说明一次；时区换算
-（事件写哪天就是哪天）；以及单元格里的角标。
+改规则、改"剔除的文字"都不用重新下载：mod 会拿已经读到的数据按新设置重新标一遍。
 
 ## 高亮规则
 
-"高亮规则"决定日历上标记哪些事件、怎么标记：**一项就是一类日子**，每项填三栏（词、颜色、文字），
-想加一类就点 Add，不想要就删掉那一项。**留空的栏表示不动**，所以可以只改颜色、也可以只换文字。
+一项一类日子，每项填三栏：
 
-    要找的词：休,放假        颜色：#4EA1FF        显示的文字：{name}
+    要找的词：休        颜色：#4EA1FF        显示的文字：{name}
 
-- **词**：在事件的 `SUMMARY` 里查找，多个用逗号隔开（`休,放假,holiday`），出现其中一个就生效。
-  查找不看大小写，也不要求词前后有分隔符。填 `*` 是**兜底**：接收所有没被别的规则匹配到的事件；
-  留空则这一项什么都不标记（刚加进来还没填的状态）。
-- **颜色**：取色器选一个，或者手填 `#RRGGBB`（也认 `RRGGBB` 和 8 位 `AARRGGBB`）。**留空表示不动颜色**
-  ——这时这一项只换文字。填错的规则会被丢掉，日志里点名。
-- **文字**：**留空表示不动文字**——这时这一项只改颜色。`{name}` 是事件的 `SUMMARY` 去掉匹配到的词
-  之后剩下的内容（那个词被一对括号单独括着时，括号也一起去掉）。
+- **要找的词**：只填一个词，它出现在事件文字里就算命中。默认两项是"休"和"班"；填 `*` 是**兜底**：
+  所有没被别的规则命中过的事件都归它——别国的订阅源大多没有"休"/"班"，加一项填 `*` 就能全标上。
+- **颜色**：取色器选一个，或者手填 `#RRGGBB`。**留空则不动颜色**，只换文字。
+- **显示的文字**：`{name}` 是事件原文（再按"剔除的文字"删掉其中你写的部分）；也可以写死一段文字，
+  默认"班"那一项就写着 `补班`。**留空则保留系统原本的农历/节气文字**，只改颜色。
+- **留空的栏表示不动**；从上往下第一条命中的生效。
 
-从上往下找，**第一条匹配上的生效**，所以把具体的那条放在前面。默认的两项是"休"/"放假"（蓝色、显示
-节日名）和"班"/"补班"（红色、显示"补班"），和以前版本一样。
+几个例子（每行都是列表里的一项）：
 
-几个例子（每行都是往列表里加的一项）：
-
-| 词 | 颜色 | 文字 | 效果 |
+| 要找的词 | 颜色 | 显示的文字 | 效果 |
 | --- | --- | --- | --- |
-| `*` | `#4EA1FF` | `{name}` | 订阅源里的所有事件都显示事件名、蓝色（不需要任何标记） |
-| `休,放假` | `#4EA1FF` | `{name}` | "休"或"放假"标到的日子显示事件名、蓝色 |
-| `班,补班` | `#FF5A5A` | `补班` | "班"标到的日子显示"补班"、红色 |
-| `祝日` | `#E81123` | （留空） | 日文订阅源里"祝日"的日子只改颜色、不换文字 |
-| `Holiday` | （留空） | `休息` | 英文订阅源里 "Holiday" 的日子只换文字、颜色保持系统原样 |
-| `Nghỉ,nghỉ lễ` | `#FF5A5A` | `{name}` | 越南订阅源里"nghỉ"标到的日子显示节日名、红色 |
+| `休` | `#4EA1FF` | `{name}` | 放假的日子显示节日名、蓝色（默认） |
+| `班` | `#FF5A5A` | `补班` | 调休上班的日子显示"补班"、红色（默认） |
+| `*` | `#4EA1FF` | `{name}` | 订阅源里的所有事件都显示原文、蓝色 |
+| `祝日` | `#E81123` | （留空） | 日文订阅源里"祝日"的日子只改颜色，保留原有文字 |
+| `nghỉ lễ` | `#FF5A5A` | `{name}` | 越南订阅源里"nghỉ lễ"的日子显示原文、红色 |
 
-三栏里"词"必填（或者写 `*` 兜底），颜色和文字至少要填一个：两个都留空的项不会做事。
+## 剔除的文字
 
-mod 只给自己标过的格子改颜色，并且在第一次改色之前记下这个文本块原来的前景色（本地值），
-需要还原时原样写回去；原本没有本地值就清掉，让样式和继承来的颜色重新生效。所以像"相邻月份
-的日期被系统调暗"这种由系统自己设的本地颜色，不会被 mod 弄丢。一个颜色"是不是 mod 自己的"是按
-brush 对象本身判断的，不是按颜色值：mod 不会把自己的颜色当成原来的颜色存下来，也不会抹掉系统
-之后设的颜色。
+事件原文里不想要的那一段，原样写一条，它就从显示的文字里消失（出现几次删几次，写的是什么就删什么
+——括号、空格都算）。默认两条是中文订阅源的标记：
 
-## 如何找到日历
+```
+（休）       国庆节（休）                    显示成  国庆节
+(nghỉ bù)    Giỗ tổ Hùng Vương (nghỉ bù)    显示成  Giỗ tổ Hùng Vương
+```
 
-日期单元格不是被"通知"来的：mod 在日历窗口自己的 UI 线程上直接读 XAML 树（`Window::Current()`
-往下走），每一轮复查都重新找一遍，所以不注入任何东西，也用不到 XAML 诊断。
+把列表清空就什么都不删，`{name}` 显示的就是订阅源原文。
 
-定位"农历文字"（Windows 11 里叫 `LunarTextBlock`）同样是每轮重新遍历单元格的视觉树：单元格一共
-只有三四个子元素，走一遍很便宜，但可以保证不会往系统已经换掉的旧文本块里写字。日期数字是单元格
-里唯一的纯数字文本，mod 永远不会动它。万一某个 Windows 版本改了模板结构，mod 会退回按字号自动识别，
-并在日志里打印一次单元格结构（元素类型、名称、文字、字号）供排查。
+## 数据来源
+
+mod 不联网、也不内置任何节假日数据，只读你填的那个地址。下面几个都只是示例，mod 不会自己去访问：
+
+- 苹果 iCloud 中国节假日：`https://p10-calendars.icloud.com/holiday/CN_zh.ics`
+- 苹果 iCloud 越南节假日：`https://p10-calendars.icloud.com/holiday/VN_vi.ics`
+- `https://holiday.ailcc.com/api/holiday/ics`（中国，一次返回多年）
+
+订阅源里每个事件大致长这样，**"要找的词"就是在这里面找**：
+
+```
+SUMMARY:春节（休）
+```
+
+任何 `.ics` 订阅地址都能用。取不到数据时（没填地址、没网、地址失效）日历保持系统原样，不会变成空白。
 
 ## 致谢
 
 日历窗口的定位方式来自 lonfro 的
 [Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
-（GPL-3.0），`RunFromWindowThread` 这类跨线程调用沿用 m417z 的
+（GPL-3.0），跨线程调用沿用 m417z 的
 [Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods)。
-
-mod **不使用 XAML 诊断（`InitializeXamlDiagnosticsEx`）**，所以在同一个进程里可以和
-Windows 11 Notification Center Styler、UWPSpy 这类同样用诊断的工具一起用。
 
 ---
 
 # Lunar & Holiday Calendar (English)
 
-Writes your own text and colour into the Windows 11 calendar flyout, the one that opens
-when you click the taskbar clock: the holidays of the iCalendar feed you point it at, as
-marked by the rules you write - any country's holidays, not only Chinese ones.
+Writes your own text and colour into the Windows 11 calendar flyout (the one which opens
+when you click the clock on the taskbar): the holidays of the iCalendar feed you enter,
+marked by rules you write yourself - any country's holidays, not only Chinese ones.
 
-- **Days off**: the line under the day number is replaced with the holiday name
-  from the data source (for example `国庆节`) and drawn in blue by default.
-- **Adjusted workdays (调休)**: replaced with `补班` and drawn in red by default.
-- **The rules are yours**: which words mark a day, in which colour and with which
-  text is a list in the settings, one item per kind of day (see "Highlight rules").
-  A feed of another country, whose events carry no 休/班 marker at all, is one item
-  away: write `*` in its words.
-- **A field left empty is left alone**: an empty text keeps the system's own lunar date
-  or solar term and only changes the colour, an empty colour only changes the text.
-- **Every other day**: left exactly as the system draws it.
+- **Days off**: days marked 休 show the name of the holiday (for example `国庆节`), in blue.
+- **Adjusted workdays (调休)**: days marked 班 show `补班`, in red.
+- Every other day keeps the lunar date or the solar term the system prints there.
 
 ## Requirements
 
-The mod writes into the **second line of a day cell** - the lunar date or solar term the
-system prints there - so the taskbar calendar has to show that line: Settings -> Time &
-language -> Date & time -> "Show additional calendars in the taskbar", with Simplified
-Chinese (Lunar) selected. With it switched off, a day cell may have no text to write into,
-and nothing extra appears on the calendar (the log says so when that happens).
+The mod writes into the **second line of a day cell**, the one which shows the lunar date
+or the solar term, so that line has to be on:
 
-The date a cell stands for is worked out from the cell itself rather than from the local
-time zone of the machine, so no holiday lands a day early or late west of UTC either.
+Settings -> Time & language -> Date & time -> "Show additional calendars in the taskbar"
+-> Simplified Chinese (Lunar)
 
-## How it works
-
-A day cell of that calendar contains only two texts, the day number and one
-lunar-text block, and there is no container to put an extra element in. Inserting
-an element makes the shell rebuild the day cells over and over (measured: 470
-insertions in 37 seconds, and an empty calendar afterwards), so the mod says
-everything with the existing text and its colour. The shell also rewrites its own
-lunar text asynchronously after a month change, which is why the mod re-checks
-the visible cells once a second, for a few seconds after everything which can
-start such a rewrite, and only writes when a cell no longer shows what it wants.
-The re-check is started by the calendar window appearing or being shown, by the date
-or the text of a cell changing, and by the data or the settings changing; it stops
-itself after five passes without a write, because the shell keeps the day cells of a
-closed flyout alive and a timer which only stopped when they went away would never
-stop.
-
-Changing the rules does not download the feed again: the mod keeps the text of the feed it
-read last and marks the data it already has again with the new rules (a log line says so).
-Only another address throws the old data away.
+With that line switched off a day cell usually has nothing to write into, and no mark
+shows up on the calendar.
 
 ## Settings
 
-| Setting | Meaning |
+| Setting | What to fill in |
 | --- | --- |
-| Data source (ICS) | Any iCalendar (.ics) URL. Its events are marked by the highlight rules below. Empty by default, and then the mod fetches nothing at all and the calendar is left as it is. |
-| Refresh interval (hours) | How long fetched data is reused (default 24 h). Only used while a data source is set. |
-| Highlight rules | Which events are marked, in which colour and with which text: a list of items, one per kind of day, each with a Words, a Colour and a Text field (a field left empty is left alone). See "Highlight rules" below. |
+| Data source (ICS) | The address of your `.ics` feed. **Empty by default, and then nothing is shown** and the mod fetches nothing. |
+| Refresh interval (hours) | How often the feed is read again (24 h by default). |
+| Highlight rules | Which days are marked, in which colour and with which text. See below. |
+| Text to remove | The pieces of the text of an event which are cut off it (default `（休）` and `（班）`). See below. |
 
-## Data source
-
-The mod ships with no holiday data and no built-in service address: it reads only
-the address you enter, and with an empty address (the default) it makes no request
-at all and the calendar stays exactly as Windows draws it.
-
-Enter the address of an **iCalendar (`.ics`) feed**. An event is marked when one of the
-words of a highlight rule appears in its `SUMMARY`; the rules mark 休 and 班 by default,
-so a feed whose day-off and workday entries look like this is marked out of the box:
-
-```
-BEGIN:VEVENT
-DTSTART;VALUE=DATE:20260215
-DTEND;VALUE=DATE:20260224
-SUMMARY:春节（休）
-END:VEVENT
-```
-
-One feed which works this way is `https://holiday.ailcc.com/api/holiday/ics` (several
-years at once, with the day-off and workday markers). It is an example: the mod does
-not contact it - or anything else - unless you paste that address into the settings.
-Any other feed in the format above works as well.
-
-Another one is Apple's iCloud holiday calendar for the mainland,
-`https://p10-calendars.icloud.com/holiday/CN_zh.ics`: it is answered
-gzip-compressed whatever the request asks for, which the mod undoes before it reads
-the body.
-
-- Only events whose `SUMMARY` carries one of the words of a highlight rule are
-  marked, and the rule which matched decides the colour and the text of that day
-  (by default a day off shows the festival name and an adjusted workday `补班`).
-  Entries which no rule matches - solar terms, traditional festivals, foreign
-  holidays - are left alone, so they are never mistaken for a holiday; a
-  catch-all rule (`*`, see "Highlight rules") is what marks those as well. The
-  date an event names is used: a time part in `DTSTART`/`DTEND` is accepted and
-  ignored, so `20260215`, `2026-02-15` and `20260215T000000Z` all mean 15 February.
-- `DTEND` is exclusive, as in RFC 5545: the event above is 15 to 23 February. An
-  event without a `DTEND` is the single day it starts on, and a `DURATION` (`P3D`,
-  `P1W`) is read as the end it stands for.
-- Every date is checked for being a date which exists, leap years included:
-  `20260231` is dropped instead of being walked into 3 March, and an event whose
-  `DTEND` or `DURATION` cannot be parsed, or which is not after its `DTSTART`, is
-  dropped as well (a log line counts those).
-- Data is fetched once an address is set, and reused for 24 hours (configurable); a
-  failed request keeps the previous data and is retried after 10 minutes, and a
-  feed may describe at most 20000 dates in total.
-- A response which is compressed with gzip or zlib is decompressed before it is
-  parsed. A body compressed in any other way (brotli and zstd are the others a
-  server may pick) cannot be read: the log says so instead of the mod reading the
-  bytes as text.
-
-What is read of a feed: the `DTSTART`/`DTEND` of an event, a `DURATION` written instead of a
-`DTEND`, the days an `RDATE` names, the days an `EXDATE` leaves out, and the plain yearly
-`RRULE` - `FREQ=YEARLY`, with `COUNT`, `UNTIL`, `INTERVAL`, and at most `BYMONTH` and
-`BYMONTHDAY` naming the day the event already starts on. Deliberately not expanded: any
-other form of recurrence (`FREQ=MONTHLY` and the like, or a part such as `BYDAY`), which is
-read as the single occurrence its event names, with a one-time log line saying so; a time
-zone (the date an event names is the date used); and any badge or corner marker inside a
-cell.
+Changing the rules, or the text to remove, does not download the feed again: the data
+which was already read is marked again with the new settings.
 
 ## Highlight rules
 
-The "Highlight rules" setting says which events are marked on the calendar and how:
-**one item is one kind of day**, with three fields each - the words, the colour and the
-text. Add an item for another kind of day, remove the ones you do not want. **A field
-which is empty is left alone**, so a rule can change the colour of a day, its text, or
-both.
+One item per kind of day, three fields each:
 
-    Words: 休,放假        Colour: #4EA1FF        Text: {name}
+    Word: 休        Colour: #4EA1FF        Text: {name}
 
-- **Words**: looked for in the `SUMMARY` of an event, separated by commas
-  (`休,放假,holiday`); one of them appearing is enough. The search ignores case, and
-  needs no separators around the word. `*` is the **catch-all**: it takes every event no
-  other rule matched. Empty words mark nothing - the state of an item which has just been
-  added.
-- **Colour**: pick one, or write `#RRGGBB` by hand (`RRGGBB` and the eight digit
-  `AARRGGBB` are read as well). **Empty leaves the colour of the cell as it is**, so the
-  rule only writes a text. A colour which does not parse drops the rule, and the log
-  names it.
-- **Text**: **empty keeps the lunar text**, so the rule only changes the colour.
-  `{name}` is the `SUMMARY` of the event with the matching word taken out (and with the
-  brackets around it, when it is written in brackets of its own).
-
-The items are tried in the order they are in the list and the **first match wins**, so the
-specific rule goes first. The two items the mod ships with mark 休/放假 blue with the name
-of the holiday and 班/补班 red with 补班 - what the mod marked before.
+- **Word**: one word, and a day is marked when it appears in the text of an event. The
+  two default items look for 休 and 班; `*` is the **catch-all**: it takes every event no
+  other rule matched - a feed of another country, whose events carry no 休/班 marker, is
+  one item with `*` away.
+- **Colour**: pick one, or write `#RRGGBB`. **Empty keeps the colour of the cell** and only
+  changes the text.
+- **Text**: `{name}` is the text of the event as it stands (with what "Text to remove" says
+  deleted from it); a fixed text works too - the default 班 item says `补班`. **Empty keeps
+  the lunar text of the system** and only changes the colour.
+- A field left empty is left alone, and the first rule which matches a day marks it.
 
 A few examples, each of them one item of the list:
 
-| Words | Colour | Text | What it does |
+| Word | Colour | Text | What it does |
 | --- | --- | --- | --- |
-| `*` | `#4EA1FF` | `{name}` | every event of the feed shows its name, in blue (no marker needed) |
-| `休,放假` | `#4EA1FF` | `{name}` | days marked 休 or 放假 show the name of the event, in blue |
-| `班,补班` | `#FF5A5A` | `补班` | days marked 班 show `补班`, in red |
-| `祝日` | `#E81123` | (empty) | 祝日 of a Japanese feed is coloured, and its own text is kept |
-| `Holiday` | (empty) | `休息` | days of an English feed which say Holiday show `休息`, in the colour of the cell |
-| `Nghỉ,nghỉ lễ` | `#FF5A5A` | `{name}` | days of a Vietnamese feed marked nghỉ show the name of the holiday, in red |
+| `休` | `#4EA1FF` | `{name}` | a day off shows the name of the holiday, in blue (default) |
+| `班` | `#FF5A5A` | `补班` | an adjusted workday shows `补班`, in red (default) |
+| `*` | `#4EA1FF` | `{name}` | every event of the feed shows its own text, in blue |
+| `祝日` | `#E81123` | (empty) | 祝日 of a Japanese feed is coloured, its own text kept |
+| `nghỉ lễ` | `#FF5A5A` | `{name}` | days of a Vietnamese feed which say `nghỉ lễ`, in red |
 
-The words are what every rule needs (or `*`); of the colour and the text, at least one
-has to be filled in - an item with neither of them does nothing.
+## Text to remove
 
-The colour of a day is written only into a cell the mod is marking, and the value
-the cell had before the first write is remembered (the local value of
-`Foreground`) so that it can be put back exactly; a cell which had no local value
-gets the property cleared, so that its style and inherited colour apply again.
-Clearing the property looks the same most of the time, but not always: a value
-the shell sets on the element itself - it dims the days of the neighbouring
-months that way - would be lost instead of restored. Whether a colour on the label
-is the mod's own is decided by the brush object and not by the colour it holds, so
-the mod never saves its own colour as an original one, and never takes away a
-colour the shell has set since.
+A part of the text of an event you do not want to read is written here as it stands, and
+it disappears from the name (every appearance of it, exactly the characters you wrote - a
+bracket or a space included). The two default items are the marker of the Chinese feed:
 
-## How it finds the calendar
+```
+（休）       国庆节（休）                     shows  国庆节
+(nghỉ bù)    Giỗ tổ Hùng Vương (nghỉ bù)     shows  Giỗ tổ Hùng Vương
+```
 
-Nothing reports a day cell to the mod: it reads the XAML tree of the calendar window on
-that window's own UI thread (`Window::Current()` and down) and finds the day cells again
-on every pass. Nothing is injected and no XAML diagnostics are involved.
+Empty the list and nothing is taken out, so `{name}` is the text of the feed as it stands.
 
-Inside a day cell, the mod walks the three or four children on every pass, never writes
-to the day number (it is the only all-digit text in a cell), prefers the block the
-calendar names `LunarTextBlock`, falls back to the smallest text that has content, and
-remembers the element it wrote to by interface pointer so that a block the shell has
-already replaced is not written to any more.
+## Data source
+
+The mod fetches nothing and ships with no holiday data of its own: it reads the address
+you enter, and nothing else. The addresses below are examples - the mod does not contact
+them by itself:
+
+- Apple iCloud holidays for China: `https://p10-calendars.icloud.com/holiday/CN_zh.ics`
+- Apple iCloud holidays for Vietnam: `https://p10-calendars.icloud.com/holiday/VN_vi.ics`
+- `https://holiday.ailcc.com/api/holiday/ics` (China, several years at once)
+
+An event of a feed looks like this, and **the word of a rule is looked for in it**:
+
+```
+SUMMARY:春节（休）
+```
+
+Any `.ics` address works. A feed which cannot be read (no address, no network, an address
+which is gone) leaves the calendar as the system draws it; it does not turn empty.
 
 ## Credits
 
-The way the calendar window is found follows lonfro's
+The way the calendar window is found comes from lonfro's
 [Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
-(GPL-3.0); the cross-thread helpers such as `RunFromWindowThread` follow m417z's
+(GPL-3.0), and the cross-thread helpers follow m417z's
 [Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods).
-
-The mod does **not** use XAML Diagnostics (`InitializeXamlDiagnosticsEx`), so it can be
-used together with Windows 11 Notification Center Styler and tools such as UWPSpy, which
-use it themselves.
 
 ---
 
 # Lịch âm & ngày lễ (Tiếng Việt)
 
 Viết chữ và màu của bạn vào bảng lịch Windows 11 (bấm vào đồng hồ ở khay hệ thống): ngày lễ từ link
-iCalendar (`.ics`) bạn tự nhập, tô màu theo quy tắc bạn tự viết.
+iCalendar (`.ics`) bạn tự nhập, được tô theo quy tắc bạn tự viết - ngày lễ của bất kỳ nước nào, không chỉ
+Trung Quốc.
 
 - **Ngày nghỉ/lễ**: mặc định những ngày có dấu "休" hiện tên ngày lễ (ví dụ 国庆节), màu xanh.
 - **Ngày làm bù**: mặc định những ngày có dấu "班" hiện 补班, màu đỏ.
-- **Quy tắc là của bạn**: từ nào được tô, màu gì, chữ gì - tất cả nằm trong một danh sách ở phần cài đặt,
-  mỗi mục là một loại ngày (xem "Quy tắc tô màu"). Muốn tô cả một nguồn của nước khác, nơi sự kiện không
-  có dấu 休/班, thì thêm một mục với từ `*`.
-- **Ô để trống là giữ nguyên**: trống chữ thì giữ chữ âm lịch/tiết khí của hệ thống và chỉ đổi màu; trống
-  màu thì chỉ đổi chữ.
-- **Những ngày còn lại** giữ nguyên đúng như hệ thống vẽ.
+- Những ngày còn lại giữ nguyên chữ âm lịch/tiết khí của hệ thống.
 
 ## Yêu cầu
 
-Mod viết vào **dòng chữ thứ hai** của ô ngày, tức dòng hệ thống in ngày âm lịch hoặc tiết khí, nên bảng
-lịch ở khay hệ thống phải bật dòng đó: Cài đặt → Thời gian & ngôn ngữ → Ngày & giờ → "Hiển thị lịch bổ
-sung trên khay hệ thống", chọn "Trung (Giản thể, Âm lịch)". Tắt dòng đó thì ô ngày có thể không còn chữ
-nào để viết, và trên lịch sẽ không thấy gì (log có ghi lại việc này).
+Mod viết vào **dòng chữ thứ hai** của ô ngày, tức dòng hiện ngày âm lịch hoặc tiết khí, nên phải bật dòng
+đó trước:
 
-Ngày mà một ô đại diện được tính từ chính ô đó chứ không theo múi giờ của máy, nên không bị lệch một ngày.
+Cài đặt → Thời gian & ngôn ngữ → Ngày & giờ → "Hiển thị lịch bổ sung trên khay hệ thống" → chọn
+"Trung (Giản thể, Âm lịch)"
 
-## Nguyên lý hoạt động
-
-Ô ngày của bảng lịch chỉ có hai chữ: số ngày và một khối chữ âm lịch; không có chỗ để thêm phần tử mới, mà
-thêm vào thì shell dựng lại các ô liên tục (đã đo: 470 lần chèn trong 37 giây, sau đó lịch trống), nên mod
-chỉ nói mọi thứ bằng chữ và màu sẵn có. Shell cũng ghi lại chữ âm lịch của nó sau khi đổi tháng theo cách
-bất đồng bộ, nên mod kiểm tra lại các ô đang thấy mỗi giây, trong vài giây sau mọi việc có thể bắt đầu lần
-ghi đó, và chỉ ghi khi ô không còn hiện đúng thứ mod muốn. Vòng kiểm tra lại được khởi động khi cửa sổ lịch
-xuất hiện hoặc được hiện ra, khi ngày hay chữ của một ô đổi, và khi dữ liệu hay cài đặt đổi; nó tự dừng sau
-năm vòng không ghi gì, vì shell giữ các ô ngày của bảng lịch đã đóng lại, mà một bộ đếm thời gian chỉ dừng
-khi chúng biến mất thì sẽ không bao giờ dừng.
-
-Đổi quy tắc không cần tải lại nguồn: mod giữ nội dung nguồn đã đọc lần cuối và tô lại dữ liệu đã có theo
-quy tắc mới (log có ghi một dòng); chỉ khi đổi sang địa chỉ khác mới bỏ dữ liệu cũ.
+Không bật dòng đó thì ô ngày thường không còn chỗ nào để viết, và trên lịch sẽ không thấy dấu nào.
 
 ## Cài đặt
 
-| Cài đặt | Ý nghĩa |
+| Cài đặt | Điền gì |
 | --- | --- |
-| Nguồn dữ liệu (ICS) | Một link iCalendar (`.ics`). Những sự kiện khớp với "Quy tắc tô màu" sẽ được tô lên lịch; để trống (mặc định) thì mod không gửi request nào và lịch giữ nguyên như hệ thống vẽ. |
-| Khoảng thời gian làm mới (giờ) | Trong khoảng này mod không tải lại dữ liệu (mặc định 24 giờ). Chỉ có nghĩa khi đã nhập link. |
-| Quy tắc tô màu | Sự kiện nào được tô, màu gì và chữ gì: một danh sách, mỗi mục một loại ngày, gồm Từ, Màu, Chữ (ô để trống là giữ nguyên). Xem phần "Quy tắc tô màu". |
+| Nguồn dữ liệu (ICS) | Địa chỉ `.ics` của bạn. **Để trống (mặc định) thì không hiện gì** và mod không tải gì cả. |
+| Khoảng thời gian làm mới (giờ) | Bao lâu tải lại nguồn một lần (mặc định 24 giờ). |
+| Quy tắc tô màu | Ngày nào được tô, màu gì và chữ gì. Xem bên dưới. |
+| Chữ cần bỏ | Những đoạn chữ bị bỏ khỏi nguyên văn sự kiện (mặc định `（休）`, `（班）`). Xem bên dưới. |
 
-## Nguồn dữ liệu
-
-Mod không kèm dữ liệu ngày lễ và không có địa chỉ dịch vụ nào sẵn: nó chỉ đọc địa chỉ bạn nhập, và với địa
-chỉ trống (mặc định) nó không gửi request nào cả, lịch giữ nguyên đúng như Windows vẽ.
-
-Nhập địa chỉ của một link **iCalendar (`.ics`)**. Một sự kiện được tô khi một trong các từ của "Quy tắc tô
-màu" xuất hiện trong `SUMMARY` của nó; mặc định quy tắc tô 休 và 班, nên nguồn có dạng như sau là dùng được
-ngay:
-
-```
-BEGIN:VEVENT
-DTSTART;VALUE=DATE:20260215
-DTEND;VALUE=DATE:20260224
-SUMMARY:春节（休）
-END:VEVENT
-```
-
-Một nguồn dùng được là `https://holiday.ailcc.com/api/holiday/ics` (nhiều năm một lúc, có dấu nghỉ và dấu
-làm bù). Đó chỉ là ví dụ: mod không truy cập nó - cũng như bất cứ địa chỉ nào khác - trừ khi bạn dán địa chỉ
-đó vào cài đặt. Mọi nguồn khác đúng định dạng trên cũng dùng được.
-
-Một ví dụ nữa là lịch ngày lễ Trung Quốc đại lục của Apple iCloud,
-`https://p10-calendars.icloud.com/holiday/CN_zh.ics`: địa chỉ này trả về nội dung nén gzip, mod giải nén
-trước khi đọc.
-
-- Chỉ những sự kiện có `SUMMARY` chứa một từ của quy tắc mới được tô, và quy tắc khớp quyết định màu và chữ
-  của ngày đó (mặc định ngày nghỉ hiện tên ngày lễ, ngày làm bù hiện 补班). Những mục không quy tắc nào khớp
-  - tiết khí, lễ truyền thống, lễ của nước khác - được để nguyên, nên không bao giờ bị nhầm thành ngày nghỉ;
-  muốn tô cả chúng thì thêm một quy tắc `*` (xem "Quy tắc tô màu"). Ngày được dùng là ngày sự kiện ghi:
-  phần giờ trong `DTSTART`/`DTEND` được chấp nhận và bỏ qua (`20260215`, `2026-02-15` và `20260215T000000Z`
-  đều đọc là ngày 15 tháng 2).
-- `DTEND` là ngày **không** được tính, đúng như RFC 5545: sự kiện trên là từ 15 đến 23 tháng 2. Sự kiện
-  không có `DTEND` được tính là một ngày, đúng ngày bắt đầu.
-- Mọi ngày đều được kiểm tra là ngày có thật (kể cả năm nhuận): `20260231` bị bỏ cả sự kiện chứ không được
-  "đẩy" sang ngày 3 tháng 3; sự kiện có `DTEND` không đọc được, hoặc ngày kết thúc không muộn hơn ngày bắt
-  đầu, cũng bị bỏ (log có đếm lại).
-- Dữ liệu chỉ được tải sau khi bạn nhập địa chỉ, và sau đó mặc định 24 giờ một lần (đổi được); request lỗi
-  thì giữ dữ liệu cũ và thử lại sau 10 phút. Khi không có dữ liệu (chưa nhập địa chỉ, không có mạng, địa chỉ
-  hỏng), lịch giữ nguyên như hệ thống vẽ: không thành trống trơn và cũng không ghi log liên tục.
-- Nội dung trả về nén gzip hoặc zlib được giải nén trước khi đọc (địa chỉ Apple ở trên trả về như vậy). Các
-  kiểu nén khác (brotli, zstd) thì không đọc được: log nói rõ điều đó thay vì đọc dữ liệu nhị phân như chữ.
-
-Mod đọc gì từ nguồn: `DTSTART`/`DTEND` của sự kiện, một `DURATION` viết thay cho `DTEND`, những ngày
-`RDATE` nêu tên, những ngày bị `EXDATE` loại ra, và `RRULE` dạng "hằng năm" thuần (`FREQ=YEARLY`, có thể
-kèm `COUNT`, `UNTIL`, `INTERVAL`, cùng lắm là `BYMONTH`/`BYMONTHDAY` trùng với ngày sự kiện đã có). Cố ý
-không mở rộng: mọi dạng lặp khác (`FREQ=MONTHLY` và tương tự, hay một phần như `BYDAY`) được đọc đúng như
-lần xuất hiện mà sự kiện ghi, log có ghi một lần; việc đổi múi giờ (ngày sự kiện ghi chính là ngày được
-dùng); và mọi nhãn hay dấu ở góc trong ô ngày.
+Đổi quy tắc hay đổi "chữ cần bỏ" đều không phải tải lại nguồn: mod tô lại dữ liệu đã đọc theo cài đặt mới.
 
 ## Quy tắc tô màu
 
-"Quy tắc tô màu" quyết định sự kiện nào được tô trên lịch và tô thế nào: **mỗi mục là một loại ngày**, mỗi
-mục có ba ô (Từ, Màu, Chữ). **Ô để trống là giữ nguyên**, nên có thể chỉ đổi màu, hoặc chỉ đổi chữ.
+Mỗi mục là một loại ngày, gồm ba ô:
 
-    Từ: 休,放假        Màu: #4EA1FF        Chữ: {name}
+    Từ: 休        Màu: #4EA1FF        Chữ: {name}
 
-- **Từ**: tìm trong `SUMMARY` của sự kiện, nhiều từ cách nhau bằng dấu phẩy (`休,放假,holiday`), có một từ
-  xuất hiện là mục đó có hiệu lực. Không phân biệt chữ hoa chữ thường, và không đòi hỏi dấu phân cách quanh
-  từ. `*` là **quy tắc bao trọn**: nhận mọi sự kiện không quy tắc nào khớp; để trống thì mục đó không tô
-  ngày nào.
-- **Màu**: chọn trong bảng màu, hoặc tự viết `#RRGGBB` (cũng nhận `RRGGBB` và `AARRGGBB` tám chữ số).
-  **Để trống là giữ nguyên màu** - khi đó mục này chỉ đổi chữ. Màu viết sai thì quy tắc bị bỏ, log có ghi.
-- **Chữ**: **để trống là giữ nguyên chữ** - khi đó mục này chỉ đổi màu. `{name}` là `SUMMARY` của sự kiện
-  sau khi bỏ từ đã khớp (nếu từ đó nằm trong một cặp ngoặc thì bỏ cả ngoặc).
+- **Từ**: chỉ một từ, xuất hiện trong nội dung sự kiện là ngày đó được tô. Hai mục mặc định là 休 và 班;
+  `*` là **bao trọn**: nhận mọi sự kiện không quy tắc nào khớp - nguồn của nước khác, sự kiện không có
+  dấu 休/班, chỉ cần thêm một mục với `*`.
+- **Màu**: chọn trong bảng màu, hoặc tự viết `#RRGGBB`. **Để trống là giữ nguyên màu**, chỉ đổi chữ.
+- **Chữ**: `{name}` là nguyên văn sự kiện (sau khi bỏ những gì bạn viết trong "Chữ cần bỏ"); cũng có thể
+  viết một chữ cố định - mục 班 mặc định ghi `补班`. **Để trống là giữ chữ âm lịch/tiết khí của hệ
+  thống**, chỉ đổi màu.
+- Ô để trống là giữ nguyên; quy tắc đầu tiên khớp sẽ được dùng.
 
-Danh sách được duyệt từ trên xuống và **quy tắc đầu tiên khớp là quy tắc được dùng**, nên hãy đặt mục cụ thể
-lên trước. Hai mục mặc định là 休/放假 (xanh, hiện tên ngày lễ) và 班/补班 (đỏ, hiện 补班), như các bản trước.
-
-Vài ví dụ (mỗi dòng là một mục thêm vào danh sách):
+Vài ví dụ (mỗi dòng là một mục trong danh sách):
 
 | Từ | Màu | Chữ | Tác dụng |
 | --- | --- | --- | --- |
-| `*` | `#4EA1FF` | `{name}` | mọi sự kiện của nguồn đều hiện tên, màu xanh (không cần dấu gì) |
-| `休,放假` | `#4EA1FF` | `{name}` | ngày có dấu 休 hoặc 放假 hiện tên sự kiện, màu xanh |
-| `班,补班` | `#FF5A5A` | `补班` | ngày có dấu 班 hiện 补班, màu đỏ |
+| `休` | `#4EA1FF` | `{name}` | ngày nghỉ hiện tên ngày lễ, màu xanh (mặc định) |
+| `班` | `#FF5A5A` | `补班` | ngày làm bù hiện 补班, màu đỏ (mặc định) |
+| `*` | `#4EA1FF` | `{name}` | mọi sự kiện của nguồn đều hiện nguyên văn, màu xanh |
 | `祝日` | `#E81123` | (trống) | ngày 祝日 của nguồn Nhật chỉ đổi màu, giữ chữ của hệ thống |
-| `Holiday` | (trống) | `休息` | ngày có chữ Holiday của nguồn tiếng Anh chỉ đổi chữ, giữ màu |
-| `Nghỉ,nghỉ lễ` | `#FF5A5A` | `{name}` | ngày có dấu nghỉ của nguồn Việt hiện tên ngày lễ, màu đỏ |
+| `nghỉ lễ` | `#FF5A5A` | `{name}` | ngày có "nghỉ lễ" của nguồn Việt hiện nguyên văn, màu đỏ |
 
-Ba ô thì "Từ" là bắt buộc (hoặc viết `*`), còn Màu và Chữ phải điền ít nhất một: mục để trống cả hai thì
-không làm gì.
+## Chữ cần bỏ
 
-Mod chỉ đổi màu ở những ô do chính nó tô, và ghi lại màu chữ gốc của khối chữ trước lần đổi màu đầu tiên để
-trả lại đúng như cũ; ô vốn không có giá trị local thì xoá thuộc tính đi. Nhờ vậy những màu do hệ thống tự
-đặt - ví dụ ngày của tháng bên cạnh bị làm mờ - không bị mod làm mất. Một màu có phải của mod hay không được
-quyết định bằng chính đối tượng brush chứ không bằng giá trị màu: mod không lưu màu của mình thành màu gốc,
-và không lấy đi màu mà shell đặt sau đó.
+Đoạn chữ bạn không muốn thấy trong nguyên văn sự kiện thì viết vào đây đúng như nó vốn có, và nó biến mất
+khỏi chữ hiển thị (mọi chỗ xuất hiện, đúng những ký tự bạn viết - kể cả ngoặc và dấu cách). Hai mục mặc
+định là dấu của nguồn Trung Quốc:
 
-## Cách tìm lịch
+```
+（休）        国庆节（休）                     hiện  国庆节
+(nghỉ bù)     Giỗ tổ Hùng Vương (nghỉ bù)     hiện  Giỗ tổ Hùng Vương
+```
 
-Không có gì báo cho mod biết ô ngày nào đang có: mod tự đọc cây XAML của cửa sổ lịch trên chính luồng UI của
-cửa sổ đó (`Window::Current()` và đi xuống) và tìm lại các ô ngày ở mỗi vòng. Không tiêm gì vào tiến trình và
-không dùng XAML diagnostics.
+Xóa hết danh sách thì không bỏ gì, `{name}` là nguyên văn nguồn.
 
-Trong một ô ngày, mod duyệt ba bốn phần tử con ở mỗi vòng, không bao giờ ghi vào số ngày (đó là chữ chỉ có
-chữ số duy nhất trong ô), ưu tiên khối mà lịch đặt tên `LunarTextBlock`, nếu không có thì lấy chữ nhỏ nhất có
-nội dung, và nhớ phần tử mình đã ghi bằng con trỏ giao diện để không ghi vào khối mà shell đã thay.
+## Nguồn dữ liệu
+
+Mod không tải gì và không kèm dữ liệu ngày lễ nào: nó chỉ đọc địa chỉ bạn nhập. Vài địa chỉ dưới đây chỉ
+là ví dụ, mod không tự truy cập:
+
+- Ngày lễ Trung Quốc của Apple iCloud: `https://p10-calendars.icloud.com/holiday/CN_zh.ics`
+- Ngày lễ Việt Nam của Apple iCloud: `https://p10-calendars.icloud.com/holiday/VN_vi.ics`
+- `https://holiday.ailcc.com/api/holiday/ics` (Trung Quốc, nhiều năm một lần)
+
+Mỗi sự kiện trong nguồn trông như thế này, và **"Từ" của quy tắc được tìm trong đó**:
+
+```
+SUMMARY:春节（休）
+```
+
+Mọi địa chỉ `.ics` đều dùng được. Khi không đọc được dữ liệu (chưa nhập địa chỉ, không có mạng, địa chỉ
+hỏng) thì lịch giữ nguyên như hệ thống vẽ, không bị trống.
 
 ## Ghi công
 
 Cách tìm cửa sổ lịch dựa theo mod
 [Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
-của lonfro (GPL-3.0); các helper gọi xuyên luồng như `RunFromWindowThread` dựa theo
+của lonfro (GPL-3.0); các helper gọi xuyên luồng dựa theo
 [Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods) của m417z.
-
-Mod **không dùng XAML Diagnostics (`InitializeXamlDiagnosticsEx`)**, nên có thể dùng cùng tiến trình với
-Windows 11 Notification Center Styler, UWPSpy và những công cụ cũng dùng diagnostics.
 */
 // ==/WindhawkModReadme==
 
@@ -529,69 +315,65 @@ Windows 11 Notification Center Styler, UWPSpy và những công cụ cũng dùng
   $name:vi-VN: Nguồn dữ liệu (ICS, để trống = không có dữ liệu)
   $description: >-
     An iCalendar (.ics) feed, for example
-    https://p10-calendars.icloud.com/holiday/CN_zh.ics. The events of it which the
-    highlight rules below match are marked; nothing else is read.
+    https://p10-calendars.icloud.com/holiday/CN_zh.ics. Only the events of it which the
+    rules below match are read.
   $description:zh-CN: >-
     一个 iCalendar（.ics）订阅地址，例如 https://p10-calendars.icloud.com/holiday/CN_zh.ics。
-    里面被下面"高亮规则"匹配到的事件会标在日历上；除了这个地址，mod 不访问任何网址。
+    只有被下面"高亮规则"匹配到的事件会读；除了这个地址，mod 不访问任何网址。
   $description:vi-VN: >-
     Một link iCalendar (.ics), ví dụ https://p10-calendars.icloud.com/holiday/CN_zh.ics.
-    Những sự kiện khớp với quy tắc tô màu bên dưới sẽ được tô; ngoài link này mod không
-    truy cập địa chỉ nào khác.
+    Chỉ những sự kiện khớp với quy tắc bên dưới được đọc; ngoài link này mod không truy
+    cập địa chỉ nào khác.
 - refreshIntervalHours: 24
   $name: Refresh interval (hours)
   $name:zh-CN: 刷新间隔（小时）
   $name:vi-VN: Khoảng thời gian làm mới (giờ)
   $description: >-
-    How long fetched data is reused before the source is asked again.
+    How long the data is reused before the feed is read again (default 24).
   $description:zh-CN: 这段时间内不重复下载。
   $description:vi-VN: Trong khoảng này mod không tải lại dữ liệu.
 - highlightRules:
-  - - words: "休,放假"
-      $name: Words to look for
+  - - word: "休"
+      $name: Word to look for
       $name:zh-CN: 要找的词
-      $name:vi-VN: Những từ cần tìm
+      $name:vi-VN: Từ cần tìm
       $description: >-
-        Words looked for in the text of an event, separated by commas; a day is marked
-        when one of them appears. "*" takes every event no other rule matched. An item
-        with no words marks nothing.
+        One word, found anywhere in the text of an event. "*" takes every event no other
+        rule matched; an empty word marks nothing.
       $description:zh-CN: >-
-        在事件文字里查找的词，多个用逗号隔开，出现其中一个就按这条规则标记。填 "*" 表示兜底：
-        所有没被别的规则匹配到的事件都归它。这一栏留空则这一项不标记任何日子（刚加进来还没填）。
+        一个词，出现在事件文字里就算匹配。填 "*" 表示兜底：没被别的规则匹配到的事件都归它；
+        留空则这一项不标记任何日子（刚加进来还没填）。
       $description:vi-VN: >-
-        Những từ tìm trong nội dung sự kiện, cách nhau bằng dấu phẩy; có một từ xuất hiện là
-        ngày đó được tô. "*" là quy tắc bao trọn: nhận mọi sự kiện không quy tắc nào khớp.
-        Để trống thì quy tắc này không tô ngày nào.
+        Một từ, xuất hiện trong nội dung sự kiện là khớp. "*" là bao trọn: nhận mọi sự kiện
+        không quy tắc nào khớp; để trống thì mục này không tô ngày nào.
     - color: "#4EA1FF"
       $name: Colour
       $name:zh-CN: 颜色
       $name:vi-VN: Màu
       $description: >-
-        The colour of the text of a marked day (#RRGGBB). Empty leaves the colour as it
-        is; a colour which is not a colour drops the rule, and the log names it.
+        The colour of the text of a marked day (#RRGGBB). Empty keeps the colour the cell
+        has.
       $description:zh-CN: >-
-        被标记那一天的文字颜色（#RRGGBB）。留空表示不动颜色（只换文字）；填错的规则会被丢掉，
-        日志里点名。
+        被标记那天文字的颜色（#RRGGBB）。留空则不动颜色。
       $description:vi-VN: >-
-        Màu chữ của ngày được tô (#RRGGBB). Để trống là giữ nguyên màu; màu viết sai thì quy
-        tắc đó bị bỏ và có ghi trong log.
+        Màu chữ của ngày được tô (#RRGGBB). Để trống là giữ nguyên màu.
       #! $format: colorRgb
     - text: "{name}"
       $name: Text to show
       $name:zh-CN: 显示的文字
       $name:vi-VN: Chữ hiển thị
       $description: >-
-        Replaces the lunar text. Leave empty for colour only; {name} is the event text
-        with the matching word taken out.
+        What the cell shows. "{name}" is the text of the event as the feed writes it;
+        empty keeps the lunar text and only changes the colour.
       $description:zh-CN: >-
-        替换农历文字。留空则只改颜色；{name} 是事件文字去掉匹配到的词之后剩下的内容。
+        日历上显示的文字。"{name}" 就是事件原文；留空则保留系统农历文字、只改颜色。
       $description:vi-VN: >-
-        Thay chữ âm lịch. Để trống thì chỉ tô màu; {name} là nội dung sự kiện sau khi bỏ từ
-        đã khớp.
-  - - words: "班,补班"
-      $name: Words to look for
+        Chữ hiện trên lịch. "{name}" là nguyên văn của sự kiện; để trống là giữ chữ âm lịch
+        và chỉ đổi màu.
+  - - word: "班"
+      $name: Word to look for
       $name:zh-CN: 要找的词
-      $name:vi-VN: Những từ cần tìm
+      $name:vi-VN: Từ cần tìm
     - color: "#FF5A5A"
       $name: Colour
       $name:zh-CN: 颜色
@@ -605,16 +387,30 @@ Windows 11 Notification Center Styler, UWPSpy và những công cụ cũng dùng
   $name:zh-CN: 高亮规则
   $name:vi-VN: Quy tắc tô màu
   $description: >-
-    One item per kind of day: words, colour, text. A field which is empty is left alone.
-    The first rule which matches a day marks it; "*" is the catch-all. The two items
-    above are the default.
+    One item per kind of day - a word, a colour, a text. A field left empty is left
+    alone, and the first rule which matches a day marks it.
   $description:zh-CN: >-
-    一项一类日子：词、颜色、文字，留空的栏表示不动（留空颜色只换文字，留空文字只改颜色）。
-    从上往下第一条匹配上的生效，"*" 是兜底。上面两项是默认值。
+    一项一类日子：一个词、颜色、文字，留空的栏表示不动。从上往下第一条匹配上的生效。
   $description:vi-VN: >-
-    Mỗi mục là một loại ngày: từ, màu, chữ. Ô để trống là giữ nguyên (trống màu thì chỉ đổi
-    chữ, trống chữ thì chỉ đổi màu). Quy tắc đầu tiên khớp sẽ được dùng; "*" là bao trọn.
-    Hai mục trên là mặc định.
+    Mỗi mục là một loại ngày: một từ, màu, chữ. Ô để trống là giữ nguyên; quy tắc đầu tiên
+    khớp sẽ được dùng.
+- removeTexts: ["（休）", "（班）"]
+  $name: Text to remove from the name
+  $name:zh-CN: 剔除的文字
+  $name:vi-VN: Chữ cần bỏ khỏi tên
+  $description: >-
+    One item per string, deleted from the text above as it is written - a bracket or a
+    space written by hand is a part of it, and every appearance of it goes. The two
+    default items are the marker of the Chinese feed ("（休）" turns "春节（休）" into
+    "春节"); remove them and nothing is taken out.
+  $description:zh-CN: >-
+    每条一项，把这条文字从上面的文字里删掉：写的是什么就删什么（括号、空格都算），出现几次删
+    几次。默认的两条是中国订阅源的标记（写 "（休）"，"春节（休）" 就显示成 "春节"）；把它们
+    删掉就什么都不删了。
+  $description:vi-VN: >-
+    Mỗi mục một chuỗi, bị xóa khỏi chữ ở trên đúng như đã viết - ngoặc hay dấu cách bạn viết
+    đều tính, và mọi chỗ xuất hiện đều bị xóa. Hai mục mặc định là dấu của nguồn Trung Quốc
+    ("（休）" biến "春节（休）" thành "春节"); xóa hết hai mục đó thì không xóa gì nữa.
 */
 // ==/WindhawkModSettings==
 
@@ -717,11 +513,11 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
 
-// One rule of the "highlight rules" setting: the words which mark an event, the colour
+// One rule of the "highlight rules" setting: the word which marks an event, the colour
 // the day is drawn in, and the text the cell shows. The settings UI has one item of the
 // list per rule, with the three fields written below:
 //
-//     Words:  休,放假        Colour: #4EA1FF        Text: {name}
+//     Word: 休        Colour: #4EA1FF        Text: {name}
 //
 // A field which is left out asks for that part of the day to be left alone: a rule with
 // no colour keeps the colour the shell gave the cell, and a rule with no text keeps the
@@ -729,7 +525,10 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 // both. What the fields are is in the WindhawkModSettings block above, which the two
 // have to be changed together.
 struct HighlightRule {
-    std::vector<std::wstring> words;
+    // The one word this rule looks for. "*" is the catch-all, which takes every event no
+    // other rule matched, and an empty word is a rule which marks nothing - the state of
+    // an item which was just added.
+    std::wstring word;
     std::optional<winrt::Windows::UI::Color> color;
     std::wstring text;
 };
@@ -748,6 +547,10 @@ struct Settings {
     int refreshIntervalHours = 24;
     // The rule list as the setting is parsed into it; an empty list marks nothing.
     std::vector<HighlightRule> rules;
+    // What the user asked to be taken out of the name of a marked day, one entry of the
+    // list per string. Empty takes nothing out, which is the state of a feed whose names
+    // are already what the user wants to read.
+    std::vector<std::wstring> removeTexts;
 };
 
 std::mutex g_settingsMutex;
@@ -832,9 +635,9 @@ std::wstring TrimWhitespace(std::wstring const& text) {
 // The highlight rules
 //
 // Which days the calendar marks, and how, is a list of rules in the settings, one item
-// per rule, each with three fields - the words, the colour and the text:
+// per rule, each with three fields - the word, the colour and the text:
 //
-//     Words:  休,放假
+//     Word:   休
 //     Colour: #4EA1FF
 //     Text:   {name}
 //
@@ -849,46 +652,21 @@ std::wstring TrimWhitespace(std::wstring const& text) {
 // ever - the list itself has no end to find.
 constexpr int kMaxHighlightRules = 32;
 
-// The words of a rule, separated by commas - the full-width one as well, since a rule is
-// as likely to be written with that one on a Chinese system. "*" is the catch-all: the
-// rule which takes every event no other rule matched, and which is written that way
-// because a rule with no words at all is one which marks nothing.
-void SplitRuleWords(std::wstring const& text, std::vector<std::wstring>& words) {
-    std::wstring current;
-
-    for (size_t i = 0; i <= text.size(); i++) {
-        wchar_t c = i < text.size() ? text[i] : L',';
-        if (c != L',' && c != L'，') {
-            current += c;
-            continue;
-        }
-        std::wstring word = TrimWhitespace(current);
-        current.clear();
-        if (word.empty()) {
-            continue;
-        }
-        if (word == L"*") {
-            words.clear();
-            return;
-        }
-        words.push_back(std::move(word));
-    }
-}
-
 // The rule list of the settings. A rule whose colour cannot be read is dropped rather
 // than guessed at, and the log names it: a list which marks days differently from what
 // it says is the kind of thing nobody finds by looking. An item which does not describe
-// anything yet - no words, or neither a colour nor a text - is skipped, which is also
+// anything yet - no word, or neither a colour nor a text - is skipped, which is also
 // the state of one the user is in the middle of filling in.
 std::vector<HighlightRule> LoadHighlightRules() {
     std::vector<HighlightRule> rules;
     std::wstring firstNoColour;
     size_t droppedColour = 0;
     size_t droppedWords = 0;
+    bool saidAboutOlderWords = false;
 
     for (int i = 0; i < kMaxHighlightRules; i++) {
-        const std::wstring words =
-            TrimWhitespace(ReadStringSetting(L"highlightRules[%d].words", i));
+        const std::wstring word =
+            TrimWhitespace(ReadStringSetting(L"highlightRules[%d].word", i));
         const std::wstring colorText =
             TrimWhitespace(ReadStringSetting(L"highlightRules[%d].color", i));
         const std::wstring text =
@@ -896,19 +674,32 @@ std::vector<HighlightRule> LoadHighlightRules() {
 
         // An item which is not written at all is skipped: that is the state of an item
         // the user has just added, and of every index past the end of the list.
-        if (words.empty() && colorText.empty() && text.empty()) {
+        if (word.empty() && colorText.empty() && text.empty()) {
             continue;
         }
 
-        // A rule without words marks nothing - "*" is what a rule which takes the
+        // A rule without a word marks nothing - "*" is what a rule which takes the
         // events no other rule matched is written with - so it is left out as well.
-        if (words.empty()) {
+        if (word.empty()) {
+            // An item of the older shape: before the word of a rule was one word it was a
+            // list of them, separated by commas and stored under "words". That value is
+            // not read - what a rule looks for is one word now - but the item is one
+            // somebody wrote, so a word about it once is worth more than a calendar which
+            // is quietly empty where it was not.
+            if (!saidAboutOlderWords &&
+                !ReadStringSetting(L"highlightRules[%d].words", i).empty()) {
+                saidAboutOlderWords = true;
+                Wh_Log(L"A highlight rule is stored under \"words\", from a version in "
+                       L"which a rule looked for several of them: a rule looks for one "
+                       L"word now, and that value is not read. Write the word of the rule "
+                       L"again in the settings");
+            }
             droppedWords++;
             continue;
         }
 
         HighlightRule rule;
-        SplitRuleWords(words, rule.words);
+        rule.word = word;
         rule.text = text;
 
         // No colour is not a mistake: it asks for the colour the shell gave the cell to
@@ -919,13 +710,13 @@ std::vector<HighlightRule> LoadHighlightRules() {
         if (!colorText.empty() && !rule.color) {
             droppedColour++;
             if (firstNoColour.empty()) {
-                firstNoColour = words;
+                firstNoColour = word;
             }
             continue;
         }
 
         // Nothing would change on the day this rule matches: the item is half written,
-        // or it is a rule which is only there for the words it looks for, which is
+        // or it is a rule which is only there for the word it looks for, which is
         // nothing a calendar can show.
         if (!rule.color && rule.text.empty()) {
             continue;
@@ -938,7 +729,7 @@ std::vector<HighlightRule> LoadHighlightRules() {
     // stops; a rule on the far side of the limit is worth a word, since its days would
     // otherwise be marked by nothing at all.
     const std::wstring beyond = TrimWhitespace(
-        ReadStringSetting(L"highlightRules[%d].words", kMaxHighlightRules));
+        ReadStringSetting(L"highlightRules[%d].word", kMaxHighlightRules));
     if (!beyond.empty()) {
         Wh_Log(L"More than %d highlight rules are set; the rest is ignored",
                kMaxHighlightRules);
@@ -950,7 +741,7 @@ std::vector<HighlightRule> LoadHighlightRules() {
                droppedColour, firstNoColour.c_str());
     }
     if (droppedWords) {
-        Wh_Log(L"%zu highlight rule(s) have no words and are ignored - the rule which "
+        Wh_Log(L"%zu highlight rule(s) have no word and are ignored - the rule which "
                L"takes what the others did not is written \"*\"",
                droppedWords);
     }
@@ -958,10 +749,44 @@ std::vector<HighlightRule> LoadHighlightRules() {
     return rules;
 }
 
+// How many entries of the "text to remove" list are read. A list setting has no length to
+// ask for, so the walk has to stop somewhere and this is where: nothing needs this many
+// strings to be taken out, and a list which is longer is cut off with a log line.
+constexpr int kMaxRemoveTexts = 16;
+
+// The text the user asked to be taken out of the name of a marked day: one string per
+// entry of the list, one item of the settings UI per string. The entries are read exactly
+// as they are written, which is how they are used as well (see RemoveAll): no trimming,
+// no separators to escape, so a string which has to lose a comma or a bracket is written
+// with it. An item which is empty is skipped - that is the state of an item just added
+// and of the empty item the list starts from - and the walk goes on rather than stopping
+// there, so an item left empty in the middle does not hide the ones below it.
+std::vector<std::wstring> LoadRemoveTexts() {
+    std::vector<std::wstring> texts;
+    for (int i = 0; i < kMaxRemoveTexts; i++) {
+        const std::wstring text = ReadStringSetting(L"removeTexts[%d]", i);
+        if (text.empty()) {
+            continue;
+        }
+        texts.push_back(text);
+    }
+
+    const std::wstring beyond =
+        ReadStringSetting(L"removeTexts[%d]", kMaxRemoveTexts);
+    if (!beyond.empty()) {
+        Wh_Log(L"More than %d texts to remove are set; the rest is ignored",
+               kMaxRemoveTexts);
+    }
+
+    return texts;
+}
+
 // Whether two rule lists are the same. This is what tells a settings change which
 // changes the marking from one which only changes something else (the refresh interval,
 // say): the data which is already loaded has to be marked again in the first case, and
-// only drawn again in the second.
+// only drawn again in the second. The text to remove belongs to the marking as well -
+// it is taken out of the name of a marked day - and is compared next to this, where the
+// settings change is looked at (see Wh_ModSettingsChanged).
 bool SameHighlightRules(std::vector<HighlightRule> const& left,
                         std::vector<HighlightRule> const& right) {
     auto sameColor = [](std::optional<winrt::Windows::UI::Color> const& a,
@@ -976,7 +801,7 @@ bool SameHighlightRules(std::vector<HighlightRule> const& left,
         return false;
     }
     for (size_t i = 0; i < left.size(); i++) {
-        if (left[i].words != right[i].words || left[i].text != right[i].text ||
+        if (left[i].word != right[i].word || left[i].text != right[i].text ||
             !sameColor(left[i].color, right[i].color)) {
             return false;
         }
@@ -1007,90 +832,42 @@ size_t FindWord(std::wstring const& text, std::wstring const& word) {
     return std::wstring::npos;
 }
 
-// The rule which marks this text, and the word of it which was found. The rules are
-// tried in the order they are written and the first one with a word which appears in the
-// text wins, so the specific rule goes above the general one. A rule without words - the
-// catch-all - is used only when no rule with a word matched, wherever it stands in the
-// list: it is the "everything else" rule, and a list which writes it first means what a
-// list which writes it last means.
+// The rule which marks this text. The rules are tried in the order they are written and
+// the first one whose word appears in the text wins, so the specific rule goes above the
+// general one. The catch-all ("*") is used only when no other rule matched, wherever it
+// stands in the list: it is the "everything else" rule, and a list which writes it first
+// means what a list which writes it last means.
 const HighlightRule* MatchHighlightRule(std::wstring const& text,
-                                        std::vector<HighlightRule> const& rules,
-                                        size_t& position,
-                                        size_t& length) {
-    position = 0;
-    length = 0;
-
+                                        std::vector<HighlightRule> const& rules) {
     for (const auto& rule : rules) {
-        size_t best = std::wstring::npos;
-        size_t bestLength = 0;
-
-        for (const auto& word : rule.words) {
-            size_t at = FindWord(text, word);
-            if (at == std::wstring::npos) {
-                continue;
-            }
-            // The word which starts leftmost names the day: the name of an event is
-            // what is left of its text once that word is taken out, and "中秋国庆"
-            // should not lose its tail to a rule which looks for "国庆" as well. Two
-            // words which start at the same place are settled by the longer one.
-            if (best == std::wstring::npos || at < best ||
-                (at == best && word.size() > bestLength)) {
-                best = at;
-                bestLength = word.size();
-            }
-        }
-
-        if (best != std::wstring::npos) {
-            position = best;
-            length = bestLength;
+        if (rule.word != L"*" && FindWord(text, rule.word) != std::wstring::npos) {
             return &rule;
         }
     }
 
     for (const auto& rule : rules) {
-        if (rule.words.empty()) {
+        if (rule.word == L"*") {
             return &rule;
         }
     }
     return nullptr;
 }
 
-// The name of an event: its text without the word which marked it. A rule whose words
-// are all the event says leaves an empty name, which is nothing a cell can show; the
-// caller writes nothing then and the day is marked by colour alone.
-//
-// A word which sits in a pair of brackets takes the brackets with it when they hold
-// nothing else ("国庆节（休）" -> "国庆节"): the brackets are there to set the marker
-// apart from the name, and taking only the word out would leave an empty pair behind,
-// which is not a name either. A bracketed marker is how a feed writes it in any
-// language, so this is not a rule about Chinese: "Holiday (observed)" loses the
-// brackets the same way.
-std::wstring EventNameWithoutWord(std::wstring const& text,
-                                  size_t position,
-                                  size_t length) {
-    size_t begin = position;
-    size_t end = position + length;
-    if (length && begin > 0 && end < text.size()) {
-        const wchar_t before = text[begin - 1];
-        const wchar_t after = text[end];
-        const bool wrapped =
-            (before == L'（' && after == L'）') ||
-            (before == L'(' && after == L')') ||
-            (before == L'【' && after == L'】') ||
-            (before == L'[' && after == L']') ||
-            (before == L'{' && after == L'}') ||
-            (before == L'〔' && after == L'〕');
-        if (wrapped) {
-            begin--;
-            end++;
-        }
+// Takes every appearance of "what" out of "text". What the settings say is what is taken
+// out, character for character: an entry is not a pattern, a space or a bracket is a part
+// of it like any other character, and the case has to be the one which is written. An
+// entry which appears twice has both of them taken out, and "nothing at all" is not
+// looked for - a search for it would answer with a place between every two characters.
+void RemoveAll(std::wstring& text, std::wstring const& what) {
+    if (what.empty()) {
+        return;
     }
 
-    std::wstring name = text;
-    if (end > begin && begin <= name.size() && end <= name.size()) {
-        name.erase(begin, end - begin);
+    size_t at = text.find(what);
+    while (at != std::wstring::npos) {
+        text.erase(at, what.size());
+        at = text.find(what, at);
     }
-    return TrimWhitespace(name);
 }
 
 void LoadSettings() {
@@ -1099,6 +876,7 @@ void LoadSettings() {
     settings->dataSourceUrl = ReadStringSetting(L"dataSourceUrl");
     settings->refreshIntervalHours = Wh_GetIntSetting(L"refreshIntervalHours");
     settings->rules = LoadHighlightRules();
+    settings->removeTexts = LoadRemoveTexts();
 
     if (settings->refreshIntervalHours < 1) {
         settings->refreshIntervalHours = 1;
@@ -1110,7 +888,7 @@ void LoadSettings() {
     // one thing the marking needs.
     if (settings->rules.empty() && !settings->dataSourceUrl.empty()) {
         Wh_Log(L"No highlight rule is set, so no date is marked; add one in the "
-               L"settings of this mod (the words of an event, a colour and a text)");
+               L"settings of this mod (a word of an event, a colour and a text)");
     }
 
     {
@@ -1140,9 +918,9 @@ std::wstring Utf8ToWide(const char* data, size_t length) {
 ////////////////////////////////////////////////////////////////////////////////
 // Holiday data
 
-// What the calendar shows for one date: the name of the event which covers it, with the
-// word which marked it taken out, and the text and the colour of the rule which marked
-// it. Which rule that is gets decided when the feed is read - see
+// What the calendar shows for one date: the text of the event which covers it, with the
+// strings the user asked to be taken out of it deleted, and the text and the colour of
+// the rule which marked it. Which rule that is gets decided when the feed is read - see
 // ClassifyEventSummary - so that a day cell is drawn from this alone. A colour which is
 // not there is the rule asking for the colour of the cell to be left alone.
 struct HolidayInfo {
@@ -1360,26 +1138,36 @@ std::wstring UnescapeIcsText(std::wstring const& text) {
 }
 
 // Whether an event is marked at all, and how: the rule which matched decides the colour
-// and the text of the day, and the name is what is left of the text of the event once
-// the word which matched is taken out.
+// and the text of the day, and the name is the text of the event as the feed writes it,
+// with what the user asked to be taken out of it (the "text to remove" setting) deleted.
+// Nothing else is taken out - the word which marked the day is left where it stands, and
+// an entry of that list is what takes a marker off a name.
 //
 // "元旦节（休）" with the rules the mod ships with is one such event: the rule of 休
-// matches, so the day is drawn in its blue and the cell shows "元旦节". An event which
-// no rule matches - a solar term, a western holiday, anything the rules were not
-// written for - is left out of the data, so that it can never be taken for a holiday.
+// matches, so the day is drawn in its blue and the cell shows "元旦节（休）" - or
+// "元旦节", with "（休）" written in the list above. An event which no rule matches - a
+// solar term, a western holiday, anything the rules were not written for - is left out of
+// the data, so that it can never be taken for a holiday.
+//
+// The list is used here, after the match and not before it: which day is marked is the
+// feed's answer and not the settings' one, so an entry which covers a word of a rule -
+// the whole "（休）" of "国庆节（休）", say - cannot stop a day from being marked.
 bool ClassifyEventSummary(std::wstring const& summary,
                           std::vector<HighlightRule> const& rules,
-                          HolidayInfo& out) {
+                          HolidayInfo& out,
+                          std::vector<std::wstring> const& removeTexts) {
     std::wstring text = UnescapeIcsText(summary);
 
-    size_t position = 0;
-    size_t length = 0;
-    const HighlightRule* rule = MatchHighlightRule(text, rules, position, length);
+    const HighlightRule* rule = MatchHighlightRule(text, rules);
     if (!rule) {
         return false;
     }
 
-    out.name = EventNameWithoutWord(text, position, length);
+    for (const auto& what : removeTexts) {
+        RemoveAll(text, what);
+    }
+
+    out.name = TrimWhitespace(text);
     out.text = rule->text;
     out.color = rule->color;
     return true;
@@ -1576,7 +1364,8 @@ void AppendDateKeys(std::wstring const& value, std::vector<int32_t>& keys) {
 
 bool ParseIcs(std::wstring const& text,
               std::vector<HighlightRule> const& rules,
-              HolidayMap& out) {
+              HolidayMap& out,
+              std::vector<std::wstring> const& removeTexts) {
     auto lines = SplitIcsLines(text);
 
     // One VEVENT as the feed wrote it. The events are collected before a date is drawn
@@ -1704,7 +1493,7 @@ bool ParseIcs(std::wstring const& text,
         }
 
         HolidayInfo info;
-        if (!ClassifyEventSummary(collected.summary, rules, info)) {
+        if (!ClassifyEventSummary(collected.summary, rules, info, removeTexts)) {
             continue;
         }
 
@@ -1848,7 +1637,8 @@ bool ParseIcs(std::wstring const& text,
 // has no event - reads fine and leaves "out" empty, which the caller reports.
 bool ParseHolidayData(std::wstring const& body,
                       std::vector<HighlightRule> const& rules,
-                      HolidayMap& out) {
+                      HolidayMap& out,
+                      std::vector<std::wstring> const& removeTexts) {
     if (body.find(L"BEGIN:VEVENT") == std::wstring::npos &&
         body.find(L"BEGIN:VCALENDAR") == std::wstring::npos) {
         Wh_Log(L"The data source did not return an iCalendar feed");
@@ -1864,7 +1654,7 @@ bool ParseHolidayData(std::wstring const& body,
         return false;
     }
 
-    return ParseIcs(body, rules, out);
+    return ParseIcs(body, rules, out, removeTexts);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2594,7 +2384,7 @@ bool FetchHolidayData() {
     }
 
     HolidayMap parsed;
-    if (!ParseHolidayData(body, current->rules, parsed)) {
+    if (!ParseHolidayData(body, current->rules, parsed, current->removeTexts)) {
         Wh_Log(L"Failed to parse the holiday data (%zu characters)", body.size());
         return false;
     }
@@ -2817,12 +2607,13 @@ void ResetHolidayData() {
     }
 }
 
-// Marks the data which is already loaded with a new rule list, instead of asking the
-// data source for the same feed again. The body which was kept is what makes this
-// possible; it is read here rather than at the point the setting changed so that the
-// parse - which walks every date of the feed - happens outside the lock which guards the
-// data, and StoreHolidays publishes the result in one piece.
-void RemarkStoredHolidays(std::vector<HighlightRule> const& rules) {
+// Marks the data which is already loaded with a new rule list, and with the new text to
+// remove, instead of asking the data source for the same feed again. The body which was
+// kept is what makes this possible; it is read here rather than at the point the setting
+// changed so that the parse - which walks every date of the feed - happens outside the
+// lock which guards the data, and StoreHolidays publishes the result in one piece.
+void RemarkStoredHolidays(std::vector<HighlightRule> const& rules,
+                          std::vector<std::wstring> const& removeTexts) {
     std::wstring body;
     {
         std::lock_guard<std::mutex> lock(g_holidaysMutex);
@@ -2835,7 +2626,7 @@ void RemarkStoredHolidays(std::vector<HighlightRule> const& rules) {
     }
 
     HolidayMap parsed;
-    if (!ParseHolidayData(body, rules, parsed)) {
+    if (!ParseHolidayData(body, rules, parsed, removeTexts)) {
         // The body is the one which was read before, so this cannot happen except
         // through a change the mod does not know about; the data which is on screen is
         // left as it is rather than taken away.
@@ -2848,13 +2639,13 @@ void RemarkStoredHolidays(std::vector<HighlightRule> const& rules) {
     StoreHolidays(body, std::move(parsed));
 
     if (entryCount) {
-        Wh_Log(L"Marked the feed which was read before again with %zu rule(s): %zu "
-               L"dates",
-               rules.size(), entryCount);
+        Wh_Log(L"Marked the feed which was read before again with %zu rule(s) and %zu "
+               L"text(s) to remove: %zu dates",
+               rules.size(), removeTexts.size(), entryCount);
     } else {
-        Wh_Log(L"Marked the feed which was read before again with %zu rule(s), which "
-               L"match no event of it: no date is marked",
-               rules.size());
+        Wh_Log(L"Marked the feed which was read before again with %zu rule(s) and %zu "
+               L"text(s) to remove, which match no event of it: no date is marked",
+               rules.size(), removeTexts.size());
     }
 }
 
@@ -4753,7 +4544,7 @@ void Wh_ModUninit() {
 }
 
 // Changing the settings: only a changed data source clears the data which was fetched,
-// because the other settings (the rules, whether to replace) are only a different way of
+// because the other settings (the rules, the text to remove) are only a different way of
 // drawing the same data, and the cells can be repainted from it. Dropping the data
 // instead would make the calendar fall back to the lunar text until the next fetch.
 // Data which is still inside the refresh interval is not fetched again either, so
@@ -4772,12 +4563,15 @@ void Wh_ModSettingsChanged() {
     // back to the lunar text until the next fetch is done.
     if (settings->dataSourceUrl != previous->dataSourceUrl) {
         ResetHolidayData();
-    } else if (!SameHighlightRules(previous->rules, settings->rules)) {
+    } else if (!SameHighlightRules(previous->rules, settings->rules) ||
+               previous->removeTexts != settings->removeTexts) {
         // The data is the feed of the same address, and only the marking of it changed:
         // the body which was kept is read again, so that the new rules take effect at
         // once instead of with the next fetch - which may be a day away - and without
-        // asking the source for a feed it already answered with.
-        RemarkStoredHolidays(settings->rules);
+        // asking the source for a feed it already answered with. Changing what is taken
+        // out of a name changes the name of a day, which is a part of the marking as
+        // well, so it is read again the same way.
+        RemarkStoredHolidays(settings->rules, settings->removeTexts);
     }
 
     // Re-apply the new settings to the day items which are already on screen.
