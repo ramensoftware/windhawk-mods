@@ -55,7 +55,9 @@ These screenshots were captured using a macro. The same macro can generate fresh
 
 thanks for using my mod :D
 
-**Windows 11 supported; Windows 10 support is experimental and uses its built-in Segoe MDL2 Assets icon font.**
+**Windows 11 supported; Windows 10 1607 (build 14393) and newer are experimental and use the built-in Segoe MDL2 Assets icon font.**
+On Windows 10 builds earlier than 20348, live-captured windows can display a yellow capture border because those builds cannot disable it.
+The desktop overview's virtual-desktop management requires Windows 11; on Windows 10, those controls are unavailable.
 
 Pressing the top grip quickly reveals the real window without starting a drag.
 Move while holding to drag it with its native decorations and a short
@@ -445,10 +447,11 @@ static COLORREF GetAccentColor() {
 
 
 
-static bool LoadBoolSetting(LPCWSTR settingName, bool /*defaultVal*/) {
+// Defaults come from the Windhawk mod settings schema.
+static bool LoadBoolSetting(LPCWSTR settingName) {
     return Wh_GetIntSetting(settingName) != 0;
 }
-static int LoadIntSetting(LPCWSTR settingName, int /*defaultVal*/) {
+static int LoadIntSetting(LPCWSTR settingName) {
     return Wh_GetIntSetting(settingName);
 }
 
@@ -670,9 +673,9 @@ Settings LoadSettings() {
     s.tileSelectedBigger = wcscmp(tileSelectedStyle, L"bigger") == 0;
     const auto animation = WindhawkUtils::StringSetting::make(L"animation");
     s.originalAnimations = wcscmp(animation, L"original") == 0;
-    s.groupPrograms = ::LoadBoolSetting(L"groupWindows", true);
-    s.windowScale = std::clamp(::LoadIntSetting(L"windowScale", 100), 25, 200) / 100.0f;
-    s.enableSearch = ::LoadBoolSetting(L"searchEnabled", true);
+    s.groupPrograms = ::LoadBoolSetting(L"groupWindows");
+    s.windowScale = std::clamp(::LoadIntSetting(L"windowScale"), 25, 200) / 100.0f;
+    s.enableSearch = ::LoadBoolSetting(L"searchEnabled");
     // Windowed mode is intentionally a compact picker: keep the area clear
     // for the selected preview and its icon/title, without search or dragging.
     if (s.windowMode) s.enableSearch = false;
@@ -680,11 +683,11 @@ Settings LoadSettings() {
         s.groupPrograms = false;
         s.enableSearch = false;
     }
-    s.searchBarScale = std::clamp(::LoadIntSetting(L"searchScale", 100), 50, 200) / 100.0f;
+    s.searchBarScale = std::clamp(::LoadIntSetting(L"searchScale"), 50, 200) / 100.0f;
     s.searchBarWidth = 0;
-    s.iconSize = (int)std::round(32 * std::clamp(::LoadIntSetting(L"iconScale", 140), 50, 300) / 100.0f);
-    s.disable3DWindows = !::LoadBoolSetting(L"enable3D", true);
-    s.reflections = ::LoadBoolSetting(L"reflections", true);
+    s.iconSize = (int)std::round(32 * std::clamp(::LoadIntSetting(L"iconScale"), 50, 300) / 100.0f);
+    s.disable3DWindows = !::LoadBoolSetting(L"enable3D");
+    s.reflections = ::LoadBoolSetting(L"reflections");
     const auto backdrop=WindhawkUtils::StringSetting::make(L"backgroundStyle");
     BackdropStyle selected=BackdropStyle::Blur;
     if (wcscmp(backdrop,L"opaque")==0) selected=BackdropStyle::Opaque;
@@ -694,19 +697,19 @@ Settings LoadSettings() {
     s.backdropStyle=EffectiveBackdrop(selected,s.energySaver,wcscmp(saverBackground,L"unchanged")!=0,
         wcscmp(saverBackground,L"transparent")==0 ? BackdropStyle::Transparent : BackdropStyle::Opaque);
     s.blurBackground=s.backdropStyle==BackdropStyle::Blur;
-    s.holdToPreview=::LoadBoolSetting(L"holdToPreview",false);
-    s.showDesktopCard=::LoadBoolSetting(L"showDesktopCard",true);
+    s.holdToPreview=::LoadBoolSetting(L"holdToPreview");
+    s.showDesktopCard=::LoadBoolSetting(L"showDesktopCard");
     const auto minimizedTint=WindhawkUtils::StringSetting::make(L"minimizedPreviewTint");
     s.minimizedTint=wcscmp(minimizedTint,L"none")==0 ? Settings::MinimizedTint::None :
         (wcscmp(minimizedTint,L"gray")==0 ? Settings::MinimizedTint::Gray : Settings::MinimizedTint::Accent);
-    s.transparentOpacity=std::clamp(::LoadIntSetting(L"transparentOpacity",35),0,100)/100.0f;
-    s.previewCache=::LoadBoolSetting(L"previewCache",true);
-    s.touchpadGestures=::LoadBoolSetting(L"touchpadGestures",true);
-    s.desktopOverviewHotkey=::LoadBoolSetting(L"desktopOverviewHotkey",false);
-    s.desktopOverviewHoldWin=::LoadBoolSetting(L"desktopOverviewHoldWin",true);
-    s.ignoreRepeatedNavigationKeys=::LoadBoolSetting(L"ignoreRepeatedNavigationKeys",true);
+    s.transparentOpacity=std::clamp(::LoadIntSetting(L"transparentOpacity"),0,100)/100.0f;
+    s.previewCache=::LoadBoolSetting(L"previewCache");
+    s.touchpadGestures=::LoadBoolSetting(L"touchpadGestures");
+    s.desktopOverviewHotkey=::LoadBoolSetting(L"desktopOverviewHotkey");
+    s.desktopOverviewHoldWin=::LoadBoolSetting(L"desktopOverviewHoldWin");
+    s.ignoreRepeatedNavigationKeys=::LoadBoolSetting(L"ignoreRepeatedNavigationKeys");
     s.italian = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
-    s.typingAnimation = ::LoadBoolSetting(L"typingAnimation", false);
+    s.typingAnimation = ::LoadBoolSetting(L"typingAnimation");
 
     // Appearance follows Windows 11; no separate color/font/corner controls.
     DWORD light = 0, bytes = sizeof(light);
@@ -1472,12 +1475,6 @@ struct Item {
     com_ptr<ID2D1Bitmap1> placeholder;
     com_ptr<ID2D1Bitmap1> minimizedHint;
     EffectChain hintChain;
-
-    // Minimized windows can't be captured directly. Their DWM thumbnail (the
-    // last content, as in the taskbar previews) is shown in an off-screen
-    // proxy window, which is captured instead.
-    HWND proxy = nullptr;
-    HTHUMBNAIL thumbnail = nullptr;
 
     wgc::GraphicsCaptureItem captureItem{nullptr};
     wgc::Direct3D11CaptureFramePool framePool{nullptr};
@@ -2322,7 +2319,7 @@ class Switcher {
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item, bool hintLayer=false);
     void SaveWindowSnapshot(Item& item);
     com_ptr<ID2D1Bitmap1> CreateTargetBitmap(UINT width, UINT height);
-    void UpdateBackground(bool desktopOnly=false);
+    void UpdateBackground();
     void CaptureAcrylicBackdrop();
 
     int SelectedIndex() const;
@@ -3380,7 +3377,7 @@ void Switcher::ToggleDesktopOverview(bool force) {
     if(m_state==State::Open) {
         if(!EnsureSwapChain(m_monitor.right-m_monitor.left,m_monitor.bottom-m_monitor.top)) {HandleDeviceLost();return;}
         m_background=nullptr;m_backgroundKey.clear();
-        if(m_settings.blurBackground) UpdateBackground(true);
+        if(m_settings.blurBackground) UpdateBackground();
         SetWindowPos(m_hwnd,HWND_TOPMOST,m_monitor.left,m_monitor.top,m_monitor.right-m_monitor.left,m_monitor.bottom-m_monitor.top,SWP_NOACTIVATE);
     }
     const HRESULT hr=m_desktopBridge.Refresh();
@@ -5347,14 +5344,6 @@ void Switcher::StopCapture(Item& item) {
     item.framePool = nullptr;
     item.captureItem = nullptr;
 
-    if (item.thumbnail) {
-        DwmUnregisterThumbnail(item.thumbnail);
-        item.thumbnail = nullptr;
-    }
-    if (item.proxy) {
-        DestroyWindow(item.proxy);
-        item.proxy = nullptr;
-    }
 }
 
 void Switcher::PollFrames(Item& item) {
@@ -5534,7 +5523,7 @@ void Switcher::ShowOverlay() {
         }
     }
     if (m_settings.blurBackground || (m_settings.simpleStyle && !m_desktopOverview)) {
-        if(m_desktopOverview) UpdateBackground(true);
+        if(m_desktopOverview) UpdateBackground();
         else CaptureAcrylicBackdrop();
     } else { m_background=nullptr; }
     if (!m_capturing) {
@@ -5967,27 +5956,7 @@ void Switcher::BuildDrawList(float t) {
                      DrawEntryBehind);
 }
 
-// Lays out the 2D panel styles: every window gets a cell, which may hold a
-// thumbnail, an icon and a title, and the cells flow in rows (or, for the
-// list, in columns) inside a panel.
-
-
-// The selection slides between neighboring cells. When it wraps around from
-// the last window to the first, it fades instead of crossing the panel.
-
-
 D2D1_COLOR_F StyleColor(D2D1_COLOR_F color,float alpha) {color.a=alpha;return color;}
-
-// Panel and selection background, drawn under the thumbnails.
-
-
-
-
-// Draws a window title in a rectangle, vertically centered.
-
-
-// Icons, titles and the selection border, drawn over the thumbnails.
-
 
 bool Switcher::EnsureChain(EffectChain& chain) {
     if (chain.transform) {
@@ -8373,8 +8342,7 @@ void Switcher::CaptureAcrylicBackdrop() {
     if (SUCCEEDED(result)) m_background=target;
 }
 
-void Switcher::UpdateBackground(bool desktopOnly) {
-    (void)desktopOnly;
+void Switcher::UpdateBackground() {
     const UINT width = m_swapWidth;
     const UINT height = m_swapHeight;
 
@@ -8644,27 +8612,39 @@ void WhTool_ModSettingsChanged() {
 ////////////////////////////////////////////////////////////////////////////////
 } // namespace covertabby
 
-// Use the native Windows icon font, avoiding any font installation on Windows 10.
-static PCWSTR CoverTabbyIconFont() {
-    using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    auto fn = ntdll ? reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
-    OSVERSIONINFOW version{};
-    version.dwOSVersionInfoSize = sizeof(version);
-    const bool win11 = fn && fn(&version) == 0 && version.dwMajorVersion == 10 && version.dwBuildNumber >= 22000;
-    return win11 ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
+// Cache the real Windows build once; RtlGetVersion is manifest-independent.
+struct CoverTabbyWindowsVersion {
+    bool supported = false;
+    bool isWindows11 = false;
+};
+
+static const CoverTabbyWindowsVersion& GetCoverTabbyWindowsVersion() {
+    static const CoverTabbyWindowsVersion info = [] {
+        using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto getVersion = ntdll ? reinterpret_cast<RtlGetVersionFn>(
+            GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
+        OSVERSIONINFOW version{};
+        version.dwOSVersionInfoSize = sizeof(version);
+        if (!getVersion || getVersion(&version) != 0) {
+            return CoverTabbyWindowsVersion{};
+        }
+        return CoverTabbyWindowsVersion{
+            version.dwMajorVersion == 10 && version.dwBuildNumber >= 14393,
+            version.dwMajorVersion == 10 && version.dwBuildNumber >= 22000
+        };
+    }();
+    return info;
 }
 
-// RtlGetVersion reports the real OS build independently of app manifests.
+// Segoe Fluent Icons on Windows 11, Segoe MDL2 Assets on Windows 10.
+static PCWSTR CoverTabbyIconFont() {
+    return GetCoverTabbyWindowsVersion().isWindows11
+        ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
+}
+
 static bool IsSupportedWindowsVersion() {
-    using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    auto getVersion = ntdll ? reinterpret_cast<RtlGetVersionFn>(
-        GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
-    OSVERSIONINFOW version{};
-    version.dwOSVersionInfoSize = sizeof(version);
-    return getVersion && getVersion(&version) == 0 &&
-        version.dwMajorVersion == 10 && version.dwBuildNumber >= 10240;
+    return GetCoverTabbyWindowsVersion().supported;
 }
 
 // Explorer only forwards its Alt+Tab hotkey; rendering and input ownership live in the tool process.
@@ -8874,7 +8854,6 @@ BOOL Init() {
     if (!IsSupportedWindowsVersion()) return FALSE;
     StartExplorerPart();return g_explorerThread!=nullptr;
 }
-void Restart() {StopExplorerPart();StartExplorerPart();}
 }
 bool g_isExplorer=false;
 static bool IsCoverTabbyExplorerProcess() {
@@ -9043,8 +9022,7 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     // explorer.exe part.
     if (g_isExplorer) {
-        CoverTabbyShellBridge::Restart();
-        return;
+        return; // Explorer's Alt+Tab forwarder has no mod settings to reload.
     }
 
     if (g_isToolModProcessLauncher) {
