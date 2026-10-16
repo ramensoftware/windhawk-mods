@@ -15,6 +15,8 @@
 Draws a transparent, click-through overlay with animated dark smoke around the
 Windows 11 taskbar.
 
+![Taskbar Smoke](https://raw.githubusercontent.com/xxsoulxx/taskbar-smoke/main/taskbar-smoke.gif)
+
 * **Five smoke styles:** a real-time fluid simulation (the smoke rises, swirls
 and drifts over the edge), a classic layered texture smoke, and three tuned
 variants of the fluid smoke.
@@ -28,6 +30,8 @@ red.
 Works best with a dark, pill-shaped taskbar theme (e.g. Windows 11 Taskbar
 Styler); the smoke follows the taskbar's button groups. Runs in its own process
 (tool mod), Explorer is not modified.
+
+Limitations: primary taskbar only, designed for a bottom-docked taskbar.
 */
 // ==/WindhawkModReadme==
 
