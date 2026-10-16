@@ -3392,7 +3392,6 @@ BOOL Wh_ModInit() {
 }
 
 static bool HookWin11(HMODULE tb) {
-    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         // required
         {{L"public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void)"},
