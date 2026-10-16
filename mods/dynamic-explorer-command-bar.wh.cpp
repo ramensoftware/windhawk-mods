@@ -28,14 +28,29 @@ Designed for Windows 11 with the WinAppSDK (WinUI 3) File Explorer.
 ## Key Features
 
 * **Custom Buttons & Dropdown Menus** — Add single-click toolbar buttons or nested dropdown menus (supporting up to 8 levels of hierarchy via parent referencing) running commands, scripts, or internal shell actions.
-* **Context-Aware Dynamic Visibility** — Automatically show or hide individual buttons depending on the file extensions or item types highlighted in Explorer.
+* **Flexible Ordering & Sorting** — Order buttons and menu items using priority numbers (`order`). Supports integers, arbitrary decimals (`1.2`, `1.25`) to easily insert items in-between without renumbering, and negative numbers (`-1`) to place items at the very beginning.
+* **Context-Aware Dynamic Visibility** — Automatically show or hide individual buttons depending on the file extensions or item types highlighted in Explorer, including single (`single`) or multi-item (`multiple`) selection filters.
 * **Dynamic UI Labels & Clamping** — Embed live tokens (`%base%`, `%name%`, `%c%`, `%ext%`, `%d_name%`) directly in button and dropdown labels that update in real time. Labels truncate cleanly with an ellipsis (`...`) past 24 characters on toolbar buttons and 48 characters in menus, with the complete label preserved in the hover tooltip.
 * **Flexible Inactive State** — Choose between completely hiding (`Collapsed`) or graying out (`Disabled`) buttons when selection conditions are not met.
 * **Advanced Command Tokens** — Pass active folder paths, file names, counts, extensions, parent directories, or selected file lists straight into your apps.
 * **Batch Spawning (`%sel_each%`)** — Automatically launch an application instance for each highlighted item with built-in safety throttling.
 * **Secondary Command Bar Placement** — Dock custom actions on the right side of the command bar (next to the Details/Preview pane toggles) for a clean dual-toolbar layout.
-* **Theme-Aware Icons** — Support fluent Segoe glyphs (browse codes on [Segoe Fluent Icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font)), local `.exe` / `.dll` / `.ico` paths, Store apps (`shell:AppsFolder\...`), and dual Light/Dark icons via `LightPath | DarkPath` syntax.
+* **Theme-Aware & Executable Icons** — Support fluent Segoe glyphs (browse codes on [Segoe Fluent Icons](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font)), short application names runnable via Run or Terminal (`cmd.exe`, `notepad.exe`, `winrar.exe`), local file paths (`.exe` / `.dll` / `.ico`), Store apps (`shell:AppsFolder\...`), and dual Light/Dark icons via `LightPath | DarkPath` syntax.
 * **Open on Hover** — Open dropdown menus smoothly on cursor hover.
+
+---
+
+## Built-in Shell Actions
+
+Instead of an executable path, you can set **Command** to one of these built-in actions.
+
+> **Tip:** Both `internal:` and `int:` prefixes are supported. 
+> All command names are completely **case-insensitive** (e.g., `internal:openWith`, `internal:openwith`, `internal:OpeNWitH`, and `INT:OPENWITH` all work identically).
+
+* `internal:OpenWith` — Opens Windows native Open With dialog for the active item.
+* `internal:FolderOptions` — Opens Classic Folder Options dialog.
+* `internal:TogglePreview` — Toggles the File Explorer Preview pane.
+* `internal:ToggleDetails` — Toggles the File Explorer Details pane.
 
 ---
 
@@ -73,23 +88,27 @@ Wrap placeholders in double quotes when necessary (e.g., `-d "%path%"` or `code.
 The **File extension filter** (`matchExtensions`) field lets you display toolbar actions contextually:
 
 * **Leave blank or `*`** — Always show the button regardless of selection.
-* **Target any selection** — e.g. `selected` or `any` (Button appears whenever at least one item is highlighted, whether files, folders, or both).
-* **Target files only** — e.g. `files` (or `file`) (Hides button whenever a folder is selected).
-* **Target folders only** — e.g. `folders` (or `folder`, `dir`) (Button appears exclusively when directories are selected).
-* **Target both files & folders** — e.g. `files, folders` or `selected`.
-* **Whitelist specific extensions** — e.g. `txt, js, cpp` (Button only appears when selected items match these formats).
-* **Exclude specific extensions** — e.g. `*,-exe,-zip` (Shows for all items except executables and archives).
-* **Combine rules** — e.g. `files,-zip` (Shows for regular files, excluding zip archives).
+* **Target any selection** — `selected` or `any` (Button appears whenever at least one item is highlighted, whether files, folders, or both).
+* **Target single item only** — `single` (Appears exclusively when exactly 1 item is selected).
+* **Target multiple items** — `multiple` (or `multi`) (Appears only when 2 or more items are selected).
+* **Target files only** — `files` (or `file`) (Hides button whenever a folder is selected).
+* **Target folders only** — `folders` (or `folder`, `dir`) (Button appears exclusively when directories are selected).
+* **Combine rules** — 
+  * `files, single` — Appears only when exactly one regular file is selected (ideal for actions like **Open With**).
+  * `folders, single` — Appears only when exactly one folder is selected.
+  * `txt, js, cpp` — Whitelist specific file formats.
+  * `*,-exe,-zip` — Shows for all items except executables and archives.
+  * `files,-zip` — Shows for regular files, excluding zip archives.
 
 ---
 
-## Built-in Shell Actions
+## Button Ordering & Positioning (`order`)
 
-Instead of an executable path, you can set **Command** to one of these built-in actions:
-* `internal:OpenWith` — Opens Windows native Open With dialog for the active item.
-* `internal:FolderOptions` — Opens Classic Folder Options dialog.
-* `internal:TogglePreview` — Toggles the File Explorer Preview pane.
-* `internal:ToggleDetails` — Toggles the File Explorer Details pane.
+Instead of cutting and pasting configuration code to reorder items:
+* Set **Display Order / Priority** (`order`) to any number (e.g. `1`, `2`, `3`). Lower numbers appear first.
+* Use decimals (e.g. `1.5`) to insert an item between `1` and `2` without having to renumber subsequent buttons.
+* Use negative numbers (e.g. `-1`) to position an item before unnumbered buttons.
+* Inside dropdown menus, `order` sorts items strictly within that specific menu container.
 
 ---
 
@@ -136,10 +155,16 @@ To place buttons inside a dropdown menu:
     - parent: ""
       $name: Parent Menu ID
       $description: Leave blank for the top toolbar. Set to a Menu ID to place this item inside that menu.
+    - order: ""
+      $name: Display Order / Priority
+      $description: >-
+        Optional sorting position. Lower numbers appear first (e.g. 1, 2, 3).
+        Decimals (e.g. 1.2, 1.25) can insert items between existing ones, and negative numbers (e.g. -1) place items before unnumbered buttons.
+        Leave empty to keep the default list order.
     - command: internal:FolderOptions
       $name: Command
       $description: >-
-        The executable to run, or an internal command (internal:TogglePreview, internal:ToggleDetails, internal:FolderOptions, internal:OpenWith).
+        The executable to run, or an internal command using 'internal:' or 'int:' prefix (case-insensitive, e.g. internal:openWith, internal:openwith, internal:OpeNWitH, and INT:OPENWITH).
     - parameters: ""
       $name: Parameters
       $description: >-
@@ -150,12 +175,13 @@ To place buttons inside a dropdown menu:
         Comma-separated list of extensions (e.g. txt, js, cpp).
         Use 'selected' or 'any' to show whenever anything is selected (files, folders, or both).
         Use 'files' for files only, 'folders' (or 'dir') for directories only.
+        Use 'single' for exactly 1 item, 'multiple' (or 'multi') for 2+ items.
         Prefix with '-' to exclude (e.g. -exe, -folders).
         Prefix with '*' or leave blank to show always.
     - iconGlyph: E713
       $name: Icon glyph or icon path
       $description: >-
-        Fluent icon glyph (e.g. E713), file path (.ico/.dll/.exe), or empty for executable icon. 
+        Fluent icon glyph (e.g. E713), file path (.ico/.dll/.exe), app executable name (cmd.exe, notepad.exe), or empty for executable icon. 
         Separate with | for theme-aware icons (Light | Dark, or | Dark).
     - hideIcon: false
       $name: Hide icon
@@ -170,29 +196,17 @@ To place buttons inside a dropdown menu:
     - separatorBefore: false
       $name: Vertical separator before
       $description: Show a vertical separator line before this button.
-    - separatorAfter: true
+    - separatorAfter: false
       $name: Vertical separator after
       $description: Show a vertical separator line after this button.
-  - - type: button
-    - id: "open_terminal"
-    - parent: ""
-    - command: wt.exe
-    - parameters: -d "%path%"
-    - matchExtensions: ""
-    - iconGlyph: ""
-    - hideIcon: false
-    - showLabel: false
-    - labelText: "Open Terminal Here"
-    - separatorBefore: false
-    - separatorAfter: false
   - - type: button
     - id: "open_with"
     - parent: ""
     - command: internal:OpenWith
     - parameters: ""
-    - matchExtensions: "files"
+    - matchExtensions: "files, single"
     - iconGlyph: "E7AC"
-    - hideIcon: true
+    - hideIcon: false
     - showLabel: true
     - labelText: "Open With"
     - separatorBefore: false
@@ -202,49 +216,61 @@ To place buttons inside a dropdown menu:
     - parent: ""
     - command: notepad.exe
     - parameters: "%sel_each%"
-    - matchExtensions: "files"
-    - iconGlyph: "shell:AppsFolder\\Microsoft.WindowsNotepad_8wekyb3d8bbwe!App"
-    - hideIcon: true
-    - showLabel: true
+    - matchExtensions: ""
+    - iconGlyph: "notepad.exe"
+    - hideIcon: false
+    - showLabel: false
     - labelText: "Notepad"
+    - separatorBefore: true
+    - separatorAfter: false
+  - - type: button
+    - id: "open_terminal"
+    - parent: ""
+    - command: wt.exe
+    - parameters: -d "%path%"
+    - matchExtensions: ""
+    - iconGlyph: "wt.exe"
+    - hideIcon: false
+    - showLabel: false
+    - labelText: "Open Terminal Here"
     - separatorBefore: false
     - separatorAfter: false
   - - type: menu
-    - id: "additional_menu"
+    - id: "custom_menu"
     - parent: ""
     - command: ""
     - parameters: ""
     - matchExtensions: ""
-    - iconGlyph: "E81E"
+    - iconGlyph: "E70D"
     - hideIcon: false
-    - showLabel: false
-    - labelText: "Additional"
+    - showLabel: true
+    - labelText: "Commands"
     - separatorBefore: false
     - separatorAfter: false
   - - type: button
-    - id: "open_paint"
-    - parent: "additional_menu"
-    - command: mspaint.exe
-    - parameters: ""
+    - id: "cmd_here"
+    - parent: "custom_menu"
+    - command: cmd.exe
+    - parameters: /k cd /d "%path%"
     - matchExtensions: ""
-    - iconGlyph: ""
+    - iconGlyph: "cmd.exe"
     - hideIcon: false
     - showLabel: false
-    - labelText: "Open Paint"
+    - labelText: "Command Prompt"
     - separatorBefore: false
     - separatorAfter: false
   - - type: button
     - id: "open_calc"
-    - parent: "additional_menu"
+    - parent: "custom_menu"
     - command: calc.exe
     - parameters: ""
     - matchExtensions: ""
-    - iconGlyph: "shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+    - iconGlyph: "E8EF"
     - hideIcon: false
     - showLabel: false
-    - labelText: "Open Calculator"
+    - labelText: "Calculator"
     - separatorBefore: false
-    - separatorAfter: true
+    - separatorAfter: false
   $name: Toolbar items
   $description: Custom buttons and dropdown menus added to the command bar.
 - placeOnSecondaryBar: true
@@ -328,6 +354,7 @@ struct ActionItem {
     std::wstring parameters;
     std::wstring matchExtensions;
     std::wstring icon;
+    double order = 0.0;
     bool hideIcon = false;
     bool showLabel = false;
     bool isMenu = false;
@@ -1232,15 +1259,26 @@ void RunShellWorkOnWorkerThread(std::function<void()> work) {
     }
 }
 
+bool IsCommandMatch(std::wstring_view cmd, std::wstring_view actionName) {
+    // Matches either "internal:<action>" or "int:<action>"
+    if (cmd.starts_with(L"internal:") || cmd.starts_with(L"INTERNAL:")) {
+        return _wcsicmp(cmd.data() + 9, actionName.data()) == 0;
+    }
+    if (cmd.starts_with(L"int:") || cmd.starts_with(L"INT:")) {
+        return _wcsicmp(cmd.data() + 4, actionName.data()) == 0;
+    }
+    return false;
+}
+
 void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
                      ActionItem const& item) {
     if (item.command.empty() || g_unloading)
         return;
 
     HWND hWnd = GetExplorerWindowForElement(elementForWindow);
-    PCWSTR cmd = item.command.c_str();
+    std::wstring_view cmd = item.command;
 
-    if (_wcsicmp(cmd, L"internal:TogglePreview") == 0) {
+    if (IsCommandMatch(cmd, L"TogglePreview")) {
         INPUT inputs[4] = {};
         inputs[0].type = INPUT_KEYBOARD;
         inputs[0].ki.wVk = VK_MENU;
@@ -1256,7 +1294,7 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         return;
     }
 
-    if (_wcsicmp(cmd, L"internal:ToggleDetails") == 0) {
+    if (IsCommandMatch(cmd, L"ToggleDetails")) {
         INPUT inputs[6] = {};
         inputs[0].type = INPUT_KEYBOARD;
         inputs[0].ki.wVk = VK_MENU;
@@ -1277,7 +1315,7 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         return;
     }
 
-    if (_wcsicmp(cmd, L"internal:FolderOptions") == 0) {
+    if (IsCommandMatch(cmd, L"FolderOptions")) {
         RunShellWorkOnWorkerThread([]() {
             ShellExecuteW(nullptr, L"open", L"control.exe", L"folders", nullptr,
                           SW_SHOWNORMAL);
@@ -1285,7 +1323,7 @@ void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
         return;
     }
 
-    if (_wcsicmp(cmd, L"internal:OpenWith") == 0) {
+    if (IsCommandMatch(cmd, L"OpenWith")) {
         ExplorerContext context = GetExplorerContext(hWnd);
         if (!context.selectedPath.empty() &&
             PathIsDirectoryW(context.selectedPath.c_str()) == FALSE) {
@@ -1537,6 +1575,8 @@ bool LooksLikeIconPath(std::wstring const& iconSetting) {
     if (comma != std::wstring::npos)
         lower.resize(comma);
 
+    // Treat bare filenames like "cmd.exe", "winrar.exe", or "shell32.dll" as
+    // icon targets
     return lower.ends_with(L".exe") || lower.ends_with(L".dll") ||
            lower.ends_with(L".ico");
 }
@@ -1560,7 +1600,10 @@ HICON LoadIconFromPath(std::wstring const& iconPath) {
         }
     }
 
+    // Resolve short names via PATH or App Paths (e.g., "cmd.exe", "winrar.exe")
+    expanded = ResolveCommandPath(expanded);
     expanded = ResolveAppExecutionAlias(expanded);
+
     HICON hIcon = nullptr;
     if (ExtractIconExW(expanded.c_str(), iconIndex, &hIcon, nullptr, 1) &&
         hIcon)
@@ -1724,15 +1767,15 @@ muxc::IconElement MakeCommandButtonIcon(ActionItem const& item) {
         return nullptr;
 
     PCWSTR defaultGlyph = L"";
-    PCWSTR cmd = item.command.c_str();
+    std::wstring_view cmd = item.command;
 
-    if (_wcsicmp(cmd, L"internal:OpenWith") == 0)
+    if (IsCommandMatch(cmd, L"OpenWith"))
         defaultGlyph = L"\uE7AC";
-    else if (_wcsicmp(cmd, L"internal:TogglePreview") == 0)
+    else if (IsCommandMatch(cmd, L"TogglePreview"))
         defaultGlyph = L"\uE8A1";
-    else if (_wcsicmp(cmd, L"internal:ToggleDetails") == 0)
+    else if (IsCommandMatch(cmd, L"ToggleDetails"))
         defaultGlyph = L"\uE9F9";
-    else if (_wcsicmp(cmd, L"internal:FolderOptions") == 0)
+    else if (IsCommandMatch(cmd, L"FolderOptions"))
         defaultGlyph = L"\uE713";
 
     return CreateIconElement(item.icon, item.command, defaultGlyph);
@@ -1830,6 +1873,10 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
     bool explicitFoldersRule = false;
     bool matchAllExtensions = false;
 
+    // Selection count constraint
+    enum class CountRule { None, Single, Multiple };
+    CountRule countRule = CountRule::None;
+
     std::vector<std::wstring> positiveExts;
     std::vector<std::wstring> negativeExts;
 
@@ -1847,6 +1894,16 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
             continue;
 
         token = ToLower(token);
+
+        // --- Count keywords ---
+        if (token == L"single") {
+            countRule = CountRule::Single;
+            continue;
+        }
+        if (token == L"multiple" || token == L"multi") {
+            countRule = CountRule::Multiple;
+            continue;
+        }
 
         bool isNegative = false;
         if (token.front() == L'-' || token.front() == L'~') {
@@ -1905,9 +1962,23 @@ bool ItemMatchesExtensionFilter(const std::wstring& filterPattern,
         }
     }
 
+    // Check count constraint
+    if (countRule == CountRule::Single && summary.count != 1) {
+        return false;
+    }
+    if (countRule == CountRule::Multiple && summary.count < 2) {
+        return false;
+    }
+
     bool hasPositiveTerms = allowAnySelection || matchAllExtensions ||
                             explicitFilesRule || explicitFoldersRule ||
                             !positiveExts.empty();
+
+    // If only count rules were specified (e.g., "single"), allow any selected
+    // item
+    if (!hasPositiveTerms && negativeExts.empty()) {
+        return true;
+    }
 
     // Validate every item in the current selection
     for (const auto& ext : summary.extensions) {
@@ -3289,6 +3360,9 @@ void LoadSettings() {
                 .get();
         item.icon =
             WindhawkUtils::StringSetting::make(L"%s.iconGlyph", prefix).get();
+        auto orderSetting =
+            WindhawkUtils::StringSetting::make(L"%s.order", prefix);
+        item.order = (*orderSetting.get()) ? _wtof(orderSetting.get()) : 0.0;
         item.hideIcon = Wh_GetIntSetting(L"%s.hideIcon", prefix) != 0;
         item.showLabel = Wh_GetIntSetting(L"%s.showLabel", prefix) != 0;
         item.separatorBefore =
@@ -3307,7 +3381,14 @@ void LoadSettings() {
         }
     }
 
-    // 2. Recursively populate subItems by matching candidate.parent == node.id
+    // Sort root items by order (std::stable_sort preserves list order for equal
+    // values)
+    std::stable_sort(rootItems.begin(), rootItems.end(),
+                     [](const ActionItem& a, const ActionItem& b) {
+                         return a.order < b.order;
+                     });
+
+    // 2. Recursively populate and sort subItems
     std::vector<std::wstring> ancestors;
     std::function<void(ActionItem&)> attachChildren = [&](ActionItem& node) {
         if (!node.isMenu || ancestors.size() >= 8)
@@ -3335,6 +3416,13 @@ void LoadSettings() {
             attachChildren(child);
             node.subItems.push_back(std::move(child));
         }
+
+        // Sort items inside this specific dropdown/submenu by their order
+        std::stable_sort(node.subItems.begin(), node.subItems.end(),
+                         [](const ActionItem& a, const ActionItem& b) {
+                             return a.order < b.order;
+                         });
+
         ancestors.pop_back();
     };
 
