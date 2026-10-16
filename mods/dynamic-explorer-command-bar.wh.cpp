@@ -334,6 +334,14 @@ struct PendingDispatchScope {
     PendingDispatchScope& operator=(const PendingDispatchScope&) = delete;
 };
 
+std::atomic<int> g_uiCallsInProgress{0};
+struct UiCallScope {
+    UiCallScope() { g_uiCallsInProgress++; }
+    ~UiCallScope() { g_uiCallsInProgress--; }
+    UiCallScope(const UiCallScope&) = delete;
+    UiCallScope& operator=(const UiCallScope&) = delete;
+};
+
 static constexpr CLSID kCLSID_ShellWindows = {
     0x9ba05972,
     0xf6a8,
@@ -893,6 +901,12 @@ std::wstring ExtractBaseName(std::wstring_view itemPath) {
     return buffer;
 }
 
+std::wstring QuoteArg(std::wstring value) {
+    if (!value.empty() && value.back() == L'\\')
+        value += L'\\';
+    return L"\"" + value + L"\"";
+}
+
 std::wstring BuildParameters(std::wstring parameters,
                              ExplorerContext const& context) {
     if (parameters.empty() || parameters.find(L'%') == std::wstring::npos)
@@ -982,10 +996,9 @@ std::wstring BuildParameters(std::wstring parameters,
 
     // --- %1 (First selected item full path) ---
     if (parameters.find(L"%1") != std::wstring::npos) {
-        std::wstring firstItem =
-            context.allSelectedPaths.empty()
-                ? L""
-                : (L"\"" + context.allSelectedPaths[0] + L"\"");
+        std::wstring firstItem = context.allSelectedPaths.empty()
+                                     ? L""
+                                     : QuoteArg(context.allSelectedPaths[0]);
         ReplacePlaceholder(parameters, L"\"%1%\"", firstItem);
         ReplacePlaceholder(parameters, L"%1%", firstItem);
         ReplacePlaceholder(parameters, L"\"%1\"", firstItem);
@@ -1017,13 +1030,10 @@ std::wstring BuildParameters(std::wstring parameters,
     if (parameters.find(L"%d_smart") != std::wstring::npos) {
         std::wstring smartDir =
             !foldersOnly.empty() ? foldersOnly[0] : context.folderPath;
-        if (!smartDir.empty() && smartDir.back() == L'\\')
-            smartDir += L'\\';
-        ReplacePlaceholder(parameters, L"\"%d_smart%\"",
-                           L"\"" + smartDir + L"\"");
+        std::wstring quotedSmart = QuoteArg(smartDir);
+        ReplacePlaceholder(parameters, L"\"%d_smart%\"", quotedSmart);
         ReplacePlaceholder(parameters, L"%d_smart%", smartDir);
-        ReplacePlaceholder(parameters, L"\"%d_smart\"",
-                           L"\"" + smartDir + L"\"");
+        ReplacePlaceholder(parameters, L"\"%d_smart\"", quotedSmart);
         ReplacePlaceholder(parameters, L"%d_smart", smartDir);
     }
 
@@ -1058,25 +1068,21 @@ std::wstring BuildParameters(std::wstring parameters,
     }
 
     // --- %path% / %dir / %d (Active folder path) ---
-    ReplacePlaceholder(parameters, L"\"%path%\"",
-                       L"\"" + context.folderPath + L"\"");
+    std::wstring quotedPath = QuoteArg(context.folderPath);
+
+    ReplacePlaceholder(parameters, L"\"%path%\"", quotedPath);
     ReplacePlaceholder(parameters, L"%path%", context.folderPath);
-    ReplacePlaceholder(parameters, L"\"%path\"",
-                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"\"%path\"", quotedPath);
     ReplacePlaceholder(parameters, L"%path", context.folderPath);
 
-    ReplacePlaceholder(parameters, L"\"%dir%\"",
-                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"\"%dir%\"", quotedPath);
     ReplacePlaceholder(parameters, L"%dir%", context.folderPath);
-    ReplacePlaceholder(parameters, L"\"%dir\"",
-                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"\"%dir\"", quotedPath);
     ReplacePlaceholder(parameters, L"%dir", context.folderPath);
 
-    ReplacePlaceholder(parameters, L"\"%d%\"",
-                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"\"%d%\"", quotedPath);
     ReplacePlaceholder(parameters, L"%d%", context.folderPath);
-    ReplacePlaceholder(parameters, L"\"%d\"",
-                       L"\"" + context.folderPath + L"\"");
+    ReplacePlaceholder(parameters, L"\"%d\"", quotedPath);
     ReplacePlaceholder(parameters, L"%d", context.folderPath);
 
     // --- %p / %parent (Parent directory of active tab) ---
@@ -1098,14 +1104,16 @@ std::wstring BuildParameters(std::wstring parameters,
             }
         }
 
-        ReplacePlaceholder(parameters, L"\"%parent%\"", L"\"" + p + L"\"");
+        std::wstring quotedParent = QuoteArg(p);
+
+        ReplacePlaceholder(parameters, L"\"%parent%\"", quotedParent);
         ReplacePlaceholder(parameters, L"%parent%", p);
-        ReplacePlaceholder(parameters, L"\"%parent\"", L"\"" + p + L"\"");
+        ReplacePlaceholder(parameters, L"\"%parent\"", quotedParent);
         ReplacePlaceholder(parameters, L"%parent", p);
 
-        ReplacePlaceholder(parameters, L"\"%p%\"", L"\"" + p + L"\"");
+        ReplacePlaceholder(parameters, L"\"%p%\"", quotedParent);
         ReplacePlaceholder(parameters, L"%p%", p);
-        ReplacePlaceholder(parameters, L"\"%p\"", L"\"" + p + L"\"");
+        ReplacePlaceholder(parameters, L"\"%p\"", quotedParent);
         ReplacePlaceholder(parameters, L"%p", p);
     }
 
@@ -1260,18 +1268,23 @@ void RunShellWorkOnWorkerThread(std::function<void()> work) {
 }
 
 bool IsCommandMatch(std::wstring_view cmd, std::wstring_view actionName) {
-    // Matches either "internal:<action>" or "int:<action>"
-    if (cmd.starts_with(L"internal:") || cmd.starts_with(L"INTERNAL:")) {
-        return _wcsicmp(cmd.data() + 9, actionName.data()) == 0;
+    constexpr std::wstring_view kInternal = L"internal:";
+    constexpr std::wstring_view kInt = L"int:";
+
+    if (cmd.size() >= kInternal.size() &&
+        _wcsnicmp(cmd.data(), kInternal.data(), kInternal.size()) == 0) {
+        return _wcsicmp(cmd.data() + kInternal.size(), actionName.data()) == 0;
     }
-    if (cmd.starts_with(L"int:") || cmd.starts_with(L"INT:")) {
-        return _wcsicmp(cmd.data() + 4, actionName.data()) == 0;
+    if (cmd.size() >= kInt.size() &&
+        _wcsnicmp(cmd.data(), kInt.data(), kInt.size()) == 0) {
+        return _wcsicmp(cmd.data() + kInt.size(), actionName.data()) == 0;
     }
     return false;
 }
 
 void OnActionInvoked(mux::FrameworkElement const& elementForWindow,
                      ActionItem const& item) {
+    UiCallScope scope;
     if (item.command.empty() || g_unloading)
         return;
 
@@ -3490,6 +3503,10 @@ void Wh_ModUninit() {
             Wh_Log(L"Couldn't reach the thread of window %08X",
                    (DWORD)(ULONG_PTR)hWnd);
         }
+    }
+
+    while (g_uiCallsInProgress > 0) {
+        Sleep(10);
     }
 
     {
