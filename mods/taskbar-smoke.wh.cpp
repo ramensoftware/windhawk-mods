@@ -2253,11 +2253,28 @@ void Zeichnen() {
     }
 }
 bool Vollbild() {
+    // Fullscreen = the foreground window covers its whole monitor (desktop and
+    // taskbar never count)
     QUERY_USER_NOTIFICATION_STATE q{};
-    if (FAILED(SHQueryUserNotificationState(&q)))
+    if (SUCCEEDED(SHQueryUserNotificationState(&q)) &&
+        (q == QUNS_RUNNING_D3D_FULL_SCREEN || q == QUNS_PRESENTATION_MODE))
+        return true;
+    HWND fg = GetForegroundWindow();
+    if (!fg)
         return false;
-    return q == QUNS_BUSY || q == QUNS_RUNNING_D3D_FULL_SCREEN ||
-           q == QUNS_PRESENTATION_MODE;
+    wchar_t cls[64] = {};
+    GetClassNameW(fg, cls, 64);
+    if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW") ||
+        !wcscmp(cls, L"Shell_TrayWnd") ||
+        !wcscmp(cls, L"Shell_SecondaryTrayWnd"))
+        return false;
+    RECT wr{};
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetWindowRect(fg, &wr) ||
+        !GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi))
+        return false;
+    return wr.left <= mi.rcMonitor.left && wr.top <= mi.rcMonitor.top &&
+           wr.right >= mi.rcMonitor.right && wr.bottom >= mi.rcMonitor.bottom;
 }
 static float g_letzteTop = -1;
 static ULONGLONG g_bewegt = 0;
