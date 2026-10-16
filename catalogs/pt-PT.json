@@ -18766,6 +18766,33 @@
         "version": "0.2"
       }
     },
+    "windhawk-mawaqit": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792150371000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792150371000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "HHeitlager",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lwinhttp",
+        "description": "Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.",
+        "github": "https://github.com/hheitlager",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Mawaqit Prayer Clock",
+        "version": "0.6.9"
+      }
+    },
     "windhawk-topbar": {
       "details": {
         "defaultSorting": 11214,
@@ -19031,7 +19058,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791374466000,
+        "updated": 1792150366000,
         "users": 30
       },
       "metadata": {
@@ -19039,14 +19066,14 @@
           "x86-64"
         ],
         "author": "babamohammed",
-        "compilerOptions": "-luser32 -lgdi32 -lshell32 -lcomctl32 -lole32 -ladvapi32 -lpowrprof",
-        "description": "This mod restores the Windows 10 power user menu (Win+X) when the Windows 10 taskbar runs on Windows 11 24H2 or 25H2",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -lcomctl32 -lole32 -loleaut32 -ladvapi32 -lpowrprof",
+        "description": "This mod restores a Windows 10-style Win+X menu on Windows 11, with immersive or native Win32 styling and support for legacy and modern taskbars",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe"
         ],
         "name": "Windows 10 Win+X restorer on Win11 24H2",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "windows-11-control-center-buttons": {

@@ -2,12 +2,98 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-16T11:01:56.000Z</updated>
+    <updated>2026-10-16T11:32:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mawaqit Prayer Clock 0.6.9]]></title>
+        <id>https://windhawk.net/mods/windhawk-mawaqit#94e338b1d2c90b55cb81a9882d1ee8d0be42a3c8</id>
+        <link href="https://windhawk.net/mods/windhawk-mawaqit"/>
+        <updated>2026-10-16T11:32:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mawaqitprayerclock">Mawaqit Prayer Clock</h1>
+<p>Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Upcoming prayer name, scheduled time, and live countdown</li>
+<li>Clickable prayer-schedule popup with optional auto-close timer</li>
+<li>13 appearance themes, including Windows / System, Traditional Islamic, Catppuccin Mocha, Emberveil, Dracula, Nord, Gruvbox Dark, Tokyo Night, Solarized Dark and Light, and Custom</li>
+<li>Independent custom colors for the pill and popup</li>
+<li>Visibility switches for the prayer label, countdown, and popup</li>
+<li>Five selectable taskbar positions, including experimental dynamic centering</li>
+<li>Native XAML taskbar integration with reserved layout space for anchored positions</li>
+<li>Automatic or manual clock height, four-sided margins and padding, tray gap, corner radius, and font size</li>
+<li>Background schedule updates through native WinHTTP, with configurable refresh interval</li>
+<li>Live settings updates without restarting Explorer</li>
+</ul>
+<h2 id="networkaccessandcachedschedules">Network access and cached schedules</h2>
+<p>This mod intentionally uses Mawaqit’s published mosque-specific prayer times rather
+than locally calculated astronomical times, preserving mosque-specific adjustments.</p>
+<p>This mod connects to <strong>https://mawaqit.net</strong> over HTTPS to retrieve the public
+prayer schedule for the mosque identifier configured in Settings. The request
+is an HTTP GET for <code>https://mawaqit.net/&lt;language&gt;/&lt;mosque-identifier&gt;</code>;
+no account or authentication is required. The server can observe the request
+and normal connection information such as your IP address.</p>
+<p>The schedule is stored in Windhawk's mod-specific storage. A valid cached
+schedule is reused when Explorer restarts, until the configured refresh interval
+expires (24 hours by default; adjustable from 1 to 168 hours). The mod also
+requests a fresh schedule when the mosque or refresh interval changes.
+If a download fails, it retries after one hour. An empty, expired, mismatched,
+or unusable cache causes a download at startup. The mod reads schedule data
+from the public Mawaqit webpage, so changes to that page can interrupt updates.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>Mawaqit Prayer Clock supports multiple appearance themes to match your Windows 11 desktop.</p>
+<p>Windows System Default | Traditional Islamic |
+|:---:|:---:|
+<img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default.png" alt="Windows" /> | <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic.png" alt="Traditional" /> |</p>
+<p>| Catppuccin Mocha | Emberveil |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png" alt="Catppuccin" /> | <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png" alt="Emberveil" /> |</p>
+<h2 id="desktopintegration">Desktop Integration</h2>
+<p>See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 desktop.
+<img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/My-Desktop.png" alt="Desktop" /></p>
+<h2 id="configuration">Configuration</h2>
+<p>Choose a mosque identifier or Mawaqit URL in Settings.
+Select an appearance theme and customize the widget as desired.
+Custom color settings only apply when the Custom theme is selected.
+Set popup auto-close to 0 to keep the popup open until dismissed.</p>
+<h2 id="moreinformation">More information</h2>
+<p>For installation instructions, additional screenshots,
+troubleshooting, and release information, visit:</p>
+<p><a href="https://github.com/hheitlager/windhawk-mawaqit">GitHub Project</a></p>
+<h2 id="compatibilityandcredits">Compatibility and credits</h2>
+<p>Windows 11 only. Taskbar XAML integration adapted from Windhawk’s
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp">taskbar-folder-menus</a> (MIT).</p>
+<h2 id="license">License</h2>
+<p>MIT License.</p>
+<h2 id="disclaimer">Disclaimer</h2>
+<p>This is an unofficial community project and is not affiliated
+with or endorsed by Mawaqit.</p>]]></content>
+        <author>
+            <name>HHeitlager</name>
+            <uri>https://github.com/hheitlager</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 10 Win+X restorer on Win11 24H2 1.1.0]]></title>
+        <id>https://windhawk.net/mods/windows-10-winx-restorer#7e8bd94db79e4067a243df7fa205a1fc035038c7</id>
+        <link href="https://windhawk.net/mods/windows-10-winx-restorer"/>
+        <updated>2026-10-16T11:32:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for replacing the Win+X menu on the native Windows 11 taskbar </li>
+<li>Added a native Win32 menu style alongside the existing immersive style</li>
+<li>Added an option to hide “Shut down or sign out” for a Windows 8-like layout (credits to CrazyDude for the suggestion)</li>
+<li>Added an optional PowerShell fallback when Windows Terminal is unavailable, including the administrator entry</li>
+<li>Added symbol-based interception of the modern Win+X menu without replacing normal Start menu activation</li>
+<li>Updated the README and clarified all setting descriptions</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.2.0]]></title>
         <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#5a72d5ad93a08dc2701836d2302e929eee986677</id>
@@ -728,93 +814,6 @@ so place more specific rules before general ones.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Coin & Stock Monitor 1.1.0]]></title>
-        <id>https://windhawk.net/mods/coin-stock-monitor#466bc6c1a6e9a7ca517547b61ecaf891ef0eedc6</id>
-        <link href="https://windhawk.net/mods/coin-stock-monitor"/>
-        <updated>2026-10-14T07:02:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="coinstockmonitor">Coin &amp; Stock Monitor</h1>
-<p><img src="https://raw.githubusercontent.com/jayll1303/coin-stock-monitor/main/docs/screenshot.png" alt="Taskbar screenshot" /></p>
-<p>Shows live stock and crypto prices on the left side of the taskbar.</p>
-<p>Prices come from a configurable JSON API. The default is the Yahoo Finance chart
-API, which works without an API key for both stocks (<code>AAPL</code>, <code>VNM.VN</code>) and crypto
-(<code>BTC-USD</code>, <code>ETH-USD</code>).</p>
-<h2 id="networkaccess">Network access</h2>
-<p>This mod sends HTTPS requests from <code>explorer.exe</code> to the URL set in <strong>Price API URL</strong>.
-By default that is <code>query1.finance.yahoo.com</code>. It sends one request per symbol (up to
-4) at startup, then once every <strong>Refresh interval</strong> (default 60 seconds). Each request
-identifies the mod by name in its User-Agent header. No other data is sent. To
-stop all requests, disable the mod.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Price API URL</strong> - requested once per symbol. <code>{symbol}</code> is replaced with the
-URL-encoded symbol.</li>
-<li><strong>Price JSON key</strong> - the key whose numeric value is the price in the response.
-Yahoo Finance uses <code>regularMarketPrice</code>.</li>
-<li><strong>Symbols</strong> - comma-separated list, shown in order. At most 4 symbols, shown 2
-per line.</li>
-<li><strong>Entry prices</strong> - comma-separated <code>SYMBOL=PRICE</code> pairs. When a symbol has an
-entry price, its price and signed percentage change from the entry are shown.
-The color is the gain color when the price is at or above the entry, and the
-loss color otherwise.</li>
-<li><strong>Text alignment</strong> - left or right inside the monitor area.</li>
-<li><strong>Left offset</strong> and <strong>Monitor width</strong> - position and size of the monitor area, in
-pixels from the left edge of the taskbar.</li>
-<li><strong>Text color</strong> - <code>#RRGGBB</code> for symbols and prices without an entry price. The
-default is green. Leave empty to follow the taskbar theme.</li>
-<li><strong>Gain color</strong> and <strong>Loss color</strong> - <code>#RRGGBB</code> colors for prices and percentages
-compared with entry prices.</li>
-<li><strong>Refresh interval</strong> - seconds between fetches (minimum 15).</li>
-</ul>
-<p>Changing any setting reloads the mod.</p>
-<h3 id="examplecoingecko">Example: CoinGecko</h3>
-<ul>
-<li>Price API URL: <code>https://api.coingecko.com/api/v3/simple/price?ids={symbol}&amp;vs_currencies=usd</code></li>
-<li>Price JSON key: <code>usd</code></li>
-<li>Symbols: <code>bitcoin,ethereum</code> (CoinGecko coin ids, not ticker symbols)</li>
-<li>Entry prices: <code>bitcoin=60000</code> (use the same ids as Symbols)</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Horizontal taskbar on the primary monitor only.</li>
-<li>The monitor is placed by pixel offset, so it assumes the Start button is centered.
-With a left-aligned Start button, the monitor overlaps Start.</li>
-<li>If the taskbar has many apps or a wide Start area, reduce <strong>Monitor width</strong> so
-the monitor does not cover the task list.</li>
-<li>Pixel values are for 100% display scaling.</li>
-</ul>]]></content>
-        <author>
-            <name>jayll1303</name>
-            <uri>https://github.com/jayll1303</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Swipe Taskbar Fix 1.0.5]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-swipe-taskbar-fix#3b5992685827bfee26b0ac55c6770b6a1b0b60a7</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-swipe-taskbar-fix"/>
-        <updated>2026-10-14T06:21:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="virtualdesktopswipetaskbarfix">Virtual Desktop Swipe Taskbar Fix</h1>
-<p>Restores the missing incoming taskbar bitmap during a touchpad virtual desktop swipe
-on Windows 11.</p>
-<p><img src="https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/virtual-desktop-swipe-taskbar-fix/virtual-desktop-swipe-taskbar-fix.png" alt="The issue" />
-<em>The issue</em></p>
-<h2 id="limitation">Limitation</h2>
-<p>While a swipe is held, both previews can show the current desktop's taskbar
-buttons, instead of reflecting the incoming taskbar's current state. This is
-because Windows has not yet committed the switch during a swipe gesture, and
-thumbnails taken at that time inevitably look the same as on the outgoing
-desktop.</p>
-<p>Keyboard switching avoids this because it freezes the outgoing taskbar preview
-and updates the actual taskbar during the transition, allowing the live incoming
-preview to show the destination desktop's buttons.</p>
-<p>ARM64 is not supported: native methods are resolved through symbols, but internal
-member offsets are discovered from those methods at initialization. Initialization
-stops if the required symbols or layout cannot be recognized.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
         </author>
     </entry>
 </feed>

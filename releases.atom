@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-16T07:01:35.000Z</updated>
+    <updated>2026-10-16T11:32:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mawaqit Prayer Clock 0.6.9]]></title>
+        <id>https://windhawk.net/mods/windhawk-mawaqit#94e338b1d2c90b55cb81a9882d1ee8d0be42a3c8</id>
+        <link href="https://windhawk.net/mods/windhawk-mawaqit"/>
+        <updated>2026-10-16T11:32:51.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="mawaqitprayerclock">Mawaqit Prayer Clock</h1>
+<p>Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Upcoming prayer name, scheduled time, and live countdown</li>
+<li>Clickable prayer-schedule popup with optional auto-close timer</li>
+<li>13 appearance themes, including Windows / System, Traditional Islamic, Catppuccin Mocha, Emberveil, Dracula, Nord, Gruvbox Dark, Tokyo Night, Solarized Dark and Light, and Custom</li>
+<li>Independent custom colors for the pill and popup</li>
+<li>Visibility switches for the prayer label, countdown, and popup</li>
+<li>Five selectable taskbar positions, including experimental dynamic centering</li>
+<li>Native XAML taskbar integration with reserved layout space for anchored positions</li>
+<li>Automatic or manual clock height, four-sided margins and padding, tray gap, corner radius, and font size</li>
+<li>Background schedule updates through native WinHTTP, with configurable refresh interval</li>
+<li>Live settings updates without restarting Explorer</li>
+</ul>
+<h2 id="networkaccessandcachedschedules">Network access and cached schedules</h2>
+<p>This mod intentionally uses Mawaqit’s published mosque-specific prayer times rather
+than locally calculated astronomical times, preserving mosque-specific adjustments.</p>
+<p>This mod connects to <strong>https://mawaqit.net</strong> over HTTPS to retrieve the public
+prayer schedule for the mosque identifier configured in Settings. The request
+is an HTTP GET for <code>https://mawaqit.net/&lt;language&gt;/&lt;mosque-identifier&gt;</code>;
+no account or authentication is required. The server can observe the request
+and normal connection information such as your IP address.</p>
+<p>The schedule is stored in Windhawk's mod-specific storage. A valid cached
+schedule is reused when Explorer restarts, until the configured refresh interval
+expires (24 hours by default; adjustable from 1 to 168 hours). The mod also
+requests a fresh schedule when the mosque or refresh interval changes.
+If a download fails, it retries after one hour. An empty, expired, mismatched,
+or unusable cache causes a download at startup. The mod reads schedule data
+from the public Mawaqit webpage, so changes to that page can interrupt updates.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>Mawaqit Prayer Clock supports multiple appearance themes to match your Windows 11 desktop.</p>
+<p>Windows System Default | Traditional Islamic |
+|:---:|:---:|
+<img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default.png" alt="Windows" /> | <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic.png" alt="Traditional" /> |</p>
+<p>| Catppuccin Mocha | Emberveil |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png" alt="Catppuccin" /> | <img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png" alt="Emberveil" /> |</p>
+<h2 id="desktopintegration">Desktop Integration</h2>
+<p>See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 desktop.
+<img src="https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/My-Desktop.png" alt="Desktop" /></p>
+<h2 id="configuration">Configuration</h2>
+<p>Choose a mosque identifier or Mawaqit URL in Settings.
+Select an appearance theme and customize the widget as desired.
+Custom color settings only apply when the Custom theme is selected.
+Set popup auto-close to 0 to keep the popup open until dismissed.</p>
+<h2 id="moreinformation">More information</h2>
+<p>For installation instructions, additional screenshots,
+troubleshooting, and release information, visit:</p>
+<p><a href="https://github.com/hheitlager/windhawk-mawaqit">GitHub Project</a></p>
+<h2 id="compatibilityandcredits">Compatibility and credits</h2>
+<p>Windows 11 only. Taskbar XAML integration adapted from Windhawk’s
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp">taskbar-folder-menus</a> (MIT).</p>
+<h2 id="license">License</h2>
+<p>MIT License.</p>
+<h2 id="disclaimer">Disclaimer</h2>
+<p>This is an unofficial community project and is not affiliated
+with or endorsed by Mawaqit.</p>]]></content>
+        <author>
+            <name>HHeitlager</name>
+            <uri>https://github.com/hheitlager</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Maximized Window Margins 1.0]]></title>
         <id>https://windhawk.net/mods/maximized-window-margins#b4d6b87f9febd496839055ee71c41c549a05582d</id>
@@ -1154,81 +1222,6 @@ No application/system light or dark setting is changed.</li>
         <author>
             <name>appEW</name>
             <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor Idle Fade 1.0.0]]></title>
-        <id>https://windhawk.net/mods/cursor-idle-fade#8d60b4c4113a7f0a18b4b48a5443a199acf54805</id>
-        <link href="https://windhawk.net/mods/cursor-idle-fade"/>
-        <updated>2026-10-12T23:01:19.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cursoridlefade">Cursor Idle Fade</h1>
-<p>When the mouse hasn't moved (or been clicked / scrolled) for the configured
-number of seconds, the system cursors are smoothly faded out. The moment any
-mouse activity happens, the cursors are restored immediately.</p>
-<p><img src="https://i.imgur.com/g5EWkMU.gif" alt="Cursor Idle Fade Demo" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>Windows has no "cursor opacity" setting, so the mod captures the current
-system cursors, then swaps them for progressively more transparent copies
-using <code>SetSystemCursor</code>. Mouse activity (movement, clicks and scrolling) is
-detected with raw input, so nothing is polled while the cursor is visible.
-While the cursor is faded, a slow watchdog (every 250 ms, or every 50 ms
-while an elevated app has focus, see Limitations) also checks the mouse and
-the input desktop.
-On activity the original cursors are put back with <code>SetSystemCursor</code> (which
-updates the cursor on screen immediately), followed by a reload of the saved
-cursor scheme with <code>SPI_SETCURSORS</code>, so the scheme's own cursors are in place
-again.</p>
-<p>The mod runs in its own dedicated <code>windhawk.exe</code> process (a Windhawk "tool
-mod").</p>
-<h2 id="howthisdiffersfromsimilarmods">How this differs from similar mods</h2>
-<ul>
-<li><p><a href="https://windhawk.net/mods/cursor-auto-hide">Cursor auto-hide on idle</a>
-hides the cursor outright once the idle delay has passed and shows it again
-on the first movement or click. This mod fades the cursor out gradually
-instead of making it vanish abruptly:</p></li>
-<li><p>The fade is smooth (eased) and its length is a setting. A fade duration of
-0 hides the cursor instantly, like a plain auto-hide.</p></li>
-<li><p>The final opacity is a setting too, so the cursor can fade to, say, 20%
-and stay findable instead of disappearing completely.</p>
-<p>If you just want the cursor gone after a delay, that mod is the simpler
-choice. This one is for people who prefer a soft fade, or want the cursor
-dimmed rather than hidden.</p>
-<p>Both mods swap the same system cursors and reload the cursor scheme when
-they restore, so they aren't meant to be enabled together. Pick one.</p></li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Only the standard system cursors are faded (arrow, I-beam, hand, resize,
-cross, help, etc.). Apps that draw their own cursor (some games, some
-browsers/design tools) are not affected.</li>
-<li>The animated busy/working cursors are left alone on purpose.</li>
-<li>Monochrome cursors can't be made partially transparent. With the default
-Windows cursor scheme this includes the text (I-beam) and precision
-(crosshair) cursors. They stay unchanged until the fade passes 50% and then
-disappear; if <em>Final opacity</em> is 50 or more, they stay visible.</li>
-<li>The faded copies are single-size bitmaps. With mixed-DPI monitors or a
-larger pointer size, the cursor may change size while it fades and snap
-back when restored.</li>
-<li>Restoring reloads your saved cursor scheme, so cursors changed temporarily
-by another tool via <code>SetSystemCursor</code> revert to the saved scheme.</li>
-<li>Windows doesn't deliver raw mouse input to a normal (non-elevated) process
-while an app running as administrator has focus (Task Manager, for
-example). In that case the mod falls back to checking the cursor position
-and mouse buttons (about 5 times a second): the cursor still reappears
-when you move or click, but scrolling alone isn't noticed. The mod notices
-which app has focus and switches back to raw input by itself.</li>
-<li>If the cursor is faded while a secure screen (UAC prompt, lock screen)
-takes the input, it is restored automatically.</li>
-</ul>
-<h2 id="recovery">Recovery</h2>
-<p>If the mod's process crashes while the cursor is faded, it tries to restore
-the cursors before it exits. If the process is killed instead, the mod
-restores the cursors the next time it starts. You can also re-apply your cursor scheme
-in <em>Settings > Bluetooth & devices > Mouse > Additional mouse settings >
-Pointers</em>.</p>]]></content>
-        <author>
-            <name>Nuzza</name>
-            <uri>https://github.com/Nuzza</uri>
         </author>
     </entry>
 </feed>
