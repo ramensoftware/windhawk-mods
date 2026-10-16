@@ -194,12 +194,17 @@ void LoadSettings() {
 std::atomic<bool> g_taskbarViewDllLoaded;
 std::atomic<bool> g_unloading;
 
+// Set once the first XAML tree root is registered. Until then there is no
+// taskbar to refresh, so the WinEvent hooks stay unregistered. The event
+// thread id is published by that thread itself; RegisterRoot uses it to ask
+// the thread to re-register its hooks.
+std::atomic<bool> g_treeKnown;
+std::atomic<DWORD> g_eventThreadId;
+
 // Everything below is touched on the taskbar thread only: the hooks run
 // there, and refresh, restore and settings reload are marshaled to it with
-// RunFromWindowThread. The containers hold XAML weak references, so they
-// must not be destroyed at process exit (see the Windhawk wiki, "Global
-// objects and process shutdown"); they are cleared on the taskbar thread
-// when the mod unloads instead.
+// RunFromWindowThread. The containers hold only weak references and plain
+// data, which are safe to destroy at process exit.
 
 // One entry per XAML tree we know of (one per taskbar). Every refresh pass
 // enumerates the buttons from the root, so recycled or newly created buttons
@@ -208,8 +213,7 @@ struct RootEntry {
     void* key;
     winrt::weak_ref<Xaml::DependencyObject> root;
 };
-[[clang::no_destroy]] std::optional<std::vector<RootEntry>> g_roots{
-    std::in_place};
+std::vector<RootEntry> g_roots;
 
 // Every LabelControl TextBlock we subscribed to, so the subscription can be
 // removed when the mod unloads.
@@ -217,22 +221,35 @@ struct LabelEntry {
     winrt::weak_ref<Xaml::Controls::TextBlock> label;
     int64_t textChangedToken;
 };
-[[clang::no_destroy]] std::optional<std::unordered_map<void*, LabelEntry>>
-    g_labels{std::in_place};
+std::unordered_map<void*, LabelEntry> g_labels;
 
 // ============================================================================
 // Running code on the taskbar thread
 // ============================================================================
 
+// Looks the taskbar window up among this process's own windows. FindWindow
+// would return the first Shell_TrayWnd in Z-order, which can belong to
+// another process (alternative shells such as RetroBar or Cairo Shell create
+// their own Shell_TrayWnd to host tray icons).
 HWND FindCurrentProcessTaskbarWnd() {
-    HWND hTaskbarWnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (!hTaskbarWnd) {
-        return nullptr;
-    }
+    HWND hTaskbarWnd = nullptr;
 
-    DWORD processId = 0;
-    GetWindowThreadProcessId(hTaskbarWnd, &processId);
-    return processId == GetCurrentProcessId() ? hTaskbarWnd : nullptr;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
@@ -387,6 +404,14 @@ struct LazyWindowSnapshot {
 };
 
 bool IsWindowShown(HWND hwnd) {
+    // Covers hidden windows and windows that were just closed but are still
+    // listed in their group until the taskbar catches up: for a destroyed
+    // HWND, IsIconic returns FALSE and DWMWA_CLOAKED fails, which would count
+    // it as shown.
+    if (!IsWindowVisible(hwnd)) {
+        return false;
+    }
+
     // IsIconic is the source of truth. Win+D minimizes windows for real, so
     // it is covered here without special handling.
     if (IsIconic(hwnd)) {
@@ -552,6 +577,16 @@ bool SafeReadPointer(const void* address, void** value) {
            read == sizeof(*value);
 }
 
+// Logs a fixed message the first time it is reached.
+#define LogOnce(message)                     \
+    do {                                     \
+        static bool logged_ = false;         \
+        if (!logged_) {                      \
+            logged_ = true;                  \
+            Wh_Log(message);                 \
+        }                                    \
+    } while (0)
+
 bool IsKnownViewModelVtable(void* vftable) {
     return vftable &&
            (vftable == TaskListWindowViewModel_ITaskListWindowViewModel_vftable ||
@@ -580,21 +615,48 @@ bool IsKnownViewModel(void* object) {
 }
 
 // Finds the interface sub-object whose vtable is `vftable`, scanning forward
-// from the object's identity pointer (the Taskbar Labels mod does the same
-// walk between the view model's interfaces).
+// and then backward from `object`. The pointer the items source hands out
+// may be an upcast interface pointer rather than the object's first slot, in
+// which case the wanted interface can sit before it (Taskbar Labels walks
+// backward from ITaskbarAppItemViewModel to ITaskListWindowViewModel for
+// that reason). Both directions are bounded and read through
+// SafeReadPointer, so a miss is harmless.
 void* FindInterfaceByVtable(void* object, void* vftable) {
     if (!object || !vftable) {
         return nullptr;
     }
 
     auto slots = static_cast<void**>(object);
+
     for (int i = 0; i < 16; i++) {
         void* value = nullptr;
         if (!SafeReadPointer(&slots[i], &value)) {
             break;
         }
         if (value == vftable) {
+            if (i > 0) {
+                static bool logged = false;
+                if (!logged) {
+                    logged = true;
+                    Wh_Log(L"Interface found %d slot(s) forward", i);
+                }
+            }
             return &slots[i];
+        }
+    }
+
+    for (int i = 1; i <= 16; i++) {
+        void* value = nullptr;
+        if (!SafeReadPointer(&slots[-i], &value)) {
+            break;
+        }
+        if (value == vftable) {
+            static bool logged = false;
+            if (!logged) {
+                logged = true;
+                Wh_Log(L"Interface found %d slot(s) backward", i);
+            }
+            return &slots[-i];
         }
     }
 
@@ -709,6 +771,7 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
             }
         }
         result.state = ButtonWindowsState::kResolved;
+        LogOnce(L"Resolved a single-window button through the view model");
         return result;
     }
 
@@ -717,6 +780,7 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
             viewModel.get(),
             TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable)) {
         result.state = ButtonWindowsState::kResolved;
+        LogOnce(L"Resolved a group button through the view model");
 
         winrt::com_ptr<IUnknown> taskGroupUnknown;
         HRESULT hr = TaskListGroupViewModel_get_TaskGroup(
@@ -750,6 +814,9 @@ ButtonWindows ResolveButtonWindows(const Xaml::FrameworkElement& button) {
         return result;
     }
 
+    // A known view model whose interfaces were not found: this button falls
+    // back to title matching.
+    LogOnce(L"View model matched neither interface; using title fallback");
     return result;
 }
 
@@ -892,15 +959,15 @@ bool g_rebuildingLabel = false;
 bool EnsureLabelTracked(const Xaml::Controls::TextBlock& label) {
     void* key = winrt::get_abi(label);
 
-    auto it = g_labels->find(key);
-    if (it != g_labels->end()) {
+    auto it = g_labels.find(key);
+    if (it != g_labels.end()) {
         auto existing = it->second.label.get();
         if (existing && existing == label) {
             return false;
         }
 
         // Stale entry for a dead TextBlock whose address got reused.
-        g_labels->erase(it);
+        g_labels.erase(it);
     }
 
     int64_t token = label.RegisterPropertyChangedCallback(
@@ -923,7 +990,7 @@ bool EnsureLabelTracked(const Xaml::Controls::TextBlock& label) {
             }
         });
 
-    g_labels->emplace(key, LabelEntry{winrt::make_weak(label), token});
+    g_labels.emplace(key, LabelEntry{winrt::make_weak(label), token});
     return true;
 }
 
@@ -1185,7 +1252,7 @@ void ApplyToButton(const Xaml::FrameworkElement& button,
 bool RegisterRoot(const Xaml::DependencyObject& root) {
     void* key = winrt::get_abi(root);
 
-    for (auto it = g_roots->begin(); it != g_roots->end();) {
+    for (auto it = g_roots.begin(); it != g_roots.end();) {
         if (it->key == key) {
             auto existing = it->root.get();
             if (existing && existing == root) {
@@ -1193,15 +1260,25 @@ bool RegisterRoot(const Xaml::DependencyObject& root) {
             }
 
             // Dead object at a reused address.
-            it = g_roots->erase(it);
+            it = g_roots.erase(it);
             continue;
         }
         ++it;
     }
 
-    g_roots->push_back(RootEntry{key, winrt::make_weak(root)});
+    g_roots.push_back(RootEntry{key, winrt::make_weak(root)});
     Wh_Log(L"Registered taskbar tree root: %s",
            winrt::get_class_name(root).c_str());
+
+    // The first root makes the event hooks worthwhile. By now the view-model
+    // symbols are resolved too, so the NAMECHANGE decision in HookWinEvents
+    // is accurate. If the event thread hasn't published its id yet, it will
+    // see the flag itself when it registers its hooks.
+    if (!g_treeKnown.exchange(true)) {
+        if (DWORD threadId = g_eventThreadId) {
+            PostThreadMessage(threadId, WM_APP_RECONFIGURE_HOOKS, 0, 0);
+        }
+    }
     return true;
 }
 
@@ -1223,10 +1300,10 @@ void RefreshTreesOnCurrentThread() {
 
     LazyWindowSnapshot snapshot;
 
-    for (auto it = g_roots->begin(); it != g_roots->end();) {
+    for (auto it = g_roots.begin(); it != g_roots.end();) {
         auto root = it->root.get();
         if (!root) {
-            it = g_roots->erase(it);
+            it = g_roots.erase(it);
             continue;
         }
 
@@ -1245,9 +1322,9 @@ void RefreshTreesOnCurrentThread() {
         ++it;
     }
 
-    for (auto it = g_labels->begin(); it != g_labels->end();) {
+    for (auto it = g_labels.begin(); it != g_labels.end();) {
         if (!it->second.label.get()) {
-            it = g_labels->erase(it);
+            it = g_labels.erase(it);
         } else {
             ++it;
         }
@@ -1262,7 +1339,7 @@ void WINAPI RefreshTreesProc(void*) {
 // trees. Runs synchronously on the taskbar thread while unloading, so no
 // delegate implemented by the mod stays registered afterwards.
 void WINAPI RestoreAndClearProc(void*) {
-    for (auto& [key, entry] : *g_labels) {
+    for (auto& [key, entry] : g_labels) {
         try {
             if (auto label = entry.label.get()) {
                 label.UnregisterPropertyChangedCallback(
@@ -1275,8 +1352,8 @@ void WINAPI RestoreAndClearProc(void*) {
         }
     }
 
-    g_labels->clear();
-    g_roots->clear();
+    g_labels.clear();
+    g_roots.clear();
 }
 
 // ============================================================================
@@ -1467,7 +1544,6 @@ void WINAPI RegisterTaskbarTreesProc(void*) {
 
 HANDLE g_eventThread;
 HANDLE g_eventThreadReady;
-DWORD g_eventThreadId;
 
 // Only touched on the event thread.
 UINT_PTR g_refreshTimer;
@@ -1500,6 +1576,12 @@ void ArmRefreshTimer() {
     }
 }
 
+// Keeps only events that can change a taskbar button: top-level, unowned
+// windows that aren't tool windows. SHOW and HIDE fire for every top-level
+// window in every process, including tooltips, menus and the taskbar's own
+// thumbnail previews, and each pass costs a walk over every button. Styles
+// and the owner can still be read after a hide (and after a destroy, which
+// a hide of a closing window usually precedes).
 void CALLBACK WinEventProc(HWINEVENTHOOK,
                            DWORD,
                            HWND hwnd,
@@ -1512,6 +1594,14 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
     }
 
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) {
+        return;
+    }
+
+    LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    if ((exStyle & WS_EX_TOOLWINDOW) && !(exStyle & WS_EX_APPWINDOW)) {
+        return;
+    }
+    if (GetWindow(hwnd, GW_OWNER) && !(exStyle & WS_EX_APPWINDOW)) {
         return;
     }
 
@@ -1532,6 +1622,13 @@ void UnhookWinEvents() {
 // change doesn't change which windows a button has).
 void HookWinEvents() {
     UnhookWinEvents();
+
+    // No tree yet: either Taskbar.View.dll hasn't loaded (sign-in), or this
+    // explorer.exe has no taskbar at all (e.g. "Launch folder windows in a
+    // separate process"). RegisterRoot asks for a re-run once a tree exists.
+    if (!g_treeKnown) {
+        return;
+    }
 
     struct Range {
         DWORD min;
@@ -1567,8 +1664,10 @@ DWORD WINAPI EventThreadProc(LPVOID) {
     // PostThreadMessage from other threads can't be lost.
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_eventThreadId = GetCurrentThreadId();
     SetEvent(g_eventThreadReady);
 
+    // Registers nothing until a tree is known; see HookWinEvents.
     HookWinEvents();
 
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
@@ -1606,7 +1705,7 @@ void StartEventThread() {
     }
 
     g_eventThread =
-        CreateThread(nullptr, 0, EventThreadProc, nullptr, 0, &g_eventThreadId);
+        CreateThread(nullptr, 0, EventThreadProc, nullptr, 0, nullptr);
     if (!g_eventThread) {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
         CloseHandle(g_eventThreadReady);
@@ -1958,12 +2057,6 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
-
-    // Empty by now (cleared on the taskbar thread), unless that thread could
-    // not be reached; either way nothing may be left for the automatic
-    // destructors at process exit.
-    g_labels.reset();
-    g_roots.reset();
 }
 
 void WINAPI ReloadSettingsProc(void*) {
@@ -1979,7 +2072,7 @@ void Wh_ModSettingsChanged() {
         LoadSettings();
     }
 
-    if (g_eventThreadId) {
-        PostThreadMessage(g_eventThreadId, WM_APP_RECONFIGURE_HOOKS, 0, 0);
+    if (DWORD threadId = g_eventThreadId) {
+        PostThreadMessage(threadId, WM_APP_RECONFIGURE_HOOKS, 0, 0);
     }
 }
