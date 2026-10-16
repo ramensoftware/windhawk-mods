@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-16T14:01:24.000Z</updated>
+    <updated>2026-10-16T16:00:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer List Zebra Stripes 0.14.2]]></title>
+        <id>https://windhawk.net/mods/explorer-zebra-stripes#db6755f00eeee9b78c6d519b40d2bbf7f0b7ccf9</id>
+        <link href="https://windhawk.net/mods/explorer-zebra-stripes"/>
+        <updated>2026-10-16T16:00:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Make the zebra stripes anti aliased</li>
+<li>Fix a bug where scrolling with trackpad leads to flicking of stripes due to item recycling. This is done by caching stripe indices.</li>
+<li>Make the mod lazy load so as not to slow down explorer.exe from starting</li>
+</ul>]]></content>
+        <author>
+            <name>DarkionAvey</name>
+            <uri>https://github.com/DarkionAvey</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Properties Button 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-properties-button#032e419e893a9668ecd3624d7a71293d8a1f58c6</id>
@@ -788,138 +803,6 @@ while it's enabled.</p>]]></content>
         <author>
             <name>SAM2WOW</name>
             <uri>https://github.com/SAM2WOW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Terminal Start Minimized 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windows-terminal-start-minimized#ac640abc86e6254e47dee54ac7447d100a45ac0d</id>
-        <link href="https://windhawk.net/mods/windows-terminal-start-minimized"/>
-        <updated>2026-10-15T07:00:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsterminalstartminimized">Windows Terminal Start Minimized</h1>
-<p><strong>English</strong> | <a href="#português">Português</a></p>
-<p>Made in Brazil by <strong>caliberda</strong> · bugs and ideas: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">an issue on
-GitHub</a> · Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> ·
-<a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<p>When Windows Terminal opens at sign-in, this mod makes it start <strong>minimized</strong>,
-or straight in the <strong>notification area</strong>, instead of on the screen.</p>
-<h2 id="requiredturnonterminalsoptions">Required: turn on Terminal's options</h2>
-<p>The mod works through Terminal's own options and never changes them, so it
-<strong>does nothing until you turn them on</strong>. Open Terminal's settings (<code>Ctrl+,</code>):</p>
-<ol>
-<li><strong>Required:</strong> <strong>Startup</strong> &gt; <strong>Launch on machine startup</strong> (called <strong>Launch
-at login</strong> in newer versions). <a href="https://learn.microsoft.com/windows/terminal/customize-settings/startup#launch-on-machine-startup">Microsoft's
-guide</a>.
-Terminal must also be on in Windows <strong>Settings</strong> &gt; <strong>Apps</strong> &gt; <strong>Startup</strong>.</li>
-<li><strong>To start in the notification area:</strong> <strong>Appearance</strong> &gt; <strong>Hide Terminal in
-the notification area when it is minimized</strong>. <a href="https://learn.microsoft.com/windows/terminal/customize-settings/interaction#minimize-to-notification-area">Microsoft's
-guide</a>.
-Without it, Terminal starts minimized on the taskbar.</li>
-</ol>
-<p>Then sign out and back in (or restart) to see it work.</p>
-<h2 id="whatchanges">What changes</h2>
-<p>Without the mod, Terminal opens on the screen at sign-in even with both options
-on, and only goes to the notification area after you minimize it. With the mod:</p>
-<ul>
-<li>With option 2 on, it goes straight to the notification area, without showing
-on the screen.</li>
-<li>With option 2 off, it starts minimized on the taskbar.</li>
-</ul>
-<p>It doesn't take the focus from what you're doing. Click its icon to bring it
-back, in the size Terminal would have used (maximized, if Terminal is set to
-launch maximized).</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod runs only inside Windows Terminal. When Windows starts Terminal through
-its <strong>Launch on machine startup</strong> option, the windows of that launch (one, or
-one per window when Terminal restores your last session) are shown minimized
-instead of on the screen. Opening Terminal any other way (Start menu, taskbar,
-<code>wt</code> command, a shortcut) isn't changed, even right after you sign in.</p>
-<p>The mod stops acting when you bring back one of those windows, or one minute
-after Terminal started.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Only the Microsoft Store (packaged) version of Terminal has the <strong>Launch on
-machine startup</strong> option. The portable (zip) version is left unchanged.</li>
-<li>If Windhawk starts after Terminal, the mod can't act on that sign-in.</li>
-</ul>
-<h2 id="contact">Contact</h2>
-<p>I'm <strong>caliberda</strong>, a developer from Brazil. Write in English, Portuguese or
-your own language.</p>
-<ul>
-<li><strong>Bugs and ideas: an issue on GitHub</strong>, the best way: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">report a
-bug</a> or <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">suggest an
-idea</a>.
-It mentions me (@cesarkali), so I see it.</li>
-<li><strong>Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a></strong>: to talk to me
-and follow my projects.</li>
-<li><strong><a href="https://caliberda.com.br">caliberda.com.br</a></strong>: my site, with my other
-projects and a Discord link.</li>
-</ul>
-<hr />
-<h2 id="portugus">Português</h2>
-<p>Feito no Brasil por <strong>caliberda</strong> · pode falar comigo em português · bugs e
-ideias: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">uma issue no
-GitHub</a> · Instagram
-<a href="https://www.instagram.com/cesar.kali">@cesar.kali</a> · <a href="https://caliberda.com.br">caliberda.com.br</a></p>
-<p>Quando o Windows Terminal abre no logon, este mod faz ele <strong>já iniciar
-minimizado</strong>, ou direto na <strong>área de notificação</strong>, em vez de aparecer na tela.</p>
-<h3 id="obrigatrioligueasopesdoterminal">Obrigatório: ligue as opções do Terminal</h3>
-<p>O mod funciona pelas opções do próprio Terminal e nunca as altera, então ele
-<strong>não faz nada até você ligá-las</strong>. Abra as configurações do Terminal
-(<code>Ctrl+,</code>):</p>
-<ol>
-<li><strong>Obrigatório:</strong> <strong>Inicialização</strong> &gt; <strong>Iniciar na inicialização da
-máquina</strong> (chamada <strong>Iniciar no logon</strong> nas versões mais novas). <a href="https://learn.microsoft.com/pt-br/windows/terminal/customize-settings/startup#launch-on-machine-startup">Guia da
-Microsoft</a>.
-O Terminal também precisa estar ligado em <strong>Configurações</strong> do Windows &gt;
-<strong>Aplicativos</strong> &gt; <strong>Inicialização</strong>.</li>
-<li><strong>Para iniciar na área de notificação:</strong> <strong>Aparência</strong> &gt; <strong>Ocultar o
-Terminal na área de notificação quando estiver minimizado</strong>. <a href="https://learn.microsoft.com/pt-br/windows/terminal/customize-settings/interaction#minimize-to-notification-area">Guia da
-Microsoft</a>.
-Sem ela, o Terminal inicia minimizado na barra de tarefas.</li>
-</ol>
-<p>Depois, saia da conta e entre de novo (ou reinicie) para ver funcionando.</p>
-<h3 id="oquemuda">O que muda</h3>
-<p>Sem o mod, o Terminal abre na tela no logon mesmo com as duas opções ligadas, e
-só vai para a área de notificação depois que você o minimiza. Com o mod:</p>
-<ul>
-<li>Com a opção 2 ligada, ele vai direto para a área de notificação, sem aparecer
-na tela.</li>
-<li>Com a opção 2 desligada, ele inicia minimizado na barra de tarefas.</li>
-</ul>
-<p>Ele não tira o foco do que você está fazendo. Clique no ícone dele para
-trazê-lo de volta, no tamanho que o Terminal usaria (maximizado, se o Terminal
-estiver configurado para abrir maximizado).</p>
-<h3 id="comofunciona">Como funciona</h3>
-<p>O mod roda só dentro do Windows Terminal. Quando o Windows abre o Terminal pela
-opção <strong>Iniciar na inicialização da máquina</strong>, as janelas dessa inicialização
-(uma, ou uma por janela quando o Terminal restaura a última sessão) aparecem
-minimizadas em vez de na tela. Abrir o Terminal de outro jeito (menu Iniciar,
-barra de tarefas, comando <code>wt</code>, um atalho) não muda, mesmo logo depois de você
-entrar.</p>
-<p>O mod para de agir quando você traz de volta uma dessas janelas, ou um minuto
-depois de o Terminal iniciar.</p>
-<h3 id="limitaesconhecidas">Limitações conhecidas</h3>
-<ul>
-<li>Só a versão da Microsoft Store (empacotada) do Terminal tem a opção
-<strong>Iniciar na inicialização da máquina</strong>. A versão portátil (zip) não muda.</li>
-<li>Se o Windhawk iniciar depois do Terminal, o mod não consegue agir naquele
-logon.</li>
-</ul>
-<h3 id="contato">Contato</h3>
-<p>Sou o <strong>caliberda</strong>, desenvolvedor brasileiro. Pode escrever em português.</p>
-<ul>
-<li><strong>Bugs e ideias: uma issue no GitHub</strong>, o melhor caminho: <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">relatar um
-bug</a> ou <a href="https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BWindows%20Terminal%20Start%20Minimized%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A">sugerir uma
-ideia</a>.
-Ela já me marca (@cesarkali), então eu vejo.</li>
-<li><strong>Instagram <a href="https://www.instagram.com/cesar.kali">@cesar.kali</a></strong>: para conversar
-comigo e acompanhar meus projetos.</li>
-<li><strong><a href="https://caliberda.com.br">caliberda.com.br</a></strong>: meu site, com meus outros
-projetos e um link para o Discord.</li>
-</ul>]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
         </author>
     </entry>
 </feed>

@@ -6487,7 +6487,7 @@
         "ratingUsers": 23,
         "reviews": 0,
         "trendingSorting": 30.3,
-        "updated": 1791918179000,
+        "updated": 1792166409000,
         "users": 303
       },
       "metadata": {
@@ -6503,7 +6503,7 @@
         ],
         "license": "WTFPL",
         "name": "Explorer List Zebra Stripes",
-        "version": "0.13.0"
+        "version": "0.14.2"
       }
     },
     "explorerframe-fixes-for-win11-22h2plus": {
@@ -11332,7 +11332,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 2, 3, 61],
         "ratingUsers": 66,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 145.7,
         "updated": 1792148504000,
         "users": 1457
