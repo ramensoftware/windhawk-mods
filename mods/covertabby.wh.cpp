@@ -2412,13 +2412,35 @@ class Switcher {
     float m_overviewSavedScale=1;
     com_ptr<ID2D1Bitmap1> m_overviewSavedBackground;
     std::wstring m_overviewSavedBackgroundKey;
-    struct OverviewDesktop {GUID id{};std::wstring name;com_ptr<ID2D1Bitmap1> wallpaper;bool tried=false;D2D1_RECT_F hit{},rename{},remove{};float hoverAmount=0,focusAmount=0,renameHover=0,removeHover=0;};
+    struct OverviewDesktop {
+        GUID id{};
+        std::wstring name;
+        com_ptr<ID2D1Bitmap1> wallpaper;
+        bool tried = false;
+        D2D1_RECT_F hit{}, rename{}, remove{};
+        float hoverAmount = 0, focusAmount = 0, renameHover = 0, removeHover = 0;
+    };
     D2D1_RECT_F m_overviewAdd{},m_overviewRenameBox{};
     GUID m_overviewRenameId{};
     std::wstring m_overviewRenameText;
     bool m_overviewRenameSelectAll=false;
     double m_overviewActionErrorUntil=0;
-    struct OverviewWindow {HWND hwnd;GUID desktop;RECT rect;std::wstring title;com_ptr<ID2D1Bitmap1> icon;DWORD pid;std::unique_ptr<Item> capture;D2D1_RECT_F hit{};int hitDesktop=-1;D2D1_RECT_F dockHit{};float dockHover=0,dockFocus=0,dockAmount=0;D2D1_RECT_F dockVisual{};bool dockTarget=false,alive=true,minimized=false;double validateAt=0;};
+    struct OverviewWindow {
+        HWND hwnd;
+        GUID desktop;
+        RECT rect;
+        std::wstring title;
+        com_ptr<ID2D1Bitmap1> icon;
+        DWORD pid;
+        std::unique_ptr<Item> capture;
+        D2D1_RECT_F hit{};
+        int hitDesktop = -1;
+        D2D1_RECT_F dockHit{};
+        float dockHover = 0, dockFocus = 0, dockAmount = 0;
+        D2D1_RECT_F dockVisual{};
+        bool dockTarget = false, alive = true, minimized = false;
+        double validateAt = 0;
+    };
     std::vector<OverviewDesktop> m_overviewDesktops;
     std::vector<OverviewWindow> m_overviewWindows;
     com_ptr<IDWriteTextFormat> m_overviewFormat;
@@ -2836,7 +2858,15 @@ bool Switcher::CreateDeviceResources() {
 }
 
 void Switcher::ReleaseDeviceResources() {
-    m_searchTextAnimation={};m_renameTextAnimation={};m_uiTextBlur=nullptr;m_uiPanelMasks.clear();m_holdMessageFormat=nullptr;m_holdMessageTitle={};m_holdMessageBody={};m_holdTransform=nullptr;m_holdExitBitmap=nullptr;
+    m_searchTextAnimation = {};
+    m_renameTextAnimation = {};
+    m_uiTextBlur = nullptr;
+    m_uiPanelMasks.clear();
+    m_holdMessageFormat = nullptr;
+    m_holdMessageTitle = {};
+    m_holdMessageBody = {};
+    m_holdTransform = nullptr;
+    m_holdExitBitmap = nullptr;
     m_showDesktopWallpaper=nullptr;m_showDesktopWallpaperKey.clear();
     m_simpleGray=nullptr;m_simpleContrastSource=nullptr;m_simpleContrastSamples.clear();
     g_ready = false;
@@ -3704,7 +3734,10 @@ void Switcher::DrawDesktopOverview(float opacity) {
         m_brush->SetColor(D2D1::ColorF(0,0,0,opacity*.3f));
         const D2D1_RECT_F shadow{card.left-3*m_dpiScale,card.top+4*m_dpiScale,card.right+3*m_dpiScale,card.bottom+9*m_dpiScale};
         m_ctx->FillRoundedRectangle({shadow,14*m_dpiScale,14*m_dpiScale},m_brush.get());
-        auto layer=D2D1::LayerParameters1();layer.geometricMask=m_overviewCardMask.get();layer.maskTransform=D2D1::Matrix3x2F::Translation(card.left,card.top);layer.opacity=opacity;
+        auto layer = D2D1::LayerParameters1();
+        layer.geometricMask = m_overviewCardMask.get();
+        layer.maskTransform = D2D1::Matrix3x2F::Translation(card.left, card.top);
+        layer.opacity = opacity;
         m_ctx->PushLayer(layer,nullptr);
         m_brush->SetColor(m_settings.backgroundColor);m_ctx->FillRectangle(card,m_brush.get());
         if(desktop.wallpaper) m_ctx->DrawBitmap(desktop.wallpaper.get(),card,1,D2D1_INTERPOLATION_MODE_LINEAR);
@@ -3932,7 +3965,11 @@ void Switcher::DrawDesktopOverview(float opacity) {
             if(!bitmap) for(const auto& item:m_items) if(item->hwnd==window.hwnd && item->pid==window.pid) {bitmap=item->content.get();break;}
             if(bitmap) m_ctx->DrawBitmap(bitmap,ghost,opacity*.85f,D2D1_INTERPOLATION_MODE_LINEAR);
             else if(window.icon) m_ctx->DrawBitmap(window.icon.get(),{ghost.left+12*m_dpiScale,ghost.top+12*m_dpiScale,ghost.left+44*m_dpiScale,ghost.top+44*m_dpiScale},opacity,D2D1_INTERPOLATION_MODE_LINEAR);
-            m_brush->SetColor(StyleColor(m_settings.highlightColor,opacity));m_ctx->DrawRoundedRectangle({ghost,8*m_dpiScale,8*m_dpiScale},m_brush.get(),2*m_dpiScale);break;
+            m_brush->SetColor(StyleColor(m_settings.highlightColor, opacity));
+            m_ctx->DrawRoundedRectangle(
+                {ghost, 8 * m_dpiScale, 8 * m_dpiScale},
+                m_brush.get(), 2 * m_dpiScale);
+            break;
         }
         hoveredTitle.clear();
     }
@@ -4066,7 +4103,19 @@ void Switcher::OnStart(WPARAM flags) {
     m_hoverWindow=nullptr; m_hoverCandidate=nullptr;
     m_hoverSelectionArmed=true; m_lastHoverCursor={-10000,-10000};
     m_closeButton={}; m_killButton={}; m_pinButton={}; m_iconRects.clear();
-    m_searchFrom.clear(); m_searchTransitionStart=0; m_searchBarWidth=0; m_searchBarTime=0; m_searchActive=false; m_searchSelectAll=false; g_searchTyping=false; g_searchHasResults=true; m_searchQuery.clear(); m_searchMatches.clear(); m_searchMask.clear(); m_searchMeasuredText.clear(); m_searchMeasuredWidth=0;
+    m_searchFrom.clear();
+    m_searchTransitionStart = 0;
+    m_searchBarWidth = 0;
+    m_searchBarTime = 0;
+    m_searchActive = false;
+    m_searchSelectAll = false;
+    g_searchTyping = false;
+    g_searchHasResults = true;
+    m_searchQuery.clear();
+    m_searchMatches.clear();
+    m_searchMask.clear();
+    m_searchMeasuredText.clear();
+    m_searchMeasuredWidth = 0;
     m_simpleIndicator=-1; m_simpleRaised=nullptr; m_simpleFormat=nullptr; m_simpleDockHover.clear();
     m_previousForeground = GetForegroundWindow();
 
@@ -5450,7 +5499,13 @@ void Switcher::Teardown() {
     DismissIconContext();m_iconMenuAmount=0;m_iconMenuWindow=nullptr;
     ClearPointerPress();
     m_touchSession=false;
-    m_desktopOverview=false;g_desktopOverviewActive=false;g_desktopWinHoldSession=false;g_desktopRenameTyping=false;m_overviewRenameText.clear();m_commitDesktop=false;m_touchTapCount=0;
+    m_desktopOverview = false;
+    g_desktopOverviewActive = false;
+    g_desktopWinHoldSession = false;
+    g_desktopRenameTyping = false;
+    m_overviewRenameText.clear();
+    m_commitDesktop = false;
+    m_touchTapCount = 0;
     ClearOverviewCaptures();
     m_overviewWindows.clear();m_overviewDesktops.clear();
     m_overviewSavedBackground=nullptr;m_overviewSavedBackgroundKey.clear();
