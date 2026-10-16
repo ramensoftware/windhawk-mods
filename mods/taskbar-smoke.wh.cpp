@@ -2432,16 +2432,14 @@ void Tick() {
         } else
             da = false;
     }
-    const float ziel = da ? 1.f : 0.f;
+    const bool farbeWechselt = g_ti != (int)g_statusTi;
+    const float ziel = (da && !farbeWechselt) ? 1.f : 0.f;
     if (!da)
         g_blende = 0.f;
     else
         g_blende += (ziel - g_blende) * 0.35f;
-    if (g_ti != (int)g_statusTi) {
-        g_blende *= 0.6f;
-        if (g_blende < 0.06f)
-            g_ti = (int)g_statusTi;
-    }  // color change via a short fade-out; off = immediate, on = smooth
+    if (farbeWechselt && g_blende < 0.06f)
+        g_ti = (int)g_statusTi;  // color change: fade out, switch, fade back in
     if (g_blende < 0.01f) {
         ShowWindow(g_hwnd, SW_HIDE);
         TimerTakt(false);
