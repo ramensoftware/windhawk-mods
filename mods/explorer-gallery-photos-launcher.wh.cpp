@@ -21,7 +21,7 @@ and launches the Microsoft Photos app (`ms-photos:`) instead of opening the buil
 
 *(Note: Only in-Explorer navigation is redirected. Opening Gallery from a pinned Start menu shortcut won't be intercepted. Using the Back/Forward history buttons to return to Gallery will also bypass the hook.)*
 
-![Demonstration](https://raw.githubusercontent.com/jakubix30/explorer-gallery-photos-launcher/main/demo.gif)
+![Demonstration](https://raw.githubusercontent.com/jakubix30/mods-windhawk/refs/heads/main/demo.gif)
 
 ## Features
 
