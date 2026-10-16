@@ -562,25 +562,30 @@ SolidColorBrush MakeBrush(winrt::Windows::UI::Color color) {
     return brush;
 }
 
-winrt::Windows::UI::Color ThemeForegroundColor() {
-    // The taskbar follows the Windows mode (SystemUsesLightTheme), which is independent from
-    // the app mode that UISettings and the XAML ActualTheme reflect.
+// The taskbar follows the Windows mode (SystemUsesLightTheme), which is independent from the
+// app mode that UISettings and the XAML ActualTheme reflect.
+bool TaskbarUsesLightTheme() {
     DWORD usesLight = 0;
     DWORD size = sizeof(usesLight);
     if (RegGetValueW(HKEY_CURRENT_USER,
                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                      L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &usesLight,
                      &size) == ERROR_SUCCESS) {
-        return usesLight ? winrt::Windows::UI::Color{255, 0, 0, 0}
-                         : winrt::Windows::UI::Color{255, 255, 255, 255};
+        return usesLight != 0;
     }
     try {
         winrt::Windows::UI::ViewManagement::UISettings uiSettings;
-        return uiSettings.GetColorValue(
+        auto fg = uiSettings.GetColorValue(
             winrt::Windows::UI::ViewManagement::UIColorType::Foreground);
+        return static_cast<int>(fg.R) + fg.G + fg.B <= 420;
     } catch (...) {
-        return {255, 255, 255, 255};
+        return false;
     }
+}
+
+winrt::Windows::UI::Color ThemeForegroundColor() {
+    return TaskbarUsesLightTheme() ? winrt::Windows::UI::Color{255, 0, 0, 0}
+                                   : winrt::Windows::UI::Color{255, 255, 255, 255};
 }
 
 winrt::Windows::UI::Color Dimmed(winrt::Windows::UI::Color color, BYTE alpha) {
@@ -4101,8 +4106,7 @@ void UpdateTrayVisual() {
     if (!g_trayVisual) return;
     using Color = winrt::Windows::UI::Color;
     const bool active = g_trayHovered || g_trayPopupOpen;
-    auto fg = ThemeForegroundColor();
-    const bool dark = static_cast<int>(fg.R) + fg.G + fg.B > 420;
+    const bool dark = !TaskbarUsesLightTheme();
     const Color topColor = dark ? Color{0x28, 255, 255, 255} : Color{0x08, 0, 0, 0};
     const Color bottomColor = dark ? Color{0x0A, 255, 255, 255} : Color{0x10, 0, 0, 0};
 
@@ -4331,8 +4335,7 @@ struct MenuPalette {
 };
 
 MenuPalette GetMenuPalette() {
-    auto fg = ThemeForegroundColor();
-    bool dark = static_cast<int>(fg.R) + fg.G + fg.B > 420;
+    const bool dark = !TaskbarUsesLightTheme();
     if (dark) {
         return {{255, 32, 32, 32}, {255, 62, 62, 62}, {255, 240, 240, 240},
                 {255, 152, 152, 152}, {22, 255, 255, 255}, {255, 150, 150, 150}};
@@ -4756,6 +4759,7 @@ void ShowMeetingSubmenu(Button const& source, int64_t startUnix, int64_t endUnix
         surface.BorderThickness({1, 1, 1, 1});
         surface.CornerRadius({8, 8, 8, 8});
         surface.Child(enter);
+        surface.RequestedTheme(TaskbarUsesLightTheme() ? ElementTheme::Light : ElementTheme::Dark);
 
         // Position next to the agenda popup in the taskbar XAML-root space
         // (same space ShowAgendaPopupAtTray uses); a Flyout anchored to a
@@ -5017,6 +5021,8 @@ void ShowAgendaFlyout() {
         shell.BorderBrush(MakeBrush(pal.border));
         shell.BorderThickness({1, 1, 1, 1});
         shell.Child(shellBody);
+        // Default button states resolve theme resources against the element's theme.
+        shell.RequestedTheme(TaskbarUsesLightTheme() ? ElementTheme::Light : ElementTheme::Dark);
 
         g_agendaPopup = Popup();
         g_agendaPopup.XamlRoot(g_agendaGrid.XamlRoot());
@@ -5186,7 +5192,7 @@ bool StopUiTimer() {
     return true;
 }
 
-std::tuple<uint64_t, uint64_t, int, int, int64_t> g_uiLastKey;
+std::tuple<uint64_t, uint64_t, int, int, int64_t, bool> g_uiLastKey;
 bool g_uiLastKeyValid = false;
 
 void UiTimerTick(winrt::Windows::Foundation::IInspectable const&,
@@ -5201,7 +5207,7 @@ void UiTimerTick(winrt::Windows::Foundation::IInspectable const&,
                                      g_settingsGeneration.load(std::memory_order_relaxed),
                                      static_cast<int>(GetAuthState()),
                                      g_refreshUiState.load(std::memory_order_relaxed),
-                                     NowUnix() / 15);
+                                     NowUnix() / 15, TaskbarUsesLightTheme());
     if (g_uiLastKeyValid && key == g_uiLastKey) {
         return;
     }
