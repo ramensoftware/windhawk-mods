@@ -6,7 +6,7 @@
 // @author          Mathis
 // @github          https://github.com/xxsoulxx
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -lwinmm -luser32 -lgdi32
+// @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -64,12 +64,12 @@ Styler); the smoke follows the taskbar's button groups. Runs in its own process
 // ==/WindhawkModSettings==
 
 #include <d2d1.h>
-#include <mmsystem.h>
 #include <shellapi.h>
 #include <uiautomation.h>
 #include <windows.h>
 #include <wrl/client.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -142,7 +142,8 @@ std::vector<Pille> g_pillen;   // used by Tick (screen pixels)
 std::vector<Pille> g_pillenQ;  // written by the UIA thread (under g_lock)
 CRITICAL_SECTION g_lock;
 volatile LONG g_uiaBereit = 0;
-volatile bool g_uiaStop = false;
+std::atomic<bool> g_uiaStop{false};
+std::atomic<bool> g_overlaySichtbar{false};
 HANDLE g_uiaThread = nullptr;
 float g_hoehe = 57;  // Height of the pill body (UIA bounds, measured at rest)
 float g_offT = 9, g_offB = 9;  // Gap between pill body and taskbar window (from
@@ -182,10 +183,31 @@ bool PillenLesen() {
     ComPtr<IUIAutomationElement> root;
     if (FAILED(g_ua->ElementFromHandle(tray, &root)) || !root)
         return false;
-    ComPtr<IUIAutomationCondition> tc;
-    g_ua->CreateTrueCondition(&tc);
+    ComPtr<IUIAutomationCacheRequest> cr;
+    if (FAILED(g_ua->CreateCacheRequest(&cr)) || !cr)
+        return false;
+    cr->AddProperty(UIA_ControlTypePropertyId);
+    cr->AddProperty(UIA_AutomationIdPropertyId);
+    cr->AddProperty(UIA_BoundingRectanglePropertyId);
+    VARIANT vt;
+    VariantInit(&vt);
+    vt.vt = VT_I4;
+    vt.lVal = UIA_ButtonControlTypeId;
+    VARIANT vi;
+    VariantInit(&vi);
+    vi.vt = VT_BSTR;
+    vi.bstrVal = SysAllocString(L"TaskbarFrame");
+    ComPtr<IUIAutomationCondition> cb, cf, tc;
+    g_ua->CreatePropertyCondition(UIA_ControlTypePropertyId, vt, &cb);
+    g_ua->CreatePropertyCondition(UIA_AutomationIdPropertyId, vi, &cf);
+    VariantClear(&vi);
+    if (!cb || !cf ||
+        FAILED(g_ua->CreateOrCondition(cb.Get(), cf.Get(), &tc)) || !tc)
+        return false;
     ComPtr<IUIAutomationElementArray> arr;
-    if (FAILED(root->FindAll(TreeScope_Descendants, tc.Get(), &arr)) || !arr)
+    if (FAILED(root->FindAllBuildCache(TreeScope_Descendants, tc.Get(),
+                                       cr.Get(), &arr)) ||
+        !arr)
         return false;
     int n = 0;
     arr->get_Length(&n);
@@ -197,14 +219,14 @@ bool PillenLesen() {
         if (FAILED(arr->GetElement(i, &e)) || !e)
             continue;
         CONTROLTYPEID ct = 0;
-        e->get_CurrentControlType(&ct);
+        e->get_CachedControlType(&ct);
         BSTR id = nullptr;
-        e->get_CurrentAutomationId(&id);
+        e->get_CachedAutomationId(&id);
         std::wstring s = id ? id : L"";
         if (id)
             SysFreeString(id);
         RECT r{};
-        e->get_CurrentBoundingRectangle(&r);
+        e->get_CachedBoundingRectangle(&r);
         if (r.right - r.left <= 0)
             continue;
         if (s == L"TaskbarFrame") {
@@ -259,7 +281,7 @@ bool PillenLesen() {
     InterlockedExchange(&g_uiaBereit, 1);
     if (g_frame) {
         RECT fr{}, wr{};
-        if (SUCCEEDED(g_frame->get_CurrentBoundingRectangle(&fr)) &&
+        if (SUCCEEDED(g_frame->get_CachedBoundingRectangle(&fr)) &&
             GetWindowRect(tray, &wr) && fr.bottom > fr.top) {
             const float oT = (float)(fr.top - wr.top),
                         oB = (float)(wr.bottom - fr.bottom);
@@ -362,10 +384,6 @@ int g_bw = 0, g_bh = 0;
 bool Ziel(int w, int h) {
     if (g_dib && g_bw == w && g_bh == h)
         return true;
-    if (g_dib) {
-        DeleteObject(g_dib);
-        g_dib = nullptr;
-    }
     if (!g_memdc)
         g_memdc = CreateCompatibleDC(nullptr);
     BITMAPINFO bi{};
@@ -375,10 +393,16 @@ bool Ziel(int w, int h) {
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
-    g_dib = CreateDIBSection(g_memdc, &bi, DIB_RGB_COLORS, &g_bits, nullptr, 0);
-    if (!g_dib)
+    void* bits = nullptr;
+    HBITMAP dib =
+        CreateDIBSection(g_memdc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!dib)
         return false;
-    SelectObject(g_memdc, g_dib);
+    SelectObject(g_memdc, dib);
+    if (g_dib)
+        DeleteObject(g_dib);
+    g_dib = dib;
+    g_bits = bits;
     g_bw = w;
     g_bh = h;
     return true;
@@ -564,7 +588,7 @@ void MittelBerechnen() {
     ok = true;
     Log("Mittel %.3f %.3f %.3f", g_mittel[0], g_mittel[1], g_mittel[2]);
 }
-volatile bool g_einstellungNeu = false;
+std::atomic<bool> g_einstellungNeu{true};
 float g_mausF = 1.f;
 bool g_partikel = true;
 int g_modus = 0;  // mode: subtle 1, strong 2, off 0
@@ -583,13 +607,9 @@ int StringSettingIndex(PCWSTR name,
     }
     return result;
 }
-void EffekteLesen() {  // Windhawk settings (re-read every 2 s)
-    static ULONGLONG zl = 0;
-    const ULONGLONG n = GetTickCount64();
-    if (n - zl < 2000 && !g_einstellungNeu)
+void EffekteLesen() {  // Windhawk settings (at start and after a change)
+    if (!g_einstellungNeu.exchange(false))
         return;
-    zl = n;
-    g_einstellungNeu = false;
     const int m =
         StringSettingIndex(L"mouse", {L"off", L"gentle", L"strong"}, 1);
     g_mausF = m == 0 ? 0.f : m == 2 ? 2.f : 1.f;
@@ -735,7 +755,7 @@ void FluidSchritt(Fluid& F,
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
     const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, 2)];
+    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -949,11 +969,11 @@ void FluidSchritt(Fluid& F,
             u[i] += dt * 26.f * n1;
             v[i] += dt * 16.f * n2;  // irregular turbulence
             const float ddx = x - mx, ddy = y - my, r2 = ddx * ddx + ddy * ddy;
-            if (r2 < 90.f) {
-                const float g = std::exp(-r2 / 18.f);
+            if (g_mausF > 0.f && r2 < 90.f * g_mausF) {
+                const float g = std::exp(-r2 / (18.f * g_mausF)) * g_mausF;
                 u[i] += g * (mvx * 4.f + ddx * .35f);
                 v[i] += g * (mvy * 4.f + ddy * .35f);
-                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f);
+                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f) * g_mausF;
             }  // Subtle mouse interaction: drags and pushes the smoke
             u[i] *= .985f;
             v[i] *= .985f;
@@ -1020,7 +1040,7 @@ void FluidSchritt(Fluid& F,
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
     const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, 2)];
+    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -1202,11 +1222,11 @@ void FluidSchritt(Fluid& F,
             u[i] += dt * 26.f * n1;
             v[i] += dt * 16.f * n2;  // irregular turbulence
             const float ddx = x - mx, ddy = y - my, r2 = ddx * ddx + ddy * ddy;
-            if (r2 < 90.f) {
-                const float g = std::exp(-r2 / 18.f);
+            if (g_mausF > 0.f && r2 < 90.f * g_mausF) {
+                const float g = std::exp(-r2 / (18.f * g_mausF)) * g_mausF;
                 u[i] += g * (mvx * 4.f + ddx * .35f);
                 v[i] += g * (mvy * 4.f + ddy * .35f);
-                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f);
+                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f) * g_mausF;
             }  // Subtle mouse interaction: drags and pushes the smoke
             u[i] *= .985f;
             v[i] *= .985f;
@@ -1283,7 +1303,7 @@ void FluidSchritt(Fluid& F,
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
     const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, 2)];
+    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -1498,11 +1518,11 @@ void FluidSchritt(Fluid& F,
             u[i] += dt * 26.f * n1;
             v[i] += dt * 16.f * n2;  // irregular turbulence
             const float ddx = x - mx, ddy = y - my, r2 = ddx * ddx + ddy * ddy;
-            if (r2 < 90.f) {
-                const float g = std::exp(-r2 / 18.f);
+            if (g_mausF > 0.f && r2 < 90.f * g_mausF) {
+                const float g = std::exp(-r2 / (18.f * g_mausF)) * g_mausF;
                 u[i] += g * (mvx * 4.f + ddx * .35f);
                 v[i] += g * (mvy * 4.f + ddy * .35f);
-                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f);
+                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f) * g_mausF;
             }  // Subtle mouse interaction: drags and pushes the smoke
             u[i] *= .985f;
             v[i] *= .985f;
@@ -1579,7 +1599,7 @@ void FluidSchritt(Fluid& F,
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
     const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, 2)];
+    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -2309,8 +2329,9 @@ DWORD WINAPI UiaThread(LPVOID) {
             Sleep(250);
             PillenLesen();
         }  // no pills yet (auto-hide: taskbar only visible while the mouse is
-           // on it) -> read anyway
-        else if (sichtbar && !NahAnLeiste()) {
+           // on it) -> read anyway; otherwise skip while the overlay is
+           // hidden
+        else if (sichtbar && g_overlaySichtbar && !NahAnLeiste()) {
             Sleep(700);
             if (NahAnLeiste())
                 continue;
@@ -2319,9 +2340,18 @@ DWORD WINAPI UiaThread(LPVOID) {
         for (int i = 0; i < 10 && !g_uiaStop; ++i)
             Sleep(100);
     }
+    g_frame.Reset();
     g_ua.Reset();
     CoUninitialize();
     return 0;
+}
+void TimerTakt(bool sichtbar) {  // 15 ms while shown, 250 ms while hidden
+    static bool zuletzt = true;
+    g_overlaySichtbar = sichtbar;
+    if (sichtbar == zuletzt)
+        return;
+    zuletzt = sichtbar;
+    SetTimer(g_hwnd, 1, sichtbar ? 15 : 250, nullptr);
 }
 void Tick() {
     EffekteLesen();  // in every style
@@ -2410,8 +2440,10 @@ void Tick() {
     }  // color change via a short fade-out; off = immediate, on = smooth
     if (g_blende < 0.01f) {
         ShowWindow(g_hwnd, SW_HIDE);
+        TimerTakt(false);
         return;
     }
+    TimerTakt(true);
     if (!IsWindowVisible(g_hwnd))
         ShowWindow(g_hwnd, SW_SHOWNOACTIVATE);
     static ULONGLONG zLetzt = 0;
@@ -2482,14 +2514,12 @@ DWORD WINAPI RauchThread(LPVOID) {
                              nullptr, nullptr, inst, nullptr);
     if (!g_hwnd)
         return 1;
-    timeBeginPeriod(1);
     SetTimer(g_hwnd, 1, 15, nullptr);
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
-    timeEndPeriod(1);
     g_uiaStop = true;
     KillTimer(g_hwnd, 1);
     DestroyWindow(g_hwnd);
