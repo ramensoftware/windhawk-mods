@@ -19,6 +19,12 @@ A dock as close to macOS as possible, while still working the way Windows
 does. Icons sit on a frosted-glass dock and grow as the pointer passes over
 them.
 
+![The dock in action](https://i.imgur.com/PjxXyHy.gif)
+
+![Screenshot](https://i.imgur.com/RqihfRk.png)
+
+![Screenshot](https://i.imgur.com/hEV29sz.png)
+
 Unlike "Taskbar Dock Animation", which magnifies the stock taskbar's icons,
 and "Mac Island & Dock", which replaces the taskbar with a separate dock
 window, this mod restyles the real taskbar: a frosted plate, larger icons
@@ -54,7 +60,7 @@ mod (GPL-3.0).
 /*
 - dockSize: 55
   $name: Dock Size (0-100)
-  $description: Size of the icons and the dock, from 18px to 73px icons. (Default = 55)
+  $description: Size of the icons and the dock. (Default = 55)
 - magnification: 60
   $name: Magnification (0-100)
   $description: How much the icons grow when hovered. (Default = 60)
