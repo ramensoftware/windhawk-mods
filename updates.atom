@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-16T12:04:00.000Z</updated>
+    <updated>2026-10-16T13:05:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.4.0]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a4c44e19cf76a635b3ecddac529fcdf1e83615ea</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-10-16T13:05:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improve compatibility with 26H2</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Coin & Stock Monitor 1.2.1]]></title>
+        <id>https://windhawk.net/mods/coin-stock-monitor#0e077339c6b1504dc9943f5ed14b7b311baac2de</id>
+        <link href="https://windhawk.net/mods/coin-stock-monitor"/>
+        <updated>2026-10-16T13:05:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><code>Symbols</code> and <code>EntryPrices</code> are documented with <code>|</code> as the separator. Lists saved with commas by older versions still work.</li>
+<li>Entry prices use <code>.</code> as the decimal separator. A comma is accepted only as a thousands separator, followed by exactly three digits, so <code>12,005</code> means <code>12005</code> and <code>0,45</code> is rejected.</li>
+<li>Numbers are parsed with the classic locale, so the result does not depend on the regional settings of the system.</li>
+<li>Fixes a wrong percentage change when an entry price had a comma.</li>
+</ul>]]></content>
+        <author>
+            <name>jayll1303</name>
+            <uri>https://github.com/jayll1303</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.0]]></title>
         <id>https://windhawk.net/mods/winv-panel-tweaks#d7afc202adc5a0b927f4fc78e67e1a3e4230afaa</id>
@@ -854,38 +883,6 @@ projetos e um link para o Discord.</li>
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Snap Flyout Instant 1.1]]></title>
-        <id>https://windhawk.net/mods/snap-flyout-instant#c78eef5d562e9b831069809a12e2f95ed0290e0f</id>
-        <link href="https://windhawk.net/mods/snap-flyout-instant"/>
-        <updated>2026-10-15T06:04:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a "Hide delay (ms)" setting to control how long the snap layouts flyout stays visible after the pointer leaves it. The default (0) keeps the system behavior.</li>
-</ul>]]></content>
-        <author>
-            <name>pajs</name>
-            <uri>https://github.com/pajs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.7.0]]></title>
-        <id>https://windhawk.net/mods/explorer-custom-shortcuts#a62f085f428edfe603914cee262a1088ea22da03</id>
-        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
-        <updated>2026-10-15T06:04:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <code>%base</code> and <code>%basename</code> tokens to extract filenames without extensions.</li>
-<li>Added <code>internal:openWithCode</code> (selection-aware with 10-folder/50-file caps) and <code>internal:openDirInCode</code> for VS Code integration.</li>
-<li>Added support for shorthand <code>int:</code> prefix alongside <code>internal:</code>.</li>
-<li>Added full-word parameter aliases (<code>%name</code>, <code>%dir</code>, <code>%count</code>, <code>%parent</code>) and literal percent escape (<code>%%</code>).</li>
-<li>Added on-screen error notifications for invalid internal commands.</li>
-<li>Consolidated internal command documentation with a single tip callout.</li>
-<li>Updated settings descriptions and streamlined documentation sections.</li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
         </author>
     </entry>
 </feed>

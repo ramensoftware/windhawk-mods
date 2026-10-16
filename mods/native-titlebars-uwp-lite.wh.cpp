@@ -2,7 +2,7 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars Lite
 // @description     Enables native titlebars in UWP apps
-// @version         1.3.0
+// @version         1.4.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
@@ -337,6 +337,20 @@ void DestroyTitlebarIcons(HWND hWnd)
     RemovePropW(hWnd, L"NativeTitlebarIconSet");
 }
 
+typedef bool (* CTitleBar__UpdateBorderVisibilityAndMargins_t)(void *);
+
+CTitleBar__UpdateBorderVisibilityAndMargins_t CTitleBar__UpdateBorderVisibilityAndMargins_orig;
+
+bool __fastcall CTitleBar__UpdateBorderVisibilityAndMargins_hook(
+
+    void *pThis
+
+){
+
+    return 0;
+
+}
+
 LRESULT CALLBACK SubclassProc(
     HWND hWnd,
     UINT uMsg,
@@ -460,6 +474,13 @@ BOOL Wh_ModInit()
             (void *)CTitleBar__PaintButton_hook,
             false
         },
+        {
+            {L"private: bool __cdecl CTitleBar::UpdateBorderVisibilityAndMargins(void)"},
+            (void **)&CTitleBar__UpdateBorderVisibilityAndMargins_orig,
+            (void *)CTitleBar__UpdateBorderVisibilityAndMargins_hook,
+            true
+        } 
+        
     };
 
     return WindhawkUtils::HookSymbols(

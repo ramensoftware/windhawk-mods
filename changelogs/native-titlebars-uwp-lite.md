@@ -1,3 +1,7 @@
+## 1.4.0 ([Oct 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a4c44e19cf76a635b3ecddac529fcdf1e83615ea/mods/native-titlebars-uwp-lite.wh.cpp))
+
+* Improve compatibility with 26H2
+
 ## 1.3.0 ([Sep 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/196fcdb727a79e52a624264506fdd1928e4ec565/mods/native-titlebars-uwp-lite.wh.cpp))
 
 * Fix immersive Alt-Tab switcher
