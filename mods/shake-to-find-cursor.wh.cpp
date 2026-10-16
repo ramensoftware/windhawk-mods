@@ -803,7 +803,9 @@ bool InitFramesDir() {
 
     WCHAR storage[MAX_PATH];
     size_t length = Wh_GetModStoragePath(storage, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) {
+    // Leave room for the subfolder and file names: swprintf_s ends the
+    // process rather than failing when the buffer is too small.
+    if (length == 0 || length + 40 >= MAX_PATH) {
         return false;
     }
     if (storage[length - 1] == L'\\') {
