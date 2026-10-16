@@ -51,12 +51,13 @@ static const PROPERTYKEY PKEY_AppUserModel_ID_local =
 
 static const WCHAR *const kBatchFilter = L"private: long __cdecl CTitleBar::_";
 
-static std::unordered_set<void *> g_hookedAddrs;
+
 
 INT64 __fastcall CTitleBar_Generic_hook(void *, void *, void *, void *) {return 0;}
 
 static void HookAllCTitleBar(HMODULE hModule)
 {
+    static std::unordered_set<void *> g_hookedAddrs;
     WH_FIND_SYMBOL findSym = {};
     HANDLE hFind = Wh_FindFirstSymbol(hModule, nullptr, &findSym);
     if (!hFind)
@@ -384,17 +385,13 @@ LRESULT CALLBACK SubclassProc(
         ForgetSubclassedWindow(hWnd);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
-
-        if (uMsg == WM_NCRBUTTONDOWN ||
+    if (uMsg == WM_NCRBUTTONDOWN ||
         uMsg == WM_NCRBUTTONUP ||
         uMsg == WM_NCLBUTTONDBLCLK ||
         uMsg == WM_POPUPSYSTEMMENU ||
-        uMsg == WM_SYSCOMMAND)
-    {
-        return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-    }
-
-    if (uMsg == WM_NCPAINT || uMsg == WM_NCCALCSIZE)
+        uMsg == WM_SYSCOMMAND ||
+        uMsg == WM_NCPAINT || 
+        uMsg == WM_NCCALCSIZE)
     {
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
@@ -440,7 +437,7 @@ HWND WINAPI CreateWindowInBandEx_hook(
 
     dwExStyle &= ~WS_EX_DLGMODALFRAME;
     dwExStyle &= ~0x00200000L;
-    dwStyle = WS_OVERLAPPEDWINDOW | WS_DLGFRAME;
+    dwStyle = WS_OVERLAPPEDWINDOW;
 
     HWND res = CreateWindowInBandEx_orig(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
@@ -481,7 +478,7 @@ BOOL Wh_ModInit()
     InitializeCriticalSection(&g_csGdiplus);
 
     Wh_SetFunctionHook(
-        (void *)GetProcAddress(LoadLibraryW(L"user32.dll"), "CreateWindowInBandEx"),
+        (void *)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowInBandEx"),
         (void *)CreateWindowInBandEx_hook,
         (void **)&CreateWindowInBandEx_orig);
 
@@ -511,8 +508,10 @@ void Wh_ModUninit()
     {
         if (IsWindow(hWnd))
         {
-            DestroyTitlebarIcons(hWnd);
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+            SendMessageW(hWnd, WM_SETICON, ICON_SMALL, 0);
+            SendMessageW(hWnd, WM_SETICON, ICON_BIG, 0);
+            DestroyTitlebarIcons(hWnd);
         }
     }
 
