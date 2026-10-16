@@ -221,10 +221,13 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
         return NULL;
     }
 
-    Gdiplus::Graphics g(scaled);
-    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-    g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-    g.DrawImage(bmp, 0, 0, targetSize, targetSize);
+    {
+        Gdiplus::Graphics g(scaled);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+        g.DrawImage(bmp, 0, 0, targetSize, targetSize);
+    }
+
     delete bmp;
 
     HICON hIcon = NULL;
