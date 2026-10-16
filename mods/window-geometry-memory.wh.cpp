@@ -2,7 +2,7 @@
 // @id              window-geometry-memory
 // @name            Where I Left It
 // @description     Remembers each app's window position and size, restores it when the app opens again, and keeps open windows reachable when your display setup changes
-// @version         1.1
+// @version         1.2
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
@@ -108,16 +108,22 @@ list are remembered or moved.
 ## Diagnostics
 
 Turn on **Write a diagnostics journal** in the settings and the mod appends a
-line to `window-geometry-journal-<SID>.txt` in its storage folder for every save,
-restore and decision, with the exact rectangle and monitor involved. It is the
-fastest way to see why a particular window was or was not restored, and it is
-worth attaching to a bug report. It is off by default.
+line to `window-geometry-journal.txt` for every save, restore and decision, with
+the exact rectangle and monitor involved. It is the fastest way to see why a
+particular window was or was not restored, and it is worth attaching to a bug
+report. It is off by default.
 
-Both files carry the signed-in user's SID in their names, because a tool mod runs
-one process per signed-in session while the storage folder is shared by the whole
-machine. Without the SID, two users signed in at once would each overwrite the
-other's saved geometry -- and the file lists window titles, which should not be
-readable from another session.
+Both files live in a folder named after the signed-in user's SID, inside the mod's
+storage folder. That storage folder is shared by the whole machine and a tool mod
+runs one process per signed-in session, so the folder is created with a protected
+access control list that gives full access to that user, SYSTEM and
+administrators, and to nobody else: two users signed in at once neither overwrite
+each other's saved geometry nor can read each other's window titles. If the mod
+cannot read the user's SID it saves nothing at all -- sharing the data would be
+worse than forgetting it. A file an earlier build left in the shared folder is
+moved in on the first load; when the folder already holds one of the same name,
+the older file is kept beside it instead of overwriting it, and the older log is
+readable only by the same three identities.
 */
 // ==/WindhawkModReadme==
 
@@ -153,11 +159,11 @@ readable from another session.
 - diagnosticsLog: false
   $name: Write a diagnostics journal
   $description: >-
-    Appends a line to window-geometry-journal-<SID>.txt in this mod's storage
-    folder for every save, restore and decision, with the exact rectangle and
-    monitor involved. Intended for validating behaviour and for bug reports:
-    the stored geometry file is written lazily and holds every tracked app for
-    this user. Off by default.
+    Appends a line to window-geometry-journal.txt in this user's own folder
+    inside the mod's storage folder, for every save, restore and decision, with
+    the exact rectangle and monitor involved. Intended for validating behaviour
+    and for bug reports: the stored geometry file is written lazily and holds
+    every tracked app for this user. Off by default.
 - clearStoredData: none
   $name: Clear stored data
   $description: >-
@@ -237,6 +243,13 @@ readable from another session.
 static constexpr PCWSTR kGeometryStoreFileName = L"window-geometry.json";
 static constexpr PCWSTR kDiagnosticsJournalFileName =
     L"window-geometry-journal.txt";
+
+// The names a file from an earlier layout takes when this user's folder already
+// holds its usual one. Nothing is overwritten, and nothing older is left in the
+// shared folder where another account can read the window titles in it.
+static constexpr PCWSTR kAdoptedStoreFileName = L"window-geometry-adopted.json";
+static constexpr PCWSTR kAdoptedJournalFileName =
+    L"window-geometry-journal-adopted.txt";
 
 // Defined further down, with the other file I/O. Declared here because the
 // window-filtering and skip-logging code above it also journals its decisions.
@@ -968,6 +981,31 @@ static std::wstring PerUserFileName(const std::wstring& baseName,
         return baseName + L"-" + sid;
     }
     return baseName.substr(0, dot) + L"-" + sid + baseName.substr(dot);
+}
+
+// Which store a session should adopt when it has none of its own. The
+// SID-in-the-name file is this user's own and wins; the pre-r16 machine-wide file
+// is claimed only when this user has nothing. A store of this user's own is never
+// displaced: overwriting it is the bug the per-user layout exists to prevent.
+enum class LegacyAdoption {
+    None,
+    PerUserName,
+    SharedName,
+};
+
+static LegacyAdoption DecideLegacyAdoption(bool ownStoreExists,
+                                           bool legacyPerUserNameExists,
+                                           bool legacySharedNameExists) {
+    if (ownStoreExists) {
+        return LegacyAdoption::None;
+    }
+    if (legacyPerUserNameExists) {
+        return LegacyAdoption::PerUserName;
+    }
+    if (legacySharedNameExists) {
+        return LegacyAdoption::SharedName;
+    }
+    return LegacyAdoption::None;
 }
 
 static int AllocateOrdinal(const std::set<int>& liveOrdinals) {
@@ -2498,17 +2536,28 @@ static int FindMonitorIndexByHandle(HMONITOR monitor) {
 
 // --- Per-user storage -------------------------------------------------------
 //
-// Wh_GetModStoragePath is a single machine-wide folder, and a tool mod runs one
-// process per signed-in session. Before this, every session wrote the same
-// window-geometry.json: with two users signed in, each flush replaced the other
-// user's entries -- and the file, like the journal, carries executable paths and
-// window titles, so each user's document names were readable from the other
-// session. Both files and the clear-action latch therefore carry the signed-in
-// user's SID.
+// Wh_GetModStoragePath is a single folder for the whole machine, and a tool mod
+// runs one process per signed-in session. The files carry executable paths and
+// window titles, so two users must neither share them nor be able to read each
+// other's -- which are two different requirements:
 //
-// The SID comes from this process's own token, and the conversion is hand-written
-// rather than a call into sddl.h -- see FormatSidString for why.
+//  * Two sessions signed in at once must not overwrite each other's store. A
+//    shared file name cannot keep them apart; the layout has to.
+//  * A file is readable by whoever can open the folder it is in, and the mod's
+//    storage folder is readable by every user on the machine. A SID in a file
+//    name does not change that; it only names the file after its reader.
 //
+// So each user gets a folder of their own: <storage>\<SID>, created with a
+// protected DACL that gives full access to that user, SYSTEM and administrators,
+// and inherits nothing from the shared folder. What is inside is private by
+// construction, whatever the files are called. This is the same shape as
+// desktop-sticky-notes, built through the ACL functions rather than through an
+// SDDL string, for the same reason the SID conversion below is hand-written: a
+// header a Windhawk mod does not get is how this file last failed to compile.
+//
+// The SID comes from this process's own token, and its text form is written out
+// by hand rather than with a call into sddl.h -- see FormatSidString for why.
+
 // Reads the bytes of a SID into the parts FormatSidString renders. Kept out of the
 // tested core because it is the only part that has to know what a SID looks like;
 // SID and SID_IDENTIFIER_AUTHORITY are declared in winnt.h, which windows.h pulls
@@ -2541,11 +2590,19 @@ static std::wstring SidToString(PSID sid) {
     return FormatSidString(parsed->Revision, authority, subAuthorities);
 }
 
+// The signed-in user's SID in both forms the mod needs: the bytes, for the
+// folder's access control list, and the text, for the folder name.
+//
 // Read once and cached: the SID cannot change while the process lives, and the
 // readers run on two threads (init and the event thread).
-static std::wstring CurrentUserSid() {
+struct UserTokenSid {
+    std::vector<BYTE> bytes;
+    std::wstring text;
+};
+
+static const UserTokenSid& CurrentUserTokenSid() {
     static bool attempted = false;
-    static std::wstring cached;
+    static UserTokenSid cached;
 
     if (attempted) {
         return cached;
@@ -2554,8 +2611,7 @@ static std::wstring CurrentUserSid() {
 
     HANDLE token = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-        Wh_Log(L"[GEOM] OpenProcessToken failed (error %lu); storing under the "
-               L"shared name", GetLastError());
+        Wh_Log(L"[GEOM] OpenProcessToken failed (error %lu)", GetLastError());
         return cached;
     }
 
@@ -2565,21 +2621,34 @@ static std::wstring CurrentUserSid() {
         std::vector<BYTE> buffer(size);
         if (GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
             auto* user = reinterpret_cast<TOKEN_USER*>(buffer.data());
-            cached = SidToString(user->User.Sid);
+            if (user->User.Sid) {
+                const DWORD sidLength = GetLengthSid(user->User.Sid);
+                if (sidLength > 0 && sidLength <= size) {
+                    const BYTE* first =
+                        reinterpret_cast<const BYTE*>(user->User.Sid);
+                    cached.bytes.assign(first, first + sidLength);
+                    cached.text = SidToString(user->User.Sid);
+                }
+            }
         }
     }
 
     CloseHandle(token);
 
-    if (cached.empty()) {
-        // Without a SID the mod still works; it simply falls back to the shared
-        // name it used before. Logged rather than silent, because that fallback
-        // re-introduces the multi-user behaviour this exists to prevent.
-        Wh_Log(L"[GEOM] the user SID could not be read; storing under the shared "
-               L"name (each signed-in user will share it)");
+    if (cached.text.empty()) {
+        // Without a SID there is no folder that can be made private and no name
+        // that keeps two sessions apart. The mod saves nothing at all rather than
+        // putting the data back in a file every user can read: it remembers
+        // nothing across a restart, and that is the best available answer.
+        Wh_Log(L"[GEOM] the user SID could not be read; this session will not "
+               L"save any geometry");
     }
 
     return cached;
+}
+
+static std::wstring CurrentUserSid() {
+    return CurrentUserTokenSid().text;
 }
 
 // Built once: the latch key is used on every settings change.
@@ -2588,81 +2657,389 @@ static const std::wstring& PerUserLatchValueName() {
     if (name.empty()) {
         const std::wstring sid = CurrentUserSid();
         // No SID: the name from before the per-user change, so a value latched by
-        // an earlier build is still seen and the setting is not re-fired.
+        // an earlier build is still seen and the setting is not re-fired. Nothing
+        // is saved in that state, so there is nothing for a stale latch to wipe.
         name = sid.empty() ? std::wstring(kClearLatchValueName)
                            : std::wstring(kClearLatchValueName) + L"-" + sid;
     }
     return name;
 }
 
-static bool BuildGeometryStorePath(PWSTR buffer, size_t bufferSize) {
-    size_t len = Wh_GetModStoragePath(buffer, bufferSize);
-    if (len == 0 || len + 1 >= bufferSize) {
+// The access control list of a user's private folder, or of a file inside it: full
+// access for that user, for SYSTEM and for administrators -- the last two because
+// Windhawk has to be able to remove the folder along with the mod -- and for nobody
+// else.
+static bool BuildPrivateAcl(const std::vector<BYTE>& userSid,
+                            bool inheritToChildren,
+                            std::vector<BYTE>& aclBuffer) {
+    if (userSid.empty()) {
+        return false;
+    }
+
+    const DWORD allowEntrySize =
+        sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + SECURITY_MAX_SID_SIZE;
+    aclBuffer.assign(sizeof(ACL) + 3 * allowEntrySize + 32, 0);
+
+    PACL acl = reinterpret_cast<PACL>(aclBuffer.data());
+    if (!InitializeAcl(acl, (DWORD)aclBuffer.size(), ACL_REVISION)) {
+        return false;
+    }
+
+    // Inheritance is for the folder: it carries the same three entries to the files
+    // created inside it. A file has no children, and the bits would show up in an
+    // ACL query, so the file form is written without them.
+    const DWORD aceFlags = inheritToChildren
+                               ? (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE)
+                               : 0;
+
+    if (!AddAccessAllowedAceEx(acl, ACL_REVISION, aceFlags, FILE_ALL_ACCESS,
+                               reinterpret_cast<PSID>(
+                                   const_cast<BYTE*>(userSid.data())))) {
+        return false;
+    }
+
+    const WELL_KNOWN_SID_TYPE wellKnownSids[] = {WinLocalSystemSid,
+                                                 WinBuiltinAdministratorsSid};
+    for (WELL_KNOWN_SID_TYPE type : wellKnownSids) {
+        BYTE sidBuffer[SECURITY_MAX_SID_SIZE];
+        DWORD sidSize = sizeof(sidBuffer);
+        if (!CreateWellKnownSid(type, nullptr, sidBuffer, &sidSize)) {
+            return false;
+        }
+        if (!AddAccessAllowedAceEx(acl, ACL_REVISION, aceFlags, FILE_ALL_ACCESS,
+                                   reinterpret_cast<PSID>(sidBuffer))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Creates the folder if it is not there yet. The permissions of one that already
+// exists are left alone: the only folder that can exist under this name was
+// created here, for this user, with this access control list.
+static bool EnsurePrivateFolder(const std::wstring& path,
+                                const std::vector<BYTE>& userSid) {
+    std::vector<BYTE> aclBuffer;
+    if (!BuildPrivateAcl(userSid, /*inheritToChildren=*/true, aclBuffer)) {
+        Wh_Log(L"[GEOM] could not build the private folder's access control list");
+        return false;
+    }
+
+    SECURITY_DESCRIPTOR descriptor{};
+    if (!InitializeSecurityDescriptor(&descriptor,
+                                      SECURITY_DESCRIPTOR_REVISION) ||
+        !SetSecurityDescriptorDacl(&descriptor, TRUE,
+                                   reinterpret_cast<PACL>(aclBuffer.data()),
+                                   FALSE) ||
+        // The list above and nothing else: without the protected bit the entries
+        // inherited from the shared storage folder would be merged into it, and
+        // every user on the machine would be back in.
+        !SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED,
+                                      SE_DACL_PROTECTED)) {
+        Wh_Log(L"[GEOM] could not build the private folder's security descriptor");
+        return false;
+    }
+
+    SECURITY_ATTRIBUTES attributes{sizeof(attributes), &descriptor, FALSE};
+    if (CreateDirectoryW(path.c_str(), &attributes)) {
+        return true;
+    }
+
+    const DWORD error = GetLastError();
+    if (error == ERROR_ALREADY_EXISTS) {
+        return true;
+    }
+
+    Wh_Log(L"[GEOM] could not create %s (error %lu); this session will not save "
+           L"any geometry", path.c_str(), error);
+    return false;
+}
+
+// The same three entries, for a file inside the folder.
+//
+// Needed because a move does not change permissions. A file this mod wrote before
+// the per-user folder existed arrives inside it with the list it had in the shared
+// folder -- which lets every user on the machine open it. The folder stops anyone
+// listing its contents, but not a reader who already knows the path: Windows grants
+// bypass-traverse-checking by default, so the file's own list is what decides.
+static bool ApplyPrivateAclToFile(const std::wstring& path,
+                                  const std::vector<BYTE>& userSid) {
+    std::vector<BYTE> aclBuffer;
+    if (!BuildPrivateAcl(userSid, /*inheritToChildren=*/false, aclBuffer)) {
+        return false;
+    }
+
+    SECURITY_DESCRIPTOR descriptor{};
+    if (!InitializeSecurityDescriptor(&descriptor,
+                                      SECURITY_DESCRIPTOR_REVISION) ||
+        !SetSecurityDescriptorDacl(&descriptor, TRUE,
+                                   reinterpret_cast<PACL>(aclBuffer.data()),
+                                   FALSE) ||
+        !SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED,
+                                      SE_DACL_PROTECTED)) {
+        return false;
+    }
+
+    if (!SetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, &descriptor)) {
+        Wh_Log(L"[GEOM] could not set the access control list of %s (error %lu)",
+               path.c_str(), GetLastError());
+        return false;
+    }
+    return true;
+}
+
+// This user's data folder, created on first use. Empty means "not available",
+// and every caller reads that as "do not save".
+static const std::wstring& UserDataFolder() {
+    static bool attempted = false;
+    static std::wstring cached;
+
+    if (attempted) {
+        return cached;
+    }
+    attempted = true;
+
+    const UserTokenSid& sid = CurrentUserTokenSid();
+    if (sid.text.empty()) {
+        return cached;
+    }
+
+    WCHAR storage[MAX_PATH];
+    const size_t len = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
+    if (len == 0 || len + 1 >= ARRAYSIZE(storage)) {
         Wh_Log(L"Failed to get the mod storage path");
-        return false;
+        return cached;
     }
 
-    const std::wstring fileName =
-        PerUserFileName(kGeometryStoreFileName, CurrentUserSid());
+    std::wstring folder = storage;
+    folder += L"\\";
+    folder += sid.text;
 
-    // len is the length without the terminating null, so append in its place.
-    if (swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                   fileName.c_str()) < 0) {
-        Wh_Log(L"Stored geometry path is too long");
-        return false;
+    if (EnsurePrivateFolder(folder, sid.bytes)) {
+        cached = std::move(folder);
     }
 
-    return true;
+    return cached;
 }
 
-// The name this mod used before the store was made per-user. Read-only: it exists
-// so that a store written by an earlier build is adopted rather than orphaned.
-static bool BuildLegacyGeometryStorePath(PWSTR buffer, size_t bufferSize) {
-    size_t len = Wh_GetModStoragePath(buffer, bufferSize);
-    if (len == 0 || len + 1 >= bufferSize) {
+// A file inside this user's folder. False means the folder is not available (no
+// SID, or it could not be created), and then nothing is written or read.
+static bool BuildUserFilePath(PCWSTR fileName, PWSTR buffer, size_t bufferSize) {
+    const std::wstring& folder = UserDataFolder();
+    if (folder.empty()) {
         return false;
     }
-    if (swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                   kGeometryStoreFileName) < 0) {
-        return false;
-    }
-    return true;
+    return swprintf_s(buffer, bufferSize, L"%s\\%s", folder.c_str(), fileName) >=
+           0;
 }
 
-// Adopts a store written before the per-user names existed, by renaming it to this
-// user's name -- and only when this user has no store of their own. Renaming rather
-// than copying is what keeps the result correct for everybody: the file is the
-// shared one, so exactly one session may claim it, and the first session to load
-// after the upgrade is the only candidate. If the rename fails, the file is left
-// alone and this session starts with no remembered geometry: silently reading
-// another user's titles is worse than a one-time loss of remembered positions.
-static void AdoptLegacyStoreIfPresent() {
-    WCHAR perUserPath[MAX_PATH];
-    WCHAR legacyPath[MAX_PATH];
+static bool BuildGeometryStorePath(PWSTR buffer, size_t bufferSize) {
+    return BuildUserFilePath(kGeometryStoreFileName, buffer, bufferSize);
+}
 
-    if (!BuildGeometryStorePath(perUserPath, ARRAYSIZE(perUserPath)) ||
-        !BuildLegacyGeometryStorePath(legacyPath, ARRAYSIZE(legacyPath))) {
+// Every file this user's folder can already hold: the store and the journal, whether
+// this load moved them in or an earlier build left them with the shared list. Runs
+// once per load and costs two ACL writes; files created afterwards inherit the
+// folder's entries, so this is about the ones that arrived by rename.
+static void RepairUserFileAcls() {
+    const std::vector<BYTE>& userSid = CurrentUserTokenSid().bytes;
+    if (userSid.empty()) {
         return;
     }
 
-    if (GetFileAttributesW(perUserPath) != INVALID_FILE_ATTRIBUTES) {
-        return;  // this user already has a store
-    }
-    if (GetFileAttributesW(legacyPath) == INVALID_FILE_ATTRIBUTES) {
-        return;  // nothing to adopt: a fresh install
-    }
-
-    if (MoveFileExW(legacyPath, perUserPath, 0)) {
-        Wh_Log(L"[GEOM] adopted the pre-upgrade store as this user's own");
-        AppendDiagnosticsJournal(
-            L"STORE-ADOPT legacy store renamed to the per-user name");
-    } else {
-        Wh_Log(L"[GEOM] the pre-upgrade store could not be adopted (error %lu); "
-               L"this session starts with no remembered geometry", GetLastError());
-        AppendDiagnosticsJournal(
-            L"STORE-ADOPT legacy store left in place (rename failed)");
+    const PCWSTR names[] = {kGeometryStoreFileName, kDiagnosticsJournalFileName,
+                            kAdoptedStoreFileName, kAdoptedJournalFileName};
+    for (PCWSTR name : names) {
+        WCHAR path[MAX_PATH];
+        if (!BuildUserFilePath(name, path, ARRAYSIZE(path))) {
+            return;  // no private folder, so there is nothing to repair
+        }
+        if (GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) {
+            ApplyPrivateAclToFile(path, userSid);
+        }
     }
 }
+
+// The names this mod used before the per-user folder, both in the shared storage
+// folder: the pre-r16 machine-wide store, and the SID-in-the-name store that the
+// first per-user build wrote. They are read here only so that a store written by
+// an earlier build is adopted instead of orphaned -- and so that the file with
+// the window titles in it stops sitting in a folder other users can read.
+static bool BuildLegacySharedStorePath(PWSTR buffer, size_t bufferSize) {
+    const size_t len = Wh_GetModStoragePath(buffer, bufferSize);
+    if (len == 0 || len + 1 >= bufferSize) {
+        return false;
+    }
+    return swprintf_s(buffer + len, bufferSize - len, L"\\%s",
+                      kGeometryStoreFileName) >= 0;
+}
+
+static bool BuildLegacyPerUserNamePath(PCWSTR fileName, PWSTR buffer,
+                                       size_t bufferSize) {
+    const std::wstring sid = CurrentUserSid();
+    if (sid.empty()) {
+        return false;
+    }
+    const size_t len = Wh_GetModStoragePath(buffer, bufferSize);
+    if (len == 0 || len + 1 >= bufferSize) {
+        return false;
+    }
+    const std::wstring legacyName = PerUserFileName(fileName, sid);
+    return swprintf_s(buffer + len, bufferSize - len, L"\\%s",
+                      legacyName.c_str()) >= 0;
+}
+
+// Moves one legacy file into this user's folder, unless there is no such file or
+// this user already has a file under that name. Renaming rather than copying is
+// what keeps the result correct for everybody: a file in the shared folder can be
+// claimed by exactly one session, and the first session to load after the upgrade
+// is the only candidate. A file that cannot be moved is left alone: silently
+// reading another user's window titles is worse than a one-time loss of
+// remembered positions.
+// A rename needs DELETE on the file, and anything holding it open at that moment
+// refuses it. The file that matters here is the journal, and the field pass reads it
+// continuously while the mod is being reloaded -- which is exactly when this runs.
+// Five attempts over about 200ms turn that collision into a non-event; a failure
+// that survives them is logged, and the next load tries again.
+static bool MoveFileWithRetry(PCWSTR from, PCWSTR to) {
+    for (int attempt = 0; attempt < 5; attempt++) {
+        if (MoveFileExW(from, to, 0)) {
+            return true;
+        }
+        const DWORD error = GetLastError();
+        if (error != ERROR_SHARING_VIOLATION && error != ERROR_ACCESS_DENIED) {
+            return false;
+        }
+        Sleep((DWORD)(20 * (attempt + 1)));
+    }
+    return false;
+}
+
+// `fallbackName` (may be null) is the name to use when the folder already holds
+// the file's usual one. A file that a previous build wrote in the shared storage
+// folder is not left there because this user's folder happens to have a newer file
+// of the same kind: the older one is kept beside it instead. The second field run is
+// what proved that: the retry above never got a chance, because the guard fired
+// first and the journal stayed in the shared folder for good.
+static bool MoveLegacyFileIntoUserFolder(PCWSTR fileName, PCWSTR fallbackName,
+                                         PCWSTR legacyPath) {
+    if (!legacyPath ||
+        GetFileAttributesW(legacyPath) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+
+    WCHAR target[MAX_PATH];
+    if (!BuildUserFilePath(fileName, target, ARRAYSIZE(target))) {
+        return false;
+    }
+    if (GetFileAttributesW(target) != INVALID_FILE_ATTRIBUTES) {
+        if (!fallbackName ||
+            !BuildUserFilePath(fallbackName, target, ARRAYSIZE(target)) ||
+            GetFileAttributesW(target) != INVALID_FILE_ATTRIBUTES) {
+            return false;  // nowhere free to put it
+        }
+    }
+
+    if (!MoveFileWithRetry(legacyPath, target)) {
+        Wh_Log(L"[GEOM] could not move %s into this user's folder (error %lu)",
+               legacyPath, GetLastError());
+        return false;
+    }
+
+    // The rename brought the file's old permissions with it.
+    ApplyPrivateAclToFile(target, CurrentUserTokenSid().bytes);
+    return true;
+}
+
+// Runs before the store is loaded and before the first journal line is written,
+// which is what lets the old journal itself be moved: once this session has
+// appended a line to its own journal, the old file's target name is taken and it
+// would stay in the shared folder for good.
+static void AdoptLegacyFilesIfPresent() {
+    WCHAR ownStore[MAX_PATH];
+    if (!BuildGeometryStorePath(ownStore, ARRAYSIZE(ownStore))) {
+        return;  // no private folder: nothing is adopted, and nothing is saved
+    }
+
+    WCHAR legacyPerUserName[MAX_PATH];
+    const bool haveLegacyPerUserName =
+        BuildLegacyPerUserNamePath(kGeometryStoreFileName, legacyPerUserName,
+                                   ARRAYSIZE(legacyPerUserName)) &&
+        GetFileAttributesW(legacyPerUserName) != INVALID_FILE_ATTRIBUTES;
+
+    WCHAR legacyShared[MAX_PATH];
+    const bool haveLegacyShared =
+        BuildLegacySharedStorePath(legacyShared, ARRAYSIZE(legacyShared)) &&
+        GetFileAttributesW(legacyShared) != INVALID_FILE_ATTRIBUTES;
+
+    const LegacyAdoption adoption = DecideLegacyAdoption(
+        GetFileAttributesW(ownStore) != INVALID_FILE_ATTRIBUTES,
+        haveLegacyPerUserName, haveLegacyShared);
+
+    // This user's own earlier store is taken in whatever the decision says. The
+    // decision is about which file this session remembers *from*; when the folder
+    // already holds the live copy the older one is not remembered from, but it does
+    // not stay in a folder every account can read either -- it is kept beside the
+    // live one under kAdoptedStoreFileName.
+    bool legacyStoreWanted = false;
+    bool legacyStoreMoved = false;
+    if (haveLegacyPerUserName) {
+        legacyStoreWanted = true;
+        legacyStoreMoved = MoveLegacyFileIntoUserFolder(
+            kGeometryStoreFileName, kAdoptedStoreFileName, legacyPerUserName);
+    } else if (adoption == LegacyAdoption::SharedName) {
+        // The machine-wide store is this user's only once nobody else needs it: it
+        // is claimed when this user has nothing, never taken away from the others.
+        legacyStoreWanted = true;
+        legacyStoreMoved = MoveLegacyFileIntoUserFolder(
+            kGeometryStoreFileName, nullptr, legacyShared);
+    }
+
+    if (legacyStoreWanted) {
+        if (legacyStoreMoved) {
+            Wh_Log(
+                L"[GEOM] adopted the store written before the per-user folder");
+            AppendDiagnosticsJournal(
+                L"STORE-ADOPT legacy store moved into this user's folder");
+        } else {
+            Wh_Log(L"[GEOM] the legacy store could not be adopted; this session "
+                   L"starts with no remembered geometry");
+            AppendDiagnosticsJournal(L"STORE-ADOPT legacy store left in place");
+        }
+    }
+
+    // The journal too, when it is this user's own file: the point of the folder
+    // is that the lines with the window titles in them are not in the shared one.
+    // The pre-r16 journal was written by every user at once and is left where it
+    // is -- it is a log, and it is not this user's to claim.
+    //
+    // This one is taken in even when the folder already has a journal, which it
+    // almost always has by the time this runs: the field run of r18 left the older
+    // journal in the shared folder for exactly that reason.
+    WCHAR legacyJournal[MAX_PATH];
+    if (BuildLegacyPerUserNamePath(kDiagnosticsJournalFileName, legacyJournal,
+                                   ARRAYSIZE(legacyJournal)) &&
+        GetFileAttributesW(legacyJournal) != INVALID_FILE_ATTRIBUTES) {
+        if (MoveLegacyFileIntoUserFolder(kDiagnosticsJournalFileName,
+                                         kAdoptedJournalFileName, legacyJournal)) {
+            AppendDiagnosticsJournal(
+                L"LEGACY-MOVE the journal this user's earlier build wrote is now "
+                L"inside the folder");
+        } else {
+            // Said out loud, because the file it is about carries window titles and
+            // is sitting where another user can read it until a later load moves it.
+            AppendDiagnosticsJournal(
+                L"LEGACY-MOVE the earlier journal could not be moved into the "
+                L"folder; the next load will try again");
+        }
+    }
+
+    // Whatever is already in the folder, including files an earlier build moved in
+    // with the permissions they had in the shared one.
+    RepairUserFileAcls();
+}
+
 
 static constexpr DWORD kStoreFlushDelayMs = 2000;
 static constexpr UINT kSettleTickMs = 100;
@@ -2827,12 +3204,31 @@ static bool g_diagnosticsLog = false;
 // names one exact file -- the alternative is two different files both claiming to
 // be r14, which is how a stale build starts reading like a defect.
 //
-// r16-2026-10-14 carries the three fixes from the pull request review: the per-app
+// r16-2026-10-14 carries the three fixes from the first review round: the per-app
 // position and size switches are now read and applied (they were declared and
 // documented but reached no code), the placement rectangle of a minimized or
 // maximized window is converted out of workspace coordinates before it is stored,
 // and the store, the journal and the clear-action latch are per signed-in user.
-static constexpr PCWSTR kJournalBuild = L"r16-2026-10-14";
+//
+// r17-2026-10-15 carries the second round: the two callers that held a reference
+// into the monitor cache across a refresh no longer can (WindowOwnRect reads the
+// rectangles it needs from Windows), and the per-user files moved into a folder of
+// their own, created with a protected access control list, so that another user
+// can no longer read them -- with the fallback to the shared file name dropped, so
+// that no SID means no saving at all.
+//
+// r18-2026-10-15 is the same round after the field pass: a file that arrives in the
+// folder by rename keeps the permissions it had in the shared folder, so moved-in
+// files are given the folder's list too, and the rename itself retries through the
+// moment when a diagnostics reader is holding the journal open.
+//
+// r19-2026-10-15 is what the second field run of that build found: the retry was not
+// enough, because by the time it was needed the folder held a journal of its own --
+// the move was skipped as "this user already has one", and the file with the window
+// titles stayed in the shared folder for good. A file from an earlier layout is now
+// taken in whatever the folder holds, under a name of its own when the usual one is
+// taken, and the machine-wide store is still claimed only when this user has nothing.
+static constexpr PCWSTR kJournalBuild = L"r19-2026-10-15";
 
 // The journal flag has to be known before the store is loaded, because the load
 // itself journals a line. Reading it only in ApplySettingsOnEventThread -- which
@@ -2843,18 +3239,7 @@ static void RefreshDiagnosticsSetting() {
 }
 
 static bool BuildJournalPath(PWSTR buffer, size_t bufferSize) {
-    size_t len = Wh_GetModStoragePath(buffer, bufferSize);
-    if (len == 0 || len + 1 >= bufferSize) {
-        return false;
-    }
-    const std::wstring fileName =
-        PerUserFileName(kDiagnosticsJournalFileName, CurrentUserSid());
-
-    if (swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                   fileName.c_str()) < 0) {
-        return false;
-    }
-    return true;
+    return BuildUserFilePath(kDiagnosticsJournalFileName, buffer, bufferSize);
 }
 
 // Never fails loudly: a diagnostics log that cannot be written must not affect
@@ -2886,7 +3271,8 @@ static void AppendDiagnosticsJournal(const std::wstring& line) {
 static void LoadGeometryStore() {
     g_store = GeometryStore();
 
-    AdoptLegacyStoreIfPresent();
+    // The legacy files were adopted in the startup path, before this load and
+    // before the first journal line -- see AdoptLegacyFilesIfPresent.
 
     WCHAR path[MAX_PATH];
     if (!BuildGeometryStorePath(path, ARRAYSIZE(path))) {
@@ -3027,8 +3413,7 @@ static const MonitorView* CurrentMonitorView(HWND hwnd) {
 // *showCommand receives the placement's show state when the rectangle came from
 // GetWindowPlacement, and is left alone otherwise; the save path uses it to record
 // whether the window was maximized.
-static bool WindowOwnRect(HWND hwnd, const MonitorView& monitor, GeoRect& rect,
-                          UINT* showCommand) {
+static bool WindowOwnRect(HWND hwnd, GeoRect& rect, UINT* showCommand) {
     if (IsIconic(hwnd) || IsZoomed(hwnd)) {
         WINDOWPLACEMENT placement{};
         placement.length = sizeof(placement);
@@ -3036,11 +3421,28 @@ static bool WindowOwnRect(HWND hwnd, const MonitorView& monitor, GeoRect& rect,
             return false;
         }
 
+        // The monitor rectangles come from Windows, not from the monitor cache.
+        // The cache is refreshed when a window sits on a monitor it has not seen,
+        // and a refresh replaces the vector: a caller holding a reference into the
+        // old one would be reading freed memory. Asking for the two rectangles
+        // directly keeps this helper -- and everyone who calls it -- out of that.
+        MONITORINFO info{};
+        info.cbSize = sizeof(info);
+        if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                             &info)) {
+            return false;
+        }
+
+        const GeoRect pixelRect{info.rcMonitor.left, info.rcMonitor.top,
+                                info.rcMonitor.right, info.rcMonitor.bottom};
+        const GeoRect workRect{info.rcWork.left, info.rcWork.top,
+                               info.rcWork.right, info.rcWork.bottom};
+
         const GeoRect normal{placement.rcNormalPosition.left,
                              placement.rcNormalPosition.top,
                              placement.rcNormalPosition.right,
                              placement.rcNormalPosition.bottom};
-        rect = PlacementRectToScreen(normal, monitor.pixelRect, monitor.workRect);
+        rect = PlacementRectToScreen(normal, pixelRect, workRect);
 
         if (showCommand) {
             *showCommand = placement.showCmd;
@@ -3075,13 +3477,16 @@ static GeoRect ApplyOwnRestoreFlags(HWND hwnd, const WindowIdentity& identity,
         return target;
     }
 
+    // The window's own rectangle, read straight from Windows. This is the call
+    // that used to go through CurrentMonitorView and could therefore refresh the
+    // monitor cache -- and both callers hold a reference into that cache across
+    // this call, so the refresh left them reading a freed vector. The rectangle
+    // does not need the cache, and now never touches it.
+    //
+    // Best effort: if the rectangle cannot be read, the caller's rectangle (a
+    // GetWindowRect) is the fallback, which is correct for every normal window.
     GeoRect own = currentRect;
-    if (const MonitorView* ownMonitor = CurrentMonitorView(hwnd)) {
-        // Best effort: if the window's own rectangle cannot be read, the caller's
-        // rectangle (a GetWindowRect) is the fallback, which is correct for every
-        // normal window.
-        WindowOwnRect(hwnd, *ownMonitor, own, nullptr);
-    }
+    WindowOwnRect(hwnd, own, nullptr);
 
     return ApplyRestoreFlags(target, own, flags);
 }
@@ -3626,11 +4031,10 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
     // minimized at close therefore comes back at its normal size rather than
     // minimized.
     //
-    // The monitor is resolved FIRST because that conversion needs it. The
-    // coordinates the placement reports are workspace coordinates -- see
-    // PlacementRectToScreen -- and they differ from screen coordinates whenever the
-    // taskbar is not at the bottom or the right, so they cannot be converted without
-    // knowing which monitor's work area they are relative to.
+    // The conversion needs the monitor's rectangles, and WindowOwnRect asks
+    // Windows for them rather than the cache -- see its comment. The cache is still
+    // resolved here for the identity and the normalized rectangle recorded below,
+    // and it is resolved before the reference is taken, never after.
     const MonitorView* monitorView = CurrentMonitorView(hwnd);
     if (!monitorView) {
         return;
@@ -3639,7 +4043,7 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
 
     GeoRect geometry{};
     UINT showCommand = 0;
-    if (!WindowOwnRect(hwnd, monitor, geometry, &showCommand)) {
+    if (!WindowOwnRect(hwnd, geometry, &showCommand)) {
         return;
     }
     const std::wstring state = (showCommand == SW_SHOWMAXIMIZED) ? L"maximized"
@@ -4439,6 +4843,9 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
 
     RefreshMonitorViews();
     RefreshDiagnosticsSetting();   // must precede the load: the load journals
+    // Before the first journal line, not merely before the load: appending to this
+    // session's journal first would take the name the old journal's move needs.
+    AdoptLegacyFilesIfPresent();
     AppendDiagnosticsJournal(std::wstring(L"MOD build=") + kJournalBuild);
     // Measured on this thread, once: see ProbeDpiAwareness.
     ProbeDpiAwareness(hwnd);
@@ -4459,29 +4866,36 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
 // --- Clear stored data action -----------------------------------------------
 
 
+static void DeleteStoredFile(PWSTR path) {
+    // "Nothing to clear" is a normal outcome, not an error.
+    if (DeleteFileW(path)) {
+        Wh_Log(L"Cleared stored data: %s", path);
+        return;
+    }
+    DWORD error = GetLastError();
+    if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) {
+        Wh_Log(L"Failed to clear stored data (error %u): %s", error, path);
+    }
+}
+
 static void ClearGeometryStore() {
     WCHAR path[MAX_PATH];
+
     if (BuildGeometryStorePath(path, ARRAYSIZE(path))) {
-        // "Nothing to clear" is a normal outcome, not an error.
-        if (DeleteFileW(path)) {
-            Wh_Log(L"Cleared stored data: %s", path);
-        } else {
-            DWORD error = GetLastError();
-            if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) {
-                Wh_Log(L"Failed to clear stored data (error %u): %s", error,
-                       path);
-            }
-        }
+        DeleteStoredFile(path);
     }
 
-    // The pre-upgrade shared store as well, and this is not optional: the load
-    // adopts that file when this user has no store of their own, so a clear that
-    // left it in place would be undone -- the data would come straight back on
-    // the next launch, which is the worst possible bug for a "forget this" action.
-    WCHAR legacyPath[MAX_PATH];
-    if (BuildLegacyGeometryStorePath(legacyPath, ARRAYSIZE(legacyPath)) &&
-        DeleteFileW(legacyPath)) {
-        Wh_Log(L"Cleared the pre-upgrade shared store: %s", legacyPath);
+    // Every earlier home of the same data as well, and this is not optional: the
+    // load adopts these files when this user has no store of their own, so a clear
+    // that left one in place would be undone -- the data would come straight back
+    // on the next launch, which is the worst possible bug for a "forget this"
+    // action. Both earlier names, plus the pre-r16 machine-wide one.
+    if (BuildLegacyPerUserNamePath(kGeometryStoreFileName, path,
+                                   ARRAYSIZE(path))) {
+        DeleteStoredFile(path);
+    }
+    if (BuildLegacySharedStorePath(path, ARRAYSIZE(path))) {
+        DeleteStoredFile(path);
     }
 }
 
