@@ -2828,7 +2828,7 @@ static std::unordered_map<HWND, PendingApply> g_pendingApplies;
 static std::unordered_set<std::wstring> g_overrideWindows;
 static std::atomic<bool> g_clearStoreRequested{false};
 
-// Identities whose moves were refused this session (carryover Item 1). A refusal
+// Identities whose moves were refused this session. A refusal
 // is not only a failed restore: the DESTROY-time save that follows it would
 // record the position the window happened to be at as if the user had chosen it,
 // and the next session would open there. Session state, exactly like
@@ -3288,8 +3288,7 @@ static void ArmRelayoutTimer() {
 // A non-zero result is a different situation from the app overriding the move:
 // an elevated (UIPI) target lands here. The code is returned rather than merely
 // logged because ERROR_ACCESS_DENIED is also the signal to stop saving that
-// window's geometry -- a refused move must not be recorded as a placement
-// (carryover Item 1).
+// window's geometry: a refused move must not be recorded as a placement.
 // Deliberately does not maximize: issuing both in one go is what made a
 // maximized restore unreliable, because the move lands after the maximize
 // request and un-maximizes the window again. Maximizing is a separate step,
@@ -3488,9 +3487,9 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
         (maximize ? L"maximized" : L"normal") + L" clamp=" +
         (clamped ? L"yes" : L"no") +
         // Which halves of the remembered geometry this restore was allowed to
-        // apply. The journal is the only place a field run can read it from, and
-        // "the setting did nothing" and "the setting did something" look identical
-        // in the rectangle alone when the window happened to be in the right place.
+        // apply. The journal is the only place this is written down, and "the
+        // setting did nothing" and "the setting did something" look identical in
+        // the rectangle alone when the window happened to be in the right place.
         L" flags=" +
         FormatRestoreFlags(MakeRestoreFlags(identity.restorePosition,
                                            identity.restoreSize)) +
@@ -3676,7 +3675,7 @@ static void RunRelayoutPass() {
 // not happen, the journal has to answer which of two things happened: the mod never
 // saw the window close, or it saw the close and could not read a rectangle from a
 // window that was already on its way out. Without a line for the second, both look
-// like silence, and the field pass reads that as the mod doing nothing at all.
+// like silence, and silence reads as the mod doing nothing at all.
 static void JournalSaveSkip(const WindowIdentity& identity, PCWSTR reason) {
     AppendDiagnosticsJournal(L"SAVE-SKIP exe=" + identity.exeName + L" class=" +
                              identity.className + L" ordinal=" +
@@ -3950,7 +3949,7 @@ static void ProcessSettleTick(HWND hwnd) {
             if (pending.observedTarget &&
                 GeoRectsApproxEqual(currentRect, pending.lastObserved,
                                     kApplyTolerancePixels)) {
-                // The point of the milestone in one searchable line.
+                // One searchable line for the outcome.
                 Wh_Log(L"[GEOM] VERDICT restore=ok exe=%s rect=(%ld,%ld,%ld,%ld)",
                        pending.exeName.c_str(), currentRect.left,
                        currentRect.top, currentRect.right, currentRect.bottom);
