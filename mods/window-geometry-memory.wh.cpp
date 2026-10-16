@@ -7,13 +7,10 @@
 // @github          https://github.com/Metanoid18
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -ldwmapi -ladvapi32
+// @compilerOptions -luser32 -ldwmapi -ladvapi32
 // ==/WindhawkMod==
 
 // Source code is published under the MIT license.
-//
-// The @author and @github values must match the GitHub profile of the pull
-// request author. The @id must keep matching the file name.
 //
 // For bug reports and feature requests, please open an issue here:
 // https://github.com/ramensoftware/windhawk-mods/issues
@@ -84,6 +81,13 @@ list are remembered or moved.
   between sessions falls back to matching by executable, class and ordinal, and
   is only restored when that match is unambiguous. Windows with identical titles
   may be restored to each other's positions.
+* **A save at close can lose its turn.** The rectangle is read from the window as
+  the window is closing, and Windows sometimes has the window out of the way first.
+  When that happens nothing is recorded for that close, the diagnostics journal says
+  so with a reason, and the window keeps whatever position it was last remembered
+  at. Moving the window once by hand records it there and then, and that save is not
+  a last-moment read, so this is about windows that are moved by something other than
+  you and closed immediately after.
 * **A window that was minimized when it closed comes back at its normal size**,
   not minimized.
 * **Stored resolution is not rescaled when DPI changes.** Nothing multiplies a
@@ -120,10 +124,8 @@ access control list that gives full access to that user, SYSTEM and
 administrators, and to nobody else: two users signed in at once neither overwrite
 each other's saved geometry nor can read each other's window titles. If the mod
 cannot read the user's SID it saves nothing at all -- sharing the data would be
-worse than forgetting it. A file an earlier build left in the shared folder is
-moved in on the first load; when the folder already holds one of the same name,
-the older file is kept beside it instead of overwriting it, and the older log is
-readable only by the same three identities.
+worse than forgetting it. The journal is a diagnostics aid rather than a history,
+so it is capped: once it passes a megabyte it starts over from empty.
 */
 // ==/WindhawkModReadme==
 
@@ -138,8 +140,9 @@ readable only by the same three identities.
       $name: Executable
       $description: >-
         Executable file name (for example notepad.exe) or a full path to the
-        executable. Empty entries are ignored. Apps that are not listed here are
-        never tracked or moved.
+        executable. Entries are read in order until the first one with nothing in
+        it, so keep them at the top of the list. Apps that are not listed here
+        are never tracked or moved.
     - RestorePosition: true
       $name: Restore position
       $description: >-
@@ -199,61 +202,48 @@ readable only by the same three identities.
 #include <unordered_set>
 #include <vector>
 
-// Milestones (see mod-1-window-geometry-brief.md for the full design brief):
+// What it does, and where the edges are:
 //
-// M0  [done] Resolve window identities and log create/show/move-sized/destroyed
-//     events, plus display-config changes.
-// M1  [done] Save geometry on move-sized and on destroy, restore on show, with a
-//     bounded settle re-apply. Storage is monitor-relative with both the pixel
-//     rect and the normalized rect, matched against a table of seen display
-//     configurations.
-// M2  [this file] React to a display change by relaying out the windows that are
-//     already open, through the same normalized mapping and the same apply path
-//     as M1's restore. A refused (elevated) window no longer has its geometry
-//     overwritten at close. DPI is logged as a sanity ratio, not applied: no
-//     correction is multiplied in until the field says one is needed, which is
-//     also why this milestone still needs no shcore.
-//
-// Boundaries, for the reviewer:
-// * The only windows this mod moves are the ones it is restoring, and it does so
-//   at most twice per show (see the settle state machine below). User input wins
+// * Saves a window's rectangle and monitor when it is closed or dragged, and
+//   restores them the next time a window of the same app appears, matched on
+//   process path, window class and a normalized title, with an ordinal for
+//   windows whose title changed.
+// * Reacts to a display change by relaying out the windows that are already
+//   open, through the same normalized mapping and the same apply path as the
+//   restore.
+// * The only windows it ever moves are the ones it is restoring, at most twice
+//   per show (see the settle state machine below). User input wins
 //   unconditionally: a MOVESIZEEND drops any restore still in flight before the
-//   position is recorded.
-// * Stored geometry lives in one JSON file under the mod storage path, written
-//   atomically and debounced. The identity cache, the ordinal counters and the
-//   session override set are in-memory only.
+//   position is recorded. A display change moves only windows the user has not
+//   already moved by hand, and never a minimized one; a maximized window is
+//   Windows' own business until its monitor disappears.
+// * Stored geometry lives in one JSON file inside this user's folder under the
+//   mod storage path, written atomically and debounced. The identity cache, the
+//   ordinal sets and the session override set are in-memory only.
 // * A dedicated event thread with its own message loop is required: with
 //   WINEVENT_OUTOFCONTEXT, the system delivers events to the installing
 //   thread's message queue, so a thread that never pumps never receives
-//   anything. Same pattern as the command-on-window-focus and
-//   borderless-fullscreen mods.
+//   anything.
 // * Elevation/UIPI refusals are detected and remembered rather than retried: a
 //   window whose move was refused is also not saved, so a position the mod could
 //   not apply never becomes the position the next session opens at.
-// * A display change moves only windows the user has not already told the mod to
-//   leave alone, and never a minimized one. A maximized window is Windows' own
-//   business until its monitor disappears. Per-monitor DPI is captured as
-//   unknown (0) on purpose: nothing reads it yet, and the DPI-awareness question
-//   is answered before any DPI arithmetic is written, not after.
 
 // --- Settings ---------------------------------------------------------------
 
-// The geometry store inside the mod's storage folder. Defined once here so the
-// M3 implementation and the clear action below can never drift apart.
+// The geometry store inside this user's folder. Defined once here so the clear
+// action and the store code cannot drift apart.
 static constexpr PCWSTR kGeometryStoreFileName = L"window-geometry.json";
 static constexpr PCWSTR kDiagnosticsJournalFileName =
     L"window-geometry-journal.txt";
 
-// The names a file from an earlier layout takes when this user's folder already
-// holds its usual one. Nothing is overwritten, and nothing older is left in the
-// shared folder where another account can read the window titles in it.
-static constexpr PCWSTR kAdoptedStoreFileName = L"window-geometry-adopted.json";
-static constexpr PCWSTR kAdoptedJournalFileName =
-    L"window-geometry-journal-adopted.txt";
 
 // Defined further down, with the other file I/O. Declared here because the
 // window-filtering and skip-logging code above it also journals its decisions.
 static void AppendDiagnosticsJournal(const std::wstring& line);
+
+// Defined with the clear action at the bottom of the file, called from both the
+// message handler and the startup path.
+static void ClearStoredFile();
 
 // Mod storage key latching the last handled "Clear stored data" value.
 // See ApplyClearStoredDataAction for why this is needed.
@@ -261,7 +251,7 @@ static constexpr PCWSTR kClearLatchValueName = L"clearStoredDataLatch";
 static constexpr int kClearLatchNone = 0;
 static constexpr int kClearLatchHandled = 1;
 
-// --- M0 event plumbing ------------------------------------------------------
+// --- Event plumbing --------------------------------------------------------
 
 // Hidden top-level window used to receive the WM_DISPLAYCHANGE broadcast.
 static constexpr PCWSTR kMessageWindowClassName =
@@ -273,13 +263,6 @@ static constexpr UINT kMsgReloadSettings = WM_APP + 1;
 static constexpr UINT kMsgShutdown = WM_APP + 2;
 static constexpr UINT kMsgClearStore = WM_APP + 3;
 
-// TEST-ONLY, and deliberately not documented in the README: runs one ordinary
-// relayout pass against a fabricated monitor snapshot containing a ghost
-// monitor the test window can have come from. It exists because this machine has
-// one display and the vanished-monitor branch of the relayout path would
-// otherwise ship on code review alone. Inert unless the diagnosticsLog setting
-// is on, so a normal user cannot reach it by accident.
-static constexpr UINT kMsgTestDisplayChange = WM_APP + 4;
 
 // Processes whose windows are never tracked, checked before the allowlist.
 static constexpr PCWSTR kExcludedProcesses[] = {
@@ -292,8 +275,7 @@ static constexpr PCWSTR kExcludedProcesses[] = {
 // --- Window identity --------------------------------------------------------
 
 // >>> WINDOW_IDENTITY_CORE >>>
-// Extracted verbatim by tools/run_tests.sh, which unit-tests the title
-// normalization against the cases from the M0 validation list.
+// Pure string handling: the title normalization cases are unit-tested off Windows.
 
 static bool IsDecimalDigit(wchar_t c) {
     return c >= L'0' && c <= L'9';
@@ -398,9 +380,7 @@ static std::map<std::tuple<std::wstring, std::wstring, std::wstring>,
                 std::set<int>>
     g_liveOrdinals;
 // One allowlist entry: the executable to match, and which parts of its remembered
-// geometry the mod may use. The flags used to be declared in the settings and
-// described in the readme while no code read them, so unticking "Restore size"
-// changed nothing -- found in review.
+// geometry the mod may use.
 struct AllowlistEntry {
     std::wstring exe;  // lowercased, as before
     bool restorePosition = true;
@@ -447,11 +427,10 @@ static void ReleaseOrdinal(const WindowIdentity& identity) {
 }
 
 // >>> GEOMETRY_CORE >>>
-// Extracted verbatim by tools/run_tests.sh. Everything in this block is pure
-// logic over plain data with no Win32 calls, so the rules that are most likely
-// to be subtly wrong -- matching, clamping, eviction and persistence -- are
-// unit-tested off-Windows. The Win32 layer below converts to and from these
-// types at the boundary.
+// Everything in this block is pure logic over plain data with no Win32 calls, so
+// the rules that are most likely to be subtly wrong -- matching, clamping,
+// eviction and persistence -- are unit-tested off Windows. The Win32 layer below
+// converts to and from these types at the boundary.
 
 struct GeoRect {
     long left = 0;
@@ -477,7 +456,6 @@ struct MonitorView {
     GeoRect pixelRect;
     GeoRect workRect;
     bool primary = false;
-    unsigned dpi = 0;
 };
 
 // A monitor as stored. Adds the arrangement relative to the primary monitor,
@@ -491,7 +469,6 @@ struct StoredMonitor {
     GeoRect pixelRect;
     GeoRect workRect;  // stored, but deliberately not compared by ConfigsMatch
     bool primary = false;
-    unsigned dpi = 0;
     double relLeft = 0;
     double relTop = 0;
     double relWidth = 1;
@@ -843,8 +820,6 @@ static GeoRect ClampRectToWorkArea(const GeoRect& rect,
     return clamped;
 }
 
-// Ordinal for a new window: the lowest number no live window of the same key is
-// using.
 //
 // This must be lowest-free rather than monotonic. A monotonic counter gives a
 // reopened window a fresh, higher ordinal, and since matching requires the
@@ -858,6 +833,22 @@ static GeoRect ClampRectToWorkArea(const GeoRect& rect,
 // closed and reopened in a different order their geometry can swap; that is
 // inherent to matching identical titles, and a benign miss is preferable to
 // restoring the wrong window's geometry.
+// Ordinal for a new window: the lowest number no live window of the same key is
+// using.
+//
+// This must be lowest-free rather than monotonic. A monotonic counter gives a
+// reopened window a fresh, higher ordinal, and since matching requires the
+// stored ordinal to be equal, a window that is closed and reopened in the same
+// session can never match the entry saved moments earlier, which is the headline
+// use case. Lowest-free lets a closed window's number be reused, so the reopened
+// window inherits exactly the geometry just stored for it.
+//
+// Concurrent windows still get distinct ordinals (0, 1, ...), so windows open at
+// the same time never share an entry. When several same-titled windows are
+// closed and reopened in a different order their geometry can swap; that is
+// inherent to matching identical titles, and a benign miss is preferable to
+// restoring the wrong window's geometry.
+static int AllocateOrdinal(const std::set<int>& liveOrdinals);
 // Which parts of a remembered rectangle an app is allowed to use. Both default to
 // on: the settings entry ships both toggled on, and a window whose allowlist entry
 // says nothing keeps the behaviour it had before the flags were read.
@@ -948,11 +939,13 @@ static GeoRect PlacementRectToScreen(const GeoRect& rect, const GeoRect& monitor
 // are 32-bit words -- and it is therefore the half worth testing. The struct
 // unpacking in SidToString is the other half and is four lines long.
 //
-// Written by hand rather than with ConvertSidToStringSidW on purpose. That function
-// needs sddl.h, which is not among the headers a Windhawk mod gets, so calling it
-// compiled here and failed on the user's machine: the local syntax check links
-// against our own stand-in headers, and the stand-in had declared it. Everything
-// used below is plain arithmetic over values the caller has already read.
+// Written by hand rather than with ConvertSidToStringSidW on purpose, and not
+// because that function is out of reach: sddl.h is available to a mod (the
+// desktop-sticky-notes mod includes it). The reason is that everything below is
+// plain arithmetic over values the caller has already read, so the part that can
+// be wrong is a pure function with unit tests over it, and the one call the mod
+// would otherwise need is a call that has to be linked against a library the
+// rest of this file does not use.
 //
 // Documented form note: an identifier authority larger than 32 bits is rendered in
 // hexadecimal by the SID documentation. A process token's authority is 5 on every
@@ -970,44 +963,14 @@ static std::wstring FormatSidString(unsigned revision, unsigned long long author
     return text;
 }
 
-static std::wstring PerUserFileName(const std::wstring& baseName,
-                                    const std::wstring& sid) {
-    if (sid.empty()) {
-        return baseName;
-    }
-
-    size_t dot = baseName.find_last_of(L'.');
-    if (dot == std::wstring::npos) {
-        return baseName + L"-" + sid;
-    }
-    return baseName.substr(0, dot) + L"-" + sid + baseName.substr(dot);
-}
-
-// Which store a session should adopt when it has none of its own. The
-// SID-in-the-name file is this user's own and wins; the pre-r16 machine-wide file
-// is claimed only when this user has nothing. A store of this user's own is never
-// displaced: overwriting it is the bug the per-user layout exists to prevent.
-enum class LegacyAdoption {
-    None,
-    PerUserName,
-    SharedName,
-};
-
-static LegacyAdoption DecideLegacyAdoption(bool ownStoreExists,
-                                           bool legacyPerUserNameExists,
-                                           bool legacySharedNameExists) {
-    if (ownStoreExists) {
-        return LegacyAdoption::None;
-    }
-    if (legacyPerUserNameExists) {
-        return LegacyAdoption::PerUserName;
-    }
-    if (legacySharedNameExists) {
-        return LegacyAdoption::SharedName;
-    }
-    return LegacyAdoption::None;
-}
-
+// Ordinal for a new window: the lowest number no live window of the same key is
+// using.
+//
+// Lowest free rather than monotonic, because matching requires the stored ordinal to
+// be equal: a counter would hand a reopened window a fresh number, and it could never
+// match the entry saved moments earlier, which is the headline use case. A closed
+// window's number is therefore reused, while windows open at the same time still get
+// distinct ones.
 static int AllocateOrdinal(const std::set<int>& liveOrdinals) {
     int candidate = 0;
     for (int live : liveOrdinals) {  // std::set iterates in ascending order
@@ -1018,18 +981,6 @@ static int AllocateOrdinal(const std::set<int>& liveOrdinals) {
         }
     }
     return candidate;
-}
-
-// Kept for the record: the previous monotonic allocator. Tests assert that it
-// cannot match, which is what made close-and-reopen restore nothing.
-static int NextOrdinalFor(const std::vector<int>& usedOrdinals) {
-    int next = 0;
-    for (int ordinal : usedOrdinals) {
-        if (ordinal >= next) {
-            next = ordinal + 1;
-        }
-    }
-    return next;
 }
 
 static bool ConfigIsReferenced(const GeometryStore& store, int configId) {
@@ -1247,8 +1198,7 @@ static std::wstring SerializeGeometryStore(const GeometryStore& store) {
             JsonAppendEscaped(out, monitor.slotAtSave);
             out += L",\n          \"primary\": ";
             out += monitor.primary ? L"true" : L"false";
-            out += L",\n          \"dpi\": " + std::to_wstring(monitor.dpi) +
-                   L",\n";
+            out += L",\n";
             out += L"          \"relLeft\": " + FormatDouble(monitor.relLeft) +
                    L", \"relTop\": " + FormatDouble(monitor.relTop) +
                    L", \"relWidth\": " + FormatDouble(monitor.relWidth) +
@@ -1624,8 +1574,6 @@ static bool DeserializeGeometryStore(const std::wstring& text,
                         JsonString(monitorValue.Find(L"slotAtSave"), L"");
                     monitor.primary =
                         JsonBool(monitorValue.Find(L"primary"), false);
-                    monitor.dpi =
-                        (unsigned)JsonInt(monitorValue.Find(L"dpi"), 0);
                     monitor.relLeft =
                         JsonDouble(monitorValue.Find(L"relLeft"), 0);
                     monitor.relTop =
@@ -1778,10 +1726,10 @@ static SettleAction DecideMaximizeSettle(const MaximizeSettle& state) {
 // Everything here is decided before a single Win32 call, and is unit-tested the
 // same way the M1 rules are.
 
-// Whether two monitor sets describe the same arrangement. Compared unordered,
-// on identity, pixel rect and DPI -- the three things the relayout decision
-// itself depends on, so "equivalent" means "no window's mapping can have
-// changed" and the pass can be skipped whole. workRect is excluded for the same
+// Whether two monitor sets describe the same arrangement. Compared unordered, on
+// identity and pixel rect -- the two things the relayout decision itself depends
+// on, so "equivalent" means "no window's mapping can have changed" and the pass
+// can be skipped whole. workRect is excluded for the same
 // reason ConfigsMatch excludes it: a moved taskbar or a different work area is
 // not a monitor change, and treating it as one would move every window on the
 // desktop for nothing.
@@ -1800,8 +1748,7 @@ static bool MonitorSetsEquivalent(const std::vector<MonitorView>& a,
                 continue;
             }
             if (MonitorIdentityOf(b[i]) == identity &&
-                GeoRectsEqual(b[i].pixelRect, view.pixelRect) &&
-                b[i].dpi == view.dpi) {
+                GeoRectsEqual(b[i].pixelRect, view.pixelRect)) {
                 used[i] = true;
                 found = true;
                 break;
@@ -1882,7 +1829,6 @@ static MonitorResolution ResolveOriginMonitorTarget(
     stored.pixelRect = origin.pixelRect;
     stored.workRect = origin.workRect;
     stored.primary = origin.primary;
-    stored.dpi = origin.dpi;
     ComputeRelativeToPrimary(previous, (size_t)originIndex, stored.relLeft,
                              stored.relTop, stored.relWidth, stored.relHeight);
 
@@ -1986,8 +1932,7 @@ static RelayoutPlan ComputeRelayoutPlan(const std::vector<MonitorView>& previous
     plan.monitorUnchanged =
         !plan.originGone &&
         MonitorIdentityOf(target) == MonitorIdentityOf(origin) &&
-        GeoRectsEqual(target.pixelRect, origin.pixelRect) &&
-        target.dpi == origin.dpi;
+        GeoRectsEqual(target.pixelRect, origin.pixelRect);
     if (plan.monitorUnchanged) {
         return plan;
     }
@@ -2047,9 +1992,9 @@ static RelayoutSkip DecideRelayoutSkip(const RelayoutPlan& plan,
     }
     if (!plan.relayout) {
         // Checked before the maximize rule on purpose: when the mapping lands the
-        // window where it already is -- a resolution change elsewhere, a
-        // scale-only change -- "nothing needed doing" is the honest reason, and
-        // reporting "maximized" instead would suggest it would have moved.
+        // window where it already is -- a resolution change on another monitor,
+        // say -- "nothing needed doing" is the honest reason, and reporting
+        // "maximized" instead would suggest it would have moved.
         return RelayoutSkip::TargetEqualsCurrent;
     }
     if (subject.maximized && !plan.originGone) {
@@ -2088,7 +2033,7 @@ static UnwritableChange DecideUnwritableChange(bool applySucceeded,
     return UnwritableChange::None;
 }
 
-// The DPI sanity field (Q2/Q3). Deliberately a log value and not a correction:
+// The DPI sanity field. Deliberately a log value and not a correction: the
 // normalized mapping may already be DPI-correct, and adding an unverified
 // multiply on top of a mechanism that might be right is how two wrongs cancel
 // out in testing and reappear in the field. Logged as a ratio, with both
@@ -2491,10 +2436,6 @@ static bool BuildMonitorViews(std::vector<MonitorView>& monitors) {
                 }
             }
 
-            // Per-monitor DPI is not captured yet: M1 does not rescale, and the
-            // shcore dependency arrives with M2 when it actually needs it.
-            view.dpi = 0;
-
             list->push_back(std::move(view));
             return TRUE;
         },
@@ -2551,12 +2492,15 @@ static int FindMonitorIndexByHandle(HMONITOR monitor) {
 // protected DACL that gives full access to that user, SYSTEM and administrators,
 // and inherits nothing from the shared folder. What is inside is private by
 // construction, whatever the files are called. This is the same shape as
-// desktop-sticky-notes, built through the ACL functions rather than through an
-// SDDL string, for the same reason the SID conversion below is hand-written: a
-// header a Windhawk mod does not get is how this file last failed to compile.
+// desktop-sticky-notes and the same three entries, built through the ACL
+// functions rather than parsed from an SDDL string: building the entries
+// directly is a shorter path to the same descriptor, and it keeps a
+// string-to-descriptor conversion out of a path that runs on every load.
+// sddl.h is available to a mod; this is a choice, not a limitation.
 //
 // The SID comes from this process's own token, and its text form is written out
-// by hand rather than with a call into sddl.h -- see FormatSidString for why.
+// by hand rather than with a call into ConvertSidToStringSidW -- see
+// FormatSidString for why.
 
 // Reads the bytes of a SID into the parts FormatSidString renders. Kept out of the
 // tested core because it is the only part that has to know what a SID looks like;
@@ -2651,16 +2595,17 @@ static std::wstring CurrentUserSid() {
     return CurrentUserTokenSid().text;
 }
 
-// Built once: the latch key is used on every settings change.
+// Built once: the latch key is used on every settings change. Empty means no SID,
+// which also means no folder and nothing saved, so the action has nothing to do.
 static const std::wstring& PerUserLatchValueName() {
+    static bool resolved = false;
     static std::wstring name;
-    if (name.empty()) {
+    if (!resolved) {
+        resolved = true;
         const std::wstring sid = CurrentUserSid();
-        // No SID: the name from before the per-user change, so a value latched by
-        // an earlier build is still seen and the setting is not re-fired. Nothing
-        // is saved in that state, so there is nothing for a stale latch to wipe.
-        name = sid.empty() ? std::wstring(kClearLatchValueName)
-                           : std::wstring(kClearLatchValueName) + L"-" + sid;
+        if (!sid.empty()) {
+            name = std::wstring(kClearLatchValueName) + L"-" + sid;
+        }
     }
     return name;
 }
@@ -2715,9 +2660,43 @@ static bool BuildPrivateAcl(const std::vector<BYTE>& userSid,
     return true;
 }
 
-// Creates the folder if it is not there yet. The permissions of one that already
-// exists are left alone: the only folder that can exist under this name was
-// created here, for this user, with this access control list.
+// Whether this user owns the folder. An existing folder is only written into
+// when they do: the storage folder it lives in is writable by every account, so
+// another user could create this folder first with a list of their own, and every
+// file written inside would inherit it.
+static bool FolderOwnerIsCurrentUser(const std::wstring& path,
+                                     const std::vector<BYTE>& userSid) {
+    DWORD needed = 0;
+    GetFileSecurityW(path.c_str(), OWNER_SECURITY_INFORMATION, nullptr, 0,
+                     &needed);
+    if (needed == 0) {
+        return false;
+    }
+
+    std::vector<BYTE> descriptor(needed);
+    if (!GetFileSecurityW(path.c_str(), OWNER_SECURITY_INFORMATION,
+                          reinterpret_cast<PSECURITY_DESCRIPTOR>(
+                              descriptor.data()),
+                          needed, &needed)) {
+        return false;
+    }
+
+    PSID owner = nullptr;
+    BOOL defaulted = FALSE;
+    if (!GetSecurityDescriptorOwner(
+            reinterpret_cast<PSECURITY_DESCRIPTOR>(descriptor.data()), &owner,
+            &defaulted) ||
+        !owner) {
+        return false;
+    }
+
+    return EqualSid(owner, reinterpret_cast<PSID>(
+                               const_cast<BYTE*>(userSid.data()))) != FALSE;
+}
+
+// Creates this user's folder, with a protected access control list of its own.
+// Files created inside inherit that list, so nothing has to be re-permissioned
+// later; a file that arrives any other way is not written here at all.
 static bool EnsurePrivateFolder(const std::wstring& path,
                                 const std::vector<BYTE>& userSid) {
     std::vector<BYTE> aclBuffer;
@@ -2748,7 +2727,12 @@ static bool EnsurePrivateFolder(const std::wstring& path,
 
     const DWORD error = GetLastError();
     if (error == ERROR_ALREADY_EXISTS) {
-        return true;
+        if (FolderOwnerIsCurrentUser(path, userSid)) {
+            return true;
+        }
+        Wh_Log(L"[GEOM] %s already exists and is not this user's; this session "
+               L"will not save any geometry", path.c_str());
+        return false;
     }
 
     Wh_Log(L"[GEOM] could not create %s (error %lu); this session will not save "
@@ -2756,41 +2740,13 @@ static bool EnsurePrivateFolder(const std::wstring& path,
     return false;
 }
 
-// The same three entries, for a file inside the folder.
-//
-// Needed because a move does not change permissions. A file this mod wrote before
-// the per-user folder existed arrives inside it with the list it had in the shared
-// folder -- which lets every user on the machine open it. The folder stops anyone
-// listing its contents, but not a reader who already knows the path: Windows grants
-// bypass-traverse-checking by default, so the file's own list is what decides.
-static bool ApplyPrivateAclToFile(const std::wstring& path,
-                                  const std::vector<BYTE>& userSid) {
-    std::vector<BYTE> aclBuffer;
-    if (!BuildPrivateAcl(userSid, /*inheritToChildren=*/false, aclBuffer)) {
-        return false;
-    }
-
-    SECURITY_DESCRIPTOR descriptor{};
-    if (!InitializeSecurityDescriptor(&descriptor,
-                                      SECURITY_DESCRIPTOR_REVISION) ||
-        !SetSecurityDescriptorDacl(&descriptor, TRUE,
-                                   reinterpret_cast<PACL>(aclBuffer.data()),
-                                   FALSE) ||
-        !SetSecurityDescriptorControl(&descriptor, SE_DACL_PROTECTED,
-                                      SE_DACL_PROTECTED)) {
-        return false;
-    }
-
-    if (!SetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, &descriptor)) {
-        Wh_Log(L"[GEOM] could not set the access control list of %s (error %lu)",
-               path.c_str(), GetLastError());
-        return false;
-    }
-    return true;
-}
 
 // This user's data folder, created on first use. Empty means "not available",
 // and every caller reads that as "do not save".
+//
+// Resolved once, from WhTool_ModInit before the event thread exists, so the
+// folder and the SID behind it are initialized by a single thread; everything
+// else only reads the result.
 static const std::wstring& UserDataFolder() {
     static bool attempted = false;
     static std::wstring cached;
@@ -2838,207 +2794,7 @@ static bool BuildGeometryStorePath(PWSTR buffer, size_t bufferSize) {
     return BuildUserFilePath(kGeometryStoreFileName, buffer, bufferSize);
 }
 
-// Every file this user's folder can already hold: the store and the journal, whether
-// this load moved them in or an earlier build left them with the shared list. Runs
-// once per load and costs two ACL writes; files created afterwards inherit the
-// folder's entries, so this is about the ones that arrived by rename.
-static void RepairUserFileAcls() {
-    const std::vector<BYTE>& userSid = CurrentUserTokenSid().bytes;
-    if (userSid.empty()) {
-        return;
-    }
 
-    const PCWSTR names[] = {kGeometryStoreFileName, kDiagnosticsJournalFileName,
-                            kAdoptedStoreFileName, kAdoptedJournalFileName};
-    for (PCWSTR name : names) {
-        WCHAR path[MAX_PATH];
-        if (!BuildUserFilePath(name, path, ARRAYSIZE(path))) {
-            return;  // no private folder, so there is nothing to repair
-        }
-        if (GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES) {
-            ApplyPrivateAclToFile(path, userSid);
-        }
-    }
-}
-
-// The names this mod used before the per-user folder, both in the shared storage
-// folder: the pre-r16 machine-wide store, and the SID-in-the-name store that the
-// first per-user build wrote. They are read here only so that a store written by
-// an earlier build is adopted instead of orphaned -- and so that the file with
-// the window titles in it stops sitting in a folder other users can read.
-static bool BuildLegacySharedStorePath(PWSTR buffer, size_t bufferSize) {
-    const size_t len = Wh_GetModStoragePath(buffer, bufferSize);
-    if (len == 0 || len + 1 >= bufferSize) {
-        return false;
-    }
-    return swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                      kGeometryStoreFileName) >= 0;
-}
-
-static bool BuildLegacyPerUserNamePath(PCWSTR fileName, PWSTR buffer,
-                                       size_t bufferSize) {
-    const std::wstring sid = CurrentUserSid();
-    if (sid.empty()) {
-        return false;
-    }
-    const size_t len = Wh_GetModStoragePath(buffer, bufferSize);
-    if (len == 0 || len + 1 >= bufferSize) {
-        return false;
-    }
-    const std::wstring legacyName = PerUserFileName(fileName, sid);
-    return swprintf_s(buffer + len, bufferSize - len, L"\\%s",
-                      legacyName.c_str()) >= 0;
-}
-
-// Moves one legacy file into this user's folder, unless there is no such file or
-// this user already has a file under that name. Renaming rather than copying is
-// what keeps the result correct for everybody: a file in the shared folder can be
-// claimed by exactly one session, and the first session to load after the upgrade
-// is the only candidate. A file that cannot be moved is left alone: silently
-// reading another user's window titles is worse than a one-time loss of
-// remembered positions.
-// A rename needs DELETE on the file, and anything holding it open at that moment
-// refuses it. The file that matters here is the journal, and the field pass reads it
-// continuously while the mod is being reloaded -- which is exactly when this runs.
-// Five attempts over about 200ms turn that collision into a non-event; a failure
-// that survives them is logged, and the next load tries again.
-static bool MoveFileWithRetry(PCWSTR from, PCWSTR to) {
-    for (int attempt = 0; attempt < 5; attempt++) {
-        if (MoveFileExW(from, to, 0)) {
-            return true;
-        }
-        const DWORD error = GetLastError();
-        if (error != ERROR_SHARING_VIOLATION && error != ERROR_ACCESS_DENIED) {
-            return false;
-        }
-        Sleep((DWORD)(20 * (attempt + 1)));
-    }
-    return false;
-}
-
-// `fallbackName` (may be null) is the name to use when the folder already holds
-// the file's usual one. A file that a previous build wrote in the shared storage
-// folder is not left there because this user's folder happens to have a newer file
-// of the same kind: the older one is kept beside it instead. The second field run is
-// what proved that: the retry above never got a chance, because the guard fired
-// first and the journal stayed in the shared folder for good.
-static bool MoveLegacyFileIntoUserFolder(PCWSTR fileName, PCWSTR fallbackName,
-                                         PCWSTR legacyPath) {
-    if (!legacyPath ||
-        GetFileAttributesW(legacyPath) == INVALID_FILE_ATTRIBUTES) {
-        return false;
-    }
-
-    WCHAR target[MAX_PATH];
-    if (!BuildUserFilePath(fileName, target, ARRAYSIZE(target))) {
-        return false;
-    }
-    if (GetFileAttributesW(target) != INVALID_FILE_ATTRIBUTES) {
-        if (!fallbackName ||
-            !BuildUserFilePath(fallbackName, target, ARRAYSIZE(target)) ||
-            GetFileAttributesW(target) != INVALID_FILE_ATTRIBUTES) {
-            return false;  // nowhere free to put it
-        }
-    }
-
-    if (!MoveFileWithRetry(legacyPath, target)) {
-        Wh_Log(L"[GEOM] could not move %s into this user's folder (error %lu)",
-               legacyPath, GetLastError());
-        return false;
-    }
-
-    // The rename brought the file's old permissions with it.
-    ApplyPrivateAclToFile(target, CurrentUserTokenSid().bytes);
-    return true;
-}
-
-// Runs before the store is loaded and before the first journal line is written,
-// which is what lets the old journal itself be moved: once this session has
-// appended a line to its own journal, the old file's target name is taken and it
-// would stay in the shared folder for good.
-static void AdoptLegacyFilesIfPresent() {
-    WCHAR ownStore[MAX_PATH];
-    if (!BuildGeometryStorePath(ownStore, ARRAYSIZE(ownStore))) {
-        return;  // no private folder: nothing is adopted, and nothing is saved
-    }
-
-    WCHAR legacyPerUserName[MAX_PATH];
-    const bool haveLegacyPerUserName =
-        BuildLegacyPerUserNamePath(kGeometryStoreFileName, legacyPerUserName,
-                                   ARRAYSIZE(legacyPerUserName)) &&
-        GetFileAttributesW(legacyPerUserName) != INVALID_FILE_ATTRIBUTES;
-
-    WCHAR legacyShared[MAX_PATH];
-    const bool haveLegacyShared =
-        BuildLegacySharedStorePath(legacyShared, ARRAYSIZE(legacyShared)) &&
-        GetFileAttributesW(legacyShared) != INVALID_FILE_ATTRIBUTES;
-
-    const LegacyAdoption adoption = DecideLegacyAdoption(
-        GetFileAttributesW(ownStore) != INVALID_FILE_ATTRIBUTES,
-        haveLegacyPerUserName, haveLegacyShared);
-
-    // This user's own earlier store is taken in whatever the decision says. The
-    // decision is about which file this session remembers *from*; when the folder
-    // already holds the live copy the older one is not remembered from, but it does
-    // not stay in a folder every account can read either -- it is kept beside the
-    // live one under kAdoptedStoreFileName.
-    bool legacyStoreWanted = false;
-    bool legacyStoreMoved = false;
-    if (haveLegacyPerUserName) {
-        legacyStoreWanted = true;
-        legacyStoreMoved = MoveLegacyFileIntoUserFolder(
-            kGeometryStoreFileName, kAdoptedStoreFileName, legacyPerUserName);
-    } else if (adoption == LegacyAdoption::SharedName) {
-        // The machine-wide store is this user's only once nobody else needs it: it
-        // is claimed when this user has nothing, never taken away from the others.
-        legacyStoreWanted = true;
-        legacyStoreMoved = MoveLegacyFileIntoUserFolder(
-            kGeometryStoreFileName, nullptr, legacyShared);
-    }
-
-    if (legacyStoreWanted) {
-        if (legacyStoreMoved) {
-            Wh_Log(
-                L"[GEOM] adopted the store written before the per-user folder");
-            AppendDiagnosticsJournal(
-                L"STORE-ADOPT legacy store moved into this user's folder");
-        } else {
-            Wh_Log(L"[GEOM] the legacy store could not be adopted; this session "
-                   L"starts with no remembered geometry");
-            AppendDiagnosticsJournal(L"STORE-ADOPT legacy store left in place");
-        }
-    }
-
-    // The journal too, when it is this user's own file: the point of the folder
-    // is that the lines with the window titles in them are not in the shared one.
-    // The pre-r16 journal was written by every user at once and is left where it
-    // is -- it is a log, and it is not this user's to claim.
-    //
-    // This one is taken in even when the folder already has a journal, which it
-    // almost always has by the time this runs: the field run of r18 left the older
-    // journal in the shared folder for exactly that reason.
-    WCHAR legacyJournal[MAX_PATH];
-    if (BuildLegacyPerUserNamePath(kDiagnosticsJournalFileName, legacyJournal,
-                                   ARRAYSIZE(legacyJournal)) &&
-        GetFileAttributesW(legacyJournal) != INVALID_FILE_ATTRIBUTES) {
-        if (MoveLegacyFileIntoUserFolder(kDiagnosticsJournalFileName,
-                                         kAdoptedJournalFileName, legacyJournal)) {
-            AppendDiagnosticsJournal(
-                L"LEGACY-MOVE the journal this user's earlier build wrote is now "
-                L"inside the folder");
-        } else {
-            // Said out loud, because the file it is about carries window titles and
-            // is sitting where another user can read it until a later load moves it.
-            AppendDiagnosticsJournal(
-                L"LEGACY-MOVE the earlier journal could not be moved into the "
-                L"folder; the next load will try again");
-        }
-    }
-
-    // Whatever is already in the folder, including files an earlier build moved in
-    // with the permissions they had in the shared one.
-    RepairUserFileAcls();
-}
 
 
 static constexpr DWORD kStoreFlushDelayMs = 2000;
@@ -3192,43 +2948,11 @@ static bool WriteUtf8File(const WCHAR* path, const std::string& data) {
 // diagnosis, not for normal use.
 static bool g_diagnosticsLog = false;
 
-// Journalled at startup. A stale build cost a round of diagnosis once: the
-// journal looked complete, but the lines being looked for were not in it because
-// the running copy predated them. The build id makes that visible immediately.
-//
-// It identifies a verified behaviour, not every text revision: it changes when
-// the mod's behaviour changes, so a run can be tied to the field result it
-// belongs to.
-// r15-2026-09-22 is a documentation-only revision: the readme text changed and no
-// code did. It carries its own id anyway, so that the id in a journal line always
-// names one exact file -- the alternative is two different files both claiming to
-// be r14, which is how a stale build starts reading like a defect.
-//
-// r16-2026-10-14 carries the three fixes from the first review round: the per-app
-// position and size switches are now read and applied (they were declared and
-// documented but reached no code), the placement rectangle of a minimized or
-// maximized window is converted out of workspace coordinates before it is stored,
-// and the store, the journal and the clear-action latch are per signed-in user.
-//
-// r17-2026-10-15 carries the second round: the two callers that held a reference
-// into the monitor cache across a refresh no longer can (WindowOwnRect reads the
-// rectangles it needs from Windows), and the per-user files moved into a folder of
-// their own, created with a protected access control list, so that another user
-// can no longer read them -- with the fallback to the shared file name dropped, so
-// that no SID means no saving at all.
-//
-// r18-2026-10-15 is the same round after the field pass: a file that arrives in the
-// folder by rename keeps the permissions it had in the shared folder, so moved-in
-// files are given the folder's list too, and the rename itself retries through the
-// moment when a diagnostics reader is holding the journal open.
-//
-// r19-2026-10-15 is what the second field run of that build found: the retry was not
-// enough, because by the time it was needed the folder held a journal of its own --
-// the move was skipped as "this user already has one", and the file with the window
-// titles stayed in the shared folder for good. A file from an earlier layout is now
-// taken in whatever the folder holds, under a name of its own when the usual one is
-// taken, and the machine-wide store is still claimed only when this user has nothing.
-static constexpr PCWSTR kJournalBuild = L"r19-2026-10-15";
+// Journalled at startup, so that a journal line names one exact build: a stale copy
+// once looked complete while the lines being looked for were missing from it, which
+// cost a round of diagnosis. It identifies a verified behaviour, not every text
+// revision, so a run can be tied to the field result it belongs to.
+static constexpr PCWSTR kJournalBuild = L"r21-2026-10-16";
 
 // The journal flag has to be known before the store is loaded, because the load
 // itself journals a line. Reading it only in ApplySettingsOnEventThread -- which
@@ -3242,6 +2966,11 @@ static bool BuildJournalPath(PWSTR buffer, size_t bufferSize) {
     return BuildUserFilePath(kDiagnosticsJournalFileName, buffer, bufferSize);
 }
 
+// A diagnostics log that is never trimmed is a file that grows for the life of
+// the install. Past this size it starts over: the journal is for the last thing
+// that happened, not for history.
+static constexpr long long kMaxJournalBytes = 1024 * 1024;
+
 // Never fails loudly: a diagnostics log that cannot be written must not affect
 // the behaviour it is meant to observe.
 static void AppendDiagnosticsJournal(const std::wstring& line) {
@@ -3254,14 +2983,28 @@ static void AppendDiagnosticsJournal(const std::wstring& line) {
         return;
     }
 
-    HANDLE file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+    HANDLE file = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         return;
     }
 
-    std::wstring stamped = L"[" + std::to_wstring((long long)time(nullptr)) +
-                           L"] " + line + L"\r\n";
+    bool truncated = false;
+    LARGE_INTEGER size{};
+    if (GetFileSizeEx(file, &size) && size.QuadPart > kMaxJournalBytes) {
+        SetFilePointer(file, 0, nullptr, FILE_BEGIN);
+        truncated = SetEndOfFile(file) != FALSE;
+    } else {
+        SetFilePointer(file, 0, nullptr, FILE_END);
+    }
+
+    std::wstring stamped;
+    if (truncated) {
+        stamped += L"[0] JOURNAL-TRUNCATED the journal passed " +
+                   std::to_wstring(size.QuadPart) + L" bytes\r\n";
+    }
+    stamped += L"[" + std::to_wstring((long long)time(nullptr)) + L"] " + line +
+               L"\r\n";
     std::string utf8 = WideToUtf8(stamped);
     DWORD written = 0;
     WriteFile(file, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
@@ -3271,8 +3014,6 @@ static void AppendDiagnosticsJournal(const std::wstring& line) {
 static void LoadGeometryStore() {
     g_store = GeometryStore();
 
-    // The legacy files were adopted in the startup path, before this load and
-    // before the first journal line -- see AdoptLegacyFilesIfPresent.
 
     WCHAR path[MAX_PATH];
     if (!BuildGeometryStorePath(path, ARRAYSIZE(path))) {
@@ -3338,6 +3079,13 @@ static bool WriteGeometryStore() {
 }
 
 static void MarkStoreDirty() {
+    // Nothing is written without the private folder, so do not arm the flush timer
+    // for a save that cannot happen: it would keep waking every 100 ms and fail to
+    // write every 2 s for the rest of the session.
+    if (UserDataFolder().empty()) {
+        return;
+    }
+
     g_storeDirty = true;
     g_storeLastChange = GetTickCount64();
 }
@@ -3363,7 +3111,6 @@ static void SnapshotMonitors(const std::vector<MonitorView>& monitors,
         monitor.pixelRect = monitors[i].pixelRect;
         monitor.workRect = monitors[i].workRect;
         monitor.primary = monitors[i].primary;
-        monitor.dpi = monitors[i].dpi;
         ComputeRelativeToPrimary(monitors, i, monitor.relLeft, monitor.relTop,
                                  monitor.relWidth, monitor.relHeight);
         stored.push_back(std::move(monitor));
@@ -3767,10 +3514,9 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
         L" flags=" +
         FormatRestoreFlags(MakeRestoreFlags(identity.restorePosition,
                                            identity.restoreSize)) +
-        // The same DPI sanity field the relayout path logs (Q3): the ratio of the
-        // DPI this window reports now to the DPI stored with its geometry. Logged
-        // here as well so that one field answers the question for every decision
-        // the mod makes, whether or not anything gets scaled.
+        // The same DPI sanity field the relayout path logs: the ratio of the DPI
+        // this window reports now to the DPI stored with its geometry, so that one
+        // field answers the question for every decision the mod makes.
         L" dpiRatio=" +
         FormatDpiRatio(entry->dpiAtSave, (unsigned)GetDpiForWindow(hwnd)));
 
@@ -3879,10 +3625,8 @@ static void RunRelayoutPass() {
         target = ApplyOwnRestoreFlags(hwnd, identity, target, currentRect,
                                       /*positionRequired=*/plan.originGone);
 
-        // The Q2/Q3 sanity field: logged, never applied. Normalized mapping may
-        // already be DPI-correct, and an unverified multiply on top of a mechanism
-        // that might be right is how two wrongs cancel out in testing and
-        // reappear in the field. The stored DPI is read for this line only.
+        // The DPI sanity field: logged, never applied. The stored DPI is read for
+        // this line only.
         unsigned currentDpi = (unsigned)GetDpiForWindow(hwnd);
         const StoredWindow* entry = FindStoredWindowFor(
             g_store, identity.exePath, identity.className,
@@ -3944,59 +3688,19 @@ static void RunRelayoutPass() {
                              std::to_wstring(skipped));
 }
 
-// TEST-ONLY. Replaces the pre-change snapshot with one that contains a ghost
-// monitor the test window can have come from -- a copy of the rightmost real
-// monitor, shifted one monitor-width to the right -- and runs the ordinary pass
-// against the real monitor set. It exists because this machine has one display
-// and the vanished-monitor branch would otherwise ship on code review alone.
+
+// A save that could not be made, journalled rather than silent.
 //
-// Nothing about the pass is special-cased for it: the ghost resolves through the
-// same five-step chain, and a window that is not on the ghost is treated exactly
-// as it would be on a real monitor. Never mentioned in the README; unreachable
-// unless the diagnostics setting is on.
-static void SimulateVanishedMonitorPass() {
-    if (g_monitors.empty()) {
-        Wh_Log(L"[GEOM] test-only hook ignored: no monitors to fabricate from");
-        return;
-    }
-
-    const MonitorView* rightmost = &g_monitors[0];
-    for (const MonitorView& monitor : g_monitors) {
-        if (monitor.pixelRect.right > rightmost->pixelRect.right) {
-            rightmost = &monitor;
-        }
-    }
-
-    long width = GeoRectWidth(rightmost->pixelRect);
-    long height = GeoRectHeight(rightmost->pixelRect);
-
-    MonitorView ghost = *rightmost;
-    ghost.key = L"test-hook:ghost-monitor";
-    ghost.fallbackId = L"test-hook:ghost-monitor";
-    ghost.friendlyName = L"Test hook ghost monitor";
-    ghost.gdiName = L"\\\\.\\TESTGHOST";
-    ghost.primary = false;
-    ghost.pixelRect = {rightmost->pixelRect.right, rightmost->pixelRect.top,
-                       rightmost->pixelRect.right + width,
-                       rightmost->pixelRect.top + height};
-    ghost.workRect = ghost.pixelRect;
-
-    std::vector<MonitorView> fabricated = g_monitors;
-    fabricated.push_back(ghost);
-    g_lastKnownMonitors = std::move(fabricated);
-
-    Wh_Log(L"[GEOM] test-only hook: pretending the monitor at (%ld,%ld,%ld,%ld) "
-           L"was just unplugged",
-           ghost.pixelRect.left, ghost.pixelRect.top, ghost.pixelRect.right,
-           ghost.pixelRect.bottom);
-
-    AppendDiagnosticsJournal(L"RELAYOUT-TEST hook=vanished-monitor origin=(" +
-                             std::to_wstring(ghost.pixelRect.left) + L"," +
-                             std::to_wstring(ghost.pixelRect.top) + L"," +
-                             std::to_wstring(ghost.pixelRect.right) + L"," +
-                             std::to_wstring(ghost.pixelRect.bottom) + L")");
-
-    RunRelayoutPass();
+// The mod's promise is that a window comes back where it was left. When that does
+// not happen, the journal has to answer which of two things happened: the mod never
+// saw the window close, or it saw the close and could not read a rectangle from a
+// window that was already on its way out. Without a line for the second, both look
+// like silence, and the field pass reads that as the mod doing nothing at all.
+static void JournalSaveSkip(const WindowIdentity& identity, PCWSTR reason) {
+    AppendDiagnosticsJournal(L"SAVE-SKIP exe=" + identity.exeName + L" class=" +
+                             identity.className + L" ordinal=" +
+                             std::to_wstring(identity.ordinal) + L" reason=" +
+                             reason);
 }
 
 static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
@@ -4017,10 +3721,7 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
         Wh_Log(L"[GEOM] save skipped for %s: a move for this window was refused "
                L"earlier this session",
                identity.exeName.c_str());
-        AppendDiagnosticsJournal(L"SAVE-SKIP exe=" + identity.exeName +
-                                 L" ordinal=" +
-                                 std::to_wstring(identity.ordinal) +
-                                 L" reason=unwritable");
+        JournalSaveSkip(identity, L"unwritable");
         return;
     }
 
@@ -4037,6 +3738,8 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
     // and it is resolved before the reference is taken, never after.
     const MonitorView* monitorView = CurrentMonitorView(hwnd);
     if (!monitorView) {
+        // No monitor resolves for the window: it is gone, and so is its rectangle.
+        JournalSaveSkip(identity, L"no-monitor");
         return;
     }
     const MonitorView& monitor = *monitorView;
@@ -4044,11 +3747,17 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
     GeoRect geometry{};
     UINT showCommand = 0;
     if (!WindowOwnRect(hwnd, geometry, &showCommand)) {
+        // The usual case at a close: the window is being destroyed, and Windows
+        // answers nothing for a handle that is already gone. Nothing can be done
+        // about a rectangle that cannot be read; it is recorded so that the miss
+        // has a reason instead of leaving a gap.
+        JournalSaveSkip(identity, L"no-placement");
         return;
     }
     const std::wstring state = (showCommand == SW_SHOWMAXIMIZED) ? L"maximized"
                                                                  : L"normal";
     if (GeoRectWidth(geometry) <= 0 || GeoRectHeight(geometry) <= 0) {
+        JournalSaveSkip(identity, L"empty-rect");
         return;
     }
 
@@ -4436,101 +4145,6 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
 
 // --- Display changes --------------------------------------------------------
 
-// --- DPI awareness probe (M2, verification-first) ---------------------------
-//
-// Every relayout decision compares rectangles: is this window still on the
-// monitor it was on, and does the mapped rectangle differ from its current one.
-// Whether the values Win32 hands back are true physical pixels or coordinates
-// virtualized to the caller's DPI awareness depends entirely on the awareness of
-// THIS thread -- a property of the host process (windhawk.exe), not of the mod.
-// GetWindowRect and GetMonitorInfo return virtualized values to a DPI-unaware
-// caller and physical pixels to a per-monitor-aware one, so getting this wrong
-// would make every comparison quietly wrong on a scaled display while looking
-// perfect on a 100% one -- and the failure would appear in the field, on someone
-// else's machine.
-//
-// So it is measured, once, on the thread that does the reads, rather than
-// assumed. The two APIs are resolved dynamically because they arrived in Windows
-// 10 version 1607 while the mod still loads on Windows 7:
-//   awareness  unprefixed thread context: unaware(0) / system(1) / per-monitor(2)
-//   systemDpi  what this thread believes the system DPI is (96 when unaware)
-//   windowDpi  what the mod reads for its own window on the primary monitor
-//   primary    the size the mod enumerates for the primary monitor
-//
-// How to read it in the field: with scaling set above 100%, if windowDpi and
-// systemDpi are both 96 while the user's scale is 150%, this process is DPI
-// unaware and the rectangles are virtualized, not physical. The cross-check that
-// needs no DPI knowledge at all is on the DISPLAYCHANGE line, where size= is the
-// physical size Windows reports in the message and primary= is what the mod
-// reads: if they disagree, the mod is reading virtualized coordinates.
-typedef HANDLE(CALLBACK* GetThreadDpiAwarenessContextProc)();
-typedef int(CALLBACK* GetAwarenessFromDpiAwarenessContextProc)(HANDLE);
-typedef UINT(CALLBACK* GetDpiForSystemProc)();
-
-static const wchar_t* DpiAwarenessName(int awareness) {
-    switch (awareness) {
-        case 0:
-            return L"unaware";
-        case 1:
-            return L"system";
-        case 2:
-            return L"per-monitor";
-        default:
-            return L"unknown";
-    }
-}
-
-static std::wstring PrimaryMonitorSizeText() {
-    for (const MonitorView& monitor : g_monitors) {
-        if (monitor.primary) {
-            return std::to_wstring(GeoRectWidth(monitor.pixelRect)) + L"x" +
-                   std::to_wstring(GeoRectHeight(monitor.pixelRect));
-        }
-    }
-    return L"none";
-}
-
-static void ProbeDpiAwareness(HWND messageWindow) {
-    int awareness = -1;
-    unsigned systemDpi = 0;
-
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (user32) {
-        auto getContext = (GetThreadDpiAwarenessContextProc)GetProcAddress(
-            user32, "GetThreadDpiAwarenessContext");
-        auto getAwareness =
-            (GetAwarenessFromDpiAwarenessContextProc)GetProcAddress(
-                user32, "GetAwarenessFromDpiAwarenessContext");
-        if (getContext && getAwareness) {
-            HANDLE context = getContext();
-            if (context) {
-                awareness = getAwareness(context);
-            }
-        }
-
-        auto getSystemDpi = (GetDpiForSystemProc)GetProcAddress(
-            user32, "GetDpiForSystem");
-        if (getSystemDpi) {
-            systemDpi = getSystemDpi();
-        }
-    }
-
-    unsigned windowDpi = messageWindow ? (unsigned)GetDpiForWindow(messageWindow)
-                                       : 0;
-
-    std::wstring primary = PrimaryMonitorSizeText();
-
-    Wh_Log(L"[GEOM] DPI probe: awareness=%s(%d) systemDpi=%u windowDpi=%u "
-           L"primary=%s",
-           DpiAwarenessName(awareness), awareness, systemDpi, windowDpi,
-           primary.c_str());
-
-    AppendDiagnosticsJournal(L"MOD-DPI awareness=" +
-                             std::wstring(DpiAwarenessName(awareness)) +
-                             L" systemDpi=" + std::to_wstring(systemDpi) +
-                             L" windowDpi=" + std::to_wstring(windowDpi) +
-                             L" primary=" + primary);
-}
 
 struct MonitorRecord {
     std::wstring device;
@@ -4553,6 +4167,18 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC /*hdc*/,
     }
 
     return TRUE;
+}
+
+// What the mod reads back for the primary monitor, for the display-change line
+// below: compared against the size Windows reports in the message itself.
+static std::wstring PrimaryMonitorSizeText() {
+    for (const MonitorView& monitor : g_monitors) {
+        if (monitor.primary) {
+            return std::to_wstring(GeoRectWidth(monitor.pixelRect)) + L"x" +
+                   std::to_wstring(GeoRectHeight(monitor.pixelRect));
+        }
+    }
+    return L"none";
 }
 
 static void LogDisplayChange(WPARAM wParam, LPARAM lParam) {
@@ -4635,6 +4261,7 @@ static void ApplySettingsOnEventThread() {
     // is applied here rather than being lost.
     if (g_clearStoreRequested.load()) {
         g_clearStoreRequested.store(false);
+        ClearStoredFile();
         g_store = GeometryStore();
         g_storeDirty = false;
         Wh_Log(L"[GEOM] cleared stored data requested before startup");
@@ -4717,9 +4344,9 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 L" size=" + std::to_wstring((unsigned long)(lParam & 0xFFFF)) +
                 L"x" + std::to_wstring((unsigned long)((lParam >> 16) & 0xFFFF)) +
                 L" monitors=" + std::to_wstring(g_monitors.size()) +
-                // size= is what Windows reports, primary= is what the mod reads
-                // back for the same monitor; a disagreement means this process
-                // is reading DPI-virtualized coordinates. See ProbeDpiAwareness.
+                // size= is what Windows reports and primary= is what the mod
+                // reads back for the same monitor; the tool process is
+                // per-monitor aware, so the two describe the same pixels.
                 L" primary=" + PrimaryMonitorSizeText() +
                 L" dpi=" + std::to_wstring((unsigned long)GetDpiForWindow(hwnd)));
             if (g_modEnabled) {
@@ -4743,25 +4370,15 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             }
             break;
 
-        case kMsgTestDisplayChange:
-            // TEST-ONLY, gated on the diagnostics setting. See
-            // SimulateVanishedMonitorPass for why it exists and why it is inert
-            // for a normal user.
-            if (!g_diagnosticsLog) {
-                Wh_Log(L"[GEOM] test-only display-change hook ignored "
-                       L"(the diagnostics journal is off)");
-                return 0;
-            }
-            SimulateVanishedMonitorPass();
-            return 0;
-
         case kMsgReloadSettings:
             ApplySettingsOnEventThread();
             return 0;
 
         case kMsgClearStore:
-            // Drop the in-memory copy too, otherwise the pending flush would
-            // write the just-cleared data straight back to disk.
+            // The file first, then the in-memory copy, both on this thread: doing
+            // the delete on the settings thread left a window in which the pending
+            // flush wrote the cleared data straight back to disk.
+            ClearStoredFile();
             g_store = GeometryStore();
             g_storeDirty = false;
             g_pendingApplies.clear();
@@ -4843,12 +4460,7 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
 
     RefreshMonitorViews();
     RefreshDiagnosticsSetting();   // must precede the load: the load journals
-    // Before the first journal line, not merely before the load: appending to this
-    // session's journal first would take the name the old journal's move needs.
-    AdoptLegacyFilesIfPresent();
     AppendDiagnosticsJournal(std::wstring(L"MOD build=") + kJournalBuild);
-    // Measured on this thread, once: see ProbeDpiAwareness.
-    ProbeDpiAwareness(hwnd);
     LoadGeometryStore();
     ApplySettingsOnEventThread();
 
@@ -4878,23 +4490,11 @@ static void DeleteStoredFile(PWSTR path) {
     }
 }
 
-static void ClearGeometryStore() {
+// Event-thread only, so that a flush already pending cannot write the data back
+// after the file is gone.
+static void ClearStoredFile() {
     WCHAR path[MAX_PATH];
-
     if (BuildGeometryStorePath(path, ARRAYSIZE(path))) {
-        DeleteStoredFile(path);
-    }
-
-    // Every earlier home of the same data as well, and this is not optional: the
-    // load adopts these files when this user has no store of their own, so a clear
-    // that left one in place would be undone -- the data would come straight back
-    // on the next launch, which is the worst possible bug for a "forget this"
-    // action. Both earlier names, plus the pre-r16 machine-wide one.
-    if (BuildLegacyPerUserNamePath(kGeometryStoreFileName, path,
-                                   ARRAYSIZE(path))) {
-        DeleteStoredFile(path);
-    }
-    if (BuildLegacySharedStorePath(path, ARRAYSIZE(path))) {
         DeleteStoredFile(path);
     }
 }
@@ -4910,43 +4510,22 @@ static void ClearGeometryStore() {
 //
 // Deliberately independent of the "enabled" master switch: clearing is a
 // maintenance action, and users need it while the mod is off.
-// The clear-action latch, read under this user's name, with the pre-r16 shared
-// name as a fallback.
-//
-// The fallback is not a nicety. This runs on every load, including the first load
-// after the upgrade, and the per-user name has never been written before. Without
-// it, a latch of "this clear was already handled" would be invisible -- and if the
-// dropdown was left on "clear now" (Windhawk cannot reset it, so it stays where the
-// user left it), the mod would fire the clear again on the very load that adopted
-// the store, wiping the data the upgrade was supposed to preserve.
-static int ReadClearLatch(PCWSTR perUserName) {
-    int latch = (int)Wh_GetIntValue(perUserName, kClearLatchNone);
-    if (latch == kClearLatchNone) {
-        int legacy = (int)Wh_GetIntValue(kClearLatchValueName, kClearLatchNone);
-        if (legacy != kClearLatchNone) {
-            Wh_Log(L"[GEOM] honouring the clear-action latch written before this "
-                   L"build made it per user");
-            return legacy;
-        }
-    }
-    return latch;
-}
-
 static void ApplyClearStoredDataAction() {
-    PCWSTR requestedAction = Wh_GetStringSetting(L"clearStoredData");
-    if (!requestedAction) {
+    const std::wstring& latchName = PerUserLatchValueName();
+    if (latchName.empty()) {
+        // No private folder, so this session never saved anything to clear.
         return;
     }
 
-    bool requestedClear = wcscmp(requestedAction, L"clearNow") == 0;
+    PCWSTR requestedAction = Wh_GetStringSetting(L"clearStoredData");
+    const bool requestedClear = wcscmp(requestedAction, L"clearNow") == 0;
     Wh_FreeStringSetting(requestedAction);
 
-    PCWSTR latchName = PerUserLatchValueName().c_str();
-    int latch = ReadClearLatch(latchName);
+    const int latch = (int)Wh_GetIntValue(latchName.c_str(), kClearLatchNone);
 
     if (!requestedClear) {
         if (latch != kClearLatchNone) {
-            Wh_SetIntValue(latchName, kClearLatchNone);
+            Wh_SetIntValue(latchName.c_str(), kClearLatchNone);
         }
         return;
     }
@@ -4955,18 +4534,17 @@ static void ApplyClearStoredDataAction() {
         return;
     }
 
-    if (!Wh_SetIntValue(latchName, kClearLatchHandled)) {
+    if (!Wh_SetIntValue(latchName.c_str(), kClearLatchHandled)) {
         // Worth surfacing: without the latch the next settings save would clear
         // again.
         Wh_Log(L"Failed to latch the clear action; it may run again on the next "
                L"settings save");
     }
 
-    ClearGeometryStore();
-
-    // The file is gone, but the event thread still holds the store in memory and
-    // would flush it back within a couple of seconds. Signal it to drop that
-    // copy; the flag covers the case where the thread does not exist yet.
+    // The file is deleted by the event thread, which is also the only thread that
+    // touches the in-memory copy: deleting it here left a window in which a flush
+    // that was already pending wrote the data straight back. The flag covers the
+    // case where the thread does not exist yet -- the startup path acts on it.
     g_clearStoreRequested.store(true);
     HWND messageWindow = g_messageWindow.load();
     if (messageWindow) {
@@ -4978,6 +4556,12 @@ static void ApplyClearStoredDataAction() {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"[GEOM] init");
+
+    // Resolved here, before the event thread exists, so that the folder is created
+    // and the SID read by one thread: a settings save can call into the same state
+    // from Windhawk's thread.
+    UserDataFolder();
+
     ApplyClearStoredDataAction();
 
     g_eventThread = CreateThread(nullptr, 0, EventThreadProc, nullptr, 0,
@@ -5025,7 +4609,7 @@ void WhTool_ModUninit() {
     }
 }
 
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
