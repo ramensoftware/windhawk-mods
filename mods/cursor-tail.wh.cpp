@@ -4,7 +4,7 @@
 // @name:zh-CN      光标拖尾
 // @description     Adds a speed-reactive cursor trail with optional interaction feedback.
 // @description:zh-CN 为鼠标指针添加速度响应式拖尾与可选的交互反馈。
-// @version         3.13
+// @version         3.14
 // @author          CYoJkoY
 // @github          https://github.com/CYoJkoY
 // @license         MIT
@@ -34,7 +34,7 @@ Direct2D overlay, independently of the application under the pointer.
 - **Custom appearance:** Configure trail color, outline color, gradient, and optional glow.
 - **Adaptive color:** Automatically sample the active cursor image and prefer colors with sufficient contrast against the screen background.
 - **Fade-out:** Smoothly fade the trail after the pointer slows down.
-- **Interaction feedback:** Optional expanding rings for left, right, and middle clicks, plus animated arrows that travel up or down with the scroll direction. These effects can run without a motion trail.
+- **Interaction feedback:** Optional expanding rings for left, right, and middle clicks, plus animated scroll arrows. Hold Shift to change vertical wheel feedback into horizontal arrows: wheel up points left and wheel down points right. These effects can run without a motion trail.
 - **Per-app rules:** Enable or disable the trail for selected executables.
 - **Fullscreen suppression:** Automatically hide the trail for exclusive or borderless fullscreen applications and restore it after fullscreen ends.
 
@@ -74,7 +74,7 @@ Cursor Tail shares the general cursor-trail space with other Windhawk mods, but 
 - **Appearance:** separately configurable outer/core widths, optional gradient and glow, and automatic or manual outline colors.
 - **Adaptive color:** cursor-image color extraction with histogram ranking, contrast-aware selection, and hysteresis to avoid rapid color switching near the contrast boundary.
 - **Context awareness:** per-app `exe=on|off` rules and fullscreen suppression for exclusive or borderless applications.
-- **Interaction layer:** optional button-specific click rings and animated up/down scroll arrows. Interaction events use asynchronous raw mouse input instead of a system-wide low-level mouse hook.
+- **Interaction layer:** optional button-specific click rings and animated scroll arrows, including left/right arrows for Shift+wheel. Interaction events use asynchronous raw mouse input instead of a system-wide low-level mouse hook.
 - **Motion cues:** optional fixed-capacity acceleration streaks and direction-change chevrons, plus bounded interpolation for large movement gaps.
 
 Comparable mods include:
@@ -264,8 +264,8 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
     - wheel_feedback_enabled: false
       $name: Scroll-wheel feedback
       $name:zh-CN: 滚轮反馈
-      $description: Show an animated arrow that moves up or down with the wheel direction, using a separate color for each direction.
-      $description:zh-CN: 滚轮向上或向下滚动时显示随方向移动的箭头，并为两个方向分别设置颜色。
+      $description: Show an animated arrow in the wheel direction. Hold Shift for horizontal feedback, with wheel up pointing left and wheel down pointing right. Colors remain associated with the wheel input direction.
+      $description:zh-CN: 滚轮滚动时显示沿对应方向移动的箭头。按住 Shift 时改为水平反馈：向上滚动指向左侧，向下滚动指向右侧。颜色仍按滚轮输入方向区分。
     - left_click_color: "#00D7FF"
       $name: Left-click color
       $name:zh-CN: 左键颜色
@@ -284,13 +284,13 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
     - wheel_up_color: "#7CFF6B"
       $name: Scroll-up color
       $name:zh-CN: 向上滚动颜色
-      $description: Hexadecimal RGB color used by the upward-moving scroll arrow.
-      $description:zh-CN: 向上移动的滚轮箭头使用的十六进制 RGB 颜色。
+      $description: Hexadecimal RGB color used for wheel-up input, including the left-pointing arrow shown while Shift is held.
+      $description:zh-CN: 向上滚动输入对应的十六进制 RGB 颜色；按住 Shift 时该颜色用于指向左侧的箭头。
     - wheel_down_color: "#A78BFA"
       $name: Scroll-down color
       $name:zh-CN: 向下滚动颜色
-      $description: Hexadecimal RGB color used by the downward-moving scroll arrow.
-      $description:zh-CN: 向下移动的滚轮箭头使用的十六进制 RGB 颜色。
+      $description: Hexadecimal RGB color used for wheel-down input, including the right-pointing arrow shown while Shift is held.
+      $description:zh-CN: 向下滚动输入对应的十六进制 RGB 颜色；按住 Shift 时该颜色用于指向右侧的箭头。
     - wheel_arrow_size: 18
       $name: Scroll-arrow size
       $name:zh-CN: 滚轮箭头大小
@@ -579,6 +579,8 @@ enum class RippleKind : uint8_t {
     Click,
     WheelUp,
     WheelDown,
+    WheelLeft,
+    WheelRight,
 };
 
 struct RippleEffect {
@@ -2262,26 +2264,37 @@ bool RenderOverlay(HWND hwnd, LONGLONG nowQpc) {
         if (alpha < 0.005f) continue;
 
         if (ripple.kind != RippleKind::Click) {
-            // Scroll arrows move in the same direction as the requested wheel action.
-            const float direction = ripple.kind == RippleKind::WheelUp ? -1.0f : 1.0f;
+            const float directionX = ripple.kind == RippleKind::WheelLeft
+                ? -1.0f
+                : ripple.kind == RippleKind::WheelRight ? 1.0f : 0.0f;
+            const float directionY = ripple.kind == RippleKind::WheelUp
+                ? -1.0f
+                : ripple.kind == RippleKind::WheelDown ? 1.0f : 0.0f;
+            const float arrowCenterX = static_cast<float>(ripple.center.x)
+                + directionX * scaledWheelArrowDistance * (easedProgress - 0.5f);
             const float arrowCenterY = static_cast<float>(ripple.center.y)
-                + direction * scaledWheelArrowDistance * (easedProgress - 0.5f);
+                + directionY * scaledWheelArrowDistance * (easedProgress - 0.5f);
             const float arrowSize = scaledWheelArrowSize * (0.88f + 0.12f * remaining);
             const D2D1_POINT_2F arrowTip = D2D1::Point2F(
-                static_cast<float>(ripple.center.x),
-                arrowCenterY + direction * arrowSize * 0.5f);
+                arrowCenterX + directionX * arrowSize * 0.5f,
+                arrowCenterY + directionY * arrowSize * 0.5f);
+            const float perpendicularX = -directionY;
+            const float perpendicularY = directionX;
+            const D2D1_POINT_2F arrowBase = D2D1::Point2F(
+                arrowTip.x - directionX * arrowSize * 0.29f,
+                arrowTip.y - directionY * arrowSize * 0.29f);
             const D2D1_POINT_2F arrowLeft = D2D1::Point2F(
-                arrowTip.x - arrowSize * 0.31f,
-                arrowTip.y - direction * arrowSize * 0.29f);
+                arrowBase.x - perpendicularX * arrowSize * 0.31f,
+                arrowBase.y - perpendicularY * arrowSize * 0.31f);
             const D2D1_POINT_2F arrowRight = D2D1::Point2F(
-                arrowTip.x + arrowSize * 0.31f,
-                arrowTip.y - direction * arrowSize * 0.29f);
+                arrowBase.x + perpendicularX * arrowSize * 0.31f,
+                arrowBase.y + perpendicularY * arrowSize * 0.31f);
             const D2D1_POINT_2F shaftStart = D2D1::Point2F(
-                arrowTip.x,
-                arrowCenterY - direction * arrowSize * 0.42f);
+                arrowCenterX - directionX * arrowSize * 0.42f,
+                arrowCenterY - directionY * arrowSize * 0.42f);
             const D2D1_POINT_2F shaftEnd = D2D1::Point2F(
-                arrowTip.x,
-                arrowCenterY + direction * arrowSize * 0.20f);
+                arrowCenterX + directionX * arrowSize * 0.20f,
+                arrowCenterY + directionY * arrowSize * 0.20f);
 
             g_rippleBrush->SetColor(ToColorF(ripple.color, alpha));
             g_renderTarget->DrawLine(
@@ -2470,9 +2483,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
                     if (wheelEvent) {
                         const SHORT wheelDelta = static_cast<SHORT>(mouse.usButtonData);
                         if (wheelDelta != 0) {
-                            const RippleKind kind = wheelDelta > 0
-                                ? RippleKind::WheelUp
-                                : RippleKind::WheelDown;
+                            const bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                            const RippleKind kind = shiftPressed
+                                ? (wheelDelta > 0
+                                    ? RippleKind::WheelLeft
+                                    : RippleKind::WheelRight)
+                                : (wheelDelta > 0
+                                    ? RippleKind::WheelUp
+                                    : RippleKind::WheelDown);
                             AddRipple(
                                 interactionPoint,
                                 wheelDelta > 0 ? g_wheelUpRGB : g_wheelDownRGB,
