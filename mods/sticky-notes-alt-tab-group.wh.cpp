@@ -4,7 +4,7 @@
 // @name:ko         스티커 메모 Alt+Tab 하나로 묶기
 // @description     Group Microsoft Sticky Notes into one Alt+Tab entry, bring open notes forward together, and use compact previews.
 // @description:ko  스티커 메모를 Alt+Tab 한 항목으로 묶고, 전환하면 열린 메모를 함께 표시하며 미리보기를 작게 만듭니다.
-// @version         1.1.0
+// @version         1.1.1
 // @author          Choihyunseok1
 // @github          https://github.com/Choihyunseok1
 // @license         MIT
@@ -158,13 +158,15 @@ HRESULT WINAPI SourceSizeHook(void* self, PreviewSize* size) {
     if (FAILED(sourceBounds(self, &bounds))) return hr;
     struct Match { PreviewBounds bounds; bool notes = false; } match{bounds};
     EnumWindows([](HWND window, LPARAM data) -> BOOL {
-        if (!IsWindowVisible(window) || !Notes(window)) return TRUE;
+        if (!IsWindowVisible(window)) return TRUE;
         auto& m = *reinterpret_cast<Match*>(data);
         RECT r{};
         if (FAILED(DwmGetWindowAttribute(window, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) return TRUE;
         auto closeEnough = [](float a, float b) { return a - b < 2 && b - a < 2; };
         if (closeEnough(m.bounds.x, r.left) && closeEnough(m.bounds.y, r.top) &&
             closeEnough(m.bounds.width, r.right - r.left) && closeEnough(m.bounds.height, r.bottom - r.top)) {
+            // Only inspect the process after the cheap bounds match.
+            if (!Notes(window)) return TRUE;
             m.notes = true; return FALSE;
         }
         return TRUE;
