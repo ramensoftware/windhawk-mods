@@ -2,7 +2,7 @@
 // @id              tray-agenda
 // @name            Tray Agenda
 // @description     Calendar agenda widget in the Windows 11 tray (Google Calendar accounts and ICS feeds) with native reminder notifications.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Rubens Nascimento
 // @github          https://github.com/chambber
 // @homepage        https://github.com/chambber/tray-agenda
@@ -108,6 +108,13 @@ other setting, so treat them as secrets.
   is shown on the primary taskbar only.
 - Taskbar XAML-root and tray insertion strategy is adapted from Salyts' MIT-licensed
   Taskbar Fluent Media Player Windhawk mod.
+
+## Contributing and issues
+
+Found a bug, have an idea, or want to contribute? Open an issue or a pull request on
+[GitHub](https://github.com/chambber/tray-agenda). When reporting a problem, please include your
+Windows build, the Windhawk version and the mod log output (with any account details removed).
+You can also find me at [github.com/chambber](https://github.com/chambber).
 */
 // ==/WindhawkModReadme==
 
@@ -556,15 +563,16 @@ SolidColorBrush MakeBrush(winrt::Windows::UI::Color color) {
 }
 
 winrt::Windows::UI::Color ThemeForegroundColor() {
-    try {
-        // The taskbar follows the Windows mode, while UISettings reflects the app mode, so ask
-        // the widget's own XAML tree when it exists.
-        if (g_agendaGrid) {
-            return g_agendaGrid.ActualTheme() == ElementTheme::Dark
-                       ? winrt::Windows::UI::Color{255, 255, 255, 255}
-                       : winrt::Windows::UI::Color{255, 0, 0, 0};
-        }
-    } catch (...) {
+    // The taskbar follows the Windows mode (SystemUsesLightTheme), which is independent from
+    // the app mode that UISettings and the XAML ActualTheme reflect.
+    DWORD usesLight = 0;
+    DWORD size = sizeof(usesLight);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &usesLight,
+                     &size) == ERROR_SUCCESS) {
+        return usesLight ? winrt::Windows::UI::Color{255, 0, 0, 0}
+                         : winrt::Windows::UI::Color{255, 255, 255, 255};
     }
     try {
         winrt::Windows::UI::ViewManagement::UISettings uiSettings;
