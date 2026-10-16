@@ -22,7 +22,8 @@ switching windows with **Alt+Tab**.
 - The cursor is moved once the **Alt** key is released, after the window
   switcher closes.
 - Ignores system overlays (desktop, taskbar, the Alt+Tab switcher).
-- Retries briefly while the target window settles.
+- Moves the cursor as soon as the selected window receives focus
+  (`EVENT_SYSTEM_FOREGROUND`), instead of polling.
 - Works with multiple monitors: the cursor is centered on the monitor where
   the focused window is.
 
@@ -33,18 +34,12 @@ The mod runs as a tool mod in a dedicated process, so it does not inject into
 
 // ==WindhawkModSettings==
 /*
-- delayMs: 80
-  $name: Delay after Alt release (ms)
-  $description: How long to wait after releasing Alt before moving the cursor.
 - onlyOnWindowChange: false
   $name: Only move when the window changes
   $description: If enabled, only move when the focused window actually changes.
-- retryIntervalMs: 50
-  $name: Retry interval (ms)
-  $description: Interval between attempts while the target window is not ready yet.
-- retryCount: 12
-  $name: Retry count
-  $description: Maximum number of attempts to move the cursor.
+- timeoutMs: 2000
+  $name: Fallback timeout (ms)
+  $description: How long to keep waiting for the selected window to be focused before giving up.
 */
 // ==/WindhawkModSettings==
 
@@ -56,35 +51,28 @@ The mod runs as a tool mod in a dedicated process, so it does not inject into
 
 #define WM_ALT_TAB_QUIT   (WM_APP + 1)
 #define WM_ALT_TAB_RELOAD (WM_APP + 2)
-#define TIMER_MOVE 1
+#define TIMER_WAIT 1
 
 static HHOOK g_kbHook = nullptr;
+static HWINEVENTHOOK g_weHook = nullptr;
 static std::atomic<HWND> g_hwnd{nullptr};
 static HANDLE g_thread = nullptr;
 static HANDLE g_readyEvent = nullptr;
 static bool g_initOk = false;
 
 static bool g_armed = false;
+static bool g_waiting = false;
 static HWND g_fgAtArm = nullptr;
-static int g_retries = 0;
 
-static int g_delayMs = 80;
 static int g_onlyOnWindowChange = 0;
-static int g_retryIntervalMs = 50;
-static int g_retryCount = 12;
+static int g_timeoutMs = 2000;
 
 static void LoadSettings() {
-    g_delayMs = Wh_GetIntSetting(L"delayMs");
     g_onlyOnWindowChange = Wh_GetIntSetting(L"onlyOnWindowChange") ? 1 : 0;
-    g_retryIntervalMs = Wh_GetIntSetting(L"retryIntervalMs");
-    g_retryCount = Wh_GetIntSetting(L"retryCount");
+    g_timeoutMs = Wh_GetIntSetting(L"timeoutMs");
 
-    if (g_delayMs < 0) g_delayMs = 0;
-    if (g_delayMs > 2000) g_delayMs = 2000;
-    if (g_retryIntervalMs < 10) g_retryIntervalMs = 10;
-    if (g_retryIntervalMs > 500) g_retryIntervalMs = 500;
-    if (g_retryCount < 0) g_retryCount = 0;
-    if (g_retryCount > 100) g_retryCount = 100;
+    if (g_timeoutMs < 100) g_timeoutMs = 100;
+    if (g_timeoutMs > 10000) g_timeoutMs = 10000;
 }
 
 // System overlays that should never receive the cursor.
@@ -119,14 +107,13 @@ static bool GetVisibleRect(HWND hwnd, RECT* rc) {
     return GetWindowRect(hwnd, rc) != FALSE;
 }
 
-static bool TryMoveToCenter() {
-    HWND fg = GetForegroundWindow();
+static bool MoveToWindow(HWND fg) {
     if (!fg || IsOverlay(fg))
         return false;
     if (IsIconic(fg))
         return false;
 
-    // Only relevant if the window changed; otherwise keep retrying.
+    // Only relevant if the window changed.
     if (g_onlyOnWindowChange && fg == g_fgAtArm)
         return false;
 
@@ -143,16 +130,31 @@ static bool TryMoveToCenter() {
     return true;
 }
 
+// The selected window becomes foreground once the switcher closes. Move the
+// cursor only then, so the window being left is never centered by mistake.
+static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG,
+                                  DWORD, DWORD) {
+    if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW)
+        return;
+    if (!g_waiting || IsOverlay(hwnd))
+        return;
+
+    g_waiting = false;
+    HWND wnd = g_hwnd.load();
+    if (wnd)
+        KillTimer(wnd, TIMER_WAIT);
+    MoveToWindow(hwnd);
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_TIMER:
-        if (wParam == TIMER_MOVE) {
-            KillTimer(hwnd, TIMER_MOVE);
-            if (TryMoveToCenter() || g_retries >= g_retryCount) {
-                g_retries = 0;
-            } else {
-                g_retries++;
-                SetTimer(hwnd, TIMER_MOVE, (UINT)g_retryIntervalMs, nullptr);
+        if (wParam == TIMER_WAIT) {
+            KillTimer(hwnd, TIMER_WAIT);
+            if (g_waiting) {
+                // No foreground event arrived; fall back to the current window.
+                g_waiting = false;
+                MoveToWindow(GetForegroundWindow());
             }
         }
         return 0;
@@ -176,20 +178,24 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
 
         if (isDown && kbd->vkCode == VK_TAB && (kbd->flags & LLKHF_ALTDOWN)) {
-            // Alt+Tab: arm and remember the originating window.
+            // Alt+Tab: arm, cancel any pending move, remember the current window.
             g_armed = true;
+            g_waiting = false;
             g_fgAtArm = GetForegroundWindow();
+            HWND hwnd = g_hwnd.load();
+            if (hwnd)
+                KillTimer(hwnd, TIMER_WAIT);
         } else if (isDown && kbd->vkCode == VK_ESCAPE) {
             g_armed = false;
         } else if (isUp && g_armed &&
                    (kbd->vkCode == VK_MENU || kbd->vkCode == VK_LMENU ||
                     kbd->vkCode == VK_RMENU)) {
-            // Alt released: schedule the move.
+            // Alt released: wait for the selected window to get focus.
             g_armed = false;
-            g_retries = 0;
+            g_waiting = true;
             HWND hwnd = g_hwnd.load();
             if (hwnd)
-                SetTimer(hwnd, TIMER_MOVE, (UINT)g_delayMs, nullptr);
+                SetTimer(hwnd, TIMER_WAIT, (UINT)g_timeoutMs, nullptr);
         }
     }
     return CallNextHookEx(g_kbHook, nCode, wParam, lParam);
@@ -237,6 +243,19 @@ static DWORD WINAPI ThreadProc(LPVOID) {
         return 1;
     }
 
+    g_weHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, wc.hInstance,
+                               WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!g_weHook) {
+        Wh_Log(L"SetWinEventHook failed: %u", GetLastError());
+        UnhookWindowsHookEx(g_kbHook);
+        g_kbHook = nullptr;
+        DestroyWindow(hwnd);
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        g_initOk = false;
+        SetEvent(g_readyEvent);
+        return 1;
+    }
+
     g_initOk = true;
     SetEvent(g_readyEvent);
 
@@ -246,6 +265,10 @@ static DWORD WINAPI ThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    if (g_weHook) {
+        UnhookWinEvent(g_weHook);
+        g_weHook = nullptr;
+    }
     if (g_kbHook) {
         UnhookWindowsHookEx(g_kbHook);
         g_kbHook = nullptr;
