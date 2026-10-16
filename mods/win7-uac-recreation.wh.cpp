@@ -95,6 +95,7 @@ This modification settings are accessible through the Windhawk interface and are
 
 - The banner colour is determined by the native publisher row: blue exclusively in the presence of a verified publisher, amber in every other case.
 - The displayed shield conforms to the selected theme and the native verdict. Manual selections may exclusively render the prompt more cautious, never more trusted.
+- The signature of the elevated file is read from its embedded Authenticode signature and, when the file has none of its own, from the security catalog of the system: a component of Windows is catalog-signed, and the catalog is verified with the trust provider of the system, exactly like any other signed object. The verdict of the operating system is never contradicted by the mod's own check.
 - In the presence of an elevation request relating to Regedit, the program name row is normalised to the localised name of the Registry Editor. Verified publisher status is attributed exclusively following confirmation, by the operating system, of the signature of the system file. A native row explicitly relating to an unknown or unverified publisher is never overridden.
 - Diagnostic files may contain prompt text and command-line details. Their activation is recommended exclusively when necessary.
 
@@ -1469,6 +1470,7 @@ struct PromptInfo {
     bool credentialVariant = false;
     bool systemFileConfirmed = false;        // the prompt itself showed %SystemRoot%\regedit.exe; signature is still checked
     bool publisherVerifiedByWindows = false; // native verified row, or the signature-backed Regedit exception
+    bool nativeWindowsComponent = false;     // the native row says "verified" and the publisher is "Microsoft Windows"
     bool publisherRowLabelSeen = false;      // a labelled publisher row was present
     bool publisherRowValueReadable = false;   // its value was actually mapped, not fallback text
     bool publisherRowLabelRejected = false;  // its label was rejected by LabelSaysVerified
@@ -2305,18 +2307,306 @@ static std::wstring TrustedSignerNameFromState(HMODULE wintrust, HANDLE state) {
     return result;
 }
 
-static int VerifySignatureState(const std::wstring& path, std::wstring* verifiedSignerName) {
-    if (verifiedSignerName) verifiedSignerName->clear();
-    if (path.empty()) return SigUnknown;
-    static WinVerifyTrustFn fn = nullptr;
-    static HMODULE wintrust = nullptr;
+// wintrust.dll, loaded on demand: the mod does not link against it, and the library is only
+// needed when a signature is really read.
+static HMODULE WinTrustDll() {
+    static HMODULE dll = nullptr;
     static bool tried = false;
     if (!tried) {
         tried = true;
-        wintrust = LoadLibraryExW(L"wintrust.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (wintrust) fn = (WinVerifyTrustFn)GetProcAddress(wintrust, "WinVerifyTrust");
+        dll = LoadLibraryExW(L"wintrust.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    return dll;
+}
+
+// WinVerifyTrust, resolved once and kept: the answer only decides which shield the banner
+// shows, and the prompt must not wait for a library to be loaded twice.
+static WinVerifyTrustFn WinVerifyTrustApi() {
+    static WinVerifyTrustFn fn = nullptr;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        HMODULE dll = WinTrustDll();
+        if (dll) fn = (WinVerifyTrustFn)GetProcAddress(dll, "WinVerifyTrust");
         if (!fn) Dbg(L"signature: wintrust.dll is not usable - the state stays unknown");
     }
+    return fn;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The security catalog: where the signature of a component of Windows usually is.
+//
+// Most of the binaries in %SystemRoot%\System32 (notepad.exe, regedit.exe, taskmgr.exe and
+// hundreds of others) carry no embedded Authenticode signature: what makes them signed is their
+// hash, listed in a signed catalog file of the system (C:\Windows\System32\CatRoot).
+// WinVerifyTrust reads the embedded signature only, so for those files it answers
+// TRUST_E_NOSIGNATURE - "no signature" - even though Windows considers the file signed and
+// shows "Verified publisher: Microsoft Windows" for it.
+//
+// The catalog administrator (the documented CryptCATAdmin* family of wintrust.dll) answers the
+// real question - "is this file a member of a catalog?" - and the member is then verified with
+// WinVerifyTrust exactly like any other signed object (dwUnionChoice = WTD_CHOICE_CATALOG), so
+// a file that is not really listed in a trusted catalog cannot pass.
+//
+// Everything here is read-only: the file is opened for reading, the catalogs are read from the
+// catalog database of the system, and the answer only decides which shield the banner shows.
+// Nothing approves, refuses or changes anything.
+// ---------------------------------------------------------------------------------------------
+
+// The handles of the catalog administrator. The SDK headers do not declare them in every
+// version, and both of them are pointers in every version: they are spelled out here so that
+// the mod does not depend on the headers of the machine it happens to be built on.
+typedef HANDLE CatAdminHandle;   // HCATADMIN
+typedef HANDLE CatInfoHandle;    // HCATINFO
+
+// The layout of CATALOG_INFO. The only field this mod reads is wszCatalogFile, and that one is
+// a wide string in every version of the structure; the three members that follow it belong to
+// the member information, which is not asked for here - only the basic information of the
+// catalog is.
+struct CatalogInfoLocal {
+    DWORD cbStruct;
+    WCHAR wszCatalogFile[MAX_PATH];
+    void* szMemberTag;
+    void* szMemberFilePath;
+    void* szMemberFile;
+    FILETIME ftMemberFile;
+};
+
+// The layout of WINTRUST_CATALOG_INFO. The hCatAdmin member is the one Windows 8 and later
+// need for a hash that is not a SHA-1 one; the structure is written by this mod and read by
+// the trust provider of the system, which is told how much of it there is through cbStruct.
+struct CatalogTrustInfoLocal {
+    DWORD cbStruct;
+    DWORD dwCatalogVersion;
+    LPCWSTR pcwszCatalogFilePath;
+    LPCWSTR pcwszMemberTag;
+    LPCWSTR pcwszMemberFilePath;
+    HANDLE hMemberFile;
+    BYTE* pbCalculatedFileHash;
+    DWORD cbCalculatedFileHash;
+    void* pcCatalogContext;
+    HANDLE hCatAdmin;
+};
+
+typedef BOOL (WINAPI* CatAcquireContextFn)(CatAdminHandle*, const GUID*, DWORD);
+typedef BOOL (WINAPI* CatAcquireContext2Fn)(CatAdminHandle*, const GUID*, LPCWSTR, void*, DWORD);
+typedef BOOL (WINAPI* CatCalcHashFn)(HANDLE, DWORD*, BYTE*, DWORD);
+typedef BOOL (WINAPI* CatCalcHash2Fn)(CatAdminHandle, HANDLE, DWORD*, BYTE*, DWORD);
+typedef CatInfoHandle (WINAPI* CatEnumCatalogsFn)(CatAdminHandle, BYTE*, DWORD, DWORD,
+                                                  CatInfoHandle*);
+typedef BOOL (WINAPI* CatCatalogInfoFn)(CatInfoHandle, CatalogInfoLocal*, DWORD);
+typedef BOOL (WINAPI* CatReleaseCatalogFn)(CatAdminHandle, CatInfoHandle, DWORD);
+typedef BOOL (WINAPI* CatReleaseContextFn)(CatAdminHandle, DWORD);
+
+// The catalog administrator of wintrust.dll, resolved once and never linked against. A build of
+// Windows that does not have one of these functions simply does not get that particular way of
+// asking: the file is then in no catalog as far as the mod is concerned, which is exactly what
+// the mod believed before this existed.
+struct CatalogApi {
+    HMODULE dll = nullptr;
+    CatAcquireContextFn acquire = nullptr;
+    CatAcquireContext2Fn acquire2 = nullptr;
+    CatCalcHashFn calcHash = nullptr;
+    CatCalcHash2Fn calcHash2 = nullptr;
+    CatEnumCatalogsFn enumCatalogs = nullptr;
+    CatCatalogInfoFn catalogInfo = nullptr;
+    CatReleaseCatalogFn releaseCatalog = nullptr;
+    CatReleaseContextFn releaseContext = nullptr;
+    bool usable = false;
+};
+
+static const CatalogApi& CatalogApis() {
+    static CatalogApi api = []() -> CatalogApi {
+        CatalogApi a;
+        a.dll = WinTrustDll();
+        if (!a.dll) return a;
+        a.acquire = (CatAcquireContextFn)GetProcAddress(a.dll, "CryptCATAdminAcquireContext");
+        a.acquire2 = (CatAcquireContext2Fn)GetProcAddress(a.dll, "CryptCATAdminAcquireContext2");
+        a.calcHash = (CatCalcHashFn)GetProcAddress(a.dll, "CryptCATAdminCalcHashFromFileHandle");
+        a.calcHash2 = (CatCalcHash2Fn)GetProcAddress(a.dll, "CryptCATAdminCalcHashFromFileHandle2");
+        a.enumCatalogs = (CatEnumCatalogsFn)GetProcAddress(a.dll, "CryptCATAdminEnumCatalogFromHash");
+        a.catalogInfo = (CatCatalogInfoFn)GetProcAddress(a.dll, "CryptCATCatalogInfoFromContext");
+        a.releaseCatalog =
+            (CatReleaseCatalogFn)GetProcAddress(a.dll, "CryptCATAdminReleaseCatalogContext");
+        a.releaseContext = (CatReleaseContextFn)GetProcAddress(a.dll, "CryptCATAdminReleaseContext");
+        a.usable = a.acquire && a.calcHash && a.enumCatalogs && a.catalogInfo &&
+                   a.releaseCatalog && a.releaseContext;
+        if (!a.usable)
+            Dbg(L"catalog: the catalog administrator of this build of Windows is not complete - "
+                L"the catalogs of the system cannot be read");
+        return a;
+    }();
+    return api;
+}
+
+// The tag of a catalog member is the hash of the file, written as hexadecimal.
+static std::wstring CatalogMemberTag(const BYTE* hash, DWORD len) {
+    static const WCHAR kHex[] = L"0123456789ABCDEF";
+    std::wstring tag;
+    tag.reserve((size_t)len * 2);
+    for (DWORD i = 0; i < len; i++) {
+        tag.push_back(kHex[(hash[i] >> 4) & 0x0F]);
+        tag.push_back(kHex[hash[i] & 0x0F]);
+    }
+    return tag;
+}
+
+// The membership of the file in the catalogs of the system, with a hash that has already been
+// computed. The catalog that lists it is then verified by the trust provider of the system,
+// exactly like any other signed object: a catalog that is not trusted, or that does not really
+// list the file, does not pass.
+static int VerifyCatalogMember(const std::wstring& path, const std::wstring& memberTag,
+                                const BYTE* hash, DWORD hashLen, CatAdminHandle admin,
+                                bool handOverTheAdminContext, std::wstring* catalogFile) {
+    const CatalogApi& api = CatalogApis();
+    if (catalogFile) catalogFile->clear();
+    WinVerifyTrustFn verify = WinVerifyTrustApi();
+    if (!verify || !api.enumCatalogs || !api.catalogInfo || !admin) return SigUnknown;
+
+    int result = SigUnknown;
+    CatInfoHandle previous = nullptr;
+    bool held = false;               // the handle in `previous` is still ours to release
+    // A bounded number of catalogs: the first one that verifies is the answer, and a file that
+    // is in no catalog at all is found in none of them.
+    for (int attempt = 0; attempt < 8; attempt++) {
+        CatInfoHandle info = api.enumCatalogs(admin, const_cast<BYTE*>(hash), hashLen, 0,
+                                              held ? &previous : nullptr);
+        if (!info) {
+            // The enumeration is over: the catalog administrator releases the handle of the
+            // previous catalog by itself, and releasing it here as well would release it twice.
+            held = false;
+            break;
+        }
+        previous = info;
+        held = true;
+
+        CatalogInfoLocal infoStruct = {};
+        infoStruct.cbStruct = sizeof(infoStruct);
+        if (!api.catalogInfo(info, &infoStruct, 0)) continue;
+        std::wstring catalog = infoStruct.wszCatalogFile;
+        if (catalog.empty()) continue;
+        if (GetFileAttributesW(catalog.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+
+        CatalogTrustInfoLocal catalogInfo = {};
+        catalogInfo.cbStruct = sizeof(catalogInfo);
+        catalogInfo.pcwszCatalogFilePath = catalog.c_str();
+        catalogInfo.pcwszMemberTag = memberTag.c_str();
+        catalogInfo.pcwszMemberFilePath = path.c_str();
+        // The context has to be handed over whenever the hash is not a SHA-1 one: Windows 8 and
+        // later need it to know which catalog database the member comes from.
+        catalogInfo.hCatAdmin = handOverTheAdminContext ? (HANDLE)admin : nullptr;
+
+        WINTRUST_DATA data = {};
+        data.cbStruct = sizeof(data);
+        data.dwUIChoice = WTD_UI_NONE;                 // never a dialog of its own
+        data.fdwRevocationChecks = WTD_REVOKE_NONE;    // no network round trip
+        data.dwUnionChoice = WTD_CHOICE_CATALOG;
+        data.pCatalog = reinterpret_cast<WINTRUST_CATALOG_INFO*>(&catalogInfo);
+        data.dwStateAction = WTD_STATEACTION_VERIFY;
+        data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL;
+
+        GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+        LONG status = verify(nullptr, &action, &data);
+        data.dwStateAction = WTD_STATEACTION_CLOSE;
+        verify(nullptr, &action, &data);
+
+        if (status == ERROR_SUCCESS) {
+            result = SigTrusted;
+            if (catalogFile) *catalogFile = catalog;
+            break;
+        }
+        // The file is listed in a catalog, but that catalog does not verify: the file is not
+        // trusted, and saying so is more honest than saying "no signature".
+        result = SigInvalid;
+        if (catalogFile) *catalogFile = catalog;
+    }
+    // The handle of the catalog that was still open when the loop ended: only in that case it
+    // has not been released by the enumeration itself.
+    if (held && previous && api.releaseCatalog) api.releaseCatalog(admin, previous, 0);
+    return result;
+}
+
+// The signature of the file in the security catalog of the system. Two hashes are tried, in
+// this order: the SHA-256 one that Windows 8 and later use for the files of the system, and
+// the SHA-1 one that the older catalogs carry. The answer is SigTrusted, SigInvalid or
+// SigUnknown - never "unsigned": a file that is in no catalog at all is not a file of the
+// system, and the embedded signature is the one that decides about it.
+static int VerifyCatalogSignature(const std::wstring& path, std::wstring* catalogFile) {
+    if (catalogFile) catalogFile->clear();
+    if (path.empty()) return SigUnknown;
+    const CatalogApi& api = CatalogApis();
+    if (!api.usable) return SigUnknown;
+
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        Dbg(L"catalog: the file could not be opened for reading: %u", GetLastError());
+        return SigUnknown;
+    }
+
+    // The catalog database of the system: the one the operating system uses for its own
+    // components. DRIVER_ACTION_VERIFY is the documented identifier of that database.
+    static const GUID kSystemCatalogs = {
+        0xF750E6C3, 0x38EE, 0x11D1, {0x85, 0xE5, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE}};
+
+    int result = SigUnknown;
+    std::wstring foundCatalog;
+
+    // The modern way: the context chooses the algorithm, and the hash of the file is computed
+    // with it. Windows 8 and later need that context for the verification itself.
+    if (api.acquire2 && api.calcHash2) {
+        CatAdminHandle admin = nullptr;
+        if (api.acquire2(&admin, &kSystemCatalogs, L"SHA256", nullptr, 0) && admin) {
+            DWORD hashLen = 0;
+            if (api.calcHash2(admin, file, &hashLen, nullptr, 0) && hashLen && hashLen <= 64) {
+                std::vector<BYTE> hash(hashLen);
+                if (api.calcHash2(admin, file, &hashLen, hash.data(), 0)) {
+                    int r = VerifyCatalogMember(path, CatalogMemberTag(hash.data(), hashLen),
+                                                hash.data(), hashLen, admin, true, &foundCatalog);
+                    if (r == SigTrusted) result = SigTrusted;
+                    else if (r == SigInvalid && result != SigTrusted) result = SigInvalid;
+                }
+            }
+            if (api.releaseContext) api.releaseContext(admin, 0);
+        }
+    }
+
+    // The older way: the SHA-1 hash of the file, and the context of the same database. The
+    // systems that still carry the older catalogs answer this one.
+    if (result != SigTrusted && api.acquire && api.calcHash) {
+        CatAdminHandle admin = nullptr;
+        if (api.acquire(&admin, &kSystemCatalogs, 0) && admin) {
+            DWORD hashLen = 0;
+            if (api.calcHash(file, &hashLen, nullptr, 0) && hashLen && hashLen <= 64) {
+                std::vector<BYTE> hash(hashLen);
+                if (api.calcHash(file, &hashLen, hash.data(), 0)) {
+                    int r = VerifyCatalogMember(path, CatalogMemberTag(hash.data(), hashLen),
+                                                hash.data(), hashLen, admin, false, &foundCatalog);
+                    if (r == SigTrusted) result = SigTrusted;
+                    else if (r == SigInvalid && result != SigTrusted) result = SigInvalid;
+                }
+            }
+            if (api.releaseContext) api.releaseContext(admin, 0);
+        }
+    }
+
+    CloseHandle(file);
+    if (result == SigTrusted || result == SigInvalid) {
+        if (catalogFile) *catalogFile = foundCatalog;
+        Dbg(L"catalog: the file is listed in '%s' (%s)", foundCatalog.c_str(),
+            result == SigTrusted ? L"the catalog is trusted" : L"the catalog is not trusted");
+    } else {
+        Dbg(L"catalog: the file is in no catalog of the system");
+    }
+    return result;
+}
+
+static int VerifySignatureState(const std::wstring& path, std::wstring* verifiedSignerName,
+                                 bool askTheCatalog) {
+    if (verifiedSignerName) verifiedSignerName->clear();
+    if (path.empty()) return SigUnknown;
+    HMODULE wintrust = WinTrustDll();
+    WinVerifyTrustFn fn = WinVerifyTrustApi();
     if (!fn) return SigUnknown;
 
     WINTRUST_FILE_INFO file = {};
@@ -2356,6 +2646,23 @@ static int VerifySignatureState(const std::wstring& path, std::wstring* verified
     DWORD code = (DWORD)status;
     if (code == (DWORD)TRUST_E_NOSIGNATURE) {
         Dbg(L"signature: WinVerifyTrust reports no signature (0x%08X)", (unsigned)code);
+        // A component of Windows carries its signature in the security catalog of the system,
+        // and WinVerifyTrust does not read the catalogs: the catalog is asked instead. The
+        // question is asked only when it can change the answer, that is when the native prompt
+        // says the publisher is verified and the file has no signature of its own.
+        if (askTheCatalog) {
+            std::wstring catalog;
+            int catalogState = VerifyCatalogSignature(path, &catalog);
+            if (catalogState == SigTrusted) {
+                Dbg(L"signature: the file is a member of the signed catalog '%s'", catalog.c_str());
+                return SigTrusted;
+            }
+            if (catalogState == SigInvalid) {
+                Dbg(L"signature: the file is listed in '%s', but that catalog is not trusted",
+                    catalog.c_str());
+                return SigInvalid;
+            }
+        }
         return SigUnsigned;
     }
     if (code == (DWORD)TRUST_E_SUBJECT_FORM_UNKNOWN ||
@@ -2726,6 +3033,12 @@ static void FinishHarvest(PromptInfo& info) {
     info.sawUnknownAuthor = TextHasAnyWord(info.publisherText, kAuthorWords,
                                            ARRAYSIZE(kAuthorWords));
     bool publisherKnown = info.publisherVerifiedByWindows && !info.sawUnknownAuthor && !IsUnknownPublisherValue(info.publisherText);
+
+    // The native row says that the publisher is verified and names "Microsoft Windows": this is
+    // a component of Windows, and Windows 7 gives it the full shield. The verdict is the
+    // operating system's own, and the mod's own signature check - which does not read the
+    // security catalogs of the system - must never contradict it.
+    info.nativeWindowsComponent = publisherKnown && IsWindowsPublisherText(info.publisherText);
 
     // Blue only when Windows' own publisher row says "verified"; everything else is amber.
     if (info.yes && !info.yesEnabled) {
@@ -6009,8 +6322,14 @@ static DWORD WINAPI UiSessionRunInner() {
     // systemFileConfirmed means only that the prompt named the system path. It never bypasses
     // WinVerifyTrust: even this tightly gated compatibility exception must earn its verified
     // presentation from the file's actual signature.
+    // The catalog of the system is asked only when the two verdicts can disagree: when the
+    // native prompt says that the publisher is verified (or when the Registry Editor
+    // compatibility path is active) and the file carries no embedded signature of its own.
+    // That is exactly the case of a component of Windows, whose signature lives in the catalog.
     if (!info.appPath.empty())
-        info.signatureState = VerifySignatureState(info.appPath, nullptr);
+        info.signatureState = VerifySignatureState(info.appPath, nullptr,
+                                                   info.publisherVerifiedByWindows ||
+                                                       info.regeditOverrideApplied);
 
     if (info.regeditOverrideApplied) {
         bool trusted = info.signatureState == SigTrusted;
@@ -6029,10 +6348,23 @@ static DWORD WINAPI UiSessionRunInner() {
     }
 
     {
+        // The mod's own signature check can only make the prompt *more* cautious than the
+        // operating system, never less: a component of Windows carries its signature in the
+        // security catalog of the system, which WinVerifyTrust does not read, so the check
+        // alone would answer "no signature" for notepad.exe and would take the full shield
+        // away from every component of Windows. When the native row says "Verified publisher:
+        // Microsoft Windows", the verdict of the operating system is the one that counts.
+        bool signatureRefuted = (info.signatureState == SigUnsigned) ||
+                                (info.signatureState == SigInvalid);
+        bool nativeVerdictKept = signatureRefuted && info.nativeWindowsComponent;
+        if (nativeVerdictKept)
+            Log(L"the native row says a verified 'Microsoft Windows' publisher: the mod's own "
+                L"signature check does not read the security catalog of the system, and the "
+                L"verdict of the operating system is the one that counts");
+
         bool unconfirmed = (info.bannerState == 2) ||
                            (!info.publisherVerifiedByWindows) ||
-                           (info.signatureState == SigUnsigned) ||
-                           info.signatureState == SigInvalid ||
+                           (signatureRefuted && !info.nativeWindowsComponent) ||
                            (info.regeditOverrideApplied && info.signatureState != SigTrusted);
         int variant = 0;
         if (unconfirmed)
