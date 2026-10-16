@@ -873,14 +873,15 @@ inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)())
     if (!WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks)))
         return false;
     // Secondary symbols are optional. Never fail the working primary clock.
-    WindhawkUtils::SYMBOL_HOOK secondaryHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CSecondaryTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
          &CSecondaryTaskBand_GetTaskbarHost_Original},
     };
     bool secondaryOk =
-        WindhawkUtils::HookSymbols(taskbar, secondaryHooks, ARRAYSIZE(secondaryHooks));
+        WindhawkUtils::HookSymbols(taskbar, taskbarDllSecondaryHooks,
+                           ARRAYSIZE(taskbarDllSecondaryHooks));
     Wh_Log(L"[Mawaqit][Monitor][Probe] secondary-symbols status=%s vtable=%p host=%p",
            secondaryOk ? L"ok" : L"missing", CSecondaryTaskBand_ITaskListWndSite_vftable,
            (void*)CSecondaryTaskBand_GetTaskbarHost_Original);
