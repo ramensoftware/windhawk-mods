@@ -1,9 +1,11 @@
 // ==WindhawkMod==
 // @id              chinese-holiday-calendar
-// @name            Chinese Holiday Calendar
-// @name:zh-CN      中国节假日日历
-// @description     Show the Chinese statutory holidays and adjusted workdays of an ICS feed you supply in the Windows 11 calendar flyout, marked by rules you write yourself
-// @description:zh-CN 在 Windows 11 日历中按你自己写的规则，标记你填的 ICS 订阅源里的中国法定节假日与调休安排
+// @name            Lunar & Holiday Calendar
+// @name:zh-CN      农历与节假日日历
+// @name:vi-VN      Lịch âm & ngày lễ
+// @description     Write your own text and colour into the Windows 11 calendar flyout: the holidays of an iCalendar (.ics) feed you supply, marked by rules you write yourself
+// @description:zh-CN 在 Windows 11 日历里写你自己的文字和颜色：按你自己写的规则标记你填的 ICS 订阅源里的节假日
+// @description:vi-VN Viết chữ và màu của bạn vào bảng lịch Windows 11: ngày lễ từ link iCalendar (.ics) bạn tự nhập, tô màu theo quy tắc bạn tự viết
 // @version         0.22
 // @author          dcsmf
 // @github          https://github.com/dcsmf
@@ -16,9 +18,9 @@
 
 // ==WindhawkModReadme==
 /*
-# 中国节假日日历
+# 农历与节假日日历（Lunar & Holiday Calendar）
 
-![Chinese Holiday Calendar View](https://i.imgur.com/SBafHNL.png)
+![Lunar & Holiday Calendar View](https://i.imgur.com/SBafHNL.png)
 
 Windows 11 的日历（点击任务栏右下角时间/日期弹出）默认只在数字下方显示农历或节气。这个 mod 会把你提供的
 节假日数据写进日历的日期单元格，标记哪些日子、怎么标记则由你自己写的规则决定：
@@ -31,9 +33,6 @@ Windows 11 的日历（点击任务栏右下角时间/日期弹出）默认只�
   颜色保持系统原样。
 - 其余日期保持系统原本的农历/节气显示，完全不动。
 
-日历里没有可以放额外元素的容器（日期单元格只有"日期数字 + 农历文字"两个文本），而且系统会在切换
-月份后异步重写农历文字，所以 mod 只用颜色和文字本身来表示放假/补班。
-
 ## 使用前提
 
 mod 是往日期单元格里的**第二行文字**写的，也就是系统显示农历/节气的那一行，所以任务栏日历要打开
@@ -43,6 +42,28 @@ mod 是往日期单元格里的**第二行文字**写的，也就是系统显示
 
 另外，"这一格是哪一天"是按格子代表的本地日期算出来的，跟格子布置在哪个时区无关，所以在东八区、
 欧美时区都不会差一天。
+
+## 工作原理
+
+日历里没有可以放额外元素的容器（日期单元格只有"日期数字 + 农历文字"两个文本），而且系统会在切换
+月份后异步重写农历文字，所以 mod 只用颜色和文字本身来表示放假/补班。
+
+mod 只替换农历文字的内容和颜色，不改动单元格的结构，也不会重复写入同一个单元格。系统在切换月份后
+会异步重写农历文字，有时连文字块本身都会换掉，所以 mod 会在日历变化之后的几秒内逐秒复查单元格：
+只有发现放假/补班的文字被系统覆盖时才会再写一次，其余单元格不做任何写入。复查由"日历窗口出现或
+被显示、日期变化、文字变化、数据或设置变化"触发，并且在连续几秒没有任何写入之后自己停下来——
+系统的日历即使关掉了也仍然被 shell 留着，定时器不能一直跑下去。
+
+改规则不用重新下载：mod 会把最近一次读到的订阅源内容留着，规则一改就照着新规则把已经读到的数据重新
+标一遍（日志里会记一条），只有换了订阅地址才会把旧数据丢掉。
+
+## 设置项
+
+| 设置 | 含义 |
+| --- | --- |
+| 数据来源（ICS 地址） | 一个 iCalendar（`.ics`）订阅地址。里面被"高亮规则"匹配到的事件会标在日历上；留空（默认）则 mod 一个请求也不发，日历保持系统原样。 |
+| 刷新间隔（小时） | 这段时间内不重复下载（默认 24 小时）。只在填了地址时才有意义。 |
+| 高亮规则 | 哪些事件被标记、标成什么颜色和文字：一张列表，一项一类日子，每项填词、颜色、文字（留空的栏表示不动）。见下文的"高亮规则"。 |
 
 ## 数据来源
 
@@ -119,14 +140,17 @@ END:VEVENT
 | `班,补班` | `#FF5A5A` | `补班` | "班"标到的日子显示"补班"、红色 |
 | `祝日` | `#E81123` | （留空） | 日文订阅源里"祝日"的日子只改颜色、不换文字 |
 | `Holiday` | （留空） | `休息` | 英文订阅源里 "Holiday" 的日子只换文字、颜色保持系统原样 |
+| `Nghỉ,nghỉ lễ` | `#FF5A5A` | `{name}` | 越南订阅源里"nghỉ"标到的日子显示节日名、红色 |
 
 三栏里"词"必填（或者写 `*` 兜底），颜色和文字至少要填一个：两个都留空的项不会做事。
 
 mod 只给自己标过的格子改颜色，并且在第一次改色之前记下这个文本块原来的前景色（本地值），
 需要还原时原样写回去；原本没有本地值就清掉，让样式和继承来的颜色重新生效。所以像"相邻月份
-的日期被系统调暗"这种由系统自己设的本地颜色，不会被 mod 弄丢。
+的日期被系统调暗"这种由系统自己设的本地颜色，不会被 mod 弄丢。一个颜色"是不是 mod 自己的"是按
+brush 对象本身判断的，不是按颜色值：mod 不会把自己的颜色当成原来的颜色存下来，也不会抹掉系统
+之后设的颜色。
 
-## 关于识别
+## 如何找到日历
 
 日期单元格不是被"通知"来的：mod 在日历窗口自己的 UI 线程上直接读 XAML 树（`Window::Current()`
 往下走），每一轮复查都重新找一遍，所以不注入任何东西，也用不到 XAML 诊断。
@@ -135,15 +159,6 @@ mod 只给自己标过的格子改颜色，并且在第一次改色之前记下�
 只有三四个子元素，走一遍很便宜，但可以保证不会往系统已经换掉的旧文本块里写字。日期数字是单元格
 里唯一的纯数字文本，mod 永远不会动它。万一某个 Windows 版本改了模板结构，mod 会退回按字号自动识别，
 并在日志里打印一次单元格结构（元素类型、名称、文字、字号）供排查。
-
-mod 只替换农历文字的内容和颜色，不改动单元格的结构，也不会重复写入同一个单元格。系统在切换月份后
-会异步重写农历文字，有时连文字块本身都会换掉，所以 mod 会在日历变化之后的几秒内逐秒复查单元格：
-只有发现放假/补班的文字被系统覆盖时才会再写一次，其余单元格不做任何写入。复查由"日历窗口出现或
-被显示、日期变化、文字变化、数据或设置变化"触发，并且在连续几秒没有任何写入之后自己停下来——
-系统的日历即使关掉了也仍然被 shell 留着，定时器不能一直跑下去。
-
-改规则不用重新下载：mod 会把最近一次读到的订阅源内容留着，规则一改就照着新规则把已经读到的数据重新
-标一遍（日志里会记一条），只有换了订阅地址才会把旧数据丢掉。
 
 ## 致谢
 
@@ -157,11 +172,11 @@ Windows 11 Notification Center Styler、UWPSpy 这类同样用诊断的工具一
 
 ---
 
-# Chinese Holiday Calendar (English)
+# Lunar & Holiday Calendar (English)
 
-Shows Chinese statutory holidays and adjusted workdays inside the Windows 11
-calendar flyout, the one that opens when you click the taskbar clock, using the
-holiday data you point it at and the marking rules you write.
+Writes your own text and colour into the Windows 11 calendar flyout, the one that opens
+when you click the taskbar clock: the holidays of the iCalendar feed you point it at, as
+marked by the rules you write - any country's holidays, not only Chinese ones.
 
 - **Days off**: the line under the day number is replaced with the holiday name
   from the data source (for example `国庆节`) and drawn in blue by default.
@@ -185,7 +200,7 @@ and nothing extra appears on the calendar (the log says so when that happens).
 The date a cell stands for is worked out from the cell itself rather than from the local
 time zone of the machine, so no holiday lands a day early or late west of UTC either.
 
-## Why it works the way it does
+## How it works
 
 A day cell of that calendar contains only two texts, the day number and one
 lunar-text block, and there is no container to put an extra element in. Inserting
@@ -201,16 +216,9 @@ itself after five passes without a write, because the shell keeps the day cells 
 closed flyout alive and a timer which only stopped when they went away would never
 stop.
 
-The colour of a day is written only into a cell the mod is marking, and the value
-the cell had before the first write is remembered (the local value of
-`Foreground`) so that it can be put back exactly; a cell which had no local value
-gets the property cleared, so that its style and inherited colour apply again.
-Clearing the property looks the same most of the time, but not always: a value
-the shell sets on the element itself - it dims the days of the neighbouring
-months that way - would be lost instead of restored. Whether a colour on the label
-is the mod's own is decided by the brush object and not by the colour it holds, so
-the mod never saves its own colour as an original one, and never takes away a
-colour the shell has set since.
+Changing the rules does not download the feed again: the mod keeps the text of the feed it
+read last and marks the data it already has again with the new rules (a log line says so).
+Only another address throws the old data away.
 
 ## Settings
 
@@ -316,13 +324,21 @@ A few examples, each of them one item of the list:
 | `班,补班` | `#FF5A5A` | `补班` | days marked 班 show `补班`, in red |
 | `祝日` | `#E81123` | (empty) | 祝日 of a Japanese feed is coloured, and its own text is kept |
 | `Holiday` | (empty) | `休息` | days of an English feed which say Holiday show `休息`, in the colour of the cell |
+| `Nghỉ,nghỉ lễ` | `#FF5A5A` | `{name}` | days of a Vietnamese feed marked nghỉ show the name of the holiday, in red |
 
 The words are what every rule needs (or `*`); of the colour and the text, at least one
 has to be filled in - an item with neither of them does nothing.
 
-Changing the rules does not download the feed again: the mod keeps the text of the feed it
-read last and marks the data it already has again with the new rules (a log line says so).
-Only another address throws the old data away.
+The colour of a day is written only into a cell the mod is marking, and the value
+the cell had before the first write is remembered (the local value of
+`Foreground`) so that it can be put back exactly; a cell which had no local value
+gets the property cleared, so that its style and inherited colour apply again.
+Clearing the property looks the same most of the time, but not always: a value
+the shell sets on the element itself - it dims the days of the neighbouring
+months that way - would be lost instead of restored. Whether a colour on the label
+is the mod's own is decided by the brush object and not by the colour it holds, so
+the mod never saves its own colour as an original one, and never takes away a
+colour the shell has set since.
 
 ## How it finds the calendar
 
@@ -346,14 +362,171 @@ The way the calendar window is found follows lonfro's
 The mod does **not** use XAML Diagnostics (`InitializeXamlDiagnosticsEx`), so it can be
 used together with Windows 11 Notification Center Styler and tools such as UWPSpy, which
 use it themselves.
+
+---
+
+# Lịch âm & ngày lễ (Tiếng Việt)
+
+Viết chữ và màu của bạn vào bảng lịch Windows 11 (bấm vào đồng hồ ở khay hệ thống): ngày lễ từ link
+iCalendar (`.ics`) bạn tự nhập, tô màu theo quy tắc bạn tự viết.
+
+- **Ngày nghỉ/lễ**: mặc định những ngày có dấu "休" hiện tên ngày lễ (ví dụ 国庆节), màu xanh.
+- **Ngày làm bù**: mặc định những ngày có dấu "班" hiện 补班, màu đỏ.
+- **Quy tắc là của bạn**: từ nào được tô, màu gì, chữ gì - tất cả nằm trong một danh sách ở phần cài đặt,
+  mỗi mục là một loại ngày (xem "Quy tắc tô màu"). Muốn tô cả một nguồn của nước khác, nơi sự kiện không
+  có dấu 休/班, thì thêm một mục với từ `*`.
+- **Ô để trống là giữ nguyên**: trống chữ thì giữ chữ âm lịch/tiết khí của hệ thống và chỉ đổi màu; trống
+  màu thì chỉ đổi chữ.
+- **Những ngày còn lại** giữ nguyên đúng như hệ thống vẽ.
+
+## Yêu cầu
+
+Mod viết vào **dòng chữ thứ hai** của ô ngày, tức dòng hệ thống in ngày âm lịch hoặc tiết khí, nên bảng
+lịch ở khay hệ thống phải bật dòng đó: Cài đặt → Thời gian & ngôn ngữ → Ngày & giờ → "Hiển thị lịch bổ
+sung trên khay hệ thống", chọn "Trung (Giản thể, Âm lịch)". Tắt dòng đó thì ô ngày có thể không còn chữ
+nào để viết, và trên lịch sẽ không thấy gì (log có ghi lại việc này).
+
+Ngày mà một ô đại diện được tính từ chính ô đó chứ không theo múi giờ của máy, nên không bị lệch một ngày.
+
+## Nguyên lý hoạt động
+
+Ô ngày của bảng lịch chỉ có hai chữ: số ngày và một khối chữ âm lịch; không có chỗ để thêm phần tử mới, mà
+thêm vào thì shell dựng lại các ô liên tục (đã đo: 470 lần chèn trong 37 giây, sau đó lịch trống), nên mod
+chỉ nói mọi thứ bằng chữ và màu sẵn có. Shell cũng ghi lại chữ âm lịch của nó sau khi đổi tháng theo cách
+bất đồng bộ, nên mod kiểm tra lại các ô đang thấy mỗi giây, trong vài giây sau mọi việc có thể bắt đầu lần
+ghi đó, và chỉ ghi khi ô không còn hiện đúng thứ mod muốn. Vòng kiểm tra lại được khởi động khi cửa sổ lịch
+xuất hiện hoặc được hiện ra, khi ngày hay chữ của một ô đổi, và khi dữ liệu hay cài đặt đổi; nó tự dừng sau
+năm vòng không ghi gì, vì shell giữ các ô ngày của bảng lịch đã đóng lại, mà một bộ đếm thời gian chỉ dừng
+khi chúng biến mất thì sẽ không bao giờ dừng.
+
+Đổi quy tắc không cần tải lại nguồn: mod giữ nội dung nguồn đã đọc lần cuối và tô lại dữ liệu đã có theo
+quy tắc mới (log có ghi một dòng); chỉ khi đổi sang địa chỉ khác mới bỏ dữ liệu cũ.
+
+## Cài đặt
+
+| Cài đặt | Ý nghĩa |
+| --- | --- |
+| Nguồn dữ liệu (ICS) | Một link iCalendar (`.ics`). Những sự kiện khớp với "Quy tắc tô màu" sẽ được tô lên lịch; để trống (mặc định) thì mod không gửi request nào và lịch giữ nguyên như hệ thống vẽ. |
+| Khoảng thời gian làm mới (giờ) | Trong khoảng này mod không tải lại dữ liệu (mặc định 24 giờ). Chỉ có nghĩa khi đã nhập link. |
+| Quy tắc tô màu | Sự kiện nào được tô, màu gì và chữ gì: một danh sách, mỗi mục một loại ngày, gồm Từ, Màu, Chữ (ô để trống là giữ nguyên). Xem phần "Quy tắc tô màu". |
+
+## Nguồn dữ liệu
+
+Mod không kèm dữ liệu ngày lễ và không có địa chỉ dịch vụ nào sẵn: nó chỉ đọc địa chỉ bạn nhập, và với địa
+chỉ trống (mặc định) nó không gửi request nào cả, lịch giữ nguyên đúng như Windows vẽ.
+
+Nhập địa chỉ của một link **iCalendar (`.ics`)**. Một sự kiện được tô khi một trong các từ của "Quy tắc tô
+màu" xuất hiện trong `SUMMARY` của nó; mặc định quy tắc tô 休 và 班, nên nguồn có dạng như sau là dùng được
+ngay:
+
+```
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20260215
+DTEND;VALUE=DATE:20260224
+SUMMARY:春节（休）
+END:VEVENT
+```
+
+Một nguồn dùng được là `https://holiday.ailcc.com/api/holiday/ics` (nhiều năm một lúc, có dấu nghỉ và dấu
+làm bù). Đó chỉ là ví dụ: mod không truy cập nó - cũng như bất cứ địa chỉ nào khác - trừ khi bạn dán địa chỉ
+đó vào cài đặt. Mọi nguồn khác đúng định dạng trên cũng dùng được.
+
+Một ví dụ nữa là lịch ngày lễ Trung Quốc đại lục của Apple iCloud,
+`https://p10-calendars.icloud.com/holiday/CN_zh.ics`: địa chỉ này trả về nội dung nén gzip, mod giải nén
+trước khi đọc.
+
+- Chỉ những sự kiện có `SUMMARY` chứa một từ của quy tắc mới được tô, và quy tắc khớp quyết định màu và chữ
+  của ngày đó (mặc định ngày nghỉ hiện tên ngày lễ, ngày làm bù hiện 补班). Những mục không quy tắc nào khớp
+  - tiết khí, lễ truyền thống, lễ của nước khác - được để nguyên, nên không bao giờ bị nhầm thành ngày nghỉ;
+  muốn tô cả chúng thì thêm một quy tắc `*` (xem "Quy tắc tô màu"). Ngày được dùng là ngày sự kiện ghi:
+  phần giờ trong `DTSTART`/`DTEND` được chấp nhận và bỏ qua (`20260215`, `2026-02-15` và `20260215T000000Z`
+  đều đọc là ngày 15 tháng 2).
+- `DTEND` là ngày **không** được tính, đúng như RFC 5545: sự kiện trên là từ 15 đến 23 tháng 2. Sự kiện
+  không có `DTEND` được tính là một ngày, đúng ngày bắt đầu.
+- Mọi ngày đều được kiểm tra là ngày có thật (kể cả năm nhuận): `20260231` bị bỏ cả sự kiện chứ không được
+  "đẩy" sang ngày 3 tháng 3; sự kiện có `DTEND` không đọc được, hoặc ngày kết thúc không muộn hơn ngày bắt
+  đầu, cũng bị bỏ (log có đếm lại).
+- Dữ liệu chỉ được tải sau khi bạn nhập địa chỉ, và sau đó mặc định 24 giờ một lần (đổi được); request lỗi
+  thì giữ dữ liệu cũ và thử lại sau 10 phút. Khi không có dữ liệu (chưa nhập địa chỉ, không có mạng, địa chỉ
+  hỏng), lịch giữ nguyên như hệ thống vẽ: không thành trống trơn và cũng không ghi log liên tục.
+- Nội dung trả về nén gzip hoặc zlib được giải nén trước khi đọc (địa chỉ Apple ở trên trả về như vậy). Các
+  kiểu nén khác (brotli, zstd) thì không đọc được: log nói rõ điều đó thay vì đọc dữ liệu nhị phân như chữ.
+
+Mod đọc gì từ nguồn: `DTSTART`/`DTEND` của sự kiện, một `DURATION` viết thay cho `DTEND`, những ngày
+`RDATE` nêu tên, những ngày bị `EXDATE` loại ra, và `RRULE` dạng "hằng năm" thuần (`FREQ=YEARLY`, có thể
+kèm `COUNT`, `UNTIL`, `INTERVAL`, cùng lắm là `BYMONTH`/`BYMONTHDAY` trùng với ngày sự kiện đã có). Cố ý
+không mở rộng: mọi dạng lặp khác (`FREQ=MONTHLY` và tương tự, hay một phần như `BYDAY`) được đọc đúng như
+lần xuất hiện mà sự kiện ghi, log có ghi một lần; việc đổi múi giờ (ngày sự kiện ghi chính là ngày được
+dùng); và mọi nhãn hay dấu ở góc trong ô ngày.
+
+## Quy tắc tô màu
+
+"Quy tắc tô màu" quyết định sự kiện nào được tô trên lịch và tô thế nào: **mỗi mục là một loại ngày**, mỗi
+mục có ba ô (Từ, Màu, Chữ). **Ô để trống là giữ nguyên**, nên có thể chỉ đổi màu, hoặc chỉ đổi chữ.
+
+    Từ: 休,放假        Màu: #4EA1FF        Chữ: {name}
+
+- **Từ**: tìm trong `SUMMARY` của sự kiện, nhiều từ cách nhau bằng dấu phẩy (`休,放假,holiday`), có một từ
+  xuất hiện là mục đó có hiệu lực. Không phân biệt chữ hoa chữ thường, và không đòi hỏi dấu phân cách quanh
+  từ. `*` là **quy tắc bao trọn**: nhận mọi sự kiện không quy tắc nào khớp; để trống thì mục đó không tô
+  ngày nào.
+- **Màu**: chọn trong bảng màu, hoặc tự viết `#RRGGBB` (cũng nhận `RRGGBB` và `AARRGGBB` tám chữ số).
+  **Để trống là giữ nguyên màu** - khi đó mục này chỉ đổi chữ. Màu viết sai thì quy tắc bị bỏ, log có ghi.
+- **Chữ**: **để trống là giữ nguyên chữ** - khi đó mục này chỉ đổi màu. `{name}` là `SUMMARY` của sự kiện
+  sau khi bỏ từ đã khớp (nếu từ đó nằm trong một cặp ngoặc thì bỏ cả ngoặc).
+
+Danh sách được duyệt từ trên xuống và **quy tắc đầu tiên khớp là quy tắc được dùng**, nên hãy đặt mục cụ thể
+lên trước. Hai mục mặc định là 休/放假 (xanh, hiện tên ngày lễ) và 班/补班 (đỏ, hiện 补班), như các bản trước.
+
+Vài ví dụ (mỗi dòng là một mục thêm vào danh sách):
+
+| Từ | Màu | Chữ | Tác dụng |
+| --- | --- | --- | --- |
+| `*` | `#4EA1FF` | `{name}` | mọi sự kiện của nguồn đều hiện tên, màu xanh (không cần dấu gì) |
+| `休,放假` | `#4EA1FF` | `{name}` | ngày có dấu 休 hoặc 放假 hiện tên sự kiện, màu xanh |
+| `班,补班` | `#FF5A5A` | `补班` | ngày có dấu 班 hiện 补班, màu đỏ |
+| `祝日` | `#E81123` | (trống) | ngày 祝日 của nguồn Nhật chỉ đổi màu, giữ chữ của hệ thống |
+| `Holiday` | (trống) | `休息` | ngày có chữ Holiday của nguồn tiếng Anh chỉ đổi chữ, giữ màu |
+| `Nghỉ,nghỉ lễ` | `#FF5A5A` | `{name}` | ngày có dấu nghỉ của nguồn Việt hiện tên ngày lễ, màu đỏ |
+
+Ba ô thì "Từ" là bắt buộc (hoặc viết `*`), còn Màu và Chữ phải điền ít nhất một: mục để trống cả hai thì
+không làm gì.
+
+Mod chỉ đổi màu ở những ô do chính nó tô, và ghi lại màu chữ gốc của khối chữ trước lần đổi màu đầu tiên để
+trả lại đúng như cũ; ô vốn không có giá trị local thì xoá thuộc tính đi. Nhờ vậy những màu do hệ thống tự
+đặt - ví dụ ngày của tháng bên cạnh bị làm mờ - không bị mod làm mất. Một màu có phải của mod hay không được
+quyết định bằng chính đối tượng brush chứ không bằng giá trị màu: mod không lưu màu của mình thành màu gốc,
+và không lấy đi màu mà shell đặt sau đó.
+
+## Cách tìm lịch
+
+Không có gì báo cho mod biết ô ngày nào đang có: mod tự đọc cây XAML của cửa sổ lịch trên chính luồng UI của
+cửa sổ đó (`Window::Current()` và đi xuống) và tìm lại các ô ngày ở mỗi vòng. Không tiêm gì vào tiến trình và
+không dùng XAML diagnostics.
+
+Trong một ô ngày, mod duyệt ba bốn phần tử con ở mỗi vòng, không bao giờ ghi vào số ngày (đó là chữ chỉ có
+chữ số duy nhất trong ô), ưu tiên khối mà lịch đặt tên `LunarTextBlock`, nếu không có thì lấy chữ nhỏ nhất có
+nội dung, và nhớ phần tử mình đã ghi bằng con trỏ giao diện để không ghi vào khối mà shell đã thay.
+
+## Ghi công
+
+Cách tìm cửa sổ lịch dựa theo mod
+[Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
+của lonfro (GPL-3.0); các helper gọi xuyên luồng như `RunFromWindowThread` dựa theo
+[Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods) của m417z.
+
+Mod **không dùng XAML Diagnostics (`InitializeXamlDiagnosticsEx`)**, nên có thể dùng cùng tiến trình với
+Windows 11 Notification Center Styler, UWPSpy và những công cụ cũng dùng diagnostics.
 */
 // ==/WindhawkModReadme==
+
 
 // ==WindhawkModSettings==
 /*
 - dataSourceUrl: ""
   $name: Data source (ICS, empty = no data)
   $name:zh-CN: 数据来源（ICS 地址，留空则不显示节假日）
+  $name:vi-VN: Nguồn dữ liệu (ICS, để trống = không có dữ liệu)
   $description: >-
     An iCalendar (.ics) feed, for example
     https://p10-calendars.icloud.com/holiday/CN_zh.ics. The events of it which the
@@ -361,16 +534,23 @@ use it themselves.
   $description:zh-CN: >-
     一个 iCalendar（.ics）订阅地址，例如 https://p10-calendars.icloud.com/holiday/CN_zh.ics。
     里面被下面"高亮规则"匹配到的事件会标在日历上；除了这个地址，mod 不访问任何网址。
+  $description:vi-VN: >-
+    Một link iCalendar (.ics), ví dụ https://p10-calendars.icloud.com/holiday/CN_zh.ics.
+    Những sự kiện khớp với quy tắc tô màu bên dưới sẽ được tô; ngoài link này mod không
+    truy cập địa chỉ nào khác.
 - refreshIntervalHours: 24
   $name: Refresh interval (hours)
   $name:zh-CN: 刷新间隔（小时）
+  $name:vi-VN: Khoảng thời gian làm mới (giờ)
   $description: >-
     How long fetched data is reused before the source is asked again.
   $description:zh-CN: 这段时间内不重复下载。
+  $description:vi-VN: Trong khoảng này mod không tải lại dữ liệu.
 - highlightRules:
   - - words: "休,放假"
       $name: Words to look for
       $name:zh-CN: 要找的词
+      $name:vi-VN: Những từ cần tìm
       $description: >-
         Words looked for in the text of an event, separated by commas; a day is marked
         when one of them appears. "*" takes every event no other rule matched. An item
@@ -378,36 +558,52 @@ use it themselves.
       $description:zh-CN: >-
         在事件文字里查找的词，多个用逗号隔开，出现其中一个就按这条规则标记。填 "*" 表示兜底：
         所有没被别的规则匹配到的事件都归它。这一栏留空则这一项不标记任何日子（刚加进来还没填）。
+      $description:vi-VN: >-
+        Những từ tìm trong nội dung sự kiện, cách nhau bằng dấu phẩy; có một từ xuất hiện là
+        ngày đó được tô. "*" là quy tắc bao trọn: nhận mọi sự kiện không quy tắc nào khớp.
+        Để trống thì quy tắc này không tô ngày nào.
     - color: "#4EA1FF"
       $name: Colour
       $name:zh-CN: 颜色
+      $name:vi-VN: Màu
       $description: >-
         The colour of the text of a marked day (#RRGGBB). Empty leaves the colour as it
         is; a colour which is not a colour drops the rule, and the log names it.
       $description:zh-CN: >-
         被标记那一天的文字颜色（#RRGGBB）。留空表示不动颜色（只换文字）；填错的规则会被丢掉，
         日志里点名。
+      $description:vi-VN: >-
+        Màu chữ của ngày được tô (#RRGGBB). Để trống là giữ nguyên màu; màu viết sai thì quy
+        tắc đó bị bỏ và có ghi trong log.
       #! $format: colorRgb
     - text: "{name}"
       $name: Text to show
       $name:zh-CN: 显示的文字
+      $name:vi-VN: Chữ hiển thị
       $description: >-
         Replaces the lunar text. Leave empty for colour only; {name} is the event text
         with the matching word taken out.
       $description:zh-CN: >-
         替换农历文字。留空则只改颜色；{name} 是事件文字去掉匹配到的词之后剩下的内容。
+      $description:vi-VN: >-
+        Thay chữ âm lịch. Để trống thì chỉ tô màu; {name} là nội dung sự kiện sau khi bỏ từ
+        đã khớp.
   - - words: "班,补班"
       $name: Words to look for
       $name:zh-CN: 要找的词
+      $name:vi-VN: Những từ cần tìm
     - color: "#FF5A5A"
       $name: Colour
       $name:zh-CN: 颜色
+      $name:vi-VN: Màu
       #! $format: colorRgb
     - text: "补班"
       $name: Text to show
       $name:zh-CN: 显示的文字
+      $name:vi-VN: Chữ hiển thị
   $name: Highlight rules
   $name:zh-CN: 高亮规则
+  $name:vi-VN: Quy tắc tô màu
   $description: >-
     One item per kind of day: words, colour, text. A field which is empty is left alone.
     The first rule which matches a day marks it; "*" is the catch-all. The two items
@@ -415,6 +611,10 @@ use it themselves.
   $description:zh-CN: >-
     一项一类日子：词、颜色、文字，留空的栏表示不动（留空颜色只换文字，留空文字只改颜色）。
     从上往下第一条匹配上的生效，"*" 是兜底。上面两项是默认值。
+  $description:vi-VN: >-
+    Mỗi mục là một loại ngày: từ, màu, chữ. Ô để trống là giữ nguyên (trống màu thì chỉ đổi
+    chữ, trống chữ thì chỉ đổi màu). Quy tắc đầu tiên khớp sẽ được dùng; "*" là bao trọn.
+    Hai mục trên là mặc định.
 */
 // ==/WindhawkModSettings==
 
