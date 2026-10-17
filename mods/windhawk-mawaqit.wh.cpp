@@ -1,12 +1,12 @@
 // ==WindhawkMod==
-// @id windhawk-mawaqit
-// @name Mawaqit Prayer Clock
-// @description Mawaqit prayer clock with live countdown, prayer schedule popup, and customizable themes.
-// @version 0.6.9
-// @author HHeitlager
-// @github https://github.com/hheitlager
-// @include explorer.exe
-// @architecture x86-64
+// @id              windhawk-mawaqit
+// @name            Mawaqit Prayer Clock
+// @description     Mawaqit prayer clock with live countdown, multi-monitor taskbar support, prayer schedule popup, and customizable themes.
+// @version         0.7.0
+// @author          HHeitlager
+// @github          https://github.com/hheitlager
+// @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lwinhttp
 // ==/WindhawkMod==
 
@@ -18,7 +18,7 @@ Mawaqit prayer clock with live countdown, prayer schedule popup, and customizabl
 
 ## Features
 - Upcoming prayer name, scheduled time, and live countdown
-- Clickable prayer-schedule popup with optional auto-close timer
+- Clickable or hover-opened prayer-schedule popup with taskbar slide animation and optional auto-close timer
 - 13 appearance themes, including Windows / System, Traditional Islamic, Catppuccin Mocha, Emberveil, Dracula, Nord, Gruvbox Dark, Tokyo Night, Solarized Dark and Light, and Custom
 - Independent custom colors for the pill and popup
 - Visibility switches for the prayer label, countdown, and popup
@@ -27,6 +27,44 @@ Mawaqit prayer clock with live countdown, prayer schedule popup, and customizabl
 - Automatic or manual clock height, four-sided margins and padding, tray gap, corner radius, and font size
 - Background schedule updates through native WinHTTP, with configurable refresh interval
 - Live settings updates without restarting Explorer
+
+
+## Screenshots
+Mawaqit Prayer Clock supports multiple appearance themes to match your Windows 11 desktop.
+
+Windows System Default | Traditional Islamic |
+|:---:|:---:|
+![Windows](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default.png) | ![Traditional](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic.png) |
+
+| Catppuccin Mocha | Emberveil |
+|:---:|:---:|
+| ![Catppuccin](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png) | ![Emberveil](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png) |
+
+
+## Desktop Integration
+See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 desktop.
+![Desktop](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/My-Desktop.png)
+
+
+## Configuration
+- Choose a mosque identifier or Mawaqit URL in Settings.
+  Search for your nearby mosque via e.g. [Google](https://www.google.com/search?q=mawaqit+mosque+near+me). 
+  Accepted inputs include a bare mosque identifier and the full URL:
+  - ![UrlExample](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Mosque-Identifier.png)
+- Select an appearance theme and customize the widget as desired.
+- Custom color settings only apply when the Custom theme is selected.
+- Set popup auto-close to 0 to keep the popup open until dismissed.
+- Optional hover opening uses a configurable mouse-leave delay (500 ms by default).
+
+
+## Release candidate 0.7.0
+Unifies taskbar positioning under General. Position for primary and secondary
+monitors. Secondary center and after-icons use a non-layout-affecting overlay;
+before-icons reserves a real slot in the taskbar icon container.
+Unsupported tray anchors fall back to the known-working tray slot.
+Popup placement remains monitor-aware. The multi-monitor behavior has passed the author’s 26-check regression suite.
+Some positioning modes may be constrained by crowded or narrow taskbars.
+
 
 ## Network access and cached schedules
 This mod intentionally uses Mawaqit’s published mosque-specific prayer times rather
@@ -46,26 +84,6 @@ If a download fails, it retries after one hour. An empty, expired, mismatched,
 or unusable cache causes a download at startup. The mod reads schedule data
 from the public Mawaqit webpage, so changes to that page can interrupt updates.
 
-## Screenshots
-Mawaqit Prayer Clock supports multiple appearance themes to match your Windows 11 desktop.
-
-Windows System Default | Traditional Islamic |
-|:---:|:---:|
-![Windows](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Windows-System-Default.png) | ![Traditional](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Traditional-Islamic.png) |
-
-| Catppuccin Mocha | Emberveil |
-|:---:|:---:|
-| ![Catppuccin](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Catppucchin-Moca.png) | ![Emberveil](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/Mawaqit-Emberveil.png) |
-
-## Desktop Integration
-See how Mawaqit Prayer Clock integrates into a fully customized Windows 11 desktop.
-![Desktop](https://raw.githubusercontent.com/hheitlager/windhawk-mawaqit/main/screenshots/My-Desktop.png)
-
-## Configuration
-Choose a mosque identifier or Mawaqit URL in Settings.
-Select an appearance theme and customize the widget as desired.
-Custom color settings only apply when the Custom theme is selected.
-Set popup auto-close to 0 to keep the popup open until dismissed.
 
 ## More information
 For installation instructions, additional screenshots,
@@ -73,16 +91,18 @@ troubleshooting, and release information, visit:
 
 [GitHub Project](https://github.com/hheitlager/windhawk-mawaqit)
 
+
 ## Compatibility and credits
 Windows 11 only. Taskbar XAML integration adapted from Windhawk’s
 [taskbar-folder-menus](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-folder-menus.wh.cpp) (MIT).
 
+
 ## License
 MIT License.
 
+
 ## Disclaimer
-This is an unofficial community project and is not affiliated
-with or endorsed by Mawaqit.
+This is an unofficial community project and is not affiliated with or endorsed by Mawaqit.
 */
 // ==/WindhawkModReadme==
 
@@ -116,6 +136,10 @@ with or endorsed by Mawaqit.
     - before-icons: Before taskbar icons
     - after-icons: After taskbar icons
     - center: Dynamic center (experimental)
+  - ShowPrimaryMonitor: true
+    $name: Show clock on primary monitor
+  - ShowSecondaryMonitors: true
+    $name: Show clock on secondary monitors
   $name: General
 - Display:
   - ShowNextPrayer: true
@@ -124,6 +148,12 @@ with or endorsed by Mawaqit.
     $name: Show countdown
   - EnablePopup: true
     $name: Show popup
+  - OpenPopupOnHover: false
+    $name: Open popup when hovering over clock
+    $description: Open without clicking. The popup closes after the cursor leaves both clock and popup.
+  - HoverCloseDelayMs: 500
+    $name: Hover popup close delay (milliseconds)
+    $description: Delay after leaving the clock and popup (0–5000 ms).
   - PopupAutoCloseSeconds: 5
     $name: Popup auto-close (seconds, 0 = disabled)
     $description: Automatically close popup after 1–300 seconds. Opening it again resets the timer.
@@ -201,6 +231,9 @@ with or endorsed by Mawaqit.
 #include <cstdint>
 #include <winhttp.h>
 #include <map>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
@@ -248,7 +281,7 @@ struct Lease
     bool createdBaseColumn = false;
 };
 
-inline Kind Classify(FrameworkElement const &parent)
+inline Kind Classify(FrameworkElement const& parent)
 {
     if (!parent)
         return Kind::Unsupported;
@@ -261,7 +294,7 @@ inline Kind Classify(FrameworkElement const &parent)
 
 // Class name of an unexpected panel, so a mod can log what it actually got
 // instead of reporting a bare "not found" for an element that is right there.
-inline std::wstring ClassName(FrameworkElement const &element)
+inline std::wstring ClassName(FrameworkElement const& element)
 {
     if (!element)
         return L"(null)";
@@ -278,14 +311,14 @@ inline std::wstring ClassName(FrameworkElement const &element)
 // Named direct children, for logging when an anchor cannot be resolved. A tray
 // restructure shows up here as missing or renamed names, which is the one thing
 // a user's debug log otherwise cannot tell us.
-inline std::wstring DescribeChildren(Panel const &parent)
+inline std::wstring DescribeChildren(Panel const& parent)
 {
     if (!parent)
         return L"(none)";
     std::wstring names;
     try
     {
-        for (auto const &child : parent.Children())
+        for (auto const& child : parent.Children())
         {
             auto element = child.try_as<FrameworkElement>();
             if (!element || element.Name().empty())
@@ -302,11 +335,11 @@ inline std::wstring DescribeChildren(Panel const &parent)
     return names.empty() ? L"(no named children)" : names;
 }
 
-inline FrameworkElement FindDirectChild(Panel const &parent, wchar_t const *name)
+inline FrameworkElement FindDirectChild(Panel const& parent, wchar_t const* name)
 {
     if (!parent || !name)
         return nullptr;
-    for (auto const &child : parent.Children())
+    for (auto const& child : parent.Children())
     {
         auto element = child.try_as<FrameworkElement>();
         if (element && element.Name() == name)
@@ -315,7 +348,7 @@ inline FrameworkElement FindDirectChild(Panel const &parent, wchar_t const *name
     return nullptr;
 }
 
-inline int IndexOfChild(Panel const &parent, FrameworkElement const &child)
+inline int IndexOfChild(Panel const& parent, FrameworkElement const& child)
 {
     if (!parent || !child)
         return -1;
@@ -327,7 +360,7 @@ inline int IndexOfChild(Panel const &parent, FrameworkElement const &child)
     return -1;
 }
 
-inline bool ResolveSlot(Panel const &parent, Anchor anchor, int &slot)
+inline bool ResolveSlot(Panel const& parent, Anchor anchor, int& slot)
 {
     Kind kind = Classify(parent);
     if (kind == Kind::Unsupported)
@@ -339,7 +372,7 @@ inline bool ResolveSlot(Panel const &parent, Anchor anchor, int &slot)
         return true;
     }
 
-    wchar_t const *referenceName = nullptr;
+    wchar_t const* referenceName = nullptr;
     bool after = false;
     switch (anchor)
     {
@@ -371,9 +404,9 @@ inline bool ResolveSlot(Panel const &parent, Anchor anchor, int &slot)
     return true;
 }
 
-inline bool Release(Panel const &parent, Lease &lease);
+inline bool Release(Panel const& parent, Lease& lease);
 
-inline bool AcquireAt(Panel const &parent, int slot, std::wstring const &markerName, Lease &lease)
+inline bool AcquireAt(Panel const& parent, int slot, std::wstring const& markerName, Lease& lease)
 {
     Kind kind = Classify(parent);
     if (kind == Kind::Unsupported || slot < 0 || markerName.empty())
@@ -427,7 +460,7 @@ inline bool AcquireAt(Panel const &parent, int slot, std::wstring const &markerN
         else
             grid.ColumnDefinitions().Append(definition);
 
-        for (auto const &child : grid.Children())
+        for (auto const& child : grid.Children())
         {
             auto element = child.try_as<FrameworkElement>();
             if (!element)
@@ -459,7 +492,7 @@ inline bool AcquireAt(Panel const &parent, int slot, std::wstring const &markerN
 
 // Live index of the lease marker. Other mods inject and remove siblings around
 // us, so the acquire-time index is a hint, never the truth at removal time.
-inline bool FindMarker(Panel const &parent, Lease const &lease, uint32_t &index)
+inline bool FindMarker(Panel const& parent, Lease const& lease, uint32_t& index)
 {
     if (!parent || lease.markerName.empty())
         return false;
@@ -478,7 +511,7 @@ inline bool FindMarker(Panel const &parent, Lease const &lease, uint32_t &index)
 // Put mod content into the leased slot. On a Grid the content joins the leased
 // column; on a StackPanel it is inserted directly after the marker, so the
 // marker's position is the content's position.
-inline bool PlaceChild(Panel const &parent, Lease const &lease, FrameworkElement const &content)
+inline bool PlaceChild(Panel const& parent, Lease const& lease, FrameworkElement const& content)
 {
     if (!parent || !content || lease.kind == Kind::Unsupported)
         return false;
@@ -499,7 +532,7 @@ inline bool PlaceChild(Panel const &parent, Lease const &lease, FrameworkElement
     return true;
 }
 
-inline bool Release(Panel const &parent, Lease &lease)
+inline bool Release(Panel const& parent, Lease& lease)
 {
     if (!parent || lease.markerName.empty())
         return false;
@@ -525,7 +558,7 @@ inline bool Release(Panel const &parent, Lease &lease)
     if (static_cast<uint32_t>(liveColumn) < grid.ColumnDefinitions().Size())
         grid.ColumnDefinitions().RemoveAt(liveColumn);
 
-    for (auto const &child : grid.Children())
+    for (auto const& child : grid.Children())
     {
         auto element = child.try_as<FrameworkElement>();
         if (!element)
@@ -546,6 +579,64 @@ inline bool Release(Panel const &parent, Lease &lease)
 }
 
 } // namespace folder_menus_slot_lease
+// Enumerate live primary and secondary Explorer taskbar windows.
+namespace mawaqit_monitor_discovery
+{
+struct TaskbarRecord
+{
+    HWND hwnd = nullptr;
+    HMONITOR monitor = nullptr;
+    bool primaryTaskbar = false;
+    std::wstring device;
+    bool primaryMonitor = false;
+};
+
+inline std::vector<TaskbarRecord> EnumerateTaskbars()
+{
+    std::vector<TaskbarRecord> result;
+    EnumWindows(
+        [](HWND hwnd, LPARAM context) -> BOOL
+        {
+            DWORD pid = 0;
+            wchar_t className[64]{};
+            if (GetWindowThreadProcessId(hwnd, &pid) == 0 || pid != GetCurrentProcessId() ||
+                !GetClassNameW(hwnd, className, ARRAYSIZE(className)))
+                return TRUE;
+            bool primary = _wcsicmp(className, L"Shell_TrayWnd") == 0;
+            if (!primary && _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0)
+                return TRUE;
+            HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+            MONITORINFOEXW info{};
+            info.cbSize = sizeof(info);
+            TaskbarRecord entry{};
+            entry.hwnd = hwnd;
+            entry.monitor = monitor;
+            entry.primaryTaskbar = primary;
+            if (monitor && GetMonitorInfoW(monitor, &info))
+            {
+                entry.device = info.szDevice;
+                entry.primaryMonitor = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
+            }
+            reinterpret_cast<std::vector<TaskbarRecord>*>(context)->push_back(std::move(entry));
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+inline void LogInventory()
+{
+    auto taskbars = EnumerateTaskbars();
+    Wh_Log(L"[Mawaqit][Monitor] Taskbar discovery: count=%u", (unsigned)taskbars.size());
+    for (auto const& bar : taskbars)
+        Wh_Log(L"[Mawaqit][Monitor] hwnd=%p class=%s monitor=%s primaryMonitor=%d uiThread=%lu",
+               bar.hwnd, bar.primaryTaskbar ? L"Shell_TrayWnd" : L"Shell_SecondaryTrayWnd",
+               bar.device.empty() ? L"(unresolved)" : bar.device.c_str(),
+               bar.primaryMonitor ? 1 : 0,
+               (unsigned long)GetWindowThreadProcessId(bar.hwnd, nullptr));
+}
+} // namespace mawaqit_monitor_discovery
+
 namespace folder_menus_taskbar_window
 {
 
@@ -555,7 +646,8 @@ inline HWND FindCurrentProcessTaskbarWnd()
 {
     HWND result = nullptr;
     EnumWindows(
-        [](HWND window, LPARAM parameter) -> BOOL {
+        [](HWND window, LPARAM parameter) -> BOOL
+        {
             DWORD processId = 0;
             WCHAR className[32];
             if (GetWindowThreadProcessId(window, &processId) &&
@@ -563,7 +655,7 @@ inline HWND FindCurrentProcessTaskbarWnd()
                 GetClassName(window, className, ARRAYSIZE(className)) &&
                 _wcsicmp(className, L"Shell_TrayWnd") == 0)
             {
-                *reinterpret_cast<HWND *>(parameter) = window;
+                *reinterpret_cast<HWND*>(parameter) = window;
                 return FALSE;
             }
             return TRUE;
@@ -592,7 +684,7 @@ namespace folder_menus_dispatch
 // message, and reports whether the callback actually ran — a caller that
 // assumes it did will corrupt its own state when the dispatch failed.
 
-using ThreadProc = void (*)(void *);
+using ThreadProc = void (*)(void*);
 using ExceptionLogFn = void (*)(PCWSTR context);
 
 inline ExceptionLogFn g_logException = nullptr;
@@ -604,7 +696,7 @@ inline void SetExceptionLogger(ExceptionLogFn logger)
     g_logException = logger;
 }
 
-inline bool Invoke(ThreadProc proc, void *parameter)
+inline bool Invoke(ThreadProc proc, void* parameter)
 {
     try
     {
@@ -619,41 +711,31 @@ inline bool Invoke(ThreadProc proc, void *parameter)
     return false;
 }
 
+// A dispatch is owned by a registry rather than by the calling worker's stack.
+// A timed-out SendMessage must never leave a hook with a dangling Dispatch*.
 struct Dispatch
 {
     ThreadProc proc;
-    void *parameter;
-    bool succeeded = false;
-    // Every concurrent caller installs its own hook with this same proc, and
-    // each hook instance sees every message equal to g_dispatchMessage. With
-    // two dispatches in flight, both hooks are in the chain when either
-    // message arrives, so without this each callback would run twice. The
-    // hooks run one after another on the UI thread, so a plain flag suffices.
+    void* parameter;
+    std::mutex executionMutex;
     bool ran = false;
+    bool cancelled = false;
+    bool succeeded = false;
 };
 
-// The private message this mod dispatches on. Set before the hook is
-// installed, and read by the hook proc to recognise its own message.
-//
-// A CALLWNDPROC HOOK SEES EVERY MESSAGE SENT TO EVERY WINDOW ON THE TASKBAR'S
-// UI THREAD. `lParam` for all of those is arbitrary — an integer, a flag, a
-// pointer to something else entirely. So the message MUST be checked first,
-// against a value that does not come from lParam, and only then may lParam be
-// treated as a Dispatch*. Reading anything out of lParam before that check
-// dereferences whatever happened to be in the message and takes Explorer down
-// with it.
-//
-// Atomic because the caller may be the retry thread while the hook
-// proc runs on the taskbar's UI thread. RegisterWindowMessageW returns the
-// same value for the same string for the lifetime of the session, so this
-// settles on one value immediately and never changes again.
+inline std::mutex g_registryMutex;
+inline std::unordered_map<ULONG_PTR, std::shared_ptr<Dispatch>> g_requests;
+inline std::atomic<ULONG_PTR> g_nextRequestId{1};
 inline std::atomic<UINT> g_dispatchMessage{0};
 
-// messageName must embed WH_MOD_ID, so two mods cannot collide on the message.
-inline bool RunFromWindowThread(HWND window, ThreadProc proc, void *parameter, PCWSTR messageName)
+// Returns false if the taskbar cannot service the request promptly. Any
+// callback already executing is allowed to finish before the caller returns,
+// keeping the caller-owned parameter valid for the entire invocation.
+inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter, PCWSTR messageName,
+                                DWORD timeoutMs = 2000)
 {
     UINT message = RegisterWindowMessageW(messageName);
-    if (!message)
+    if (!message || !IsWindow(window))
         return false;
 
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
@@ -663,24 +745,35 @@ inline bool RunFromWindowThread(HWND window, ThreadProc proc, void *parameter, P
         return Invoke(proc, parameter);
 
     g_dispatchMessage.store(message, std::memory_order_release);
-
     HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
-        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT
+        {
             if (code == HC_ACTION)
             {
-                auto const *call = reinterpret_cast<CWPSTRUCT const *>(lParam);
-                // Message first. Only our own private message carries a
-                // Dispatch* in lParam; everything else carries something we
-                // must not touch.
+                auto const* call = reinterpret_cast<CWPSTRUCT const*>(lParam);
                 UINT expected = g_dispatchMessage.load(std::memory_order_acquire);
                 if (expected && call->message == expected)
                 {
-                    if (auto *dispatch = reinterpret_cast<Dispatch *>(call->lParam);
-                        dispatch && !dispatch->ran)
+                    auto id = static_cast<ULONG_PTR>(call->lParam);
+                    std::shared_ptr<Dispatch> request;
                     {
-                        dispatch->ran = true;
-                        dispatch->succeeded = Invoke(dispatch->proc, dispatch->parameter);
+                        std::lock_guard<std::mutex> lock(g_registryMutex);
+                        auto it = g_requests.find(id);
+                        if (it != g_requests.end())
+                            request = it->second;
+                    }
+                    if (request)
+                    {
+                        // Serializes duplicate hooks and cancellation. Holding
+                        // this lock through Invoke ensures a timed-out caller
+                        // cannot return while its stack parameter is in use.
+                        std::lock_guard<std::mutex> lock(request->executionMutex);
+                        if (!request->ran && !request->cancelled)
+                        {
+                            request->ran = true;
+                            request->succeeded = Invoke(request->proc, request->parameter);
+                        }
                     }
                 }
             }
@@ -690,10 +783,42 @@ inline bool RunFromWindowThread(HWND window, ThreadProc proc, void *parameter, P
     if (!hook)
         return false;
 
-    Dispatch dispatch{proc, parameter};
-    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&dispatch));
+    auto request = std::make_shared<Dispatch>();
+    request->proc = proc;
+    request->parameter = parameter;
+    ULONG_PTR id = g_nextRequestId.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(g_registryMutex);
+        g_requests.emplace(id, request);
+    }
+
+    DWORD_PTR ignored = 0;
+    BOOL delivered = FALSE;
+    if (timeoutMs == INFINITE)
+    {
+        // Shutdown must finish removing callbacks and windows before the mod unloads.
+        SendMessageW(window, message, 0, static_cast<LPARAM>(id));
+        delivered = TRUE;
+    }
+    else
+    {
+        delivered = SendMessageTimeoutW(window, message, 0, static_cast<LPARAM>(id),
+                                        SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &ignored);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_registryMutex);
+        g_requests.erase(id);
+    }
+    // Even if the message is processed late, it can no longer find the
+    // request. A hook which already found it must finish before we return.
+    bool succeeded = false;
+    {
+        std::lock_guard<std::mutex> lock(request->executionMutex);
+        request->cancelled = true;
+        succeeded = delivered && request->ran && request->succeeded;
+    }
     UnhookWindowsHookEx(hook);
-    return dispatch.succeeded;
+    return succeeded;
 }
 
 } // namespace folder_menus_dispatch
@@ -705,21 +830,23 @@ using winrt::Windows::UI::Xaml::XamlRoot;
 
 // ---- XamlRoot ---------------------------------------------------------------
 
-using CTaskBand_GetTaskbarHost_t = void *(WINAPI *)(void *, void *);
-using TaskbarHost_FrameHeight_t = int(WINAPI *)(void *);
-using Ref_count_base_Decref_t = void(WINAPI *)(void *);
-using TrayUI_StartTaskbar_t = void(WINAPI *)(void *);
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
+using Ref_count_base_Decref_t = void(WINAPI*)(void*);
+using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
 
 inline CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
 inline TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 inline Ref_count_base_Decref_t Ref_count_base_Decref_Original = nullptr;
 inline TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
-inline void *CTaskBand_ITaskListWndSite_vftable = nullptr;
+inline void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+inline void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
+inline CTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original = nullptr;
 
 // The mod's rebuild callback, invoked after Explorer rebuilds the taskbar.
 inline void (*g_onTaskbarRebuilt)() = nullptr;
 
-inline void WINAPI TrayUI_StartTaskbar_Hook(void *self)
+inline void WINAPI TrayUI_StartTaskbar_Hook(void* self)
 {
     TrayUI_StartTaskbar_Original(self);
     try
@@ -752,8 +879,24 @@ inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)())
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &TrayUI_StartTaskbar_Original,
          TrayUI_StartTaskbar_Hook},
+        // Secondary symbols are optional. Never fail the working primary clock.
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CSecondaryTaskBand_ITaskListWndSite_vftable,
+         nullptr,
+         true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &CSecondaryTaskBand_GetTaskbarHost_Original,
+         nullptr,
+         true},
     };
-    return WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+    if (!WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks)))
+        return false;
+    bool secondaryOk = CSecondaryTaskBand_ITaskListWndSite_vftable &&
+                       CSecondaryTaskBand_GetTaskbarHost_Original;
+    Wh_Log(L"[Mawaqit][Monitor][Probe] secondary-symbols status=%s vtable=%p host=%p",
+           secondaryOk ? L"ok" : L"missing", CSecondaryTaskBand_ITaskListWndSite_vftable,
+           (void*)CSecondaryTaskBand_GetTaskbarHost_Original);
+    return true;
 }
 
 // The FrameworkElement lives at an offset inside TaskbarHost that MOVES
@@ -763,14 +906,14 @@ inline size_t FrameworkElementOffset()
 {
     size_t offset = 0x10;
 #if defined(_M_X64)
-    BYTE const *code = reinterpret_cast<BYTE const *>(TaskbarHost_FrameHeight_Original);
+    BYTE const* code = reinterpret_cast<BYTE const*>(TaskbarHost_FrameHeight_Original);
     if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC && code[4] == 0x48 &&
         code[5] == 0x83 && code[6] == 0xC1 && code[7] <= 0x7F)
     {
         offset = code[7];
     }
 #elif defined(_M_ARM64)
-    DWORD const *code = reinterpret_cast<DWORD const *>(TaskbarHost_FrameHeight_Original);
+    DWORD const* code = reinterpret_cast<DWORD const*>(TaskbarHost_FrameHeight_Original);
     if (code[0] == 0xD503237F && (code[1] & 0xFFC07FFF) == 0xA9807BFD && code[2] == 0x910003FD &&
         (code[3] & 0xFFF00FE0) == 0xF8400C00)
     {
@@ -782,47 +925,142 @@ inline size_t FrameworkElementOffset()
     return offset;
 }
 
-inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd)
+inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd, bool diagnostic = false)
 {
     if (!CTaskBand_GetTaskbarHost_Original || !TaskbarHost_FrameHeight_Original ||
         !Ref_count_base_Decref_Original || !CTaskBand_ITaskListWndSite_vftable)
+    {
+        if (diagnostic)
+            Wh_Log(L"[Mawaqit][Monitor][Probe] stage=symbols status=missing");
         return nullptr;
+    }
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=symbols status=ok");
 
     HWND taskSwWnd = (HWND)GetProp(taskbarWnd, L"TaskbandHWND");
     if (!taskSwWnd)
+    {
+        if (diagnostic)
+            Wh_Log(L"[Mawaqit][Monitor][Probe] stage=TaskbandHWND status=missing taskbar=%p",
+                   taskbarWnd);
         return nullptr;
-    void *taskBand = (void *)GetWindowLongPtr(taskSwWnd, 0);
+    }
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=TaskbandHWND status=ok hwnd=%p", taskSwWnd);
+    void* taskBand = (void*)GetWindowLongPtr(taskSwWnd, 0);
     if (!taskBand)
+    {
+        if (diagnostic)
+            Wh_Log(L"[Mawaqit][Monitor][Probe] stage=taskBand status=null");
         return nullptr;
+    }
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=taskBand status=ok");
 
-    void *site = taskBand;
-    for (int i = 0; *(void **)site != CTaskBand_ITaskListWndSite_vftable; ++i)
+    void* site = taskBand;
+    for (int i = 0; *(void**)site != CTaskBand_ITaskListWndSite_vftable; ++i)
     {
         if (i == 20)
+        {
+            if (diagnostic)
+                Wh_Log(L"[Mawaqit][Monitor][Probe] stage=site-vtable status=not-found");
             return nullptr;
-        site = (void **)site + 1;
+        }
+        site = (void**)site + 1;
     }
 
-    void *host[2]{};
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=site-vtable status=ok");
+    void* host[2]{};
     CTaskBand_GetTaskbarHost_Original(site, host);
+    if (!host[0] || !host[1])
+    {
+        if (diagnostic)
+            Wh_Log(L"[Mawaqit][Monitor][Probe] stage=taskbar-host status=missing");
+        if (host[1])
+            Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=taskbar-host status=ok");
+    auto* unknown = *(IUnknown**)((BYTE*)host[0] + FrameworkElementOffset());
+    if (!unknown)
+    {
+        if (diagnostic)
+            Wh_Log(L"[Mawaqit][Monitor][Probe] stage=framework-element status=null");
+        Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=framework-element status=pointer-present");
+    FrameworkElement element = nullptr;
+    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(element));
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=framework-element-QI status=%s",
+               element ? L"ok" : L"failed");
+    auto result = element ? element.XamlRoot() : nullptr;
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=xaml-root status=%s", result ? L"ok" : L"null");
+    Ref_count_base_Decref_Original(host[1]);
+    return result;
+}
+
+// Secondary taskbars use WorkerW and CSecondaryTaskBand, not TaskbandHWND.
+// Mirrors the established Windhawk multirow taskbar resolution path.
+inline XamlRoot GetSecondaryTaskbarXamlRoot(HWND taskbarWnd, bool diagnostic = false)
+{
+    if (!CSecondaryTaskBand_ITaskListWndSite_vftable ||
+        !CSecondaryTaskBand_GetTaskbarHost_Original || !TaskbarHost_FrameHeight_Original ||
+        !Ref_count_base_Decref_Original)
+    {
+        if (diagnostic)
+            Wh_Log(L"[Mawaqit][Monitor][Probe] stage=secondary-symbols status=missing");
+        return nullptr;
+    }
+    HWND worker = FindWindowExW(taskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=secondary-WorkerW hwnd=%p", worker);
+    if (!worker)
+        return nullptr;
+    void* taskBand = (void*)GetWindowLongPtrW(worker, 0);
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=secondary-taskBand ptr=%p", taskBand);
+    if (!taskBand)
+        return nullptr;
+    void* site = taskBand;
+    int offset = 0;
+    for (; offset < 20; ++offset)
+    {
+        if (*(void**)site == CSecondaryTaskBand_ITaskListWndSite_vftable)
+            break;
+        site = (void**)site + 1;
+    }
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=secondary-site offset=%d found=%d", offset,
+               offset < 20);
+    if (offset == 20)
+        return nullptr;
+    void* host[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(site, host);
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=secondary-host ptr=%p ref=%p", host[0], host[1]);
     if (!host[0] || !host[1])
     {
         if (host[1])
             Ref_count_base_Decref_Original(host[1]);
         return nullptr;
     }
-
-    auto *unknown = *(IUnknown **)((BYTE *)host[0] + FrameworkElementOffset());
-    if (!unknown)
-    {
-        Ref_count_base_Decref_Original(host[1]);
-        return nullptr;
-    }
+    auto* unknown = *(IUnknown**)((BYTE*)host[0] + FrameworkElementOffset());
     FrameworkElement element = nullptr;
-    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(element));
-    auto result = element ? element.XamlRoot() : nullptr;
+    if (unknown)
+        unknown->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(element));
+    auto root = element ? element.XamlRoot() : nullptr;
+    if (diagnostic)
+        Wh_Log(L"[Mawaqit][Monitor][Probe] stage=secondary-XamlRoot status=%s",
+               root ? L"ok" : L"null");
     Ref_count_base_Decref_Original(host[1]);
-    return result;
+    return root;
 }
 
 } // namespace folder_menus_taskbar_xaml
@@ -836,14 +1074,19 @@ static std::wstring CacheDir()
     return path;
 }
 
+// Shared configuration ownership: refresh worker reads, settings loader writes.
+// The generation changes only when the schedule's mosque or refresh interval changes.
+static SRWLOCK g_settingsLock = SRWLOCK_INIT;
+static std::atomic<unsigned long long> g_scheduleConfigGeneration{0};
+
 namespace NativeUpdater
 {
 
-static void fail(const char *s)
+static void fail(const char* s)
 {
     throw std::runtime_error(s);
 }
-static std::string narrow(const std::wstring &s)
+static std::string narrow(const std::wstring& s)
 {
     if (s.empty())
         return {};
@@ -852,7 +1095,7 @@ static std::string narrow(const std::wstring &s)
     WideCharToMultiByte(CP_UTF8, 0, s.data(), (int)s.size(), r.data(), n, nullptr, nullptr);
     return r;
 }
-static std::string quote(const std::string &s)
+static std::string quote(const std::string& s)
 {
     std::string o = "\"";
     for (unsigned char c : s)
@@ -901,14 +1144,14 @@ struct J
     std::string s;
     std::vector<J> a;
     std::map<std::string, J> o;
-    const J &key(const std::string &k) const
+    const J& key(const std::string& k) const
     {
         auto it = o.find(k);
         if (it == o.end())
             fail("Missing JSON key");
         return it->second;
     }
-    const J &idx(size_t i) const
+    const J& idx(size_t i) const
     {
         if (i >= a.size())
             fail("JSON array index missing");
@@ -918,7 +1161,7 @@ struct J
 
 struct Parser
 {
-    const std::string &s;
+    const std::string& s;
     size_t p = 0;
     int depth = 0;
     void ws()
@@ -932,7 +1175,7 @@ struct Parser
         if (p >= s.size() || s[p++] != c)
             fail("Malformed JSON");
     }
-    static void utf8(std::string &out, unsigned cp)
+    static void utf8(std::string& out, unsigned cp)
     {
         if (cp < 128)
             out += (char)cp;
@@ -1020,7 +1263,8 @@ struct Parser
             case 'f':
                 o += '\f';
                 break;
-            case 'u': {
+            case 'u':
+            {
                 unsigned cp = hex4();
                 if (cp >= 0xD800 && cp <= 0xDBFF)
                 {
@@ -1131,11 +1375,11 @@ struct Http
         if (h)
             WinHttpCloseHandle(h);
     }
-    Http(const Http &) = delete;
-    Http &operator=(const Http &) = delete;
+    Http(const Http&) = delete;
+    Http& operator=(const Http&) = delete;
 };
 
-static std::string fetch(const std::wstring &path)
+static std::string fetch(const std::wstring& path)
 {
     Http session(WinHttpOpen(L"EmberveilMawaqit/0.5", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                              WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
@@ -1171,7 +1415,7 @@ static std::string fetch(const std::wstring &path)
     return result;
 }
 
-static std::string extract(const std::string &html)
+static std::string extract(const std::string& html)
 {
     size_t pos = html.find("let confData");
     if (pos == std::string::npos)
@@ -1206,13 +1450,13 @@ static std::string date(int y, int m, int d)
     snprintf(b, sizeof(b), "%04d-%02d-%02d", y, m, d);
     return b;
 }
-static bool validTime(const std::string &t)
+static bool validTime(const std::string& t)
 {
     return t.size() == 5 && t[2] == ':' && t[0] >= '0' && t[0] <= '2' && t[1] >= '0' &&
            t[1] <= '9' && t[3] >= '0' && t[3] <= '5' && t[4] >= '0' && t[4] <= '9' &&
            ((t[0] - '0') * 10 + t[1] - '0') < 24;
 }
-static void writeFile(const std::wstring &path, const std::string &content)
+static void writeFile(const std::wstring& path, const std::string& content)
 {
     HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
                            FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -1225,17 +1469,24 @@ static void writeFile(const std::wstring &path, const std::string &content)
     if (!ok || written != content.size())
         fail("Cache write failed");
 }
-static void replace(const std::wstring &from, const std::wstring &to)
+static void replace(const std::wstring& from, const std::wstring& to)
 {
     if (!MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         fail("Cache replace failed");
 }
 
-static std::wstring normalize(std::wstring input, std::wstring &slug)
+static std::wstring normalize(std::wstring input, std::wstring& slug)
 {
-    const std::wstring prefix = L"https://mawaqit.net/";
-    if (input.rfind(prefix, 0) == 0)
-        input = input.substr(prefix.size());
+    // Accept public and admin page links, but always download from the public host.
+    for (const wchar_t* prefix : {L"https://mawaqit.net/", L"https://admin.mawaqit.net/"})
+    {
+        std::wstring candidate(prefix);
+        if (input.compare(0, candidate.size(), candidate) == 0)
+        {
+            input.erase(0, candidate.size());
+            break;
+        }
+    }
     if (input.empty() || input.find_first_of(L"?#\\@") != std::wstring::npos ||
         input.find(L"://") != std::wstring::npos)
         fail("Invalid mosque URL/identifier");
@@ -1250,7 +1501,11 @@ static std::wstring normalize(std::wstring input, std::wstring &slug)
     }
     else
         slug = input;
-    auto valid = [](wchar_t c) {
+    // Both /<language>/<slug> and /<language>/m/<slug> identify the same mosque.
+    if (slug.compare(0, 2, L"m/") == 0)
+        slug.erase(0, 2);
+    auto valid = [](wchar_t c)
+    {
         return (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9') ||
                c == L'_' || c == L'-';
     };
@@ -1261,7 +1516,7 @@ static std::wstring normalize(std::wstring input, std::wstring &slug)
     return L"/" + lang + L"/" + slug;
 }
 
-static bool Run(const std::wstring &mosque)
+static bool Run(const std::wstring& mosque, unsigned long long expectedGeneration)
 {
     std::wstring slug;
     std::wstring path = normalize(mosque, slug);
@@ -1269,11 +1524,11 @@ static bool Run(const std::wstring &mosque)
     std::string json = extract(html);
     Parser parser{json};
     J root = parser.value();
-    const J &cal = root.key("calendar");
+    const J& cal = root.key("calendar");
     if (cal.kind != J::Arr || cal.a.size() != 12)
         fail("Calendar must have 12 months");
-    const J &nameVal = root.key("name");
-    const J &tzVal = root.key("timezone");
+    const J& nameVal = root.key("name");
+    const J& tzVal = root.key("timezone");
     if (tzVal.kind != J::Str || tzVal.s.empty())
         fail("Missing timezone");
     std::string name = nameVal.kind == J::Str && !nameVal.s.empty() ? nameVal.s : narrow(slug);
@@ -1286,18 +1541,18 @@ static bool Run(const std::wstring &mosque)
           << "\n# Year: " << year << "\n";
     for (int m = 1; m <= 12; m++)
     {
-        const J &month = cal.idx(m - 1);
+        const J& month = cal.idx(m - 1);
         if (month.kind != J::Obj)
             fail("Month is not an object");
         for (int d = 1; d <= days(year, m); d++)
         {
-            const J &entry = month.key(std::to_string(d));
+            const J& entry = month.key(std::to_string(d));
             if (entry.kind != J::Arr || entry.a.size() != 6)
                 fail("Invalid calendar day");
             sched << date(year, m, d);
             for (int i : {0, 2, 3, 4, 5})
             {
-                const J &t = entry.idx(i);
+                const J& t = entry.idx(i);
                 if (t.kind != J::Str || !validTime(t.s))
                     fail("Invalid prayer time");
                 sched << '|' << t.s;
@@ -1367,8 +1622,29 @@ static bool Run(const std::wstring &mosque)
     {
         writeFile(tmp1, sched.str());
         writeFile(tmp2, meta.str());
-        replace(tmp1, dir + L"\\schedule.txt");
-        replace(tmp2, dir + L"\\metadata.json");
+        // A settings change while fetching must never publish the obsolete
+        // mosque's schedule. Serialize validation and both cache replacements
+        // against settings updates.
+        AcquireSRWLockShared(&g_settingsLock);
+        if (g_scheduleConfigGeneration.load(std::memory_order_acquire) != expectedGeneration)
+        {
+            ReleaseSRWLockShared(&g_settingsLock);
+            DeleteFileW(tmp1.c_str());
+            DeleteFileW(tmp2.c_str());
+            Wh_Log(L"[Mawaqit] Discarded obsolete schedule download before cache commit");
+            return false;
+        }
+        try
+        {
+            replace(tmp1, dir + L"\\schedule.txt");
+            replace(tmp2, dir + L"\\metadata.json");
+        }
+        catch (...)
+        {
+            ReleaseSRWLockShared(&g_settingsLock);
+            throw;
+        }
+        ReleaseSRWLockShared(&g_settingsLock);
     }
     catch (...)
     {
@@ -1386,12 +1662,12 @@ struct Prayer
     std::wstring name;
     int minute;
 };
-static const wchar_t *kNames[] = {L"Fajr", L"Dhuhr", L"Asr", L"Maghrib", L"Isha"};
+static const wchar_t* kNames[] = {L"Fajr", L"Dhuhr", L"Asr", L"Maghrib", L"Isha"};
 static std::wstring g_label = L"Loading schedule", g_countdown = L"--:--";
 static std::wstring g_loadedDate;
 static std::vector<Prayer> g_today, g_tomorrow;
 
-static std::wstring DateKey(const SYSTEMTIME &t)
+static std::wstring DateKey(const SYSTEMTIME& t)
 {
     wchar_t b[16];
     swprintf(b, 16, L"%04u-%02u-%02u", t.wYear, t.wMonth, t.wDay);
@@ -1404,7 +1680,7 @@ static std::wstring CachePath()
     return dir.empty() ? L"" : dir + L"\\schedule.txt";
 }
 
-static std::wstring Utf8ToWide(const std::string &s)
+static std::wstring Utf8ToWide(const std::string& s)
 {
     int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
     if (n <= 0)
@@ -1416,7 +1692,7 @@ static std::wstring Utf8ToWide(const std::string &s)
 // Minimal JSON string reader for the two fields written by our trusted updater.
 // Handles standard JSON escapes and Unicode escapes, including surrogate pairs.
 
-static std::wstring JsonField(const std::wstring &json, const wchar_t *key)
+static std::wstring JsonField(const std::wstring& json, const wchar_t* key)
 {
     std::wstring token = L"\"" + std::wstring(key) + L"\"";
     size_t at = json.find(token);
@@ -1513,7 +1789,7 @@ static void LoadMetadata()
     std::wstring hijri = JsonField(json, L"hijriDate");
     if (hijri.size() == 10 && hijri[4] == L'-' && hijri[7] == L'-')
     {
-        static const wchar_t *months[] = {L"Muharram",       L"Safar",         L"Rabi' al-Awwal",
+        static const wchar_t* months[] = {L"Muharram",       L"Safar",         L"Rabi' al-Awwal",
                                           L"Rabi' al-Thani", L"Jumada al-Ula", L"Jumada al-Akhirah",
                                           L"Rajab",          L"Sha'ban",       L"Ramadan",
                                           L"Shawwal",        L"Dhu al-Qi'dah", L"Dhu al-Hijjah"};
@@ -1528,7 +1804,7 @@ static void LoadMetadata()
     }
 }
 
-static bool ParseDay(const std::wstring &line, const std::wstring &date, std::vector<Prayer> &out)
+static bool ParseDay(const std::wstring& line, const std::wstring& date, std::vector<Prayer>& out)
 {
     if (line.size() < date.size() + 1 || line.compare(0, date.size(), date) != 0 ||
         line[date.size()] != L'|')
@@ -1554,7 +1830,7 @@ static bool ParseDay(const std::wstring &line, const std::wstring &date, std::ve
     return true;
 }
 
-static void LoadSchedule(const SYSTEMTIME &now)
+static void LoadSchedule(const SYSTEMTIME& now)
 {
     std::wstring today = DateKey(now);
     if (today == g_loadedDate)
@@ -1604,7 +1880,7 @@ static void UpdateCountdown()
         return;
     }
     int nowSec = now.wHour * 3600 + now.wMinute * 60 + now.wSecond;
-    for (const auto &p : g_today)
+    for (const auto& p : g_today)
     {
         int sec = p.minute * 60 - nowSec;
         if (sec > 0)
@@ -1619,7 +1895,7 @@ static void UpdateCountdown()
     }
     if (!g_tomorrow.empty())
     {
-        const auto &p = g_tomorrow.front();
+        const auto& p = g_tomorrow.front();
         int sec = 86400 - nowSec + p.minute * 60;
         wchar_t label[80], count[32];
         swprintf(label, 80, L"%ls  %02d:%02d", p.name.c_str(), p.minute / 60, p.minute % 60);
@@ -1650,14 +1926,14 @@ struct Insets
 {
     int left = 0, top = 0, right = 0, bottom = 0;
 };
-static Insets ParseInsets(const std::wstring &value, int minVal, int maxVal)
+static Insets ParseInsets(const std::wstring& value, int minVal, int maxVal)
 {
     Insets result{};
     int values[4]{};
     if (swscanf_s(value.c_str(), L" %d , %d , %d , %d ", &values[0], &values[1], &values[2],
                   &values[3]) == 4)
     {
-        for (int &v : values)
+        for (int& v : values)
             v = std::clamp(v, minVal, maxVal);
         result = {values[0], values[1], values[2], values[3]};
     }
@@ -1667,6 +1943,7 @@ static int g_width = 200, g_pillHeight = 0, g_trayGap = 5, g_cornerRadius = 13, 
 static Insets g_margins{}, g_padding{};
 static std::wstring g_theme = L"system";
 static std::wstring g_position = L"before-tray";
+static bool g_showPrimaryMonitor = true, g_showSecondaryMonitors = true;
 struct PillPalette
 {
     winrt::Windows::UI::Color background, foreground, countdown, separator;
@@ -1675,7 +1952,7 @@ static winrt::Windows::UI::Color Rgb(unsigned c)
 {
     return winrt::Windows::UI::Color{255, (uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c};
 }
-static COLORREF ParseThemeHex(const std::wstring &input, COLORREF fallback)
+static COLORREF ParseThemeHex(const std::wstring& input, COLORREF fallback)
 {
     if (input.size() != 7 || input[0] != L'#')
         return fallback;
@@ -1709,11 +1986,11 @@ static bool WindowsLightMode()
         return false;
     DWORD value = 0, bytes = sizeof(value);
     LONG result = RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, nullptr,
-                                   reinterpret_cast<BYTE *>(&value), &bytes);
+                                   reinterpret_cast<BYTE*>(&value), &bytes);
     RegCloseKey(key);
     return result == ERROR_SUCCESS && value != 0;
 }
-static PillPalette ResolvePillPalette(const std::wstring &theme)
+static PillPalette ResolvePillPalette(const std::wstring& theme)
 {
     if (theme == L"traditional")
         return {Rgb(0x123D34), Rgb(0xF5EAD3), Rgb(0xE4C784), Rgb(0xC9B789)};
@@ -1755,9 +2032,14 @@ static PillPalette ResolvePillPalette(const std::wstring &theme)
 static bool g_showNext = true, g_showCountdown = true, g_enablePopup = true;
 static std::atomic<int> g_popupAutoCloseSeconds{5};
 static ULONGLONG g_popupAutoCloseDeadline = 0;
+static bool g_openPopupOnHover = false;
+static int g_hoverCloseDelayMs = 500;
+// Accessed only from the taskbar UI thread (the popup is created on that thread).
+static bool g_hoverPopupActive = false;
+static ULONGLONG g_hoverOutsideSince = 0;
+static RECT g_hoverAnchorRect{};
 static std::wstring g_mosque = L"al-haram-makkah-saudi-arabia";
 static int g_refreshHours = 24;
-static SRWLOCK g_settingsLock = SRWLOCK_INIT;
 static HANDLE g_stopEvent = nullptr, g_refreshEvent = nullptr;
 static HANDLE g_updateWorker = nullptr;
 static HANDLE g_countdownWorker = nullptr;
@@ -1768,6 +2050,8 @@ static void UpdateClockOnUiThread();
 static HWND g_popup = nullptr;
 static winrt::event_token g_tapToken{};
 static bool g_tapRegistered = false;
+static winrt::event_token g_hoverToken{};
+static bool g_hoverRegistered = false;
 
 // Popup is a small independent Win32 window owned by the taskbar UI thread.
 // The native taskbar slot remains XAML; this preserves the original v0.6.6
@@ -1865,8 +2149,9 @@ static void PaintPrayerPopup(HWND hwnd)
                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                              DEFAULT_PITCH, L"Segoe UI");
     HGDIOBJ oldFont = SelectObject(dc, font);
-    auto line = [&](const std::wstring &value, int left, int top, int right, int height,
-                    COLORREF color, UINT flags) {
+    auto line = [&](const std::wstring& value, int left, int top, int right, int height,
+                    COLORREF color, UINT flags)
+    {
         RECT rect{left, top, right, top + height};
         SetTextColor(dc, color);
         DrawTextW(dc, value.c_str(), -1, &rect,
@@ -1911,17 +2196,91 @@ static void PaintPrayerPopup(HWND hwnd)
 }
 // The popup is an activatable flyout: Windows notifies it when focus leaves.
 // No session-wide mouse hook or cross-application Escape polling is needed.
+// All animation state belongs to the taskbar/popup UI thread.
+static constexpr UINT_PTR kPopupAnimationTimer = 2;
+static bool g_popupAnimating = false;
+static bool g_popupClosing = false;
+static bool g_popupMotionEnabled = true;
+static ULONGLONG g_popupAnimationStarted = 0;
+static DWORD g_popupAnimationDuration = 200;
+static int g_popupStartY = 0;
+static int g_popupTargetY = 0;
+static int g_popupTargetX = 0;
+static int g_popupWidth = 0;
+static int g_popupHeight = 0;
+static int g_popupSlideDistance = 0;
 static ULONGLONG g_popupLastDeactivated = 0;
-static void HidePrayerPopup(bool deactivated = false)
+
+static bool PopupMotionAllowed()
 {
-    g_popupAutoCloseDeadline = 0;
+    BOOL enabled = TRUE;
+    return SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0) && enabled;
+}
+
+static void StopPopupAnimation()
+{
+    if (g_popup && IsWindow(g_popup))
+        KillTimer(g_popup, kPopupAnimationTimer);
+    g_popupAnimating = false;
+    g_popupClosing = false;
+}
+
+static void FinishPopupHide()
+{
+    StopPopupAnimation();
     if (g_popup && IsWindow(g_popup))
     {
         KillTimer(g_popup, 1);
         ShowWindow(g_popup, SW_HIDE);
     }
+}
+
+static void BeginPopupCloseAnimation()
+{
+    if (!g_popup || !IsWindowVisible(g_popup) || g_popupClosing)
+        return;
+    g_popupAutoCloseDeadline = 0;
+    g_hoverPopupActive = false;
+    g_hoverOutsideSince = 0;
+    KillTimer(g_popup, 1);
+    if (!g_popupMotionEnabled)
+    {
+        FinishPopupHide();
+        return;
+    }
+    RECT current{};
+    if (!GetWindowRect(g_popup, &current))
+    {
+        FinishPopupHide();
+        return;
+    }
+    g_popupStartY = current.top;
+    g_popupTargetY = current.top + g_popupSlideDistance;
+    g_popupAnimationStarted = GetTickCount64();
+    g_popupAnimationDuration = 140;
+    g_popupAnimating = true;
+    g_popupClosing = true;
+    if (!SetTimer(g_popup, kPopupAnimationTimer, 15, nullptr))
+    {
+        Wh_Log(L"[Mawaqit] Popup close animation timer failed: %lu; hiding immediately",
+               GetLastError());
+        FinishPopupHide();
+    }
+}
+
+static void HidePrayerPopup(bool deactivated = false)
+{
+    g_popupAutoCloseDeadline = 0;
+    g_hoverPopupActive = false;
+    g_hoverOutsideSince = 0;
+    // Focus loss must hide immediately so the flyout never floats above a new app.
     if (deactivated)
+    {
+        FinishPopupHide();
         g_popupLastDeactivated = GetTickCount64();
+    }
+    else
+        BeginPopupCloseAnimation();
 }
 static LRESULT CALLBACK PrayerPopupProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -1946,9 +2305,53 @@ static LRESULT CALLBACK PrayerPopupProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     case WM_CLOSE:
         HidePrayerPopup();
         return 0;
-    case WM_TIMER: {
+    case WM_TIMER:
+    {
+        if (wp == kPopupAnimationTimer && g_popupAnimating)
+        {
+            ULONGLONG elapsed = GetTickCount64() - g_popupAnimationStarted;
+            double t = std::min(1.0, static_cast<double>(elapsed) / g_popupAnimationDuration);
+            // Cubic ease-out on entry; cubic ease-in on exit.
+            double eased = g_popupClosing ? t * t * t : 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);
+            int y = g_popupStartY +
+                    static_cast<int>(std::lround((g_popupTargetY - g_popupStartY) * eased));
+            SetWindowPos(hwnd, nullptr, g_popupTargetX, y, 0, 0,
+                         SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (t >= 1.0)
+            {
+                bool closing = g_popupClosing;
+                StopPopupAnimation();
+                if (closing)
+                    FinishPopupHide();
+            }
+            return 0;
+        }
         if (wp == 1)
         {
+            if (g_hoverPopupActive && !g_popupAnimating && IsWindowVisible(hwnd))
+            {
+                POINT cursor{};
+                RECT popupRect{};
+                if (GetCursorPos(&cursor) && GetWindowRect(hwnd, &popupRect))
+                {
+                    bool inside =
+                        PtInRect(&g_hoverAnchorRect, cursor) || PtInRect(&popupRect, cursor);
+                    if (inside)
+                        g_hoverOutsideSince = 0;
+                    else
+                    {
+                        ULONGLONG now = GetTickCount64();
+                        if (!g_hoverOutsideSince)
+                            g_hoverOutsideSince = now;
+                        if (now - g_hoverOutsideSince >=
+                            static_cast<ULONGLONG>(g_hoverCloseDelayMs))
+                        {
+                            HidePrayerPopup();
+                            return 0;
+                        }
+                    }
+                }
+            }
             if (g_popupAutoCloseDeadline && GetTickCount64() >= g_popupAutoCloseDeadline)
             {
                 Wh_Log(L"[Mawaqit] Popup auto-close timeout reached");
@@ -1960,6 +2363,7 @@ static LRESULT CALLBACK PrayerPopupProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         return 0;
     }
     case WM_DESTROY:
+        StopPopupAnimation();
         KillTimer(hwnd, 1);
         if (g_popup == hwnd)
             g_popup = nullptr;
@@ -1974,6 +2378,11 @@ static void DestroyPrayerPopup()
 {
     if (g_popup)
     {
+        // A rebuild/unload is a forced close, never an animated transition.
+        FinishPopupHide();
+        g_popupAutoCloseDeadline = 0;
+        g_hoverPopupActive = false;
+        g_hoverOutsideSince = 0;
         DestroyWindow(g_popup);
         g_popup = nullptr;
     }
@@ -1985,7 +2394,8 @@ static void DestroyPrayerPopup()
             g_popupClassRegistered = false;
     }
 }
-[[maybe_unused]] static void TogglePrayerPopup()
+[[maybe_unused]] static void TogglePrayerPopup(Grid const& anchorPill, HWND anchorTaskbar,
+                                               bool hover = false)
 {
 
     if (!g_enablePopup)
@@ -1993,14 +2403,17 @@ static void DestroyPrayerPopup()
         Wh_Log(L"[Mawaqit] Popup click ignored: disabled by settings");
         return;
     }
-    // A pill click may have just deactivated the flyout. Do not reopen it.
+    // Avoid reopening immediately after losing activation.
     if (g_popupLastDeactivated && GetTickCount64() - g_popupLastDeactivated < 300)
         return;
     if (g_popup && IsWindowVisible(g_popup))
     {
-        HidePrayerPopup();
+        if (!hover)
+            HidePrayerPopup();
         return;
     }
+    if (hover && !g_openPopupOnHover)
+        return;
     if (!g_popup)
     {
 
@@ -2012,7 +2425,7 @@ static void DestroyPrayerPopup()
             QueryPerformanceCounter(&stamp);
             swprintf_s(g_popupClassName, L"MawaqitPopup_%lu_%llX_%p", GetCurrentProcessId(),
                        (unsigned long long)stamp.QuadPart,
-                       reinterpret_cast<void *>(&PrayerPopupProc));
+                       reinterpret_cast<void*>(&PrayerPopupProc));
         }
         if (!g_popupClassInstance)
         {
@@ -2057,7 +2470,9 @@ static void DestroyPrayerPopup()
 
     UpdateCountdown();
 
-    HWND taskbar = taskwin::FindCurrentProcessTaskbarWnd();
+    HWND taskbar = anchorTaskbar && IsWindow(anchorTaskbar)
+                       ? anchorTaskbar
+                       : taskwin::FindCurrentProcessTaskbarWnd();
     RECT bar{};
     if (taskbar)
         GetWindowRect(taskbar, &bar);
@@ -2078,13 +2493,14 @@ static void DestroyPrayerPopup()
     bool top = bar.top <= monitor.top + 10;
     int x = bar.left + (bar.right - bar.left - w) / 2;
     // Center below the XAML pill if possible, otherwise use taskbar center.
-    if (g_pill)
+    if (anchorPill)
     {
         try
         {
-            auto transform = g_pill.TransformToVisual(nullptr);
+            auto transform = anchorPill.TransformToVisual(nullptr);
             auto pt = transform.TransformPoint({0, 0});
-            x = bar.left + (int)std::lround((pt.X + g_pill.ActualWidth() / 2.0) * scale) - w / 2;
+            x = bar.left + (int)std::lround((pt.X + anchorPill.ActualWidth() / 2.0) * scale) -
+                w / 2;
         }
         catch (...)
         {
@@ -2102,15 +2518,67 @@ static void DestroyPrayerPopup()
     if (rounded && !SetWindowRgn(g_popup, rounded, FALSE))
         DeleteObject(rounded);
 
-    SetWindowPos(g_popup, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW);
-    SetForegroundWindow(g_popup);
-    SetFocus(g_popup);
-    SetTimer(g_popup, 1, 150, nullptr);
+    // Animate the whole native window, leaving its paint/layout and themes unchanged.
+    StopPopupAnimation();
+    g_popupMotionEnabled = PopupMotionAllowed();
+    g_popupTargetX = x;
+    g_popupTargetY = y;
+    g_popupWidth = w;
+    g_popupHeight = h;
+    g_popupSlideDistance = top ? -MulDiv(22, dpi, 96) : MulDiv(22, dpi, 96);
+    g_popupStartY = g_popupMotionEnabled ? y + g_popupSlideDistance : y;
+    SetWindowPos(g_popup, HWND_TOPMOST, x, g_popupStartY, w, h,
+                 SWP_SHOWWINDOW | (hover ? SWP_NOACTIVATE : 0));
+    if (g_popupMotionEnabled)
+    {
+        g_popupAnimating = true;
+        g_popupClosing = false;
+        g_popupAnimationStarted = GetTickCount64();
+        g_popupAnimationDuration = 200;
+        if (!SetTimer(g_popup, kPopupAnimationTimer, 15, nullptr))
+        {
+            Wh_Log(L"[Mawaqit] Popup open animation timer failed: %lu; showing at final position",
+                   GetLastError());
+            StopPopupAnimation();
+            SetWindowPos(g_popup, nullptr, g_popupTargetX, g_popupTargetY, 0, 0,
+                         SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+    if (!hover)
+    {
+        SetForegroundWindow(g_popup);
+        SetFocus(g_popup);
+    }
+    g_hoverPopupActive = hover;
+    g_hoverOutsideSince = 0;
+    if (hover)
+    {
+        // Translate the XAML pill bounds into physical screen coordinates.
+        // The same monitor-aware coordinate space is used for popup placement.
+        try
+        {
+            auto transform = anchorPill.TransformToVisual(nullptr);
+            auto pt = transform.TransformPoint({0, 0});
+            g_hoverAnchorRect = {
+                bar.left + static_cast<LONG>(std::lround(pt.X * scale)),
+                bar.top + static_cast<LONG>(std::lround(pt.Y * scale)),
+                bar.left +
+                    static_cast<LONG>(std::lround((pt.X + anchorPill.ActualWidth()) * scale)),
+                bar.top +
+                    static_cast<LONG>(std::lround((pt.Y + anchorPill.ActualHeight()) * scale))};
+        }
+        catch (...)
+        {
+            g_hoverAnchorRect = bar;
+        }
+    }
+    SetTimer(g_popup, 1, 50, nullptr);
     // Arm only after the popup becomes visible; a subsequent opening re-arms.
     int autoClose = g_popupAutoCloseSeconds.load();
     g_popupAutoCloseDeadline =
         autoClose > 0 ? GetTickCount64() + static_cast<ULONGLONG>(autoClose) * 1000 : 0;
-    Wh_Log(L"[Mawaqit] Popup opened: auto-close=%d seconds", autoClose);
+    Wh_Log(L"[Mawaqit][Monitor] Popup opened: taskbar=%p anchor=%s x=%d y=%d auto-close=%d seconds",
+           taskbar, anchorTaskbar ? L"secondary" : L"primary", x, y, autoClose);
 
     InvalidateRect(g_popup, nullptr, FALSE);
 }
@@ -2118,7 +2586,7 @@ static void DestroyPrayerPopup()
 static constexpr wchar_t kSlotName[] = L"MawaqitTaskbarSlot";
 static constexpr wchar_t kLeaseName[] = L"MawaqitTaskbarLease";
 
-static FrameworkElement FindNamed(FrameworkElement const &root, wchar_t const *name, int depth = 0)
+static FrameworkElement FindNamed(FrameworkElement const& root, wchar_t const* name, int depth = 0)
 {
     if (!root || depth > 24)
         return nullptr;
@@ -2151,8 +2619,8 @@ static Panel LiveTray()
 
 // Locate the application repeater's actual parent for icon-area insertion.
 // Do not substitute a tray slot when the XAML hierarchy differs.
-static bool FindApplicationRepeater(FrameworkElement const &root, Panel &parent,
-                                    FrameworkElement &repeater, int depth = 0)
+static bool FindApplicationRepeater(FrameworkElement const& root, Panel& parent,
+                                    FrameworkElement& repeater, int depth = 0)
 {
     if (!root || depth > 24)
         return false;
@@ -2160,7 +2628,7 @@ static bool FindApplicationRepeater(FrameworkElement const &root, Panel &parent,
     // Only lease beside a direct child of a supported panel.
     if (auto panel = root.try_as<Panel>())
     {
-        for (auto const &child : panel.Children())
+        for (auto const& child : panel.Children())
         {
             auto element = child.try_as<FrameworkElement>();
             if (element && element.Name() == L"TaskbarFrameRepeater" &&
@@ -2213,7 +2681,7 @@ static Panel ResolveCenterParent()
     return grid;
 }
 
-static Panel ResolvePositionParent(int &slotIndex)
+static Panel ResolvePositionParent(int& slotIndex)
 {
     slotIndex = -1;
     if (g_position == L"after-icons")
@@ -2477,21 +2945,437 @@ static void UpdateAfterIconsOnUiThread()
     }
 }
 
-static void RemoveOnUiThread()
+// Secondary taskbars own independent XAML objects, leases, and event tokens.
+// Never reuse the primary widget's XAML objects, lease, or parent.
+struct SecondaryClockInstance
 {
-    g_centerDiagnosticCount = 0;
-    g_afterIconsDiagnosticCount = 0;
-    DestroyPrayerPopup();
-    if (g_pill && g_tapRegistered)
+    HWND taskbar = nullptr;
+    std::wstring monitor;
+    winrt::weak_ref<Panel> parent;
+    winrt::weak_ref<Grid> pill;
+    winrt::weak_ref<TextBlock> prayer;
+    winrt::weak_ref<TextBlock> countdown;
+    slot::Lease lease{};
+    winrt::event_token tapToken{};
+    bool tapRegistered = false;
+    winrt::event_token hoverToken{};
+    bool hoverRegistered = false;
+};
+static std::vector<SecondaryClockInstance> g_secondaryClocks;
+static constexpr wchar_t kSecondarySlotName[] = L"MawaqitSecondaryClockSlot";
+static constexpr wchar_t kSecondaryLeaseName[] = L"MawaqitSecondaryClockLease";
+
+static void RemoveSecondaryClocksOnUiThread()
+{
+    for (auto& instance : g_secondaryClocks)
     {
+        auto pill = instance.pill.get();
+        if (pill)
+        {
+            if (instance.hoverRegistered)
+            {
+                try
+                {
+                    pill.PointerEntered(instance.hoverToken);
+                }
+                catch (...)
+                {
+                }
+                instance.hoverRegistered = false;
+            }
+            if (instance.tapRegistered)
+            {
+                try
+                {
+                    pill.Tapped(instance.tapToken);
+                }
+                catch (...)
+                {
+                }
+                instance.tapRegistered = false;
+            }
+        }
+        auto parent = instance.parent.get();
+        if (parent)
+        {
+            for (int i = (int)parent.Children().Size() - 1; i >= 0; --i)
+            {
+                auto child = parent.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child && child.Name() == kSecondarySlotName)
+                    parent.Children().RemoveAt(i);
+            }
+            if (!instance.lease.markerName.empty())
+                slot::Release(parent, instance.lease);
+        }
+    }
+    g_secondaryClocks.clear();
+}
+
+// A weak reference can remain alive after Explorer detaches a taskbar tree.
+// Validate that the tracked pill still belongs to its recorded parent.
+static bool SecondaryClockAttachedOnUiThread(SecondaryClockInstance const& instance)
+{
+    if (!IsWindow(instance.taskbar))
+        return false;
+    auto parent = instance.parent.get();
+    auto pill = instance.pill.get();
+    if (!parent || !pill)
+        return false;
+    try
+    {
+        for (auto const& child : parent.Children())
+            if (child.try_as<Grid>() == pill)
+                return true;
+    }
+    catch (...)
+    {
+    }
+    return false;
+}
+
+static void EnsureSecondaryClocksOnUiThread()
+{
+    if (g_stopping.load() || !g_showSecondaryMonitors)
+        return;
+    // Retire detached or destroyed secondary instances before rediscovery.
+    // Removal uses the existing token-revocation and slot-release path.
+    bool stale = false;
+    for (auto const& instance : g_secondaryClocks)
+        if (!SecondaryClockAttachedOnUiThread(instance))
+        {
+            stale = true;
+            break;
+        }
+    if (stale)
+    {
+        Wh_Log(L"[Mawaqit][Monitor] Stale secondary clock detected; rebuilding secondary slots");
+        RemoveSecondaryClocksOnUiThread();
+    }
+    for (auto const& record : mawaqit_monitor_discovery::EnumerateTaskbars())
+    {
+        if (record.primaryTaskbar || !IsWindow(record.hwnd))
+            continue;
+        bool existing = false;
+        for (auto const& instance : g_secondaryClocks)
+            if (instance.taskbar == record.hwnd && SecondaryClockAttachedOnUiThread(instance))
+            {
+                existing = true;
+                break;
+            }
+        if (existing)
+            continue;
+        // Resolve the secondary XAML tree without development-only hierarchy dumps.
+        auto xamlRoot = taskxaml::GetSecondaryTaskbarXamlRoot(record.hwnd, false);
+        auto root = xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+        auto trayElement = root ? FindNamed(root, L"SystemTrayFrameGrid") : nullptr;
+        auto parent = trayElement ? trayElement.try_as<Panel>() : nullptr;
+        auto kind = parent ? slot::Classify(parent) : slot::Kind::Unsupported;
+        if (!parent || kind == slot::Kind::Unsupported)
+        {
+            continue;
+        }
+        // Before-icons requires a real layout lease in the secondary icon
+        // repeater's parent; overlays cannot make room to its left.
+        bool overlay = g_position == L"center" || g_position == L"after-icons";
+        int index = -1;
+        if (g_position == L"before-icons")
+        {
+            Panel iconsParent{nullptr};
+            FrameworkElement repeater{nullptr};
+            if (!root || !FindApplicationRepeater(root, iconsParent, repeater) || !iconsParent ||
+                !repeater || iconsParent.ActualWidth() <= 0 || repeater.ActualWidth() <= 0 ||
+                repeater.ActualHeight() <= 0)
+            {
+                Wh_Log(L"[Mawaqit][Monitor][BeforeIcons] waiting for secondary icon repeater on %s",
+                       record.device.c_str());
+                continue;
+            }
+            auto iconKind = slot::Classify(iconsParent);
+            if (iconKind == slot::Kind::Columns)
+                index = Grid::GetColumn(repeater);
+            else if (iconKind == slot::Kind::Order)
+                index = slot::IndexOfChild(iconsParent, repeater);
+            if (index < 0)
+            {
+                Wh_Log(L"[Mawaqit][Monitor][BeforeIcons] no supported icon slot on %s",
+                       record.device.c_str());
+                continue;
+            }
+            parent = iconsParent;
+            Wh_Log(L"[Mawaqit][Monitor][BeforeIcons] monitor=%s parent=%s slot=%d repeaterW=%.1f "
+                   L"children=%s",
+                   record.device.c_str(), slot::ClassName(parent).c_str(), index,
+                   repeater.ActualWidth(), slot::DescribeChildren(parent).c_str());
+        }
+        else if (overlay)
+        {
+            auto rootGrid = root.try_as<Grid>();
+            RECT bar{};
+            double expectedWidth = 0;
+            if (GetWindowRect(record.hwnd, &bar))
+                expectedWidth =
+                    (bar.right - bar.left) * 96.0 / std::max(96u, GetDpiForWindow(record.hwnd));
+            if (!rootGrid || expectedWidth <= 0 || rootGrid.ActualWidth() < expectedWidth * 0.75)
+            {
+                Wh_Log(L"[Mawaqit][Monitor] Overlay awaiting full-width secondary root: %s",
+                       record.device.c_str());
+                continue;
+            }
+            parent = rootGrid;
+        }
+        else
+        {
+            slot::Anchor anchor = g_position == L"after-tray" ? slot::Anchor::AfterShowDesktop
+                                                              : slot::Anchor::BeforeIcons;
+            if (!slot::ResolveSlot(parent, anchor, index))
+            {
+                Wh_Log(L"[Mawaqit][Monitor] Anchor %s unavailable on %s; using before-icons",
+                       g_position.c_str(), record.device.c_str());
+                anchor = slot::Anchor::BeforeIcons;
+                if (!slot::ResolveSlot(parent, anchor, index))
+                    continue;
+            }
+        }
+        Wh_Log(L"[Mawaqit][Monitor] Secondary position: monitor=%s requested=%s mode=%s slot=%d",
+               record.device.c_str(), g_position.c_str(), overlay ? L"overlay" : L"lease", index);
+        SecondaryClockInstance instance{};
+        instance.taskbar = record.hwnd;
+        instance.monitor = record.device;
+        if (!overlay && !slot::AcquireAt(parent, index, kSecondaryLeaseName, instance.lease))
+            continue;
         try
         {
-            g_pill.Tapped(g_tapToken);
+            Grid box;
+            box.Name(kSecondarySlotName);
+            box.Width((double)g_width + g_trayGap);
+            box.Height(g_pillHeight > 0 ? (double)g_pillHeight : 30.0);
+            box.VerticalAlignment(VerticalAlignment::Center);
+            Border surface;
+            auto palette = ResolvePillPalette(g_theme);
+            SolidColorBrush bg;
+            bg.Color(palette.background);
+            surface.Background(bg);
+            double r = (double)g_cornerRadius;
+            surface.CornerRadius({r, r, r, r});
+            surface.Margin({0, 0, (double)g_trayGap, 0});
+            surface.Padding({(double)g_padding.left, (double)g_padding.top, (double)g_padding.right,
+                             (double)g_padding.bottom});
+            StackPanel content;
+            content.Orientation(Orientation::Horizontal);
+            content.HorizontalAlignment(HorizontalAlignment::Center);
+            content.VerticalAlignment(VerticalAlignment::Center);
+            TextBlock prayer;
+            prayer.FontSize((double)g_fontSize);
+            prayer.Margin({5, 0, 4, 0});
+            prayer.VerticalAlignment(VerticalAlignment::Center);
+            SolidColorBrush fg;
+            fg.Color(palette.foreground);
+            prayer.Foreground(fg);
+            TextBlock countdown;
+            countdown.FontSize((double)g_fontSize);
+            countdown.Margin({4, 0, 5, 0});
+            countdown.VerticalAlignment(VerticalAlignment::Center);
+            SolidColorBrush accent;
+            accent.Color(palette.countdown);
+            countdown.Foreground(accent);
+            content.Children().Append(prayer);
+            if (g_theme == L"custom")
+            {
+                TextBlock separator;
+                separator.Text(L"|");
+                separator.FontSize((double)g_fontSize);
+                SolidColorBrush separatorBrush;
+                separatorBrush.Color(palette.separator);
+                separator.Foreground(separatorBrush);
+                content.Children().Append(separator);
+            }
+            content.Children().Append(countdown);
+            surface.Child(content);
+            box.Children().Append(surface);
+            if (overlay)
+            {
+                auto grid = parent.try_as<Grid>();
+                Grid::SetColumn(box, 0);
+                Grid::SetColumnSpan(box, std::max(1, (int)grid.ColumnDefinitions().Size()));
+                Grid::SetRow(box, 0);
+                Grid::SetRowSpan(box, std::max(1, (int)grid.RowDefinitions().Size()));
+                box.HorizontalAlignment(HorizontalAlignment::Center);
+                Canvas::SetZIndex(box, 100);
+                grid.Children().Append(box);
+            }
+            else if (!slot::PlaceChild(parent, instance.lease, box))
+            {
+                slot::Release(parent, instance.lease);
+                continue;
+            }
+            // The popup is still shared; anchor refinement follows after the
+            // secondary rendering contract is verified on a real machine.
+            // Use the event sender rather than strongly capturing the event source.
+            // Store each token immediately so partial insertion can revoke it.
+            instance.pill = box;
+            instance.tapToken = box.Tapped(
+                [secondaryTaskbar = record.hwnd](auto const& sender, auto const&)
+                {
+                    if (auto pill = sender.template try_as<Grid>())
+                        TogglePrayerPopup(pill, secondaryTaskbar);
+                });
+            instance.tapRegistered = true;
+            instance.hoverToken = box.PointerEntered(
+                [secondaryTaskbar = record.hwnd](auto const& sender, auto const&)
+                {
+                    if (g_openPopupOnHover)
+                        if (auto pill = sender.template try_as<Grid>())
+                            TogglePrayerPopup(pill, secondaryTaskbar, true);
+                });
+            instance.hoverRegistered = true;
+            instance.parent = parent;
+            instance.prayer = prayer;
+            instance.countdown = countdown;
+            prayer.Text(g_showNext ? g_label : L"");
+            countdown.Text(g_showCountdown ? g_countdown : L"");
+            g_secondaryClocks.push_back(std::move(instance));
+            Wh_Log(L"[Mawaqit][Monitor] Secondary clock inserted on %s hwnd=%p",
+                   record.device.c_str(), record.hwnd);
         }
         catch (...)
         {
+            // Roll back subscriptions before detaching partially inserted XAML.
+            if (auto pill = instance.pill.get())
+            {
+                if (instance.hoverRegistered)
+                {
+                    try
+                    {
+                        pill.PointerEntered(instance.hoverToken);
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+                if (instance.tapRegistered)
+                {
+                    try
+                    {
+                        pill.Tapped(instance.tapToken);
+                    }
+                    catch (...)
+                    {
+                    }
+                }
+            }
+            for (int i = (int)parent.Children().Size() - 1; i >= 0; --i)
+            {
+                auto child = parent.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child && child.Name() == kSecondarySlotName)
+                    parent.Children().RemoveAt(i);
+            }
+            slot::Release(parent, instance.lease);
+            Wh_Log(L"[Mawaqit][Monitor] Secondary insertion failed on %s", record.device.c_str());
         }
-        g_tapRegistered = false;
+    }
+}
+
+static void UpdateSecondaryClocksOnUiThread()
+{
+    EnsureSecondaryClocksOnUiThread();
+    for (auto& instance : g_secondaryClocks)
+    {
+        if (auto prayer = instance.prayer.get())
+            prayer.Text(g_showNext ? g_label : L"");
+        if (auto countdown = instance.countdown.get())
+            countdown.Text(g_showCountdown ? g_countdown : L"");
+        if ((g_position == L"center" || g_position == L"after-icons") && instance.pill.get())
+        {
+            try
+            {
+                auto pill = instance.pill.get();
+                auto grid = instance.parent.get().try_as<Grid>();
+                if (!grid || grid.ActualWidth() <= 0)
+                    continue;
+                double width = pill.ActualWidth() > 0 ? pill.ActualWidth() : pill.Width();
+                double centered = (grid.ActualWidth() - width) / 2.0;
+                double desired = centered;
+                auto tray = FindNamed(grid, L"SystemTrayFrameGrid");
+                double trayLeft = grid.ActualWidth();
+                if (tray)
+                    trayLeft = tray.TransformToVisual(grid).TransformPoint({0, 0}).X;
+                Panel iconsParent{nullptr};
+                FrameworkElement repeater{nullptr};
+                double appRight = 0;
+                bool measured = false;
+                if (FindApplicationRepeater(grid, iconsParent, repeater) && repeater)
+                {
+                    appRight = repeater.TransformToVisual(grid).TransformPoint({0, 0}).X;
+                    int count = VisualTreeHelper::GetChildrenCount(repeater);
+                    for (int i = 0; i < count; ++i)
+                    {
+                        auto child =
+                            VisualTreeHelper::GetChild(repeater, i).try_as<FrameworkElement>();
+                        if (!child || child.Visibility() != Visibility::Visible ||
+                            child.ActualWidth() <= 0 || child.ActualWidth() > 400)
+                            continue;
+                        auto p = child.TransformToVisual(grid).TransformPoint({0, 0});
+                        if (std::isfinite(p.X) && p.X >= 0 &&
+                            p.X + child.ActualWidth() <= grid.ActualWidth() + 1)
+                        {
+                            appRight = std::max(appRight, p.X + child.ActualWidth());
+                            measured = true;
+                        }
+                    }
+                }
+                desired = g_position == L"after-icons" ? appRight + 5.0
+                                                       : std::max(centered, appRight + 5.0);
+                bool room = measured && desired + width + 5.0 <= trayLeft;
+                pill.Visibility(room ? Visibility::Visible : Visibility::Collapsed);
+                if (room)
+                {
+                    auto translation = pill.RenderTransform().try_as<TranslateTransform>();
+                    if (!translation)
+                    {
+                        translation = TranslateTransform();
+                        pill.RenderTransform(translation);
+                    }
+                    translation.X(desired - centered);
+                }
+            }
+            catch (...)
+            {
+                Wh_Log(L"[Mawaqit][Monitor] Secondary overlay layout retry");
+            }
+        }
+    }
+}
+
+static void RemoveOnUiThread()
+{
+    RemoveSecondaryClocksOnUiThread();
+    g_centerDiagnosticCount = 0;
+    g_afterIconsDiagnosticCount = 0;
+    DestroyPrayerPopup();
+    if (g_pill)
+    {
+        if (g_hoverRegistered)
+        {
+            try
+            {
+                g_pill.PointerEntered(g_hoverToken);
+            }
+            catch (...)
+            {
+            }
+            g_hoverRegistered = false;
+        }
+        if (g_tapRegistered)
+        {
+            try
+            {
+                g_pill.Tapped(g_tapToken);
+            }
+            catch (...)
+            {
+            }
+            g_tapRegistered = false;
+        }
     }
     auto parent = g_parent.get();
     if (!parent)
@@ -2522,6 +3406,12 @@ static void InsertOnUiThread()
 {
     if (g_stopping.load())
         return;
+    if (!g_showPrimaryMonitor)
+    {
+        Wh_Log(L"[Mawaqit][Monitor] Primary clock disabled by settings");
+        UpdateSecondaryClocksOnUiThread();
+        return;
+    }
     int slotIndex = -1;
     auto parent = ResolvePositionParent(slotIndex);
     if (!parent)
@@ -2652,8 +3542,46 @@ static void InsertOnUiThread()
     }
     g_placeholder = box;
     g_pill = box;
-    g_tapToken = box.Tapped([](auto const &, auto const &) { TogglePrayerPopup(); });
-    g_tapRegistered = true;
+    try
+    {
+        g_tapToken =
+            box.Tapped([](auto const&, auto const&) { TogglePrayerPopup(g_pill, nullptr); });
+        g_tapRegistered = true;
+        g_hoverToken = box.PointerEntered(
+            [](auto const&, auto const&)
+            {
+                if (g_openPopupOnHover)
+                    TogglePrayerPopup(g_pill, nullptr, true);
+            });
+        g_hoverRegistered = true;
+    }
+    catch (...)
+    {
+        // Roll back a partially registered primary pill before propagating.
+        if (g_hoverRegistered)
+        {
+            try
+            {
+                box.PointerEntered(g_hoverToken);
+            }
+            catch (...)
+            {
+            }
+            g_hoverRegistered = false;
+        }
+        if (g_tapRegistered)
+        {
+            try
+            {
+                box.Tapped(g_tapToken);
+            }
+            catch (...)
+            {
+            }
+            g_tapRegistered = false;
+        }
+        throw;
+    }
     g_prayerText = prayer;
     g_countdownText = countdown;
     Wh_Log(L"[Mawaqit] Text controls attached, prayer=%d countdown=%d", g_prayerText ? 1 : 0,
@@ -2676,6 +3604,7 @@ static void InsertOnUiThread()
     UpdateDynamicCenterOnUiThread();
     UpdateAfterIconsOnUiThread();
     UpdateCountdown();
+    UpdateSecondaryClocksOnUiThread();
     prayer.Text(g_showNext ? g_label : L"");
     countdown.Text(g_showCountdown ? g_countdown : L"");
     Wh_Log(L"[Mawaqit] Native XAML position %s inserted: %d physical px, %.1f DIP, DPI %.0f",
@@ -2688,7 +3617,7 @@ static void LogException(PCWSTR context)
     {
         throw;
     }
-    catch (winrt::hresult_error const &e)
+    catch (winrt::hresult_error const& e)
     {
         Wh_Log(L"[Mawaqit] %s failed HRESULT 0x%08X: %s", context, (unsigned)e.code().value,
                e.message().c_str());
@@ -2706,18 +3635,41 @@ static bool OnTaskbarThread(folder_menus_dispatch::ThreadProc proc)
                                                              L"Windhawk_Mawaqit_TaskbarDispatch");
 }
 
-static DWORD WINAPI StartWorker(void *)
+// Explorer can inject the mod before creating its taskbar HWNDs. Bootstrap
+// waits for ownership rather than permanently skipping workers at AfterInit.
+static DWORD WINAPI ScheduleWorker(void*);
+static DWORD WINAPI CountdownWorker(void*);
+static DWORD WINAPI StartWorker(void*)
 {
-    // Explorer may create the taskbar's XAML tree after Windhawk initialization.
+    bool workersStarted = false;
+    // Keep the bootstrap bounded for file-manager Explorer processes.
     for (int i = 0; i < 40 && !g_stopping.load(); ++i)
     {
-        bool inserted = false;
-        HWND wnd = taskwin::FindCurrentProcessTaskbarWnd();
-        if (wnd)
-            inserted = OnTaskbarThread([](void *) { InsertOnUiThread(); });
-        if (inserted && g_placeholder.get())
-            return 0;
-        // Wake immediately on mod shutdown instead of sleeping for 1.5 seconds.
+        if (!mawaqit_monitor_discovery::EnumerateTaskbars().empty())
+        {
+            if (!workersStarted)
+            {
+                workersStarted = true;
+                mawaqit_monitor_discovery::LogInventory();
+                Wh_Log(L"[Mawaqit] Taskbar ownership detected; starting workers");
+                if (!g_stopping.load())
+                {
+                    g_updateWorker = CreateThread(nullptr, 0, ScheduleWorker, nullptr, 0, nullptr);
+                    if (!g_updateWorker)
+                        Wh_Log(L"[Mawaqit] Failed to start schedule worker: error=%lu",
+                               GetLastError());
+                    g_countdownWorker =
+                        CreateThread(nullptr, 0, CountdownWorker, nullptr, 0, nullptr);
+                    if (!g_countdownWorker)
+                        Wh_Log(L"[Mawaqit] Failed to start countdown worker: error=%lu",
+                               GetLastError());
+                }
+            }
+            bool dispatched = OnTaskbarThread([](void*) { InsertOnUiThread(); });
+            // Secondary-only configurations intentionally have no primary placeholder.
+            if (dispatched && (g_placeholder.get() || !g_showPrimaryMonitor))
+                return 0;
+        }
         if (WaitForSingleObject(g_stopEvent, 1500) != WAIT_TIMEOUT)
             break;
     }
@@ -2731,22 +3683,33 @@ static void EnsureTaskbarSlotOnUiThread()
 {
     if (g_stopping.load())
         return;
+    if (!g_showPrimaryMonitor)
+    {
+        UpdateSecondaryClocksOnUiThread();
+        g_taskbarRebuildPending.store(false, std::memory_order_release);
+        return;
+    }
     int index = -1;
     auto parent = ResolvePositionParent(index);
     if (!parent)
         return; // New taskbar tree may still be initializing.
+    // A matching name alone isn't sufficient: it might be a leftover slot
+    // from a detached instance. Verify the tracked XAML object and parent.
     bool present = false;
-    for (auto child : parent.Children())
+    auto tracked = g_placeholder.get();
+    auto trackedParent = g_parent.get();
+    if (tracked && trackedParent == parent)
     {
-        auto element = child.try_as<FrameworkElement>();
-        if (element && element.Name() == kSlotName)
-        {
-            present = true;
-            break;
-        }
+        for (auto const& child : parent.Children())
+            if (child.try_as<FrameworkElement>() == tracked)
+            {
+                present = true;
+                break;
+            }
     }
-    if (present)
+    if (present && g_showPrimaryMonitor)
     {
+        UpdateSecondaryClocksOnUiThread();
         g_taskbarRebuildPending.store(false, std::memory_order_release);
         return;
     }
@@ -2765,17 +3728,8 @@ static void ApplyPendingSettingsOnUiThread()
     try
     {
         LoadModSettings();
-        if (g_popup && IsWindowVisible(g_popup))
-        {
-            if (!g_enablePopup)
-                HidePrayerPopup();
-            else
-            {
-                int seconds = g_popupAutoCloseSeconds.load();
-                g_popupAutoCloseDeadline =
-                    seconds > 0 ? GetTickCount64() + static_cast<ULONGLONG>(seconds) * 1000 : 0;
-            }
-        }
+        // Removal destroys the popup immediately, so don't schedule a closing
+        // animation or re-arm an auto-close timer for a soon-to-be-dead window.
         RemoveOnUiThread();
         InsertOnUiThread();
         Wh_Log(L"[Mawaqit] Pending settings applied on taskbar thread");
@@ -2810,12 +3764,13 @@ static void UpdateClockOnUiThread()
         countdown.Text(g_showCountdown ? g_countdown : L"");
     UpdateDynamicCenterOnUiThread();
     UpdateAfterIconsOnUiThread();
+    UpdateSecondaryClocksOnUiThread();
 }
 
 // XAML DispatcherTimer did not tick in the taskbar's hosting context on the
 // tested Windows build. A Win32 waitable worker supplies the cadence; all
 // TextBlock writes still execute on the owning taskbar/XAML thread.
-static DWORD WINAPI CountdownWorker(void *)
+static DWORD WINAPI CountdownWorker(void*)
 {
     while (!g_stopping.load())
     {
@@ -2824,7 +3779,7 @@ static DWORD WINAPI CountdownWorker(void *)
             break;
         if (g_stopping.load())
             break;
-        if (!OnTaskbarThread([](void *) { UpdateClockOnUiThread(); }))
+        if (!OnTaskbarThread([](void*) { UpdateClockOnUiThread(); }))
         {
             static unsigned failures = 0;
             if (++failures <= 3 || failures % 60 == 0)
@@ -2836,7 +3791,7 @@ static DWORD WINAPI CountdownWorker(void *)
 
 // Return remaining cache lifetime only when it belongs to the selected mosque,
 // includes today's date, and both cache files are present.
-static DWORD FreshScheduleCacheRemainingMs(const std::wstring &mosque, int hours)
+static DWORD FreshScheduleCacheRemainingMs(const std::wstring& mosque, int hours)
 {
     try
     {
@@ -2916,7 +3871,7 @@ static DWORD LimitRefreshDelayAtYearEnd(DWORD delay)
     return std::min(delay, capped);
 }
 
-static DWORD WINAPI ScheduleWorker(void *)
+static DWORD WINAPI ScheduleWorker(void*)
 {
     std::wstring initialMosque;
     int initialHours;
@@ -2960,14 +3915,15 @@ static DWORD WINAPI ScheduleWorker(void *)
         AcquireSRWLockShared(&g_settingsLock);
         mosque = g_mosque;
         hours = g_refreshHours;
+        const auto generation = g_scheduleConfigGeneration.load(std::memory_order_acquire);
         ReleaseSRWLockShared(&g_settingsLock);
         Wh_Log(L"[Mawaqit] Refresh started: mosque=%s interval=%d hours", mosque.c_str(), hours);
         bool ok = false;
         try
         {
-            ok = NativeUpdater::Run(mosque);
+            ok = NativeUpdater::Run(mosque, generation);
         }
-        catch (const std::exception &e)
+        catch (const std::exception& e)
         {
             Wh_Log(L"[Mawaqit] Schedule update: %hs", e.what());
         }
@@ -2977,16 +3933,28 @@ static DWORD WINAPI ScheduleWorker(void *)
         }
         if (g_stopping.load())
             return 0;
+        // The settings may change after cache commit, but before UI dispatch.
+        // Skip obsolete UI work and immediately retry with the latest snapshot.
+        const bool obsolete =
+            g_scheduleConfigGeneration.load(std::memory_order_acquire) != generation;
+        if (obsolete)
+        {
+            Wh_Log(L"[Mawaqit] Refresh configuration changed; retrying latest settings");
+            delay = 0;
+            continue;
+        }
         if (ok)
         {
             Wh_Log(L"[Mawaqit] Schedule updated");
-            OnTaskbarThread([](void *) {
-                g_loadedDate.clear();
-                g_today.clear();
-                g_tomorrow.clear();
-                LoadMetadata();
-                UpdateClockOnUiThread();
-            });
+            OnTaskbarThread(
+                [](void*)
+                {
+                    g_loadedDate.clear();
+                    g_today.clear();
+                    g_tomorrow.clear();
+                    LoadMetadata();
+                    UpdateClockOnUiThread();
+                });
         }
         delay = (DWORD)(ok ? hours : 1) * 60u * 60u * 1000u;
         Wh_Log(L"[Mawaqit] Refresh finished: success=%d next-delay=%lu ms", ok ? 1 : 0,
@@ -3010,6 +3978,10 @@ static void LoadModSettings()
         position != L"center")
         position = L"before-tray";
     g_position = position;
+    g_showPrimaryMonitor = Wh_GetIntSetting(L"General.ShowPrimaryMonitor") != 0;
+    g_showSecondaryMonitors = Wh_GetIntSetting(L"General.ShowSecondaryMonitors") != 0;
+    Wh_Log(L"[Mawaqit][Monitor] Visibility: primary=%d secondary=%d unified-position=%s",
+           g_showPrimaryMonitor ? 1 : 0, g_showSecondaryMonitors ? 1 : 0, g_position.c_str());
     auto theme = ReadSetting(L"General.Theme");
     if (theme != L"traditional" && theme != L"catppuccin" && theme != L"emberveil" &&
         theme != L"emberveil-midnight" && theme != L"emerald-mosque" && theme != L"dracula" &&
@@ -3042,6 +4014,8 @@ static void LoadModSettings()
     g_showNext = Wh_GetIntSetting(L"Display.ShowNextPrayer") != 0;
     g_showCountdown = Wh_GetIntSetting(L"Display.ShowCountdown") != 0;
     g_enablePopup = Wh_GetIntSetting(L"Display.EnablePopup") != 0;
+    g_openPopupOnHover = Wh_GetIntSetting(L"Display.OpenPopupOnHover") != 0;
+    g_hoverCloseDelayMs = std::clamp(Wh_GetIntSetting(L"Display.HoverCloseDelayMs"), 0, 5000);
     int autoClose = std::clamp(Wh_GetIntSetting(L"Display.PopupAutoCloseSeconds"), 0, 300);
     g_popupAutoCloseSeconds.store(autoClose);
     Wh_Log(L"[Mawaqit] Popup auto-close configured: %d seconds", autoClose);
@@ -3055,6 +4029,8 @@ static void LoadModSettings()
     bool changed = g_mosque != mosque || g_refreshHours != hours;
     g_mosque = mosque;
     g_refreshHours = hours;
+    if (changed)
+        g_scheduleConfigGeneration.fetch_add(1, std::memory_order_release);
     ReleaseSRWLockExclusive(&g_settingsLock);
     Wh_Log(L"[Mawaqit] Settings: next=%d countdown=%d popup=%d theme=%s mosque=%s refresh=%d h "
            L"changed=%d",
@@ -3076,11 +4052,13 @@ BOOL Wh_ModInit()
     if (!g_stopEvent || !g_refreshEvent)
         return FALSE;
     folder_menus_dispatch::SetExceptionLogger(LogException);
-    if (!taskxaml::HookTaskbarSymbols([]() {
-            // Hook may fire while Explorer is constructing the new taskbar.
-            // Defer all XAML access to the regular UI-thread countdown tick.
-            g_taskbarRebuildPending.store(true, std::memory_order_release);
-        }))
+    if (!taskxaml::HookTaskbarSymbols(
+            []()
+            {
+                // Hook may fire while Explorer is constructing the new taskbar.
+                // Defer all XAML access to the regular UI-thread countdown tick.
+                g_taskbarRebuildPending.store(true, std::memory_order_release);
+            }))
     {
         Wh_Log(L"[Mawaqit] Failed to hook taskbar symbols");
         return FALSE;
@@ -3089,15 +4067,21 @@ BOOL Wh_ModInit()
 }
 void Wh_ModAfterInit()
 {
+    // Do not decide taskbar ownership from a single early snapshot: on Explorer
+    // restart the shell windows may appear several seconds after injection.
     g_worker = CreateThread(nullptr, 0, StartWorker, nullptr, 0, nullptr);
-    g_updateWorker = CreateThread(nullptr, 0, ScheduleWorker, nullptr, 0, nullptr);
-    g_countdownWorker = CreateThread(nullptr, 0, CountdownWorker, nullptr, 0, nullptr);
+    if (!g_worker)
+        Wh_Log(L"[Mawaqit] Failed to start taskbar bootstrap worker: error=%lu", GetLastError());
 }
 void Wh_ModSettingsChanged()
 {
+    // Windhawk also loads into Explorer instances that don't own taskbars.
+    // They have no workers to retry a UI dispatch and no taskbar UI to rebuild.
+    if (mawaqit_monitor_discovery::EnumerateTaskbars().empty())
+        return;
     Wh_Log(L"[Mawaqit] Settings change received; scheduling native slot rebuild");
     g_settingsPending.store(true, std::memory_order_release);
-    bool dispatched = OnTaskbarThread([](void *) { ApplyPendingSettingsOnUiThread(); });
+    bool dispatched = OnTaskbarThread([](void*) { ApplyPendingSettingsOnUiThread(); });
     if (!dispatched)
         Wh_Log(L"[Mawaqit] Settings dispatch unavailable; pending update will retry on countdown "
                L"tick");
@@ -3129,8 +4113,13 @@ void Wh_ModUninit()
         CloseHandle(g_countdownWorker);
         g_countdownWorker = nullptr;
     }
-    if (!OnTaskbarThread([](void *) { RemoveOnUiThread(); }))
-        Wh_Log(L"[Mawaqit] Teardown could not reach taskbar thread");
+    if (HWND wnd = taskwin::FindCurrentProcessTaskbarWnd())
+    {
+        if (!folder_menus_dispatch::RunFromWindowThread(
+                wnd, [](void*) { RemoveOnUiThread(); }, nullptr,
+                L"Windhawk_Mawaqit_TaskbarDispatch", INFINITE))
+            Wh_Log(L"[Mawaqit] Teardown could not reach taskbar thread");
+    }
     if (g_refreshEvent)
     {
         CloseHandle(g_refreshEvent);
