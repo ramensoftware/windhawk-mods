@@ -2,7 +2,7 @@
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
 // @description     Show .ics events in the calendar of the Notification Centre, like in Windows 10
-// @version         1.2
+// @version         1.3
 // @author          lonfro
 // @github          https://github.com/lonfro
 // @include         ShellExperienceHost.exe
@@ -111,17 +111,27 @@ Checking events on other dates:
 
 // ==WindhawkModSettings==
 /*
-- icsPath: [""]
+- icsPath:
+  - - path: ""
+      $name: Source
+      $description: Local file path or remote URL to the .ics calendar file.
+    - colour: default
+      $name: Colour
+      $options:
+      - default: Default
+      - red: Red
+      - green: Green
+      - blue: Blue
+      - orange: Orange
+      - yellow: Yellow
+      - pink: Pink
   $name: Path to .ics
   $description: |
     Local file path or remote URL to the .ics calendar file.
     Read the FAQ if you have issues with local files.
-- calendarPosition: above
-  $name: Calendar position
-  $description: Show calendar above or below the agenda
-  $options:
-  - above: Show calendar above agenda
-  - below: Show calendar below agenda
+- applyColorsOnEventBorders: true
+  $name: Apply colours on borders of events
+  $description: Show set colour on the border of events.
 - hideCompletedEvents: false
   $name: Hide completed events
   $description: |
@@ -134,6 +144,22 @@ Checking events on other dates:
   $options:
   - inline: "Inline: show in separate row"
   - popup: "Popup: show as dismissable overlay"
+- calendarPosition: above
+  $name: Calendar position
+  $description: Show calendar above or below the agenda
+  $options:
+  - above: Show calendar above agenda
+  - below: Show calendar below agenda
+- buttonsPosition: above
+  $name: Buttons position
+  $description: Show buttons (previous/next day, calendar toggle, refresh) above or below the agenda
+  $options:
+  - above: Show buttons above agenda
+  - below: Show buttons below agenda
+- numberOfWeeksInView: 5
+  $name: Number of weeks shown in calendar
+  $description: |
+    The number of weeks that the calendar shows when expanded. This setting only applies for when the calendar is in "inline" mode.
 - maxHeightCollapsed: 0
   $name: Max height of agenda (calendar collapsed/popup)
   $description: |
@@ -160,6 +186,9 @@ Checking events on other dates:
 - keyboardShortcuts: true
   $name: Keyboard shortcuts
   $description: Use left and right arrow keys to move backward and forward by a single day respectively
+- collapsibleNotificationCenter: true
+  $name: Collapsible notification centre
+  $description: Add an expand/collapse button to the notification centre banner to collapse/expand notifications.
 */
 // ==/WindhawkModSettings==
 
@@ -206,6 +235,8 @@ Checking events on other dates:
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Globalization.h>
+#include <winrt/Windows.System.UserProfile.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
@@ -224,6 +255,8 @@ Checking events on other dates:
 
 namespace wf = winrt::Windows::Foundation;
 namespace ws = winrt::Windows::System;
+namespace wsup = winrt::Windows::System::UserProfile;
+namespace wg = winrt::Windows::Globalization;
 namespace wadt = winrt::Windows::ApplicationModel::DataTransfer;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
@@ -233,6 +266,16 @@ namespace wuc = winrt::Windows::UI::Core;
 
 std::atomic<ULONGLONG> g_lastOpenTick = 0;
 std::atomic<ULONGLONG> g_lastFetchTick = 0;
+
+// Returns the user's preferred first day of the week via
+// Windows.System.UserProfile.GlobalizationPreferences.WeekStartsOn()
+// which returns Windows.Globalization.DayOfWeek — the same type CalendarView.FirstDayOfWeek expects.
+wg::DayOfWeek GetSystemFirstDayOfWeek() {
+    try {
+        return wsup::GlobalizationPreferences::WeekStartsOn();
+    } catch (...) {}
+    return wg::DayOfWeek::Sunday; // safe fallback
+}
 
 inline void NormalizeSystemTime(SYSTEMTIME& st) {
     FILETIME ft{};
@@ -392,6 +435,7 @@ struct CalendarEvent {
     bool hasRRule = false;
     RecurrenceRule rrule;
     std::vector<std::wstring> exDates;
+    std::wstring source;
 };
 
 std::vector<CalendarEvent> g_allParsedEvents;
@@ -996,31 +1040,124 @@ void TriggerBackgroundFetch(bool force = false);
 void StartWorkerThread();
 void StopWorkerThread();
 
-std::vector<std::wstring> GetIcsPathsSetting() {
-    std::vector<std::wstring> paths;
-    for (int i = 0;; i++) {
-        PCWSTR val = Wh_GetStringSetting(L"icsPath[%d]", i);
-        bool hasVal = (val && *val);
-        if (hasVal) {
-            std::wstring clean = val;
-            while (!clean.empty() && (clean.front() == L' ' || clean.front() == L'\t' || clean.front() == L'"')) {
-                clean.erase(clean.begin());
-            }
-            while (!clean.empty() && (clean.back() == L' ' || clean.back() == L'\t' || clean.back() == L'"')) {
-                clean.pop_back();
-            }
-            if (!clean.empty()) {
-                paths.push_back(clean);
-            }
-        }
-        if (val) {
-            Wh_FreeStringSetting(val);
-        }
-        if (!hasVal) {
-            break;
+struct IcsSourceConfig {
+    std::wstring source;
+    std::wstring colour;
+};
+
+inline bool ShouldApplyColorsOnEventBorders() {
+    return Wh_GetIntSetting(L"applyColorsOnEventBorders") != 0;
+}
+
+winrt::Windows::UI::Color GetColorForPreset(std::wstring const& colourChoice, wux::FrameworkElement const& fe = nullptr);
+
+inline std::wstring FindSourceColour(const std::vector<IcsSourceConfig>& sources, const std::wstring& source) {
+    for (const auto& s : sources) {
+        if (_wcsicmp(s.source.c_str(), source.c_str()) == 0) {
+            return s.colour;
         }
     }
-    if (paths.empty()) {
+    return L"default";
+}
+
+// Reads an individual icsPath element at index i, with full backwards compatibility:
+// - Supports structured: icsPath[i].path, icsPath[i].source, icsSources[i].source, icsSources[i].path
+// - Supports legacy string: icsPath[i]
+// - Supports structured color: icsPath[i].colour, icsPath[i].color, icsSources[i].colour, icsSources[i].color
+// - Supports legacy global color: "colour" / "color"
+bool GetIcsElementSetting(int i, IcsSourceConfig& outConfig, const std::wstring& legacyGlobalColour) {
+    auto cleanString = [](PCWSTR raw) -> std::wstring {
+        if (!raw || !*raw) return L"";
+        std::wstring s = raw;
+        while (!s.empty() && (s.front() == L' ' || s.front() == L'\t' || s.front() == L'"')) {
+            s.erase(s.begin());
+        }
+        while (!s.empty() && (s.back() == L' ' || s.back() == L'\t' || s.back() == L'"')) {
+            s.pop_back();
+        }
+        return s;
+    };
+
+    auto getCleanSetting = [&](const wchar_t* fmt, int idx) -> std::wstring {
+        PCWSTR val = Wh_GetStringSetting(fmt, idx);
+        std::wstring res = cleanString(val);
+        if (val) Wh_FreeStringSetting(val);
+        return res;
+    };
+
+    // 1. Path / source retrieval:
+    // Check structured subkeys first, then legacy string key, then temporary icsSources keys
+    std::wstring path = getCleanSetting(L"icsPath[%d].path", i);
+    if (path.empty()) {
+        path = getCleanSetting(L"icsPath[%d].source", i);
+    }
+    if (path.empty()) {
+        path = getCleanSetting(L"icsPath[%d]", i);
+    }
+    if (path.empty()) {
+        path = getCleanSetting(L"icsSources[%d].source", i);
+    }
+    if (path.empty()) {
+        path = getCleanSetting(L"icsSources[%d].path", i);
+    }
+
+    // 2. Colour retrieval:
+    std::wstring colour = getCleanSetting(L"icsPath[%d].colour", i);
+    if (colour.empty()) {
+        colour = getCleanSetting(L"icsPath[%d].color", i);
+    }
+    if (colour.empty()) {
+        colour = getCleanSetting(L"icsSources[%d].colour", i);
+    }
+    if (colour.empty()) {
+        colour = getCleanSetting(L"icsSources[%d].color", i);
+    }
+
+    // Fallback to legacy global colour if item colour is empty or "default"
+    if ((colour.empty() || _wcsicmp(colour.c_str(), L"default") == 0) && !legacyGlobalColour.empty()) {
+        colour = legacyGlobalColour;
+    }
+    if (colour.empty()) {
+        colour = L"default";
+    }
+
+    if (!path.empty()) {
+        outConfig.source = std::move(path);
+        outConfig.colour = std::move(colour);
+        return true;
+    }
+
+    return false;
+}
+
+std::vector<IcsSourceConfig> GetIcsSourcesSetting() {
+    std::wstring legacyGlobalColour;
+    PCWSTR c = Wh_GetStringSetting(L"colour");
+    if (!c || !*c) {
+        if (c) Wh_FreeStringSetting(c);
+        c = Wh_GetStringSetting(L"color");
+    }
+    if (c && *c) {
+        legacyGlobalColour = c;
+    }
+    if (c) Wh_FreeStringSetting(c);
+
+    std::vector<IcsSourceConfig> sources;
+    int consecutiveEmpty = 0;
+    for (int i = 0;; i++) {
+        IcsSourceConfig config;
+        if (GetIcsElementSetting(i, config, legacyGlobalColour)) {
+            sources.push_back(std::move(config));
+            consecutiveEmpty = 0;
+        } else {
+            consecutiveEmpty++;
+            if (consecutiveEmpty >= 3 || i >= 20) {
+                break;
+            }
+        }
+    }
+
+    if (sources.empty()) {
         PCWSTR val = Wh_GetStringSetting(L"icsPath");
         if (val && *val) {
             std::wstring clean = val;
@@ -1031,12 +1168,23 @@ std::vector<std::wstring> GetIcsPathsSetting() {
                 clean.pop_back();
             }
             if (!clean.empty()) {
-                paths.push_back(clean);
+                sources.push_back({clean, legacyGlobalColour.empty() ? L"default" : legacyGlobalColour});
             }
         }
         if (val) {
             Wh_FreeStringSetting(val);
         }
+    }
+
+    return sources;
+}
+
+std::vector<std::wstring> GetIcsPathsSetting() {
+    auto sources = GetIcsSourcesSetting();
+    std::vector<std::wstring> paths;
+    paths.reserve(sources.size());
+    for (const auto& s : sources) {
+        paths.push_back(s.source);
     }
     return paths;
 }
@@ -1058,6 +1206,18 @@ bool IsCalendarAboveAgenda() {
     return isAbove;
 }
 
+bool IsButtonsAboveAgenda() {
+    PCWSTR pos = Wh_GetStringSetting(L"buttonsPosition");
+    bool isAbove = true;
+    if (pos) {
+        if (wcscmp(pos, L"below") == 0) {
+            isAbove = false;
+        }
+        Wh_FreeStringSetting(pos);
+    }
+    return isAbove;
+}
+
 bool IsInlineCalendarMode() {
     PCWSTR mode = Wh_GetStringSetting(L"groupingMode");
     bool isInline = true;
@@ -1068,6 +1228,14 @@ bool IsInlineCalendarMode() {
         Wh_FreeStringSetting(mode);
     }
     return isInline;
+}
+
+int GetNumberOfWeeksInViewSetting() {
+    int val = Wh_GetIntSetting(L"numberOfWeeksInView");
+    if (val < 2 || val > 8) {
+        return 5;
+    }
+    return val;
 }
 
 int GetMaxHeightCollapsedSetting() {
@@ -1095,6 +1263,10 @@ int GetMinFetchIntervalSetting() {
 
 bool GetKeyboardShortcutsSetting() {
     return Wh_GetIntSetting(L"keyboardShortcuts") != 0;
+}
+
+bool GetCollapsibleNotificationCenterSetting() {
+    return Wh_GetIntSetting(L"collapsibleNotificationCenter") != 0;
 }
 
 
@@ -1894,11 +2066,14 @@ namespace {
     [[clang::no_destroy]] wuxc::ItemsControl m_itemsControl{nullptr};
     SYSTEMTIME m_currentFilterDate{};
     winrt::event_token m_calendarViewSelectionChangedToken{};
+    winrt::event_token m_calendarViewDayItemChangingToken{};
     winrt::event_token m_dateBtnClickToken{};
     bool m_isUpdatingCalendarSelection{false};
     winrt::event_token m_prevBtnToken{};
     winrt::event_token m_nextBtnToken{};
     winrt::event_token m_refreshBtnToken{};
+    winrt::event_token m_calendarViewThemeChangedToken{};
+    winrt::event_token m_rootGridThemeChangedToken{};
     [[clang::no_destroy]] wux::FrameworkElement m_focusSessionControl{nullptr};
     int64_t m_focusSessionVisibilityToken{0};
     [[clang::no_destroy]] wuxc::ScrollViewer m_hostScrollViewer{nullptr};
@@ -1914,6 +2089,25 @@ namespace {
     std::atomic<HANDLE> g_hWorkEvent{nullptr};
     std::atomic<HANDLE> g_hStopEvent{nullptr};
     std::atomic<bool> g_workerForceFetch{false};
+
+    [[clang::no_destroy]] wuxc::Grid m_notificationCenterGrid{nullptr};
+    [[clang::no_destroy]] wuxc::Grid m_notificationCenterTopBanner{nullptr};
+    [[clang::no_destroy]] wux::FrameworkElement m_dndSubtext{nullptr};
+    [[clang::no_destroy]] wux::FrameworkElement m_dndSubtextBorder{nullptr};
+    [[clang::no_destroy]] wux::FrameworkElement m_notificationCenterView{nullptr};
+    [[clang::no_destroy]] wux::FrameworkElement m_dndButton{nullptr};
+    [[clang::no_destroy]] wuxc::TextBlock m_notificationsTextBlock{nullptr};
+    [[clang::no_destroy]] wuxc::Button m_calendarExpandCollapseButton{nullptr};
+    [[clang::no_destroy]] wuxc::Button m_notificationCollapseButton{nullptr};
+    [[clang::no_destroy]] wuxc::FontIcon m_notificationCollapseIcon{nullptr};
+    winrt::event_token m_notificationCollapseBtnToken{};
+    winrt::event_token m_notificationsTextTappedToken{};
+    winrt::event_token m_dndLayoutUpdatedToken{};
+    bool m_isNotificationCenterCollapsed{false};
+    double m_origGridMinHeight{232.0};
+    double m_origViewMinHeight{0.0};
+    double m_origViewHeight{std::numeric_limits<double>::quiet_NaN()};
+    wux::VerticalAlignment m_origGridVerticalAlignment{wux::VerticalAlignment::Stretch};
 }
 
 struct CoreWindowData {
@@ -1938,6 +2132,10 @@ void WalkVisualTree(winrt::Windows::UI::Xaml::DependencyObject const& root);
 void RegisterCoreWindowEvents();
 void UnregisterCoreWindowEvents();
 void RevokeLayoutUpdated();
+void ApplyNotificationCenterCollapsedState(bool collapsed);
+void UpdateNotificationCollapseButtonPosition();
+void SetupNotificationCenterCollapseButton();
+void RestoreNotificationCenterCollapse();
 
 void RevokeLayoutUpdated() {
     if (t_coreWindowData.layoutUpdatedFe && t_coreWindowData.layoutUpdatedToken.value != 0) {
@@ -1965,6 +2163,236 @@ void UnregisterFocusSessionControl() {
     }
 }
 
+void UpdateNotificationCollapseButtonPosition() {
+    if (!m_notificationCollapseButton) return;
+    try {
+        int col = 0;
+        int row = 0;
+        if (m_notificationCenterTopBanner) {
+            auto cols = m_notificationCenterTopBanner.ColumnDefinitions();
+            if (cols.Size() > 0 && cols.Size() <= 3) {
+                wuxc::ColumnDefinition colDef;
+                colDef.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                cols.Append(colDef);
+            }
+            if (cols.Size() > 0) {
+                col = (int)cols.Size() - 1;
+            }
+        } else if (m_dndButton) {
+            col = wuxc::Grid::GetColumn(m_dndButton) + 2;
+        }
+        if (m_dndButton) {
+            row = wuxc::Grid::GetRow(m_dndButton);
+        }
+        m_notificationCollapseButton.Margin(wux::Thickness{8, 0, 0, 0});
+        if (wuxc::Grid::GetColumn(m_notificationCollapseButton) != col) {
+            wuxc::Grid::SetColumn(m_notificationCollapseButton, col);
+        }
+        if (wuxc::Grid::GetRow(m_notificationCollapseButton) != row) {
+            wuxc::Grid::SetRow(m_notificationCollapseButton, row);
+        }
+        m_notificationCollapseButton.HorizontalAlignment(wux::HorizontalAlignment::Right);
+        m_notificationCollapseButton.VerticalAlignment(wux::VerticalAlignment::Center);
+    } catch (...) {}
+}
+
+void ApplyNotificationCenterCollapsedState(bool collapsed) {
+    m_isNotificationCenterCollapsed = collapsed;
+
+    try {
+        if (m_notificationCenterGrid) {
+            m_notificationCenterGrid.MinHeight(collapsed ? 0.0 : m_origGridMinHeight);
+            m_notificationCenterGrid.Height(std::numeric_limits<double>::quiet_NaN());
+            m_notificationCenterGrid.VerticalAlignment(collapsed ? wux::VerticalAlignment::Bottom : m_origGridVerticalAlignment);
+        }
+    } catch (...) {}
+
+    try {
+        if (m_notificationCenterView) {
+            m_notificationCenterView.Height(collapsed ? 0.0 : m_origViewHeight);
+        }
+    } catch (...) {}
+
+    try {
+        if (m_dndSubtext) {
+            m_dndSubtext.Height(collapsed ? 0.0 : std::numeric_limits<double>::quiet_NaN());
+        }
+    } catch (...) {}
+
+    try {
+        if (m_dndSubtextBorder) {
+            m_dndSubtextBorder.Height(collapsed ? 0.0 : std::numeric_limits<double>::quiet_NaN());
+        }
+    } catch (...) {}
+
+    if (m_notificationCollapseIcon) {
+        try {
+            m_notificationCollapseIcon.Glyph(collapsed ? L"\uE70E" : L"\uE70D");
+        } catch (...) {}
+    }
+
+    if (m_notificationCollapseButton) {
+        try {
+            wuxc::ToolTipService::SetToolTip(
+                m_notificationCollapseButton,
+                winrt::box_value(winrt::hstring(collapsed ? L"Expand notifications" : L"Collapse notifications")));
+        } catch (...) {}
+    }
+}
+
+void SetupNotificationCenterCollapseButton() {
+    if (!GetCollapsibleNotificationCenterSetting()) {
+        return;
+    }
+    if (!m_notificationCenterTopBanner || !m_notificationCenterView) {
+        return;
+    }
+
+    if (!m_notificationCollapseButton) {
+        m_notificationCollapseButton = wuxc::Button();
+        m_notificationCollapseButton.Name(L"CustomNotificationCollapseButton");
+        m_notificationCollapseButton.Width(24);
+        m_notificationCollapseButton.Height(24);
+        m_notificationCollapseButton.Padding(wux::Thickness{0, 0, 0, 0});
+        m_notificationCollapseButton.CornerRadius(GetStandardCornerRadius());
+
+        if (m_calendarExpandCollapseButton) {
+            try {
+                if (auto s = m_calendarExpandCollapseButton.Style()) {
+                    m_notificationCollapseButton.Style(s);
+                }
+            } catch (...) {}
+        } else {
+            try {
+                auto res = wux::Application::Current().Resources();
+                if (res.HasKey(winrt::box_value(L"SubtleButtonStyle"))) {
+                    m_notificationCollapseButton.Style(
+                        res.Lookup(winrt::box_value(L"SubtleButtonStyle")).try_as<wux::Style>());
+                }
+            } catch (...) {}
+        }
+
+        m_notificationCollapseIcon = wuxc::FontIcon();
+        m_notificationCollapseIcon.Glyph(m_isNotificationCenterCollapsed ? L"\uE70E" : L"\uE70D");
+        m_notificationCollapseIcon.FontSize(12);
+        m_notificationCollapseButton.Content(m_notificationCollapseIcon);
+
+        m_notificationCollapseBtnToken = m_notificationCollapseButton.Click(
+            [](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                ApplyNotificationCenterCollapsedState(!m_isNotificationCenterCollapsed);
+            });
+    } else if (m_calendarExpandCollapseButton && !m_notificationCollapseButton.Style()) {
+        try {
+            if (auto s = m_calendarExpandCollapseButton.Style()) {
+                m_notificationCollapseButton.Style(s);
+            }
+        } catch (...) {}
+    }
+
+    UpdateNotificationCollapseButtonPosition();
+
+    if (m_notificationCenterTopBanner) {
+        auto parent = m_notificationCollapseButton.Parent();
+        if (parent != m_notificationCenterTopBanner) {
+            if (parent) {
+                if (auto parentPanel = parent.try_as<wuxc::Panel>()) {
+                    uint32_t idx = 0;
+                    if (parentPanel.Children().IndexOf(m_notificationCollapseButton, idx)) {
+                        parentPanel.Children().RemoveAt(idx);
+                    }
+                }
+            }
+            m_notificationCenterTopBanner.Children().Append(m_notificationCollapseButton);
+            UpdateNotificationCollapseButtonPosition();
+        }
+    }
+
+    if (m_dndButton && m_dndLayoutUpdatedToken.value == 0) {
+        m_dndLayoutUpdatedToken = m_dndButton.LayoutUpdated(
+            [](wf::IInspectable const&, wf::IInspectable const&) {
+                UpdateNotificationCollapseButtonPosition();
+            });
+    }
+
+    if (m_notificationsTextBlock && m_notificationsTextTappedToken.value == 0) {
+        try {
+            m_notificationsTextTappedToken = m_notificationsTextBlock.Tapped(
+                [](wf::IInspectable const&, wuxi::TappedRoutedEventArgs const&) {
+                    ApplyNotificationCenterCollapsedState(!m_isNotificationCenterCollapsed);
+                });
+        } catch (...) {}
+    }
+
+    ApplyNotificationCenterCollapsedState(m_isNotificationCenterCollapsed);
+}
+
+void RestoreNotificationCenterCollapse() {
+    try {
+        if (m_notificationCollapseButton) {
+            if (m_notificationCollapseBtnToken.value != 0) {
+                m_notificationCollapseButton.Click(m_notificationCollapseBtnToken);
+                m_notificationCollapseBtnToken = {};
+            }
+            if (auto parent = m_notificationCollapseButton.Parent()) {
+                if (auto parentPanel = parent.try_as<wuxc::Panel>()) {
+                    uint32_t idx = 0;
+                    if (parentPanel.Children().IndexOf(m_notificationCollapseButton, idx)) {
+                        parentPanel.Children().RemoveAt(idx);
+                    }
+                }
+            }
+            m_notificationCollapseButton = nullptr;
+        }
+        m_notificationCollapseIcon = nullptr;
+
+        if (m_notificationCenterTopBanner) {
+            try {
+                auto cols = m_notificationCenterTopBanner.ColumnDefinitions();
+                if (cols.Size() == 4) {
+                    cols.RemoveAt(3);
+                }
+            } catch (...) {}
+        }
+
+        if (m_notificationsTextBlock && m_notificationsTextTappedToken.value != 0) {
+            m_notificationsTextBlock.Tapped(m_notificationsTextTappedToken);
+            m_notificationsTextTappedToken = {};
+        }
+        m_notificationsTextBlock = nullptr;
+
+        if (m_dndButton && m_dndLayoutUpdatedToken.value != 0) {
+            m_dndButton.LayoutUpdated(m_dndLayoutUpdatedToken);
+            m_dndLayoutUpdatedToken = {};
+        }
+        m_dndButton = nullptr;
+
+        if (m_notificationCenterGrid) {
+            m_notificationCenterGrid.MinHeight(m_origGridMinHeight);
+            m_notificationCenterGrid.Height(std::numeric_limits<double>::quiet_NaN());
+            m_notificationCenterGrid.VerticalAlignment(m_origGridVerticalAlignment);
+            m_notificationCenterGrid = nullptr;
+        }
+
+        if (m_notificationCenterView) {
+            m_notificationCenterView.Height(m_origViewHeight);
+            m_notificationCenterView = nullptr;
+        }
+
+        if (m_dndSubtext) {
+            m_dndSubtext.Height(std::numeric_limits<double>::quiet_NaN());
+            m_dndSubtext = nullptr;
+        }
+
+        if (m_dndSubtextBorder) {
+            m_dndSubtextBorder.Height(std::numeric_limits<double>::quiet_NaN());
+            m_dndSubtextBorder = nullptr;
+        }
+
+        m_notificationCenterTopBanner = nullptr;
+        m_calendarExpandCollapseButton = nullptr;
+    } catch (...) {}
+}
+
 void RestoreCalendarContent() {
     DWORD owner = g_ownerThreadId.load();
     if (owner != 0 && owner != GetCurrentThreadId()) {
@@ -1973,6 +2401,7 @@ void RestoreCalendarContent() {
 
     RevokeLayoutUpdated();
     UnregisterFocusSessionControl();
+    RestoreNotificationCenterCollapse();
 
     if (m_focusSessionControl) {
         try {
@@ -2007,6 +2436,18 @@ void RestoreCalendarContent() {
         if (m_calendarView && m_calendarViewSelectionChangedToken.value != 0) {
             m_calendarView.SelectedDatesChanged(m_calendarViewSelectionChangedToken);
             m_calendarViewSelectionChangedToken = {};
+        }
+        if (m_calendarView && m_calendarViewDayItemChangingToken.value != 0) {
+            m_calendarView.CalendarViewDayItemChanging(m_calendarViewDayItemChangingToken);
+            m_calendarViewDayItemChangingToken = {};
+        }
+        if (m_calendarView && m_calendarViewThemeChangedToken.value != 0) {
+            m_calendarView.ActualThemeChanged(m_calendarViewThemeChangedToken);
+            m_calendarViewThemeChangedToken = {};
+        }
+        if (m_rootGrid && m_rootGridThemeChangedToken.value != 0) {
+            m_rootGrid.ActualThemeChanged(m_rootGridThemeChangedToken);
+            m_rootGridThemeChangedToken = {};
         }
         if (m_datePicker) {
             if (m_datePickerLoadedToken.value != 0) {
@@ -2098,6 +2539,8 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
     }
 
     int timeColumnWidth = GetTimeColumnWidthSetting();
+    bool applyBorders = ShouldApplyColorsOnEventBorders();
+    auto sources = applyBorders ? GetIcsSourcesSetting() : std::vector<IcsSourceConfig>{};
 
     for (const auto& ev : events) {
         auto border = wuxc::Border();
@@ -2105,7 +2548,13 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         border.Padding(wux::Thickness{8, 6, 8, 6});
         border.CornerRadius(GetStandardCornerRadius());
         border.Background(GetCardBackgroundBrush());
-        border.BorderBrush(GetCardBorderBrush());
+        if (applyBorders) {
+            std::wstring colChoice = FindSourceColour(sources, ev.source);
+            auto color = GetColorForPreset(colChoice, border);
+            border.BorderBrush(wuxm::SolidColorBrush(color));
+        } else {
+            border.BorderBrush(GetCardBorderBrush());
+        }
         border.BorderThickness(wux::Thickness{1, 1, 1, 1});
 
         auto eventGrid = wuxc::Grid();
@@ -2255,6 +2704,222 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
     }
 }
 
+SYSTEMTIME WinRtDateTimeToLocalSystemTime(wf::DateTime const& dt) {
+    auto ticks = dt.time_since_epoch().count();
+    ULARGE_INTEGER uli;
+    uli.QuadPart = static_cast<ULONGLONG>(ticks);
+    FILETIME ft;
+    ft.dwLowDateTime = uli.LowPart;
+    ft.dwHighDateTime = uli.HighPart;
+
+    SYSTEMTIME stUtc{}, stLocal{};
+    FileTimeToSystemTime(&ft, &stUtc);
+    SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &stLocal);
+    return stLocal;
+}
+
+winrt::Windows::UI::Color GetAccentFillColorSecondary(wux::FrameworkElement const& fe = nullptr) {
+    try {
+        if (fe) {
+            auto res = fe.Resources();
+            if (res && res.HasKey(winrt::box_value(L"AccentFillColorSecondaryBrush"))) {
+                if (auto b = res.Lookup(winrt::box_value(L"AccentFillColorSecondaryBrush")).try_as<wuxm::SolidColorBrush>()) {
+                    return b.Color();
+                }
+            }
+        }
+        if (m_rootGrid) {
+            auto res = m_rootGrid.Resources();
+            if (res && res.HasKey(winrt::box_value(L"AccentFillColorSecondaryBrush"))) {
+                if (auto b = res.Lookup(winrt::box_value(L"AccentFillColorSecondaryBrush")).try_as<wuxm::SolidColorBrush>()) {
+                    return b.Color();
+                }
+            }
+        }
+    } catch (...) {}
+    try {
+        if (auto app = wux::Application::Current()) {
+            auto res = app.Resources();
+            if (res && res.HasKey(winrt::box_value(L"AccentFillColorSecondaryBrush"))) {
+                if (auto b = res.Lookup(winrt::box_value(L"AccentFillColorSecondaryBrush")).try_as<wuxm::SolidColorBrush>()) {
+                    return b.Color();
+                }
+            }
+            if (res && res.HasKey(winrt::box_value(L"SystemAccentColor"))) {
+                return winrt::unbox_value<winrt::Windows::UI::Color>(res.Lookup(winrt::box_value(L"SystemAccentColor")));
+            }
+        }
+    } catch (...) {}
+    return winrt::Windows::UI::Color{255, 0, 120, 215};
+}
+
+bool IsDarkTheme(wux::FrameworkElement const& fe = nullptr) {
+    try {
+        if (fe) {
+            auto theme = fe.ActualTheme();
+            if (theme == wux::ElementTheme::Dark) return true;
+            if (theme == wux::ElementTheme::Light) return false;
+        }
+    } catch (...) {}
+    try {
+        if (m_calendarView) {
+            auto theme = m_calendarView.ActualTheme();
+            if (theme == wux::ElementTheme::Dark) return true;
+            if (theme == wux::ElementTheme::Light) return false;
+        }
+    } catch (...) {}
+    try {
+        if (m_rootGrid) {
+            auto theme = m_rootGrid.ActualTheme();
+            if (theme == wux::ElementTheme::Dark) return true;
+            if (theme == wux::ElementTheme::Light) return false;
+        }
+    } catch (...) {}
+    try {
+        if (auto app = wux::Application::Current()) {
+            return app.RequestedTheme() == wux::ApplicationTheme::Dark;
+        }
+    } catch (...) {}
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme",
+                     RRF_RT_REG_DWORD,
+                     nullptr,
+                     &value,
+                     &size) == ERROR_SUCCESS) {
+        return value == 0;
+    }
+    return false;
+}
+
+struct ColorPair {
+    winrt::Windows::UI::Color light;
+    winrt::Windows::UI::Color dark;
+};
+
+// Base array of colours with light and dark tones:
+// Red, Green, Blue, Orange, Yellow, Pink
+static const ColorPair g_colorPresets[] = {
+    // 0: Red
+    { winrt::Windows::UI::Color{255, 255, 120, 120}, winrt::Windows::UI::Color{255, 255, 97, 97} },
+    // 1: Green
+    { winrt::Windows::UI::Color{255, 110, 210, 110}, winrt::Windows::UI::Color{255, 108, 203, 95} },
+    // 2: Blue
+    { winrt::Windows::UI::Color{255, 115, 185, 255}, winrt::Windows::UI::Color{255, 96, 205, 255} },
+    // 3: Orange
+    { winrt::Windows::UI::Color{255, 255, 168, 76},  winrt::Windows::UI::Color{255, 255, 160, 67} },
+    // 4: Yellow
+    { winrt::Windows::UI::Color{255, 250, 212, 60},  winrt::Windows::UI::Color{255, 255, 215, 0} },
+    // 5: Pink
+    { winrt::Windows::UI::Color{255, 248, 140, 210}, winrt::Windows::UI::Color{255, 255, 128, 235} },
+};
+
+winrt::Windows::UI::Color GetColorForPreset(std::wstring const& colourChoice, wux::FrameworkElement const& fe) {
+    std::wstring lowerChoice = colourChoice;
+    std::transform(lowerChoice.begin(), lowerChoice.end(), lowerChoice.begin(), ::towlower);
+
+    bool dark = IsDarkTheme(fe);
+
+    if (lowerChoice == L"red") {
+        return dark ? g_colorPresets[0].dark : g_colorPresets[0].light;
+    } else if (lowerChoice == L"green") {
+        return dark ? g_colorPresets[1].dark : g_colorPresets[1].light;
+    } else if (lowerChoice == L"blue") {
+        return dark ? g_colorPresets[2].dark : g_colorPresets[2].light;
+    } else if (lowerChoice == L"orange") {
+        return dark ? g_colorPresets[3].dark : g_colorPresets[3].light;
+    } else if (lowerChoice == L"yellow") {
+        return dark ? g_colorPresets[4].dark : g_colorPresets[4].light;
+    } else if (lowerChoice == L"pink") {
+        return dark ? g_colorPresets[5].dark : g_colorPresets[5].light;
+    }
+
+    // Default: uses accent colour (AccentFillColorSecondaryBrush)
+    return GetAccentFillColorSecondary(fe);
+}
+
+std::vector<winrt::Windows::UI::Color> ComputeDensityColorsForDate(wf::DateTime const& dt, wux::FrameworkElement const& fe = nullptr) {
+    SYSTEMTIME stLocal = WinRtDateTimeToLocalSystemTime(dt);
+    std::vector<CalendarEvent> events;
+    {
+        std::lock_guard<std::mutex> lock(g_eventsMutex);
+        events = FilterEventsForDate(g_allParsedEvents, stLocal);
+    }
+    std::vector<winrt::Windows::UI::Color> colors;
+    if (!events.empty()) {
+        auto sources = GetIcsSourcesSetting();
+        size_t count = std::min<size_t>(events.size(), (size_t)10);
+        colors.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            std::wstring colChoice = FindSourceColour(sources, events[i].source);
+            colors.push_back(GetColorForPreset(colChoice, fe));
+        }
+    }
+    return colors;
+}
+
+void ApplyCalendarDayItemCornerRadius(
+    wuxc::CalendarViewDayItem const& item,
+    double radius = 20.0)
+{
+    if (!item)
+        return;
+
+    try {
+        int count = wuxm::VisualTreeHelper::GetChildrenCount(item);
+
+        for (int i = 0; i < count; ++i) {
+            auto border =
+                wuxm::VisualTreeHelper::GetChild(item, i)
+                    .try_as<wuxc::Border>();
+
+            if (!border)
+                continue;
+
+            border.CornerRadius(
+                wux::CornerRadius{radius, radius, radius, radius});
+        }
+    }
+    catch (...) {}
+}
+
+void RefreshCalendarDayItems(wux::DependencyObject const& root) {
+    if (!root) return;
+    try {
+        int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+        for (int i = 0; i < count; ++i) {
+            auto child = wuxm::VisualTreeHelper::GetChild(root, i);
+            if (auto dayItem = child.try_as<wuxc::CalendarViewDayItem>()) {
+                try { dayItem.ApplyTemplate(); } catch (...) {}
+                ApplyCalendarDayItemCornerRadius(dayItem, 20.0);
+                dayItem.SetDensityColors(ComputeDensityColorsForDate(dayItem.Date(), dayItem));
+            } else {
+                RefreshCalendarDayItems(child);
+            }
+        }
+    } catch (...) {}
+}
+
+void RefreshCalendarView() {
+    if (!m_calendarView) return;
+    try {
+        RefreshCalendarDayItems(m_calendarView);
+    } catch (...) {}
+    if (auto dispatcher = m_calendarView.Dispatcher()) {
+        dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Low, []() {
+            if (m_calendarView) {
+                try {
+                    RefreshCalendarDayItems(m_calendarView);
+                } catch (...) {}
+            }
+
+            m_calendarView.UpdateLayout();
+        });
+    }
+}
+
 void UpdateDateDisplayAndCalendar(SYSTEMTIME const& st) {
     if (m_dateButtonText) {
         m_dateButtonText.Text(FormatFilterDate(st));
@@ -2278,6 +2943,7 @@ void UpdateDateDisplayAndCalendar(SYSTEMTIME const& st) {
             m_calendarView.SelectedDates().Append(winrtDt);
         } catch (...) {}
         m_isUpdatingCalendarSelection = false;
+        RefreshCalendarView();
     }
 }
 
@@ -2409,6 +3075,7 @@ void DispatchUpdateEvents() {
             filtered = FilterEventsForDate(g_allParsedEvents, m_currentFilterDate);
         }
         try { PopulateItemsControl(filtered); } catch (...) {}
+        RefreshCalendarView();
     });
 
     if (action) {
@@ -2500,21 +3167,28 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
 
                 m_dateBtnClickToken = m_dateButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     if (!m_calendarView) return;
-                    bool isAbove = IsCalendarAboveAgenda();
+                    bool calAbove = IsCalendarAboveAgenda();
+                    bool btnAbove = IsButtonsAboveAgenda();
                     if (m_calendarView.Visibility() == wux::Visibility::Visible) {
                         m_calendarView.Visibility(wux::Visibility::Collapsed);
                         wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Show calendar"));
-                        if (isAbove) {
+                        // When calendar collapses and header sits directly below it, restore top margin
+                        if (calAbove && btnAbove) {
                             if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
                         }
                         UpdateMaxHeight(GetMaxHeightCollapsedSetting());
                     } else {
                         m_calendarView.Visibility(wux::Visibility::Visible);
                         wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Hide calendar"));
-                        if (isAbove) {
+                        // When calendar expands above header, tighten header top margin
+                        if (calAbove && btnAbove) {
                             if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 2, 12, 0});
                         }
+                        try {
+                            m_calendarView.NumberOfWeeksInView(GetNumberOfWeeksInViewSetting());
+                        } catch (...) {}
                         UpdateMaxHeight(GetMaxHeightExpandedSetting());
+                        RefreshCalendarView();
                     }
                 });
             }
@@ -2527,11 +3201,61 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                 m_calendarView.BorderThickness(wux::Thickness{0, 0, 0, 0});
                 m_calendarView.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
                 m_calendarView.IsTodayHighlighted(true);
+                m_calendarView.FirstDayOfWeek(GetSystemFirstDayOfWeek());
+                try {
+                    m_calendarView.NumberOfWeeksInView(GetNumberOfWeeksInViewSetting());
+                } catch (...) {}
                 m_calendarView.SelectionMode(wuxc::CalendarViewSelectionMode::Single);
                 m_calendarView.Visibility(wux::Visibility::Collapsed);
                 m_calendarViewSelectionChangedToken = m_calendarView.SelectedDatesChanged([](wuxc::CalendarView const& cv, wuxc::CalendarViewSelectedDatesChangedEventArgs const& args) {
                     if (args.AddedDates().Size() > 0) {
                         OnCalendarViewSelectedDatesChanged(args.AddedDates().GetAt(0));
+                    }
+                });
+                m_calendarViewThemeChangedToken = m_calendarView.ActualThemeChanged([](auto const&, auto const&) {
+                    std::vector<CalendarEvent> currentEvents;
+                    {
+                        std::lock_guard<std::mutex> lock(g_eventsMutex);
+                        currentEvents = FilterEventsForDate(g_allParsedEvents, m_currentFilterDate);
+                    }
+                    try { PopulateItemsControl(currentEvents); } catch (...) {}
+                    RefreshCalendarView();
+                });
+            } else {
+                try {
+                    m_calendarView.NumberOfWeeksInView(GetNumberOfWeeksInViewSetting());
+                } catch (...) {}
+            }
+            if (m_calendarView && m_calendarViewDayItemChangingToken.value == 0) {
+                m_calendarViewDayItemChangingToken = m_calendarView.CalendarViewDayItemChanging(
+                [](auto const&, wuxc::CalendarViewDayItemChangingEventArgs const& args) {
+                    if (args.InRecycleQueue())
+                        return;
+
+                    auto item = args.Item();
+                    if (!item)
+                        return;
+
+                    if (args.Phase() == 0) {
+                        // Let CalendarView finish its initial rendering,
+                        // then run our customization in the next phase.
+                        args.RegisterUpdateCallback(
+                            [](auto const&, wuxc::CalendarViewDayItemChangingEventArgs const& args) {
+                                if (args.InRecycleQueue())
+                                    return;
+
+                                auto item = args.Item();
+                                if (!item)
+                                    return;
+
+                                try {
+                                    item.ApplyTemplate();
+                                } catch (...) {}
+
+                                ApplyCalendarDayItemCornerRadius(item, 20.0);
+                                item.SetDensityColors(
+                                    ComputeDensityColorsForDate(item.Date(), item));
+                            });
                     }
                 });
             }
@@ -2655,14 +3379,21 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             auto refreshIcon = wuxc::FontIcon(); refreshIcon.Glyph(L"\uE72C"); refreshIcon.FontSize(12);
             m_refreshButton.Content(refreshIcon);
             wuxc::ToolTipService::SetToolTip(m_refreshButton, winrt::box_value(L"Refresh events"));
-            m_refreshBtnToken = m_refreshButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) { TriggerBackgroundFetch(true); });
+            m_refreshBtnToken = m_refreshButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                TriggerBackgroundFetch(true);
+                RefreshCalendarView();
+            });
         }
 
         if (!m_headerGrid) {
             m_headerGrid = wuxc::Grid();
             m_headerGrid.Name(L"CustomCalendarHeaderGrid");
             if (isInline) {
-                if (IsCalendarAboveAgenda()) {
+                bool calAbove = IsCalendarAboveAgenda();
+                bool btnAbove = IsButtonsAboveAgenda();
+                // When buttons are directly below calendar (both above agenda), start with top breathing room.
+                // Toggle collapse will tighten/restore this margin dynamically.
+                if (calAbove && btnAbove) {
                     m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
                 } else {
                     m_headerGrid.Margin(wux::Thickness{12, 6, 12, 0});
@@ -2687,41 +3418,73 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
         if (!m_rootGrid) {
             m_rootGrid = wuxc::Grid();
             m_rootGrid.Name(L"CustomCalendarRootGrid");
-            bool isAbove = IsCalendarAboveAgenda();
+            bool calAbove = IsCalendarAboveAgenda();
+            bool btnAbove = IsButtonsAboveAgenda();
             if (isInline) {
                 m_rootGrid.Margin(wux::Thickness{0, 0, 0, 4});
                 wuxc::RowDefinition row0{}; row0.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row0);
                 wuxc::RowDefinition row1{}; row1.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row1);
                 wuxc::RowDefinition row2{}; row2.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row2);
-                if (isAbove) {
-                    wuxc::Grid::SetRow(m_calendarView, 0); m_rootGrid.Children().Append(m_calendarView);
-                    wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
+
+                if (calAbove && btnAbove) {
+                    // Row order: [calendar] [buttons] [agenda]
+                    wuxc::Grid::SetRow(m_calendarView, 0);      m_rootGrid.Children().Append(m_calendarView);
+                    wuxc::Grid::SetRow(m_headerGrid, 1);        m_rootGrid.Children().Append(m_headerGrid);
                     wuxc::Grid::SetRow(m_eventsScrollViewer, 2); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    m_calendarView.Margin(wux::Thickness{0, 0, 0, 0});
+                    // headerGrid margin set at creation; updated dynamically on toggle
                     m_eventsScrollViewer.Margin(wux::Thickness{12, 0, 12, 0});
-                } else {
-                    wuxc::Grid::SetRow(m_eventsScrollViewer, 0); m_rootGrid.Children().Append(m_eventsScrollViewer);
-                    wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
-                    wuxc::Grid::SetRow(m_calendarView, 2); m_rootGrid.Children().Append(m_calendarView);
-                    m_eventsScrollViewer.Margin(wux::Thickness{12, 10, 12, 0});
+                } else if (calAbove && !btnAbove) {
+                    // Row order: [calendar] [agenda] [buttons]
+                    wuxc::Grid::SetRow(m_calendarView, 0);      m_rootGrid.Children().Append(m_calendarView);
+                    wuxc::Grid::SetRow(m_eventsScrollViewer, 1); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    wuxc::Grid::SetRow(m_headerGrid, 2);        m_rootGrid.Children().Append(m_headerGrid);
+                    m_calendarView.Margin(wux::Thickness{0, 0, 0, 0});
+                    m_eventsScrollViewer.Margin(wux::Thickness{12, 8, 12, 0});
                     m_headerGrid.Margin(wux::Thickness{12, 6, 12, 0});
+                } else if (!calAbove && btnAbove) {
+                    // Row order: [buttons] [agenda] [calendar]
+                    wuxc::Grid::SetRow(m_headerGrid, 0);        m_rootGrid.Children().Append(m_headerGrid);
+                    wuxc::Grid::SetRow(m_eventsScrollViewer, 1); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    wuxc::Grid::SetRow(m_calendarView, 2);      m_rootGrid.Children().Append(m_calendarView);
+                    m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
+                    m_eventsScrollViewer.Margin(wux::Thickness{12, 0, 12, 0});
                     m_calendarView.Margin(wux::Thickness{0, 0, 0, 4});
+                } else {
+                    // Row order: [agenda] [buttons] [calendar]
+                    wuxc::Grid::SetRow(m_eventsScrollViewer, 0); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    wuxc::Grid::SetRow(m_headerGrid, 1);        m_rootGrid.Children().Append(m_headerGrid);
+                    wuxc::Grid::SetRow(m_calendarView, 2);      m_rootGrid.Children().Append(m_calendarView);
+                    m_eventsScrollViewer.Margin(wux::Thickness{12, 8, 12, 0});
+                    m_headerGrid.Margin(wux::Thickness{12, 6, 12, 0});
+                    m_calendarView.Margin(wux::Thickness{0, 0, 0, 0});
                 }
             } else {
+                // Popup mode: no calendar row — only buttons and agenda
                 m_rootGrid.Margin(wux::Thickness{12, 4, 12, 4});
                 wuxc::RowDefinition row0{}; row0.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row0);
                 wuxc::RowDefinition row1{}; row1.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row1);
-                if (isAbove) {
-                    wuxc::Grid::SetRow(m_headerGrid, 0); m_rootGrid.Children().Append(m_headerGrid);
+                if (btnAbove) {
+                    wuxc::Grid::SetRow(m_headerGrid, 0);        m_rootGrid.Children().Append(m_headerGrid);
                     wuxc::Grid::SetRow(m_eventsScrollViewer, 1); m_rootGrid.Children().Append(m_eventsScrollViewer);
                     m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
                     m_eventsScrollViewer.Margin(wux::Thickness{0, 0, 0, 0});
                 } else {
                     wuxc::Grid::SetRow(m_eventsScrollViewer, 0); m_rootGrid.Children().Append(m_eventsScrollViewer);
-                    wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
+                    wuxc::Grid::SetRow(m_headerGrid, 1);        m_rootGrid.Children().Append(m_headerGrid);
                     m_eventsScrollViewer.Margin(wux::Thickness{0, 6, 0, 0});
                     m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
                 }
             }
+            m_rootGridThemeChangedToken = m_rootGrid.ActualThemeChanged([](auto const&, auto const&) {
+                std::vector<CalendarEvent> currentEvents;
+                {
+                    std::lock_guard<std::mutex> lock(g_eventsMutex);
+                    currentEvents = FilterEventsForDate(g_allParsedEvents, m_currentFilterDate);
+                }
+                try { PopulateItemsControl(currentEvents); } catch (...) {}
+                RefreshCalendarView();
+            });
         }
 
         SYSTEMTIME today; GetLocalTime(&today); m_currentFilterDate = today;
@@ -2800,6 +3563,58 @@ void WalkVisualTree(winrt::Windows::UI::Xaml::DependencyObject const& root) {
                 }
             } else if (name == L"FocusSessionControl" || (!m_focusSessionControl && winrt::get_class_name(fe) == L"ActionCenter.FocusSessionControl")) {
                 HandleFocusSessionControl(fe);
+            } else if (name == L"ExpandCollapseButton") {
+                if (auto btn = fe.try_as<wuxc::Button>()) {
+                    m_calendarExpandCollapseButton = btn;
+                    if (m_notificationCollapseButton) {
+                        try {
+                            if (auto s = btn.Style()) {
+                                m_notificationCollapseButton.Style(s);
+                            }
+                        } catch (...) {}
+                    }
+                }
+            } else if (name == L"NotificationCenterGrid") {
+                m_notificationCenterGrid = fe.try_as<wuxc::Grid>();
+                if (m_notificationCenterGrid) {
+                    double mh = m_notificationCenterGrid.MinHeight();
+                    if (mh > 0 && !m_isNotificationCenterCollapsed) m_origGridMinHeight = mh;
+                    if (!m_isNotificationCenterCollapsed) m_origGridVerticalAlignment = m_notificationCenterGrid.VerticalAlignment();
+                }
+                SetupNotificationCenterCollapseButton();
+            } else if (name == L"NotificationCenterTopBanner") {
+                m_notificationCenterTopBanner = fe.try_as<wuxc::Grid>();
+                SetupNotificationCenterCollapseButton();
+            } else if (name == L"DoNotDisturbSubtext") {
+                m_dndSubtext = fe;
+            } else if (name == L"DoNotDisturbSubtextHighContrastBorder") {
+                m_dndSubtextBorder = fe;
+            } else if (name == L"NotificationCenterView" || (!m_notificationCenterView && winrt::get_class_name(fe) == L"ActionCenter.NotificationCenterView")) {
+                m_notificationCenterView = fe;
+                if (m_notificationCenterView) {
+                    m_origViewMinHeight = m_notificationCenterView.MinHeight();
+                    if (!m_isNotificationCenterCollapsed) {
+                        m_origViewHeight = m_notificationCenterView.Height();
+                    }
+                }
+                SetupNotificationCenterCollapseButton();
+            } else if (name == L"DoNotDisturbButton") {
+                if (m_dndButton != fe) {
+                    if (m_dndButton && m_dndLayoutUpdatedToken.value != 0) {
+                        try { m_dndButton.LayoutUpdated(m_dndLayoutUpdatedToken); } catch (...) {}
+                        m_dndLayoutUpdatedToken = {};
+                    }
+                    m_dndButton = fe;
+                }
+                SetupNotificationCenterCollapseButton();
+            } else if (name == L"NotificationsTextBlock") {
+                if (m_notificationsTextBlock != fe) {
+                    if (m_notificationsTextBlock && m_notificationsTextTappedToken.value != 0) {
+                        try { m_notificationsTextBlock.Tapped(m_notificationsTextTappedToken); } catch (...) {}
+                        m_notificationsTextTappedToken = {};
+                    }
+                    m_notificationsTextBlock = fe.try_as<wuxc::TextBlock>();
+                }
             }
         }
         int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
@@ -2866,12 +3681,16 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
                     calendarEvents = entry.cachedEvents;
                 } else {
                     calendarEvents = ParseIcs(content);
+                    for (auto& ev : calendarEvents) {
+                        ev.source = icsPath;
+                    }
                     entry.cachedEvents = calendarEvents;
                     Wh_Log(L"Parsed %zu events from %s", calendarEvents.size(), icsPath.c_str());
                 }
             }
 
             for (auto& ev : calendarEvents) {
+                ev.source = icsPath;
                 if (!ev.uid.empty()) {
                     std::wstring key = ev.uid + L"#" + ev.recurrenceId;
                     if (!seenKeys.insert(key).second) {
