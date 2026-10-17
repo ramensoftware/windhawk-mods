@@ -46,7 +46,7 @@ Multiple sources:
 
 Customising whether the calendar is shown inline or as a popup:
 
-![comparison](https://i.imgur.com/od3kcQS.png)
+![comparison](https://i.imgur.com/wUAJo9P.png)
 
 Collapsible notification centre:
 
