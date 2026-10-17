@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod accurately recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page
-// @version        5.1.0
+// @description    This mod accurately recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page. 5.2.0 adds full StartAllBack / custom taskbar support.
+// @version        5.2.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -79,6 +79,19 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, Wi
 - **Kichura** - Visual analysis
 
 If any issues are encountered, please report them to the author of the mod.
+## What's new in 5.2.0
+- **Full StartAllBack / custom taskbar support.** StartAllBack replaces the
+  stock tray with its own implementation, so tray discovery never finds the
+  network button. 5.2.0 intercepts both entry points StartAllBack uses after a
+  network-icon click: the `ms-availablenetworks:` ShellExecute fallback and the
+  WinRT activation of `Windows.Internal.ShellExperience.NetworkFlyout` (its
+  "Windows 11 flyouts" mode), and anchors the flyout to StartAllBack's own tray
+  button (`SIBNetworkIcon`/`SIBTrayButton`) before falling back to the cursor.
+- Credits: the ShellExecute interception approach was created by **awnaise** in
+  the fork ["Windows 7 Network Flyout (StartAllBack / Win11 Fix)"](https://github.com/ramensoftware/windhawk-mods/pull/5622),
+  itself built on this mod. 5.2.0 merges that idea upstream and hardens it.
+  Thank you, awnaise!
+
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -749,6 +762,8 @@ void FreeSystemIcons();
 void LoadSystemIcons();
 static int GetNetworkCountSafe();
 static BOOL GetNetworkIconScreenRect(RECT* outRect);
+// 5.2.0: defined in the StartAllBack support block near Wh_ModInit.
+static BOOL GetStartAllBackNetworkIconRect(RECT* outRect);
 static UINT GetDpiForScreenRect(const RECT* rc);
 
 // Forward-declared so RecalcDpiMetrics() can re-bind fonts on the Connect
@@ -7390,6 +7405,25 @@ static BOOL GetNetworkIconScreenRect(RECT* outRect) {
     // keep using the last known anchor rather than the corner default.
     if (g_IsRetroBarHost && GetRetroBarNetworkAnchorRect(outRect))
         return TRUE;
+    // 5.2.0: StartAllBack / custom taskbars -- classic tray lookup is not
+    // available. Try StartAllBack's own tray button window classes first, so
+    // the flyout pops next to the icon. Credit for the idea of a positional
+    // fallback in this situation goes to awnaise's fork (cursor rect); this
+    // version prefers the real button rect and keeps the cursor only as a
+    // last resort.
+    RECT rcSAB;
+    if (GetStartAllBackNetworkIconRect(&rcSAB)) {
+        *outRect = rcSAB;
+        return TRUE;
+    }
+    POINT pt;
+    if (GetCursorPos(&pt)) {
+        int cx = GetSystemMetrics(SM_CXSMICON);
+        int cy = GetSystemMetrics(SM_CYSMICON);
+        SetRect(outRect, pt.x - cx / 2 - 2, pt.y - cy / 2 - 2,
+                pt.x + cx / 2 + 2, pt.y + cy / 2 + 2);
+        return TRUE;
+    }
     return FALSE;
 }
 
@@ -12330,11 +12364,272 @@ static void SettingsChanged() {
 }  // namespace Win7NetworkCenterLinks
 
 
+
+// ===========================================================================
+// 5.2.0 - StartAllBack / custom taskbar support
+// ===========================================================================
+// Why this exists: StartAllBack (StartAllBackX64.dll, internally "Taskbar2")
+// replaces the stock taskbar/tray with its own implementation. It exposes no
+// classic ToolbarWindow32 / TB_GETBUTTON anatomy, so the tray discovery in
+// this mod finds nothing and the flyout never triggers. Verified against
+// StartAllBack 3.9.28: its network-icon click handler (Startup's tray code,
+// the click dispatcher) takes one of three paths:
+//   1. ShellExecuteW(L"ms-availablenetworks:")                 -- fallback
+//   2. StartAllBack's own hosted Win7-style flyout              -- SAB setting
+//   3. WinRT activation of "Windows.Internal.ShellExperience.NetworkFlyout"
+//      ("Windows 11 flyouts" mode in SAB)
+// This block catches paths 1 and 3 so the Win7 flyout opens regardless of the
+// SAB "Choose flyouts style" setting. Path 2 is SAB's own flyout by the user's
+// choice; leave it alone.
+//
+// Credits: catching path 1 via ShellExecute hooks comes from awnaise's fork
+// "win7-network-flyout-sab-fix" (ramensoftware/windhawk-mods PR #5622), which
+// was itself derived from this mod. 5.2.0 merges that idea upstream and
+// hardens it: prefix-based URI matching (instead of wcsstr), path 3 via
+// RoGetActivationFactory, tray-button anchoring to StartAllBack's own window
+// classes before any cursor fallback, and thread-safe flyout dispatch.
+// Thanks awnaise!
+// ===========================================================================
+
+// --- URI matching (path 1) -------------------------------------------------
+// SAB passes exactly L"ms-availablenetworks:" as lpFile, but be strict and
+// tolerant at once: case-insensitive prefix, skip quotes/whitespace.
+static BOOL IsAvailableNetworksUri(LPCWSTR s) {
+    if (!s)
+        return FALSE;
+    while (*s == L' ' || *s == L'"' || *s == L'\t')
+        s++;
+    return _wcsnicmp(s, L"ms-availablenetworks:", 20) == 0;
+}
+
+// --- Thread-safe flyout dispatch ------------------------------------------
+// Same policy as HandleNetworkIconClick: never run ToggleFlyoutWindow() on a
+// tray/UI thread (WLAN/COM work freezes the taskbar). Bounce to the flyout
+// owner thread when one exists.
+static void RequestShowWin7Flyout() {
+    DWORD tid = g_dwFlyoutOwnerThreadId ? g_dwFlyoutOwnerThreadId
+                                        : g_Ctx.dwHotkeyThreadId;
+    if (tid) {
+        PostThreadMessageW(tid, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
+        return;
+    }
+    try {
+        ToggleFlyoutWindow();
+    } catch (...) {
+        Wh_Log(L"RequestShowWin7Flyout: exception while toggling flyout, ignored");
+    }
+}
+
+// --- ShellExecuteW / ShellExecuteExW hooks (path 1) ------------------------
+typedef HINSTANCE(WINAPI * ShellExecuteW_t)(HWND, LPCWSTR, LPCWSTR, LPCWSTR,
+                                           LPCWSTR, INT);
+static ShellExecuteW_t ShellExecuteW_Original = NULL;
+
+typedef BOOL(WINAPI * ShellExecuteExW_t)(SHELLEXECUTEINFOW *);
+static ShellExecuteExW_t ShellExecuteExW_Original = NULL;
+
+HINSTANCE WINAPI ShellExecuteW_Hook(HWND hWnd, LPCWSTR lpOperation,
+                                    LPCWSTR lpFile, LPCWSTR lpParameters,
+                                    LPCWSTR lpDirectory, INT nShowCmd) {
+    if (g_Settings.interceptNativeFlyout &&
+        (IsAvailableNetworksUri(lpFile) || IsAvailableNetworksUri(lpParameters))) {
+        Wh_Log(L"[SAB] ShellExecuteW(ms-availablenetworks:) intercepted");
+        RequestShowWin7Flyout();
+        return (HINSTANCE)33;  // >32 = success; suppress the modern pane
+    }
+    return ShellExecuteW_Original(hWnd, lpOperation, lpFile, lpParameters,
+                                  lpDirectory, nShowCmd);
+}
+
+BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW *pExecInfo) {
+    if (g_Settings.interceptNativeFlyout && pExecInfo &&
+        (IsAvailableNetworksUri(pExecInfo->lpFile) ||
+         IsAvailableNetworksUri(pExecInfo->lpParameters))) {
+        Wh_Log(L"[SAB] ShellExecuteExW(ms-availablenetworks:) intercepted");
+        RequestShowWin7Flyout();
+        return TRUE;  // suppress the modern pane
+    }
+    return ShellExecuteExW_Original(pExecInfo);
+}
+
+// --- RoGetActivationFactory hook (path 3) ---------------------------------
+// StartAllBack's "Windows 11 flyouts" mode activates the WinRT class
+// "Windows.Internal.ShellExperience.NetworkFlyout" instead of ShellExecute.
+// We intercept that activation and hand back a no-op factory so SAB believes
+// the modern flyout opened. Returning a failure HRESULT is NOT an option:
+// SAB fail-fasts (its code does `js -> fail-fast wrapper`) when activation
+// fails, which would take explorer.exe down.
+//
+// The no-op factory relies on a uniform calling convention, so it is compiled
+// for x64/ARM64 only; on x86 hosts the WinRT path is left untouched (Win11,
+// and therefore StartAllBack's modern path, is x64/ARM64 anyway).
+#if defined(_M_X64) || defined(_M_ARM64) || defined(__x86_64__) || \
+    defined(__aarch64__)
+#define SAB_WINRT_INTERCEPTION 1
+#endif
+
+#ifdef SAB_WINRT_INTERCEPTION
+typedef void *HSTRING_T;
+typedef HRESULT(WINAPI * RoGetActivationFactory_t)(HSTRING_T, REFIID, void **);
+typedef PCWSTR(WINAPI * WindowsGetStringRawBuffer_t)(HSTRING_T, UINT32 *);
+
+static RoGetActivationFactory_t RoGetActivationFactory_Original = NULL;
+static WindowsGetStringRawBuffer_t pWindowsGetStringRawBuffer = NULL;
+
+// Immortal no-op object: QI/AddRef/Release + generic methods that all
+// succeed silently. SAB calls: QI (vtable[0]) -> show-at-rect (vtable[6],
+// offset 0x30) -> Release (vtable[2]); all within one call stack, so the
+// static object is enough and safe across mod unload.
+static void *g_SabNoOpVtable[12] = {};
+static LONG g_SabNoOpRefs = 1;
+
+static HRESULT STDMETHODCALLTYPE SabNoOp_QI(void *self, REFIID riid,
+                                            void **ppv) {
+    if (ppv)
+        *ppv = self;
+    return S_OK;
+}
+static ULONG STDMETHODCALLTYPE SabNoOp_AddRef(void *self) {
+    return (ULONG)InterlockedIncrement(&g_SabNoOpRefs);
+}
+static ULONG STDMETHODCALLTYPE SabNoOp_Release(void *self) {
+    // Immortal on purpose: never free, never let the refcount hit zero.
+    InterlockedIncrement(&g_SabNoOpRefs);
+    return (ULONG)g_SabNoOpRefs;
+}
+static HRESULT STDMETHODCALLTYPE SabNoOp_Method(void *self, void *a, void *b,
+                                                void *c, void *d, void *e,
+                                                void *f, void *g) {
+    return S_OK;
+}
+static void SabNoOp_InitVtable() {
+    static bool done = false;
+    if (done)
+        return;
+    done = true;
+    g_SabNoOpVtable[0] = (void *)SabNoOp_QI;
+    g_SabNoOpVtable[1] = (void *)SabNoOp_AddRef;
+    g_SabNoOpVtable[2] = (void *)SabNoOp_Release;
+    for (int i = 3; i < 12; i++)
+        g_SabNoOpVtable[i] = (void *)SabNoOp_Method;
+}
+struct SabNoOpObject {
+    void **lpVtbl;
+};
+static SabNoOpObject g_SabNoOpObject = {g_SabNoOpVtable};
+
+static const WCHAR kNetworkFlyoutClass[] =
+    L"Windows.Internal.ShellExperience.NetworkFlyout";
+
+HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING_T classId, REFIID riid,
+                                           void **factory) {
+    if (g_Settings.interceptNativeFlyout && pWindowsGetStringRawBuffer &&
+        classId) {
+        UINT32 len = 0;
+        PCWSTR name = pWindowsGetStringRawBuffer(classId, &len);
+        // 46 = wcslen(kNetworkFlyoutClass); reject everything else (in
+        // particular WindowsUdk.UI.Shell.NetworkIcon, which the tray icon
+        // itself needs).
+        if (name && len == 46 &&
+            _wcsicmp(name, kNetworkFlyoutClass) == 0) {
+            Wh_Log(L"[SAB] WinRT NetworkFlyout activation intercepted");
+            RequestShowWin7Flyout();
+            if (factory) {
+                SabNoOp_InitVtable();
+                *factory = &g_SabNoOpObject;
+                SabNoOp_AddRef(&g_SabNoOpObject);
+                return S_OK;
+            }
+        }
+    }
+    return RoGetActivationFactory_Original(classId, riid, factory);
+}
+#endif  // SAB_WINRT_INTERCEPTION
+
+// --- StartAllBack tray-button anchoring -----------------------------------
+// SAB registers its own tray button window classes (seen in StartAllBackX64
+// .dll strings): "SIBNetworkIcon", "SIBTrayButton". When classic tray lookup
+// fails, use the button's real rect so the flyout pops next to the icon
+// instead of the cursor.
+struct SabFindChildCtx {
+    const WCHAR *cls;
+    HWND found;
+};
+static BOOL CALLBACK SabFindChildByClassProc(HWND h, LPARAM lp) {
+    SabFindChildCtx *c = (SabFindChildCtx *)lp;
+    WCHAR buf[64];
+    if (GetClassNameW(h, buf, 64) && _wcsicmp(buf, c->cls) == 0) {
+        c->found = h;
+        return FALSE;
+    }
+    return TRUE;
+}
+static BOOL GetStartAllBackNetworkIconRect(RECT *outRect) {
+    static const WCHAR *kClasses[] = {L"SIBNetworkIcon", L"SIBTrayButton"};
+    static const WCHAR *kTrays[] = {L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"};
+
+    for (const WCHAR *tray : kTrays) {
+        HWND hTray = FindWindowW(tray, NULL);
+        if (!hTray)
+            continue;
+        for (const WCHAR *cls : kClasses) {
+            HWND hBtn = FindWindowExW(hTray, NULL, cls, NULL);
+            // Not a direct child? Search descendants too.
+            if (!hBtn) {
+                SabFindChildCtx ctx = {cls, NULL};
+                EnumChildWindows(hTray, SabFindChildByClassProc,
+                                 (LPARAM)&ctx);
+                hBtn = ctx.found;
+            }
+            if (hBtn && IsWindowVisible(hBtn) && GetWindowRect(hBtn, outRect) &&
+                !IsRectEmpty(outRect))
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+// --- Hook installation ----------------------------------------------------
+static void InstallStartAllBackHooks() {
+    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+    if (hShell32) {
+        void *pExec =
+            (void *)GetProcAddress(hShell32, "ShellExecuteW");
+        if (pExec)
+            Wh_SetFunctionHook(pExec, (void *)ShellExecuteW_Hook,
+                               (void **)&ShellExecuteW_Original);
+        void *pExecEx =
+            (void *)GetProcAddress(hShell32, "ShellExecuteExW");
+        if (pExecEx)
+            Wh_SetFunctionHook(pExecEx, (void *)ShellExecuteExW_Hook,
+                               (void **)&ShellExecuteExW_Original);
+    }
+#ifdef SAB_WINRT_INTERCEPTION
+    HMODULE hCombase = GetModuleHandleW(L"combase.dll");
+    if (hCombase) {
+        pWindowsGetStringRawBuffer =
+            (WindowsGetStringRawBuffer_t)GetProcAddress(
+                hCombase, "WindowsGetStringRawBuffer");
+        void *pRo = (void *)GetProcAddress(hCombase, "RoGetActivationFactory");
+        if (pRo)
+            Wh_SetFunctionHook(pRo, (void *)RoGetActivationFactory_Hook,
+                               (void **)&RoGetActivationFactory_Original);
+    }
+#endif
+    Wh_Log(L"StartAllBack support hooks installed");
+}
+// ===========================================================================
+// End 5.2.0 StartAllBack support block
+// ===========================================================================
+
 BOOL Wh_ModInit() {
     Wh_Log(L"=== Wh_ModInit ===");
     DetectWindowsVersion();
     LoadSettings();
     DetermineLocale();
+
+    // 5.2.0: StartAllBack / custom taskbar support (see block above).
+    InstallStartAllBackHooks();
 
     // g_Ctx.csLock must be ready before Win7NetworkCenterLinks::Init() below
     // installs its DirectUI/DrawTextW hooks: those hooks run in control.exe
