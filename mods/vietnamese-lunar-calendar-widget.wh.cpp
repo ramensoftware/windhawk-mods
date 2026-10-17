@@ -17,23 +17,21 @@
 /*
 # Vietnamese Lunar Calendar Widget
 
-Github: caotu2k5
-
 A Vietnamese lunar calendar and zodiac widget for the primary Windows 11 taskbar,
 with an interactive daily almanac and a list of Vietnamese holidays and
 commemorations.
 
-![Screenshot1](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot1.png)
+![Taskbar widget](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot1.png)
 
-Screenshot 1
+Taskbar widget
 
-![Screenshot2](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot2.png)
+![Daily almanac popup](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot2.png)
 
-Screenshot 2
+Daily almanac popup
 
-![Screenshot3](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot3.png)
+![Holiday list](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot3.png)
 
-Screenshot 3
+Holiday list
 
 ## Features
 
@@ -2210,7 +2208,6 @@ bool InitializePopupXamlHost(HWND hwnd) {
             g_popupXamlSource = nullptr;
         }
         g_popupXamlChild = nullptr;
-
         return false;
     }
 }
@@ -2307,8 +2304,9 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         case WM_SHOWWINDOW:
             if (!wParam) {
                 CancelPopupClose(hwnd);
-
-            } else g_popupBackdropDirty = true;
+            } else {
+                g_popupBackdropDirty = true;
+            }
             break;
 
         case WM_TIMER:
@@ -2987,8 +2985,6 @@ void Wh_ModBeforeUninit() {
             nullptr);
     }
 }
-
-
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
