@@ -64,6 +64,8 @@ rates use).
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <cwchar>
 #include <string>
 
 #include <strsafe.h>
@@ -82,13 +84,8 @@ constexpr DWORD kIdGBytesPerSec = 32882;     // "GB/s"
 constexpr DWORD kIdValueUnitPattern = 34563;  // "%1!s! %2!s!"
 constexpr DWORD kIdNetworkColumnMbps = 37034;  // "%s Mbps"
 
-// Not real resources (string IDs are 16-bit): the WdcStringMap::LoadStringW
-// hook answers these with the English unit names.
-constexpr DWORD kIdEnglishKBytesPerSec = 0x10001;
-constexpr DWORD kIdEnglishMBytesPerSec = 0x10002;
-constexpr DWORD kIdEnglishGBytesPerSec = 0x10003;
-
 constexpr PCWSTR kEnglishByteUnits[] = {L"B/s", L"KB/s", L"MB/s", L"GB/s"};
+constexpr PCWSTR kDefaultValueUnitPattern = L"%1!s! %2!s!";
 
 // WDC column type of the Processes/Users "Network" column.
 constexpr BYTE kNetworkColumnType = 0x0A;
@@ -110,27 +107,21 @@ static_assert(sizeof(ATM_INSTANT_VALUE_SCALE) == 0x18);
 // Same shape as Task Manager's network table (Kbps, Mbps, Gbps), with byte
 // units. Values are divided by 8 before they reach it. Each unit switches to
 // the next one where it would round up to "1,000" (999.5 and above).
-constexpr ATM_INSTANT_VALUE_SCALE kLocalizedByteScale[] = {
+//
+// Task Manager reads exactly 3 rows: its scaleCount argument is unused, and
+// the callers never set it. The 4th row is spare, so a later build that reads
+// one more row still stays within this table.
+constexpr ATM_INSTANT_VALUE_SCALE kByteScale[] = {
     {999499.999, 1e-3, kIdKBytesPerSec, 0},
     {999499999.999, 1e-6, kIdMBytesPerSec, 0},
     {999999999999.0, 1e-9, kIdGBytesPerSec, 0},
-};
-constexpr ATM_INSTANT_VALUE_SCALE kEnglishByteScale[] = {
-    {999499.999, 1e-3, kIdEnglishKBytesPerSec, 0},
-    {999499999.999, 1e-6, kIdEnglishMBytesPerSec, 0},
-    {999999999999.0, 1e-9, kIdEnglishGBytesPerSec, 0},
+    {1e300, 1e-9, kIdGBytesPerSec, 0},
 };
 
 // Settings.
 bool g_englishUnits = true;
-// English units on the Performance page need the WdcStringMap::LoadStringW
-// hook to answer kIdEnglish*; without it, that page keeps localized units.
-bool g_useEnglishUnitIds = false;
 
-const ATM_INSTANT_VALUE_SCALE* ByteScale() {
-    return g_useEnglishUnitIds ? kEnglishByteScale : kLocalizedByteScale;
-}
-
+// Identified by the unit string IDs. scaleCount can't be used: see kByteScale.
 bool IsNetworkScale(const ATM_INSTANT_VALUE_SCALE* scale) {
     return scale && scale[0].stringId == kIdKbps &&
            scale[1].stringId == kIdMbps && scale[2].stringId == kIdGbps;
@@ -165,13 +156,19 @@ NUMBERFMTW g_localeNumberFormat = {0, 1, 3, g_decimalSep, g_thousandSep, 1};
 
 // Strings loaded once. g_byteUnits are English or localized per the
 // "unitNames" setting; g_byteUnitText holds never-freed copies for the hooks.
-std::wstring g_valueUnitPattern = L"%1!s! %2!s!";
+std::wstring g_valueUnitPattern = kDefaultValueUnitPattern;
 std::wstring g_byteUnits[4];  // B/s, KB/s, MB/s, GB/s
 PCWSTR g_byteUnitText[4];
 std::wstring g_networkColumnPrefix;
+// Whether string 37034 is still the "%s Mbps" network column format.
+bool g_networkColumnFormatValid;
 
 thread_local bool t_hasRawNetworkMbps;
 thread_local double t_rawNetworkMbps;
+
+// Set while a network GetBestFitUnit call runs, so the string hook can answer
+// its byte unit IDs with the English names without affecting other callers.
+thread_local bool t_inNetworkBestFitUnit;
 
 bool IsBidiMark(WCHAR c) {
     return c == 0x200E || c == 0x200F || c == 0x061C ||
@@ -212,11 +209,49 @@ PCWSTR CopyToProcessHeap(const std::wstring& s) {
     return copy;
 }
 
+// Whether `pattern` is safe for FormatMessageW with the two string arguments of
+// ComposeValueUnit: it uses inserts %1 and %2, both as strings, and no other.
+bool IsValidValueUnitPattern(const std::wstring& pattern) {
+    bool has1 = false;
+    bool has2 = false;
+    for (size_t i = 0; i < pattern.size(); i++) {
+        if (pattern[i] != L'%' || i + 1 >= pattern.size()) {
+            continue;
+        }
+        WCHAR next = pattern[i + 1];
+        if (next < L'1' || next > L'9') {
+            i++;  // An escape like %% or %n, not an insert.
+            continue;
+        }
+
+        size_t end = i + 1;
+        int insert = 0;
+        while (end < pattern.size() && iswdigit(pattern[end])) {
+            insert = insert * 10 + (pattern[end] - L'0');
+            end++;
+        }
+        if (insert != 1 && insert != 2) {
+            return false;
+        }
+        if (end < pattern.size() && pattern[end] == L'!' &&
+            pattern.compare(end, 3, L"!s!") != 0) {
+            return false;
+        }
+        (insert == 1 ? has1 : has2) = true;
+        i = end - 1;
+    }
+    return has1 && has2;
+}
+
 void LoadStrings() {
     std::wstring pattern = LoadTmString(kIdValueUnitPattern);
-    if (!pattern.empty()) {
+    if (IsValidValueUnitPattern(pattern)) {
         g_valueUnitPattern = pattern;
+    } else {
+        Wh_Log(L"Using the default value/unit pattern instead of \"%s\"",
+               pattern.c_str());
     }
+
     for (int i = 0; i < 4; i++) {
         if (!g_englishUnits) {
             g_byteUnits[i] = LoadTmString(kIdBytesPerSec + i);
@@ -226,7 +261,17 @@ void LoadStrings() {
         }
         g_byteUnitText[i] = CopyToProcessHeap(g_byteUnits[i]);
     }
-    g_networkColumnPrefix = LeadingBidiMarks(LoadTmString(kIdNetworkColumnMbps));
+
+    std::wstring columnFormat = LoadTmString(kIdNetworkColumnMbps);
+    std::wstring mbps = StripBidiMarks(LoadTmString(kIdMbps));
+    g_networkColumnFormatValid =
+        !mbps.empty() && columnFormat.find(L"%s") != std::wstring::npos &&
+        StripBidiMarks(columnFormat).find(mbps) != std::wstring::npos;
+    if (!g_networkColumnFormatValid) {
+        Wh_Log(L"Not converting the Network column: string %u is \"%s\"",
+               kIdNetworkColumnMbps, columnFormat.c_str());
+    }
+    g_networkColumnPrefix = LeadingBidiMarks(columnFormat);
 }
 
 // "%1!s! %2!s!" with a value and a byte unit (kIdBytesPerSec..kIdGBytesPerSec).
@@ -402,13 +447,20 @@ void EnsureInitialized() {
     InitOnceExecuteOnce(&g_initOnce, InitOnceCallback, nullptr, nullptr);
 }
 
-// Text for a string ID the mod answers itself (graph labels and the English
-// unit IDs), or nullptr to let Task Manager load it.
-PCWSTR GetReplacementText(DWORD id) {
-    if (id >= kIdEnglishKBytesPerSec && id <= kIdEnglishGBytesPerSec) {
-        EnsureInitialized();
-        return g_byteUnitText[1 + id - kIdEnglishKBytesPerSec];
+// In English mode, the English name for a byte unit ID that a network
+// GetBestFitUnit call loads, or nullptr. Other callers of the same IDs, such as
+// the disk view, keep Task Manager's names.
+PCWSTR GetNetworkUnitText(DWORD id) {
+    if (!t_inNetworkBestFitUnit || !g_englishUnits || id < kIdKBytesPerSec ||
+        id > kIdGBytesPerSec) {
+        return nullptr;
     }
+    EnsureInitialized();
+    return g_byteUnitText[id - kIdBytesPerSec];
+}
+
+// The replacement for a network graph label ID, or nullptr.
+PCWSTR GetNetworkLabelText(DWORD id) {
     if (id < kNetworkLabels[0].id ||
         id > kNetworkLabels[ARRAYSIZE(kNetworkLabels) - 1].id) {
         return nullptr;
@@ -440,12 +492,19 @@ HRESULT WINAPI GetBestFitUnit_Hook(void* pThis,
                                    int scaleCount,
                                    double value,
                                    int flags) {
-    if (IsNetworkScale(scale)) {
-        scale = ByteScale();
-        value /= 8;
+    if (!IsNetworkScale(scale)) {
+        return GetBestFitUnit_Original(pThis, numberFormat, output,
+                                       outputChars, scale, scaleCount, value,
+                                       flags);
     }
-    return GetBestFitUnit_Original(pThis, numberFormat, output, outputChars,
-                                   scale, scaleCount, value, flags);
+
+    bool wasInNetworkBestFitUnit = t_inNetworkBestFitUnit;
+    t_inNetworkBestFitUnit = true;
+    HRESULT hr = GetBestFitUnit_Original(pThis, numberFormat, output,
+                                         outputChars, kByteScale, scaleCount,
+                                         value / 8, flags);
+    t_inNetworkBestFitUnit = wasInNetworkBestFitUnit;
+    return hr;
 }
 
 // Performance sidebar "S: ... R: ..." pair.
@@ -475,15 +534,19 @@ HRESULT WINAPI GetBestFitUnitPair_Hook(void* pThis,
                                        int formatId1,
                                        int formatId2,
                                        bool sharedUnit) {
-    if (IsNetworkScale(scale)) {
-        scale = ByteScale();
-        value1 /= 8;
-        value2 /= 8;
+    if (!IsNetworkScale(scale)) {
+        return GetBestFitUnitPair_Original(
+            pThis, numberFormat, output1, output2, outputChars, scale,
+            scaleCount, value1, value2, formatId1, formatId2, sharedUnit);
     }
-    return GetBestFitUnitPair_Original(pThis, numberFormat, output1, output2,
-                                       outputChars, scale, scaleCount, value1,
-                                       value2, formatId1, formatId2,
-                                       sharedUnit);
+
+    bool wasInNetworkBestFitUnit = t_inNetworkBestFitUnit;
+    t_inNetworkBestFitUnit = true;
+    HRESULT hr = GetBestFitUnitPair_Original(
+        pThis, numberFormat, output1, output2, outputChars, kByteScale,
+        scaleCount, value1 / 8, value2 / 8, formatId1, formatId2, sharedUnit);
+    t_inNetworkBestFitUnit = wasInNetworkBestFitUnit;
+    return hr;
 }
 
 // "View network details" link speed. This overload is only used for network
@@ -575,6 +638,11 @@ HRESULT WINAPI TmPrintOrFormatBuffer_Hook(PWSTR buffer,
     }
 
     EnsureInitialized();
+    if (!g_networkColumnFormatValid) {
+        return TmPrintOrFormatBuffer_Original(buffer, bufferChars,
+                                              numberFormat, formatId, value,
+                                              useNumberFormat);
+    }
 
     double kbps = GetNetworkColumnMbps(value) * 125;  // 1 Mbps = 125 KB/s
     if (kbps < 0) {
@@ -605,7 +673,7 @@ HRESULT WINAPI TmPrintOrFormatBuffer_Hook(PWSTR buffer,
 }
 
 // Graph scale labels and English unit names, through Task Manager's string
-// cache.
+// cache. Replacements are returned without entering the cache.
 using WdcStringMap_LoadStringW_t = HRESULT(WINAPI*)(void* pThis,
                                                     DWORD id,
                                                     PWSTR* string);
@@ -613,14 +681,19 @@ WdcStringMap_LoadStringW_t WdcStringMap_LoadStringW_Original;
 HRESULT WINAPI WdcStringMap_LoadStringW_Hook(void* pThis,
                                              DWORD id,
                                              PWSTR* string) {
-    if (PCWSTR label = GetReplacementText(id)) {
-        *string = const_cast<PWSTR>(label);
+    PCWSTR text = GetNetworkUnitText(id);
+    if (!text) {
+        text = GetNetworkLabelText(id);
+    }
+    if (text) {
+        *string = const_cast<PWSTR>(text);
         return S_OK;
     }
     return WdcStringMap_LoadStringW_Original(pThis, id, string);
 }
 
-// Graph scale labels, uncached loads.
+// Graph scale labels, uncached loads. Unit names are not replaced here: when
+// the cache calls this, the result is cached and shared with the disk view.
 using WdcLoadString_t = HRESULT(WINAPI*)(DWORD id,
                                          PWSTR buffer,
                                          ULONGLONG bufferChars);
@@ -628,7 +701,7 @@ WdcLoadString_t WdcLoadString_Original;
 HRESULT WINAPI WdcLoadString_Hook(DWORD id,
                                   PWSTR buffer,
                                   ULONGLONG bufferChars) {
-    if (PCWSTR label = GetReplacementText(id)) {
+    if (PCWSTR label = GetNetworkLabelText(id)) {
         return StringCchCopyW(buffer, bufferChars, label);
     }
     return WdcLoadString_Original(id, buffer, bufferChars);
@@ -719,11 +792,9 @@ BOOL Wh_ModInit() {
         anyFound |= result.found;
     }
 
-    g_useEnglishUnitIds =
-        g_englishUnits && WdcStringMap_LoadStringW_Original != nullptr;
-    if (g_englishUnits && !g_useEnglishUnitIds) {
-        Wh_Log(L"Performance page keeps localized unit names: "
-               L"WdcStringMap::LoadStringW not hooked");
+    if (g_englishUnits && !WdcStringMap_LoadStringW_Original) {
+        Wh_Log(L"The Performance page keeps Task Manager's unit names: "
+               L"WdcStringMap::LoadStringW is not hooked");
     }
 
     return anyFound;
