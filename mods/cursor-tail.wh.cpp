@@ -4,7 +4,7 @@
 // @name:zh-CN      光标拖尾
 // @description     Adds a speed-reactive cursor trail with optional interaction feedback.
 // @description:zh-CN 为鼠标指针添加速度响应式拖尾与可选的交互反馈。
-// @version         3.15
+// @version         3.16
 // @author          CYoJkoY
 // @github          https://github.com/CYoJkoY
 // @license         MIT
@@ -34,7 +34,7 @@ Direct2D overlay, independently of the application under the pointer.
 - **Custom appearance:** Configure trail color, outline color, gradient, and optional glow.
 - **Adaptive color:** Automatically sample the active cursor image and prefer colors with sufficient contrast against the screen background.
 - **Fade-out:** Smoothly fade the trail after the pointer slows down.
-- **Interaction feedback:** Optional expanding rings for left, right, and middle clicks, plus animated scroll arrows. Hold Shift to change vertical wheel feedback into horizontal arrows: wheel up points left and wheel down points right. These effects can run without a motion trail.
+- **Interaction feedback:** Optional expanding rings for left, right, and middle clicks, plus animated scroll arrows. Native horizontal/tilt-wheel input points left or right directly. Hold Shift to map vertical wheel feedback to horizontal arrows: wheel up points left and wheel down points right. These effects can run without a motion trail.
 - **Per-app rules:** Enable or disable the trail for selected executables.
 - **Fullscreen suppression:** Automatically hide the trail for exclusive or borderless fullscreen applications and restore it after fullscreen ends.
 
@@ -74,7 +74,7 @@ Cursor Tail shares the general cursor-trail space with other Windhawk mods, but 
 - **Appearance:** separately configurable outer/core widths, optional gradient and glow, and automatic or manual outline colors.
 - **Adaptive color:** cursor-image color extraction with histogram ranking, contrast-aware selection, and hysteresis to avoid rapid color switching near the contrast boundary.
 - **Context awareness:** per-app `exe=on|off` rules and fullscreen suppression for exclusive or borderless applications.
-- **Interaction layer:** optional button-specific click rings and animated scroll arrows, including left/right arrows for Shift+wheel. Interaction events use asynchronous raw mouse input instead of a system-wide low-level mouse hook.
+- **Interaction layer:** optional button-specific click rings and animated scroll arrows, including native horizontal/tilt-wheel arrows and left/right arrows for Shift+vertical-wheel. Interaction events use asynchronous raw mouse input instead of a system-wide low-level mouse hook.
 - **Motion cues:** bounded directional burst glyphs and incoming-to-outgoing turn markers, plus interpolation for large movement gaps. Acceleration feedback is enabled by default; sharp-turn feedback remains optional to limit visual clutter.
 
 Comparable mods include:
@@ -264,8 +264,8 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
     - wheel_feedback_enabled: false
       $name: Scroll-wheel feedback
       $name:zh-CN: 滚轮反馈
-      $description: Show an animated arrow in the wheel direction. Hold Shift for horizontal feedback, with wheel up pointing left and wheel down pointing right. Colors remain associated with the wheel input direction.
-      $description:zh-CN: 滚轮滚动时显示沿对应方向移动的箭头。按住 Shift 时改为水平反馈：向上滚动指向左侧，向下滚动指向右侧。颜色仍按滚轮输入方向区分。
+      $description: Show an animated arrow in the wheel direction. Native horizontal/tilt-wheel input points left or right directly. Hold Shift to map vertical wheel input to horizontal feedback, with wheel up pointing left and wheel down pointing right. Colors remain associated with the wheel input direction.
+      $description:zh-CN: 滚轮滚动时显示沿对应方向移动的箭头。原生水平/倾斜滚轮直接显示左/右箭头；按住 Shift 时，垂直滚轮改为水平反馈：向上滚动指向左侧，向下滚动指向右侧。颜色仍按滚轮输入方向区分。
     - left_click_color: "#00D7FF"
       $name: Left-click color
       $name:zh-CN: 左键颜色
@@ -343,8 +343,8 @@ This mod is derived in part from the Windhawk **Cursor Motion Blur** mod by Thea
     - acceleration_threshold: 30000
       $name: Acceleration threshold
       $name:zh-CN: 加速度阈值
-      $description: Minimum speed increase per second required for a burst accent, in pixels per second squared. Lower values are more sensitive. Range 3000-100000.
-      $description:zh-CN: 触发加速提示所需的最小速度变化率，单位为像素每秒平方。数值越低越灵敏。范围 3000-100000。
+      $description: Minimum acceleration required for a burst accent, in pixels per second squared. Speed is compared across approximately 40 ms windows to reduce raw-input report jitter. Lower values are more sensitive. Range 3000-100000.
+      $description:zh-CN: 触发加速提示所需的最小加速度，单位为像素每秒平方。速度基于约 40 毫秒的测量窗口进行比较，以降低原始鼠标报告抖动的影响。数值越低越灵敏。范围 3000-100000。
     - turn_angle_degrees: 65
       $name: Turn angle threshold
       $name:zh-CN: 转向角度阈值
@@ -422,7 +422,6 @@ constexpr int kMaxTailLength = 64;
 constexpr int kHistoryCapacity = kMaxTailLength;
 constexpr int kRenderPadding = 2;
 constexpr float kFadeCutoff = 0.05f;
-constexpr DWORD kMinCursorChangeResampleIntervalMs = 100;
 constexpr int kAutoResampleIntervalMaxMs = 10000;
 constexpr int kBackgroundSampleRadius = 24;
 constexpr int kBackgroundSampleGrid = 5;
@@ -444,6 +443,7 @@ constexpr int kMaxRippleClusterRadiusPx = 512;
 constexpr int kMaxActiveMotionAccents = 8;
 constexpr float kFastMoveInterpolationSpacingPx = 28.0f;
 constexpr DWORD kMotionResumeGapMs = 120;
+constexpr DWORD kAccelerationMeasurementWindowMs = 40;
 constexpr DWORD kAccelerationAccentCooldownMs = 180;
 constexpr DWORD kTurnAccentCooldownMs = 220;
 
@@ -481,6 +481,11 @@ float g_fadeAlpha = 0.0f;
 POINT g_lastMotionCuePoint = {};
 LONGLONG g_lastMotionCueQpc = 0;
 float g_lastMotionCueSpeed = 0.0f;
+POINT g_accelerationWindowPoint = {};
+LONGLONG g_accelerationWindowQpc = 0;
+float g_accelerationWindowSpeed = 0.0f;
+bool g_hasAccelerationWindowSample = false;
+bool g_hasAccelerationWindowSpeed = false;
 float g_lastMotionDirectionX = 0.0f;
 float g_lastMotionDirectionY = 0.0f;
 bool g_hasPreviousMotionCueSample = false;
@@ -564,7 +569,7 @@ float g_wheelArrowDistance = 32.0f;
 int g_rippleDurationMs = 420;
 float g_rippleStrokeWidth = 3.0f;
 float g_rippleOpacity = 0.78f;
-int g_accelerationAccentEnabled = 0;
+int g_accelerationAccentEnabled = 1;
 int g_turnAccentEnabled = 0;
 int g_fastMoveInterpolationEnabled = 1;
 int g_accelerationThreshold = 30000;
@@ -1045,6 +1050,11 @@ static void ResetMotionCueTracking() {
     g_lastMotionDirectionX = 0.0f;
     g_lastMotionDirectionY = 0.0f;
     g_hasPreviousMotionCueSample = false;
+    g_accelerationWindowPoint = {};
+    g_accelerationWindowQpc = 0;
+    g_accelerationWindowSpeed = 0.0f;
+    g_hasAccelerationWindowSample = false;
+    g_hasAccelerationWindowSpeed = false;
     g_lastAccelerationAccentQpc = 0;
     g_lastTurnAccentQpc = 0;
 }
@@ -1108,6 +1118,11 @@ static void UpdateMotionCueTracking(const POINT& point, LONGLONG nowQpc) {
         g_lastMotionDirectionX = 0.0f;
         g_lastMotionDirectionY = 0.0f;
         g_hasPreviousMotionCueSample = false;
+        g_accelerationWindowPoint = point;
+        g_accelerationWindowQpc = nowQpc;
+        g_accelerationWindowSpeed = 0.0f;
+        g_hasAccelerationWindowSample = false;
+        g_hasAccelerationWindowSpeed = false;
         return;
     }
 
@@ -1118,6 +1133,11 @@ static void UpdateMotionCueTracking(const POINT& point, LONGLONG nowQpc) {
         g_lastMotionDirectionX = 0.0f;
         g_lastMotionDirectionY = 0.0f;
         g_hasPreviousMotionCueSample = true;
+        g_accelerationWindowPoint = point;
+        g_accelerationWindowQpc = nowQpc;
+        g_accelerationWindowSpeed = 0.0f;
+        g_hasAccelerationWindowSample = true;
+        g_hasAccelerationWindowSpeed = false;
         return;
     }
 
@@ -1125,13 +1145,18 @@ static void UpdateMotionCueTracking(const POINT& point, LONGLONG nowQpc) {
     const LONGLONG resumeGapTicks = std::max<LONGLONG>(
         1, g_qpcFrequency * static_cast<LONGLONG>(kMotionResumeGapMs) / 1000);
     if (elapsedTicks <= 0 || elapsedTicks > resumeGapTicks) {
-        // Never turn the time spent idle into an apparent acceleration or turn.
+        // Rebase after idle; do not interpret time spent idle as acceleration or a turn.
         g_lastMotionCuePoint = point;
         g_lastMotionCueQpc = nowQpc;
         g_lastMotionCueSpeed = 0.0f;
         g_lastMotionDirectionX = 0.0f;
         g_lastMotionDirectionY = 0.0f;
         g_hasPreviousMotionCueSample = true;
+        g_accelerationWindowPoint = point;
+        g_accelerationWindowQpc = nowQpc;
+        g_accelerationWindowSpeed = 0.0f;
+        g_hasAccelerationWindowSample = true;
+        g_hasAccelerationWindowSpeed = false;
         return;
     }
 
@@ -1144,26 +1169,8 @@ static void UpdateMotionCueTracking(const POINT& point, LONGLONG nowQpc) {
     if (distance >= 2.0f) {
         const float directionX = dx / distance;
         const float directionY = dy / distance;
-        const float acceleration =
-            (speed - g_lastMotionCueSpeed) / std::max(elapsedSeconds, 0.001f);
-        const LONGLONG accelerationCooldown = std::max<LONGLONG>(
-            1, g_qpcFrequency * static_cast<LONGLONG>(kAccelerationAccentCooldownMs) / 1000);
         const LONGLONG turnCooldown = std::max<LONGLONG>(
             1, g_qpcFrequency * static_cast<LONGLONG>(kTurnAccentCooldownMs) / 1000);
-
-        if (g_accelerationAccentEnabled
-            && speed >= g_triggerVelocity
-            && acceleration >= static_cast<float>(g_accelerationThreshold)
-            && (g_lastAccelerationAccentQpc == 0
-                || nowQpc - g_lastAccelerationAccentQpc >= accelerationCooldown)) {
-            AddMotionAccent(
-                point,
-                directionX,
-                directionY,
-                acceleration / static_cast<float>(g_accelerationThreshold),
-                MotionAccentKind::Acceleration);
-            g_lastAccelerationAccentQpc = nowQpc;
-        }
 
         const float previousDirectionLength = sqrtf(
             g_lastMotionDirectionX * g_lastMotionDirectionX
@@ -1195,6 +1202,52 @@ static void UpdateMotionCueTracking(const POINT& point, LONGLONG nowQpc) {
 
         g_lastMotionDirectionX = directionX;
         g_lastMotionDirectionY = directionY;
+    }
+
+    // Compare average velocities over longer, bounded windows instead of differentiating
+    // every raw-input wake, whose report batching can make adjacent speeds oscillate.
+    const LONGLONG accelerationWindowTicks = std::max<LONGLONG>(
+        1, g_qpcFrequency
+            * static_cast<LONGLONG>(kAccelerationMeasurementWindowMs) / 1000);
+    if (g_accelerationAccentEnabled
+        && g_hasAccelerationWindowSample
+        && nowQpc - g_accelerationWindowQpc >= accelerationWindowTicks) {
+        const LONGLONG windowElapsedTicks = nowQpc - g_accelerationWindowQpc;
+        const float windowElapsedSeconds = static_cast<float>(windowElapsedTicks)
+            / static_cast<float>(std::max<LONGLONG>(1, g_qpcFrequency));
+        const float windowDx = static_cast<float>(point.x - g_accelerationWindowPoint.x);
+        const float windowDy = static_cast<float>(point.y - g_accelerationWindowPoint.y);
+        const float windowDistance = sqrtf(windowDx * windowDx + windowDy * windowDy);
+        const float windowSpeed = windowDistance / std::max(windowElapsedSeconds, 0.001f);
+
+        if (g_hasAccelerationWindowSpeed && windowDistance >= 2.0f) {
+            const float acceleration =
+                (windowSpeed - g_accelerationWindowSpeed)
+                / std::max(windowElapsedSeconds, 0.001f);
+            const LONGLONG accelerationCooldown = std::max<LONGLONG>(
+                1, g_qpcFrequency
+                    * static_cast<LONGLONG>(kAccelerationAccentCooldownMs) / 1000);
+            if (windowSpeed >= g_triggerVelocity
+                && acceleration >= static_cast<float>(g_accelerationThreshold)
+                && (g_lastAccelerationAccentQpc == 0
+                    || nowQpc - g_lastAccelerationAccentQpc >= accelerationCooldown)) {
+                const float directionX = windowDx / windowDistance;
+                const float directionY = windowDy / windowDistance;
+                AddMotionAccent(
+                    point,
+                    directionX,
+                    directionY,
+                    acceleration / static_cast<float>(g_accelerationThreshold),
+                    MotionAccentKind::Acceleration);
+                g_lastAccelerationAccentQpc = nowQpc;
+            }
+        }
+
+        g_accelerationWindowPoint = point;
+        g_accelerationWindowQpc = nowQpc;
+        g_accelerationWindowSpeed = windowSpeed;
+        g_hasAccelerationWindowSample = true;
+        g_hasAccelerationWindowSpeed = true;
     }
 
     g_lastMotionCuePoint = point;
@@ -1693,7 +1746,8 @@ static int GetEffectiveTailLength(float speedNorm) {
 }
 
 void UpdateTrailState(const POINT& previousPoint, const POINT& point, float velocity) {
-    if (velocity > g_triggerVelocity && !g_isSmearing) {
+    const bool startedSmearing = velocity > g_triggerVelocity && !g_isSmearing;
+    if (startedSmearing) {
         g_isSmearing = true;
         g_lowVelocityFrames = 0;
         g_fadeAlpha = 1.0f;
@@ -1707,13 +1761,22 @@ void UpdateTrailState(const POINT& previousPoint, const POINT& point, float velo
         g_lowVelocityFrames = 0;
     }
     if (g_isSmearing) {
+        if (startedSmearing) {
+            // A fading tail belongs to the previous motion segment. Do not connect
+            // it to a new segment after a discontinuous cursor repositioning.
+            HistoryClear();
+        }
         const float target = std::clamp((velocity - g_stopVelocity) / (g_triggerVelocity * 2.0f), 0.0f, 1.0f);
         g_smoothedSpeedNorm = g_smoothedSpeedNorm * 0.55f + target * 0.45f;
         const float dx = static_cast<float>(point.x - previousPoint.x);
         const float dy = static_cast<float>(point.y - previousPoint.y);
         const float distance = sqrtf(dx * dx + dy * dy);
         int interpolationSteps = 1;
-        if (g_fastMoveInterpolationEnabled && distance > kFastMoveInterpolationSpacingPx) {
+        // Start from the current point only. A discontinuous cursor repositioning
+        // must not be turned into a streak when the velocity gate first opens.
+        if (!startedSmearing
+            && g_fastMoveInterpolationEnabled
+            && distance > kFastMoveInterpolationSpacingPx) {
             const int requiredSteps = static_cast<int>(ceilf(distance / kFastMoveInterpolationSpacingPx));
             interpolationSteps = std::clamp(requiredSteps, 1, g_maxInterpolationSteps + 1);
         }
@@ -2472,6 +2535,19 @@ bool SmearFrame(HWND hwnd, DWORD now, bool renderFrame) {
         return false;
     }
 
+    const LONGLONG sampleElapsedTicks = sampleQpc - g_lastSampleQpc;
+    const LONGLONG resumeGapTicks = std::max<LONGLONG>(
+        1, g_qpcFrequency * static_cast<LONGLONG>(kMotionResumeGapMs) / 1000);
+    if (g_lastSampleQpc <= 0
+        || sampleElapsedTicks <= 0
+        || sampleElapsedTicks > resumeGapTicks) {
+        // Initialize or rebase instead of inferring speed across an invalid sample interval.
+        ResetTrailState();
+        ResetMotionCueTracking();
+        g_lastPos = point;
+        g_lastSampleQpc = sampleQpc;
+    }
+
     const bool wasSmearing = g_isSmearing;
     const int previousHistoryCount = g_historyCount;
     const POINT previousPoint = g_lastPos;
@@ -2522,7 +2598,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
             const bool clickEvent = g_clickFeedbackEnabled
                 && (buttons & clickDownMask) != 0;
             const bool wheelEvent = g_wheelFeedbackEnabled
-                && (buttons & RI_MOUSE_WHEEL) != 0;
+                && (buttons & (RI_MOUSE_WHEEL | RI_MOUSE_HWHEEL)) != 0;
             if (clickEvent || wheelEvent) {
                 POINT interactionPoint = {};
                 if (GetCursorPos(&interactionPoint)) {
@@ -2540,14 +2616,20 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
                     if (wheelEvent) {
                         const SHORT wheelDelta = static_cast<SHORT>(mouse.usButtonData);
                         if (wheelDelta != 0) {
-                            const bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-                            const RippleKind kind = shiftPressed
+                            const bool horizontalWheel = (buttons & RI_MOUSE_HWHEEL) != 0;
+                            const bool shiftPressed = !horizontalWheel
+                                && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                            const RippleKind kind = horizontalWheel
                                 ? (wheelDelta > 0
-                                    ? RippleKind::WheelLeft
-                                    : RippleKind::WheelRight)
-                                : (wheelDelta > 0
-                                    ? RippleKind::WheelUp
-                                    : RippleKind::WheelDown);
+                                    ? RippleKind::WheelRight
+                                    : RippleKind::WheelLeft)
+                                : shiftPressed
+                                    ? (wheelDelta > 0
+                                        ? RippleKind::WheelLeft
+                                        : RippleKind::WheelRight)
+                                    : (wheelDelta > 0
+                                        ? RippleKind::WheelUp
+                                        : RippleKind::WheelDown);
                             AddRipple(
                                 interactionPoint,
                                 wheelDelta > 0 ? g_wheelUpRGB : g_wheelDownRGB,
