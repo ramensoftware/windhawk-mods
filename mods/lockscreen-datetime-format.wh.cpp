@@ -23,7 +23,7 @@ Example (Windows default on the left, this mod on the right):
 
 | Before | After |
 |--------|-------|
-| ![Before](https://i.imgur.com/vwH10YW.png) | ![After](https://i.imgur.com/2kZgtnm.png) |
+| ![Before](https://i.imgur.com/RacefWU.jpeg) | ![After](https://i.imgur.com/X7FyLkG.jpeg) |
 
 The clock keeps updating on its own, and choosing the "Windows default"
 options restores the original text.
@@ -48,7 +48,7 @@ options restores the original text.
 
   Example with an emoji as the separator:
 
-  ![Clock with an emoji as the separator](https://i.imgur.com/HDPAl63.png)
+  ![Clock with an emoji as the separator](https://i.imgur.com/BgbWJn5.jpeg)
 
 - **Hour format**: follow the Windows setting, or force 24-hour or 12-hour.
 - **Leading zero on hours**: show `09` or `9`.
@@ -109,7 +109,7 @@ inclusion list. For example:
 
 Example with this mod and the Styler together:
 
-![Lock screen using this mod together with Windows 11 Start Menu Styler](https://i.imgur.com/FobjRr6.png)
+![Lock screen using this mod together with Windows 11 Start Menu Styler](https://i.imgur.com/UvXQ5jN.jpeg)
 
 Making the clock font bigger usually moves the clock; adjust a
 `TranslateTransform` in the Styler if it ends up off-center.
@@ -153,9 +153,9 @@ attached` and `Date format attached`.
 
 | | |
 |---|---|
-| ![otherscreenshot1](https://i.imgur.com/Y6zjDz5.png) | ![otherscreenshot4](https://i.imgur.com/9Dg3G9G.png) |
-| ![otherscreenshot2](https://i.imgur.com/mfyVyFZ.png) | ![otherscreenshot5](https://i.imgur.com/K0he91e.png) |
-| ![otherscreenshot3](https://i.imgur.com/NN7bGfb.png) | ![otherscreenshot6](https://i.imgur.com/aORwvfu.png) |
+| ![otherscreenshot1](https://i.imgur.com/deNfP1g.jpeg) | ![otherscreenshot4](https://i.imgur.com/DhXtIHB.jpeg) |
+| ![otherscreenshot2](https://i.imgur.com/QlKQbhb.jpeg) | ![otherscreenshot5](https://i.imgur.com/L1ORUbh.jpeg) |
+| ![otherscreenshot3](https://i.imgur.com/SHiTh3N.jpeg) | ![otherscreenshot6](https://i.imgur.com/Qb4IN5i.jpeg) |
 */
 // ==/WindhawkModReadme==
  
