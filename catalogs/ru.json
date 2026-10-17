@@ -12679,7 +12679,7 @@
         "ratingUsers": 53,
         "reviews": 0,
         "trendingSorting": 23.00530913070095,
-        "updated": 1791554642000,
+        "updated": 1792231272000,
         "users": 2040
       },
       "metadata": {
@@ -12691,7 +12691,7 @@
           "windhawk.exe"
         ],
         "name": "Shake to Find Cursor",
-        "version": "1.4"
+        "version": "1.4.1"
       }
     },
     "shell-animation-disabler": {

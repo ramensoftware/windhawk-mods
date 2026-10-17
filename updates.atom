@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T09:00:15.000Z</updated>
+    <updated>2026-10-17T10:01:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Shake to Find Cursor 1.4.1]]></title>
+        <id>https://windhawk.net/mods/shake-to-find-cursor#564e574c0812bbae205023f0b5ff4c6ed4a1a8f8</id>
+        <link href="https://windhawk.net/mods/shake-to-find-cursor"/>
+        <updated>2026-10-17T10:01:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed flickering and stutter with larger pointer sizes (Settings &gt; Accessibility &gt; Mouse pointer and touch &gt; Size). Thanks to @winchestercanal for tracking this down in #5595.</li>
+<li>Fixed the cursor briefly appearing at the wrong size when it changes type (e.g. arrow to text cursor) during or after the animation.</li>
+<li>Fixed the cursor not updating while the mouse is held still.</li>
+</ul>]]></content>
+        <author>
+            <name>Darius Varnelis</name>
+            <uri>https://github.com/Darius-Varnelis</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor auto-hide on idle 1.1]]></title>
         <id>https://windhawk.net/mods/cursor-auto-hide#c1f6d0d3554f55260011548f812901bcce4ac5b5</id>
@@ -707,19 +722,6 @@ radius" setting of that mod then applies to maximized windows too.</li>
         <author>
             <name>Mário Barbosa</name>
             <uri>https://github.com/mariogomesbarbosa</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.2.0]]></title>
-        <id>https://windhawk.net/mods/hide-taskbar-tooltips#e3976aca5c5f511878e4beefdc2e9ef65cd5565b</id>
-        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
-        <updated>2026-10-15T21:02:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <code>hideTrayOverflowTooltips</code> setting (enabled by default) to suppress hover tooltips for hidden icons inside the system tray overflow drawer.</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
         </author>
     </entry>
 </feed>
