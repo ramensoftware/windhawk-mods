@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T07:02:52.000Z</updated>
+    <updated>2026-10-17T09:00:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cursor auto-hide on idle 1.1]]></title>
+        <id>https://windhawk.net/mods/cursor-auto-hide#c1f6d0d3554f55260011548f812901bcce4ac5b5</id>
+        <link href="https://windhawk.net/mods/cursor-auto-hide"/>
+        <updated>2026-10-17T09:00:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the <code>Toggle hotkey</code> setting: a global shortcut that turns the auto-hide on and off at runtime.</li>
+<li>Added <code>Record the shortcut by pressing it</code>: press the shortcut within 60 seconds and it is copied to the clipboard in the format the field expects, with an on-screen note while the window is open.</li>
+<li>A shortcut needs Ctrl, Alt or Win, because a global shortcut takes its key away from every application; F1 to F24, Pause and ScrollLock may be used alone or with Shift.</li>
+<li>Recording accepts every key the field can hold, punctuation, lock keys and numeric keypad included, and the note is placed on the monitor under the pointer at that monitor's scale.</li>
+<li>Documented the recording order - shortcut first, then paste - in the readme and in both settings descriptions.</li>
+</ul>]]></content>
+        <author>
+            <name>nikitor32</name>
+            <uri>https://github.com/nikitor32</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 2.1.0]]></title>
         <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#03313a1c1b7fd3526f5a6fb8f79f3a727d6ae74c</id>
@@ -703,23 +720,6 @@ radius" setting of that mod then applies to maximized windows too.</li>
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Windows Audio Limiter 1.0]]></title>
-        <id>https://windhawk.net/mods/disable-audio-limiter#5b3cb48c0878eae050751c3343edc10d3e494a05</id>
-        <link href="https://windhawk.net/mods/disable-audio-limiter"/>
-        <updated>2026-10-15T19:03:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablewindowsaudiolimiter">Disable Windows Audio Limiter</h1>
-<p>Windows has a built-in audio adjustment mechanism that decreases the volume for a few seconds after a loud click or increases if a video or audio has dropped volume.
-This mod disables this adjustment.</p>
-<p>After mod start, restart the Windows audio service, executing with admin privileges:</p>
-<p><code>net stop audiosrv</code></p>
-<p><code>net start audiosrv</code></p>
-<p>or reboot.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

@@ -3369,7 +3369,7 @@
         "ratingUsers": 15,
         "reviews": 0,
         "trendingSorting": 15.9,
-        "updated": 1791633629000,
+        "updated": 1792227615000,
         "users": 159
       },
       "metadata": {
@@ -3380,7 +3380,7 @@
           "windhawk.exe"
         ],
         "name": "Cursor auto-hide on idle",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "cursor-idle-fade": {
