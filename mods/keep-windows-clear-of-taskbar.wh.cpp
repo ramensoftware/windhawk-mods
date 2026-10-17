@@ -76,7 +76,7 @@ windows are not corrected.
 /*
 - correctAfterDrag: true
   $name: Also correct windows after I drag or resize them
-  $description: Turn off if you want to be able to drag a window under the taskbar yourself.
+  $description: Turn off if you want to be able to drag a window under the taskbar yourself. A window you leave under the taskbar is then left alone until it's maximized.
 - autoHiddenTaskbar: true
   $name: Keep windows clear of an auto-hidden taskbar while it's showing
   $description: Leave on if another mod keeps an auto-hide taskbar visible. Turn off if your taskbar really auto-hides and you don't want windows to move while it pops up; windows then only avoid the space Windows itself reserves.
@@ -101,6 +101,7 @@ static const DWORD kRetryWindowMs = 2000;
 static const int kMaxCorrectionsPerWindow = 3;  // per kRetryWindowMs
 static const int kMaxShrinkAttempts = 2;        // per kRetryWindowMs
 static const int kMaxBackoffs = 3;              // then stop for good
+static const DWORD kQuietResetMs = 60000;       // forget back-offs after this
 
 static std::atomic<bool> g_correctAfterDrag{true};
 static std::atomic<bool> g_autoHiddenTaskbar{true};
@@ -403,6 +404,9 @@ static Permission AskPermission(HWND hWnd, bool wantsShrink) {
     const DWORD now = GetTickCount();
     CorrectionHistory& h = g_history[hWnd];
     if (h.count == 0 || now - h.start > kRetryWindowMs) {
+        if (now - h.start > kQuietResetMs) {
+            h.backoffs = 0;  // Quiet for a while: earlier fights don't count.
+        }
         h.start = now;
         h.count = 0;
         h.shrinkCount = 0;
@@ -436,48 +440,63 @@ static Permission AskPermission(HWND hWnd, bool wantsShrink) {
     return Permission::Allow;
 }
 
-static void CorrectWindow(HWND hWnd) {
-    if (!IsCandidateWindow(hWnd)) {
-        return;
-    }
-
+// Where a window is and where it would have to go. Filled by
+// NeedsCorrection.
+struct Placement {
     RECT win;
-    if (!GetWindowRect(hWnd, &win)) {
-        return;
-    }
-
     RECT vis;
-    if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &vis,
-                                     sizeof(vis)))) {
-        vis = win;
+    UsableArea area;
+    RECT target;
+    bool shrinks;
+};
+
+// Returns true if the window currently reaches under the taskbar and can be
+// corrected.
+static bool NeedsCorrection(HWND hWnd, Placement* p) {
+    if (!IsCandidateWindow(hWnd)) {
+        return false;
     }
 
-    HMONITOR monitor = MonitorFromRect(&vis, MONITOR_DEFAULTTONEAREST);
+    if (!GetWindowRect(hWnd, &p->win)) {
+        return false;
+    }
+
+    if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                     &p->vis, sizeof(p->vis)))) {
+        p->vis = p->win;
+    }
+
+    HMONITOR monitor = MonitorFromRect(&p->vis, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
     if (!monitor || !GetMonitorInfoW(monitor, &mi)) {
-        return;
+        return false;
     }
 
-    if (IsFullscreenLike(vis, mi.rcMonitor) ||
-        SpansAnotherMonitor(vis, mi.rcMonitor)) {
-        return;
+    if (IsFullscreenLike(p->vis, mi.rcMonitor) ||
+        SpansAnotherMonitor(p->vis, mi.rcMonitor)) {
+        return false;
     }
 
-    const UsableArea area = GetUsableArea(monitor, mi);
+    p->area = GetUsableArea(monitor, mi);
     const bool allowShrink = !g_cannotShrink.count(hWnd);
-    RECT target;
-    bool shrinks;
-    if (!ComputeCorrectedRect(win, vis, area, allowShrink, &target,
-                              &shrinks)) {
+    return ComputeCorrectedRect(p->win, p->vis, p->area, allowShrink,
+                                &p->target, &p->shrinks);
+}
+
+static void CorrectWindow(HWND hWnd) {
+    Placement p;
+    if (!NeedsCorrection(hWnd, &p)) {
         return;
     }
 
+    RECT target = p.target;
+    bool shrinks = p.shrinks;
     switch (AskPermission(hWnd, shrinks)) {
         case Permission::Deny:
             return;
         case Permission::AllowWithoutShrink:
-            if (!ComputeCorrectedRect(win, vis, area, false, &target,
+            if (!ComputeCorrectedRect(p.win, p.vis, p.area, false, &target,
                                       &shrinks)) {
                 return;
             }
@@ -535,8 +554,14 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK,
                 g_userPlaced.erase(hWnd);
                 CorrectWindow(hWnd);
             } else {
-                // Respect where the user put it until it is maximized again.
-                g_userPlaced.insert(hWnd);
+                // If the user left it under the taskbar, respect that until
+                // it is maximized again. Otherwise keep correcting it as usual.
+                Placement p;
+                if (NeedsCorrection(hWnd, &p)) {
+                    g_userPlaced.insert(hWnd);
+                } else {
+                    g_userPlaced.erase(hWnd);
+                }
             }
             return;
 
