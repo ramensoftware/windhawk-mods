@@ -111,8 +111,8 @@ unlinked.
   Screen or Win+Shift+R, so Windows handles them as usual.
 - The tool, color and thickness you used last are remembered.
 - A recording closed without copying or saving it is deleted; the window asks first. If the mod
-  turns off while recording, or with a recording still open, the recording is kept in the
-  recordings folder.
+  turns off (or Windows signs out) while recording, or with a recording still open, the recording
+  goes to the recordings folder the next time the mod starts.
 - Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
   mod's storage (in a folder only you can open), and go with the mod.
 - Windhawk 1.x runs mods in a 32-bit process, short on memory for video: there, an area bigger
@@ -865,8 +865,9 @@ private:
 //
 // Each mod keeps its own copy of the group (which widgets are in it, left to right, and where it
 // is) in its storage, and shows it to the others as properties of its widget window, stamped with
-// when it last changed: the newest copy wins. Each widget finds the others by their window class
-// and posts them a message whenever its group, size or place changes.
+// when it last changed: the newest copy wins. Each widget shows its id on its window too, finds the
+// others by theirs (the ones it knows, by their window class), and posts them a message whenever
+// its group, size or place changes.
 
 namespace WidgetLink {
 
@@ -2776,15 +2777,26 @@ SIZE VideoSizeFor(int width, int height) {
 // Writes a video file, frame by frame.
 class VideoWriter {
 public:
-    // Starts the file. The width and height must be even.
+    // Starts the file. The width and height must be even. In a 64-bit process the graphics card
+    // encodes, where it can; in a 32-bit one (Windhawk 1.x) its encoder would take about twice the
+    // memory, which isn't there to spare, so the processor does.
     bool Open(const std::wstring& path, int width, int height) {
+        if (sizeof(void*) == 8 && Open(path, width, height, true)) {
+            return true;
+        }
+        return Open(path, width, height, false);
+    }
+
+    bool Open(const std::wstring& path, int width, int height, bool hardware) {
+        writer_.Reset();
         width_ = width;
         height_ = height;
         Com<IMFAttributes> attributes;
-        if (FAILED(MFCreateAttributes(attributes.Put(), 2)) ||
+        if (FAILED(MFCreateAttributes(attributes.Put(), 3)) ||
             FAILED(attributes->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4)) ||
             // Frames go straight through the encoder, not held to look ahead: a third of the memory.
             FAILED(attributes->SetUINT32(MF_LOW_LATENCY, TRUE)) ||
+            FAILED(attributes->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, hardware)) ||
             FAILED(MFCreateSinkWriterFromURL(path.c_str(), nullptr, attributes.Get(), writer_.Put()))) {
             return false;
         }
@@ -3320,36 +3332,64 @@ std::wstring WorkFolder() {
     return Storage::Folder();
 }
 
-void CleanUpWorkFolder() {
+// Tidies the work folder, at start, on a thread of its own:
+// - Recordings left in it ("Recording <date> <time>.mp4": the mod turned off with one open in the
+//   trim window, or still being made; Windows signed out; or something went wrong) go to the
+//   recordings folder. They're copied, so they take on that folder's permissions, then deleted.
+//   One that can't be read (cut off while it was being made) is just deleted.
+// - Copies made for the clipboard go after a day.
+// Setting cancel stops it, without leaving part of a copy.
+void TidyWorkFolder(const std::wstring& recordings, BOOL* cancel) {
     std::wstring folder = WorkFolder();
     if (folder.empty()) {
         return;
     }
+    ComThread com;
+    MediaFoundation mediaFoundation;
     FILETIME now;
     GetSystemTimeAsFileTime(&now);
     ULONGLONG cutoff = (((ULONGLONG)now.dwHighDateTime << 32) | now.dwLowDateTime) - 24ULL * 3600 * kTicksPerSecond;
+    std::vector<std::wstring> leftovers;
+    std::vector<std::wstring> old;
     WIN32_FIND_DATAW found;
     HANDLE search = FindFirstFileW((folder + L"\\*.mp4").c_str(), &found);
     if (search == INVALID_HANDLE_VALUE) {
         return;
     }
     do {
+        if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            continue;
+        }
+        std::wstring file = folder + L"\\" + found.cFileName;
         ULONGLONG written = ((ULONGLONG)found.ftLastWriteTime.dwHighDateTime << 32) | found.ftLastWriteTime.dwLowDateTime;
-        if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && written < cutoff) {
-            DeleteFileW((folder + L"\\" + found.cFileName).c_str());
+        if (wcsncmp(found.cFileName, L"Recording ", 10) == 0) {
+            leftovers.push_back(file);
+        } else if (written < cutoff) {
+            old.push_back(file);
         }
     } while (FindNextFileW(search, &found));
     FindClose(search);
-}
-
-// Keeps a recording that wasn't copied or saved (the mod turned off with it open, or still
-// recording) in the recordings folder, rather than losing it. Returns whether it's there.
-bool KeepRecording(const std::wstring& recording, const std::wstring& folder) {
-    if (folder.empty() || GetFileAttributesW(recording.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        return false;
+    for (const std::wstring& file : old) {
+        DeleteFileW(file.c_str());
     }
-    SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);  // Fails harmlessly when it's there already.
-    return MoveFileExW(recording.c_str(), NewFileName(folder, L"Screen Recording", L".mp4").c_str(), MOVEFILE_COPY_ALLOWED);
+    for (const std::wstring& file : leftovers) {
+        if (*cancel) {
+            return;
+        }
+        SIZE size;
+        if (mediaFoundation.Started() && !VideoReader::Probe(file, size)) {
+            DeleteFileW(file.c_str());
+            continue;
+        }
+        if (recordings.empty()) {
+            continue;
+        }
+        SHCreateDirectoryExW(nullptr, recordings.c_str(), nullptr);  // Fails harmlessly when it's there already.
+        std::wstring target = NewFileName(recordings, L"Screen Recording", L".mp4");
+        if (CopyFileExW(file.c_str(), target.c_str(), nullptr, nullptr, cancel, COPY_FILE_FAIL_IF_EXISTS)) {
+            DeleteFileW(file.c_str());
+        }
+    }
 }
 
 // Puts a file on the clipboard, as File Explorer's Copy does, to paste into a chat, an email or a
@@ -5273,8 +5313,9 @@ public:
             DestroyWindow(hwnd_);
         }
         reader_.Close();
-        // Gone without being closed (the mod turned off), and neither copied nor saved: kept.
-        if (opened_ && !closed_ && !copied_ && !saved_ && saveFolder && KeepRecording(path_, saveFolder())) {
+        // Gone without being closed (the mod turned off), and neither copied nor saved: left in the
+        // work folder, for the next start to put in the recordings folder.
+        if (opened_ && !closed_ && !copied_ && !saved_) {
             return;
         }
         DeleteFileW(path_.c_str());
@@ -6278,7 +6319,8 @@ public:
         }
         pen_.color = (ARGB)Storage::GetInt(L"Color", (int)pen_.color);
         pen_.thickness = std::clamp(Storage::GetInt(L"Thickness", pen_.thickness), kMinThickness, kMaxThickness);
-        CleanUpWorkFolder();
+        tidyRecordings_ = settings_.recordings.path;
+        tidying_ = CreateThread(nullptr, 0, TidyProc, this, 0, nullptr);
         if (!messages_.Create(L"TaskbarSnipper.Mod.Messages") || !notice_.Create()) {
             return false;
         }
@@ -6301,15 +6343,17 @@ public:
     ~SnipApp() {
         hook_.Stop();
         overlay_.reset();
-        // Turning off while recording: the recording is finished and kept in the recordings
-        // folder, as are any not yet copied or saved in trim windows.
-        if (recorder_.Recording()) {
-            recorder_.Stop();
-            KeepRecording(recordingPath_, settings_.recordings.path);
-        }
+        // Turning off while recording: the recording is finished, and left (as are any not yet
+        // copied or saved in trim windows) for the next start to put in the recordings folder.
+        recorder_.Stop();
         recordingBar_.Hide();
         trimWindows_.clear();
         widget_.Destroy();
+        if (tidying_) {
+            cancelTidy_ = TRUE;  // What's left is done next time.
+            WaitForSingleObject(tidying_, INFINITE);
+            CloseHandle(tidying_);
+        }
     }
 
     HWND MessageHandle() const { return messages_.Handle(); }
@@ -6567,6 +6611,16 @@ private:
     RECT recordingArea_{};
     std::wstring recordingPath_;  // While recording.
     std::vector<std::unique_ptr<TrimWindow>> trimWindows_;
+    // Tidying the work folder, at start.
+    HANDLE tidying_ = nullptr;
+    std::wstring tidyRecordings_;
+    BOOL cancelTidy_ = FALSE;
+
+    static DWORD WINAPI TidyProc(void* parameter) {
+        auto self = (SnipApp*)parameter;
+        TidyWorkFolder(self->tidyRecordings_, &self->cancelTidy_);
+        return 0;
+    }
 };
 
 // ---------------------------------------------------------------------------
