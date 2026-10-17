@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.8.0
+// @version         1.0.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -53,6 +53,15 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 
 ### 8. Passive Environment Diagnostics
 - Passively detects and logs Hardware-Accelerated GPU Scheduling (HAGS), Virtualization-Based Security (VBS/Core Isolation), and Memory Compression status.
+
+## Settings
+
+- **Foreground priority boost**: Automatically increases the CPU priority of the active foreground window.
+- **Throttle CPU-heavy background processes**: Temporarily lowers priority of background processes consuming excessive CPU.
+- **Process startup grace period**: Minimum age in seconds a process must have before its memory can be optimized or trimmed (default: 5 seconds). Protects processes during initialization and JIT compilation.
+- **Standard free RAM threshold**: Percentage of available physical memory below which background memory cleanup is triggered.
+- **Early memory cap for heavy apps**: Reclaims memory from listed heavy apps once their memory exceeds the configured cap.
+- **Excluded processes**: Comma-separated list of executable names that must never be throttled or trimmed.
 
 ## Compatibility
 - Supported OS: Windows 10 (version 1809 and later) and Windows 11 (all versions including 24H2).
@@ -143,6 +152,9 @@ If you find this mod useful, you can support its development and maintenance:
 - electronMemoryCapMb: 300
   $name: Heavy Apps Memory Cap (MB)
   $description: Maximum memory threshold before an inactive listed application is cleaned (100 to 2000 MB).
+- processStartupGraceSeconds: 5
+  $name: Process Startup Grace Period (seconds)
+  $description: Minimum age in seconds a newly spawned process must reach before being eligible for memory trimming or priority throttling (1 to 60s, default 5s). Prevents page faults and access violations during process initialization and JIT compilation.
 - customTargetList: "zen.exe, chrome.exe, msedge.exe, brave.exe, firefox.exe, opera.exe, vivaldi.exe, discord.exe, slack.exe, teams.exe, telegram.exe, whatsapp.exe, signal.exe, skype.exe, spotify.exe, steam.exe, epicgameslauncher.exe, code.exe, obs64.exe"
   $name: Heavy Memory Hogs Process List
   $description: All background apps are optimized when RAM drops; this list is only for preemptive memory trimming on heavy web/Electron apps exceeding the cap above.
@@ -528,6 +540,7 @@ struct ModSettings {
     int ioActivityTransferThresholdKbps = 100;
     int compressionBurstHysteresisSeconds = 20;
     bool pauseOnBattery = true;
+    int processStartupGraceSeconds = 5;
     int checkIntervalSec = 10;
     LogDetailLevel logDetailLevel = LogDetailLevel::Detailed;
 };
@@ -602,10 +615,6 @@ struct BoostedProcessEntry {
 static std::atomic<DWORD> g_currentBoostedPid{0};
 static std::vector<BoostedProcessEntry> g_boostedProcesses;
 
-// Fast-path synchronization atomics for hook thread
-static std::atomic<bool> g_fastProBalanceEnabled{true};
-static std::atomic<DWORD> g_fastForegroundPriority{ABOVE_NORMAL_PRIORITY_CLASS};
-static std::atomic<DWORD> g_fastBoostedPid{0};
 static std::atomic<ULONGLONG> g_lastFocusChangeTick{0};
 
 // ---------------------------------------------------------------------------
@@ -707,19 +716,23 @@ static void EngageHighPerformancePowerScheme() {
 }
 
 static void PowerSchemeWorkerProc() {
-    while (g_powerWorkerRunning.load(std::memory_order_relaxed)) {
-        DWORD waitRes = WaitForSingleObject(g_powerWakeEvent, INFINITE);
-        if (!g_powerWorkerRunning.load(std::memory_order_relaxed)) {
-            break;
-        }
-        if (waitRes == WAIT_OBJECT_0) {
-            bool target = g_desiredHighPerformance.load(std::memory_order_acquire);
-            if (target) {
-                EngageHighPerformancePowerScheme();
-            } else {
-                RestoreOriginalPowerScheme();
+    try {
+        while (g_powerWorkerRunning.load(std::memory_order_relaxed)) {
+            DWORD waitRes = WaitForSingleObject(g_powerWakeEvent, INFINITE);
+            if (!g_powerWorkerRunning.load(std::memory_order_relaxed)) {
+                break;
+            }
+            if (waitRes == WAIT_OBJECT_0) {
+                bool target = g_desiredHighPerformance.load(std::memory_order_acquire);
+                if (target) {
+                    EngageHighPerformancePowerScheme();
+                } else {
+                    RestoreOriginalPowerScheme();
+                }
             }
         }
+    } catch (...) {
+        Wh_Log(L"[SmartOptimizer] PowerSchemeWorkerProc unhandled exception caught.");
     }
 }
 
@@ -825,6 +838,18 @@ static std::deque<std::chrono::steady_clock::time_point> g_focusSwitchHistory;
 static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
     g_processLastTrimmed;
 
+// ---------------------------------------------------------------------------
+// Window State Map (Forward declaration for Sanctuary & ProBalance)
+// ---------------------------------------------------------------------------
+
+struct WindowState {
+    bool hasVisibleWindow = false;
+    bool hasVisibleNonMinimizedWindow = false;
+    bool isMinimized = false;
+};
+
+static std::unordered_map<DWORD, WindowState> BuildWindowStateMapCached();
+
 // Game-sweep debounce; only touched by the hook thread.
 static DWORD g_lastGameSweepPid = 0;
 static std::chrono::steady_clock::time_point g_lastGameSweepTime{};
@@ -927,12 +952,38 @@ static bool IsGamingLockdownActive(DWORD fgPid,
         g_gameLastForegroundTime = now;
         return true;
     }
+
+    // Check window state of the sanctuary process:
+    // If the game window has been minimized or no longer has any visible window,
+    // the user explicitly shelved or closed it — release lockdown immediately.
+    auto windowStates = BuildWindowStateMapCached();
+    auto itWs = windowStates.find(sanctuaryPid);
+    if (itWs != windowStates.end() && itWs->second.isMinimized) {
+        ClearGameSanctuary();
+        return false;
+    }
+    if (itWs == windowStates.end() || !itWs->second.hasVisibleWindow) {
+        ClearGameSanctuary();
+        return false;
+    }
+
     // Maintain sanctuary immunity and memory lockdown for configured grace period after Alt-Tab
+    // only while the game window remains open / unminimized in the background.
     std::lock_guard<std::mutex> lock(g_gameSanctuaryMutex);
     auto elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(
                           now - g_gameLastForegroundTime)
                           .count();
-    return elapsedSec <= static_cast<int64_t>(gracePeriodSeconds);
+    if (elapsedSec > static_cast<int64_t>(gracePeriodSeconds)) {
+        if (g_gameSanctuaryHandle) {
+            CloseHandle(g_gameSanctuaryHandle);
+            g_gameSanctuaryHandle = nullptr;
+        }
+        g_gameSanctuaryPid = 0;
+        g_gameSanctuaryCreateTime = {};
+        g_gameLastForegroundTime = {};
+        return false;
+    }
+    return true;
 }
 
 static std::chrono::steady_clock::time_point g_lastPeriodicCleanTime{};
@@ -1056,6 +1107,7 @@ static std::vector<std::wstring> ParseProcessList(const std::wstring& input) {
     std::vector<std::wstring> result;
     std::wstring current;
     auto flush = [&]() {
+        // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
         std::wstring trimmed = ToLower(Trim(current));
         if (!trimmed.empty()) {
             result.push_back(trimmed);
@@ -1157,6 +1209,7 @@ static std::wstring FormatUptime(std::chrono::steady_clock::time_point start,
 
 static std::wstring BuildSessionStatsString() {
     auto now = std::chrono::steady_clock::now();
+    // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
     std::wstring uptime = FormatUptime(g_modStartTime, now);
     ULONGLONG reclaimedMb =
         g_sessionBytesReclaimed.load(std::memory_order_relaxed) /
@@ -1200,6 +1253,32 @@ static bool IsEssentialSystemSecurityProcess(const std::wstring& name) {
         L"tiworker.exe", L"trustedinstaller.exe", L"msiexec.exe",
         L"dismhost.exe", L"dism.exe"};
     return kEssential.count(name) != 0;
+}
+
+static bool IsWindhawkProcess(HANDLE hProcess) {
+    static const std::wstring s_windhawkDir = []() {
+        WCHAR path[MAX_PATH];
+        if (GetModuleFileNameW(nullptr, path, ARRAYSIZE(path)) > 0) {
+            WCHAR* pSlash = wcsrchr(path, L'\\');
+            if (pSlash) {
+                *pSlash = L'\0';
+            }
+            return ToLower(path);
+        }
+        return std::wstring();
+    }();
+    if (s_windhawkDir.empty()) {
+        return false;
+    }
+    WCHAR procPath[MAX_PATH];
+    DWORD size = ARRAYSIZE(procPath);
+    if (QueryFullProcessImageNameW(hProcess, 0, procPath, &size) && size > 0) {
+        std::wstring lowerProc = ToLower(procPath);
+        if (lowerProc.starts_with(s_windhawkDir)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 #ifndef LIST_MODULES_ALL
@@ -1548,6 +1627,16 @@ static bool IsActiveMultiTaskingMode() {
 // Audio Session Shield (WASAPI Real-Time Protection)
 // ---------------------------------------------------------------------------
 
+static std::wstring GetProcessNameByPid(DWORD pid);
+
+static bool IsWallpaperEngineProcess(const std::wstring& name) {
+    static const std::unordered_set<std::wstring> kWallpaperProcs = {
+        L"wallpaper32.exe", L"wallpaper64.exe",
+        L"webwallpaper32.exe", L"webwallpaper64.exe",
+        L"ui32.exe"};
+    return kWallpaperProcs.count(name) != 0;
+}
+
 static void ScanDeviceAudioSessions(IMMDevice* pDevice,
                                     std::unordered_set<DWORD>& audioPids) {
     if (!pDevice)
@@ -1569,6 +1658,23 @@ static void ScanDeviceAudioSessions(IMMDevice* pDevice,
                     AudioSessionState state = AudioSessionStateInactive;
                     if (SUCCEEDED(pSessionControl->GetState(&state)) &&
                         state == AudioSessionStateActive) {
+                        // Check if session is muted or master volume is silent
+                        ISimpleAudioVolume* pSimpleVol = nullptr;
+                        if (SUCCEEDED(pSessionControl->QueryInterface(
+                                __uuidof(ISimpleAudioVolume),
+                                reinterpret_cast<void**>(&pSimpleVol))) &&
+                            pSimpleVol) {
+                            BOOL isMuted = FALSE;
+                            float masterVol = 1.0f;
+                            bool muted = (SUCCEEDED(pSimpleVol->GetMute(&isMuted)) && isMuted);
+                            bool silent = (SUCCEEDED(pSimpleVol->GetMasterVolume(&masterVol)) && masterVol <= 0.0001f);
+                            pSimpleVol->Release();
+                            if (muted || silent) {
+                                pSessionControl->Release();
+                                continue;
+                            }
+                        }
+
                         IAudioSessionControl2* pControl2 = nullptr;
                         if (SUCCEEDED(pSessionControl->QueryInterface(
                                 __uuidof(IAudioSessionControl2),
@@ -1576,7 +1682,9 @@ static void ScanDeviceAudioSessions(IMMDevice* pDevice,
                             pControl2) {
                             DWORD pid = 0;
                             if (SUCCEEDED(pControl2->GetProcessId(&pid)) && pid != 0) {
-                                audioPids.insert(pid);
+                                if (!IsWallpaperEngineProcess(GetProcessNameByPid(pid))) {
+                                    audioPids.insert(pid);
+                                }
                             }
                             pControl2->Release();
                         }
@@ -1649,9 +1757,10 @@ static std::unordered_set<DWORD> GetActiveAudioProcessIds() {
     return audioPids;
 }
 
-// Forward declarations for early audio elastic re-engagement & pre-emptive staging
+// Forward declarations for audio sanctuary & process state management
 static bool SetProcessMemoryPriorityHint(HANDLE hProcess, ULONG priority);
 static bool ResetProcessEcoQoS(HANDLE hProcess);
+static bool RestoreAndEraseThrottledProcess(DWORD pid);
 
 static std::wstring GetProcessNameByPid(DWORD pid) {
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -1694,28 +1803,19 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
     auto rawPids = GetActiveAudioProcessIds();
 
     // 1. Instant Elastic Rebound: for any audio stream newly started or resumed,
-    // immediately restore full memory priority (5 / Normal) and clear any EcoQoS throttling.
+    // if it was throttled by the mod, restore it immediately to normal operation.
     for (DWORD pid : rawPids) {
         if (g_audioPidsCache.find(pid) == g_audioPidsCache.end()) {
-            HANDLE hProc = OpenProcess(
-                PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
-                FALSE, pid);
-            if (hProc) {
-                SetProcessMemoryPriorityHint(hProc, 5 /* MEMORY_PRIORITY_NORMAL */);
-                ResetProcessEcoQoS(hProc);
-                CloseHandle(hProc);
-            }
+            RestoreAndEraseThrottledProcess(pid);
             std::wstring procName = GetProcessNameByPid(pid);
             LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
-                     L"Active audio stream detected on %s (PID %u) -> Engaging topological sanctuary | Memory: Normal",
+                     L"Active audio stream detected on %s (PID %u) -> Engaging topological sanctuary",
                      procName.c_str(), pid);
         }
         g_audioPidLastActive[pid] = now;
     }
 
-    // 2. Pre-emptive Memory Staging: for any PID that stopped playing audio,
-    // stage memory gently to standby list (2 / Low) once the grace period elapses.
-    DWORD fgPid = GetForegroundProcessId();
+    // 2. Sanctuary Grace Period: maintain protection for 5 seconds after audio ceases
     std::unordered_set<DWORD> combined;
     for (auto it = g_audioPidLastActive.begin();
          it != g_audioPidLastActive.end();) {
@@ -1726,25 +1826,6 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
             combined.insert(it->first);
             ++it;
         } else {
-            DWORD stoppedPid = it->first;
-            std::wstring procName = GetProcessNameByPid(stoppedPid);
-            std::wstring fgName = (fgPid != 0) ? GetProcessNameByPid(fgPid) : L"";
-            bool isForegroundApp =
-                (stoppedPid == fgPid) ||
-                (!fgName.empty() && _wcsicmp(procName.c_str(), fgName.c_str()) == 0);
-
-            if (!isForegroundApp && stoppedPid != 0 && stoppedPid != 4) {
-                HANDLE hProc = OpenProcess(
-                    PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
-                    FALSE, stoppedPid);
-                if (hProc) {
-                    SetProcessMemoryPriorityHint(hProc, 2 /* MEMORY_PRIORITY_LOW */);
-                    CloseHandle(hProc);
-                }
-                LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
-                         L"Audio stream ceased on %s (PID %u) -> Pre-emptively staging to Standby memory (Memory: Low)",
-                         procName.c_str(), stoppedPid);
-            }
             it = g_audioPidLastActive.erase(it);
         }
     }
@@ -1883,14 +1964,14 @@ static bool SetProcessEcoQoS(HANDLE hProcess, bool enableThrottling) {
                                  &state, sizeof(state)) != 0;
 }
 
-// Explicitly disables EcoQoS on Windows 11 22H2+. ControlMask must specify
-// which mechanisms to control; passing 0 is a no-op on modern kernels.
+// Resets power throttling to return control to Windows OS power management.
+// Per Microsoft SetProcessInformation / PROCESS_POWER_THROTTLING_STATE docs,
+// ControlMask = 0 and StateMask = 0 restores system-managed power throttling.
 static bool ResetProcessEcoQoS(HANDLE hProcess) {
     PROCESS_POWER_THROTTLING_STATE state{};
     state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
-    state.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
-                        PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
-    state.StateMask = 0; // Disable all controlled mechanisms
+    state.ControlMask = 0;
+    state.StateMask = 0;
     return SetProcessInformation(hProcess,
                                  (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
                                  &state, sizeof(state)) != 0;
@@ -1962,6 +2043,16 @@ static void RestoreForegroundBoostLocked() {
             itCtx->second.state = ProcessState::BackgroundNormal;
             itCtx->second.stateEnteredAt = std::chrono::steady_clock::now();
         }
+    }
+    for (const auto& entry : g_boostedProcesses) {
+        auto itCtx = g_processContexts.find(entry.pid);
+        const wchar_t* pName =
+            (itCtx != g_processContexts.end() && !itCtx->second.name.empty())
+                ? itCtx->second.name.c_str()
+                : L"process";
+        LogEvent(LogCategory::ProBalance, LogDetailLevel::Detailed,
+                 L"Restoring priority for background %s (PID %u) -> Priority: Normal | I/O: Normal",
+                 pName, entry.pid);
     }
     g_boostedProcesses.clear();
     g_currentBoostedPid.store(0, std::memory_order_release);
@@ -2208,7 +2299,6 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
     }
 
     g_currentBoostedPid.store(newForegroundPid, std::memory_order_release);
-    g_fastBoostedPid.store(newForegroundPid, std::memory_order_release);
     // POWR-01 & POWR-02: Condition power scheme engagement on confirmed active game & dispatch asynchronously
     if (settings.enableDynamicPowerPlan) {
         auto now = std::chrono::steady_clock::now();
@@ -2478,11 +2568,6 @@ static void RestoreAllThrottledProcesses() {
 // Window State Map
 // ---------------------------------------------------------------------------
 
-struct WindowState {
-    bool hasVisibleWindow = false;
-    bool isMinimized = false;
-};
-
 static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
     auto* map = reinterpret_cast<std::unordered_map<DWORD, WindowState>*>(lParam);
     if (!IsWindowVisible(hwnd))
@@ -2503,12 +2588,29 @@ static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
         }
     }
 
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    auto& state = (*map)[pid];
-    state.hasVisibleWindow = true;
-    if (IsIconic(hwnd)) {
-        state.isMinimized = true;
+    DWORD rawPid = 0;
+    GetWindowThreadProcessId(hwnd, &rawPid);
+    DWORD resolvedPid = GetWindowProcessIdResolved(hwnd);
+
+    auto recordState = [&](DWORD targetPid) {
+        if (targetPid == 0) {
+            return;
+        }
+        auto& state = (*map)[targetPid];
+        state.hasVisibleWindow = true;
+        if (IsIconic(hwnd)) {
+            if (!state.hasVisibleNonMinimizedWindow) {
+                state.isMinimized = true;
+            }
+        } else {
+            state.hasVisibleNonMinimizedWindow = true;
+            state.isMinimized = false;
+        }
+    };
+
+    recordState(resolvedPid);
+    if (rawPid != resolvedPid && rawPid != 0) {
+        recordState(rawPid);
     }
     return TRUE;
 }
@@ -2924,6 +3026,7 @@ enum class VetoReason : uint16_t {
     UserRecentFocus = 1 << 11,       // Recent user interaction grace (Weight: 600)
     TargetFilterExclusion = 1 << 12, // targetProcessesOnly is active and not listed (Weight: 500)
     PackagedApp = 1 << 13,           // UWP/MSIX managed by Windows PLM (Weight: 450)
+    StartupGracePeriod = 1 << 14,    // Process in startup / initialization phase (Weight: 1000)
 };
 
 struct DecisionResult {
@@ -3053,6 +3156,16 @@ struct SystemActionArbiter {
         const std::unordered_map<DWORD, DWORD>* parentOf = nullptr,
         const std::unordered_map<DWORD, WindowState>* windowStates =
             nullptr) const noexcept {
+        uint64_t ageSec = GetProcessAgeSeconds(hProcess);
+        if (ageSec < static_cast<uint64_t>(settings.processStartupGraceSeconds)) {
+            return {false, VetoReason::StartupGracePeriod,
+                    L"Process in Startup / Initialization Phase"};
+        }
+        if (IsWindhawkProcess(hProcess)) {
+            return {false, VetoReason::KernelSecurity,
+                    L"Windhawk Host / Sub-process Family"};
+        }
+
         if (action == ActionType::TrimWorkingSet) {
             if (pid == foregroundPid || immuneFamilyPids.count(pid)) {
                 return {false, VetoReason::ForegroundOrFamily,
@@ -3474,8 +3587,82 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 }
 
 // ---------------------------------------------------------------------------
-// Fullscreen / Direct3D Game Detection
+// Fullscreen / Direct3D & Windows GameConfigStore Game Detection
 // ---------------------------------------------------------------------------
+
+static std::mutex g_gameConfigStoreMutex;
+static std::unordered_set<std::wstring> g_gameConfigStoreCache;
+static std::chrono::steady_clock::time_point g_lastGameConfigStoreScan{};
+
+static void RefreshGameConfigStoreCache() {
+    auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lock(g_gameConfigStoreMutex);
+    if (g_lastGameConfigStoreScan.time_since_epoch().count() != 0 &&
+        std::chrono::duration_cast<std::chrono::minutes>(now - g_lastGameConfigStoreScan).count() < 10) {
+        return; // Cache valid for 10 minutes
+    }
+    g_gameConfigStoreCache.clear();
+    HKEY hParent = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"System\\GameConfigStore\\Children", 0, KEY_READ, &hParent) == ERROR_SUCCESS) {
+        DWORD subkeyCount = 0;
+        DWORD maxSubkeyLen = 0;
+        if (RegQueryInfoKeyW(hParent, nullptr, nullptr, nullptr, &subkeyCount, &maxSubkeyLen, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+            std::vector<wchar_t> subkeyName(maxSubkeyLen + 1);
+            for (DWORD i = 0; i < subkeyCount; ++i) {
+                DWORD nameLen = static_cast<DWORD>(subkeyName.size());
+                if (RegEnumKeyExW(hParent, i, subkeyName.data(), &nameLen, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+                    HKEY hSub = nullptr;
+                    if (RegOpenKeyExW(hParent, subkeyName.data(), 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
+                        wchar_t pathBuf[MAX_PATH]{};
+                        DWORD bufSize = sizeof(pathBuf);
+                        DWORD type = 0;
+                        if (RegQueryValueExW(hSub, L"MatchedExeFullPath", nullptr, &type, reinterpret_cast<LPBYTE>(pathBuf), &bufSize) == ERROR_SUCCESS && type == REG_SZ) {
+                            const wchar_t* lastSlash = wcsrchr(pathBuf, L'\\');
+                            if (!lastSlash) {
+                                lastSlash = wcsrchr(pathBuf, L'/');
+                            }
+                            const wchar_t* exePtr = lastSlash ? (lastSlash + 1) : pathBuf;
+                            if (exePtr[0] != L'\0') {
+                                g_gameConfigStoreCache.insert(ToLower(exePtr));
+                            }
+                        }
+                        RegCloseKey(hSub);
+                    }
+                }
+            }
+        }
+        RegCloseKey(hParent);
+    }
+    g_lastGameConfigStoreScan = now;
+}
+
+static bool IsRegisteredWindowsGame(const std::wstring& procName) {
+    if (procName.empty()) {
+        return false;
+    }
+    RefreshGameConfigStoreCache();
+    std::lock_guard<std::mutex> lock(g_gameConfigStoreMutex);
+    return g_gameConfigStoreCache.count(ToLower(procName)) != 0;
+}
+
+static bool HasGameRuntimeSignature(HANDLE hProc) {
+    if (!hProc) {
+        return false;
+    }
+    wchar_t imagePath[MAX_PATH]{};
+    DWORD pathLen = _countof(imagePath);
+    if (QueryFullProcessImageNameW(hProc, 0, imagePath, &pathLen) && pathLen > 0) {
+        std::wstring fullPathLower = ToLower(imagePath);
+        // Common verified game directories
+        if (fullPathLower.find(L"\\steamapps\\common\\") != std::wstring::npos ||
+            fullPathLower.find(L"\\epic games\\") != std::wstring::npos ||
+            fullPathLower.find(L"\\gog games\\") != std::wstring::npos ||
+            fullPathLower.find(L"\\xboxgames\\") != std::wstring::npos) {
+            return true;
+        }
+    }
+    return false;
+}
 
 static bool IsExcludedFromGameDetection(const std::wstring& name) {
     static const std::unordered_set<std::wstring> kNonGames = {
@@ -3488,7 +3675,11 @@ static bool IsExcludedFromGameDetection(const std::wstring& name) {
         L"obs64.exe", L"obs32.exe",
         L"mstsc.exe", L"teamviewer.exe", L"anydesk.exe",
         L"windowsterminal.exe", L"cmd.exe", L"powershell.exe", L"conhost.exe",
-        L"explorer.exe"};
+        L"explorer.exe",
+        L"winstore.app.exe", L"applicationframehost.exe", L"systemsettings.exe",
+        L"calculatorapp.exe", L"notepad.exe", L"code.exe", L"devenv.exe",
+        L"slack.exe", L"discord.exe", L"spotify.exe", L"thunderbird.exe",
+        L"taskmgr.exe", L"regedit.exe"};
     return kNonGames.count(name) != 0;
 }
 
@@ -3500,21 +3691,26 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     wchar_t className[64]{};
     GetClassNameW(hwnd, className, _countof(className));
     static const std::unordered_set<std::wstring> kSystemClasses = {
-        L"Shell_TrayWnd", L"Progman", L"WorkerW",
+        L"Shell_TrayWnd",
+        L"Progman",
+        L"WorkerW",
         L"#32768", // Win32 menu
         L"#32769", // Desktop
         L"tooltips_class32",
         L"IME",
         L"MSCTFIME UI",
-        L"Windows.UI.Core.CoreWindow" // UWP shell overlays
-    };
+        L"Windows.UI.Core.CoreWindow", // UWP shell overlays
+        L"ApplicationFrameWindow",     // UWP / Modern App frame
+        L"Windows.UI.Composition.DesktopWindowContentBridge"};
     if (kSystemClasses.count(className) != 0)
         return false;
 
-    // Exclusion check for media players, browsers, and terminals.
+    // Exclusion check for desktop utilities, media players, browsers, terminals
+    std::wstring procName;
     std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
     for (const auto& entry : snapshot) {
         if (entry.pid == pid) {
+            procName = entry.name;
             if (IsExcludedFromGameDetection(entry.name)) {
                 return false;
             }
@@ -3522,7 +3718,7 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         }
     }
 
-    // Direct3D exclusive fullscreen check (fast-path, works on older Windows too).
+    // Direct3D exclusive fullscreen check (fast-path, Windows Shell certified).
     if (g_pfnSHQueryUserNotificationState) {
         QUERY_USER_NOTIFICATION_STATE quns = QUNS_NOT_PRESENT;
         if (SUCCEEDED(g_pfnSHQueryUserNotificationState(&quns))) {
@@ -3530,6 +3726,26 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
                 return true;
             }
         }
+    }
+
+    // Packaged apps (UWP/MSIX like Store, Settings, Calculator) are standard Windows apps,
+    // not dedicated 3D games, unless running exclusive D3D above.
+    HANDLE hCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hCheck) {
+        bool isPkg = IsPackagedAppCached(pid, hCheck);
+        bool hasGameDir = HasGameRuntimeSignature(hCheck);
+        CloseHandle(hCheck);
+        if (isPkg) {
+            return false;
+        }
+        if (hasGameDir) {
+            return true;
+        }
+    }
+
+    // Official Windows Game Bar / GameConfigStore registry check
+    if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
+        return true;
     }
 
     // Use DWM extended frame bounds to get the actual rendered rect without shadow margins
@@ -3637,7 +3853,8 @@ struct TrimAttemptResult {
 };
 
 static TrimAttemptResult
-TryTrimProcess(DWORD pid, const SystemActionArbiter& arbiter,
+TryTrimProcess(DWORD pid, const std::wstring& procName,
+               const SystemActionArbiter& arbiter,
                const std::unordered_map<DWORD, WindowState>* windowStates = nullptr,
                bool emergency = false,
                bool forceHardTrim = false) {
@@ -3681,20 +3898,23 @@ TryTrimProcess(DWORD pid, const SystemActionArbiter& arbiter,
                              reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc),
                              sizeof(pmc))) {
         SIZE_T wsMb = pmc.WorkingSetSize / (1024ULL * 1024ULL);
+        bool isTargetListed = IsInList(procName, settings.customTargetList);
         bool isMemoryCapExceeded =
-            settings.enableElectronMemoryCap &&
+            settings.enableElectronMemoryCap && isTargetListed &&
             (wsMb >= static_cast<SIZE_T>(settings.electronMemoryCapMb));
 
         if (wsMb >= settings.minProcessMemoryToTrimMb) {
-            int cooldownSec = emergency ? 45 : 180;
-            auto itTrim = g_processLastTrimmed.find(pid);
-            if (itTrim != g_processLastTrimmed.end()) {
-                auto diffSec = std::chrono::duration_cast<std::chrono::seconds>(
-                                   now - itTrim->second)
-                                   .count();
-                if (diffSec < cooldownSec) {
-                    CloseHandle(hProc);
-                    return result;
+            if (!forceHardTrim) {
+                int cooldownSec = emergency ? 45 : 180;
+                auto itTrim = g_processLastTrimmed.find(pid);
+                if (itTrim != g_processLastTrimmed.end()) {
+                    auto diffSec = std::chrono::duration_cast<std::chrono::seconds>(
+                                       now - itTrim->second)
+                                       .count();
+                    if (diffSec < cooldownSec) {
+                        CloseHandle(hProc);
+                        return result;
+                    }
                 }
             }
 
@@ -3852,7 +4072,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
 
     auto tryTrimAndRecord = [&](DWORD pid, const std::wstring& name) {
         TrimAttemptResult attempt =
-            TryTrimProcess(pid, arbiter, &windowStates, emergency, forceHardTrim);
+            TryTrimProcess(pid, name, arbiter, &windowStates, emergency, forceHardTrim);
         if (attempt.trimmed) {
             stats.processesTrimmed++;
             if (attempt.isSoftTrim) {
@@ -3911,8 +4131,10 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             }
 
             if (preDec.primaryVeto == VetoReason::UserRecentFocus && !capEligible) {
-                stats.processesSkippedRecent++;
-                return false;
+                if (!forceHardTrim) {
+                    stats.processesSkippedRecent++;
+                    return false;
+                }
             } else if (!capEligible) {
                 return false;
             }
@@ -3952,6 +4174,9 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
     };
 
     for (const auto& entry : processList) {
+        if (!g_workerRunning.load(std::memory_order_relaxed)) {
+            break;
+        }
         DWORD pid = entry.pid;
         const std::wstring& procName = entry.name;
         if (!shouldTrimProcess(pid, procName))
@@ -3965,6 +4190,9 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             std::unordered_set<DWORD> visited;
             CollectDescendants(pid, childrenOf, descendants, visited);
             for (DWORD childPid : descendants) {
+                if (!g_workerRunning.load(std::memory_order_relaxed)) {
+                    break;
+                }
                 auto childIt = byPid.find(childPid);
                 if (childIt == byPid.end())
                     continue;
@@ -4051,10 +4279,19 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
 // Cleanup Pass Dispatcher
 // ---------------------------------------------------------------------------
 
+static DWORD WINAPI PlayChimeWorkItem(LPVOID) {
+    MessageBeep(MB_OK);
+    return 0;
+}
+
 static void PerformMemoryCleanup(const wchar_t* triggerReason,
                                  bool allowWorkingSetTrim = true,
                                  bool hogsOnly = false,
                                  bool forceHardTrim = false) {
+    if (!g_workerRunning.load(std::memory_order_relaxed)) {
+        return;
+    }
+
     ModSettings settings = GetSettingsSnapshot();
 
     // Suppress all memory purges during active gaming sessions except explicit panic triggers
@@ -4120,6 +4357,7 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
     double totalGb = memBefore.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
     double sessionGb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
     double sessionStandbyGb = g_sessionBytesStandbyDemoted.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
+    // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
     std::wstring uptime =
         FormatUptime(g_modStartTime, std::chrono::steady_clock::now());
 
@@ -4171,11 +4409,12 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
 
     // Emergency Panic Hotkey completion feedback & session report:
     if (wcscmp(triggerReason, L"[Panic Hotkey Trigger]") == 0) {
+        // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
         std::wstring report = BuildSessionStatsString();
         LogEvent(LogCategory::Memory, LogDetailLevel::Minimal, L"%s", report.c_str());
         Wh_Log(L"[SmartOptimizer] %s", report.c_str());
         if (settings.enableHotkeySound) {
-            std::thread([]() { MessageBeep(MB_OK); }).detach();
+            QueueUserWorkItem(PlayChimeWorkItem, nullptr, WT_EXECUTEDEFAULT);
         }
     }
 }
@@ -4186,31 +4425,22 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
 
 static void HandleForegroundChanged(HWND hwnd) {
     DWORD pid = GetWindowProcessIdResolved(hwnd);
-    if (pid == 0 || pid == 4 || pid == GetCurrentProcessId())
+    if (pid == 0 || pid == 4 || pid == GetCurrentProcessId()) {
+        if (pid == 0 && g_currentBoostedPid.load(std::memory_order_relaxed) != 0) {
+            std::lock_guard<std::mutex> lock(g_priorityMutex);
+            RestoreForegroundBoostLocked();
+        }
         return;
+    }
 
     if (pid != g_currentBoostedPid.load(std::memory_order_relaxed)) {
-        // Fast-path: immediately boost active foreground window without allocations or I/O
-        if (g_fastProBalanceEnabled.load(std::memory_order_relaxed)) {
-            HANDLE hFastProc = OpenProcess(
-                PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
-                FALSE, pid);
-            if (hFastProc) {
-                DWORD targetPrio =
-                    g_fastForegroundPriority.load(std::memory_order_relaxed);
-                SetPriorityClass(hFastProc, targetPrio);
-                CloseHandle(hFastProc);
-            }
-            g_fastBoostedPid.store(pid, std::memory_order_release);
-        }
-
         RecordFocusSwitch(pid);
         g_lastFocusChangeTick.store(GetTickCount64(), std::memory_order_release);
 
         ModSettings settings = GetSettingsSnapshot();
         MaybeRequestGameSweep(pid, hwnd, settings);
 
-        // Wake worker for deferred background adjustment and tree discovery
+        // Wake worker immediately to record original priority and apply boost
         if (g_wakeEvent) {
             SetEvent(g_wakeEvent);
         }
@@ -4271,90 +4501,95 @@ static LRESULT CALLBACK PowerWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
 }
 
 static DWORD WINAPI HookThreadProc(LPVOID) {
-    // Ensure message queue is created immediately so PostThreadMessageW never
-    // fails
-    MSG msg;
-    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    try {
+        // Ensure message queue is created immediately so PostThreadMessageW never
+        // fails
+        MSG msg;
+        PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    WNDCLASSEXW wc{};
-    wc.cbSize = sizeof(wc);
-    wc.lpfnWndProc = PowerWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = L"SmartOptimizerPowerMsgWnd";
-    RegisterClassExW(&wc);
+        WNDCLASSEXW wc{};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = PowerWndProc;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.lpszClassName = L"SmartOptimizerPowerMsgWnd";
+        RegisterClassExW(&wc);
 
-    HWND hPowerWnd =
-        CreateWindowExW(0, wc.lpszClassName, nullptr, 0, 0, 0, 0, 0,
-                        HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
-    HPOWERNOTIFY hPowerNotify = nullptr;
-    if (hPowerWnd) {
-        hPowerNotify = RegisterSuspendResumeNotification(
-            hPowerWnd, DEVICE_NOTIFY_WINDOW_HANDLE);
-    }
-
-    g_winEventHook = SetWinEventHook(
-        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc,
-        0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-
-    {
-        ModSettings settings = GetSettingsSnapshot();
-        if (settings.enablePanicHotkey) {
-            g_panicHotkeyRegistered.store(
-                RegisterHotKey(nullptr, kPanicHotkeyId,
-                               MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_F11));
+        HWND hPowerWnd =
+            CreateWindowExW(0, wc.lpszClassName, nullptr, 0, 0, 0, 0, 0,
+                            HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+        HPOWERNOTIFY hPowerNotify = nullptr;
+        if (hPowerWnd) {
+            hPowerNotify = RegisterSuspendResumeNotification(
+                hPowerWnd, DEVICE_NOTIFY_WINDOW_HANDLE);
         }
-    }
 
-    if (g_hookThreadReadyEvent) {
-        SetEvent(g_hookThreadReadyEvent);
-    }
+        g_winEventHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc,
+            0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
-    while (g_hookThreadRunning.load()) {
-        BOOL result = GetMessageW(&msg, nullptr, 0, 0);
-        if (result <= 0)
-            break;
-
-        if (msg.message == WM_HOTKEY && msg.wParam == kPanicHotkeyId) {
-            std::wstring report = BuildSessionStatsString();
-            Wh_Log(L"[SmartOptimizer] %s", report.c_str());
-            LogEvent(LogCategory::Memory, LogDetailLevel::Minimal,
-                     L"Panic hotkey triggered (Ctrl+Alt+F11). Requesting immediate working set sweep...");
-            g_forceCleanupRequested.store(true);
-            if (g_wakeEvent) {
-                SetEvent(g_wakeEvent);
-            }
-        } else if (msg.message == WM_APP) {
-            if (msg.wParam == 1 && !g_panicHotkeyRegistered.load()) {
+        {
+            ModSettings settings = GetSettingsSnapshot();
+            if (settings.enablePanicHotkey) {
                 g_panicHotkeyRegistered.store(
                     RegisterHotKey(nullptr, kPanicHotkeyId,
                                    MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_F11));
-            } else if (msg.wParam == 0 && g_panicHotkeyRegistered.load()) {
-                UnregisterHotKey(nullptr, kPanicHotkeyId);
-                g_panicHotkeyRegistered.store(false);
             }
         }
 
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
+        if (g_hookThreadReadyEvent) {
+            SetEvent(g_hookThreadReadyEvent);
+        }
 
-    if (g_panicHotkeyRegistered.load()) {
-        UnregisterHotKey(nullptr, kPanicHotkeyId);
-        g_panicHotkeyRegistered.store(false);
+        while (g_hookThreadRunning.load()) {
+            BOOL result = GetMessageW(&msg, nullptr, 0, 0);
+            if (result <= 0)
+                break;
+
+            if (msg.message == WM_HOTKEY && msg.wParam == kPanicHotkeyId) {
+                // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
+                std::wstring report = BuildSessionStatsString();
+                Wh_Log(L"[SmartOptimizer] %s", report.c_str());
+                LogEvent(LogCategory::Memory, LogDetailLevel::Minimal,
+                         L"Panic hotkey triggered (Ctrl+Alt+F11). Requesting immediate working set sweep...");
+                g_forceCleanupRequested.store(true);
+                if (g_wakeEvent) {
+                    SetEvent(g_wakeEvent);
+                }
+            } else if (msg.message == WM_APP) {
+                if (msg.wParam == 1 && !g_panicHotkeyRegistered.load()) {
+                    g_panicHotkeyRegistered.store(
+                        RegisterHotKey(nullptr, kPanicHotkeyId,
+                                       MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_F11));
+                } else if (msg.wParam == 0 && g_panicHotkeyRegistered.load()) {
+                    UnregisterHotKey(nullptr, kPanicHotkeyId);
+                    g_panicHotkeyRegistered.store(false);
+                }
+            }
+
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        if (g_panicHotkeyRegistered.load()) {
+            UnregisterHotKey(nullptr, kPanicHotkeyId);
+            g_panicHotkeyRegistered.store(false);
+        }
+        if (g_winEventHook) {
+            UnhookWinEvent(g_winEventHook);
+            g_winEventHook = nullptr;
+        }
+        if (hPowerNotify) {
+            UnregisterSuspendResumeNotification(hPowerNotify);
+            hPowerNotify = nullptr;
+        }
+        if (hPowerWnd) {
+            DestroyWindow(hPowerWnd);
+            hPowerWnd = nullptr;
+        }
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    } catch (...) {
+        Wh_Log(L"[SmartOptimizer] Unhandled exception in HookThreadProc");
     }
-    if (g_winEventHook) {
-        UnhookWinEvent(g_winEventHook);
-        g_winEventHook = nullptr;
-    }
-    if (hPowerNotify) {
-        UnregisterSuspendResumeNotification(hPowerNotify);
-        hPowerNotify = nullptr;
-    }
-    if (hPowerWnd) {
-        DestroyWindow(hPowerWnd);
-        hPowerWnd = nullptr;
-    }
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
     return 0;
 }
 
@@ -4369,267 +4604,274 @@ static void MemoryOptimizerWorker() {
            L"started "
            L"(0.00%% CPU passive wait).");
 
-    HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
-    g_modStartTime = std::chrono::steady_clock::now();
-    g_lastPeriodicCleanTime = g_modStartTime;
-    g_lastIdleCleanTime = g_modStartTime;
-    g_lastTriggerCleanTime = g_modStartTime;
+    try {
+        HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
+        g_modStartTime = std::chrono::steady_clock::now();
+        g_lastPeriodicCleanTime = g_modStartTime;
+        g_lastIdleCleanTime = g_modStartTime;
+        g_lastTriggerCleanTime = g_modStartTime;
 
-    bool isWarmupPass = true;
+        bool isWarmupPass = true;
 
-    while (g_workerRunning.load()) {
-        if (g_systemSuspended.load()) {
-            DWORD waitRes = WaitForSingleObject(g_stopEvent, 1000);
-            if (waitRes == WAIT_OBJECT_0) {
-                break;
-            }
-            continue;
-        }
-
-        ModSettings settings = GetSettingsSnapshot();
-
-        bool onBattery = settings.pauseOnBattery && IsRunningOnBattery();
-
-        if (g_forceCleanupRequested.exchange(false)) {
-            PerformMemoryCleanup(L"[Panic Hotkey Trigger]",
-                                 /*allowWorkingSetTrim=*/true, /*hogsOnly=*/false,
-                                 /*forceHardTrim=*/true);
-        }
-        if (g_gameSweepRequested.exchange(false)) {
-            Wh_Log(L"[SmartOptimizer] Fullscreen / 3D game detected. Running "
-                   L"preventive RAM sweep...");
-            PerformMemoryCleanup(L"[Pre-Game Sweep]", /*allowWorkingSetTrim=*/true,
-                                 /*hogsOnly=*/false, /*forceHardTrim=*/true);
-        }
-
-        if (g_resetSamplesRequested.exchange(false, std::memory_order_acq_rel)) {
-            g_cpuSamples.clear();
-            g_ioSamples.clear();
-            g_audioWorkerSamples.clear();
-            g_audioWorkerActiveUntil.clear();
-            g_loggedAudioWorkers.clear();
-            g_aiCpuSamples.clear();
-        }
-
-        // Slow-path debounce: wait for focus stabilization before running tree discovery and CPU sampling
-        ULONGLONG lastFocusTick =
-            g_lastFocusChangeTick.load(std::memory_order_acquire);
-        if (lastFocusTick != 0) {
-            ULONGLONG nowTick = GetTickCount64();
-            if (nowTick >= lastFocusTick) {
-                ULONGLONG elapsedMs = nowTick - lastFocusTick;
-                if (elapsedMs < 1500) {
-                    DWORD waitMs = static_cast<DWORD>(1500 - elapsedMs);
-                    DWORD waitRes = WaitForSingleObject(g_stopEvent, waitMs);
-                    if (waitRes == WAIT_OBJECT_0) {
-                        break;
-                    }
+        while (g_workerRunning.load()) {
+            if (g_systemSuspended.load()) {
+                DWORD waitRes = WaitForSingleObject(g_stopEvent, 1000);
+                if (waitRes == WAIT_OBJECT_0) {
+                    break;
                 }
+                continue;
             }
-        }
 
-        DWORD fgPid = GetForegroundProcessId();
-        if (fgPid != 0) {
-            UpdateForegroundBoost(fgPid, settings);
-        }
+            ModSettings settings = GetSettingsSnapshot();
 
-        bool recentlyResumed = false;
-        ULONGLONG resumeTick = g_lastResumeTick.load(std::memory_order_acquire);
-        if (resumeTick != 0) {
-            ULONGLONG nowTick = GetTickCount64();
-            if (nowTick >= resumeTick && (nowTick - resumeTick) < 30000) {
-                recentlyResumed = true;
+            bool onBattery = settings.pauseOnBattery && IsRunningOnBattery();
+
+            if (g_forceCleanupRequested.exchange(false)) {
+                PerformMemoryCleanup(L"[Panic Hotkey Trigger]",
+                                     /*allowWorkingSetTrim=*/true, /*hogsOnly=*/false,
+                                     /*forceHardTrim=*/true);
             }
-        }
-
-        static bool s_lastOnBatteryState = false;
-        if (onBattery != s_lastOnBatteryState) {
-            s_lastOnBatteryState = onBattery;
-            if (onBattery) {
-                LogEvent(LogCategory::Power, LogDetailLevel::Minimal,
-                         L"Battery power or Energy Saver active. Background throttling and memory cleanups paused.");
-            } else {
-                LogEvent(LogCategory::Power, LogDetailLevel::Minimal,
-                         L"AC power restored. Resuming background optimization and throttling engine.");
+            if (g_gameSweepRequested.exchange(false)) {
+                Wh_Log(L"[SmartOptimizer] Fullscreen / 3D game detected. Running "
+                       L"preventive RAM sweep...");
+                PerformMemoryCleanup(L"[Pre-Game Sweep]", /*allowWorkingSetTrim=*/true,
+                                     /*hogsOnly=*/false, /*forceHardTrim=*/true);
             }
-        }
 
-        if (!onBattery && !recentlyResumed) {
-            UpdateAiProcessActivity(settings);
-            ApplyBackgroundThrottling(settings, GetForegroundProcessId());
-        } else if (onBattery || recentlyResumed) {
-            RestoreAllThrottledProcesses();
-        }
-
-        bool inGamingLockdown =
-            IsGamingLockdownActive(fgPid, std::chrono::steady_clock::now(),
-                                   settings.gameAltTabGracePeriodSeconds);
-        static bool s_lastGamingLockdownState = false;
-        if (inGamingLockdown != s_lastGamingLockdownState) {
-            s_lastGamingLockdownState = inGamingLockdown;
-            if (inGamingLockdown) {
-                LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
-                         L"Gaming Lockdown active: RAM calculation and trimming cycles suspended.");
-            } else {
-                LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
-                         L"Gaming Lockdown released: resuming normal memory management.");
+            if (g_resetSamplesRequested.exchange(false, std::memory_order_acq_rel)) {
+                g_cpuSamples.clear();
+                g_ioSamples.clear();
+                g_audioWorkerSamples.clear();
+                g_audioWorkerActiveUntil.clear();
+                g_loggedAudioWorkers.clear();
+                g_aiCpuSamples.clear();
             }
-        }
 
-        if (!onBattery && !recentlyResumed && !inGamingLockdown) {
-            MEMORYSTATUSEX mem;
-            mem.dwLength = sizeof(mem);
-            if (GlobalMemoryStatusEx(&mem)) {
-                double freePercent =
-                    (static_cast<double>(mem.ullAvailPhys) / mem.ullTotalPhys) * 100.0;
-                auto now = std::chrono::steady_clock::now();
-
-                bool shouldClean = false;
-                std::wstring reason;
-
-                auto elapsedSinceTrigger =
-                    std::chrono::duration_cast<std::chrono::seconds>(
-                        now - g_lastTriggerCleanTime)
-                        .count();
-                bool triggerCooldownElapsed =
-                    elapsedSinceTrigger >= kTriggerCooldownSec;
-
-                // Hysteresis: ensure consumed RAM has meaningfully increased since last cleanup
-                bool ramGrowthConditionMet = true;
-                DWORDLONG lastAvail = g_lastCleanAvailPhys.load(std::memory_order_relaxed);
-                if (lastAvail != 0) {
-                    if (mem.ullAvailPhys + kMinRamGrowthForReevaluationBytes > lastAvail) {
-                        ramGrowthConditionMet = false;
-                    }
-                }
-
-                SystemHardwareProfile hw = GetHardwareProfile();
-                double effectiveFreeRamThreshold = GetEffectiveRamThreshold(
-                    settings.freeRamThresholdPercent, hw.totalRamGb, /*isTieredHogs=*/false);
-                double effectiveTieredThreshold = GetEffectiveRamThreshold(
-                    settings.freeRamThresholdPercent, hw.totalRamGb, /*isTieredHogs=*/true);
-
-                // Smart threshold trigger
-                bool hogsOnly = false;
-                if (!isWarmupPass && (settings.cleanMode == CleanMode::SmartThreshold ||
-                                      settings.cleanMode == CleanMode::SmartAndPeriodic)) {
-                    if (freePercent <= effectiveFreeRamThreshold &&
-                        triggerCooldownElapsed && ramGrowthConditionMet) {
-                        shouldClean = true;
-                        hogsOnly = false;
-                        wchar_t buf[160];
-                        swprintf_s(buf, L"[%s: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB)]",
-                                   (settings.freeRamThresholdPercent <= 0) ? L"Auto Standard Threshold" : L"Custom Standard Threshold",
-                                   freePercent, effectiveFreeRamThreshold, hw.totalRamGb);
-                        reason = buf;
-                        g_lastTriggerCleanTime = now;
-                    } else if (settings.enableTieredRamThreshold &&
-                               freePercent <= effectiveTieredThreshold &&
-                               triggerCooldownElapsed && ramGrowthConditionMet) {
-                        shouldClean = true;
-                        hogsOnly = true;
-                        wchar_t buf[160];
-                        swprintf_s(
-                            buf,
-                            L"[%s: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB, Inactive Hogs Only)]",
-                            (settings.freeRamThresholdPercent <= 0) ? L"Auto Tiered Threshold" : L"Custom Tiered Threshold",
-                            freePercent, effectiveTieredThreshold, hw.totalRamGb);
-                        reason = buf;
-                        g_lastTriggerCleanTime = now;
-                    }
-                }
-
-                // 2. Periodic timer trigger (gated on memory pressure).
-                if (!shouldClean && !isWarmupPass &&
-                    (settings.cleanMode == CleanMode::Periodic ||
-                     settings.cleanMode == CleanMode::SmartAndPeriodic)) {
-                    auto elapsedMinutes =
-                        std::chrono::duration_cast<std::chrono::minutes>(
-                            now - g_lastPeriodicCleanTime)
-                            .count();
-                    if (elapsedMinutes >= settings.periodicIntervalMinutes) {
-                        if (freePercent <= effectiveFreeRamThreshold) {
-                            shouldClean = true;
-                            hogsOnly = false;
-                            wchar_t buf[160];
-                            swprintf_s(buf,
-                                       L"[Periodic Trigger: %d min interval (Free RAM %.1f%% "
-                                       L"<= %.1f%%)]",
-                                       settings.periodicIntervalMinutes, freePercent,
-                                       effectiveFreeRamThreshold);
-                            reason = buf;
+            // Slow-path debounce: wait for focus stabilization before running tree discovery and CPU sampling
+            ULONGLONG lastFocusTick =
+                g_lastFocusChangeTick.load(std::memory_order_acquire);
+            if (lastFocusTick != 0) {
+                ULONGLONG nowTick = GetTickCount64();
+                if (nowTick >= lastFocusTick) {
+                    ULONGLONG elapsedMs = nowTick - lastFocusTick;
+                    if (elapsedMs < 1500) {
+                        DWORD waitMs = static_cast<DWORD>(1500 - elapsedMs);
+                        DWORD waitRes = WaitForSingleObject(g_stopEvent, waitMs);
+                        if (waitRes == WAIT_OBJECT_0) {
+                            break;
                         }
-                        g_lastPeriodicCleanTime = now;
                     }
                 }
+            }
 
-                // Idle trigger: sweeps on entering idle state with minimum cooldown and memory pressure check
-                DWORD idleSec = GetSystemIdleSeconds();
-                DWORD idleThresholdSec =
-                    static_cast<DWORD>(settings.idleThresholdMinutes) * 60;
-                bool isSystemIdle = (idleSec >= idleThresholdSec);
+            DWORD fgPid = GetForegroundProcessId();
+            if (fgPid != 0) {
+                UpdateForegroundBoost(fgPid, settings);
+            }
 
-                if (!shouldClean && !isWarmupPass && settings.enableIdleBoost && isSystemIdle &&
-                    triggerCooldownElapsed) {
-                    auto elapsedSinceIdleClean =
-                        std::chrono::duration_cast<std::chrono::minutes>(
-                            now - g_lastIdleCleanTime)
+            bool recentlyResumed = false;
+            ULONGLONG resumeTick = g_lastResumeTick.load(std::memory_order_acquire);
+            if (resumeTick != 0) {
+                ULONGLONG nowTick = GetTickCount64();
+                if (nowTick >= resumeTick && (nowTick - resumeTick) < 30000) {
+                    recentlyResumed = true;
+                }
+            }
+
+            static bool s_lastOnBatteryState = false;
+            if (onBattery != s_lastOnBatteryState) {
+                s_lastOnBatteryState = onBattery;
+                if (onBattery) {
+                    LogEvent(LogCategory::Power, LogDetailLevel::Minimal,
+                             L"Battery power or Energy Saver active. Background throttling and memory cleanups paused.");
+                } else {
+                    LogEvent(LogCategory::Power, LogDetailLevel::Minimal,
+                             L"AC power restored. Resuming background optimization and throttling engine.");
+                }
+            }
+
+            if (!onBattery && !recentlyResumed) {
+                UpdateAiProcessActivity(settings);
+                ApplyBackgroundThrottling(settings, GetForegroundProcessId());
+            } else if (onBattery || recentlyResumed) {
+                RestoreAllThrottledProcesses();
+            }
+
+            bool inGamingLockdown =
+                IsGamingLockdownActive(fgPid, std::chrono::steady_clock::now(),
+                                       settings.gameAltTabGracePeriodSeconds);
+            static bool s_lastGamingLockdownState = false;
+            if (inGamingLockdown != s_lastGamingLockdownState) {
+                s_lastGamingLockdownState = inGamingLockdown;
+                if (inGamingLockdown) {
+                    LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
+                             L"Gaming Lockdown active: RAM calculation and trimming cycles suspended.");
+                } else {
+                    LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
+                             L"Gaming Lockdown released: resuming normal memory management.");
+                }
+            }
+
+            if (!onBattery && !recentlyResumed && !inGamingLockdown) {
+                MEMORYSTATUSEX mem;
+                mem.dwLength = sizeof(mem);
+                if (GlobalMemoryStatusEx(&mem)) {
+                    double freePercent =
+                        (static_cast<double>(mem.ullAvailPhys) / mem.ullTotalPhys) * 100.0;
+                    auto now = std::chrono::steady_clock::now();
+
+                    bool shouldClean = false;
+                    std::wstring reason;
+
+                    auto elapsedSinceTrigger =
+                        std::chrono::duration_cast<std::chrono::seconds>(
+                            now - g_lastTriggerCleanTime)
                             .count();
-                    int idleIntervalMin =
-                        (std::max)(10, settings.periodicIntervalMinutes);
-                    if (!g_wasIdle || elapsedSinceIdleClean >= idleIntervalMin) {
-                        if (freePercent <= effectiveFreeRamThreshold) {
+                    bool triggerCooldownElapsed =
+                        elapsedSinceTrigger >= kTriggerCooldownSec;
+
+                    // Hysteresis: ensure consumed RAM has meaningfully increased since last cleanup
+                    bool ramGrowthConditionMet = true;
+                    DWORDLONG lastAvail = g_lastCleanAvailPhys.load(std::memory_order_relaxed);
+                    if (lastAvail != 0) {
+                        if (mem.ullAvailPhys + kMinRamGrowthForReevaluationBytes > lastAvail) {
+                            ramGrowthConditionMet = false;
+                        }
+                    }
+
+                    SystemHardwareProfile hw = GetHardwareProfile();
+                    double effectiveFreeRamThreshold = GetEffectiveRamThreshold(
+                        settings.freeRamThresholdPercent, hw.totalRamGb, /*isTieredHogs=*/false);
+                    double effectiveTieredThreshold = GetEffectiveRamThreshold(
+                        settings.freeRamThresholdPercent, hw.totalRamGb, /*isTieredHogs=*/true);
+
+                    // Smart threshold trigger
+                    bool hogsOnly = false;
+                    if (!isWarmupPass && (settings.cleanMode == CleanMode::SmartThreshold ||
+                                          settings.cleanMode == CleanMode::SmartAndPeriodic)) {
+                        if (freePercent <= effectiveFreeRamThreshold &&
+                            triggerCooldownElapsed && ramGrowthConditionMet) {
                             shouldClean = true;
                             hogsOnly = false;
                             wchar_t buf[160];
-                            swprintf_s(buf,
-                                       L"[Idle Trigger: idle for %u min (Free RAM %.1f%% <= "
-                                       L"%.1f%%)]",
-                                       idleSec / 60, freePercent,
-                                       effectiveFreeRamThreshold);
+                            swprintf_s(buf, L"[%s: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB)]",
+                                       (settings.freeRamThresholdPercent <= 0) ? L"Auto Standard Threshold" : L"Custom Standard Threshold",
+                                       freePercent, effectiveFreeRamThreshold, hw.totalRamGb);
                             reason = buf;
-                            g_lastIdleCleanTime = now;
+                            g_lastTriggerCleanTime = now;
+                        } else if (settings.enableTieredRamThreshold &&
+                                   freePercent <= effectiveTieredThreshold &&
+                                   triggerCooldownElapsed && ramGrowthConditionMet) {
+                            shouldClean = true;
+                            hogsOnly = true;
+                            wchar_t buf[160];
+                            swprintf_s(
+                                buf,
+                                L"[%s: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB, Inactive Hogs Only)]",
+                                (settings.freeRamThresholdPercent <= 0) ? L"Auto Tiered Threshold" : L"Custom Tiered Threshold",
+                                freePercent, effectiveTieredThreshold, hw.totalRamGb);
+                            reason = buf;
                             g_lastTriggerCleanTime = now;
                         }
                     }
-                }
 
-                // 4. Critical emergency safety: if free RAM drops to <= 10.0%,
-                // intervene immediately even during the first cycle.
-                if (!shouldClean && freePercent <= 10.0 && triggerCooldownElapsed) {
-                    shouldClean = true;
-                    hogsOnly = false;
-                    wchar_t buf[128];
-                    swprintf_s(buf, L"[Critical Emergency: Free RAM %.1f%% <= 10.0%%]",
-                               freePercent);
-                    reason = buf;
-                    g_lastTriggerCleanTime = now;
-                }
+                    // 2. Periodic timer trigger (gated on memory pressure).
+                    if (!shouldClean && !isWarmupPass &&
+                        (settings.cleanMode == CleanMode::Periodic ||
+                         settings.cleanMode == CleanMode::SmartAndPeriodic)) {
+                        auto elapsedMinutes =
+                            std::chrono::duration_cast<std::chrono::minutes>(
+                                now - g_lastPeriodicCleanTime)
+                                .count();
+                        if (elapsedMinutes >= settings.periodicIntervalMinutes) {
+                            if (freePercent <= effectiveFreeRamThreshold) {
+                                shouldClean = true;
+                                hogsOnly = false;
+                                wchar_t buf[160];
+                                swprintf_s(buf,
+                                           L"[Periodic Trigger: %d min interval (Free RAM %.1f%% "
+                                           L"<= %.1f%%)]",
+                                           settings.periodicIntervalMinutes, freePercent,
+                                           effectiveFreeRamThreshold);
+                                reason = buf;
+                            }
+                            g_lastPeriodicCleanTime = now;
+                        }
+                    }
 
-                if (!isSystemIdle) {
-                    g_wasIdle = false;
-                } else if (shouldClean) {
-                    g_wasIdle = true;
-                }
+                    // Idle trigger: sweeps on entering idle state with minimum cooldown and memory pressure check
+                    DWORD idleSec = GetSystemIdleSeconds();
+                    DWORD idleThresholdSec =
+                        static_cast<DWORD>(settings.idleThresholdMinutes) * 60;
+                    bool isSystemIdle = (idleSec >= idleThresholdSec);
 
-                if (shouldClean) {
-                    PerformMemoryCleanup(reason.c_str(), /*allowWorkingSetTrim=*/true,
-                                         hogsOnly, /*forceHardTrim=*/false);
+                    if (!shouldClean && !isWarmupPass && settings.enableIdleBoost && isSystemIdle &&
+                        triggerCooldownElapsed) {
+                        auto elapsedSinceIdleClean =
+                            std::chrono::duration_cast<std::chrono::minutes>(
+                                now - g_lastIdleCleanTime)
+                                .count();
+                        int idleIntervalMin =
+                            (std::max)(10, settings.periodicIntervalMinutes);
+                        if (!g_wasIdle || elapsedSinceIdleClean >= idleIntervalMin) {
+                            if (freePercent <= effectiveFreeRamThreshold) {
+                                shouldClean = true;
+                                hogsOnly = false;
+                                wchar_t buf[160];
+                                swprintf_s(buf,
+                                           L"[Idle Trigger: idle for %u min (Free RAM %.1f%% <= "
+                                           L"%.1f%%)]",
+                                           idleSec / 60, freePercent,
+                                           effectiveFreeRamThreshold);
+                                reason = buf;
+                                g_lastIdleCleanTime = now;
+                                g_lastTriggerCleanTime = now;
+                            }
+                        }
+                    }
+
+                    // 4. Critical emergency safety: if free RAM drops to <= 10.0%,
+                    // intervene immediately even during the first cycle.
+                    if (!shouldClean && freePercent <= 10.0 && triggerCooldownElapsed) {
+                        shouldClean = true;
+                        hogsOnly = false;
+                        wchar_t buf[128];
+                        swprintf_s(buf, L"[Critical Emergency: Free RAM %.1f%% <= 10.0%%]",
+                                   freePercent);
+                        reason = buf;
+                        g_lastTriggerCleanTime = now;
+                    }
+
+                    if (!isSystemIdle) {
+                        g_wasIdle = false;
+                    } else if (shouldClean) {
+                        g_wasIdle = true;
+                    }
+
+                    if (shouldClean) {
+                        PerformMemoryCleanup(reason.c_str(), /*allowWorkingSetTrim=*/true,
+                                             hogsOnly, /*forceHardTrim=*/false);
+                    }
                 }
             }
+
+            isWarmupPass = false;
+
+            DWORD waitSec = (DWORD)std::clamp(settings.checkIntervalSec, 1, 60);
+            DWORD waitRes =
+                WaitForMultipleObjects(2, waitHandles, FALSE, waitSec * 1000);
+
+            if (waitRes == WAIT_OBJECT_0) {
+                break;
+            } else if (waitRes == WAIT_OBJECT_0 + 1) {
+                ResetEvent(g_wakeEvent);
+            }
         }
-
-        isWarmupPass = false;
-
-        DWORD waitSec = (DWORD)std::clamp(settings.checkIntervalSec, 1, 60);
-        DWORD waitRes =
-            WaitForMultipleObjects(2, waitHandles, FALSE, waitSec * 1000);
-
-        if (waitRes == WAIT_OBJECT_0) {
-            break;
-        } else if (waitRes == WAIT_OBJECT_0 + 1) {
-            ResetEvent(g_wakeEvent);
-        }
+    } catch (const std::exception& ex) {
+        Wh_Log(L"[SmartOptimizer] Fatal exception in MemoryOptimizerWorker: %S",
+               ex.what());
+    } catch (...) {
+        Wh_Log(L"[SmartOptimizer] Fatal unhandled exception in MemoryOptimizerWorker");
     }
 
     {
@@ -4663,15 +4905,6 @@ static void LoadSettings() {
     } else {
         g_settings.foregroundPriorityLevel = ForegroundPrioritySetting::AboveNormal;
     }
-
-    // Synchronize lock-free atomics for hook thread fast-path
-    g_fastProBalanceEnabled.store(g_settings.enableProBalance,
-                                  std::memory_order_release);
-    g_fastForegroundPriority.store(
-        (g_settings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
-            ? HIGH_PRIORITY_CLASS
-            : ABOVE_NORMAL_PRIORITY_CLASS,
-        std::memory_order_release);
 
     g_settings.enableForegroundCpuSets =
         Wh_GetIntSetting(L"enableForegroundCpuSets") != 0;
@@ -4730,6 +4963,9 @@ static void LoadSettings() {
 
     int capMb = (int)Wh_GetIntSetting(L"electronMemoryCapMb");
     g_settings.electronMemoryCapMb = std::clamp(capMb, 100, 4000);
+
+    int startupGrace = (int)Wh_GetIntSetting(L"processStartupGraceSeconds");
+    g_settings.processStartupGraceSeconds = std::clamp(startupGrace, 1, 60);
 
     // Section 3: Hardware & Workload Protection
     g_settings.enableSmartAiOptimization =
@@ -4968,16 +5204,7 @@ void WhTool_ModUninit() {
             SetEvent(g_stopEvent);
         }
         if (g_workerThread && g_workerThread->joinable()) {
-            // 3-second timeout before detach to prevent hanging during unload
-            HANDLE hThread = g_workerThread->native_handle();
-            DWORD waitRes = WaitForSingleObject(hThread, 3000);
-            if (waitRes == WAIT_OBJECT_0) {
-                g_workerThread->join();
-            } else {
-                LogEvent(LogCategory::Shutdown, LogDetailLevel::Minimal,
-                         L"Worker thread did not terminate within 3s; detaching to prevent hang.");
-                g_workerThread->detach();
-            }
+            g_workerThread->join();
         }
         g_workerThread.reset();
     }
@@ -4988,13 +5215,7 @@ void WhTool_ModUninit() {
             SetEvent(g_powerWakeEvent);
         }
         if (g_powerWorkerThread && g_powerWorkerThread->joinable()) {
-            HANDLE hPower = g_powerWorkerThread->native_handle();
-            DWORD waitRes = WaitForSingleObject(hPower, 2000);
-            if (waitRes == WAIT_OBJECT_0) {
-                g_powerWorkerThread->join();
-            } else {
-                g_powerWorkerThread->detach();
-            }
+            g_powerWorkerThread->join();
         }
         g_powerWorkerThread.reset();
     }
@@ -5045,6 +5266,7 @@ void WhTool_ModUninit() {
     {
         double sessionGb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
         double sessionStandbyGb = g_sessionBytesStandbyDemoted.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
+        // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
         std::wstring uptime =
             FormatUptime(g_modStartTime, std::chrono::steady_clock::now());
         size_t immuneCount = 0;
