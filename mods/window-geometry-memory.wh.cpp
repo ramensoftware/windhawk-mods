@@ -1748,6 +1748,24 @@ static int FindOriginMonitor(const std::vector<MonitorView>& monitors,
     return bestIndex;
 }
 
+// Which monitor a restore measures the work area and the maximize confirm
+// against. Normally the monitor the geometry was stored for: that is where the
+// window is going. With "Restore position" off the window stays where it opened,
+// so the answer is the monitor the composed rectangle landed on -- clamping
+// against the stored monitor instead would drag the window across the desktop,
+// and the maximize confirm would wait for a monitor the window never reaches.
+// A rectangle that overlaps no monitor keeps the stored one: a window that opened
+// off-screen is the case the clamp exists for.
+static int RestoreClampMonitor(const std::vector<MonitorView>& monitors,
+                               int storedIndex, const GeoRect& composed,
+                               bool restorePosition) {
+    if (restorePosition || storedIndex < 0) {
+        return storedIndex;
+    }
+    int landed = FindOriginMonitor(monitors, composed);
+    return landed >= 0 ? landed : storedIndex;
+}
+
 // Whether a monitor with this identity is absent from the given set. "Gone" is
 // the case that overrides everything else: it is the one situation where a
 // window's placement is not a preference but a problem.
@@ -2922,7 +2940,7 @@ static bool g_diagnosticsLog = false;
 // once looked complete while the lines being looked for were missing from it, which
 // cost a round of diagnosis. It identifies a verified behaviour, not every text
 // revision, so a run can be tied to the field result it belongs to.
-static constexpr PCWSTR kJournalBuild = L"r23-2026-10-16";
+static constexpr PCWSTR kJournalBuild = L"r24-2026-10-16";
 
 // The journal flag has to be known before the store is loaded, because the load
 // itself journals a line. Reading it only in ApplySettingsOnEventThread -- which
@@ -3448,10 +3466,14 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
     // "Restore size" off the window keeps its own size, which can be larger than
     // the remembered one, so clamping the remembered rectangle first could leave
     // the rectangle handed to the window hanging past the edge of the work area.
-    bool clamped = ShouldClampRect(target, monitor.workRect,
-                                   !exactConfiguration);
+    //
+    // It is also measured against the monitor the window is actually going to be
+    // on, which is not the stored one while the position is left alone.
+    const MonitorView& placed = g_monitors[(size_t)RestoreClampMonitor(
+        g_monitors, resolution.index, target, identity.restorePosition)];
+    bool clamped = ShouldClampRect(target, placed.workRect, !exactConfiguration);
     if (clamped) {
-        target = ClampRectToWorkArea(target, monitor.workRect);
+        target = ClampRectToWorkArea(target, placed.workRect);
     }
 
     bool maximize = entry->state == L"maximized";
@@ -3493,7 +3515,9 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
         L" dpiRatio=" +
         FormatDpiRatio(entry->dpiAtSave, (unsigned)GetDpiForWindow(hwnd)));
 
-    IssueApply(hwnd, identity, target, currentRect, maximize, monitor.pixelRect);
+    // The maximize confirm compares against the same monitor, for the same reason:
+    // it has to be the monitor the window is on, not the one it was saved on.
+    IssueApply(hwnd, identity, target, currentRect, maximize, placed.pixelRect);
 }
 
 // --- Display-change relayout pass -------------------------------------------
@@ -4246,11 +4270,10 @@ static void ApplySettingsOnEventThread() {
 
     RefreshDiagnosticsSetting();
 
-    // Relayout compares against the arrangement that was there before, so
-    // applying the settings starts from the arrangement in front of the user now:
-    // a display change from before the save is not a reason to rescue every open
-    // window. The hooks are idempotent, so this is safe on every save.
-    g_lastKnownMonitors = g_monitors;
+    // The hooks are idempotent, so this is safe on every save. The relayout
+    // baseline deliberately is not reset here: a save within half a second of a
+    // display change would make the debounced pass compare the new arrangement
+    // with itself and skip the rescue. It is set where the thread starts.
     InstallHooks();
 
     if (g_allowlistIsEmpty) {
@@ -4409,6 +4432,11 @@ static DWORD WINAPI EventThreadProc(LPVOID /*parameter*/) {
     g_messageWindow.store(hwnd);
 
     RefreshMonitorViews();
+    // The arrangement the relayout pass compares against. Taken once, here, so
+    // that a display change arriving before (or during) the first settings apply
+    // is still a change: a later compare against the same snapshots is what the
+    // 500 ms debounce is for.
+    g_lastKnownMonitors = g_monitors;
     RefreshDiagnosticsSetting();   // must precede the load: the load journals
     AppendDiagnosticsJournal(std::wstring(L"MOD build=") + kJournalBuild);
     LoadGeometryStore();
