@@ -2,11 +2,11 @@
 // @id              middle-click-new-tab
 // @name            Middle Click New Tab
 // @description     Middle-click the empty tab strip area of File Explorer or Notepad to open a new tab
-// @version         1.0.0
+// @version         1.0.3
 // @author          venasataa
 // @github          https://github.com/venasataa
 // @homepage        https://venasataa.github.io
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -lshlwapi
 // ==/WindhawkMod==
 
@@ -14,6 +14,7 @@
 
 // ==WindhawkModReadme==
 /*
+
 This mod adds the browser-style behavior of opening a new tab when the mouse
 wheel (middle button) is clicked on the empty part of the tab strip, i.e. the
 area where the tabs are located, but not on a tab itself.
@@ -25,22 +26,19 @@ Only two apps are supported, and the mod ignores clicks everywhere else:
 
 How it works:
 
-- A low-level mouse hook only records the click position and posts it to a
-  worker thread. No hit testing or other blocking work is done inside the
-  hook, so input is never delayed.
+- The mod runs as a standalone Windhawk Tool, ensuring it executes in a single 
+  instance and doesn't inject multiple hooks into different Explorer processes.
+- A dedicated low-level mouse hook thread records the click position and immediately 
+  posts it to an isolated UI Automation worker thread. Input is never delayed.
 - The worker thread uses UI Automation to find out what was clicked. If the
   point is inside a tab strip (a Tab control / TabView) but not on a tab
-  item and not on a strip button (scroll arrows, caption buttons), the mod
-  sends the app's new tab shortcut to the clicked window.
+  item and not on a strip button, the mod sends the app's new tab shortcut.
 - Areas that are visually part of the tab strip row but are not descendants
-  of the TabView element in the UIA tree (for example the title bar drag
-  region to the right of the add button) are detected by a fallback check:
-  the tab strip container is located in the window, and any point on the
-  same horizontal row is accepted.
-- Middle clicking an actual tab is left untouched, so the native
-  "close tab" behavior keeps working.
-- The TabView "add" button is also accepted: middle clicking it opens a new
-  tab just like a left click would.
+  of the TabView element in the UIA tree are detected by a row fallback check.
+- Middle clicking an actual tab is left untouched, so the native "close tab" 
+  behavior keeps working perfectly.
+
+![Middle Click New Tab Demo](https://raw.githubusercontent.com/venasataa/windhawk-mod-assets/refs/heads/main/middle-click-new-tab.gif)
 */
 // ==/WindhawkModReadme==
 
@@ -49,26 +47,29 @@ How it works:
 #include <oleauto.h>
 #include <shlwapi.h>
 #include <uiautomation.h>
+#include <cwchar>
 
+// Thread IDs and handles
 DWORD g_workerThreadId = 0;
 HANDLE g_workerThread = nullptr;
 
+DWORD g_hookThreadId = 0;
+HANDLE g_hookThread = nullptr;
+
+// UI Automation interfaces
 IUIAutomation* g_pAutomation = nullptr;
 IUIAutomationTreeWalker* g_pControlWalker = nullptr;
 
 ////////////////////////////////////////////////////////////
-// Target apps and their new tab shortcuts.
+// Target applications and shortcut key dispatch
 
-// Returns the virtual key of the app's new tab shortcut, or 0 if the window
-// does not belong to a supported app.
 WORD GetNewTabKeyForWindow(HWND hWnd) {
     DWORD dwProcessId = 0;
     if (!GetWindowThreadProcessId(hWnd, &dwProcessId)) {
         return 0;
     }
 
-    HANDLE hProcess =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
     if (!hProcess) {
         return 0;
     }
@@ -114,14 +115,14 @@ void SendCtrlKey(WORD vk) {
 }
 
 ////////////////////////////////////////////////////////////
-// UI Automation hit test, runs on the worker thread only.
+// UI Automation Hit-Testing (Executed exclusively on the worker thread)
 
 enum class HitResult {
-    Undecided,     // neither a tab, a button nor the strip container
-    OnTab,         // a tab item: leave the native middle-click behavior
-    OnAddButton,   // the TabView add ("plus") button
-    OnOtherButton, // caption/scroll and other strip buttons
-    InContainer,   // inside the tab strip container, but not on a tab/button
+    Undecided,     
+    OnTab,         
+    OnAddButton,   
+    OnOtherButton, 
+    InContainer,   
 };
 
 bool IsTabItemElement(IUIAutomationElement* pElement) {
@@ -140,7 +141,6 @@ bool IsTabItemElement(IUIAutomationElement* pElement) {
             return true;
         }
     }
-
     return false;
 }
 
@@ -153,7 +153,6 @@ bool IsTabStripContainerElement(IUIAutomationElement* pElement) {
 
     BSTR className = nullptr;
     if (SUCCEEDED(pElement->get_CurrentClassName(&className)) && className) {
-        // Note: "TabViewItem" must not be treated as the container.
         bool isContainer = !StrStrIW(className, L"TabViewItem") &&
                            (StrStrIW(className, L"TabView") ||
                             StrStrIW(className, L"TabStrip"));
@@ -162,11 +161,9 @@ bool IsTabStripContainerElement(IUIAutomationElement* pElement) {
             return true;
         }
     }
-
     return false;
 }
 
-// 0 = not a button, 1 = the add ("plus") button, 2 = some other button.
 int GetButtonKind(IUIAutomationElement* pElement) {
     CONTROLTYPEID controlType = 0;
     if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
@@ -184,23 +181,18 @@ int GetButtonKind(IUIAutomationElement* pElement) {
         }
         SysFreeString(automationId);
     }
-
     return kind;
 }
 
-// Finds the bounding rectangle of the tab strip container (TabView) in the
-// window: first by UIA control type, then by the WinUI class name fallback.
 bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip) {
     IUIAutomationElement* pRoot = nullptr;
-    if (FAILED(g_pAutomation->ElementFromHandle(hRootWnd, &pRoot)) ||
-        !pRoot) {
+    if (FAILED(g_pAutomation->ElementFromHandle(hRootWnd, &pRoot)) || !pRoot) {
         return false;
     }
 
     bool found = false;
     IUIAutomationElement* pTabStrip = nullptr;
 
-    // 1) By control type: the TabView container reports UIA_TabControlTypeId.
     VARIANT varControlType;
     VariantInit(&varControlType);
     varControlType.vt = VT_I4;
@@ -208,19 +200,14 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip) {
 
     IUIAutomationCondition* pCondition = nullptr;
     if (SUCCEEDED(g_pAutomation->CreatePropertyCondition(
-            UIA_ControlTypePropertyId, varControlType, &pCondition)) &&
-        pCondition) {
-        if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pCondition,
-                                       &pTabStrip)) &&
-            pTabStrip) {
+            UIA_ControlTypePropertyId, varControlType, &pCondition)) && pCondition) {
+        if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pCondition, &pTabStrip)) && pTabStrip) {
             found = true;
         }
         pCondition->Release();
     }
     VariantClear(&varControlType);
 
-    // 2) Fallback by class name (WinUI 2 / WinUI 3 TabView), for apps where
-    //    the container does not report the Tab control type (e.g. Notepad).
     if (!found) {
         static const WCHAR* kTabViewClassNames[] = {
             L"Windows.UI.Xaml.Controls.TabView",
@@ -236,22 +223,15 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip) {
             IUIAutomationCondition* pClassCondition = nullptr;
             if (varClassName.bstrVal &&
                 SUCCEEDED(g_pAutomation->CreatePropertyCondition(
-                    UIA_ClassNamePropertyId, varClassName,
-                    &pClassCondition)) &&
-                pClassCondition) {
-                if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants,
-                                               pClassCondition,
-                                               &pTabStrip)) &&
-                    pTabStrip) {
+                    UIA_ClassNamePropertyId, varClassName, &pClassCondition)) && pClassCondition) {
+                if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pClassCondition, &pTabStrip)) && pTabStrip) {
                     found = true;
                 }
                 pClassCondition->Release();
             }
             VariantClear(&varClassName);
 
-            if (found) {
-                break;
-            }
+            if (found) break;
         }
     }
 
@@ -267,10 +247,6 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip) {
     return result;
 }
 
-// Fallback for areas that are visually part of the tab strip row but are not
-// descendants of the TabView element in the UIA tree (e.g. the title bar drag
-// region to the right of the add button in File Explorer): accept any point
-// on the same horizontal row as the tab strip container.
 bool IsPointOnTabStripRow(HWND hRootWnd, POINT pt) {
     RECT rcTabStrip;
     if (!FindTabStripRect(hRootWnd, &rcTabStrip)) {
@@ -289,9 +265,6 @@ bool IsPointOnTabStripRow(HWND hRootWnd, POINT pt) {
     return pt.x >= rcWindow.left && pt.x <= rcWindow.right;
 }
 
-// Returns true if the point is on the empty area of a tab strip (or on the
-// TabView add button), and false if it's on a tab, on a strip button, or
-// outside the tab strip row.
 bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
     IUIAutomationElement* pElement = nullptr;
     if (FAILED(g_pAutomation->ElementFromPoint(pt, &pElement)) || !pElement) {
@@ -309,8 +282,7 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
         }
 
         if (int buttonKind = GetButtonKind(pCurrent)) {
-            hit = (buttonKind == 1) ? HitResult::OnAddButton
-                                    : HitResult::OnOtherButton;
+            hit = (buttonKind == 1) ? HitResult::OnAddButton : HitResult::OnOtherButton;
             break;
         }
 
@@ -320,8 +292,7 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
         }
 
         IUIAutomationElement* pParent = nullptr;
-        HRESULT hrParent =
-            g_pControlWalker->GetParentElement(pCurrent, &pParent);
+        HRESULT hrParent = g_pControlWalker->GetParentElement(pCurrent, &pParent);
         pCurrent->Release();
         pCurrent = SUCCEEDED(hrParent) ? pParent : nullptr;
     }
@@ -341,85 +312,66 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
             return false;
 
         case HitResult::Undecided:
-            // E.g. the title bar drag region next to the tabs.
             return IsPointOnTabStripRow(hRootWnd, pt);
     }
-
     return false;
 }
 
 void HandleMiddleClick(POINT pt) {
     HWND hWnd = WindowFromPoint(pt);
-    if (!hWnd) {
-        return;
-    }
+    if (!hWnd) return;
 
     HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-    if (!hRootWnd) {
-        hRootWnd = hWnd;
-    }
+    if (!hRootWnd) hRootWnd = hWnd;
 
     WORD newTabKey = GetNewTabKeyForWindow(hRootWnd);
-    if (!newTabKey) {
-        return;
-    }
-
-    if (!IsEmptyTabStripAtPoint(pt, hRootWnd)) {
-        return;
-    }
-
-    // The shortcut goes to the foreground window; make sure it's the
-    // clicked window.
-    if (GetForegroundWindow() != hRootWnd) {
+    if (!newTabKey) return;
+    if (!IsEmptyTabStripAtPoint(pt, hRootWnd)) return;
+    
+    HWND hForeground = GetForegroundWindow();
+    if (hForeground != hRootWnd) {
         if (!SetForegroundWindow(hRootWnd)) {
-            return;
+            DWORD foreThreadId = GetWindowThreadProcessId(hForeground, nullptr);
+            DWORD currThreadId = GetCurrentThreadId();
+            if (foreThreadId != currThreadId) {
+                AttachThreadInput(currThreadId, foreThreadId, TRUE);
+                SetForegroundWindow(hRootWnd);
+                AttachThreadInput(currThreadId, foreThreadId, FALSE);
+            }
         }
     }
-
+    
     SendCtrlKey(newTabKey);
 }
 
 ////////////////////////////////////////////////////////////
-// Worker thread. The low-level hook only posts the click position here,
-// so no blocking work is done inside the hook itself.
-
-LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && wParam == WM_MBUTTONDOWN) {
-        MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
-PostThreadMessage(g_workerThreadId, WM_APP + 1, (WPARAM)pMouseStruct->pt.x, (LPARAM)pMouseStruct->pt.y);
-    }
-
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
-}
+// Thread 1: UI Automation (Worker Thread)
 
 DWORD WINAPI WorkerThread(LPVOID lpParameter) {
     HANDLE hReadyEvent = (HANDLE)lpParameter;
-
     g_workerThreadId = GetCurrentThreadId();
 
     HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     bool comInitialized = SUCCEEDED(hrCom);
-
+    
     if (comInitialized) {
-        if (FAILED(CoCreateInstance(__uuidof(CUIAutomation), nullptr,
-                                    CLSCTX_INPROC_SERVER,
-                                    __uuidof(IUIAutomation),
-                                    (void**)&g_pAutomation)) ||
-            !g_pAutomation) {
-            g_pAutomation = nullptr;
-        } else if (FAILED(
-                       g_pAutomation->get_ControlViewWalker(
-                           &g_pControlWalker))) {
-            g_pControlWalker = nullptr;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&g_pAutomation)) && g_pAutomation) {
+            if (FAILED(g_pAutomation->get_ControlViewWalker(&g_pControlWalker))) {
+                g_pControlWalker = nullptr;
+            }
         }
     }
 
-    HHOOK mouseHook =
-        SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+    // CRITICAL: Force creation of the message queue before signaling readiness!
+    // PostThreadMessage requires the target thread to have a message queue, which is 
+    // normally only created when GetMessage is called. Without PeekMessage, clicks 
+    // will be lost because PostThreadMessage fails silently.
+    MSG msg;
+    PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
+    // Signal the main mod thread that COM and UIA are initialized
     SetEvent(hReadyEvent);
 
-    MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
         if (msg.hwnd == nullptr && msg.message == WM_APP) {
             PostQuitMessage(0);
@@ -440,67 +392,265 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
         DispatchMessage(&msg);
     }
 
-    if (mouseHook) {
-        UnhookWindowsHookEx(mouseHook);
-    }
+    if (g_pControlWalker) g_pControlWalker->Release();
+    if (g_pAutomation) g_pAutomation->Release();
 
-    if (g_pControlWalker) {
-        g_pControlWalker->Release();
-        g_pControlWalker = nullptr;
-    }
-    if (g_pAutomation) {
-        g_pAutomation->Release();
-        g_pAutomation = nullptr;
-    }
-
-    if (comInitialized) {
-        CoUninitialize();
-    }
-
+    if (comInitialized) CoUninitialize();
     return 0;
 }
 
-void WorkerThreadInit() {
-    if (g_workerThread) {
-        return;
-    }
+////////////////////////////////////////////////////////////
+// Thread 2: Low-level mouse hook (Lightweight implementation)
 
-    HANDLE hReadyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!hReadyEvent) {
-        return;
+LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && wParam == WM_MBUTTONDOWN) {
+        MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
+        PostThreadMessage(g_workerThreadId, WM_APP + 1, (WPARAM)(LONG_PTR)pMouseStruct->pt.x, (LPARAM)(LONG_PTR)pMouseStruct->pt.y);
     }
-
-    g_workerThread =
-        CreateThread(nullptr, 0, WorkerThread, hReadyEvent, 0, nullptr);
-    if (g_workerThread) {
-        WaitForSingleObject(hReadyEvent, INFINITE);
-    }
-
-    CloseHandle(hReadyEvent);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-void WorkerThreadUninit() {
-    if (!g_workerThread) {
-        return;
+DWORD WINAPI HookThread(LPVOID lpParameter) {
+    HANDLE hReadyEvent = (HANDLE)lpParameter;
+    g_hookThreadId = GetCurrentThreadId();
+
+    HHOOK mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+
+    // Signal that the hook was successfully installed
+    SetEvent(hReadyEvent);
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (msg.hwnd == nullptr && msg.message == WM_APP) {
+            PostQuitMessage(0);
+            continue;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
-    PostThreadMessage(GetThreadId(g_workerThread), WM_APP, 0, 0);
-    WaitForSingleObject(g_workerThread, INFINITE);
-    CloseHandle(g_workerThread);
-    g_workerThread = nullptr;
+    if (mouseHook) {
+        UnhookWindowsHookEx(mouseHook);
+    }
+    return 0;
 }
 
 ////////////////////////////////////////////////////////////
-// Windhawk mod entry points.
+// Windhawk Tool mod callbacks
+
+BOOL WhTool_ModInit() {
+    // Initialize and start the UI Automation thread
+    HANDLE hWorkerReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (hWorkerReady) {
+        g_workerThread = CreateThread(nullptr, 0, WorkerThread, hWorkerReady, 0, nullptr);
+        if (g_workerThread) {
+            WaitForSingleObject(hWorkerReady, INFINITE);
+        }
+        CloseHandle(hWorkerReady);
+    }
+
+    // Initialize and start the isolated mouse hook thread
+    HANDLE hHookReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (hHookReady) {
+        g_hookThread = CreateThread(nullptr, 0, HookThread, hHookReady, 0, nullptr);
+        if (g_hookThread) {
+            WaitForSingleObject(hHookReady, INFINITE);
+        }
+        CloseHandle(hHookReady);
+    }
+    
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+}
+
+void WhTool_ModUninit() {
+    // Terminate the mouse hook thread
+    if (g_hookThread) {
+        PostThreadMessage(g_hookThreadId, WM_APP, 0, 0);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+    }
+
+    // Terminate the UIA worker thread
+    if (g_workerThread) {
+        PostThreadMessage(g_workerThreadId, WM_APP, 0, 0);
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    ExitThread(0);
+}
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    WorkerThreadInit();
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +\
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    WorkerThreadUninit();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
