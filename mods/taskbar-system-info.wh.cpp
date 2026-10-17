@@ -4,7 +4,7 @@
 // @name:uk-UA      Системний монітор панелі завдань
 // @description     CPU, GPU, RAM and VRAM on the Windows 11 taskbar, with temperatures, history graphs, adaptive layouts and live dragging.
 // @description:uk-UA CPU, GPU, RAM і VRAM на панелі завдань Windows 11: температури, графіки історії, адаптивні макети та перетягування живого віджета.
-// @version         1.7.1
+// @version         1.7.2
 // @author          Yevhenii Starychenko
 // @github          https://github.com/starychenko
 // @homepage        https://github.com/starychenko/windhawk-taskbar-system-info
@@ -248,6 +248,12 @@ collide with another mapped element, the reservation is undone and the mod uses
 a free gap. **Reserved space gap** defaults to 8 logical pixels, with an effective
 minimum of 6. The mod does not reorder individual app buttons.
 
+On an automatically sized dock, reservation can first grow the button group's
+container. The widget appears only after the arranged controls confirm that it
+fits; a rejected expansion restores the original margin. Root padding and
+borders are excluded from the usable area. Taskbar Styler themes can target
+`Grid#WindhawkTaskbarSystemInfo`; adaptive scaling uses an inner `Viewbox`.
+
 Left and centered taskbar alignment use the same placement map. Separately drawn
 items or windows from another taskbar mod may need manual positioning or a
 compatibility fix. A particular Taskbar Styler preset still needs a live check.
@@ -434,7 +440,7 @@ placement errors and sensor mismatches. It does not print every sample.
 
 ## Compatibility
 
-The current source is **1.7.1**, built with Windhawk **1.7.3** for Windows 11.
+The current source is **1.7.2**, built with Windhawk **1.7.3** for Windows 11.
 The widget targets horizontal primary and secondary taskbars. x64 and ARM64
 builds pass; ARM64 hardware has not been checked.
 
@@ -832,7 +838,7 @@ HANDLE g_placementRetryWakeEvent = nullptr;
 [[clang::no_destroy]] std::optional<std::thread> g_placementRetryWorker;
 
 [[clang::no_destroy]] Grid g_widget{nullptr};
-[[clang::no_destroy]] Viewbox g_widgetHost{nullptr};
+[[clang::no_destroy]] Grid g_widgetHost{nullptr};
 event_token g_rootSizeChangedToken{};
 event_token g_rootLayoutUpdatedToken{};
 [[clang::no_destroy]] Grid g_rootGrid{nullptr};
@@ -4648,6 +4654,8 @@ struct TaskbarPlacement {
     double width = 0.0;
     double reserved = 0.0;
 };
+std::optional<TaskbarPlacement> g_dockReservationTrial;
+bool g_dockReservationActive = false;
 constexpr double kPlacementTolerance = 0.25;
 
 bool Intersects(double left, double right, const OccupiedInterval& item) {
@@ -4775,7 +4783,8 @@ TaskbarPlacement ResolvePlacementForSize(const ModSettings& settings,
                                          double desiredWidth,
                                          double minimumScale,
                                          double contentHeight,
-                                         bool allowReservation = true) {
+                                         bool allowReservation = true,
+                                         bool reservationOnly = false) {
     if (!geometry.ready || !std::isfinite(geometry.width) ||
         geometry.width <= 0) {
         return {};
@@ -4854,9 +4863,11 @@ TaskbarPlacement ResolvePlacementForSize(const ModSettings& settings,
                 bestPrevious = previous;
             }
         };
-        for (auto slot :
-             FreeWidgetIntervals(geometry.width, geometry.occupied)) {
-            consider(slot, false);
+        if (!reservationOnly) {
+            for (auto slot :
+                 FreeWidgetIntervals(geometry.width, geometry.occupied)) {
+                consider(slot, false);
+            }
         }
         if (settings.reserveSpace && allowReservation && hasButtons &&
             maximumShift > 0) {
@@ -4886,13 +4897,14 @@ WidgetPlacement ResolveWidgetPlacement(const ModSettings& settings,
                                        const TaskbarGeometry& geometry,
                                        PreferredPosition preferred,
                                        const WidgetFontMetrics& font,
-                                       bool allowReservation = true) {
+                                       bool allowReservation = true,
+                                       bool reservationOnly = false) {
     auto legacy = BuildWidgetLayout(settings, font, WidgetLayoutMode::Full,
                                     kWidgetHeight, true);
     auto evaluate = [&](WidgetLayout layout, double minimumScale) {
         auto placement = ResolvePlacementForSize(
             settings, geometry, preferred, layout.width, minimumScale,
-            layout.height, allowReservation);
+            layout.height, allowReservation, reservationOnly);
         layout.scale = placement.width > 0
                            ? std::min({1.0, placement.width / layout.width,
                                        geometry.height > 0
@@ -5032,6 +5044,21 @@ bool VisibleInTaskbar(FrameworkElement element, FrameworkElement searchRoot) {
     }
     return false;
 }
+Thickness TaskbarContentInsets(FrameworkElement root) {
+    if (auto grid = root.try_as<Grid>()) {
+        auto padding = grid.Padding();
+        auto border = grid.BorderThickness();
+        return {padding.Left + border.Left, padding.Top + border.Top,
+                padding.Right + border.Right, padding.Bottom + border.Bottom};
+    }
+    if (auto control = root.try_as<Control>()) {
+        auto padding = control.Padding();
+        auto border = control.BorderThickness();
+        return {padding.Left + border.Left, padding.Top + border.Top,
+                padding.Right + border.Right, padding.Bottom + border.Bottom};
+    }
+    return {};
+}
 TaskbarGeometry MeasureTaskbarGeometry(
     FrameworkElement root,
     FrameworkElement repeater,
@@ -5041,8 +5068,11 @@ TaskbarGeometry MeasureTaskbarGeometry(
     if (!root) {
         return result;
     }
-    result.width = root.ActualWidth();
-    result.height = root.ActualHeight();
+    // Children are arranged inside the Grid's padding and border. Use that
+    // same origin for obstacles, placement margins and the move projection.
+    auto insets = TaskbarContentInsets(root);
+    result.width = root.ActualWidth() - insets.Left - insets.Right;
+    result.height = root.ActualHeight() - insets.Top - insets.Bottom;
     result.ready = std::isfinite(result.width) && result.width > 0 &&
                    std::isfinite(result.height) && result.height > 0;
     auto searchRoot = root;
@@ -5073,6 +5103,8 @@ TaskbarGeometry MeasureTaskbarGeometry(
             auto rect = element.TransformToVisual(root).TransformBounds(
                 Rect{0, 0, static_cast<float>(element.ActualWidth()),
                      static_cast<float>(element.ActualHeight())});
+            rect.X -= static_cast<float>(insets.Left);
+            rect.Y -= static_cast<float>(insets.Top);
             if (!std::isfinite(rect.X) || !std::isfinite(rect.Width) ||
                 !std::isfinite(rect.Y) || !std::isfinite(rect.Height)) {
                 result.ready = false;
@@ -5093,17 +5125,80 @@ TaskbarGeometry MeasureTaskbarGeometry(
 std::vector<OccupiedInterval> g_lastBaselineObstacles;
 double g_lastGeometryWidth = 0.0;
 double g_lastGeometryHeight = 0.0;
+double g_lastDockAvailableWidth = 0.0;
 struct PlacementInputs {
     TaskbarGeometry geometry;
     int width, leftOffset, fontSize, reserveGap;
-    bool reserveSpace, reservationRejected;
+    bool reserveSpace, reservationRejected, dockReservationActive;
     std::wstring fontFamily;
     std::optional<double> savedFraction;
     double baselineMargin;
     uint64_t capacityRevision;
+    double dockAvailableWidth;
     bool operator==(const PlacementInputs&) const = default;
 };
 std::optional<PlacementInputs> g_lastPlacementInputs;
+struct ReservationInputs {
+    int width, leftOffset, fontSize, reserveGap;
+    bool reserveSpace;
+    std::wstring fontFamily;
+    std::optional<double> savedFraction;
+    uint64_t capacityRevision;
+    bool operator==(const ReservationInputs&) const = default;
+};
+std::optional<ReservationInputs> g_lastReservationInputs;
+
+// A content-sized dock has no free gap until reserving space grows its frame.
+// Only propose a bounded trial here; the next arranged XAML pass must prove it
+// fits before the widget becomes visible. Never change the theme's own widths.
+double AutoSizedDockAvailableWidth() {
+    auto frame = VisualTreeHelper::GetParent(g_rootGrid).try_as<FrameworkElement>();
+    auto xaml = g_rootGrid.XamlRoot();
+    if (!frame || !xaml || !g_taskItemsRepeater ||
+        !std::isnan(g_rootGrid.Width()) || !std::isnan(frame.Width()) ||
+        (g_rootGrid.HorizontalAlignment() == HorizontalAlignment::Stretch &&
+         frame.HorizontalAlignment() == HorizontalAlignment::Stretch)) {
+        return 0;
+    }
+    auto rootMargin = g_rootGrid.Margin();
+    auto frameMargin = frame.Margin();
+    auto insets = TaskbarContentInsets(g_rootGrid);
+    double available = xaml.Size().Width;
+    if (auto parent = VisualTreeHelper::GetParent(frame).try_as<FrameworkElement>()) {
+        auto parentInsets = TaskbarContentInsets(parent);
+        available = std::min(available, parent.ActualWidth() - parentInsets.Left - parentInsets.Right);
+    }
+    auto frameInsets = TaskbarContentInsets(frame);
+    double rootInsetsWidth = insets.Left + insets.Right;
+    double frameToContent = frameInsets.Left + frameInsets.Right +
+                            std::max(0.0, rootMargin.Left) +
+                            std::max(0.0, rootMargin.Right) + rootInsetsWidth;
+    // Each maximum constrains a different box. Convert all three to root
+    // content coordinates before selecting the tightest available width.
+    double limit = std::min({
+        available - std::max(0.0, frameMargin.Left) -
+            std::max(0.0, frameMargin.Right) - frameToContent,
+        g_rootGrid.MaxWidth() - rootInsetsWidth,
+        frame.MaxWidth() - frameToContent});
+    return std::isfinite(limit) ? std::max(0.0, limit) : 0;
+}
+std::optional<TaskbarPlacement> AutoSizedDockReservation(
+    const ModSettings& settings, const TaskbarGeometry& geometry,
+    PreferredPosition preferred, double limit) {
+    if (!geometry.ready) return std::nullopt;
+    auto expanded = geometry;
+    expanded.width = limit;
+    if (!std::isfinite(expanded.width) || expanded.width <= geometry.width + kPlacementTolerance) {
+        return std::nullopt;
+    }
+    // Adaptive layouts can exceed the configured full-layout preference.
+    // Try measured layouts against the real limit, considering only slots
+    // created by reservation: a synthetic free slot alone cannot grow a dock.
+    auto candidate = ResolveWidgetPlacement(settings, expanded, preferred,
+                                            MeasureWidgetFont(settings), true, true).placement;
+    return candidate.width > 0 && candidate.reserved > 0
+               ? std::optional{candidate} : std::nullopt;
+}
 
 void ApplyTaskbarPlacement(const ModSettings& settings) {
     if (!g_widgetHost || !g_rootGrid || g_applyingTaskbarPlacement) {
@@ -5134,9 +5229,21 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
     auto geometry = MeasureTaskbarGeometry(g_rootGrid, g_taskItemsRepeater,
                                            ownMargin ? g_reservedMargin : 0.0,
                                            CurrentGeometryCache());
+    double dockAvailableWidth = AutoSizedDockAvailableWidth();
+    if (!ownMargin || g_reservedMargin <= 0 || dockAvailableWidth <= 0) {
+        g_dockReservationActive = false;
+    }
+    auto savedFraction = SavedTaskbarFraction(g_taskbarWindow.load());
+    ReservationInputs reservationInputs{settings.width, settings.leftOffset,
+        settings.fontSize, settings.reserveGap, settings.reserveSpace,
+        settings.fontFamily, savedFraction, g_capacityBudgetRevision};
+    bool reservationInputsChanged = !g_lastReservationInputs ||
+                                    *g_lastReservationInputs != reservationInputs;
+    g_lastReservationInputs = std::move(reservationInputs);
     bool changed = geometry.occupied.size() != g_lastBaselineObstacles.size() ||
                    std::abs(geometry.width - g_lastGeometryWidth) > 0.5 ||
-                   std::abs(geometry.height - g_lastGeometryHeight) > 0.5;
+                   std::abs(geometry.height - g_lastGeometryHeight) > 0.5 ||
+                   std::abs(dockAvailableWidth - g_lastDockAvailableWidth) > 0.5;
     if (!changed) {
         for (size_t i = 0; i < geometry.occupied.size(); ++i) {
             const auto& a = geometry.occupied[i];
@@ -5148,7 +5255,10 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             }
         }
     }
-    if (g_rejectionNeedsBaseline) {
+    if (reservationInputsChanged) {
+        g_reservationRejected = false;
+        g_rejectionNeedsBaseline = false;
+    } else if (g_rejectionNeedsBaseline) {
         g_rejectionNeedsBaseline = false;
     } else if (changed) {
         g_reservationRejected = false;
@@ -5156,6 +5266,35 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
     g_lastBaselineObstacles = geometry.occupied;
     g_lastGeometryWidth = geometry.width;
     g_lastGeometryHeight = geometry.height;
+    g_lastDockAvailableWidth = dockAvailableWidth;
+    if (g_dockReservationTrial) {
+        auto trial = *g_dockReservationTrial;
+        g_dockReservationTrial.reset();
+        auto arranged = MeasureTaskbarGeometry(g_rootGrid, g_taskItemsRepeater,
+                                               0, CurrentGeometryCache());
+        if (reservationInputsChanged || !settings.reserveSpace || !ownMargin || !arranged.ready ||
+            !PlacementFits(arranged, {trial.left, trial.width, 0}) ||
+            !ReservedControlsFit(arranged)) {
+            bool restoreMargin = ownMargin && g_reservedMargin != 0;
+            g_reservationRejected = !reservationInputsChanged;
+            g_rejectionNeedsBaseline = restoreMargin;
+            if (restoreMargin) {
+                g_taskItemsRepeater.Margin(margin);
+            }
+            g_reservedMargin = 0;
+            g_dockReservationActive = false;
+            g_lastAppliedRepeaterMarginLeft.reset();
+            g_lastPlacementInputs.reset();
+            // An external override already removed our margin. Writing that
+            // same value does not schedule layout, so waiting would deadlock
+            // future settings-only retries behind an event that never arrives.
+            g_reservationAwaitingLayout = restoreMargin;
+            g_reservationRevision = g_layoutRevision;
+            return;
+        }
+        // The theme can stop being a dock while a trial awaits arrangement.
+        g_dockReservationActive = dockAvailableWidth > 0;
+    }
     // Validate the arranged result against its unshifted measurement. A styler
     // or layout manager need not move every button by the requested margin.
     if (ownMargin && g_reservedMargin > 0 &&
@@ -5171,6 +5310,7 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             // cannot reconstruct it when a centered/styled group moved less.
             g_taskItemsRepeater.Margin(margin);
             g_reservedMargin = 0;
+            g_dockReservationActive = false;
             g_lastAppliedRepeaterMarginLeft.reset();
             g_widgetHost.Visibility(Visibility::Collapsed);
             g_reservationAwaitingLayout = true;
@@ -5178,7 +5318,6 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             return;
         }
     }
-    auto savedFraction = SavedTaskbarFraction(g_taskbarWindow.load());
     PlacementInputs inputs{geometry,
                            settings.width,
                            settings.leftOffset,
@@ -5186,10 +5325,12 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
                            settings.reserveGap,
                            settings.reserveSpace,
                            g_reservationRejected,
+                           g_dockReservationActive,
                            settings.fontFamily,
                            savedFraction,
                            margin.Left,
-                           g_capacityBudgetRevision};
+                           g_capacityBudgetRevision,
+                           dockAvailableWidth};
     // Metric/clock text layout passes still validate the map, but do not rerun
     // the placement solver or touch XAML geometry when its inputs are
     // unchanged.
@@ -5201,7 +5342,23 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
                                 g_previousPlacementLeft.load(), savedFraction};
     auto resolved = ResolveWidgetPlacement(settings, geometry, preferred,
                                            MeasureWidgetFont(settings),
-                                           !g_reservationRejected);
+                                           !g_reservationRejected,
+                                           g_dockReservationActive);
+    if (resolved.placement.width == 0 && settings.reserveSpace &&
+        !g_reservationRejected && g_reservedMargin == 0) {
+        if (auto trial = AutoSizedDockReservation(settings, geometry, preferred, dockAvailableWidth)) {
+            g_widgetHost.Visibility(Visibility::Collapsed);
+            margin.Left += trial->reserved;
+            g_taskItemsRepeater.Margin(margin);
+            g_reservedMargin = trial->reserved;
+            g_lastAppliedRepeaterMarginLeft = margin.Left;
+            g_dockReservationTrial = trial;
+            g_reservationAwaitingLayout = true;
+            g_reservationRevision = g_layoutRevision;
+            g_lastPlacementInputs.reset();
+            return;
+        }
+    }
     auto placement = resolved.placement;
     ApplyWidgetGeometry(settings, resolved.layout);
     auto visibility =
@@ -5233,6 +5390,9 @@ void ApplyTaskbarPlacement(const ModSettings& settings) {
             g_taskItemsRepeater.Margin(margin);
         }
         g_reservedMargin = g_taskItemsRepeater.Margin().Left - base;
+        // A theme can become a dock while the visible widget still supplies
+        // enough width for the normal solver to reserve without a cold trial.
+        g_dockReservationActive = g_reservedMargin > 0 && dockAvailableWidth > 0;
         g_lastAppliedRepeaterMarginLeft =
             g_reservedMargin != 0
                 ? std::optional<double>{g_taskItemsRepeater.Margin().Left}
@@ -5781,9 +5941,12 @@ bool RemoveWidget() {
     g_lastAppliedRepeaterMarginLeft.reset();
     g_reservationAwaitingLayout = false;
     g_reservationRejected = false;
+    g_dockReservationTrial.reset();
+    g_dockReservationActive = false;
     g_rejectionNeedsBaseline = false;
     g_lastBaselineObstacles.clear();
     g_lastPlacementInputs.reset();
+    g_lastReservationInputs.reset();
     g_geometryCache.reset(); // Release cached XAML references and storage on their owning thread.
 
     if (g_rootGrid && g_widgetHost) {
@@ -5889,14 +6052,18 @@ bool InjectWidget(FrameworkElement taskbarFrame) {
 
     Grid widget;
     widget.IsHitTestVisible(false);
-    Viewbox host;
+    // Keep the public Grid selector used by Taskbar Styler themes. Scaling is
+    // an internal detail, so adaptive layouts don't break existing islands.
+    Grid host;
     host.Name(kWidgetName);
     host.IsHitTestVisible(false);
-    host.Stretch(Stretch::Uniform);
-    host.StretchDirection(StretchDirection::DownOnly);
     host.HorizontalAlignment(HorizontalAlignment::Left);
     host.VerticalAlignment(VerticalAlignment::Center);
-    host.Child(widget);
+    Viewbox scaler;
+    scaler.Stretch(Stretch::Uniform);
+    scaler.StretchDirection(StretchDirection::DownOnly);
+    scaler.Child(widget);
+    host.Children().Append(scaler);
     Canvas::SetZIndex(host, 10000);
     Grid::SetColumn(host, 0);
     Grid::SetColumnSpan(host,
@@ -7261,6 +7428,7 @@ struct TaskbarProjection {
     RECT panel{};
     double scale = 1.0;
     std::wstring key;
+    bool reservationOnly = false;
 };
 struct ScopedPhysicalDpi {
     DPI_AWARENESS_CONTEXT previous = SetThreadDpiAwarenessContext(
@@ -7277,6 +7445,7 @@ double ScreenPointToTaskbarX(const TaskbarProjection& projection, POINT point) {
 void ProbeTaskbarFrameGeometry(TaskbarProjection& probe,
                                FrameworkElement frame) {
     probe.geometry.ready = false;
+    probe.reservationOnly = false;
     if (!frame) {
         return;
     }
@@ -7286,8 +7455,14 @@ void ProbeTaskbarFrameGeometry(TaskbarProjection& probe,
     }
     auto repeater = FindDirectChildByName(root, L"TaskbarFrameRepeater");
     bool current = probe.window == g_taskbarWindow.load();
+    // Capture this on the taskbar's UI thread along with the geometry. The
+    // editor thread must not read XAML or mutable reservation state directly.
+    bool ownMargin = current && repeater && g_lastAppliedRepeaterMarginLeft &&
+        std::abs(repeater.Margin().Left - *g_lastAppliedRepeaterMarginLeft) < .01;
+    probe.reservationOnly = ownMargin && g_reservedMargin > 0 &&
+                           g_dockReservationActive;
     probe.geometry =
-        MeasureTaskbarGeometry(root, repeater, current ? g_reservedMargin : 0,
+        MeasureTaskbarGeometry(root, repeater, ownMargin ? g_reservedMargin : 0,
                                current ? CurrentGeometryCache() : nullptr);
     auto xaml = root.XamlRoot();
     if (!xaml || !probe.geometry.ready) {
@@ -7306,6 +7481,9 @@ void ProbeTaskbarFrameGeometry(TaskbarProjection& probe,
     }
     if (auto content = xaml.Content().try_as<UIElement>()) {
         auto point = root.TransformToVisual(content).TransformPoint({0, 0});
+        auto insets = TaskbarContentInsets(root);
+        point.X += static_cast<float>(insets.Left);
+        point.Y += static_cast<float>(insets.Top);
         probe.origin.x += static_cast<LONG>(std::lround(point.X * probe.scale));
         probe.origin.y += static_cast<LONG>(std::lround(point.Y * probe.scale));
     }
@@ -7895,7 +8073,8 @@ void UpdateMoveCandidate(
         target.key.empty()
             ? WidgetPlacement{}
             : ResolveWidgetPlacement(*settings, target.geometry, preferred,
-                                     g_moveEditor->visual.fontMetrics);
+                                     g_moveEditor->visual.fontMetrics, true,
+                                     target.reservationOnly);
     auto candidate = resolved.placement;
     if (pointer && candidate.width > 0) {
         left = PreferredLeftForWidget(preferred, target.geometry,
@@ -8333,7 +8512,7 @@ void BeginMoveEditor() {
         *settings, projection.geometry,
         {g_moveEditor->preferredLeft, g_previousPlacementLeft.load(),
          SavedTaskbarFraction(target)},
-        g_moveEditor->visual.fontMetrics);
+        g_moveEditor->visual.fontMetrics, true, projection.reservationOnly);
     g_moveEditor->candidate = initial.placement;
     if (initial.placement.width > 0) {
         g_moveEditor->preferredLeft = initial.placement.left;

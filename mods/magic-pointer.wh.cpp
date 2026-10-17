@@ -2,7 +2,7 @@
 // @id              magic-pointer
 // @name            Magic Pointer
 // @description     Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini AI about it
-// @version         1.0.1
+// @version         1.0.2
 // @author          Rono
 // @github          https://github.com/rono-zeroseven
 // @include         windhawk.exe
@@ -17,9 +17,11 @@ The Magic Pointer from Google's Googlebooks, on Windows: an AI mouse cursor.
 Wiggle the mouse, then point at anything on screen, select it, and ask Gemini
 about it, search it with Google Lens, copy its text or translate it.
 
-![Magic Pointer with a sample selection and question](https://raw.githubusercontent.com/rono-zeroseven/windhawk-mods/0a3b052e38da866ce5312754be9bec0e5364caea/assets/magic-pointer/preview.png)
+[GitHub](https://github.com/rono-zeroseven) · Discord: **rono007**
 
-*Native preview with a sample selection; browser actions work without an API key.*
+![Magic Pointer in action](https://raw.githubusercontent.com/rono-zeroseven/magic-pointer/v1.0.2/assets/magic-pointer/preview.gif)
+
+*Animated preview of Magic Pointer.*
 
 ## How to use
 
@@ -37,10 +39,12 @@ on its own when the mouse stays still for a while.
 
 ## Gemini
 
-Add a free Gemini API key (https://aistudio.google.com/apikey) in the
-settings and answers stream right into the card. You can ask follow-up
-questions. Enable **Smart suggestions** to have Gemini suggest up to three
-things to do with each selection; this is off by default.
+Add an API key from [Google AI Studio](https://aistudio.google.com/apikey) in the
+mod's Windhawk settings to receive answers directly in the card. You can ask
+follow-up questions.
+
+**Smart suggestions** are optional and disabled by default. When enabled,
+Gemini suggests up to three things to do with each selection.
 Drag over an answer to select text, then press Ctrl+C or right-click to copy.
 The **Copy** button copies the whole answer, including while it is streaming.
 
@@ -140,12 +144,18 @@ in any app on the *Excluded apps* list (for example `RobloxPlayerBeta.exe`,
   interacting with elevated apps.
 * Works on every Windows version Windhawk runs on, on x64, ARM64 and 32-bit
   systems, and supports multiple monitors with per-monitor display scaling.
-* Shakes are detected from raw mouse input, so nothing runs while the mouse is
-  idle and the mouse itself is never slowed down.
+* The mod never blocks or rewrites your normal mouse input.
 * *Highlight what you point at* reads the layout of the app under the pointer
   through UI Automation, the accessibility API. Chromium-based browsers turn
   on their accessibility support when it's used, which costs a little memory.
   Turn it off if you prefer: click and drag always works.
+
+## Report a problem
+
+[Open an issue](https://github.com/rono-zeroseven/magic-pointer/issues) with your
+Windows version, Windhawk version, Magic Pointer version, and steps to reproduce
+the problem. Include screenshots when useful and remove private content.
+
 */
 // ==/WindhawkModReadme==
 
@@ -352,6 +362,7 @@ constexpr UINT WM_APP_GEMINI = WM_APP + 3;
 constexpr UINT WM_APP_OCR = WM_APP + 4;
 constexpr UINT WM_APP_BROWSER = WM_APP + 5;
 constexpr UINT WM_APP_TEMP_FILE = WM_APP + 6;
+constexpr UINT WM_APP_FOREGROUND = WM_APP + 7;
 
 constexpr int kHotkeyActivate = 1;
 constexpr int kHotkeyEscape = 2;
@@ -6005,14 +6016,8 @@ BOOL CALLBACK CollectBrowserWindow(HWND hwnd, LPARAM param) {
 
 void BringToFront(HWND window) {
     if (IsIconic(window)) ShowWindow(window, SW_RESTORE);
-    const HWND foreground = GetForegroundWindow();
-    const DWORD foregroundThread = foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-    const DWORD thisThread = GetCurrentThreadId();
-    const bool joined = foregroundThread && foregroundThread != thisThread &&
-                        AttachThreadInput(thisThread, foregroundThread, TRUE);
     BringWindowToTop(window);
     SetForegroundWindow(window);
-    if (joined) AttachThreadInput(thisThread, foregroundThread, FALSE);
 }
 
 std::vector<std::wstring> OpenGeminiComposerKeys(IUIAutomation* automation,
@@ -10222,6 +10227,11 @@ bool g_hoverValid;
 POINT g_lastRawPoint{LONG_MIN, LONG_MIN};
 HMONITOR g_shakeMonitor;
 float g_shakeDpiScale = 1.0f;
+HWINEVENTHOOK g_foregroundHook;
+HWND g_shakePollingWindow;
+std::wstring g_windhawkExecutable;
+std::wstring g_windhawkUiDirectory;
+constexpr UINT_PTR kShakePollingTimer = 1;
 
 HANDLE g_timer;
 bool g_timerArmed;
@@ -10622,6 +10632,98 @@ void OnHotkey(int id) {
     }
 }
 
+bool IsWindhawkUiWindow(HWND hwnd) {
+    if (!hwnd || g_windhawkExecutable.empty()) {
+        return false;
+    }
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    if (!processId || processId == GetCurrentProcessId()) {
+        return false;
+    }
+    const std::wstring path = ProcessPathOfWindow(hwnd);
+    return !path.empty() &&
+           (_wcsicmp(path.c_str(), g_windhawkExecutable.c_str()) == 0 ||
+            (!g_windhawkUiDirectory.empty() &&
+             path.size() > g_windhawkUiDirectory.size() &&
+             _wcsnicmp(path.c_str(), g_windhawkUiDirectory.c_str(),
+                       g_windhawkUiDirectory.size()) == 0));
+}
+
+void RefreshShakePolling() {
+    const HWND foreground = GetForegroundWindow();
+    const HWND target = g_settings.shake && !g_stopping &&
+                                IsWindhawkUiWindow(foreground)
+                            ? foreground
+                            : nullptr;
+    if (target == g_shakePollingWindow) {
+        return;
+    }
+    if (g_shakePollingWindow) {
+        KillTimer(g_messageWindow, kShakePollingTimer);
+        g_shakePollingWindow = nullptr;
+    }
+    g_shake.Clear();
+    g_lastRawPoint = {LONG_MIN, LONG_MIN};
+    if (target && g_messageWindow) {
+        // Sample only while Windhawk's UI is foreground, providing a fallback
+        // if background raw mouse input is unavailable. The normal handler
+        // deduplicates raw and sampled positions and keeps all safety checks.
+        if (SetTimer(g_messageWindow, kShakePollingTimer, 16, nullptr)) {
+            g_shakePollingWindow = target;
+        } else {
+            Wh_Log(L"Windhawk UI shake timer failed: %u", GetLastError());
+        }
+    }
+}
+
+void CALLBACK ForegroundChanged(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG,
+                                DWORD, DWORD) {
+    if (event == EVENT_SYSTEM_FOREGROUND && g_messageWindow && !g_stopping) {
+        PostMessageW(g_messageWindow, WM_APP_FOREGROUND, 0, 0);
+    }
+}
+
+void StopShakeMonitoring() {
+    if (g_foregroundHook) {
+        UnhookWinEvent(g_foregroundHook);
+        g_foregroundHook = nullptr;
+    }
+    if (g_shakePollingWindow) {
+        KillTimer(g_messageWindow, kShakePollingTimer);
+        g_shakePollingWindow = nullptr;
+    }
+    g_shake.Clear();
+    g_lastRawPoint = {LONG_MIN, LONG_MIN};
+}
+
+void ConfigureShakeMonitoring() {
+    if (!g_settings.shake || g_stopping) {
+        StopShakeMonitoring();
+        return;
+    }
+    if (g_windhawkExecutable.empty()) {
+        WCHAR executable[MAX_PATH];
+        const DWORD length = GetModuleFileNameW(nullptr, executable, ARRAYSIZE(executable));
+        if (length && length < ARRAYSIZE(executable)) {
+            g_windhawkExecutable.assign(executable, length);
+            const size_t slash = g_windhawkExecutable.find_last_of(L"\\/");
+            if (slash != std::wstring::npos) {
+                g_windhawkUiDirectory = g_windhawkExecutable.substr(0, slash + 1) + L"UI\\";
+            }
+        }
+    }
+    if (!g_foregroundHook) {
+        g_foregroundHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+            ForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+        if (!g_foregroundHook) {
+            Wh_Log(L"Foreground monitoring failed: %u", GetLastError());
+        }
+    }
+    RefreshShakePolling();
+}
+
 void OnDisplayChanged() {
     const double now = NowMs();
     DeactivatePointer(now, false);
@@ -10659,6 +10761,7 @@ void ApplySettings(const Settings& settings) {
     g_styleVersion++;
     g_cursors.Clear();
     g_shake.Configure(g_settings.sensitivity);
+    ConfigureShakeMonitoring();
     RegisterActivationHotkey();
     g_card.OnSettingsChanged(now);
 }
@@ -10727,6 +10830,7 @@ LRESULT CALLBACK LayerWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 }
 
 void Shutdown() {
+    StopShakeMonitoring();
     const double now = NowMs();
     DeactivatePointer(now, false);
     g_card.Destroy();
@@ -10756,6 +10860,20 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 
         case WM_HOTKEY:
             OnHotkey(static_cast<int>(wParam));
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == kShakePollingTimer && g_shakePollingWindow) {
+                if (GetForegroundWindow() != g_shakePollingWindow) {
+                    RefreshShakePolling();
+                } else {
+                    OnRawMouseInput();
+                }
+            }
+            return 0;
+
+        case WM_APP_FOREGROUND:
+            RefreshShakePolling();
             return 0;
 
         case WM_APP_SETTINGS: {
@@ -10853,6 +10971,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 
     auto fail = [&](PCWSTR what) {
         Wh_Log(L"%s failed: %u", what, GetLastError());
+        StopShakeMonitoring();
         if (g_messageWindow) {
             DestroyWindow(g_messageWindow);
             g_messageWindow = nullptr;
@@ -10899,6 +11018,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         Wh_Log(L"Couldn't create the overlay: %u", GetLastError());
     }
     g_shake.Configure(g_settings.sensitivity);
+    ConfigureShakeMonitoring();
     RegisterActivationHotkey();
     SetEvent(g_workerReadyEvent);
 

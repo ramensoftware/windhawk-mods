@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-custom-shortcuts
 // @name            Explorer Custom Shortcuts
-// @description     Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.
-// @version         1.6.0
+// @description     Customizable keyboard shortcuts for File Explorer: open terminal, copy paths, create files/folders, toggle hidden items, and launch apps with hotkeys.
+// @version         1.7.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
@@ -37,9 +37,11 @@ Adds customizable, app-style keyboard shortcuts to Windows File Explorer with pa
 
 ## Internal Explorer Commands
 
-You can assign any hotkey directly to built-in commands by setting the path to one of the following identifiers. 
+You can assign any hotkey directly to built-in commands by setting the path to one of the following identifiers.
 
-> **Tip:** All command names are completely **case-insensitive** (e.g., `internal:copyPath`, `internal:copypath`, and `internal:CopyPatH` all work identically).
+> **Prefixes:** Supports both `internal:` and shorthand `int:` (e.g. `int:copyPath` or `internal:copyPath`).
+>
+> **Tip:** All command names are completely **case-insensitive** (e.g., `internal:copyPath`, `internal:copypath`, `internal:CopyPatH`, and `INT:CopyPatH` all work identically).
 
 #### File & Folder Management
 | Command | Default Key | Description |
@@ -87,6 +89,8 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 | `internal:openTerminalAdmin` | `Ctrl + Shift + Alt + T` | Opens Terminal/PowerShell as Administrator. |
 | `internal:openCmd` | — | Opens the classic Command Prompt in the folder. |
 | `internal:openCmdAdmin` | — | Opens the classic Command Prompt as Administrator. |
+| `internal:openDirInCode` | — | Opens the active directory in VS Code as a workspace project, ignoring selections. |
+| `internal:openWithCode` | — | Opens selected items in VS Code (Max 10 folder windows, Max 50 files in one window). |
 
 > **Persistent Settings Notice:** Toggles for hidden files, extensions, and checkboxes flip the native Windows Explorer shell settings directly (`SHGetSetSettings`). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled.
 
@@ -94,18 +98,20 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 
 ### Available Tokens for Arguments & Examples
 
+* **`%%`** — Literal percent sign (`%`). Useful for passing environment variables or script arguments directly to shells like `cmd.exe /c` (e.g. `%%PATH%%`), or URL-encoded percent signs without triggering token expansion.
 * **`%f`** — All selected items as space-separated quoted paths (`"C:\a.txt" "C:\b.png"`).
 * **`%files`** — Selected regular files only (skips selected folders).
 * **`%folders`** — Selected folders only (skips selected regular files).
 * **`%1`** — Quoted path of the first selected file or directory (`"C:\a.txt"`).
-* **`%n`** — File or folder names only without absolute directory paths (`"a.txt"`).
-* **`%c`** — Total number of selected items as an integer (`3`). In loop modes, this resolves to `1`.
+* **`%n`** / **`%name`** — File or folder names only without absolute directory paths (`"a.txt"`).
+* **`%base`** / **`%basename`** — File names without extension (`"document"` from `"document.pdf"`, or `"LICENSE"` for extensionless files). Selected folders retain their full name without stripping dots (e.g. `"v1.2"`).
+* **`%c`** / **`%count`** — Total number of selected items as an integer (`3`). In loop modes, this resolves to `1`.
 * **`%ext`** — File extension of the first selected item (`.png`).
 * **`%s`** — Space-separated paths with **smart-quoting** (automatically adds double-quotes only to paths containing spaces).
-* **`%d`** — Active directory open in the current tab (`C:\Users\Name\Documents`). Virtual folders like *This PC* or *Recycle Bin* resolve to an empty string.
+* **`%d`** / **`%dir`** — Active directory open in the current tab (`C:\Users\Name\Documents`). Virtual folders like *This PC* or *Recycle Bin* resolve to an empty string.
 * **`%d_smart`** — Selected folder if one is highlighted; otherwise falls back to the current active directory.
 * **`%d_name`** — Folder name of the active tab only, without the full directory path (`Documents`).
-* **`%p`** — Parent directory path of the active tab.
+* **`%p`** / **`%parent`** — Parent directory path of the active tab.
 
 > **Shell Interpreter Security Notice:** Path tokens are quoted according to standard Windows CRT command-line (`argv`) rules. If arguments are passed to script interpreters (e.g. `cmd.exe /c` or `powershell.exe -Command`), parameters may be re-parsed by that interpreter. Use native binary arguments or pass paths directly to target programs.
 
@@ -119,6 +125,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
   * *Use Case:* Single-file image editors, batch converters, or per-file processing scripts.
 * **`loop_folders`**: Executes the application once per selected folder.
   * *Use Case:* Batch archiving folders individually or folder-specific terminal operations.
+  * *Note:* Directory tokens (`%d`, `%dir`, `%d_smart`, `%d_name`, and `%p`/`%parent`) resolve relative to each individual iterated folder rather than the active Explorer tab.
 
 ---
 
@@ -134,6 +141,8 @@ You can add your own shortcuts using these templates in the settings:
   * Path: `C:\Program Files\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
 * **Search with Everything** (Search current active directory)
   * Path: `C:\Program Files\Everything\Everything.exe` | Args: `"%d"` | Mode: `batch`
+* **Open in VS Code (Built-in)**
+  * Path: `internal:openDirInCode` | Mode: `batch`
 * **Open in VS Code**
   * Path: `code` | Args: `"%d_smart"` | Mode: `batch`
 * **Queue in VLC Media Player**
@@ -141,12 +150,11 @@ You can add your own shortcuts using these templates in the settings:
 
 ---
 
-### Comparison with Existing Mods
+### Comparison with Other Mods
 
-While related mods exist in the Windhawk repository, **Explorer Custom Shortcuts** provides a distinct, keyboard-first workflow engine:
-* **`explorer-command-bar`**: Adds visual custom toolbar buttons exclusively to the modern Windows 11 command bar. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across both classic and tabbed Explorer windows. It introduces specialized batch looping capabilities (`loop_files`, `loop_folders`), rich token expansions (`%n`, `%ext`, `%c`, `%files`, `%folders`), and context-aware suppression during inline edits.
-* **`keyboard-shortcut-actions`**: A general-purpose desktop/window hotkey dispatcher without Explorer context awareness. This mod parses active Explorer tab navigation, item selections, and folder paths directly into CLI parameters.
-* **`toggle-hidden-files` / `explorer-ctrln-newfile` / `explorer-ctrlq-new-folder`**: Single-purpose mods; here, internal shell actions are optional presets within a single hotkey table, allowing users to bind them to whatever key combinations they prefer without installing multiple separate hooks.
+* **`explorer-command-bar`** — Focuses on adding graphical toolbar buttons to the Windows 11 command bar. This mod is completely UI-less, designed specifically for low-latency keyboard workflows, batch looping (`loop_files`, `loop_folders`), and context-aware suppression during inline renames.
+* **`keyboard-shortcut-actions`** — Dispatches global desktop hotkeys without Explorer awareness. This mod inspects active tabs, selected items, and folder paths directly to dynamically expand arguments.
+* **Single-purpose mods** (`toggle-hidden-files`, `explorer-ctrln-newfile`, etc.) — Individual mods requiring separate installations. This mod combines those actions into a single configurable table using built-in commands (`int:` / `internal:`).
 
 ### Author & Attribution
 
@@ -179,10 +187,10 @@ While related mods exist in the Windhawk repository, **Explorer Custom Shortcuts
       $name: "Require Alt"
     - path: "internal:openTerminal"
       $name: "Executable Path or Internal Command"
-      $description: "Executable path, alias, or internal command. See the Details tab for the full list of built-in commands. (Note: toggle commands modify persistent Explorer settings)."
+      $description: "Executable path, alias, or internal command (supports 'internal:' or shorthand 'int:'). See the Details tab for the full list of built-in commands. (Note: toggle commands modify persistent Explorer settings)."
     - args: ""
       $name: "Arguments / Tokens"
-      $description: "Supported tokens: %f, %files, %folders, %1, %n, %c, %ext, %s, %d, %d_smart, %d_name, %p."
+      $description: "Supported tokens: %%, %f, %files, %folders, %1, %n / %name, %base / %basename, %c / %count, %ext, %s, %d / %dir, %d_smart, %d_name, %p / %parent."
     - mode: "batch"
       $name: "Launch Mode"
       $options:
@@ -328,6 +336,8 @@ While related mods exist in the Windhawk repository, **Explorer Custom Shortcuts
 #include <shared_mutex>
 #include <string>
 #include <vector>
+#include <string_view>
+#include <filesystem>
 
 #include <windhawk_utils.h>
 
@@ -421,19 +431,18 @@ std::wstring ResolveCommandPath(const std::wstring& command) {
     return expanded;
 }
 
+// Trims leading/trailing whitespace and quote characters in place.
+void TrimWhitespaceAndQuotes(std::wstring& s) {
+    auto keep = [](wchar_t ch) {
+        return !(iswspace(ch) || ch == L'"' || ch == L'\'');
+    };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), keep));
+    s.erase(std::find_if(s.rbegin(), s.rend(), keep).base(), s.end());
+}
+
 int ParseKey(std::wstring keyStr) {
     // Trim leading whitespace and quotes
-    auto isTrimChar = [](wchar_t ch) {
-        return iswspace(ch) || ch == L'"' || ch == L'\'';
-    };
-    keyStr.erase(keyStr.begin(),
-                 std::find_if(keyStr.begin(), keyStr.end(),
-                              [&](wchar_t ch) { return !isTrimChar(ch); }));
-    // Trim trailing whitespace and quotes
-    keyStr.erase(std::find_if(keyStr.rbegin(), keyStr.rend(),
-                              [&](wchar_t ch) { return !isTrimChar(ch); })
-                     .base(),
-                 keyStr.end());
+    TrimWhitespaceAndQuotes(keyStr);
     // Convert to uppercase
     std::transform(keyStr.begin(), keyStr.end(), keyStr.begin(), ::towupper);
     if (keyStr.empty())
@@ -665,6 +674,39 @@ std::wstring GetFileNamesOnly(const std::vector<std::wstring>& paths,
     return res;
 }
 
+std::wstring GetFileBaseNamesOnly(const std::vector<std::wstring>& paths,
+                                  bool forceQuotes = true) {
+    std::wstring res;
+    for (const auto& p : paths) {
+        if (!res.empty())
+            res += L" ";
+        PCWSTR namePtr = PathFindFileNameW(p.c_str());
+        std::wstring name = namePtr ? namePtr : L"";
+
+        DWORD attr = GetFileAttributesW(p.c_str());
+        bool isDirectory = (attr != INVALID_FILE_ATTRIBUTES &&
+                            (attr & FILE_ATTRIBUTE_DIRECTORY));
+
+        // Only strip extensions from regular files, preserving directory names
+        if (!isDirectory) {
+            size_t dot = name.find_last_of(L'.');
+            // Only strip if dot exists and is NOT the first character
+            // (preserves dotfiles like .gitignore, and extensionless files like
+            // LICENSE)
+            if (dot != std::wstring::npos && dot > 0) {
+                name = name.substr(0, dot);
+            }
+        }
+
+        if (forceQuotes || name.find(L' ') != std::wstring::npos) {
+            res += SafeQuote(name);
+        } else {
+            res += name;
+        }
+    }
+    return res;
+}
+
 std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
     if (paths.empty())
         return L"";
@@ -839,65 +881,76 @@ std::wstring ExpandTokens(const std::wstring& pattern,
             continue;
         }
 
-        if (pattern.compare(i, 6, L"%files") == 0) {
+        // Helper lambda to match token at index i and advance past it
+        auto consume = [&](std::wstring_view token) {
+            if (pattern.compare(i, token.size(), token) != 0)
+                return false;
+            i += token.size();
+            return true;
+        };
+
+        // --- Escaped Literal Percent ---
+        if (consume(L"%%")) {
+            result.push_back(L'%');
+        }
+        // --- Files & Folders Collections ---
+        else if (consume(L"%files")) {
             result += JoinPaths(filesOnly, true);
-            i += 6;
-        } else if (pattern.compare(i, 8, L"%folders") == 0) {
+        } else if (consume(L"%folders")) {
             result += JoinPaths(foldersOnly, true);
-            i += 8;
-        } else if (pattern.compare(i, 8, L"%d_smart") == 0) {
+        }
+        // --- Directory Tokens (longest to shortest) ---
+        else if (consume(L"%d_smart")) {
             std::wstring smartDir =
                 !foldersOnly.empty() ? foldersOnly[0] : activeDir;
             if (!smartDir.empty() && smartDir.back() == L'\\')
                 smartDir += L'\\';
             result += smartDir;
-            i += 8;
-        } else if (pattern.compare(i, 7, L"%d_name") == 0) {
+        } else if (consume(L"%d_name")) {
             std::wstring dir = activeDir;
             while (!dir.empty() && dir.back() == L'\\')
                 dir.pop_back();
             PCWSTR namePtr = PathFindFileNameW(dir.c_str());
             result += (namePtr ? namePtr : L"");
-            i += 7;
-        } else if (pattern.compare(i, 4, L"%ext") == 0) {
-            result += GetFileExtension(allItems);
-            i += 4;
-        } else if (pattern.compare(i, 2, L"%f") == 0) {
-            result += JoinPaths(allItems, true);
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%1") == 0) {
-            result += allItems.empty() ? L"" : SafeQuote(allItems[0]);
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%n") == 0) {
-            result += GetFileNamesOnly(allItems, true);
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%c") == 0) {
-            result += std::to_wstring(allItems.size());
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%s") == 0) {
-            result += JoinPaths(allItems, false);
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%d") == 0) {
+        } else if (consume(L"%dir") || consume(L"%d")) {
             std::wstring activeWithTrailing = activeDir;
             if (!activeWithTrailing.empty() &&
                 activeWithTrailing.back() == L'\\')
                 activeWithTrailing += L'\\';
             result += activeWithTrailing;
-            i += 2;
-        } else if (pattern.compare(i, 2, L"%p") == 0) {
+        }
+        // --- Parent Directory ---
+        else if (consume(L"%parent") || consume(L"%p")) {
             std::wstring parent = activeDir;
             while (!parent.empty() && parent.back() == L'\\')
                 parent.pop_back();
             size_t slash = parent.find_last_of(L'\\');
-            if (slash == std::wstring::npos) {
-                result += std::wstring();
-            } else {
+            if (slash != std::wstring::npos) {
                 std::wstring p = parent.substr(0, slash);
                 if (p.length() == 2 && p[1] == L':')
                     p += L'\\';
                 result += p;
             }
-            i += 2;
+        }
+        // --- Names, Base Names & Extension ---
+        else if (consume(L"%basename") || consume(L"%base")) {
+            result += GetFileBaseNamesOnly(allItems, true);
+        } else if (consume(L"%name") || consume(L"%n")) {
+            result += GetFileNamesOnly(allItems, true);
+        } else if (consume(L"%ext")) {
+            result += GetFileExtension(allItems);
+        }
+        // --- Selection Counts ---
+        else if (consume(L"%count") || consume(L"%c")) {
+            result += std::to_wstring(allItems.size());
+        }
+        // --- Path Selections & Single Item ---
+        else if (consume(L"%f")) {
+            result += JoinPaths(allItems, true);
+        } else if (consume(L"%1")) {
+            result += allItems.empty() ? L"" : SafeQuote(allItems[0]);
+        } else if (consume(L"%s")) {
+            result += JoinPaths(allItems, false);
         } else {
             result.push_back(pattern[i++]);
         }
@@ -1364,7 +1417,36 @@ void LaunchTerminalHelper(const std::wstring& activeDir,
     }
 }
 
-void ExecuteInternalCommand(const std::wstring& command,
+// Finds VS Code executable (Code.exe), preferring the direct binary over
+// code.cmd.
+std::wstring FindVsCode() {
+    // 1. Try direct App Paths / PATH resolution for Code.exe
+    std::wstring exe = ResolveCommandPath(L"code.exe");
+    if (exe.find(L'\\') != std::wstring::npos &&
+        GetFileAttributesW(exe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return exe;
+    }
+
+    // 2. Fall back to code.cmd on PATH
+    std::wstring cmd = ResolveCommandPath(L"code.cmd");
+    if (cmd.find(L'\\') == std::wstring::npos) {
+        return std::wstring();
+    }
+
+    // 3. Resolve sibling <install>\Code.exe from <install>\bin\code.cmd
+    std::filesystem::path binCmdPath(cmd);
+    std::filesystem::path siblingExe =
+        binCmdPath.parent_path().parent_path() / L"Code.exe";
+
+    if (GetFileAttributesW(siblingExe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return siblingExe.wstring();
+    }
+
+    // 4. Fall back to the script only if Code.exe cannot be found
+    return cmd;
+}
+
+void ExecuteInternalCommand(const std::wstring& action,
                             HWND rootHwnd,
                             HWND capturedFocus) {
     // ==========================================
@@ -1372,7 +1454,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     // ==========================================
 
     // --- Create new Text File ---
-    if (_wcsicmp(command.c_str(), L"internal:newTextFile") == 0) {
+    if (_wcsicmp(action.c_str(), L"newTextFile") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             ShowActionToast(rootHwnd, L"Failed to create text file",
@@ -1435,7 +1517,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Create New Smart File (Plain Text / Code / Config) ---
-    if (_wcsicmp(command.c_str(), L"internal:newSmartFile") == 0) {
+    if (_wcsicmp(action.c_str(), L"newSmartFile") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             ShowActionToast(rootHwnd, L"Failed to create file",
@@ -1497,7 +1579,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Touch File / Folder (Update Last Modified Timestamp) ---
-    if (_wcsicmp(command.c_str(), L"internal:touchFile") == 0) {
+    if (_wcsicmp(action.c_str(), L"touchFile") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:touchFile: Failed to get active IShellView");
@@ -1562,7 +1644,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Create New Folder ---
-    if (_wcsicmp(command.c_str(), L"internal:newFolder") == 0) {
+    if (_wcsicmp(action.c_str(), L"newFolder") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:newFolder: Failed to get active IShellView");
@@ -1625,7 +1707,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Create Shortcut ---
-    if (_wcsicmp(command.c_str(), L"internal:createShortcut") == 0) {
+    if (_wcsicmp(action.c_str(), L"createShortcut") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             ShowActionToast(rootHwnd, L"Failed to create shortcut",
@@ -1703,7 +1785,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Pack Selected Items into "New Group" ---
-    if (_wcsicmp(command.c_str(), L"internal:packIntoFolder") == 0) {
+    if (_wcsicmp(action.c_str(), L"packIntoFolder") == 0) {
         Wh_Log(L"internal:packIntoFolder: Invoked.");
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
@@ -1806,7 +1888,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Bulk Duplicate (In-Place Copy) ---
-    if (_wcsicmp(command.c_str(), L"internal:bulkDuplicate") == 0) {
+    if (_wcsicmp(action.c_str(), L"bulkDuplicate") == 0) {
         Wh_Log(L"internal:bulkDuplicate: Invoked.");
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
@@ -1888,7 +1970,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     // ==========================================
 
     // --- Copy Path ---
-    if (_wcsicmp(command.c_str(), L"internal:copyPath") == 0) {
+    if (_wcsicmp(action.c_str(), L"copyPath") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:copyPath: Failed to get IShellView");
@@ -1931,7 +2013,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Copy Selected File Name ---
-    if (_wcsicmp(command.c_str(), L"internal:copyName") == 0) {
+    if (_wcsicmp(action.c_str(), L"copyName") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:copyName: Failed to get active IShellView");
@@ -1966,7 +2048,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Copy Unix/Forward-Slash Path ---
-    if (_wcsicmp(command.c_str(), L"internal:copyUnixPath") == 0) {
+    if (_wcsicmp(action.c_str(), L"copyUnixPath") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:copyUnixPath: Failed to get IShellView");
@@ -2012,7 +2094,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Copy Current Folder Path Directly ---
-    if (_wcsicmp(command.c_str(), L"internal:copyFolderPath") == 0) {
+    if (_wcsicmp(action.c_str(), L"copyFolderPath") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:copyFolderPath: Failed to get IShellView");
@@ -2041,7 +2123,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     // ==========================================
 
     // --- Show Properties ---
-    if (_wcsicmp(command.c_str(), L"internal:showProperties") == 0) {
+    if (_wcsicmp(action.c_str(), L"showProperties") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             ShowActionToast(rootHwnd, L"Failed to open Properties",
@@ -2087,7 +2169,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Open With Dialog ---
-    if (_wcsicmp(command.c_str(), L"internal:openWith") == 0) {
+    if (_wcsicmp(action.c_str(), L"openWith") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:openWith: Failed to get active IShellView");
@@ -2127,7 +2209,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Open Recycle Bin ---
-    if (_wcsicmp(command.c_str(), L"internal:openRecycleBin") == 0) {
+    if (_wcsicmp(action.c_str(), L"openRecycleBin") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(L"internal:openRecycleBin: Failed to get active IShellView");
@@ -2174,7 +2256,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Empty Recycle bin ---
-    if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
+    if (_wcsicmp(action.c_str(), L"emptyRecycleBin") == 0) {
         Wh_Log(L"internal:emptyRecycleBin invoked");
         SHQUERYRBINFO rbInfo = {sizeof(rbInfo)};
         if (SUCCEEDED(SHQueryRecycleBinW(nullptr, &rbInfo))) {
@@ -2213,7 +2295,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Open Parent Folder ---
-    if (_wcsicmp(command.c_str(), L"internal:openParentFolder") == 0) {
+    if (_wcsicmp(action.c_str(), L"openParentFolder") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
             Wh_Log(
@@ -2248,7 +2330,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Folder Options ---
-    if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
+    if (_wcsicmp(action.c_str(), L"folderOptions") == 0) {
         Wh_Log(L"internal:folderOptions: Opening Folder Options dialog");
         ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
         return;
@@ -2259,7 +2341,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     // ==========================================
 
     // --- Toggle Hidden Files ---
-    if (_wcsicmp(command.c_str(), L"internal:toggleHiddenFiles") == 0) {
+    if (_wcsicmp(action.c_str(), L"toggleHiddenFiles") == 0) {
         SHELLSTATE ss{};
         SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, FALSE);
         ss.fShowAllObjects = !ss.fShowAllObjects;
@@ -2273,7 +2355,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Toggle File Extensions ---
-    if (_wcsicmp(command.c_str(), L"internal:toggleFileExtensions") == 0) {
+    if (_wcsicmp(action.c_str(), L"toggleFileExtensions") == 0) {
         SHELLSTATE ss{};
         SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, FALSE);
         ss.fShowExtensions = !ss.fShowExtensions;
@@ -2287,7 +2369,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Toggle Checkboxes ---
-    if (_wcsicmp(command.c_str(), L"internal:toggleCheckboxes") == 0) {
+    if (_wcsicmp(action.c_str(), L"toggleCheckboxes") == 0) {
         SHELLSTATE ss{};
         SHGetSetSettings(&ss, SSF_AUTOCHECKSELECT, FALSE);
         ss.fAutoCheckSelect = !ss.fAutoCheckSelect;
@@ -2308,7 +2390,7 @@ void ExecuteInternalCommand(const std::wstring& command,
     // ==========================================
 
     // --- Open With Notepad ---
-    if (_wcsicmp(command.c_str(), L"internal:openWithNotepad") == 0) {
+    if (_wcsicmp(action.c_str(), L"openWithNotepad") == 0) {
         Wh_Log(L"internal:openWithNotepad: Invoked.");
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) {
@@ -2339,8 +2421,8 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Open Terminal Here ---
-    if (_wcsicmp(command.c_str(), L"internal:openTerminal") == 0 ||
-        _wcsicmp(command.c_str(), L"internal:openTerminalHere") == 0) {
+    if (_wcsicmp(action.c_str(), L"openTerminal") == 0 ||
+        _wcsicmp(action.c_str(), L"openTerminalHere") == 0) {
         Wh_Log(L"internal:openTerminal: Invoked.");
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         std::wstring activeDir = GetActiveFolderPath(psv);
@@ -2352,8 +2434,8 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Open Terminal Here (Admin/Elevated) ---
-    if (_wcsicmp(command.c_str(), L"internal:openTerminalAdmin") == 0 ||
-        _wcsicmp(command.c_str(), L"internal:openTerminalElevated") == 0) {
+    if (_wcsicmp(action.c_str(), L"openTerminalAdmin") == 0 ||
+        _wcsicmp(action.c_str(), L"openTerminalElevated") == 0) {
         Wh_Log(L"internal:openTerminalAdmin: Invoked.");
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         std::wstring activeDir = GetActiveFolderPath(psv);
@@ -2365,10 +2447,9 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- Open Command Prompt Here ---
-    if (_wcsicmp(command.c_str(), L"internal:openCmd") == 0 ||
-        _wcsicmp(command.c_str(), L"internal:openCmdAdmin") == 0) {
-        bool elevated =
-            (_wcsicmp(command.c_str(), L"internal:openCmdAdmin") == 0);
+    if (_wcsicmp(action.c_str(), L"openCmd") == 0 ||
+        _wcsicmp(action.c_str(), L"openCmdAdmin") == 0) {
+        bool elevated = (_wcsicmp(action.c_str(), L"openCmdAdmin") == 0);
 
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         std::wstring activeDir = GetActiveFolderPath(psv);
@@ -2402,7 +2483,115 @@ void ExecuteInternalCommand(const std::wstring& command,
         return;
     }
 
-    Wh_Log(L"Unknown internal command: %s", command.c_str());
+    // --- Open Current Directory in VS Code ---
+    if (_wcsicmp(action.c_str(), L"openDirInCode") == 0) {
+        Wh_Log(L"internal:openDirInCode: Invoked.");
+        std::wstring codePath = FindVsCode();
+
+        if (codePath.empty()) {
+            Wh_Log(L"internal:openDirInCode: VS Code not found");
+            ShowActionToast(rootHwnd, L"VS Code not found", ToastType::Error);
+            return;
+        }
+
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        std::wstring activeDir = GetActiveFolderPath(psv);
+        if (psv)
+            psv->Release();
+
+        if (!activeDir.empty()) {
+            ExecuteApp(codePath, SafeQuote(activeDir), activeDir);
+        } else {
+            ShowActionToast(rootHwnd, L"Active folder unavailable",
+                            ToastType::Error);
+        }
+        return;
+    }
+
+    // --- Open Selected Items in VS Code ---
+    if (_wcsicmp(action.c_str(), L"openWithCode") == 0) {
+        Wh_Log(L"internal:openWithCode: Invoked.");
+        std::wstring codePath = FindVsCode();
+        if (codePath.empty()) {
+            Wh_Log(L"internal:openWithCode: VS Code not found");
+            ShowActionToast(rootHwnd, L"VS Code not found", ToastType::Error);
+            return;
+        }
+
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
+        std::wstring activeDir = GetActiveFolderPath(psv);
+        if (psv)
+            psv->Release();
+
+        if (allSelected.empty()) {
+            Wh_Log(L"internal:openWithCode: No items selected.");
+            ShowActionToast(rootHwnd, L"No items selected", ToastType::Error);
+            return;
+        }
+
+        std::vector<std::wstring> files;
+        std::vector<std::wstring> folders;
+        for (const auto& path : allSelected) {
+            DWORD attr = GetFileAttributesW(path.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES &&
+                (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                folders.push_back(path);
+            } else {
+                files.push_back(path);
+            }
+        }
+
+        // 1. Open folders: capped at 10 windows
+        const size_t MAX_FOLDER_WINDOWS = 10;
+        bool folderCapHit = folders.size() > MAX_FOLDER_WINDOWS;
+        size_t foldersToOpen =
+            folderCapHit ? MAX_FOLDER_WINDOWS : folders.size();
+
+        for (size_t i = 0; i < foldersToOpen; ++i) {
+            ExecuteApp(codePath, L"-n " + SafeQuote(folders[i]), folders[i]);
+        }
+
+        // 2. Open files: capped at 50, all in a single window
+        bool fileCapHit = false;
+        if (!files.empty()) {
+            const size_t MAX_FILES = 50;
+            fileCapHit = files.size() > MAX_FILES;
+            std::vector<std::wstring> filesToOpen = files;
+            if (fileCapHit) {
+                filesToOpen.resize(MAX_FILES);
+            }
+
+            std::wstring fileArgs = JoinPaths(filesToOpen, true);
+            if (!folders.empty()) {
+                fileArgs = L"-n " + fileArgs;
+            }
+            ExecuteApp(codePath, fileArgs, activeDir);
+        }
+
+        // 3. Consolidated feedback toast (single notification)
+        if (folderCapHit && fileCapHit) {
+            ShowActionToast(rootHwnd,
+                            L"Opened 10 folders & 50 files (limits reached)",
+                            ToastType::Info);
+        } else if (folderCapHit) {
+            std::wstring toastMsg = L"Opened 10 of " +
+                                    std::to_wstring(folders.size()) +
+                                    L" folders (max 10)";
+            ShowActionToast(rootHwnd, toastMsg.c_str(), ToastType::Info);
+        } else if (fileCapHit) {
+            std::wstring toastMsg = L"Opened 50 of " +
+                                    std::to_wstring(files.size()) +
+                                    L" files (max 50)";
+            ShowActionToast(rootHwnd, toastMsg.c_str(), ToastType::Info);
+        }
+
+        return;
+    }
+
+    Wh_Log(L"Unknown internal command: %s", action.c_str());
+    std::wstring errorMsg = L"Unknown command: " + action;
+    ShowActionToast(rootHwnd, errorMsg.c_str(), ToastType::Error);
 }
 
 void DispatchShortcutExecution(CustomShortcut sc,
@@ -2412,8 +2601,22 @@ void DispatchShortcutExecution(CustomShortcut sc,
         if (g_unloading.load())
             return;
 
-        if (sc.path.rfind(L"internal:", 0) == 0) {
-            ExecuteInternalCommand(sc.path, rootHwnd, capturedFocus);
+        // Support both "internal:" and "int:" prefixes (case-insensitive)
+        bool isInternal = false;
+        std::wstring actionName;
+
+        if (_wcsnicmp(sc.path.c_str(), L"internal:", 9) == 0) {
+            isInternal = true;
+            actionName = sc.path.substr(9);
+        } else if (_wcsnicmp(sc.path.c_str(), L"int:", 4) == 0) {
+            isInternal = true;
+            actionName = sc.path.substr(4);
+        }
+
+        if (isInternal) {
+            // Trim leading and trailing whitespace / quotes
+            TrimWhitespaceAndQuotes(actionName);
+            ExecuteInternalCommand(actionName, rootHwnd, capturedFocus);
             return;
         }
 
