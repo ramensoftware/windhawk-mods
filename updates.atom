@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T18:02:23.000Z</updated>
+    <updated>2026-10-17T21:02:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.9.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-percentage#b00b5e3043a606e9864405a111acaf29d69dc170</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
+        <updated>2026-10-17T21:02:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added separate vertical offset settings (<code>verticalOffset</code> and <code>iconVerticalOffset</code>) for the percentage text and native volume/mute icons to allow fine-tuned alignment.</li>
+<li>Preserved stock and custom container margins when vertical offsets are set to zero.</li>
+<li>Fixed container grid column definitions cleanup when restoring layout on mod unload.</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Window Cards 1.8]]></title>
         <id>https://windhawk.net/mods/desktop-window-cards#15eab1d96589bcbec11e4d9e8aeb2659510e1206</id>
@@ -716,65 +731,6 @@ panel keeps working as usual.</p>
         <author>
             <name>jayll1303</name>
             <uri>https://github.com/jayll1303</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Audio Flipper 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-audio-flipper#50db4c4d6c2dd9c6822ad676c7787c78cd5aba4f</id>
-        <link href="https://windhawk.net/mods/taskbar-audio-flipper"/>
-        <updated>2026-10-16T12:03:55.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaraudioflipper">Taskbar Audio Flipper</h1>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-audio-flipper/screenshot.png" alt="The widget on the taskbar, with its Output, Input and Webcam sections" /></p>
-<p>A taskbar widget, in the style of the Windows weather widget, for switching audio devices. It has
-up to three sections, which you can each show or hide:</p>
-<ul>
-<li><strong>Output</strong>: the active output device's icon, name and volume. Click it to switch to the next
-output (speakers → headset → monitor → …).</li>
-<li><strong>Input</strong>: the same for your microphone.</li>
-<li><strong>Webcam</strong>: the chosen webcam's name and whether it's on, with a camera icon. Click it to turn
-the webcam on or off.</li>
-</ul>
-<p>On the Output and Input sections:</p>
-<ul>
-<li><strong>Hover</strong>: a flyout opens above it with the device's name, a volume slider, and the device icon
-as a mute button, like the Windows 11 volume flyout.</li>
-<li><strong>Left-click</strong>: switch to the next device.</li>
-<li><strong>Scroll</strong>: turn the volume (or microphone level) up or down.</li>
-<li><strong>Middle-click</strong>: mute / unmute.</li>
-</ul>
-<p>After you change the output volume, the mod plays the Windows "Default Beep" ding at the new level,
-like Windows' own volume slider. Turn it off with <strong>Output → Ding when changing volume</strong>.</p>
-<p>Anywhere on the widget, <strong>right-click</strong> for the menu and <strong>drag</strong> left or right to move it along the
-taskbar. The <strong>Output</strong>, <strong>Input</strong> and <strong>Webcam</strong> submenus each have a <strong>Show on taskbar</strong> switch for
-their section, and the settings for it: picking a device directly, which devices are in the click
-rotation, whether to switch the communications device too, and links to the Windows settings.</p>
-<p>Devices are shown with the name and icon they have in the Windows Sound control panel. To change
-them, choose <strong>Rename or change device icons…</strong> in the <strong>Output</strong> or <strong>Input</strong> submenu, right-click a
-device, and choose <strong>Properties</strong>.</p>
-<h2 id="webcamonoff">Webcam on/off</h2>
-<p>Turn it on under <strong>Webcam → Show on taskbar</strong> and pick the webcam to control in the same menu. The
-camera icon has a slash through it while the webcam is off; click it to switch. Windows has no way to
-rename a webcam, but <strong>Webcam → Rename…</strong> gives it a name to show on the widget.</p>
-<p>Turning the webcam off works like <strong>Disable device</strong> in Device Manager: no app can use it until it's
-turned back on. It stays off after a restart, and after the mod is turned off or removed. To turn it
-back on without the mod, open Device Manager, find the webcam under <strong>Cameras</strong> (or <strong>Imaging
-devices</strong>), right-click it and choose <strong>Enable device</strong>.</p>
-<p>Windows only lets administrators turn devices on and off, so each switch runs Microsoft's PnP Utility
-(<code>pnputil.exe</code>) as administrator, which may show a Windows prompt asking to allow it, depending on
-your User Account Control settings.</p>
-<h2 id="linkingwithtaskbarrdplauncher">Linking with Taskbar RDP Launcher</h2>
-<p>With the Taskbar RDP Launcher mod running too, the two widgets can be joined into one: right-click
-either, choose <strong>Link with RDPLauncher</strong> (or <strong>Link with AudioFlipper</strong>) and which side it goes on.
-Linked, they sit side by side with a divider between them, dragging either moves both, and if one
-hides the other takes its place.</p>
-<h2 id="settings">Settings</h2>
-<p>The sections, the click rotation and the webcam settings are kept in the mod's storage, which
-Windhawk removes along with the mod. The first time it runs, the mod takes on the settings of the
-AudioFlipper app, if you have it (from <code>%APPDATA%\AudioFlipper\settings.txt</code>, which it doesn't
-change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
         </author>
     </entry>
 </feed>

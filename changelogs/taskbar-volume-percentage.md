@@ -1,3 +1,9 @@
+## 1.9.0 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b00b5e3043a606e9864405a111acaf29d69dc170/mods/taskbar-volume-percentage.wh.cpp))
+
+* Added separate vertical offset settings (`verticalOffset` and `iconVerticalOffset`) for the percentage text and native volume/mute icons to allow fine-tuned alignment.
+* Preserved stock and custom container margins when vertical offsets are set to zero.
+* Fixed container grid column definitions cleanup when restoring layout on mod unload.
+
 ## 1.8.1 ([Oct 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7046e9ed96c91e9ce073fb74d94fac13b9c4895a/mods/taskbar-volume-percentage.wh.cpp))
 
 - feat: add independent fontSize, prefixSize, and iconSize settings with native 16px defaults
