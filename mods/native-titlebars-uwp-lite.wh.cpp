@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              native-titlebars-uwp-lite
-// @name            Remove UWP titlebars Lite
+// @name            Remove UWP titlebars
 // @description     Enables native titlebars in UWP apps
 // @version         2.0
 // @author          Anixx
@@ -46,12 +46,11 @@ static const GUID IID_IExtractIconW_local =
 static const PROPERTYKEY PKEY_AppUserModel_ID_local =
     {{0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
 
-// Skips the private HRESULT methods of CTitleBar, so that the UWP title bar
-// isn't created, drawn or updated.
-HRESULT WINAPI CTitleBar_Stub_hook(void *pThis)
-{
-    return S_OK;
-}
+INT64 __fastcall CTitleBar_Generic_hook(void *, void *, void *, void *) {return 0;}
+
+static void *g_dummyOrig;
+
+#define CT(sig) { {L##sig}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true }
 
 static ULONG_PTR g_gdiplusToken = 0;
 
@@ -187,7 +186,6 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
         g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
         g.DrawImage(bmp, 0, 0, targetSize, targetSize);
     }
-
     delete bmp;
 
     HICON hIcon = NULL;
@@ -393,7 +391,7 @@ HWND WINAPI CreateWindowInBandEx_hook(
 
     dwExStyle &= ~WS_EX_DLGMODALFRAME;
     dwExStyle &= ~0x00200000L;
-    dwStyle = WS_OVERLAPPEDWINDOW;
+    dwStyle = WS_OVERLAPPEDWINDOW | WS_DLGFRAME;
 
     HWND res = CreateWindowInBandEx_orig(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
@@ -434,7 +432,7 @@ BOOL Wh_ModInit()
     InitializeCriticalSection(&g_csGdiplus);
 
     Wh_SetFunctionHook(
-        (void *)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowInBandEx"),
+        (void *)GetProcAddress(GetModuleHandle(L"user32.dll"), "CreateWindowInBandEx"),
         (void *)CreateWindowInBandEx_hook,
         (void **)&CreateWindowInBandEx_orig);
 
@@ -443,75 +441,52 @@ BOOL Wh_ModInit()
         (void *)DwmExtendFrameIntoClientArea_hook,
         (void **)&DwmExtendFrameIntoClientArea_orig);
 
-    HMODULE hAppFrame = LoadLibraryExW(L"ApplicationFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hAppFrame)
-    {
-        Wh_Log(L"Failed to load ApplicationFrame.dll");
-        return FALSE;
-    }
-
     WindhawkUtils::SYMBOL_HOOK ApplicationFrame_dll_hooks[] = {
-        // Windows 10 1809 and later, Windows 11 21H2 and later.
-        {{L"private: long __cdecl CTitleBar::_AnimateTitleBar(bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_Cloak(int,bool,bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_CommitDCompDevice(void *)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_CreateTitleBarWindow(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_GetCoreApplicationViewTitleBar(struct _GUID const &,void * *)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_GetFrame(struct IApplicationFrameInternal * *)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_InitializeDCompVariables(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_InitializePersistence(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_ManuallyPositionElements(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_NotifyReservedMetricsChanged(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_NotifyViewOfPersistence(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_NotifyVisibilityChanged(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_OnTitleBarHitTestVisualUpdated(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_PaintButton(struct IDCompositionSurface *,enum CTitleBar::TitleBarControl,enum TITLE_BAR_BITMAP_TYPE,struct tagRECT const &,struct tagRECT const &)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_PaintTitle(struct IDCompositionSurface *,struct tagRECT const &)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_PersistColors(struct Windows::UI::ViewManagement::IApplicationViewTitleBar *)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_PlaceVisuals(struct tagRECT const *,bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_SetIsVisible(int)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_ShowActionsMenu(struct tagPOINT *,enum TitleBarTelemetry::ACTIONS_MENU_INVOKE)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_ShowSystemMenu(struct tagPOINT *,enum TitleBarTelemetry::SYSTEM_MENU_INVOKE)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_ShowTitleBar(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateAllButtonStates(enum CTitleBar::DrawButtonFilter,bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateBackgroundSurfaces(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateBackgroundTransforms(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateButtonState(enum CTitleBar::TitleBarControl,bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateButtonStateAndCommit(enum CTitleBar::TitleBarControl,bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateColorsFromApplicationView(bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateColorsFromApplicationViewAsync(bool)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateConstraints(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateDrawnByAppSetting(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateHitTestWindow(void)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateHoverPressState(enum CTitleBar::TitleBarControl)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_UpdateVisiblityForHideOptions(enum TITLE_BAR_HIDE_OPTIONS)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_ValidateDCompDevice(long)"}, nullptr, CTitleBar_Stub_hook},
-        {{L"private: long __cdecl CTitleBar::_VisibleButtonsUpdated(void)"}, nullptr, CTitleBar_Stub_hook},
-
-        // Windows 11 22H2 and later.
-        {{L"private: long __cdecl CTitleBar::_UpdateBackgroundVisualTree(void)"}, nullptr, CTitleBar_Stub_hook, true},
-        {{L"private: long __cdecl CTitleBar::_UpdateMica(void)"}, nullptr, CTitleBar_Stub_hook, true},
-
-        // Windows 11 24H2 and later.
-        {{L"private: long __cdecl CTitleBar::_GetApplicationViewTitleBar(struct _GUID const &,void * *)"}, nullptr, CTitleBar_Stub_hook, true},
-        {{L"private: long __cdecl CTitleBar::_GetDCompProvider(struct IDCompProvider * *)"}, nullptr, CTitleBar_Stub_hook, true},
-
-        // Windows 10 1809 to 1909, Windows 11 21H2 to 23H2, 24H2 since
-        // 26100.8116, 25H2 since 26200.8116, 26H1 since 28000.2179, and 26H2.
-        {{L"private: long __cdecl CTitleBar::_ComputeTitleBarRects(struct tagRECT const *)"}, nullptr, CTitleBar_Stub_hook, true},
-
-        // Windows 10 2004 and later, Windows 11 21H2 to 26H2, but not Canary
-        // builds since 29591.
-        {{L"private: long __cdecl CTitleBar::_HideActionsMenu(void)"}, nullptr, CTitleBar_Stub_hook, true},
+        CT("private: long __cdecl CTitleBar::_NotifyViewOfPersistence(void)"),
+        CT("private: long __cdecl CTitleBar::_OnTitleBarHitTestVisualUpdated(void)"),
+        CT("private: long __cdecl CTitleBar::_GetApplicationViewTitleBar(struct _GUID const &,void * *)"),
+        CT("private: long __cdecl CTitleBar::_NotifyVisibilityChanged(void)"),
+        CT("private: long __cdecl CTitleBar::_UpdateBackgroundVisualTree(void)"),
+        CT("private: long __cdecl CTitleBar::_UpdateConstraints(void)"),
+        CT("private: long __cdecl CTitleBar::_UpdateHoverPressState(enum CTitleBar::TitleBarControl)"),
+        CT("private: long __cdecl CTitleBar::_UpdateColorsFromApplicationViewAsync(bool)"),
+        CT("private: long __cdecl CTitleBar::_UpdateHitTestWindow(void)"),
+        CT("private: long __cdecl CTitleBar::_Cloak(int,bool,bool)"),
+        CT("private: long __cdecl CTitleBar::_ValidateDCompDevice(long)"),
+        CT("private: long __cdecl CTitleBar::_PaintTitle(struct IDCompositionSurface *,struct tagRECT const &)"),
+        CT("private: long __cdecl CTitleBar::_ComputeTitleBarRects(struct tagRECT const *)"),
+        CT("private: long __cdecl CTitleBar::_PlaceVisuals(struct tagRECT const *,bool)"),
+        CT("private: long __cdecl CTitleBar::_UpdateColorsFromApplicationView(bool)"),
+        CT("private: long __cdecl CTitleBar::_UpdateMica(void)"),
+        CT("private: long __cdecl CTitleBar::_UpdateBackgroundSurfaces(void)"),
+        CT("private: long __cdecl CTitleBar::_ManuallyPositionElements(void)"),
+        CT("private: long __cdecl CTitleBar::_SetIsVisible(int)"),
+        CT("private: long __cdecl CTitleBar::_NotifyReservedMetricsChanged(void)"),
+        CT("private: long __cdecl CTitleBar::_GetFrame(struct IApplicationFrameInternal * *)"),
+        CT("private: long __cdecl CTitleBar::_ShowTitleBar(void)"),
+        CT("private: long __cdecl CTitleBar::_GetCoreApplicationViewTitleBar(struct _GUID const &,void * *)"),
+        CT("private: long __cdecl CTitleBar::_ShowActionsMenu(struct tagPOINT *,enum TitleBarTelemetry::ACTIONS_MENU_INVOKE)"),
+        CT("private: long __cdecl CTitleBar::_InitializePersistence(void)"),
+        CT("private: long __cdecl CTitleBar::_PersistColors(struct Windows::UI::ViewManagement::IApplicationViewTitleBar *)"),
+        CT("private: long __cdecl CTitleBar::_UpdateDrawnByAppSetting(void)"),
+        CT("private: long __cdecl CTitleBar::_CommitDCompDevice(void *)"),
+        CT("private: long __cdecl CTitleBar::_InitializeDCompVariables(void)"),
+        CT("private: long __cdecl CTitleBar::_AnimateTitleBar(bool)"),
+        CT("private: long __cdecl CTitleBar::_UpdateButtonState(enum CTitleBar::TitleBarControl,bool)"),
+        CT("private: long __cdecl CTitleBar::_HideActionsMenu(void)"),
+        CT("private: long __cdecl CTitleBar::_GetDCompProvider(struct IDCompProvider * *)"),
+        CT("private: long __cdecl CTitleBar::_UpdateBackgroundTransforms(void)"),
+        CT("private: long __cdecl CTitleBar::_VisibleButtonsUpdated(void)"),
+        CT("private: long __cdecl CTitleBar::_UpdateButtonStateAndCommit(enum CTitleBar::TitleBarControl,bool)"),
+        CT("private: long __cdecl CTitleBar::_ShowSystemMenu(struct tagPOINT *,enum TitleBarTelemetry::SYSTEM_MENU_INVOKE)"),
+        CT("private: long __cdecl CTitleBar::_UpdateVisiblityForHideOptions(enum TITLE_BAR_HIDE_OPTIONS)"),
+        CT("private: long __cdecl CTitleBar::_UpdateAllButtonStates(enum CTitleBar::DrawButtonFilter,bool)"),
     };
 
-    if (!WindhawkUtils::HookSymbols(hAppFrame, ApplicationFrame_dll_hooks, ARRAYSIZE(ApplicationFrame_dll_hooks)))
-    {
-        Wh_Log(L"Failed to hook ApplicationFrame.dll symbols");
-        return FALSE;
-    }
-
-    return TRUE;
+    return WindhawkUtils::HookSymbols(
+        LoadLibraryExW(L"ApplicationFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
+        ApplicationFrame_dll_hooks,
+        ARRAYSIZE(ApplicationFrame_dll_hooks));
 }
 
 void Wh_ModUninit()
