@@ -2,11 +2,11 @@
 // @id              taskbar-smoke
 // @name            Taskbar Smoke
 // @description     Soft, living smoke around the Windows 11 taskbar pills. Real fluid simulation: it rises, swirls, drifts over the edge and reacts to the mouse. Click-through overlay, follows auto-hide, hides in fullscreen.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Rubicus
 // @github          https://github.com/xxsoulxx
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lwinhttp -ldwmapi
+// @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -ldwmapi
 // ==/WindhawkMod==
 
 // clang-format off
@@ -23,18 +23,12 @@ and drifts over the edge), a classic layered texture smoke, and three tuned
 variants of the fluid smoke.
 * **Reacts to the mouse:** moving the cursor across the taskbar pushes the smoke
 aside; it flows back on its own.
-* **Eight colors:** violet, pink, light blue, ice blue, green, gold, orange,
-red.
 * **Eight colors** (violet, pink, light blue, ice blue, green, gold, orange,
 red), plus the Windows accent color or a slow rainbow cycle. An optional
 **second color** blends along each pill, from left to right.
 * **Opacity** in seven steps (17% to 150%), **density**, **speed**, **tone**
 (dark smoke or light glow), **halo thickness** and **mouse reach**.
 * Optional small dark clouds slowly rising from the taskbar.
-* **Optional status feed (off by default):** colors the smoke when a JSON
-endpoint you configure reports a warning/danger level. Source URL (plain
-http://), JSON keys, polling interval, level thresholds and both colors are
-configurable. Leave it off if you do not need it; nothing is requested then.
 * Follows auto-hide, hides in fullscreen apps, settings apply instantly.
 
 Works best with a dark, pill-shaped taskbar theme (e.g. Windows 11 Taskbar
@@ -64,7 +58,7 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
   - rainbow: Slow rainbow cycle
 - color2: none
   $name: Second color
-  $description: Blends the smoke from the first color (left end of each pill) to this one (right end). Status feed colors (warning/danger) always win.
+  $description: Blends the smoke from the first color (left end of each pill) to this one (right end).
   $options:
   - none: None
   - violet: Violet
@@ -77,7 +71,7 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
   - red: Red
 - opacity: normal
   $name: Opacity
-  $description: Normal is the look of earlier versions.
+  $description: Normal (default).
   $options:
   - faint: Faint (17%)
   - whisper: Whisper (30%)
@@ -133,73 +127,6 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
   - large: Large
 - clouds: true
   $name: Small dark clouds rising from the taskbar
-- statusSource: "off"
-  $name: Status feed
-  $description: Colors the smoke when a JSON endpoint reports a warning/danger level. Only plain http:// URLs are used.
-  $options:
-  - "off": Off
-  - feed: Feed (JSON over http)
-- statusUrl: ""
-  $name: Status feed URL
-  $description: http://host[:port]/path (no https). An empty or invalid URL keeps the feed off.
-- statusObjectKey: ""
-  $name: JSON object key
-  $description: Key of the object that holds the level and age. Empty = search from the start of the document.
-- statusLevelKey: level
-  $name: JSON level key
-  $description: Key whose integer value is the level (first occurrence after the object key).
-- statusAgeKey: ""
-  $name: JSON timestamp key
-  $description: Key with a Unix timestamp (seconds) of the report. Empty = no age check.
-- statusMaxAgeMin: "10"
-  $name: Maximum age of a report (minutes)
-  $options:
-  - "2": 2 minutes
-  - "5": 5 minutes
-  - "10": 10 minutes
-  - "30": 30 minutes
-  - "60": 60 minutes
-- statusPoll: 3s
-  $name: Polling interval
-  $options:
-  - 3s: 3 seconds
-  - 10s: 10 seconds
-  - 30s: 30 seconds
-  - 60s: 60 seconds
-- statusWarnLevel: "1"
-  $name: Warning from level
-  $options:
-  - "1": Level 1
-  - "2": Level 2
-  - "3": Level 3
-- statusDangerLevel: "2"
-  $name: Danger from level
-  $options:
-  - "2": Level 2
-  - "3": Level 3
-  - "4": Level 4
-- statusWarnColor: orange
-  $name: Warning color
-  $options:
-  - violet: Violet
-  - pink: Pink
-  - lightblue: Light blue
-  - iceblue: Ice blue
-  - green: Green
-  - gold: Gold
-  - orange: Orange
-  - red: Red
-- statusDangerColor: red
-  $name: Danger color
-  $options:
-  - violet: Violet
-  - pink: Pink
-  - lightblue: Light blue
-  - iceblue: Ice blue
-  - green: Green
-  - gold: Gold
-  - orange: Orange
-  - red: Red
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -209,12 +136,12 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
 #include <shellapi.h>
 #include <uiautomation.h>
 #include <windows.h>
-#include <winhttp.h>
 #include <wrl/client.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <initializer_list>
@@ -288,19 +215,14 @@ volatile LONG g_uiaBereit = 0;
 std::atomic<bool> g_uiaStop{false};
 std::atomic<bool> g_overlaySichtbar{false};
 HANDLE g_uiaThread = nullptr;
-HANDLE g_statusThread = nullptr;
-float g_hoehe = 57;  // Height of the pill body (UIA bounds, measured at rest)
 float g_offT = 9, g_offB = 9;  // Gap between pill body and taskbar window (from
                                // UIA, measured without hover)
-float g_dy = 0;                // current offset (auto-hide slide)
-bool g_sichtbar = false;       // taskbar present and no fullscreen app
 float g_blende = 0;            // smooth fade in/out
 HWND g_hwnd = nullptr;
 ComPtr<IUIAutomation> g_ua;
 ComPtr<IUIAutomationElement> g_frame;
-int MonitorBottom() {
-    HMONITOR m = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", nullptr),
-                                   MONITOR_DEFAULTTOPRIMARY);
+int MonitorBottom(HWND tray) {
+    HMONITOR m = MonitorFromWindow(tray, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO mi{sizeof(mi)};
     GetMonitorInfoW(m, &mi);
     return mi.rcMonitor.bottom;
@@ -416,12 +338,11 @@ bool PillenLesen() {
             const float oT = (float)(fr.top - wr.top),
                         oB = (float)(wr.bottom - fr.bottom);
             if (oT >= 0 && oT <= 30 && oB >= 0 && oB <= 30) {
+                EnterCriticalSection(&g_lock);
                 g_offT = oT;
                 g_offB = oB;
+                LeaveCriticalSection(&g_lock);
             }
-            const float hh = (float)(fr.bottom - fr.top);
-            if (hh >= 40.f && hh <= 70.f && std::fabs(hh - g_hoehe) < 12.f)
-                g_hoehe = hh;
         }
     }
     return true;
@@ -433,10 +354,10 @@ static const float kRauchRgb[kFarben][3] = {
     {88.f, 52.f, 160.f},  {168.f, 84.f, 22.f}, {160.f, 30.f, 36.f},
     {200.f, 60.f, 120.f}, {34.f, 96.f, 150.f}, {70.f, 140.f, 185.f},
     {34.f, 128.f, 78.f},  {150.f, 108.f, 10.f}};
-constexpr int kSlots = kFarben + 1;      // 1.7.0: slot 8 = accent / rainbow
+constexpr int kSlots = kFarben + 1;      // slot 8 = accent / rainbow
 float g_eigen[3] = {88.f, 52.f, 160.f};  // color of slot 8
-bool g_glanz = false;   // 1.7.0: tone glow (light) instead of smoke (dark)
-float g_opF = 1.f;      // opacity factor (1 = look of 1.6.0)
+bool g_glanz = false;   // tone glow (light) instead of smoke (dark)
+float g_opF = 1.f;      // opacity factor (1 = normal)
 float g_dichteF = 1.f;  // density / dye gain
 float g_tempoF = 1.f;   // simulation time scale
 float g_reichF = 1.f;   // mouse reach (radius factor)
@@ -466,29 +387,7 @@ void ToneRgb(float* c) {  // glow = lighter variant of the same color
             c[i] = std::min(255.f, c[i] * 1.35f + 55.f);
 }
 int g_ti = 0;  // current smoke tint: 0 violet, 1 warning orange, 2 danger red
-volatile LONG g_statusTi = 0;  // effective tint (user color or feed status)
-volatile LONG g_nutzerTi = 0;  // 1.6.0: color chosen in the settings
-volatile LONG g_feedTi = 0;    // status feed: 0 normal, else tint index + 1
-volatile LONG g_feedOn = 1;    // setting statusSource (feed = 1)
-void StatusMischen() {
-    const LONG h = g_feedTi;
-    InterlockedExchange(&g_statusTi, (g_feedOn && h > 0) ? h - 1 : g_nutzerTi);
-}
-// ===== Status feed defaults (off, no URL) =====
-constexpr int kDefaultStatusSource = 0;  // 0 off, 1 feed
-constexpr wchar_t kDefaultStatusUrl[] = L"";
-struct StatusCfg {
-    int source = kDefaultStatusSource;
-    std::wstring host, path;
-    INTERNET_PORT port = 80;
-    std::string objKey, lvlKey, ageKey;
-    long long maxAgeSec = 600;
-    int pollMs = 3000, warnLvl = 1, dangerLvl = 2, warnTi = 1, dangerTi = 2;
-    bool urlOk = false;
-};
-StatusCfg g_sc;
-SRWLOCK g_scLock = SRWLOCK_INIT;
-std::atomic<int> g_scVer{0};
+volatile LONG g_statusTi = 0;  // tint chosen in the settings
 bool SlotBauen(ID2D1RenderTarget* rt, int ti) {
     float c[3];
     BasisFarbe(ti, c);
@@ -541,7 +440,7 @@ bool Bereit(ID2D1RenderTarget* rt) {
     }
     return true;
 }
-// 1.7.0: color of slot 8 (Windows accent or slow rainbow), quantized so the
+// color of slot 8 (Windows accent or slow rainbow), quantized so the
 // textures are rebuilt only in small steps
 void EigenfarbeAktualisieren() {
     if (g_farbModus == 0)
@@ -749,7 +648,7 @@ void WolkenBauen() {
 
 // ---- Fluid simulation (stable fluids, Jos Stam), smoke as dye ----
 constexpr float FL_C = 5.f;  // cell size px
-float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MX = g_flMX;       // margin left/right (scaled by thickness)
 float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
@@ -757,7 +656,6 @@ struct Fluid {
     std::vector<float> u, v, u0, v0, d, d0, p, dv, ox, oy, ox0, oy0, al;
     std::vector<uint32_t> px;
     ComPtr<ID2D1Bitmap> bmp;
-    ComPtr<ID2D1BitmapBrush> br;
     const void* owner = nullptr;
     void Init(int w, int h, float sd) {
         W = w;
@@ -769,7 +667,6 @@ struct Fluid {
             a->assign(n, 0.f);
         px.clear();
         bmp.Reset();
-        br.Reset();
     }
 };
 std::vector<Fluid> g_fl;
@@ -836,117 +733,13 @@ int StringSettingIndex(PCWSTR name,
     }
     return result;
 }
-static std::wstring TextSetting(PCWSTR name, PCWSTR def) {
-    PCWSTR t = Wh_GetStringSetting(name);
-    std::wstring r = t ? t : def;
-    if (t)
-        Wh_FreeStringSetting(t);
-    return r;
-}
-static std::string AsciiKey(
-    const std::wstring& w) {  // JSON keys: printable ASCII only
-    std::string r;
-    for (wchar_t c : w) {
-        if (c < 33 || c > 126 || c == L'"' || c == L'\\')
-            return std::string();
-        r.push_back((char)c);
-    }
-    return r.size() <= 64 ? r : std::string();
-}
-// only http://host[:port][/path]; anything else -> false (feed stays off)
-static bool UrlZerlegen(const std::wstring& u, StatusCfg& c) {
-    static const wchar_t pre[] = L"http://";
-    if (u.size() < 9 || u.size() > 512 || _wcsnicmp(u.c_str(), pre, 7) != 0)
-        return false;
-    size_t he = u.find_first_of(L"/?#", 7);
-    std::wstring hp =
-        u.substr(7, he == std::wstring::npos ? std::wstring::npos : he - 7);
-    std::wstring path = he == std::wstring::npos ? L"/" : u.substr(he);
-    if (path[0] != L'/')
-        path = L"/" + path;
-    c.port = 80;
-    size_t col = hp.rfind(L':');
-    if (col != std::wstring::npos && hp.find(L']') == std::wstring::npos) {
-        std::wstring ps = hp.substr(col + 1);
-        hp.resize(col);
-        if (ps.empty() || ps.size() > 5)
-            return false;
-        long v = 0;
-        for (wchar_t ch : ps) {
-            if (ch < L'0' || ch > L'9')
-                return false;
-            v = v * 10 + (ch - L'0');
-        }
-        if (v < 1 || v > 65535)
-            return false;
-        c.port = (INTERNET_PORT)v;
-    }
-    if (hp.empty() || hp.size() > 253)
-        return false;
-    for (wchar_t ch : hp)
-        if (ch <= 32 || ch == L'@' || ch == L'\\' || ch > 126)
-            return false;
-    c.host = hp;
-    c.path = path;
-    return true;
-}
-void StatusLesen() {  // status feed settings (called from EffekteLesen)
-    StatusCfg c;
-    c.source = StringSettingIndex(L"statusSource", {L"off", L"feed"},
-                                  kDefaultStatusSource);
-    c.urlOk = UrlZerlegen(TextSetting(L"statusUrl", kDefaultStatusUrl), c);
-    c.objKey = AsciiKey(TextSetting(L"statusObjectKey", L""));
-    c.lvlKey = AsciiKey(TextSetting(L"statusLevelKey", L"level"));
-    c.ageKey = AsciiKey(TextSetting(L"statusAgeKey", L""));
-    static const long long ages[] = {2, 5, 10, 30, 60};
-    c.maxAgeSec =
-        ages[StringSettingIndex(L"statusMaxAgeMin",
-                                {L"2", L"5", L"10", L"30", L"60"}, 2)] *
-        60;
-    static const int polls[] = {3000, 10000, 30000, 60000};
-    c.pollMs = polls[StringSettingIndex(L"statusPoll",
-                                        {L"3s", L"10s", L"30s", L"60s"}, 0)];
-    c.warnLvl =
-        1 + StringSettingIndex(L"statusWarnLevel", {L"1", L"2", L"3"}, 0);
-    c.dangerLvl =
-        2 + StringSettingIndex(L"statusDangerLevel", {L"2", L"3", L"4"}, 0);
-    static const wchar_t* namen[kFarben] = {L"violet", L"orange",    L"red",
-                                            L"pink",   L"lightblue", L"iceblue",
-                                            L"green",  L"gold"};
-    c.warnTi = c.dangerTi = -1;
-    PCWSTR w = Wh_GetStringSetting(L"statusWarnColor");
-    PCWSTR d = Wh_GetStringSetting(L"statusDangerColor");
-    for (int q = 0; q < kFarben; ++q) {
-        if (w && !_wcsicmp(w, namen[q]))
-            c.warnTi = q;
-        if (d && !_wcsicmp(d, namen[q]))
-            c.dangerTi = q;
-    }
-    if (w)
-        Wh_FreeStringSetting(w);
-    if (d)
-        Wh_FreeStringSetting(d);
-    if (c.warnTi < 0)
-        c.warnTi = 1;
-    if (c.dangerTi < 0)
-        c.dangerTi = 2;
-    if (c.lvlKey.empty())
-        c.urlOk = false;  // no level key -> nothing to read
-    g_feedOn = (c.source == 1 && c.urlOk) ? 1 : 0;
-    AcquireSRWLockExclusive(&g_scLock);
-    g_sc = c;
-    ReleaseSRWLockExclusive(&g_scLock);
-    g_scVer++;
-    if (!g_feedOn)
-        InterlockedExchange(&g_feedTi, 0);
-}
 void EffekteLesen() {  // Windhawk settings (at start and after a change)
     if (!g_einstellungNeu.exchange(false))
         return;
     const int m =
         StringSettingIndex(L"mouse", {L"off", L"gentle", L"strong"}, 1);
     g_mausF = m == 0 ? 0.f : m == 2 ? 2.f : 1.f;
-    {  // 1.7.0 settings (unknown / missing values fall back to the defaults)
+    {  // appearance settings (unknown / missing values fall back to the defaults)
         static const float opac[] = {.17f, .30f, .50f, .70f, 1.f, 1.25f, 1.5f};
         g_opF =
             opac[StringSettingIndex(L"opacity",
@@ -998,9 +791,7 @@ void EffekteLesen() {  // Windhawk settings (at start and after a change)
             }
             Wh_FreeStringSetting(f);
         }
-        InterlockedExchange(&g_nutzerTi, ti);
-        StatusLesen();
-        StatusMischen();
+        InterlockedExchange(&g_statusTi, ti);
     }
     g_partikel = Wh_GetIntSetting(L"clouds") != 0;
     g_modus = StringSettingIndex(
@@ -1224,7 +1015,6 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         }
     if (F.owner != (const void*)rt) {
         F.bmp.Reset();
-        F.br.Reset();
         F.owner = rt;
     }
     if (!F.bmp &&
@@ -1242,7 +1032,7 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
 }
 namespace v211 {             // Smoke variant: simulation with mask
 constexpr float FL_C = 5.f;  // cell size px
-float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MX = g_flMX;       // margin left/right (scaled by thickness)
 float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
@@ -1499,7 +1289,7 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
 }  // namespace v211
 namespace v220 {             // Smoke variant: simulation carries the texture
 constexpr float FL_C = 5.f;  // cell size px
-float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MX = g_flMX;       // margin left/right (scaled by thickness)
 float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
@@ -1507,7 +1297,6 @@ struct Fluid {
     std::vector<float> u, v, u0, v0, d, d0, p, dv, ox, oy, ox0, oy0, al;
     std::vector<uint32_t> px;
     ComPtr<ID2D1Bitmap> bmp;
-    ComPtr<ID2D1BitmapBrush> br;
     const void* owner = nullptr;
     void Init(int w, int h, float sd) {
         W = w;
@@ -1519,7 +1308,6 @@ struct Fluid {
             a->assign(n, 0.f);
         px.clear();
         bmp.Reset();
-        br.Reset();
     }
 };
 std::vector<Fluid> g_fl;
@@ -1782,7 +1570,6 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         }
     if (F.owner != (const void*)rt) {
         F.bmp.Reset();
-        F.br.Reset();
         F.owner = rt;
     }
     if (!F.bmp &&
@@ -1801,7 +1588,7 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
 }  // namespace v220
 namespace v221 {  // Smoke variant: simulation carries the texture, subtle
 constexpr float FL_C = 5.f;  // cell size px
-float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MX = g_flMX;       // margin left/right (scaled by thickness)
 float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
@@ -1809,7 +1596,6 @@ struct Fluid {
     std::vector<float> u, v, u0, v0, d, d0, p, dv, ox, oy, ox0, oy0, al;
     std::vector<uint32_t> px;
     ComPtr<ID2D1Bitmap> bmp;
-    ComPtr<ID2D1BitmapBrush> br;
     const void* owner = nullptr;
     void Init(int w, int h, float sd) {
         W = w;
@@ -1821,7 +1607,6 @@ struct Fluid {
             a->assign(n, 0.f);
         px.clear();
         bmp.Reset();
-        br.Reset();
     }
 };
 std::vector<Fluid> g_fl;
@@ -2085,7 +1870,6 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         }
     if (F.owner != (const void*)rt) {
         F.bmp.Reset();
-        F.br.Reset();
         F.owner = rt;
     }
     if (!F.bmp &&
@@ -2126,8 +1910,8 @@ void Zeichnen() {
     for (auto& p : g_pillen) {
         L = std::min(L, p.l);
         R = std::max(R, p.r);
-        T = std::min(T, p.t + g_dy);
-        B = std::max(B, p.b + g_dy);
+        T = std::min(T, p.t);
+        B = std::max(B, p.b);
     }
     const int x0 = (int)std::floor(L - pad), y0 = (int)std::floor(T - pad),
               w = (int)std::ceil(R + pad) - x0,
@@ -2164,10 +1948,9 @@ void Zeichnen() {
     g_rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (g_modus == 1) {  // classic texture smoke
         for (auto& p : g_pillen) {
-            const D2D1_RECT_F r = D2D1::RectF(p.l - x0, p.t + g_dy - y0,
-                                              p.r - x0, p.b + g_dy - y0);
+            const D2D1_RECT_F r = D2D1::RectF(p.l - x0, p.t - y0,
+                                              p.r - x0, p.b - y0);
             const float rad = (r.bottom - r.top) * 0.5f;
-            const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(r, rad, rad);
             // Glow only along the top/bottom of the pill, faded out at the
             // rounded ends (no double rounding beyond the sides)
             ComPtr<ID2D1Layer> endLy;
@@ -2267,8 +2050,8 @@ void Zeichnen() {
         g_rt->BindDC(g_memdc, &rc);
         g_rt->BeginDraw();
         for (auto& p : g_pillen) {
-            const D2D1_RECT_F r = D2D1::RectF(p.l - x0, p.t + g_dy - y0,
-                                              p.r - x0, p.b + g_dy - y0);
+            const D2D1_RECT_F r = D2D1::RectF(p.l - x0, p.t - y0,
+                                              p.r - x0, p.b - y0);
             const float rad = (r.bottom - r.top) * 0.5f;
             const D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(r, rad, rad);
             // Inner haze: dense at the edge, only a hint in the center (icons)
@@ -2334,7 +2117,7 @@ void Zeichnen() {
                 const Pille& p = g_pillen[pi];
                 v211::Fluid& F = v211::g_fl[pi];
                 const float gx0 = p.l - v211::FL_MX,
-                            gy0 = p.t + g_dy - v211::FL_MY;
+                            gy0 = p.t - v211::FL_MY;
                 const int W = (int)std::ceil((p.r - p.l + 2 * v211::FL_MX) /
                                              v211::FL_C),
                           H = (int)std::ceil((p.b - p.t + 2 * v211::FL_MY) /
@@ -2381,7 +2164,7 @@ void Zeichnen() {
                 const Pille& p = g_pillen[pi];
                 v220::Fluid& F = v220::g_fl[pi];
                 const float gx0 = p.l - v220::FL_MX,
-                            gy0 = p.t + g_dy - v220::FL_MY;
+                            gy0 = p.t - v220::FL_MY;
                 const int W = (int)std::ceil((p.r - p.l + 2 * v220::FL_MX) /
                                              v220::FL_C),
                           H = (int)std::ceil((p.b - p.t + 2 * v220::FL_MY) /
@@ -2428,7 +2211,7 @@ void Zeichnen() {
                 const Pille& p = g_pillen[pi];
                 v221::Fluid& F = v221::g_fl[pi];
                 const float gx0 = p.l - v221::FL_MX,
-                            gy0 = p.t + g_dy - v221::FL_MY;
+                            gy0 = p.t - v221::FL_MY;
                 const int W = (int)std::ceil((p.r - p.l + 2 * v221::FL_MX) /
                                              v221::FL_C),
                           H = (int)std::ceil((p.b - p.t + 2 * v221::FL_MY) /
@@ -2474,7 +2257,7 @@ void Zeichnen() {
         for (size_t pi = 0; pi < g_pillen.size(); ++pi) {
             const Pille& p = g_pillen[pi];
             Fluid& F = g_fl[pi];
-            const float gx0 = p.l - FL_MX, gy0 = p.t + g_dy - FL_MY;
+            const float gx0 = p.l - FL_MX, gy0 = p.t - FL_MY;
             const int W = (int)std::ceil((p.r - p.l + 2 * FL_MX) / FL_C),
                       H = (int)std::ceil((p.b - p.t + 2 * FL_MY) / FL_C);
             if (W != F.W || H != F.H)
@@ -2518,7 +2301,7 @@ void Zeichnen() {
                         xx = sel->l + rr0 +
                              (float)(rand() % 10000) / 10000.f *
                                  std::max(1.f, sel->r - sel->l - 2 * rr0);
-            fk.push_back({xx, sel->t + g_dy + (float)(rand() % 8),
+            fk.push_back({xx, sel->t + (float)(rand() % 8),
                           ((float)(rand() % 200) - 100.f) / 14.f,
                           -(10.f + (float)(rand() % 14)), 0.f,
                           2.6f + (float)(rand() % 140) / 100.f});
@@ -2652,9 +2435,9 @@ void Zeichnen() {
                 }
         }
     }
-    if (g_bits && (g_opF > 1.f || (g_farbe2 >= 0 && g_ti == (int)g_nutzerTi)) &&
-        GdiFlush()) {  // 1.7.0: second color along each pill, opacity above 1
-        const bool zwei = g_farbe2 >= 0 && g_ti == (int)g_nutzerTi;
+    if (g_bits && (g_opF > 1.f || (g_farbe2 >= 0 && g_ti == (int)g_statusTi)) &&
+        GdiFlush()) {  // second color along each pill, opacity above 1
+        const bool zwei = g_farbe2 >= 0 && g_ti == (int)g_statusTi;
         float c1[3], c2[3];
         BasisFarbe(g_ti, c1);
         ToneRgb(c1);
@@ -2749,8 +2532,6 @@ bool Vollbild() {
     return wr.left <= mi.rcMonitor.left && wr.top <= mi.rcMonitor.top &&
            wr.right >= mi.rcMonitor.right && wr.bottom >= mi.rcMonitor.bottom;
 }
-static float g_letzteTop = -1;
-static ULONGLONG g_bewegt = 0;
 bool NahAnLeiste() {
     RECT wr{};
     POINT c{};
@@ -2759,117 +2540,6 @@ bool NahAnLeiste() {
            c.y >= wr.top - 160 && c.y <= wr.bottom + 40;
 }
 
-// Finds `"key"` followed by ':' at or after `from`; reads the integer after it.
-static bool JsonZahl(const std::string& b,
-                     size_t from,
-                     const std::string& key,
-                     long long& out,
-                     size_t* pos = nullptr) {
-    const std::string k = "\"" + key + "\"";
-    for (size_t p = b.find(k, from); p != std::string::npos;
-         p = b.find(k, p + 1)) {
-        size_t q = p + k.size();
-        while (q < b.size() &&
-               (b[q] == ' ' || b[q] == '\t' || b[q] == '\r' || b[q] == '\n'))
-            ++q;
-        if (q >= b.size() || b[q] != ':')
-            continue;
-        ++q;
-        while (q < b.size() &&
-               (b[q] == ' ' || b[q] == '\t' || b[q] == '\r' || b[q] == '\n'))
-            ++q;
-        if (q < b.size() && (b[q] == '-' || (b[q] >= '0' && b[q] <= '9'))) {
-            out = atoll(b.c_str() + q);
-            if (pos)
-                *pos = q;
-            return true;
-        }
-    }
-    return false;
-}
-// 1.8.0: generic status feed. Polls the configured http:// JSON endpoint; reads
-// the level (first `levelKey` after `objectKey`) and optional age; level >=
-// danger -> danger color, >= warn -> warn color, else the user's color.
-// Unreachable -> unchanged.
-DWORD WINAPI StatusThread(LPVOID) {
-    while (!g_uiaStop) {
-        StatusCfg c;
-        AcquireSRWLockShared(&g_scLock);
-        c = g_sc;
-        ReleaseSRWLockShared(&g_scLock);
-        const int ver = g_scVer;
-        if (c.source == 1 && c.urlOk) {
-            std::string body;
-            bool erreicht = false;
-            HINTERNET se =
-                WinHttpOpen(L"TaskbarSmoke/1", WINHTTP_ACCESS_TYPE_NO_PROXY,
-                            nullptr, nullptr, 0);
-            if (se) {
-                WinHttpSetTimeouts(se, 1500, 1500, 1500, 1500);
-                HINTERNET co = WinHttpConnect(se, c.host.c_str(), c.port, 0);
-                HINTERNET rq =
-                    co ? WinHttpOpenRequest(co, L"GET", c.path.c_str(), nullptr,
-                                            nullptr, nullptr, 0)
-                       : nullptr;
-                if (rq &&
-                    WinHttpSendRequest(rq, nullptr, 0, nullptr, 0, 0, 0) &&
-                    WinHttpReceiveResponse(rq, nullptr)) {
-                    DWORD n = 0, code = 0, cl = sizeof(code);
-                    char buf[8192];
-                    if (WinHttpQueryHeaders(rq,
-                                            WINHTTP_QUERY_STATUS_CODE |
-                                                WINHTTP_QUERY_FLAG_NUMBER,
-                                            WINHTTP_HEADER_NAME_BY_INDEX, &code,
-                                            &cl, WINHTTP_NO_HEADER_INDEX) &&
-                        code == 200) {
-                        erreicht = true;
-                        while (WinHttpReadData(rq, buf, sizeof(buf), &n) && n) {
-                            body.append(buf, n);
-                            if (body.size() > 4000000)
-                                break;
-                        }
-                    }
-                }
-                if (rq)
-                    WinHttpCloseHandle(rq);
-                if (co)
-                    WinHttpCloseHandle(co);
-                WinHttpCloseHandle(se);
-            }
-            size_t from = 0;
-            bool ok = erreicht;
-            if (ok && !c.objKey.empty()) {
-                const size_t o = body.find("\"" + c.objKey + "\"");
-                ok = o != std::string::npos;
-                from = ok ? o + c.objKey.size() + 2 : 0;
-            }
-            long long lvl = 0;
-            if (ok && JsonZahl(body, from, c.lvlKey, lvl) && ver == g_scVer) {
-                bool frisch = true;
-                if (!c.ageKey.empty()) {
-                    long long seit = 0;
-                    frisch = JsonZahl(body, from, c.ageKey, seit) && seit > 0 &&
-                             (long long)time(nullptr) - seit < c.maxAgeSec;
-                }
-                int h = 0;  // 0 normal (or stale), else tint index + 1
-                if (frisch) {
-                    if (lvl >= c.dangerLvl)
-                        h = c.dangerTi + 1;
-                    else if (lvl >= c.warnLvl)
-                        h = c.warnTi + 1;
-                }
-                if (h != (int)g_feedTi) {
-                    InterlockedExchange(&g_feedTi, h);
-                    StatusMischen();
-                }
-            }
-        }
-        for (int i = 0, n = c.pollMs / 100;
-             i < n && !g_uiaStop && ver == g_scVer; ++i)
-            Sleep(100);
-    }
-    return 0;
-}
 DWORD WINAPI UiaThread(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -2881,7 +2551,7 @@ DWORD WINAPI UiaThread(LPVOID) {
         RECT wr{};
         HWND tr = FindWindowW(L"Shell_TrayWnd", nullptr);
         const bool sichtbar =
-            tr && GetWindowRect(tr, &wr) && wr.top < MonitorBottom() - 6;
+            tr && GetWindowRect(tr, &wr) && wr.top < MonitorBottom(tr) - 6;
         bool leer;
         {
             EnterCriticalSection(&g_lock);
@@ -2918,15 +2588,17 @@ void TimerTakt(bool sichtbar) {  // 15 ms while shown, 250 ms while hidden
 }
 void Tick() {
     EffekteLesen();  // in every style
-    static ULONGLONG lesen = 0;
     const ULONGLONG now = GetTickCount64();
     // Dock magnification (icons grow on hover): don't re-read pill widths while
     // the cursor is on the taskbar No UIA call in Tick (it blocked ~300 ms
     // while the taskbar slid -> overlay froze). UIA runs on its own thread.
+    float offT, offB;
     {
         EnterCriticalSection(&g_lock);
         const bool neu = InterlockedExchange(&g_uiaBereit, 0) != 0;
         auto q = g_pillenQ;
+        offT = g_offT;
+        offB = g_offB;
         LeaveCriticalSection(&g_lock);
         if (neu) {
             for (size_t i = 0; i < q.size(); ++i)
@@ -2937,23 +2609,22 @@ void Tick() {
             g_pillen = q;
         }
     }
-    bool da = !g_pillen.empty() && !Vollbild() &&
-              IsWindowVisible(FindWindowW(L"Shell_TrayWnd", nullptr));
+    const HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    bool da = !g_pillen.empty() && !Vollbild() && IsWindowVisible(tray);
     // Position = taskbar WINDOW (Shell_TrayWnd). It slides visibly when
     // hiding/showing (~160-280 ms); dock magnification does not change it. (UIA
     // only reports final positions.) The overlay follows the window frame by
     // frame.
     if (da) {
         RECT wr{};
-        HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
         if (tray && GetWindowRect(tray, &wr) && wr.bottom > wr.top) {
-            const int mb = MonitorBottom();
+            const int mb = MonitorBottom(tray);
             if (wr.top >= mb - 10)
                 da = false;  // almost fully hidden: gone
             else
                 for (auto& p : g_pillen) {
-                    p.t = (float)wr.top + g_offT;
-                    p.b = (float)wr.bottom - g_offB;
+                    p.t = (float)wr.top + offT;
+                    p.b = (float)wr.bottom - offB;
                 }
         } else
             da = false;
@@ -2980,13 +2651,7 @@ void Tick() {
         SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
-    static int lastTopDraw = -9999;
-    static ULONGLONG lastDraw = 0;
-    RECT wrx{};
-    GetWindowRect(FindWindowW(L"Shell_TrayWnd", nullptr), &wrx);
-    (void)lastDraw;  // draw every frame (60/s), otherwise the smoke stutters
-    lastTopDraw = wrx.top;
-    lastDraw = GetTickCount64();
+    // draw every frame (60/s), otherwise the smoke stutters
     Zeichnen();
 }
 LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -3013,8 +2678,6 @@ DWORD WINAPI RauchThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     InitializeCriticalSection(&g_lock);
     g_uiaThread = CreateThread(nullptr, 0, UiaThread, nullptr, 0, nullptr);
-    g_statusThread =
-        CreateThread(nullptr, 0, StatusThread, nullptr, 0, nullptr);
     Rauschen();
     HINSTANCE inst = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc{sizeof(wc)};
@@ -3043,11 +2706,6 @@ DWORD WINAPI RauchThread(LPVOID) {
         WaitForSingleObject(g_uiaThread, 1500);
         CloseHandle(g_uiaThread);
         g_uiaThread = nullptr;
-    }
-    if (g_statusThread) {
-        WaitForSingleObject(g_statusThread, 2500);
-        CloseHandle(g_statusThread);
-        g_statusThread = nullptr;
     }
     g_fl.clear();
     g_fl.shrink_to_fit();
