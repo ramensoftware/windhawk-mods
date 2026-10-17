@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
-// @description    This mod accurately recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page. 5.2.0 adds full StartAllBack / custom taskbar support.
+// @description    This mod accurately recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page
 // @version        5.2.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
@@ -55,15 +55,15 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, Wi
 
 ## Requirements
 - **Windows 10** with the native taskbar
-- **Windows 11** with the Windows 10 taskbar (via [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher) or similar mods)
+- **Windows 11** using StartAllBack, RetroBar or similar programs such as ExplorerPatcher
 - The network icon must be visible in the main system tray (overflow menu not supported)
-- **[RetroBar](https://github.com/dremin/RetroBar)** is also supported: when the classic taskbar is in use, clicking its network tray icon opens this flyout instead of the modern one. RetroBar must run with Explorer as the shell (the recommended, default RetroBar setup); the flyout is then driven by the RetroBar process itself. Supported on x86 and x64 RetroBar builds; a native ARM64 RetroBar build is not currently supported.
+- **[RetroBar](https://github.com/dremin/RetroBar)** is also supported: when the classic taskbar is in use, clicking its network tray icon opens this flyout instead of the modern one. RetroBar must run with Explorer as the shell (the recommended, default RetroBar setup); the flyout is then driven by the RetroBar process itself.
 
 **Note:** Some heavily customized and unstable taskbar configurations may still not be supported.
 
 ## Known limitations
 - **Overflow menu**: The network icon must be in the main system tray, not hidden in the overflow menu.
-- **Auto-reconnect checkbox**: May not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
+- **Auto-reconnect checkbox**: It may not work reliably on all setups. If the network doesn't reconnect automatically, try connecting manually.
 - **"View full map"**: This link opens the Network shell folder, the same as on Windows 10/11 which is the most similar concept to the classic Windows 7 map.
 - **Control Panel custom page refresh**: On some Windows builds, the customized Network and Sharing Center page may not fully refresh its custom map/details while it is already open. This is a minor visual limitation; close and reopen the page to refresh the custom data.
 
@@ -77,20 +77,9 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, Wi
 - **Anixx** - Testing on Windows 11 23H2 and providing feedback
 - **sebastian08dm08-cpu** - Testing on Windows 10 1809
 - **Kichura** - Visual analysis
+- **awnaise** - Implementation for StartAllBack support
 
 If any issues are encountered, please report them to the author of the mod.
-## What's new in 5.2.0
-- **Full StartAllBack / custom taskbar support.** StartAllBack replaces the
-  stock tray with its own implementation, so tray discovery never finds the
-  network button. 5.2.0 intercepts both entry points StartAllBack uses after a
-  network-icon click: the `ms-availablenetworks:` ShellExecute fallback and the
-  WinRT activation of `Windows.Internal.ShellExperience.NetworkFlyout` (its
-  "Windows 11 flyouts" mode), and anchors the flyout to StartAllBack's own tray
-  button (`SIBNetworkIcon`/`SIBTrayButton`) before falling back to the cursor.
-- Credits: the ShellExecute interception approach was created by **awnaise** in
-  the fork ["Windows 7 Network Flyout (StartAllBack / Win11 Fix)"](https://github.com/ramensoftware/windhawk-mods/pull/5622),
-  itself built on this mod. 5.2.0 merges that idea upstream and hardens it.
-  Thank you, awnaise!
 
 */
 // ==/WindhawkModReadme==
@@ -148,6 +137,7 @@ If any issues are encountered, please report them to the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog
+// - 5.2.0: Added support for StartAllBack (tested on Windows 11 24H2)
 // - 5.1.0: New "Follow system theme" option (the right pick for Fake High
 //   Contrast and other classic/msstyles setups): instead of forcing the flat
 //   classic palette it really tracks Windows - the live High Contrast system
