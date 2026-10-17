@@ -59,7 +59,7 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Uninstall**: Right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Protected Windows components offer no uninstall action. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
-- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, and opened context menus from its live visual tree, with a best-effort read of Start Menu Styler's Windhawk registry settings for `WindhawkBlur` parameters and unopened menu rules (not available in portable Windhawk, which falls back to live tree inspection and a glass/acrylic approximation). Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
+- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties, approximating custom composition blur brushes with a glass effect. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
 - **No Simulated Keystrokes**: A low-level keyboard hook (`WH_KEYBOARD_LL`) is active while Start, SearchHost, or the search window is in the foreground to capture opening text and context-menu typing. Focus is handled with standard foreground APIs only; the mod never attaches thread input or synthesizes keystrokes.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
@@ -195,7 +195,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - **Everything is reported as not running:** start the Everything application and leave it running in the tray. Its service alone does not provide the search IPC window. Everything 1.4 and 1.5 alpha/beta, including named instances, are supported.
 - **A preview shows only an icon:** enable File Preview. Common image formats have a built-in decoding fallback; specialist formats may require a thumbnail provider, and videos may require a compatible Windows codec. Unavailable or unreadable content falls back to its icon and available properties.
 - **Folder sizes are missing:** enable Everything's **Index folder size** option; see [Folder Sizes in Preview](#folder-sizes-in-preview). The mod does not recursively scan folders to calculate sizes.
-- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start if using portable Windhawk so its live menu presenter can be captured). Reading `WindhawkBlur` parameters and unopened menu rules from Windhawk's registry is best-effort and does not work with portable Windhawk.
+- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start once so its live menu presenter can be captured). Custom composition blur brushes are approximated with a glass effect using their public tint/fallback colors.
 - **A custom command does not start:** choose the shell that understands the command. PowerShell 7 and custom shells must already be installed. Hide Terminal hides the shell console; it does not shorten the command's lifetime or hide windows opened by the command.
 
 Tested on **Windows 11 25H2 and 26H2, x86-64**. Other Windows versions and builds, including Insider builds, have not been verified. For a reproducible problem, include the full Windows build, mod version, Everything version and instance name, other Start/search mods, and steps to reproduce it.
@@ -245,7 +245,7 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
     $description: Open search with an additional keyboard shortcut. Win+S and the existing entry points remain available. Changes apply immediately. If another app or Windows reserves the combination, choose another.
   - shortcutModifiers: alt
     $name: Shortcut Modifiers
-    $description: Modifier keys held with the key below. Requires Enable Alternative Shortcut. None reserves the selected key even while typing in other apps.
+    $description: Modifier keys held with the key below. Requires Enable Alternative Shortcut. None is accepted only for function, media, browser, and special keys so normal typing is not blocked.
     $options:
     - alt: Alt
     - ctrl: Ctrl
@@ -3972,16 +3972,17 @@ RECT SearchSlideViewport(RECT const& frame, RECT const& work, SearchTaskbarEdge 
 }
 
 struct SearchAppearanceData {
-    uint32_t version = 5, dark = 1;
+    uint32_t version = 7, dark = 1;
     uint32_t taskbarEdge = static_cast<uint32_t>(SearchTaskbarEdge::Bottom), reserved = 0;
     uint32_t foreground = 0, searchForeground = 0;
     double width = 0, height = 0, edgeGap = 12, alignment = 0.5;
-    double corners[4]{8, 8, 8, 8}, thickness[4]{1, 1, 1, 1}, innerThickness[4]{};
+    double corners[4]{8, 8, 8, 8}, thickness[4]{1, 1, 1, 1};
     double searchCorners[4]{4, 4, 4, 4}, searchThickness[4]{1, 1, 1, 1};
-    SearchBrushData background, innerBackground, outline, innerOutline;
+    SearchBrushData background, outline;
     SearchBrushData searchBackground, searchOutline;
-    SearchSurfaceData searchOverlay, header, itemHover, footer;
+    SearchSurfaceData searchOverlay, header, footer;
     SearchSurfaceData menu, menuBorder, menuItem;
+    bool operator==(SearchAppearanceData const&) const = default;
 };
 static SearchAppearanceData g_searchAppearance;
 static bool g_searchAppearanceValid = false;
@@ -4332,13 +4333,16 @@ static UINT ParseAlternativeShortcutKey(std::wstring_view text) {
 }
 
 // Without modifiers, only function, media, browser, and dedicated special keys
-// are allowed so normal typing keys cannot be taken away from other apps.
+// are allowed so normal typing, Escape, IME, and volume keys cannot be taken
+// away from other apps.
 static bool IsSafeUnmodifiedShortcutKey(UINT key) {
+    if (key == VK_VOLUME_MUTE || key == VK_VOLUME_DOWN || key == VK_VOLUME_UP)
+        return false;
     return (key >= VK_F1 && key <= VK_F24) ||
            (key >= VK_BROWSER_BACK && key <= VK_LAUNCH_APP2) ||
            key == VK_PAUSE || key == VK_SNAPSHOT || key == VK_APPS ||
            key == VK_SLEEP || key == VK_SCROLL ||
-           (key >= 0x15 && key <= 0x1F) || (key >= 0xF6 && key <= 0xFE);
+           (key >= 0xF6 && key <= 0xFE);
 }
 
 static bool AlternativeShortcutMatches(UINT shortcut, UINT key, const BYTE* state) {
@@ -5388,13 +5392,10 @@ void KeepHandler(wf::IInspectable const& source, Revoker revoker) {
     g_xamlHandlers->push_back({winrt::make_weak(source), std::make_shared<Revoker>(std::move(revoker))});
 }
 
-[[clang::no_destroy]] wuxc::Border g_windowInnerBorder{nullptr};
 [[clang::no_destroy]] wuxc::Image g_windowStrokeImage{nullptr};
 SearchBrushData g_windowOutlineBrush{};
-SearchBrushData g_windowInnerOutlineBrush{};
 std::array<double, 4> g_windowCorners{8, 8, 8, 8};
 std::array<double, 4> g_windowThickness{1, 1, 1, 1};
-std::array<double, 4> g_windowInnerThickness{0, 0, 0, 0};
 
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_filesHeaderHolder{nullptr};
@@ -5669,20 +5670,6 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
 void TeardownStartMenuBridge(HWND core) {
     if (!core) return;
     KillTimer(core, SearchAppearanceTimerId());
-    try {
-        if (auto window = wux::Window::Current(); window && window.Content()) {
-            if (auto probe = FindDescendantByName(window.Content(), L"__WhMenuProbeCanvas", 16)) {
-                if (auto elem = probe.try_as<wux::UIElement>()) {
-                    if (auto parent = wuxm::VisualTreeHelper::GetParent(probe).try_as<wuxc::Panel>()) {
-                        uint32_t idx = 0;
-                        if (parent.Children().IndexOf(elem, idx))
-                            parent.Children().RemoveAt(idx);
-                    }
-                }
-            }
-        }
-    } catch (...) {
-    }
     if (g_subclassed) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(core, StartMenuSubclassProc);
         g_subclassed = false;
@@ -9542,15 +9529,6 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     footerBorder.Child(footerWrap);
     root.Children().Append(footerBorder);
 
-    wuxc::Canvas windowInnerCanvas;
-    windowInnerCanvas.IsHitTestVisible(false);
-    wuxc::Canvas::SetZIndex(windowInnerCanvas, -1);
-    wuxc::Border windowInnerBorder;
-    windowInnerBorder.IsHitTestVisible(false);
-    windowInnerBorder.Visibility(wux::Visibility::Collapsed);
-    windowInnerCanvas.Children().Append(windowInnerBorder);
-    root.Children().Append(windowInnerCanvas);
-    g_windowInnerBorder = windowInnerBorder;
 
     wuxc::Canvas windowStrokeCanvas;
     windowStrokeCanvas.IsHitTestVisible(false);
@@ -12230,7 +12208,6 @@ void TeardownSearchUi() {
     g_appButtonsOpt.reset();
     g_fileButtonsOpt.reset();
     g_resultsHost = nullptr;
-    g_windowInnerBorder = nullptr;
     g_windowStrokeImage = nullptr;
     g_searchTextBrush = nullptr;
     g_resolvedSearchTextBrush = nullptr;
@@ -12905,18 +12882,11 @@ void SearchWindowStyle() {
     g_resultsHost.Padding(wux::ThicknessHelper::FromLengths(16, 16, 16, 12));
     g_resultsHost.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
     g_resultsHost.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
-    g_resultsHost.BorderBrush(nullptr);
     g_windowCorners = {8, 8, 8, 8};
     g_windowThickness = {1, 1, 1, 1};
-    g_windowInnerThickness = {};
-    g_windowInnerOutlineBrush = {};
     g_windowOutlineBrush = {};
     g_windowOutlineBrush.kind = 1;
     g_windowOutlineBrush.color = light ? 0x25000000u : 0x20FFFFFFu;
-    if (g_windowInnerBorder) {
-        g_windowInnerBorder.Background(nullptr);
-        g_windowInnerBorder.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
-    }
     wuxm::AcrylicBrush surface;
     surface.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
     surface.TintColor(light ? winrt::Windows::UI::Color{255, 243, 243, 243}
@@ -13164,125 +13134,18 @@ SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush, wux::FrameworkEleme
             data.offsets[i] = stop.Offset();
         }
     } else if (auto comp = brush.try_as<wuxm::XamlCompositionBrushBase>()) {
+        // Only public data: the brush's FallbackColor and, when another mod
+        // exposes them, the __WhBlur*Proxy_ resources on the owner (read with
+        // try_as, so anything unexpected is simply ignored). The blur amount is
+        // not readable through any public API, so a default is used.
         data.kind = 4;
         data.blur = 18;
         data.luminosity = 0.0;
         data.saturation = 1.0;
         uint32_t fallback = SearchPackColor(comp.FallbackColor());
         uint32_t tint = fallback;
-        bool extractedExact = false;
-
-        // XamlCompositionBrushBase is a composable WinRT class: winrt::get_abi(comp)
-        // returns m_inner (the aggregated Windows XAML object), whereas querying
-        // IXamlCompositionBrushBaseOverrides returns the vtable at offset 0 of the
-        // derived C++ class (Start Menu Styler's XamlBlurBrush).
-        // Note: IVisual::get_Compositor() allocates a new WinRT wrapper on each call,
-        // so raw pointer comparison against visual.Compositor() cannot be used.
-        // Instead, compute the exact C++/WinRT member offset from
-        // XamlCompositionBrushBaseT<D> and validate the member layout.
-        try {
-            struct StylerBlurBrushLayout {
-                void* compositor;
-                float blurAmount;
-                winrt::Windows::UI::Color tint;
-                std::optional<uint8_t> tintOpacity;
-                void* tintThemeResourceKey;
-                std::optional<float> tintLuminosityOpacity;
-                std::optional<float> tintSaturation;
-                std::optional<float> noiseOpacity;
-                std::optional<float> noiseDensity;
-                std::optional<winrt::Windows::UI::Color> fallbackColor;
-                void* fallbackThemeResourceKey;
-                void* proxyBrush;
-                void* fallbackProxyBrush;
-            };
-            struct StylerBlurBrushProbe : wuxm::XamlCompositionBrushBaseT<StylerBlurBrushProbe> {
-                StylerBlurBrushLayout layout;
-            };
-            alignas(StylerBlurBrushProbe) uint8_t probeStorage[sizeof(StylerBlurBrushProbe)]{};
-            auto* probeObj = reinterpret_cast<const StylerBlurBrushProbe*>(probeStorage);
-            const size_t exactOffset = static_cast<size_t>(reinterpret_cast<const uint8_t*>(&probeObj->layout) -
-                                                           reinterpret_cast<const uint8_t*>(probeObj));
-
-            auto isReadablePtr = [](const void* ptr, size_t bytes = sizeof(void*)) {
-                if (!ptr)
-                    return false;
-                MEMORY_BASIC_INFORMATION info{};
-                if (!VirtualQuery(ptr, &info, sizeof(info)) || info.State != MEM_COMMIT)
-                    return false;
-                if (!(info.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
-                                      PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY)))
-                    return false;
-                const uintptr_t end = reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
-                return reinterpret_cast<uintptr_t>(ptr) + bytes <= end;
-            };
-
-            auto overrides = comp.try_as<wuxm::IXamlCompositionBrushBaseOverrides>();
-            auto* rawObj = reinterpret_cast<const uint8_t*>(winrt::get_abi(overrides));
-            if (rawObj) {
-                auto tryExtractAt = [&](size_t offset) -> bool {
-                    if (!isReadablePtr(rawObj + offset, sizeof(StylerBlurBrushLayout)))
-                        return false;
-                    auto const* layout = reinterpret_cast<const StylerBlurBrushLayout*>(rawObj + offset);
-                    if (!isReadablePtr(layout->compositor, sizeof(void*)) || !std::isfinite(layout->blurAmount) ||
-                        layout->blurAmount < 0.0f || layout->blurAmount > 200.0f) {
-                        return false;
-                    }
-                    // Verify std::optional engaged flags are valid booleans (0 or 1)
-                    const uint8_t optTintOp = reinterpret_cast<const uint8_t*>(&layout->tintOpacity)[1];
-                    const uint8_t optLum = reinterpret_cast<const uint8_t*>(&layout->tintLuminosityOpacity)[4];
-                    const uint8_t optSat = reinterpret_cast<const uint8_t*>(&layout->tintSaturation)[4];
-                    const uint8_t optFallback = reinterpret_cast<const uint8_t*>(&layout->fallbackColor)[4];
-                    if (optTintOp > 1 || optLum > 1 || optSat > 1 || optFallback > 1)
-                        return false;
-
-                    data.blur = std::clamp<double>(layout->blurAmount, 0.0, 100.0);
-                    winrt::Windows::UI::Color tintCol = layout->tint;
-                    if (layout->proxyBrush && isReadablePtr(layout->proxyBrush)) {
-                        wuxm::SolidColorBrush proxy{nullptr};
-                        winrt::copy_from_abi(proxy, layout->proxyBrush);
-                        if (proxy)
-                            tintCol = proxy.Color();
-                    }
-                    if (layout->fallbackProxyBrush && isReadablePtr(layout->fallbackProxyBrush)) {
-                        wuxm::SolidColorBrush fbProxy{nullptr};
-                        winrt::copy_from_abi(fbProxy, layout->fallbackProxyBrush);
-                        if (fbProxy)
-                            fallback = SearchPackColor(fbProxy.Color());
-                    } else if (layout->fallbackColor.has_value()) {
-                        fallback = SearchPackColor(*layout->fallbackColor);
-                    }
-                    if (layout->tintOpacity.has_value()) {
-                        tintCol.A = *layout->tintOpacity;
-                    }
-                    tint = SearchPackColor(tintCol);
-                    if (layout->tintLuminosityOpacity.has_value() && std::isfinite(*layout->tintLuminosityOpacity) &&
-                        *layout->tintLuminosityOpacity >= 0.0f && *layout->tintLuminosityOpacity <= 1.0f) {
-                        data.luminosity = *layout->tintLuminosityOpacity;
-                    }
-                    if (layout->tintSaturation.has_value() && std::isfinite(*layout->tintSaturation) &&
-                        *layout->tintSaturation >= 0.0f && *layout->tintSaturation <= 10.0f) {
-                        data.saturation = *layout->tintSaturation;
-                    }
-                    return true;
-                };
-
-                if (tryExtractAt(exactOffset)) {
-                    extractedExact = true;
-                } else {
-                    for (size_t offset = 16; offset <= 80; offset += 8) {
-                        if (offset != exactOffset && tryExtractAt(offset)) {
-                            extractedExact = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        } catch (...) {
-        }
-
-        if (!extractedExact && owner) {
-            bool foundTintProxy = false;
+        bool foundTintProxy = false;
+        if (owner) {
             try {
                 for (auto const& pair : owner.Resources()) {
                     auto key = winrt::unbox_value_or<winrt::hstring>(pair.Key(), L"");
@@ -13300,9 +13163,21 @@ SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush, wux::FrameworkEleme
                 }
             } catch (...) {
             }
-            if (!foundTintProxy && ((tint >> 24) == 0 || (tint >> 24) == 0xFF)) {
-                tint = (tint & 0x00FFFFFFu) | 0x40000000u;
+        }
+        const bool isDark = owner ? (owner.ActualTheme() == wux::ElementTheme::Dark) : !IsLightTheme();
+        if (!foundTintProxy) {
+            if (isDark) {
+                tint = 0x40000000u;
+                fallback = 0xFF202020u;
+            } else {
+                tint = 0x80F3F3F3u;
+                fallback = 0xFFF3F3F3u;
             }
+        } else {
+            if ((tint >> 24) == 0)
+                tint = isDark ? 0x40000000u : 0x80F3F3F3u;
+            if ((fallback >> 24) == 0)
+                fallback = isDark ? 0xFF202020u : 0xFFF3F3F3u;
         }
         data.color = tint;
         data.fallback = fallback | 0xFF000000u;
@@ -13522,131 +13397,46 @@ void CaptureStartAppearance(HWND target) try {
     SearchAppearanceData appearance;
     appearance.dark = border.ActualTheme() == wux::ElementTheme::Dark;
 
-    // 1. Universal Outer & Inner Window Surface Introspection:
-    // Inspect AcrylicBorder, its parent Border (Grid#Root > Border), Classic Start's
-    // Border#AppBorder, and inner content frames (Grid#MainMenu / Grid#RootContent).
-    SearchSurfaceData outerSurface = CaptureLiveSurface(border);
-    SearchSurfaceData innerSurface{};
-
-    auto considerWindowLayer = [&](wux::FrameworkElement const& elem, bool preferInner) {
-        if (!elem || elem == border || elem.Visibility() != wux::Visibility::Visible || elem.Opacity() <= 0.01)
-            return;
-        if (preferInner &&
-            (elem.ActualWidth() < border.ActualWidth() * 0.85 || elem.ActualHeight() < border.ActualHeight() * 0.85))
-            return;
-        auto surf = CaptureLiveSurface(elem);
-        if (!(surf.flags & 1) && !(surf.flags & 2))
-            return;
-        if (!preferInner) {
-            if (!(outerSurface.flags & 1) && (surf.flags & 1)) {
-                outerSurface.background = surf.background;
-                outerSurface.flags |= 1;
-            } else if ((surf.flags & 1) && !(innerSurface.flags & 1)) {
-                innerSurface.background = surf.background;
-                innerSurface.flags |= 1;
-            }
-            if (!(outerSurface.flags & 2) && (surf.flags & 2)) {
-                outerSurface.outline = surf.outline;
-                outerSurface.flags |= 2;
-                if (hasPositive4(surf.thickness))
-                    std::copy(std::begin(surf.thickness), std::end(surf.thickness), outerSurface.thickness);
-            } else if ((surf.flags & 2) && !(innerSurface.flags & 2)) {
-                innerSurface.outline = surf.outline;
-                innerSurface.flags |= 2;
-                if (hasPositive4(surf.thickness))
-                    std::copy(std::begin(surf.thickness), std::end(surf.thickness), innerSurface.thickness);
-            }
-            if (!hasPositive4(outerSurface.corners) && hasPositive4(surf.corners))
-                std::copy(std::begin(surf.corners), std::end(surf.corners), outerSurface.corners);
-        } else {
-            if ((surf.flags & 1) && !(innerSurface.flags & 1)) {
-                if (!(outerSurface.flags & 1)) {
-                    outerSurface.background = surf.background;
-                    outerSurface.flags |= 1;
-                } else {
-                    innerSurface.background = surf.background;
-                    innerSurface.flags |= 1;
+    // 1. Direct Window Surface Introspection:
+    // Inspect Start's primary AcrylicBorder, or its parent Border / AppBorder if AcrylicBorder has no background.
+    SearchSurfaceData windowSurface = CaptureLiveSurface(border);
+    if (!SearchBrushIsVisible(windowSurface.background)) {
+        if (auto parentObj = wuxm::VisualTreeHelper::GetParent(border)) {
+            if (auto parentBorder = parentObj.try_as<wuxc::Border>()) {
+                auto parentSurf = CaptureLiveSurface(parentBorder);
+                if (SearchBrushIsVisible(parentSurf.background))
+                    windowSurface.background = parentSurf.background;
+                if (!SearchBrushIsVisible(windowSurface.outline) && SearchBrushIsVisible(parentSurf.outline)) {
+                    windowSurface.outline = parentSurf.outline;
+                    if (hasPositive4(parentSurf.thickness))
+                        std::copy(std::begin(parentSurf.thickness), std::end(parentSurf.thickness), windowSurface.thickness);
                 }
+                if (!hasPositive4(windowSurface.corners) && hasPositive4(parentSurf.corners))
+                    std::copy(std::begin(parentSurf.corners), std::end(parentSurf.corners), windowSurface.corners);
             }
-            if ((surf.flags & 2) && !(innerSurface.flags & 2)) {
-                if (!(outerSurface.flags & 2)) {
-                    outerSurface.outline = surf.outline;
-                    outerSurface.flags |= 2;
-                    if (hasPositive4(surf.thickness))
-                        std::copy(std::begin(surf.thickness), std::end(surf.thickness), outerSurface.thickness);
-                } else {
-                    innerSurface.outline = surf.outline;
-                    innerSurface.flags |= 2;
-                    if (hasPositive4(surf.thickness))
-                        std::copy(std::begin(surf.thickness), std::end(surf.thickness), innerSurface.thickness);
-                }
-            }
-            if (!hasPositive4(outerSurface.corners) && hasPositive4(surf.corners))
-                std::copy(std::begin(surf.corners), std::end(surf.corners), outerSurface.corners);
         }
-    };
-
-    if (auto parentObj = wuxm::VisualTreeHelper::GetParent(border)) {
-        if (auto parentBorder = parentObj.try_as<wuxc::Border>())
-            considerWindowLayer(parentBorder, false);
     }
-    if (auto appBorderNode = FindDescendantByName(content, L"AppBorder", 12)) {
-        if (auto appBorder = appBorderNode.try_as<wux::FrameworkElement>())
-            considerWindowLayer(appBorder, false);
-    }
-    for (PCWSTR innerName : {L"MainMenu", L"RootContent", L"InnerContent"}) {
-        if (auto node = FindDescendantByName(content, innerName, 14)) {
-            if (auto fe = node.try_as<wux::FrameworkElement>()) {
-                considerWindowLayer(fe, true);
-                for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(fe); i < n; ++i) {
-                    if (auto childFe = wuxm::VisualTreeHelper::GetChild(fe, i).try_as<wux::FrameworkElement>()) {
-                        auto name = childFe.Name();
-                        if (name == L"AcrylicBorder" || name == L"NavigationPane" || name == L"SearchBoxHolder" ||
-                            name == L"__WhMenuProbeCanvas")
-                            continue;
-                        if (childFe.try_as<wuxc::Border>() || childFe.try_as<wuxc::Grid>()) {
-                            considerWindowLayer(childFe, true);
-                        }
-                    }
+    if (!SearchBrushIsVisible(windowSurface.background)) {
+        if (auto appBorderNode = FindDescendantByName(content, L"AppBorder", 12)) {
+            if (auto appBorder = appBorderNode.try_as<wux::FrameworkElement>()) {
+                auto appSurf = CaptureLiveSurface(appBorder);
+                if (SearchBrushIsVisible(appSurf.background))
+                    windowSurface.background = appSurf.background;
+                if (!SearchBrushIsVisible(windowSurface.outline) && SearchBrushIsVisible(appSurf.outline)) {
+                    windowSurface.outline = appSurf.outline;
+                    if (hasPositive4(appSurf.thickness))
+                        std::copy(std::begin(appSurf.thickness), std::end(appSurf.thickness), windowSurface.thickness);
                 }
+                if (!hasPositive4(windowSurface.corners) && hasPositive4(appSurf.corners))
+                    std::copy(std::begin(appSurf.corners), std::end(appSurf.corners), windowSurface.corners);
             }
         }
     }
 
-    // When a theme (such as LiquidGlass2) puts WindhawkBlur on both AcrylicBorder
-    // and Grid#Root > Border, composite their tints into a single host-backdrop
-    // glass brush so g_windowInnerBorder does not blur the backdrop a second time.
-    if (outerSurface.background.kind == 4 && innerSurface.background.kind == 4) {
-        auto c1 = SearchUnpackColor(outerSurface.background.color);
-        auto c2 = SearchUnpackColor(innerSurface.background.color);
-        const double a1 = (c1.A / 255.0) * std::clamp(outerSurface.background.opacity, 0.0, 1.0);
-        const double a2 = (c2.A / 255.0) * std::clamp(innerSurface.background.opacity, 0.0, 1.0);
-        const double outA = a1 + a2 * (1.0 - a1);
-        if (outA > 0.001) {
-            winrt::Windows::UI::Color merged{};
-            merged.A = static_cast<uint8_t>(std::clamp( std::round(outA * 255.0), 0.0, 255.0));
-            merged.R = static_cast<uint8_t>(std::clamp(std::round((c1.R * a1 + c2.R * a2 * (1.0 - a1)) / outA), 0.0, 255.0));
-            merged.G = static_cast<uint8_t>(std::clamp(std::round((c1.G * a1 + c2.G * a2 * (1.0 - a1)) / outA), 0.0, 255.0));
-            merged.B = static_cast<uint8_t>(std::clamp(std::round((c1.B * a1 + c2.B * a2 * (1.0 - a1)) / outA), 0.0, 255.0));
-            outerSurface.background.color = SearchPackColor(merged);
-            outerSurface.background.opacity = 1.0;
-        }
-        outerSurface.background.blur = std::max(outerSurface.background.blur, innerSurface.background.blur);
-        if (innerSurface.background.luminosity > outerSurface.background.luminosity)
-            outerSurface.background.luminosity = innerSurface.background.luminosity;
-        if (innerSurface.background.saturation != 1.0 && outerSurface.background.saturation == 1.0)
-            outerSurface.background.saturation = innerSurface.background.saturation;
-        innerSurface.background = {};
-        innerSurface.flags &= ~1u;
-    }
-
-    appearance.background = outerSurface.background;
-    appearance.outline = outerSurface.outline;
-    std::copy(std::begin(outerSurface.corners), std::end(outerSurface.corners), appearance.corners);
-    std::copy(std::begin(outerSurface.thickness), std::end(outerSurface.thickness), appearance.thickness);
-    appearance.innerBackground = innerSurface.background;
-    appearance.innerOutline = innerSurface.outline;
-    std::copy(std::begin(innerSurface.thickness), std::end(innerSurface.thickness), appearance.innerThickness);
+    appearance.background = windowSurface.background;
+    appearance.outline = windowSurface.outline;
+    std::copy(std::begin(windowSurface.corners), std::end(windowSurface.corners), appearance.corners);
+    std::copy(std::begin(windowSurface.thickness), std::end(windowSurface.thickness), appearance.thickness);
 
     // Read rendered labels so custom TextBlock Foreground rules are included.
     auto textColor = [](wux::DependencyObject const& root, std::initializer_list<PCWSTR> names) {
@@ -13662,54 +13452,34 @@ void CaptureStartAppearance(HWND target) try {
     appearance.foreground =
         textColor(mainRoot, {L"DisplayName", L"AppDisplayName", L"PinnedListHeaderText", L"AllAppsHeading"});
 
-    // 2. Universal 3-Layer Search Box Introspection:
-    // Themes style SearchBoxToggleButton (Control), its template root Grid, and/or Border#BorderElement.
+    // 2. Search Box Introspection:
     if (auto toggle = FindStockSearchToggle(mainRoot)) {
-        if (auto toggleCtrl = toggle.try_as<wuxc::Control>()) {
-            try {
-                wux::VisualStateManager::GoToState(toggleCtrl, L"Normal", false);
-            } catch (...) {
-            }
-        }
         appearance.searchForeground =
             textColor(toggle, {L"PlaceholderText", L"Text", L"PlaceholderTextContentPresenter", L"SearchGlyph"});
 
-        std::vector<SearchSurfaceData> searchLayers;
-        if (auto searchFound = FindDescendantByName(toggle, L"BorderElement", 8)) {
-            if (auto searchBorder = searchFound.try_as<wux::FrameworkElement>()) {
-                searchLayers.push_back(CaptureLiveSurface(searchBorder));
-                if (auto parentGrid = wuxm::VisualTreeHelper::GetParent(searchBorder).try_as<wux::FrameworkElement>()) {
-                    if (parentGrid != toggle)
-                        searchLayers.push_back(CaptureLiveSurface(parentGrid));
+        wux::FrameworkElement searchElement{nullptr};
+        if (auto searchFound = FindDescendantByName(toggle, L"BorderElement", 8))
+            searchElement = searchFound.try_as<wux::FrameworkElement>();
+        if (!searchElement)
+            searchElement = toggle.try_as<wux::FrameworkElement>();
+
+        if (searchElement) {
+            SearchSurfaceData searchSurf = CaptureLiveSurface(searchElement);
+            if (!SearchBrushIsVisible(searchSurf.background) && searchElement != toggle) {
+                if (auto toggleFe = toggle.try_as<wux::FrameworkElement>()) {
+                    auto toggleSurf = CaptureLiveSurface(toggleFe);
+                    if (SearchBrushIsVisible(toggleSurf.background))
+                        searchSurf.background = toggleSurf.background;
+                    if (!SearchBrushIsVisible(searchSurf.outline) && SearchBrushIsVisible(toggleSurf.outline))
+                        searchSurf.outline = toggleSurf.outline;
+                    if (!hasPositive4(searchSurf.corners) && hasPositive4(toggleSurf.corners))
+                        std::copy(std::begin(toggleSurf.corners), std::end(toggleSurf.corners), searchSurf.corners);
                 }
             }
-        }
-        if (auto toggleFe = toggle.try_as<wux::FrameworkElement>()) {
-            searchLayers.push_back(CaptureLiveSurface(toggleFe));
-        }
-
-        bool havePrimaryBg = false, havePrimaryOutline = false, haveCorners = false;
-        for (auto const& layer : searchLayers) {
-            if ((layer.flags & 1) && !havePrimaryBg) {
-                appearance.searchBackground = layer.background;
-                havePrimaryBg = true;
-            } else if ((layer.flags & 1) && !(appearance.searchOverlay.flags & 1)) {
-                appearance.searchOverlay.background = layer.background;
-                appearance.searchOverlay.flags |= 1;
-            }
-            if ((layer.flags & 2) && hasPositive4(layer.thickness) && !havePrimaryOutline) {
-                appearance.searchOutline = layer.outline;
-                std::copy(std::begin(layer.thickness), std::end(layer.thickness), appearance.searchThickness);
-                havePrimaryOutline = true;
-            } else if ((layer.flags & 2) && hasPositive4(layer.thickness) && !(appearance.searchOverlay.flags & 2)) {
-                appearance.searchOverlay.outline = layer.outline;
-                std::copy(std::begin(layer.thickness), std::end(layer.thickness), appearance.searchOverlay.thickness);
-                appearance.searchOverlay.flags |= 2 | 8;
-            }
-            if (!haveCorners && hasPositive4(layer.corners)) {
-                std::copy(std::begin(layer.corners), std::end(layer.corners), appearance.searchCorners);
-                haveCorners = true;
-            }
+            appearance.searchBackground = searchSurf.background;
+            appearance.searchOutline = searchSurf.outline;
+            std::copy(std::begin(searchSurf.corners), std::end(searchSurf.corners), appearance.searchCorners);
+            std::copy(std::begin(searchSurf.thickness), std::end(searchSurf.thickness), appearance.searchThickness);
         }
     }
 
@@ -13756,88 +13526,9 @@ void CaptureStartAppearance(HWND target) try {
         }
     }
 
-    // 5. Universal Item Hover / Selection VisualState Probe:
-    // Find a representative item Control in Start and briefly transition it to
-    // "PointerOver" to read the exact hover/selection surface styled by any theme.
-    try {
-        wuxc::Control sampleItem{nullptr};
-        std::function<void(wux::DependencyObject const&, int)> findSampleItem =
-            [&](wux::DependencyObject const& node, int depth) {
-                if (!node || depth > 18 || sampleItem)
-                    return;
-                if (auto fe = node.try_as<wux::FrameworkElement>()) {
-                    if (fe.Name() == L"__WhMenuProbeCanvas")
-                        return;
-                }
-                if (auto ctrl = node.try_as<wuxc::Control>()) {
-                    auto clsName = winrt::get_class_name(ctrl);
-                    if (clsName == L"Windows.UI.Xaml.Controls.GridViewItem" ||
-                        clsName == L"Windows.UI.Xaml.Controls.ListViewItem" ||
-                        clsName.ends_with(L"TileGridViewItem") || clsName.ends_with(L"PinnedListTile") ||
-                        (ctrl.try_as<wuxc::Button>() && ctrl.Name() != L"SearchBoxToggleButton" &&
-                         ctrl.ActualWidth() >= 48 && ctrl.ActualHeight() >= 28 && ctrl.ActualHeight() <= 120)) {
-                        sampleItem = ctrl;
-                        return;
-                    }
-                }
-                for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(node); i < n && !sampleItem; ++i)
-                    findSampleItem(wuxm::VisualTreeHelper::GetChild(node, i), depth + 1);
-            };
-        for (PCWSTR listName : {L"StartMenuPinnedList", L"PinnedList", L"RecommendedList", L"AllAppsGrid", L"AllList"}) {
-            if (auto listNode = FindDescendantByName(mainRoot, listName, 16)) {
-                findSampleItem(listNode, 0);
-                if (sampleItem)
-                    break;
-            }
-        }
-        if (!sampleItem)
-            findSampleItem(mainRoot, 0);
-
-        if (sampleItem) {
-            auto captureItemSubtree = [&](wuxc::Control const& ctrl) {
-                SearchSurfaceData result = CaptureLiveSurface(ctrl, true);
-                std::function<void(wux::DependencyObject const&, int)> walk =
-                    [&](wux::DependencyObject const& n, int d) {
-                        if (!n || d > 5)
-                            return;
-                        if (auto fe = n.try_as<wux::FrameworkElement>()) {
-                            if (fe.try_as<wuxc::Border>() || fe.try_as<wuxc::Grid>() ||
-                                fe.try_as<wuxc::ContentPresenter>()) {
-                                auto sub = CaptureLiveSurface(fe, true);
-                                if ((sub.flags & 1) && !(result.flags & 1)) {
-                                    result.background = sub.background;
-                                    result.flags |= 1;
-                                }
-                                if ((sub.flags & 2) && hasPositive4(sub.thickness) && !(result.flags & 2)) {
-                                    result.outline = sub.outline;
-                                    std::copy(std::begin(sub.thickness), std::end(sub.thickness), result.thickness);
-                                    result.flags |= 2 | 8;
-                                }
-                                if (!hasPositive4(result.corners) && hasPositive4(sub.corners)) {
-                                    std::copy(std::begin(sub.corners), std::end(sub.corners), result.corners);
-                                    result.flags |= 4;
-                                }
-                            }
-                        }
-                        for (int i = 0, count = wuxm::VisualTreeHelper::GetChildrenCount(n); i < count; ++i)
-                            walk(wuxm::VisualTreeHelper::GetChild(n, i), d + 1);
-                    };
-                walk(ctrl, 0);
-                return result;
-            };
-            wux::VisualStateManager::GoToState(sampleItem, L"PointerOver", false);
-            appearance.itemHover = captureItemSubtree(sampleItem);
-            wux::VisualStateManager::GoToState(sampleItem, L"Normal", false);
-        }
-    } catch (...) {
-    }
-
-    // 6. Universal Context Menu (MenuFlyoutPresenter & MenuFlyoutItem) Introspection:
-    // First check any open popups; otherwise probe a hidden 0x0 MenuFlyoutPresenter
-    // inside the live visual tree so Start Menu Styler's OnVisualTreeChange callback
-    // styles MenuFlyoutPresenter, MenuFlyoutPresenter > Border, and MenuFlyoutItem.
-    // When the theme changes, recreate the probe so any broken TemplateBindings on
-    // MenuFlyoutPresenter > Border (e.g. CornerRadius=40 from LiquidGlass2) reset cleanly.
+    // 5. Context Menu (MenuFlyoutPresenter & MenuFlyoutItem) Introspection.
+    // Result rows use a fixed selection style, so Start's item hover look is
+    // not captured.
     SearchSurfaceData liveMenu{}, liveMenuBorder{}, liveMenuItem{};
     auto inspectPresenter = [&](wuxc::MenuFlyoutPresenter const& presenter) {
         if (!presenter)
@@ -13894,70 +13585,18 @@ void CaptureStartAppearance(HWND target) try {
     } catch (...) {
     }
 
-    static SearchAppearanceData s_lastNonMenuAppearance{};
-    static uint32_t s_probeTickCounter = 0;
-    const bool nonMenuChanged = memcmp(&appearance, &s_lastNonMenuAppearance, sizeof(SearchAppearanceData)) != 0;
-    if (nonMenuChanged)
-        s_lastNonMenuAppearance = appearance;
-    const bool recreateProbe = nonMenuChanged || (++s_probeTickCounter % 4 == 0);
-
-    if (!foundOpenMenu) {
-        try {
-            if (auto hostPanel = mainRoot.try_as<wuxc::Panel>()) {
-                if (recreateProbe) {
-                    auto children = hostPanel.Children();
-                    for (int i = static_cast<int>(children.Size()) - 1; i >= 0; --i) {
-                        if (auto fe = children.GetAt(static_cast<uint32_t>(i)).try_as<wux::FrameworkElement>()) {
-                            if (fe.Name() == L"__WhMenuProbeCanvas")
-                                children.RemoveAt(static_cast<uint32_t>(i));
-                        }
-                    }
-                }
-                wuxc::MenuFlyoutPresenter probePresenter{nullptr};
-                if (!recreateProbe) {
-                    if (auto existingProbe = FindDescendantByName(hostPanel, L"__WhMenuProbePresenter", 4))
-                        probePresenter = existingProbe.try_as<wuxc::MenuFlyoutPresenter>();
-                }
-                if (!probePresenter) {
-                    wuxc::Canvas probeCanvas;
-                    probeCanvas.Name(L"__WhMenuProbeCanvas");
-                    probeCanvas.Width(0);
-                    probeCanvas.Height(0);
-                    probeCanvas.Opacity(0.0);
-                    probeCanvas.IsHitTestVisible(false);
-                    probePresenter = wuxc::MenuFlyoutPresenter{};
-                    probePresenter.Name(L"__WhMenuProbePresenter");
-                    probePresenter.Width(0);
-                    probePresenter.Height(0);
-                    probePresenter.MinWidth(0);
-                    probePresenter.MinHeight(0);
-                    probePresenter.MaxWidth(0);
-                    probePresenter.MaxHeight(0);
-                    probePresenter.Opacity(0.0);
-                    probePresenter.IsHitTestVisible(false);
-                    probePresenter.IsTabStop(false);
-                    wuxc::MenuFlyoutItem probeItem;
-                    probeItem.Text(L"Probe");
-                    probeItem.IsTabStop(false);
-                    probeItem.AllowFocusOnInteraction(false);
-                    probePresenter.Items().Append(probeItem);
-                    probeCanvas.Children().Append(probePresenter);
-                    hostPanel.Children().Append(probeCanvas);
-                    probePresenter.ApplyTemplate();
-                    probeItem.ApplyTemplate();
-                    probePresenter.UpdateLayout();
-                }
-                if (probePresenter) {
-                    inspectPresenter(probePresenter);
-                }
-            }
-        } catch (...) {
-        }
+    // Start's live UI is never changed to measure it: menu styling comes only
+    // from a real Start context menu while one is open, and the last result is
+    // kept for later captures. Until a menu has been opened, defaults are used.
+    static SearchSurfaceData s_lastMenu{}, s_lastMenuBorder{}, s_lastMenuItem{};
+    if (foundOpenMenu) {
+        s_lastMenu = liveMenu;
+        s_lastMenuBorder = liveMenuBorder;
+        s_lastMenuItem = liveMenuItem;
     }
-
-    appearance.menu = liveMenu;
-    appearance.menuBorder = liveMenuBorder;
-    appearance.menuItem = liveMenuItem;
+    appearance.menu = s_lastMenu;
+    appearance.menuBorder = s_lastMenuBorder;
+    appearance.menuItem = s_lastMenuItem;
 
     HWND start = CachedStartWindow();
     POINT client{};
@@ -15321,10 +14960,15 @@ struct SearchGlassBrush : wuxm::XamlCompositionBrushBaseT<SearchGlassBrush> {
     searchcomp::CompositionEffectFactory factory{nullptr};
     bool hostBackdrop;
     SearchGlassBrush(SearchBrushData value, bool host) : data(value), hostBackdrop(host) {
-        compositor = wux::Hosting::ElementCompositionPreview::GetElementVisual(g_resultsHost).Compositor();
+        if (g_resultsHost) {
+            try {
+                compositor = wux::Hosting::ElementCompositionPreview::GetElementVisual(g_resultsHost).Compositor();
+            } catch (...) {
+            }
+        }
     }
     void OnConnected() noexcept {
-        if (CompositionBrush())
+        if (CompositionBrush() || !compositor)
             return;
         try {
             if (hostBackdrop)
@@ -15425,7 +15069,8 @@ wuxm::Brush RecreateSearchBrush(SearchBrushData const& data, bool hostBackdrop =
         brush = wuxm::SolidColorBrush{SearchUnpackColor(data.color)};
     else if (data.kind == 2) {
         wuxm::AcrylicBrush acrylic;
-        acrylic.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
+        acrylic.BackgroundSource(hostBackdrop ? wuxm::AcrylicBackgroundSource::HostBackdrop
+                                              : wuxm::AcrylicBackgroundSource::Backdrop);
         acrylic.TintColor(SearchUnpackColor(data.color));
         acrylic.FallbackColor(SearchUnpackColor(data.fallback));
         acrylic.TintOpacity(std::clamp(data.tint, 0.0, 1.0));
@@ -15552,6 +15197,7 @@ void ApplySearchWindowShapeRegion() {
 }
 
 struct SmoothShapeCacheEntry {
+    uintptr_t strokeAbi = 0;
     int widthPx = 0;
     int heightPx = 0;
     float width = 0.0f;
@@ -15565,10 +15211,10 @@ struct SmoothShapeCacheEntry {
     bool operator==(SmoothShapeCacheEntry const&) const = default;
 };
 
-[[clang::no_destroy]] std::unordered_map<uintptr_t, SmoothShapeCacheEntry> g_smoothShapeCache;
+std::unordered_map<uintptr_t, SmoothShapeCacheEntry> g_smoothShapeCache;
 
 void ClearSmoothShapeCache() {
-    g_smoothShapeCache.clear();
+    g_smoothShapeCache = {};
 }
 
 bool ApplySmoothElementShape(wux::UIElement const& clipTarget, wuxc::Image const& strokeImage, double widthDip,
@@ -15599,10 +15245,12 @@ bool ApplySmoothElementShape(wux::UIElement const& clipTarget, wuxc::Image const
     }
 
     const uintptr_t targetAbi = reinterpret_cast<uintptr_t>(winrt::get_abi(clipTarget));
-    SmoothShapeCacheEntry entry{widthPx, heightPx, width, height, scale, radii, thickness, outlineBrush,
+    const uintptr_t strokeAbi = reinterpret_cast<uintptr_t>(winrt::get_abi(strokeImage));
+    SmoothShapeCacheEntry entry{strokeAbi, widthPx, heightPx, width, height, scale, radii, thickness, outlineBrush,
                                 innerThickness, innerOutlineBrush};
+    const bool strokeSized = !strokeImage || (strokeImage.Width() == widthDip && strokeImage.Height() == heightDip);
     auto it = g_smoothShapeCache.find(targetAbi);
-    if (it != g_smoothShapeCache.end() && it->second == entry)
+    if (strokeSized && it != g_smoothShapeCache.end() && it->second == entry)
         return true;
 
     bool smoothClip = false;
@@ -15844,12 +15492,6 @@ void UpdateSearchWindowShape() {
     const double scale = GetDpiForWindow(host) / 96.0;
     const double widthDip = client.right / scale, heightDip = client.bottom / scale;
     const auto pad = g_resultsHost.Padding();
-    if (g_windowInnerBorder) {
-        wuxc::Canvas::SetLeft(g_windowInnerBorder, -pad.Left);
-        wuxc::Canvas::SetTop(g_windowInnerBorder, -pad.Top);
-        g_windowInnerBorder.Width(widthDip);
-        g_windowInnerBorder.Height(heightDip);
-    }
     if (g_windowStrokeImage) {
         wuxc::Canvas::SetLeft(g_windowStrokeImage, -pad.Left);
         wuxc::Canvas::SetTop(g_windowStrokeImage, -pad.Top);
@@ -15859,8 +15501,7 @@ void UpdateSearchWindowShape() {
         radii[i] = static_cast<float>(std::clamp(g_windowCorners[i], 0.0, std::min(widthDip, heightDip) / 2.0));
 
     const bool smooth = ApplySmoothElementShape(g_searchWindowRoot, g_windowStrokeImage, widthDip, heightDip,
-                                                g_windowCorners, g_windowThickness, g_windowOutlineBrush,
-                                                g_windowInnerThickness, g_windowInnerOutlineBrush);
+                                                g_windowCorners, g_windowThickness, g_windowOutlineBrush);
 
     static HWND lastHost = nullptr;
     static RECT lastSize{};
@@ -15982,83 +15623,17 @@ void ApplyPreviewCardAppearance() {
 void ApplyResultRowButtonTheme(wuxc::Button const& btn, bool isSelected, bool refreshTheme) try {
     if (!btn)
         return;
-    auto res = btn.Resources();
-    wuxm::Brush normalBg{nullptr};
-    wuxm::Brush selectedBg{nullptr};
-    wuxm::Brush normalBorder{nullptr};
-    wuxm::Brush activeBorder{nullptr};
+    const bool light = IsLightTheme();
+    const wuxm::Brush normalBg = MakeBrush(0, 0, 0, 0);
+    const wuxm::Brush normalBorder = MakeBrush(0, 0, 0, 0);
+    const wuxm::Brush selectedBg = light ? MakeBrush(0x18, 0, 0, 0) : MakeBrush(0x28, 255, 255, 255);
+    const wuxm::Brush pressedBg = light ? MakeBrush(0x22, 0, 0, 0) : MakeBrush(0x1E, 255, 255, 255);
+    const wuxm::Brush activeBorder = light ? MakeBrush(0x28, 0, 0, 0) : MakeBrush(0x40, 255, 255, 255);
 
-    // Cache only under our own private keys: HasKey/Lookup on built-in names
-    // such as ButtonBackgroundPointerOver can resolve through XAML's theme
-    // dictionaries even on a fresh button.
-    if (!refreshTheme) {
-        auto cached = [&](const wchar_t* key) -> wuxm::Brush {
-            if (auto value = res.TryLookup(winrt::box_value(key)))
-                return value.try_as<wuxm::Brush>();
-            return nullptr;
-        };
-        normalBg = cached(L"__WhNormalBg");
-        selectedBg = cached(L"__WhSelectedBg");
-        normalBorder = cached(L"__WhNormalBorder");
-        activeBorder = cached(L"__WhActiveBorder");
-    }
-
-    if (!normalBg || !selectedBg || !normalBorder || !activeBorder) {
-        const bool light = IsLightTheme();
-        auto const& itemHover = g_searchAppearance.itemHover;
-        const bool hasCopiedHoverBg = g_searchAppearanceValid && (itemHover.flags & 1) &&
-                                      SearchBrushIsVisible(itemHover.background);
-        const bool hasCopiedHoverOutline =
-            g_searchAppearanceValid && (itemHover.flags & 2) && SearchBrushIsVisible(itemHover.outline) &&
-            (itemHover.thickness[0] > 0 || itemHover.thickness[1] > 0 || itemHover.thickness[2] > 0 ||
-             itemHover.thickness[3] > 0);
-        const bool hasCopiedCorners =
-            g_searchAppearanceValid && (itemHover.flags & 4) &&
-            (itemHover.corners[0] > 0 || itemHover.corners[1] > 0 || itemHover.corners[2] > 0 ||
-             itemHover.corners[3] > 0);
-
-        if (hasCopiedCorners) {
-            btn.CornerRadius(wux::CornerRadius{
-                std::clamp(itemHover.corners[0], 0.0, 18.0),
-                std::clamp(itemHover.corners[1], 0.0, 18.0),
-                std::clamp(itemHover.corners[2], 0.0, 18.0),
-                std::clamp(itemHover.corners[3], 0.0, 18.0),
-            });
-        } else {
-            btn.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
-        }
-
-        normalBg = MakeBrush(0, 0, 0, 0);
-        wuxm::Brush pressedBg{nullptr};
-
-        if (hasCopiedHoverBg) {
-            selectedBg = RecreateSearchBrush(itemHover.background);
-            SearchBrushData pressedData = itemHover.background;
-            pressedData.opacity = std::clamp(pressedData.opacity * 0.85, 0.1, 1.0);
-            pressedBg = RecreateSearchBrush(pressedData);
-        }
-        if (!selectedBg)
-            selectedBg = light ? MakeBrush(0x16, 0, 0, 0) : MakeBrush(0x1D, 255, 255, 255);
-        if (!pressedBg)
-            pressedBg = light ? MakeBrush(0x1C, 0, 0, 0) : MakeBrush(0x24, 255, 255, 255);
-
-        normalBorder = MakeBrush(0, 0, 0, 0);
-        activeBorder = hasCopiedHoverOutline ? RecreateSearchBrush(itemHover.outline) : nullptr;
-        if (!activeBorder)
-            activeBorder = normalBorder;
-
-        if (hasCopiedHoverOutline) {
-            btn.BorderThickness(wux::ThicknessHelper::FromLengths(
-                std::clamp(itemHover.thickness[0], 0.0, 4.0), std::clamp(itemHover.thickness[1], 0.0, 4.0),
-                std::clamp(itemHover.thickness[2], 0.0, 4.0), std::clamp(itemHover.thickness[3], 0.0, 4.0)));
-        } else {
-            btn.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
-        }
-
-        res.Insert(winrt::box_value(L"__WhNormalBg"), normalBg);
-        res.Insert(winrt::box_value(L"__WhSelectedBg"), selectedBg);
-        res.Insert(winrt::box_value(L"__WhNormalBorder"), normalBorder);
-        res.Insert(winrt::box_value(L"__WhActiveBorder"), activeBorder);
+    if (refreshTheme || btn.BorderThickness().Left == 0) {
+        btn.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
+        btn.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+        auto res = btn.Resources();
         res.Insert(winrt::box_value(L"ButtonBackgroundPointerOver"), selectedBg);
         res.Insert(winrt::box_value(L"ButtonBackgroundPressed"), pressedBg);
         res.Insert(winrt::box_value(L"ButtonBorderBrushPointerOver"), activeBorder);
@@ -16071,12 +15646,11 @@ void ApplyResultRowButtonTheme(wuxc::Button const& btn, bool isSelected, bool re
     } else {
         btn.Background(normalBg);
         btn.BorderBrush(normalBorder);
-        // A row left in PointerOver (e.g. in the other column) would keep
-        // showing the selected brush; send it back to Normal.
-        wux::VisualStateManager::GoToState(btn, L"Normal", false);
+        if (btn.Parent()) {
+            wux::VisualStateManager::GoToState(btn, L"Normal", false);
+        }
     }
 } catch (...) {
-    Wh_Log(L"row theme failed %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
 
 wux::CornerRadius SearchCorners(double const (&v)[4]) {
@@ -16113,6 +15687,8 @@ bool ValidSearchSurface(SearchSurfaceData const& surface) {
 
 struct SearchMenuAppearance {
     uint32_t dark, foreground, overrideColor;
+    SearchBrushData windowBackground;
+    double windowCorners[4];
     SearchSurfaceData presenter, border, item;
     bool operator==(SearchMenuAppearance const&) const = default;
 };
@@ -16137,10 +15713,37 @@ SearchSurfaceData MergedMenuSurface() {
     // A child Border's margin is an internal inset, not the popup's position.
     // Do not transfer it to the presenter margin.
     surface.flags |= border.flags & 31u;
+
+    // Fall back to Start Menu window's styling when no menu-specific override was captured.
+    if (!(surface.flags & 1) && SearchBrushIsVisible(appearance.background)) {
+        surface.background = appearance.background;
+        surface.flags |= 1;
+    }
+    if (!(surface.flags & 2) && SearchBrushIsVisible(appearance.outline)) {
+        surface.outline = appearance.outline;
+        surface.flags |= 2;
+    }
     if (!(surface.flags & 4)) {
-        for (double& c : surface.corners)
-            c = 8.0;
-        surface.flags |= 4;
+        auto hasPositive4 = [](const double (&arr)[4]) {
+            return arr[0] > 0 || arr[1] > 0 || arr[2] > 0 || arr[3] > 0;
+        };
+        if (hasPositive4(appearance.corners)) {
+            std::copy(std::begin(appearance.corners), std::end(appearance.corners), surface.corners);
+            surface.flags |= 4;
+        } else {
+            for (double& c : surface.corners)
+                c = 8.0;
+            surface.flags |= 4;
+        }
+    }
+    if (!(surface.flags & 8)) {
+        auto hasPositive4 = [](const double (&arr)[4]) {
+            return arr[0] > 0 || arr[1] > 0 || arr[2] > 0 || arr[3] > 0;
+        };
+        if (hasPositive4(appearance.thickness)) {
+            std::copy(std::begin(appearance.thickness), std::end(appearance.thickness), surface.thickness);
+            surface.flags |= 8;
+        }
     }
     return surface;
 }
@@ -16153,8 +15756,15 @@ wux::Style CopiedMenuPresenterStyle() {
     if (!g_searchWindowWindow.load() || !g_searchAppearanceValid)
         return nullptr;
     auto const& appearance = g_searchAppearance;
-    SearchMenuAppearance snapshot{appearance.dark, SearchMainTextColor(), SearchTextOverride(),
-                                  appearance.menu, appearance.menuBorder, appearance.menuItem};
+    SearchMenuAppearance snapshot{appearance.dark,
+                                  SearchMainTextColor(),
+                                  SearchTextOverride(),
+                                  appearance.background,
+                                  {appearance.corners[0], appearance.corners[1], appearance.corners[2],
+                                   appearance.corners[3]},
+                                  appearance.menu,
+                                  appearance.menuBorder,
+                                  appearance.menuItem};
     if (g_searchMenuPresenterStyle && g_searchMenuAppearance && *g_searchMenuAppearance == snapshot)
         return g_searchMenuPresenterStyle;
     SearchSurfaceData surface = MergedMenuSurface();
@@ -16166,18 +15776,35 @@ wux::Style CopiedMenuPresenterStyle() {
         SearchChooseTextColor(surface.background, surface.foreground ? surface.foreground : snapshot.foreground,
                               appearance.dark != 0, snapshot.overrideColor);
     set(wux::FrameworkElement::RequestedThemeProperty(),
-        winrt::box_value(SearchLuminance(foreground) > 0.5 ? wux::ElementTheme::Dark : wux::ElementTheme::Light));
+        winrt::box_value(appearance.dark ? wux::ElementTheme::Dark : wux::ElementTheme::Light));
     set(wuxc::Control::ForegroundProperty(), wuxm::SolidColorBrush{SearchUnpackColor(foreground)});
-    if (surface.flags & 1)
-        set(wuxc::Control::BackgroundProperty(), RecreateSearchBrush(surface.background, true));
-    if (surface.flags & 2)
-        set(wuxc::Control::BorderBrushProperty(), RecreateSearchBrush(surface.outline));
-    if (surface.flags & 4)
-        set(wuxc::Control::CornerRadiusProperty(), winrt::box_value(SearchCorners(surface.corners)));
-    if (surface.flags & 8)
+
+    if ((surface.flags & 1) && SearchBrushIsVisible(surface.background)) {
+        if (auto menuBg = RecreateSearchBrush(surface.background, true))
+            set(wuxc::Control::BackgroundProperty(), menuBg);
+    }
+
+    if ((surface.flags & 2) && SearchBrushIsVisible(surface.outline)) {
+        if (auto menuBorder = RecreateSearchBrush(surface.outline, false))
+            set(wuxc::Control::BorderBrushProperty(), menuBorder);
+    }
+
+    if (surface.flags & 4) {
+        wux::CornerRadius menuCorners = SearchCorners(surface.corners);
+        if (menuCorners.TopLeft <= 0 && menuCorners.TopRight <= 0 && menuCorners.BottomRight <= 0 &&
+            menuCorners.BottomLeft <= 0)
+            menuCorners = wux::CornerRadius{8, 8, 8, 8};
+        set(wuxc::Control::CornerRadiusProperty(), winrt::box_value(menuCorners));
+    }
+
+    if (surface.flags & 8) {
         set(wuxc::Control::BorderThicknessProperty(), winrt::box_value(SearchThickness(surface.thickness)));
-    if (surface.flags & 16)
+    }
+
+    if (surface.flags & 16) {
         set(wuxc::Control::PaddingProperty(), winrt::box_value(SearchThickness(surface.padding)));
+    }
+
     if (surface.flags & 32)
         set(wux::FrameworkElement::MarginProperty(), winrt::box_value(SearchThickness(surface.margin)));
     g_searchMenuPresenterStyle = style;
@@ -16192,8 +15819,7 @@ void ApplyOpenMenuPresenters() try {
         return;
     EnableThreadPopupHostBackdrop();
     auto style = CopiedMenuPresenterStyle();
-    const SearchSurfaceData surface = MergedMenuSurface();
-    if (!(surface.flags & 31u))
+    if (!style)
         return;
     for (auto popup : wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
         if (popup == g_previewPopup)
@@ -16203,53 +15829,8 @@ void ApplyOpenMenuPresenters() try {
             if (!node || depth > 16)
                 return;
             if (auto presenter = node.try_as<wuxc::MenuFlyoutPresenter>()) {
-                if (style && presenter.Style() != style)
+                if (presenter.Style() != style)
                     presenter.Style(style);
-                wuxc::Border childBorder{nullptr};
-                for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(presenter); i < n; ++i) {
-                    if (auto b = wuxm::VisualTreeHelper::GetChild(presenter, i).try_as<wuxc::Border>()) {
-                        childBorder = b;
-                        break;
-                    }
-                }
-                if (!childBorder) {
-                    if (auto bgNode = FindDescendantByName(presenter, L"BackgroundElement", 4))
-                        childBorder = bgNode.try_as<wuxc::Border>();
-                }
-                if (childBorder) {
-                    const uint64_t appliedGen = winrt::unbox_value_or<uint64_t>(childBorder.Tag(), 0);
-                    if (appliedGen != g_searchMenuStyleGeneration) {
-                        childBorder.Tag(winrt::box_value(g_searchMenuStyleGeneration));
-                        if (surface.flags & 1) {
-                            presenter.Background(MakeBrush(0, 0, 0, 0));
-                            childBorder.Background(RecreateSearchBrush(surface.background, true));
-                        } else {
-                            presenter.ClearValue(wuxc::Control::BackgroundProperty());
-                            childBorder.ClearValue(wuxc::Border::BackgroundProperty());
-                        }
-                        if (surface.flags & 2) {
-                            presenter.BorderBrush(MakeBrush(0, 0, 0, 0));
-                            childBorder.BorderBrush(RecreateSearchBrush(surface.outline));
-                        } else {
-                            presenter.ClearValue(wuxc::Control::BorderBrushProperty());
-                            childBorder.ClearValue(wuxc::Border::BorderBrushProperty());
-                        }
-                        if (surface.flags & 4) {
-                            presenter.CornerRadius(SearchCorners(surface.corners));
-                            childBorder.CornerRadius(SearchCorners(surface.corners));
-                        }
-                        if (surface.flags & 8) {
-                            presenter.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
-                            childBorder.BorderThickness(SearchThickness(surface.thickness));
-                        } else {
-                            presenter.ClearValue(wuxc::Control::BorderThicknessProperty());
-                            childBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-                        }
-                        if (surface.flags & 16) {
-                            childBorder.Padding(SearchThickness(surface.padding));
-                        }
-                    }
-                }
                 return;
             }
             const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
@@ -16265,7 +15846,8 @@ void PrepareCopiedMenuItems(winrt::Windows::Foundation::Collections::IVector<wux
     auto const& surface = g_searchAppearance.menuItem;
     auto const& menu = g_searchAppearance.menu;
     auto const& border = g_searchAppearance.menuBorder;
-    auto background = (border.flags & 1) ? border.background : menu.background;
+    auto background = (border.flags & 1) ? border.background
+                                         : ((menu.flags & 1) ? menu.background : g_searchAppearance.background);
     const uint32_t menuColor =
         SearchChooseTextColor(background, menu.foreground ? menu.foreground : SearchMainTextColor(),
                               g_searchAppearance.dark != 0, SearchTextOverride());
@@ -16298,13 +15880,27 @@ void PrepareCopiedMenuItems(winrt::Windows::Foundation::Collections::IVector<wux
             control.ClearValue(wux::FrameworkElement::MarginProperty());
         ApplySearchSurface(control, surface);
         if (auto sub = item.try_as<wuxc::MenuFlyoutSubItem>()) {
+            if (auto style = CopiedMenuPresenterStyle()) {
+                try {
+                    sub.Resources().Insert(winrt::box_value(winrt::xaml_typename<wuxc::MenuFlyoutPresenter>()), style);
+                } catch (...) {
+                }
+            }
             if (!sub.Tag()) {
                 sub.Tag(winrt::box_value(uint32_t{1}));
                 KeepHandler(sub, sub.PointerEntered(winrt::auto_revoke, [](auto const&, auto const&) {
+                    if (g_resultsHost) {
+                        g_resultsHost.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
+                                                            wuc::DispatchedHandler{[] { ApplyOpenMenuPresenters(); }});
+                    }
                     if (HWND host = g_searchWindowWindow.load())
                         SetTimer(host, kSearchContainerContrastTimer, 40, nullptr);
                 }));
                 KeepHandler(sub, sub.GotFocus(winrt::auto_revoke, [](auto const&, auto const&) {
+                    if (g_resultsHost) {
+                        g_resultsHost.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
+                                                            wuc::DispatchedHandler{[] { ApplyOpenMenuPresenters(); }});
+                    }
                     if (HWND host = g_searchWindowWindow.load())
                         SetTimer(host, kSearchContainerContrastTimer, 40, nullptr);
                 }));
@@ -16371,6 +15967,12 @@ void RefreshCopiedMenuStyles() try {
     auto style = CopiedMenuPresenterStyle();
     if (!style || g_searchMenuRefreshedGeneration == g_searchMenuStyleGeneration)
         return;
+    if (g_resultsHost) {
+        try {
+            g_resultsHost.Resources().Insert(winrt::box_value(winrt::xaml_typename<wuxc::MenuFlyoutPresenter>()), style);
+        } catch (...) {
+        }
+    }
     // A real appearance change may happen while a menu is already open. This
     // refresh handles that case only; opening new menus never waits for a timer.
     for (auto const* buttons : {&g_appButtonsOpt, &g_fileButtonsOpt}) {
@@ -16409,23 +16011,8 @@ void ApplyStartAppearance() try {
     g_windowThickness = {bounded(appearance.thickness[0]), bounded(appearance.thickness[1]),
                          bounded(appearance.thickness[2]), bounded(appearance.thickness[3])};
     g_windowOutlineBrush = appearance.outline;
-    g_windowInnerThickness = {bounded(appearance.innerThickness[0]), bounded(appearance.innerThickness[1]),
-                              bounded(appearance.innerThickness[2]), bounded(appearance.innerThickness[3])};
-    g_windowInnerOutlineBrush = appearance.innerOutline;
     g_resultsHost.CornerRadius(
         wux::CornerRadius{g_windowCorners[0], g_windowCorners[1], g_windowCorners[2], g_windowCorners[3]});
-
-    if (g_windowInnerBorder) {
-        if (SearchBrushIsVisible(appearance.innerBackground)) {
-            g_windowInnerBorder.Background(RecreateSearchBrush(appearance.innerBackground, false));
-            g_windowInnerBorder.Visibility(wux::Visibility::Visible);
-        } else {
-            g_windowInnerBorder.Background(nullptr);
-            g_windowInnerBorder.Visibility(wux::Visibility::Collapsed);
-        }
-        g_windowInnerBorder.CornerRadius(
-            wux::CornerRadius{g_windowCorners[0], g_windowCorners[1], g_windowCorners[2], g_windowCorners[3]});
-    }
 
     // 2. Search Bar (Primary + 2nd Overlay Layer + D2D Smooth Stroke)
     if (auto brush = RecreateSearchBrush(appearance.searchBackground))
@@ -16912,12 +16499,12 @@ LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
             data->lpData) {
             SearchAppearanceData appearance;
             memcpy(&appearance, data->lpData, sizeof(appearance));
-            if (appearance.version == 5 && appearance.taskbarEdge <= static_cast<uint32_t>(SearchTaskbarEdge::Bottom) &&
+            if (appearance.version == 7 && appearance.taskbarEdge <= static_cast<uint32_t>(SearchTaskbarEdge::Bottom) &&
                 std::isfinite(appearance.width) && std::isfinite(appearance.height) && appearance.width >= 0 &&
                 appearance.width <= 4000 && appearance.height >= 0 && appearance.height <= 4000 &&
                 std::isfinite(appearance.edgeGap) && std::isfinite(appearance.alignment) &&
                 ValidSearchSurface(appearance.searchOverlay) && ValidSearchSurface(appearance.header) &&
-                ValidSearchSurface(appearance.itemHover) && ValidSearchSurface(appearance.footer) &&
+                ValidSearchSurface(appearance.footer) &&
                 ValidSearchSurface(appearance.menu) && ValidSearchSurface(appearance.menuBorder) &&
                 ValidSearchSurface(appearance.menuItem)) {
                 if ((appearance.width < 400 || appearance.height < 350) && g_searchAppearance.width >= 400) {
@@ -16927,8 +16514,7 @@ LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
                     appearance.alignment = g_searchAppearance.alignment;
                     appearance.taskbarEdge = g_searchAppearance.taskbarEdge;
                 }
-                const bool changed =
-                    !g_searchAppearanceValid || memcmp(&appearance, &g_searchAppearance, sizeof(appearance)) != 0;
+                const bool changed = !g_searchAppearanceValid || !(appearance == g_searchAppearance);
                 g_searchAppearance = appearance;
                 g_searchAppearanceValid = true;
                 g_searchAppearanceDirty = g_searchAppearanceDirty || changed;
@@ -16936,11 +16522,10 @@ LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
                     wchar_t description[192]{};
                     swprintf_s(
                         description,
-                        L"Start appearance: %.0fx%.0f gap=%.1f align=%.2f bg=%u(%08X,blur=%.0f) inner=%u hdr=%u hover=%u ftr=%u menu=%u",
+                        L"Start appearance: %.0fx%.0f gap=%.1f align=%.2f bg=%u(%08X,blur=%.0f) hdr=%u ftr=%u menu=%u",
                         appearance.width, appearance.height, appearance.edgeGap, appearance.alignment,
                         appearance.background.kind, appearance.background.color, appearance.background.blur,
-                        appearance.innerBackground.kind, appearance.header.flags, appearance.itemHover.flags,
-                        appearance.footer.flags, appearance.menuBorder.flags);
+                        appearance.header.flags, appearance.footer.flags, appearance.menuBorder.flags);
                     SearchWindowTrace(description);
                 }
                 return 1;
