@@ -2,12 +2,76 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T10:01:12.000Z</updated>
+    <updated>2026-10-17T13:04:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Tray Agenda 1.0.1]]></title>
+        <id>https://windhawk.net/mods/tray-agenda#3fed8cb0bdebcf06b4806bf78801069cb60e581e</id>
+        <link href="https://windhawk.net/mods/tray-agenda"/>
+        <updated>2026-10-17T13:04:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the widget and popup text color when the Windows mode (taskbar) differs from the app mode: it now follows the taskbar's <code>SystemUsesLightTheme</code> setting, so the text stays readable on a dark taskbar with light apps and the other way around.</li>
+<li>Added a "Contributing and issues" section to the mod description with the repository link.</li>
+</ul>]]></content>
+        <author>
+            <name>Rubens Nascimento</name>
+            <uri>https://github.com/chambber</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Sticky Notes: Alt+Tab group 1.1.1]]></title>
+        <id>https://windhawk.net/mods/sticky-notes-alt-tab-group#4487102abb2aa126c83ea826c028e098d74e8383</id>
+        <link href="https://windhawk.net/mods/sticky-notes-alt-tab-group"/>
+        <updated>2026-10-17T13:04:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="stickynotesalttabgroup">Sticky Notes: Alt+Tab group</h1>
+<p>Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.</p>
+<ul>
+<li>Show one representative Sticky Notes window in Alt+Tab.</li>
+<li>Switch to Sticky Notes to bring all its open windows on the current virtual
+desktop forward together.</li>
+<li>Minimized notes are restored; closed notes are not opened.</li>
+<li>Switching from another application by clicking a note or its taskbar button
+also brings the open notes forward.</li>
+<li>Use compact Sticky Notes previews, with a default maximum source size of
+260 by 160 pixels while preserving the aspect ratio.</li>
+<li>Other shell views that use the same thumbnail factory can also use this
+compact source size. The shell controls the final display scale.</li>
+<li>Matching uses the note window's extended frame bounds.</li>
+<li>Keep note contents, window sizes, positions, and ownership unchanged.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11, x64, with the standard XAML Alt+Tab switcher.</li>
+<li>Locally tested on Windows 11 25H2, build 26200.9457, Windhawk 1.7.3,
+and Microsoft Sticky Notes 6.1.4.0.</li>
+<li>Other Windows builds and the newer OneNote-based Sticky Notes experience
+have not been tested.</li>
+<li>Uses private shell symbols, which may change after Windows updates.</li>
+<li>Tested alongside Alt+Tab per monitor 1.2 with its cursor-monitor filter.</li>
+<li>That mod's monitor filtering still applies. Notes restored after selection
+can be on any monitor on the current virtual desktop.</li>
+<li>Disabling this mod restores the normal switcher behavior.</li>
+<li>Do not enable both a local copy and the catalog version simultaneously.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Preview maximum width / height</strong>: maximum reported Sticky Notes thumbnail
+source dimensions. Values at or below zero use the defaults (260 / 160).</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>The Alt+Tab visibility-filtering approach is adapted from
+<a href="https://windhawk.net/mods/alt-tab-per-monitor">Alt+Tab per monitor</a> by L3r0y and
+<a href="https://windhawk.net/mods/alt-tab-hide-ghost-windows">Alt+Tab: Hide ghost windows</a>
+by David Trapp (CherryDT). Their MIT notices are retained below.</p>]]></content>
+        <author>
+            <name>Choihyunseok1</name>
+            <uri>https://github.com/Choihyunseok1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Shake to Find Cursor 1.4.1]]></title>
         <id>https://windhawk.net/mods/shake-to-find-cursor#564e574c0812bbae205023f0b5ff4c6ed4a1a8f8</id>
@@ -659,69 +723,6 @@ with or endorsed by Mawaqit.</p>]]></content>
         <author>
             <name>sidlikesgrapess</name>
             <uri>https://github.com/sidlikesgrapess</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Legacy Clock Square Cutout & Animated Custom Image 3.2.0]]></title>
-        <id>https://windhawk.net/mods/remove-clock-cutout-background#036c1fb164596b01650218b075affec3bf65e88f</id>
-        <link href="https://windhawk.net/mods/remove-clock-cutout-background"/>
-        <updated>2026-10-16T10:31:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <code>customImagePath</code> setting to replace the default analog clock in StartAllBack and Date/Time dialogs with a custom static image (PNG, JPEG, BMP) or animated GIF.</li>
-<li>Implemented safe memory-stream image loading to prevent file locking while the mod is enabled.</li>
-<li>Added robust GDI+ lifecycle management during process shutdown.</li>
-</ul>]]></content>
-        <author>
-            <name>awnaise</name>
-            <uri>https://github.com/awnaise</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Maximized Window Margins 1.0]]></title>
-        <id>https://windhawk.net/mods/maximized-window-margins#b4d6b87f9febd496839055ee71c41c549a05582d</id>
-        <link href="https://windhawk.net/mods/maximized-window-margins"/>
-        <updated>2026-10-16T07:01:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="maximizedwindowmargins">Maximized Window Margins</h1>
-<p><img src="https://raw.githubusercontent.com/mariogomesbarbosa/window-maximized-margin/main/images/preview.png" alt="Screenshot" /></p>
-<p>Maximized windows no longer touch the screen edges. A configurable gap is kept
-on every side, which pairs nicely with a floating dock (for example the
-<em>Luminosity</em> or <em>DockLike</em> themes of <strong>Windows 11 Taskbar Styler</strong>).</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod runs as a <em>tool mod</em> (in its own <code>windhawk.exe</code> process, nothing is
-injected into other programs). For each monitor and each edge with a margin
-greater than zero, it registers an invisible
-<a href="https://learn.microsoft.com/windows/win32/shell/application-desktop-toolbars">AppBar</a>
-of the configured thickness. Windows then reduces the work area, and every
-maximized window fits inside it.</p>
-<ul>
-<li>Margins are set in DIPs and scaled per monitor DPI.</li>
-<li>AppBars are registered again when Explorer restarts, when displays change,
-and when the taskbar or another AppBar moves.</li>
-<li>Disabling the mod restores the original work area immediately.</li>
-</ul>
-<h2 id="sideeffects">Side effects</h2>
-<p>Since the work area itself shrinks, the gap also applies to:</p>
-<ul>
-<li>Snap / Snap Layouts (snapped windows keep the margin too).</li>
-<li>Desktop icon placement.</li>
-<li>Anything else that positions itself from the work area, such as pop-ups and
-notifications that apps place in a corner of the screen.</li>
-</ul>
-<p>Real fullscreen apps (games, videos, F11) cover the whole monitor and are not
-affected.</p>
-<h2 id="tips">Tips</h2>
-<ul>
-<li>With a floating dock, the taskbar still reserves its own height at the
-bottom. The bottom margin is added on top of it, so a small value (0–10)
-is usually enough.</li>
-<li>Maximized windows have square corners in Windows 11. To round them, install
-<em>Custom Window Corner Radius</em> and set "Rounded corners for maximized and
-snapped windows" to "Round snapped and maximized windows". The "Corner
-radius" setting of that mod then applies to maximized windows too.</li>
-</ul>]]></content>
-        <author>
-            <name>Mário Barbosa</name>
-            <uri>https://github.com/mariogomesbarbosa</uri>
         </author>
     </entry>
 </feed>
