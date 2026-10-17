@@ -2,12 +2,54 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T13:30:38.000Z</updated>
+    <updated>2026-10-17T14:01:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Reopen Programs at Sign-in 2.0.1]]></title>
+        <id>https://windhawk.net/mods/reopen-programs-at-sign-in#1b77d44584c94c1be861fc3745528cca2e13133b</id>
+        <link href="https://windhawk.net/mods/reopen-programs-at-sign-in"/>
+        <updated>2026-10-17T14:01:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed: nothing was reopened in Windhawk portable mode, because the mod storage drops line breaks. The saved list now uses a separator that survives (the old one is still read).</li>
+<li>Fixed: programs with a background process but no window were treated as already open and skipped. The check now compares windows, also right before each launch.</li>
+<li>Windhawk's own programs (tray app, 2.0 tool-mod hosts, editor) are no longer saved or reopened.</li>
+<li>README: documents the already-open check and the helper-process limitation.</li>
+</ul>]]></content>
+        <author>
+            <name>lima26x</name>
+            <uri>https://github.com/brdantas26</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AltTab Mouse Focus 1.1]]></title>
+        <id>https://windhawk.net/mods/alt-tab-mouse-focus#716c4dff8e60cc806b7c896b98281a477f163d47</id>
+        <link href="https://windhawk.net/mods/alt-tab-mouse-focus"/>
+        <updated>2026-10-17T14:01:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alttabmousefocus">AltTab Mouse Focus</h1>
+<p>Moves the mouse cursor to the center of the window that gets focused after
+switching windows with <strong>Alt+Tab</strong>.</p>
+<ul>
+<li>Only acts on Alt+Tab. Clicking, other keyboard shortcuts or focus changes
+made by other programs do not move the cursor.</li>
+<li>The cursor is moved once the <strong>Alt</strong> key is released, after the window
+switcher closes.</li>
+<li>Ignores system overlays (desktop, taskbar, the Alt+Tab switcher).</li>
+<li>Moves the cursor as soon as the selected window receives focus
+(<code>EVENT_SYSTEM_FOREGROUND</code>), instead of polling.</li>
+<li>Works with multiple monitors: the cursor is centered on the monitor where
+the focused window is.</li>
+</ul>
+<p>The mod runs as a tool mod in a dedicated process, so it does not inject into
+<code>explorer.exe</code>.</p>]]></content>
+        <author>
+            <name>tafadias</name>
+            <uri>https://github.com/tafadias</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 UAC Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-uac-recreation#328b64ade45664ed8b24a65c00c8f241643e9b1d</id>
@@ -702,90 +744,6 @@ with or endorsed by Mawaqit.</p>]]></content>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.2.0]]></title>
-        <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#5a72d5ad93a08dc2701836d2302e929eee986677</id>
-        <link href="https://windhawk.net/mods/neiz-supersmile-audio-visualizer"/>
-        <updated>2026-10-16T11:01:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a disk section, volume control, and a mini visualizer to the player.</li>
-<li>Added player style selection.</li>
-<li>Added player button position selection.</li>
-<li>Added configurable actions for player button clicks.</li>
-<li>Improved visualizer behavior.</li>
-<li>Improved color transition speed in Album Color and Album Gradient modes when changing tracks.</li>
-<li>Added smooth color transitions in Album Color and Album Gradient modes.</li>
-</ul>]]></content>
-        <author>
-            <name>NeiZ</name>
-            <uri>https://github.com/NeiZqwe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.4]]></title>
-        <id>https://windhawk.net/mods/win32-ui-modernizer#d7ef637639feef3112cf86684415661d4c1d58b6</id>
-        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
-        <updated>2026-10-16T11:01:49.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li>Option to start File Explorer's status bar beside the navigation pane, with or without the view buttons</li>
-<li>Explorer's InfoBar restyled as WinUI's warning InfoBar</li>
-<li>Experimental DirectWrite text for Explorer dialogs and file pickers, text and hotkey fields included</li>
-<li>DirectWrite text for legacy toolbars, address bars and the Ribbon</li>
-<li>DirectWrite text in the Registry Editor's values list</li>
-<li>Registry Editor address bar and Edit borders styled after WinUI's TextBox</li>
-<li>Navigation tree hover, pressed and selected states from WinUI's NavigationView</li>
-<li>SysLink links drawn in WinUI's accent text color</li>
-<li>Check box glyphs and check animation taken from WinUI's own CheckBox animation</li>
-<li>Check animation for File Explorer item check boxes</li>
-<li>Larger desktop item check boxes, clear of the selection ring</li>
-</ul>
-<h3 id="changed">Changed</h3>
-<ul>
-<li>Settings reorganized, with some on/off options turned into choices</li>
-<li>Split button chevrons, toolbar buttons, menu bar, tooltips, radios and links aligned with WinUI's colors</li>
-<li>Check box and Registry Editor panel corners follow WinUI's radii</li>
-<li>Dark-mode text now picks its color from the background it's actually drawn on, judged by APCA, instead of always turning light</li>
-<li>Windows Installer (msiexec) is no longer excluded. The exclusion was added in 1.0.2 because dark mode turned installer text light on their light panels and background bitmaps; that text now takes its color from the background it is drawn on, so it stays readable</li>
-<li>Tooltip text drawn with native composited alpha</li>
-</ul>
-<h3 id="removed">Removed</h3>
-<ul>
-<li>AutoPlay dialog replacement</li>
-<li>Collapsible navigation pane. It will soon be a standalone mod</li>
-<li>External transparency compatibility option</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Black backgrounds behind navigation pane icons on first opening</li>
-<li>File Explorer item check boxes overlapping the selection ring</li>
-<li>Dark ring around desktop check boxes and the Folder Options tree's radios and check boxes</li>
-<li>Disabled split buttons showing two chevrons</li>
-<li>Desktop icon labels turning transparent without the DirectWrite option</li>
-<li>Dark mode overriding high-contrast themes</li>
-<li>Dark colors saved into Windows' color scheme, leaving list and edit fields dark after a contrast theme</li>
-<li>White text on light backgrounds in dark mode (installers, Fonts thumbnails, app-painted cells)</li>
-<li>Tree view tooltips with a light acrylic and unreadable text in dark mode</li>
-<li>Composited text losing its alpha and opaque text masks coming out too light</li>
-<li>Some styled text drawn about a quarter too large, and glow text returning the wrong height</li>
-<li>Navigation pane edge line running over Explorer's InfoBar</li>
-<li>White tree chevrons in light apps excluded from dark mode</li>
-<li>Garbled address bar text in file pickers of GDI-scaled programs like MMC</li>
-<li>32-bit file pickers in dark mode losing item icons</li>
-<li>Jumbo shortcut overlay missing in 32-bit Explorer</li>
-<li>Rename box rendering under light Mica</li>
-</ul>
-<h3 id="performance">Performance</h3>
-<ul>
-<li>Shell text, navigation pane glyphs and chevrons, and Registry Editor tree rows drawn from a CPU raster cache. Making scrolling noticeably smoother</li>
-<li>Navigation pane animations and the pill paced to the compositor clock</li>
-<li>Cached dark-mode lookups, text masks sized to the text instead of the window, and cheaper hot-path checks</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

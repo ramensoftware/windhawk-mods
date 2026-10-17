@@ -2,12 +2,38 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-17T13:30:38.000Z</updated>
+    <updated>2026-10-17T14:01:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AltTab Mouse Focus 1.1]]></title>
+        <id>https://windhawk.net/mods/alt-tab-mouse-focus#716c4dff8e60cc806b7c896b98281a477f163d47</id>
+        <link href="https://windhawk.net/mods/alt-tab-mouse-focus"/>
+        <updated>2026-10-17T14:01:34.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="alttabmousefocus">AltTab Mouse Focus</h1>
+<p>Moves the mouse cursor to the center of the window that gets focused after
+switching windows with <strong>Alt+Tab</strong>.</p>
+<ul>
+<li>Only acts on Alt+Tab. Clicking, other keyboard shortcuts or focus changes
+made by other programs do not move the cursor.</li>
+<li>The cursor is moved once the <strong>Alt</strong> key is released, after the window
+switcher closes.</li>
+<li>Ignores system overlays (desktop, taskbar, the Alt+Tab switcher).</li>
+<li>Moves the cursor as soon as the selected window receives focus
+(<code>EVENT_SYSTEM_FOREGROUND</code>), instead of polling.</li>
+<li>Works with multiple monitors: the cursor is centered on the monitor where
+the focused window is.</li>
+</ul>
+<p>The mod runs as a tool mod in a dedicated process, so it does not inject into
+<code>explorer.exe</code>.</p>]]></content>
+        <author>
+            <name>tafadias</name>
+            <uri>https://github.com/tafadias</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 UAC Recreation 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-uac-recreation#328b64ade45664ed8b24a65c00c8f241643e9b1d</id>
@@ -1104,128 +1130,6 @@ stops if the required symbols or layout cannot be recognized.</p>]]></content>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spotlight Launcher 0.5.11]]></title>
-        <id>https://windhawk.net/mods/spotlight-launcher#002d01efc7998c0c2c45cd7f0a44650aef7f3955</id>
-        <link href="https://windhawk.net/mods/spotlight-launcher"/>
-        <updated>2026-10-14T05:00:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="spotlightlauncher">Spotlight Launcher</h1>
-<p>A fast, keyboard-driven application launcher for Windows, packaged as a <a href="https://windhawk.net">Windhawk</a> tool mod.</p>
-<p>Press <strong>Alt + Space</strong>, type a few letters, press <strong>Enter</strong>. That is the whole idea.</p>
-<p>Spotlight Launcher indexes the same applications you see in the Start menu (classic programs and Microsoft Store / MSIX apps) and filters them as you type. It runs in its own <code>windhawk.exe</code> process, so it never gets injected into Explorer and cannot affect the shell.</p>
-<hr />
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="main">Main</h3>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Desktop.png" alt="Spotlight Launcher in action" /></p>
-<p>The search bar over the desktop, with the default <strong>Midnight</strong> colour and <strong>Acrylic</strong> effect. A short query already filtered a handful of results, with the matching letters highlighted. This is the launcher's first impression.</p>
-<h3 id="detailspanel">Details panel</h3>
-<p><img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Details.png" alt="Details panel" /></p>
-<p>An app selected with the details panel open on the right (<strong>Ctrl + I</strong>): the actions list and the technical info table.</p>
-<h3 id="lookandfeel">Look and feel</h3>
-<p>These are some of the built-in looks (themes): the <strong>Aurora</strong> effect in three colours, plus <strong>Frosted</strong>, <strong>Glass</strong> and <strong>Mica</strong>.</p>
-<p>| Theme | Preview |
-| --- | --- |
-| <strong>Aurora</strong> &middot; Amber | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Amber.png" alt="Aurora, amber" /> |
-| <strong>Aurora</strong> &middot; Emerald | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Emerald.png" alt="Aurora, emerald" /> |
-| <strong>Aurora</strong> &middot; Violet | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Aurora%20Violet.png" alt="Aurora, violet" /> |
-| <strong>Frosted</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Frosted.png" alt="Frosted" /> |
-| <strong>Glass</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Glass.png" alt="Glass" /> |
-| <strong>Mica</strong> | <img src="https://raw.githubusercontent.com/DavidRaveloU/Spotlight-Launcher-Windhawk/main/assets/Mica.png" alt="Mica" /> |</p>
-<p>The rest (the <strong>Acrylic</strong> and <strong>Solid</strong> effects and the remaining colours — Midnight blue, Graphite, Black, Teal, Rose, Crimson, Sky, Lavender, White) are covered below in the Features section.</p>
-<hr />
-<h2 id="features">Features</h2>
-<h3 id="instantforgivingsearch">Instant, forgiving search</h3>
-<ul>
-<li>Filters classic programs and Microsoft Store apps as you type.</li>
-<li>Case- and accent-insensitive.</li>
-<li>Multi-word queries (<code>visual code</code>) and acronyms (<code>vsc</code> finds <em>Visual Studio Code</em>).</li>
-<li>Matching letters are highlighted in the result.</li>
-<li>Results show a friendly name plus the real target (exe, <code>.lnk</code>, MSIX package).</li>
-</ul>
-<h3 id="keyboardfirst">Keyboard-first</h3>
-<p>Everything is reachable without touching the mouse.</p>
-<p>| Shortcut | Action |
-| --- | --- |
-| <strong>Alt + Space</strong> | Open / close the search bar (configurable) |
-| <strong>↑ / ↓ / Tab</strong> | Move the selection |
-| <strong>Enter</strong> | Open the selected app |
-| <strong>Esc</strong> | Close the details panel, then the search bar |
-| <strong>Ctrl + Enter</strong> | Open the file location |
-| <strong>Ctrl + Shift + Enter</strong> | Run as administrator |
-| <strong>Ctrl + Shift + C</strong> | Copy the path |
-| <strong>Ctrl + P</strong> | Properties |
-| <strong>Ctrl + Shift + R</strong> | Remove from recents |
-| <strong>Ctrl + I</strong> | Toggle the details panel (configurable) |
-| <strong>Ctrl + R</strong> | Reindex the app list |
-| Mouse wheel | Scroll the list without changing the selection |
-| Mouse hover | Highlight the row under the cursor |</p>
-<p><strong>Alt + Space</strong> is also the system shortcut for a window's title-bar menu (Move, Size, Close…). While the mod is enabled with the default shortcut, that menu is not reachable by keyboard, so pick another combination in the settings if you use it. Apps like PowerToys Run make the same trade-off.</p>
-<h3 id="detailspanel-1">Details panel</h3>
-<p>Press <strong>Ctrl + I</strong> (or <strong>Ctrl + K</strong> / <strong>Ctrl + Space</strong> / <strong>F4</strong>) with an app selected to reveal a right-hand panel with actions and technical data. The actions also work with the panel closed. File actions are only offered for desktop apps; Store (MSIX) apps only expose <em>open</em> and <em>remove from recents</em>.</p>
-<h3 id="appearance">Appearance</h3>
-<ul>
-<li>Six background effects (<strong>Acrylic</strong>, <strong>Mica</strong>, <strong>Glass</strong>, <strong>Frosted</strong>, <strong>Aurora</strong>, <strong>Solid</strong>) and 12 colours.</li>
-<li>Effects capture what is behind the bar on open, blur it and composite it inside the rounded card (tint, grain, highlights, gradients) — so they look the same on Windows 10 and 11 without undocumented DWM APIs.</li>
-<li>Adjustable panel opacity, blur strength and layout.</li>
-<li>Adapts to the DPI of each monitor.</li>
-<li>The bar can sit anywhere from against the top edge to against the bottom edge of the screen.</li>
-</ul>
-<h3 id="freshwithoutfuss">Fresh without fuss</h3>
-<ul>
-<li><strong>Automatic</strong> index updates watch the Start menu folders and re-read the list when an app is installed or removed, with a light periodic fallback for Store apps.</li>
-<li>Can also re-index on every open or on a fixed interval (1 / 3 / 5 / 10 minutes).</li>
-<li>Installers write an "Uninstall …" shortcut for everything they install; the mod inspects what each shortcut actually runs and hides the uninstallers and documentation, while keeping real tools whose names merely contain "uninstall".</li>
-<li>If reindexing finishes with the search bar already open, the list updates by itself.</li>
-<li>Only what Windows lists as an app appears: a portable program without a shortcut in the Start menu is not indexed. A freshly installed app may take a few seconds to appear, until Windows registers its shortcut.</li>
-</ul>
-<h3 id="safebydesign">Safe by design</h3>
-<ul>
-<li>Runs as a Windhawk <strong>tool</strong> mod in its own process, not inside Explorer.</li>
-<li><strong>Disable in fullscreen</strong>: the hotkey stays quiet while a fullscreen window (a game, a video player, a fullscreen browser) is focused.</li>
-<li>If another app already owns the shortcut, the mod warns you instead of fighting over it.</li>
-</ul>
-<hr />
-<h2 id="installation">Installation</h2>
-<ol>
-<li>Install <a href="https://windhawk.net">Windhawk</a> (Windows 10 or 11).</li>
-<li>In Windhawk, open <strong>Mods</strong> and search for <strong>Spotlight Launcher</strong>, then click <strong>Install</strong>.</li>
-<li>Press <strong>Alt + Space</strong> to open it. Change the shortcut, position, effect and colour from the mod's <strong>Settings</strong> tab.</li>
-</ol>
-<h3 id="fromsource">From source</h3>
-<ol>
-<li>Download <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/blob/main/spotlight-launcher.wh.cpp"><code>spotlight-launcher.wh.cpp</code></a>.</li>
-<li>In Windhawk, choose <strong>Create a new mod</strong>, replace the editor contents with the file and <strong>Save</strong>.</li>
-<li>Install it from your local mods list.</li>
-</ol>
-<hr />
-<h2 id="contributing">Contributing</h2>
-<p>Contributions are welcome — bug reports, fixes, new features and translations alike. See the <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk">repository</a> for details.</p>
-<h3 id="reportingabug">Reporting a bug</h3>
-<p>Open an <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/issues">issue</a> and include:</p>
-<ul>
-<li>Windows build (<code>winver</code>) and Windhawk version.</li>
-<li>The mod version (shown in the README header / settings).</li>
-<li>Steps to reproduce it and what you expected instead.</li>
-<li>A screenshot or short clip when the problem is visual.</li>
-</ul>
-<h3 id="sendingapullrequest">Sending a pull request</h3>
-<ol>
-<li>Fork the repository and create a branch from <code>main</code>, e.g. <code>fix/acrylic-on-win10</code>.</li>
-<li>Make your change in <code>spotlight-launcher.wh.cpp</code> (C++23, Windhawk tool mod).</li>
-<li>Bump <code>@version</code> in the mod header when behaviour changes.</li>
-<li>Confirm it compiles and test it on the Windows versions you can reach.</li>
-<li>Open a pull request against <code>main</code> describing <strong>what</strong> changed and <strong>why</strong>.</li>
-</ol>
-<p>Keep pull requests focused: one bug or feature per PR is much easier to review and merge.</p>
-<hr />
-<h2 id="license">License</h2>
-<p>Released under the <strong>MIT License</strong>. See <a href="https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk/blob/main/LICENSE">LICENSE</a>.</p>
-<p>Copyright (c) 2026-present David Ravelo.</p>]]></content>
-        <author>
-            <name>David Ravelo</name>
-            <uri>https://github.com/DavidRaveloU</uri>
         </author>
     </entry>
 </feed>
