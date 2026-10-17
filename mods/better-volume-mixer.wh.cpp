@@ -8,7 +8,7 @@
 // @homepage     https://github.com/0Allu/better-volume-mixer
 // @donateUrl    https://ko-fi.com/0allu
 // @include      windhawk.exe
-// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus -ld2d1 -ldwrite
+// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -lgdiplus -ld2d1 -ldwrite
 // @license      MIT
 // ==/WindhawkMod==
 
@@ -527,7 +527,7 @@ bool g_showRequestPending;
 bool g_closeRequestPending;
 bool g_trayPressKnown;
 bool g_trayPressWasVisible;
-bool g_trayWheelArmed;     // Listening to the mouse wheel over the tray icon.
+std::atomic<bool> g_trayWheelArmed; // Listening to the wheel over the tray icon.
 int g_trayWheelRemainder;  // Wheel movement short of a whole step.
 bool g_showingMixer;
 bool g_outputMenuOpen;
@@ -1090,6 +1090,7 @@ void CreateFonts(HWND hWnd) {
     // Windows 10 does not come with the Windows 11 icon font. Its own has the
     // same icons at the same code points; without it, they would be missing.
     bool fluentIcons = !IsWindows10Style() && FontInstalled(L"Segoe Fluent Icons");
+    g_symbolFace = fluentIcons ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
 
     g_titleFont = CreateFontW(
         -MulDiv(15, g_dpi, 72), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
@@ -1106,8 +1107,7 @@ void CreateFonts(HWND hWnd) {
     g_symbolFont = CreateFontW(
         -MulDiv(13, g_dpi, 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
-        g_symbolFace = fluentIcons ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets");
+        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, g_symbolFace);
     // The entry box is an ordinary opaque window, so it can have ClearType,
     // and the same family and size as the percentage it replaces. Plain
     // antialiasing renders Segoe UI unevenly at this size.
@@ -4191,72 +4191,132 @@ LRESULT CALLBACK VolumeIndicatorProc(HWND window, UINT message, WPARAM wParam,
 // the focus and leaves the wheel working as usual everywhere else. Hooking
 // only then keeps every move of the mouse from waking the mixer up.
 //
-// The taskbar does not always report the pointer moving onto the icon, so a
-// timer also watches for it. It asks the taskbar where the icon is at most
-// once a second.
-bool PointerOverTrayIcon() {
-    POINT cursor{};
-    RECT icon{};
-    return GetCursorPos(&cursor) && GetTrayIconRect(&icon) && PtInRect(&icon, cursor);
+// Windows holds up the mouse input of the whole system until a low-level hook
+// returns, and calls it on the thread that set it. So the hook lives on a
+// thread that does nothing else, never waiting for the UI thread while it
+// paints a frame or refreshes the sessions.
+//
+// The taskbar reports the pointer moving onto the icon, but not always, so a
+// slow timer also watches for it. Once armed, the hook itself notices the
+// pointer leaving. Both test against a cached rect of the icon; the taskbar
+// is asked for it again only when it may have changed.
+constexpr UINT WM_TRAY_HOOK_ARM = WM_APP + 1; // Thread message. wParam: 1 arm, 0 disarm.
+constexpr ULONGLONG TRAY_RECT_LIFETIME = 5000;
+
+SRWLOCK g_trayIconRectLock = SRWLOCK_INIT;
+RECT g_trayIconRect{};         // Read by the hook thread, under the lock.
+ULONGLONG g_trayIconRectTime;  // When the rect was last asked for.
+HANDLE g_trayHookThread;
+DWORD g_trayHookThreadId;
+
+void ForgetTrayIconRect() {
+    g_trayIconRectTime = 0;
 }
 
-RECT g_trayIconRect{};
-ULONGLONG g_trayIconRectTime;
-
-bool PointerNearTrayIcon() {
+// The taskbar says the pointer is over the icon when it reports a move, so a
+// rect that does not hold the pointer then may be out of date.
+bool PointerOverTrayIcon(bool taskbarSaysOver) {
+    POINT cursor{};
+    if (!GetCursorPos(&cursor)) return false;
+    AcquireSRWLockShared(&g_trayIconRectLock);
+    RECT rect = g_trayIconRect;
+    ReleaseSRWLockShared(&g_trayIconRectLock);
     ULONGLONG now = GetTickCount64();
-    if (!g_trayIconRectTime || now - g_trayIconRectTime > 1000) {
-        if (!GetTrayIconRect(&g_trayIconRect)) SetRectEmpty(&g_trayIconRect);
+    ULONGLONG age = now - g_trayIconRectTime;
+    if (!g_trayIconRectTime || age > TRAY_RECT_LIFETIME ||
+        (taskbarSaysOver && !PtInRect(&rect, cursor) && age > 100)) {
+        if (!GetTrayIconRect(&rect)) SetRectEmpty(&rect);
+        AcquireSRWLockExclusive(&g_trayIconRectLock);
+        g_trayIconRect = rect;
+        ReleaseSRWLockExclusive(&g_trayIconRectLock);
         g_trayIconRectTime = now;
     }
-    POINT cursor{};
-    return GetCursorPos(&cursor) && PtInRect(&g_trayIconRect, cursor);
+    return PtInRect(&rect, cursor);
 }
 
-HHOOK g_trayWheelHook;
-
-// Windows waits for a low-level hook before it moves on with the input, so
-// hand the wheel over to the window and return straight away.
+// Runs on the hook thread, so it only looks at the pointer and posts.
 LRESULT CALLBACK TrayWheelHook(int code, WPARAM message, LPARAM data) {
-    if (code == HC_ACTION && message == WM_MOUSEWHEEL) {
+    if (code == HC_ACTION && (message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL)) {
         auto* mouse = reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
-        if (HWND window = g_hWnd.load()) {
-            PostMessageW(window, WM_APP_TRAY_WHEEL,
-                         static_cast<WPARAM>(static_cast<SHORT>(HIWORD(mouse->mouseData))), 0);
+        AcquireSRWLockShared(&g_trayIconRectLock);
+        bool over = PtInRect(&g_trayIconRect, mouse->pt);
+        ReleaseSRWLockShared(&g_trayIconRectLock);
+        if (!over) {
+            PostThreadMessageW(GetCurrentThreadId(), WM_TRAY_HOOK_ARM, 0, 0);
+        } else if (message == WM_MOUSEWHEEL) {
+            if (HWND window = g_hWnd.load()) {
+                PostMessageW(window, WM_APP_TRAY_WHEEL,
+                             static_cast<WPARAM>(static_cast<SHORT>(HIWORD(mouse->mouseData))),
+                             0);
+            }
         }
     }
     return CallNextHookEx(nullptr, code, message, data);
 }
 
-void DisarmTrayWheel(HWND hWnd) {
-    if (!g_trayWheelArmed) return;
-    if (g_trayWheelHook) UnhookWindowsHookEx(g_trayWheelHook);
-    g_trayWheelHook = nullptr;
-    g_trayWheelArmed = false;
-    Wh_Log(L"Mixer: pointer left the tray icon");
-}
-
-void ArmTrayWheel(HWND hWnd) {
-    if (!g_trayWheelArmed) {
-        g_trayWheelHook = SetWindowsHookExW(WH_MOUSE_LL, TrayWheelHook,
-                                            GetModuleHandleW(nullptr), 0);
-        if (!g_trayWheelHook) {
-            Wh_Log(L"Mixer: tray icon scrolling unavailable, error %lu", GetLastError());
-            return;
+DWORD WINAPI TrayHookThreadProc(LPVOID readyEvent) {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    MSG message;
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // Create the queue.
+    SetEvent(static_cast<HANDLE>(readyEvent));
+    HHOOK hook = nullptr;
+    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+        if (message.message != WM_TRAY_HOOK_ARM) continue;
+        if (message.wParam && !hook) {
+            hook = SetWindowsHookExW(WH_MOUSE_LL, TrayWheelHook, GetModuleHandleW(nullptr), 0);
+            if (hook) {
+                g_trayWheelArmed = true;
+                Wh_Log(L"Mixer: pointer over the tray icon, listening to the wheel");
+            } else {
+                Wh_Log(L"Mixer: tray icon scrolling unavailable, error %lu", GetLastError());
+            }
+        } else if (!message.wParam && hook) {
+            UnhookWindowsHookEx(hook);
+            hook = nullptr;
+            g_trayWheelArmed = false;
+            Wh_Log(L"Mixer: pointer left the tray icon");
         }
-        g_trayWheelArmed = true;
-        g_trayWheelRemainder = 0;
-        Wh_Log(L"Mixer: pointer over the tray icon, listening to the wheel");
     }
+    if (hook) UnhookWindowsHookEx(hook);
+    g_trayWheelArmed = false;
+    return 0;
 }
 
-// Runs on TIMER_TRAY_WATCH.
-void WatchTrayPointer(HWND hWnd) {
-    if (!g_trayWheelArmed) {
-        if (PointerNearTrayIcon()) ArmTrayWheel(hWnd);
-    } else if (!PointerOverTrayIcon()) {
-        DisarmTrayWheel(hWnd);
+void StartTrayHookThread() {
+    HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ready) return;
+    g_trayHookThread = CreateThread(nullptr, 0, TrayHookThreadProc, ready, 0, &g_trayHookThreadId);
+    if (g_trayHookThread) {
+        WaitForSingleObject(ready, INFINITE);
+    } else {
+        g_trayHookThreadId = 0;
+        Wh_Log(L"Mixer: tray icon scrolling unavailable, error %lu", GetLastError());
     }
+    CloseHandle(ready);
+}
+
+void StopTrayHookThread() {
+    if (!g_trayHookThread) return;
+    PostThreadMessageW(g_trayHookThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_trayHookThread, INFINITE);
+    CloseHandle(g_trayHookThread);
+    g_trayHookThread = nullptr;
+    g_trayHookThreadId = 0;
+}
+
+void ArmTrayWheel() {
+    if (g_trayWheelArmed || !g_trayHookThreadId) return;
+    g_trayWheelRemainder = 0;
+    PostThreadMessageW(g_trayHookThreadId, WM_TRAY_HOOK_ARM, 1, 0);
+}
+
+void DisarmTrayWheel() {
+    if (g_trayHookThreadId) PostThreadMessageW(g_trayHookThreadId, WM_TRAY_HOOK_ARM, 0, 0);
+}
+
+// Runs on TIMER_TRAY_WATCH, for the moves onto the icon the taskbar misses.
+void WatchTrayPointer() {
+    if (!g_trayWheelArmed && PointerOverTrayIcon(false)) ArmTrayWheel();
 }
 
 // Changes master volume by the mouse-wheel step for each notch. High-resolution
@@ -5032,6 +5092,7 @@ void HandlePointerMove(HWND hWnd, POINT point) {
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                             LPARAM lParam) {
     if (message == g_taskbarCreatedMessage && g_taskbarCreatedMessage) {
+        ForgetTrayIconRect();
         AddTrayIcon(hWnd);
         return 0;
     }
@@ -5112,9 +5173,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             if (event == WM_LBUTTONDOWN || event == WM_LBUTTONDBLCLK) {
                 RememberTrayPress(hWnd);
             }
-            if (event == WM_MOUSEMOVE) {
-                g_trayIconRectTime = 0;
-                ArmTrayWheel(hWnd);
+            if (event == WM_MOUSEMOVE && !g_trayWheelArmed && PointerOverTrayIcon(true)) {
+                ArmTrayWheel();
             }
             TrayAction action = GetTrayAction(event, g_trayVersion4);
             if (action != TrayAction::None) {
@@ -5240,7 +5300,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 return 0;
             }
             if (wParam == TIMER_TRAY_WATCH) {
-                WatchTrayPointer(hWnd);
+                WatchTrayPointer();
                 return 0;
             }
             if (wParam == TIMER_TRIM) {
@@ -5304,16 +5364,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             return 0;
         }
 
+        // The hook only sends the wheel while the pointer is on the icon.
         case WM_APP_TRAY_WHEEL:
-            if (g_trayWheelArmed) {
-                int delta = static_cast<SHORT>(wParam);
-                if (PointerOverTrayIcon()) {
-                    Wh_Log(L"Mixer: wheel over the tray icon, %d", delta);
-                    ScrollMasterVolume(hWnd, delta);
-                } else {
-                    DisarmTrayWheel(hWnd);
-                }
-            }
+            ScrollMasterVolume(hWnd, static_cast<SHORT>(wParam));
             return 0;
 
         case WM_MOUSELEAVE:
@@ -5591,7 +5644,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             g_closeTime = 0;
             g_closeQueued = false;
             KillTimer(hWnd, TIMER_TRAY_WATCH);
-            DisarmTrayWheel(hWnd);
+            DisarmTrayWheel();
             RemoveTrayIcon(hWnd);
             ReleaseAudioData();
             g_activatedSessions.clear();
@@ -5720,7 +5773,8 @@ DWORD WINAPI ThreadProc(LPVOID) {
     g_hWnd.store(hWnd);
     Wh_Log(L"Mixer: window created, HWND=%p", static_cast<void*>(hWnd));
     AddTrayIcon(hWnd);
-    SetTimer(hWnd, TIMER_TRAY_WATCH, 100, nullptr);
+    StartTrayHookThread();
+    SetTimer(hWnd, TIMER_TRAY_WATCH, 500, nullptr);
     SetEvent(g_windowReadyEvent);
 
     MSG message;
@@ -5746,6 +5800,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
 
     if (IsWindow(hWnd)) DestroyWindow(hWnd);
     g_hWnd.store(nullptr);
+    StopTrayHookThread();
     g_apps.reset();
     UnregisterClassW(VOLUME_INDICATOR_CLASS, windowClass.hInstance);
     UnregisterClassW(NAME_TOOLTIP_CLASS, windowClass.hInstance);
