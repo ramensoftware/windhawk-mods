@@ -2856,6 +2856,9 @@ std::vector<winrt::Windows::UI::Color> ComputeDensityColorsForDate(wf::DateTime 
             std::wstring colChoice = FindSourceColour(sources, events[i].source);
             colors.push_back(GetColorForPreset(colChoice, fe));
         }
+        // WinUI CalendarViewDayItem stacks density bars from bottom to top,
+        // so reverse to ensure earliest events appear on top.
+        std::reverse(colors.begin(), colors.end());
     }
     return colors;
 }
