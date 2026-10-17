@@ -101,7 +101,7 @@ Gentle sounds play as you use the launcher: a soft switch-like click when the ba
 
 * Six background effects (**Acrylic**, **Mica**, **Glass**, **Frosted**, **Aurora**, **Solid**) and 12 colours.
 * Each effect is built from a blurred view of whatever is behind the bar, finished with a colour tint, subtle grain and light highlights, so the bar looks the same on Windows 10 and 11.
-* **Live acrylic**: Acrylic, Frosted and Aurora follow what is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turning it off uses a single snapshot taken when the bar opens, which helps performance and saves battery. With Glass, live mode also hides the bar from screenshots, recordings and screen sharing. It is on by default and can be changed in the settings.
+* **Live acrylic**: Acrylic, Glass, Frosted and Aurora follow what is behind the bar in real time. Turning it off uses a single snapshot taken when the bar opens, which helps performance and saves battery. It is on by default and can be changed in the settings.
 * Adjustable panel opacity, blur strength and layout.
 * Looks sharp on every monitor, even high-resolution ones or a mix of several.
 * The bar can sit anywhere from against the top edge to against the bottom edge of the screen.
@@ -201,7 +201,7 @@ Copyright (c) 2026-present David Ravelo.
     - solid: Solid (no effect)
 - LiveAcrylic: true
   $name: Live acrylic (real time)
-  $description: Keeps the background blur live. Acrylic, Frosted and Aurora follow whatever is behind the bar in real time, and Glass keeps refreshing its blur as the background changes. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. With the Glass effect, live mode also hides the bar from screenshots, screen recordings and screen sharing. Needs Windows 10 1803 or newer.
+  $description: Keeps the background blur live. Acrylic, Glass, Frosted and Aurora follow whatever is behind the bar in real time. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. Needs Windows 10 1803 or newer.
 - BlurAmount: 50
   $name: Blur strength (0 to 100)
   $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Ignored with "Solid".
@@ -1359,7 +1359,6 @@ static const UINT_PTR TIMER_FRAME = 1;
 static const UINT_PTR TIMER_BLINK = 2;
 static const UINT_PTR TIMER_COPY = 3;  // clears the calculator "Copied" flash
 static const UINT_PTR TIMER_CALC = 4;  // debounce for calculator evaluation
-static const UINT_PTR TIMER_GLASS = 5; // refreshes the Glass backdrop while the bar is open
 static const int HOTKEY_ID = 1;
 
 // ===== Types =====
@@ -3974,8 +3973,8 @@ static int g_liveRgnSize[2][2] = {};                // Windows 10: size of the l
 
 static bool UseLive() {
     if (!g_liveSupported || !g_cfg.liveAcrylic) return false;
-    return g_cfg.effect == BgEffect::Acrylic || g_cfg.effect == BgEffect::Frosted ||
-           g_cfg.effect == BgEffect::Aurora;
+    return g_cfg.effect == BgEffect::Acrylic || g_cfg.effect == BgEffect::Glass ||
+           g_cfg.effect == BgEffect::Frosted || g_cfg.effect == BgEffect::Aurora;
 }
 
 static bool WindowsBuildAtLeast(DWORD build) {
@@ -4139,45 +4138,6 @@ static bool CaptureBackdrop(int x, int y, int w, int h) {
         return false;
     }
     return true;
-}
-
-// ---- Real-time Glass ----
-// Glass uses little blur, so DWM's acrylic (fixed, strong blur) does not fit. Instead the desktop
-// is captured again several times per second while the bar is open. So that the capture does not
-// include the bar itself, the window is excluded from screen capture
-// (WDA_EXCLUDEFROMCAPTURE, Windows 10 2004+). If Windows does not allow it, Glass stays static.
-static const UINT kGlassRefreshMs = 16;  // ~60 captures per second to reduce lag
-typedef BOOL(WINAPI* SetWindowDisplayAffinity_t)(HWND, DWORD);
-static bool g_glassCaptureOk = false;
-
-static bool UseGlassLive() {
-    if (!g_cfg.liveAcrylic) return false;
-    return g_cfg.effect == BgEffect::Glass && g_glassCaptureOk;
-}
-
-// Called on open. Only with Glass is the window excluded from capture (so screenshots and
-// recordings still see the bar with the other effects).
-static void ApplyCaptureAffinity() {
-    static SetWindowDisplayAffinity_t fn = [] {
-        HMODULE u = GetModuleHandleW(L"user32.dll");
-        return u ? (SetWindowDisplayAffinity_t)GetProcAddress(u, "SetWindowDisplayAffinity") : nullptr;
-    }();
-    g_glassCaptureOk = false;
-    if (!fn || !g_hwnd) return;
-    const bool want = g_cfg.effect == BgEffect::Glass && g_cfg.liveAcrylic;
-    if (fn(g_hwnd, want ? 0x00000011 /*WDA_EXCLUDEFROMCAPTURE*/ : 0 /*WDA_NONE*/)) {
-        g_glassCaptureOk = want;
-    } else if (want) {
-        Wh_Log(L"Glass: SetWindowDisplayAffinity failed (%lu), using a static capture", GetLastError());
-    }
-}
-
-static void RefreshGlassBackdrop() {
-    if (!UseGlassLive() || !g_hwnd || g_bmpW <= 0 || g_bmpH <= 0) return;
-    // The surface is already on screen (with the animation offset): capture exactly what is
-    // underneath it.
-    CaptureBackdrop(g_winX, g_winY + (int)std::lround(g_offY), g_bmpW, g_bmpH);
-    MarkDirty();
 }
 
 // Prepares the acrylic background for the next opening.
@@ -5860,7 +5820,6 @@ static void FinishHide() {
         g_frameTimerOn = false;
     }
     KillTimer(g_hwnd, TIMER_BLINK);
-    KillTimer(g_hwnd, TIMER_GLASS);
     KillTimer(g_hwnd, TIMER_COPY);
     KillTimer(g_hwnd, TIMER_CALC);
     g_calcPending = false;
@@ -5952,7 +5911,6 @@ static void ShowLauncher() {
     if (g_winX + g_bmpW > mi.rcMonitor.right) g_winX = mi.rcMonitor.right - g_bmpW;
     if (g_winX < mi.rcMonitor.left) g_winX = mi.rcMonitor.left;
 
-    ApplyCaptureAffinity();
     // Acrylic: capture the desktop now, with the window still hidden.
     PrepareBackdrop();
     if (UseLive()) {
@@ -5974,7 +5932,6 @@ static void ShowLauncher() {
     Sound::OnOpen();
 
     SetTimer(g_hwnd, TIMER_BLINK, 530, nullptr);
-    if (UseGlassLive()) SetTimer(g_hwnd, TIMER_GLASS, kGlassRefreshMs, nullptr);
     StartFrameTimer();
 
     if (!g_indexing && ShouldReindexOnOpen()) {
@@ -6588,12 +6545,6 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                 RunSearch();
                 UpdateTargets(false, /*followSelection=*/true);
                 MarkDirty();
-            } else if (wp == TIMER_GLASS) {
-                if (g_vis == Vis::Hidden || !UseGlassLive()) {
-                    KillTimer(g_hwnd, TIMER_GLASS);
-                } else if (g_vis != Vis::Hiding) {
-                    RefreshGlassBackdrop();
-                }
             } else if (wp == TIMER_BLINK) {
                 if (g_vis == Vis::Shown && GetForegroundWindow() != g_hwnd &&
                     NowSec() - g_shownAt > 0.5) {
