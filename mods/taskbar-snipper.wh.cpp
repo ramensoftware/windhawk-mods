@@ -112,7 +112,8 @@ unlinked.
 - The tool, color and thickness you used last are remembered.
 - A recording closed without copying or saving it is deleted; the window asks first. If the mod
   turns off (or Windows signs out) while recording, or with a recording still open, the recording
-  goes to the recordings folder the next time the mod starts.
+  goes to the recordings folder: right away when that's on the same drive as Windhawk's mod storage,
+  otherwise the next time the mod starts.
 - Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
   mod's storage (in a folder only you can open), and go with the mod.
 - Windhawk 1.x runs mods in a 32-bit process, short on memory for video: there, an area bigger
@@ -158,6 +159,7 @@ unlinked.
 #include <shellscalingapi.h>
 #include <dwmapi.h>
 #include <sddl.h>
+#include <aclapi.h>
 #include <commdlg.h>
 #include <codecapi.h>
 #include <d3d11.h>
@@ -2789,6 +2791,9 @@ public:
 
     bool Open(const std::wstring& path, int width, int height, bool hardware) {
         writer_.Reset();
+        path_ = path;
+        hardware_ = hardware;
+        wroteFrame_ = false;
         width_ = width;
         height_ = height;
         Com<IMFAttributes> attributes;
@@ -2831,6 +2836,28 @@ public:
 
     // Adds a frame of width × height pixels, shown from the time (in ticks from the start).
     bool Write(const BYTE* pixels, LONGLONG time) {
+        if (WriteFrame(pixels, time)) {
+            wroteFrame_ = true;
+            return true;
+        }
+        // A graphics card's encoder can open and still fail once frames come (when other apps use
+        // all its sessions, say): the processor's, from the start.
+        if (!hardware_ || wroteFrame_ || !Open(path_, width_, height_, false) || !WriteFrame(pixels, time)) {
+            return false;
+        }
+        wroteFrame_ = true;
+        return true;
+    }
+
+    // Finishes the file. Returns whether it was all written.
+    bool Finish() {
+        bool finished = writer_ && SUCCEEDED(writer_->Finalize());
+        writer_.Reset();
+        return finished;
+    }
+
+private:
+    bool WriteFrame(const BYTE* pixels, LONGLONG time) {
         DWORD size = (DWORD)width_ * height_ * 4;
         Com<IMFMediaBuffer> buffer;
         BYTE* data = nullptr;
@@ -2846,16 +2873,11 @@ public:
                SUCCEEDED(writer_->WriteSample(stream_, sample.Get()));
     }
 
-    // Finishes the file. Returns whether it was all written.
-    bool Finish() {
-        bool finished = writer_ && SUCCEEDED(writer_->Finalize());
-        writer_.Reset();
-        return finished;
-    }
-
-private:
     Com<IMFSinkWriter> writer_;
     DWORD stream_ = 0;
+    std::wstring path_;
+    bool hardware_ = false;
+    bool wroteFrame_ = false;
     int width_ = 0;
     int height_ = 0;
 };
@@ -3327,9 +3349,31 @@ Recorder::FrameSource ScreenFrames(const RECT& area) {
 }
 
 // The folder for recordings being made and trimmed, and copies put on the clipboard: the user's
-// own folder in the mod's storage. Files older than a day there are cleaned up.
+// own folder in the mod's storage. TidyWorkFolder deals with what's left in it.
 std::wstring WorkFolder() {
     return Storage::Folder();
+}
+
+// When the mod turns off (or Windows signs out) with a recording that wasn't copied or saved: it
+// goes to the recordings folder at once if that's on the same drive (a rename, quick enough to
+// finish), taking on that folder's permissions instead of the work folder's. Otherwise it stays for
+// TidyWorkFolder at the next start (which never comes if the mod is removed, so the move matters).
+bool MoveRecordingNow(const std::wstring& recording, const std::wstring& folder) {
+    if (recording.empty() || folder.empty()) {
+        return false;
+    }
+    SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);  // Fails harmlessly when it's there already.
+    std::wstring target = NewFileName(folder, L"Screen Recording", L".mp4");
+    if (!MoveFileExW(recording.c_str(), target.c_str(), 0)) {
+        return false;
+    }
+    // An empty list of its own, and the folder's inherited.
+    ACL empty;
+    if (InitializeAcl(&empty, sizeof(empty), ACL_REVISION)) {
+        SetNamedSecurityInfoW(target.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION, nullptr,
+                              nullptr, &empty, nullptr);
+    }
+    return true;
 }
 
 // Tidies the work folder, at start, on a thread of its own:
@@ -5015,6 +5059,8 @@ public:
     // How long the recording is so far, and whether it failed.
     std::function<LONGLONG()> elapsed;
     std::function<bool()> failed;
+    // Windows is signing out or shutting down: the recording is finished now, while there's time.
+    std::function<void()> onEndSession;
 
     ~RecordingBar() { Hide(); }
 
@@ -5075,6 +5121,11 @@ public:
 
     bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
         switch (message) {
+            case WM_ENDSESSION:
+                if (wParam && onEndSession) {
+                    onEndSession();
+                }
+                return true;
             case WM_MOUSEACTIVATE:
                 result = MA_NOACTIVATE;  // The app being recorded keeps the keyboard.
                 return true;
@@ -5313,9 +5364,11 @@ public:
             DestroyWindow(hwnd_);
         }
         reader_.Close();
-        // Gone without being closed (the mod turned off), and neither copied nor saved: left in the
-        // work folder, for the next start to put in the recordings folder.
+        // Gone without being closed (the mod turned off), and neither copied nor saved: kept.
         if (opened_ && !closed_ && !copied_ && !saved_) {
+            if (saveFolder) {
+                MoveRecordingNow(path_, saveFolder());
+            }
             return;
         }
         DeleteFileW(path_.c_str());
@@ -6343,9 +6396,12 @@ public:
     ~SnipApp() {
         hook_.Stop();
         overlay_.reset();
-        // Turning off while recording: the recording is finished, and left (as are any not yet
-        // copied or saved in trim windows) for the next start to put in the recordings folder.
-        recorder_.Stop();
+        // Turning off while recording: the recording is finished and kept, as are any not yet copied
+        // or saved in trim windows.
+        if (recorder_.Recording()) {
+            recorder_.Stop();
+            MoveRecordingNow(recordingPath_, settings_.recordings.path);
+        }
         recordingBar_.Hide();
         trimWindows_.clear();
         widget_.Destroy();
@@ -6482,6 +6538,14 @@ private:
         recordingBar_.onCancel = [this]() { CancelRecording(); };
         recordingBar_.elapsed = [this]() { return recorder_.Elapsed(); };
         recordingBar_.failed = [this]() { return recorder_.Failed(); };
+        recordingBar_.onEndSession = [this]() {
+            if (recorder_.Recording()) {
+                recorder_.Stop();
+                if (MoveRecordingNow(recordingPath_, settings_.recordings.path)) {
+                    recordingPath_.clear();
+                }
+            }
+        };
         if (recordingBar_.Show(area)) {
             widget_.SetRecording(true);
         }
