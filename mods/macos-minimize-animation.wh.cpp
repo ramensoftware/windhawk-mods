@@ -56,6 +56,11 @@ repo. Huge thanks for building this, sharing the recording, and generously handi
 it all over - this mod wouldn't look nearly this good without him. The **Classic**
 style is the mod's original renderer.
 
+The Firefox-family first-window check in the app-launch animation (v3.1.7) is
+ported from **ReDrag**'s [Windows Animations](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-animations.wh.cpp)
+mod, which found that hiding a Gecko browser's first window with a DWM cloak can
+make it open a second window. Thanks!
+
 ## Known issues
 - On multi-monitor setups (especially the secondary display), the genie can
   briefly slide sideways / to the left for a frame or two at the very start of a
@@ -355,14 +360,36 @@ std::atomic<int> g_tileCount{TILE_COUNT_DEFAULT};
 std::vector<std::wstring> g_ExcludedPrograms;
 
 // --- UNLOAD COORDINATION ---
-// Windhawk unmaps the mod DLL right after uninit, so any worker thread still
-// running mod code at that point would crash its host process. Workers register
-// here and abort promptly once g_unloading is set; Wh_ModBeforeUninit waits for
-// the count to drain before the DLL goes away. (MINE's drain model is kept in
-// preference to HIS's join-and-pump StopAndJoinAllThreads: pumping messages while
-// unloading can re-enter our six hooks under @include *.)
+// Windhawk unmaps the mod DLL right after Wh_ModUninit returns, so a worker thread
+// still running mod code at that point (even just its function epilogue) would
+// crash its host process. Every worker is started through MacGenieSpawnWorker,
+// which keeps its handle and refuses new workers once g_unloading is set (checked
+// under the same lock). Wh_ModBeforeUninit sets the flag, the workers notice it
+// and wind down, and Wh_ModUninit - which runs after the hooks are disabled, so no
+// new worker can appear - joins every handle before the DLL goes away. The join
+// doesn't pump messages (that could re-enter hooks), and no worker sends a message
+// to the unloading thread once g_unloading is set.
 std::atomic<bool> g_unloading{false};
-std::atomic<int>  g_workerCount{0};
+std::mutex g_WorkerThreadsMutex;
+std::vector<HANDLE> g_WorkerThreads;
+
+// Returns false (nothing started) when unloading or CreateThread fails; callers
+// then undo their hide exactly as on any other failed start.
+static bool MacGenieSpawnWorker(LPTHREAD_START_ROUTINE proc, void* param) {
+    std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
+    if (g_unloading.load(std::memory_order_relaxed)) return false;
+    // Drop handles of workers that already finished.
+    for (size_t i = g_WorkerThreads.size(); i-- > 0;) {
+        if (WaitForSingleObject(g_WorkerThreads[i], 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_WorkerThreads[i]);
+            g_WorkerThreads.erase(g_WorkerThreads.begin() + i);
+        }
+    }
+    HANDLE hThread = CreateThread(NULL, 0, proc, param, 0, NULL);
+    if (!hThread) return false;
+    g_WorkerThreads.push_back(hThread);
+    return true;
+}
 
 void MacGenieLoadSettings() {
     int ms = Wh_GetIntSetting(L"duration_ms");
@@ -809,7 +836,7 @@ static void ClampGenieCanvas(int& left, int& top, int& right, int& bottom,
 // -------------------------------------------------------------------------
 // Genie Animation Thread
 //
-// MINE's loop and lifecycle - g_workerCount, g_unloading early-out, the
+// MINE's loop and lifecycle - joined worker, g_unloading early-out, the
 // first-frame sync event, g_AnimActive teardown - with HIS's Direct2D mesh
 // renderer as the per-frame draw call. Frames are paced by a high-resolution
 // waitable timer at 2x the display's refresh rate (never a busy loop), so DWM
@@ -1272,9 +1299,8 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         int unhideMs = data->unhideDurationMs;
         int animMs = data->durationMs;
         if (data->requestedUnhide && unhideMs > animMs) {
-            // Chunked sleep so the unload drain (which waits ~3 s for workers to
-            // see g_unloading) never times out on the up-to-~5 s unhide wait and
-            // leaves this thread in unmapped code.
+            // Chunked sleep so an unload (which joins this thread) never waits out
+            // the up-to-~5 s unhide delay.
             int remaining = unhideMs - animMs;
             while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
                 int chunk = remaining < 20 ? remaining : 20;
@@ -1313,7 +1339,6 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         g_AnimActive.erase(data->hRealWnd);
     }
     delete data;
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -1323,7 +1348,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 // preferred it). It consumes the SAME MacGenieAnimData contract the modern engine
 // does - snapshot bitmap, extended-frame rect, dock target, first-frame event - and
 // runs the SAME teardown (reveal, DWM transitions, auto-hide deferred minimize,
-// worker drain), so it drops in behind the identical setup/capture path; only the
+// unload join), so it drops in behind the identical setup/capture path; only the
 // per-frame rendering differs. Selected by the "Animation style" setting.
 // -------------------------------------------------------------------------
 DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
@@ -1653,9 +1678,8 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
         int unhideMs = data->unhideDurationMs;
         int animMs = data->durationMs;
         if (data->requestedUnhide && unhideMs > animMs) {
-            // Chunked sleep so the unload drain (which waits ~3 s for workers to
-            // see g_unloading) never times out on the up-to-~5 s unhide wait and
-            // leaves this thread in unmapped code.
+            // Chunked sleep so an unload (which joins this thread) never waits out
+            // the up-to-~5 s unhide delay.
             int remaining = unhideMs - animMs;
             while (remaining > 0 && !g_unloading.load(std::memory_order_relaxed)) {
                 int chunk = remaining < 20 ? remaining : 20;
@@ -1686,7 +1710,6 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
         g_AnimActive.erase(data->hRealWnd);
     }
     delete data;
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -2000,7 +2023,10 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
             g_SnapshotCache.erase(it);
         }
         void* pCacheBits = nullptr;
-        HBITMAP hCacheBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pCacheBits, NULL, 0);
+        // Not while unloading: Wh_ModUninit may already have cleared the cache, and
+        // nothing would ever free a bitmap added after that.
+        HBITMAP hCacheBmp = g_unloading.load(std::memory_order_relaxed) ? NULL :
+            CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pCacheBits, NULL, 0);
         if (hCacheBmp && pCacheBits) {
             memcpy(pCacheBits, data->pBits, (size_t)w * h * 4);
             g_SnapshotCache[hWnd] = { hCacheBmp, pCacheBits, w, h };
@@ -2027,14 +2053,11 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     }
     bool waitForFirstFrame = (data->hFirstFrameShown != NULL);
 
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
     // Same setup and capture for both styles; only the render thread differs.
     LPTHREAD_START_ROUTINE renderProc =
         g_classicEngine.load(std::memory_order_relaxed) ? MacGenieAnimThreadClassic
                                                         : MacGenieAnimThread;
-    HANDLE hThread = CreateThread(NULL, 0, renderProc, data, 0, NULL);
-    if (hThread) {
-        CloseHandle(hThread);
+    if (MacGenieSpawnWorker(renderProc, data)) {
         if (hFirstShown) {
             if (waitForFirstFrame) {
                 WaitForSingleObject(hFirstShown, 200);   // capped: worst case = old behavior
@@ -2044,9 +2067,8 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
         return true;
     }
 
-    // Thread couldn't start - undo our state so the window isn't left invisible or
-    // with transitions permanently disabled.
-    g_workerCount.fetch_sub(1, std::memory_order_release);
+    // Thread couldn't start (or the mod is unloading) - undo our state so the window
+    // isn't left invisible or with transitions permanently disabled.
     if (rising) {
         MacGenieUndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak);
     } else {
@@ -2095,7 +2117,11 @@ static bool MacGenieIsFirstGeckoWindow(HWND hWnd) {
         _wcsicmp(cls, L"MozillaWindowClass") != 0) {
         return false;
     }
-    MacGenieGeckoSearch search = { hWnd, GetCurrentProcessId(), false };
+    // The hooks run in whichever process makes the call, so match the window's
+    // owner, not the calling process.
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    MacGenieGeckoSearch search = { hWnd, pid, false };
     EnumWindows(MacGenieFindOtherGeckoWindow, (LPARAM)&search);
     return !search.found;
 }
@@ -2131,13 +2157,14 @@ static bool MacGenieLaunchPrepare(HWND hWnd, int nCmdShow, LONG_PTR* origExOut,
         nCmdShow != SW_SHOWDEFAULT && nCmdShow != SW_SHOWMAXIMIZED) return false;
     if (IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
     if (!MacGenieIsLaunchWindow(hWnd)) return false;
-    // Excluded programs show untouched (StartMacGenieAnim would refuse them anyway,
-    // but only after the hide had already delayed the window).
-    if (MacGenieIsExcluded(hWnd)) return false;
     {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         if (!g_LaunchSeen.insert(hWnd).second) return false;
     }
+    // Excluded programs show untouched (StartMacGenieAnim would refuse them anyway,
+    // but only after the hide had already delayed the window). Checked after the
+    // seen-set so re-shows of a seen window skip the process lookup.
+    if (MacGenieIsExcluded(hWnd)) return false;
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     *origExOut = exStyle;
     MacGenieSetDwmTransitions(hWnd, FALSE);
@@ -2164,12 +2191,7 @@ static void MacGenieLaunchCommit(HWND hWnd, LONG_PTR originalExStyle, BOOL cloak
     ld->hWnd = hWnd;
     ld->originalExStyle = originalExStyle;
     ld->hiddenByCloak = cloaked;
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
-    HANDLE h = CreateThread(NULL, 0, MacGenieLaunchThread, ld, 0, NULL);
-    if (h) {
-        CloseHandle(h);
-    } else {
-        g_workerCount.fetch_sub(1, std::memory_order_release);
+    if (!MacGenieSpawnWorker(MacGenieLaunchThread, ld)) {
         delete ld;
         MacGenieUndoRisingHide(hWnd, originalExStyle, cloaked);
     }
@@ -2377,13 +2399,11 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
         if (IsWindow(hWnd)) {
             MacGenieUndoRisingHide(hWnd, originalExStyle, hiddenByCloak);
         }
-        g_workerCount.fetch_sub(1, std::memory_order_release);
         return 0;
     }
 
     // Rising genie; reveals the real window at teardown the same way it was hidden.
     StartMacGenieAnim(hWnd, TRUE, originalExStyle, hiddenByCloak);
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -2410,18 +2430,32 @@ void Wh_ModSettingsChanged() {
     MacGenieLoadSettings();
 }
 
-// Windhawk unmaps the mod DLL right after Wh_ModUninit returns, so any worker
-// thread still running mod code would crash its host. Signal workers to abort and
-// wait for them to drain (MINE's drain model - the animation loop checks the flag
-// every frame, the launch worker every 50 ms; the cap only guards a hung DWM).
+// Signal workers to wind down (the animation loop checks the flag every frame, the
+// launch worker every 50 ms) and stop new ones from starting. They're joined in
+// Wh_ModUninit, once the hooks are gone (see UNLOAD COORDINATION).
 void Wh_ModBeforeUninit() {
+    std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
     g_unloading.store(true, std::memory_order_relaxed);
-    for (int i = 0; i < 300 && g_workerCount.load(std::memory_order_acquire) > 0; ++i) {
-        Sleep(10);
-    }
 }
 
 void Wh_ModUninit() {
+    {
+        // Normally already set by Wh_ModBeforeUninit; cheap insurance.
+        std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
+        g_unloading.store(true, std::memory_order_relaxed);
+    }
+    // Join every worker before releasing anything they use (D2D factory, caches).
+    // Not under g_CacheMutex: workers take it during their teardown.
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
+        threads.swap(g_WorkerThreads);
+    }
+    for (HANDLE h : threads) {
+        WaitForSingleObject(h, INFINITE);
+        CloseHandle(h);
+    }
+
     if (g_d2dFactory) {
         g_d2dFactory->Release();
         g_d2dFactory = nullptr;
