@@ -16480,18 +16480,19 @@
         "ratingUsers": 21,
         "reviews": 0,
         "trendingSorting": 0.3762614921590207,
-        "updated": 1780349862000,
+        "updated": 1792216904000,
         "users": 735
       },
       "metadata": {
         "author": "Asteski",
+        "compilerOptions": "-lshell32 -lole32 -loleaut32 -luuid",
         "description": "Toggle the visibility of hidden files in Windows Explorer using Ctrl+H",
         "github": "https://github.com/Asteski",
         "include": [
           "windhawk.exe"
         ],
         "name": "Toggle Hidden Files",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "tortoisegit-progress-animation-background-fix": {

@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-16T17:01:17.000Z</updated>
+    <updated>2026-10-17T06:01:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Toggle Hidden Files 1.1.0]]></title>
+        <id>https://windhawk.net/mods/toggle-hidden-files#587704d691363d85fea430f5e02bc52ef75a6669</id>
+        <link href="https://windhawk.net/mods/toggle-hidden-files"/>
+        <updated>2026-10-17T06:01:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added separate and configurable modifier to toggle protected operating system files</li>
+<li>Fixed a bug where icons may occasionally disappear in File Explorer when toggling back the hidden files and folders.</li>
+</ul>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[What When Where Notes 1.3.2]]></title>
         <id>https://windhawk.net/mods/what-when-where-notes#42b2e0d8841f564a666a6130fbf89d4929e0af53</id>
@@ -748,93 +762,6 @@ resolutions, multi-monitor support and low rendering overhead.</p>]]></content>
         <author>
             <name>His Fanciness</name>
             <uri>https://github.com/HisFanciness</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8/8.1 Display Switch Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win8-display-switch-recreation#183ccb4a266611edc7ed6139f5b077e2c04f13ec</id>
-        <link href="https://windhawk.net/mods/win8-display-switch-recreation"/>
-        <updated>2026-10-15T18:31:53.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows881displayswitchrecreation">Windows 8/8.1 Display Switch Recreation</h1>
-<blockquote>
-  <p><strong>IMPORTANT:</strong> This modification runs in <code>explorer.exe</code> and does not require adding the critical
-  <code>dwm.exe</code> process to Windhawk's inclusion list. When an elevated window or a secure desktop is
-  active, Windows may not deliver keyboard input to Explorer; in that case the native Project
-  flyout remains available.</p>
-</blockquote>
-<p>This mod recreates the Windows 8/8.1 display switch panel (the <strong>Second screen</strong> flyout in
-Windows 8 and the <strong>Project</strong> pane in Windows 8.1) on Windows 10 and Windows 11. It uses the
-real Windows display configuration and does not replace system files, patch the graphics driver,
-or modify native display binaries. Topology changes and <strong>Set as main display</strong> use documented
-Windows APIs and persist like the native Project flyout. This modification has been tested on Windows 10 21H2 and Windows 11 24H2.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8display.png" alt="Windows 8/8.1 Display Switch screenshot" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Four native display modes: <strong>PC screen only</strong>, <strong>Duplicate</strong>, <strong>Extend</strong>, and <strong>Second screen only</strong>.</li>
-<li>Live display state with monitor hotplug and Settings-app changes reflected while the panel is open.</li>
-<li>Windows 8.1-style layout, embedded icons, accent color, per-monitor DPI support, and translations
-for English, Italian, Spanish, French, Portuguese, German, Russian, Simplified Chinese, Japanese,
-and Korean.</li>
-<li>Right-click commands: <strong>Set as main display</strong>, <strong>Detect displays</strong>, <strong>More settings</strong>, and
-<strong>Copy monitor information</strong>.</li>
-<li>Keyboard controls: <code>Win+P</code> to open or toggle, <code>Left</code>/<code>Right</code>/<code>Up</code>/<code>Down</code> to select, <code>Enter</code> or
-<code>Space</code> to apply, <code>1</code>-<code>4</code> for direct selection, <code>F5</code> to detect displays, and <code>Esc</code> to dismiss.</li>
-<li>While the panel is open, repeated <code>Win+P</code> presses cycle through the modes; releasing Win applies
-the selected mode and closes the panel.</li>
-<li>Click-outside and foreground-change dismissal, plus a status line for display API errors.</li>
-<li>The Windows 8/8.1 <strong>Devices > Second screen/Project</strong> route and a no-argument
-<code>DisplaySwitch.exe</code> launch replace the native <code>DisplaySwitchUIWnd</code>; direct commands such as
-<code>DisplaySwitch.exe /extend</code> remain untouched.</li>
-</ul>
-<h2 id="winpinputpath">Win+P input path</h2>
-<p>When enabled, the mod installs one narrow <code>WH_KEYBOARD_LL</code> hook in the main <code>explorer.exe</code> process.
-It consumes only the physical <code>Win+P</code> sequence, passes injected input and every other key through,
-and sends private messages to the panel. The hook is removed when the setting is disabled or the mod
-is unloaded. If an elevated window or a secure desktop is active, the hook may not receive the input;
-the native Windows Project flyout is intentionally preserved in that case.</p>
-<p>The panel loads only in the Explorer process that owns the shell window, so separate folder-window
-processes do not create duplicate panels.</p>
-<h2 id="windowsapis">Windows APIs</h2>
-<p>The panel uses documented public APIs:</p>
-<p>| Purpose | API |
-| --- | --- |
-| Read paths, topology, and monitor names | <code>QueryDisplayConfig</code>, <code>GetDisplayConfigBufferSizes</code>, <code>DisplayConfigGetDeviceInfo</code> |
-| Apply or validate a topology | <code>SetDisplayConfig</code> with <code>SDC_APPLY</code>, <code>SDC_VALIDATE</code>, and the topology flags |
-| Detect displays | <code>SetDisplayConfig</code> with <code>SDC_USE_DATABASE_CURRENT</code> |
-| Set the primary display | <code>ChangeDisplaySettingsEx</code> with <code>CDS_SET_PRIMARY</code> and <code>CDS_UPDATEREGISTRY</code> |
-| Monitor information and DPI | <code>EnumDisplayMonitors</code>, <code>GetMonitorInfo</code>, <code>EnumDisplaySettingsEx</code>, <code>GetDpiForMonitor</code> |
-| Other display settings | <code>ms-settings:display</code> deep links |
-| Replace another native Project flyout | <code>SetWinEventHook(EVENT_SYSTEM_FOREGROUND)</code> and <code>DisplaySwitchUIWnd</code> detection |
-| Error reporting | documented return codes and <code>FormatMessage</code> |</p>
-<p>The mod does not write arbitrary registry values, call driver-private interfaces, launch
-<code>DisplaySwitch.exe</code>, or undo user-requested display changes when disabled. <code>ERROR_ACCESS_DENIED</code>
-is shown in the panel when the current session cannot change the display configuration.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Open with Win+P</strong>: replace the native Project flyout and supported native entry points.</li>
-<li><strong>Panel color</strong>: accent, Charcoal, or Custom color.</li>
-<li><strong>Full-height pane</strong>: use the Windows 8.1 full-height layout or fit the content.</li>
-<li><strong>Validate before applying</strong>: validate the topology with <code>SDC_VALIDATE</code> before applying it.</li>
-<li><strong>Allow path persistence</strong>: add <code>SDC_PATH_PERSIST_IF_REQUIRED</code> when applying a topology.</li>
-<li><strong>Disable unavailable options</strong>: gray out modes that require more than one connected display.</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>The mod cannot make a topology work when the display driver does not support it.</li>
-<li>Wireless-display discovery remains part of the native Windows Connect experience.</li>
-<li>Resolution, refresh rate, orientation, HDR, and the embedded artwork are not re-created or changed.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>AdministratoX</strong> — Metro UI interface template.</li>
-<li><strong>Meteoni</strong> — <code>IsMainExplorerProcess</code> pattern.</li>
-<li>The Windows 8/8.1 Search Charm Recreation mod — panel, animation, light dismiss, z-band,
-context-menu, and translation components.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
