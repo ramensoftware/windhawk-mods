@@ -4,6 +4,7 @@
 // @description     Music Dynamic Island inspired by iPhone's one and Matcha external music player
 // @version         1.1.0
 // @author          MrsWorthless
+// github           https://github.com/MrsWorthless
 // @include         windhawk.exe
 // @compilerOptions -lgdi32 -luser32 -lgdiplus -lole32 -lshlwapi -lshell32 -lwininet -lwindowsapp -lruntimeobject
 // ==/WindhawkMod==
@@ -230,7 +231,7 @@ struct CachedRenderResources {
 struct UIState {
     float curW = 196.0f, curH = 34.0f, expandT = 0.0f, bigModeT = 0.0f, drawerT = 0.0f, bigLyricsT = 1.0f;
     float dpiScale = 1.0f;
-bool hovered = false, hidden = false, fullscreenHidden = false, wasF12Down = false;
+    bool hovered = false, hidden = false, fullscreenHidden = false, wasF12Down = false;
     bool bigMode = false, showLyrics = false;
     bool hasSavedBigPos = false, draggingWin = false, draggingSeek = false, hoveringSeek = false;
     float savedBigX = 0.0f, savedBigY = 80.0f, bigPosT = 0.0f;
@@ -258,8 +259,8 @@ void LoadModSettings() {
     g_set.compactH           = std::max(28, Wh_GetIntSetting(L"CompactHeight"));
     g_set.expandedW          = std::max(290, Wh_GetIntSetting(L"NormalWidth"));
     g_set.expandedH          = std::max(118, Wh_GetIntSetting(L"NormalHeight"));
-    g_set.bigW               = std::max(680, Wh_GetIntSetting(L"StudioWidth"));
-    g_set.bigH               = std::max(430, Wh_GetIntSetting(L"StudioHeight"));
+    g_set.bigW               = std::max(680, Wh_GetIntSetting(L"BigWidth"));
+    g_set.bigH               = std::max(430, Wh_GetIntSetting(L"BigHeight"));
     g_set.glassOpacity       = std::clamp(Wh_GetIntSetting(L"GlassOpacity"), 180, 255);
     g_set.preferSpotify      = Wh_GetIntSetting(L"PreferSpotify") != 0;
     g_set.autoHideFullscreen = Wh_GetIntSetting(L"AutoHideFullscreen") != 0;
@@ -1697,19 +1698,48 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             QueryPerformanceCounter(&n);
             g_ui.qpcFreq = (double)f.QuadPart;
             g_ui.lastQpc = n.QuadPart;
-            SetTimer(hwnd, TIMER_ID_FRAME, 7, nullptr);
+            RegisterIslandHotkey(hwnd);
+            SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_ANIM);
             return 0;
         }
 
+        case WM_HOTKEY:
+            if (wParam == HOTKEY_ID_HIDE) {
+                g_ui.hidden = !g_ui.hidden;
+                ShowWindow(hwnd, (g_ui.hidden || g_ui.fullscreenHidden) ? SW_HIDE : SW_SHOWNOACTIVATE);
+                UpdateAudioCaptureNeeded();
+                if (g_ui.hidden) SetTimerIntervalIfNeeded(hwnd, 0);
+                else WakeAnimationTimer(hwnd);
+            }
+            return 0;
+
+        case WM_DPICHANGED:
+            WakeAnimationTimer(hwnd);
+            return 0;
+
+        case WM_ISLAND_MEDIA_CHANGED:
+            UpdateAudioCaptureNeeded();
+            WakeAnimationTimer(hwnd);
+            return 0;
+
         case WM_TIMER:
             if (wParam == TIMER_ID_FRAME) {
-                bool f12Down = (GetAsyncKeyState(VK_F12) & 0x8000) != 0;
-                if (f12Down && !g_ui.wasF12Down) {
-                    g_ui.hidden = !g_ui.hidden;
-                    ShowWindow(hwnd, (g_ui.hidden || g_ui.fullscreenHidden) ? SW_HIDE : SW_SHOWNOACTIVATE);
+                ULONGLONG nowTick = GetTickCount64();
+                if (g_set.autoHideFullscreen && nowTick - g_ui.lastFullscreenCheckMs > 500) {
+                    g_ui.lastFullscreenCheckMs = nowTick;
+                    QUERY_USER_NOTIFICATION_STATE quns = QUNS_ACCEPTS_NOTIFICATIONS;
+                    bool fs = SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+                              (quns == QUNS_BUSY || quns == QUNS_RUNNING_D3D_FULL_SCREEN || quns == QUNS_PRESENTATION_MODE);
+                    if (fs != g_ui.fullscreenHidden) {
+                        g_ui.fullscreenHidden = fs;
+                        ShowWindow(hwnd, (g_ui.hidden || g_ui.fullscreenHidden) ? SW_HIDE : SW_SHOWNOACTIVATE);
+                        UpdateAudioCaptureNeeded();
+                    }
                 }
-                g_ui.wasF12Down = f12Down;
-                if (g_ui.hidden) return 0;
+                if (g_ui.hidden || g_ui.fullscreenHidden) {
+                    SetTimerIntervalIfNeeded(hwnd, 0);
+                    return 0;
+                }
 
                 LARGE_INTEGER n{};
                 QueryPerformanceCounter(&n);
@@ -1717,10 +1747,11 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 g_ui.lastQpc = n.QuadPart;
                 g_ui.marqueeTime += dt;
 
-                bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                bool clickThrough = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) &&
+                                    ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
                 LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-                if (ctrl && !(ex & WS_EX_TRANSPARENT)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_TRANSPARENT);
-                else if (!ctrl && (ex & WS_EX_TRANSPARENT)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_TRANSPARENT);
+                if (clickThrough && !(ex & WS_EX_TRANSPARENT)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_TRANSPARENT);
+                else if (!clickThrough && (ex & WS_EX_TRANSPARENT)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_TRANSPARENT);
 
                 if (g_ui.trackAnimT < 1.0f) g_ui.trackAnimT = std::min(1.0f, g_ui.trackAnimT + dt * 2.4f);
                 g_ui.bounceW *= std::exp(-10.0f * dt);
@@ -2151,7 +2182,7 @@ BOOL Wh_ModInit() {
     }
 
     if (isToolModProcess) {
-     g_toolModProcessMutex =
+        g_toolModProcessMutex =
             CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutexW failed");
@@ -2195,10 +2226,7 @@ void Wh_ModAfterInit() {
     switch (GetModuleFileNameW(nullptr, currentProcessPath,
                                ARRAYSIZE(currentProcessPath))) {
     case 0:
-  case 1:
     case ARRAYSIZE(currentProcessPath):
-        TCHAR szDummy[1] = {0};
-        (void)szDummy;
         Wh_Log(L"GetModuleFileNameW failed");
         return;
     }
