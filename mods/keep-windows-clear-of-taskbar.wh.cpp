@@ -37,14 +37,18 @@ the taskbar instead.
 
 Left alone: maximized and fullscreen windows, minimized windows, tool windows,
 always-on-top windows, menus, tooltips, windows you have placed across two
-monitors, and screen edges without a taskbar (you can still park a window
-partly off-screen there).
+monitors, and screen edges without a taskbar or other reserved screen space
+(you can still park a window partly off-screen there). Space reserved by docks,
+app bars or mods such as Maximized Window Margins counts as reserved too, so
+windows are kept clear of it as well.
 
 ## Relation to Taskbar Top Window Guard
 
 Taskbar Top Window Guard solves the same problem for a taskbar at the top of the
 screen, and adds optional centering of new windows. This mod covers any taskbar
-edge, including the bottom, and does not center windows.
+edge, including the bottom, and does not center windows. With a top taskbar,
+both mods correct the same windows, so Taskbar Top Window Guard is only worth
+adding alongside this one for its centering.
 
 ## How it works
 
@@ -75,7 +79,7 @@ windows are not corrected.
   $description: Turn off if you want to be able to drag a window under the taskbar yourself.
 - autoHiddenTaskbar: true
   $name: Keep windows clear of an auto-hidden taskbar while it's showing
-  $description: Leave on if another mod keeps an auto-hide taskbar visible. Turn off if your taskbar really auto-hides and you don't want windows to move while it pops up.
+  $description: Leave on if another mod keeps an auto-hide taskbar visible. Turn off if your taskbar really auto-hides and you don't want windows to move while it pops up; windows then only avoid the space Windows itself reserves.
 */
 // ==/WindhawkModSettings==
 
@@ -98,8 +102,6 @@ static const int kMaxCorrectionsPerWindow = 3;  // per kRetryWindowMs
 static const int kMaxShrinkAttempts = 2;        // per kRetryWindowMs
 static const int kMaxBackoffs = 3;              // then stop for good
 
-static const UINT kAutoHideRefreshMs = 2000;
-
 static std::atomic<bool> g_correctAfterDrag{true};
 static std::atomic<bool> g_autoHiddenTaskbar{true};
 
@@ -109,8 +111,7 @@ static HANDLE g_readyEvent = nullptr;
 
 // ---------------------------------------------------------------------------
 // State below is only touched on the watcher thread (out-of-context WinEvent
-// callbacks and its timer run on the thread that registered them), so it needs
-// no locking.
+// callbacks run on the thread that registered them), so it needs no locking.
 // ---------------------------------------------------------------------------
 struct CorrectionHistory {
     DWORD start = 0;
@@ -124,7 +125,6 @@ static std::unordered_map<HWND, CorrectionHistory> g_history;
 static std::unordered_set<HWND> g_givenUp;
 static std::unordered_set<HWND> g_cannotShrink;
 static std::unordered_set<HWND> g_userPlaced;
-static bool g_taskbarAutoHide = false;  // cached; only read when needed
 
 // Returns true for a normal, captioned, resizable top-level window.
 static bool IsNormalWindowStyle(DWORD style, DWORD exStyle) {
@@ -366,7 +366,10 @@ static UsableArea GetUsableArea(HMONITOR monitor, const MONITORINFO& mi) {
     UsableArea area;
     InitUsableArea(mi.rcMonitor, mi.rcWork, &area);
 
-    if (g_taskbarAutoHide && !g_autoHiddenTaskbar) {
+    // Without auto-hide, the work area already excludes the taskbar. Measuring
+    // the taskbar itself only matters when it is in auto-hide mode, which is
+    // what this setting is about.
+    if (!g_autoHiddenTaskbar) {
         return area;
     }
 
@@ -505,22 +508,6 @@ static void ForgetWindow(HWND hWnd) {
     }
 }
 
-static void RefreshAutoHideState() {
-    // Only needed when auto-hidden taskbars are ignored. Called from the timer,
-    // never from inside a WinEvent callback.
-    if (g_autoHiddenTaskbar) {
-        return;
-    }
-    APPBARDATA abd = {};
-    abd.cbSize = sizeof(abd);
-    g_taskbarAutoHide =
-        (SHAppBarMessage(ABM_GETSTATE, &abd) & ABS_AUTOHIDE) != 0;
-}
-
-static VOID CALLBACK AutoHideTimerProc(HWND, UINT, UINT_PTR, DWORD) {
-    RefreshAutoHideState();
-}
-
 static void CALLBACK WinEventProc(HWINEVENTHOOK,
                                   DWORD event,
                                   HWND hWnd,
@@ -579,14 +566,10 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK,
 // Watcher thread
 // ---------------------------------------------------------------------------
 static DWORD WINAPI WatcherThread(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     // Create the message queue before signaling ready, so the WM_QUIT posted
     // at unload is never lost.
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-
-    RefreshAutoHideState();
 
     const DWORD flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
     HWINEVENTHOOK hooks[] = {
@@ -606,8 +589,6 @@ static DWORD WINAPI WatcherThread(LPVOID) {
         }
     }
 
-    UINT_PTR timer = SetTimer(nullptr, 0, kAutoHideRefreshMs, AutoHideTimerProc);
-
     SetEvent(g_readyEvent);
 
     // Check windows that were already open before the mod started.
@@ -618,7 +599,6 @@ static DWORD WINAPI WatcherThread(LPVOID) {
     BOOL result;
     while ((result = GetMessageW(&msg, nullptr, 0, 0)) != 0 && result != -1) {
         if (!msg.hwnd && msg.message == kMsgSettingsChanged) {
-            RefreshAutoHideState();
             if (g_correctAfterDrag) {
                 // Windows the user placed while the setting was off are no
                 // longer exempt.
@@ -631,9 +611,6 @@ static DWORD WINAPI WatcherThread(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    if (timer) {
-        KillTimer(nullptr, timer);
-    }
     for (HWINEVENTHOOK h : hooks) {
         if (h) {
             UnhookWinEvent(h);
