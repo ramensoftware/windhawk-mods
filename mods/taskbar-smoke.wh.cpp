@@ -2,14 +2,15 @@
 // @id              taskbar-smoke
 // @name            Taskbar Smoke
 // @description     Soft, living smoke around the Windows 11 taskbar pills. Real fluid simulation: it rises, swirls, drifts over the edge and reacts to the mouse. Click-through overlay, follows auto-hide, hides in fullscreen.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Mathis
 // @github          https://github.com/xxsoulxx
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32
+// @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lwinhttp -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
+// clang-format off
 /*
 # Taskbar Smoke
 Draws a transparent, click-through overlay with animated dark smoke around the
@@ -24,7 +25,16 @@ variants of the fluid smoke.
 aside; it flows back on its own.
 * **Eight colors:** violet, pink, light blue, ice blue, green, gold, orange,
 red.
+* **Eight colors** (violet, pink, light blue, ice blue, green, gold, orange,
+red), plus the Windows accent color or a slow rainbow cycle. An optional
+**second color** blends along each pill, from left to right.
+* **Opacity** in seven steps (17% to 150%), **density**, **speed**, **tone**
+(dark smoke or light glow), **halo thickness** and **mouse reach**.
 * Optional small dark clouds slowly rising from the taskbar.
+* **Optional status feed (off by default):** colors the smoke when a JSON
+endpoint you configure reports a warning/danger level. Source URL (plain
+http://), JSON keys, polling interval, level thresholds and both colors are
+configurable. Leave it off if you do not need it; nothing is requested then.
 * Follows auto-hide, hides in fullscreen apps, settings apply instantly.
 
 Works best with a dark, pill-shaped taskbar theme (e.g. Windows 11 Taskbar
@@ -33,9 +43,11 @@ Styler); the smoke follows the taskbar's button groups. Runs in its own process
 
 Limitations: primary taskbar only, designed for a bottom-docked taskbar.
 */
+// clang-format on
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
+// clang-format off
 /*
 - color: violet
   $name: Smoke color
@@ -48,6 +60,57 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
   - gold: Gold
   - orange: Orange
   - red: Red
+  - accent: Windows accent color
+  - rainbow: Slow rainbow cycle
+- color2: none
+  $name: Second color
+  $description: Blends the smoke from the first color (left end of each pill) to this one (right end). Status feed colors (warning/danger) always win.
+  $options:
+  - none: None
+  - violet: Violet
+  - pink: Pink
+  - lightblue: Light blue
+  - iceblue: Ice blue
+  - green: Green
+  - gold: Gold
+  - orange: Orange
+  - red: Red
+- opacity: normal
+  $name: Opacity
+  $description: Normal is the look of earlier versions.
+  $options:
+  - faint: Faint (17%)
+  - whisper: Whisper (30%)
+  - subtle: Subtle (50%)
+  - light: Light (70%)
+  - normal: Normal (100%)
+  - strong: Strong (125%)
+  - full: Full (150%)
+- density: normal
+  $name: Smoke density
+  $options:
+  - sparse: Sparse
+  - normal: Normal
+  - dense: Dense
+- speed: normal
+  $name: Smoke speed
+  $options:
+  - calm: Calm
+  - normal: Normal
+  - lively: Lively
+- tone: smoke
+  $name: Tone
+  $options:
+  - smoke: Smoke (dark)
+  - glow: Glow (light)
+- thickness: normal
+  $name: Halo thickness
+  $description: How far the smoke reaches out from the taskbar pills.
+  $options:
+  - slim: Slim
+  - normal: Normal
+  - thick: Thick
+  - extra: Extra
 - style: fluid
   $name: Smoke style
   $options:
@@ -59,26 +122,102 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
 - mouse: gentle
   $name: Mouse reaction
   $options:
-  - off: Off
+  - "off": Off
   - gentle: Gentle
   - strong: Strong
+- reach: normal
+  $name: Mouse reach
+  $options:
+  - small: Small
+  - normal: Normal
+  - large: Large
 - clouds: true
   $name: Small dark clouds rising from the taskbar
+- statusSource: "off"
+  $name: Status feed
+  $description: Colors the smoke when a JSON endpoint reports a warning/danger level. Only plain http:// URLs are used.
+  $options:
+  - "off": Off
+  - feed: Feed (JSON over http)
+- statusUrl: ""
+  $name: Status feed URL
+  $description: http://host[:port]/path (no https). An empty or invalid URL keeps the feed off.
+- statusObjectKey: ""
+  $name: JSON object key
+  $description: Key of the object that holds the level and age. Empty = search from the start of the document.
+- statusLevelKey: level
+  $name: JSON level key
+  $description: Key whose integer value is the level (first occurrence after the object key).
+- statusAgeKey: ""
+  $name: JSON timestamp key
+  $description: Key with a Unix timestamp (seconds) of the report. Empty = no age check.
+- statusMaxAgeMin: "10"
+  $name: Maximum age of a report (minutes)
+  $options:
+  - "2": 2 minutes
+  - "5": 5 minutes
+  - "10": 10 minutes
+  - "30": 30 minutes
+  - "60": 60 minutes
+- statusPoll: 3s
+  $name: Polling interval
+  $options:
+  - 3s: 3 seconds
+  - 10s: 10 seconds
+  - 30s: 30 seconds
+  - 60s: 60 seconds
+- statusWarnLevel: "1"
+  $name: Warning from level
+  $options:
+  - "1": Level 1
+  - "2": Level 2
+  - "3": Level 3
+- statusDangerLevel: "2"
+  $name: Danger from level
+  $options:
+  - "2": Level 2
+  - "3": Level 3
+  - "4": Level 4
+- statusWarnColor: orange
+  $name: Warning color
+  $options:
+  - violet: Violet
+  - pink: Pink
+  - lightblue: Light blue
+  - iceblue: Ice blue
+  - green: Green
+  - gold: Gold
+  - orange: Orange
+  - red: Red
+- statusDangerColor: red
+  $name: Danger color
+  $options:
+  - violet: Violet
+  - pink: Pink
+  - lightblue: Light blue
+  - iceblue: Ice blue
+  - green: Green
+  - gold: Gold
+  - orange: Orange
+  - red: Red
 */
+// clang-format on
 // ==/WindhawkModSettings==
 
 #include <d2d1.h>
+#include <dwmapi.h>
 #include <shellapi.h>
 #include <uiautomation.h>
 #include <windows.h>
+#include <winhttp.h>
 #include <wrl/client.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <initializer_list>
 #include <string>
 #include <vector>
 using Microsoft::WRL::ComPtr;
@@ -149,6 +288,7 @@ volatile LONG g_uiaBereit = 0;
 std::atomic<bool> g_uiaStop{false};
 std::atomic<bool> g_overlaySichtbar{false};
 HANDLE g_uiaThread = nullptr;
+HANDLE g_statusThread = nullptr;
 float g_hoehe = 57;  // Height of the pill body (UIA bounds, measured at rest)
 float g_offT = 9, g_offB = 9;  // Gap between pill body and taskbar window (from
                                // UIA, measured without hover)
@@ -158,20 +298,6 @@ float g_blende = 0;            // smooth fade in/out
 HWND g_hwnd = nullptr;
 ComPtr<IUIAutomation> g_ua;
 ComPtr<IUIAutomationElement> g_frame;
-FILE* g_log = nullptr;
-void Log(const char* f, ...) {
-    if (!g_log)
-        return;
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    fprintf(g_log, "%02d:%02d:%02d ", st.wHour, st.wMinute, st.wSecond);
-    va_list ap;
-    va_start(ap, f);
-    vfprintf(g_log, f, ap);
-    va_end(ap);
-    fputc('\n', g_log);
-    fflush(g_log);
-}
 int MonitorBottom() {
     HMONITOR m = MonitorFromWindow(FindWindowW(L"Shell_TrayWnd", nullptr),
                                    MONITOR_DEFAULTTOPRIMARY);
@@ -307,15 +433,93 @@ static const float kRauchRgb[kFarben][3] = {
     {88.f, 52.f, 160.f},  {168.f, 84.f, 22.f}, {160.f, 30.f, 36.f},
     {200.f, 60.f, 120.f}, {34.f, 96.f, 150.f}, {70.f, 140.f, 185.f},
     {34.f, 128.f, 78.f},  {150.f, 108.f, 10.f}};
+constexpr int kSlots = kFarben + 1;      // 1.7.0: slot 8 = accent / rainbow
+float g_eigen[3] = {88.f, 52.f, 160.f};  // color of slot 8
+bool g_glanz = false;   // 1.7.0: tone glow (light) instead of smoke (dark)
+float g_opF = 1.f;      // opacity factor (1 = look of 1.6.0)
+float g_dichteF = 1.f;  // density / dye gain
+float g_tempoF = 1.f;   // simulation time scale
+float g_reichF = 1.f;   // mouse reach (radius factor)
+float g_rr = 1.f;       // reach squared (area factor in the solvers)
+float g_dickeF = 1.f;   // halo thickness factor
+float g_flMX = 30.f,
+      g_flMY = 34.f;  // simulation margins (px), scaled by thickness
+float g_dkTop = .982f, g_dkSide = .94f;  // dye decay per step
+int g_farbModus = 0;                     // 0 named color, 1 accent, 2 rainbow
+int g_farbe2 = -1;  // second color (index into kRauchRgb) or -1
 struct Satz {
     const void* owner = nullptr;
-    ComPtr<ID2D1Bitmap> bmp[kFarben][3];
-    ComPtr<ID2D1BitmapBrush> br[kFarben][3];
+    bool glanz = false;
+    float eigen[3] = {-1.f, -1.f, -1.f};
+    ComPtr<ID2D1Bitmap> bmp[kSlots][3];
+    ComPtr<ID2D1BitmapBrush> br[kSlots][3];
 } g_satz;
+void BasisFarbe(int ti, float* o) {
+    const float* q =
+        ti >= kFarben ? g_eigen : kRauchRgb[std::clamp(ti, 0, kFarben - 1)];
+    for (int i = 0; i < 3; ++i)
+        o[i] = q[i];
+}
+void ToneRgb(float* c) {  // glow = lighter variant of the same color
+    if (g_glanz)
+        for (int i = 0; i < 3; ++i)
+            c[i] = std::min(255.f, c[i] * 1.35f + 55.f);
+}
 int g_ti = 0;  // current smoke tint: 0 violet, 1 warning orange, 2 danger red
-volatile LONG g_statusTi = 0;  // set by the status thread
+volatile LONG g_statusTi = 0;  // effective tint (user color or feed status)
+volatile LONG g_nutzerTi = 0;  // 1.6.0: color chosen in the settings
+volatile LONG g_feedTi = 0;    // status feed: 0 normal, else tint index + 1
+volatile LONG g_feedOn = 1;    // setting statusSource (feed = 1)
+void StatusMischen() {
+    const LONG h = g_feedTi;
+    InterlockedExchange(&g_statusTi, (g_feedOn && h > 0) ? h - 1 : g_nutzerTi);
+}
+// ===== Status feed defaults (off, no URL) =====
+constexpr int kDefaultStatusSource = 0;  // 0 off, 1 feed
+constexpr wchar_t kDefaultStatusUrl[] = L"";
+struct StatusCfg {
+    int source = kDefaultStatusSource;
+    std::wstring host, path;
+    INTERNET_PORT port = 80;
+    std::string objKey, lvlKey, ageKey;
+    long long maxAgeSec = 600;
+    int pollMs = 3000, warnLvl = 1, dangerLvl = 2, warnTi = 1, dangerTi = 2;
+    bool urlOk = false;
+};
+StatusCfg g_sc;
+SRWLOCK g_scLock = SRWLOCK_INIT;
+std::atomic<int> g_scVer{0};
+bool SlotBauen(ID2D1RenderTarget* rt, int ti) {
+    float c[3];
+    BasisFarbe(ti, c);
+    ToneRgb(c);
+    std::vector<uint32_t> px((size_t)N * N);
+    for (int k = 0; k < 3; ++k) {
+        for (size_t q = 0; q < px.size(); ++q) {
+            const float al = g_alpha[k][q];
+            px[q] = ((uint32_t)(al * 255 + .5f) << 24) |
+                    ((uint32_t)(c[0] * al + .5f) << 16) |
+                    ((uint32_t)(c[1] * al + .5f) << 8) |
+                    (uint32_t)(c[2] * al + .5f);
+        }
+        if (FAILED(rt->CreateBitmap(
+                D2D1::SizeU(N, N), px.data(), N * 4,
+                D2D1::BitmapProperties(D2D1::PixelFormat(
+                    DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)),
+                &g_satz.bmp[ti][k])))
+            return false;
+        if (FAILED(rt->CreateBitmapBrush(
+                g_satz.bmp[ti][k].Get(),
+                D2D1::BitmapBrushProperties(
+                    D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP,
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR),
+                &g_satz.br[ti][k])))
+            return false;
+    }
+    return true;
+}
 bool Bereit(ID2D1RenderTarget* rt) {
-    if (g_satz.owner != (const void*)rt) {
+    if (g_satz.owner != (const void*)rt || g_satz.glanz != g_glanz) {
         for (auto& r : g_satz.br)
             for (auto& b : r)
                 b.Reset();
@@ -323,36 +527,57 @@ bool Bereit(ID2D1RenderTarget* rt) {
             for (auto& b : r)
                 b.Reset();
         g_satz.owner = rt;
+        g_satz.glanz = g_glanz;
+        g_satz.eigen[0] = -1.f;
     }
-    if (g_satz.br[0][0] && g_satz.br[kFarben - 1][2])
-        return true;
-    const auto& rgb = kRauchRgb;
-    std::vector<uint32_t> px((size_t)N * N);
     for (int ti = 0; ti < kFarben; ++ti)
-        for (int k = 0; k < 3; ++k) {
-            for (size_t q = 0; q < px.size(); ++q) {
-                const float al = g_alpha[k][q];
-                px[q] = ((uint32_t)(al * 255 + .5f) << 24) |
-                        ((uint32_t)(rgb[ti][0] * al + .5f) << 16) |
-                        ((uint32_t)(rgb[ti][1] * al + .5f) << 8) |
-                        (uint32_t)(rgb[ti][2] * al + .5f);
-            }
-            if (FAILED(
-                    rt->CreateBitmap(D2D1::SizeU(N, N), px.data(), N * 4,
-                                     D2D1::BitmapProperties(D2D1::PixelFormat(
-                                         DXGI_FORMAT_B8G8R8A8_UNORM,
-                                         D2D1_ALPHA_MODE_PREMULTIPLIED)),
-                                     &g_satz.bmp[ti][k])))
-                return false;
-            if (FAILED(rt->CreateBitmapBrush(
-                    g_satz.bmp[ti][k].Get(),
-                    D2D1::BitmapBrushProperties(
-                        D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP,
-                        D2D1_BITMAP_INTERPOLATION_MODE_LINEAR),
-                    &g_satz.br[ti][k])))
-                return false;
-        }
+        if (!g_satz.br[ti][2] && !SlotBauen(rt, ti))
+            return false;
+    if (!g_satz.br[kFarben][2] ||
+        std::memcmp(g_satz.eigen, g_eigen, sizeof(g_eigen))) {
+        if (!SlotBauen(rt, kFarben))
+            return false;
+        std::memcpy(g_satz.eigen, g_eigen, sizeof(g_eigen));
+    }
     return true;
+}
+// 1.7.0: color of slot 8 (Windows accent or slow rainbow), quantized so the
+// textures are rebuilt only in small steps
+void EigenfarbeAktualisieren() {
+    if (g_farbModus == 0)
+        return;
+    float c[3] = {88.f, 52.f, 160.f};
+    const double now = GetTickCount64() * 0.001;
+    if (g_farbModus == 1) {
+        static double last = -10;
+        static float acc[3] = {88.f, 52.f, 160.f};
+        if (now - last > 2.0) {
+            last = now;
+            DWORD col = 0;
+            BOOL opaque = FALSE;
+            if (SUCCEEDED(DwmGetColorizationColor(&col, &opaque))) {
+                float rgb[3] = {(float)((col >> 16) & 255),
+                                (float)((col >> 8) & 255), (float)(col & 255)};
+                const float mx = std::max(rgb[0], std::max(rgb[1], rgb[2]));
+                if (mx >= 1.f)
+                    for (int i = 0; i < 3; ++i)
+                        acc[i] = rgb[i] * 170.f / mx;
+            }
+        }
+        for (int i = 0; i < 3; ++i)
+            c[i] = acc[i];
+    } else {  // slow hue cycle, about 90 s per round
+        const float h = (float)std::fmod(now / 90.0, 1.0) * 6.f;
+        const int k = (int)h;
+        const float f = h - k, v = 170.f, sat = .7f;
+        const float pq = v * (1 - sat), qq = v * (1 - sat * f),
+                    tt = v * (1 - sat * (1 - f));
+        const float t6[6][3] = {{v, tt, pq}, {qq, v, pq}, {pq, v, tt},
+                                {pq, qq, v}, {tt, pq, v}, {v, pq, qq}};
+        std::memcpy(c, t6[k % 6], sizeof(c));
+    }
+    for (int i = 0; i < 3; ++i)
+        g_eigen[i] = std::round(c[i] / 4.f) * 4.f;
 }
 void Schicht(int k,
              float left,
@@ -523,8 +748,9 @@ void WolkenBauen() {
 }
 
 // ---- Fluid simulation (stable fluids, Jos Stam), smoke as dye ----
-constexpr float FL_C = 5.f, FL_MX = 30.f,
-                FL_MY = 34.f;  // cell size px, margin left/right and top/bottom
+constexpr float FL_C = 5.f;  // cell size px
+float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
     float seed = 0;
@@ -590,7 +816,6 @@ void MittelBerechnen() {
             g_mittel[k] = (float)(sm / g_alpha[k].size());
     }
     ok = true;
-    Log("Mittel %.3f %.3f %.3f", g_mittel[0], g_mittel[1], g_mittel[2]);
 }
 std::atomic<bool> g_einstellungNeu{true};
 float g_mausF = 1.f;
@@ -611,40 +836,177 @@ int StringSettingIndex(PCWSTR name,
     }
     return result;
 }
+static std::wstring TextSetting(PCWSTR name, PCWSTR def) {
+    PCWSTR t = Wh_GetStringSetting(name);
+    std::wstring r = t ? t : def;
+    if (t)
+        Wh_FreeStringSetting(t);
+    return r;
+}
+static std::string AsciiKey(
+    const std::wstring& w) {  // JSON keys: printable ASCII only
+    std::string r;
+    for (wchar_t c : w) {
+        if (c < 33 || c > 126 || c == L'"' || c == L'\\')
+            return std::string();
+        r.push_back((char)c);
+    }
+    return r.size() <= 64 ? r : std::string();
+}
+// only http://host[:port][/path]; anything else -> false (feed stays off)
+static bool UrlZerlegen(const std::wstring& u, StatusCfg& c) {
+    static const wchar_t pre[] = L"http://";
+    if (u.size() < 9 || u.size() > 512 || _wcsnicmp(u.c_str(), pre, 7) != 0)
+        return false;
+    size_t he = u.find_first_of(L"/?#", 7);
+    std::wstring hp =
+        u.substr(7, he == std::wstring::npos ? std::wstring::npos : he - 7);
+    std::wstring path = he == std::wstring::npos ? L"/" : u.substr(he);
+    if (path[0] != L'/')
+        path = L"/" + path;
+    c.port = 80;
+    size_t col = hp.rfind(L':');
+    if (col != std::wstring::npos && hp.find(L']') == std::wstring::npos) {
+        std::wstring ps = hp.substr(col + 1);
+        hp.resize(col);
+        if (ps.empty() || ps.size() > 5)
+            return false;
+        long v = 0;
+        for (wchar_t ch : ps) {
+            if (ch < L'0' || ch > L'9')
+                return false;
+            v = v * 10 + (ch - L'0');
+        }
+        if (v < 1 || v > 65535)
+            return false;
+        c.port = (INTERNET_PORT)v;
+    }
+    if (hp.empty() || hp.size() > 253)
+        return false;
+    for (wchar_t ch : hp)
+        if (ch <= 32 || ch == L'@' || ch == L'\\' || ch > 126)
+            return false;
+    c.host = hp;
+    c.path = path;
+    return true;
+}
+void StatusLesen() {  // status feed settings (called from EffekteLesen)
+    StatusCfg c;
+    c.source = StringSettingIndex(L"statusSource", {L"off", L"feed"},
+                                  kDefaultStatusSource);
+    c.urlOk = UrlZerlegen(TextSetting(L"statusUrl", kDefaultStatusUrl), c);
+    c.objKey = AsciiKey(TextSetting(L"statusObjectKey", L""));
+    c.lvlKey = AsciiKey(TextSetting(L"statusLevelKey", L"level"));
+    c.ageKey = AsciiKey(TextSetting(L"statusAgeKey", L""));
+    static const long long ages[] = {2, 5, 10, 30, 60};
+    c.maxAgeSec =
+        ages[StringSettingIndex(L"statusMaxAgeMin",
+                                {L"2", L"5", L"10", L"30", L"60"}, 2)] *
+        60;
+    static const int polls[] = {3000, 10000, 30000, 60000};
+    c.pollMs = polls[StringSettingIndex(L"statusPoll",
+                                        {L"3s", L"10s", L"30s", L"60s"}, 0)];
+    c.warnLvl =
+        1 + StringSettingIndex(L"statusWarnLevel", {L"1", L"2", L"3"}, 0);
+    c.dangerLvl =
+        2 + StringSettingIndex(L"statusDangerLevel", {L"2", L"3", L"4"}, 0);
+    static const wchar_t* namen[kFarben] = {L"violet", L"orange",    L"red",
+                                            L"pink",   L"lightblue", L"iceblue",
+                                            L"green",  L"gold"};
+    c.warnTi = c.dangerTi = -1;
+    PCWSTR w = Wh_GetStringSetting(L"statusWarnColor");
+    PCWSTR d = Wh_GetStringSetting(L"statusDangerColor");
+    for (int q = 0; q < kFarben; ++q) {
+        if (w && !_wcsicmp(w, namen[q]))
+            c.warnTi = q;
+        if (d && !_wcsicmp(d, namen[q]))
+            c.dangerTi = q;
+    }
+    if (w)
+        Wh_FreeStringSetting(w);
+    if (d)
+        Wh_FreeStringSetting(d);
+    if (c.warnTi < 0)
+        c.warnTi = 1;
+    if (c.dangerTi < 0)
+        c.dangerTi = 2;
+    if (c.lvlKey.empty())
+        c.urlOk = false;  // no level key -> nothing to read
+    g_feedOn = (c.source == 1 && c.urlOk) ? 1 : 0;
+    AcquireSRWLockExclusive(&g_scLock);
+    g_sc = c;
+    ReleaseSRWLockExclusive(&g_scLock);
+    g_scVer++;
+    if (!g_feedOn)
+        InterlockedExchange(&g_feedTi, 0);
+}
 void EffekteLesen() {  // Windhawk settings (at start and after a change)
     if (!g_einstellungNeu.exchange(false))
         return;
     const int m =
         StringSettingIndex(L"mouse", {L"off", L"gentle", L"strong"}, 1);
     g_mausF = m == 0 ? 0.f : m == 2 ? 2.f : 1.f;
+    {  // 1.7.0 settings (unknown / missing values fall back to the defaults)
+        static const float opac[] = {.17f, .30f, .50f, .70f, 1.f, 1.25f, 1.5f};
+        g_opF =
+            opac[StringSettingIndex(L"opacity",
+                                    {L"faint", L"whisper", L"subtle", L"light",
+                                     L"normal", L"strong", L"full"},
+                                    4)];
+        static const float dens[] = {.6f, 1.f, 1.5f};
+        g_dichteF = dens[StringSettingIndex(
+            L"density", {L"sparse", L"normal", L"dense"}, 1)];
+        static const float spd[] = {.6f, 1.f, 1.6f};
+        g_tempoF = spd[StringSettingIndex(L"speed",
+                                          {L"calm", L"normal", L"lively"}, 1)];
+        g_glanz = StringSettingIndex(L"tone", {L"smoke", L"glow"}, 0) == 1;
+        static const float rch[] = {.7f, 1.f, 1.4f};
+        g_reichF = rch[StringSettingIndex(L"reach",
+                                          {L"small", L"normal", L"large"}, 1)];
+        g_rr = g_reichF * g_reichF;
+        static const float dik[] = {.7f, 1.f, 1.4f, 1.9f};
+        g_dickeF = dik[StringSettingIndex(
+            L"thickness", {L"slim", L"normal", L"thick", L"extra"}, 1)];
+        g_flMX = 30.f * g_dickeF;
+        g_flMY = 34.f * g_dickeF;
+        g_dkTop = std::pow(.982f, g_tempoF / g_dickeF);
+        g_dkSide = std::pow(.94f, g_tempoF / g_dickeF);
+        g_farbe2 =
+            StringSettingIndex(L"color2",
+                               {L"none", L"violet", L"orange", L"red", L"pink",
+                                L"lightblue", L"iceblue", L"green", L"gold"},
+                               0) -
+            1;  // same order as kRauchRgb
+    }
     {
         static const wchar_t* namen[kFarben] = {
             L"violet",    L"orange",  L"red",   L"pink",
             L"lightblue", L"iceblue", L"green", L"gold"};
         PCWSTR f = Wh_GetStringSetting(L"color");
         int ti = 0;
+        g_farbModus = 0;
         if (f) {
             for (int q = 0; q < kFarben; ++q)
                 if (!_wcsicmp(f, namen[q]))
                     ti = q;
+            if (!_wcsicmp(f, L"accent")) {
+                g_farbModus = 1;
+                ti = kFarben;
+            } else if (!_wcsicmp(f, L"rainbow")) {
+                g_farbModus = 2;
+                ti = kFarben;
+            }
             Wh_FreeStringSetting(f);
         }
-        InterlockedExchange(&g_statusTi, ti);
+        InterlockedExchange(&g_nutzerTi, ti);
+        StatusLesen();
+        StatusMischen();
     }
     g_partikel = Wh_GetIntSetting(L"clouds") != 0;
     g_modus = StringSettingIndex(
         L"style",
         {L"fluid", L"texture", L"fluidFirst", L"fluidCarried", L"fluidSoft"},
         0);
-    {
-        static int alt = -1;
-        const int neu = g_modus * 100 + (int)g_statusTi * 10 + m;
-        if (neu != alt) {
-            alt = neu;
-            Log("Einstellung: stil %d farbe %d maus %d", g_modus,
-                (int)g_statusTi, m);
-        }
-    }
 }
 void FluidSchritt(Fluid& F,
                   float dt,
@@ -678,11 +1040,12 @@ void FluidSchritt(Fluid& F,
             u[i] += dt * 26.f * n1;
             v[i] += dt * 16.f * n2;  // irregular turbulence
             const float ddx = x - mx, ddy = y - my, r2 = ddx * ddx + ddy * ddy;
-            if (g_mausF > 0.f && r2 < 130.f * g_mausF) {
-                const float g = std::exp(-r2 / (26.f * g_mausF)) * g_mausF;
+            if (g_mausF > 0.f && r2 < 130.f * g_mausF * g_rr) {
+                const float g =
+                    std::exp(-r2 / (26.f * g_mausF * g_rr)) * g_mausF;
                 u[i] += g * (mvx * 5.f + ddx * .55f);
                 v[i] += g * (mvy * 5.f + ddy * .55f);
-                d[i] *= 1.f - .16f * std::exp(-r2 / 22.f) * g_mausF;
+                d[i] *= 1.f - .16f * std::exp(-r2 / (22.f * g_rr)) * g_mausF;
             }  // Mouse drags and pushes the smoke, clearing the icons
             u[i] *= .985f;
             v[i] *= .985f;
@@ -747,19 +1110,23 @@ void FluidSchritt(Fluid& F,
             const bool innen = x >= ix0 && x < ix1 && y >= iy0 && y < iy1;
             if (innen) {
                 const float ziel =
-                    .12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t);
+                    (.12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t)) *
+                    g_dichteF;
                 d[i] += (ziel - d[i]) * .035f;
             }  // thinner at rest; replenishes
             else
-                d[i] *= (y < iy0)
-                            ? .982f
-                            : .94f;  // rises visibly at the top, fades quickly
+                d[i] *=
+                    (y < iy0)
+                        ? g_dkTop
+                        : g_dkSide;  // rises visibly at the top, fades quickly
                                      // at the sides/bottom (no double rounding)
         }
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
-    const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
+    float cT[3];
+    BasisFarbe(ti, cT);
+    ToneRgb(cT);
+    const float* c = cT;
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -778,7 +1145,7 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
                                       std::max(ix0c + rr - x, x - (ix1c - rr))),
                         qy = std::fabs(y - cyc);
             const float dist = std::max(0.f, std::sqrt(qx * qx + qy * qy) - rr);
-            const float reich = (y < cyc) ? 6.f : 3.f;
+            const float reich = ((y < cyc) ? 6.f : 3.f) * g_dickeF;
             float ef = std::clamp(1.f - dist / reich, 0.f, 1.f);
             ef = ef * ef * (3.f - 2.f * ef);
             float mask = 1.f;
@@ -798,7 +1165,8 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         F.px.assign((size_t)PW * PH, 0);
         F.bmp.Reset();
     }
-    const float t = (float)std::fmod(GetTickCount64() * 0.001, 3600.0);
+    const float t =
+        (float)std::fmod(GetTickCount64() * 0.001 * g_tempoF, 3600.0);
     struct Lg {
         int k;
         float sc, vx, vy, op;
@@ -872,9 +1240,10 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         D2D1::RectF(ziel.left, ziel.top, ziel.left + PW * R, ziel.top + PH * R),
         1.f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
-namespace v211 {  // Smoke variant: simulation with mask
-constexpr float FL_C = 5.f, FL_MX = 30.f,
-                FL_MY = 34.f;  // cell size px, margin left/right and top/bottom
+namespace v211 {             // Smoke variant: simulation with mask
+constexpr float FL_C = 5.f;  // cell size px
+float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
     float seed = 0;
@@ -939,7 +1308,6 @@ void MittelBerechnen() {
             g_mittel[k] = (float)(sm / g_alpha[k].size());
     }
     ok = true;
-    Log("Mittel %.3f %.3f %.3f", g_mittel[0], g_mittel[1], g_mittel[2]);
 }
 void FluidSchritt(Fluid& F,
                   float dt,
@@ -973,11 +1341,12 @@ void FluidSchritt(Fluid& F,
             u[i] += dt * 26.f * n1;
             v[i] += dt * 16.f * n2;  // irregular turbulence
             const float ddx = x - mx, ddy = y - my, r2 = ddx * ddx + ddy * ddy;
-            if (g_mausF > 0.f && r2 < 90.f * g_mausF) {
-                const float g = std::exp(-r2 / (18.f * g_mausF)) * g_mausF;
+            if (g_mausF > 0.f && r2 < 90.f * g_mausF * g_rr) {
+                const float g =
+                    std::exp(-r2 / (18.f * g_mausF * g_rr)) * g_mausF;
                 u[i] += g * (mvx * 4.f + ddx * .35f);
                 v[i] += g * (mvy * 4.f + ddy * .35f);
-                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f) * g_mausF;
+                d[i] *= 1.f - .06f * std::exp(-r2 / (14.f * g_rr)) * g_mausF;
             }  // Subtle mouse interaction: drags and pushes the smoke
             u[i] *= .985f;
             v[i] *= .985f;
@@ -1032,19 +1401,23 @@ void FluidSchritt(Fluid& F,
             const bool innen = x >= ix0 && x < ix1 && y >= iy0 && y < iy1;
             if (innen) {
                 const float ziel =
-                    .12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t);
+                    (.12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t)) *
+                    g_dichteF;
                 d[i] += (ziel - d[i]) * .035f;
             }  // thinner at rest; replenishes
             else
-                d[i] *= (y < iy0)
-                            ? .982f
-                            : .94f;  // rises visibly at the top, fades quickly
+                d[i] *=
+                    (y < iy0)
+                        ? g_dkTop
+                        : g_dkSide;  // rises visibly at the top, fades quickly
                                      // at the sides/bottom (no double rounding)
         }
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
-    const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
+    float cT[3];
+    BasisFarbe(ti, cT);
+    ToneRgb(cT);
+    const float* c = cT;
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -1066,9 +1439,8 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
             const float dist = std::max(0.f, std::sqrt(qx * qx + qy * qy) -
                                                  rr);  // cells outside the pill
             const float reich =
-                (y < cyc)
-                    ? 6.f
-                    : 3.f;  // extends further upward, short at the sides/bottom
+                ((y < cyc) ? 6.f : 3.f) *
+                g_dickeF;  // extends further upward, short at the sides/bottom
             float ef = std::clamp(1.f - dist / reich, 0.f, 1.f);
             ef = ef * ef * (3.f - 2.f * ef);
             float mask = 1.f;
@@ -1114,7 +1486,8 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         D2D1::LayerParameters(ziel, nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
                               D2D1::IdentityMatrix(), 1.f, F.br.Get()),
         ly.Get());
-    const float t = (float)std::fmod(GetTickCount64() * 0.001, 3600.0);
+    const float t =
+        (float)std::fmod(GetTickCount64() * 0.001 * g_tempoF, 3600.0);
     static const float opk[3] = {1.0f, .8f, .65f};
     for (int k = 0; k < 3; ++k)
         for (int ph = 0; ph < 2; ++ph) {
@@ -1124,9 +1497,10 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
     rt->PopLayer();
 }
 }  // namespace v211
-namespace v220 {  // Smoke variant: simulation carries the texture
-constexpr float FL_C = 5.f, FL_MX = 30.f,
-                FL_MY = 34.f;  // cell size px, margin left/right and top/bottom
+namespace v220 {             // Smoke variant: simulation carries the texture
+constexpr float FL_C = 5.f;  // cell size px
+float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
     float seed = 0;
@@ -1192,7 +1566,6 @@ void MittelBerechnen() {
             g_mittel[k] = (float)(sm / g_alpha[k].size());
     }
     ok = true;
-    Log("Mittel %.3f %.3f %.3f", g_mittel[0], g_mittel[1], g_mittel[2]);
 }
 void FluidSchritt(Fluid& F,
                   float dt,
@@ -1226,11 +1599,12 @@ void FluidSchritt(Fluid& F,
             u[i] += dt * 26.f * n1;
             v[i] += dt * 16.f * n2;  // irregular turbulence
             const float ddx = x - mx, ddy = y - my, r2 = ddx * ddx + ddy * ddy;
-            if (g_mausF > 0.f && r2 < 90.f * g_mausF) {
-                const float g = std::exp(-r2 / (18.f * g_mausF)) * g_mausF;
+            if (g_mausF > 0.f && r2 < 90.f * g_mausF * g_rr) {
+                const float g =
+                    std::exp(-r2 / (18.f * g_mausF * g_rr)) * g_mausF;
                 u[i] += g * (mvx * 4.f + ddx * .35f);
                 v[i] += g * (mvy * 4.f + ddy * .35f);
-                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f) * g_mausF;
+                d[i] *= 1.f - .06f * std::exp(-r2 / (14.f * g_rr)) * g_mausF;
             }  // Subtle mouse interaction: drags and pushes the smoke
             u[i] *= .985f;
             v[i] *= .985f;
@@ -1295,19 +1669,23 @@ void FluidSchritt(Fluid& F,
             const bool innen = x >= ix0 && x < ix1 && y >= iy0 && y < iy1;
             if (innen) {
                 const float ziel =
-                    .12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t);
+                    (.12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t)) *
+                    g_dichteF;
                 d[i] += (ziel - d[i]) * .035f;
             }  // thinner at rest; replenishes
             else
-                d[i] *= (y < iy0)
-                            ? .982f
-                            : .94f;  // rises visibly at the top, fades quickly
+                d[i] *=
+                    (y < iy0)
+                        ? g_dkTop
+                        : g_dkSide;  // rises visibly at the top, fades quickly
                                      // at the sides/bottom (no double rounding)
         }
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
-    const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
+    float cT[3];
+    BasisFarbe(ti, cT);
+    ToneRgb(cT);
+    const float* c = cT;
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -1326,7 +1704,7 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
                                       std::max(ix0c + rr - x, x - (ix1c - rr))),
                         qy = std::fabs(y - cyc);
             const float dist = std::max(0.f, std::sqrt(qx * qx + qy * qy) - rr);
-            const float reich = (y < cyc) ? 6.f : 3.f;
+            const float reich = ((y < cyc) ? 6.f : 3.f) * g_dickeF;
             float ef = std::clamp(1.f - dist / reich, 0.f, 1.f);
             ef = ef * ef * (3.f - 2.f * ef);
             float mask = 1.f;
@@ -1345,7 +1723,8 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         F.px.assign((size_t)PW * PH, 0);
         F.bmp.Reset();
     }
-    const float t = (float)std::fmod(GetTickCount64() * 0.001, 3600.0);
+    const float t =
+        (float)std::fmod(GetTickCount64() * 0.001 * g_tempoF, 3600.0);
     struct Lg {
         int k;
         float sc, vx, vy, op;
@@ -1421,8 +1800,9 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
 }
 }  // namespace v220
 namespace v221 {  // Smoke variant: simulation carries the texture, subtle
-constexpr float FL_C = 5.f, FL_MX = 30.f,
-                FL_MY = 34.f;  // cell size px, margin left/right and top/bottom
+constexpr float FL_C = 5.f;  // cell size px
+float& FL_MX = g_flMX;       // margin left/right (1.7.0: scaled by thickness)
+float& FL_MY = g_flMY;       // margin top/bottom
 struct Fluid {
     int W = 0, H = 0;
     float seed = 0;
@@ -1488,7 +1868,6 @@ void MittelBerechnen() {
             g_mittel[k] = (float)(sm / g_alpha[k].size());
     }
     ok = true;
-    Log("Mittel %.3f %.3f %.3f", g_mittel[0], g_mittel[1], g_mittel[2]);
 }
 void FluidSchritt(Fluid& F,
                   float dt,
@@ -1522,11 +1901,12 @@ void FluidSchritt(Fluid& F,
             u[i] += dt * 26.f * n1;
             v[i] += dt * 16.f * n2;  // irregular turbulence
             const float ddx = x - mx, ddy = y - my, r2 = ddx * ddx + ddy * ddy;
-            if (g_mausF > 0.f && r2 < 90.f * g_mausF) {
-                const float g = std::exp(-r2 / (18.f * g_mausF)) * g_mausF;
+            if (g_mausF > 0.f && r2 < 90.f * g_mausF * g_rr) {
+                const float g =
+                    std::exp(-r2 / (18.f * g_mausF * g_rr)) * g_mausF;
                 u[i] += g * (mvx * 4.f + ddx * .35f);
                 v[i] += g * (mvy * 4.f + ddy * .35f);
-                d[i] *= 1.f - .06f * std::exp(-r2 / 14.f) * g_mausF;
+                d[i] *= 1.f - .06f * std::exp(-r2 / (14.f * g_rr)) * g_mausF;
             }  // Subtle mouse interaction: drags and pushes the smoke
             u[i] *= .985f;
             v[i] *= .985f;
@@ -1591,19 +1971,23 @@ void FluidSchritt(Fluid& F,
             const bool innen = x >= ix0 && x < ix1 && y >= iy0 && y < iy1;
             if (innen) {
                 const float ziel =
-                    .12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t);
+                    (.12f + .85f * Quelle(x * 1.6f + F.seed * 2, y * 1.6f, t)) *
+                    g_dichteF;
                 d[i] += (ziel - d[i]) * .035f;
             }  // thinner at rest; replenishes
             else
-                d[i] *= (y < iy0)
-                            ? .982f
-                            : .94f;  // rises visibly at the top, fades quickly
+                d[i] *=
+                    (y < iy0)
+                        ? g_dkTop
+                        : g_dkSide;  // rises visibly at the top, fades quickly
                                      // at the sides/bottom (no double rounding)
         }
 }
 void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
-    const auto& rgb = kRauchRgb;
-    const float* c = rgb[std::clamp(ti, 0, kFarben - 1)];
+    float cT[3];
+    BasisFarbe(ti, cT);
+    ToneRgb(cT);
+    const float* c = cT;
     const float hell[3] = {std::min(255.f, c[0] * 1.55f + 30),
                            std::min(255.f, c[1] * 1.5f + 18),
                            std::min(255.f, c[2] * 1.55f + 30)},
@@ -1622,7 +2006,7 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
                                       std::max(ix0c + rr - x, x - (ix1c - rr))),
                         qy = std::fabs(y - cyc);
             const float dist = std::max(0.f, std::sqrt(qx * qx + qy * qy) - rr);
-            const float reich = (y < cyc) ? 6.f : 3.f;
+            const float reich = ((y < cyc) ? 6.f : 3.f) * g_dickeF;
             float ef = std::clamp(1.f - dist / reich, 0.f, 1.f);
             ef = ef * ef * (3.f - 2.f * ef);
             float mask = 1.f;
@@ -1642,7 +2026,8 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         F.px.assign((size_t)PW * PH, 0);
         F.bmp.Reset();
     }
-    const float t = (float)std::fmod(GetTickCount64() * 0.001, 3600.0);
+    const float t =
+        (float)std::fmod(GetTickCount64() * 0.001 * g_tempoF, 3600.0);
     struct Lg {
         int k;
         float sc, vx, vy, op;
@@ -1717,19 +2102,26 @@ void FluidMalen(Fluid& F, ID2D1RenderTarget* rt, D2D1_RECT_F ziel, int ti) {
         1.f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 }  // namespace v221
-#define ZAB(c)                                  \
-    do {                                        \
-        static int k_ = 0;                      \
-        if (k_++ < 5)                           \
-            Log("Zeichnen ab: %s (%d)", c, k_); \
-    } while (0)
 void Zeichnen() {
     if (g_pillen.empty()) {
-        ZAB("keine Pillen");
         return;
     }
-    const float pad =
-        46;  // glow 19 px + margin, never clipped at the window edge
+    EigenfarbeAktualisieren();
+    {  // thickness changed: start the simulations fresh at the new size
+        static float lastK = 1.f;
+        if (lastK != g_dickeF) {
+            lastK = g_dickeF;
+            g_fl.clear();
+            v211::g_fl.clear();
+            v220::g_fl.clear();
+            v221::g_fl.clear();
+        }
+    }
+    const float kd = std::max(1.f, g_dickeF);
+    const float pad = std::max(
+        46.f,
+        std::max(g_flMX, g_flMY) +
+            12.f);  // glow 19 px + margin, never clipped at the window edge
     float L = 1e9f, T = 1e9f, R = -1e9f, B = -1e9f;
     for (auto& p : g_pillen) {
         L = std::min(L, p.l);
@@ -1741,13 +2133,11 @@ void Zeichnen() {
               w = (int)std::ceil(R + pad) - x0,
               h = (int)std::ceil(B + pad) - y0;
     if (w < 10 || h < 10 || !Ziel(w, h)) {
-        ZAB("Groesse/DIB");
         return;
     }
     if (!g_fab &&
         FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
                                  __uuidof(ID2D1Factory), (void**)&g_fab))) {
-        ZAB("Factory");
         return;
     }
     if (!g_rt) {
@@ -1757,21 +2147,19 @@ void Zeichnen() {
                               D2D1_ALPHA_MODE_PREMULTIPLIED),
             96, 96, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE);
         if (FAILED(g_fab->CreateDCRenderTarget(&props, &g_rt))) {
-            ZAB("RenderTarget");
             return;
         }
     }
     RECT rc{0, 0, w, h};
     if (FAILED(g_rt->BindDC(g_memdc, &rc))) {
-        ZAB("BindDC");
         return;
     }
     if (!Bereit(g_rt.Get())) {
-        ZAB("Texturen");
         g_rt.Reset();
         return;
     }
-    const float t = (float)std::fmod(GetTickCount64() * 0.001, 3600.0);
+    const float t =
+        (float)std::fmod(GetTickCount64() * 0.001 * g_tempoF, 3600.0);
     g_rt->BeginDraw();
     g_rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (g_modus == 1) {  // classic texture smoke
@@ -1805,8 +2193,8 @@ void Zeichnen() {
                     endLy)
                     g_rt->PushLayer(
                         D2D1::LayerParameters(
-                            D2D1::RectF(r.left - 40, r.top - 40, r.right + 40,
-                                        r.bottom + 40),
+                            D2D1::RectF(r.left - 40 * kd, r.top - 40 * kd,
+                                        r.right + 40 * kd, r.bottom + 40 * kd),
                             nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
                             D2D1::IdentityMatrix(), 1.f, endB.Get()),
                         endLy.Get());
@@ -1815,15 +2203,15 @@ void Zeichnen() {
             // Weak base glow WITHOUT mask (no gaps/cut-out blobs); the mask
             // only adds wisps on top
             for (int i = 1; i <= 16; ++i) {
-                const float d = 1.1f * i,
-                            f = std::min(1.f, d / 2.5f) *
-                                std::pow(std::max(0.f, 1.f - d / 18.f), 1.6f);
-                Schicht(0, r.left, r.top, t + 3, .45f * f, 0);
+                const float d0 = 1.1f * i, d = d0 * g_dickeF,
+                            f = std::min(1.f, d0 / 2.5f) *
+                                std::pow(std::max(0.f, 1.f - d0 / 18.f), 1.6f);
+                Schicht(0, r.left, r.top, t + 3, .45f * f * g_dichteF, 0);
                 g_rt->DrawRoundedRectangle(
                     D2D1::RoundedRect(D2D1::RectF(r.left - d, r.top - d,
                                                   r.right + d, r.bottom + d),
                                       rad + d, rad + d),
-                    g_satz.br[g_ti][0].Get(), 2.2f);
+                    g_satz.br[g_ti][0].Get(), 2.2f * g_dickeF);
             }
             // Coarse, slowly drifting mask -> glow reaches far in places,
             // barely in others (no ruler-straight edge)
@@ -1839,8 +2227,8 @@ void Zeichnen() {
                         r.top - std::fmod(t * 2.f, 422.f)));
                 g_rt->PushLayer(
                     D2D1::LayerParameters(
-                        D2D1::RectF(r.left - 30, r.top - 30, r.right + 30,
-                                    r.bottom + 30),
+                        D2D1::RectF(r.left - 30 * kd, r.top - 30 * kd,
+                                    r.right + 30 * kd, r.bottom + 30 * kd),
                         nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
                         D2D1::IdentityMatrix(), 1.f, g_satz.br[g_ti][2].Get()),
                     saumLy.Get());
@@ -1848,20 +2236,20 @@ void Zeichnen() {
             for (int i = 1; i <= 20;
                  ++i) {  // 20 fine rings, ONE smoke pattern -> wisps instead of
                          // separate strokes
-                const float d = .95f * i,
-                            f = std::min(1.f, d / 5.f) *
-                                std::pow(std::max(0.f, 1.f - d / 20.f),
+                const float d0 = .95f * i, d = d0 * g_dickeF,
+                            f = std::min(1.f, d0 / 5.f) *
+                                std::pow(std::max(0.f, 1.f - d0 / 20.f),
                                          1.3f);  // thin at the edge, dense at
                                                  // 4-6 px, then frays out
                 for (int ph = 0; ph < 2; ++ph) {
-                    Schicht(0, r.left, r.top, t + 3, 1.25f * f,
+                    Schicht(0, r.left, r.top, t + 3, 1.25f * f * g_dichteF,
                             ph);  // stronger; the mask thins it out
                     g_rt->DrawRoundedRectangle(
                         D2D1::RoundedRect(
                             D2D1::RectF(r.left - d, r.top - d, r.right + d,
                                         r.bottom + d),
                             rad + d, rad + d),
-                        g_satz.br[g_ti][0].Get(), 2.0f);
+                        g_satz.br[g_ti][0].Get(), 2.0f * g_dickeF);
                 }
             }
             if (saumMaske)
@@ -1870,7 +2258,6 @@ void Zeichnen() {
                 g_rt->PopLayer();
         }
         if (FAILED(g_rt->EndDraw())) {
-            ZAB("EndDraw");
             g_rt.Reset();
             return;
         }
@@ -1913,7 +2300,8 @@ void Zeichnen() {
                 static const float opk[3] = {.72f, .56f, .42f};
                 for (int k = 0; k < 3; ++k)
                     for (int ph = 0; ph < 2; ++ph) {
-                        Schicht(k, r.left, r.top, t, opk[k] * 1.45f, ph);
+                        Schicht(k, r.left, r.top, t, opk[k] * 1.45f * g_dichteF,
+                                ph);
                         g_rt->FillRectangle(r, g_satz.br[g_ti][k].Get());
                     }
                 g_rt->PopLayer();
@@ -1954,7 +2342,7 @@ void Zeichnen() {
                 if (W != F.W || H != F.H)
                     F.Init(W, H, (float)pi * 41.7f);
                 v211::FluidSchritt(
-                    F, dtS, t, (cp.x - gx0) / v211::FL_C,
+                    F, dtS * g_tempoF, t, (cp.x - gx0) / v211::FL_C,
                     (cp.y - gy0) / v211::FL_C, mOk ? mvx / v211::FL_C : 0.f,
                     mOk ? mvy / v211::FL_C : 0.f, v211::FL_MX / v211::FL_C,
                     v211::FL_MY / v211::FL_C, W - v211::FL_MX / v211::FL_C,
@@ -2001,7 +2389,7 @@ void Zeichnen() {
                 if (W != F.W || H != F.H)
                     F.Init(W, H, (float)pi * 41.7f);
                 v220::FluidSchritt(
-                    F, dtS, t, (cp.x - gx0) / v220::FL_C,
+                    F, dtS * g_tempoF, t, (cp.x - gx0) / v220::FL_C,
                     (cp.y - gy0) / v220::FL_C, mOk ? mvx / v220::FL_C : 0.f,
                     mOk ? mvy / v220::FL_C : 0.f, v220::FL_MX / v220::FL_C,
                     v220::FL_MY / v220::FL_C, W - v220::FL_MX / v220::FL_C,
@@ -2048,7 +2436,7 @@ void Zeichnen() {
                 if (W != F.W || H != F.H)
                     F.Init(W, H, (float)pi * 41.7f);
                 v221::FluidSchritt(
-                    F, dtS, t, (cp.x - gx0) / v221::FL_C,
+                    F, dtS * g_tempoF, t, (cp.x - gx0) / v221::FL_C,
                     (cp.y - gy0) / v221::FL_C, mOk ? mvx / v221::FL_C : 0.f,
                     mOk ? mvy / v221::FL_C : 0.f, v221::FL_MX / v221::FL_C,
                     v221::FL_MY / v221::FL_C, W - v221::FL_MX / v221::FL_C,
@@ -2091,10 +2479,10 @@ void Zeichnen() {
                       H = (int)std::ceil((p.b - p.t + 2 * FL_MY) / FL_C);
             if (W != F.W || H != F.H)
                 F.Init(W, H, (float)pi * 41.7f);
-            FluidSchritt(F, dtS, t, (cp.x - gx0) / FL_C, (cp.y - gy0) / FL_C,
-                         mOk ? mvx / FL_C : 0.f, mOk ? mvy / FL_C : 0.f,
-                         FL_MX / FL_C, FL_MY / FL_C, W - FL_MX / FL_C,
-                         H - FL_MY / FL_C);
+            FluidSchritt(F, dtS * g_tempoF, t, (cp.x - gx0) / FL_C,
+                         (cp.y - gy0) / FL_C, mOk ? mvx / FL_C : 0.f,
+                         mOk ? mvy / FL_C : 0.f, FL_MX / FL_C, FL_MY / FL_C,
+                         W - FL_MX / FL_C, H - FL_MY / FL_C);
             FluidMalen(F, g_rt.Get(),
                        D2D1::RectF(gx0 - x0, gy0 - y0, gx0 - x0 + W * FL_C,
                                    gy0 - y0 + H * FL_C),
@@ -2148,10 +2536,13 @@ void Zeichnen() {
         // Tiny dark clouds rise slowly from the taskbar (calm, ~30 fps), violet
         // glow, black fill
         WolkenBauen();
-        float glow[kFarben][3];
-        for (int q = 0; q < kFarben; ++q)
+        float glow[kSlots][3];
+        for (int q = 0; q < kSlots; ++q) {
+            float bc[3];
+            BasisFarbe(q, bc);
             for (int c = 0; c < 3; ++c)
-                glow[q][c] = std::min(255.f, kRauchRgb[q][c] * 1.55f + 40.f);
+                glow[q][c] = std::min(255.f, bc[c] * 1.55f + 40.f);
+        }
         D2D1_MATRIX_3X2_F altT;
         g_rt->GetTransform(&altT);
         for (auto& f : fk) {
@@ -2206,7 +2597,6 @@ void Zeichnen() {
         g_rt->SetTransform(altT);
     }
     if (FAILED(g_rt->EndDraw())) {
-        ZAB("EndDraw");
         g_rt.Reset();
         return;
     }
@@ -2230,7 +2620,7 @@ void Zeichnen() {
             spur[sn % 20] = {(float)cp.x, (float)cp.y, jetzt};
             ++sn;
         }
-        const float R0 = 40.f * g_mausF;
+        const float R0 = 40.f * g_mausF * g_reichF;
         uint32_t* px = static_cast<uint32_t*>(g_bits);
         for (int k = 0; k < std::min(sn, 20); ++k) {
             const Sp& s = spur[k];
@@ -2262,19 +2652,78 @@ void Zeichnen() {
                 }
         }
     }
+    if (g_bits && (g_opF > 1.f || (g_farbe2 >= 0 && g_ti == (int)g_nutzerTi)) &&
+        GdiFlush()) {  // 1.7.0: second color along each pill, opacity above 1
+        const bool zwei = g_farbe2 >= 0 && g_ti == (int)g_nutzerTi;
+        float c1[3], c2[3];
+        BasisFarbe(g_ti, c1);
+        ToneRgb(c1);
+        BasisFarbe(g_farbe2 >= 0 ? g_farbe2 : 0, c2);
+        ToneRgb(c2);
+        const float lum1 =
+            std::max(1.f, .3f * c1[0] + .59f * c1[1] + .11f * c1[2]);
+        std::vector<float> tcol(w, 0.f);
+        if (zwei)
+            for (int x = 0; x < w; ++x) {
+                const float ax = (float)(x + x0);
+                float best = 1e9f, tt = 0.f;
+                for (auto& p : g_pillen) {
+                    const float dx = ax < p.l   ? p.l - ax
+                                     : ax > p.r ? ax - p.r
+                                                : 0.f;
+                    if (dx < best) {
+                        best = dx;
+                        tt = std::clamp((ax - p.l) / std::max(1.f, p.r - p.l),
+                                        0.f, 1.f);
+                    }
+                }
+                tcol[x] = tt;
+            }
+        const float gain = std::max(1.f, g_opF);
+        uint32_t* px = static_cast<uint32_t*>(g_bits);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                uint32_t& q = px[(size_t)y * w + x];
+                const uint32_t a = q >> 24;
+                if (!a)
+                    continue;
+                float r = (float)((q >> 16) & 255), g = (float)((q >> 8) & 255),
+                      b = (float)(q & 255);
+                if (zwei && tcol[x] > .004f) {
+                    const float inv = 255.f / a;
+                    const float ur = r * inv, ug = g * inv, ub = b * inv;
+                    const float sl = (.3f * ur + .59f * ug + .11f * ub) / lum1;
+                    const float k = tcol[x];
+                    r = (ur + (std::min(255.f, c2[0] * sl) - ur) * k) * a /
+                        255.f;
+                    g = (ug + (std::min(255.f, c2[1] * sl) - ug) * k) * a /
+                        255.f;
+                    b = (ub + (std::min(255.f, c2[2] * sl) - ub) * k) * a /
+                        255.f;
+                }
+                float na = (float)a;
+                if (gain > 1.f) {
+                    na = std::min(255.f, na * gain);
+                    const float sc = na / (float)a;
+                    r *= sc;
+                    g *= sc;
+                    b *= sc;
+                }
+                r = std::min(r, na);
+                g = std::min(g, na);
+                b = std::min(b, na);
+                q = ((uint32_t)(na + .5f) << 24) | ((uint32_t)(r + .5f) << 16) |
+                    ((uint32_t)(g + .5f) << 8) | (uint32_t)(b + .5f);
+            }
+    }
     POINT dst{x0, y0}, src{0, 0};
     SIZE sz{w, h};
     BLENDFUNCTION bf{AC_SRC_OVER, 0,
-                     (BYTE)std::lround(255 * std::clamp(g_blende, 0.f, 1.f)),
+                     (BYTE)std::lround(255 * std::clamp(g_blende, 0.f, 1.f) *
+                                       std::min(1.f, g_opF)),
                      AC_SRC_ALPHA};
-    if (!UpdateLayeredWindow(g_hwnd, nullptr, &dst, &sz, g_memdc, &src, 0, &bf,
-                             ULW_ALPHA))
-        ZAB("ULW");
-    {
-        static int k2 = 0;
-        if (k2++ < 3)
-            Log("gezeichnet %d,%d %dx%d blende %.2f", x0, y0, w, h, g_blende);
-    }
+    UpdateLayeredWindow(g_hwnd, nullptr, &dst, &sz, g_memdc, &src, 0, &bf,
+                        ULW_ALPHA);
 }
 bool Vollbild() {
     // Fullscreen = the foreground window covers its whole monitor (desktop and
@@ -2310,12 +2759,122 @@ bool NahAnLeiste() {
            c.y >= wr.top - 160 && c.y <= wr.bottom + 40;
 }
 
+// Finds `"key"` followed by ':' at or after `from`; reads the integer after it.
+static bool JsonZahl(const std::string& b,
+                     size_t from,
+                     const std::string& key,
+                     long long& out,
+                     size_t* pos = nullptr) {
+    const std::string k = "\"" + key + "\"";
+    for (size_t p = b.find(k, from); p != std::string::npos;
+         p = b.find(k, p + 1)) {
+        size_t q = p + k.size();
+        while (q < b.size() &&
+               (b[q] == ' ' || b[q] == '\t' || b[q] == '\r' || b[q] == '\n'))
+            ++q;
+        if (q >= b.size() || b[q] != ':')
+            continue;
+        ++q;
+        while (q < b.size() &&
+               (b[q] == ' ' || b[q] == '\t' || b[q] == '\r' || b[q] == '\n'))
+            ++q;
+        if (q < b.size() && (b[q] == '-' || (b[q] >= '0' && b[q] <= '9'))) {
+            out = atoll(b.c_str() + q);
+            if (pos)
+                *pos = q;
+            return true;
+        }
+    }
+    return false;
+}
+// 1.8.0: generic status feed. Polls the configured http:// JSON endpoint; reads
+// the level (first `levelKey` after `objectKey`) and optional age; level >=
+// danger -> danger color, >= warn -> warn color, else the user's color.
+// Unreachable -> unchanged.
+DWORD WINAPI StatusThread(LPVOID) {
+    while (!g_uiaStop) {
+        StatusCfg c;
+        AcquireSRWLockShared(&g_scLock);
+        c = g_sc;
+        ReleaseSRWLockShared(&g_scLock);
+        const int ver = g_scVer;
+        if (c.source == 1 && c.urlOk) {
+            std::string body;
+            bool erreicht = false;
+            HINTERNET se =
+                WinHttpOpen(L"TaskbarSmoke/1", WINHTTP_ACCESS_TYPE_NO_PROXY,
+                            nullptr, nullptr, 0);
+            if (se) {
+                WinHttpSetTimeouts(se, 1500, 1500, 1500, 1500);
+                HINTERNET co = WinHttpConnect(se, c.host.c_str(), c.port, 0);
+                HINTERNET rq =
+                    co ? WinHttpOpenRequest(co, L"GET", c.path.c_str(), nullptr,
+                                            nullptr, nullptr, 0)
+                       : nullptr;
+                if (rq &&
+                    WinHttpSendRequest(rq, nullptr, 0, nullptr, 0, 0, 0) &&
+                    WinHttpReceiveResponse(rq, nullptr)) {
+                    DWORD n = 0, code = 0, cl = sizeof(code);
+                    char buf[8192];
+                    if (WinHttpQueryHeaders(rq,
+                                            WINHTTP_QUERY_STATUS_CODE |
+                                                WINHTTP_QUERY_FLAG_NUMBER,
+                                            WINHTTP_HEADER_NAME_BY_INDEX, &code,
+                                            &cl, WINHTTP_NO_HEADER_INDEX) &&
+                        code == 200) {
+                        erreicht = true;
+                        while (WinHttpReadData(rq, buf, sizeof(buf), &n) && n) {
+                            body.append(buf, n);
+                            if (body.size() > 4000000)
+                                break;
+                        }
+                    }
+                }
+                if (rq)
+                    WinHttpCloseHandle(rq);
+                if (co)
+                    WinHttpCloseHandle(co);
+                WinHttpCloseHandle(se);
+            }
+            size_t from = 0;
+            bool ok = erreicht;
+            if (ok && !c.objKey.empty()) {
+                const size_t o = body.find("\"" + c.objKey + "\"");
+                ok = o != std::string::npos;
+                from = ok ? o + c.objKey.size() + 2 : 0;
+            }
+            long long lvl = 0;
+            if (ok && JsonZahl(body, from, c.lvlKey, lvl) && ver == g_scVer) {
+                bool frisch = true;
+                if (!c.ageKey.empty()) {
+                    long long seit = 0;
+                    frisch = JsonZahl(body, from, c.ageKey, seit) && seit > 0 &&
+                             (long long)time(nullptr) - seit < c.maxAgeSec;
+                }
+                int h = 0;  // 0 normal (or stale), else tint index + 1
+                if (frisch) {
+                    if (lvl >= c.dangerLvl)
+                        h = c.dangerTi + 1;
+                    else if (lvl >= c.warnLvl)
+                        h = c.warnTi + 1;
+                }
+                if (h != (int)g_feedTi) {
+                    InterlockedExchange(&g_feedTi, h);
+                    StatusMischen();
+                }
+            }
+        }
+        for (int i = 0, n = c.pollMs / 100;
+             i < n && !g_uiaStop && ver == g_scVer; ++i)
+            Sleep(100);
+    }
+    return 0;
+}
 DWORD WINAPI UiaThread(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(CoCreateInstance(kClsidUIA, nullptr, CLSCTX_INPROC_SERVER,
                                 kIidUIA, (void**)&g_ua))) {
-        Log("UIA fehlt");
         return 1;
     }
     while (!g_uiaStop) {
@@ -2359,20 +2918,6 @@ void TimerTakt(bool sichtbar) {  // 15 ms while shown, 250 ms while hidden
 }
 void Tick() {
     EffekteLesen();  // in every style
-    {  // Diagnostics: log every taskbar window position change with ms
-       // timestamps (independent of drawing)
-        static int lastTop = -9999;
-        static int cnt = 0;
-        RECT wr{};
-        HWND tr = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (tr && GetWindowRect(tr, &wr) && wr.top != lastTop && cnt < 3000) {
-            lastTop = wr.top;
-            ++cnt;
-            Log("T %llu top %d vis %d blende %.2f",
-                (unsigned long long)GetTickCount64() % 100000, (int)wr.top,
-                (int)IsWindowVisible(g_hwnd), g_blende);
-        }
-    }
     static ULONGLONG lesen = 0;
     const ULONGLONG now = GetTickCount64();
     // Dock magnification (icons grow on hover): don't re-read pill widths while
@@ -2394,17 +2939,6 @@ void Tick() {
     }
     bool da = !g_pillen.empty() && !Vollbild() &&
               IsWindowVisible(FindWindowW(L"Shell_TrayWnd", nullptr));
-    {
-        static ULONGLONG zd = 0;
-        if (GetTickCount64() - zd > 60000) {
-            zd = GetTickCount64();
-            QUERY_USER_NOTIFICATION_STATE q{};
-            SHQueryUserNotificationState(&q);
-            Log("Diag pillen=%d vollbild=%d quns=%d sichtbar=%d",
-                (int)g_pillen.size(), (int)Vollbild(), (int)q,
-                (int)IsWindowVisible(FindWindowW(L"Shell_TrayWnd", nullptr)));
-        }
-    }
     // Position = taskbar WINDOW (Shell_TrayWnd). It slides visibly when
     // hiding/showing (~160-280 ms); dock magnification does not change it. (UIA
     // only reports final positions.) The overlay follows the window frame by
@@ -2421,14 +2955,6 @@ void Tick() {
                     p.t = (float)wr.top + g_offT;
                     p.b = (float)wr.bottom - g_offB;
                 }
-            static int logN = 0;
-            static int lastT = -999;
-            if (std::abs(wr.top - lastT) > 6 && logN < 600) {
-                lastT = wr.top;
-                ++logN;
-                Log("Fenster oben %d unten %d mb %d", (int)wr.top,
-                    (int)wr.bottom, mb);
-            }
         } else
             da = false;
     }
@@ -2461,23 +2987,7 @@ void Tick() {
     (void)lastDraw;  // draw every frame (60/s), otherwise the smoke stutters
     lastTopDraw = wrx.top;
     lastDraw = GetTickCount64();
-    {
-        const ULONGLONG t0 = GetTickCount64();
-        Zeichnen();
-        const ULONGLONG dt = GetTickCount64() - t0;
-        static ULONGLONG sum = 0;
-        static int n = 0, mx = 0;
-        sum += dt;
-        ++n;
-        mx = std::max<int>(mx, (int)dt);
-        if (n >= 300) {
-            Log("Frame mittel %.1f ms max %d ms (%d Bilder)", (double)sum / n,
-                mx, n);
-            sum = 0;
-            n = 0;
-            mx = 0;
-        }
-    }
+    Zeichnen();
 }
 LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (m == WM_TIMER) {
@@ -2503,6 +3013,8 @@ DWORD WINAPI RauchThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     InitializeCriticalSection(&g_lock);
     g_uiaThread = CreateThread(nullptr, 0, UiaThread, nullptr, 0, nullptr);
+    g_statusThread =
+        CreateThread(nullptr, 0, StatusThread, nullptr, 0, nullptr);
     Rauschen();
     HINSTANCE inst = GetModuleHandleW(nullptr);
     WNDCLASSEXW wc{sizeof(wc)};
@@ -2531,6 +3043,11 @@ DWORD WINAPI RauchThread(LPVOID) {
         WaitForSingleObject(g_uiaThread, 1500);
         CloseHandle(g_uiaThread);
         g_uiaThread = nullptr;
+    }
+    if (g_statusThread) {
+        WaitForSingleObject(g_statusThread, 2500);
+        CloseHandle(g_statusThread);
+        g_statusThread = nullptr;
     }
     g_fl.clear();
     g_fl.shrink_to_fit();
@@ -2576,11 +3093,6 @@ void WhTool_ModUninit() {
     if (g_thread) {
         PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_thread, 3000);
-    }
-    Log("Ende Mod");
-    if (g_log) {
-        fclose(g_log);
-        g_log = nullptr;
     }
     TerminateProcess(GetCurrentProcess(), 0);
 }
