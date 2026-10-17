@@ -2,7 +2,7 @@
 // @id              files-2-folders
 // @name            Files 2 Folders
 // @description     Move or copy one or more selected files in Explorer into a subfolder (named — nested paths with "/" supported, by extension, by name, or by date), or Defolder to unpack folders back out, with a workaround hotkey for other file managers
-// @version         2.6.2
+// @version         2.6.3
 // @author          tria
 // @github          https://github.com/triatomic
 // @include         explorer.exe
@@ -2376,8 +2376,11 @@ static void InsertF2FMenuItem(HMENU hmenu) {
                 F2F_MENU_CMD, label.c_str());
 }
 
-BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
-                                  int x, int y, HWND hwnd, LPTPMPARAMS lptpm)
+// Shared by both menu functions: Explorer used TrackPopupMenuEx for the file
+// menu, and since the October 2026 update uses TrackPopupMenu.
+template <typename F>
+static BOOL TrackMenuCommon(HMENU hmenu, UINT fuFlags, HWND hwnd,
+                            F callOriginal)
 {
     bool injected = false;
     g_currentMenuHwnd = hwnd;
@@ -2397,7 +2400,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
         }
     }
 
-    BOOL res = TrackPopupMenuEx_Orig(hmenu, fuFlags, x, y, hwnd, lptpm);
+    BOOL res = callOriginal();
 
     if (injected && (fuFlags & TPM_RETURNCMD) && (UINT)res == F2F_MENU_CMD) {
         std::wstring folder = g_currentFolder;
@@ -2417,6 +2420,24 @@ BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
     // TrackPopupMenuEx call, so the worst case is a single pending state.
 
     return res;
+}
+
+BOOL WINAPI TrackPopupMenuEx_Hook(HMENU hmenu, UINT fuFlags,
+                                  int x, int y, HWND hwnd, LPTPMPARAMS lptpm)
+{
+    return TrackMenuCommon(hmenu, fuFlags, hwnd, [&] {
+        return TrackPopupMenuEx_Orig(hmenu, fuFlags, x, y, hwnd, lptpm);
+    });
+}
+
+using TrackPopupMenu_t = decltype(&TrackPopupMenu);
+static TrackPopupMenu_t TrackPopupMenu_Orig;
+BOOL WINAPI TrackPopupMenu_Hook(HMENU hmenu, UINT fuFlags, int x, int y,
+                                int reserved, HWND hwnd, const RECT* rect)
+{
+    return TrackMenuCommon(hmenu, fuFlags, hwnd, [&] {
+        return TrackPopupMenu_Orig(hmenu, fuFlags, x, y, reserved, hwnd, rect);
+    });
 }
 
 // Catch the WM_COMMAND path. Shell context menus deliver commands almost
@@ -2813,6 +2834,8 @@ BOOL Wh_ModInit() {
                                    &TrackPopupMenuEx_Orig);
     WindhawkUtils::SetFunctionHook(PostMessageW, PostMessageW_Hook,
                                    &PostMessageW_Orig);
+    WindhawkUtils::SetFunctionHook(TrackPopupMenu, TrackPopupMenu_Hook,
+                                   &TrackPopupMenu_Orig);
 
     StartHotkeyThread();
     return TRUE;
