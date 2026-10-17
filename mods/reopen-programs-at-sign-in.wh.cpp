@@ -2,7 +2,7 @@
 // @id              reopen-programs-at-sign-in
 // @name            Reopen Programs at Sign-in
 // @description     Reopens the programs that were open before shutdown/restart the next time you sign in
-// @version         2.0.0
+// @version         2.0.1
 // @author          lima26x
 // @github          https://github.com/brdantas26
 // @include         explorer.exe
@@ -21,7 +21,11 @@ the feature off, disable the mod.
   sign-in by default). Documents/tabs depend on each program.
 - Programs running as administrator and Windows components (File Explorer,
   Control Panel...) are not reopened.
-- Programs that are already running (e.g. from Startup) are not opened twice.
+- Programs that already have a window open (e.g. started by Startup) are not
+  opened twice.
+- Windhawk's own programs are never reopened.
+- Programs whose window belongs to a helper process (e.g. Steam, Chromium
+  apps) may not come back as they were.
 - Nothing is reopened if the mod is enabled long after signing in, or if
   Explorer restarts during the day: only a fresh sign-in triggers it.
 - Each Windows account keeps its own list.
@@ -43,8 +47,11 @@ Para desligar a função, desative o mod.
   depois de entrar, por padrão). Documentos e abas dependem de cada programa.
 - Programas abertos como administrador e componentes do Windows (Explorador de
   Arquivos, Painel de Controle...) não são reabertos.
-- Programas que já estão abertos (por exemplo, os que iniciam com o Windows)
-  não são abertos duas vezes.
+- Programas que já têm uma janela aberta (por exemplo, os que iniciam com o
+  Windows) não são abertos duas vezes.
+- Os programas do próprio Windhawk nunca são reabertos.
+- Programas cuja janela pertence a um processo auxiliar (por exemplo, Steam e
+  apps baseados no Chromium) podem não voltar como estavam.
 - Nada é reaberto se o mod for ativado muito depois do login, nem se o Explorer
   reiniciar durante o dia: só um login novo dispara a restauração.
 - Cada conta do Windows tem a sua própria lista.
@@ -76,7 +83,6 @@ navegadores); este mod reabre qualquer programa, pelo caminho do executável.
 #include <ntsecapi.h>
 #include <sddl.h>
 #include <shellapi.h>
-#include <tlhelp32.h>
 
 #ifndef DWM_CLOAKED_SHELL
 #define DWM_CLOAKED_SHELL 0x2  // may be missing in Windhawk's headers
@@ -95,6 +101,9 @@ constexpr UINT_PTR kTimerSnapshot = 1, kTimerRestoreStart = 2,
                    kTimerRestoreStep = 3;
 constexpr UINT kSnapshotIntervalMs = 20 * 1000;  // the list used at next sign-in
 constexpr UINT kRestoreStepMs = 2 * 1000;        // one app at a time, no CPU spike
+// Separates the saved programs. '?' can't appear in a file name or an AUMID,
+// and survives the mod storage (portable mode drops '\n' characters).
+constexpr wchar_t kListSeparator = L'?';
 // Restore only if the sign-in is at most this old (FILETIME units, 100 ns).
 constexpr ULONGLONG kMaxLogonAge = 10ULL * 60 * 10000000;
 
@@ -199,6 +208,26 @@ bool IsAppWindow(HWND hwnd) {
     return !GetWindow(hwnd, GW_OWNER);  // owned = dialog/popup
 }
 
+// Windhawk's own programs with a window are never relaunched: the tray app, the
+// Windhawk 2.0 tool-mod hosts (windhawk-mod*.exe) and the editor
+// (<Windhawk folder>\UI\VSCodium.exe). Matched by name, so other
+// programs that share a folder with a portable Windhawk are not affected, and
+// the disk is only probed for a VSCodium.exe.
+bool IsWindhawkProgram(const std::wstring& exePath) {
+    std::wstring lower = ToLower(exePath);
+    size_t slash = lower.rfind(L'\\');
+    if (slash == std::wstring::npos || slash == 0) return false;
+    std::wstring name = lower.substr(slash + 1);
+    if (name == L"windhawk.exe" || name.starts_with(L"windhawk-mod")) return true;
+    if (name != L"vscodium.exe") return false;
+    // The editor: <Windhawk folder>\UI\VSCodium.exe.
+    size_t parent = lower.rfind(L'\\', slash - 1);
+    return parent != std::wstring::npos &&
+           lower.compare(parent, slash - parent + 1, L"\\ui\\") == 0 &&
+           GetFileAttributesW((exePath.substr(0, parent + 1) + L"windhawk.exe").c_str()) !=
+               INVALID_FILE_ATTRIBUTES;
+}
+
 // How to relaunch the app that owns `pid`: "A|<AUMID>" for Store/packaged
 // apps, "P|<exe path>" for classic programs, or "" = do not relaunch (and
 // `whySkipped`, if given, says why, for the log).
@@ -241,6 +270,8 @@ std::wstring AppKey(DWORD pid, std::wstring* whySkipped = nullptr) {
         reason = L"(no path)";
     else if (elevated)
         reason = L"(running as administrator)";
+    else if (IsWindhawkProgram(path))
+        reason = L"(Windhawk)";
     else if (packaged && lower.find(L"\\systemapps\\") == std::wstring::npos)
         return L"A|" + std::wstring(aumid);
     else if (!packaged && lower.rfind(WindowsDir(), 0) != 0)
@@ -307,12 +338,14 @@ void SaveSnapshot() {
         snap.apps.resize(g_maxApps);
 
     std::wstring joined, skipped;
-    for (const auto& app : snap.apps) joined += app + L'\n';
+    for (const auto& app : snap.apps) joined += app + kListSeparator;
+    std::wstring readable = joined;  // same list, one program per line, for the log
+    std::replace(readable.begin(), readable.end(), kListSeparator, L'\n');
     for (const auto& s : snap.skipped) skipped += s + L'\n';
     // Only write when something changed (no registry write every 20 s).
     if (joined != g_lastSaved && WriteStringValue(L"lastSession", joined)) {
         g_lastSaved = joined;
-        Wh_Log(L"Saved %u app(s):\n%s", (unsigned)snap.apps.size(), joined.c_str());
+        Wh_Log(L"Saved %u app(s):\n%s", (unsigned)snap.apps.size(), readable.c_str());
         if (!skipped.empty()) Wh_Log(L"Not saved (by design):\n%s", skipped.c_str());
     }
 }
@@ -322,24 +355,21 @@ void SaveSnapshot() {
 // ---------------------------------------------------------------------------
 
 void BuildRestoreQueue() {
-    // Apps already running (e.g. from Startup) are not launched twice.
-    std::vector<std::wstring> running;
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap != INVALID_HANDLE_VALUE) {
-        PROCESSENTRY32W pe{sizeof(pe)};
-        for (BOOL ok = Process32FirstW(snap, &pe); ok; ok = Process32NextW(snap, &pe))
-            running.push_back(AppKey(pe.th32ProcessID));
-        CloseHandle(snap);
-    }
+    // Programs that already have a window (e.g. started by Startup) are not
+    // launched twice. Compared by window, like the saved list: a background
+    // process without a window (browser helper, tray app) doesn't count as open.
+    Snapshot open;
+    EnumWindows(CollectAppWindow, reinterpret_cast<LPARAM>(&open));
 
     std::wstring saved = ReadStringValue(L"lastSession");
-    for (size_t start = 0, end; (end = saved.find(L'\n', start)) != saved.npos;
+    // Also accepts '\n', the separator 2.0.0 used on regular installs.
+    for (size_t start = 0, end; (end = saved.find_first_of(L"?\n", start)) != saved.npos;
          start = end + 1) {
         std::wstring key = saved.substr(start, end - start);
         if (key.size() <= 2) continue;
         if (g_restoreQueue.size() >= static_cast<size_t>(g_maxApps)) break;
-        if (std::find(running.begin(), running.end(), key) != running.end())
-            Wh_Log(L"Already running, skipped: %s", key.c_str());
+        if (std::find(open.apps.begin(), open.apps.end(), key) != open.apps.end())
+            Wh_Log(L"Already open, skipped: %s", key.c_str());
         else
             g_restoreQueue.push_back(key);
     }
@@ -427,6 +457,16 @@ LRESULT CALLBACK SessionWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 BuildRestoreQueue();
                 SetTimer(hwnd, kTimerRestoreStep, kRestoreStepMs, nullptr);
             } else if (wParam == kTimerRestoreStep) {
+                // A Startup program may have opened its window since the queue
+                // was built: skip it instead of starting a second copy.
+                Snapshot open;
+                EnumWindows(CollectAppWindow, reinterpret_cast<LPARAM>(&open));
+                while (!g_restoreQueue.empty() &&
+                       std::find(open.apps.begin(), open.apps.end(),
+                                 g_restoreQueue.front()) != open.apps.end()) {
+                    Wh_Log(L"Already open, skipped: %s", g_restoreQueue.front().c_str());
+                    g_restoreQueue.erase(g_restoreQueue.begin());
+                }
                 if (g_restoreQueue.empty()) {
                     KillTimer(hwnd, wParam);
                     g_restoring = false;  // snapshots resume

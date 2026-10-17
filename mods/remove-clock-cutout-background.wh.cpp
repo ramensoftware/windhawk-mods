@@ -486,6 +486,24 @@ LRESULT CALLBACK ClockSubclassProc(
             break;
         }
 
+        case WM_TIMER: {
+            if (wParam == 9999) {
+                PCWSTR customImagePath = Wh_GetStringSetting(L"customImagePath");
+                if (customImagePath && customImagePath[0] != L'\0') {
+                    CachedImage* cached = GetCachedImage(customImagePath);
+                    if (cached && cached->frameCount > 1) {
+                        std::lock_guard<std::mutex> lock(g_windowAnimsMutex);
+                        auto& animState = g_windowAnims[hwnd];
+                        animState.currentFrame = (animState.currentFrame + 1) % cached->frameCount;
+                        InvalidateRect(hwnd, NULL, FALSE);
+                    }
+                }
+                Wh_FreeStringSetting((PWSTR)customImagePath);
+                return 0;
+            }
+            break;
+        }
+
         case WM_NCDESTROY: {
             KillTimer(hwnd, 9999);
             {
@@ -621,7 +639,7 @@ void Wh_ModUninit() {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClockSubclassProc);
         if (addedComposited) {
             SetWindowLongW(hwnd, GWL_EXSTYLE,
-                           GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+                         GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
         }
         InvalidateRect(hwnd, NULL, TRUE);
     };
@@ -632,6 +650,16 @@ void Wh_ModUninit() {
 
     {
         std::lock_guard<std::mutex> lockImg(g_imageMutex);
+        g_imageCache.reset();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_windowAnimsMutex);
+        g_windowAnims.clear();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_imageMutex);
         g_imageCache.reset();
     }
 
