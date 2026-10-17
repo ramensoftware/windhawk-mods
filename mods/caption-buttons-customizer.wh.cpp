@@ -289,9 +289,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 #include <wchar.h>
 #include <regex>
 #include <string_view>
-#include <algorithm>
 #include <unordered_map>
-#include <vector>
 
 // ======================================================================
 //  PART 1: Layout (caption buttons on the left, icon and title layout)
@@ -2986,7 +2984,8 @@ void Wh_ModUninit() {
         return;
     }
     if (g_iconWaitThread) {
-        WaitForSingleObject(g_iconWaitThread, 2000);   // the thread stops by itself when g_unloading is set
+        InterlockedExchange(&g_unloading, 1);   // make sure the thread stops even if Wh_ModBeforeUninit was skipped
+        WaitForSingleObject(g_iconWaitThread, INFINITE);   // the thread checks g_unloading every 100 ms
         CloseHandle(g_iconWaitThread);
         g_iconWaitThread = nullptr;
     }
