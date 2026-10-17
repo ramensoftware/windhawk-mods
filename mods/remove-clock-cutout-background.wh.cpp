@@ -83,9 +83,14 @@ static ShowWindow_t pfnShowWindowOriginal = NULL;
 
 thread_local bool g_bInMask = false;
 
-// Global state tracking for subclassed windows
+// State tracking for subclassed windows and border management
+struct ClockWindowState {
+    bool addedComposited;
+    bool removedBorder;
+};
+
 std::mutex g_clockWindowsMutex;
-std::unordered_map<HWND, bool> g_clockWindows;
+std::unordered_map<HWND, ClockWindowState> g_clockWindows;
 
 // Cached image structure for animated GIF support
 struct CachedImage {
@@ -106,6 +111,16 @@ struct WindowAnimState {
 
 std::unordered_map<HWND, WindowAnimState> g_windowAnims;
 std::mutex g_windowAnimsMutex;
+
+// Helper to toggle and refresh window borders cleanly
+void SetBorder(HWND hwnd, bool enable) {
+    DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
+    SetWindowLongW(hwnd, GWL_STYLE,
+                   enable ? (style | WS_BORDER) : (style & ~WS_BORDER));
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                     SWP_NOACTIVATE);
+}
 
 // Retrieve or load cached image from memory stream to prevent file locking
 CachedImage* GetCachedImage(const wchar_t* path) {
@@ -486,24 +501,6 @@ LRESULT CALLBACK ClockSubclassProc(
             break;
         }
 
-        case WM_TIMER: {
-            if (wParam == 9999) {
-                PCWSTR customImagePath = Wh_GetStringSetting(L"customImagePath");
-                if (customImagePath && customImagePath[0] != L'\0') {
-                    CachedImage* cached = GetCachedImage(customImagePath);
-                    if (cached && cached->frameCount > 1) {
-                        std::lock_guard<std::mutex> lock(g_windowAnimsMutex);
-                        auto& animState = g_windowAnims[hwnd];
-                        animState.currentFrame = (animState.currentFrame + 1) % cached->frameCount;
-                        InvalidateRect(hwnd, NULL, FALSE);
-                    }
-                }
-                Wh_FreeStringSetting((PWSTR)customImagePath);
-                return 0;
-            }
-            break;
-        }
-
         case WM_NCDESTROY: {
             KillTimer(hwnd, 9999);
             {
@@ -525,16 +522,15 @@ void AttachIfClock(HWND hwnd) {
     if (!IsAnalogClockControl(hwnd)) return;
 
     DWORD style = GetWindowLongW(hwnd, GWL_STYLE);
-    if (style & WS_BORDER) {
-        SetWindowLongW(hwnd, GWL_STYLE, style & ~WS_BORDER);
-    }
-
     DWORD exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
-    bool addedComposited = !(exStyle & WS_EX_COMPOSITED);
+    ClockWindowState state{
+        .addedComposited = !(exStyle & WS_EX_COMPOSITED),
+        .removedBorder = (style & WS_BORDER) != 0,
+    };
 
     {
         std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
-        if (!g_clockWindows.try_emplace(hwnd, addedComposited).second) return;
+        if (!g_clockWindows.try_emplace(hwnd, state).second) return;
     }
 
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, ClockSubclassProc, 0)) {
@@ -543,8 +539,12 @@ void AttachIfClock(HWND hwnd) {
         return;
     }
 
-    if (addedComposited) {
+    if (state.addedComposited) {
         SetWindowLongW(hwnd, GWL_EXSTYLE, exStyle | WS_EX_COMPOSITED);
+    }
+
+    if (state.removedBorder) {
+        SetBorder(hwnd, false);
     }
 
     InvalidateRect(hwnd, NULL, TRUE);
@@ -625,7 +625,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    std::vector<std::pair<HWND, bool>> windows;
+    std::vector<std::pair<HWND, ClockWindowState>> windows;
     {
         std::lock_guard<std::mutex> lock(g_clockWindowsMutex);
         windows.assign(g_clockWindows.begin(), g_clockWindows.end());
@@ -634,12 +634,15 @@ void Wh_ModUninit() {
 
     auto cleanup = [](const auto& pair) {
         HWND hwnd = pair.first;
-        bool addedComposited = pair.second;
+        ClockWindowState state = pair.second;
         KillTimer(hwnd, 9999);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ClockSubclassProc);
-        if (addedComposited) {
+        if (state.addedComposited) {
             SetWindowLongW(hwnd, GWL_EXSTYLE,
-                         GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+                           GetWindowLongW(hwnd, GWL_EXSTYLE) & ~WS_EX_COMPOSITED);
+        }
+        if (state.removedBorder) {
+            SetBorder(hwnd, true);
         }
         InvalidateRect(hwnd, NULL, TRUE);
     };
@@ -650,16 +653,6 @@ void Wh_ModUninit() {
 
     {
         std::lock_guard<std::mutex> lockImg(g_imageMutex);
-        g_imageCache.reset();
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_windowAnimsMutex);
-        g_windowAnims.clear();
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_imageMutex);
         g_imageCache.reset();
     }
 
