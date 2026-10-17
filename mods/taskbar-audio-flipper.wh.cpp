@@ -2302,8 +2302,8 @@ struct AudioStatus {
 
     bool operator==(const AudioStatus& other) const {
         return device.id == other.device.id && device.name == other.device.name && device.description == other.device.description &&
-               device.fullName == other.device.fullName && device.iconPath == other.device.iconPath && level == other.level &&
-               muted == other.muted;
+               device.fullName == other.device.fullName && device.iconPath == other.device.iconPath &&
+               device.kind == other.device.kind && level == other.level && muted == other.muted;
     }
 };
 
@@ -2579,28 +2579,29 @@ enum class IconStyle {
     Fluent = 1,   // Glyphs from the Windows icon font, in the taskbar's color, like its own icons (the default).
 };
 
-// The glyph for the device's kind, or a struck-through speaker when there's no device.
-const wchar_t* GlyphFor(const std::optional<AudioStatus>& status) {
+// The glyph for a muted (or missing) output or input: a struck-through speaker or microphone.
+const wchar_t* MutedGlyph(EDataFlow flow) {
+    return flow == eCapture ? L"\uEC54" : L"\uE74F";  // MicOff, Mute
+}
+
+// The glyph for the output's or input's kind, or the muted one when there's no device. Inputs of
+// other kinds (line in, S/PDIF, Remote Audio) are microphones, and outputs of other kinds speakers.
+const wchar_t* GlyphFor(EDataFlow flow, const std::optional<AudioStatus>& status) {
     if (!status) {
-        return L"";  // Mute
+        return MutedGlyph(flow);
     }
     switch (status->device.kind) {
         case DeviceKind::Headphones:
-            return L"";  // Headphone
+            return L"\uE7F6";  // Headphone
         case DeviceKind::Headset:
-            return L"";  // Headset
+            return L"\uE95B";  // Headset
         case DeviceKind::Display:
-            return L"";  // TVMonitor
+            return L"\uE7F4";  // TVMonitor
         case DeviceKind::Microphone:
-            return L"";  // Microphone
+            return L"\uE720";  // Microphone
         default:
-            return L"";  // Speakers
+            return flow == eCapture ? L"\uE720" : L"\uE7F5";  // Microphone, Speakers
     }
-}
-
-// The glyph for a muted (or missing) output or input: a struck-through speaker or microphone.
-const wchar_t* MutedGlyph(EDataFlow flow) {
-    return flow == eCapture ? L"" : L"";  // MicOff, Mute
 }
 
 // A copy of an icon as a bitmap, with its transparency (from its alpha channel, or its mask for
@@ -2715,22 +2716,44 @@ void DrawMuteBadge(gp::Graphics& graphics, const gp::RectF& bounds) {
     graphics.DrawLine(&pen, badge.GetRight() - inset, badge.Y + inset, badge.X + inset, badge.GetBottom() - inset);
 }
 
+// Draws an icon-font glyph at one font size, centered in the box by its ink, the way the taskbar
+// draws its own glyphs: unlike DrawGlyph, it doesn't stretch each glyph to fill the box, so they all
+// keep the same size and weight.
+void DrawGlyphAtSize(gp::Graphics& graphics, const wchar_t* glyph, float emSize, const gp::RectF& box, const gp::Color& color) {
+    const wchar_t* fontName = IconFontName();
+    if (!fontName) {
+        DrawGlyph(graphics, glyph, box, color);  // Draws a placeholder.
+        return;
+    }
+    gp::FontFamily family(fontName);
+    gp::GraphicsPath path;
+    path.AddString(glyph, -1, &family, gp::FontStyleRegular, emSize, gp::PointF(0, 0), gp::StringFormat::GenericTypographic());
+    gp::RectF ink;
+    path.GetBounds(&ink);
+    if (ink.Width <= 0 || ink.Height <= 0) {
+        return;
+    }
+    gp::Matrix transform;
+    transform.Translate(box.X + (box.Width - ink.Width) / 2 - ink.X, box.Y + (box.Height - ink.Height) / 2 - ink.Y);
+    path.Transform(&transform);
+    gp::SolidBrush brush(color);
+    graphics.FillPath(&brush, &path);
+}
+
 // Draws the icon of the output or input device in the style chosen. In the Windows style, that's the
 // device's Windows icon (or a glyph when there's no device or its icon can't be loaded), faded with
-// a mute badge when it's muted. In the Fluent style, it's a glyph a little smaller than the box,
-// like the taskbar's own icons, struck through when the device is muted.
+// a mute badge when it's muted. In the Fluent style, it's a glyph at three quarters of the box's
+// height, about the size of the taskbar's own icons, struck through when the device is muted.
 void DrawDeviceIcon(gp::Graphics& graphics, DeviceIcons& icons, EDataFlow flow, const std::optional<AudioStatus>& status,
                     const gp::RectF& bounds, const gp::Color& glyphColor) {
     bool muted = status && status->muted;
     if (icons.style == IconStyle::Fluent) {
-        gp::RectF glyph = bounds;
-        glyph.Inflate(-bounds.Width / 8, -bounds.Height / 8);
-        DrawGlyph(graphics, !status || muted ? MutedGlyph(flow) : GlyphFor(status), glyph, glyphColor);
+        DrawGlyphAtSize(graphics, muted ? MutedGlyph(flow) : GlyphFor(flow, status), bounds.Height * 0.75f, bounds, glyphColor);
         return;
     }
     gp::Bitmap* icon = status ? icons.Get(status->device.iconPath, (int)std::min(bounds.Width, bounds.Height)) : nullptr;
     if (!icon) {
-        DrawGlyph(graphics, GlyphFor(status), bounds, muted ? WithAlpha(115, glyphColor) : glyphColor);
+        DrawGlyph(graphics, GlyphFor(flow, status), bounds, muted ? WithAlpha(115, glyphColor) : glyphColor);
     } else {
         gp::InterpolationMode previous = graphics.GetInterpolationMode();
         graphics.SetInterpolationMode(gp::InterpolationModeHighQualityBicubic);
