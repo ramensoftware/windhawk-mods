@@ -1,100 +1,200 @@
 // ==WindhawkMod==
 // @id              neiz-supersmile-audio-visualizer
 // @name            Desktop Audio Visualizer Plus
-// @description     A highly customizable audio visualizer with synced lyrics, featuring optional network access to fetch lyrics from lrclib.net
-// @version         1.0.1
+// @description     A highly customizable audio visualizer with synced lyrics, media controls and EQ, featuring optional network access to fetch lyrics from lrclib.net
+// @description:ru  Настраиваемый аудиовизуализатор с синхронизированным текстом песен, управлением медиа и эквалайзером, с опциональным доступом к сети для загрузки текстов с lrclib.net
+// @version         1.2.0
 // @license         MIT
 // @author          NeiZ
 // @github          https://github.com/NeiZqwe
 // @include         explorer.exe
-// @compilerOptions -lole32 -luuid -lmmdevapi -lksuser -lgdi32 -luser32 -lgdiplus -ldwmapi -lruntimeobject -lwindowsapp -lwinhttp
+// @compilerOptions -lole32 -luuid -lmmdevapi -lksuser -lgdi32 -luser32 -lgdiplus -ldwmapi -lruntimeobject -lwindowsapp -lwinhttp -lshell32 -ld3d11 -ldxgi -ldcomp -ld2d1
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Desktop Audio Visualizer Plus
 
-Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highly customizable real-time audio visualizer directly on the Windows desktop.
+Desktop Audio Visualizer Plus is a highly customizable Windhawk desktop overlay that combines a real-time audio visualizer, synchronized lyrics, album artwork, media controls and a full 10-band EQ
 
 ## Features
 
-### Audio
+### Audio and performance
 
-- WASAPI loopback capture for system audio
-- Optional per-application audio source
-- 1024-point FFT
-- 32 logarithmic frequency bands
-- 10-band custom EQ curve applied across the FFT bands ( Win 11 )
+- WASAPI audio capture for the **whole system** or **selected applications**
+- 1024-point FFT with 32 logarithmic frequency bands
 - Up to 256 rendered visual bars
+- 10-band custom EQ curve applied across the FFT bands
 - Auto-Gain normalization
-- Attack / decay controls
+- Frame-rate-independent attack / decay dynamics
 - Optional CAVA-style smoothing
+- Configurable render FPS; `0` follows the display refresh rate without a software FPS cap
+- Adaptive idle rendering: when the visualizer reaches its resting state, rendering is automatically reduced to save resources
+- Fullscreen/borderless-fullscreen throttle: while another application occupies an entire monitor, the overlay on that monitor is temporarily reduced to **1 FPS** without changing the user's saved FPS setting; other monitors keep their normal render rate
+- Monitor selection: `0` renders on **all monitors**, while `1`, `2`, ... target one specific monitor
+- Configurable placement relative to desktop icons: **Behind icons, transparent** (default), **Behind icons, opaque layer**, or **Above icons** ( **Advanced → Desktop placement** )
+
+![1](https://i.imgur.com/mk5fide.png)
+![2](https://i.imgur.com/NtlXLCd.png)
+
+---
 
 ### Visualization
 
 - Stereo, Mountain, Mirror, Wave, Circular, Dots and Area visualization types
-- Square, Rounded, Segmented, Pointed, Continuous Curve and Battery bar styles
 - Linear, Step, Cosine and Catmull-Rom interpolation
 - Vertical and horizontal orientations
 - Mirrored visualization pass
 - Configurable bar count, width, spacing, height and corner radius
-- Circular radius and start-angle controls
+- Dynamic bar width based on cursor distance
+- Optional foreground PNG image plane
 
-### Appearance
+![3](https://i.imgur.com/8NllN1h.gif)
 
-- Solid colors and gradients
-- Album-derived colors and album gradients
-- Dynamic Acrylic, Liquid Glass and Aero-style peak-cap rendering
+![4](https://i.imgur.com/VNz6GOi.gif)
+
+---
+
+### Appearance and colors
+
+- Square, Rounded, Segmented, Pointed, Continuous Curve and Battery bar styles
+- Album-derived solid and gradient colors
 - Configurable opacity and dynamic opacity curves
-- Dynamic color curves
-- Bar borders with visualizer, album and custom hex colors
-- Optional visualizer backgrounds: solid, gradient, album color and album gradient
+- Dynamic color curves based on bar height
+- Customizable bar borders
+- Optional customizable visualizer background
+
+![5](https://i.imgur.com/aqXU5Fa.gif)
+
+---
 
 ### Lyrics
 
-Lyrics are optional and disabled by default. When enabled, the mod can retrieve synchronized lyrics for the currently playing track from LRCLIB and display them in a configurable desktop widget.
+Lyrics are optional. The widget can display artist/title metadata, synchronized lyrics, previous/upcoming lines and fallback text, with extensive layout and appearance controls.
 
-The widget supports artist/title metadata, synchronized highlighting, previous/upcoming lines, multiple fonts, alignment, long-line wrapping, fallback/collapse/hide behavior, album-derived backgrounds, gradients, rounded corners and configurable borders.
+- Left, center or right text alignment
+- Configurable focus-line position
+- Configurable number of lyric lines above and below the current line
+- Optional wrapping of long highlighted lyric lines
+- Fallback, collapse or hide behaviour when lyrics are unavailable
+- Album-derived and gradient backgrounds
+- Configurable background opacity, rounding and borders
+- Click-to-seek lyric rows inside the Media & EQ popup
+- Long artist/title metadata is automatically clipped and smoothly marquee-scrolls when it is wider than the available widget area
 
-## Lyrics data source
+![6](https://i.imgur.com/TU0iXkc.gif)
 
-When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.
+### Lyrics data source and local LRC files
 
-## Custom EQ ( Win 11 )
+Lyrics can be loaded from local `.lrc` files instead of the online LRCLIB lookup.
 
-The Equalizer button is injected as a native Windows 11 XAML element directly into the system tray. Click it to open the graphical 10-band EQ flyout. Each band ranges from 0.0x to 2.0x gain, with 1.0x as the neutral/default value. EQ values are stored in the mod's local Windhawk storage so they survive reloads without changing the existing visualizer settings pipeline.
+When **Use local LRC files** is enabled:
 
+- The configured folder is searched for local `.lrc` files
+- Network/LRCLIB lyric lookups are disabled
+- Local playback can work without sending lyric searches over the network
+- Custom or manually edited timing files can be used
+
+Recommended local file names:
+
+1. `Artist - Title.lrc`
+2. `Title.lrc`
+
+![7](https://i.imgur.com/ZEOrsmg.png)
+
+![8](https://i.imgur.com/bGYvyU7.png)
+
+When local LRC mode is disabled, the normal online LRCLIB lookup is used. Network access is limited to lyric retrieval and is not used for telemetry, analytics or remote configuration.
+
+---
+
+### Album Widget
+
+- Optional album-art desktop widget
+- Mouse-drag positioning
+- Separate placement or attachment to the Lyrics widget / visualizer
+- Configurable width, height, corner radius and opacity
+- Configurable attachment gap and maximum attachment distance
+- Configurable album-image resampling quality
+- Cached artwork rendering so repeated frames do not continuously rescale the source image
+   - Player popup framebuffer reuse to avoid per-frame GDI bitmap/DC allocation
+   - Player scheduler rendering capped at 60 FPS while desktop visualization can run at higher refresh rates
+
+---
+
+### Media & EQ
+
+The Player popup is integrated into the tray on both Windows 11 and Windows 10.
+
+- **Windows 11:** native XAML tray integration
+- **Windows 10:** native notification-area (`Shell_NotifyIcon`) integration
+- Tray button visibility can be toggled from the settings on both Windows versions
+- Clicking the tray button opens the redesigned Player popup
+- Current track, artist and source information
+- Optional Volume section with a system-master-volume slider and mute toggle
+- Customizable left/middle/right click and wheel actions on the tray button, including media controls, shuffle/repeat, mute, volume adjustment, and Windows sound/volume mixer shortcuts
+- Timeline seeking
+- Optional Click-to-Seek Lyrics section with scrollable LRC rows
+- Play/pause, previous/next and ±5 second seeking controls
+- Graphical 10-band EQ with `0.0x`–`2.0x` gain range and `1.0x` as neutral
+- Built-in presets: Flat, Bass Boost, Bass Cut, Treble Boost, Vocal, Rock, Pop, Classical and Loudness
+- Up to 12 custom EQ presets stored in Windhawk settings
+- Configurable Media & EQ Layout Builder
+- Optional rotating Disk section with circular FFT ring and recurring bass-hit pulse animation
+- Configurable popup placement, layout, color themes and fun skins
+
+![9](https://i.imgur.com/GA68U6D.png)
+
+![10](https://i.imgur.com/8TvmQ8V.png)
+
+![11](https://i.imgur.com/gRLC7uy.png)
+
+![a](https://i.imgur.com/csqf7kJ.png)
+
+![12](https://i.imgur.com/TE3lOeB.png)
+
+![13](https://i.imgur.com/ZxlcDIV.png)
+
+![14](https://i.imgur.com/kphLg3D.png)
+
+![15](https://i.imgur.com/Kewsx9C.png)
+
+
+---
 ## Performance
 
-The visualizer uses a lightweight WASAPI/FFT pipeline and dynamically reduces rendering frequency when the visualization has reached its resting state.
+The visualizer uses a WASAPI/FFT pipeline with adaptive rendering. While audio is active, the render scheduler follows the configured FPS or display refresh rate and uses a high-resolution waitable timer when available, preserving fractional frame periods (for example, 180 FPS = 5.556 ms) instead of quantizing the cadence to integer-millisecond `SetTimer` intervals. When the bars settle, the scheduler is automatically reduced. Audio updates can wake the overlay again so active playback returns to the normal render cadence.
 
-The visualizer frame rate can be configured independently. A value of `0` removes the software FPS cap and follows the current display refresh rate; any positive value requests that FPS, but it is still capped by the display refresh rate. Higher refresh rates can make the animation smoother, especially with fast visualizer styles, but may increase CPU/GPU usage and power consumption.
+When a fullscreen or borderless-fullscreen application occupies a monitor, only the overlay rendered on that monitor temporarily uses a 1 FPS safety throttle. Other selected monitors continue to use the configured FPS. The configured FPS value is **not** overwritten, and normal rendering is restored when fullscreen mode ends.
 
-Actual CPU usage depends on display resolution, enabled effects, visualization style, lyrics, frame rate and other settings.
+For multi-monitor setups, `0` renders separate overlay windows across all available monitors. A positive value selects one monitor. If a selected monitor is unavailable, the overlay falls back to the primary monitor.
+
+The Media & EQ SMTC worker runs only while the Media & EQ tray button is enabled, avoiding repeated cross-process media polling when that feature is disabled.
+
+Actual CPU/GPU usage depends on display resolution, effects, visualization style, lyrics, frame rate, number of monitors and other enabled features.
+
+## Windows compatibility
+
+The Media & EQ tray integration uses different shell mechanisms depending on the Windows version:
+
+- **Windows 11:** XAML tray integration inside the Windows taskbar/tray UI
+- **Windows 10:** native notification-area icon integration with retry/recovery handling when Explorer recreates the tray
+
+This keeps the user-facing Media & EQ feature consistent while allowing each Windows version to use the shell integration path available to it.
+
+The mod has been tested across multiple builds of Windows 10 and Windows 11.
 
 
 ---
 
-## Preview
+## Credits
 
-![eq](https://i.imgur.com/IOwofqV.png)
-
-![1](https://i.imgur.com/TU0iXkc.gif)
-
-![2](https://i.imgur.com/8NllN1h.gif)
-
-![3](https://i.imgur.com/VNz6GOi.gif)
-
-![4](https://i.imgur.com/aqXU5Fa.gif)
-
----
-
-# Credits
-
-- **NeiZ** — Author and maintainer.
-- **SuperSmile123** — Contributor.
-- **Salyts** — Reference / upstream desktop audio visualizer implementation.
-- **GR0UD** — Upstream audio capture / FFT implementation reference.
+- [**NeiZ**](https://github.com/NeiZqwe) — Author and maintainer. 
+- [**SuperSmile123**](https://github.com/SuperSmile123) — Contributor.  
+- [**SuperAnt220**](https://github.com/SuperAnt220) — Contributor.  
+- [**Salyts**](https://github.com/Salyts) — Reference / upstream desktop audio visualizer implementation.  
+- [**GR0UD**](https://github.com/GR0UD) — Upstream audio capture / FFT implementation reference.  
+  
 
 ---
 
@@ -102,20 +202,37 @@ Actual CPU usage depends on display resolution, enabled effects, visualization s
 
 Please report bugs and feature requests through the repository issue tracker: [Report an Issue on GitHub](https://github.com/NeiZqwe/windhawk-mods/issues)
 
-
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - Visualizer:
-    - barCount: 96
+    - enabled: true
+      $name: Enable visualizer
+      $name:ru-RU: Включить визуализатор
+      $description: Enables the desktop audio visualizer. Turning this off hides the desktop visualizer and stops its audio capture unless an open Player section needs live audio data.
+      $description:ru-RU: Включает аудиовизуализатор на рабочем столе. При выключении визуализатор скрывается, а захват аудио останавливается, если открытый Player не требует живые аудиоданные для своих секций.
+
+    - hideWhenNoMediaPlaying: false
+      $name: Hide when no media is playing
+      $name:ru-RU: Скрывать, когда ничего не играет
+      $description: Automatically hides the desktop visualizer while no media session is actively playing.
+      $description:ru-RU: Автоматически скрывает визуализатор рабочего стола, пока ни одна медиасессия не воспроизводится.
+
+    - hideWhenTargetApplicationNotRunning: false
+      $name: Hide when target application is not running
+      $name:ru-RU: Скрывать, когда целевое приложение не запущено
+      $description: In Selected applications mode, automatically hides the desktop visualizer while none of the configured executable names is running.
+      $description:ru-RU: В режиме «Выбранные приложения» автоматически скрывает визуализатор, пока ни одно из указанных .exe не запущено.
+
+    - barCount: 32
       $name: Bar count
       $name:ru-RU: Количество полос
       $description: Number of bars displayed by the visualizer (0-256)
       $description:ru-RU: Количество полос, отображаемых визуализатором (0-256)
 
-    - barWidth: 6
+    - barWidth: 7
       $name: Bar width
       $name:ru-RU: Ширина полос
       $description: Controls the width of each bar
@@ -204,17 +321,17 @@ Please report bugs and feature requests through the repository issue tracker: [R
           $description:ru-RU: Задаёт начальный угол кругового визуализатора. -90° = сверху, 0° = справа, 90° = снизу
       $name: Circular type settings
       $name:ru-RU: Настройки кругового визуализатора
-    - positionX: 50
+    - positionX: 800
       $name: X position (px)
       $description: Adjusts the horizontal position of the visualizer
       $name:ru-RU: X позиция
       $description:ru-RU: Изменяет горизонтальное положение визуализатора
-    - positionY: 900
+    - positionY: 1000
       $name: Y position (px)
       $description: Adjusts the vertical position of the visualizer
       $name:ru-RU: Y позиция
       $description:ru-RU: Изменяет вертикальное положение визуализатора
-    - maxBarHeight: 200
+    - maxBarHeight: 150
       $name: Max bar height
       $description: Sets the maximum height the bars can reach
       $name:ru-RU: Максимальная высота полосы
@@ -231,6 +348,20 @@ Please report bugs and feature requests through the repository issue tracker: [R
   $description:ru-RU: Настройка расположения, положения и геометрии аудиовизуализатора
 
 - Performance:
+    - targetMonitor: 0
+      $name: Target monitor
+      $name:ru-RU: Монитор визуализации
+      $description: >-
+        Selects which monitor receives the visualizer and all desktop widgets.
+        0 = all monitors (higher CPU/GPU usage because the same visualizer is
+        rendered once per monitor; use only if needed). 1, 2, ... = a specific
+        monitor number.
+      $description:ru-RU: >-
+        Выбирает монитор, на котором выводятся визуализатор и все рабочие
+        виджеты. 0 = все мониторы (повышенная нагрузка на CPU/GPU,
+        поскольку визуализатор рендерится отдельно на каждом мониторе;
+        используйте только при необходимости). 1, 2, ... = конкретный монитор.
+
     - targetFps: 60
       $name: Visualizer frame rate
       $name:ru-RU: Частота кадров визуализатора
@@ -250,37 +381,37 @@ Please report bugs and feature requests through the repository issue tracker: [R
         - audioSource: system
           $name: Audio source
           $name:ru-RU: Источник аудио
-          $description: Select whether the visualizer listens to the whole system or one application
-          $description:ru-RU: Выберите, слушать ли всю систему или только одно приложение
+          $description: Select whether the visualizer listens to the whole system or selected applications
+          $description:ru-RU: Выберите, слушать ли всю систему или выбранные приложения
           $options:
             - system: Whole system
-            - application: Selected application
+            - application: Selected applications
           $options:ru-RU:
             - system: Вся система
-            - application: Выбранное приложение
+            - application: Выбранные приложения
 
         - audioApplicationName: ""
-          $name: Application executable
-          $name:ru-RU: Исполняемый файл приложения
-          $description: Executable name, for example Spotify.exe
-          $description:ru-RU: Имя .exe, например Spotify.exe
+          $name: Selected application executable(s)
+          $name:ru-RU: Исполняемый файл(ы) выбранных приложений
+          $description: Used when Audio source is set to Selected applications. One or more executable names separated by comma, semicolon, slash, pipe, or whitespace, for example Spotify.exe, Discord.exe
+          $description:ru-RU: Используется в режиме «Выбранные приложения». Одно или несколько имён .exe, разделённых запятой, точкой с запятой, слэшем, вертикальной чертой или пробелом, например Spotify.exe, Discord.exe
       $name: Audio source
       $name:ru-RU: Источник аудио
 
-    - sensitivity: 150
+    - sensitivity: 65
       $name: Sensitivity
       $name:ru-RU: Чувствительность
       $description: Controls how strongly the visualizer reacts to audio (0-300)
       $description:ru-RU: Определяет, насколько сильно визуализатор реагирует на звук (0-300)
 
     - AutoGain:
-        - autoGainEnabled: true
+        - autoGainEnabled: false
           $name: Auto-Gain
           $name:ru-RU: Автонормализация
           $description: Automatically adjusts the audio level for a more consistent response
           $description:ru-RU: Автоматически регулирует уровень сигнала для более стабильной реакции
 
-        - autoGainStrength: 50
+        - autoGainStrength: 90
           $name: Auto-Gain strength
           $name:ru-RU: Сила автонормализации
           $description: Controls how strongly automatic gain adjusts the audio level (0-100)
@@ -295,13 +426,13 @@ Please report bugs and feature requests through the repository issue tracker: [R
         - attackSpeed: 40
           $name: Attack speed
           $name:ru-RU: Скорость атаки
-          $description: Controls how quickly the bars rise in response to louder audio (0-100)
+          $description: Controls the attack response. The value is frame-rate independent and preserves the same time response across different refresh rates (0-100)
           $description:ru-RU: Определяет, насколько быстро полосы поднимаются в ответ на усиление звука (0-100)
 
         - decaySpeed: 16
           $name: Decay speed
           $name:ru-RU: Скорость затухания
-          $description: Controls how quickly the bars return toward their resting height (0-100)
+          $description: Controls the decay response. The value is frame-rate independent and preserves the same time response across different refresh rates (0-100)
           $description:ru-RU: Определяет, насколько быстро полосы возвращаются к высоте покоя (0-100)
 
         - cavaSmoothingEnabled: false
@@ -372,7 +503,7 @@ Please report bugs and feature requests through the repository issue tracker: [R
           $description: Controls the gap between individual square segments (px)
           $description:ru-RU: Определяет расстояние между отдельными квадратными сегментами (px)
 
-        - segmentHeight: 0
+        - segmentHeight: 5
           $name: Segment height
           $name:ru-RU: Высота сегментов
           $description: Controls the height of each square segment (px). 0 = bar width
@@ -394,7 +525,13 @@ Please report bugs and feature requests through the repository issue tracker: [R
       $name:ru-RU: Стиль
 
     - Colors:
-        - colorMode: dynamic_acrylic
+        - animateAlbumAccent: true
+          $name: Animate album accent
+          $name:ru-RU: Анимировать акцент обложки
+          $description: Smoothly transitions album-derived colors to the new cover palette over 300 ms.
+          $description:ru-RU: Плавно переводит все цвета, полученные из обложки, в новую палитру за 300 мс.
+
+        - colorMode: solid
           $name: Color mode
           $name:ru-RU: Цветовой режим
           $description: Selects how the visualizer colors are generated
@@ -510,13 +647,13 @@ Please report bugs and feature requests through the repository issue tracker: [R
       $name:ru-RU: Прозрачность
 
     - Background:
-        - backgroundEnabled: false
+        - backgroundEnabled: true
           $name: Visualizer background
           $name:ru-RU: Фон визуализатора
           $description: Enables or disables the visualizer background
           $description:ru-RU: Включает или выключает фон визуализатора
 
-        - backgroundMode: solid
+        - backgroundMode: blur
           $name: Background mode
           $name:ru-RU: Режим фона
           $description: Selects the visualizer background mode
@@ -653,11 +790,11 @@ Please report bugs and feature requests through the repository issue tracker: [R
         - collapse: Свернуть до названия
         - hide: Скрывать виджет
 
-    - unavailableText: "N/A"
+    - unavailableText: ""
       $name: Fallback
       $name:ru-RU: Текст-заглушка
-      $description: "Text shown when the current track has no lyrics ( Default: N/A )"
-      $description:ru-RU: "Текст, отображаемый если для текущего трека нет текста песни ( По умолчанию: N/A )"
+      $description: "Text shown when the current track has no lyrics. Leave empty to show a random emoticon."
+      $description:ru-RU: "Текст, отображаемый если для текущего трека нет текста песни. Оставьте пустым, чтобы показывать случайный эмотикон."
 
     - showArtist: true
       $name: Show artist
@@ -802,6 +939,42 @@ Please report bugs and feature requests through the repository issue tracker: [R
       $description: Wraps the highlighted lyric line onto multiple vertical lines when it does not fit in the available width
       $description:ru-RU: Переносит выделенную текущую строку на несколько строк по вертикали, если она не помещается по ширине
 
+    - useLocalLrcFiles: true
+      $name: Use local LRC files
+      $name:ru-RU: Использовать локальные LRC-файлы
+      $description: >-
+        When enabled, lyrics are loaded strictly from local .lrc files in the folder below. Network and LRCLIB lookups are completely disabled.
+        Why use this: offline playback, rare/custom tracks missing from the online database, or manual timing adjustments.
+        File placement and naming priority:
+        1. "Artist - Title.lrc" (recommended)
+        2. "Title.lrc" (fallback)
+        How to easily create a .lrc file using LRCGET: ( https://github.com/tranxuanthang/lrcget/releases )
+        1. Open LRCGET and switch to the "LRCLIB" tab.
+        2. Search for your track, click preview icon, and press "copy".
+        3. Paste into notepad and save as "Artist - Title.lrc" inside your chosen folder (select "All Files" type in Notepad to prevent saving as .lrc.txt).
+        If disabled, local files are ignored and standard online LRCLIB search is used.
+      $description:ru-RU: >-
+        При включении текст загружается только из локальных .lrc-файлов в указанной ниже папке. Автоматический онлайн-поиск через LRCLIB полностью отключается.
+        Зачем это нужно: Работает без интернета, редкие треки, отсутствующие в онлайн-базе, или ручная настройка таймингов.
+        Размещение и приоритет именования файлов:
+        1. "Исполнитель - Название.lrc" (рекомендуется)
+        2. "Название.lrc" (резервный вариант)
+        Как быстро получить .lrc-файл через LRCGET: ( https://github.com/tranxuanthang/lrcget/releases )
+        1. Откройте LRCGET и перейдите во вкладку "LRCLIB".
+        2. Найдите нужный трек, нажмите просмотра и нажмите "copy".
+        3. Вставьте текст в Блокнот и сохраните как "Исполнитель - Название.lrc" в вашу папку (обязательно выберите тип "Все файлы (*.*)", чтобы файл не сохранился как .lrc.txt).
+        Если настройка выключена, локальные файлы игнорируются и используется обычный поиск через LRCLIB.
+
+    - localLrcFolder: ""
+      $name: Local LRC folder
+      $name:ru-RU: Папка локальных LRC-файлов
+      $description: >-
+        Full path to the folder containing your .lrc files, for example C:\Music\Lyrics.
+        With "Use local LRC files" enabled, the mod searches this folder only.
+      $description:ru-RU: >-
+        Полный путь к папке с вашими .lrc-файлами, например C:\Music\Lyrics.
+        При включённой настройке «Использовать локальные LRC-файлы» мод ищет тексты только в этой папке.
+
     - opacity: 90
       $name: Opacity
       $name:ru-RU: Прозрачность
@@ -900,12 +1073,366 @@ Please report bugs and feature requests through the repository issue tracker: [R
       $description: Opacity of the background border (0-100)
       $description:ru-RU: Прозрачность рамки вокруг фона (0-100)
 
-  $name: Lyrics ( Beta )
-  $name:ru-RU: Текст песни ( Бета )
+  $name: Lyrics
+  $name:ru-RU: Текст песни
   $description: Displays lyrics for the currently playing track
   $description:ru-RU: Показывает текст текущего трека
 
+- AlbumWidget:
+    - enabled: false
+      $name: Album widget enabled
+      $name:ru-RU: Включить Album Widget
+      $description: Shows album artwork in the third desktop widget. ( High CPU usage )
+      $description:ru-RU: Показывает обложку альбома в третьем виджете рабочего стола. ( Высокая нагрузка на ЦП )
+
+    - attachment: separate
+      $name: Album widget attachment
+      $name:ru-RU: Привязка Album Widget
+      $description: Controls whether the album widget is independent or attached to the lyrics/visualizer.
+      $description:ru-RU: Определяет, является ли Album Widget отдельным или прикреплённым к lyrics/visualizer.
+      $options:
+        - separate: Separate
+        - lyrics: Attached to lyrics
+        - visualizer: Attached to visualizer
+      $options:ru-RU:
+        - separate: Отдельный
+        - lyrics: Прикреплён к visualizer
+        - visualizer: Прикреплён к visualizer
+
+    - width: 180
+      $name: Album widget width
+      $name:ru-RU: Ширина Album Widget
+
+    - height: 180
+      $name: Album widget height
+      $name:ru-RU: Высота Album Widget
+
+    - quality: standard
+      $name: Album image quality
+      $name:ru-RU: Качество изображения Album Widget
+      $description: Controls the resampling quality used when the album artwork cache is rebuilt. Lower values use less CPU when the artwork, size, or settings change.
+      $description:ru-RU: Управляет качеством ресэмплинга при пересоздании кэша обложки. Низкие значения используют меньше ЦП при смене обложки, размера или настроек.
+      $options:
+        - fastest: Fastest
+        - standard: Standard
+        - high: High
+        - highest: Highest
+      $options:ru-RU:
+        - fastest: Максимально быстро
+        - standard: Стандарт
+        - high: Высокое
+        - highest: Максимальное
+
+    - cornerRadius: 14
+      $name: Album widget corner radius
+      $name:ru-RU: Скругление Album Widget
+
+    - opacity: 88
+      $name: Album widget opacity
+      $name:ru-RU: Прозрачность Album Widget
+
+    - gap: 12
+      $name: Album widget attachment gap
+      $name:ru-RU: Отступ привязки Album Widget
+      $description: Minimum clear space between the album widget and its anchor.
+      $description:ru-RU: Минимальное свободное расстояние между Album Widget и привязанным виджетом.
+
+    - maxDistance: 180
+      $name: Album widget max attachment distance
+      $name:ru-RU: Максимальная дистанция привязки Album Widget
+      $description: Maximum allowed distance from the attached widget.
+      $description:ru-RU: Максимальное разрешённое расстояние от привязанного виджета.
+
+- PlayerMenu:
+    - showMediaEqTrayButton: true
+      $name: Show Player tray button
+      $name:ru-RU: Показывать кнопку Player в трее
+
+    - trayButtonPosition: left_of_language
+      $name: Player tray button position (Windows 11 only)
+      $name:ru-RU: Положение кнопки Player в трее (только Windows 11)
+      $description: Changes where the Player button is inserted into the Windows 11 system tray. This setting has no effect on Windows 10.
+      $description:ru-RU: Изменяет положение кнопки Player в системном трее Windows 11. В Windows 10 эта настройка не действует.
+      $options:
+        - tray_left: Tray left (left of Show hidden icons)
+        - tray_right: Tray right (right of Show desktop)
+        - left_of_show_desktop: Left of Show desktop
+        - right_of_sound_output: Right of sound output
+        - left_of_sound_output: Left of sound output
+        - right_of_language: Right of language selector
+        - left_of_language: Left of language selector
+        - right_of_show_hidden_icons: Right of Show hidden icons
+      $options:ru-RU:
+        - tray_left: В начале трея (слева от «Показать скрытые значки»)
+        - tray_right: В конце трея (справа от «Показать рабочий стол»)
+        - left_of_show_desktop: Слева от «Показать рабочий стол»
+        - right_of_sound_output: Справа от управления звуком
+        - left_of_sound_output: Слева от управления звуком
+        - right_of_language: Справа от смены языка
+        - left_of_language: Слева от смены языка
+        - right_of_show_hidden_icons: Справа от «Показать скрытые значки»
+
+    - TrayMouseActions:
+        - trayLeftClickAction: toggle_player
+          $name: Left click
+          $name:ru-RU: Левый клик
+          $description: Action for a left click on the Player tray icon.
+          $description:ru-RU: Действие при нажатии левой кнопкой на иконку Player в трее.
+          $options:
+            - none: Do nothing
+            - toggle_player: Open menu
+            - context_menu: Show context menu
+            - open_source: Open current media app
+            - toggle_mute: Mute / unmute system audio
+            - volume_up: Increase system volume (+5%)
+            - volume_down: Decrease system volume (-5%)
+            - play_pause: Play / Pause
+            - toggle_shuffle: Toggle shuffle
+            - toggle_repeat: Toggle repeat
+            - previous_track: Previous track
+            - next_track: Next track
+            - rewind_5: Rewind 5 seconds
+            - forward_5: Forward 5 seconds
+            - open_sound_settings: Open Windows sound settings
+            - open_volume_mixer: Open Volume Mixer
+          $options:ru-RU:
+            - none: Ничего не делать
+            - toggle_player: Открыть меню
+            - context_menu: Показать контекстное меню
+            - open_source: Открыть приложение с текущим медиа
+            - toggle_mute: Включить / выключить звук системы
+            - volume_up: Увеличить громкость системы (+5%)
+            - volume_down: Уменьшить громкость системы (-5%)
+            - play_pause: Воспроизведение / пауза
+            - toggle_shuffle: Переключить случайный порядок
+            - toggle_repeat: Переключить повтор
+            - previous_track: Предыдущий трек
+            - next_track: Следующий трек
+            - rewind_5: Назад на 5 секунд
+            - forward_5: Вперёд на 5 секунд
+            - open_sound_settings: Открыть параметры звука Windows
+            - open_volume_mixer: Открыть микшер громкости
+
+        - trayMiddleClickAction: play_pause
+          $name: Middle click
+          $name:ru-RU: Средний клик
+          $description: Action for a middle click on the Player tray icon.
+          $description:ru-RU: Действие при нажатии средней кнопкой на иконку Player в трее.
+          $options:
+            - none: Do nothing
+            - toggle_player: Open menu
+            - context_menu: Show context menu
+            - open_source: Open current media app
+            - toggle_mute: Mute / unmute system audio
+            - volume_up: Increase system volume (+5%)
+            - volume_down: Decrease system volume (-5%)
+            - play_pause: Play / Pause
+            - toggle_shuffle: Toggle shuffle
+            - toggle_repeat: Toggle repeat
+            - previous_track: Previous track
+            - next_track: Next track
+            - rewind_5: Rewind 5 seconds
+            - forward_5: Forward 5 seconds
+            - open_sound_settings: Open Windows sound settings
+            - open_volume_mixer: Open Volume Mixer
+          $options:ru-RU:
+            - none: Ничего не делать
+            - toggle_player: Открыть меню
+            - context_menu: Показать контекстное меню
+            - open_source: Открыть приложение с текущим медиа
+            - toggle_mute: Включить / выключить звук системы
+            - volume_up: Увеличить громкость системы (+5%)
+            - volume_down: Уменьшить громкость системы (-5%)
+            - play_pause: Воспроизведение / пауза
+            - toggle_shuffle: Переключить случайный порядок
+            - toggle_repeat: Переключить повтор
+            - previous_track: Предыдущий трек
+            - next_track: Следующий трек
+            - rewind_5: Назад на 5 секунд
+            - forward_5: Вперёд на 5 секунд
+            - open_sound_settings: Открыть параметры звука Windows
+            - open_volume_mixer: Открыть микшер громкости
+
+        - trayRightClickAction: toggle_player
+          $name: Right click
+          $name:ru-RU: Правый клик
+          $description: Action for a right click on the Player tray icon.
+          $description:ru-RU: Действие при нажатии правой кнопкой на иконку Player в трее.
+          $options:
+            - none: Do nothing
+            - toggle_player: Open menu
+            - context_menu: Show context menu
+            - open_source: Open current media app
+            - toggle_mute: Mute / unmute system audio
+            - volume_up: Increase system volume (+5%)
+            - volume_down: Decrease system volume (-5%)
+            - play_pause: Play / Pause
+            - toggle_shuffle: Toggle shuffle
+            - toggle_repeat: Toggle repeat
+            - previous_track: Previous track
+            - next_track: Next track
+            - rewind_5: Rewind 5 seconds
+            - forward_5: Forward 5 seconds
+            - open_sound_settings: Open Windows sound settings
+            - open_volume_mixer: Open Volume Mixer
+          $options:ru-RU:
+            - none: Ничего не делать
+            - toggle_player: Открыть меню
+            - context_menu: Показать контекстное меню
+            - open_source: Открыть приложение с текущим медиа
+            - toggle_mute: Включить / выключить звук системы
+            - volume_up: Увеличить громкость системы (+5%)
+            - volume_down: Уменьшить громкость системы (-5%)
+            - play_pause: Воспроизведение / пауза
+            - toggle_shuffle: Переключить случайный порядок
+            - toggle_repeat: Переключить повтор
+            - previous_track: Предыдущий трек
+            - next_track: Следующий трек
+            - rewind_5: Назад на 5 секунд
+            - forward_5: Вперёд на 5 секунд
+            - open_sound_settings: Открыть параметры звука Windows
+            - open_volume_mixer: Открыть микшер громкости
+
+        - trayWheelUpAction: volume_up
+          $name: Scroll up
+          $name:ru-RU: Колесо вверх
+          $description: Action for scrolling up over the Player tray icon.
+          $description:ru-RU: Действие при прокрутке колеса вверх над иконкой Player в трее.
+          $options:
+            - none: Do nothing
+            - toggle_player: Open menu
+            - context_menu: Show context menu
+            - open_source: Open current media app
+            - toggle_mute: Mute / unmute system audio
+            - volume_up: Increase system volume (+5%)
+            - volume_down: Decrease system volume (-5%)
+            - play_pause: Play / Pause
+            - toggle_shuffle: Toggle shuffle
+            - toggle_repeat: Toggle repeat
+            - previous_track: Previous track
+            - next_track: Next track
+            - rewind_5: Rewind 5 seconds
+            - forward_5: Forward 5 seconds
+            - open_sound_settings: Open Windows sound settings
+            - open_volume_mixer: Open Volume Mixer
+          $options:ru-RU:
+            - none: Ничего не делать
+            - toggle_player: Открыть меню
+            - context_menu: Показать контекстное меню
+            - open_source: Открыть приложение с текущим медиа
+            - toggle_mute: Включить / выключить звук системы
+            - volume_up: Увеличить громкость системы (+5%)
+            - volume_down: Уменьшить громкость системы (-5%)
+            - play_pause: Воспроизведение / пауза
+            - toggle_shuffle: Переключить случайный порядок
+            - toggle_repeat: Переключить повтор
+            - previous_track: Предыдущий трек
+            - next_track: Следующий трек
+            - rewind_5: Назад на 5 секунд
+            - forward_5: Вперёд на 5 секунд
+            - open_sound_settings: Открыть параметры звука Windows
+            - open_volume_mixer: Открыть микшер громкости
+
+        - trayWheelDownAction: volume_down
+          $name: Scroll down
+          $name:ru-RU: Колесо вниз
+          $description: Action for scrolling down over the Player tray icon.
+          $description:ru-RU: Действие при прокрутке колеса вниз над иконкой Player в трее.
+          $options:
+            - none: Do nothing
+            - toggle_player: Open menu
+            - context_menu: Show context menu
+            - open_source: Open current media app
+            - toggle_mute: Mute / unmute system audio
+            - volume_up: Increase system volume (+5%)
+            - volume_down: Decrease system volume (-5%)
+            - play_pause: Play / Pause
+            - toggle_shuffle: Toggle shuffle
+            - toggle_repeat: Toggle repeat
+            - previous_track: Previous track
+            - next_track: Next track
+            - rewind_5: Rewind 5 seconds
+            - forward_5: Forward 5 seconds
+            - open_sound_settings: Open Windows sound settings
+            - open_volume_mixer: Open Volume Mixer
+          $options:ru-RU:
+            - none: Ничего не делать
+            - toggle_player: Открыть меню
+            - context_menu: Показать контекстное меню
+            - open_source: Открыть приложение с текущим медиа
+            - toggle_mute: Включить / выключить звук системы
+            - volume_up: Увеличить громкость системы (+5%)
+            - volume_down: Уменьшить громкость системы (-5%)
+            - play_pause: Воспроизведение / пауза
+            - toggle_shuffle: Переключить случайный порядок
+            - toggle_repeat: Переключить повтор
+            - previous_track: Предыдущий трек
+            - next_track: Следующий трек
+            - rewind_5: Назад на 5 секунд
+            - forward_5: Вперёд на 5 секунд
+            - open_sound_settings: Открыть параметры звука Windows
+            - open_volume_mixer: Открыть микшер громкости
+      $name: Tray icon mouse actions
+      $name:ru-RU: Действия мыши на иконке в трее
+
+    - playerPopupStyle: system
+      $name: Player popup style
+      $name:ru-RU: Стиль окна Player
+      $options:
+        - "system": System default
+        - "amethyst": Sakura
+        - "ocean": Ocean
+        - "sakura": Amethyst
+        - "forest": Forest
+        - "sunset": Sunset
+        - "ember": Ember
+        - "neon": Velvet Dusk
+        - "terminal": Terminal
+        - "graphite": Graphite
+        - "hazard": Arctic Frost
+      $options:ru-RU:
+        - "system": Системный
+        - "amethyst": Сакура
+        - "ocean": Океан
+        - "sakura": Аметист
+        - "forest": Лес
+        - "sunset": Закат
+        - "ember": Уголёк
+        - "neon": Бархатные сумерки
+        - "terminal": Терминал
+        - "graphite": Графит
+        - "hazard": Арктический мороз
+
+  $name: Player Menu
+  $name:ru-RU: Меню Player
+
 - Advanced:
+    - debugMode: false
+      $name: Debug mode
+      $name:ru-RU: Режим отладки
+
+    - desktopPlacement: behind_icons_transparent
+      $name: Desktop placement
+      $name:ru-RU: Размещение на рабочем столе
+      $description: >-
+        Where the visualizer sits relative to the desktop icons.
+        "Behind icons, opaque layer" uses an opaque layer on Windows 11 24H2 and newer.
+        "Behind icons, transparent" is an experimental alternative for Windows 11 24H2 and newer.
+        "Above icons" is the original placement and works everywhere.
+      $description:ru-RU: >-
+        Где находится визуализатор относительно значков рабочего стола.
+        "За значками, непрозрачный слой" использует непрозрачный слой в Windows 11 24H2 и новее.
+        "За значками, прозрачно" — экспериментальный вариант для Windows 11 24H2 и новее.
+        "Поверх значков" — исходное размещение, работает везде.
+      $options:
+        - "behind_icons_opaque": Behind icons, opaque layer (Windows 11 24H2+)
+        - "behind_icons_transparent": Behind icons, transparent (experimental, Windows 11 24H2+)
+        - "above_icons": Above icons (original)
+      $options:ru-RU:
+        - "behind_icons_opaque": За значками, непрозрачный слой (Windows 11 24H2+)
+        - "behind_icons_transparent": За значками, прозрачно (эксперимент, Windows 11 24H2+)
+        - "above_icons": Поверх значков (исходный вариант)
+
     - ForegroundImage:
         - imagePath: ""
           $name: Foreground plane image path (PNG)
@@ -970,23 +1497,34 @@ Please report bugs and feature requests through the repository issue tracker: [R
 
   $name: Advanced
   $name:ru-RU: Дополнительно
+
+
 */
+
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
+#include <shellapi.h>
 #undef GetCurrentTime
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Media.h>
 #include <winrt/Windows.Media.Control.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <mmdeviceapi.h>
+#include <endpointvolume.h>
 #include <audiopolicy.h>
 #include <audioclient.h>
 #include <tlhelp32.h>
 #include <ksmedia.h>
 #include <gdiplus.h>
 #include <dwmapi.h>
+#include <d3d11.h>
+#include <d2d1_1.h>
+#include <dxgi1_2.h>
+#include <dcomp.h>
+#include <shobjidl.h>
 #include <windhawk_utils.h>
 #include <windhawk_api.h>
 #include <wrl.h>
@@ -995,6 +1533,7 @@ Please report bugs and feature requests through the repository issue tracker: [R
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 
@@ -1006,7 +1545,6 @@ enum WH_AUDIOCLIENT_ACTIVATION_TYPE : DWORD {
 
 enum WH_PROCESS_LOOPBACK_MODE : DWORD {
     WH_PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0,
-    WH_PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE = 1,
 };
 
 struct WH_AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
@@ -1032,14 +1570,18 @@ struct WH_AUDIOCLIENT_ACTIVATION_PARAMS {
 #include <chrono>
 #include <cstring>
 #include <vector>
+#include <deque>
 #include <array>
 #include <memory>
+#include <utility>
 // #include <new>
 #include <mutex>
 // #include <thread>
 #include <shared_mutex>
 #include <objidl.h>
 #include <cwctype>
+#include <climits>
+#include <random>
 
 using winrt::Windows::UI::Xaml::FrameworkElement;
 using winrt::Windows::UI::Xaml::XamlRoot;
@@ -1053,6 +1595,53 @@ using winrt::Windows::UI::Xaml::Controls::StackPanel;
 // using winrt::Windows::UI::Xaml::Controls::TextBlock;
 using winrt::Windows::UI::Xaml::Controls::ToolTip;
 // using winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutBase;
+
+// Advanced.desktopPlacement values.
+static constexpr int DESKTOP_PLACEMENT_OPAQUE = 1;       // raised desktop: opaque holder
+static constexpr int DESKTOP_PLACEMENT_TRANSPARENT = 2;  // raised desktop: DirectComposition
+static constexpr int DESKTOP_PLACEMENT_ABOVE_ICONS = 3;  // original DefView child
+
+enum EqTrayButtonPosition : int {
+    EQ_TRAY_BUTTON_POSITION_TRAY_LEFT = 0,
+    EQ_TRAY_BUTTON_POSITION_TRAY_RIGHT,
+    EQ_TRAY_BUTTON_POSITION_LEFT_OF_SHOW_DESKTOP,
+    EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SOUND_OUTPUT,
+    EQ_TRAY_BUTTON_POSITION_LEFT_OF_SOUND_OUTPUT,
+    EQ_TRAY_BUTTON_POSITION_RIGHT_OF_LANGUAGE,
+    EQ_TRAY_BUTTON_POSITION_LEFT_OF_LANGUAGE,
+    EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SHOW_HIDDEN_ICONS,
+};
+
+static constexpr int EQ_TRAY_BUTTON_POSITION_DEFAULT =
+    EQ_TRAY_BUTTON_POSITION_LEFT_OF_LANGUAGE;
+
+enum EqTrayAction : int {
+    EQ_TRAY_ACTION_NONE = 0,
+    EQ_TRAY_ACTION_OPEN_PLAYER,
+    EQ_TRAY_ACTION_TOGGLE_PLAYER,
+    EQ_TRAY_ACTION_CONTEXT_MENU,
+    EQ_TRAY_ACTION_OPEN_SOURCE,
+    EQ_TRAY_ACTION_TOGGLE_MUTE,
+    EQ_TRAY_ACTION_VOLUME_UP,
+    EQ_TRAY_ACTION_VOLUME_DOWN,
+    EQ_TRAY_ACTION_PLAY_PAUSE,
+    EQ_TRAY_ACTION_TOGGLE_SHUFFLE,
+    EQ_TRAY_ACTION_TOGGLE_REPEAT,
+    EQ_TRAY_ACTION_PREVIOUS_TRACK,
+    EQ_TRAY_ACTION_NEXT_TRACK,
+    EQ_TRAY_ACTION_REWIND_5,
+    EQ_TRAY_ACTION_FORWARD_5,
+    EQ_TRAY_ACTION_OPEN_SOUND_SETTINGS,
+    EQ_TRAY_ACTION_OPEN_VOLUME_MIXER,
+};
+
+enum EqTrayGesture : int {
+    EQ_TRAY_GESTURE_LEFT = 0,
+    EQ_TRAY_GESTURE_MIDDLE,
+    EQ_TRAY_GESTURE_RIGHT,
+    EQ_TRAY_GESTURE_WHEEL_UP,
+    EQ_TRAY_GESTURE_WHEEL_DOWN,
+};
 
 struct VisualizerSettings {
     int barCount;
@@ -1068,9 +1657,23 @@ struct VisualizerSettings {
     int positionY;
     int maxBarHeight;
     int minBarHeight;
+    int targetMonitor; // 0 = all monitors, 1+ = monitor index
     int targetFps;
+    bool visualizerEnabled;
+    bool hideVisualizerWhenNoMediaPlaying;
+    bool hideVisualizerWhenTargetApplicationNotRunning;
+    bool showMediaEqTrayButton;
+    int trayButtonPosition; // PlayerMenu.trayButtonPosition (Windows 11 only)
+    int trayLeftClickAction;
+    int trayMiddleClickAction;
+    int trayRightClickAction;
+    int trayWheelUpAction;
+    int trayWheelDownAction;
+    bool debugMode; // Advanced.debugMode
+    int playerPopupStyle; // PlayerMenu.playerPopupStyle
+    int desktopPlacement; // DESKTOP_PLACEMENT_* (Advanced.desktopPlacement)
     int sensitivity;
-    int audioSource; // 0 = system, 1 = application
+    int audioSource; // 0 = whole system, 1 = selected applications
     std::wstring audioApplicationName;
     int autoGainEnabled;
     int autoGainStrength;
@@ -1142,6 +1745,8 @@ struct VisualizerSettings {
     int lyricsLinesAbove;
     int lyricsLinesBelow;
     bool lyricsLongLineWrapEnabled;
+    bool lyricsUseLocalLrcFiles;
+    std::wstring lyricsLocalLrcFolder;
     int lyricsOpacity;
     bool lyricsBackgroundEnabled;
     int lyricsBackgroundMode; // 0 = solid, 1 = gradient, 2 = album, 3 = album gradient
@@ -1155,6 +1760,17 @@ struct VisualizerSettings {
     int lyricsBorderOpacity;
     DWORD lyricsBorderColor1;
     DWORD lyricsBorderColor2;
+
+    // Third desktop widget: album artwork.
+    bool albumWidgetEnabled;
+    int albumWidgetAttachment; // 0 = separate, 1 = lyrics, 2 = visualizer
+    int albumWidgetWidth;
+    int albumWidgetHeight;
+    int albumWidgetQuality;
+    int albumWidgetCornerRadius;
+    int albumWidgetOpacity;
+    int albumWidgetGap;
+    int albumWidgetMaxDistance;
 } g_settings{};
 
 struct AlbumPaletteGdi {
@@ -1166,8 +1782,186 @@ static AlbumPaletteGdi g_albumPalette{};
 static std::mutex g_albumPaletteMutex;
 static size_t g_albumPaletteHash = 0;
 
+// Album-art bytes are produced by the same media-session worker that already
+// supplies the album-derived colors. The actual GDI+ image is decoded lazily
+// on the overlay thread, so no GDI+ image object crosses thread boundaries.
+static std::mutex g_albumArtworkMutex;
+static std::vector<BYTE> g_albumArtworkBytes;
+static size_t g_albumArtworkHash = 0;
+static size_t g_albumArtworkLoadedHash = 0;
+static Gdiplus::Bitmap* g_albumArtworkBitmap = nullptr;
+static IStream* g_albumArtworkStream = nullptr;
+
+// The artwork and album palette only change when media metadata changes.
+// Revisions let the render loop detect changes without taking the artwork/palette
+// mutexes on every frame.
+static std::atomic<size_t> g_albumArtworkRevision{0};
+static std::atomic<size_t> g_albumPaletteRevision{0};
+static std::atomic<DWORD> g_albumPalettePrimaryFast{RGB(18, 18, 18)};
+static std::atomic<DWORD> g_albumPaletteSecondaryFast{RGB(45, 45, 45)};
+static std::atomic<bool> g_animateAlbumAccent{true};
+
+// Shared by every album-derived color consumer (visualizer, widget backgrounds,
+// borders, lyrics and the Player/Disk palette). Keeping the transition here means
+// all of them observe the same palette animation rather than animating separately.
+struct AlbumPaletteAnimationState {
+    DWORD fromPrimary = RGB(18, 18, 18);
+    DWORD fromSecondary = RGB(45, 45, 45);
+    DWORD toPrimary = RGB(18, 18, 18);
+    DWORD toSecondary = RGB(45, 45, 45);
+    std::chrono::steady_clock::time_point started{};
+    // The initial palette is the legacy fallback. Treat it as an established
+    // palette so the first real cover can transition from it as well.
+    bool initialized = true;
+};
+
+static std::mutex g_albumPaletteAnimationMutex;
+static AlbumPaletteAnimationState g_albumPaletteAnimation{};
+static void WakeOverlayForAlbumMediaChange();
+static void WakeEqPopupForAlbumMediaChange();
+
+static DWORD InterpolateAlbumPaletteColor(DWORD from, DWORD to, float t) {
+    auto channel = [t](BYTE a, BYTE b) -> BYTE {
+        const float value = static_cast<float>(a) +
+            (static_cast<float>(b) - static_cast<float>(a)) * t;
+        return static_cast<BYTE>(std::clamp(
+            static_cast<int>(std::lround(value)), 0, 255));
+    };
+    return RGB(
+        channel(GetRValue(from), GetRValue(to)),
+        channel(GetGValue(from), GetGValue(to)),
+        channel(GetBValue(from), GetBValue(to)));
+}
+
+static DWORD EvaluateAlbumPaletteAnimationColorLocked(
+    bool secondary, std::chrono::steady_clock::time_point now) {
+    const DWORD from = secondary
+        ? g_albumPaletteAnimation.fromSecondary
+        : g_albumPaletteAnimation.fromPrimary;
+    const DWORD to = secondary
+        ? g_albumPaletteAnimation.toSecondary
+        : g_albumPaletteAnimation.toPrimary;
+
+    if (!g_albumPaletteAnimation.initialized)
+        return to;
+
+    const float elapsedMs = std::chrono::duration<float, std::milli>(
+        now - g_albumPaletteAnimation.started).count();
+    const float linearT = std::clamp(elapsedMs / 300.0f, 0.0f, 1.0f);
+    if (linearT >= 1.0f)
+        return to;
+
+    // Smoothstep easing avoids a visible start/stop when the cover changes.
+    const float t = linearT * linearT * (3.0f - 2.0f * linearT);
+    return InterpolateAlbumPaletteColor(from, to, t);
+}
+
+static void SetAlbumPaletteAnimationTarget(DWORD primary, DWORD secondary) {
+    const auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(g_albumPaletteAnimationMutex);
+        auto& animation = g_albumPaletteAnimation;
+
+        if (!animation.initialized) {
+            animation.fromPrimary = animation.toPrimary = primary;
+            animation.fromSecondary = animation.toSecondary = secondary;
+            animation.started = now;
+            animation.initialized = true;
+        } else if (g_animateAlbumAccent.load(std::memory_order_acquire)) {
+            // If another cover arrives mid-transition, continue smoothly from
+            // the currently displayed colors instead of jumping back to the old source.
+            animation.fromPrimary =
+                EvaluateAlbumPaletteAnimationColorLocked(false, now);
+            animation.fromSecondary =
+                EvaluateAlbumPaletteAnimationColorLocked(true, now);
+            animation.toPrimary = primary;
+            animation.toSecondary = secondary;
+            animation.started = now;
+        } else {
+            animation.fromPrimary = animation.toPrimary = primary;
+            animation.fromSecondary = animation.toSecondary = secondary;
+            animation.started = now;
+        }
+    }
+
+    // Wake the overlay thread so an idle visualizer doesn't miss most of this
+    // short transition before switching back to its configured render cadence.
+    WakeOverlayForAlbumMediaChange();
+}
+
+static bool IsAlbumPaletteTransitionActive() {
+    if (!g_animateAlbumAccent.load(std::memory_order_acquire))
+        return false;
+
+    std::lock_guard<std::mutex> lock(g_albumPaletteAnimationMutex);
+    const auto& animation = g_albumPaletteAnimation;
+    if (!animation.initialized ||
+        (animation.fromPrimary == animation.toPrimary &&
+         animation.fromSecondary == animation.toSecondary)) {
+        return false;
+    }
+
+    const float elapsedMs = std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - animation.started).count();
+    return elapsedMs >= 0.0f && elapsedMs < 300.0f;
+}
+
+static void SetAlbumAccentAnimationEnabled(bool enabled) {
+    const bool oldValue = g_animateAlbumAccent.exchange(
+        enabled, std::memory_order_acq_rel);
+    if (oldValue == enabled)
+        return;
+
+    // Changing the switch must not resume a stale, half-finished transition.
+    // The current target becomes the new baseline; the next cover change will
+    // animate only when the setting is enabled.
+    std::lock_guard<std::mutex> lock(g_albumPaletteAnimationMutex);
+    const DWORD primary =
+        g_albumPalettePrimaryFast.load(std::memory_order_acquire);
+    const DWORD secondary =
+        g_albumPaletteSecondaryFast.load(std::memory_order_acquire);
+    g_albumPaletteAnimation.fromPrimary =
+        g_albumPaletteAnimation.toPrimary = primary;
+    g_albumPaletteAnimation.fromSecondary =
+        g_albumPaletteAnimation.toSecondary = secondary;
+    g_albumPaletteAnimation.started = std::chrono::steady_clock::now();
+    g_albumPaletteAnimation.initialized = true;
+}
+
+// Final-size cache: expensive scaling, clipping, opacity, and borders are
+// performed only when the artwork or relevant widget settings change.
+static Gdiplus::Bitmap* g_albumWidgetCacheBitmap = nullptr;
+static size_t g_albumWidgetCacheHash = 0;
+
+// The Media & EQ Disk section is rendered on the popup thread, so keep a
+// separate decoded artwork cache instead of sharing the desktop widget's GDI+
+// bitmap across the overlay and popup threads.
+static Gdiplus::Bitmap* g_eqDiskArtworkBitmap = nullptr;
+static IStream* g_eqDiskArtworkStream = nullptr;
+static size_t g_eqDiskArtworkLoadedHash = 0;
+struct EqDiskArtworkRasterCache {
+    Gdiplus::Bitmap* bitmap = nullptr;
+    size_t sourceHash = 0;
+    Gdiplus::Bitmap* sourceBitmap = nullptr;
+};
+static EqDiskArtworkRasterCache g_eqDiskArtworkRasterCache;
+
+// Positions are persisted in Windhawk storage, but storage reads are not needed
+// in the hot render loop. Keep runtime copies and update them only on load/drag.
+static std::atomic<int> g_albumWidgetSeparateX{620};
+static std::atomic<int> g_albumWidgetSeparateY{620};
+static std::atomic<int> g_albumWidgetLyricsOffsetX{0};
+static std::atomic<int> g_albumWidgetLyricsOffsetY{0};
+static std::atomic<int> g_albumWidgetVisualizerOffsetX{0};
+static std::atomic<int> g_albumWidgetVisualizerOffsetY{0};
+
 static HANDLE g_hAlbumColorThread = nullptr;
 static HANDLE g_hAlbumColorStopEvent = nullptr;
+// Auto-reset wake event: SMTC can notify this worker as soon as media metadata
+// or the available session list changes, without increasing steady-state polling.
+static HANDLE g_hAlbumColorWakeEvent = nullptr;
+static std::atomic<size_t> g_albumSessionChangeRevision{0};
+static std::atomic<size_t> g_albumMediaPropertiesRevision{0};
 static std::atomic<bool> g_albumColorRunning{false};
 
 struct LyricsLine {
@@ -1187,14 +1981,201 @@ static ULONGLONG g_lyricsPositionAnchorTickMs = 0;
 static bool g_lyricsPlaying = false;
 static bool g_lyricsHasSynced = false;
 static bool g_lyricsAvailable = false;
+static std::atomic<bool> g_lyricsAvailableFast{false};
 static HANDLE g_hLyricsThread = nullptr;
 static HANDLE g_hLyricsStopEvent = nullptr;
 static std::atomic<bool> g_lyricsRunning{false};
+
+
+// Notification-area media player state. This is intentionally independent from
+// the optional Lyrics worker so the player remains available when Lyrics is
+// disabled (the default configuration).
+struct EqMediaState {
+    std::wstring title;
+    std::wstring artist;
+    std::wstring source;
+    std::wstring sourceAppUserModelId;
+    std::wstring trackKey;
+    double positionSeconds = 0.0;
+    double durationSeconds = 0.0;
+    double playbackRate = 1.0;
+    bool playing = false;
+    bool hasSession = false;
+};
+
+static std::mutex g_eqMediaMutex;
+static EqMediaState g_eqMediaState;
+static std::atomic<ULONGLONG> g_eqMediaMetadataRevision{1};
+static HANDLE g_hEqMediaThread = nullptr;
+static HANDLE g_hEqMediaStopEvent = nullptr;
+static HANDLE g_hEqMediaWakeEvent = nullptr;
+static std::atomic<bool> g_eqMediaRunning{false};
+
+// Layout Builder state. The runtime representation mirrors the requested
+// JSON structure:
+// { "canvas": { "w": 700, "h": 700 }, "widgets": [ ... ] }
+// Windhawk local storage exposes scalar values, so the same state is persisted
+// as individual integer fields under MediaEQ.layout.*.
+enum EqLayoutWidgetId : int {
+    EQ_LAYOUT_EQ = 0,
+    EQ_LAYOUT_PRESETS = 1,
+    EQ_LAYOUT_MEDIA = 2,
+    EQ_LAYOUT_LYRICS = 3,
+    EQ_LAYOUT_DISK = 4,
+    EQ_LAYOUT_MINI_VISUALIZER = 5,
+    EQ_LAYOUT_VOLUME = 6,
+};
+
+struct EqLayoutWidgetState {
+    int id = 0;
+    int x = 0;
+    int y = 0;
+    int w = 100;
+    int h = 100;
+    int rotation = 0;
+    bool present = false;
+    bool backgroundEnabled = true;
+    bool backgroundCircle = false;
+    int zOrder = 0;
+    // 0 = left, 1 = center, 2 = right. Used by Media and Lyrics.
+    int textAlignment = 1;
+};
+
+static constexpr int EQ_LAYOUT_CANVAS_W = 700;
+static constexpr int EQ_LAYOUT_CANVAS_H = 700;
+static constexpr int EQ_LAYOUT_GRID = 10;
+static constexpr int EQ_LAYOUT_STORAGE_VERSION = 8;
+static constexpr int EQ_LAYOUT_WIDGET_COUNT = 7;
+
+// Forward declaration used by the album-art worker before the layout helpers
+// are defined later in the file.
+static bool EqIsLayoutWidgetPresent(int id);
+
+static std::array<EqLayoutWidgetState, EQ_LAYOUT_WIDGET_COUNT> g_eqLayoutWidgets{};
+static std::array<std::atomic<bool>, EQ_LAYOUT_WIDGET_COUNT>
+    g_eqLayoutWidgetPresenceSnapshot{};
+static bool g_eqLayoutLoaded = false;
+
+// The Disk section only needs album/session polling while the Player popup is
+// actually visible. Keep this as a fast runtime flag so the album worker can
+// stay completely asleep when the popup is closed and the Disk is the only
+// feature that would otherwise keep it alive.
+static std::atomic<bool> g_eqPlayerPopupOpen{false};
+
+// Media & EQ popup placement editor. Values are stored per aspect ratio as
+// normalized placement state (0..1000). The popup center and the guide cross
+// are independent, so the popup can be moved freely in both axes.
+enum EqPopupAspectIndex : int {
+    EQ_POPUP_ASPECT_16_9 = 0,
+    EQ_POPUP_ASPECT_4_3 = 1,
+    EQ_POPUP_ASPECT_21_9 = 2,
+};
+static constexpr int EQ_POPUP_ASPECT_COUNT = 3;
+
+struct EqPopupPlacementState {
+    // Popup position is stored as an independent normalized center (0..1000).
+    // The cross is a separate placement guide and does not constrain the popup.
+    int popupCenterX = 750;
+    int popupCenterY = 750;
+    int crossX = 500;
+    int crossY = 500;
+};
+static std::array<EqPopupPlacementState, EQ_POPUP_ASPECT_COUNT>
+    g_eqPopupPlacement{};
+static int g_eqPopupPlacementAspect = EQ_POPUP_ASPECT_16_9;
+static bool g_eqPopupPlacementLoaded = false;
+
+enum EqPopupPlacementDragTarget : int {
+    EQ_POPUP_PLACEMENT_DRAG_NONE = 0,
+    EQ_POPUP_PLACEMENT_DRAG_POPUP = 1,
+    EQ_POPUP_PLACEMENT_DRAG_CROSS = 2,
+};
+static int g_eqPopupPlacementDragTarget = EQ_POPUP_PLACEMENT_DRAG_NONE;
+static int g_eqPopupPlacementDragOffsetX = 0;
+static int g_eqPopupPlacementDragOffsetY = 0;
+// Placement dragging uses the actual desktop cursor delta from the moment the
+// drag starts. This avoids mixing client coordinates, settings scroll offset,
+// and DPI scaling while the popup is being moved.
+static POINT g_eqPopupPlacementDragStartCursor{};
+static POINT g_eqPopupPlacementDragStartCenter{};
+static POINT g_eqPopupPlacementDragStartCross{};
+static int g_eqSettingsScrollOffset = 0;
+static bool g_eqSettingsScrollbarDragging = false;
+static int g_eqSettingsScrollbarDragStartY = 0;
+static int g_eqSettingsScrollbarStartOffset = 0;
+static constexpr int EQ_SETTINGS_POSITION_TOP = 640;
+static constexpr int EQ_SETTINGS_POSITION_CONTENT_HEIGHT = 1150;
+static constexpr int EQ_SETTINGS_SCROLLBAR_LEFT = 692;
+static constexpr int EQ_SETTINGS_SCROLLBAR_RIGHT = 698;
+
+static void LoadEqLayoutSettings();
+static void SaveEqLayoutSettings();
+static void LoadEqPopupPlacementSettings();
+static void SaveEqPopupPlacementSettings();
+
+enum class EqMediaCommandType : int {
+    PlayPause = 0,
+    ToggleShuffle,
+    ToggleRepeat,
+    Previous,
+    Next,
+    Rewind5,
+    Forward5,
+    Seek,
+};
+
+struct EqMediaCommand {
+    EqMediaCommandType type = EqMediaCommandType::PlayPause;
+    double seekPositionSeconds = 0.0;
+    ULONGLONG enqueuedAtMs = 0;
+};
+
+static std::mutex g_eqMediaCommandMutex;
+static std::deque<EqMediaCommand> g_eqMediaCommands;
 
 static constexpr int VIZ_FFT_SIZE = 1024;
 static constexpr int VIZ_NUM_BANDS = 32;
 static constexpr int VIZ_BANDS_MAX = 256;
 static constexpr float VIZ_PI = 3.14159265358979323846f;
+
+// FFT-derived event features. The existing 1024-point FFT already advances
+// by a 512-sample hop, so transient detection reuses those consecutive
+// spectra instead of introducing another FFT workload.
+static constexpr int VIZ_BASS_FLUX_BANDS = 6;
+static constexpr float VIZ_FLUX_BASELINE_ALPHA = 0.008f;
+static constexpr float VIZ_FLUX_DEVIATION_ALPHA = 0.020f;
+static constexpr float VIZ_FLUX_THRESHOLD_DEVIATION = 1.75f;
+static constexpr float VIZ_FLUX_THRESHOLD_RELATIVE = 0.25f;
+static constexpr float VIZ_FLUX_THRESHOLD_FLOOR = 0.00015f;
+static constexpr float VIZ_FLUX_NORMALIZE_DEVIATION = 3.5f;
+static constexpr float VIZ_FLUX_NORMALIZE_BASELINE = 0.55f;
+static constexpr float VIZ_FLUX_NORMALIZE_FLOOR = 0.00075f;
+static constexpr float VIZ_TRANSIENT_ATTACK_SECONDS = 0.012f;
+static constexpr float VIZ_TRANSIENT_DECAY_SECONDS = 0.090f;
+// Bass has its own faster detector/envelope; it is not derived from the
+// all-spectrum amplitude/transient envelope.
+static constexpr float VIZ_BASS_TRANSIENT_ATTACK_SECONDS = 0.010f;
+static constexpr float VIZ_BASS_TRANSIENT_DECAY_SECONDS = 0.075f;
+static constexpr float VIZ_BASS_TRANSIENT_TRIGGER = 0.52f;
+static constexpr ULONGLONG VIZ_BASS_TRANSIENT_COOLDOWN_MS = 140;
+
+// Beat confidence combines bass spectral novelty, instantaneous rise, bass
+// energy attack and learned onset timing. Bass loudness alone is never enough.
+static constexpr float VIZ_BEAT_CONFIDENCE_EVENT_THRESHOLD = 0.30f;
+static constexpr size_t VIZ_BEAT_INTERVAL_HISTORY_SIZE = 6;
+static constexpr ULONGLONG VIZ_BEAT_INTERVAL_MIN_MS = 220;
+static constexpr ULONGLONG VIZ_BEAT_INTERVAL_MAX_MS = 1600;
+
+// Disk uses the bass-only beat-confidence gate, separate from the generic
+// all-spectrum transient detector above.
+static constexpr float VIZ_DISK_FLUX_TRIGGER = 0.12f;
+static constexpr float VIZ_DISK_FLUX_THRESHOLD_DEVIATION = 1.15f;
+static constexpr float VIZ_DISK_FLUX_THRESHOLD_RELATIVE = 0.12f;
+static constexpr float VIZ_DISK_FLUX_NORMALIZE_DEVIATION = 2.20f;
+static constexpr float VIZ_DISK_FLUX_NORMALIZE_BASELINE = 0.40f;
+static constexpr float VIZ_DISK_FLUX_RISE_FRACTION = 0.08f;
+static constexpr ULONGLONG VIZ_DISK_FLUX_COOLDOWN_MS = 90;
+
 
 // Ten logarithmic EQ controls cover the audible range without requiring a
 // second FFT or changing the existing 32 visualizer bands.
@@ -1207,16 +2188,101 @@ static constexpr std::array<float, VIZ_EQ_BANDS> VIZ_EQ_HIGH_HZ = {
     60.0f, 120.0f, 250.0f, 500.0f, 1000.0f,
     2000.0f, 4000.0f, 8000.0f, 14000.0f, 20000.0f
 };
+// Legacy single-curve storage kept for backwards compatibility.
 static constexpr std::array<const wchar_t*, VIZ_EQ_BANDS> VIZ_EQ_STORAGE_KEYS = {
     L"customEqBand0", L"customEqBand1", L"customEqBand2", L"customEqBand3",
     L"customEqBand4", L"customEqBand5", L"customEqBand6", L"customEqBand7",
     L"customEqBand8", L"customEqBand9"
 };
-static std::array<std::atomic<float>, VIZ_EQ_BANDS> g_customEqGains{};
 
+// Persistent storage for the actual curve currently shown by the EQ. This is
+// deliberately separate from custom presets and from the old legacy curve so
+// selecting a built-in preset can never overwrite the user's current values.
+static constexpr std::array<const wchar_t*, VIZ_EQ_BANDS> VIZ_EQ_ACTIVE_STORAGE_KEYS = {
+    L"eqActiveBand0", L"eqActiveBand1", L"eqActiveBand2", L"eqActiveBand3",
+    L"eqActiveBand4", L"eqActiveBand5", L"eqActiveBand6", L"eqActiveBand7",
+    L"eqActiveBand8", L"eqActiveBand9"
+};
+static constexpr wchar_t VIZ_EQ_SELECTED_PRESET_STORAGE_KEY[] =
+    L"eqSelectedPreset";
+static constexpr int VIZ_EQ_BUILTIN_PRESET_COUNT = 8;
+static constexpr int VIZ_EQ_MAX_CUSTOM_PRESETS = 12;
+static constexpr int EQ_CUSTOM_PRESET_INDEX_BASE = 100;
+static std::array<std::array<std::atomic<float>, VIZ_EQ_BANDS>, VIZ_EQ_MAX_CUSTOM_PRESETS> g_eqCustomPresetGains{};
+static int g_eqCustomPresetCount = 0;
+static int g_eqSelectedPreset = -1;
+static std::array<std::atomic<float>, VIZ_EQ_BANDS> g_customEqGains{};
+static std::array<std::atomic<float>, VIZ_EQ_BANDS> g_eqActiveGains{};
+static bool g_eqStorageInitialized = false;
+
+// Raw/early-stage spectrum is kept separate from the visual band envelope.
+// g_audioBands remains the existing processed visual path.
+static std::atomic<float> g_rawAudioBands[VIZ_NUM_BANDS] = {};
 static std::atomic<float> g_audioBands[VIZ_NUM_BANDS] = {};
+static std::atomic<float> g_spectralFlux{0.0f};
+static std::atomic<float> g_bassSpectralFlux{0.0f};
+static std::atomic<float> g_transientScore{0.0f};
+static std::atomic<float> g_bassTransientScore{0.0f};
+static std::atomic<float> g_audioBeatConfidence{0.0f};
+static std::atomic<float> g_audioBassTransientEventStrength{0.0f};
+static std::atomic<ULONGLONG> g_audioTransientEventCounter{0};
+// Dedicated Disk Pulse event stream. The audio thread publishes events only
+// when the bass-only onset features pass the beat-confidence gate, even when
+// the generic all-spectrum transient envelope has adapted to the track.
+static std::atomic<float> g_audioDiskPulseEventStrength{0.0f};
+static std::atomic<ULONGLONG> g_audioDiskPulseEventCounter{0};
 static std::atomic<ULONGLONG> g_lastAudioUpdateMs{0};
 static float g_currentHeights[VIZ_BANDS_MAX] = {};
+
+// Media & EQ Disk section state. These values are only touched by the popup
+// thread while the popup is rendering, so no additional locking is needed.
+static float g_eqDiskAutoGainMax = 0.06f;
+static constexpr size_t EQ_DISK_MAX_PARALLEL_PULSES = 16;
+static constexpr int EQ_DISK_RING_BARS = 40;
+static std::array<ULONGLONG, EQ_DISK_MAX_PARALLEL_PULSES> g_eqDiskPulseStartMs{};
+static std::array<float, EQ_DISK_MAX_PARALLEL_PULSES> g_eqDiskPulseStrength{};
+static std::array<float, EQ_DISK_RING_BARS> g_eqDiskBarSmooth{};
+static std::array<float, EQ_DISK_RING_BARS> g_eqDiskBarGhost{};
+static constexpr int EQ_DISK_GHOST_HISTORY_SIZE = 4;
+static std::array<std::array<float, EQ_DISK_GHOST_HISTORY_SIZE>, EQ_DISK_RING_BARS>
+    g_eqDiskGhostHistoryValues{};
+static std::array<std::array<ULONGLONG, EQ_DISK_GHOST_HISTORY_SIZE>, EQ_DISK_RING_BARS>
+    g_eqDiskGhostHistoryTimes{};
+static float g_eqDiskPulseScale = 1.0f;
+static ULONGLONG g_eqDiskLastPulseEventCounter = 0;
+static ULONGLONG g_eqDiskLastSmoothMs = 0;
+static float g_eqDiskRotationDegrees = 0.0f;
+static ULONGLONG g_eqDiskLastRotationMs = 0;
+static std::wstring g_eqDiskLastTrackKey;
+
+// Where the desktop overlay windows live in Explorer's desktop hierarchy.
+// Filled in by ResolveOverlayDesktopParent (see the desktop layering notes
+// next to it) and consumed by the overlay creation and repair code.
+// How overlay frames reach the screen.
+static constexpr int OVERLAY_RENDER_ULW = 0;           // layered child, UpdateLayeredWindow (classic desktop, above icons)
+static constexpr int OVERLAY_RENDER_OPAQUE_HOLDER = 1; // raised desktop: opaque LWA holder + D3D child, wallpaper redrawn
+static constexpr int OVERLAY_RENDER_DCOMP = 2;         // raised desktop: DirectComposition premultiplied alpha
+
+struct OverlayDesktopPlacement {
+    HWND parent = nullptr;           // overlay windows (or their holders) are children of this
+    HWND insertAfter = nullptr;      // raised desktop: sibling to stack directly below
+    HWND wallpaperWorkerW = nullptr; // raised desktop: pushed to the bottom
+    bool raised = false;             // Windows 11 24H2+ "raised desktop" layout
+    bool behindIcons = false;        // overlay renders behind the desktop icons
+    int renderMode = OVERLAY_RENDER_ULW;
+};
+static OverlayDesktopPlacement g_overlayPlacement;
+static void ReassertOverlayZOrder();
+static HWND ResolveOverlayDesktopParent(int placementSetting);
+
+// Per-overlay state, parallel to g_overlayWindows (declared below).
+// g_overlayHosts[i] is the opaque holder window for OVERLAY_RENDER_OPAQUE_HOLDER
+// (nullptr otherwise); g_overlayWindows[i] is always the window rendered into.
+static std::vector<HWND> g_overlayHosts;
+static int g_overlayBuiltRenderMode = -1;
+static bool g_overlayForceRebuild = false;
+static bool OverlayPresentFrame(HWND hwnd, int w, int h);
+static bool OverlayFillWallpaperBase(HWND hwnd, int w, int h);
 
 static float g_hannWindow[VIZ_FFT_SIZE] = {};
 static float g_twiddleRe[VIZ_FFT_SIZE / 2] = {};
@@ -1224,13 +2290,231 @@ static float g_twiddleIm[VIZ_FFT_SIZE / 2] = {};
 static int g_logBinStart[VIZ_NUM_BANDS + 1] = {};
 
 static HWND g_hwndOverlay = nullptr;
+static std::vector<HWND> g_overlayWindows;
+
+// Runtime state for the desktop visualizer. The window remains as a lightweight
+// desktop host while hidden, but rendering and audio capture are suspended.
+static bool g_desktopVisualizerVisible = true;
+static ULONGLONG g_lastDesktopVisualizerVisibilityCheckMs = 0;
+static constexpr ULONGLONG kDesktopVisualizerVisibilityCheckMs = 300;
+
+// Per-overlay timestamp used by the fullscreen throttle. When only one monitor
+// is covered by a fullscreen app, that monitor can stay at 1 FPS while other
+// overlay windows continue rendering at the configured rate.
+static std::vector<ULONGLONG> g_overlayLastRenderMs;
+static RECT g_overlayScreenRect{}; // Screen-space rectangle currently being rendered.
 static HANDLE g_hOverlayThread = nullptr;
 static HANDLE g_hOverlayStopEvent = nullptr;
 static DWORD g_overlayThreadId = 0;
 static std::atomic<bool> g_overlayIdle{false};
 static std::atomic<HWND> g_overlayWakeHwnd{nullptr};
+static std::atomic<bool> g_shellServicesStarted{false};
 static constexpr UINT WM_VIZ_AUDIO_WAKE = WM_APP + 0x2A1;
+static constexpr UINT WM_VIZ_REBUILD_OVERLAYS = WM_APP + 0x2A2;
+static constexpr UINT WM_VIZ_ALBUM_MEDIA_CHANGED = WM_APP + 0x2A3;
+static constexpr UINT WM_VIZ_OPEN_LAYOUT_EDITOR = WM_APP + 0x2A4;
+static constexpr UINT WM_VIZ_DEBUG_SYNC = WM_APP + 0x2A5;
+static constexpr UINT WM_VIZ_DEBUG_SAMPLE = WM_APP + 0x2A6;
+static constexpr UINT WM_VIZ_REFRESH_SERVICES = WM_APP + 0x2A8;
+static std::atomic<bool> g_overlayServicesRefreshPending{false};
+static std::atomic<bool> g_audioCaptureRestartRequested{false};
+
+static void RequestOverlayServicesRefresh(bool restartAudioCapture = false) {
+    HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
+    if (!overlay)
+        return;
+
+    if (restartAudioCapture)
+        g_audioCaptureRestartRequested.store(true, std::memory_order_release);
+
+    bool expected = false;
+    if (!g_overlayServicesRefreshPending.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        return;
+    }
+    if (!PostMessageW(overlay, WM_VIZ_REFRESH_SERVICES, 0, 0))
+        g_overlayServicesRefreshPending.store(false, std::memory_order_release);
+}
+
+static void WakeOverlayForAlbumMediaChange() {
+    HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
+    if (overlay && IsWindow(overlay))
+        PostMessageW(overlay, WM_VIZ_ALBUM_MEDIA_CHANGED, 0, 0);
+
+    // The Player popup has its own window thread and may remain open while the
+    // desktop visualizer is hidden, so wake it independently for artwork/palette changes.
+    WakeEqPopupForAlbumMediaChange();
+}
+
 static ULONG_PTR g_gdiplusToken = 0;
+
+enum DebugPerfAction : int {
+    DEBUG_PERF_AUDIO_CAPTURE = 0,
+    DEBUG_PERF_AUDIO_FFT,
+    DEBUG_PERF_AUDIO_BANDS,
+    DEBUG_PERF_AUDIO_PROCESS,
+    DEBUG_PERF_AUDIO_PUBLISH,
+    DEBUG_PERF_RUNTIME_REFRESH,
+    DEBUG_PERF_ANIMATION,
+
+    // Visualizer frame breakdown. These scopes are nested inside the total
+    // visualizer render scope so the debug window can show where the frame
+    // time actually goes instead of treating RenderOverlay() as a black box.
+    DEBUG_PERF_VISUALIZER_RENDER,
+    DEBUG_PERF_VIZ_FRAME_SETUP,
+    DEBUG_PERF_VIZ_CLEAR,
+    DEBUG_PERF_VIZ_MAIN_PASS,
+    DEBUG_PERF_VIZ_GPU_PASS,
+    DEBUG_PERF_VIZ_MIRROR_PASS,
+    DEBUG_PERF_VIZ_FOREGROUND,
+    DEBUG_PERF_VIZ_PRESENT,
+
+    DEBUG_PERF_LYRICS_RENDER,
+    DEBUG_PERF_ALBUM_RENDER,
+    DEBUG_PERF_ALBUM_CACHE,
+
+    // Player frame breakdown.
+    DEBUG_PERF_PLAYER_RENDER,
+    DEBUG_PERF_PLAYER_STATE,
+    DEBUG_PERF_PLAYER_BUFFER,
+    DEBUG_PERF_PLAYER_CLEAR,
+    DEBUG_PERF_PLAYER_MAIN_PAGE,
+    DEBUG_PERF_PLAYER_SETTINGS_PAGE,
+    DEBUG_PERF_PLAYER_PRESENT,
+    DEBUG_PERF_PLAYER_CLEANUP,
+    DEBUG_PERF_PLAYER_MEDIA,
+    DEBUG_PERF_ALBUM_WORKER,
+    DEBUG_PERF_LYRICS_WORKER,
+    DEBUG_PERF_DESKTOP_MAINTENANCE,
+    DEBUG_PERF_TRAY_MAINTENANCE,
+    DEBUG_PERF_SCHEDULER_TICK,
+    DEBUG_PERF_COUNT,
+};
+
+static const wchar_t* DebugPerfActionName(DebugPerfAction action) {
+    switch (action) {
+    case DEBUG_PERF_AUDIO_CAPTURE: return L"audio capture";
+    case DEBUG_PERF_AUDIO_FFT: return L"FFT";
+    case DEBUG_PERF_AUDIO_BANDS: return L"32-band mapping";
+    case DEBUG_PERF_AUDIO_PROCESS: return L"audio processing";
+    case DEBUG_PERF_AUDIO_PUBLISH: return L"publish audio bands";
+    case DEBUG_PERF_RUNTIME_REFRESH: return L"runtime refresh";
+    case DEBUG_PERF_ANIMATION: return L"animation update";
+    case DEBUG_PERF_VISUALIZER_RENDER: return L"visualizer render (total)";
+    case DEBUG_PERF_VIZ_FRAME_SETUP: return L"  VIZ frame setup";
+    case DEBUG_PERF_VIZ_CLEAR: return L"  VIZ clear framebuffer";
+    case DEBUG_PERF_VIZ_MAIN_PASS: return L"  VIZ RenderVisualizerPass (CPU)";
+    case DEBUG_PERF_VIZ_GPU_PASS: return L"  VIZ GPU pass (D2D)";
+    case DEBUG_PERF_VIZ_MIRROR_PASS: return L"  VIZ mirror pass";
+    case DEBUG_PERF_VIZ_FOREGROUND: return L"  VIZ foreground";
+    case DEBUG_PERF_VIZ_PRESENT: return L"  VIZ present (ULW/DComp)";
+    case DEBUG_PERF_LYRICS_RENDER: return L"lyrics render (legacy)";
+    case DEBUG_PERF_ALBUM_RENDER: return L"album render (legacy)";
+    case DEBUG_PERF_ALBUM_CACHE: return L"album cache rebuild";
+    case DEBUG_PERF_PLAYER_RENDER: return L"Player render (total)";
+    case DEBUG_PERF_PLAYER_STATE: return L"  Player state/style";
+    case DEBUG_PERF_PLAYER_BUFFER: return L"  Player framebuffer setup";
+    case DEBUG_PERF_PLAYER_CLEAR: return L"  Player clear framebuffer";
+    case DEBUG_PERF_PLAYER_MAIN_PAGE: return L"  Player main page";
+    case DEBUG_PERF_PLAYER_SETTINGS_PAGE: return L"  Player settings page";
+    case DEBUG_PERF_PLAYER_PRESENT: return L"  Player present (ULW)";
+    case DEBUG_PERF_PLAYER_CLEANUP: return L"  Player buffer cleanup";
+    case DEBUG_PERF_PLAYER_MEDIA: return L"Player media worker";
+    case DEBUG_PERF_ALBUM_WORKER: return L"album media worker";
+    case DEBUG_PERF_LYRICS_WORKER: return L"lyrics worker";
+    case DEBUG_PERF_DESKTOP_MAINTENANCE: return L"desktop maintenance";
+    case DEBUG_PERF_TRAY_MAINTENANCE: return L"tray maintenance";
+    case DEBUG_PERF_SCHEDULER_TICK: return L"render scheduler (total)";
+    default: return L"unknown";
+    }
+}
+
+struct DebugPerfCounter {
+    std::atomic<ULONGLONG> qpcTicks{0};
+    std::atomic<ULONGLONG> calls{0};
+    std::atomic<ULONGLONG> lastQpcTicks{0};
+    std::atomic<ULONGLONG> maxQpcTicks{0};
+};
+
+static std::array<DebugPerfCounter, DEBUG_PERF_COUNT> g_debugPerf{};
+static std::array<std::atomic<float>, DEBUG_PERF_COUNT> g_debugActionAvgMs{};
+static std::array<std::atomic<float>, DEBUG_PERF_COUNT> g_debugActionLastMs{};
+static std::array<std::atomic<float>, DEBUG_PERF_COUNT> g_debugActionMaxMs{};
+static std::array<std::atomic<float>, DEBUG_PERF_COUNT> g_debugActionCallsPerSec{};
+static std::atomic<bool> g_debugInstrumentationEnabled{false};
+
+static void DebugPerfUpdateMax(std::atomic<ULONGLONG>& target, ULONGLONG value) {
+    ULONGLONG observed = target.load(std::memory_order_relaxed);
+    while (observed < value &&
+           !target.compare_exchange_weak(observed, value,
+                                         std::memory_order_relaxed,
+                                         std::memory_order_relaxed)) {
+    }
+}
+
+class DebugPerfScope {
+public:
+    explicit DebugPerfScope(DebugPerfAction action)
+        : m_action(action),
+          m_enabled(g_debugInstrumentationEnabled.load(std::memory_order_relaxed)) {
+        if (m_enabled)
+            QueryPerformanceCounter(&m_start);
+    }
+
+    ~DebugPerfScope() {
+        if (!m_enabled)
+            return;
+        LARGE_INTEGER end{};
+        QueryPerformanceCounter(&end);
+        const ULONGLONG elapsed =
+            end.QuadPart >= m_start.QuadPart
+                ? static_cast<ULONGLONG>(end.QuadPart - m_start.QuadPart)
+                : 0;
+        auto& counter = g_debugPerf[static_cast<size_t>(m_action)];
+        counter.qpcTicks.fetch_add(elapsed, std::memory_order_relaxed);
+        counter.calls.fetch_add(1, std::memory_order_relaxed);
+        counter.lastQpcTicks.store(elapsed, std::memory_order_relaxed);
+        DebugPerfUpdateMax(counter.maxQpcTicks, elapsed);
+    }
+
+private:
+    DebugPerfAction m_action;
+    bool m_enabled = false;
+    LARGE_INTEGER m_start{};
+};
+
+static std::atomic<ULONGLONG> g_debugVisualizerFrames{0};
+static std::atomic<ULONGLONG> g_debugPlayerFrames{0};
+static std::atomic<ULONGLONG> g_debugAudioFftFrames{0};
+static std::atomic<ULONGLONG> g_debugOverlayTicks{0};
+static std::atomic<float> g_debugAudioFftHz{0.0f};
+static std::atomic<float> g_debugOverlayTickHz{0.0f};
+
+static constexpr int DEBUG_FPS_HISTORY_SIZE = 120; // 12 seconds at 100 ms samples
+static std::array<float, DEBUG_FPS_HISTORY_SIZE> g_debugVisualizerFpsHistory{};
+static std::array<float, DEBUG_FPS_HISTORY_SIZE> g_debugPlayerFpsHistory{};
+static std::array<float, DEBUG_FPS_HISTORY_SIZE> g_debugSchedulerFpsHistory{};
+static std::array<float, DEBUG_FPS_HISTORY_SIZE> g_debugAudioFftHistory{};
+static int g_debugFpsHistoryCount = 0;
+static int g_debugFpsHistoryWrite = 0;
+static ULONGLONG g_debugLastFpsSampleMs = 0;
+static ULONGLONG g_debugLastCpuSampleMs = 0;
+static ULONGLONG g_debugLastCpuQpc = 0;
+static std::atomic<float> g_debugVisualizerCpu{0.0f};
+static std::atomic<float> g_debugPlayerCpu{0.0f};
+static std::atomic<float> g_debugAlbumCpu{0.0f};
+static std::atomic<float> g_debugVisualizerFps{0.0f};
+static std::atomic<float> g_debugPlayerFps{0.0f};
+static std::atomic<float> g_debugSchedulerIntervalMs{0.0f};
+static std::atomic<float> g_debugSchedulerLatenessMs{0.0f};
+static std::atomic<float> g_debugSchedulerDeadlineMissPct{0.0f};
+static std::atomic<ULONGLONG> g_debugSchedulerLastStartQpc{0};
+static std::atomic<ULONGLONG> g_debugSchedulerIntervalQpcTotal{0};
+static std::atomic<ULONGLONG> g_debugSchedulerIntervalSamples{0};
+static std::atomic<ULONGLONG> g_debugSchedulerMisses{0};
+static std::atomic<ULONGLONG> g_debugSchedulerMissSamples{0};
+static HWND g_debugHwnd = nullptr;
+static bool g_debugClassRegistered = false;
 
 static HDC g_renderMemDC = nullptr;
 static HBITMAP g_renderBitmap = nullptr;
@@ -1238,9 +2522,6 @@ static HGDIOBJ g_renderOldBitmap = nullptr;
 static void* g_renderBits = nullptr;
 static int g_renderWidth = 0;
 static int g_renderHeight = 0;
-static RECT g_lastRenderDirtyRect{};
-static bool g_renderNeedsFullClear = true;
-
 static std::shared_mutex g_settingsMutex;
 
 static VisualizerSettings GetSettingsSnapshot() {
@@ -1253,14 +2534,75 @@ static HANDLE g_hAudioEvent = nullptr;
 static std::atomic<bool> g_running{false};
 static std::atomic<bool> g_audioRunning{false};
 
+// Audio demand broker. Consumers declare whether they currently need live FFT
+// data and at what cadence. The capture/FFT pipeline only services the maximum
+// requested rate instead of tying audio work to a particular renderer.
+enum AudioConsumerId : int {
+    AUDIO_CONSUMER_VISUALIZER = 0,
+    AUDIO_CONSUMER_PLAYER = 1,
+    AUDIO_CONSUMER_COUNT = 2,
+};
+
+struct AudioConsumerRequest {
+    std::atomic<bool> active{false};
+    std::atomic<float> targetHz{0.0f};
+};
+
+static std::array<AudioConsumerRequest, AUDIO_CONSUMER_COUNT> g_audioConsumers{};
+static std::atomic<float> g_audioRequestedHz{0.0f};
+
+static void SetAudioConsumerRequest(
+    AudioConsumerId id, bool active, float targetHz) {
+    const size_t index = static_cast<size_t>(id);
+    g_audioConsumers[index].targetHz.store(
+        active ? std::max(0.0f, targetHz) : 0.0f,
+        std::memory_order_release);
+    g_audioConsumers[index].active.store(active, std::memory_order_release);
+
+    float maxHz = 0.0f;
+    for (const auto& consumer : g_audioConsumers) {
+        if (!consumer.active.load(std::memory_order_acquire))
+            continue;
+        maxHz = std::max(
+            maxHz,
+            consumer.targetHz.load(std::memory_order_relaxed));
+    }
+    g_audioRequestedHz.store(maxHz, std::memory_order_release);
+}
+
+static bool HasLiveAudioConsumer() {
+    return g_audioRequestedHz.load(std::memory_order_acquire) > 0.0f;
+}
+
+static float GetAudioRequestedHz() {
+    return std::max(0.0f,
+        g_audioRequestedHz.load(std::memory_order_acquire));
+}
+
+// Audio pipeline diagnostics. These are read by the optional debug window and
+// never affect the audio path itself.
+static std::atomic<UINT32> g_audioSampleRate{0};
+static std::atomic<UINT32> g_audioChannels{0};
+static std::atomic<float> g_audioFftLevel{0.0f};
+static std::atomic<int> g_audioCaptureSourceMode{0}; // 0=system, 1=selected applications
+
 static Gdiplus::Image* g_pForegroundImage = nullptr;
 static std::atomic<bool> g_imageNeedsReload{true};
+
+struct BackgroundBlurCacheEntry {
+    RECT rect{};
+    int width = 0;
+    int height = 0;
+    int radius = 0;
+    Gdiplus::Bitmap* bitmap = nullptr;
+};
 
 static Gdiplus::Bitmap* g_pBackgroundBlurBitmap = nullptr;
 static RECT g_backgroundBlurRect{};
 static int g_backgroundBlurWidth = 0;
 static int g_backgroundBlurHeight = 0;
 static int g_backgroundBlurRadius = 0;
+static std::vector<BackgroundBlurCacheEntry> g_backgroundBlurCache;
 static std::atomic<bool> g_backgroundBlurNeedsReload{true};
 
 static void LoadForegroundImage() {
@@ -1287,11 +2629,13 @@ static void EnsureForegroundImageLoaded() {
 }
 
 static void DestroyBackgroundBlurBitmap() {
-    if (g_pBackgroundBlurBitmap) {
-        delete g_pBackgroundBlurBitmap;
-        g_pBackgroundBlurBitmap = nullptr;
+    for (auto& entry : g_backgroundBlurCache) {
+        delete entry.bitmap;
+        entry.bitmap = nullptr;
     }
+    g_backgroundBlurCache.clear();
 
+    g_pBackgroundBlurBitmap = nullptr;
     g_backgroundBlurRect = {};
     g_backgroundBlurWidth = 0;
     g_backgroundBlurHeight = 0;
@@ -1328,20 +2672,42 @@ static void ApplyBoxBlurGdiPlus(Gdiplus::Bitmap& bitmap, int radius) {
 
     const int r = std::clamp(radius, 1, 24);
 
-    // Horizontal pass.
+    // Horizontal pass. Keep the exact same box-average definition as the
+    // original implementation, but maintain a sliding sum instead of
+    // rescanning up to (2*r + 1) source pixels for every output pixel.
+    // This changes the work from O(width * height * radius) to O(width * height)
+    // while preserving the integer sums and divisions pixel-for-pixel.
     for (UINT y = 0; y < height; ++y) {
+        uint32_t sum[4] = {};
+        for (int sx = 0; sx <= r && sx < static_cast<int>(width); ++sx) {
+            const BYTE* p = src.data() + (static_cast<size_t>(y) * width + sx) * 4;
+            for (int c = 0; c < 4; ++c)
+                sum[c] += p[c];
+        }
+
         for (UINT x = 0; x < width; ++x) {
-            uint32_t sum[4] = {};
-            int count = 0;
+            if (x > 0) {
+                const int removeX = static_cast<int>(x) - r - 1;
+                const int addX = static_cast<int>(x) + r;
+
+                if (removeX >= 0) {
+                    const BYTE* p = src.data() +
+                        (static_cast<size_t>(y) * width + removeX) * 4;
+                    for (int c = 0; c < 4; ++c)
+                        sum[c] -= p[c];
+                }
+
+                if (addX < static_cast<int>(width)) {
+                    const BYTE* p = src.data() +
+                        (static_cast<size_t>(y) * width + addX) * 4;
+                    for (int c = 0; c < 4; ++c)
+                        sum[c] += p[c];
+                }
+            }
+
             const int x0 = std::max<int>(0, static_cast<int>(x) - r);
             const int x1 = std::min<int>(static_cast<int>(width) - 1, static_cast<int>(x) + r);
-
-            for (int sx = x0; sx <= x1; ++sx) {
-                const BYTE* p = src.data() + (static_cast<size_t>(y) * width + sx) * 4;
-                for (int c = 0; c < 4; ++c)
-                    sum[c] += p[c];
-                ++count;
-            }
+            const int count = x1 - x0 + 1;
 
             BYTE* out = tmp.data() + (static_cast<size_t>(y) * width + x) * 4;
             for (int c = 0; c < 4; ++c)
@@ -1349,20 +2715,39 @@ static void ApplyBoxBlurGdiPlus(Gdiplus::Bitmap& bitmap, int radius) {
         }
     }
 
-    // Vertical pass.
-    for (UINT y = 0; y < height; ++y) {
-        for (UINT x = 0; x < width; ++x) {
-            uint32_t sum[4] = {};
-            int count = 0;
+    // Vertical pass. Same exact box-average semantics, using sliding sums
+    // down each column instead of an inner loop over every source row.
+    for (UINT x = 0; x < width; ++x) {
+        uint32_t sum[4] = {};
+        for (int sy = 0; sy <= r && sy < static_cast<int>(height); ++sy) {
+            const BYTE* p = tmp.data() + (static_cast<size_t>(sy) * width + x) * 4;
+            for (int c = 0; c < 4; ++c)
+                sum[c] += p[c];
+        }
+
+        for (UINT y = 0; y < height; ++y) {
+            if (y > 0) {
+                const int removeY = static_cast<int>(y) - r - 1;
+                const int addY = static_cast<int>(y) + r;
+
+                if (removeY >= 0) {
+                    const BYTE* p = tmp.data() +
+                        (static_cast<size_t>(removeY) * width + x) * 4;
+                    for (int c = 0; c < 4; ++c)
+                        sum[c] -= p[c];
+                }
+
+                if (addY < static_cast<int>(height)) {
+                    const BYTE* p = tmp.data() +
+                        (static_cast<size_t>(addY) * width + x) * 4;
+                    for (int c = 0; c < 4; ++c)
+                        sum[c] += p[c];
+                }
+            }
+
             const int y0 = std::max<int>(0, static_cast<int>(y) - r);
             const int y1 = std::min<int>(static_cast<int>(height) - 1, static_cast<int>(y) + r);
-
-            for (int sy = y0; sy <= y1; ++sy) {
-                const BYTE* p = tmp.data() + (static_cast<size_t>(sy) * width + x) * 4;
-                for (int c = 0; c < 4; ++c)
-                    sum[c] += p[c];
-                ++count;
-            }
+            const int count = y1 - y0 + 1;
 
             BYTE* out = static_cast<BYTE*>(data.Scan0) +
                         static_cast<size_t>(y) * data.Stride + x * 4;
@@ -1427,10 +2812,14 @@ static Gdiplus::Bitmap* CreateBackgroundBlurBitmap(const RECT& rect, int blurRad
                         static_cast<float>(virtualX) * 0.0f;
     const float drawY = (static_cast<float>(virtualH) - drawH) * 0.5f;
 
+    // rect is local to the selected overlay monitor. Convert it to virtual
+    // desktop coordinates before sampling the wallpaper.
+    const int overlayX = g_overlayScreenRect.left;
+    const int overlayY = g_overlayScreenRect.top;
     const float localX =
-        static_cast<float>(rect.left + virtualX);
+        static_cast<float>(rect.left + overlayX - virtualX);
     const float localY =
-        static_cast<float>(rect.top + virtualY);
+        static_cast<float>(rect.top + overlayY - virtualY);
 
     g.DrawImage(
         wallpaper.get(),
@@ -1451,31 +2840,51 @@ static void EnsureBackgroundBlurBitmap(const RECT& rect) {
         return;
     }
 
+    if (g_backgroundBlurNeedsReload.exchange(false, std::memory_order_acq_rel))
+        DestroyBackgroundBlurBitmap();
+
     const int width = rect.right - rect.left;
     const int height = rect.bottom - rect.top;
-
-    if (!g_backgroundBlurNeedsReload.load(std::memory_order_acquire) &&
-        g_pBackgroundBlurBitmap &&
-        g_backgroundBlurRect.left == rect.left &&
-        g_backgroundBlurRect.top == rect.top &&
-        g_backgroundBlurRect.right == rect.right &&
-        g_backgroundBlurRect.bottom == rect.bottom &&
-        g_backgroundBlurWidth == width &&
-        g_backgroundBlurHeight == height &&
-        g_backgroundBlurRadius == g_settings.backgroundBlurRadius) {
+    if (width <= 0 || height <= 0) {
+        g_pBackgroundBlurBitmap = nullptr;
         return;
     }
 
-    DestroyBackgroundBlurBitmap();
-    g_pBackgroundBlurBitmap = CreateBackgroundBlurBitmap(
-        rect, g_settings.backgroundBlurRadius);
-    if (g_pBackgroundBlurBitmap) {
-        g_backgroundBlurRect = rect;
-        g_backgroundBlurWidth = width;
-        g_backgroundBlurHeight = height;
-        g_backgroundBlurRadius = g_settings.backgroundBlurRadius;
-        g_backgroundBlurNeedsReload.store(false, std::memory_order_release);
+    for (auto& entry : g_backgroundBlurCache) {
+        if (entry.bitmap &&
+            entry.rect.left == rect.left &&
+            entry.rect.top == rect.top &&
+            entry.rect.right == rect.right &&
+            entry.rect.bottom == rect.bottom &&
+            entry.width == width &&
+            entry.height == height &&
+            entry.radius == g_settings.backgroundBlurRadius) {
+            g_pBackgroundBlurBitmap = entry.bitmap;
+            g_backgroundBlurRect = entry.rect;
+            g_backgroundBlurWidth = entry.width;
+            g_backgroundBlurHeight = entry.height;
+            g_backgroundBlurRadius = entry.radius;
+            return;
+        }
     }
+
+    BackgroundBlurCacheEntry entry;
+    entry.rect = rect;
+    entry.width = width;
+    entry.height = height;
+    entry.radius = g_settings.backgroundBlurRadius;
+    entry.bitmap = CreateBackgroundBlurBitmap(rect, g_settings.backgroundBlurRadius);
+    if (!entry.bitmap) {
+        g_pBackgroundBlurBitmap = nullptr;
+        return;
+    }
+
+    g_pBackgroundBlurBitmap = entry.bitmap;
+    g_backgroundBlurRect = entry.rect;
+    g_backgroundBlurWidth = entry.width;
+    g_backgroundBlurHeight = entry.height;
+    g_backgroundBlurRadius = entry.radius;
+    g_backgroundBlurCache.push_back(entry);
 }
 
 static DWORD ParseHexColorGDI(LPCWSTR hexStr, DWORD fallback) {
@@ -1507,15 +2916,176 @@ static DWORD ParseHexColorGDI(LPCWSTR hexStr, DWORD fallback) {
 static void LoadCustomEQSettings();
 static void SaveCustomEQSettings();
 
-static void LoadSettings() {
+// Player popup style identifiers are declared before LoadSettings because the
+// settings loader needs to parse PlayerMenu.playerPopupStyle. The full style
+// implementation lives with the popup renderer later in the file.
+enum EqPopupStyleId : int {
+    EQ_POPUP_STYLE_SYSTEM = 0,
+    EQ_POPUP_STYLE_AMETHYST,
+    EQ_POPUP_STYLE_OCEAN,
+    EQ_POPUP_STYLE_SAKURA,
+    EQ_POPUP_STYLE_FOREST,
+    EQ_POPUP_STYLE_SUNSET,
+    EQ_POPUP_STYLE_EMBER,
+    EQ_POPUP_STYLE_NEON,
+    EQ_POPUP_STYLE_TERMINAL,
+    EQ_POPUP_STYLE_GRAPHITE,
+    EQ_POPUP_STYLE_HAZARD,
+};
+
+static std::atomic<int> g_eqPopupStyleId{EQ_POPUP_STYLE_SYSTEM};
+static int EqPopupStyleIdFromSetting(PCWSTR value);
+static int EqTrayButtonPositionFromSetting(PCWSTR value);
+
+static RECT GetThirdAlbumWidgetAnchorRect(const VisualizerSettings& settings);
+static void DrawAlbumWidgetBorder(
+    Gdiplus::Graphics& graphics,
+    const RECT& rect,
+    const VisualizerSettings& settings);
+
+// ---------------------------------------------------------------------------
+// Desktop layout overrides
+// ---------------------------------------------------------------------------
+// Positions applied from the desktop layout editor are kept in mod storage,
+// because a Windhawk mod cannot write its own settings. Precedence rule: a
+// stored position is honoured only while the Windhawk setting still equals
+// the value it had when the position was applied. Changing the position in
+// the Windhawk settings UI therefore always wins; the stale override is simply
+// ignored (never rewritten here, since storage writes can re-enter
+// Wh_ModSettingsChanged on some builds).
+struct LayoutOverrideKeys {
+    const wchar_t* flag;
+    const wchar_t* x;
+    const wchar_t* y;
+    const wchar_t* baseX;
+    const wchar_t* baseY;
+};
+
+static constexpr LayoutOverrideKeys kVisualizerLayoutKeys{
+    L"layout.visualizer.override", L"layout.visualizer.x", L"layout.visualizer.y",
+    L"layout.visualizer.base.x", L"layout.visualizer.base.y"};
+static constexpr LayoutOverrideKeys kLyricsLayoutKeys{
+    L"layout.lyrics.override", L"layout.lyrics.x", L"layout.lyrics.y",
+    L"layout.lyrics.base.x", L"layout.lyrics.base.y"};
+
+// x/y hold the values from the Windhawk settings on entry. They are replaced
+// by the stored override when it is still valid for those setting values.
+static bool ApplyLayoutOverride(const LayoutOverrideKeys& keys, int& x, int& y) {
+    if (Wh_GetIntValue(keys.flag, 0) == 0)
+        return false;
+    if (Wh_GetIntValue(keys.baseX, 0) != x || Wh_GetIntValue(keys.baseY, 0) != y)
+        return false;
+    x = Wh_GetIntValue(keys.x, x);
+    y = Wh_GetIntValue(keys.y, y);
+    return true;
+}
+
+static void StoreLayoutOverride(
+    const LayoutOverrideKeys& keys, int x, int y, int baseX, int baseY) {
+    Wh_SetIntValue(keys.x, x);
+    Wh_SetIntValue(keys.y, y);
+    Wh_SetIntValue(keys.baseX, baseX);
+    Wh_SetIntValue(keys.baseY, baseY);
+    Wh_SetIntValue(keys.flag, 1);
+}
+
+static int EqTrayActionFromSetting(PCWSTR value, int fallback) {
+    if (!value)
+        return fallback;
+    if (wcscmp(value, L"none") == 0) return EQ_TRAY_ACTION_NONE;
+    if (wcscmp(value, L"open_player") == 0) return EQ_TRAY_ACTION_TOGGLE_PLAYER;
+    if (wcscmp(value, L"toggle_player") == 0) return EQ_TRAY_ACTION_TOGGLE_PLAYER;
+    if (wcscmp(value, L"context_menu") == 0) return EQ_TRAY_ACTION_CONTEXT_MENU;
+    if (wcscmp(value, L"open_source") == 0) return EQ_TRAY_ACTION_OPEN_SOURCE;
+    if (wcscmp(value, L"toggle_mute") == 0) return EQ_TRAY_ACTION_TOGGLE_MUTE;
+    if (wcscmp(value, L"volume_up") == 0) return EQ_TRAY_ACTION_VOLUME_UP;
+    if (wcscmp(value, L"volume_down") == 0) return EQ_TRAY_ACTION_VOLUME_DOWN;
+    if (wcscmp(value, L"play_pause") == 0) return EQ_TRAY_ACTION_PLAY_PAUSE;
+    if (wcscmp(value, L"toggle_shuffle") == 0) return EQ_TRAY_ACTION_TOGGLE_SHUFFLE;
+    if (wcscmp(value, L"toggle_repeat") == 0) return EQ_TRAY_ACTION_TOGGLE_REPEAT;
+    if (wcscmp(value, L"previous_track") == 0) return EQ_TRAY_ACTION_PREVIOUS_TRACK;
+    if (wcscmp(value, L"next_track") == 0) return EQ_TRAY_ACTION_NEXT_TRACK;
+    if (wcscmp(value, L"rewind_5") == 0) return EQ_TRAY_ACTION_REWIND_5;
+    if (wcscmp(value, L"forward_5") == 0) return EQ_TRAY_ACTION_FORWARD_5;
+    if (wcscmp(value, L"open_sound_settings") == 0) return EQ_TRAY_ACTION_OPEN_SOUND_SETTINGS;
+    if (wcscmp(value, L"open_volume_mixer") == 0) return EQ_TRAY_ACTION_OPEN_VOLUME_MIXER;
+    return fallback;
+}
+
+static int EqReadTrayActionSetting(PCWSTR key, int fallback) {
+    PCWSTR value = Wh_GetStringSetting(key);
+    if (!value)
+        return fallback;
+    const int result = EqTrayActionFromSetting(value, fallback);
+    Wh_FreeStringSetting(value);
+    return result;
+}
+
+static void LoadSettings(bool loadPlayerLayout = true) {
+    // Layout and popup placement are owned by the Player window thread after
+    // startup. Windhawk may invoke Wh_ModSettingsChanged from another thread,
+    // so settings refreshes must not reload/mutate those live UI structures.
+    if (loadPlayerLayout) {
+        LoadEqLayoutSettings();
+        LoadEqPopupPlacementSettings();
+    }
+
+    const int rawTargetMonitor = Wh_GetIntSetting(L"Performance.targetMonitor");
     g_settings.barCount = std::clamp(Wh_GetIntSetting(L"Visualizer.barCount"), 1, VIZ_BANDS_MAX);
     g_settings.barWidth = std::clamp(Wh_GetIntSetting(L"Visualizer.barWidth"), 1, 50);
     g_settings.barSpacing = std::clamp(Wh_GetIntSetting(L"Visualizer.barSpacing"), 0, 50);
     g_settings.positionX = Wh_GetIntSetting(L"Visualizer.positionX");
     g_settings.positionY = Wh_GetIntSetting(L"Visualizer.positionY");
+    ApplyLayoutOverride(kVisualizerLayoutKeys, g_settings.positionX, g_settings.positionY);
     g_settings.maxBarHeight = std::clamp(Wh_GetIntSetting(L"Visualizer.maxBarHeight"), 1, 2000);
     g_settings.minBarHeight = std::clamp(Wh_GetIntSetting(L"Visualizer.minBarHeight"), 0, 1000);
+    g_settings.targetMonitor = std::max(0, rawTargetMonitor);
     g_settings.targetFps = std::max(0, Wh_GetIntSetting(L"Performance.targetFps"));
+    g_settings.visualizerEnabled =
+        Wh_GetIntSetting(L"Visualizer.enabled") != 0;
+    g_settings.hideVisualizerWhenNoMediaPlaying =
+        Wh_GetIntSetting(L"Visualizer.hideWhenNoMediaPlaying") != 0;
+    g_settings.hideVisualizerWhenTargetApplicationNotRunning =
+        Wh_GetIntSetting(L"Visualizer.hideWhenTargetApplicationNotRunning") != 0;
+    g_settings.showMediaEqTrayButton =
+        Wh_GetIntSetting(L"PlayerMenu.showMediaEqTrayButton") != 0;
+    g_settings.trayButtonPosition = EQ_TRAY_BUTTON_POSITION_DEFAULT;
+    if (PCWSTR trayButtonPosition =
+            Wh_GetStringSetting(L"PlayerMenu.trayButtonPosition")) {
+        g_settings.trayButtonPosition =
+            EqTrayButtonPositionFromSetting(trayButtonPosition);
+        Wh_FreeStringSetting(trayButtonPosition);
+    }
+    g_settings.trayLeftClickAction = EqReadTrayActionSetting(
+        L"PlayerMenu.TrayMouseActions.trayLeftClickAction", EQ_TRAY_ACTION_TOGGLE_PLAYER);
+    g_settings.trayMiddleClickAction = EqReadTrayActionSetting(
+        L"PlayerMenu.TrayMouseActions.trayMiddleClickAction", EQ_TRAY_ACTION_PLAY_PAUSE);
+    g_settings.trayRightClickAction = EqReadTrayActionSetting(
+        L"PlayerMenu.TrayMouseActions.trayRightClickAction", EQ_TRAY_ACTION_TOGGLE_PLAYER);
+    g_settings.trayWheelUpAction = EqReadTrayActionSetting(
+        L"PlayerMenu.TrayMouseActions.trayWheelUpAction", EQ_TRAY_ACTION_VOLUME_UP);
+    g_settings.trayWheelDownAction = EqReadTrayActionSetting(
+        L"PlayerMenu.TrayMouseActions.trayWheelDownAction", EQ_TRAY_ACTION_VOLUME_DOWN);
+    g_settings.debugMode =
+        Wh_GetIntSetting(L"Advanced.debugMode") != 0;
+    SetAlbumAccentAnimationEnabled(
+        Wh_GetIntSetting(L"Appearance.Colors.animateAlbumAccent") != 0);
+    g_settings.playerPopupStyle = EQ_POPUP_STYLE_SYSTEM;
+    if (PCWSTR popupStyle = Wh_GetStringSetting(L"PlayerMenu.playerPopupStyle")) {
+        g_settings.playerPopupStyle = EqPopupStyleIdFromSetting(popupStyle);
+        Wh_FreeStringSetting(popupStyle);
+    }
+    g_eqPopupStyleId.store(g_settings.playerPopupStyle, std::memory_order_release);
+    g_settings.desktopPlacement = DESKTOP_PLACEMENT_TRANSPARENT;
+    if (PCWSTR placement = Wh_GetStringSetting(L"Advanced.desktopPlacement")) {
+        if (wcscmp(placement, L"behind_icons_opaque") == 0)
+            g_settings.desktopPlacement = DESKTOP_PLACEMENT_OPAQUE;
+        else if (wcscmp(placement, L"behind_icons_transparent") == 0)
+            g_settings.desktopPlacement = DESKTOP_PLACEMENT_TRANSPARENT;
+        else if (wcscmp(placement, L"above_icons") == 0)
+            g_settings.desktopPlacement = DESKTOP_PLACEMENT_ABOVE_ICONS;
+        Wh_FreeStringSetting(placement);
+    }
     g_settings.sensitivity = std::clamp(Wh_GetIntSetting(L"Audio.sensitivity"), 0, 300);
 
     PCWSTR audioSourceStr = Wh_GetStringSetting(L"Audio.Source.audioSource");
@@ -1638,6 +3208,7 @@ static void LoadSettings() {
         Wh_FreeStringSetting(backgroundBorderColor2Str);
 
     g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+
 
     LoadCustomEQSettings();
 
@@ -1796,7 +3367,7 @@ static void LoadSettings() {
         g_settings.lyricsUnavailableText = lyricsUnavailableTextStr;
         Wh_FreeStringSetting(lyricsUnavailableTextStr);
     } else {
-        g_settings.lyricsUnavailableText = L"N/A";
+        g_settings.lyricsUnavailableText.clear();
     }
 
     PCWSTR lyricsUnavailableBehaviorStr =
@@ -1839,6 +3410,7 @@ static void LoadSettings() {
 
     g_settings.lyricsX = Wh_GetIntSetting(L"Lyrics.positionX");
     g_settings.lyricsY = Wh_GetIntSetting(L"Lyrics.positionY");
+    ApplyLayoutOverride(kLyricsLayoutKeys, g_settings.lyricsX, g_settings.lyricsY);
     g_settings.lyricsWidth = std::clamp(Wh_GetIntSetting(L"Lyrics.width"), 160, 1600);
     g_settings.lyricsHeight = std::clamp(Wh_GetIntSetting(L"Lyrics.height"), 100, 900);
     g_settings.lyricsFontSize = std::clamp(Wh_GetIntSetting(L"Lyrics.fontSize"), 10, 72);
@@ -1860,6 +3432,25 @@ static void LoadSettings() {
     g_settings.lyricsLinesBelow = std::clamp(Wh_GetIntSetting(L"Lyrics.linesBelow"), 0, 6);
     g_settings.lyricsLongLineWrapEnabled =
         Wh_GetIntSetting(L"Lyrics.longLineWrapEnabled") != 0;
+    g_settings.lyricsUseLocalLrcFiles =
+        Wh_GetIntSetting(L"Lyrics.useLocalLrcFiles") != 0;
+
+    PCWSTR lyricsLocalLrcFolderStr =
+        Wh_GetStringSetting(L"Lyrics.localLrcFolder");
+    if (lyricsLocalLrcFolderStr) {
+        g_settings.lyricsLocalLrcFolder = lyricsLocalLrcFolderStr;
+        while (!g_settings.lyricsLocalLrcFolder.empty() &&
+               (g_settings.lyricsLocalLrcFolder.back() == L' ' ||
+                g_settings.lyricsLocalLrcFolder.back() == L'\\')) {
+            if (g_settings.lyricsLocalLrcFolder.size() == 3 &&
+                g_settings.lyricsLocalLrcFolder[1] == L':')
+                break;
+            g_settings.lyricsLocalLrcFolder.pop_back();
+        }
+        Wh_FreeStringSetting(lyricsLocalLrcFolderStr);
+    } else {
+        g_settings.lyricsLocalLrcFolder.clear();
+    }
     g_settings.lyricsOpacity = std::clamp(Wh_GetIntSetting(L"Lyrics.opacity"), 0, 100);
     g_settings.lyricsBackgroundEnabled = Wh_GetIntSetting(L"Lyrics.backgroundEnabled") != 0;
 
@@ -1934,6 +3525,71 @@ static void LoadSettings() {
 
     g_settings.opacityCurve = static_cast<float>(
         std::clamp(Wh_GetIntSetting(L"Appearance.Opacity.opacityCurve"), -100, 100));
+
+    g_settings.albumWidgetEnabled =
+        Wh_GetIntSetting(L"AlbumWidget.enabled") != 0;
+    g_settings.albumWidgetWidth = std::clamp(
+        Wh_GetIntSetting(L"AlbumWidget.width"), 20, 2000);
+    g_settings.albumWidgetHeight = std::clamp(
+        Wh_GetIntSetting(L"AlbumWidget.height"), 20, 2000);
+    PCWSTR albumWidgetQualityStr =
+        Wh_GetStringSetting(L"AlbumWidget.quality");
+    g_settings.albumWidgetQuality = 1; // Standard
+    if (albumWidgetQualityStr) {
+        if (wcscmp(albumWidgetQualityStr, L"fastest") == 0)
+            g_settings.albumWidgetQuality = 0;
+        else if (wcscmp(albumWidgetQualityStr, L"high") == 0)
+            g_settings.albumWidgetQuality = 2;
+        else if (wcscmp(albumWidgetQualityStr, L"highest") == 0)
+            g_settings.albumWidgetQuality = 3;
+        Wh_FreeStringSetting(albumWidgetQualityStr);
+    }
+    g_settings.albumWidgetCornerRadius = std::clamp(
+        Wh_GetIntSetting(L"AlbumWidget.cornerRadius"), 0, 1000);
+    g_settings.albumWidgetOpacity = std::clamp(
+        Wh_GetIntSetting(L"AlbumWidget.opacity"), 0, 100);
+    g_settings.albumWidgetGap = std::clamp(
+        Wh_GetIntSetting(L"AlbumWidget.gap"), 0, 500);
+    g_settings.albumWidgetMaxDistance = std::clamp(
+        Wh_GetIntSetting(L"AlbumWidget.maxDistance"), 0, 2000);
+
+    PCWSTR albumWidgetAttachmentStr =
+        Wh_GetStringSetting(L"AlbumWidget.attachment");
+    g_settings.albumWidgetAttachment = 0;
+    if (albumWidgetAttachmentStr) {
+        if (wcscmp(albumWidgetAttachmentStr, L"lyrics") == 0)
+            g_settings.albumWidgetAttachment = 1;
+        else if (wcscmp(albumWidgetAttachmentStr, L"visualizer") == 0)
+            g_settings.albumWidgetAttachment = 2;
+        Wh_FreeStringSetting(albumWidgetAttachmentStr);
+    }
+
+    g_albumWidgetSeparateX.store(
+        Wh_GetIntValue(L"albumWidget.separate.x", 620),
+        std::memory_order_release);
+    g_albumWidgetSeparateY.store(
+        Wh_GetIntValue(L"albumWidget.separate.y", 620),
+        std::memory_order_release);
+
+    if (g_settings.albumWidgetAttachment == 1) {
+        const RECT anchor = GetThirdAlbumWidgetAnchorRect(g_settings);
+        g_albumWidgetLyricsOffsetX.store(
+            Wh_GetIntValue(L"albumWidget.lyrics.offsetX",
+                           anchor.right - anchor.left + g_settings.albumWidgetGap),
+            std::memory_order_release);
+        g_albumWidgetLyricsOffsetY.store(
+            Wh_GetIntValue(L"albumWidget.lyrics.offsetY", 0),
+            std::memory_order_release);
+    } else if (g_settings.albumWidgetAttachment == 2) {
+        const RECT anchor = GetThirdAlbumWidgetAnchorRect(g_settings);
+        g_albumWidgetVisualizerOffsetX.store(
+            Wh_GetIntValue(L"albumWidget.visualizer.offsetX",
+                           anchor.right - anchor.left + g_settings.albumWidgetGap),
+            std::memory_order_release);
+        g_albumWidgetVisualizerOffsetY.store(
+            Wh_GetIntValue(L"albumWidget.visualizer.offsetY", 0),
+            std::memory_order_release);
+    }
 
     LoadForegroundImage();
 }
@@ -2049,100 +3705,248 @@ static void VizFFT(std::vector<float>& re, std::vector<float>& im) {
     }
 }
 
-static void LoadCustomEQSettings() {
-    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
-        const int stored = std::clamp(
-            Wh_GetIntValue(VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(i)], 100), 0, 200);
-        g_customEqGains[static_cast<size_t>(i)].store(
-            stored / 100.0f, std::memory_order_relaxed);
+static void EqGetCustomPresetStorageKey(int presetIndex, int band, wchar_t* buffer, size_t bufferCount) {
+    swprintf_s(buffer, bufferCount, L"customEqPreset%dBand%d", presetIndex + 1, band);
+}
+
+static void EqSaveCustomPresetCount() {
+    Wh_SetIntValue(L"customEqPresetCount", g_eqCustomPresetCount);
+}
+
+static void EqSaveCustomPreset(int presetIndex) {
+    if (presetIndex < 0 || presetIndex >= g_eqCustomPresetCount)
+        return;
+    for (int band = 0; band < VIZ_EQ_BANDS; ++band) {
+        wchar_t key[64]{};
+        EqGetCustomPresetStorageKey(presetIndex, band, key, 64);
+        const float gain = std::clamp(
+            g_eqCustomPresetGains[static_cast<size_t>(presetIndex)][static_cast<size_t>(band)].load(
+                std::memory_order_relaxed), 0.0f, 2.0f);
+        Wh_SetIntValue(key, static_cast<int>(std::lround(gain * 100.0f)));
     }
+}
+
+static void EqSaveAllCustomPresets() {
+    EqSaveCustomPresetCount();
+    for (int i = 0; i < g_eqCustomPresetCount; ++i)
+        EqSaveCustomPreset(i);
+}
+
+static void LoadCustomEQSettings() {
+    // Windhawk calls LoadSettings() again when the user changes any mod
+    // setting. Do not reload the live EQ curve from storage on those calls,
+    // otherwise a normal settings change would silently revert the current
+    // EQ values. The storage is loaded once per module lifetime instead.
+    if (g_eqStorageInitialized)
+        return;
+
+    // Load the current EQ curve independently from preset storage. Newer
+    // versions use eqActiveBand0..9; older installations only have the
+    // legacy customEqBand0..9 values, so fall back to those when needed.
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const int activeStored = Wh_GetIntValue(
+            VIZ_EQ_ACTIVE_STORAGE_KEYS[static_cast<size_t>(i)], -1);
+        const int stored = std::clamp(
+            activeStored >= 0
+                ? activeStored
+                : Wh_GetIntValue(
+                    VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(i)], 100),
+            0, 200);
+        const float gain = stored / 100.0f;
+        g_customEqGains[static_cast<size_t>(i)].store(gain, std::memory_order_relaxed);
+        g_eqActiveGains[static_cast<size_t>(i)].store(gain, std::memory_order_relaxed);
+    }
+
+    g_eqCustomPresetCount = std::clamp(
+        Wh_GetIntValue(L"customEqPresetCount", 0), 0, VIZ_EQ_MAX_CUSTOM_PRESETS);
+    for (int preset = 0; preset < VIZ_EQ_MAX_CUSTOM_PRESETS; ++preset) {
+        for (int band = 0; band < VIZ_EQ_BANDS; ++band) {
+            wchar_t key[64]{};
+            EqGetCustomPresetStorageKey(preset, band, key, 64);
+            const int stored = std::clamp(Wh_GetIntValue(key, 100), 0, 200);
+            g_eqCustomPresetGains[static_cast<size_t>(preset)][static_cast<size_t>(band)].store(
+                stored / 100.0f, std::memory_order_relaxed);
+        }
+    }
+
+    const int savedPreset = Wh_GetIntValue(
+        VIZ_EQ_SELECTED_PRESET_STORAGE_KEY, -1);
+    if (savedPreset >= 0 && savedPreset < VIZ_EQ_BUILTIN_PRESET_COUNT) {
+        g_eqSelectedPreset = savedPreset;
+    } else if (savedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE &&
+               savedPreset < EQ_CUSTOM_PRESET_INDEX_BASE + g_eqCustomPresetCount) {
+        g_eqSelectedPreset = savedPreset;
+    } else {
+        g_eqSelectedPreset = -1;
+    }
+
+    g_eqStorageInitialized = true;
 }
 
 static void SaveCustomEQSettings() {
-    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+    // Always persist the currently visible EQ curve, regardless of whether a
+    // built-in preset, a custom preset, or no preset is selected. This keeps
+    // the actual slider values stable across settings changes, recompiles,
+    // Explorer restarts, and full PC reboots.
+    for (int band = 0; band < VIZ_EQ_BANDS; ++band) {
         const float gain = std::clamp(
-            g_customEqGains[static_cast<size_t>(i)].load(std::memory_order_relaxed),
+            g_eqActiveGains[static_cast<size_t>(band)].load(std::memory_order_relaxed),
             0.0f, 2.0f);
+        g_customEqGains[static_cast<size_t>(band)].store(gain, std::memory_order_relaxed);
+        const int stored = static_cast<int>(std::lround(gain * 100.0f));
+
+        // New persistent active-curve storage.
         Wh_SetIntValue(
-            VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(i)],
-            static_cast<int>(std::lround(gain * 100.0f)));
+            VIZ_EQ_ACTIVE_STORAGE_KEYS[static_cast<size_t>(band)], stored);
+
+        // Keep the legacy keys mirrored so older versions can still restore
+        // the last active curve if the user downgrades the mod.
+        Wh_SetIntValue(
+            VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(band)], stored);
+    }
+
+    // A custom preset represents the currently editable curve. Keep the
+    // selected preset synchronized with the actual slider values as before.
+    if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE) {
+        const int presetIndex = g_eqSelectedPreset - EQ_CUSTOM_PRESET_INDEX_BASE;
+        if (presetIndex >= 0 && presetIndex < g_eqCustomPresetCount) {
+            for (int band = 0; band < VIZ_EQ_BANDS; ++band) {
+                g_eqCustomPresetGains[static_cast<size_t>(presetIndex)][static_cast<size_t>(band)].store(
+                    std::clamp(
+                        g_eqActiveGains[static_cast<size_t>(band)].load(std::memory_order_relaxed),
+                        0.0f, 2.0f),
+                    std::memory_order_relaxed);
+            }
+            EqSaveCustomPreset(presetIndex);
+        }
+    }
+
+    Wh_SetIntValue(VIZ_EQ_SELECTED_PRESET_STORAGE_KEY, g_eqSelectedPreset);
+}
+
+struct VizEqBandMap {
+    int a = 0;
+    int b = 0;
+    float t = 0.0f;
+};
+
+static void BuildVizEqBandMaps(std::array<VizEqBandMap, VIZ_NUM_BANDS>& maps) {
+    constexpr float kMinHz = 20.0f;
+    constexpr float kMaxHz = 20000.0f;
+
+    for (int band = 0; band < VIZ_NUM_BANDS; ++band) {
+        const float bandT = (static_cast<float>(band) + 0.5f) /
+            static_cast<float>(VIZ_NUM_BANDS);
+        const float frequency = kMinHz *
+            powf(kMaxHz / kMinHz, bandT);
+
+        float previousLog = logf(std::max(kMinHz, VIZ_EQ_LOW_HZ[0]));
+        bool mapped = false;
+
+        for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+            const float lowHz = VIZ_EQ_LOW_HZ[static_cast<size_t>(i)];
+            const float highHz = VIZ_EQ_HIGH_HZ[static_cast<size_t>(i)];
+            const float lowLog = logf(lowHz);
+            const float highLog = logf(highHz);
+
+            if (frequency <= lowHz) {
+                if (i == 0) {
+                    maps[static_cast<size_t>(band)] = {0, 0, 0.0f};
+                } else {
+                    const float t = std::clamp(
+                        (logf(frequency) - previousLog) /
+                            std::max(0.0001f, lowLog - previousLog),
+                        0.0f, 1.0f);
+                    maps[static_cast<size_t>(band)] = {i - 1, i, t};
+                }
+                mapped = true;
+                break;
+            }
+
+            if (frequency <= highHz) {
+                const float lowT = std::clamp(
+                    (logf(frequency) - lowLog) /
+                        std::max(0.0001f, highLog - lowLog),
+                    0.0f, 1.0f);
+                const float blend =
+                    lowT < 0.5f ? 0.0f : (lowT - 0.5f) * 2.0f;
+                const int next = (i + 1 < VIZ_EQ_BANDS) ? i + 1 : i;
+                maps[static_cast<size_t>(band)] = {i, next, blend};
+                mapped = true;
+                break;
+            }
+
+            previousLog = highLog;
+        }
+
+        if (!mapped) {
+            maps[static_cast<size_t>(band)] =
+                {VIZ_EQ_BANDS - 1, VIZ_EQ_BANDS - 1, 0.0f};
+        }
     }
 }
 
-static float GetVizEQMultiplier(int band) {
-    band = std::clamp(band, 0, VIZ_NUM_BANDS - 1);
+static void GetVizEQMultipliers(float out[VIZ_NUM_BANDS]) {
+    static const std::array<VizEqBandMap, VIZ_NUM_BANDS> maps = [] {
+        std::array<VizEqBandMap, VIZ_NUM_BANDS> result{};
+        BuildVizEqBandMaps(result);
+        return result;
+    }();
 
-    // The existing FFT uses logarithmic 20 Hz..20 kHz bands, so interpolate
-    // the user controls in log-frequency space. This keeps the EQ smooth while
-    // leaving the established FFT/visualizer pipeline completely unchanged.
-    constexpr float kMinHz = 20.0f;
-    constexpr float kMaxHz = 20000.0f;
-    const float bandT = (static_cast<float>(band) + 0.5f) /
-        static_cast<float>(VIZ_NUM_BANDS);
-    const float frequency = kMinHz *
-        powf(kMaxHz / kMinHz, bandT);
-
-    float previousLog = logf(std::max(kMinHz, VIZ_EQ_LOW_HZ[0]));
-    float previousGain = g_customEqGains[0].load(std::memory_order_relaxed);
-
+    // Snapshot the ten controls once per FFT instead of repeatedly touching
+    // atomics while rediscovering the same frequency mapping for every band.
+    std::array<float, VIZ_EQ_BANDS> gains{};
     for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
-        const float lowLog = logf(VIZ_EQ_LOW_HZ[static_cast<size_t>(i)]);
-        const float highLog = logf(VIZ_EQ_HIGH_HZ[static_cast<size_t>(i)]);
-        const float currentGain = g_customEqGains[static_cast<size_t>(i)].load(
-            std::memory_order_relaxed);
-
-        if (frequency <= VIZ_EQ_LOW_HZ[static_cast<size_t>(i)]) {
-            if (i == 0)
-                return std::clamp(currentGain, 0.0f, 2.0f);
-            const float t = std::clamp(
-                (logf(frequency) - previousLog) /
-                    std::max(0.0001f, lowLog - previousLog),
-                0.0f, 1.0f);
-            return std::clamp(previousGain +
-                (g_customEqGains[static_cast<size_t>(i)].load(std::memory_order_relaxed) -
-                 previousGain) * t, 0.0f, 2.0f);
-        }
-
-        if (frequency <= VIZ_EQ_HIGH_HZ[static_cast<size_t>(i)]) {
-            // Each slider controls its own frequency range. A small linear
-            // interpolation inside that range avoids hard gain discontinuities
-            // at the FFT-band boundaries.
-            const float lowT = std::clamp(
-                (logf(frequency) - lowLog) /
-                    std::max(0.0001f, highLog - lowLog),
-                0.0f, 1.0f);
-            const float nextGain = (i + 1 < VIZ_EQ_BANDS)
-                ? g_customEqGains[static_cast<size_t>(i + 1)].load(std::memory_order_relaxed)
-                : currentGain;
-            // Blend towards the next control only through the second half of
-            // the range, preserving the intuitive meaning of the slider.
-            const float blend = lowT < 0.5f ? 0.0f : (lowT - 0.5f) * 2.0f;
-            return std::clamp(currentGain + (nextGain - currentGain) * blend,
-                              0.0f, 2.0f);
-        }
-
-        previousLog = highLog;
-        previousGain = currentGain;
+        gains[static_cast<size_t>(i)] = std::clamp(
+            g_eqActiveGains[static_cast<size_t>(i)].load(
+                std::memory_order_relaxed),
+            0.0f, 2.0f);
     }
 
-    return std::clamp(
-        g_customEqGains[VIZ_EQ_BANDS - 1].load(std::memory_order_relaxed),
-        0.0f, 2.0f);
+    for (int band = 0; band < VIZ_NUM_BANDS; ++band) {
+        const VizEqBandMap& map = maps[static_cast<size_t>(band)];
+        const float a = gains[static_cast<size_t>(map.a)];
+        const float b = gains[static_cast<size_t>(map.b)];
+        out[band] = std::clamp(a + (b - a) * map.t, 0.0f, 2.0f);
+    }
 }
 
 static float GetBandGravity(int band) {
-    const float t = (band + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
-    return 0.012f + t * 0.030f;
+    static const std::array<float, VIZ_NUM_BANDS> values = [] {
+        std::array<float, VIZ_NUM_BANDS> result{};
+        for (int i = 0; i < VIZ_NUM_BANDS; ++i) {
+            const float t = (i + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
+            result[static_cast<size_t>(i)] = 0.012f + t * 0.030f;
+        }
+        return result;
+    }();
+    return values[static_cast<size_t>(band)];
 }
 
 static float GetBandSensitivity(int band) {
-    const float t = (band + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
-    return 0.28f * powf(0.045f / 0.28f, t);
+    static const std::array<float, VIZ_NUM_BANDS> values = [] {
+        std::array<float, VIZ_NUM_BANDS> result{};
+        for (int i = 0; i < VIZ_NUM_BANDS; ++i) {
+            const float t = (i + 0.5f) / static_cast<float>(VIZ_NUM_BANDS);
+            result[static_cast<size_t>(i)] = 0.28f *
+                powf(0.045f / 0.28f, t);
+        }
+        return result;
+    }();
+    return values[static_cast<size_t>(band)];
 }
 
 static void ClearAudioBands() {
+    for (auto& band : g_rawAudioBands)
+        band.store(0.0f, std::memory_order_relaxed);
     for (auto& band : g_audioBands)
         band.store(0.0f, std::memory_order_relaxed);
+    g_spectralFlux.store(0.0f, std::memory_order_relaxed);
+    g_bassSpectralFlux.store(0.0f, std::memory_order_relaxed);
+    g_transientScore.store(0.0f, std::memory_order_relaxed);
+    g_bassTransientScore.store(0.0f, std::memory_order_relaxed);
+    g_audioBeatConfidence.store(0.0f, std::memory_order_relaxed);
+    g_audioBassTransientEventStrength.store(0.0f, std::memory_order_relaxed);
 }
 
 class AudioInterfaceActivationHandler final
@@ -2239,7 +4043,7 @@ public:
 };
 
 static bool EqualsExecutableName(const wchar_t* currentName,
-                                 const std::wstring& wanted) {
+                                  const std::wstring& wanted) {
     if (!currentName)
         return false;
 
@@ -2250,139 +4054,192 @@ static bool EqualsExecutableName(const wchar_t* currentName,
     return current == wanted;
 }
 
-static DWORD FindAudioProcessIdByExecutable(
-    IMMDeviceEnumerator* enumerator,
-    const std::wstring& executableName) {
+static std::vector<std::wstring> SplitExecutableList(const std::wstring& input) {
+    std::vector<std::wstring> result;
+    std::wstring token;
 
-    if (executableName.empty())
-        return 0;
+    auto flushToken = [&]() {
+        size_t begin = 0;
+        while (begin < token.size() && iswspace(token[begin]))
+            ++begin;
 
+        size_t end = token.size();
+        while (end > begin && iswspace(token[end - 1]))
+            --end;
+
+        if (end > begin) {
+            std::wstring normalized = token.substr(begin, end - begin);
+            for (wchar_t& ch : normalized)
+                ch = static_cast<wchar_t>(towlower(ch));
+            result.push_back(std::move(normalized));
+        }
+        token.clear();
+    };
+
+    for (wchar_t ch : input) {
+        if (ch == L',' || ch == L';' || ch == L'/' || ch == L'\\' ||
+            ch == L'|' || ch == L'+' || iswspace(ch)) {
+            flushToken();
+        } else {
+            token.push_back(ch);
+        }
+    }
+
+    flushToken();
+    return result;
+}
+
+static bool ExecutableListContains(const std::vector<std::wstring>& executableNames,
+                                   const std::wstring& executableName) {
     std::wstring wanted = executableName;
     for (wchar_t& ch : wanted)
         ch = static_cast<wchar_t>(towlower(ch));
 
-    DWORD activeSessionPid = 0;
-    DWORD anySessionPid = 0;
+    for (const std::wstring& name : executableNames) {
+        if (name == wanted)
+            return true;
+    }
+    return false;
+}
 
-    if (enumerator) {
-        IMMDevice* device = nullptr;
-        HRESULT hr = enumerator->GetDefaultAudioEndpoint(
-            eRender, eConsole, &device);
 
-        if (SUCCEEDED(hr) && device) {
-            IAudioSessionManager2* sessionManager = nullptr;
-            hr = device->Activate(
-                __uuidof(IAudioSessionManager2),
-                CLSCTX_ALL,
-                nullptr,
-                reinterpret_cast<void**>(&sessionManager));
+static bool ProcessExecutableNameMatches(
+    DWORD processId, const std::vector<std::wstring>& executableNames) {
+    if (!processId || executableNames.empty())
+        return false;
 
-            if (SUCCEEDED(hr) && sessionManager) {
-                IAudioSessionEnumerator* sessionEnumerator = nullptr;
-                hr = sessionManager->GetSessionEnumerator(&sessionEnumerator);
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process)
+        return false;
 
-                if (SUCCEEDED(hr) && sessionEnumerator) {
-                    int sessionCount = 0;
-                    if (SUCCEEDED(sessionEnumerator->GetCount(&sessionCount))) {
-                        for (int i = 0; i < sessionCount; ++i) {
-                            IAudioSessionControl* control = nullptr;
-                            if (FAILED(sessionEnumerator->GetSession(i, &control)) || !control)
-                                continue;
+    wchar_t exePath[MAX_PATH] = {};
+    DWORD pathLen = ARRAYSIZE(exePath);
+    bool matches = false;
 
-                            IAudioSessionControl2* control2 = nullptr;
-                            if (SUCCEEDED(control->QueryInterface(
-                                    __uuidof(IAudioSessionControl2),
-                                    reinterpret_cast<void**>(&control2))) &&
-                                control2) {
-                                DWORD pid = 0;
-                                if (SUCCEEDED(control2->GetProcessId(&pid)) && pid != 0) {
-                                    HANDLE process = OpenProcess(
-                                        PROCESS_QUERY_LIMITED_INFORMATION,
-                                        FALSE,
-                                        pid);
-
-                                    bool matches = false;
-                                    bool isActive = false;
-
-                                    if (process) {
-                                        wchar_t exePath[MAX_PATH] = {};
-                                        DWORD pathLen = ARRAYSIZE(exePath);
-                                        if (QueryFullProcessImageNameW(
-                                                process, 0, exePath, &pathLen)) {
-                                            const wchar_t* base = wcsrchr(exePath, L'\\');
-                                            base = base ? base + 1 : exePath;
-                                            matches = EqualsExecutableName(base, wanted);
-                                        }
-                                        CloseHandle(process);
-                                    }
-
-                                    AudioSessionState state = AudioSessionStateInactive;
-                                    if (matches &&
-                                        SUCCEEDED(control->GetState(&state))) {
-                                        isActive = (state == AudioSessionStateActive);
-                                    }
-
-                                    if (matches) {
-                                        if (anySessionPid == 0)
-                                            anySessionPid = pid;
-                                        if (isActive && activeSessionPid == 0)
-                                            activeSessionPid = pid;
-                                    }
-                                }
-                                control2->Release();
-                            }
-
-                            control->Release();
-                        }
-                    }
-                    sessionEnumerator->Release();
-                }
-                sessionManager->Release();
-            }
-            device->Release();
-        }
+    if (QueryFullProcessImageNameW(process, 0, exePath, &pathLen)) {
+        const wchar_t* base = wcsrchr(exePath, L'\\');
+        base = base ? base + 1 : exePath;
+        matches = ExecutableListContains(executableNames, base);
     }
 
-    if (activeSessionPid != 0) {
-        Wh_Log(L"Selected audio app '%s' -> active audio PID=%lu",
-               executableName.c_str(),
-               static_cast<unsigned long>(activeSessionPid));
-        return activeSessionPid;
-    }
+    CloseHandle(process);
+    return matches;
+}
 
-    if (anySessionPid != 0) {
-        Wh_Log(L"Selected audio app '%s' -> audio-session PID=%lu",
-               executableName.c_str(),
-               static_cast<unsigned long>(anySessionPid));
-        return anySessionPid;
-    }
+static bool IsAnyConfiguredExecutableRunning(const std::wstring& executableList) {
+    const std::vector<std::wstring> executableNames = SplitExecutableList(executableList);
+    if (executableNames.empty())
+        return false;
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE)
-        return 0;
+        return false;
 
+    bool found = false;
     PROCESSENTRY32W entry{};
     entry.dwSize = sizeof(entry);
-    DWORD result = 0;
-
     if (Process32FirstW(snapshot, &entry)) {
         do {
-            if (EqualsExecutableName(entry.szExeFile, wanted)) {
-                result = entry.th32ProcessID;
+            if (ExecutableListContains(executableNames, entry.szExeFile)) {
+                found = true;
                 break;
             }
         } while (Process32NextW(snapshot, &entry));
     }
 
     CloseHandle(snapshot);
+    return found;
+}
 
-    if (result != 0) {
-        Wh_Log(L"Selected audio app '%s' -> process snapshot PID=%lu",
-               executableName.c_str(),
-               static_cast<unsigned long>(result));
+enum class AudioSampleFormat {
+    Float32,
+    Int16,
+    Int32,
+};
+
+static bool GetAudioSampleFormat(
+    const WAVEFORMATEX* format, AudioSampleFormat* outFormat) {
+    if (!format || !outFormat)
+        return false;
+
+    if (format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT &&
+        format->wBitsPerSample == 32) {
+        *outFormat = AudioSampleFormat::Float32;
+        return true;
     }
 
-    return result;
+    if (format->wFormatTag == WAVE_FORMAT_PCM) {
+        if (format->wBitsPerSample == 16) {
+            *outFormat = AudioSampleFormat::Int16;
+            return true;
+        }
+        if (format->wBitsPerSample == 32) {
+            *outFormat = AudioSampleFormat::Int32;
+            return true;
+        }
+    }
+
+    if (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+        format->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+        const auto* extensible =
+            reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format);
+
+        if (extensible->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT &&
+            format->wBitsPerSample == 32) {
+            *outFormat = AudioSampleFormat::Float32;
+            return true;
+        }
+
+        if (extensible->SubFormat == KSDATAFORMAT_SUBTYPE_PCM) {
+            if (format->wBitsPerSample == 16) {
+                *outFormat = AudioSampleFormat::Int16;
+                return true;
+            }
+            if (format->wBitsPerSample == 32) {
+                *outFormat = AudioSampleFormat::Int32;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static float ReadAudioMonoSample(
+    const BYTE* data,
+    UINT32 frameIndex,
+    UINT32 channels,
+    AudioSampleFormat format) {
+
+    if (!data || channels == 0)
+        return 0.0f;
+
+    float mono = 0.0f;
+
+    switch (format) {
+    case AudioSampleFormat::Float32: {
+        const float* src = reinterpret_cast<const float*>(data);
+        for (UINT32 c = 0; c < channels; ++c)
+            mono += src[frameIndex * channels + c];
+        break;
+    }
+
+    case AudioSampleFormat::Int16: {
+        const INT16* src = reinterpret_cast<const INT16*>(data);
+        for (UINT32 c = 0; c < channels; ++c)
+            mono += src[frameIndex * channels + c] / 32768.0f;
+        break;
+    }
+
+    case AudioSampleFormat::Int32: {
+        const INT32* src = reinterpret_cast<const INT32*>(data);
+        for (UINT32 c = 0; c < channels; ++c)
+            mono += src[frameIndex * channels + c] / 2147483648.0f;
+        break;
+    }
+    }
+
+    return mono / static_cast<float>(channels);
 }
 
 static bool InitSystemAudioClient(
@@ -2391,10 +4248,10 @@ static bool InitSystemAudioClient(
     IAudioCaptureClient** outCapture,
     UINT32* outSampleRate,
     UINT32* outChannels,
-    bool* outIsFloat) {
+    AudioSampleFormat* outSampleFormat) {
 
     if (!enumerator || !outClient || !outCapture ||
-        !outSampleRate || !outChannels || !outIsFloat) {
+        !outSampleRate || !outChannels || !outSampleFormat) {
         return false;
     }
 
@@ -2427,11 +4284,15 @@ static bool InitSystemAudioClient(
 
     *outSampleRate = format->nSamplesPerSec;
     *outChannels = std::max<UINT32>(1, format->nChannels);
-    *outIsFloat =
-        format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT ||
-        (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
-         reinterpret_cast<WAVEFORMATEXTENSIBLE*>(format)->SubFormat ==
-             KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
+    if (!GetAudioSampleFormat(format, outSampleFormat)) {
+        Wh_Log(L"Unsupported system mix format: tag=%u bits=%u channels=%u",
+               static_cast<unsigned>(format->wFormatTag),
+               static_cast<unsigned>(format->wBitsPerSample),
+               static_cast<unsigned>(format->nChannels));
+        CoTaskMemFree(format);
+        client->Release();
+        return false;
+    }
 
     hr = client->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
@@ -2484,10 +4345,10 @@ static bool InitProcessAudioClient(
     IAudioCaptureClient** outCapture,
     UINT32* outSampleRate,
     UINT32* outChannels,
-    bool* outIsFloat) {
+    AudioSampleFormat* outSampleFormat) {
 
     if (!processId || !outClient || !outCapture ||
-        !outSampleRate || !outChannels || !outIsFloat) {
+        !outSampleRate || !outChannels || !outSampleFormat) {
         return false;
     }
 
@@ -2527,21 +4388,40 @@ static bool InitProcessAudioClient(
         asyncOperation->Release();
 
     if (FAILED(hr)) {
+        handler->DisableEvent();
         handler->Release();
         CloseHandle(completedEvent);
         return false;
     }
 
-    for (;;) {
-        const DWORD waitResult = WaitForSingleObject(completedEvent, 50);
-        if (waitResult == WAIT_OBJECT_0)
-            break;
-        if (g_audioRunning.load(std::memory_order_acquire) == false) {
-            handler->DisableEvent();
-            handler->Release();
-            CloseHandle(completedEvent);
-            return false;
-        }
+    // ActivateAudioInterfaceAsync may retain and invoke this handler after the
+    // audio worker is asked to stop. Do not release the handler/event while that
+    // callback is outstanding: its code and vtable live in this DLL, so unload
+    // must join this worker only after activation has completed.
+    DWORD waitResult = WAIT_TIMEOUT;
+    while (waitResult == WAIT_TIMEOUT) {
+        waitResult = WaitForSingleObject(completedEvent, 100);
+        // The shutdown flag deliberately does not cancel this wait. StopAudioCapture
+        // joins the worker, and therefore cannot let the module unload while COM
+        // can still call ActivateCompleted().
+    }
+    if (waitResult != WAIT_OBJECT_0) {
+        // A valid, owned event handle should not fail here. Keep waiting rather
+        // than releasing a possibly live callback target after an anomalous result.
+        Wh_Log(L"Process loopback activation completion wait returned %lu (pid=%lu); retrying",
+               static_cast<unsigned long>(waitResult),
+               static_cast<unsigned long>(processId));
+        do {
+            Sleep(100);
+            waitResult = WaitForSingleObject(completedEvent, INFINITE);
+        } while (waitResult != WAIT_OBJECT_0);
+    }
+
+    if (!g_audioRunning.load(std::memory_order_acquire)) {
+        handler->DisableEvent();
+        handler->Release();
+        CloseHandle(completedEvent);
+        return false;
     }
 
     const HRESULT activationResult = handler->Result();
@@ -2549,12 +4429,14 @@ static bool InitProcessAudioClient(
         Wh_Log(L"Process loopback activation result failed: 0x%08X (pid=%lu)",
                static_cast<unsigned>(activationResult),
                static_cast<unsigned long>(processId));
+        handler->DisableEvent();
         handler->Release();
         CloseHandle(completedEvent);
         return false;
     }
 
     IAudioClient* client = handler->TakeAudioClient();
+    handler->DisableEvent();
     handler->Release();
     CloseHandle(completedEvent);
 
@@ -2617,7 +4499,7 @@ static bool InitProcessAudioClient(
 
     *outSampleRate = format.nSamplesPerSec;
     *outChannels = format.nChannels;
-    *outIsFloat = false;
+    *outSampleFormat = AudioSampleFormat::Int16;
     *outClient = client;
     *outCapture = capture;
     return true;
@@ -2630,26 +4512,23 @@ static bool InitAudioClient(
     IAudioCaptureClient** outCapture,
     UINT32* outSampleRate,
     UINT32* outChannels,
-    bool* outIsFloat) {
+    AudioSampleFormat* outSampleFormat) {
 
-    if (settings.audioSource == 1) {
-        DWORD pid = FindAudioProcessIdByExecutable(enumerator, settings.audioApplicationName);
-        if (!pid) {
-            Wh_Log(L"Selected audio application not found: %s",
-                   settings.audioApplicationName.c_str());
-            return false;
-        }
-        return InitProcessAudioClient(
-            pid, outClient, outCapture,
-            outSampleRate, outChannels, outIsFloat);
+    if (settings.audioSource == 0) {
+        return InitSystemAudioClient(
+            enumerator,
+            outClient,
+            outCapture,
+            outSampleRate,
+            outChannels,
+            outSampleFormat);
     }
 
-    return InitSystemAudioClient(
-        enumerator, outClient, outCapture,
-        outSampleRate, outChannels, outIsFloat);
+    return false;
 }
 
 static void PublishAudioBands(const float bands[VIZ_NUM_BANDS]) {
+    DebugPerfScope debugScope(DEBUG_PERF_AUDIO_PUBLISH);
     float peak = 0.0f;
     for (int i = 0; i < VIZ_NUM_BANDS; ++i) {
         g_audioBands[i].store(bands[i], std::memory_order_relaxed);
@@ -2664,6 +4543,206 @@ static void PublishAudioBands(const float bands[VIZ_NUM_BANDS]) {
         if (overlay)
             PostMessageW(overlay, WM_VIZ_AUDIO_WAKE, 0, 0);
     }
+}
+
+static std::vector<DWORD> FindAudioProcessIdsByExecutable(
+    IMMDeviceEnumerator* enumerator,
+    const std::wstring& executableList) {
+    const std::vector<std::wstring> executableNames = SplitExecutableList(executableList);
+    std::vector<DWORD> result;
+    if (executableNames.empty())
+        return result;
+
+    auto findNameIndex = [&](const wchar_t* currentName) -> int {
+        if (!currentName)
+            return -1;
+        std::wstring current = currentName;
+        for (wchar_t& ch : current)
+            ch = static_cast<wchar_t>(towlower(ch));
+        for (size_t i = 0; i < executableNames.size(); ++i) {
+            if (executableNames[i] == current)
+                return static_cast<int>(i);
+        }
+        return -1;
+    };
+
+    // One target PID per configured executable is intentional. Process-loopback in
+    // INCLUDE_TARGET_PROCESS_TREE mode captures the target and its child processes,
+    // so selecting every helper/content PID would duplicate the same application's audio.
+    std::vector<DWORD> bestPid(executableNames.size(), 0);
+    std::vector<bool> bestPidActive(executableNames.size(), false);
+
+    if (enumerator) {
+        IMMDevice* device = nullptr;
+        HRESULT hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+        if (SUCCEEDED(hr) && device) {
+            IAudioSessionManager2* sessionManager = nullptr;
+            hr = device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr,
+                                  reinterpret_cast<void**>(&sessionManager));
+            if (SUCCEEDED(hr) && sessionManager) {
+                IAudioSessionEnumerator* sessionEnumerator = nullptr;
+                hr = sessionManager->GetSessionEnumerator(&sessionEnumerator);
+                if (SUCCEEDED(hr) && sessionEnumerator) {
+                    int sessionCount = 0;
+                    if (SUCCEEDED(sessionEnumerator->GetCount(&sessionCount))) {
+                        for (int i = 0; i < sessionCount; ++i) {
+                            IAudioSessionControl* control = nullptr;
+                            if (FAILED(sessionEnumerator->GetSession(i, &control)) || !control)
+                                continue;
+
+                            IAudioSessionControl2* control2 = nullptr;
+                            if (SUCCEEDED(control->QueryInterface(
+                                    __uuidof(IAudioSessionControl2),
+                                    reinterpret_cast<void**>(&control2))) && control2) {
+                                DWORD pid = 0;
+                                if (SUCCEEDED(control2->GetProcessId(&pid)) && pid) {
+                                    HANDLE process = OpenProcess(
+                                        PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                                    if (process) {
+                                        wchar_t exePath[MAX_PATH] = {};
+                                        DWORD pathLen = ARRAYSIZE(exePath);
+                                        if (QueryFullProcessImageNameW(
+                                                process, 0, exePath, &pathLen)) {
+                                            const wchar_t* base = wcsrchr(exePath, L'\\');
+                                            base = base ? base + 1 : exePath;
+                                            const int nameIndex = findNameIndex(base);
+                                            if (nameIndex >= 0) {
+                                                AudioSessionState state = AudioSessionStateInactive;
+                                                const bool active =
+                                                    SUCCEEDED(control->GetState(&state)) &&
+                                                    state == AudioSessionStateActive;
+                                                if (!bestPid[nameIndex] ||
+                                                    (active && !bestPidActive[nameIndex])) {
+                                                    bestPid[nameIndex] = pid;
+                                                    bestPidActive[nameIndex] = active;
+                                                }
+                                            }
+                                        }
+                                        CloseHandle(process);
+                                    }
+                                }
+                                control2->Release();
+                            }
+                            control->Release();
+                        }
+                    }
+                    sessionEnumerator->Release();
+                }
+                sessionManager->Release();
+            }
+            device->Release();
+        }
+    }
+
+    // If an application currently has no audio session, fall back to one live process
+    // for that executable. Its process tree will be captured once audio starts.
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W entry{};
+        entry.dwSize = sizeof(entry);
+        if (Process32FirstW(snapshot, &entry)) {
+            do {
+                const int nameIndex = findNameIndex(entry.szExeFile);
+                if (nameIndex >= 0 && !bestPid[nameIndex])
+                    bestPid[nameIndex] = entry.th32ProcessID;
+            } while (Process32NextW(snapshot, &entry));
+        }
+        CloseHandle(snapshot);
+    }
+
+    for (DWORD pid : bestPid) {
+        if (pid)
+            result.push_back(pid);
+    }
+
+    return result;
+}
+
+struct ProcessAudioSource {
+    DWORD pid = 0;
+    IAudioClient* client = nullptr;
+    IAudioCaptureClient* capture = nullptr;
+    UINT32 sampleRate = 48000;
+    UINT32 channels = 2;
+    AudioSampleFormat sampleFormat = AudioSampleFormat::Int16;
+};
+
+
+static void ReleaseProcessAudioSources(std::vector<ProcessAudioSource>& sources) {
+    for (auto& source : sources) {
+        // The capture service is obtained from the client, so release the
+        // service interface before dropping the owning IAudioClient reference.
+        if (source.capture) {
+            source.capture->Release();
+            source.capture = nullptr;
+        }
+        if (source.client) {
+            source.client->Stop();
+            source.client->Release();
+            source.client = nullptr;
+        }
+    }
+    sources.clear();
+}
+
+static bool BuildProcessAudioSources(
+    const std::vector<DWORD>& pids,
+    std::vector<ProcessAudioSource>& sources) {
+    ReleaseProcessAudioSources(sources);
+
+    UINT32 commonSampleRate = 0;
+    UINT32 commonChannels = 0;
+    AudioSampleFormat commonSampleFormat = AudioSampleFormat::Int16;
+
+    for (DWORD pid : pids) {
+        ProcessAudioSource source{};
+        source.pid = pid;
+        if (!InitProcessAudioClient(
+                pid,
+                &source.client,
+                &source.capture,
+                &source.sampleRate,
+                &source.channels,
+                &source.sampleFormat)) {
+            Wh_Log(L"Failed to initialize selected process audio source (pid=%lu)",
+                   static_cast<unsigned long>(pid));
+            continue;
+        }
+
+        if (commonSampleRate == 0) {
+            commonSampleRate = source.sampleRate;
+            commonChannels = source.channels;
+            commonSampleFormat = source.sampleFormat;
+        }
+
+        // Selected process-loopback sources are expected to use the same mix format.
+        // If a source reports a different format, keep it out rather than mixing
+        // incompatible sample streams.
+        if (source.sampleRate != commonSampleRate ||
+            source.channels != commonChannels ||
+            source.sampleFormat != commonSampleFormat) {
+            Wh_Log(L"Skipping selected process PID=%lu because its audio format differs from the first source",
+                   static_cast<unsigned long>(pid));
+            source.client->Stop();
+            source.client->Release();
+            source.client = nullptr;
+            source.capture->Release();
+            source.capture = nullptr;
+            continue;
+        }
+
+        sources.push_back(source);
+    }
+
+    return !sources.empty();
+}
+
+static bool SamePidList(
+    const std::vector<DWORD>& a,
+    const std::vector<DWORD>& b) {
+    if (a.size() != b.size())
+        return false;
+    return std::equal(a.begin(), a.end(), b.begin());
 }
 
 static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
@@ -2689,24 +4768,17 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
     IAudioCaptureClient* capture = nullptr;
     UINT32 sampleRate = 48000;
     UINT32 channels = 2;
-    bool isFloat = true;
-    DWORD targetProcessId = 0;
+    AudioSampleFormat sampleFormat = AudioSampleFormat::Float32;
+
+    std::vector<ProcessAudioSource> processSources;
+    std::vector<DWORD> targetProcessIds;
+    std::vector<HANDLE> targetProcessWatchHandles;
+    std::vector<std::vector<float>> sourceFrames;
     ULONGLONG lastTargetCheckMs = 0;
-    DWORD targetCheckIntervalMs = 500;
-    const VisualizerSettings initialSettings = GetSettingsSnapshot();
-
-    if (initialSettings.audioSource == 1)
-        targetProcessId = FindAudioProcessIdByExecutable(enumerator, initialSettings.audioApplicationName);
-
-    if (InitAudioClient(
-            enumerator, initialSettings,
-            &client,
-            &capture,
-            &sampleRate,
-            &channels,
-            &isFloat)) {
-        BuildLogBins(sampleRate);
-    }
+    DWORD targetCheckIntervalMs = 750;
+    std::wstring lastTargetExecutableList;
+    bool previousSelectedMode = GetSettingsSnapshot().audioSource == 1;
+    ULONGLONG nextAudioFftMs = 0;
 
     static constexpr int RING_CAP = VIZ_FFT_SIZE * 4;
     std::vector<float> ringBuf(RING_CAP, 0.0f);
@@ -2716,207 +4788,889 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
     std::vector<float> re(VIZ_FFT_SIZE, 0.0f);
     std::vector<float> im(VIZ_FFT_SIZE, 0.0f);
 
+    // In selected-app mode multiple process-loopback clients can occasionally
+    // expose different amounts of buffered audio in one capture pass. Do not
+    // let that backlog make the FFT/visualizer run several audio hops at once.
+    // The visualizer must advance at the real-time FFT hop cadence instead.
+
     float bandEnv[VIZ_NUM_BANDS] = {};
-    
+    float autoGain = 1.0f;
+    float smoothMax = 0.01f;
 
-    while (g_audioRunning.load(std::memory_order_acquire)) {
-        const VisualizerSettings settings = GetSettingsSnapshot();
-        if (settings.audioSource == 1) {
-            const ULONGLONG now = GetTickCount64();
-            if (now - lastTargetCheckMs >= targetCheckIntervalMs) {
-                lastTargetCheckMs = now;
-                const DWORD newTargetProcessId =
-                    FindAudioProcessIdByExecutable(enumerator, settings.audioApplicationName);
+    // Event-path state lives on the audio thread. It intentionally does not
+    // reuse bandEnv, Auto-Gain or visual attack/decay.
+    float previousRawBands[VIZ_NUM_BANDS] = {};
+    float spectralFluxBaseline = 0.0f;
+    float spectralFluxDeviation = VIZ_FLUX_NORMALIZE_FLOOR;
+    float bassFluxBaseline = 0.0f;
+    float bassFluxDeviation = VIZ_FLUX_NORMALIZE_FLOOR;
+    float transientEnvelope = 0.0f;
+    float bassTransientEnvelope = 0.0f;
+    float beatConfidenceEnvelope = 0.0f;
+    float bassEnergyBaseline = 0.0f;
+    float previousBassEnergy = 0.0f;
+    float previousBassFlux = 0.0f;
+    std::array<float, VIZ_BEAT_INTERVAL_HISTORY_SIZE> bassHitIntervalHistory{};
+    size_t bassHitIntervalCount = 0;
+    size_t bassHitIntervalNext = 0;
+    ULONGLONG lastRhythmHitMs = 0;
+    ULONGLONG lastBassTransientEventMs = 0;
+    ULONGLONG lastDiskFluxEventMs = 0;
+    bool hasPreviousRawBands = false;
 
-                if (newTargetProcessId == 0) {
-                    // When the selected app is not playing, there is normally no
-                    // audio session to query. Back off the process fallback so we
-                    // do not create a system-wide snapshot every 500 ms forever.
-                    targetCheckIntervalMs = std::min<DWORD>(
-                        targetCheckIntervalMs * 2, 5000);
-                } else {
-                    targetCheckIntervalMs = 500;
-                }
+    auto clearAudioState = [&]() {
+        std::fill(ringBuf.begin(), ringBuf.end(), 0.0f);
+        ringHead = 0;
+        ringCount = 0;
+        nextAudioFftMs = 0;
+        g_audioFftLevel.store(0.0f, std::memory_order_release);
+        for (float& value : bandEnv)
+            value = 0.0f;
+        std::fill(previousRawBands, previousRawBands + VIZ_NUM_BANDS, 0.0f);
+        spectralFluxBaseline = 0.0f;
+        spectralFluxDeviation = VIZ_FLUX_NORMALIZE_FLOOR;
+        bassFluxBaseline = 0.0f;
+        bassFluxDeviation = VIZ_FLUX_NORMALIZE_FLOOR;
+        transientEnvelope = 0.0f;
+        bassTransientEnvelope = 0.0f;
+        beatConfidenceEnvelope = 0.0f;
+        bassEnergyBaseline = 0.0f;
+        previousBassEnergy = 0.0f;
+        previousBassFlux = 0.0f;
+        bassHitIntervalHistory.fill(0.0f);
+        bassHitIntervalCount = 0;
+        bassHitIntervalNext = 0;
+        lastRhythmHitMs = 0;
+        lastBassTransientEventMs = 0;
+        lastDiskFluxEventMs = 0;
+        hasPreviousRawBands = false;
+        ClearAudioBands();
+    };
 
-                if (newTargetProcessId != targetProcessId) {
-                    if (client) {
-                        client->Stop();
-                        client->Release();
-                        client = nullptr;
-                    }
-                    if (capture) {
-                        capture->Release();
-                        capture = nullptr;
-                    }
-
-                    targetProcessId = newTargetProcessId;
-                    ringHead = 0;
-                    ringCount = 0;
-                    for (float& value : bandEnv)
-                        value = 0.0f;
-                    ClearAudioBands();
-                }
-            }
+    auto releaseSingleSource = [&]() {
+        // Release the capture service before the client it came from.
+        if (capture) {
+            capture->Release();
+            capture = nullptr;
         }
-
-        if (g_hAudioEvent) {
-            WaitForSingleObject(g_hAudioEvent, 20);
-        } else {
-            Sleep(8);
-        }
-
-        if (!capture || !client) {
-            if (client) {
-                client->Stop();
-                client->Release();
-                client = nullptr;
-            }
-            if (capture) {
-                capture->Release();
-                capture = nullptr;
-            }
-
-            ringHead = 0;
-            ringCount = 0;
-            for (float& value : bandEnv)
-                value = 0.0f;
-            ClearAudioBands();
-
-            if (InitAudioClient(
-                    enumerator,
-                    settings,
-                    &client,
-                    &capture,
-                    &sampleRate,
-                    &channels,
-                    &isFloat)) {
-                BuildLogBins(sampleRate);
-            } else {
-                Sleep(settings.audioSource == 1 ? 100 : 20);
-                continue;
-            }
-        }
-
-        UINT32 packetSize = 0;
-        hr = capture->GetNextPacketSize(&packetSize);
-        if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+        if (client) {
             client->Stop();
             client->Release();
             client = nullptr;
-            capture->Release();
-            capture = nullptr;
-            continue;
         }
+    };
 
-        if (FAILED(hr)) {
-            Sleep(5);
-            continue;
+    // Keep a lightweight synchronization handle for each selected process.
+    // This lets us notice process termination immediately, so the relatively
+    // expensive audio-session/process enumeration can back off when the PID
+    // list remains stable without making process restarts slow to detect.
+    auto rebuildProcessWatchHandles = [&]() {
+        for (HANDLE handle : targetProcessWatchHandles) {
+            if (handle)
+                CloseHandle(handle);
         }
+        targetProcessWatchHandles.clear();
+        targetProcessWatchHandles.reserve(targetProcessIds.size());
 
-        if (packetSize == 0) {
-            for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
-                bandEnv[b] = std::max(0.0f, bandEnv[b] - GetBandGravity(b));
-                g_audioBands[b].store(bandEnv[b], std::memory_order_relaxed);
+        for (DWORD pid : targetProcessIds) {
+            HANDLE handle = OpenProcess(SYNCHRONIZE, FALSE, pid);
+            targetProcessWatchHandles.push_back(handle);
+        }
+    };
+
+    auto anyWatchedProcessExited = [&]() -> bool {
+        for (HANDLE handle : targetProcessWatchHandles) {
+            if (!handle)
+                continue;
+            const DWORD waitResult = WaitForSingleObject(handle, 0);
+            if (waitResult == WAIT_OBJECT_0 || waitResult == WAIT_FAILED)
+                return true;
+        }
+        return false;
+    };
+
+    const VisualizerSettings initialSettings = GetSettingsSnapshot();
+    g_audioCaptureSourceMode.store(initialSettings.audioSource, std::memory_order_release);
+    if (initialSettings.audioSource == 1) {
+        targetProcessIds = FindAudioProcessIdsByExecutable(
+            enumerator, initialSettings.audioApplicationName);
+        lastTargetExecutableList = initialSettings.audioApplicationName;
+        rebuildProcessWatchHandles();
+        if (BuildProcessAudioSources(targetProcessIds, processSources) &&
+            !processSources.empty()) {
+            sampleRate = processSources.front().sampleRate;
+            channels = processSources.front().channels;
+            sampleFormat = processSources.front().sampleFormat;
+            g_audioSampleRate.store(sampleRate, std::memory_order_release);
+            g_audioChannels.store(channels, std::memory_order_release);
+            BuildLogBins(sampleRate);
+        }
+    } else if (InitSystemAudioClient(
+                   enumerator,
+                   &client,
+                   &capture,
+                   &sampleRate,
+                   &channels,
+                   &sampleFormat)) {
+        g_audioSampleRate.store(sampleRate, std::memory_order_release);
+        g_audioChannels.store(channels, std::memory_order_release);
+        g_audioCaptureSourceMode.store(0, std::memory_order_release);
+        BuildLogBins(sampleRate);
+    }
+
+    while (g_audioRunning.load(std::memory_order_acquire)) {
+        const VisualizerSettings settings = GetSettingsSnapshot();
+        const bool selectedMode = settings.audioSource == 1;
+        g_audioCaptureSourceMode.store(selectedMode ? 1 : 0,
+                                       std::memory_order_release);
+
+        // Handle a live switch between Whole system and Selected applications
+        // without carrying audio buffers or media from the previous source.
+        if (selectedMode != previousSelectedMode) {
+            ReleaseProcessAudioSources(processSources);
+            targetProcessIds.clear();
+            for (HANDLE handle : targetProcessWatchHandles) {
+                if (handle)
+                    CloseHandle(handle);
             }
-            g_lastAudioUpdateMs.store(GetTickCount64(), std::memory_order_release);
-            continue;
+            targetProcessWatchHandles.clear();
+            releaseSingleSource();
+            clearAudioState();
+            lastTargetCheckMs = 0;
+            targetCheckIntervalMs = 750;
+            lastTargetExecutableList.clear();
+            previousSelectedMode = selectedMode;
         }
 
-        while (packetSize > 0 &&
-               g_audioRunning.load(std::memory_order_acquire)) {
-            BYTE* data = nullptr;
-            UINT32 numFrames = 0;
-            DWORD flags = 0;
+        if (selectedMode) {
+            const ULONGLONG now = GetTickCount64();
+            const bool executableListChanged =
+                settings.audioApplicationName != lastTargetExecutableList;
+            const bool watchedProcessExited = anyWatchedProcessExited();
+            const bool sourceSetIncomplete =
+                processSources.size() != targetProcessIds.size();
+            const bool needsTargetCheck =
+                executableListChanged ||
+                watchedProcessExited ||
+                now - lastTargetCheckMs >= targetCheckIntervalMs;
 
-            hr = capture->GetBuffer(
-                &data,
-                &numFrames,
-                &flags,
-                nullptr,
-                nullptr);
+            if (needsTargetCheck) {
+                lastTargetCheckMs = now;
 
-            if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
-                client->Stop();
-                client->Release();
-                client = nullptr;
-                capture->Release();
-                capture = nullptr;
-                break;
+                std::vector<DWORD> newTargetProcessIds =
+                    FindAudioProcessIdsByExecutable(
+                        enumerator, settings.audioApplicationName);
+
+                const bool pidListChanged =
+                    !SamePidList(newTargetProcessIds, targetProcessIds);
+
+                if (executableListChanged || pidListChanged || sourceSetIncomplete ||
+                    watchedProcessExited) {
+                    const bool logTargetChange =
+                        executableListChanged || pidListChanged || watchedProcessExited;
+
+                    ReleaseProcessAudioSources(processSources);
+                    targetProcessIds = std::move(newTargetProcessIds);
+                    rebuildProcessWatchHandles();
+                    clearAudioState();
+
+                    if (BuildProcessAudioSources(
+                            targetProcessIds, processSources) &&
+                        !processSources.empty()) {
+                        sampleRate = processSources.front().sampleRate;
+                        channels = processSources.front().channels;
+                        sampleFormat = processSources.front().sampleFormat;
+                        g_audioSampleRate.store(sampleRate, std::memory_order_release);
+                        g_audioChannels.store(channels, std::memory_order_release);
+                        BuildLogBins(sampleRate);
+                    } else {
+                        g_audioSampleRate.store(0, std::memory_order_release);
+                        g_audioChannels.store(0, std::memory_order_release);
+                    }
+
+                    if (logTargetChange) {
+                        Wh_Log(L"Audio target changed: '%s' -> %zu target process(es)",
+                               settings.audioApplicationName.c_str(),
+                               targetProcessIds.size());
+                    }
+
+                    targetCheckIntervalMs = targetProcessIds.empty()
+                                                ? 1500
+                                                : (sourceSetIncomplete ? 1500 : 750);
+                } else if (!newTargetProcessIds.empty()) {
+                    // Stable target: exponentially back off discovery. Process
+                    // exit is still detected immediately through the watcher
+                    // handles above, so this only delays discovery of a newly
+                    // appearing/reselected PID while the current target lives.
+                    targetCheckIntervalMs =
+                        std::min<DWORD>(targetCheckIntervalMs * 2, 3000);
+                } else {
+                    targetCheckIntervalMs = 1500;
+                }
+
+                lastTargetExecutableList = settings.audioApplicationName;
             }
 
-            if (FAILED(hr))
-                break;
+            if (g_hAudioEvent)
+                WaitForSingleObject(g_hAudioEvent, 20);
+            else
+                Sleep(8);
 
-            if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
-                for (int b = 0; b < VIZ_NUM_BANDS; ++b)
-                    bandEnv[b] = std::max(0.0f, bandEnv[b] - GetBandGravity(b));
-                PublishAudioBands(bandEnv);
-            } else if (data && numFrames > 0) {
-                if (isFloat) {
-                    const float* src = reinterpret_cast<const float*>(data);
-                    for (UINT32 f = 0; f < numFrames; ++f) {
-                        float mono = 0.0f;
-                        for (UINT32 c = 0; c < channels; ++c)
-                            mono += src[f * channels + c];
+            if (processSources.empty()) {
+                clearAudioState();
+                Sleep(50);
+                continue;
+            }
 
-                        ringBuf[ringHead] = mono / static_cast<float>(channels);
-                        ringHead = (ringHead + 1) % RING_CAP;
-                        ringCount = std::min(ringCount + 1, RING_CAP);
+            sourceFrames.resize(processSources.size());
+            for (auto& frames : sourceFrames)
+                frames.clear();
+            bool sourceInvalidated = false;
+
+            for (size_t sourceIndex = 0;
+                 sourceIndex < processSources.size();
+                 ++sourceIndex) {
+                auto& source = processSources[sourceIndex];
+                auto& frames = sourceFrames[sourceIndex];
+
+                UINT32 packetSize = 0;
+                hr = source.capture->GetNextPacketSize(&packetSize);
+                if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+                    sourceInvalidated = true;
+                    break;
+                }
+                if (FAILED(hr))
+                    continue;
+
+                while (packetSize > 0 &&
+                       g_audioRunning.load(std::memory_order_acquire)) {
+                    DebugPerfScope debugScope(DEBUG_PERF_AUDIO_CAPTURE);
+                    BYTE* data = nullptr;
+                    UINT32 numFrames = 0;
+                    DWORD flags = 0;
+
+                    hr = source.capture->GetBuffer(
+                        &data, &numFrames, &flags, nullptr, nullptr);
+                    if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+                        sourceInvalidated = true;
+                        break;
                     }
-                } else if (channels > 0) {
-                    const INT16* src = reinterpret_cast<const INT16*>(data);
-                    for (UINT32 f = 0; f < numFrames; ++f) {
-                        float mono = 0.0f;
-                        for (UINT32 c = 0; c < channels; ++c)
-                            mono += src[f * channels + c] / 32768.0f;
+                    if (FAILED(hr))
+                        break;
 
-                        ringBuf[ringHead] = mono / static_cast<float>(channels);
-                        ringHead = (ringHead + 1) % RING_CAP;
-                        ringCount = std::min(ringCount + 1, RING_CAP);
+                    if (numFrames > 0) {
+                        frames.reserve(frames.size() + numFrames);
+
+                        if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+                            frames.insert(frames.end(), numFrames, 0.0f);
+                        } else if (data && source.channels > 0) {
+                            for (UINT32 f = 0; f < numFrames; ++f) {
+                                frames.push_back(ReadAudioMonoSample(
+                                    data, f, source.channels, source.sampleFormat));
+                            }
+                        }
                     }
+
+                    source.capture->ReleaseBuffer(numFrames);
+                    hr = source.capture->GetNextPacketSize(&packetSize);
+                    if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+                        sourceInvalidated = true;
+                        break;
+                    }
+                    if (FAILED(hr))
+                        break;
+                }
+
+                if (sourceInvalidated)
+                    break;
+            }
+
+            if (sourceInvalidated) {
+                ReleaseProcessAudioSources(processSources);
+                targetProcessIds.clear();
+                for (HANDLE handle : targetProcessWatchHandles) {
+                    if (handle)
+                        CloseHandle(handle);
+                }
+                targetProcessWatchHandles.clear();
+                clearAudioState();
+                lastTargetCheckMs = 0;
+                targetCheckIntervalMs = 750;
+                continue;
+            }
+
+            size_t maxFrames = 0;
+            for (const auto& frames : sourceFrames)
+                maxFrames = std::max(maxFrames, frames.size());
+
+            if (maxFrames > 0) {
+                // Mix all selected executables together. Each configured executable
+                // contributes independently, so X.exe + Y.exe means X AND Y.
+                for (size_t f = 0; f < maxFrames; ++f) {
+                    float mixed = 0.0f;
+                    size_t contributingSources = 0;
+
+                    for (const auto& frames : sourceFrames) {
+                        if (f < frames.size()) {
+                            mixed += frames[f];
+                            ++contributingSources;
+                        }
+                    }
+
+                    if (contributingSources > 0)
+                        mixed /= static_cast<float>(contributingSources);
+
+                    ringBuf[ringHead] = mixed;
+                    ringHead = (ringHead + 1) % RING_CAP;
+                    ringCount = std::min(ringCount + 1, RING_CAP);
+                }
+            }
+        } else {
+            if (!client || !capture) {
+                releaseSingleSource();
+                clearAudioState();
+
+                if (InitSystemAudioClient(
+                        enumerator,
+                        &client,
+                        &capture,
+                        &sampleRate,
+                        &channels,
+                        &sampleFormat)) {
+                    g_audioSampleRate.store(sampleRate, std::memory_order_release);
+                    g_audioChannels.store(channels, std::memory_order_release);
+                    g_audioCaptureSourceMode.store(0, std::memory_order_release);
+                    BuildLogBins(sampleRate);
+                } else {
+                    Sleep(50);
+                    continue;
                 }
             }
 
-            capture->ReleaseBuffer(numFrames);
+            if (g_hAudioEvent)
+                WaitForSingleObject(g_hAudioEvent, 20);
+            else
+                Sleep(8);
 
+            UINT32 packetSize = 0;
             hr = capture->GetNextPacketSize(&packetSize);
             if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
-                client->Stop();
-                client->Release();
-                client = nullptr;
-                capture->Release();
-                capture = nullptr;
-                break;
+                releaseSingleSource();
+                clearAudioState();
+                continue;
             }
-            if (FAILED(hr))
-                break;
+
+            if (FAILED(hr)) {
+                Sleep(5);
+                continue;
+            }
+
+            while (packetSize > 0 &&
+                   g_audioRunning.load(std::memory_order_acquire)) {
+                DebugPerfScope debugScope(DEBUG_PERF_AUDIO_CAPTURE);
+                BYTE* data = nullptr;
+                UINT32 numFrames = 0;
+                DWORD flags = 0;
+
+                hr = capture->GetBuffer(
+                    &data, &numFrames, &flags, nullptr, nullptr);
+                if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+                    releaseSingleSource();
+                    clearAudioState();
+                    break;
+                }
+                if (FAILED(hr))
+                    break;
+
+                if (numFrames > 0) {
+                    if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+                        for (UINT32 f = 0; f < numFrames; ++f) {
+                            ringBuf[ringHead] = 0.0f;
+                            ringHead = (ringHead + 1) % RING_CAP;
+                            ringCount = std::min(ringCount + 1, RING_CAP);
+                        }
+                    } else if (data && channels > 0) {
+                        for (UINT32 f = 0; f < numFrames; ++f) {
+                            ringBuf[ringHead] = ReadAudioMonoSample(
+                                data, f, channels, sampleFormat);
+                            ringHead = (ringHead + 1) % RING_CAP;
+                            ringCount = std::min(ringCount + 1, RING_CAP);
+                        }
+                    }
+                }
+
+                capture->ReleaseBuffer(numFrames);
+                hr = capture->GetNextPacketSize(&packetSize);
+                if (hr == AUDCLNT_E_DEVICE_INVALIDATED) {
+                    releaseSingleSource();
+                    clearAudioState();
+                    break;
+                }
+                if (FAILED(hr))
+                    break;
+            }
         }
+
+        const float autoGainStrength =
+            std::clamp(settings.autoGainStrength, 0, 100) / 100.0f;
+
+        auto UpdateSpectralFeatures = [&](const float rawMags[VIZ_NUM_BANDS]) {
+            DebugPerfScope debugScope(DEBUG_PERF_AUDIO_PROCESS);
+            for (int b = 0; b < VIZ_NUM_BANDS; ++b)
+                g_rawAudioBands[b].store(rawMags[b], std::memory_order_relaxed);
+
+            static constexpr float kBassFluxWeights[VIZ_BASS_FLUX_BANDS] = {
+                1.00f, 0.90f, 0.72f, 0.58f, 0.42f, 0.28f
+            };
+            constexpr float kBassWeightSum =
+                1.00f + 0.90f + 0.72f + 0.58f + 0.42f + 0.28f;
+
+            // Seed each detector from the first raw FFT frame. This avoids a
+            // startup false positive in both the spectral and bass-energy paths.
+            if (!hasPreviousRawBands) {
+                std::copy(rawMags, rawMags + VIZ_NUM_BANDS, previousRawBands);
+                previousBassEnergy = 0.0f;
+                for (int b = 0; b < VIZ_BASS_FLUX_BANDS; ++b)
+                    previousBassEnergy += std::max(0.0f, rawMags[b]) *
+                        kBassFluxWeights[b];
+                bassEnergyBaseline = previousBassEnergy;
+                hasPreviousRawBands = true;
+                g_spectralFlux.store(0.0f, std::memory_order_relaxed);
+                g_bassSpectralFlux.store(0.0f, std::memory_order_relaxed);
+                g_transientScore.store(0.0f, std::memory_order_relaxed);
+                g_bassTransientScore.store(0.0f, std::memory_order_relaxed);
+                g_audioBeatConfidence.store(0.0f, std::memory_order_relaxed);
+                previousBassFlux = 0.0f;
+                return;
+            }
+
+            float positiveDeltaSum = 0.0f;
+            float bassPositiveDeltaSum = 0.0f;
+            float bassEnergy = 0.0f;
+
+            for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
+                const float current = std::max(0.0f, rawMags[b]);
+                const float previous = std::max(0.0f, previousRawBands[b]);
+                const float delta = std::max(0.0f, current - previous);
+
+                positiveDeltaSum += delta;
+                if (b < VIZ_BASS_FLUX_BANDS) {
+                    bassPositiveDeltaSum += delta * kBassFluxWeights[b];
+                    bassEnergy += current * kBassFluxWeights[b];
+                }
+            }
+
+            // Average positive change instead of summing 32 bins directly.
+            const float rawFlux = positiveDeltaSum /
+                static_cast<float>(VIZ_NUM_BANDS);
+            const float rawBassFlux = bassPositiveDeltaSum / kBassWeightSum;
+
+            spectralFluxBaseline +=
+                (rawFlux - spectralFluxBaseline) * VIZ_FLUX_BASELINE_ALPHA;
+            spectralFluxBaseline = std::max(0.0f, spectralFluxBaseline);
+            spectralFluxDeviation +=
+                (fabsf(rawFlux - spectralFluxBaseline) - spectralFluxDeviation) *
+                VIZ_FLUX_DEVIATION_ALPHA;
+            spectralFluxDeviation = std::max(0.0f, spectralFluxDeviation);
+
+            bassFluxBaseline +=
+                (rawBassFlux - bassFluxBaseline) * VIZ_FLUX_BASELINE_ALPHA;
+            bassFluxBaseline = std::max(0.0f, bassFluxBaseline);
+            bassFluxDeviation +=
+                (fabsf(rawBassFlux - bassFluxBaseline) - bassFluxDeviation) *
+                VIZ_FLUX_DEVIATION_ALPHA;
+            bassFluxDeviation = std::max(0.0f, bassFluxDeviation);
+
+            bassEnergyBaseline +=
+                (bassEnergy - bassEnergyBaseline) * VIZ_FLUX_BASELINE_ALPHA;
+            bassEnergyBaseline = std::max(0.0f, bassEnergyBaseline);
+
+            const float spectralThreshold = spectralFluxBaseline +
+                std::max(
+                    spectralFluxDeviation * VIZ_FLUX_THRESHOLD_DEVIATION,
+                    std::max(
+                        spectralFluxBaseline * VIZ_FLUX_THRESHOLD_RELATIVE,
+                        VIZ_FLUX_THRESHOLD_FLOOR));
+            const float spectralScale = std::max(
+                std::max(
+                    spectralFluxDeviation * VIZ_FLUX_NORMALIZE_DEVIATION,
+                    spectralFluxBaseline * VIZ_FLUX_NORMALIZE_BASELINE),
+                VIZ_FLUX_NORMALIZE_FLOOR);
+            const float spectralInstant = std::clamp(
+                (rawFlux - spectralThreshold) / spectralScale, 0.0f, 1.0f);
+
+            const float bassThreshold = bassFluxBaseline +
+                std::max(
+                    bassFluxDeviation * VIZ_FLUX_THRESHOLD_DEVIATION,
+                    std::max(
+                        bassFluxBaseline * VIZ_FLUX_THRESHOLD_RELATIVE,
+                        VIZ_FLUX_THRESHOLD_FLOOR));
+            const float bassScale = std::max(
+                std::max(
+                    bassFluxDeviation * VIZ_FLUX_NORMALIZE_DEVIATION,
+                    bassFluxBaseline * VIZ_FLUX_NORMALIZE_BASELINE),
+                VIZ_FLUX_NORMALIZE_FLOOR);
+            const float bassInstant = std::clamp(
+                (rawBassFlux - bassThreshold) / bassScale, 0.0f, 1.0f);
+
+            // Dedicated bass transient / beat analysis. This detector only
+            // sees the low-frequency raw spectrum; it does not consume the
+            // general all-spectrum transient score or processed visual bands.
+            const float diskFluxThreshold = bassFluxBaseline +
+                std::max(
+                    bassFluxDeviation * VIZ_DISK_FLUX_THRESHOLD_DEVIATION,
+                    std::max(
+                        bassFluxBaseline * VIZ_DISK_FLUX_THRESHOLD_RELATIVE,
+                        VIZ_FLUX_THRESHOLD_FLOOR));
+            const float diskFluxScale = std::max(
+                std::max(
+                    bassFluxDeviation * VIZ_DISK_FLUX_NORMALIZE_DEVIATION,
+                    bassFluxBaseline * VIZ_DISK_FLUX_NORMALIZE_BASELINE),
+                VIZ_FLUX_NORMALIZE_FLOOR);
+            const float diskFluxInstant = std::clamp(
+                (rawBassFlux - diskFluxThreshold) / diskFluxScale,
+                0.0f, 1.0f);
+            const float diskFluxRise = rawBassFlux - previousBassFlux;
+            const float rawBassEnergyRise =
+                std::max(0.0f, bassEnergy - previousBassEnergy);
+
+            const ULONGLONG nowFeatureMs = GetTickCount64();
+            const float minDiskFluxRise = std::max(
+                diskFluxScale * VIZ_DISK_FLUX_RISE_FRACTION,
+                VIZ_FLUX_THRESHOLD_FLOOR);
+
+            // Evidence terms are deliberately independent: spectral novelty
+            // detects a new low-frequency onset, flux rise measures attack,
+            // energy rise verifies a fresh bass hit, and absolute bass support
+            // only contributes a small amount (so sustained loud bass is not a beat).
+            const float noveltyEvidence = std::clamp(diskFluxInstant, 0.0f, 1.0f);
+            const float attackEvidence = std::clamp(
+                diskFluxRise / std::max(diskFluxScale * 0.22f,
+                                        VIZ_FLUX_THRESHOLD_FLOOR),
+                0.0f, 1.0f);
+            const float energyAttackEvidence = std::clamp(
+                rawBassEnergyRise /
+                    std::max(bassEnergyBaseline * 0.65f, 0.00020f),
+                0.0f, 1.0f);
+            const float bassEnergyRatio = bassEnergy /
+                std::max(bassEnergyBaseline, 0.00025f);
+            const float bassSupportEvidence = std::clamp(
+                (bassEnergyRatio - 0.70f) / 1.50f, 0.0f, 1.0f);
+
+            // Drop stale rhythm history after a long pause before evaluating
+            // the next onset, so the first beat after silence is not penalized.
+            if (lastRhythmHitMs != 0 && nowFeatureMs > lastRhythmHitMs &&
+                nowFeatureMs - lastRhythmHitMs > VIZ_BEAT_INTERVAL_MAX_MS + 400) {
+                bassHitIntervalHistory.fill(0.0f);
+                bassHitIntervalCount = 0;
+                bassHitIntervalNext = 0;
+                lastRhythmHitMs = 0;
+            }
+
+            // Learn a rough beat period from recent accepted bass onsets.
+            // Timing is a confidence modifier, not a hard BPM lock, so a new
+            // track or a syncopated hit can still trigger on strong evidence.
+            float rhythmConfidence = 0.58f;
+            float estimatedBeatPeriodMs = 0.0f;
+            if (bassHitIntervalCount >= 2) {
+                std::array<float, VIZ_BEAT_INTERVAL_HISTORY_SIZE> intervals{};
+                for (size_t i = 0; i < bassHitIntervalCount; ++i)
+                    intervals[i] = bassHitIntervalHistory[i];
+                std::sort(intervals.begin(),
+                          intervals.begin() + bassHitIntervalCount);
+                const size_t middle = bassHitIntervalCount / 2;
+                estimatedBeatPeriodMs = (bassHitIntervalCount % 2 == 0)
+                    ? (intervals[middle - 1] + intervals[middle]) * 0.5f
+                    : intervals[middle];
+
+                std::array<float, VIZ_BEAT_INTERVAL_HISTORY_SIZE> deviations{};
+                for (size_t i = 0; i < bassHitIntervalCount; ++i)
+                    deviations[i] = std::fabs(
+                        bassHitIntervalHistory[i] - estimatedBeatPeriodMs);
+                std::sort(deviations.begin(),
+                          deviations.begin() + bassHitIntervalCount);
+                const float medianDeviation =
+                    (bassHitIntervalCount % 2 == 0)
+                        ? (deviations[middle - 1] + deviations[middle]) * 0.5f
+                        : deviations[middle];
+                const float intervalStability = std::exp(
+                    -medianDeviation /
+                    std::max(80.0f, estimatedBeatPeriodMs * 0.22f));
+
+                if (lastRhythmHitMs != 0 && nowFeatureMs > lastRhythmHitMs) {
+                    const float currentIntervalMs = static_cast<float>(
+                        nowFeatureMs - lastRhythmHitMs);
+                    const float expectedIntervals[] = {
+                        estimatedBeatPeriodMs * 0.5f,
+                        estimatedBeatPeriodMs,
+                        estimatedBeatPeriodMs * 2.0f,
+                    };
+                    float bestRelativeError = 10.0f;
+                    for (float expected : expectedIntervals) {
+                        if (expected <= 0.0f)
+                            continue;
+                        bestRelativeError = std::min(
+                            bestRelativeError,
+                            std::fabs(currentIntervalMs - expected) / expected);
+                    }
+                    const float phaseFit = std::exp(
+                        -bestRelativeError / 0.22f);
+                    rhythmConfidence = std::clamp(
+                        0.15f + 0.85f * phaseFit * intervalStability,
+                        0.0f, 1.0f);
+                } else {
+                    rhythmConfidence = 0.25f + 0.50f * intervalStability;
+                }
+            } else if (bassHitIntervalCount == 1) {
+                rhythmConfidence = 0.64f;
+            }
+
+            float beatConfidenceInstant = std::clamp(
+                0.50f * noveltyEvidence +
+                0.24f * attackEvidence +
+                0.16f * energyAttackEvidence +
+                0.10f * bassSupportEvidence,
+                0.0f, 1.0f);
+            beatConfidenceInstant *= 0.60f + 0.40f * rhythmConfidence;
+            beatConfidenceInstant = std::clamp(beatConfidenceInstant, 0.0f, 1.0f);
+
+            const bool bassEnergyPresent =
+                bassEnergy >= std::max(0.0005f, bassEnergyBaseline * 1.10f);
+            const bool diskCooldownElapsed =
+                lastDiskFluxEventMs == 0 ||
+                nowFeatureMs - lastDiskFluxEventMs >= VIZ_DISK_FLUX_COOLDOWN_MS;
+
+            if (bassEnergyPresent &&
+                diskFluxInstant >= VIZ_DISK_FLUX_TRIGGER &&
+                diskFluxRise >= minDiskFluxRise &&
+                beatConfidenceInstant >= VIZ_BEAT_CONFIDENCE_EVENT_THRESHOLD &&
+                diskCooldownElapsed) {
+                g_audioDiskPulseEventStrength.store(
+                    std::clamp(
+                        0.30f + beatConfidenceInstant * 0.90f,
+                        0.30f, 1.20f),
+                    std::memory_order_release);
+                g_audioDiskPulseEventCounter.fetch_add(
+                    1, std::memory_order_release);
+                lastDiskFluxEventMs = nowFeatureMs;
+
+                // Only plausible beat intervals train the rhythm estimate.
+                // Very short fills do not corrupt the underlying beat period;
+                // a long pause clears stale rhythm history.
+                if (lastRhythmHitMs == 0) {
+                    lastRhythmHitMs = nowFeatureMs;
+                } else {
+                    const ULONGLONG intervalMs = nowFeatureMs - lastRhythmHitMs;
+                    if (intervalMs > VIZ_BEAT_INTERVAL_MAX_MS + 400) {
+                        bassHitIntervalHistory.fill(0.0f);
+                        bassHitIntervalCount = 0;
+                        bassHitIntervalNext = 0;
+                        lastRhythmHitMs = nowFeatureMs;
+                    } else if (intervalMs >= VIZ_BEAT_INTERVAL_MIN_MS &&
+                               intervalMs <= VIZ_BEAT_INTERVAL_MAX_MS) {
+                        bassHitIntervalHistory[bassHitIntervalNext] =
+                            static_cast<float>(intervalMs);
+                        bassHitIntervalNext = (bassHitIntervalNext + 1) %
+                            VIZ_BEAT_INTERVAL_HISTORY_SIZE;
+                        bassHitIntervalCount = std::min(
+                            bassHitIntervalCount + 1,
+                            VIZ_BEAT_INTERVAL_HISTORY_SIZE);
+                        lastRhythmHitMs = nowFeatureMs;
+                    }
+                }
+            }
+            previousBassFlux = rawBassFlux;
+            previousBassEnergy = bassEnergy;
+
+            // Envelope timing follows the real FFT hop, not render FPS.
+            const double hopSeconds = sampleRate > 0
+                ? (VIZ_FFT_SIZE / 2.0) / static_cast<double>(sampleRate)
+                : 1.0 / 60.0;
+            const float attackAlpha = std::clamp(
+                1.0f - expf(-static_cast<float>(hopSeconds) /
+                            VIZ_TRANSIENT_ATTACK_SECONDS),
+                0.0f, 1.0f);
+            const float decayAlpha = std::clamp(
+                1.0f - expf(-static_cast<float>(hopSeconds) /
+                            VIZ_TRANSIENT_DECAY_SECONDS),
+                0.0f, 1.0f);
+
+            if (spectralInstant > transientEnvelope)
+                transientEnvelope +=
+                    (spectralInstant - transientEnvelope) * attackAlpha;
+            else
+                transientEnvelope +=
+                    (spectralInstant - transientEnvelope) * decayAlpha;
+
+            const float bassAttackAlpha = std::clamp(
+                1.0f - expf(-static_cast<float>(hopSeconds) /
+                            VIZ_BASS_TRANSIENT_ATTACK_SECONDS),
+                0.0f, 1.0f);
+            const float bassDecayAlpha = std::clamp(
+                1.0f - expf(-static_cast<float>(hopSeconds) /
+                            VIZ_BASS_TRANSIENT_DECAY_SECONDS),
+                0.0f, 1.0f);
+            const float bassTransientInstant = std::clamp(
+                0.62f * bassInstant +
+                0.24f * energyAttackEvidence +
+                0.14f * attackEvidence,
+                0.0f, 1.0f);
+            if (bassTransientInstant > bassTransientEnvelope)
+                bassTransientEnvelope +=
+                    (bassTransientInstant - bassTransientEnvelope) * bassAttackAlpha;
+            else
+                bassTransientEnvelope +=
+                    (bassTransientInstant - bassTransientEnvelope) * bassDecayAlpha;
+
+            const float beatAttackAlpha = std::clamp(
+                1.0f - expf(-static_cast<float>(hopSeconds) / 0.018f),
+                0.0f, 1.0f);
+            const float beatDecayAlpha = std::clamp(
+                1.0f - expf(-static_cast<float>(hopSeconds) / 0.115f),
+                0.0f, 1.0f);
+            if (beatConfidenceInstant > beatConfidenceEnvelope)
+                beatConfidenceEnvelope +=
+                    (beatConfidenceInstant - beatConfidenceEnvelope) * beatAttackAlpha;
+            else
+                beatConfidenceEnvelope +=
+                    (beatConfidenceInstant - beatConfidenceEnvelope) * beatDecayAlpha;
+
+            transientEnvelope = std::clamp(transientEnvelope, 0.0f, 1.0f);
+            bassTransientEnvelope = std::clamp(
+                bassTransientEnvelope, 0.0f, 1.0f);
+            beatConfidenceEnvelope = std::clamp(
+                beatConfidenceEnvelope, 0.0f, 1.0f);
+
+            g_spectralFlux.store(rawFlux, std::memory_order_relaxed);
+            g_bassSpectralFlux.store(rawBassFlux, std::memory_order_relaxed);
+            g_transientScore.store(transientEnvelope, std::memory_order_relaxed);
+            g_bassTransientScore.store(
+                bassTransientEnvelope, std::memory_order_relaxed);
+            g_audioBeatConfidence.store(
+                beatConfidenceEnvelope, std::memory_order_relaxed);
+
+            // Publish the independent bass-transient event stream as well.
+            // The all-spectrum transient score and Disk beat-confidence events
+            // remain separate so consumers can choose the detector they need.
+            // Reuse the shared bass-energy gate for both event paths.
+            const bool cooldownElapsed =
+                lastBassTransientEventMs == 0 ||
+                nowFeatureMs - lastBassTransientEventMs >=
+                    VIZ_BASS_TRANSIENT_COOLDOWN_MS;
+            if (bassEnergyPresent &&
+                bassTransientEnvelope >= VIZ_BASS_TRANSIENT_TRIGGER &&
+                cooldownElapsed) {
+                g_audioBassTransientEventStrength.store(
+                    bassTransientEnvelope, std::memory_order_release);
+                g_audioTransientEventCounter.fetch_add(
+                    1, std::memory_order_release);
+                lastBassTransientEventMs = nowFeatureMs;
+            }
+
+            std::copy(rawMags, rawMags + VIZ_NUM_BANDS, previousRawBands);
+        };
+
+        auto ProcessRawMagnitudes = [&](const float rawMags[VIZ_NUM_BANDS]) {
+            DebugPerfScope debugScope(DEBUG_PERF_AUDIO_PROCESS);
+            float nextBands[VIZ_NUM_BANDS] = {};
+            float frameMax = 0.0f;
+            for (int b = 0; b < VIZ_NUM_BANDS; ++b)
+                frameMax = std::max(frameMax, rawMags[b]);
+
+            if (settings.autoGainEnabled && autoGainStrength > 0.0f) {
+                if (frameMax > smoothMax)
+                    smoothMax += (frameMax - smoothMax) * 0.5f;
+                else
+                    smoothMax += (frameMax - smoothMax) * 0.02f;
+
+                smoothMax = std::max(0.0001f, smoothMax);
+
+                float targetGain = 0.98f / smoothMax;
+                targetGain = std::clamp(targetGain, 1.0f, 150.0f);
+                targetGain = 1.0f + (targetGain - 1.0f) * autoGainStrength;
+
+                if (targetGain > autoGain)
+                    autoGain += (targetGain - autoGain) * 0.035f;
+                else
+                    autoGain += (targetGain - autoGain) * 0.15f;
+            } else {
+                autoGain = 1.0f;
+                smoothMax = 0.01f;
+            }
+
+            for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
+                float m = rawMags[b];
+
+                if (settings.autoGainEnabled && smoothMax > 0.0001f) {
+                    float ratio = std::clamp(m / smoothMax, 0.0f, 1.0f);
+                    ratio = ratio * ratio * ratio;
+
+                    const float appliedGain =
+                        1.0f + (autoGain - 1.0f) * ratio;
+                    m *= appliedGain;
+                }
+
+                m = std::clamp(m, 0.0f, 1.0f);
+                bandEnv[b] =
+                    (m >= bandEnv[b])
+                        ? m
+                        : std::max(0.0f, bandEnv[b] - GetBandGravity(b));
+                nextBands[b] = bandEnv[b];
+            }
+
+            PublishAudioBands(nextBands);
+        };
+
+        const float tSens = settings.sensitivity / 100.0f;
+        const float sliderGain =
+            (tSens <= 1.0f)
+                ? 0.25f + tSens * tSens * 2.75f
+                : 3.0f + (tSens - 1.0f) * 4.0f;
 
         while (ringCount >= VIZ_FFT_SIZE &&
                g_audioRunning.load(std::memory_order_acquire)) {
+            // Consumers are independent from capture. Only process an FFT when
+            // at least one live consumer requests it, and cap the FFT cadence to
+            // the fastest consumer currently active. The native 1024/512 hop
+            // remains the upper physical update rate.
+            const float requestedHz = GetAudioRequestedHz();
+            if (requestedHz <= 0.0f)
+                break;
+            const double fftMaxHz = sampleRate > 0
+                ? static_cast<double>(sampleRate) / (VIZ_FFT_SIZE / 2.0)
+                : 1.0;
+            const double effectiveHz = std::max(0.5,
+                std::min(static_cast<double>(requestedHz), fftMaxHz));
+            const ULONGLONG nowFftMs = GetTickCount64();
+            if (nextAudioFftMs != 0 && nowFftMs < nextAudioFftMs)
+                break;
+
             const int readStart =
                 (ringHead - ringCount + RING_CAP) % RING_CAP;
 
+            int ringIndex = readStart;
             for (int i = 0; i < VIZ_FFT_SIZE; ++i) {
-                re[i] = ringBuf[(readStart + i) % RING_CAP] * g_hannWindow[i];
+                re[i] = ringBuf[ringIndex] * g_hannWindow[i];
                 im[i] = 0.0f;
+                if (++ringIndex == RING_CAP) {
+                    ringIndex = 0;
+                }
             }
 
             ringCount -= VIZ_FFT_SIZE / 2;
-            VizFFT(re, im);
+            {
+                DebugPerfScope debugScope(DEBUG_PERF_AUDIO_FFT);
+                VizFFT(re, im);
+            }
+            g_debugAudioFftFrames.fetch_add(1, std::memory_order_relaxed);
 
-            const float tSens = settings.sensitivity / 100.0f;
-            const float sliderGain =
-                (tSens <= 1.0f)
-                    ? 0.25f + tSens * tSens * 2.75f
-                    : 3.0f + (tSens - 1.0f) * 4.0f;
-
-                        float nextBands[VIZ_NUM_BANDS] = {};
-
+            float rawSpectrum[VIZ_NUM_BANDS] = {};
             float rawMags[VIZ_NUM_BANDS] = {};
-            float frameMax = 0.0f;
-
-            for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
+            float eqMultipliers[VIZ_NUM_BANDS] = {};
+            GetVizEQMultipliers(eqMultipliers);
+            {
+                DebugPerfScope debugScope(DEBUG_PERF_AUDIO_BANDS);
+                for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
                 int bStart = g_logBinStart[b];
                 int bEnd = g_logBinStart[b + 1];
                 if (bEnd <= bStart)
@@ -2924,8 +5678,9 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
 
                 float sumSq = 0.0f;
                 int count = 0;
-
-                for (int k = bStart; k < bEnd && k < VIZ_FFT_SIZE / 2; ++k) {
+                for (int k = bStart;
+                     k < bEnd && k < VIZ_FFT_SIZE / 2;
+                     ++k) {
                     sumSq += re[k] * re[k] + im[k] * im[k];
                     ++count;
                 }
@@ -2933,85 +5688,77 @@ static DWORD WINAPI AudioCaptureThreadProc(LPVOID) {
                 const float rms = count > 0
                     ? sqrtf(sumSq / static_cast<float>(count))
                     : 0.0f;
+                const float unprocessedMagnitude =
+                    rms / (VIZ_FFT_SIZE * 0.5f);
+                rawSpectrum[b] = unprocessedMagnitude;
 
-                const float eqM = GetVizEQMultiplier(b);
-
-                const float mag = (rms / (VIZ_FFT_SIZE * 0.5f)) /
-                        GetBandSensitivity(b) * sliderGain * eqM;
-
-                rawMags[b] = mag;
-                frameMax = std::max(frameMax, mag);
+                const float eqM = eqMultipliers[b];
+                rawMags[b] =
+                    unprocessedMagnitude / GetBandSensitivity(b) *
+                    sliderGain * eqM;
+                }
             }
 
-            static float s_autoGain = 1.0f;
-            static float s_smoothMax = 0.01f;
+            // Run feature detection once per FFT hop on the raw, pre-EQ spectrum.
+            // Visual EQ/sensitivity remains confined to the existing render path.
+            UpdateSpectralFeatures(rawSpectrum);
+            ProcessRawMagnitudes(rawMags);
 
-            const float autoGainStrength =
-                std::clamp(settings.autoGainStrength, 0, 100) / 100.0f;
+            const float fftLevel = std::max_element(
+                rawMags, rawMags + VIZ_NUM_BANDS) != rawMags
+                    ? *std::max_element(rawMags, rawMags + VIZ_NUM_BANDS)
+                    : 0.0f;
+            g_audioFftLevel.store(std::clamp(fftLevel, 0.0f, 1.0f),
+                                  std::memory_order_release);
 
-            if (settings.autoGainEnabled && autoGainStrength > 0.0f) {
-                if (frameMax > s_smoothMax) {
-                    s_smoothMax += (frameMax - s_smoothMax) * 0.5f;
-                } else {
-                    s_smoothMax += (frameMax - s_smoothMax) * 0.02f;
-                }
-                s_smoothMax = std::max(0.0001f, s_smoothMax);
-
-                float targetGain = 0.98f / s_smoothMax;
-                targetGain = std::clamp(targetGain, 1.0f, 150.0f);
-
-                targetGain = 1.0f + (targetGain - 1.0f) * autoGainStrength;
-
-                if (targetGain > s_autoGain) {
-                    s_autoGain += (targetGain - s_autoGain) * 0.035f;
-                } else {
-                    s_autoGain += (targetGain - s_autoGain) * 0.15f;
-                }
-            } else {
-                s_autoGain = 1.0f;
-                s_smoothMax = 0.01f;
-            }
-
-            for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
-                float m = rawMags[b];
-
-                if (settings.autoGainEnabled && s_smoothMax > 0.0001f) {
-                    float ratio = std::clamp(m / s_smoothMax, 0.0f, 1.0f);
-                    ratio = ratio * ratio * ratio;
-
-                    const float appliedGain =
-                        1.0f + (s_autoGain - 1.0f) * ratio;
-                    m *= appliedGain;
-                }
-
-                m = std::clamp(m, 0.0f, 1.0f);
-
-                bandEnv[b] =
-                    (m >= bandEnv[b])
-                        ? m
-                        : std::max(0.0f, bandEnv[b] - GetBandGravity(b));
-
-                nextBands[b] = bandEnv[b];
-            }
-
-            PublishAudioBands(nextBands);
+            const ULONGLONG intervalMs = static_cast<ULONGLONG>(std::max(
+                1.0, std::ceil(1000.0 / effectiveHz)));
+            nextAudioFftMs = nowFftMs + intervalMs;
         }
     }
 
-    if (client) {
-        client->Stop();
-        client->Release();
+    releaseSingleSource();
+    ReleaseProcessAudioSources(processSources);
+    for (HANDLE handle : targetProcessWatchHandles) {
+        if (handle)
+            CloseHandle(handle);
     }
-    if (capture)
-        capture->Release();
-
+    targetProcessWatchHandles.clear();
     enumerator->Release();
     ClearAudioBands();
+    g_audioSampleRate.store(0, std::memory_order_release);
+    g_audioChannels.store(0, std::memory_order_release);
+    g_audioFftLevel.store(0.0f, std::memory_order_release);
+    g_audioCaptureSourceMode.store(0, std::memory_order_release);
     CoUninitialize();
     return 0;
 }
 
 static void StartAudioCapture() {
+    // The overlay thread owns this lifecycle. Never start a new worker after
+    // shutdown has begun, even if a previous worker cleared its running flag.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    if (g_audioRunning.load(std::memory_order_acquire))
+        return;
+
+    // AudioCaptureThreadProc can clear g_audioRunning just before returning
+    // after an initialization failure. Reap that generation before setting
+    // the flag for a replacement; otherwise the old thread could clear the
+    // new worker's flag, or its handle could be overwritten and leaked.
+    if (g_hAudioThread) {
+        if (g_hAudioEvent)
+            SetEvent(g_hAudioEvent);
+        WaitForSingleObject(g_hAudioThread, INFINITE);
+        CloseHandle(g_hAudioThread);
+        g_hAudioThread = nullptr;
+    }
+
+    // Shutdown may have begun while the previous generation was being joined.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
     if (g_audioRunning.exchange(true, std::memory_order_acq_rel))
         return;
 
@@ -3023,6 +5770,8 @@ static void StartAudioCapture() {
         return;
     }
 
+    // The event may have been signaled while reaping a failed worker.
+    ResetEvent(g_hAudioEvent);
     g_hAudioThread = CreateThread(
         nullptr,
         0,
@@ -3039,16 +5788,22 @@ static void StartAudioCapture() {
 }
 
 static void StopAudioCapture() {
-    if (!g_audioRunning.exchange(false, std::memory_order_acq_rel))
-        return;
+    const bool wasRunning =
+        g_audioRunning.exchange(false, std::memory_order_acq_rel);
 
+    // Always signal and close the handles when they exist. The running flag can
+    // already be false if the worker exited through an error path, but the
+    // thread handle still must never survive DLL unload.
     if (g_hAudioEvent)
         SetEvent(g_hAudioEvent);
 
     if (g_hAudioThread) {
+        Wh_Log(L"StopAudioCapture: waiting for audio thread (running=%d)",
+               wasRunning ? 1 : 0);
         WaitForSingleObject(g_hAudioThread, INFINITE);
         CloseHandle(g_hAudioThread);
         g_hAudioThread = nullptr;
+        Wh_Log(L"StopAudioCapture: audio thread joined");
     }
 
     if (g_hAudioEvent) {
@@ -3057,6 +5812,9 @@ static void StopAudioCapture() {
     }
 
     ClearAudioBands();
+    g_audioSampleRate.store(0, std::memory_order_release);
+    g_audioChannels.store(0, std::memory_order_release);
+    g_audioFftLevel.store(0.0f, std::memory_order_release);
     g_lastAudioUpdateMs.store(GetTickCount64(), std::memory_order_release);
 }
 
@@ -3066,6 +5824,27 @@ static float g_cavaPeak[VIZ_BANDS_MAX] = {};
 static float g_cavaPrevOut[VIZ_BANDS_MAX] = {};
 static bool g_cavaWasEnabled = false;
 
+
+// Converts a response amount defined for one 60 Hz update into an
+// equivalent response for an arbitrary elapsed time. This keeps the same
+// attack/decay time constant across 60/120/144/165/180 Hz and other timer
+// cadences instead of making the animation react faster at higher FPS.
+static float FrameRateIndependentResponse(float perFrameResponse, float dtFrames) {
+    perFrameResponse = std::clamp(perFrameResponse, 0.0f, 1.0f);
+    dtFrames = std::max(0.0f, dtFrames);
+
+    if (dtFrames <= 0.0f || perFrameResponse <= 0.0f)
+        return 0.0f;
+    if (perFrameResponse >= 1.0f)
+        return 1.0f;
+
+    // Repeated application of
+    //     x += (target - x) * perFrameResponse
+    // over dtFrames is equivalent to this single step:
+    //     alpha = 1 - (1 - perFrameResponse)^dtFrames
+    // This is mathematically exact for a constant target between updates.
+    return 1.0f - powf(1.0f - perFrameResponse, dtFrames);
+}
 
 static float ApplyCavaSmoothing(
     float rawValue,
@@ -3130,6 +5909,7 @@ static void ResetCavaSmoothing() {
 }
 
 static void UpdateAnimationFromAudio() {
+    DebugPerfScope debugScope(DEBUG_PERF_ANIMATION);
     const int barCount = std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
 
     float bands[VIZ_NUM_BANDS];
@@ -3185,6 +5965,14 @@ static void UpdateAnimationFromAudio() {
     const float minHeight = static_cast<float>(g_settings.minBarHeight);
 
     static ULONGLONG fallbackLastMs = 0;
+    static LONGLONG animationLastQpc = 0;
+    static const double qpcFrequency = []() -> double {
+        LARGE_INTEGER frequency{};
+        if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0)
+            return 0.0;
+        return static_cast<double>(frequency.QuadPart);
+    }();
+
     const ULONGLONG nowMs = GetTickCount64();
     const ULONGLONG lastAudioMs =
         g_lastAudioUpdateMs.load(std::memory_order_acquire);
@@ -3192,19 +5980,40 @@ static void UpdateAnimationFromAudio() {
     if (fallbackLastMs == 0)
         fallbackLastMs = nowMs;
 
+    LARGE_INTEGER nowQpc{};
+    QueryPerformanceCounter(&nowQpc);
+
+    if (animationLastQpc == 0 || qpcFrequency <= 0.0)
+        animationLastQpc = nowQpc.QuadPart;
+
+    // Use QPC for the animation clock rather than GetTickCount64.
+    // Windows' millisecond clock can quantize multiple 120/144/165/180 Hz
+    // callbacks to the same timestamp, which introduces visible motion jitter.
+    // QPC keeps the elapsed-time math continuous even when the timer fires at
+    // high refresh rates.
+    const float dtFrames = std::clamp(
+        static_cast<float>(
+            static_cast<double>(nowQpc.QuadPart - animationLastQpc) /
+            qpcFrequency * 60.0),
+        0.0f, 8.0f);
+    animationLastQpc = nowQpc.QuadPart;
+
     if (lastAudioMs != 0 && nowMs > lastAudioMs + 120) {
         if (fallbackLastMs < lastAudioMs)
             fallbackLastMs = lastAudioMs;
 
-        const float dtFrames = std::clamp(
-            static_cast<float>(nowMs - fallbackLastMs) / 16.0f,
+        const float audioDtFrames = std::clamp(
+            static_cast<float>(nowMs - fallbackLastMs) / (1000.0f / 60.0f),
             0.0f, 8.0f);
 
-        if (dtFrames > 0.0f) {
+        if (audioDtFrames > 0.0f) {
             for (int b = 0; b < VIZ_NUM_BANDS; ++b) {
                 float v = g_audioBands[b].load(std::memory_order_relaxed);
-                v = std::max(0.0f, v - GetBandGravity(b) * dtFrames);
-                g_audioBands[b].store(v, std::memory_order_relaxed);
+                for (;;) {
+                    float dec = std::max(0.0f, v - GetBandGravity(b) * audioDtFrames);
+                    if (g_audioBands[b].compare_exchange_weak(v, dec, std::memory_order_relaxed))
+                        break;
+                }
             }
             fallbackLastMs = nowMs;
         }
@@ -3213,7 +6022,10 @@ static void UpdateAnimationFromAudio() {
     }
 
     static float g_wavePhase = 0.0f;
-    g_wavePhase += 0.06f;
+    // The Wave deformation is also time-based. Without this multiplier, a
+    // 180 Hz render rate would make the wave travel roughly 3x faster than
+    // at 60 Hz even though the audio itself did not change.
+    g_wavePhase += 0.06f * dtFrames;
 
     for (int i = 0; i < barCount; ++i) {
         float freqT = 0.5f;
@@ -3266,7 +6078,9 @@ static void UpdateAnimationFromAudio() {
         if (g_settings.cavaSmoothingEnabled) {
             current = target;
         } else {
-            const float response = target > current ? attack : decay;
+            const float response = FrameRateIndependentResponse(
+                target > current ? attack : decay,
+                dtFrames);
             current += (target - current) * response;
         }
 
@@ -4197,10 +7011,9 @@ static DWORD GetVisualizerColorSecondary() {
     return g_settings.color2;
 }
 
-static bool IsAlbumColorMode() {
-    // Album colors are also consumed by the background, visualizer border,
-    // lyrics background, and lyrics border. Keep the album worker alive only
-    // when at least one enabled feature can actually use those colors.
+static bool IsAlbumPaletteMode() {
+    // Keep the expensive palette extraction disabled when the album widget is
+    // the only consumer. The widget itself needs the artwork, not the palette.
     return g_settings.colorMode == 7 || g_settings.colorMode == 8 ||
            (g_settings.backgroundEnabled &&
             (g_settings.backgroundMode == 3 || g_settings.backgroundMode == 4)) ||
@@ -4213,6 +7026,23 @@ static bool IsAlbumColorMode() {
            (g_settings.lyricsEnabled && g_settings.lyricsBorderEnabled &&
             (g_settings.lyricsBorderMode == 0 ||
              g_settings.lyricsBorderMode == 1));
+}
+
+static bool IsAlbumColorMode() {
+    // Permanent consumers: album-derived colors and the desktop Album Widget.
+    // The popup Disk is deliberately excluded here because it does not need
+    // album/session polling while the Player window is closed.
+    return IsAlbumPaletteMode() ||
+           g_settings.albumWidgetEnabled;
+}
+
+static bool IsAlbumColorCaptureNeeded() {
+    // Disk artwork/session polling is demand-driven by the Player popup.
+    // When the popup is closed, a Disk section alone must not keep the worker
+    // alive during games or other unrelated workloads.
+    return IsAlbumColorMode() ||
+           (EqIsLayoutWidgetPresent(EQ_LAYOUT_DISK) &&
+            g_eqPlayerPopupOpen.load(std::memory_order_acquire));
 }
 
 static void RenderCurveVisualizer(
@@ -4687,132 +7517,620 @@ static AlbumPaletteGdi ExtractAlbumPaletteGdi(const std::vector<BYTE>& imageByte
         return fallback;
     }
 
-    struct Bucket {
-        uint64_t r = 0;
-        uint64_t g = 0;
-        uint64_t b = 0;
-        uint32_t n = 0;
-    };
-
-    Bucket buckets[16][16][16]{};
-
-    for (UINT y = 0; y < h; y += 4) {
-        for (UINT x = 0; x < w; x += 4) {
-            Gdiplus::Color c;
-            if (bitmap.GetPixel(x, y, &c) != Gdiplus::Ok)
-                continue;
-
-            const int r = c.GetRed();
-            const int g = c.GetGreen();
-            const int b = c.GetBlue();
-            const int luma = (r * 299 + g * 587 + b * 114) / 1000;
-
-
-            if (luma < 24 || luma > 235)
-                continue;
-
-            auto& bucket = buckets[r >> 4][g >> 4][b >> 4];
-            bucket.r += static_cast<uint64_t>(r);
-            bucket.g += static_cast<uint64_t>(g);
-            bucket.b += static_cast<uint64_t>(b);
-            bucket.n++;
-        }
-    }
-
-    struct Candidate {
+    // Palette extraction runs only when the artwork changes, so the hot path is
+    // deliberately capped. At most ~4096 pixels are sampled, regardless of the
+    // thumbnail size. This gives us enough information for a strong palette while
+    // keeping the album worker cheap even when a large artwork image is supplied.
+    struct Sample {
+        float l;
+        float a;
+        float b;
         float weight;
-        BYTE r;
-        BYTE g;
-        BYTE b;
+        float nx;
+        float ny;
     };
 
-    std::vector<Candidate> candidates;
-    candidates.reserve(64);
+    constexpr size_t kMaxSamples = 4096;
+    constexpr int kClusterCount = 8;
+    constexpr int kKMeansIterations = 5;
 
-    for (int R = 0; R < 16; ++R) {
-        for (int G = 0; G < 16; ++G) {
-            for (int B = 0; B < 16; ++B) {
-                const auto& bucket = buckets[R][G][B];
-                if (bucket.n < 8)
-                    continue;
+    std::vector<Sample> samples;
+    samples.reserve(kMaxSamples);
 
-                const float fr = static_cast<float>(bucket.r) /
-                    static_cast<float>(bucket.n) / 255.0f;
-                const float fg = static_cast<float>(bucket.g) /
-                    static_cast<float>(bucket.n) / 255.0f;
-                const float fb = static_cast<float>(bucket.b) /
-                    static_cast<float>(bucket.n) / 255.0f;
+    // The artwork is 8-bit per channel, so cache the expensive sRGB transfer
+    // function once instead of calling pow() three times for every sample.
+    static const std::array<float, 256> srgbToLinearLut = [] {
+        std::array<float, 256> lut{};
+        for (int i = 0; i < 256; ++i) {
+            const float c = static_cast<float>(i) / 255.0f;
+            lut[i] = c <= 0.04045f
+                ? c / 12.92f
+                : std::pow((c + 0.055f) / 1.055f, 2.4f);
+        }
+        return lut;
+    }();
 
-                const float mx = std::max({fr, fg, fb});
-                const float mn = std::min({fr, fg, fb});
-                const float sat = mx > 0.0f ? (mx - mn) / mx : 0.0f;
-                const float weight = static_cast<float>(bucket.n) * (0.3f + sat);
+    auto rgbToOklab = [&](BYTE r8, BYTE g8, BYTE b8,
+                          float& outL, float& outA, float& outB) {
+        const float lr = srgbToLinearLut[r8];
+        const float lg = srgbToLinearLut[g8];
+        const float lb = srgbToLinearLut[b8];
 
-                candidates.push_back({
-                    weight,
-                    static_cast<BYTE>(fr * 255.0f),
-                    static_cast<BYTE>(fg * 255.0f),
-                    static_cast<BYTE>(fb * 255.0f)});
+        const float l =
+            0.4122214708f * lr +
+            0.5363325363f * lg +
+            0.0514459929f * lb;
+        const float m =
+            0.2119034982f * lr +
+            0.6806995451f * lg +
+            0.1073969566f * lb;
+        const float s =
+            0.0883024619f * lr +
+            0.2817188376f * lg +
+            0.6299787005f * lb;
+
+        const float l3 = std::cbrt(std::max(l, 0.0f));
+        const float m3 = std::cbrt(std::max(m, 0.0f));
+        const float s3 = std::cbrt(std::max(s, 0.0f));
+
+        outL =
+            0.2104542553f * l3 +
+            0.7936177850f * m3 -
+            0.0040720468f * s3;
+        outA =
+            1.9779984951f * l3 -
+            2.4285922050f * m3 +
+            0.4505937099f * s3;
+        outB =
+            0.0259040371f * l3 +
+            0.7827717662f * m3 -
+            0.8086757660f * s3;
+    };
+
+    auto oklabToRgb = [](float l, float a, float b,
+                         float& outR, float& outG, float& outB) {
+        const float l3 = l + 0.3963377774f * a + 0.2158037573f * b;
+        const float m3 = l - 0.1055613458f * a - 0.0638541728f * b;
+        const float s3 = l - 0.0894841775f * a - 1.2914855480f * b;
+
+        const float l_ = l3 * l3 * l3;
+        const float m_ = m3 * m3 * m3;
+        const float s_ = s3 * s3 * s3;
+
+        const float lr =
+            4.0767416621f * l_ -
+            3.3077115913f * m_ +
+            0.2309699292f * s_;
+        const float lg =
+            -1.2684380046f * l_ +
+            2.6097574011f * m_ -
+            0.3413193965f * s_;
+        const float lb =
+            -0.0041960863f * l_ -
+            0.7034186147f * m_ +
+            1.7076147010f * s_;
+
+        auto linearToSrgb = [](float c) -> float {
+            c = std::clamp(c, 0.0f, 1.0f);
+            return c <= 0.0031308f
+                ? 12.92f * c
+                : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+        };
+
+        outR = linearToSrgb(lr);
+        outG = linearToSrgb(lg);
+        outB = linearToSrgb(lb);
+    };
+
+    auto smoothStep = [](float edge0, float edge1, float x) -> float {
+        if (edge1 <= edge0)
+            return x >= edge1 ? 1.0f : 0.0f;
+        const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    };
+
+    // Choose independent X/Y strides from the image aspect ratio. Unlike a
+    // single stride based only on total pixel count, this stays near the 4096
+    // sample cap even for unusually wide or tall artwork.
+    const double aspect =
+        static_cast<double>(w) / std::max(1.0, static_cast<double>(h));
+    const int targetSampleWidth = std::max(
+        1,
+        std::min(
+            static_cast<int>(w),
+            static_cast<int>(std::ceil(
+                std::sqrt(static_cast<double>(kMaxSamples) * aspect)))));
+    // Allocate the remaining sample budget to Y. This guarantees that even
+    // extreme aspect ratios stay within the intended ~4096 sample budget.
+    const int targetSampleHeight = std::max(
+        1,
+        std::min(
+            static_cast<int>(h),
+            static_cast<int>(kMaxSamples) / targetSampleWidth));
+    const int sampleStepX = std::max(
+        1, static_cast<int>(std::ceil(
+            static_cast<double>(w) / targetSampleWidth)));
+    const int sampleStepY = std::max(
+        1, static_cast<int>(std::ceil(
+            static_cast<double>(h) / targetSampleHeight)));
+
+    Gdiplus::BitmapData locked{};
+    Gdiplus::Rect rect(0, 0, static_cast<int>(w), static_cast<int>(h));
+    if (bitmap.LockBits(&rect, Gdiplus::ImageLockModeRead,
+                        PixelFormat32bppARGB, &locked) != Gdiplus::Ok) {
+        stream->Release();
+        return fallback;
+    }
+
+    const BYTE* pixels = static_cast<const BYTE*>(locked.Scan0);
+    const int stride = static_cast<int>(locked.Stride);
+
+    double globalLumaSum = 0.0;
+    double globalWeightSum = 0.0;
+
+    for (UINT y = 0; y < h; y += static_cast<UINT>(sampleStepY)) {
+        const BYTE* row = pixels + static_cast<int>(y) * stride;
+        const float ny =
+            (static_cast<float>(y) + 0.5f * sampleStepY) /
+            std::max(1.0f, static_cast<float>(h)) * 2.0f - 1.0f;
+
+        for (UINT x = 0; x < w; x += static_cast<UINT>(sampleStepX)) {
+            const BYTE* px = row + static_cast<int>(x) * 4;
+            const int a8 = px[3];
+            if (a8 <= 0)
+                continue;
+
+            BYTE r8 = px[2];
+            BYTE g8 = px[1];
+            BYTE b8 = px[0];
+
+            // GDI+ sources may contain premultiplied RGB for partially
+            // transparent pixels. Restore straight-alpha channel values before
+            // converting to OKLab. The correction is only done for alpha < 255,
+            // so the overwhelmingly common opaque case remains branch-light.
+            if (a8 < 255) {
+                r8 = static_cast<BYTE>(std::min(
+                    255, (static_cast<int>(r8) * 255 + a8 / 2) / a8));
+                g8 = static_cast<BYTE>(std::min(
+                    255, (static_cast<int>(g8) * 255 + a8 / 2) / a8));
+                b8 = static_cast<BYTE>(std::min(
+                    255, (static_cast<int>(b8) * 255 + a8 / 2) / a8));
             }
+
+            float l = 0.0f;
+            float oa = 0.0f;
+            float ob = 0.0f;
+            rgbToOklab(r8, g8, b8, l, oa, ob);
+
+            const float chroma = std::sqrt(oa * oa + ob * ob);
+
+            // Keep near-black/near-white pixels available for genuinely
+            // monochrome artwork, but reduce their influence instead of deleting
+            // them outright. This avoids throwing away useful detail from covers
+            // with bright or dark themes.
+            const float darkVisibility = smoothStep(0.02f, 0.16f, l);
+            const float brightVisibility =
+                1.0f - smoothStep(0.88f, 0.995f, l);
+            const float brightnessFactor =
+                0.28f + 0.72f * std::min(darkVisibility, brightVisibility);
+
+            const float nx =
+                (static_cast<float>(x) + 0.5f * sampleStepX) /
+                std::max(1.0f, static_cast<float>(w)) * 2.0f - 1.0f;
+            const float radial = std::clamp(
+                std::sqrt(nx * nx + ny * ny) / std::sqrt(2.0f),
+                0.0f, 1.0f);
+            const float spatialWeight = 1.08f - 0.16f * radial;
+            const float alphaWeight = static_cast<float>(a8) / 255.0f;
+
+            // Strong chroma gets a little more influence during clustering so a
+            // tiny, vivid accent is not swallowed by a huge neutral background.
+            const float chromaScore = smoothStep(0.012f, 0.14f, chroma);
+            const float baseWeight =
+                brightnessFactor * spatialWeight * alphaWeight;
+            const float characteristicWeight =
+                (0.58f + 1.20f * chromaScore) * baseWeight;
+
+            if (characteristicWeight <= 0.0f || baseWeight <= 0.0f)
+                continue;
+
+            samples.push_back({
+                l, oa, ob, characteristicWeight, nx, ny});
+
+            // Keep global lightness independent from the chroma preference used
+            // by clustering. This makes the contrast bonus describe the artwork
+            // itself instead of the already-biased palette candidate weights.
+            globalLumaSum += static_cast<double>(l) * baseWeight;
+            globalWeightSum += baseWeight;
         }
     }
 
+    bitmap.UnlockBits(&locked);
     stream->Release();
 
-    if (candidates.empty())
+    if (samples.empty() || globalWeightSum <= 0.0)
         return fallback;
 
-    std::sort(candidates.begin(), candidates.end(),
-        [](const Candidate& a, const Candidate& b) {
-            return a.weight > b.weight;
-        });
+    const float globalLuma = static_cast<float>(
+        globalLumaSum / globalWeightSum);
+    const int clusterCount = std::min(
+        kClusterCount, static_cast<int>(samples.size()));
 
-    AlbumPaletteGdi result{
-        RGB(candidates[0].r, candidates[0].g, candidates[0].b),
-        RGB(candidates[0].r, candidates[0].g, candidates[0].b)};
+    struct Center {
+        float l = 0.0f;
+        float a = 0.0f;
+        float b = 0.0f;
+    };
 
-    const float primaryWeight = candidates[0].weight;
-    float bestSecondaryScore = -1.0f;
-    const Candidate* bestSecondary = nullptr;
+    std::array<Center, kClusterCount> centers{};
 
-    for (const auto& candidate : candidates) {
-        const int dr = static_cast<int>(candidate.r) - candidates[0].r;
-        const int dg = static_cast<int>(candidate.g) - candidates[0].g;
-        const int db = static_cast<int>(candidate.b) - candidates[0].b;
-        const float distance = std::sqrt(
-            static_cast<float>(dr * dr + dg * dg + db * db));
-
-        if (candidate.weight < primaryWeight * 0.08f || distance < 36.0f)
-            continue;
-
-        const float distanceT = std::clamp(distance / 255.0f, 0.0f, 1.0f);
-        const float score = candidate.weight * (0.35f + distanceT * 1.65f);
-        if (score > bestSecondaryScore) {
-            bestSecondaryScore = score;
-            bestSecondary = &candidate;
+    // Deterministic farthest-point seeding: the first seed is the strongest
+    // individual colour sample; each later seed is chosen for perceptual
+    // separation from the already selected seeds. This is stable, cheap and
+    // avoids random clustering results between track changes.
+    size_t firstIndex = 0;
+    float firstScore = -1.0f;
+    for (size_t i = 0; i < samples.size(); ++i) {
+        const float chroma = std::sqrt(
+            samples[i].a * samples[i].a + samples[i].b * samples[i].b);
+        const float chromaScore = smoothStep(0.012f, 0.14f, chroma);
+        const float score = samples[i].weight *
+            (0.65f + 1.35f * chromaScore);
+        if (score > firstScore) {
+            firstScore = score;
+            firstIndex = i;
         }
     }
 
-    if (bestSecondary) {
-        result.secondary = RGB(
-            bestSecondary->r, bestSecondary->g, bestSecondary->b);
+    centers[0] = {
+        samples[firstIndex].l,
+        samples[firstIndex].a,
+        samples[firstIndex].b};
+
+    for (int c = 1; c < clusterCount; ++c) {
+        size_t bestIndex = 0;
+        float bestScore = -1.0f;
+
+        for (size_t i = 0; i < samples.size(); ++i) {
+            float minDistanceSq = 1.0e9f;
+            for (int previous = 0; previous < c; ++previous) {
+                const float dl = samples[i].l - centers[previous].l;
+                const float da = samples[i].a - centers[previous].a;
+                const float db = samples[i].b - centers[previous].b;
+                const float distanceSq = dl * dl + da * da + db * db;
+                minDistanceSq = std::min(minDistanceSq, distanceSq);
+            }
+
+            const float chroma = std::sqrt(
+                samples[i].a * samples[i].a + samples[i].b * samples[i].b);
+            const float chromaScore = smoothStep(0.012f, 0.14f, chroma);
+            const float score = minDistanceSq * samples[i].weight *
+                (0.55f + 0.90f * chromaScore);
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestIndex = i;
+            }
+        }
+
+        centers[c] = {
+            samples[bestIndex].l,
+            samples[bestIndex].a,
+            samples[bestIndex].b};
+    }
+
+    // Small fixed-size weighted k-means in OKLab. The cluster count and number of
+    // iterations are intentionally bounded so accuracy improves without making
+    // artwork changes expensive. No allocation occurs during the iterations.
+    for (int iteration = 0; iteration < kKMeansIterations; ++iteration) {
+        std::array<double, kClusterCount> sumWeight{};
+        std::array<double, kClusterCount> sumL{};
+        std::array<double, kClusterCount> sumA{};
+        std::array<double, kClusterCount> sumB{};
+
+        for (const auto& sample : samples) {
+            int bestCluster = 0;
+            float bestDistanceSq = 1.0e9f;
+
+            for (int c = 0; c < clusterCount; ++c) {
+                const float dl = sample.l - centers[c].l;
+                const float da = sample.a - centers[c].a;
+                const float db = sample.b - centers[c].b;
+                const float distanceSq = dl * dl + da * da + db * db;
+                if (distanceSq < bestDistanceSq) {
+                    bestDistanceSq = distanceSq;
+                    bestCluster = c;
+                }
+            }
+
+            sumWeight[bestCluster] += sample.weight;
+            sumL[bestCluster] += static_cast<double>(sample.l) * sample.weight;
+            sumA[bestCluster] += static_cast<double>(sample.a) * sample.weight;
+            sumB[bestCluster] += static_cast<double>(sample.b) * sample.weight;
+        }
+
+        for (int c = 0; c < clusterCount; ++c) {
+            if (sumWeight[c] <= 0.0)
+                continue;
+
+            centers[c].l = static_cast<float>(sumL[c] / sumWeight[c]);
+            centers[c].a = static_cast<float>(sumA[c] / sumWeight[c]);
+            centers[c].b = static_cast<float>(sumB[c] / sumWeight[c]);
+        }
+    }
+
+    struct ClusterStats {
+        float score = 0.0f;
+        float mass = 0.0f;
+        float l = 0.0f;
+        float a = 0.0f;
+        float b = 0.0f;
+        float spread = 0.0f;
+        float chroma = 0.0f;
+    };
+
+    std::array<ClusterStats, kClusterCount> stats{};
+    std::array<double, kClusterCount> mass{};
+    std::array<double, kClusterCount> sumX{};
+    std::array<double, kClusterCount> sumY{};
+    std::array<double, kClusterCount> sumXX{};
+    std::array<double, kClusterCount> sumYY{};
+
+    for (const auto& sample : samples) {
+        int bestCluster = 0;
+        float bestDistanceSq = 1.0e9f;
+
+        for (int c = 0; c < clusterCount; ++c) {
+            const float dl = sample.l - centers[c].l;
+            const float da = sample.a - centers[c].a;
+            const float db = sample.b - centers[c].b;
+            const float distanceSq = dl * dl + da * da + db * db;
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                bestCluster = c;
+            }
+        }
+
+        const double weight = sample.weight;
+        mass[bestCluster] += weight;
+        sumX[bestCluster] += static_cast<double>(sample.nx) * weight;
+        sumY[bestCluster] += static_cast<double>(sample.ny) * weight;
+        sumXX[bestCluster] +=
+            static_cast<double>(sample.nx) * sample.nx * weight;
+        sumYY[bestCluster] +=
+            static_cast<double>(sample.ny) * sample.ny * weight;
+    }
+
+    int primaryCluster = -1;
+    float primaryScore = -1.0f;
+
+    for (int c = 0; c < clusterCount; ++c) {
+        if (mass[c] <= 0.0)
+            continue;
+
+        const float l = centers[c].l;
+        const float a = centers[c].a;
+        const float b = centers[c].b;
+        const float chroma = std::sqrt(a * a + b * b);
+        const float chromaScore = smoothStep(0.012f, 0.14f, chroma);
+
+        const float meanX = static_cast<float>(sumX[c] / mass[c]);
+        const float meanY = static_cast<float>(sumY[c] / mass[c]);
+        const float varianceX = std::max(
+            0.0f,
+            static_cast<float>(sumXX[c] / mass[c]) - meanX * meanX);
+        const float varianceY = std::max(
+            0.0f,
+            static_cast<float>(sumYY[c] / mass[c]) - meanY * meanY);
+        const float spatialSpread = std::sqrt(varianceX + varianceY);
+
+        // Broadly distributed colours are more representative of the whole
+        // cover than a tiny logo/highlight, but the spread bonus is intentionally
+        // mild so a genuinely important local accent can still win.
+        const float spreadFactor =
+            0.82f + 0.18f * std::clamp(spatialSpread / 0.55f, 0.0f, 1.0f);
+
+        // Neutral colours remain valid for monochrome artwork, but saturated
+        // colours receive enough preference to beat bland background clusters.
+        const float neutralFactor =
+            0.55f + 0.45f * chromaScore;
+
+        // Protect dark shadows and pure highlights with a soft penalty instead
+        // of hard filtering them out.
+        const float darkVisibility = smoothStep(0.02f, 0.16f, l);
+        const float brightVisibility =
+            1.0f - smoothStep(0.88f, 0.995f, l);
+        const float brightnessFactor =
+            0.28f + 0.72f * std::min(darkVisibility, brightVisibility);
+
+        const float contrast = std::clamp(
+            std::fabs(l - globalLuma) / 0.50f, 0.0f, 1.0f);
+        const float contrastFactor = 0.90f + 0.30f * contrast;
+
+        // Coverage is still the strongest signal; chroma, spread and contrast
+        // are controlled bonuses rather than replacements for true dominance.
+        const float score =
+            static_cast<float>(mass[c]) *
+            (0.60f + 1.45f * chromaScore) *
+            neutralFactor *
+            brightnessFactor *
+            contrastFactor *
+            spreadFactor;
+
+        stats[c] = {
+            score,
+            static_cast<float>(mass[c]),
+            l,
+            a,
+            b,
+            spatialSpread,
+            chroma};
+
+        if (score > primaryScore) {
+            primaryScore = score;
+            primaryCluster = c;
+        }
+    }
+
+    if (primaryCluster < 0)
+        return fallback;
+
+    auto colorFromLab = [&](const ClusterStats& cluster) -> DWORD {
+        float r = 0.0f;
+        float g = 0.0f;
+        float b = 0.0f;
+        oklabToRgb(cluster.l, cluster.a, cluster.b, r, g, b);
+        return RGB(
+            static_cast<BYTE>(std::lround(std::clamp(r, 0.0f, 1.0f) * 255.0f)),
+            static_cast<BYTE>(std::lround(std::clamp(g, 0.0f, 1.0f) * 255.0f)),
+            static_cast<BYTE>(std::lround(std::clamp(b, 0.0f, 1.0f) * 255.0f)));
+    };
+
+    AlbumPaletteGdi result{
+        colorFromLab(stats[primaryCluster]),
+        colorFromLab(stats[primaryCluster])};
+
+    int secondaryCluster = -1;
+    int fallbackSecondaryCluster = -1;
+    float bestSecondaryScore = -1.0f;
+    float bestFallbackSecondaryScore = -1.0f;
+
+    const ClusterStats& primary = stats[primaryCluster];
+    const float primaryHue = std::atan2(primary.b, primary.a);
+
+    constexpr float kMinSecondaryMassRatio = 0.025f;
+    constexpr float kDistinctHueThreshold = 0.18f; // ~32 degrees
+    constexpr float kStrongHueThreshold = 0.35f;   // ~63 degrees
+
+    for (int c = 0; c < clusterCount; ++c) {
+        if (c == primaryCluster || stats[c].mass <= 0.0f)
+            continue;
+
+        const ClusterStats& candidate = stats[c];
+
+        // Allow somewhat smaller accent clusters here. A real secondary colour
+        // can be much less common than Primary, while tiny logos/highlights are
+        // still filtered out.
+        if (candidate.mass < primary.mass * kMinSecondaryMassRatio)
+            continue;
+
+        const float dl = candidate.l - primary.l;
+        const float da = candidate.a - primary.a;
+        const float db = candidate.b - primary.b;
+        const float distance = std::sqrt(dl * dl + da * da + db * db);
+
+        if (distance < 0.055f)
+            continue;
+
+        const float distanceScore =
+            std::clamp(distance / 0.32f, 0.0f, 1.0f);
+
+        float hueSeparation = 0.0f;
+        const bool bothChromatic =
+            primary.chroma > 0.025f && candidate.chroma > 0.025f;
+
+        if (bothChromatic) {
+            const float candidateHue = std::atan2(candidate.b, candidate.a);
+            float hueDiff = std::fabs(candidateHue - primaryHue);
+            constexpr float kPi = 3.14159265358979323846f;
+            if (hueDiff > kPi)
+                hueDiff = 2.0f * kPi - hueDiff;
+            hueSeparation = std::clamp(hueDiff / kPi, 0.0f, 1.0f);
+        }
+
+        const float lightnessSeparation = std::clamp(
+            std::fabs(candidate.l - primary.l) / 0.50f,
+            0.0f, 1.0f);
+
+        // Keep a fallback based on overall usefulness, but make the preferred
+        // path explicitly favour a genuinely different hue. This prevents a
+        // red+blue cover from ending up red+slightly-different-red merely because
+        // several red clusters have more pixels.
+        const float fallbackDistinctiveness =
+            0.55f +
+            0.90f * distanceScore +
+            0.65f * hueSeparation +
+            0.18f * lightnessSeparation;
+        const float fallbackScore = candidate.score * fallbackDistinctiveness;
+
+        if (fallbackScore > bestFallbackSecondaryScore) {
+            bestFallbackSecondaryScore = fallbackScore;
+            fallbackSecondaryCluster = c;
+        }
+
+        // When both colours are chromatic, a small hue separation is treated as
+        // the same colour family. We deliberately do not let such a cluster win
+        // while a sufficiently substantial, genuinely different hue exists.
+        const bool sufficientlyDifferentHue =
+            !bothChromatic || hueSeparation >= kDistinctHueThreshold;
+
+        if (!sufficientlyDifferentHue)
+            continue;
+
+        // Hue diversity is intentionally stronger than raw cluster mass here.
+        // This makes an actual blue/teal accent beat a second red cluster when
+        // the primary colour is red, while still respecting meaningful coverage.
+        const float hueDiversityBonus =
+            0.70f +
+            1.90f * hueSeparation +
+            0.65f * std::clamp(
+                (hueSeparation - kDistinctHueThreshold) /
+                (1.0f - kDistinctHueThreshold),
+                0.0f, 1.0f);
+
+        // Give very strongly separated hues an additional modest preference, but
+        // do not ignore useful analogous gradients entirely. The coverage/score
+        // still matters after hue diversity has passed the gate.
+        const float strongHueBonus =
+            hueSeparation >= kStrongHueThreshold ? 1.20f : 1.0f;
+
+        const float score =
+            candidate.score *
+            (0.80f + 0.85f * distanceScore +
+             0.20f * lightnessSeparation) *
+            hueDiversityBonus *
+            strongHueBonus;
+
+        if (score > bestSecondaryScore) {
+            bestSecondaryScore = score;
+            secondaryCluster = c;
+        }
+    }
+
+    // Prefer a hue-diverse candidate whenever one exists. Only fall back to a
+    // second shade of the same family when the artwork truly does not contain a
+    // sufficiently distinct alternative colour.
+    if (secondaryCluster < 0)
+        secondaryCluster = fallbackSecondaryCluster;
+
+    if (secondaryCluster >= 0) {
+        result.secondary = colorFromLab(stats[secondaryCluster]);
     }
 
     return result;
 }
 
 static size_t HashAlbumBytes(const std::vector<BYTE>& bytes) {
-    size_t hash = 0;
-    for (size_t i = 0; i < bytes.size(); i += 1024)
-        hash = hash * 31 + bytes[i];
-    return hash;
+    uint64_t hash = 1469598103934665603ULL;
+    for (size_t i = 0; i < bytes.size(); i += 1024) {
+        hash ^= static_cast<uint64_t>(bytes[i]);
+        hash *= 1099511628211ULL;
+    }
+    return static_cast<size_t>(hash);
 }
 
 static void UpdateAlbumPaletteFromBytes(const std::vector<BYTE>& thumbBytes, size_t hash) {
     if (thumbBytes.empty() || hash == 0) {
-        std::lock_guard<std::mutex> lock(g_albumPaletteMutex);
-        g_albumPalette = AlbumPaletteGdi{};
-        g_albumPaletteHash = 0;
+        const AlbumPaletteGdi fallback{};
+        {
+            std::lock_guard<std::mutex> lock(g_albumPaletteMutex);
+            g_albumPalette = fallback;
+            g_albumPaletteHash = 0;
+            g_albumPalettePrimaryFast.store(fallback.primary, std::memory_order_release);
+            g_albumPaletteSecondaryFast.store(fallback.secondary, std::memory_order_release);
+            g_albumPaletteRevision.fetch_add(1, std::memory_order_release);
+        }
+        SetAlbumPaletteAnimationTarget(fallback.primary, fallback.secondary);
         return;
     }
 
@@ -4825,19 +8143,408 @@ static void UpdateAlbumPaletteFromBytes(const std::vector<BYTE>& thumbBytes, siz
     AlbumPaletteGdi palette = ExtractAlbumPaletteGdi(thumbBytes);
     {
         std::lock_guard<std::mutex> lock(g_albumPaletteMutex);
+        // A concurrent worker update for the same cover does not need to restart
+        // the transition once the target palette has already been published.
+        if (g_albumPaletteHash == hash)
+            return;
         g_albumPalette = palette;
         g_albumPaletteHash = hash;
+        g_albumPalettePrimaryFast.store(palette.primary, std::memory_order_release);
+        g_albumPaletteSecondaryFast.store(palette.secondary, std::memory_order_release);
+        g_albumPaletteRevision.fetch_add(1, std::memory_order_release);
     }
+    SetAlbumPaletteAnimationTarget(palette.primary, palette.secondary);
 }
 
 static DWORD GetAlbumPalettePrimary() {
-    std::lock_guard<std::mutex> lock(g_albumPaletteMutex);
-    return g_albumPalette.primary;
+    if (!g_animateAlbumAccent.load(std::memory_order_acquire))
+        return g_albumPalettePrimaryFast.load(std::memory_order_acquire);
+    std::lock_guard<std::mutex> lock(g_albumPaletteAnimationMutex);
+    return EvaluateAlbumPaletteAnimationColorLocked(
+        false, std::chrono::steady_clock::now());
 }
 
 static DWORD GetAlbumPaletteSecondary() {
-    std::lock_guard<std::mutex> lock(g_albumPaletteMutex);
-    return g_albumPalette.secondary;
+    if (!g_animateAlbumAccent.load(std::memory_order_acquire))
+        return g_albumPaletteSecondaryFast.load(std::memory_order_acquire);
+    std::lock_guard<std::mutex> lock(g_albumPaletteAnimationMutex);
+    return EvaluateAlbumPaletteAnimationColorLocked(
+        true, std::chrono::steady_clock::now());
+}
+
+static void UpdateAlbumArtworkFromBytes(const std::vector<BYTE>& bytes, size_t hash) {
+    {
+        std::lock_guard<std::mutex> lock(g_albumArtworkMutex);
+        if (hash == g_albumArtworkHash)
+            return;
+        g_albumArtworkHash = hash;
+        g_albumArtworkBytes = bytes;
+        g_albumArtworkRevision.fetch_add(1, std::memory_order_release);
+    }
+
+    // Wake an idle desktop overlay immediately as well. Otherwise Album Widget
+    // could keep showing the previous cover until the next unrelated render wake.
+    WakeOverlayForAlbumMediaChange();
+}
+
+static void ClearAlbumArtworkCache() {
+    std::lock_guard<std::mutex> lock(g_albumArtworkMutex);
+    g_albumArtworkHash = 0;
+    g_albumArtworkBytes.clear();
+}
+
+static void DestroyAlbumArtworkImage() {
+    if (g_albumArtworkBitmap) {
+        delete g_albumArtworkBitmap;
+        g_albumArtworkBitmap = nullptr;
+    }
+    if (g_albumArtworkStream) {
+        g_albumArtworkStream->Release();
+        g_albumArtworkStream = nullptr;
+    }
+    g_albumArtworkLoadedHash = 0;
+}
+
+static void EnsureAlbumArtworkLoaded() {
+    if (!g_settings.albumWidgetEnabled)
+        return;
+
+    size_t hash = 0;
+    std::vector<BYTE> bytes;
+    {
+        std::lock_guard<std::mutex> lock(g_albumArtworkMutex);
+        hash = g_albumArtworkHash;
+        if (hash == 0 || g_albumArtworkBytes.empty()) {
+            if (g_albumArtworkLoadedHash != 0)
+                DestroyAlbumArtworkImage();
+            return;
+        }
+        if (hash == g_albumArtworkLoadedHash && g_albumArtworkBitmap)
+            return;
+        bytes = g_albumArtworkBytes;
+    }
+
+    DestroyAlbumArtworkImage();
+
+    HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
+    if (!hGlobal)
+        return;
+
+    void* dst = GlobalLock(hGlobal);
+    if (!dst) {
+        GlobalFree(hGlobal);
+        return;
+    }
+    std::memcpy(dst, bytes.data(), bytes.size());
+    GlobalUnlock(hGlobal);
+
+    IStream* stream = nullptr;
+    if (FAILED(CreateStreamOnHGlobal(hGlobal, TRUE, &stream)) || !stream) {
+        GlobalFree(hGlobal);
+        return;
+    }
+
+    Gdiplus::Bitmap* image = Gdiplus::Bitmap::FromStream(stream, FALSE);
+    if (!image || image->GetLastStatus() != Gdiplus::Ok ||
+        image->GetWidth() == 0 || image->GetHeight() == 0) {
+        delete image;
+        stream->Release();
+        return;
+    }
+
+    g_albumArtworkStream = stream;
+    g_albumArtworkBitmap = image;
+    g_albumArtworkLoadedHash = hash;
+}
+
+static void DestroyEqDiskArtworkImage() {
+    delete g_eqDiskArtworkRasterCache.bitmap;
+    g_eqDiskArtworkRasterCache = EqDiskArtworkRasterCache{};
+    if (g_eqDiskArtworkBitmap) {
+        delete g_eqDiskArtworkBitmap;
+        g_eqDiskArtworkBitmap = nullptr;
+    }
+    if (g_eqDiskArtworkStream) {
+        g_eqDiskArtworkStream->Release();
+        g_eqDiskArtworkStream = nullptr;
+    }
+    g_eqDiskArtworkLoadedHash = 0;
+}
+
+static void EnsureEqDiskArtworkLoaded() {
+    size_t hash = 0;
+    std::vector<BYTE> bytes;
+    {
+        std::lock_guard<std::mutex> lock(g_albumArtworkMutex);
+        hash = g_albumArtworkHash;
+        if (hash == 0 || g_albumArtworkBytes.empty()) {
+            if (g_eqDiskArtworkLoadedHash != 0)
+                DestroyEqDiskArtworkImage();
+            return;
+        }
+        if (hash == g_eqDiskArtworkLoadedHash && g_eqDiskArtworkBitmap)
+            return;
+        bytes = g_albumArtworkBytes;
+    }
+
+    DestroyEqDiskArtworkImage();
+
+    HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
+    if (!hGlobal)
+        return;
+
+    void* dst = GlobalLock(hGlobal);
+    if (!dst) {
+        GlobalFree(hGlobal);
+        return;
+    }
+    std::memcpy(dst, bytes.data(), bytes.size());
+    GlobalUnlock(hGlobal);
+
+    IStream* stream = nullptr;
+    if (FAILED(CreateStreamOnHGlobal(hGlobal, TRUE, &stream)) || !stream) {
+        GlobalFree(hGlobal);
+        return;
+    }
+
+    Gdiplus::Bitmap* image = Gdiplus::Bitmap::FromStream(stream, FALSE);
+    if (!image || image->GetLastStatus() != Gdiplus::Ok ||
+        image->GetWidth() == 0 || image->GetHeight() == 0) {
+        delete image;
+        stream->Release();
+        return;
+    }
+
+    g_eqDiskArtworkStream = stream;
+    g_eqDiskArtworkBitmap = image;
+    g_eqDiskArtworkLoadedHash = hash;
+}
+
+// Pre-crop and circularly mask the artwork once per track. The Disk rotates
+// this small transparent raster every frame instead of rebuilding an ellipse
+// clip and resampling/cropping the original source image on every render.
+static bool EnsureEqDiskArtworkRasterCache() {
+    constexpr int kRasterSize = 256;
+    auto& cache = g_eqDiskArtworkRasterCache;
+    if (!g_eqDiskArtworkBitmap || g_eqDiskArtworkBitmap->GetLastStatus() != Gdiplus::Ok)
+        return false;
+    if (cache.bitmap && cache.sourceBitmap == g_eqDiskArtworkBitmap &&
+        cache.sourceHash == g_eqDiskArtworkLoadedHash)
+        return true;
+
+    std::unique_ptr<Gdiplus::Bitmap> raster(
+        new Gdiplus::Bitmap(kRasterSize, kRasterSize, PixelFormat32bppARGB));
+    if (!raster || raster->GetLastStatus() != Gdiplus::Ok)
+        return false;
+
+    Gdiplus::Graphics rasterGraphics(raster.get());
+    rasterGraphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    rasterGraphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    rasterGraphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    rasterGraphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+    rasterGraphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+    Gdiplus::GraphicsPath clipPath;
+    clipPath.AddEllipse(1.0f, 1.0f,
+        static_cast<float>(kRasterSize - 2), static_cast<float>(kRasterSize - 2));
+    rasterGraphics.SetClip(&clipPath, Gdiplus::CombineModeReplace);
+
+    const UINT imageW = g_eqDiskArtworkBitmap->GetWidth();
+    const UINT imageH = g_eqDiskArtworkBitmap->GetHeight();
+    if (imageW == 0 || imageH == 0)
+        return false;
+    const float srcW = static_cast<float>(imageW);
+    const float srcH = static_cast<float>(imageH);
+    const float srcSize = std::min(srcW, srcH);
+    const float srcX = srcW > srcH ? (srcW - srcSize) * 0.5f : 0.0f;
+    const float srcY = srcH > srcW ? (srcH - srcSize) * 0.5f : 0.0f;
+    rasterGraphics.DrawImage(g_eqDiskArtworkBitmap,
+        Gdiplus::RectF(0.0f, 0.0f,
+            static_cast<float>(kRasterSize), static_cast<float>(kRasterSize)),
+        srcX, srcY, srcSize, srcSize, Gdiplus::UnitPixel);
+
+    delete cache.bitmap;
+    cache.bitmap = raster.release();
+    cache.sourceBitmap = g_eqDiskArtworkBitmap;
+    cache.sourceHash = g_eqDiskArtworkLoadedHash;
+    return true;
+}
+
+static void DestroyAlbumWidgetCache() {
+    if (g_albumWidgetCacheBitmap) {
+        delete g_albumWidgetCacheBitmap;
+        g_albumWidgetCacheBitmap = nullptr;
+    }
+    g_albumWidgetCacheHash = 0;
+}
+
+static Gdiplus::InterpolationMode GetAlbumWidgetInterpolationMode(int quality) {
+    switch (std::clamp(quality, 0, 3)) {
+    case 0:
+        return Gdiplus::InterpolationModeNearestNeighbor;
+    case 2:
+        return Gdiplus::InterpolationModeHighQualityBilinear;
+    case 3:
+        return Gdiplus::InterpolationModeHighQualityBicubic;
+    default:
+        // The old path inherited GDI+'s default Bilinear interpolation.
+        // Keep that as the default so the normal visual appearance stays close.
+        return Gdiplus::InterpolationModeBilinear;
+    }
+}
+
+static size_t BuildAlbumWidgetCacheHash(const VisualizerSettings& settings) {
+    size_t hash = g_albumArtworkRevision.load(std::memory_order_acquire);
+    auto combine = [&hash](size_t value) {
+        hash ^= value + static_cast<size_t>(0x9e3779b9) +
+                (hash << 6) + (hash >> 2);
+    };
+
+    // The artwork revision already invalidates this cache whenever the track
+    // changes. Do not tie the widget cache to palette revisions: the album
+    // artwork can be identical while an unrelated album-color consumer causes
+    // the palette cache to refresh. The standalone album widget does not need
+    // that rebuild.
+    combine(static_cast<size_t>(settings.albumWidgetWidth));
+    combine(static_cast<size_t>(settings.albumWidgetHeight));
+    combine(static_cast<size_t>(settings.albumWidgetQuality));
+    combine(static_cast<size_t>(settings.albumWidgetCornerRadius));
+    combine(static_cast<size_t>(settings.albumWidgetOpacity));
+    combine(static_cast<size_t>(settings.albumWidgetAttachment));
+
+    if (settings.albumWidgetAttachment == 1) {
+        combine(static_cast<size_t>(settings.lyricsBackgroundEnabled));
+        combine(static_cast<size_t>(settings.lyricsBorderEnabled));
+        combine(static_cast<size_t>(settings.lyricsBorderMode));
+        combine(static_cast<size_t>(settings.lyricsBorderThickness));
+        combine(static_cast<size_t>(settings.lyricsBorderOpacity));
+        combine(static_cast<size_t>(settings.lyricsRounding));
+        combine(static_cast<size_t>(settings.lyricsBorderColor1));
+        combine(static_cast<size_t>(settings.lyricsBorderColor2));
+    } else if (settings.albumWidgetAttachment == 2) {
+        combine(static_cast<size_t>(settings.backgroundBorderEnabled));
+        combine(static_cast<size_t>(settings.backgroundBorderMode));
+        combine(static_cast<size_t>(settings.backgroundBorderThickness));
+        combine(static_cast<size_t>(settings.backgroundBorderOpacity));
+        combine(static_cast<size_t>(settings.backgroundCornerRadius));
+        combine(static_cast<size_t>(settings.backgroundBorderColor1));
+        combine(static_cast<size_t>(settings.backgroundBorderColor2));
+    }
+
+    return hash;
+}
+
+static bool EnsureAlbumWidgetCache(const VisualizerSettings& settings) {
+    DebugPerfScope debugScope(DEBUG_PERF_ALBUM_CACHE);
+    if (!settings.albumWidgetEnabled || settings.albumWidgetOpacity <= 0) {
+        DestroyAlbumWidgetCache();
+        return false;
+    }
+
+    const size_t cacheHash = BuildAlbumWidgetCacheHash(settings);
+    if (g_albumWidgetCacheBitmap && g_albumWidgetCacheHash == cacheHash &&
+        static_cast<int>(g_albumWidgetCacheBitmap->GetWidth()) == settings.albumWidgetWidth &&
+        static_cast<int>(g_albumWidgetCacheBitmap->GetHeight()) == settings.albumWidgetHeight) {
+        return true;
+    }
+
+    // Only touch the artwork mutex/decode path when the cache is actually stale.
+    EnsureAlbumArtworkLoaded();
+    if (!g_albumArtworkBitmap || g_albumArtworkLoadedHash == 0)
+        return false;
+
+    const int w = settings.albumWidgetWidth;
+    const int h = settings.albumWidgetHeight;
+    if (w <= 0 || h <= 0)
+        return false;
+
+    auto* cache = new Gdiplus::Bitmap(w, h, PixelFormat32bppARGB);
+    if (!cache || cache->GetLastStatus() != Gdiplus::Ok) {
+        delete cache;
+        return false;
+    }
+
+    Gdiplus::Graphics cacheGraphics(cache);
+    cacheGraphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    cacheGraphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    cacheGraphics.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+    cacheGraphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+    const RECT localRect{0, 0, w, h};
+    const BYTE alpha = static_cast<BYTE>(
+        std::clamp(settings.albumWidgetOpacity, 0, 100) * 255 / 100);
+    const int radius = std::clamp(
+        settings.albumWidgetCornerRadius, 0, std::min(w, h) / 2);
+
+    Gdiplus::GraphicsPath path;
+    AddRoundedRectSubpath(
+        path, 0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h),
+        static_cast<float>(radius));
+
+    Gdiplus::SolidBrush fallbackBrush(Gdiplus::Color(alpha, 20, 20, 23));
+    cacheGraphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+    cacheGraphics.FillPath(&fallbackBrush, &path);
+
+    const UINT imageW = g_albumArtworkBitmap->GetWidth();
+    const UINT imageH = g_albumArtworkBitmap->GetHeight();
+    if (imageW > 0 && imageH > 0) {
+        const float scale = std::max(
+            static_cast<float>(w) / static_cast<float>(imageW),
+            static_cast<float>(h) / static_cast<float>(imageH));
+        const float drawW = static_cast<float>(imageW) * scale;
+        const float drawH = static_cast<float>(imageH) * scale;
+        const float drawX = (static_cast<float>(w) - drawW) * 0.5f;
+        const float drawY = (static_cast<float>(h) - drawH) * 0.5f;
+
+        Gdiplus::GraphicsState clipState = cacheGraphics.Save();
+        cacheGraphics.SetClip(&path, Gdiplus::CombineModeReplace);
+        cacheGraphics.SetInterpolationMode(
+            GetAlbumWidgetInterpolationMode(settings.albumWidgetQuality));
+
+        Gdiplus::ImageAttributes attrs;
+        Gdiplus::ColorMatrix matrix = {
+            1, 0, 0, 0, 0,
+            0, 1, 0, 0, 0,
+            0, 0, 1, 0, 0,
+            0, 0, 0, alpha / 255.0f, 0,
+            0, 0, 0, 0, 1};
+        attrs.SetColorMatrix(
+            &matrix,
+            Gdiplus::ColorMatrixFlagsDefault,
+            Gdiplus::ColorAdjustTypeBitmap);
+        cacheGraphics.DrawImage(
+            g_albumArtworkBitmap,
+            Gdiplus::RectF(drawX, drawY, drawW, drawH),
+            0, 0,
+            static_cast<Gdiplus::REAL>(imageW),
+            static_cast<Gdiplus::REAL>(imageH),
+            Gdiplus::UnitPixel, &attrs);
+        cacheGraphics.Restore(clipState);
+    }
+
+    if (settings.albumWidgetAttachment == 0) {
+        Gdiplus::GraphicsPath innerPath;
+        const RECT innerRect{8, 8, w - 8, h - 8};
+        if (innerRect.right > innerRect.left && innerRect.bottom > innerRect.top) {
+            AddRoundedRectSubpath(
+                innerPath,
+                static_cast<float>(innerRect.left),
+                static_cast<float>(innerRect.top),
+                static_cast<float>(innerRect.right - innerRect.left),
+                static_cast<float>(innerRect.bottom - innerRect.top),
+                static_cast<float>(std::max(0, radius - 4)));
+            Gdiplus::Pen innerPen(
+                Gdiplus::Color(static_cast<BYTE>(alpha * 0.22f), 255, 255, 255), 1.0f);
+            cacheGraphics.DrawPath(&innerPen, &innerPath);
+        }
+    } else {
+        DrawAlbumWidgetBorder(cacheGraphics, localRect, settings);
+    }
+
+    DestroyAlbumWidgetCache();
+    g_albumWidgetCacheBitmap = cache;
+    g_albumWidgetCacheHash = cacheHash;
+    return true;
 }
 
 static winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession
@@ -4882,79 +8589,306 @@ static DWORD WINAPI AlbumColorThreadProc(LPVOID) {
             throw winrt::hresult_canceled();
         auto manager = managerOperation.GetResults();
 
+        using Session = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession;
+        winrt::event_token sessionsChangedToken{};
+        winrt::event_token currentSessionChangedToken{};
+        bool sessionsChangedSubscribed = false;
+        bool currentSessionChangedSubscribed = false;
+        try {
+            sessionsChangedToken = manager.SessionsChanged(
+                [](auto const&, auto const&) {
+                    g_albumSessionChangeRevision.fetch_add(1, std::memory_order_release);
+                    if (HANDLE wake = g_hAlbumColorWakeEvent)
+                        SetEvent(wake);
+                });
+            sessionsChangedSubscribed = true;
+        } catch (...) {
+            // The bounded polling fallback below still detects newly added/removed sessions.
+        }
+        try {
+            // CurrentSessionChanged covers switching between already-existing players,
+            // which does not necessarily raise SessionsChanged.
+            currentSessionChangedToken = manager.CurrentSessionChanged(
+                [](auto const&, auto const&) {
+                    g_albumSessionChangeRevision.fetch_add(1, std::memory_order_release);
+                    if (HANDLE wake = g_hAlbumColorWakeEvent)
+                        SetEvent(wake);
+                });
+            currentSessionChangedSubscribed = true;
+        } catch (...) {
+            // The bounded polling fallback below still detects the active-session switch.
+        }
+
         std::wstring pinnedSourceAppUserModelId;
+        Session cachedSession = nullptr;
+        Session mediaPropertiesEventSession = nullptr;
+        winrt::event_token mediaPropertiesChangedToken{};
+        bool mediaPropertiesChangedSubscribed = false;
+        ULONGLONG lastSessionLookupMs = 0;
+        std::wstring lastSessionLookupKey;
 
-        // Keep this worker polling instead of wiring long-lived WinRT event
-        // tokens. The mod is injected into Explorer and can be reconfigured or
-        // unloaded while the shell is rebuilding; the existing cancellable
-        // async waits make this lifecycle predictable without callback-token
-        // revocation races. The interval is deliberately slow because album
-        // artwork changes only when media metadata changes.
+        std::wstring cachedTitle;
+        std::wstring cachedArtist;
+        std::wstring cachedAlbum;
+        std::wstring cachedTrackKey;
+        winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties
+            cachedProperties = nullptr;
+        ULONGLONG lastMetadataMs = 0;
+        ULONGLONG lastThumbnailAttemptMs = 0;
+        bool thumbnailAvailableForTrack = false;
+        bool albumHadSession = false;
+        bool previousPaletteNeeded = false;
+        size_t lastSessionChangeRevision =
+            g_albumSessionChangeRevision.load(std::memory_order_acquire);
+        size_t lastMediaPropertiesRevision =
+            g_albumMediaPropertiesRevision.load(std::memory_order_acquire);
+
+        // Metadata/session-change events wake this worker immediately. The 700 ms
+        // wait is only a fallback for missed WinRT notifications and settings changes;
+        // expensive thumbnail reads and palette extraction remain track-change-only.
         while (g_albumColorRunning.load(std::memory_order_acquire)) {
-            const VisualizerSettings settings = GetSettingsSnapshot();
-            try {
-                winrt::Windows::Media::Control::
-                    GlobalSystemMediaTransportControlsSession session = nullptr;
+            {
+                DebugPerfScope debugScope(DEBUG_PERF_ALBUM_WORKER);
+                const VisualizerSettings settings = GetSettingsSnapshot();
+                const bool paletteNeeded = IsAlbumPaletteMode();
+                try {
+                    const ULONGLONG nowMs = GetTickCount64();
+                    const size_t sessionRevision =
+                        g_albumSessionChangeRevision.load(std::memory_order_acquire);
+                    if (sessionRevision != lastSessionChangeRevision) {
+                        lastSessionChangeRevision = sessionRevision;
+                        lastSessionLookupMs = 0;
+                    }
 
-                if (settings.audioSource == 1 &&
-                    !settings.audioApplicationName.empty()) {
-                    session = FindLyricsSession(
-                        manager,
-                        settings.audioApplicationName,
-                        pinnedSourceAppUserModelId);
-                } else {
-                    session = manager.GetCurrentSession();
-                    pinnedSourceAppUserModelId.clear();
-                }
+                    const size_t propertiesRevision =
+                        g_albumMediaPropertiesRevision.load(std::memory_order_acquire);
+                    const bool mediaPropertiesChanged =
+                        propertiesRevision != lastMediaPropertiesRevision;
+                    if (mediaPropertiesChanged) {
+                        lastMediaPropertiesRevision = propertiesRevision;
+                        lastMetadataMs = 0;
+                    }
 
-                std::vector<BYTE> thumbBytes;
+                    const std::wstring lookupKey =
+                        settings.audioSource == 1 ? settings.audioApplicationName : L"<system>";
 
-                if (session) {
-                    auto propsOperation = session.TryGetMediaPropertiesAsync();
-                    if (!WaitWinrtAsync(propsOperation, g_hAlbumColorStopEvent, std::chrono::milliseconds(1500)))
-                        throw winrt::hresult_canceled();
-                    auto props = propsOperation.GetResults();
-                    if (props) {
-                        if (auto thumbRef = props.Thumbnail()) {
+                    if (lookupKey != lastSessionLookupKey || lastSessionLookupMs == 0 ||
+                        nowMs - lastSessionLookupMs >= 750) {
+                        lastSessionLookupKey = lookupKey;
+                        lastSessionLookupMs = nowMs;
+
+                        Session newSession = nullptr;
+                        if (settings.audioSource == 1) {
+                            if (!settings.audioApplicationName.empty()) {
+                                newSession = FindLyricsSession(
+                                    manager, settings.audioApplicationName,
+                                    pinnedSourceAppUserModelId);
+                            } else {
+                                pinnedSourceAppUserModelId.clear();
+                            }
+                        } else {
+                            newSession = manager.GetCurrentSession();
+                            pinnedSourceAppUserModelId.clear();
+                        }
+
+                        if (newSession != cachedSession) {
+                            // Revoke the old session callback on this worker before
+                            // releasing its session reference. The callback itself only
+                            // bumps a revision and signals an event; it never touches UI.
+                            if (mediaPropertiesChangedSubscribed && mediaPropertiesEventSession) {
+                                try {
+                                    mediaPropertiesEventSession.MediaPropertiesChanged(
+                                        mediaPropertiesChangedToken);
+                                } catch (...) {
+                                }
+                            }
+                            mediaPropertiesChangedSubscribed = false;
+                            mediaPropertiesEventSession = nullptr;
+
+                            cachedSession = newSession;
+                            cachedProperties = nullptr;
+                            cachedTitle.clear();
+                            cachedArtist.clear();
+                            cachedAlbum.clear();
+                            cachedTrackKey.clear();
+                            lastMetadataMs = 0;
+                            thumbnailAvailableForTrack = false;
+
+                            if (cachedSession) {
+                                try {
+                                    mediaPropertiesEventSession = cachedSession;
+                                    mediaPropertiesChangedToken = cachedSession.MediaPropertiesChanged(
+                                        [](auto const&, auto const&) {
+                                            g_albumMediaPropertiesRevision.fetch_add(
+                                                1, std::memory_order_release);
+                                            if (HANDLE wake = g_hAlbumColorWakeEvent)
+                                                SetEvent(wake);
+                                        });
+                                    mediaPropertiesChangedSubscribed = true;
+                                } catch (...) {
+                                    // The one-second metadata refresh remains as fallback.
+                                    mediaPropertiesChangedSubscribed = false;
+                                    mediaPropertiesEventSession = nullptr;
+                                }
+                            }
+                        }
+                    }
+
+                    const Session session = cachedSession;
+                    if (!session) {
+                        cachedTitle.clear();
+                        cachedArtist.clear();
+                        cachedAlbum.clear();
+                        cachedTrackKey.clear();
+                        cachedProperties = nullptr;
+                        lastMetadataMs = 0;
+                        thumbnailAvailableForTrack = false;
+                        if (albumHadSession) {
+                            albumHadSession = false;
+                            UpdateAlbumArtworkFromBytes({}, 0);
+                            if (paletteNeeded)
+                                UpdateAlbumPaletteFromBytes({}, 0);
+                        }
+                    } else {
+                        albumHadSession = true;
+                        const bool refreshMetadata =
+                            lastMetadataMs == 0 || nowMs - lastMetadataMs >= 1000;
+                        if (refreshMetadata) {
+                            lastMetadataMs = nowMs;
                             try {
-                                auto streamOperation = thumbRef.OpenReadAsync();
-                                if (!WaitWinrtAsync(streamOperation, g_hAlbumColorStopEvent, std::chrono::milliseconds(1500)))
+                                auto propsOperation = session.TryGetMediaPropertiesAsync();
+                                if (!WaitWinrtAsync(
+                                        propsOperation, g_hAlbumColorStopEvent,
+                                        std::chrono::milliseconds(1500)))
                                     throw winrt::hresult_canceled();
-                                auto stream = streamOperation.GetResults();
-                                if (stream) {
-                                    const UINT64 size = stream.Size();
-                                    if (size > 0 && size < 4ULL * 1024ULL * 1024ULL) {
-                                        winrt::Windows::Storage::Streams::DataReader reader(stream);
-                                        auto loadOperation = reader.LoadAsync(static_cast<UINT32>(size));
-                                        if (!WaitWinrtAsync(loadOperation, g_hAlbumColorStopEvent, std::chrono::milliseconds(1500)))
-                                            throw winrt::hresult_canceled();
-                                        thumbBytes.resize(static_cast<size_t>(size));
-                                        reader.ReadBytes(winrt::array_view<BYTE>(thumbBytes));
-                                        reader.DetachStream();
+                                auto props = propsOperation.GetResults();
+                                if (props) {
+                                    cachedProperties = props;
+                                    cachedTitle = props.Title().c_str();
+                                    cachedArtist = props.Artist().c_str();
+                                    cachedAlbum = props.AlbumTitle().c_str();
+                                }
+                            } catch (...) {
+                            }
+                        }
+
+                        const std::wstring trackKey =
+                            cachedArtist + L"\n" + cachedTitle + L"\n" + cachedAlbum;
+                        const bool trackChanged =
+                            !trackKey.empty() && trackKey != cachedTrackKey;
+                        if (trackChanged) {
+                            cachedTrackKey = trackKey;
+                            thumbnailAvailableForTrack = false;
+                        }
+
+                        // Do not reopen/read the thumbnail while the track is unchanged.
+                        // A failed/missing cover is retried only every 10 seconds.
+                        if (trackChanged || mediaPropertiesChanged ||
+                            (!thumbnailAvailableForTrack &&
+                             nowMs - lastThumbnailAttemptMs >= 10000)) {
+                            lastThumbnailAttemptMs = nowMs;
+
+                            std::vector<BYTE> thumbBytes;
+                            try {
+                                // Reuse the cached MediaProperties object rather than
+                                // requesting the same WinRT metadata a second time.
+                                auto props = cachedProperties;
+                                if (props) {
+                                    if (auto thumbRef = props.Thumbnail()) {
+                                        auto streamOperation = thumbRef.OpenReadAsync();
+                                        if (WaitWinrtAsync(
+                                                streamOperation, g_hAlbumColorStopEvent,
+                                                std::chrono::milliseconds(1500))) {
+                                            auto stream = streamOperation.GetResults();
+                                            if (stream) {
+                                                const UINT64 size = stream.Size();
+                                                if (size > 0 && size <= 4ULL * 1024ULL * 1024ULL) {
+                                                    winrt::Windows::Storage::Streams::DataReader reader(stream);
+                                                    auto loadOperation = reader.LoadAsync(static_cast<UINT32>(size));
+                                                    if (WaitWinrtAsync(
+                                                            loadOperation, g_hAlbumColorStopEvent,
+                                                            std::chrono::milliseconds(1500))) {
+                                                        thumbBytes.resize(static_cast<size_t>(size));
+                                                        reader.ReadBytes(winrt::array_view<BYTE>(thumbBytes));
+                                                        reader.DetachStream();
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             } catch (...) {
                                 thumbBytes.clear();
                             }
+
+                            if (!thumbBytes.empty()) {
+                                const size_t thumbHash = HashAlbumBytes(thumbBytes);
+                                thumbnailAvailableForTrack = true;
+                                UpdateAlbumArtworkFromBytes(thumbBytes, thumbHash);
+                                if (paletteNeeded)
+                                    UpdateAlbumPaletteFromBytes(thumbBytes, thumbHash);
+                            } else {
+                                thumbnailAvailableForTrack = false;
+                                UpdateAlbumArtworkFromBytes({}, 0);
+                                if (paletteNeeded)
+                                    UpdateAlbumPaletteFromBytes({}, 0);
+                            }
+                        }
+
+                        // If album colors are enabled while this worker already runs
+                        // for Album Widget, extract the current palette only once.
+                        if (paletteNeeded && !previousPaletteNeeded) {
+                            std::vector<BYTE> currentArtwork;
+                            size_t currentArtworkHash = 0;
+                            {
+                                std::lock_guard<std::mutex> lock(g_albumArtworkMutex);
+                                currentArtworkHash = g_albumArtworkHash;
+                                if (currentArtworkHash != 0 && !g_albumArtworkBytes.empty())
+                                    currentArtwork = g_albumArtworkBytes;
+                            }
+                            if (!currentArtwork.empty() && currentArtworkHash != 0)
+                                UpdateAlbumPaletteFromBytes(currentArtwork, currentArtworkHash);
                         }
                     }
+                } catch (...) {
+                    // Keep the last valid artwork on transient WinRT failures.
                 }
 
-                UpdateAlbumPaletteFromBytes(
-                    thumbBytes,
-                    HashAlbumBytes(thumbBytes));
-            } catch (...) {
-                UpdateAlbumPaletteFromBytes({}, 0);
+                previousPaletteNeeded = paletteNeeded;
             }
 
             if (g_hAlbumColorStopEvent) {
-                if (WaitForSingleObject(g_hAlbumColorStopEvent, 700) == WAIT_OBJECT_0)
+                HANDLE waitHandles[2] = {g_hAlbumColorStopEvent, g_hAlbumColorWakeEvent};
+                const DWORD waitResult = g_hAlbumColorWakeEvent
+                    ? WaitForMultipleObjects(2, waitHandles, FALSE, 700)
+                    : WaitForSingleObject(g_hAlbumColorStopEvent, 700);
+                if (waitResult == WAIT_OBJECT_0)
                     break;
             } else {
                 Sleep(700);
             }
         }
+
+        if (mediaPropertiesChangedSubscribed && mediaPropertiesEventSession) {
+            try {
+                mediaPropertiesEventSession.MediaPropertiesChanged(mediaPropertiesChangedToken);
+            } catch (...) {
+            }
+        }
+        if (currentSessionChangedSubscribed) {
+            try {
+                manager.CurrentSessionChanged(currentSessionChangedToken);
+            } catch (...) {
+            }
+        }
+        if (sessionsChangedSubscribed) {
+            try {
+                manager.SessionsChanged(sessionsChangedToken);
+            } catch (...) {
+            }
+        }
     } catch (...) {
+        UpdateAlbumArtworkFromBytes({}, 0);
         UpdateAlbumPaletteFromBytes({}, 0);
     }
 
@@ -4968,16 +8902,60 @@ static DWORD WINAPI AlbumColorThreadProc(LPVOID) {
 }
 
 static void StartAlbumColorCapture() {
+    // Worker lifecycle is owned by the overlay thread. Do not restart a worker
+    // after shutdown has begun, even if its running flag is already clear.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    if (g_albumColorRunning.load(std::memory_order_acquire))
+        return;
+
+    // Reap any previous generation before resetting its stop event or
+    // overwriting its handle. Signal both events so a stale worker can leave
+    // waits promptly, then release those events only after it has exited.
+    if (g_hAlbumColorThread) {
+        if (g_hAlbumColorStopEvent)
+            SetEvent(g_hAlbumColorStopEvent);
+        if (g_hAlbumColorWakeEvent)
+            SetEvent(g_hAlbumColorWakeEvent);
+        WaitForSingleObject(g_hAlbumColorThread, INFINITE);
+        CloseHandle(g_hAlbumColorThread);
+        g_hAlbumColorThread = nullptr;
+
+        if (g_hAlbumColorStopEvent) {
+            CloseHandle(g_hAlbumColorStopEvent);
+            g_hAlbumColorStopEvent = nullptr;
+        }
+        if (g_hAlbumColorWakeEvent) {
+            CloseHandle(g_hAlbumColorWakeEvent);
+            g_hAlbumColorWakeEvent = nullptr;
+        }
+    }
+
+    // Shutdown may have begun while the previous generation was being joined.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
     if (g_albumColorRunning.exchange(true, std::memory_order_acq_rel))
         return;
 
     if (!g_hAlbumColorStopEvent)
         g_hAlbumColorStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hAlbumColorWakeEvent)
+        g_hAlbumColorWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
     if (!g_hAlbumColorStopEvent) {
         g_albumColorRunning.store(false, std::memory_order_release);
+        if (g_hAlbumColorWakeEvent) {
+            CloseHandle(g_hAlbumColorWakeEvent);
+            g_hAlbumColorWakeEvent = nullptr;
+        }
         return;
     }
+
+    ResetEvent(g_hAlbumColorStopEvent);
+    if (g_hAlbumColorWakeEvent)
+        ResetEvent(g_hAlbumColorWakeEvent);
 
     g_hAlbumColorThread = CreateThread(
         nullptr, 0, AlbumColorThreadProc, nullptr, 0, nullptr);
@@ -4985,27 +8963,41 @@ static void StartAlbumColorCapture() {
         g_albumColorRunning.store(false, std::memory_order_release);
         CloseHandle(g_hAlbumColorStopEvent);
         g_hAlbumColorStopEvent = nullptr;
+        if (g_hAlbumColorWakeEvent) {
+            CloseHandle(g_hAlbumColorWakeEvent);
+            g_hAlbumColorWakeEvent = nullptr;
+        }
     }
 }
 
 static void StopAlbumColorCapture() {
-    if (!g_albumColorRunning.exchange(false, std::memory_order_acq_rel))
-        return;
+    const bool wasRunning =
+        g_albumColorRunning.exchange(false, std::memory_order_acq_rel);
 
     if (g_hAlbumColorStopEvent)
         SetEvent(g_hAlbumColorStopEvent);
+    if (g_hAlbumColorWakeEvent)
+        SetEvent(g_hAlbumColorWakeEvent);
 
     if (g_hAlbumColorThread) {
+        Wh_Log(L"StopAlbumColorCapture: waiting for album worker (running=%d)",
+               wasRunning ? 1 : 0);
         WaitForSingleObject(g_hAlbumColorThread, INFINITE);
         CloseHandle(g_hAlbumColorThread);
         g_hAlbumColorThread = nullptr;
+        Wh_Log(L"StopAlbumColorCapture: album worker joined");
     }
 
     if (g_hAlbumColorStopEvent) {
         CloseHandle(g_hAlbumColorStopEvent);
         g_hAlbumColorStopEvent = nullptr;
     }
+    if (g_hAlbumColorWakeEvent) {
+        CloseHandle(g_hAlbumColorWakeEvent);
+        g_hAlbumColorWakeEvent = nullptr;
+    }
 
+    UpdateAlbumArtworkFromBytes({}, 0);
     UpdateAlbumPaletteFromBytes({}, 0);
 }
 
@@ -5302,6 +9294,7 @@ static void ClearLyricsState() {
     g_lyricsPlaying = false;
     g_lyricsHasSynced = false;
     g_lyricsAvailable = false;
+    g_lyricsAvailableFast.store(g_lyricsAvailable, std::memory_order_release);
 }
 
 static void SetLyricsTimelineState(
@@ -5412,6 +9405,184 @@ static std::vector<LyricsLine> ParsePlainLyricsAsEstimated(
     return lines;
 }
 
+
+static std::wstring TrimLyricsFileNamePart(std::wstring value) {
+    while (!value.empty() && iswspace(value.front()))
+        value.erase(value.begin());
+    while (!value.empty() && iswspace(value.back()))
+        value.pop_back();
+
+    // Replace characters that cannot appear in Windows file names.
+    for (wchar_t& ch : value) {
+        switch (ch) {
+            case L'<': case L'>': case L':': case L'"':
+            case L'/': case L'\\': case L'|': case L'?': case L'*':
+                ch = L'_';
+                break;
+            default:
+                break;
+        }
+    }
+
+    while (!value.empty() && (value.back() == L'.' || value.back() == L' '))
+        value.pop_back();
+
+    return value;
+}
+
+static bool ReadLyricsTextFile(
+    const std::wstring& path,
+    std::wstring& text) {
+
+    text.clear();
+
+    HANDLE file = CreateFileW(
+        path.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return false;
+
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(file, &size) ||
+        size.QuadPart <= 0 ||
+        size.QuadPart > 4 * 1024 * 1024) {
+        CloseHandle(file);
+        return false;
+    }
+
+    std::string bytes(static_cast<size_t>(size.QuadPart), '\0');
+    DWORD bytesRead = 0;
+    const bool readOk =
+        ReadFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &bytesRead, nullptr) &&
+        bytesRead == bytes.size();
+    CloseHandle(file);
+
+    if (!readOk)
+        return false;
+    bytes.resize(bytesRead);
+
+    if (bytes.size() >= 2 &&
+        static_cast<unsigned char>(bytes[0]) == 0xFF &&
+        static_cast<unsigned char>(bytes[1]) == 0xFE) {
+        const size_t wcharCount = (bytes.size() - 2) / sizeof(wchar_t);
+        text.resize(wcharCount);
+        if (wcharCount)
+            memcpy(text.data(), bytes.data() + 2, wcharCount * sizeof(wchar_t));
+        return !text.empty();
+    }
+
+    if (bytes.size() >= 3 &&
+        static_cast<unsigned char>(bytes[0]) == 0xEF &&
+        static_cast<unsigned char>(bytes[1]) == 0xBB &&
+        static_cast<unsigned char>(bytes[2]) == 0xBF) {
+        bytes.erase(0, 3);
+    }
+
+    if (bytes.empty())
+        return false;
+
+    const int wideLength = MultiByteToWideChar(
+        CP_UTF8,
+        MB_ERR_INVALID_CHARS,
+        bytes.data(),
+        static_cast<int>(bytes.size()),
+        nullptr,
+        0);
+    if (wideLength > 0) {
+        text.resize(wideLength);
+        MultiByteToWideChar(
+            CP_UTF8,
+            MB_ERR_INVALID_CHARS,
+            bytes.data(),
+            static_cast<int>(bytes.size()),
+            text.data(),
+            wideLength);
+        return !text.empty();
+    }
+
+    // Some older LRC collections are saved using the system ANSI code page.
+    const int ansiLength = MultiByteToWideChar(
+        CP_ACP,
+        0,
+        bytes.data(),
+        static_cast<int>(bytes.size()),
+        nullptr,
+        0);
+    if (ansiLength <= 0)
+        return false;
+
+    text.resize(ansiLength);
+    MultiByteToWideChar(
+        CP_ACP,
+        0,
+        bytes.data(),
+        static_cast<int>(bytes.size()),
+        text.data(),
+        ansiLength);
+    return !text.empty();
+}
+
+static bool TryLoadLocalLyricsForTrack(
+    const std::wstring& title,
+    const std::wstring& artist,
+    const std::wstring& trackKey) {
+
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    if (!settings.lyricsUseLocalLrcFiles || settings.lyricsLocalLrcFolder.empty())
+        return false;
+
+    std::wstring artistPart = TrimLyricsFileNamePart(artist);
+    std::wstring titlePart = TrimLyricsFileNamePart(title);
+    if (titlePart.empty())
+        return false;
+
+    std::vector<std::wstring> candidateNames;
+    if (!artistPart.empty())
+        candidateNames.push_back(artistPart + L" - " + titlePart + L".lrc");
+    candidateNames.push_back(titlePart + L".lrc");
+
+    // Avoid relying on the exact filename casing. Windows is normally
+    // case-insensitive, but this also helps when a collection was copied
+    // between unusual filesystems or tools.
+    for (const std::wstring& candidateName : candidateNames) {
+        std::wstring path = settings.lyricsLocalLrcFolder;
+        if (!path.empty() && path.back() != L'\\' && path.back() != L'/')
+            path.push_back(L'\\');
+        path += candidateName;
+
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES ||
+            (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+            continue;
+
+        std::wstring fileText;
+        if (!ReadLyricsTextFile(path, fileText))
+            continue;
+
+        std::vector<LyricsLine> parsed;
+        ParseSyncedLyrics(fileText, parsed);
+        if (parsed.empty())
+            continue;
+
+        std::lock_guard<std::mutex> lock(g_lyricsMutex);
+        if (g_lyricsTrackKey != trackKey)
+            return false;
+
+        g_lyricsAvailable = true;
+        g_lyricsAvailableFast.store(true, std::memory_order_release);
+        g_lyricsHasSynced = true;
+        g_lyricsLines = std::make_shared<const std::vector<LyricsLine>>(std::move(parsed));
+        return true;
+    }
+
+    return false;
+}
+
 static void FetchLyricsForTrack(
     const std::wstring& title,
     const std::wstring& artist,
@@ -5421,6 +9592,14 @@ static void FetchLyricsForTrack(
 
     if (title.empty() || artist.empty() || durationSeconds <= 0.0)
         return;
+
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    if (settings.lyricsUseLocalLrcFiles) {
+        // Local mode is intentionally exclusive: do not contact LRCLIB at all.
+        // A missing/invalid local file simply leaves lyrics unavailable.
+        TryLoadLocalLyricsForTrack(title, artist, trackKey);
+        return;
+    }
 
     const std::wstring host = L"lrclib.net";
     const std::wstring artistEncoded =
@@ -5467,6 +9646,7 @@ static void FetchLyricsForTrack(
         std::lock_guard<std::mutex> lock(g_lyricsMutex);
         if (g_lyricsTrackKey == trackKey) {
             g_lyricsAvailable = false;
+            g_lyricsAvailableFast.store(g_lyricsAvailable, std::memory_order_release);
             g_lyricsHasSynced = false;
         }
         return;
@@ -5498,6 +9678,8 @@ static void FetchLyricsForTrack(
         return;
 
     g_lyricsAvailable = !parsed.empty();
+
+    g_lyricsAvailableFast.store(g_lyricsAvailable, std::memory_order_release);
     g_lyricsHasSynced = hasSynced;
     g_lyricsLines = std::make_shared<const std::vector<LyricsLine>>(std::move(parsed));
 }
@@ -5542,11 +9724,21 @@ static bool MediaSessionMatchesExecutable(
             NormalizeMediaAppIdentifier(session.SourceAppUserModelId().c_str());
         if (sourceAppId.empty())
             return false;
-
         return sourceAppId.find(wanted) != std::wstring::npos;
     } catch (...) {
         return false;
     }
+}
+
+static bool MediaSessionMatchesExecutableList(
+    const winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession& session,
+    const std::wstring& executableList) {
+    const auto names = SplitExecutableList(executableList);
+    for (const auto& name : names) {
+        if (MediaSessionMatchesExecutable(session, name))
+            return true;
+    }
+    return false;
 }
 
 static winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession
@@ -5554,12 +9746,10 @@ FindLyricsSession(
     const winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager& manager,
     const std::wstring& executableName,
     std::wstring& pinnedSourceAppUserModelId) {
-
     if (executableName.empty())
         return nullptr;
 
-    using Session = winrt::Windows::Media::Control::
-        GlobalSystemMediaTransportControlsSession;
+    using Session = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession;
 
     if (!pinnedSourceAppUserModelId.empty()) {
         try {
@@ -5570,7 +9760,8 @@ FindLyricsSession(
 
                 const std::wstring sourceAppId =
                     NormalizeMediaAppIdentifier(session.SourceAppUserModelId().c_str());
-                if (sourceAppId == pinnedSourceAppUserModelId)
+                if (sourceAppId == pinnedSourceAppUserModelId &&
+                    MediaSessionMatchesExecutableList(session, executableName))
                     return session;
             }
         } catch (...) {
@@ -5582,24 +9773,16 @@ FindLyricsSession(
     try {
         const auto sessions = manager.GetSessions();
         Session bestSession = nullptr;
-        Session currentSession = nullptr;
-
-        try {
-            currentSession = manager.GetCurrentSession();
-        } catch (...) {
-        }
 
         for (const auto& session : sessions) {
-            if (!session || !MediaSessionMatchesExecutable(session, executableName))
+            if (!session || !MediaSessionMatchesExecutableList(session, executableName))
                 continue;
 
             bool playing = false;
             try {
                 using PlaybackStatus =
-                    winrt::Windows::Media::Control::
-                        GlobalSystemMediaTransportControlsSessionPlaybackStatus;
-                playing = session.GetPlaybackInfo().PlaybackStatus() ==
-                          PlaybackStatus::Playing;
+                    winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
+                playing = session.GetPlaybackInfo().PlaybackStatus() == PlaybackStatus::Playing;
             } catch (...) {
             }
 
@@ -5612,21 +9795,13 @@ FindLyricsSession(
                 bestSession = session;
         }
 
-        // If GetSessions() failed to expose the target immediately, current
-        // session is still safe to use only when it belongs to the configured app.
-        if (!bestSession && currentSession &&
-            MediaSessionMatchesExecutable(currentSession, executableName)) {
-            bestSession = currentSession;
-        }
-
         if (bestSession) {
             pinnedSourceAppUserModelId = NormalizeMediaAppIdentifier(
                 bestSession.SourceAppUserModelId().c_str());
 
             if (!pinnedSourceAppUserModelId.empty()) {
-                Wh_Log(L"Lyrics session pinned to AUMID '%s' for executable '%s'",
-                       pinnedSourceAppUserModelId.c_str(),
-                       executableName.c_str());
+                Wh_Log(L"Media session pinned to AUMID '%s' for executable list '%s'",
+                       pinnedSourceAppUserModelId.c_str(), executableName.c_str());
             }
         }
 
@@ -5634,6 +9809,885 @@ FindLyricsSession(
     } catch (...) {
         return nullptr;
     }
+}
+
+
+static std::wstring EqMediaSourceDisplayName(const std::wstring& sourceAppId) {
+    const std::wstring id = NormalizeMediaAppIdentifier(sourceAppId);
+    if (id.find(L"spotify") != std::wstring::npos)
+        return L"Spotify";
+    if (id.find(L"youtubemusic") != std::wstring::npos ||
+        id.find(L"youtube music") != std::wstring::npos)
+        return L"YouTube Music";
+    if (id.find(L"vlc") != std::wstring::npos)
+        return L"VLC";
+    if (id.find(L"musicbee") != std::wstring::npos)
+        return L"MusicBee";
+    if (id.find(L"foobar") != std::wstring::npos)
+        return L"foobar2000";
+    if (id.find(L"aimp") != std::wstring::npos)
+        return L"AIMP";
+    if (id.find(L"media player") != std::wstring::npos ||
+        id.find(L"zune") != std::wstring::npos)
+        return L"Media Player";
+    if (id.find(L"chrome") != std::wstring::npos)
+        return L"Chrome";
+    if (id.find(L"msedge") != std::wstring::npos ||
+        id.find(L"edge") != std::wstring::npos)
+        return L"Edge";
+    if (id.find(L"firefox") != std::wstring::npos)
+        return L"Firefox";
+    if (id.find(L"brave") != std::wstring::npos)
+        return L"Brave";
+    if (id.empty())
+        return {};
+
+    // Keep an unknown AUMID readable without exposing the long package suffix.
+    std::wstring display = sourceAppId;
+    const size_t bang = display.find(L'!');
+    if (bang != std::wstring::npos)
+        display.resize(bang);
+    const size_t slash = display.find_last_of(L"\\/");
+    if (slash != std::wstring::npos)
+        display = display.substr(slash + 1);
+    if (display.size() > 28)
+        display.resize(28);
+    return display;
+}
+
+static std::atomic<ULONGLONG> g_eqMediaPositionAnchorTickMs{0};
+static std::atomic<ULONGLONG> g_eqMediaLocalOverrideUntilMs{0};
+
+static void SetEqMediaStateEmpty() {
+    std::lock_guard<std::mutex> lock(g_eqMediaMutex);
+    const bool hadMetadata = g_eqMediaState.hasSession ||
+        !g_eqMediaState.title.empty() || !g_eqMediaState.artist.empty() ||
+        !g_eqMediaState.source.empty() || !g_eqMediaState.trackKey.empty();
+    g_eqMediaState = EqMediaState{};
+    if (hadMetadata)
+        g_eqMediaMetadataRevision.fetch_add(1, std::memory_order_acq_rel);
+    g_eqMediaPositionAnchorTickMs.store(0, std::memory_order_release);
+    g_eqMediaLocalOverrideUntilMs.store(0, std::memory_order_release);
+}
+
+static void SetEqMediaState(
+    const std::wstring& title,
+    const std::wstring& artist,
+    const std::wstring& sourceAppId,
+    double position,
+    double duration,
+    double playbackRate,
+    bool playing) {
+
+    if (!IsFiniteDouble(position) || position < 0.0)
+        position = 0.0;
+    if (!IsFiniteDouble(duration) || duration < 0.0)
+        duration = 0.0;
+    if (!IsFiniteDouble(playbackRate) || playbackRate <= 0.0)
+        playbackRate = 1.0;
+    if (duration > 0.0)
+        position = std::clamp(position, 0.0, duration);
+    else
+        position = std::max(0.0, position);
+
+    EqMediaState next;
+    next.title = title;
+    next.artist = artist;
+    next.sourceAppUserModelId = sourceAppId;
+    next.source = EqMediaSourceDisplayName(sourceAppId);
+    next.positionSeconds = position;
+    next.durationSeconds = duration;
+    next.playbackRate = playbackRate;
+    next.playing = playing;
+    next.hasSession = true;
+    next.trackKey = artist + L"\n" + title + L"\n" + sourceAppId + L"\n" +
+                    std::to_wstring(static_cast<long long>(std::llround(duration)));
+
+    const ULONGLONG now = GetTickCount64();
+    std::lock_guard<std::mutex> lock(g_eqMediaMutex);
+
+    const EqMediaState previous = g_eqMediaState;
+    const bool sameTrack = previous.hasSession && next.trackKey == previous.trackKey;
+    const bool playbackStateChanged = previous.playing != next.playing;
+    const bool metadataChanged =
+        previous.hasSession != next.hasSession ||
+        previous.title != next.title ||
+        previous.artist != next.artist ||
+        previous.source != next.source ||
+        previous.sourceAppUserModelId != next.sourceAppUserModelId ||
+        previous.trackKey != next.trackKey;
+    const ULONGLONG overrideUntil =
+        g_eqMediaLocalOverrideUntilMs.load(std::memory_order_acquire);
+    const bool localOverrideActive =
+        overrideUntil != 0 && now < overrideUntil && sameTrack;
+
+    if (sameTrack && localOverrideActive) {
+        // Keep the optimistic UI state for a short time after a local media
+        // command. WinRT can report the old playback/position state until its
+        // async command has completed; without this guard the worker could
+        // immediately paint that stale state back over the popup.
+        next.positionSeconds = previous.positionSeconds;
+        next.playing = previous.playing;
+    } else if (sameTrack && previous.playing && next.playing && !playbackStateChanged) {
+        // `position` is already compensated to "now" from the media
+        // timeline's LastUpdatedTime (see EqMediaThreadProc below).  When
+        // there is no active local seek override, re-anchor to that real
+        // player time every sample. This keeps the UI clock synchronized to
+        // the actual media position instead of maintaining an independent
+        // percentage-based clock that can drift and then jump backwards.
+        next.positionSeconds = position;
+        g_eqMediaPositionAnchorTickMs.store(now, std::memory_order_release);
+    } else {
+        // New track, play/pause transition, or a stopped session: accept the
+        // media session's position as authoritative and start a fresh local
+        // interpolation only when playback is actually running.
+        next.positionSeconds = position;
+        g_eqMediaPositionAnchorTickMs.store(
+            playing ? now : 0, std::memory_order_release);
+        if (!localOverrideActive)
+            g_eqMediaLocalOverrideUntilMs.store(0, std::memory_order_release);
+    }
+
+    if (duration > 0.0)
+        next.positionSeconds = std::clamp(next.positionSeconds, 0.0, duration);
+    else
+        next.positionSeconds = std::max(0.0, next.positionSeconds);
+
+    g_eqMediaState = std::move(next);
+    if (metadataChanged)
+        g_eqMediaMetadataRevision.fetch_add(1, std::memory_order_acq_rel);
+    if (playbackStateChanged) {
+        HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
+        if (overlay && IsWindow(overlay))
+            PostMessageW(overlay, WM_VIZ_AUDIO_WAKE, 0, 0);
+    }
+}
+
+static EqMediaState GetEqMediaStateSnapshot() {
+    std::lock_guard<std::mutex> lock(g_eqMediaMutex);
+    return g_eqMediaState;
+}
+
+static void GetEqMediaDynamicStateSnapshot(
+    double& durationSeconds, double& playbackRate, bool& playing, bool& hasSession) {
+    std::lock_guard<std::mutex> lock(g_eqMediaMutex);
+    durationSeconds = g_eqMediaState.durationSeconds;
+    playbackRate = g_eqMediaState.playbackRate;
+    playing = g_eqMediaState.playing;
+    hasSession = g_eqMediaState.hasSession;
+}
+
+static bool IsEqMediaCaptureNeededForSettings(const VisualizerSettings& settings) {
+    // The Player UI needs SMTC state, and hide-on-no-media needs that state even
+    // when the Player tray button itself is disabled.
+    return settings.showMediaEqTrayButton ||
+           (settings.visualizerEnabled &&
+            settings.hideVisualizerWhenNoMediaPlaying) ||
+           g_eqPlayerPopupOpen.load(std::memory_order_acquire);
+}
+
+static UINT GetRenderIntervalMs(const VisualizerSettings& settings);
+static double GetEffectiveRenderFps(const VisualizerSettings& settings);
+
+static bool EqPlayerNeedsLiveAudioCapture() {
+    if (!g_eqPlayerPopupOpen.load(std::memory_order_acquire))
+        return false;
+    return EqIsLayoutWidgetPresent(EQ_LAYOUT_DISK) ||
+           EqIsLayoutWidgetPresent(EQ_LAYOUT_MINI_VISUALIZER);
+}
+
+static float GetVisualizerAudioDemandHz(const VisualizerSettings& settings) {
+    if (!g_desktopVisualizerVisible)
+        return 0.0f;
+    // Audio updates do not need to match the display refresh rate: the render
+    // path interpolates/animates between samples. Cap FFT production at 60 Hz
+    // on high-refresh displays to remove unnecessary CPU DSP work.
+    return static_cast<float>(std::clamp(
+        std::min(60.0, GetEffectiveRenderFps(settings)), 1.0, 60.0));
+}
+
+static float GetPlayerAudioDemandHz(const VisualizerSettings& settings) {
+    if (!EqPlayerNeedsLiveAudioCapture())
+        return 0.0f;
+    // Player rendering is intentionally capped at 60 Hz. There is no benefit
+    // in requesting 120/180/240 Hz audio updates for a UI that is presented at
+    // most once every ~16.67 ms on the scheduler path.
+    return static_cast<float>(std::clamp(
+        std::min(60.0, GetEffectiveRenderFps(settings)), 1.0, 60.0));
+}
+
+static void RefreshAudioConsumerDemand(const VisualizerSettings& settings) {
+    const float visualizerHz = GetVisualizerAudioDemandHz(settings);
+    const float playerHz = GetPlayerAudioDemandHz(settings);
+    SetAudioConsumerRequest(
+        AUDIO_CONSUMER_VISUALIZER, visualizerHz > 0.0f, visualizerHz);
+    SetAudioConsumerRequest(
+        AUDIO_CONSUMER_PLAYER, playerHz > 0.0f, playerHz);
+}
+
+static bool IsDesktopVisualizerTargetApplicationRunning(
+    const VisualizerSettings& settings) {
+    if (settings.audioSource != 1 ||
+        !settings.hideVisualizerWhenTargetApplicationNotRunning)
+        return true;
+    return IsAnyConfiguredExecutableRunning(settings.audioApplicationName);
+}
+
+static bool ShouldShowDesktopVisualizer(const VisualizerSettings& settings) {
+    if (!settings.visualizerEnabled)
+        return false;
+    if (!IsDesktopVisualizerTargetApplicationRunning(settings))
+        return false;
+    if (settings.hideVisualizerWhenNoMediaPlaying) {
+        const EqMediaState media = GetEqMediaStateSnapshot();
+        if (!media.playing)
+            return false;
+    }
+    return true;
+}
+
+static void ApplyDesktopVisualizerWindowVisibility(bool show) {
+    if (g_desktopVisualizerVisible == show)
+        return;
+
+    g_desktopVisualizerVisible = show;
+    const int command = show ? SW_SHOWNOACTIVATE : SW_HIDE;
+    for (size_t i = 0; i < g_overlayWindows.size(); ++i) {
+        HWND overlay = g_overlayWindows[i];
+        HWND host = i < g_overlayHosts.size() ? g_overlayHosts[i] : nullptr;
+        if (host && IsWindow(host))
+            ShowWindow(host, command);
+        if (overlay && IsWindow(overlay))
+            ShowWindow(overlay, command);
+    }
+    if (show && !g_overlayWindows.empty())
+        ReassertOverlayZOrder();
+}
+
+static bool RefreshDesktopVisualizerRuntime(
+    const VisualizerSettings& settings, bool forceVisibilityCheck = false) {
+    DebugPerfScope debugScope(DEBUG_PERF_RUNTIME_REFRESH);
+
+    // The overlay thread exclusively owns the audio worker handles. A settings
+    // change only sets this request flag; stop/restart here on the owner thread.
+    if (g_audioCaptureRestartRequested.exchange(
+            false, std::memory_order_acq_rel)) {
+        StopAudioCapture();
+    }
+
+    const ULONGLONG nowMs = GetTickCount64();
+    if (forceVisibilityCheck ||
+        nowMs - g_lastDesktopVisualizerVisibilityCheckMs >=
+            kDesktopVisualizerVisibilityCheckMs) {
+        g_lastDesktopVisualizerVisibilityCheckMs = nowMs;
+        ApplyDesktopVisualizerWindowVisibility(
+            ShouldShowDesktopVisualizer(settings));
+    }
+
+    // When the desktop visualizer is hidden, don't keep WASAPI capture alive just
+    // to produce frames nobody can see. Player Disk/Mini remain an explicit
+    // exception while Player is open because those sections consume the same
+    // live audio bands.
+    RefreshAudioConsumerDemand(settings);
+    const bool audioNeeded = HasLiveAudioConsumer();
+    if (audioNeeded) {
+        if (!g_audioRunning.load(std::memory_order_acquire))
+            StartAudioCapture();
+    } else if (g_audioRunning.load(std::memory_order_acquire)) {
+        StopAudioCapture();
+    }
+
+    return g_desktopVisualizerVisible;
+}
+
+static double GetEqMediaPosition() {
+    std::lock_guard<std::mutex> lock(g_eqMediaMutex);
+    double position = g_eqMediaState.positionSeconds;
+    if (g_eqMediaState.playing && g_eqMediaPositionAnchorTickMs.load(std::memory_order_acquire) != 0) {
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG anchor = g_eqMediaPositionAnchorTickMs.load(std::memory_order_acquire);
+        const ULONGLONG elapsed = now >= anchor ? now - anchor : 0;
+        const double rate = std::clamp(
+            IsFiniteDouble(g_eqMediaState.playbackRate)
+                ? g_eqMediaState.playbackRate : 1.0,
+            0.05, 8.0);
+        position += static_cast<double>(elapsed) / 1000.0 * rate;
+    }
+    if (g_eqMediaState.durationSeconds > 0.0)
+        position = std::clamp(position, 0.0, g_eqMediaState.durationSeconds);
+    return std::max(0.0, position);
+}
+
+static void EnqueueEqMediaCommand(
+    EqMediaCommandType type, double seekPositionSeconds = 0.0) {
+    {
+        std::lock_guard<std::mutex> lock(g_eqMediaCommandMutex);
+        g_eqMediaCommands.push_back(EqMediaCommand{type, seekPositionSeconds, GetTickCount64()});
+    }
+
+    if (type == EqMediaCommandType::PlayPause) {
+        // Optimistically flip the icon immediately. The actual WinRT command
+        // is asynchronous, so waiting for TryPlayAsync/TryPauseAsync before
+        // changing this state creates the noticeable ~0.5 s visual lag.
+        std::lock_guard<std::mutex> lock(g_eqMediaMutex);
+        if (g_eqMediaState.hasSession) {
+            const ULONGLONG now = GetTickCount64();
+            double position = g_eqMediaState.positionSeconds;
+            const ULONGLONG anchor =
+                g_eqMediaPositionAnchorTickMs.load(std::memory_order_acquire);
+            if (g_eqMediaState.playing && anchor != 0 && now >= anchor) {
+                const double rate = std::clamp(
+                    IsFiniteDouble(g_eqMediaState.playbackRate)
+                        ? g_eqMediaState.playbackRate : 1.0,
+                    0.05, 8.0);
+                position += static_cast<double>(now - anchor) / 1000.0 * rate;
+            }
+            if (g_eqMediaState.durationSeconds > 0.0)
+                position = std::clamp(position, 0.0, g_eqMediaState.durationSeconds);
+            else
+                position = std::max(0.0, position);
+
+            g_eqMediaState.positionSeconds = position;
+            g_eqMediaState.playing = !g_eqMediaState.playing;
+            g_eqMediaPositionAnchorTickMs.store(
+                g_eqMediaState.playing ? now : 0, std::memory_order_release);
+            g_eqMediaLocalOverrideUntilMs.store(
+                now + 1500, std::memory_order_release);
+        }
+    }
+
+    // Reflect seek/±5s immediately instead of waiting for WinRT's next
+    // TimelineProperties sample. This also prevents the thumb from visually
+    // jumping back to the old position while the async seek is completing,
+    // including when the track is paused.
+    if (type == EqMediaCommandType::Seek ||
+        type == EqMediaCommandType::Rewind5 ||
+        type == EqMediaCommandType::Forward5) {
+        std::lock_guard<std::mutex> lock(g_eqMediaMutex);
+        if (g_eqMediaState.hasSession) {
+            const ULONGLONG now = GetTickCount64();
+            double target = g_eqMediaState.positionSeconds;
+            const ULONGLONG anchor =
+                g_eqMediaPositionAnchorTickMs.load(std::memory_order_acquire);
+            if (g_eqMediaState.playing && anchor != 0 && now >= anchor) {
+                const double rate = std::clamp(
+                    IsFiniteDouble(g_eqMediaState.playbackRate)
+                        ? g_eqMediaState.playbackRate : 1.0,
+                    0.05, 8.0);
+                target += static_cast<double>(now - anchor) / 1000.0 * rate;
+            }
+            if (type == EqMediaCommandType::Seek) {
+                target = seekPositionSeconds;
+            } else {
+                target += type == EqMediaCommandType::Rewind5 ? -5.0 : 5.0;
+            }
+            if (g_eqMediaState.durationSeconds > 0.0)
+                target = std::clamp(target, 0.0, g_eqMediaState.durationSeconds);
+            else
+                target = std::max(0.0, target);
+            g_eqMediaState.positionSeconds = target;
+            // A paused track must not get a running interpolation anchor.
+            g_eqMediaPositionAnchorTickMs.store(
+                g_eqMediaState.playing ? now : 0, std::memory_order_release);
+            g_eqMediaLocalOverrideUntilMs.store(
+                now + 3000, std::memory_order_release);
+        }
+    }
+
+    if (g_hEqMediaWakeEvent)
+        SetEvent(g_hEqMediaWakeEvent);
+}
+
+static std::vector<EqMediaCommand> DrainEqMediaCommands() {
+    std::vector<EqMediaCommand> result;
+    std::lock_guard<std::mutex> lock(g_eqMediaCommandMutex);
+    result.reserve(g_eqMediaCommands.size());
+    while (!g_eqMediaCommands.empty()) {
+        result.push_back(g_eqMediaCommands.front());
+        g_eqMediaCommands.pop_front();
+    }
+    return result;
+}
+
+static void ExecuteEqMediaCommand(
+    const winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession& session,
+    const EqMediaCommand& command) {
+    if (!session)
+        return;
+
+    try {
+        switch (command.type) {
+        case EqMediaCommandType::PlayPause: {
+            using PlaybackStatus =
+                winrt::Windows::Media::Control::
+                    GlobalSystemMediaTransportControlsSessionPlaybackStatus;
+            const auto status = session.GetPlaybackInfo().PlaybackStatus();
+            if (status == PlaybackStatus::Playing) {
+                auto op = session.TryPauseAsync();
+                if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(800)))
+                    (void)op.GetResults();
+            } else {
+                auto op = session.TryPlayAsync();
+                if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(800)))
+                    (void)op.GetResults();
+            }
+            break;
+        }
+        case EqMediaCommandType::ToggleShuffle: {
+            const auto playbackInfo = session.GetPlaybackInfo();
+            // IsShuffleActive is nullable in this WinRT projection. Treat an
+            // unavailable value as false instead of implicitly converting the
+            // IReference<bool> wrapper to bool.
+            const auto currentShuffleRef = playbackInfo.IsShuffleActive();
+            const bool currentShuffle = currentShuffleRef
+                ? currentShuffleRef.Value() : false;
+            const bool targetShuffle = !currentShuffle;
+            const bool shuffleSupported = playbackInfo.Controls().IsShuffleEnabled();
+            auto op = session.TryChangeShuffleActiveAsync(targetShuffle);
+            if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(1200))) {
+                const bool succeeded = op.GetResults();
+                Wh_Log(L"Player tray: Toggle shuffle requested=%d current=%d supported=%d result=%d",
+                       targetShuffle ? 1 : 0, currentShuffle ? 1 : 0,
+                       shuffleSupported ? 1 : 0, succeeded ? 1 : 0);
+            } else {
+                Wh_Log(L"Player tray: Toggle shuffle timed out (supported=%d)",
+                       shuffleSupported ? 1 : 0);
+            }
+            break;
+        }
+        case EqMediaCommandType::ToggleRepeat: {
+            using RepeatMode = winrt::Windows::Media::MediaPlaybackAutoRepeatMode;
+            const auto currentModeRef = session.GetPlaybackInfo().AutoRepeatMode();
+            // AutoRepeatMode is nullable in WinRT. If the session does not expose
+            // a value, treat it as repeat-off and toggle to repeat-list.
+            const RepeatMode currentMode = currentModeRef
+                ? currentModeRef.Value() : RepeatMode::None;
+            // Treat repeat as a clear two-state toggle: off <-> repeat playlist.
+            const RepeatMode targetMode = currentMode == RepeatMode::None
+                ? RepeatMode::List : RepeatMode::None;
+            auto op = session.TryChangeAutoRepeatModeAsync(targetMode);
+            if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(800)))
+                (void)op.GetResults();
+            break;
+        }
+        case EqMediaCommandType::Previous: {
+            auto op = session.TrySkipPreviousAsync();
+            if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(800)))
+                (void)op.GetResults();
+            break;
+        }
+        case EqMediaCommandType::Next: {
+            auto op = session.TrySkipNextAsync();
+            if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(800)))
+                (void)op.GetResults();
+            break;
+        }
+        case EqMediaCommandType::Rewind5:
+        case EqMediaCommandType::Forward5: {
+            const auto timeline = session.GetTimelineProperties();
+            const double duration = timeline.EndTime().count() / 10000000.0;
+            double position = timeline.Position().count() / 10000000.0;
+
+            // TimelineProperties::Position is valid as of LastUpdatedTime,
+            // not necessarily at this exact instant. Compensate that age so
+            // ±5s is applied to the real current playback position.
+            try {
+                const auto playbackInfo = session.GetPlaybackInfo();
+                using PlaybackStatus =
+                    winrt::Windows::Media::Control::
+                        GlobalSystemMediaTransportControlsSessionPlaybackStatus;
+                if (playbackInfo.PlaybackStatus() == PlaybackStatus::Playing) {
+                    const auto age = winrt::clock::now() - timeline.LastUpdatedTime();
+                    double ageSeconds =
+                        static_cast<double>(age.count()) / 10000000.0;
+                    if (ageSeconds > 0.0 && ageSeconds < 60.0) {
+                        auto rateRef = playbackInfo.PlaybackRate();
+                        const double rate = rateRef ? rateRef.Value() : 1.0;
+                        if (IsFiniteDouble(rate) && rate > 0.0)
+                            position += ageSeconds * rate;
+                    }
+                }
+            } catch (...) {
+            }
+
+            const double delta =
+                command.type == EqMediaCommandType::Rewind5 ? -5.0 : 5.0;
+            position += delta;
+            if (duration > 0.0)
+                position = std::clamp(position, 0.0, duration);
+            else
+                position = std::max(0.0, position);
+            const int64_t ticks =
+                static_cast<int64_t>(std::llround(position * 10000000.0));
+            auto op = session.TryChangePlaybackPositionAsync(ticks);
+            if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(800)))
+                (void)op.GetResults();
+            break;
+        }
+        case EqMediaCommandType::Seek: {
+            double position = command.seekPositionSeconds;
+            const auto timeline = session.GetTimelineProperties();
+            const double duration = timeline.EndTime().count() / 10000000.0;
+            if (duration > 0.0)
+                position = std::clamp(position, 0.0, duration);
+            else
+                position = std::max(0.0, position);
+            const int64_t ticks = static_cast<int64_t>(std::llround(position * 10000000.0));
+            auto op = session.TryChangePlaybackPositionAsync(ticks);
+            if (WaitWinrtAsync(op, g_hEqMediaStopEvent, std::chrono::milliseconds(800)))
+                (void)op.GetResults();
+            break;
+        }
+        }
+    } catch (...) {
+    }
+}
+
+static DWORD WINAPI EqMediaThreadProc(LPVOID) {
+    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        apartmentInitialized = true;
+
+        auto managerOperation =
+            winrt::Windows::Media::Control::
+                GlobalSystemMediaTransportControlsSessionManager::RequestAsync();
+        if (!WaitWinrtAsync(managerOperation, g_hEqMediaStopEvent,
+                            std::chrono::milliseconds(1500)))
+            throw winrt::hresult_canceled();
+        auto manager = managerOperation.GetResults();
+        std::wstring pinnedSourceAppUserModelId;
+        winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession cachedSession = nullptr;
+        ULONGLONG lastSessionLookupMs = 0;
+        std::wstring lastSessionLookupKey;
+        ULONGLONG lastMediaPropertiesMs = 0;
+        ULONGLONG lastTimelinePollMs = 0;
+        ULONGLONG lastPlaybackInfoPollMs = 0;
+        std::wstring cachedMediaTitle;
+        std::wstring cachedMediaArtist;
+        std::wstring cachedSourceAppId;
+        double cachedDuration = 0.0;
+        double cachedTimelinePosition = 0.0;
+        double cachedPlaybackRate = 1.0;
+        bool cachedPlaying = false;
+        winrt::Windows::Foundation::DateTime cachedTimelineLastUpdated{};
+        bool cachedTimelineLastUpdatedValid = false;
+        bool forceMediaRefresh = true;
+
+        while (g_eqMediaRunning.load(std::memory_order_acquire)) {
+            {
+                DebugPerfScope debugScope(DEBUG_PERF_PLAYER_MEDIA);
+            const VisualizerSettings settings = GetSettingsSnapshot();
+            winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession session = nullptr;
+
+            try {
+                const ULONGLONG nowMs = GetTickCount64();
+                const std::wstring lookupKey =
+                    settings.audioSource == 1 ? settings.audioApplicationName : L"<system>";
+
+                if (settings.audioSource == 1 && !settings.audioApplicationName.empty()) {
+                    if (lookupKey != lastSessionLookupKey ||
+                        nowMs - lastSessionLookupMs >= 750) {
+                        lastSessionLookupKey = lookupKey;
+                        lastSessionLookupMs = nowMs;
+                        auto newSession = FindLyricsSession(
+                            manager, settings.audioApplicationName,
+                            pinnedSourceAppUserModelId);
+                        if (newSession != cachedSession) {
+                            cachedSession = newSession;
+                            lastMediaPropertiesMs = 0;
+                            lastTimelinePollMs = 0;
+                            lastPlaybackInfoPollMs = 0;
+                            cachedSourceAppId.clear();
+                            cachedDuration = 0.0;
+                            cachedTimelinePosition = 0.0;
+                            cachedPlaybackRate = 1.0;
+                            cachedPlaying = false;
+                            cachedTimelineLastUpdated = {};
+                            cachedTimelineLastUpdatedValid = false;
+                            forceMediaRefresh = true;
+                        }
+                    }
+                    session = cachedSession;
+                } else if (settings.audioSource == 1) {
+                    lastSessionLookupKey.clear();
+                    lastSessionLookupMs = 0;
+                    pinnedSourceAppUserModelId.clear();
+                    cachedSession = nullptr;
+                    cachedSourceAppId.clear();
+                    cachedDuration = 0.0;
+                    cachedTimelinePosition = 0.0;
+                    cachedPlaybackRate = 1.0;
+                    cachedPlaying = false;
+                    cachedTimelineLastUpdated = {};
+                    cachedTimelineLastUpdatedValid = false;
+                    lastMediaPropertiesMs = 0;
+                    lastTimelinePollMs = 0;
+                    lastPlaybackInfoPollMs = 0;
+                    forceMediaRefresh = true;
+                    session = nullptr;
+                } else {
+                    // CurrentSession is only needed for detecting an actual session
+                    // switch. Position is projected locally between timeline samples.
+                    if (lastSessionLookupKey != L"<system>" ||
+                        nowMs - lastSessionLookupMs >= 750) {
+                        lastSessionLookupKey = L"<system>";
+                        lastSessionLookupMs = nowMs;
+                        auto newSession = manager.GetCurrentSession();
+                        if (newSession != cachedSession) {
+                            cachedSession = newSession;
+                            lastMediaPropertiesMs = 0;
+                            lastTimelinePollMs = 0;
+                            lastPlaybackInfoPollMs = 0;
+                            cachedSourceAppId.clear();
+                            cachedDuration = 0.0;
+                            cachedTimelinePosition = 0.0;
+                            cachedPlaybackRate = 1.0;
+                            cachedPlaying = false;
+                            cachedTimelineLastUpdated = {};
+                            cachedTimelineLastUpdatedValid = false;
+                            forceMediaRefresh = true;
+                        }
+                    }
+                    pinnedSourceAppUserModelId.clear();
+                    session = cachedSession;
+                }
+            } catch (...) {
+                session = nullptr;
+            }
+
+            auto commands = DrainEqMediaCommands();
+            if (session) {
+                for (const auto& command : commands)
+                    ExecuteEqMediaCommand(session, command);
+                if (!commands.empty())
+                    forceMediaRefresh = true;
+            } else if (!commands.empty()) {
+                // A session can briefly disappear while SMTC switches players.
+                // Keep commands pending for a short grace period instead of
+                // silently discarding a click made during that transition.
+                const ULONGLONG now = GetTickCount64();
+                std::lock_guard<std::mutex> lock(g_eqMediaCommandMutex);
+                for (auto it = commands.rbegin(); it != commands.rend(); ++it) {
+                    if (it->enqueuedAtMs && now >= it->enqueuedAtMs &&
+                        now - it->enqueuedAtMs <= 2000) {
+                        g_eqMediaCommands.push_front(*it);
+                    }
+                }
+            }
+
+            try {
+                if (session) {
+                    const ULONGLONG sampleNowMs = GetTickCount64();
+                    const bool refreshProperties =
+                        forceMediaRefresh || lastMediaPropertiesMs == 0 ||
+                        sampleNowMs - lastMediaPropertiesMs >= 1000;
+                    const bool refreshTimeline =
+                        forceMediaRefresh || lastTimelinePollMs == 0 ||
+                        sampleNowMs - lastTimelinePollMs >= 500;
+                    const bool refreshPlaybackInfo =
+                        forceMediaRefresh || lastPlaybackInfoPollMs == 0 ||
+                        sampleNowMs - lastPlaybackInfoPollMs >= 500;
+
+                    bool stateRefreshed = forceMediaRefresh;
+
+                    if (refreshProperties) {
+                        lastMediaPropertiesMs = sampleNowMs;
+                        try {
+                            auto propsOperation = session.TryGetMediaPropertiesAsync();
+                            if (WaitWinrtAsync(propsOperation, g_hEqMediaStopEvent,
+                                               std::chrono::milliseconds(800))) {
+                                auto props = propsOperation.GetResults();
+                                if (props) {
+                                    cachedMediaTitle = props.Title().c_str();
+                                    cachedMediaArtist = props.Artist().c_str();
+                                }
+                            }
+                        } catch (...) {
+                        }
+                        stateRefreshed = true;
+                    }
+
+                    if (refreshTimeline) {
+                        lastTimelinePollMs = sampleNowMs;
+                        try {
+                            const auto timeline = session.GetTimelineProperties();
+                            cachedDuration = timeline.EndTime().count() / 10000000.0;
+                            cachedTimelinePosition = timeline.Position().count() / 10000000.0;
+                            cachedTimelineLastUpdated = timeline.LastUpdatedTime();
+                            cachedTimelineLastUpdatedValid = true;
+                        } catch (...) {
+                        }
+                        stateRefreshed = true;
+                    }
+
+                    if (refreshPlaybackInfo) {
+                        lastPlaybackInfoPollMs = sampleNowMs;
+                        try {
+                            const auto info = session.GetPlaybackInfo();
+                            using PlaybackStatus =
+                                winrt::Windows::Media::Control::
+                                    GlobalSystemMediaTransportControlsSessionPlaybackStatus;
+                            cachedPlaying = info.PlaybackStatus() == PlaybackStatus::Playing;
+                            auto rateRef = info.PlaybackRate();
+                            const double rate = rateRef ? rateRef.Value() : 1.0;
+                            if (IsFiniteDouble(rate) && rate > 0.0)
+                                cachedPlaybackRate = rate;
+                        } catch (...) {
+                        }
+                        stateRefreshed = true;
+                    }
+
+                    if (cachedSourceAppId.empty() || forceMediaRefresh) {
+                        try {
+                            cachedSourceAppId = session.SourceAppUserModelId().c_str();
+                        } catch (...) {
+                        }
+                        stateRefreshed = true;
+                    }
+
+                    if (stateRefreshed) {
+                        double position = cachedTimelinePosition;
+                        double duration = cachedDuration;
+
+                        // Keep the old smooth position behavior: advance the last
+                        // timeline sample locally instead of querying WinRT each wake.
+                        if (cachedPlaying && cachedTimelineLastUpdatedValid) {
+                            try {
+                                const auto age =
+                                    winrt::clock::now() - cachedTimelineLastUpdated;
+                                double ageSeconds =
+                                    static_cast<double>(age.count()) / 10000000.0;
+                                if (ageSeconds > 0.0 && ageSeconds < 60.0)
+                                    position += ageSeconds * cachedPlaybackRate;
+                            } catch (...) {
+                            }
+                        }
+
+                        if (duration > 0.0)
+                            position = std::clamp(position, 0.0, duration);
+                        else
+                            position = std::max(0.0, position);
+
+                        SetEqMediaState(
+                            cachedMediaTitle, cachedMediaArtist, cachedSourceAppId,
+                            position, duration, cachedPlaybackRate, cachedPlaying);
+                    }
+
+                    forceMediaRefresh = false;
+                } else {
+                    cachedMediaTitle.clear();
+                    cachedMediaArtist.clear();
+                    cachedSourceAppId.clear();
+                    cachedDuration = 0.0;
+                    cachedTimelinePosition = 0.0;
+                    cachedPlaybackRate = 1.0;
+                    cachedPlaying = false;
+                    cachedTimelineLastUpdated = {};
+                    cachedTimelineLastUpdatedValid = false;
+                    lastMediaPropertiesMs = 0;
+                    lastTimelinePollMs = 0;
+                    lastPlaybackInfoPollMs = 0;
+                    forceMediaRefresh = true;
+                    SetEqMediaStateEmpty();
+                    g_eqMediaPositionAnchorTickMs.store(0, std::memory_order_release);
+                }
+            } catch (...) {
+                SetEqMediaStateEmpty();
+                g_eqMediaPositionAnchorTickMs.store(0, std::memory_order_release);
+            }
+
+            }
+            if (g_hEqMediaStopEvent) {
+                const DWORD waitMs = g_hEqMediaWakeEvent ? 150 : 150;
+                if (WaitForSingleObject(g_hEqMediaWakeEvent, waitMs) == WAIT_OBJECT_0)
+                    ResetEvent(g_hEqMediaWakeEvent);
+                if (WaitForSingleObject(g_hEqMediaStopEvent, 0) == WAIT_OBJECT_0)
+                    break;
+            } else {
+                Sleep(150);
+            }
+        }
+    } catch (...) {
+        SetEqMediaStateEmpty();
+    }
+
+    g_eqMediaPositionAnchorTickMs.store(0, std::memory_order_release);
+    g_eqMediaRunning.store(false, std::memory_order_release);
+    if (apartmentInitialized)
+        winrt::uninit_apartment();
+    return 0;
+}
+
+static void StartEqMediaCapture() {
+    if (g_eqMediaRunning.exchange(true, std::memory_order_acq_rel))
+        return;
+
+    if (!g_hEqMediaStopEvent)
+        g_hEqMediaStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hEqMediaWakeEvent)
+        g_hEqMediaWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
+    if (!g_hEqMediaStopEvent || !g_hEqMediaWakeEvent) {
+        g_eqMediaRunning.store(false, std::memory_order_release);
+        if (g_hEqMediaStopEvent) {
+            CloseHandle(g_hEqMediaStopEvent);
+            g_hEqMediaStopEvent = nullptr;
+        }
+        if (g_hEqMediaWakeEvent) {
+            CloseHandle(g_hEqMediaWakeEvent);
+            g_hEqMediaWakeEvent = nullptr;
+        }
+        return;
+    }
+
+    ResetEvent(g_hEqMediaStopEvent);
+    ResetEvent(g_hEqMediaWakeEvent);
+    g_eqMediaPositionAnchorTickMs.store(0, std::memory_order_release);
+    g_hEqMediaThread = CreateThread(
+        nullptr, 0, EqMediaThreadProc, nullptr, 0, nullptr);
+    if (!g_hEqMediaThread) {
+        g_eqMediaRunning.store(false, std::memory_order_release);
+        CloseHandle(g_hEqMediaStopEvent);
+        CloseHandle(g_hEqMediaWakeEvent);
+        g_hEqMediaStopEvent = nullptr;
+        g_hEqMediaWakeEvent = nullptr;
+    }
+}
+
+static void StopEqMediaCapture() {
+    const bool wasRunning =
+        g_eqMediaRunning.exchange(false, std::memory_order_acq_rel);
+
+    if (g_hEqMediaStopEvent)
+        SetEvent(g_hEqMediaStopEvent);
+    if (g_hEqMediaWakeEvent)
+        SetEvent(g_hEqMediaWakeEvent);
+
+    if (g_hEqMediaThread) {
+        Wh_Log(L"StopEqMediaCapture: waiting for SMTC worker (running=%d)",
+               wasRunning ? 1 : 0);
+        WaitForSingleObject(g_hEqMediaThread, INFINITE);
+        CloseHandle(g_hEqMediaThread);
+        g_hEqMediaThread = nullptr;
+        Wh_Log(L"StopEqMediaCapture: SMTC worker joined");
+    }
+
+    if (g_hEqMediaStopEvent) {
+        CloseHandle(g_hEqMediaStopEvent);
+        g_hEqMediaStopEvent = nullptr;
+    }
+    if (g_hEqMediaWakeEvent) {
+        CloseHandle(g_hEqMediaWakeEvent);
+        g_hEqMediaWakeEvent = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_eqMediaCommandMutex);
+        g_eqMediaCommands.clear();
+    }
+    g_eqMediaPositionAnchorTickMs.store(0, std::memory_order_release);
+    SetEqMediaStateEmpty();
 }
 
 static DWORD WINAPI LyricsThreadProc(LPVOID) {
@@ -5654,8 +10708,17 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
         std::wstring lastTrackKey;
         ULONGLONG lastFetchMs = 0;
         std::wstring pinnedSourceAppUserModelId;
+        winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession cachedSession = nullptr;
+        ULONGLONG lastSessionLookupMs = 0;
+        std::wstring lastSessionLookupKey;
+        ULONGLONG lastMediaPropertiesMs = 0;
+        std::wstring cachedMediaTitle;
+        std::wstring cachedMediaArtist;
+        std::wstring cachedMediaAlbum;
 
         while (g_lyricsRunning.load(std::memory_order_acquire)) {
+            {
+                DebugPerfScope debugScope(DEBUG_PERF_LYRICS_WORKER);
             const VisualizerSettings settings = GetSettingsSnapshot();
             std::wstring title;
             std::wstring artist;
@@ -5672,14 +10735,36 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
                 winrt::Windows::Media::Control::
                     GlobalSystemMediaTransportControlsSession session = nullptr;
 
-                if (settings.audioSource == 1 &&
-                    !settings.audioApplicationName.empty()) {
-                    session = FindLyricsSession(
-                        manager,
-                        settings.audioApplicationName,
-                        pinnedSourceAppUserModelId);
+                const ULONGLONG nowMs = GetTickCount64();
+                const std::wstring lookupKey =
+                    settings.audioSource == 1 ? settings.audioApplicationName : L"<system>";
+
+                if (settings.audioSource == 1) {
+                    if (!settings.audioApplicationName.empty()) {
+                        if (lookupKey != lastSessionLookupKey ||
+                            nowMs - lastSessionLookupMs >= 750) {
+                            lastSessionLookupKey = lookupKey;
+                            lastSessionLookupMs = nowMs;
+                            auto newSession = FindLyricsSession(
+                                manager, settings.audioApplicationName,
+                                pinnedSourceAppUserModelId);
+                            if (newSession != cachedSession) {
+                                cachedSession = newSession;
+                                lastMediaPropertiesMs = 0;
+                            }
+                        }
+                        session = cachedSession;
+                    } else {
+                        lastSessionLookupKey.clear();
+                        lastSessionLookupMs = 0;
+                        pinnedSourceAppUserModelId.clear();
+                        cachedSession = nullptr;
+                    }
                 } else {
                     session = manager.GetCurrentSession();
+                    cachedSession = session;
+                    lastSessionLookupKey = L"<system>";
+                    lastSessionLookupMs = nowMs;
                     pinnedSourceAppUserModelId.clear();
                 }
 
@@ -5687,18 +10772,30 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
                     haveSession = true;
 
                     try {
-                        auto propsOperation = session.TryGetMediaPropertiesAsync();
-                        if (!WaitWinrtAsync(propsOperation, g_hLyricsStopEvent, std::chrono::milliseconds(1500)))
-                            throw winrt::hresult_canceled();
-                        auto props = propsOperation.GetResults();
-                        if (props) {
-                            title = props.Title().c_str();
-                            artist = props.Artist().c_str();
-                            album = props.AlbumTitle().c_str();
+                        const bool refreshProperties =
+                            lastMediaPropertiesMs == 0 ||
+                            nowMs - lastMediaPropertiesMs >= 1000;
+                        if (refreshProperties) {
+                            lastMediaPropertiesMs = nowMs;
+                            auto propsOperation = session.TryGetMediaPropertiesAsync();
+                            if (!WaitWinrtAsync(propsOperation, g_hLyricsStopEvent, std::chrono::milliseconds(1500)))
+                                throw winrt::hresult_canceled();
+                            auto props = propsOperation.GetResults();
+                            if (props) {
+                                cachedMediaTitle = props.Title().c_str();
+                                cachedMediaArtist = props.Artist().c_str();
+                                cachedMediaAlbum = props.AlbumTitle().c_str();
+                            }
                         }
+
+                        title = cachedMediaTitle;
+                        artist = cachedMediaArtist;
+                        album = cachedMediaAlbum;
                     } catch (...) {
-                        // Keep the rest of the media session alive if
-                        // metadata retrieval temporarily fails.
+                        // Keep the last good metadata if retrieval temporarily fails.
+                        title = cachedMediaTitle;
+                        artist = cachedMediaArtist;
+                        album = cachedMediaAlbum;
                     }
 
                     try {
@@ -5758,6 +10855,10 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
             }
 
             if (!haveSession) {
+                cachedMediaTitle.clear();
+                cachedMediaArtist.clear();
+                cachedMediaAlbum.clear();
+                lastMediaPropertiesMs = 0;
                 {
                     std::lock_guard<std::mutex> lock(g_lyricsMutex);
                     g_lyricsLines.reset();
@@ -5766,6 +10867,7 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
                     g_lyricsTrackKey.clear();
                     g_lyricsHasSynced = false;
                     g_lyricsAvailable = false;
+                    g_lyricsAvailableFast.store(g_lyricsAvailable, std::memory_order_release);
                     g_lyricsPositionSeconds = 0.0;
                     g_lyricsDurationSeconds = 0.0;
                     g_lyricsPositionAnchorTickMs = 0;
@@ -5807,6 +10909,7 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
                         g_lyricsLines.reset();
                         g_lyricsHasSynced = false;
                         g_lyricsAvailable = false;
+                        g_lyricsAvailableFast.store(g_lyricsAvailable, std::memory_order_release);
                     }
 
                     FetchLyricsForTrack(
@@ -5818,6 +10921,7 @@ static DWORD WINAPI LyricsThreadProc(LPVOID) {
                 }
             }
 
+            }
             if (g_hLyricsStopEvent) {
                 if (WaitForSingleObject(
                         g_hLyricsStopEvent, 500) == WAIT_OBJECT_0) {
@@ -5861,16 +10965,19 @@ static void StartLyricsCapture() {
 }
 
 static void StopLyricsCapture() {
-    if (!g_lyricsRunning.exchange(false, std::memory_order_acq_rel))
-        return;
+    const bool wasRunning =
+        g_lyricsRunning.exchange(false, std::memory_order_acq_rel);
 
     if (g_hLyricsStopEvent)
         SetEvent(g_hLyricsStopEvent);
 
     if (g_hLyricsThread) {
+        Wh_Log(L"StopLyricsCapture: waiting for lyrics worker (running=%d)",
+               wasRunning ? 1 : 0);
         WaitForSingleObject(g_hLyricsThread, INFINITE);
         CloseHandle(g_hLyricsThread);
         g_hLyricsThread = nullptr;
+        Wh_Log(L"StopLyricsCapture: lyrics worker joined");
     }
 
     if (g_hLyricsStopEvent) {
@@ -5901,6 +11008,8 @@ static int GetCurrentLyricsLineIndex(
 
     return lo == 0 ? -1 : static_cast<int>(lo - 1);
 }
+
+static UINT GetRenderIntervalMs(const VisualizerSettings& settings);
 
 struct LyricsFontCache {
     std::wstring artistFontId;
@@ -5934,6 +11043,63 @@ struct LyricsFontCache {
 // run after Explorer has already torn down its graphics/runtime state; the
 // overlay thread explicitly clears this cache before GdiplusShutdown.
 [[clang::no_destroy]] static LyricsFontCache g_lyricsFontCache;
+
+// Cache stable GDI+ glyph measurements. Artist/title sizes only change when
+// the track text or font settings change, and the current wrapped-line size
+// only changes when the current lyric line, width, or font changes.
+struct LyricsMeasureCache {
+    std::wstring trackKey;
+    std::wstring artist;
+    std::wstring title;
+    std::wstring artistFontId;
+    std::wstring lyricsFontId;
+    int fontSize = 0;
+    Gdiplus::RectF artistBounds{};
+    Gdiplus::RectF titleBounds{};
+    Gdiplus::RectF separatorBounds{};
+    bool valid = false;
+
+    void Clear() {
+        trackKey.clear();
+        artist.clear();
+        title.clear();
+        artistFontId.clear();
+        lyricsFontId.clear();
+        fontSize = 0;
+        artistBounds = {};
+        titleBounds = {};
+        separatorBounds = {};
+        valid = false;
+    }
+};
+
+[[clang::no_destroy]] static LyricsMeasureCache g_lyricsMeasureCache;
+
+struct LyricsWrapMeasureCache {
+    std::wstring trackKey;
+    std::wstring lineText;
+    std::wstring lyricsFontId;
+    int lineIndex = -1;
+    int contentWidth = 0;
+    int fontSize = 0;
+    int linesFilled = 1;
+    float height = 0.0f;
+    bool valid = false;
+
+    void Clear() {
+        trackKey.clear();
+        lineText.clear();
+        lyricsFontId.clear();
+        lineIndex = -1;
+        contentWidth = 0;
+        fontSize = 0;
+        linesFilled = 1;
+        height = 0.0f;
+        valid = false;
+    }
+};
+
+[[clang::no_destroy]] static LyricsWrapMeasureCache g_lyricsWrapMeasureCache;
 
 static const wchar_t* ResolveLyricsFontName(const std::wstring& id) {
     if (id == L"arial") return L"Arial";
@@ -6009,6 +11175,7 @@ static bool EnsureLyricsFontCache() {
 }
 
 static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
+    DebugPerfScope debugScope(DEBUG_PERF_LYRICS_RENDER);
     if (!g_settings.lyricsEnabled || g_settings.lyricsOpacity <= 0)
         return;
 
@@ -6186,53 +11353,150 @@ static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
     const float contentLeft = static_cast<float>(x + 18);
     const float contentWidth = static_cast<float>(std::max(1, w - 36));
 
-    const bool drawArtist = collapsedUnavailable
-        ? false
-        : (g_settings.lyricsShowArtist && !artist.empty());
-    const bool drawTitle = collapsedUnavailable
-        ? !title.empty()
-        : (g_settings.lyricsShowTitle && !title.empty());
+    const bool drawArtist =
+        g_settings.lyricsShowArtist && !artist.empty();
+    const bool drawTitle =
+        g_settings.lyricsShowTitle && !title.empty();
 
     if (drawArtist || drawTitle) {
         const std::wstring separator = L"  •  ";
 
-        Gdiplus::RectF measureRect(0.0f, 0.0f, 10000.0f, 100.0f);
         Gdiplus::RectF artistBounds{}, titleBounds{}, separatorBounds{};
         Gdiplus::StringFormat measureFormat;
         measureFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
         measureFormat.SetTrimming(Gdiplus::StringTrimmingNone);
 
-        if (drawArtist) {
-            graphics.MeasureString(artist.c_str(), -1, &artistFont, measureRect,
-                                   &measureFormat, &artistBounds);
-        }
-        if (drawTitle) {
-            graphics.MeasureString(title.c_str(), -1, &titleFont, measureRect,
-                                   &measureFormat, &titleBounds);
-        }
-        if (drawArtist && drawTitle) {
+        const bool measureCacheHit =
+            g_lyricsMeasureCache.valid &&
+            g_lyricsMeasureCache.trackKey == trackKey &&
+            g_lyricsMeasureCache.artist == artist &&
+            g_lyricsMeasureCache.title == title &&
+            g_lyricsMeasureCache.artistFontId == g_settings.lyricsArtistFont &&
+            g_lyricsMeasureCache.lyricsFontId == g_settings.lyricsLyricsFont &&
+            g_lyricsMeasureCache.fontSize == g_settings.lyricsFontSize;
+
+        if (measureCacheHit) {
+            artistBounds = g_lyricsMeasureCache.artistBounds;
+            titleBounds = g_lyricsMeasureCache.titleBounds;
+            separatorBounds = g_lyricsMeasureCache.separatorBounds;
+        } else {
+            const Gdiplus::RectF measureRect(0.0f, 0.0f, 10000.0f, 100.0f);
+            if (!artist.empty()) {
+                graphics.MeasureString(artist.c_str(), -1, &artistFont, measureRect,
+                                       &measureFormat, &artistBounds);
+            }
+            if (!title.empty()) {
+                graphics.MeasureString(title.c_str(), -1, &titleFont, measureRect,
+                                       &measureFormat, &titleBounds);
+            }
             graphics.MeasureString(separator.c_str(), -1, &artistFont, measureRect,
                                    &measureFormat, &separatorBounds);
+
+            g_lyricsMeasureCache.trackKey = trackKey;
+            g_lyricsMeasureCache.artist = artist;
+            g_lyricsMeasureCache.title = title;
+            g_lyricsMeasureCache.artistFontId = g_settings.lyricsArtistFont;
+            g_lyricsMeasureCache.lyricsFontId = g_settings.lyricsLyricsFont;
+            g_lyricsMeasureCache.fontSize = g_settings.lyricsFontSize;
+            g_lyricsMeasureCache.artistBounds = artistBounds;
+            g_lyricsMeasureCache.titleBounds = titleBounds;
+            g_lyricsMeasureCache.separatorBounds = separatorBounds;
+            g_lyricsMeasureCache.valid = true;
         }
 
         const float metadataWidth =
             (drawArtist ? artistBounds.Width : 0.0f) +
             (drawArtist && drawTitle ? separatorBounds.Width : 0.0f) +
             (drawTitle ? titleBounds.Width : 0.0f);
-        float metadataLeft = contentLeft;
-        if (g_settings.lyricsTextAlignment == 2) {
-            metadataLeft = contentLeft + contentWidth - metadataWidth;
-        } else if (g_settings.lyricsTextAlignment == 1) {
-            metadataLeft = contentLeft + (contentWidth - metadataWidth) * 0.5f;
+
+        const float metadataY = static_cast<float>(y + 10);
+        const float metadataHeight =
+            static_cast<float>(g_settings.lyricsFontSize + 8);
+
+        // Keep artist/title strictly inside the widget. If the complete line
+        // is wider than the available content area, smoothly pan it from
+        // left to right and back instead of letting it overflow the widget.
+        static std::wstring lastMetadataTrackKey;
+        static ULONGLONG metadataScrollElapsedMs = 0;
+        static bool metadataScrollInitialized = false;
+
+        const bool metadataFits = metadataWidth <= contentWidth;
+        const float metadataOverflow =
+            metadataFits ? 0.0f : (metadataWidth - contentWidth);
+
+        if (!metadataScrollInitialized || trackKey != lastMetadataTrackKey) {
+            lastMetadataTrackKey = trackKey;
+            metadataScrollElapsedMs = 0;
+            metadataScrollInitialized = true;
         }
-        metadataLeft = std::max(contentLeft, metadataLeft);
+
+        float metadataLeft = contentLeft;
+        if (metadataFits) {
+            if (g_settings.lyricsTextAlignment == 2) {
+                metadataLeft = contentLeft + contentWidth - metadataWidth;
+            } else if (g_settings.lyricsTextAlignment == 1) {
+                metadataLeft = contentLeft + (contentWidth - metadataWidth) * 0.5f;
+            }
+        } else {
+            // Advance the animation once per rendered frame and use the same
+            // interval as Performance.targetFps. This keeps the marquee's
+            // motion cadence tied to the widget's actual render cadence
+            // instead of making it depend on irregular WM_TIMER arrival.
+            constexpr ULONGLONG kMetadataPauseMs = 900;
+            constexpr double kMetadataSpeedPxPerSecond = 55.0;
+            constexpr ULONGLONG kMetadataTravelMs = 650;
+
+
+            UINT renderIntervalMs = GetRenderIntervalMs(g_settings);
+            if (renderIntervalMs == 0)
+                renderIntervalMs = 1;
+
+            // Advance by exactly one nominal render interval per rendered
+            // frame. This makes the marquee use the same FPS cadence as
+            // Performance.targetFps (or the monitor refresh rate when 0),
+            // avoiding variable-sized position jumps from timer jitter.
+            metadataScrollElapsedMs += static_cast<ULONGLONG>(renderIntervalMs);
+
+            const double travelMs =
+                (static_cast<double>(metadataOverflow) /
+                 kMetadataSpeedPxPerSecond) * 1000.0;
+            const ULONGLONG oneWayMs = static_cast<ULONGLONG>(
+                std::max<double>(kMetadataTravelMs, travelMs));
+            const ULONGLONG cycleMs =
+                kMetadataPauseMs + oneWayMs + kMetadataPauseMs + oneWayMs;
+
+            const ULONGLONG elapsedMs = metadataScrollElapsedMs % cycleMs;
+
+            double offset = 0.0;
+            if (elapsedMs < kMetadataPauseMs) {
+                offset = 0.0;
+            } else if (elapsedMs < kMetadataPauseMs + oneWayMs) {
+                const double t =
+                    static_cast<double>(elapsedMs - kMetadataPauseMs) /
+                    static_cast<double>(oneWayMs);
+                offset = metadataOverflow * t;
+            } else if (elapsedMs <
+                       kMetadataPauseMs + oneWayMs + kMetadataPauseMs) {
+                offset = metadataOverflow;
+            } else {
+                const double t =
+                    static_cast<double>(
+                        elapsedMs - kMetadataPauseMs - oneWayMs - kMetadataPauseMs) /
+                    static_cast<double>(oneWayMs);
+                offset = metadataOverflow * (1.0 - t);
+            }
+
+            metadataLeft = contentLeft - static_cast<float>(offset);
+        }
 
         Gdiplus::SolidBrush metaBrush(
             Gdiplus::Color(static_cast<BYTE>(totalAlpha * 0.65f),
                            235, 235, 235));
-        const float metadataY = static_cast<float>(y + 10);
-        const float metadataHeight =
-            static_cast<float>(g_settings.lyricsFontSize + 8);
+
+        Gdiplus::GraphicsState metadataClipState = graphics.Save();
+        graphics.SetClip(
+            Gdiplus::RectF(contentLeft, metadataY, contentWidth, metadataHeight),
+            Gdiplus::CombineModeIntersect);
 
         if (drawArtist) {
             Gdiplus::RectF rect(
@@ -6256,6 +11520,8 @@ static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
             graphics.DrawString(title.c_str(), -1, &titleFont, rect,
                                 &measureFormat, &metaBrush);
         }
+
+        graphics.Restore(metadataClipState);
     }
 
     if (!collapsedUnavailable && g_settings.lyricsShowLyrics) {
@@ -6280,36 +11546,251 @@ static void DrawLyricsWidget(Gdiplus::Graphics& graphics) {
         float currentBlockHeight = lineHeight;
         if (haveLyrics && g_settings.lyricsLongLineWrapEnabled && current >= 0 &&
             current < static_cast<int>(lines.size())) {
-            Gdiplus::RectF measured;
-            const Gdiplus::RectF measureRect(0.0f, 0.0f, contentWidth, 10000.0f);
-            INT codePointsFitted = 0;
-            INT linesFilled = 0;
-            if (graphics.MeasureString(
-                    lines[current].text.c_str(), -1, &font, measureRect,
-                    &wrapFormat, &measured, &codePointsFitted, &linesFilled) == Gdiplus::Ok &&
-                linesFilled > 1) {
+            const std::wstring& currentLineText = lines[current].text;
+            const bool wrapCacheHit =
+                g_lyricsWrapMeasureCache.valid &&
+                g_lyricsWrapMeasureCache.trackKey == trackKey &&
+                g_lyricsWrapMeasureCache.lineIndex == current &&
+                g_lyricsWrapMeasureCache.lineText == currentLineText &&
+                g_lyricsWrapMeasureCache.contentWidth == static_cast<int>(contentWidth) &&
+                g_lyricsWrapMeasureCache.fontSize == g_settings.lyricsFontSize &&
+                g_lyricsWrapMeasureCache.lyricsFontId == g_settings.lyricsLyricsFont;
+
+            int linesFilled = 1;
+            float measuredHeight = lineHeight;
+            if (wrapCacheHit) {
+                linesFilled = g_lyricsWrapMeasureCache.linesFilled;
+                measuredHeight = g_lyricsWrapMeasureCache.height;
+            } else {
+                Gdiplus::RectF measured;
+                const Gdiplus::RectF measureRect(0.0f, 0.0f, contentWidth, 10000.0f);
+                INT codePointsFitted = 0;
+                INT measuredLinesFilled = 0;
+                if (graphics.MeasureString(
+                        currentLineText.c_str(), -1, &font, measureRect,
+                        &wrapFormat, &measured, &codePointsFitted, &measuredLinesFilled) == Gdiplus::Ok) {
+                    linesFilled = std::max(1, measuredLinesFilled);
+                    measuredHeight = measured.Height;
+                }
+
+                g_lyricsWrapMeasureCache.trackKey = trackKey;
+                g_lyricsWrapMeasureCache.lineText = currentLineText;
+                g_lyricsWrapMeasureCache.lineIndex = current;
+                g_lyricsWrapMeasureCache.contentWidth = static_cast<int>(contentWidth);
+                g_lyricsWrapMeasureCache.fontSize = g_settings.lyricsFontSize;
+                g_lyricsWrapMeasureCache.lyricsFontId = g_settings.lyricsLyricsFont;
+                g_lyricsWrapMeasureCache.linesFilled = linesFilled;
+                g_lyricsWrapMeasureCache.height = measuredHeight;
+                g_lyricsWrapMeasureCache.valid = true;
+            }
+
+            if (linesFilled > 1) {
                 currentBlockHeight = std::max(
-                    lineHeight * static_cast<float>(linesFilled), measured.Height + 2.0f);
+                    lineHeight * static_cast<float>(linesFilled), measuredHeight + 2.0f);
             }
         }
 
         if (!haveLyrics) {
-            const std::wstring fallback = g_settings.lyricsUnavailableText.empty()
-                ? L"N/A"
-                : g_settings.lyricsUnavailableText;
+            std::wstring fallback;
+            if (g_settings.lyricsUnavailableText.empty()) {
+                // Empty Fallback means "pick a random emoticon for this track".
+                // Keep the selected emoticon until the track changes, so it does
+                // not change every render frame. Never select the same one twice
+                // in a row when moving to another track.
+                static const wchar_t* kLyricsFallbackEmoticons[] = {
+                    // Shrug
+                    L"┐(￣∀￣)┌",
+                    L"┐(°ヮ°)┌",
+                    L"╮(─▽─)╭",
+                    L"┐( ˘_˘ )┌",
+                    L"╮(╯▽╰)╭",
+                    L"¯\\_(ツ)_/¯",
+                    L"¯\\_(•-•)_/¯",
+                    L"¯\\_(⊙_⊙)_/¯",
+                    L"¯\\_(º_o)_/¯",
+                    L"┐(′～′)┌",
+                    L"¯\\_(⇀_↼)_/¯",
+                    L"╮(. . )╭",
+                    L"┐(i_i)┌",
+                    L"╮(u_u)╭",
+
+                    // Angry
+                    L"(ಠ益ಠ)",
+                    L"(ಠ_ಠ)",
+                    L"(¬_¬)",
+                    L"(＃`Д´)",
+                    L"(╬ಠ益ಠ)",
+                    L"(ノಠ益ಠ)ノ彡┻━┻",
+                    L"┻━┻ ︵ヽ(`Д´)ﾉ︵ ┻━┻",
+                    L"(ᗒᗣᗕ)՞",
+                    L"(｀Д´)",
+                    L"(╯°□°)╯︵",
+                    L"(‡▼益▼)",
+                    L"(＃ﾟДﾟ)",
+                    L"(ಠ╭╮ಠ)",
+
+
+                    // Sad
+                    L"(T_T)",
+                    L"(;_;)",
+                    L"(ಥ_ಥ)",
+                    L"(；＿；)",
+                    L"(╥﹏╥)",
+                    L"(｡•́︿•̀｡)",
+                    L"(っ˘̩╭╮˘̩)っ",
+                    L"(இ﹏இ`｡)",
+                    L"(´;︵;`)",
+                    L"(ノ_<。)",
+                    L"(ಥ﹏ಥ)",
+                    L"(つ﹏⊂)",
+                    L"( ᵕ̩̩ㅅᵕ̩̩ )",
+                    L"(╯︵╰,)",
+
+                    // Surprised
+                    L"(O_O)",
+                    L"(o_O)",
+                    L"(⊙_⊙)",
+                    L"(☉_☉)",
+                    L"(°Д°)",
+                    L"(゜ロ゜)",
+                    L"(ﾟдﾟ)",
+                    L"(⊙o⊙)",
+                    L"(ㆆ_ㆆ)",
+                    L"(°ロ°) !",
+                    L"Σ(°△°|||)",
+                    L"Σ(ﾟДﾟ)",
+                    L"(⊙_◎)",
+                    L"(•᷄ࡇ•᷅)",
+
+                    // Thinking
+                    L"(・_・?)",
+                    L"(・・?)",
+                    L"(￣～￣;)",
+                    L"(￢_￢)",
+                    L"(˘･_･˘)",
+                    L"(´･_･`)",
+                    L"(─_─)?",
+                    L"(•ิ_•ิ)?",
+                    L"(⊙﹏⊙)",
+                    L"(・・;)",
+                    L"(￣ω￣;)",
+                    L"(｡･_･｡)",
+                    L"(｀・ω・´)?",
+                    L"(・・ )?"
+                };
+                constexpr size_t kLyricsFallbackEmoticonCount =
+                    sizeof(kLyricsFallbackEmoticons) /
+                    sizeof(kLyricsFallbackEmoticons[0]);
+
+                static std::wstring lastFallbackTrackKey;
+                static std::wstring currentFallbackEmoticon;
+                static int lastFallbackIndex = -1;
+                static std::mt19937 fallbackRng(
+                    static_cast<std::mt19937::result_type>(
+                        GetTickCount64() ^
+                        static_cast<ULONGLONG>(GetCurrentProcessId())));
+
+                // During the tiny window before the lyrics worker publishes the
+                // full track key, use artist+title. Once the full key arrives,
+                // recognize that it is the same track so the emoticon is not
+                // changed twice during one track switch.
+                const std::wstring temporaryTrackKey =
+                    artist + L"\n" + title;
+                const std::wstring& fallbackTrackKey =
+                    trackKey.empty() ? temporaryTrackKey : trackKey;
+
+                bool sameTrackAfterMetadata = false;
+                if (!trackKey.empty() &&
+                    !lastFallbackTrackKey.empty() &&
+                    lastFallbackTrackKey + L"\n" == trackKey.substr(
+                        0, lastFallbackTrackKey.size() + 1)) {
+                    sameTrackAfterMetadata = true;
+                }
+
+                if (fallbackTrackKey != lastFallbackTrackKey) {
+                    if (!sameTrackAfterMetadata ||
+                        currentFallbackEmoticon.empty()) {
+                        std::uniform_int_distribution<size_t> distribution(
+                            0, kLyricsFallbackEmoticonCount - 1);
+                        size_t nextIndex = distribution(fallbackRng);
+                        if (kLyricsFallbackEmoticonCount > 1) {
+                            while (static_cast<int>(nextIndex) == lastFallbackIndex)
+                                nextIndex = distribution(fallbackRng);
+                        }
+
+                        lastFallbackIndex = static_cast<int>(nextIndex);
+                        currentFallbackEmoticon =
+                            kLyricsFallbackEmoticons[nextIndex];
+                    }
+
+                    lastFallbackTrackKey = fallbackTrackKey;
+                } else if (currentFallbackEmoticon.empty()) {
+                    std::uniform_int_distribution<size_t> distribution(
+                        0, kLyricsFallbackEmoticonCount - 1);
+                    size_t nextIndex = distribution(fallbackRng);
+                    if (kLyricsFallbackEmoticonCount > 1) {
+                        while (static_cast<int>(nextIndex) == lastFallbackIndex)
+                            nextIndex = distribution(fallbackRng);
+                    }
+
+                    lastFallbackIndex = static_cast<int>(nextIndex);
+                    currentFallbackEmoticon =
+                        kLyricsFallbackEmoticons[nextIndex];
+                }
+
+                fallback = currentFallbackEmoticon;
+            } else {
+                fallback = g_settings.lyricsUnavailableText;
+            }
+
             Gdiplus::SolidBrush fallbackBrush(
                 Gdiplus::Color(static_cast<BYTE>(totalAlpha * 0.78f),
                                245, 245, 248));
             const float fallbackY = y + h *
                 (static_cast<float>(std::clamp(g_settings.lyricsFocusY, 0, 100)) / 100.0f);
-            Gdiplus::RectF fallbackRect(
-                contentLeft,
-                fallbackY - static_cast<float>(g_settings.lyricsFontSize) * 0.7f,
-                contentWidth,
-                static_cast<float>(g_settings.lyricsFontSize + 12));
-            graphics.DrawString(
-                fallback.c_str(), -1, &font, fallbackRect, &textFormat,
-                &fallbackBrush);
+
+            if (g_settings.lyricsUnavailableText.empty()) {
+                // The built-in random fallback is intentionally a two-line block:
+                // the selected kaomoji on top and a larger, clearly separated "No lyrics" label below.
+                const float emoticonHeight = static_cast<float>(g_settings.lyricsFontSize + 8);
+                const float labelFontSize = std::max(14.0f,
+                    static_cast<float>(g_settings.lyricsFontSize) * 1.16f);
+                // Font::GetFamily() writes into a FontFamily object and returns a Status;
+                // it does not return a FontFamily pointer suitable for the Font constructor.
+                Gdiplus::FontFamily noLyricsFamily;
+                font.GetFamily(&noLyricsFamily);
+                Gdiplus::Font noLyricsFont(
+                    &noLyricsFamily, labelFontSize, Gdiplus::FontStyleRegular,
+                    Gdiplus::UnitPixel);
+
+                Gdiplus::RectF emoticonRect(
+                    contentLeft,
+                    fallbackY - static_cast<float>(g_settings.lyricsFontSize) * 0.78f,
+                    contentWidth,
+                    emoticonHeight);
+                graphics.DrawString(
+                    fallback.c_str(), -1, &font, emoticonRect, &textFormat,
+                    &fallbackBrush);
+
+                Gdiplus::RectF labelRect(
+                    contentLeft,
+                    fallbackY + static_cast<float>(g_settings.lyricsFontSize) * 0.62f,
+                    contentWidth,
+                    labelFontSize + 10.0f);
+                graphics.DrawString(
+                    L"No lyrics", -1, &noLyricsFont, labelRect, &textFormat,
+                    &fallbackBrush);
+            } else {
+                // User-provided fallback text keeps the original single-line behavior.
+                Gdiplus::RectF fallbackRect(
+                    contentLeft,
+                    fallbackY - static_cast<float>(g_settings.lyricsFontSize) * 0.7f,
+                    contentWidth,
+                    static_cast<float>(g_settings.lyricsFontSize + 12));
+                graphics.DrawString(
+                    fallback.c_str(), -1, &font, fallbackRect, &textFormat,
+                    &fallbackBrush);
+            }
         } else {
             const int topCount = g_settings.lyricsLinesAbove;
             const int bottomCount = g_settings.lyricsLinesBelow;
@@ -6745,8 +12226,6 @@ static void DestroyRenderTarget() {
     g_renderBits = nullptr;
     g_renderWidth = 0;
     g_renderHeight = 0;
-    g_lastRenderDirtyRect = {};
-    g_renderNeedsFullClear = true;
 }
 
 static bool g_mirrorRenderPass = false;
@@ -6754,19 +12233,21 @@ static int g_mirrorRenderAxis = 0; // 1 = vertical, 2 = horizontal
 static bool g_mirrorCircularPass = false;
 
 static bool EnsureRenderTarget(int w, int h) {
-    if (w <= 0 || h <= 0)
+    if (w <= 0 || h <= 0) {
         return false;
+    }
 
     if (g_renderMemDC && g_renderBitmap && g_renderBits &&
-        g_renderWidth == w && g_renderHeight == h) {
+        g_renderWidth >= w && g_renderHeight >= h) {
         return true;
     }
 
     DestroyRenderTarget();
 
     g_renderMemDC = CreateCompatibleDC(nullptr);
-    if (!g_renderMemDC)
+    if (!g_renderMemDC) {
         return false;
+    }
 
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -6791,7 +12272,6 @@ static bool EnsureRenderTarget(int w, int h) {
 
     g_renderWidth = w;
     g_renderHeight = h;
-    g_renderNeedsFullClear = true;
     return true;
 }
 
@@ -6807,11 +12287,8 @@ static int LimitBarLengthByLyricsWidget(
     if (!g_settings.lyricsLimitBars || !g_settings.lyricsEnabled || barLen <= 0)
         return barLen;
 
-    bool lyricsAvailable = false;
-    {
-        std::lock_guard<std::mutex> lock(g_lyricsMutex);
-        lyricsAvailable = g_lyricsAvailable;
-    }
+    const bool lyricsAvailable =
+        g_lyricsAvailableFast.load(std::memory_order_acquire);
 
     if (!lyricsAvailable && g_settings.lyricsUnavailableBehavior == 1)
         return barLen;
@@ -6931,18 +12408,20 @@ static bool RenderSpecialVisualization(
     Gdiplus::GraphicsState state = graphics.Save();
 
     if (g_settings.barShape == 5) {
+        const BYTE alpha = static_cast<BYTE>(std::clamp(
+            g_settings.acrylicOpacity * 2.55f, 0.0f, 255.0f));
+        Gdiplus::SolidBrush brush(Gdiplus::Color(
+            alpha, GetRValue(primaryColor), GetGValue(primaryColor), GetBValue(primaryColor)));
         for (int i = 0; i < barCount; ++i) {
             const int barLen = std::max(1, static_cast<int>(g_currentHeights[i]));
             const float t = barCount > 1
                 ? static_cast<float>(i) / static_cast<float>(barCount - 1)
                 : 0.0f;
-            DWORD color = (g_settings.colorMode == 1 || g_settings.colorMode == 6 ||
-                           g_settings.colorMode == 8)
+            const DWORD color = (g_settings.colorMode == 1 || g_settings.colorMode == 6 ||
+                                 g_settings.colorMode == 8)
                 ? LerpColor(primaryColor, secondaryColor, t)
                 : primaryColor;
-            const BYTE alpha = static_cast<BYTE>(std::clamp(
-                g_settings.acrylicOpacity * 2.55f, 0.0f, 255.0f));
-            Gdiplus::SolidBrush brush(Gdiplus::Color(
+            brush.SetColor(Gdiplus::Color(
                 alpha, GetRValue(color), GetGValue(color), GetBValue(color)));
 
             const int offset = i * (g_settings.barWidth + g_settings.barSpacing);
@@ -7052,14 +12531,31 @@ static void RenderVisualizerPass(
     Gdiplus::Graphics& graphics,
     int w,
     int h) {
-    const DWORD primaryColor = (g_settings.colorMode == 7 || g_settings.colorMode == 8)
+    // Snapshot frame-static settings once. This both avoids repeated global reads
+    // in the 180 Hz hot path and keeps one frame internally self-consistent.
+    const int colorMode = g_settings.colorMode;
+    const int barStyle = g_settings.barStyle;
+    const int orientation = g_settings.orientation;
+    const int positionX = g_settings.positionX;
+    const int positionY = g_settings.positionY;
+    const int maxBarHeight = std::max(1, g_settings.maxBarHeight);
+    const bool isCircle = (g_settings.barShape == 4);
+    const bool dynamicAcrylic = (colorMode == 3);
+    const bool needsHeightRatio = dynamicAcrylic || (barStyle == 5);
+    const bool needsGradientT = (colorMode == 1);
+    const bool lyricsLimitBars =
+        g_settings.lyricsEnabled && g_settings.lyricsLimitBars;
+
+    const DWORD primaryColor = (colorMode == 7 || colorMode == 8)
         ? GetAlbumPalettePrimary()
         : g_settings.color1;
-        const DWORD secondaryColor = (g_settings.colorMode == 8)
-            ? GetAlbumPaletteSecondary()
-            : g_settings.color2;
+    const DWORD secondaryColor = (colorMode == 8)
+        ? GetAlbumPaletteSecondary()
+        : g_settings.color2;
 
     const int barCount = std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
+    const int baseAlphaValue = std::clamp(
+        255 * g_settings.acrylicOpacity / 100, 10, 255);
 
 
     if (g_mirrorRenderPass && g_settings.barShape == 4) {
@@ -7178,6 +12674,10 @@ static void RenderVisualizerPass(
 
 
     int currentOffset = -startShift;
+    // Solid-color bars used to allocate a GDI+ brush for every bar on every
+    // frame. Reuse one brush and change its color as the bar changes.
+    Gdiplus::SolidBrush solidBarBrush(Gdiplus::Color(
+        255, GetRValue(primaryColor), GetGValue(primaryColor), GetBValue(primaryColor)));
 
     for (int i = 0; i < barCount; ++i) {
         int barLen = std::max(1, static_cast<int>(g_currentHeights[i]));
@@ -7191,10 +12691,10 @@ static void RenderVisualizerPass(
             barLen = std::max(barLen, effectiveSegmentHeight);
         }
 
-        if (g_settings.barShape != 4) {
-            const int barCrossPos = (g_settings.orientation <= 2)
-                ? g_settings.positionX + currentOffset
-                : g_settings.positionY + currentOffset;
+        if (!isCircle && lyricsLimitBars) {
+            const int barCrossPos = (orientation <= 2)
+                ? positionX + currentOffset
+                : positionY + currentOffset;
             barLen = LimitBarLengthByLyricsWidget(
                 barCrossPos, currentBarWidth, barLen,
                 g_mirrorRenderPass, w, h);
@@ -7270,25 +12770,31 @@ static void RenderVisualizerPass(
             barRect.bottom <= 0 || barRect.top >= h)
             continue;
 
-        float heightRatio = static_cast<float>(barLen) / static_cast<float>(std::max(1, g_settings.maxBarHeight));
-        heightRatio = std::clamp(heightRatio, 0.0f, 1.0f);
+        float heightRatio = 0.0f;
+        float colorT = 0.0f;
+        float opacityT = 0.0f;
+        if (needsHeightRatio) {
+            heightRatio = std::clamp(
+                static_cast<float>(barLen) / static_cast<float>(maxBarHeight),
+                0.0f, 1.0f);
+            if (dynamicAcrylic) {
+                colorT = ApplyHeightCurve(
+                    heightRatio,
+                    g_settings.gradientCurveEnabled,
+                    g_settings.gradientCurve);
+                opacityT = ApplyHeightCurve(
+                    heightRatio,
+                    g_settings.opacityCurveEnabled,
+                    g_settings.opacityCurve);
+            }
+        }
 
-        const float colorT = ApplyHeightCurve(
-            heightRatio,
-            g_settings.gradientCurveEnabled,
-            g_settings.gradientCurve);
-
-        const float opacityT = ApplyHeightCurve(
-            heightRatio,
-            g_settings.opacityCurveEnabled,
-            g_settings.opacityCurve);
-
-        float gradientT = barCount > 1
+        const float gradientT = (needsGradientT && barCount > 1)
             ? static_cast<float>(i) / static_cast<float>(barCount - 1)
             : 0.0f;
 
         DWORD color = primaryColor;
-        if (g_settings.barShape == 4) {
+        if (isCircle) {
 
             const float angle =
                 (static_cast<float>(g_settings.circleStartAngle) +
@@ -7298,28 +12804,22 @@ static void RenderVisualizerPass(
             const float circleX = 0.5f + 0.5f * circleCos;
             const float circleY = 0.5f + 0.5f * circleSin;
 
-            if (g_settings.colorMode == 1) {
+            if (colorMode == 1) {
                 color = LerpColor(primaryColor, secondaryColor, circleX);
-            } else if (g_settings.colorMode == 6 || g_settings.colorMode == 8) {
-
+            } else if (colorMode == 6 || colorMode == 8) {
                 color = LerpColor(primaryColor, secondaryColor, circleY);
-            } else if (g_settings.colorMode == 3) {
-                color = LerpColor(primaryColor, secondaryColor, colorT); 
+            } else if (dynamicAcrylic) {
+                color = LerpColor(primaryColor, secondaryColor, colorT);
             }
-        } else {
-            if (g_settings.colorMode == 1) {
-                color = LerpColor(primaryColor, secondaryColor, gradientT);
-            } else if (g_settings.colorMode == 6 || g_settings.colorMode == 8) {
-                color = primaryColor;
-            } else if (g_settings.colorMode == 3) {
-                color = LerpColor(primaryColor, secondaryColor, colorT); 
-            }
+        } else if (colorMode == 1) {
+            color = LerpColor(primaryColor, secondaryColor, gradientT);
+        } else if (dynamicAcrylic) {
+            color = LerpColor(primaryColor, secondaryColor, colorT);
         }
 
-        int alphaValue = std::clamp(
-            255 * g_settings.acrylicOpacity / 100, 10, 255);
+        int alphaValue = baseAlphaValue;
 
-        if (g_settings.colorMode == 3) {
+        if (dynamicAcrylic) {
             const int minAlpha =
                 (g_settings.dynamicAcrylicMinOpacity * 255) / 100;
             const int maxAlpha = 255;
@@ -7483,13 +12983,12 @@ static void RenderVisualizerPass(
             }
 
             else {
-                Gdiplus::SolidBrush radialBrush(
-                    Gdiplus::Color(
-                        alpha,
-                        GetRValue(color),
-                        GetGValue(color),
-                        GetBValue(color)));
-                DrawBarBrush(graphics, radialRect, radialRadius, radialBrush);
+                solidBarBrush.SetColor(Gdiplus::Color(
+                    alpha,
+                    GetRValue(color),
+                    GetGValue(color),
+                    GetBValue(color)));
+                DrawBarBrush(graphics, radialRect, radialRadius, solidBarBrush);
             }
 
             if (g_settings.borderEnabled) {
@@ -7625,7 +13124,6 @@ static void RenderVisualizerPass(
                 GetRValue(color),
                 GetGValue(color),
                 GetBValue(color));
-            Gdiplus::SolidBrush brush(gdiColor);
 
             if (g_settings.colorMode == 1) {
 
@@ -7664,7 +13162,8 @@ static void RenderVisualizerPass(
                     c1, c2);
                 DrawBarBrush(graphics, barRect, radius, gradientBrush);
             } else {
-                DrawBarBrush(graphics, barRect, radius, brush);
+                solidBarBrush.SetColor(gdiColor);
+                DrawBarBrush(graphics, barRect, radius, solidBarBrush);
             }
         }
 
@@ -7690,140 +13189,306 @@ static void RenderVisualizerPass(
 
     }
 
-static void AddDirtyRect(RECT& bounds, const RECT& rect, int renderWidth, int renderHeight) {
-    RECT clipped = rect;
-    clipped.left = std::clamp<LONG>(clipped.left, 0, renderWidth);
-    clipped.top = std::clamp<LONG>(clipped.top, 0, renderHeight);
-    clipped.right = std::clamp<LONG>(clipped.right, 0, renderWidth);
-    clipped.bottom = std::clamp<LONG>(clipped.bottom, 0, renderHeight);
-    if (clipped.right <= clipped.left || clipped.bottom <= clipped.top)
-        return;
-
-    if (bounds.right <= bounds.left || bounds.bottom <= bounds.top) {
-        bounds = clipped;
-    } else {
-        bounds.left = std::min<LONG>(bounds.left, clipped.left);
-        bounds.top = std::min<LONG>(bounds.top, clipped.top);
-        bounds.right = std::max<LONG>(bounds.right, clipped.right);
-        bounds.bottom = std::max<LONG>(bounds.bottom, clipped.bottom);
+static RECT GetThirdAlbumWidgetAnchorRect(const VisualizerSettings& settings) {
+    if (settings.albumWidgetAttachment == 1) {
+        int lyricsH = settings.lyricsHeight;
+        const bool lyricsAvailable =
+            g_lyricsAvailableFast.load(std::memory_order_acquire);
+        if (!lyricsAvailable && settings.lyricsUnavailableBehavior == 2)
+            lyricsH = std::min(lyricsH, std::max(40, settings.lyricsFontSize + 18));
+        return RECT{
+            settings.lyricsX,
+            settings.lyricsY,
+            settings.lyricsX + settings.lyricsWidth,
+            settings.lyricsY + lyricsH};
     }
+
+    const int barCount = std::clamp(settings.barCount, 1, VIZ_BANDS_MAX);
+    return GetVisualizerBackgroundRect(
+        barCount, 1.0f, settings.backgroundPadding,
+        settings.backgroundHeightAdjustment);
 }
 
-static RECT MirrorDirtyRect(const RECT& rect, int axis, int renderWidth, int renderHeight) {
-    RECT mirrored = rect;
-    if (axis == 1) {
-        mirrored.top = renderHeight - rect.bottom;
-        mirrored.bottom = renderHeight - rect.top;
-    } else if (axis == 2) {
-        mirrored.left = renderWidth - rect.right;
-        mirrored.right = renderWidth - rect.left;
-    }
-    return mirrored;
-}
+static RECT ClampAlbumWidgetAttachedRect(
+    const RECT& anchor, const RECT& desired, int gap, int maxDistance) {
+    const int widgetW = std::max(1L, desired.right - desired.left);
+    const int widgetH = std::max(1L, desired.bottom - desired.top);
+    gap = std::max(0, gap);
+    maxDistance = std::max(gap, maxDistance);
 
-static RECT GetOverlayContentBounds(int renderWidth, int renderHeight) {
-    RECT bounds{};
-    const int barCount = std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
-
-    // Use the maximum possible visualizer geometry. This is intentionally
-    // conservative: the persistent DIB is only cleared/uploaded inside this
-    // region, so underestimating it could leave stale pixels behind when bars
-    // move or when settings change. The extra dynamic-width allowance covers
-    // the cursor-driven widening without changing the rendering geometry.
-    RECT visualizerRect = GetVisualizerBackgroundRect(
-        barCount, 1.0f, g_settings.backgroundPadding,
-        g_settings.backgroundHeightAdjustment);
-    const int extraCross = g_settings.dynamicWidthEnabled
-        ? barCount * std::max(0, g_settings.dynamicWidthMaxBonus)
-        : 0;
-    if (g_settings.orientation <= 2)
-        visualizerRect.right += extraCross + std::max(2, g_settings.borderThickness + 1);
-    else
-        visualizerRect.bottom += extraCross + std::max(2, g_settings.borderThickness + 1);
-    visualizerRect.left -= std::max(2, g_settings.borderThickness + 1);
-    visualizerRect.top -= std::max(2, g_settings.borderThickness + 1);
-    AddDirtyRect(bounds, visualizerRect, renderWidth, renderHeight);
-
-    if (g_settings.mirroredVisualizer) {
-        const int axis = (g_settings.barShape == 4)
-            ? 2
-            : ((g_settings.orientation > 2) ? 2 : 1);
-        AddDirtyRect(
-            bounds,
-            MirrorDirtyRect(visualizerRect, axis, renderWidth, renderHeight),
-            renderWidth, renderHeight);
-    }
-
-    if (g_settings.lyricsEnabled &&
-        g_settings.lyricsOpacity > 0 &&
-        g_settings.lyricsWidth > 0 && g_settings.lyricsHeight > 0) {
-        RECT lyricsRect{
-            g_settings.lyricsX,
-            g_settings.lyricsY,
-            g_settings.lyricsX + g_settings.lyricsWidth,
-            g_settings.lyricsY + g_settings.lyricsHeight
-        };
-        const int margin = std::max(2, g_settings.lyricsBorderThickness + 1);
-        lyricsRect.left -= margin;
-        lyricsRect.top -= margin;
-        lyricsRect.right += margin;
-        lyricsRect.bottom += margin;
-        AddDirtyRect(bounds, lyricsRect, renderWidth, renderHeight);
-    }
-
-    if (g_pForegroundImage) {
-        const int drawW = (g_settings.imageWidth > 0)
-            ? g_settings.imageWidth : static_cast<int>(g_pForegroundImage->GetWidth());
-        const int drawH = (g_settings.imageHeight > 0)
-            ? g_settings.imageHeight : static_cast<int>(g_pForegroundImage->GetHeight());
-        if (drawW > 0 && drawH > 0) {
-            RECT imageRect{
-                g_settings.imageX,
-                g_settings.imageY,
-                g_settings.imageX + drawW,
-                g_settings.imageY + drawH
-            };
-            AddDirtyRect(bounds, imageRect, renderWidth, renderHeight);
+    struct Candidate { RECT rect{}; long long score = 0; };
+    auto makeCandidate = [&](int minLeft, int maxLeft,
+                             int minTop, int maxTop) -> RECT {
+        if (minLeft > maxLeft) {
+            const int mid = (minLeft + maxLeft) / 2;
+            minLeft = maxLeft = mid;
         }
-    }
+        if (minTop > maxTop) {
+            const int mid = (minTop + maxTop) / 2;
+            minTop = maxTop = mid;
+        }
+        RECT r{};
+        r.left = std::clamp<LONG>(desired.left, minLeft, maxLeft);
+        r.top = std::clamp<LONG>(desired.top, minTop, maxTop);
+        r.right = r.left + widgetW;
+        r.bottom = r.top + widgetH;
+        return r;
+    };
+    auto score = [&](const RECT& r) -> long long {
+        const long long dx = static_cast<long long>(r.left) - desired.left;
+        const long long dy = static_cast<long long>(r.top) - desired.top;
+        return dx * dx + dy * dy;
+    };
 
-    return bounds;
+    std::array<Candidate, 4> candidates{};
+    candidates[0].rect = makeCandidate(
+        anchor.right + gap, anchor.right + maxDistance,
+        anchor.top - maxDistance, anchor.bottom + maxDistance - widgetH);
+    candidates[1].rect = makeCandidate(
+        anchor.left - maxDistance - widgetW, anchor.left - gap - widgetW,
+        anchor.top - maxDistance, anchor.bottom + maxDistance - widgetH);
+    candidates[2].rect = makeCandidate(
+        anchor.left - maxDistance, anchor.right + maxDistance - widgetW,
+        anchor.bottom + gap, anchor.bottom + maxDistance);
+    candidates[3].rect = makeCandidate(
+        anchor.left - maxDistance, anchor.right + maxDistance - widgetW,
+        anchor.top - maxDistance - widgetH, anchor.top - gap - widgetH);
+
+    for (auto& candidate : candidates)
+        candidate.score = score(candidate.rect);
+
+    Candidate best = candidates[0];
+    for (size_t i = 1; i < candidates.size(); ++i) {
+        if (candidates[i].score < best.score)
+            best = candidates[i];
+    }
+    return best.rect;
 }
 
-static void ClearRenderRegion(RECT rect, int width, int height) {
-    if (rect.right <= rect.left || rect.bottom <= rect.top)
-        return;
-    rect.left = std::clamp<LONG>(rect.left, 0, width);
-    rect.top = std::clamp<LONG>(rect.top, 0, height);
-    rect.right = std::clamp<LONG>(rect.right, 0, width);
-    rect.bottom = std::clamp<LONG>(rect.bottom, 0, height);
-    if (rect.right <= rect.left || rect.bottom <= rect.top)
-        return;
+static RECT GetThirdAlbumWidgetRect(const VisualizerSettings& settings) {
+    const int w = settings.albumWidgetWidth;
+    const int h = settings.albumWidgetHeight;
 
-    BYTE* bits = static_cast<BYTE*>(g_renderBits);
-    const size_t stride = static_cast<size_t>(width) * sizeof(DWORD);
-    const size_t rowBytes = static_cast<size_t>(rect.right - rect.left) * sizeof(DWORD);
-    for (int y = rect.top; y < rect.bottom; ++y) {
-        std::memset(
-            bits + static_cast<size_t>(y) * stride +
-                static_cast<size_t>(rect.left) * sizeof(DWORD),
-            0,
-            rowBytes);
+    if (settings.albumWidgetAttachment == 0) {
+        const int x = g_albumWidgetSeparateX.load(std::memory_order_acquire);
+        const int y = g_albumWidgetSeparateY.load(std::memory_order_acquire);
+        return RECT{x, y, x + w, y + h};
+    }
+
+    const RECT anchor = GetThirdAlbumWidgetAnchorRect(settings);
+    int ox = 0;
+    int oy = 0;
+    if (settings.albumWidgetAttachment == 1) {
+        ox = g_albumWidgetLyricsOffsetX.load(std::memory_order_acquire);
+        oy = g_albumWidgetLyricsOffsetY.load(std::memory_order_acquire);
+    } else {
+        ox = g_albumWidgetVisualizerOffsetX.load(std::memory_order_acquire);
+        oy = g_albumWidgetVisualizerOffsetY.load(std::memory_order_acquire);
+    }
+    const RECT desired{
+        anchor.left + ox, anchor.top + oy,
+        anchor.left + ox + w, anchor.top + oy + h};
+    return ClampAlbumWidgetAttachedRect(
+        anchor, desired, settings.albumWidgetGap,
+        settings.albumWidgetMaxDistance);
+}
+
+// Update the live widget position without touching Windhawk settings.
+// Persisting settings while handling WM_MOUSEMOVE can synchronously trigger
+// Wh_ModSettingsChanged(), which rebuilds the desktop overlay and makes the
+// drag path unstable on some Explorer builds.
+static void UpdateThirdAlbumWidgetRectInMemory(
+    const VisualizerSettings& settings, const RECT& rect) {
+    if (settings.albumWidgetAttachment == 0) {
+        g_albumWidgetSeparateX.store(rect.left, std::memory_order_release);
+        g_albumWidgetSeparateY.store(rect.top, std::memory_order_release);
+        return;
+    }
+
+    const RECT anchor = GetThirdAlbumWidgetAnchorRect(settings);
+    const RECT clamped = ClampAlbumWidgetAttachedRect(
+        anchor, rect, settings.albumWidgetGap,
+        settings.albumWidgetMaxDistance);
+    const int offsetX = clamped.left - anchor.left;
+    const int offsetY = clamped.top - anchor.top;
+    if (settings.albumWidgetAttachment == 1) {
+        g_albumWidgetLyricsOffsetX.store(offsetX, std::memory_order_release);
+        g_albumWidgetLyricsOffsetY.store(offsetY, std::memory_order_release);
+    } else {
+        g_albumWidgetVisualizerOffsetX.store(offsetX, std::memory_order_release);
+        g_albumWidgetVisualizerOffsetY.store(offsetY, std::memory_order_release);
     }
 }
 
-static void RenderOverlay(HWND hwnd) {
-    EnsureForegroundImageLoaded();
+// Commit the final drag position to Windhawk settings. This is intentionally
+// called only when the drag ends (or is cancelled), never for every mouse move.
+static void StoreThirdAlbumWidgetRect(
+    const VisualizerSettings& settings, const RECT& rect) {
+    if (settings.albumWidgetAttachment == 0) {
+        g_albumWidgetSeparateX.store(rect.left, std::memory_order_release);
+        g_albumWidgetSeparateY.store(rect.top, std::memory_order_release);
+        Wh_SetIntValue(L"albumWidget.separate.x", rect.left);
+        Wh_SetIntValue(L"albumWidget.separate.y", rect.top);
+        return;
+    }
 
-    RECT rc{};
-    GetClientRect(hwnd, &rc);
-    const int w = rc.right - rc.left;
-    const int h = rc.bottom - rc.top;
+    const RECT anchor = GetThirdAlbumWidgetAnchorRect(settings);
+    const RECT clamped = ClampAlbumWidgetAttachedRect(
+        anchor, rect, settings.albumWidgetGap,
+        settings.albumWidgetMaxDistance);
+    const int offsetX = clamped.left - anchor.left;
+    const int offsetY = clamped.top - anchor.top;
+    if (settings.albumWidgetAttachment == 1) {
+        g_albumWidgetLyricsOffsetX.store(offsetX, std::memory_order_release);
+        g_albumWidgetLyricsOffsetY.store(offsetY, std::memory_order_release);
+        Wh_SetIntValue(L"albumWidget.lyrics.offsetX", offsetX);
+        Wh_SetIntValue(L"albumWidget.lyrics.offsetY", offsetY);
+    } else {
+        g_albumWidgetVisualizerOffsetX.store(offsetX, std::memory_order_release);
+        g_albumWidgetVisualizerOffsetY.store(offsetY, std::memory_order_release);
+        Wh_SetIntValue(L"albumWidget.visualizer.offsetX", offsetX);
+        Wh_SetIntValue(L"albumWidget.visualizer.offsetY", offsetY);
+    }
+}
+
+static bool IsAlbumWidgetOverlayWindow(HWND hwnd) {
+    if (!hwnd)
+        return false;
+    for (HWND overlay : g_overlayWindows) {
+        if (overlay == hwnd)
+            return true;
+    }
+    return false;
+}
+
+static void DrawAlbumWidgetBorder(
+    Gdiplus::Graphics& graphics,
+    const RECT& rect,
+    const VisualizerSettings& settings) {
+    const bool lyricsAnchor = settings.albumWidgetAttachment == 1;
+    const bool enabled = lyricsAnchor
+        ? (settings.lyricsBackgroundEnabled && settings.lyricsBorderEnabled)
+        : settings.backgroundBorderEnabled;
+    const int opacity = lyricsAnchor
+        ? settings.lyricsBorderOpacity
+        : settings.backgroundBorderOpacity;
+    if (!enabled || opacity <= 0)
+        return;
+
+    const int mode = lyricsAnchor
+        ? settings.lyricsBorderMode
+        : settings.backgroundBorderMode;
+    const int thickness = std::max(1, lyricsAnchor
+        ? settings.lyricsBorderThickness
+        : settings.backgroundBorderThickness);
+    const BYTE alpha = static_cast<BYTE>(
+        std::clamp(opacity, 0, 100) * 255 / 100);
+
+    DWORD color1 = lyricsAnchor ? settings.lyricsBorderColor1
+                                : settings.backgroundBorderColor1;
+    DWORD color2 = lyricsAnchor ? settings.lyricsBorderColor2
+                                : settings.backgroundBorderColor2;
+    if (mode == 0 || mode == 1) {
+        color1 = GetAlbumPalettePrimary();
+        color2 = GetAlbumPaletteSecondary();
+    }
+
+    const int radius = lyricsAnchor
+        ? settings.lyricsRounding
+        : settings.backgroundCornerRadius;
+    Gdiplus::GraphicsPath path;
+    AddRoundedRectSubpath(
+        path,
+        static_cast<float>(rect.left), static_cast<float>(rect.top),
+        static_cast<float>(rect.right - rect.left),
+        static_cast<float>(rect.bottom - rect.top),
+        static_cast<float>(std::clamp<int>(
+            radius, 0, std::min(rect.right - rect.left, rect.bottom - rect.top) / 2)));
+
+    if (mode == 1 || mode == 3) {
+        Gdiplus::LinearGradientBrush brush(
+            Gdiplus::PointF(static_cast<float>(rect.left), static_cast<float>(rect.top)),
+            Gdiplus::PointF(static_cast<float>(rect.right), static_cast<float>(rect.bottom)),
+            Gdiplus::Color(alpha, GetRValue(color1), GetGValue(color1), GetBValue(color1)),
+            Gdiplus::Color(alpha, GetRValue(color2), GetGValue(color2), GetBValue(color2)));
+        Gdiplus::Pen pen(&brush, static_cast<Gdiplus::REAL>(thickness));
+        graphics.DrawPath(&pen, &path);
+    } else {
+        Gdiplus::Pen pen(
+            Gdiplus::Color(alpha, GetRValue(color1), GetGValue(color1), GetBValue(color1)),
+            static_cast<Gdiplus::REAL>(thickness));
+        graphics.DrawPath(&pen, &path);
+    }
+}
+
+static void DrawAlbumWidget(Gdiplus::Graphics& graphics) {
+    DebugPerfScope debugScope(DEBUG_PERF_ALBUM_RENDER);
+    const VisualizerSettings& settings = g_settings;
+    if (!settings.albumWidgetEnabled || settings.albumWidgetOpacity <= 0)
+        return;
+
+    const RECT rect = GetThirdAlbumWidgetRect(settings);
+    const int w = rect.right - rect.left;
+    const int h = rect.bottom - rect.top;
     if (w <= 0 || h <= 0)
         return;
 
-    if (!EnsureRenderTarget(w, h))
+    if (!EnsureAlbumWidgetCache(settings))
         return;
+
+    // The cache is exactly widget-sized, so the hot path does one 1:1 image
+    // composite instead of resizing, clipping, color-matrix setup, and border
+    // construction on every visualizer frame.
+    graphics.DrawImage(
+        g_albumWidgetCacheBitmap,
+        Gdiplus::RectF(static_cast<float>(rect.left), static_cast<float>(rect.top),
+                       static_cast<float>(w), static_cast<float>(h)));
+}
+
+static bool CanUseGpuVisualizer();
+static bool RenderGpuVisualizerFrame(HWND hwnd, int w, int h);
+
+static void RenderOverlay(HWND hwnd) {
+    DebugPerfScope debugScope(DEBUG_PERF_VISUALIZER_RENDER);
+    if (!hwnd || !IsWindow(hwnd)) {
+        return;
+    }
+
+    if (!g_desktopVisualizerVisible)
+        return;
+
+    int w = 0;
+    int h = 0;
+    {
+        DebugPerfScope scope(DEBUG_PERF_VIZ_FRAME_SETUP);
+        EnsureForegroundImageLoaded();
+
+        RECT screenRect{};
+        if (!GetWindowRect(hwnd, &screenRect)) {
+            return;
+        }
+        g_overlayScreenRect = screenRect;
+
+        RECT rc{};
+        GetClientRect(hwnd, &rc);
+        w = rc.right - rc.left;
+        h = rc.bottom - rc.top;
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+    }
+
+    if (CanUseGpuVisualizer()) {
+        if (RenderGpuVisualizerFrame(hwnd, w, h))
+            return;
+    }
+
+    {
+        DebugPerfScope scope(DEBUG_PERF_VIZ_FRAME_SETUP);
+        if (!EnsureRenderTarget(w, h)) {
+            return;
+        }
+    }
 
     // The persistent render target must be cleared completely before each
     // frame. Partial dirty-region clearing can leave stale pixels behind when
@@ -7833,12 +13498,21 @@ static void RenderOverlay(HWND hwnd) {
     //
     // Keep the persistent DIB for allocation stability, but use a full-frame
     // clear/upload so every frame exactly represents the current visualizer.
-    std::memset(
-        g_renderBits, 0,
-        static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(DWORD));
-
-    const RECT dirtyRect{0, 0, w, h};
-    g_renderNeedsFullClear = false;
+    //
+    // The opaque raised-desktop layer hides the real wallpaper, so its frames
+    // start from a copy of the wallpaper instead of transparent black.
+    {
+        DebugPerfScope scope(DEBUG_PERF_VIZ_CLEAR);
+        if (!(g_overlayBuiltRenderMode == OVERLAY_RENDER_OPAQUE_HOLDER &&
+              OverlayFillWallpaperBase(hwnd, w, h))) {
+            // The DIB section is tightly packed for this render target, so one
+            // contiguous clear is cheaper than a memset call for every row.
+            std::memset(
+                g_renderBits,
+                0,
+                static_cast<size_t>(w) * static_cast<size_t>(h) * sizeof(DWORD));
+        }
+    }
 
     {
         Gdiplus::Graphics graphics(g_renderMemDC);
@@ -7846,9 +13520,13 @@ static void RenderOverlay(HWND hwnd) {
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
         graphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
 
-        RenderVisualizerPass(graphics, w, h);
+        {
+            DebugPerfScope scope(DEBUG_PERF_VIZ_MAIN_PASS);
+            RenderVisualizerPass(graphics, w, h);
+        }
 
         if (g_settings.mirroredVisualizer) {
+            DebugPerfScope scope(DEBUG_PERF_VIZ_MIRROR_PASS);
             const int axis = (g_settings.orientation > 2) ? 2 : 1;
             g_mirrorRenderAxis = axis;
             g_mirrorRenderPass = true;
@@ -7875,9 +13553,15 @@ static void RenderOverlay(HWND hwnd) {
             g_mirrorRenderAxis = 0;
         }
 
+        // DrawLyricsWidget() and DrawAlbumWidget() already own their detailed
+        // render scopes (DEBUG_PERF_LYRICS_RENDER / DEBUG_PERF_ALBUM_RENDER).
+        // Do not add wrapper scopes here: the two would report nearly identical
+        // timings and make the profiler harder to read.
         DrawLyricsWidget(graphics);
+        DrawAlbumWidget(graphics);
 
         if (g_pForegroundImage) {
+            DebugPerfScope scope(DEBUG_PERF_VIZ_FOREGROUND);
             int drawW = (g_settings.imageWidth > 0)
                 ? g_settings.imageWidth
                 : g_pForegroundImage->GetWidth();
@@ -7895,7 +13579,33 @@ static void RenderOverlay(HWND hwnd) {
         }
     }
 
+    // Raised-desktop modes present through Direct3D / DirectComposition.
+    if (g_overlayBuiltRenderMode != OVERLAY_RENDER_ULW) {
+        DebugPerfScope scope(DEBUG_PERF_VIZ_PRESENT);
+        OverlayPresentFrame(hwnd, w, h);
+        // Count every successfully reached visualizer render regardless of the
+        // presentation backend. The previous counter update lived only in the
+        // layered-window path, so DirectComposition/other modes reported 0 FPS.
+        return;
+    }
+
+    // For a top-level window pptDst is the screen position. For a CHILD
+    // window it is relative to the parent's client area, so passing {0,0}
+    // moves the overlay to the desktop's top-left corner on every frame.
+    // That corner is only the primary monitor's origin when no monitor sits
+    // left of or above the primary; on other layouts the overlay is shifted
+    // off its monitor and the periodic rebuild pass then recreates it every
+    // second. Child overlays are positioned by CreateWindowExW/SetWindowPos,
+    // so leave their position untouched here (pptDst = nullptr).
+    const bool isChildOverlay = GetParent(hwnd) != nullptr;
     POINT dstPos{0, 0};
+    if (!isChildOverlay) {
+        RECT windowRect{};
+        if (GetWindowRect(hwnd, &windowRect)) {
+            dstPos.x = windowRect.left;
+            dstPos.y = windowRect.top;
+        }
+    }
     SIZE size{w, h};
     POINT srcPos{0, 0};
     BLENDFUNCTION blend{};
@@ -7906,44 +13616,407 @@ static void RenderOverlay(HWND hwnd) {
 
     UPDATELAYEREDWINDOWINFO updateInfo{};
     updateInfo.cbSize = sizeof(updateInfo);
-    updateInfo.pptDst = &dstPos;
+    updateInfo.pptDst = isChildOverlay ? nullptr : &dstPos;
     updateInfo.psize = &size;
     updateInfo.hdcSrc = g_renderMemDC;
     updateInfo.pptSrc = &srcPos;
     updateInfo.pblend = &blend;
     updateInfo.dwFlags = ULW_ALPHA;
-    updateInfo.prcDirty = &dirtyRect;
+    // nullptr updates the complete layered window, matching the previous
+    // full-window dirty rectangle without keeping throw-away state.
+    updateInfo.prcDirty = nullptr;
 
-    UpdateLayeredWindowIndirect(hwnd, &updateInfo);
+    {
+        DebugPerfScope scope(DEBUG_PERF_VIZ_PRESENT);
+        if (UpdateLayeredWindowIndirect(hwnd, &updateInfo)) {
+            // Count only real visualizer presents. This keeps the debug FPS metric
+            // tied to VIZ rendering rather than to the debug window timer.
+        }
+    }
 
-    // Kept for compatibility with the existing render-target lifecycle.
-    g_lastRenderDirtyRect = dirtyRect;
 }
 
 static UINT GetRenderIntervalMs(const VisualizerSettings& settings);
+static UINT GetOverlayTimerIntervalMs(const VisualizerSettings& settings);
+static void ArmOverlayRenderTimer(
+    const VisualizerSettings& settings, bool resetDeadline);
 
 static UINT g_cachedDisplayRefreshRateHz = 0;
 static UINT g_currentOverlayTimerMs = 0;
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+static HANDLE g_hOverlayRenderTimer = nullptr;
+static bool g_overlayRenderTimerHighRes = false;
+static LARGE_INTEGER g_overlayQpcFrequency{};
+static ULONGLONG g_overlayRenderDeadlineQpc = 0;
+static double g_overlayRenderScheduledPeriodMs = 0.0;
+
+// Desktop layout editor (defined next to the overlay thread). While it is
+// active the overlay is frozen: no audio-driven frames, no repair passes.
+static std::atomic<bool> g_layoutEditActive{false};
+static void LayoutEditBegin();
+static void LayoutEditEnd(bool apply);
+
+// Automatically throttle only the overlay monitor currently occupied by a
+// fullscreen/borderless-fullscreen foreground window. The user's configured
+// targetFps is never modified.
+static std::atomic<bool> g_fullscreenThrottleActive{false};
+static std::atomic<HMONITOR> g_fullscreenMonitor{nullptr};
+static ULONGLONG g_lastFullscreenCheckMs = 0;
 
 
 // popup implementation
-static constexpr int EQ_POPUP_WIDTH = 520;
-static constexpr int EQ_POPUP_HEIGHT = 300;
-static constexpr int EQ_SLIDER_TOP = 76;
-static constexpr int EQ_SLIDER_BOTTOM = 242;
-static constexpr int EQ_SLIDER_HORIZONTAL_PADDING = 34;
+static constexpr int EQ_POPUP_WIDTH = 700;
+static constexpr int EQ_POPUP_HEIGHT = 530;
+
+// The builder always uses the full logical canvas. The main page may shrink to
+// the bounding box of placed widgets; these offsets keep the widgets at the same
+// screen coordinates after the popup itself is cropped.
+static int g_eqPopupLogicalWidth = EQ_POPUP_WIDTH;
+static int g_eqPopupLogicalHeight = EQ_POPUP_HEIGHT;
+static int g_eqPopupContentOffsetX = 0;
+static int g_eqPopupContentOffsetY = 0;
+
+// Slightly smaller page button (gear/back) so it stays visually separate from
+// the media source text while keeping the same top-right placement.
+static constexpr int EQ_PAGE_BUTTON_TOP = 8;
+static constexpr int EQ_PAGE_BUTTON_BOTTOM = 48;
+static constexpr UINT kEqPopupPageAnimationTimerId = 0x4E55;
+static constexpr UINT kEqPopupPageAnimationIntervalMs = 16;
+static constexpr ULONGLONG kEqPopupPageAnimationDurationMs = 220;
+static constexpr UINT kEqPresetPageAnimationTimerId = 0x4E56;
+static constexpr UINT kEqPresetPageAnimationIntervalMs = 16;
+static constexpr ULONGLONG kEqPresetPageAnimationDurationMs = kEqPopupPageAnimationDurationMs;
+
 static constexpr int EQ_BUTTON_WIDTH = 32;
 static constexpr int EQ_BUTTON_HEIGHT = 32;
 static constexpr int EQ_POPUP_TASKBAR_GAP = 16;
-static HWND g_eqPopupHwnd = nullptr;
+static constexpr UINT kEqPopupAnimationTimerId = 0x4E53;
+static constexpr UINT kEqPopupAnimationIntervalMs = 16;
+static HWND g_eqPopupHwnd = nullptr;  // Accessed directly only by the popup owner thread.
+static std::atomic<HWND> g_eqPopupHwndForRequests{nullptr};
+static constexpr UINT WM_EQ_ALBUM_ARTWORK_CHANGED = WM_APP + 0x2A7;
+static constexpr UINT WM_EQ_RENDER_TICK = WM_APP + 0x2A9;
+static std::atomic<bool> g_eqPopupRenderRequestPending{false};
+static std::atomic<bool> g_eqPopupAttributesUpdateRequested{false};
+static LRESULT CALLBACK EqTrayVolumeFlyoutProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+static constexpr wchar_t kEqTrayVolumeFlyoutClass[] = L"WindhawkEqTrayVolumeFlyout";
+static void RequestEqPopupRender(HWND popup = nullptr) {
+    if (!g_running.load(std::memory_order_acquire) ||
+        !g_eqPlayerPopupOpen.load(std::memory_order_acquire))
+        return;
+    if (!popup)
+        popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (!popup)
+        return;
+
+    bool expected = false;
+    if (!g_eqPopupRenderRequestPending.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        return;
+    }
+    if (!PostMessageW(popup, WM_EQ_RENDER_TICK, 0, 0))
+        g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+}
+static void WakeEqPopupForAlbumMediaChange() {
+    if (!g_eqPlayerPopupOpen.load(std::memory_order_acquire))
+        return;
+    HWND popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (popup && IsWindow(popup))
+        PostMessageW(popup, WM_EQ_ALBUM_ARTWORK_CHANGED, 0, 0);
+}
+static HWND g_eqTaskbarHwnd = nullptr;
 static HINSTANCE g_eqModuleHandle = nullptr;
 static bool g_eqClassesRegistered = false;
+
+static void InitOverlayQpcFrequency();
+static ULONGLONG OverlayQpcNow();
+static double GetEffectiveRenderFps(const VisualizerSettings& settings);
+
+// Persistent Player framebuffer. The popup is rendered repeatedly at high
+// cadence, so recreating a DIB/DC/bitmap on every frame is needlessly expensive.
+// The surface is resized only when the popup's pixel dimensions actually change.
+struct EqPlayerRenderSurface {
+    HDC memDC = nullptr;
+    HBITMAP bitmap = nullptr;
+    HGDIOBJ oldBitmap = nullptr;
+    void* bits = nullptr;
+    int width = 0;
+    int height = 0;
+};
+
+static EqPlayerRenderSurface g_eqPlayerRenderSurface;
+
+// Media metadata changes far less often than the Player render cadence. Keep
+// the copied title/artist/source strings in the render-side cache and refresh
+// them only when the media metadata revision changes. Numeric playback state
+// is still sampled every render because the timeline has to move smoothly.
+struct EqPlayerMediaRenderCache {
+    ULONGLONG metadataRevision = 0;
+    EqMediaState state{};
+    std::wstring displayTitle;
+    std::wstring displayArtist;
+};
+static EqPlayerMediaRenderCache g_eqPlayerMediaRenderCache;
+
+// The persistent Player surface and all popup layout/render caches are owned by
+// the popup's window thread. Other threads request a coalesced WM_EQ_RENDER_TICK.
+static std::atomic<ULONGLONG> g_eqLastScheduledRenderQpc{0};
+// Keep the Player at its active cadence for a short grace period after
+// playback stops. Disk and other animated sections need a few frames to
+// finish their natural fade instead of stepping immediately into 5 FPS idle.
+static ULONGLONG g_eqPlayerPlaybackGraceUntilQpc = 0;
+static constexpr ULONGLONG kEqPlayerPlaybackGraceMs = 3000;
+static constexpr double kEqPlayerActiveMaxFps = 30.0;
+static constexpr double kEqPlayerDiskActiveMaxFps = 45.0;
+static constexpr double kEqPlayerIdleFps = 5.0;
+
+static void DestroyEqStaticWidgetCache();
+
+static void DestroyEqPlayerRenderSurface() {
+    if (g_eqPlayerRenderSurface.memDC) {
+        if (g_eqPlayerRenderSurface.oldBitmap &&
+            g_eqPlayerRenderSurface.oldBitmap != HGDI_ERROR) {
+            SelectObject(g_eqPlayerRenderSurface.memDC,
+                         g_eqPlayerRenderSurface.oldBitmap);
+        }
+    }
+    if (g_eqPlayerRenderSurface.bitmap) {
+        DeleteObject(g_eqPlayerRenderSurface.bitmap);
+    }
+    if (g_eqPlayerRenderSurface.memDC) {
+        DeleteDC(g_eqPlayerRenderSurface.memDC);
+    }
+    g_eqPlayerRenderSurface = EqPlayerRenderSurface{};
+    DestroyEqStaticWidgetCache();
+}
+
+static bool EnsureEqPlayerRenderSurface(int width, int height) {
+    if (width <= 0 || height <= 0)
+        return false;
+
+    if (g_eqPlayerRenderSurface.memDC &&
+        g_eqPlayerRenderSurface.bitmap &&
+        g_eqPlayerRenderSurface.bits &&
+        g_eqPlayerRenderSurface.width == width &&
+        g_eqPlayerRenderSurface.height == height) {
+        return true;
+    }
+
+    DestroyEqPlayerRenderSurface();
+
+    HDC mem = CreateCompatibleDC(nullptr);
+    if (!mem)
+        return false;
+
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = width;
+    bi.bmiHeader.biHeight = -height;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HBITMAP bitmap = CreateDIBSection(
+        nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bitmap || !bits) {
+        if (bitmap)
+            DeleteObject(bitmap);
+        DeleteDC(mem);
+        return false;
+    }
+
+    HGDIOBJ oldBitmap = SelectObject(mem, bitmap);
+    if (!oldBitmap || oldBitmap == HGDI_ERROR) {
+        DeleteObject(bitmap);
+        DeleteDC(mem);
+        return false;
+    }
+
+    g_eqPlayerRenderSurface.memDC = mem;
+    g_eqPlayerRenderSurface.bitmap = bitmap;
+    g_eqPlayerRenderSurface.oldBitmap = oldBitmap;
+    g_eqPlayerRenderSurface.bits = bits;
+    g_eqPlayerRenderSurface.width = width;
+    g_eqPlayerRenderSurface.height = height;
+    return true;
+}
+
+static bool ShouldRenderPlayerOnSchedulerTick() {
+    InitOverlayQpcFrequency();
+    if (g_overlayQpcFrequency.QuadPart <= 0)
+        return true;
+
+    const ULONGLONG nowQpc = OverlayQpcNow();
+    const double effectiveHz = std::max(1.0,
+        GetEffectiveRenderFps(GetSettingsSnapshot()));
+    // Keep the scheduler-side popup render below display rate. Direct input
+    // handlers and animation timers still repaint immediately when interaction
+    // needs it, while the steady media UI does not burn CPU at 120/180 Hz.
+    // Keep an open but stopped Player alive at a low idle cadence. This is
+    // deliberately independent of the desktop visualizer FPS: an open popup
+    // with no active playback should not keep repainting at 30/45 Hz.
+    double ignoredDuration = 0.0;
+    double ignoredPlaybackRate = 1.0;
+    bool playerPlaying = false;
+    bool playerHasSession = false;
+    GetEqMediaDynamicStateSnapshot(
+        ignoredDuration, ignoredPlaybackRate, playerPlaying, playerHasSession);
+    (void)playerHasSession;
+
+    // Playback stopping should not immediately force the popup to 5 FPS.
+    // Keep the previous active cadence for 3 seconds so Disk/other Player
+    // animations can decay smoothly. The grace period starts only after we
+    // have actually observed playback, so an initially idle popup remains a
+    // cheap 5 FPS surface.
+    if (playerPlaying) {
+        const ULONGLONG graceTicks = static_cast<ULONGLONG>(
+            (static_cast<double>(g_overlayQpcFrequency.QuadPart) *
+             static_cast<double>(kEqPlayerPlaybackGraceMs)) / 1000.0);
+        g_eqPlayerPlaybackGraceUntilQpc = nowQpc + graceTicks;
+    }
+
+    const bool playbackGraceActive =
+        !playerPlaying &&
+        g_eqPlayerPlaybackGraceUntilQpc != 0 &&
+        nowQpc < g_eqPlayerPlaybackGraceUntilQpc;
+
+    const bool playerNeedsActiveCadence =
+        playerPlaying || playbackGraceActive || IsAlbumPaletteTransitionActive();
+    const double schedulerPlayerHz = playerNeedsActiveCadence
+        ? (EqIsLayoutWidgetPresent(EQ_LAYOUT_DISK)
+            ? kEqPlayerDiskActiveMaxFps : kEqPlayerActiveMaxFps)
+        : kEqPlayerIdleFps;
+    const double playerHz = std::min(schedulerPlayerHz, effectiveHz);
+    const ULONGLONG minTicks = static_cast<ULONGLONG>(std::max(1.0,
+        static_cast<double>(g_overlayQpcFrequency.QuadPart) / playerHz));
+
+    const ULONGLONG lastRenderQpc =
+        g_eqLastScheduledRenderQpc.load(std::memory_order_acquire);
+    if (lastRenderQpc == 0 || nowQpc - lastRenderQpc >= minTicks) {
+        g_eqLastScheduledRenderQpc.store(nowQpc, std::memory_order_release);
+        return true;
+    }
+    return false;
+}
 static int g_eqHotBand = -1;
 static int g_eqDraggingBand = -1;
+static int g_eqHotPreset = -1;
+static int g_eqHotPresetNav = -1;
 static const wchar_t* kEqPopupClass = L"WindhawkVisualizerEQPopup";
+
+static constexpr int EQ_PLUS_PRESET_HIT = -2;
+static constexpr int EQ_PRESET_NAV_SAVED_HIT = -3;
+static constexpr int EQ_PRESET_NAV_BUILTIN_HIT = -4;
+static constexpr int EQ_PRESET_PAGE_BUILTIN = 0;
+static constexpr int EQ_PRESET_PAGE_SAVED = 1;
+static constexpr int EQ_PRESET_NAV_WIDTH = 72;
+static constexpr int EQ_PRESET_NAV_HEIGHT = 24;
+static constexpr int EQ_PRESET_HEADER_GAP = 6;
+static constexpr int EQ_PRESET_PLUS_WIDTH = 24;
+
+static std::atomic<int> g_eqPresetPage{EQ_PRESET_PAGE_BUILTIN};
+static float g_eqPresetPageAnimationProgress = 0.0f;
+static int g_eqPresetPageAnimationStart = EQ_PRESET_PAGE_BUILTIN;
+static int g_eqPresetPageAnimationTarget = EQ_PRESET_PAGE_BUILTIN;
+static ULONGLONG g_eqPresetPageAnimationStartTick = 0;
+static bool g_eqPresetPageAnimationActive = false;
+
+static constexpr std::array<const wchar_t*, VIZ_EQ_BUILTIN_PRESET_COUNT> VIZ_EQ_PRESET_NAMES = {
+    L"Flat", L"Bass Boost", L"Bass Cut", L"Treble Boost", L"Vocal",
+    L"Rock", L"Pop", L"Classical"
+};
+
+// 1.00x is neutral. Presets are deliberately moderate so they remain useful
+// as starting points instead of acting like hard limiting or a volume boost.
+static constexpr std::array<std::array<float, VIZ_EQ_BANDS>, VIZ_EQ_BUILTIN_PRESET_COUNT>
+    VIZ_EQ_PRESET_GAINS = {{
+        {{1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f}},
+        {{1.38f, 1.32f, 1.24f, 1.14f, 1.06f, 1.00f, 0.98f, 0.96f, 0.94f, 0.92f}},
+        {{0.44f, 0.60f, 0.75f, 0.94f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f}},
+        {{0.90f, 0.92f, 0.95f, 0.98f, 1.00f, 1.12f, 1.25f, 1.42f, 1.52f, 1.68f}},
+        {{0.94f, 0.93f, 1.05f, 1.16f, 1.32f, 1.28f, 1.12f, 1.06f, 0.96f, 0.93f}},
+        {{1.31f, 1.19f, 1.06f, 0.98f, 0.93f, 1.02f, 1.14f, 1.22f, 1.18f, 1.12f}},
+        {{1.10f, 1.03f, 0.98f, 0.98f, 1.04f, 1.08f, 1.13f, 1.18f, 1.14f, 1.08f}},
+        {{1.00f, 0.96f, 0.93f, 0.96f, 1.04f, 1.08f, 1.08f, 1.04f, 1.00f, 0.96f}},
+    }};
+
+static int g_eqHotPresetDelete = -1;
+static int g_eqHotMediaButton = -1;
+static bool g_eqHotVolumeMute = false;
+static bool g_eqHotPageButton = false;
+static std::array<float, VIZ_EQ_BANDS> g_eqPresetTargets{};
+static ULONGLONG g_eqLastAnimationTick = 0;
+static bool g_eqPresetAnimationActive = false;
+static bool g_eqMediaSeeking = false;
+static double g_eqMediaSeekPreviewSeconds = 0.0;
+static int g_eqLyricsScrollOffset = 0;
+static int g_eqHotLyricsLine = -1;
+static std::wstring g_eqLyricsScrollTrackKey;
+static bool g_eqLyricsScrollbarDragging = false;
+static int g_eqLyricsScrollbarDragStartY = 0;
+static int g_eqLyricsScrollbarStartOffset = 0;
+
+// Manual scrolling temporarily suspends automatic focus-line following.
+// Each wheel/scrollbar movement refreshes this deadline, so the 3.5 s delay
+// is measured from the user's last manual scroll action.
+static ULONGLONG g_eqLyricsAutoFocusResumeTick = 0;
+static constexpr ULONGLONG kEqLyricsAutoFocusPauseMs = 3500;
+
+// The Lyrics section is a mostly static surface: while a track is playing,
+// the current line usually remains unchanged for multiple Player frames.
+// Cache the rendered lyric rows and rebuild only when something that actually
+// changes their pixels changes (track/content, active line, scroll, hover,
+// style, alignment or geometry).
+struct EqLyricsRenderCache {
+    std::unique_ptr<Gdiplus::Bitmap> bitmap;
+    int width = 0;
+    int height = 0;
+    int alignment = 1;
+    int activeIndex = -2;
+    int scrollOffset = -1;
+    int hotLine = -2;
+    int styleId = EQ_POPUP_STYLE_SYSTEM;
+    bool dark = false;
+    bool available = false;
+    bool synced = false;
+    std::wstring trackKey;
+    const std::vector<LyricsLine>* linesPtr = nullptr;
+};
+static EqLyricsRenderCache g_eqLyricsRenderCache;
+
+// 0 = Media & EQ page, 1 = Settings page. The value is animated so both
+// pages slide horizontally instead of abruptly replacing each other.
+static float g_eqPageAnimationProgress = 0.0f;
+static float g_eqPageAnimationStart = 0.0f;
+static float g_eqPageAnimationTarget = 0.0f;
+static ULONGLONG g_eqPageAnimationStartTick = 0;
+static bool g_eqPageAnimationActive = false;
+
+static constexpr UINT WM_EQ_NATIVE_TRAY = WM_APP + 0x2A3;
+static constexpr UINT kEqNativeTrayIconId = 0x4E51;
+static constexpr wchar_t kEqNativeTrayWindowClass[] =
+    L"WindhawkVisualizerEQTrayMessageWindow";
+static const GUID kEqNativeTrayGuid =
+    {0x6ad3e8d6, 0x72f1, 0x4c7e,
+     {0x9c, 0x83, 0x7f, 0x3f, 0x39, 0x91, 0x0d, 0x7d}};
+static HWND g_eqNativeTrayMessageHwnd = nullptr;
+static bool g_eqNativeTrayRegistered = false;
+static UINT g_eqTaskbarCreatedMessage = 0;
+static constexpr UINT kEqNativeTrayRetryTimerId = 0x4E52;
+static constexpr UINT kEqNativeTrayRetryDelayMs = 300;
+static constexpr int kEqNativeTrayMaxRetryCount = 8;
+static int g_eqNativeTrayRetryCount = 0;
+
+static LRESULT CALLBACK EqNativeTrayMessageProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static int EqPopupScalePx(int value, double scale);
 static double EqGetPopupDpiScale();
+static void RenderEqPopup(HWND hwnd);
 
 static bool IsDarkThemeEnabled() {
     DWORD data = 0;
@@ -7957,36 +14030,1139 @@ static bool IsDarkThemeEnabled() {
     }
     return true;
 }
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
 static void ApplyEqPopupWindowAttributes(HWND hwnd) {
-    if (!hwnd)
+    if (!hwnd || !IsWindow(hwnd))
         return;
 
+    // The Player is a layered WS_POPUP and paints its actual surface itself.
+    // This attribute only keeps DWM's notion of the window theme in sync; it
+    // does not paint a background over our adaptive section surfaces.
     const BOOL dark = IsDarkThemeEnabled() ? TRUE : FALSE;
-    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                          &dark, sizeof(dark));
+    DwmSetWindowAttribute(
+        hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+}
+struct EqPopupStyle {
+    int id = EQ_POPUP_STYLE_SYSTEM;
+    Gdiplus::Color background;
+    Gdiplus::Color panel;
+    Gdiplus::Color text;
+    Gdiplus::Color muted;
+    Gdiplus::Color accent;
+    Gdiplus::Color track;
+    Gdiplus::Color button;
+};
+
+static EqPopupStyle MakeEqPopupStyle(int id, bool dark) {
+    EqPopupStyle s{};
+    s.id = id;
+
+    auto setTheme = [&](DWORD lightBg, DWORD lightPanel, DWORD lightText,
+                        DWORD lightMuted, DWORD lightAccent,
+                        DWORD darkBg, DWORD darkPanel, DWORD darkText,
+                        DWORD darkMuted, DWORD darkAccent) {
+        const DWORD bg = dark ? darkBg : lightBg;
+        const DWORD panel = dark ? darkPanel : lightPanel;
+        const DWORD text = dark ? darkText : lightText;
+        const DWORD muted = dark ? darkMuted : lightMuted;
+        const DWORD accent = dark ? darkAccent : lightAccent;
+
+        s.background = Gdiplus::Color(
+            245, GetRValue(bg), GetGValue(bg), GetBValue(bg));
+        s.panel = Gdiplus::Color(
+            246, GetRValue(panel), GetGValue(panel), GetBValue(panel));
+        s.text = Gdiplus::Color(
+            255, GetRValue(text), GetGValue(text), GetBValue(text));
+        s.muted = Gdiplus::Color(
+            215, GetRValue(muted), GetGValue(muted), GetBValue(muted));
+        s.accent = Gdiplus::Color(
+            255, GetRValue(accent), GetGValue(accent), GetBValue(accent));
+        s.track = Gdiplus::Color(
+            105, GetRValue(muted), GetGValue(muted), GetBValue(muted));
+        s.button = Gdiplus::Color(
+            228, GetRValue(panel), GetGValue(panel), GetBValue(panel));
+    };
+
+    switch (id) {
+    case EQ_POPUP_STYLE_AMETHYST:
+        setTheme(0xFAF7FF, 0xFFFFFF, 0x2B2435, 0x6E6579, 0x7C4DFF,
+                 0x171322, 0x241D31, 0xF5EEFF, 0xB7A9C8, 0xB58CFF);
+        break;
+    case EQ_POPUP_STYLE_OCEAN:
+        // Corrected: Ocean/Sunset were previously swapped.
+        setTheme(0xFFF8F2, 0xFFFFFF, 0x45271D, 0x8A6D61, 0xF28C5B,
+                 0x24180F, 0x352018, 0xFFF4EC, 0xC6A294, 0xFFA66E);
+        break;
+    case EQ_POPUP_STYLE_SAKURA:
+        setTheme(0xFFF7FB, 0xFFFFFF, 0x432333, 0x8A6878, 0xE56B9F,
+                 0x21141B, 0x321D28, 0xFFF0F7, 0xC7A1B5, 0xFF83B6);
+        break;
+    case EQ_POPUP_STYLE_FOREST:
+        setTheme(0xF4FBF6, 0xFFFFFF, 0x20392B, 0x638071, 0x4DAA6A,
+                 0x101A15, 0x192A21, 0xECFFF2, 0x9FC4AC, 0x70D68C);
+        break;
+    case EQ_POPUP_STYLE_SUNSET:
+        // Corrected: Ocean/Sunset were previously swapped.
+        setTheme(0xF3FAFF, 0xFFFFFF, 0x173247, 0x607A8A, 0x2D9CDB,
+                 0x0E1821, 0x162633, 0xE9F7FF, 0x9EBAC9, 0x55B8ED);
+        break;
+    case EQ_POPUP_STYLE_EMBER:
+        setTheme(0xF5F7FF, 0xFFFFFF, 0x202B4A, 0x68738F, 0x657DFF,
+                 0x101529, 0x1B2341, 0xEDF0FF, 0xA6B0D1, 0x8297FF);
+        break;
+    case EQ_POPUP_STYLE_NEON:
+        setTheme(0xFFF4FB, 0xFFFFFF, 0x3C1D3A, 0x8B6485, 0xE83DAB,
+                 0x201020, 0x321A33, 0xFFF0FB, 0xC9A1C8, 0xFF62C7);
+        break;
+    case EQ_POPUP_STYLE_TERMINAL:
+        setTheme(0xF2FFF4, 0xFFFFFF, 0x18341E, 0x5E7964, 0x2BA84A,
+                 0x0D1710, 0x16251A, 0xE5FFEA, 0x93B79D, 0x56D878);
+        break;
+    case EQ_POPUP_STYLE_GRAPHITE:
+        setTheme(0xF1F2F4, 0xFFFFFF, 0x24272E, 0x6E747E, 0x59636F,
+                 0x141619, 0x20242A, 0xF2F4F7, 0xAAB2BC, 0x9BA8B8);
+        break;
+    case EQ_POPUP_STYLE_HAZARD:
+        setTheme(0xFFF8EA, 0xFFFFFF, 0x4A3418, 0x8A7650, 0xD48B00,
+                 0x211A0B, 0x302611, 0xFFF4D8, 0xC8B47C, 0xFFC43D);
+        break;
+    default:
+        s.id = EQ_POPUP_STYLE_SYSTEM;
+        s.background = Gdiplus::Color(
+            245, dark ? 28 : 242, dark ? 28 : 242, dark ? 30 : 244);
+        s.panel = Gdiplus::Color(
+            248, dark ? 24 : 239, dark ? 24 : 239, dark ? 26 : 241);
+        s.text = Gdiplus::Color(
+            255, dark ? 245 : 30, dark ? 245 : 30, dark ? 248 : 30);
+        s.muted = Gdiplus::Color(
+            205, dark ? 205 : 90, dark ? 205 : 90, dark ? 210 : 95);
+        s.accent = Gdiplus::Color(255, 105, 165, 255);
+        s.track = Gdiplus::Color(
+            105, dark ? 150 : 125, dark ? 150 : 125, dark ? 155 : 130);
+        s.button = Gdiplus::Color(
+            dark ? 235 : 245, dark ? 47 : 236, dark ? 47 : 236, dark ? 50 : 238);
+        break;
+    }
+    return s;
+}
+
+static int EqPopupStyleIdFromSetting(PCWSTR value) {
+    if (!value)
+        return EQ_POPUP_STYLE_SYSTEM;
+
+    struct NameMap { const wchar_t* name; int id; };
+    static constexpr NameMap map[] = {
+        {L"system", EQ_POPUP_STYLE_SYSTEM},
+        {L"amethyst", EQ_POPUP_STYLE_AMETHYST},
+        {L"ocean", EQ_POPUP_STYLE_OCEAN},
+        {L"sakura", EQ_POPUP_STYLE_SAKURA},
+        {L"forest", EQ_POPUP_STYLE_FOREST},
+        {L"sunset", EQ_POPUP_STYLE_SUNSET},
+        {L"ember", EQ_POPUP_STYLE_EMBER},
+        {L"neon", EQ_POPUP_STYLE_NEON},
+        {L"terminal", EQ_POPUP_STYLE_TERMINAL},
+        {L"graphite", EQ_POPUP_STYLE_GRAPHITE},
+        {L"hazard", EQ_POPUP_STYLE_HAZARD},
+    };
+
+    for (const auto& item : map) {
+        if (wcscmp(value, item.name) == 0)
+            return item.id;
+    }
+    return EQ_POPUP_STYLE_SYSTEM;
+}
+
+static int EqTrayButtonPositionFromSetting(PCWSTR value) {
+    if (!value)
+        return EQ_TRAY_BUTTON_POSITION_DEFAULT;
+
+    struct NameMap { const wchar_t* name; int id; };
+    static constexpr NameMap map[] = {
+        {L"tray_left", EQ_TRAY_BUTTON_POSITION_TRAY_LEFT},
+        {L"tray_right", EQ_TRAY_BUTTON_POSITION_TRAY_RIGHT},
+        {L"left_of_show_desktop", EQ_TRAY_BUTTON_POSITION_LEFT_OF_SHOW_DESKTOP},
+        {L"right_of_sound_output", EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SOUND_OUTPUT},
+        {L"left_of_sound_output", EQ_TRAY_BUTTON_POSITION_LEFT_OF_SOUND_OUTPUT},
+        {L"right_of_language", EQ_TRAY_BUTTON_POSITION_RIGHT_OF_LANGUAGE},
+        {L"left_of_language", EQ_TRAY_BUTTON_POSITION_LEFT_OF_LANGUAGE},
+        {L"right_of_show_hidden_icons", EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SHOW_HIDDEN_ICONS},
+    };
+
+    for (const auto& item : map) {
+        if (wcscmp(value, item.name) == 0)
+            return item.id;
+    }
+    return EQ_TRAY_BUTTON_POSITION_DEFAULT;
+}
+
+static bool EqPopupStyleRenderDark(bool systemDark) {
+    // All popup themes now have light/dark variants and follow the Windows
+    // application theme. There are no fixed-theme skins anymore.
+    return systemDark;
+}
+
+static EqLayoutWidgetState MakeDefaultEqLayoutWidget(int id) {
+    EqLayoutWidgetState w{};
+    w.id = id;
+    w.rotation = 0;
+    w.zOrder = id;
+    w.present = true;
+    w.textAlignment = 1;
+    if (id == EQ_LAYOUT_MEDIA) {
+        w.x = 0; w.y = 0; w.w = 700; w.h = 100;
+    } else if (id == EQ_LAYOUT_EQ) {
+        w.x = 0; w.y = 110; w.w = 480; w.h = 410;
+    } else if (id == EQ_LAYOUT_PRESETS) {
+        w.x = 490; w.y = 110; w.w = 210; w.h = 410;
+    } else if (id == EQ_LAYOUT_LYRICS) {
+        // New interactive lyrics section is opt-in, so the existing sections
+        // keep their current default arrangement unchanged.
+        w.x = 140; w.y = 130; w.w = 420; w.h = 360;
+        w.present = false;
+    } else if (id == EQ_LAYOUT_DISK) {
+        // Disk is also opt-in. It is large enough to leave room for the
+        // circular FFT ring around the artwork.
+        w.x = 220; w.y = 140; w.w = 260; w.h = 260;
+        w.present = false;
+    } else if (id == EQ_LAYOUT_MINI_VISUALIZER) {
+        // Mini Visualizer is opt-in. Keep it clearly rectangular so its
+        // orientation is unambiguous in the builder.
+        w.x = 170; w.y = 540; w.w = 360; w.h = 100;
+        w.present = false;
+    } else {
+        // Volume is opt-in and uses the same compact rectangular sizing rules
+        // as Mini Visualizer, with orientation inferred from its aspect ratio.
+        w.x = 470; w.y = 540; w.w = 200; w.h = 40;
+        w.present = false;
+    }
+    return w;
+}
+
+static int EqLayoutMinWidth(int id) {
+    switch (id) {
+    case EQ_LAYOUT_MEDIA: return 220;
+    case EQ_LAYOUT_EQ: return 220;
+    case EQ_LAYOUT_PRESETS: return 150;
+    case EQ_LAYOUT_LYRICS: return 180;
+    case EQ_LAYOUT_DISK: return 150;
+    case EQ_LAYOUT_MINI_VISUALIZER: return 20;
+    case EQ_LAYOUT_VOLUME: return 20;
+    default: return 100;
+    }
+}
+
+static int EqLayoutMinHeight(int id) {
+    switch (id) {
+    case EQ_LAYOUT_MEDIA: return 100;
+    case EQ_LAYOUT_EQ: return 180;
+    case EQ_LAYOUT_PRESETS: return 140;
+    case EQ_LAYOUT_LYRICS: return 100;
+    case EQ_LAYOUT_DISK: return 150;
+    case EQ_LAYOUT_MINI_VISUALIZER: return 20;
+    case EQ_LAYOUT_VOLUME: return 20;
+    default: return 70;
+    }
+}
+
+static int EqLayoutMaxHeight(int id) {
+    switch (id) {
+    case EQ_LAYOUT_MINI_VISUALIZER:
+    case EQ_LAYOUT_VOLUME: return 220;
+    default: return EQ_LAYOUT_CANVAS_H;
+    }
+}
+
+static int EqSnap10(int value) {
+    return static_cast<int>(std::lround(static_cast<double>(value) /
+                                         static_cast<double>(EQ_LAYOUT_GRID))) * EQ_LAYOUT_GRID;
+}
+
+static void ClampEqLayoutWidget(EqLayoutWidgetState& w) {
+    w.x = std::clamp(w.x, 0, EQ_LAYOUT_CANVAS_W - 1);
+    w.y = std::clamp(w.y, 0, EQ_LAYOUT_CANVAS_H - 1);
+    w.w = std::clamp(w.w, EqLayoutMinWidth(w.id), EQ_LAYOUT_CANVAS_W);
+    w.h = std::clamp(w.h, EqLayoutMinHeight(w.id), EqLayoutMaxHeight(w.id));
+    if (w.id == EQ_LAYOUT_MINI_VISUALIZER || w.id == EQ_LAYOUT_VOLUME) {
+        // Mini Visualizer and Volume must remain rectangular, never square.
+        // Keep a noticeable aspect difference so compact sections do not
+        // flicker between horizontal and vertical layouts near 1:1.
+        constexpr int minDifference = 20;
+        if (std::abs(w.w - w.h) < minDifference) {
+            if (w.w >= w.h) {
+                w.w = std::min(EQ_LAYOUT_CANVAS_W, w.h + minDifference);
+                if (w.w == EQ_LAYOUT_CANVAS_W && w.w - w.h < minDifference)
+                    w.h = std::max(EqLayoutMinHeight(w.id), w.w - minDifference);
+            } else {
+                w.h = std::min(EqLayoutMaxHeight(w.id), w.w + minDifference);
+                if (w.h == EqLayoutMaxHeight(w.id) && w.h - w.w < minDifference)
+                    w.w = std::max(EqLayoutMinWidth(w.id), w.h - minDifference);
+            }
+        }
+    }
+    w.x = std::clamp(w.x, 0, std::max(0, EQ_LAYOUT_CANVAS_W - w.w));
+    w.y = std::clamp(w.y, 0, std::max(0, EQ_LAYOUT_CANVAS_H - w.h));
+    w.rotation = ((w.rotation % 360) + 360) % 360;
+    w.rotation = (w.rotation / 90) * 90;
+    w.textAlignment = std::clamp(w.textAlignment, 0, 2);
+    if (w.id != EQ_LAYOUT_MEDIA && w.id != EQ_LAYOUT_LYRICS)
+        w.textAlignment = 1;
+}
+
+static EqLayoutWidgetState* EqGetLayoutWidget(int id) {
+    for (auto& w : g_eqLayoutWidgets) {
+        if (w.id == id)
+            return &w;
+    }
+    return nullptr;
+}
+
+static const EqLayoutWidgetState* EqGetLayoutWidgetConst(int id) {
+    for (const auto& w : g_eqLayoutWidgets) {
+        if (w.id == id)
+            return &w;
+    }
+    return nullptr;
+}
+
+static void PublishEqLayoutWidgetPresenceSnapshot() {
+    for (int i = 0; i < EQ_LAYOUT_WIDGET_COUNT; ++i) {
+        g_eqLayoutWidgetPresenceSnapshot[static_cast<size_t>(i)].store(
+            g_eqLayoutWidgets[static_cast<size_t>(i)].present,
+            std::memory_order_release);
+    }
+}
+
+static bool EqIsLayoutWidgetPresent(int id) {
+    if (id < 0 || id >= EQ_LAYOUT_WIDGET_COUNT)
+        return false;
+    return g_eqLayoutWidgetPresenceSnapshot[static_cast<size_t>(id)].load(
+        std::memory_order_acquire);
+}
+
+static void EqNormalizeLayoutZOrder() {
+    std::array<int, EQ_LAYOUT_WIDGET_COUNT> order{};
+    for (int i = 0; i < EQ_LAYOUT_WIDGET_COUNT; ++i)
+        order[static_cast<size_t>(i)] = i;
+
+    std::sort(order.begin(), order.end(), [](int a, int b) {
+        const auto& wa = g_eqLayoutWidgets[static_cast<size_t>(a)];
+        const auto& wb = g_eqLayoutWidgets[static_cast<size_t>(b)];
+        if (wa.zOrder != wb.zOrder)
+            return wa.zOrder < wb.zOrder;
+        return wa.id < wb.id;
+    });
+
+    for (int rank = 0; rank < EQ_LAYOUT_WIDGET_COUNT; ++rank)
+        g_eqLayoutWidgets[static_cast<size_t>(order[static_cast<size_t>(rank)])].zOrder = rank;
+}
+
+static void EqBringLayoutWidgetToFront(int id) {
+    auto* selected = EqGetLayoutWidget(id);
+    if (!selected)
+        return;
+
+    int maxZ = selected->zOrder;
+    for (const auto& w : g_eqLayoutWidgets)
+        maxZ = std::max(maxZ, w.zOrder);
+
+    if (selected->zOrder != maxZ) {
+        selected->zOrder = maxZ + 1;
+        EqNormalizeLayoutZOrder();
+    }
+}
+
+static std::array<int, EQ_LAYOUT_WIDGET_COUNT> EqGetLayoutZOrderIndices() {
+    std::array<int, EQ_LAYOUT_WIDGET_COUNT> order{};
+    for (int i = 0; i < EQ_LAYOUT_WIDGET_COUNT; ++i)
+        order[static_cast<size_t>(i)] = i;
+    std::sort(order.begin(), order.end(), [](int a, int b) {
+        const auto& wa = g_eqLayoutWidgets[static_cast<size_t>(a)];
+        const auto& wb = g_eqLayoutWidgets[static_cast<size_t>(b)];
+        if (wa.zOrder != wb.zOrder)
+            return wa.zOrder < wb.zOrder;
+        return wa.id < wb.id;
+    });
+    return order;
+}
+
+static void ResetEqLayoutToDefaults() {
+    for (int i = 0; i < EQ_LAYOUT_WIDGET_COUNT; ++i)
+        g_eqLayoutWidgets[static_cast<size_t>(i)] = MakeDefaultEqLayoutWidget(i);
+}
+
+static int EqLayoutGetStoredField(int id, const wchar_t* field, int fallback) {
+    wchar_t key[128]{};
+    swprintf_s(key, L"MediaEQ.layout.%d.%s", id, field);
+    return Wh_GetIntValue(key, fallback);
+}
+
+static void EqLayoutSetStoredField(int id, const wchar_t* field, int value) {
+    wchar_t key[128]{};
+    swprintf_s(key, L"MediaEQ.layout.%d.%s", id, field);
+    Wh_SetIntValue(key, value);
+}
+
+static void LoadEqLayoutSettings() {
+    ResetEqLayoutToDefaults();
+
+    const int version = Wh_GetIntValue(L"MediaEQ.layout.version", 0);
+    if (version == EQ_LAYOUT_STORAGE_VERSION) {
+        for (auto& w : g_eqLayoutWidgets) {
+            const auto defaults = MakeDefaultEqLayoutWidget(w.id);
+            w.x = EqSnap10(EqLayoutGetStoredField(w.id, L"x", defaults.x));
+            w.y = EqSnap10(EqLayoutGetStoredField(w.id, L"y", defaults.y));
+            w.w = EqSnap10(EqLayoutGetStoredField(w.id, L"w", defaults.w));
+            w.h = EqSnap10(EqLayoutGetStoredField(w.id, L"h", defaults.h));
+            w.rotation = EqLayoutGetStoredField(w.id, L"rotation", defaults.rotation);
+            w.present = EqLayoutGetStoredField(w.id, L"present", defaults.present ? 1 : 0) != 0;
+            w.backgroundEnabled = EqLayoutGetStoredField(
+                w.id, L"backgroundEnabled", defaults.backgroundEnabled ? 1 : 0) != 0;
+            w.backgroundCircle = EqLayoutGetStoredField(
+                w.id, L"backgroundCircle", 0) != 0;
+            w.zOrder = EqLayoutGetStoredField(w.id, L"zOrder", w.id);
+            w.textAlignment = EqLayoutGetStoredField(w.id, L"textAlignment", defaults.textAlignment);
+            if (w.id != EQ_LAYOUT_DISK)
+                w.backgroundCircle = false;
+            if (w.id != EQ_LAYOUT_EQ)
+                w.rotation = 0;
+            ClampEqLayoutWidget(w);
+        }
+        EqNormalizeLayoutZOrder();
+        g_eqLayoutLoaded = true;
+        PublishEqLayoutWidgetPresenceSnapshot();
+        return;
+    }
+
+    if (version >= 1 && version <= 7) {
+        // Preserve an existing pre-disk Layout Builder arrangement exactly, then
+        // add the newer optional sections as absent. Do not reset the user's old
+        // layout.
+        for (auto& w : g_eqLayoutWidgets) {
+            if (version < 3 &&
+                (w.id == EQ_LAYOUT_DISK ||
+                 (version == 1 && w.id == EQ_LAYOUT_LYRICS)))
+                continue;
+            const auto defaults = MakeDefaultEqLayoutWidget(w.id);
+            w.x = EqSnap10(EqLayoutGetStoredField(w.id, L"x", defaults.x));
+            w.y = EqSnap10(EqLayoutGetStoredField(w.id, L"y", defaults.y));
+            w.w = EqSnap10(EqLayoutGetStoredField(w.id, L"w", defaults.w));
+            w.h = EqSnap10(EqLayoutGetStoredField(w.id, L"h", defaults.h));
+            w.rotation = EqLayoutGetStoredField(w.id, L"rotation", defaults.rotation);
+            w.present = EqLayoutGetStoredField(w.id, L"present", defaults.present ? 1 : 0) != 0;
+            w.backgroundEnabled = true;
+            w.backgroundCircle = false;
+            w.zOrder = w.id;
+            w.textAlignment = 1;
+            if (w.id != EQ_LAYOUT_EQ)
+                w.rotation = 0;
+            ClampEqLayoutWidget(w);
+        }
+        // Migrate older layouts without discarding existing placements.
+        // Lyrics/Disk, background shape, z-order, text alignment, Mini
+        // Visualizer and Volume were added across later layout versions.
+        if (version == 1)
+            g_eqLayoutWidgets[3] = MakeDefaultEqLayoutWidget(EQ_LAYOUT_LYRICS);
+        if (version < 3)
+            g_eqLayoutWidgets[4] = MakeDefaultEqLayoutWidget(EQ_LAYOUT_DISK);
+        g_eqLayoutLoaded = true;
+        SaveEqLayoutSettings();
+        return;
+    }
+
+    // One-time migration from the old Show media section toggle. A disabled
+    // media section becomes an absent media widget; all other defaults are
+    // preserved exactly as before.
+    const bool legacyShowMedia =
+        Wh_GetIntValue(L"MediaEQ.showMediaSection", 1) != 0;
+    if (!legacyShowMedia) {
+        if (auto* media = EqGetLayoutWidget(EQ_LAYOUT_MEDIA))
+            media->present = false;
+    }
+    g_eqLayoutLoaded = true;
+    SaveEqLayoutSettings();
+}
+
+static void SaveEqLayoutSettings() {
+    // Publish before persistent writes: Wh_SetIntValue can synchronously
+    // re-enter Wh_ModSettingsChanged on some Windhawk builds.
+    PublishEqLayoutWidgetPresenceSnapshot();
+    Wh_SetIntValue(L"MediaEQ.layout.version", EQ_LAYOUT_STORAGE_VERSION);
+    Wh_SetIntValue(L"MediaEQ.layout.canvas.w", EQ_LAYOUT_CANVAS_W);
+    Wh_SetIntValue(L"MediaEQ.layout.canvas.h", EQ_LAYOUT_CANVAS_H);
+    for (const auto& w : g_eqLayoutWidgets) {
+        EqLayoutSetStoredField(w.id, L"x", w.x);
+        EqLayoutSetStoredField(w.id, L"y", w.y);
+        EqLayoutSetStoredField(w.id, L"w", w.w);
+        EqLayoutSetStoredField(w.id, L"h", w.h);
+        EqLayoutSetStoredField(w.id, L"rotation", w.rotation);
+        EqLayoutSetStoredField(w.id, L"present", w.present ? 1 : 0);
+        EqLayoutSetStoredField(w.id, L"backgroundEnabled", w.backgroundEnabled ? 1 : 0);
+        EqLayoutSetStoredField(w.id, L"backgroundCircle",
+                               (w.id == EQ_LAYOUT_DISK && w.backgroundCircle) ? 1 : 0);
+        EqLayoutSetStoredField(w.id, L"zOrder", w.zOrder);
+        EqLayoutSetStoredField(w.id, L"textAlignment", w.textAlignment);
+    }
+}
+
+static EqPopupPlacementState EqGetDefaultPopupPlacement(int aspect) {
+    (void)aspect;
+    return EqPopupPlacementState{};
+}
+
+static int EqPopupPlacementGetStoredField(int aspect, const wchar_t* field, int fallback) {
+    wchar_t key[160]{};
+    swprintf_s(key, L"MediaEQ.popupPlacement.%d.%s", aspect, field);
+    return Wh_GetIntValue(key, fallback);
+}
+
+static void EqPopupPlacementSetStoredField(int aspect, const wchar_t* field, int value) {
+    wchar_t key[160]{};
+    swprintf_s(key, L"MediaEQ.popupPlacement.%d.%s", aspect, field);
+    Wh_SetIntValue(key, value);
+}
+
+static void ClampEqPopupPlacementState(EqPopupPlacementState& state) {
+    // Popup and cross are intentionally independent. The popup center is only
+    // normalized screen position; the canvas-bound clamp is handled separately
+    // because it depends on the popup preview size.
+    state.popupCenterX = std::clamp(state.popupCenterX, 0, 1000);
+    state.popupCenterY = std::clamp(state.popupCenterY, 0, 1000);
+    // Keep the cross away from the exact outer edge so all four guide regions remain usable.
+    state.crossX = std::clamp(state.crossX, 1, 999);
+    state.crossY = std::clamp(state.crossY, 1, 999);
+}
+
+static POINT EqGetPopupPlacementCenterNormalized(const EqPopupPlacementState& state) {
+    return POINT{
+        std::clamp(state.popupCenterX, 0, 1000),
+        std::clamp(state.popupCenterY, 0, 1000)
+    };
+}
+
+static void EqSetPopupPlacementFromCenterNormalized(EqPopupPlacementState& state,
+                                                     int centerX, int centerY) {
+    state.popupCenterX = std::clamp(centerX, 0, 1000);
+    state.popupCenterY = std::clamp(centerY, 0, 1000);
+    ClampEqPopupPlacementState(state);
+}
+
+static constexpr int EQ_POPUP_PLACEMENT_STORAGE_VERSION = 3;
+
+static void LoadEqPopupPlacementSettings() {
+    g_eqPopupPlacementAspect = std::clamp(
+        Wh_GetIntValue(L"MediaEQ.popupPlacement.aspect", EQ_POPUP_ASPECT_16_9),
+        0, EQ_POPUP_ASPECT_COUNT - 1);
+    const int version = Wh_GetIntValue(L"MediaEQ.popupPlacement.version", 0);
+
+    for (int aspect = 0; aspect < EQ_POPUP_ASPECT_COUNT; ++aspect) {
+        auto state = EqGetDefaultPopupPlacement(aspect);
+        state.crossX = std::clamp(EqPopupPlacementGetStoredField(aspect, L"crossX", state.crossX), 1, 999);
+        state.crossY = std::clamp(EqPopupPlacementGetStoredField(aspect, L"crossY", state.crossY), 1, 999);
+
+        if (version >= EQ_POPUP_PLACEMENT_STORAGE_VERSION) {
+            // Version 3 stores the popup center directly, so popup movement is
+            // completely independent from the cross/guide position.
+            state.popupCenterX = EqPopupPlacementGetStoredField(aspect, L"popupCenterX", state.popupCenterX);
+            state.popupCenterY = EqPopupPlacementGetStoredField(aspect, L"popupCenterY", state.popupCenterY);
+            ClampEqPopupPlacementState(state);
+        } else if (version >= 2) {
+            // Migrate the version-2 quadrant + offset representation to the new
+            // independent center representation without visibly moving the popup.
+            const int legacyQuadrant = std::clamp(
+                EqPopupPlacementGetStoredField(aspect, L"popupQuadrant", 3), 0, 3);
+            const int legacyOffsetX = std::clamp(
+                EqPopupPlacementGetStoredField(aspect, L"popupOffsetX", 0), -1000, 1000);
+            const int legacyOffsetY = std::clamp(
+                EqPopupPlacementGetStoredField(aspect, L"popupOffsetY", 0), -1000, 1000);
+            const bool rightSide = (legacyQuadrant & 1) != 0;
+            const bool bottomSide = (legacyQuadrant & 2) != 0;
+            const int left = rightSide ? state.crossX : 0;
+            const int right = rightSide ? 1000 : state.crossX;
+            const int top = bottomSide ? state.crossY : 0;
+            const int bottom = bottomSide ? 1000 : state.crossY;
+            state.popupCenterX = (left + right) / 2 + legacyOffsetX;
+            state.popupCenterY = (top + bottom) / 2 + legacyOffsetY;
+            ClampEqPopupPlacementState(state);
+        } else {
+            // Migrate the original absolute 0..1000 center format.
+            const int oldPopupX = EqPopupPlacementGetStoredField(aspect, L"popupX", state.popupCenterX);
+            const int oldPopupY = EqPopupPlacementGetStoredField(aspect, L"popupY", state.popupCenterY);
+            EqSetPopupPlacementFromCenterNormalized(state, oldPopupX, oldPopupY);
+        }
+
+        g_eqPopupPlacement[static_cast<size_t>(aspect)] = state;
+    }
+    g_eqPopupPlacementLoaded = true;
+}
+
+static void SaveEqPopupPlacementSettings() {
+    Wh_SetIntValue(L"MediaEQ.popupPlacement.version", EQ_POPUP_PLACEMENT_STORAGE_VERSION);
+    Wh_SetIntValue(L"MediaEQ.popupPlacement.aspect", g_eqPopupPlacementAspect);
+    for (int aspect = 0; aspect < EQ_POPUP_ASPECT_COUNT; ++aspect) {
+        const auto& state = g_eqPopupPlacement[static_cast<size_t>(aspect)];
+        EqPopupPlacementSetStoredField(aspect, L"popupCenterX", state.popupCenterX);
+        EqPopupPlacementSetStoredField(aspect, L"popupCenterY", state.popupCenterY);
+        EqPopupPlacementSetStoredField(aspect, L"crossX", state.crossX);
+        EqPopupPlacementSetStoredField(aspect, L"crossY", state.crossY);
+    }
+}
+
+static RECT EqGetLayoutRectRaw(int id) {
+    const auto* w = EqGetLayoutWidgetConst(id);
+    if (!w || !w->present)
+        return RECT{0, 0, 0, 0};
+    return RECT{w->x, w->y, w->x + w->w, w->y + w->h};
+}
+
+static RECT EqGetLayoutRect(int id) {
+    RECT r = EqGetLayoutRectRaw(id);
+    if (r.right <= r.left || r.bottom <= r.top)
+        return r;
+    r.left -= g_eqPopupContentOffsetX;
+    r.right -= g_eqPopupContentOffsetX;
+    r.top -= g_eqPopupContentOffsetY;
+    r.bottom -= g_eqPopupContentOffsetY;
+    return r;
+}
+
+static bool EqPointInLayoutRect(int id, int x, int y) {
+    const RECT r = EqGetLayoutRect(id);
+    return r.right > r.left && PtInRect(&r, POINT{x, y}) != FALSE;
+}
+
+static std::mutex g_eqSystemVolumeMutex;
+static float g_eqCachedSystemVolume = 0.50f;
+static bool g_eqCachedSystemMuted = false;
+static bool g_eqSystemVolumeCacheValid = false;
+static ULONGLONG g_eqSystemVolumeLastPollMs = 0;
+static bool g_eqVolumeDragging = false;
+static ULONGLONG g_eqVolumeLastDragSetMs = 0;
+
+// Activate the default render endpoint only for a short operation. This avoids
+// keeping an endpoint COM interface alive across Explorer apartment changes.
+template <typename Callback>
+static bool EqWithSystemEndpointVolume(Callback&& callback) {
+    const HRESULT apartmentHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool uninitializeApartment = SUCCEEDED(apartmentHr);
+    if (FAILED(apartmentHr) && apartmentHr != RPC_E_CHANGED_MODE)
+        return false;
+
+    IMMDeviceEnumerator* enumerator = nullptr;
+    IMMDevice* device = nullptr;
+    IAudioEndpointVolume* endpoint = nullptr;
+    HRESULT hr = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+        IID_PPV_ARGS(&enumerator));
+    if (SUCCEEDED(hr))
+        hr = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &device);
+    if (SUCCEEDED(hr))
+        hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                              nullptr, reinterpret_cast<void**>(&endpoint));
+    if (SUCCEEDED(hr) && endpoint)
+        hr = callback(endpoint);
+
+    if (endpoint) endpoint->Release();
+    if (device) device->Release();
+    if (enumerator) enumerator->Release();
+    if (uninitializeApartment) CoUninitialize();
+    return SUCCEEDED(hr);
+}
+
+static void EqRefreshSystemVolumeCache(bool force = false) {
+    const ULONGLONG now = GetTickCount64();
+    {
+        std::lock_guard<std::mutex> lock(g_eqSystemVolumeMutex);
+        if (!force && now >= g_eqSystemVolumeLastPollMs &&
+            now - g_eqSystemVolumeLastPollMs < 450)
+            return;
+        g_eqSystemVolumeLastPollMs = now;
+    }
+
+    float volume = 0.50f;
+    BOOL muted = FALSE;
+    const bool ok = EqWithSystemEndpointVolume([&](IAudioEndpointVolume* endpoint) -> HRESULT {
+        HRESULT hr = endpoint->GetMasterVolumeLevelScalar(&volume);
+        if (SUCCEEDED(hr))
+            hr = endpoint->GetMute(&muted);
+        return hr;
+    });
+    if (!ok)
+        return;
+
+    std::lock_guard<std::mutex> lock(g_eqSystemVolumeMutex);
+    g_eqCachedSystemVolume = std::clamp(volume, 0.0f, 1.0f);
+    g_eqCachedSystemMuted = muted != FALSE;
+    g_eqSystemVolumeCacheValid = true;
+    g_eqSystemVolumeLastPollMs = now;
+}
+
+struct EqSystemVolumeSnapshot {
+    float volume = 0.50f;
+    bool muted = false;
+    bool valid = false;
+};
+
+static EqSystemVolumeSnapshot EqGetSystemVolumeSnapshot(bool preview = false) {
+    if (preview)
+        return EqSystemVolumeSnapshot{0.62f, false, true};
+    EqRefreshSystemVolumeCache(false);
+    std::lock_guard<std::mutex> lock(g_eqSystemVolumeMutex);
+    return EqSystemVolumeSnapshot{
+        g_eqCachedSystemVolume, g_eqCachedSystemMuted,
+        g_eqSystemVolumeCacheValid};
+}
+
+static bool EqSetSystemVolumeScalar(float requestedVolume) {
+    const float volume = std::clamp(requestedVolume, 0.0f, 1.0f);
+    const bool ok = EqWithSystemEndpointVolume([&](IAudioEndpointVolume* endpoint) -> HRESULT {
+        HRESULT hr = endpoint->SetMasterVolumeLevelScalar(volume, nullptr);
+        if (SUCCEEDED(hr))
+            hr = endpoint->SetMute(FALSE, nullptr);
+        return hr;
+    });
+    if (ok) {
+        std::lock_guard<std::mutex> lock(g_eqSystemVolumeMutex);
+        g_eqCachedSystemVolume = volume;
+        g_eqCachedSystemMuted = false;
+        g_eqSystemVolumeCacheValid = true;
+        g_eqSystemVolumeLastPollMs = GetTickCount64();
+    }
+    return ok;
+}
+
+static bool EqToggleSystemMute() {
+    BOOL newMuted = FALSE;
+    const bool ok = EqWithSystemEndpointVolume([&](IAudioEndpointVolume* endpoint) -> HRESULT {
+        BOOL muted = FALSE;
+        HRESULT hr = endpoint->GetMute(&muted);
+        if (FAILED(hr))
+            return hr;
+        newMuted = muted ? FALSE : TRUE;
+        return endpoint->SetMute(newMuted, nullptr);
+    });
+    if (ok) {
+        std::lock_guard<std::mutex> lock(g_eqSystemVolumeMutex);
+        g_eqCachedSystemMuted = newMuted != FALSE;
+        g_eqSystemVolumeCacheValid = true;
+        g_eqSystemVolumeLastPollMs = GetTickCount64();
+    }
+    return ok;
+}
+
+struct EqVolumeMetrics {
+    RECT slider{};
+    RECT muteButton{};
+    bool horizontal = true;
+};
+
+static EqVolumeMetrics EqBuildVolumeMetrics(const RECT& r) {
+    EqVolumeMetrics result{};
+    // Keep all layout calculations in LONG, matching RECT's coordinate type.
+    // Mixing LONG coordinates with int dimensions breaks std::min/std::max
+    // template deduction in the Windhawk Clang toolchain.
+    const LONG width = std::max<LONG>(1L, r.right - r.left);
+    const LONG height = std::max<LONG>(1L, r.bottom - r.top);
+    result.horizontal = width >= height;
+    const LONG shortSide = std::min<LONG>(width, height);
+    const LONG padding = std::clamp<LONG>(shortSide / 6L, 2L, 8L);
+
+    if (result.horizontal) {
+        const LONG buttonSize = std::clamp<LONG>(height - padding * 2L, 12L, 24L);
+        const LONG buttonLeft = std::max<LONG>(r.left + padding + 1L,
+                                               r.right - padding - buttonSize);
+        result.muteButton = RECT{
+            buttonLeft, r.top + padding,
+            std::min<LONG>(r.right - padding, buttonLeft + buttonSize),
+            r.bottom - padding};
+        const LONG sliderLeft = std::min<LONG>(r.right - 2L, r.left + padding);
+        const LONG sliderRight = std::max<LONG>(sliderLeft + 1L,
+                                                result.muteButton.left - padding);
+        result.slider = RECT{sliderLeft, r.top + padding,
+                             std::min<LONG>(r.right, sliderRight), r.bottom - padding};
+    } else {
+        const LONG buttonSize = std::clamp<LONG>(width - padding * 2L, 12L, 24L);
+        const LONG buttonTop = std::max<LONG>(r.top + padding + 1L,
+                                              r.bottom - padding - buttonSize);
+        result.muteButton = RECT{
+            r.left + padding, buttonTop, r.right - padding,
+            std::min<LONG>(r.bottom - padding, buttonTop + buttonSize)};
+        const LONG sliderTop = std::min<LONG>(r.bottom - 2L, r.top + padding);
+        const LONG sliderBottom = std::max<LONG>(sliderTop + 1L,
+                                                 result.muteButton.top - padding);
+        result.slider = RECT{r.left + padding, sliderTop,
+                             r.right - padding, std::min<LONG>(r.bottom, sliderBottom)};
+    }
+    return result;
+}
+
+static bool EqPointInVolumeMuteButton(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    x = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    y = static_cast<int>(std::lround(static_cast<double>(y) / scale));
+    if (!EqIsLayoutWidgetPresent(EQ_LAYOUT_VOLUME))
+        return false;
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_VOLUME);
+    const EqVolumeMetrics metrics = EqBuildVolumeMetrics(r);
+    return PtInRect(&metrics.muteButton, POINT{x, y}) != FALSE;
+}
+
+static bool EqPointInVolumeSlider(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    x = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    y = static_cast<int>(std::lround(static_cast<double>(y) / scale));
+    if (!EqIsLayoutWidgetPresent(EQ_LAYOUT_VOLUME))
+        return false;
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_VOLUME);
+    const EqVolumeMetrics metrics = EqBuildVolumeMetrics(r);
+    return PtInRect(&metrics.slider, POINT{x, y}) != FALSE;
+}
+
+static void EqSetVolumeFromPoint(int x, int y, bool force = false) {
+    const double scale = EqGetPopupDpiScale();
+    x = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    y = static_cast<int>(std::lround(static_cast<double>(y) / scale));
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_VOLUME);
+    if (r.right <= r.left || r.bottom <= r.top)
+        return;
+    const EqVolumeMetrics metrics = EqBuildVolumeMetrics(r);
+    const ULONGLONG now = GetTickCount64();
+    if (!force && now >= g_eqVolumeLastDragSetMs &&
+        now - g_eqVolumeLastDragSetMs < 28)
+        return;
+
+    float value = 0.50f;
+    const int widgetWidth = std::max(1L, r.right - r.left);
+    const int widgetHeight = std::max(1L, r.bottom - r.top);
+    const float knobRadius = std::clamp(
+        static_cast<float>(std::min(widgetWidth, widgetHeight)) * 0.18f,
+        3.0f, 6.5f);
+    if (metrics.horizontal) {
+        float trackStart = static_cast<float>(metrics.slider.left) + knobRadius;
+        float trackEnd = static_cast<float>(metrics.slider.right) - knobRadius;
+        if (trackEnd <= trackStart) {
+            trackStart = static_cast<float>(metrics.slider.left);
+            trackEnd = static_cast<float>(metrics.slider.right);
+        }
+        const float span = std::max(1.0f, trackEnd - trackStart);
+        value = (static_cast<float>(x) - trackStart) / span;
+    } else {
+        float trackStart = static_cast<float>(metrics.slider.top) + knobRadius;
+        float trackEnd = static_cast<float>(metrics.slider.bottom) - knobRadius;
+        if (trackEnd <= trackStart) {
+            trackStart = static_cast<float>(metrics.slider.top);
+            trackEnd = static_cast<float>(metrics.slider.bottom);
+        }
+        const float span = std::max(1.0f, trackEnd - trackStart);
+        value = 1.0f - (static_cast<float>(y) - trackStart) / span;
+    }
+    value = std::clamp(value, 0.0f, 1.0f);
+
+    const EqSystemVolumeSnapshot current = EqGetSystemVolumeSnapshot(false);
+    if (!force && current.valid && !current.muted &&
+        std::abs(current.volume - value) < 0.012f)
+        return;
+    g_eqVolumeLastDragSetMs = now;
+    EqSetSystemVolumeScalar(value);
+}
+
+static void DrawEqVolumeWidget(
+    Gdiplus::Graphics& graphics, const RECT& r, bool dark, bool preview) {
+    if (r.right <= r.left || r.bottom <= r.top)
+        return;
+
+    const EqPopupStyle style = MakeEqPopupStyle(
+        g_eqPopupStyleId.load(std::memory_order_acquire), dark);
+    const EqVolumeMetrics metrics = EqBuildVolumeMetrics(r);
+    const EqSystemVolumeSnapshot state = EqGetSystemVolumeSnapshot(preview);
+    const float volume = std::clamp(state.volume, 0.0f, 1.0f);
+    const int width = std::max(1L, r.right - r.left);
+    const int height = std::max(1L, r.bottom - r.top);
+    const float shortSide = static_cast<float>(std::min(width, height));
+    const float knobRadius = std::clamp(shortSide * 0.18f, 3.0f, 6.5f);
+    const float trackWidth = std::clamp(shortSide * 0.14f, 2.0f, 5.0f);
+
+    const float muteRadius = std::clamp(shortSide * 0.16f, 2.0f, 6.0f);
+    Gdiplus::GraphicsPath mutePath;
+    AddRoundedRectSubpath(mutePath,
+        static_cast<float>(metrics.muteButton.left),
+        static_cast<float>(metrics.muteButton.top),
+        static_cast<float>(std::max(1L, metrics.muteButton.right - metrics.muteButton.left)),
+        static_cast<float>(std::max(1L, metrics.muteButton.bottom - metrics.muteButton.top)),
+        muteRadius);
+    Gdiplus::SolidBrush muteBackground(style.button);
+    graphics.FillPath(&muteBackground, &mutePath);
+    if (!preview && g_eqHotVolumeMute) {
+        Gdiplus::SolidBrush hoverTint(Gdiplus::Color(
+            105, style.accent.GetR(), style.accent.GetG(), style.accent.GetB()));
+        graphics.FillPath(&hoverTint, &mutePath);
+        Gdiplus::Pen hoverBorder(Gdiplus::Color(
+            180, style.accent.GetR(), style.accent.GetG(), style.accent.GetB()), 1.0f);
+        graphics.DrawPath(&hoverBorder, &mutePath);
+    }
+
+    Gdiplus::FontFamily symbolFamily(L"Segoe MDL2 Assets");
+    Gdiplus::Font muteFont(&symbolFamily,
+        std::clamp(shortSide * 0.62f, 9.0f, 18.0f),
+        Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::StringFormat centered;
+    centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+    centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::SolidBrush iconBrush(style.text);
+    const wchar_t* glyph = state.muted ? L"\xE74F" : L"\xE995";
+    graphics.DrawString(glyph, -1, &muteFont,
+        Gdiplus::RectF(static_cast<float>(metrics.muteButton.left),
+                       static_cast<float>(metrics.muteButton.top),
+                       static_cast<float>(metrics.muteButton.right - metrics.muteButton.left),
+                       static_cast<float>(metrics.muteButton.bottom - metrics.muteButton.top)),
+        &centered, &iconBrush);
+
+    float trackStart = 0.0f;
+    float trackEnd = 0.0f;
+    float trackCross = 0.0f;
+    if (metrics.horizontal) {
+        trackStart = static_cast<float>(metrics.slider.left) + knobRadius;
+        trackEnd = static_cast<float>(metrics.slider.right) - knobRadius;
+        if (trackEnd <= trackStart) {
+            trackStart = static_cast<float>(metrics.slider.left);
+            trackEnd = static_cast<float>(metrics.slider.right);
+        }
+        trackCross = height >= 34
+            ? static_cast<float>(r.top) + static_cast<float>(height) * 0.68f
+            : (static_cast<float>(r.top) + static_cast<float>(r.bottom)) * 0.5f;
+    } else {
+        trackStart = static_cast<float>(metrics.slider.top) + knobRadius;
+        trackEnd = static_cast<float>(metrics.slider.bottom) - knobRadius;
+        if (trackEnd <= trackStart) {
+            trackStart = static_cast<float>(metrics.slider.top);
+            trackEnd = static_cast<float>(metrics.slider.bottom);
+        }
+        trackCross = (static_cast<float>(metrics.slider.left) +
+                      static_cast<float>(metrics.slider.right)) * 0.5f;
+    }
+
+    Gdiplus::Pen trackPen(style.track, trackWidth);
+    trackPen.SetStartCap(Gdiplus::LineCapRound);
+    trackPen.SetEndCap(Gdiplus::LineCapRound);
+    Gdiplus::Pen fillPen(style.accent, trackWidth);
+    fillPen.SetStartCap(Gdiplus::LineCapRound);
+    fillPen.SetEndCap(Gdiplus::LineCapRound);
+    float knobX = trackCross;
+    float knobY = trackCross;
+    if (metrics.horizontal) {
+        knobX = trackStart + (trackEnd - trackStart) * volume;
+        knobY = trackCross;
+        graphics.DrawLine(&trackPen, trackStart, trackCross, trackEnd, trackCross);
+        graphics.DrawLine(&fillPen, trackStart, trackCross, knobX, trackCross);
+    } else {
+        knobX = trackCross;
+        knobY = trackEnd - (trackEnd - trackStart) * volume;
+        graphics.DrawLine(&trackPen, trackCross, trackStart, trackCross, trackEnd);
+        graphics.DrawLine(&fillPen, trackCross, knobY, trackCross, trackEnd);
+    }
+    Gdiplus::SolidBrush knobBrush(style.accent);
+    graphics.FillEllipse(&knobBrush, knobX - knobRadius, knobY - knobRadius,
+                         knobRadius * 2.0f, knobRadius * 2.0f);
+
+    if (metrics.horizontal && width >= 110 && height >= 34) {
+        Gdiplus::Font valueFont(L"Segoe UI", 9.0f,
+                                Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::SolidBrush valueBrush(style.text);
+        wchar_t label[48]{};
+        swprintf_s(label, L"Volume  %d%%", static_cast<int>(std::lround(volume * 100.0f)));
+        graphics.DrawString(label, -1, &valueFont,
+            Gdiplus::RectF(static_cast<float>(r.left + 8), static_cast<float>(r.top + 2),
+                           static_cast<float>(std::max(1, width - 42)), 14.0f),
+            nullptr, &valueBrush);
+    }
+}
+
+
+static bool EqLayoutWidgetIsVertical(const EqLayoutWidgetState& widget) {
+    return widget.rotation == 90 || widget.rotation == 270 || widget.h > widget.w;
+}
+
+static float EqClampLayoutScale(float value) {
+    return std::clamp(value, 0.08f, 4.0f);
+}
+
+struct EqMediaMetrics {
+    RECT timeline{};
+    std::array<RECT, 5> buttons{};
+};
+
+static EqMediaMetrics EqBuildMediaMetricsForRect(const RECT& r, bool vertical) {
+    EqMediaMetrics result{};
+    const int width = std::max(1, static_cast<int>(r.right - r.left));
+    const int height = std::max(1, static_cast<int>(r.bottom - r.top));
+
+    if (vertical) {
+        // Vertical Media no longer reserves space for album art. The text sits
+        // first, followed by the timeline and transport controls.
+        const int textBlock = std::max(34, std::min(52, height / 3));
+        const int timelineY = static_cast<int>(r.top) + textBlock +
+            std::max(8, std::min(18, (height - textBlock) / 5));
+        const int left = r.left + 18;
+        const int right = std::max(left + 1, static_cast<int>(r.right) - 18);
+        const int timelineTop = std::clamp(timelineY - 7,
+            static_cast<int>(r.top) + 4,
+            static_cast<int>(r.bottom) - 46);
+        const int timelineBottom = std::clamp(timelineY + 7,
+            timelineTop + 1,
+            static_cast<int>(r.bottom) - 34);
+        result.timeline = RECT{left, timelineTop, right, timelineBottom};
+
+        const int buttonWidth = std::clamp((width - 28 - 4 * 6) / 5, 24, 42);
+        const int total = buttonWidth * 5 + 6 * 4;
+        const int startX = static_cast<int>(r.left) + std::max(0, (width - total) / 2);
+        const int top = std::clamp(result.timeline.bottom + 10,
+            r.top + 4,
+            r.bottom - 30);
+        for (int i = 0; i < 5; ++i) {
+            const int x = startX + i * (buttonWidth + 6);
+            result.buttons[static_cast<size_t>(i)] = RECT{
+                x, top, x + buttonWidth,
+                std::min(static_cast<int>(r.bottom), top + 30)};
+        }
+    } else {
+        // Horizontal media is deliberately compact enough for the default
+        // 700x100 layout: title/artist, timeline, then five transport buttons.
+        const int timelineY = static_cast<int>(r.top) + std::clamp(height * 52 / 100, 42, std::max(42, height - 40));
+        const int timelineMargin = std::min(40, std::max(22, width / 12));
+        const int left = static_cast<int>(r.left) + timelineMargin;
+        const int right = std::max(left + 1, static_cast<int>(r.right) - timelineMargin);
+        result.timeline = RECT{left, timelineY - 8, right, timelineY + 8};
+        const int buttonHeight = std::clamp(height / 3, 28, 34);
+        constexpr int gap = 6;
+        const int buttonWidth = std::clamp((width - 20 - gap * 4) / 5, 24, 42);
+        const int total = buttonWidth * 5 + gap * 4;
+        const int startX = static_cast<int>(r.left) + std::max(0, (width - total) / 2);
+        const int top = std::clamp(timelineY + 10,
+                                   static_cast<int>(r.top) + 2,
+                                   static_cast<int>(r.bottom) - buttonHeight - 2);
+        for (int i = 0; i < 5; ++i) {
+            const int x = startX + i * (buttonWidth + gap);
+            result.buttons[static_cast<size_t>(i)] = RECT{
+                x, top, x + buttonWidth, std::min(static_cast<int>(r.bottom), top + buttonHeight)};
+        }
+    }
+    return result;
+}
+
+static EqMediaMetrics EqGetMediaMetrics() {
+    const auto* w = EqGetLayoutWidgetConst(EQ_LAYOUT_MEDIA);
+    if (!w || !w->present)
+        return EqMediaMetrics{};
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_MEDIA);
+    return EqBuildMediaMetricsForRect(r, EqLayoutWidgetIsVertical(*w));
+}
+
+static RECT GetEqMediaTimelineRect() {
+    return EqGetMediaMetrics().timeline;
+}
+
+static RECT GetEqMediaButtonRect(int index) {
+    if (index < 0 || index >= 5)
+        return RECT{0, 0, 0, 0};
+    return EqGetMediaMetrics().buttons[static_cast<size_t>(index)];
+}
+
+static int HitTestEqMediaButton(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    const POINT point{static_cast<int>(std::lround(static_cast<double>(x) / scale)),
+                      static_cast<int>(std::lround(static_cast<double>(y) / scale))};
+    for (int i = 0; i < 5; ++i) {
+        const RECT r = GetEqMediaButtonRect(i);
+        if (PtInRect(&r, point))
+            return i;
+    }
+    return -1;
+}
+
+static bool HitTestEqMediaTimeline(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    const POINT point{static_cast<int>(std::lround(static_cast<double>(x) / scale)),
+                      static_cast<int>(std::lround(static_cast<double>(y) / scale))};
+    const RECT r = GetEqMediaTimelineRect();
+    return PtInRect(&r, point) != FALSE;
+}
+
+struct EqSliderMetrics {
+    RECT area{};
+    int top = 0;
+    int bottom = 0;
+    bool horizontal = false;
+};
+
+static EqSliderMetrics EqGetSliderMetrics() {
+    EqSliderMetrics m{};
+    const auto* widget = EqGetLayoutWidgetConst(EQ_LAYOUT_EQ);
+    if (!widget || !widget->present)
+        return m;
+
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_EQ);
+    if (r.right <= r.left)
+        return m;
+
+    m.horizontal = widget->rotation == 90 || widget->rotation == 270;
+    if (m.horizontal) {
+        m.area = RECT{
+            r.left + 54,
+            r.top + 38,
+            std::max(static_cast<int>(r.left) + 55,
+                     static_cast<int>(r.right) - 18),
+            std::max(static_cast<int>(r.top) + 39,
+                     static_cast<int>(r.bottom) - 18)};
+    } else {
+        m.area = RECT{
+            r.left + 20,
+            r.top + 46,
+            std::max(static_cast<int>(r.left) + 21,
+                     static_cast<int>(r.right) - 20),
+            std::max(static_cast<int>(r.top) + 47,
+                     static_cast<int>(r.bottom) - 42)};
+    }
+    m.top = m.area.top;
+    m.bottom = m.area.bottom;
+    return m;
 }
 
 static POINT GetEqSliderPoint(int index) {
-    const int usableWidth = EQ_POPUP_WIDTH - EQ_SLIDER_HORIZONTAL_PADDING * 2;
-    const float t = VIZ_EQ_BANDS > 1
-        ? static_cast<float>(index) / static_cast<float>(VIZ_EQ_BANDS - 1)
-        : 0.0f;
-    return POINT{
-        EQ_SLIDER_HORIZONTAL_PADDING +
-            static_cast<int>(std::round(t * usableWidth)),
-        EQ_SLIDER_TOP};
+    const EqSliderMetrics m = EqGetSliderMetrics();
+    const int count = std::max(1, VIZ_EQ_BANDS - 1);
+    const float t = static_cast<float>(index) / static_cast<float>(count);
+    if (m.horizontal) {
+        const int y = static_cast<int>(m.area.top) + static_cast<int>(std::round(
+            t * std::max(0, static_cast<int>(m.area.bottom) - static_cast<int>(m.area.top))));
+        const int x = static_cast<int>(m.area.left + m.area.right) / 2;
+        return POINT{x, y};
+    }
+    const int x = static_cast<int>(m.area.left) + static_cast<int>(std::round(
+        t * std::max(0, static_cast<int>(m.area.right) - static_cast<int>(m.area.left))));
+    return POINT{x, m.top};
 }
 
-static int HitTestEqBand(int x) {
+static int HitTestEqBand(int x, int y) {
     const double scale = EqGetPopupDpiScale();
-    const int logicalX = static_cast<int>(std::lround(
-        static_cast<double>(x) / scale));
+    const int logicalX = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    const int logicalY = static_cast<int>(std::lround(static_cast<double>(y) / scale));
+    const EqSliderMetrics m = EqGetSliderMetrics();
+    const RECT hitRect{
+        m.area.left - 18, m.area.top - 18,
+        m.area.right + 18, m.area.bottom + 18};
+    if (!PtInRect(&hitRect, POINT{logicalX, logicalY}))
+        return -1;
 
     int best = -1;
-    int bestDistance = 17;
+    int bestDistance = 24;
     for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
         const POINT point = GetEqSliderPoint(i);
-        const int distance = std::abs(logicalX - point.x);
+        const int distance = m.horizontal
+            ? std::abs(logicalY - point.y)
+            : std::abs(logicalX - point.x);
         if (distance < bestDistance) {
             bestDistance = distance;
             best = i;
@@ -7995,182 +15171,3596 @@ static int HitTestEqBand(int x) {
     return best;
 }
 
-static float GetEqGainAtBand(int index) {
+static bool EqHasCustomPresets() {
+    return g_eqCustomPresetCount > 0;
+}
+
+static int EqGetPresetPage() {
+    return g_eqPresetPage.load(std::memory_order_relaxed);
+}
+
+static int EqGetPresetPageItemCount(int page) {
+    return page == EQ_PRESET_PAGE_SAVED ? g_eqCustomPresetCount
+                                        : VIZ_EQ_BUILTIN_PRESET_COUNT;
+}
+
+static int EqGetPresetItemCount() {
+    return EqGetPresetPageItemCount(EqGetPresetPage());
+}
+
+static int EqPresetLocalToGlobalIndex(int page, int localIndex) {
+    if (localIndex < 0 || localIndex >= EqGetPresetPageItemCount(page))
+        return -1;
+    return page == EQ_PRESET_PAGE_SAVED
+        ? EQ_CUSTOM_PRESET_INDEX_BASE + localIndex
+        : localIndex;
+}
+
+struct EqPresetGridMetrics {
+    int cols = 1;
+    int rows = 1;
+    int rowHeight = 22;
+    int contentTop = 38;
+    int gap = 6;
+    int cellWidth = 30;
+};
+
+static EqPresetGridMetrics EqGetPresetGridMetrics(
+    const EqLayoutWidgetState& widget, int itemCount = -1) {
+    EqPresetGridMetrics m{};
+    const int count = itemCount < 0 ? std::max(1, EqGetPresetItemCount())
+                                    : std::max(1, itemCount);
+    const int panelW = std::max(1, widget.w);
+    const int panelH = std::max(1, widget.h);
+    const int availableHeight = std::max(1, panelH - 46);
+    constexpr int targetRowHeight = 28;
+    constexpr int cellGap = 6;
+    constexpr int minCellWidth = 30;
+    constexpr int maxColumns = 5;
+
+    const int maxRowsOneColumn = std::max(1, availableHeight / targetRowHeight);
+    const int widthColumnCapacity = std::max(1,
+        (panelW - 20 + cellGap) / (minCellWidth + cellGap));
+    const int allowedColumns = std::max(1, std::min(maxColumns, widthColumnCapacity));
+
+    m.cols = count <= maxRowsOneColumn
+        ? 1
+        : std::clamp((count + maxRowsOneColumn - 1) / maxRowsOneColumn,
+                     1, allowedColumns);
+    m.rows = (count + m.cols - 1) / m.cols;
+    m.rowHeight = std::max(20, availableHeight / std::max(1, m.rows));
+    m.contentTop = 38;
+    m.gap = cellGap;
+
+    const int usableW = std::max(1, panelW - 20);
+    m.cellWidth = std::max(minCellWidth,
+        (usableW - m.gap * (m.cols - 1)) / std::max(1, m.cols));
+    return m;
+}
+
+static int EqPresetColumnCount(const EqLayoutWidgetState& widget) {
+    return EqGetPresetGridMetrics(widget).cols;
+}
+
+static int EqPresetRowHeight(const EqLayoutWidgetState& widget) {
+    return EqGetPresetGridMetrics(widget).rowHeight;
+}
+
+static RECT GetEqPresetRect(int itemIndex, int page = -1) {
+    if (page < 0)
+        page = EqGetPresetPage();
+    const auto* widget = EqGetLayoutWidgetConst(EQ_LAYOUT_PRESETS);
+    if (!widget || !widget->present || itemIndex < 0 ||
+        itemIndex >= EqGetPresetPageItemCount(page))
+        return RECT{0, 0, 0, 0};
+
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_PRESETS);
+    const EqPresetGridMetrics m = EqGetPresetGridMetrics(
+        *widget, EqGetPresetPageItemCount(page));
+    const int col = itemIndex % m.cols;
+    const int row = itemIndex / m.cols;
+    const int left = r.left + 10 + col * (m.cellWidth + m.gap);
+    const int top = r.top + m.contentTop + row * m.rowHeight;
+    const int right = left + m.cellWidth;
+    const int bottom = std::min<int>(static_cast<int>(r.bottom) - 8,
+                                     top + m.rowHeight - 4);
+    if (right <= left || bottom <= top)
+        return RECT{0, 0, 0, 0};
+    return RECT{left, top, right, bottom};
+}
+
+static RECT GetEqPageButtonRect();
+static RECT EqGetDesktopLayoutButtonRect();
+
+struct EqPresetHeaderControlRects {
+    RECT mode{};
+    RECT plus{};
+};
+
+static EqPresetHeaderControlRects GetEqPresetHeaderControlRects(int page = -1) {
+    if (page < 0)
+        page = EqGetPresetPage();
+
+    EqPresetHeaderControlRects result{};
+    const auto* widget = EqGetLayoutWidgetConst(EQ_LAYOUT_PRESETS);
+    if (!widget || !widget->present)
+        return result;
+
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_PRESETS);
+    const RECT gear = GetEqPageButtonRect();
+    constexpr int rightMargin = 10;
+    constexpr int gearGap = 8;
+    constexpr int leftMargin = 8;
+    const int top = r.top + 8;
+    int rightLimit = static_cast<int>(r.right) - rightMargin;
+    const RECT headerRect{r.left, r.top + 4, r.right, r.top + 36};
+    // Match the old '+' placement rule exactly: only make room for the gear
+    // when the gear actually overlaps the Presets header.
+    if (headerRect.right > gear.left && headerRect.left < gear.right &&
+        headerRect.bottom > gear.top && headerRect.top < gear.bottom) {
+        rightLimit = std::min(rightLimit, static_cast<int>(gear.left) - gearGap);
+    }
+
+    if (page == EQ_PRESET_PAGE_BUILTIN) {
+        const int right = rightLimit;
+        const int left = right - EQ_PRESET_NAV_WIDTH;
+        result.mode = RECT{std::max<int>(leftMargin + r.left, left), top,
+                           right, top + EQ_PRESET_NAV_HEIGHT};
+    } else {
+        const int totalWidth = EQ_PRESET_PLUS_WIDTH + EQ_PRESET_HEADER_GAP +
+                               EQ_PRESET_NAV_WIDTH;
+        const int groupLeft = rightLimit - totalWidth;
+        result.plus = RECT{std::max<int>(r.left + leftMargin, groupLeft),
+                           top,
+                           std::max<int>(r.left + leftMargin,
+                                    groupLeft + EQ_PRESET_PLUS_WIDTH),
+                           top + EQ_PRESET_NAV_HEIGHT};
+        result.mode = RECT{
+            result.plus.right + EQ_PRESET_HEADER_GAP, top,
+            result.plus.right + EQ_PRESET_HEADER_GAP + EQ_PRESET_NAV_WIDTH,
+            top + EQ_PRESET_NAV_HEIGHT};
+    }
+
+    if (result.mode.right <= result.mode.left ||
+        result.mode.bottom <= result.mode.top)
+        result.mode = RECT{0, 0, 0, 0};
+    if (result.plus.right <= result.plus.left ||
+        result.plus.bottom <= result.plus.top)
+        result.plus = RECT{0, 0, 0, 0};
+    return result;
+}
+
+static RECT GetEqPresetModeButtonRect(int page = -1) {
+    return GetEqPresetHeaderControlRects(page).mode;
+}
+
+static RECT GetEqPlusRect() {
+    if (EqGetPresetPage() != EQ_PRESET_PAGE_SAVED)
+        return RECT{0, 0, 0, 0};
+    if (g_eqCustomPresetCount >= VIZ_EQ_MAX_CUSTOM_PRESETS)
+        return RECT{0, 0, 0, 0};
+    return GetEqPresetHeaderControlRects(EQ_PRESET_PAGE_SAVED).plus;
+}
+
+static int HitTestEqPresetNavButton(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    const POINT point{static_cast<int>(std::lround(static_cast<double>(x) / scale)),
+                      static_cast<int>(std::lround(static_cast<double>(y) / scale))};
+    const int page = EqGetPresetPage();
+    const EqPresetHeaderControlRects rects = GetEqPresetHeaderControlRects(page);
+
+    if (PtInRect(&rects.mode, point))
+        return page == EQ_PRESET_PAGE_BUILTIN
+            ? EQ_PRESET_NAV_SAVED_HIT : EQ_PRESET_NAV_BUILTIN_HIT;
+    if (page == EQ_PRESET_PAGE_SAVED && PtInRect(&rects.plus, point))
+        return EQ_PLUS_PRESET_HIT;
+    return -1;
+}
+
+static RECT GetEqPresetDeleteRect(int customIndex) {
+    RECT r = GetEqPresetRect(customIndex, EQ_PRESET_PAGE_SAVED);
+    r.right = std::min(static_cast<int>(r.right), static_cast<int>(r.left) + 20);
+    r.bottom = std::min(static_cast<int>(r.bottom), static_cast<int>(r.top) + 20);
+    return r;
+}
+
+static int HitTestEqPresetDelete(int x, int y) {
+    if (EqGetPresetPage() != EQ_PRESET_PAGE_SAVED || !EqHasCustomPresets() ||
+        g_eqPresetPageAnimationActive)
+        return -1;
+    const double scale = EqGetPopupDpiScale();
+    const POINT point{static_cast<int>(std::lround(static_cast<double>(x) / scale)),
+                      static_cast<int>(std::lround(static_cast<double>(y) / scale))};
+    for (int i = 0; i < g_eqCustomPresetCount; ++i) {
+        const RECT r = GetEqPresetDeleteRect(i);
+        if (PtInRect(&r, point)) return i;
+    }
+    return -1;
+}
+
+static int HitTestEqPreset(int x, int y) {
+    if (g_eqPresetPageAnimationActive)
+        return -1;
+    const double scale = EqGetPopupDpiScale();
+    const POINT point{static_cast<int>(std::lround(static_cast<double>(x) / scale)),
+                      static_cast<int>(std::lround(static_cast<double>(y) / scale))};
+    const int nav = HitTestEqPresetNavButton(x, y);
+    if (nav == EQ_PLUS_PRESET_HIT)
+        return EQ_PLUS_PRESET_HIT;
+    const int page = EqGetPresetPage();
+    for (int i = 0; i < EqGetPresetPageItemCount(page); ++i) {
+        const RECT r = GetEqPresetRect(i, page);
+        if (PtInRect(&r, point))
+            return EqPresetLocalToGlobalIndex(page, i);
+    }
+    return -1;
+}
+
+static void EqStartPresetPageAnimation(HWND hwnd, int targetPage);
+static void EqApplyPresetPageAnimationStep(HWND hwnd);
+
+static RECT GetEqPageButtonRect() {
+    // On the default Media & EQ page the settings button is anchored to the
+    // RIGHTMOST visible section. The right edge is the primary criterion;
+    // vertical position is considered only when two sections have the same
+    // right edge. This keeps the gear attached to whichever section actually
+    // occupies the right side of the layout, regardless of section type.
+    if (g_eqPageAnimationTarget < 0.5f) {
+        const EqLayoutWidgetState* anchor = nullptr;
+        int anchorRight = std::numeric_limits<int>::min();
+        int anchorTop = std::numeric_limits<int>::max();
+
+        for (const auto& widget : g_eqLayoutWidgets) {
+            if (!widget.present)
+                continue;
+
+            const int widgetRight = widget.x + widget.w;
+            if (!anchor ||
+                widgetRight > anchorRight ||
+                (widgetRight == anchorRight && widget.y < anchorTop) ||
+                (widgetRight == anchorRight && widget.y == anchorTop &&
+                 widget.id > anchor->id)) {
+                anchor = &widget;
+                anchorRight = widgetRight;
+                anchorTop = widget.y;
+            }
+        }
+
+        if (anchor) {
+            const RECT anchorRect = EqGetLayoutRect(anchor->id);
+            const int buttonWidth = EQ_PAGE_BUTTON_BOTTOM - EQ_PAGE_BUTTON_TOP;
+            const int right = std::max(buttonWidth,
+                                       static_cast<int>(anchorRect.right) - 8);
+            const int top = static_cast<int>(anchorRect.top) + 8;
+            const int bottom = top + buttonWidth;
+            const int left = std::max(0, right - buttonWidth);
+            return RECT{left, top, right, bottom};
+        }
+    }
+
+    const int buttonWidth = EQ_PAGE_BUTTON_BOTTOM - EQ_PAGE_BUTTON_TOP;
+    const int right = std::max(buttonWidth, g_eqPopupLogicalWidth - 8);
+    const int left = std::max(0, right - buttonWidth);
+    return RECT{left, EQ_PAGE_BUTTON_TOP, right, EQ_PAGE_BUTTON_TOP + buttonWidth};
+}
+
+static bool HitTestEqPageButton(int x, int y) {
+    const double scale = EqGetPopupDpiScale();
+    const int logicalX = static_cast<int>(std::lround(static_cast<double>(x) / scale));
+    const int logicalY = static_cast<int>(std::lround(static_cast<double>(y) / scale));
+    const RECT r = GetEqPageButtonRect();
+    return PtInRect(&r, POINT{logicalX, logicalY}) != FALSE;
+}
+
+static double EqMediaPositionFromMouseX(int x) {
+    const double scale = EqGetPopupDpiScale();
+    const double logicalX = static_cast<double>(x) / scale;
+    const RECT timeline = GetEqMediaTimelineRect();
+    const double t = std::clamp(
+        (logicalX - static_cast<double>(timeline.left)) /
+            static_cast<double>(std::max(1, static_cast<int>(timeline.right - timeline.left))),
+        0.0, 1.0);
+    const EqMediaState state = GetEqMediaStateSnapshot();
+    return state.durationSeconds > 0.0 ? state.durationSeconds * t : 0.0;
+}
+
+static float EqEaseInOutCubic(float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    return t < 0.5f
+        ? 4.0f * t * t * t
+        : 1.0f - std::pow(-2.0f * t + 2.0f, 3.0f) / 2.0f;
+}
+
+static void EqStopPageAnimation(HWND hwnd) {
+    g_eqPageAnimationActive = false;
+    g_eqPageAnimationStartTick = 0;
+    g_eqPageAnimationStart = g_eqPageAnimationTarget;
+    if (hwnd)
+        KillTimer(hwnd, kEqPopupPageAnimationTimerId);
+}
+
+static RECT EqGetPresentLayoutBounds() {
+    bool found = false;
+    int minX = EQ_LAYOUT_CANVAS_W;
+    int minY = EQ_LAYOUT_CANVAS_H;
+    int maxX = 0;
+    int maxY = 0;
+    for (const auto& w : g_eqLayoutWidgets) {
+        if (!w.present)
+            continue;
+        minX = std::min(minX, std::max(0, w.x));
+        minY = std::min(minY, std::max(0, w.y));
+        maxX = std::max(maxX, std::min(EQ_LAYOUT_CANVAS_W, w.x + w.w));
+        maxY = std::max(maxY, std::min(EQ_LAYOUT_CANVAS_H, w.y + w.h));
+        found = true;
+    }
+    if (!found || maxX <= minX || maxY <= minY)
+        return RECT{0, 0, EQ_LAYOUT_CANVAS_W, EQ_LAYOUT_CANVAS_H};
+    return RECT{minX, minY, maxX, maxY};
+}
+
+static void EqExpandPopupForLayoutBuilder(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd))
+        return;
+    const double scale = EqGetPopupDpiScale();
+    RECT wr{};
+    if (!GetWindowRect(hwnd, &wr))
+        return;
+    const int restoreX = wr.left - EqPopupScalePx(g_eqPopupContentOffsetX, scale);
+    const int restoreY = wr.top - EqPopupScalePx(g_eqPopupContentOffsetY, scale);
+    g_eqPopupContentOffsetX = 0;
+    g_eqPopupContentOffsetY = 0;
+    g_eqPopupLogicalWidth = EQ_POPUP_WIDTH;
+    g_eqPopupLogicalHeight = EQ_POPUP_HEIGHT;
+    SetWindowPos(hwnd, nullptr, restoreX, restoreY,
+                 EqPopupScalePx(EQ_POPUP_WIDTH, scale),
+                 EqPopupScalePx(EQ_POPUP_HEIGHT, scale),
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+static void EqCropPopupToLayout(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd) || g_eqPageAnimationTarget >= 0.5f)
+        return;
+    const RECT bounds = EqGetPresentLayoutBounds();
+    const int newLogicalWidth = std::max(1L, bounds.right - bounds.left);
+    const int newLogicalHeight = std::max(1L, bounds.bottom - bounds.top);
+    const double scale = EqGetPopupDpiScale();
+    RECT wr{};
+    if (!GetWindowRect(hwnd, &wr))
+        return;
+    const int newX = wr.left + EqPopupScalePx(bounds.left, scale);
+    const int newY = wr.top + EqPopupScalePx(bounds.top, scale);
+    g_eqPopupContentOffsetX = bounds.left;
+    g_eqPopupContentOffsetY = bounds.top;
+    g_eqPopupLogicalWidth = newLogicalWidth;
+    g_eqPopupLogicalHeight = newLogicalHeight;
+    SetWindowPos(hwnd, nullptr, newX, newY,
+                 EqPopupScalePx(newLogicalWidth, scale),
+                 EqPopupScalePx(newLogicalHeight, scale),
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+static void EqStartPageAnimation(HWND hwnd, bool showSettings) {
+    if (!hwnd || !IsWindow(hwnd))
+        return;
+
+    if (showSettings)
+        EqExpandPopupForLayoutBuilder(hwnd);
+
+    const float target = showSettings ? 1.0f : 0.0f;
+    if (std::abs(g_eqPageAnimationProgress - target) < 0.001f) {
+        g_eqPageAnimationProgress = target;
+        g_eqPageAnimationStart = target;
+        g_eqPageAnimationTarget = target;
+        EqStopPageAnimation(hwnd);
+        RenderEqPopup(hwnd);
+        return;
+    }
+
+    g_eqPageAnimationStart = g_eqPageAnimationProgress;
+    g_eqPageAnimationTarget = target;
+    g_eqPageAnimationStartTick = GetTickCount64();
+    if (showSettings) {
+        g_eqSettingsScrollOffset = 0;
+        g_eqSettingsScrollbarDragging = false;
+        g_eqPopupPlacementDragTarget = EQ_POPUP_PLACEMENT_DRAG_NONE;
+    } else {
+        g_eqSettingsScrollOffset = 0;
+    }
+    g_eqPageAnimationActive = true;
+    SetTimer(hwnd, kEqPopupPageAnimationTimerId,
+             kEqPopupPageAnimationIntervalMs, nullptr);
+    RenderEqPopup(hwnd);
+}
+
+static void EqApplyPageAnimationStep(HWND hwnd) {
+    if (!g_eqPageAnimationActive) {
+        KillTimer(hwnd, kEqPopupPageAnimationTimerId);
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG elapsed = now >= g_eqPageAnimationStartTick
+        ? now - g_eqPageAnimationStartTick : 0;
+    const float linear = std::clamp(
+        static_cast<float>(elapsed) /
+            static_cast<float>(kEqPopupPageAnimationDurationMs),
+        0.0f, 1.0f);
+    const float eased = EqEaseInOutCubic(linear);
+    g_eqPageAnimationProgress = g_eqPageAnimationStart +
+        (g_eqPageAnimationTarget - g_eqPageAnimationStart) * eased;
+
+    if (linear >= 1.0f) {
+        g_eqPageAnimationProgress = g_eqPageAnimationTarget;
+        EqStopPageAnimation(hwnd);
+        if (g_eqPageAnimationTarget < 0.5f)
+            EqCropPopupToLayout(hwnd);
+    }
+
+    RenderEqPopup(hwnd);
+}
+
+static std::wstring FormatEqMediaTime(double seconds) {
+    if (!IsFiniteDouble(seconds) || seconds < 0.0)
+        seconds = 0.0;
+    const long long total = static_cast<long long>(std::llround(seconds));
+    const long long hours = total / 3600;
+    const long long minutes = (total % 3600) / 60;
+    const long long secs = total % 60;
+    wchar_t buffer[32]{};
+    if (hours > 0) {
+        swprintf_s(buffer, L"%lld:%02lld:%02lld", hours, minutes, secs);
+    } else {
+        swprintf_s(buffer, L"%lld:%02lld", minutes, secs);
+    }
+    return buffer;
+}
+
+static float GetEqActiveGainAtBand(int index) {
     return std::clamp(
-        g_customEqGains[static_cast<size_t>(index)].load(std::memory_order_relaxed),
+        g_eqActiveGains[static_cast<size_t>(index)].load(std::memory_order_relaxed),
         0.0f, 2.0f);
 }
 
-static void SetEqGainFromMouse(int index, int y) {
+static float GetEqGainAtBand(int index) {
+    return GetEqActiveGainAtBand(index);
+}
+
+static void EqStopPresetPageAnimation(HWND hwnd) {
+    g_eqPresetPageAnimationActive = false;
+    g_eqPresetPageAnimationProgress = 0.0f;
+    g_eqPresetPageAnimationStart = g_eqPresetPage.load(std::memory_order_relaxed);
+    g_eqPresetPageAnimationTarget = g_eqPresetPage.load(std::memory_order_relaxed);
+    g_eqPresetPageAnimationStartTick = 0;
+    if (hwnd)
+        KillTimer(hwnd, kEqPresetPageAnimationTimerId);
+}
+
+static void EqStartPresetPageAnimation(HWND hwnd, int targetPage) {
+    if (!hwnd || !IsWindow(hwnd))
+        return;
+    targetPage = targetPage == EQ_PRESET_PAGE_SAVED
+        ? EQ_PRESET_PAGE_SAVED : EQ_PRESET_PAGE_BUILTIN;
+    const int currentPage = g_eqPresetPage.load(std::memory_order_relaxed);
+    if (g_eqPresetPageAnimationActive)
+        return;
+    if (currentPage == targetPage)
+        return;
+
+    g_eqHotPreset = -1;
+    g_eqHotPresetDelete = -1;
+    g_eqHotPresetNav = -1;
+    g_eqPresetPageAnimationStart = currentPage;
+    g_eqPresetPageAnimationTarget = targetPage;
+    g_eqPresetPageAnimationProgress = 0.0f;
+    g_eqPresetPageAnimationStartTick = GetTickCount64();
+    g_eqPresetPageAnimationActive = true;
+    SetTimer(hwnd, kEqPresetPageAnimationTimerId,
+             kEqPresetPageAnimationIntervalMs, nullptr);
+    RenderEqPopup(hwnd);
+}
+
+static void EqApplyPresetPageAnimationStep(HWND hwnd) {
+    if (!g_eqPresetPageAnimationActive) {
+        KillTimer(hwnd, kEqPresetPageAnimationTimerId);
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG elapsed = now >= g_eqPresetPageAnimationStartTick
+        ? now - g_eqPresetPageAnimationStartTick : 0;
+    const float linear = std::clamp(
+        static_cast<float>(elapsed) /
+            static_cast<float>(kEqPresetPageAnimationDurationMs),
+        0.0f, 1.0f);
+    g_eqPresetPageAnimationProgress = linear;
+
+    if (linear >= 1.0f) {
+        g_eqPresetPage.store(g_eqPresetPageAnimationTarget,
+                             std::memory_order_relaxed);
+        g_eqPresetPageAnimationActive = false;
+        g_eqPresetPageAnimationProgress = 0.0f;
+        g_eqPresetPageAnimationStart = g_eqPresetPageAnimationTarget;
+        g_eqPresetPageAnimationStartTick = 0;
+        KillTimer(hwnd, kEqPresetPageAnimationTimerId);
+        g_eqHotPreset = -1;
+        g_eqHotPresetDelete = -1;
+        g_eqHotPresetNav = -1;
+    }
+
+    RenderEqPopup(hwnd);
+}
+
+static void EqStopPresetAnimation(HWND hwnd) {
+    g_eqPresetAnimationActive = false;
+    g_eqLastAnimationTick = 0;
+    if (hwnd)
+        KillTimer(hwnd, kEqPopupAnimationTimerId);
+}
+
+static void EqStartPresetAnimation(HWND hwnd, int presetIndex) {
+    if (presetIndex < 0)
+        return;
+
+    if (presetIndex < VIZ_EQ_BUILTIN_PRESET_COUNT) {
+        // Built-in presets use their direct 0..7 index.
+        g_eqSelectedPreset = presetIndex;
+        for (int i = 0; i < VIZ_EQ_BANDS; ++i)
+            g_eqPresetTargets[static_cast<size_t>(i)] =
+                VIZ_EQ_PRESET_GAINS[static_cast<size_t>(presetIndex)][static_cast<size_t>(i)];
+    } else if (presetIndex >= EQ_CUSTOM_PRESET_INDEX_BASE) {
+        // Layout Builder's Saved page returns the persistent custom-preset id
+        // (100 + customIndex). The previous implementation incorrectly treated
+        // it as an offset from the built-in count, so clicking a Saved preset
+        // silently did nothing.
+        const int customIndex = presetIndex - EQ_CUSTOM_PRESET_INDEX_BASE;
+        if (customIndex < 0 || customIndex >= g_eqCustomPresetCount)
+            return;
+        g_eqSelectedPreset = presetIndex;
+        for (int i = 0; i < VIZ_EQ_BANDS; ++i)
+            g_eqPresetTargets[static_cast<size_t>(i)] = std::clamp(
+                g_eqCustomPresetGains[static_cast<size_t>(customIndex)][static_cast<size_t>(i)].load(
+                    std::memory_order_relaxed),
+                0.0f, 2.0f);
+    } else {
+        return;
+    }
+
+    Wh_SetIntValue(VIZ_EQ_SELECTED_PRESET_STORAGE_KEY, g_eqSelectedPreset);
+    g_eqPresetAnimationActive = true;
+    g_eqLastAnimationTick = GetTickCount64();
+    if (hwnd)
+        SetTimer(hwnd, kEqPopupAnimationTimerId, kEqPopupAnimationIntervalMs, nullptr);
+}
+
+static void EqCreateCustomPreset(HWND hwnd) {
+    if (g_eqCustomPresetCount >= VIZ_EQ_MAX_CUSTOM_PRESETS) return;
+    const int newIndex = g_eqCustomPresetCount++;
+    for (int band = 0; band < VIZ_EQ_BANDS; ++band)
+        g_eqCustomPresetGains[static_cast<size_t>(newIndex)][static_cast<size_t>(band)].store(
+            std::clamp(g_eqActiveGains[static_cast<size_t>(band)].load(std::memory_order_relaxed), 0.0f, 2.0f),
+            std::memory_order_relaxed);
+    g_eqSelectedPreset = EQ_CUSTOM_PRESET_INDEX_BASE + newIndex;
+    EqSaveCustomPreset(newIndex);
+    EqSaveCustomPresetCount();
+    SaveCustomEQSettings();
+    g_eqHotPresetDelete = -1;
+    if (hwnd) RenderEqPopup(hwnd);
+}
+
+static void EqDeleteCustomPreset(HWND hwnd, int customIndex) {
+    if (customIndex < 0 || customIndex >= g_eqCustomPresetCount) return;
+    EqStopPresetAnimation(hwnd);
+    const int selectedCustom = g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE
+        ? g_eqSelectedPreset - EQ_CUSTOM_PRESET_INDEX_BASE : -1;
+    for (int i = customIndex; i + 1 < g_eqCustomPresetCount; ++i) {
+        for (int band = 0; band < VIZ_EQ_BANDS; ++band)
+            g_eqCustomPresetGains[static_cast<size_t>(i)][static_cast<size_t>(band)].store(
+                g_eqCustomPresetGains[static_cast<size_t>(i + 1)][static_cast<size_t>(band)].load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
+    }
+    --g_eqCustomPresetCount;
+    for (int band = 0; band < VIZ_EQ_BANDS; ++band)
+        g_eqCustomPresetGains[static_cast<size_t>(g_eqCustomPresetCount)][static_cast<size_t>(band)].store(1.0f, std::memory_order_relaxed);
+    if (selectedCustom == customIndex) g_eqSelectedPreset = -1;
+    else if (selectedCustom > customIndex) g_eqSelectedPreset = EQ_CUSTOM_PRESET_INDEX_BASE + selectedCustom - 1;
+    EqSaveAllCustomPresets();
+    SaveCustomEQSettings();
+    g_eqHotPresetDelete = -1;
+    if (hwnd) RenderEqPopup(hwnd);
+}
+
+static void EqApplyPresetAnimationStep(HWND hwnd) {
+    if (!g_eqPresetAnimationActive)
+        return;
+
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG deltaMs = g_eqLastAnimationTick ? now - g_eqLastAnimationTick : 16;
+    g_eqLastAnimationTick = now;
+    deltaMs = std::clamp<ULONGLONG>(deltaMs, 1, 64);
+
+    // A frame-rate-independent exponential approach gives the soft, Linux-like
+    // "all knobs move together" transition without a fixed-duration jump.
+    const float alpha = 1.0f - expf(-static_cast<float>(deltaMs) / 90.0f);
+    bool finished = true;
+
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const size_t index = static_cast<size_t>(i);
+        const float current = GetEqActiveGainAtBand(i);
+        const float target = g_eqPresetTargets[index];
+        float next = current + (target - current) * alpha;
+        if (fabsf(target - next) < 0.0025f)
+            next = target;
+        if (fabsf(target - next) >= 0.0025f)
+            finished = false;
+        g_eqActiveGains[index].store(std::clamp(next, 0.0f, 2.0f),
+                                     std::memory_order_relaxed);
+    }
+
+    if (finished) {
+        for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+            g_eqActiveGains[static_cast<size_t>(i)].store(
+                g_eqPresetTargets[static_cast<size_t>(i)],
+                std::memory_order_relaxed);
+        }
+        EqStopPresetAnimation(hwnd);
+        SaveCustomEQSettings();
+    }
+
+    RenderEqPopup(hwnd);
+    if (g_hwndOverlay)
+        PostMessageW(g_hwndOverlay, WM_VIZ_AUDIO_WAKE, 0, 0);
+}
+
+static void EqBeginManualBandEdit(HWND hwnd) {
+    // A manual edit only stops an in-progress preset transition. The selected
+    // preset stays selected, and predefined preset values are never copied
+    // into Custom. This means editing Vocal/Pop/etc. is temporary: selecting
+    // that preset again restores its built-in curve.
+    EqStopPresetAnimation(hwnd);
+}
+
+static void SetEqGainFromMouse(int index, int x, int y) {
     if (index < 0 || index >= VIZ_EQ_BANDS)
         return;
 
     const double scale = EqGetPopupDpiScale();
-    const float logicalY = static_cast<float>(
-        static_cast<double>(y) / scale);
-    const float t = std::clamp(
-        (logicalY - static_cast<float>(EQ_SLIDER_TOP)) /
-            static_cast<float>(std::max(1, EQ_SLIDER_BOTTOM - EQ_SLIDER_TOP)),
-        0.0f, 1.0f);
-    const float gain = std::clamp(2.0f * (1.0f - t), 0.0f, 2.0f);
-    g_customEqGains[static_cast<size_t>(index)].store(
+    const EqSliderMetrics metrics = EqGetSliderMetrics();
+    const float logicalX = static_cast<float>(static_cast<double>(x) / scale);
+    const float logicalY = static_cast<float>(static_cast<double>(y) / scale);
+    float t = 0.0f;
+    if (metrics.horizontal) {
+        t = std::clamp(
+            (logicalX - static_cast<float>(metrics.area.left)) /
+                static_cast<float>(std::max(1L, metrics.area.right - metrics.area.left)),
+            0.0f, 1.0f);
+    } else {
+        t = std::clamp(
+            (logicalY - static_cast<float>(metrics.top)) /
+                static_cast<float>(std::max(1, metrics.bottom - metrics.top)),
+            0.0f, 1.0f);
+    }
+    const float gain = metrics.horizontal
+        ? std::clamp(2.0f * t, 0.0f, 2.0f)
+        : std::clamp(2.0f * (1.0f - t), 0.0f, 2.0f);
+    g_eqActiveGains[static_cast<size_t>(index)].store(
         gain, std::memory_order_relaxed);
+    if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE) {
+        const int customIndex = g_eqSelectedPreset - EQ_CUSTOM_PRESET_INDEX_BASE;
+        if (customIndex >= 0 && customIndex < g_eqCustomPresetCount)
+            g_eqCustomPresetGains[static_cast<size_t>(customIndex)][static_cast<size_t>(index)].store(gain, std::memory_order_relaxed);
+    } else {
+        g_customEqGains[static_cast<size_t>(index)].store(gain, std::memory_order_relaxed);
+    }
+    g_eqPresetTargets[static_cast<size_t>(index)] = gain;
 }
 
-static void RenderEqPopup(HWND hwnd) {
-    if (!hwnd)
+static bool EqLayoutRectsTouch(const RECT& a, const RECT& b) {
+    const bool horizontal =
+        (a.right == b.left || b.right == a.left) &&
+        std::max(a.top, b.top) < std::min(a.bottom, b.bottom);
+    const bool vertical =
+        (a.bottom == b.top || b.bottom == a.top) &&
+        std::max(a.left, b.left) < std::min(a.right, b.right);
+    return horizontal || vertical;
+}
+
+static void AddEqAdaptiveRoundedRect(
+    Gdiplus::GraphicsPath& path,
+    const RECT& rect,
+    float radius,
+    bool roundTopLeft,
+    bool roundTopRight,
+    bool roundBottomRight,
+    bool roundBottomLeft) {
+    const float left = static_cast<float>(rect.left);
+    const float top = static_cast<float>(rect.top);
+    const float right = static_cast<float>(rect.right);
+    const float bottom = static_cast<float>(rect.bottom);
+    const float safeRadius = std::max(0.0f, std::min({
+        radius, (right - left) * 0.5f, (bottom - top) * 0.5f}));
+
+    const float rtl = roundTopLeft ? safeRadius : 0.0f;
+    const float rtr = roundTopRight ? safeRadius : 0.0f;
+    const float rbr = roundBottomRight ? safeRadius : 0.0f;
+    const float rbl = roundBottomLeft ? safeRadius : 0.0f;
+
+    path.StartFigure();
+    path.AddLine(left + rtl, top, right - rtr, top);
+    if (rtr > 0.0f)
+        path.AddArc(right - 2.0f * rtr, top, 2.0f * rtr, 2.0f * rtr, 270.0f, 90.0f);
+    path.AddLine(right, top + rtr, right, bottom - rbr);
+    if (rbr > 0.0f)
+        path.AddArc(right - 2.0f * rbr, bottom - 2.0f * rbr, 2.0f * rbr, 2.0f * rbr, 0.0f, 90.0f);
+    path.AddLine(right - rbr, bottom, left + rbl, bottom);
+    if (rbl > 0.0f)
+        path.AddArc(left, bottom - 2.0f * rbl, 2.0f * rbl, 2.0f * rbl, 90.0f, 90.0f);
+    path.AddLine(left, bottom - rbl, left, top + rtl);
+    if (rtl > 0.0f)
+        path.AddArc(left, top, 2.0f * rtl, 2.0f * rtl, 180.0f, 90.0f);
+    path.CloseFigure();
+}
+
+static void RenderEqSectionBackgroundsUncached(
+    Gdiplus::Graphics& graphics,
+    bool dark) {
+    // The popup-wide background on the default page is transparent, so make
+    // individual section surfaces a little more opaque for visual balance.
+    const EqPopupStyle style = MakeEqPopupStyle(
+        g_eqPopupStyleId.load(std::memory_order_acquire), dark);
+    const Gdiplus::Color panelColor = style.panel;
+    Gdiplus::SolidBrush panelBrush(panelColor);
+    Gdiplus::GraphicsPath backgroundPath;
+    backgroundPath.SetFillMode(Gdiplus::FillModeWinding);
+
+    for (const auto& widget : g_eqLayoutWidgets) {
+        if (!widget.present || !widget.backgroundEnabled)
+            continue;
+
+        const RECT r = EqGetLayoutRect(widget.id);
+        if (r.right <= r.left || r.bottom <= r.top)
+            continue;
+
+        bool touchLeft = false;
+        bool touchTop = false;
+        bool touchRight = false;
+        bool touchBottom = false;
+
+        for (const auto& other : g_eqLayoutWidgets) {
+            if (!other.present || !other.backgroundEnabled || other.id == widget.id)
+                continue;
+            const RECT o = EqGetLayoutRect(other.id);
+            if (EqLayoutRectsTouch(r, o)) {
+                if (o.right == r.left) touchLeft = true;
+                if (r.right == o.left) touchRight = true;
+                if (o.bottom == r.top) touchTop = true;
+                if (r.bottom == o.top) touchBottom = true;
+            }
+        }
+
+        Gdiplus::GraphicsPath path;
+        if (widget.id == EQ_LAYOUT_DISK) {
+            // The Disk background intentionally sits a few pixels inside the
+            // logical section, so the section frame is tighter around the disc.
+            RECT diskRect = r;
+            constexpr int kDiskBackgroundInset = 6;
+            diskRect.left += kDiskBackgroundInset;
+            diskRect.top += kDiskBackgroundInset;
+            diskRect.right -= kDiskBackgroundInset;
+            diskRect.bottom -= kDiskBackgroundInset;
+            if (diskRect.right <= diskRect.left || diskRect.bottom <= diskRect.top)
+                continue;
+
+            if (widget.backgroundCircle) {
+                path.AddEllipse(
+                    static_cast<float>(diskRect.left),
+                    static_cast<float>(diskRect.top),
+                    static_cast<float>(diskRect.right - diskRect.left),
+                    static_cast<float>(diskRect.bottom - diskRect.top));
+            } else {
+                const float radius = std::min(14.0f,
+                    std::max(4.0f, static_cast<float>(std::min(
+                        diskRect.right - diskRect.left,
+                        diskRect.bottom - diskRect.top)) * 0.06f));
+                AddEqAdaptiveRoundedRect(
+                    path, diskRect, radius,
+                    true, true, true, true);
+            }
+        } else {
+            const float radius = std::min(14.0f,
+                std::max(4.0f, static_cast<float>(std::min(
+                    r.right - r.left, r.bottom - r.top)) * 0.06f));
+            AddEqAdaptiveRoundedRect(
+                path, r, radius,
+                !touchTop && !touchLeft,
+                !touchTop && !touchRight,
+                !touchBottom && !touchRight,
+                !touchBottom && !touchLeft);
+        }
+        // Collect all section shapes first; fill them together so literally
+        // touching neighbors become one continuous background surface. Disk is
+        // intentionally an independent shape even if its layout rectangle touches another section.
+        backgroundPath.AddPath(&path, FALSE);
+    }
+
+    if (backgroundPath.GetPointCount() > 0)
+        graphics.FillPath(&panelBrush, &backgroundPath);
+}
+
+
+struct EqSectionBackgroundCache {
+    Gdiplus::Bitmap* bitmap = nullptr;
+    size_t hash = 0;
+    int width = 0;
+    int height = 0;
+};
+static EqSectionBackgroundCache g_eqSectionBackgroundCache;
+
+static size_t BuildEqSectionBackgroundCacheHash(bool dark, int width, int height) {
+    size_t hash = 0;
+    auto combine = [&hash](size_t value) {
+        hash ^= value + static_cast<size_t>(0x9e3779b9) + (hash << 6) + (hash >> 2);
+    };
+    combine(static_cast<size_t>(dark));
+    combine(static_cast<size_t>(g_eqPopupStyleId.load(std::memory_order_acquire)));
+    combine(static_cast<size_t>(width));
+    combine(static_cast<size_t>(height));
+    for (const auto& widget : g_eqLayoutWidgets) {
+        if (!widget.present || !widget.backgroundEnabled)
+            continue;
+        const RECT r = EqGetLayoutRect(widget.id);
+        combine(static_cast<size_t>(widget.id + 1));
+        combine(static_cast<size_t>(widget.backgroundCircle));
+        combine(static_cast<size_t>(r.left));
+        combine(static_cast<size_t>(r.top));
+        combine(static_cast<size_t>(r.right));
+        combine(static_cast<size_t>(r.bottom));
+    }
+    return hash;
+}
+
+static void DrawEqSectionBackgrounds(Gdiplus::Graphics& graphics, bool dark) {
+    const int width = std::max(1, g_eqPopupLogicalWidth);
+    const int height = std::max(1, g_eqPopupLogicalHeight);
+    const size_t cacheHash = BuildEqSectionBackgroundCacheHash(dark, width, height);
+    auto& cache = g_eqSectionBackgroundCache;
+
+    if (!cache.bitmap || cache.hash != cacheHash ||
+        cache.width != width || cache.height != height) {
+        std::unique_ptr<Gdiplus::Bitmap> bitmap(
+            new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+        if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+            RenderEqSectionBackgroundsUncached(graphics, dark);
+            return;
+        }
+        Gdiplus::Graphics cacheGraphics(bitmap.get());
+        cacheGraphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        cacheGraphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        cacheGraphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+        cacheGraphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+        RenderEqSectionBackgroundsUncached(cacheGraphics, dark);
+
+        delete cache.bitmap;
+        cache.bitmap = bitmap.release();
+        cache.hash = cacheHash;
+        cache.width = width;
+        cache.height = height;
+    }
+    graphics.DrawImage(cache.bitmap, 0, 0, width, height);
+}
+
+static Gdiplus::StringAlignment EqTextAlignmentValue(int alignment) {
+    switch (std::clamp(alignment, 0, 2)) {
+    case 0: return Gdiplus::StringAlignmentNear;
+    case 2: return Gdiplus::StringAlignmentFar;
+    default: return Gdiplus::StringAlignmentCenter;
+    }
+}
+
+
+// Track title and artist change only when the active media metadata changes.
+// Cache their text raster separately from the moving timeline and playback
+// controls, so each Player frame does not recreate fonts and re-rasterize text.
+struct EqMediaTextRenderCache {
+    Gdiplus::Bitmap* bitmap = nullptr;
+    std::wstring title;
+    std::wstring artist;
+    int width = 0;
+    int height = 0;
+    int alignment = 1;
+    int styleId = -1;
+    bool dark = true;
+};
+static EqMediaTextRenderCache g_eqMediaTextRenderCache;
+
+static bool DrawEqMediaTextCached(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    const std::wstring& title,
+    const std::wstring& artist,
+    int textAlignment) {
+    const int width = r.right - r.left;
+    const int height = r.bottom - r.top;
+    if (width <= 0 || height <= 0)
+        return false;
+
+    const int alignment = std::clamp(textAlignment, 0, 2);
+    const int styleId = g_eqPopupStyleId.load(std::memory_order_acquire);
+    auto& cache = g_eqMediaTextRenderCache;
+    const bool cacheMatches = cache.bitmap &&
+        cache.width == width && cache.height == height &&
+        cache.alignment == alignment && cache.styleId == styleId &&
+        cache.dark == dark && cache.title == title && cache.artist == artist;
+
+    if (!cacheMatches) {
+        std::unique_ptr<Gdiplus::Bitmap> bitmap(
+            new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+        if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok)
+            return false;
+
+        Gdiplus::Graphics cacheGraphics(bitmap.get());
+        cacheGraphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        cacheGraphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+        cacheGraphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+        const EqPopupStyle style = MakeEqPopupStyle(styleId, dark);
+        Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
+        Gdiplus::FontFamily smallFamily(L"Segoe UI");
+        const float titleSize = std::clamp(height * 0.17f, 11.0f, 16.0f);
+        const float smallSize = std::clamp(height * 0.13f, 9.0f, 13.0f);
+        Gdiplus::Font titleFont(&titleFamily, titleSize,
+            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::Font artistFont(&smallFamily, smallSize,
+            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::SolidBrush titleBrush(style.text);
+        Gdiplus::SolidBrush mutedBrush(style.muted);
+        Gdiplus::StringFormat noWrap;
+        noWrap.SetAlignment(EqTextAlignmentValue(alignment));
+        noWrap.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+        noWrap.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
+
+        cacheGraphics.DrawString(title.c_str(), -1, &titleFont,
+            Gdiplus::RectF(12.0f, 9.0f,
+                           static_cast<float>(std::max(60, width - 24)),
+                           titleSize + 8.0f),
+            &noWrap, &titleBrush);
+        cacheGraphics.DrawString(artist.c_str(), -1, &artistFont,
+            Gdiplus::RectF(12.0f, 9.0f + titleSize + 4.0f,
+                           static_cast<float>(std::max(60, width - 24)),
+                           smallSize + 6.0f),
+            &noWrap, &mutedBrush);
+
+        delete cache.bitmap;
+        cache.bitmap = bitmap.release();
+        cache.title = title;
+        cache.artist = artist;
+        cache.width = width;
+        cache.height = height;
+        cache.alignment = alignment;
+        cache.styleId = styleId;
+        cache.dark = dark;
+    }
+
+    graphics.DrawImage(cache.bitmap, r.left, r.top, width, height);
+    return true;
+}
+
+static void DrawEqMediaWidget(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    const EqMediaState& media,
+    int rotation,
+    int textAlignment,
+    bool preview) {
+    if (r.right <= r.left || r.bottom <= r.top)
         return;
 
-    const bool dark = IsDarkThemeEnabled();
-    const double scale = EqGetPopupDpiScale();
-    const int width = EqPopupScalePx(EQ_POPUP_WIDTH, scale);
-    const int height = EqPopupScalePx(EQ_POPUP_HEIGHT, scale);
+    const EqPopupStyle style = MakeEqPopupStyle(
+        g_eqPopupStyleId.load(std::memory_order_acquire), dark);
+    const Gdiplus::Color titleColor = style.text;
+    const Gdiplus::Color mutedColor = style.muted;
+    const Gdiplus::Color trackColor = style.track;
+    const Gdiplus::Color accentColor = style.accent;
 
-    HDC screen = GetDC(nullptr);
-    HDC mem = CreateCompatibleDC(screen);
-    BITMAPINFO bi{};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = width;
-    bi.bmiHeader.biHeight = -height;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
+    Gdiplus::FontFamily smallFamily(L"Segoe UI");
+    Gdiplus::FontFamily symbolFamily(L"Segoe UI Symbol");
+    Gdiplus::Font timeFont(&smallFamily, 9.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::Font controlFont(&symbolFamily, 15.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
 
-    void* bits = nullptr;
-    HBITMAP bitmap = CreateDIBSection(screen, &bi, DIB_RGB_COLORS,
-                                      &bits, nullptr, 0);
-    if (!bitmap || !bits) {
-        if (bitmap) DeleteObject(bitmap);
-        DeleteDC(mem);
-        ReleaseDC(nullptr, screen);
+    const std::wstring* mediaTitle = nullptr;
+    const std::wstring* mediaArtist = nullptr;
+    std::wstring directArtist;
+    // RenderEqPopup supplies the persistent render cache; keep a safe fallback
+    // for any direct/preview invocation outside that path.
+    if (!preview && !g_eqPlayerMediaRenderCache.displayTitle.empty()) {
+        mediaTitle = &g_eqPlayerMediaRenderCache.displayTitle;
+        mediaArtist = &g_eqPlayerMediaRenderCache.displayArtist;
+    } else {
+        static const std::wstring kNoMediaTitle = L"No media playing";
+        static const std::wstring kNoMediaArtist = L"By —";
+        std::wstring directTitle;
+        if (media.hasSession && !media.title.empty())
+            directTitle = media.title;
+        else
+            directTitle = kNoMediaTitle;
+        if (media.hasSession && !media.artist.empty())
+            directArtist = L"By " + media.artist;
+        else
+            directArtist = kNoMediaArtist;
+        mediaTitle = &directTitle;
+        mediaArtist = &directArtist;
+    }
+    const bool vertical = rotation == 90 || rotation == 270 || (r.bottom-r.top) > (r.right-r.left);
+    const Gdiplus::StringAlignment horizontalAlignment = EqTextAlignmentValue(textAlignment);
+
+    // Alignment is applied to the whole Media section text area.
+    // Do not reserve an artificial right-side block: that made the right
+    // alignment appear close to center because the StringFormat box ended
+    // well before the actual section edge.
+    if (!preview && DrawEqMediaTextCached(
+            graphics, r, dark, *mediaTitle, *mediaArtist, textAlignment)) {
+        // Cached: text fonts/rasterization are rebuilt only when metadata,
+        // layout, alignment or theme changes.
+    } else {
+        const float titleSize = std::clamp((r.bottom-r.top) * 0.17f, 11.0f, 16.0f);
+        const float smallSize = std::clamp((r.bottom-r.top) * 0.13f, 9.0f, 13.0f);
+        Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
+        Gdiplus::FontFamily artistFamily(L"Segoe UI");
+        Gdiplus::Font titleFont(&titleFamily, titleSize,
+            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::Font artistFont(&artistFamily, smallSize,
+            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::SolidBrush titleBrush(titleColor);
+        Gdiplus::SolidBrush mutedBrush(mutedColor);
+        const int textLeft = r.left + 12;
+        const int textTop = r.top + 9;
+        const int textWidth = std::max(60, static_cast<int>(r.right - r.left) - 24);
+        Gdiplus::StringFormat noWrap;
+        noWrap.SetAlignment(horizontalAlignment);
+        noWrap.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+        noWrap.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
+        graphics.DrawString(mediaTitle->c_str(), -1, &titleFont,
+            Gdiplus::RectF((float)textLeft, (float)textTop,
+                           (float)textWidth, titleSize + 8.0f),
+            &noWrap, &titleBrush);
+        graphics.DrawString(mediaArtist->c_str(), -1, &artistFont,
+            Gdiplus::RectF((float)textLeft,
+                           (float)textTop + titleSize + 4.0f,
+                           (float)textWidth, smallSize + 6.0f),
+            &noWrap, &mutedBrush);
+    }
+
+    const EqMediaMetrics metrics = EqBuildMediaMetricsForRect(
+        r, rotation == 90 || rotation == 270 || (r.bottom-r.top) > (r.right-r.left));
+
+    const double mediaPosition = g_eqMediaSeeking && !preview
+        ? g_eqMediaSeekPreviewSeconds : media.positionSeconds;
+    const double duration = std::max(0.0, media.durationSeconds);
+    const float progress = duration > 0.0 ? (float)std::clamp(mediaPosition/duration,0.0,1.0) : 0.0f;
+    const float timelineY = (float)(metrics.timeline.top + metrics.timeline.bottom) * 0.5f;
+    const float left = (float)metrics.timeline.left;
+    const float right = (float)metrics.timeline.right;
+    Gdiplus::Pen timelinePen(trackColor, 4.0f);
+    timelinePen.SetStartCap(Gdiplus::LineCapRound); timelinePen.SetEndCap(Gdiplus::LineCapRound);
+    graphics.DrawLine(&timelinePen,left,timelineY,right,timelineY);
+    Gdiplus::Pen timelineFill(accentColor,4.0f);
+    timelineFill.SetStartCap(Gdiplus::LineCapRound); timelineFill.SetEndCap(Gdiplus::LineCapRound);
+    const float progressX=left+(right-left)*progress;
+    graphics.DrawLine(&timelineFill,left,timelineY,progressX,timelineY);
+    if (!vertical) {
+        Gdiplus::SolidBrush timeBrush(titleColor);
+        graphics.DrawString(FormatEqMediaTime(mediaPosition).c_str(), -1, &timeFont,
+                            Gdiplus::PointF((float)r.left+12.0f,(float)r.top+64.0f), &timeBrush);
+        Gdiplus::StringFormat durationFormat;
+        durationFormat.SetAlignment(Gdiplus::StringAlignmentFar);
+        durationFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+        graphics.DrawString(FormatEqMediaTime(duration).c_str(), -1, &timeFont,
+                            Gdiplus::RectF((float)r.right-62.0f,(float)r.top+64.0f,50.0f,16.0f), &durationFormat, &timeBrush);
+    }
+
+    const wchar_t* glyphs[5]={L"\x23EE",L"-5",L"\x23B6",L"+5",L"\x23ED"};
+    glyphs[2]=media.playing?L"\x23F8":L"\x25B6";
+    Gdiplus::SolidBrush buttonBrush(style.button);
+    Gdiplus::SolidBrush glyphBrush(style.text);
+    Gdiplus::GraphicsPath buttonPath;
+    Gdiplus::StringFormat centered;
+    centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+    centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    for(int i=0;i<5;i++) {
+        const RECT br=metrics.buttons[(size_t)i];
+        buttonPath.Reset();
+        AddRoundedRectSubpath(buttonPath,(float)br.left,(float)br.top,(float)(br.right-br.left),(float)(br.bottom-br.top),8.0f);
+        graphics.FillPath(&buttonBrush,&buttonPath);
+        graphics.DrawString(glyphs[i],-1,&controlFont,Gdiplus::RectF((float)br.left,(float)br.top,(float)(br.right-br.left),(float)(br.bottom-br.top)),&centered,&glyphBrush);
+    }
+}
+
+
+static float EqDiskPulseEaseIn(float value) {
+    value = std::clamp(value, 0.0f, 1.0f);
+    // Harder ease-in for the attack: the pulse stays close to rest for a
+    // moment and then ramps decisively into the peak instead of looking like
+    // a soft linear swell.
+    return value * value * value;
+}
+
+static float EqDiskPulseEaseOut(float value) {
+    value = std::clamp(value, 0.0f, 1.0f);
+    // Harder ease-out for the release: the first part drops quickly, then the
+    // tail settles smoothly instead of hanging near the peak.
+    const float inv = 1.0f - value;
+    return 1.0f - inv * inv * inv;
+}
+
+static void DrawEqDiskWidget(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    bool preview) {
+    if (r.right <= r.left || r.bottom <= r.top)
+        return;
+
+    const float width = static_cast<float>(r.right - r.left);
+    const float height = static_cast<float>(r.bottom - r.top);
+    const float cx = (static_cast<float>(r.left) + static_cast<float>(r.right)) * 0.5f;
+    const float cy = (static_cast<float>(r.top) + static_cast<float>(r.bottom)) * 0.5f;
+
+    // Leave room for the circular spectrum outside the artwork.
+    const float maxRadius = std::max(24.0f, std::min(width, height) * 0.48f);
+    const float baseDiskRadius = maxRadius * 0.70f;
+    const Gdiplus::Color styleAccent =
+        MakeEqPopupStyle(g_eqPopupStyleId.load(std::memory_order_acquire), dark).accent;
+
+    ULONGLONG nowMs = GetTickCount64();
+    float diskScale = 1.0f;
+    float smoothDtFrames = 1.0f;
+    float diskAttackResponse = 0.14f;
+    float diskDecayResponse = 0.055f;
+
+    if (!preview) {
+        // RenderEqPopup already refreshes the media render cache. Do not take
+        // a second full media-state snapshot/copy just to compare the cached
+        // track key; it is not used anywhere in the Disk render path.
+        const std::wstring& mediaTrackKey = g_eqPlayerMediaRenderCache.state.trackKey;
+        if (mediaTrackKey != g_eqDiskLastTrackKey) {
+            g_eqDiskLastTrackKey = mediaTrackKey;
+            g_eqDiskPulseStartMs.fill(0);
+            g_eqDiskPulseStrength.fill(0.0f);
+            g_eqDiskBarSmooth.fill(0.0f);
+            g_eqDiskBarGhost.fill(0.0f);
+            for (auto& values : g_eqDiskGhostHistoryValues)
+                values.fill(0.0f);
+            for (auto& times : g_eqDiskGhostHistoryTimes)
+                times.fill(nowMs);
+            g_eqDiskPulseScale = 1.0f;
+            g_eqDiskLastPulseEventCounter =
+                g_audioDiskPulseEventCounter.load(std::memory_order_acquire);
+            g_eqDiskLastSmoothMs = nowMs;
+        }
+
+        float frameMax = 0.0f;
+        float bassEnergy = 0.0f;
+
+        if (g_eqDiskLastSmoothMs != 0 && nowMs >= g_eqDiskLastSmoothMs) {
+            const ULONGLONG elapsedMs = nowMs - g_eqDiskLastSmoothMs;
+            smoothDtFrames = elapsedMs == 0
+                ? 0.0f
+                : std::clamp(
+                    static_cast<float>(elapsedMs) / (1000.0f / 60.0f),
+                    0.25f, 8.0f);
+        }
+        g_eqDiskLastSmoothMs = nowMs;
+        diskAttackResponse =
+            FrameRateIndependentResponse(0.14f, smoothDtFrames);
+        diskDecayResponse =
+            FrameRateIndependentResponse(0.055f, smoothDtFrames);
+        static constexpr float kBassWeights[6] = {
+            1.00f, 0.90f, 0.72f, 0.58f, 0.42f, 0.28f
+        };
+        for (int i = 0; i < 6 && i < VIZ_NUM_BANDS; ++i) {
+            const float value = std::max(0.0f,
+                g_audioBands[i].load(std::memory_order_relaxed));
+            frameMax = std::max(frameMax, value);
+            bassEnergy += value * kBassWeights[i];
+        }
+
+        const float lowBand = std::max(0.0f,
+            g_audioBands[0].load(std::memory_order_relaxed));
+        const float secondBand = VIZ_NUM_BANDS > 1
+            ? std::max(0.0f, g_audioBands[1].load(std::memory_order_relaxed))
+            : lowBand;
+
+        if (frameMax > g_eqDiskAutoGainMax)
+            g_eqDiskAutoGainMax += (frameMax - g_eqDiskAutoGainMax) * 0.24f;
+        else
+            g_eqDiskAutoGainMax += (frameMax - g_eqDiskAutoGainMax) * 0.012f;
+
+        g_eqDiskAutoGainMax = std::clamp(g_eqDiskAutoGainMax, 0.025f, 1.0f);
+        const float diskGain = 0.72f / std::max(0.025f, g_eqDiskAutoGainMax);
+        const float weightedBass = std::clamp((bassEnergy / 3.90f) * diskGain, 0.0f, 1.35f);
+        const float lowBandPeak = std::clamp(
+            (lowBand * 0.78f + secondBand * 0.22f) * diskGain * 1.18f,
+            0.0f, 1.35f);
+        const float normalizedBass = std::clamp(
+            std::max(weightedBass, lowBandPeak), 0.0f, 1.0f);
+        float baseBassPulse = 0.0f;
+
+        // Use the render-side snapshot already refreshed by RenderEqPopup.
+        if (g_eqPlayerMediaRenderCache.state.playing) {
+            // Bass energy is the slow/base component. The separate bass spectral
+            // flux event path is the short impact component. This prevents a
+            // sustained bass note from repeatedly retriggering the Disk.
+            // Keep a small continuous component so weak/medium bass produces
+            // a correspondingly weak pulse even when it does not cross the
+            // transient-event gate. The nonlinear curve gives noticeably more
+            // body to strong bass while keeping quiet bass restrained.
+            baseBassPulse =
+                0.0085f + 0.0105f *
+                (normalizedBass * normalizedBass);
+
+            const ULONGLONG pulseEventCounter =
+                g_audioDiskPulseEventCounter.load(std::memory_order_acquire);
+            if (pulseEventCounter != g_eqDiskLastPulseEventCounter) {
+                const ULONGLONG pendingEvents =
+                    pulseEventCounter - g_eqDiskLastPulseEventCounter;
+                const size_t spawnCount = static_cast<size_t>(std::min<ULONGLONG>(
+                    pendingEvents,
+                    static_cast<ULONGLONG>(EQ_DISK_MAX_PARALLEL_PULSES)));
+                const float eventStrength = std::clamp(
+                    g_audioDiskPulseEventStrength.load(
+                        std::memory_order_acquire),
+                    0.0f, 1.20f);
+
+                for (size_t eventIndex = 0; eventIndex < spawnCount; ++eventIndex) {
+                    // Existing pulses keep running while a new one starts on top.
+                    size_t slot = EQ_DISK_MAX_PARALLEL_PULSES;
+                    for (size_t i = 0; i < EQ_DISK_MAX_PARALLEL_PULSES; ++i) {
+                        if (g_eqDiskPulseStartMs[i] == 0) {
+                            slot = i;
+                            break;
+                        }
+                    }
+                    if (slot == EQ_DISK_MAX_PARALLEL_PULSES) {
+                        slot = 0;
+                        for (size_t i = 1; i < EQ_DISK_MAX_PARALLEL_PULSES; ++i) {
+                            if (g_eqDiskPulseStartMs[i] < g_eqDiskPulseStartMs[slot])
+                                slot = i;
+                        }
+                    }
+                    g_eqDiskPulseStartMs[slot] = nowMs;
+                    // Event strength is driven by bass spectral rise; blend the
+                    // current bass energy into it so two hits with different
+                    // low-frequency power do not look identical.
+                    const float bassStrength = std::clamp(
+                        0.35f + normalizedBass * 0.85f,
+                        0.35f, 1.20f);
+                    g_eqDiskPulseStrength[slot] = std::clamp(
+                        0.62f + eventStrength * 0.42f + bassStrength * 0.18f,
+                        0.62f, 1.22f);
+                }
+
+                g_eqDiskLastPulseEventCounter = pulseEventCounter;
+            }
+
+            if (g_eqDiskLastRotationMs == 0) {
+                g_eqDiskLastRotationMs = nowMs;
+            } else {
+                const ULONGLONG dtMs = nowMs >= g_eqDiskLastRotationMs
+                    ? std::min<ULONGLONG>(nowMs - g_eqDiskLastRotationMs, 100)
+                    : 0;
+                g_eqDiskLastRotationMs = nowMs;
+                g_eqDiskRotationDegrees = std::fmod(
+                    g_eqDiskRotationDegrees + static_cast<float>(dtMs) * 0.0120f,
+                    360.0f);
+            }
+        } else {
+            // Playback stopping does not cancel active pulses. Their timestamps
+            // remain alive and the popup timer continues to render them until
+            // their individual animations finish.
+            g_eqDiskLastPulseEventCounter =
+                g_audioDiskPulseEventCounter.load(std::memory_order_acquire);
+            g_eqDiskLastRotationMs = nowMs;
+        }
+
+        float totalPulseBoost = 0.0f;
+        for (size_t i = 0; i < EQ_DISK_MAX_PARALLEL_PULSES; ++i) {
+            const ULONGLONG startMs = g_eqDiskPulseStartMs[i];
+            if (startMs == 0)
+                continue;
+
+            const ULONGLONG elapsed = nowMs >= startMs ? nowMs - startMs : 0;
+            if (elapsed >= 340) {
+                g_eqDiskPulseStartMs[i] = 0;
+                g_eqDiskPulseStrength[i] = 0.0f;
+                continue;
+            }
+
+            const float t = elapsed / 340.0f;
+            // A deliberately harder in/out shape: fast, decisive movement into
+            // the hit, followed by a strong release and a short smooth tail.
+            const float envelope = t < 0.16f
+                ? EqDiskPulseEaseIn(t / 0.16f)
+                : 1.0f - EqDiskPulseEaseOut((t - 0.16f) / 0.84f);
+            // Slightly reduce the previous maximum while preserving clearly
+            // different pulse sizes for weak versus heavy bass hits.
+            const float pulseStrength = std::clamp(
+                g_eqDiskPulseStrength[i], 0.62f, 1.22f);
+            totalPulseBoost += 0.020f * pulseStrength * envelope;
+        }
+        // Smooth the combined pulse itself as a separate animation layer.
+        // This removes the last bit of scale stepping when several hits overlap.
+        const float pulseTarget = 1.0f + std::min(
+            0.055f, baseBassPulse + totalPulseBoost);
+        const float pulseRiseResponse =
+            FrameRateIndependentResponse(0.18f, smoothDtFrames);
+        const float pulseFallResponse =
+            FrameRateIndependentResponse(0.10f, smoothDtFrames);
+        const float pulseResponse = pulseTarget > g_eqDiskPulseScale
+            ? pulseRiseResponse : pulseFallResponse;
+        g_eqDiskPulseScale += (pulseTarget - g_eqDiskPulseScale) * pulseResponse;
+        g_eqDiskPulseScale = std::clamp(g_eqDiskPulseScale, 1.0f, 1.055f);
+        diskScale = g_eqDiskPulseScale;
+    }
+
+    const float diskRadius = baseDiskRadius * diskScale;
+    const float ringOuter = maxRadius;
+
+    // Start the circular FFT almost directly at the artwork edge. The bars
+    // use flat caps, so keeping only a tiny offset leaves the visualizer
+    // noticeably closer to the disk without drawing into the artwork.
+    const float ringArcSpacing =
+        (2.0f * VIZ_PI * diskRadius) / static_cast<float>(EQ_DISK_RING_BARS);
+    const float ringBarWidth = std::clamp(ringArcSpacing - 3.0f, 3.5f, 18.0f);
+    const float ringInner = std::min(
+        ringOuter - ringBarWidth * 0.5f - 1.0f,
+        diskRadius + 0.5f);
+    // Reduce the Disk ring's maximum radial bar length to 80% of its
+    // previous Disk-only limit, without changing the global visualizer.
+    const float diskMaxBarLength =
+        std::max(1.0f, (ringOuter - ringInner) * 0.544f);
+
+    // Disk is a real popup section, so its background is painted only inside
+    // the Disk widget rectangle. The popup itself remains transparent between
+    // sections; this keeps the background tied to the actual occupied areas.
+    // A dark backing keeps the disk readable even when the album artwork is
+    // very bright, while the artwork itself fills the circular disc.
+    Gdiplus::SolidBrush diskBacking(
+        Gdiplus::Color(dark ? 245 : 235, dark ? 13 : 28, dark ? 13 : 28, dark ? 16 : 30));
+    graphics.FillEllipse(
+        &diskBacking,
+        cx - diskRadius, cy - diskRadius,
+        diskRadius * 2.0f, diskRadius * 2.0f);
+
+    if (!preview)
+        EnsureEqDiskArtworkLoaded();
+
+    if (preview || !g_eqDiskArtworkBitmap) {
+        Gdiplus::SolidBrush placeholder(
+            Gdiplus::Color(dark ? 205 : 175, dark ? 32 : 78, dark ? 32 : 78, dark ? 38 : 82));
+        graphics.FillEllipse(
+            &placeholder,
+            cx - diskRadius + 2.0f, cy - diskRadius + 2.0f,
+            diskRadius * 2.0f - 4.0f, diskRadius * 2.0f - 4.0f);
+    } else {
+        if (EnsureEqDiskArtworkRasterCache()) {
+            const Gdiplus::GraphicsState state = graphics.Save();
+            graphics.TranslateTransform(cx, cy);
+            graphics.RotateTransform(g_eqDiskRotationDegrees);
+            graphics.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+            graphics.DrawImage(
+                g_eqDiskArtworkRasterCache.bitmap,
+                Gdiplus::RectF(
+                    -diskRadius, -diskRadius,
+                    diskRadius * 2.0f, diskRadius * 2.0f),
+                0.0f, 0.0f, 256.0f, 256.0f, Gdiplus::UnitPixel);
+            graphics.Restore(state);
+        } else {
+            // Fallback preserves the original path if the raster cache cannot
+            // be allocated (for example, under memory pressure).
+            Gdiplus::Bitmap* bitmap = g_eqDiskArtworkBitmap;
+            const UINT imageW = bitmap->GetWidth();
+            const UINT imageH = bitmap->GetHeight();
+            if (imageW > 0 && imageH > 0) {
+                const Gdiplus::GraphicsState state = graphics.Save();
+                Gdiplus::GraphicsPath clipPath;
+                clipPath.AddEllipse(
+                    cx - diskRadius + 1.5f, cy - diskRadius + 1.5f,
+                    diskRadius * 2.0f - 3.0f, diskRadius * 2.0f - 3.0f);
+                graphics.SetClip(&clipPath, Gdiplus::CombineModeReplace);
+                graphics.TranslateTransform(cx, cy);
+                graphics.RotateTransform(g_eqDiskRotationDegrees);
+                const float srcW = static_cast<float>(imageW);
+                const float srcH = static_cast<float>(imageH);
+                const float srcSize = std::min(srcW, srcH);
+                const float srcX = srcW > srcH ? (srcW - srcSize) * 0.5f : 0.0f;
+                const float srcY = srcH > srcW ? (srcH - srcSize) * 0.5f : 0.0f;
+                graphics.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+                graphics.DrawImage(
+                    bitmap,
+                    Gdiplus::RectF(
+                        -diskRadius, -diskRadius,
+                        diskRadius * 2.0f, diskRadius * 2.0f),
+                    srcX, srcY, srcSize, srcSize, Gdiplus::UnitPixel);
+                graphics.Restore(state);
+            }
+        }
+    }
+
+    // Only the outer edge is outlined here. The previous 72%-radius ring
+    // looked like a stray white circle through the middle of the artwork.
+    Gdiplus::Pen outerPen(
+        Gdiplus::Color(dark ? 120 : 100, 220, 220, 225), 1.0f);
+    graphics.DrawEllipse(
+        &outerPen,
+        cx - diskRadius + 0.5f, cy - diskRadius + 0.5f,
+        diskRadius * 2.0f - 1.0f, diskRadius * 2.0f - 1.0f);
+
+
+    // Larger center hole that scales with the disk/section size.
+    const float holeRadius = std::max(14.0f, diskRadius * 0.27f);
+    Gdiplus::SolidBrush holeBrush(
+        Gdiplus::Color(245, dark ? 19 : 24, dark ? 19 : 24, dark ? 22 : 28));
+    graphics.FillEllipse(
+        &holeBrush,
+        cx - holeRadius, cy - holeRadius,
+        holeRadius * 2.0f, holeRadius * 2.0f);
+    const float holeInnerRadius = holeRadius * 0.70f;
+    const float holeRingWidth = std::clamp(diskRadius * 0.045f, 5.0f, 8.0f);
+    Gdiplus::Pen holeInnerRingPen(
+        Gdiplus::Color(105, 165, 165, 165), holeRingWidth);
+    graphics.DrawEllipse(
+        &holeInnerRingPen,
+        cx - holeInnerRadius, cy - holeInnerRadius,
+        holeInnerRadius * 2.0f, holeInnerRadius * 2.0f);
+
+    Gdiplus::Pen holeEdgePen(
+        Gdiplus::Color(225, 250, 250, 250), 1.5f);
+    graphics.DrawEllipse(
+        &holeEdgePen,
+        cx - holeRadius + 0.75f, cy - holeRadius + 0.75f,
+        holeRadius * 2.0f - 1.5f, holeRadius * 2.0f - 1.5f);
+
+    // Independent circular FFT. It uses the existing 32 audio bands, with a
+    // small private auto-gain so the ring remains useful across quiet/loud tracks.
+    const float barWidth = ringBarWidth;
+    const float gain = 0.72f / std::max(0.035f, g_eqDiskAutoGainMax);
+    // Ring geometry is fixed; precompute each direction once rather than
+    // calling sin/cos several times per bar on every Player frame.
+    static const std::array<std::array<float, 2>, EQ_DISK_RING_BARS> kRingDirections = [] {
+        std::array<std::array<float, 2>, EQ_DISK_RING_BARS> directions{};
+        for (int i = 0; i < EQ_DISK_RING_BARS; ++i) {
+            const float angle = -VIZ_PI * 0.5f +
+                (2.0f * VIZ_PI * static_cast<float>(i)) / EQ_DISK_RING_BARS;
+            directions[static_cast<size_t>(i)] = {std::cos(angle), std::sin(angle)};
+        }
+        return directions;
+    }();
+    Gdiplus::Pen ghostPen(Gdiplus::Color(8, styleAccent.GetR(), styleAccent.GetG(), styleAccent.GetB()), barWidth);
+    ghostPen.SetStartCap(Gdiplus::LineCapFlat);
+    ghostPen.SetEndCap(Gdiplus::LineCapFlat);
+    Gdiplus::Pen barPen(Gdiplus::Color(38, styleAccent.GetR(), styleAccent.GetG(), styleAccent.GetB()), barWidth);
+    barPen.SetStartCap(Gdiplus::LineCapFlat);
+    barPen.SetEndCap(Gdiplus::LineCapFlat);
+    for (int i = 0; i < EQ_DISK_RING_BARS; ++i) {
+        const float position =
+            (i / static_cast<float>(EQ_DISK_RING_BARS)) * VIZ_NUM_BANDS;
+        const int index0 = std::clamp(static_cast<int>(position), 0, VIZ_NUM_BANDS - 1);
+        const int index1 = (index0 + 1) % VIZ_NUM_BANDS;
+        const float frac = position - static_cast<float>(index0);
+        const float source =
+            g_audioBands[index0].load(std::memory_order_relaxed) * (1.0f - frac) +
+            g_audioBands[index1].load(std::memory_order_relaxed) * frac;
+        const float target = std::clamp(source * gain, 0.0f, 1.0f);
+
+        float value = target;
+        float ghostValue = target;
+        if (!preview) {
+            float& smooth = g_eqDiskBarSmooth[static_cast<size_t>(i)];
+            const float response = target > smooth
+                ? diskAttackResponse
+                : diskDecayResponse;
+            smooth += (target - smooth) * response;
+            smooth = std::clamp(smooth, 0.0f, 1.0f);
+            value = smooth;
+
+            // Feed the ghost from a tiny time-delayed copy of the already
+            // smoothed bar. The delay is only a few milliseconds, but using
+            // timestamped interpolation keeps it visible even when the popup
+            // frame interval is larger than the requested delay.
+            constexpr ULONGLONG kGhostDelayMs = 8;
+            auto& historyValues = g_eqDiskGhostHistoryValues[static_cast<size_t>(i)];
+            auto& historyTimes = g_eqDiskGhostHistoryTimes[static_cast<size_t>(i)];
+            if (historyTimes[0] == 0)
+                historyTimes.fill(nowMs);
+
+            if (historyTimes[0] != nowMs) {
+                for (int h = EQ_DISK_GHOST_HISTORY_SIZE - 1; h > 0; --h) {
+                    historyValues[h] = historyValues[h - 1];
+                    historyTimes[h] = historyTimes[h - 1];
+                }
+                historyValues[0] = value;
+                historyTimes[0] = nowMs;
+            } else {
+                historyValues[0] = value;
+            }
+
+            const ULONGLONG ghostTargetMs =
+                nowMs > kGhostDelayMs ? nowMs - kGhostDelayMs : 0;
+            float delayedValue = historyValues[EQ_DISK_GHOST_HISTORY_SIZE - 1];
+            bool sampled = false;
+            for (int h = 0; h < EQ_DISK_GHOST_HISTORY_SIZE - 1; ++h) {
+                const ULONGLONG newerTime = historyTimes[h];
+                const ULONGLONG olderTime = historyTimes[h + 1];
+                if (olderTime <= ghostTargetMs && ghostTargetMs <= newerTime) {
+                    const ULONGLONG span = newerTime - olderTime;
+                    if (span > 0) {
+                        const float t = static_cast<float>(ghostTargetMs - olderTime) /
+                                        static_cast<float>(span);
+                        delayedValue = historyValues[h + 1] +
+                                       (historyValues[h] - historyValues[h + 1]) *
+                                           std::clamp(t, 0.0f, 1.0f);
+                    } else {
+                        delayedValue = historyValues[h];
+                    }
+                    sampled = true;
+                    break;
+                }
+            }
+            if (!sampled && historyTimes[0] <= ghostTargetMs)
+                delayedValue = historyValues[0];
+
+            // The ghost has its own dynamics: slightly softer on the way up
+            // and noticeably slower on the way down than the live Disk bars.
+            float& ghost = g_eqDiskBarGhost[static_cast<size_t>(i)];
+            const float ghostAttackResponse =
+                FrameRateIndependentResponse(0.075f, smoothDtFrames);
+            const float ghostDecayResponse =
+                FrameRateIndependentResponse(0.038f, smoothDtFrames);
+            const float ghostResponse = delayedValue > ghost
+                ? ghostAttackResponse
+                : ghostDecayResponse;
+            ghost += (delayedValue - ghost) * ghostResponse;
+            ghost = std::clamp(ghost, 0.0f, 1.0f);
+            ghostValue = ghost;
+        }
+
+        const float dirX = kRingDirections[static_cast<size_t>(i)][0];
+        const float dirY = kRingDirections[static_cast<size_t>(i)][1];
+        const float innerX = cx + dirX * ringInner;
+        const float innerY = cy + dirY * ringInner;
+
+        if (ghostValue > 0.01f) {
+            const float ghostOpacityT = ApplyHeightCurve(
+                ghostValue, true, -25.0f);
+            const BYTE ghostAlpha = static_cast<BYTE>(std::lround(
+                8.0f + 48.0f * std::clamp(ghostOpacityT, 0.0f, 1.0f)));
+            ghostPen.SetColor(Gdiplus::Color(
+                ghostAlpha, styleAccent.GetR(), styleAccent.GetG(), styleAccent.GetB()));
+
+            const float ghostOuterRadius =
+                ringInner + std::max(1.0f, diskMaxBarLength * ghostValue);
+            graphics.DrawLine(
+                &ghostPen,
+                innerX, innerY,
+                cx + dirX * ghostOuterRadius,
+                cy + dirY * ghostOuterRadius);
+        }
+
+        // Nonlinear opacity is adjustable independently of the desktop bars.
+        // Default -25 closely matches the previous fixed pow(value, 0.58) curve.
+        const float opacityT = ApplyHeightCurve(
+            value, true, -25.0f);
+        const BYTE barAlpha = static_cast<BYTE>(std::lround(
+            38.0f + 141.0f * std::clamp(opacityT, 0.0f, 1.0f)));
+        barPen.SetColor(Gdiplus::Color(
+            barAlpha, styleAccent.GetR(), styleAccent.GetG(), styleAccent.GetB()));
+
+        const float barOuterRadius =
+            ringInner + std::max(1.0f, diskMaxBarLength * value);
+        graphics.DrawLine(
+            &barPen,
+            innerX, innerY,
+            cx + dirX * barOuterRadius,
+            cy + dirY * barOuterRadius);
+    }
+
+}
+
+static void DrawEqPresetButtonsForPage(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    int rotation,
+    bool preview,
+    int page,
+    float xOffset) {
+    const Gdiplus::Color titleColor(255, dark ? 245 : 30, dark ? 245 : 30,
+                                    dark ? 248 : 30);
+    const Gdiplus::Color selectedColor =
+        MakeEqPopupStyle(g_eqPopupStyleId.load(std::memory_order_acquire), dark).accent;
+    Gdiplus::FontFamily smallFamily(L"Segoe UI");
+    const int pageCount = EqGetPresetPageItemCount(page);
+    const EqLayoutWidgetState layoutWidget{
+        EQ_LAYOUT_PRESETS, r.left, r.top, r.right - r.left, r.bottom - r.top, rotation, true};
+    const EqPresetGridMetrics grid = EqGetPresetGridMetrics(layoutWidget, pageCount);
+
+    Gdiplus::SolidBrush normalCellBrush(Gdiplus::Color(24, 255, 255, 255));
+    Gdiplus::SolidBrush selectedCellBrush(Gdiplus::Color(
+        70, selectedColor.GetR(), selectedColor.GetG(), selectedColor.GetB()));
+    Gdiplus::SolidBrush normalTextBrush(titleColor);
+    Gdiplus::SolidBrush selectedTextBrush(selectedColor);
+    Gdiplus::GraphicsPath cellPath;
+    Gdiplus::StringFormat centered;
+    centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+    centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    centered.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+    // A grid normally uses one font size, but cache any different clipped-row
+    // size too so no per-cell Font is created on every render.
+    std::array<float, VIZ_EQ_MAX_CUSTOM_PRESETS> cachedFontSizes{};
+    std::array<std::unique_ptr<Gdiplus::Font>, VIZ_EQ_MAX_CUSTOM_PRESETS> cachedFonts{};
+    size_t cachedFontCount = 0;
+
+    const Gdiplus::GraphicsState state = graphics.Save();
+    graphics.TranslateTransform(xOffset, 0.0f);
+
+    for (int item = 0; item < pageCount; ++item) {
+        const int globalIndex = EqPresetLocalToGlobalIndex(page, item);
+        const int col = item % grid.cols;
+        const int row = item / grid.cols;
+        const int gap = grid.gap;
+        const int cellW = grid.cellWidth;
+        const RECT cell{
+            r.left + 10 + col * (cellW + gap),
+            r.top + grid.contentTop + row * grid.rowHeight,
+            r.left + 10 + col * (cellW + gap) + cellW,
+            std::min<int>(static_cast<int>(r.bottom) - 8,
+                          static_cast<int>(r.top + grid.contentTop +
+                                           row * grid.rowHeight + grid.rowHeight - 4))};
+        if (cell.right <= cell.left || cell.bottom <= cell.top)
+            continue;
+
+        const bool selected = globalIndex >= 0 && g_eqSelectedPreset == globalIndex;
+        Gdiplus::Brush* cellBrush = selected
+            ? static_cast<Gdiplus::Brush*>(&selectedCellBrush)
+            : static_cast<Gdiplus::Brush*>(&normalCellBrush);
+        cellPath.Reset();
+        AddRoundedRectSubpath(cellPath, static_cast<float>(cell.left),
+                              static_cast<float>(cell.top),
+                              static_cast<float>(cell.right - cell.left),
+                              static_cast<float>(cell.bottom - cell.top), 7.0f);
+        graphics.FillPath(cellBrush, &cellPath);
+
+        wchar_t customName[32]{};
+        const wchar_t* name = nullptr;
+        int customIndex = -1;
+        if (page == EQ_PRESET_PAGE_BUILTIN) {
+            name = VIZ_EQ_PRESET_NAMES[static_cast<size_t>(item)];
+        } else {
+            customIndex = item;
+            swprintf_s(customName, L"Custom %d", customIndex + 1);
+            name = customName;
+        }
+
+        const float itemFontSize = std::clamp(
+            static_cast<float>(cell.bottom - cell.top) * 0.46f, 9.0f, 11.0f);
+        size_t fontIndex = 0;
+        while (fontIndex < cachedFontCount &&
+               std::abs(cachedFontSizes[fontIndex] - itemFontSize) > 0.001f) {
+            ++fontIndex;
+        }
+        if (fontIndex == cachedFontCount && fontIndex < cachedFonts.size()) {
+            cachedFontSizes[fontIndex] = itemFontSize;
+            cachedFonts[fontIndex] = std::make_unique<Gdiplus::Font>(
+                &smallFamily, itemFontSize, Gdiplus::FontStyleRegular,
+                Gdiplus::UnitPixel);
+            ++cachedFontCount;
+        }
+        Gdiplus::Brush* textBrush = selected
+            ? static_cast<Gdiplus::Brush*>(&selectedTextBrush)
+            : static_cast<Gdiplus::Brush*>(&normalTextBrush);
+        graphics.DrawString(
+            name, -1, cachedFonts[fontIndex].get(),
+            Gdiplus::RectF(static_cast<float>(cell.left),
+                           static_cast<float>(cell.top),
+                           static_cast<float>(cell.right - cell.left),
+                           static_cast<float>(cell.bottom - cell.top)),
+            &centered, textBrush);
+
+        if (!preview && page == EQ_PRESET_PAGE_SAVED && customIndex >= 0 &&
+            (g_eqHotPreset == globalIndex || g_eqHotPresetDelete == customIndex)) {
+            const RECT dr = GetEqPresetDeleteRect(customIndex);
+            Gdiplus::SolidBrush db(Gdiplus::Color(235, 220, 45, 45));
+            graphics.FillEllipse(&db, static_cast<Gdiplus::REAL>(dr.left),
+                                 static_cast<Gdiplus::REAL>(dr.top), 18.0f, 18.0f);
+            Gdiplus::Pen xp(Gdiplus::Color(255, 255, 255, 255), 2.0f);
+            xp.SetStartCap(Gdiplus::LineCapRound);
+            xp.SetEndCap(Gdiplus::LineCapRound);
+            const Gdiplus::REAL cx = static_cast<Gdiplus::REAL>(dr.left) + 9.0f;
+            const Gdiplus::REAL cy = static_cast<Gdiplus::REAL>(dr.top) + 9.0f;
+            graphics.DrawLine(&xp, cx - 4.0f, cy - 4.0f, cx + 4.0f, cy + 4.0f);
+            graphics.DrawLine(&xp, cx + 4.0f, cy - 4.0f, cx - 4.0f, cy + 4.0f);
+        }
+    }
+
+    graphics.Restore(state);
+}
+
+static void DrawEqPresetHeaderNavigation(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    bool preview) {
+    const Gdiplus::Color titleColor(
+        255, dark ? 245 : 30, dark ? 245 : 30, dark ? 248 : 30);
+    const Gdiplus::FontFamily family(L"Segoe UI Semibold");
+    const int page = EqGetPresetPage();
+    const EqPresetHeaderControlRects rects = GetEqPresetHeaderControlRects(page);
+
+    if (preview)
+        return;
+
+    const wchar_t* modeText = page == EQ_PRESET_PAGE_BUILTIN ? L"Saved" : L"Built-in";
+    const int hotMode = page == EQ_PRESET_PAGE_BUILTIN
+        ? EQ_PRESET_NAV_SAVED_HIT : EQ_PRESET_NAV_BUILTIN_HIT;
+    const bool modeHot = g_eqHotPresetNav == hotMode;
+
+    if (rects.mode.right > rects.mode.left) {
+        Gdiplus::SolidBrush modeBrush(Gdiplus::Color(
+            modeHot ? 50 : 24, 255, 255, 255));
+        Gdiplus::GraphicsPath modePath;
+        AddRoundedRectSubpath(
+            modePath, static_cast<float>(rects.mode.left),
+            static_cast<float>(rects.mode.top),
+            static_cast<float>(rects.mode.right - rects.mode.left),
+            static_cast<float>(rects.mode.bottom - rects.mode.top), 7.0f);
+        graphics.FillPath(&modeBrush, &modePath);
+
+        Gdiplus::Font modeFont(&family, 10.5f, Gdiplus::FontStyleRegular,
+                               Gdiplus::UnitPixel);
+        Gdiplus::StringFormat centered;
+        centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+        centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        Gdiplus::SolidBrush textBrush(titleColor);
+        graphics.DrawString(
+            modeText, -1, &modeFont,
+            Gdiplus::RectF(static_cast<float>(rects.mode.left),
+                           static_cast<float>(rects.mode.top),
+                           static_cast<float>(rects.mode.right - rects.mode.left),
+                           static_cast<float>(rects.mode.bottom - rects.mode.top)),
+            &centered, &textBrush);
+    }
+
+    if (page == EQ_PRESET_PAGE_SAVED &&
+        g_eqCustomPresetCount < VIZ_EQ_MAX_CUSTOM_PRESETS &&
+        rects.plus.right > rects.plus.left) {
+        const bool hot = g_eqHotPreset == EQ_PLUS_PRESET_HIT;
+        Gdiplus::SolidBrush pb(Gdiplus::Color(hot ? 50 : 24, 255, 255, 255));
+        Gdiplus::GraphicsPath pp;
+        AddRoundedRectSubpath(
+            pp, static_cast<float>(rects.plus.left),
+            static_cast<float>(rects.plus.top),
+            static_cast<float>(rects.plus.right - rects.plus.left),
+            static_cast<float>(rects.plus.bottom - rects.plus.top), 7.0f);
+        graphics.FillPath(&pb, &pp);
+        Gdiplus::Pen pen(titleColor, 2.0f);
+        const Gdiplus::REAL cx =
+            static_cast<Gdiplus::REAL>(rects.plus.left + rects.plus.right) * 0.5f;
+        const Gdiplus::REAL cy =
+            static_cast<Gdiplus::REAL>(rects.plus.top + rects.plus.bottom) * 0.5f;
+        graphics.DrawLine(&pen, cx - 6.0f, cy, cx + 6.0f, cy);
+        graphics.DrawLine(&pen, cx, cy - 6.0f, cx, cy + 6.0f);
+    }
+}
+
+static void RenderEqPresetWidgetUncached(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    int rotation,
+    bool preview) {
+    if (r.right <= r.left || r.bottom <= r.top)
+        return;
+
+    const Gdiplus::Color titleColor(
+        255, dark ? 245 : 30, dark ? 245 : 30, dark ? 248 : 30);
+    Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
+    Gdiplus::Font headerFont(&titleFamily, 13.0f,
+                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush headerBrush(titleColor);
+    graphics.DrawString(L"Presets", -1, &headerFont,
+                        Gdiplus::PointF(static_cast<float>(r.left) + 12.0f,
+                                        static_cast<float>(r.top) + 11.0f),
+                        &headerBrush);
+
+    const bool animating = g_eqPresetPageAnimationActive;
+    const int contentTop = r.top + 34;
+    const Gdiplus::GraphicsState clipState = graphics.Save();
+    graphics.SetClip(
+        Gdiplus::Rect(r.left, contentTop,
+                      std::max(1L, r.right - r.left),
+                      std::max(1L, r.bottom - contentTop)),
+        Gdiplus::CombineModeIntersect);
+
+    if (animating) {
+        const float linear = std::clamp(g_eqPresetPageAnimationProgress, 0.0f, 1.0f);
+        const float eased = EqEaseInOutCubic(linear);
+        const float sectionWidth = static_cast<float>(r.right - r.left);
+        const float oldOffset =
+            g_eqPresetPageAnimationStart == EQ_PRESET_PAGE_BUILTIN
+                ? -sectionWidth * eased
+                : sectionWidth * eased;
+        const float newOffset =
+            g_eqPresetPageAnimationTarget == EQ_PRESET_PAGE_BUILTIN
+                ? -sectionWidth * (1.0f - eased)
+                : sectionWidth * (1.0f - eased);
+
+        DrawEqPresetButtonsForPage(
+            graphics, r, dark, rotation, preview,
+            g_eqPresetPageAnimationStart, oldOffset);
+        DrawEqPresetButtonsForPage(
+            graphics, r, dark, rotation, preview,
+            g_eqPresetPageAnimationTarget, newOffset);
+    } else {
+        DrawEqPresetButtonsForPage(
+            graphics, r, dark, rotation, preview,
+            EqGetPresetPage(), 0.0f);
+    }
+    graphics.Restore(clipState);
+
+    DrawEqPresetHeaderNavigation(graphics, r, dark, preview);
+}
+
+
+// Preset buttons are static most of the time. Cache their backgrounds, labels,
+// page selector and selected-state highlight; invalidate only on a relevant UI
+// state change. While the built-in/saved page slide is active, keep the original
+// live painter so animation timing remains untouched.
+struct EqPresetWidgetRenderCache {
+    Gdiplus::Bitmap* bitmap = nullptr;
+    size_t hash = 0;
+    int width = 0;
+    int height = 0;
+};
+static EqPresetWidgetRenderCache g_eqPresetWidgetRenderCache;
+
+static size_t BuildEqPresetWidgetRenderCacheHash(
+    const RECT& r, bool dark, int rotation) {
+    size_t hash = 0;
+    auto combine = [&hash](size_t value) {
+        hash ^= value + static_cast<size_t>(0x9e3779b9) + (hash << 6) + (hash >> 2);
+    };
+    combine(static_cast<size_t>(dark));
+    combine(static_cast<size_t>(g_eqPopupStyleId.load(std::memory_order_acquire)));
+    combine(static_cast<size_t>(r.left));
+    combine(static_cast<size_t>(r.top));
+    combine(static_cast<size_t>(r.right));
+    combine(static_cast<size_t>(r.bottom));
+    combine(static_cast<size_t>(rotation));
+    combine(static_cast<size_t>(EqGetPresetPage() + 1));
+    combine(static_cast<size_t>(g_eqSelectedPreset + 2));
+    combine(static_cast<size_t>(g_eqHotPreset + 2));
+    combine(static_cast<size_t>(g_eqHotPresetNav + 2));
+    combine(static_cast<size_t>(g_eqHotPresetDelete + 2));
+    combine(static_cast<size_t>(g_eqCustomPresetCount));
+    return hash;
+}
+
+static void DrawEqPresetWidget(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    int rotation,
+    bool preview = false) {
+    if (preview || g_eqPresetPageAnimationActive) {
+        RenderEqPresetWidgetUncached(graphics, r, dark, rotation, preview);
         return;
     }
 
-    HGDIOBJ oldBitmap = SelectObject(mem, bitmap);
-    std::memset(bits, 0, static_cast<size_t>(width) * height * 4);
+    const int width = r.right - r.left;
+    const int height = r.bottom - r.top;
+    if (width <= 0 || height <= 0)
+        return;
 
+    auto& cache = g_eqPresetWidgetRenderCache;
+    const size_t cacheHash = BuildEqPresetWidgetRenderCacheHash(r, dark, rotation);
+    if (!cache.bitmap || cache.hash != cacheHash ||
+        cache.width != width || cache.height != height) {
+        std::unique_ptr<Gdiplus::Bitmap> bitmap(
+            new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+        if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+            RenderEqPresetWidgetUncached(graphics, r, dark, rotation, false);
+            return;
+        }
+
+        Gdiplus::Graphics cacheGraphics(bitmap.get());
+        cacheGraphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        cacheGraphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+        cacheGraphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+        cacheGraphics.TranslateTransform(
+            -static_cast<Gdiplus::REAL>(r.left),
+            -static_cast<Gdiplus::REAL>(r.top));
+        RenderEqPresetWidgetUncached(cacheGraphics, r, dark, rotation, false);
+
+        delete cache.bitmap;
+        cache.bitmap = bitmap.release();
+        cache.hash = cacheHash;
+        cache.width = width;
+        cache.height = height;
+    }
+    graphics.DrawImage(cache.bitmap, r.left, r.top, width, height);
+}
+
+struct EqLyricsMetrics {
+    RECT content{};
+    RECT scrollbarTrack{};
+    int lineHeight = 28;
+    int contentHeight = 0;
+    int maxScroll = 0;
+    std::vector<int> lineHeights;
+};
+
+static int EstimateEqLyricsWrappedLineCount(const std::wstring& text, int width) {
+    if (text.empty())
+        return 1;
+
+    // The section uses a fixed 12 px Segoe UI font. This conservative estimate
+    // intentionally gives long rows a little more height than the average
+    // measured glyph width, preventing wrapped lines from being clipped.
+    constexpr double kAverageGlyphWidthPx = 6.8;
+    const int safeWidth = std::max(24, width - 8);
+    const int charsPerLine = std::max(1, static_cast<int>(std::floor(
+        static_cast<double>(safeWidth) / kAverageGlyphWidthPx)));
+    return std::max(1, static_cast<int>((text.size() +
+                                         static_cast<size_t>(charsPerLine) - 1) /
+                                        static_cast<size_t>(charsPerLine)));
+}
+
+static EqLyricsMetrics GetEqLyricsMetrics(
+    const EqLayoutWidgetState& widget,
+    const std::vector<LyricsLine>* lines) {
+    EqLyricsMetrics m{};
+    const RECT r = EqGetLayoutRect(widget.id);
+    constexpr int headerHeight = 12;
+    constexpr int bottomPadding = 12;
+    constexpr int scrollbarWidth = 8;
+    constexpr int scrollbarGap = 8;
+    constexpr int baseRowHeight = 28;
+    constexpr int wrappedTextLineHeight = 18;
+    constexpr int rowVerticalPadding = 10;
+    m.content.left = r.left + 16;
+    m.content.top = r.top + headerHeight;
+    m.content.right = std::max(m.content.left + 1,
+                               r.right - 16 - scrollbarWidth - scrollbarGap);
+    m.content.bottom = std::max(m.content.top + 1,
+                                r.bottom - bottomPadding);
+
+    const size_t lineCount = lines ? lines->size() : 0;
+    m.lineHeights.reserve(lineCount);
+    long long totalHeight = 0;
+    const int textWidth = std::max(24L, m.content.right - m.content.left);
+    for (size_t i = 0; i < lineCount; ++i) {
+        const int wrappedLines = EstimateEqLyricsWrappedLineCount(
+            (*lines)[i].text, textWidth);
+        const int height = std::max(
+            baseRowHeight,
+            wrappedLines * wrappedTextLineHeight + rowVerticalPadding);
+        m.lineHeights.push_back(height);
+        totalHeight += height;
+        if (totalHeight >= INT_MAX) {
+            totalHeight = INT_MAX;
+            break;
+        }
+    }
+    m.contentHeight = static_cast<int>(std::min<long long>(totalHeight, INT_MAX));
+    if (!m.lineHeights.empty())
+        m.lineHeight = m.lineHeights.front();
+
+    const int viewportHeight = std::max(1L, m.content.bottom - m.content.top);
+    m.maxScroll = std::max(0, m.contentHeight - viewportHeight);
+    m.scrollbarTrack = RECT{
+        r.right - 16 - scrollbarWidth,
+        m.content.top,
+        r.right - 16,
+        m.content.bottom};
+    return m;
+}
+
+static int GetEqLyricsLineTop(const EqLyricsMetrics& metrics, size_t index) {
+    if (index >= metrics.lineHeights.size())
+        return metrics.content.top;
+    int y = metrics.content.top;
+    for (size_t i = 0; i < index; ++i)
+        y += metrics.lineHeights[i];
+    return y;
+}
+
+static void PauseEqLyricsAutoFocus() {
+    const ULONGLONG now = GetTickCount64();
+    g_eqLyricsAutoFocusResumeTick = now + kEqLyricsAutoFocusPauseMs;
+}
+
+static bool EqLyricsAutoFocusPaused() {
+    return GetTickCount64() < g_eqLyricsAutoFocusResumeTick;
+}
+
+static void MaybeAutoFocusEqLyrics(const EqLayoutWidgetState& widget,
+                                    const std::vector<LyricsLine>& lines,
+                                    const EqLyricsMetrics& metrics,
+                                    int activeIndex) {
+    if (activeIndex < 0 || static_cast<size_t>(activeIndex) >= lines.size() ||
+        metrics.lineHeights.size() != lines.size() ||
+        EqLyricsAutoFocusPaused()) {
+        return;
+    }
+
+    const int viewportHeight =
+        std::max(1L, metrics.content.bottom - metrics.content.top);
+    const int lineTop = GetEqLyricsLineTop(metrics, static_cast<size_t>(activeIndex));
+    const int lineHeight = metrics.lineHeights[static_cast<size_t>(activeIndex)];
+    const int lineCenter = lineTop + lineHeight / 2;
+    const int targetOffset = lineCenter - metrics.content.top - viewportHeight / 2;
+    const int clampedTarget = std::clamp(targetOffset, 0, metrics.maxScroll);
+
+    // The argument is intentionally kept in the helper signature because the
+    // widget's geometry is the source of truth for focus placement.
+    (void)widget;
+    g_eqLyricsScrollOffset = clampedTarget;
+}
+
+static int GetEqLyricsLineAtPoint(const EqLayoutWidgetState& widget,
+                                  int x, int y) {
+    std::shared_ptr<const std::vector<LyricsLine>> lines;
+    {
+        std::lock_guard<std::mutex> lock(g_lyricsMutex);
+        lines = g_lyricsLines;
+    }
+    if (!lines || lines->empty())
+        return -1;
+
+    const EqLyricsMetrics m = GetEqLyricsMetrics(widget, lines.get());
+    if (!PtInRect(&m.content, POINT{x, y}))
+        return -1;
+
+    const int contentY = y - m.content.top + g_eqLyricsScrollOffset;
+    int cursor = 0;
+    for (size_t i = 0; i < m.lineHeights.size(); ++i) {
+        const int next = cursor + m.lineHeights[i];
+        if (contentY >= cursor && contentY < next)
+            return static_cast<int>(i);
+        cursor = next;
+    }
+    return -1;
+}
+
+static void ScrollEqLyricsByPixels(const EqLayoutWidgetState& widget,
+                                   int delta) {
+    std::shared_ptr<const std::vector<LyricsLine>> lines;
+    {
+        std::lock_guard<std::mutex> lock(g_lyricsMutex);
+        lines = g_lyricsLines;
+    }
+    const EqLyricsMetrics m = GetEqLyricsMetrics(widget, lines.get());
+    g_eqLyricsScrollOffset = std::clamp(
+        g_eqLyricsScrollOffset + delta, 0, m.maxScroll);
+    if (delta != 0)
+        PauseEqLyricsAutoFocus();
+}
+
+static void SeekToEqLyricsLine(int index) {
+    std::shared_ptr<const std::vector<LyricsLine>> lines;
+    bool synced = false;
+    {
+        std::lock_guard<std::mutex> lock(g_lyricsMutex);
+        lines = g_lyricsLines;
+        synced = g_lyricsHasSynced;
+    }
+    if (!synced || !lines || index < 0 ||
+        static_cast<size_t>(index) >= lines->size())
+        return;
+
+    const double position = (*lines)[static_cast<size_t>(index)].timeSeconds;
+    if (!IsFiniteDouble(position) || position < 0.0)
+        return;
+
+    // Reuse the existing GSMTC command worker. Its Seek command calls
+    // TryChangePlaybackPositionAsync with the position converted to ticks.
+    EnqueueEqMediaCommand(EqMediaCommandType::Seek, position);
+}
+
+static RECT GetEqLyricsScrollbarThumb(const EqLyricsMetrics& m) {
+    const int trackHeight = std::max(1L,
+        m.scrollbarTrack.bottom - m.scrollbarTrack.top);
+    if (m.maxScroll <= 0)
+        return m.scrollbarTrack;
+    const int thumbHeight = std::clamp(
+        static_cast<int>(std::lround(
+            static_cast<double>(trackHeight) *
+            std::min(1.0, static_cast<double>(trackHeight) /
+                             std::max(1, m.contentHeight)))),
+        28, trackHeight);
+    const int travel = std::max(0, trackHeight - thumbHeight);
+    const int top = m.scrollbarTrack.top +
+        (travel > 0 ? static_cast<int>(std::lround(
+            static_cast<double>(travel) * g_eqLyricsScrollOffset /
+            std::max(1, m.maxScroll))) : 0);
+    return RECT{m.scrollbarTrack.left, top,
+                m.scrollbarTrack.right, top + thumbHeight};
+}
+
+static void DrawEqLyricsWidget(Gdiplus::Graphics& graphics,
+                               const EqLayoutWidgetState& widget,
+                               bool dark, bool preview) {
+    const RECT r = EqGetLayoutRect(widget.id);
+    if (r.right <= r.left || r.bottom <= r.top)
+        return;
+
+    const int width = r.right - r.left;
+    const int height = r.bottom - r.top;
+    const int styleId = g_eqPopupStyleId.load(std::memory_order_acquire);
+    const Gdiplus::Color titleColor(255, dark ? 245 : 30, dark ? 245 : 30,
+                                    dark ? 248 : 30);
+    const Gdiplus::Color lineColor(235, dark ? 232 : 30, dark ? 232 : 30,
+                                   dark ? 235 : 32);
+    const Gdiplus::Color activeColor =
+        MakeEqPopupStyle(styleId, dark).accent;
+    const Gdiplus::Color hoverColor(48, activeColor.GetR(), activeColor.GetG(), activeColor.GetB());
+    const Gdiplus::Color activeFill(54, activeColor.GetR(), activeColor.GetG(), activeColor.GetB());
+
+    // Preview is intentionally immediate: it is static and only used by the
+    // Layout Builder, so there is no point keeping a second preview cache.
+    if (preview) {
+        Gdiplus::FontFamily bodyFamily(L"Segoe UI");
+        Gdiplus::Font lineFont(&bodyFamily, 12.0f,
+                               Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        const Gdiplus::StringAlignment horizontalAlignment =
+            EqTextAlignmentValue(widget.textAlignment);
+        Gdiplus::SolidBrush lineBrush(lineColor);
+        Gdiplus::SolidBrush activeBrush(activeColor);
+        const EqLyricsMetrics metrics = GetEqLyricsMetrics(widget, nullptr);
+        Gdiplus::StringFormat previewFormat;
+        previewFormat.SetAlignment(horizontalAlignment);
+        previewFormat.SetLineAlignment(Gdiplus::StringAlignmentNear);
+        previewFormat.SetTrimming(Gdiplus::StringTrimmingNone);
+        for (int i = 0; i < 5; ++i) {
+            const int y = metrics.content.top + i * metrics.lineHeight;
+            if (y + 20 > metrics.content.bottom)
+                break;
+            graphics.DrawString(
+                i == 2 ? L"Current lyric line" : L"Lyric preview line", -1,
+                &lineFont,
+                Gdiplus::RectF((float)metrics.content.left, (float)y,
+                               (float)(metrics.content.right - metrics.content.left),
+                               22.0f), &previewFormat,
+                i == 2 ? &activeBrush : &lineBrush);
+        }
+        return;
+    }
+
+    std::shared_ptr<const std::vector<LyricsLine>> lines;
+    std::wstring trackKey;
+    bool available = false;
+    bool synced = false;
+    {
+        std::lock_guard<std::mutex> lock(g_lyricsMutex);
+        lines = g_lyricsLines;
+        trackKey = g_lyricsTrackKey;
+        available = g_lyricsAvailable;
+        synced = g_lyricsHasSynced;
+    }
+
+    if (trackKey != g_eqLyricsScrollTrackKey) {
+        g_eqLyricsScrollTrackKey = trackKey;
+        g_eqLyricsScrollOffset = 0;
+        g_eqHotLyricsLine = -1;
+        g_eqLyricsAutoFocusResumeTick = 0;
+    }
+
+    const size_t lineCount = lines ? lines->size() : 0;
+    const EqLyricsMetrics metrics = GetEqLyricsMetrics(widget, lines.get());
+    g_eqLyricsScrollOffset = std::clamp(g_eqLyricsScrollOffset, 0,
+                                        metrics.maxScroll);
+
+    const int activeIndex = (available && lineCount > 0 && synced)
+        ? GetCurrentLyricsLineIndex(*lines, GetCurrentLyricsPosition())
+        : -1;
+
+    if (available && lineCount > 0)
+        MaybeAutoFocusEqLyrics(widget, *lines, metrics, activeIndex);
+
+    // Re-read after auto-focus because that may change the scroll offset.
+    const int finalScrollOffset = g_eqLyricsScrollOffset;
+    const int hotLine = g_eqHotLyricsLine;
+    const bool cacheMatches =
+        g_eqLyricsRenderCache.bitmap &&
+        g_eqLyricsRenderCache.width == width &&
+        g_eqLyricsRenderCache.height == height &&
+        g_eqLyricsRenderCache.alignment == widget.textAlignment &&
+        g_eqLyricsRenderCache.activeIndex == activeIndex &&
+        g_eqLyricsRenderCache.scrollOffset == finalScrollOffset &&
+        g_eqLyricsRenderCache.hotLine == hotLine &&
+        g_eqLyricsRenderCache.styleId == styleId &&
+        g_eqLyricsRenderCache.dark == dark &&
+        g_eqLyricsRenderCache.available == available &&
+        g_eqLyricsRenderCache.synced == synced &&
+        g_eqLyricsRenderCache.trackKey == trackKey &&
+        g_eqLyricsRenderCache.linesPtr == lines.get();
+
+    if (!cacheMatches) {
+        g_eqLyricsRenderCache.bitmap =
+            std::make_unique<Gdiplus::Bitmap>(width, height,
+                                               PixelFormat32bppPARGB);
+        if (!g_eqLyricsRenderCache.bitmap ||
+            g_eqLyricsRenderCache.bitmap->GetLastStatus() != Gdiplus::Ok) {
+            g_eqLyricsRenderCache.bitmap.reset();
+        } else {
+            Gdiplus::Graphics cacheGraphics(g_eqLyricsRenderCache.bitmap.get());
+            cacheGraphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            cacheGraphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+            cacheGraphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+            cacheGraphics.TranslateTransform(
+                -static_cast<Gdiplus::REAL>(r.left),
+                -static_cast<Gdiplus::REAL>(r.top));
+
+            Gdiplus::FontFamily bodyFamily(L"Segoe UI");
+            Gdiplus::Font lineFont(&bodyFamily, 12.0f,
+                                   Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+            Gdiplus::SolidBrush lineBrush(lineColor);
+            Gdiplus::SolidBrush activeBrush(activeColor);
+
+            if (!available || lineCount == 0) {
+                const int cardW = std::max<int>(140,
+                    metrics.content.right - metrics.content.left - 8);
+                const int cardH = 70;
+                const int cardX = metrics.content.left + 4;
+                const int cardY = metrics.content.top +
+                    std::max<int>(0, (metrics.content.bottom - metrics.content.top - cardH) / 2);
+                Gdiplus::GraphicsPath cardPath;
+                AddRoundedRectSubpath(cardPath, (float)cardX, (float)cardY,
+                                      (float)cardW, (float)cardH, 10.0f);
+                Gdiplus::SolidBrush cardBrush(
+                    Gdiplus::Color(dark ? 26 : 18, dark ? 255 : 80,
+                                   dark ? 255 : 80, dark ? 255 : 85));
+                cacheGraphics.FillPath(&cardBrush, &cardPath);
+                Gdiplus::Font unavailableFont(
+                    &bodyFamily, 12.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+                Gdiplus::StringFormat centered;
+                centered.SetAlignment(EqTextAlignmentValue(widget.textAlignment));
+                centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+                Gdiplus::SolidBrush unavailableBrush(titleColor);
+                cacheGraphics.DrawString(L"Lyrics unavailable", -1, &unavailableFont,
+                                         Gdiplus::RectF((float)cardX, (float)cardY,
+                                                        (float)cardW, (float)cardH),
+                                         &centered, &unavailableBrush);
+            } else {
+                const Gdiplus::GraphicsState clipState = cacheGraphics.Save();
+                cacheGraphics.SetClip(
+                    Gdiplus::Rect(metrics.content.left, metrics.content.top,
+                                  std::max(1L, metrics.content.right - metrics.content.left),
+                                  std::max(1L, metrics.content.bottom - metrics.content.top)),
+                    Gdiplus::CombineModeIntersect);
+
+                const Gdiplus::StringAlignment horizontalAlignment =
+                    EqTextAlignmentValue(widget.textAlignment);
+                for (size_t i = 0; i < lineCount; ++i) {
+                    const int lineTop = GetEqLyricsLineTop(metrics, i);
+                    const int lineHeight = metrics.lineHeights[i];
+                    const int y = lineTop - finalScrollOffset;
+                    if (y + lineHeight < metrics.content.top)
+                        continue;
+                    if (y > metrics.content.bottom)
+                        break;
+
+                    const bool active = static_cast<int>(i) == activeIndex;
+                    const bool hovered = static_cast<int>(i) == hotLine;
+                    if (active || hovered) {
+                        Gdiplus::GraphicsPath rowPath;
+                        AddRoundedRectSubpath(
+                            rowPath, (float)metrics.content.left, (float)y + 2.0f,
+                            (float)(metrics.content.right - metrics.content.left),
+                            (float)lineHeight - 4.0f, 7.0f);
+                        Gdiplus::SolidBrush rowBrush(active ? activeFill : hoverColor);
+                        cacheGraphics.FillPath(&rowBrush, &rowPath);
+                    }
+
+                    Gdiplus::Brush* currentBrush = active
+                        ? static_cast<Gdiplus::Brush*>(&activeBrush)
+                        : static_cast<Gdiplus::Brush*>(&lineBrush);
+                    Gdiplus::StringFormat lyricsFormat;
+                    lyricsFormat.SetAlignment(horizontalAlignment);
+                    lyricsFormat.SetLineAlignment(Gdiplus::StringAlignmentNear);
+                    lyricsFormat.SetTrimming(Gdiplus::StringTrimmingNone);
+                    cacheGraphics.DrawString(
+                        (*lines)[i].text.c_str(), -1, &lineFont,
+                        Gdiplus::RectF((float)metrics.content.left + 4.0f,
+                                       (float)y + 3.0f,
+                                       (float)(metrics.content.right - metrics.content.left - 8),
+                                       (float)std::max(1, lineHeight - 6)),
+                        &lyricsFormat, currentBrush);
+                }
+
+                cacheGraphics.Restore(clipState);
+            }
+
+            if (available && lineCount > 0 && metrics.maxScroll > 0) {
+                Gdiplus::GraphicsPath trackPath;
+                AddRoundedRectSubpath(
+                    trackPath, (float)metrics.scrollbarTrack.left,
+                    (float)metrics.scrollbarTrack.top,
+                    (float)(metrics.scrollbarTrack.right - metrics.scrollbarTrack.left),
+                    (float)(metrics.scrollbarTrack.bottom - metrics.scrollbarTrack.top),
+                    4.0f);
+                Gdiplus::SolidBrush trackBrush(
+                    Gdiplus::Color(dark ? 40 : 28, dark ? 160 : 100,
+                                   dark ? 160 : 100, dark ? 165 : 105));
+                cacheGraphics.FillPath(&trackBrush, &trackPath);
+
+                const RECT thumb = GetEqLyricsScrollbarThumb(metrics);
+                Gdiplus::GraphicsPath thumbPath;
+                AddRoundedRectSubpath(
+                    thumbPath, (float)thumb.left, (float)thumb.top,
+                    (float)(thumb.right - thumb.left),
+                    (float)(thumb.bottom - thumb.top), 4.0f);
+                Gdiplus::SolidBrush thumbBrush(
+                    g_eqLyricsScrollbarDragging
+                        ? activeColor
+                        : Gdiplus::Color(dark ? 150 : 100, dark ? 205 : 120,
+                                         dark ? 205 : 120, dark ? 210 : 125));
+                cacheGraphics.FillPath(&thumbBrush, &thumbPath);
+            }
+
+            g_eqLyricsRenderCache.width = width;
+            g_eqLyricsRenderCache.height = height;
+            g_eqLyricsRenderCache.alignment = widget.textAlignment;
+            g_eqLyricsRenderCache.activeIndex = activeIndex;
+            g_eqLyricsRenderCache.scrollOffset = finalScrollOffset;
+            g_eqLyricsRenderCache.hotLine = hotLine;
+            g_eqLyricsRenderCache.styleId = styleId;
+            g_eqLyricsRenderCache.dark = dark;
+            g_eqLyricsRenderCache.available = available;
+            g_eqLyricsRenderCache.synced = synced;
+            g_eqLyricsRenderCache.trackKey = trackKey;
+            g_eqLyricsRenderCache.linesPtr = lines.get();
+        }
+    }
+
+    if (g_eqLyricsRenderCache.bitmap) {
+        graphics.DrawImage(g_eqLyricsRenderCache.bitmap.get(),
+                           Gdiplus::Rect(r.left, r.top, width, height));
+    }
+}
+
+static std::array<float, 8> g_eqMiniVisualizerSmooth{};
+static ULONGLONG g_eqMiniVisualizerLastMs = 0;
+
+static void DrawEqMiniVisualizerWidget(
+    Gdiplus::Graphics& graphics,
+    const RECT& r,
+    bool dark,
+    bool preview) {
+    if (r.right <= r.left || r.bottom <= r.top)
+        return;
+
+    const float width = static_cast<float>(r.right - r.left);
+    const float height = static_cast<float>(r.bottom - r.top);
+    const bool centralVertical = width > height;
+    const float centerX = (static_cast<float>(r.left) + static_cast<float>(r.right)) * 0.5f;
+    const float centerY = (static_cast<float>(r.top) + static_cast<float>(r.bottom)) * 0.5f;
+    const Gdiplus::Color styleAccent =
+        MakeEqPopupStyle(g_eqPopupStyleId.load(std::memory_order_acquire), dark).accent;
+
+    std::array<float, 8> values{};
+    if (preview) {
+        values = {0.18f, 0.34f, 0.52f, 0.78f, 0.60f, 0.42f, 0.67f, 0.28f};
+    } else {
+        const ULONGLONG nowMs = GetTickCount64();
+        float dtFrames = 1.0f;
+        if (g_eqMiniVisualizerLastMs != 0 && nowMs >= g_eqMiniVisualizerLastMs) {
+            const ULONGLONG elapsedMs = nowMs - g_eqMiniVisualizerLastMs;
+            dtFrames = elapsedMs == 0
+                ? 0.0f
+                : std::clamp(static_cast<float>(elapsedMs) / (1000.0f / 60.0f), 0.25f, 8.0f);
+        }
+        g_eqMiniVisualizerLastMs = nowMs;
+
+        const float attackResponse = FrameRateIndependentResponse(0.16f, dtFrames);
+        const float decayResponse = FrameRateIndependentResponse(0.055f, dtFrames);
+        for (int i = 0; i < 8; ++i) {
+            const int bandIndex = (i * std::max(1, VIZ_NUM_BANDS - 1)) / 7;
+            const float raw = std::clamp(
+                std::max(0.0f, g_audioBands[bandIndex].load(std::memory_order_relaxed)) * 1.18f,
+                0.0f, 1.0f);
+            const float response = raw > g_eqMiniVisualizerSmooth[static_cast<size_t>(i)]
+                ? attackResponse : decayResponse;
+            g_eqMiniVisualizerSmooth[static_cast<size_t>(i)] +=
+                (raw - g_eqMiniVisualizerSmooth[static_cast<size_t>(i)]) * response;
+            values[static_cast<size_t>(i)] = std::clamp(
+                g_eqMiniVisualizerSmooth[static_cast<size_t>(i)], 0.0f, 1.0f);
+        }
+    }
+
+    constexpr float opacityCurve = -25.0f;
+    const int gap = std::clamp(static_cast<int>(std::lround((centralVertical ? width : height) * 0.012f)), 4, 9);
+    // The mini visualizer redraws every frame; reuse GDI+ objects instead of
+    // allocating a brush and path for each of its eight bars.
+    Gdiplus::SolidBrush barBrush(Gdiplus::Color(
+        0, styleAccent.GetR(), styleAccent.GetG(), styleAccent.GetB()));
+    Gdiplus::GraphicsPath barPath;
+    if (centralVertical) {
+        const float available = std::max(32.0f, width - 28.0f);
+        const float barWidth = std::clamp((available - gap * 7.0f) / 8.0f, 6.0f, 18.0f);
+        const float totalWidth = barWidth * 8.0f + gap * 7.0f;
+        const float startX = centerX - totalWidth * 0.5f;
+        const float minBarHeight = std::clamp(height * 0.10f, 6.0f, 14.0f);
+        const float maxBarHeight = std::max(minBarHeight + 4.0f, height * 0.78f);
+
+        for (int i = 0; i < 8; ++i) {
+            const float value = values[static_cast<size_t>(i)];
+            const float barHeight = minBarHeight + (maxBarHeight - minBarHeight) * value;
+            const float x = startX + i * (barWidth + gap);
+            const float y = centerY - barHeight * 0.5f;
+            const float opacityT = ApplyHeightCurve(value, true, opacityCurve);
+            const BYTE alpha = static_cast<BYTE>(std::lround(30.0f + 225.0f * opacityT));
+            barBrush.SetColor(Gdiplus::Color(alpha, styleAccent.GetR(), styleAccent.GetG(), styleAccent.GetB()));
+            barPath.Reset();
+            AddRoundedRectSubpath(barPath, x, y, barWidth, barHeight, barWidth * 0.5f);
+            graphics.FillPath(&barBrush, &barPath);
+        }
+    } else {
+        const float available = std::max(32.0f, height - 28.0f);
+        const float barHeight = std::clamp((available - gap * 7.0f) / 8.0f, 6.0f, 18.0f);
+        const float totalHeight = barHeight * 8.0f + gap * 7.0f;
+        const float startY = centerY - totalHeight * 0.5f;
+        const float minBarLength = std::clamp(width * 0.10f, 6.0f, 14.0f);
+        const float maxBarLength = std::max(minBarLength + 4.0f, width * 0.78f);
+        for (int i = 0; i < 8; ++i) {
+            const float value = values[static_cast<size_t>(i)];
+            const float barLength = minBarLength + (maxBarLength - minBarLength) * value;
+            const float x = centerX - barLength * 0.5f;
+            const float y = startY + i * (barHeight + gap);
+            const float opacityT = ApplyHeightCurve(value, true, opacityCurve);
+            const BYTE alpha = static_cast<BYTE>(std::lround(30.0f + 225.0f * opacityT));
+            barBrush.SetColor(Gdiplus::Color(alpha, styleAccent.GetR(), styleAccent.GetG(), styleAccent.GetB()));
+            barPath.Reset();
+            AddRoundedRectSubpath(barPath, x, y, barLength, barHeight, barHeight * 0.5f);
+            graphics.FillPath(&barBrush, &barPath);
+        }
+    }
+
+    (void)dark;
+}
+
+static void DrawEqWidget(
+    Gdiplus::Graphics& graphics,
+    const EqLayoutWidgetState& widget,
+    bool dark,
+    const EqMediaState& media,
+    bool preview = false) {
+    const RECT r = EqGetLayoutRect(widget.id);
+    if (r.right <= r.left || r.bottom <= r.top) return;
+    if (widget.id == EQ_LAYOUT_MEDIA) {
+        DrawEqMediaWidget(graphics,r,dark,media,widget.rotation,widget.textAlignment,preview);
+        return;
+    }
+    if (widget.id == EQ_LAYOUT_PRESETS) {
+        DrawEqPresetWidget(graphics,r,dark,widget.rotation,preview);
+        return;
+    }
+    if (widget.id == EQ_LAYOUT_LYRICS) {
+        DrawEqLyricsWidget(graphics, widget, dark, preview);
+        return;
+    }
+    if (widget.id == EQ_LAYOUT_DISK) {
+        DrawEqDiskWidget(graphics, r, dark, preview);
+        return;
+    }
+    if (widget.id == EQ_LAYOUT_MINI_VISUALIZER) {
+        DrawEqMiniVisualizerWidget(graphics, r, dark, preview);
+        return;
+    }
+    if (widget.id == EQ_LAYOUT_VOLUME) {
+        DrawEqVolumeWidget(graphics, r, dark, preview);
+        return;
+    }
+
+    const Gdiplus::Color titleColor(255,dark?245:30,dark?245:30,dark?248:30);
+    const Gdiplus::Color trackColor(100,dark?150:125,dark?150:125,dark?155:130);
+    const Gdiplus::Color accentColor =
+        MakeEqPopupStyle(g_eqPopupStyleId.load(std::memory_order_acquire), dark).accent;
+    Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
+    Gdiplus::FontFamily smallFamily(L"Segoe UI");
+    Gdiplus::Font headerFont(&titleFamily,13.0f,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel);
+    Gdiplus::Font valueFont(&smallFamily,8.5f,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush headerBrush(titleColor);
+    graphics.DrawString(L"Equalizer",-1,&headerFont,
+                        Gdiplus::PointF((float)r.left+12.0f,(float)r.top+10.0f),
+                        &headerBrush);
+
+    const bool rotated = widget.rotation == 90 || widget.rotation == 270;
+    if (rotated) {
+        // A rotated section is rendered adaptively rather than rotating text.
+        // Ten EQ bands become horizontal sliders, keeping all labels readable.
+        const int left = static_cast<int>(r.left) + 54;
+        const int right = std::max(left + 30, static_cast<int>(r.right) - 52);
+        const int valueLeft = std::min(right + 6, static_cast<int>(r.right) - 42);
+        const int top = static_cast<int>(r.top) + 38;
+        const int bottom = static_cast<int>(r.bottom) - 18;
+        const int usableH = std::max(10, bottom - top);
+        const float rowStep = static_cast<float>(usableH) /
+                              static_cast<float>(std::max(1, VIZ_EQ_BANDS - 1));
+        Gdiplus::Pen trackPen(trackColor,4.0f);
+        trackPen.SetStartCap(Gdiplus::LineCapRound);
+        trackPen.SetEndCap(Gdiplus::LineCapRound);
+        Gdiplus::Pen fillPen(accentColor,4.0f);
+        fillPen.SetStartCap(Gdiplus::LineCapRound);
+        fillPen.SetEndCap(Gdiplus::LineCapRound);
+        Gdiplus::SolidBrush knobBrush(accentColor);
+        Gdiplus::StringFormat centered;
+        centered.SetAlignment(Gdiplus::StringAlignmentCenter);
+        centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        // Preserve the original near alignment for the value readout.
+        centered.SetAlignment(Gdiplus::StringAlignmentNear);
+        for (int i=0;i<VIZ_EQ_BANDS;++i) {
+            const float y = static_cast<float>(top) + rowStep * static_cast<float>(i);
+            const float gain = GetEqGainAtBand(i);
+            const float knobX = static_cast<float>(left) +
+                (gain / 2.0f) * static_cast<float>(std::max(1, right-left));
+            graphics.DrawLine(&trackPen,(float)left,y,(float)right,y);
+            graphics.DrawLine(&fillPen,(float)left,y,knobX,y);
+            graphics.FillEllipse(&knobBrush,
+                (Gdiplus::REAL)(knobX-6.0f),(Gdiplus::REAL)(y-6.0f),
+                12.0f,12.0f);
+            if (!preview && (i==g_eqHotBand || i==g_eqDraggingBand)) {
+                wchar_t txt[16]{};
+                swprintf_s(txt,L"%.2f",gain);
+                graphics.DrawString(txt,-1,&valueFont,
+                    Gdiplus::RectF((float)valueLeft,y-9.0f,38.0f,18.0f),
+                    &centered,&headerBrush);
+            }
+        }
+        return;
+    }
+
+    const int left = static_cast<int>(r.left) + 20;
+    const int right = static_cast<int>(r.right) - 20;
+    const int top = static_cast<int>(r.top) + 46;
+    const int bottom = std::max<int>(top + 1, static_cast<int>(r.bottom) - 42);
+    const float span=(float)std::max(1,right-left);
+    Gdiplus::Pen trackPen(trackColor,4);
+    trackPen.SetStartCap(Gdiplus::LineCapRound);
+    trackPen.SetEndCap(Gdiplus::LineCapRound);
+    Gdiplus::Pen fillPen(accentColor,4);
+    fillPen.SetStartCap(Gdiplus::LineCapRound);
+    fillPen.SetEndCap(Gdiplus::LineCapRound);
+    Gdiplus::SolidBrush knobBrush(accentColor);
+    Gdiplus::SolidBrush textBrush(titleColor);
+    Gdiplus::StringFormat valueFormat;
+    valueFormat.SetAlignment(Gdiplus::StringAlignmentCenter);
+    valueFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::StringFormat labelFormat;
+    labelFormat.SetAlignment(Gdiplus::StringAlignmentCenter);
+    labelFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+    for(int i=0;i<VIZ_EQ_BANDS;++i){
+        const float x=left+span*(float)i/(float)std::max(1,VIZ_EQ_BANDS-1);
+        graphics.DrawLine(&trackPen,x,(float)top,x,(float)bottom);
+        const float gain=GetEqGainAtBand(i);
+        const float knobY=bottom-(gain/2.0f)*(bottom-top);
+        graphics.DrawLine(&fillPen,x,knobY,x,(float)bottom);
+        graphics.FillEllipse(&knobBrush,
+            (Gdiplus::REAL)(x - 6.0f),(Gdiplus::REAL)(knobY - 6.0f),12.0f,12.0f);
+        if(!preview && (i==g_eqHotBand || i==g_eqDraggingBand)){
+            wchar_t txt[16]{}; swprintf_s(txt,L"%.2f",gain);
+            graphics.DrawString(txt,-1,&valueFont,
+                Gdiplus::RectF(x-22,knobY-29,44,18),&valueFormat,&textBrush);
+        }
+        wchar_t label[32]{};
+        const float high=VIZ_EQ_HIGH_HZ[(size_t)i];
+        if(high>=1000) swprintf_s(label,L"%.0fk",high/1000);
+        else swprintf_s(label,L"%.0f",high);
+        graphics.DrawString(label,-1,&valueFont,
+            Gdiplus::RectF(x-26,bottom+10,52,20),&labelFormat,&textBrush);
+    }}
+
+
+// The EQ section is visually static between slider changes. Cache its rendered
+// pixels so the normal Player frame only composites a bitmap instead of
+// recreating fonts, pens, brushes and all ten slider/label geometries every time.
+// The cache key includes every value that affects this widget's appearance.
+struct EqStaticWidgetCache {
+    Gdiplus::Bitmap* bitmap = nullptr;
+    size_t hash = 0;
+    int width = 0;
+    int height = 0;
+};
+static EqStaticWidgetCache g_eqStaticEqWidgetCache;
+
+static void DestroyEqStaticWidgetCache() {
+    delete g_eqStaticEqWidgetCache.bitmap;
+    g_eqStaticEqWidgetCache = EqStaticWidgetCache{};
+    delete g_eqSectionBackgroundCache.bitmap;
+    g_eqSectionBackgroundCache = EqSectionBackgroundCache{};
+    delete g_eqMediaTextRenderCache.bitmap;
+    g_eqMediaTextRenderCache = EqMediaTextRenderCache{};
+    delete g_eqPresetWidgetRenderCache.bitmap;
+    g_eqPresetWidgetRenderCache = EqPresetWidgetRenderCache{};
+    // unique_ptr's destructor must run before GdiplusShutdown, not at DLL unload.
+    g_eqLyricsRenderCache = EqLyricsRenderCache{};
+}
+
+static size_t BuildEqStaticWidgetCacheHash(const EqLayoutWidgetState& widget, bool dark, const RECT& r) {
+    size_t hash = 0;
+    auto combine = [&hash](size_t value) {
+        hash ^= value + static_cast<size_t>(0x9e3779b9) + (hash << 6) + (hash >> 2);
+    };
+    combine(static_cast<size_t>(dark));
+    combine(static_cast<size_t>(g_eqPopupStyleId.load(std::memory_order_acquire)));
+    combine(static_cast<size_t>(r.left)); combine(static_cast<size_t>(r.top));
+    combine(static_cast<size_t>(r.right)); combine(static_cast<size_t>(r.bottom));
+    combine(static_cast<size_t>(widget.rotation));
+    combine(static_cast<size_t>(g_eqHotBand + 2));
+    combine(static_cast<size_t>(g_eqDraggingBand + 2));
+    for (int i = 0; i < VIZ_EQ_BANDS; ++i)
+        combine(static_cast<size_t>(std::lround(GetEqGainAtBand(i) * 10000.0f)));
+    return hash;
+}
+
+static void DrawEqWidgetCached(Gdiplus::Graphics& graphics, const EqLayoutWidgetState& widget, bool dark) {
+    const RECT r = EqGetLayoutRect(widget.id);
+    const int width = r.right - r.left;
+    const int height = r.bottom - r.top;
+    if (width <= 0 || height <= 0)
+        return;
+
+    const size_t cacheHash = BuildEqStaticWidgetCacheHash(widget, dark, r);
+    if (!g_eqStaticEqWidgetCache.bitmap || g_eqStaticEqWidgetCache.hash != cacheHash ||
+        g_eqStaticEqWidgetCache.width != width || g_eqStaticEqWidgetCache.height != height) {
+        auto* bitmap = new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
+        if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+            delete bitmap;
+            DrawEqWidget(graphics, widget, dark, g_eqPlayerMediaRenderCache.state, false);
+            return;
+        }
+        Gdiplus::Graphics cacheGraphics(bitmap);
+        cacheGraphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        cacheGraphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+        cacheGraphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+        cacheGraphics.TranslateTransform(static_cast<Gdiplus::REAL>(-r.left),
+                                         static_cast<Gdiplus::REAL>(-r.top));
+        DrawEqWidget(cacheGraphics, widget, dark, g_eqPlayerMediaRenderCache.state, false);
+        delete g_eqStaticEqWidgetCache.bitmap;
+        g_eqStaticEqWidgetCache.bitmap = bitmap;
+        g_eqStaticEqWidgetCache.hash = cacheHash;
+        g_eqStaticEqWidgetCache.width = width;
+        g_eqStaticEqWidgetCache.height = height;
+    }
+    graphics.DrawImage(g_eqStaticEqWidgetCache.bitmap, r.left, r.top, width, height);
+}
+
+static void RenderEqMainPage(
+    Gdiplus::Graphics& graphics,
+    bool dark,
+    const EqMediaState& media) {
+    DrawEqSectionBackgrounds(graphics, dark);
+    const auto drawOrder = EqGetLayoutZOrderIndices();
+    for (const int index : drawOrder) {
+        const auto& widget = g_eqLayoutWidgets[static_cast<size_t>(index)];
+        if (!widget.present) continue;
+        if (widget.id == EQ_LAYOUT_EQ)
+            DrawEqWidgetCached(graphics, widget, dark);
+        else
+            DrawEqWidget(graphics, widget, dark, media, false);
+    }
+
+    const EqPopupStyle style = MakeEqPopupStyle(
+        g_eqPopupStyleId.load(std::memory_order_acquire), dark);
+    const Gdiplus::Color titleColor = style.text;
+    const Gdiplus::FontFamily dummyFamily(L"Segoe MDL2 Assets");
+    Gdiplus::Font gearFont(&dummyFamily,18.0f,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel);
+    const RECT pageButton=GetEqPageButtonRect();
+    if(g_eqHotPageButton){
+        Gdiplus::SolidBrush pb(style.accent);
+        Gdiplus::GraphicsPath path;
+        AddRoundedRectSubpath(path,(float)pageButton.left,(float)pageButton.top,
+                              (float)(pageButton.right-pageButton.left),
+                              (float)(pageButton.bottom-pageButton.top),9);
+        graphics.FillPath(&pb,&path);
+    }
+    Gdiplus::SolidBrush gearBrush(g_eqHotPageButton
+        ? Gdiplus::Color(255,255,255,255)
+        : titleColor);
+    Gdiplus::StringFormat c;
+    c.SetAlignment(Gdiplus::StringAlignmentCenter);
+    c.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    graphics.DrawString(L"\xE713",-1,&gearFont,
+                        Gdiplus::RectF((float)pageButton.left,(float)pageButton.top,
+                                       (float)(pageButton.right-pageButton.left),
+                                       (float)(pageButton.bottom-pageButton.top)),
+                        &c,&gearBrush);
+}
+
+struct EqLayoutBuilderView {
+    RECT canvas{};
+    float scale = 1.0f;
+    int sidebarLeft = 540;
+    int sidebarRight = 690;
+    int sidebarTop = 74;
+};
+
+static EqLayoutBuilderView GetEqLayoutBuilderView() {
+    EqLayoutBuilderView v{};
+    // Keep the canvas wide enough for the sidebar while allowing a taller
+    // working area; the settings page places Popup position below this area.
+    constexpr int left=20, top=72, maxW=510, maxH=500;
+    v.scale=EqClampLayoutScale(std::min((float)maxW/(float)EQ_LAYOUT_CANVAS_W,(float)maxH/(float)EQ_LAYOUT_CANVAS_H));
+    const int w=std::max(1,(int)std::lround(EQ_LAYOUT_CANVAS_W*v.scale));
+    const int h=std::max(1,(int)std::lround(EQ_LAYOUT_CANVAS_H*v.scale));
+    v.canvas=RECT{left,top,left+w,top+h};
+    return v;
+}
+
+static RECT EqBuilderWidgetScreenRect(const EqLayoutBuilderView& view,const EqLayoutWidgetState& widget){
+    return RECT{view.canvas.left+(int)std::lround(widget.x*view.scale),view.canvas.top+(int)std::lround(widget.y*view.scale),view.canvas.left+(int)std::lround((widget.x+widget.w)*view.scale),view.canvas.top+(int)std::lround((widget.y+widget.h)*view.scale)};
+}
+
+static int EqBuilderHitWidget(int x,int y){
+    const EqLayoutBuilderView view=GetEqLayoutBuilderView();
+    const auto drawOrder = EqGetLayoutZOrderIndices();
+    for(int oi=(int)drawOrder.size()-1; oi>=0; --oi){
+        const auto& w=g_eqLayoutWidgets[static_cast<size_t>(drawOrder[static_cast<size_t>(oi)])];
+        if(!w.present) continue;
+        const RECT sr=EqBuilderWidgetScreenRect(view,w);
+        if(PtInRect(&sr,POINT{x,y})) return w.id;
+    }
+    return -1;
+}
+
+static constexpr int EQ_BUILDER_DRAG_NONE = -1;
+static int g_eqBuilderSelectedId = -1;
+static int g_eqBuilderDragId = EQ_BUILDER_DRAG_NONE;
+static int g_eqBuilderResizeId = EQ_BUILDER_DRAG_NONE;
+static int g_eqBuilderResizeCorner = -1;
+static int g_eqBuilderDragStartX = 0;
+static int g_eqBuilderDragStartY = 0;
+static int g_eqBuilderOriginalX = 0;
+static int g_eqBuilderOriginalY = 0;
+static int g_eqBuilderOriginalW = 0;
+static int g_eqBuilderOriginalH = 0;
+static bool g_eqBuilderRemoveOnDrop = false;
+
+static RECT EqBuilderPaletteRect(int id){
+    int idx = 0;
+    switch (id) {
+    case EQ_LAYOUT_EQ: idx = 0; break;
+    case EQ_LAYOUT_PRESETS: idx = 1; break;
+    case EQ_LAYOUT_MEDIA: idx = 2; break;
+    case EQ_LAYOUT_LYRICS: idx = 3; break;
+    case EQ_LAYOUT_DISK: idx = 4; break;
+    case EQ_LAYOUT_MINI_VISUALIZER: idx = 5; break;
+    case EQ_LAYOUT_VOLUME: idx = 6; break;
+    default: idx = 0; break;
+    }
+    return RECT{545,100+idx*62,688,150+idx*62};
+}
+
+static const wchar_t* EqBuilderWidgetName(int id){
+    switch(id){
+    case EQ_LAYOUT_EQ:return L"EQ";
+    case EQ_LAYOUT_PRESETS:return L"Presets";
+    case EQ_LAYOUT_MEDIA:return L"Media";
+    case EQ_LAYOUT_LYRICS:return L"Lyrics";
+    case EQ_LAYOUT_DISK:return L"Disk";
+    case EQ_LAYOUT_MINI_VISUALIZER:return L"Mini visualizer";
+    case EQ_LAYOUT_VOLUME:return L"Volume";
+    default:return L"?";
+    }
+}
+
+static RECT EqBuilderBackgroundRect(const RECT& r){ return RECT{r.right-28,r.top+4,r.right-4,r.top+28}; }
+static RECT EqBuilderSpecialRect(const RECT& r){ return RECT{r.right-54,r.top+4,r.right-30,r.top+28}; }
+static RECT EqBuilderShapeRect(const RECT& r){ return EqBuilderSpecialRect(r); }
+static RECT EqBuilderRotateRect(const RECT& r){ return EqBuilderSpecialRect(r); }
+static RECT EqBuilderAlignmentRect(const RECT& r){ return EqBuilderSpecialRect(r); }
+static RECT EqBuilderDeleteRect(const RECT& r){ return RECT{r.left+4,r.top+4,r.left+28,r.top+28}; }
+
+static void DrawEqBuilderAlignmentIcon(
+    Gdiplus::Graphics& graphics, const RECT& r, int alignment, Gdiplus::Color color) {
+    Gdiplus::Pen pen(color, 1.6f);
+    const float centerX = (r.left + r.right) * 0.5f;
+    const float lengths[3] = {12.0f, 8.0f, 10.0f};
+    const float y[3] = {r.top + 8.0f, r.top + 12.0f, r.top + 16.0f};
+    const int mode = std::clamp(alignment, 0, 2);
+    for (int i = 0; i < 3; ++i) {
+        float left = static_cast<float>(r.left);
+        if (mode == 1)
+            left = centerX - lengths[i] * 0.5f;
+        else if (mode == 2)
+            left = static_cast<float>(r.right) - lengths[i];
+        graphics.DrawLine(&pen, left, y[i], left + lengths[i], y[i]);
+    }
+}
+
+
+static int EqBuilderHitHandle(const RECT& r,int x,int y){
+    constexpr int hs=12;
+    const RECT handles[4]={{r.left-hs/2,r.top-hs/2,r.left+hs/2,r.top+hs/2},{r.right-hs/2,r.top-hs/2,r.right+hs/2,r.top+hs/2},{r.left-hs/2,r.bottom-hs/2,r.left+hs/2,r.bottom+hs/2},{r.right-hs/2,r.bottom-hs/2,r.right+hs/2,r.bottom+hs/2}};
+    for(int i=0;i<4;++i) if(PtInRect(&handles[i],POINT{x,y})) return i;
+    return -1;
+}
+
+static void DrawEqLayoutBuilder(
+    Gdiplus::Graphics& graphics,
+    bool dark,
+    const EqMediaState& media) {
+    const Gdiplus::Color titleColor(255,dark?245:30,dark?245:30,dark?248:30);
+    const Gdiplus::Color mutedColor(190,dark?205:90,dark?205:90,dark?210:95);
+    const Gdiplus::Color accent =
+        MakeEqPopupStyle(g_eqPopupStyleId.load(std::memory_order_acquire), dark).accent;
+    Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold"); Gdiplus::FontFamily smallFamily(L"Segoe UI"); Gdiplus::Font header(&titleFamily,16,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel); Gdiplus::Font small(&smallFamily,10.5f,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush tb(titleColor), mb(mutedColor);
+    graphics.DrawString(L"Layout Builder",-1,&header,Gdiplus::PointF(20,18),&tb);
+    graphics.DrawString(L"Drag sections onto the canvas. Move and resize them",-1,&small,Gdiplus::PointF(20,42),&mb);
+
+    // Desktop layout editor entry point (visualizer / album widget / lyrics
+    // positions on the desktop).
+    {
+        const RECT button = EqGetDesktopLayoutButtonRect();
+        Gdiplus::SolidBrush buttonBrush(accent);
+        Gdiplus::GraphicsPath path;
+        AddRoundedRectSubpath(path, static_cast<float>(button.left), static_cast<float>(button.top),
+                              static_cast<float>(button.right - button.left),
+                              static_cast<float>(button.bottom - button.top), 9.0f);
+        graphics.FillPath(&buttonBrush, &path);
+        Gdiplus::Font buttonFont(&titleFamily, 12.5f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::StringFormat center;
+        center.SetAlignment(Gdiplus::StringAlignmentCenter);
+        center.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+        graphics.DrawString(L"Open desktop layout editor", -1, &buttonFont,
+                            Gdiplus::RectF(static_cast<float>(button.left), static_cast<float>(button.top),
+                                           static_cast<float>(button.right - button.left),
+                                           static_cast<float>(button.bottom - button.top)),
+                            &center, &textBrush);
+    }
+
+    const EqLayoutBuilderView view=GetEqLayoutBuilderView();
+    Gdiplus::SolidBrush canvasBrush(Gdiplus::Color(dark?215:250,dark?19:247,dark?19:247,dark?21:249));
+    graphics.FillRectangle(&canvasBrush, (Gdiplus::REAL)view.canvas.left, (Gdiplus::REAL)view.canvas.top, (Gdiplus::REAL)(view.canvas.right-view.canvas.left), (Gdiplus::REAL)(view.canvas.bottom-view.canvas.top));
+    Gdiplus::Pen gridPen(Gdiplus::Color(dark?28:18,dark?90:80,dark?90:80,dark?95:85),1.0f);
+    for(int gx=0;gx<=EQ_LAYOUT_CANVAS_W;gx+=EQ_LAYOUT_GRID){ const float x=view.canvas.left+gx*view.scale; graphics.DrawLine(&gridPen,x,(float)view.canvas.top,x,(float)view.canvas.bottom); }
+    for(int gy=0;gy<=EQ_LAYOUT_CANVAS_H;gy+=EQ_LAYOUT_GRID){ const float y=view.canvas.top+gy*view.scale; graphics.DrawLine(&gridPen,(float)view.canvas.left,y,(float)view.canvas.right,y); }
+    Gdiplus::Pen borderPen(Gdiplus::Color(150,dark?140:100,dark?140:100,dark?145:105),1.0f); graphics.DrawRectangle(&borderPen, (Gdiplus::REAL)view.canvas.left, (Gdiplus::REAL)view.canvas.top, (Gdiplus::REAL)(view.canvas.right-view.canvas.left-1), (Gdiplus::REAL)(view.canvas.bottom-view.canvas.top-1));
+
+    // The builder uses a lightweight preview so the editor stays cheap and does
+    // not invoke the full live widget interaction layer while dragging.
+    const auto builderDrawOrder = EqGetLayoutZOrderIndices();
+    for(const int index : builderDrawOrder){
+        const auto& w = g_eqLayoutWidgets[static_cast<size_t>(index)];
+        if(!w.present) continue;
+        const RECT sr=EqBuilderWidgetScreenRect(view,w);
+        if (w.backgroundEnabled) {
+            Gdiplus::SolidBrush sectionBg(Gdiplus::Color(
+                dark ? 26 : 34, dark ? 90 : 245, dark ? 90 : 245, dark ? 92 : 245));
+            Gdiplus::GraphicsPath sectionPath;
+            if (w.id == EQ_LAYOUT_DISK) {
+                // Keep a little empty margin inside the layout rectangle so
+                // the Disk section background does not look oversized.
+                const float inset = 4.0f;
+                const float x = static_cast<float>(sr.left) + inset;
+                const float y = static_cast<float>(sr.top) + inset;
+                const float bw = std::max(1.0f, static_cast<float>(sr.right - sr.left) - inset * 2.0f);
+                const float bh = std::max(1.0f, static_cast<float>(sr.bottom - sr.top) - inset * 2.0f);
+                if (w.backgroundCircle)
+                    sectionPath.AddEllipse(x, y, bw, bh);
+                else
+                    AddRoundedRectSubpath(sectionPath, x, y, bw, bh, 7.0f);
+            } else {
+                AddRoundedRectSubpath(sectionPath, (float)sr.left, (float)sr.top,
+                                      (float)(sr.right - sr.left),
+                                      (float)(sr.bottom - sr.top), 7.0f);
+            }
+            graphics.FillPath(&sectionBg, &sectionPath);
+        }
+        // Paint a lightweight adaptive representation over the logical preview.
+        Gdiplus::GraphicsPath path; AddRoundedRectSubpath(path,(float)sr.left,(float)sr.top,(float)(sr.right-sr.left),(float)(sr.bottom-sr.top),7);
+        Gdiplus::Pen p(w.id==g_eqBuilderSelectedId?accent:Gdiplus::Color(110,dark?150:100,dark?150:100,dark?155:105),w.id==g_eqBuilderSelectedId?2.0f:1.0f); graphics.DrawPath(&p,&path);
+        Gdiplus::Font mini(&smallFamily,9,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel); Gdiplus::SolidBrush labelBrush(titleColor);
+        Gdiplus::StringFormat center; center.SetAlignment(Gdiplus::StringAlignmentCenter); center.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        graphics.DrawString(EqBuilderWidgetName(w.id),-1,&mini,Gdiplus::RectF((float)sr.left,(float)sr.top,(float)(sr.right-sr.left),18),&center,&labelBrush);
+        if(w.id==EQ_LAYOUT_EQ){
+            const bool rotated = w.rotation == 90 || w.rotation == 270;
+            const int count = 10;
+            if (rotated) {
+                const int srHeight = static_cast<int>(sr.bottom - sr.top);
+                for(int i=0;i<count;i++){
+                    const float py=(float)sr.top+30.0f+
+                        (float)std::max<int>(1, srHeight-42)*i/(float)(count-1);
+                    graphics.DrawLine(&p,(float)sr.left+34.0f,py,
+                                      (float)sr.right-10.0f,py);
+                }
+            } else {
+                const int srWidth = static_cast<int>(sr.right - sr.left);
+                for(int i=0;i<count;i++){
+                    const float px=(float)sr.left+14.0f+
+                        (float)std::max<int>(1, srWidth-28)*i/(float)(count-1);
+                    const float by=(float)sr.bottom-12;
+                    graphics.DrawLine(&p,px,by,px,(float)sr.top+28);
+                }
+            }
+        } else if(w.id==EQ_LAYOUT_PRESETS){
+            const EqPresetGridMetrics grid = EqGetPresetGridMetrics(w, VIZ_EQ_BUILTIN_PRESET_COUNT);
+            for(int rr=0;rr<grid.rows;rr++){
+                for(int cc=0;cc<grid.cols;cc++){
+                    if(rr*grid.cols+cc>=VIZ_EQ_BUILTIN_PRESET_COUNT) break;
+                    const int cl=sr.left+9+cc*
+                        std::max(12, (static_cast<int>(sr.right-sr.left)-18-(grid.cols-1)*4)/grid.cols + 4);
+                    const int cw=std::max(12,
+                        (static_cast<int>(sr.right-sr.left)-18-(grid.cols-1)*4)/grid.cols);
+                    const int ct=sr.top+28+rr*
+                        std::max(16, grid.rowHeight * static_cast<int>(view.scale));
+                    Gdiplus::SolidBrush b(Gdiplus::Color(28,255,255,255));
+                    graphics.FillRectangle(&b,(Gdiplus::REAL)cl,(Gdiplus::REAL)ct,
+                                           (Gdiplus::REAL)cw,
+                                           std::min(14.0f,(Gdiplus::REAL)grid.rowHeight-4.0f));
+                }
+            }
+        }
+        else if(w.id==EQ_LAYOUT_LYRICS){
+            Gdiplus::Pen lyricsPreviewPen(Gdiplus::Color(75,255,255,255), 1.0f);
+            const int srWidth = static_cast<int>(sr.right - sr.left);
+            const int lineRight = sr.left + std::max(24, srWidth - 14);
+            for(int i=0;i<5;++i){
+                const int py=sr.top+26+i*15;
+                if(py+5>=sr.bottom) break;
+                graphics.DrawLine(&lyricsPreviewPen,(float)sr.left+12.0f,(float)py,
+                                  (float)lineRight,(float)py);
+            }
+        }
+        else if (w.id == EQ_LAYOUT_DISK) {
+            const float cx = (float)(sr.left + sr.right) * 0.5f;
+            const float cy = (float)(sr.top + sr.bottom) * 0.5f;
+            const float sectionRadius =
+                std::min((float)(sr.right - sr.left), (float)(sr.bottom - sr.top));
+            const float baseRadius = std::max(12.0f, sectionRadius * 0.35f);
+
+            // Builder preview is intentionally just a static disk silhouette;
+            // the live circular visualizer is not rendered here.
+            Gdiplus::SolidBrush diskBrush(Gdiplus::Color(180, 18, 18, 22));
+            graphics.FillEllipse(&diskBrush, cx - baseRadius, cy - baseRadius,
+                                 baseRadius * 2.0f, baseRadius * 2.0f);
+            Gdiplus::Pen diskEdgePen(Gdiplus::Color(210, 255, 255, 255), 1.3f);
+            graphics.DrawEllipse(&diskEdgePen, cx - baseRadius, cy - baseRadius,
+                                 baseRadius * 2.0f, baseRadius * 2.0f);
+            const float holeRadius = baseRadius * 0.27f;
+            Gdiplus::SolidBrush holeBrush(Gdiplus::Color(235, 25, 25, 28));
+            graphics.FillEllipse(&holeBrush, cx - holeRadius, cy - holeRadius,
+                                 holeRadius * 2.0f, holeRadius * 2.0f);
+            Gdiplus::Pen holePen(Gdiplus::Color(165, 190, 190, 190), 1.8f);
+            graphics.DrawEllipse(&holePen, cx - holeRadius * 0.70f,
+                                 cy - holeRadius * 0.70f,
+                                 holeRadius * 1.40f, holeRadius * 1.40f);
+        }
+        else if (w.id == EQ_LAYOUT_VOLUME) {
+            const bool horizontal = (sr.right - sr.left) >= (sr.bottom - sr.top);
+            Gdiplus::Pen volumeTrack(Gdiplus::Color(80,255,255,255), 3.0f);
+            Gdiplus::Pen volumeFill(accent, 3.0f);
+            Gdiplus::SolidBrush volumeKnob(accent);
+            RECT muteButton{};
+            if (horizontal) {
+                const float centerY = (sr.top + sr.bottom) * 0.5f;
+                const float buttonSize = std::clamp((float)(sr.bottom - sr.top) * 0.62f, 12.0f, 22.0f);
+                muteButton = RECT{(LONG)(sr.right - buttonSize - 5.0f),
+                                  (LONG)(centerY - buttonSize * 0.5f),
+                                  (LONG)(sr.right - 5.0f),
+                                  (LONG)(centerY + buttonSize * 0.5f)};
+                const float left = sr.left + 8.0f;
+                const float right = (float)muteButton.left - 7.0f;
+                const float knob = left + std::max(1.0f, right - left) * 0.62f;
+                graphics.DrawLine(&volumeTrack, left, centerY, right, centerY);
+                graphics.DrawLine(&volumeFill, left, centerY, knob, centerY);
+                graphics.FillEllipse(&volumeKnob, knob - 4.0f, centerY - 4.0f, 8.0f, 8.0f);
+            } else {
+                const float centerX = (sr.left + sr.right) * 0.5f;
+                const float buttonSize = std::clamp((float)(sr.right - sr.left) * 0.62f, 12.0f, 22.0f);
+                muteButton = RECT{(LONG)(centerX - buttonSize * 0.5f),
+                                  (LONG)(sr.bottom - buttonSize - 5.0f),
+                                  (LONG)(centerX + buttonSize * 0.5f),
+                                  (LONG)(sr.bottom - 5.0f)};
+                const float top = sr.top + 8.0f;
+                const float bottom = (float)muteButton.top - 7.0f;
+                const float knob = bottom - std::max(1.0f, bottom - top) * 0.62f;
+                graphics.DrawLine(&volumeTrack, centerX, top, centerX, bottom);
+                graphics.DrawLine(&volumeFill, centerX, knob, centerX, bottom);
+                graphics.FillEllipse(&volumeKnob, centerX - 4.0f, knob - 4.0f, 8.0f, 8.0f);
+            }
+            Gdiplus::GraphicsPath mutePath;
+            AddRoundedRectSubpath(mutePath, (float)muteButton.left, (float)muteButton.top,
+                                  (float)(muteButton.right - muteButton.left),
+                                  (float)(muteButton.bottom - muteButton.top), 4.0f);
+            Gdiplus::SolidBrush muteBg(Gdiplus::Color(45, 255, 255, 255));
+            graphics.FillPath(&muteBg, &mutePath);
+            Gdiplus::Font muteFont(L"Segoe MDL2 Assets", 10.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+            graphics.DrawString(L"\xE995", -1, &muteFont,
+                Gdiplus::RectF((float)muteButton.left, (float)muteButton.top,
+                               (float)(muteButton.right - muteButton.left),
+                               (float)(muteButton.bottom - muteButton.top)),
+                &center, &labelBrush);
+        }
+        else if (w.id == EQ_LAYOUT_MINI_VISUALIZER) {
+            const bool verticalBars = (sr.right - sr.left) > (sr.bottom - sr.top);
+            const float cx = (sr.left + sr.right) * 0.5f;
+            const float cy = (sr.top + sr.bottom) * 0.5f;
+            const float values[8] = {0.18f,0.34f,0.52f,0.78f,0.60f,0.42f,0.67f,0.28f};
+            const float gap = 4.0f;
+            Gdiplus::SolidBrush miniBrush(Gdiplus::Color(180,255,255,255));
+            if (verticalBars) {
+                const float bw = std::clamp((sr.right-sr.left-24.0f-gap*7.0f)/8.0f,4.0f,12.0f);
+                const float total = bw*8.0f + gap*7.0f;
+                const float startX = cx-total*0.5f;
+                const float minH = std::max(5.0f,(sr.bottom-sr.top)*0.10f);
+                const float maxH = std::max(minH+4.0f,(sr.bottom-sr.top)*0.72f);
+                for(int i=0;i<8;i++){
+                    const float bh=minH+(maxH-minH)*values[i];
+                    const float x=startX+i*(bw+gap);
+                    const float y=cy-bh*0.5f;
+                    Gdiplus::GraphicsPath barPath;
+                    AddRoundedRectSubpath(barPath,x,y,bw,bh,bw*0.5f);
+                    graphics.FillPath(&miniBrush,&barPath);
+                }
+            } else {
+                const float bh = std::clamp((sr.bottom-sr.top-24.0f-gap*7.0f)/8.0f,4.0f,12.0f);
+                const float total = bh*8.0f + gap*7.0f;
+                const float startY = cy-total*0.5f;
+                const float minL = std::max(5.0f,(sr.right-sr.left)*0.10f);
+                const float maxL = std::max(minL+4.0f,(sr.right-sr.left)*0.72f);
+                for(int i=0;i<8;i++){
+                    const float bl=minL+(maxL-minL)*values[i];
+                    const float x=cx-bl*0.5f;
+                    const float y=startY+i*(bh+gap);
+                    Gdiplus::GraphicsPath barPath;
+                    AddRoundedRectSubpath(barPath,x,y,bl,bh,bh*0.5f);
+                    graphics.FillPath(&miniBrush,&barPath);
+                }
+            }
+        }
+        else {
+            // Media preview intentionally has no album-cover area. The live
+            // Media section also uses that space for metadata/timeline only.
+            Gdiplus::Pen mediaPreviewPen(Gdiplus::Color(75,255,255,255), 1.0f);
+            const int srWidth = static_cast<int>(sr.right - sr.left);
+            const int lineRight = sr.left + std::max(24, srWidth - 14);
+            graphics.DrawLine(&mediaPreviewPen,
+                (float)sr.left + 12.0f, (float)sr.top + 24.0f,
+                (float)lineRight, (float)sr.top + 24.0f);
+            graphics.DrawLine(&mediaPreviewPen,
+                (float)sr.left + 12.0f, (float)sr.top + 34.0f,
+                (float)lineRight, (float)sr.top + 34.0f);
+        }
+        if(w.id==g_eqBuilderSelectedId){
+            const RECT del=EqBuilderDeleteRect(sr);
+            Gdiplus::SolidBrush db(Gdiplus::Color(235,220,45,45));
+            graphics.FillEllipse(&db, (Gdiplus::REAL)del.left, (Gdiplus::REAL)del.top, 20.0f, 20.0f);
+            Gdiplus::SolidBrush rb(Gdiplus::Color(210,accent.GetR(),accent.GetG(),accent.GetB()));
+            if (w.id == EQ_LAYOUT_EQ) {
+                const RECT rot=EqBuilderRotateRect(sr);
+                graphics.FillEllipse(&rb, (Gdiplus::REAL)rot.left, (Gdiplus::REAL)rot.top, 20.0f, 20.0f);
+            } else if (w.id == EQ_LAYOUT_DISK) {
+                const RECT shape=EqBuilderShapeRect(sr);
+                graphics.FillEllipse(&rb, (Gdiplus::REAL)shape.left, (Gdiplus::REAL)shape.top, 20.0f, 20.0f);
+            }
+            if (w.id == EQ_LAYOUT_MEDIA || w.id == EQ_LAYOUT_LYRICS) {
+                const RECT align = EqBuilderAlignmentRect(sr);
+                Gdiplus::SolidBrush alignButton(Gdiplus::Color(210,accent.GetR(),accent.GetG(),accent.GetB()));
+                graphics.FillEllipse(&alignButton, (Gdiplus::REAL)align.left,
+                                     (Gdiplus::REAL)align.top, 20.0f, 20.0f);
+                DrawEqBuilderAlignmentIcon(
+                    graphics, RECT{align.left + 2, align.top + 2, align.left + 18, align.top + 18},
+                    w.textAlignment, Gdiplus::Color(255,255,255,255));
+            }
+            const RECT bg=EqBuilderBackgroundRect(sr);
+            Gdiplus::SolidBrush bgButton(w.backgroundEnabled
+                ? Gdiplus::Color(210,accent.GetR(),accent.GetG(),accent.GetB())
+                : Gdiplus::Color(150,80,80,80));
+            graphics.FillEllipse(&bgButton, (Gdiplus::REAL)bg.left, (Gdiplus::REAL)bg.top, 20.0f, 20.0f);
+            Gdiplus::Font sf(L"Segoe MDL2 Assets",11,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel);
+            Gdiplus::SolidBrush wb(Gdiplus::Color(255,255,255,255));
+            graphics.DrawString(L"\xE894",-1,&sf,Gdiplus::RectF((float)del.left,(float)del.top,20,20),&center,&wb);
+            if (w.id == EQ_LAYOUT_EQ) {
+                const RECT rot=EqBuilderRotateRect(sr);
+                graphics.DrawString(L"\xE895",-1,&sf,Gdiplus::RectF((float)rot.left,(float)rot.top,20,20),&center,&wb);
+            } else if (w.id == EQ_LAYOUT_DISK) {
+                const RECT shape=EqBuilderShapeRect(sr);
+                Gdiplus::Pen shapePen(Gdiplus::Color(255,255,255,255), 1.4f);
+                if (w.backgroundCircle) {
+                    graphics.DrawEllipse(&shapePen, (Gdiplus::REAL)shape.left + 6.0f,
+                                         (Gdiplus::REAL)shape.top + 6.0f, 8.0f, 8.0f);
+                } else {
+                    graphics.DrawRectangle(&shapePen, (Gdiplus::REAL)shape.left + 6.0f,
+                                           (Gdiplus::REAL)shape.top + 6.0f, 8.0f, 8.0f);
+                }
+            }
+            Gdiplus::Pen bgGlyphPen(Gdiplus::Color(255,255,255,255), 1.5f);
+            if (w.backgroundEnabled) {
+                graphics.DrawRectangle(&bgGlyphPen,
+                    (Gdiplus::REAL)bg.left + 7.0f, (Gdiplus::REAL)bg.top + 7.0f, 6.0f, 6.0f);
+            } else {
+                graphics.DrawLine(&bgGlyphPen,
+                    (Gdiplus::REAL)bg.left + 6.0f, (Gdiplus::REAL)bg.top + 6.0f,
+                    (Gdiplus::REAL)bg.right - 6.0f, (Gdiplus::REAL)bg.bottom - 6.0f);
+                graphics.DrawLine(&bgGlyphPen,
+                    (Gdiplus::REAL)bg.right - 6.0f, (Gdiplus::REAL)bg.top + 6.0f,
+                    (Gdiplus::REAL)bg.left + 6.0f, (Gdiplus::REAL)bg.bottom - 6.0f);
+            }
+            const int hs=8; const POINT corners[4]={{sr.left,sr.top},{sr.right,sr.top},{sr.left,sr.bottom},{sr.right,sr.bottom}}; Gdiplus::SolidBrush hb(accent); for(const auto& c:corners) graphics.FillRectangle(&hb, (Gdiplus::REAL)c.x - hs * 0.5f, (Gdiplus::REAL)c.y - hs * 0.5f, (Gdiplus::REAL)hs, (Gdiplus::REAL)hs);
+        }
+    }
+
+    Gdiplus::Font paletteHeader(&titleFamily,13,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel);
+    graphics.DrawString(L"Sections",-1,&paletteHeader,Gdiplus::PointF(545,82),&tb);
+    for(int id=0;id<EQ_LAYOUT_WIDGET_COUNT;++id){ const RECT pr=EqBuilderPaletteRect(id); const bool enabled=!EqIsLayoutWidgetPresent(id); const bool hot=(g_eqBuilderDragId==id); Gdiplus::SolidBrush b(Gdiplus::Color(enabled?(hot?55:35):(dark?18:14), enabled?105:150, enabled?165:155, enabled?255:160)); Gdiplus::GraphicsPath path; AddRoundedRectSubpath(path,(float)pr.left,(float)pr.top,(float)(pr.right-pr.left),(float)(pr.bottom-pr.top),9); graphics.FillPath(&b,&path); Gdiplus::Font f(&smallFamily,12,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel); Gdiplus::SolidBrush text(enabled?titleColor:mutedColor); Gdiplus::StringFormat c; c.SetAlignment(Gdiplus::StringAlignmentCenter); c.SetLineAlignment(Gdiplus::StringAlignmentCenter); graphics.DrawString(EqBuilderWidgetName(id),-1,&f,Gdiplus::RectF((float)pr.left,(float)pr.top,(float)(pr.right-pr.left),(float)(pr.bottom-pr.top)),&c,&text); }
+    graphics.DrawString(L"Each section can be placed once.",-1,&small,Gdiplus::RectF(545,535,145,70),nullptr,&mb);
+
+    // Palette drag ghost.
+    if(g_eqBuilderDragId>=0){ POINT cursor{}; GetCursorPos(&cursor); ScreenToClient(g_eqPopupHwnd,&cursor); const double scale=EqGetPopupDpiScale(); cursor.x=(LONG)std::lround(cursor.x/scale); cursor.y=(LONG)std::lround(cursor.y/scale); const RECT ghost={cursor.x-45,cursor.y-20,cursor.x+45,cursor.y+20}; Gdiplus::SolidBrush b(Gdiplus::Color(95,accent.GetR(),accent.GetG(),accent.GetB())); Gdiplus::GraphicsPath path; AddRoundedRectSubpath(path,(float)ghost.left,(float)ghost.top,(float)(ghost.right-ghost.left),(float)(ghost.bottom-ghost.top),8); graphics.FillPath(&b,&path); Gdiplus::StringFormat c; c.SetAlignment(Gdiplus::StringAlignmentCenter); c.SetLineAlignment(Gdiplus::StringAlignmentCenter); graphics.DrawString(EqBuilderWidgetName(g_eqBuilderDragId),-1,&small,Gdiplus::RectF((float)ghost.left,(float)ghost.top,90,40),&c,&tb); }
+}
+
+static const wchar_t* EqPopupAspectName(int aspect) {
+    switch (aspect) {
+    case EQ_POPUP_ASPECT_4_3: return L"4:3";
+    case EQ_POPUP_ASPECT_21_9: return L"21:9";
+    default: return L"16:9";
+    }
+}
+
+struct EqPopupPlacementView {
+    RECT canvas{};
+    float scale = 1.0f;
+};
+
+static EqPopupPlacementView GetEqPopupPlacementView() {
+    EqPopupPlacementView view{};
+    constexpr int left = 20;
+    constexpr int top = EQ_SETTINGS_POSITION_TOP + 122;
+    constexpr int maxWidth = 658;
+    constexpr int maxHeight = 320;
+
+    double aspect = 16.0 / 9.0;
+    if (g_eqPopupPlacementAspect == EQ_POPUP_ASPECT_4_3)
+        aspect = 4.0 / 3.0;
+    else if (g_eqPopupPlacementAspect == EQ_POPUP_ASPECT_21_9)
+        aspect = 21.0 / 9.0;
+
+    int width = maxWidth;
+    int height = static_cast<int>(std::lround(width / aspect));
+    if (height > maxHeight) {
+        height = maxHeight;
+        width = static_cast<int>(std::lround(height * aspect));
+    }
+
+    view.canvas = RECT{left, top, left + width, top + height};
+    view.scale = std::max(0.05f, static_cast<float>(width) / 1000.0f);
+    return view;
+}
+
+static RECT EqGetPopupPlacementAspectButtonRect(int aspect) {
+    // Compact buttons with equal margins; they no longer run almost edge-to-edge.
+    constexpr int groupWidth = 478; // 3 * 150 + 2 * 14
+    constexpr int left = (EQ_POPUP_WIDTH - groupWidth) / 2;
+    constexpr int gap = 14;
+    constexpr int width = 150;
+    constexpr int top = EQ_SETTINGS_POSITION_TOP + 50;
+    constexpr int height = 44;
+    return RECT{left + aspect * (width + gap), top,
+                left + aspect * (width + gap) + width, top + height};
+}
+
+// Lives in the settings page header, between the Layout Builder title and
+// the back button, so it is reachable without scrolling.
+static RECT EqGetDesktopLayoutButtonRect() {
+    return RECT{372, 14, 572, 50};
+}
+
+static POINT EqPopupPlacementNormalizedToScreen(
+    const EqPopupPlacementView& view, int x, int y) {
+    return POINT{
+        view.canvas.left + static_cast<int>(std::lround(
+            (view.canvas.right - view.canvas.left) * x / 1000.0)),
+        view.canvas.top + static_cast<int>(std::lround(
+            (view.canvas.bottom - view.canvas.top) * y / 1000.0))
+    };
+}
+
+static RECT EqGetPopupPlacementPreviewRect(const EqPopupPlacementView& view) {
+    const auto& state = g_eqPopupPlacement[static_cast<size_t>(g_eqPopupPlacementAspect)];
+    const int canvasWidth = view.canvas.right - view.canvas.left;
+    const int canvasHeight = view.canvas.bottom - view.canvas.top;
+    const int popupWidth = std::clamp(static_cast<int>(std::lround(canvasWidth * 0.26)), 110, 190);
+    const int popupHeight = std::clamp(static_cast<int>(std::lround(popupWidth * 530.0 / 700.0)), 82, 150);
+    const POINT centerNorm = EqGetPopupPlacementCenterNormalized(state);
+    const int halfW = popupWidth / 2;
+    const int halfH = popupHeight / 2;
+    const int minX = halfW;
+    const int maxX = std::max(minX, canvasWidth - halfW);
+    const int minY = halfH;
+    const int maxY = std::max(minY, canvasHeight - halfH);
+    const int centerX = view.canvas.left + std::clamp(
+        static_cast<int>(std::lround(canvasWidth * centerNorm.x / 1000.0)), minX, maxX);
+    const int centerY = view.canvas.top + std::clamp(
+        static_cast<int>(std::lround(canvasHeight * centerNorm.y / 1000.0)), minY, maxY);
+    return RECT{centerX - halfW, centerY - halfH, centerX + halfW, centerY + halfH};
+}
+
+static void EqClampPopupPlacementToCanvas(const EqPopupPlacementView& view,
+                                             EqPopupPlacementState& state) {
+    const int canvasWidth = view.canvas.right - view.canvas.left;
+    const int canvasHeight = view.canvas.bottom - view.canvas.top;
+    if (canvasWidth <= 0 || canvasHeight <= 0)
+        return;
+
+    const int popupWidth = std::clamp(static_cast<int>(std::lround(canvasWidth * 0.26)), 110, 190);
+    const int popupHeight = std::clamp(static_cast<int>(std::lround(popupWidth * 530.0 / 700.0)), 82, 150);
+    const int minNX = static_cast<int>(std::lround((popupWidth / 2.0) * 1000.0 / canvasWidth));
+    const int maxNX = 1000 - minNX;
+    const int minNY = static_cast<int>(std::lround((popupHeight / 2.0) * 1000.0 / canvasHeight));
+    const int maxNY = 1000 - minNY;
+    const POINT current = EqGetPopupPlacementCenterNormalized(state);
+    const int clampedX = std::clamp<int>(current.x, minNX, std::max(minNX, maxNX));
+    const int clampedY = std::clamp<int>(current.y, minNY, std::max(minNY, maxNY));
+    if (current.x != clampedX || current.y != clampedY)
+        EqSetPopupPlacementFromCenterNormalized(state, clampedX, clampedY);
+}
+
+static RECT EqGetPopupPlacementScrollbarTrack() {
+    return RECT{EQ_SETTINGS_SCROLLBAR_LEFT, 64, EQ_SETTINGS_SCROLLBAR_RIGHT, EQ_POPUP_HEIGHT - 12};
+}
+
+static int EqGetPopupSettingsScrollMax();
+
+static RECT EqGetPopupPlacementScrollbarThumb() {
+    const RECT track = EqGetPopupPlacementScrollbarTrack();
+    const int trackHeight = std::max(1L, track.bottom - track.top);
+    if (EQ_SETTINGS_POSITION_CONTENT_HEIGHT <= EQ_POPUP_HEIGHT)
+        return track;
+    const int visible = EQ_POPUP_HEIGHT;
+    const int thumbHeight = std::clamp(static_cast<int>(std::lround(
+        trackHeight * (static_cast<double>(visible) / EQ_SETTINGS_POSITION_CONTENT_HEIGHT))), 48, trackHeight);
+    const int travel = std::max(0, trackHeight - thumbHeight);
+    const int top = track.top + (travel > 0 ? static_cast<int>(std::lround(
+        static_cast<double>(travel) * g_eqSettingsScrollOffset /
+        std::max(1, EqGetPopupSettingsScrollMax()))) : 0);
+    return RECT{track.left, top, track.right, top + thumbHeight};
+}
+
+static int EqGetPopupSettingsScrollMax() {
+    return std::max(0, EQ_SETTINGS_POSITION_CONTENT_HEIGHT - EQ_POPUP_HEIGHT);
+}
+
+static void EqSetPopupSettingsScrollOffset(int value) {
+    g_eqSettingsScrollOffset = std::clamp(value, 0, EqGetPopupSettingsScrollMax());
+}
+
+static int EqPopupPlacementHitTarget(int x, int y) {
+    const EqPopupPlacementView view = GetEqPopupPlacementView();
+    const auto& state = g_eqPopupPlacement[static_cast<size_t>(g_eqPopupPlacementAspect)];
+    const POINT cross = EqPopupPlacementNormalizedToScreen(view, state.crossX, state.crossY);
+    const RECT popup = EqGetPopupPlacementPreviewRect(view);
+    if (PtInRect(&popup, POINT{x, y}))
+        return EQ_POPUP_PLACEMENT_DRAG_POPUP;
+    const RECT crossHit{cross.x - 10, cross.y - 10, cross.x + 11, cross.y + 11};
+    if (PtInRect(&crossHit, POINT{x, y}))
+        return EQ_POPUP_PLACEMENT_DRAG_CROSS;
+    return EQ_POPUP_PLACEMENT_DRAG_NONE;
+}
+
+static int EqPopupPlacementScreenToNormalized(const EqPopupPlacementView& view, int x, int y, bool horizontal) {
+    const int span = horizontal ? (view.canvas.right - view.canvas.left) : (view.canvas.bottom - view.canvas.top);
+    const int start = horizontal ? view.canvas.left : view.canvas.top;
+    if (span <= 0) return 0;
+    return std::clamp(static_cast<int>(std::lround((x - start) * 1000.0 / span)), 0, 1000);
+}
+
+static POINT EqGetPopupPlacementAnchorForWorkArea(const RECT& workArea) {
+    const auto& state = g_eqPopupPlacement[static_cast<size_t>(g_eqPopupPlacementAspect)];
+    const POINT centerNorm = EqGetPopupPlacementCenterNormalized(state);
+    const double nx = centerNorm.x / 1000.0;
+    const double ny = centerNorm.y / 1000.0;
+    return POINT{
+        workArea.left + static_cast<int>(std::lround((workArea.right - workArea.left) * nx)),
+        workArea.top + static_cast<int>(std::lround((workArea.bottom - workArea.top) * ny))
+    };
+}
+
+static void EqApplyConfiguredPopupPlacement(HWND hwnd, const RECT& workArea) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    RECT wr{};
+    if (!GetWindowRect(hwnd, &wr)) return;
+    POINT anchor = EqGetPopupPlacementAnchorForWorkArea(workArea);
+    int width = wr.right - wr.left;
+    int height = wr.bottom - wr.top;
+    int x = anchor.x - width / 2;
+    int y = anchor.y - height / 2;
+    x = std::clamp<int>(x, workArea.left, std::max(workArea.left, workArea.right - width));
+    y = std::clamp<int>(y, workArea.top, std::max(workArea.top, workArea.bottom - height));
+    SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+static void DrawEqPopupPlacementEditor(Gdiplus::Graphics& graphics, bool dark) {
+    const auto& state = g_eqPopupPlacement[static_cast<size_t>(g_eqPopupPlacementAspect)];
+    const EqPopupPlacementView view = GetEqPopupPlacementView();
+    const Gdiplus::Color titleColor(255, dark ? 245 : 30, dark ? 245 : 30, dark ? 248 : 30);
+    const Gdiplus::Color mutedColor(190, dark ? 205 : 90, dark ? 205 : 90, dark ? 210 : 95);
+    const Gdiplus::Color activeColor =
+        MakeEqPopupStyle(g_eqPopupStyleId.load(std::memory_order_acquire), dark).accent;
+    const Gdiplus::Color inactiveColor(255, 126, 126, 126);
+    const Gdiplus::Color gridColor(36, dark ? 95 : 80, dark ? 95 : 80, dark ? 100 : 85);
+
+    Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
+    Gdiplus::FontFamily bodyFamily(L"Segoe UI");
+    Gdiplus::Font titleFont(&titleFamily, 16.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::Font bodyFont(&bodyFamily, 10.5f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush titleBrush(titleColor), mutedBrush(mutedColor);
+    graphics.DrawString(L"Popup position", -1, &titleFont,
+                        Gdiplus::PointF(20.0f, static_cast<float>(EQ_SETTINGS_POSITION_TOP + 12)),
+                        &titleBrush);
+    graphics.DrawString(L"Choose the screen format, then drag the popup or center cross independently.", -1,
+                        &bodyFont,
+                        Gdiplus::PointF(20.0f, static_cast<float>(EQ_SETTINGS_POSITION_TOP + 35)),
+                        &mutedBrush);
+
+    for (int aspect = 0; aspect < EQ_POPUP_ASPECT_COUNT; ++aspect) {
+        const RECT button = EqGetPopupPlacementAspectButtonRect(aspect);
+        const bool selected = aspect == g_eqPopupPlacementAspect;
+        Gdiplus::SolidBrush buttonBrush(selected ? activeColor : inactiveColor);
+        Gdiplus::GraphicsPath path;
+        AddRoundedRectSubpath(path, static_cast<float>(button.left), static_cast<float>(button.top),
+                              static_cast<float>(button.right - button.left),
+                              static_cast<float>(button.bottom - button.top), 10.0f);
+        graphics.FillPath(&buttonBrush, &path);
+        Gdiplus::Font formatFont(&titleFamily, 13.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::StringFormat center;
+        center.SetAlignment(Gdiplus::StringAlignmentCenter);
+        center.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+        graphics.DrawString(EqPopupAspectName(aspect), -1, &formatFont,
+                            Gdiplus::RectF(static_cast<float>(button.left), static_cast<float>(button.top),
+                                           static_cast<float>(button.right - button.left),
+                                           static_cast<float>(button.bottom - button.top)),
+                            &center, &textBrush);
+    }
+
+    Gdiplus::SolidBrush canvasBrush(Gdiplus::Color(dark ? 215 : 250, dark ? 19 : 247, dark ? 19 : 247, dark ? 21 : 249));
+    graphics.FillRectangle(&canvasBrush, static_cast<Gdiplus::REAL>(view.canvas.left),
+                           static_cast<Gdiplus::REAL>(view.canvas.top),
+                           static_cast<Gdiplus::REAL>(view.canvas.right - view.canvas.left),
+                           static_cast<Gdiplus::REAL>(view.canvas.bottom - view.canvas.top));
+
+    Gdiplus::Pen gridPen(gridColor, 1.0f);
+    const int step = 10;
+    for (int gx = 0; gx <= 1000; gx += step) {
+        const int x = view.canvas.left + static_cast<int>(std::lround(
+            (view.canvas.right - view.canvas.left) * gx / 1000.0));
+        graphics.DrawLine(&gridPen, static_cast<float>(x), static_cast<float>(view.canvas.top),
+                          static_cast<float>(x), static_cast<float>(view.canvas.bottom));
+    }
+    for (int gy = 0; gy <= 1000; gy += step) {
+        const int y = view.canvas.top + static_cast<int>(std::lround(
+            (view.canvas.bottom - view.canvas.top) * gy / 1000.0));
+        graphics.DrawLine(&gridPen, static_cast<float>(view.canvas.left), static_cast<float>(y),
+                          static_cast<float>(view.canvas.right), static_cast<float>(y));
+    }
+
+    Gdiplus::Pen borderPen(Gdiplus::Color(150, dark ? 140 : 100, dark ? 140 : 100, dark ? 145 : 105), 1.0f);
+    graphics.DrawRectangle(&borderPen, static_cast<Gdiplus::REAL>(view.canvas.left),
+                           static_cast<Gdiplus::REAL>(view.canvas.top),
+                           static_cast<Gdiplus::REAL>(view.canvas.right - view.canvas.left - 1),
+                           static_cast<Gdiplus::REAL>(view.canvas.bottom - view.canvas.top - 1));
+
+    const POINT cross = EqPopupPlacementNormalizedToScreen(view, state.crossX, state.crossY);
+    Gdiplus::Pen crossPen(Gdiplus::Color(215, 215, 215, 215), 1.2f);
+    graphics.DrawLine(&crossPen, static_cast<float>(view.canvas.left), static_cast<float>(cross.y),
+                      static_cast<float>(view.canvas.right), static_cast<float>(cross.y));
+    graphics.DrawLine(&crossPen, static_cast<float>(cross.x), static_cast<float>(view.canvas.top),
+                      static_cast<float>(cross.x), static_cast<float>(view.canvas.bottom));
+
+    const RECT popup = EqGetPopupPlacementPreviewRect(view);
+    Gdiplus::GraphicsPath popupPath;
+    AddRoundedRectSubpath(popupPath, static_cast<float>(popup.left), static_cast<float>(popup.top),
+                          static_cast<float>(popup.right - popup.left),
+                          static_cast<float>(popup.bottom - popup.top), 8.0f);
+    Gdiplus::SolidBrush popupFill(Gdiplus::Color(130, 128, 128, 128));
+    Gdiplus::Pen popupPen(activeColor, 2.0f);
+    graphics.FillPath(&popupFill, &popupPath);
+    graphics.DrawPath(&popupPen, &popupPath);
+
+    Gdiplus::Font popupFont(&bodyFamily, 10.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::StringFormat popupCenter;
+    popupCenter.SetAlignment(Gdiplus::StringAlignmentCenter);
+    popupCenter.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::SolidBrush popupText(Gdiplus::Color(240, 245, 245, 245));
+    graphics.DrawString(L"Player", -1, &popupFont,
+                        Gdiplus::RectF(static_cast<float>(popup.left), static_cast<float>(popup.top),
+                                       static_cast<float>(popup.right - popup.left),
+                                       static_cast<float>(popup.bottom - popup.top)),
+                        &popupCenter, &popupText);
+
+    Gdiplus::Pen crossMarkPen(Gdiplus::Color(235, 235, 235, 235), 2.0f);
+    graphics.DrawLine(&crossMarkPen, static_cast<float>(cross.x - 8), static_cast<float>(cross.y),
+                      static_cast<float>(cross.x + 8), static_cast<float>(cross.y));
+    graphics.DrawLine(&crossMarkPen, static_cast<float>(cross.x), static_cast<float>(cross.y - 8),
+                      static_cast<float>(cross.x), static_cast<float>(cross.y + 8));
+}
+
+static void RenderEqSettingsPage(Gdiplus::Graphics& graphics, bool dark) {
+    const EqMediaState media = GetEqMediaStateSnapshot();
+    const Gdiplus::GraphicsState contentState = graphics.Save();
+    graphics.TranslateTransform(0.0f, -static_cast<Gdiplus::REAL>(g_eqSettingsScrollOffset));
+    DrawEqLayoutBuilder(graphics, dark, media);
+    DrawEqPopupPlacementEditor(graphics, dark);
+    graphics.Restore(contentState);
+
+    if (EqGetPopupSettingsScrollMax() > 0) {
+        const RECT track = EqGetPopupPlacementScrollbarTrack();
+        const RECT thumb = EqGetPopupPlacementScrollbarThumb();
+        Gdiplus::SolidBrush trackBrush(Gdiplus::Color(52, dark ? 95 : 165, dark ? 95 : 165, dark ? 100 : 170));
+        Gdiplus::GraphicsPath trackPath;
+        AddRoundedRectSubpath(trackPath, static_cast<float>(track.left), static_cast<float>(track.top),
+                              static_cast<float>(track.right - track.left),
+                              static_cast<float>(track.bottom - track.top), 3.0f);
+        graphics.FillPath(&trackBrush, &trackPath);
+        Gdiplus::SolidBrush thumbBrush(Gdiplus::Color(175, dark ? 175 : 120, dark ? 175 : 120, dark ? 180 : 125));
+        Gdiplus::GraphicsPath thumbPath;
+        AddRoundedRectSubpath(thumbPath, static_cast<float>(thumb.left), static_cast<float>(thumb.top),
+                              static_cast<float>(thumb.right - thumb.left),
+                              static_cast<float>(thumb.bottom - thumb.top), 3.0f);
+        graphics.FillPath(&thumbBrush, &thumbPath);
+    }
+
+    const Gdiplus::Color titleColor(255,dark?245:30,dark?245:30,dark?248:30);
+    Gdiplus::FontFamily symbolFamily(L"Segoe MDL2 Assets");
+    Gdiplus::Font arrowFont(&symbolFamily,19.0f,Gdiplus::FontStyleRegular,Gdiplus::UnitPixel);
+    const RECT pageButton=GetEqPageButtonRect();
+    if(g_eqHotPageButton){ Gdiplus::SolidBrush pb(Gdiplus::Color(dark?255:255,dark?62:224,dark?62:224,dark?66:226)); Gdiplus::GraphicsPath path; AddRoundedRectSubpath(path,(float)pageButton.left,(float)pageButton.top,(float)(pageButton.right-pageButton.left),(float)(pageButton.bottom-pageButton.top),9); graphics.FillPath(&pb,&path); }
+    Gdiplus::SolidBrush arrowBrush(g_eqHotPageButton?Gdiplus::Color(255,255,255,255):titleColor); Gdiplus::StringFormat c; c.SetAlignment(Gdiplus::StringAlignmentCenter); c.SetLineAlignment(Gdiplus::StringAlignmentCenter); graphics.DrawString(L"\xE72B",-1,&arrowFont,Gdiplus::RectF((float)pageButton.left,(float)pageButton.top,(float)(pageButton.right-pageButton.left),(float)(pageButton.bottom-pageButton.top)),&c,&arrowBrush);
+}
+
+static void RenderEqPopup(HWND hwnd) {
+    DebugPerfScope debugScope(DEBUG_PERF_PLAYER_RENDER);
+    if (!hwnd)
+        return;
+
+    bool dark = true;
+    int styleId = EQ_POPUP_STYLE_SYSTEM;
+    EqPopupStyle style{};
+    double scale = 1.0;
+    int logicalWidth = 1;
+    int logicalHeight = 1;
+    int width = 1;
+    int height = 1;
+    {
+        DebugPerfScope scope(DEBUG_PERF_PLAYER_STATE);
+        const bool systemDark = IsDarkThemeEnabled();
+        styleId = g_eqPopupStyleId.load(std::memory_order_acquire);
+        style = MakeEqPopupStyle(styleId, systemDark);
+        dark = systemDark;
+        scale = EqGetPopupDpiScale();
+        logicalWidth = std::max(1, g_eqPopupLogicalWidth);
+        logicalHeight = std::max(1, g_eqPopupLogicalHeight);
+        width = EqPopupScalePx(logicalWidth, scale);
+        height = EqPopupScalePx(logicalHeight, scale);
+
+        const ULONGLONG metadataRevision =
+            g_eqMediaMetadataRevision.load(std::memory_order_acquire);
+        if (g_eqPlayerMediaRenderCache.metadataRevision != metadataRevision) {
+            const EqMediaState fresh = GetEqMediaStateSnapshot();
+            g_eqPlayerMediaRenderCache.state.title = fresh.title;
+            g_eqPlayerMediaRenderCache.state.artist = fresh.artist;
+            g_eqPlayerMediaRenderCache.state.source = fresh.source;
+            g_eqPlayerMediaRenderCache.state.sourceAppUserModelId = fresh.sourceAppUserModelId;
+            g_eqPlayerMediaRenderCache.state.trackKey = fresh.trackKey;
+            g_eqPlayerMediaRenderCache.state.hasSession = fresh.hasSession;
+            g_eqPlayerMediaRenderCache.displayTitle =
+                (fresh.hasSession && !fresh.title.empty())
+                    ? fresh.title : L"No media playing";
+            g_eqPlayerMediaRenderCache.displayArtist =
+                (fresh.hasSession && !fresh.artist.empty())
+                    ? L"By " + fresh.artist : L"By —";
+            g_eqPlayerMediaRenderCache.metadataRevision = metadataRevision;
+        }
+
+        GetEqMediaDynamicStateSnapshot(
+            g_eqPlayerMediaRenderCache.state.durationSeconds,
+            g_eqPlayerMediaRenderCache.state.playbackRate,
+            g_eqPlayerMediaRenderCache.state.playing,
+            g_eqPlayerMediaRenderCache.state.hasSession);
+        g_eqPlayerMediaRenderCache.state.positionSeconds = GetEqMediaPosition();
+    }
+
+    const EqMediaState& media = g_eqPlayerMediaRenderCache.state;
+
+    {
+        DebugPerfScope scope(DEBUG_PERF_PLAYER_BUFFER);
+        if (!EnsureEqPlayerRenderSurface(width, height))
+            return;
+    }
+
+    {
+        DebugPerfScope scope(DEBUG_PERF_PLAYER_CLEAR);
+        std::memset(
+            g_eqPlayerRenderSurface.bits,
+            0,
+            static_cast<size_t>(g_eqPlayerRenderSurface.width) *
+                static_cast<size_t>(g_eqPlayerRenderSurface.height) *
+                sizeof(DWORD));
+    }
+
+    HDC mem = g_eqPlayerRenderSurface.memDC;
     Gdiplus::Graphics graphics(mem);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
     graphics.ScaleTransform(static_cast<Gdiplus::REAL>(scale),
                             static_cast<Gdiplus::REAL>(scale));
 
-    const BYTE bgAlpha = dark ? 232 : 238;
-    const Gdiplus::Color bgColor(
-        bgAlpha, dark ? 28 : 242, dark ? 28 : 242, dark ? 30 : 244);
-    Gdiplus::GraphicsPath bgPath;
-    AddRoundedRectSubpath(bgPath, 1.0f, 1.0f,
-                          static_cast<float>(EQ_POPUP_WIDTH - 2),
-                          static_cast<float>(EQ_POPUP_HEIGHT - 2), 16.0f);
-    Gdiplus::SolidBrush bg(bgColor);
-    graphics.FillPath(&bg, &bgPath);
+    // Main page deliberately stays transparent outside the actual sections.
+    // DrawEqSectionBackgrounds() owns the adaptive section surfaces for every
+    // popup theme. Only the Settings page uses a full popup canvas.
+    const bool settingsPage = g_eqPageAnimationTarget >= 0.5f;
+    if (settingsPage) {
+        const Gdiplus::Color bgColor =
+            styleId == EQ_POPUP_STYLE_SYSTEM
+                ? Gdiplus::Color(dark ? 232 : 238, dark ? 28 : 242, dark ? 28 : 242, dark ? 30 : 244)
+                : style.background;
+        Gdiplus::GraphicsPath bgPath;
+        AddRoundedRectSubpath(bgPath, 1.0f, 1.0f,
+                              static_cast<float>(logicalWidth - 2),
+                              static_cast<float>(logicalHeight - 2), 16.0f);
+        Gdiplus::SolidBrush bg(bgColor);
+        graphics.FillPath(&bg, &bgPath);
+    }
 
-    Gdiplus::Color titleColor(255,
-                              dark ? 245 : 30,
-                              dark ? 245 : 30,
-                              dark ? 248 : 30);
-    Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
-    Gdiplus::Font titleFont(&titleFamily, 17.0f,
-                           Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-    Gdiplus::SolidBrush titleBrush(titleColor);
-    graphics.DrawString(L"Equalizer", -1, &titleFont,
-                        Gdiplus::PointF(20.0f, 15.0f), &titleBrush);
+    // Clip both pages to the popup body. The window itself stays stationary;
+    // only the two surfaces slide horizontally over the common background.
+    Gdiplus::GraphicsPath contentClip;
+    AddRoundedRectSubpath(
+        contentClip, 1.0f, 1.0f,
+        static_cast<float>(EQ_POPUP_WIDTH - 2),
+        static_cast<float>(logicalHeight - 2), 16.0f);
+    const Gdiplus::GraphicsState clipState = graphics.Save();
+    graphics.SetClip(&contentClip, Gdiplus::CombineModeIntersect);
 
-    Gdiplus::FontFamily smallFamily(L"Segoe UI");
-    Gdiplus::Font smallFont(&smallFamily, 9.0f,
-                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-    Gdiplus::SolidBrush subBrush(Gdiplus::Color(
-        190,
-        dark ? 210 : 80,
-        dark ? 210 : 80,
-        dark ? 215 : 85));
-    graphics.DrawString(L"Gain", -1, &smallFont,
-                        Gdiplus::PointF(20.0f, 45.0f), &subBrush);
+    const float pageWidth = static_cast<float>(logicalWidth);
+    const float progress = std::clamp(g_eqPageAnimationProgress, 0.0f, 1.0f);
 
-    const Gdiplus::Color trackColor(
-        110,
-        dark ? 150 : 125,
-        dark ? 150 : 125,
-        dark ? 155 : 130);
-    const Gdiplus::Color accentColor(
-        255, 105, 165, 255);
-    const Gdiplus::Color labelColor(
-        235,
-        dark ? 225 : 55,
-        dark ? 225 : 55,
-        dark ? 230 : 60);
-
-    Gdiplus::Pen trackPen(trackColor, 4.0f);
-    trackPen.SetStartCap(Gdiplus::LineCapRound);
-    trackPen.SetEndCap(Gdiplus::LineCapRound);
-
-    for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
-        const POINT point = GetEqSliderPoint(i);
-        graphics.DrawLine(&trackPen,
-                          static_cast<float>(point.x),
-                          static_cast<float>(EQ_SLIDER_TOP),
-                          static_cast<float>(point.x),
-                          static_cast<float>(EQ_SLIDER_BOTTOM));
-
-        const float gain = GetEqGainAtBand(i);
-        const float knobY = EQ_SLIDER_BOTTOM -
-            (gain / 2.0f) * (EQ_SLIDER_BOTTOM - EQ_SLIDER_TOP);
-
-        Gdiplus::Pen fillPen(accentColor, 4.0f);
-        fillPen.SetStartCap(Gdiplus::LineCapRound);
-        fillPen.SetEndCap(Gdiplus::LineCapRound);
-        graphics.DrawLine(&fillPen,
-                          static_cast<float>(point.x),
-                          static_cast<float>(knobY),
-                          static_cast<float>(point.x),
-                          static_cast<float>(EQ_SLIDER_BOTTOM));
-
-        Gdiplus::SolidBrush knobBrush(accentColor);
-        graphics.FillEllipse(&knobBrush,
-                             static_cast<float>(point.x) - 7.0f,
-                             knobY - 7.0f,
-                             14.0f, 14.0f);
-
-        if (i == g_eqHotBand || i == g_eqDraggingBand) {
-            wchar_t gainText[16]{};
-            swprintf_s(gainText, L"%.2f", gain);
-            Gdiplus::SolidBrush gainBrush(labelColor);
-            Gdiplus::RectF gainRect(
-                static_cast<float>(point.x) - 22.0f,
-                knobY - 29.0f,
-                44.0f, 18.0f);
-            Gdiplus::StringFormat centered;
-            centered.SetAlignment(Gdiplus::StringAlignmentCenter);
-            centered.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-            graphics.DrawString(gainText, -1, &smallFont,
-                                gainRect, &centered, &gainBrush);
+    // When the page is stationary, draw only the visible page. The previous
+    // implementation rendered both complete pages every frame and relied on
+    // the clip/transform to hide one of them, which still paid most of the
+    // layout/drawing cost for the invisible page. During the actual slide we
+    // still render both pages because both are visible.
+    if (!g_eqPageAnimationActive && progress <= 0.001f) {
+        DebugPerfScope scope(DEBUG_PERF_PLAYER_MAIN_PAGE);
+        RenderEqMainPage(graphics, dark, media);
+    } else if (!g_eqPageAnimationActive && progress >= 0.999f) {
+        DebugPerfScope scope(DEBUG_PERF_PLAYER_SETTINGS_PAGE);
+        RenderEqSettingsPage(graphics, dark);
+    } else {
+        {
+            const Gdiplus::GraphicsState state = graphics.Save();
+            graphics.TranslateTransform(-progress * pageWidth, 0.0f);
+            DebugPerfScope scope(DEBUG_PERF_PLAYER_MAIN_PAGE);
+            RenderEqMainPage(graphics, dark, media);
+            graphics.Restore(state);
         }
 
-        wchar_t label[32]{};
-        const float high = VIZ_EQ_HIGH_HZ[static_cast<size_t>(i)];
-        const float low = VIZ_EQ_LOW_HZ[static_cast<size_t>(i)];
-        auto formatFreq = [](float hz, wchar_t* out, size_t count) {
-            if (hz >= 1000.0f)
-                swprintf_s(out, count, L"%.0fk", hz / 1000.0f);
-            else
-                swprintf_s(out, count, L"%.0f", hz);
-        };
-        wchar_t lowText[16]{}, highText[16]{};
-        formatFreq(low, lowText, ARRAYSIZE(lowText));
-        formatFreq(high, highText, ARRAYSIZE(highText));
-        swprintf_s(label, L"%s-%s", lowText, highText);
-
-        Gdiplus::RectF labelRect(
-            static_cast<float>(point.x) - 29.0f,
-            static_cast<float>(EQ_SLIDER_BOTTOM + 14),
-            58.0f, 28.0f);
-        Gdiplus::StringFormat centered;
-        centered.SetAlignment(Gdiplus::StringAlignmentCenter);
-        centered.SetLineAlignment(Gdiplus::StringAlignmentNear);
-        Gdiplus::SolidBrush textBrush(labelColor);
-        graphics.DrawString(label, -1, &smallFont,
-                            labelRect, &centered, &textBrush);
+        {
+            const Gdiplus::GraphicsState state = graphics.Save();
+            graphics.TranslateTransform((1.0f - progress) * pageWidth, 0.0f);
+            DebugPerfScope scope(DEBUG_PERF_PLAYER_SETTINGS_PAGE);
+            RenderEqSettingsPage(graphics, dark);
+            graphics.Restore(state);
+        }
     }
+
+    graphics.Restore(clipState);
+
 
     POINT dstPos{};
     RECT popupRect{};
@@ -8185,81 +18775,846 @@ static void RenderEqPopup(HWND hwnd) {
     blend.SourceConstantAlpha = 255;
     blend.AlphaFormat = AC_SRC_ALPHA;
 
-    UpdateLayeredWindow(hwnd, screen, &dstPos, &size,
-                        mem, &srcPos, 0, &blend, ULW_ALPHA);
+    {
+        DebugPerfScope scope(DEBUG_PERF_PLAYER_PRESENT);
+        HDC screen = GetDC(nullptr);
+        if (screen) {
+            UpdateLayeredWindow(hwnd, screen, &dstPos, &size,
+                                mem, &srcPos, 0, &blend, ULW_ALPHA);
+            ReleaseDC(nullptr, screen);
+        }
+    }
 
-    SelectObject(mem, oldBitmap);
-    DeleteObject(bitmap);
-    DeleteDC(mem);
-    ReleaseDC(nullptr, screen);
+    // No per-frame GDI object teardown is needed anymore. The framebuffer is
+    // owned by g_eqPlayerRenderSurface and is reused until the popup size
+    // changes or the popup is destroyed. Keep the cleanup scope for profiler
+    // compatibility; it should now stay effectively at ~0 ms.
+    {
+        DebugPerfScope scope(DEBUG_PERF_PLAYER_CLEANUP);
+    }
 }
+
 static void DestroyEqPopup();
-static bool EqIsCursorOverXamlButton();
+static bool EqIsCursorOverTrayButton();
+
+static void EqSyncRenderTimer(HWND hwnd) {
+    (void)hwnd;
+    // Player rendering is driven by the shared high-resolution scheduler.
+}
+
+static bool EqPointInLyricsWidget(int x, int y,
+                                  const EqLayoutWidgetState*& outWidget) {
+    outWidget = nullptr;
+    const auto* widget = EqGetLayoutWidgetConst(EQ_LAYOUT_LYRICS);
+    if (!widget || !widget->present)
+        return false;
+    const RECT r = EqGetLayoutRect(EQ_LAYOUT_LYRICS);
+    if (!PtInRect(&r, POINT{x, y}))
+        return false;
+    outWidget = widget;
+    return true;
+}
+
 static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+    case WM_EQ_RENDER_TICK:
+        g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+        if (g_eqPopupHwnd == hwnd &&
+            g_eqPlayerPopupOpen.load(std::memory_order_acquire)) {
+            if (g_eqPopupAttributesUpdateRequested.exchange(
+                    false, std::memory_order_acq_rel)) {
+                ApplyEqPopupWindowAttributes(hwnd);
+            }
+            RenderEqPopup(hwnd);
+        }
+        return 0;
+    case WM_EQ_ALBUM_ARTWORK_CHANGED:
+        RenderEqPopup(hwnd);
+        return 0;
     case WM_MOUSEACTIVATE:
         return MA_ACTIVATE;
     case WM_SETFOCUS:
         RenderEqPopup(hwnd);
         return 0;
+    case WM_CREATE:
+        EqSyncRenderTimer(hwnd);
+        return 0;
+    case WM_TIMER:
+        if (wParam == kEqPopupAnimationTimerId) {
+            EqApplyPresetAnimationStep(hwnd);
+            return 0;
+        }
+        if (wParam == kEqPopupPageAnimationTimerId) {
+            EqApplyPageAnimationStep(hwnd);
+            return 0;
+        }
+        if (wParam == kEqPresetPageAnimationTimerId) {
+            EqApplyPresetPageAnimationStep(hwnd);
+            return 0;
+        }
+        break;
     case WM_KILLFOCUS:
         if (g_eqDraggingBand >= 0) {
             SaveCustomEQSettings();
             g_eqDraggingBand = -1;
             ReleaseCapture();
         }
-        // A click on our XAML tray button also causes the popup to lose focus.
-        // Keep it alive for that click so EqShowPopupForXamlButton() can perform
-        // a real toggle instead of reopening the popup immediately.
-        if (!EqIsCursorOverXamlButton())
+        if (g_eqMediaSeeking) {
+            g_eqMediaSeeking = false;
+            ReleaseCapture();
+        }
+        if (g_eqLyricsScrollbarDragging) {
+            g_eqLyricsScrollbarDragging = false;
+            ReleaseCapture();
+        }
+        if (g_eqSettingsScrollbarDragging) {
+            g_eqSettingsScrollbarDragging = false;
+            ReleaseCapture();
+        }
+        if (g_eqPopupPlacementDragTarget != EQ_POPUP_PLACEMENT_DRAG_NONE) {
+            g_eqPopupPlacementDragTarget = EQ_POPUP_PLACEMENT_DRAG_NONE;
+            g_eqPopupPlacementDragOffsetX = 0;
+            g_eqPopupPlacementDragOffsetY = 0;
+        }
+        // A click on our tray button also causes the popup to lose focus. Keep
+        // it alive for that click so the tray callback can perform a real toggle
+        // instead of immediately reopening a popup that is closing.
+        if (!EqIsCursorOverTrayButton())
             PostMessageW(hwnd, WM_CLOSE, 0, 0);
         return 0;
     case WM_MOUSEMOVE: {
-        const int x = GET_X_LPARAM(lParam);
-        const int y = GET_Y_LPARAM(lParam);
-        const int hot = HitTestEqBand(x);
-        if (hot != g_eqHotBand) {
-            g_eqHotBand = hot;
-            RenderEqPopup(hwnd);
+        // Page buttons are intentionally handled before all page-specific hover
+        // state. During the page slide the page content itself is noninteractive.
+        if (!g_eqPageAnimationActive) {
+            const bool settingsPage = g_eqPageAnimationTarget >= 0.5f;
+            const int x = GET_X_LPARAM(lParam);
+            const int y = GET_Y_LPARAM(lParam);
+
+            // The gear/back page button uses one shared hitbox on both pages.
+            // Track it before page-specific controls so hover also works on
+            // the settings page.
+            const bool hotPageButton = HitTestEqPageButton(x, y);
+            if (hotPageButton != g_eqHotPageButton) {
+                g_eqHotPageButton = hotPageButton;
+                RenderEqPopup(hwnd);
+            }
+
+            if (settingsPage) {
+                const EqLayoutBuilderView view = GetEqLayoutBuilderView();
+                const double builderDpiScale = EqGetPopupDpiScale();
+                const int bx = static_cast<int>(std::lround(static_cast<double>(x) / builderDpiScale));
+                const int by = static_cast<int>(std::lround(static_cast<double>(y) / builderDpiScale)) + g_eqSettingsScrollOffset;
+
+                if (g_eqSettingsScrollbarDragging) {
+                    const RECT track = EqGetPopupPlacementScrollbarTrack();
+                    const RECT thumb = EqGetPopupPlacementScrollbarThumb();
+                    const int thumbTravel = std::max(1L, (track.bottom - track.top) - (thumb.bottom - thumb.top));
+                    const int dy = y - g_eqSettingsScrollbarDragStartY;
+                    EqSetPopupSettingsScrollOffset(g_eqSettingsScrollbarStartOffset +
+                        static_cast<int>(std::lround(dy * EqGetPopupSettingsScrollMax() /
+                            static_cast<double>(thumbTravel))));
+                    RenderEqPopup(hwnd);
+                    return 0;
+                }
+
+                if (g_eqPopupPlacementDragTarget != EQ_POPUP_PLACEMENT_DRAG_NONE) {
+                    const EqPopupPlacementView placementView = GetEqPopupPlacementView();
+                    const double placementScale = EqGetPopupDpiScale();
+                    const int canvasWidth = placementView.canvas.right - placementView.canvas.left;
+                    const int canvasHeight = placementView.canvas.bottom - placementView.canvas.top;
+                    POINT cursor{};
+                    if (!GetCursorPos(&cursor))
+                        return 0;
+
+                    // Use the cursor's actual screen-space delta from drag start.
+                    // This deliberately avoids deriving the Y position from the
+                    // settings page's scrolling/client coordinates.
+                    const double logicalDeltaX =
+                        static_cast<double>(cursor.x - g_eqPopupPlacementDragStartCursor.x) /
+                        std::max(0.05, placementScale);
+                    const double logicalDeltaY =
+                        static_cast<double>(cursor.y - g_eqPopupPlacementDragStartCursor.y) /
+                        std::max(0.05, placementScale);
+                    const int normalizedDeltaX = static_cast<int>(std::lround(
+                        logicalDeltaX * 1000.0 / std::max(1, canvasWidth)));
+                    const int normalizedDeltaY = static_cast<int>(std::lround(
+                        logicalDeltaY * 1000.0 / std::max(1, canvasHeight)));
+
+                    auto& placement = g_eqPopupPlacement[static_cast<size_t>(g_eqPopupPlacementAspect)];
+                    if (g_eqPopupPlacementDragTarget == EQ_POPUP_PLACEMENT_DRAG_POPUP) {
+                        // Move the popup freely in both dimensions, keeping the
+                        // complete preview rectangle inside the placement grid.
+                        const int desiredX = g_eqPopupPlacementDragStartCenter.x + normalizedDeltaX;
+                        const int desiredY = g_eqPopupPlacementDragStartCenter.y + normalizedDeltaY;
+                        const int popupWidth = std::clamp(static_cast<int>(std::lround(canvasWidth * 0.26)), 110, 190);
+                        const int popupHeight = std::clamp(static_cast<int>(std::lround(popupWidth * 530.0 / 700.0)), 82, 150);
+                        const int minNX = static_cast<int>(std::lround((popupWidth / 2.0) * 1000.0 /
+                            std::max(1, canvasWidth)));
+                        const int maxNX = 1000 - minNX;
+                        const int minNY = static_cast<int>(std::lround((popupHeight / 2.0) * 1000.0 /
+                            std::max(1, canvasHeight)));
+                        const int maxNY = 1000 - minNY;
+                        EqSetPopupPlacementFromCenterNormalized(
+                            placement,
+                            std::clamp(desiredX, minNX, std::max(minNX, maxNX)),
+                            std::clamp(desiredY, minNY, std::max(minNY, maxNY)));
+                    } else {
+                        placement.crossX = g_eqPopupPlacementDragStartCross.x + normalizedDeltaX;
+                        placement.crossY = g_eqPopupPlacementDragStartCross.y + normalizedDeltaY;
+                        ClampEqPopupPlacementState(placement);
+                        EqClampPopupPlacementToCanvas(placementView, placement);
+                    }
+                    RenderEqPopup(hwnd);
+                    return 0;
+                }
+                if (g_eqBuilderDragId >= 0) {
+                    RenderEqPopup(hwnd);
+                    TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0}; TrackMouseEvent(&tme);
+                    return 0;
+                }
+                if (g_eqBuilderResizeId >= 0) {
+                    if (auto* w=EqGetLayoutWidget(g_eqBuilderResizeId)) {
+                        const int dx = bx - g_eqBuilderDragStartX;
+                        const int dy = by - g_eqBuilderDragStartY;
+                        int nx=w->x,ny=w->y,nw=g_eqBuilderOriginalW,nh=g_eqBuilderOriginalH;
+                        if(g_eqBuilderResizeCorner==0){nx=g_eqBuilderOriginalX+dx;ny=g_eqBuilderOriginalY+dy;nw=g_eqBuilderOriginalW-dx;nh=g_eqBuilderOriginalH-dy;}
+                        else if(g_eqBuilderResizeCorner==1){ny=g_eqBuilderOriginalY+dy;nw=g_eqBuilderOriginalW+dx;nh=g_eqBuilderOriginalH-dy;}
+                        else if(g_eqBuilderResizeCorner==2){nx=g_eqBuilderOriginalX+dx;nw=g_eqBuilderOriginalW-dx;nh=g_eqBuilderOriginalH+dy;}
+                        else {nw=g_eqBuilderOriginalW+dx;nh=g_eqBuilderOriginalH+dy;}
+                        w->x=EqSnap10(nx);w->y=EqSnap10(ny);w->w=EqSnap10(nw);w->h=EqSnap10(nh);ClampEqLayoutWidget(*w);
+                    }
+                    RenderEqPopup(hwnd); return 0;
+                }
+                const int selectedId=g_eqBuilderSelectedId;
+                if(selectedId>=0 && GetCapture()==hwnd && g_eqBuilderDragId==EQ_BUILDER_DRAG_NONE){
+                    if(auto* w=EqGetLayoutWidget(selectedId)){
+                        const int dx = bx - g_eqBuilderDragStartX;
+                        const int dy = by - g_eqBuilderDragStartY;
+                        if ((dx != 0 || dy != 0) &&
+                            w->zOrder != EQ_LAYOUT_WIDGET_COUNT - 1) {
+                            EqBringLayoutWidgetToFront(selectedId);
+                            SaveEqLayoutSettings();
+                        }
+                        w->x = EqSnap10(g_eqBuilderOriginalX + dx);
+                        w->y = EqSnap10(g_eqBuilderOriginalY + dy);
+                        ClampEqLayoutWidget(*w);
+                        bool overPalette = false;
+                        for (int paletteId = 0; paletteId < EQ_LAYOUT_WIDGET_COUNT; ++paletteId) {
+                            const RECT paletteRect = EqBuilderPaletteRect(paletteId);
+                            if (PtInRect(&paletteRect, POINT{bx, by}) &&
+                                paletteId == selectedId) {
+                                overPalette = true;
+                                break;
+                            }
+                        }
+                        g_eqBuilderRemoveOnDrop = overPalette;
+                        RenderEqPopup(hwnd);
+                        return 0;
+                    }
+                }
+                TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0}; TrackMouseEvent(&tme);
+                return 0;
+            }
+
+            if (g_eqVolumeDragging) {
+                EqSetVolumeFromPoint(x, y);
+                RenderEqPopup(hwnd);
+                return 0;
+            }
+
+            const EqLayoutWidgetState* lyricsWidget = nullptr;
+            const bool overLyrics = EqPointInLyricsWidget(x, y, lyricsWidget);
+            if (g_eqLyricsScrollbarDragging) {
+                lyricsWidget = EqGetLayoutWidgetConst(EQ_LAYOUT_LYRICS);
+                if (lyricsWidget && lyricsWidget->present) {
+                    std::shared_ptr<const std::vector<LyricsLine>> lines;
+                    {
+                        std::lock_guard<std::mutex> lock(g_lyricsMutex);
+                        lines = g_lyricsLines;
+                    }
+                    const EqLyricsMetrics metrics = GetEqLyricsMetrics(
+                        *lyricsWidget, lines.get());
+                    const int trackHeight = std::max(1L,
+                        metrics.scrollbarTrack.bottom - metrics.scrollbarTrack.top);
+                    const RECT thumb = GetEqLyricsScrollbarThumb(metrics);
+                    const int travel = std::max(1L,
+                        trackHeight - (thumb.bottom - thumb.top));
+                    const int dy = y - g_eqLyricsScrollbarDragStartY;
+                    const int maxThumbDelta = std::max(0, travel -
+                        static_cast<int>(std::lround(
+                            static_cast<double>(g_eqLyricsScrollbarStartOffset) * travel /
+                            std::max(1, metrics.maxScroll))));
+                    const int initialThumb = static_cast<int>(std::lround(
+                        static_cast<double>(g_eqLyricsScrollbarStartOffset) * travel /
+                        std::max(1, metrics.maxScroll)));
+                    const int thumbDelta = std::clamp(
+                        dy, -initialThumb, maxThumbDelta);
+                    g_eqLyricsScrollOffset = std::clamp(
+                        g_eqLyricsScrollbarStartOffset +
+                        static_cast<int>(std::lround(
+                            static_cast<double>(thumbDelta) * metrics.maxScroll / travel)),
+                        0, metrics.maxScroll);
+                    // Any scrollbar movement counts as manual scrolling.
+                    // Refresh the deadline on every mouse move so autofocus
+                    // resumes 3.5 s after the user's last scrollbar movement.
+                    PauseEqLyricsAutoFocus();
+                    RenderEqPopup(hwnd);
+                    return 0;
+                } else {
+                    g_eqLyricsScrollbarDragging = false;
+                }
+            }
+            if (overLyrics && lyricsWidget) {
+                const int hotLyrics = GetEqLyricsLineAtPoint(*lyricsWidget, x, y);
+                if (hotLyrics != g_eqHotLyricsLine) {
+                    g_eqHotLyricsLine = hotLyrics;
+                    RenderEqPopup(hwnd);
+                }
+                return 0;
+            }
+            if (g_eqHotLyricsLine != -1) {
+                g_eqHotLyricsLine = -1;
+                RenderEqPopup(hwnd);
+            }
+
+            if (EqIsLayoutWidgetPresent(EQ_LAYOUT_MEDIA)) {
+                if (g_eqMediaSeeking) {
+                    g_eqMediaSeekPreviewSeconds = EqMediaPositionFromMouseX(x);
+                    RenderEqPopup(hwnd);
+                    return 0;
+                }
+            }
+
+            if (g_eqDraggingBand >= 0) {
+                SetEqGainFromMouse(g_eqDraggingBand, x, y);
+                RenderEqPopup(hwnd);
+                return 0;
+            }
+
+            const int hotMediaButton = (!settingsPage && EqIsLayoutWidgetPresent(EQ_LAYOUT_MEDIA))
+                ? HitTestEqMediaButton(x, y) : -1;
+            const bool hotVolumeMute = !settingsPage && EqPointInVolumeMuteButton(x, y);
+            const int hotPresetNav = (!settingsPage && !g_eqPresetPageAnimationActive)
+                ? HitTestEqPresetNavButton(x, y) : -1;
+            const int hotDelete = (!settingsPage && !g_eqPresetPageAnimationActive)
+                ? HitTestEqPresetDelete(x, y) : -1;
+            const int hotPreset = (!settingsPage && !g_eqPresetPageAnimationActive)
+                ? HitTestEqPreset(x, y) : -1;
+            const bool overPresetControl = hotPresetNav != -1 || hotDelete >= 0 ||
+                hotPreset >= 0 || hotPreset == EQ_PLUS_PRESET_HIT;
+            const int hotBand = settingsPage || g_eqPresetPageAnimationActive || overPresetControl
+                ? -1 : HitTestEqBand(x, y);
+            if (hotMediaButton != g_eqHotMediaButton ||
+                hotVolumeMute != g_eqHotVolumeMute ||
+                hotBand != g_eqHotBand || hotPreset != g_eqHotPreset ||
+                hotDelete != g_eqHotPresetDelete || hotPresetNav != g_eqHotPresetNav) {
+                g_eqHotMediaButton = hotMediaButton;
+                g_eqHotVolumeMute = hotVolumeMute;
+                g_eqHotBand = hotBand;
+                g_eqHotPreset = hotPreset;
+                g_eqHotPresetDelete = hotDelete;
+                g_eqHotPresetNav = hotPresetNav;
+                RenderEqPopup(hwnd);
+            }
         }
-        if (g_eqDraggingBand >= 0) {
-            SetEqGainFromMouse(g_eqDraggingBand, y);
-            RenderEqPopup(hwnd);
-            return 0;
-        }
+
         TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
         TrackMouseEvent(&tme);
         return 0;
     }
     case WM_MOUSELEAVE:
-        if (g_eqDraggingBand < 0 && g_eqHotBand != -1) {
+        if (g_eqDraggingBand < 0 &&
+            (g_eqHotPageButton || g_eqHotMediaButton != -1 || g_eqHotVolumeMute ||
+             g_eqHotBand != -1 || g_eqHotPreset != -1 || g_eqHotPresetNav != -1 ||
+             g_eqHotPresetDelete != -1 || g_eqHotLyricsLine != -1)) {
+            g_eqHotPageButton = false;
+            g_eqHotMediaButton = -1;
+            g_eqHotVolumeMute = false;
             g_eqHotBand = -1;
+            g_eqHotPreset = -1;
+            g_eqHotPresetNav = -1;
+            g_eqHotPresetDelete = -1;
+            g_eqHotLyricsLine = -1;
             RenderEqPopup(hwnd);
         }
         return 0;
+    case WM_MOUSEWHEEL: {
+        if (!g_eqPageAnimationActive) {
+            const int notches = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
+            if (notches != 0 && g_eqPageAnimationTarget >= 0.5f) {
+                EqSetPopupSettingsScrollOffset(g_eqSettingsScrollOffset - notches * 56);
+                RenderEqPopup(hwnd);
+                return 0;
+            }
+
+            if (g_eqPageAnimationTarget < 0.5f) {
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                ScreenToClient(hwnd, &pt);
+                const double scale = EqGetPopupDpiScale();
+                const int x = static_cast<int>(std::lround(pt.x / scale));
+                const int y = static_cast<int>(std::lround(pt.y / scale));
+                const EqLayoutWidgetState* lyricsWidget = nullptr;
+                if (EqPointInLyricsWidget(x, y, lyricsWidget)) {
+                    if (notches != 0) {
+                        // Treat every wheel action as manual scrolling, even when
+                        // the content is already at the top/bottom edge.
+                        PauseEqLyricsAutoFocus();
+                        ScrollEqLyricsByPixels(*lyricsWidget, -notches * 3 * 28);
+                        RenderEqPopup(hwnd);
+                    }
+                    return 0;
+                }
+            }
+        }
+        break;
+    }
     case WM_LBUTTONDOWN: {
-        const int band = HitTestEqBand(GET_X_LPARAM(lParam));
+        const int x = GET_X_LPARAM(lParam);
+        const int y = GET_Y_LPARAM(lParam);
+
+        if (g_eqPageAnimationActive)
+            return 0;
+
+        const bool settingsPage = g_eqPageAnimationTarget >= 0.5f;
+        if (HitTestEqPageButton(x, y)) {
+            EqStartPageAnimation(hwnd, !settingsPage);
+            return 0;
+        }
+
+        if (settingsPage) {
+            const EqLayoutBuilderView view = GetEqLayoutBuilderView();
+            const double builderDpiScale = EqGetPopupDpiScale();
+            const int bx = static_cast<int>(std::lround(static_cast<double>(x) / builderDpiScale));
+            const int by = static_cast<int>(std::lround(static_cast<double>(y) / builderDpiScale)) + g_eqSettingsScrollOffset;
+            const bool inCanvas = PtInRect(&view.canvas, POINT{bx, by}) != FALSE;
+
+            {
+                const RECT layoutButton = EqGetDesktopLayoutButtonRect();
+                if (PtInRect(&layoutButton, POINT{bx, by})) {
+                    // The popup is owned by the taskbar/XAML thread on Windows 11,
+                    // but the layout editor must be owned by the overlay thread so
+                    // its timer, rendering and cleanup stay on one thread.
+                    DestroyEqPopup();
+                    HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
+                    if (overlay && IsWindow(overlay)) {
+                        if (!PostMessageW(overlay, WM_VIZ_OPEN_LAYOUT_EDITOR, 0, 0))
+                            Wh_Log(L"EqPopupProc: failed to post layout editor request");
+                    } else {
+                        Wh_Log(L"EqPopupProc: overlay window unavailable for layout editor");
+                    }
+                    return 0;
+                }
+            }
+
+            if (EqGetPopupSettingsScrollMax() > 0) {
+                const double scrollbarDpiScale = EqGetPopupDpiScale();
+                const int logicalScrollbarX = static_cast<int>(std::lround(x / scrollbarDpiScale));
+                const int logicalScrollbarY = static_cast<int>(std::lround(y / scrollbarDpiScale));
+                const RECT track = EqGetPopupPlacementScrollbarTrack();
+                const RECT thumb = EqGetPopupPlacementScrollbarThumb();
+                if (PtInRect(&track, POINT{logicalScrollbarX, logicalScrollbarY})) {
+                    if (PtInRect(&thumb, POINT{logicalScrollbarX, logicalScrollbarY})) {
+                        g_eqSettingsScrollbarDragging = true;
+                        g_eqSettingsScrollbarDragStartY = y;
+                        g_eqSettingsScrollbarStartOffset = g_eqSettingsScrollOffset;
+                        SetCapture(hwnd);
+                    } else {
+                        const int direction = logicalScrollbarY < thumb.top ? -1 : 1;
+                        EqSetPopupSettingsScrollOffset(g_eqSettingsScrollOffset + direction * (EQ_POPUP_HEIGHT - 70));
+                        RenderEqPopup(hwnd);
+                    }
+                    return 0;
+                }
+            }
+
+            // Format buttons live in the scrollable content area. Convert the
+            // mouse coordinates to the same logical space used for drawing.
+            const double settingsDpiScale = EqGetPopupDpiScale();
+            const int logicalMouseX = static_cast<int>(std::lround(x / settingsDpiScale));
+            const int logicalMouseY = static_cast<int>(std::lround((y + g_eqSettingsScrollOffset) / settingsDpiScale));
+            for (int aspect = 0; aspect < EQ_POPUP_ASPECT_COUNT; ++aspect) {
+                const RECT button = EqGetPopupPlacementAspectButtonRect(aspect);
+                if (PtInRect(&button, POINT{logicalMouseX, logicalMouseY})) {
+                    if (g_eqPopupPlacementAspect != aspect) {
+                        g_eqPopupPlacementAspect = aspect;
+                        SaveEqPopupPlacementSettings();
+                    }
+                    RenderEqPopup(hwnd);
+                    return 0;
+                }
+            }
+
+            const EqPopupPlacementView placementView = GetEqPopupPlacementView();
+            const double placementScale = EqGetPopupDpiScale();
+            const int placementHitX = static_cast<int>(std::lround(x / placementScale));
+            const int placementHitY = static_cast<int>(std::lround((y + g_eqSettingsScrollOffset) / placementScale));
+            if (PtInRect(&placementView.canvas, POINT{placementHitX, placementHitY})) {
+                const int target = EqPopupPlacementHitTarget(placementHitX, placementHitY);
+                if (target != EQ_POPUP_PLACEMENT_DRAG_NONE) {
+                    auto& placement = g_eqPopupPlacement[static_cast<size_t>(g_eqPopupPlacementAspect)];
+                    POINT cursor{};
+                    GetCursorPos(&cursor);
+                    g_eqPopupPlacementDragStartCursor = cursor;
+                    if (target == EQ_POPUP_PLACEMENT_DRAG_POPUP) {
+                        const POINT popupCenter = EqGetPopupPlacementCenterNormalized(placement);
+                        g_eqPopupPlacementDragStartCenter = popupCenter;
+                    } else {
+                        g_eqPopupPlacementDragStartCross = POINT{placement.crossX, placement.crossY};
+                    }
+                    // Keep these legacy offsets zeroed. Dragging now uses the
+                    // cursor-delta model above, which treats X and Y identically.
+                    g_eqPopupPlacementDragOffsetX = 0;
+                    g_eqPopupPlacementDragOffsetY = 0;
+                    g_eqPopupPlacementDragTarget = target;
+                    SetCapture(hwnd);
+                    return 0;
+                }
+            }
+
+            if (g_eqBuilderResizeId >= 0) {
+                if (auto* w = EqGetLayoutWidget(g_eqBuilderResizeId)) {
+                    const int dx = bx - g_eqBuilderDragStartX;
+                    const int dy = by - g_eqBuilderDragStartY;
+                    int nx=w->x, ny=w->y, nw=g_eqBuilderOriginalW, nh=g_eqBuilderOriginalH;
+                    if (g_eqBuilderResizeCorner==0) { nx=g_eqBuilderOriginalX+dx; ny=g_eqBuilderOriginalY+dy; nw=g_eqBuilderOriginalW-dx; nh=g_eqBuilderOriginalH-dy; }
+                    else if (g_eqBuilderResizeCorner==1) { ny=g_eqBuilderOriginalY+dy; nw=g_eqBuilderOriginalW+dx; nh=g_eqBuilderOriginalH-dy; }
+                    else if (g_eqBuilderResizeCorner==2) { nx=g_eqBuilderOriginalX+dx; nw=g_eqBuilderOriginalW-dx; nh=g_eqBuilderOriginalH+dy; }
+                    else { nw=g_eqBuilderOriginalW+dx; nh=g_eqBuilderOriginalH+dy; }
+                    w->x=EqSnap10(nx); w->y=EqSnap10(ny); w->w=EqSnap10(nw); w->h=EqSnap10(nh); ClampEqLayoutWidget(*w);
+                    RenderEqPopup(hwnd);
+                }
+                return 0;
+            }
+
+            // Section controls. Background is always the rightmost control.
+            if (g_eqBuilderSelectedId >= 0) {
+                if (auto* selected=EqGetLayoutWidget(g_eqBuilderSelectedId)) {
+                    const RECT sr=EqBuilderWidgetScreenRect(view,*selected);
+                    if (selected->id == EQ_LAYOUT_MEDIA || selected->id == EQ_LAYOUT_LYRICS) {
+                        const RECT alignmentRect = EqBuilderAlignmentRect(sr);
+                        if (PtInRect(&alignmentRect, POINT{bx,by})) {
+                            selected->textAlignment = (selected->textAlignment + 1) % 3;
+                            SaveEqLayoutSettings();
+                            RenderEqPopup(hwnd);
+                            return 0;
+                        }
+                    }
+                    const RECT backgroundRect = EqBuilderBackgroundRect(sr);
+                    if (PtInRect(&backgroundRect,POINT{bx,by})) {
+                        selected->backgroundEnabled = !selected->backgroundEnabled;
+                        SaveEqLayoutSettings();
+                        RenderEqPopup(hwnd);
+                        return 0;
+                    }
+                    if (selected->id == EQ_LAYOUT_DISK) {
+                        const RECT shapeRect = EqBuilderShapeRect(sr);
+                        if (PtInRect(&shapeRect, POINT{bx,by})) {
+                            selected->backgroundCircle = !selected->backgroundCircle;
+                            SaveEqLayoutSettings();
+                            RenderEqPopup(hwnd);
+                            return 0;
+                        }
+                    }
+                    const RECT deleteRect = EqBuilderDeleteRect(sr);
+                    if (selected->id == EQ_LAYOUT_EQ) {
+                        const RECT rotateRect = EqBuilderRotateRect(sr);
+                        if (PtInRect(&rotateRect,POINT{bx,by})) {
+                            selected->rotation=(selected->rotation+90)%360;
+                            SaveEqLayoutSettings(); RenderEqPopup(hwnd); return 0;
+                        }
+                    }
+                    if (PtInRect(&deleteRect,POINT{bx,by})) {
+                        const int deletedId = selected->id;
+                        selected->present=false;
+                        g_eqBuilderSelectedId=-1;
+                        if (deletedId == EQ_LAYOUT_LYRICS) {
+                            g_eqLyricsScrollOffset = 0;
+                            g_eqHotLyricsLine = -1;
+                            g_eqLyricsScrollTrackKey.clear();
+                            g_eqLyricsAutoFocusResumeTick = 0;
+                        }
+                        SaveEqLayoutSettings();
+                        if (deletedId == EQ_LAYOUT_DISK)
+                            RequestOverlayServicesRefresh();
+                        RenderEqPopup(hwnd);
+                        return 0;
+                    }
+                    const int corner=EqBuilderHitHandle(sr,bx,by);
+                    if (corner>=0) { g_eqBuilderResizeId=selected->id; g_eqBuilderResizeCorner=corner; g_eqBuilderDragStartX=bx; g_eqBuilderDragStartY=by; g_eqBuilderOriginalX=selected->x; g_eqBuilderOriginalY=selected->y; g_eqBuilderOriginalW=selected->w; g_eqBuilderOriginalH=selected->h; SetCapture(hwnd); return 0; }
+                }
+            }
+
+            const int paletteId = [&]() -> int {
+                for (int id=0;id<EQ_LAYOUT_WIDGET_COUNT;++id) { const RECT pr=EqBuilderPaletteRect(id); if (PtInRect(&pr,POINT{bx,by}) && !EqIsLayoutWidgetPresent(id)) return id; }
+                return -1;
+            }();
+            if (paletteId>=0) { g_eqBuilderDragId=paletteId; SetCapture(hwnd); RenderEqPopup(hwnd); return 0; }
+
+            const int hit = EqBuilderHitWidget(bx,by);
+            if (hit>=0) {
+                g_eqBuilderSelectedId=hit;
+                const auto* w=EqGetLayoutWidgetConst(hit);
+                if (w) { g_eqBuilderDragStartX=bx; g_eqBuilderDragStartY=by; g_eqBuilderOriginalX=w->x; g_eqBuilderOriginalY=w->y; g_eqBuilderRemoveOnDrop=false; g_eqBuilderResizeId=EQ_BUILDER_DRAG_NONE; SetCapture(hwnd); }
+                RenderEqPopup(hwnd);
+                return 0;
+            }
+            g_eqBuilderSelectedId=-1;
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+
+        if (EqIsLayoutWidgetPresent(EQ_LAYOUT_VOLUME)) {
+            if (EqPointInVolumeMuteButton(x, y)) {
+                EqToggleSystemMute();
+                RenderEqPopup(hwnd);
+                return 0;
+            }
+            if (EqPointInVolumeSlider(x, y)) {
+                g_eqVolumeDragging = true;
+                g_eqVolumeLastDragSetMs = 0;
+                EqSetVolumeFromPoint(x, y, true);
+                SetCapture(hwnd);
+                RenderEqPopup(hwnd);
+                return 0;
+            }
+        }
+
+        const EqLayoutWidgetState* lyricsWidget = nullptr;
+        if (EqPointInLyricsWidget(x, y, lyricsWidget)) {
+            std::shared_ptr<const std::vector<LyricsLine>> lines;
+            {
+                std::lock_guard<std::mutex> lock(g_lyricsMutex);
+                lines = g_lyricsLines;
+            }
+            const EqLyricsMetrics metrics = GetEqLyricsMetrics(
+                *lyricsWidget, lines.get());
+            if (metrics.maxScroll > 0 &&
+                PtInRect(&metrics.scrollbarTrack, POINT{x, y})) {
+                const RECT thumb = GetEqLyricsScrollbarThumb(metrics);
+                if (PtInRect(&thumb, POINT{x, y})) {
+                    g_eqLyricsScrollbarDragging = true;
+                    g_eqLyricsScrollbarDragStartY = y;
+                    g_eqLyricsScrollbarStartOffset = g_eqLyricsScrollOffset;
+                    PauseEqLyricsAutoFocus();
+                    SetCapture(hwnd);
+                } else {
+                    const int direction = y < thumb.top ? -1 : 1;
+                    ScrollEqLyricsByPixels(*lyricsWidget, direction *
+                        std::max(1L, metrics.content.bottom -
+                                 metrics.content.top - 28));
+                }
+            } else {
+                const int lineIndex = GetEqLyricsLineAtPoint(*lyricsWidget, x, y);
+                if (lineIndex >= 0)
+                    SeekToEqLyricsLine(lineIndex);
+            }
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+
+        if (EqIsLayoutWidgetPresent(EQ_LAYOUT_MEDIA) && HitTestEqMediaTimeline(x, y)) {
+            const EqMediaState state = GetEqMediaStateSnapshot();
+            if (state.hasSession && state.durationSeconds > 0.0) {
+                g_eqMediaSeeking = true;
+                g_eqMediaSeekPreviewSeconds = EqMediaPositionFromMouseX(x);
+                SetCapture(hwnd);
+                RenderEqPopup(hwnd);
+            }
+            return 0;
+        }
+
+        if (EqIsLayoutWidgetPresent(EQ_LAYOUT_MEDIA)) {
+            const int mediaButton = HitTestEqMediaButton(x, y);
+            if (mediaButton >= 0) {
+                switch (mediaButton) {
+                case 0: EnqueueEqMediaCommand(EqMediaCommandType::Previous); break;
+                case 1: EnqueueEqMediaCommand(EqMediaCommandType::Rewind5); break;
+                case 2: EnqueueEqMediaCommand(EqMediaCommandType::PlayPause); break;
+                case 3: EnqueueEqMediaCommand(EqMediaCommandType::Forward5); break;
+                case 4: EnqueueEqMediaCommand(EqMediaCommandType::Next); break;
+                }
+                RenderEqPopup(hwnd);
+                return 0;
+            }
+        }
+
+        const int presetNav = HitTestEqPresetNavButton(x, y);
+        if (presetNav == EQ_PRESET_NAV_SAVED_HIT) {
+            EqStartPresetPageAnimation(hwnd, EQ_PRESET_PAGE_SAVED);
+            return 0;
+        }
+        if (presetNav == EQ_PRESET_NAV_BUILTIN_HIT) {
+            EqStartPresetPageAnimation(hwnd, EQ_PRESET_PAGE_BUILTIN);
+            return 0;
+        }
+
+        const int deletePreset = HitTestEqPresetDelete(x, y);
+        if (deletePreset >= 0) {
+            EqDeleteCustomPreset(hwnd, deletePreset);
+            return 0;
+        }
+        const int preset = HitTestEqPreset(x, y);
+        if (preset == EQ_PLUS_PRESET_HIT) {
+            EqCreateCustomPreset(hwnd);
+            return 0;
+        }
+        if (preset >= 0) {
+            EqStartPresetAnimation(hwnd, preset);
+            g_eqHotPreset = preset;
+            g_eqHotBand = -1;
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+
+        const int band = HitTestEqBand(x, y);
         if (band >= 0) {
+            EqBeginManualBandEdit(hwnd);
             g_eqDraggingBand = band;
             g_eqHotBand = band;
-            SetEqGainFromMouse(band, GET_Y_LPARAM(lParam));
+            g_eqHotPreset = -1;
+            SetEqGainFromMouse(band, x, y);
             SetCapture(hwnd);
             RenderEqPopup(hwnd);
         }
         return 0;
     }
     case WM_LBUTTONUP:
+        if (g_eqVolumeDragging) {
+            const int x = GET_X_LPARAM(lParam);
+            const int y = GET_Y_LPARAM(lParam);
+            EqSetVolumeFromPoint(x, y, true);
+            g_eqVolumeDragging = false;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+        if (g_eqSettingsScrollbarDragging) {
+            g_eqSettingsScrollbarDragging = false;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+        if (g_eqPopupPlacementDragTarget != EQ_POPUP_PLACEMENT_DRAG_NONE) {
+            g_eqPopupPlacementDragTarget = EQ_POPUP_PLACEMENT_DRAG_NONE;
+            g_eqPopupPlacementDragOffsetX = 0;
+            g_eqPopupPlacementDragOffsetY = 0;
+            SaveEqPopupPlacementSettings();
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+        if (g_eqLyricsScrollbarDragging) {
+            g_eqLyricsScrollbarDragging = false;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+        if (g_eqBuilderDragId >= 0) {
+            const int dragId = g_eqBuilderDragId;
+            const int x = GET_X_LPARAM(lParam);
+            const int y = GET_Y_LPARAM(lParam);
+            const double builderDpiScale = EqGetPopupDpiScale();
+            const int bx = static_cast<int>(std::lround(static_cast<double>(x) / builderDpiScale));
+            const int by = static_cast<int>(std::lround(static_cast<double>(y) / builderDpiScale));
+            const EqLayoutBuilderView view = GetEqLayoutBuilderView();
+            const bool inCanvas = PtInRect(&view.canvas, POINT{bx, by}) != FALSE;
+            bool changed = false;
+            if (inCanvas && !EqIsLayoutWidgetPresent(dragId)) {
+                if (auto* w = EqGetLayoutWidget(dragId)) {
+                    const int logicalX = (int)std::lround((bx - view.canvas.left) / view.scale);
+                    const int logicalY = (int)std::lround((by - view.canvas.top) / view.scale);
+                    w->x = EqSnap10(logicalX - w->w / 2);
+                    w->y = EqSnap10(logicalY - w->h / 2);
+                    w->present = true;
+                    ClampEqLayoutWidget(*w);
+                    EqBringLayoutWidgetToFront(w->id);
+                    g_eqBuilderSelectedId = w->id;
+                    changed = true;
+                }
+            }
+            g_eqBuilderDragId = EQ_BUILDER_DRAG_NONE;
+            ReleaseCapture();
+            if (changed) {
+                SaveEqLayoutSettings();
+                if (dragId == EQ_LAYOUT_LYRICS)
+                    StartLyricsCapture();
+                if (dragId == EQ_LAYOUT_DISK)
+                    RequestOverlayServicesRefresh();
+            }
+            RenderEqPopup(hwnd);
+            return 0;
+        }
+        if (g_eqBuilderResizeId >= 0) {
+            SaveEqLayoutSettings();
+            g_eqBuilderResizeId=EQ_BUILDER_DRAG_NONE; g_eqBuilderResizeCorner=-1; ReleaseCapture(); RenderEqPopup(hwnd); return 0;
+        }
+        if (g_eqBuilderSelectedId >= 0 && GetCapture()==hwnd && g_eqPageAnimationTarget>=0.5f) {
+            if (g_eqBuilderRemoveOnDrop) {
+                const int removedId = g_eqBuilderSelectedId;
+                if (auto* w=EqGetLayoutWidget(g_eqBuilderSelectedId)) w->present=false;
+                if (removedId == EQ_LAYOUT_LYRICS) {
+                    g_eqLyricsScrollOffset = 0;
+                    g_eqHotLyricsLine = -1;
+                    g_eqLyricsScrollTrackKey.clear();
+                }
+                SaveEqLayoutSettings();
+                if (removedId == EQ_LAYOUT_DISK)
+                    RequestOverlayServicesRefresh();
+                g_eqBuilderSelectedId=-1;
+            } else {
+                SaveEqLayoutSettings();
+            }
+            g_eqBuilderRemoveOnDrop=false; ReleaseCapture(); RenderEqPopup(hwnd); return 0;
+        }
+        if (g_eqMediaSeeking) {
+            g_eqMediaSeeking = false;
+            ReleaseCapture();
+            EnqueueEqMediaCommand(EqMediaCommandType::Seek, g_eqMediaSeekPreviewSeconds);
+            RenderEqPopup(hwnd);
+            return 0;
+        }
         if (g_eqDraggingBand >= 0) {
-            SetEqGainFromMouse(g_eqDraggingBand, GET_Y_LPARAM(lParam));
+            const int x = GET_X_LPARAM(lParam);
+            const int y = GET_Y_LPARAM(lParam);
+            SetEqGainFromMouse(g_eqDraggingBand, x, y);
             SaveCustomEQSettings();
             g_eqDraggingBand = -1;
             ReleaseCapture();
             RenderEqPopup(hwnd);
-            PostMessageW(g_hwndOverlay, WM_VIZ_AUDIO_WAKE, 0, 0);
+            if (g_hwndOverlay)
+                PostMessageW(g_hwndOverlay, WM_VIZ_AUDIO_WAKE, 0, 0);
         }
         return 0;
     case WM_CANCELMODE:
     case WM_CAPTURECHANGED:
+        g_eqVolumeDragging = false;
+        g_eqBuilderDragId=EQ_BUILDER_DRAG_NONE;
+        g_eqBuilderResizeId=EQ_BUILDER_DRAG_NONE;
+        g_eqBuilderResizeCorner=-1;
+        g_eqBuilderRemoveOnDrop=false;
+        g_eqHotPresetNav = -1;
+        if (g_eqLyricsScrollbarDragging) {
+            g_eqLyricsScrollbarDragging=false;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+        }
+        if (g_eqSettingsScrollbarDragging) {
+            g_eqSettingsScrollbarDragging=false;
+            if (GetCapture() == hwnd)
+                ReleaseCapture();
+        }
+        if (g_eqPopupPlacementDragTarget != EQ_POPUP_PLACEMENT_DRAG_NONE) {
+            g_eqPopupPlacementDragTarget = EQ_POPUP_PLACEMENT_DRAG_NONE;
+            g_eqPopupPlacementDragOffsetX = 0;
+            g_eqPopupPlacementDragOffsetY = 0;
+        }
+        if (g_eqMediaSeeking) {
+            g_eqMediaSeeking = false;
+        }
         if (g_eqDraggingBand >= 0) {
             SaveCustomEQSettings();
             g_eqDraggingBand = -1;
@@ -8279,6 +19634,31 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         RenderEqPopup(hwnd);
         return 0;
     }
+    case WM_DESTROY:
+        KillTimer(hwnd, kEqPopupAnimationTimerId);
+        KillTimer(hwnd, kEqPopupPageAnimationTimerId);
+        KillTimer(hwnd, kEqPresetPageAnimationTimerId);
+        g_eqPageAnimationActive = false;
+        g_eqPresetPageAnimationActive = false;
+        if (g_eqMediaSeeking) {
+            g_eqMediaSeeking = false;
+            ReleaseCapture();
+        }
+        // DestroyEqPopup normally releases these before DestroyWindow. Keep a
+        // fallback for shell-driven window destruction so GDI+ objects never
+        // survive until static destructors run after GdiplusShutdown.
+        if (g_eqPopupHwnd == hwnd) {
+            g_eqPopupHwnd = nullptr;
+            g_eqPopupHwndForRequests.store(nullptr, std::memory_order_release);
+            g_eqPlayerPopupOpen.store(false, std::memory_order_release);
+            g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+            g_eqPopupAttributesUpdateRequested.store(false, std::memory_order_release);
+            DestroyEqDiskArtworkImage();
+            DestroyEqPlayerRenderSurface();
+            g_eqLastScheduledRenderQpc.store(0, std::memory_order_release);
+            RequestOverlayServicesRefresh();
+        }
+        return 0;
     case WM_CLOSE:
         DestroyEqPopup();
         return 0;
@@ -8289,7 +19669,9 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 }
 
 static bool RegisterEqWindowClasses(HINSTANCE instance) {
-    if (g_eqClassesRegistered) return true;
+    if (g_eqClassesRegistered)
+        return true;
+
     WNDCLASSW popupClass{};
     popupClass.lpfnWndProc = EqPopupProc;
     popupClass.hInstance = instance;
@@ -8297,6 +19679,30 @@ static bool RegisterEqWindowClasses(HINSTANCE instance) {
     popupClass.lpszClassName = kEqPopupClass;
     if (!RegisterClassW(&popupClass))
         return false;
+
+    WNDCLASSW trayClass{};
+    trayClass.lpfnWndProc = EqNativeTrayMessageProc;
+    trayClass.hInstance = instance;
+    trayClass.lpszClassName = kEqNativeTrayWindowClass;
+    if (!RegisterClassW(&trayClass)) {
+        UnregisterClassW(kEqPopupClass, instance);
+        return false;
+    }
+
+    WNDCLASSEXW flyoutClass{};
+    flyoutClass.cbSize = sizeof(flyoutClass);
+    flyoutClass.lpfnWndProc = EqTrayVolumeFlyoutProc;
+    flyoutClass.hInstance = instance;
+    flyoutClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    flyoutClass.lpszClassName = kEqTrayVolumeFlyoutClass;
+    if (!RegisterClassExW(&flyoutClass)) {
+        // In particular, do not accept ERROR_CLASS_ALREADY_EXISTS: the class
+        // may still point into a previous, already-unloaded copy of this DLL.
+        UnregisterClassW(kEqNativeTrayWindowClass, instance);
+        UnregisterClassW(kEqPopupClass, instance);
+        return false;
+    }
+
     g_eqModuleHandle = instance;
     g_eqClassesRegistered = true;
     return true;
@@ -8304,16 +19710,61 @@ static bool RegisterEqWindowClasses(HINSTANCE instance) {
 static void EqClosePopup();
 
 static void DestroyEqPopup() {
+    // Closing Player removes the Disk's only demand for album/session polling.
+    // Permanent consumers (album colors / desktop Album Widget) can still keep
+    // the shared worker alive through IsAlbumColorCaptureNeeded().
+    g_eqPlayerPopupOpen.store(false, std::memory_order_release);
+    RequestOverlayServicesRefresh();
+
     if (g_eqDraggingBand >= 0) {
         SaveCustomEQSettings();
         g_eqDraggingBand = -1;
         ReleaseCapture();
     }
 
-    HWND hwnd = g_eqPopupHwnd;
-    g_eqPopupHwnd = nullptr;
-    g_eqHotBand = -1;
+    // Closing the popup must not leave the audio EQ halfway between two
+    // presets. Finish the current transition before stopping its timer.
+    if (g_eqPresetAnimationActive) {
+        for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+            g_eqActiveGains[static_cast<size_t>(i)].store(
+                g_eqPresetTargets[static_cast<size_t>(i)],
+                std::memory_order_relaxed);
+        }
+    }
+    SaveCustomEQSettings();
 
+    HWND hwnd = g_eqPopupHwnd;
+    g_eqPopupHwndForRequests.store(nullptr, std::memory_order_release);
+    g_eqPopupHwnd = nullptr;
+    g_eqPopupRenderRequestPending.store(false, std::memory_order_release);
+    g_eqPopupAttributesUpdateRequested.store(false, std::memory_order_release);
+    g_eqHotBand = -1;
+    g_eqHotPreset = -1;
+    g_eqBuilderSelectedId = -1;
+    g_eqBuilderDragId = EQ_BUILDER_DRAG_NONE;
+    g_eqBuilderResizeId = EQ_BUILDER_DRAG_NONE;
+    g_eqBuilderRemoveOnDrop = false;
+    g_eqPopupLogicalWidth = EQ_POPUP_WIDTH;
+    g_eqPopupLogicalHeight = EQ_POPUP_HEIGHT;
+    g_eqPopupContentOffsetX = 0;
+    g_eqPopupContentOffsetY = 0;
+    EqStopPresetAnimation(hwnd);
+    EqStopPageAnimation(hwnd);
+    g_eqPageAnimationProgress = 0.0f;
+    g_eqPageAnimationStart = 0.0f;
+    g_eqPageAnimationTarget = 0.0f;
+    g_eqSettingsScrollOffset = 0;
+    g_eqSettingsScrollbarDragging = false;
+    g_eqPopupPlacementDragTarget = EQ_POPUP_PLACEMENT_DRAG_NONE;
+    g_eqPopupPlacementDragOffsetX = 0;
+    g_eqPopupPlacementDragOffsetY = 0;
+    // This function runs on the popup's owner thread, so no renderer can be
+    // using these caches concurrently.
+    DestroyEqDiskArtworkImage();
+    DestroyEqPlayerRenderSurface();
+    g_eqLastScheduledRenderQpc.store(0, std::memory_order_release);
+
+    // Album/audio worker lifecycle is reconciled by the overlay thread.
     if (hwnd && IsWindow(hwnd))
         DestroyWindow(hwnd);
 }
@@ -8321,24 +19772,65 @@ static void DestroyEqPopup() {
 // -----------------------------------------------------------------------------
 // Custom EQ taskbar integration.
 //
-// IMPORTANT: The EQ button is a real XAML child of the Windows 11
-// system-tray XAML tree, rather than a separate HWND. The code adapts to
-// Grid/StackPanel changes in recent Windows 11 builds and avoids changing the
-// outer tray Grid's ColumnDefinitions, reducing conflicts with Taskbar Styler.
+// Windows 11 uses the existing native XAML tray integration. Windows 10 uses
+// Shell_NotifyIcon, which puts the EQ icon into the real notification area
+// instead of creating a separate taskbar window. This keeps the icon under
+// Explorer's normal tray layout/visibility management.
 // -----------------------------------------------------------------------------
+static bool g_eqIsWindows11 = false;
+static DWORD g_eqWindowsBuildNumber = 0;
+
+struct EqRtlOsVersionInfo {
+    ULONG dwOSVersionInfoSize;
+    ULONG dwMajorVersion;
+    ULONG dwMinorVersion;
+    ULONG dwBuildNumber;
+    ULONG dwPlatformId;
+    WCHAR szCSDVersion[128];
+};
+using EqRtlGetVersion_t = LONG (WINAPI*)(EqRtlOsVersionInfo*);
+
+static bool EqDetectWindows11Once() {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto rtlGetVersion = ntdll
+        ? reinterpret_cast<EqRtlGetVersion_t>(GetProcAddress(ntdll, "RtlGetVersion"))
+        : nullptr;
+
+    EqRtlOsVersionInfo version{};
+    version.dwOSVersionInfoSize = sizeof(version);
+    if (!rtlGetVersion || rtlGetVersion(&version) != 0) {
+        Wh_Log(L"EqDetectWindows11Once: RtlGetVersion failed; assuming Windows 10 path");
+        g_eqWindowsBuildNumber = 0;
+        return false;
+    }
+
+    g_eqWindowsBuildNumber = version.dwBuildNumber;
+    const bool isWindows11 =
+        version.dwMajorVersion >= 10 && version.dwBuildNumber >= 22000;
+    Wh_Log(L"EqDetectWindows11Once: Windows %u.%u build %u -> %s path",
+           version.dwMajorVersion, version.dwMinorVersion,
+           version.dwBuildNumber,
+           isWindows11 ? L"Windows 11 XAML" : L"Windows 10 native tray");
+    return isWindows11;
+}
+
 static constexpr wchar_t kEqXamlButtonName[] = L"WindhawkVisualizerEQButton";
 static constexpr wchar_t kEqXamlTrayGridName[] = L"SystemTrayFrameGrid";
-static constexpr wchar_t kEqButtonGlyph[] = L"\xE9E9"; // Segoe Fluent Icons: Equalizer.
+static constexpr wchar_t kEqButtonGlyph[] = L"\xEC4F"; // Segoe Fluent/MDL2 Icons: MusicNote.
 
-static HWND g_eqTaskbarHwnd = nullptr;
 static bool g_eqTaskbarSymbolsHooked = false;
 static std::atomic<bool> g_eqXamlInjectionReady{false};
 [[clang::no_destroy]] static FrameworkElement g_eqXamlButton = nullptr;
 [[clang::no_destroy]] static Grid g_eqXamlTrayGrid = nullptr;
 [[clang::no_destroy]] static FrameworkElement g_eqXamlParent = nullptr;
 static int g_eqXamlColumn = -1;
+static std::atomic<int> g_eqXamlAppliedPosition{-1};
 static winrt::event_token g_eqXamlClickToken{};
 static bool g_eqXamlClickTokenValid = false;
+static winrt::event_token g_eqXamlPointerToken{};
+static bool g_eqXamlPointerTokenValid = false;
+static winrt::event_token g_eqXamlWheelToken{};
+static bool g_eqXamlWheelTokenValid = false;
 
 static int EqPopupScalePx(int value, double scale) {
     return std::max(1, static_cast<int>(std::lround(
@@ -8347,8 +19839,9 @@ static int EqPopupScalePx(int value, double scale) {
 
 static double EqGetPopupDpiScale() {
     UINT dpi = 96;
-    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
-        dpi = GetDpiForWindow(g_eqPopupHwnd);
+    const HWND popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (popup && IsWindow(popup))
+        dpi = GetDpiForWindow(popup);
     else if (g_eqTaskbarHwnd && IsWindow(g_eqTaskbarHwnd))
         dpi = GetDpiForWindow(g_eqTaskbarHwnd);
 
@@ -8390,6 +19883,34 @@ static bool EqIsReadableMemoryRange(const void* address, size_t size) {
            size <= regionEnd - start;
 }
 
+static BOOL CALLBACK FindCurrentProcessTaskbarWndProc(HWND hwnd, LPARAM lParam) {
+    if (!hwnd || !lParam)
+        return TRUE;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+
+    wchar_t cls[64]{};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)))
+        return TRUE;
+
+    // Always resolve the primary taskbar. Secondary taskbars are separate
+    // shell windows and must not become the owner of the Media & EQ button.
+    if (wcscmp(cls, L"Shell_TrayWnd") == 0) {
+        *reinterpret_cast<HWND*>(lParam) = hwnd;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static HWND FindCurrentProcessTaskbarWnd() {
+    HWND taskbar = nullptr;
+    EnumWindows(FindCurrentProcessTaskbarWndProc, reinterpret_cast<LPARAM>(&taskbar));
+    return taskbar;
+}
 static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     if (!hTaskbarWnd) {
         Wh_Log(L"EqGetTaskbarXamlRoot: taskbar window is null");
@@ -8610,6 +20131,34 @@ static bool EqGetXamlButtonScreenRect(Button const& button, RECT* outRect) {
     }
 }
 
+static NOTIFYICONIDENTIFIER EqMakeNativeTrayIdentifier() {
+    NOTIFYICONIDENTIFIER identifier{};
+    identifier.cbSize = sizeof(identifier);
+    identifier.uID = kEqNativeTrayIconId;
+    identifier.guidItem = kEqNativeTrayGuid;
+    return identifier;
+}
+
+static bool EqGetNativeTrayButtonScreenRect(RECT* outRect) {
+    if (!outRect || !g_eqNativeTrayRegistered)
+        return false;
+
+    const auto identifier = EqMakeNativeTrayIdentifier();
+    return SUCCEEDED(Shell_NotifyIconGetRect(&identifier, outRect));
+}
+
+static bool EqIsCursorOverNativeTrayButton() {
+    RECT buttonRect{};
+    if (!EqGetNativeTrayButtonScreenRect(&buttonRect))
+        return false;
+
+    POINT cursor{};
+    if (!GetCursorPos(&cursor))
+        return false;
+
+    return PtInRect(&buttonRect, cursor) != FALSE;
+}
+
 static bool EqIsCursorOverXamlButton() {
     if (!g_eqXamlButton)
         return false;
@@ -8625,8 +20174,14 @@ static bool EqIsCursorOverXamlButton() {
     return PtInRect(&buttonRect, cursor) != FALSE;
 }
 
+static bool EqIsCursorOverTrayButton() {
+    return g_eqIsWindows11
+        ? EqIsCursorOverXamlButton()
+        : EqIsCursorOverNativeTrayButton();
+}
+
 static void EqClosePopup() {
-    HWND hwnd = g_eqPopupHwnd;
+    HWND hwnd = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
     if (!hwnd || !IsWindow(hwnd))
         return;
 
@@ -8640,102 +20195,365 @@ static void EqClosePopup() {
         SendMessageW(hwnd, WM_CLOSE, 0, 0);
 }
 
-static void EqShowPopupForXamlButton(Button const& button) {
-    try {
-        if (!button)
-            return;
+// Navigation actions on the tray button should not leave the Player popup
+// floating above another surface (for example, Volume Mixer, Sound Settings,
+// the current media app, or the custom tray context menu).
+static void EqClosePlayerPopupForTrayNavigation() {
+    const HWND popup = g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (popup && IsWindow(popup))
+        EqClosePopup();
+}
 
+// Temporary volume flyout shown for volume-changing tray gestures. It is a
+// separate top-level window, so its position is tied to the actual tray button
+// rather than to the Player popup/layout.
+static constexpr UINT_PTR kEqTrayVolumeFlyoutTimer = 0x4E71;
+static constexpr UINT kEqTrayVolumeFlyoutLifeMs = 1450;
+static constexpr UINT kEqTrayVolumeFlyoutFadeMs = 180;
+static HWND g_eqTrayVolumeFlyoutHwnd = nullptr;
+// Fade-in is started only when the window is first created. Subsequent volume
+// key presses extend the hide deadline without restarting the animation.
+static ULONGLONG g_eqTrayVolumeFlyoutShownAt = 0;
+static ULONGLONG g_eqTrayVolumeFlyoutHideAt = 0;
+static bool g_eqTrayVolumeFlyoutHorizontal = false;
+static bool g_eqTrayVolumeFlyoutDragging = false;
+static ULONGLONG g_eqTrayVolumeFlyoutLastSetMs = 0;
+static int g_eqTrayVolumeFlyoutLastX = 0;
+static int g_eqTrayVolumeFlyoutLastY = 0;
+
+static void EqTrayVolumeFlyoutKeepAlive(HWND /*hwnd*/) {
+    // Interaction extends visibility but leaves the current fade phase untouched.
+    g_eqTrayVolumeFlyoutHideAt = GetTickCount64() + kEqTrayVolumeFlyoutLifeMs;
+}
+
+static void EqTrayVolumeFlyoutRender(HWND hwnd) {
+    PAINTSTRUCT ps{};
+    HDC hdc = BeginPaint(hwnd, &ps);
+    RECT client{};
+    GetClientRect(hwnd, &client);
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+    const auto style = MakeEqPopupStyle(
+        g_eqPopupStyleId.load(std::memory_order_acquire), IsDarkThemeEnabled());
+    Gdiplus::GraphicsPath bg;
+    AddRoundedRectSubpath(bg, 0.5f, 0.5f,
+        static_cast<float>(std::max<LONG>(1, client.right-client.left)-1),
+        static_cast<float>(std::max<LONG>(1, client.bottom-client.top)-1), 12.0f);
+    Gdiplus::SolidBrush background(style.background);
+    graphics.FillPath(&background, &bg);
+    RECT widget{5, 5, std::max<LONG>(6,client.right-5),
+                     std::max<LONG>(6,client.bottom-5)};
+    DrawEqVolumeWidget(graphics, widget, IsDarkThemeEnabled(), false);
+    EndPaint(hwnd, &ps);
+}
+
+static void EqTrayVolumeFlyoutSetAlpha(HWND hwnd, BYTE alpha) {
+    SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+}
+
+static LRESULT CALLBACK EqTrayVolumeFlyoutProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_NCCREATE:
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+    case WM_PAINT:
+        EqTrayVolumeFlyoutRender(hwnd);
+        return 0;
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_TIMER:
+        if (wParam == kEqTrayVolumeFlyoutTimer) {
+            const ULONGLONG now = GetTickCount64();
+            if (now >= g_eqTrayVolumeFlyoutHideAt + kEqTrayVolumeFlyoutFadeMs) {
+                KillTimer(hwnd, kEqTrayVolumeFlyoutTimer);
+                g_eqTrayVolumeFlyoutHwnd = nullptr;
+                DestroyWindow(hwnd);
+                return 0;
+            }
+
+            BYTE alpha = 255;
+            const ULONGLONG fadeInElapsed = now - g_eqTrayVolumeFlyoutShownAt;
+            if (fadeInElapsed < kEqTrayVolumeFlyoutFadeMs) {
+                alpha = static_cast<BYTE>(255 * fadeInElapsed / kEqTrayVolumeFlyoutFadeMs);
+            } else if (now > g_eqTrayVolumeFlyoutHideAt) {
+                const ULONGLONG fadeOutElapsed = now - g_eqTrayVolumeFlyoutHideAt;
+                alpha = static_cast<BYTE>(255 * (kEqTrayVolumeFlyoutFadeMs - fadeOutElapsed) /
+                                          kEqTrayVolumeFlyoutFadeMs);
+            }
+            EqTrayVolumeFlyoutSetAlpha(hwnd, alpha);
+            return 0;
+        }
+        break;
+    case WM_LBUTTONDOWN: {
+        EqTrayVolumeFlyoutKeepAlive(hwnd);
+        SetCapture(hwnd);
+        g_eqTrayVolumeFlyoutDragging = false;
+        const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+        g_eqTrayVolumeFlyoutLastX = x;
+        g_eqTrayVolumeFlyoutLastY = y;
+        RECT r{}; GetClientRect(hwnd, &r);
+        RECT widget{5,5,r.right-5,r.bottom-5};
+        const auto metrics = EqBuildVolumeMetrics(widget);
+        if (PtInRect(&metrics.muteButton, POINT{x,y})) {
+            EqToggleSystemMute();
+            InvalidateRect(hwnd, nullptr, FALSE);
+        } else if (PtInRect(&metrics.slider, POINT{x,y})) {
+            g_eqTrayVolumeFlyoutDragging = true;
+            const int w = std::max<LONG>(1, widget.right-widget.left);
+            const int h = std::max<LONG>(1, widget.bottom-widget.top);
+            float value = 0.5f;
+            const float radius = std::clamp(static_cast<float>(std::min(w,h))*0.18f,3.0f,6.5f);
+            if (metrics.horizontal) {
+                float a=metrics.slider.left+radius, b=metrics.slider.right-radius;
+                if (b<=a) { a=(float)metrics.slider.left; b=(float)metrics.slider.right; }
+                value=(x-a)/std::max(1.0f,b-a);
+            } else {
+                float a=metrics.slider.top+radius, b=metrics.slider.bottom-radius;
+                if (b<=a) { a=(float)metrics.slider.top; b=(float)metrics.slider.bottom; }
+                value=1.0f-(y-a)/std::max(1.0f,b-a);
+            }
+            EqSetSystemVolumeScalar(std::clamp(value,0.0f,1.0f));
+            g_eqTrayVolumeFlyoutLastSetMs = GetTickCount64();
+        }
+        InvalidateRect(hwnd,nullptr,FALSE);
+        return 0;
+    }
+    case WM_MOUSEMOVE:
+        if (g_eqTrayVolumeFlyoutDragging && (wParam & MK_LBUTTON)) {
+            EqTrayVolumeFlyoutKeepAlive(hwnd);
+            const int x=GET_X_LPARAM(lParam), y=GET_Y_LPARAM(lParam);
+            g_eqTrayVolumeFlyoutLastX = x;
+            g_eqTrayVolumeFlyoutLastY = y;
+            RECT r{}; GetClientRect(hwnd,&r);
+            RECT widget{5,5,r.right-5,r.bottom-5};
+            const auto metrics=EqBuildVolumeMetrics(widget);
+            float value = 0.5f;
+            if (metrics.horizontal) {
+                float a=(float)metrics.slider.left+4.0f,b=(float)metrics.slider.right-4.0f;
+                value = std::clamp((x-a)/std::max(1.0f,b-a),0.0f,1.0f);
+            } else {
+                float a=(float)metrics.slider.top+4.0f,b=(float)metrics.slider.bottom-4.0f;
+                value = std::clamp(1.0f-(y-a)/std::max(1.0f,b-a),0.0f,1.0f);
+            }
+            // Endpoint-volume COM calls are synchronous and can stall the UI if
+            // issued for every raw mouse event. Cap writes at ~60 Hz while still
+            // extending the popup lifetime on every event.
+            const ULONGLONG now = GetTickCount64();
+            if (now - g_eqTrayVolumeFlyoutLastSetMs >= 16) {
+                EqSetSystemVolumeScalar(value);
+                g_eqTrayVolumeFlyoutLastSetMs = now;
+            }
+            InvalidateRect(hwnd,nullptr,FALSE);
+            return 0;
+        }
+        break;
+    case WM_LBUTTONUP:
+        if (g_eqTrayVolumeFlyoutDragging) {
+            EqTrayVolumeFlyoutKeepAlive(hwnd);
+            RECT r{}; GetClientRect(hwnd, &r);
+            RECT widget{5, 5, r.right - 5, r.bottom - 5};
+            const auto metrics = EqBuildVolumeMetrics(widget);
+            float value = 0.5f;
+            if (metrics.horizontal) {
+                const float a = static_cast<float>(metrics.slider.left) + 4.0f;
+                const float b = static_cast<float>(metrics.slider.right) - 4.0f;
+                value = (g_eqTrayVolumeFlyoutLastX - a) / std::max(1.0f, b - a);
+            } else {
+                const float a = static_cast<float>(metrics.slider.top) + 4.0f;
+                const float b = static_cast<float>(metrics.slider.bottom) - 4.0f;
+                value = 1.0f - (g_eqTrayVolumeFlyoutLastY - a) / std::max(1.0f, b - a);
+            }
+            EqSetSystemVolumeScalar(std::clamp(value, 0.0f, 1.0f));
+            g_eqTrayVolumeFlyoutLastSetMs = GetTickCount64();
+        }
+        g_eqTrayVolumeFlyoutDragging=false; ReleaseCapture(); return 0;
+    case WM_CAPTURECHANGED:
+        g_eqTrayVolumeFlyoutDragging=false; return 0;
+    case WM_DESTROY:
+        KillTimer(hwnd,kEqTrayVolumeFlyoutTimer);
+        if (g_eqTrayVolumeFlyoutHwnd==hwnd) g_eqTrayVolumeFlyoutHwnd=nullptr;
+        return 0;
+    }
+    return DefWindowProcW(hwnd,msg,wParam,lParam);
+}
+
+static void EqDestroyTrayVolumeFlyoutOnOwnerThread() {
+    HWND hwnd = g_eqTrayVolumeFlyoutHwnd;
+    if (!hwnd || !IsWindow(hwnd)) {
+        g_eqTrayVolumeFlyoutHwnd = nullptr;
+        return;
+    }
+    const DWORD ownerThreadId = GetWindowThreadProcessId(hwnd, nullptr);
+    if (ownerThreadId == GetCurrentThreadId()) {
+        DestroyWindow(hwnd);
+        return;
+    }
+
+    struct Payload { HWND hwnd; } payload{hwnd};
+    if (!EqRunFromWindowThread(hwnd, [](void* raw) {
+            const HWND window = static_cast<Payload*>(raw)->hwnd;
+            if (window && IsWindow(window))
+                DestroyWindow(window);
+        }, &payload)) {
+        Wh_Log(L"EqDestroyTrayVolumeFlyoutOnOwnerThread: failed to marshal WM_DESTROY to owner thread");
+    }
+}
+
+static void EqShowTrayVolumeFlyout() {
+    if (!g_running.load(std::memory_order_acquire) ||
+        !GetSettingsSnapshot().showMediaEqTrayButton)
+        return;
+    // When the Player is open and already contains Volume, do not duplicate it.
+    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd) &&
+        EqIsLayoutWidgetPresent(EQ_LAYOUT_VOLUME))
+        return;
+
+    RECT button{};
+    if (g_eqIsWindows11) {
+        if (!EqGetXamlButtonScreenRect(g_eqXamlButton.try_as<Button>(), &button))
+            return;
+    } else if (!EqGetNativeTrayButtonScreenRect(&button)) {
+        return;
+    }
+    MONITORINFO mi{}; mi.cbSize=sizeof(mi);
+    HMONITOR monitor=MonitorFromRect(&button,MONITOR_DEFAULTTONEAREST);
+    RECT monitorRect{};
+    if (!monitor || !GetMonitorInfoW(monitor,&mi)) return;
+    monitorRect=mi.rcMonitor;
+    // Infer the taskbar edge from the tray button itself, not from work-area
+    // insets. Work-area insets can be ambiguous on multi-monitor/custom-DPI setups.
+    const LONG leftDistance = std::max<LONG>(0, button.left - monitorRect.left);
+    const LONG rightDistance = std::max<LONG>(0, monitorRect.right - button.right);
+    const LONG topDistance = std::max<LONG>(0, button.top - monitorRect.top);
+    const LONG bottomDistance = std::max<LONG>(0, monitorRect.bottom - button.bottom);
+    enum class TrayEdge { Left, Top, Right, Bottom };
+    TrayEdge edge = TrayEdge::Bottom;
+    LONG nearestDistance = bottomDistance;
+    if (leftDistance < nearestDistance) { nearestDistance = leftDistance; edge = TrayEdge::Left; }
+    if (rightDistance < nearestDistance) { nearestDistance = rightDistance; edge = TrayEdge::Right; }
+    if (topDistance < nearestDistance) { nearestDistance = topDistance; edge = TrayEdge::Top; }
+
+    const bool horizontalTaskbar = edge == TrayEdge::Top || edge == TrayEdge::Bottom;
+    g_eqTrayVolumeFlyoutHorizontal = !horizontalTaskbar;
+    const int width = horizontalTaskbar ? 46 : 158;
+    const int height = horizontalTaskbar ? 158 : 46;
+    const int gap = 5;
+    // For a top/bottom taskbar, place the slider directly above/below the
+    // button's centerline. For side taskbars, place it beside the button.
+    int x = (button.left + button.right - width) / 2;
+    int y = (button.top + button.bottom - height) / 2;
+    switch (edge) {
+    case TrayEdge::Bottom:
+        y = button.top - height - gap;
+        break;
+    case TrayEdge::Top:
+        y = button.bottom + gap;
+        break;
+    case TrayEdge::Left:
+        x = button.right + gap;
+        break;
+    case TrayEdge::Right:
+        x = button.left - width - gap;
+        break;
+    }
+    const int minX = static_cast<int>(monitorRect.left);
+    const int maxX = std::max(minX, static_cast<int>(monitorRect.right) - width);
+    const int minY = static_cast<int>(monitorRect.top);
+    const int maxY = std::max(minY, static_cast<int>(monitorRect.bottom) - height);
+    x = std::clamp(x, minX, maxX);
+    y = std::clamp(y, minY, maxY);
+
+    if (g_eqTrayVolumeFlyoutHwnd && IsWindow(g_eqTrayVolumeFlyoutHwnd)) {
+        SetWindowPos(g_eqTrayVolumeFlyoutHwnd,HWND_TOPMOST,x,y,width,height,
+                     SWP_NOACTIVATE|SWP_SHOWWINDOW);
+        // Keep the original fade-in phase and just postpone the fade-out.
+        g_eqTrayVolumeFlyoutHideAt = GetTickCount64() + kEqTrayVolumeFlyoutLifeMs;
+        InvalidateRect(g_eqTrayVolumeFlyoutHwnd,nullptr,FALSE);
+        return;
+    }
+    if (!g_eqClassesRegistered || !g_eqModuleHandle)
+        return;
+    HWND hwnd=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST|WS_EX_LAYERED,
+        kEqTrayVolumeFlyoutClass,L"",WS_POPUP,x,y,width,height,nullptr,nullptr,
+        g_eqModuleHandle,nullptr);
+    if (!hwnd) return;
+    g_eqTrayVolumeFlyoutHwnd=hwnd;
+    g_eqTrayVolumeFlyoutShownAt=GetTickCount64();
+    g_eqTrayVolumeFlyoutHideAt=g_eqTrayVolumeFlyoutShownAt + kEqTrayVolumeFlyoutLifeMs;
+    EqTrayVolumeFlyoutSetAlpha(hwnd,0);
+    ShowWindow(hwnd,SW_SHOWNOACTIVATE);
+    SetTimer(hwnd,kEqTrayVolumeFlyoutTimer,16,nullptr);
+    InvalidateRect(hwnd,nullptr,FALSE);
+}
+
+
+static void EqShowPopupForTrayRect(const RECT& buttonRect) {
+    // XAML click events are not Windhawk function hooks, so a queued click may
+    // still arrive after Wh_ModBeforeUninit has begun unloading the mod.
+    if (!g_running.load(std::memory_order_acquire) || !g_eqClassesRegistered)
+        return;
+
+    try {
         if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd)) {
             EqClosePopup();
             return;
         }
 
-        RECT taskbarRect{};
-        if (!g_eqTaskbarHwnd || !GetWindowRect(g_eqTaskbarHwnd, &taskbarRect))
-            return;
+        if (!g_eqPopupPlacementLoaded)
+            LoadEqPopupPlacementSettings();
 
         const double scale = EqGetPopupDpiScale();
         const int popupWidth = EqPopupScalePx(EQ_POPUP_WIDTH, scale);
         const int popupHeight = EqPopupScalePx(EQ_POPUP_HEIGHT, scale);
-        const int taskbarGap = EqPopupScalePx(EQ_POPUP_TASKBAR_GAP, scale);
-
-        RECT buttonRect{};
-        if (!EqGetXamlButtonScreenRect(button, &buttonRect))
-            return;
-
-        const int buttonLeft = buttonRect.left;
-        const int buttonTop = buttonRect.top;
-        const int buttonRight = buttonRect.right;
-        const int buttonBottom = buttonRect.bottom;
-
-        int x = buttonLeft - (popupWidth - (buttonRight - buttonLeft)) / 2;
-        int y = buttonTop - popupHeight - taskbarGap;
-
-        // Anchor the flyout to the actual taskbar edge instead of the XAML
-        // button's transformed coordinates. This remains correct when the
-        // taskbar is auto-hidden, and prevents the popup from extending under
-        // the taskbar because of XAML/DPI coordinate differences.
-        MONITORINFO preMi{};
-        preMi.cbSize = sizeof(preMi);
-        HMONITOR preMonitor = MonitorFromWindow(g_eqTaskbarHwnd, MONITOR_DEFAULTTONEAREST);
-        if (preMonitor && GetMonitorInfoW(preMonitor, &preMi)) {
-            const RECT& mr = preMi.rcMonitor;
-            const int topEdgeDistance = std::abs(taskbarRect.top - mr.top);
-            const int bottomEdgeDistance = std::abs(mr.bottom - taskbarRect.bottom);
-            const int leftEdgeDistance = std::abs(taskbarRect.left - mr.left);
-            const int rightEdgeDistance = std::abs(mr.right - taskbarRect.right);
-
-            const int minVertical = std::min(topEdgeDistance, bottomEdgeDistance);
-            const int minHorizontal = std::min(leftEdgeDistance, rightEdgeDistance);
-            const bool bottomTaskbar = bottomEdgeDistance == minVertical &&
-                                       bottomEdgeDistance <= leftEdgeDistance &&
-                                       bottomEdgeDistance <= rightEdgeDistance;
-            const bool topTaskbar = topEdgeDistance == minVertical &&
-                                    topEdgeDistance < bottomEdgeDistance &&
-                                    topEdgeDistance <= leftEdgeDistance &&
-                                    topEdgeDistance <= rightEdgeDistance;
-            const bool leftTaskbar = leftEdgeDistance == minHorizontal &&
-                                     leftEdgeDistance < rightEdgeDistance &&
-                                     leftEdgeDistance < topEdgeDistance &&
-                                     leftEdgeDistance < bottomEdgeDistance;
-
-            if (bottomTaskbar) {
-                // Use the earlier of the work-area bottom and the physical
-                // taskbar top. Both are above the taskbar in the visible and
-                // auto-hide cases respectively.
-                const int anchorY = std::min(taskbarRect.top, preMi.rcWork.bottom);
-                y = anchorY - popupHeight - taskbarGap;
-            } else if (topTaskbar) {
-                const int anchorY = std::max(taskbarRect.bottom, preMi.rcWork.top);
-                y = anchorY + taskbarGap;
-            } else if (leftTaskbar) {
-                x = taskbarRect.right + taskbarGap;
-                y = buttonTop - popupHeight / 2;
-            } else {
-                x = taskbarRect.left - popupWidth - taskbarGap;
-                y = buttonTop - popupHeight / 2;
-            }
-        }
 
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
-        HMONITOR monitor = MonitorFromWindow(g_eqTaskbarHwnd, MONITOR_DEFAULTTONEAREST);
+        HMONITOR monitor = MonitorFromRect(&buttonRect, MONITOR_DEFAULTTONEAREST);
+        RECT workArea{};
         if (monitor && GetMonitorInfoW(monitor, &mi)) {
-            x = std::clamp<int>(x, mi.rcWork.left + taskbarGap / 2,
-                           mi.rcWork.right - popupWidth - taskbarGap / 2);
-            y = std::clamp<int>(y, mi.rcWork.top + taskbarGap / 2,
-                           mi.rcWork.bottom - popupHeight - taskbarGap / 2);
+            workArea = mi.rcWork;
+        } else {
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
         }
+        if (workArea.right <= workArea.left || workArea.bottom <= workArea.top)
+            return;
+
+        // Create and place the full logical popup first. The layout-cropping
+        // pass then removes unused edges while preserving the corresponding
+        // screen coordinates of the original 700x530 layout canvas. Do not
+        // re-center the cropped window afterwards: doing so makes the visible
+        // content drift whenever the used layout occupies only one side of the
+        // canvas (for example, Lyrics placed at the far right).
+
+        g_eqPopupLogicalWidth = EQ_POPUP_WIDTH;
+        g_eqPopupLogicalHeight = EQ_POPUP_HEIGHT;
+        g_eqPopupContentOffsetX = 0;
+        g_eqPresetPage.store(EQ_PRESET_PAGE_BUILTIN, std::memory_order_relaxed);
+        g_eqPresetPageAnimationProgress = 0.0f;
+        g_eqPresetPageAnimationStart = EQ_PRESET_PAGE_BUILTIN;
+        g_eqPresetPageAnimationTarget = EQ_PRESET_PAGE_BUILTIN;
+        g_eqPresetPageAnimationActive = false;
+        g_eqHotPreset = -1;
+        g_eqHotPresetNav = -1;
+        g_eqHotPresetDelete = -1;
+        g_eqPopupContentOffsetY = 0;
 
         g_eqPopupHwnd = CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_LAYERED,
             kEqPopupClass,
-            L"Equalizer",
+            L"Player",
             WS_POPUP,
-            x, y, popupWidth, popupHeight,
+            workArea.left, workArea.top, popupWidth, popupHeight,
             nullptr, nullptr, g_eqModuleHandle, nullptr);
         if (!g_eqPopupHwnd)
             return;
+        g_eqPopupHwndForRequests.store(g_eqPopupHwnd, std::memory_order_release);
+
+        // The Disk section is demand-driven: only after the Player window has
+        // been created do we allow the album/session worker to start for Disk.
+        g_eqPlayerPopupOpen.store(true, std::memory_order_release);
+        RequestOverlayServicesRefresh();
 
         ApplyEqPopupWindowAttributes(g_eqPopupHwnd);
         ShowWindow(g_eqPopupHwnd, SW_SHOWNOACTIVATE);
@@ -8743,10 +20561,478 @@ static void EqShowPopupForXamlButton(Button const& button) {
                      SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
         SetForegroundWindow(g_eqPopupHwnd);
         SetFocus(g_eqPopupHwnd);
+
+        // Apply the configured position while the window still represents
+        // the full 700x530 logical canvas. Cropping below then shifts the
+        // window to the used section bounds without changing that placement.
+        EqApplyConfiguredPopupPlacement(g_eqPopupHwnd, workArea);
+        EqCropPopupToLayout(g_eqPopupHwnd);
         RenderEqPopup(g_eqPopupHwnd);
+
     } catch (...) {
+        g_eqPopupHwndForRequests.store(nullptr, std::memory_order_release);
         g_eqPopupHwnd = nullptr;
     }
+}
+
+static void EqShowPopupForXamlButton(Button const& button) {
+    if (!g_running.load(std::memory_order_acquire) ||
+        !g_eqIsWindows11 || !button)
+        return;
+
+    RECT buttonRect{};
+    if (!EqGetXamlButtonScreenRect(button, &buttonRect))
+        return;
+
+    EqShowPopupForTrayRect(buttonRect);
+}
+
+static void EqShowPopupForNativeTrayButton() {
+    if (g_eqIsWindows11)
+        return;
+
+    RECT buttonRect{};
+    if (!EqGetNativeTrayButtonScreenRect(&buttonRect))
+        return;
+
+    HWND taskbar = FindCurrentProcessTaskbarWnd();
+    if (!taskbar || !IsWindow(taskbar))
+        return;
+
+    g_eqTaskbarHwnd = taskbar;
+    EqShowPopupForTrayRect(buttonRect);
+}
+
+static void EqOpenPlayerFromTray() {
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+    if (g_eqIsWindows11) {
+        if (auto button = g_eqXamlButton.try_as<Button>())
+            EqShowPopupForXamlButton(button);
+    } else {
+        EqShowPopupForNativeTrayButton();
+    }
+}
+
+struct EqMediaAppWindowSearch {
+    std::wstring executableName;
+    HWND window = nullptr;
+};
+
+static BOOL CALLBACK EqFindCurrentMediaAppWindowProc(HWND hwnd, LPARAM lParam) {
+    auto* search = reinterpret_cast<EqMediaAppWindowSearch*>(lParam);
+    if (!search || !IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER))
+        return TRUE;
+    if (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)
+        return TRUE;
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    if (!processId)
+        return TRUE;
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process)
+        return TRUE;
+    wchar_t imagePath[MAX_PATH]{};
+    DWORD chars = ARRAYSIZE(imagePath);
+    const bool gotPath = QueryFullProcessImageNameW(process, 0, imagePath, &chars) != FALSE;
+    CloseHandle(process);
+    if (!gotPath)
+        return TRUE;
+
+    const wchar_t* baseName = wcsrchr(imagePath, L'\\');
+    baseName = baseName ? baseName + 1 : imagePath;
+    if (_wcsicmp(baseName, search->executableName.c_str()) != 0)
+        return TRUE;
+
+    search->window = hwnd;
+    return FALSE;
+}
+
+static bool EqTryFocusRunningMediaApp(const std::wstring& sourceAppId) {
+    // Desktop SMTC sessions commonly identify themselves with an executable
+    // name (for example, Spotify.exe or chrome.exe), not a packaged-app AUMID.
+    if (sourceAppId.empty() || sourceAppId.find(L'!') != std::wstring::npos)
+        return false;
+
+    std::wstring executableName = sourceAppId;
+    const size_t slash = executableName.find_last_of(L"\\/");
+    if (slash != std::wstring::npos)
+        executableName = executableName.substr(slash + 1);
+    if (executableName.empty())
+        return false;
+    if (executableName.find(L'.') == std::wstring::npos)
+        executableName += L".exe";
+
+    EqMediaAppWindowSearch search{executableName, nullptr};
+    EnumWindows(EqFindCurrentMediaAppWindowProc, reinterpret_cast<LPARAM>(&search));
+    if (!search.window || !IsWindow(search.window))
+        return false;
+
+    if (IsIconic(search.window))
+        ShowWindow(search.window, SW_RESTORE);
+    else
+        ShowWindow(search.window, SW_SHOW);
+    SetForegroundWindow(search.window);
+    Wh_Log(L"EqOpenCurrentMediaSource: focused running desktop app '%s'", executableName.c_str());
+    return true;
+}
+
+static void EqOpenCurrentMediaSource() {
+    const EqMediaState media = GetEqMediaStateSnapshot();
+    if (!media.hasSession || media.sourceAppUserModelId.empty()) {
+        Wh_Log(L"EqOpenCurrentMediaSource: no active media source ID");
+        return;
+    }
+
+    const std::wstring& sourceAppId = media.sourceAppUserModelId;
+    if (EqTryFocusRunningMediaApp(sourceAppId))
+        return;
+
+    const HRESULT apartmentHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const bool uninitializeApartment = SUCCEEDED(apartmentHr);
+    HRESULT activationHr = apartmentHr;
+    if (SUCCEEDED(apartmentHr) || apartmentHr == RPC_E_CHANGED_MODE) {
+        IApplicationActivationManager* activationManager = nullptr;
+        activationHr = CoCreateInstance(
+            CLSID_ApplicationActivationManager, nullptr, CLSCTX_LOCAL_SERVER,
+            IID_PPV_ARGS(&activationManager));
+        if (SUCCEEDED(activationHr) && activationManager) {
+            DWORD processId = 0;
+            activationHr = activationManager->ActivateApplication(
+                sourceAppId.c_str(), nullptr, AO_NONE, &processId);
+            activationManager->Release();
+        }
+    }
+    if (uninitializeApartment)
+        CoUninitialize();
+    if (SUCCEEDED(activationHr))
+        return;
+
+    // ActivateApplication is for AUMIDs. Some desktop players publish only an
+    // executable ID, so also try the registered AppsFolder path where applicable.
+    const std::wstring appsFolderPath = L"shell:AppsFolder\\" + sourceAppId;
+    HINSTANCE shellResult = ShellExecuteW(
+        nullptr, L"open", appsFolderPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(shellResult) > 32) {
+        Wh_Log(L"EqOpenCurrentMediaSource: launched via AppsFolder '%s'", sourceAppId.c_str());
+        return;
+    }
+
+    // Final desktop-app fallback: ShellExecute can resolve executable names
+    // registered through App Paths, or a fully-qualified source path.
+    shellResult = ShellExecuteW(
+        nullptr, L"open", sourceAppId.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(shellResult) <= 32) {
+        Wh_Log(L"EqOpenCurrentMediaSource: all activation methods failed for '%s' (HRESULT 0x%08X)",
+               sourceAppId.c_str(), static_cast<unsigned int>(activationHr));
+    }
+}
+
+static void EqOpenVolumeMixer() {
+    if (g_eqIsWindows11) {
+        // Windows 11: Win+Ctrl+V opens the Sound output / Quick Settings
+        // volume-mixer page, without navigating into the Settings app.
+        INPUT input[6]{};
+        input[0].type = INPUT_KEYBOARD;
+        input[0].ki.wVk = VK_LWIN;
+        input[0].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
+        input[1].type = INPUT_KEYBOARD;
+        input[1].ki.wVk = VK_CONTROL;
+        input[2].type = INPUT_KEYBOARD;
+        input[2].ki.wVk = 'V';
+        input[3].type = INPUT_KEYBOARD;
+        input[3].ki.wVk = 'V';
+        input[3].ki.dwFlags = KEYEVENTF_KEYUP;
+        input[4].type = INPUT_KEYBOARD;
+        input[4].ki.wVk = VK_CONTROL;
+        input[4].ki.dwFlags = KEYEVENTF_KEYUP;
+        input[5].type = INPUT_KEYBOARD;
+        input[5].ki.wVk = VK_LWIN;
+        input[5].ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
+        if (SendInput(6u, input, sizeof(INPUT)) ==
+            6u) {
+            return;
+        }
+        Wh_Log(L"EqOpenVolumeMixer: Win+Ctrl+V failed, error=%lu; falling back to sndvol.exe",
+               GetLastError());
+    }
+
+    // Windows 10 (or a Win11 build where the shortcut is unavailable): open
+    // the classic mixer instead of sending users to a Settings page.
+    ShellExecuteW(nullptr, L"open", L"sndvol.exe", nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+// The menu is a native Win32 popup, but its custom captions are owned by the mod
+// and therefore need explicit localization. Follow the current user's Windows
+// display language; unsupported languages fall back to English.
+static bool EqUseRussianTrayMenu() {
+    const LANGID uiLanguage = GetUserDefaultUILanguage();
+    return PRIMARYLANGID(uiLanguage) == LANG_RUSSIAN;
+}
+
+static void EqShowTrayContextMenu(HWND owner) {
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    enum : UINT {
+        ID_OPEN_PLAYER = 41001,
+        ID_PLAY_PAUSE,
+        ID_PREVIOUS,
+        ID_NEXT,
+        ID_TOGGLE_SHUFFLE,
+        ID_TOGGLE_REPEAT,
+        ID_TOGGLE_MUTE,
+        ID_VOLUME_UP,
+        ID_VOLUME_DOWN,
+        ID_OPEN_SOURCE,
+        ID_SOUND_SETTINGS,
+        ID_VOLUME_MIXER,
+    };
+
+    const EqMediaState media = GetEqMediaStateSnapshot();
+    const EqSystemVolumeSnapshot volume = EqGetSystemVolumeSnapshot(false);
+    HMENU menu = CreatePopupMenu();
+    if (!menu)
+        return;
+
+    const bool russianUi = EqUseRussianTrayMenu();
+    AppendMenuW(menu, MF_STRING, ID_OPEN_PLAYER,
+                russianUi ? L"Открыть Player" : L"Open Player");
+    AppendMenuW(menu, MF_STRING, ID_PLAY_PAUSE,
+                russianUi ? L"Воспроизведение / пауза" : L"Play / Pause");
+    AppendMenuW(menu, MF_STRING, ID_PREVIOUS,
+                russianUi ? L"Предыдущий трек" : L"Previous track");
+    AppendMenuW(menu, MF_STRING, ID_NEXT,
+                russianUi ? L"Следующий трек" : L"Next track");
+    AppendMenuW(menu, MF_STRING, ID_TOGGLE_SHUFFLE,
+                russianUi ? L"Перемешать треки" : L"Toggle shuffle");
+    AppendMenuW(menu, MF_STRING, ID_TOGGLE_REPEAT,
+                russianUi ? L"Режим повтора" : L"Toggle repeat");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_TOGGLE_MUTE,
+                volume.valid && volume.muted
+                    ? (russianUi ? L"Включить системный звук" : L"Unmute system audio")
+                    : (russianUi ? L"Выключить системный звук" : L"Mute system audio"));
+    AppendMenuW(menu, MF_STRING, ID_VOLUME_UP,
+                russianUi ? L"Увеличить громкость на 5%" : L"Volume +5%");
+    AppendMenuW(menu, MF_STRING, ID_VOLUME_DOWN,
+                russianUi ? L"Уменьшить громкость на 5%" : L"Volume -5%");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING | (media.hasSession && !media.sourceAppUserModelId.empty()
+                                   ? MF_ENABLED : MF_GRAYED),
+                ID_OPEN_SOURCE,
+                russianUi ? L"Открыть приложение с медиа" : L"Open current media app");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_SOUND_SETTINGS,
+                russianUi ? L"Параметры звука Windows" : L"Windows sound settings");
+    AppendMenuW(menu, MF_STRING, ID_VOLUME_MIXER,
+                russianUi ? L"Микшер громкости" : L"Volume Mixer");
+
+    POINT cursor{};
+    if (!GetCursorPos(&cursor)) {
+        DestroyMenu(menu);
+        return;
+    }
+    // Prefer the event/source window. For the Win10 notification icon this is
+    // the dedicated callback window (the standard Win32 tray-menu owner); for
+    // the Win11 XAML button it is the taskbar window that owns the button.
+    if (!owner || !IsWindow(owner))
+        owner = g_eqTaskbarHwnd;
+    if (!owner || !IsWindow(owner))
+        owner = g_eqNativeTrayMessageHwnd;
+    if (owner && IsWindow(owner))
+        SetForegroundWindow(owner);
+
+    const UINT command = TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
+        cursor.x, cursor.y, 0, owner, nullptr);
+    DestroyMenu(menu);
+    if (owner && IsWindow(owner))
+        PostMessageW(owner, WM_NULL, 0, 0);
+
+    switch (command) {
+    case ID_OPEN_PLAYER:
+        if (!g_eqPopupHwnd || !IsWindow(g_eqPopupHwnd))
+            EqOpenPlayerFromTray();
+        break;
+    case ID_PLAY_PAUSE:
+        EnqueueEqMediaCommand(EqMediaCommandType::PlayPause);
+        break;
+    case ID_PREVIOUS:
+        EnqueueEqMediaCommand(EqMediaCommandType::Previous);
+        break;
+    case ID_NEXT:
+        EnqueueEqMediaCommand(EqMediaCommandType::Next);
+        break;
+    case ID_TOGGLE_SHUFFLE:
+        EnqueueEqMediaCommand(EqMediaCommandType::ToggleShuffle);
+        break;
+    case ID_TOGGLE_REPEAT:
+        EnqueueEqMediaCommand(EqMediaCommandType::ToggleRepeat);
+        break;
+    case ID_TOGGLE_MUTE:
+        EqToggleSystemMute();
+        break;
+    case ID_VOLUME_UP: {
+        const auto state = EqGetSystemVolumeSnapshot(false);
+        EqSetSystemVolumeScalar(state.volume + 0.05f);
+        break;
+    }
+    case ID_VOLUME_DOWN: {
+        const auto state = EqGetSystemVolumeSnapshot(false);
+        EqSetSystemVolumeScalar(state.volume - 0.05f);
+        break;
+    }
+    case ID_OPEN_SOURCE:
+        EqOpenCurrentMediaSource();
+        break;
+    case ID_SOUND_SETTINGS:
+        ShellExecuteW(nullptr, L"open", L"ms-settings:sound", nullptr, nullptr, SW_SHOWNORMAL);
+        break;
+    case ID_VOLUME_MIXER:
+        EqOpenVolumeMixer();
+        break;
+    default:
+        break;
+    }
+}
+
+static std::atomic<HWND> g_eqDeferredContextMenuOwner{nullptr};
+static std::atomic<UINT_PTR> g_eqDeferredContextMenuTimerId{0};
+
+static void CALLBACK EqDeferredTrayContextMenuTimerProc(
+    HWND, UINT, UINT_PTR timerId, DWORD) {
+    KillTimer(nullptr, timerId);
+    UINT_PTR expectedTimer = timerId;
+    if (!g_eqDeferredContextMenuTimerId.compare_exchange_strong(
+            expectedTimer, 0, std::memory_order_acq_rel)) {
+        return;  // A newer click replaced this pending menu request.
+    }
+    HWND owner = g_eqDeferredContextMenuOwner.exchange(
+        nullptr, std::memory_order_acq_rel);
+    // A queue timer runs after the current pointer/tray notification handler
+    // returns, so the release event cannot immediately dismiss the menu.
+    EqShowTrayContextMenu(owner);
+}
+
+static void EqScheduleTrayContextMenu(HWND owner) {
+    if (!owner || !IsWindow(owner)) {
+        EqShowTrayContextMenu(owner);
+        return;
+    }
+    g_eqDeferredContextMenuOwner.store(owner, std::memory_order_release);
+    const UINT_PTR oldTimer = g_eqDeferredContextMenuTimerId.exchange(
+        0, std::memory_order_acq_rel);
+    if (oldTimer)
+        KillTimer(nullptr, oldTimer);
+
+    const UINT_PTR timerId = SetTimer(
+        nullptr, 0, 1, EqDeferredTrayContextMenuTimerProc);
+    if (!timerId) {
+        g_eqDeferredContextMenuOwner.store(nullptr, std::memory_order_release);
+        Wh_Log(L"EqScheduleTrayContextMenu: deferred timer scheduling failed, error=%lu; opening directly",
+               GetLastError());
+        EqShowTrayContextMenu(owner);
+        return;
+    }
+    g_eqDeferredContextMenuTimerId.store(timerId, std::memory_order_release);
+}
+
+static void EqDispatchTrayAction(int action, HWND owner) {
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    switch (action) {
+    case EQ_TRAY_ACTION_NONE:
+        return;
+    case EQ_TRAY_ACTION_OPEN_PLAYER:
+        if (!g_eqPopupHwnd || !IsWindow(g_eqPopupHwnd))
+            EqOpenPlayerFromTray();
+        return;
+    case EQ_TRAY_ACTION_TOGGLE_PLAYER:
+        if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
+            EqClosePopup();
+        else
+            EqOpenPlayerFromTray();
+        return;
+    case EQ_TRAY_ACTION_CONTEXT_MENU:
+        EqClosePlayerPopupForTrayNavigation();
+        EqScheduleTrayContextMenu(owner);
+        return;
+    case EQ_TRAY_ACTION_OPEN_SOURCE:
+        EqClosePlayerPopupForTrayNavigation();
+        EqOpenCurrentMediaSource();
+        return;
+    case EQ_TRAY_ACTION_TOGGLE_MUTE:
+        EqToggleSystemMute();
+        return;
+    case EQ_TRAY_ACTION_VOLUME_UP: {
+        const auto state = EqGetSystemVolumeSnapshot(false);
+        EqSetSystemVolumeScalar(state.volume + 0.05f);
+        EqShowTrayVolumeFlyout();
+        return;
+    }
+    case EQ_TRAY_ACTION_VOLUME_DOWN: {
+        const auto state = EqGetSystemVolumeSnapshot(false);
+        EqSetSystemVolumeScalar(state.volume - 0.05f);
+        EqShowTrayVolumeFlyout();
+        return;
+    }
+    case EQ_TRAY_ACTION_PLAY_PAUSE:
+        EnqueueEqMediaCommand(EqMediaCommandType::PlayPause);
+        return;
+    case EQ_TRAY_ACTION_TOGGLE_SHUFFLE:
+        EnqueueEqMediaCommand(EqMediaCommandType::ToggleShuffle);
+        return;
+    case EQ_TRAY_ACTION_TOGGLE_REPEAT:
+        EnqueueEqMediaCommand(EqMediaCommandType::ToggleRepeat);
+        return;
+    case EQ_TRAY_ACTION_PREVIOUS_TRACK:
+        EnqueueEqMediaCommand(EqMediaCommandType::Previous);
+        return;
+    case EQ_TRAY_ACTION_NEXT_TRACK:
+        EnqueueEqMediaCommand(EqMediaCommandType::Next);
+        return;
+    case EQ_TRAY_ACTION_REWIND_5:
+        EnqueueEqMediaCommand(EqMediaCommandType::Rewind5);
+        return;
+    case EQ_TRAY_ACTION_FORWARD_5:
+        EnqueueEqMediaCommand(EqMediaCommandType::Forward5);
+        return;
+    case EQ_TRAY_ACTION_OPEN_SOUND_SETTINGS:
+        EqClosePlayerPopupForTrayNavigation();
+        ShellExecuteW(nullptr, L"open", L"ms-settings:sound", nullptr, nullptr, SW_SHOWNORMAL);
+        return;
+    case EQ_TRAY_ACTION_OPEN_VOLUME_MIXER:
+        EqClosePlayerPopupForTrayNavigation();
+        EqOpenVolumeMixer();
+        return;
+    default:
+        return;
+    }
+}
+
+static void EqDispatchTrayGesture(int gesture, HWND owner) {
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    int action = EQ_TRAY_ACTION_NONE;
+    switch (gesture) {
+    case EQ_TRAY_GESTURE_LEFT: action = settings.trayLeftClickAction; break;
+    case EQ_TRAY_GESTURE_MIDDLE: action = settings.trayMiddleClickAction; break;
+    case EQ_TRAY_GESTURE_RIGHT: action = settings.trayRightClickAction; break;
+    case EQ_TRAY_GESTURE_WHEEL_UP: action = settings.trayWheelUpAction; break;
+    case EQ_TRAY_GESTURE_WHEEL_DOWN: action = settings.trayWheelDownAction; break;
+    default: return;
+    }
+    EqDispatchTrayAction(action, owner);
+}
+
+static void EqDispatchTrayWheelDelta(int delta, HWND owner) {
+    if (delta > 0)
+        EqDispatchTrayGesture(EQ_TRAY_GESTURE_WHEEL_UP, owner);
+    else if (delta < 0)
+        EqDispatchTrayGesture(EQ_TRAY_GESTURE_WHEEL_DOWN, owner);
 }
 
 static bool EqIsCurrentXamlButtonAlive(FrameworkElement const& root) {
@@ -8796,9 +21082,274 @@ static FrameworkElement EqFindDirectChildContaining(
     return nullptr;
 }
 
+static HICON EqCreateNativeFluentPlayerIcon() {
+    constexpr int kIconSize = 32;
+    Gdiplus::Bitmap bitmap(
+        kIconSize, kIconSize, PixelFormat32bppARGB);
+    if (bitmap.GetLastStatus() != Gdiplus::Ok)
+        return nullptr;
+
+    Gdiplus::Graphics graphics(&bitmap);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+    graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+    Gdiplus::FontFamily fontFamily(L"Segoe MDL2 Assets");
+    if (fontFamily.GetLastStatus() != Gdiplus::Ok)
+        return nullptr;
+
+    Gdiplus::Font font(
+        &fontFamily, 28.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::StringFormat format;
+    format.SetAlignment(Gdiplus::StringAlignmentCenter);
+    format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+
+    // Keep the tray glyph white on both light and dark Windows 10 tray themes.
+    // The notification area background is controlled by Explorer; the EQ icon
+    // should remain visually consistent with the white Fluent/XAML Player button used
+    // by the Windows 11 implementation.
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, 255, 255, 255));
+    const wchar_t glyph[] = {L'\xE768', L'\0'};
+    const Gdiplus::RectF rect(
+        0.0f, 0.0f, static_cast<Gdiplus::REAL>(kIconSize),
+        static_cast<Gdiplus::REAL>(kIconSize));
+    graphics.DrawString(glyph, -1, &font, rect, &format, &brush);
+
+    HICON icon = nullptr;
+    if (bitmap.GetHICON(&icon) != Gdiplus::Ok)
+        return nullptr;
+    return icon;
+}
+
+static bool EqModifyNativeTrayIcon() {
+    if (!g_eqNativeTrayMessageHwnd || !g_eqNativeTrayRegistered)
+        return false;
+
+    HICON icon = EqCreateNativeFluentPlayerIcon();
+    if (!icon) {
+        Wh_Log(L"EqModifyNativeTrayIcon: failed to create icon");
+        return false;
+    }
+
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_eqNativeTrayMessageHwnd;
+    nid.uID = kEqNativeTrayIconId;
+    nid.uFlags = NIF_ICON | NIF_TIP | NIF_GUID;
+    nid.hIcon = icon;
+    nid.guidItem = kEqNativeTrayGuid;
+    wcscpy_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Player");
+
+    const BOOL ok = Shell_NotifyIconW(NIM_MODIFY, &nid);
+    DestroyIcon(icon);
+    if (!ok) {
+        Wh_Log(L"EqModifyNativeTrayIcon: NIM_MODIFY failed, error=%lu",
+               GetLastError());
+    }
+    return ok != FALSE;
+}
+
+static bool EqAddNativeTrayIcon() {
+    if (!g_eqNativeTrayMessageHwnd)
+        return false;
+    if (!GetSettingsSnapshot().showMediaEqTrayButton)
+        return false;
+    if (g_eqNativeTrayRegistered)
+        return true;
+
+    HICON icon = EqCreateNativeFluentPlayerIcon();
+    if (!icon) {
+        Wh_Log(L"EqAddNativeTrayIcon: failed to create icon");
+        return false;
+    }
+
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_eqNativeTrayMessageHwnd;
+    nid.uID = kEqNativeTrayIconId;
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_GUID;
+    nid.uCallbackMessage = WM_EQ_NATIVE_TRAY;
+    nid.hIcon = icon;
+    nid.guidItem = kEqNativeTrayGuid;
+    wcscpy_s(nid.szTip, ARRAYSIZE(nid.szTip), L"Player");
+
+    // Remove only our own fixed-GUID icon before re-adding, which prevents a
+    // stale icon from a previous Windhawk hot-reload from becoming a ghost.
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+
+    const BOOL ok = Shell_NotifyIconW(NIM_ADD, &nid);
+    DestroyIcon(icon);
+
+    if (!ok) {
+        Wh_Log(L"EqAddNativeTrayIcon: NIM_ADD failed, error=%lu",
+               GetLastError());
+        g_eqNativeTrayRegistered = false;
+        return false;
+    }
+
+    g_eqNativeTrayRegistered = true;
+    g_eqNativeTrayRetryCount = 0;
+    if (g_eqNativeTrayMessageHwnd)
+        KillTimer(g_eqNativeTrayMessageHwnd, kEqNativeTrayRetryTimerId);
+    Wh_Log(L"EqAddNativeTrayIcon: registered native Win10 notification-area icon");
+    return true;
+}
+
+static void EqScheduleNativeTrayIconRetry(UINT delayMs = kEqNativeTrayRetryDelayMs) {
+    if (g_eqIsWindows11 || !g_eqNativeTrayMessageHwnd ||
+        !g_running.load(std::memory_order_acquire) ||
+        g_eqNativeTrayRegistered) {
+        return;
+    }
+
+    if (g_eqNativeTrayRetryCount >= kEqNativeTrayMaxRetryCount) {
+        Wh_Log(L"EqScheduleNativeTrayIconRetry: retry limit reached");
+        return;
+    }
+
+    ++g_eqNativeTrayRetryCount;
+    if (!SetTimer(g_eqNativeTrayMessageHwnd, kEqNativeTrayRetryTimerId,
+                  std::max(1u, delayMs), nullptr)) {
+        Wh_Log(L"EqScheduleNativeTrayIconRetry: SetTimer failed, error=%lu",
+               GetLastError());
+    } else {
+        Wh_Log(L"EqScheduleNativeTrayIconRetry: scheduled retry %d/%d in %u ms",
+               g_eqNativeTrayRetryCount, kEqNativeTrayMaxRetryCount, delayMs);
+    }
+}
+
+static void EqRemoveNativeTrayIcon() {
+    if (g_eqNativeTrayMessageHwnd)
+        KillTimer(g_eqNativeTrayMessageHwnd, kEqNativeTrayRetryTimerId);
+    g_eqNativeTrayRetryCount = 0;
+    if (g_eqNativeTrayMessageHwnd) {
+        NOTIFYICONDATAW nid{};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = g_eqNativeTrayMessageHwnd;
+        nid.uID = kEqNativeTrayIconId;
+        nid.uFlags = NIF_GUID;
+        nid.guidItem = kEqNativeTrayGuid;
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+    }
+    g_eqNativeTrayRegistered = false;
+}
+
+static LRESULT CALLBACK EqNativeTrayMessageProc(
+    HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (g_eqTaskbarCreatedMessage && msg == g_eqTaskbarCreatedMessage) {
+        if (g_running.load(std::memory_order_acquire)) {
+            // Explorer rebuilt the notification area, so the old icon is gone.
+            // TaskbarCreated can arrive before the new tray is ready for NIM_ADD.
+            // Retry a few times with a short one-shot timer instead of polling.
+            g_eqNativeTrayRegistered = false;
+            g_eqNativeTrayRetryCount = 0;
+            if (GetSettingsSnapshot().showMediaEqTrayButton) {
+                if (!EqAddNativeTrayIcon())
+                    EqScheduleNativeTrayIconRetry();
+            }
+        }
+        return 0;
+    }
+
+    if (msg == WM_TIMER && wParam == kEqNativeTrayRetryTimerId) {
+        if (!g_eqIsWindows11 && g_running.load(std::memory_order_acquire)) {
+            KillTimer(hwnd, kEqNativeTrayRetryTimerId);
+            if (GetSettingsSnapshot().showMediaEqTrayButton &&
+                !g_eqNativeTrayRegistered && !EqAddNativeTrayIcon())
+                EqScheduleNativeTrayIconRetry();
+        } else {
+            KillTimer(hwnd, kEqNativeTrayRetryTimerId);
+        }
+        return 0;
+    }
+
+    if (msg == WM_EQ_NATIVE_TRAY &&
+        LOWORD(wParam) == kEqNativeTrayIconId &&
+        !g_eqIsWindows11 &&
+        g_running.load(std::memory_order_acquire)) {
+        const UINT trayEvent = static_cast<UINT>(lParam);
+        switch (trayEvent) {
+        case WM_LBUTTONDOWN:
+            EqDispatchTrayGesture(EQ_TRAY_GESTURE_LEFT, hwnd);
+            return 0;
+        case WM_MBUTTONUP:
+            EqDispatchTrayGesture(EQ_TRAY_GESTURE_MIDDLE, hwnd);
+            return 0;
+        case WM_RBUTTONUP:
+            EqDispatchTrayGesture(EQ_TRAY_GESTURE_RIGHT, hwnd);
+            return 0;
+        case WM_MOUSEWHEEL:
+            EqDispatchTrayWheelDelta(GET_WHEEL_DELTA_WPARAM(wParam), hwnd);
+            return 0;
+        default:
+            break;
+        }
+    }
+
+    if (msg == WM_SETTINGCHANGE && !g_eqIsWindows11 &&
+        g_eqNativeTrayRegistered) {
+        EqModifyNativeTrayIcon();
+        return 0;
+    }
+
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static bool EqCreateNativeTrayMessageWindow(HINSTANCE instance) {
+    if (g_eqNativeTrayMessageHwnd && IsWindow(g_eqNativeTrayMessageHwnd))
+        return true;
+
+    if (!g_eqTaskbarCreatedMessage)
+        g_eqTaskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
+    if (!g_eqTaskbarCreatedMessage) {
+        Wh_Log(L"EqCreateNativeTrayMessageWindow: failed to register TaskbarCreated message");
+        return false;
+    }
+
+    g_eqNativeTrayMessageHwnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW,
+        kEqNativeTrayWindowClass,
+        L"WindhawkVisualizerEQTray",
+        WS_POPUP,
+        0, 0, 0, 0,
+        nullptr, nullptr, instance, nullptr);
+    if (!g_eqNativeTrayMessageHwnd) {
+        Wh_Log(L"EqCreateNativeTrayMessageWindow: CreateWindowEx failed, error=%lu",
+               GetLastError());
+        return false;
+    }
+
+    return true;
+}
+
+static void EqDestroyNativeTrayMessageWindowOnItsThread() {
+    HWND hwnd = g_eqNativeTrayMessageHwnd;
+    if (hwnd && IsWindow(hwnd))
+        DestroyWindow(hwnd);
+    g_eqNativeTrayMessageHwnd = nullptr;
+}
+
+static void EqEnsureNativeTrayIcon() {
+    DebugPerfScope debugScope(DEBUG_PERF_TRAY_MAINTENANCE);
+    if (g_eqIsWindows11 || !g_eqNativeTrayMessageHwnd)
+        return;
+
+    if (!GetSettingsSnapshot().showMediaEqTrayButton) {
+        if (g_eqNativeTrayRegistered)
+            EqRemoveNativeTrayIcon();
+        return;
+    }
+
+    if (!EqAddNativeTrayIcon())
+        EqScheduleNativeTrayIconRetry();
+}
+
 static void EqResetXamlStateOnly() {
     g_eqXamlClickTokenValid = false;
+    g_eqXamlPointerTokenValid = false;
+    g_eqXamlWheelTokenValid = false;
     g_eqXamlColumn = -1;
+    g_eqXamlAppliedPosition.store(-1, std::memory_order_release);
     g_eqXamlButton = nullptr;
     g_eqXamlParent = nullptr;
     g_eqXamlTrayGrid = nullptr;
@@ -8806,11 +21357,20 @@ static void EqResetXamlStateOnly() {
 }
 
 static void EqRemoveXamlButtonOnUiThread() {
+    // The XAML tray button and its temporary volume flyout share this UI thread.
+    // Destroy the flyout synchronously before the module can be unloaded.
+    if (g_eqTrayVolumeFlyoutHwnd && IsWindow(g_eqTrayVolumeFlyoutHwnd))
+        EqDestroyTrayVolumeFlyoutOnOwnerThread();
+
     try {
         if (g_eqXamlParent && g_eqXamlButton) {
-            if (g_eqXamlClickTokenValid) {
-                if (auto button = g_eqXamlButton.try_as<Button>())
+            if (auto button = g_eqXamlButton.try_as<Button>()) {
+                if (g_eqXamlClickTokenValid)
                     button.Click(g_eqXamlClickToken);
+                if (g_eqXamlPointerTokenValid)
+                    button.PointerPressed(g_eqXamlPointerToken);
+                if (g_eqXamlWheelTokenValid)
+                    button.PointerWheelChanged(g_eqXamlWheelToken);
             }
 
             auto panel = g_eqXamlParent.try_as<Panel>();
@@ -8824,14 +21384,46 @@ static void EqRemoveXamlButtonOnUiThread() {
                 }
             }
         }
+
+        // Grid insertion adds a ColumnDefinition and shifts existing children
+        // to make room. Restore both when the button is moved/removed so changing
+        // the position does not accumulate empty columns over repeated updates.
+        if (g_eqXamlTrayGrid && g_eqXamlColumn >= 0) {
+            try {
+                auto grid = g_eqXamlTrayGrid;
+                const int insertedColumn = g_eqXamlColumn;
+                for (uint32_t i = 0; i < grid.Children().Size(); ++i) {
+                    auto child = grid.Children().GetAt(i).try_as<FrameworkElement>();
+                    if (!child || child == g_eqXamlButton)
+                        continue;
+                    const int column = Grid::GetColumn(child);
+                    if (column > insertedColumn)
+                        Grid::SetColumn(child, column - 1);
+                }
+                if (insertedColumn < static_cast<int>(grid.ColumnDefinitions().Size()))
+                    grid.ColumnDefinitions().RemoveAt(static_cast<uint32_t>(insertedColumn));
+            } catch (...) {
+            }
+        }
     } catch (...) {
     }
 
     EqResetXamlStateOnly();
-    EqClosePopup();
+
+    // We are already executing on the XAML/taskbar owner thread here. On
+    // Windows 11 the Player popup is created from that same thread, so destroy
+    // it directly. EqClosePopup() may SendMessage back to the overlay thread;
+    // during overlay shutdown that would form a synchronous A->B->A deadlock.
+    HWND popup = g_eqPopupHwnd;
+    if (popup && IsWindow(popup))
+        DestroyEqPopup();
 }
 
-static void EqSetupButtonCommon(Button const& button, winrt::event_token* tokenOut) {
+static void EqSetupButtonCommon(
+    Button const& button,
+    winrt::event_token* clickTokenOut,
+    winrt::event_token* pointerTokenOut,
+    winrt::event_token* wheelTokenOut) {
     button.Name(kEqXamlButtonName);
     button.Width(EQ_BUTTON_WIDTH);
     button.Height(EQ_BUTTON_HEIGHT);
@@ -8850,21 +21442,28 @@ static void EqSetupButtonCommon(Button const& button, winrt::event_token* tokenO
     icon.FontSize(18.0);
     icon.HorizontalAlignment(HorizontalAlignment::Center);
     icon.VerticalAlignment(VerticalAlignment::Center);
+    bool iconFontReady = false;
     try {
         icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe Fluent Icons"));
+        iconFontReady = true;
     } catch (...) {
         try {
             icon.FontFamily(winrt::Windows::UI::Xaml::Media::FontFamily(L"Segoe MDL2 Assets"));
+            iconFontReady = true;
         } catch (...) {
+            // Last-resort fallback: use a normal Unicode music note instead of
+            // leaving the tray button with a missing/empty icon.
         }
     }
+    if (!iconFontReady)
+        icon.Glyph(L"♪");
     const BYTE iconChannel = IsDarkThemeEnabled() ? 255 : 32;
     icon.Foreground(winrt::Windows::UI::Xaml::Media::SolidColorBrush(
         winrt::Windows::UI::Color{255, iconChannel, iconChannel, iconChannel}));
     button.Content(icon);
 
     ToolTip tooltip;
-    tooltip.Content(winrt::box_value(winrt::hstring{L"Equalizer"}));
+    tooltip.Content(winrt::box_value(winrt::hstring{L"Player"}));
     try {
         winrt::Windows::UI::Xaml::Controls::ToolTipService::SetToolTip(button, tooltip);
     } catch (...) {
@@ -8873,31 +21472,122 @@ static void EqSetupButtonCommon(Button const& button, winrt::event_token* tokenO
     auto clickToken = button.Click([button](
         winrt::Windows::Foundation::IInspectable const&,
         winrt::Windows::UI::Xaml::RoutedEventArgs const&) {
-        EqShowPopupForXamlButton(button);
+        EqDispatchTrayGesture(EQ_TRAY_GESTURE_LEFT, g_eqTaskbarHwnd);
     });
 
-    if (tokenOut)
-        *tokenOut = clickToken;
+    auto pointerToken = button.PointerPressed([button](
+        winrt::Windows::Foundation::IInspectable const&,
+        winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const& args) {
+        const auto point = args.GetCurrentPoint(button);
+        const auto properties = point.Properties();
+        int gesture = -1;
+        if (properties.IsRightButtonPressed())
+            gesture = EQ_TRAY_GESTURE_RIGHT;
+        else if (properties.IsMiddleButtonPressed())
+            gesture = EQ_TRAY_GESTURE_MIDDLE;
+        if (gesture >= 0) {
+            EqDispatchTrayGesture(gesture, g_eqTaskbarHwnd);
+            args.Handled(true);
+        }
+    });
+
+    auto wheelToken = button.PointerWheelChanged([button](
+        winrt::Windows::Foundation::IInspectable const&,
+        winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const& args) {
+        const auto point = args.GetCurrentPoint(button);
+        const int delta = point.Properties().MouseWheelDelta();
+        if (delta != 0) {
+            EqDispatchTrayWheelDelta(delta, g_eqTaskbarHwnd);
+            args.Handled(true);
+        }
+    });
+
+    if (clickTokenOut)
+        *clickTokenOut = clickToken;
+    if (pointerTokenOut)
+        *pointerTokenOut = pointerToken;
+    if (wheelTokenOut)
+        *wheelTokenOut = wheelToken;
 }
 
-static bool EqInsertIntoGrid(Grid const& trayGrid, Button const& button) {
+static const wchar_t* EqTrayButtonPositionAnchorName(int position) {
+    switch (position) {
+    case EQ_TRAY_BUTTON_POSITION_TRAY_LEFT:
+    case EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SHOW_HIDDEN_ICONS:
+        return L"NotifyIconStack";
+    case EQ_TRAY_BUTTON_POSITION_TRAY_RIGHT:
+    case EQ_TRAY_BUTTON_POSITION_LEFT_OF_SHOW_DESKTOP:
+        return L"ShowDesktopStack";
+    case EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SOUND_OUTPUT:
+    case EQ_TRAY_BUTTON_POSITION_LEFT_OF_SOUND_OUTPUT:
+        return L"ControlCenterButton";
+    case EQ_TRAY_BUTTON_POSITION_RIGHT_OF_LANGUAGE:
+    case EQ_TRAY_BUTTON_POSITION_LEFT_OF_LANGUAGE:
+    default:
+        return L"NonActivatableStack";
+    }
+}
+
+static bool EqTrayButtonPositionInsertAfter(int position) {
+    switch (position) {
+    case EQ_TRAY_BUTTON_POSITION_TRAY_RIGHT:
+    case EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SOUND_OUTPUT:
+    case EQ_TRAY_BUTTON_POSITION_RIGHT_OF_LANGUAGE:
+    case EQ_TRAY_BUTTON_POSITION_RIGHT_OF_SHOW_HIDDEN_ICONS:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static FrameworkElement EqFindDirectChildByName(
+    FrameworkElement const& parent, const wchar_t* name) {
+    if (!parent || !name)
+        return nullptr;
+    try {
+        const auto count =
+            winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChildrenCount(parent);
+        for (int i = 0; i < count; ++i) {
+            auto child = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetChild(parent, i)
+                .try_as<FrameworkElement>();
+            if (child && child.Name() == name)
+                return child;
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
+static bool EqInsertIntoGrid(
+    Grid const& trayGrid, Button const& button, int position) {
     if (!trayGrid || !button)
         return false;
 
-    int insertCol = -1;
-    if (auto languageStack = EqFindChildByName(trayGrid, L"NonActivatableStack")) {
-        insertCol = Grid::GetColumn(languageStack);
-    } else if (auto notifyStack = EqFindChildByName(trayGrid, L"NotifyIconStack")) {
-        insertCol = Grid::GetColumn(notifyStack) + 1;
+    const int columnCount = static_cast<int>(trayGrid.ColumnDefinitions().Size());
+    const wchar_t* anchorName = EqTrayButtonPositionAnchorName(position);
+    auto anchor = EqFindDirectChildByName(trayGrid, anchorName);
+    bool insertAfter = EqTrayButtonPositionInsertAfter(position);
+
+    // Keep the old default placement if a particular anchor is unavailable on
+    // this Windows 11 build. Different taskbar builds do not expose identical
+    // child sets or names.
+    if (!anchor) {
+        anchor = EqFindDirectChildByName(trayGrid, L"NonActivatableStack");
+        insertAfter = false;
+        if (!anchor) {
+            anchor = EqFindDirectChildByName(trayGrid, L"NotifyIconStack");
+            insertAfter = true;
+        }
     }
 
-    const int columnCount = static_cast<int>(trayGrid.ColumnDefinitions().Size());
-    if (insertCol < 0 || insertCol > columnCount)
-        insertCol = columnCount;
+    int insertCol = anchor ? Grid::GetColumn(anchor) : columnCount;
+    if (anchor && insertAfter)
+        ++insertCol;
+    insertCol = std::clamp(insertCol, 0, columnCount);
 
     for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
         auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-        if (!child)
+        if (!child || child == button)
             continue;
         const int column = Grid::GetColumn(child);
         if (column >= insertCol)
@@ -8961,48 +21651,65 @@ static bool EqInsertIntoStackPanel(
     FrameworkElement const& trayFrame,
     StackPanel const& stack,
     Button const& button,
-    FrameworkElement const& notifyIconStack,
-    FrameworkElement const& languageStack,
+    int position,
     FrameworkElement* insertionParentOut) {
     if (!trayFrame || !stack || !button)
         return false;
 
-    // The desired location is between the notification/hidden-icon group and
-    // the language/input group. On the new StackPanel-based tray, those groups
-    // are often siblings under an inner container such as SystemTray.Stack.
-    // Insert into that shared parent, immediately before the language group.
-    auto commonParent = EqFindCommonPanelParent(
-        trayFrame, notifyIconStack, languageStack);
+    const wchar_t* anchorName = EqTrayButtonPositionAnchorName(position);
+    auto anchor = EqFindChildByName(trayFrame, anchorName);
+    bool insertAfter = EqTrayButtonPositionInsertAfter(position);
 
-    Panel targetPanel = commonParent ? commonParent.try_as<Panel>() : nullptr;
-    if (!targetPanel)
+    // Fall back to the previous position (immediately before the language/input
+    // stack), then to the notification-icon stack if an anchor is absent.
+    if (!anchor) {
+        anchor = EqFindChildByName(trayFrame, L"NonActivatableStack");
+        insertAfter = false;
+    }
+    if (!anchor) {
+        anchor = EqFindChildByName(trayFrame, L"NotifyIconStack");
+        insertAfter = true;
+    }
+
+    FrameworkElement insertionAnchor = nullptr;
+    Panel targetPanel = nullptr;
+    if (anchor) {
+        // Insert beside the selected anchor in its actual parent panel. This
+        // works for both direct children of SystemTrayFrameGrid and builds where
+        // the named stacks are wrapped by another panel.
+        targetPanel = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(anchor)
+            .try_as<Panel>();
+        if (targetPanel) {
+            insertionAnchor = anchor;
+        } else {
+            insertionAnchor = EqFindDirectChildContaining(trayFrame, anchor);
+            if (insertionAnchor) {
+                targetPanel = winrt::Windows::UI::Xaml::Media::VisualTreeHelper::GetParent(
+                    insertionAnchor).try_as<Panel>();
+            }
+        }
+    }
+
+    if (!targetPanel) {
         targetPanel = stack;
+        insertionAnchor = nullptr;
+        insertAfter = false;
+    }
 
     uint32_t index = targetPanel.Children().Size();
-
-    FrameworkElement anchor = nullptr;
-    if (languageStack) {
-        anchor = EqFindDirectChildContaining(targetPanel, languageStack);
-    }
-    if (!anchor && notifyIconStack) {
-        anchor = EqFindDirectChildContaining(targetPanel, notifyIconStack);
-    }
-
-    if (anchor) {
+    if (insertionAnchor) {
         for (uint32_t i = 0; i < targetPanel.Children().Size(); ++i) {
             auto child = targetPanel.Children().GetAt(i).try_as<FrameworkElement>();
-            if (child == anchor) {
-                index = i;
+            if (child == insertionAnchor) {
+                index = i + (insertAfter ? 1u : 0u);
                 break;
             }
         }
     }
 
     targetPanel.Children().InsertAt(index, button);
-
     if (insertionParentOut)
         *insertionParentOut = targetPanel;
-
     return true;
 }
 
@@ -9039,19 +21746,20 @@ static void EqInjectXamlButtonOnUiThread(HWND taskbar, XamlRoot xamlRoot) {
         }
 
         Button button;
-        EqSetupButtonCommon(button, &g_eqXamlClickToken);
+        EqSetupButtonCommon(
+            button, &g_eqXamlClickToken,
+            &g_eqXamlPointerToken, &g_eqXamlWheelToken);
 
+        const int selectedPosition = GetSettingsSnapshot().trayButtonPosition;
         bool inserted = false;
         FrameworkElement insertionParent = nullptr;
         if (trayGrid) {
-            inserted = EqInsertIntoGrid(trayGrid, button);
+            inserted = EqInsertIntoGrid(trayGrid, button, selectedPosition);
             if (inserted)
                 insertionParent = trayFrame;
         } else if (trayStack) {
-            auto notifyIconStack = EqFindChildByName(root, L"NotifyIconStack");
-            auto languageStack = EqFindChildByName(root, L"NonActivatableStack");
             inserted = EqInsertIntoStackPanel(
-                trayFrame, trayStack, button, notifyIconStack, languageStack,
+                trayFrame, trayStack, button, selectedPosition,
                 &insertionParent);
         } else {
             trayPanel.Children().Append(button);
@@ -9073,6 +21781,9 @@ static void EqInjectXamlButtonOnUiThread(HWND taskbar, XamlRoot xamlRoot) {
         g_eqXamlTrayGrid = trayGrid;
         g_eqXamlButton = button;
         g_eqXamlClickTokenValid = true;
+        g_eqXamlPointerTokenValid = true;
+        g_eqXamlWheelTokenValid = true;
+        g_eqXamlAppliedPosition.store(selectedPosition, std::memory_order_release);
         g_eqXamlInjectionReady.store(true, std::memory_order_release);
 
         Wh_Log(L"EqInjectXamlButton: injected into %s#%s",
@@ -9107,12 +21818,32 @@ static void EqHideLegacyNativeButtons(HWND taskbar) {
 }
 
 static void EqEnsureXamlButton() {
-    if (!g_eqTaskbarSymbolsHooked)
+    DebugPerfScope debugScope(DEBUG_PERF_TRAY_MAINTENANCE);
+    if (!g_eqIsWindows11 || !g_eqTaskbarSymbolsHooked)
         return;
 
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    const bool showTrayButton =
+        GetSettingsSnapshot().showMediaEqTrayButton;
+
+    HWND taskbar = FindCurrentProcessTaskbarWnd();
     if (!taskbar || !IsWindow(taskbar))
         return;
+
+    if (!showTrayButton) {
+        if (!g_eqXamlInjectionReady.load(std::memory_order_acquire))
+            return;
+
+        struct Payload { HWND taskbar; } payload{taskbar};
+        if (!EqRunFromWindowThread(taskbar, [](void* raw) {
+            auto* p = static_cast<Payload*>(raw);
+            if (!p || !p->taskbar)
+                return;
+            EqRemoveXamlButtonOnUiThread();
+        }, &payload)) {
+            Wh_Log(L"EqEnsureXamlButton: failed to remove disabled tray button");
+        }
+        return;
+    }
 
     static ULONGLONG lastDeepCheckMs = 0;
     const ULONGLONG nowMs = GetTickCount64();
@@ -9120,8 +21851,10 @@ static void EqEnsureXamlButton() {
     // TrayUI::StartTaskbar is the primary immediate recovery path. The deep
     // reconciliation below is only a periodic safety net for XAML changes that
     // are not accompanied by that notification.
+    const int desiredPosition = GetSettingsSnapshot().trayButtonPosition;
     if (g_eqXamlInjectionReady.load(std::memory_order_acquire) &&
         g_eqTaskbarHwnd == taskbar &&
+        g_eqXamlAppliedPosition.load(std::memory_order_acquire) == desiredPosition &&
         nowMs - lastDeepCheckMs < 30000) {
         return;
     }
@@ -9130,7 +21863,7 @@ static void EqEnsureXamlButton() {
 
     EqHideLegacyNativeButtons(taskbar);
 
-    struct Payload { HWND taskbar; } payload{taskbar};
+    struct Payload { HWND taskbar; int desiredPosition; } payload{taskbar, desiredPosition};
     if (!EqRunFromWindowThread(taskbar, [](void* raw) {
         auto* p = static_cast<Payload*>(raw);
         if (!p || !p->taskbar)
@@ -9152,6 +21885,7 @@ static void EqEnsureXamlButton() {
             }
 
             if (g_eqTaskbarHwnd == p->taskbar &&
+                g_eqXamlAppliedPosition.load(std::memory_order_acquire) == p->desiredPosition &&
                 EqIsCurrentXamlButtonAlive(rootElement)) {
                 g_eqXamlInjectionReady.store(true, std::memory_order_release);
                 return;
@@ -9177,24 +21911,35 @@ static void WINAPI EqTrayUIStartTaskbarHook(void* pThis) {
     if (g_eqTrayUIStartTaskbarOriginal)
         g_eqTrayUIStartTaskbarOriginal(pThis);
 
-    if (!g_running.load(std::memory_order_acquire))
+    // A taskbar can be rebuilt while OverlayThreadProc is still creating the
+    // desktop windows. Defer XAML injection until shell services are ready;
+    // the startup path injects the button after initialization completes.
+    if (!g_eqIsWindows11 ||
+        !g_running.load(std::memory_order_acquire) ||
+        !g_shellServicesStarted.load(std::memory_order_acquire))
         return;
 
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND taskbar = FindCurrentProcessTaskbarWnd();
     if (!taskbar)
         return;
 
     // StartTaskbar is called when Windows rebuilds the taskbar/tray XAML.
-    // Immediately invalidate our cached object graph and reinject on the taskbar
-    // UI thread instead of waiting for the 1-second polling fallback.
+    // Immediately invalidate our cached object graph and either remove or
+    // reinject our button on the taskbar UI thread instead of waiting for the
+    // 1-second polling fallback.
     EqHideLegacyNativeButtons(taskbar);
     g_eqTaskbarHwnd = taskbar;
-    EqRunFromWindowThread(taskbar, [](void*) {
+    const bool showTrayButton =
+        GetSettingsSnapshot().showMediaEqTrayButton;
+    EqRunFromWindowThread(taskbar, [](void* raw) {
+        const bool show = raw != nullptr;
         EqRemoveXamlButtonOnUiThread();
+        if (!show)
+            return;
         auto root = EqGetTaskbarXamlRoot(g_eqTaskbarHwnd);
         if (root)
             EqInjectXamlButtonOnUiThread(g_eqTaskbarHwnd, root);
-    }, nullptr);
+    }, showTrayButton ? reinterpret_cast<void*>(1) : nullptr);
 }
 
 static bool EqHookTaskbarSymbols() {
@@ -9242,6 +21987,24 @@ static bool EqHookTaskbarSymbols() {
 }
 
 static void EqCleanupIntegration() {
+    if (!g_eqIsWindows11) {
+        // On Windows 10 the flyout is owned by this overlay/native-tray thread.
+        EqDestroyTrayVolumeFlyoutOnOwnerThread();
+        HWND trayMessageWindow = g_eqNativeTrayMessageHwnd;
+        if (trayMessageWindow && IsWindow(trayMessageWindow)) {
+            EqRunFromWindowThread(trayMessageWindow, [](void*) {
+                EqRemoveNativeTrayIcon();
+                EqDestroyNativeTrayMessageWindowOnItsThread();
+            }, nullptr);
+        } else {
+            g_eqNativeTrayRegistered = false;
+            g_eqNativeTrayMessageHwnd = nullptr;
+        }
+
+        EqClosePopup();
+        return;
+    }
+
     HWND taskbar = g_eqTaskbarHwnd;
     if (taskbar && IsWindow(taskbar)) {
         EqRunFromWindowThread(taskbar, [](void*) {
@@ -9259,64 +22022,955 @@ static void EqCleanupIntegration() {
     }
 }
 
+static HMODULE GetCurrentModModuleHandle();
+static UINT GetDisplayRefreshRateHz();
+static double GetEffectiveRenderFps(const VisualizerSettings& settings);
+static double GetRenderSchedulerPeriodMs(const VisualizerSettings& settings);
+
+static constexpr wchar_t kDebugOverlayClassName[] = L"WindhawkVisualizerDebugOverlay";
+static constexpr UINT kDebugTimerId = 0xD061;
+static constexpr UINT kDebugTimerMs = 100;
+
+static double DebugQpcSeconds(ULONGLONG ticks) {
+    LARGE_INTEGER freq{};
+    if (!QueryPerformanceFrequency(&freq) || freq.QuadPart <= 0)
+        return 0.0;
+    return static_cast<double>(ticks) /
+        static_cast<double>(freq.QuadPart);
+}
+
+static void DebugFormatLine(std::vector<std::wstring>& lines,
+                            const wchar_t* label, const std::wstring& value) {
+    wchar_t buffer[640]{};
+    _snwprintf_s(buffer, _countof(buffer), _TRUNCATE,
+                 L"%-22ls %ls", label, value.c_str());
+    lines.emplace_back(buffer);
+}
+
+static void DebugFormatLine(std::vector<std::wstring>& lines,
+                            const wchar_t* label, const wchar_t* value) {
+    DebugFormatLine(lines, label, std::wstring(value ? value : L"-"));
+}
+
+static std::wstring DebugFormatFloat(float value, int decimals = 2,
+                                     const wchar_t* suffix = L"") {
+    wchar_t buffer[128]{};
+    _snwprintf_s(buffer, _countof(buffer), _TRUNCATE,
+                 L"%.*f%ls", decimals, static_cast<double>(value), suffix);
+    return buffer;
+}
+
+static std::wstring DebugFormatInt(int value) {
+    wchar_t buffer[64]{};
+    _snwprintf_s(buffer, _countof(buffer), _TRUNCATE, L"%d", value);
+    return buffer;
+}
+
+static std::wstring DebugEllipsize(const std::wstring& value, size_t maxLen = 54) {
+    if (value.size() <= maxLen)
+        return value;
+    if (maxLen < 4)
+        return value.substr(0, maxLen);
+    return value.substr(0, maxLen - 3) + L"...";
+}
+
+
+static void DebugPushFpsSample(float visualizerFps, float playerFps,
+                               float schedulerFps, float fftHz) {
+    const size_t index = static_cast<size_t>(g_debugFpsHistoryWrite);
+    g_debugVisualizerFpsHistory[index] = visualizerFps;
+    g_debugPlayerFpsHistory[index] = playerFps;
+    g_debugSchedulerFpsHistory[index] = schedulerFps;
+    g_debugAudioFftHistory[index] = fftHz;
+    g_debugFpsHistoryWrite = (g_debugFpsHistoryWrite + 1) % DEBUG_FPS_HISTORY_SIZE;
+    g_debugFpsHistoryCount = std::min(DEBUG_FPS_HISTORY_SIZE, g_debugFpsHistoryCount + 1);
+}
+
+static void UpdateDebugPerformanceSnapshot() {
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    const ULONGLONG nowMs = GetTickCount64();
+    if (g_debugLastFpsSampleMs == 0)
+        g_debugLastFpsSampleMs = nowMs;
+
+    const ULONGLONG elapsedMs = nowMs >= g_debugLastFpsSampleMs
+        ? nowMs - g_debugLastFpsSampleMs : 0;
+    if (elapsedMs >= kDebugTimerMs) {
+        const ULONGLONG visualizerFrames =
+            g_debugVisualizerFrames.exchange(0, std::memory_order_acq_rel);
+        const ULONGLONG playerFrames =
+            g_debugPlayerFrames.exchange(0, std::memory_order_acq_rel);
+        const ULONGLONG fftFrames =
+            g_debugAudioFftFrames.exchange(0, std::memory_order_acq_rel);
+        const ULONGLONG overlayTicks =
+            g_debugOverlayTicks.exchange(0, std::memory_order_acq_rel);
+        const float scale = elapsedMs > 0
+            ? 1000.0f / static_cast<float>(elapsedMs) : 0.0f;
+        const bool vizActive =
+            settings.visualizerEnabled && g_desktopVisualizerVisible;
+        const float vizFps = vizActive
+            ? std::clamp(static_cast<float>(visualizerFrames) * scale, 0.0f, 1000.0f)
+            : 0.0f;
+        const float playerFps = std::clamp(
+            static_cast<float>(playerFrames) * scale, 0.0f, 1000.0f);
+        g_debugVisualizerFps.store(vizFps, std::memory_order_release);
+        g_debugPlayerFps.store(playerFps, std::memory_order_release);
+        const float fftHzNow = std::clamp(
+            static_cast<float>(fftFrames) * scale, 0.0f, 1000.0f);
+        const float schedulerHzNow = std::clamp(
+            static_cast<float>(overlayTicks) * scale, 0.0f, 1000.0f);
+        g_debugAudioFftHz.store(fftHzNow, std::memory_order_release);
+        g_debugOverlayTickHz.store(schedulerHzNow, std::memory_order_release);
+        DebugPushFpsSample(vizFps, playerFps, schedulerHzNow, fftHzNow);
+        g_debugLastFpsSampleMs = nowMs;
+    }
+
+    LARGE_INTEGER freq{};
+    if (!QueryPerformanceFrequency(&freq) || freq.QuadPart <= 0)
+        return;
+
+    const ULONGLONG schedulerIntervalTicks =
+        g_debugSchedulerIntervalQpcTotal.exchange(0, std::memory_order_acq_rel);
+    const ULONGLONG schedulerIntervalSamples =
+        g_debugSchedulerIntervalSamples.exchange(0, std::memory_order_acq_rel);
+    const ULONGLONG schedulerMisses =
+        g_debugSchedulerMisses.exchange(0, std::memory_order_acq_rel);
+    const ULONGLONG schedulerMissSamples =
+        g_debugSchedulerMissSamples.exchange(0, std::memory_order_acq_rel);
+
+    if (schedulerIntervalSamples > 0) {
+        const double avgIntervalMs =
+            static_cast<double>(schedulerIntervalTicks) * 1000.0 /
+            (static_cast<double>(freq.QuadPart) *
+             static_cast<double>(schedulerIntervalSamples));
+        g_debugSchedulerIntervalMs.store(
+            static_cast<float>(std::clamp(avgIntervalMs, 0.0, 60000.0)),
+            std::memory_order_release);
+    }
+    if (schedulerMissSamples > 0) {
+        const double missPct =
+            static_cast<double>(schedulerMisses) * 100.0 /
+            static_cast<double>(schedulerMissSamples);
+        g_debugSchedulerDeadlineMissPct.store(
+            static_cast<float>(std::clamp(missPct, 0.0, 100.0)),
+            std::memory_order_release);
+    }
+    LARGE_INTEGER qpc{};
+    QueryPerformanceCounter(&qpc);
+    const ULONGLONG qpcNow = qpc.QuadPart > 0
+        ? static_cast<ULONGLONG>(qpc.QuadPart) : 0;
+    if (g_debugLastCpuSampleMs == 0 || g_debugLastCpuQpc == 0) {
+        g_debugLastCpuSampleMs = nowMs;
+        g_debugLastCpuQpc = qpcNow;
+        for (auto& counter : g_debugPerf) {
+            counter.qpcTicks.exchange(0, std::memory_order_acq_rel);
+            counter.calls.exchange(0, std::memory_order_acq_rel);
+            counter.lastQpcTicks.store(0, std::memory_order_release);
+            counter.maxQpcTicks.store(0, std::memory_order_release);
+        }
+        return;
+    }
+
+    const ULONGLONG wallMs = nowMs >= g_debugLastCpuSampleMs
+        ? nowMs - g_debugLastCpuSampleMs : 0;
+    const ULONGLONG wallQpc = qpcNow >= g_debugLastCpuQpc
+        ? qpcNow - g_debugLastCpuQpc : 0;
+    if (wallMs < 200 || wallQpc == 0)
+        return;
+
+    const double wallSeconds =
+        static_cast<double>(wallQpc) / static_cast<double>(freq.QuadPart);
+
+    for (int i = 0; i < DEBUG_PERF_COUNT; ++i) {
+        auto& counter = g_debugPerf[static_cast<size_t>(i)];
+        const ULONGLONG ticks = counter.qpcTicks.exchange(0, std::memory_order_acq_rel);
+        const ULONGLONG calls = counter.calls.exchange(0, std::memory_order_acq_rel);
+        const ULONGLONG lastTicks = counter.lastQpcTicks.load(std::memory_order_acquire);
+        const ULONGLONG maxTicks = counter.maxQpcTicks.exchange(0, std::memory_order_acq_rel);
+
+        const double totalMs = static_cast<double>(ticks) * 1000.0 /
+                               static_cast<double>(freq.QuadPart);
+        const double avgMs = calls > 0 ? totalMs / static_cast<double>(calls) : 0.0;
+        const double callsPerSec = wallSeconds > 0.0
+            ? static_cast<double>(calls) / wallSeconds : 0.0;
+        g_debugActionAvgMs[static_cast<size_t>(i)].store(
+            static_cast<float>(std::clamp(avgMs, 0.0, 60000.0)), std::memory_order_release);
+        g_debugActionLastMs[static_cast<size_t>(i)].store(
+            static_cast<float>(static_cast<double>(lastTicks) * 1000.0 /
+                               static_cast<double>(freq.QuadPart)), std::memory_order_release);
+        g_debugActionMaxMs[static_cast<size_t>(i)].store(
+            static_cast<float>(static_cast<double>(maxTicks) * 1000.0 /
+                               static_cast<double>(freq.QuadPart)), std::memory_order_release);
+        g_debugActionCallsPerSec[static_cast<size_t>(i)].store(
+            static_cast<float>(std::clamp(callsPerSec, 0.0, 100000.0)), std::memory_order_release);
+    }
+
+    auto sampleCpu = [&](DebugPerfAction id) -> float {
+        // CPU values are supplementary. Detailed per-action milliseconds above
+        // are the primary performance data because actions can be nested.
+        const size_t index = static_cast<size_t>(id);
+        const float avgMs = g_debugActionAvgMs[index].load(std::memory_order_acquire);
+        const float callsPerSec = g_debugActionCallsPerSec[index].load(std::memory_order_acquire);
+        return static_cast<float>(std::clamp(
+            wallSeconds > 0.0 ? (static_cast<double>(avgMs) * callsPerSec) /
+                                   (wallSeconds > 0.0 ? 1000.0 : 1.0) * 100.0
+                              : 0.0,
+            0.0, 1000.0));
+    };
+
+    // Keep these legacy summary values available, but make it clear in the UI
+    // that the detailed timing table is the authoritative diagnostic view.
+    g_debugVisualizerCpu.store(sampleCpu(DEBUG_PERF_VISUALIZER_RENDER),
+                               std::memory_order_release);
+    g_debugPlayerCpu.store(sampleCpu(DEBUG_PERF_PLAYER_RENDER),
+                            std::memory_order_release);
+    g_debugAlbumCpu.store(sampleCpu(DEBUG_PERF_ALBUM_RENDER),
+                           std::memory_order_release);
+
+    g_debugLastCpuSampleMs = nowMs;
+    g_debugLastCpuQpc = qpcNow;
+}
+
+static void DebugDrawFpsGraph(Gdiplus::Graphics& graphics,
+                              const Gdiplus::RectF& rect,
+                              const VisualizerSettings& settings) {
+    Gdiplus::SolidBrush panelBrush(Gdiplus::Color(190, 16, 17, 20));
+    graphics.FillRectangle(&panelBrush, rect);
+    Gdiplus::Pen gridPen(Gdiplus::Color(70, 125, 130, 140), 1.0f);
+    const int rows = 4;
+    for (int r = 0; r <= rows; ++r) {
+        const float y = rect.Y + rect.Height * r / static_cast<float>(rows);
+        graphics.DrawLine(&gridPen, rect.X, y, rect.X + rect.Width, y);
+    }
+
+    const bool vizActive =
+        settings.visualizerEnabled && g_desktopVisualizerVisible;
+    const double targetHz = GetEffectiveRenderFps(settings);
+    const double graphMax = std::max(
+        60.0,
+        std::max(targetHz,
+            std::max<double>(
+                g_debugVisualizerFps.load(std::memory_order_acquire),
+                g_debugPlayerFps.load(std::memory_order_acquire))));
+
+    auto drawSeries = [&](const std::array<float, DEBUG_FPS_HISTORY_SIZE>& history,
+                          const Gdiplus::Color& color, float thickness) {
+        if (g_debugFpsHistoryCount <= 0)
+            return;
+        Gdiplus::Pen pen(color, thickness);
+        Gdiplus::GraphicsPath path;
+        bool havePrevious = false;
+        Gdiplus::PointF previous{};
+        for (int sample = 0; sample < g_debugFpsHistoryCount; ++sample) {
+            int index = g_debugFpsHistoryWrite - g_debugFpsHistoryCount + sample;
+            while (index < 0)
+                index += DEBUG_FPS_HISTORY_SIZE;
+            index %= DEBUG_FPS_HISTORY_SIZE;
+            const float fps = history[static_cast<size_t>(index)];
+            const float x = g_debugFpsHistoryCount > 1
+                ? rect.X + rect.Width * sample /
+                    static_cast<float>(g_debugFpsHistoryCount - 1)
+                : rect.X + rect.Width;
+            const float y = rect.Y + rect.Height *
+                (1.0f - std::clamp(static_cast<float>(fps / graphMax), 0.0f, 1.0f));
+            const Gdiplus::PointF point(x, y);
+            if (!havePrevious) {
+                path.StartFigure();
+                previous = point;
+                havePrevious = true;
+            } else {
+                path.AddLine(previous, point);
+                previous = point;
+            }
+        }
+        if (havePrevious)
+            graphics.DrawPath(&pen, &path);
+    };
+
+    if (targetHz > 0.0 && vizActive) {
+        const float y = rect.Y + rect.Height *
+            (1.0f - std::clamp(static_cast<float>(targetHz / graphMax), 0.0f, 1.0f));
+        Gdiplus::Pen targetPen(Gdiplus::Color(120, 255, 220, 120), 1.0f);
+        targetPen.SetDashStyle(Gdiplus::DashStyleDash);
+        graphics.DrawLine(&targetPen, rect.X, y, rect.X + rect.Width, y);
+    }
+
+    if (vizActive)
+        drawSeries(g_debugVisualizerFpsHistory,
+                   Gdiplus::Color(235, 235, 245, 250), 2.0f);
+    drawSeries(g_debugPlayerFpsHistory,
+               Gdiplus::Color(220, 150, 180, 255), 1.4f);
+    drawSeries(g_debugSchedulerFpsHistory,
+               Gdiplus::Color(150, 130, 200, 255), 1.0f);
+    drawSeries(g_debugAudioFftHistory,
+               Gdiplus::Color(120, 210, 150, 210), 1.0f);
+
+    // Scheduler and FFT are also shown independently so a render bottleneck
+    // can be compared directly against scheduler cadence and new audio data.
+    // Their series are historical just like VIZ/PLAYER; the dashed markers
+    // below make the current values easier to read at a glance.
+    // frame-series, so they still provide an immediate explanation when a
+    // render target is missed without making the graph visually overloaded.
+    const float schedulerHz = g_debugOverlayTickHz.load(std::memory_order_acquire);
+    const float fftHz = g_debugAudioFftHz.load(std::memory_order_acquire);
+    auto drawCurrentMarker = [&](float hz, const Gdiplus::Color& color,
+                                 Gdiplus::DashStyle dash) {
+        if (hz <= 0.0f)
+            return;
+        const float y = rect.Y + rect.Height *
+            (1.0f - std::clamp(static_cast<float>(hz / graphMax), 0.0f, 1.0f));
+        Gdiplus::Pen pen(color, 1.0f);
+        pen.SetDashStyle(dash);
+        graphics.DrawLine(&pen, rect.X, y, rect.X + rect.Width, y);
+    };
+    drawCurrentMarker(schedulerHz, Gdiplus::Color(150, 130, 200, 255), Gdiplus::DashStyleDot);
+    drawCurrentMarker(fftHz, Gdiplus::Color(120, 210, 150, 230), Gdiplus::DashStyleDashDot);
+
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(230, 235, 235, 240));
+    Gdiplus::FontFamily family(L"Segoe UI");
+    Gdiplus::Font font(&family, 9.0f, Gdiplus::FontStyleRegular,
+                       Gdiplus::UnitPoint);
+    Gdiplus::StringFormat fmt;
+    fmt.SetAlignment(Gdiplus::StringAlignmentNear);
+    fmt.SetLineAlignment(Gdiplus::StringAlignmentNear);
+    std::wstring label = L"FPS graph / last 12 s   target ";
+    label += DebugFormatFloat(static_cast<float>(targetHz), 1, L" Hz");
+    label += L"   VIZ ";
+    label += vizActive
+        ? DebugFormatFloat(g_debugVisualizerFps.load(std::memory_order_acquire), 1, L" Hz")
+        : L"OFF";
+    label += L"   PLAYER ";
+    label += DebugFormatFloat(g_debugPlayerFps.load(std::memory_order_acquire), 1, L" Hz");
+    label += L"   SCHED ";
+    label += DebugFormatFloat(schedulerHz, 1, L" Hz");
+    label += L"   FFT ";
+    label += DebugFormatFloat(fftHz, 1, L" Hz");
+    graphics.DrawString(label.c_str(), -1, &font,
+                        Gdiplus::RectF(rect.X + 8.0f, rect.Y + 5.0f,
+                                       rect.Width - 16.0f, 18.0f),
+                        &fmt, &textBrush);
+}
+
+static void DebugDrawTextBlock(Gdiplus::Graphics& graphics,
+                               const std::vector<std::wstring>& lines,
+                               float x, float y, float width,
+                               Gdiplus::Font& font,
+                               Gdiplus::Brush& brush,
+                               float lineHeight = 13.0f) {
+    Gdiplus::StringFormat fmt;
+    fmt.SetAlignment(Gdiplus::StringAlignmentNear);
+    fmt.SetLineAlignment(Gdiplus::StringAlignmentNear);
+    float cy = y;
+    for (const auto& line : lines) {
+        graphics.DrawString(line.c_str(), -1, &font,
+                            Gdiplus::RectF(x, cy, width, lineHeight + 2.0f),
+                            &fmt, &brush);
+        cy += lineHeight;
+    }
+}
+
+static void RenderDebugWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd))
+        return;
+
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    const int width = rc.right - rc.left;
+    const int height = rc.bottom - rc.top;
+    if (width <= 0 || height <= 0)
+        return;
+
+    PAINTSTRUCT ps{};
+    HDC hdc = BeginPaint(hwnd, &ps);
+    if (!hdc)
+        return;
+
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
+    graphics.Clear(Gdiplus::Color(238, 15, 16, 19));
+
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    const EqMediaState media = GetEqMediaStateSnapshot();
+    const ULONGLONG nowMs = GetTickCount64();
+    LARGE_INTEGER freq{};
+    QueryPerformanceFrequency(&freq);
+
+    Gdiplus::FontFamily family(L"Segoe UI");
+    Gdiplus::Font titleFont(&family, 13.0f, Gdiplus::FontStyleBold, Gdiplus::UnitPoint);
+    Gdiplus::Font sectionFont(&family, 9.5f, Gdiplus::FontStyleBold, Gdiplus::UnitPoint);
+    Gdiplus::Font font(&family, 8.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint);
+    Gdiplus::SolidBrush titleBrush(Gdiplus::Color(255, 248, 248, 252));
+    Gdiplus::SolidBrush sectionBrush(Gdiplus::Color(255, 180, 205, 255));
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(235, 224, 228, 232));
+    Gdiplus::SolidBrush mutedBrush(Gdiplus::Color(210, 160, 165, 172));
+    Gdiplus::Pen separatorPen(Gdiplus::Color(70, 120, 125, 132), 1.0f);
+    Gdiplus::StringFormat fmt;
+    fmt.SetAlignment(Gdiplus::StringAlignmentNear);
+    fmt.SetLineAlignment(Gdiplus::StringAlignmentNear);
+
+    graphics.DrawString(L"Desktop Audio Visualizer — DEBUG", -1, &titleFont,
+                        Gdiplus::RectF(12, 8, width - 24, 22), &fmt, &titleBrush);
+
+    const int refreshHz = static_cast<int>(std::max<UINT>(1, GetDisplayRefreshRateHz()));
+    const double effectiveHz = GetEffectiveRenderFps(settings);
+    const double periodMs = GetRenderSchedulerPeriodMs(settings);
+    const HWND playerPopup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    const bool popupOpen = playerPopup && IsWindow(playerPopup) &&
+        g_eqPlayerPopupOpen.load(std::memory_order_acquire);
+    const bool audioRunning = g_audioRunning.load(std::memory_order_acquire);
+    const bool fullscreen = g_fullscreenThrottleActive.load(std::memory_order_acquire);
+    const bool idle = g_overlayIdle.load(std::memory_order_acquire);
+    const bool timerReady = g_hOverlayRenderTimer != nullptr;
+    auto boolText = [](bool value) -> const wchar_t* { return value ? L"ON" : L"OFF"; };
+    auto hexDword = [](DWORD value) -> std::wstring {
+        wchar_t b[16]{};
+        _snwprintf_s(b, _countof(b), _TRUNCATE, L"#%06X", static_cast<unsigned>(value & 0xFFFFFFu));
+        return b;
+    };
+    auto placementName = [](int value) -> const wchar_t* {
+        switch (value) {
+        case DESKTOP_PLACEMENT_OPAQUE: return L"behind-icons opaque";
+        case DESKTOP_PLACEMENT_TRANSPARENT: return L"behind-icons transparent";
+        case DESKTOP_PLACEMENT_ABOVE_ICONS: return L"above icons";
+        default: return L"unknown";
+        }
+    };
+    auto backendName = [](int value) -> const wchar_t* {
+        switch (value) {
+        case OVERLAY_RENDER_ULW: return L"ULW";
+        case OVERLAY_RENDER_OPAQUE_HOLDER: return L"opaque holder + D3D";
+        case OVERLAY_RENDER_DCOMP: return L"DirectComposition";
+        default: return L"unknown";
+        }
+    };
+    auto shapeName = [](int value) -> const wchar_t* {
+        switch (value) {
+        case 0: return L"Stereo";
+        case 1: return L"Mountain";
+        case 2: return L"Mirror";
+        case 3: return L"Wave";
+        case 4: return L"Circular";
+        case 5: return L"Dots";
+        case 6: return L"Area";
+        default: return L"unknown";
+        }
+    };
+    auto interpolationName = [](int value) -> const wchar_t* {
+        switch (value) {
+        case 0: return L"Linear";
+        case 1: return L"Step";
+        case 2: return L"Cosine";
+        case 3: return L"Catmull-Rom";
+        default: return L"unknown";
+        }
+    };
+    auto orientationName = [](int value) -> const wchar_t* {
+        switch (value) {
+        case 0: return L"Bottom up";
+        case 1: return L"Center vertical";
+        case 2: return L"Top down";
+        case 3: return L"Left right";
+        case 4: return L"Center horizontal";
+        case 5: return L"Right left";
+        default: return L"unknown";
+        }
+    };
+
+    const size_t vizTotalIndex = static_cast<size_t>(DEBUG_PERF_VISUALIZER_RENDER);
+    const size_t playerTotalIndex = static_cast<size_t>(DEBUG_PERF_PLAYER_RENDER);
+    const float vizRenderAvgMs = g_debugActionAvgMs[vizTotalIndex].load(std::memory_order_acquire);
+    const float playerRenderAvgMs = g_debugActionAvgMs[playerTotalIndex].load(std::memory_order_acquire);
+    const double frameBudgetMs = effectiveHz > 0.0 ? 1000.0 / effectiveHz : 0.0;
+    const double peakSequentialRenderMs = static_cast<double>(vizRenderAvgMs) +
+        (popupOpen ? static_cast<double>(playerRenderAvgMs) : 0.0);
+    const double peakSequentialHeadroomMs = frameBudgetMs - peakSequentialRenderMs;
+    const double actualPlayerHz = popupOpen
+        ? std::clamp(static_cast<double>(g_debugPlayerFps.load(std::memory_order_acquire)), 0.0, effectiveHz)
+        : 0.0;
+    const double playerDuty = effectiveHz > 0.0
+        ? actualPlayerHz / effectiveHz
+        : 0.0;
+    // Player is intentionally not rendered on every scheduler tick at high
+    // refresh rates. This value estimates average render work per scheduler
+    // tick from the measured Player cadence, unlike peakSequentialRenderMs.
+    const double amortizedRenderMs = static_cast<double>(vizRenderAvgMs) +
+        (popupOpen ? static_cast<double>(playerRenderAvgMs) * playerDuty : 0.0);
+    const double amortizedHeadroomMs = frameBudgetMs - amortizedRenderMs;
+
+    const float left = 12.0f;
+    const float right = static_cast<float>(width / 2 + 2);
+    const float lh = 12.8f;
+    float y = 31.0f;
+
+    graphics.DrawString(L"SYSTEM / RUNTIME", -1, &sectionFont,
+                        Gdiplus::PointF(left, y), &sectionBrush); y += 14;
+    std::vector<std::wstring> leftLines;
+    leftLines.push_back(L"mod: Desktop Audio Visualizer Plus  v1.2.0");
+    leftLines.push_back(L"process: explorer.exe  PID " + DebugFormatInt(static_cast<int>(GetCurrentProcessId())));
+    leftLines.push_back(std::wstring(L"Windows: ") + (g_eqIsWindows11 ? L"11" : L"10"));
+    leftLines.push_back(L"shell services: " + std::wstring(boolText(g_shellServicesStarted.load(std::memory_order_acquire))) +
+                        L"  debug: " + std::wstring(boolText(g_debugInstrumentationEnabled.load(std::memory_order_acquire))));
+    leftLines.push_back(L"placement: " + std::wstring(placementName(settings.desktopPlacement)) +
+                        L"  backend: " + std::wstring(backendName(g_overlayBuiltRenderMode)) +
+                        L"  VIZ path: " +
+                        std::wstring(CanUseGpuVisualizer() ? L"GPU/D2D" : L"CPU/GDI+"));
+    leftLines.push_back(L"overlay windows: " + DebugFormatInt(static_cast<int>(g_overlayWindows.size())) +
+                        L"  hosts: " + DebugFormatInt(static_cast<int>(g_overlayHosts.size())));
+    leftLines.push_back(L"monitor: " + DebugFormatInt(settings.targetMonitor) +
+                        L"  display: " + DebugFormatInt(refreshHz) + L" Hz");
+    leftLines.push_back(L"FPS setting: " + DebugFormatInt(settings.targetFps) +
+                        L"  effective target: " + DebugFormatFloat(static_cast<float>(effectiveHz), 2, L" Hz"));
+    leftLines.push_back(L"frame budget: " + DebugFormatFloat(static_cast<float>(frameBudgetMs), 3, L" ms") +
+                        L"  scheduler period: " + DebugFormatFloat(static_cast<float>(periodMs), 3, L" ms"));
+    leftLines.push_back(L"timer: " + std::wstring(timerReady ? (g_overlayRenderTimerHighRes ? L"HIGH-RES waitable" : L"waitable") : L"OFF") +
+                        L"  target deadline: " + DebugFormatFloat(static_cast<float>(periodMs), 3, L" ms"));
+    leftLines.push_back(L"actual VIZ: " + DebugFormatFloat(g_debugVisualizerFps.load(std::memory_order_acquire), 1, L" Hz") +
+                        L"  PLAYER: " + DebugFormatFloat(g_debugPlayerFps.load(std::memory_order_acquire), 1, L" Hz"));
+    leftLines.push_back(L"tick interval avg: " + DebugFormatFloat(g_debugSchedulerIntervalMs.load(std::memory_order_acquire), 3, L" ms") +
+                        L"  lateness last: " + DebugFormatFloat(g_debugSchedulerLatenessMs.load(std::memory_order_acquire), 3, L" ms"));
+    leftLines.push_back(L"deadline misses: " + DebugFormatFloat(g_debugSchedulerDeadlineMissPct.load(std::memory_order_acquire), 1, L"%") +
+                        L"  tick rate: " + DebugFormatFloat(g_debugOverlayTickHz.load(std::memory_order_acquire), 1, L" Hz"));
+    leftLines.push_back(L"render avg: VIZ " + DebugFormatFloat(vizRenderAvgMs, 3, L" ms") +
+                        L"  PLAYER " + DebugFormatFloat(playerRenderAvgMs, 3, L" ms"));
+    leftLines.push_back(L"render peak VIZ+PLAYER: " +
+                        DebugFormatFloat(static_cast<float>(peakSequentialRenderMs), 3, L" ms") +
+                        L"  headroom: " +
+                        DebugFormatFloat(static_cast<float>(peakSequentialHeadroomMs), 3, L" ms"));
+    leftLines.push_back(L"render amortized: " +
+                        DebugFormatFloat(static_cast<float>(amortizedRenderMs), 3, L" ms/tick") +
+                        L"  headroom: " +
+                        DebugFormatFloat(static_cast<float>(amortizedHeadroomMs), 3, L" ms") +
+                        L"  PLAYER duty " +
+                        DebugFormatFloat(static_cast<float>(playerDuty * 100.0), 1, L"%"));
+    leftLines.push_back(L"idle: " + std::wstring(boolText(idle)) +
+                        L"  fullscreen: " + std::wstring(boolText(fullscreen)) +
+                        L"  layout edit: " + std::wstring(boolText(g_layoutEditActive.load(std::memory_order_acquire))));
+    const RECT lastOverlayRect = g_overlayScreenRect;
+    leftLines.push_back(L"last overlay rect: " + DebugFormatInt(lastOverlayRect.left) + L"," +
+                        DebugFormatInt(lastOverlayRect.top) + L"  " +
+                        DebugFormatInt(lastOverlayRect.right - lastOverlayRect.left) + L"x" +
+                        DebugFormatInt(lastOverlayRect.bottom - lastOverlayRect.top));
+    DebugDrawTextBlock(graphics, leftLines, left, y, right - left - 8, font, textBrush, lh);
+
+    float ry = 31.0f;
+    graphics.DrawString(L"AUDIO / PIPELINE", -1, &sectionFont,
+                        Gdiplus::PointF(right, ry), &sectionBrush); ry += 14;
+    std::vector<std::wstring> rightLines;
+    rightLines.push_back(L"source: " + std::wstring(settings.audioSource == 1 ? L"Selected applications" : L"Whole system"));
+    if (settings.audioSource == 1)
+        rightLines.push_back(L"selected: " + DebugEllipsize(settings.audioApplicationName, 40));
+    rightLines.push_back(L"capture: " + std::wstring(boolText(audioRunning)) +
+                         L"  mode " + DebugFormatInt(g_audioCaptureSourceMode.load(std::memory_order_acquire)));
+    rightLines.push_back(L"format: " + DebugFormatInt(static_cast<int>(g_audioSampleRate.load(std::memory_order_acquire))) +
+                         L" Hz / " + DebugFormatInt(static_cast<int>(g_audioChannels.load(std::memory_order_acquire))) +
+                         L" ch / FFT " + DebugFormatInt(VIZ_FFT_SIZE) + L" / 32 bands");
+    rightLines.push_back(L"consumer VIZ: " + DebugFormatFloat(g_audioConsumers[AUDIO_CONSUMER_VISUALIZER].targetHz.load(std::memory_order_acquire), 1, L" Hz") +
+                         L"  " + std::wstring(boolText(g_audioConsumers[AUDIO_CONSUMER_VISUALIZER].active.load(std::memory_order_acquire))));
+    rightLines.push_back(L"consumer PLAYER: " + DebugFormatFloat(g_audioConsumers[AUDIO_CONSUMER_PLAYER].targetHz.load(std::memory_order_acquire), 1, L" Hz") +
+                         L"  " + std::wstring(boolText(g_audioConsumers[AUDIO_CONSUMER_PLAYER].active.load(std::memory_order_acquire))));
+    rightLines.push_back(L"demand max: " + DebugFormatFloat(GetAudioRequestedHz(), 1, L" Hz") +
+                         L"  actual FFT: " + DebugFormatFloat(g_debugAudioFftHz.load(std::memory_order_acquire), 1, L" Hz"));
+    const ULONGLONG lastAudioMs = g_lastAudioUpdateMs.load(std::memory_order_acquire);
+    const ULONGLONG audioAgeMs = (lastAudioMs > 0 && nowMs >= lastAudioMs)
+        ? nowMs - lastAudioMs : 0;
+    rightLines.push_back(L"audio data age: " + DebugFormatInt(static_cast<int>(std::min<ULONGLONG>(audioAgeMs, 60000))) +
+                         L" ms  FFT interval: " +
+                         DebugFormatFloat(g_debugAudioFftHz.load(std::memory_order_acquire) > 0.01f
+                             ? 1000.0f / g_debugAudioFftHz.load(std::memory_order_acquire) : 0.0f, 3, L" ms"));
+    rightLines.push_back(L"level " + DebugFormatFloat(g_audioFftLevel.load(std::memory_order_acquire), 3) +
+                         L"  flux " + DebugFormatFloat(g_spectralFlux.load(std::memory_order_acquire), 3) +
+                         L"  transient " + DebugFormatFloat(g_transientScore.load(std::memory_order_acquire), 3));
+    rightLines.push_back(L"bass transient " +
+                         DebugFormatFloat(g_bassTransientScore.load(std::memory_order_acquire), 3) +
+                         L"  beat confidence " +
+                         DebugFormatFloat(g_audioBeatConfidence.load(std::memory_order_acquire), 3));
+    rightLines.push_back(L"sensitivity: " + DebugFormatInt(settings.sensitivity) +
+                         L"  Auto-Gain " + std::wstring(boolText(settings.autoGainEnabled != 0)) +
+                         L" / " + DebugFormatInt(settings.autoGainStrength));
+    rightLines.push_back(L"attack/decay: " + DebugFormatInt(settings.attackSpeed) + L" / " +
+                         DebugFormatInt(settings.decaySpeed) +
+                         L"  smoothing " + std::wstring(boolText(settings.cavaSmoothingEnabled)));
+    rightLines.push_back(L"FFT timing: " + DebugFormatFloat(g_debugActionAvgMs[DEBUG_PERF_AUDIO_FFT].load(std::memory_order_acquire), 3, L" ms avg") +
+                         L"  processing: " + DebugFormatFloat(g_debugActionAvgMs[DEBUG_PERF_AUDIO_PROCESS].load(std::memory_order_acquire), 3, L" ms avg"));
+    DebugDrawTextBlock(graphics, rightLines, right, ry, static_cast<float>(width) - right - 8, font, textBrush, lh);
+
+    y += static_cast<float>(leftLines.size()) * lh + 7;
+    ry += static_cast<float>(rightLines.size()) * lh + 7;
+    graphics.DrawLine(&separatorPen, 12.0f, std::max(y, ry) - 3.0f, static_cast<float>(width) - 12.0f, std::max(y, ry) - 3.0f);
+    float sy = std::max(y, ry) + 1;
+
+    graphics.DrawString(L"MEDIA / LYRICS / ALBUM / VISUALIZER", -1, &sectionFont,
+                        Gdiplus::PointF(12, sy), &sectionBrush); sy += 14;
+    std::vector<std::wstring> mediaLines;
+    std::wstring sessionText = media.hasSession
+        ? ((media.artist.empty() ? L"" : media.artist + L" — ") + media.title)
+        : L"none";
+    mediaLines.push_back(L"media: " + DebugEllipsize(sessionText, 78) +
+                         L"  source=" + DebugEllipsize(media.source, 22));
+    mediaLines.push_back(L"playback: " + std::wstring(boolText(media.playing)) +
+                         L"  " + DebugFormatFloat(static_cast<float>(media.positionSeconds), 1, L"s") +
+                         L" / " + DebugFormatFloat(static_cast<float>(media.durationSeconds), 1, L"s") +
+                         L"  rate " + DebugFormatFloat(static_cast<float>(media.playbackRate), 2, L"x"));
+    mediaLines.push_back(L"Player: " + std::wstring(boolText(popupOpen)) +
+                         L"  style " + DebugFormatInt(g_eqPopupStyleId.load(std::memory_order_acquire)) +
+                         L"  DPI " + (popupOpen ? DebugFormatFloat(static_cast<float>(EqGetPopupDpiScale() * 100.0), 0, L"%") : L"closed"));
+    mediaLines.push_back(L"popup layout: " + DebugFormatInt(g_eqPopupLogicalWidth) + L"x" +
+                         DebugFormatInt(g_eqPopupLogicalHeight) +
+                         L"  offset " + DebugFormatInt(g_eqPopupContentOffsetX) + L"," +
+                         DebugFormatInt(g_eqPopupContentOffsetY));
+    mediaLines.push_back(L"lyrics: " + std::wstring(boolText(settings.lyricsEnabled)) +
+                         L"  worker " + std::wstring(boolText(g_lyricsRunning.load(std::memory_order_acquire))) +
+                         L"  available " + std::wstring(boolText(g_lyricsAvailableFast.load(std::memory_order_acquire))));
+    bool lyricsSynced = false;
+    double lyricPos = 0.0;
+    int lyricLineCount = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_lyricsMutex);
+        lyricsSynced = g_lyricsHasSynced;
+        lyricPos = g_lyricsPositionSeconds;
+        if (g_lyricsLines)
+            lyricLineCount = static_cast<int>(g_lyricsLines->size());
+    }
+    mediaLines.push_back(L"lyrics state: synced " + std::wstring(boolText(lyricsSynced)) +
+                         L"  lines " + DebugFormatInt(lyricLineCount) +
+                         L"  position " + DebugFormatFloat(static_cast<float>(lyricPos), 1, L"s"));
+    mediaLines.push_back(L"LRC: " + std::wstring(settings.lyricsUseLocalLrcFiles ? L"LOCAL" : L"LRCLIB/network") +
+                         L"  folder=" + DebugEllipsize(settings.lyricsLocalLrcFolder, 58));
+    mediaLines.push_back(L"album: " + std::wstring(boolText(settings.albumWidgetEnabled)) +
+                         L"  worker " + std::wstring(boolText(g_albumColorRunning.load(std::memory_order_acquire))) +
+                         L"  cache " + std::wstring(g_albumWidgetCacheBitmap ? L"READY" : L"EMPTY") +
+                         L"  size " + DebugFormatInt(settings.albumWidgetWidth) + L"x" + DebugFormatInt(settings.albumWidgetHeight));
+    mediaLines.push_back(L"bars: " + DebugFormatInt(settings.barCount) +
+                         L"  width/gap " + DebugFormatInt(settings.barWidth) + L"/" + DebugFormatInt(settings.barSpacing) +
+                         L"  max/min " + DebugFormatInt(settings.maxBarHeight) + L"/" + DebugFormatInt(settings.minBarHeight));
+    mediaLines.push_back(L"shape/style: " + std::wstring(shapeName(settings.barShape)) + L" / " + DebugFormatInt(settings.barStyle) +
+                         L"  mirrored " + std::wstring(boolText(settings.mirroredVisualizer)) +
+                         L"  interpolation " + std::wstring(interpolationName(settings.interpolationMode)));
+    mediaLines.push_back(L"orientation: " + std::wstring(orientationName(settings.orientation)) +
+                         L"  bars " + DebugFormatInt(settings.barCount) +
+                         L"  width/gap " + DebugFormatInt(settings.barWidth) + L"/" + DebugFormatInt(settings.barSpacing));
+    mediaLines.push_back(L"bar range: " + DebugFormatInt(settings.minBarHeight) + L".." + DebugFormatInt(settings.maxBarHeight) +
+                         L"  border " + std::wstring(boolText(settings.borderEnabled != 0)) +
+                         L"  BG " + std::wstring(boolText(settings.backgroundEnabled)));
+    mediaLines.push_back(L"colors mode: " + DebugFormatInt(settings.colorMode) +
+                         L"  " + hexDword(settings.color1) + L" -> " + hexDword(settings.color2));
+    mediaLines.push_back(L"album palette: " + hexDword(g_albumPalettePrimaryFast.load(std::memory_order_acquire)) +
+                         L" -> " + hexDword(g_albumPaletteSecondaryFast.load(std::memory_order_acquire)));
+    mediaLines.push_back(L"foreground PNG: " + std::wstring(g_pForegroundImage ? L"READY" : L"OFF/EMPTY"));
+    mediaLines.push_back(L"audio workers: capture " + std::wstring(boolText(audioRunning)) +
+                         L"  lyrics " + std::wstring(boolText(g_lyricsRunning.load(std::memory_order_acquire))) +
+                         L"  album " + std::wstring(boolText(g_albumColorRunning.load(std::memory_order_acquire))));
+    mediaLines.push_back(L"tray: " + std::wstring(boolText(settings.showMediaEqTrayButton != 0)) +
+                         L"  integration " + std::wstring(g_eqIsWindows11 ? L"Win11 XAML" : L"Win10 native"));
+    DebugDrawTextBlock(graphics, mediaLines, 12, sy, static_cast<float>(width) - 24, font, textBrush, lh);
+
+    float perfY = sy + static_cast<float>(mediaLines.size()) * lh + 7;
+    graphics.DrawLine(&separatorPen, 12.0f, perfY - 3.0f, static_cast<float>(width) - 12.0f, perfY - 3.0f);
+    graphics.DrawString(L"PERFORMANCE — inclusive avg / last / max (ms), calls/s, ms/s", -1,
+                        &sectionFont, Gdiplus::PointF(12, perfY), &sectionBrush);
+    perfY += 14;
+
+    const float colAction = 12;
+    const float colAvg = static_cast<float>(width) - 300;
+    const float colLast = static_cast<float>(width) - 235;
+    const float colMax = static_cast<float>(width) - 170;
+    const float colRate = static_cast<float>(width) - 105;
+    const float colTotal = static_cast<float>(width) - 42;
+    graphics.DrawString(L"action", -1, &font, Gdiplus::PointF(colAction, perfY), &mutedBrush);
+    graphics.DrawString(L"avg", -1, &font, Gdiplus::PointF(colAvg, perfY), &mutedBrush);
+    graphics.DrawString(L"last", -1, &font, Gdiplus::PointF(colLast, perfY), &mutedBrush);
+    graphics.DrawString(L"max", -1, &font, Gdiplus::PointF(colMax, perfY), &mutedBrush);
+    graphics.DrawString(L"/s", -1, &font, Gdiplus::PointF(colRate, perfY), &mutedBrush);
+    graphics.DrawString(L"ms/s", -1, &font, Gdiplus::PointF(colTotal, perfY), &mutedBrush);
+    perfY += 11;
+
+    const int maxRows = std::max(0, std::min(
+        static_cast<int>(DEBUG_PERF_COUNT), static_cast<int>((height - perfY - 165) / 12)));
+    for (int i = 0; i < maxRows; ++i) {
+        const size_t index = static_cast<size_t>(i);
+        wchar_t avg[24]{}, last[24]{}, max[24]{}, rate[24]{}, total[24]{};
+        const float avgValue = g_debugActionAvgMs[index].load(std::memory_order_acquire);
+        const float rateValue = g_debugActionCallsPerSec[index].load(std::memory_order_acquire);
+        _snwprintf_s(avg, _countof(avg), _TRUNCATE, L"%.3f", avgValue);
+        _snwprintf_s(last, _countof(last), _TRUNCATE, L"%.3f", g_debugActionLastMs[index].load(std::memory_order_acquire));
+        _snwprintf_s(max, _countof(max), _TRUNCATE, L"%.3f", g_debugActionMaxMs[index].load(std::memory_order_acquire));
+        _snwprintf_s(rate, _countof(rate), _TRUNCATE, L"%.1f", rateValue);
+        _snwprintf_s(total, _countof(total), _TRUNCATE, L"%.2f", (avgValue * rateValue));
+        graphics.DrawString(DebugPerfActionName(static_cast<DebugPerfAction>(i)), -1,
+                            &font, Gdiplus::PointF(colAction, perfY), &textBrush);
+        graphics.DrawString(avg, -1, &font, Gdiplus::PointF(colAvg, perfY), &textBrush);
+        graphics.DrawString(last, -1, &font, Gdiplus::PointF(colLast, perfY), &textBrush);
+        graphics.DrawString(max, -1, &font, Gdiplus::PointF(colMax, perfY), &textBrush);
+        graphics.DrawString(rate, -1, &font, Gdiplus::PointF(colRate, perfY), &textBrush);
+        graphics.DrawString(total, -1, &font, Gdiplus::PointF(colTotal, perfY), &textBrush);
+        perfY += 12;
+    }
+
+    const float graphTop = static_cast<float>(height - 165);
+    const Gdiplus::RectF graphRect(12.0f, graphTop,
+                                   static_cast<float>(width - 24), 140.0f);
+    DebugDrawFpsGraph(graphics, graphRect, settings);
+
+    const std::wstring footer =
+        L"actual: VIZ " + DebugFormatFloat(g_debugVisualizerFps.load(std::memory_order_acquire), 1, L" Hz") +
+        L"  PLAYER " + DebugFormatFloat(g_debugPlayerFps.load(std::memory_order_acquire), 1, L" Hz") +
+        L"  target " + DebugFormatFloat(static_cast<float>(effectiveHz), 1, L" Hz") +
+        L"  budget " + DebugFormatFloat(static_cast<float>(frameBudgetMs), 3, L" ms") +
+        L"  deadline miss " + DebugFormatFloat(g_debugSchedulerDeadlineMissPct.load(std::memory_order_acquire), 1, L"%");
+    graphics.DrawString(footer.c_str(), -1, &font,
+                        Gdiplus::PointF(12.0f, static_cast<float>(height - 24)),
+                        &mutedBrush);
+    EndPaint(hwnd, &ps);
+}
+
+
+static LRESULT CALLBACK DebugOverlayProc(HWND hwnd, UINT msg,
+                                          WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_MOUSEACTIVATE:
+        return MA_NOACTIVATE;
+    case WM_TIMER:
+        if (wParam == kDebugTimerId) {
+            const VisualizerSettings settings = GetSettingsSnapshot();
+            g_debugInstrumentationEnabled.store(
+                settings.debugMode, std::memory_order_release);
+            if (!settings.debugMode) {
+                DestroyWindow(hwnd);
+                return 0;
+            }
+            UpdateDebugPerformanceSnapshot();
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+        break;
+    case WM_PAINT:
+        RenderDebugWindow(hwnd);
+        return 0;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+    case WM_DESTROY:
+        KillTimer(hwnd, kDebugTimerId);
+        if (g_debugHwnd == hwnd)
+            g_debugHwnd = nullptr;
+        return 0;
+    case WM_NCHITTEST:
+        return HTTRANSPARENT;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static void RegisterDebugWindowClass(HINSTANCE instance) {
+    if (g_debugClassRegistered || !instance)
+        return;
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = DebugOverlayProc;
+    wc.hInstance = instance;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    wc.lpszClassName = kDebugOverlayClassName;
+    g_debugClassRegistered = RegisterClassW(&wc) != 0;
+}
+
+static void DestroyDebugWindow() {
+    g_debugInstrumentationEnabled.store(false, std::memory_order_release);
+    if (g_debugHwnd && IsWindow(g_debugHwnd)) {
+        DestroyWindow(g_debugHwnd);
+        g_debugHwnd = nullptr;
+    }
+}
+
+static void PositionDebugWindow() {
+    if (!g_debugHwnd || !IsWindow(g_debugHwnd))
+        return;
+    POINT origin{0, 0};
+    HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(monitor, &mi))
+        return;
+    SetWindowPos(g_debugHwnd, HWND_TOPMOST,
+                 mi.rcWork.left + 12, mi.rcWork.top + 12,
+                 1180, 940,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+static void SyncDebugWindow(bool forcePosition = false) {
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    if (!settings.debugMode) {
+        DestroyDebugWindow();
+        return;
+    }
+    g_debugInstrumentationEnabled.store(true, std::memory_order_release);
+
+    const HINSTANCE instance = GetCurrentModModuleHandle();
+    RegisterDebugWindowClass(instance);
+    if (!g_debugClassRegistered)
+        return;
+
+    if (!g_debugHwnd || !IsWindow(g_debugHwnd)) {
+        g_debugHwnd = CreateWindowExW(
+            WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+            kDebugOverlayClassName,
+            L"Desktop Audio Visualizer Debug",
+            WS_POPUP,
+            0, 0, 1180, 940,
+            nullptr, nullptr, instance, nullptr);
+        if (!g_debugHwnd)
+            return;
+
+        g_debugVisualizerFpsHistory.fill(0.0f);
+        g_debugPlayerFpsHistory.fill(0.0f);
+        g_debugSchedulerFpsHistory.fill(0.0f);
+        g_debugAudioFftHistory.fill(0.0f);
+        g_debugFpsHistoryCount = 0;
+        g_debugFpsHistoryWrite = 0;
+        g_debugLastFpsSampleMs = 0;
+        g_debugLastCpuSampleMs = 0;
+        g_debugLastCpuQpc = 0;
+        g_debugVisualizerCpu.store(0.0f, std::memory_order_release);
+        g_debugPlayerCpu.store(0.0f, std::memory_order_release);
+        g_debugAlbumCpu.store(0.0f, std::memory_order_release);
+        g_debugVisualizerFps.store(0.0f, std::memory_order_release);
+        g_debugPlayerFps.store(0.0f, std::memory_order_release);
+        g_debugSchedulerIntervalMs.store(0.0f, std::memory_order_release);
+        g_debugSchedulerLatenessMs.store(0.0f, std::memory_order_release);
+        g_debugSchedulerDeadlineMissPct.store(0.0f, std::memory_order_release);
+        g_debugSchedulerLastStartQpc.store(0, std::memory_order_release);
+        g_debugSchedulerIntervalQpcTotal.store(0, std::memory_order_release);
+        g_debugSchedulerIntervalSamples.store(0, std::memory_order_release);
+        g_debugSchedulerMisses.store(0, std::memory_order_release);
+        g_debugSchedulerMissSamples.store(0, std::memory_order_release);
+        g_debugVisualizerFrames.store(0, std::memory_order_release);
+        g_debugPlayerFrames.store(0, std::memory_order_release);
+        g_debugAudioFftFrames.store(0, std::memory_order_release);
+        g_debugOverlayTicks.store(0, std::memory_order_release);
+        g_debugAudioFftHz.store(0.0f, std::memory_order_release);
+        g_debugOverlayTickHz.store(0.0f, std::memory_order_release);
+        g_debugInstrumentationEnabled.store(true, std::memory_order_release);
+        for (auto& counter : g_debugPerf) {
+            counter.qpcTicks.store(0, std::memory_order_release);
+            counter.calls.store(0, std::memory_order_release);
+            counter.lastQpcTicks.store(0, std::memory_order_release);
+            counter.maxQpcTicks.store(0, std::memory_order_release);
+        }
+        for (auto& value : g_debugActionAvgMs)
+            value.store(0.0f, std::memory_order_release);
+        for (auto& value : g_debugActionLastMs)
+            value.store(0.0f, std::memory_order_release);
+        for (auto& value : g_debugActionMaxMs)
+            value.store(0.0f, std::memory_order_release);
+        for (auto& value : g_debugActionCallsPerSec)
+            value.store(0.0f, std::memory_order_release);
+        SetTimer(g_debugHwnd, kDebugTimerId, kDebugTimerMs, nullptr);
+    }
+
+    if (forcePosition)
+        PositionDebugWindow();
+}
+
+static void UnregisterDebugWindowClass(HINSTANCE instance) {
+    DestroyDebugWindow();
+    if (g_debugClassRegistered && instance)
+        UnregisterClassW(kDebugOverlayClassName, instance);
+    g_debugClassRegistered = false;
+}
+
+static HMODULE GetCurrentModModuleHandle();
+static bool RebuildOverlayWindows(
+    const VisualizerSettings& settings,
+    HINSTANCE instance,
+    LPCWSTR windowClass,
+    HWND desktopParent);
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-    case WM_TIMER:
-        if (wParam == 1) {
-            std::shared_lock<std::shared_mutex> settingsLock(g_settingsMutex);
-            UpdateAnimationFromAudio();
-            RenderOverlay(hwnd);
-
-            const int barCount = std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
-            const float peakRatio = GetCurrentVisualizerPeakRatio(barCount);
-            const float minRatio = static_cast<float>(g_settings.minBarHeight) /
-                static_cast<float>(std::max(1, g_settings.maxBarHeight));
-            const bool shouldIdle =
-                peakRatio <= std::min(1.0f, minRatio + 0.01f);
-            if (shouldIdle != g_overlayIdle.load(std::memory_order_acquire))
-                g_overlayIdle.store(shouldIdle, std::memory_order_release);
-
-            const UINT intervalMs = shouldIdle ? 200 : GetRenderIntervalMs(g_settings);
-            if (intervalMs != g_currentOverlayTimerMs) {
-                g_currentOverlayTimerMs = intervalMs;
-                SetTimer(hwnd, 1, intervalMs, nullptr);
-            }
+    case WM_VIZ_REFRESH_SERVICES: {
+        g_overlayServicesRefreshPending.store(false, std::memory_order_release);
+        if (!g_running.load(std::memory_order_acquire) ||
+            !g_shellServicesStarted.load(std::memory_order_acquire)) {
+            g_audioCaptureRestartRequested.store(false, std::memory_order_release);
+            return 0;
         }
-        return 0;
 
-    case WM_VIZ_AUDIO_WAKE:
-        g_overlayIdle.store(false, std::memory_order_release);
-        {
-            const VisualizerSettings settings = GetSettingsSnapshot();
-            const UINT intervalMs = GetRenderIntervalMs(settings);
-            if (intervalMs != g_currentOverlayTimerMs) {
-                g_currentOverlayTimerMs = intervalMs;
-                SetTimer(hwnd, 1, intervalMs, nullptr);
-            }
-        }
-        return 0;
+        const VisualizerSettings settings = GetSettingsSnapshot();
+        const bool visible = RefreshDesktopVisualizerRuntime(settings, true);
+        if (IsAlbumColorCaptureNeeded())
+            StartAlbumColorCapture();
+        else
+            StopAlbumColorCapture();
 
-    case WM_PAINT:
-        {
-            std::shared_lock<std::shared_mutex> settingsLock(g_settingsMutex);
-            RenderOverlay(hwnd);
-        }
-        ValidateRect(hwnd, nullptr);
+        g_currentOverlayTimerMs = visible
+            ? GetOverlayTimerIntervalMs(settings)
+            : kDesktopVisualizerVisibilityCheckMs;
+        ArmOverlayRenderTimer(settings, true);
         return 0;
-
-    case WM_WINDOWPOSCHANGING: {
-        WINDOWPOS* pos = reinterpret_cast<WINDOWPOS*>(lParam);
-        if (pos && GetParent(hwnd) == nullptr)
-            pos->hwndInsertAfter = HWND_BOTTOM;
-        break;
     }
+
+    case WM_VIZ_ALBUM_MEDIA_CHANGED: {
+        const VisualizerSettings settings = GetSettingsSnapshot();
+        g_currentOverlayTimerMs = GetOverlayTimerIntervalMs(settings);
+        ArmOverlayRenderTimer(settings, true);
+        return 0;
+    }
+
+    case WM_VIZ_OPEN_LAYOUT_EDITOR:
+        LayoutEditBegin();
+        return 0;
+
+    case WM_VIZ_DEBUG_SYNC:
+        SyncDebugWindow(true);
+        return 0;
+
+    case WM_VIZ_DEBUG_SAMPLE:
+        if (g_debugHwnd && IsWindow(g_debugHwnd))
+            InvalidateRect(g_debugHwnd, nullptr, FALSE);
+        return 0;
+
+    case WM_VIZ_REBUILD_OVERLAYS: {
+        // A settings change while editing invalidates the edit session.
+        if (g_layoutEditActive.load(std::memory_order_acquire))
+            LayoutEditEnd(false);
+        const VisualizerSettings settings = GetSettingsSnapshot();
+        g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
+        g_cachedDisplayRefreshRateHz = 0;
+        // Re-resolve rather than use GetParent(hwnd): the placement setting
+        // may have changed, and with the opaque holder the parent is the
+        // holder, not the desktop window.
+        RebuildOverlayWindows(settings, GetCurrentModModuleHandle(),
+                              L"WindhawkVisualizerOverlay",
+                              ResolveOverlayDesktopParent(settings.desktopPlacement));
+        RefreshDesktopVisualizerRuntime(settings, true);
+        if (g_hwndOverlay) {
+            const UINT interval = g_desktopVisualizerVisible
+                ? GetOverlayTimerIntervalMs(settings)
+                : kDesktopVisualizerVisibilityCheckMs;
+            g_currentOverlayTimerMs = interval;
+            ArmOverlayRenderTimer(settings, true);
+        }
+
+        // Layered windows are updated with UpdateLayeredWindowIndirect; they
+        // do not need a separate WM_PAINT render. Render one intentional frame
+        // after rebuilding instead of invalidating the window and rendering
+        // again from WM_PAINT. This removes duplicate full-frame uploads after
+        // settings/display changes without changing the displayed result.
+        for (HWND overlay : g_overlayWindows)
+            RenderOverlay(overlay);
+        return 0;
+    }
+    case WM_TIMER:
+        // Visualizer/Player rendering is driven by the high-resolution waitable
+        // timer in OverlayThreadProc. This message timer is intentionally unused.
+        return 0;
 
     case WM_SETTINGCHANGE:
         // Wallpaper/theme changes invalidate the cached wallpaper blur and the
         // display query cache used to derive the render interval.
         g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
         g_cachedDisplayRefreshRateHz = 0;
-        if (g_eqXamlInjectionReady.load(std::memory_order_acquire) &&
+        if (g_eqIsWindows11 &&
+            g_eqXamlInjectionReady.load(std::memory_order_acquire) &&
             g_eqTaskbarHwnd && IsWindow(g_eqTaskbarHwnd)) {
             EqRunFromWindowThread(g_eqTaskbarHwnd, [](void*) {
                 try {
@@ -9324,8 +22978,7 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                         button.InvalidateMeasure();
                     if (g_eqTaskbarHwnd)
                         InvalidateRect(g_eqTaskbarHwnd, nullptr, FALSE);
-                    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
-                        RenderEqPopup(g_eqPopupHwnd);
+                    RequestEqPopupRender();
                 } catch (...) {
                 }
             }, nullptr);
@@ -9333,21 +22986,29 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         return 0;
 
     case WM_DISPLAYCHANGE:
+        SyncDebugWindow(true);
+        if (g_layoutEditActive.load(std::memory_order_acquire))
+            LayoutEditEnd(false);
         g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
         g_cachedDisplayRefreshRateHz = 0;
         g_currentOverlayTimerMs = 0;
-        if (GetParent(hwnd) == nullptr) {
-            SetWindowPos(hwnd, HWND_BOTTOM,
-                         GetSystemMetrics(SM_XVIRTUALSCREEN),
-                         GetSystemMetrics(SM_YVIRTUALSCREEN),
-                         std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN)),
-                         std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN)),
-                         SWP_NOACTIVATE | SWP_NOZORDER);
+        if (hwnd == g_hwndOverlay) {
+            const VisualizerSettings settings = GetSettingsSnapshot();
+            RebuildOverlayWindows(settings, GetCurrentModModuleHandle(),
+                                  L"WindhawkVisualizerOverlay",
+                                  ResolveOverlayDesktopParent(settings.desktopPlacement));
+            if (g_hwndOverlay) {
+                g_currentOverlayTimerMs = GetOverlayTimerIntervalMs(settings);
+                ArmOverlayRenderTimer(settings, true);
+            }
+            for (HWND overlay : g_overlayWindows)
+                RenderOverlay(overlay);
         }
-        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
 
     case WM_NCHITTEST:
+        // Desktop overlays are always click-through. Album Widget positioning
+        // is handled by the dedicated Desktop Layout Editor.
         return HTTRANSPARENT;
     }
 
@@ -9362,7 +23023,1579 @@ static HMODULE GetCurrentModModuleHandle() {
     return module;
 }
 
+struct OverlayMonitorInfo {
+    HMONITOR monitor = nullptr;
+    RECT rect{};
+    bool primary = false;
+};
+
+static BOOL CALLBACK CollectOverlayMonitorProc(
+    HMONITOR hMonitor,
+    HDC,
+    LPRECT,
+    LPARAM lParam) {
+    auto* monitors = reinterpret_cast<std::vector<OverlayMonitorInfo>*>(lParam);
+    if (!monitors) {
+        return FALSE;
+    }
+
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(hMonitor, reinterpret_cast<MONITORINFO*>(&mi))) {
+        return TRUE;
+    }
+
+    OverlayMonitorInfo info;
+    info.monitor = hMonitor;
+    info.rect = mi.rcMonitor;
+    info.primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+    monitors->push_back(info);
+
+    return TRUE;
+}
+
+static std::vector<OverlayMonitorInfo> GetOverlayMonitors() {
+    std::vector<OverlayMonitorInfo> monitors;
+    EnumDisplayMonitors(
+        nullptr, nullptr, CollectOverlayMonitorProc,
+        reinterpret_cast<LPARAM>(&monitors));
+
+    std::stable_sort(monitors.begin(), monitors.end(),
+        [](const OverlayMonitorInfo& a, const OverlayMonitorInfo& b) {
+            if (a.primary != b.primary)
+                return a.primary > b.primary;
+            if (a.rect.top != b.rect.top)
+                return a.rect.top < b.rect.top;
+            if (a.rect.left != b.rect.left)
+                return a.rect.left < b.rect.left;
+            return a.rect.right < b.rect.right;
+        });
+
+    return monitors;
+}
+
+static std::vector<RECT> GetOverlayTargetRects(const VisualizerSettings& settings) {
+    const auto monitors = GetOverlayMonitors();
+    std::vector<RECT> result;
+
+    if (settings.targetMonitor <= 0) {
+        result.reserve(monitors.size());
+        for (size_t i = 0; i < monitors.size(); ++i) {
+            result.push_back(monitors[i].rect);
+        }
+        return result;
+    }
+
+    const size_t index = static_cast<size_t>(settings.targetMonitor - 1);
+
+    if (index < monitors.size()) {
+        result.push_back(monitors[index].rect);
+        return result;
+    }
+
+
+    for (size_t i = 0; i < monitors.size(); ++i) {
+        if (monitors[i].primary) {
+            result.push_back(monitors[i].rect);
+            return result;
+        }
+    }
+
+    if (!monitors.empty()) {
+        result.push_back(monitors.front().rect);
+    } else {
+    }
+    return result;
+}
+
+static RECT GetOverlayTargetScreenRect(const VisualizerSettings& settings) {
+    const auto rects = GetOverlayTargetRects(settings);
+    if (!rects.empty()) {
+        return rects.front();
+    }
+
+    RECT fallback{
+        GetSystemMetrics(SM_XVIRTUALSCREEN),
+        GetSystemMetrics(SM_YVIRTUALSCREEN),
+        GetSystemMetrics(SM_XVIRTUALSCREEN) +
+            std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN)),
+        GetSystemMetrics(SM_YVIRTUALSCREEN) +
+            std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN))};
+    return fallback;
+}
+
+// ===========================================================================
+// Raised-desktop presentation (Windows 11 24H2+)
+// ===========================================================================
+// See docs/research/2026-09-26-win11-raised-desktop.md. On the raised desktop
+// an UpdateLayeredWindow child of Progman is never composited. Two ways in:
+//
+//  - OVERLAY_RENDER_OPAQUE_HOLDER (default there): the recipe known to work
+//    for live-wallpaper tools. An opaque layered holder (LWA_ALPHA 255) is a
+//    child of Progman directly below the icon layer, and the overlay window
+//    inside it presents through a Direct3D swap chain. Being opaque it hides
+//    the real wallpaper, so every frame starts from a captured copy of it.
+//  - OVERLAY_RENDER_DCOMP (experimental): the overlay window itself is a child
+//    of Progman below the icons and presents a premultiplied-alpha
+//    DirectComposition swap chain, keeping true transparency.
+//
+// Everything here runs on the overlay thread.
+
+static const wchar_t* kOverlayHostClass = L"WindhawkVisualizerOverlayHost";
+static bool g_overlayHostClassRegistered = false;
+
+struct OverlayPresenter {
+    HWND hwnd = nullptr;
+    Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
+    Microsoft::WRL::ComPtr<IDCompositionTarget> target;
+    Microsoft::WRL::ComPtr<IDCompositionVisual> visual;
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> d2dTarget;
+    int width = 0;
+    int height = 0;
+    bool loggedFirstPresent = false;
+};
+[[clang::no_destroy]] static std::vector<OverlayPresenter> g_overlayPresenters;
+[[clang::no_destroy]] static Microsoft::WRL::ComPtr<ID3D11Device> g_overlayD3D;
+[[clang::no_destroy]] static Microsoft::WRL::ComPtr<ID3D11DeviceContext> g_overlayD3DContext;
+[[clang::no_destroy]] static Microsoft::WRL::ComPtr<IDXGIFactory2> g_overlayDxgiFactory;
+[[clang::no_destroy]] static Microsoft::WRL::ComPtr<IDCompositionDevice> g_overlayDComp;
+[[clang::no_destroy]] static Microsoft::WRL::ComPtr<ID2D1Factory1> g_overlayD2DFactory;
+[[clang::no_destroy]] static Microsoft::WRL::ComPtr<ID2D1Device> g_overlayD2DDevice;
+[[clang::no_destroy]] static Microsoft::WRL::ComPtr<ID2D1DeviceContext> g_overlayD2DContext;
+
+struct OverlayWallpaperCache {
+    RECT screenRect{};
+    int width = 0;
+    int height = 0;
+    std::vector<DWORD> pixels; // premultiplied BGRA, alpha forced to 255
+};
+static std::vector<OverlayWallpaperCache> g_overlayWallpapers; // parallel to g_overlayWindows
+static ULONGLONG g_overlayWallpaperCapturedMs = 0;
+static std::wstring g_overlayWallpaperSignature;
+
+static LRESULT CALLBACK OverlayHostProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_NCHITTEST:
+        return HTTRANSPARENT;
+    case WM_PAINT: {
+        // The overlay window inside covers the whole holder.
+        PAINTSTRUCT ps{};
+        BeginPaint(hwnd, &ps);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static bool EnsureOverlayHostClass(HINSTANCE instance) {
+    if (g_overlayHostClassRegistered)
+        return true;
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = OverlayHostProc;
+    wc.hInstance = instance;
+    wc.lpszClassName = kOverlayHostClass;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"EnsureOverlayHostClass: RegisterClass failed, error=%lu", GetLastError());
+        return false;
+    }
+    g_overlayHostClassRegistered = true;
+    return true;
+}
+
+static void UnregisterOverlayHostClass(HINSTANCE instance) {
+    if (!g_overlayHostClassRegistered)
+        return;
+    UnregisterClassW(kOverlayHostClass, instance);
+    g_overlayHostClassRegistered = false;
+}
+
+static int OverlayIndexOf(HWND hwnd) {
+    for (size_t i = 0; i < g_overlayWindows.size(); ++i) {
+        if (g_overlayWindows[i] == hwnd)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+static bool EnsureOverlayD3D() {
+    if (g_overlayD3D && g_overlayDxgiFactory)
+        return true;
+
+    const D3D_FEATURE_LEVEL levels[] = {
+        D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3};
+    const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    HRESULT hr = D3D11CreateDevice(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, levels,
+        ARRAYSIZE(levels), D3D11_SDK_VERSION, &g_overlayD3D, nullptr,
+        &g_overlayD3DContext);
+    if (FAILED(hr)) {
+        Wh_Log(L"Overlay D3D: hardware device failed (hr=0x%08X), trying WARP",
+               static_cast<unsigned>(hr));
+        hr = D3D11CreateDevice(
+            nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags, levels,
+            ARRAYSIZE(levels), D3D11_SDK_VERSION, &g_overlayD3D, nullptr,
+            &g_overlayD3DContext);
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"Overlay D3D: D3D11CreateDevice failed (hr=0x%08X)", static_cast<unsigned>(hr));
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+    if (FAILED(hr = g_overlayD3D.As(&dxgiDevice)) ||
+        FAILED(hr = dxgiDevice->GetAdapter(&adapter)) ||
+        FAILED(hr = adapter->GetParent(IID_PPV_ARGS(&g_overlayDxgiFactory)))) {
+        Wh_Log(L"Overlay D3D: DXGI factory lookup failed (hr=0x%08X)", static_cast<unsigned>(hr));
+        g_overlayD3DContext.Reset();
+        g_overlayD3D.Reset();
+        return false;
+    }
+    return true;
+}
+
+static bool EnsureOverlayDComp() {
+    if (g_overlayDComp)
+        return true;
+    if (!EnsureOverlayD3D())
+        return false;
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+    HRESULT hr = g_overlayD3D.As(&dxgiDevice);
+    if (SUCCEEDED(hr)) {
+        hr = DCompositionCreateDevice(
+            dxgiDevice.Get(), __uuidof(IDCompositionDevice),
+            reinterpret_cast<void**>(g_overlayDComp.GetAddressOf()));
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"Overlay DComp: DCompositionCreateDevice failed (hr=0x%08X)",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+    return true;
+}
+
+static bool EnsureOverlayD2D() {
+    if (g_overlayD2DContext && g_overlayD2DDevice && g_overlayD2DFactory)
+        return true;
+
+    if (!EnsureOverlayD3D())
+        return false;
+
+    HRESULT hr = D2D1CreateFactory(
+        D2D1_FACTORY_TYPE_SINGLE_THREADED,
+        IID_PPV_ARGS(&g_overlayD2DFactory));
+    if (FAILED(hr)) {
+        Wh_Log(L"Overlay D2D: D2D1CreateFactory failed (hr=0x%08X)",
+               static_cast<unsigned>(hr));
+        g_overlayD2DFactory.Reset();
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+    hr = g_overlayD3D.As(&dxgiDevice);
+    if (SUCCEEDED(hr))
+        hr = g_overlayD2DFactory->CreateDevice(
+            dxgiDevice.Get(), &g_overlayD2DDevice);
+    if (SUCCEEDED(hr))
+        hr = g_overlayD2DDevice->CreateDeviceContext(
+            D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_overlayD2DContext);
+
+    if (FAILED(hr)) {
+        Wh_Log(L"Overlay D2D: device/context creation failed (hr=0x%08X)",
+               static_cast<unsigned>(hr));
+        g_overlayD2DContext.Reset();
+        g_overlayD2DDevice.Reset();
+        g_overlayD2DFactory.Reset();
+        return false;
+    }
+
+    g_overlayD2DContext->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
+    g_overlayD2DContext->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    return true;
+}
+
+static bool EnsureOverlayD2DTarget(OverlayPresenter& presenter) {
+    if (!presenter.swapChain || !EnsureOverlayD2D())
+        return false;
+    if (presenter.d2dTarget)
+        return true;
+
+    Microsoft::WRL::ComPtr<IDXGISurface> surface;
+    HRESULT hr = presenter.swapChain->GetBuffer(
+        0, IID_PPV_ARGS(&surface));
+    if (FAILED(hr))
+        return false;
+
+    const D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+        D2D1_BITMAP_OPTIONS_TARGET,
+        D2D1::PixelFormat(
+            DXGI_FORMAT_B8G8R8A8_UNORM,
+            D2D1_ALPHA_MODE_PREMULTIPLIED),
+        96.0f, 96.0f);
+
+    hr = g_overlayD2DContext->CreateBitmapFromDxgiSurface(
+        surface.Get(), &props, &presenter.d2dTarget);
+    if (FAILED(hr)) {
+        presenter.d2dTarget.Reset();
+        return false;
+    }
+    return true;
+}
+
+
+static D2D1::ColorF OverlayD2DColor(DWORD rgb, float alpha = 1.0f) {
+    return D2D1::ColorF(
+        static_cast<float>(GetRValue(rgb)) / 255.0f,
+        static_cast<float>(GetGValue(rgb)) / 255.0f,
+        static_cast<float>(GetBValue(rgb)) / 255.0f,
+        std::clamp(alpha, 0.0f, 1.0f));
+}
+
+static bool CanUseGpuVisualizer() {
+    // The GPU path intentionally handles the common real-time bar renderer.
+    // Features that currently depend on the CPU/GDI composition surface stay on
+    // the legacy path instead of being approximated or silently changed.
+    if (g_overlayBuiltRenderMode != OVERLAY_RENDER_DCOMP)
+        return false;
+    const VisualizerSettings& settings = g_settings;
+    if (!EnsureOverlayD2D())
+        return false;
+    if (settings.lyricsEnabled || settings.albumWidgetEnabled || g_pForegroundImage)
+        return false;
+    if (settings.backgroundEnabled && settings.backgroundMode == 5) // wallpaper blur
+        return false;
+    if (settings.barStyle == 2 || settings.barStyle == 3 ||
+        settings.barStyle == 4 || settings.barStyle == 5)
+        return false;
+    if (settings.barShape == 5 || settings.barShape == 6) // Dots/Area keep the CPU-specialized path.
+        return false;
+    if (settings.colorMode == 4 || settings.colorMode == 5) // glass effects
+        return false;
+    return true;
+}
+
+static OverlayPresenter* FindOverlayPresenter(HWND hwnd) {
+    for (auto& p : g_overlayPresenters) {
+        if (p.hwnd == hwnd)
+            return &p;
+    }
+    return nullptr;
+}
+
+static bool RenderGpuVisualizerFrame(HWND hwnd, int w, int h) {
+    DebugPerfScope gpuScope(DEBUG_PERF_VIZ_GPU_PASS);
+    OverlayPresenter* presenter = FindOverlayPresenter(hwnd);
+    if (!presenter || !presenter->swapChain || !EnsureOverlayD2DTarget(*presenter))
+        return false;
+
+    ID2D1DeviceContext* ctx = g_overlayD2DContext.Get();
+    if (!ctx)
+        return false;
+
+    ctx->SetTarget(presenter->d2dTarget.Get());
+    ctx->SetDpi(96.0f, 96.0f);
+    ctx->SetTransform(D2D1::Matrix3x2F::Identity());
+    ctx->BeginDraw();
+    ctx->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+
+    const VisualizerSettings& settings = g_settings;
+    const int barCount = std::clamp(settings.barCount, 1, VIZ_BANDS_MAX);
+    const int maxBarHeight = std::max(1, settings.maxBarHeight);
+    const float baseAlpha = std::clamp(
+        static_cast<float>(settings.acrylicOpacity) / 100.0f, 0.0f, 1.0f);
+    const DWORD primaryColor = GetVisualizerColorPrimary();
+    const DWORD secondaryColor = GetVisualizerColorSecondary();
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> solidBrush;
+    HRESULT hr = ctx->CreateSolidColorBrush(
+        OverlayD2DColor(primaryColor, baseAlpha), &solidBrush);
+    if (FAILED(hr)) {
+        ctx->EndDraw();
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<ID2D1GradientStopCollection> vizGradientStops;
+    if (settings.colorMode == 1 || settings.colorMode == 6 || settings.colorMode == 8) {
+        D2D1_GRADIENT_STOP stops[2]{};
+        stops[0].position = 0.0f;
+        stops[0].color = OverlayD2DColor(primaryColor, baseAlpha);
+        stops[1].position = 1.0f;
+        stops[1].color = OverlayD2DColor(secondaryColor, baseAlpha);
+        if (FAILED(ctx->CreateGradientStopCollection(
+                stops, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP,
+                &vizGradientStops))) {
+            vizGradientStops.Reset();
+        }
+    }
+
+    // Background: solid/gradient/album/album-gradient are cheap on the GPU.
+    if (settings.backgroundEnabled && settings.backgroundOpacity > 0) {
+        const RECT bgRect = GetVisualizerBackgroundRect(
+            barCount, 1.0f, settings.backgroundPadding,
+            settings.backgroundHeightAdjustment);
+        if (bgRect.right > bgRect.left && bgRect.bottom > bgRect.top) {
+            const float bgAlpha = std::clamp(
+                static_cast<float>(settings.backgroundOpacity) / 100.0f,
+                0.0f, 1.0f);
+            DWORD bg1 = settings.backgroundColor1;
+            DWORD bg2 = settings.backgroundColor2;
+            if (settings.backgroundMode == 3 || settings.backgroundMode == 4) {
+                bg1 = GetAlbumPalettePrimary();
+                bg2 = GetAlbumPaletteSecondary();
+            }
+
+            if (settings.backgroundMode == 1 || settings.backgroundMode == 4) {
+                D2D1_GRADIENT_STOP stops[2]{};
+                stops[0].position = 0.0f;
+                stops[0].color = OverlayD2DColor(bg1, bgAlpha);
+                stops[1].position = 1.0f;
+                stops[1].color = OverlayD2DColor(bg2, bgAlpha);
+                Microsoft::WRL::ComPtr<ID2D1GradientStopCollection> stopCollection;
+                Microsoft::WRL::ComPtr<ID2D1LinearGradientBrush> gradient;
+                if (SUCCEEDED(ctx->CreateGradientStopCollection(
+                        stops, 2, D2D1_GAMMA_2_2,
+                        D2D1_EXTEND_MODE_CLAMP, &stopCollection)) &&
+                    SUCCEEDED(ctx->CreateLinearGradientBrush(
+                        D2D1::LinearGradientBrushProperties(
+                            D2D1::Point2F(static_cast<float>(bgRect.left),
+                                          static_cast<float>(bgRect.top)),
+                            D2D1::Point2F(static_cast<float>(bgRect.right),
+                                          static_cast<float>(bgRect.bottom))),
+                        stopCollection.Get(), &gradient))) {
+                    if (settings.backgroundCornerRadius > 0) {
+                        const D2D1_ROUNDED_RECT rr{
+                            D2D1::RectF(static_cast<float>(bgRect.left),
+                                        static_cast<float>(bgRect.top),
+                                        static_cast<float>(bgRect.right),
+                                        static_cast<float>(bgRect.bottom)),
+                            static_cast<float>(settings.backgroundCornerRadius),
+                            static_cast<float>(settings.backgroundCornerRadius)};
+                        ctx->FillRoundedRectangle(&rr, gradient.Get());
+                    } else {
+                        ctx->FillRectangle(
+                            D2D1::RectF(static_cast<float>(bgRect.left),
+                                        static_cast<float>(bgRect.top),
+                                        static_cast<float>(bgRect.right),
+                                        static_cast<float>(bgRect.bottom)),
+                            gradient.Get());
+                    }
+                }
+            } else {
+                solidBrush->SetColor(OverlayD2DColor(bg1, bgAlpha));
+                if (settings.backgroundCornerRadius > 0) {
+                    const D2D1_ROUNDED_RECT rr{
+                        D2D1::RectF(static_cast<float>(bgRect.left),
+                                    static_cast<float>(bgRect.top),
+                                    static_cast<float>(bgRect.right),
+                                    static_cast<float>(bgRect.bottom)),
+                        static_cast<float>(settings.backgroundCornerRadius),
+                        static_cast<float>(settings.backgroundCornerRadius)};
+                    ctx->FillRoundedRectangle(&rr, solidBrush.Get());
+                } else {
+                    ctx->FillRectangle(
+                        D2D1::RectF(static_cast<float>(bgRect.left),
+                                    static_cast<float>(bgRect.top),
+                                    static_cast<float>(bgRect.right),
+                                    static_cast<float>(bgRect.bottom)),
+                        solidBrush.Get());
+                }
+            }
+
+            if (settings.backgroundBorderEnabled &&
+                settings.backgroundBorderThickness > 0 &&
+                settings.backgroundBorderOpacity > 0) {
+                DWORD border1 = settings.backgroundBorderColor1;
+                DWORD border2 = settings.backgroundBorderColor2;
+                if (settings.backgroundBorderMode == 0 ||
+                    settings.backgroundBorderMode == 1) {
+                    border1 = GetAlbumPalettePrimary();
+                    border2 = GetAlbumPaletteSecondary();
+                }
+                const float borderAlpha = std::clamp(
+                    static_cast<float>(settings.backgroundBorderOpacity) / 100.0f,
+                    0.0f, 1.0f);
+                solidBrush->SetColor(OverlayD2DColor(border1, borderAlpha));
+                const D2D1_RECT_F rect = D2D1::RectF(
+                    static_cast<float>(bgRect.left) + 0.5f,
+                    static_cast<float>(bgRect.top) + 0.5f,
+                    static_cast<float>(bgRect.right) - 0.5f,
+                    static_cast<float>(bgRect.bottom) - 0.5f);
+                const D2D1_ROUNDED_RECT rr{
+                    rect,
+                    static_cast<float>(std::max(0, settings.backgroundCornerRadius)),
+                    static_cast<float>(std::max(0, settings.backgroundCornerRadius))};
+                ctx->DrawRoundedRectangle(
+                    &rr, solidBrush.Get(),
+                    static_cast<float>(settings.backgroundBorderThickness));
+                (void)border2; // gradient border falls back to a solid GPU stroke.
+            }
+        }
+    }
+
+    POINT cursor{};
+    if (settings.dynamicWidthEnabled) {
+        GetCursorPos(&cursor);
+        ScreenToClient(hwnd, &cursor);
+    }
+
+    std::array<int, VIZ_BANDS_MAX> barWidths{};
+    std::fill_n(barWidths.begin(), static_cast<size_t>(barCount), settings.barWidth);
+    if (settings.dynamicWidthEnabled) {
+        const float rx = static_cast<float>(std::max(1, settings.dynamicWidthRadiusX));
+        const float ry = static_cast<float>(std::max(1, settings.dynamicWidthRadiusY));
+        for (int i = 0; i < barCount; ++i) {
+            const int basePos = i * (settings.barWidth + settings.barSpacing);
+            int centerX = 0;
+            int centerY = 0;
+            if (settings.barShape == 4) {
+                const float angle =
+                    (static_cast<float>(settings.circleStartAngle) +
+                     360.0f * static_cast<float>(i) / static_cast<float>(barCount)) *
+                    (VIZ_PI / 180.0f);
+                centerX = settings.positionX +
+                    static_cast<int>(std::cos(angle) * settings.circleRadius);
+                centerY = settings.positionY +
+                    static_cast<int>(std::sin(angle) * settings.circleRadius);
+            } else if (settings.orientation <= 2) {
+                centerX = settings.positionX + basePos + settings.barWidth / 2;
+                centerY = settings.positionY;
+            } else {
+                centerX = settings.positionX;
+                centerY = settings.positionY + basePos + settings.barWidth / 2;
+            }
+            float dx = static_cast<float>(cursor.x - centerX) / rx;
+            float dy = static_cast<float>(cursor.y - centerY) / ry;
+            const float distSq = dx * dx + dy * dy;
+            if (distSq < 1.0f) {
+                const float normDist = std::sqrt(distSq);
+                float factor = 1.0f - normDist;
+                factor = 0.5f * (1.0f - std::cos(factor * 3.14159265f));
+                barWidths[i] += static_cast<int>(
+                    factor * settings.dynamicWidthMaxBonus);
+            }
+        }
+    }
+
+    auto drawPass = [&](bool mirrored) {
+        int currentOffset = 0;
+        for (int i = 0; i < barCount; ++i) {
+            int barLen = std::max(1, static_cast<int>(g_currentHeights[i]));
+            const int barWidth = std::max(1, barWidths[i]);
+            D2D1_RECT_F rect{};
+            float circleAngleDeg = 0.0f;
+
+            if (settings.barShape == 4) {
+                const float angle =
+                    (static_cast<float>(settings.circleStartAngle) +
+                     360.0f * static_cast<float>(i) / static_cast<float>(barCount)) *
+                    (VIZ_PI / 180.0f);
+                circleAngleDeg = settings.circleStartAngle +
+                    360.0f * static_cast<float>(i) / static_cast<float>(barCount);
+                float cx = static_cast<float>(settings.positionX);
+                float cy = static_cast<float>(settings.positionY);
+                if (mirrored) {
+                    if (settings.orientation <= 2)
+                        cy = static_cast<float>(h) - cy;
+                    else
+                        cx = static_cast<float>(w) - cx;
+                }
+                const float px = cx + std::cos(angle) * settings.circleRadius;
+                const float py = cy + std::sin(angle) * settings.circleRadius;
+                rect = D2D1::RectF(
+                    px - barWidth * 0.5f,
+                    static_cast<float>(settings.circleRadius),
+                    px + barWidth * 0.5f,
+                    static_cast<float>(settings.circleRadius + barLen));
+            } else if (settings.orientation <= 2) {
+                const float x = static_cast<float>(settings.positionX + currentOffset);
+                float top = 0.0f;
+                float bottom = 0.0f;
+                if (settings.orientation == 0) {
+                    top = static_cast<float>(settings.positionY - barLen);
+                    bottom = static_cast<float>(settings.positionY);
+                } else if (settings.orientation == 1) {
+                    top = static_cast<float>(settings.positionY - barLen / 2);
+                    bottom = static_cast<float>(settings.positionY + barLen / 2);
+                } else {
+                    top = static_cast<float>(settings.positionY);
+                    bottom = static_cast<float>(settings.positionY + barLen);
+                }
+                rect = D2D1::RectF(
+                    x, top, x + static_cast<float>(barWidth), bottom);
+            } else {
+                const float y = static_cast<float>(settings.positionY + currentOffset);
+                float left = 0.0f;
+                float right = 0.0f;
+                if (settings.orientation == 3) {
+                    left = static_cast<float>(settings.positionX);
+                    right = static_cast<float>(settings.positionX + barLen);
+                } else if (settings.orientation == 4) {
+                    left = static_cast<float>(settings.positionX - barLen / 2);
+                    right = static_cast<float>(settings.positionX + barLen / 2);
+                } else {
+                    left = static_cast<float>(settings.positionX - barLen);
+                    right = static_cast<float>(settings.positionX);
+                }
+                rect = D2D1::RectF(
+                    left, y, right, y + static_cast<float>(barWidth));
+            }
+
+            currentOffset += barWidth + settings.barSpacing;
+
+            if (settings.barShape == 4) {
+                // Circular bars use local radial coordinates, so the rect above
+                // is reconstructed around the local origin for the transform.
+                const float halfW = barWidth * 0.5f;
+                const float centerX = mirrored && settings.orientation > 2
+                    ? static_cast<float>(w - settings.positionX)
+                    : static_cast<float>(settings.positionX);
+                const float centerY = mirrored && settings.orientation <= 2
+                    ? static_cast<float>(h - settings.positionY)
+                    : static_cast<float>(settings.positionY);
+                const float angle =
+                    (static_cast<float>(settings.circleStartAngle) +
+                     360.0f * static_cast<float>(i) / static_cast<float>(barCount)) *
+                    (VIZ_PI / 180.0f);
+                const float px = centerX + std::cos(angle) * settings.circleRadius;
+                const float py = centerY + std::sin(angle) * settings.circleRadius;
+                const D2D1_RECT_F localRect = D2D1::RectF(
+                    px - halfW, py, px + halfW, py + static_cast<float>(barLen));
+
+                D2D1_MATRIX_3X2_F oldTransform{};
+                ctx->GetTransform(&oldTransform);
+                ctx->SetTransform(
+                    D2D1::Matrix3x2F::Rotation(
+                        circleAngleDeg, D2D1::Point2F(px, py)));
+
+                const float heightRatio = std::clamp(
+                    static_cast<float>(barLen) / static_cast<float>(maxBarHeight),
+                    0.0f, 1.0f);
+                float colorT = static_cast<float>(i) /
+                    static_cast<float>(std::max(1, barCount - 1));
+                if (settings.colorMode == 3)
+                    colorT = ApplyHeightCurve(
+                        heightRatio, settings.gradientCurveEnabled,
+                        settings.gradientCurve);
+                DWORD color = primaryColor;
+                if (settings.colorMode == 1 || settings.colorMode == 3)
+                    color = LerpColor(primaryColor, secondaryColor, colorT);
+
+                float alpha = baseAlpha;
+                if (settings.colorMode == 3) {
+                    const float opacityT = ApplyHeightCurve(
+                        heightRatio, settings.opacityCurveEnabled,
+                        settings.opacityCurve);
+                    const float minAlpha = std::clamp(
+                        static_cast<float>(settings.dynamicAcrylicMinOpacity) / 100.0f,
+                        0.0f, 1.0f);
+                    alpha = std::clamp(
+                        (minAlpha + (1.0f - minAlpha) * opacityT) * baseAlpha,
+                        0.0f, 1.0f);
+                }
+                solidBrush->SetColor(OverlayD2DColor(color, alpha));
+                if (settings.barStyle == 1) {
+                    const float radius = static_cast<float>(std::clamp(
+                        settings.cornerRadius, 0,
+                        std::min(barWidth, std::max(1, barLen)) / 2));
+                    const D2D1_ROUNDED_RECT rr{
+                        localRect, radius, radius};
+                    ctx->FillRoundedRectangle(&rr, solidBrush.Get());
+                    if (settings.borderEnabled && settings.borderThickness > 0) {
+                        solidBrush->SetColor(OverlayD2DColor(
+                            GetVisualizerColorPrimary(), baseAlpha));
+                        ctx->DrawRoundedRectangle(
+                            &rr, solidBrush.Get(),
+                            static_cast<float>(settings.borderThickness));
+                    }
+                } else {
+                    ctx->FillRectangle(&localRect, solidBrush.Get());
+                    if (settings.borderEnabled && settings.borderThickness > 0) {
+                        solidBrush->SetColor(OverlayD2DColor(
+                            GetVisualizerColorPrimary(), baseAlpha));
+                        ctx->DrawRectangle(
+                            &localRect, solidBrush.Get(),
+                            static_cast<float>(settings.borderThickness));
+                    }
+                }
+                ctx->SetTransform(oldTransform);
+                continue;
+            }
+
+            if (mirrored) {
+                if (settings.orientation <= 2) {
+                    rect = D2D1::RectF(
+                        rect.left,
+                        static_cast<float>(h) - rect.bottom,
+                        rect.right,
+                        static_cast<float>(h) - rect.top);
+                } else {
+                    rect = D2D1::RectF(
+                        static_cast<float>(w) - rect.right,
+                        rect.top,
+                        static_cast<float>(w) - rect.left,
+                        rect.bottom);
+                }
+            }
+
+            const float heightRatio = std::clamp(
+                std::max(0.0f, rect.bottom - rect.top) /
+                static_cast<float>(std::max(1, maxBarHeight)),
+                0.0f, 1.0f);
+            float colorT = barCount > 1
+                ? static_cast<float>(i) / static_cast<float>(barCount - 1)
+                : 0.0f;
+            if (settings.colorMode == 3)
+                colorT = ApplyHeightCurve(
+                    heightRatio, settings.gradientCurveEnabled,
+                    settings.gradientCurve);
+            DWORD color = primaryColor;
+            if (settings.colorMode == 1 || settings.colorMode == 3)
+                color = LerpColor(primaryColor, secondaryColor, colorT);
+            else if (settings.colorMode == 7)
+                color = GetAlbumPalettePrimary();
+
+            float alpha = baseAlpha;
+            if (settings.colorMode == 3) {
+                const float opacityT = ApplyHeightCurve(
+                    heightRatio, settings.opacityCurveEnabled,
+                    settings.opacityCurve);
+                const float minAlpha = std::clamp(
+                    static_cast<float>(settings.dynamicAcrylicMinOpacity) / 100.0f,
+                    0.0f, 1.0f);
+                alpha = std::clamp(
+                    (minAlpha + (1.0f - minAlpha) * opacityT) * baseAlpha,
+                    0.0f, 1.0f);
+            }
+
+            // The GPU renderer keeps the common gradient modes visually close
+            // to the GDI+ versions while replacing dozens of CPU path/fill calls
+            // with one GPU primitive per bar.
+            Microsoft::WRL::ComPtr<ID2D1LinearGradientBrush> barGradient;
+            ID2D1Brush* fillBrush = solidBrush.Get();
+            if (vizGradientStops &&
+                (settings.colorMode == 1 || settings.colorMode == 6 || settings.colorMode == 8)) {
+                const bool horizontal = settings.colorMode == 1;
+                const D2D1_POINT_2F startPoint = horizontal
+                    ? D2D1::Point2F(rect.left, rect.top)
+                    : D2D1::Point2F(rect.left, rect.bottom);
+                const D2D1_POINT_2F endPoint = horizontal
+                    ? D2D1::Point2F(rect.right, rect.top)
+                    : D2D1::Point2F(rect.left, rect.top);
+                if (SUCCEEDED(ctx->CreateLinearGradientBrush(
+                        D2D1::LinearGradientBrushProperties(startPoint, endPoint),
+                        vizGradientStops.Get(), &barGradient))) {
+                    fillBrush = barGradient.Get();
+                }
+            } else {
+                solidBrush->SetColor(OverlayD2DColor(color, alpha));
+            }
+            if (settings.barStyle == 1) {
+                const float radius = static_cast<float>(std::clamp(
+                    settings.cornerRadius, 0,
+                    std::min(static_cast<int>(rect.right - rect.left),
+                             static_cast<int>(rect.bottom - rect.top)) / 2));
+                const D2D1_ROUNDED_RECT rr{
+                    rect, radius, radius};
+                ctx->FillRoundedRectangle(&rr, fillBrush);
+                if (settings.borderEnabled && settings.borderThickness > 0) {
+                    solidBrush->SetColor(OverlayD2DColor(
+                        GetVisualizerColorPrimary(), baseAlpha));
+                    ctx->DrawRoundedRectangle(
+                        &rr, solidBrush.Get(),
+                        static_cast<float>(settings.borderThickness));
+                }
+            } else {
+                ctx->FillRectangle(&rect, fillBrush);
+                if (settings.borderEnabled && settings.borderThickness > 0) {
+                    solidBrush->SetColor(OverlayD2DColor(
+                        GetVisualizerColorPrimary(), baseAlpha));
+                    ctx->DrawRectangle(
+                        &rect, solidBrush.Get(),
+                        static_cast<float>(settings.borderThickness));
+                }
+            }
+        }
+    };
+
+    // Background was already drawn; bars are the hot path.
+    drawPass(false);
+    if (settings.mirroredVisualizer)
+        drawPass(true);
+
+    hr = ctx->EndDraw();
+    if (hr == D2DERR_RECREATE_TARGET) {
+        presenter->d2dTarget.Reset();
+        return false;
+    }
+    if (FAILED(hr))
+        return false;
+
+    {
+        DebugPerfScope scope(DEBUG_PERF_VIZ_PRESENT);
+        hr = presenter->swapChain->Present(0, 0);
+    }
+
+    if (!presenter->loggedFirstPresent) {
+        presenter->loggedFirstPresent = true;
+        Wh_Log(L"Overlay presenter hwnd=%p: first GPU D2D Present hr=0x%08X",
+               hwnd, static_cast<unsigned>(hr));
+    }
+    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+        Wh_Log(L"Overlay D2D presenter: device lost (hr=0x%08X), rebuilding",
+               static_cast<unsigned>(hr));
+        g_overlayForceRebuild = true;
+    }
+    return SUCCEEDED(hr);
+}
+
+static void DestroyOverlayPresenters() {
+    // The context retains its currently selected swap-chain bitmap independently
+    // of each presenter's ComPtr; release that reference before destroying targets.
+    if (g_overlayD2DContext)
+        g_overlayD2DContext->SetTarget(nullptr);
+
+    for (auto& p : g_overlayPresenters) {
+        if (p.visual)
+            p.visual->SetContent(nullptr);
+        if (p.target)
+            p.target->SetRoot(nullptr);
+        p.d2dTarget.Reset();
+        p.visual.Reset();
+        p.target.Reset();
+        p.swapChain.Reset();
+    }
+    g_overlayPresenters.clear();
+    if (g_overlayDComp)
+        g_overlayDComp->Commit();
+    if (g_overlayD3DContext) {
+        g_overlayD3DContext->ClearState();
+        g_overlayD3DContext->Flush();
+    }
+}
+
+static void ReleaseOverlayGraphics() {
+    DestroyOverlayPresenters();
+
+    // These no_destroy globals must still be explicitly released on controlled
+    // unload. Release D2D before D3D because the D2D device holds the DXGI device.
+    if (g_overlayD2DContext)
+        g_overlayD2DContext->SetTarget(nullptr);
+    g_overlayD2DContext.Reset();
+    g_overlayD2DDevice.Reset();
+    g_overlayD2DFactory.Reset();
+
+    g_overlayDComp.Reset();
+    g_overlayDxgiFactory.Reset();
+    g_overlayD3DContext.Reset();
+    g_overlayD3D.Reset();
+}
+
+static void CreateOverlayPresenter(HWND hwnd, int w, int h, bool composition) {
+    OverlayPresenter p{};
+    p.hwnd = hwnd;
+    p.width = w;
+    p.height = h;
+
+    if (!EnsureOverlayD3D() || (composition && !EnsureOverlayDComp())) {
+        g_overlayPresenters.push_back(p);
+        return;
+    }
+    if (composition)
+        EnsureOverlayD2D();
+
+    DXGI_SWAP_CHAIN_DESC1 desc{};
+    desc.Width = static_cast<UINT>(w);
+    desc.Height = static_cast<UINT>(h);
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount = 2;
+    desc.Scaling = DXGI_SCALING_STRETCH;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+
+    HRESULT hr = S_OK;
+    if (composition) {
+        desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+        hr = g_overlayDxgiFactory->CreateSwapChainForComposition(
+            g_overlayD3D.Get(), &desc, nullptr, &p.swapChain);
+        if (SUCCEEDED(hr))
+            hr = g_overlayDComp->CreateTargetForHwnd(hwnd, TRUE, &p.target);
+        if (SUCCEEDED(hr))
+            hr = g_overlayDComp->CreateVisual(&p.visual);
+        if (SUCCEEDED(hr))
+            hr = p.visual->SetContent(p.swapChain.Get());
+        if (SUCCEEDED(hr))
+            hr = p.target->SetRoot(p.visual.Get());
+        if (SUCCEEDED(hr))
+            hr = g_overlayDComp->Commit();
+        Wh_Log(L"Overlay presenter (DirectComposition, premultiplied) hwnd=%p %dx%d: hr=0x%08X",
+               hwnd, w, h, static_cast<unsigned>(hr));
+    } else {
+        desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        hr = g_overlayDxgiFactory->CreateSwapChainForHwnd(
+            g_overlayD3D.Get(), hwnd, &desc, nullptr, nullptr, &p.swapChain);
+        if (FAILED(hr)) {
+            Wh_Log(L"Overlay presenter: flip swap chain failed (hr=0x%08X), trying blt model",
+                   static_cast<unsigned>(hr));
+            desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+            desc.BufferCount = 1;
+            desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+            hr = g_overlayDxgiFactory->CreateSwapChainForHwnd(
+                g_overlayD3D.Get(), hwnd, &desc, nullptr, nullptr, &p.swapChain);
+        }
+        Wh_Log(L"Overlay presenter (D3D HWND swap chain) hwnd=%p %dx%d: hr=0x%08X",
+               hwnd, w, h, static_cast<unsigned>(hr));
+    }
+
+    if (FAILED(hr)) {
+        p.visual.Reset();
+        p.target.Reset();
+        p.swapChain.Reset();
+    }
+    g_overlayPresenters.push_back(p);
+}
+
+static bool OverlayPresentFrame(HWND hwnd, int w, int h) {
+    OverlayPresenter* presenter = nullptr;
+    for (auto& p : g_overlayPresenters) {
+        if (p.hwnd == hwnd) {
+            presenter = &p;
+            break;
+        }
+    }
+
+    if (!presenter || !presenter->swapChain) {
+        // No swap chain: in the opaque holder the overlay window is a plain
+        // child of a layered window, so GDI still reaches the holder's surface.
+        if (g_overlayBuiltRenderMode == OVERLAY_RENDER_OPAQUE_HOLDER) {
+            HDC dc = GetDC(hwnd);
+            if (dc) {
+                BitBlt(dc, 0, 0, w, h, g_renderMemDC, 0, 0, SRCCOPY);
+                ReleaseDC(hwnd, dc);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    HRESULT hr = S_OK;
+    if (presenter->width != w || presenter->height != h) {
+        // The D2D target references swap-chain buffer 0; release it before
+        // ResizeBuffers or DXGI can reject the resize with outstanding refs.
+        presenter->d2dTarget.Reset();
+        if (g_overlayD2DContext)
+            g_overlayD2DContext->SetTarget(nullptr);
+        hr = presenter->swapChain->ResizeBuffers(
+            0, static_cast<UINT>(w), static_cast<UINT>(h), DXGI_FORMAT_UNKNOWN, 0);
+        if (FAILED(hr)) {
+            Wh_Log(L"Overlay presenter: ResizeBuffers failed (hr=0x%08X)", static_cast<unsigned>(hr));
+            g_overlayForceRebuild = true;
+            return false;
+        }
+        presenter->width = w;
+        presenter->height = h;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> backBuffer;
+    hr = presenter->swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+    if (SUCCEEDED(hr)) {
+        const D3D11_BOX box{0, 0, 0, static_cast<UINT>(w), static_cast<UINT>(h), 1};
+        g_overlayD3DContext->UpdateSubresource(
+            backBuffer.Get(), 0, &box, g_renderBits,
+            static_cast<UINT>(g_renderWidth) * sizeof(DWORD), 0);
+        backBuffer.Reset();
+        hr = presenter->swapChain->Present(0, 0);
+    }
+
+    if (!presenter->loggedFirstPresent) {
+        presenter->loggedFirstPresent = true;
+        Wh_Log(L"Overlay presenter hwnd=%p: first Present hr=0x%08X",
+               hwnd, static_cast<unsigned>(hr));
+    }
+    if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+        Wh_Log(L"Overlay presenter: device lost (hr=0x%08X), rebuilding",
+               static_cast<unsigned>(hr));
+        g_overlayForceRebuild = true;
+    }
+    return SUCCEEDED(hr);
+}
+
+// ---------------------------------------------------------------------------
+// Wallpaper copy for the opaque holder
+// ---------------------------------------------------------------------------
+
+static DWORD OverlayDesktopColorPixel() {
+    const COLORREF c = GetSysColor(COLOR_DESKTOP);
+    return 0xFF000000u | (static_cast<DWORD>(GetRValue(c)) << 16) |
+           (static_cast<DWORD>(GetGValue(c)) << 8) | GetBValue(c);
+}
+
+static std::wstring OverlayTranscodedWallpaperPath() {
+    wchar_t path[MAX_PATH]{};
+    ExpandEnvironmentStringsW(
+        L"%APPDATA%\\Microsoft\\Windows\\Themes\\TranscodedWallpaper", path, MAX_PATH);
+    return path;
+}
+
+// Cheap per-second check for wallpaper changes (manual change, slideshow,
+// Spotlight all touch at least one of these).
+static std::wstring CurrentWallpaperSignature() {
+    wchar_t wallpaper[MAX_PATH]{};
+    SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaper, 0);
+    std::wstring sig = wallpaper;
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    if (GetFileAttributesExW(OverlayTranscodedWallpaperPath().c_str(),
+                             GetFileExInfoStandard, &fad)) {
+        wchar_t buf[96]{};
+        swprintf_s(buf, L"|%08lX%08lX|%lu", fad.ftLastWriteTime.dwHighDateTime,
+                   fad.ftLastWriteTime.dwLowDateTime, fad.nFileSizeLow);
+        sig += buf;
+    }
+    wchar_t color[16]{};
+    swprintf_s(color, L"|%06lX", static_cast<unsigned long>(GetSysColor(COLOR_DESKTOP)));
+    sig += color;
+    return sig;
+}
+
+// Pixel-exact copy of what Explorer draws in the wallpaper WorkerW.
+static bool CaptureWallpaperFromWorkerW(HWND workerW, std::vector<DWORD>& out, RECT& outRect) {
+    if (!workerW || !IsWindow(workerW) || !GetWindowRect(workerW, &outRect))
+        return false;
+    const int w = outRect.right - outRect.left;
+    const int h = outRect.bottom - outRect.top;
+    if (w <= 0 || h <= 0)
+        return false;
+
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HDC screen = GetDC(nullptr);
+    HDC mem = CreateCompatibleDC(screen);
+    HBITMAP bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!mem || !bmp || !bits) {
+        if (bmp) DeleteObject(bmp);
+        if (mem) DeleteDC(mem);
+        return false;
+    }
+    HGDIOBJ old = SelectObject(mem, bmp);
+    std::memset(bits, 0, static_cast<size_t>(w) * h * sizeof(DWORD));
+    const BOOL printed = PrintWindow(workerW, mem, PW_RENDERFULLCONTENT);
+    GdiFlush();
+
+    const DWORD* src = static_cast<const DWORD*>(bits);
+    size_t nonBlack = 0;
+    size_t samples = 0;
+    const size_t total = static_cast<size_t>(w) * h;
+    for (size_t i = 0; i < total; i += std::max<size_t>(1, total / 4096)) {
+        ++samples;
+        if (src[i] & 0x00FFFFFFu)
+            ++nonBlack;
+    }
+    const bool usable = printed && nonBlack * 100 >= samples;
+    if (usable) {
+        out.resize(total);
+        for (size_t i = 0; i < total; ++i)
+            out[i] = src[i] | 0xFF000000u;
+    }
+    Wh_Log(L"Wallpaper capture: PrintWindow(WorkerW %p, %dx%d) printed=%d nonBlack=%zu/%zu -> %s",
+           workerW, w, h, printed ? 1 : 0, nonBlack, samples, usable ? L"used" : L"rejected");
+
+    SelectObject(mem, old);
+    DeleteObject(bmp);
+    DeleteDC(mem);
+    return usable;
+}
+
+static void DrawWallpaperImage(Gdiplus::Graphics& g, Gdiplus::Bitmap& img,
+                               DESKTOP_WALLPAPER_POSITION pos,
+                               const RECT& area, const RECT& clip, const RECT& target) {
+    const float iw = static_cast<float>(img.GetWidth());
+    const float ih = static_cast<float>(img.GetHeight());
+    if (iw <= 0 || ih <= 0)
+        return;
+    const float ax = static_cast<float>(area.left - target.left);
+    const float ay = static_cast<float>(area.top - target.top);
+    const float aw = static_cast<float>(area.right - area.left);
+    const float ah = static_cast<float>(area.bottom - area.top);
+
+    g.SetClip(Gdiplus::Rect(clip.left - target.left, clip.top - target.top,
+                            clip.right - clip.left, clip.bottom - clip.top));
+    if (pos == DWPOS_TILE) {
+        Gdiplus::TextureBrush brush(&img);
+        brush.TranslateTransform(ax, ay);
+        g.FillRectangle(&brush, ax, ay, aw, ah);
+    } else {
+        float dw = aw, dh = ah;
+        if (pos == DWPOS_CENTER) {
+            dw = iw;
+            dh = ih;
+        } else if (pos == DWPOS_FIT) {
+            const float s = std::min(aw / iw, ah / ih);
+            dw = iw * s;
+            dh = ih * s;
+        } else if (pos == DWPOS_FILL || pos == DWPOS_SPAN) {
+            const float s = std::max(aw / iw, ah / ih);
+            dw = iw * s;
+            dh = ih * s;
+        }
+        g.DrawImage(&img, Gdiplus::RectF(ax + (aw - dw) / 2.0f, ay + (ah - dh) / 2.0f, dw, dh));
+    }
+    g.ResetClip();
+}
+
+// Fallback: redraw the wallpaper from the shell's settings.
+static bool RenderWallpaperViaShell(const RECT& target, std::vector<DWORD>& out) {
+    const int w = target.right - target.left;
+    const int h = target.bottom - target.top;
+    if (w <= 0 || h <= 0)
+        return false;
+
+    const HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool drewImage = false;
+    {
+        Microsoft::WRL::ComPtr<IDesktopWallpaper> dw;
+        HRESULT hr = CoCreateInstance(CLSID_DesktopWallpaper, nullptr, CLSCTX_ALL,
+                                      IID_PPV_ARGS(&dw));
+        if (SUCCEEDED(hr)) {
+            COLORREF bg = GetSysColor(COLOR_DESKTOP);
+            dw->GetBackgroundColor(&bg);
+            DESKTOP_WALLPAPER_POSITION pos = DWPOS_FILL;
+            dw->GetPosition(&pos);
+
+            Gdiplus::Bitmap canvas(w, h, PixelFormat32bppARGB);
+            Gdiplus::Graphics g(&canvas);
+            g.Clear(Gdiplus::Color(255, GetRValue(bg), GetGValue(bg), GetBValue(bg)));
+            g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+            UINT count = 0;
+            dw->GetMonitorDevicePathCount(&count);
+            std::vector<RECT> monitorRects;
+            std::vector<std::wstring> paths;
+            RECT span{};
+            for (UINT i = 0; i < count; ++i) {
+                LPWSTR id = nullptr;
+                if (FAILED(dw->GetMonitorDevicePathAt(i, &id)) || !id)
+                    continue;
+                RECT mr{};
+                LPWSTR path = nullptr;
+                if (SUCCEEDED(dw->GetMonitorRECT(id, &mr))) {
+                    dw->GetWallpaper(id, &path);
+                    monitorRects.push_back(mr);
+                    paths.push_back(path ? path : L"");
+                    UnionRect(&span, &span, &mr);
+                }
+                if (path) CoTaskMemFree(path);
+                CoTaskMemFree(id);
+            }
+
+            for (size_t i = 0; i < monitorRects.size(); ++i) {
+                RECT visible{};
+                if (!IntersectRect(&visible, &monitorRects[i], &target))
+                    continue;
+                std::wstring path = paths[i];
+                if (path.empty() || GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+                    path = OverlayTranscodedWallpaperPath();
+                if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
+                    continue;
+                Gdiplus::Bitmap img(path.c_str());
+                if (img.GetLastStatus() != Gdiplus::Ok)
+                    continue;
+                const RECT& area = pos == DWPOS_SPAN ? span : monitorRects[i];
+                DrawWallpaperImage(g, img, pos, area, visible, target);
+                drewImage = true;
+            }
+
+            Gdiplus::Rect lockRect(0, 0, w, h);
+            Gdiplus::BitmapData data{};
+            if (canvas.LockBits(&lockRect, Gdiplus::ImageLockModeRead,
+                                PixelFormat32bppARGB, &data) == Gdiplus::Ok) {
+                out.resize(static_cast<size_t>(w) * h);
+                for (int y = 0; y < h; ++y) {
+                    const DWORD* row = reinterpret_cast<const DWORD*>(
+                        static_cast<const BYTE*>(data.Scan0) + static_cast<size_t>(y) * data.Stride);
+                    for (int x = 0; x < w; ++x)
+                        out[static_cast<size_t>(y) * w + x] = row[x] | 0xFF000000u;
+                }
+                canvas.UnlockBits(&data);
+            } else {
+                drewImage = false;
+            }
+            Wh_Log(L"Wallpaper capture: IDesktopWallpaper monitors=%u position=%d drewImage=%d",
+                   count, static_cast<int>(pos), drewImage ? 1 : 0);
+        } else {
+            Wh_Log(L"Wallpaper capture: IDesktopWallpaper unavailable (hr=0x%08X)",
+                   static_cast<unsigned>(hr));
+        }
+    }
+    if (SUCCEEDED(hrInit))
+        CoUninitialize();
+    return drewImage;
+}
+
+static void CaptureOverlayWallpapers(const std::vector<RECT>& rects) {
+    g_overlayWallpapers.clear();
+
+    std::vector<DWORD> full;
+    RECT fullRect{};
+    const bool haveFull = CaptureWallpaperFromWorkerW(
+        g_overlayPlacement.wallpaperWorkerW, full, fullRect);
+    const int fullW = fullRect.right - fullRect.left;
+
+    for (const RECT& rect : rects) {
+        OverlayWallpaperCache cache{};
+        cache.screenRect = rect;
+        cache.width = std::max(1L, rect.right - rect.left);
+        cache.height = std::max(1L, rect.bottom - rect.top);
+        cache.pixels.assign(static_cast<size_t>(cache.width) * cache.height,
+                            OverlayDesktopColorPixel());
+
+        RECT overlap{};
+        if (haveFull && IntersectRect(&overlap, &rect, &fullRect)) {
+            const int copyW = overlap.right - overlap.left;
+            for (int y = overlap.top; y < overlap.bottom; ++y) {
+                const DWORD* src = full.data() +
+                    static_cast<size_t>(y - fullRect.top) * fullW + (overlap.left - fullRect.left);
+                DWORD* dst = cache.pixels.data() +
+                    static_cast<size_t>(y - rect.top) * cache.width + (overlap.left - rect.left);
+                std::memcpy(dst, src, static_cast<size_t>(copyW) * sizeof(DWORD));
+            }
+        } else {
+            std::vector<DWORD> drawn;
+            if (RenderWallpaperViaShell(rect, drawn) &&
+                drawn.size() == cache.pixels.size()) {
+                cache.pixels.swap(drawn);
+            } else {
+                Wh_Log(L"Wallpaper capture: falling back to the desktop background color");
+            }
+        }
+        g_overlayWallpapers.push_back(std::move(cache));
+    }
+
+    g_overlayWallpaperCapturedMs = GetTickCount64();
+    g_overlayWallpaperSignature = CurrentWallpaperSignature();
+}
+
+static void RecaptureOverlayWallpapers() {
+    std::vector<RECT> rects;
+    for (HWND hwnd : g_overlayWindows) {
+        RECT r{};
+        if (hwnd && GetWindowRect(hwnd, &r))
+            rects.push_back(r);
+    }
+    if (rects.size() == g_overlayWindows.size())
+        CaptureOverlayWallpapers(rects);
+}
+
+static bool OverlayFillWallpaperBase(HWND hwnd, int w, int h) {
+    const int index = OverlayIndexOf(hwnd);
+    if (index < 0 || static_cast<size_t>(index) >= g_overlayWallpapers.size())
+        return false;
+    const OverlayWallpaperCache& cache = g_overlayWallpapers[static_cast<size_t>(index)];
+    BYTE* base = static_cast<BYTE*>(g_renderBits);
+    const size_t stride = static_cast<size_t>(g_renderWidth) * sizeof(DWORD);
+    if (cache.width != w || cache.height != h) {
+        // Size changed since the capture: solid color until the next capture.
+        const DWORD color = OverlayDesktopColorPixel();
+        for (int y = 0; y < h; ++y)
+            std::fill_n(reinterpret_cast<DWORD*>(base + y * stride), w, color);
+        return true;
+    }
+    for (int y = 0; y < h; ++y) {
+        std::memcpy(base + y * stride,
+                    cache.pixels.data() + static_cast<size_t>(y) * w,
+                    static_cast<size_t>(w) * sizeof(DWORD));
+    }
+    return true;
+}
+
+// One-shot dump of Progman's children in z-order, for remote debugging on
+// machines we cannot test on (Windows 11 raised desktop).
+static void LogDesktopTree(const wchar_t* reason) {
+    HWND progman = GetShellWindow();
+    if (!progman)
+        progman = FindWindowW(L"Progman", nullptr);
+    if (!progman)
+        return;
+    Wh_Log(L"Desktop tree (%s): Progman=%p exStyle=0x%08lX mode=%d",
+           reason, progman,
+           static_cast<unsigned long>(GetWindowLongPtrW(progman, GWL_EXSTYLE)),
+           g_overlayPlacement.renderMode);
+    int n = 0;
+    for (HWND c = GetWindow(progman, GW_CHILD); c && n < 24;
+         c = GetWindow(c, GW_HWNDNEXT), ++n) {
+        wchar_t cls[64]{};
+        GetClassNameW(c, cls, ARRAYSIZE(cls));
+        RECT r{};
+        GetWindowRect(c, &r);
+        BYTE alpha = 0;
+        DWORD lwaFlags = 0;
+        COLORREF key = 0;
+        const LONG_PTR ex = GetWindowLongPtrW(c, GWL_EXSTYLE);
+        const bool haveLwa = (ex & WS_EX_LAYERED) &&
+                             GetLayeredWindowAttributes(c, &key, &alpha, &lwaFlags);
+        Wh_Log(L"  #%d %p %s (%ld,%ld)-(%ld,%ld) vis=%d style=0x%08lX ex=0x%08lX lwa=%s%lu/%u",
+               n, c, cls, r.left, r.top, r.right, r.bottom,
+               IsWindowVisible(c) ? 1 : 0,
+               static_cast<unsigned long>(GetWindowLongPtrW(c, GWL_STYLE)),
+               static_cast<unsigned long>(ex),
+               haveLwa ? L"" : L"-", static_cast<unsigned long>(lwaFlags),
+               static_cast<unsigned>(alpha));
+    }
+}
+
+static void DestroyAllOverlayWindows() {
+    // Swap chains and composition targets go before their windows.
+    DestroyOverlayPresenters();
+    if (g_overlayForceRebuild) {
+        // Device lost or presenter broken: start the next build from scratch.
+        ReleaseOverlayGraphics();
+        g_overlayForceRebuild = false;
+    }
+    for (HWND hwnd : g_overlayWindows) {
+        if (hwnd && IsWindow(hwnd)) {
+            DestroyWindow(hwnd);
+        }
+    }
+    for (HWND host : g_overlayHosts) {
+        if (host && IsWindow(host))
+            DestroyWindow(host);
+    }
+    g_overlayWindows.clear();
+    g_overlayHosts.clear();
+    g_overlayLastRenderMs.clear();
+    g_overlayWallpapers.clear();
+    g_overlayBuiltRenderMode = OVERLAY_RENDER_ULW;
+    g_hwndOverlay = nullptr;
+    g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
+    g_overlayServicesRefreshPending.store(false, std::memory_order_release);
+}
+
+// Opaque holder for the raised desktop, following the recipe known to work
+// there: created top-level with WS_EX_LAYERED, given LWA_ALPHA 255, then
+// reparented onto Progman and turned into a WS_CHILD.
+static HWND CreateOpaqueOverlayHost(HINSTANCE instance, HWND desktopParent,
+                                    const RECT& screenRect, POINT clientTopLeft) {
+    if (!EnsureOverlayHostClass(instance))
+        return nullptr;
+    const int width = std::max(1L, screenRect.right - screenRect.left);
+    const int height = std::max(1L, screenRect.bottom - screenRect.top);
+    HWND host = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
+        kOverlayHostClass, L"Desktop Audio Visualizer Host", WS_POPUP,
+        screenRect.left, screenRect.top, width, height,
+        nullptr, nullptr, instance, nullptr);
+    if (!host) {
+        Wh_Log(L"CreateOpaqueOverlayHost: CreateWindowEx failed, error=%lu", GetLastError());
+        return nullptr;
+    }
+    if (!SetLayeredWindowAttributes(host, 0, 255, LWA_ALPHA))
+        Wh_Log(L"CreateOpaqueOverlayHost: SetLayeredWindowAttributes failed, error=%lu", GetLastError());
+    if (!SetParent(host, desktopParent))
+        Wh_Log(L"CreateOpaqueOverlayHost: SetParent failed, error=%lu", GetLastError());
+    LONG_PTR style = GetWindowLongPtrW(host, GWL_STYLE);
+    style = (style | WS_CHILD) & ~static_cast<LONG_PTR>(WS_POPUP);
+    SetWindowLongPtrW(host, GWL_STYLE, style);
+    SetWindowPos(host, nullptr, clientTopLeft.x, clientTopLeft.y, width, height,
+                 SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    return host;
+}
+
+static bool CreateOverlayWindowsForSettings(
+    const VisualizerSettings& settings,
+    HINSTANCE instance,
+    LPCWSTR windowClass,
+    HWND desktopParent) {
+    const auto rects = GetOverlayTargetRects(settings);
+
+    if (rects.empty() || !desktopParent || !IsWindow(desktopParent)) {
+        return false;
+    }
+
+    DestroyAllOverlayWindows();
+
+    int maxW = 1;
+    int maxH = 1;
+    for (const RECT& rect : rects) {
+        maxW = std::max<int>(maxW, rect.right - rect.left);
+        maxH = std::max<int>(maxH, rect.bottom - rect.top);
+    }
+    if (!EnsureRenderTarget(maxW, maxH)) {
+        return false;
+    }
+
+    const int renderMode = g_overlayPlacement.renderMode;
+    if (renderMode == OVERLAY_RENDER_OPAQUE_HOLDER) {
+        // Capture before our opaque layer exists (PrintWindow renders only
+        // the WorkerW itself, but keep the order obvious).
+        CaptureOverlayWallpapers(rects);
+    }
+
+    for (size_t rectIndex = 0; rectIndex < rects.size(); ++rectIndex) {
+        const RECT& screenRect = rects[rectIndex];
+        const int width = std::max(1L, screenRect.right - screenRect.left);
+        const int height = std::max(1L, screenRect.bottom - screenRect.top);
+
+        // Keep the overlay as a CHILD of the desktop hierarchy (the wallpaper
+        // WorkerW on the classic desktop, Progman on the raised desktop, see
+        // ResolveOverlayDesktopParent). Win+D / Show Desktop manipulates
+        // top-level windows, while the desktop child hierarchy remains part
+        // of the desktop surface. Creating these as WS_POPUP windows makes
+        // them disappear on Win+D.
+        POINT topLeft{screenRect.left, screenRect.top};
+        POINT bottomRight{screenRect.right, screenRect.bottom};
+        if (!ScreenToClient(desktopParent, &topLeft) ||
+            !ScreenToClient(desktopParent, &bottomRight)) {
+            DestroyAllOverlayWindows();
+            return false;
+        }
+
+        HWND host = nullptr;
+        HWND hwnd = nullptr;
+        if (renderMode == OVERLAY_RENDER_OPAQUE_HOLDER) {
+            host = CreateOpaqueOverlayHost(instance, desktopParent, screenRect, topLeft);
+            if (host) {
+                hwnd = CreateWindowExW(
+                    WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+                    windowClass, L"Desktop Audio Visualizer",
+                    WS_CHILD | WS_VISIBLE, 0, 0, width, height,
+                    host, nullptr, instance, nullptr);
+            }
+        } else if (renderMode == OVERLAY_RENDER_DCOMP) {
+            hwnd = CreateWindowExW(
+                WS_EX_NOREDIRECTIONBITMAP | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+                    WS_EX_NOACTIVATE,
+                windowClass, L"Desktop Audio Visualizer",
+                WS_CHILD | WS_VISIBLE, topLeft.x, topLeft.y, width, height,
+                desktopParent, nullptr, instance, nullptr);
+        } else {
+            hwnd = CreateWindowExW(
+                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                windowClass, L"Desktop Audio Visualizer",
+                WS_CHILD | WS_VISIBLE, topLeft.x, topLeft.y, width, height,
+                desktopParent, nullptr, instance, nullptr);
+        }
+        if (!hwnd) {
+            Wh_Log(L"CreateOverlayWindowsForSettings: CreateWindowEx failed (mode=%d), error=%lu",
+                   renderMode, GetLastError());
+            if (host && IsWindow(host))
+                DestroyWindow(host);
+            DestroyAllOverlayWindows();
+            return false;
+        }
+        if (!host) {
+            SetWindowPos(hwnd, nullptr, topLeft.x, topLeft.y, width, height,
+                         SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW);
+        }
+        BOOL excludeFromPeek = TRUE;
+        DwmSetWindowAttribute(host ? host : hwnd, DWMWA_EXCLUDED_FROM_PEEK,
+                              &excludeFromPeek, sizeof(excludeFromPeek));
+        g_overlayWindows.push_back(hwnd);
+        g_overlayHosts.push_back(host);
+
+        if (renderMode != OVERLAY_RENDER_ULW)
+            CreateOverlayPresenter(hwnd, width, height, renderMode == OVERLAY_RENDER_DCOMP);
+        if (host)
+            ShowWindow(host, SW_SHOWNOACTIVATE);
+    }
+    g_overlayBuiltRenderMode = renderMode;
+    g_overlayLastRenderMs.assign(g_overlayWindows.size(), 0);
+
+    // Raised desktop: a new child lands on top of Progman's children, i.e.
+    // above the icon layer. Stack it below the icons right away.
+    ReassertOverlayZOrder();
+
+    g_hwndOverlay = g_overlayWindows.front();
+    g_overlayScreenRect = rects.front();
+    g_overlayWakeHwnd.store(g_hwndOverlay, std::memory_order_release);
+    g_overlayIdle.store(false, std::memory_order_release);
+
+    Wh_Log(L"Overlay windows created: count=%zu mode=%d first=%p host=%p",
+           g_overlayWindows.size(), renderMode, g_overlayWindows.front(),
+           g_overlayHosts.front());
+    if (g_overlayPlacement.raised)
+        LogDesktopTree(L"after overlay creation");
+    return true;
+}
+
+// Returns true when the overlay windows were recreated. A recreated window
+// has no render timer, so the caller must re-arm it.
+static bool RebuildOverlayWindows(
+    const VisualizerSettings& settings,
+    HINSTANCE instance,
+    LPCWSTR windowClass,
+    HWND desktopParent) {
+    DebugPerfScope debugScope(DEBUG_PERF_DESKTOP_MAINTENANCE);
+    const auto desired = GetOverlayTargetRects(settings);
+    bool matches = !g_overlayForceRebuild &&
+                   desktopParent && IsWindow(desktopParent) &&
+                   g_overlayBuiltRenderMode == g_overlayPlacement.renderMode &&
+                   desired.size() == g_overlayWindows.size() &&
+                   g_overlayHosts.size() == g_overlayWindows.size();
+    if (matches) {
+        for (size_t i = 0; i < desired.size(); ++i) {
+            // The window stacked among the desktop's children: the holder
+            // when there is one, otherwise the overlay itself.
+            HWND stacked = g_overlayHosts[i] ? g_overlayHosts[i] : g_overlayWindows[i];
+            RECT actual{};
+            if (!g_overlayWindows[i] || !IsWindow(g_overlayWindows[i]) ||
+                !stacked || !IsWindow(stacked) ||
+                GetParent(stacked) != desktopParent ||
+                !GetWindowRect(g_overlayWindows[i], &actual) ||
+                std::memcmp(&actual, &desired[i], sizeof(RECT)) != 0) {
+                matches = false;
+                break;
+            }
+        }
+    }
+    if (!matches && desktopParent && IsWindow(desktopParent)) {
+        const bool ok = CreateOverlayWindowsForSettings(
+            settings, instance, windowClass, desktopParent);
+        Wh_Log(L"RebuildOverlayWindows: overlay windows recreated (ok=%d)",
+               ok ? 1 : 0);
+        return ok;
+    }
+    return false;
+}
+
 static UINT GetDisplayRefreshRateHz() {
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    const auto monitors = GetOverlayMonitors();
+
+    if (settings.targetMonitor <= 0 && !monitors.empty()) {
+        UINT maxRefreshRate = 1;
+        for (const auto& monitor : monitors) {
+            MONITORINFOEXW monitorInfo{};
+            monitorInfo.cbSize = sizeof(monitorInfo);
+            DEVMODEW devMode{};
+            devMode.dmSize = sizeof(devMode);
+
+            if (GetMonitorInfoW(
+                    monitor.monitor,
+                    reinterpret_cast<MONITORINFO*>(&monitorInfo)) &&
+                EnumDisplaySettingsW(
+                    monitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &devMode) &&
+                devMode.dmDisplayFrequency > 1) {
+                maxRefreshRate = std::max<UINT>(
+                    maxRefreshRate,
+                    static_cast<UINT>(devMode.dmDisplayFrequency));
+            }
+        }
+        if (maxRefreshRate > 1)
+            return maxRefreshRate;
+    }
+
     HMONITOR monitor = nullptr;
     if (g_hwndOverlay)
         monitor = MonitorFromWindow(g_hwndOverlay, MONITOR_DEFAULTTOPRIMARY);
@@ -9371,20 +24604,314 @@ static UINT GetDisplayRefreshRateHz() {
 
     MONITORINFOEXW monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
-
     DEVMODEW devMode{};
     devMode.dmSize = sizeof(devMode);
 
     if (monitor &&
-        GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&monitorInfo)) &&
+        GetMonitorInfoW(
+            monitor, reinterpret_cast<MONITORINFO*>(&monitorInfo)) &&
         EnumDisplaySettingsW(
             monitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &devMode) &&
         devMode.dmDisplayFrequency > 1) {
         return static_cast<UINT>(devMode.dmDisplayFrequency);
     }
 
-    // 60 Hz is a safe fallback when the current display mode cannot be queried.
     return 60;
+}
+
+static HMONITOR GetFullscreenForegroundMonitor() {
+    HWND foreground = GetForegroundWindow();
+    if (!foreground || !IsWindow(foreground) || !IsWindowVisible(foreground) ||
+        IsIconic(foreground)) {
+        return nullptr;
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(foreground, &processId);
+    if (processId == 0 || processId == GetCurrentProcessId())
+        return nullptr;
+
+    LONG style = GetWindowLongW(foreground, GWL_STYLE);
+    if (style & WS_CHILD)
+        return nullptr;
+
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(
+            foreground, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
+        return nullptr;
+    }
+
+    RECT windowRect{};
+    if (!GetWindowRect(foreground, &windowRect))
+        return nullptr;
+
+    HMONITOR monitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONULL);
+    if (!monitor)
+        return nullptr;
+
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfoW(monitor, &monitorInfo))
+        return nullptr;
+
+    // Treat both exclusive fullscreen and borderless fullscreen as fullscreen.
+    // A two-pixel tolerance covers occasional rounding/DPI edge differences.
+    constexpr int kFullscreenTolerancePx = 2;
+    const bool fullscreen =
+        std::abs(windowRect.left - monitorInfo.rcMonitor.left) <= kFullscreenTolerancePx &&
+        std::abs(windowRect.top - monitorInfo.rcMonitor.top) <= kFullscreenTolerancePx &&
+        std::abs(windowRect.right - monitorInfo.rcMonitor.right) <= kFullscreenTolerancePx &&
+        std::abs(windowRect.bottom - monitorInfo.rcMonitor.bottom) <= kFullscreenTolerancePx;
+
+    return fullscreen ? monitor : nullptr;
+}
+
+static bool IsOverlayOnMonitor(HWND overlay, HMONITOR monitor) {
+    if (!overlay || !monitor)
+        return false;
+    return MonitorFromWindow(overlay, MONITOR_DEFAULTTONEAREST) == monitor;
+}
+
+static bool AnyOverlayNotFullscreenThrottled(HMONITOR fullscreenMonitor) {
+    if (!fullscreenMonitor)
+        return true;
+
+    for (HWND overlay : g_overlayWindows) {
+        if (!IsOverlayOnMonitor(overlay, fullscreenMonitor))
+            return true;
+    }
+
+    return false;
+}
+
+static double GetEffectiveRenderFps(const VisualizerSettings& settings) {
+    if (g_cachedDisplayRefreshRateHz == 0)
+        g_cachedDisplayRefreshRateHz = GetDisplayRefreshRateHz();
+    const double refreshHz = static_cast<double>(
+        std::max<UINT>(1, g_cachedDisplayRefreshRateHz));
+    const double requestedFps = settings.targetFps <= 0
+        ? refreshHz
+        : static_cast<double>(settings.targetFps);
+    return std::max(1.0, std::min(requestedFps, refreshHz));
+}
+
+static double GetRenderSchedulerPeriodMs(const VisualizerSettings& settings) {
+    const bool visualizerVisible =
+        settings.visualizerEnabled && g_desktopVisualizerVisible;
+    const HWND playerPopup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    const bool playerOpen =
+        g_eqPlayerPopupOpen.load(std::memory_order_acquire) &&
+        playerPopup && IsWindow(playerPopup);
+
+    if (!visualizerVisible && !playerOpen)
+        return static_cast<double>(kDesktopVisualizerVisibilityCheckMs);
+
+    if (visualizerVisible && !playerOpen) {
+        const HMONITOR fullscreenMonitor =
+            g_fullscreenMonitor.load(std::memory_order_acquire);
+        if (fullscreenMonitor && !AnyOverlayNotFullscreenThrottled(fullscreenMonitor))
+            return 1000.0;
+        if (IsAlbumPaletteTransitionActive())
+            return 1000.0 / GetEffectiveRenderFps(settings);
+        if (g_overlayIdle.load(std::memory_order_acquire))
+            return 200.0;
+    }
+
+    // Keep the exact fractional period: 180 Hz = 5.555... ms.
+    return 1000.0 / GetEffectiveRenderFps(settings);
+}
+
+static void InitOverlayQpcFrequency() {
+    if (g_overlayQpcFrequency.QuadPart <= 0)
+        QueryPerformanceFrequency(&g_overlayQpcFrequency);
+}
+
+static bool EnsureOverlayRenderTimer() {
+    if (g_hOverlayRenderTimer)
+        return true;
+    InitOverlayQpcFrequency();
+    g_hOverlayRenderTimer = CreateWaitableTimerExW(
+        nullptr, nullptr,
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
+    g_overlayRenderTimerHighRes = g_hOverlayRenderTimer != nullptr;
+    if (!g_hOverlayRenderTimer) {
+        g_hOverlayRenderTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+        g_overlayRenderTimerHighRes = false;
+    }
+    return g_hOverlayRenderTimer != nullptr;
+}
+
+static void DisarmOverlayRenderTimer() {
+    if (g_hOverlayRenderTimer)
+        CancelWaitableTimer(g_hOverlayRenderTimer);
+    g_overlayRenderDeadlineQpc = 0;
+    g_overlayRenderScheduledPeriodMs = 0.0;
+}
+
+static void CloseOverlayRenderTimer() {
+    if (g_hOverlayRenderTimer) {
+        CancelWaitableTimer(g_hOverlayRenderTimer);
+        CloseHandle(g_hOverlayRenderTimer);
+        g_hOverlayRenderTimer = nullptr;
+    }
+    g_overlayRenderTimerHighRes = false;
+    g_overlayRenderDeadlineQpc = 0;
+    g_overlayRenderScheduledPeriodMs = 0.0;
+}
+
+static ULONGLONG OverlayQpcNow() {
+    InitOverlayQpcFrequency();
+    LARGE_INTEGER now{};
+    QueryPerformanceCounter(&now);
+    return now.QuadPart > 0 ? static_cast<ULONGLONG>(now.QuadPart) : 0;
+}
+
+static void ArmOverlayRenderTimer(
+    const VisualizerSettings& settings, bool resetDeadline) {
+    if (!EnsureOverlayRenderTimer() || g_overlayQpcFrequency.QuadPart <= 0)
+        return;
+
+    const double periodMs = GetRenderSchedulerPeriodMs(settings);
+    const ULONGLONG nowQpc = OverlayQpcNow();
+    const double qpcFrequency =
+        static_cast<double>(g_overlayQpcFrequency.QuadPart);
+    const bool periodChanged =
+        std::abs(periodMs - g_overlayRenderScheduledPeriodMs) > 0.01;
+
+    if (resetDeadline || periodChanged || g_overlayRenderDeadlineQpc == 0) {
+        g_overlayRenderScheduledPeriodMs = periodMs;
+        const double ticks = periodMs * qpcFrequency / 1000.0;
+        g_overlayRenderDeadlineQpc = nowQpc + static_cast<ULONGLONG>(
+            std::max(1.0, std::ceil(ticks)));
+    } else {
+        const double periodTicks = periodMs * qpcFrequency / 1000.0;
+        const ULONGLONG increment = static_cast<ULONGLONG>(
+            std::max(1.0, std::ceil(periodTicks)));
+        while (g_overlayRenderDeadlineQpc <= nowQpc)
+            g_overlayRenderDeadlineQpc += increment;
+    }
+
+    const ULONGLONG delayTicks =
+        g_overlayRenderDeadlineQpc > nowQpc
+            ? g_overlayRenderDeadlineQpc - nowQpc : 1;
+    const LONGLONG relative100ns = -static_cast<LONGLONG>(std::max(
+        1.0,
+        std::ceil(static_cast<double>(delayTicks) * 10000000.0 /
+                  qpcFrequency)));
+    LARGE_INTEGER due{};
+    due.QuadPart = relative100ns;
+    SetWaitableTimer(g_hOverlayRenderTimer, &due, 0, nullptr, nullptr, FALSE);
+}
+
+static void ProcessOverlayRenderTick() {
+    const ULONGLONG schedulerNowQpc = OverlayQpcNow();
+    const ULONGLONG previousSchedulerQpc =
+        g_debugSchedulerLastStartQpc.exchange(
+            schedulerNowQpc, std::memory_order_acq_rel);
+    if (previousSchedulerQpc != 0 && schedulerNowQpc > previousSchedulerQpc) {
+        g_debugSchedulerIntervalQpcTotal.fetch_add(
+            schedulerNowQpc - previousSchedulerQpc, std::memory_order_relaxed);
+        g_debugSchedulerIntervalSamples.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    const ULONGLONG scheduledDeadline = g_overlayRenderDeadlineQpc;
+    if (scheduledDeadline != 0 && g_overlayQpcFrequency.QuadPart > 0) {
+        const double latenessMs = schedulerNowQpc > scheduledDeadline
+            ? static_cast<double>(schedulerNowQpc - scheduledDeadline) * 1000.0 /
+              static_cast<double>(g_overlayQpcFrequency.QuadPart)
+            : 0.0;
+        g_debugSchedulerLatenessMs.store(
+            static_cast<float>(std::clamp(latenessMs, 0.0, 60000.0)),
+            std::memory_order_release);
+        g_debugSchedulerMissSamples.fetch_add(1, std::memory_order_relaxed);
+        // Treat >0.20 ms late as an actual deadline miss rather than normal
+        // timer/QPC quantization noise.
+        if (latenessMs > 0.20)
+            g_debugSchedulerMisses.fetch_add(1, std::memory_order_relaxed);
+    } else {
+        g_debugSchedulerLatenessMs.store(0.0f, std::memory_order_release);
+    }
+
+    DebugPerfScope debugScope(DEBUG_PERF_SCHEDULER_TICK);
+    if (!g_running.load(std::memory_order_acquire) ||
+        g_layoutEditActive.load(std::memory_order_acquire))
+        return;
+
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    const bool visible = RefreshDesktopVisualizerRuntime(settings);
+
+    // Player must keep refreshing independently of desktop-visualizer visibility.
+    // Its own open state also keeps GetRenderSchedulerPeriodMs at the Player cadence.
+    const HWND playerPopup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (g_eqPlayerPopupOpen.load(std::memory_order_acquire) &&
+        playerPopup && IsWindow(playerPopup) &&
+        ShouldRenderPlayerOnSchedulerTick()) {
+        RequestEqPopupRender(playerPopup);
+        g_debugPlayerFrames.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    if (!visible) {
+        ArmOverlayRenderTimer(settings, true);
+        return;
+    }
+
+    const double schedulerPeriod = GetRenderSchedulerPeriodMs(settings);
+    g_currentOverlayTimerMs = std::max<UINT>(
+        1, static_cast<UINT>(std::ceil(schedulerPeriod)));
+
+    bool renderedAny = false;
+    {
+        std::shared_lock<std::shared_mutex> settingsLock(g_settingsMutex);
+        if (settings.visualizerEnabled && g_desktopVisualizerVisible) {
+            UpdateAnimationFromAudio();
+
+            const ULONGLONG nowMs = GetTickCount64();
+            const HMONITOR fullscreenMonitor =
+                g_fullscreenMonitor.load(std::memory_order_acquire);
+            if (g_overlayLastRenderMs.size() != g_overlayWindows.size())
+                g_overlayLastRenderMs.assign(g_overlayWindows.size(), 0);
+
+            for (size_t i = 0; i < g_overlayWindows.size(); ++i) {
+                HWND overlay = g_overlayWindows[i];
+                bool shouldRender = true;
+                if (fullscreenMonitor) {
+                    const HMONITOR overlayMonitor =
+                        MonitorFromWindow(overlay, MONITOR_DEFAULTTONEAREST);
+                    if (overlayMonitor == fullscreenMonitor) {
+                        const ULONGLONG lastRenderMs = g_overlayLastRenderMs[i];
+                        shouldRender = lastRenderMs == 0 ||
+                            nowMs - lastRenderMs >= 1000;
+                    }
+                }
+                if (shouldRender) {
+                    RenderOverlay(overlay);
+                    g_overlayLastRenderMs[i] = nowMs;
+                    renderedAny = true;
+                }
+            }
+
+            const int barCount =
+                std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
+            const float peakRatio = GetCurrentVisualizerPeakRatio(barCount);
+            const float minRatio =
+                static_cast<float>(g_settings.minBarHeight) /
+                static_cast<float>(std::max(1, g_settings.maxBarHeight));
+            const bool shouldIdle =
+                peakRatio <= std::min(1.0f, minRatio + 0.01f);
+            if (shouldIdle != g_overlayIdle.load(std::memory_order_acquire))
+                g_overlayIdle.store(shouldIdle, std::memory_order_release);
+        }
+    }
+
+    if (renderedAny)
+        g_debugVisualizerFrames.fetch_add(1, std::memory_order_relaxed);
+
+    g_debugOverlayTicks.fetch_add(1, std::memory_order_relaxed);
+    const VisualizerSettings rescheduleSettings = GetSettingsSnapshot();
+    ArmOverlayRenderTimer(rescheduleSettings, false);
 }
 
 static UINT GetRenderIntervalMs(const VisualizerSettings& settings) {
@@ -9406,9 +24933,1196 @@ static UINT GetRenderIntervalMs(const VisualizerSettings& settings) {
         1, static_cast<UINT>(std::ceil(1000.0 / effectiveFps)));
 }
 
+static UINT GetOverlayTimerIntervalMs(const VisualizerSettings& settings) {
+    return std::max<UINT>(
+        1, static_cast<UINT>(std::ceil(
+            GetRenderSchedulerPeriodMs(settings))));
+}
+
+static bool UpdateFullscreenThrottle(bool forceCheck = false) {
+    const ULONGLONG nowMs = GetTickCount64();
+    if (!forceCheck && nowMs - g_lastFullscreenCheckMs < 250)
+        return g_fullscreenThrottleActive.load(std::memory_order_acquire);
+
+    g_lastFullscreenCheckMs = nowMs;
+    const HMONITOR fullscreenMonitor = GetFullscreenForegroundMonitor();
+    const HMONITOR previousMonitor = g_fullscreenMonitor.exchange(
+        fullscreenMonitor, std::memory_order_acq_rel);
+    const bool fullscreen = fullscreenMonitor != nullptr;
+    const bool previous = previousMonitor != nullptr;
+    g_fullscreenThrottleActive.store(fullscreen, std::memory_order_release);
+
+    if (fullscreenMonitor != previousMonitor) {
+        if (g_hwndOverlay && IsWindow(g_hwndOverlay) &&
+            !g_layoutEditActive.load(std::memory_order_acquire)) {
+            const VisualizerSettings settings = GetSettingsSnapshot();
+            g_currentOverlayTimerMs = GetOverlayTimerIntervalMs(settings);
+            ArmOverlayRenderTimer(settings, true);
+        }
+    } else if (fullscreen != previous) {
+        // Kept for clarity if the state representation changes in the future.
+        g_fullscreenThrottleActive.store(fullscreen, std::memory_order_release);
+    }
+
+    return fullscreen;
+}
+
+// Desktop window layering, top to bottom.
+//
+// Classic desktop (Windows 10, Windows 11 before 24H2):
+//
+//   WorkerW (or Progman)          host of the icon layer
+//     SHELLDLL_DefView
+//       SysListView32 "FolderView" the desktop icons
+//   WorkerW                       wallpaper layer, spawned by Progman on 0x052C
+//   Progman
+//
+// "Raised desktop" (Windows 11 24H2+, build 26100+): Progman carries
+// WS_EX_NOREDIRECTIONBITMAP and the desktop layers are CHILDREN of Progman:
+//
+//   Progman
+//     SHELLDLL_DefView (or a WorkerW nesting it)   the icon layer
+//     WorkerW                                       wallpaper layer
+//
+// A window parented to SHELLDLL_DefView is a sibling of the icon list and is
+// painted ABOVE the icons. To draw BEHIND the icons the overlay lives in the
+// wallpaper WorkerW on the classic desktop, and on the raised desktop it is a
+// child of Progman stacked between the icon layer and the wallpaper WorkerW.
+// A layered child placed INSIDE the raised-desktop WorkerW is not displayed
+// at all, which is why the raised layout needs its own path (the recipe used
+// by live-wallpaper tools that support 24H2, e.g. RexPaper). Win+D / Show
+// Desktop leaves both layers alone.
+
+static HWND FindDesktopProgman() {
+    HWND hProgman = GetShellWindow();
+    if (!hProgman)
+        hProgman = FindWindowW(L"Progman", nullptr);
+    if (!hProgman)
+        return nullptr;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hProgman, &pid);
+    return pid == GetCurrentProcessId() ? hProgman : nullptr;
+}
+
+static bool IsRaisedDesktop(HWND hProgman) {
+    return hProgman &&
+           (GetWindowLongPtrW(hProgman, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP) != 0;
+}
+
+static BOOL CALLBACK FindDefViewChildProc(HWND hwnd, LPARAM lParam) {
+    wchar_t cls[32]{};
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+        wcscmp(cls, L"SHELLDLL_DefView") == 0) {
+        *reinterpret_cast<HWND*>(lParam) = hwnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// Classic: DefView directly under Progman or under a top-level WorkerW.
+// Raised: DefView directly under Progman or nested at any depth below it.
+static HWND FindDesktopDefView(HWND hProgman) {
+    HWND defView = hProgman
+        ? FindWindowExW(hProgman, nullptr, L"SHELLDLL_DefView", nullptr)
+        : nullptr;
+    if (defView)
+        return defView;
+
+    HWND worker = nullptr;
+    while ((worker = FindWindowExW(nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
+        defView = FindWindowExW(worker, nullptr, L"SHELLDLL_DefView", nullptr);
+        if (defView)
+            return defView;
+    }
+
+    if (hProgman) {
+        HWND nested = nullptr;
+        EnumChildWindows(hProgman, FindDefViewChildProc,
+                         reinterpret_cast<LPARAM>(&nested));
+        if (nested)
+            return nested;
+    }
+    return nullptr;
+}
+
+// Explorer owns several small, invisible WorkerW windows that have nothing to
+// do with the desktop. The wallpaper layer is the visible one that covers the
+// same area as Progman and does not itself host the icon layer.
+static bool IsWallpaperWorkerWCandidate(HWND hwnd, HWND hProgman) {
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd))
+        return false;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return false;
+
+    if (FindWindowExW(hwnd, nullptr, L"SHELLDLL_DefView", nullptr))
+        return false;
+
+    RECT r{};
+    RECT p{};
+    if (!GetWindowRect(hwnd, &r) || !GetWindowRect(hProgman, &p))
+        return false;
+    return r.left == p.left && r.top == p.top &&
+           r.right == p.right && r.bottom == p.bottom;
+}
+
+// Classic desktop only.
+static HWND FindWallpaperWorkerW(HWND hProgman, HWND defView) {
+    if (!hProgman || !defView)
+        return nullptr;
+
+    // The wallpaper WorkerW sits right below the top-level WorkerW that
+    // hosts SHELLDLL_DefView in the z-order.
+    HWND defViewHost = GetAncestor(defView, GA_PARENT);
+    if (defViewHost && defViewHost != hProgman &&
+        GetAncestor(defViewHost, GA_PARENT) == GetDesktopWindow()) {
+        HWND next = defViewHost;
+        while ((next = FindWindowExW(nullptr, next, L"WorkerW", nullptr)) != nullptr) {
+            if (IsWallpaperWorkerWCandidate(next, hProgman))
+                return next;
+        }
+    }
+
+    // Some builds make it a top-level popup owned by Progman instead.
+    HWND worker = nullptr;
+    while ((worker = FindWindowExW(nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
+        if (GetWindow(worker, GW_OWNER) == hProgman &&
+            IsWallpaperWorkerWCandidate(worker, hProgman))
+            return worker;
+    }
+
+    return nullptr;
+}
+
+// Raised desktop: the WorkerW child of Progman that does not host the icons.
+static HWND FindRaisedWallpaperWorkerW(HWND hProgman, HWND iconHost) {
+    HWND worker = nullptr;
+    while ((worker = FindWindowExW(hProgman, worker, L"WorkerW", nullptr)) != nullptr) {
+        if (worker == iconHost)
+            continue;
+        if (FindWindowExW(worker, nullptr, L"SHELLDLL_DefView", nullptr))
+            continue;
+        return worker;
+    }
+    return nullptr;
+}
+
+// Raised desktop stacking: icon layer on top, overlay right below it,
+// wallpaper WorkerW at the bottom. Explorer may restack its children on
+// wallpaper or theme changes, so the repair pass calls this too. No-op for
+// the other placements.
+static void ReassertOverlayZOrder() {
+    // Only the raised desktop behind-icons placements set insertAfter.
+    const HWND insertAfter = g_overlayPlacement.insertAfter;
+    if (!g_overlayPlacement.raised || !insertAfter)
+        return;
+    if (IsWindow(insertAfter)) {
+        for (size_t i = 0; i < g_overlayWindows.size(); ++i) {
+            // Stack the holder when there is one; the overlay inside follows.
+            HWND stacked = (i < g_overlayHosts.size() && g_overlayHosts[i])
+                ? g_overlayHosts[i] : g_overlayWindows[i];
+            if (stacked && IsWindow(stacked)) {
+                SetWindowPos(stacked, insertAfter, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+    }
+    const HWND wallpaper = g_overlayPlacement.wallpaperWorkerW;
+    if (wallpaper && IsWindow(wallpaper)) {
+        SetWindowPos(wallpaper, HWND_BOTTOM, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
+// Returns the window the overlay should be a child of and records the full
+// placement in g_overlayPlacement. Returns nullptr while the desktop is not
+// ready yet. The 0x052C spawn request is sent once per Progman instance.
+// placementSetting is VisualizerSettings::desktopPlacement.
+static HWND ResolveOverlayDesktopParent(int placementSetting) {
+    static HWND s_spawnRequestedFor = nullptr;
+    static HWND s_lastLoggedParent = nullptr;
+    static int s_lastLoggedMode = -1;
+
+    HWND hProgman = FindDesktopProgman();
+    if (!hProgman)
+        return nullptr;
+
+    const bool raised = IsRaisedDesktop(hProgman);
+    if (hProgman != s_spawnRequestedFor) {
+        s_spawnRequestedFor = hProgman;
+        // Undocumented Progman message that makes it create/reposition the
+        // wallpaper WorkerW behind the icons. (0xD, 1) is the canonical spawn
+        // request. On the raised desktop a trailing (0xD, 0) removes the
+        // freshly created WorkerW again, so that variant is only sent on the
+        // classic desktop, where both are harmless.
+        if (!raised)
+            SendMessageTimeoutW(hProgman, 0x052C, 0xD, 0, SMTO_ABORTIFHUNG, 1000, nullptr);
+        SendMessageTimeoutW(hProgman, 0x052C, 0xD, 1, SMTO_ABORTIFHUNG, 1000, nullptr);
+    }
+
+    HWND defView = FindDesktopDefView(hProgman);
+    if (!defView)
+        return nullptr;
+
+    OverlayDesktopPlacement placement{};
+    placement.raised = raised;
+    placement.renderMode = OVERLAY_RENDER_ULW;
+    const wchar_t* description = L"";
+
+    if (placementSetting == DESKTOP_PLACEMENT_ABOVE_ICONS) {
+        // The original placement: a sibling of the icon list, above it.
+        // Renders everywhere, including the raised desktop.
+        placement.parent = defView;
+        description = L"above icons (setting): child of SHELLDLL_DefView";
+    } else if (raised) {
+        // The direct child of Progman that hosts the icon view.
+        HWND iconHost = defView;
+        for (;;) {
+            HWND parent = GetAncestor(iconHost, GA_PARENT);
+            if (!parent || parent == hProgman)
+                break;
+            iconHost = parent;
+        }
+        placement.parent = hProgman;
+        placement.insertAfter = iconHost;
+        placement.wallpaperWorkerW = FindRaisedWallpaperWorkerW(hProgman, iconHost);
+        placement.behindIcons = true;
+        // UpdateLayeredWindow content is never composited here, see
+        // docs/research/2026-09-26-win11-raised-desktop.md.
+        if (placementSetting == DESKTOP_PLACEMENT_TRANSPARENT) {
+            placement.renderMode = OVERLAY_RENDER_DCOMP;
+            description = L"raised desktop: DirectComposition child of Progman below the icon layer";
+        } else {
+            placement.renderMode = OVERLAY_RENDER_OPAQUE_HOLDER;
+            description = L"raised desktop: opaque holder child of Progman below the icon layer";
+        }
+    } else {
+        HWND wallpaper = FindWallpaperWorkerW(hProgman, defView);
+        if (wallpaper) {
+            placement.parent = wallpaper;
+            placement.behindIcons = true;
+            description = L"classic desktop: wallpaper WorkerW, behind icons";
+        } else {
+            placement.parent = defView;
+            description = L"SHELLDLL_DefView fallback, above icons";
+        }
+    }
+    g_overlayPlacement = placement;
+
+    if (placement.parent != s_lastLoggedParent || placement.renderMode != s_lastLoggedMode) {
+        s_lastLoggedParent = placement.parent;
+        s_lastLoggedMode = placement.renderMode;
+        Wh_Log(L"Overlay desktop parent: %s (parent=%p insertAfter=%p wallpaperWorkerW=%p mode=%d)",
+               description, placement.parent, placement.insertAfter,
+               placement.wallpaperWorkerW, placement.renderMode);
+    }
+    return placement.parent;
+}
+
+// ===========================================================================
+// Desktop layout editor
+// ===========================================================================
+// A dedicated edit mode: the desktop overlay is frozen (render timer stopped,
+// repair passes paused), a dimmed top-level surface covers the overlay's
+// monitor, and the visualizer / album widget / lyrics can be dragged or
+// nudged. Nothing is persisted until Apply. Cancel restores the entry state.
+// The editor runs on the overlay thread and shares its state with the
+// overlay renderer, so dragging re-renders the frozen overlay at the new
+// position at a throttled rate instead of every mouse move.
+
+static constexpr int LAYOUT_TARGET_NONE = -1;
+static constexpr int LAYOUT_TARGET_VISUALIZER = 0;
+static constexpr int LAYOUT_TARGET_ALBUM = 1;
+static constexpr int LAYOUT_TARGET_LYRICS = 2;
+
+static constexpr int LAYOUT_BUTTON_NONE = -1;
+static constexpr int LAYOUT_BUTTON_APPLY = 0;
+static constexpr int LAYOUT_BUTTON_RESET = 1;
+static constexpr int LAYOUT_BUTTON_LOCK_WIDGET = 2;
+static constexpr int LAYOUT_BUTTON_CANCEL = 3;
+
+static constexpr UINT kLayoutEditTimerId = 1;
+static constexpr UINT kLayoutEditTimerMs = 30;
+static const wchar_t* kLayoutEditClass = L"WindhawkVisualizerLayoutEditor";
+static bool g_layoutEditClassRegistered = false;
+
+struct LayoutEditState {
+    HWND hwnd = nullptr;
+    RECT screenRect{};
+    int width = 0;
+    int height = 0;
+    double scale = 1.0;
+
+    int dragTarget = LAYOUT_TARGET_NONE;
+    int hoverTarget = LAYOUT_TARGET_NONE;
+    int selectedTarget = LAYOUT_TARGET_VISUALIZER;
+    int hotButton = LAYOUT_BUTTON_NONE;
+    POINT dragStartCursor{};
+    POINT dragStartOrigin{};
+    bool snapX = false;
+    bool snapY = false;
+    bool lockVisualizer = false;
+    bool lockAlbum = false;
+    bool lockLyrics = false;
+    bool dirty = false;
+
+    // State at entry, restored on cancel.
+    int origVisualizerX = 0;
+    int origVisualizerY = 0;
+    int origLyricsX = 0;
+    int origLyricsY = 0;
+    int origAlbumSeparateX = 0;
+    int origAlbumSeparateY = 0;
+    int origAlbumLyricsOffsetX = 0;
+    int origAlbumLyricsOffsetY = 0;
+    int origAlbumVisualizerOffsetX = 0;
+    int origAlbumVisualizerOffsetY = 0;
+
+    HDC memDC = nullptr;
+    HBITMAP bitmap = nullptr;
+    HGDIOBJ oldBitmap = nullptr;
+    void* bits = nullptr;
+};
+static LayoutEditState g_layoutEdit;
+
+static LRESULT CALLBACK LayoutEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+struct LayoutEditToolbar {
+    RECT panel{};
+    RECT apply{};
+    RECT reset{};
+    RECT lockWidget{};
+    RECT cancel{};
+};
+
+static int LayoutEditPx(double v) {
+    return static_cast<int>(std::lround(v * g_layoutEdit.scale));
+}
+
+static LayoutEditToolbar LayoutEditGetToolbar() {
+    LayoutEditToolbar t{};
+    const int panelW = std::min(g_layoutEdit.width - LayoutEditPx(32), LayoutEditPx(920));
+    const int panelH = LayoutEditPx(152);
+    const int left = (g_layoutEdit.width - panelW) / 2;
+    const int top = LayoutEditPx(24);
+    t.panel = RECT{left, top, left + panelW, top + panelH};
+
+    const int buttonH = LayoutEditPx(34);
+    const int buttonTop = top + panelH - buttonH - LayoutEditPx(14);
+    const int gap = LayoutEditPx(8);
+    int x = left + LayoutEditPx(18);
+    t.apply = RECT{x, buttonTop, x + LayoutEditPx(100), buttonTop + buttonH};
+    x = t.apply.right + gap;
+    t.reset = RECT{x, buttonTop, x + LayoutEditPx(145), buttonTop + buttonH};
+    x = t.reset.right + gap;
+    t.lockWidget = RECT{x, buttonTop, x + LayoutEditPx(135), buttonTop + buttonH};
+    x = t.lockWidget.right + gap;
+    t.cancel = RECT{x, buttonTop, x + LayoutEditPx(100), buttonTop + buttonH};
+    return t;
+}
+
+// The helpers below read g_settings; callers hold g_settingsMutex.
+static bool LayoutEditTargetAvailable(int target) {
+    switch (target) {
+    case LAYOUT_TARGET_VISUALIZER:
+        return true;
+    case LAYOUT_TARGET_ALBUM:
+        return g_settings.albumWidgetEnabled;
+    case LAYOUT_TARGET_LYRICS:
+        return g_settings.lyricsEnabled;
+    }
+    return false;
+}
+
+static const wchar_t* LayoutEditTargetName(int target) {
+    switch (target) {
+    case LAYOUT_TARGET_VISUALIZER: return L"Visualizer";
+    case LAYOUT_TARGET_ALBUM: return L"Album widget";
+    case LAYOUT_TARGET_LYRICS: return L"Lyrics";
+    }
+    return L"";
+}
+
+static bool LayoutEditTargetLocked(int target) {
+    switch (target) {
+    case LAYOUT_TARGET_VISUALIZER: return g_layoutEdit.lockVisualizer;
+    case LAYOUT_TARGET_ALBUM: return g_layoutEdit.lockAlbum;
+    case LAYOUT_TARGET_LYRICS: return g_layoutEdit.lockLyrics;
+    }
+    return false;
+}
+
+static void LayoutEditSetTargetLocked(int target, bool locked) {
+    switch (target) {
+    case LAYOUT_TARGET_VISUALIZER: g_layoutEdit.lockVisualizer = locked; break;
+    case LAYOUT_TARGET_ALBUM: g_layoutEdit.lockAlbum = locked; break;
+    case LAYOUT_TARGET_LYRICS: g_layoutEdit.lockLyrics = locked; break;
+    }
+}
+
+static int LayoutEditRectCenterX(const RECT& r) {
+    return static_cast<int>((r.left + r.right) / 2);
+}
+
+static int LayoutEditRectCenterY(const RECT& r) {
+    return static_cast<int>((r.top + r.bottom) / 2);
+}
+
+static RECT LayoutEditTargetRect(int target) {
+    switch (target) {
+    case LAYOUT_TARGET_VISUALIZER: {
+        const int barCount = std::clamp(g_settings.barCount, 1, VIZ_BANDS_MAX);
+        return GetVisualizerBackgroundRect(
+            barCount, 1.0f, std::max(6, g_settings.backgroundPadding),
+            g_settings.backgroundHeightAdjustment);
+    }
+    case LAYOUT_TARGET_ALBUM:
+        return GetThirdAlbumWidgetRect(g_settings);
+    case LAYOUT_TARGET_LYRICS:
+        return RECT{g_settings.lyricsX, g_settings.lyricsY,
+                    g_settings.lyricsX + g_settings.lyricsWidth,
+                    g_settings.lyricsY + g_settings.lyricsHeight};
+    }
+    return RECT{};
+}
+
+// The point the stored coordinates refer to (anchor for the visualizer,
+// top-left for the widgets).
+static POINT LayoutEditTargetOrigin(int target) {
+    switch (target) {
+    case LAYOUT_TARGET_VISUALIZER:
+        return POINT{g_settings.positionX, g_settings.positionY};
+    case LAYOUT_TARGET_LYRICS:
+        return POINT{g_settings.lyricsX, g_settings.lyricsY};
+    case LAYOUT_TARGET_ALBUM: {
+        const RECT r = GetThirdAlbumWidgetRect(g_settings);
+        return POINT{r.left, r.top};
+    }
+    }
+    return POINT{};
+}
+
+// Caller holds a unique lock on g_settingsMutex.
+static void LayoutEditSetTargetOrigin(int target, int x, int y) {
+    switch (target) {
+    case LAYOUT_TARGET_VISUALIZER:
+        g_settings.positionX = x;
+        g_settings.positionY = y;
+        break;
+    case LAYOUT_TARGET_LYRICS:
+        g_settings.lyricsX = x;
+        g_settings.lyricsY = y;
+        break;
+    case LAYOUT_TARGET_ALBUM: {
+        const RECT desired{x, y, x + g_settings.albumWidgetWidth,
+                           y + g_settings.albumWidgetHeight};
+        // Attached widgets are clamped to their anchor exactly like the
+        // legacy on-desktop drag did.
+        UpdateThirdAlbumWidgetRectInMemory(g_settings, desired);
+        break;
+    }
+    }
+}
+
+static int LayoutEditHitTarget(int x, int y) {
+    std::shared_lock<std::shared_mutex> lock(g_settingsMutex);
+    // Smaller items first so they stay grabbable when overlapping the bars.
+    const int order[] = {LAYOUT_TARGET_ALBUM, LAYOUT_TARGET_LYRICS, LAYOUT_TARGET_VISUALIZER};
+    for (int target : order) {
+        if (!LayoutEditTargetAvailable(target))
+            continue;
+        const RECT r = LayoutEditTargetRect(target);
+        if (PtInRect(&r, POINT{x, y}))
+            return target;
+    }
+    return LAYOUT_TARGET_NONE;
+}
+
+static int LayoutEditHitButton(int x, int y) {
+    const LayoutEditToolbar t = LayoutEditGetToolbar();
+    const POINT p{x, y};
+    if (PtInRect(&t.apply, p)) return LAYOUT_BUTTON_APPLY;
+    if (PtInRect(&t.reset, p)) return LAYOUT_BUTTON_RESET;
+    if (PtInRect(&t.lockWidget, p)) return LAYOUT_BUTTON_LOCK_WIDGET;
+    if (PtInRect(&t.cancel, p)) return LAYOUT_BUTTON_CANCEL;
+    return LAYOUT_BUTTON_NONE;
+}
+
+static void LayoutEditReleaseSurface() {
+    if (g_layoutEdit.memDC && g_layoutEdit.oldBitmap)
+        SelectObject(g_layoutEdit.memDC, g_layoutEdit.oldBitmap);
+    if (g_layoutEdit.bitmap)
+        DeleteObject(g_layoutEdit.bitmap);
+    if (g_layoutEdit.memDC)
+        DeleteDC(g_layoutEdit.memDC);
+    g_layoutEdit.memDC = nullptr;
+    g_layoutEdit.bitmap = nullptr;
+    g_layoutEdit.oldBitmap = nullptr;
+    g_layoutEdit.bits = nullptr;
+}
+
+static bool LayoutEditEnsureSurface() {
+    if (g_layoutEdit.memDC && g_layoutEdit.bitmap && g_layoutEdit.bits)
+        return true;
+    LayoutEditReleaseSurface();
+
+    HDC screen = GetDC(nullptr);
+    g_layoutEdit.memDC = CreateCompatibleDC(screen);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = g_layoutEdit.width;
+    bi.bmiHeader.biHeight = -g_layoutEdit.height;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    g_layoutEdit.bitmap = CreateDIBSection(
+        screen, &bi, DIB_RGB_COLORS, &g_layoutEdit.bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+
+    if (!g_layoutEdit.memDC || !g_layoutEdit.bitmap || !g_layoutEdit.bits) {
+        LayoutEditReleaseSurface();
+        return false;
+    }
+    g_layoutEdit.oldBitmap = SelectObject(g_layoutEdit.memDC, g_layoutEdit.bitmap);
+    return true;
+}
+
+static void LayoutEditDrawButton(
+    Gdiplus::Graphics& graphics, const RECT& rect, const wchar_t* text,
+    bool accent, bool hot, Gdiplus::Font& font) {
+    Gdiplus::Color fill = accent
+        ? (hot ? Gdiplus::Color(255, 135, 185, 255) : Gdiplus::Color(255, 105, 165, 255))
+        : (hot ? Gdiplus::Color(255, 96, 96, 100) : Gdiplus::Color(255, 70, 70, 74));
+    Gdiplus::SolidBrush brush(fill);
+    Gdiplus::GraphicsPath path;
+    AddRoundedRectSubpath(path, static_cast<float>(rect.left), static_cast<float>(rect.top),
+                          static_cast<float>(rect.right - rect.left),
+                          static_cast<float>(rect.bottom - rect.top),
+                          static_cast<float>(LayoutEditPx(9)));
+    graphics.FillPath(&brush, &path);
+    Gdiplus::StringFormat center;
+    center.SetAlignment(Gdiplus::StringAlignmentCenter);
+    center.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+    graphics.DrawString(text, -1, &font,
+                        Gdiplus::RectF(static_cast<float>(rect.left), static_cast<float>(rect.top),
+                                       static_cast<float>(rect.right - rect.left),
+                                       static_cast<float>(rect.bottom - rect.top)),
+                        &center, &textBrush);
+}
+
+static void LayoutEditRender() {
+    if (!g_layoutEdit.hwnd || !IsWindow(g_layoutEdit.hwnd))
+        return;
+    if (!LayoutEditEnsureSurface())
+        return;
+
+    const int w = g_layoutEdit.width;
+    const int h = g_layoutEdit.height;
+
+    // Dim the desktop so edit mode is unmistakable. Premultiplied BGRA:
+    // black at alpha 64.
+    std::fill_n(static_cast<DWORD*>(g_layoutEdit.bits),
+                static_cast<size_t>(w) * static_cast<size_t>(h), 0x40000000u);
+
+    Gdiplus::Graphics graphics(g_layoutEdit.memDC);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+
+    const Gdiplus::Color accent(255, 105, 165, 255);
+    Gdiplus::FontFamily titleFamily(L"Segoe UI Semibold");
+    Gdiplus::FontFamily bodyFamily(L"Segoe UI");
+    Gdiplus::Font titleFont(&titleFamily, static_cast<float>(LayoutEditPx(17)),
+                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::Font bodyFont(&bodyFamily, static_cast<float>(LayoutEditPx(12.5)),
+                           Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::Font labelFont(&titleFamily, static_cast<float>(LayoutEditPx(12.5)),
+                            Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::Font buttonFont(&titleFamily, static_cast<float>(LayoutEditPx(13)),
+                             Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::SolidBrush whiteBrush(Gdiplus::Color(255, 245, 245, 248));
+    Gdiplus::SolidBrush mutedBrush(Gdiplus::Color(215, 200, 200, 205));
+    Gdiplus::SolidBrush accentBrush(accent);
+
+    // Show a center guide only while a widget is magnetically snapped to that axis.
+    if (g_layoutEdit.dragTarget != LAYOUT_TARGET_NONE &&
+        (g_layoutEdit.snapX || g_layoutEdit.snapY)) {
+        Gdiplus::Pen guidePen(Gdiplus::Color(210, 105, 165, 255),
+                              static_cast<float>(LayoutEditPx(1)));
+        if (g_layoutEdit.snapX)
+            graphics.DrawLine(&guidePen, static_cast<float>(w / 2), 0.0f,
+                              static_cast<float>(w / 2), static_cast<float>(h));
+        if (g_layoutEdit.snapY)
+            graphics.DrawLine(&guidePen, 0.0f, static_cast<float>(h / 2),
+                              static_cast<float>(w), static_cast<float>(h / 2));
+    }
+
+    std::wstring coords;
+    {
+        std::shared_lock<std::shared_mutex> lock(g_settingsMutex);
+        const int order[] = {LAYOUT_TARGET_VISUALIZER, LAYOUT_TARGET_LYRICS, LAYOUT_TARGET_ALBUM};
+        for (int target : order) {
+            if (!LayoutEditTargetAvailable(target))
+                continue;
+            const RECT r = LayoutEditTargetRect(target);
+            const POINT origin = LayoutEditTargetOrigin(target);
+            const bool selected = target == g_layoutEdit.selectedTarget;
+            const bool hot = target == g_layoutEdit.hoverTarget ||
+                             target == g_layoutEdit.dragTarget;
+
+            Gdiplus::GraphicsPath path;
+            AddRoundedRectSubpath(path, static_cast<float>(r.left), static_cast<float>(r.top),
+                                  static_cast<float>(std::max(1L, r.right - r.left)),
+                                  static_cast<float>(std::max(1L, r.bottom - r.top)),
+                                  static_cast<float>(LayoutEditPx(8)));
+            Gdiplus::SolidBrush fill(selected
+                ? Gdiplus::Color(hot ? 70 : 48, 105, 165, 255)
+                : Gdiplus::Color(hot ? 60 : 34, 255, 255, 255));
+            Gdiplus::Pen pen(selected ? accent : Gdiplus::Color(230, 235, 235, 235),
+                             static_cast<float>(LayoutEditPx(2)));
+            graphics.FillPath(&fill, &path);
+            graphics.DrawPath(&pen, &path);
+
+            if (target == LAYOUT_TARGET_VISUALIZER) {
+                // Mark the anchor the X/Y settings refer to.
+                Gdiplus::Pen crossPen(Gdiplus::Color(255, 255, 255, 255),
+                                      static_cast<float>(LayoutEditPx(1.5)));
+                const float cx = static_cast<float>(origin.x);
+                const float cy = static_cast<float>(origin.y);
+                const float arm = static_cast<float>(LayoutEditPx(9));
+                graphics.DrawLine(&crossPen, cx - arm, cy, cx + arm, cy);
+                graphics.DrawLine(&crossPen, cx, cy - arm, cx, cy + arm);
+            }
+
+            wchar_t label[96]{};
+            swprintf_s(label, L"%s%s   X %d   Y %d", LayoutEditTargetName(target),
+                       LayoutEditTargetLocked(target) ? L"  [LOCKED]" : L"",
+                       origin.x, origin.y);
+            Gdiplus::RectF measured;
+            graphics.MeasureString(label, -1, &labelFont, Gdiplus::PointF(0.0f, 0.0f), &measured);
+            const int pillW = static_cast<int>(measured.Width) + LayoutEditPx(20);
+            const int pillH = LayoutEditPx(26);
+            int pillX = std::clamp<int>(r.left, LayoutEditPx(8), std::max(LayoutEditPx(8), w - pillW - LayoutEditPx(8)));
+            int pillY = r.top - pillH - LayoutEditPx(6);
+            if (pillY < LayoutEditPx(8))
+                pillY = r.top + LayoutEditPx(6);
+            Gdiplus::GraphicsPath pill;
+            AddRoundedRectSubpath(pill, static_cast<float>(pillX), static_cast<float>(pillY),
+                                  static_cast<float>(pillW), static_cast<float>(pillH),
+                                  static_cast<float>(pillH / 2));
+            Gdiplus::SolidBrush pillBrush(selected ? accent : Gdiplus::Color(225, 32, 32, 36));
+            graphics.FillPath(&pillBrush, &pill);
+            Gdiplus::StringFormat center;
+            center.SetAlignment(Gdiplus::StringAlignmentCenter);
+            center.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+            graphics.DrawString(label, -1, &labelFont,
+                                Gdiplus::RectF(static_cast<float>(pillX), static_cast<float>(pillY),
+                                               static_cast<float>(pillW), static_cast<float>(pillH)),
+                                &center, &whiteBrush);
+
+            wchar_t part[64]{};
+            swprintf_s(part, L"%s%s X %d  Y %d", coords.empty() ? L"" : L"     ",
+                       LayoutEditTargetName(target), origin.x, origin.y);
+            coords += part;
+        }
+    }
+
+    // Toolbar
+    const LayoutEditToolbar t = LayoutEditGetToolbar();
+    {
+        Gdiplus::GraphicsPath panel;
+        AddRoundedRectSubpath(panel, static_cast<float>(t.panel.left), static_cast<float>(t.panel.top),
+                              static_cast<float>(t.panel.right - t.panel.left),
+                              static_cast<float>(t.panel.bottom - t.panel.top),
+                              static_cast<float>(LayoutEditPx(14)));
+        Gdiplus::SolidBrush panelBrush(Gdiplus::Color(238, 28, 28, 30));
+        Gdiplus::Pen panelPen(Gdiplus::Color(80, 255, 255, 255), 1.0f);
+        graphics.FillPath(&panelBrush, &panel);
+        graphics.DrawPath(&panelPen, &panel);
+
+        const float textLeft = static_cast<float>(t.panel.left + LayoutEditPx(18));
+        const float textWidth = static_cast<float>(t.panel.right - t.panel.left - LayoutEditPx(36));
+        graphics.DrawString(L"Desktop layout editor", -1, &titleFont,
+                            Gdiplus::PointF(textLeft, static_cast<float>(t.panel.top + LayoutEditPx(12))),
+                            &whiteBrush);
+        graphics.DrawString(
+            L"Drag widgets to move them; select one and use Lock widget to prevent movement. "
+            L"Widgets snap to the screen center within 5 px independently on X and Y. "
+            L"Arrow keys nudge (Shift = 10 px); Enter applies, Esc cancels.",
+            -1, &bodyFont,
+            Gdiplus::RectF(textLeft, static_cast<float>(t.panel.top + LayoutEditPx(38)),
+                           textWidth, static_cast<float>(LayoutEditPx(30))),
+            nullptr, &mutedBrush);
+        graphics.DrawString(coords.c_str(), -1, &labelFont,
+                            Gdiplus::RectF(textLeft,
+                                static_cast<float>(t.panel.top + LayoutEditPx(72)),
+                                textWidth, static_cast<float>(LayoutEditPx(20))),
+                            nullptr, &accentBrush);
+
+        LayoutEditDrawButton(graphics, t.apply, L"Apply", true,
+                             g_layoutEdit.hotButton == LAYOUT_BUTTON_APPLY, buttonFont);
+        LayoutEditDrawButton(graphics, t.reset, L"Reset to settings", false,
+                             g_layoutEdit.hotButton == LAYOUT_BUTTON_RESET, buttonFont);
+        const bool selectedLocked = LayoutEditTargetLocked(g_layoutEdit.selectedTarget);
+        LayoutEditDrawButton(graphics, t.lockWidget,
+                             selectedLocked ? L"Unlock widget" : L"Lock widget", false,
+                             g_layoutEdit.hotButton == LAYOUT_BUTTON_LOCK_WIDGET, buttonFont);
+        LayoutEditDrawButton(graphics, t.cancel, L"Cancel", false,
+                             g_layoutEdit.hotButton == LAYOUT_BUTTON_CANCEL, buttonFont);
+    }
+
+    POINT dstPos{g_layoutEdit.screenRect.left, g_layoutEdit.screenRect.top};
+    SIZE size{w, h};
+    POINT srcPos{0, 0};
+    BLENDFUNCTION blend{};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
+    HDC screen = GetDC(nullptr);
+    UpdateLayeredWindow(g_layoutEdit.hwnd, screen, &dstPos, &size,
+                        g_layoutEdit.memDC, &srcPos, 0, &blend, ULW_ALPHA);
+    ReleaseDC(nullptr, screen);
+}
+
+static void LayoutEditRenderOverlays() {
+    std::shared_lock<std::shared_mutex> lock(g_settingsMutex);
+    for (HWND overlay : g_overlayWindows)
+        RenderOverlay(overlay);
+}
+
+static void LayoutEditResumeOverlay() {
+    if (!g_hwndOverlay || !IsWindow(g_hwndOverlay))
+        return;
+    const VisualizerSettings settings = GetSettingsSnapshot();
+    g_currentOverlayTimerMs = GetOverlayTimerIntervalMs(settings);
+    ArmOverlayRenderTimer(settings, true);
+    LayoutEditRenderOverlays();
+}
+
+static void LayoutEditResetToSettings() {
+    const int vx = Wh_GetIntSetting(L"Visualizer.positionX");
+    const int vy = Wh_GetIntSetting(L"Visualizer.positionY");
+    const int lx = Wh_GetIntSetting(L"Lyrics.positionX");
+    const int ly = Wh_GetIntSetting(L"Lyrics.positionY");
+    std::unique_lock<std::shared_mutex> lock(g_settingsMutex);
+    // Locked widgets stay put even when Reset to settings is used.
+    if (!LayoutEditTargetLocked(LAYOUT_TARGET_VISUALIZER)) {
+        g_settings.positionX = vx;
+        g_settings.positionY = vy;
+    }
+    if (!LayoutEditTargetLocked(LAYOUT_TARGET_LYRICS)) {
+        g_settings.lyricsX = lx;
+        g_settings.lyricsY = ly;
+    }
+}
+
+static void LayoutEditBegin() {
+    if (g_layoutEdit.hwnd && IsWindow(g_layoutEdit.hwnd)) {
+        SetForegroundWindow(g_layoutEdit.hwnd);
+        return;
+    }
+    if (!g_hwndOverlay || !IsWindow(g_hwndOverlay)) {
+        Wh_Log(L"LayoutEditBegin: overlay window not ready");
+        return;
+    }
+
+    HINSTANCE instance = GetCurrentModModuleHandle();
+    if (!g_layoutEditClassRegistered) {
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = LayoutEditProc;
+        wc.hInstance = instance;
+        wc.lpszClassName = kLayoutEditClass;
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        if (!RegisterClassW(&wc)) {
+            Wh_Log(L"LayoutEditBegin: RegisterClass failed, error=%lu", GetLastError());
+            return;
+        }
+        g_layoutEditClassRegistered = true;
+    }
+
+    RECT rect{};
+    if (!GetWindowRect(g_hwndOverlay, &rect))
+        return;
+
+    g_layoutEdit = LayoutEditState{};
+    g_layoutEdit.screenRect = rect;
+    g_layoutEdit.width = std::max(1L, rect.right - rect.left);
+    g_layoutEdit.height = std::max(1L, rect.bottom - rect.top);
+    g_layoutEdit.lockVisualizer = Wh_GetIntValue(L"layout.widgetLock.visualizer", 0) != 0;
+    g_layoutEdit.lockAlbum = Wh_GetIntValue(L"layout.widgetLock.album", 0) != 0;
+    g_layoutEdit.lockLyrics = Wh_GetIntValue(L"layout.widgetLock.lyrics", 0) != 0;
+    {
+        std::shared_lock<std::shared_mutex> lock(g_settingsMutex);
+        g_layoutEdit.origVisualizerX = g_settings.positionX;
+        g_layoutEdit.origVisualizerY = g_settings.positionY;
+        g_layoutEdit.origLyricsX = g_settings.lyricsX;
+        g_layoutEdit.origLyricsY = g_settings.lyricsY;
+    }
+    g_layoutEdit.origAlbumSeparateX = g_albumWidgetSeparateX.load(std::memory_order_acquire);
+    g_layoutEdit.origAlbumSeparateY = g_albumWidgetSeparateY.load(std::memory_order_acquire);
+    g_layoutEdit.origAlbumLyricsOffsetX = g_albumWidgetLyricsOffsetX.load(std::memory_order_acquire);
+    g_layoutEdit.origAlbumLyricsOffsetY = g_albumWidgetLyricsOffsetY.load(std::memory_order_acquire);
+    g_layoutEdit.origAlbumVisualizerOffsetX = g_albumWidgetVisualizerOffsetX.load(std::memory_order_acquire);
+    g_layoutEdit.origAlbumVisualizerOffsetY = g_albumWidgetVisualizerOffsetY.load(std::memory_order_acquire);
+
+    // Freeze the desktop overlay for the whole edit session.
+    g_layoutEditActive.store(true, std::memory_order_release);
+    DisarmOverlayRenderTimer();
+
+    g_layoutEdit.hwnd = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        kLayoutEditClass, L"Desktop layout editor", WS_POPUP,
+        rect.left, rect.top, g_layoutEdit.width, g_layoutEdit.height,
+        nullptr, nullptr, instance, nullptr);
+    if (!g_layoutEdit.hwnd) {
+        Wh_Log(L"LayoutEditBegin: CreateWindowEx failed, error=%lu", GetLastError());
+        g_layoutEditActive.store(false, std::memory_order_release);
+        LayoutEditResumeOverlay();
+        return;
+    }
+
+    const UINT dpi = GetDpiForWindow(g_layoutEdit.hwnd);
+    g_layoutEdit.scale = std::max(0.5, (dpi ? dpi : 96) / 96.0);
+
+    LayoutEditRender();
+    ShowWindow(g_layoutEdit.hwnd, SW_SHOWNOACTIVATE);
+    SetWindowPos(g_layoutEdit.hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    SetForegroundWindow(g_layoutEdit.hwnd);
+    SetFocus(g_layoutEdit.hwnd);
+    SetTimer(g_layoutEdit.hwnd, kLayoutEditTimerId, kLayoutEditTimerMs, nullptr);
+    Wh_Log(L"Layout editor opened on (%ld,%ld)-(%ld,%ld)",
+           rect.left, rect.top, rect.right, rect.bottom);
+}
+
+static void LayoutEditEnd(bool apply) {
+    HWND hwnd = g_layoutEdit.hwnd;
+    if (!hwnd)
+        return;
+    g_layoutEdit.hwnd = nullptr;
+
+    if (g_layoutEdit.dragTarget != LAYOUT_TARGET_NONE) {
+        g_layoutEdit.dragTarget = LAYOUT_TARGET_NONE;
+        if (GetCapture() == hwnd)
+            ReleaseCapture();
+    }
+
+    VisualizerSettings snapshot{};
+    if (apply) {
+        snapshot = GetSettingsSnapshot();
+    } else {
+        std::unique_lock<std::shared_mutex> lock(g_settingsMutex);
+        g_settings.positionX = g_layoutEdit.origVisualizerX;
+        g_settings.positionY = g_layoutEdit.origVisualizerY;
+        g_settings.lyricsX = g_layoutEdit.origLyricsX;
+        g_settings.lyricsY = g_layoutEdit.origLyricsY;
+        g_albumWidgetSeparateX.store(g_layoutEdit.origAlbumSeparateX, std::memory_order_release);
+        g_albumWidgetSeparateY.store(g_layoutEdit.origAlbumSeparateY, std::memory_order_release);
+        g_albumWidgetLyricsOffsetX.store(g_layoutEdit.origAlbumLyricsOffsetX, std::memory_order_release);
+        g_albumWidgetLyricsOffsetY.store(g_layoutEdit.origAlbumLyricsOffsetY, std::memory_order_release);
+        g_albumWidgetVisualizerOffsetX.store(g_layoutEdit.origAlbumVisualizerOffsetX, std::memory_order_release);
+        g_albumWidgetVisualizerOffsetY.store(g_layoutEdit.origAlbumVisualizerOffsetY, std::memory_order_release);
+    }
+
+    if (IsWindow(hwnd))
+        DestroyWindow(hwnd);
+    g_layoutEditActive.store(false, std::memory_order_release);
+    LayoutEditResumeOverlay();
+
+    if (!apply) {
+        Wh_Log(L"Layout editor: cancelled");
+        return;
+    }
+
+    // Lock states are editor-owned options and are persisted only on Apply,
+    // matching the editor's transactional position changes.
+    Wh_SetIntValue(L"layout.widgetLock.visualizer", g_layoutEdit.lockVisualizer ? 1 : 0);
+    Wh_SetIntValue(L"layout.widgetLock.album", g_layoutEdit.lockAlbum ? 1 : 0);
+    Wh_SetIntValue(L"layout.widgetLock.lyrics", g_layoutEdit.lockLyrics ? 1 : 0);
+
+    // Persist last, after the editor is gone and the overlay is live again:
+    // storage writes may re-enter Wh_ModSettingsChanged synchronously on
+    // some builds, which reloads settings and rebuilds the overlay.
+    StoreLayoutOverride(kVisualizerLayoutKeys, snapshot.positionX, snapshot.positionY,
+                        Wh_GetIntSetting(L"Visualizer.positionX"),
+                        Wh_GetIntSetting(L"Visualizer.positionY"));
+    if (snapshot.lyricsEnabled) {
+        StoreLayoutOverride(kLyricsLayoutKeys, snapshot.lyricsX, snapshot.lyricsY,
+                            Wh_GetIntSetting(L"Lyrics.positionX"),
+                            Wh_GetIntSetting(L"Lyrics.positionY"));
+    }
+    if (snapshot.albumWidgetEnabled)
+        StoreThirdAlbumWidgetRect(snapshot, GetThirdAlbumWidgetRect(snapshot));
+    Wh_Log(L"Layout editor: applied visualizer (%d,%d), lyrics (%d,%d)",
+           snapshot.positionX, snapshot.positionY, snapshot.lyricsX, snapshot.lyricsY);
+}
+
+static LRESULT CALLBACK LayoutEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_MOUSEACTIVATE:
+        return MA_ACTIVATE;
+    case WM_NCHITTEST:
+        return HTCLIENT;
+    case WM_SETCURSOR: {
+        POINT p{};
+        GetCursorPos(&p);
+        ScreenToClient(hwnd, &p);
+        LPCWSTR cursor = IDC_ARROW;
+        const int hoverButton = LayoutEditHitButton(p.x, p.y);
+        const int hoverTarget = hoverButton == LAYOUT_BUTTON_NONE
+            ? LayoutEditHitTarget(p.x, p.y) : LAYOUT_TARGET_NONE;
+        if (g_layoutEdit.dragTarget != LAYOUT_TARGET_NONE)
+            cursor = IDC_SIZEALL;
+        else if (hoverButton != LAYOUT_BUTTON_NONE)
+            cursor = IDC_HAND;
+        else if (hoverTarget != LAYOUT_TARGET_NONE)
+            cursor = LayoutEditTargetLocked(hoverTarget) ? IDC_HAND : IDC_SIZEALL;
+        SetCursor(LoadCursorW(nullptr, cursor));
+        return TRUE;
+    }
+    case WM_MOUSEMOVE: {
+        const int x = GET_X_LPARAM(lParam);
+        const int y = GET_Y_LPARAM(lParam);
+        if (g_layoutEdit.dragTarget != LAYOUT_TARGET_NONE) {
+            POINT cursor{};
+            if (!GetCursorPos(&cursor))
+                return 0;
+            const int target = g_layoutEdit.dragTarget;
+            if (LayoutEditTargetLocked(target)) {
+                g_layoutEdit.dragTarget = LAYOUT_TARGET_NONE;
+                g_layoutEdit.snapX = false;
+                g_layoutEdit.snapY = false;
+                if (GetCapture() == hwnd)
+                    ReleaseCapture();
+                g_layoutEdit.dirty = true;
+                return 0;
+            }
+
+            int nx = g_layoutEdit.dragStartOrigin.x + (cursor.x - g_layoutEdit.dragStartCursor.x);
+            int ny = g_layoutEdit.dragStartOrigin.y + (cursor.y - g_layoutEdit.dragStartCursor.y);
+            bool enteredSnapX = false;
+            bool enteredSnapY = false;
+            {
+                std::unique_lock<std::shared_mutex> lock(g_settingsMutex);
+                // First apply the unsnapped candidate. The actual widget rectangle
+                // (not its stored origin) determines how close its center is to the
+                // screen center, including the visualizer's offset around its anchor.
+                LayoutEditSetTargetOrigin(target, nx, ny);
+                const RECT candidate = LayoutEditTargetRect(target);
+                const int offsetX = LayoutEditRectCenterX(candidate) - g_layoutEdit.width / 2;
+                const int offsetY = LayoutEditRectCenterY(candidate) - g_layoutEdit.height / 2;
+
+                if (g_layoutEdit.snapX) {
+                    if (std::abs(offsetX) <= 5)
+                        nx -= offsetX;
+                    else
+                        g_layoutEdit.snapX = false;
+                } else if (std::abs(offsetX) <= 5) {
+                    nx -= offsetX;
+                    g_layoutEdit.snapX = true;
+                    enteredSnapX = true;
+                }
+
+                if (g_layoutEdit.snapY) {
+                    if (std::abs(offsetY) <= 5)
+                        ny -= offsetY;
+                    else
+                        g_layoutEdit.snapY = false;
+                } else if (std::abs(offsetY) <= 5) {
+                    ny -= offsetY;
+                    g_layoutEdit.snapY = true;
+                    enteredSnapY = true;
+                }
+
+                LayoutEditSetTargetOrigin(target, nx, ny);
+                const RECT finalRect = LayoutEditTargetRect(target);
+                // Attached album widgets can be constrained by their anchor. Do not
+                // advertise a snap if those constraints prevent actual centering.
+                if (g_layoutEdit.snapX &&
+                    std::abs(LayoutEditRectCenterX(finalRect) - g_layoutEdit.width / 2) > 1) {
+                    g_layoutEdit.snapX = false;
+                    enteredSnapX = false;
+                }
+                if (g_layoutEdit.snapY &&
+                    std::abs(LayoutEditRectCenterY(finalRect) - g_layoutEdit.height / 2) > 1) {
+                    g_layoutEdit.snapY = false;
+                    enteredSnapY = false;
+                }
+                if (enteredSnapX || enteredSnapY) {
+                    const POINT actualOrigin = LayoutEditTargetOrigin(target);
+                    if (enteredSnapX) {
+                        g_layoutEdit.dragStartOrigin.x = actualOrigin.x;
+                        g_layoutEdit.dragStartCursor.x = cursor.x;
+                    }
+                    if (enteredSnapY) {
+                        g_layoutEdit.dragStartOrigin.y = actualOrigin.y;
+                        g_layoutEdit.dragStartCursor.y = cursor.y;
+                    }
+                }
+            }
+            g_layoutEdit.dirty = true;
+            return 0;
+        }
+        const int hot = LayoutEditHitButton(x, y);
+        const int hover = hot == LAYOUT_BUTTON_NONE
+            ? LayoutEditHitTarget(x, y) : LAYOUT_TARGET_NONE;
+        if (hover != g_layoutEdit.hoverTarget || hot != g_layoutEdit.hotButton) {
+            g_layoutEdit.hoverTarget = hover;
+            g_layoutEdit.hotButton = hot;
+            g_layoutEdit.dirty = true;
+        }
+        return 0;
+    }
+    case WM_LBUTTONDOWN: {
+        const int x = GET_X_LPARAM(lParam);
+        const int y = GET_Y_LPARAM(lParam);
+        SetFocus(hwnd);
+        const int button = LayoutEditHitButton(x, y);
+        if (button == LAYOUT_BUTTON_APPLY) {
+            LayoutEditEnd(true);
+            return 0;
+        }
+        if (button == LAYOUT_BUTTON_CANCEL) {
+            LayoutEditEnd(false);
+            return 0;
+        }
+        if (button == LAYOUT_BUTTON_RESET) {
+            LayoutEditResetToSettings();
+            g_layoutEdit.snapX = false;
+            g_layoutEdit.snapY = false;
+            g_layoutEdit.dirty = true;
+            return 0;
+        }
+        if (button == LAYOUT_BUTTON_LOCK_WIDGET) {
+            LayoutEditSetTargetLocked(g_layoutEdit.selectedTarget,
+                                      !LayoutEditTargetLocked(g_layoutEdit.selectedTarget));
+            if (LayoutEditTargetLocked(g_layoutEdit.selectedTarget) &&
+                g_layoutEdit.dragTarget == g_layoutEdit.selectedTarget) {
+                g_layoutEdit.dragTarget = LAYOUT_TARGET_NONE;
+                g_layoutEdit.snapX = false;
+                g_layoutEdit.snapY = false;
+                if (GetCapture() == hwnd)
+                    ReleaseCapture();
+            }
+            g_layoutEdit.dirty = true;
+            return 0;
+        }
+        const int target = LayoutEditHitTarget(x, y);
+        if (target != LAYOUT_TARGET_NONE) {
+            g_layoutEdit.selectedTarget = target;
+            g_layoutEdit.snapX = false;
+            g_layoutEdit.snapY = false;
+            if (!LayoutEditTargetLocked(target)) {
+                g_layoutEdit.dragTarget = target;
+                GetCursorPos(&g_layoutEdit.dragStartCursor);
+                {
+                    std::shared_lock<std::shared_mutex> lock(g_settingsMutex);
+                    g_layoutEdit.dragStartOrigin = LayoutEditTargetOrigin(target);
+                }
+                SetCapture(hwnd);
+            } else {
+                // A locked widget remains selectable so its lock can be removed.
+                g_layoutEdit.dragTarget = LAYOUT_TARGET_NONE;
+            }
+            g_layoutEdit.dirty = true;
+        }
+        return 0;
+    }
+    case WM_LBUTTONUP:
+        if (g_layoutEdit.dragTarget != LAYOUT_TARGET_NONE) {
+            g_layoutEdit.dragTarget = LAYOUT_TARGET_NONE;
+            g_layoutEdit.snapX = false;
+            g_layoutEdit.snapY = false;
+            ReleaseCapture();
+            g_layoutEdit.dirty = true;
+        }
+        return 0;
+    case WM_CAPTURECHANGED:
+        if (g_layoutEdit.dragTarget != LAYOUT_TARGET_NONE) {
+            g_layoutEdit.dragTarget = LAYOUT_TARGET_NONE;
+            g_layoutEdit.snapX = false;
+            g_layoutEdit.snapY = false;
+            g_layoutEdit.dirty = true;
+        }
+        return 0;
+    case WM_KEYDOWN: {
+        if (wParam == VK_ESCAPE) {
+            LayoutEditEnd(false);
+            return 0;
+        }
+        if (wParam == VK_RETURN) {
+            LayoutEditEnd(true);
+            return 0;
+        }
+        if (wParam == VK_TAB) {
+            // Cycle the selection through the available items.
+            std::shared_lock<std::shared_mutex> lock(g_settingsMutex);
+            for (int i = 1; i <= 3; ++i) {
+                const int candidate = (g_layoutEdit.selectedTarget + i) % 3;
+                if (LayoutEditTargetAvailable(candidate)) {
+                    g_layoutEdit.selectedTarget = candidate;
+                    break;
+                }
+            }
+            g_layoutEdit.dirty = true;
+            return 0;
+        }
+        int dx = 0;
+        int dy = 0;
+        switch (wParam) {
+        case VK_LEFT: dx = -1; break;
+        case VK_RIGHT: dx = 1; break;
+        case VK_UP: dy = -1; break;
+        case VK_DOWN: dy = 1; break;
+        default: return 0;
+        }
+        const int step = (GetKeyState(VK_SHIFT) & 0x8000) ? 10 : 1;
+        if (LayoutEditTargetLocked(g_layoutEdit.selectedTarget))
+            return 0;
+        {
+            std::unique_lock<std::shared_mutex> lock(g_settingsMutex);
+            if (LayoutEditTargetAvailable(g_layoutEdit.selectedTarget)) {
+                const POINT o = LayoutEditTargetOrigin(g_layoutEdit.selectedTarget);
+                LayoutEditSetTargetOrigin(g_layoutEdit.selectedTarget,
+                                          o.x + dx * step, o.y + dy * step);
+            }
+        }
+        g_layoutEdit.dirty = true;
+        return 0;
+    }
+    case WM_TIMER:
+        if (wParam == kLayoutEditTimerId && g_layoutEdit.dirty) {
+            // Coalesce mouse moves: at most one overlay + editor frame per tick.
+            g_layoutEdit.dirty = false;
+            LayoutEditRenderOverlays();
+            LayoutEditRender();
+        }
+        return 0;
+    case WM_CLOSE:
+        LayoutEditEnd(false);
+        return 0;
+    case WM_DESTROY:
+        KillTimer(hwnd, kLayoutEditTimerId);
+        LayoutEditReleaseSurface();
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static void LayoutEditUnregisterClass(HINSTANCE instance) {
+    if (!g_layoutEditClassRegistered)
+        return;
+    UnregisterClassW(kLayoutEditClass, instance);
+    g_layoutEditClassRegistered = false;
+}
+
 static DWORD WINAPI OverlayThreadProc(LPVOID) {
     Gdiplus::GdiplusStartupInput gdiplusInput{};
-    if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != Gdiplus::Ok) {
+    const Gdiplus::Status gdiplusStatus =
+        Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr);
+    if (gdiplusStatus != Gdiplus::Ok) {
         g_gdiplusToken = 0;
         return 0;
     }
@@ -9430,93 +26144,63 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     bool classRegistered = false;
     if (RegisterClassW(&wc)) {
         classRegistered = true;
+        RegisterDebugWindowClass(wc.hInstance);
     } else {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
         return 0;
     }
 
-    // The taskbar helper is optional. If its small native windows cannot be
-    // registered, the core visualizer continues normally rather than failing
-    // the entire mod because of a UI convenience feature.
-    RegisterEqWindowClasses(wc.hInstance);
-
-    const int screenW = std::max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
-    const int screenH = std::max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
-
-    HWND hParent = nullptr;
-    HWND lastProgman = nullptr;
-    // Explorer can load the injected module before the desktop shell hierarchy
-    // exists. Creating a popup here is unsafe: it can render into an incomplete
-    // desktop and can also keep a stale surface after Explorer rebuilds itself.
-    // Wait for the real SHELLDLL_DefView instead; the wait is stoppable and uses
-    // the same child-window model as the normal desktop path.
-    for (;;) {
-        if (g_hOverlayStopEvent &&
-            WaitForSingleObject(g_hOverlayStopEvent, 0) == WAIT_OBJECT_0) {
-            EqCleanupIntegration();
-            if (classRegistered)
-                UnregisterClassW(wc.lpszClassName, wc.hInstance);
-            Gdiplus::GdiplusShutdown(g_gdiplusToken);
-            g_gdiplusToken = 0;
-            return 0;
-        }
-
-        HWND hProgman = FindWindowW(L"Progman", nullptr);
-        DWORD progmanProcessId = 0;
-        if (hProgman)
-            GetWindowThreadProcessId(hProgman, &progmanProcessId);
-
-        if (hProgman && progmanProcessId == GetCurrentProcessId()) {
-            if (hProgman != lastProgman) {
-                lastProgman = hProgman;
-                // Undocumented Progman message used by common desktop-overlay
-                // implementations to create/reposition the WorkerW behind icons.
-                // Send it once per Progman instance instead of repeatedly while
-                // the shell is starting, avoiding unnecessary cross-thread work.
-                SendMessageTimeoutW(hProgman, 0x052C, 0, 0,
-                                    SMTO_ABORTIFHUNG, 1000, nullptr);
-            }
-
-            hParent = FindWindowExW(
-                hProgman, nullptr, L"SHELLDLL_DefView", nullptr);
-            if (!hParent) {
-                HWND hWorkerW = nullptr;
-                while ((hWorkerW = FindWindowExW(
-                            nullptr, hWorkerW, L"WorkerW", nullptr)) != nullptr) {
-                    hParent = FindWindowExW(
-                        hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
-                    if (hParent)
-                        break;
-                }
-            }
-        }
-
-        if (hParent)
-            break;
-
-        if (g_hOverlayStopEvent)
-            WaitForSingleObject(g_hOverlayStopEvent, 250);
-        else
-            Sleep(250);
+    // Register the EQ window classes now, but do not create process-owned tray
+    // windows or worker threads until this Explorer process actually owns the
+    // desktop and its taskbar. Secondary folder Explorers can otherwise stay
+    // alive without a desktop and steal the Win10 tray icon from the real shell.
+    if (!RegisterEqWindowClasses(wc.hInstance)) {
+        Wh_Log(L"OverlayThreadProc: Player window class registration failed");
     }
 
-    RECT parentRect{};
-    const int initialW = GetClientRect(hParent, &parentRect)
-        ? std::max(1L, parentRect.right - parentRect.left)
-        : screenW;
-    const int initialH = GetClientRect(hParent, &parentRect)
-        ? std::max(1L, parentRect.bottom - parentRect.top)
-        : screenH;
+    HWND hParent = nullptr;
+    HWND taskbar = nullptr;
+    MSG startupMsg{};
+    bool startupAborted = false;
 
-    g_hwndOverlay = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        wc.lpszClassName,
-        L"Desktop Audio Visualizer",
-        WS_CHILD | WS_VISIBLE,
-        0, 0, initialW, initialH, hParent, nullptr, wc.hInstance, nullptr);
+    // Explorer can load the injected module before the desktop shell hierarchy
+    // exists. Wait for both the real desktop and this process's taskbar. Pumping
+    // the queue here prevents the startup wait from blocking sent messages.
+    for (;;) {
+        HANDLE stopEvent = g_hOverlayStopEvent;
+        DWORD waitResult = MsgWaitForMultipleObjects(
+            stopEvent ? 1 : 0, stopEvent ? &stopEvent : nullptr,
+            FALSE, 250, QS_ALLINPUT);
 
-    if (!g_hwndOverlay) {
+        if (stopEvent && waitResult == WAIT_OBJECT_0) {
+            startupAborted = true;
+            break;
+        }
+
+        if (waitResult == WAIT_OBJECT_0 + (stopEvent ? 1 : 0)) {
+            while (PeekMessageW(&startupMsg, nullptr, 0, 0, PM_REMOVE)) {
+                if (startupMsg.message == WM_QUIT) {
+                    g_running.store(false, std::memory_order_release);
+                    startupAborted = true;
+                    break;
+                }
+                TranslateMessage(&startupMsg);
+                DispatchMessageW(&startupMsg);
+            }
+            if (startupAborted)
+                break;
+        }
+
+        hParent = ResolveOverlayDesktopParent(GetSettingsSnapshot().desktopPlacement);
+        taskbar = FindCurrentProcessTaskbarWnd();
+        if (hParent && taskbar)
+            break;
+    }
+
+    if (startupAborted) {
+        EqCleanupIntegration();
+        UnregisterDebugWindowClass(wc.hInstance);
         if (classRegistered)
             UnregisterClassW(wc.lpszClassName, wc.hInstance);
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
@@ -9524,142 +26208,148 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         return 0;
     }
 
-    g_overlayWakeHwnd.store(g_hwndOverlay, std::memory_order_release);
+    g_eqTaskbarHwnd = taskbar;
 
-    BOOL excludeFromPeek = TRUE;
-    DwmSetWindowAttribute(g_hwndOverlay, DWMWA_EXCLUDED_FROM_PEEK,
-                          &excludeFromPeek, sizeof(excludeFromPeek));
-
-    g_overlayIdle.store(false, std::memory_order_release);
-    {
-        const VisualizerSettings settings = GetSettingsSnapshot();
-        g_currentOverlayTimerMs = GetRenderIntervalMs(settings);
-        SetTimer(g_hwndOverlay, 1, g_currentOverlayTimerMs, nullptr);
+    if (!g_eqIsWindows11) {
+        // Create the message window now, but do not expose the tray icon until
+        // the overlay and background workers are initialized. On Windows 10 the
+        // icon messages are handled by this thread, so showing it earlier lets
+        // the first click queue behind expensive one-time overlay setup.
+        if (!EqCreateNativeTrayMessageWindow(wc.hInstance)) {
+            Wh_Log(L"OverlayThreadProc: failed to create Win10 EQ tray message window");
+        }
     }
+
+    const VisualizerSettings initialSettings = GetSettingsSnapshot();
+    if (!CreateOverlayWindowsForSettings(
+            initialSettings, wc.hInstance, wc.lpszClassName, hParent)) {
+        Wh_Log(L"OverlayThreadProc: initial overlay creation failed");
+        EqCleanupIntegration();
+        UnregisterDebugWindowClass(wc.hInstance);
+        ReleaseOverlayGraphics();
+        UnregisterOverlayHostClass(wc.hInstance);
+        if (classRegistered)
+            UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+        return 0;
+    }
+
+    // All shell-dependent workers start only after the desktop/taskbar
+    // ownership check. Secondary Explorer processes can load the mod too, but
+    // they must not create audio/album/lyrics/SMTC workers of their own.
+    const VisualizerSettings startupSettings = GetSettingsSnapshot();
+    SyncDebugWindow(true);
+    RefreshDesktopVisualizerRuntime(startupSettings, true);
+
+    if (IsAlbumColorCaptureNeeded())
+        StartAlbumColorCapture();
+    if (startupSettings.lyricsEnabled ||
+        EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS)) {
+        StartLyricsCapture();
+    }
+    if (IsEqMediaCaptureNeededForSettings(startupSettings))
+        StartEqMediaCapture();
+    g_shellServicesStarted.store(true, std::memory_order_release);
+
+    {
+        const bool visible = RefreshDesktopVisualizerRuntime(startupSettings, true);
+        g_currentOverlayTimerMs = visible
+            ? GetOverlayTimerIntervalMs(startupSettings)
+            : kDesktopVisualizerVisibilityCheckMs;
+        EnsureOverlayRenderTimer();
+        ArmOverlayRenderTimer(startupSettings, true);
+    }
+
+    // Publish the Player button only after the main overlay loop and the
+    // Media & EQ worker have been started. This prevents a click during shell
+    // startup from waiting behind initialization or opening before SMTC polling
+    // has even been requested.
+    if (!g_eqIsWindows11)
+        EqEnsureNativeTrayIcon();
+    else
+        EqEnsureXamlButton();
 
     MSG msg{};
     HANDLE stopEvent = g_hOverlayStopEvent;
     ULONGLONG lastShellCheckMs = GetTickCount64() - 1000;
+    g_lastFullscreenCheckMs = GetTickCount64() - 1000;
 
     for (;;) {
+        HANDLE waitHandles[2]{};
+        DWORD waitCount = 0;
+        if (stopEvent)
+            waitHandles[waitCount++] = stopEvent;
+        if (g_hOverlayRenderTimer)
+            waitHandles[waitCount++] = g_hOverlayRenderTimer;
+
         DWORD waitResult = MsgWaitForMultipleObjects(
-            stopEvent ? 1 : 0, stopEvent ? &stopEvent : nullptr,
+            waitCount, waitCount ? waitHandles : nullptr,
             FALSE, 250, QS_ALLINPUT);
 
         if (stopEvent && waitResult == WAIT_OBJECT_0)
             break;
 
+        if (g_hOverlayRenderTimer &&
+            waitResult == WAIT_OBJECT_0 + (stopEvent ? 1 : 0)) {
+            ProcessOverlayRenderTick();
+        }
+
         if (g_running.load(std::memory_order_acquire)) {
+            UpdateFullscreenThrottle();
+
             const ULONGLONG nowMs = GetTickCount64();
             if (nowMs - lastShellCheckMs >= 1000) {
                 lastShellCheckMs = nowMs;
-                EqEnsureXamlButton();
-                HWND expectedParent = nullptr;
-                HWND currentProgman = FindWindowW(L"Progman", nullptr);
-            if (currentProgman) {
-                expectedParent = FindWindowExW(
-                    currentProgman, nullptr, L"SHELLDLL_DefView", nullptr);
-                if (!expectedParent) {
-                    HWND worker = nullptr;
-                    while ((worker = FindWindowExW(
-                                nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
-                        expectedParent = FindWindowExW(
-                            worker, nullptr, L"SHELLDLL_DefView", nullptr);
-                        if (expectedParent)
-                            break;
-                    }
-                }
-            }
-            const bool overlayMissing =
-                !g_hwndOverlay || !IsWindow(g_hwndOverlay) ||
-                (expectedParent && GetParent(g_hwndOverlay) != expectedParent);
-            if (overlayMissing) {
-                // The overlay is owned by this thread, so explicitly destroy a
-                // stale child before attaching a new one to the rebuilt shell.
-                if (g_hwndOverlay && IsWindow(g_hwndOverlay))
-                    DestroyWindow(g_hwndOverlay);
-                g_hwndOverlay = nullptr;
-                g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
 
-                // During Explorer restart the old shell view may disappear for
-                // several polling intervals. Do not fall back to a popup: wait
-                // for the new SHELLDLL_DefView so the mod cannot render before
-                // the desktop is ready or attach to the wrong window tree.
-                HWND recoveryParent = nullptr;
-                HWND recoveryProgman = FindWindowW(L"Progman", nullptr);
-                DWORD recoveryPid = 0;
-                if (recoveryProgman)
-                    GetWindowThreadProcessId(recoveryProgman, &recoveryPid);
-                if (recoveryProgman)
-                    lastProgman = recoveryProgman;
+                const bool fullscreen =
+                    g_fullscreenThrottleActive.load(std::memory_order_acquire);
+                if (g_eqIsWindows11)
+                    EqEnsureXamlButton();
+                else
+                    EqEnsureNativeTrayIcon();
 
-                if (recoveryProgman && recoveryPid == GetCurrentProcessId()) {
-                    recoveryParent = FindWindowExW(
-                        recoveryProgman, nullptr, L"SHELLDLL_DefView", nullptr);
-                    if (!recoveryParent) {
-                        HWND worker = nullptr;
-                        while ((worker = FindWindowExW(
-                                    nullptr, worker, L"WorkerW", nullptr)) != nullptr) {
-                            recoveryParent = FindWindowExW(
-                                worker, nullptr, L"SHELLDLL_DefView", nullptr);
-                            if (recoveryParent)
-                                break;
-                        }
-                    }
-                }
+                if (!fullscreen &&
+                    !g_layoutEditActive.load(std::memory_order_acquire)) {
+                    const VisualizerSettings settings = GetSettingsSnapshot();
+                    HWND currentDesktopParent =
+                        ResolveOverlayDesktopParent(settings.desktopPlacement);
+                    if (currentDesktopParent)
+                        hParent = currentDesktopParent;
 
-                if (recoveryParent) {
-                    RECT recoveryRect{};
-                    const int recoveryW = GetClientRect(recoveryParent, &recoveryRect)
-                        ? std::max(1L, recoveryRect.right - recoveryRect.left)
-                        : screenW;
-                    const int recoveryH = GetClientRect(recoveryParent, &recoveryRect)
-                        ? std::max(1L, recoveryRect.bottom - recoveryRect.top)
-                        : screenH;
-
-                    g_hwndOverlay = CreateWindowExW(
-                        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                        wc.lpszClassName,
-                        L"Desktop Audio Visualizer",
-                        WS_CHILD | WS_VISIBLE,
-                        0, 0, recoveryW, recoveryH,
-                        recoveryParent, nullptr, wc.hInstance, nullptr);
+                    const bool rebuilt = RebuildOverlayWindows(
+                        settings, wc.hInstance, wc.lpszClassName, hParent);
+                    if (!rebuilt)
+                        ReassertOverlayZOrder();
 
                     if (g_hwndOverlay) {
-                        g_overlayWakeHwnd.store(g_hwndOverlay, std::memory_order_release);
-                        BOOL excludeFromPeek = TRUE;
-                        DwmSetWindowAttribute(
-                            g_hwndOverlay, DWMWA_EXCLUDED_FROM_PEEK,
-                            &excludeFromPeek, sizeof(excludeFromPeek));
-                        g_overlayIdle.store(false, std::memory_order_release);
-                        g_lastRenderDirtyRect = {};
-                        g_renderNeedsFullClear = true;
-                        const VisualizerSettings settings = GetSettingsSnapshot();
-                        g_currentOverlayTimerMs = GetRenderIntervalMs(settings);
-                        SetTimer(g_hwndOverlay, 1, g_currentOverlayTimerMs, nullptr);
-                    }
-                }
-            } else {
-                HWND parent = GetParent(g_hwndOverlay);
-                if (parent) {
-                    RECT parentRect{};
-                    if (GetClientRect(parent, &parentRect)) {
-                        const int pw = std::max(1L, parentRect.right - parentRect.left);
-                        const int ph = std::max(1L, parentRect.bottom - parentRect.top);
-                        RECT currentRect{};
-                        GetClientRect(g_hwndOverlay, &currentRect);
-                        if (currentRect.right - currentRect.left != pw ||
-                            currentRect.bottom - currentRect.top != ph) {
-                            SetWindowPos(g_hwndOverlay, nullptr, 0, 0, pw, ph,
-                                         SWP_NOACTIVATE | SWP_NOZORDER);
+                        const UINT interval = GetOverlayTimerIntervalMs(settings);
+                        if (rebuilt || interval != g_currentOverlayTimerMs) {
+                            g_currentOverlayTimerMs = interval;
+                            ArmOverlayRenderTimer(settings, true);
+                        }
+                        if (rebuilt) {
+                            for (HWND overlay : g_overlayWindows)
+                                RenderOverlay(overlay);
                         }
                     }
+
+                    if (!rebuilt &&
+                        g_overlayBuiltRenderMode == OVERLAY_RENDER_OPAQUE_HOLDER &&
+                        !g_overlayWindows.empty() &&
+                        (nowMs - g_overlayWallpaperCapturedMs >= 5 * 60 * 1000 ||
+                         CurrentWallpaperSignature() != g_overlayWallpaperSignature)) {
+                        RecaptureOverlayWallpapers();
+                        std::shared_lock<std::shared_mutex> settingsLock(g_settingsMutex);
+                        for (HWND overlay : g_overlayWindows)
+                            RenderOverlay(overlay);
+                    }
                 }
-            }
             }
         }
 
-        if (waitResult == WAIT_OBJECT_0 + (stopEvent ? 1 : 0)) {
+        const DWORD messageWaitIndex = WAIT_OBJECT_0 + waitCount;
+        if (waitResult == messageWaitIndex) {
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 if (msg.message == WM_QUIT) {
                     g_running.store(false, std::memory_order_release);
@@ -9672,13 +26362,23 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     }
 
 overlay_exit:
+    DisarmOverlayRenderTimer();
+    CloseOverlayRenderTimer();
+    g_shellServicesStarted.store(false, std::memory_order_release);
+
+    // This is the sole owner of audio/album worker lifecycle. Join them before
+    // closing popup windows or tearing down resources they can still publish.
+    StopAudioCapture();
+    StopAlbumColorCapture();
+
+    if (g_layoutEditActive.load(std::memory_order_acquire))
+        LayoutEditEnd(false);
+    LayoutEditUnregisterClass(wc.hInstance);
     EqCleanupIntegration();
-    if (g_hwndOverlay) {
-        g_overlayWakeHwnd.store(nullptr, std::memory_order_release);
-        KillTimer(g_hwndOverlay, 1);
-        DestroyWindow(g_hwndOverlay);
-        g_hwndOverlay = nullptr;
-    }
+    DestroyDebugWindow();
+    DestroyAllOverlayWindows();
+    ReleaseOverlayGraphics();
+    UnregisterOverlayHostClass(wc.hInstance);
 
     DestroyRenderTarget();
 
@@ -9687,11 +26387,18 @@ overlay_exit:
         g_pForegroundImage = nullptr;
     }
 
+    DestroyAlbumArtworkImage();
+    ClearAlbumArtworkCache();
+    DestroyAlbumWidgetCache();
+
     DestroyBackgroundBlurBitmap();
     g_backgroundBlurNeedsReload.store(true, std::memory_order_release);
 
     g_lyricsFontCache.Clear();
+    g_lyricsMeasureCache.Clear();
+    g_lyricsWrapMeasureCache.Clear();
 
+    UnregisterDebugWindowClass(wc.hInstance);
     if (classRegistered)
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
@@ -9704,27 +26411,88 @@ static void EqUnregisterWindowClasses() {
     if (!g_eqClassesRegistered)
         return;
 
-    if (g_eqPopupHwnd && IsWindow(g_eqPopupHwnd))
+    EqDestroyTrayVolumeFlyoutOnOwnerThread();
+    const HWND popup =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (popup && IsWindow(popup))
         EqClosePopup();
 
+    UnregisterClassW(kEqTrayVolumeFlyoutClass, g_eqModuleHandle);
+    UnregisterClassW(kEqNativeTrayWindowClass, g_eqModuleHandle);
     UnregisterClassW(kEqPopupClass, g_eqModuleHandle);
     g_eqClassesRegistered = false;
     g_eqModuleHandle = nullptr;
 }
 
 void Wh_ModAfterInit() {
-    if (g_eqTaskbarSymbolsHooked)
+    // OverlayThreadProc owns startup ordering and adds the button only after
+    // shell services are ready. This callback may run before that point.
+    if (g_eqIsWindows11 && g_eqTaskbarSymbolsHooked &&
+        g_shellServicesStarted.load(std::memory_order_acquire) &&
+        g_running.load(std::memory_order_acquire)) {
         EqEnsureXamlButton();
+    }
 }
 
 BOOL Wh_ModInit() {
+    g_desktopVisualizerVisible = true;
+    g_lastDesktopVisualizerVisibilityCheckMs = 0;
+    g_eqStorageInitialized = false;
+    g_eqSelectedPreset = -1;
+    g_eqHotPreset = -1;
+    g_eqHotPresetDelete = -1;
+    g_eqHotMediaButton = -1;
+    g_eqHotVolumeMute = false;
+    g_eqHotPageButton = false;
+    g_eqHotBand = -1;
+    g_eqDraggingBand = -1;
+    g_eqPresetAnimationActive = false;
+    g_eqLastAnimationTick = 0;
+    g_eqMediaSeeking = false;
+    g_eqMediaSeekPreviewSeconds = 0.0;
+    g_eqLyricsScrollOffset = 0;
+    g_eqHotLyricsLine = -1;
+    g_eqLyricsScrollTrackKey.clear();
+    g_eqLyricsScrollbarDragging = false;
+    g_eqLyricsScrollbarDragStartY = 0;
+    g_eqLyricsScrollbarStartOffset = 0;
+    g_eqDiskAutoGainMax = 0.06f;
+    g_eqDiskPulseStartMs.fill(0);
+    g_eqDiskPulseStrength.fill(0.0f);
+    g_eqDiskBarSmooth.fill(0.0f);
+    g_eqDiskBarGhost.fill(0.0f);
+    g_eqDiskPulseScale = 1.0f;
+    g_eqDiskLastPulseEventCounter =
+        g_audioDiskPulseEventCounter.load(std::memory_order_relaxed);
+    g_eqDiskLastSmoothMs = 0;
+    g_eqDiskRotationDegrees = 0.0f;
+    g_eqDiskLastRotationMs = 0;
+    g_audioRequestedHz.store(0.0f, std::memory_order_release);
+    g_audioSampleRate.store(0, std::memory_order_release);
+    g_audioChannels.store(0, std::memory_order_release);
+    g_audioFftLevel.store(0.0f, std::memory_order_release);
+    g_audioCaptureSourceMode.store(0, std::memory_order_release);
+
     LoadSettings();
 
-    g_eqTaskbarSymbolsHooked = EqHookTaskbarSymbols();
-    if (!g_eqTaskbarSymbolsHooked) {
-        Wh_Log(L"Wh_ModInit: taskbar XAML EQ integration hooks could not be installed; visualizer will continue without EQ button");
+    // One OS-version probe for the whole mod lifetime. Windows 11 is build
+    // 22000+, so it selects the existing XAML implementation; older supported
+    // builds use only the native Windows 10 notification-area implementation.
+    g_eqIsWindows11 = EqDetectWindows11Once();
+    g_eqTaskbarSymbolsHooked = false;
+    if (g_eqIsWindows11) {
+        g_eqTaskbarSymbolsHooked = EqHookTaskbarSymbols();
+        if (!g_eqTaskbarSymbolsHooked) {
+            Wh_Log(L"Wh_ModInit: Windows 11 taskbar XAML EQ integration hooks could not be installed; visualizer will continue without EQ button");
+        }
+    } else {
+        Wh_Log(L"Wh_ModInit: using Windows 10 native notification-area EQ button (build %u)",
+               g_eqWindowsBuildNumber);
     }
-    RegisterEqWindowClasses(GetCurrentModModuleHandle());
+    if (!RegisterEqWindowClasses(GetCurrentModModuleHandle())) {
+        Wh_Log(L"Wh_ModInit: Player window class registration failed; Player UI will stay unavailable until Explorer restarts");
+    }
+    g_shellServicesStarted.store(false, std::memory_order_release);
     g_running.store(true, std::memory_order_release);
 
     BuildHannWindow();
@@ -9738,13 +26506,10 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    StartAudioCapture();
-
     g_hOverlayThread = CreateThread(
         nullptr, 0, OverlayThreadProc, nullptr, 0, &g_overlayThreadId);
 
     if (!g_hOverlayThread) {
-        StopAudioCapture();
         g_running.store(false, std::memory_order_release);
         CloseHandle(g_hOverlayStopEvent);
         g_hOverlayStopEvent = nullptr;
@@ -9752,30 +26517,95 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (IsAlbumColorMode())
-        StartAlbumColorCapture();
-    if (g_settings.lyricsEnabled)
+    // Wh_ModInit can run in secondary Explorer processes. Shell-dependent
+    // workers are started by OverlayThreadProc after it verifies desktop/taskbar
+    // ownership. Lyrics keeps its existing guarded startup path; audio/album
+    // worker handles remain exclusively owned by the overlay thread.
+    if (g_shellServicesStarted.load(std::memory_order_acquire) &&
+        (g_settings.lyricsEnabled ||
+         EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS))) {
         StartLyricsCapture();
+    }
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    g_running.store(false, std::memory_order_release);
-    EqCleanupIntegration();
-    StopLyricsCapture();
-    StopAlbumColorCapture();
-    StopAudioCapture();
+static void SignalWorkerShutdown() {
+    // Audio and album worker state/handles are owned exclusively by the overlay
+    // thread. Do not clear their running flags here: a concurrent overlay tick
+    // could otherwise mistake a still-live worker for a stopped one and replace
+    // its handle. The overlay exit path signals, joins, and closes both workers.
+    g_lyricsRunning.store(false, std::memory_order_release);
+    if (g_hLyricsStopEvent)
+        SetEvent(g_hLyricsStopEvent);
 
+    g_eqMediaRunning.store(false, std::memory_order_release);
+    if (g_hEqMediaStopEvent)
+        SetEvent(g_hEqMediaStopEvent);
+    if (g_hEqMediaWakeEvent)
+        SetEvent(g_hEqMediaWakeEvent);
+}
+
+// Windhawk removes function hooks after Wh_ModBeforeUninit returns and before
+// Wh_ModUninit is called. Stop advertising new work from any detour before that
+// phase begins. The Win11 StartTaskbar hook remains enabled for taskbar rebuilds,
+// but it immediately becomes inert once g_running is cleared.
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"Wh_ModBeforeUninit: begin");
+    g_running.store(false, std::memory_order_release);
+    // The temporary tray volume flyout can belong to the XAML/taskbar thread;
+    // ask that window to close asynchronously rather than destroying it cross-thread.
+    HWND volumeFlyout = g_eqTrayVolumeFlyoutHwnd;
+    if (volumeFlyout && IsWindow(volumeFlyout))
+        PostMessageW(volumeFlyout, WM_CLOSE, 0, 0);
+    SignalWorkerShutdown();
+    // Start tearing down the overlay before Windhawk removes hooks. We do not
+    // wait here: the overlay thread must finish after hooks are removed, but
+    // the early signal prevents it from starting another render/UI cycle.
+    if (g_hOverlayStopEvent)
+        SetEvent(g_hOverlayStopEvent);
+    Wh_Log(L"Wh_ModBeforeUninit: shutdown signaled");
+}
+
+
+void Wh_ModUninit() {
+    const bool saveEqSettings =
+        g_shellServicesStarted.load(std::memory_order_acquire);
+
+    Wh_Log(L"Wh_ModUninit: begin");
+
+    // Make settings callbacks inert before persisting EQ state. Wh_SetIntValue
+    // can synchronously re-enter Wh_ModSettingsChanged on some Windhawk builds;
+    // doing that while shutdown has already signaled workers can otherwise
+    // restart services or post work into windows that are being destroyed.
+    g_running.store(false, std::memory_order_release);
+    g_shellServicesStarted.store(false, std::memory_order_release);
+    if (saveEqSettings)
+        SaveCustomEQSettings();
+
+    SignalWorkerShutdown();
+
+    // The overlay thread owns the Win10 tray message window and the overlay
+    // cleanup path. Signal and join it before stopping workers or unregistering
+    // classes, so Win10 cleanup never SendMessage's into a thread stuck in startup.
     if (g_hOverlayStopEvent)
         SetEvent(g_hOverlayStopEvent);
 
     if (g_hOverlayThread) {
+        Wh_Log(L"Wh_ModUninit: waiting for overlay thread");
         WaitForSingleObject(g_hOverlayThread, INFINITE);
         CloseHandle(g_hOverlayThread);
         g_hOverlayThread = nullptr;
+        Wh_Log(L"Wh_ModUninit: overlay thread joined");
     }
 
     g_overlayThreadId = 0;
+
+    // Phase 2: all workers were already signaled above, so these waits no longer
+    // depend on the overlay thread deciding to wake them first. Stop* also
+    // unconditionally joins a live handle even if its running flag was cleared
+    // by the worker itself.
+    StopLyricsCapture();
+    StopEqMediaCapture();
 
     if (g_hOverlayStopEvent) {
         CloseHandle(g_hOverlayStopEvent);
@@ -9783,60 +26613,163 @@ void Wh_ModUninit() {
     }
 
     EqUnregisterWindowClasses();
+    Wh_Log(L"Wh_ModUninit: complete");
 }
 
 void Wh_ModSettingsChanged() {
+    // Settings storage writes can re-enter this callback synchronously, including
+    // while EQ values are being saved during mod unload. Never start workers,
+    // rebuild windows, or touch taskbar/XAML state once shutdown has begun.
+    if (!g_running.load(std::memory_order_acquire))
+        return;
+
+    int oldTargetMonitor = 0;
+    bool oldShowMediaEqTrayButton = true;
+    int oldTrayButtonPosition = EQ_TRAY_BUTTON_POSITION_DEFAULT;
+    bool oldDebugMode = false;
+    int oldPlayerPopupStyle = EQ_POPUP_STYLE_SYSTEM;
+    bool oldVisualizerEnabled = true;
+    bool oldHideVisualizerWhenNoMediaPlaying = false;
+    bool oldHideVisualizerWhenTargetApplicationNotRunning = false;
     int oldAudioSource = 0;
     std::wstring oldAudioApplicationName;
     bool oldLyricsEnabled = false;
+    bool oldLyricsUseLocalLrcFiles = true;
+    std::wstring oldLyricsLocalLrcFolder;
     bool oldAlbumColorMode = false;
 
     {
         std::unique_lock<std::shared_mutex> settingsLock(g_settingsMutex);
+        oldTargetMonitor = g_settings.targetMonitor;
+        oldShowMediaEqTrayButton = g_settings.showMediaEqTrayButton;
+        oldTrayButtonPosition = g_settings.trayButtonPosition;
+        oldDebugMode = g_settings.debugMode;
+        oldPlayerPopupStyle = g_settings.playerPopupStyle;
+        oldVisualizerEnabled = g_settings.visualizerEnabled;
+        oldHideVisualizerWhenNoMediaPlaying =
+            g_settings.hideVisualizerWhenNoMediaPlaying;
+        oldHideVisualizerWhenTargetApplicationNotRunning =
+            g_settings.hideVisualizerWhenTargetApplicationNotRunning;
         oldAudioSource = g_settings.audioSource;
         oldAudioApplicationName = g_settings.audioApplicationName;
         oldLyricsEnabled = g_settings.lyricsEnabled;
-        oldAlbumColorMode = IsAlbumColorMode();
-        LoadSettings();
+        oldLyricsUseLocalLrcFiles = g_settings.lyricsUseLocalLrcFiles;
+        oldLyricsLocalLrcFolder = g_settings.lyricsLocalLrcFolder;
+        oldAlbumColorMode = IsAlbumColorCaptureNeeded();
+        LoadSettings(false);
     }
 
     int newAudioSource = 0;
     std::wstring newAudioApplicationName;
+    bool newShowMediaEqTrayButton = true;
+    int newTrayButtonPosition = EQ_TRAY_BUTTON_POSITION_DEFAULT;
+    bool newDebugMode = false;
+    int newPlayerPopupStyle = EQ_POPUP_STYLE_SYSTEM;
+    bool newVisualizerEnabled = true;
+    bool newHideVisualizerWhenNoMediaPlaying = false;
+    bool newHideVisualizerWhenTargetApplicationNotRunning = false;
+    int newTargetFps = 0;
     bool newLyricsEnabled = false;
+    bool newLyricsUseLocalLrcFiles = true;
+    std::wstring newLyricsLocalLrcFolder;
+    bool newInteractiveLyrics = false;
     bool newAlbumColorMode = false;
     {
         std::shared_lock<std::shared_mutex> settingsLock(g_settingsMutex);
         newAudioSource = g_settings.audioSource;
         newAudioApplicationName = g_settings.audioApplicationName;
+        newShowMediaEqTrayButton = g_settings.showMediaEqTrayButton;
+        newTrayButtonPosition = g_settings.trayButtonPosition;
+        newDebugMode = g_settings.debugMode;
+        newPlayerPopupStyle = g_settings.playerPopupStyle;
+        newVisualizerEnabled = g_settings.visualizerEnabled;
+        newHideVisualizerWhenNoMediaPlaying =
+            g_settings.hideVisualizerWhenNoMediaPlaying;
+        newHideVisualizerWhenTargetApplicationNotRunning =
+            g_settings.hideVisualizerWhenTargetApplicationNotRunning;
+        newTargetFps = g_settings.targetFps;
         newLyricsEnabled = g_settings.lyricsEnabled;
-        newAlbumColorMode = IsAlbumColorMode();
+        newLyricsUseLocalLrcFiles = g_settings.lyricsUseLocalLrcFiles;
+        newLyricsLocalLrcFolder = g_settings.lyricsLocalLrcFolder;
+        newInteractiveLyrics = EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS);
+        newAlbumColorMode = IsAlbumColorCaptureNeeded();
     }
 
-    if (oldAlbumColorMode != newAlbumColorMode) {
-        if (newAlbumColorMode)
-            StartAlbumColorCapture();
-        else
-            StopAlbumColorCapture();
+
+    const HWND popupForSettings =
+        g_eqPopupHwndForRequests.load(std::memory_order_acquire);
+    if (oldPlayerPopupStyle != newPlayerPopupStyle &&
+        popupForSettings && IsWindow(popupForSettings)) {
+        g_eqPopupAttributesUpdateRequested.store(true, std::memory_order_release);
+        RequestEqPopupRender(popupForSettings);
     }
 
-    if (oldLyricsEnabled != newLyricsEnabled) {
-        if (newLyricsEnabled)
-            StartLyricsCapture();
+    if (oldDebugMode != newDebugMode && g_hwndOverlay && IsWindow(g_hwndOverlay)) {
+        PostMessageW(g_hwndOverlay, WM_VIZ_DEBUG_SYNC, 0, 0);
+    }
+
+    if (oldShowMediaEqTrayButton != newShowMediaEqTrayButton ||
+        (g_eqIsWindows11 && oldTrayButtonPosition != newTrayButtonPosition)) {
+        if (g_eqIsWindows11)
+            EqEnsureXamlButton();
+        else if (oldShowMediaEqTrayButton != newShowMediaEqTrayButton)
+            EqEnsureNativeTrayIcon();
+    }
+
+    const bool eqMediaCaptureNeededBefore =
+        oldShowMediaEqTrayButton ||
+        (oldVisualizerEnabled && oldHideVisualizerWhenNoMediaPlaying) ||
+        g_eqPlayerPopupOpen.load(std::memory_order_acquire);
+    const bool eqMediaCaptureNeededAfter =
+        newShowMediaEqTrayButton ||
+        (newVisualizerEnabled && newHideVisualizerWhenNoMediaPlaying) ||
+        g_eqPlayerPopupOpen.load(std::memory_order_acquire);
+    if (eqMediaCaptureNeededBefore != eqMediaCaptureNeededAfter &&
+        g_shellServicesStarted.load(std::memory_order_acquire)) {
+        if (eqMediaCaptureNeededAfter)
+            StartEqMediaCapture();
         else
-            StopLyricsCapture();
+            StopEqMediaCapture();
     }
 
     const bool audioSourceChanged =
         oldAudioSource != newAudioSource ||
         oldAudioApplicationName != newAudioApplicationName;
 
-    if (audioSourceChanged) {
-        StopAudioCapture();
-        StartAudioCapture();
+    if (oldAlbumColorMode != newAlbumColorMode || audioSourceChanged)
+        RequestOverlayServicesRefresh(audioSourceChanged);
+
+    const bool lyricsSourceChanged =
+        oldLyricsUseLocalLrcFiles != newLyricsUseLocalLrcFiles ||
+        oldLyricsLocalLrcFolder != newLyricsLocalLrcFolder;
+
+    if (lyricsSourceChanged)
+        StopLyricsCapture();
+
+    if (oldLyricsEnabled != newLyricsEnabled ||
+        audioSourceChanged ||
+        lyricsSourceChanged) {
+        if (g_shellServicesStarted.load(std::memory_order_acquire)) {
+            if (newLyricsEnabled || newInteractiveLyrics)
+                StartLyricsCapture();
+            else
+                StopLyricsCapture();
+        } else if (!newLyricsEnabled && !newInteractiveLyrics) {
+            StopLyricsCapture();
+        }
     }
 
+    const bool desktopVisibilitySettingsChanged =
+        oldVisualizerEnabled != newVisualizerEnabled ||
+        oldHideVisualizerWhenNoMediaPlaying != newHideVisualizerWhenNoMediaPlaying ||
+        oldHideVisualizerWhenTargetApplicationNotRunning !=
+            newHideVisualizerWhenTargetApplicationNotRunning;
+
+    if (audioSourceChanged || desktopVisibilitySettingsChanged)
+        RequestOverlayServicesRefresh(audioSourceChanged);
+
     if (g_hwndOverlay) {
-        InvalidateRect(g_hwndOverlay, nullptr, TRUE);
+        PostMessageW(g_hwndOverlay, WM_VIZ_REBUILD_OVERLAYS, 0, 0);
         PostMessageW(g_hwndOverlay, WM_VIZ_AUDIO_WAKE, 0, 0);
     }
 }

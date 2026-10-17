@@ -2,7 +2,7 @@
 // @id              multiwm
 // @name            MultiWM
 // @description     Lightweight, low-cortisol window manager with true per-virtual-desktop layouts. 
-// @version         1.13.20
+// @version         1.13.58
 // @author          meteoni
 // @github          https://github.com/Meteoni
 // @license         MIT
@@ -23,7 +23,7 @@ including floating - and simple, predictable controls.
 ![GIF](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/MultiWM/MultiWM.gif)
 
 ## Notes
-- *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe`) for better stability and workspace preservation across Explorer restarts.*
+- *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe, windhawk-mod.exe, windhawk-mod-uiaccess.exe`) for a better experience.*
 - *MultiWM's virtual-desktop notification integration is based on [Taskbar Desktop Indicator by Simon Benedict](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-desktop-indicator.wh.cpp) (MIT).*
 
 ## Features
@@ -39,7 +39,7 @@ continuous polling.
 ## Layouts
 - Floating
 - Master + Stack (vertical or horizontal)
-- Binary Space Partitioning (BSP)
+- Dwindle
 - Columns / Rows
 - Monocle
 
@@ -56,6 +56,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
 ## Also check out
 - [Virtual Desktop Helper by u2x1](https://windhawk.net/mods/virtual-desktop-helper)
 - [Taskbar Desktop Indicator by Simon Benedict](https://windhawk.net/mods/taskbar-desktop-indicator)
+- [GNOME-like dynamic virtual desktops by Giggig](https://windhawk.net/mods/gnome-dynamic-desktops)
 
 */
 // ==/WindhawkModReadme==
@@ -65,65 +66,169 @@ A small tray indicator shows the active workspace layout and provides quick acce
 - general:
   - DefaultWindowManagementMode: automatic
     $name: Default Window Management Mode
-    $description: 'Choose membership policy after startup. Manual keeps Alt+T groups contained: new windows are not admitted, minimizing / moving to another desktop releases membership. Maximized windows still preserve their slot. Automatic continuously discovers and migrates managed windows.'
+    $description: Automatic adds windows as they appear. Manual adds them when you choose Tile Workspace.
     $options:
       - manual: Manual
       - automatic: Automatic
   - AutomaticNewWindowPosition: last_slot
     $name: Automatic Window Insertion Position
-    $description: 'Choose where Automatic mode inserts newly discovered windows and migrated windows from another workspace. Maximized / minimized windows are restored in-place.'
+    $description: Preferred position for new or moved windows in Automatic mode. Tries another position if needed.
     $options:
       - last_slot: Last slot
       - after_focused: After focused window
+  - TrayClickAction: cycle_layout
+    $name: Tray Icon Click
+    $description: Action when the tray icon is left-clicked.
+    $options:
+      - cycle_layout: Switch layout
+      - context_menu: Open context menu
   $name: General
 
 - workspace:
   - DefaultLayout: master_stack
-    $name: Default Layout
-    $description: Initial layout used when a new desktop + monitor workspace is created.
+    $name: Fallback Layout
+    $description: Starting layout when no rule matches.
     $options:
       - master_stack: Master + Stack (Vertical)
       - master_stack_h: Master + Stack (Horizontal)
       - columns: Columns
       - rows: Rows
-      - bsp: BSP (Binary Space Partitioning)
+      - dwindle: Dwindle
       - monocle: Monocle (Fullscreen)
       - floating: Floating (No tiling)
-  - LayoutCycle: [master_stack, master_stack_h, bsp, columns, rows, monocle, floating]
+  - LayoutCycle: [master_stack, master_stack_h, dwindle, columns, rows, monocle, floating]
     $name: Layout Cycle
-    $description: 'Layouts visited by the Cycle Layout hotkey, in order. Remove layouts you never want to cycle through, or re-order entries as you wish.'
+    $description: Layouts used by Cycle Layout, in this order.
     $options:
       - master_stack: Master + Stack (Vertical)
       - master_stack_h: Master + Stack (Horizontal)
       - columns: Columns
       - rows: Rows
-      - bsp: BSP (Binary Space Partitioning)
+      - dwindle: Dwindle
       - monocle: Monocle (Fullscreen)
       - floating: Floating (No tiling)
+  - InitializationRules:
+      - - Layout: ""
+          $name: Initial Layout
+          $description: Choose a layout and at least one desktop or monitor condition. Disabled ignores this row.
+          $options:
+            - "": Disabled
+            - master_stack: Master + Stack (Vertical)
+            - master_stack_h: Master + Stack (Horizontal)
+            - columns: Columns
+            - rows: Rows
+            - dwindle: Dwindle
+            - monocle: Monocle (Fullscreen)
+            - floating: Floating (No tiling)
+        - DesktopNameContains: ""
+          $name: Desktop Name Contains
+          #! $hideIf: {Layout: ""}
+          $description: Match part of a custom desktop name, ignoring case. Blank matches any desktop.
+        - DesktopNumber: 0
+          $name: Desktop Number
+          #! $hideIf: {Layout: ""}
+          #! $min: 0
+          $description: Desktop position in Task View, starting at 1. 0 matches any desktop.
+        - Monitor: any
+          $name: Monitor
+          #! $hideIf: {Layout: ""}
+          $options:
+            - any: Any
+            - primary: Primary
+            - non_primary: Non-primary
+            - specific: Specific monitor
+        - MonitorId: ""
+          $name: Monitor ID
+          #! $hideIf: {Layout: ""}
+          #! $showIf: {Monitor: specific}
+          $description: Paste a monitor ID from diagnostics. Blank disables this rule.
+    $name: Initialization Rules
+    $description: Special handling rules for specific virtual desktops / monitors.
+  - Overflow:
+    - WindowLimit: 0
+      $name: Auto-tiling Limit
+      #! $min: 0
+      $description: Maximum tiled windows per monitor on each desktop. 0 means unlimited.
+    - Action: float
+      $name: Overflow Action
+      $description: Applies when tiled windows exceed the limit or cannot fit. Created virtual desktops stay after their windows close or MultiWM is turned off.
+      $options:
+        - float: Float window
+        - new_desktop: New desktop after current
+    - TryOtherMonitors: false
+      $name: Try Other Monitors First
+      $description: Try another monitor before floating or changing desktop.
+    - MonitorLimits:
+      - - Monitor: disabled
+          $name: Monitor
+          $options:
+            - disabled: Rule disabled
+            - primary: Primary
+            - non_primary: Non-primary
+            - specific: Specific monitor
+        - MonitorId: ""
+          $name: Monitor ID
+          #! $showIf: {Monitor: specific}
+          $description: Paste a monitor ID from diagnostics. Blank disables this rule.
+        - Limit: 0
+          $name: Auto-tiling Limit
+          #! $min: 0
+          #! $hideIf: {Monitor: disabled}
+          $description: Limit for each matching monitor per desktop. 0 means unlimited.
+      $name: Per-Monitor Limits
+      $description: First matching rule wins. Other monitors use the main limit.
+    $name: Overflow
+    $description: Automatic mode only. Minimized and hidden windows do not count. Maximized windows count.
   - TileGap: 6
     $name: Window Gap (DPI-scaled pixels)
-    $description: Gap between adjacent tiled windows, scaled per monitor.
+    #! $min: 0
+    #! $max: 100
+    $description: Space between tiled windows (0-100).
   - WorkspaceInsets: "6, 6, 6, 6"
     $name: Insets (DPI-scaled pixels)
-    $description: 'Left, Top, Right, Bottom (0-500), scaled per monitor. Positive values inset the workspace from that edge. Example: 4, 4, 4, 4'
+    $description: Space at the left, top, right, and bottom edges. Enter four values from 0 to 500.
   - MasterPercent: 50
     $name: Master Size (%)
-    $description: Default master share in Master + Stack layouts (1-99).
+    #! $min: 1
+    #! $max: 99
+    #! $format: slider
+    $description: Starting screen share for the main window in Master + Stack layouts (1-99%).
+  - ReverseDwindle: false
+    $name: Reverse Dwindle
+    $description: Grow the Dwindle layout from the top-left instead of the bottom-right.
+  - AdaptiveDwindleSlots: 2
+    $name: Adaptive Dwindle Slots
+    #! $min: 0
+    #! $max: 64
+    $description: How many splits can adjust to fit windows (0-64). 0 keeps all splits fixed.
+  - AdaptiveDwindlePercentage: 15
+    $name: Adaptive Dwindle Percentage
+    #! $min: 0
+    #! $max: 40
+    #! $format: slider
+    #! $hideIf: {AdaptiveDwindleSlots: 0}
+    $description: How far splits may move from the middle (0-40). 15 allows 35%-65%. 0 disables adjustment.
   $name: Workspace
 
 - appearance:
+  - ShowToasts: true
+    $name: Show Toasts
+    $description: Show layout, mode, and error toasts.
   - FlyoutPosition: top
-    $name: Status Flyout Position
-    $description: Show layout and mode flyout at the top or bottom center of the active monitor.
+    $name: Toast Position
+    #! $showIf: {ShowToasts: true}
+    $description: Show messages at the top or bottom of the active monitor.
     $options:
       - top: Top
       - bottom: Bottom
   - FlyoutOffsetX: 0
-    $name: Status Flyout X Offset
-    $description: Horizontal offset in DPI-scaled pixels (positive moves right).
+    $name: Toast Horizontal Offset (DPI-scaled pixels)
+    #! $showIf: {ShowToasts: true}
+    $description: Move messages left or right. Positive values move right.
   - FlyoutOffsetY: 0
-    $name: Status Flyout Y Offset
-    $description: Vertical offset in DPI-scaled pixels (positive moves down).
+    $name: Toast Vertical Offset (DPI-scaled pixels)
+    #! $showIf: {ShowToasts: true}
+    $description: Move messages up or down. Positive values move down.
   - CustomIcons:
       - - Layout: master_stack
           $name: Layout
@@ -132,19 +237,20 @@ A small tray indicator shows the active workspace layout and provides quick acce
             - master_stack_h: Master + Stack (Horizontal)
             - columns: Columns
             - rows: Rows
-            - bsp: BSP
+            - dwindle: Dwindle
             - monocle: Monocle
             - floating: Floating
         - Path: ""
-          $name: Icon path (.ico)
+          $name: Icon File (.ico)
+          #! $format: filePath
     $name: Custom Tray Layout Icons
-    $description: Optional per-layout .ico overrides. Failed or empty paths use the generated text icon.
+    $description: Choose a .ico file for each layout. Blank or invalid files use the built-in icon.
   $name: Appearance
 
 - hotkeys:
   - TilingModifier: alt
     $name: Modifier
-    $description: "Modifier used by all window-manager hotkeys. \nNote: Alt+letter shortcuts can override application menu mnemonics. Choose Alt+Shift or Ctrl+Alt if this is disruptive. "
+    $description: Held with every shortcut below. Alt may conflict with app menus; choose another modifier if needed.
     $options:
       - alt: Alt
       - ctrl: Ctrl
@@ -153,83 +259,133 @@ A small tray indicator shows the active workspace layout and provides quick acce
       - ctrl+shift: Ctrl + Shift
   - TileKey: "T"
     $name: Tile Workspace
-    $description: 'Reconcile and tile windows on the current monitor. Leave blank to disable. Examples: T, D, Space, `, -'
+    $description: Arrange windows on the current monitor. Blank disables this shortcut. Examples include T, Space, or F5.
   - LayoutKey: "L"
     $name: Cycle Layout
-    $description: 'Cycle the current workspace layout. Leave blank to disable. Examples: L, Tab, =, ], /'
+    $description: Switch to the next layout. Blank disables this shortcut.
   - SwapMasterKey: "M"
     $name: Set Master Window
-    $description: 'Set another tiled window as the master. Leave blank to disable.'
+    $description: Make the focused window the main window. Blank disables this shortcut.
   - PromoteWindowKey: ","
     $name: Promote Focused Window
-    $description: 'Move the focused tiled window one logical slot earlier. Does nothing in the first slot. Leave blank to disable.'
+    $description: Move the focused window one place earlier. Blank disables this shortcut.
   - DemoteWindowKey: "."
     $name: Demote Focused Window
-    $description: 'Move the focused tiled window one logical slot later. Does nothing in the last slot. Leave blank to disable.'
+    $description: Move the focused window one place later. Blank disables this shortcut.
   - ManagementModeToggleKey: "R"
     $name: Toggle Window Management Mode
-    $description: 'Switch between Automatic and Manual modes at runtime. Leave blank to disable.'
+    $description: Switch between Automatic and Manual mode. Blank disables this shortcut.
   - FloatFocusedKey: "F"
     $name: Float Focused Window
-    $description: 'Float the focused tiled window. Leave blank to disable.'
+    $description: Remove the focused window from tiling. Blank disables this shortcut.
   - DiagnosticDumpKey: ""
     $name: Write Diagnostic Report
-    $description: 'Write a formatted state, health, churn, and invariant report to the configured output directory. Uses the configured modifier. Leave blank to disable.'
+    $description: Save a diagnostic report to the Output Directory. Blank disables this shortcut.
   $name: Hotkeys
 
 - diagnostics:
   - DiagnosticsOutputPath: "%USERPROFILE%\\Documents\\MultiWMDiagnostics"
     $name: Output Directory
-    $description: 'Directory for timestamped UTF-8 .txt diagnostic reports. Environment variables such as %USERPROFILE% are supported and missing directories are created. Reports include window titles and executable paths, so review them before sharing.'
+    #! $format: folderPath
+    $description: Folder for diagnostic reports. Reports include window titles and app paths; review them before sharing.
   $name: Diagnostics
 
 - windowBehavior:
   - MouseMoveBehavior: float
     $name: Tiled Window Drag Action
-    $description: Action when a tiled window is dragged without resizing.
+    $description: What happens when you drag a tiled window.
     $options:
       - float: Float moved window
       - swap: Swap with tiled window under pointer
   - FloatingDefaultSize: "960, 640"
     $name: Floating Default Size (DPI-scaled pixels)
-    $description: 'Width, Height used for newly discovered windows in Floating workspaces (Automatic mode only). Values must be 100-4000. Scaled per monitor. Example: 960, 640'
+    $description: Starting size in Floating layouts. Enter width, height (100-4000). Automatic mode only.
   $name: Window Behavior
 
 - windowRules:
   - Rules:
       - - Process: ""
-          $name: Process name
-          $description: Case-insensitive exact match. Leave blank to match any process.
+          $name: App File Name
+          $description: "Case-insensitive exact match. Leave blank to match any process. \n
+            Separate multiple names with commas; escape a literal comma as \\,."
         - Class: ""
           $name: Window class
-          $description: Case-insensitive exact match. Leave blank to match any class.
+          $description: "Case-insensitive exact match. Leave blank to match any class. \n
+            Separate multiple names with commas; escape a literal comma as \\,."
         - TitleContains: ""
           $name: Window title contains
-          $description: Case-insensitive substring. Leave blank to match any title.
+          $description: "Case-insensitive substring match. Leave blank to match any title. \n
+            Separate multiple fragments with commas; escape a literal comma as \\,."
         - Treatment: exclude
           $name: Treatment
           $options:
             - exclude: Exclude
+            - default_to_floating: Default to floating
+            - always_floating: Always floating
             - trace_to_owner: Trace to owner
+            - open_on_monitor: Open on monitor / desktop
             - preserve_size_when_centering: Preserve size when centering
             - override_size_when_centering: Override size when centering
+        - Monitor: any
+          $name: Monitor
+          #! $showIf: {Treatment: open_on_monitor}
+          $description: Any keeps the current monitor.
+          $options:
+            - any: Any
+            - primary: Primary
+            - non_primary: Non-primary
+            - specific: Specific monitor
+        - MonitorId: ""
+          $name: Monitor ID
+          #! $showIf: {Treatment: open_on_monitor, Monitor: specific}
+          $description: Paste a monitor ID from diagnostics. Blank disables this rule.
+        - DesktopNumber: 0
+          $name: Desktop Number
+          #! $showIf: {Treatment: open_on_monitor}
+          #! $min: 0
+          $description: Position in Task View, starting at 1. Both desktop fields must match. 0 matches any number.
+        - DesktopNameContains: ""
+          $name: Desktop Name Contains
+          #! $showIf: {Treatment: open_on_monitor}
+          $description: Match part of a name, ignoring case. First match wins. Leave both desktop fields empty to stay.
+        - FollowWindow: false
+          $name: Follow Window
+          #! $showIf: {Treatment: open_on_monitor}
+          $description: Switch to the window's desktop after moving it.
         - Size: ""
           $name: Centering size override
-          $description: 'Only effective when "Override size" is selected. Example: 720, 480'
+          #! $showIf: {Treatment: override_size_when_centering}
+          $description: 'Only effective when "Override size" is selected. Default-to-floating and Always-floating discovery always preserve the application''s size. Use Width, Height in DPI-scaled pixels, or "Workspace" to fill the current monitor''s usable workspace. Examples: 720, 480'
     $name: Rules
-    $description: 'All populated match fields in a rule must match. Separate rules are alternatives. Exclude prevents management. Trace to owner retargets move/size boundaries from a matching helper window to its already-managed root owner. Centering treatments apply when Automatic mode centers a newly admitted window or must replace missing floating geometry. The first matching centering treatment wins.'
+    $description: 
+        "Both floating treatments center without changing the application's size. \n
+        Trace to owner retargets move/size to its root owner. \n
+        Every non-blank match field in a rule must match; comma-separated values within one field are alternatives, e.g. Thunderbird.exe, Librewolf.exe."
   $name: Window Rules
+  $description: One shoe does not fit everyone, apparently...
 
 - advanced:
   - ConformanceLeaseMs: 3000
-    $name: Tiled Window Conformance Lease (ms)
-    $description: 'Briefly reinforces the assigned rectangle after placement in case the application moves itself again. A still-tiled window that remains outside its tile is floated and the remaining layout reflows. Set to 0 to disable (0-10000 ms). [Default 3000]'
+    $name: Keep Windows in Place (ms)
+    #! $min: 0
+    #! $max: 10000
+    $description: Keep windows in their tiles for this long after placement (0-10000 ms). Windows that resist will float. 0 disables this.
   - ConformanceRepairIntervalMs: 75
-    $name: Conformance Repair Interval (ms)
-    $description: 'Minimum delay between attempts to return a tiled window to its assigned rectangle during the conformance lease (20-2000 ms). [Default 75]'
+    $name: Position Repair Interval (ms)
+    #! $min: 20
+    #! $max: 2000
+    #! $hideIf: {ConformanceLeaseMs: 0}
+    $description: Time between attempts to keep windows in their tiles (20-2000 ms).
   - ReconcileDelayMs: 50
-    $name: Lifecycle Settle Delay (ms)
-    $description: Delay before visibility/lifecycle bursts are reconciled. Increase only if shell transitions are unusually slow (20-2000 ms).
+    $name: Window Change Delay (ms)
+    #! $min: 20
+    #! $max: 2000
+    $description: Wait this long before handling window changes (20-2000 ms).
+  - SlowApplicationDelayMs: 250
+    $name: New Window Retry Delay (ms)
+    #! $min: 0
+    #! $max: 2000
+    $description: Wait this long before checking a new window again (0-2000 ms). 0 disables retries.
   $name: Advanced
 */
 // ==/WindhawkModSettings==
@@ -246,6 +402,7 @@ A small tray indicator shows the active workspace layout and provides quick acce
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <climits>
 #include <cassert>
 #include <cstdarg>
 #include <deque>
@@ -308,6 +465,8 @@ A small tray indicator shows the active workspace layout and provides quick acce
 //    a saved logical slot/weight until restored or explicitly floated/forgotten.
 // 5. Columns/Rows keep one grid weight per active tiled window.
 //    MasterStack/MasterStackH keep one stack weight per non-master active window.
+//    Dwindle keeps one outgoing ratio per active slot. The final slot's ratio
+//    is dormant until another leaf follows it, and survives suspension.
 // 6. A managed HWND has exactly one desktop+monitor workspace owner.
 // 7. Visibility/cloak events are dirty signals; ownership comes from explicit
 //    desktop/monitor queries, not from cloak state.
@@ -315,7 +474,8 @@ A small tray indicator shows the active workspace layout and provides quick acce
 //    Automatic admits unknown HWNDs and migrates managed HWNDs between workspaces;
 //    Manual admits only through explicit commands, forgets minimized members, and
 //    releases membership when a managed HWND moves to another virtual desktop.
-//    Maximized members remain suspended so restoring preserves their exact slot.
+//    Maximized/fullscreen tiled members are suspended and restore to their saved
+//    logical slot when they return to a normal window state.
 // 9. Floating geometry is remembered independently of tiled geometry. Tiling and
 //    geometry adoption never overwrite the last meaningful floating rectangle.
 //
@@ -348,7 +508,15 @@ struct NotificationInterfaceConfig {
 
 struct VirtualDesktopAbiProfile {
   IID managerInternal{};
+  IID virtualDesktop{};
   bool usesHMonitor = false;
+  int getDesktopsIndex = 7;
+  int switchDesktopIndex = 9;
+  int createDesktopIndex = 10;
+  int moveDesktopIndex = -1;
+  int removeDesktopIndex = 11;
+  int animatedSwitchIndex = -1;
+  int animationWaitIndex = -1;
   NotificationInterfaceConfig notification{};
 };
 
@@ -359,6 +527,22 @@ bool GetCurrentDesktopId(GUID* outGuid);
 bool GetWindowDesktopIdSafe(HWND hwnd, GUID* outGuid);
 bool IsWindowOnCurrentDesktopSafe(HWND hwnd, BOOL* onCurrent);
 bool RegisterVirtualDesktopNotifications();
+bool GetDesktopIdsInOrder(std::vector<GUID>* desktopIds);
+bool CreateDesktopAfter(const GUID& sourceDesktop, GUID* desktopId, int* desktopNumber);
+bool IsDesktopEmptyExcept(const GUID& desktopId, HWND allowedWindow = nullptr);
+bool RemoveEmptyOverflowDesktop(const GUID& desktopId, const GUID& fallbackDesktop);
+enum class WindowMovePurpose { Overflow, InitialPlacement };
+bool MoveWindowToDesktop(HWND hwnd, DWORD processId, const GUID& sourceDesktop, const GUID& desktopId,
+                         WindowMovePurpose purpose = WindowMovePurpose::Overflow);
+bool SwitchToDesktop(HWND hwnd, DWORD processId, const GUID& desktopId, const GUID& sourceDesktop, DWORD inputTickMs,
+                     WindowMovePurpose purpose = WindowMovePurpose::Overflow);
+
+struct DesktopMetadata {
+  std::wstring name;
+  int number = 0;
+};
+
+DesktopMetadata ReadDesktopMetadata(const GUID& desktopId);
 }  // namespace Platform::VirtualDesktop
 
 namespace RuntimeLifecycle {
@@ -381,6 +565,31 @@ struct PendingWorkspaceArrange {
   HMONITOR monitor = nullptr;
 };
 
+struct PendingWindowOverflow {
+  HWND hwnd = nullptr;
+  DWORD processId = 0;
+  GUID sourceDesktop{};
+  std::wstring sourceMonitorId;
+  bool monitorFixed = false;
+  uint64_t tilingGeneration = 0;
+};
+
+struct PendingOverflowSwitch {
+  HWND hwnd = nullptr;
+  DWORD processId = 0;
+  GUID sourceDesktop{};
+  GUID targetDesktop{};
+  RECT sourceFrame{};
+  ULONGLONG deadlineTickMs = 0;
+  DWORD inputTickMs = 0;
+};
+
+struct PendingDiscoveryRetry {
+  HWND hwnd = nullptr;
+  DWORD processId = 0;
+  ULONGLONG dueTickMs = 0;
+};
+
 //=============================================================================
 // Runtime/configuration state groups
 //=============================================================================
@@ -401,7 +610,6 @@ enum HotkeyIds {
 constexpr UINT WM_APP_MOVE_SIZE_END = WM_APP + 1;
 constexpr UINT WM_APP_WINDOW_EVENT = WM_APP + 2;
 constexpr UINT WM_APP_VIRTUAL_DESKTOP_CHANGED = WM_APP + 3;
-constexpr UINT WM_APP_TRAY_REFRESH = WM_APP + 4;
 constexpr UINT WM_APP_LAYOUT_CYCLE = WM_APP + 5;
 constexpr UINT WM_APP_RECONCILE_NOW = WM_APP + 6;
 constexpr UINT WM_APP_LAYOUT_SET = WM_APP + 7;
@@ -416,12 +624,15 @@ enum class WmMessageDisposition {
 
 static WmMessageDisposition HandleWmThreadMessage(const MSG& msg);
 
-enum class TileLayout { MasterStack, Columns, Rows, MasterStackH, BSP, Monocle, Floating, COUNT };
+enum class TileLayout { MasterStack, Columns, Rows, MasterStackH, Dwindle, Monocle, Floating, COUNT };
 enum class MouseMoveBehavior { Float, Swap };
 enum class WindowRuleTreatment {
   Exclude,
+  DefaultToFloating,
+  AlwaysFloating,
   TraceToOwner,
   FloatingPlacementOverride,
+  InitialPlacement,
 };
 enum class ManagementMode { Manual, Automatic };
 enum class AutomaticNewWindowPosition { LastSlot, AfterFocused };
@@ -430,7 +641,7 @@ static std::vector<TileLayout> MakeBuiltInLayoutCycle() {
   return {
       TileLayout::MasterStack,
       TileLayout::MasterStackH,
-      TileLayout::BSP,
+      TileLayout::Dwindle,
       TileLayout::Columns,
       TileLayout::Rows,
       TileLayout::Monocle,
@@ -449,19 +660,37 @@ struct FloatingDefaultSize {
   LONG height = 640;
 };
 
+enum class RuleMonitor { Any, Primary, NonPrimary, Specific };
+
 struct WindowRule {
   WindowRuleTreatment treatment = WindowRuleTreatment::Exclude;
-  std::wstring process;
-  std::wstring className;
-  std::wstring titleContains;
+  std::vector<std::wstring> processNames;
+  std::vector<std::wstring> classNames;
+  std::vector<std::wstring> titleFragments;
   bool preserveFloatingSize = true;
+  bool useWorkspaceSize = false;
   FloatingDefaultSize floatingSizeDip{};
+  RuleMonitor monitor = RuleMonitor::Any;
+  std::wstring monitorId;
+  int desktopNumber = 0;
+  std::wstring desktopNameContains;
+  bool followWindow = false;
+};
+
+struct WorkspaceInitializationRule {
+  std::wstring desktopNameContains;
+  int desktopNumber = 0;
+  RuleMonitor monitor = RuleMonitor::Any;
+  std::wstring monitorId;
+  TileLayout layout = TileLayout::MasterStack;
+  int settingsIndex = 0;
 };
 
 // Windhawk settings and immutable-at-runtime policy values. Settings reloads
 // replace these fields; transient WM state lives in WmRuntime instead.
 struct SettingsState {
   UINT reconcileDelayMs = 50;
+  UINT slowApplicationDelayMs = 250;
   UINT conformanceLeaseMs = 3000;
   UINT conformanceRepairIntervalMs = 75;
 
@@ -481,13 +710,26 @@ struct SettingsState {
   LONG gapDip = 6;
   FloatingDefaultSize floatingDefaultSizeDip{};
   LONG masterPercent = 50;
+  bool reverseDwindle = false;
+  size_t adaptiveDwindleSlots = 2;
+  LONG adaptiveDwindlePercentage = 40;
 
   MouseMoveBehavior mouseMoveBehavior = MouseMoveBehavior::Float;
   AutomaticNewWindowPosition automaticNewWindowPosition =
       AutomaticNewWindowPosition::LastSlot;
   TileLayout defaultLayout = TileLayout::MasterStack;
   std::vector<TileLayout> layoutCycle = MakeBuiltInLayoutCycle();
+  std::vector<WorkspaceInitializationRule> workspaceInitializationRules;
   std::vector<WindowRule> windowRules;
+  size_t automaticWindowLimit = 0;
+  bool overflowCreateDesktop = false;
+  bool overflowTryOtherMonitors = false;
+  struct MonitorWindowLimit {
+    RuleMonitor monitor = RuleMonitor::Specific;
+    std::wstring monitorId;
+    size_t limit = 0;
+  };
+  std::vector<MonitorWindowLimit> monitorWindowLimits;
   std::wstring diagnosticsOutputPath =
       L"%USERPROFILE%\\Documents\\MultiWMDiagnostics";
 };
@@ -531,6 +773,12 @@ struct WmRuntime {
   HANDLE readyEvent = nullptr;
 
   UINT_PTR lifecycleTimer = 0;
+  UINT_PTR discoveryRetryTimer = 0;
+  UINT_PTR overflowTimer = 0; // Checks desktop arrival, without activating HWNDs.
+  // Destroy events retire queued HWND lifetimes before deferred work runs.
+  std::unordered_set<HWND> overflowWindows;
+  std::vector<PendingWindowOverflow> pendingWindowOverflow;
+  PendingOverflowSwitch pendingOverflowSwitch{};
   UINT_PTR maintenanceTimer = 0;
   UINT_PTR conformanceTimer = 0;
   UINT maintenanceAttempts = 0;
@@ -543,7 +791,22 @@ struct WmRuntime {
       ReconciledDesktopState::Unknown;
   bool pendingDesktopSwitchFlyouts = false;
   std::vector<HWND> lifecycleDirtyWindows;
+  std::vector<PendingDiscoveryRetry> pendingDiscoveryRetries;
   std::vector<PendingWorkspaceArrange> pendingDesktopArranges;
+  // Routing is independent of management and also works in Manual mode.
+  bool windowRoutingReady = false;
+  std::unordered_set<HWND> windowRoutingEvaluated;
+  struct PendingWindowRoute {
+    DWORD processId = 0;
+    GUID sourceDesktop{};
+    GUID targetDesktop{};
+    RuleMonitor monitor = RuleMonitor::Any;
+    std::wstring monitorId;
+    bool followWindow = false;
+    uint64_t visibleGeneration = 0; // Counts a maximized arrival without admitting it.
+  };
+  std::unordered_map<HWND, PendingWindowRoute> pendingWindowRoutes;
+  PendingOverflowSwitch pendingInitialPlacementSwitch{};
   ManagementMode managementMode = ManagementMode::Automatic;
 };
 
@@ -580,6 +843,7 @@ struct Counters {
   uint64_t tiledSwapActions = 0;
   uint64_t tiledFloatActions = 0;
   uint64_t dividerUpdates = 0;
+  uint64_t rejectedResizeGestures = 0;
 
   uint64_t reconcileCalls = 0;
   uint64_t reconcileWindowsExamined = 0;
@@ -599,11 +863,19 @@ struct Counters {
   uint64_t placementPreflightStops = 0;
   uint64_t setWindowPosCalls = 0;
   uint64_t placementSuccess = 0;
+  uint64_t placementSuppressedByPhysicalState = 0;
   uint64_t placementAdjusted = 0;
   uint64_t placementAccessDenied = 0;
   uint64_t placementRefused = 0;
   uint64_t placementDead = 0;
   uint64_t floatingGeometryRepairs = 0;
+
+  uint64_t constraintProbeAttempts = 0;
+  uint64_t constraintProbeSuccesses = 0;
+  uint64_t constraintProbeTimeouts = 0;
+  uint64_t constraintProbeFailures = 0;
+  uint64_t constraintUnsatisfiablePlans = 0;
+  uint64_t constraintFloats = 0;
 
   uint64_t virtualDesktopChangesProcessed = 0;
   uint64_t virtualDesktopFallbackChanges = 0;
@@ -634,6 +906,8 @@ struct Counters {
   uint64_t swapMasterCommands = 0;
   uint64_t promoteWindowCommands = 0;
   uint64_t demoteWindowCommands = 0;
+  uint64_t rejectedOrderCommands = 0;
+  uint64_t rejectedLayoutChanges = 0;
 
   uint64_t reportsWritten = 0;
   uint64_t reportWriteFailures = 0;
@@ -834,8 +1108,8 @@ enum class ManageState {
 };
 
 // Why a logically managed tiled window is temporarily absent from the active
-// layout. This mirrors FancyWM's Restored vs Minimized/Maximized state boundary,
-// while retaining Hidden for close-to-tray behavior.
+// layout. Hidden is retained for close-to-tray behavior; maximize and fullscreen
+// share the same save-slot/restore semantics.
 enum class SuspensionReason {
   None,
   Hidden,
@@ -845,11 +1119,31 @@ enum class SuspensionReason {
 
 enum class PlacementResult {
   Success,
+  SuppressedByPhysicalState,
   AdjustedByWindow,
   AccessDenied,
   Refused,
   Dead,
 };
+
+// Native minimum tracking constraints converted to the DWM extended-frame
+// geometry used by the layout engine. A successful WM_GETMINMAXINFO report is
+// authoritative solver policy. If a later probe fails, callers retain the last
+// valid report rather than inventing a weaker constraint.
+struct WindowConstraints {
+  LONG minWidth = 1;
+  LONG minHeight = 1;
+  UINT dpi = 96;
+  bool valid = false;
+  DWORD lastProbeError = ERROR_SUCCESS;
+};
+
+static uint64_t NextTilingGeneration() {
+  static uint64_t nextGeneration = 1;
+  uint64_t generation = nextGeneration++;
+  if (generation == 0) generation = nextGeneration++;
+  return generation;
+}
 
 struct WindowRecord {
   HWND hwnd = nullptr;
@@ -861,6 +1155,21 @@ struct WindowRecord {
   bool canMove = true;
   bool canResize = true;
   bool topmost = false;
+
+  // Monotonic admission generation provides stable ordering for constraint
+  // recovery candidates. Reordering never changes this value.
+  uint64_t tilingGeneration = 0;
+  // Retained through constraint-refresh replans so a pending admission can try
+  // nearby insertion slots before it is floated.
+  bool pendingInsertionPlacement = false;
+  bool automaticOverflowMonitorFixed = false;
+  // Default-floating admission can precede a usable restored rectangle. Retain
+  // the centering request until discovery can place the restored HWND.
+  bool pendingDefaultFloatingCenter = false;
+  // Set by an Always-floating rule. The policy is retained on the record so a
+  // title change cannot make an explicitly protected window tileable by accident.
+  bool alwaysFloating = false;
+  WindowConstraints constraints{};
 
   PlacementResult lastPlacementResult = PlacementResult::Success;
   RECT lastRequestedRect{};
@@ -909,7 +1218,13 @@ class Workspace {
   const std::unordered_map<HWND, WindowRecord>& Records() const { return records_; }
   const std::vector<double>& StackWeights() const { return stackWeights_; }
   const std::vector<double>& GridWeights() const { return gridWeights_; }
+  std::vector<double> DwindleRatios() const {
+    if (dwindleRatios_.empty()) return {};
+    return {dwindleRatios_.begin(), dwindleRatios_.end() - 1};
+  }
   size_t ActiveCount() const { return windows_.size(); }
+  size_t VisibleWindowCount() const;
+  Workspace EmptyWithInheritedLayoutSettings() const;
   size_t RecordCount() const { return records_.size(); }
   bool Empty() const { return windows_.empty(); }
 
@@ -923,6 +1238,7 @@ class Workspace {
     return IsTiled(lastFocusedWindow_) ? lastFocusedWindow_ : nullptr;
   }
   bool RememberFocusedWindow(HWND hwnd);
+  bool UpdateConstraints(HWND hwnd, const WindowConstraints& constraints);
   bool HasSuspended() const;
   bool AllTiledVisible(const std::vector<HWND>& snapshot) const;
 
@@ -931,10 +1247,20 @@ class Workspace {
   void SetMasterRatio(double ratio);
   bool MakeMaster(HWND hwnd, HWND* oldMaster = nullptr);
   bool SwapTiled(HWND first, HWND second);
+  bool MovePendingAdmissionToIndex(HWND hwnd, size_t targetIndex);
+  bool ClearInsertionPlacement(HWND hwnd);
+  bool ClearDefaultFloatingCenter(HWND hwnd);
+  bool EnforceAlwaysFloating(HWND hwnd);
+  bool SetDwindleRatio(size_t splitIndex, double ratio);
+  bool HasSameWindowMembershipAs(const Workspace& other) const;
+  bool HasSameLayoutStateAs(const Workspace& other) const;
+  bool RestoreLayoutStateFrom(const Workspace& source);
+  bool RestoreCompatibleActiveLayoutStateFrom(const Workspace& source);
   bool RememberFloatingGeometry(
       HWND hwnd, const RECT& frame, HMONITOR monitor, UINT dpi);
 
   bool ActivateTiled(HWND hwnd);
+  bool AdmitFloating(WindowRecord record);
   bool AdmitTiled(WindowRecord record);
   bool AdmitTiledAfter(WindowRecord record, HWND anchor);
   bool AdmitInitial(WindowRecord record, SuspensionReason reason);
@@ -956,6 +1282,9 @@ class Workspace {
       const RECT& workArea, LONG gap, size_t resizedIndex,
       const ::MoveSizeGesture& gesture);
   bool LearnGridResize(
+      const RECT& workArea, LONG gap, size_t resizedIndex,
+      const ::MoveSizeGesture& gesture);
+  bool LearnDwindleResize(
       const RECT& workArea, LONG gap, size_t resizedIndex,
       const ::MoveSizeGesture& gesture);
   PlacementAction ApplyPlacementObservation(HWND hwnd, const PlacementObservation& observation);
@@ -982,14 +1311,32 @@ class Workspace {
   SuspendedSlot MakeAppendedSuspendedSlot() const;
   void AppendTiledWithDefaultWeight(HWND hwnd);
   void ResetSuspendedLayoutHints();
+  void RememberCurrentLayoutGeometry();
+  void RestoreRememberedLayoutGeometry();
   void DebugValidateMutation(const wchar_t* operation) const;
 
   TileLayout layout_ = TileLayout::MasterStack;
   std::vector<HWND> windows_;
   std::unordered_map<HWND, WindowRecord> records_;
   double masterRatio_ = 0.5;
+  // Positional defaults inherited by an overflow-created workspace, without HWNDs.
+  std::vector<double> inheritedSlotWeights_;
   std::vector<double> stackWeights_;
   std::vector<double> gridWeights_;
+  std::vector<double> dwindleRatios_;
+
+  // Active slot geometry is remembered per layout family. This makes Monocle
+  // and ordinary layout cycling presentation-like with respect to the previous
+  // tiling geometry: switching away and back restores the exact weights/ratios
+  // when the active window order is unchanged. Membership/order changes make the
+  // remembered snapshot ineligible rather than trying to reinterpret old slots.
+  std::vector<HWND> rememberedMasterStackOrder_;
+  std::vector<double> rememberedMasterStackWeights_;
+  std::vector<HWND> rememberedGridOrder_;
+  std::vector<double> rememberedGridWeights_;
+  std::vector<HWND> rememberedDwindleOrder_;
+  std::vector<double> rememberedDwindleRatios_;
+
   HWND lastFocusedWindow_ = nullptr;
 };
 
@@ -1034,6 +1381,7 @@ using Model::PlacementObservation;
 using Model::PlacementResult;
 using Model::SuspendedSlot;
 using Model::SuspensionReason;
+using Model::WindowConstraints;
 using Model::WindowRecord;
 using Model::Workspace;
 using Model::WorkspaceGeometryItem;
@@ -1072,8 +1420,44 @@ static WorkspaceRepository g_workspaces;
 static MoveSizeTracker g_moveSize;
 static WinEventHooks g_hooks;
 
+enum class UserLayoutMutationKind {
+  Resize,
+  Order,
+  LayoutChange,
+};
+
+struct PendingLayoutMutation {
+  Workspace previous;
+  Workspace candidate;
+  HWND subject = nullptr;
+  UserLayoutMutationKind kind = UserLayoutMutationKind::Resize;
+  const wchar_t* action = L"Layout mutation";
+};
+
+static std::unordered_map<
+    DesktopMonitorKey, PendingLayoutMutation,
+    Model::DesktopMonitorKeyHash, Model::DesktopMonitorKeyEqual>
+    g_pendingLayoutMutations;
+
+// Admission recovery can temporarily move the pending member and/or adaptive
+// layout geometry before conformance has proved the resulting arrangement. Keep
+// the pre-recovery state until that member settles so a suspend/restore race
+// cannot strand the established members in geometry that existed only for the
+// pending admission.
+struct PendingAdmissionRecovery {
+  DesktopMonitorKey key;
+  Workspace baseline;
+  uint64_t generation = 0;
+};
+
+static std::unordered_map<HWND, PendingAdmissionRecovery>
+    g_pendingAdmissionRecoveries;
+
 struct ConformanceLease {
   RECT expectedRect{};
+  // Preserve the user action that produced this target through asynchronous
+  // constraint discovery and its subsequent arrangement.
+  HWND preferredTiledWindow = nullptr;
   ULONGLONG expiresAtTickMs = 0;
   // Diagnostic only. Attempt count never controls lease lifetime or policy.
   unsigned attempts = 0;
@@ -1148,6 +1532,8 @@ static bool CancelConformanceLease(HWND hwnd, uint64_t generation = 0) {
 static void ClearAllConformanceLeases() {
   AssertWmThread(L"ClearAllConformanceLeases");
   g_conformanceLeases.leases.clear();
+  g_pendingLayoutMutations.clear();
+  g_pendingAdmissionRecoveries.clear();
 }
 
 static size_t CountActiveConformanceLeases() {
@@ -1216,7 +1602,8 @@ static uint64_t AllocateConformanceLeaseGeneration() {
 }
 
 static void BeginConformanceLease(
-    HWND hwnd, const RECT& expectedRect, bool scheduleRepair = false) {
+    HWND hwnd, const RECT& expectedRect, bool scheduleRepair = false,
+    HWND preferredTiledWindow = nullptr) {
   AssertWmThread(L"BeginConformanceLease");
   if (!hwnd || g_settings.conformanceLeaseMs == 0 ||
       expectedRect.right <= expectedRect.left ||
@@ -1233,6 +1620,9 @@ static void BeginConformanceLease(
   if (it != g_conformanceLeases.leases.end() &&
       now < it->second.expiresAtTickMs &&
       EqualRect(&it->second.expectedRect, &expectedRect)) {
+    if (preferredTiledWindow) {
+      it->second.preferredTiledWindow = preferredTiledWindow;
+    }
     if (scheduleRepair && !it->second.repairDueTickMs) {
       it->second.repairDueTickMs = std::min(
           it->second.expiresAtTickMs,
@@ -1244,6 +1634,7 @@ static void BeginConformanceLease(
 
   ConformanceLease lease;
   lease.expectedRect = expectedRect;
+  lease.preferredTiledWindow = preferredTiledWindow;
   lease.expiresAtTickMs = now + g_settings.conformanceLeaseMs;
   if (scheduleRepair) {
     lease.repairDueTickMs = std::min(
@@ -1402,7 +1793,9 @@ static bool TryParseLayoutSetting(PCWSTR str, TileLayout* outLayout) {
       {L"master_stack_h", TileLayout::MasterStackH},
       {L"columns", TileLayout::Columns},
       {L"rows", TileLayout::Rows},
-      {L"bsp", TileLayout::BSP},
+      {L"dwindle", TileLayout::Dwindle},
+      // Compatibility alias for configurations saved before 1.13.29.
+      {L"bsp", TileLayout::Dwindle},
       {L"monocle", TileLayout::Monocle},
       {L"floating", TileLayout::Floating},
   };
@@ -1623,8 +2016,11 @@ std::vector<double> DefaultWeights(size_t count) {
 
 static HMONITOR GetCurrentManagedWindowMonitor(HWND hwnd);
 static SuspensionReason GetPhysicalSuspensionReason(HWND hwnd);
-static bool WindowCanBeManaged(HWND hwnd);
+static bool WindowCanBeManaged(HWND hwnd, bool allowFixedSize = false);
 static bool IsWindowTrackedInAnyState(HWND hwnd);
+namespace Reconcile {
+static void ScheduleLifecycleReconcile(HWND hwnd);
+}
 bool ContainsWindow(const std::vector<HWND>& windows, HWND hwnd) {
   for (HWND w : windows) {
     if (w == hwnd) return true;
@@ -1680,6 +2076,26 @@ bool Workspace::RememberFocusedWindow(HWND hwnd) {
   return true;
 }
 
+bool Workspace::UpdateConstraints(
+    HWND hwnd, const WindowConstraints& constraints) {
+  AssertWmThread(L"Workspace::UpdateConstraints");
+  WindowRecord* record = FindMutable(hwnd);
+  if (!record) return false;
+
+  if (!record->tilingGeneration && record->state != ManageState::Floating) {
+    record->tilingGeneration = Model::NextTilingGeneration();
+  }
+  const WindowConstraints& old = record->constraints;
+  const bool changed =
+      old.minWidth != constraints.minWidth ||
+      old.minHeight != constraints.minHeight ||
+      old.dpi != constraints.dpi ||
+      old.valid != constraints.valid ||
+      old.lastProbeError != constraints.lastProbeError;
+  record->constraints = constraints;
+  return changed;
+}
+
 bool Workspace::HasSuspended() const {
   return std::any_of(
       records_.begin(), records_.end(), [](const auto& kv) {
@@ -1709,6 +2125,12 @@ WindowRecord& Workspace::UpsertRecord(WindowRecord record) {
     const HMONITOR floatingMonitor = existing.floatingMonitor;
     const UINT floatingDpi = existing.floatingDpi;
     const bool hasFloatingRect = existing.hasFloatingRect;
+    const uint64_t tilingGeneration = existing.tilingGeneration;
+    const bool pendingInsertionPlacement = existing.pendingInsertionPlacement;
+    const bool pendingDefaultFloatingCenter =
+        existing.pendingDefaultFloatingCenter;
+    const bool alwaysFloating = existing.alwaysFloating;
+    const WindowConstraints cachedConstraints = existing.constraints;
     const ManageState state = existing.state;
     const SuspensionReason suspension = existing.suspensionReason;
     const SuspendedSlot slot = existing.savedSlot;
@@ -1719,6 +2141,13 @@ WindowRecord& Workspace::UpsertRecord(WindowRecord record) {
     existing.lastPlacementResult = lastResult;
     existing.lastRequestedRect = lastRequested;
     existing.lastObservedRect = lastObserved;
+    existing.tilingGeneration = tilingGeneration;
+    existing.pendingInsertionPlacement = pendingInsertionPlacement;
+    existing.pendingDefaultFloatingCenter = pendingDefaultFloatingCenter;
+    existing.alwaysFloating = alwaysFloating;
+    if (!existing.constraints.valid && cachedConstraints.valid) {
+      existing.constraints = cachedConstraints;
+    }
     if (hasFloatingRect) {
       existing.floatingRect = floatingRect;
       existing.floatingMonitor = floatingMonitor;
@@ -1736,23 +2165,55 @@ WindowRecord& Workspace::UpsertRecord(WindowRecord record) {
 bool Workspace::ActivateTiled(HWND hwnd) {
   AssertWmThread(L"Workspace::ActivateTiled");
   WindowRecord* record = FindMutable(hwnd);
-  if (!record) return false;
+  if (!record || record->alwaysFloating) return false;
 
+  const ManageState previousState = record->state;
   bool changed = false;
+  if (record->pendingDefaultFloatingCenter) {
+    record->pendingDefaultFloatingCenter = false;
+    changed = true;
+  }
   if (record->state != ManageState::Tiled || record->hasSavedSlot ||
       record->suspensionReason != SuspensionReason::None) {
     record->state = ManageState::Tiled;
     record->suspensionReason = SuspensionReason::None;
     record->savedSlot = {};
     record->hasSavedSlot = false;
+    if (previousState == ManageState::Floating ||
+        previousState == ManageState::Ignored) {
+      record->tilingGeneration = Model::NextTilingGeneration();
+      record->pendingInsertionPlacement = true;
+      // Explicitly re-tiling a floating window is a new placement attempt, but
+      // the app's last valid native minimum remains authoritative. If it changed
+      // while floating, a corrected placement will trigger a bounded re-probe.
+    } else if (!record->tilingGeneration) {
+      record->tilingGeneration = Model::NextTilingGeneration();
+    }
     changed = true;
   }
   if (!ContainsWindow(windows_, hwnd)) {
     AppendTiledWithDefaultWeight(hwnd);
+    record->pendingInsertionPlacement = true;
     changed = true;
   }
   if (changed) DebugValidateMutation(L"Workspace::ActivateTiled");
   return changed;
+}
+
+bool Workspace::AdmitFloating(WindowRecord record) {
+  AssertWmThread(L"Workspace::AdmitFloating");
+  const HWND hwnd = record.hwnd;
+  if (!hwnd || HasRecord(hwnd)) return false;
+
+  record.state = ManageState::Floating;
+  record.tilingGeneration = 0;
+  record.pendingInsertionPlacement = false;
+  record.suspensionReason = SuspensionReason::None;
+  record.savedSlot = {};
+  record.hasSavedSlot = false;
+  records_.emplace(hwnd, std::move(record));
+  DebugValidateMutation(L"Workspace::AdmitFloating");
+  return true;
 }
 
 bool Workspace::AdmitTiled(WindowRecord record) {
@@ -1760,6 +2221,9 @@ bool Workspace::AdmitTiled(WindowRecord record) {
   if (!record.hwnd) return false;
   const HWND hwnd = record.hwnd;
   const bool existed = HasRecord(hwnd);
+  if (!existed && !record.tilingGeneration) {
+    record.tilingGeneration = Model::NextTilingGeneration();
+  }
   UpsertRecord(std::move(record));
   const bool activated = ActivateTiled(hwnd);
   return !existed || activated;
@@ -1798,19 +2262,29 @@ bool Workspace::AdmitTiledAfter(WindowRecord record, HWND anchor) {
   if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
     gridWeights_.insert(
         gridWeights_.begin() + std::min(insertionActiveIndex, gridWeights_.size()),
-        1.0);
+        insertionActiveIndex < inheritedSlotWeights_.size() ? inheritedSlotWeights_[insertionActiveIndex] : 1.0);
   } else if ((layout_ == TileLayout::MasterStack ||
               layout_ == TileLayout::MasterStackH) &&
              insertionActiveIndex > 0) {
     const size_t stackIndex =
         std::min(insertionActiveIndex - 1, stackWeights_.size());
-    stackWeights_.insert(stackWeights_.begin() + stackIndex, 1.0);
+    stackWeights_.insert(stackWeights_.begin() + stackIndex,
+        stackIndex < inheritedSlotWeights_.size() ? inheritedSlotWeights_[stackIndex] : 1.0);
+  } else if (layout_ == TileLayout::Dwindle) {
+    const size_t ratioIndex =
+        std::min(insertionActiveIndex, dwindleRatios_.size());
+    dwindleRatios_.insert(dwindleRatios_.begin() + ratioIndex,
+        ratioIndex < inheritedSlotWeights_.size() ? inheritedSlotWeights_[ratioIndex] : 0.5);
   }
 
   record.state = ManageState::Tiled;
+  record.pendingInsertionPlacement = true;
   record.suspensionReason = SuspensionReason::None;
   record.savedSlot = {};
   record.hasSavedSlot = false;
+  if (!record.tilingGeneration) {
+    record.tilingGeneration = Model::NextTilingGeneration();
+  }
   records_.emplace(hwnd, std::move(record));
   EnsureWeights();
   DebugValidateMutation(L"Workspace::AdmitTiledAfter");
@@ -1853,8 +2327,12 @@ Workspace Workspace::AdoptGeometry(
   Workspace workspace;
   workspace.layout_ = layout;
   for (const auto& item : items) {
-    workspace.windows_.push_back(item.record.hwnd);
-    workspace.records_.emplace(item.record.hwnd, item.record);
+    WindowRecord record = item.record;
+    if (!record.tilingGeneration) {
+      record.tilingGeneration = Model::NextTilingGeneration();
+    }
+    workspace.windows_.push_back(record.hwnd);
+    workspace.records_.emplace(record.hwnd, std::move(record));
   }
   if (items.empty()) return workspace;
 
@@ -2031,10 +2509,17 @@ void LayoutGridWeighted(
   outRects.resize(windowCount);
   if (windowCount == 0) return;
 
+  const std::vector<double>* effectiveWeights = &weights;
+  std::vector<double> defaultWeights;
+  if (weights.size() != windowCount) {
+    defaultWeights = DefaultWeights(windowCount);
+    effectiveWeights = &defaultWeights;
+  }
+
   LONG totalSize = horizontal ? (area.bottom - area.top) : (area.right - area.left);
   LONG effectiveGap = 0;
   std::vector<LONG> sizes =
-      ComputeWeightedSizes(totalSize, gap, weights, &effectiveGap);
+      ComputeWeightedSizes(totalSize, gap, *effectiveWeights, &effectiveGap);
   LONG position = horizontal ? area.top : area.left;
 
   for (size_t i = 0; i < windowCount; ++i) {
@@ -2101,9 +2586,24 @@ void LayoutMasterStackWeighted(
   }
 }
 
-void LayoutBSP(
-    const RECT& area, LONG gap, size_t startIndex, size_t count, int depth,
-    std::vector<RECT>& outRects) {
+struct DwindleSplit {
+  bool vertical = false;
+  LONG usableSpan = 0;
+  LONG firstSpan = 0;
+  RECT first{};
+  RECT remaining{};
+};
+
+// Ordered-chain Dwindle: each node gives its first child to startIndex and
+// recursively gives its second child to all later windows. Ratios belong to
+// those split nodes, so swapping windows exchanges leaves without reshaping the
+// tree. Fibonacci-style axes alternate by depth, starting side-by-side;
+// resizing an ancestor never rotates a descendant's divider.
+void LayoutDwindle(
+    const RECT& area, LONG gap, size_t startIndex, size_t count,
+    const std::vector<double>& splitRatios, bool reverse,
+    std::vector<RECT>& outRects,
+    std::vector<DwindleSplit>* outSplits = nullptr) {
   if (count == 0) return;
   if (count == 1) {
     outRects[startIndex] = area;
@@ -2112,8 +2612,7 @@ void LayoutBSP(
 
   const LONG width = area.right - area.left;
   const LONG height = area.bottom - area.top;
-  bool splitVertical = depth % 2 == 0;
-  if ((splitVertical ? width : height) < 2) splitVertical = !splitVertical;
+  const bool splitVertical = (startIndex % 2) == 0;
 
   const LONG span = splitVertical ? width : height;
   if (span < 2) {
@@ -2124,19 +2623,361 @@ void LayoutBSP(
   }
 
   const LONG effectiveGap = std::clamp<LONG>(gap, 0, span - 2);
-  const LONG firstSpan = (span - effectiveGap) / 2;
+  const LONG usableSpan = span - effectiveGap;
+  const double ratio = startIndex < splitRatios.size()
+      ? ClampDouble(splitRatios[startIndex], 0.1, 0.9)
+      : 0.5;
+  const LONG firstSpan = std::clamp<LONG>(
+      static_cast<LONG>(std::llround(usableSpan * ratio)),
+      1, usableSpan - 1);
   RECT remaining = area;
   if (splitVertical) {
-    outRects[startIndex] = {
-        area.left, area.top, area.left + firstSpan, area.bottom};
-    remaining.left = outRects[startIndex].right + effectiveGap;
+    if (reverse) {
+      outRects[startIndex] = {
+          area.right - firstSpan, area.top, area.right, area.bottom};
+      remaining.right = outRects[startIndex].left - effectiveGap;
+    } else {
+      outRects[startIndex] = {
+          area.left, area.top, area.left + firstSpan, area.bottom};
+      remaining.left = outRects[startIndex].right + effectiveGap;
+    }
   } else {
-    outRects[startIndex] = {
-        area.left, area.top, area.right, area.top + firstSpan};
-    remaining.top = outRects[startIndex].bottom + effectiveGap;
+    if (reverse) {
+      outRects[startIndex] = {
+          area.left, area.bottom - firstSpan, area.right, area.bottom};
+      remaining.bottom = outRects[startIndex].top - effectiveGap;
+    } else {
+      outRects[startIndex] = {
+          area.left, area.top, area.right, area.top + firstSpan};
+      remaining.top = outRects[startIndex].bottom + effectiveGap;
+    }
   }
 
-  LayoutBSP(remaining, gap, startIndex + 1, count - 1, depth + 1, outRects);
+  if (outSplits) {
+    if (outSplits->size() < startIndex + count - 1) {
+      outSplits->resize(startIndex + count - 1);
+    }
+    (*outSplits)[startIndex] = {
+        splitVertical, usableSpan, firstSpan,
+        outRects[startIndex], remaining};
+  }
+
+  LayoutDwindle(
+      remaining, gap, startIndex + 1, count - 1,
+      splitRatios, reverse, outRects, outSplits);
+}
+
+struct ConstraintExtent {
+  LONG minWidth = 1;
+  LONG minHeight = 1;
+};
+
+static bool ConstraintDimensionFits(LONG value, LONG minimum) {
+  return value >= minimum;
+}
+
+// Weighted allocation with the same gap-degradation semantics as the ordinary
+// layout path. Relative weights remain preferences; members pin to their native
+// minimum only when required to make the full span legal.
+static bool ComputeConstrainedWeightedSizes(
+    LONG totalSize, LONG gap, const std::vector<double>& weights,
+    const std::vector<LONG>& minimums,
+    std::vector<LONG>* outSizes, LONG* outEffectiveGap = nullptr) {
+  if (!outSizes) return false;
+  const size_t count = minimums.size();
+  outSizes->assign(count, 0);
+  if (outEffectiveGap) *outEffectiveGap = 0;
+  if (count == 0) return true;
+  if (totalSize <= 0) return false;
+
+  LONG effectiveGap = 0;
+  if (count > 1 && totalSize > static_cast<LONG>(count)) {
+    const LONG maximumGap =
+        (totalSize - static_cast<LONG>(count)) /
+        static_cast<LONG>(count - 1);
+    effectiveGap = std::clamp<LONG>(gap, 0, maximumGap);
+  }
+  if (outEffectiveGap) *outEffectiveGap = effectiveGap;
+
+  const long long available64 =
+      static_cast<long long>(totalSize) -
+      static_cast<long long>(effectiveGap) * (count - 1);
+  if (available64 < static_cast<long long>(count) ||
+      available64 > LONG_MAX) {
+    return false;
+  }
+  const LONG available = static_cast<LONG>(available64);
+
+  std::vector<LONG> mins(count);
+  std::vector<double> normalizedWeights(count, 1.0);
+  long long minSum = 0;
+  for (size_t i = 0; i < count; ++i) {
+    mins[i] = std::max<LONG>(1, minimums[i]);
+    minSum += mins[i];
+    if (i < weights.size() &&
+        std::isfinite(weights[i]) && weights[i] > 0.0) {
+      normalizedWeights[i] = weights[i];
+    }
+  }
+  if (minSum > available) return false;
+
+  auto sumAt = [&](double lambda) {
+    double sum = 0.0;
+    for (size_t i = 0; i < count; ++i) {
+      sum += std::max(
+          lambda * normalizedWeights[i], static_cast<double>(mins[i]));
+    }
+    return sum;
+  };
+
+  double low = 0.0;
+  double high = 1.0;
+  while (sumAt(high) < static_cast<double>(available) && high < 1.0e12) {
+    high *= 2.0;
+  }
+  for (int iteration = 0; iteration < 80; ++iteration) {
+    const double mid = (low + high) * 0.5;
+    if (sumAt(mid) < static_cast<double>(available)) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  std::vector<double> raw(count);
+  long long roundedSum = 0;
+  for (size_t i = 0; i < count; ++i) {
+    raw[i] = std::max(
+        high * normalizedWeights[i], static_cast<double>(mins[i]));
+    LONG rounded = static_cast<LONG>(std::floor(raw[i]));
+    rounded = std::max(rounded, mins[i]);
+    (*outSizes)[i] = rounded;
+    roundedSum += rounded;
+  }
+
+  while (roundedSum < available) {
+    size_t best = count;
+    double bestFraction = -1.0;
+    for (size_t i = 0; i < count; ++i) {
+      const double fraction = raw[i] - std::floor(raw[i]);
+      if (best == count || fraction > bestFraction) {
+        best = i;
+        bestFraction = fraction;
+      }
+    }
+    if (best == count) return false;
+    ++(*outSizes)[best];
+    ++roundedSum;
+    raw[best] = static_cast<double>((*outSizes)[best]);
+  }
+
+  while (roundedSum > available) {
+    size_t best = count;
+    double bestFraction = 2.0;
+    for (size_t i = 0; i < count; ++i) {
+      if ((*outSizes)[i] <= mins[i]) continue;
+      const double fraction = raw[i] - std::floor(raw[i]);
+      if (best == count || fraction < bestFraction) {
+        best = i;
+        bestFraction = fraction;
+      }
+    }
+    if (best == count) return false;
+    --(*outSizes)[best];
+    --roundedSum;
+    raw[best] = static_cast<double>((*outSizes)[best]);
+  }
+  return true;
+}
+
+static ConstraintExtent ToConstraintExtent(
+    const Model::WindowConstraints& c) {
+  const LONG minWidth =
+      c.valid ? std::max<LONG>(1, c.minWidth) : 1;
+  const LONG minHeight =
+      c.valid ? std::max<LONG>(1, c.minHeight) : 1;
+  return {minWidth, minHeight};
+}
+
+static bool ConstraintAreaFits(
+    const RECT& area, const ConstraintExtent& c) {
+  const LONG width = area.right - area.left;
+  const LONG height = area.bottom - area.top;
+  return width > 0 && height > 0 &&
+         ConstraintDimensionFits(width, c.minWidth) &&
+         ConstraintDimensionFits(height, c.minHeight);
+}
+
+static bool ChooseConstrainedSplit(
+    LONG span, LONG gap, double preferredFirstRatio,
+    LONG firstMin, LONG secondMin,
+    LONG* outFirstSize, LONG* outEffectiveGap = nullptr) {
+  if (!outFirstSize || span < 2) return false;
+  const LONG effectiveGap = std::clamp<LONG>(gap, 0, span - 2);
+  if (outEffectiveGap) *outEffectiveGap = effectiveGap;
+  const LONG available = span - effectiveGap;
+
+  const LONG low = std::max<LONG>(1, firstMin);
+  const LONG high = available - std::max<LONG>(1, secondMin);
+  if (low > high) return false;
+
+  const LONG preferred = static_cast<LONG>(
+      std::llround(static_cast<double>(available) * preferredFirstRatio));
+  *outFirstSize = std::clamp(preferred, low, high);
+  return true;
+}
+
+bool LayoutGridConstrained(
+    const RECT& area, LONG gap, const std::vector<double>& weights,
+    const std::vector<Model::WindowConstraints>& constraints,
+    bool horizontal, std::vector<RECT>* outRects) {
+  if (!outRects) return false;
+  const size_t count = constraints.size();
+  outRects->assign(count, RECT{});
+  if (count == 0) return true;
+
+  const LONG crossSpan =
+      horizontal ? area.right - area.left : area.bottom - area.top;
+  std::vector<LONG> mins(count);
+  for (size_t i = 0; i < count; ++i) {
+    const ConstraintExtent c = ToConstraintExtent(constraints[i]);
+    if (horizontal) {
+      if (!ConstraintDimensionFits(crossSpan, c.minWidth)) {
+        return false;
+      }
+      mins[i] = c.minHeight;
+    } else {
+      if (!ConstraintDimensionFits(crossSpan, c.minHeight)) {
+        return false;
+      }
+      mins[i] = c.minWidth;
+    }
+  }
+
+  const LONG total =
+      horizontal ? area.bottom - area.top : area.right - area.left;
+  LONG effectiveGap = 0;
+  std::vector<LONG> sizes;
+  if (!ComputeConstrainedWeightedSizes(
+          total, gap, weights, mins, &sizes, &effectiveGap)) {
+    return false;
+  }
+
+  LONG position = horizontal ? area.top : area.left;
+  for (size_t i = 0; i < count; ++i) {
+    const LONG end =
+        i + 1 == count
+            ? (horizontal ? area.bottom : area.right)
+            : position + sizes[i];
+    (*outRects)[i] = horizontal
+        ? RECT{area.left, position, area.right, end}
+        : RECT{position, area.top, end, area.bottom};
+    position = end + effectiveGap;
+  }
+  return true;
+}
+
+bool LayoutMasterStackConstrained(
+    const RECT& area, LONG gap, bool horizontal, double masterRatio,
+    const std::vector<double>& stackWeights,
+    const std::vector<Model::WindowConstraints>& constraints,
+    std::vector<RECT>* outRects) {
+  if (!outRects) return false;
+  const size_t count = constraints.size();
+  outRects->assign(count, RECT{});
+  if (count == 0) return true;
+  if (count == 1) {
+    if (!ConstraintAreaFits(area, ToConstraintExtent(constraints[0]))) {
+      return false;
+    }
+    (*outRects)[0] = area;
+    return true;
+  }
+
+  const ConstraintExtent master = ToConstraintExtent(constraints[0]);
+  const LONG areaWidth = area.right - area.left;
+  const LONG areaHeight = area.bottom - area.top;
+  const LONG splitSpan = horizontal ? areaHeight : areaWidth;
+  const LONG innerSpan = horizontal ? areaWidth : areaHeight;
+
+  if (horizontal) {
+    if (!ConstraintDimensionFits(areaWidth, master.minWidth)) {
+      return false;
+    }
+  } else if (!ConstraintDimensionFits(areaHeight, master.minHeight)) {
+    return false;
+  }
+
+  LONG stackSplitMin = 1;
+  std::vector<LONG> innerMins;
+  innerMins.reserve(count - 1);
+  for (size_t i = 1; i < count; ++i) {
+    const ConstraintExtent c = ToConstraintExtent(constraints[i]);
+    if (horizontal) {
+      stackSplitMin = std::max(stackSplitMin, c.minHeight);
+      innerMins.push_back(c.minWidth);
+    } else {
+      stackSplitMin = std::max(stackSplitMin, c.minWidth);
+      innerMins.push_back(c.minHeight);
+    }
+  }
+
+  LONG masterSize = 0;
+  LONG masterGap = 0;
+  if (!ChooseConstrainedSplit(
+          splitSpan, gap, masterRatio,
+          horizontal ? master.minHeight : master.minWidth,
+          stackSplitMin,
+          &masterSize, &masterGap)) {
+    return false;
+  }
+
+  LONG stackGap = 0;
+  std::vector<LONG> innerSizes;
+  if (!ComputeConstrainedWeightedSizes(
+          innerSpan, gap, stackWeights, innerMins,
+          &innerSizes, &stackGap)) {
+    return false;
+  }
+
+  if (horizontal) {
+    (*outRects)[0] = {
+        area.left, area.top, area.right, area.top + masterSize};
+    const LONG stackTop = area.top + masterSize + masterGap;
+    LONG x = area.left;
+    for (size_t i = 0; i < innerSizes.size(); ++i) {
+      const LONG end =
+          i + 1 == innerSizes.size() ? area.right : x + innerSizes[i];
+      (*outRects)[i + 1] = {x, stackTop, end, area.bottom};
+      x = end + stackGap;
+    }
+  } else {
+    (*outRects)[0] = {
+        area.left, area.top, area.left + masterSize, area.bottom};
+    const LONG stackLeft = area.left + masterSize + masterGap;
+    LONG y = area.top;
+    for (size_t i = 0; i < innerSizes.size(); ++i) {
+      const LONG end =
+          i + 1 == innerSizes.size() ? area.bottom : y + innerSizes[i];
+      (*outRects)[i + 1] = {stackLeft, y, area.right, end};
+      y = end + stackGap;
+    }
+  }
+  return true;
+}
+
+bool LayoutMonocleConstrained(
+    const RECT& area,
+    const std::vector<Model::WindowConstraints>& constraints,
+    std::vector<RECT>* outRects) {
+  if (!outRects) return false;
+  outRects->assign(constraints.size(), area);
+  for (const auto& constraint : constraints) {
+    if (!ConstraintAreaFits(area, ToConstraintExtent(constraint))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 
@@ -2148,6 +2989,155 @@ void LayoutBSP(
 
 // Win32 observation lives here, outside Model. These helpers translate live HWND
 // properties/geometry into value objects consumed by Workspace and reconciliation.
+
+constexpr UINT kConstraintProbeTimeoutMs = 40;
+
+static int GetSystemMetricForDpiCompat(int index, UINT dpi) {
+  using GetSystemMetricsForDpiFn = int(WINAPI*)(int, UINT);
+  static GetSystemMetricsForDpiFn fn = [] {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    return user32
+        ? reinterpret_cast<GetSystemMetricsForDpiFn>(
+              GetProcAddress(user32, "GetSystemMetricsForDpi"))
+        : nullptr;
+  }();
+  return fn ? fn(index, dpi ? dpi : 96) : GetSystemMetrics(index);
+}
+
+static void GetFrameDecorationSpan(
+    HWND hwnd, LONG* outWidth, LONG* outHeight) {
+  if (outWidth) *outWidth = 0;
+  if (outHeight) *outHeight = 0;
+
+  RECT windowRect{};
+  RECT frame{};
+  if (!hwnd ||
+      !GetWindowRect(hwnd, &windowRect) ||
+      FAILED(DwmGetWindowAttribute(
+          hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+          &frame, sizeof(frame)))) {
+    return;
+  }
+
+  if (outWidth) {
+    *outWidth = std::max<LONG>(
+        0,
+        (frame.left - windowRect.left) +
+        (windowRect.right - frame.right));
+  }
+  if (outHeight) {
+    *outHeight = std::max<LONG>(
+        0,
+        (frame.top - windowRect.top) +
+        (windowRect.bottom - frame.bottom));
+  }
+}
+
+// WM_GETMINMAXINFO can execute target-process window procedure code. Bound the
+// synchronous query so a hung client cannot block the serialized WM actor. A
+// failed probe remains unconstrained; a previously valid observation is retained
+// by the evidence-merge path.
+static WindowConstraints ProbeWindowConstraints(HWND hwnd) {
+  ++Diagnostics::g_runtime.counters.constraintProbeAttempts;
+  WindowConstraints constraints;
+
+  if (!hwnd || !IsWindow(hwnd)) {
+    constraints.lastProbeError = ERROR_INVALID_WINDOW_HANDLE;
+    ++Diagnostics::g_runtime.counters.constraintProbeFailures;
+    return constraints;
+  }
+  if (IsHungAppWindow(hwnd)) {
+    constraints.lastProbeError = ERROR_TIMEOUT;
+    ++Diagnostics::g_runtime.counters.constraintProbeTimeouts;
+    return constraints;
+  }
+
+  HMONITOR monitor =
+      MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+  constraints.dpi = GetMonitorEffectiveDpi(monitor);
+
+  const LONG defaultMinWidth = std::max<LONG>(
+      1, GetSystemMetricForDpiCompat(SM_CXMINTRACK, constraints.dpi));
+  const LONG defaultMinHeight = std::max<LONG>(
+      1, GetSystemMetricForDpiCompat(SM_CYMINTRACK, constraints.dpi));
+  const LONG defaultMaxWidth = std::max<LONG>(
+      defaultMinWidth,
+      GetSystemMetricForDpiCompat(SM_CXMAXTRACK, constraints.dpi));
+  const LONG defaultMaxHeight = std::max<LONG>(
+      defaultMinHeight,
+      GetSystemMetricForDpiCompat(SM_CYMAXTRACK, constraints.dpi));
+
+  MINMAXINFO mmi{};
+  mmi.ptMinTrackSize = {defaultMinWidth, defaultMinHeight};
+  mmi.ptMaxTrackSize = {defaultMaxWidth, defaultMaxHeight};
+
+  DWORD_PTR result = 0;
+  SetLastError(ERROR_SUCCESS);
+  const LRESULT delivered =
+      hwnd && IsWindow(hwnd)
+          ? SendMessageTimeoutW(
+                hwnd, WM_GETMINMAXINFO, 0,
+                reinterpret_cast<LPARAM>(&mmi),
+                SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT,
+                kConstraintProbeTimeoutMs, &result)
+          : 0;
+  if (!delivered) {
+    DWORD error = GetLastError();
+    if (error == ERROR_SUCCESS) error = ERROR_GEN_FAILURE;
+    constraints.lastProbeError = error;
+    if (error == ERROR_TIMEOUT) {
+      ++Diagnostics::g_runtime.counters.constraintProbeTimeouts;
+    } else {
+      ++Diagnostics::g_runtime.counters.constraintProbeFailures;
+    }
+    return constraints;
+  }
+
+  constraints.valid = true;
+  ++Diagnostics::g_runtime.counters.constraintProbeSuccesses;
+
+  LONG decorationWidth = 0;
+  LONG decorationHeight = 0;
+  GetFrameDecorationSpan(
+      hwnd, &decorationWidth, &decorationHeight);
+
+  constraints.minWidth = std::max<LONG>(
+      1,
+      std::max<LONG>(defaultMinWidth, mmi.ptMinTrackSize.x) -
+          decorationWidth);
+  constraints.minHeight = std::max<LONG>(
+      1,
+      std::max<LONG>(defaultMinHeight, mmi.ptMinTrackSize.y) -
+          decorationHeight);
+
+  return constraints;
+}
+
+static bool SameConstraintGeometry(
+    const WindowConstraints& a, const WindowConstraints& b) {
+  return a.minWidth == b.minWidth &&
+         a.minHeight == b.minHeight &&
+         a.dpi == b.dpi &&
+         a.valid == b.valid;
+}
+
+static WindowConstraints MergeConstraintProbeWithCache(
+    const WindowConstraints& cached, WindowConstraints observed) {
+  if (!observed.valid && cached.valid) {
+    const DWORD error = observed.lastProbeError;
+    observed = cached;
+    observed.lastProbeError = error;
+  }
+  return observed;
+}
+
+static LONG RectWidth(const RECT& rect) {
+  return rect.right - rect.left;
+}
+
+static LONG RectHeight(const RECT& rect) {
+  return rect.bottom - rect.top;
+}
 
 static WindowRecord MakeWindowRecord(HWND hwnd, ManageState state = ManageState::Tiled) {
   WindowRecord record;
@@ -2349,30 +3339,48 @@ static const WindowRule* FindMatchingWindowRule(
   for (const auto& rule : g_settings.windowRules) {
     if (rule.treatment != treatment) continue;
 
-    if (!rule.className.empty()) {
+    if (!rule.classNames.empty()) {
       if (!haveClass) {
         wchar_t buffer[256]{};
         if (GetClassNameW(hwnd, buffer, ARRAYSIZE(buffer))) className = buffer;
         haveClass = true;
       }
-      if (!EqualsInsensitive(className, rule.className)) continue;
+      if (std::none_of(
+              rule.classNames.begin(), rule.classNames.end(),
+              [&](const std::wstring& candidate) {
+                return EqualsInsensitive(className, candidate);
+              })) {
+        continue;
+      }
     }
 
-    if (!rule.titleContains.empty()) {
+    if (!rule.titleFragments.empty()) {
       if (!haveTitle) {
         wchar_t buffer[512]{};
         if (GetWindowTextW(hwnd, buffer, ARRAYSIZE(buffer))) title = buffer;
         haveTitle = true;
       }
-      if (!ContainsInsensitive(title, rule.titleContains)) continue;
+      if (std::none_of(
+              rule.titleFragments.begin(), rule.titleFragments.end(),
+              [&](const std::wstring& candidate) {
+                return ContainsInsensitive(title, candidate);
+              })) {
+        continue;
+      }
     }
 
-    if (!rule.process.empty()) {
+    if (!rule.processNames.empty()) {
       if (!haveProcess) {
         processName = GetWindowProcessName(hwnd);
         haveProcess = true;
       }
-      if (!EqualsInsensitive(processName, rule.process)) continue;
+      if (std::none_of(
+              rule.processNames.begin(), rule.processNames.end(),
+              [&](const std::wstring& candidate) {
+                return EqualsInsensitive(processName, candidate);
+              })) {
+        continue;
+      }
     }
 
     return &rule;
@@ -2380,14 +3388,40 @@ static const WindowRule* FindMatchingWindowRule(
   return nullptr;
 }
 
+// Discovery waits for initial placement before assigning workspace ownership. Explicit
+// admission bypasses this policy and overrides pending initial placement.
+static bool IsWindowAwaitingInitialPlacement(HWND hwnd) {
+  return g_wm.windowRoutingReady &&
+         (g_wm.pendingWindowRoutes.count(hwnd) ||
+          (!g_wm.windowRoutingEvaluated.count(hwnd) &&
+           FindMatchingWindowRule(hwnd, WindowRuleTreatment::InitialPlacement)));
+}
+
+static bool HasMonitorPlacementRule(HWND hwnd) {
+  const WindowRule* rule = FindMatchingWindowRule(hwnd, WindowRuleTreatment::InitialPlacement);
+  return rule && (rule->monitor != RuleMonitor::Any || !rule->monitorId.empty());
+}
+
 static bool IsWindowExcludedByRules(HWND hwnd) {
   return FindMatchingWindowRule(hwnd, WindowRuleTreatment::Exclude) != nullptr;
+}
+
+static bool ShouldWindowAlwaysFloat(HWND hwnd) {
+  return FindMatchingWindowRule(
+             hwnd, WindowRuleTreatment::AlwaysFloating) != nullptr;
+}
+
+static bool ShouldWindowStartFloating(HWND hwnd, bool* alwaysFloating = nullptr) {
+  const bool always = ShouldWindowAlwaysFloat(hwnd);
+  if (alwaysFloating) *alwaysFloating = always;
+  return always || FindMatchingWindowRule(
+                       hwnd, WindowRuleTreatment::DefaultToFloating) != nullptr;
 }
 
 // Applies stable structural and exclusion policy only; visibility, show state,
 // desktop, and monitor participation are checked separately. Tracked windows
 // tolerate a temporarily missing resize style so transient app UI cannot evict them.
-static bool WindowCanBeManaged(HWND hwnd) {
+static bool WindowCanBeManaged(HWND hwnd, bool allowFixedSize) {
   if (!hwnd) return false;
 
   // Reject structurally ineligible HWNDs before evaluating configurable exclusion
@@ -2400,7 +3434,16 @@ static bool WindowCanBeManaged(HWND hwnd) {
 
   // window could temporarily lose its WS_SizeBox.
   // (example: Office save/discard dialog)
-  if (!(style & WS_SIZEBOX) && !IsWindowTrackedInAnyState(hwnd)) return false;
+  // A Default-to-floating rule is also an explicit Automatic-mode admission
+  // policy for naturally fixed-size top-level windows. Always-floating is also
+  // eligible during explicit Manual admission; centering never resizes either.
+  if (!allowFixedSize && !(style & WS_SIZEBOX) &&
+      !IsWindowTrackedInAnyState(hwnd)) {
+    bool alwaysFloating = false;
+    const bool startsFloating =
+        ShouldWindowStartFloating(hwnd, &alwaysFloating);
+    if (!alwaysFloating && !(IsAutomaticMode() && startsFloating)) return false;
+  }
 
   LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
   if (exStyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return false;
@@ -2422,8 +3465,8 @@ static HMONITOR GetCurrentManagedWindowMonitor(HWND hwnd) {
   // (example: VSCode unstaged commit dialog)
   if (!IsWindowTrackedInAnyState(hwnd) && !IsWindowEnabled(hwnd)) return nullptr;
 
-  // FancyWM only tiles windows in the Restored state. Minimized, maximized and
-  // native-fullscreen windows remain managed logically until they are restored.
+  // Minimized, hidden, maximized, and fullscreen windows are not active layout
+  // participants. Their logical records retain enough state to restore in place.
   if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) return nullptr;
   if (!WindowCanBeManaged(hwnd)) return nullptr;
   if (IsWindowCloaked(hwnd)) return nullptr;
@@ -2450,7 +3493,8 @@ static bool RectsNear(const RECT& a, const RECT& b, LONG tolerance = Model::kPla
 // Positions one observed HWND without mutating logical workspace state. The
 // resulting value object is folded into Workspace separately.
 static PlacementObservation PlaceWindowChecked(
-    HWND hwnd, bool canMove, const RECT& targetRect) {
+    HWND hwnd, bool canMove, const RECT& targetRect,
+    bool positionOnly = false) {
   ++Diagnostics::g_runtime.counters.placementChecks;
   PlacementObservation observation;
   observation.requested = targetRect;
@@ -2460,6 +3504,9 @@ static PlacementObservation PlaceWindowChecked(
     switch (result) {
       case PlacementResult::Success:
         ++Diagnostics::g_runtime.counters.placementSuccess;
+        break;
+      case PlacementResult::SuppressedByPhysicalState:
+        ++Diagnostics::g_runtime.counters.placementSuppressedByPhysicalState;
         break;
       case PlacementResult::AdjustedByWindow:
         ++Diagnostics::g_runtime.counters.placementAdjusted;
@@ -2474,7 +3521,8 @@ static PlacementObservation PlaceWindowChecked(
         ++Diagnostics::g_runtime.counters.placementDead;
         break;
     }
-    if (result != PlacementResult::Success) {
+    if (result != PlacementResult::Success &&
+        result != PlacementResult::SuppressedByPhysicalState) {
       Diagnostics::RecordEvent(
           L"placement result=%d hwnd=%p target=[%ld,%ld,%ld,%ld]",
           static_cast<int>(result), hwnd, targetRect.left, targetRect.top,
@@ -2516,6 +3564,16 @@ static PlacementObservation PlaceWindowChecked(
     offsetBottom = windowRect.bottom - extendedFrame.bottom;
   }
 
+  // Close the final physical-state race at the actual mutation boundary. The
+  // application can maximize/fullscreen/minimize itself after arrangement's
+  // earlier eligibility check but before this SetWindowPos. Treat that transition
+  // as a benign suppressed placement, never as refusal/nonconformance.
+  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+      IsWindowCloaked(hwnd)) {
+    ++Diagnostics::g_runtime.counters.placementPreflightStops;
+    return finish(PlacementResult::SuppressedByPhysicalState);
+  }
+
   SetLastError(ERROR_SUCCESS);
   ++Diagnostics::g_runtime.counters.setWindowPosCalls;
   observation.placementIssued = true;
@@ -2523,9 +3581,14 @@ static PlacementObservation PlaceWindowChecked(
       hwnd, nullptr,
       targetRect.left - offsetLeft,
       targetRect.top - offsetTop,
-      targetRect.right - targetRect.left + offsetLeft + offsetRight,
-      targetRect.bottom - targetRect.top + offsetTop + offsetBottom,
-      SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+      positionOnly
+          ? 0
+          : targetRect.right - targetRect.left + offsetLeft + offsetRight,
+      positionOnly
+          ? 0
+          : targetRect.bottom - targetRect.top + offsetTop + offsetBottom,
+      SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE |
+          SWP_NOSENDCHANGING | (positionOnly ? SWP_NOSIZE : 0));
   if (!placed) {
     const DWORD error = GetLastError();
     return finish(error == ERROR_ACCESS_DENIED
@@ -2545,7 +3608,10 @@ static PlacementObservation PlaceWindowChecked(
                     : PlacementResult::AdjustedByWindow);
 }
 
-static void ArrangeWorkspace(const DesktopMonitorKey& key);
+static void ArrangeWorkspace(
+    const DesktopMonitorKey& key, HWND preferredTiledWindow = nullptr);
+static bool ClearSettledInsertionPlacements(
+    const DesktopMonitorKey& key, Workspace& workspace);
 
 static void ClearMoveSizeSamples(HWND hwnd) {
   AssertWmThread(L"ClearMoveSizeSamples");
@@ -2649,7 +3715,10 @@ static bool GetWorkspaceWorkArea(HMONITOR monitor, RECT* outWorkArea) {
 enum class FloatingPlacementIntent {
   PassiveRestore,
   PreserveAnchor,
+  CenterWithFloatingSize,
   NewWindowCenter,
+  CenterPreservingSize,
+  FailureCenter,
 };
 
 struct FloatingPlacementHint {
@@ -2721,8 +3790,8 @@ static HMONITOR ResolveRememberedFloatingMonitor(
 
 // Converts remembered floating geometry into a destination-monitor rectangle.
 // Passive migration restores the full rectangle on the same monitor and centers
-// remembered/default size on a different monitor. Explicit drag/hotkey intent
-// always preserves the user's anchor while repairing only the size.
+// remembered/default size on a different monitor. Drag intent preserves the
+// user's anchor; explicit centering can retain either floating or current size.
 static bool RepairFloatingGeometry(
     const DesktopMonitorKey& key, Workspace& workspace, HWND hwnd,
     const FloatingPlacementHint& hint) {
@@ -2745,28 +3814,43 @@ static bool RepairFloatingGeometry(
                            current.right > current.left &&
                            current.bottom > current.top;
 
-  const bool centerNewWindow =
-      hint.intent == FloatingPlacementIntent::NewWindowCenter;
-  const bool needsFallbackSize = centerNewWindow || !record->hasFloatingRect;
+  const bool centerWithoutResize =
+      hint.intent == FloatingPlacementIntent::CenterPreservingSize;
+  const bool useNewWindowSize =
+      hint.intent == FloatingPlacementIntent::NewWindowCenter ||
+      hint.intent == FloatingPlacementIntent::FailureCenter;
+  const bool centerInWorkspace =
+      hint.intent == FloatingPlacementIntent::CenterWithFloatingSize ||
+      useNewWindowSize || centerWithoutResize;
+  if (centerWithoutResize && !haveCurrent) return false;
+
+  const bool needsFallbackSize =
+      useNewWindowSize || centerWithoutResize || !record->hasFloatingRect;
   const WindowRule* placementOverride =
-      IsAutomaticMode() && needsFallbackSize
+      IsAutomaticMode() && needsFallbackSize && !centerWithoutResize
           ? FindMatchingWindowRule(
                 hwnd, WindowRuleTreatment::FloatingPlacementOverride)
           : nullptr;
   const bool preserveCurrentSize =
+      hint.intent != FloatingPlacementIntent::FailureCenter &&
       placementOverride && placementOverride->preserveFloatingSize;
   const bool useCustomSize =
       placementOverride && !placementOverride->preserveFloatingSize;
 
   LONG width = 0;
   LONG height = 0;
-  if (preserveCurrentSize && haveCurrent) {
+  if (centerWithoutResize || (preserveCurrentSize && haveCurrent)) {
     width = current.right - current.left;
     height = current.bottom - current.top;
   } else if (useCustomSize) {
-    width = ScaleDip(placementOverride->floatingSizeDip.width, targetDpi);
-    height = ScaleDip(placementOverride->floatingSizeDip.height, targetDpi);
-  } else if (!centerNewWindow && record->hasFloatingRect) {
+    if (placementOverride->useWorkspaceSize) {
+      width = workArea.right - workArea.left;
+      height = workArea.bottom - workArea.top;
+    } else {
+      width = ScaleDip(placementOverride->floatingSizeDip.width, targetDpi);
+      height = ScaleDip(placementOverride->floatingSizeDip.height, targetDpi);
+    }
+  } else if (!useNewWindowSize && record->hasFloatingRect) {
     const UINT sourceDpi = record->floatingDpi ? record->floatingDpi : 96;
     width = MulDiv(
         record->floatingRect.right - record->floatingRect.left,
@@ -2787,20 +3871,24 @@ static bool RepairFloatingGeometry(
   POINT center{};
   if (hint.intent == FloatingPlacementIntent::PreserveAnchor) {
     center = hint.anchor;
-  } else if (!centerNewWindow && record->hasFloatingRect &&
+  } else if (!centerInWorkspace && record->hasFloatingRect &&
              ResolveRememberedFloatingMonitor(*record) == monitor) {
     center = RectCenter(record->floatingRect);
   } else {
     center = RectCenter(workArea);
   }
 
-  RECT target = ClampFloatingRectToWorkArea(
-      CenteredRect(center, width, height), workArea);
-  // The window can enter a suspended physical state while the placement target
-  // is being calculated. Never overwrite that newer application-owned state.
-  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) return false;
+  RECT target = CenteredRect(center, width, height);
+  if (!centerWithoutResize) {
+    target = ClampFloatingRectToWorkArea(target, workArea);
+  }
+  // The window can enter a non-participating physical state while the placement
+  // target is being calculated. Never overwrite it.
+  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) {
+    return false;
+  }
   PlacementObservation observation =
-      PlaceWindowChecked(hwnd, record->canMove, target);
+      PlaceWindowChecked(hwnd, record->canMove, target, centerWithoutResize);
   if (observation.result != PlacementResult::Success &&
       observation.result != PlacementResult::AdjustedByWindow) {
     return false;
@@ -2924,6 +4012,9 @@ bool Workspace::Validate(
          !record.floatingMonitor || !record.floatingDpi)) {
       fail(L"remembered floating geometry is invalid", hwnd);
     }
+    if (record.alwaysFloating && record.state != ManageState::Floating) {
+      fail(L"Always-floating record is not Floating", hwnd);
+    }
 
     switch (record.state) {
       case ManageState::Tiled:
@@ -2967,6 +4058,7 @@ bool Workspace::Validate(
       fail(L"grid weight count does not match active tiled count");
     }
     if (!stackWeights_.empty()) fail(L"grid layout retains stack weights");
+    if (!dwindleRatios_.empty()) fail(L"grid layout retains Dwindle ratios");
   } else if (layout_ == TileLayout::MasterStack ||
              layout_ == TileLayout::MasterStackH) {
     const size_t expected = windows_.empty() ? 0 : windows_.size() - 1;
@@ -2974,7 +4066,23 @@ bool Workspace::Validate(
       fail(L"stack weight count does not match non-master tiled count");
     }
     if (!gridWeights_.empty()) fail(L"master/stack layout retains grid weights");
-  } else if (!stackWeights_.empty() || !gridWeights_.empty()) {
+    if (!dwindleRatios_.empty()) fail(L"master/stack layout retains Dwindle ratios");
+  } else if (layout_ == TileLayout::Dwindle) {
+    const size_t expected = windows_.size();
+    if (dwindleRatios_.size() != expected) {
+      fail(L"Dwindle outgoing ratio count does not match active slot count");
+    }
+    for (double ratio : dwindleRatios_) {
+      if (!std::isfinite(ratio) || ratio < 0.1 || ratio > 0.9) {
+        fail(L"Dwindle ratio is outside the supported range");
+        break;
+      }
+    }
+    if (!stackWeights_.empty() || !gridWeights_.empty()) {
+      fail(L"Dwindle layout retains unrelated layout weights");
+    }
+  } else if (!stackWeights_.empty() || !gridWeights_.empty() ||
+             !dwindleRatios_.empty()) {
     fail(L"weightless layout retains layout weights");
   }
 
@@ -3179,6 +4287,8 @@ static bool Initialize();
 static void Shutdown();
 static void UpdateIcon(TileLayout layout, HMONITOR monitor = nullptr);
 static void ShowLayoutFlyout(TileLayout layout, HMONITOR monitor = nullptr);
+static void ShowCommandFailureFlyout(
+    const wchar_t* text, HMONITOR monitor = nullptr);
 static void ShowManagementModeFlyout(bool automatic);
 static void ShowDesktopSwitchFlyouts(const GUID& desktopId);
 static void RefreshForMonitor(HMONITOR monitor);
@@ -3201,12 +4311,22 @@ void Workspace::EnsureWeights() {
     const size_t stackCount = windows_.empty() ? 0 : windows_.size() - 1;
     if (stackWeights_.size() != stackCount) stackWeights_ = DefaultWeights(stackCount);
     gridWeights_.clear();
+    dwindleRatios_.clear();
   } else if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
     if (gridWeights_.size() != windows_.size()) gridWeights_ = DefaultWeights(windows_.size());
     stackWeights_.clear();
+    dwindleRatios_.clear();
+  } else if (layout_ == TileLayout::Dwindle) {
+    // Keep one outgoing ratio per active slot, including a dormant ratio on the
+    // final slot. The dormant value is what lets the predecessor's divider survive
+    // when its successor is suspended, then become active again on restoration.
+    dwindleRatios_.resize(windows_.size(), 0.5);
+    stackWeights_.clear();
+    gridWeights_.clear();
   } else {
     stackWeights_.clear();
     gridWeights_.clear();
+    dwindleRatios_.clear();
   }
 }
 
@@ -3235,6 +4355,14 @@ void Workspace::RemoveActiveAt(size_t index, SuspendedSlot* saved) {
       slot.hasWeight = true;
       stackWeights_.erase(stackWeights_.begin() + (index - 1));
     }
+  } else if (layout_ == TileLayout::Dwindle && !dwindleRatios_.empty()) {
+    // Save the suspended logical slot's outgoing ratio. Because EnsureWeights
+    // retains the final dormant ratio, removing the last active member does not
+    // accidentally consume the divider owned by its predecessor.
+    const size_t ratioIndex = index;
+    slot.weight = dwindleRatios_[ratioIndex];
+    slot.hasWeight = true;
+    dwindleRatios_.erase(dwindleRatios_.begin() + ratioIndex);
   }
 
   windows_.erase(windows_.begin() + index);
@@ -3294,6 +4422,11 @@ bool Workspace::Suspend(HWND hwnd, SuspensionReason reason) {
   WindowRecord* existing = FindMutable(hwnd);
   if (existing && existing->state == ManageState::Suspended) {
     if (existing->suspensionReason == reason) return false;
+    if (reason == SuspensionReason::Maximized &&
+        (existing->suspensionReason == SuspensionReason::Minimized ||
+         existing->suspensionReason == SuspensionReason::Hidden)) {
+      existing->tilingGeneration = Model::NextTilingGeneration();
+    }
     existing->suspensionReason = reason;
     DebugValidateMutation(L"Workspace::Suspend(reason update)");
     return true;
@@ -3321,12 +4454,13 @@ bool Workspace::Suspend(HWND hwnd, SuspensionReason reason) {
 static SuspensionReason GetPhysicalSuspensionReason(HWND hwnd) {
   if (!hwnd || !IsWindow(hwnd)) return SuspensionReason::None;
   if (IsIconic(hwnd)) return SuspensionReason::Minimized;
-  if (!IsWindowVisible(hwnd)) return SuspensionReason::Hidden;
+  DWORD cloaked = 0;
+  DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+  if (!IsWindowVisible(hwnd) || (cloaked & DWM_CLOAKED_APP)) return SuspensionReason::Hidden;
   if (IsZoomed(hwnd)) return SuspensionReason::Maximized;
 
-  // Match FancyWM's native-fullscreen fallback: Chromium and similar apps can
-  // cover a complete display while Windows still reports the HWND as Restored.
-  // Maximized is the right model reason because both states have identical
+  // Chromium and similar apps can cover the full monitor while Windows still
+  // reports the HWND as restored. Fullscreen and native maximize have identical
   // suspend/save-slot/restore semantics here.
   RECT windowRect{};
   if (GetWindowRect(hwnd, &windowRect)) {
@@ -3350,8 +4484,8 @@ static SuspensionReason GetPhysicalSuspensionReason(HWND hwnd) {
 
 // Workspace initialization needs a broader physical snapshot than normal layout
 // participation. A visible top-level window can already belong to this workspace
-// while minimized or maximized, even though CollectTileWindows correctly excludes
-// it from placement. Enumerate that broader set only when creating a workspace.
+// while minimized, maximized, or fullscreen, even though active collection
+// correctly excludes it from placement.
 static std::vector<HWND> CollectWorkspaceWindowsForInitialization(
     HMONITOR monitor, const GUID& desktopId) {
   std::vector<HWND> windows;
@@ -3391,14 +4525,30 @@ static std::vector<HWND> CollectWorkspaceWindowsForInitialization(
   return windows;
 }
 
-static bool AdmitInitialObservedWindow(Workspace& workspace, HWND hwnd) {
+static bool AdmitInitialObservedWindow(
+    Workspace& workspace, HWND hwnd, bool useAutomaticAdmissionPolicy) {
   if (!hwnd || !IsWindow(hwnd) || workspace.HasRecord(hwnd) ||
-      IsWindowTrackedInAnyState(hwnd)) {
+      IsWindowTrackedInAnyState(hwnd) || IsWindowCloaked(hwnd)) {
+    return false;
+  }
+  if (useAutomaticAdmissionPolicy && IsWindowAwaitingInitialPlacement(hwnd)) {
     return false;
   }
   const SuspensionReason reason = GetPhysicalSuspensionReason(hwnd);
   if (reason == SuspensionReason::Hidden) return false;
-  return workspace.AdmitInitial(MakeWindowRecord(hwnd), reason);
+  bool alwaysFloating = false;
+  const bool startsFloating =
+      ShouldWindowStartFloating(hwnd, &alwaysFloating);
+  if (alwaysFloating || (useAutomaticAdmissionPolicy && startsFloating)) {
+    WindowRecord record = MakeWindowRecord(hwnd, ManageState::Floating);
+    record.pendingDefaultFloatingCenter = true;
+    record.alwaysFloating = alwaysFloating;
+    return workspace.AdmitFloating(std::move(record));
+  }
+  WindowRecord record = MakeWindowRecord(hwnd);
+  record.automaticOverflowMonitorFixed =
+      HasMonitorPlacementRule(hwnd);
+  return workspace.AdmitInitial(std::move(record), reason);
 }
 
 size_t Workspace::LogicalWindowCount() const {
@@ -3409,31 +4559,53 @@ size_t Workspace::LogicalWindowCount() const {
   return count;
 }
 
+size_t Workspace::VisibleWindowCount() const {
+  if (layout_ == TileLayout::Floating) return 0;
+  size_t count = windows_.size();
+  for (const auto& member : records_) {
+    const WindowRecord& record = member.second;
+    if (record.state == ManageState::Suspended && record.hasSavedSlot &&
+        record.suspensionReason == SuspensionReason::Maximized) ++count;
+  }
+  return count;
+}
+
+Workspace Workspace::EmptyWithInheritedLayoutSettings() const {
+  Workspace empty;
+  empty.layout_ = layout_;
+  empty.masterRatio_ = masterRatio_;
+  if (layout_ == TileLayout::MasterStack || layout_ == TileLayout::MasterStackH) {
+    empty.inheritedSlotWeights_ = stackWeights_;
+  } else if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
+    empty.inheritedSlotWeights_ = gridWeights_;
+  } else if (layout_ == TileLayout::Dwindle) {
+    empty.inheritedSlotWeights_ = dwindleRatios_;
+  }
+  if (empty.inheritedSlotWeights_.size() < inheritedSlotWeights_.size()) {
+    empty.inheritedSlotWeights_.insert(empty.inheritedSlotWeights_.end(),
+        inheritedSlotWeights_.begin() + empty.inheritedSlotWeights_.size(), inheritedSlotWeights_.end());
+  }
+  return empty;
+}
+
 bool Workspace::AdmitInitial(
     WindowRecord record, SuspensionReason reason) {
   AssertWmThread(L"Workspace::AdmitInitial");
   const HWND hwnd = record.hwnd;
   if (!hwnd || HasRecord(hwnd) || reason == SuspensionReason::Hidden) return false;
+  if (!record.tilingGeneration) {
+    record.tilingGeneration = Model::NextTilingGeneration();
+  }
 
   record.state = reason == SuspensionReason::None
                      ? ManageState::Tiled
                      : ManageState::Suspended;
+  record.pendingInsertionPlacement = true;
   if (reason == SuspensionReason::None) {
-    windows_.push_back(hwnd);
+    AppendTiledWithDefaultWeight(hwnd);
   } else {
-    const size_t logicalIndex = LogicalWindowCount();
     record.suspensionReason = reason;
-    record.savedSlot.index = logicalIndex;
-    if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
-      record.savedSlot.weight = 1.0;
-      record.savedSlot.hasWeight = true;
-    } else if (layout_ == TileLayout::MasterStack || layout_ == TileLayout::MasterStackH) {
-      if (logicalIndex == 0) record.savedSlot.wasMaster = true;
-      else {
-        record.savedSlot.weight = 1.0;
-        record.savedSlot.hasWeight = true;
-      }
-    }
+    record.savedSlot = MakeAppendedSuspendedSlot();
     record.hasSavedSlot = true;
   }
 
@@ -3472,7 +4644,11 @@ bool Workspace::AdmitInitialAfter(
     }
   }
 
+  if (!record.tilingGeneration) {
+    record.tilingGeneration = Model::NextTilingGeneration();
+  }
   record.state = ManageState::Suspended;
+  record.pendingInsertionPlacement = true;
   record.suspensionReason = reason;
   record.savedSlot.index = insertionLogicalIndex;
   if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
@@ -3481,6 +4657,9 @@ bool Workspace::AdmitInitialAfter(
   } else if (layout_ == TileLayout::MasterStack ||
              layout_ == TileLayout::MasterStackH) {
     record.savedSlot.weight = 1.0;
+    record.savedSlot.hasWeight = true;
+  } else if (layout_ == TileLayout::Dwindle) {
+    record.savedSlot.weight = 0.5;
     record.savedSlot.hasWeight = true;
   }
   record.hasSavedSlot = true;
@@ -3491,10 +4670,6 @@ bool Workspace::AdmitInitialAfter(
   return true;
 }
 
-static bool IsWindowSuspendedMaximized(HWND hwnd) {
-  return g_workspaces.IsSuspendedMaximized(hwnd);
-}
-
 bool Workspace::Restore(HWND hwnd) {
   AssertWmThread(L"Workspace::Restore");
   WindowRecord* record = FindMutable(hwnd);
@@ -3503,6 +4678,11 @@ bool Workspace::Restore(HWND hwnd) {
   }
 
   const SuspendedSlot slot = record->savedSlot;
+  const bool returnedToVisibleSet = record->suspensionReason == SuspensionReason::Minimized ||
+                                   record->suspensionReason == SuspensionReason::Hidden;
+  if (returnedToVisibleSet || !record->tilingGeneration) {
+    record->tilingGeneration = Model::NextTilingGeneration();
+  }
   const size_t index = std::min(
       LogicalIndexToActiveIndex(slot.index, hwnd), windows_.size());
   windows_.insert(windows_.begin() + index, hwnd);
@@ -3525,9 +4705,23 @@ bool Workspace::Restore(HWND hwnd) {
           stackWeights_.begin() + stackIndex,
           slot.hasWeight ? slot.weight : 1.0);
     }
+  } else if (layout_ == TileLayout::Dwindle) {
+    // Reinsert the logical slot's outgoing ratio before EnsureWeights. The vector
+    // deliberately includes the final dormant ratio, so a one-window intermediate
+    // restore cannot discard split state needed by a later restored successor.
+    const size_t ratioIndex = std::min(index, dwindleRatios_.size());
+    dwindleRatios_.insert(
+        dwindleRatios_.begin() + ratioIndex,
+        slot.hasWeight ? ClampDouble(slot.weight, 0.1, 0.9) : 0.5);
   }
 
   record->state = ManageState::Tiled;
+  // Preserve the saved slot as the first restore attempt, but keep the restored
+  // member movable until that placement has survived conformance. If its old
+  // slot became infeasible while suspended, ArrangeWorkspace can now apply the
+  // same nearest-slot / Dwindle recovery used for a fresh admission instead of
+  // immediately floating it.
+  record->pendingInsertionPlacement = layout_ != TileLayout::Floating;
   record->suspensionReason = SuspensionReason::None;
   record->savedSlot = {};
   record->hasSavedSlot = false;
@@ -3554,6 +4748,8 @@ bool Workspace::Float(HWND hwnd) {
   WindowRecord* record = FindMutable(hwnd);
   if (!record) return false;
   record->state = ManageState::Floating;
+  record->pendingInsertionPlacement = false;
+  record->pendingDefaultFloatingCenter = false;
   record->suspensionReason = SuspensionReason::None;
   record->savedSlot = {};
   record->hasSavedSlot = false;
@@ -3596,10 +4792,12 @@ void Workspace::AppendTiledWithDefaultWeight(HWND hwnd) {
   const size_t oldCount = windows_.size();
   windows_.push_back(hwnd);
   if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
-    gridWeights_.push_back(1.0);
+    gridWeights_.push_back(oldCount < inheritedSlotWeights_.size() ? inheritedSlotWeights_[oldCount] : 1.0);
   } else if ((layout_ == TileLayout::MasterStack || layout_ == TileLayout::MasterStackH) &&
              oldCount > 0) {
-    stackWeights_.push_back(1.0);
+    stackWeights_.push_back(oldCount - 1 < inheritedSlotWeights_.size() ? inheritedSlotWeights_[oldCount - 1] : 1.0);
+  } else if (layout_ == TileLayout::Dwindle) {
+    dwindleRatios_.push_back(oldCount < inheritedSlotWeights_.size() ? inheritedSlotWeights_[oldCount] : 0.5);
   }
 }
 
@@ -3607,14 +4805,17 @@ SuspendedSlot Workspace::MakeAppendedSuspendedSlot() const {
   SuspendedSlot slot{};
   slot.index = LogicalWindowCount();
   if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
-    slot.weight = 1.0;
+    slot.weight = slot.index < inheritedSlotWeights_.size() ? inheritedSlotWeights_[slot.index] : 1.0;
     slot.hasWeight = true;
   } else if (layout_ == TileLayout::MasterStack || layout_ == TileLayout::MasterStackH) {
     if (slot.index == 0) slot.wasMaster = true;
     else {
-      slot.weight = 1.0;
+      slot.weight = slot.index - 1 < inheritedSlotWeights_.size() ? inheritedSlotWeights_[slot.index - 1] : 1.0;
       slot.hasWeight = true;
     }
+  } else if (layout_ == TileLayout::Dwindle) {
+    slot.weight = slot.index < inheritedSlotWeights_.size() ? inheritedSlotWeights_[slot.index] : 0.5;
+    slot.hasWeight = true;
   }
   return slot;
 }
@@ -3631,6 +4832,13 @@ void Workspace::AdmitMigrated(WindowRecord record, HWND anchor) {
   AssertWmThread(L"Workspace::AdmitMigrated");
   const HWND hwnd = record.hwnd;
   if (!hwnd) return;
+  if (record.state == ManageState::Tiled ||
+      record.state == ManageState::Suspended) {
+    // A destination workspace admission is newer than its existing members and
+    // receives the first opportunity to find a viable destination slot.
+    record.tilingGeneration = Model::NextTilingGeneration();
+    record.pendingInsertionPlacement = true;
+  }
   Forget(hwnd);
 
   // Automatic cross-workspace insertion follows the same destination-anchor
@@ -3688,6 +4896,53 @@ void Workspace::MergeNonTiledRecordsFrom(const Workspace& source) {
   DebugValidateMutation(L"Workspace::MergeNonTiledRecordsFrom");
 }
 
+void Workspace::RememberCurrentLayoutGeometry() {
+  AssertWmThread(L"Workspace::RememberCurrentLayoutGeometry");
+
+  if (layout_ == TileLayout::MasterStack ||
+      layout_ == TileLayout::MasterStackH) {
+    rememberedMasterStackOrder_ = windows_;
+    rememberedMasterStackWeights_ = stackWeights_;
+  } else if (layout_ == TileLayout::Columns ||
+             layout_ == TileLayout::Rows) {
+    rememberedGridOrder_ = windows_;
+    rememberedGridWeights_ = gridWeights_;
+  } else if (layout_ == TileLayout::Dwindle) {
+    rememberedDwindleOrder_ = windows_;
+    rememberedDwindleRatios_ = dwindleRatios_;
+  }
+}
+
+void Workspace::RestoreRememberedLayoutGeometry() {
+  AssertWmThread(L"Workspace::RestoreRememberedLayoutGeometry");
+
+  if (layout_ == TileLayout::MasterStack ||
+      layout_ == TileLayout::MasterStackH) {
+    const size_t expected = windows_.empty() ? 0 : windows_.size() - 1;
+    if (rememberedMasterStackOrder_ == windows_ &&
+        rememberedMasterStackWeights_.size() == expected) {
+      stackWeights_ = rememberedMasterStackWeights_;
+    } else {
+      stackWeights_.clear();
+    }
+  } else if (layout_ == TileLayout::Columns ||
+             layout_ == TileLayout::Rows) {
+    if (rememberedGridOrder_ == windows_ &&
+        rememberedGridWeights_.size() == windows_.size()) {
+      gridWeights_ = rememberedGridWeights_;
+    } else {
+      gridWeights_.clear();
+    }
+  } else if (layout_ == TileLayout::Dwindle) {
+    if (rememberedDwindleOrder_ == windows_ &&
+        rememberedDwindleRatios_.size() == windows_.size()) {
+      dwindleRatios_ = rememberedDwindleRatios_;
+    } else {
+      dwindleRatios_.clear();
+    }
+  }
+}
+
 void Workspace::ResetSuspendedLayoutHints() {
   AssertWmThread(L"Workspace::ResetSuspendedLayoutHints");
   for (auto& kv : records_) {
@@ -3703,8 +4958,12 @@ void Workspace::ResetSuspendedLayoutHints() {
 void Workspace::SetLayout(TileLayout layout) {
   AssertWmThread(L"Workspace::SetLayout");
   if (layout_ == layout) return;
+
+  RememberCurrentLayoutGeometry();
   layout_ = layout;
+  inheritedSlotWeights_.clear();
   ResetSuspendedLayoutHints();
+  RestoreRememberedLayoutGeometry();
   EnsureWeights();
   DebugValidateMutation(L"Workspace::SetLayout");
 }
@@ -3731,6 +4990,151 @@ void Workspace::SetMasterRatio(double ratio) {
   DebugValidateMutation(L"Workspace::SetMasterRatio");
 }
 
+bool Workspace::SetDwindleRatio(size_t splitIndex, double ratio) {
+  AssertWmThread(L"Workspace::SetDwindleRatio");
+  EnsureWeights();
+  if (layout_ != TileLayout::Dwindle ||
+      dwindleRatios_.size() < 2 || splitIndex >= dwindleRatios_.size() - 1) {
+    return false;
+  }
+
+  const double clamped = ClampDouble(ratio, 0.1, 0.9);
+  if (std::abs(dwindleRatios_[splitIndex] - clamped) <= 1e-9) return false;
+  dwindleRatios_[splitIndex] = clamped;
+  DebugValidateMutation(L"Workspace::SetDwindleRatio");
+  return true;
+}
+
+bool Workspace::HasSameWindowMembershipAs(const Workspace& other) const {
+  if (windows_.size() != other.windows_.size() ||
+      records_.size() != other.records_.size()) {
+    return false;
+  }
+  for (const auto& [hwnd, record] : records_) {
+    auto otherIt = other.records_.find(hwnd);
+    if (otherIt == other.records_.end() ||
+        record.pid != otherIt->second.pid ||
+        record.tilingGeneration != otherIt->second.tilingGeneration ||
+        record.state != otherIt->second.state ||
+        record.alwaysFloating != otherIt->second.alwaysFloating ||
+        record.suspensionReason != otherIt->second.suspensionReason ||
+        record.hasSavedSlot != otherIt->second.hasSavedSlot) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool Workspace::HasSameLayoutStateAs(const Workspace& other) const {
+  if (!HasSameWindowMembershipAs(other)) return false;
+  for (const auto& [hwnd, record] : records_) {
+    const auto& saved = other.records_.at(hwnd).savedSlot;
+    if (record.hasSavedSlot &&
+        (record.savedSlot.index != saved.index ||
+         record.savedSlot.weight != saved.weight ||
+         record.savedSlot.hasWeight != saved.hasWeight ||
+         record.savedSlot.wasMaster != saved.wasMaster)) return false;
+  }
+  return windows_ == other.windows_ &&
+      layout_ == other.layout_ && masterRatio_ == other.masterRatio_ &&
+      inheritedSlotWeights_ == other.inheritedSlotWeights_ &&
+      stackWeights_ == other.stackWeights_ &&
+      gridWeights_ == other.gridWeights_ &&
+      dwindleRatios_ == other.dwindleRatios_ &&
+      rememberedMasterStackOrder_ == other.rememberedMasterStackOrder_ &&
+      rememberedMasterStackWeights_ == other.rememberedMasterStackWeights_ &&
+      rememberedGridOrder_ == other.rememberedGridOrder_ &&
+      rememberedGridWeights_ == other.rememberedGridWeights_ &&
+      rememberedDwindleOrder_ == other.rememberedDwindleOrder_ &&
+      rememberedDwindleRatios_ == other.rememberedDwindleRatios_;
+}
+
+bool Workspace::RestoreLayoutStateFrom(const Workspace& source) {
+  AssertWmThread(L"Workspace::RestoreLayoutStateFrom");
+  if (!HasSameWindowMembershipAs(source)) return false;
+
+  windows_ = source.windows_;
+  layout_ = source.layout_;
+  masterRatio_ = source.masterRatio_;
+  inheritedSlotWeights_ = source.inheritedSlotWeights_;
+  stackWeights_ = source.stackWeights_;
+  gridWeights_ = source.gridWeights_;
+  dwindleRatios_ = source.dwindleRatios_;
+  rememberedMasterStackOrder_ = source.rememberedMasterStackOrder_;
+  rememberedMasterStackWeights_ = source.rememberedMasterStackWeights_;
+  rememberedGridOrder_ = source.rememberedGridOrder_;
+  rememberedGridWeights_ = source.rememberedGridWeights_;
+  rememberedDwindleOrder_ = source.rememberedDwindleOrder_;
+  rememberedDwindleRatios_ = source.rememberedDwindleRatios_;
+  for (auto& [hwnd, record] : records_) {
+    const WindowRecord& sourceRecord = source.records_.find(hwnd)->second;
+    if (record.state == ManageState::Suspended) {
+      record.savedSlot = sourceRecord.savedSlot;
+    }
+  }
+  DebugValidateMutation(L"Workspace::RestoreLayoutStateFrom");
+  return true;
+}
+
+// Restore only the active layout/order geometry from a compatible snapshot.
+// Unlike RestoreLayoutStateFrom, this intentionally tolerates extra/missing
+// inactive records. It is used when a pending admission has already left active
+// participation: the established tiled membership must match, while the pending
+// HWND itself may now be Suspended instead of Tiled.
+bool Workspace::RestoreCompatibleActiveLayoutStateFrom(
+    const Workspace& source) {
+  AssertWmThread(L"Workspace::RestoreCompatibleActiveLayoutStateFrom");
+  if (layout_ != source.layout_ || windows_.size() != source.windows_.size()) {
+    return false;
+  }
+
+  for (HWND hwnd : windows_) {
+    const WindowRecord* currentRecord = Find(hwnd);
+    const WindowRecord* sourceRecord = source.Find(hwnd);
+    if (!currentRecord || !sourceRecord ||
+        currentRecord->state != ManageState::Tiled ||
+        sourceRecord->state != ManageState::Tiled ||
+        currentRecord->pid != sourceRecord->pid ||
+        currentRecord->tilingGeneration != sourceRecord->tilingGeneration) {
+      return false;
+    }
+  }
+  for (HWND hwnd : source.windows_) {
+    if (!IsTiled(hwnd)) return false;
+  }
+
+  windows_ = source.windows_;
+  masterRatio_ = source.masterRatio_;
+  inheritedSlotWeights_ = source.inheritedSlotWeights_;
+  stackWeights_ = source.stackWeights_;
+  gridWeights_ = source.gridWeights_;
+  dwindleRatios_ = source.dwindleRatios_;
+  rememberedMasterStackOrder_ = source.rememberedMasterStackOrder_;
+  rememberedMasterStackWeights_ = source.rememberedMasterStackWeights_;
+  rememberedGridOrder_ = source.rememberedGridOrder_;
+  rememberedGridWeights_ = source.rememberedGridWeights_;
+  rememberedDwindleOrder_ = source.rememberedDwindleOrder_;
+  rememberedDwindleRatios_ = source.rememberedDwindleRatios_;
+
+  // Undo logical-index shifts caused by the provisional admission for suspended
+  // members that existed in both snapshots. Current-only inactive records are
+  // deliberately preserved.
+  for (auto& [hwnd, record] : records_) {
+    if (record.state != ManageState::Suspended) continue;
+    const WindowRecord* sourceRecord = source.Find(hwnd);
+    if (!sourceRecord || sourceRecord->state != ManageState::Suspended ||
+        !sourceRecord->hasSavedSlot) {
+      continue;
+    }
+    record.savedSlot = sourceRecord->savedSlot;
+    record.hasSavedSlot = true;
+  }
+
+  EnsureWeights();
+  DebugValidateMutation(L"Workspace::RestoreCompatibleActiveLayoutStateFrom");
+  return true;
+}
+
 bool Workspace::MakeMaster(HWND hwnd, HWND* oldMaster) {
   AssertWmThread(L"Workspace::MakeMaster");
   if (layout_ == TileLayout::Floating || windows_.size() < 2) return false;
@@ -3754,6 +5158,91 @@ bool Workspace::SwapTiled(HWND first, HWND second) {
   return true;
 }
 
+bool Workspace::MovePendingAdmissionToIndex(HWND hwnd, size_t targetIndex) {
+  AssertWmThread(L"Workspace::MovePendingAdmissionToIndex");
+  auto current = std::find(windows_.begin(), windows_.end(), hwnd);
+  if (current == windows_.end()) return false;
+
+  WindowRecord* record = FindMutable(hwnd);
+  const size_t currentIndex =
+      static_cast<size_t>(std::distance(windows_.begin(), current));
+  if (!record || !record->pendingInsertionPlacement ||
+      targetIndex >= windows_.size() || targetIndex == currentIndex) {
+    return false;
+  }
+
+  EnsureWeights();
+  const size_t oldCount = windows_.size();
+  const size_t oldLogicalIndex = ActiveIndexToLogicalIndex(currentIndex);
+  windows_.erase(current);
+
+  if ((layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) &&
+      gridWeights_.size() == oldCount) {
+    gridWeights_.erase(gridWeights_.begin() + currentIndex);
+  } else if ((layout_ == TileLayout::MasterStack ||
+              layout_ == TileLayout::MasterStackH) &&
+             oldCount > 1 && stackWeights_.size() == oldCount - 1) {
+    const size_t stackIndex = currentIndex == 0 ? 0 : currentIndex - 1;
+    stackWeights_.erase(stackWeights_.begin() + stackIndex);
+  }
+  CloseLogicalGapAfterRemoval(oldLogicalIndex, hwnd);
+
+  const size_t insertionLogicalIndex = ActiveIndexToLogicalIndex(targetIndex);
+  for (auto& kv : records_) {
+    WindowRecord& existing = kv.second;
+    if (existing.state == ManageState::Suspended && existing.hasSavedSlot &&
+        existing.savedSlot.index >= insertionLogicalIndex) {
+      ++existing.savedSlot.index;
+    }
+  }
+
+  windows_.insert(windows_.begin() + targetIndex, hwnd);
+  if (layout_ == TileLayout::Columns || layout_ == TileLayout::Rows) {
+    gridWeights_.insert(gridWeights_.begin() + targetIndex, 1.0);
+  } else if ((layout_ == TileLayout::MasterStack ||
+              layout_ == TileLayout::MasterStackH) &&
+             oldCount > 1) {
+    const size_t stackIndex = targetIndex == 0 ? 0 : targetIndex - 1;
+    stackWeights_.insert(stackWeights_.begin() + stackIndex, 1.0);
+  }
+
+  EnsureWeights();
+  DebugValidateMutation(L"Workspace::MovePendingAdmissionToIndex");
+  return true;
+}
+
+bool Workspace::ClearInsertionPlacement(HWND hwnd) {
+  AssertWmThread(L"Workspace::ClearInsertionPlacement");
+  WindowRecord* record = FindMutable(hwnd);
+  if (!record || !record->pendingInsertionPlacement) return false;
+  record->pendingInsertionPlacement = false;
+  DebugValidateMutation(L"Workspace::ClearInsertionPlacement");
+  return true;
+}
+
+bool Workspace::ClearDefaultFloatingCenter(HWND hwnd) {
+  AssertWmThread(L"Workspace::ClearDefaultFloatingCenter");
+  WindowRecord* record = FindMutable(hwnd);
+  if (!record || !record->pendingDefaultFloatingCenter) return false;
+  record->pendingDefaultFloatingCenter = false;
+  DebugValidateMutation(L"Workspace::ClearDefaultFloatingCenter");
+  return true;
+}
+
+bool Workspace::EnforceAlwaysFloating(HWND hwnd) {
+  AssertWmThread(L"Workspace::EnforceAlwaysFloating");
+  WindowRecord* record = FindMutable(hwnd);
+  if (!record) return false;
+
+  bool changed = !record->alwaysFloating;
+  record->alwaysFloating = true;
+  if (record->state != ManageState::Floating) {
+    changed |= Float(hwnd);
+  }
+  if (changed) DebugValidateMutation(L"Workspace::EnforceAlwaysFloating");
+  return changed;
+}
+
 void Workspace::RepairForArrangement(
     const std::vector<HWND>& invalidWindows,
     const std::vector<WindowRecord>& missingActiveRecords) {
@@ -3762,6 +5251,9 @@ void Workspace::RepairForArrangement(
 
   for (WindowRecord record : missingActiveRecords) {
     if (!record.hwnd || !ContainsWindow(windows_, record.hwnd)) continue;
+    if (!record.tilingGeneration) {
+      record.tilingGeneration = Model::NextTilingGeneration();
+    }
     record.state = ManageState::Tiled;
     record.suspensionReason = SuspensionReason::None;
     record.savedSlot = {};
@@ -3813,6 +5305,79 @@ static void ObserveAndRepairWorkspaceForArrangement(Workspace& workspace) {
 //-----------------------------------------------------------------------------
 // Workspace resize-learning operations
 //-----------------------------------------------------------------------------
+
+// Refreshes the application-owned native minimum contract without introducing a
+// second solver notion of "proof". Normal arrangement probes only records that
+// are missing, stale-DPI, or still resolving an admission/restore. User-authored
+// mutations and explicit Tile Workspace operations can force a refresh so a
+// relaxed same-DPI minimum cannot remain cached indefinitely.
+static bool RefreshWorkspaceNativeConstraints(
+    Workspace& workspace, bool forceAll, const wchar_t* reason) {
+  bool changed = false;
+  for (HWND hwnd : workspace.TiledWindows()) {
+    const WindowRecord* record = workspace.Find(hwnd);
+    if (!record ||
+        GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+        IsWindowCloaked(hwnd)) {
+      continue;
+    }
+
+    const HMONITOR windowMonitor = GetWindowPhysicalMonitor(hwnd);
+    const UINT currentDpi = windowMonitor
+        ? GetMonitorEffectiveDpi(windowMonitor)
+        : 0;
+    const bool needsProbe =
+        forceAll || record->pendingInsertionPlacement ||
+        !record->constraints.valid ||
+        (currentDpi && currentDpi != record->constraints.dpi);
+    if (!needsProbe) continue;
+
+    const WindowConstraints before = record->constraints;
+    const WindowConstraints fresh = ProbeWindowConstraints(hwnd);
+    const WindowConstraints refreshed =
+        MergeConstraintProbeWithCache(before, fresh);
+    const bool geometryChanged =
+        !SameConstraintGeometry(before, refreshed);
+    changed |= workspace.UpdateConstraints(hwnd, refreshed);
+
+    if (fresh.valid && geometryChanged) {
+      Diagnostics::RecordEvent(
+          L"native constraint report refreshed reason=%ls hwnd=%p min=%ldx%ld dpi=%u",
+          reason ? reason : L"arrange", hwnd, refreshed.minWidth,
+          refreshed.minHeight, refreshed.dpi);
+    }
+  }
+  return changed;
+}
+
+static std::vector<WindowConstraints> ActiveWindowConstraints(
+    const Workspace& workspace) {
+  std::vector<WindowConstraints> constraints;
+  constraints.reserve(workspace.ActiveCount());
+  for (HWND hwnd : workspace.TiledWindows()) {
+    const WindowRecord* record = workspace.Find(hwnd);
+    constraints.push_back(record ? record->constraints : WindowConstraints{});
+  }
+  return constraints;
+}
+
+static bool RectsSatisfyWindowConstraints(
+    const std::vector<RECT>& rects,
+    const std::vector<WindowConstraints>& constraints) {
+  if (rects.size() != constraints.size()) return false;
+  for (size_t i = 0; i < rects.size(); ++i) {
+    const LONG width = rects[i].right - rects[i].left;
+    const LONG height = rects[i].bottom - rects[i].top;
+    const WindowConstraints& c = constraints[i];
+    if (c.valid &&
+        (width < std::max<LONG>(1, c.minWidth) ||
+         height < std::max<LONG>(1, c.minHeight))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 constexpr LONG kResizeEdgeDeltaTolerance = 1;
 constexpr LONG kMinLearnedResizeSpan = 80;
 
@@ -3861,10 +5426,22 @@ bool Workspace::LearnMasterStackResize(
   AssertWmThread(L"Workspace::LearnMasterStackResize");
   EnsureWeights();
   const bool horizontal = layout_ == TileLayout::MasterStackH;
+  const std::vector<WindowConstraints> constraints =
+      ActiveWindowConstraints(*this);
+
   std::vector<RECT> expectedRects;
   Layout::LayoutMasterStackWeighted(
       workArea, gap, windows_.size(), expectedRects, horizontal,
       ClampDouble(masterRatio_, 0.1, 0.9), stackWeights_);
+  if (!RectsSatisfyWindowConstraints(expectedRects, constraints)) {
+    std::vector<RECT> constrainedRects;
+    if (Layout::LayoutMasterStackConstrained(
+            workArea, gap, horizontal,
+            ClampDouble(masterRatio_, 0.1, 0.9), stackWeights_,
+            constraints, &constrainedRects)) {
+      expectedRects = std::move(constrainedRects);
+    }
+  }
   if (expectedRects.size() != windows_.size()) return false;
 
   bool changed = false;
@@ -3930,9 +5507,21 @@ bool Workspace::LearnGridResize(
   AssertWmThread(L"Workspace::LearnGridResize");
   EnsureWeights();
   const bool horizontal = layout_ == TileLayout::Rows;
+  const std::vector<WindowConstraints> constraints =
+      ActiveWindowConstraints(*this);
+
   std::vector<RECT> expectedRects;
   Layout::LayoutGridWeighted(
-      workArea, gap, windows_.size(), expectedRects, horizontal, gridWeights_);
+      workArea, gap, windows_.size(), expectedRects,
+      horizontal, gridWeights_);
+  if (!RectsSatisfyWindowConstraints(expectedRects, constraints)) {
+    std::vector<RECT> constrainedRects;
+    if (Layout::LayoutGridConstrained(
+            workArea, gap, gridWeights_, constraints,
+            horizontal, &constrainedRects)) {
+      expectedRects = std::move(constrainedRects);
+    }
+  }
   if (expectedRects.size() != windows_.size()) return false;
 
   bool changed = false;
@@ -3959,54 +5548,1208 @@ bool Workspace::LearnGridResize(
   return changed;
 }
 
-static bool BuildWorkspaceLayoutPlan(
+bool Workspace::LearnDwindleResize(
+    const RECT& workArea, LONG gap, size_t resizedIndex,
+    const MoveSizeGesture& gesture) {
+  AssertWmThread(L"Workspace::LearnDwindleResize");
+  EnsureWeights();
+  if (layout_ != TileLayout::Dwindle || windows_.size() < 2 ||
+      resizedIndex >= windows_.size()) {
+    return false;
+  }
+
+  std::vector<RECT> expectedRects(windows_.size());
+  std::vector<Layout::DwindleSplit> splits;
+  Layout::LayoutDwindle(
+      workArea, gap, 0, windows_.size(), dwindleRatios_,
+      g_settings.reverseDwindle, expectedRects, &splits);
+  if (splits.size() + 1 != dwindleRatios_.size()) return false;
+
+  const RECT& resizedRect = expectedRects[resizedIndex];
+  size_t selectedVerticalSplit = static_cast<size_t>(-1);
+  size_t selectedHorizontalSplit = static_cast<size_t>(-1);
+  LONG selectedVerticalDelta = 0;
+  LONG selectedHorizontalDelta = 0;
+  for (size_t splitIndex = 0;
+       splitIndex < splits.size() && splitIndex <= resizedIndex;
+       ++splitIndex) {
+    const Layout::DwindleSplit& split = splits[splitIndex];
+    LONG firstSpanDelta = 0;
+    if (split.vertical) {
+      if (resizedIndex == splitIndex) {
+        firstSpanDelta = g_settings.reverseDwindle
+            ? -(gesture.end.left - gesture.start.left)
+            : gesture.end.right - gesture.start.right;
+      } else if ((!g_settings.reverseDwindle &&
+                  resizedRect.left == split.remaining.left) ||
+                 (g_settings.reverseDwindle &&
+                  resizedRect.right == split.remaining.right)) {
+        firstSpanDelta = g_settings.reverseDwindle
+            ? -(gesture.end.right - gesture.start.right)
+            : gesture.end.left - gesture.start.left;
+      }
+    } else {
+      if (resizedIndex == splitIndex) {
+        firstSpanDelta = g_settings.reverseDwindle
+            ? -(gesture.end.top - gesture.start.top)
+            : gesture.end.bottom - gesture.start.bottom;
+      } else if ((!g_settings.reverseDwindle &&
+                  resizedRect.top == split.remaining.top) ||
+                 (g_settings.reverseDwindle &&
+                  resizedRect.bottom == split.remaining.bottom)) {
+        firstSpanDelta = g_settings.reverseDwindle
+            ? -(gesture.end.bottom - gesture.start.bottom)
+            : gesture.end.top - gesture.start.top;
+      }
+    }
+    if (!IsMeaningfulResizeDelta(firstSpanDelta) || split.usableSpan < 2) {
+      continue;
+    }
+
+    // A descendant can share an edge with more than one same-axis ancestor.
+    // Keep the nearest match on each axis. A corner drag may intentionally
+    // update one horizontal and one vertical divider.
+    if (split.vertical) {
+      selectedVerticalSplit = splitIndex;
+      selectedVerticalDelta = firstSpanDelta;
+    } else {
+      selectedHorizontalSplit = splitIndex;
+      selectedHorizontalDelta = firstSpanDelta;
+    }
+  }
+
+  bool changed = false;
+  auto applySelectedDivider = [&](size_t splitIndex, LONG firstSpanDelta) {
+    if (splitIndex >= splits.size()) return;
+    const Layout::DwindleSplit& split = splits[splitIndex];
+    const LONG minimumSpan = std::min<LONG>(
+        kMinLearnedResizeSpan,
+        std::max<LONG>(1, (split.usableSpan - 1) / 2));
+    const LONG newFirstSpan = std::clamp<LONG>(
+        split.firstSpan + firstSpanDelta,
+        minimumSpan, split.usableSpan - minimumSpan);
+    const double newRatio = ClampDouble(
+        static_cast<double>(newFirstSpan) /
+            static_cast<double>(split.usableSpan),
+        0.1, 0.9);
+    if (std::abs(newRatio - dwindleRatios_[splitIndex]) <= 1e-9) return;
+
+    dwindleRatios_[splitIndex] = newRatio;
+    changed = true;
+    Wh_Log(
+        L"Dwindle divider updated slot=%zu ratio=%.6f",
+        splitIndex, newRatio);
+    Diagnostics::RecordEvent(
+        L"dwindle divider updated hwnd=%p slot=%zu ratio=%.6f",
+        windows_[resizedIndex], splitIndex, newRatio);
+  };
+  applySelectedDivider(selectedVerticalSplit, selectedVerticalDelta);
+  applySelectedDivider(selectedHorizontalSplit, selectedHorizontalDelta);
+  if (!changed) return false;
+
+  DebugValidateMutation(L"Workspace::LearnDwindleResize");
+  return true;
+}
+
+enum class LayoutPlanStatus {
+  Success,
+  NotApplicable,
+  Unsatisfiable,
+};
+
+static LayoutPlanStatus BuildWorkspaceLayoutPlan(
     const Workspace& workspace, const RECT& workArea, LONG gap,
     std::vector<RECT>* outRects) {
-  if (!outRects) return false;
+  if (!outRects) return LayoutPlanStatus::Unsatisfiable;
   outRects->assign(workspace.ActiveCount(), RECT{});
 
+  // Always begin from MultiWM's ordinary geometry. When the native constraints
+  // already fit, this stays byte-for-byte on the established layout path.
   switch (workspace.Layout()) {
     case TileLayout::MasterStack:
       Layout::LayoutMasterStackWeighted(
           workArea, gap, workspace.ActiveCount(), *outRects, false,
           ClampDouble(workspace.MasterRatio(), 0.1, 0.9),
           workspace.StackWeights());
-      return true;
+      break;
 
     case TileLayout::MasterStackH:
       Layout::LayoutMasterStackWeighted(
           workArea, gap, workspace.ActiveCount(), *outRects, true,
           ClampDouble(workspace.MasterRatio(), 0.1, 0.9),
           workspace.StackWeights());
-      return true;
+      break;
 
     case TileLayout::Columns:
       Layout::LayoutGridWeighted(
           workArea, gap, workspace.ActiveCount(), *outRects, false,
           workspace.GridWeights());
-      return true;
+      break;
 
     case TileLayout::Rows:
       Layout::LayoutGridWeighted(
           workArea, gap, workspace.ActiveCount(), *outRects, true,
           workspace.GridWeights());
-      return true;
+      break;
 
-    case TileLayout::BSP:
-      Layout::LayoutBSP(workArea, gap, 0, workspace.ActiveCount(), 0, *outRects);
-      return true;
+    case TileLayout::Dwindle:
+      Layout::LayoutDwindle(
+          workArea, gap, 0, workspace.ActiveCount(),
+          workspace.DwindleRatios(), g_settings.reverseDwindle, *outRects);
+      break;
 
     case TileLayout::Monocle:
       outRects->assign(workspace.ActiveCount(), workArea);
-      return true;
+      break;
 
     case TileLayout::Floating:
     case TileLayout::COUNT:
       outRects->clear();
-      return false;
+      return LayoutPlanStatus::NotApplicable;
+  }
+
+  const std::vector<WindowConstraints> constraints =
+      ActiveWindowConstraints(workspace);
+  if (RectsSatisfyWindowConstraints(*outRects, constraints)) {
+    return LayoutPlanStatus::Success;
+  }
+
+  bool constrainedSuccess = false;
+  switch (workspace.Layout()) {
+    case TileLayout::MasterStack:
+      constrainedSuccess = Layout::LayoutMasterStackConstrained(
+          workArea, gap, false,
+          ClampDouble(workspace.MasterRatio(), 0.1, 0.9),
+          workspace.StackWeights(), constraints, outRects);
+      break;
+
+    case TileLayout::MasterStackH:
+      constrainedSuccess = Layout::LayoutMasterStackConstrained(
+          workArea, gap, true,
+          ClampDouble(workspace.MasterRatio(), 0.1, 0.9),
+          workspace.StackWeights(), constraints, outRects);
+      break;
+
+    case TileLayout::Columns:
+      constrainedSuccess = Layout::LayoutGridConstrained(
+          workArea, gap, workspace.GridWeights(),
+          constraints, false, outRects);
+      break;
+
+    case TileLayout::Rows:
+      constrainedSuccess = Layout::LayoutGridConstrained(
+          workArea, gap, workspace.GridWeights(),
+          constraints, true, outRects);
+      break;
+
+    case TileLayout::Dwindle:
+      // Dwindle ratios are tree state. Constraint handling may reassign a fresh
+      // admission or fit the shared shallow-divider policy, but ordinary planning
+      // never reshapes the tree around its current occupants.
+      return LayoutPlanStatus::Unsatisfiable;
+
+    case TileLayout::Monocle:
+      constrainedSuccess = Layout::LayoutMonocleConstrained(
+          workArea, constraints, outRects);
+      break;
+
+    case TileLayout::Floating:
+    case TileLayout::COUNT:
+      return LayoutPlanStatus::NotApplicable;
+  }
+
+  if (constrainedSuccess) return LayoutPlanStatus::Success;
+  return LayoutPlanStatus::Unsatisfiable;
+}
+
+struct AdaptiveDwindleRatioEnvelope {
+  double minimum = 0.1;
+  double maximum = 0.9;
+};
+
+static bool AutomaticDwindleAdaptationEnabled() {
+  return g_settings.adaptiveDwindleSlots > 0 &&
+      g_settings.adaptiveDwindlePercentage > 0;
+}
+
+static AdaptiveDwindleRatioEnvelope GetAdaptiveDwindleRatioEnvelope() {
+  const double deviation =
+      static_cast<double>(std::clamp<LONG>(
+          g_settings.adaptiveDwindlePercentage, 0, 40)) /
+      100.0;
+  return {0.5 - deviation, 0.5 + deviation};
+}
+
+// Admission recovery and explicit order-mutation preflight share one geometry
+// fitter. Leading split nodes may move according to Adaptive Dwindle Slots and
+// Adaptive Dwindle Percentage; every deeper ratio and the complete window order
+// stay fixed. A percentage of zero deliberately disables automatic ratio
+// changes. A manual ratio outside the adaptive envelope is retained whenever it
+// is already feasible; the envelope constrains only an automatic replacement.
+static bool FitAdaptiveDwindleDividers(
+    Workspace& candidate, const RECT& workArea, LONG gap) {
+  if (candidate.Layout() != TileLayout::Dwindle || candidate.ActiveCount() < 2 ||
+      !AutomaticDwindleAdaptationEnabled()) {
+    return false;
+  }
+
+  const auto& windows = candidate.TiledWindows();
+  const auto constraints = ActiveWindowConstraints(candidate);
+  const auto& ratios = candidate.DwindleRatios();
+  const size_t adaptiveSplitCount =
+      std::min(g_settings.adaptiveDwindleSlots, ratios.size());
+  if (adaptiveSplitCount == 0) return false;
+  const AdaptiveDwindleRatioEnvelope adaptiveEnvelope =
+      GetAdaptiveDwindleRatioEnvelope();
+
+  std::vector<SIZE> windowMinimums(windows.size(), SIZE{1, 1});
+  for (size_t i = 0; i < constraints.size(); ++i) {
+    const auto& constraint = constraints[i];
+    if (constraint.valid) {
+      windowMinimums[i].cx = std::max<LONG>(1, constraint.minWidth);
+      windowMinimums[i].cy = std::max<LONG>(1, constraint.minHeight);
+    }
+  }
+
+  const LONG maximumSpan = std::max(RectWidth(workArea), RectHeight(workArea));
+  auto requiredSpan = [&](LONG first, LONG tail, size_t splitIndex,
+                          bool adaptive) {
+    const double fixedRatio = ClampDouble(ratios[splitIndex], 0.1, 0.9);
+    auto fits = [&](LONG span) {
+      if (span < 2) return false;
+      const LONG usable = span - std::clamp<LONG>(gap, 0, span - 2);
+      if (usable < 2) return false;
+
+      if (!adaptive) {
+        const LONG allocated = std::clamp<LONG>(
+            static_cast<LONG>(std::llround(usable * fixedRatio)),
+            1, usable - 1);
+        return allocated >= first && usable - allocated >= tail;
+      }
+
+      // A manually chosen ratio outside the adaptive envelope remains a legal
+      // no-op if it already satisfies both sides. Only a ratio we actually need
+      // to change must land inside the configured symmetric envelope.
+      const LONG currentAllocated = std::clamp<LONG>(
+          static_cast<LONG>(std::llround(usable * fixedRatio)),
+          1, usable - 1);
+      if (currentAllocated >= first && usable - currentAllocated >= tail) {
+        return true;
+      }
+
+      const LONG minimumAdaptive = std::clamp<LONG>(
+          static_cast<LONG>(std::llround(
+              usable * adaptiveEnvelope.minimum)), 1, usable - 1);
+      const LONG maximumAdaptive = std::clamp<LONG>(
+          static_cast<LONG>(std::llround(
+              usable * adaptiveEnvelope.maximum)), 1, usable - 1);
+      const LONG lower = std::max(first, minimumAdaptive);
+      const LONG upper = std::min(usable - tail, maximumAdaptive);
+      return lower <= upper;
+    };
+
+    if (!fits(maximumSpan)) return maximumSpan + 1;
+    LONG low = 2;
+    LONG high = maximumSpan;
+    while (low < high) {
+      const LONG middle = low + (high - low) / 2;
+      if (fits(middle)) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    return low;
+  };
+
+  // Minimum extent of each recursive tail. Fixed descendants preserve their
+  // current ratios; adaptive descendants contribute only the space they need
+  // somewhere inside the configured adaptive ratio envelope.
+  std::vector<SIZE> subtreeMinimums = windowMinimums;
+  for (size_t splitIndex = windows.size() - 1; splitIndex-- > 0;) {
+    const SIZE first = windowMinimums[splitIndex];
+    const SIZE tail = subtreeMinimums[splitIndex + 1];
+    SIZE combined{
+        std::max(first.cx, tail.cx),
+        std::max(first.cy, tail.cy)};
+    const bool adaptive = splitIndex < adaptiveSplitCount;
+    if ((splitIndex % 2) == 0) {
+      combined.cx = requiredSpan(first.cx, tail.cx, splitIndex, adaptive);
+    } else {
+      combined.cy = requiredSpan(first.cy, tail.cy, splitIndex, adaptive);
+    }
+    subtreeMinimums[splitIndex] = combined;
+  }
+
+  if (RectWidth(workArea) < subtreeMinimums[0].cx ||
+      RectHeight(workArea) < subtreeMinimums[0].cy) {
+    return false;
+  }
+
+  Workspace trial = candidate;
+  RECT remaining = workArea;
+  for (size_t splitIndex = 0; splitIndex < adaptiveSplitCount; ++splitIndex) {
+    const bool vertical = (splitIndex % 2) == 0;
+    const LONG span = vertical ? RectWidth(remaining) : RectHeight(remaining);
+    if (span < 2) return false;
+    const LONG usable = span - std::clamp<LONG>(gap, 0, span - 2);
+    if (usable < 2) return false;
+
+    const LONG firstMinimum = vertical
+        ? windowMinimums[splitIndex].cx
+        : windowMinimums[splitIndex].cy;
+    const LONG tailMinimum = vertical
+        ? subtreeMinimums[splitIndex + 1].cx
+        : subtreeMinimums[splitIndex + 1].cy;
+    const double preferred = ClampDouble(ratios[splitIndex], 0.1, 0.9);
+    const LONG desired = std::clamp<LONG>(
+        static_cast<LONG>(std::llround(usable * preferred)),
+        1, usable - 1);
+    LONG firstSpan = desired;
+    if (desired < firstMinimum || usable - desired < tailMinimum) {
+      const LONG minimumAdaptive = std::clamp<LONG>(
+          static_cast<LONG>(std::llround(
+              usable * adaptiveEnvelope.minimum)), 1, usable - 1);
+      const LONG maximumAdaptive = std::clamp<LONG>(
+          static_cast<LONG>(std::llround(
+              usable * adaptiveEnvelope.maximum)), 1, usable - 1);
+      const LONG lower = std::max(firstMinimum, minimumAdaptive);
+      const LONG upper = std::min(usable - tailMinimum, maximumAdaptive);
+      if (lower > upper) return false;
+      firstSpan = std::clamp<LONG>(desired, lower, upper);
+    }
+    trial.SetDwindleRatio(
+        splitIndex, static_cast<double>(firstSpan) / usable);
+
+    std::vector<RECT> rects(windows.size());
+    std::vector<Layout::DwindleSplit> splits;
+    Layout::LayoutDwindle(
+        workArea, gap, 0, windows.size(), trial.DwindleRatios(),
+        g_settings.reverseDwindle, rects, &splits);
+    if (splitIndex >= splits.size()) return false;
+    remaining = splits[splitIndex].remaining;
+  }
+
+  std::vector<RECT> rects;
+  if (BuildWorkspaceLayoutPlan(
+          trial, workArea, gap, &rects) != LayoutPlanStatus::Success) {
+    return false;
+  }
+  candidate = std::move(trial);
+  return true;
+}
+
+static void RememberPendingLayoutMutation(
+    const DesktopMonitorKey& key, const Workspace& previous,
+    const Workspace& candidate, HWND subject, UserLayoutMutationKind kind,
+    const wchar_t* action) {
+  PendingLayoutMutation mutation;
+  mutation.previous = previous;
+  mutation.candidate = candidate;
+  mutation.subject = subject;
+  mutation.kind = kind;
+  mutation.action = action ? action : L"Layout mutation";
+  g_pendingLayoutMutations[key] = std::move(mutation);
+}
+
+static void DiscardPendingAdmissionRecovery(HWND hwnd) {
+  if (hwnd) g_pendingAdmissionRecoveries.erase(hwnd);
+}
+
+static void RememberPendingAdmissionRecovery(
+    const DesktopMonitorKey& key, HWND hwnd, const Workspace& baseline) {
+  if (!hwnd) return;
+  const WindowRecord* record = baseline.Find(hwnd);
+  if (!record || record->state != ManageState::Tiled ||
+      !record->pendingInsertionPlacement) {
+    return;
+  }
+
+  auto existing = g_pendingAdmissionRecoveries.find(hwnd);
+  if (existing != g_pendingAdmissionRecoveries.end() &&
+      existing->second.generation == record->tilingGeneration &&
+      Model::DesktopMonitorKeyEqual{}(existing->second.key, key)) {
+    // Keep the earliest pre-recovery snapshot for this unsettled admission.
+    return;
+  }
+
+  PendingAdmissionRecovery recovery;
+  recovery.key = key;
+  recovery.baseline = baseline;
+  recovery.generation = record->tilingGeneration;
+  g_pendingAdmissionRecoveries[hwnd] = std::move(recovery);
+}
+
+// If an admission/restore leaves active participation before its recovery has
+// settled, derive the no-longer-active state from the pre-recovery snapshot and
+// restore that established order/geometry into the live workspace. This makes
+// adaptive ratios and sibling reassignment provisional instead of leaking into
+// the N-1 layout after a minimize/hidden participation race.
+static bool RestorePendingAdmissionRecoveryAfterSuspension(
+    const DesktopMonitorKey& key, HWND hwnd, Workspace* workspace) {
+  if (!workspace || !hwnd) return false;
+  auto recoveryIt = g_pendingAdmissionRecoveries.find(hwnd);
+  if (recoveryIt == g_pendingAdmissionRecoveries.end()) return false;
+
+  PendingAdmissionRecovery recovery = recoveryIt->second;
+  g_pendingAdmissionRecoveries.erase(recoveryIt);
+  if (!Model::DesktopMonitorKeyEqual{}(recovery.key, key)) return false;
+
+  const WindowRecord* currentRecord = workspace->Find(hwnd);
+  const WindowRecord* baselineRecord = recovery.baseline.Find(hwnd);
+  if (!currentRecord || !baselineRecord ||
+      currentRecord->state != ManageState::Suspended ||
+      baselineRecord->state != ManageState::Tiled ||
+      currentRecord->tilingGeneration != recovery.generation ||
+      baselineRecord->tilingGeneration != recovery.generation) {
+    return false;
+  }
+
+  Workspace restored = recovery.baseline;
+  if (!restored.Suspend(hwnd, currentRecord->suspensionReason) ||
+      !workspace->RestoreCompatibleActiveLayoutStateFrom(restored)) {
+    Diagnostics::RecordEvent(
+        L"pending admission recovery snapshot became incompatible hwnd=%p desktop=%08X",
+        hwnd, key.desktopId.Data1);
+    return false;
+  }
+
+  Diagnostics::RecordEvent(
+      L"pending admission recovery rolled back after suspension hwnd=%p desktop=%08X",
+      hwnd, key.desktopId.Data1);
+  return true;
+}
+
+static HWND FindConstraintCulprit(
+    const Workspace& workspace, const std::vector<RECT>& rects,
+    HWND preferred = nullptr) {
+  const std::vector<WindowConstraints> constraints =
+      ActiveWindowConstraints(workspace);
+  auto violatesAssignedRect = [&](size_t index) {
+    if (index >= constraints.size() || index >= rects.size()) return false;
+    const WindowConstraints& constraint = constraints[index];
+    return constraint.valid &&
+        (RectWidth(rects[index]) < std::max<LONG>(1, constraint.minWidth) ||
+         RectHeight(rects[index]) < std::max<LONG>(1, constraint.minHeight));
+  };
+
+  const size_t preferredIndex = workspace.TiledIndex(preferred);
+  if (violatesAssignedRect(preferredIndex)) return preferred;
+  for (size_t i = 0; i < constraints.size(); ++i) {
+    if (violatesAssignedRect(i)) return workspace.TiledWindows()[i];
+  }
+  return nullptr;
+}
+
+// Shared constraint compatibility surface. Admission recovery and conflict
+// reporting deliberately use the same fit predicate and augmenting-path primitive
+// so diagnostics cannot disagree with the solver about whether a slot is usable.
+static bool WindowConstraintFitsSlot(
+    const WindowConstraints& constraint, const RECT& slot) {
+  return !constraint.valid ||
+      (RectWidth(slot) >= std::max<LONG>(1, constraint.minWidth) &&
+       RectHeight(slot) >= std::max<LONG>(1, constraint.minHeight));
+}
+
+struct ConstraintSlotCompatibility {
+  std::vector<std::vector<size_t>> slotsByWindow;
+};
+
+static ConstraintSlotCompatibility BuildConstraintSlotCompatibility(
+    const std::vector<WindowConstraints>& constraints,
+    const std::vector<RECT>& slots, bool preferNearbySlots) {
+  ConstraintSlotCompatibility compatibility;
+  compatibility.slotsByWindow.resize(constraints.size());
+  for (size_t windowIndex = 0; windowIndex < constraints.size(); ++windowIndex) {
+    auto& compatibleSlots = compatibility.slotsByWindow[windowIndex];
+    for (size_t slotIndex = 0; slotIndex < slots.size(); ++slotIndex) {
+      if (WindowConstraintFitsSlot(constraints[windowIndex], slots[slotIndex])) {
+        compatibleSlots.push_back(slotIndex);
+      }
+    }
+    if (preferNearbySlots) {
+      std::stable_sort(
+          compatibleSlots.begin(), compatibleSlots.end(),
+          [&](size_t first, size_t second) {
+            const size_t firstDistance = first > windowIndex
+                ? first - windowIndex
+                : windowIndex - first;
+            const size_t secondDistance = second > windowIndex
+                ? second - windowIndex
+                : windowIndex - second;
+            return firstDistance != secondDistance
+                ? firstDistance < secondDistance
+                : first < second;
+          });
+    }
+  }
+  return compatibility;
+}
+
+static bool TryAssignConstraintWindow(
+    size_t candidateWindow,
+    const ConstraintSlotCompatibility& compatibility,
+    std::vector<size_t>* slotOwner, const std::vector<bool>& fixedWindows,
+    std::vector<bool>* visitedSlots, bool preferFreeSlots) {
+  if (!slotOwner || !visitedSlots ||
+      candidateWindow >= compatibility.slotsByWindow.size()) {
+    return false;
+  }
+  constexpr size_t kUnassigned = static_cast<size_t>(-1);
+  const auto& compatibleSlots = compatibility.slotsByWindow[candidateWindow];
+
+  if (preferFreeSlots) {
+    for (size_t slotIndex : compatibleSlots) {
+      if (slotIndex >= slotOwner->size() || (*visitedSlots)[slotIndex] ||
+          (*slotOwner)[slotIndex] != kUnassigned) {
+        continue;
+      }
+      (*visitedSlots)[slotIndex] = true;
+      (*slotOwner)[slotIndex] = candidateWindow;
+      return true;
+    }
+  }
+
+  for (size_t slotIndex : compatibleSlots) {
+    if (slotIndex >= slotOwner->size() || (*visitedSlots)[slotIndex]) continue;
+    (*visitedSlots)[slotIndex] = true;
+    const size_t displacedWindow = (*slotOwner)[slotIndex];
+    if (displacedWindow == kUnassigned ||
+        (displacedWindow < fixedWindows.size() &&
+         !fixedWindows[displacedWindow] &&
+         TryAssignConstraintWindow(
+             displacedWindow, compatibility, slotOwner, fixedWindows,
+             visitedSlots, preferFreeSlots))) {
+      (*slotOwner)[slotIndex] = candidateWindow;
+      return true;
+    }
   }
   return false;
 }
+
+// Applies an already-decided active-slot permutation without changing membership.
+// Suspended logical slots remain anchored; swapping active leaves changes only which
+// active window occupies each currently available logical position.
+static bool ApplyTiledWindowOrder(
+    Workspace& workspace, const std::vector<HWND>& desiredOrder) {
+  if (desiredOrder.size() != workspace.ActiveCount()) return false;
+  for (size_t slotIndex = 0; slotIndex < desiredOrder.size(); ++slotIndex) {
+    const HWND current = workspace.TiledWindows()[slotIndex];
+    if (current != desiredOrder[slotIndex] &&
+        !workspace.SwapTiled(current, desiredOrder[slotIndex])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Layout conversion has different semantics from an explicit order mutation.
+// Preserve the existing order first (the caller already tried that), but if the
+// new Dwindle geometry cannot host that order, find a compatible permutation.
+//
+// Adaptive prefix splits are searched jointly with assignment: for a candidate
+// occupant we allocate the smallest legal span that satisfies that window, which
+// maximizes the recursive tail. With minimum-only constraints, any larger tail is
+// never worse, so failure with this maximal tail proves that occupant cannot lead
+// to a feasible continuation. Once the adaptive prefix ends, ordinary bipartite
+// matching solves the remaining fixed-geometry tail in polynomial time.
+static bool ReassignDwindleLayoutConversionForConstraints(
+    Workspace& workspace, const RECT& workArea, LONG gap,
+    size_t* outMovedWindowCount) {
+  if (workspace.Layout() != TileLayout::Dwindle || workspace.ActiveCount() < 2) {
+    return false;
+  }
+
+  const std::vector<HWND> windows = workspace.TiledWindows();
+  const std::vector<WindowConstraints> constraints =
+      ActiveWindowConstraints(workspace);
+  const std::vector<double> ratios = workspace.DwindleRatios();
+  const size_t count = windows.size();
+  if (constraints.size() != count || ratios.size() + 1 < count) return false;
+
+  const size_t adaptiveSplitCount = AutomaticDwindleAdaptationEnabled()
+      ? std::min(
+            g_settings.adaptiveDwindleSlots,
+            count > 0 ? count - 1 : size_t{0})
+      : 0;
+  const AdaptiveDwindleRatioEnvelope adaptiveEnvelope =
+      GetAdaptiveDwindleRatioEnvelope();
+  std::vector<bool> used(count, false);
+  std::vector<HWND> desiredOrder(count, nullptr);
+  uint64_t usedMask = 0;
+  size_t searchNodes = 0;
+  bool searchLimitReached = false;
+  constexpr size_t kMaxSearchNodes = 250000;
+
+  struct SearchKey {
+    uint64_t usedMask = 0;
+    uint32_t slotIndex = 0;
+    LONG width = 0;
+    LONG height = 0;
+    bool operator==(const SearchKey& other) const noexcept {
+      return usedMask == other.usedMask && slotIndex == other.slotIndex &&
+          width == other.width && height == other.height;
+    }
+  };
+  struct SearchKeyHash {
+    size_t operator()(const SearchKey& key) const noexcept {
+      size_t value = std::hash<uint64_t>{}(key.usedMask);
+      value ^= std::hash<uint32_t>{}(key.slotIndex) +
+          0x9e3779b9u + (value << 6) + (value >> 2);
+      value ^= std::hash<LONG>{}(key.width) +
+          0x9e3779b9u + (value << 6) + (value >> 2);
+      value ^= std::hash<LONG>{}(key.height) +
+          0x9e3779b9u + (value << 6) + (value >> 2);
+      return value;
+    }
+  };
+  std::unordered_set<SearchKey, SearchKeyHash> deadStates;
+  const bool canMemoize = count <= 64;
+
+  auto makeSplit = [&](const RECT& area, size_t slotIndex, LONG firstSpan,
+                       RECT* first, RECT* remaining) {
+    if (!first || !remaining) return false;
+    const bool vertical = (slotIndex % 2) == 0;
+    const LONG span = vertical ? RectWidth(area) : RectHeight(area);
+    if (span < 2) return false;
+    const LONG effectiveGap = std::clamp<LONG>(gap, 0, span - 2);
+    const LONG usable = span - effectiveGap;
+    if (firstSpan < 1 || firstSpan >= usable) return false;
+
+    *remaining = area;
+    if (vertical) {
+      if (g_settings.reverseDwindle) {
+        *first = {area.right - firstSpan, area.top, area.right, area.bottom};
+        remaining->right = first->left - effectiveGap;
+      } else {
+        *first = {area.left, area.top, area.left + firstSpan, area.bottom};
+        remaining->left = first->right + effectiveGap;
+      }
+    } else {
+      if (g_settings.reverseDwindle) {
+        *first = {area.left, area.bottom - firstSpan, area.right, area.bottom};
+        remaining->bottom = first->top - effectiveGap;
+      } else {
+        *first = {area.left, area.top, area.right, area.top + firstSpan};
+        remaining->top = first->bottom + effectiveGap;
+      }
+    }
+    return RectWidth(*remaining) > 0 && RectHeight(*remaining) > 0;
+  };
+
+  auto matchFixedTail = [&](size_t slotIndex, const RECT& area) {
+    const size_t tailCount = count - slotIndex;
+    if (tailCount == 0) return true;
+
+    std::vector<size_t> remainingWindows;
+    remainingWindows.reserve(tailCount);
+    for (size_t windowIndex = 0; windowIndex < count; ++windowIndex) {
+      if (!used[windowIndex]) remainingWindows.push_back(windowIndex);
+    }
+    if (remainingWindows.size() != tailCount) return false;
+
+    std::vector<RECT> allSlots(count);
+    Layout::LayoutDwindle(
+        area, gap, slotIndex, tailCount, ratios,
+        g_settings.reverseDwindle, allSlots);
+    std::vector<RECT> tailSlots(
+        allSlots.begin() + slotIndex, allSlots.end());
+    std::vector<WindowConstraints> tailConstraints;
+    tailConstraints.reserve(tailCount);
+    for (size_t windowIndex : remainingWindows) {
+      tailConstraints.push_back(constraints[windowIndex]);
+    }
+    const ConstraintSlotCompatibility compatibility =
+        BuildConstraintSlotCompatibility(tailConstraints, tailSlots, true);
+    for (const auto& compatibleSlots : compatibility.slotsByWindow) {
+      if (compatibleSlots.empty()) return false;
+    }
+
+    constexpr size_t kUnassigned = static_cast<size_t>(-1);
+    std::vector<size_t> slotOwner(tailCount, kUnassigned);
+    std::vector<bool> fixed(tailCount, false);
+
+    // Seed surviving exact positions first so a layout conversion disturbs as
+    // little order as possible before augmenting paths are allowed to move them.
+    for (size_t localWindow = 0; localWindow < tailCount; ++localWindow) {
+      const size_t originalIndex = remainingWindows[localWindow];
+      if (originalIndex < slotIndex) continue;
+      const size_t localSlot = originalIndex - slotIndex;
+      if (localSlot >= tailCount || slotOwner[localSlot] != kUnassigned) continue;
+      const auto& compatibleSlots = compatibility.slotsByWindow[localWindow];
+      if (std::find(
+              compatibleSlots.begin(), compatibleSlots.end(), localSlot) !=
+          compatibleSlots.end()) {
+        slotOwner[localSlot] = localWindow;
+      }
+    }
+
+    std::vector<size_t> assignmentOrder(tailCount);
+    for (size_t i = 0; i < tailCount; ++i) assignmentOrder[i] = i;
+    std::stable_sort(
+        assignmentOrder.begin(), assignmentOrder.end(),
+        [&](size_t first, size_t second) {
+          const size_t firstChoices = compatibility.slotsByWindow[first].size();
+          const size_t secondChoices = compatibility.slotsByWindow[second].size();
+          return firstChoices != secondChoices
+              ? firstChoices < secondChoices
+              : remainingWindows[first] < remainingWindows[second];
+        });
+
+    for (size_t localWindow : assignmentOrder) {
+      if (std::find(slotOwner.begin(), slotOwner.end(), localWindow) !=
+          slotOwner.end()) {
+        continue;
+      }
+      std::vector<bool> visitedSlots(tailCount, false);
+      if (!TryAssignConstraintWindow(
+              localWindow, compatibility, &slotOwner, fixed,
+              &visitedSlots, true)) {
+        return false;
+      }
+    }
+
+    for (size_t localSlot = 0; localSlot < tailCount; ++localSlot) {
+      if (slotOwner[localSlot] == kUnassigned) return false;
+      desiredOrder[slotIndex + localSlot] =
+          windows[remainingWindows[slotOwner[localSlot]]];
+    }
+    return true;
+  };
+
+  auto search = [&](auto&& self, size_t slotIndex, const RECT& area) -> bool {
+    if (++searchNodes > kMaxSearchNodes) {
+      searchLimitReached = true;
+      return false;
+    }
+    if (slotIndex >= count) return true;
+
+    SearchKey key{};
+    if (canMemoize) {
+      key = {usedMask, static_cast<uint32_t>(slotIndex),
+             RectWidth(area), RectHeight(area)};
+      if (deadStates.find(key) != deadStates.end()) return false;
+    }
+
+    if (slotIndex >= adaptiveSplitCount || slotIndex + 1 >= count) {
+      const bool matched = matchFixedTail(slotIndex, area);
+      if (!matched && canMemoize) deadStates.insert(key);
+      return matched;
+    }
+
+    const bool vertical = (slotIndex % 2) == 0;
+    const LONG span = vertical ? RectWidth(area) : RectHeight(area);
+    if (span < 2) {
+      if (canMemoize) deadStates.insert(key);
+      return false;
+    }
+    const LONG effectiveGap = std::clamp<LONG>(gap, 0, span - 2);
+    const LONG usable = span - effectiveGap;
+    if (usable < 2) {
+      if (canMemoize) deadStates.insert(key);
+      return false;
+    }
+    const LONG minimumAdaptive = std::clamp<LONG>(
+        static_cast<LONG>(std::llround(
+            usable * adaptiveEnvelope.minimum)), 1, usable - 1);
+    const LONG maximumAdaptive = std::clamp<LONG>(
+        static_cast<LONG>(std::llround(
+            usable * adaptiveEnvelope.maximum)), 1, usable - 1);
+    const double currentRatio = ClampDouble(ratios[slotIndex], 0.1, 0.9);
+    const LONG currentSpan = std::clamp<LONG>(
+        static_cast<LONG>(std::llround(usable * currentRatio)),
+        1, usable - 1);
+
+    std::vector<size_t> candidates;
+    candidates.reserve(count - slotIndex);
+    for (size_t windowIndex = 0; windowIndex < count; ++windowIndex) {
+      if (!used[windowIndex]) candidates.push_back(windowIndex);
+    }
+    std::stable_sort(
+        candidates.begin(), candidates.end(),
+        [&](size_t first, size_t second) {
+          const size_t firstDistance = first > slotIndex
+              ? first - slotIndex : slotIndex - first;
+          const size_t secondDistance = second > slotIndex
+              ? second - slotIndex : slotIndex - second;
+          return firstDistance != secondDistance
+              ? firstDistance < secondDistance : first < second;
+        });
+
+    for (size_t windowIndex : candidates) {
+      const WindowConstraints& constraint = constraints[windowIndex];
+      const LONG primaryMinimum = constraint.valid
+          ? std::max<LONG>(
+                1, vertical ? constraint.minWidth : constraint.minHeight)
+          : 1;
+      LONG firstSpan = usable;
+      if (currentSpan >= primaryMinimum) {
+        // Keeping the current manual ratio is always allowed, even when it lies
+        // outside the automatic envelope.
+        firstSpan = currentSpan;
+      }
+      const LONG adaptiveSpan = std::max(primaryMinimum, minimumAdaptive);
+      if (adaptiveSpan <= maximumAdaptive) {
+        // The smallest permitted automatic span maximizes the recursive tail;
+        // with minimum-only constraints this is never worse for continuation.
+        firstSpan = std::min(firstSpan, adaptiveSpan);
+      }
+      if (firstSpan >= usable) continue;
+
+      RECT first{};
+      RECT remaining{};
+      if (!makeSplit(area, slotIndex, firstSpan, &first, &remaining) ||
+          !WindowConstraintFitsSlot(constraint, first)) {
+        continue;
+      }
+
+      used[windowIndex] = true;
+      if (canMemoize) usedMask |= (uint64_t{1} << windowIndex);
+      desiredOrder[slotIndex] = windows[windowIndex];
+      if (self(self, slotIndex + 1, remaining)) return true;
+      desiredOrder[slotIndex] = nullptr;
+      if (canMemoize) usedMask &= ~(uint64_t{1} << windowIndex);
+      used[windowIndex] = false;
+      if (searchLimitReached) return false;
+    }
+
+    if (canMemoize) deadStates.insert(key);
+    return false;
+  };
+
+  RECT normalizedArea{0, 0, RectWidth(workArea), RectHeight(workArea)};
+  if (!search(search, 0, normalizedArea)) {
+    if (searchLimitReached) {
+      Diagnostics::RecordEvent(
+          L"dwindle layout conversion search limit reached windows=%zu adaptive=%zu nodes=%zu",
+          count, adaptiveSplitCount, searchNodes);
+    }
+    return false;
+  }
+
+  Workspace trial = workspace;
+  if (!ApplyTiledWindowOrder(trial, desiredOrder)) return false;
+  if (adaptiveSplitCount > 0) {
+    if (!FitAdaptiveDwindleDividers(trial, workArea, gap)) return false;
+  } else {
+    std::vector<RECT> rects;
+    ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+    if (BuildWorkspaceLayoutPlan(
+            trial, workArea, gap, &rects) != LayoutPlanStatus::Success) {
+      return false;
+    }
+  }
+
+  size_t movedWindowCount = 0;
+  for (size_t i = 0; i < count; ++i) {
+    if (desiredOrder[i] != windows[i]) ++movedWindowCount;
+  }
+  if (outMovedWindowCount) *outMovedWindowCount = movedWindowCount;
+  workspace = std::move(trial);
+  return true;
+}
+
+static void ShowWindowConstraintConflict(
+    const Workspace& workspace, const std::vector<RECT>& rects,
+    HWND fallback, HMONITOR monitor) {
+  const auto constraints = ActiveWindowConstraints(workspace);
+  const ConstraintSlotCompatibility compatibility =
+      BuildConstraintSlotCompatibility(constraints, rects, false);
+  std::vector<bool> involved(constraints.size(), false);
+  for (size_t i = 0; i < constraints.size(); ++i) {
+    involved[i] = i < rects.size() &&
+        !WindowConstraintFitsSlot(constraints[i], rects[i]);
+  }
+  // A failed matching identifies groups competing for too few slots. Follow
+  // alternating paths from unmatched windows to include the other blockers,
+  // even when they currently fit (e.g. Pixeval already occupies the only slot).
+  if (workspace.Layout() == TileLayout::Dwindle &&
+      rects.size() == constraints.size()) {
+    constexpr size_t kUnassigned = static_cast<size_t>(-1);
+    std::vector<size_t> owner(rects.size(), kUnassigned);
+    std::vector<bool> fixed(constraints.size(), false);
+    std::vector<size_t> unmatched;
+    for (size_t window = 0; window < constraints.size(); ++window) {
+      std::vector<bool> visited(rects.size(), false);
+      if (!TryAssignConstraintWindow(
+              window, compatibility, &owner, fixed, &visited, false)) {
+        unmatched.push_back(window);
+      }
+    }
+    if (!unmatched.empty()) {
+      involved.assign(constraints.size(), false);
+      auto include = [&](auto&& self, size_t member) -> void {
+        if (member >= involved.size() || involved[member]) return;
+        involved[member] = true;
+        for (size_t slot : compatibility.slotsByWindow[member]) {
+          if (slot < owner.size() && owner[slot] != kUnassigned) {
+            self(self, owner[slot]);
+          }
+        }
+      };
+      for (size_t window : unmatched) include(include, window);
+    }
+  }
+  std::vector<std::wstring> names;
+  for (size_t i = 0; i < involved.size(); ++i) {
+    if (!involved[i]) continue;
+    std::wstring name = GetWindowProcessName(workspace.TiledWindows()[i]);
+    if (name.size() > 4 && _wcsicmp(name.c_str() + name.size() - 4, L".exe") == 0)
+      name.resize(name.size() - 4);
+    if (name.empty()) name = L"A window";
+    if (std::find(names.begin(), names.end(), name) == names.end())
+      names.push_back(std::move(name));
+  }
+  if (names.empty() && fallback) {
+    std::wstring name = GetWindowProcessName(fallback);
+    if (name.size() > 4 && _wcsicmp(name.c_str() + name.size() - 4, L".exe") == 0)
+      name.resize(name.size() - 4);
+    if (!name.empty()) names.push_back(std::move(name));
+  }
+  std::wstring message;
+  for (size_t i = 0; i < names.size(); ++i) {
+    if (i) message += i + 1 == names.size() ? L" and " : L", ";
+    message += names[i];
+  }
+  if (names.empty()) message = L"A window";
+  message += names.size() > 1
+      ? L" need more space in this layout" : L" needs more space";
+  TrayUi::ShowCommandFailureFlyout(message.c_str(), monitor);
+}
+
+static void ReportRejectedLayoutMutation(
+    const DesktopMonitorKey& key, HMONITOR monitor,
+    UserLayoutMutationKind kind, const wchar_t* action, HWND subject,
+    const Workspace& rejectedWorkspace, const std::vector<RECT>& rejectedRects,
+    HWND culpritHint = nullptr) {
+  switch (kind) {
+    case UserLayoutMutationKind::Resize:
+      ++Diagnostics::g_runtime.counters.rejectedResizeGestures;
+      break;
+    case UserLayoutMutationKind::Order:
+      ++Diagnostics::g_runtime.counters.rejectedOrderCommands;
+      break;
+    case UserLayoutMutationKind::LayoutChange:
+      ++Diagnostics::g_runtime.counters.rejectedLayoutChanges;
+      break;
+  }
+
+  HWND culprit = FindConstraintCulprit(
+      rejectedWorkspace, rejectedRects, subject);
+  if (!culprit) culprit = culpritHint;
+  ShowWindowConstraintConflict(
+      rejectedWorkspace, rejectedRects, culprit, monitor);
+  Wh_Log(
+      L"%ls rejected by layout constraints subject=%p culprit=%p",
+      action, subject, culprit);
+  Diagnostics::RecordEvent(
+      L"layout mutation rejected action=%ls subject=%p culprit=%p desktop=%08X",
+      action, subject, culprit, key.desktopId.Data1);
+}
+
+static bool TryRollbackPendingLayoutMutation(
+    const DesktopMonitorKey& key, HMONITOR monitor, Workspace* workspace,
+    const std::vector<RECT>& rejectedRects, HWND culpritHint = nullptr) {
+  if (!workspace) return false;
+  auto mutationIt = g_pendingLayoutMutations.find(key);
+  if (mutationIt == g_pendingLayoutMutations.end()) return false;
+  // Constraint learning and admission recovery are allowed to adjust ratios or
+  // reorder pending admissions downstream of the user's command. Those are part
+  // of the same delayed transaction, not evidence that the transaction is stale.
+  // Only a membership/participation change makes the saved rollback snapshot
+  // unsafe to apply.
+  if (!workspace->HasSameWindowMembershipAs(mutationIt->second.candidate)) {
+    Diagnostics::RecordEvent(
+        L"discarded stale layout mutation rollback after membership change action=%ls desktop=%08X",
+        mutationIt->second.action, key.desktopId.Data1);
+    g_pendingLayoutMutations.erase(mutationIt);
+    return false;
+  }
+
+  PendingLayoutMutation mutation = mutationIt->second;
+  Workspace restored = *workspace;
+  if (!restored.RestoreLayoutStateFrom(mutation.previous)) {
+    g_pendingLayoutMutations.erase(mutationIt);
+    return false;
+  }
+
+  WorkspaceMetrics rollbackMetrics;
+  if (!GetWorkspaceMetrics(monitor, &rollbackMetrics)) {
+    g_pendingLayoutMutations.erase(mutationIt);
+    return false;
+  }
+  std::vector<RECT> restoredRects;
+  ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+  const LayoutPlanStatus restoredStatus = BuildWorkspaceLayoutPlan(
+      restored, rollbackMetrics.workArea, rollbackMetrics.gap, &restoredRects);
+  if (restoredStatus != LayoutPlanStatus::Success &&
+      restoredStatus != LayoutPlanStatus::NotApplicable) {
+    Diagnostics::RecordEvent(
+        L"layout mutation rollback no longer feasible action=%ls desktop=%08X",
+        mutation.action, key.desktopId.Data1);
+    g_pendingLayoutMutations.erase(mutationIt);
+    return false;
+  }
+
+  for (HWND hwnd : workspace->TiledWindows()) CancelConformanceLease(hwnd);
+  if (restored.Layout() == TileLayout::Floating) {
+    RestoreWorkspaceFloatingGeometry(key, restored);
+  }
+  ReportRejectedLayoutMutation(
+      key, monitor, mutation.kind, mutation.action, mutation.subject,
+      *workspace, rejectedRects, culpritHint);
+  g_workspaces.Save(key, restored);
+  *workspace = std::move(restored);
+  g_pendingLayoutMutations.erase(mutationIt);
+  TrayUi::UpdateIcon(workspace->Layout(), monitor);
+  return true;
+}
+
+static bool HasOutstandingConformanceLease(const Workspace& workspace) {
+  for (HWND hwnd : workspace.TiledWindows()) {
+    if (ReadConformanceLease(hwnd, nullptr) !=
+        ConformanceLeaseReadResult::Missing) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void ClearSettledLayoutMutation(
+    const DesktopMonitorKey& key, const Workspace& workspace) {
+  auto mutationIt = g_pendingLayoutMutations.find(key);
+  if (mutationIt == g_pendingLayoutMutations.end()) return;
+  if (!workspace.HasSameWindowMembershipAs(mutationIt->second.candidate)) {
+    Diagnostics::RecordEvent(
+        L"discarded stale layout mutation settle after membership change action=%ls desktop=%08X",
+        mutationIt->second.action, key.desktopId.Data1);
+    g_pendingLayoutMutations.erase(mutationIt);
+    return;
+  }
+  if (HasOutstandingConformanceLease(workspace)) return;
+  Diagnostics::RecordEvent(
+      L"layout mutation settled action=%ls desktop=%08X",
+      mutationIt->second.action, key.desktopId.Data1);
+  g_pendingLayoutMutations.erase(mutationIt);
+}
+
+
+// Dwindle geometry belongs to slots, not applications. During admission only,
+// assign every active window to a compatible existing slot before concluding
+// that one must float. The new window stays in the candidate slot, and an
+// explicit user-mutation subject stays put.
+static bool ReassignPendingDwindleAdmissionForConstraints(
+    Workspace& workspace, const std::vector<RECT>& slots,
+    HWND pendingAdmission, HWND fixedWindow, size_t* outMovedWindowCount) {
+  if (workspace.Layout() != TileLayout::Dwindle ||
+      slots.size() != workspace.ActiveCount()) {
+    return false;
+  }
+
+  const WindowRecord* pendingRecord = workspace.Find(pendingAdmission);
+  const size_t pendingWindowIndex = workspace.TiledIndex(pendingAdmission);
+  if (!pendingRecord || !pendingRecord->pendingInsertionPlacement ||
+      pendingWindowIndex >= workspace.ActiveCount()) {
+    return false;
+  }
+
+  const std::vector<HWND> windows = workspace.TiledWindows();
+  const std::vector<WindowConstraints> constraints =
+      ActiveWindowConstraints(workspace);
+  const size_t count = windows.size();
+  const ConstraintSlotCompatibility compatibility =
+      BuildConstraintSlotCompatibility(constraints, slots, true);
+  for (const auto& compatibleSlots : compatibility.slotsByWindow) {
+    if (compatibleSlots.empty()) return false;
+  }
+
+  constexpr size_t kUnassigned = static_cast<size_t>(-1);
+  std::vector<size_t> slotOwner(count, kUnassigned);
+  std::vector<bool> fixed(count, false);
+  auto pinWindow = [&](size_t windowIndex, size_t slotIndex) {
+    if (windowIndex >= count || slotIndex >= count ||
+        slotOwner[slotIndex] != kUnassigned) {
+      return false;
+    }
+    const auto& compatibleSlots = compatibility.slotsByWindow[windowIndex];
+    if (std::find(
+            compatibleSlots.begin(), compatibleSlots.end(), slotIndex) ==
+        compatibleSlots.end()) {
+      return false;
+    }
+    slotOwner[slotIndex] = windowIndex;
+    fixed[windowIndex] = true;
+    return true;
+  };
+
+  if (!pinWindow(pendingWindowIndex, pendingWindowIndex)) return false;
+  const size_t fixedWindowIndex = workspace.TiledIndex(fixedWindow);
+  if (fixedWindow && fixedWindow != pendingAdmission &&
+      !pinWindow(fixedWindowIndex, fixedWindowIndex)) {
+    return false;
+  }
+
+  // Seed every compatible current placement. Starting with empty slots allowed
+  // later flexible windows to evict earlier ones and shuffle the whole order.
+  for (size_t i = 0; i < count; ++i) {
+    const auto& compatibleSlots = compatibility.slotsByWindow[i];
+    if (!fixed[i] && slotOwner[i] == kUnassigned &&
+        std::find(compatibleSlots.begin(), compatibleSlots.end(), i) !=
+            compatibleSlots.end()) {
+      slotOwner[i] = i;
+    }
+  }
+  std::vector<size_t> assignmentOrder;
+  assignmentOrder.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    if (!fixed[i]) assignmentOrder.push_back(i);
+  }
+  std::stable_sort(
+      assignmentOrder.begin(), assignmentOrder.end(),
+      [&](size_t first, size_t second) {
+        const size_t firstChoices = compatibility.slotsByWindow[first].size();
+        const size_t secondChoices = compatibility.slotsByWindow[second].size();
+        return firstChoices != secondChoices
+            ? firstChoices < secondChoices
+            : first < second;
+      });
+
+  for (size_t windowIndex : assignmentOrder) {
+    if (std::find(slotOwner.begin(), slotOwner.end(), windowIndex) != slotOwner.end())
+      continue;
+    std::vector<bool> visitedSlots(count, false);
+    if (!TryAssignConstraintWindow(
+            windowIndex, compatibility, &slotOwner, fixed,
+            &visitedSlots, true)) {
+      return false;
+    }
+  }
+
+  std::vector<HWND> desiredOrder(count);
+  size_t movedWindowCount = 0;
+  for (size_t slotIndex = 0; slotIndex < count; ++slotIndex) {
+    if (slotOwner[slotIndex] == kUnassigned) return false;
+    desiredOrder[slotIndex] = windows[slotOwner[slotIndex]];
+    if (desiredOrder[slotIndex] != windows[slotIndex]) ++movedWindowCount;
+  }
+  if (!ApplyTiledWindowOrder(workspace, desiredOrder)) return false;
+  if (outMovedWindowCount) *outMovedWindowCount = movedWindowCount;
+  return movedWindowCount > 0;
+}
+
+static bool FloatWindowAfterFailure(
+    const DesktopMonitorKey& key, Workspace& workspace, HWND hwnd) {
+  if (!workspace.Float(hwnd)) return false;
+  FloatingPlacementHint hint;
+  hint.intent = FloatingPlacementIntent::FailureCenter;
+  if (!RepairFloatingGeometry(key, workspace, hwnd, hint)) {
+    Diagnostics::RecordEvent(
+        L"failure float geometry reset failed hwnd=%p desktop=%08X",
+        hwnd, key.desktopId.Data1);
+  }
+  return true;
+}
+
 
 Workspace::PlacementAction Workspace::ApplyPlacementObservation(
     HWND hwnd, const PlacementObservation& observation) {
@@ -4021,6 +6764,7 @@ Workspace::PlacementAction Workspace::ApplyPlacementObservation(
 
   switch (observation.result) {
     case PlacementResult::Success:
+    case PlacementResult::SuppressedByPhysicalState:
     case PlacementResult::AdjustedByWindow:
     case PlacementResult::Refused:
       return PlacementAction::None;
@@ -4034,11 +6778,57 @@ Workspace::PlacementAction Workspace::ApplyPlacementObservation(
   return PlacementAction::None;
 }
 
+static size_t AutomaticWindowLimitForMonitor(const Model::MonitorId& monitor) {
+  MONITORINFO monitorInfo{sizeof(monitorInfo)};
+  bool monitorInfoRead = false;
+  bool haveMonitorInfo = false;
+  for (const auto& rule : g_settings.monitorWindowLimits) {
+    if (rule.monitor == RuleMonitor::Specific) {
+      if (rule.monitorId == monitor.deviceId) return rule.limit;
+      continue;
+    }
+    if (!monitorInfoRead) {
+      haveMonitorInfo = GetMonitorInfoW(monitor.Resolve(), &monitorInfo);
+      monitorInfoRead = true;
+    }
+    if (haveMonitorInfo && ((monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0) ==
+                              (rule.monitor == RuleMonitor::Primary)) return rule.limit;
+  }
+  return g_settings.automaticWindowLimit;
+}
+
+// Arrangement releases the slot first; physical routing runs after every source
+// workspace in the burst has been saved, so discovery snapshots cannot go stale
+// midway through admission. A failed route therefore already has a safe fallback.
+static bool FloatAutomaticOverflowWindow(
+    const DesktopMonitorKey& key, Workspace& workspace, HWND hwnd,
+    const wchar_t* reason) {
+  const WindowRecord* record = workspace.Find(hwnd);
+  if (!record) return false;
+  const DWORD processId = record->pid;
+  const bool monitorFixed = record->automaticOverflowMonitorFixed;
+  const uint64_t generation = record->tilingGeneration;
+  const bool route = IsAutomaticMode() && g_hooks.hideDestroy &&
+      (g_settings.overflowCreateDesktop || g_settings.overflowTryOtherMonitors);
+  CancelConformanceLease(hwnd);
+  DiscardPendingAdmissionRecovery(hwnd);
+  if (!(route ? workspace.Float(hwnd) : FloatWindowAfterFailure(key, workspace, hwnd))) return false;
+  if (route) {
+    g_wm.overflowWindows.insert(hwnd);
+    g_wm.pendingWindowOverflow.push_back(
+        {hwnd, processId, key.desktopId, key.monitor.deviceId, monitorFixed, generation});
+    Reconcile::ScheduleLifecycleReconcile(nullptr);
+  }
+  Diagnostics::RecordEvent(L"automatic overflow hwnd=%p reason=%ls route=%d", hwnd, reason, route ? 1 : 0);
+  return true;
+}
+
 // Renders one workspace from authoritative model state. Arrangement itself is a
 // small pipeline: repair local invariants -> compute targets -> apply placement ->
-// fold placement outcomes back into the model. Reflow is iterative rather than
-// recursive; each continuing pass removes at least one active tile.
-static void ArrangeWorkspace(const DesktopMonitorKey& key) {
+// fold placement outcomes back into the model. Reflow is iterative: a pass may
+// refresh a native constraint or select one constraint-removal candidate.
+static void ArrangeWorkspace(
+    const DesktopMonitorKey& key, HWND preferredTiledWindow) {
   ++Diagnostics::g_runtime.counters.arrangeCalls;
   if (!IsWorkspaceOnActiveDesktop(key)) return;
 
@@ -4054,26 +6844,673 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
   const LONG gap = metrics.gap;
 
   ObserveAndRepairWorkspaceForArrangement(workspace);
-  const size_t maxPasses = workspace.ActiveCount() + 1;
+  if (IsAutomaticMode() && workspace.Layout() != TileLayout::Floating) {
+    const size_t limit = AutomaticWindowLimitForMonitor(key.monitor);
+    if (limit) {
+      struct VisibleMember {
+        HWND hwnd;
+        DWORD processId;
+        uint64_t generation;
+        bool awaitingInitialPlacement;
+      };
+      std::vector<VisibleMember> visibleMembers;
+      size_t retainedSlots = 0;
+      for (const auto& member : workspace.Records()) {
+        const WindowRecord& record = member.second;
+        if (record.state == ManageState::Tiled ||
+            (record.state == ManageState::Suspended && record.hasSavedSlot &&
+             record.suspensionReason == SuspensionReason::Maximized)) {
+          const SuspensionReason physicalReason = GetPhysicalSuspensionReason(record.hwnd);
+          if (physicalReason == SuspensionReason::Minimized ||
+              physicalReason == SuspensionReason::Hidden || IsWindowCloaked(record.hwnd)) continue;
+          visibleMembers.push_back({record.hwnd, record.pid, record.tilingGeneration, false});
+        }
+      }
+      // Copy pending identities before desktop queries, which can deliver lifecycle events.
+      for (const auto& pending : g_wm.pendingWindowRoutes) {
+        const auto& request = pending.second;
+        if (request.visibleGeneration && IsEqualGUID(request.sourceDesktop, key.desktopId)) {
+          visibleMembers.push_back({pending.first, request.processId, request.visibleGeneration, true});
+        }
+      }
+      std::sort(visibleMembers.begin(), visibleMembers.end(),
+                [](const VisibleMember& first, const VisibleMember& second) {
+                  return first.generation < second.generation;
+                });
+      for (const VisibleMember& member : visibleMembers) {
+        if (member.awaitingInitialPlacement) {
+          GUID owner{};
+          if (!GetWindowDesktopIdSafe(member.hwnd, &owner) || !IsEqualGUID(owner, key.desktopId)) continue;
+          DWORD liveProcessId = 0;
+          GetWindowThreadProcessId(member.hwnd, &liveProcessId);
+          if (!IsWindow(member.hwnd) || liveProcessId != member.processId ||
+              IsWindowTrackedInAnyState(member.hwnd) || IsWindowCloaked(member.hwnd) ||
+              GetPhysicalSuspensionReason(member.hwnd) != SuspensionReason::Maximized ||
+              GetWindowPhysicalMonitor(member.hwnd) != monitor || ShouldWindowStartFloating(member.hwnd)) continue;
+          const auto pending = g_wm.pendingWindowRoutes.find(member.hwnd);
+          if (pending == g_wm.pendingWindowRoutes.end() || pending->second.processId != member.processId ||
+              pending->second.visibleGeneration != member.generation) continue;
+          // Reserve its place in arrival order. Restoration still performs initial placement.
+          ++retainedSlots;
+          continue;
+        }
+        const bool exceedsLimit = retainedSlots >= limit;
+        ++retainedSlots;
+        // Visible maximized members count, but are not restored just to move them.
+        if (exceedsLimit && !IsMoveSizeGestureInProgress(member.hwnd) &&
+            FloatAutomaticOverflowWindow(key, workspace, member.hwnd, L"count limit")) {
+          --retainedSlots;
+        }
+      }
+    }
+  }
+  auto pendingMutationIt = g_pendingLayoutMutations.find(key);
+  if (pendingMutationIt != g_pendingLayoutMutations.end() &&
+      !workspace.HasSameWindowMembershipAs(
+          pendingMutationIt->second.candidate)) {
+    Diagnostics::RecordEvent(
+        L"discarded stale layout mutation before arrangement after membership change action=%ls desktop=%08X",
+        pendingMutationIt->second.action, key.desktopId.Data1);
+    g_pendingLayoutMutations.erase(pendingMutationIt);
+  }
+  // Native reports are cached between arrangements. The first pass below probes
+  // missing/stale reports and pending admissions/restores before geometry is solved.
+  const size_t maxPasses = workspace.ActiveCount() * 5 + 8;
+  bool constraintFailureReported = false;
   for (size_t pass = 0; pass < maxPasses; ++pass) {
     ++Diagnostics::g_runtime.counters.arrangePasses;
     if (workspace.Layout() == TileLayout::Floating || workspace.Empty()) {
       if (workspace.Layout() == TileLayout::Floating) {
-        for (HWND hwnd : workspace.TiledWindows()) CancelConformanceLease(hwnd);
+        for (HWND hwnd : workspace.TiledWindows()) {
+          CancelConformanceLease(hwnd);
+          workspace.ClearInsertionPlacement(hwnd);
+        }
       }
       g_workspaces.Save(key, workspace);
+      ClearSettledLayoutMutation(key, workspace);
       return;
+    }
+
+    if (pass == 0) {
+      RefreshWorkspaceNativeConstraints(workspace, false, L"arrange");
     }
 
     std::vector<RECT> rects;
     ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
-    if (!BuildWorkspaceLayoutPlan(workspace, workArea, gap, &rects)) {
+    LayoutPlanStatus planStatus =
+        BuildWorkspaceLayoutPlan(workspace, workArea, gap, &rects);
+    if (planStatus == LayoutPlanStatus::NotApplicable) {
       g_workspaces.Save(key, workspace);
       return;
+    }
+    if (planStatus == LayoutPlanStatus::Unsatisfiable) {
+      ++Diagnostics::g_runtime.counters.constraintUnsatisfiablePlans;
+      // An explicit order mutation has already passed a full native-constraint
+      // preflight before commit. If it later becomes unsatisfiable, do not
+      // reinterpret the command by reshaping/reassigning it again here. The
+      // delayed transaction gets first refusal: restore the previous order and
+      // report the same constraint toast. Only when that saved order is no
+      // longer feasible either may ordinary global constraint recovery proceed.
+      if (TryRollbackPendingLayoutMutation(
+              key, monitor, &workspace, rects)) {
+        continue;
+      }
+
+      // A settled Dwindle workspace should preserve membership and order when a
+      // DPI/work-area/native-minimum change makes its current ratios infeasible.
+      // Before considering any eviction, clamp only the configured adaptive
+      // divider prefix to the nearest feasible geometry. Pending admissions have
+      // their own transactional recovery below and must not use this settled path.
+      bool hasPendingAdmission = false;
+      for (HWND hwnd : workspace.TiledWindows()) {
+        const WindowRecord* record = workspace.Find(hwnd);
+        if (record && record->pendingInsertionPlacement) {
+          hasPendingAdmission = true;
+          break;
+        }
+      }
+      if (!hasPendingAdmission &&
+          workspace.Layout() == TileLayout::Dwindle &&
+          AutomaticDwindleAdaptationEnabled()) {
+        Workspace adaptive = workspace;
+        const std::vector<double> beforeRatios = adaptive.DwindleRatios();
+        if (FitAdaptiveDwindleDividers(adaptive, workArea, gap)) {
+          const auto& afterRatios = adaptive.DwindleRatios();
+          const size_t ratioCount =
+              std::min(beforeRatios.size(), afterRatios.size());
+          size_t changedRatios = 0;
+          for (size_t splitIndex = 0; splitIndex < ratioCount; ++splitIndex) {
+            if (std::abs(beforeRatios[splitIndex] -
+                         afterRatios[splitIndex]) <= 1e-9) {
+              continue;
+            }
+            ++changedRatios;
+            Diagnostics::RecordEvent(
+                L"settled dwindle adaptive ratio changed split=%zu from=%.6f to=%.6f desktop=%08X",
+                splitIndex, beforeRatios[splitIndex], afterRatios[splitIndex],
+                key.desktopId.Data1);
+          }
+
+          // BuildWorkspaceLayoutPlan was unsatisfiable immediately above, so a
+          // successful fitter should necessarily alter geometry. Guard anyway to
+          // prevent a pathological no-op from spinning the arrangement loop.
+          if (changedRatios > 0) {
+            for (HWND hwnd : workspace.TiledWindows()) {
+              CancelConformanceLease(hwnd);
+            }
+            workspace = std::move(adaptive);
+            Diagnostics::RecordEvent(
+                L"settled dwindle constraints recovered adaptively changes=%zu desktop=%08X",
+                changedRatios, key.desktopId.Data1);
+            g_workspaces.Save(key, workspace);
+            continue;
+          }
+        }
+      }
+
+      // Keep the exact pre-recovery state. If a pending admission is moved or
+      // adaptive geometry is changed below, that state remains provisional until
+      // conformance settles.
+      const Workspace pendingAdmissionRecoveryBaseline = workspace;
+
+      HWND victim = nullptr;
+      bool intrinsicallyImpossible = false;
+      bool pendingAdmissionRejected = false;
+      bool singleRemovalMakesCurrentOrderViable = false;
+
+      // Removing another member cannot help a window whose authoritative native
+      // minimum is larger than the entire usable workspace. Float that window
+      // directly; reserve candidate testing for aggregate constraint conflicts.
+      const LONG workspaceWidth = RectWidth(workArea);
+      const LONG workspaceHeight = RectHeight(workArea);
+      const std::vector<WindowConstraints> activeConstraints =
+          ActiveWindowConstraints(workspace);
+      uint64_t newestImpossibleGeneration = 0;
+      for (size_t i = 0;
+           i < workspace.TiledWindows().size() &&
+           i < activeConstraints.size();
+           ++i) {
+        const WindowConstraints& constraint = activeConstraints[i];
+        if (!constraint.valid) continue;
+
+        const bool impossible =
+            std::max<LONG>(1, constraint.minWidth) > workspaceWidth ||
+            std::max<LONG>(1, constraint.minHeight) > workspaceHeight;
+        if (!impossible) continue;
+
+        const HWND candidate = workspace.TiledWindows()[i];
+        if (IsAutomaticMode() && IsMoveSizeGestureInProgress(candidate)) continue;
+        const WindowRecord* candidateRecord = workspace.Find(candidate);
+        const uint64_t generation =
+            candidateRecord ? candidateRecord->tilingGeneration : 0;
+        if (!victim || generation >= newestImpossibleGeneration) {
+          victim = candidate;
+          newestImpossibleGeneration = generation;
+        }
+      }
+
+      if (victim) {
+        intrinsicallyImpossible = true;
+      } else {
+        struct ConstraintCandidate {
+          HWND hwnd;
+          uint64_t generation;
+        };
+
+        std::vector<ConstraintCandidate> candidates;
+        candidates.reserve(workspace.ActiveCount());
+        for (HWND candidate : workspace.TiledWindows()) {
+          if (IsAutomaticMode() && IsMoveSizeGestureInProgress(candidate)) continue;
+          const WindowRecord* candidateRecord = workspace.Find(candidate);
+          candidates.push_back({
+              candidate,
+              candidateRecord ? candidateRecord->tilingGeneration : 0});
+        }
+        std::stable_sort(
+            candidates.begin(), candidates.end(),
+            [&](const ConstraintCandidate& first,
+                const ConstraintCandidate& second) {
+              const bool firstPreferred = first.hwnd == preferredTiledWindow;
+              const bool secondPreferred = second.hwnd == preferredTiledWindow;
+              if (firstPreferred != secondPreferred) return !firstPreferred;
+              return first.generation > second.generation;
+            });
+
+        // A fresh admission's configured position is a preference, not a reason
+        // to discard it. Once placement has proven a conflict, preserve it when
+        // adaptive Dwindle ratios can make it viable, then try nearby slots before
+        // allowing broader sibling reassignment.
+        const TileLayout layout = workspace.Layout();
+        const bool searchAlternateInsertion =
+            layout == TileLayout::MasterStack ||
+            layout == TileLayout::MasterStackH ||
+            layout == TileLayout::Columns || layout == TileLayout::Rows ||
+            layout == TileLayout::Dwindle;
+        const size_t preferredTiledIndex =
+            workspace.TiledIndex(preferredTiledWindow);
+        Workspace viableInsertion;
+        HWND repositionedAdmission = nullptr;
+        size_t previousInsertionIndex = 0;
+        size_t viableInsertionIndex = 0;
+        bool matchedDwindleConstraints = false;
+        size_t reassignedDwindleWindows = 0;
+        struct DwindleRatioAdjustment {
+          size_t splitIndex;
+          double before;
+          double after;
+        };
+        std::vector<DwindleRatioAdjustment> adjustedDwindleRatios;
+
+        auto rememberDwindleRatioAdjustments = [&](const std::vector<double>& before,
+                                                   const Workspace& after) {
+          adjustedDwindleRatios.clear();
+          const auto& afterRatios = after.DwindleRatios();
+          const size_t count = std::min(before.size(), afterRatios.size());
+          for (size_t splitIndex = 0; splitIndex < count; ++splitIndex) {
+            if (std::abs(before[splitIndex] - afterRatios[splitIndex]) <= 1e-9) {
+              continue;
+            }
+            adjustedDwindleRatios.push_back(
+                {splitIndex, before[splitIndex], afterRatios[splitIndex]});
+          }
+        };
+
+        auto preservePreferredWindow = [&](const Workspace& trial) {
+          return preferredTiledIndex >= workspace.ActiveCount() ||
+              trial.TiledIndex(preferredTiledWindow) == preferredTiledIndex;
+        };
+
+        auto acceptInsertion = [&](Workspace&& trial, HWND hwnd,
+                                   size_t currentIndex, size_t targetIndex,
+                                   size_t movedWindowCount) {
+          viableInsertion = std::move(trial);
+          repositionedAdmission = hwnd;
+          previousInsertionIndex = currentIndex;
+          viableInsertionIndex = targetIndex;
+          matchedDwindleConstraints = movedWindowCount > 0;
+          reassignedDwindleWindows = movedWindowCount;
+        };
+
+        if (searchAlternateInsertion && layout == TileLayout::Dwindle) {
+          // Adaptive Dwindle Slots controls which leading split ratios may move,
+          // not where the pending window may be placed. Preserve its saved/current
+          // slot first; then walk every nearby slot before reassigning siblings.
+          for (const ConstraintCandidate& candidate : candidates) {
+            const WindowRecord* candidateRecord = workspace.Find(candidate.hwnd);
+            if (!candidateRecord ||
+                !candidateRecord->pendingInsertionPlacement ||
+                candidate.hwnd == preferredTiledWindow) {
+              continue;
+            }
+
+            const size_t currentIndex = workspace.TiledIndex(candidate.hwnd);
+            if (currentIndex >= workspace.ActiveCount()) continue;
+
+            auto tryAdaptiveIndex = [&](size_t targetIndex,
+                                        bool tryFixedGeometryFirst) {
+              Workspace trial = workspace;
+              if (targetIndex != currentIndex &&
+                  !trial.MovePendingAdmissionToIndex(
+                      candidate.hwnd, targetIndex)) {
+                return false;
+              }
+              if (!preservePreferredWindow(trial)) return false;
+
+              if (tryFixedGeometryFirst) {
+                std::vector<RECT> trialRects;
+                ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+                if (BuildWorkspaceLayoutPlan(
+                        trial, workArea, gap, &trialRects) ==
+                    LayoutPlanStatus::Success) {
+                  adjustedDwindleRatios.clear();
+                  acceptInsertion(
+                      std::move(trial), candidate.hwnd, currentIndex,
+                      targetIndex, 0);
+                  return true;
+                }
+              }
+
+              if (!AutomaticDwindleAdaptationEnabled()) return false;
+              const std::vector<double> beforeRatios = trial.DwindleRatios();
+              if (!FitAdaptiveDwindleDividers(trial, workArea, gap)) {
+                return false;
+              }
+              rememberDwindleRatioAdjustments(beforeRatios, trial);
+              acceptInsertion(
+                  std::move(trial), candidate.hwnd, currentIndex,
+                  targetIndex, 0);
+              return true;
+            };
+
+            // The current assignment is already known to fail at fixed geometry,
+            // so test whether changing only eligible ratios can preserve it.
+            if (tryAdaptiveIndex(currentIndex, false)) break;
+
+            for (size_t distance = 1;
+                 distance < workspace.ActiveCount() && !repositionedAdmission;
+                 ++distance) {
+              if (currentIndex + distance < workspace.ActiveCount() &&
+                  tryAdaptiveIndex(currentIndex + distance, true)) {
+                break;
+              }
+              if (currentIndex >= distance &&
+                  tryAdaptiveIndex(currentIndex - distance, true)) {
+                break;
+              }
+            }
+            if (repositionedAdmission) break;
+          }
+
+          // Only after preserving/moving the pending member fails do we allow
+          // matching to move established siblings. Nearby target slots are tried
+          // before matching around the current slot to minimize disruption.
+          if (!repositionedAdmission) {
+            for (const ConstraintCandidate& candidate : candidates) {
+              const WindowRecord* candidateRecord = workspace.Find(candidate.hwnd);
+              if (!candidateRecord ||
+                  !candidateRecord->pendingInsertionPlacement ||
+                  candidate.hwnd == preferredTiledWindow) {
+                continue;
+              }
+
+              const size_t currentIndex = workspace.TiledIndex(candidate.hwnd);
+              if (currentIndex >= workspace.ActiveCount()) continue;
+
+              auto tryMatchedIndex = [&](size_t targetIndex) {
+                Workspace trial = workspace;
+                if (targetIndex != currentIndex &&
+                    !trial.MovePendingAdmissionToIndex(
+                        candidate.hwnd, targetIndex)) {
+                  return false;
+                }
+                if (!preservePreferredWindow(trial)) return false;
+
+                std::vector<RECT> trialRects;
+                ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+                LayoutPlanStatus trialStatus = BuildWorkspaceLayoutPlan(
+                    trial, workArea, gap, &trialRects);
+                size_t movedWindowCount = 0;
+                if (trialStatus != LayoutPlanStatus::Success) {
+                  if (!ReassignPendingDwindleAdmissionForConstraints(
+                          trial, trialRects, candidate.hwnd,
+                          preferredTiledWindow, &movedWindowCount)) {
+                    return false;
+                  }
+                  ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+                  trialStatus = BuildWorkspaceLayoutPlan(
+                      trial, workArea, gap, &trialRects);
+                  if (trialStatus != LayoutPlanStatus::Success) {
+                    if (!AutomaticDwindleAdaptationEnabled()) return false;
+                    const std::vector<double> beforeRatios =
+                        trial.DwindleRatios();
+                    if (!FitAdaptiveDwindleDividers(
+                            trial, workArea, gap)) {
+                      return false;
+                    }
+                    rememberDwindleRatioAdjustments(beforeRatios, trial);
+                  } else {
+                    adjustedDwindleRatios.clear();
+                  }
+                } else {
+                  adjustedDwindleRatios.clear();
+                }
+
+                acceptInsertion(
+                    std::move(trial), candidate.hwnd, currentIndex,
+                    targetIndex, movedWindowCount);
+                return true;
+              };
+
+              for (size_t distance = 1;
+                   distance < workspace.ActiveCount() && !repositionedAdmission;
+                   ++distance) {
+                if (currentIndex + distance < workspace.ActiveCount() &&
+                    tryMatchedIndex(currentIndex + distance)) {
+                  break;
+                }
+                if (currentIndex >= distance &&
+                    tryMatchedIndex(currentIndex - distance)) {
+                  break;
+                }
+              }
+              if (!repositionedAdmission && tryMatchedIndex(currentIndex)) {
+                break;
+              }
+              if (repositionedAdmission) break;
+            }
+          }
+        } else if (searchAlternateInsertion) {
+          // Other layouts have no automatic divider adaptation or matching.
+          for (const ConstraintCandidate& candidate : candidates) {
+            const WindowRecord* candidateRecord = workspace.Find(candidate.hwnd);
+            if (!candidateRecord ||
+                !candidateRecord->pendingInsertionPlacement ||
+                candidate.hwnd == preferredTiledWindow) {
+              continue;
+            }
+
+            const size_t currentIndex = workspace.TiledIndex(candidate.hwnd);
+            if (currentIndex >= workspace.ActiveCount()) continue;
+
+            auto tryInsertionIndex = [&](size_t targetIndex) {
+              Workspace trial = workspace;
+              if (!trial.MovePendingAdmissionToIndex(
+                      candidate.hwnd, targetIndex) ||
+                  !preservePreferredWindow(trial)) {
+                return false;
+              }
+              std::vector<RECT> trialRects;
+              ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+              if (BuildWorkspaceLayoutPlan(
+                      trial, workArea, gap, &trialRects) !=
+                  LayoutPlanStatus::Success) {
+                return false;
+              }
+              adjustedDwindleRatios.clear();
+              acceptInsertion(
+                  std::move(trial), candidate.hwnd, currentIndex,
+                  targetIndex, 0);
+              return true;
+            };
+
+            for (size_t distance = 1;
+                 distance < workspace.ActiveCount() && !repositionedAdmission;
+                 ++distance) {
+              if (currentIndex + distance < workspace.ActiveCount() &&
+                  tryInsertionIndex(currentIndex + distance)) {
+                break;
+              }
+              if (currentIndex >= distance &&
+                  tryInsertionIndex(currentIndex - distance)) {
+                break;
+              }
+            }
+            if (repositionedAdmission) break;
+          }
+        }
+
+        if (repositionedAdmission) {
+          RememberPendingAdmissionRecovery(
+              key, repositionedAdmission, pendingAdmissionRecoveryBaseline);
+          workspace = std::move(viableInsertion);
+          if (matchedDwindleConstraints) {
+            Wh_Log(
+                L"Dwindle admission reassigned %zu windows across compatible slots for HWND %p",
+                reassignedDwindleWindows,
+                static_cast<void*>(repositionedAdmission));
+            Diagnostics::RecordEvent(
+                L"dwindle admission matched all constraints hwnd=%p slot=%zu reassigned=%zu",
+                repositionedAdmission, viableInsertionIndex,
+                reassignedDwindleWindows);
+          }
+          if (!adjustedDwindleRatios.empty()) {
+            Wh_Log(
+                L"Dwindle admission adapted %zu split ratio(s) for HWND %p at slot %zu",
+                adjustedDwindleRatios.size(),
+                static_cast<void*>(repositionedAdmission),
+                viableInsertionIndex);
+            Diagnostics::RecordEvent(
+                L"dwindle admission adapted ratios hwnd=%p slot=%zu changes=%zu",
+                repositionedAdmission, viableInsertionIndex,
+                adjustedDwindleRatios.size());
+            for (const DwindleRatioAdjustment& adjustment :
+                 adjustedDwindleRatios) {
+              Wh_Log(
+                  L"Dwindle adaptive split %zu changed %.6f -> %.6f for HWND %p",
+                  adjustment.splitIndex, adjustment.before, adjustment.after,
+                  static_cast<void*>(repositionedAdmission));
+              Diagnostics::RecordEvent(
+                  L"dwindle adaptive ratio changed hwnd=%p split=%zu from=%.6f to=%.6f",
+                  repositionedAdmission, adjustment.splitIndex,
+                  adjustment.before, adjustment.after);
+            }
+          }
+          if (previousInsertionIndex != viableInsertionIndex) {
+            Wh_Log(
+                L"Constraint-aware admission repositioned HWND %p from slot %zu to %zu",
+                static_cast<void*>(repositionedAdmission),
+                previousInsertionIndex, viableInsertionIndex);
+            Diagnostics::RecordEvent(
+                L"constraint-aware admission repositioned hwnd=%p from=%zu to=%zu",
+                repositionedAdmission, previousInsertionIndex,
+                viableInsertionIndex);
+          }
+          g_workspaces.Save(key, workspace);
+          continue;
+        }
+
+        // A still-pending admission/restore owns the failure it introduced.
+        // Once every placement/adaptive/matching recovery above has failed, reject
+        // that pending member itself; never evict an already-settled sibling to
+        // make room for it.
+        for (const ConstraintCandidate& candidate : candidates) {
+          const WindowRecord* candidateRecord = workspace.Find(candidate.hwnd);
+          if (!candidateRecord || !candidateRecord->pendingInsertionPlacement) {
+            continue;
+          }
+          victim = candidate.hwnd;
+          pendingAdmissionRejected = true;
+          break;
+        }
+
+        if (!victim) {
+          // Prefer a removal that makes the current order viable in one step.
+          for (const ConstraintCandidate& candidate : candidates) {
+            Workspace trial = workspace;
+            if (!trial.Float(candidate.hwnd)) continue;
+
+            std::vector<RECT> trialRects;
+            ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+            if (BuildWorkspaceLayoutPlan(
+                    trial, workArea, gap, &trialRects) !=
+                LayoutPlanStatus::Success) {
+              continue;
+            }
+
+            victim = candidate.hwnd;
+            singleRemovalMakesCurrentOrderViable = true;
+            break;
+          }
+        }
+        // Automatic mode also resolves conflicts requiring several removals.
+        // Each pass releases one member and replans the remaining group.
+        if (!victim && IsAutomaticMode() && !candidates.empty()) {
+          victim = candidates.front().hwnd;
+        }
+      }
+      const WindowRecord* victimRecord = victim ? workspace.Find(victim) : nullptr;
+      if (!victim || !victimRecord) {
+        const HWND culprit = FindConstraintCulprit(
+            workspace, rects, preferredTiledWindow);
+        if (!constraintFailureReported) {
+          ShowWindowConstraintConflict(
+              workspace, rects, culprit, monitor);
+          constraintFailureReported = true;
+        }
+        Diagnostics::RecordEvent(
+            L"constraint conflict left membership unchanged; no single settled removal is sufficient desktop=%08X",
+            key.desktopId.Data1);
+        g_workspaces.Save(key, workspace);
+        return;
+      }
+
+      const uint64_t generation = victimRecord->tilingGeneration;
+      const WindowConstraints constraints = victimRecord->constraints;
+      if (intrinsicallyImpossible) {
+        Wh_Log(
+          L"Native minimum exceeds workspace; floating HWND %p (generation=%llu)",
+          static_cast<void*>(victim),
+          static_cast<unsigned long long>(generation));
+      } else if (pendingAdmissionRejected) {
+        Wh_Log(
+            L"Constraint conflict; rejecting pending admission HWND %p (generation=%llu)",
+            static_cast<void*>(victim),
+            static_cast<unsigned long long>(generation));
+        Diagnostics::RecordEvent(
+            L"pending admission rejected hwnd=%p generation=%llu",
+            victim, static_cast<unsigned long long>(generation));
+      } else if (singleRemovalMakesCurrentOrderViable) {
+        Wh_Log(
+            L"Current-order constraint conflict; floating single-removal candidate HWND %p (generation=%llu)",
+            static_cast<void*>(victim),
+            static_cast<unsigned long long>(generation));
+      } else {
+        Wh_Log(
+            L"Constraint conflict; floating fallback HWND %p (generation=%llu)",
+            static_cast<void*>(victim),
+            static_cast<unsigned long long>(generation));
+      }
+      Diagnostics::RecordEvent(
+          L"native constraints floated hwnd=%p generation=%llu intrinsic=%d singleRemovalCurrentOrder=%d preferred=%d min=%ldx%ld",
+          victim, static_cast<unsigned long long>(generation),
+          intrinsicallyImpossible ? 1 : 0,
+          singleRemovalMakesCurrentOrderViable ? 1 : 0,
+          victim == preferredTiledWindow ? 1 : 0,
+          constraints.minWidth, constraints.minHeight);
+
+      for (size_t i = 0;
+           i < activeConstraints.size() &&
+           i < workspace.TiledWindows().size();
+           ++i) {
+        const WindowConstraints& memberConstraint = activeConstraints[i];
+        if (!memberConstraint.valid) continue;
+        size_t compatibleSlotCount = 0;
+        for (const RECT& slot : rects) {
+          if (WindowConstraintFitsSlot(memberConstraint, slot)) {
+            ++compatibleSlotCount;
+          }
+        }
+        Diagnostics::RecordEvent(
+            L"constraint conflict member hwnd=%p slot=%zu min=%ldx%ld compatibleSlots=%zu",
+            workspace.TiledWindows()[i], i,
+            memberConstraint.minWidth, memberConstraint.minHeight,
+            compatibleSlotCount);
+      }
+
+      CancelConformanceLease(victim);
+      const HWND culprit = FindConstraintCulprit(workspace, rects, victim);
+      const bool automaticOverflow = IsAutomaticMode();
+      if (!constraintFailureReported && !automaticOverflow) {
+        ShowWindowConstraintConflict(workspace, rects, culprit ? culprit : victim, monitor);
+        constraintFailureReported = true;
+      }
+      DiscardPendingAdmissionRecovery(victim);
+      if (!(automaticOverflow
+                ? FloatAutomaticOverflowWindow(key, workspace, victim, L"cannot fit")
+                : FloatWindowAfterFailure(key, workspace, victim))) {
+        g_workspaces.Save(key, workspace);
+        return;
+      }
+      ++Diagnostics::g_runtime.counters.constraintFloats;
+      g_workspaces.Save(key, workspace);
+      if (workspace.Empty()) return;
+      continue;
     }
 
     std::vector<HWND> toFloat;
     std::vector<HWND> toForget;
+    bool constraintReplanRequested = false;
+    bool layoutMutationRollbackRequested = false;
     const std::vector<HWND> active = workspace.TiledWindows();
     const size_t count = std::min(active.size(), rects.size());
     for (size_t i = 0; i < count; ++i) {
@@ -4082,36 +7519,74 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
 
       if (!IsWindow(hwnd)) {
         action = Workspace::PlacementAction::Forget;
-      } else if (GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None &&
-                 !IsWindowCloaked(hwnd)) {
+      } else {
         const WindowRecord* record = workspace.Find(hwnd);
         if (!record) {
           action = Workspace::PlacementAction::Forget;
-        } else {
+        } else if (
+            GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None &&
+            !IsWindowCloaked(hwnd)) {
           PlacementObservation observation =
               PlaceWindowChecked(hwnd, record->canMove, rects[i]);
           action = workspace.ApplyPlacementObservation(hwnd, observation);
-          if (action != Workspace::PlacementAction::None) {
-            CancelConformanceLease(hwnd);
-          } else {
-            switch (observation.result) {
-              case PlacementResult::Success:
-                if (observation.placementIssued) {
-                  BeginConformanceLease(hwnd, rects[i]);
-                }
-                break;
-              case PlacementResult::AdjustedByWindow:
-              case PlacementResult::Refused:
-                BeginConformanceLease(hwnd, rects[i], true);
-                break;
-              case PlacementResult::AccessDenied:
-              case PlacementResult::Dead:
-                break;
+
+          // A native minimum report is authoritative as soon as it is available.
+          // If an application still corrects a legal target, re-probe in case its
+          // own WM_GETMINMAXINFO contract changed dynamically. If the report is
+          // unchanged, leave the event to conformance handling rather than
+          // inventing a second empirical minimum-size policy.
+          if (observation.result == PlacementResult::AdjustedByWindow) {
+            const WindowConstraints before = record->constraints;
+            const WindowConstraints fresh = ProbeWindowConstraints(hwnd);
+            const WindowConstraints observed =
+                MergeConstraintProbeWithCache(before, fresh);
+            const bool geometryChanged =
+                !SameConstraintGeometry(before, observed);
+            workspace.UpdateConstraints(hwnd, observed);
+
+            if (fresh.valid && geometryChanged) {
+              action = Workspace::PlacementAction::None;
+              constraintReplanRequested = true;
+              CancelConformanceLease(hwnd);
+              Diagnostics::RecordEvent(
+                  L"placement refreshed native constraints hwnd=%p min=%ldx%ld dpi=%u",
+                  hwnd, observed.minWidth, observed.minHeight, observed.dpi);
+            }
+          }
+
+          if (!constraintReplanRequested) {
+            if (action != Workspace::PlacementAction::None) {
+              CancelConformanceLease(hwnd);
+            } else {
+              switch (observation.result) {
+                case PlacementResult::Success:
+                  if (observation.placementIssued) {
+                    BeginConformanceLease(
+                        hwnd, rects[i], false, preferredTiledWindow);
+                  }
+                  break;
+                case PlacementResult::SuppressedByPhysicalState:
+                  break;
+                case PlacementResult::AdjustedByWindow:
+                case PlacementResult::Refused:
+                  BeginConformanceLease(
+                      hwnd, rects[i], true, preferredTiledWindow);
+                  if (g_settings.conformanceLeaseMs == 0 &&
+                      TryRollbackPendingLayoutMutation(
+                          key, monitor, &workspace, rects, hwnd)) {
+                    layoutMutationRollbackRequested = true;
+                  }
+                  break;
+                case PlacementResult::AccessDenied:
+                case PlacementResult::Dead:
+                  break;
+              }
             }
           }
         }
       }
 
+      if (layoutMutationRollbackRequested) break;
       switch (action) {
         case Workspace::PlacementAction::None:
           break;
@@ -4122,6 +7597,13 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
           toForget.push_back(hwnd);
           break;
       }
+      if (constraintReplanRequested) break;
+    }
+
+    if (layoutMutationRollbackRequested) continue;
+    if (constraintReplanRequested) {
+      g_workspaces.Save(key, workspace);
+      continue;
     }
 
     bool participationChanged = false;
@@ -4139,12 +7621,24 @@ static void ArrangeWorkspace(const DesktopMonitorKey& key) {
           L"placement failure forced hwnd=%p to per-window Floating (result=%d)",
           hwnd, static_cast<int>(record->lastPlacementResult));
       CancelConformanceLease(hwnd);
-      participationChanged |= workspace.Float(hwnd);
+      participationChanged |= FloatWindowAfterFailure(key, workspace, hwnd);
     }
 
+    if (!participationChanged) {
+      ClearSettledInsertionPlacements(key, workspace);
+    }
     g_workspaces.Save(key, workspace);
-    if (!participationChanged || workspace.Empty()) return;
+    if (!participationChanged || workspace.Empty()) {
+      ClearSettledLayoutMutation(key, workspace);
+      return;
+    }
   }
+
+  Diagnostics::RecordEvent(
+      L"arrangement safety bound exhausted desktop=%08X active=%zu",
+      key.desktopId.Data1, workspace.ActiveCount());
+  g_workspaces.Save(key, workspace);
+  ClearSettledLayoutMutation(key, workspace);
 }
 
 // Consumes one expired generation. A user gesture, migration, or new
@@ -4186,13 +7680,45 @@ static bool GetCurrentAuthoritativeTiledRect(
   if (!GetWorkspaceMetrics(monitor, &metrics)) return false;
 
   std::vector<RECT> rects;
-  if (!BuildWorkspaceLayoutPlan(
-          workspace, metrics.workArea, metrics.gap, &rects) ||
+  if (BuildWorkspaceLayoutPlan(
+          workspace, metrics.workArea, metrics.gap, &rects) !=
+          LayoutPlanStatus::Success ||
       tiledIndex >= rects.size()) {
     return false;
   }
   *outRect = rects[tiledIndex];
   return true;
+}
+
+// An admission remains movable until every placement produced by its reflow has
+// survived conformance. This matters because an existing sibling, not only the
+// new HWND, can reveal the constraint that requires an alternate insertion slot.
+static bool ClearSettledInsertionPlacements(
+    const DesktopMonitorKey& key, Workspace& workspace) {
+  if (HasOutstandingConformanceLease(workspace)) return false;
+
+  bool changed = false;
+  for (HWND hwnd : workspace.TiledWindows()) {
+    const WindowRecord* record = workspace.Find(hwnd);
+    if (!record || !record->pendingInsertionPlacement ||
+        GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+        IsWindowCloaked(hwnd)) {
+      continue;
+    }
+
+    RECT authoritative{};
+    RECT current{};
+    if (GetCurrentAuthoritativeTiledRect(
+            key, workspace, hwnd, &authoritative) &&
+        GetWindowFrameRect(hwnd, &current) &&
+        RectsNear(current, authoritative)) {
+      if (workspace.ClearInsertionPlacement(hwnd)) {
+        changed = true;
+        DiscardPendingAdmissionRecovery(hwnd);
+      }
+    }
+  }
+  return changed;
 }
 
 // HWND values can be reused. Conformance is allowed to act only on the same
@@ -4262,18 +7788,54 @@ static void FinalizeExpiredConformanceLease(
     Diagnostics::RecordEvent(
         L"conformance lease completed compliant hwnd=%p attempts=%u",
         hwnd, lease.attempts);
+    if (ClearSettledInsertionPlacements(owners.front(), workspace)) {
+      g_workspaces.Save(owners.front(), workspace);
+    }
+    ClearSettledLayoutMutation(owners.front(), workspace);
     return;
   }
 
   // Expiry processing performs several live queries after its initial preflight.
-  // A window that entered fullscreen/maximized meanwhile must remain suspended,
-  // not be permanently converted to Floating by this stale lease verdict.
+  // A window that became suspended meanwhile must not be converted to Floating.
   if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) {
     stale();
     return;
   }
 
-  if (!workspace.Float(hwnd)) {
+  // The deadline is the last chance to catch a dynamic native minimum report
+  // that changed after planning. If the app's own report is unchanged, remaining
+  // nonconformance is not reinterpreted as a second empirical minimum policy.
+  const WindowConstraints beforeConstraints = record->constraints;
+  const WindowConstraints freshConstraints = ProbeWindowConstraints(hwnd);
+  const WindowConstraints observed = MergeConstraintProbeWithCache(
+      beforeConstraints, freshConstraints);
+  if (!ConformanceWindowMatchesRecordIdentity(hwnd, *record) ||
+      GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+      IsWindowCloaked(hwnd)) {
+    stale();
+    return;
+  }
+  const bool geometryChanged =
+      !SameConstraintGeometry(beforeConstraints, observed);
+  workspace.UpdateConstraints(hwnd, observed);
+  if (freshConstraints.valid && geometryChanged) {
+    Diagnostics::RecordEvent(
+        L"conformance deadline refreshed native constraints hwnd=%p min=%ldx%ld dpi=%u",
+        hwnd, observed.minWidth, observed.minHeight, observed.dpi);
+    g_workspaces.Save(owners.front(), workspace);
+    ArrangeWorkspace(owners.front(), lease.preferredTiledWindow);
+    return;
+  }
+
+  const std::vector<RECT> noRejectedRects;
+  if (TryRollbackPendingLayoutMutation(
+          owners.front(), owners.front().ResolveMonitor(), &workspace,
+          noRejectedRects, hwnd)) {
+    ArrangeWorkspace(owners.front());
+    return;
+  }
+
+  if (!FloatWindowAfterFailure(owners.front(), workspace, hwnd)) {
     stale();
     return;
   }
@@ -4286,7 +7848,7 @@ static void FinalizeExpiredConformanceLease(
       L"Window %p remained outside its assigned tile at conformance deadline; switching it to Floating",
       hwnd);
   g_workspaces.Save(owners.front(), workspace);
-  ArrangeWorkspace(owners.front());
+  ArrangeWorkspace(owners.front(), lease.preferredTiledWindow);
 }
 
 // A tracked tiled HWND either confirms its authoritative rectangle or opens/reuses
@@ -4379,9 +7941,40 @@ static bool HandleTiledWindowLocationChange(HWND hwnd) {
 
   // Re-check at the mutation boundary: Chromium can finish entering fullscreen
   // while the ownership/layout queries above are in progress.
-  if (GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None) {
+  if (!ConformanceWindowMatchesRecordIdentity(hwnd, *record) ||
+      GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+      IsWindowCloaked(hwnd)) {
     CancelConformanceLease(hwnd, lease.generation);
     return false;
+  }
+
+  // The incoming LOCATIONCHANGE says the application did not remain on its
+  // authoritative tile. Re-probe its own native minimum contract before another
+  // SetWindowPos, in case that contract changed dynamically.
+  const WindowConstraints beforeConstraints = record->constraints;
+  const WindowConstraints freshConstraints = ProbeWindowConstraints(hwnd);
+  const WindowConstraints observedConstraints = MergeConstraintProbeWithCache(
+      beforeConstraints, freshConstraints);
+  // WM_GETMINMAXINFO executes target window code. Revalidate physical state
+  // after that bounded call before either learning policy or reinforcing a tile.
+  if (!ConformanceWindowMatchesRecordIdentity(hwnd, *record) ||
+      GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+      IsWindowCloaked(hwnd)) {
+    CancelConformanceLease(hwnd, lease.generation);
+    return false;
+  }
+  const bool locationConstraintChanged =
+      !SameConstraintGeometry(beforeConstraints, observedConstraints);
+  workspace.UpdateConstraints(hwnd, observedConstraints);
+  if (freshConstraints.valid && locationConstraintChanged) {
+    CancelConformanceLease(hwnd, lease.generation);
+    Diagnostics::RecordEvent(
+        L"conformance location refreshed native constraints hwnd=%p min=%ldx%ld dpi=%u",
+        hwnd, observedConstraints.minWidth, observedConstraints.minHeight,
+        observedConstraints.dpi);
+    g_workspaces.Save(owners.front(), workspace);
+    ArrangeWorkspace(owners.front(), lease.preferredTiledWindow);
+    return true;
   }
 
   PlacementObservation observation =
@@ -4396,6 +7989,8 @@ static bool HandleTiledWindowLocationChange(HWND hwnd) {
 
   Workspace::PlacementAction action =
       workspace.ApplyPlacementObservation(hwnd, observation);
+
+
   ++Diagnostics::g_runtime.counters.conformanceLeaseRepairs;
   Diagnostics::RecordEvent(
       L"conformance lease reinforced hwnd=%p attempt=%u result=%d",
@@ -4405,14 +8000,14 @@ static bool HandleTiledWindowLocationChange(HWND hwnd) {
     CancelConformanceLease(hwnd, lease.generation);
     workspace.Forget(hwnd);
     g_workspaces.Save(owners.front(), workspace);
-    ArrangeWorkspace(owners.front());
+    ArrangeWorkspace(owners.front(), lease.preferredTiledWindow);
     return true;
   }
   if (action == Workspace::PlacementAction::Float) {
     CancelConformanceLease(hwnd, lease.generation);
-    workspace.Float(hwnd);
+    FloatWindowAfterFailure(owners.front(), workspace, hwnd);
     g_workspaces.Save(owners.front(), workspace);
-    ArrangeWorkspace(owners.front());
+    ArrangeWorkspace(owners.front(), lease.preferredTiledWindow);
     return true;
   }
 
@@ -4520,10 +8115,55 @@ static bool EnsureUniqueWindowOwnership(
     HWND hwnd, const DesktopMonitorKey& targetKey,
     std::vector<DesktopMonitorKey>* changedKeys = nullptr);
 
-static Workspace MakeDefaultWorkspace() {
+static TileLayout ResolveInitialWorkspaceLayout(
+    const DesktopMonitorKey& key, int* matchedRuleIndex = nullptr,
+    const Platform::VirtualDesktop::DesktopMetadata* liveMetadata = nullptr) {
+  if (matchedRuleIndex) *matchedRuleIndex = 0;
+  Platform::VirtualDesktop::DesktopMetadata desktop;
+  bool metadataRead = false;
+  MONITORINFO monitorInfo{sizeof(monitorInfo)};
+  const bool haveMonitorInfo =
+      !g_settings.workspaceInitializationRules.empty() &&
+      GetMonitorInfoW(key.ResolveMonitor(), &monitorInfo);
+
+  for (const auto& rule : g_settings.workspaceInitializationRules) {
+    if (!rule.monitorId.empty() && rule.monitorId != key.monitor.deviceId) continue;
+    if (rule.monitor == RuleMonitor::Primary || rule.monitor == RuleMonitor::NonPrimary) {
+      if (!haveMonitorInfo) continue;
+      const bool primary = (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0;
+      if (primary != (rule.monitor == RuleMonitor::Primary)) continue;
+    }
+    if (!rule.desktopNameContains.empty() || rule.desktopNumber != 0) {
+      if (!metadataRead) {
+        desktop = liveMetadata ? *liveMetadata : Platform::VirtualDesktop::ReadDesktopMetadata(key.desktopId);
+        std::transform(
+            desktop.name.begin(), desktop.name.end(), desktop.name.begin(),
+            [](wchar_t ch) { return std::towlower(ch); });
+        metadataRead = true;
+      }
+      if (rule.desktopNumber != 0 && rule.desktopNumber != desktop.number) continue;
+      if (!rule.desktopNameContains.empty() &&
+          desktop.name.find(rule.desktopNameContains) == std::wstring::npos) {
+        continue;
+      }
+    }
+    if (matchedRuleIndex) *matchedRuleIndex = rule.settingsIndex;
+    return rule.layout;
+  }
+  return g_settings.defaultLayout;
+}
+
+static Workspace MakeDefaultWorkspace(const DesktopMonitorKey& key) {
   Workspace workspace;
-  workspace.SetLayout(g_settings.defaultLayout);
+  int matchedRuleIndex = 0;
+  workspace.SetLayout(ResolveInitialWorkspaceLayout(key, &matchedRuleIndex));
   workspace.SetMasterRatio(g_settings.masterPercent / 100.0);
+  if (matchedRuleIndex != 0) {
+    Diagnostics::RecordEvent(
+        L"workspace initial layout desktop=%08X monitorId=%ls rule=%d layout=%d",
+        key.desktopId.Data1, key.monitor.deviceId.c_str(), matchedRuleIndex,
+        static_cast<int>(workspace.Layout()));
+  }
   return workspace;
 }
 
@@ -4541,10 +8181,12 @@ static bool ReconcileTrackedSnapshotOwnership(
 }
 
 static bool SeedInitialSnapshot(
-    Workspace& workspace, const std::vector<HWND>& initialSnapshot) {
+    Workspace& workspace, const std::vector<HWND>& initialSnapshot,
+    bool useAutomaticAdmissionPolicy) {
   bool changed = false;
   for (HWND hwnd : initialSnapshot) {
-    changed |= AdmitInitialObservedWindow(workspace, hwnd);
+    changed |= AdmitInitialObservedWindow(
+        workspace, hwnd, useAutomaticAdmissionPolicy);
   }
   return changed;
 }
@@ -4555,7 +8197,9 @@ static bool RestoreSuspendedSnapshot(
   for (HWND hwnd : snapshot) {
     const WindowRecord* record = workspace.Find(hwnd);
     if (record && record->state == ManageState::Suspended) {
-      changed |= workspace.Restore(hwnd);
+      if (workspace.Restore(hwnd)) {
+        changed = true;
+      }
     }
   }
   return changed;
@@ -4575,22 +8219,44 @@ static bool ReadoptFloatingSnapshot(
 
 static bool AdmitUntrackedSnapshot(
     Workspace& workspace, const std::vector<HWND>& snapshot, bool allowAdmission,
-    bool useAutomaticPositionPolicy = false,
+    bool useAutomaticAdmissionPolicy = false,
     std::vector<HWND>* admittedWindows = nullptr) {
   if (!allowAdmission) return false;
 
   const bool afterFocused =
-      useAutomaticPositionPolicy &&
+      useAutomaticAdmissionPolicy &&
       g_settings.automaticNewWindowPosition ==
           AutomaticNewWindowPosition::AfterFocused;
   HWND anchor = afterFocused ? workspace.LastFocusedTiledWindow() : nullptr;
 
   bool changed = false;
   for (HWND hwnd : snapshot) {
-    if (workspace.HasRecord(hwnd) || IsWindowTrackedInAnyState(hwnd)) continue;
+    if (workspace.HasRecord(hwnd) || IsWindowTrackedInAnyState(hwnd) ||
+        IsWindowCloaked(hwnd)) {
+      continue;
+    }
+    if (useAutomaticAdmissionPolicy && IsWindowAwaitingInitialPlacement(hwnd)) {
+      continue;
+    }
+
+    bool alwaysFloating = false;
+    const bool startsFloating =
+        ShouldWindowStartFloating(hwnd, &alwaysFloating);
+    if (alwaysFloating || (useAutomaticAdmissionPolicy && startsFloating)) {
+      WindowRecord record = MakeWindowRecord(hwnd, ManageState::Floating);
+      record.pendingDefaultFloatingCenter = true;
+      record.alwaysFloating = alwaysFloating;
+      if (workspace.AdmitFloating(std::move(record))) {
+        changed = true;
+        if (admittedWindows) admittedWindows->push_back(hwnd);
+      }
+      continue;
+    }
 
     bool admitted = false;
     WindowRecord record = MakeWindowRecord(hwnd, ManageState::Tiled);
+    record.automaticOverflowMonitorFixed =
+        HasMonitorPlacementRule(hwnd);
     if (anchor) {
       admitted = workspace.AdmitTiledAfter(std::move(record), anchor);
     } else {
@@ -4609,23 +8275,28 @@ static bool AdmitUntrackedSnapshot(
 }
 
 // Automatic discovery can observe a new window while Windows still reports it as
-// minimized or maximized. Such HWNDs belong to the workspace logically but must not
-// enter the active tiling set until restored. Re-check physical state at admission
-// time so a stale dirty-event snapshot cannot suspend a window that has since moved
-// back to Restored/Hidden.
+// minimized, maximized, or fullscreen. Such HWNDs belong to the workspace
+// logically but must not enter the active tiling set until restored.
 static bool AdmitUntrackedSuspendedSnapshot(
     Workspace& workspace, const std::vector<HWND>& snapshot, bool allowAdmission,
-    bool useAutomaticPositionPolicy = false) {
+    bool useAutomaticAdmissionPolicy = false) {
   if (!allowAdmission) return false;
 
   const bool afterFocused =
-      useAutomaticPositionPolicy &&
+      useAutomaticAdmissionPolicy &&
       g_settings.automaticNewWindowPosition ==
           AutomaticNewWindowPosition::AfterFocused;
   const HWND anchor = afterFocused ? workspace.LastFocusedTiledWindow() : nullptr;
 
   auto admitOne = [&](HWND hwnd) {
-    if (workspace.HasRecord(hwnd) || IsWindowTrackedInAnyState(hwnd)) return false;
+    if (workspace.HasRecord(hwnd) || IsWindowTrackedInAnyState(hwnd) ||
+        IsWindowCloaked(hwnd)) {
+      return false;
+    }
+
+    if (useAutomaticAdmissionPolicy && IsWindowAwaitingInitialPlacement(hwnd)) {
+      return false;
+    }
 
     const SuspensionReason reason = GetPhysicalSuspensionReason(hwnd);
     if (reason != SuspensionReason::Minimized &&
@@ -4633,10 +8304,23 @@ static bool AdmitUntrackedSuspendedSnapshot(
       return false;
     }
 
-    if (anchor) {
-      return workspace.AdmitInitialAfter(MakeWindowRecord(hwnd), reason, anchor);
+    bool alwaysFloating = false;
+    const bool startsFloating =
+        ShouldWindowStartFloating(hwnd, &alwaysFloating);
+    if (alwaysFloating || (useAutomaticAdmissionPolicy && startsFloating)) {
+      WindowRecord record = MakeWindowRecord(hwnd, ManageState::Floating);
+      record.pendingDefaultFloatingCenter = true;
+      record.alwaysFloating = alwaysFloating;
+      return workspace.AdmitFloating(std::move(record));
     }
-    return workspace.AdmitInitial(MakeWindowRecord(hwnd), reason);
+
+    WindowRecord record = MakeWindowRecord(hwnd);
+    record.automaticOverflowMonitorFixed =
+        HasMonitorPlacementRule(hwnd);
+    if (anchor) {
+      return workspace.AdmitInitialAfter(std::move(record), reason, anchor);
+    }
+    return workspace.AdmitInitial(std::move(record), reason);
   };
 
   bool changed = false;
@@ -4697,14 +8381,23 @@ static bool EnsureWorkspaceFromSnapshot(
   ReconcileTrackedSnapshotOwnership(
       key, workspaceExisted ? snapshot : initialSnapshot, ownershipChangedKeys);
 
-  if (!g_workspaces.Load(key, &workspace)) workspace = MakeDefaultWorkspace();
-  if (!workspaceExisted) SeedInitialSnapshot(workspace, initialSnapshot);
+  if (!g_workspaces.Load(key, &workspace)) workspace = MakeDefaultWorkspace(key);
+  if (!workspaceExisted) {
+    SeedInitialSnapshot(
+        workspace, initialSnapshot,
+        IsAutomaticMode() && !adoptCurrentGeometry);
+  }
+
+  // Tile Workspace may readopt current geometry, but it never bypasses native
+  // application minimums. Constraint overrides belong at the application layer,
+  // not in the tiling solver.
 
   RestoreSuspendedSnapshot(workspace, snapshot);
   if (adoptCurrentGeometry) ReadoptFloatingSnapshot(workspace, snapshot);
   AdmitUntrackedSnapshot(workspace, snapshot, true, false);
 
   if (adoptCurrentGeometry) {
+    RefreshWorkspaceNativeConstraints(workspace, true, L"Tile Workspace");
     AdoptSnapshotGeometryIfEligible(
         workspace, snapshot, metrics.workArea, metrics.gap, monitor);
   }
@@ -4757,6 +8450,7 @@ static bool MigrateManagedWindow(
     HWND hwnd, const DesktopMonitorKey& sourceKey, const DesktopMonitorKey& targetKey) {
   if (!hwnd || SameWorkspaceKey(sourceKey, targetKey)) return false;
   CancelConformanceLease(hwnd);
+  DiscardPendingAdmissionRecovery(hwnd);
 
   Workspace source;
   if (!g_workspaces.Load(sourceKey, &source)) return false;
@@ -4770,8 +8464,7 @@ static bool MigrateManagedWindow(
 
   Workspace target;
   if (!g_workspaces.Load(targetKey, &target)) {
-    target.SetLayout(g_settings.defaultLayout);
-    target.SetMasterRatio(g_settings.masterPercent / 100.0);
+    target = MakeDefaultWorkspace(targetKey);
   }
 
   HWND insertionAnchor = nullptr;
@@ -4902,6 +8595,7 @@ static void ForgetWindowFromOwners(
     HWND hwnd, const std::vector<DesktopMonitorKey>& ownerKeys,
     std::vector<DesktopMonitorKey>* changedKeys) {
   CancelConformanceLease(hwnd);
+  DiscardPendingAdmissionRecovery(hwnd);
   for (const auto& ownerKey : ownerKeys) {
     Workspace workspace;
     if (!g_workspaces.Load(ownerKey, &workspace)) continue;
@@ -4968,10 +8662,9 @@ static void ReconcileWindowParticipation(
     SuspensionReason reason = physicalReason;
     if (reason == SuspensionReason::Maximized && !IsZoomed(hwnd) &&
         record->state == ManageState::Tiled) {
-      // FancyWM's full-monitor fallback can also describe a legitimate
-      // borderless tile when the work area, gaps and insets consume no space.
-      // If this window already occupies its authoritative tile, there is no
-      // layout violation to suspend or repair.
+      // A borderless tile can legitimately cover the monitor when the configured
+      // work area has no visible insets/gaps. If it already occupies its exact
+      // authoritative tile, don't mistake that geometry for fullscreen.
       RECT authoritative{};
       RECT current{};
       if (GetCurrentAuthoritativeTiledRect(
@@ -4984,17 +8677,30 @@ static void ReconcileWindowParticipation(
 
     bool changed = false;
     bool restoredIntoFloatingLayout = false;
+    const bool pendingInsertionBeforeSuspension =
+        record->state == ManageState::Tiled &&
+        record->pendingInsertionPlacement;
+
     if (record->state == ManageState::Tiled &&
         reason != SuspensionReason::None) {
       CancelConformanceLease(hwnd);
-      changed = workspace.Suspend(hwnd, reason);
+      ClearMoveSizeSamples(hwnd);
+      const bool suspended = workspace.Suspend(hwnd, reason);
+      changed |= suspended;
+      if (suspended && pendingInsertionBeforeSuspension) {
+        changed |= RestorePendingAdmissionRecoveryAfterSuspension(
+            ownerKey, hwnd, &workspace);
+      }
     } else if (record->state == ManageState::Suspended) {
       if (reason == SuspensionReason::None) {
-        changed = workspace.Restore(hwnd);
+        const bool restored = workspace.Restore(hwnd);
+        changed |= restored;
         restoredIntoFloatingLayout =
-            changed && workspace.Layout() == TileLayout::Floating;
+            restored && workspace.Layout() == TileLayout::Floating;
       } else {
-        changed = workspace.Suspend(hwnd, reason);
+        if (workspace.Suspend(hwnd, reason)) {
+          changed = true;
+        }
       }
     }
 
@@ -5003,7 +8709,8 @@ static void ReconcileWindowParticipation(
       // the layout-transition restore. Apply the same passive remembered-geometry
       // policy when it becomes active again.
       if (restoredIntoFloatingLayout) {
-        RepairFloatingGeometry(ownerKey, workspace, hwnd, FloatingPlacementHint{});
+        RepairFloatingGeometry(
+            ownerKey, workspace, hwnd, FloatingPlacementHint{});
       }
       g_workspaces.Save(ownerKey, workspace);
       if (changedKeys) AddUniqueWorkspaceKey(*changedKeys, ownerKey);
@@ -5050,6 +8757,24 @@ static void ReconcileKnownWindow(
   ownerKeys = ReconcileWindowOwnership(hwnd, scope, std::move(ownerKeys), changedKeys);
   if (ownerKeys.empty()) return;
 
+  // Rules normally classify a window at admission. Also enforce Always floating
+  // for an already-managed window after a settings reload; once applied, retain
+  // it for that HWND's lifetime even if a title-based match later changes.
+  if (ShouldWindowAlwaysFloat(hwnd)) {
+    bool policyChanged = false;
+    for (const auto& ownerKey : ownerKeys) {
+      Workspace workspace;
+      if (!g_workspaces.Load(ownerKey, &workspace) ||
+          !workspace.EnforceAlwaysFloating(hwnd)) {
+        continue;
+      }
+      policyChanged = true;
+      g_workspaces.Save(ownerKey, workspace);
+      if (changedKeys) AddUniqueWorkspaceKey(*changedKeys, ownerKey);
+    }
+    if (policyChanged) CancelConformanceLease(hwnd);
+  }
+
   if (HasReconcileScope(scope, ReconcileScope::Participation)) {
     ReconcileWindowParticipation(hwnd, ownerKeys, changedKeys);
   }
@@ -5088,7 +8813,256 @@ static void AddPendingWorkspaceArrange(const GUID& desktopId, HMONITOR monitor) 
   }
 }
 
-static void ScheduleLifecycleReconcile(HWND hwnd);
+// Run before snapshots are built. A rule chooses the initial destination once;
+// admission and overflow remain owned by the destination's ordinary active pass.
+static void RouteNewWindows(std::vector<HMONITOR>& monitors) {
+  if (!g_wm.windowRoutingReady) return;
+
+  const HWND foregroundWindow = GetForegroundWindow();
+  std::vector<HWND> candidates;
+  ++Diagnostics::g_runtime.counters.enumWindowsPasses;
+  EnumWindows(
+      [](HWND hwnd, LPARAM lParam) WINAPI -> BOOL {
+        ++Diagnostics::g_runtime.counters.enumWindowsVisited;
+        if (!g_wm.windowRoutingEvaluated.count(hwnd) || g_wm.pendingWindowRoutes.count(hwnd)) {
+          reinterpret_cast<std::vector<HWND>*>(lParam)->push_back(hwnd);
+        }
+        return TRUE;
+      }, reinterpret_cast<LPARAM>(&candidates));
+
+  for (HWND hwnd : candidates) {
+    // Explicit admission and user gestures override pending initial placement.
+    if (IsWindowTrackedInAnyState(hwnd) || IsMoveSizeGestureInProgress(hwnd)) {
+      g_wm.windowRoutingEvaluated.insert(hwnd);
+      g_wm.pendingWindowRoutes.erase(hwnd);
+      continue;
+    }
+    if (!IsWindow(hwnd) || !IsWindowVisible(hwnd) || !IsWindowEnabled(hwnd) || IsHungAppWindow(hwnd)) continue;
+    if (!WindowCanBeManaged(hwnd, true)) {
+      // Exclusion wins. Ineligible framework HWNDs may become eligible later.
+      g_wm.pendingWindowRoutes.erase(hwnd);
+      continue;
+    }
+    DWORD processId = 0;
+    GUID sourceDesktop{};
+    GetWindowThreadProcessId(hwnd, &processId);
+    if (!processId || !GetWindowDesktopIdSafe(hwnd, &sourceDesktop) ||
+        IsEqualGUID(sourceDesktop, GUID_NULL)) continue;
+
+    if (!g_wm.pendingWindowRoutes.count(hwnd)) {
+      if (g_wm.windowRoutingEvaluated.count(hwnd) || !IsWindow(hwnd)) continue;
+      const WindowRule* rule = FindMatchingWindowRule(hwnd, WindowRuleTreatment::InitialPlacement);
+      if (g_wm.windowRoutingEvaluated.count(hwnd) || !IsWindow(hwnd)) continue;
+      if (!rule) {
+        g_wm.windowRoutingEvaluated.insert(hwnd);
+        continue;
+      }
+      // Copy the rule before COM calls, which may deliver lifecycle events.
+      WmRuntime::PendingWindowRoute request;
+      request.processId = processId;
+      request.sourceDesktop = sourceDesktop;
+      request.targetDesktop = sourceDesktop;
+      request.monitor = rule->monitor;
+      request.monitorId = rule->monitorId;
+      request.followWindow = rule->followWindow;
+      const int desktopNumber = rule->desktopNumber;
+      const std::wstring desktopName = rule->desktopNameContains;
+      if (desktopNumber || !desktopName.empty()) {
+        std::vector<GUID> order;
+        if (!Platform::VirtualDesktop::GetDesktopIdsInOrder(&order)) continue;
+        request.targetDesktop = GUID_NULL;
+        for (size_t i = 0; i < order.size(); ++i) {
+          if (desktopNumber && desktopNumber != static_cast<int>(i + 1)) continue;
+          if (!desktopName.empty()) {
+            const auto metadata = Platform::VirtualDesktop::ReadDesktopMetadata(order[i]);
+            if (!ContainsInsensitive(metadata.name, desktopName)) continue;
+          }
+          request.targetDesktop = order[i];
+          break;
+        }
+      }
+      DWORD livePid = 0;
+      GUID liveOwner{};
+      GetWindowThreadProcessId(hwnd, &livePid);
+      if (g_wm.windowRoutingEvaluated.count(hwnd) || !IsWindow(hwnd) || livePid != processId ||
+          !GetWindowDesktopIdSafe(hwnd, &liveOwner) || !IsEqualGUID(liveOwner, sourceDesktop)) continue;
+      g_wm.windowRoutingEvaluated.insert(hwnd);
+      if (IsEqualGUID(request.targetDesktop, GUID_NULL)) {
+        Wh_Log(L"Initial placement desktop unavailable for HWND %p", hwnd);
+        continue;
+      }
+      g_wm.pendingWindowRoutes.emplace(hwnd, std::move(request));
+    }
+    // Never retain map iterators or references across native calls.
+    const auto pending = g_wm.pendingWindowRoutes.find(hwnd);
+    if (pending == g_wm.pendingWindowRoutes.end()) continue;
+    const auto request = pending->second;
+    if (request.processId != processId || !IsEqualGUID(request.sourceDesktop, sourceDesktop)) {
+      g_wm.pendingWindowRoutes.erase(hwnd); // The app or user relocated it.
+      continue;
+    }
+    GUID currentDesktop{};
+    if (!GetCurrentDesktopId(&currentDesktop) || !IsEqualGUID(currentDesktop, sourceDesktop) ||
+        IsWindowCloaked(hwnd)) continue;
+
+    const HMONITOR sourceMonitor = GetWindowPhysicalMonitor(hwnd);
+    HMONITOR targetMonitor = sourceMonitor;
+    AddUniqueMonitor(monitors, sourceMonitor);
+    if (request.monitor == RuleMonitor::Specific) {
+      Model::MonitorId identity;
+      identity.deviceId = request.monitorId;
+      targetMonitor = identity.Resolve();
+    } else if (request.monitor == RuleMonitor::Primary || request.monitor == RuleMonitor::NonPrimary) {
+      auto matchesMonitor = [&](HMONITOR monitor) {
+        MONITORINFO info{sizeof(info)};
+        return GetMonitorInfoW(monitor, &info) &&
+            ((info.dwFlags & MONITORINFOF_PRIMARY) != 0) == (request.monitor == RuleMonitor::Primary);
+      };
+      if (!matchesMonitor(sourceMonitor)) {
+        std::vector<std::pair<std::wstring, HMONITOR>> connected;
+        EnumDisplayMonitors(nullptr, nullptr,
+            [](HMONITOR monitor, HDC, LPRECT, LPARAM parameter) WINAPI -> BOOL {
+              Model::MonitorId identity;
+              if (Model::MonitorId::FromHMonitor(monitor, &identity)) {
+                reinterpret_cast<std::vector<std::pair<std::wstring, HMONITOR>>*>(parameter)
+                    ->emplace_back(identity.deviceId, monitor);
+              }
+              return TRUE;
+            }, reinterpret_cast<LPARAM>(&connected));
+        // Stable IDs give a repeatable choice among several secondary monitors.
+        std::sort(connected.begin(), connected.end(), [](const auto& first, const auto& second) {
+          return first.first < second.first;
+        });
+        targetMonitor = nullptr;
+        for (const auto& candidate : connected) {
+          if (matchesMonitor(candidate.second)) { targetMonitor = candidate.second; break; }
+        }
+      }
+    }
+    if (!targetMonitor) {
+      Wh_Log(L"Initial placement monitor unavailable for HWND %p", hwnd);
+      g_wm.pendingWindowRoutes.erase(hwnd);
+      continue;
+    }
+    const bool changeDesktop = !IsEqualGUID(request.targetDesktop, sourceDesktop);
+    if (!changeDesktop && targetMonitor == sourceMonitor) {
+      // Already at its destination: normal suspended admission must still count
+      // maximized windows, without waiting for an unnecessary physical move.
+      g_wm.pendingWindowRoutes.erase(hwnd);
+      continue;
+    }
+    const SuspensionReason suspensionReason = GetPhysicalSuspensionReason(hwnd);
+    if (suspensionReason != SuspensionReason::None) {
+      const auto pending = g_wm.pendingWindowRoutes.find(hwnd);
+      if (pending != g_wm.pendingWindowRoutes.end()) {
+        if (suspensionReason == SuspensionReason::Maximized) {
+          if (!pending->second.visibleGeneration) pending->second.visibleGeneration = Model::NextTilingGeneration();
+          AddPendingWorkspaceArrange(sourceDesktop, sourceMonitor);
+        } else {
+          pending->second.visibleGeneration = 0;
+        }
+      }
+      continue;
+    }
+    // A frozen GUID must still exist; desktop reordering must not retarget it.
+    if (changeDesktop) {
+      std::vector<GUID> order;
+      if (!Platform::VirtualDesktop::GetDesktopIdsInOrder(&order)) continue;
+      if (std::none_of(order.begin(), order.end(), [&](const GUID& id) {
+            return IsEqualGUID(id, request.targetDesktop);
+          })) {
+        g_wm.pendingWindowRoutes.erase(hwnd);
+        continue;
+      }
+    }
+    auto canRoute = [&] {
+      const auto pending = g_wm.pendingWindowRoutes.find(hwnd);
+      if (pending == g_wm.pendingWindowRoutes.end() || pending->second.processId != processId) return false;
+      DWORD livePid = 0;
+      GUID owner{}, current{};
+      GetWindowThreadProcessId(hwnd, &livePid);
+      return IsWindow(hwnd) && livePid == processId && !IsWindowTrackedInAnyState(hwnd) &&
+          !IsMoveSizeGestureInProgress(hwnd) && !IsWindowCloaked(hwnd) &&
+          GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None &&
+          GetWindowDesktopIdSafe(hwnd, &owner) && IsEqualGUID(owner, sourceDesktop) &&
+          GetCurrentDesktopId(&current) && IsEqualGUID(current, sourceDesktop) &&
+          g_wm.pendingWindowRoutes.count(hwnd);
+    };
+    LASTINPUTINFO input{sizeof(input)};
+    if (!GetLastInputInfo(&input) || !canRoute()) continue;
+    RECT sourceFrame{};
+    if (targetMonitor != sourceMonitor) {
+      RECT workArea{};
+      if (!GetWindowFrameRect(hwnd, &sourceFrame) || RectWidth(sourceFrame) <= 0 ||
+          RectHeight(sourceFrame) <= 0 || !GetWorkspaceWorkArea(targetMonitor, &workArea)) {
+        g_wm.pendingWindowRoutes.erase(hwnd);
+        continue;
+      }
+      const RECT target = CenteredRect(RectCenter(workArea), RectWidth(sourceFrame), RectHeight(sourceFrame));
+      const auto placed = PlaceWindowChecked(hwnd, true, target, true);
+      if (placed.result == PlacementResult::SuppressedByPhysicalState) continue;
+      AddUniqueMonitor(monitors, GetWindowPhysicalMonitor(hwnd));
+      if (placed.result != PlacementResult::Success || GetWindowPhysicalMonitor(hwnd) != targetMonitor) {
+        Diagnostics::RecordEvent(L"initial placement monitor refused hwnd=%p target=%p result=%d",
+                                 hwnd, targetMonitor, static_cast<int>(placed.result));
+        g_wm.pendingWindowRoutes.erase(hwnd);
+        continue;
+      }
+    }
+    if (!canRoute()) continue;
+    if (changeDesktop && !Platform::VirtualDesktop::MoveWindowToDesktop(
+            hwnd, processId, sourceDesktop, request.targetDesktop,
+            Platform::VirtualDesktop::WindowMovePurpose::InitialPlacement)) {
+      // Undo only our monitor move, and only while the original request is live.
+      LASTINPUTINFO latestInput{sizeof(latestInput)};
+      if (targetMonitor != sourceMonitor && GetLastInputInfo(&latestInput) &&
+          latestInput.dwTime == input.dwTime && canRoute()) {
+        PlaceWindowChecked(hwnd, true, sourceFrame, true);
+      }
+      g_wm.pendingWindowRoutes.erase(hwnd);
+      continue;
+    }
+    DWORD livePid = 0;
+    GUID owner{};
+    GetWindowThreadProcessId(hwnd, &livePid);
+    if (!GetWindowDesktopIdSafe(hwnd, &owner) || !IsEqualGUID(owner, request.targetDesktop)) continue;
+    GetWindowThreadProcessId(hwnd, &livePid);
+    if (!IsWindow(hwnd) || !g_wm.pendingWindowRoutes.count(hwnd) || livePid != processId) continue;
+    g_wm.pendingWindowRoutes.erase(hwnd); // Overflow must never reapply this rule.
+    AddUniqueMonitor(monitors, targetMonitor);
+    if (changeDesktop) {
+      DesktopMonitorKey targetKey{};
+      Workspace workspace;
+      if (DesktopMonitorKey::FromHMonitor(request.targetDesktop, targetMonitor, &targetKey) &&
+          !g_workspaces.Load(targetKey, &workspace)) {
+        g_workspaces.Save(targetKey, MakeDefaultWorkspace(targetKey));
+      }
+      // Off-desktop windows stay unadmitted until the ordinary destination pass.
+      // That pass enforces fit/limits, including when several windows arrive together.
+      AddPendingWorkspaceArrange(request.targetDesktop, targetMonitor);
+      if (request.followWindow && (!g_wm.pendingInitialPlacementSwitch.hwnd || hwnd == foregroundWindow)) {
+        g_wm.pendingInitialPlacementSwitch =
+            {hwnd, processId, sourceDesktop, request.targetDesktop, {}, 0, input.dwTime};
+      }
+      ScheduleLifecycleReconcile(nullptr);
+    }
+    Diagnostics::RecordEvent(L"initial placement hwnd=%p targetDesktop=%08X monitor=%p follow=%d",
+                             hwnd, request.targetDesktop.Data1, targetMonitor, request.followWindow ? 1 : 0);
+  }
+}
+
+// Switch only after snapshots have finished. No forced HWND activation is needed.
+static void FollowInitiallyPlacedWindow() {
+  const PendingOverflowSwitch pending = g_wm.pendingInitialPlacementSwitch;
+  if (!pending.hwnd) return;
+  if (Platform::VirtualDesktop::SwitchToDesktop(
+          pending.hwnd, pending.processId, pending.targetDesktop, pending.sourceDesktop, pending.inputTickMs,
+          Platform::VirtualDesktop::WindowMovePurpose::InitialPlacement)) {
+    g_wm.reconciledDesktopState = ReconciledDesktopState::TransitionPending;
+    ScheduleLifecycleReconcile(nullptr);
+  }
+  g_wm.pendingInitialPlacementSwitch = {};
+}
 
 // Build only the extra inactive candidates implicated by this settled lifecycle
 // burst. This deliberately does not add another EnumWindows pass: normal restored
@@ -5157,9 +9131,10 @@ static bool DiscoverWorkspaceWindows(
       key, initializing ? initialSnapshot : snapshot, ownershipChangedKeys);
 
   bool hasState = g_workspaces.Load(key, &workspace);
-  if (!hasState) workspace = MakeDefaultWorkspace();
+  if (!hasState) workspace = MakeDefaultWorkspace(key);
 
-  if (initializing && SeedInitialSnapshot(workspace, initialSnapshot)) {
+  if (initializing &&
+      SeedInitialSnapshot(workspace, initialSnapshot, true)) {
     hasState = true;
     changed = true;
   }
@@ -5179,14 +9154,43 @@ static bool DiscoverWorkspaceWindows(
     changed = true;
   }
 
+  // A default-floating HWND can be admitted during initial seeding or while it
+  // is suspended. Once it appears in the active snapshot, route the retained
+  // centering request through the same placement pass.
+  for (HWND hwnd : snapshot) {
+    const WindowRecord* record = workspace.Find(hwnd);
+    if (record && record->state == ManageState::Floating &&
+        record->pendingDefaultFloatingCenter &&
+        !ContainsWindow(newlyAdmittedWindows, hwnd)) {
+      newlyAdmittedWindows.push_back(hwnd);
+    }
+  }
+
   // Automatic discovery owns the first floating geometry of a genuinely new
-  // restored window. Center it in this workspace, applying the configured
-  // default size unless a matching placement override preserves or replaces it.
-  if (admitUntracked && workspace.Layout() == TileLayout::Floating) {
+  // restored window. A rule-floated admission always keeps its application-
+  // selected size, including when the whole workspace is already Floating.
+  // Other Floating-workspace admissions use the configured sizing policy.
+  if (admitUntracked) {
     for (HWND hwnd : newlyAdmittedWindows) {
+      const WindowRecord* record = workspace.Find(hwnd);
+      const bool pendingDefaultCenter =
+          record && record->state == ManageState::Floating &&
+          record->pendingDefaultFloatingCenter;
+      if (!record ||
+          (workspace.Layout() != TileLayout::Floating &&
+           !pendingDefaultCenter)) {
+        continue;
+      }
+
       FloatingPlacementHint newWindowHint;
-      newWindowHint.intent = FloatingPlacementIntent::NewWindowCenter;
-      RepairFloatingGeometry(key, workspace, hwnd, newWindowHint);
+      newWindowHint.intent =
+          pendingDefaultCenter
+              ? FloatingPlacementIntent::CenterPreservingSize
+              : FloatingPlacementIntent::NewWindowCenter;
+      if (RepairFloatingGeometry(key, workspace, hwnd, newWindowHint)) {
+        workspace.ClearDefaultFloatingCenter(hwnd);
+        changed = true;
+      }
     }
   }
 
@@ -5213,20 +9217,23 @@ static bool DiscoverCurrentWorkspaceOnMonitor(HMONITOR monitor) {
     return false;
   }
 
-  std::vector<HWND> snapshot = CollectTileWindows(monitor);
-  DesktopMonitorKey key{};
-  if (!DesktopMonitorKey::FromHMonitor(currentDesktop, monitor, &key)) return false;
-  const bool changed =
-      DiscoverWorkspaceWindows(monitor, currentDesktop, snapshot, &key);
+  std::vector<HMONITOR> monitors{monitor};
+  RouteNewWindows(monitors);
+  const auto snapshots = CollectTileWindowsForMonitors(monitors);
+  bool arranged = false;
+  for (size_t i = 0; i < monitors.size(); ++i) {
+    DesktopMonitorKey key{};
+    if (!DesktopMonitorKey::FromHMonitor(currentDesktop, monitors[i], &key)) continue;
+    const bool changed =
+        DiscoverWorkspaceWindows(monitors[i], currentDesktop, snapshots[i], &key);
 
-  // "No model mutation" is not the same as "no workspace". Startup, mode changes,
-  // and explicit monitor passes may need to reinforce already-correct membership.
-  Workspace existing;
-  const bool hasWorkspace = changed || g_workspaces.Load(key, &existing);
-  if (!hasWorkspace) return false;
-
-  ArrangeWorkspace(key);
-  return true;
+    // An unchanged workspace may still need its existing layout reinforced.
+    Workspace existing;
+    if (!changed && !g_workspaces.Load(key, &existing)) continue;
+    ArrangeWorkspace(key);
+    arranged = true;
+  }
+  return arranged;
 }
 
 static void EnumerateCurrentMonitors(std::vector<HMONITOR>& monitors) {
@@ -5244,7 +9251,8 @@ static void EnumerateCurrentMonitors(std::vector<HMONITOR>& monitors) {
 
 // During a virtual-desktop switch, DWM cloaks and uncloaks windows one at a time.
 // Snapshot otherwise eligible windows by desktop GUID while deliberately ignoring
-// that transient cloak bit; settled reconciliation handles genuine cloaks later.
+// that transient cloak bit. Known membership therefore survives the transition;
+// the admission boundary defers unknown cloaked HWNDs to the settled pass.
 static std::vector<HWND> GetTileWindowsAfterDesktopSwitch(
     HMONITOR monitor, const GUID& desktopId) {
   std::vector<HWND> windows;
@@ -5393,6 +9401,623 @@ static void ScheduleLifecycleReconcile(HWND hwnd) {
   }
 }
 
+static void ScheduleNextDiscoveryRetryTimer() {
+  if (g_wm.discoveryRetryTimer) {
+    KillTimer(nullptr, g_wm.discoveryRetryTimer);
+    g_wm.discoveryRetryTimer = 0;
+  }
+  if (g_wm.pendingDiscoveryRetries.empty()) return;
+
+  const ULONGLONG now = GetTickCount64();
+  ULONGLONG earliestDue = g_wm.pendingDiscoveryRetries.front().dueTickMs;
+  for (const auto& pending : g_wm.pendingDiscoveryRetries) {
+    earliestDue = std::min(earliestDue, pending.dueTickMs);
+  }
+  const UINT delayMs = earliestDue > now
+                           ? static_cast<UINT>(earliestDue - now)
+                           : 1;
+  g_wm.discoveryRetryTimer = SetTimer(nullptr, 0, delayMs, nullptr);
+  if (!g_wm.discoveryRetryTimer) {
+    Wh_Log(L"Failed to schedule slow-application discovery timer");
+    g_wm.pendingDiscoveryRetries.clear();
+  }
+}
+
+// This stage owns only untracked HWNDs. Once discovery succeeds,
+// ArrangeWorkspace establishes any needed post-placement conformance lease.
+static void ProcessDiscoveryRetryTimer() {
+  AssertWmThread(L"ProcessDiscoveryRetryTimer");
+  if (g_wm.discoveryRetryTimer) {
+    KillTimer(nullptr, g_wm.discoveryRetryTimer);
+    g_wm.discoveryRetryTimer = 0;
+  }
+  if (!IsAutomaticMode() && !g_wm.windowRoutingReady) {
+    g_wm.pendingDiscoveryRetries.clear();
+    return;
+  }
+
+  const ULONGLONG now = GetTickCount64();
+  std::vector<PendingDiscoveryRetry> due;
+  g_wm.pendingDiscoveryRetries.erase(
+      std::remove_if(
+          g_wm.pendingDiscoveryRetries.begin(),
+          g_wm.pendingDiscoveryRetries.end(),
+          [&](const PendingDiscoveryRetry& pending) {
+            if (pending.dueTickMs > now) return false;
+            due.push_back(pending);
+            return true;
+          }),
+      g_wm.pendingDiscoveryRetries.end());
+  ScheduleNextDiscoveryRetryTimer();
+
+  std::vector<HMONITOR> monitors;
+  for (const auto& pending : due) {
+    if (!pending.hwnd || !IsWindow(pending.hwnd) ||
+        IsWindowTrackedInAnyState(pending.hwnd)) {
+      continue;
+    }
+    DWORD processId = 0;
+    GetWindowThreadProcessId(pending.hwnd, &processId);
+    if (!processId || processId != pending.processId) continue;
+    AddUniqueMonitor(monitors,
+                     GetCurrentManagedWindowMonitor(pending.hwnd));
+  }
+  RouteNewWindows(monitors);
+  for (HMONITOR monitor : monitors) DiscoverCurrentWorkspaceOnMonitor(monitor);
+  if (!g_wm.pendingWindowOverflow.empty()) ScheduleLifecycleReconcile(nullptr);
+}
+
+// Overflow work runs only after admission/arrangement has saved every source.
+// Trial workspaces never change native geometry or evict destination members.
+static void ProcessWindowOverflow() {
+  if (g_wm.overflowTimer) {
+    KillTimer(nullptr, g_wm.overflowTimer);
+    g_wm.overflowTimer = 0;
+  }
+  if (!IsAutomaticMode()) {
+    g_wm.pendingWindowOverflow.clear();
+    g_wm.pendingOverflowSwitch = {};
+    return;
+  }
+
+  if (g_wm.pendingWindowOverflow.empty() && !g_wm.pendingOverflowSwitch.hwnd) return;
+  const ULONGLONG now = GetTickCount64();
+  GUID currentDesktop{};
+  const bool desktopKnown = GetCurrentDesktopId(&currentDesktop);
+  bool waitForSwitch = false;
+  PendingOverflowSwitch transition = g_wm.pendingOverflowSwitch;
+
+  // Keep the repository aligned with the observed result even if a native move
+  // or its rollback fails. Shell identity, never our intended target, wins.
+  auto reconcileObservedOwner = [](HWND hwnd) {
+    GUID observedDesktop{};
+    DesktopMonitorKey observedKey{};
+    if (GetWindowDesktopIdSafe(hwnd, &observedDesktop) &&
+        DesktopMonitorKey::FromHMonitor(observedDesktop, GetWindowPhysicalMonitor(hwnd), &observedKey)) {
+      std::vector<DesktopMonitorKey> changed;
+      EnsureUniqueWindowOwnership(hwnd, observedKey, &changed);
+      for (const auto& key : changed) ArrangeWorkspace(key);
+    }
+  };
+
+  auto rollbackOverflowMove = [&](const PendingOverflowSwitch& pending) {
+    GUID observed{};
+    DWORD processId = 0;
+    GetWindowThreadProcessId(pending.hwnd, &processId);
+    if (!IsWindow(pending.hwnd) || processId != pending.processId ||
+        !g_wm.overflowWindows.count(pending.hwnd)) {
+      Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(pending.targetDesktop, pending.sourceDesktop);
+      return;
+    }
+    if (!GetWindowDesktopIdSafe(pending.hwnd, &observed) ||
+        (!IsEqualGUID(observed, pending.sourceDesktop) &&
+         !IsEqualGUID(observed, pending.targetDesktop))) {
+      reconcileObservedOwner(pending.hwnd);
+      Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(pending.targetDesktop, pending.sourceDesktop);
+      return;
+    }
+    GUID liveCurrent{};
+    LASTINPUTINFO input{sizeof(input)};
+    if (!GetCurrentDesktopId(&liveCurrent) || !IsEqualGUID(liveCurrent, pending.sourceDesktop) ||
+        !GetLastInputInfo(&input) || input.dwTime != pending.inputTickMs ||
+        IsMoveSizeGestureInProgress(pending.hwnd)) {
+      reconcileObservedOwner(pending.hwnd);
+      Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(pending.targetDesktop, pending.sourceDesktop);
+      return;
+    }
+    const bool alreadyHome = IsEqualGUID(observed, pending.sourceDesktop);
+    const bool returned = alreadyHome || Platform::VirtualDesktop::MoveWindowToDesktop(
+        pending.hwnd, pending.processId, pending.targetDesktop, pending.sourceDesktop);
+    if (returned && GetWindowDesktopIdSafe(pending.hwnd, &observed) &&
+        IsEqualGUID(observed, pending.sourceDesktop)) {
+      PlaceWindowChecked(pending.hwnd, true, pending.sourceFrame);
+    }
+    reconcileObservedOwner(pending.hwnd);
+    // A failed native follow uses the configured floating fallback, including
+    // when rollback cannot return the window home.
+    for (const auto& key : g_workspaces.OwnersOf(pending.hwnd)) {
+      Workspace workspace;
+      if (g_workspaces.Load(key, &workspace) && workspace.Float(pending.hwnd)) {
+        g_workspaces.Save(key, workspace);
+        ArrangeWorkspace(key);
+      }
+    }
+    Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(pending.targetDesktop, pending.sourceDesktop);
+    Diagnostics::RecordEvent(L"overflow rollback hwnd=%p returned=%d", pending.hwnd, returned ? 1 : 0);
+    if (!returned) TrayUi::ShowCommandFailureFlyout(L"Could not return the window to its desktop.");
+  };
+
+  if (transition.hwnd) {
+    DWORD processId = 0;
+    LASTINPUTINFO input{sizeof(input)};
+    GetWindowThreadProcessId(transition.hwnd, &processId);
+    GUID windowDesktop{};
+    if (!IsWindow(transition.hwnd) || processId != transition.processId ||
+        !g_wm.overflowWindows.count(transition.hwnd) ||
+        !GetLastInputInfo(&input) || input.dwTime != transition.inputTickMs ||
+        !GetWindowDesktopIdSafe(transition.hwnd, &windowDesktop) ||
+        !IsEqualGUID(windowDesktop, transition.targetDesktop)) {
+      transition = {}; // User input or a changed lifetime cancels the follow.
+    } else if (desktopKnown && IsEqualGUID(currentDesktop, transition.targetDesktop)) {
+      // Desktop arrival is enough. Let the shell reveal and focus application
+      // views; neither a cloaking sample nor SetForegroundWindow proves readiness.
+      Diagnostics::RecordEvent(L"overflow desktop arrived target=%08X hwnd=%p",
+                               transition.targetDesktop.Data1, transition.hwnd);
+      ScheduleLifecycleReconcile(transition.hwnd);
+      transition = {};
+    } else if ((desktopKnown && !IsEqualGUID(currentDesktop, transition.sourceDesktop)) ||
+               now >= transition.deadlineTickMs) {
+      const PendingOverflowSwitch failed = transition;
+      transition = {};
+      // A user-initiated desktop change should never be reversed.
+      if (desktopKnown && IsEqualGUID(currentDesktop, failed.sourceDesktop)) {
+        rollbackOverflowMove(failed);
+      }
+    } else {
+      waitForSwitch = true;
+    }
+  }
+  g_wm.pendingOverflowSwitch = transition;
+
+  std::vector<PendingWindowOverflow> pending;
+  pending.swap(g_wm.pendingWindowOverflow);
+  const HWND foreground = GetForegroundWindow();
+  LASTINPUTINFO batchInput{sizeof(batchInput)};
+  GetLastInputInfo(&batchInput);
+  PendingOverflowSwitch follow{};
+  for (PendingWindowOverflow request : pending) {
+    const HWND hwnd = request.hwnd;
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    if (!IsWindow(hwnd) || !processId || processId != request.processId ||
+        !g_wm.overflowWindows.count(hwnd) || IsMoveSizeGestureInProgress(hwnd)) continue;
+    GUID observedDesktop{};
+    DesktopMonitorKey sourceKey{};
+    const HMONITOR sourceMonitor = GetWindowPhysicalMonitor(hwnd);
+    if (!desktopKnown || !GetWindowDesktopIdSafe(hwnd, &observedDesktop) ||
+        !DesktopMonitorKey::FromHMonitor(observedDesktop, sourceMonitor, &sourceKey)) {
+      g_wm.pendingWindowOverflow.push_back(std::move(request));
+      continue;
+    }
+    if (!IsEqualGUID(observedDesktop, request.sourceDesktop) ||
+        sourceKey.monitor.deviceId != request.sourceMonitorId) {
+      // An app or the shell can relocate a queued window. Preserve its overflow
+      // intent while rebasing ownership to the observed desktop and monitor.
+      reconcileObservedOwner(hwnd);
+      request.sourceDesktop = observedDesktop;
+      request.sourceMonitorId = sourceKey.monitor.deviceId;
+    }
+    Workspace source;
+    if (!g_workspaces.Load(sourceKey, &source)) continue;
+    const WindowRecord* sourceRecord = source.Find(hwnd);
+    if (!sourceRecord || sourceRecord->pid != processId ||
+        sourceRecord->tilingGeneration != request.tilingGeneration ||
+        !g_wm.overflowWindows.count(hwnd) ||
+        sourceRecord->state != ManageState::Floating || sourceRecord->alwaysFloating ||
+        source.Layout() == TileLayout::Floating || IsWindowExcludedByRules(hwnd) ||
+        ShouldWindowAlwaysFloat(hwnd)) continue;
+    if (!IsEqualGUID(currentDesktop, request.sourceDesktop) ||
+        GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None || IsWindowCloaked(hwnd)) {
+      // Wait for desktop arrival or restoration rather than polling hidden apps.
+      g_wm.pendingWindowOverflow.push_back(std::move(request));
+      continue;
+    }
+    RECT sourceFrame{};
+    if (!WindowCanBeManaged(hwnd) || IsHungAppWindow(hwnd) ||
+        !GetWindowFrameRect(hwnd, &sourceFrame)) {
+      g_wm.pendingWindowOverflow.push_back(std::move(request));
+      continue;
+    }
+
+    WindowRecord incoming = *sourceRecord;
+    incoming.state = ManageState::Tiled;
+    incoming.pendingDefaultFloatingCenter = false;
+    incoming.constraints = ProbeWindowConstraints(hwnd);
+    if (!incoming.constraints.valid || !incoming.constraints.dpi) {
+      // A missing startup constraint report is not evidence that the app cannot
+      // fit. Retry on the next lifecycle event without losing the routing request.
+      Diagnostics::RecordEvent(L"overflow deferred hwnd=%p reason=constraints unavailable", hwnd);
+      g_wm.pendingWindowOverflow.push_back(std::move(request));
+      continue;
+    }
+
+    std::vector<HMONITOR> monitors{sourceMonitor};
+    if (g_settings.overflowTryOtherMonitors && !request.monitorFixed) {
+      std::vector<HMONITOR> connected;
+      EnumerateCurrentMonitors(connected);
+      MONITORINFO sourceInfo{sizeof(sourceInfo)};
+      GetMonitorInfoW(sourceMonitor, &sourceInfo);
+      auto distance = [&](HMONITOR monitor) {
+        MONITORINFO info{sizeof(info)};
+        if (!GetMonitorInfoW(monitor, &info)) return LLONG_MAX;
+        const long long dx = static_cast<long long>(info.rcMonitor.left) + info.rcMonitor.right -
+                             sourceInfo.rcMonitor.left - sourceInfo.rcMonitor.right;
+        const long long dy = static_cast<long long>(info.rcMonitor.top) + info.rcMonitor.bottom -
+                             sourceInfo.rcMonitor.top - sourceInfo.rcMonitor.bottom;
+        return dx * dx + dy * dy;
+      };
+      std::stable_sort(connected.begin(), connected.end(),
+                       [&](HMONITOR first, HMONITOR second) { return distance(first) < distance(second); });
+      for (HMONITOR monitor : connected) AddUniqueMonitor(monitors, monitor);
+    }
+
+    // Existing desktop occupancy is irrelevant: only try monitors on the source,
+    // then create one new desktop after proving its initial layout can fit.
+    auto preflight = [&](const DesktopMonitorKey& key, Workspace* trial, RECT* incomingRect,
+                         const Workspace* initial = nullptr) {
+      const HMONITOR monitor = key.ResolveMonitor();
+      WorkspaceMetrics metrics;
+      if (!monitor || !GetWorkspaceMetrics(monitor, &metrics)) return false;
+      if (initial) *trial = *initial;
+      else if (!g_workspaces.Load(key, trial)) *trial = MakeDefaultWorkspace(key);
+      trial->Forget(hwnd);
+      if (trial->Layout() == TileLayout::Floating) {
+        if (!initial) return false; // Another monitor must have room to tile.
+        WindowRecord record = incoming;
+        record.pendingInsertionPlacement = false;
+        trial->AdmitFloating(std::move(record));
+        *incomingRect = sourceFrame;
+        return true;
+      }
+      if (!incoming.constraints.valid || !incoming.constraints.dpi) return false;
+      const auto oldRecords = trial->Records();
+      for (const auto& member : oldRecords) {
+        GUID owner{};
+        DWORD livePid = 0;
+        GetWindowThreadProcessId(member.first, &livePid);
+        if (!IsWindow(member.first) || livePid != member.second.pid) {
+          trial->Forget(member.first);
+        } else if (!GetWindowDesktopIdSafe(member.first, &owner)) {
+          return false;
+        } else if (!IsEqualGUID(owner, key.desktopId) || GetWindowPhysicalMonitor(member.first) != monitor) {
+          trial->Forget(member.first);
+        } else {
+          SuspensionReason reason = GetPhysicalSuspensionReason(member.first);
+          if (reason == SuspensionReason::Maximized && !IsZoomed(member.first) &&
+              member.second.state == ManageState::Tiled) {
+            RECT authoritative{}, current{};
+            if (GetCurrentAuthoritativeTiledRect(key, *trial, member.first, &authoritative) &&
+                GetWindowFrameRect(member.first, &current) && RectsNear(current, authoritative)) {
+              reason = SuspensionReason::None;
+            }
+          }
+          if (member.second.state == ManageState::Tiled && reason != SuspensionReason::None) {
+            trial->Suspend(member.first, reason);
+          } else if (member.second.state == ManageState::Suspended) {
+            if (reason == SuspensionReason::None) trial->Restore(member.first);
+            else trial->Suspend(member.first, reason);
+          }
+        }
+      }
+      struct CandidateEnumeration {
+        const DesktopMonitorKey* key;
+        HMONITOR monitor;
+        Workspace* trial;
+        HWND incoming;
+        bool complete = true;
+      } context{&key, monitor, trial, hwnd};
+      ++Diagnostics::g_runtime.counters.enumWindowsPasses;
+      const BOOL enumerated = initial ? TRUE : EnumWindows([](HWND candidate, LPARAM parameter) WINAPI -> BOOL {
+        ++Diagnostics::g_runtime.counters.enumWindowsVisited;
+        auto& context = *reinterpret_cast<CandidateEnumeration*>(parameter);
+        if (candidate == context.incoming || !IsWindowVisible(candidate) ||
+            !WindowCanBeManaged(candidate) || GetWindowPhysicalMonitor(candidate) != context.monitor ||
+            (!IsWindowTrackedInAnyState(candidate) && !IsWindowEnabled(candidate))) return TRUE;
+        DWORD cloaked = 0;
+        if (FAILED(DwmGetWindowAttribute(candidate, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
+          context.complete = false;
+          return TRUE;
+        }
+        if (cloaked) return TRUE; // Only source-desktop monitors are scanned.
+        GUID desktop{};
+        if (!GetWindowDesktopIdSafe(candidate, &desktop)) {
+          context.complete = false;
+          return TRUE;
+        }
+        if (!IsEqualGUID(desktop, context.key->desktopId)) return TRUE;
+        if (context.trial->HasRecord(candidate)) return TRUE;
+        // A stale owner must be reconciled before importing this destination;
+        // copying it here would duplicate ownership or lose its floating policy.
+        if (IsWindowTrackedInAnyState(candidate) || IsWindowAwaitingInitialPlacement(candidate)) {
+          context.complete = false;
+          return TRUE;
+        }
+        bool alwaysFloating = false;
+        if (ShouldWindowStartFloating(candidate, &alwaysFloating)) {
+          WindowRecord record = MakeWindowRecord(candidate, ManageState::Floating);
+          record.alwaysFloating = alwaysFloating;
+          context.trial->AdmitFloating(std::move(record));
+        } else {
+          context.trial->AdmitInitial(MakeWindowRecord(candidate), GetPhysicalSuspensionReason(candidate));
+        }
+        return TRUE;
+      }, reinterpret_cast<LPARAM>(&context));
+      if (!enumerated || !context.complete) return false;
+      trial->Forget(hwnd);
+      const size_t limit = AutomaticWindowLimitForMonitor(key.monitor);
+      if (limit && trial->VisibleWindowCount() >= limit) return false;
+      WindowRecord record = incoming;
+      // Predict monitor-DPI constraints, then probe again after a physical move.
+      if (record.constraints.dpi != metrics.dpi) {
+        record.constraints.minWidth = std::max<LONG>(1, MulDiv(record.constraints.minWidth, metrics.dpi, record.constraints.dpi));
+        record.constraints.minHeight = std::max<LONG>(1, MulDiv(record.constraints.minHeight, metrics.dpi, record.constraints.dpi));
+        record.constraints.dpi = metrics.dpi;
+      }
+      const HWND anchor = g_settings.automaticNewWindowPosition == AutomaticNewWindowPosition::AfterFocused
+          ? trial->LastFocusedTiledWindow() : nullptr;
+      if (anchor) trial->AdmitTiledAfter(std::move(record), anchor);
+      else trial->AdmitTiled(std::move(record));
+      for (HWND member : trial->TiledWindows()) {
+        if (member == hwnd) continue;
+        const WindowConstraints constraints = ProbeWindowConstraints(member);
+        if (!constraints.valid) return false;
+        trial->UpdateConstraints(member, constraints);
+      }
+      auto fits = [&](Workspace& candidate) {
+        std::vector<RECT> rects;
+        if (BuildWorkspaceLayoutPlan(candidate, metrics.workArea, metrics.gap, &rects) != LayoutPlanStatus::Success &&
+            !(candidate.Layout() == TileLayout::Dwindle && AutomaticDwindleAdaptationEnabled() &&
+              FitAdaptiveDwindleDividers(candidate, metrics.workArea, metrics.gap))) return false;
+        if (BuildWorkspaceLayoutPlan(candidate, metrics.workArea, metrics.gap, &rects) != LayoutPlanStatus::Success) return false;
+        const size_t index = candidate.TiledIndex(hwnd);
+        if (index >= rects.size()) return false;
+        *incomingRect = rects[index];
+        return true;
+      };
+      if (fits(*trial)) return true;
+      const Workspace preferred = *trial;
+      const size_t preferredIndex = preferred.TiledIndex(hwnd);
+      for (size_t offset = 1; offset < preferred.ActiveCount(); ++offset) {
+        for (int direction : {-1, 1}) {
+          const long long index = static_cast<long long>(preferredIndex) + direction * static_cast<long long>(offset);
+          if (index < 0 || static_cast<size_t>(index) >= preferred.ActiveCount()) continue;
+          Workspace alternative = preferred;
+          if (alternative.MovePendingAdmissionToIndex(hwnd, static_cast<size_t>(index)) && fits(alternative)) {
+            *trial = std::move(alternative);
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    bool committed = false;
+    bool mutationFailed = false;
+    bool retryWhenReady = false;
+    // Recheck source capacity, then try other monitors and one new desktop.
+    // Never create another desktop if this attempt fails or the window cannot fit.
+    const size_t candidateCount = monitors.size() + (g_settings.overflowCreateDesktop ? 1 : 0);
+    for (size_t index = 0; index < candidateCount; ++index) {
+      const bool createDesktop = index == monitors.size();
+      const HMONITOR monitor = createDesktop ? sourceMonitor : monitors[index];
+      GUID desktop = request.sourceDesktop;
+      GUID createdDesktop{};
+      int desktopNumber = 0;
+      DesktopMonitorKey targetKey{};
+      Workspace initial;
+      Platform::VirtualDesktop::DesktopMetadata metadata;
+      auto resolveOverflowLayout = [&](const DesktopMonitorKey& key) {
+        int matchedRule = 0;
+        const TileLayout ruleLayout = ResolveInitialWorkspaceLayout(key, &matchedRule, &metadata);
+        if (matchedRule) {
+          Workspace selected;
+          selected.SetLayout(ruleLayout);
+          selected.SetMasterRatio(g_settings.masterPercent / 100.0);
+          return selected;
+        }
+        return source.EmptyWithInheritedLayoutSettings();
+      };
+      if (createDesktop) {
+        std::vector<GUID> order;
+        if (!Platform::VirtualDesktop::GetDesktopIdsInOrder(&order)) break;
+        auto position = std::find_if(order.begin(), order.end(),
+            [&](const GUID& id) { return IsEqualGUID(id, request.sourceDesktop); });
+        if (position == order.end()) break;
+        metadata.number = static_cast<int>(position - order.begin()) + 2;
+        // A desktop created by this operation starts without a custom name.
+        targetKey = {GUID_NULL, sourceKey.monitor};
+        initial = resolveOverflowLayout(targetKey);
+      } else if (!DesktopMonitorKey::FromHMonitor(desktop, monitor, &targetKey)) continue;
+      Workspace candidate;
+      RECT targetFrame{};
+      if (!preflight(targetKey, &candidate, &targetFrame, createDesktop ? &initial : nullptr)) continue;
+      auto canMoveIncoming = [&] {
+        GUID liveCurrent{}, liveOwner{};
+        LASTINPUTINFO liveInput{sizeof(liveInput)};
+        DWORD livePid = 0;
+        GetWindowThreadProcessId(hwnd, &livePid);
+        return GetLastInputInfo(&liveInput) &&
+            (hwnd != foreground || (GetForegroundWindow() == hwnd && liveInput.dwTime == batchInput.dwTime)) &&
+            IsWindow(hwnd) && livePid == processId && g_wm.overflowWindows.count(hwnd) &&
+            GetCurrentDesktopId(&liveCurrent) && IsEqualGUID(liveCurrent, request.sourceDesktop) &&
+            GetWindowDesktopIdSafe(hwnd, &liveOwner) && IsEqualGUID(liveOwner, request.sourceDesktop) &&
+            GetWindowPhysicalMonitor(hwnd) == sourceMonitor &&
+            !IsMoveSizeGestureInProgress(hwnd) && !IsWindowCloaked(hwnd) &&
+            GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None;
+      };
+      if (!canMoveIncoming()) { retryWhenReady = true; mutationFailed = true; break; }
+      if (createDesktop) {
+        const bool created = Platform::VirtualDesktop::CreateDesktopAfter(
+            request.sourceDesktop, &createdDesktop, &desktopNumber);
+        desktop = createdDesktop;
+        targetKey.desktopId = desktop;
+        metadata = Platform::VirtualDesktop::ReadDesktopMetadata(desktop);
+        metadata.number = desktopNumber; // Native order wins over lagging registry data.
+        initial = resolveOverflowLayout(targetKey);
+        const bool readyAfterCreation = canMoveIncoming();
+        if (!created || !readyAfterCreation ||
+            !Platform::VirtualDesktop::IsDesktopEmptyExcept(desktop) ||
+            !preflight(targetKey, &candidate, &targetFrame, &initial) || !canMoveIncoming()) {
+          retryWhenReady = created && (!readyAfterCreation || !canMoveIncoming());
+          Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(createdDesktop, request.sourceDesktop);
+          mutationFailed = true;
+          break;
+        }
+      }
+      // Change monitors while the HWND is still visible. Off-desktop placement
+      // is suppressed by the ordinary safety gate. Verify the app's real DPI
+      // contract before committing its virtual-desktop ownership.
+      if (monitor != sourceMonitor) {
+        const PlacementObservation placed = PlaceWindowChecked(hwnd, incoming.canMove, targetFrame);
+        incoming.constraints = ProbeWindowConstraints(hwnd);
+        if (placed.result != PlacementResult::Success || GetWindowPhysicalMonitor(hwnd) != monitor ||
+            !incoming.constraints.valid || !preflight(targetKey, &candidate, &targetFrame, createDesktop ? &initial : nullptr)) {
+          rollbackOverflowMove({hwnd, processId, request.sourceDesktop, desktop, sourceFrame, 0, batchInput.dwTime});
+          mutationFailed = true;
+          break;
+        }
+      }
+      const bool differentDesktop = !IsEqualGUID(desktop, request.sourceDesktop);
+      if (differentDesktop && !Platform::VirtualDesktop::MoveWindowToDesktop(
+              hwnd, processId, request.sourceDesktop, desktop)) {
+        rollbackOverflowMove({hwnd, processId, request.sourceDesktop, desktop, sourceFrame, 0, batchInput.dwTime});
+        mutationFailed = true;
+        break;
+      }
+      GUID actualDesktop{};
+      DWORD livePid = 0;
+      if (!GetWindowDesktopIdSafe(hwnd, &actualDesktop) || !IsEqualGUID(actualDesktop, desktop) ||
+          GetWindowPhysicalMonitor(hwnd) != monitor) {
+        rollbackOverflowMove({hwnd, processId, request.sourceDesktop, desktop, sourceFrame, 0, batchInput.dwTime});
+        mutationFailed = true;
+        break;
+      }
+      const WindowRecord* liveRecord = nullptr;
+      if (!g_workspaces.Load(sourceKey, &source) ||
+          !(liveRecord = source.Find(hwnd)) || liveRecord->pid != processId ||
+          liveRecord->tilingGeneration != request.tilingGeneration ||
+          !g_wm.overflowWindows.count(hwnd)) {
+        reconcileObservedOwner(hwnd);
+        if (createDesktop) Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(createdDesktop, request.sourceDesktop);
+        mutationFailed = true;
+        break;
+      }
+      // Destination membership can change during the native calls. Repeat the
+      // proof after movement; a new conflict rolls back only this incoming HWND.
+      incoming.constraints = ProbeWindowConstraints(hwnd);
+      if ((candidate.Layout() != TileLayout::Floating && !incoming.constraints.valid) ||
+          (createDesktop && !Platform::VirtualDesktop::IsDesktopEmptyExcept(desktop, hwnd)) ||
+          !preflight(targetKey, &candidate, &targetFrame, createDesktop ? &initial : nullptr)) {
+        rollbackOverflowMove({hwnd, processId, request.sourceDesktop, desktop, sourceFrame, 0, batchInput.dwTime});
+        mutationFailed = true;
+        break;
+      }
+      LASTINPUTINFO finalInput{sizeof(finalInput)};
+      GUID finalCurrent{};
+      GetWindowThreadProcessId(hwnd, &livePid);
+      if (!IsWindow(hwnd) || livePid != processId ||
+          !g_wm.overflowWindows.count(hwnd) || IsMoveSizeGestureInProgress(hwnd) ||
+          GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+          !GetLastInputInfo(&finalInput) ||
+          (hwnd == foreground && finalInput.dwTime != batchInput.dwTime) ||
+          !GetCurrentDesktopId(&finalCurrent) || !IsEqualGUID(finalCurrent, request.sourceDesktop) ||
+          !GetWindowDesktopIdSafe(hwnd, &actualDesktop) || !IsEqualGUID(actualDesktop, desktop) ||
+          GetWindowPhysicalMonitor(hwnd) != monitor) {
+        reconcileObservedOwner(hwnd);
+        if (createDesktop) Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(createdDesktop, request.sourceDesktop);
+        mutationFailed = true;
+        break;
+      }
+      source.Forget(hwnd);
+      g_workspaces.Save(sourceKey, source);
+      g_workspaces.Save(targetKey, candidate);
+      if (createDesktop) {
+        std::vector<HMONITOR> connected;
+        EnumerateCurrentMonitors(connected);
+        for (HMONITOR otherMonitor : connected) {
+          DesktopMonitorKey otherKey{}, otherSourceKey{};
+          Workspace existing, otherSource;
+          if (otherMonitor == monitor ||
+              !DesktopMonitorKey::FromHMonitor(desktop, otherMonitor, &otherKey) ||
+              g_workspaces.Load(otherKey, &existing) ||
+              !DesktopMonitorKey::FromHMonitor(request.sourceDesktop, otherMonitor, &otherSourceKey)) continue;
+          if (!g_workspaces.Load(otherSourceKey, &otherSource)) otherSource = MakeDefaultWorkspace(otherSourceKey);
+          int matchedRule = 0;
+          const TileLayout ruleLayout = ResolveInitialWorkspaceLayout(otherKey, &matchedRule, &metadata);
+          Workspace inherited = otherSource.EmptyWithInheritedLayoutSettings();
+          if (matchedRule) {
+            inherited = Workspace{};
+            inherited.SetLayout(ruleLayout);
+            inherited.SetMasterRatio(g_settings.masterPercent / 100.0);
+          }
+          g_workspaces.Save(otherKey, inherited);
+        }
+      }
+      AddPendingWorkspaceArrange(desktop, monitor);
+      if (!differentDesktop) ArrangeWorkspace(targetKey);
+      if (differentDesktop && hwnd == foreground) {
+        follow = {hwnd, processId, request.sourceDesktop, desktop, sourceFrame, GetTickCount64() + 2000, batchInput.dwTime};
+      }
+      Diagnostics::RecordEvent(L"overflow placed hwnd=%p targetDesktop=%08X monitorId=%ls", hwnd, desktop.Data1, targetKey.monitor.deviceId.c_str());
+      committed = true;
+      break;
+    }
+    if (!committed && IsWindow(hwnd) && g_wm.overflowWindows.count(hwnd) &&
+        (retryWhenReady || GetPhysicalSuspensionReason(hwnd) != SuspensionReason::None ||
+         IsWindowCloaked(hwnd))) {
+      g_wm.pendingWindowOverflow.push_back(std::move(request));
+    } else if (!committed && !mutationFailed) {
+      Diagnostics::RecordEvent(L"overflow fallback hwnd=%p reason=no viable destination", hwnd);
+      Workspace fallback;
+      if (g_workspaces.Load(sourceKey, &fallback)) {
+        FloatingPlacementHint hint;
+        hint.intent = FloatingPlacementIntent::FailureCenter;
+        if (RepairFloatingGeometry(sourceKey, fallback, hwnd, hint)) g_workspaces.Save(sourceKey, fallback);
+      }
+    }
+  }
+
+  if (follow.hwnd) {
+    GUID liveCurrent{};
+    LASTINPUTINFO liveInput{sizeof(liveInput)};
+    GetLastInputInfo(&liveInput);
+    if (liveInput.dwTime == follow.inputTickMs && IsWindow(follow.hwnd) &&
+        g_wm.overflowWindows.count(follow.hwnd) &&
+        GetCurrentDesktopId(&liveCurrent) && IsEqualGUID(liveCurrent, follow.sourceDesktop)) {
+      if (Platform::VirtualDesktop::SwitchToDesktop(follow.hwnd, follow.processId, follow.targetDesktop, follow.sourceDesktop, follow.inputTickMs)) {
+        follow.deadlineTickMs = GetTickCount64() + 2000;
+        g_wm.pendingOverflowSwitch = follow;
+        g_wm.reconciledDesktopState = ReconciledDesktopState::TransitionPending;
+        waitForSwitch = true;
+        ScheduleLifecycleReconcile(nullptr);
+      } else {
+        GetLastInputInfo(&liveInput);
+        if (liveInput.dwTime == follow.inputTickMs && GetCurrentDesktopId(&liveCurrent) &&
+            IsEqualGUID(liveCurrent, follow.sourceDesktop)) rollbackOverflowMove(follow);
+      }
+    }
+  }
+  ULONGLONG nextDue = waitForSwitch ? GetTickCount64() + 50 : 0;
+  if (nextDue) {
+    const ULONGLONG tick = GetTickCount64();
+    g_wm.overflowTimer = SetTimer(nullptr, 0, nextDue > tick ? static_cast<UINT>(nextDue - tick) : 1, nullptr);
+    if (!g_wm.overflowTimer) {
+      g_wm.pendingOverflowSwitch = {};
+      Wh_Log(L"Overflow switch timer unavailable; retaining observed window ownership");
+    }
+  }
+}
+
 // After a lifecycle burst settles, reconcile tracked-window physical and desktop
 // state, discover eligible windows only on the current desktop, then arrange each
 // changed or pending workspace once and refresh the tray.
@@ -5504,6 +10129,8 @@ static void ReconcileDeferredLifecycle() {
     AddUniqueMonitor(monitors, GetWindowPhysicalMonitor(hwnd));
   }
 
+  RouteNewWindows(monitors);
+
   // One top-level enumeration is enough for every monitor involved in this burst.
   std::vector<std::vector<HWND>> snapshots = CollectTileWindowsForMonitors(monitors);
   std::vector<std::vector<HWND>> suspendedSnapshots =
@@ -5530,6 +10157,46 @@ static void ReconcileDeferredLifecycle() {
     }
   }
 
+  // Admission is intentionally decided only after the settled snapshot. If a
+  // plausible Automatic-mode candidate is still unknown, its first observation
+  // may have raced application initialization or shell desktop registration.
+  // Give it one independent re-observation without turning discovery into polling.
+  if ((IsAutomaticMode() || g_wm.windowRoutingReady) &&
+      g_settings.slowApplicationDelayMs) {
+    bool addedRetry = false;
+    const ULONGLONG dueTickMs =
+        GetTickCount64() + g_settings.slowApplicationDelayMs;
+    for (HWND hwnd : dirtyWindows) {
+      if (hwnd && IsWindow(hwnd) && !IsWindowTrackedInAnyState(hwnd) &&
+          (IsAutomaticMode() || !g_wm.windowRoutingEvaluated.count(hwnd)) &&
+          GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None &&
+          GetAncestor(hwnd, GA_ROOT) == hwnd) {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(hwnd, &processId);
+        if (!processId) continue;
+
+        auto existing = std::find_if(
+            g_wm.pendingDiscoveryRetries.begin(),
+            g_wm.pendingDiscoveryRetries.end(),
+            [&](const PendingDiscoveryRetry& pending) {
+              return pending.hwnd == hwnd;
+            });
+        if (existing != g_wm.pendingDiscoveryRetries.end()) {
+          if (existing->processId == processId) continue;
+          *existing = {hwnd, processId, dueTickMs};
+        } else {
+          g_wm.pendingDiscoveryRetries.push_back(
+              {hwnd, processId, dueTickMs});
+        }
+        addedRetry = true;
+      }
+    }
+
+    if (addedRetry) {
+      ScheduleNextDiscoveryRetryTimer();
+    }
+  }
+
   for (const auto& key : globallyChanged) {
     if (std::none_of(arrangedKeys.begin(), arrangedKeys.end(),
                      [&](const DesktopMonitorKey& arranged) {
@@ -5552,6 +10219,8 @@ static void ReconcileDeferredLifecycle() {
     g_wm.pendingDesktopSwitchFlyouts = false;
     TrayUi::ShowDesktopSwitchFlyouts(currentDesktop);
   }
+  ProcessWindowOverflow();
+  FollowInitiallyPlacedWindow();
   // Ordinary lifecycle work updates the icon/tooltip for the monitor the tray is
   // already representing. Only a foreground event or explicit workspace command
   // retargets that single shell icon to another monitor.
@@ -5621,6 +10290,9 @@ static void ProcessWindowLifecycleEvent(DWORD event, HWND hwnd) {
       // Cross-monitor movement remains ownership migration, not conformance drift.
       // Otherwise a tiled HWND that leaves its authoritative rectangle opens or
       // reuses one bounded lease; expected SetWindowPos echoes are consumed there.
+      // A native drag remains authoritative until MOVESIZEEND reconciles monitor
+      // ownership for this HWND. Never probe or migrate underneath the user.
+      if (IsMoveSizeGestureInProgress(hwnd)) break;
       if (!Platform::WindowEvents::HasTrackedMonitorOwnershipMismatch(hwnd) &&
           HandleTiledWindowLocationChange(hwnd)) {
         break;
@@ -5636,8 +10308,8 @@ static void ProcessWindowLifecycleEvent(DWORD event, HWND hwnd) {
     case EVENT_SYSTEM_MINIMIZEEND:
     case EVENT_OBJECT_STATECHANGE:
       // These are prompts to query actual physical state. In Automatic mode,
-      // minimize/restore preserves membership; in both modes maximize/restore
-      // preserves the saved logical slot. Run immediately and after settle.
+      // minimize/maximize/fullscreen transitions preserve membership through a
+      // saved slot. Run immediately and after settle.
       ReconcileManagedWindowStateNow(hwnd);
       ScheduleLifecycleReconcile(hwnd);
       break;
@@ -5690,6 +10362,98 @@ static MoveSizeGesture ConsumeMoveSizeGesture(HWND hwnd) {
 //=============================================================================
 namespace Commands {
 
+// User-authored geometry changes are rejected before commit when cached native
+// constraints already make them impossible. A short-lived transaction handles a
+// minimum that an application changes only during the resulting placement.
+static bool ValidateUserLayoutMutation(
+    const DesktopMonitorKey& key, HMONITOR monitor,
+    Workspace& candidate, HWND subject, UserLayoutMutationKind kind,
+    const wchar_t* action) {
+  // A same-DPI native minimum can change while no placement is occurring.
+  // Refresh the committed workspace first, persist that application-owned state,
+  // then mirror it into the geometry-mutated candidate before deciding whether
+  // the user's operation is feasible.
+  Workspace current;
+  bool committedConstraintsChanged = false;
+  if (g_workspaces.Load(key, &current)) {
+    committedConstraintsChanged =
+        RefreshWorkspaceNativeConstraints(current, true, L"user mutation");
+    if (committedConstraintsChanged) {
+      g_workspaces.Save(key, current);
+    }
+    for (HWND hwnd : candidate.TiledWindows()) {
+      const WindowRecord* currentRecord = current.Find(hwnd);
+      if (currentRecord) {
+        candidate.UpdateConstraints(hwnd, currentRecord->constraints);
+      }
+    }
+  }
+
+  WorkspaceMetrics metrics;
+  std::vector<RECT> rects;
+  LayoutPlanStatus status = LayoutPlanStatus::Unsatisfiable;
+  if (GetWorkspaceMetrics(monitor, &metrics)) {
+    ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+    status = BuildWorkspaceLayoutPlan(
+        candidate, metrics.workArea, metrics.gap, &rects);
+    if (status == LayoutPlanStatus::Unsatisfiable &&
+        candidate.Layout() == TileLayout::Dwindle) {
+      if ((kind == UserLayoutMutationKind::Order ||
+           kind == UserLayoutMutationKind::LayoutChange) &&
+          FitAdaptiveDwindleDividers(
+              candidate, metrics.workArea, metrics.gap)) {
+        // Preserve the requested/current order whenever adaptive geometry alone
+        // can make it feasible. Explicit order mutations stop here: they are
+        // never allowed to reshuffle unrelated windows.
+        Diagnostics::RecordEvent(
+            kind == UserLayoutMutationKind::Order
+                ? L"adaptive dwindle order preflight accommodated action=%ls"
+                : L"adaptive dwindle layout conversion preserved order action=%ls",
+            action ? action : L"Layout mutation");
+        return true;
+      }
+
+      if (kind == UserLayoutMutationKind::LayoutChange) {
+        Workspace reassigned = candidate;
+        size_t movedWindowCount = 0;
+        if (ReassignDwindleLayoutConversionForConstraints(
+                reassigned, metrics.workArea, metrics.gap,
+                &movedWindowCount)) {
+          candidate = std::move(reassigned);
+          Diagnostics::RecordEvent(
+              L"dwindle layout conversion reassigned windows action=%ls moved=%zu",
+              action ? action : L"Change layout", movedWindowCount);
+          return true;
+        }
+      }
+    }
+  }
+  if (status == LayoutPlanStatus::Success ||
+      status == LayoutPlanStatus::NotApplicable) {
+    return true;
+  }
+
+  ReportRejectedLayoutMutation(
+      key, monitor, kind, action ? action : L"Layout mutation", subject,
+      candidate, rects);
+  // If the rejection exposed a changed native contract, reconcile the committed
+  // layout only when that existing layout is itself no longer feasible. Avoid an
+  // unnecessary reflow merely because the rejected candidate needed fresh data.
+  if (committedConstraintsChanged) {
+    WorkspaceMetrics committedMetrics;
+    std::vector<RECT> committedRects;
+    if (GetWorkspaceMetrics(monitor, &committedMetrics)) {
+      ++Diagnostics::g_runtime.counters.layoutPlansBuilt;
+      if (BuildWorkspaceLayoutPlan(
+              current, committedMetrics.workArea, committedMetrics.gap,
+              &committedRects) == LayoutPlanStatus::Unsatisfiable) {
+        ArrangeWorkspace(key);
+      }
+    }
+  }
+  return false;
+}
+
 // Promotes the foreground window, or its tiled owner, to the master slot, then
 // clears stale gesture samples for both windows and reflows the workspace.
 void SwapMaster() {
@@ -5712,13 +10476,22 @@ void SwapMaster() {
   }
 
   HWND resolved = ResolveToTiledWindow(fg, workspace.TiledWindows());
+  Workspace candidate = workspace;
   HWND oldMaster = nullptr;
-  if (!resolved || !workspace.MakeMaster(resolved, &oldMaster)) return;
+  if (!resolved || !candidate.MakeMaster(resolved, &oldMaster)) return;
+  if (!ValidateUserLayoutMutation(
+          key, monitor, candidate, resolved, UserLayoutMutationKind::Order,
+          L"Set master")) {
+    return;
+  }
 
-  g_workspaces.Save(key, workspace);
+  RememberPendingLayoutMutation(
+      key, workspace, candidate, resolved, UserLayoutMutationKind::Order,
+      L"Set master");
+  g_workspaces.Save(key, candidate);
   ClearMoveSizeSamples(oldMaster);
   ClearMoveSizeSamples(resolved);
-  ArrangeWorkspace(key);
+  ArrangeWorkspace(key, resolved);
   Diagnostics::RecordEvent(
       L"Swap Master old=%p new=%p", oldMaster, resolved);
 }
@@ -5764,12 +10537,21 @@ static void MoveFocusedWindowOneSlot(bool promote) {
 
   const size_t otherIndex = promote ? index - 1 : index + 1;
   HWND other = workspace.TiledWindows()[otherIndex];
-  if (!workspace.SwapTiled(resolved, other)) return;
+  Workspace candidate = workspace;
+  if (!candidate.SwapTiled(resolved, other)) return;
+  if (!ValidateUserLayoutMutation(
+          key, monitor, candidate, resolved, UserLayoutMutationKind::Order,
+          promote ? L"Promote" : L"Demote")) {
+    return;
+  }
 
-  g_workspaces.Save(key, workspace);
+  RememberPendingLayoutMutation(
+      key, workspace, candidate, resolved, UserLayoutMutationKind::Order,
+      promote ? L"Promote" : L"Demote");
+  g_workspaces.Save(key, candidate);
   ClearMoveSizeSamples(resolved);
   ClearMoveSizeSamples(other);
-  ArrangeWorkspace(key);
+  ArrangeWorkspace(key, resolved);
 
   Diagnostics::RecordEvent(
       promote ? L"Promote Window hwnd=%p from=%zu to=%zu"
@@ -5799,18 +10581,20 @@ void FloatFocusedWindow() {
   Workspace workspace;
   if (!g_workspaces.Load(key, &workspace)) return;
 
+  // Explicit floating also cancels a queued overflow of this focused HWND.
+  g_wm.overflowWindows.erase(hwnd);
+  g_wm.pendingWindowOverflow.erase(
+      std::remove_if(g_wm.pendingWindowOverflow.begin(), g_wm.pendingWindowOverflow.end(),
+                     [hwnd](const PendingWindowOverflow& request) { return request.hwnd == hwnd; }),
+      g_wm.pendingWindowOverflow.end());
   HWND tiled = ResolveToTiledWindow(hwnd, workspace.TiledWindows());
   if (!tiled) return;
 
-  RECT before{};
   FloatingPlacementHint hint;
-  if (GetWindowFrameRect(tiled, &before) && before.right > before.left &&
-      before.bottom > before.top) {
-    hint.intent = FloatingPlacementIntent::PreserveAnchor;
-    hint.anchor = RectCenter(before);
-  }
+  hint.intent = FloatingPlacementIntent::CenterWithFloatingSize;
 
   CancelConformanceLease(tiled);
+  DiscardPendingAdmissionRecovery(tiled);
   if (!workspace.Float(tiled)) return;
   RepairFloatingGeometry(key, workspace, tiled, hint);
   g_workspaces.Save(key, workspace);
@@ -5862,12 +10646,22 @@ void CycleCurrentWorkspaceLayout(HMONITOR monitor = nullptr) {
         return;
       }
     } else {
-      state = Reconcile::MakeDefaultWorkspace();
+      state = Reconcile::MakeDefaultWorkspace(key);
     }
   }
 
   const TileLayout previousLayout = state.Layout();
-  if (!state.CycleLayout(g_settings.layoutCycle)) return;
+  Workspace candidate = state;
+  if (!candidate.CycleLayout(g_settings.layoutCycle)) return;
+  if (!ValidateUserLayoutMutation(
+          key, monitor, candidate, nullptr,
+          UserLayoutMutationKind::LayoutChange, L"Change layout")) {
+    return;
+  }
+  RememberPendingLayoutMutation(
+      key, state, candidate, nullptr, UserLayoutMutationKind::LayoutChange,
+      L"Change layout");
+  state = std::move(candidate);
   if (previousLayout != TileLayout::Floating &&
       state.Layout() == TileLayout::Floating) {
     RestoreWorkspaceFloatingGeometry(key, state);
@@ -5903,7 +10697,7 @@ void SetCurrentWorkspaceLayout(TileLayout layout, HMONITOR monitor = nullptr) {
         return;
       }
     } else {
-      state = Reconcile::MakeDefaultWorkspace();
+      state = Reconcile::MakeDefaultWorkspace(key);
       workspaceCreated = true;
     }
   }
@@ -5916,7 +10710,17 @@ void SetCurrentWorkspaceLayout(TileLayout layout, HMONITOR monitor = nullptr) {
     return;
   }
 
-  state.SetLayout(layout);
+  Workspace candidate = state;
+  candidate.SetLayout(layout);
+  if (!ValidateUserLayoutMutation(
+          key, monitor, candidate, nullptr,
+          UserLayoutMutationKind::LayoutChange, L"Change layout")) {
+    return;
+  }
+  RememberPendingLayoutMutation(
+      key, state, candidate, nullptr, UserLayoutMutationKind::LayoutChange,
+      L"Change layout");
+  state = std::move(candidate);
   if (previousLayout != TileLayout::Floating && layout == TileLayout::Floating) {
     RestoreWorkspaceFloatingGeometry(key, state);
   }
@@ -5936,6 +10740,7 @@ static void HandleUserMove(
     const MoveSizeGesture& gesture) {
   if (g_settings.mouseMoveBehavior == MouseMoveBehavior::Float) {
     CancelConformanceLease(hwnd);
+    DiscardPendingAdmissionRecovery(hwnd);
     if (workspace.Float(hwnd)) {
       RepairFloatingGeometry(
           key, workspace, hwnd, MakeFloatingPlacementHintFromGesture(gesture));
@@ -5949,6 +10754,7 @@ static void HandleUserMove(
   }
 
   HWND target = nullptr;
+  HWND preferredTiledWindow = nullptr;
   if (workspace.IsTiled(hwnd) && gesture.hasDropPoint) {
     for (HWND candidate : workspace.TiledWindows()) {
       if (candidate == hwnd) continue;
@@ -5960,15 +10766,27 @@ static void HandleUserMove(
     }
   }
 
-  if (target && workspace.SwapTiled(hwnd, target)) {
-    g_workspaces.Save(key, workspace);
-    ++Diagnostics::g_runtime.counters.tiledSwapActions;
-    Wh_Log(L"User move swapped managed windows %p and %p", hwnd, target);
-    Diagnostics::RecordEvent(L"user drag swapped hwnd=%p target=%p", hwnd, target);
+  if (target) {
+    Workspace candidate = workspace;
+    if (candidate.SwapTiled(hwnd, target) &&
+        ValidateUserLayoutMutation(
+            key, key.ResolveMonitor(), candidate, hwnd,
+            UserLayoutMutationKind::Order, L"Swap")) {
+      RememberPendingLayoutMutation(
+          key, workspace, candidate, hwnd, UserLayoutMutationKind::Order,
+          L"Swap");
+      workspace = std::move(candidate);
+      preferredTiledWindow = hwnd;
+      g_workspaces.Save(key, workspace);
+      ++Diagnostics::g_runtime.counters.tiledSwapActions;
+      Wh_Log(L"User move swapped managed windows %p and %p", hwnd, target);
+      Diagnostics::RecordEvent(
+          L"user drag swapped hwnd=%p target=%p", hwnd, target);
+    }
   }
 
   // No target means the source remains tiled and simply snaps back to its slot.
-  ArrangeWorkspace(key);
+  ArrangeWorkspace(key, preferredTiledWindow);
 }
 
 static void HandleUserResize(
@@ -5985,36 +10803,51 @@ static void HandleUserResize(
     return;
   }
 
+  Workspace candidate = workspace;
   bool changed = false;
-  switch (workspace.Layout()) {
+  switch (candidate.Layout()) {
     case TileLayout::MasterStack:
     case TileLayout::MasterStackH:
-      changed = workspace.LearnMasterStackResize(
+      changed = candidate.LearnMasterStackResize(
           workArea, gap, resizedIndex, gesture);
       break;
 
     case TileLayout::Columns:
     case TileLayout::Rows:
-      changed = workspace.LearnGridResize(
+      changed = candidate.LearnGridResize(
           workArea, gap, resizedIndex, gesture);
       break;
 
     case TileLayout::COUNT:
       return;
 
-    case TileLayout::BSP:
+    case TileLayout::Dwindle:
+      changed = candidate.LearnDwindleResize(
+          workArea, gap, resizedIndex, gesture);
+      break;
+
     case TileLayout::Monocle:
     case TileLayout::Floating:
       break;
   }
 
   if (changed) {
+    if (!ValidateUserLayoutMutation(
+            key, key.ResolveMonitor(), candidate, hwnd,
+            UserLayoutMutationKind::Resize, L"Resize")) {
+      ArrangeWorkspace(key, hwnd);
+      return;
+    }
+    RememberPendingLayoutMutation(
+        key, workspace, candidate, hwnd, UserLayoutMutationKind::Resize,
+        L"Resize");
+    workspace = std::move(candidate);
     g_workspaces.Save(key, workspace);
     ++Diagnostics::g_runtime.counters.dividerUpdates;
     Wh_Log(L"User resize updated local divider state for %p", hwnd);
     Diagnostics::RecordEvent(L"user resize updated divider hwnd=%p", hwnd);
   }
-  ArrangeWorkspace(key);
+  ArrangeWorkspace(key, changed ? hwnd : nullptr);
 }
 
 // Consumes one completed user gesture and routes it to the move or resize policy.
@@ -6191,16 +11024,34 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
   }
 
   const bool tracked = IsWindowTrackedInAnyState(hwnd);
+  if (event == EVENT_OBJECT_DESTROY) {
+    // Retire lifetime metadata when destruction is observed, before a delayed
+    // model message could mistake a reused HWND for the old routed window.
+    g_wm.overflowWindows.erase(hwnd);
+    g_wm.pendingWindowOverflow.erase(
+        std::remove_if(g_wm.pendingWindowOverflow.begin(), g_wm.pendingWindowOverflow.end(),
+                       [hwnd](const PendingWindowOverflow& pending) { return pending.hwnd == hwnd; }),
+        g_wm.pendingWindowOverflow.end());
+    if (g_wm.pendingOverflowSwitch.hwnd == hwnd) g_wm.pendingOverflowSwitch = {};
+    if (g_wm.pendingInitialPlacementSwitch.hwnd == hwnd) g_wm.pendingInitialPlacementSwitch = {};
+    const bool routingKnown = g_wm.windowRoutingEvaluated.erase(hwnd) != 0;
+    const bool routingPending = g_wm.pendingWindowRoutes.erase(hwnd) != 0;
+    if (tracked || routingKnown || routingPending) QueueWindowEvent(event, hwnd);
+    return;
+  }
 
   // A tiled LOCATIONCHANGE is classified later on the WM actor. Expected placement
   // echoes are cheap no-ops there; unexpected same-monitor drift opens a bounded
   // conformance lease instead of being silently discarded.
   if (event == EVENT_OBJECT_LOCATIONCHANGE) {
     if (!tracked) {
-      // A newly created window can already be minimized/maximized before the
-      // ordinary discovery snapshot ever sees it. Admit only those inactive
-      // physical states through this otherwise-noisy event; settled discovery
-      // re-checks eligibility, desktop, monitor and management mode.
+      if (g_wm.pendingWindowRoutes.count(hwnd)) {
+        QueueWindowEvent(event, hwnd);
+        return;
+      }
+      // A newly created window can already be minimized, maximized, or fullscreen
+      // before the ordinary discovery snapshot sees it. Queue those states for the
+      // inactive-admission path.
       const SuspensionReason reason = GetPhysicalSuspensionReason(hwnd);
       if ((reason != SuspensionReason::Minimized &&
            reason != SuspensionReason::Maximized) ||
@@ -6211,8 +11062,11 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
       return;
     }
 
+    const bool overflowPending = std::any_of(
+        g_wm.pendingWindowOverflow.begin(), g_wm.pendingWindowOverflow.end(),
+        [hwnd](const PendingWindowOverflow& pending) { return pending.hwnd == hwnd; });
     const bool stateOrLeaseNeedsObservation =
-        IsWindowSuspendedMaximized(hwnd) ||
+        overflowPending || g_workspaces.IsSuspendedMaximized(hwnd) ||
         HasActiveConformanceLease(hwnd) ||
         g_workspaces.IsTiled(hwnd);
     if (!stateOrLeaseNeedsObservation &&
@@ -6224,16 +11078,21 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
     return;
   }
 
-  // Keep shell/framework noise out of the WM queue. Untracked HWNDs still flow
-  // through the normal discovery pipeline in both modes, but only after they
-  // resemble real windows; Manual mode blocks admission at the model boundary.
+  // Unknown top-level lifecycle events are only discovery prompts. Do not apply
+  // the full eligibility policy inside the callback: a newly shown framework
+  // window can still be acquiring its final styles, owner, title, or desktop
+  // registration. The settled snapshot remains authoritative for admission, and
+  // Manual mode still blocks admission at the model boundary.
   if (!tracked) {
     const bool discoveryEvent =
         event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_UNCLOAKED ||
         event == EVENT_OBJECT_STATECHANGE ||
         event == EVENT_SYSTEM_MINIMIZESTART ||
-        event == EVENT_SYSTEM_MINIMIZEEND;
-    if (!discoveryEvent || !WindowCanBeManaged(hwnd)) {
+        event == EVENT_SYSTEM_MINIMIZEEND ||
+        ((event == EVENT_SYSTEM_MOVESIZESTART ||
+          event == EVENT_SYSTEM_MOVESIZEEND) &&
+         (g_wm.windowRoutingReady || IsAutomaticMode()));
+    if (!discoveryEvent || GetAncestor(hwnd, GA_ROOT) != hwnd) {
       return;
     }
   }
@@ -6242,7 +11101,26 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
   // Lease cancellation is actor-local; workspace mutation remains deferred until
   // normal message dispatch.
   if (event == EVENT_SYSTEM_MOVESIZESTART) {
+    g_wm.overflowWindows.erase(hwnd);
+    g_wm.pendingWindowOverflow.erase(
+        std::remove_if(g_wm.pendingWindowOverflow.begin(), g_wm.pendingWindowOverflow.end(),
+                       [hwnd](const PendingWindowOverflow& pending) { return pending.hwnd == hwnd; }),
+        g_wm.pendingWindowOverflow.end());
+    if (g_wm.pendingOverflowSwitch.hwnd == hwnd) g_wm.pendingOverflowSwitch = {};
+    if (g_wm.pendingInitialPlacementSwitch.hwnd == hwnd) g_wm.pendingInitialPlacementSwitch = {};
+    if (g_wm.windowRoutingReady) {
+      g_wm.windowRoutingEvaluated.insert(hwnd);
+      g_wm.pendingWindowRoutes.erase(hwnd);
+    }
     CancelConformanceLease(hwnd);
+  }
+
+  // Untracked drags only cancel initial routing. They must not reach the
+  // managed-window gesture handler or leave samples for an unrelated workspace.
+  if (!tracked && (event == EVENT_SYSTEM_MOVESIZESTART ||
+                   event == EVENT_SYSTEM_MOVESIZEEND)) {
+    if (event == EVENT_SYSTEM_MOVESIZEEND) QueueWindowEvent(EVENT_OBJECT_SHOW, hwnd);
+    return;
   }
 
   // Cache user move/resize boundaries. The callback only records facts; model
@@ -6468,6 +11346,67 @@ bool UsesHMonitorParameter() { return g_vd.abi.usesHMonitor; }
 // Virtual Desktop API + native change notifications
 //=============================================================================
 
+DesktopMetadata ReadDesktopMetadata(const GUID& desktopId) {
+  // Read only at the initial-layout boundary. Missing shell metadata leaves the
+  // corresponding condition unmatched; it never changes existing workspaces.
+  DesktopMetadata desktop;
+  DWORD sessionId = 0;
+  const bool haveSession = ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+  const std::wstring registryPaths[] = {
+      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops",
+      haveSession
+          ? L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo\\" +
+                std::to_wstring(sessionId) + L"\\VirtualDesktops"
+          : std::wstring{}};
+
+  for (const auto& path : registryPaths) {
+    if (path.empty()) continue;
+    DWORD bytes = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, path.c_str(), L"VirtualDesktopIDs",
+                     RRF_RT_REG_BINARY, nullptr, nullptr, &bytes) != ERROR_SUCCESS ||
+        bytes == 0 || bytes > 65536 || bytes % sizeof(GUID) != 0) {
+      continue;
+    }
+    std::vector<GUID> ids(bytes / sizeof(GUID));
+    if (RegGetValueW(HKEY_CURRENT_USER, path.c_str(), L"VirtualDesktopIDs",
+                     RRF_RT_REG_BINARY, nullptr, ids.data(), &bytes) != ERROR_SUCCESS ||
+        bytes % sizeof(GUID) != 0) {
+      continue;
+    }
+    ids.resize(bytes / sizeof(GUID));
+    auto found = std::find_if(ids.begin(), ids.end(), [&](const GUID& id) {
+      return IsEqualGUID(id, desktopId);
+    });
+    if (found != ids.end()) {
+      desktop.number = static_cast<int>(found - ids.begin()) + 1;
+      break;
+    }
+  }
+
+  wchar_t desktopIdText[39]{};
+  if (!StringFromGUID2(desktopId, desktopIdText, ARRAYSIZE(desktopIdText))) {
+    return desktop;
+  }
+  for (const auto& path : registryPaths) {
+    if (path.empty()) continue;
+    const std::wstring namePath = path + L"\\Desktops\\" + desktopIdText;
+    DWORD bytes = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, namePath.c_str(), L"Name",
+                     RRF_RT_REG_SZ, nullptr, nullptr, &bytes) != ERROR_SUCCESS ||
+        bytes == 0 || bytes > 65536 || bytes % sizeof(wchar_t) != 0) {
+      continue;
+    }
+    std::vector<wchar_t> name(bytes / sizeof(wchar_t) + 1, L'\0');
+    if (RegGetValueW(HKEY_CURRENT_USER, namePath.c_str(), L"Name",
+                     RRF_RT_REG_SZ, nullptr, name.data(), &bytes) == ERROR_SUCCESS &&
+        name.front() != L'\0') {
+      desktop.name = name.data();
+      break;
+    }
+  }
+  return desktop;
+}
+
 static const int VTABLE_GET_CURRENT_DESKTOP = 6;
 
 static const NotificationInterfaceConfig& GetNotificationInterfaceConfig() {
@@ -6484,28 +11423,46 @@ static bool SelectVirtualDesktopAbiProfile(
 
   if (build < 20348) {
     profile.managerInternal = IID_IVirtualDesktopManagerInternal_Win10Old;
+    profile.virtualDesktop = {0xFF72FFDD, 0xBE7E, 0x43FC, {0x9C, 0x03, 0xAD, 0x81, 0x68, 0x1E, 0x88, 0xE4}};
     profile.usesHMonitor = false;
   } else if (build < 22000) {
     profile.managerInternal = IID_IVirtualDesktopManagerInternal_Win10_20348;
+    profile.virtualDesktop = {0x62FDF88B, 0x11CA, 0x4AFB, {0x8B, 0xD8, 0x22, 0x96, 0xDF, 0xAE, 0x49, 0xE2}};
     profile.usesHMonitor = true;
-  } else if (build < 22483) {
+  } else if (build < 22483 || (build == 22621 && revision < 2215)) {
     profile.managerInternal = IID_IVirtualDesktopManagerInternal_Win11_22000;
+    profile.virtualDesktop = {0x536D3495, 0xB208, 0x4CC9, {0xAE, 0x26, 0xDE, 0x81, 0x11, 0x27, 0x5B, 0xF8}};
     profile.usesHMonitor = true;
+    if (build >= 22449) {
+      profile.getDesktopsIndex = 8;
+      profile.switchDesktopIndex = 10;
+    }
   } else if (build >= 22621 && build < 26100) {
     profile.managerInternal = IID_IVirtualDesktopManagerInternal_Win11_22621;
+    profile.virtualDesktop = {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
     profile.usesHMonitor = false;
   } else if (build >= 26100) {
     profile.managerInternal = IID_IVirtualDesktopManagerInternal_Win11_26100;
+    profile.virtualDesktop = {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
     profile.usesHMonitor = false;
+    profile.animatedSwitchIndex = 22;
+    profile.animationWaitIndex = 24;
   } else {
     // The old manual table did not claim a manager ABI for Insider builds
     // 22483..22620. Keep that gap explicit rather than silently guessing.
     return false;
   }
 
-  // Mirrors Windhawk's Taskbar Desktop Indicator notification ABI table. Its
-  // manually assembled sink relies on the unified x64 calling convention; x86
-  // keeps the core desktop API but uses settled cloak/uncloak reconciliation.
+  if (build >= 22000) {
+    profile.createDesktopIndex = profile.switchDesktopIndex + 1;
+    if (build >= 26100) ++profile.createDesktopIndex;
+    profile.moveDesktopIndex = profile.createDesktopIndex + 1;
+    profile.removeDesktopIndex = profile.createDesktopIndex + 2;
+  }
+
+  // Mirrors Windhawk's Taskbar Desktop Indicator notification ABI table. The
+  // architecture metadata guarantees a 64-bit caller-cleanup ABI; retain the
+  // compile guard as a belt-and-braces constraint around the manual sink.
 #if defined(_WIN64)
   if (build >= 22000) {
     if (build < 22483 ||
@@ -6739,8 +11696,8 @@ bool RegisterVirtualDesktopNotifications() {
 
   NotificationInterfaceConfig config = GetNotificationInterfaceConfig();
   if (config.methodCount == 0) {
-    // Win10 has no selected native notification ABI. x86 also deliberately uses
-    // settled cloak/uncloak reconciliation instead of the x64-only manual sink.
+    // Win10 has no selected native notification ABI and deliberately uses settled
+    // cloak/uncloak reconciliation instead.
     return true;
   }
 
@@ -6841,9 +11798,30 @@ bool InitializeVirtualDesktopAPIOnce() {
     return false;
   }
 
-  hr = g_vd.serviceProvider->QueryService(
-      CLSID_VirtualDesktopManagerInternal, g_vd.abi.managerInternal,
-      reinterpret_cast<void**>(&g_vd.managerInternal));
+  if (g_vd.explorerBuild >= 22621) {
+    hr = g_vd.serviceProvider->QueryService(
+        CLSID_VirtualDesktopManagerInternal, IID_IVirtualDesktopManagerInternal_Win11_26100,
+        reinterpret_cast<void**>(&g_vd.managerInternal));
+    if (SUCCEEDED(hr) && g_vd.managerInternal) {
+      g_vd.abi.managerInternal = IID_IVirtualDesktopManagerInternal_Win11_26100;
+      g_vd.abi.virtualDesktop = {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}};
+      g_vd.abi.usesHMonitor = false;
+      g_vd.abi.getDesktopsIndex = 7;
+      g_vd.abi.switchDesktopIndex = 9;
+      // MScholtes supplies separate 23H2/24H2 definitions for this same IID:
+      // 24H2 inserts SwitchDesktopAndMoveForegroundView at slot 10.
+      g_vd.abi.animatedSwitchIndex = g_vd.explorerBuild >= 26100 ? 22 : 21;
+      g_vd.abi.animationWaitIndex = g_vd.abi.animatedSwitchIndex + 2;
+      g_vd.abi.createDesktopIndex = g_vd.explorerBuild >= 26100 ? 11 : 10;
+      g_vd.abi.moveDesktopIndex = g_vd.abi.createDesktopIndex + 1;
+      g_vd.abi.removeDesktopIndex = g_vd.abi.createDesktopIndex + 2;
+    }
+  }
+  if (!g_vd.managerInternal) {
+    hr = g_vd.serviceProvider->QueryService(
+        CLSID_VirtualDesktopManagerInternal, g_vd.abi.managerInternal,
+        reinterpret_cast<void**>(&g_vd.managerInternal));
+  }
   if (FAILED(hr) || !g_vd.managerInternal) {
     Wh_Log(L"Failed to get VirtualDesktopManagerInternal: 0x%08X", hr);
     SAFE_RELEASE(g_vd.managerInternal);
@@ -6953,32 +11931,381 @@ bool ReinitializeVirtualDesktopAPI() {
   return ready;
 }
 
+// Per-window IVirtualDesktopManager calls can legitimately reject or lose an
+// individual HWND. Rebuild the shared COM stack only when the proxy/server itself
+// is no longer usable.
+static bool IsDeadVirtualDesktopProxy(HRESULT hr) {
+  return hr == RPC_E_DISCONNECTED ||
+         hr == RPC_E_CONNECTION_TERMINATED ||
+         hr == RPC_E_SERVER_DIED ||
+         hr == RPC_E_SERVER_DIED_DNE ||
+         hr == RPC_E_INVALID_IPID ||
+         hr == RPC_E_INVALID_OBJECT ||
+         hr == CO_E_OBJNOTCONNECTED ||
+         hr == HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE);
+}
+
 // Invokes a private manager slot using the Windows-version-specific signature.
 // A failed call forces one core-API reinitialization and retry before returning.
 template <typename TResult>
-HRESULT CallManagerInternal(int vtableIndex, TResult* outResult) {
-  if (!g_vd.managerInternal) return E_NOINTERFACE;
-  if (UsesHMonitorParameter()) {
-    auto pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, TResult*)>(
-        g_vd.managerInternal, vtableIndex);
-    HRESULT hr = pfn(g_vd.managerInternal, nullptr, outResult);
-    if (FAILED(hr) && ReinitializeVirtualDesktopAPI() && g_vd.managerInternal) {
-      pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, TResult*)>(
-          g_vd.managerInternal, vtableIndex);
-      hr = pfn(g_vd.managerInternal, nullptr, outResult);
+HRESULT CallManagerInternal(int vtableIndex, TResult* outResult, bool enumerateDesktops = false) {
+  HRESULT hr = E_NOINTERFACE;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    if (!g_vd.managerInternal) return hr;
+    const int slot = enumerateDesktops ? g_vd.abi.getDesktopsIndex : vtableIndex;
+    if (UsesHMonitorParameter()) {
+      const auto function = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, TResult*)>(g_vd.managerInternal, slot);
+      hr = function(g_vd.managerInternal, nullptr, outResult);
+    } else {
+      const auto function = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, TResult*)>(g_vd.managerInternal, slot);
+      hr = function(g_vd.managerInternal, outResult);
     }
-    return hr;
-  }
-
-  auto pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, TResult*)>(
-      g_vd.managerInternal, vtableIndex);
-  HRESULT hr = pfn(g_vd.managerInternal, outResult);
-  if (FAILED(hr) && ReinitializeVirtualDesktopAPI() && g_vd.managerInternal) {
-    pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, TResult*)>(
-        g_vd.managerInternal, vtableIndex);
-    hr = pfn(g_vd.managerInternal, outResult);
+    if (SUCCEEDED(hr) || attempt != 0 || !ReinitializeVirtualDesktopAPI()) break;
   }
   return hr;
+}
+
+// Enumeration/movement follow the shell interfaces used by Virtual Desktop
+// Helper and VD.ahk. Animation and its versioned slots follow MScholtes'
+// separate VirtualDesktop11.cs and VirtualDesktop11-24H2.cs definitions.
+bool GetDesktopIdsInOrder(std::vector<GUID>* desktopIds) {
+  if (!desktopIds) return false;
+  desktopIds->clear();
+  if (!InitializeVirtualDesktopAPI()) return false;
+  IObjectArray* desktops = nullptr;
+  HRESULT hr = CallManagerInternal(g_vd.abi.getDesktopsIndex, &desktops, true);
+  if (FAILED(hr) || !desktops) {
+    SAFE_RELEASE(desktops);
+    return false;
+  }
+  UINT count = 0;
+  hr = desktops->GetCount(&count);
+  for (UINT index = 0; SUCCEEDED(hr) && index < count; ++index) {
+    IVirtualDesktop* desktop = nullptr;
+    hr = desktops->GetAt(index, g_vd.abi.virtualDesktop, reinterpret_cast<void**>(&desktop));
+    GUID id{};
+    if (SUCCEEDED(hr) && desktop) hr = desktop->GetId(&id);
+    else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+    SAFE_RELEASE(desktop);
+    if (SUCCEEDED(hr)) desktopIds->push_back(id);
+  }
+  desktops->Release();
+  if (FAILED(hr)) desktopIds->clear();
+  return SUCCEEDED(hr);
+}
+
+// Resolve a GUID against a fresh shell array at each mutation boundary. Holding
+// an ordinal or a desktop pointer across a dynamic-desktop update is unsafe.
+static IVirtualDesktop* FindLiveDesktop(const GUID& desktopId) {
+  if (!InitializeVirtualDesktopAPI()) return nullptr;
+  IObjectArray* desktops = nullptr;
+  HRESULT hr = CallManagerInternal(g_vd.abi.getDesktopsIndex, &desktops, true);
+  IUnknown* const manager = g_vd.managerInternal;
+  if (FAILED(hr) || !desktops) {
+    SAFE_RELEASE(desktops);
+    return nullptr;
+  }
+  UINT count = 0;
+  if (FAILED(desktops->GetCount(&count))) count = 0;
+  IVirtualDesktop* found = nullptr;
+  for (UINT index = 0; index < count; ++index) {
+    IVirtualDesktop* desktop = nullptr;
+    GUID id{};
+    if (SUCCEEDED(desktops->GetAt(index, g_vd.abi.virtualDesktop, reinterpret_cast<void**>(&desktop))) &&
+        desktop && SUCCEEDED(desktop->GetId(&id)) && IsEqualGUID(id, desktopId)) {
+      found = desktop;
+      break;
+    }
+    SAFE_RELEASE(desktop);
+  }
+  desktops->Release();
+  if (g_vd.managerInternal != manager) SAFE_RELEASE(found);
+  return found;
+}
+
+// Read shell views rather than guessing occupancy from cloaked top-level HWNDs.
+// An unregistered ApplicationFrameWindow is absent here and cannot block routing.
+bool IsDesktopEmptyExcept(const GUID& desktopId, HWND allowedWindow) {
+  if (!InitializeVirtualDesktopAPI()) return false;
+  IUnknown* const manager = g_vd.managerInternal;
+  const IID collectionIid =
+      {0x1841C6D7, 0x4F9D, 0x42C0, {0xAF, 0x41, 0x87, 0x47, 0x53, 0x8F, 0x10, 0xE5}};
+  const IID viewIid =
+      {0x372E1D3B, 0x38D3, 0x42E4, {0xA1, 0x5B, 0x8A, 0xB2, 0xB1, 0x78, 0xF5, 0x13}};
+  IUnknown* collection = nullptr;
+  IObjectArray* views = nullptr;
+  IUnknown* allowedIdentity = nullptr;
+  HRESULT hr = g_vd.serviceProvider->QueryService(
+      collectionIid, collectionIid, reinterpret_cast<void**>(&collection));
+  if (SUCCEEDED(hr) && collection && allowedWindow) {
+    IUnknown* view = nullptr;
+    hr = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HWND, IUnknown**)>(collection, 6)(
+        collection, allowedWindow, &view);
+    if (SUCCEEDED(hr) && view) hr = view->QueryInterface(IID_IUnknown, reinterpret_cast<void**>(&allowedIdentity));
+    else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+    SAFE_RELEASE(view);
+  }
+  if (SUCCEEDED(hr) && collection) {
+    hr = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IObjectArray**)>(collection, 3)(collection, &views);
+  } else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+  UINT count = 0;
+  if (SUCCEEDED(hr) && views) hr = views->GetCount(&count);
+  else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+  bool empty = SUCCEEDED(hr);
+  for (UINT index = 0; empty && index < count; ++index) {
+    IUnknown* view = nullptr;
+    IUnknown* identity = nullptr;
+    GUID owner{};
+    hr = views->GetAt(index, viewIid, reinterpret_cast<void**>(&view));
+    if (SUCCEEDED(hr) && view) {
+      // IApplicationView derives from IInspectable; GetVirtualDesktopId is slot 25.
+      hr = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, GUID*)>(view, 25)(view, &owner);
+      if (SUCCEEDED(hr) && IsEqualGUID(owner, desktopId)) {
+        hr = view->QueryInterface(IID_IUnknown, reinterpret_cast<void**>(&identity));
+        empty = SUCCEEDED(hr) && allowedIdentity && identity == allowedIdentity;
+      }
+    } else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+    if (FAILED(hr)) empty = false;
+    SAFE_RELEASE(identity);
+    SAFE_RELEASE(view);
+  }
+  SAFE_RELEASE(allowedIdentity);
+  SAFE_RELEASE(views);
+  SAFE_RELEASE(collection);
+  return empty && g_vd.managerInternal == manager;
+}
+
+bool CreateDesktopAfter(const GUID& sourceDesktop, GUID* desktopId, int* desktopNumber) {
+  if (!desktopId || !desktopNumber) return false;
+  *desktopId = {};
+  *desktopNumber = 0;
+  std::vector<GUID> order;
+  GUID current{};
+  if (!GetDesktopIdsInOrder(&order) || !GetCurrentDesktopId(&current) ||
+      !IsEqualGUID(current, sourceDesktop)) return false;
+  auto source = std::find_if(order.begin(), order.end(),
+      [&](const GUID& id) { return IsEqualGUID(id, sourceDesktop); });
+  if (source == order.end() ||
+      (g_vd.abi.moveDesktopIndex < 0 && source + 1 != order.end())) return false;
+  IUnknown* const manager = g_vd.managerInternal;
+  IVirtualDesktop* created = nullptr;
+  // Creation is a mutation: never retry it after a lost COM response.
+  HRESULT hr = UsesHMonitorParameter()
+      ? GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, IVirtualDesktop**)>(manager, g_vd.abi.createDesktopIndex)(manager, nullptr, &created)
+      : GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IVirtualDesktop**)>(manager, g_vd.abi.createDesktopIndex)(manager, &created);
+  if (created) created->GetId(desktopId);
+  SAFE_RELEASE(created);
+  if (IsEqualGUID(*desktopId, GUID_NULL)) {
+    Diagnostics::RecordEvent(L"overflow desktop creation returned no identity hr=%08X", hr);
+    if (IsDeadVirtualDesktopProxy(hr)) RuntimeLifecycle::RequestMaintenance(true);
+    return false;
+  }
+  if (!GetDesktopIdsInOrder(&order) || g_vd.managerInternal != manager ||
+      !GetCurrentDesktopId(&current) || !IsEqualGUID(current, sourceDesktop)) return false;
+  source = std::find_if(order.begin(), order.end(),
+      [&](const GUID& id) { return IsEqualGUID(id, sourceDesktop); });
+  auto target = std::find_if(order.begin(), order.end(),
+      [&](const GUID& id) { return IsEqualGUID(id, *desktopId); });
+  if (source == order.end() || target == order.end()) return false;
+  if (target != source + 1) {
+    if (g_vd.abi.moveDesktopIndex < 0 || !IsDesktopEmptyExcept(*desktopId) ||
+        g_vd.managerInternal != manager || !GetCurrentDesktopId(&current) ||
+        !IsEqualGUID(current, sourceDesktop)) return false;
+    const int index = static_cast<int>(source - order.begin()) + (target < source ? 0 : 1);
+    created = FindLiveDesktop(*desktopId);
+    if (!created || g_vd.managerInternal != manager) { SAFE_RELEASE(created); return false; }
+    hr = UsesHMonitorParameter()
+        ? GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IVirtualDesktop*, HMONITOR, int)>(manager, g_vd.abi.moveDesktopIndex)(manager, created, nullptr, index)
+        : GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IVirtualDesktop*, int)>(manager, g_vd.abi.moveDesktopIndex)(manager, created, index);
+    created->Release();
+  }
+  if (!GetDesktopIdsInOrder(&order) || g_vd.managerInternal != manager) return false;
+  source = std::find_if(order.begin(), order.end(),
+      [&](const GUID& id) { return IsEqualGUID(id, sourceDesktop); });
+  target = std::find_if(order.begin(), order.end(),
+      [&](const GUID& id) { return IsEqualGUID(id, *desktopId); });
+  const bool inserted = source != order.end() && target != order.end() && target == source + 1;
+  if (inserted) *desktopNumber = static_cast<int>(target - order.begin()) + 1;
+  Diagnostics::RecordEvent(L"overflow desktop creation target=%08X hr=%08X inserted=%d", desktopId->Data1, hr, inserted ? 1 : 0);
+  if (IsDeadVirtualDesktopProxy(hr)) RuntimeLifecycle::RequestMaintenance(true);
+  return inserted;
+}
+
+// Only callers holding the GUID returned by their own creation may use this.
+// Never delete a selected desktop or one containing any shell application view.
+bool RemoveEmptyOverflowDesktop(const GUID& desktopId, const GUID& fallbackDesktop) {
+  if (IsEqualGUID(desktopId, GUID_NULL) || IsEqualGUID(desktopId, fallbackDesktop)) return false;
+  IVirtualDesktop* desktop = FindLiveDesktop(desktopId);
+  IUnknown* const manager = g_vd.managerInternal;
+  IVirtualDesktop* fallback = FindLiveDesktop(fallbackDesktop);
+  GUID current{};
+  bool removed = false;
+  if (desktop && fallback && IsDesktopEmptyExcept(desktopId) &&
+      GetCurrentDesktopId(&current) && !IsEqualGUID(current, desktopId) &&
+      g_vd.managerInternal == manager) {
+    HRESULT hr = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IVirtualDesktop*, IVirtualDesktop*)>(
+        manager, g_vd.abi.removeDesktopIndex)(manager, desktop, fallback);
+    removed = SUCCEEDED(hr);
+    Diagnostics::RecordEvent(L"overflow empty desktop cleanup target=%08X hr=%08X", desktopId.Data1, hr);
+    if (IsDeadVirtualDesktopProxy(hr)) RuntimeLifecycle::RequestMaintenance(true);
+  }
+  SAFE_RELEASE(desktop);
+  SAFE_RELEASE(fallback);
+  return removed;
+}
+
+bool MoveWindowToDesktop(HWND hwnd, DWORD processId, const GUID& sourceDesktop, const GUID& desktopId,
+                         WindowMovePurpose purpose) {
+  auto requestPending = [&] {
+    if (purpose == WindowMovePurpose::Overflow) return g_wm.overflowWindows.count(hwnd) != 0;
+    const auto pending = g_wm.pendingWindowRoutes.find(hwnd);
+    return pending != g_wm.pendingWindowRoutes.end() && pending->second.processId == processId &&
+        IsEqualGUID(pending->second.sourceDesktop, sourceDesktop) &&
+        IsEqualGUID(pending->second.targetDesktop, desktopId) && !IsMoveSizeGestureInProgress(hwnd);
+  };
+  if (!requestPending() || !g_vd.serviceProvider) return false;
+  IVirtualDesktop* desktop = FindLiveDesktop(desktopId);
+  if (!desktop) return false;
+  IUnknown* const manager = g_vd.managerInternal;
+  if (!manager || !g_vd.serviceProvider || !requestPending()) {
+    desktop->Release();
+    return false;
+  }
+  const IID viewCollectionIid =
+      {0x1841C6D7, 0x4F9D, 0x42C0, {0xAF, 0x41, 0x87, 0x47, 0x53, 0x8F, 0x10, 0xE5}};
+  IUnknown* collection = nullptr;
+  IUnknown* view = nullptr;
+  HRESULT hr = g_vd.serviceProvider->QueryService(
+      viewCollectionIid, viewCollectionIid, reinterpret_cast<void**>(&collection));
+  if (SUCCEEDED(hr) && collection) {
+    const auto getView = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HWND, IUnknown**)>(collection, 6);
+    hr = getView(collection, hwnd, &view);
+  } else if (SUCCEEDED(hr)) {
+    hr = E_NOINTERFACE;
+  }
+  IUnknown* pinnedApps = nullptr;
+  const CLSID pinnedAppsService =
+      {0xB5A399E7, 0x1C87, 0x46B8, {0x88, 0xE9, 0xFC, 0x57, 0x47, 0xB1, 0x71, 0xBD}};
+  const IID pinnedAppsIid =
+      {0x4CE81583, 0x1E4C, 0x4632, {0xA6, 0x21, 0x07, 0xA5, 0x35, 0x43, 0x14, 0x8F}};
+  BOOL pinned = TRUE;
+  if (SUCCEEDED(hr) && view) {
+    hr = g_vd.managerInternal == manager && g_vd.serviceProvider
+        ? g_vd.serviceProvider->QueryService(pinnedAppsService, pinnedAppsIid, reinterpret_cast<void**>(&pinnedApps))
+        : E_ABORT;
+    if (SUCCEEDED(hr) && pinnedApps) {
+      const auto isPinned = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IUnknown*, BOOL*)>(pinnedApps, 6);
+      hr = isPinned(pinnedApps, view, &pinned);
+    }
+    if (SUCCEEDED(hr) && pinned) hr = E_ACCESSDENIED;
+  }
+  SAFE_RELEASE(pinnedApps);
+  BOOL canMove = FALSE;
+  if (SUCCEEDED(hr) && view && g_vd.managerInternal == manager) {
+    const auto canMoveView = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IUnknown*, BOOL*)>(g_vd.managerInternal, 5);
+    hr = canMoveView(g_vd.managerInternal, view, &canMove);
+  }
+  DWORD livePid = 0;
+  GUID owner{}, current{};
+  const bool sourceObserved = SUCCEEDED(hr) && view && canMove &&
+      GetWindowDesktopIdSafe(hwnd, &owner) && IsEqualGUID(owner, sourceDesktop);
+  const bool sourceActive = purpose == WindowMovePurpose::Overflow ||
+      (GetCurrentDesktopId(&current) && IsEqualGUID(current, sourceDesktop) &&
+       !IsWindowTrackedInAnyState(hwnd) && !IsWindowCloaked(hwnd) &&
+       GetPhysicalSuspensionReason(hwnd) == SuspensionReason::None);
+  GetWindowThreadProcessId(hwnd, &livePid);
+  if (sourceObserved && sourceActive && IsWindow(hwnd) && livePid == processId &&
+      requestPending() && manager && g_vd.managerInternal == manager) {
+    const auto moveView = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IUnknown*, IVirtualDesktop*)>(g_vd.managerInternal, 4);
+    hr = moveView(g_vd.managerInternal, view, desktop);
+  } else if (SUCCEEDED(hr)) {
+    hr = E_ACCESSDENIED;
+  }
+  SAFE_RELEASE(view);
+  SAFE_RELEASE(collection);
+  desktop->Release();
+  GUID observed{};
+  // A mutation can complete despite a lost COM response. Never blindly repeat it.
+  const bool ownerObserved = GetWindowDesktopIdSafe(hwnd, &observed);
+  GetWindowThreadProcessId(hwnd, &livePid);
+  const bool moved = IsWindow(hwnd) && livePid == processId && ownerObserved &&
+                     IsEqualGUID(observed, desktopId) && requestPending();
+  Diagnostics::RecordEvent(L"window desktop move hwnd=%p target=%08X hr=%08X observedSuccess=%d",
+                           hwnd, desktopId.Data1, hr, moved ? 1 : 0);
+  if (IsDeadVirtualDesktopProxy(hr)) RuntimeLifecycle::RequestMaintenance(true);
+  return moved;
+}
+
+bool SwitchToDesktop(HWND hwnd, DWORD processId, const GUID& desktopId, const GUID& sourceDesktop, DWORD inputTickMs,
+                     WindowMovePurpose purpose) {
+  IVirtualDesktop* desktop = FindLiveDesktop(desktopId);
+  if (!desktop) return false;
+  IUnknown* const manager = g_vd.managerInternal;
+  auto canFollow = [&] {
+    LASTINPUTINFO input{sizeof(input)};
+    GUID current{}, owner{};
+    if (!GetWindowDesktopIdSafe(hwnd, &owner) || !IsEqualGUID(owner, desktopId) ||
+        !GetCurrentDesktopId(&current) || !IsEqualGUID(current, sourceDesktop) ||
+        !manager || g_vd.managerInternal != manager) return false;
+    // Owner queries can pump destroy/user-gesture events. Check intent last.
+    DWORD livePid = 0;
+    GetWindowThreadProcessId(hwnd, &livePid);
+    const auto& initial = g_wm.pendingInitialPlacementSwitch;
+    const bool requestPending = purpose == WindowMovePurpose::Overflow
+        ? g_wm.overflowWindows.count(hwnd) != 0
+        : initial.hwnd == hwnd && initial.processId == processId &&
+          initial.inputTickMs == inputTickMs && IsEqualGUID(initial.sourceDesktop, sourceDesktop) &&
+          IsEqualGUID(initial.targetDesktop, desktopId) && !IsMoveSizeGestureInProgress(hwnd);
+    return IsWindow(hwnd) && livePid == processId && requestPending &&
+           GetLastInputInfo(&input) && input.dwTime == inputTickMs;
+  };
+  if (!canFollow()) {
+    desktop->Release();
+    return false;
+  }
+  HRESULT hr = E_NOINTERFACE;
+  bool animated = false;
+  if (g_vd.abi.animatedSwitchIndex >= 0) {
+    // The reference waits before a new animation to avoid crashing Explorer
+    // when another switch is still animating. Wait for completion before
+    // ordinary workspace reconciliation resumes.
+    const auto waitForAnimation = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*)>(
+        g_vd.managerInternal, g_vd.abi.animationWaitIndex);
+    hr = waitForAnimation(g_vd.managerInternal);
+    // An existing animation can outlast the user's decision to stay elsewhere.
+    if (!canFollow()) {
+      desktop->Release();
+      return false;
+    }
+    if (SUCCEEDED(hr)) {
+      const auto switchAnimated = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IVirtualDesktop*)>(
+          g_vd.managerInternal, g_vd.abi.animatedSwitchIndex);
+      hr = switchAnimated(g_vd.managerInternal, desktop);
+      animated = SUCCEEDED(hr);
+      if (animated && g_vd.managerInternal == manager) {
+        const HRESULT waitHr = waitForAnimation(g_vd.managerInternal);
+        if (FAILED(waitHr)) Wh_Log(L"Desktop animation completion wait failed: 0x%08X", waitHr);
+      }
+    }
+  }
+  if (g_vd.managerInternal == manager &&
+      (g_vd.abi.animatedSwitchIndex < 0 || hr == E_NOTIMPL || hr == E_NOINTERFACE) && canFollow()) {
+    if (g_vd.abi.usesHMonitor) {
+      const auto switchDesktop = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, HMONITOR, IVirtualDesktop*)>(
+          g_vd.managerInternal, g_vd.abi.switchDesktopIndex);
+      hr = switchDesktop(g_vd.managerInternal, nullptr, desktop);
+    } else {
+      const auto switchDesktop = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IVirtualDesktop*)>(
+          g_vd.managerInternal, g_vd.abi.switchDesktopIndex);
+      hr = switchDesktop(g_vd.managerInternal, desktop);
+    }
+  }
+  desktop->Release();
+  GUID current{};
+  const bool accepted = SUCCEEDED(hr) || (GetCurrentDesktopId(&current) && IsEqualGUID(current, desktopId));
+  Diagnostics::RecordEvent(L"window desktop switch target=%08X hr=%08X accepted=%d animated=%d", desktopId.Data1, hr, accepted ? 1 : 0, animated ? 1 : 0);
+  if (IsDeadVirtualDesktopProxy(hr)) RuntimeLifecycle::RequestMaintenance(true);
+  return accepted;
 }
 
 bool GetCurrentDesktopId(GUID* outGuid) {
@@ -7027,10 +12354,13 @@ bool GetWindowDesktopIdSafe(HWND hwnd, GUID* outGuid) {
   }
 
   HRESULT hr = g_vd.desktopManager->GetWindowDesktopId(hwnd, outGuid);
-  if (FAILED(hr) && ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr) &&
+      ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
     hr = g_vd.desktopManager->GetWindowDesktopId(hwnd, outGuid);
   }
-  if (FAILED(hr)) RuntimeLifecycle::RequestMaintenance(false);
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr)) {
+    RuntimeLifecycle::RequestMaintenance(false);
+  }
   return SUCCEEDED(hr);
 }
 
@@ -7042,10 +12372,13 @@ bool IsWindowOnCurrentDesktopSafe(HWND hwnd, BOOL* onCurrent) {
   }
 
   HRESULT hr = g_vd.desktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, onCurrent);
-  if (FAILED(hr) && ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr) &&
+      ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
     hr = g_vd.desktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, onCurrent);
   }
-  if (FAILED(hr)) RuntimeLifecycle::RequestMaintenance(false);
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr)) {
+    RuntimeLifecycle::RequestMaintenance(false);
+  }
   return SUCCEEDED(hr);
 }
 
@@ -7255,6 +12588,8 @@ static UINT g_taskbarCreatedMessage = 0;
 static bool g_iconAdded = false;
 static bool g_systemLightTheme = false;
 static bool g_flyoutTop = false;
+static bool g_showToasts = true;
+static bool g_trayClickOpensMenu = false;
 static int g_flyoutOffsetX = 0;
 static int g_flyoutOffsetY = 0;
 static TileLayout g_displayedLayout = TileLayout::COUNT;
@@ -7267,6 +12602,7 @@ struct FlyoutInstance {
   HMONITOR monitor = nullptr;
   std::wstring text;
   DWORD shownTick = 0;
+  DWORD holdMs = kFlyoutHoldMs;
 };
 
 static std::vector<FlyoutInstance*> g_flyouts;
@@ -7281,7 +12617,7 @@ static const wchar_t* LayoutDisplayName(TileLayout layout) {
     case TileLayout::MasterStackH: return L"Master + Stack (Horizontal)";
     case TileLayout::Columns: return L"Columns";
     case TileLayout::Rows: return L"Rows";
-    case TileLayout::BSP: return L"BSP";
+    case TileLayout::Dwindle: return L"Dwindle";
     case TileLayout::Monocle: return L"Monocle";
     case TileLayout::Floating: return L"Floating";
     default: return L"Unknown";
@@ -7294,7 +12630,7 @@ static const wchar_t* LayoutTrayText(TileLayout layout) {
     case TileLayout::MasterStackH: return L"MH";
     case TileLayout::Columns: return L"CL";
     case TileLayout::Rows: return L"RW";
-    case TileLayout::BSP: return L"BS";
+    case TileLayout::Dwindle: return L"DW";
     case TileLayout::Monocle: return L"MN";
     case TileLayout::Floating: return L"FL";
     default: return L"??";
@@ -7307,7 +12643,7 @@ static const wchar_t* LayoutFlyoutText(TileLayout layout) {
     case TileLayout::MasterStackH: return L"Master + Stack H";
     case TileLayout::Columns: return L"Columns";
     case TileLayout::Rows: return L"Rows";
-    case TileLayout::BSP: return L"BSP";
+    case TileLayout::Dwindle: return L"Dwindle";
     case TileLayout::Monocle: return L"Monocle";
     case TileLayout::Floating: return L"Floating";
     default: return L"Unknown";
@@ -7316,6 +12652,9 @@ static const wchar_t* LayoutFlyoutText(TileLayout layout) {
 
 static void LoadSettings() {
   using WindhawkUtils::StringSetting;
+  auto trayClickAction = StringSetting::make(L"general.TrayClickAction");
+  g_trayClickOpensMenu = _wcsicmp(trayClickAction.get(), L"context_menu") == 0;
+  g_showToasts = Wh_GetIntSetting(L"appearance.ShowToasts") != 0;
   auto position = StringSetting::make(L"appearance.FlyoutPosition");
   g_flyoutTop = _wcsicmp(position.get(), L"top") == 0;
   g_flyoutOffsetX = Wh_GetIntSetting(L"appearance.FlyoutOffsetX");
@@ -7394,6 +12733,7 @@ static HICON CreateTextIcon(TileLayout layout) {
             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   if (oldFont) SelectObject(dc, oldFont);
   if (font) DeleteObject(font);
+  GdiFlush();
 
   auto* pixels = static_cast<uint32_t*>(bits);
   COLORREF fg = ForegroundColor();
@@ -7498,9 +12838,9 @@ static void SetTooltip(TileLayout layout) {
         TileLayout monitorLayout = g_settings.defaultLayout;
         Workspace state;
         DesktopMonitorKey key{};
-        if (DesktopMonitorKey::FromHMonitor(desktopId, monitor, &key) &&
-            g_workspaces.Load(key, &state)) {
-          monitorLayout = state.Layout();
+        if (DesktopMonitorKey::FromHMonitor(desktopId, monitor, &key)) {
+          monitorLayout = g_workspaces.Load(key, &state)
+              ? state.Layout() : Reconcile::ResolveInitialWorkspaceLayout(key);
         }
 
         tooltip += L"\n";
@@ -7694,15 +13034,15 @@ static LRESULT CALLBACK FlyoutWindowProc(HWND hwnd, UINT message, WPARAM wParam,
     case WM_TIMER:
       if (wParam == kFlyoutTimerId && instance) {
         DWORD elapsed = GetTickCount() - instance->shownTick;
-        if (elapsed >= kFlyoutHoldMs + kFlyoutFadeMs) {
+        if (elapsed >= instance->holdMs + kFlyoutFadeMs) {
           KillTimer(hwnd, kFlyoutTimerId);
           ShowWindow(hwnd, SW_HIDE);
           return 0;
         }
         BYTE alpha = 255;
-        if (elapsed > kFlyoutHoldMs) {
+        if (elapsed > instance->holdMs) {
           alpha = static_cast<BYTE>(255 - std::min<DWORD>(
-              255, ((elapsed - kFlyoutHoldMs) * 255) / kFlyoutFadeMs));
+              255, ((elapsed - instance->holdMs) * 255) / kFlyoutFadeMs));
         }
         SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
         return 0;
@@ -7747,7 +13087,7 @@ static FlyoutInstance* GetOrCreateFlyoutForMonitor(HMONITOR monitor) {
 }
 
 static void ShowStatusFlyout(const wchar_t* text, HMONITOR monitor) {
-  if (!text || !*text) return;
+  if (!g_showToasts || !text || !*text) return;
   if (!monitor) monitor = GetWorkspaceCommandMonitor();
   RECT workArea{};
   if (!monitor || !GetMonitorWorkArea(monitor, &workArea)) return;
@@ -7783,6 +13123,9 @@ static void ShowStatusFlyout(const wchar_t* text, HMONITOR monitor) {
   if (region && !SetWindowRgn(instance->hwnd, region, TRUE)) DeleteObject(region);
 
   instance->shownTick = GetTickCount();
+  // Allow roughly 75 ms per character, retaining the minimum for short hints.
+  instance->holdMs = static_cast<DWORD>(std::max<size_t>(
+      kFlyoutHoldMs, std::min<size_t>(instance->text.size(), 1000000) * 75));
   SetLayeredWindowAttributes(instance->hwnd, 0, 255, LWA_ALPHA);
   SetWindowPos(instance->hwnd, HWND_TOPMOST, x, y, width, height,
                SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -7799,6 +13142,12 @@ static void ShowLayoutFlyout(TileLayout layout, HMONITOR monitor) {
   ShowStatusFlyout(LayoutFlyoutText(layout), monitor);
 }
 
+static void ShowCommandFailureFlyout(
+    const wchar_t* text, HMONITOR monitor) {
+  if (!text || !*text) return;
+  ShowStatusFlyout(text, monitor);
+}
+
 static void ShowManagementModeFlyout(bool automatic) {
   ShowStatusFlyout(
       automatic ? L"Automatic Mode" : L"Manual Mode",
@@ -7806,15 +13155,16 @@ static void ShowManagementModeFlyout(bool automatic) {
 }
 
 static void ShowDesktopSwitchFlyouts(const GUID& desktopId) {
+  if (!g_showToasts) return;
   std::vector<HMONITOR> monitors;
   Reconcile::EnumerateCurrentMonitors(monitors);
   for (HMONITOR monitor : monitors) {
     TileLayout layout = g_settings.defaultLayout;
     Workspace state;
     DesktopMonitorKey key{};
-    if (DesktopMonitorKey::FromHMonitor(desktopId, monitor, &key) &&
-        g_workspaces.Load(key, &state)) {
-      layout = state.Layout();
+    if (DesktopMonitorKey::FromHMonitor(desktopId, monitor, &key)) {
+      layout = g_workspaces.Load(key, &state)
+          ? state.Layout() : Reconcile::ResolveInitialWorkspaceLayout(key);
     }
     ShowLayoutFlyout(layout, monitor);
   }
@@ -7839,9 +13189,9 @@ static TileLayout GetMonitorLayoutOrDefault(HMONITOR monitor) {
   TileLayout layout = g_settings.defaultLayout;
   DesktopMonitorKey key{};
   Workspace state;
-  if (monitor && GetCurrentWorkspaceKey(monitor, &key) &&
-      g_workspaces.Load(key, &state)) {
-    layout = state.Layout();
+  if (monitor && GetCurrentWorkspaceKey(monitor, &key)) {
+    layout = g_workspaces.Load(key, &state)
+        ? state.Layout() : Reconcile::ResolveInitialWorkspaceLayout(key);
   }
   return layout;
 }
@@ -7961,7 +13311,10 @@ static void RefreshForMonitor(HMONITOR monitor) {
   DesktopMonitorKey key{};
   Workspace state;
   const bool haveKey = GetCurrentWorkspaceKey(monitor, &key);
-  if (haveKey && g_workspaces.Load(key, &state)) layout = state.Layout();
+  if (haveKey) {
+    layout = g_workspaces.Load(key, &state)
+        ? state.Layout() : Reconcile::ResolveInitialWorkspaceLayout(key);
+  }
 
   if (haveKey) {
     g_displayedDesktopId = key.desktopId;
@@ -8023,6 +13376,10 @@ static LRESULT CALLBACK TrayWindowProc(HWND hwnd, UINT message, WPARAM wParam,
     }
     if (iconId == kIconId &&
         (event == NIN_SELECT || event == NIN_KEYSELECT)) {
+      if (g_trayClickOpensMenu) {
+        ShowContextMenu();
+        return 0;
+      }
       // Emit the exact same action as the layout hotkey; layout mutation stays
       // serialized on the WM thread and is implemented in one place only.
       const DWORD threadId = g_wm.threadId.load(std::memory_order_acquire);
@@ -8117,8 +13474,10 @@ static void Shutdown() {
   DestroyIconSet(g_icons);
 
   HINSTANCE instance = GetModuleHandleW(nullptr);
-  if (g_flyoutWindowClass) UnregisterClassW(kFlyoutWindowClassName, instance);
-  if (g_trayWindowClass) UnregisterClassW(kTrayWindowClassName, instance);
+  // Unregister by name even after recovering from ERROR_CLASS_ALREADY_EXISTS,
+  // where RegisterClassW didn't return an ATOM for us to remember.
+  UnregisterClassW(kFlyoutWindowClassName, instance);
+  UnregisterClassW(kTrayWindowClassName, instance);
   g_flyoutWindowClass = g_trayWindowClass = 0;
   g_taskbarCreatedMessage = 0;
   g_displayedLayout = TileLayout::COUNT;
@@ -8147,7 +13506,7 @@ static const wchar_t* DiagnosticLayoutName(TileLayout layout) {
     case TileLayout::Columns: return L"Columns";
     case TileLayout::Rows: return L"Rows";
     case TileLayout::MasterStackH: return L"MasterStackH";
-    case TileLayout::BSP: return L"BSP";
+    case TileLayout::Dwindle: return L"Dwindle";
     case TileLayout::Monocle: return L"Monocle";
     case TileLayout::Floating: return L"Floating";
     case TileLayout::COUNT: return L"COUNT";
@@ -8178,6 +13537,7 @@ static const wchar_t* DiagnosticSuspensionReasonName(SuspensionReason reason) {
 static const wchar_t* DiagnosticPlacementResultName(PlacementResult result) {
   switch (result) {
     case PlacementResult::Success: return L"Success";
+    case PlacementResult::SuppressedByPhysicalState: return L"SuppressedByPhysicalState";
     case PlacementResult::AdjustedByWindow: return L"AdjustedByWindow";
     case PlacementResult::AccessDenied: return L"AccessDenied";
     case PlacementResult::Refused: return L"Refused";
@@ -8614,16 +13974,18 @@ static DiagnosticRecordAudit DiagnosticDumpWindowRecord(
       hasActiveIndex ? std::to_wstring(activeIndex).c_str() : L"-",
       reinterpret_cast<void*>(mapHwnd));
   report.Line(
-      L"      recordHwnd=%p pid=%lu state=%ls suspension=%ls",
+      L"      recordHwnd=%p pid=%lu state=%ls suspension=%ls alwaysFloating=%d",
       reinterpret_cast<void*>(record.hwnd), record.pid,
       DiagnosticManageStateName(record.state),
-      DiagnosticSuspensionReasonName(record.suspensionReason));
+      DiagnosticSuspensionReasonName(record.suspensionReason),
+      record.alwaysFloating ? 1 : 0);
 
   DiagnosticWindowIdentity identity = DiagnosticReadWindowIdentity(mapHwnd, record.pid);
   audit.deadHwnd = !identity.hwndAlive;
   audit.pidMismatch = identity.hwndAlive && record.pid != 0 && !identity.pidMatchesRecord;
   audit.hasPlacementFailure =
-      record.lastPlacementResult != PlacementResult::Success;
+      record.lastPlacementResult != PlacementResult::Success &&
+      record.lastPlacementResult != PlacementResult::SuppressedByPhysicalState;
 
   report.Line(
       L"      identity: hwndAlive=%d livePid=%lu pidMatchesRecord=%d process=%ls",
@@ -8650,6 +14012,15 @@ static DiagnosticRecordAudit DiagnosticDumpWindowRecord(
   report.Line(
       L"      capabilities: move=%d resize=%d topmost=%d",
       record.canMove ? 1 : 0, record.canResize ? 1 : 0, record.topmost ? 1 : 0);
+  report.Line(
+      L"      constraints: generation=%llu pendingInsertion=%d pendingFloatCenter=%d valid=%d dpi=%u min=%ldx%ld timeout=%d error=%lu",
+      static_cast<unsigned long long>(record.tilingGeneration),
+      record.pendingInsertionPlacement ? 1 : 0,
+      record.pendingDefaultFloatingCenter ? 1 : 0,
+      record.constraints.valid ? 1 : 0, record.constraints.dpi,
+      record.constraints.minWidth, record.constraints.minHeight,
+      record.constraints.lastProbeError == ERROR_TIMEOUT ? 1 : 0,
+      record.constraints.lastProbeError);
   report.Line(
       L"      placement: result=%ls",
       DiagnosticPlacementResultName(record.lastPlacementResult));
@@ -8772,6 +14143,7 @@ static void DumpCounters(
   DiagnosticCounterRow(report, L"Tiled drag -> Floating actions", c.tiledFloatActions, previous.tiledFloatActions, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Tiled drag swap actions", c.tiledSwapActions, previous.tiledSwapActions, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Divider weight updates", c.dividerUpdates, previous.dividerUpdates, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"Rejected resize gestures", c.rejectedResizeGestures, previous.rejectedResizeGestures, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Reconcile calls", c.reconcileCalls, previous.reconcileCalls, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Known HWNDs examined", c.reconcileWindowsExamined, previous.reconcileWindowsExamined, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Workspace saves", c.workspaceSaves, previous.workspaceSaves, uptimeMs, intervalMs);
@@ -8791,11 +14163,18 @@ static void DumpCounters(
   DiagnosticCounterRow(report, L"Placement preflight stops", c.placementPreflightStops, previous.placementPreflightStops, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"SetWindowPos calls", c.setWindowPosCalls, previous.setWindowPosCalls, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Placement success", c.placementSuccess, previous.placementSuccess, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"Suppressed by physical state", c.placementSuppressedByPhysicalState, previous.placementSuppressedByPhysicalState, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Adjusted by window", c.placementAdjusted, previous.placementAdjusted, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Placement access denied", c.placementAccessDenied, previous.placementAccessDenied, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Placement refused", c.placementRefused, previous.placementRefused, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Placement dead HWND", c.placementDead, previous.placementDead, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Floating geometry repairs", c.floatingGeometryRepairs, previous.floatingGeometryRepairs, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"Constraint probes", c.constraintProbeAttempts, previous.constraintProbeAttempts, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"  constraint probe successes", c.constraintProbeSuccesses, previous.constraintProbeSuccesses, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"  constraint probe timeouts", c.constraintProbeTimeouts, previous.constraintProbeTimeouts, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"  constraint probe failures", c.constraintProbeFailures, previous.constraintProbeFailures, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"Constraint-unsatisfiable plans", c.constraintUnsatisfiablePlans, previous.constraintUnsatisfiablePlans, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"Constraint-triggered floats", c.constraintFloats, previous.constraintFloats, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Conformance leases started", c.conformanceLeasesStarted, previous.conformanceLeasesStarted, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Conformance lease reinforcement attempts", c.conformanceLeaseRepairs, previous.conformanceLeaseRepairs, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Conformance lease deferred burst repairs", c.conformanceLeaseDeferredRepairs, previous.conformanceLeaseDeferredRepairs, uptimeMs, intervalMs);
@@ -8827,6 +14206,8 @@ static void DumpCounters(
   DiagnosticCounterRow(report, L"Swap master commands", c.swapMasterCommands, previous.swapMasterCommands, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Promote window commands", c.promoteWindowCommands, previous.promoteWindowCommands, uptimeMs, intervalMs);
   DiagnosticCounterRow(report, L"Demote window commands", c.demoteWindowCommands, previous.demoteWindowCommands, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"Rejected order commands", c.rejectedOrderCommands, previous.rejectedOrderCommands, uptimeMs, intervalMs);
+  DiagnosticCounterRow(report, L"Rejected layout changes", c.rejectedLayoutChanges, previous.rejectedLayoutChanges, uptimeMs, intervalMs);
 }
 
 static uint64_t DiagnosticFileTime100ns(const FILETIME& value) {
@@ -8989,6 +14370,17 @@ static void DumpPlatformHealth(ReportBuilder& report) {
   Reconcile::EnumerateCurrentMonitors(connectedMonitors);
   report.Line(
       L"Connected physical monitors: %zu", connectedMonitors.size());
+  for (HMONITOR monitor : connectedMonitors) {
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    Model::MonitorId id;
+    if (GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&info)) &&
+        Model::MonitorId::FromHMonitor(monitor, &id)) {
+      report.Line(L"  %ls primary=%d monitorId: %ls", info.szDevice,
+                  (info.dwFlags & MONITORINFOF_PRIMARY) ? 1 : 0,
+                  id.deviceId.c_str());
+    }
+  }
   report.Line(
       L"Virtual desktop API: initialized=%d abiResolved=%d Explorer=%lu.%lu usesHMonitor=%d",
       g_vd.initialized ? 1 : 0, g_vd.abiResolved ? 1 : 0,
@@ -9210,9 +14602,9 @@ static void WriteDiagnosticReport() {
       g_wm.lifecycleDirtyWindows.size(), g_wm.pendingDesktopArranges.size(),
       duplicateOwners);
   report.Line(
-      L"Active conformance leases=%zu runtime-maintenance timer=%d attempt=%u",
-      CountActiveConformanceLeases(), g_wm.maintenanceTimer ? 1 : 0,
-      g_wm.maintenanceAttempts);
+      L"Active conformance leases=%zu pending layout mutations=%zu runtime-maintenance timer=%d attempt=%u",
+      CountActiveConformanceLeases(), g_pendingLayoutMutations.size(),
+      g_wm.maintenanceTimer ? 1 : 0, g_wm.maintenanceAttempts);
   report.Line(
       L"Reverse ownership index: entries=%zu mismatches=%zu",
       ownershipIndex.size(), ownershipIndexMismatches);
@@ -9224,8 +14616,13 @@ static void WriteDiagnosticReport() {
       static_cast<unsigned long long>(counters.reportWriteFailures));
 
   report.Section(L"Configuration snapshot");
-  report.Line(L"Default layout: %ls", DiagnosticLayoutName(g_settings.defaultLayout));
+  report.Line(L"Fallback layout: %ls", DiagnosticLayoutName(g_settings.defaultLayout));
   report.TextLine(L"Layout cycle: ", DiagnosticLayoutCycleString(g_settings.layoutCycle));
+  report.Line(L"Workspace initialization rules: %zu",
+              g_settings.workspaceInitializationRules.size());
+  report.Line(L"Tray click: %ls; toasts: %ls",
+              TrayUi::g_trayClickOpensMenu ? L"context menu" : L"switch layout",
+              TrayUi::g_showToasts ? L"enabled" : L"disabled");
   report.Line(
       L"Workspace geometry (96-DPI logical px): gap=%ld insets=[%ld,%ld,%ld,%ld] floatingDefault=%ldx%ld",
       g_settings.gapDip, g_settings.insetsDip.left, g_settings.insetsDip.top,
@@ -9233,6 +14630,13 @@ static void WriteDiagnosticReport() {
       g_settings.floatingDefaultSizeDip.width,
       g_settings.floatingDefaultSizeDip.height);
   report.Line(L"Master percent: %ld", g_settings.masterPercent);
+  report.Line(
+      L"Adaptive Dwindle slots: %zu", g_settings.adaptiveDwindleSlots);
+  report.Line(
+      L"Adaptive Dwindle percentage: %ld (automatic envelope %.0f%%-%.0f%%)",
+      g_settings.adaptiveDwindlePercentage,
+      GetAdaptiveDwindleRatioEnvelope().minimum * 100.0,
+      GetAdaptiveDwindleRatioEnvelope().maximum * 100.0);
   report.Line(L"Mouse move behavior: %ls", DiagnosticMouseMoveBehaviorName(g_settings.mouseMoveBehavior));
   report.Line(
       L"Automatic insertion position: %ls",
@@ -9245,7 +14649,11 @@ static void WriteDiagnosticReport() {
       L"Conformance repair interval: %u ms",
       g_settings.conformanceRepairIntervalMs);
   report.Line(L"Lifecycle settle delay: %u ms", g_settings.reconcileDelayMs);
+  report.Line(L"Slow application discovery delay: %u ms",
+              g_settings.slowApplicationDelayMs);
   report.Line(L"Window rules: %zu", g_settings.windowRules.size());
+  report.Line(L"Initial window placement: ready=%d pending=%zu",
+              g_wm.windowRoutingReady ? 1 : 0, g_wm.pendingWindowRoutes.size());
   report.TextLine(L"Diagnostic output setting: ", g_settings.diagnosticsOutputPath);
   report.TextLine(L"Diagnostic output resolved: ", ExpandDiagnosticPath(g_settings.diagnosticsOutputPath));
 
@@ -9357,6 +14765,9 @@ static void WriteDiagnosticReport() {
         L"counts: active=%zu records=%zu tiled=%zu suspended=%zu floating=%zu ignored=%zu",
         state.ActiveCount(), state.Records().size(), workspaceTiled,
         workspaceSuspended, workspaceFloating, workspaceIgnored);
+    report.Line(L"overflow: visibleTiled=%zu limit=%zu",
+                state.VisibleWindowCount(),
+                AutomaticWindowLimitForMonitor(key.monitor));
     report.Line(L"pendingReinforcement=%d invariants=%ls",
                 pendingReinforcement ? 1 : 0,
                 invariantsValid ? L"PASS" : L"FAIL");
@@ -9371,6 +14782,9 @@ static void WriteDiagnosticReport() {
         state.LastFocusedWindow(), state.LastFocusedTiledWindow());
     report.Line(L"stackWeights: %ls", DiagnosticWeightsString(state.StackWeights()).c_str());
     report.Line(L"gridWeights:  %ls", DiagnosticWeightsString(state.GridWeights()).c_str());
+    report.Line(
+        L"dwindleRatios: %ls",
+        DiagnosticWeightsString(state.DwindleRatios()).c_str());
 
     struct LogicalRecordRef {
       size_t logicalIndex;
@@ -9438,6 +14852,10 @@ static void WriteDiagnosticReport() {
   }
 
   report.Section(L"Pending work");
+  report.Line(L"automaticOverflow: routingReady=%d limit=%zu createDesktop=%d otherMonitors=%d pending=%zu follow=%p",
+              g_hooks.hideDestroy ? 1 : 0, g_settings.automaticWindowLimit,
+              g_settings.overflowCreateDesktop ? 1 : 0, g_settings.overflowTryOtherMonitors ? 1 : 0,
+              g_wm.pendingWindowOverflow.size(), g_wm.pendingOverflowSwitch.hwnd);
   if (g_wm.lifecycleDirtyWindows.empty()) {
     report.Line(L"pendingLifecycleWindows: none");
   } else {
@@ -9479,12 +14897,16 @@ static void WriteDiagnosticReport() {
       counters.lifecycleShow + counters.lifecycleCloaked +
       counters.lifecycleUncloaked;
   const uint64_t placementResultSum =
-      counters.placementSuccess + counters.placementAdjusted +
-      counters.placementAccessDenied + counters.placementRefused +
-      counters.placementDead;
+      counters.placementSuccess +
+      counters.placementSuppressedByPhysicalState +
+      counters.placementAdjusted + counters.placementAccessDenied +
+      counters.placementRefused + counters.placementDead;
   const uint64_t placementPathSum =
       counters.placementNoOps + counters.placementPreflightStops +
       counters.setWindowPosCalls;
+  const uint64_t constraintProbeResultSum =
+      counters.constraintProbeSuccesses + counters.constraintProbeTimeouts +
+      counters.constraintProbeFailures;
   const uint64_t vdInitResultSum =
       counters.vdApiInitSuccesses + counters.vdApiInitFailures;
   const uint64_t vdNotificationResultSum =
@@ -9502,6 +14924,8 @@ static void WriteDiagnosticReport() {
       placementResultSum == counters.placementChecks;
   const bool placementPathsOk =
       placementPathSum == counters.placementChecks;
+  const bool constraintProbeAccountingOk =
+      constraintProbeResultSum == counters.constraintProbeAttempts;
   const bool vdInitAccountingOk =
       vdInitResultSum == counters.vdApiInitAttempts;
   const bool vdNotificationAccountingOk =
@@ -9534,6 +14958,11 @@ static void WriteDiagnosticReport() {
       placementPathsOk ? L"PASS" : L"FAIL",
       static_cast<unsigned long long>(placementPathSum),
       static_cast<unsigned long long>(counters.placementChecks));
+  report.Line(
+      L"  constraint probe results == attempts: %ls (%llu == %llu)",
+      constraintProbeAccountingOk ? L"PASS" : L"FAIL",
+      static_cast<unsigned long long>(constraintProbeResultSum),
+      static_cast<unsigned long long>(counters.constraintProbeAttempts));
   report.Line(
       L"  VD init successes + failures == attempts: %ls (%llu == %llu)",
       vdInitAccountingOk ? L"PASS" : L"FAIL",
@@ -9584,8 +15013,8 @@ static void WriteDiagnosticReport() {
       currentDesktopHealthy;
   const bool telemetryHealthy =
       lifecycleAccountingOk && placementResultsOk && placementPathsOk &&
-      vdInitAccountingOk && vdNotificationAccountingOk &&
-      reportAccountingOk && gestureAccountingOk;
+      constraintProbeAccountingOk && vdInitAccountingOk &&
+      vdNotificationAccountingOk && reportAccountingOk && gestureAccountingOk;
   const bool overallHealthy =
       structuralHealthy && runtimeWindowHealthy && telemetryHealthy;
 
@@ -9837,6 +15266,16 @@ void LoadSettings() {
   }
   g_settings.masterPercent = Wh_GetIntSetting(L"workspace.MasterPercent");
   if (g_settings.masterPercent < 1 || g_settings.masterPercent > 99) g_settings.masterPercent = 50;
+  g_settings.reverseDwindle =
+      Wh_GetIntSetting(L"workspace.ReverseDwindle") != 0;
+  const int adaptiveDwindleSlots =
+      Wh_GetIntSetting(L"workspace.AdaptiveDwindleSlots");
+  g_settings.adaptiveDwindleSlots = static_cast<size_t>(
+      std::clamp(adaptiveDwindleSlots, 0, 64));
+  const int adaptiveDwindlePercentage =
+      Wh_GetIntSetting(L"workspace.AdaptiveDwindlePercentage");
+  g_settings.adaptiveDwindlePercentage =
+      std::clamp(adaptiveDwindlePercentage, 0, 40);
 
   auto layout = StringSetting::make(L"workspace.DefaultLayout");
   g_settings.defaultLayout = ParseLayoutSetting(layout.get());
@@ -9860,6 +15299,112 @@ void LoadSettings() {
   if (g_settings.layoutCycle.empty()) {
     g_settings.layoutCycle = MakeBuiltInLayoutCycle();
     Wh_Log(L"LayoutCycle is empty or invalid; using the built-in layout sequence");
+  }
+
+  g_settings.automaticWindowLimit = static_cast<size_t>(
+      std::max(0, Wh_GetIntSetting(L"workspace.Overflow.WindowLimit")));
+  auto overflowAction = StringSetting::make(L"workspace.Overflow.Action");
+  g_settings.overflowCreateDesktop =
+      _wcsicmp(overflowAction.get(), L"new_desktop") == 0;
+  g_settings.overflowTryOtherMonitors =
+      Wh_GetIntSetting(L"workspace.Overflow.TryOtherMonitors") != 0;
+  g_settings.monitorWindowLimits.clear();
+  for (int i = 0;; ++i) {
+    auto monitor = StringSetting::make(L"workspace.Overflow.MonitorLimits[%d].Monitor", i);
+    auto monitorId = StringSetting::make(L"workspace.Overflow.MonitorLimits[%d].MonitorId", i);
+    const int limit = Wh_GetIntSetting(L"workspace.Overflow.MonitorLimits[%d].Limit", i);
+    if (!*monitor.get() && !*monitorId.get() && limit == 0) break;
+    // Disabled rows do not terminate the list or inspect their hidden fields.
+    if (!*monitor.get() || _wcsicmp(monitor.get(), L"disabled") == 0) continue;
+    if (limit < 0) {
+      Wh_Log(L"Ignoring negative per-monitor limit at rule %d", i + 1);
+      continue;
+    }
+    SettingsState::MonitorWindowLimit rule;
+    if (_wcsicmp(monitor.get(), L"primary") == 0) rule.monitor = RuleMonitor::Primary;
+    else if (_wcsicmp(monitor.get(), L"non_primary") == 0) rule.monitor = RuleMonitor::NonPrimary;
+    else if (_wcsicmp(monitor.get(), L"specific") != 0) {
+      Wh_Log(L"Ignoring invalid monitor selector at limit rule %d", i + 1);
+      continue;
+    }
+    if (rule.monitor == RuleMonitor::Specific) {
+      rule.monitorId = monitorId.get();
+      const size_t first = rule.monitorId.find_first_not_of(L" \t\r\n");
+      if (first == std::wstring::npos) continue;
+      rule.monitorId = rule.monitorId.substr(first, rule.monitorId.find_last_not_of(L" \t\r\n") - first + 1);
+      NormalizeMonitorIdentityToken(&rule.monitorId);
+      if (rule.monitorId.rfind(L"IFACE:", 0) != 0 && rule.monitorId.rfind(L"GDI:", 0) != 0) {
+        Wh_Log(L"Ignoring invalid monitor ID at limit rule %d", i + 1);
+        continue;
+      }
+    }
+    rule.limit = static_cast<size_t>(limit);
+    g_settings.monitorWindowLimits.push_back(std::move(rule));
+  }
+
+  g_settings.workspaceInitializationRules.clear();
+  for (int i = 0;; ++i) {
+    auto ruleLayout =
+        StringSetting::make(L"workspace.InitializationRules[%d].Layout", i);
+    auto desktopName = StringSetting::make(
+        L"workspace.InitializationRules[%d].DesktopNameContains", i);
+    auto monitor =
+        StringSetting::make(L"workspace.InitializationRules[%d].Monitor", i);
+    auto monitorId =
+        StringSetting::make(L"workspace.InitializationRules[%d].MonitorId", i);
+    const int desktopNumber = Wh_GetIntSetting(
+        L"workspace.InitializationRules[%d].DesktopNumber", i);
+    // Added rows can omit unchanged fields, including Monitor. Read the whole
+    // row before detecting the end, as blank Layout only disables that row.
+    if (!*ruleLayout.get() && !*desktopName.get() && !*monitor.get() &&
+        !*monitorId.get() && desktopNumber == 0) {
+      break;
+    }
+    if (!*ruleLayout.get()) continue;
+
+    WorkspaceInitializationRule rule;
+    rule.settingsIndex = i + 1;
+    rule.desktopNumber = desktopNumber;
+    if (rule.desktopNumber < 0 ||
+        !TryParseLayoutSetting(ruleLayout.get(), &rule.layout)) {
+      Wh_Log(L"Ignoring invalid workspace initialization rule %d", i + 1);
+      continue;
+    }
+    if (_wcsicmp(monitor.get(), L"primary") == 0) {
+      rule.monitor = RuleMonitor::Primary;
+    } else if (_wcsicmp(monitor.get(), L"non_primary") == 0) {
+      rule.monitor = RuleMonitor::NonPrimary;
+    } else if (_wcsicmp(monitor.get(), L"specific") == 0) {
+      rule.monitor = RuleMonitor::Specific;
+    } else if (*monitor.get() && _wcsicmp(monitor.get(), L"any") != 0) {
+      Wh_Log(L"Ignoring invalid monitor selector at workspace rule %d", i + 1);
+      continue;
+    }
+    auto trimmed = [](PCWSTR text) {
+      std::wstring value = text;
+      const size_t first = value.find_first_not_of(L" \t\r\n");
+      return first == std::wstring::npos ? std::wstring{}
+          : value.substr(first, value.find_last_not_of(L" \t\r\n") - first + 1);
+    };
+    rule.desktopNameContains = trimmed(desktopName.get());
+    std::transform(
+        rule.desktopNameContains.begin(), rule.desktopNameContains.end(),
+        rule.desktopNameContains.begin(),
+        [](wchar_t ch) { return std::towlower(ch); });
+    if (rule.monitor == RuleMonitor::Specific) {
+      rule.monitorId = trimmed(monitorId.get());
+      NormalizeMonitorIdentityToken(&rule.monitorId);
+      if (rule.monitorId.empty() || (rule.monitorId.rfind(L"IFACE:", 0) != 0 &&
+                                   rule.monitorId.rfind(L"GDI:", 0) != 0)) {
+        Wh_Log(L"Ignoring invalid monitor ID at workspace rule %d", i + 1);
+        continue;
+      }
+    }
+    if (rule.desktopNameContains.empty() && rule.desktopNumber == 0 &&
+        rule.monitor == RuleMonitor::Any && rule.monitorId.empty()) {
+      continue;
+    }
+    g_settings.workspaceInitializationRules.push_back(std::move(rule));
   }
 
   auto mouseBehavior =
@@ -9899,8 +15444,44 @@ void LoadSettings() {
   if (reconcileDelay < 20 || reconcileDelay > 2000) reconcileDelay = 50;
   g_settings.reconcileDelayMs = static_cast<UINT>(reconcileDelay);
 
+  int slowApplicationDelay =
+      Wh_GetIntSetting(L"advanced.SlowApplicationDelayMs");
+  if (slowApplicationDelay < 0 || slowApplicationDelay > 2000) {
+    slowApplicationDelay = 250;
+  }
+  g_settings.slowApplicationDelayMs =
+      static_cast<UINT>(slowApplicationDelay);
+
+  auto parseWindowRuleList = [](const wchar_t* text) {
+    std::vector<std::wstring> values;
+    std::wstring value;
+    for (const wchar_t* cursor = text; ; ++cursor) {
+      if (*cursor == L'\\' && cursor[1] == L',') {
+        value.push_back(L',');
+        ++cursor;
+        continue;
+      }
+      if (*cursor != L',' && *cursor != L'\0') {
+        value.push_back(*cursor);
+        continue;
+      }
+
+      size_t first = 0;
+      while (first < value.size() && std::iswspace(value[first])) ++first;
+      size_t last = value.size();
+      while (last > first && std::iswspace(value[last - 1])) --last;
+      if (first < last) {
+        values.emplace_back(value.substr(first, last - first));
+      }
+
+      value.clear();
+      if (*cursor == L'\0') break;
+    }
+    return values;
+  };
+
   g_settings.windowRules.clear();
-  for (int i = 0; i < 64; ++i) {
+  for (int i = 0;; ++i) {
     auto process =
         StringSetting::make(L"windowRules.Rules[%d].Process", i);
     auto className =
@@ -9910,6 +15491,10 @@ void LoadSettings() {
     auto treatment =
         StringSetting::make(L"windowRules.Rules[%d].Treatment", i);
     auto size = StringSetting::make(L"windowRules.Rules[%d].Size", i);
+    auto monitor = StringSetting::make(L"windowRules.Rules[%d].Monitor", i);
+    auto monitorId = StringSetting::make(L"windowRules.Rules[%d].MonitorId", i);
+    auto desktopName = StringSetting::make(L"windowRules.Rules[%d].DesktopNameContains", i);
+    const int desktopNumber = Wh_GetIntSetting(L"windowRules.Rules[%d].DesktopNumber", i);
     if (!*process.get() && !*className.get() && !*titleContains.get()) {
       Wh_Log(
           L"Window rule %d is blank; later rules will not be loaded",
@@ -9918,8 +15503,44 @@ void LoadSettings() {
     }
 
     WindowRule rule;
-    if (_wcsicmp(treatment.get(), L"trace_to_owner") == 0) {
+    if (_wcsicmp(treatment.get(), L"default_to_floating") == 0) {
+      rule.treatment = WindowRuleTreatment::DefaultToFloating;
+    } else if (_wcsicmp(treatment.get(), L"always_floating") == 0) {
+      rule.treatment = WindowRuleTreatment::AlwaysFloating;
+    } else if (_wcsicmp(treatment.get(), L"trace_to_owner") == 0) {
       rule.treatment = WindowRuleTreatment::TraceToOwner;
+    } else if (_wcsicmp(treatment.get(), L"open_on_monitor") == 0) {
+      rule.treatment = WindowRuleTreatment::InitialPlacement;
+      auto trimmed = [](PCWSTR text) {
+        std::wstring value = text;
+        const size_t first = value.find_first_not_of(L" \t\r\n");
+        return first == std::wstring::npos ? std::wstring{}
+            : value.substr(first, value.find_last_not_of(L" \t\r\n") - first + 1);
+      };
+      if (_wcsicmp(monitor.get(), L"primary") == 0) rule.monitor = RuleMonitor::Primary;
+      else if (_wcsicmp(monitor.get(), L"non_primary") == 0) rule.monitor = RuleMonitor::NonPrimary;
+      else if (_wcsicmp(monitor.get(), L"specific") == 0) rule.monitor = RuleMonitor::Specific;
+      else if (*monitor.get() && _wcsicmp(monitor.get(), L"any") != 0) {
+        Wh_Log(L"Ignoring invalid monitor selector at window rule %d", i + 1);
+        continue;
+      }
+      if (rule.monitor == RuleMonitor::Specific) {
+        rule.monitorId = trimmed(monitorId.get());
+        NormalizeMonitorIdentityToken(&rule.monitorId);
+        if (rule.monitorId.empty() || (rule.monitorId.rfind(L"IFACE:", 0) != 0 &&
+                                     rule.monitorId.rfind(L"GDI:", 0) != 0)) {
+          Wh_Log(L"Ignoring invalid monitor target at window rule %d", i + 1);
+          continue;
+        }
+      }
+      rule.desktopNumber = desktopNumber;
+      rule.desktopNameContains = trimmed(desktopName.get());
+      if (desktopNumber < 0) {
+        Wh_Log(L"Ignoring invalid desktop number at window rule %d", i + 1);
+        continue;
+      }
+      rule.followWindow = Wh_GetIntSetting(L"windowRules.Rules[%d].FollowWindow", i) != 0;
+      if (rule.monitor == RuleMonitor::Any && !desktopNumber && rule.desktopNameContains.empty()) continue;
     } else if (_wcsicmp(
                    treatment.get(), L"preserve_size_when_centering") == 0) {
       rule.treatment = WindowRuleTreatment::FloatingPlacementOverride;
@@ -9927,8 +15548,10 @@ void LoadSettings() {
     } else if (_wcsicmp(
                    treatment.get(), L"override_size_when_centering") == 0) {
       rule.treatment = WindowRuleTreatment::FloatingPlacementOverride;
-      if (!ParseFloatingDefaultSizeSetting(
-              size.get(), &rule.floatingSizeDip)) {
+      if (_wcsicmp(size.get(), L"Workspace") == 0) {
+        rule.useWorkspaceSize = true;
+      } else if (!ParseFloatingDefaultSizeSetting(
+                     size.get(), &rule.floatingSizeDip)) {
         Wh_Log(
             L"Ignoring invalid centered size override at rule %d: %s",
             i + 1, size.get());
@@ -9938,9 +15561,14 @@ void LoadSettings() {
     } else {
       rule.treatment = WindowRuleTreatment::Exclude;
     }
-    rule.process = process.get();
-    rule.className = className.get();
-    rule.titleContains = titleContains.get();
+    rule.processNames = parseWindowRuleList(process.get());
+    rule.classNames = parseWindowRuleList(className.get());
+    rule.titleFragments = parseWindowRuleList(titleContains.get());
+    if (rule.processNames.empty() && rule.classNames.empty() &&
+        rule.titleFragments.empty()) {
+      Wh_Log(L"Ignoring window rule %d with no usable match values", i + 1);
+      continue;
+    }
     g_settings.windowRules.push_back(std::move(rule));
   }
 
@@ -10045,6 +15673,12 @@ static void SetWindowManagementMode(ManagementMode mode) {
   if (g_wm.managementMode == mode) return;
   g_wm.managementMode = mode;
   const bool automatic = IsAutomaticMode();
+  if (!automatic) {
+    g_wm.pendingWindowOverflow.clear();
+    g_wm.pendingOverflowSwitch = {};
+    if (g_wm.overflowTimer) KillTimer(nullptr, g_wm.overflowTimer);
+    g_wm.overflowTimer = 0;
+  }
   Wh_Log(L"Window management mode: %s", automatic ? L"Automatic" : L"Manual");
   Diagnostics::RecordEvent(
       L"management mode changed to %ls", automatic ? L"Automatic" : L"Manual");
@@ -10084,6 +15718,12 @@ static void HandleMoveSizeEndMessage(HWND hwnd) {
 // owned by the WM are explicitly returned to Windows so STA COM's hidden window
 // continues receiving cross-apartment calls.
 static WmMessageDisposition HandleWmThreadMessage(const MSG& msg) {
+  if ((msg.message == WM_HOTKEY && msg.wParam != HK_DIAGNOSTIC_DUMP) ||
+      msg.message == WM_APP_LAYOUT_CYCLE ||
+      msg.message == WM_APP_LAYOUT_SET || msg.message == WM_APP_TILE_WORKSPACE ||
+      msg.message == WM_APP_MANAGEMENT_MODE_SET) {
+    g_wm.pendingOverflowSwitch = {};
+  }
   switch (msg.message) {
     case WM_APP_MOVE_SIZE_END:
       HandleMoveSizeEndMessage(reinterpret_cast<HWND>(msg.wParam));
@@ -10098,16 +15738,28 @@ static WmMessageDisposition HandleWmThreadMessage(const MSG& msg) {
       Reconcile::HandleVirtualDesktopChanged();
       return WmMessageDisposition::Handled;
 
-    case WM_APP_TRAY_REFRESH:
+    case WM_APP_FOREGROUND_CHANGED: {
+      HWND hwnd = reinterpret_cast<HWND>(msg.wParam);
+      RememberManagedForeground(hwnd);
+      // Some frameworks make a top-level HWND foreground without delivering a
+      // usable SHOW event. Foreground is only a discovery prompt; the settled
+      // snapshot remains authoritative for eligibility and admission.
+      if (IsAutomaticMode()) {
+        if (!hwnd || !IsWindow(hwnd)) {
+          // A rapidly replaced foreground HWND can disappear before this posted
+          // message is consumed. Preserve the discovery prompt with one settled
+          // global snapshot, which can observe its live replacement.
+          Reconcile::ScheduleLifecycleReconcile(nullptr);
+        } else if (!IsWindowTrackedInAnyState(hwnd) ||
+                   std::any_of(g_wm.pendingWindowOverflow.begin(), g_wm.pendingWindowOverflow.end(),
+                               [hwnd](const PendingWindowOverflow& request) { return request.hwnd == hwnd; })) {
+          Reconcile::ScheduleLifecycleReconcile(hwnd);
+        }
+      }
       ++Diagnostics::g_runtime.counters.trayRefreshMessages;
       TrayUi::RefreshForCurrentWorkspace();
       return WmMessageDisposition::Handled;
-
-    case WM_APP_FOREGROUND_CHANGED:
-      RememberManagedForeground(reinterpret_cast<HWND>(msg.wParam));
-      ++Diagnostics::g_runtime.counters.trayRefreshMessages;
-      TrayUi::RefreshForCurrentWorkspace();
-      return WmMessageDisposition::Handled;
+    }
 
     case WM_APP_LAYOUT_CYCLE:
       Commands::CycleCurrentWorkspaceLayout(
@@ -10143,6 +15795,16 @@ static WmMessageDisposition HandleWmThreadMessage(const MSG& msg) {
       if (g_wm.lifecycleTimer &&
           static_cast<UINT_PTR>(msg.wParam) == g_wm.lifecycleTimer) {
         Reconcile::ReconcileDeferredLifecycle();
+        return WmMessageDisposition::Handled;
+      }
+      if (g_wm.discoveryRetryTimer &&
+          static_cast<UINT_PTR>(msg.wParam) == g_wm.discoveryRetryTimer) {
+        Reconcile::ProcessDiscoveryRetryTimer();
+        return WmMessageDisposition::Handled;
+      }
+      if (g_wm.overflowTimer &&
+          static_cast<UINT_PTR>(msg.wParam) == g_wm.overflowTimer) {
+        Reconcile::ProcessWindowOverflow();
         return WmMessageDisposition::Handled;
       }
       if (g_wm.maintenanceTimer &&
@@ -10215,6 +15877,27 @@ static void RunWmMessageLoop() {
 }
 
 static void CleanupWmThread() {
+  // Deferred overflow is temporarily Floating while native routing waits. Return
+  // those members to tiling before discarding the actor queue so settings reload
+  // can enforce the new policy instead of retaining an accidental float forever.
+  std::vector<PendingWindowOverflow> deferredOverflow;
+  deferredOverflow.swap(g_wm.pendingWindowOverflow);
+  for (const PendingWindowOverflow& pending : deferredOverflow) {
+    DWORD livePid = 0;
+    GetWindowThreadProcessId(pending.hwnd, &livePid);
+    if (livePid != pending.processId || !g_wm.overflowWindows.count(pending.hwnd)) continue;
+    for (const auto& key : g_workspaces.OwnersOf(pending.hwnd)) {
+      Workspace workspace;
+      if (!g_workspaces.Load(key, &workspace) || workspace.Layout() == TileLayout::Floating) continue;
+      const WindowRecord* record = workspace.Find(pending.hwnd);
+      if (!record || record->pid != livePid || record->state != ManageState::Floating ||
+          record->alwaysFloating || record->tilingGeneration != pending.tilingGeneration) continue;
+      workspace.ActivateTiled(pending.hwnd);
+      const SuspensionReason reason = GetPhysicalSuspensionReason(pending.hwnd);
+      if (reason != SuspensionReason::None) workspace.Suspend(pending.hwnd, reason);
+      g_workspaces.Save(key, workspace);
+    }
+  }
   // Unhook WinEvent delivery before clearing transient callback observations so
   // no reentrant delivery can repopulate the next settings-reload session.
   UnregisterConfiguredHotkeys();
@@ -10226,6 +15909,10 @@ static void CleanupWmThread() {
     KillTimer(nullptr, g_wm.lifecycleTimer);
     g_wm.lifecycleTimer = 0;
   }
+  if (g_wm.discoveryRetryTimer) {
+    KillTimer(nullptr, g_wm.discoveryRetryTimer);
+    g_wm.discoveryRetryTimer = 0;
+  }
   if (g_wm.maintenanceTimer) {
     KillTimer(nullptr, g_wm.maintenanceTimer);
     g_wm.maintenanceTimer = 0;
@@ -10235,7 +15922,17 @@ static void CleanupWmThread() {
     g_wm.conformanceTimer = 0;
   }
   g_wm.lifecycleDirtyWindows.clear();
+  g_wm.pendingDiscoveryRetries.clear();
   g_wm.pendingDesktopArranges.clear();
+  if (g_wm.overflowTimer) KillTimer(nullptr, g_wm.overflowTimer);
+  g_wm.overflowTimer = 0;
+  g_wm.overflowWindows.clear();
+  g_wm.pendingWindowOverflow.clear();
+  g_wm.pendingOverflowSwitch = {};
+  g_wm.windowRoutingReady = false;
+  g_wm.windowRoutingEvaluated.clear();
+  g_wm.pendingWindowRoutes.clear();
+  g_wm.pendingInitialPlacementSwitch = {};
   g_wm.maintenanceAttempts = 0;
   g_wm.maintenanceRunning = false;
   g_wm.lifecycleRetryAfterPlatformRecovery = false;
@@ -10277,6 +15974,22 @@ DWORD WINAPI HotkeyThreadProc(LPVOID) {
   } else {
     Platform::WindowEvents::InstallWinEventHooks();
     Wh_Log(L"COM initialization failed; virtual desktop integration unavailable for this WM session");
+  }
+
+  // Existing HWNDs, including hidden windows and windows on other desktops,
+  // form a baseline before discovery or hook-driven placement can route them.
+  if (std::any_of(g_settings.windowRules.begin(), g_settings.windowRules.end(),
+                  [](const WindowRule& rule) {
+                    return rule.treatment == WindowRuleTreatment::InitialPlacement;
+                  })) {
+    ++Diagnostics::g_runtime.counters.enumWindowsPasses;
+    g_wm.windowRoutingReady = g_hooks.hideDestroy && EnumWindows(
+        [](HWND hwnd, LPARAM) WINAPI -> BOOL {
+          ++Diagnostics::g_runtime.counters.enumWindowsVisited;
+          g_wm.windowRoutingEvaluated.insert(hwnd);
+          return TRUE;
+        }, 0) != FALSE;
+    if (!g_wm.windowRoutingReady) Wh_Log(L"Initial placement baseline failed");
   }
 
   Reconcile::ScheduleLifecycleReconcile(nullptr);
@@ -10415,11 +16128,11 @@ void WhTool_ModSettingsChanged() {
 }
 
 //=============================================================================
-// Windhawk tool mod implementation for mods which don't need to inject to other
+// Windhawk tool mod implementation for mods which don't need to inject into other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk-mods/pull/1916
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated windhawk.exe process.
+// This mod launches a dedicated copy of its configured host executable.
 //=============================================================================
 
 bool g_isToolModProcessLauncher;
@@ -10432,7 +16145,7 @@ void WINAPI EntryPoint_Hook() {
   ExitThread(0);
 }
 
-// Routes each windhawk.exe instance into its tool-mod role. Normal instances act
+// Routes each host executable instance into its tool-mod role. Normal instances act
 // as launchers; only the worker tagged with this mod ID enforces singleton
 // ownership and initializes the tiling service.
 BOOL Wh_ModInit() {
@@ -10513,7 +16226,7 @@ BOOL Wh_ModInit() {
   return TRUE;
 }
 
-// Launcher-side phase: starts a copy of windhawk.exe tagged as this mod's
+// Launcher-side phase: starts a copy of the current host executable tagged as this mod's
 // dedicated tool process, then releases the returned process and thread handles.
 void Wh_ModAfterInit() {
   if (!g_isToolModProcessLauncher) {
