@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
-// @description     Search files, apps and settings from the Start menu with voidtools Everything, in place of Windows Search.
-// @version         1.1
+// @description     Replace Windows 11 search with Everything-powered files, apps and settings in a separate search window.
+// @version         2.0
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         StartMenuExperienceHost.exe
@@ -10,160 +10,519 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         GPL-3.0
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32
+// @compilerOptions -ld2d1 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Everything & Power Tools in the Start Menu
 
-A native replacement for Windows 11 Start Menu search, powered by voidtools Everything. Type in the Start Menu to search files, apps, and settings instantly. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel. Win+S and the taskbar search icon open this search too.
+A native replacement for Windows 11 search, powered by voidtools Everything. Press Win+S, click the taskbar search icon, or start typing in Start to search files, apps, and settings in a separate window styled after your Start menu. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel.
 
-![Everything & Power Tools in the Start Menu](https://raw.githubusercontent.com/bardelyne/start-everything/main/screenshot.png)
+Version **2.0** introduces a separate Windows 11 search window, with Start appearance copying, app suggestions, and custom commands.
+
+![Everything & Power Tools in the Start Menu](https://raw.githubusercontent.com/bardelyne/start-everything/main/img.png)
+
+*Version 2.0: the separate search window with a folder preview.*
+
+## Version 2.0 Changes
+
+- Search runs in its own Windows 11 window, opened directly with Win+S, the taskbar search icon, an optional custom shortcut, or by typing in Start. Start itself still opens normally.
+- Copies Start's measured size, alignment, background, rounded corners, and supported Start Menu Styler appearance. Root context menus and submenus receive their copied style before appearing.
+- Adds app and custom-command suggestions for an empty query, shared favorite learning, configurable menu width and height, and settings organized into sections.
+- Adds named custom commands with CMD, Windows PowerShell, PowerShell 7, or a custom shell; optional hidden terminals; and emoji, Windows glyph, image, icon, or executable icons.
+- Adds automatic text and monochrome-icon contrast across the search window, with a fixed-color override. Background sampling pauses during motion and scrolling; unchanged samples reuse the cached color map.
+- Improves image previews with a built-in Windows decoding fallback. With a bottom taskbar, preview cards grow down while they fit search, then align at its bottom and grow upward when taller. Top and side taskbars keep previews top-aligned and growing downward. Crossing that height and changing selections mid-animation remain smooth.
+- Keeps search input and selection when a context menu closes. Typing or Backspace closes the menu and continues the query; Escape closes the menu before clearing search.
+- Defers search UI creation until first use, buffers opening text, and restores native and text-box focus after input handoffs.
+- Supports top and side taskbars, with animations confined to the selected monitor. Right-side taskbars place the preview on the left.
 
 ## Key Features
 
-- Instant Everything Search: Queries voidtools Everything directly through its IPC interface for fast results across millions of files. The mod keeps no index of its own.
-- Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with sharp shell icons, made at the exact pixel size of your display.
-- Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
-- On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.
-- Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
-- Inline Calculator: Type a sum (e.g. 100 * 5, sqrt(144), 15% of 200, 2^10) and the result shows above the apps; large and small results in scientific notation too. Press Enter to copy it.
-- Unit Converter: Type 100 km to see it in the usual units of its kind, or 100 km to mi (also in, ->) for just one; 255 hex or 0xFF for other bases. Knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with . or , as the decimal point; each kind has its color. Add units it does not know in the settings (Reciprocal converts them back).
-- Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
-- Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, Open file location, or Uninstall (apps).
-- Native Properties Dialogs: Properties opens through explorer.exe, the same dialog as in File Explorer.
-- Drag and Drop: drag a file or folder from the results into File Explorer, the desktop or another app - Photoshop, a code editor, a chat - as you would from File Explorer. It is always a copy, never a move. Start closes once it has landed; Escape, or letting go over Start, cancels.
-- Uninstall: right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Apps that are part of Windows offer none. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
-- File Preview: the selected file gets a preview card beside the Start menu - a large thumbnail (the one File Explorer shows, so pictures, a frame of a video and documents; PDFs show their first page, drawn by Windows' own PDF renderer) with its size, date and, for pictures and videos, dimensions and length. Videos and animated GIF and WebP images play in it, muted, and a PDF turns through its first pages. SVG images are drawn by Windows' own renderer. A file with no picture shows the start of its text instead: a text or code file its first lines, and a Word, Excel, PowerPoint, RTF or OpenDocument file its first paragraphs, read by Windows' own document readers (no Office needed). Below it, the details: type, size, dates, and what the kind of file has of its own - dimensions, length, artist and album, camera, a program's description and version, a document's title and author. A folder shows how many items it holds and, when Everything keeps folder sizes, its size. A click on the path copies it.
-- Opens in Front: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
-- Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
-- Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
-- Type Anywhere: Typing anywhere in the open Start Menu goes to the search box.
-- Win+S and the Search Icon: Win+S and the taskbar search icon open the Start Menu with this search instead of the Windows search panel.
+- **Instant voidtools Everything IPC**: Queries Everything directly through its Win32 IPC interface for fast results across millions of files. The mod keeps no index of its own.
+- **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (`ms-settings:`), with sharp shell icons, made at the exact pixel size of your display.
+- **Learns Your Favorites**: Apps and custom commands you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
+- **Separate Animated Search Window**: Search follows Start's size, taskbar alignment, colors, and rounded corners, with opening and closing animations that follow the taskbar edge (bottom, top, left, or right) and respect Windows' animation setting. It stays out of the taskbar and Alt+Tab. Typing in Start closes Start and carries the opening text into search. The search bar uses Windows' own search icon.
+- **Windows Search Out of the Way**: `SearchHost.exe` keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
+- **Search Entry Points**: Open search directly with Win+S, the taskbar search icon, Start’s search bar, or an optional custom shortcut. Pressing Win or clicking Start opens Start normally; begin typing to switch into search.
+- **Suggested Apps**: An empty search shows apps and custom commands together, ordered by learned usage when enabled and alphabetically when learning is off. Escape clears the query to suggestions; press it again to close search.
+- **Custom Commands**: Add named commands to Apps, choose CMD, Windows PowerShell, PowerShell 7, or a custom shell, and optionally hide the terminal. Icons accept emoji, pasted Windows icon glyphs, Unicode codes, and local image, icon, or app paths. Commands also appear in empty-search suggestions.
+- **Optional Files Panel**: Hide the Files panel and pause Everything file queries. With automatic sizing, search becomes half as wide. Apps, settings, custom commands, and utilities remain available.
+- **Custom Menu Size**: Set your own menu width and height, or turn the toggle off to follow Start's size. Dimensions follow Windows display scaling and stay within the screen's available area.
+- **Inline Calculator**: Type a sum (e.g. `100 * 5`, `sqrt(144)`, `15% of 200`, `2^10`) and the result shows above the apps; large and small results show in scientific notation too (`= 99000`, `= 9.9e4`). Press Enter to copy it.
+- **Unit Converter**: Type `100 km` to see it in the usual units of its kind, all on one line first, or `100 km to mi` (also `in`, `->`, `=`) for just one; `255 hex` or `0xFF` for other bases. It knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with `.` or `,` as the decimal point, and each kind has its color. A number alone, or one in a name (`2024 report`, `3d`), is left to the search. Add units it does not know in the settings, and have them convert back too (Reciprocal).
+- **Network Interface Inspector**: Type `/ip` to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
+- **Full Right-Click Context Menu**: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy name (files/folders), Copy path, Open file location, or Uninstall (apps). Escape closes the menu; typing closes it and continues the query.
+- **Native Properties Dialogs**: Properties opens through `explorer.exe`, the same dialog as in File Explorer.
+- **File Preview**: Images, muted media, PDF pages, SVGs, text/document excerpts, and file properties beside search. The card adapts its alignment and resize direction to the search window’s height. See [File Preview](#file-preview) for formats, copying, and folder sizes.
+- **Drag and Drop**: Drag a file or folder into File Explorer, the desktop, or another app. It is always a copy, never a move. Previews stay hidden during the drag. A successful drop closes search; Escape cancels.
+- **Uninstall**: Right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Protected Windows components offer no uninstall action. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
+- **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
+- **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
+- **Start Menu Styler Compatibility**: Copies supported Start backgrounds, colors, rounded corners, and menu styling before menus appear. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast). Arbitrary custom Styler effects may not be reproduced exactly.
+- **No Simulated Keystrokes**: Focus is handled with standard foreground APIs only; the mod never attaches thread input or synthesizes keystrokes.
+- **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
+
+## Settings Sections
+
+The mod's Settings page groups related options together:
+
+| Section | Options |
+| :--- | :--- |
+| **Appearance** | Text size and color, keyboard shortcut hints, and custom menu dimensions |
+| **Apps & Search** | App result limit, favorite learning, search delay, and an optional keyboard shortcut |
+| **Files & Preview** | Files panel, file result limit, previews, animation, and excluded paths |
+| **Web Search** | Default search engine and keyword shortcuts |
+| **Custom Commands** | Named commands, icons, shells, and terminal visibility |
+| **Custom Unit Conversions** | Units, formulas, categories, and reciprocal conversion |
+
+## Custom Commands
+
+In Windhawk, open the mod's **Settings → Custom Commands** and add an entry:
+
+- **Name**: Display name and search term.
+- **Icon**: Paste an emoji or a Windows icon glyph, enter a Unicode code such as `E713` (Settings) or `E7E8` (Power), or provide a full path to an image, `.ico`, or executable. `U+E713`, `0xE713`, `\uE713`, and `&#xE713;` also work. Environment variables in paths are expanded. Leave blank for the terminal icon.
+- **Shell**: Choose **Command Prompt (CMD)**, **Windows PowerShell**, **PowerShell 7**, or **Custom shell**. Existing commands default to CMD. PowerShell 7 must be installed separately; it is found in its standard installation folder or through PATH.
+- **Shell Executable**: For Custom shell, enter its full executable path or a name available in PATH, such as `nu.exe` or `wsl.exe`. Environment variables such as `%ProgramFiles%` are supported.
+- **Shell Arguments**: For Custom shell, put `{command}` once as a separate argument where the shell expects the command. The mod quotes it as one Windows argument, preserving quotes, spaces, Unicode and operators inside your code. Do not add quotes around `{command}`. Environment variables in this arguments template are expanded before inserting the command.
+- **Hide Terminal**: Run without showing the shell console (default off). Apps opened by the command can still show their own windows, and Run as administrator can still display Windows' permission prompt.
+- **Command**: Enter the command for the selected shell. The mod does not guess the shell from the command text. Blank names or commands are ignored. If the selected shell is missing or the Custom shell arguments are invalid, search stays open and shows the reason.
+
+Commands appear alongside installed apps in search results and empty-search suggestions, within **Max App Results**. They share the favorite system: frequently launched entries move up, and equal-use suggestions sort alphabetically. Turning off **Learn Favorite Apps** stops learning and clears history for both apps and commands. Right-click for **Run**, **Run as administrator**, or **Copy command**. Settings changes apply without reopening search. Up to 100 entries are supported.
+
+For example, name a CMD command `Downloads`, use `📂` as its icon, and set its command to `explorer.exe "%USERPROFILE%\Downloads"`. Browse Microsoft's [Segoe Fluent Icons list](https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-fluent-icons-font) for Windows glyphs and their codes.
+
+Custom shell examples (the shell must already be installed):
+
+| Shell | Shell Executable | Shell Arguments |
+| :--- | :--- | :--- |
+| Git Bash | `%ProgramFiles%\Git\bin\bash.exe` | `-c {command}` |
+| Nushell | `nu.exe` | `-c {command}` |
+| Bash in WSL | `wsl.exe` | `--exec bash -lc {command}` |
+
+Use a full executable path if it is installed somewhere else. WSL requires an installed Linux distribution. PowerShell 7 installation options are described in [Microsoft’s documentation](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows).
+
+## File Preview
+
+Enable **Settings → Files & Preview → File Preview** to show a card beside the selected file or folder. The card includes its name, type, size, dates, and relevant media or document properties.
+
+With a **bottom taskbar**, the preview uses the available screen space independently of the search window's height:
+
+- **Preview fits inside search's height:** align at the top and resize downward.
+- **Preview is taller than search:** align its bottom with search and resize upward, including above the search window.
+- **Preview crosses search's height:** switch alignment continuously during the same resize animation, without growing down and jumping up afterward. Rapid selection changes continue from the current size.
+
+The card stays within the monitor's usable area where its height permits. If upward growth reaches the screen's top edge, it uses the available space below.
+
+With a **top, left, or right taskbar**, the preview always aligns with the top of search and resizes downward. A **right taskbar** places the preview on the **left** of search.
+
+| Content | Preview behavior |
+| :--- | :--- |
+| **PNG, JPEG, BMP, GIF, TIFF** | Shell thumbnails, with Windows' built-in image decoder as a fallback. IrfanView or another image viewer is not required. |
+| **SVG** | Rendered using Windows' SVG support. |
+| **Video, animated GIF and WebP** | Muted looping playback when **Play Videos and Animations** is enabled. Video format support depends on the codecs available in Windows. |
+| **PDF** | Rendered with Windows' PDF engine, without a separate PDF app. With animation enabled, cycle through up to the first ten pages, one per second. |
+| **Text and code** | The beginning of the file, with selectable and copyable text. |
+| **Word, Excel, PowerPoint, RTF and OpenDocument** | A text excerpt when a supported Windows or Office document filter is available. Text is extracted without document page layout. |
+| **Folders** | A folder icon, item counts, and the indexed folder size when enabled in Everything. |
+| **PSD and other specialist formats** | A shell thumbnail when a suitable thumbnail provider is installed; otherwise a file icon and available details. Installing an app does not necessarily install a thumbnail provider. |
+
+Click the name, an individual detail value, or the full path to copy it. Copy targets follow the text area, and copying keeps the displayed path unchanged. Select and copy text directly from text/document excerpts. Previews stay hidden throughout drag and drop.
+
+Turn off **Play Videos and Animations** to keep previews still, or turn off **File Preview** to hide the card. Hiding the Files panel also hides its previews and stops the mod's Everything file queries; the Everything application itself keeps running.
+
+## Automatic Text and Icon Contrast
+
+Leave **Settings → Appearance → Text Color** set to **auto** to adapt text and monochrome interface icons to their backgrounds. App and file icons keep their original colors. Enter a color such as **#202020** or **#FFFFFF** to use one fixed text color instead. Windows high contrast takes precedence.
+
+One shared background map covers the search bar, both result panels, headings, and footer. Labels use strong local light or dark tones, and subtitles and hints stay opaque for readability. The map stays aligned while either panel scrolls and is reused as results change. Separate preview and context-menu popups adapt to their own backgrounds.
+
+Background samples refresh up to four times per second while stationary and pause during opening, closing, scrolling, and drag and drop. Unchanged samples reuse the existing map. The menu continues to follow supported Start Menu Styler backgrounds; arbitrary custom effects may not be reproduced exactly.
+
+## Folder Sizes in Preview
+
+To show folder sizes, open **Everything → Tools → Options → Indexes**, enable **Index folder size**, and click **OK**. Let Everything finish updating its index, then select a folder with File Preview enabled. Folder sizes are read from Everything's index; the mod does not calculate them by scanning folders. Excluded files are not included. Without this option, previews can show item counts but no indexed folder size. See the [Everything documentation](https://www.voidtools.com/en-us/support/everything/indexes/).
 
 ## Requirements
 
-1. Windows 11 (version 22H2+ x86-64).
-2. voidtools Everything (version 1.4 or 1.5, alpha or beta) running in the background.
+1. **Windows 11 (x86-64)**: Tested on **25H2 and 26H2**. Other Windows versions and builds, including Insider builds, have not been verified.
+2. **voidtools Everything**: **Everything 1.4** or **Everything 1.5**, including alpha/beta and named instances. Keep the application running in the tray; the service alone is not enough. Download from [voidtools](https://www.voidtools.com/).
+3. **Windhawk**: Install [Windhawk](https://windhawk.net/) and load the mod.
 
 ## Taskbar Search
 
-The Windows key, the Start button, Win+S, and the taskbar search icon all open this search. The full taskbar search box is not supported, so set Search to "Search icon only" or "Hide":
-1. Right-click the Taskbar and select Taskbar settings (or Settings > Personalization > Taskbar).
-2. Under Taskbar items, set Search to "Search icon only" or "Hide".
+**Win+S**, the **taskbar search icon**, and **Start’s search bar** open search directly. Pressing **Win** or clicking the **Start button** opens Start normally; begin typing there to switch into this search. The full taskbar search box is not supported, so set Search to **Search icon only** or **Hide**:
 
-## Keyboard Shortcuts
+1. Right-click an empty area on the Taskbar and select **Taskbar settings** (or navigate to **Settings** > **Personalization** > **Taskbar**).
+2. Under **Taskbar items**, set **Search** to **Search icon only** or **Hide**.
 
-- Type any key: Automatically reveals the search palette, focuses the search box, and queries apps and files.
-- Up / Down: Navigate through application, calculation, conversion, and file results.
-- Tab / Shift + Tab: Move to the next / previous result, through the apps and on into the files.
-- Left / Right: Switch between the Apps and Files columns. Right switches only with the cursor at the end of the query, so the arrows still move the cursor while you edit.
-- Enter: Launch the selected application, copy calculation/conversion/IP result, or open item. Pressed before the results for what you typed are in, it opens the first one as soon as they arrive.
-- Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).
-- Shift + Enter: Open the selected result's context menu, the same one a right-click opens; navigate it with the arrow keys and Enter.
-- Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.
-- Right-Click: Context menu with Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy path, Open file location, and Uninstall (apps).
+## Keyboard Shortcuts and Navigation
 
-Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use 'Create desktop shortcut' first, then right-click the shortcut on your desktop and select 'Pin to Taskbar' or 'Pin to Start'.
+To add another way to open search, go to **Settings → Apps & Search**, turn on **Enable Alternative Shortcut**, then choose **Shortcut Modifiers** and **Shortcut Key**. The default is **Alt+Space**, with the feature off until enabled. You can combine Ctrl, Alt, Shift, and Windows, or choose None; a key without modifiers is reserved even while typing in another app. The key list includes letters, digits, function, navigation, numpad, punctuation/OEM, browser, and media keys. F12 is reserved by Windows, and Fn/hardware-only keys cannot be registered. Punctuation labels use a US keyboard layout. If the combination belongs to Windows or another app, choose another; registration failures are recorded in the mod log. Changes apply immediately, and Win+S remains available.
 
-## Command Reference
+| Shortcut / Input | Action |
+| :--- | :--- |
+| **Win+S / Taskbar search icon** | Open the search window directly |
+| **Alternative shortcut (optional)** | Open and focus search using your chosen modifier and key combination |
+| **Type in Start** | Close Start and carry the opening text into search |
+| **Click Start's search bar** | Open and focus the search window |
+| **Up / Down Arrow Keys** | Navigate selection through applications, utility cards, and files |
+| **Tab / Shift + Tab** | Move to the next / previous result, through the apps and on into the files |
+| **Left / Right Arrow Keys** | Switch between the Apps and Files columns (Right only with the cursor at the end of the query, so the arrows still move the cursor while you edit) |
+| **Enter** | Launch selected application, copy calculation/conversion/IP result, or open item. Pressed before the results for what you typed are in, it opens the first one as soon as they arrive |
+| **Ctrl + Enter** | Run selected application or file as Administrator (triggers UAC) |
+| **Shift + Enter** | Open the selected result's context menu (same as right-click); navigate it with the arrow keys and Enter |
+| **Escape** | Close an open context menu first; otherwise clear the query to suggestions, or close search when already empty |
+| **Type while a context menu is open** | Close the menu and continue editing the query |
+| **Right-Click** | Open the result's context menu |
 
-- <sum>: Calculate (e.g. 100 * 5, sqrt(144), 15% of 200, 2^10).
-- <number> hex, 0xFF, 0b1010: The number in other bases (Hex, Bin, Oct).
-- <number> <unit>: The number in the usual units of its kind (e.g. 100 km, 32 f, 1,5 kg).
-- <number> <unit> to <unit>: Just that conversion (e.g. 100 km to mi; also in, ->, =).
-- /ip: List all active network interfaces and IP addresses.
-- ? <term>: Web search using default search engine.
-- ?<shortcut> <term>: Targeted web search (e.g. ?yt lo-fi, ?gh windhawk, ?w physics, ?r windows).
+Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use Create desktop shortcut first, then right-click the shortcut on your desktop and select Pin to Taskbar or Pin to Start.
+
+## Built-In Commands and Utilities
+
+| Command | Description | Example | Enter Action |
+| :--- | :--- | :--- | :--- |
+| `<sum>` | Calculation | `100 * 5`<br>`sqrt(144)`<br>`15% of 200` | Copies the result |
+| `<number> hex`, `0xFF`, `0b1010` | The number in other bases (digits grouped: `0b111 1111 1111`) | `2047 hex`<br>`0x7FF` | Copies the hex value |
+| `<number> <unit>` | The number in the usual units of its kind, all on one line first | `100 km`<br>`32 f`<br>`1,5 kg` | Copies the selected one |
+| `<number> <unit> to <unit>` | Just that conversion (also `in`, `->`, `=`) | `100 km to mi`<br>`100 mbps to MB/s` | Copies the result |
+| `/ip` | Lists all active Wi-Fi, Ethernet, and VPN adapters with IP, subnet, gateway, and adapter name | `/ip` | Copies selected IP address to clipboard |
+| `?<query>` | Searches the web using the default search engine URL | `?weather today` | Opens search in default web browser |
+| `?<shortcut> <query>` | Searches specific service using configured shortcut keyword | `?yt lofi hip hop`<br>`?gh windhawk` | Opens query on target service |
+
+## Troubleshooting and Compatibility
+
+- **Everything is reported as not running:** start the Everything application and leave it running in the tray. Its service alone does not provide the search IPC window. Everything 1.4 and 1.5 alpha/beta, including named instances, are supported.
+- **A preview shows only an icon:** enable File Preview. Common image formats have a built-in decoding fallback; specialist formats may require a thumbnail provider, and videos may require a compatible Windows codec. Unavailable or unreadable content falls back to its icon and available properties.
+- **Folder sizes are missing:** enable Everything's **Index folder size** option; see [Folder Sizes in Preview](#folder-sizes-in-preview). The mod does not recursively scan folders to calculate sizes.
+- **Start Menu Styler appearance is not copied yet:** open Start so its layout and styling can be measured. Supported solid, acrylic, gradient, and recognized glass definitions are copied; arbitrary Styler effects are not guaranteed to match.
+- **A custom command does not start:** choose the shell that understands the command. PowerShell 7 and custom shells must already be installed. Hide Terminal hides the shell console; it does not shorten the command's lifetime or hide windows opened by the command.
+
+Tested on **Windows 11 25H2 and 26H2, x86-64**. Other Windows versions and builds, including Insider builds, have not been verified. For a reproducible problem, include the full Windows build, mod version, Everything version and instance name, other Start/search mods, and steps to reproduce it.
+## Upgrading from 1.x
+
+Version 2.0 organizes settings into collapsible sections. Windhawk does not transfer preferences from the old flat setting names to these sections automatically. Before upgrading from 1.x, save your settings or note your choices, then reapply them in the new sections after updating. This includes web search shortcuts and excluded path patterns. Custom commands and custom unit conversions keep their existing setting names.
+
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- maxAppResults: 6
-  $name: Max App Results
-  $description: Number of application matches to display in the Apps column (default 6).
-- maxFileResults: 12
-  $name: Max File Results
-  $description: Number of file matches to display in the Files column (default 12).
-- panelMargin: 0
-  $name: Search Panel Margin
-  $description: Space in pixels between the search panel and the edges of the Start menu. 0 (the default) fills the Start menu edge to edge; 14 gives the inset look of earlier versions.
-- textScale: 100
-  $name: Text Size (%)
-  $description: Size of the search panel's text, as a percentage of the usual (80 to 150, default 100).
-- searchDebounceMs: 0
-  $name: Search Debounce Delay (ms)
-  $description: Extra delay in milliseconds before searching, to let typing settle (default 0, instant). Rarely needed - while a search runs, new keystrokes already wait and only the latest text is searched.
-- learnFavorites: true
-  $name: Learn Favorite Apps
-  $description: Apps you open from here more often move up among results that match equally well. Turning this off stops counting and forgets the apps learned so far; turn it on again to start over.
-- filePreview: true
-  $name: File Preview
-  $description: Show a preview of the selected file beside the Start menu - its thumbnail (pictures, video frames, PDF pages, SVG), or the start of a text file or document - with its details (type, size, dates, and per kind dimensions, length, artist, version or author) and its path, which a click copies.
-- animatePreview: true
-  $name: Play Videos and Animations
-  $description: In the file preview, play videos and animated GIF and WebP images - muted, on a loop - and turn through a PDF's first pages.
-- showKeyHints: true
-  $name: Show Keyboard Shortcuts Bar
-  $description: Display the keyboard shortcut hints ([Up/Down] Select, [Tab] Next, [Enter] Open, [Ctrl+Enter] Admin, [Shift+Enter] Menu, [Esc] Close) in the bottom bar.
-- filterNoisyPaths: true
-  $name: Filter Noisy Paths
-  $description: Filter out deep build caches, version control internals, and temporary directories from file search results unless no other matches exist.
-- excludedPaths:
-    - "\\node_modules\\"
-    - "\\.git\\"
-    - "\\.gradle\\"
-    - "\\appdata\\local\\temp\\"
-    - "\\appdata\\local\\packages\\"
-    - "\\__pycache__\\"
-    - "\\.venv\\"
-    - "\\site-packages\\"
-    - "\\.cache\\"
-    - "\\build\\intermediates\\"
-    - "\\obj\\debug\\"
-    - "\\obj\\release\\"
-    - "\\windows\\winsxs\\"
-    - "\\windows\\servicing\\"
-  $name: Excluded Path Patterns
-  $description: >-
-    Paths matching any of these substrings will be filtered out from file search results so build caches, dependencies, and internal system folders don't clutter matches.
-- defaultSearchUrl: "https://duckduckgo.com/?q={q}"
-  $name: Default Search Engine URL
-  $description: >-
-    The URL template for standard web searches. Use {q} for the query placeholder.
-    Defaults to DuckDuckGo.
-- webShortcuts:
-    - - prefix: "yt"
-        $name: Shortcut Keyword
-        $description: Keyword to trigger this search (e.g. "?yt music")
-      - name: "YouTube"
-        $name: Service Name
-      - url: "https://www.youtube.com/results?search_query={q}"
-        $name: Search URL
-        $description: URL template with {q} placeholder
-    - - prefix: "gh"
-        $name: Shortcut Keyword
-      - name: "GitHub"
-        $name: Service Name
-      - url: "https://github.com/search?q={q}"
-        $name: Search URL
-    - - prefix: "w"
-        $name: Shortcut Keyword
-      - name: "Wikipedia"
-        $name: Service Name
-      - url: "https://en.wikipedia.org/wiki/Special:Search?search={q}"
-        $name: Search URL
-    - - prefix: "r"
-        $name: Shortcut Keyword
-      - name: "Reddit"
-        $name: Service Name
-      - url: "https://www.reddit.com/search/?q={q}"
-        $name: Search URL
-  $name: Web Search Shortcuts
-  $description: >-
-    Keywords that send a query to a specific site instead of the default search engine, typed as "?keyword query" (for example "?yt music").
+- appearance:
+  - textScale: 100
+    $name: Text Size (%)
+    $description: Size of the search panel's text, as a percentage of the usual (80 to 150, default 100).
+  - textColor: auto
+    $name: Text Color
+    $description: >-
+      Leave auto to adapt text and interface icons using one background color map across the main search window. Text uses strong local light or dark tones without a fading gray crossover. Subtitles, hints and monochrome symbols stay opaque in automatic mode. The map stays aligned while scrolling and is reused when typing. Background captures refresh up to four times per second while stationary. Optionally enter #202020 (dark) or #FFFFFF (light) to force one color. Applies to search, preview details and context menus. Windows high contrast takes precedence.
+  - showKeyHints: true
+    $name: Show Keyboard Shortcuts Bar
+    $description: Display the keyboard shortcut hints ([Up/Down] Select, [Tab] Next, [Enter] Open, [Ctrl+Enter] Admin, [Shift+Enter] Menu, [Esc] Close) in the bottom bar.
+  - useCustomMenuSize: false
+    $name: Use Custom Menu Size
+    $description: Set the menu width and height below. Turn off to follow Start's size. The menu is always kept within the screen's available area.
+  - menuWidth: 660
+    $name: Menu Width
+    $description: Width of the main menu at 100% display scaling (320 to 3840, default 660). Requires Use Custom Menu Size. This is the actual width even when the Files panel is hidden; the preview has its own space.
+  - menuHeight: 660
+    $name: Menu Height
+    $description: Height of the main menu at 100% display scaling (240 to 2160, default 660). Requires Use Custom Menu Size.
+  $name: Appearance
+
+- search:
+  - maxAppResults: 6
+    $name: Max App Results
+    $description: Number of application matches to display in the Apps column (default 6).
+  - learnFavorites: true
+    $name: Learn Favorite Apps
+    $description: Apps and custom commands you open from here more often move up among results that match equally well. Turning this off stops counting and forgets learned usage for both apps and commands; turn it on again to start over.
+  - searchDebounceMs: 0
+    $name: Search Debounce Delay (ms)
+    $description: Extra delay in milliseconds before searching, to let typing settle (default 0, instant). Rarely needed - while a search runs, new keystrokes already wait and only the latest text is searched.
+  - enableAlternativeShortcut: false
+    $name: Enable Alternative Shortcut
+    $description: Open search with an additional keyboard shortcut. Win+S and the existing entry points remain available. Changes apply immediately. If another app or Windows reserves the combination, choose another.
+  - shortcutModifiers: alt
+    $name: Shortcut Modifiers
+    $description: Modifier keys held with the key below. Requires Enable Alternative Shortcut. None reserves the selected key even while typing in other apps.
+    $options:
+    - alt: Alt
+    - ctrl: Ctrl
+    - shift: Shift
+    - win: Windows
+    - ctrl_alt: Ctrl + Alt
+    - ctrl_shift: Ctrl + Shift
+    - alt_shift: Alt + Shift
+    - win_ctrl: Windows + Ctrl
+    - win_alt: Windows + Alt
+    - win_shift: Windows + Shift
+    - ctrl_alt_shift: Ctrl + Alt + Shift
+    - win_ctrl_alt: Windows + Ctrl + Alt
+    - win_ctrl_shift: Windows + Ctrl + Shift
+    - win_alt_shift: Windows + Alt + Shift
+    - win_ctrl_alt_shift: Windows + Ctrl + Alt + Shift
+    - none: None
+  - shortcutKey: "0x20"
+    $name: Shortcut Key
+    $description: Key pressed with the selected modifiers. Includes letters, numbers, function keys, navigation, numpad, media, browser and OEM keys. F12 is reserved by Windows; Fn and hardware-only keys cannot be registered. Punctuation labels use a US keyboard layout.
+    $options:
+    - "0x20": "Space"
+    - "0x41": "A"
+    - "0x42": "B"
+    - "0x43": "C"
+    - "0x44": "D"
+    - "0x45": "E"
+    - "0x46": "F"
+    - "0x47": "G"
+    - "0x48": "H"
+    - "0x49": "I"
+    - "0x4A": "J"
+    - "0x4B": "K"
+    - "0x4C": "L"
+    - "0x4D": "M"
+    - "0x4E": "N"
+    - "0x4F": "O"
+    - "0x50": "P"
+    - "0x51": "Q"
+    - "0x52": "R"
+    - "0x53": "S"
+    - "0x54": "T"
+    - "0x55": "U"
+    - "0x56": "V"
+    - "0x57": "W"
+    - "0x58": "X"
+    - "0x59": "Y"
+    - "0x5A": "Z"
+    - "0x30": "0"
+    - "0x31": "1"
+    - "0x32": "2"
+    - "0x33": "3"
+    - "0x34": "4"
+    - "0x35": "5"
+    - "0x36": "6"
+    - "0x37": "7"
+    - "0x38": "8"
+    - "0x39": "9"
+    - "0x70": "F1"
+    - "0x71": "F2"
+    - "0x72": "F3"
+    - "0x73": "F4"
+    - "0x74": "F5"
+    - "0x75": "F6"
+    - "0x76": "F7"
+    - "0x77": "F8"
+    - "0x78": "F9"
+    - "0x79": "F10"
+    - "0x7A": "F11"
+    - "0x7C": "F13"
+    - "0x7D": "F14"
+    - "0x7E": "F15"
+    - "0x7F": "F16"
+    - "0x80": "F17"
+    - "0x81": "F18"
+    - "0x82": "F19"
+    - "0x83": "F20"
+    - "0x84": "F21"
+    - "0x85": "F22"
+    - "0x86": "F23"
+    - "0x87": "F24"
+    - "0x08": "Backspace"
+    - "0x09": "Tab"
+    - "0x0C": "Clear"
+    - "0x0D": "Enter"
+    - "0x13": "Pause / Break"
+    - "0x14": "Caps Lock"
+    - "0x1B": "Escape"
+    - "0x21": "Page Up"
+    - "0x22": "Page Down"
+    - "0x23": "End"
+    - "0x24": "Home"
+    - "0x25": "Left Arrow"
+    - "0x26": "Up Arrow"
+    - "0x27": "Right Arrow"
+    - "0x28": "Down Arrow"
+    - "0x29": "Select"
+    - "0x2A": "Print"
+    - "0x2B": "Execute"
+    - "0x2C": "Print Screen"
+    - "0x2D": "Insert"
+    - "0x2E": "Delete"
+    - "0x2F": "Help"
+    - "0x5D": "Menu / Apps"
+    - "0x5F": "Sleep"
+    - "0x60": "Numpad 0"
+    - "0x61": "Numpad 1"
+    - "0x62": "Numpad 2"
+    - "0x63": "Numpad 3"
+    - "0x64": "Numpad 4"
+    - "0x65": "Numpad 5"
+    - "0x66": "Numpad 6"
+    - "0x67": "Numpad 7"
+    - "0x68": "Numpad 8"
+    - "0x69": "Numpad 9"
+    - "0x6A": "Numpad Multiply"
+    - "0x6B": "Numpad Add"
+    - "0x6C": "Numpad Separator"
+    - "0x6D": "Numpad Subtract"
+    - "0x6E": "Numpad Decimal"
+    - "0x6F": "Numpad Divide"
+    - "0x90": "Num Lock"
+    - "0x91": "Scroll Lock"
+    - "0xA6": "Browser Back"
+    - "0xA7": "Browser Forward"
+    - "0xA8": "Browser Refresh"
+    - "0xA9": "Browser Stop"
+    - "0xAA": "Browser Search"
+    - "0xAB": "Browser Favorites"
+    - "0xAC": "Browser Home"
+    - "0xAD": "Volume Mute"
+    - "0xAE": "Volume Down"
+    - "0xAF": "Volume Up"
+    - "0xB0": "Media Next Track"
+    - "0xB1": "Media Previous Track"
+    - "0xB2": "Media Stop"
+    - "0xB3": "Media Play / Pause"
+    - "0xB4": "Launch Mail"
+    - "0xB5": "Launch Media Player"
+    - "0xB6": "Launch App 1"
+    - "0xB7": "Launch App 2"
+    - "0xBA": "OEM 1 (; :)"
+    - "0xBB": "OEM Plus (= +)"
+    - "0xBC": "OEM Comma (, <)"
+    - "0xBD": "OEM Minus (- _)"
+    - "0xBE": "OEM Period (. >)"
+    - "0xBF": "OEM 2 (/ ?)"
+    - "0xC0": "OEM 3 (` ~)"
+    - "0xDB": "OEM 4 ([ {)"
+    - "0xDC": "OEM 5 (\\ |)"
+    - "0xDD": "OEM 6 (] })"
+    - "0xDE": "OEM 7 (single / double quote)"
+    - "0xDF": "OEM 8"
+    - "0xE2": "OEM 102 (extra angle / backslash key)"
+    - "0x15": "IME Kana / Hangul"
+    - "0x17": "IME Junja"
+    - "0x18": "IME Final"
+    - "0x19": "IME Hanja / Kanji"
+    - "0x1C": "IME Convert"
+    - "0x1D": "IME Nonconvert"
+    - "0x1E": "IME Accept"
+    - "0x1F": "IME Mode Change"
+    - "0xF6": "Attention"
+    - "0xF7": "CrSel"
+    - "0xF8": "ExSel"
+    - "0xF9": "Erase EOF"
+    - "0xFA": "Play"
+    - "0xFB": "Zoom"
+    - "0xFD": "PA1"
+    - "0xFE": "OEM Clear"
+  $name: Apps & Search
+
+- files:
+  - hideFilesPanel: false
+    $name: Hide Files Panel
+    $description: Hide the Files column and pause file searches. In automatic sizing, the search window becomes half as wide.
+  - maxFileResults: 12
+    $name: Max File Results
+    $description: Number of file matches to display in the Files column (default 12).
+  - filePreview: true
+    $name: File Preview
+    $description: Show a preview of the selected file beside search - its thumbnail (pictures, video frames, PDF pages, SVG), or the start of a text file or document - with its details (type, size, dates, and per kind dimensions, length, artist, version or author) and its path. Click the name, a detail value, or the path to copy it; text previews also allow selecting and copying text. To show folder sizes, enable Index folder size in Everything > Tools > Options > Indexes.
+  - animatePreview: true
+    $name: Play Videos and Animations
+    $description: In the file preview, play videos and animated GIF and WebP images - muted, on a loop - and turn through a PDF's first pages.
+  - filterNoisyPaths: true
+    $name: Filter Noisy Paths
+    $description: Filter out deep build caches, version control internals, and temporary directories from file search results unless no other matches exist.
+  - excludedPaths:
+      - "\\node_modules\\"
+      - "\\.git\\"
+      - "\\.gradle\\"
+      - "\\appdata\\local\\temp\\"
+      - "\\appdata\\local\\packages\\"
+      - "\\__pycache__\\"
+      - "\\.venv\\"
+      - "\\site-packages\\"
+      - "\\.cache\\"
+      - "\\build\\intermediates\\"
+      - "\\obj\\debug\\"
+      - "\\obj\\release\\"
+      - "\\windows\\winsxs\\"
+      - "\\windows\\servicing\\"
+    $name: Excluded Path Patterns
+    $description: >-
+      Paths matching any of these substrings will be filtered out from file search results so build caches, dependencies, and internal system folders don't clutter matches.
+  $name: Files & Preview
+
+- web:
+  - defaultSearchUrl: "https://duckduckgo.com/?q={q}"
+    $name: Default Search Engine URL
+    $description: >-
+      The URL template for standard web searches. Use {q} for the query placeholder.
+      Defaults to DuckDuckGo.
+  - webShortcuts:
+      - - prefix: "yt"
+          $name: Shortcut Keyword
+          $description: Keyword to trigger this search (e.g. "?yt music")
+        - name: "YouTube"
+          $name: Service Name
+        - url: "https://www.youtube.com/results?search_query={q}"
+          $name: Search URL
+          $description: URL template with {q} placeholder
+      - - prefix: "gh"
+          $name: Shortcut Keyword
+        - name: "GitHub"
+          $name: Service Name
+        - url: "https://github.com/search?q={q}"
+          $name: Search URL
+      - - prefix: "w"
+          $name: Shortcut Keyword
+        - name: "Wikipedia"
+          $name: Service Name
+        - url: "https://en.wikipedia.org/wiki/Special:Search?search={q}"
+          $name: Search URL
+      - - prefix: "r"
+          $name: Shortcut Keyword
+        - name: "Reddit"
+          $name: Service Name
+        - url: "https://www.reddit.com/search/?q={q}"
+          $name: Search URL
+    $name: Web Search Shortcuts
+    $description: >-
+      Keywords that send a query to a specific site instead of the default search engine, typed as "?keyword query" (for example "?yt music").
+  $name: Web Search
+
+- customCommands:
+    - - name: ""
+        $name: Name
+        $description: Name shown in the Apps panel and used to find this command.
+      - icon: ""
+        $name: Icon
+        $description: Paste an emoji or Windows icon glyph, enter a Unicode value such as E713, or use a full path to an image, icon, or app file. Leave empty for the terminal icon. Environment variables in paths are supported.
+      - shell: cmd
+        $name: Shell
+        $description: Choose the shell that understands your command. PowerShell 7 must be installed separately. Custom shell uses the executable and arguments below.
+        $options:
+        - cmd: Command Prompt (CMD)
+        - powershell: Windows PowerShell
+        - pwsh: PowerShell 7
+        - custom: Custom shell
+      - shellExecutable: ""
+        $name: Shell Executable
+        $description: For Custom shell only. Enter the full path to its executable, or a name available in PATH, such as nu.exe or wsl.exe. Environment variables such as %ProgramFiles% are supported.
+      - shellArguments: "-c {command}"
+        $name: Shell Arguments
+        $description: >-
+          For Custom shell only. Put {command} once where the shell expects the command, without adding quotes around the placeholder. It is passed as one argument automatically. Examples include -c {command} for Bash or Nushell and --exec bash -lc {command} for WSL. Environment variables in these arguments are expanded before inserting the command.
+      - hideTerminal: false
+        $name: Hide Terminal
+        $description: Run without showing the terminal. Programs opened by the command can still show their own windows.
+      - command: ""
+        $name: Command
+        $description: Command to run in the selected shell, exactly as entered. Blank names or commands are ignored.
+  $name: Custom Commands
+  $description: Add named commands to the Apps panel. They share favorite ranking with installed apps, including when search is empty. Right-click to run as administrator or copy the command. Up to 100 commands are supported.
+
 - unitConversions:
     - - fromUnit: "px"
         $name: Source Unit
@@ -221,6 +580,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 #include <functional>
 #include <map>
 #include <optional>
+#include <stdexcept>
 #include <thread>
 
 inline HMODULE GetCurrentModuleHandle() {
@@ -1954,28 +2314,32 @@ struct Match {
     int rank;   // the score less the head start for use (UsageBonus): the order shown
 };
 
-// How often each app was opened from Start, by lowercase name -- names are
-// what identify an entry across index rebuilds. Owned by the search thread,
-// kept in the mod's storage.
+// How often apps and custom commands were opened. App keys are lowercase
+// names; commands have their own namespace. Owned by the search thread and
+// kept together in the mod's storage so disabling learning forgets both.
 using UsageCounts = std::unordered_map<std::wstring, int>;
 
 constexpr wchar_t kUsageValueName[] = L"appLaunchCounts";
 constexpr size_t kUsageKept = 300;   // most used first; keeps the value small
 constexpr int kUsageCap = 1000;
 
+inline int UsageCount(const UsageCounts* usage, const std::wstring& key) {
+    if (!usage) return 0;
+    auto found = usage->find(key);
+    return found == usage->end() ? 0 : std::clamp(found->second, 0, kUsageCap);
+}
+
+inline void RecordUsage(UsageCounts* usage, const std::wstring& key) {
+    if (usage) (*usage)[key] = std::min(UsageCount(usage, key) + 1, kUsageCap);
+}
+
 // A head start, in score points, for apps opened often, applied only among
 // matches of the same kind (MatchTier): an often opened name prefix moves up
 // past other prefixes, never past an exact match. 3 points after one launch,
 // 9 at most, from about seven.
 inline int UsageBonus(const UsageCounts* usage, const std::wstring& nameLower) {
-    if (!usage) {
-        return 0;
-    }
-    auto it = usage->find(nameLower);
-    if (it == usage->end() || it->second <= 0) {
-        return 0;
-    }
-    return std::min(9, static_cast<int>(std::lround(3.0 * std::log2(1.0 + it->second))));
+    const int count = UsageCount(usage, nameLower);
+    return count ? std::min(9, static_cast<int>(std::lround(3.0 * std::log2(1.0 + count)))) : 0;
 }
 
 // The kind of match a ScoreApp score stands for: exact (name, program, alias),
@@ -1984,7 +2348,7 @@ inline int MatchTier(int score) {
     return score < 10 ? 0 : score < 30 ? 1 : score < 80 ? 2 : score < 120 ? 3 : 4;
 }
 
-// One line per app: count, a tab, the lowercase name.
+// One line per entry: count, a tab, the app name or namespaced command key.
 inline UsageCounts LoadUsage() {
     UsageCounts usage;
     std::vector<wchar_t> buffer(64 * 1024);
@@ -2030,6 +2394,11 @@ inline std::wstring ToLower(std::wstring s) {
     std::transform(s.begin(), s.end(), s.begin(),
                    [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
     return s;
+}
+
+inline std::wstring CommandUsageKey(const std::wstring& name) {
+    // An app with the same display name must not share the command's count.
+    return L"\x1F" L"command:" + ToLower(name);
 }
 
 inline std::wstring ResolveAppParsingPath(const std::wstring& parse) {
@@ -2621,6 +2990,31 @@ class Index {
             if (!seen) {
                 shown.push_back(m);
             }
+        }
+        return shown;
+    }
+
+    // Empty search shows installed apps, with learned favorites first. Turning
+    // learning off uses an alphabetical list and never reads the saved counts.
+    std::vector<Match> Suggest(size_t limit,const UsageCounts* usage) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::vector<Match> hits;
+        for(const App& app:apps_) {
+            if(app.isSetting || app.name.empty() || (!app.pidl && app.targetPath.empty())) continue;
+            const int uses=UsageCount(usage,app.nameLower);
+            hits.push_back({&app,0,-uses});
+        }
+        std::stable_sort(hits.begin(),hits.end(),[](const Match& a,const Match& b) {
+            if(a.rank!=b.rank) return a.rank<b.rank;
+            return a.app->nameLower<b.app->nameLower;
+        });
+        std::vector<Match> shown;
+        shown.reserve(std::min(limit,hits.size()));
+        for(const Match& hit:hits) {
+            if(shown.size()>=limit) break;
+            if(std::none_of(shown.begin(),shown.end(),[&](const Match& kept) {
+                return kept.app->nameLower==hit.app->nameLower;
+            })) shown.push_back(hit);
         }
         return shown;
     }
@@ -3394,11 +3788,23 @@ inline std::wstring NormalizeUnit(const std::wstring& unitRaw) {
 
 } // namespace tools
 
+#include <array>
+#include <d2d1.h>
+#include <d2d1effects.h>
+#include <winrt/Windows.Graphics.h>
+#include <winrt/Windows.Graphics.Effects.h>
+#include <winrt/Windows.UI.Composition.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.ViewManagement.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
@@ -3417,9 +3823,6 @@ inline std::wstring NormalizeUnit(const std::wstring& unitRaw) {
 #pragma pop_macro("GetCurrentTime")
 
 #include <robuffer.h>
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"start-everything"
-#endif
 #include <windhawk_utils.h>
 
 namespace wf = winrt::Windows::Foundation;
@@ -3448,6 +3851,177 @@ enum class TargetProcess {
 };
 
 static TargetProcess g_targetProcess = TargetProcess::Unknown;
+
+// Local Windows 11 prototype: search has its own desktop XAML window.
+static constexpr wchar_t kSearchWindowClass[] = L"StartEverything_SearchWindowPrototype";
+static std::atomic<HWND> g_searchWindowWindow{nullptr};
+static bool g_searchWindowWaitingForStart = false; // search UI thread only
+static bool g_searchWindowSliding = false; // search UI thread only
+static bool g_renderAfterSlide = false; // latest results wait for the short slide
+static UINT SearchWindowForegroundMessage() {
+    static UINT id = RegisterWindowMessageW(L"StartEverything_SearchWindowForeground");
+    return id;
+}
+static UINT SearchWindowAppearanceMessage() {
+    static UINT id = RegisterWindowMessageW(L"StartEverything_SearchWindowAppearance");
+    return id;
+}
+static UINT_PTR SearchAppearanceTimerId() {
+    static const int identity = 0;
+    return reinterpret_cast<UINT_PTR>(&identity);
+}
+constexpr ULONG_PTR kSearchWindowAppearanceData = 0x53455354; // 'SEST'
+struct SearchBrushData {
+    uint32_t kind = 0, color = 0, fallback = 0, count = 0;
+    double opacity = 1, tint = 1, luminosity = -1;
+    double blur = 3, saturation = 1, points[4]{0,0,1,1};
+    uint32_t colors[8]{};
+    double offsets[8]{};
+    bool operator==(SearchBrushData const&) const = default;
+};
+struct SearchSurfaceData {
+    uint32_t flags = 0;
+    SearchBrushData background, outline;
+    uint32_t foreground = 0;
+    double corners[4]{}, thickness[4]{}, padding[4]{}, margin[4]{};
+    bool operator==(SearchSurfaceData const&) const = default;
+};
+enum class SearchTaskbarEdge : uint32_t { Left, Top, Right, Bottom };
+static SearchTaskbarEdge g_searchTaskbarEdge = SearchTaskbarEdge::Bottom;
+
+SearchTaskbarEdge TaskbarEdgeFromBounds(RECT const& bar, RECT const& screen) {
+    if (bar.right - bar.left > bar.bottom - bar.top)
+        return bar.top + (bar.bottom - bar.top) / 2 < screen.top + (screen.bottom - screen.top) / 2
+            ? SearchTaskbarEdge::Top : SearchTaskbarEdge::Bottom;
+    return bar.left + (bar.right - bar.left) / 2 < screen.left + (screen.right - screen.left) / 2
+        ? SearchTaskbarEdge::Left : SearchTaskbarEdge::Right;
+}
+
+SearchTaskbarEdge TaskbarEdgeForMonitor(HMONITOR screen) {
+    struct Probe { HMONITOR screen; SearchTaskbarEdge edge; bool found = false; } probe{screen, SearchTaskbarEdge::Bottom};
+    EnumWindows([](HWND window, LPARAM value) -> BOOL {
+        auto& probe = *reinterpret_cast<Probe*>(value);
+        wchar_t name[64]{};
+        if (!GetClassNameW(window, name, ARRAYSIZE(name)) ||
+            (wcscmp(name, L"Shell_TrayWnd") && wcscmp(name, L"Shell_SecondaryTrayWnd")) ||
+            MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST) != probe.screen) return TRUE;
+        RECT bar{};
+        MONITORINFO monitor{sizeof(monitor)};
+        if (!GetWindowRect(window, &bar) || IsRectEmpty(&bar) || !GetMonitorInfoW(probe.screen, &monitor)) return TRUE;
+        probe.edge = TaskbarEdgeFromBounds(bar, monitor.rcMonitor);
+        probe.found = true;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&probe));
+    if (probe.found) return probe.edge;
+    // A display without its own taskbar follows the primary taskbar's edge.
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        RECT bar{};
+        MONITORINFO monitor{sizeof(monitor)};
+        if (GetWindowRect(tray, &bar) && !IsRectEmpty(&bar) &&
+            GetMonitorInfoW(MonitorFromWindow(tray, MONITOR_DEFAULTTONEAREST), &monitor))
+            return TaskbarEdgeFromBounds(bar, monitor.rcMonitor);
+    }
+    return SearchTaskbarEdge::Bottom;
+}
+
+RECT SearchBoundsForEdge(RECT const& work, int width, int height, int gap,
+                         double alignment, SearchTaskbarEdge edge) {
+    const bool vertical = edge == SearchTaskbarEdge::Left || edge == SearchTaskbarEdge::Right;
+    const int availableX = std::max(0L, work.right - work.left - width);
+    const int availableY = std::max(0L, work.bottom - work.top - height);
+    alignment = std::clamp(alignment, 0.0, 1.0);
+    gap = std::clamp(gap, 0, vertical ? availableX : availableY);
+    int left = work.left + static_cast<int>(availableX * alignment);
+    int top = work.top + static_cast<int>(availableY * alignment);
+    switch (edge) {
+    case SearchTaskbarEdge::Left: left = work.left + gap; break;
+    case SearchTaskbarEdge::Right: left = work.right - gap - width; break;
+    case SearchTaskbarEdge::Top: top = work.top + gap; break;
+    case SearchTaskbarEdge::Bottom: top = work.bottom - gap - height; break;
+    }
+    return {left, top, left + width, top + height};
+}
+
+POINT SearchSlideTranslation(SearchTaskbarEdge edge, int pixels) {
+    switch (edge) {
+    case SearchTaskbarEdge::Left: return {-pixels, 0};
+    case SearchTaskbarEdge::Top: return {0, -pixels};
+    case SearchTaskbarEdge::Right: return {pixels, 0};
+    case SearchTaskbarEdge::Bottom: return {0, pixels};
+    }
+    return {};
+}
+
+double SearchHiddenDistance(RECT const& bounds, RECT const& work, double scale, SearchTaskbarEdge edge) {
+    switch (edge) {
+    case SearchTaskbarEdge::Left: return (bounds.right - work.left) / scale + 16;
+    case SearchTaskbarEdge::Top: return (bounds.bottom - work.top) / scale + 16;
+    case SearchTaskbarEdge::Right: return (work.right - bounds.left) / scale + 16;
+    case SearchTaskbarEdge::Bottom: return (bounds.bottom - bounds.top) / scale + 16;
+    }
+    return 0;
+}
+
+// Keep side/top slides on their destination display. The XAML child retains
+// its full layout size; the native host reveals only the part inside work.
+RECT SearchSlideViewport(RECT const& frame, RECT const& work, SearchTaskbarEdge edge) {
+    if (edge == SearchTaskbarEdge::Bottom || IsRectEmpty(&work)) return frame;
+    RECT visible{};
+    if (IntersectRect(&visible, &frame, &work)) return visible;
+    const LONG x = std::clamp(frame.left, work.left, work.right - 1);
+    const LONG y = std::clamp(frame.top, work.top, work.bottom - 1);
+    return {x, y, x + 1, y + 1};  // completely hidden by the native region
+}
+
+struct SearchAppearanceData {
+    uint32_t version = 4, dark = 1;
+    uint32_t taskbarEdge = static_cast<uint32_t>(SearchTaskbarEdge::Bottom), reserved = 0;
+    uint32_t foreground = 0, searchForeground = 0;
+    double width = 0, height = 0, edgeGap = 12, alignment = 0.5;
+    double corners[4]{8,8,8,8}, thickness[4]{1,1,1,1};
+    double searchCorners[4]{4,4,4,4}, searchThickness[4]{1,1,1,1};
+    SearchBrushData background, outline, searchBackground, searchOutline;
+    SearchSurfaceData menu, menuBorder, menuItem;
+};
+static SearchAppearanceData g_searchAppearance;
+static bool g_searchAppearanceValid = false;
+static bool g_searchAppearanceDirty = false;
+namespace {
+void LoadSettings();
+bool SearchWindowInitialize();
+void StartSearchWindowInput();
+void StopSearchWindowInput();
+void ApplySearchWindowInput();
+bool HasBufferedSearchWindowInput();
+constexpr UINT kSearchWindowInputMessage = WM_APP + 0x73;
+void SearchWindowTrace(const wchar_t* message, HRESULT hr);
+void SearchWindowTeardown();
+bool SearchWindowPreTranslate(MSG* message);
+void SearchWindowShow(std::wstring const& text = L"", bool append = false);
+void SearchWindowHide();
+void SearchWindowLayout(bool animate = true);
+void SearchWindowStyle();
+void QueueSearchBoxRefocus(bool bodyClick = false);
+bool DismissSearchContextMenu();
+void CaptureStartAppearance(HWND target);
+void RequestStartAppearance();
+void ApplyStartAppearance();
+void ApplySearchTextColors();
+uint32_t SearchTextOverride();
+void InvalidateSearchContrastContainer(wux::FrameworkElement const& root);
+void PrepareSearchResultContrastColors();
+void SearchContrastScrolled(wuxc::ScrollViewer const& scroll);
+void SearchContainerContrastTick();
+void ApplySearchContainerContrast();
+void PauseSearchContainerContrast();
+void ResetSearchContainerContrast();
+void StopSearchContainerContrast();
+void UpdateSearchWindowShape();
+void InitializeCopiedMenu(wuxc::MenuFlyout const& menu);
+void RefreshCopiedMenuStyles();
+
+}
+
 
 TargetProcess IdentifyCurrentProcess() {
     wchar_t path[MAX_PATH] = {};
@@ -3511,14 +4085,6 @@ static HWND CachedStartWindow() {
     return h;
 }
 
-static inline HWND FindStartMenuCoreWindow() {
-    return CachedStartWindow();
-}
-
-// Whether `hwnd` is SearchHost's CoreWindow. Called only on this mod's helper
-// thread in Explorer and on Start's UI thread, never inside Explorer's own
-// foreground path, so identifying a new SearchHost process by name once is
-// fine.
 static bool IsSearchHostWindow(HWND hwnd) {
     static std::atomic<DWORD> s_searchPid{0};
     static std::atomic<DWORD> s_otherPid{0};
@@ -3568,27 +4134,8 @@ static UINT DragDoneMessage() {
     return message;
 }
 
-// Start sends this to SearchHost's CoreWindow when SearchHost holds the
-// foreground and Start cannot take it. See SearchHostSubclassProc.
-static UINT StartForegroundRequestMessage() {
-    static const UINT message = RegisterWindowMessageW(L"StartEverything_StartForegroundRequest");
-    return message;
-}
-
-
 // Tracked launch threads for clean unload synchronization across processes
 static std::mutex g_launchHandlesMutex;
-// Bumped by every launch once its shell call has returned, started or not
-// (see DismissStartMenuForLaunch).
-static std::atomic<unsigned> g_launchesDone{0};
-// Closed while DismissStartMenuForLaunch makes sure Start holds the foreground,
-// so that is when the program is started; open otherwise. Launches wait at it.
-static HANDLE g_launchGate;
-static void WaitForLaunchGate() {
-    if (g_launchGate) {
-        WaitForSingleObject(g_launchGate, 1000);
-    }
-}
 static std::vector<HANDLE> g_launchHandles;
 
 template <typename F>
@@ -3646,48 +4193,31 @@ static const ULONG_PTR kExplorerCopyDataMagic = 0x53455052; // 'SEPR'
 static const ULONG_PTR kExplorerDragMagic = 0x53454447;      // 'SEDG': drag a result (StartFileDrag)
 static const ULONG_PTR kExplorerUninstallMagic = 0x5345554E; // 'SEUN': remove a packaged app (RequestPackageRemoval)
 static const UINT kExplorerStartDrag = WM_APP + 0x31;
+static const UINT kExplorerSearchShown = WM_APP + 0x32;
+static constexpr UINT_PTR kExplorerSearchStartupTimer = 2;
+static unsigned g_explorerSearchStartupAttempts = 0;  // helper thread only
+static bool g_explorerSearchRequested = false;  // helper thread only
+static constexpr UINT kExplorerOpenSearch = WM_APP + 0x33;
+static constexpr UINT kExplorerUpdateShortcut = WM_APP + 0x34;
+static constexpr int kAlternativeShortcutId = 0x5345;
+static std::atomic<UINT> g_alternativeShortcutDesired{0};
+static std::atomic<UINT> g_alternativeShortcutActive{0};
 static std::wstring g_explorerDragPath;  // helper thread only
 
 static HANDLE g_hExplorerHelperThread = nullptr;
 static DWORD g_explorerHelperThreadId = 0;
-static HWND g_hExplorerHelperWnd = nullptr;
+static std::atomic<HWND> g_hExplorerHelperWnd{nullptr};
 static HANDLE g_hExplorerHelperReadyEvent = nullptr;
 
 // ---------------------------------------------------------------------------
-// Search is never left showing without Start
-//
-// SearchHost is invisible under this mod, so whenever the shell shows Search
-// on its own, the user sees nothing at all. Two things make it do that:
-//
-//   - Win+S and the taskbar search button, which ask for Search alone;
-//   - a key typed in the few milliseconds after the Win key, before Start
-//     holds the keyboard: SearchHost takes it as the start of a native search,
-//     and the shell swaps Start out for Search -- Start vanishes mid-typing.
-//
-// Either way, once Search is showing, Start is closed and the user is still on
-// one of the two, Start is opened -- and its search box is this mod's. The
-// shell's hotkey, button and type-ahead handling are internal, so this watches
-// what is public instead: the foreground moving to Search, and Start being
-// cloaked (closed). A normal close never qualifies: by the time Start is
-// cloaked the foreground is back on another app, and Search was cloaked first.
-//
-// Opening Start is a toggle, so it is sent only once Start is known to be
-// closed, not on its way up or down. The Win key and the Start button open
-// Start alongside Search, uncloaking it within ~30ms, so normally Start has to
-// stay closed across several checks. Win+S, though, opens Search while the
-// Win key is still held, and the Win key on its own opens Start only once it
-// is released: under a held Win key one check is enough -- none at all if
-// Start was already closed. If Start was open (Win+S over Start), this waits
-// for it to finish closing first. When Start has just been cloaked, it is
-// already closed, and one check is enough too.
-//
-// Start is opened with WM_SYSCOMMAND/SC_TASKLIST, the documented "activate the
-// Start menu" command, from this helper thread: no injected keystrokes, and
-// nothing runs in Explorer's own foreground path.
+// Native shell search activations must open the independent search window.
+// Watch SearchHost activation and Start closing as a fallback for the shell's
+// internal hotkeys/search buttons. If Start is opening normally, leave it alone.
+// Requests go to the helper thread and coalesce during an existing activation.
 // ---------------------------------------------------------------------------
 static const UINT_PTR kSearchAloneTimerId = 1;
-static const UINT kSearchAloneTickMs = 80;
-static const int kSearchAloneTicks = 3;
+static const UINT kSearchAloneTickMs = 40;
+static const int kSearchAloneTicks = 2;
 static const int kSearchAloneMaxTicks = 15;
 static HWINEVENTHOOK g_searchForegroundHook = nullptr;
 static HWINEVENTHOOK g_startCloakedHook = nullptr;
@@ -3703,7 +4233,8 @@ static bool IsCloaked(HWND hwnd) {
 }
 
 static bool IsStartMenuClosed() {
-    return IsCloaked(CachedStartWindow());
+    HWND start = CachedStartWindow();
+    return !start || !IsWindowVisible(start) || IsCloaked(start);
 }
 
 // SearchHost's CoreWindow, found by process: its title is localized.
@@ -3723,33 +4254,101 @@ static HWND FindSearchHostCoreWindow() {
     return s_search;
 }
 
-// Opening Start puts Search in front first, as every opening does, and Start
-// is still cloaked at that moment -- which looks exactly like what this
-// watches for. So for a moment after asking, nothing is asked again: a second
-// SC_TASKLIST would toggle Start closed.
-static const ULONGLONG kOpenStartSettleMs = 600;
-static ULONGLONG g_openStartTick = 0;  // helper thread only
+// Repeated shell notifications during one search activation must not reopen
+// search, clear its query, or restart the opening animation.
+static const ULONGLONG kSearchActivationSettleMs = 600;
+static ULONGLONG g_searchActivationTick = 0;  // helper thread only
 
-static bool OpeningStartJustAsked() {
-    return g_openStartTick && GetTickCount64() - g_openStartTick < kOpenStartSettleMs;
+static bool SearchActivationSettling() {
+    return g_searchActivationTick && GetTickCount64() - g_searchActivationTick < kSearchActivationSettleMs;
 }
 
-static void OpenStartInsteadOfSearch() {
-    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        Wh_Log(L"[Explorer] Search showing without Start -> opening Start");
-        g_openStartTick = GetTickCount64();
-        PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
-    }
+static void OpenSearchFromShell() {
+    PostMessageW(g_hExplorerHelperWnd.load(), kExplorerOpenSearch, 0, 0);
 }
 
-// There can be several explorer.exe processes, each running this helper. Only
-// the one running the taskbar acts, or Start would be toggled once per process.
+// Only the Explorer process that owns the taskbar may open search.
 static bool IsTaskbarProcess() {
     DWORD pid = 0;
     if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
         GetWindowThreadProcessId(tray, &pid);
     }
     return pid == GetCurrentProcessId();
+}
+
+// A packed shortcut is zero when disabled; the key occupies the high byte.
+static UINT PackAlternativeShortcut(UINT modifiers, UINT key) {
+    return (key << 8) | modifiers;
+}
+
+static std::optional<UINT> ParseAlternativeShortcutModifiers(std::wstring_view text) {
+    if (text.empty()) return MOD_ALT;
+    static constexpr struct { PCWSTR name; UINT value; } values[] = {
+        {L"alt", 1},
+        {L"ctrl", 2},
+        {L"shift", 4},
+        {L"win", 8},
+        {L"ctrl_alt", 3},
+        {L"ctrl_shift", 6},
+        {L"alt_shift", 5},
+        {L"win_ctrl", 10},
+        {L"win_alt", 9},
+        {L"win_shift", 12},
+        {L"ctrl_alt_shift", 7},
+        {L"win_ctrl_alt", 11},
+        {L"win_ctrl_shift", 14},
+        {L"win_alt_shift", 13},
+        {L"win_ctrl_alt_shift", 15},
+        {L"none", 0}
+    };
+    const std::wstring value(text);
+    for (auto const& item : values) if (_wcsicmp(value.c_str(),item.name)==0) return item.value;
+    return std::nullopt;
+}
+
+static UINT ParseAlternativeShortcutKey(std::wstring_view text) {
+    if (text.empty()) return VK_SPACE;
+    if (text.size()!=4 || text[0]!=L'0' || (text[1]!=L'x' && text[1]!=L'X')) return 0;
+    UINT key=0;
+    for (size_t i=2;i<4;++i) {
+        wchar_t c=text[i];
+        int digit=c>=L'0' && c<=L'9' ? c-L'0' : c>=L'a' && c<=L'f' ? c-L'a'+10 :
+                  c>=L'A' && c<=L'F' ? c-L'A'+10 : -1;
+        if (digit<0) return 0;
+        key=(key<<4)|digit;
+    }
+    static constexpr UINT keys[] = {
+        0x20, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7C, 0x7D, 0x7E, 0x7F, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x8, 0x9, 0xC, 0xD, 0x13, 0x14, 0x1B, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x5D, 0x5F, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F, 0x90, 0x91, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF, 0xE2, 0x15, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFD, 0xFE
+    };
+    return std::find(std::begin(keys),std::end(keys),key)!=std::end(keys) ? key : 0;
+}
+
+static bool AlternativeShortcutMatches(UINT shortcut, UINT key, const BYTE* state) {
+    if (!shortcut || key != (shortcut>>8)) return false;
+    const UINT modifiers=((state[VK_MENU]&0x80) ? MOD_ALT : 0) |
+        ((state[VK_CONTROL]&0x80) ? MOD_CONTROL : 0) |
+        ((state[VK_SHIFT]&0x80) ? MOD_SHIFT : 0) |
+        (((state[VK_LWIN]|state[VK_RWIN])&0x80) ? MOD_WIN : 0);
+    return modifiers == (shortcut&0xFF);
+}
+
+// Registration belongs to the helper's message thread, in the taskbar process.
+static void ReleaseAlternativeShortcut(HWND helper) {
+    if (g_alternativeShortcutActive.exchange(0)) UnregisterHotKey(helper,kAlternativeShortcutId);
+}
+
+static void UpdateAlternativeShortcut(HWND helper) {
+    const UINT desired=IsTaskbarProcess() ? g_alternativeShortcutDesired.load() : 0;
+    if (desired==g_alternativeShortcutActive.load()) return;
+    ReleaseAlternativeShortcut(helper);
+    if (!desired) return;
+    if (RegisterHotKey(helper,kAlternativeShortcutId,(desired&0xFF)|MOD_NOREPEAT,desired>>8)) {
+        g_alternativeShortcutActive=desired;
+        SearchWindowTrace(L"alternative search shortcut registered",S_OK);
+    } else {
+        SearchWindowTrace(L"alternative search shortcut unavailable; choose another combination",
+                          HRESULT_FROM_WIN32(GetLastError()));
+    }
 }
 
 static void ArmSearchAloneCheck(int ticksNeeded) {
@@ -3763,7 +4362,7 @@ static void ArmSearchAloneCheck(int ticksNeeded) {
 static void CALLBACK ShellWindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                           LONG idChild, DWORD, DWORD) {
     if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !g_hExplorerHelperWnd ||
-        OpeningStartJustAsked()) {
+        SearchActivationSettling()) {
         return;
     }
     if (event == EVENT_OBJECT_CLOAKED) {
@@ -3781,7 +4380,7 @@ static void CALLBACK ShellWindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
     if (winKeyDown && IsStartMenuClosed()) {
         KillTimer(g_hExplorerHelperWnd, kSearchAloneTimerId);
         g_searchAloneArmed = false;
-        OpenStartInsteadOfSearch();
+        OpenSearchFromShell();
         return;
     }
     ArmSearchAloneCheck(winKeyDown ? 1 : kSearchAloneTicks);
@@ -3792,11 +4391,11 @@ static bool CheckSearchShownWithoutStart() {
     HWND search = FindSearchHostCoreWindow();
     HWND start = CachedStartWindow();
     HWND fg = GetForegroundWindow();
-    if (!g_searchAloneArmed || !search || !start || (fg != search && fg != start) || IsCloaked(search) ||
-        OpeningStartJustAsked()) {
+    if (!g_searchAloneArmed || !search || (fg != search && fg != start) || IsCloaked(search) ||
+        SearchActivationSettling()) {
         return true;  // the user moved on, Search is not showing, or Start is on its way
     }
-    if (fg == start && !IsCloaked(start)) {
+    if (fg == start && !IsStartMenuClosed()) {
         return true;  // Start is open and has the keyboard
     }
     if (++g_searchAloneTotalTicks > kSearchAloneMaxTicks) {
@@ -3806,14 +4405,14 @@ static bool CheckSearchShownWithoutStart() {
                kSearchAloneMaxTicks, IsCloaked(start) ? L"closed" : L"open");
         return true;
     }
-    if (!IsCloaked(start)) {
+    if (!IsStartMenuClosed()) {
         g_searchAloneClosedTicks = 0;  // Start is open, opening, or still closing
         return false;
     }
     if (++g_searchAloneClosedTicks < g_searchAloneTicksNeeded) {
         return false;
     }
-    OpenStartInsteadOfSearch();
+    OpenSearchFromShell();
     return true;
 }
 
@@ -3931,7 +4530,8 @@ static void RunExplorerDrag(HWND hWnd) {
     }
     // Not the effect: a drop into a folder copies in the background and
     // reports none.
-    HWND start = CachedStartWindow();
+    HWND start = g_searchWindowWindow.load();
+    if (!start) start = CachedStartWindow();
     POINT pt{};
     GetCursorPos(&pt);
     HWND under = WindowFromPoint(pt);
@@ -3961,7 +4561,8 @@ static bool AcceptPackageRemoval(std::wstring family) {
     while (!family.empty() && family.back() == L'\0') {
         family.pop_back();
     }
-    HWND start = CachedStartWindow();
+    HWND start = g_searchWindowWindow.load();
+    if (!start) start = CachedStartWindow();
     DWORD startPid = 0, foregroundPid = 0;
     if (start) {
         GetWindowThreadProcessId(start, &startPid);
@@ -4027,8 +4628,83 @@ static bool AcceptPackageRemoval(std::wstring family) {
     return true;
 }
 
+// Shell_TrayWnd is created before the taskbar's XAML island. Do not become
+// Explorer's first XAML application while its own UI is still being built.
+static bool TaskbarXamlReady(HWND tray) {
+    HWND bridge = FindWindowExW(tray, nullptr,
+        L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+    if (!bridge) return false;
+    RECT client{};
+    if (!GetClientRect(bridge, &client) || client.right <= client.left || client.bottom <= client.top) return false;
+    return FindWindowExW(bridge, nullptr, L"Windows.UI.Input.InputSite.WindowClass", nullptr) ||
+           FindWindowExW(tray, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
+}
+
+static void TryInitializeExplorerSearch(HWND helper) {
+    if (g_quit.load()) return;
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    DWORD taskbarPid = 0;
+    if (tray) GetWindowThreadProcessId(tray, &taskbarPid);
+    if (!taskbarPid) return;
+    if (taskbarPid != GetCurrentProcessId()) {
+        KillTimer(helper, kExplorerSearchStartupTimer);
+        return;
+    }
+
+    // Input capture is native Win32 and can buffer the first query without
+    // constructing XAML. The actual UI is created only on a search request.
+    UpdateAlternativeShortcut(helper);
+    StartSearchWindowInput();
+    if (!g_explorerSearchRequested) {
+        KillTimer(helper, kExplorerSearchStartupTimer);
+        return;
+    }
+    if (!TaskbarXamlReady(tray)) return;
+    KillTimer(helper, kExplorerSearchStartupTimer);
+    if (!g_searchWindowWindow.load()) {
+        ++g_explorerSearchStartupAttempts;
+        if (!SearchWindowInitialize()) {
+            if (g_explorerSearchStartupAttempts < 5)
+                SetTimer(helper, kExplorerSearchStartupTimer, 1000, nullptr);
+            else g_explorerSearchRequested = false;
+            return;
+        }
+    }
+    g_explorerSearchRequested = false;
+    if (HasBufferedSearchWindowInput()) ApplySearchWindowInput();
+    else SearchWindowShow();
+}
+
+static void RequestExplorerSearch(HWND helper) {
+    g_explorerSearchRequested = true;
+    SetTimer(helper, kExplorerSearchStartupTimer, 250, nullptr);
+    TryInitializeExplorerSearch(helper);
+}
+
 static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+    case kExplorerUpdateShortcut:
+        UpdateAlternativeShortcut(hWnd);
+        return 0;
+    case WM_HOTKEY:
+        if (wParam == kAlternativeShortcutId &&
+            g_alternativeShortcutActive.load() == PackAlternativeShortcut(LOWORD(lParam)&0xF,HIWORD(lParam)) &&
+            g_alternativeShortcutActive.load()) {
+            DismissSearchContextMenu();
+            // Keep the hotkey's foreground permission during lazy UI creation.
+            SetForegroundWindow(hWnd);
+            RequestExplorerSearch(hWnd);
+        }
+        return 0;
+    case kExplorerOpenSearch:
+        RequestExplorerSearch(hWnd);
+        return 0;
+    case kSearchWindowInputMessage:
+        if (HasBufferedSearchWindowInput()) RequestExplorerSearch(hWnd);
+        return 0;
+    case kExplorerSearchShown:
+        if (IsTaskbarProcess() && !SearchActivationSettling()) ArmSearchAloneCheck(kSearchAloneTicks);
+        return 0;
     case kExplorerStartDrag:
         RunExplorerDrag(hWnd);
         return 0;
@@ -4155,6 +4831,10 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         break;
     }
     case WM_TIMER:
+        if (wParam == kExplorerSearchStartupTimer) {
+            TryInitializeExplorerSearch(hWnd);
+            return 0;
+        }
         if (wParam == kSearchAloneTimerId) {
             if (CheckSearchShownWithoutStart()) {
                 KillTimer(hWnd, kSearchAloneTimerId);
@@ -4164,8 +4844,8 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         }
         break;
     case WM_SYSCOMMAND:
-        // It holds the foreground while a program opened from Start starts
-        // (DismissStartMenuForLaunch), so Alt+F4 can reach it.
+        // The helper can hold activation during a drag or lazy search opening.
+        // Alt+F4 must not destroy this relay window.
         if ((wParam & 0xFFF0) == SC_CLOSE) {
             return 0;
         }
@@ -4174,6 +4854,7 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         DestroyWindow(hWnd);
         return 0;
     case WM_DESTROY:
+        ReleaseAlternativeShortcut(hWnd);
         PostQuitMessage(0);
         return 0;
     default:
@@ -4216,15 +4897,26 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
         Wh_Log(L"[Explorer] Failed to create helper host window, err=%lu", GetLastError());
     }
 
+    if (hWnd) {
+        g_explorerSearchStartupAttempts = 0;
+        g_explorerSearchRequested = false;
+        SearchWindowTrace(L"search startup armed; XAML deferred until first search", S_OK);
+        SetTimer(hWnd, kExplorerSearchStartupTimer, 250, nullptr);
+    }
+
     if (g_hExplorerHelperReadyEvent) {
         SetEvent(g_hExplorerHelperReadyEvent);
     }
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (SearchWindowPreTranslate(&msg)) continue;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    ReleaseAlternativeShortcut(hWnd);
+    SearchWindowTeardown();
+    StopSearchWindowInput();  // also when search was never opened
 
     if (g_searchForegroundHook) {
         UnhookWinEvent(g_searchForegroundHook);
@@ -4292,8 +4984,8 @@ static void StopExplorerHelperHost() {
 }
 
 void InitExplorer() {
-    Wh_Log(L"=== start-everything: starting explorer.exe helper ===");
-    StartExplorerHelperHost();
+    LoadSettings();
+    Wh_Log(L"=== start-everything: explorer.exe settings ready ===");
 }
 
 // ===========================================================================
@@ -4312,10 +5004,8 @@ void InitExplorer() {
 //   1. Its CoreWindow is drawn at zero alpha (SetNeutralized). The shell
 //      still shows, hides and activates it exactly as before; it just never
 //      appears, and clicks pass through it to Start.
-//   2. When Start cannot take the foreground from it, Start asks, and it
-//      grants it (AllowStartToTakeForeground). It is the foreground process
-//      at that moment, the only process in the chain entitled to, and Start
-//      then takes the foreground itself.
+//   2. Native search activation is relayed to the independent search window,
+//      with foreground permission granted to the taskbar's Explorer process.
 //   3. WebView2 and the indexer are not launched: that is the disconnect.
 
 struct HookReentryGuard {
@@ -4375,28 +5065,6 @@ static UINT SearchNeutralizeMessage() {
     return message;
 }
 
-// Start's CoreWindow while it is open, else null.
-static HWND OpenStartWindow() {
-    HWND start = CachedStartWindow();
-    DWORD cloaked = 0;
-    if (start && SUCCEEDED(DwmGetWindowAttribute(start, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
-        !cloaked) {
-        return start;
-    }
-    return nullptr;
-}
-
-// Lets Start take the foreground from SearchHost, while Start is open.
-static BOOL AllowStartToTakeForeground() {
-    DWORD pid = 0;
-    if (HWND start = OpenStartWindow()) {
-        GetWindowThreadProcessId(start, &pid);
-    }
-    BOOL ok = pid && AllowSetForegroundWindow(pid);
-    Wh_Log(L"[SearchHost] foreground requested by Start -> %d", ok);
-    return ok;
-}
-
 // What SetNeutralized changed, kept on each window so every one is restored
 // to exactly what it had: whether it was layered already and, if so, its
 // layered attributes (color key, alpha, LWA_ flags), packed into the value.
@@ -4451,11 +5119,19 @@ static void SetNeutralized(HWND hWnd, bool on) {
 }
 
 static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    UINT requestMessage = StartForegroundRequestMessage();
-    UINT neutralizeMessage = SearchNeutralizeMessage();
-    if (uMsg == requestMessage && requestMessage) {
-        return AllowStartToTakeForeground();
+    if (uMsg == SearchWindowForegroundMessage()) {
+        HWND host = FindWindowW(kSearchWindowClass, nullptr);
+        DWORD pid = 0, shellPid = 0;
+        GetWindowThreadProcessId(host, &pid);
+        GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr), &shellPid);
+        return pid && pid == shellPid && AllowSetForegroundWindow(pid);
     }
+    if ((uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE) ||
+        (uMsg == WM_WINDOWPOSCHANGED && GetForegroundWindow() == hWnd && !IsCloaked(hWnd))) {
+        if (HWND helper = FindWindowW(kExplorerHelperClassName, kExplorerHelperWindowName))
+            PostMessageW(helper, kExplorerSearchShown, 0, 0);
+    }
+    UINT neutralizeMessage = SearchNeutralizeMessage();
     if (uMsg == neutralizeMessage && neutralizeMessage) {
         SetNeutralized(hWnd, wParam != 0);
         return TRUE;
@@ -4526,6 +5202,27 @@ struct WebShortcut {
     std::wstring url;
 };
 
+enum class CustomCommandShell { Cmd, PowerShell, PowerShell7, Custom };
+
+CustomCommandShell ParseCustomCommandShell(PCWSTR value) {
+    if(value) {
+        if(_wcsicmp(value,L"powershell")==0) return CustomCommandShell::PowerShell;
+        if(_wcsicmp(value,L"pwsh")==0) return CustomCommandShell::PowerShell7;
+        if(_wcsicmp(value,L"custom")==0) return CustomCommandShell::Custom;
+    }
+    return CustomCommandShell::Cmd;
+}
+
+struct CustomCommand {
+    std::wstring name;
+    std::wstring icon;
+    std::wstring command;
+    std::wstring shellExecutable;
+    std::wstring shellArguments = L"-c {command}";
+    CustomCommandShell shell = CustomCommandShell::Cmd;
+    bool hideTerminal = false;
+};
+
 struct CustomConversion {
     std::wstring fromUnit;
     std::wstring toUnit;
@@ -4540,42 +5237,82 @@ std::atomic<int> g_textScale{100};
 struct Settings {
     std::wstring defaultSearchUrl = L"https://duckduckgo.com/?q={q}";
     std::vector<WebShortcut> webShortcuts;
+    std::vector<CustomCommand> customCommands;
     std::vector<CustomConversion> unitConversions;
     std::vector<std::wstring> excludedPaths;
     int maxAppResults = 6;
     int maxFileResults = 12;
     int searchDebounceMs = 0;
-    int panelMargin = 0;
+    int menuWidth = 660;
+    int menuHeight = 660;
+    std::wstring textColor = L"auto";
     int textScale = 100;  // percent
     bool showKeyHints = true;
     bool filterNoisyPaths = true;
     bool learnFavorites = true;
+    bool hideFilesPanel = false;
+    bool useCustomMenuSize = false;
     bool filePreview = true;
     bool animatePreview = true;
 };
 
 Settings g_settings;
 std::mutex g_settingsMutex;
+std::atomic<uint64_t> g_settingsRevision{0};
+
+bool FilesPanelVisible() {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return !g_settings.hideFilesPanel;
+}
 // Set when Learn Favorite Apps is turned off: the search thread drops its counts.
 std::atomic<bool> g_forgetUsage{false};
-std::atomic<DWORD> g_xamlThreadId{0};
 
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
 
-    auto defUrl = WindhawkUtils::StringSetting::make(L"defaultSearchUrl");
+    auto shortcutModifiers=WindhawkUtils::StringSetting::make(L"search.shortcutModifiers");
+    auto shortcutKey=WindhawkUtils::StringSetting::make(L"search.shortcutKey");
+    auto modifiers=ParseAlternativeShortcutModifiers(shortcutModifiers.get() ? shortcutModifiers.get() : L"");
+    const UINT key=ParseAlternativeShortcutKey(shortcutKey.get() ? shortcutKey.get() : L"");
+    const bool shortcutEnabled=Wh_GetIntSetting(L"search.enableAlternativeShortcut")!=0;
+    g_alternativeShortcutDesired=shortcutEnabled && modifiers && key ? PackAlternativeShortcut(*modifiers,key) : 0;
+    if (shortcutEnabled && (!modifiers || !key))
+        Wh_Log(L"Alternative search shortcut has an invalid modifier or key setting");
+
+    auto defUrl = WindhawkUtils::StringSetting::make(L"web.defaultSearchUrl");
     if (defUrl.get() && *defUrl.get()) {
         g_settings.defaultSearchUrl = defUrl.get();
     } else {
         g_settings.defaultSearchUrl = L"https://duckduckgo.com/?q={q}";
     }
 
+    g_settings.customCommands.clear();
+    for (int i = 0; i < 100; ++i) {
+        auto name = WindhawkUtils::StringSetting::make(L"customCommands[%d].name", i);
+        auto icon = WindhawkUtils::StringSetting::make(L"customCommands[%d].icon", i);
+        auto command = WindhawkUtils::StringSetting::make(L"customCommands[%d].command", i);
+        auto shell = WindhawkUtils::StringSetting::make(L"customCommands[%d].shell", i);
+        auto shellExecutable = WindhawkUtils::StringSetting::make(L"customCommands[%d].shellExecutable", i);
+        auto shellArguments = WindhawkUtils::StringSetting::make(L"customCommands[%d].shellArguments", i);
+        CustomCommand entry;
+        if (name.get()) entry.name = tools::Trim(name.get());
+        if (icon.get()) entry.icon = tools::Trim(icon.get());
+        if (command.get()) entry.command = tools::Trim(command.get());
+        entry.shell = ParseCustomCommandShell(shell.get());
+        if(shellExecutable.get()) entry.shellExecutable=tools::Trim(shellExecutable.get());
+        if(shellArguments.get() && *shellArguments.get()) entry.shellArguments=shellArguments.get();
+        entry.hideTerminal = Wh_GetIntSetting(L"customCommands[%d].hideTerminal", i) != 0;
+        if (!entry.name.empty() && !entry.command.empty()) {
+            g_settings.customCommands.push_back(std::move(entry));
+        }
+    }
+
     g_settings.webShortcuts.clear();
     for (int i = 0;; ++i) {
-        auto pfx = WindhawkUtils::StringSetting::make(L"webShortcuts[%d].prefix", i);
+        auto pfx = WindhawkUtils::StringSetting::make(L"web.webShortcuts[%d].prefix", i);
         if (!pfx.get() || !*pfx.get()) break;
-        auto name = WindhawkUtils::StringSetting::make(L"webShortcuts[%d].name", i);
-        auto url = WindhawkUtils::StringSetting::make(L"webShortcuts[%d].url", i);
+        auto name = WindhawkUtils::StringSetting::make(L"web.webShortcuts[%d].name", i);
+        auto url = WindhawkUtils::StringSetting::make(L"web.webShortcuts[%d].url", i);
 
         WebShortcut s;
         s.prefix = pfx.get();
@@ -4613,11 +5350,11 @@ void LoadSettings() {
         }
     }
 
-    g_settings.filterNoisyPaths = Wh_GetIntSetting(L"filterNoisyPaths") != 0;
+    g_settings.filterNoisyPaths = Wh_GetIntSetting(L"files.filterNoisyPaths") != 0;
 
     g_settings.excludedPaths.clear();
     for (int i = 0;; ++i) {
-        auto val = WindhawkUtils::StringSetting::make(L"excludedPaths[%d]", i);
+        auto val = WindhawkUtils::StringSetting::make(L"files.excludedPaths[%d]", i);
         if (!val.get() || !*val.get()) break;
         std::wstring s = tools::ToLower(tools::Trim(val.get()));
         for (auto& ch : s) {
@@ -4649,31 +5386,39 @@ void LoadSettings() {
         }
     }
 
-    int maxApps = Wh_GetIntSetting(L"maxAppResults");
+    int maxApps = Wh_GetIntSetting(L"search.maxAppResults");
     g_settings.maxAppResults = (maxApps > 0) ? std::clamp(maxApps, 1, 30) : 6;
 
-    int maxFiles = Wh_GetIntSetting(L"maxFileResults");
+    int maxFiles = Wh_GetIntSetting(L"files.maxFileResults");
     g_settings.maxFileResults = (maxFiles > 0) ? std::clamp(maxFiles, 1, 50) : 12;
 
-    g_settings.searchDebounceMs = std::clamp(Wh_GetIntSetting(L"searchDebounceMs"), 0, 1000);
+    g_settings.searchDebounceMs = std::clamp(Wh_GetIntSetting(L"search.searchDebounceMs"), 0, 1000);
 
-    g_settings.panelMargin = std::clamp(Wh_GetIntSetting(L"panelMargin"), 0, 60);
-    const int textScale = Wh_GetIntSetting(L"textScale");
+    g_settings.useCustomMenuSize = Wh_GetIntSetting(L"appearance.useCustomMenuSize") != 0;
+    const int menuWidth = Wh_GetIntSetting(L"appearance.menuWidth");
+    const int menuHeight = Wh_GetIntSetting(L"appearance.menuHeight");
+    g_settings.menuWidth = menuWidth > 0 ? std::clamp(menuWidth, 320, 3840) : 660;
+    g_settings.menuHeight = menuHeight > 0 ? std::clamp(menuHeight, 240, 2160) : 660;
+    const int textScale = Wh_GetIntSetting(L"appearance.textScale");
     g_settings.textScale = textScale ? std::clamp(textScale, 80, 150) : 100;  // 0: not set yet
     g_textScale.store(g_settings.textScale);
+    auto textColor = WindhawkUtils::StringSetting::make(L"appearance.textColor");
+    g_settings.textColor = textColor.get() ? tools::Trim(textColor.get()) : L"auto";
 
-    g_settings.showKeyHints = Wh_GetIntSetting(L"showKeyHints") != 0;
+    g_settings.showKeyHints = Wh_GetIntSetting(L"appearance.showKeyHints") != 0;
 
     // Off forgets: the stored counts now, the search thread's copy on its next
     // turn (g_forgetUsage).
-    g_settings.learnFavorites = Wh_GetIntSetting(L"learnFavorites") != 0;
-    g_settings.filePreview = Wh_GetIntSetting(L"filePreview") != 0;
-    g_settings.animatePreview = Wh_GetIntSetting(L"animatePreview") != 0;
+    g_settings.learnFavorites = Wh_GetIntSetting(L"search.learnFavorites") != 0;
+    g_settings.hideFilesPanel = Wh_GetIntSetting(L"files.hideFilesPanel") != 0;
+    g_settings.filePreview = Wh_GetIntSetting(L"files.filePreview") != 0;
+    g_settings.animatePreview = Wh_GetIntSetting(L"files.animatePreview") != 0;
     if (!g_settings.learnFavorites) {
         Wh_DeleteValue(apps::kUsageValueName);
         g_forgetUsage.store(true);
     }
 
+    g_settingsRevision.fetch_add(1);
     Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu maxApps=%d maxFiles=%d debounce=%d hints=%d filterNoise=%d excluded=%zu ===",
         g_settings.defaultSearchUrl.c_str(), g_settings.webShortcuts.size(),
         g_settings.maxAppResults, g_settings.maxFileResults,
@@ -4704,60 +5449,12 @@ wux::DependencyObject FindDescendantByName(wux::DependencyObject const& root,
     return nullptr;
 }
 
-// Type plus x:Name, for log lines that have to be matched against what a
-// tree inspector shows.
-
-std::wstring ElementLabel(wux::DependencyObject const& obj) {
-    std::wstring label;
-    try {
-        label = winrt::get_class_name(obj);
-    } catch (...) {
-        label = L"<unknown>";
-    }
-    if (auto fe = obj.try_as<wux::FrameworkElement>()) {
-        std::wstring name{fe.Name()};
-        if (!name.empty()) {
-            label += L"#" + name;
-        }
-    }
-    return label;
-}
-
-
-// ---------------------------------------------------------------------------
-// A search box that is actually a search box
-//
-// The stock one is a Button: a placeholder TextBlock, two icons and a
-// Rectangle called TextCaret drawn to look like a cursor. Typing into it is
-// not possible because there is nothing there to type into -- activating it
-// hands off to SearchHost, which owns the only real text box in the whole
-// arrangement.
-//
-// So this collapses the decoy and puts a TextBox in the same grid cell, at the
-// same size, to see whether the Start menu will host one at all.
-// ---------------------------------------------------------------------------
-
-// What currently has keyboard focus, for the log.
-std::wstring FocusedElementLabel() {
-    try {
-        auto focused = wux::Input::FocusManager::GetFocusedElement();
-        if (!focused) {
-            return L"(nothing)";
-        }
-        if (auto dobj = focused.try_as<wux::DependencyObject>()) {
-            return ElementLabel(dobj);
-        }
-        return std::wstring{winrt::get_class_name(focused)};
-    } catch (...) {
-        return L"(threw)";
-    }
-}
-
+// Search controls are created only in Explorer's independent XAML window.
 [[clang::no_destroy]] wuxc::TextBox g_ourBox{nullptr};
-[[clang::no_destroy]] wux::FrameworkElement g_stockButton{nullptr};
 [[clang::no_destroy]] wuxc::Grid g_resultsHost{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_resultsList{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_appsList{nullptr};
+[[clang::no_destroy]] wuxc::ScrollViewer g_appsScroll{nullptr}, g_filesScroll{nullptr};
 struct AppCardUI {
     int appIndex = -1;
     std::wstring title;
@@ -4766,6 +5463,8 @@ struct AppCardUI {
     bool canRunAsAdmin = true;
     bool isSetting = false;
     bool isFile = false;
+    std::wstring commandLine;
+    uint64_t commandRevision = 0;
 };
 
 [[clang::no_destroy]] static std::optional<std::vector<wuxc::Button>> g_appButtonsOpt;
@@ -4804,18 +5503,11 @@ void KeepHandler(wf::IInspectable const& source, Revoker revoker) {
 [[clang::no_destroy]] wuxc::Border g_searchBarBorder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_divider{nullptr};
 [[clang::no_destroy]] wuxc::Border g_footerBorder{nullptr};
-[[clang::no_destroy]] wuxm::TranslateTransform g_resultsTranslate{nullptr};
-[[clang::no_destroy]] wuxma::Storyboard g_revealAnim{nullptr};
-[[clang::no_destroy]] wuxma::Storyboard g_hideAnim{nullptr};
 std::atomic<bool> g_isOverlayVisible{false};
 std::atomic<bool> g_isHiding{false};
 
-void HideStockPlaceholder(wux::FrameworkElement const& stock);
-void RevealOverlayAnimated();
-void HideOverlayAnimated();
+void UpdateSearchResultsLayout(bool clearPreview = false);
 void HidePreview();
-void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth = 15);
-void SyncOverlayBackground();
 
 // A font size of the mod's own UI at the text size setting (textScale).
 double Fs(double size) {
@@ -4853,14 +5545,8 @@ void RescaleFonts(wux::DependencyObject const& root) {
     }
 }
 
-// The space between the search panel and Start's edges (panelMargin).
-int PanelMargin() {
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return g_settings.panelMargin;
-}
-
 void RequestRender();
-void TeardownStartMenuUi();
+void TeardownSearchUi();
 inline UINT GetTeardownMessage() {
     static UINT s_msg = RegisterWindowMessageW(L"Windhawk_StartMenuTeardown_start-everything");
     return s_msg;
@@ -4871,11 +5557,65 @@ constexpr LRESULT kTeardownDone = 0x5445;
 
 [[clang::no_destroy]] wuxc::TextBox::TextChanged_revoker g_ourBoxChanged;
 [[clang::no_destroy]] wux::UIElement::LostFocus_revoker g_ourBoxLost;
-[[clang::no_destroy]] wux::DispatcherTimer g_openFocus{nullptr};
-[[clang::no_destroy]] wux::DispatcherTimer g_shownFocus{nullptr};
 
 inline wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
     return wuxm::SolidColorBrush{winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b)};
+}
+
+// Created with the search UI, never during Explorer startup. Existing labels
+// share these brushes so an appearance change also updates an open preview.
+[[clang::no_destroy]] wuxm::SolidColorBrush g_searchTextBrush{nullptr};
+[[clang::no_destroy]] wuxm::SolidColorBrush g_searchBoxTextBrush{nullptr};
+[[clang::no_destroy]] wuxm::SolidColorBrush g_searchPlaceholderBrush{nullptr};
+[[clang::no_destroy]] wuxm::Brush g_resolvedSearchTextBrush{nullptr};
+
+wuxm::Brush SearchTextBrush() {
+    if (g_resolvedSearchTextBrush) return g_resolvedSearchTextBrush;
+    if (!g_searchTextBrush) g_searchTextBrush = MakeBrush(255,255,255,255);
+    g_resolvedSearchTextBrush = g_searchTextBrush;
+    return g_resolvedSearchTextBrush;
+}
+wuxc::TextBlock SearchTextBlock() {
+    wuxc::TextBlock text;
+    text.Foreground(SearchTextBrush());
+    return text;
+}
+
+struct SearchIconAppearance {
+    winrt::weak_ref<wuxc::FontIcon> icon;
+    wuxm::Brush applied{nullptr};
+};
+[[clang::no_destroy]] std::optional<std::vector<SearchIconAppearance>> g_searchIcons;
+size_t g_searchIconSweepAt = 256;
+void PruneSearchIcons() {
+    if (!g_searchIcons) return;
+    std::erase_if(*g_searchIcons,[](auto const& item) { return !item.icon.get(); });
+    // Large live result lists can exceed 256 icons. Leave room for another
+    // batch instead of scanning every live weak reference for each new icon.
+    g_searchIconSweepAt = g_searchIcons->size() + 256;
+}
+wuxc::FontIcon SearchFontIcon() {
+    wuxc::FontIcon icon;
+    auto brush=SearchTextBrush();
+    icon.Foreground(brush);
+    if(!g_searchIcons) g_searchIcons.emplace();
+    if(g_searchIcons->size()>=g_searchIconSweepAt) PruneSearchIcons();
+    g_searchIcons->push_back({winrt::make_weak(icon),brush});
+    return icon;
+}
+void RefreshSearchIcons(wuxm::Brush const& brush) {
+    if(!g_searchIcons) return;
+    for(auto& item:*g_searchIcons) {
+        auto icon=item.icon.get();
+        if(!icon) continue;
+        // Utility glyphs can replace the default with their own accent brush.
+        // Update only icons still using the foreground assigned by this helper.
+        if(icon.Foreground()==item.applied) {
+            icon.Foreground(brush);
+            item.applied=brush;
+        }
+    }
+    PruneSearchIcons();
 }
 
 static std::atomic<int> g_cachedLightTheme{-1};
@@ -4896,7 +5636,7 @@ inline void RefreshThemeCache() {
         return;
     }
     try {
-        wux::FrameworkElement target = g_resultsHost ? g_resultsHost.try_as<wux::FrameworkElement>() : g_stockButton;
+        wux::FrameworkElement target = g_resultsHost;
         if (target) {
             auto theme = target.ActualTheme();
             if (theme == wux::ElementTheme::Light) {
@@ -4921,581 +5661,26 @@ inline bool IsLightTheme() {
     return g_cachedLightTheme.load() != 0;
 }
 
-wuxc::Border FindMenuAcrylicBorder() {
-    try {
-        wux::DependencyObject start = g_resultsHost ? g_resultsHost : g_stockButton;
-        if (!start) return nullptr;
-
-        wux::DependencyObject root = start;
-        wux::DependencyObject node = start;
-        for (int up = 0; up < 12; ++up) {
-            auto p = wuxm::VisualTreeHelper::GetParent(node);
-            if (!p) break;
-            root = p;
-            node = p;
-        }
-
-        if (auto found = FindDescendantByName(root, L"AcrylicBorder", 10)) {
-            if (auto b = found.try_as<wuxc::Border>()) {
-                return b;
-            }
-        }
-    } catch (...) {}
-    return nullptr;
-}
-
-void SyncOverlayBackground() {
+// Refresh the independent window without replaying the old in-Start overlay.
+void UpdateSearchResultsLayout(bool clearPreview) {
+    if (clearPreview) HidePreview();
     if (!g_resultsHost) return;
-    const int margin = PanelMargin();
-    try {
-        g_resultsHost.Margin(wux::ThicknessHelper::FromUniformLength(margin));
-    } catch (...) {}
-    try {
-        if (auto border = FindMenuAcrylicBorder()) {
-            if (auto brush = border.Background()) {
-                if (g_resultsHost.Background() != brush) {
-                    g_resultsHost.Background(brush);
-                    Wh_Log(L"SyncOverlayBackground: synchronized background from AcrylicBorder (%ls)",
-                        winrt::get_class_name(brush).c_str());
-                }
-                try {
-                    g_resultsHost.CornerRadius(border.CornerRadius());
-                    // Covering Start to its edges, the results cover its
-                    // outline too: it is drawn again on top. Inset, the
-                    // outline still shows around them.
-                    g_resultsHost.BorderBrush(border.BorderBrush());
-                    g_resultsHost.BorderThickness(margin == 0 ? border.BorderThickness()
-                                                              : wux::ThicknessHelper::FromUniformLength(0));
-                } catch (...) {}
-            }
-        }
-    } catch (...) {}
-
-    // Synchronize search bar, divider, and footer theme colors in real time
-    try {
-        bool isLight = IsLightTheme();
-        if (g_resultsHost) {
-            g_resultsHost.RequestedTheme(isLight ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
-        }
-        if (g_searchBarBorder) {
-            g_searchBarBorder.Background(isLight ? MakeBrush(0xD0, 0xFF, 0xFF, 0xFF) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
-            g_searchBarBorder.BorderBrush(isLight ? MakeBrush(0x30, 0x00, 0x00, 0x00) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
-        }
-        if (g_divider) {
-            g_divider.Background(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x14, 0xFF, 0xFF, 0xFF));
-        }
-        if (g_footerBorder) {
-            g_footerBorder.BorderBrush(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x12, 0xFF, 0xFF, 0xFF));
-        }
-    } catch (...) {}
-}
-
-void RevealOverlayAnimated() {
-    if (!g_resultsHost) return;
-    try {
-        // If already visible and not in the process of hiding, nothing to animate!
-        if (g_isOverlayVisible.load() && !g_isHiding.load()) {
-            return;
-        }
-
-        g_isOverlayVisible.store(true);
-        g_isHiding.store(false);
-
-        if (g_hideAnim) {
-            g_hideAnim.Stop();
-            g_hideAnim = nullptr;
-        }
-
-        SyncOverlayBackground();
-        g_resultsHost.Visibility(wux::Visibility::Visible);
-        g_resultsHost.IsHitTestVisible(true);
-
-        if (g_resultsHost.Opacity() >= 0.98 && g_resultsTranslate && std::abs(g_resultsTranslate.Y()) < 0.1) {
-            g_resultsHost.Opacity(1.0);
-            g_resultsHost.IsHitTestVisible(true);
-            if (g_resultsTranslate) g_resultsTranslate.Y(0.0);
-            return;
-        }
-
-        if (g_revealAnim) {
-            g_revealAnim.Stop();
-            g_revealAnim = nullptr;
-        }
-
-        wuxma::Storyboard sb;
-        wuxma::CubicEase ease;
-        ease.EasingMode(wuxma::EasingMode::EaseOut);
-
-        wuxma::DoubleAnimation animOpacity;
-        double currentOpacity = g_resultsHost.Opacity();
-        animOpacity.From(currentOpacity < 0.95 ? currentOpacity : 0.0);
-        animOpacity.To(1.0);
-        animOpacity.Duration(wux::DurationHelper::FromTimeSpan(std::chrono::milliseconds(120)));
-        animOpacity.EasingFunction(ease);
-        wuxma::Storyboard::SetTarget(animOpacity, g_resultsHost);
-        wuxma::Storyboard::SetTargetProperty(animOpacity, L"Opacity");
-        sb.Children().Append(animOpacity);
-
-        if (g_resultsTranslate) {
-            wuxma::DoubleAnimation animY;
-            double currentY = g_resultsTranslate.Y();
-            animY.From(currentY < -0.5 ? currentY : -8.0);
-            animY.To(0.0);
-            animY.Duration(wux::DurationHelper::FromTimeSpan(std::chrono::milliseconds(120)));
-            animY.EasingFunction(ease);
-            wuxma::Storyboard::SetTarget(animY, g_resultsTranslate);
-            wuxma::Storyboard::SetTargetProperty(animY, L"Y");
-            sb.Children().Append(animY);
-        }
-
-        KeepHandler(sb, sb.Completed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
-            if (g_isOverlayVisible.load() && g_resultsHost) {
-                g_resultsHost.Opacity(1.0);
-                g_resultsHost.IsHitTestVisible(true);
-                if (g_resultsTranslate) g_resultsTranslate.Y(0.0);
-            }
-        }));
-
-        g_revealAnim = sb;
-        sb.Begin();
-    } catch (...) {}
-}
-
-void HideOverlayAnimated() {
-    HidePreview();
-    if (!g_resultsHost) return;
-    try {
-        if (g_isHiding.load()) {
-            return;
-        }
-        if (!g_isOverlayVisible.load()) {
-            return;
-        }
-        g_isOverlayVisible.store(false);
-        g_isHiding.store(true);
-
-        if (g_revealAnim) {
-            g_revealAnim.Stop();
-            g_revealAnim = nullptr;
-        }
-
-        wuxma::Storyboard sb;
-        wuxma::DoubleAnimation animOpacity;
-        double currentOpacity = g_resultsHost.Opacity();
-        animOpacity.From(currentOpacity > 0.05 ? currentOpacity : 1.0);
-        animOpacity.To(0.0);
-        animOpacity.Duration(wux::DurationHelper::FromTimeSpan(std::chrono::milliseconds(180)));
-        wuxma::Storyboard::SetTarget(animOpacity, g_resultsHost);
-        wuxma::Storyboard::SetTargetProperty(animOpacity, L"Opacity");
-
-        wuxma::CubicEase ease;
-        ease.EasingMode(wuxma::EasingMode::EaseOut);
-        animOpacity.EasingFunction(ease);
-        sb.Children().Append(animOpacity);
-
-        KeepHandler(sb, sb.Completed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
-            g_isHiding.store(false);
-            if (!g_isOverlayVisible.load() && g_resultsHost) {
-                g_resultsHost.Opacity(0.0);
-                g_resultsHost.IsHitTestVisible(false);
-                if (g_resultsTranslate) {
-                    g_resultsTranslate.Y(-8.0);
-                }
-                if (g_resultsList) g_resultsList.Children().Clear();
-                if (g_appsList) g_appsList.Children().Clear();
-                if (g_activeAppsOpt) g_activeAppsOpt->clear();
-                if (g_appButtonsOpt) g_appButtonsOpt->clear();
-                if (g_fileButtonsOpt) g_fileButtonsOpt->clear();
-            }
-        }));
-
-        g_hideAnim = sb;
-        sb.Begin();
-    } catch (...) {
-        g_isHiding.store(false);
-        if (g_resultsHost) {
-            g_resultsHost.Opacity(0.0);
-            g_resultsHost.IsHitTestVisible(false);
-        }
-    }
-}
-
-struct SuppressedElement {
-    winrt::weak_ref<wux::FrameworkElement> element;
-    wux::Visibility visibility = wux::Visibility::Visible;
-    double opacity = 1.0;
-    bool hitTestVisible = true;
-    double width = std::numeric_limits<double>::quiet_NaN();
-    double maxWidth = std::numeric_limits<double>::quiet_NaN();
-    double height = std::numeric_limits<double>::quiet_NaN();
-    double maxHeight = std::numeric_limits<double>::quiet_NaN();
-    wux::Thickness margin{};
-    bool isControl = false;
-    bool tabStop = true;
-    bool tabStopOnly = false;
-};
-
-static std::vector<SuppressedElement> g_suppressed;
-
-void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
-                          bool zeroSize = false, bool tabStopOnly = false) {
-    if (!fe) {
-        return;
-    }
-    try {
-        SuppressedElement saved;
-        saved.element = winrt::make_weak(fe);
-        if (auto ctl = fe.try_as<wuxc::Control>()) {
-            saved.isControl = true;
-            saved.tabStop = ctl.IsTabStop();
-        }
-        saved.tabStopOnly = tabStopOnly;
-
-        if (tabStopOnly) {
-            g_suppressed.push_back(std::move(saved));
-            if (auto ctl = fe.try_as<wuxc::Control>()) {
-                ctl.IsTabStop(false);
-            }
-            return;
-        }
-
-        saved.visibility = fe.Visibility();
-        saved.opacity = fe.Opacity();
-        saved.hitTestVisible = fe.IsHitTestVisible();
-        saved.width = fe.Width();
-        saved.maxWidth = fe.MaxWidth();
-        saved.height = fe.Height();
-        saved.maxHeight = fe.MaxHeight();
-        saved.margin = fe.Margin();
-        g_suppressed.push_back(std::move(saved));
-
-        fe.Opacity(0.0);
-        fe.IsHitTestVisible(false);
-        if (collapse) {
-            fe.Visibility(wux::Visibility::Collapsed);
-        }
-        if (zeroSize) {
-            fe.MaxWidth(0.0);
-            fe.Width(0.0);
-            fe.MaxHeight(0.0);
-            fe.Height(0.0);
-            fe.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 0));
-        }
-    } catch (...) {
-    }
-}
-
-void RestoreShellElements() {
-    size_t restored = 0;
-    for (auto it = g_suppressed.rbegin(); it != g_suppressed.rend(); ++it) {
-        auto fe = it->element.get();
-        if (!fe) {
-            continue;
-        }
-        try {
-            if (it->tabStopOnly) {
-                if (it->isControl) {
-                    if (auto ctl = fe.try_as<wuxc::Control>()) {
-                        ctl.IsTabStop(it->tabStop);
-                    }
-                }
-                ++restored;
-                continue;
-            }
-
-            fe.Visibility(it->visibility);
-            fe.Opacity(it->opacity);
-            fe.IsHitTestVisible(it->hitTestVisible);
-            fe.Width(it->width);
-            fe.MaxWidth(it->maxWidth);
-            fe.Height(it->height);
-            fe.MaxHeight(it->maxHeight);
-            fe.Margin(it->margin);
-            if (it->isControl) {
-                if (auto ctl = fe.try_as<wuxc::Control>()) {
-                    ctl.IsTabStop(it->tabStop);
-                }
-            }
-            ++restored;
-        } catch (...) {
-        }
-    }
-    Wh_Log(L"teardown: restored %zu shell element(s) of %zu", restored,
-        g_suppressed.size());
-    g_suppressed.clear();
-}
-
-void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
-    if (!root || depth < 0) return;
-    try {
-        if (auto fe = root.try_as<wux::FrameworkElement>()) {
-            std::wstring name{fe.Name()};
-            std::wstring cls;
-            try { cls = winrt::get_class_name(root); } catch (...) {}
-
-            if (name.find(L"Windhawk") == std::wstring::npos) {
-                if (cls.find(L"SearchBox") != std::wstring::npos ||
-                    cls.find(L"RichSearch") != std::wstring::npos ||
-                    cls.find(L"SearchControl") != std::wstring::npos ||
-                    name.find(L"SearchBox") != std::wstring::npos ||
-                    name.find(L"SearchBlock") != std::wstring::npos) {
-                    SuppressShellElement(fe, true, false);
-                    if (auto ctl = fe.try_as<wuxc::Control>()) {
-                        ctl.IsTabStop(false);
-                    }
-                    Wh_Log(L"HideAllOtherSearchBoxes: suppressed %ls#%ls", cls.c_str(), name.c_str());
-                }
-            }
-        }
-        int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
-        for (int i = 0; i < count; ++i) {
-            HideAllOtherSearchBoxes(wuxm::VisualTreeHelper::GetChild(root, i), depth - 1);
-        }
-    } catch (...) {}
+    HWND host = g_searchWindowWindow.load();
+    if (host && (clearPreview || (IsWindowVisible(host) && !g_isHiding.load())))
+        SearchWindowLayout();
 }
 
 // Read and written by the XAML, search and launch threads.
 static std::atomic<HWND> g_hCoreWindow{nullptr};
 
-HWND GetOurCoreWindow() {
-    if (HWND cached = g_hCoreWindow.load(); cached && IsWindow(cached)) {
-        return cached;
-    }
-    HWND ours = nullptr;
-    EnumWindows(
-        [](HWND hwnd, LPARAM param) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid != GetCurrentProcessId()) {
-                return TRUE;
-            }
-            wchar_t cls[128] = {};
-            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-            if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
-                *reinterpret_cast<HWND*>(param) = hwnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&ours));
-    if (ours) {
-        g_hCoreWindow = ours;
-    }
-    return ours;
+HWND GetSearchWindow() {
+    return g_searchWindowWindow.load();
 }
 
-bool IsOurWindowCloaked() {
-    HWND ours = GetOurCoreWindow();
-    if (!ours) return true;
-    DWORD cloaked = 0;
-    if (SUCCEEDED(DwmGetWindowAttribute(ours, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
-        return cloaked != 0;
-    }
-    return false;
-}
-
-std::atomic<bool> g_suppressRefocus{false};
 std::atomic<bool> g_appIndexNeedsRefresh{false};
 std::atomic<ULONGLONG> g_lastAppIndexRebuildTick{0};
 
 void RequestAppIndexRefresh();
-
-// SearchHost answers the foreground request on its UI thread. If it does not
-// answer in time it is busy -- typically just woken -- and asking again on
-// every retry would stall Start's UI thread 200ms at a time while it opens.
-// So after an unanswered request, requests pause for a moment.
-std::atomic<ULONGLONG> g_foregroundRequestsPausedUntil{0};
-constexpr ULONGLONG kForegroundRequestPauseMs = 1000;
-
-void TakeForeground(bool force = false) {
-    try {
-        if (!force && g_suppressRefocus.load()) {
-            return;
-        }
-
-        HWND ours = GetOurCoreWindow();
-        if (!ours || !IsWindow(ours)) {
-            return;
-        }
-
-        HWND current = GetForegroundWindow();
-        if (current == ours || IsOurWindowCloaked()) {
-            return;  // already there, or Start is closed: nothing to show
-        }
-
-        BOOL ok = SetForegroundWindow(ours);
-        if (!ok && IsSearchHostWindow(current) && GetTickCount64() >= g_foregroundRequestsPausedUntil.load()) {
-            // The shell gives SearchHost the foreground when Start opens, and
-            // only the foreground process can pass it on. Ask SearchHost to.
-            DWORD_PTR granted = 0;
-            if (!SendMessageTimeoutW(current, StartForegroundRequestMessage(), 0, 0, SMTO_ABORTIFHUNG, 200,
-                                     &granted)) {
-                g_foregroundRequestsPausedUntil.store(GetTickCount64() + kForegroundRequestPauseMs);
-                Wh_Log(L"focus: SearchHost did not answer the foreground request; pausing requests");
-            } else if (granted) {
-                ok = SetForegroundWindow(ours);
-            }
-        }
-        BringWindowToTop(ours);
-        Wh_Log(L"focus: TakeForeground -> SetForegroundWindow result=%d, prev=0x%p, ours=0x%p",
-               ok ? 1 : 0, current, ours);
-    } catch (...) {
-    }
-}
-
-void FocusOurBoxNow() {
-    if (g_suppressRefocus.load()) return;
-    if (!g_ourBox) return;
-
-    try {
-        auto now = wux::Input::FocusManager::GetFocusedElement();
-        if (now && now == g_ourBox) {
-            return; // Already focused! Do not re-focus or interrupt typing!
-        }
-        if (g_isOverlayVisible.load() && now && (now.try_as<wuxc::Button>() || 
-                                                now.try_as<wuxc::GridViewItem>() || 
-                                                now.try_as<wuxc::ListViewItem>())) {
-            return;
-        }
-    } catch (...) {}
-
-    TakeForeground();
-    try {
-        bool ok = g_ourBox.Focus(wux::FocusState::Programmatic);
-        g_ourBox.SelectionStart(static_cast<int32_t>(g_ourBox.Text().size()));
-        g_ourBox.SelectionLength(0);
-        Wh_Log(L"focus: FocusOurBoxNow -> Focus result=%d, focused=%ls",
-            ok ? 1 : 0, FocusedElementLabel().c_str());
-    } catch (...) {}
-}
-
-void TriggerMenuOpenFocus() {
-    try {
-        g_suppressRefocus.store(false);
-        TakeForeground(true);
-        FocusOurBoxNow();
-        RequestAppIndexRefresh();
-        if (g_openFocus) {
-            g_openFocus.Stop();
-            g_openFocus = nullptr;
-        }
-        auto t = wux::DispatcherTimer();
-        t.Interval(std::chrono::milliseconds(50));
-        auto ticks = std::make_shared<int>(0);
-        KeepHandler(t, t.Tick(winrt::auto_revoke, [ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
-            auto timer = sender.try_as<wux::DispatcherTimer>();
-            if (g_suppressRefocus.load()) {
-                if (timer) timer.Stop();
-                return;
-            }
-            HWND ours = GetOurCoreWindow();
-            HWND fg = GetForegroundWindow();
-            if (fg != ours) {
-                TakeForeground();
-            }
-            FocusOurBoxNow();
-            auto now = wux::Input::FocusManager::GetFocusedElement();
-            if ((now && now == g_ourBox && fg == ours) || ++(*ticks) >= 10) {
-                if (timer) timer.Stop();
-            }
-        }));
-        t.Start();
-        g_openFocus = t;
-    } catch (...) {
-    }
-}
-
-// Takes the foreground as soon as the shell has shown Start, and keeps it
-// from SearchHost while Start settles.
-//
-// The shell shows Start ~16-50ms after the Win key or a Start-button click
-// but activates it only ~200ms later, and until Start holds the foreground,
-// keys go to SearchHost -- which takes them as a native search, grabs the
-// foreground back, and has the shell swap Start for Search (Explorer then
-// reopens Start; see "Search is never left showing without Start").
-// VisibilityChanged arrives before the shell lifts its cloak, so for ~300ms
-// this checks every 10ms and, whenever Start is open and SearchHost has the
-// foreground, takes it (TakeForeground asks SearchHost for it). Only
-// SearchHost is taken from: once any other window is in front -- a quick
-// Escape, a click elsewhere -- the check stops.
-void TakeForegroundWhenShown() {
-    try {
-        if (g_shownFocus) {
-            g_shownFocus.Stop();
-            g_shownFocus = nullptr;
-        }
-        auto t = wux::DispatcherTimer();
-        t.Interval(std::chrono::milliseconds(10));
-        auto ticks = std::make_shared<int>(0);
-        KeepHandler(t, t.Tick(winrt::auto_revoke, [ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
-            HWND ours = GetOurCoreWindow();
-            HWND fg = GetForegroundWindow();  // null while the foreground changes hands
-            bool done = !ours || ++(*ticks) > 30 || (fg && fg != ours && !IsSearchHostWindow(fg));
-            if (!done && fg != ours && !IsOurWindowCloaked()) {
-                TakeForeground(true);
-            }
-            if (done) {
-                if (auto timer = sender.try_as<wux::DispatcherTimer>()) {
-                    timer.Stop();
-                }
-            }
-        }));
-        t.Start();
-        g_shownFocus = t;
-    } catch (...) {
-    }
-}
-
-// Closes Start the way pressing the Start button a second time does.
-//
-// SC_TASKLIST to the taskbar is the documented "activate the Start menu"
-// command. Sent while Start is open it closes it, and the shell hands the
-// foreground back to whatever had it before -- what the injected Escape used
-// to achieve, with no synthesized input. Measured on 26100: foreground back to
-// the previous app ~16ms after the message, Start cloaked ~200ms later.
-//
-// It toggles, so it is sent only while Start is open and active: the
-// foreground must still be in this process or in SearchHost. Once it has
-// moved elsewhere Start is already closing, and because the cloak lags the
-// foreground change by ~200ms, a toggle in that gap would reopen it. The one
-// exception is Explorer's helper, given the foreground for a launch
-// (DismissStartMenuForLaunch) or a drag (StartFileDrag): a hidden window,
-// which Start does not close for.
-HWND FindExplorerLaunchHolder();
-
-void CloseStartMenu() {
-    HWND ours = GetOurCoreWindow();
-    if (!ours || !IsWindow(ours) || IsOurWindowCloaked()) {
-        return;
-    }
-    HWND fg = GetForegroundWindow();
-    DWORD fgPid = 0;
-    GetWindowThreadProcessId(fg, &fgPid);
-    if (fgPid != GetCurrentProcessId() && !IsSearchHostWindow(fg) && (!fg || fg != FindExplorerLaunchHolder())) {
-        Wh_Log(L"CloseStartMenu: foreground already moved to %p, leaving Start to close", fg);
-        return;
-    }
-    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
-        Wh_Log(L"CloseStartMenu: asked the shell to close Start");
-    }
-}
-
-// SearchHost taking the foreground while Start stays open.
-//
-// A click on an empty part of Start makes the shell activate Search -- on
-// stock Windows so that typing goes into its search -- and a key typed before
-// Start holds the keyboard does the same. Under this mod that must not count
-// as leaving Start: it would hide the results and clear what was typed, and
-// the next key would reach SearchHost and swap Start out. Start takes the
-// foreground back instead (TakeForeground asks SearchHost for it). Losing it
-// to anything else -- Escape, another app, a launch -- is left alone; closing
-// Start hands the foreground to the previous app, never to SearchHost.
-// When something was last opened from Start (DismissStartMenuForLaunch). A click
-// in Start hands SearchHost the foreground too, and taking it back right after
-// a launch took it from the program instead: that cancelled its right to come
-// to the front, and it opened behind.
-std::atomic<ULONGLONG> g_launchedAtTick{0};
 
 // The Store app Start is asking Explorer to remove, while it asks
 // (RequestPackageRemoval): what it answers RemovalCheckMessage by. XAML thread.
@@ -5503,78 +5688,7 @@ static std::wstring g_removalPending;
 
 // A result is being dragged, by Explorer's helper (StartFileDrag), which holds
 // the foreground until the drop: Start losing it then is not Start closing.
-static bool g_dragging = false;
-constexpr ULONGLONG kLaunchHandoffMs = 2000;
-
-bool SearchHostTookForegroundFromOpenStart() {
-    if (GetTickCount64() - g_launchedAtTick.load() < kLaunchHandoffMs) {
-        return false;  // a launch is taking over; let SearchHost hold it until then
-    }
-    return !IsOurWindowCloaked() && IsSearchHostWindow(GetForegroundWindow());
-}
-
-void ReclaimForegroundFromSearchHost() {
-    try {
-        if (!g_ourBox) {
-            return;
-        }
-        g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, [] {
-            if (SearchHostTookForegroundFromOpenStart()) {
-                TakeForeground(true);
-            }
-        });
-    } catch (...) {
-    }
-}
-
-// What was typed, kept across Start being swapped out and reopened.
-//
-// A key that reaches SearchHost before Start holds the keyboard makes the
-// shell swap Start out for Search, and Explorer then opens Start again (see
-// "Search is never left showing without Start"). The keys typed meanwhile
-// still arrive in this box, but reopening briefly activates SearchHost, and
-// losing activation clears the box. Start is already cloaked by then -- in a
-// normal close it is still visible when it loses activation -- so the text is
-// set aside and put back if Start is activated again straight away.
-static std::wstring g_swappedOutText;
-static ULONGLONG g_swappedOutTick = 0;
-static const ULONGLONG kSwappedOutTextLifetimeMs = 1500;
-
-void StashTextIfSwappedOut() {
-    try {
-        if (!g_ourBox || !IsOurWindowCloaked()) {
-            return;
-        }
-        std::wstring text{g_ourBox.Text()};
-        if (text.empty()) {
-            return;
-        }
-        g_swappedOutText = std::move(text);
-        g_swappedOutTick = GetTickCount64();
-        Wh_Log(L"focus: Start was swapped out; keeping '%ls' for its reopen", g_swappedOutText.c_str());
-    } catch (...) {
-    }
-}
-
-void RestoreSwappedOutText() {
-    if (g_swappedOutText.empty()) {
-        return;
-    }
-    std::wstring text = std::move(g_swappedOutText);
-    g_swappedOutText.clear();
-    if (!g_ourBox || GetTickCount64() - g_swappedOutTick > kSwappedOutTextLifetimeMs) {
-        return;
-    }
-    try {
-        g_ourBox.Text(text);
-        RevealOverlayAnimated();
-        g_ourBox.Focus(wux::FocusState::Programmatic);
-        g_ourBox.SelectionStart(static_cast<int32_t>(text.size()));
-        g_ourBox.SelectionLength(0);
-    } catch (...) {
-    }
-}
-
+static std::atomic<bool> g_dragging{false};
 // An Enter pressed before the results for the text were in, run when they
 // arrive (RenderResults); dropped once Start closes, or if they take longer
 // than this.
@@ -5583,55 +5697,12 @@ static bool g_enterWaitingCtrl = false;
 static ULONGLONG g_enterWaitingTick = 0;
 constexpr ULONGLONG kEnterWaitMs = 3000;
 
-void DismissStartMenu() {
-    try {
-        HidePreview();
-        g_enterWaiting = false;
-        g_suppressRefocus.store(true);
-        if (g_openFocus) {
-            g_openFocus.Stop();
-            g_openFocus = nullptr;
-        }
-        if (g_shownFocus) {
-            g_shownFocus.Stop();
-            g_shownFocus = nullptr;
-        }
-        if (g_ourBox) {
-            g_ourBox.Text(L"");
-        }
-        if (g_resultsHost) {
-            g_resultsHost.Visibility(wux::Visibility::Visible);
-            g_resultsHost.Opacity(0.0);
-            g_resultsHost.IsHitTestVisible(false);
-            if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
-        }
-        g_isOverlayVisible.store(false);
-        g_isHiding.store(false);
-        if (g_revealAnim) g_revealAnim.Stop();
-        if (g_hideAnim) g_hideAnim.Stop();
-
-        CloseStartMenu();
-    } catch (...) {
-    }
+void DismissSearch() {
+    SearchWindowHide();
 }
 
-// Programs opened from Start are started by Explorer, as stock Start's are.
-//
-// ShellExecute in Start is carried out for it by sihost.exe, so a program
-// opened here was never started by the foreground process. All it had towards
-// coming to the front was a grant (AllowSetForegroundWindow), and Windows
-// cancels grants on the next input: the Enter key coming back up, the mouse
-// moving. A program slower to show its window than that -- Office, or one
-// started for the first time -- opened behind the app Start was opened over.
-// Some did not start at all that way: an app entry run through sihost lost
-// what its shortcut passes (SteelSeries GG).
-//
-// A program started by the foreground process keeps its right through any
-// input. Stock Start hands the foreground to Explorer and has Explorer start
-// the program; DismissStartMenuForLaunch does the same with this mod's helper
-// window in Explorer, and the launches run ShellExecute inside Explorer
-// through the desktop's IShellDispatch2, the documented way to have Explorer
-// open something.
+// Use Explorer's shell activation for ordinary launches, preserving app entries,
+// shortcuts and their arguments. Elevated launches keep their runas path.
 
 // The helper window (ExplorerHelperThreadProc) of the explorer.exe running the
 // taskbar and desktop: the process ShellExecuteInExplorer reaches.
@@ -5732,382 +5803,64 @@ std::wstring AppsFolderPath(PCIDLIST_ABSOLUTE pidl) {
     return same ? path : std::wstring();
 }
 
-// Opens something from Start and closes Start, in the order Windows needs for
-// the program to come to the front. Closing Start hands the foreground back to
-// the app that had it before Start opened, and a program whose window appears
-// after that may take the foreground only if it was started while Start held
-// it (packaged apps get the right through their activation instead). That
-// failed twice over: Start was closed before the launch, and on a click the
-// shell hands SearchHost the foreground a few milliseconds later, before the
-// launch thread got to it.
-//
-// So the launch is requested at once -- the search thread looks the app up
-// while the results are still there -- but waits at g_launchGate: a moment for
-// that hand-over, the foreground taken back from SearchHost if it happened,
-// then handed on to Explorer, which starts the program (ShellExecuteInExplorer
-// explains why), and once it has, Start is closed as usual, animation and all.
-// A program that hands off to an instance already running passes its own
-// right on, as single-instance programs do.
-void DismissStartMenuForLaunch(std::function<void()> launch) {
-    g_launchedAtTick.store(GetTickCount64());
-    g_suppressRefocus.store(true);
-    if (g_openFocus) {
-        g_openFocus.Stop();
-        g_openFocus = nullptr;
-    }
-    if (g_shownFocus) {
-        g_shownFocus.Stop();
-        g_shownFocus = nullptr;
-    }
-    wuc::CoreDispatcher dispatcher{nullptr};
-    try {
-        if (g_ourBox) {
-            dispatcher = g_ourBox.Dispatcher();
-        }
-    } catch (...) {}
-    if (!g_launchGate) {
-        g_launchGate = CreateEventW(nullptr, TRUE, TRUE, nullptr);
-    }
-    if (!dispatcher || !g_launchGate) {
-        launch();
-        DismissStartMenu();
-        return;
-    }
-    ResetEvent(g_launchGate);
-    const unsigned before = g_launchesDone.load();
+// Request the launch before hiding search. Explorer already owns this window,
+// so no Start-to-Explorer foreground handoff or launch gate is needed.
+void DismissSearchForLaunch(std::function<void()> launch) {
     launch();
-    SpawnTrackedLaunch([dispatcher, before] {
-        Sleep(30);
-        HWND ours = GetOurCoreWindow();
-        HWND fg = GetForegroundWindow();
-        if (ours && fg != ours && IsSearchHostWindow(fg)) {
-            DWORD_PTR granted = 0;
-            if (SendMessageTimeoutW(fg, StartForegroundRequestMessage(), 0, 0, SMTO_ABORTIFHUNG, 200, &granted) &&
-                granted && SetForegroundWindow(ours)) {
-                for (int i = 0; i < 20 && GetForegroundWindow() != ours; ++i) {
-                    Sleep(10);
-                }
-            }
-        }
-        HWND holder = FindExplorerLaunchHolder();
-        const bool handedOver = holder && ours && GetForegroundWindow() == ours && SetForegroundWindow(holder);
-        if (!handedOver && holder) {
-            DWORD explorerPid = 0;
-            GetWindowThreadProcessId(holder, &explorerPid);
-            AllowSetForegroundWindow(explorerPid);
-        }
-        Wh_Log(L"launch: foreground %ls Explorer", handedOver ? L"handed to" : L"NOT handed to");
-        SetEvent(g_launchGate);
-        for (int i = 0; i < 200 && g_launchesDone.load() == before && !g_quit.load(); ++i) {
-            Sleep(10);
-        }
-        Wh_Log(L"launch: started with Start in front (%ls); closing Start",
-               GetForegroundWindow() == ours ? L"yes" : L"no");
-        if (!g_quit.load()) {
-            dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal, wuc::DispatchedHandler{[] {
-                DismissStartMenu();
-                // Over: a Start opened again from here on is a new one.
-                g_launchedAtTick.store(0);
-            }});
-        }
-    });
-}
-
-void DisarmScrollTabStops(wux::DependencyObject const& root, int depth = 15) {
-    if (!root || depth < 0) return;
-    if (auto scroller = root.try_as<wuxc::ScrollViewer>()) {
-        if (scroller.IsTabStop()) {
-            SuppressShellElement(scroller.as<wux::FrameworkElement>(), false, false, /*tabStopOnly=*/true);
-            Wh_Log(L"focus: proactively disabled IsTabStop on %ls", ElementLabel(root).c_str());
-        }
-    }
-    int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
-    for (int i = 0; i < count; ++i) {
-        DisarmScrollTabStops(wuxm::VisualTreeHelper::GetChild(root, i), depth - 1);
-    }
+    SearchWindowHide();
 }
 
 bool IsNavigationKey(winrt::Windows::System::VirtualKey key);
 bool HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl);
 bool ContextMenuHasFocus();
 bool EscapeBelongsToContextMenu();
-void NoteContextMenuOpened();
-void NoteContextMenuClosed();
-
-static HHOOK g_hGetMsgHook = nullptr;
-static winrt::event_token g_charReceivedToken{};
-static winrt::event_token g_keyDownToken{};
-static winrt::event_token g_activatedToken{};
-static winrt::event_token g_visibilityToken{};
-static bool g_coreEventsHooked = false;
-
-static DWORD s_lastCharTick = 0;
-static wchar_t s_lastChar = 0;
-
-bool ProcessKeyChar(wchar_t ch) {
-    if (ch < 0x20 || ch == 0x7F) return false;
-    if (!g_ourBox || !g_resultsHost) return false;
-
-    // If our search box is already focused, let standard XAML TextBox handle typing natively.
-    // Its TextChanged handler will automatically reveal the overlay and query results without double characters.
-    try {
-        auto focused = wux::Input::FocusManager::GetFocusedElement();
-        if (focused && focused == g_ourBox) {
-            if (!g_isOverlayVisible.load()) {
-                RevealOverlayAnimated();
-            }
-            return false;
-        }
-    } catch (...) {}
-
-    // Deduplicate rapid duplicate events (e.g. from WM_CHAR and CharacterReceived) within 60ms
-    DWORD now = GetTickCount();
-    if ((now - s_lastCharTick < 60) && s_lastChar == ch) {
-        return true; // Consume duplicate event so XAML doesn't double-type it
-    }
-    s_lastCharTick = now;
-    s_lastChar = ch;
-
-    Wh_Log(L"key listener: intercepted char '%c' (0x%X) [overlayVisible=%d]",
-        ch, static_cast<unsigned>(ch), g_isOverlayVisible.load() ? 1 : 0);
-    try {
-        g_suppressRefocus.store(false);
-        RevealOverlayAnimated();
-        std::wstring text{g_ourBox.Text()};
-        text.push_back(ch);
-        g_ourBox.Text(text);
-        g_ourBox.Focus(wux::FocusState::Programmatic);
-        g_ourBox.SelectionStart(static_cast<int32_t>(text.size()));
-        g_ourBox.SelectionLength(0);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-bool ProcessKeyCommand(WPARAM vk) {
-    if (!g_ourBox || !g_resultsHost) return false;
-
-    if (vk == VK_ESCAPE) {
-        // With a result's context menu open, Escape closes the menu and
-        // leaves the query alone.
-        if (EscapeBelongsToContextMenu()) {
-            return false;
-        }
-        if (g_isOverlayVisible.load() || g_isHiding.load()) {
-            Wh_Log(L"key listener: intercepted Escape -> hiding overlay");
-            try {
-                if (g_ourBox) g_ourBox.Text(L"");
-                HideOverlayAnimated();
-            } catch (...) {}
-            return true;
-        }
-        return false;
-    }
-
-    auto navKey = static_cast<winrt::Windows::System::VirtualKey>(vk);
-    if (IsNavigationKey(navKey)) {
-        if (g_isOverlayVisible.load()) {
-            bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
-            bool used = true;
-            try {
-                used = HandleNavigationKey(navKey, ctrl);
-            } catch (...) {}
-            return used;
-        }
-        return false;
-    }
-
-    if (vk == VK_BACK) {
-        bool alreadyFocused = false;
-        try {
-            auto focused = wux::Input::FocusManager::GetFocusedElement();
-            if (focused && focused == g_ourBox) alreadyFocused = true;
-        } catch (...) {}
-
-        if (!alreadyFocused) {
-            std::wstring text{g_ourBox.Text()};
-            if (!text.empty()) {
-                text.pop_back();
-                try {
-                    g_ourBox.Text(text);
-                    if (text.empty()) {
-                        HideOverlayAnimated();
-                    } else {
-                        RevealOverlayAnimated();
-                        g_ourBox.Focus(wux::FocusState::Programmatic);
-                        g_ourBox.SelectionStart(static_cast<int32_t>(text.size()));
-                    }
-                } catch (...) {}
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-LRESULT CALLBACK StartMenuGetMsgProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code >= 0 && lParam) {
-        MSG* msg = reinterpret_cast<MSG*>(lParam);
-        if (msg) {
-            if (msg->message == WM_CHAR) {
-                if (ProcessKeyChar(static_cast<wchar_t>(msg->wParam))) {
-                    msg->message = WM_NULL;
-                }
-            } else if (msg->message == WM_KEYDOWN) {
-                if (ProcessKeyCommand(msg->wParam)) {
-                    msg->message = WM_NULL;
-                }
-            }
-        }
-    }
-    return CallNextHookEx(g_hGetMsgHook, code, wParam, lParam);
-}
-
-void InstallMessageHook() {
-    if (g_hGetMsgHook) return;
-    DWORD tid = g_xamlThreadId.load();
-    if (!tid) tid = GetCurrentThreadId();
-    g_hGetMsgHook = SetWindowsHookExW(WH_GETMESSAGE, StartMenuGetMsgProc, NULL, tid);
-    if (g_hGetMsgHook) {
-        Wh_Log(L"key listener: installed WH_GETMESSAGE hook on thread %lu", tid);
-    }
-}
+void NoteContextMenuOpening(wf::IInspectable const& sender);
+void NoteContextMenuClosed(wf::IInspectable const& sender);
 
 static bool g_subclassed = false;
+void TeardownStartMenuBridge(HWND core);
 static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg && uMsg == GetTeardownMessage()) {
-        Wh_Log(L"subclass: teardown message received");
-        TeardownStartMenuUi();
+        TeardownStartMenuBridge(hWnd);
         return kTeardownDone;
     }
-
-    if (uMsg && uMsg == RemovalCheckMessage()) {
-        return !g_removalPending.empty() &&
-               std::hash<std::wstring>{}(g_removalPending) == static_cast<size_t>(lParam);
-    }
-
-    if (uMsg && uMsg == DragDoneMessage()) {
-        g_dragging = false;
-        if (IsOurWindowCloaked()) {
-            return 0;  // closed meanwhile
-        }
-        if (wParam) {
-            DismissStartMenu();  // dropped: Start's job is done
-        } else if (g_ourBox) {
-            try {
-                g_ourBox.Focus(wux::FocusState::Programmatic);  // cancelled: back to typing
-            } catch (...) {
-            }
-        }
+    if (uMsg == WM_TIMER && wParam == SearchAppearanceTimerId()) {
+        HWND host = FindWindowW(kSearchWindowClass, nullptr);
+        if (!g_quit.load() && host &&
+            (IsWindowVisible(host) || (IsWindowVisible(hWnd) && !IsCloaked(hWnd))))
+            CaptureStartAppearance(host);
         return 0;
     }
-
-    static UINT s_uMsgTaskbarCreated = 0;
-    if (s_uMsgTaskbarCreated == 0) {
-        s_uMsgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    if (uMsg == SearchWindowAppearanceMessage()) {
+        CaptureStartAppearance(reinterpret_cast<HWND>(wParam));
+        return 0;
     }
-    if (uMsg && uMsg == s_uMsgTaskbarCreated) {
-        HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (tray && hWnd) {
-            SetPropW(tray, L"WindhawkStartMenuHwnd", hWnd);
-            Wh_Log(L"subclass: TaskbarCreated -> re-published WindhawkStartMenuHwnd %p", hWnd);
-        }
-        // Observed only: Start itself, and anything subclassed before this
-        // mod, needs the broadcast too.
-        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
-
-    if (uMsg == WM_ACTIVATE) {
-        HWND otherHwnd = reinterpret_cast<HWND>(lParam);
-        DWORD otherPid = 0;
-        if (otherHwnd) GetWindowThreadProcessId(otherHwnd, &otherPid);
-
-        if (LOWORD(wParam) != WA_INACTIVE) {
-            if (GetTickCount64() - g_launchedAtTick.load() < kLaunchHandoffMs) {
-                // Taken back from SearchHost to launch (DismissStartMenuForLaunch).
-                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            }
-            g_suppressRefocus.store(false);
-            g_dragging = false;  // in case Explorer never said the drag was over
-            Wh_Log(L"subclass: WM_ACTIVATE (active, prev=%p) -> ready for search", otherHwnd);
-            if (g_ourBox && !g_isOverlayVisible.load()) {
-                g_ourBox.Text(L"");
-            }
-            if (g_resultsHost && !g_isOverlayVisible.load()) {
-                g_resultsHost.Visibility(wux::Visibility::Visible);
-                g_resultsHost.Opacity(0.0);
-                g_resultsHost.IsHitTestVisible(false);
-                if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
-                SyncOverlayBackground();
-            }
-            RestoreSwappedOutText();
-            TriggerMenuOpenFocus();
-        } else {
-            // If the other window is in our own process (e.g. context menu, flyout, tooltip), don't suppress refocus!
-            if (otherPid == GetCurrentProcessId()) {
-                Wh_Log(L"subclass: WM_ACTIVATE (inactive, internal other=%p) -> ignoring", otherHwnd);
-                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            }
-            if (g_dragging) {
-                // Explorer's helper running a drag of a result (StartFileDrag).
-                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            }
-
-            if (SearchHostTookForegroundFromOpenStart()) {
-                Wh_Log(L"subclass: WM_ACTIVATE (inactive) to SearchHost while open -> taking it back");
-                ReclaimForegroundFromSearchHost();
-                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            }
-            StashTextIfSwappedOut();
-            g_suppressRefocus.store(true);
-            g_enterWaiting = false;
-            HidePreview();
-            Wh_Log(L"subclass: WM_ACTIVATE (inactive, other=%p pid=%lu) -> suppressing refocus", otherHwnd, otherPid);
-            if (g_resultsHost) {
-                g_resultsHost.Visibility(wux::Visibility::Visible);
-                g_resultsHost.Opacity(0.0);
-                g_resultsHost.IsHitTestVisible(false);
-                if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
-            }
-            g_isOverlayVisible.store(false);
-            g_isHiding.store(false);
-            if (g_hideAnim) g_hideAnim.Stop();
-            if (g_revealAnim) g_revealAnim.Stop();
-            if (g_openFocus) {
-                g_openFocus.Stop();
-                g_openFocus = nullptr;
-            }
-        }
-    } else if (uMsg == WM_SETFOCUS) {
-        g_suppressRefocus.store(false);
-        TriggerMenuOpenFocus();
-    } else if (uMsg == WM_CHAR) {
-        if (ProcessKeyChar(static_cast<wchar_t>(wParam))) {
-            return 0;
-        }
-    } else if (uMsg == WM_KEYDOWN) {
-        if (ProcessKeyCommand(wParam)) {
-            return 0;
-        }
-    } else if (uMsg == WM_SETTINGCHANGE || uMsg == WM_THEMECHANGED) {
-        Wh_Log(L"subclass: setting or theme changed -> refreshing theme and synchronizing overlay colors");
-        RefreshThemeCache();
-        SyncOverlayBackground();
-        if (g_isOverlayVisible.load()) {
-            RequestRender();
-        }
+    if (uMsg == SearchWindowForegroundMessage()) {
+        HWND host = FindWindowW(kSearchWindowClass, nullptr);
+        DWORD pid = 0, shellPid = 0;
+        GetWindowThreadProcessId(host, &pid);
+        GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr), &shellPid);
+        return pid && pid == shellPid && AllowSetForegroundWindow(pid);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-void PlaceOurSearchBox(wux::FrameworkElement const& stockButton);
+// Start owns only this appearance/activation bridge, never the search UI.
+void TeardownStartMenuBridge(HWND core) {
+    if (!core) return;
+    KillTimer(core, SearchAppearanceTimerId());
+    ChangeWindowMessageFilterEx(core, SearchWindowAppearanceMessage(), MSGFLT_RESET, nullptr);
+    if (g_subclassed) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(core, StartMenuSubclassProc);
+        g_subclassed = false;
+    }
+    RemovePropW(core, L"WindhawkStartMenuWindow");
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+        tray && GetPropW(tray, L"WindhawkStartMenuHwnd") == core)
+        RemovePropW(tray, L"WindhawkStartMenuHwnd");
+}
 
-// The search box, found by walking rather than by being told.
-//
-// The stock SearchBoxToggleButton is what we replace, and anything else
-// search-shaped gets suppressed so two boxes are never live at once.
+// Find Start's native search control only to copy its appearance.
 wux::FrameworkElement FindStockSearchToggle(wux::DependencyObject const& root,
                                             int depth = 24) {
     if (!root || depth < 0) {
@@ -6135,43 +5888,7 @@ wux::FrameworkElement FindStockSearchToggle(wux::DependencyObject const& root,
     return nullptr;
 }
 
-std::atomic<bool> g_attaching{false};
-
-// Runs on the XAML thread. Idempotent: it stops as soon as our box is in the
-// tree, so being called on every shown window costs one failed lookup.
-void TryAttachFromWindowRoot() {
-    bool expected = false;
-    if (!g_attaching.compare_exchange_strong(expected, true)) {
-        return;
-    }
-    struct Guard {
-        ~Guard() { g_attaching.store(false); }
-    } guard;
-
-    try {
-        if (g_ourBox) {
-            return;  // already placed
-        }
-        auto window = wux::Window::Current();
-        if (!window) {
-            return;  // not a XAML thread; most shown windows are not
-        }
-        auto content = window.Content();
-        if (!content) {
-            return;
-        }
-        auto toggle = FindStockSearchToggle(content);
-        if (!toggle) {
-            return;  // tree not built yet; the next shown window retries
-        }
-        g_xamlThreadId.store(GetCurrentThreadId());
-        Wh_Log(L"attach: found SearchBoxToggleButton (%.0fx%.0f) on thread %lu",
-            toggle.ActualWidth(), toggle.ActualHeight(), GetCurrentThreadId());
-        PlaceOurSearchBox(toggle);
-    } catch (...) {
-        Wh_Log(L"attach: threw %08X", static_cast<unsigned>(winrt::to_hresult()));
-    }
-}
+void SubclassStartMenuWindow();
 
 // The hook lives on a thread of its own: UnhookWinEvent only works on the
 // thread that called SetWinEventHook, and Wh_ModAfterInit and Wh_ModUninit
@@ -6187,21 +5904,21 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
     struct Leave {
         ~Leave() { g_attachWatchCalls.fetch_sub(1); }
     } leave;
-    if (g_quit.load()) {
-        return;  // unloading: once the teardown clears g_ourBox, attaching would put the box back
-    }
-    if ((event != EVENT_OBJECT_SHOW && event != EVENT_OBJECT_UNCLOAKED) ||
+    if (g_quit.load() || g_targetProcess != TargetProcess::StartMenu) return;
+    if ((event != EVENT_OBJECT_CREATE && event != EVENT_OBJECT_SHOW && event != EVENT_OBJECT_UNCLOAKED) ||
         !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
-    if ((event == EVENT_OBJECT_UNCLOAKED || event == EVENT_OBJECT_SHOW) && hwnd == GetOurCoreWindow()) {
-        g_suppressRefocus.store(false);
-        TriggerMenuOpenFocus();
+    if (event == EVENT_OBJECT_CREATE) {
+        wchar_t cls[128]{};
+        GetClassNameW(hwnd,cls,ARRAYSIZE(cls));
+        if (wcscmp(cls,L"Windows.UI.Core.CoreWindow") == 0) SubclassStartMenuWindow();
+        return;
     }
     // In-context, so this is the thread that raised the event. The filter is
     // Window::Current() returning something rather than a class name, because
     // a name that changes across builds breaks quietly.
-    TryAttachFromWindowRoot();
+    SubclassStartMenuWindow();
 }
 
 DWORD WINAPI AttachWatchThreadProc(LPVOID) {
@@ -6209,7 +5926,7 @@ DWORD WINAPI AttachWatchThreadProc(LPVOID) {
     // this thread only owns the hooks, and needs no message loop for them.
     // One hook per event: the range between them covers focus, location and
     // name changes too, each of which would be a call into the mod.
-    const DWORD events[] = {EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED};
+    const DWORD events[] = {EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED};
     HWINEVENTHOOK hooks[ARRAYSIZE(events)] = {};
     for (size_t i = 0; i < ARRAYSIZE(events); ++i) {
         hooks[i] = SetWinEventHook(events[i], events[i], GetCurrentModuleHandle(),
@@ -6265,6 +5982,7 @@ void StopAttachWatch() {
 }
 
 void SubclassStartMenuWindow() {
+    if (g_targetProcess != TargetProcess::StartMenu) return;
     HWND ours = nullptr;
     EnumWindows(
         [](HWND hwnd, LPARAM param) -> BOOL {
@@ -6281,6 +5999,10 @@ void SubclassStartMenuWindow() {
         },
         reinterpret_cast<LPARAM>(&ours));
     if (ours) {
+        ChangeWindowMessageFilterEx(ours,SearchWindowAppearanceMessage(),MSGFLT_ALLOW,nullptr);
+        SetTimer(ours,SearchAppearanceTimerId(),500,nullptr);
+        if (HWND host = FindWindowW(kSearchWindowClass,nullptr))
+            PostMessageW(ours,SearchWindowAppearanceMessage(),reinterpret_cast<WPARAM>(host),0);
         g_hCoreWindow = ours;
         SetPropW(ours, L"WindhawkStartMenuWindow", (HANDLE)1);
         HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -6294,7 +6016,6 @@ void SubclassStartMenuWindow() {
             }
         }
     }
-    InstallMessageHook();
 }
 
 // Results, handed from the search thread to the XAML thread.
@@ -6338,6 +6059,17 @@ struct Row {
     std::wstring copyText;   // text to copy to clipboard on activation
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
     uint32_t glyphColor = 0;  // ARGB of the glyph -- a conversion's kind (calc::KindColor) -- or 0
+    std::wstring commandLine;
+    CustomCommandShell commandShell = CustomCommandShell::Cmd;
+    std::wstring commandShellExecutable;
+    std::wstring commandShellArguments;
+    bool commandHideTerminal = false;
+    std::wstring commandIcon;
+    std::wstring customIconText;
+    bool customIconIsGlyph = false;
+    uint64_t commandRevision = 0;
+    int matchScore = -1;
+    int matchRank = 0;
 };
 
 // Icons take 24 logical pixels in a row, which on a display at 150% is 36 real
@@ -6348,7 +6080,7 @@ inline constexpr int kIconDisplay = 24;  // what an icon occupies in the row, in
 // The same in physical pixels on the display Start is on: the size icons are
 // made at (see icons::Resample), so XAML draws them without scaling.
 int IconPixels() {
-    HWND start = GetOurCoreWindow();
+    HWND start = GetSearchWindow();
     UINT dpi = start ? GetDpiForWindow(start) : 0;
     if (!dpi) {
         dpi = GetDpiForSystem();
@@ -6385,7 +6117,7 @@ std::wstring g_rowsQuery;  // the text g_appRows and g_fileRows are the results 
 // keeps the lifetime where the data lives.
 std::atomic<int> g_launchRequest{-1};
 std::atomic<bool> g_launchAsAdmin{false};
-
+std::vector<std::wstring> g_commandUsageRequests; // g_queryMutex; drained by the search thread
 
 
 // Opens what was clicked.
@@ -6396,7 +6128,6 @@ std::atomic<bool> g_launchAsAdmin{false};
 // exactly what the broker could not promise when it ran elevated.
 void OpenResult(std::wstring path, bool asAdmin = false) {
     SpawnTrackedLaunch([path = std::move(path), asAdmin] {
-        WaitForLaunchGate();
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         wchar_t userProfile[MAX_PATH] = {};
         if (!GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) || !userProfile[0]) {
@@ -6439,7 +6170,6 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
         if ((asAdmin || !ShellExecuteInExplorer(path, params, workDir)) && !ShellExecuteExW(&info)) {
             Wh_Log(L"open failed (%lu): %ls (admin=%d)", GetLastError(), path.c_str(), asAdmin ? 1 : 0);
         }
-        g_launchesDone.fetch_add(1);
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
@@ -6449,7 +6179,7 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
 // Lets the taskbar's explorer.exe, where the Properties relay runs, bring the
 // sheet it opens for us to the front. Only a process that just got user input
 // may hand that right on, and Start stops being one once it closes, so this
-// is called from the click handler, before DismissStartMenu.
+// is called from the click handler, before DismissSearch.
 void AllowExplorerForeground() {
     if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
         DWORD explorerPid = 0;
@@ -6499,7 +6229,7 @@ void OpenFileLocationThenDismiss(std::wstring path) {
         }
         if (dispatcher && !g_quit.load()) {
             dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal,
-                                wuc::DispatchedHandler{[] { DismissStartMenu(); }});
+                                wuc::DispatchedHandler{[] { DismissSearch(); }});
         }
     });
 }
@@ -6835,7 +6565,7 @@ bool RequestPackageRemoval(const std::wstring& family) {
     cds.lpData = request.data();
     DWORD_PTR accepted = 0;
     g_removalPending = family;  // Explorer asks back (RemovalCheckMessage)
-    const bool ok = SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetOurCoreWindow()),
+    const bool ok = SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetSearchWindow()),
                                         reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 2000, &accepted) &&
                     accepted;
     g_removalPending.clear();
@@ -6843,11 +6573,10 @@ bool RequestPackageRemoval(const std::wstring& family) {
 }
 
 // Starts a program's uninstaller, through Explorer like any program opened
-// from Start (DismissStartMenuForLaunch), so it comes to the front -- and
+// from search (DismissSearchForLaunch), so it comes to the front -- and
 // asks for elevation itself when it needs it.
 void RunUninstaller(uninstall::Command command) {
     SpawnTrackedLaunch([command = std::move(command)] {
-        WaitForLaunchGate();
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         const std::wstring dir = uninstall::Folder(command.file);
         if (!ShellExecuteInExplorer(command.file, command.params, dir)) {
@@ -6861,14 +6590,12 @@ void RunUninstaller(uninstall::Command command) {
             ShellExecuteExW(&sei);
         }
         Wh_Log(L"uninstall: ran %ls %ls", command.file.c_str(), command.params.c_str());
-        g_launchesDone.fetch_add(1);
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
     });
 }
 
-double VisibleTop();
 
 // Asks before uninstalling, as Start's own Uninstall does: a flyout on the
 // app's card naming what goes.
@@ -6876,7 +6603,7 @@ void ConfirmUninstall(wux::FrameworkElement const& anchor, std::wstring const& n
     wuxc::Flyout flyout;
     wuxc::StackPanel panel;
     panel.MaxWidth(300);
-    wuxc::TextBlock text;
+    auto text = SearchTextBlock();
     text.Text(winrt::hstring{name + L" and its related info will be uninstalled."});
     text.TextWrapping(wux::TextWrapping::Wrap);
     panel.Children().Append(text);
@@ -6901,33 +6628,28 @@ void ConfirmUninstall(wux::FrameworkElement const& anchor, std::wstring const& n
     }));
     panel.Children().Append(confirm);
     flyout.Content(panel);
-    // Above the card, where XAML puts it, unless it would reach past the top
-    // of what Start shows (VisibleTop) -- XAML sees room there that is not
-    // drawn, as on the first card -- then below.
+    // Use the space below the card when there is not enough room above it
+    // inside the independent search window, including the first result.
     try {
         panel.Measure(wf::Size{300, std::numeric_limits<float>::infinity()});
         constexpr double kChrome = 40;  // the flyout's padding, border and gap to the card
         const double cardTop = anchor.TransformToVisual(nullptr).TransformPoint(wf::Point{0, 0}).Y;
-        if (cardTop - panel.DesiredSize().Height - kChrome < VisibleTop()) {
+        if (cardTop - panel.DesiredSize().Height - kChrome < 0) {
             flyout.Placement(wuxcp::FlyoutPlacementMode::Bottom);
         }
     } catch (...) {
     }
-    KeepHandler(flyout, flyout.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
-        NoteContextMenuOpened();
+    KeepHandler(flyout, flyout.Opening(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) {
+        NoteContextMenuOpening(sender);
     }));
-    KeepHandler(flyout, flyout.Closed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
-        NoteContextMenuClosed();
+    KeepHandler(flyout, flyout.Closed(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) {
+        NoteContextMenuClosed(sender);
     }));
     flyout.ShowAt(anchor);
 }
 
 void ShowPropertiesDialog(std::wstring path) {
     SpawnTrackedLaunch([path = std::move(path)] {
-        // Give Start a moment to close first (DismissStartMenu asks the shell
-        // for it), so the dialog does not open underneath it.
-        Sleep(150);
-
         std::wstring cleanPath = path;
         while (!cleanPath.empty() && (cleanPath.front() == L' ' || cleanPath.front() == L'\t' || cleanPath.front() == L'"')) {
             cleanPath.erase(cleanPath.begin());
@@ -6998,9 +6720,183 @@ void ShowPropertiesDialog(std::wstring path) {
     });
 }
 
+// PowerShell receives UTF-16LE code directly, without another shell changing
+// its quotes, variables, or operators.
+std::wstring EncodePowerShellCommand(std::wstring const& command) {
+    static constexpr wchar_t alphabet[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static_assert(sizeof(wchar_t) == 2);
+    auto bytes = reinterpret_cast<const unsigned char*>(command.data());
+    const size_t length = command.size() * sizeof(wchar_t);
+    std::wstring encoded;
+    encoded.reserve((length + 2) / 3 * 4);
+    for (size_t i = 0; i < length; i += 3) {
+        const uint32_t value = (uint32_t(bytes[i]) << 16) |
+            (i + 1 < length ? uint32_t(bytes[i + 1]) << 8 : 0) |
+            (i + 2 < length ? uint32_t(bytes[i + 2]) : 0);
+        encoded.push_back(alphabet[(value >> 18) & 63]);
+        encoded.push_back(alphabet[(value >> 12) & 63]);
+        encoded.push_back(i + 1 < length ? alphabet[(value >> 6) & 63] : L'=');
+        encoded.push_back(i + 2 < length ? alphabet[value & 63] : L'=');
+    }
+    return encoded;
+}
+
+std::wstring ExpandCustomShellEnvironment(std::wstring const& value) {
+    const DWORD needed=ExpandEnvironmentStringsW(value.c_str(),nullptr,0);
+    if(!needed || needed>32767) return {};
+    std::wstring expanded(needed,L'\0');
+    const DWORD written=ExpandEnvironmentStringsW(value.c_str(),expanded.data(),needed);
+    if(!written || written>needed) return {};
+    expanded.resize(written-1);
+    return expanded;
+}
+
+std::wstring ResolveCustomShellExecutable(std::wstring const& value) {
+    auto name=tools::Trim(ExpandCustomShellEnvironment(value));
+    if(name.size()>1 && name.front()==L'"' && name.back()==L'"') name=name.substr(1,name.size()-2);
+    if(name.empty() || name.find(L'"')!=std::wstring::npos) return {};
+    const auto extension=name.find_last_of(L'.');
+    if(extension!=std::wstring::npos &&
+       _wcsicmp(name.c_str()+extension,L".exe")!=0 && _wcsicmp(name.c_str()+extension,L".com")!=0) return {};
+    const bool hasPath=name.find_first_of(L"\\/:")!=std::wstring::npos;
+    const DWORD needed=hasPath ? GetFullPathNameW(name.c_str(),0,nullptr,nullptr)
+                              : SearchPathW(nullptr,name.c_str(),L".exe",0,nullptr,nullptr);
+    if(!needed || needed>32767) return {};
+    std::wstring resolved(needed+1,L'\0');
+    const DWORD written=hasPath ? GetFullPathNameW(name.c_str(),static_cast<DWORD>(resolved.size()),resolved.data(),nullptr)
+                               : SearchPathW(nullptr,name.c_str(),L".exe",static_cast<DWORD>(resolved.size()),resolved.data(),nullptr);
+    if(!written || written>=resolved.size()) return {};
+    resolved.resize(written);
+    const DWORD attributes=GetFileAttributesW(resolved.c_str());
+    return attributes!=INVALID_FILE_ATTRIBUTES && !(attributes&FILE_ATTRIBUTE_DIRECTORY) ? resolved : std::wstring();
+}
+
+std::wstring QuoteCustomShellArgument(std::wstring const& value) {
+    std::wstring quoted=L"\"";
+    size_t slashes=0;
+    for(wchar_t c:value) {
+        if(c==L'\\') { ++slashes; continue; }
+        quoted.append(c==L'"' ? slashes*2+1 : slashes,L'\\');
+        quoted.push_back(c);
+        slashes=0;
+    }
+    quoted.append(slashes*2,L'\\');
+    quoted.push_back(L'"');
+    return quoted;
+}
+
+std::wstring CustomCommandExecutable(std::wstring const& system, CustomCommandShell shell,
+                                     std::wstring const& customExecutable=L"") {
+    if(shell==CustomCommandShell::Custom) return ResolveCustomShellExecutable(customExecutable);
+    if(shell==CustomCommandShell::PowerShell7) {
+        if(auto installed=ResolveCustomShellExecutable(L"%ProgramFiles%\\PowerShell\\7\\pwsh.exe"); !installed.empty())
+            return installed;
+        return ResolveCustomShellExecutable(L"pwsh.exe");
+    }
+    return system + (shell == CustomCommandShell::PowerShell
+        ? L"\\WindowsPowerShell\\v1.0\\powershell.exe" : L"\\cmd.exe");
+}
+
+std::wstring CustomCommandParameters(std::wstring const& command, CustomCommandShell shell, bool hideTerminal,
+                                     std::wstring const& customArguments=L"-c {command}") {
+    if(shell==CustomCommandShell::Custom) {
+        constexpr std::wstring_view marker=L"{command}";
+        const size_t at=customArguments.find(marker);
+        const auto space=[](wchar_t c) { return c==L' ' || c==L'\t'; };
+        if(at==std::wstring::npos || customArguments.find(marker,at+marker.size())!=std::wstring::npos ||
+           (at && !space(customArguments[at-1])) ||
+           (at+marker.size()<customArguments.size() && !space(customArguments[at+marker.size()]))) return {};
+        return customArguments.substr(0,at)+QuoteCustomShellArgument(command)+customArguments.substr(at+marker.size());
+    }
+    if (shell == CustomCommandShell::PowerShell || shell==CustomCommandShell::PowerShell7) {
+        return std::wstring(L"-NoLogo -NoProfile ") + (hideTerminal ? L"-WindowStyle Hidden " : L"") +
+               L"-EncodedCommand " + EncodePowerShellCommand(command);
+    }
+    // /s strips only our outer quote pair; /d disables CMD AutoRun hooks.
+    return L"/d /s /c \"" + command + L"\"";
+}
+
+struct CustomCommandLaunch {
+    std::wstring executable,parameters,directory;
+};
+
+bool PrepareCustomCommand(std::wstring const& command,CustomCommandShell shell,bool hideTerminal,
+                           std::wstring const& customExecutable,std::wstring const& customArguments,
+                           CustomCommandLaunch* launch,std::wstring* error) {
+    *launch={}; error->clear();
+    wchar_t system[MAX_PATH]{};
+    if(!GetSystemDirectoryW(system,ARRAYSIZE(system))) {
+        *error=L"Couldn't find the Windows system directory.";
+        return false;
+    }
+    launch->executable=CustomCommandExecutable(system,shell,customExecutable);
+    const DWORD attributes=launch->executable.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesW(launch->executable.c_str());
+    if(attributes==INVALID_FILE_ATTRIBUTES || (attributes&FILE_ATTRIBUTE_DIRECTORY)) {
+        *error=shell==CustomCommandShell::PowerShell7 ? L"PowerShell 7 wasn't found. Install it, or set its executable using Custom shell."
+            : shell==CustomCommandShell::Custom ? L"Custom shell wasn't found. Check Shell Executable in this command's settings."
+            : L"The selected shell wasn't found. Choose another shell.";
+        return false;
+    }
+    const auto arguments=shell==CustomCommandShell::Custom ? ExpandCustomShellEnvironment(customArguments) : std::wstring();
+    launch->parameters=CustomCommandParameters(command,shell,hideTerminal,arguments);
+    if(launch->parameters.empty()) {
+        *error=L"Shell Arguments must contain {command} once as a separate argument, without quotes around it.";
+        return false;
+    }
+    if(launch->executable.size()+launch->parameters.size()+4>=32767) {
+        *error=L"This command exceeds the Windows command-line length limit.";
+        return false;
+    }
+    launch->directory=ExpandCustomShellEnvironment(L"%USERPROFILE%");
+    if(launch->directory.empty() || launch->directory==L"%USERPROFILE%") launch->directory=system;
+    return true;
+}
+
+bool CreateHiddenCommandProcess(std::wstring const& executable, std::wstring const& parameters,
+                                std::wstring const& directory) {
+    std::wstring commandLine = L"\"" + executable + L"\" " + parameters;
+    STARTUPINFOW startup{sizeof(startup)};
+    PROCESS_INFORMATION process{};
+    if (!CreateProcessW(executable.c_str(), commandLine.data(), nullptr, nullptr, FALSE,
+                        CREATE_NO_WINDOW, nullptr, directory.c_str(), &startup, &process)) return false;
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
+}
+
+void RunCustomCommand(CustomCommandLaunch launch, bool hideTerminal, bool asAdmin) {
+    SpawnTrackedLaunch([launch = std::move(launch), hideTerminal, asAdmin] {
+        HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        try {
+            const auto& executable=launch.executable;
+            const auto& parameters=launch.parameters;
+            const auto& directory=launch.directory;
+            if (hideTerminal && !asAdmin) {
+                // No console is allocated, so there is no terminal to flash
+                // or to be delegated to Windows Terminal during startup.
+                if (!CreateHiddenCommandProcess(executable, parameters, directory))
+                    Wh_Log(L"custom command: hidden launch failed (%lu)", GetLastError());
+            } else if (asAdmin || !ShellExecuteInExplorer(executable, parameters, directory)) {
+                SHELLEXECUTEINFOW execute{sizeof(execute)};
+                execute.fMask = SEE_MASK_NOASYNC;
+                execute.lpVerb = asAdmin ? L"runas" : L"open";
+                execute.lpFile = executable.c_str();
+                execute.lpParameters = parameters.c_str();
+                execute.lpDirectory = directory.c_str();
+                execute.nShow = hideTerminal ? SW_HIDE : SW_SHOWNORMAL;
+                if (!ShellExecuteExW(&execute))
+                    Wh_Log(L"custom command: launch failed (%lu)", GetLastError());
+            }
+        } catch (...) {
+            Wh_Log(L"custom command: launch failed (%08X)", static_cast<unsigned>(winrt::to_hresult()));
+        }
+        if (SUCCEEDED(comHr)) CoUninitialize();
+    });
+}
+
+
 void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
     SpawnTrackedLaunch([dir, isPowerShell, asAdmin] {
-        WaitForLaunchGate();
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         if (isPowerShell) {
             std::wstring psTarget = dir;
@@ -7039,7 +6935,6 @@ void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
                 ShellExecuteExW(&sei);
             }
         }
-        g_launchesDone.fetch_add(1);
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
@@ -7231,6 +7126,7 @@ void SetAppSelection(int index) {
 
 // Selects a file row, which makes Files the active column.
 void SetFileSelection(int index) {
+    if(!FilesPanelVisible()) return;
     if (!g_fileButtonsOpt || g_fileButtonsOpt->empty()) {
         g_selectedFile = -1;
         return;
@@ -7273,14 +7169,9 @@ void SetFileSelection(int index) {
 // of it stops and is let go the
 // moment the selection moves or Start closes.
 //
-// The card is a Popup beside the menu: right of it, or left when that would
-// run off the screen. Start's window covers the whole screen, but its window
-// region is the menu, and nothing of the window shows outside it -- so while
-// the card is up, its rectangle is added to the region (SetPreviewRegion), and
-// exactly that part is taken out again when it goes -- so a click on it goes
-// to Start's window, which hands it to the card: a click on the path copies
-// it. It never takes focus; the keyboard stays in the search box. It follows
-// the selection
+// The card is a Popup beside the search window, using the monitor's work area
+// independently of the window height. It can extend above a short search
+// window without changing any native window region. It follows the selection
 // after a short pause, so arrowing through results does not flash a card per
 // row. Thumbnails are fetched on a thread of their own: one can take a few
 // hundred milliseconds, more the first time a video is seen.
@@ -7486,6 +7377,55 @@ inline void RunInMta(F&& f) {
         }
     });
     worker.join();
+}
+
+// Use Windows' built-in codecs when Explorer has no usable thumbnail. This
+// path does not depend on file associations, shell extensions or image apps.
+inline bool DecodeNativeImage(const std::wstring& path, int width, int height, Result* r) {
+    if(width<=0 || height<=0) return false;
+    namespace imaging = winrt::Windows::Graphics::Imaging;
+    const auto lower=tools::ToLower(path);
+    const auto dot=lower.find_last_of(L'.');
+    if(dot==std::wstring::npos) return false;
+    const auto ext=std::wstring_view(lower).substr(dot);
+    winrt::guid codec{};
+    if(ext==L".png") codec=imaging::BitmapDecoder::PngDecoderId();
+    else if(ext==L".jpg" || ext==L".jpeg" || ext==L".jpe" || ext==L".jfif") codec=imaging::BitmapDecoder::JpegDecoderId();
+    else if(ext==L".bmp" || ext==L".dib") codec=imaging::BitmapDecoder::BmpDecoderId();
+    else if(ext==L".gif") codec=imaging::BitmapDecoder::GifDecoderId();
+    else if(ext==L".tif" || ext==L".tiff") codec=imaging::BitmapDecoder::TiffDecoderId();
+    else return false;
+    WIN32_FILE_ATTRIBUTE_DATA attributes{};
+    if(!GetFileAttributesExW(path.c_str(),GetFileExInfoStandard,&attributes) ||
+       (attributes.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) || attributes.nFileSizeHigh ||
+       attributes.nFileSizeLow>256u*1024*1024) return false;
+    bool ok=false;
+    RunInMta([&] {
+        auto file=winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+        auto decoder=imaging::BitmapDecoder::CreateAsync(codec,file.OpenReadAsync().get()).get();
+        const uint32_t w=decoder.PixelWidth(),h=decoder.PixelHeight();
+        const uint32_t orientedW=decoder.OrientedPixelWidth(),orientedH=decoder.OrientedPixelHeight();
+        if(!w || !h || !orientedW || !orientedH || w>100000 || h>100000 || uint64_t(w)*h>200000000) return;
+        const double fit=std::min({1.0,std::clamp(width,1,2048)/double(orientedW),
+                                       std::clamp(height,1,2048)/double(orientedH)});
+        // Scaling precedes EXIF rotation; output dimensions follow orientation.
+        const uint32_t scaledW=std::max(1u,static_cast<uint32_t>(w*fit));
+        const uint32_t scaledH=std::max(1u,static_cast<uint32_t>(h*fit));
+        const bool swapped=orientedW!=w;
+        const int outW=static_cast<int>(swapped ? scaledH : scaledW);
+        const int outH=static_cast<int>(swapped ? scaledW : scaledH);
+        imaging::BitmapTransform transform;
+        transform.ScaledWidth(scaledW); transform.ScaledHeight(scaledH);
+        transform.InterpolationMode(imaging::BitmapInterpolationMode::Fant);
+        auto data=decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8,imaging::BitmapAlphaMode::Premultiplied,
+            transform,imaging::ExifOrientationMode::RespectExifOrientation,imaging::ColorManagementMode::ColorManageToSRgb).get();
+        auto bytes=data.DetachPixelData();
+        if(bytes.size()!=static_cast<size_t>(outW)*outH*4) return;
+        std::vector<BYTE> pixels(bytes.begin(),bytes.end());
+        r->pixels=std::move(pixels); r->width=outW; r->height=outH;
+        ok=true;
+    });
+    return ok;
 }
 
 // How many of a PDF's pages the preview turns through, and for how long each.
@@ -8025,6 +7965,7 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
     std::wstring type, size, items, dimensions, length, frameRate, bitrate, artist, album, title, author, description,
         version, company, camera, taken, modified, created;
     if (OnFixedDrive(path)) {
+        winrt::com_ptr<IShellItemImageFactory> factory;
         IShellItem2* item = nullptr;
         if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item))) && item) {
             type = PropertyText(item, kItemTypeText);
@@ -8059,18 +8000,14 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
                 taken = FormatDate(shot);
             }
 
-            // A thumbnail at full size; without one, a PDF's first page, else
-            // the type's icon (TypeIconPixels).
-            IShellItemImageFactory* factory = nullptr;
-            if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory))) && factory) {
+            // Try the shell thumbnail first, including custom format handlers.
+            if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(factory.put()))) && factory) {
                 SIZE want{static_cast<LONG>(kThumbWidth * scale), static_cast<LONG>(kThumbHeight * scale)};
                 HBITMAP bitmap = nullptr;
-                const std::wstring lower = tools::ToLower(r.name);
                 if (SUCCEEDED(factory->GetImage(want, SIIGBF_THUMBNAILONLY, &bitmap)) && bitmap) {
-                    // The shell fits a thumbnail to the longer side of the size
-                    // asked for, so a wide one comes back wider than the box.
-                    if (icons::BitmapToPixels(bitmap, &r.pixels, &r.width, &r.height) &&
-                        (r.width > want.cx || r.height > want.cy)) {
+                    if (!icons::BitmapToPixels(bitmap, &r.pixels, &r.width, &r.height)) {
+                        r.pixels.clear();
+                    } else if (r.width > want.cx || r.height > want.cy) {
                         const double fit = std::min(static_cast<double>(want.cx) / r.width,
                                                     static_cast<double>(want.cy) / r.height);
                         const int w = std::max(1, static_cast<int>(r.width * fit));
@@ -8079,31 +8016,40 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
                         r.width = w;
                         r.height = h;
                     }
-                    DeleteObject(bitmap);
-                } else if (lower.size() > 4 && lower.ends_with(L".pdf") &&
-                           RenderPdfPage(path, want.cx, want.cy, &r)) {
-                    r.morePages = animate && r.pages > 1;  // RenderPdfFrames, after the card shows
-                } else if (lower.size() > 4 && lower.ends_with(L".svg") && OpenSvg(path, &r)) {
-                    // drawn on the card
-                } else if (ReadDocumentText(path, lower, &r.text)) {
-                    // its text, where a picture would be
-                } else if (ReadTextStart(path, &r.text)) {
-                    r.monospace = true;
-                } else {
-                    const int side = TypeIconPixels(scale);
-                    if (SUCCEEDED(factory->GetImage(SIZE{side, side}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bitmap)) &&
-                        bitmap) {
-                        if (icons::BitmapToPixels(bitmap, &r.pixels, &r.width, &r.height) && r.width == r.height &&
-                            r.width != side) {
-                            r.pixels = icons::Resample(r.pixels, r.width, side);
-                            r.width = r.height = side;
-                        }
-                        DeleteObject(bitmap);
-                    }
                 }
-                factory->Release();
+                if (bitmap) DeleteObject(bitmap);
             }
             item->Release();
+        }
+        // Content fallbacks also work when shell item/factory creation fails,
+        // or a provider returns an unreadable bitmap instead of a thumbnail.
+        if (r.pixels.empty()) {
+            const int width=static_cast<int>(kThumbWidth*scale),height=static_cast<int>(kThumbHeight*scale);
+            const auto lower=tools::ToLower(r.name);
+            if (DecodeNativeImage(path,width,height,&r)) {
+                // decoded by Windows, independent of thumbnail providers
+            } else if (lower.ends_with(L".pdf") && RenderPdfPage(path,width,height,&r)) {
+                r.morePages=animate && r.pages>1;
+            } else if (lower.ends_with(L".svg") && OpenSvg(path,&r)) {
+                // drawn on the card
+            } else if (ReadDocumentText(path,lower,&r.text)) {
+                // extracted document text
+            } else if (ReadTextStart(path,&r.text)) {
+                r.monospace=true;
+            }
+        }
+        // Keep custom folder/file icons when no content preview is available.
+        if (r.pixels.empty() && r.text.empty() && !r.svg && factory) {
+            const int side=TypeIconPixels(scale);
+            HBITMAP bitmap=nullptr;
+            if (SUCCEEDED(factory->GetImage(SIZE{side,side},SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,&bitmap)) && bitmap) {
+                if (!icons::BitmapToPixels(bitmap,&r.pixels,&r.width,&r.height)) r.pixels.clear();
+                else if (r.width==r.height && r.width!=side) {
+                    r.pixels=icons::Resample(r.pixels,r.width,side);
+                    r.width=r.height=side;
+                }
+            }
+            if (bitmap) DeleteObject(bitmap);
         }
         if (animate) {
             FetchMotion(path, static_cast<int>(kThumbWidth * scale), static_cast<int>(kThumbHeight * scale), &r);
@@ -8165,12 +8111,12 @@ inline Result Fetch(const std::wstring& path, double scale, bool animate, everyt
 [[clang::no_destroy]] wuxcp::Popup g_previewPopup{nullptr};
 [[clang::no_destroy]] wuxc::Border g_previewCard{nullptr};
 [[clang::no_destroy]] wuxc::Border g_previewThumbBox{nullptr};
+[[clang::no_destroy]] wuxc::Border g_previewDetails{nullptr};
 [[clang::no_destroy]] wuxc::Image g_previewImage{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_previewName{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_previewText{nullptr};
 [[clang::no_destroy]] wuxc::Grid g_previewFacts{nullptr};
 [[clang::no_destroy]] wuxc::TextBlock g_previewPath{nullptr};
-[[clang::no_destroy]] wux::DispatcherTimer g_previewCopied{nullptr};  // puts the path back after "Copied"
 std::wstring g_previewShownPath;
 [[clang::no_destroy]] wux::DispatcherTimer g_previewTimer{nullptr};
 [[clang::no_destroy]] wuxma::Storyboard g_previewResize{nullptr};  // PreviewResize
@@ -8209,7 +8155,7 @@ void PreviewThreadMain() {
             }
             path = std::exchange(preview::g_request, std::wstring());
         }
-        HWND start = GetOurCoreWindow();
+        HWND start = GetSearchWindow();
         UINT dpi = start ? GetDpiForWindow(start) : 0;
         bool animate = true;
         {
@@ -8293,66 +8239,6 @@ bool PreviewEnabled() {
     return g_settings.filePreview;
 }
 
-// What SetPreviewRegion added to Start's window region, or null.
-static HRGN g_previewAddedRegion = nullptr;
-
-// The top of what Start shows, in XAML's coordinates: its window covers the
-// screen but draws only inside its window region, the menu (less what
-// SetPreviewRegion added). 0 when it has no region.
-double VisibleTop() {
-    HWND start = GetOurCoreWindow();
-    if (!start) {
-        return 0;
-    }
-    double top = 0;
-    HRGN region = CreateRectRgn(0, 0, 0, 0);
-    const int kind = GetWindowRgn(start, region);
-    if (kind != ERROR && kind != NULLREGION) {
-        if (g_previewAddedRegion) {
-            CombineRgn(region, region, g_previewAddedRegion, RGN_DIFF);
-        }
-        RECT box{};
-        if (GetRgnBox(region, &box) != NULLREGION) {
-            top = box.top * 96.0 / GetDpiForWindow(start);
-        }
-    }
-    DeleteObject(region);
-    return top;
-}
-
-// Adds a rectangle of Start's window (physical pixels) to its window region,
-// in place of what was added before; null only takes that out. Only the part
-// the region lacked is added, so taking it out never cuts into the menu.
-void SetPreviewRegion(const RECT* rect) {
-    HWND start = GetOurCoreWindow();
-    if (!start) {
-        return;
-    }
-    HRGN region = CreateRectRgn(0, 0, 0, 0);
-    const int kind = GetWindowRgn(start, region);
-    if (kind == ERROR || kind == NULLREGION) {
-        DeleteObject(region);  // no region: nothing is clipped
-        return;
-    }
-    if (g_previewAddedRegion) {
-        CombineRgn(region, region, g_previewAddedRegion, RGN_DIFF);
-        DeleteObject(g_previewAddedRegion);
-        g_previewAddedRegion = nullptr;
-    }
-    if (rect) {
-        HRGN card = CreateRectRgnIndirect(rect);
-        HRGN added = CreateRectRgn(0, 0, 0, 0);
-        if (CombineRgn(added, card, region, RGN_DIFF) != NULLREGION) {
-            CombineRgn(region, region, added, RGN_OR);
-            g_previewAddedRegion = added;
-        } else {
-            DeleteObject(added);
-        }
-        DeleteObject(card);
-    }
-    SetWindowRgn(start, region, TRUE);  // the window owns it from here
-}
-
 // Stops whatever plays over the still and lets it go.
 void StopPreviewMotion() {
     g_previewPlayGeneration.fetch_add(1);
@@ -8391,10 +8277,36 @@ void HidePreview() {
         }
     } catch (...) {
     }
-    if (g_previewAddedRegion) {
-        SetPreviewRegion(nullptr);
-    }
 }
+
+void CopyPreviewText(std::wstring const& text) {
+    if(!text.empty()) tools::CopyTextToClipboard(text);
+}
+
+// Keep the search box focused while copying a preview value, including its
+// full text when the displayed value is trimmed.
+wuxc::Button PreviewCopyButton(wuxc::TextBlock const& text,std::wstring const& action) {
+    wuxc::Button button;
+    button.Margin(text.Margin());
+    text.Margin(wux::ThicknessHelper::FromUniformLength(0));
+    button.Padding(wux::ThicknessHelper::FromLengths(2,1,2,1));
+    button.MinWidth(0); button.MinHeight(0);
+    button.HorizontalAlignment(wux::HorizontalAlignment::Left);
+    button.HorizontalContentAlignment(wux::HorizontalAlignment::Left);
+    button.Background(MakeBrush(0,0,0,0));
+    button.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    button.IsTabStop(false); button.AllowFocusOnInteraction(false);
+    button.Content(text);
+    wuxc::ToolTipService::SetToolTip(button,winrt::box_value(winrt::hstring{action}));
+    wux::Automation::AutomationProperties::SetName(button,action);
+    KeepHandler(button,button.Click(winrt::auto_revoke,[](wf::IInspectable const& sender,wux::RoutedEventArgs const&) {
+        auto value=sender.as<wuxc::Button>().Content().as<wuxc::TextBlock>();
+        CopyPreviewText(std::wstring(value.Text()));
+    }));
+    return button;
+}
+
+void PositionPreview(double height = 0);
 
 void BuildPreviewCard() {
     if (g_previewPopup) {
@@ -8402,9 +8314,12 @@ void BuildPreviewCard() {
     }
     wuxc::Border card;
     card.Width(preview::kWidth);
-    card.Padding(wux::ThicknessHelper::FromUniformLength(12));
+    card.Padding(wux::ThicknessHelper::FromLengths(12,12,12,6));
     card.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
     card.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+    KeepHandler(card, card.SizeChanged(winrt::auto_revoke, [](wf::IInspectable const&, wux::SizeChangedEventArgs const& args) {
+        if (g_previewPopup && g_previewPopup.IsOpen()) PositionPreview(args.NewSize().Height);
+    }));
 
     wuxc::StackPanel stack;
     wuxc::Border thumbBox;
@@ -8422,25 +8337,33 @@ void BuildPreviewCard() {
     video.VerticalAlignment(wux::VerticalAlignment::Center);
     video.Visibility(wux::Visibility::Collapsed);
     thumbGrid.Children().Append(video);
-    wuxc::TextBlock thumbText;  // a text file's or a document's start (Result::text)
+    auto thumbText = SearchTextBlock();  // a text file's or a document's start (Result::text)
     thumbText.Margin(wux::ThicknessHelper::FromLengths(10, 8, 10, 8));
     ScaleFont(thumbText, 11);
     thumbText.Opacity(0.85);
     thumbText.MaxLines(24);
+    thumbText.IsTextSelectionEnabled(true);
     thumbText.TextTrimming(wux::TextTrimming::CharacterEllipsis);
     thumbText.Visibility(wux::Visibility::Collapsed);
     thumbGrid.Children().Append(thumbText);
     thumbBox.Child(thumbGrid);
     stack.Children().Append(thumbBox);
 
-    wuxc::TextBlock name;
+    // Sample details below the thumbnail, with empty padding at both ends.
+    // A bright image must not choose dark text for a darker details backdrop.
+    wuxc::Border details;
+    details.Padding(wux::ThicknessHelper::FromLengths(0,0,0,6));
+    wuxc::StackPanel detailsStack;
+    details.Child(detailsStack);
+    stack.Children().Append(details);
+    auto name = SearchTextBlock();
     name.Margin(wux::ThicknessHelper::FromLengths(2, 10, 2, 0));
     ScaleFont(name, 14);
     name.FontWeight(wut::FontWeights::SemiBold());
     name.TextWrapping(wux::TextWrapping::Wrap);
     name.MaxLines(2);
     name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-    stack.Children().Append(name);
+    detailsStack.Children().Append(PreviewCopyButton(name,L"Copy name"));
 
     // The details, label and value (ApplyPreview fills them in).
     wuxc::Grid facts;
@@ -8453,53 +8376,23 @@ void BuildPreviewCard() {
     wuxc::ColumnDefinition valueColumn;
     valueColumn.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
     facts.ColumnDefinitions().Append(valueColumn);
-    stack.Children().Append(facts);
+    detailsStack.Children().Append(facts);
 
-    // The full path, which a click copies -- without taking the keyboard
-    // from the search box.
-    wuxc::Button pathButton;
-    pathButton.Margin(wux::ThicknessHelper::FromLengths(-2, 6, -2, 0));
-    pathButton.Padding(wux::ThicknessHelper::FromLengths(4, 4, 4, 4));
-    pathButton.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
-    pathButton.HorizontalContentAlignment(wux::HorizontalAlignment::Left);
-    pathButton.Background(MakeBrush(0, 0, 0, 0));
-    pathButton.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
-    pathButton.IsTabStop(false);
-    pathButton.AllowFocusOnInteraction(false);
-    wuxc::ToolTipService::SetToolTip(pathButton, winrt::box_value(L"Copy path"));
-    wuxc::TextBlock pathText;
-    ScaleFont(pathText, 12);
+    // The full path uses the same text-sized copy target as the other values.
+    auto pathText = SearchTextBlock();
+    ScaleFont(pathText,12);
     pathText.Opacity(0.7);
+    pathText.Margin(wux::ThicknessHelper::FromLengths(2,6,2,0));
     pathText.TextWrapping(wux::TextWrapping::Wrap);
     pathText.MaxLines(3);
     pathText.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-    pathButton.Content(pathText);
-    KeepHandler(pathButton, pathButton.Click(winrt::auto_revoke, [](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-        if (g_previewShownPath.empty() || !g_previewPath) {
-            return;
-        }
-        tools::CopyTextToClipboard(g_previewShownPath);
-        g_previewPath.Text(L"Copied to clipboard");
-        if (!g_previewCopied) {
-            g_previewCopied = wux::DispatcherTimer();
-            g_previewCopied.Interval(std::chrono::milliseconds(1200));
-            KeepHandler(g_previewCopied, g_previewCopied.Tick(winrt::auto_revoke, [](wf::IInspectable const&,
-                                                                                    wf::IInspectable const&) {
-                g_previewCopied.Stop();
-                if (g_previewPath) {
-                    g_previewPath.Text(winrt::hstring{g_previewShownPath});
-                }
-            }));
-        }
-        g_previewCopied.Stop();
-        g_previewCopied.Start();
-    }));
-    stack.Children().Append(pathButton);
+    detailsStack.Children().Append(PreviewCopyButton(pathText,L"Copy path"));
     card.Child(stack);
 
     wuxcp::Popup popup;
     popup.Child(card);
     popup.IsLightDismissEnabled(false);
+    popup.ShouldConstrainToRootBounds(false);
     try {
         if (g_resultsHost && g_resultsHost.XamlRoot()) {
             popup.XamlRoot(g_resultsHost.XamlRoot());
@@ -8510,6 +8403,7 @@ void BuildPreviewCard() {
     g_previewPopup = popup;
     g_previewCard = card;
     g_previewThumbBox = thumbBox;
+    g_previewDetails = details;
     g_previewImage = image;
     g_previewVideo = video;
     g_previewText = thumbText;
@@ -8518,10 +8412,11 @@ void BuildPreviewCard() {
     g_previewPath = pathText;
 }
 
-// Beside the panel: right of it, or left when the right would run off the
-// window (Start's window, the whole screen). The window region takes in at
-// least atLeast DIPs of height: what the card spans while it changes size.
-void PositionPreview(double atLeast = 0) {
+// Bottom taskbars share the bottom edge for tall previews. Other taskbar
+// edges keep the preview aligned to the search top and always grow downward.
+// During resizing, SizeChanged supplies its actual laid-out height, so the
+// anchor changes continuously at equal heights without restarting the animation.
+void PositionPreview(double height) {
     if (!g_previewPopup || !g_resultsHost) {
         return;
     }
@@ -8543,28 +8438,36 @@ void PositionPreview(double atLeast = 0) {
         }
     }
     constexpr double kGap = 12;
-    double x = origin.X + panelWidth + kGap;
-    if (windowWidth > 0 && x + preview::kWidth > windowWidth && origin.X - kGap - preview::kWidth >= 0) {
+    double x = g_searchTaskbarEdge==SearchTaskbarEdge::Right
+        ? origin.X-kGap-preview::kWidth : origin.X+panelWidth+kGap;
+    if (g_searchTaskbarEdge!=SearchTaskbarEdge::Right && windowWidth > 0 && x + preview::kWidth > windowWidth && origin.X - kGap - preview::kWidth >= 0) {
         x = origin.X - kGap - preview::kWidth;
     }
-    // Level with the top of the panel, unless a tall card would run off the
-    // bottom of the screen.
-    g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
-    const double height = std::max(static_cast<double>(g_previewCard.DesiredSize().Height), atLeast);
+    HWND start = GetSearchWindow();
+    const double scale = (start ? GetDpiForWindow(start) : 96) / 96.0;
+    double top = 0, bottom = windowHeight;
+    POINT client{};
+    MONITORINFO monitor{sizeof(monitor)};
+    if (start && ClientToScreen(start, &client) &&
+        GetMonitorInfoW(MonitorFromWindow(start, MONITOR_DEFAULTTONEAREST), &monitor)) {
+        // Popup offsets are relative to the search window, but its available
+        // height is the monitor's work area. Negative offsets let a tall
+        // preview extend above a short search window without covering the taskbar.
+        top = (monitor.rcWork.top - client.y) / scale;
+        bottom = (monitor.rcWork.bottom - client.y) / scale;
+    }
+    if (height <= 0) {
+        g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
+        height = g_previewCard.DesiredSize().Height;
+    }
     double y = origin.Y;
-    if (windowHeight > 0 && y + height > windowHeight) {
-        y = std::max(0.0, windowHeight - height);
+    if (g_searchTaskbarEdge==SearchTaskbarEdge::Bottom) {
+        y += std::min(0.0, g_resultsHost.ActualHeight() - height);
+        if (bottom > top) y = std::max(top, std::min(y, bottom - height));
     }
     g_previewPopup.HorizontalOffset(x);
     g_previewPopup.VerticalOffset(y);
 
-    // Its rectangle in physical pixels, for the window region.
-    HWND start = GetOurCoreWindow();
-    const double scale = (start ? GetDpiForWindow(start) : 96) / 96.0;
-    RECT rect{static_cast<LONG>(std::floor(x * scale)) - 1, static_cast<LONG>(std::floor(y * scale)) - 1,
-              static_cast<LONG>(std::ceil((x + preview::kWidth) * scale)) + 1,
-              static_cast<LONG>(std::ceil((y + height) * scale)) + 1};
-    SetPreviewRegion(&rect);
 }
 
 // Plays a result's motion over the still, already shown at its size.
@@ -8670,7 +8573,7 @@ void StartFileDrag(std::wstring const& path) {
     cds.cbData = static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t));
     cds.lpData = const_cast<wchar_t*>(path.c_str());
     DWORD_PTR accepted = 0;
-    if (!SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetOurCoreWindow()),
+    if (!SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetSearchWindow()),
                              reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 500, &accepted) ||
         !accepted) {
         g_dragging = false;
@@ -8715,8 +8618,8 @@ void AddPointerHandler(wux::UIElement const& element, wux::RoutedEvent const& ev
 // Eases the card's height from what it was to what its new content needs,
 // over a sixth of a second. The content is laid out at once at its own size:
 // while the card is shorter, it is cut off at the bottom; while taller, the
-// card shows its background below it. The window region covers the larger of
-// the two meanwhile.
+// card shows its background below it. SizeChanged keeps the current edge
+// aligned during every frame, including when a new selection interrupts it.
 void PreviewResize(double fromHeight, double toHeight) {
     if (!g_previewResize) {
         g_previewResizeAnimation = wuxma::DoubleAnimation();
@@ -8743,7 +8646,7 @@ void PreviewResize(double fromHeight, double toHeight) {
     g_previewResizeAnimation.From(fromHeight);
     g_previewResizeAnimation.To(toHeight);
     g_previewCard.Height(fromHeight);
-    PositionPreview(std::max(fromHeight, toHeight));
+    PositionPreview(fromHeight);
     g_previewResize.Begin();
 }
 
@@ -8754,7 +8657,8 @@ void ApplyPreview() try {
         result = std::move(preview::g_result);
         preview::g_result.reset();
     }
-    if (!result || result->path != g_previewWanted || !g_isOverlayVisible.load() || !g_resultsHost) {
+    if (!result || result->path != g_previewWanted || !g_isOverlayVisible.load() ||
+        g_searchWindowWaitingForStart || g_searchWindowSliding || !g_resultsHost) {
         Wh_Log(L"preview: dropped (%ls)", result ? L"no longer selected" : L"nothing fetched");
         return;
     }
@@ -8844,26 +8748,25 @@ void ApplyPreview() try {
         wuxc::RowDefinition row;
         row.Height(wux::GridLengthHelper::Auto());
         g_previewFacts.RowDefinitions().Append(row);
-        wuxc::TextBlock label;
+        auto label = SearchTextBlock();
         label.Text(winrt::hstring{result->facts[i].first});
         ScaleFont(label, 12);
         label.Opacity(0.55);
         wuxc::Grid::SetRow(label, static_cast<int32_t>(i));
         g_previewFacts.Children().Append(label);
-        wuxc::TextBlock value;
+        auto value = SearchTextBlock();
         value.Text(winrt::hstring{result->facts[i].second});
         ScaleFont(value, 12);
         value.TextWrapping(wux::TextWrapping::Wrap);
         value.MaxLines(2);
         value.TextTrimming(wux::TextTrimming::CharacterEllipsis);
-        wuxc::Grid::SetRow(value, static_cast<int32_t>(i));
-        wuxc::Grid::SetColumn(value, 1);
-        g_previewFacts.Children().Append(value);
+        auto copyValue=PreviewCopyButton(value,L"Copy " + result->facts[i].first);
+        wuxc::Grid::SetRow(copyValue,static_cast<int32_t>(i));
+        wuxc::Grid::SetColumn(copyValue,1);
+        g_previewFacts.Children().Append(copyValue);
     }
+    InvalidateSearchContrastContainer(g_previewDetails);
     g_previewShownPath = result->path;
-    if (g_previewCopied) {
-        g_previewCopied.Stop();
-    }
     g_previewPath.Text(winrt::hstring{result->path});
 
     g_previewCard.Measure(wf::Size{static_cast<float>(preview::kWidth), std::numeric_limits<float>::infinity()});
@@ -8910,7 +8813,7 @@ void ApplyPreviewFrames() try {
 
 // Follows the selection: the selected file's preview, after a short pause.
 void SchedulePreview() try {
-    if (g_dragging) {
+    if (g_dragging || g_searchWindowWaitingForStart || g_searchWindowSliding) {
         return;
     }
     std::wstring path;
@@ -8971,7 +8874,7 @@ void OpenSelectedFile(int index, bool asAdmin) {
     if (asAdmin && !CanElevatePath(path)) {
         asAdmin = false;
     }
-    DismissStartMenuForLaunch([path = path, asAdmin] { OpenResult(path, asAdmin); });
+    DismissSearchForLaunch([path = path, asAdmin] { OpenResult(path, asAdmin); });
     Wh_Log(L"open file: index %d ('%ls'), asAdmin=%d", index, path.c_str(), asAdmin ? 1 : 0);
 }
 
@@ -9029,14 +8932,41 @@ void LaunchSelectedApp(int index, bool asAdmin) {
         return;
     }
     const auto& row = g_currentAppRows[index];
+    if (!row.commandLine.empty()) {
+        CustomCommandLaunch launch;
+        std::wstring error;
+        if(!PrepareCustomCommand(row.commandLine,row.commandShell,row.commandHideTerminal,
+                                 row.commandShellExecutable,row.commandShellArguments,&launch,&error)) {
+            Wh_Log(L"custom command: %ls",error.c_str());
+            if(g_footerStatus) {
+                g_footerStatus.Text(winrt::hstring{error});
+                g_footerStatus.Opacity(1);
+                g_footerStatus.MaxWidth(std::numeric_limits<double>::infinity());
+                g_footerStatus.TextWrapping(wux::TextWrapping::Wrap);
+                wuxc::ToolTipService::SetToolTip(g_footerStatus,winrt::box_value(error));
+            }
+            if(g_footerHints) g_footerHints.Visibility(wux::Visibility::Collapsed);
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_queryMutex);
+            g_commandUsageRequests.push_back(apps::CommandUsageKey(row.title));
+        }
+        g_queryWake.notify_all();
+        DismissSearchForLaunch([launch = std::move(launch),
+                                   hideTerminal = row.commandHideTerminal, asAdmin]() mutable {
+            RunCustomCommand(std::move(launch), hideTerminal, asAdmin);
+        });
+        return;
+    }
     if (!row.copyText.empty()) {
-        DismissStartMenu();
+        DismissSearch();
         tools::CopyTextToClipboard(row.copyText);
         Wh_Log(L"copied to clipboard: '%ls'", row.copyText.c_str());
         return;
     }
     if (row.openPath.starts_with(L"http:") || row.openPath.starts_with(L"https:")) {
-        DismissStartMenuForLaunch([url = row.openPath] { OpenResult(url, false); });
+        DismissSearchForLaunch([url = row.openPath] { OpenResult(url, false); });
         Wh_Log(L"launch web: '%ls'", row.openPath.c_str());
         return;
     }
@@ -9045,7 +8975,7 @@ void LaunchSelectedApp(int index, bool asAdmin) {
         if (asAdmin && !row.canRunAsAdmin) {
             asAdmin = false;
         }
-        DismissStartMenuForLaunch([which, asAdmin] {
+        DismissSearchForLaunch([which, asAdmin] {
             {
                 std::lock_guard<std::mutex> lock(g_queryMutex);
                 g_launchAsAdmin.store(asAdmin);
@@ -9068,7 +8998,7 @@ bool ResultsPending() {
 
 // What Enter does: opens the selected result.
 void ActivateSelection(bool asAdmin) {
-    const bool haveFiles = g_fileButtonsOpt && !g_fileButtonsOpt->empty();
+    const bool haveFiles = FilesPanelVisible() && g_fileButtonsOpt && !g_fileButtonsOpt->empty();
     if (g_filesColumnActive && haveFiles) {
         OpenSelectedFile(g_selectedFile < 0 ? 0 : g_selectedFile, asAdmin);
     } else if (!g_currentAppRows.empty()) {
@@ -9086,7 +9016,9 @@ bool IsNavigationKey(winrt::Windows::System::VirtualKey key) {
 // Enter are its own (Right opens its submenus).
 bool ContextMenuHasFocus() {
     try {
-        auto focused = wux::Input::FocusManager::GetFocusedElement();
+        auto focused = g_resultsHost && g_resultsHost.XamlRoot()
+                           ? wux::Input::FocusManager::GetFocusedElement(g_resultsHost.XamlRoot())
+                           : wux::Input::FocusManager::GetFocusedElement();
         return focused && (focused.try_as<wuxc::MenuFlyoutItemBase>() ||
                            focused.try_as<wuxc::MenuFlyoutPresenter>());
     } catch (...) {
@@ -9098,16 +9030,21 @@ bool ContextMenuHasFocus() {
 // close an open menu, by which time the menu no longer has focus. So a
 // menu still closing, or closed a moment ago, counts as open, and the
 // query is kept.
-static bool g_contextMenuOpen = false;
+static std::atomic<bool> g_contextMenuOpen{false};
+[[clang::no_destroy]] winrt::weak_ref<wuxcp::FlyoutBase> g_activeContextFlyout;
 static uint64_t g_contextMenuClosedTick = 0;
 
-void NoteContextMenuOpened() {
-    g_contextMenuOpen = true;
+void NoteContextMenuOpening(wf::IInspectable const& sender) {
+    if(auto flyout=sender.try_as<wuxcp::FlyoutBase>()) g_activeContextFlyout=winrt::make_weak(flyout);
+    g_contextMenuOpen=true;
 }
 
-void NoteContextMenuClosed() {
-    g_contextMenuOpen = false;
-    g_contextMenuClosedTick = GetTickCount64();
+void NoteContextMenuClosed(wf::IInspectable const& sender) {
+    auto active=g_activeContextFlyout.get();
+    if(active && active!=sender.try_as<wuxcp::FlyoutBase>()) return;
+    g_activeContextFlyout={}; g_contextMenuOpen=false;
+    g_contextMenuClosedTick=GetTickCount64();
+    if(g_searchWindowWindow.load()) QueueSearchBoxRefocus(true);
 }
 
 bool EscapeBelongsToContextMenu() {
@@ -9140,7 +9077,7 @@ bool HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl) {
     }
 
     const bool haveApps = g_appButtonsOpt && !g_appButtonsOpt->empty();
-    const bool haveFiles = g_fileButtonsOpt && !g_fileButtonsOpt->empty();
+    const bool haveFiles = FilesPanelVisible() && g_fileButtonsOpt && !g_fileButtonsOpt->empty();
     const bool inFiles = g_filesColumnActive && haveFiles;
     auto toApps = [&] { SetAppSelection(g_selectedApp < 0 ? 0 : g_selectedApp); };
     auto toFiles = [&] { SetFileSelection(g_selectedFile < 0 ? 0 : g_selectedFile); };
@@ -9226,6 +9163,114 @@ bool HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl) {
 // Search box at top (Row 0),
 // Dual-column apps and files in middle (Row 1),
 // and keyboard navigation footer at bottom (Row 2).
+void ApplyFilesPanelLayout() {
+    if(!g_resultsHost || g_resultsHost.Children().Size()<2) return;
+    const bool visible=FilesPanelVisible();
+    auto grid=g_resultsHost.Children().GetAt(1).as<wuxc::Grid>();
+    if(grid.ColumnDefinitions().Size()<3 || grid.Children().Size()<3) return;
+    grid.ColumnDefinitions().GetAt(0).Width(wux::GridLengthHelper::FromValueAndType(visible ? 40 : 1,wux::GridUnitType::Star));
+    grid.ColumnDefinitions().GetAt(2).Width(visible ? wux::GridLengthHelper::FromValueAndType(60,wux::GridUnitType::Star)
+                                                  : wux::GridLengthHelper::FromValueAndType(0,wux::GridUnitType::Pixel));
+    grid.Children().GetAt(2).Visibility(visible ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    if(g_divider) g_divider.Visibility(visible ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    static std::optional<bool> previous;
+    if(previous!=visible) { HidePreview(); previous=visible; }
+    if(!visible) { g_filesColumnActive=false; g_selectedFile=-1; }
+    if(g_footerStatus) {
+        g_footerStatus.MaxWidth(visible ? std::numeric_limits<double>::infinity() : 80);
+        g_footerStatus.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+    }
+    if(g_footerHints) {
+        auto hints=g_footerHints.Children();
+        for(uint32_t i=0;i<hints.Size();++i)
+            hints.GetAt(i).Visibility(visible || i==2 || i==5 ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+    }
+}
+
+// Use the installed Start menu's artwork; no asset is bundled with the mod.
+// Raw pixels are cached per theme. WinRT decoding starts only with the UI.
+const std::vector<BYTE>& NativeSearchIconPixels(bool light) {
+    static std::array<std::vector<BYTE>,2> cached;
+    static std::array<bool,2> attempted{};
+    const size_t variant=light ? 1 : 0;
+    if(attempted[variant]) return cached[variant];
+    attempted[variant]=true;
+    wchar_t windows[MAX_PATH]{};
+    const UINT length=GetWindowsDirectoryW(windows,ARRAYSIZE(windows));
+    if(!length || length>=ARRAYSIZE(windows)) return cached[variant];
+    static constexpr PCWSTR folders[] = {
+        L"\\SystemApps\\MicrosoftWindows.Client.Core_cw5n1h2txyewy\\StartMenu\\Assets\\SearchIcons\\",
+        L"\\SystemApps\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\Assets\\SearchIcons\\",
+        L"\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\StartMenu\\Assets\\SearchIcons\\",
+        L"\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\Assets\\SearchIcons\\",
+    };
+    for(PCWSTR folder:folders) for(int scale:{400,200,100}) {
+        const std::wstring path=std::wstring(windows)+folder+L"SearchIconOn"+
+            (light ? L"Light" : L"Dark")+L".scale-"+std::to_wstring(scale)+L".png";
+        const DWORD attributes=GetFileAttributesW(path.c_str());
+        if(attributes==INVALID_FILE_ATTRIBUTES || (attributes&FILE_ATTRIBUTE_DIRECTORY)) continue;
+        preview::RunInMta([&] {
+            namespace imaging=winrt::Windows::Graphics::Imaging;
+            auto file=winrt::Windows::Storage::StorageFile::GetFileFromPathAsync(path).get();
+            auto decoder=imaging::BitmapDecoder::CreateAsync(file.OpenReadAsync().get()).get();
+            const uint32_t width=decoder.PixelWidth(),height=decoder.PixelHeight();
+            if(!width || width!=height || width>256) return;
+            auto data=decoder.GetPixelDataAsync(imaging::BitmapPixelFormat::Bgra8,
+                imaging::BitmapAlphaMode::Premultiplied,imaging::BitmapTransform(),
+                imaging::ExifOrientationMode::IgnoreExifOrientation,imaging::ColorManagementMode::DoNotColorManage).get();
+            auto bytes=data.DetachPixelData();
+            if(bytes.size()==static_cast<size_t>(width)*height*4)
+                cached[variant].assign(bytes.begin(),bytes.end());
+        });
+        if(!cached[variant].empty()) {
+            SearchWindowTrace(light ? L"native Windows search icon loaded (light)" :
+                                      L"native Windows search icon loaded (dark)",S_OK);
+            return cached[variant];
+        }
+    }
+    SearchWindowTrace(L"native search icon unavailable; using Windows search glyph",S_FALSE);
+    return cached[variant];
+}
+
+void UpdateSearchIcon(bool light) {
+    if(!g_searchBarBorder || !g_searchBarBorder.Child()) return;
+    auto grid=g_searchBarBorder.Child().as<wuxc::Grid>();
+    auto icon=grid.Children().GetAt(0).as<wuxc::Border>();
+    HWND host=GetSearchWindow();
+    const UINT dpi=host ? GetDpiForWindow(host) : GetDpiForSystem();
+    const double scale=(dpi ? dpi : 96)/96.0;
+    const int pixels=std::clamp(static_cast<int>(std::lround(Fs(20)*scale)),1,256);
+    const double dip=pixels/scale;
+    icon.Width(dip); icon.Height(dip);
+    HIGHCONTRASTW contrast{sizeof(contrast)};
+    const bool highContrast=SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) &&
+                            (contrast.dwFlags&HCF_HIGHCONTRASTON);
+    const int variant=highContrast ? 2 : (light ? 1 : 0);
+    const int cacheKey=variant*512+pixels;
+    if(winrt::unbox_value_or<int>(icon.Tag(),-1)==cacheKey) return;
+    if(!highContrast) {
+        const auto& source=NativeSearchIconPixels(light);
+        if(const int side=icons::IconSide(source); side>0) {
+            // Average the original's premultiplied pixels at the final display
+            // size so the circular edge stays smooth. A Viewbox would leave
+            // this downsampling to the render transform, including text scale.
+            if(auto bitmap=IconBitmap(icons::Resample(source,side,pixels))) {
+                wuxc::Image image;
+                image.Width(dip); image.Height(dip); image.Stretch(wuxm::Stretch::Uniform);
+                image.UseLayoutRounding(true);
+                image.Source(bitmap); icon.Child(image); icon.Tag(winrt::box_value(cacheKey));
+                return;
+            }
+        }
+    }
+    auto glyph = SearchFontIcon();
+    glyph.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
+    glyph.Glyph(L"\uE721"); glyph.FontSize(dip);
+    glyph.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    glyph.VerticalAlignment(wux::VerticalAlignment::Center);
+    icon.Child(glyph); icon.Tag(winrt::box_value(cacheKey));
+}
+
 void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     if (g_resultsHost) {
         return;
@@ -9237,11 +9282,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::Grid root;
     root.Name(L"WindhawkEverythingResults");
-    // Edge to edge by default: with a margin, a band of Start shows around the
-    // results like a frame inside the frame. SyncOverlayBackground gives it
-    // Start's own surface -- background, corners and, edge to edge, outline --
-    // so it reads as Start. The margin is a setting (panelMargin).
-    root.Margin(wux::ThicknessHelper::FromUniformLength(PanelMargin()));
+    root.Margin(wux::ThicknessHelper::FromUniformLength(0));
     root.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
     root.VerticalAlignment(wux::VerticalAlignment::Stretch);
     root.Visibility(wux::Visibility::Visible);
@@ -9249,18 +9290,6 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     root.IsHitTestVisible(false);
     root.Padding(wux::ThicknessHelper::FromLengths(16, 12, 16, 8));
     root.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
-
-    wuxm::TranslateTransform tt;
-    tt.Y(-8.0);
-    root.RenderTransform(tt);
-    g_resultsTranslate = tt;
-
-    // Spanning every row and column of MainContent
-    wuxc::Grid::SetRow(root, 0);
-    wuxc::Grid::SetRowSpan(root, 12);
-    wuxc::Grid::SetColumn(root, 0);
-    wuxc::Grid::SetColumnSpan(root, 12);
-    wuxc::Canvas::SetZIndex(root, 999);
 
     // Root layout:
     // Row 0 (Auto): Search bar inside the overlay
@@ -9279,7 +9308,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     // Search bar container at Row 0
     wuxc::Border searchBarBorder;
     searchBarBorder.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 8));
-    searchBarBorder.Padding(wux::ThicknessHelper::FromLengths(12, 0, 10, 0));
+    searchBarBorder.Padding(wux::ThicknessHelper::FromLengths(12, 0, 12, 0));
     searchBarBorder.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
     searchBarBorder.Background(isLight ? MakeBrush(0xD0, 0xFF, 0xFF, 0xFF) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
     searchBarBorder.BorderBrush(isLight ? MakeBrush(0x30, 0x00, 0x00, 0x00) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
@@ -9295,25 +9324,25 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     searchBarGrid.ColumnDefinitions().Append(sbIconCol);
     searchBarGrid.ColumnDefinitions().Append(sbBoxCol);
 
-    wuxc::FontIcon searchIcon;
-    searchIcon.Glyph(L"\uE721");
-    ScaleFont(searchIcon, 14);
-    searchIcon.Opacity(0.65);
-    searchIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
+    wuxc::Border searchIcon;
+    searchIcon.Width(Fs(20)); searchIcon.Height(Fs(20));
+    searchIcon.Margin(wux::ThicknessHelper::FromLengths(0,0,8,0));
     searchIcon.VerticalAlignment(wux::VerticalAlignment::Center);
-    wuxc::Grid::SetColumn(searchIcon, 0);
+    searchIcon.UseLayoutRounding(true);
+    searchIcon.IsHitTestVisible(false);
+    wuxc::Grid::SetColumn(searchIcon,0);
     searchBarGrid.Children().Append(searchIcon);
 
     wuxc::TextBox box;
     box.Name(L"WindhawkStartSearchBox");
-    box.PlaceholderText(L"Search apps, settings, and files...");
+    box.PlaceholderText(L"Search Anything");
     box.VerticalAlignment(wux::VerticalAlignment::Center);
     box.VerticalContentAlignment(wux::VerticalAlignment::Center);
     ScaleFont(box, 14);
     // As tall as its text and centered in the bar, at any text size: no
     // minimum height, the same space above the text as below.
     box.MinHeight(0);
-    box.Padding(wux::ThicknessHelper::FromLengths(10, 5, 6, 5));
+    box.Padding(wux::ThicknessHelper::FromLengths(0, 5, 0, 5));
     box.Background(MakeBrush(0, 0, 0, 0));
     box.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
     box.IsTabStop(true);
@@ -9370,9 +9399,9 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
                 std::wstring text{b.Text()};
                 Wh_Log(L"own box: '%ls'", text.c_str());
                 if (text.empty()) {
-                    HideOverlayAnimated();
+                    UpdateSearchResultsLayout(true);
                 } else {
-                    RevealOverlayAnimated();
+                    UpdateSearchResultsLayout();
                 }
                 QueueQuery(std::move(text));
             } catch (...) {}
@@ -9382,12 +9411,10 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
         try {
             auto key = args.Key();
             if (key == winrt::Windows::System::VirtualKey::Escape && !EscapeBelongsToContextMenu()) {
-                if (g_isOverlayVisible.load() || g_isHiding.load()) {
-                    if (g_ourBox) g_ourBox.Text(L"");
-                    HideOverlayAnimated();
-                    args.Handled(true);
-                    return;
-                }
+                if (g_ourBox && !g_ourBox.Text().empty()) g_ourBox.Text(L"");
+                else SearchWindowHide();
+                args.Handled(true);
+                return;
             }
             if (IsNavigationKey(key) && g_isOverlayVisible.load()) {
                 bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
@@ -9398,21 +9425,12 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
         } catch (...) {}
     }));
 
-    g_ourBoxLost = box.LostFocus(
-        winrt::auto_revoke,
-        [](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-            try {
-                if (g_ourBox && g_ourBox.Text().empty() && (g_isOverlayVisible.load() || g_isHiding.load())) {
-                    HideOverlayAnimated();
-                }
-            } catch (...) {}
-        });
-
     wuxc::Grid::SetColumn(box, 1);
     searchBarGrid.Children().Append(box);
     g_ourBox = box;
 
     searchBarBorder.Child(searchBarGrid);
+    UpdateSearchIcon(isLight);
     root.Children().Append(searchBarBorder);
 
     // Results container grid: Apps column (40*), 1px hairline divider, Files column (60*)
@@ -9444,6 +9462,10 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::ScrollViewer appsScroll;
     appsScroll.Content(apps);
+    g_appsScroll = appsScroll;
+    KeepHandler(appsScroll,appsScroll.ViewChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
+        SearchContrastScrolled(sender.as<wuxc::ScrollViewer>());
+    }));
     appsScroll.IsTabStop(false);
     appsScroll.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     appsScroll.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
@@ -9478,6 +9500,10 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     wuxc::ScrollViewer filesScroll;
     filesScroll.Content(files);
+    g_filesScroll = filesScroll;
+    KeepHandler(filesScroll,filesScroll.ViewChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
+        SearchContrastScrolled(sender.as<wuxc::ScrollViewer>());
+    }));
     filesScroll.IsTabStop(false);
     filesScroll.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     filesScroll.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
@@ -9508,7 +9534,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     leftStatus.Orientation(wuxc::Orientation::Horizontal);
     leftStatus.VerticalAlignment(wux::VerticalAlignment::Center);
 
-    wuxc::FontIcon boltIcon;
+    auto boltIcon = SearchFontIcon();
     boltIcon.Glyph(L"\uE946");
     ScaleFont(boltIcon, 11);
     boltIcon.Opacity(0.5);
@@ -9516,7 +9542,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     boltIcon.VerticalAlignment(wux::VerticalAlignment::Center);
     leftStatus.Children().Append(boltIcon);
 
-    wuxc::TextBlock statusText;
+    auto statusText = SearchTextBlock();
     statusText.Text(L"Everything Search");
     ScaleFont(statusText, 11);
     statusText.Opacity(0.5);
@@ -9545,7 +9571,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
         keyBadge.Padding(wux::ThicknessHelper::FromLengths(4, 1, 4, 1));
         keyBadge.VerticalAlignment(wux::VerticalAlignment::Center);
 
-        wuxc::TextBlock keyBlock;
+        auto keyBlock = SearchTextBlock();
         keyBlock.Text(winrt::hstring{key});
         ScaleFont(keyBlock, 9.5);
         keyBlock.FontWeight(wut::FontWeights::SemiBold());
@@ -9553,7 +9579,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
         keyBadge.Child(keyBlock);
         pair.Children().Append(keyBadge);
 
-        wuxc::TextBlock actionBlock;
+        auto actionBlock = SearchTextBlock();
         actionBlock.Text(winrt::hstring{action});
         ScaleFont(actionBlock, 10.5);
         actionBlock.Opacity(0.45);
@@ -9596,12 +9622,12 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     g_resultsHost = root;
 
 
-    SyncOverlayBackground();
     if (!root.Background()) {
         root.Background(isLight ? MakeBrush(0xF2, 0xF3, 0xF3, 0xF3) : MakeBrush(0xF2, 0x20, 0x20, 0x20));
         Wh_Log(L"results: no AcrylicBorder found; flat background instead");
     }
 
+    ApplyFilesPanelLayout();
     Wh_Log(L"results: two columns and footer built");
 } catch (...) {
     Wh_Log(L"results list failed %08X", static_cast<unsigned>(winrt::to_hresult()));
@@ -9609,11 +9635,15 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
 // Runs on the XAML thread.
 void RenderResults() try {
+    if (g_searchWindowSliding) { g_renderAfterSlide = true; return; }
+    g_renderAfterSlide = false;
     if (!g_resultsList || !g_resultsHost || !g_appsList || !g_activeAppsOpt || !g_appButtonsOpt) {
         return;
     }
 
     bool isLight = IsLightTheme();
+    const bool filesVisible=FilesPanelVisible();
+    ApplyFilesPanelLayout();
 
     std::vector<Row> files;
     std::vector<Row> appNames;
@@ -9626,6 +9656,7 @@ void RenderResults() try {
         total = g_totalMatches.load();
     }
 
+    if(!filesVisible) { files.clear(); total=0; }
     if (files.empty() && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
         g_enterWaiting = false;
         g_currentAppRows.clear();
@@ -9633,7 +9664,7 @@ void RenderResults() try {
         g_selectedApp = -1;
         g_selectedFile = -1;
         g_filesColumnActive = false;
-        HideOverlayAnimated();
+        UpdateSearchResultsLayout(true);
         Wh_Log(L"render: nothing to show; menu restored");
         return;
     }
@@ -9641,9 +9672,17 @@ void RenderResults() try {
     g_resultsList.Children().Clear();
     g_currentAppRows = appNames;
 
+    const bool suggestions=g_searchWindowWindow.load() && g_shownQuery.empty();
     // Update bottom status bar
     if (g_footerStatus) {
-        if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
+        g_footerStatus.Opacity(0.5);
+        g_footerStatus.TextWrapping(wux::TextWrapping::NoWrap);
+        wuxc::ToolTipService::SetToolTip(g_footerStatus,nullptr);
+        if (suggestions) {
+            g_footerStatus.Text(filesVisible ? L"Suggested apps" : L"Apps");
+        } else if(!filesVisible) {
+            g_footerStatus.Text(L"Apps");
+        } else if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
             std::wstring statusStr = L"Network Interfaces \u2022 " + std::to_wstring(appNames.size()) + L" active \u2022 Press Enter to copy IP";
             g_footerStatus.Text(winrt::hstring{statusStr});
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE88E") {
@@ -9699,7 +9738,7 @@ void RenderResults() try {
         leftStack.Orientation(wuxc::Orientation::Horizontal);
         leftStack.VerticalAlignment(wux::VerticalAlignment::Center);
 
-        wuxc::FontIcon icon;
+        auto icon = SearchFontIcon();
         icon.Glyph(winrt::hstring{iconGlyph});
         ScaleFont(icon, 11.5);
         icon.Opacity(0.6);
@@ -9707,7 +9746,7 @@ void RenderResults() try {
         icon.VerticalAlignment(wux::VerticalAlignment::Center);
         leftStack.Children().Append(icon);
 
-        wuxc::TextBlock titleBlock;
+        auto titleBlock = SearchTextBlock();
         titleBlock.Text(winrt::hstring{title});
         ScaleFont(titleBlock, 11);
         titleBlock.FontWeight(wut::FontWeights::SemiBold());
@@ -9729,7 +9768,7 @@ void RenderResults() try {
             badge.Padding(wux::ThicknessHelper::FromLengths(7, 1, 7, 1));
             badge.VerticalAlignment(wux::VerticalAlignment::Center);
 
-            wuxc::TextBlock badgeBlock;
+            auto badgeBlock = SearchTextBlock();
             badgeBlock.Text(winrt::hstring{badgeStr});
             ScaleFont(badgeBlock, 9.5);
             badgeBlock.FontWeight(wut::FontWeights::SemiBold());
@@ -9756,7 +9795,7 @@ void RenderResults() try {
         } else if (isWebMode) {
             g_appsHeaderHolder.Child(makeHeader(L"WEB SEARCH", L"\uE774", static_cast<int>(appNames.size())));
         } else {
-            g_appsHeaderHolder.Child(makeHeader(L"APPS", L"\uE71D", static_cast<int>(appNames.size())));
+            g_appsHeaderHolder.Child(makeHeader(suggestions ? L"SUGGESTED APPS" : L"APPS", L"\uE71D", static_cast<int>(appNames.size())));
         }
     }
     std::wstring filesBadge = std::to_wstring(files.size()) + L" of " + std::to_wstring(total);
@@ -9792,7 +9831,7 @@ void RenderResults() try {
             iconBox.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
             iconBox.VerticalAlignment(wux::VerticalAlignment::Center);
 
-            wuxc::FontIcon fallbackIcon;
+            auto fallbackIcon = SearchFontIcon();
             ScaleFont(fallbackIcon, 15);
             fallbackIcon.Opacity(0.5);
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -9815,7 +9854,24 @@ void RenderResults() try {
             } else {
                 fallbackIcon.Glyph(L"\uE71D");
             }
-            iconBox.Child(fallbackIcon);
+            if (item.customIconIsGlyph) {
+                fallbackIcon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
+                fallbackIcon.Glyph(winrt::hstring{item.customIconText});
+                fallbackIcon.Opacity(1.0);
+                ScaleFont(fallbackIcon, 20);
+                iconBox.Child(fallbackIcon);
+            } else if (!item.customIconText.empty()) {
+                auto emoji = SearchTextBlock();
+                emoji.Text(winrt::hstring{item.customIconText});
+                emoji.FontFamily(wuxm::FontFamily(L"Segoe UI Emoji"));
+                emoji.IsColorFontEnabled(true);
+                ScaleFont(emoji, 20);
+                emoji.HorizontalAlignment(wux::HorizontalAlignment::Center);
+                emoji.VerticalAlignment(wux::VerticalAlignment::Center);
+                iconBox.Child(emoji);
+            } else {
+                iconBox.Child(fallbackIcon);
+            }
             wuxc::Grid::SetColumn(iconBox, 0);
             layout.Children().Append(iconBox);
         }
@@ -9824,7 +9880,7 @@ void RenderResults() try {
         wuxc::Grid::SetColumn(text, 1);
         text.VerticalAlignment(wux::VerticalAlignment::Center);
 
-        wuxc::TextBlock name;
+        auto name = SearchTextBlock();
         name.Text(winrt::hstring{item.title});
         ScaleFont(name, 12.5);
         name.FontWeight(wut::FontWeights::SemiBold());
@@ -9840,7 +9896,7 @@ void RenderResults() try {
         text.Children().Append(name);
 
         if (!item.subtitle.empty()) {
-            wuxc::TextBlock sub;
+            auto sub = SearchTextBlock();
             sub.Text(winrt::hstring{item.subtitle});
             sub.Opacity(0.45);
             ScaleFont(sub, 10.5);
@@ -9865,6 +9921,7 @@ void RenderResults() try {
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
         button.IsTabStop(false);
+        button.AllowFocusOnInteraction(false);
         if (whole) {
             wuxc::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring{item.title}));
         }
@@ -9908,8 +9965,8 @@ void RenderResults() try {
         }));
 
         wuxc::MenuFlyout menu;
-        KeepHandler(menu, menu.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); }));
-        KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); }));
+        KeepHandler(menu, menu.Opening(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuOpening(sender); }));
+        KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuClosed(sender); }));
         // Filled in when first opened, not with the card (see the file rows).
         // What it needs of the row is copied, less the icon pixels; the card
         // is held weakly, since it owns this menu.
@@ -9922,7 +9979,7 @@ void RenderResults() try {
             if (!item.copyText.empty()) {
                 wuxc::MenuFlyoutItem copyItem;
                 copyItem.Text(L"Copy to clipboard");
-                wuxc::FontIcon copyIcon;
+                auto copyIcon = SearchFontIcon();
                 copyIcon.Glyph(L"\uE8C8");
                 copyItem.Icon(copyIcon);
                 KeepHandler(copyItem, copyItem.Click(winrt::auto_revoke, [txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -9932,10 +9989,11 @@ void RenderResults() try {
             } else {
                 bool isWebItem = item.appIndex < 0 && (item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:"));
                 bool isSettingItem = item.isSetting;
+                const bool isCommandItem = !item.commandLine.empty();
 
                 wuxc::MenuFlyoutItem openItem;
-                openItem.Text(isWebItem ? L"Search in browser" : L"Open");
-                wuxc::FontIcon openIcon;
+                openItem.Text(isCommandItem ? L"Run" : isWebItem ? L"Search in browser" : L"Open");
+                auto openIcon = SearchFontIcon();
                 openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
                 openItem.Icon(openIcon);
                 KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -9953,7 +10011,7 @@ void RenderResults() try {
                 if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
                     wuxc::MenuFlyoutItem adminItem;
                     adminItem.Text(L"Run as administrator");
-                    wuxc::FontIcon adminIcon;
+                    auto adminIcon = SearchFontIcon();
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
                     KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -9969,11 +10027,21 @@ void RenderResults() try {
                     flyout.Items().Append(adminItem);
                 }
 
-                if (isWebItem) {
+                if (isCommandItem) {
+                    wuxc::MenuFlyoutItem copyCommand;
+                    copyCommand.Text(L"Copy command");
+                    auto copyIcon = SearchFontIcon();
+                    copyIcon.Glyph(L"\uE8C8");
+                    copyCommand.Icon(copyIcon);
+                    KeepHandler(copyCommand, copyCommand.Click(winrt::auto_revoke, [command = item.commandLine](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        tools::CopyTextToClipboard(command);
+                    }));
+                    flyout.Items().Append(copyCommand);
+                } else if (isWebItem) {
                     std::wstring webUrl = item.openPath;
                     wuxc::MenuFlyoutItem copyUrlItem;
                     copyUrlItem.Text(L"Copy search link");
-                    wuxc::FontIcon copyIcon;
+                    auto copyIcon = SearchFontIcon();
                     copyIcon.Glyph(L"\uE8C8");
                     copyUrlItem.Icon(copyIcon);
                     KeepHandler(copyUrlItem, copyUrlItem.Click(winrt::auto_revoke, [webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -9997,7 +10065,7 @@ void RenderResults() try {
                         if (!filePath.empty()) {
                             wuxc::MenuFlyoutItem locItem;
                             locItem.Text(L"Open file location");
-                            wuxc::FontIcon locIcon;
+                            auto locIcon = SearchFontIcon();
                             locIcon.Glyph(L"\uE838");
                             locItem.Icon(locIcon);
                             KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10007,7 +10075,7 @@ void RenderResults() try {
 
                             wuxc::MenuFlyoutItem copyPathItem;
                             copyPathItem.Text(L"Copy path");
-                            wuxc::FontIcon copyPathIcon;
+                            auto copyPathIcon = SearchFontIcon();
                             copyPathIcon.Glyph(L"\uE71B");
                             copyPathItem.Icon(copyPathIcon);
                             KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10021,7 +10089,7 @@ void RenderResults() try {
                         std::wstring shortcutTarget = isFile ? locTarget : L"shell:AppsFolder\\" + locTarget;
                         wuxc::MenuFlyoutItem shortcutItem;
                         shortcutItem.Text(L"Create desktop shortcut");
-                        wuxc::FontIcon shortcutIcon;
+                        auto shortcutIcon = SearchFontIcon();
                         shortcutIcon.Glyph(L"\uE7C5");
                         shortcutItem.Icon(shortcutIcon);
                         KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [shortcutTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10035,12 +10103,12 @@ void RenderResults() try {
 
                             wuxc::MenuFlyoutItem propItem;
                             propItem.Text(L"Properties");
-                            wuxc::FontIcon propIcon;
+                            auto propIcon = SearchFontIcon();
                             propIcon.Glyph(L"\uE946");
                             propItem.Icon(propIcon);
                             KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                                 AllowExplorerForeground();
-                                DismissStartMenu();
+                                DismissSearch();
                                 ShowPropertiesDialog(filePath);
                             }));
                             flyout.Items().Append(propItem);
@@ -10064,7 +10132,7 @@ void RenderResults() try {
 
                             wuxc::MenuFlyoutItem uninstallItem;
                             uninstallItem.Text(L"Uninstall");
-                            wuxc::FontIcon uninstallIcon;
+                            auto uninstallIcon = SearchFontIcon();
                             uninstallIcon.Glyph(L"\uE74D");
                             uninstallItem.Icon(uninstallIcon);
                             KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle](
@@ -10078,10 +10146,10 @@ void RenderResults() try {
                                     ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle] {
                                         if (!family.empty()) {
                                             if (RequestPackageRemoval(family)) {
-                                                DismissStartMenu();
+                                                DismissSearch();
                                             }
                                         } else if (uninstaller) {
-                                            DismissStartMenuForLaunch([command = *uninstaller] { RunUninstaller(command); });
+                                            DismissSearchForLaunch([command = *uninstaller] { RunUninstaller(command); });
                                         }
                                     });
                                 }});
@@ -10093,9 +10161,10 @@ void RenderResults() try {
             }
 
         }));
+        InitializeCopiedMenu(menu);
         button.ContextFlyout(menu);
 
-        return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting, item.isFile};
+        return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting, item.isFile, item.commandLine, item.commandRevision};
     };
 
     auto makeAppEmptyCard = [isLight]() -> wuxc::Border {
@@ -10111,7 +10180,7 @@ void RenderResults() try {
         wuxc::StackPanel emptyStack;
         emptyStack.HorizontalAlignment(wux::HorizontalAlignment::Center);
 
-        wuxc::FontIcon emptyIcon;
+        auto emptyIcon = SearchFontIcon();
         emptyIcon.Glyph(L"\uE71D");
         ScaleFont(emptyIcon, 24);
         emptyIcon.Opacity(0.2);
@@ -10119,7 +10188,7 @@ void RenderResults() try {
         emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
         emptyStack.Children().Append(emptyIcon);
 
-        wuxc::TextBlock emptyTitle;
+        auto emptyTitle = SearchTextBlock();
         emptyTitle.Text(L"No matching applications");
         ScaleFont(emptyTitle, 11.5);
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
@@ -10127,7 +10196,7 @@ void RenderResults() try {
         emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptyStack.Children().Append(emptyTitle);
 
-        wuxc::TextBlock emptySubtitle;
+        auto emptySubtitle = SearchTextBlock();
         emptySubtitle.Text(L"Check files or refine your query");
         ScaleFont(emptySubtitle, 10.5);
         emptySubtitle.Opacity(0.3);
@@ -10140,6 +10209,10 @@ void RenderResults() try {
     };
 
     auto isMatch = [](const AppCardUI& card, const Row& row) {
+        if (!card.commandLine.empty() || !row.commandLine.empty()) {
+            return card.title == row.title && card.commandLine == row.commandLine &&
+                   card.commandRevision == row.commandRevision;
+        }
         if (!card.openPath.empty() && !row.openPath.empty()) {
             return card.openPath == row.openPath && card.title == row.title;
         }
@@ -10246,7 +10319,7 @@ void RenderResults() try {
             iconBox.Margin(wux::ThicknessHelper::FromLengths(0, 0, 10, 0));
             iconBox.VerticalAlignment(wux::VerticalAlignment::Center);
 
-            wuxc::FontIcon fallbackIcon;
+            auto fallbackIcon = SearchFontIcon();
             ScaleFont(fallbackIcon, 15);
             fallbackIcon.Opacity(0.5);
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -10266,7 +10339,7 @@ void RenderResults() try {
         wuxc::Grid::SetColumn(text, 1);
         text.VerticalAlignment(wux::VerticalAlignment::Center);
 
-        wuxc::TextBlock name;
+        auto name = SearchTextBlock();
         name.Text(winrt::hstring{item.title});
         ScaleFont(name, 12.5);
         name.FontWeight(wut::FontWeights::SemiBold());
@@ -10275,7 +10348,7 @@ void RenderResults() try {
         text.Children().Append(name);
 
         if (!item.subtitle.empty()) {
-            wuxc::TextBlock sub;
+            auto sub = SearchTextBlock();
             sub.Text(winrt::hstring{item.subtitle});
             sub.Opacity(0.45);
             ScaleFont(sub, 10.5);
@@ -10297,6 +10370,7 @@ void RenderResults() try {
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
         button.IsTabStop(false);
+        button.AllowFocusOnInteraction(false);
 
         button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPointerOver"),
             isLight ? MakeBrush(0x14, 0x00, 0x5F, 0xB8) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
@@ -10332,7 +10406,7 @@ void RenderResults() try {
                 if (g_dragging) {
                     return;  // the release that ends a drag (StartFileDrag)
                 }
-                DismissStartMenuForLaunch([target] { OpenResult(target); });
+                DismissSearchForLaunch([target] { OpenResult(target); });
             }));
 
             // Dragging the row drags the file (StartFileDrag). A Button takes the
@@ -10382,8 +10456,8 @@ void RenderResults() try {
                               });
 
             wuxc::MenuFlyout menu;
-            KeepHandler(menu, menu.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); }));
-            KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); }));
+            KeepHandler(menu, menu.Opening(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuOpening(sender); }));
+            KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuClosed(sender); }));
             // Filled in when first opened, not with the row: every keystroke
             // builds every row, and hardly any of their menus are ever opened.
             KeepHandler(menu, menu.Opening(winrt::auto_revoke, [target, isFolder = item.isFolder, title = item.title](
@@ -10392,22 +10466,22 @@ void RenderResults() try {
                 if (flyout.Items().Size() > 0) return;
                 wuxc::MenuFlyoutItem openItem;
                 openItem.Text(L"Open");
-                wuxc::FontIcon openIcon;
+                auto openIcon = SearchFontIcon();
                 openIcon.Glyph(L"\uE8A7");
                 openItem.Icon(openIcon);
                 KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenuForLaunch([target] { OpenResult(target); });
+                    DismissSearchForLaunch([target] { OpenResult(target); });
                 }));
                 flyout.Items().Append(openItem);
 
                 if (CanElevatePath(target)) {
                     wuxc::MenuFlyoutItem adminItem;
                     adminItem.Text(L"Run as administrator");
-                    wuxc::FontIcon adminIcon;
+                    auto adminIcon = SearchFontIcon();
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
                     KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        DismissStartMenuForLaunch([target] { OpenResult(target, true /* asAdmin */); });
+                        DismissSearchForLaunch([target] { OpenResult(target, true /* asAdmin */); });
                     }));
                     flyout.Items().Append(adminItem);
                 }
@@ -10415,18 +10489,18 @@ void RenderResults() try {
                 if (isFolder) {
                     wuxc::MenuFlyoutSubItem termSub;
                     termSub.Text(L"Open in terminal");
-                    wuxc::FontIcon termIcon;
+                    auto termIcon = SearchFontIcon();
                     termIcon.Glyph(L"\uE756");
                     termSub.Icon(termIcon);
 
                     auto addTermItem = [&](const wchar_t* label, bool isPowerShell, bool asAdmin) {
                         wuxc::MenuFlyoutItem termItem;
                         termItem.Text(winrt::hstring{label});
-                        wuxc::FontIcon icon;
+                        auto icon = SearchFontIcon();
                         icon.Glyph(asAdmin ? L"\uE7EF" : L"\uE756");
                         termItem.Icon(icon);
                         KeepHandler(termItem, termItem.Click(winrt::auto_revoke, [target, isPowerShell, asAdmin](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            DismissStartMenuForLaunch(
+                            DismissSearchForLaunch(
                                 [target, isPowerShell, asAdmin] { LaunchTerminal(target, isPowerShell, asAdmin); });
                         }));
                         termSub.Items().Append(termItem);
@@ -10445,7 +10519,7 @@ void RenderResults() try {
 
                 wuxc::MenuFlyoutItem cutItem;
                 cutItem.Text(L"Cut");
-                wuxc::FontIcon cutIcon;
+                auto cutIcon = SearchFontIcon();
                 cutIcon.Glyph(L"\uE8C6");
                 cutItem.Icon(cutIcon);
                 KeepHandler(cutItem, cutItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10455,7 +10529,7 @@ void RenderResults() try {
 
                 wuxc::MenuFlyoutItem copyItem;
                 copyItem.Text(L"Copy");
-                wuxc::FontIcon copyIcon;
+                auto copyIcon = SearchFontIcon();
                 copyIcon.Glyph(L"\uE8C8");
                 copyItem.Icon(copyIcon);
                 KeepHandler(copyItem, copyItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10463,9 +10537,18 @@ void RenderResults() try {
                 }));
                 flyout.Items().Append(copyItem);
 
+                wuxc::MenuFlyoutItem copyNameItem;
+                copyNameItem.Text(L"Copy name");
+                auto copyNameIcon = SearchFontIcon(); copyNameIcon.Glyph(L"\uE8D2");
+                copyNameItem.Icon(copyNameIcon);
+                KeepHandler(copyNameItem,copyNameItem.Click(winrt::auto_revoke,[title](wf::IInspectable const&,wux::RoutedEventArgs const&) {
+                    tools::CopyTextToClipboard(title);
+                }));
+                flyout.Items().Append(copyNameItem);
+
                 wuxc::MenuFlyoutItem copyPathItem;
                 copyPathItem.Text(L"Copy path");
-                wuxc::FontIcon copyPathIcon;
+                auto copyPathIcon = SearchFontIcon();
                 copyPathIcon.Glyph(L"\uE71B");
                 copyPathItem.Icon(copyPathIcon);
                 KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10478,7 +10561,7 @@ void RenderResults() try {
 
                 wuxc::MenuFlyoutItem locItem;
                 locItem.Text(L"Open file location");
-                wuxc::FontIcon locIcon;
+                auto locIcon = SearchFontIcon();
                 locIcon.Glyph(L"\uE838");
                 locItem.Icon(locIcon);
                 KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10488,7 +10571,7 @@ void RenderResults() try {
 
                 wuxc::MenuFlyoutItem shortcutItem;
                 shortcutItem.Text(L"Create desktop shortcut");
-                wuxc::FontIcon shortcutIcon;
+                auto shortcutIcon = SearchFontIcon();
                 shortcutIcon.Glyph(L"\uE7C5");
                 shortcutItem.Icon(shortcutIcon);
                 KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [target, title](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -10501,18 +10584,19 @@ void RenderResults() try {
 
                 wuxc::MenuFlyoutItem propItem;
                 propItem.Text(L"Properties");
-                wuxc::FontIcon propIcon;
+                auto propIcon = SearchFontIcon();
                 propIcon.Glyph(L"\uE946");
                 propItem.Icon(propIcon);
                 KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     AllowExplorerForeground();
-                    DismissStartMenu();
+                    DismissSearch();
                     ShowPropertiesDialog(target);
                 }));
                 flyout.Items().Append(propItem);
 
             }));
-            button.ContextFlyout(menu);
+            InitializeCopiedMenu(menu);
+        button.ContextFlyout(menu);
         }
         return button;
     };
@@ -10535,7 +10619,7 @@ void RenderResults() try {
         wuxc::StackPanel emptyStack;
         emptyStack.HorizontalAlignment(wux::HorizontalAlignment::Center);
 
-        wuxc::FontIcon emptyIcon;
+        auto emptyIcon = SearchFontIcon();
         emptyIcon.Glyph(L"\uE8B7");
         ScaleFont(emptyIcon, 24);
         emptyIcon.Opacity(0.2);
@@ -10543,16 +10627,16 @@ void RenderResults() try {
         emptyIcon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 6));
         emptyStack.Children().Append(emptyIcon);
 
-        wuxc::TextBlock emptyTitle;
-        emptyTitle.Text(L"No matching files");
+        auto emptyTitle = SearchTextBlock();
+        emptyTitle.Text(suggestions ? L"Type to search files" : L"No matching files");
         ScaleFont(emptyTitle, 11.5);
         emptyTitle.FontWeight(wut::FontWeights::SemiBold());
         emptyTitle.Opacity(0.45);
         emptyTitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
         emptyStack.Children().Append(emptyTitle);
 
-        wuxc::TextBlock emptySubtitle;
-        emptySubtitle.Text(L"Everything index returned 0 items");
+        auto emptySubtitle = SearchTextBlock();
+        emptySubtitle.Text(suggestions ? L"Files and folders will appear here" : L"Everything index returned 0 items");
         ScaleFont(emptySubtitle, 10.5);
         emptySubtitle.Opacity(0.3);
         emptySubtitle.HorizontalAlignment(wux::HorizontalAlignment::Center);
@@ -10569,6 +10653,10 @@ void RenderResults() try {
         }
     }
 
+    InvalidateSearchContrastContainer(g_appsHeaderHolder);
+    InvalidateSearchContrastContainer(g_filesHeaderHolder);
+    PrepareSearchResultContrastColors();
+
     // New results start the keyboard selection over: on the first app, or on
     // the first file when there are no apps.
     if (g_appButtonsOpt->empty() && !g_fileButtonsOpt->empty()) {
@@ -10578,9 +10666,9 @@ void RenderResults() try {
     }
 
     if (g_ourBox && g_ourBox.Text().empty()) {
-        HideOverlayAnimated();
+        UpdateSearchResultsLayout(true);
     } else {
-        RevealOverlayAnimated();
+        UpdateSearchResultsLayout();
     }
     Wh_Log(L"render: %zu apps, %zu files, host %.0fx%.0f", appNames.size(),
         files.size(), g_resultsHost.ActualWidth(),
@@ -10654,8 +10742,12 @@ void PublishLateFileIcons(std::vector<std::pair<std::wstring, std::vector<BYTE>>
     }
 }
 
-// Called from the search thread once results are in.
+std::atomic<bool> g_renderPending{false};
+
+// Called from the search thread once results are in. Each dispatch reads the
+// latest result snapshot, so multiple queued requests would redraw it twice.
 void RequestRender() {
+    bool scheduled = false;
     try {
         if (!g_ourBox) {
             return;
@@ -10664,9 +10756,15 @@ void RequestRender() {
         if (!dispatcher) {
             return;
         }
+        if (g_renderPending.exchange(true)) return;
+        scheduled = true;
         dispatcher.RunAsync(wuc::CoreDispatcherPriority::High,
-                            wuc::DispatchedHandler{[] { RenderResults(); }});
+                            wuc::DispatchedHandler{[] {
+                                g_renderPending.store(false);
+                                if (!g_quit.load()) RenderResults();
+                            }});
     } catch (...) {
+        if (scheduled) g_renderPending.store(false);
     }
 }
 
@@ -10680,7 +10778,6 @@ void RequestRender() {
 // Debounced, because a keystroke every ~60ms would otherwise be a query every
 // ~60ms. 120ms was measured as comfortable in the broker.
 // ---------------------------------------------------------------------------
-
 
 
 void QueueQuery(std::wstring text) {
@@ -10738,6 +10835,128 @@ bool FetchAppIcon(const apps::App* app, int size, std::vector<BYTE>* out) {
 //
 // Runs on a launch thread. The index stays with the search thread, so this
 // gets copies of what it needs, the PIDL included.
+// Accept a pasted Windows icon character or its commonly copied Unicode value.
+// Emoji stay on the color-font path; filenames must not be parsed as glyphs.
+std::wstring CustomCommandWindowsGlyph(std::wstring_view icon) {
+    const auto isIcon = [](wchar_t c) { return c >= 0xE000 && c <= 0xF8FF; };
+    if ((icon.size() == 1 || (icon.size() == 2 && (icon[1] == 0xFE0E || icon[1] == 0xFE0F))) &&
+        isIcon(icon[0])) return std::wstring(1, icon[0]);
+    if (icon.starts_with(L"U+") || icon.starts_with(L"u+") ||
+        icon.starts_with(L"0x") || icon.starts_with(L"0X") ||
+        icon.starts_with(L"\\u") || icon.starts_with(L"\\U")) {
+        icon.remove_prefix(2);
+    } else if ((icon.starts_with(L"&#x") || icon.starts_with(L"&#X")) && icon.ends_with(L";")) {
+        icon.remove_prefix(3);
+        icon.remove_suffix(1);
+    }
+    if (icon.size() != 4) return {};
+    unsigned value = 0;
+    for (wchar_t c : icon) {
+        unsigned digit;
+        if (c >= L'0' && c <= L'9') digit = c - L'0';
+        else if (c >= L'a' && c <= L'f') digit = c - L'a' + 10;
+        else if (c >= L'A' && c <= L'F') digit = c - L'A' + 10;
+        else return {};
+        value = (value << 4) | digit;
+    }
+    return isIcon(static_cast<wchar_t>(value)) ? std::wstring(1, static_cast<wchar_t>(value)) : std::wstring();
+}
+
+std::wstring CustomCommandIconPath(std::wstring icon) {
+    icon=tools::Trim(icon);
+    if(icon.size()>1 && icon.front()==L'"' && icon.back()==L'"') icon=icon.substr(1,icon.size()-2);
+    const DWORD needed=ExpandEnvironmentStringsW(icon.c_str(),nullptr,0);
+    if(needed>0 && needed<=32768) {
+        std::wstring expanded(needed,L'\0');
+        if(ExpandEnvironmentStringsW(icon.c_str(),expanded.data(),needed)) {
+            expanded.resize(needed-1); icon=std::move(expanded);
+        }
+    }
+    return icon;
+}
+
+std::vector<BYTE> FetchCustomCommandIcon(std::wstring const& path,int size) {
+    std::vector<BYTE> result;
+    winrt::com_ptr<IShellItemImageFactory> image;
+    if(FAILED(SHCreateItemFromParsingName(path.c_str(),nullptr,IID_PPV_ARGS(image.put())))) return result;
+    HBITMAP bitmap=nullptr;
+    if(FAILED(image->GetImage(SIZE{size,size},SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK,&bitmap)) &&
+       FAILED(image->GetImage(SIZE{size,size},SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK,&bitmap))) return result;
+    std::vector<BYTE> pixels; int width=0,height=0;
+    const bool copied=icons::BitmapToPixels(bitmap,&pixels,&width,&height);
+    DeleteObject(bitmap);
+    if(!copied) return result;
+    const double scale=std::min(double(size)/width,double(size)/height);
+    const int w=std::clamp(static_cast<int>(std::lround(width*scale)),1,size);
+    const int h=std::clamp(static_cast<int>(std::lround(height*scale)),1,size);
+    auto fitted=icons::Resample(pixels,width,height,w,h);
+    result.resize(static_cast<size_t>(size)*size*4);
+    const int x=(size-w)/2,y=(size-h)/2;
+    for(int row=0;row<h;++row)
+        memcpy(result.data()+(static_cast<size_t>(y+row)*size+x)*4,fitted.data()+static_cast<size_t>(row)*w*4,w*4);
+    return result;
+}
+
+void AddCustomCommandRows(std::vector<Row>* rows,std::vector<CustomCommand> const& commands,
+                          std::wstring const& query,size_t limit,uint64_t revision,int iconPixels,
+                          std::map<std::wstring,std::vector<BYTE>>* iconCache,
+                          const apps::UsageCounts* usage) {
+    const auto lower=apps::ToLower(query);
+    for(auto const& command:commands) {
+        apps::App match;
+        match.name=command.name; match.nameLower=apps::ToLower(command.name);
+        std::wstring word;
+        for(wchar_t c:match.nameLower) {
+            if(iswalnum(c)) word+=c;
+            else if(!word.empty()) { match.acronym+=word.front(); match.words.push_back(std::move(word)); word.clear(); }
+        }
+        if(!word.empty()) { match.acronym+=word.front(); match.words.push_back(std::move(word)); }
+        const int score=query.empty() ? 0 : apps::ScoreApp(match,lower);
+        if(score<0) continue;
+        Row row;
+        row.title=command.name; row.subtitle=L"Custom command";
+        row.commandLine=command.command; row.commandIcon=command.icon; row.commandRevision=revision;
+        row.commandShell = command.shell; row.commandHideTerminal = command.hideTerminal;
+        row.commandShellExecutable=command.shellExecutable;
+        row.commandShellArguments=command.shellArguments;
+        const auto usageKey=apps::CommandUsageKey(command.name);
+        row.matchScore=score;
+        row.matchRank=query.empty() ? -apps::UsageCount(usage,usageKey) : score-apps::UsageBonus(usage,usageKey);
+        row.customGlyph=L"\uE756";
+        rows->push_back(std::move(row));
+    }
+    int best=std::numeric_limits<int>::max();
+    for(auto const& row:*rows) if(row.matchScore>=0) best=std::min(best,row.matchScore);
+    if(best!=std::numeric_limits<int>::max()) {
+        const int cutoff=best<80 ? 80 : best+12;
+        std::erase_if(*rows,[&](Row const& row) { return row.matchScore>=cutoff; });
+    }
+    std::stable_sort(rows->begin(),rows->end(),[&](Row const& a,Row const& b) {
+        if(a.matchScore<0 || b.matchScore<0) return a.matchScore<b.matchScore;
+        if(apps::MatchTier(a.matchScore)!=apps::MatchTier(b.matchScore)) return a.matchScore<b.matchScore;
+        if(a.matchRank!=b.matchRank) return a.matchRank<b.matchRank;
+        if(query.empty()) return apps::ToLower(a.title)<apps::ToLower(b.title);
+        if(a.matchScore!=b.matchScore) return a.matchScore<b.matchScore;
+        return a.title.size()<b.title.size();
+    });
+    const size_t tools=std::count_if(rows->begin(),rows->end(),[](Row const& row) { return row.matchScore<0; });
+    if(rows->size()>tools+limit) rows->resize(tools+limit);
+    // Load only visible icons and keep them between searches.
+    for(auto& row:*rows) {
+        if(row.commandLine.empty() || row.commandIcon.empty()) continue;
+        auto icon=CustomCommandIconPath(row.commandIcon);
+        if (auto glyph = CustomCommandWindowsGlyph(icon); !glyph.empty()) {
+            row.customIconText = std::move(glyph);
+            row.customIconIsGlyph = true;
+        } else if(icon.find_first_of(L"\\/")!=std::wstring::npos || icon.find(L':')!=std::wstring::npos) {
+            auto found=iconCache->find(icon);
+            if(found==iconCache->end()) found=iconCache->emplace(icon,FetchCustomCommandIcon(icon,iconPixels)).first;
+            row.icon=found->second;
+        } else row.customIconText=icon;
+    }
+}
+
+
 void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool asAdmin = false) {
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
@@ -11597,6 +11816,7 @@ void SearchThreadMain() {
     // One fetch per app, ever. Keyed by name because that is what identifies
     // an entry across index rebuilds.
     std::map<std::wstring, std::vector<BYTE>> appIconCache;
+    std::map<std::wstring, std::vector<BYTE>> commandIconCache;
 
     // An app's icon is the slow part of showing it the first time -- about
     // 10 ms each through the shell, 20-50 ms for a keystroke that brings up a
@@ -11628,12 +11848,15 @@ void SearchThreadMain() {
         everything::FindIpcWindow() ? L"found" : L"NOT running");
 
     std::wstring last;
+    bool haveLast=false,lastFilesVisible=true;
+    uint64_t lastSettingsRevision = 0;
     while (!g_searchQuit.load()) {
         std::wstring query;
         {
             std::unique_lock<std::mutex> lock(g_queryMutex);
             auto hasWork = [] {
-                return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0) || g_appIndexNeedsRefresh.load();
+                return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0) ||
+                       !g_commandUsageRequests.empty() || g_appIndexNeedsRefresh.load();
             };
             if (!hasWork() && (iconCache.HasPending() || prefetchNext < appIndex.Count())) {
                 lock.unlock();
@@ -11654,16 +11877,26 @@ void SearchThreadMain() {
                 }
                 return;
             }
+            if (!g_commandUsageRequests.empty()) {
+                auto requests=std::move(g_commandUsageRequests);
+                g_commandUsageRequests.clear();
+                auto usage=learnedUsage();
+                haveLast=false;
+                lock.unlock();
+                if(usage) {
+                    for(const auto& key:requests) apps::RecordUsage(usage,key);
+                    apps::SaveUsage(*usage);
+                }
+                continue;
+            }
             int wanted = g_launchRequest.exchange(-1);
             if (wanted >= 0) {
+                haveLast=false; // refresh suggestions after a launch changes favorite counts
                 bool asAdmin = g_launchAsAdmin.exchange(false);
                 if (static_cast<size_t>(wanted) < lastHits.size() && lastHits[wanted]) {
                     const auto* app = lastHits[wanted];
                     apps::UsageCounts* usage = learnedUsage();
-                    if (usage) {
-                        int& uses = (*usage)[app->nameLower];
-                        uses = std::min(uses + 1, apps::kUsageCap);
-                    }
+                    apps::RecordUsage(usage,app->nameLower);
                     std::wstring name = app->name;
                     std::wstring targetPath = app->targetPath;
                     ITEMIDLIST* pidlClone = app->pidl ? ILClone(app->pidl.get()) : nullptr;
@@ -11673,9 +11906,7 @@ void SearchThreadMain() {
                     }
 
                     SpawnTrackedLaunch([name = std::move(name), targetPath = std::move(targetPath), pidlClone, asAdmin] {
-                        WaitForLaunchGate();
                         LaunchAppAsync(name, targetPath, pidlClone, asAdmin);
-                        g_launchesDone.fetch_add(1);
                         if (pidlClone) {
                             ILFree(pidlClone);
                         }
@@ -11686,7 +11917,9 @@ void SearchThreadMain() {
                 continue;
             }
 
-            bool shouldRebuild = g_appIndexNeedsRefresh.exchange(false);
+            // Serve a pending query from the existing index first. Refreshing
+            // shell:AppsFolder must not precede the first results on reopening.
+            bool shouldRebuild = !g_queryDirty.load() && g_appIndexNeedsRefresh.exchange(false);
             if (shouldRebuild) {
                 lock.unlock();
                 g_lastAppIndexRebuildTick.store(GetTickCount64());
@@ -11697,6 +11930,7 @@ void SearchThreadMain() {
                     prefetchNext = 0;
                     g_launchRequest.store(-1);
                     last.clear();
+                    haveLast=false;
                     g_queryDirty.store(true);
                     Wh_Log(L"apps: dynamically refreshed (%zu apps)", appIndex.Count());
                 }
@@ -11719,7 +11953,7 @@ void SearchThreadMain() {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             debounceMs = g_settings.searchDebounceMs;
         }
-        if (!last.empty() && debounceMs > 0) {
+        if (haveLast && !last.empty() && !query.empty() && debounceMs > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(debounceMs));
             std::lock_guard<std::mutex> lock(g_queryMutex);
             if (g_pendingQuery != query) {
@@ -11728,33 +11962,26 @@ void SearchThreadMain() {
             }
         }
 
-        if (query == last) {
+        const bool filesVisible=FilesPanelVisible();
+        const uint64_t settingsRevision = g_settingsRevision.load();
+        if (haveLast && query == last && filesVisible==lastFilesVisible && settingsRevision==lastSettingsRevision) {
             continue;
         }
         last = query;
+        haveLast=true; lastFilesVisible=filesVisible;
+        if (settingsRevision != lastSettingsRevision) {
+            commandIconCache.clear();
+            lastSettingsRevision = settingsRevision;
+        }
 
         // Start may be on a display with another scale by now.
         if (int pixels = IconPixels(); pixels != iconPixels) {
             iconPixels = pixels;
             iconCache.SetSize(pixels);
             appIconCache.clear();
+            commandIconCache.clear();
             prefetchNext = 0;
         }
-
-        if (query.empty()) {
-            lastHits.clear();
-            g_launchRequest.store(-1);
-            {
-                std::lock_guard<std::mutex> lock(g_resultsMutex);
-                g_appRows.clear();
-                g_fileRows.clear();
-                g_rowsQuery.clear();
-                g_totalMatches.store(0);
-            }
-            RequestRender();
-            continue;
-        }
-
 
         std::wstring qTrim = tools::Trim(query);
         std::wstring qLower = tools::ToLower(qTrim);
@@ -11779,12 +12006,14 @@ void SearchThreadMain() {
         int maxApps = 6;
         bool filterNoise = true;
         std::vector<std::wstring> excludedPaths;
+        std::vector<CustomCommand> customCommands;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             maxFiles = g_settings.maxFileResults;
             maxApps = g_settings.maxAppResults;
             filterNoise = g_settings.filterNoisyPaths;
             excludedPaths = g_settings.excludedPaths;
+            customCommands = g_settings.customCommands;
         }
         static const std::vector<std::wstring> s_disabledNoise;
         const std::vector<std::wstring>* noisePtr = filterNoise ? &excludedPaths : &s_disabledNoise;
@@ -11819,7 +12048,7 @@ void SearchThreadMain() {
             return true;
         };
 
-        if (isIpCommand) {
+        if (!filesVisible || query.empty() || isIpCommand) {
             pool.clear();
             total = 0;
             ms = 0;
@@ -11846,6 +12075,7 @@ void SearchThreadMain() {
 
         // Apps are a name match over an index built once at startup, so this
         // costs nothing next to the file query.
+        auto usage=learnedUsage();
         std::vector<Row> appRows;
         lastHits.clear();
 
@@ -11903,12 +12133,16 @@ void SearchThreadMain() {
                 lastHits.push_back(nullptr);
                 appRows.push_back(std::move(r));
             }
-            for (const apps::Match& m : appIndex.Search(query, static_cast<size_t>(maxApps), learnedUsage())) {
+            auto matches=query.empty() ? appIndex.Suggest(static_cast<size_t>(maxApps),usage)
+                                       : appIndex.Search(query,static_cast<size_t>(maxApps),usage);
+            for (const apps::Match& m : matches) {
                 if (!m.app) {
                     continue;
                 }
                 Row row;
                 row.title = m.app->name;
+                row.matchScore = m.score;
+                row.matchRank = m.rank;
                 bool isSettingItem = m.app->isSetting;
                 row.isSetting = isSettingItem;
 
@@ -11960,6 +12194,12 @@ void SearchThreadMain() {
 
         }
 
+        if (!isIpCommand && !isExplicitWeb && !customCommands.empty()) {
+            AddCustomCommandRows(&appRows, customCommands, query,
+                                 static_cast<size_t>(maxApps), settingsRevision,
+                                 iconPixels, &commandIconCache, usage);
+        }
+
         std::vector<Row> fileRows;
         iconCache.NewResults(std::chrono::milliseconds(25));
         for (const everything::Result& r : pool) {
@@ -12001,262 +12241,9 @@ void SearchThreadMain() {
 }
 
 
-
-
-void RecursivelyHideTextBlocks(wux::DependencyObject const& node, int depth = 0) {
-    if (!node || depth > 8) return;
-    try {
-        if (auto tb = node.try_as<wuxc::TextBlock>()) {
-            SuppressShellElement(tb);
-        }
-        int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
-        for (int i = 0; i < count; ++i) {
-            RecursivelyHideTextBlocks(wuxm::VisualTreeHelper::GetChild(node, i), depth + 1);
-        }
-    } catch (...) {}
-}
-
-void HideStockPlaceholder(wux::FrameworkElement const& stock) {
-    if (!stock) return;
-    try {
-        if (auto ph = FindDescendantByName(stock, L"PlaceholderText", 8)) {
-            SuppressShellElement(ph.try_as<wux::FrameworkElement>());
-        }
-        if (auto caret = FindDescendantByName(stock, L"TextCaret", 8)) {
-            SuppressShellElement(caret.try_as<wux::FrameworkElement>());
-        }
-        if (auto stb = FindDescendantByName(stock, L"SearchTextBox", 8)) {
-            SuppressShellElement(stb.try_as<wux::FrameworkElement>());
-        }
-
-        // Recursively hide all TextBlocks inside the stock search button
-        RecursivelyHideTextBlocks(stock, 0);
-    } catch (...) {}
-}
-
-void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
-    g_stockButton = stockButton;
-    SuppressShellElement(stockButton);
-    if (auto ctl = stockButton.try_as<wuxc::Control>()) {
-        ctl.IsTabStop(false);
-    }
-    HideStockPlaceholder(stockButton);
-
-    auto parent = wuxm::VisualTreeHelper::GetParent(stockButton);
-    auto cell = parent ? parent.try_as<wuxc::Panel>() : nullptr;
-    if (!cell) {
-        Wh_Log(L"own box: stock button parent is not a Panel; cannot place");
-        return;
-    }
-
-    auto owner = wuxm::VisualTreeHelper::GetParent(cell);
-    auto ownerPanel = owner ? owner.try_as<wuxc::Panel>() : nullptr;
-    if (!ownerPanel) {
-        Wh_Log(L"own box: cell parent is not a Panel; cannot place");
-        return;
-    }
-
-    // The shell's own search cell, zeroed so our box can take its place.
-    // Recorded, because leaving a container collapsed at zero height after
-    // the mod goes away is what the Start menu cannot survive.
-    SuppressShellElement(cell.try_as<wux::FrameworkElement>(), /*collapse=*/true,
-                         /*zeroSize=*/true);
-
-
-    // Verify if g_resultsHost is valid and currently attached to this ownerPanel
-    bool needsBuild = false;
-    if (!g_resultsHost) {
-        needsBuild = true;
-    } else {
-        auto currentParent = wuxm::VisualTreeHelper::GetParent(g_resultsHost);
-        if (!currentParent || currentParent != ownerPanel) {
-            Wh_Log(L"PlaceOurSearchBox: visual tree changed (Start Menu Styler)! Re-attaching results host.");
-            if (currentParent) {
-                if (auto oldPanel = currentParent.try_as<wuxc::Panel>()) {
-                    uint32_t idx = 0;
-                    if (oldPanel.Children().IndexOf(g_resultsHost, idx)) {
-                        oldPanel.Children().RemoveAt(idx);
-                    }
-                }
-            }
-            needsBuild = true;
-        }
-    }
-
-    if (needsBuild) {
-        if (g_revealAnim) { g_revealAnim.Stop(); g_revealAnim = nullptr; }
-        if (g_hideAnim) { g_hideAnim.Stop(); g_hideAnim = nullptr; }
-        g_resultsTranslate = nullptr;
-        g_resultsHost = nullptr;
-        g_ourBox = nullptr;
-        g_appsList = nullptr;
-        g_resultsList = nullptr;
-        if (g_activeAppsOpt) g_activeAppsOpt->clear();
-        if (g_appButtonsOpt) g_appButtonsOpt->clear();
-        if (g_fileButtonsOpt) g_fileButtonsOpt->clear();
-        g_appsHeaderHolder = nullptr;
-        g_filesHeaderHolder = nullptr;
-        g_searchBarBorder = nullptr;
-        g_divider = nullptr;
-        g_footerBorder = nullptr;
-        BuildResultsList(ownerPanel);
-    }
-
-    // Proactively clean any other search boxes across the tree
-    try {
-        wux::DependencyObject node = cell;
-        wux::DependencyObject menuRoot = cell;
-        for (int up = 0; up < 12; ++up) {
-            auto parentNode = wuxm::VisualTreeHelper::GetParent(node);
-            if (!parentNode) break;
-            menuRoot = parentNode;
-            node = parentNode;
-        }
-        HideAllOtherSearchBoxes(menuRoot);
-        DisarmScrollTabStops(menuRoot);
-    } catch (...) {}
-
-    SubclassStartMenuWindow();
-
-    if (!g_coreEventsHooked) {
-        try {
-            if (auto window = wux::Window::Current()) {
-                if (auto core = window.CoreWindow()) {
-                    if (!g_charReceivedToken) {
-                        g_charReceivedToken = core.CharacterReceived([](wuc::CoreWindow const&, wuc::CharacterReceivedEventArgs const& args) {
-                            try {
-                                unsigned code = args.KeyCode();
-                                if (ProcessKeyChar(static_cast<wchar_t>(code))) {
-                                    args.Handled(true);
-                                }
-                            } catch (...) {}
-                        });
-                    }
-
-                    if (!g_keyDownToken) {
-                        g_keyDownToken = core.KeyDown([](wuc::CoreWindow const&, wuc::KeyEventArgs const& args) {
-                            try {
-                                if (!g_ourBox) return;
-                                auto key = args.VirtualKey();
-
-                                if (key == winrt::Windows::System::VirtualKey::Escape && !EscapeBelongsToContextMenu()) {
-                                    if (g_isOverlayVisible.load() || g_isHiding.load()) {
-                                        if (g_ourBox) g_ourBox.Text(L"");
-                                        HideOverlayAnimated();
-                                        args.Handled(true);
-                                        return;
-                                    }
-                                }
-
-                                if (IsNavigationKey(key) && g_isOverlayVisible.load()) {
-                                    bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
-                                    if (HandleNavigationKey(key, ctrl)) {
-                                        args.Handled(true);
-                                        return;
-                                    }
-                                }
-
-                                auto focused = wux::Input::FocusManager::GetFocusedElement();
-                                if (focused && focused.try_as<wuxc::TextBox>()) {
-                                    return;
-                                }
-
-                                std::wstring text{g_ourBox.Text()};
-                                if (text.empty()) return;
-
-                                if (key == winrt::Windows::System::VirtualKey::Back) {
-                                    text.pop_back();
-                                    g_ourBox.Text(text);
-                                    if (text.empty()) {
-                                        HideOverlayAnimated();
-                                    } else {
-                                        RevealOverlayAnimated();
-                                        g_ourBox.Focus(wux::FocusState::Programmatic);
-                                        g_ourBox.SelectionStart(static_cast<int32_t>(text.size()));
-                                    }
-                                    args.Handled(true);
-                                }
-                            } catch (...) {}
-                        });
-                    }
-
-                    if (!g_activatedToken) {
-                        g_activatedToken = core.Activated([](wuc::CoreWindow const&, wuc::WindowActivatedEventArgs const& args) {
-                            if (args.WindowActivationState() != wuc::CoreWindowActivationState::Deactivated &&
-                                GetTickCount64() - g_launchedAtTick.load() < kLaunchHandoffMs) {
-                                // Taken back from SearchHost to launch (DismissStartMenuForLaunch).
-                            } else if (args.WindowActivationState() != wuc::CoreWindowActivationState::Deactivated) {
-                                g_suppressRefocus.store(false);
-                                if (g_ourBox && !g_isOverlayVisible.load()) {
-                                    g_ourBox.Text(L"");
-                                }
-                                if (g_resultsHost && !g_isOverlayVisible.load()) {
-                                    g_resultsHost.Visibility(wux::Visibility::Visible);
-                                    g_resultsHost.Opacity(0.0);
-                                    g_resultsHost.IsHitTestVisible(false);
-                                    if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
-                                    SyncOverlayBackground();
-                                }
-                                RestoreSwappedOutText();
-                                TriggerMenuOpenFocus();
-                            } else if (SearchHostTookForegroundFromOpenStart()) {
-                                // Taken back by the subclass (WM_ACTIVATE); nothing to reset.
-                            } else if (g_dragging) {
-                                // Explorer's helper running a drag (StartFileDrag).
-                            } else {
-                                StashTextIfSwappedOut();
-                                g_suppressRefocus.store(true);
-                                if (g_resultsHost) {
-                                    g_resultsHost.Visibility(wux::Visibility::Visible);
-                                    g_resultsHost.Opacity(0.0);
-                                    g_resultsHost.IsHitTestVisible(false);
-                                    if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
-                                }
-                                if (g_ourBox) {
-                                    g_ourBox.Text(L"");
-                                }
-                                g_isOverlayVisible.store(false);
-                                g_isHiding.store(false);
-                                if (g_hideAnim) g_hideAnim.Stop();
-                                if (g_revealAnim) g_revealAnim.Stop();
-                                if (g_openFocus) {
-                                    g_openFocus.Stop();
-                                    g_openFocus = nullptr;
-                                }
-                            }
-                        });
-                    }
-                    if (!g_visibilityToken) {
-                        g_visibilityToken = core.VisibilityChanged(
-                            [](wuc::CoreWindow const&, wuc::VisibilityChangedEventArgs const& args) {
-                                Wh_Log(L"focus: VisibilityChanged visible=%d", args.Visible() ? 1 : 0);
-                                if (args.Visible()) {
-                                    TakeForegroundWhenShown();
-                                }
-                            });
-                    }
-                    g_coreEventsHooked = true;
-                }
-            }
-        } catch (...) {}
-    }
-
-    TriggerMenuOpenFocus();
-} catch (...) {
-    Wh_Log(L"PlaceOurSearchBox error: %08X", static_cast<unsigned>(winrt::to_hresult()));
-}
-
-void TeardownStartMenuUi() {
-    Wh_Log(L"teardown: tearing down Start Menu UI on XAML thread");
-
-
-    // Here rather than in Wh_ModUninit: on the hooked thread, the hook
-    // procedure can't be mid-call when it goes.
-    if (g_hGetMsgHook) {
-        UnhookWindowsHookEx(g_hGetMsgHook);
-        g_hGetMsgHook = nullptr;
-    }
-
+void TeardownSearchUi() {
+    Wh_Log(L"teardown: tearing down search UI on XAML thread");
+    g_contextMenuOpen=false; g_activeContextFlyout={}; g_contextMenuClosedTick=0;
     // Before anything is dropped: see g_xamlHandlers.
     try {
         g_xamlHandlers.reset();
@@ -12275,63 +12262,13 @@ void TeardownStartMenuUi() {
         g_previewText = nullptr;
         g_previewPopup = nullptr;
         g_previewCard = nullptr;
+        g_previewDetails = nullptr;
         g_previewThumbBox = nullptr;
         g_previewImage = nullptr;
         g_previewName = nullptr;
         g_previewFacts = nullptr;
         g_previewPath = nullptr;
-        if (g_previewCopied) {
-            g_previewCopied.Stop();
-        }
-        g_previewCopied = nullptr;
     } catch (...) {}
-
-    try {
-        if (HWND core = g_hCoreWindow.load(); core && g_subclassed) {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(core, StartMenuSubclassProc);
-            g_subclassed = false;
-        }
-    } catch (...) {}
-
-    if (g_openFocus) {
-        g_openFocus.Stop();
-        g_openFocus = nullptr;
-    }
-    if (g_shownFocus) {
-        g_shownFocus.Stop();
-        g_shownFocus = nullptr;
-    }
-    if (g_revealAnim) {
-        g_revealAnim.Stop();
-        g_revealAnim = nullptr;
-    }
-    if (g_hideAnim) {
-        g_hideAnim.Stop();
-        g_hideAnim = nullptr;
-    }
-
-    try {
-        auto core = wuc::CoreWindow::GetForCurrentThread();
-        if (core) {
-            if (g_charReceivedToken) {
-                core.CharacterReceived(g_charReceivedToken);
-                g_charReceivedToken = {};
-            }
-            if (g_keyDownToken) {
-                core.KeyDown(g_keyDownToken);
-                g_keyDownToken = {};
-            }
-            if (g_activatedToken) {
-                core.Activated(g_activatedToken);
-                g_activatedToken = {};
-            }
-            if (g_visibilityToken) {
-                core.VisibilityChanged(g_visibilityToken);
-                g_visibilityToken = {};
-            }
-        }
-    } catch (...) {}
-    g_coreEventsHooked = false;
 
     try {
         g_ourBoxChanged.revoke();
@@ -12364,10 +12301,20 @@ void TeardownStartMenuUi() {
     g_activeAppsOpt.reset();
     g_appButtonsOpt.reset();
     g_fileButtonsOpt.reset();
-    g_resultsTranslate = nullptr;
     g_resultsHost = nullptr;
+    g_searchTextBrush = nullptr;
+    g_resolvedSearchTextBrush = nullptr;
+    g_searchBoxTextBrush = nullptr;
+    g_searchPlaceholderBrush = nullptr;
+    g_searchIcons.reset();
+    g_searchIconSweepAt = 256;
+    g_renderPending.store(false);
+    g_renderAfterSlide = false;
+    ResetSearchContainerContrast();
     g_ourBox = nullptr;
     g_appsList = nullptr;
+    g_appsScroll = nullptr;
+    g_filesScroll = nullptr;
     g_resultsList = nullptr;
     g_appsHeaderHolder = nullptr;
     g_filesHeaderHolder = nullptr;
@@ -12380,10 +12327,3033 @@ void TeardownStartMenuUi() {
     g_currentFileRows.clear();
     g_isOverlayVisible.store(false);
     g_isHiding.store(false);
-    g_stockButton = nullptr;
+    Wh_Log(L"teardown: search UI teardown complete");
+}
 
-    RestoreShellElements();
-    Wh_Log(L"teardown: Start Menu UI teardown complete");
+
+// ===========================================================================
+// Independent Windows 11 search. Search providers, cards and actions above are
+// reused unchanged; only the window ownership and Start entry point differ.
+// ===========================================================================
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Hosting::DesktopWindowXamlSource g_searchWindowSource{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Hosting::WindowsXamlManager g_searchWindowManager{nullptr};
+[[clang::no_destroy]] winrt::com_ptr<IDesktopWindowXamlSourceNative2> g_searchWindowNative;
+[[clang::no_destroy]] wuxc::Grid g_searchWindowRoot{nullptr};
+HWND g_searchWindowChild = nullptr;
+RECT g_searchWindowWork{};
+bool g_searchWindowChanging = false;
+constexpr UINT_PTR kSearchWindowDismissTimer = 0x701;
+constexpr UINT kSearchWindowLayoutMessage = WM_APP + 0x71;
+constexpr UINT kSearchWindowShowMessage = WM_APP + 0x72;
+
+void SearchWindowTrace(const wchar_t* message, HRESULT hr = S_OK) {
+    Wh_Log(L"[SearchWindow] %ls: %08X", message, static_cast<unsigned>(hr));
+}
+
+// Capture the opening text before Start's native type-to-search consumes it.
+// The hook runs on its own message thread: no XAML, I/O, or cross-process
+// SendMessage runs inside it. Only Start/Search and the brief handoff qualify.
+constexpr UINT kSearchWindowDismissMenuMessage = WM_APP + 0x75;
+struct SearchWindowInput {
+    enum Kind { Text, Backspace, Enter, Escape, Show } kind = Text;
+    std::wstring text;
+};
+std::mutex g_searchWindowInputMutex;
+std::vector<SearchWindowInput> g_searchWindowInputs;
+std::atomic<unsigned> g_searchWindowBuffered{0};
+std::atomic<bool> g_searchWindowInputReady{false};
+std::atomic<bool> g_searchWindowMenuTyping{false};
+int g_searchWindowMenuCaret=-1,g_searchWindowMenuSelection=0; // UI thread only
+std::atomic<bool> g_searchWindowInputStop{false};
+HANDLE g_searchWindowInputThread = nullptr;
+HANDLE g_searchWindowInputStarted = nullptr;
+DWORD g_searchWindowInputThreadId = 0;
+BYTE g_searchWindowKeyState[256]{}; // input thread only
+bool g_searchWindowSwallowed[256]{};
+bool g_searchWindowDeadKey = false;
+HKL g_searchWindowDeadLayout = nullptr;
+
+void ClearSearchWindowDeadKey() {
+    if (!g_searchWindowDeadKey) return;
+    BYTE state[256]{};
+    wchar_t ignored[8]{};
+    ToUnicodeEx(VK_SPACE, MapVirtualKeyExW(VK_SPACE, MAPVK_VK_TO_VSC, g_searchWindowDeadLayout),
+                state, ignored, ARRAYSIZE(ignored), 0, g_searchWindowDeadLayout);
+    g_searchWindowDeadKey = false;
+}
+
+// The foreground host can retain logical XAML focus after its native input
+// window loses keyboard focus. This check is also safe on the input thread.
+bool SearchWindowHasNativeFocus(HWND host) {
+    if (!host) return false;
+    GUITHREADINFO info{sizeof(info)};
+    const DWORD thread = GetWindowThreadProcessId(host, nullptr);
+    return thread && GetGUIThreadInfo(thread, &info) && info.hwndFocus &&
+           IsChild(host, info.hwndFocus);
+}
+
+bool QueueSearchWindowInput(HWND host, SearchWindowInput input) {
+    std::lock_guard lock(g_searchWindowInputMutex);
+    if (g_searchWindowInputStop.load() || g_searchWindowBuffered.load() >= 256) return false;
+    g_searchWindowInputs.push_back(std::move(input));
+    g_searchWindowBuffered.fetch_add(1);
+    if (PostMessageW(host, kSearchWindowInputMessage, 0, 0)) return true;
+    g_searchWindowInputs.pop_back();
+    g_searchWindowBuffered.fetch_sub(1);
+    return false;
+}
+
+LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param) try {
+    if (code != HC_ACTION || g_searchWindowInputStop.load())
+        return CallNextHookEx(nullptr, code, message, param);
+    const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
+    const UINT vk = key.vkCode;
+    if (vk >= 256) return CallNextHookEx(nullptr, code, message, param);
+    const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+    const bool wasDown = (g_searchWindowKeyState[vk] & 0x80) != 0;
+    BYTE toggle = g_searchWindowKeyState[vk] & 1;
+    if (vk == VK_CAPITAL && down && !wasDown) toggle ^= 1;
+    g_searchWindowKeyState[vk] = (down ? 0x80 : 0) | toggle;
+    g_searchWindowKeyState[VK_SHIFT] = (g_searchWindowKeyState[VK_LSHIFT] | g_searchWindowKeyState[VK_RSHIFT]) & 0x80;
+    g_searchWindowKeyState[VK_CONTROL] = (g_searchWindowKeyState[VK_LCONTROL] | g_searchWindowKeyState[VK_RCONTROL]) & 0x80;
+    g_searchWindowKeyState[VK_MENU] = (g_searchWindowKeyState[VK_LMENU] | g_searchWindowKeyState[VK_RMENU]) & 0x80;
+    if (!down) {
+        if (std::exchange(g_searchWindowSwallowed[vk], false)) return 1;
+        return CallNextHookEx(nullptr, code, message, param);
+    }
+    // Let Windows deliver a registered hotkey. In particular, a bare key or
+    // Shift-only binding must not be consumed by Start's typing buffer first.
+    if (AlternativeShortcutMatches(g_alternativeShortcutActive.load(),vk,g_searchWindowKeyState)) {
+        g_searchWindowSwallowed[vk]=false;
+        return CallNextHookEx(nullptr,code,message,param);
+    }
+    HWND host = g_searchWindowWindow.load();
+    HWND inputTarget = host ? host : g_hExplorerHelperWnd.load();
+    HWND foreground = GetForegroundWindow();
+    const bool inHost = host && (foreground == host || GetAncestor(foreground,GA_ROOTOWNER)==host);
+    const bool menuActive=g_contextMenuOpen.load() && host && foreground &&
+        (inHost || GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr));
+    if(menuActive) {
+        const bool modified=(g_searchWindowKeyState[VK_CONTROL] | g_searchWindowKeyState[VK_MENU] |
+                             g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
+        if(vk==VK_ESCAPE && !modified) {
+            if(g_searchWindowSwallowed[vk] || PostMessageW(host,kSearchWindowDismissMenuMessage,0,0)) {
+                g_searchWindowSwallowed[vk]=true; return 1;
+            }
+        }
+        // Arrows, Enter and Tab navigate the menu. Printable text and
+        // Backspace continue below, closing the menu and editing search.
+        if(vk==VK_RETURN || vk==VK_TAB || vk==VK_UP || vk==VK_DOWN ||
+           vk==VK_LEFT || vk==VK_RIGHT || vk==VK_HOME || vk==VK_END ||
+           vk==VK_PRIOR || vk==VK_NEXT) return CallNextHookEx(nullptr,code,message,param);
+    }
+    if(inHost && vk==VK_ESCAPE && g_searchWindowSwallowed[vk]) return 1;
+    const bool inShell = foreground && (foreground == CachedStartWindow() || IsSearchHostWindow(foreground));
+    const bool missingNativeFocus = host && foreground == host && g_isOverlayVisible.load() &&
+        !g_dragging.load() && !menuActive && !SearchWindowHasNativeFocus(host);
+    const bool handoff = g_searchWindowBuffered.load() || !g_searchWindowInputReady.load() ||
+                         g_searchWindowDeadKey || missingNativeFocus;
+    const bool menuTyping=g_searchWindowMenuTyping.load() && host && foreground &&
+        GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr);
+    if (!inputTarget || (!inShell && !menuActive && !menuTyping && !(host && foreground == host && handoff))) {
+        if (!inHost) ClearSearchWindowDeadKey();
+        g_searchWindowSwallowed[vk] = false;
+        return CallNextHookEx(nullptr, code, message, param);
+    }
+    const bool ctrl = (g_searchWindowKeyState[VK_CONTROL] & 0x80) != 0;
+    const bool alt = (g_searchWindowKeyState[VK_MENU] & 0x80) != 0;
+    const bool altGr = (g_searchWindowKeyState[VK_RMENU] & 0x80) != 0;
+    if (((ctrl || alt) && !altGr) ||
+        ((g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80))
+        return CallNextHookEx(nullptr, code, message, param);
+
+    SearchWindowInput input;
+    if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
+        (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping)) {
+        ClearSearchWindowDeadKey();
+        input.kind = vk == VK_BACK ? SearchWindowInput::Backspace :
+                     vk == VK_RETURN ? SearchWindowInput::Enter : SearchWindowInput::Escape;
+    } else {
+        HKL layout = g_searchWindowDeadKey ? g_searchWindowDeadLayout :
+                     GetKeyboardLayout(GetWindowThreadProcessId(foreground, nullptr));
+        wchar_t chars[8]{};
+        int count;
+        if (vk == VK_PACKET) {
+            chars[0] = static_cast<wchar_t>(key.scanCode);
+            count = 1;
+        } else {
+            // A stateless translation preserves Shift, Caps Lock, AltGr and
+            // the active layout without changing native text input. Only a
+            // dead-key sequence uses this dedicated thread's compose state.
+            count = ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars,
+                                ARRAYSIZE(chars), g_searchWindowDeadKey ? 0 : 4, layout);
+        }
+        if (count < 0) {
+            if (!g_searchWindowDeadKey)
+                ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars, ARRAYSIZE(chars), 0, layout);
+            g_searchWindowDeadKey = true;
+            g_searchWindowDeadLayout = layout;
+            input.kind = SearchWindowInput::Show;
+        } else if (count > 0 && chars[0] >= 0x20 && chars[0] != 0x7f) {
+            g_searchWindowDeadKey = false;
+            input.text.assign(chars, std::min(count, static_cast<int>(ARRAYSIZE(chars))));
+        } else {
+            return CallNextHookEx(nullptr, code, message, param);
+        }
+    }
+    const bool wasMenuTyping=g_searchWindowMenuTyping.load();
+    if(menuActive) g_searchWindowMenuTyping=true;
+    if (!QueueSearchWindowInput(inputTarget, std::move(input))) {
+        if(menuActive) g_searchWindowMenuTyping=wasMenuTyping;
+        return CallNextHookEx(nullptr, code, message, param);
+    }
+    g_searchWindowSwallowed[vk] = true;
+    return 1;
+} catch (...) {
+    return CallNextHookEx(nullptr, code, message, param);
+}
+
+DWORD WINAPI SearchWindowInputThreadProc(void*) {
+    MSG message;
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    for (int i = 0; i < 256; ++i)
+        g_searchWindowKeyState[i] = (GetAsyncKeyState(i) & 0x8000) ? 0x80 : 0;
+    g_searchWindowKeyState[VK_CAPITAL] |= GetKeyState(VK_CAPITAL) & 1;
+    HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, SearchWindowKeyboardProc, GetCurrentModuleHandle(), 0);
+    SearchWindowTrace(hook ? L"opening input buffer ready" : L"opening input hook failed",
+                   hook ? S_OK : HRESULT_FROM_WIN32(GetLastError()));
+    SetEvent(g_searchWindowInputStarted);
+    if (!hook) return 0;
+    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+    UnhookWindowsHookEx(hook);
+    ClearSearchWindowDeadKey();
+    return 0;
+}
+
+void StartSearchWindowInput() {
+    if (g_searchWindowInputThread) return;
+    g_searchWindowInputStop = false;
+    g_searchWindowInputStarted = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_searchWindowInputStarted) return;
+    g_searchWindowInputThread = CreateThread(nullptr, 0, SearchWindowInputThreadProc, nullptr, 0, &g_searchWindowInputThreadId);
+    if (g_searchWindowInputThread) WaitForSingleObject(g_searchWindowInputStarted, 1000);
+}
+
+void StopSearchWindowInput() {
+    g_searchWindowInputStop = true;
+    if (g_searchWindowInputThread) {
+        PostThreadMessageW(g_searchWindowInputThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_searchWindowInputThread, INFINITE);
+        CloseHandle(g_searchWindowInputThread);
+        g_searchWindowInputThread = nullptr;
+    }
+    if (g_searchWindowInputStarted) CloseHandle(g_searchWindowInputStarted);
+    g_searchWindowInputStarted = nullptr;
+    std::lock_guard lock(g_searchWindowInputMutex);
+    g_searchWindowInputs.clear();
+    g_searchWindowBuffered = 0;
+}
+
+bool HasBufferedSearchWindowInput() {
+    return g_searchWindowBuffered.load() != 0;
+}
+
+void ApplySearchWindowInput() try {
+    // Keep the count nonzero until the whole batch has reached the textbox,
+    // so later physical keys cannot overtake the opening letters.
+    std::vector<SearchWindowInput> inputs;
+    {
+        std::lock_guard lock(g_searchWindowInputMutex);
+        inputs.swap(g_searchWindowInputs);
+    }
+    if (inputs.empty()) return;
+    struct Drained {
+        unsigned count;
+        ~Drained() { g_searchWindowBuffered.fetch_sub(count); }
+    } drained{static_cast<unsigned>(inputs.size())};
+    HWND host = g_searchWindowWindow.load();
+    HWND foreground = GetForegroundWindow();
+    const bool inHost=foreground && host && (foreground==host || GetAncestor(foreground,GA_ROOTOWNER)==host ||
+        (g_searchWindowMenuTyping.load() && GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr)));
+    if (foreground && (inHost || foreground==CachedStartWindow() || IsSearchHostWindow(foreground))) {
+        if(inHost && IsWindowVisible(host) && !g_searchWindowWaitingForStart) {
+            // Keep the query and caret. The first printable character closes
+            // the whole menu, and every buffered character reaches the box.
+            const bool menuTyping=g_searchWindowMenuTyping.load();
+            if(menuTyping && g_searchWindowMenuCaret<0) {
+                g_searchWindowMenuCaret=g_ourBox.SelectionStart(); g_searchWindowMenuSelection=g_ourBox.SelectionLength();
+            }
+            DismissSearchContextMenu();
+            QueueSearchBoxRefocus(true);
+            if(menuTyping) { g_ourBox.SelectionStart(g_searchWindowMenuCaret); g_ourBox.SelectionLength(g_searchWindowMenuSelection); }
+        } else SearchWindowShow();
+        for (auto const& input : inputs) {
+            if (input.kind == SearchWindowInput::Text) {
+                const int caret=g_ourBox.SelectionStart();
+                g_ourBox.SelectedText(winrt::hstring{input.text});
+                g_ourBox.SelectionStart(caret+static_cast<int32_t>(input.text.size()));
+                g_ourBox.SelectionLength(0);
+            } else if (input.kind == SearchWindowInput::Backspace) {
+                std::wstring text{g_ourBox.Text()};
+                size_t caret=std::min(static_cast<size_t>(g_ourBox.SelectionStart()),text.size());
+                size_t length=std::min(static_cast<size_t>(g_ourBox.SelectionLength()),text.size()-caret);
+                if(length) text.erase(caret,length);
+                else if(caret) {
+                    size_t previous=caret-1;
+                    if(text[previous]>=0xDC00 && text[previous]<=0xDFFF && previous &&
+                       text[previous-1]>=0xD800 && text[previous-1]<=0xDBFF) --previous;
+                    text.erase(previous,caret-previous); caret=previous;
+                }
+                g_ourBox.Text(text); g_ourBox.SelectionStart(static_cast<int32_t>(caret));
+                g_ourBox.SelectionLength(0);
+            } else if (input.kind == SearchWindowInput::Enter) {
+                HandleNavigationKey(winrt::Windows::System::VirtualKey::Enter, false);
+            } else if (input.kind == SearchWindowInput::Escape) {
+                if (g_ourBox.Text().empty()) SearchWindowHide();
+                else g_ourBox.Text(L"");
+            }
+        }
+        if(g_searchWindowMenuTyping.load()) {
+            g_searchWindowMenuCaret=g_ourBox.SelectionStart(); g_searchWindowMenuSelection=g_ourBox.SelectionLength();
+        }
+        wchar_t detail[96]{};
+        swprintf_s(detail, L"opening input delivered, events=%zu length=%u", inputs.size(), g_ourBox.Text().size());
+        SearchWindowTrace(detail);
+    }
+} catch (...) {
+    SearchWindowTrace(L"opening input delivery failed", winrt::to_hresult());
+}
+
+
+// Move the complete host so acrylic and the input region follow its contents.
+// The ordinary UI timer is only for the hidden Start handoff. Visible motion
+// uses a high-resolution clock at the destination display's refresh rate.
+constexpr UINT_PTR kSearchWindowMotionTimer = 0x702;
+constexpr UINT_PTR kSearchWindowStyleTimer = 0x703;
+constexpr UINT kSearchWindowSlideFrameMessage = WM_APP + 0x76;
+
+double SearchMotionTime() {
+    return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+struct SearchWindowSlide {
+    double from = 0, to = 0, started = 0, duration = 0;
+    bool closing = false;
+    double Value(double now) const {
+        if (duration <= 0) return to;
+        const double t = std::clamp((now-started)/duration,0.0,1.0);
+        const double ease = closing ? t*t*t : 1-(1-t)*(1-t)*(1-t);
+        return from+(to-from)*ease;
+    }
+    bool Active(double now) const { return duration > 0 && now-started < duration; }
+    void Snap(double offset) { from = to = offset; duration = 0; }
+};
+
+// No XAML or window-position operations run on this thread. It posts at most
+// one pending frame, sleeps completely between slides, and is joined before
+// the host is destroyed. No global timer-resolution change is needed.
+class SearchSlideClock {
+    HANDLE stop_ = nullptr, wake_ = nullptr, timer_ = nullptr;
+    std::thread thread_;
+    std::atomic<bool> active_{false};
+    std::atomic<HWND> host_{nullptr};
+    std::atomic<double> interval_{1000.0/60};
+    void Run() {
+        const HANDLE waits[]{stop_,wake_,timer_};
+        double next = 0;
+        for (;;) {
+            const DWORD result = WaitForMultipleObjects(3,waits,FALSE,INFINITE);
+            if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) return;
+            if (result == WAIT_OBJECT_0+1) {
+                CancelWaitableTimer(timer_);
+                next = SearchMotionTime();
+            }
+            if (!active_.load()) continue;
+            if (result == WAIT_OBJECT_0+2) {
+                if (!pending.exchange(true) && !PostMessageW(host_.load(),kSearchWindowSlideFrameMessage,0,0))
+                    pending.store(false);
+                next += interval_.load();
+            }
+            const double now = SearchMotionTime();
+            if (next < now) next = now;
+            LARGE_INTEGER due{};
+            due.QuadPart = -std::max<LONGLONG>(1,static_cast<LONGLONG>((next-now)*10000));
+            if (!SetWaitableTimer(timer_,&due,0,nullptr,nullptr,FALSE)) {
+                active_.store(false);
+                PostMessageW(host_.load(),kSearchWindowSlideFrameMessage,1,0);
+            }
+        }
+    }
+public:
+    std::atomic<bool> pending{false};
+    SearchSlideClock() {
+        stop_ = CreateEventW(nullptr,TRUE,FALSE,nullptr);
+        wake_ = CreateEventW(nullptr,FALSE,FALSE,nullptr);
+        // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION (Windows 10 version 1803+).
+        timer_ = CreateWaitableTimerExW(nullptr,nullptr,0x2,TIMER_ALL_ACCESS);
+        if (!stop_ || !wake_ || !timer_) {
+            if (stop_) CloseHandle(stop_);
+            if (wake_) CloseHandle(wake_);
+            if (timer_) CloseHandle(timer_);
+            throw std::runtime_error("search animation clock unavailable");
+        }
+        try { thread_ = std::thread([this] { Run(); }); }
+        catch (...) { CloseHandle(stop_); CloseHandle(wake_); CloseHandle(timer_); throw; }
+    }
+    ~SearchSlideClock() {
+        SetEvent(stop_);
+        if (thread_.joinable()) thread_.join();
+        CloseHandle(timer_); CloseHandle(wake_); CloseHandle(stop_);
+    }
+    void Start(HWND host,double interval) {
+        host_.store(host); interval_.store(interval); active_.store(true); SetEvent(wake_);
+    }
+    void Pause() { active_.store(false); SetEvent(wake_); }
+};
+[[clang::no_destroy]] std::optional<SearchSlideClock> g_searchSlideClock;
+SearchWindowSlide g_searchWindowSlide;
+double g_searchWindowSlideTarget = 0;
+RECT g_searchWindowBounds{};
+RECT g_searchWindowLastFrame{};
+bool g_searchWindowClosing = false;
+bool g_searchWindowCloaked = false;
+bool g_searchWindowStartWasOpen = false;
+bool g_searchWindowShellCloseAsked = false;
+ULONGLONG g_searchWindowHandoffStarted = 0;
+ULONGLONG g_searchWindowStartClosedAt = 0;
+
+bool SearchWindowAnimationsEnabled() {
+    BOOL enabled = TRUE;
+    return !SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0) || enabled;
+}
+
+// Documented WinRT interface, omitted from the projected SDK headers.
+struct SearchXamlTransparency : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_IsBackgroundTransparent(boolean* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_IsBackgroundTransparent(boolean value) = 0;
+};
+
+bool SearchWindowHasActivePopup() try {
+    if(g_contextMenuOpen) return true;
+    if(g_resultsHost && g_resultsHost.XamlRoot()) {
+        for(auto popup:wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot()))
+            if(popup!=g_previewPopup && popup.IsLightDismissEnabled()) return true;
+    }
+    return false;
+} catch(...) { return true; }
+
+constexpr UINT_PTR kSearchWindowRefocusTimer=0x704;
+ULONGLONG g_searchWindowRefocusUntil=0;
+bool g_searchWindowRefocusBodyClick=false;
+
+bool SearchWindowTextboxHasFocus() {
+    return g_ourBox && g_searchWindowSource &&
+        SearchWindowHasNativeFocus(g_searchWindowWindow.load()) && g_searchWindowSource.HasFocus() &&
+        wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot()) == g_ourBox;
+}
+
+void TraceSearchWindowFocus(const wchar_t* reason) {
+    wchar_t state[256]{};
+    auto focused = g_ourBox ? wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot()) : nullptr;
+    swprintf_s(state, L"%ls; foreground=%p native=%p island=%d textbox=%d preview=%d", reason,
+               GetForegroundWindow(), GetFocus(), g_searchWindowSource && g_searchWindowSource.HasFocus(),
+               g_ourBox && focused == g_ourBox, g_previewText && focused == g_previewText);
+    SearchWindowTrace(state);
+}
+
+void QueueSearchBoxRefocus(bool bodyClick) {
+    HWND host=g_searchWindowWindow.load();
+    if(!host || !g_ourBox || g_dragging || g_searchWindowClosing || !g_isOverlayVisible.load()) return;
+    g_searchWindowRefocusBodyClick |= bodyClick;
+    g_searchWindowRefocusUntil=GetTickCount64()+400;
+    // The popup can still be finishing its close when Closed fires. Retry on
+    // the UI thread instead of abandoning focus after one dispatcher callback.
+    if(!g_contextMenuOpen) g_searchWindowInputReady=false;
+    SetTimer(host,kSearchWindowRefocusTimer,16,nullptr);
+}
+
+void SearchWindowRefocusFrame() try {
+    HWND host=g_searchWindowWindow.load();
+    auto stop=[&] {
+        if(host) KillTimer(host,kSearchWindowRefocusTimer);
+        g_searchWindowRefocusUntil=0; g_searchWindowRefocusBodyClick=false;
+        g_searchWindowMenuTyping=false; g_searchWindowMenuCaret=-1; g_searchWindowMenuSelection=0;
+    };
+    HWND foreground=GetForegroundWindow();
+    // Modal dialogs and other windows on this thread keep their own focus.
+    const bool ours=foreground == host && IsWindowEnabled(host);
+    if(!host || !g_ourBox || !IsWindowVisible(host) || !ours || g_dragging ||
+       g_searchWindowClosing || g_quit.load()) {
+        stop(); return;
+    }
+    if(GetTickCount64()>g_searchWindowRefocusUntil) {
+        TraceSearchWindowFocus(L"search focus retry expired");
+        stop(); return;
+    }
+    if(SearchWindowHasActivePopup()) return;
+    auto focused=wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot());
+    if(!g_searchWindowRefocusBodyClick && focused && focused==g_previewText) {
+        g_searchWindowInputReady=SearchWindowHasNativeFocus(host); stop(); return;
+    }
+    // Logical XAML focus alone is insufficient after a popup: restore the
+    // native island input window first, then its editable search control.
+    const bool menuTyping=g_searchWindowMenuTyping.load() && g_searchWindowMenuCaret>=0;
+    const int caret=menuTyping ? g_searchWindowMenuCaret : g_ourBox.SelectionStart();
+    const int selection=menuTyping ? g_searchWindowMenuSelection : g_ourBox.SelectionLength();
+    HWND nativeFocus=GetFocus();
+    if((nativeFocus!=g_searchWindowChild && !IsChild(g_searchWindowChild,nativeFocus)) ||
+       !g_searchWindowSource.HasFocus()) {
+        SetFocus(g_searchWindowChild);
+        g_searchWindowSource.NavigateFocus(winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationRequest{
+            winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationReason::First});
+    }
+    const bool requested=g_ourBox.Focus(wux::FocusState::Programmatic);
+    // Focus() can succeed logically while the host still owns native input.
+    // Keep buffering and retrying until both layers agree.
+    if(requested) {
+        g_ourBox.SelectionStart(caret); g_ourBox.SelectionLength(selection);
+    }
+    if(requested && SearchWindowTextboxHasFocus()) {
+        g_searchWindowInputReady=true;
+        SearchWindowTrace(L"search native and XAML focus restored");
+        stop();
+    }
+} catch(...) {
+    SearchWindowTrace(L"search focus restore failed",winrt::to_hresult());
+    if(HWND host=g_searchWindowWindow.load()) KillTimer(host,kSearchWindowRefocusTimer);
+    g_searchWindowRefocusUntil=0;
+}
+
+void CheckSearchWindowFocus() try {
+    HWND host=g_searchWindowWindow.load();
+    if(!host || !g_ourBox || !IsWindowVisible(host) || GetForegroundWindow()!=host ||
+       !IsWindowEnabled(host) || !g_isOverlayVisible.load() || g_dragging ||
+       g_searchWindowClosing || g_quit.load() || SearchWindowHasActivePopup()) return;
+    auto focused=wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot());
+    // Selecting/copying a preview excerpt is deliberate keyboard focus.
+    if(focused && focused==g_previewText) return;
+    if(SearchWindowTextboxHasFocus()) return;
+    if(!g_searchWindowRefocusUntil) {
+        TraceSearchWindowFocus(L"search focus loss detected");
+        QueueSearchBoxRefocus();
+    }
+} catch(...) {
+    SearchWindowTrace(L"search focus check failed",winrt::to_hresult());
+}
+
+
+bool DismissSearchContextMenu() try {
+    auto flyout=g_activeContextFlyout.get();
+    if(!g_contextMenuOpen && !flyout) return false;
+    if(flyout) flyout.Hide();
+    else { g_contextMenuOpen=false; g_contextMenuClosedTick=GetTickCount64(); }
+    QueueSearchBoxRefocus(true);
+    return true;
+} catch(...) {
+    SearchWindowTrace(L"context menu dismiss failed",winrt::to_hresult());
+    return true;
+}
+
+void SetSearchWindowCloaked(bool cloak) {
+    HWND host = g_searchWindowWindow.load();
+    if (!host || cloak == g_searchWindowCloaked) return;
+    BOOL value = cloak;
+    winrt::check_hresult(DwmSetWindowAttribute(host, DWMWA_CLOAK, &value, sizeof(value)));
+    g_searchWindowCloaked = cloak;
+}
+
+void SearchWindowStyle() {
+    const bool light = IsLightTheme();
+    HWND host = g_searchWindowWindow.load();
+    BOOL dark = !light;
+    DwmSetWindowAttribute(host, 20, &dark, sizeof(dark));
+    if (!g_resultsHost) return;
+    g_resultsHost.RequestedTheme(light ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
+    g_resultsHost.Margin(wux::ThicknessHelper::FromUniformLength(0));
+    g_resultsHost.Padding(wux::ThicknessHelper::FromLengths(16,16,16,12));
+    g_resultsHost.CornerRadius(wux::CornerRadius{8,8,8,8});
+    g_resultsHost.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+    g_resultsHost.BorderBrush(light ? MakeBrush(0x25,0,0,0) : MakeBrush(0x20,255,255,255));
+    wuxm::AcrylicBrush surface;
+    surface.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
+    surface.TintColor(light ? winrt::Windows::UI::Color{255,243,243,243} : winrt::Windows::UI::Color{255,32,32,32});
+    surface.TintOpacity(light ? 0.80 : 0.78);
+    surface.TintLuminosityOpacity(light ? 0.90 : 0.82);
+    surface.FallbackColor(light ? winrt::Windows::UI::Color{255,243,243,243} : winrt::Windows::UI::Color{255,32,32,32});
+    g_resultsHost.Background(surface);
+    g_searchBarBorder.Height(Fs(40));
+    g_searchBarBorder.Margin(wux::ThicknessHelper::FromLengths(0,0,0,16));
+    g_searchBarBorder.Padding(wux::ThicknessHelper::FromLengths(12,0,12,0));
+    g_searchBarBorder.CornerRadius(wux::CornerRadius{4,4,4,4});
+    g_searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+    g_searchBarBorder.BorderBrush(light ? MakeBrush(0x18,0,0,0) : MakeBrush(0x22,255,255,255));
+    g_searchBarBorder.Background(light ? MakeBrush(0xCE,255,255,255) : MakeBrush(0x50,0,0,0));
+    ScaleFont(g_ourBox,14);
+    g_ourBox.PlaceholderText(L"Search Anything");
+    g_ourBox.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    auto searchGrid = g_searchBarBorder.Child().as<wuxc::Grid>();
+    auto searchIcon=searchGrid.Children().GetAt(0).as<wux::FrameworkElement>();
+    searchIcon.Width(Fs(20)); searchIcon.Height(Fs(20));
+    UpdateSearchIcon(light);
+    if (g_divider) g_divider.Background(light ? MakeBrush(0x18,0,0,0) : MakeBrush(0x14,255,255,255));
+    if (g_footerBorder) g_footerBorder.BorderBrush(light ? MakeBrush(0x18,0,0,0) : MakeBrush(0x14,255,255,255));
+    g_searchAppearanceDirty = true;
+    ApplyStartAppearance();
+    ApplySearchTextColors();
+}
+
+uint32_t SearchPackColor(winrt::Windows::UI::Color c) {
+    return (uint32_t(c.A)<<24)|(uint32_t(c.R)<<16)|(uint32_t(c.G)<<8)|c.B;
+}
+winrt::Windows::UI::Color SearchUnpackColor(uint32_t c) {
+    return {static_cast<BYTE>(c>>24),static_cast<BYTE>(c>>16),static_cast<BYTE>(c>>8),static_cast<BYTE>(c)};
+}
+
+uint32_t SearchParseTextColor(std::wstring_view text) {
+    if(text.size()!=7 || text[0]!=L'#') return 0;
+    uint32_t color=0;
+    for(size_t i=1;i<text.size();++i) {
+        const wchar_t c=text[i];
+        const int digit=c>=L'0' && c<=L'9' ? c-L'0' :
+                        c>=L'a' && c<=L'f' ? c-L'a'+10 :
+                        c>=L'A' && c<=L'F' ? c-L'A'+10 : -1;
+        if(digit<0) return 0;
+        color=(color<<4)|digit;
+    }
+    return color|0xFF000000;
+}
+double SearchLuminance(uint32_t color) {
+    auto linear=[](uint32_t c) { double v=c/255.0; return v<=0.04045 ? v/12.92 : std::pow((v+0.055)/1.055,2.4); };
+    return 0.2126*linear((color>>16)&255)+0.7152*linear((color>>8)&255)+0.0722*linear(color&255);
+}
+std::optional<uint32_t> SearchBackgroundColor(SearchBrushData const& brush,std::optional<uint32_t> backdrop=std::nullopt) {
+    // Transparent glass depends on whatever is behind the window. Keep the
+    // copied text there; a user override covers deliberately unusual themes.
+    if(brush.kind==2 && (brush.fallback>>24)) return brush.fallback;
+    if(brush.kind==1 && backdrop) {
+        const double alpha=std::clamp((brush.color>>24)/255.0*brush.opacity,0.0,1.0);
+        uint32_t color=0xFF000000;
+        for(int shift:{0,8,16}) color|=static_cast<uint32_t>(std::lround(
+            ((brush.color>>shift)&255)*alpha+((*backdrop>>shift)&255)*(1-alpha)))<<shift;
+        return color;
+    }
+    if((brush.kind==1 || brush.kind==4) && (brush.color>>24)*brush.opacity>=128) return brush.color;
+    return std::nullopt;
+}
+uint32_t SearchChooseTextColor(SearchBrushData const& background,uint32_t copied,bool dark,uint32_t overrideColor,
+                             std::optional<uint32_t> backdrop=std::nullopt) {
+    if(overrideColor) return overrideColor;
+    uint32_t color=(copied>>24) ? copied|0xFF000000 : dark ? 0xFFFFFFFF : 0xFF202020;
+    if(auto surface=SearchBackgroundColor(background,backdrop)) {
+        const double bg=SearchLuminance(*surface),fg=SearchLuminance(color);
+        if((std::max(bg,fg)+0.05)/(std::min(bg,fg)+0.05)<4.5)
+            color=(bg+0.05)/0.05 >= 1.05/(bg+0.05) ? 0xFF000000 : 0xFFFFFFFF;
+    }
+    return color;
+}
+uint32_t SearchTextOverride() {
+    HIGHCONTRASTW contrast{sizeof(contrast)};
+    if(SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) && (contrast.dwFlags&HCF_HIGHCONTRASTON)) {
+        const COLORREF color=GetSysColor(COLOR_WINDOWTEXT);
+        return 0xFF000000|(GetRValue(color)<<16)|(GetGValue(color)<<8)|GetBValue(color);
+    }
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    return SearchParseTextColor(g_settings.textColor);
+}
+uint32_t SearchMainTextColor() {
+    return SearchChooseTextColor(g_searchAppearance.background,g_searchAppearance.foreground,
+                                g_searchAppearanceValid ? g_searchAppearance.dark!=0 : !IsLightTheme(),SearchTextOverride());
+}
+void ApplySearchTextColors() try {
+    if(!g_resultsHost || !g_ourBox) return;
+    // Theme/settings notifications and copied-appearance changes invalidate
+    // these UI-thread caches. Ordinary result rows reuse the resolved brush.
+    g_resolvedSearchTextBrush = nullptr;
+    ResetSearchContainerContrast();
+    const uint32_t main=SearchMainTextColor();
+    const uint32_t search=SearchChooseTextColor(g_searchAppearance.searchBackground,
+        g_searchAppearance.searchForeground ? g_searchAppearance.searchForeground : main,
+        SearchLuminance(main)>0.5,SearchTextOverride(),SearchBackgroundColor(g_searchAppearance.background));
+    if(!g_searchTextBrush) g_searchTextBrush=MakeBrush(255,255,255,255);
+    g_searchTextBrush.Color(SearchUnpackColor(main));
+    if(!g_searchBoxTextBrush) g_searchBoxTextBrush=MakeBrush(255,255,255,255);
+    if(!g_searchPlaceholderBrush) g_searchPlaceholderBrush=MakeBrush(255,255,255,255);
+    g_searchBoxTextBrush.Color(SearchUnpackColor(search));
+    g_searchPlaceholderBrush.Color(SearchUnpackColor(search));
+    g_searchPlaceholderBrush.Opacity(0.65);
+    wuxm::Brush foreground=g_searchBoxTextBrush;
+    g_ourBox.Foreground(foreground);
+    g_ourBox.PlaceholderForeground(g_searchPlaceholderBrush);
+    // Focus/hover visual states use these resources instead of Foreground.
+    for(auto key:{L"TextControlForeground",L"TextControlForegroundFocused",L"TextControlForegroundPointerOver",
+                  L"TextControlButtonForeground",L"TextControlButtonForegroundPointerOver",L"TextControlButtonForegroundPressed"})
+        g_ourBox.Resources().Insert(winrt::box_value(key),foreground);
+    auto textBrush=SearchTextBrush();
+    RefreshSearchIcons(textBrush);
+    auto apply=[&](auto&& self,wux::DependencyObject const& node,int depth)->void {
+        if(!node || depth>32) return;
+        if(node==g_ourBox) return; // retain the field's own placeholder/focus brushes
+        if(auto text=node.try_as<wuxc::TextBlock>()) text.Foreground(textBrush);
+        const int count=wuxm::VisualTreeHelper::GetChildrenCount(node);
+        for(int i=0;i<count;++i) self(self,wuxm::VisualTreeHelper::GetChild(node,i),depth+1);
+    };
+    apply(apply,g_resultsHost,0);
+    if(g_previewCard) apply(apply,g_previewCard,0);
+    const bool light=SearchLuminance(main)<0.5;
+    auto theme=light ? wux::ElementTheme::Light : wux::ElementTheme::Dark;
+    g_resultsHost.RequestedTheme(theme);
+    g_searchBarBorder.RequestedTheme(SearchLuminance(search)<0.5 ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
+    g_cachedLightTheme.store(light);
+    UpdateSearchIcon(SearchLuminance(search)<0.5);
+    if(g_previewCard) {
+        g_previewCard.RequestedTheme(theme);
+        g_previewCard.Background(g_resultsHost.Background());
+        g_previewCard.BorderBrush(light ? MakeBrush(0x24,0,0,0) : MakeBrush(0x30,255,255,255));
+        g_previewThumbBox.Background(light ? MakeBrush(0x0C,0,0,0) : MakeBrush(0x10,255,255,255));
+    }
+    SearchContainerContrastTick();
+} catch(...) { SearchWindowTrace(L"text appearance failed",winrt::to_hresult()); }
+
+// Surface rules from the Styler bundled themes; user overrides take precedence.
+struct SearchThemeRule { PCWSTR theme; int role; PCWSTR style; };
+static const SearchThemeRule kSearchThemeRules[] = {
+    {L"TranslucentStartMenu",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>"},
+    {L"TranslucentStartMenu",0,L"Background:=$CommonBgBrush"},
+    {L"TranslucentStartMenu",1,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>"},
+    {L"TranslucentStartMenu",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#22000000\"/>"},
+    {L"TranslucentStartMenu",3,L"BorderThickness=1"},
+    {L"TranslucentStartMenu_variant_ClassicStartMenu",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>"},
+    {L"TranslucentStartMenu_variant_ClassicStartMenu",0,L"Background:=$CommonBgBrush"},
+    {L"TranslucentStartMenu_variant_ClassicStartMenu",1,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>"},
+    {L"TranslucentStartMenu_variant_ClassicStartMenu",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#00000000\"/>"},
+    {L"TranslucentStartMenu_variant_ClassicStartMenu",3,L"BorderThickness=0"},
+    {L"LiquidGlass2",-1,L"Glass=<WindhawkBlur BlurAmount=\"5\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.1\" />"},
+    {L"LiquidGlass2",-1,L"Frosted=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.3\" />"},
+    {L"LiquidGlass2",-1,L"Acrylic=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />"},
+    {L"LiquidGlass2",-1,L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#50808080\" Offset=\"1\" /></LinearGradientBrush>"},
+    {L"LiquidGlass2",-1,L"BorderBrush2=<WindhawkBlur BlurAmount=\"10\" TintColor=\"#909090\" TintOpacity=\"0.3\"/>"},
+    {L"LiquidGlass2",-1,L"ClockBG=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAccentColorLight2}\" TintOpacity=\"0.3\" />"},
+    {L"LiquidGlass2",-1,L"BorderThickness=0.3,1,0.3,1"},
+    {L"LiquidGlass2",-1,L"CornerRadius=25"},
+    {L"LiquidGlass2",-1,L"ElementBG=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"0.30\" />"},
+    {L"LiquidGlass2",-1,L"ElementBorderThickness=0.3,0.5,0.3,1"},
+    {L"LiquidGlass2",-1,L"ElementCornerRadius=20"},
+    {L"LiquidGlass2",-1,L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>"},
+    {L"LiquidGlass2",-1,L"ElementBorderBrush2=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#909090\" TintOpacity=\"0.3\"/>"},
+    {L"LiquidGlass2",-1,L"GlassDark=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#1A000000\" />"},
+    {L"LiquidGlass2",-1,L"GlassDark2=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#0D000000\" />"},
+    {L"LiquidGlass2",-1,L"GlassDarkTitles=<WindhawkBlur BlurAmount=\"7\" TintColor=\"#10151515\"/>"},
+    {L"LiquidGlass2",-1,L"GlassDarkBottomTray=<WindhawkBlur BlurAmount=\"14\" TintColor=\"#3E4A4A4A\"/>"},
+    {L"LiquidGlass2",-1,L"fluidBorder=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Offset=\"0\" Color=\"#2FFFFFFF\" /><GradientStop Offset=\"0.2\" Color=\"#1AFFFFFF\" /><GradientStop Offset=\"0.65\" Color=\"#1AF0F0F0\" /><GradientStop Offset=\"1\" Color=\"#2F707070\" /></LinearGradientBrush>"},
+    {L"LiquidGlass2",-1,L"fluidNormal=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\" />"},
+    {L"LiquidGlass2",-1,L"fluidHover=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\" />"},
+    {L"LiquidGlass2",-1,L"fluidPressed=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\" />"},
+    {L"LiquidGlass2",-1,L"GlassDarkSearchPage=<WindhawkBlur BlurAmount=\"4\" TintColor=\"#1F000000\"/>"},
+    {L"LiquidGlass2",0,L"Background:=$GlassDark"},
+    {L"LiquidGlass2",0,L"Background:=$GlassDark"},
+    {L"LiquidGlass2",1,L"Background:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#6F000000\" Offset=\"0.0\" /><GradientStop Color=\"#40000000\" Offset=\"0.3\" /><GradientStop Color=\"#30000000\" Offset=\"0.41\" /><GradientStop Color=\"#10000000\" Offset=\"0.6\" /><GradientStop Color=\"#00000000\" Offset=\"0.8\" /><GradientStop Color=\"#00000000\" Offset=\"1\" /></LinearGradientBrush>"},
+    {L"LiquidGlass2",2,L"Background:=Transparent"},
+    {L"LiquidGlass2",2,L"CornerRadius=40"},
+    {L"LiquidGlass2",2,L"BorderThickness=0"},
+    {L"LiquidGlass2",3,L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#70D3D3D3\" Offset=\"0.0\" /><GradientStop Color=\"#60CDCDCD\" Offset=\"0.25\" /><GradientStop Color=\"#40CDCDCD\" Offset=\"0.4\" /><GradientStop Color=\"#40696969\" Offset=\"0.65\" /><GradientStop Color=\"#553C3C3C\" Offset=\"1\" /></LinearGradientBrush>"},
+    {L"LiquidGlass2",3,L"Background:=$GlassDark"},
+    {L"LiquidGlass2",3,L"CornerRadius=40"},
+    {L"LiquidGlass2",3,L"BorderThickness=1,1,1,1"},
+    {L"LiquidGlass2",3,L"Padding=8,6,8,7"},
+    {L"LiquidGlass2",4,L"CornerRadius=11"},
+    {L"LiquidGlass2",4,L"Margin=2,3,2,3"},
+    {L"LiquidGlass",-1,L"BorderThickness=0.3,1,0.3,0.3"},
+    {L"LiquidGlass",-1,L"ElementBorderThickness=0.3,0.3,0.3,1"},
+    {L"LiquidGlass",-1,L"CornerRadius=12"},
+    {L"LiquidGlass",-1,L"ElementCornerRadius=8"},
+    {L"LiquidGlass",-1,L"Background=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.2\" />"},
+    {L"LiquidGlass",-1,L"ElementBackground=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.4\" />"},
+    {L"LiquidGlass",-1,L"ElementBackground2 = <WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.2\"  />"},
+    {L"LiquidGlass",-1,L"AccentBackground=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAccentColorLight1}\" TintOpacity=\"0.2\"  />"},
+    {L"LiquidGlass",-1,L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#50808080\" Offset=\"1\" /></LinearGradientBrush>\""},
+    {L"LiquidGlass",-1,L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>"},
+    {L"LiquidGlass",0,L"Background:=$Background"},
+    {L"LiquidGlass",1,L"Background@Checked:=$ElementBackground"},
+    {L"LiquidGlass",1,L"Background@CheckedPointerOver:=$AccentBackground"},
+    {L"LiquidGlass",1,L"Background@CheckedPressed:=$ElementBackground2"},
+    {L"LiquidGlass",1,L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />"},
+    {L"LiquidGlass",3,L"BorderThickness=$BorderThickness"},
+    {L"LiquidGlass",3,L"BorderBrush:=$BorderBrush"},
+    {L"LiquidGlass",3,L"CornerRadius=$CornerRadius"},
+    {L"TintedGlass",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#80000000\"/>"},
+    {L"TintedGlass",0,L"Background:=$CommonBgBrush"},
+    {L"TintedGlass",1,L"Background:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#1AFFFFFF\"/>"},
+    {L"TintedGlass",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#22000000\"/>"},
+    {L"TintedGlass",3,L"BorderThickness=1"},
+    {L"TintedGlass_variant_ClassicStartMenu",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#80000000\"/>"},
+    {L"TintedGlass_variant_ClassicStartMenu",0,L"Background:=$CommonBgBrush"},
+    {L"TintedGlass_variant_ClassicStartMenu",1,L"Background:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#1AFFFFFF\"/>"},
+    {L"TintedGlass_variant_ClassicStartMenu",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#00000000\"/>"},
+    {L"TintedGlass_variant_ClassicStartMenu",3,L"BorderThickness=0"},
+};
+
+std::wstring SearchTrim(std::wstring value) {
+    const auto first=value.find_first_not_of(L" \r\n\t");
+    return first==std::wstring::npos ? std::wstring() : value.substr(first,value.find_last_not_of(L" \r\n\t")-first+1);
+}
+std::wstring SearchStylerSetting(HKEY key,std::wstring const& name) {
+    wchar_t text[4096]{}; DWORD type=0,size=sizeof(text);
+    if (RegQueryValueExW(key,name.c_str(),nullptr,&type,reinterpret_cast<BYTE*>(text),&size)!=ERROR_SUCCESS ||
+        type!=REG_SZ || size>sizeof(text) || size<sizeof(wchar_t)) return {};
+    text[ARRAYSIZE(text)-1]=0; return text;
+}
+std::wstring SearchXmlAttribute(std::wstring const& xml,std::wstring_view name) {
+    std::wstring needle=std::wstring(name)+L"=\"";
+    size_t begin=xml.find(needle); if(begin==std::wstring::npos) return {};
+    begin+=needle.size(); size_t end=xml.find(L'\"',begin);
+    return end==std::wstring::npos ? std::wstring() : xml.substr(begin,end-begin);
+}
+using SearchStyleProperties=std::map<std::wstring,std::wstring>;
+struct SearchStyleConfig {
+    std::map<std::wstring,std::wstring> constants;
+    SearchStyleProperties roles[5]; // main, search bar, menu, menu border, item
+    void Add(int role,std::wstring text) {
+        size_t equal=text.find(L'='); if(equal==std::wstring::npos) return;
+        auto name=SearchTrim(text.substr(0,equal)); auto value=SearchTrim(text.substr(equal+1));
+        if(role<0) { constants[name]=value; return; }
+        if(name.ends_with(L":")) name.pop_back();
+        // Stateful rules belong to the Styler; retain native item interaction.
+        if(name.find(L'@')==std::wstring::npos) roles[role][name]=value;
+    }
+    std::wstring Value(int role,PCWSTR property) const {
+        auto it=roles[role].find(property); if(it==roles[role].end()) return {};
+        auto value=it->second;
+        for(int i=0;i<8 && value.starts_with(L"$");++i) {
+            auto c=constants.find(value.substr(1));
+            if(c==constants.end()) return {}; value=SearchTrim(c->second);
+        }
+        if(value.starts_with(L"$") || value.find(L"{{")!=std::wstring::npos) return {};
+        return value;
+    }
+};
+int SearchStyleRole(std::wstring const& target) {
+    if(target.ends_with(L"#AcrylicBorder")) return 0;
+    if(target==L"Border#BorderElement" ||
+       (target.find(L"SearchBoxToggleButton")!=std::wstring::npos && target.ends_with(L"#BorderElement"))) return 1;
+    if(target==L"MenuFlyoutPresenter" || target==L"Windows.UI.Xaml.Controls.MenuFlyoutPresenter") return 2;
+    if(target==L"MenuFlyoutPresenter > Border" || target==L"MenuFlyoutPresenter > Border#BackgroundElement" ||
+       target==L"Windows.UI.Xaml.Controls.MenuFlyoutPresenter > Windows.UI.Xaml.Controls.Border") return 3;
+    if(target==L"MenuFlyoutItem" || target==L"Windows.UI.Xaml.Controls.MenuFlyoutItem") return 4;
+    return -1;
+}
+SearchStyleConfig ReadSearchStyleConfig() {
+    SearchStyleConfig config;
+    HKEY mod=nullptr;
+    if(RegOpenKeyExW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Windhawk\\Engine\\Mods\\windows-11-start-menu-styler",0,KEY_READ,&mod)!=ERROR_SUCCESS) return config;
+    struct Close {HKEY key; ~Close(){if(key)RegCloseKey(key);}} closeMod{mod};
+    DWORD disabled=0,size=sizeof(disabled);
+    if(RegQueryValueExW(mod,L"Disabled",nullptr,nullptr,reinterpret_cast<BYTE*>(&disabled),&size)==ERROR_SUCCESS && disabled) return config;
+    HKEY key=nullptr; if(RegOpenKeyExW(mod,L"Settings",0,KEY_READ,&key)!=ERROR_SUCCESS) return config;
+    Close close{key};
+    auto theme=SearchStylerSetting(key,L"theme");
+    for(auto const& rule:kSearchThemeRules) if(theme==rule.theme) config.Add(rule.role,rule.style);
+    for(int i=0;i<256;++i) {
+        auto value=SearchStylerSetting(key,L"styleConstants["+std::to_wstring(i)+L"]");
+        if(value.empty()) break; config.Add(-1,value);
+    }
+    for(int i=0;i<256;++i) {
+        const auto prefix=L"controlStyles["+std::to_wstring(i)+L"]";
+        auto target=SearchStylerSetting(key,prefix+L".target"); if(target.empty()) break;
+        const int role=SearchStyleRole(SearchTrim(target)); if(role<0) continue;
+        for(int j=0;j<128;++j) {
+            auto value=SearchStylerSetting(key,prefix+L".styles["+std::to_wstring(j)+L"]");
+            if(value.empty()) break; config.Add(role,value);
+        }
+    }
+    return config;
+}
+
+SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush) {
+    SearchBrushData data; if(!brush) return data; data.opacity=brush.Opacity();
+    if(auto solid=brush.try_as<wuxm::SolidColorBrush>()) {
+        data.kind=1; data.color=SearchPackColor(solid.Color());
+    } else if(auto acrylic=brush.try_as<wuxm::AcrylicBrush>()) {
+        data.kind=2; data.color=SearchPackColor(acrylic.TintColor());
+        data.fallback=SearchPackColor(acrylic.FallbackColor()); data.tint=acrylic.TintOpacity();
+        if(auto luminosity=acrylic.TintLuminosityOpacity()) data.luminosity=luminosity.Value();
+    } else if(auto gradient=brush.try_as<wuxm::LinearGradientBrush>()) {
+        data.kind=3; data.count=std::min<uint32_t>(8,gradient.GradientStops().Size());
+        auto start=gradient.StartPoint(),end=gradient.EndPoint();
+        data.points[0]=start.X; data.points[1]=start.Y; data.points[2]=end.X; data.points[3]=end.Y;
+        for(uint32_t i=0;i<data.count;++i) {
+            auto stop=gradient.GradientStops().GetAt(i); data.colors[i]=SearchPackColor(stop.Color()); data.offsets[i]=stop.Offset();
+        }
+    }
+    return data;
+}
+
+// Attach a short-lived brush resource so ThemeResource resolves in Start's theme.
+wuxm::Brush SearchReadBrush(std::wstring value,wux::FrameworkElement const& context) {
+    value=SearchTrim(value);
+    if(value.ends_with(L">\"")) value.pop_back(); // tolerate trailing quote in legacy theme
+    if(value.empty()) return nullptr;
+    if(value[0]!=L'<') value=L"<SolidColorBrush Color=\""+value+L"\"/>";
+    if(!value.starts_with(L"<SolidColorBrush ") && !value.starts_with(L"<AcrylicBrush ") &&
+       !value.starts_with(L"<LinearGradientBrush ")) return nullptr;
+    value.insert(value.find(L' '),L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"");
+    auto brush=wux::Markup::XamlReader::Load(value).try_as<wuxm::Brush>();
+    if(brush && context) {
+        auto key=winrt::box_value(L"__StartEverything_ThemeProbe");
+        auto resources=context.Resources();
+        auto previous=resources.HasKey(key) ? resources.Lookup(key) : nullptr;
+        resources.Insert(key,brush);
+        if(previous) resources.Insert(key,previous); else resources.Remove(key);
+    }
+    return brush;
+}
+SearchBrushData SearchConfiguredBrush(std::wstring const& value,wux::FrameworkElement const& context) noexcept {
+    try {
+        if(!value.starts_with(L"<WindhawkBlur ")) return CaptureSearchBrush(SearchReadBrush(value,context));
+        SearchBrushData data;
+        auto color=SearchReadBrush(SearchXmlAttribute(value,L"TintColor"),context).try_as<wuxm::SolidColorBrush>();
+        if(!color) return data;
+        data.kind=4; data.color=SearchPackColor(color.Color()); data.fallback=data.color|0xFF000000;
+        data.blur=3; data.luminosity=0;
+        auto number=[&](PCWSTR name,double& out,double lo,double hi) {
+            auto text=SearchXmlAttribute(value,name); if(text.empty()) return;
+            size_t read=0; double parsed=std::stod(text,&read);
+            if(read!=text.size() || !std::isfinite(parsed)) throw std::invalid_argument("glass parameter");
+            out=std::clamp(parsed,lo,hi);
+        };
+        double alpha=(data.color>>24)/255.0;
+        number(L"TintOpacity",alpha,0,1); data.color=(data.color&0xFFFFFF)|(static_cast<uint32_t>(std::lround(alpha*255))<<24);
+        number(L"BlurAmount",data.blur,0,100); number(L"TintLuminosityOpacity",data.luminosity,0,1);
+        number(L"TintSaturation",data.saturation,0,10); number(L"Opacity",data.opacity,0,1);
+        auto fallback=SearchXmlAttribute(value,L"FallbackColor");
+        if(!fallback.empty()) if(auto brush=SearchReadBrush(fallback,context).try_as<wuxm::SolidColorBrush>()) data.fallback=SearchPackColor(brush.Color());
+        return data;
+    } catch(...) { return {}; }
+}
+bool SearchParseFour(std::wstring const& text,double (&values)[4]) {
+    if(text.empty()) return false;
+    std::vector<double> parts; const wchar_t* p=text.c_str();
+    while(*p && parts.size()<4) {
+        wchar_t* end=nullptr; double value=wcstod(p,&end);
+        if(end==p || !std::isfinite(value) || value<0 || value>200) return false;
+        parts.push_back(value); p=end; while(iswspace(*p))++p;
+        if(*p!=L',') break; ++p;
+    }
+    if(*p || (parts.size()!=1 && parts.size()!=4)) return false;
+    for(size_t i=0;i<4;++i) values[i]=parts[parts.size()==1 ? 0 : i];
+    return true;
+}
+SearchSurfaceData SearchConfiguredSurface(SearchStyleConfig const& config,int role,wux::FrameworkElement const& context) {
+    SearchSurfaceData data;
+    auto foreground=SearchConfiguredBrush(config.Value(role,L"Foreground"),context);
+    if(foreground.kind==1 && (foreground.color>>24)) { data.foreground=foreground.color; data.flags|=64; }
+    data.background=SearchConfiguredBrush(config.Value(role,L"Background"),context);
+    data.outline=SearchConfiguredBrush(config.Value(role,L"BorderBrush"),context);
+    if(data.background.kind) data.flags|=1;
+    if(data.outline.kind) data.flags|=2;
+    if(SearchParseFour(config.Value(role,L"CornerRadius"),data.corners)) data.flags|=4;
+    if(SearchParseFour(config.Value(role,L"BorderThickness"),data.thickness)) data.flags|=8;
+    if(SearchParseFour(config.Value(role,L"Padding"),data.padding)) data.flags|=16;
+    if(SearchParseFour(config.Value(role,L"Margin"),data.margin)) data.flags|=32;
+    return data;
+}
+
+void CaptureStartAppearance(HWND target) try {
+    DWORD pid=0,shellPid=0;
+    GetWindowThreadProcessId(target,&pid);
+    GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd",nullptr),&shellPid);
+    wchar_t cls[128]{};
+    GetClassNameW(target,cls,ARRAYSIZE(cls));
+    if (!pid || pid != shellPid || wcscmp(cls,kSearchWindowClass) != 0) return;
+    auto window = wux::Window::Current();
+    if (!window || !window.Content()) return;
+    auto content = window.Content();
+    auto found = FindDescendantByName(content,L"AcrylicBorder",16);
+    auto border = found ? found.try_as<wuxc::Border>() : nullptr;
+    if (!border) return;
+    if (border.ActualWidth() < 400 || border.ActualHeight() < 350) {
+        if (auto element = content.try_as<wux::FrameworkElement>()) element.UpdateLayout();
+    }
+    SearchAppearanceData appearance;
+    appearance.dark = border.ActualTheme() == wux::ElementTheme::Dark;
+    appearance.background = CaptureSearchBrush(border.Background());
+    appearance.outline = CaptureSearchBrush(border.BorderBrush());
+    // Read rendered labels so custom TextBlock Foreground rules are included.
+    auto textColor=[](wux::DependencyObject const& root,std::initializer_list<PCWSTR> names) {
+        for(auto name:names) if(auto node=FindDescendantByName(root,name,20)) {
+            if(auto text=node.try_as<wuxc::TextBlock>()) {
+                if(auto brush=text.Foreground().try_as<wuxm::SolidColorBrush>())
+                    return SearchPackColor(brush.Color());
+            }
+        }
+        return uint32_t{0};
+    };
+    appearance.foreground=textColor(content,{L"DisplayName",L"AppDisplayName",L"PinnedListHeaderText",L"AllAppsHeading"});
+    auto corners = border.CornerRadius();
+    appearance.corners[0]=corners.TopLeft; appearance.corners[1]=corners.TopRight;
+    appearance.corners[2]=corners.BottomRight; appearance.corners[3]=corners.BottomLeft;
+    auto thickness = border.BorderThickness();
+    appearance.thickness[0]=thickness.Left; appearance.thickness[1]=thickness.Top;
+    appearance.thickness[2]=thickness.Right; appearance.thickness[3]=thickness.Bottom;
+    if (auto toggle = FindStockSearchToggle(content)) {
+        appearance.searchForeground=textColor(toggle,{L"PlaceholderText",L"Text",L"PlaceholderTextContentPresenter"});
+        if (auto searchFound = FindDescendantByName(toggle,L"BorderElement",8)) {
+            if (auto searchBorder = searchFound.try_as<wuxc::Border>()) {
+                appearance.searchBackground = CaptureSearchBrush(searchBorder.Background());
+                appearance.searchOutline = CaptureSearchBrush(searchBorder.BorderBrush());
+                auto c = searchBorder.CornerRadius(); auto t = searchBorder.BorderThickness();
+                appearance.searchCorners[0]=c.TopLeft; appearance.searchCorners[1]=c.TopRight;
+                appearance.searchCorners[2]=c.BottomRight; appearance.searchCorners[3]=c.BottomLeft;
+                appearance.searchThickness[0]=t.Left; appearance.searchThickness[1]=t.Top;
+                appearance.searchThickness[2]=t.Right; appearance.searchThickness[3]=t.Bottom;
+            }
+        }
+    }
+    // Read settings once per request, but parse brush markup only when a value
+    // or resolved theme changes. No XAML objects survive the native capture.
+    auto config=ReadSearchStyleConfig();
+    std::wstring signature=appearance.dark ? L"dark" : L"light";
+    winrt::Windows::UI::ViewManagement::UISettings uiSettings;
+    signature+=std::to_wstring(SearchPackColor(uiSettings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent)));
+    static const PCWSTR properties[]{L"Background",L"BorderBrush",L"CornerRadius",L"BorderThickness",L"Padding",L"Margin",L"Foreground"};
+    for(int role=0;role<5;++role) for(auto property:properties) {
+        auto value=config.Value(role,property);
+        signature+=L"|"+std::to_wstring(value.size())+L":"+value;
+    }
+    static thread_local std::wstring previousSignature;
+    static thread_local std::array<SearchSurfaceData,5> surfaces;
+    if(signature!=previousSignature) {
+        std::array<SearchSurfaceData,5> updated;
+        for(int role=0;role<5;++role) updated[role]=SearchConfiguredSurface(config,role,border);
+        surfaces=updated; previousSignature=std::move(signature);
+    }
+    // Some stock AcrylicBorder getters return the original acrylic even after
+    // Styler replaces the rendered brush. Explicit glass rules take precedence.
+    if(surfaces[0].background.kind==4) appearance.background=surfaces[0].background;
+    if(surfaces[1].background.kind==4) appearance.searchBackground=surfaces[1].background;
+    appearance.menu=surfaces[2]; appearance.menuBorder=surfaces[3]; appearance.menuItem=surfaces[4];
+    HWND start=CachedStartWindow(); POINT client{}; MONITORINFO monitor{sizeof(monitor)};
+    const double width=border.ActualWidth(),height=border.ActualHeight();
+    if (width >= 400 && height >= 350 && ClientToScreen(start,&client) &&
+        GetMonitorInfoW(MonitorFromWindow(start,MONITOR_DEFAULTTONEAREST),&monitor)) {
+        // Arrange offsets describe the settled layout. TransformToVisual also
+        // includes Start's opening/closing translation, which would erase the
+        // bottom gap when search is opened while native Start is hidden.
+        wf::Point origin{};
+        wux::DependencyObject node=border;
+        for(int depth=0;node && node!=content && depth<32;++depth) {
+            if(auto element=node.try_as<wux::UIElement>()) {
+                auto offset=element.ActualOffset(); origin.X+=offset.x; origin.Y+=offset.y;
+            }
+            node=wuxm::VisualTreeHelper::GetParent(node);
+        }
+        const double scale=GetDpiForWindow(start)/96.0;
+        const double workWidth=(monitor.rcWork.right-monitor.rcWork.left)/scale;
+        if (node==content && width <= workWidth && height*scale <= monitor.rcWork.bottom-monitor.rcWork.top) {
+            appearance.width=width; appearance.height=height;
+            const auto edge = TaskbarEdgeForMonitor(MonitorFromWindow(start,MONITOR_DEFAULTTONEAREST));
+            appearance.taskbarEdge = static_cast<uint32_t>(edge);
+            const double left = (client.x-monitor.rcWork.left)/scale+origin.X;
+            const double top = (client.y-monitor.rcWork.top)/scale+origin.Y;
+            const double workHeight = (monitor.rcWork.bottom-monitor.rcWork.top)/scale;
+            const bool vertical = edge==SearchTaskbarEdge::Left || edge==SearchTaskbarEdge::Right;
+            const double space = vertical ? workHeight-height : workWidth-width;
+            appearance.alignment = space>0 ? std::clamp((vertical ? top : left)/space,0.0,1.0) : 0.5;
+            const double gap = edge==SearchTaskbarEdge::Left ? left : edge==SearchTaskbarEdge::Top ? top :
+                edge==SearchTaskbarEdge::Right ? workWidth-left-width : workHeight-top-height;
+            appearance.edgeGap = std::max(0.0,gap);
+        }
+    }
+    COPYDATASTRUCT data{kSearchWindowAppearanceData,sizeof(appearance),&appearance};
+    DWORD_PTR received=0;
+    SendMessageTimeoutW(target,WM_COPYDATA,reinterpret_cast<WPARAM>(start),reinterpret_cast<LPARAM>(&data),SMTO_ABORTIFHUNG,150,&received);
+} catch (...) { Wh_Log(L"search appearance capture failed: %08X",static_cast<unsigned>(winrt::to_hresult())); }
+
+void RequestStartAppearance() {
+    HWND start=CachedStartWindow(),host=g_searchWindowWindow.load();
+    if (!start || !host) return;
+    if (g_searchAppearanceValid) {
+        // Reuse measured placement immediately. A busy Start process must not
+        // hold up our UI thread on every opening or focus-check tick.
+        PostMessageW(start,SearchWindowAppearanceMessage(),reinterpret_cast<WPARAM>(host),0);
+        return;
+    }
+    // The first opening still obtains measured bounds before positioning, so
+    // different entry points don't initially open at different sizes.
+    DWORD_PTR done=0;
+    SendMessageTimeoutW(start,SearchWindowAppearanceMessage(),reinterpret_cast<WPARAM>(host),0,SMTO_ABORTIFHUNG,180,&done);
+}
+
+// Small Direct2D effect graph for Styler glass: blur, optional color adjustment,
+// then a source-over tint. Unlike AcrylicBrush, black retains its specified alpha.
+// Uses the public IGraphicsEffectD2D1Interop ABI (SDK header absent in MinGW).
+struct SearchEffectInterop : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetEffectId(GUID*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, UINT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProperty(UINT, winrt::impl::abi_t<wf::IPropertyValue>**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSource(UINT, IUnknown**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT*) = 0;
+};
+
+} // namespace
+template <> inline constexpr winrt::guid winrt::impl::guid_v<SearchEffectInterop>{
+    0x2FC57384,0xA068,0x44D7,{0xA3,0x31,0x30,0x98,0x2F,0xCF,0x71,0x77}};
+namespace {
+namespace searchcomp = winrt::Windows::UI::Composition;
+namespace searcheffect = winrt::Windows::Graphics::Effects;
+
+struct SearchEffect : winrt::implements<SearchEffect,searcheffect::IGraphicsEffect,
+                                       searcheffect::IGraphicsEffectSource,SearchEffectInterop> {
+    GUID id{};
+    winrt::hstring name;
+    std::vector<wf::IInspectable> properties;
+    std::vector<searcheffect::IGraphicsEffectSource> sources;
+    SearchEffect(GUID value) : id(value) {}
+    winrt::hstring Name() const { return name; }
+    void Name(winrt::hstring value) { name=std::move(value); }
+    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* value) noexcept override {
+        if (!value) return E_POINTER; *value=id; return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR,UINT*,UINT*) noexcept override { return E_INVALIDARG; }
+    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* value) noexcept override {
+        if (!value) return E_POINTER; *value=static_cast<UINT>(properties.size()); return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index,winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
+        if (!value) return E_POINTER; *value=nullptr;
+        if (index>=properties.size()) return E_BOUNDS;
+        winrt::copy_to_abi(properties[index].as<wf::IPropertyValue>(),*reinterpret_cast<void**>(value)); return S_OK;
+    } catch(...) { return winrt::to_hresult(); }
+    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* value) noexcept override {
+        if (!value) return E_POINTER; *value=static_cast<UINT>(sources.size()); return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index,IUnknown** value) noexcept override {
+        if (!value) return E_POINTER; *value=nullptr;
+        if (index>=sources.size()) return E_BOUNDS;
+        winrt::copy_to_abi(sources[index],*reinterpret_cast<void**>(value)); return S_OK;
+    }
+};
+
+// Container contrast sampling. One small in-memory snapshot per update, with
+// decisions made only from empty container padding. No XAML or disk I/O runs on
+// the worker, and it sleeps completely while search is hidden or animating.
+constexpr UINT_PTR kSearchContainerContrastTimer = 0x706;
+constexpr UINT kSearchContainerContrastReady = WM_APP + 0x77;
+constexpr size_t kSearchContrastMaxContainers = 64;
+constexpr int kSearchContrastStripWidth = 3;
+
+bool SearchContainerLightText(double luminance, std::optional<bool> previous = std::nullopt) {
+    if (!std::isfinite(luminance)) return previous.value_or(true);
+    // Retain polarity only inside the range where either side can still reach
+    // 4.5:1. Outside it, even pure white or black would be too faint.
+    if (previous) return *previous ? luminance <= 1.05/4.5-.05 : luminance < .05*4.5-.05;
+    return luminance < 0.17912878;
+}
+
+std::array<double,256> const& SearchContrastLinearColors() {
+    static const auto values = [] {
+        std::array<double,256> result{};
+        for (int i = 0; i < 256; ++i) {
+            const double value = i/255.0;
+            result[i] = value <= .04045 ? value/12.92 : std::pow((value+.055)/1.055,2.4);
+        }
+        return result;
+    }();
+    return values;
+}
+
+constexpr double SearchReadableTextOpacity(double requested) {
+    return requested > 0 ? 1.0 : requested;
+}
+
+constexpr uint32_t SearchContrastPreferredColor(bool light) {
+    return light ? 0xFFE0E0E0 : 0xFF282828;
+}
+uint32_t SearchContrastGrayColor(double background, bool light) {
+    if (!std::isfinite(background)) return SearchContrastPreferredColor(light);
+    background = std::clamp(background,0.0,1.0);
+    auto const& linear = SearchContrastLinearColors();
+    int gray = light ? 224 : 40;
+    const double target = light ? 4.5*(background+.05)-.05 : (background+.05)/4.5-.05;
+    // Quantized tones keep tiny sampling changes from shimmering. Stronger
+    // black/white is used only near the middle-brightness crossover.
+    while (light ? linear[gray] < target && gray < 255 : linear[gray] > target && gray > 0)
+        gray = light ? std::min(gray+4,255) : std::max(gray-4,0);
+    return 0xFF000000u | static_cast<uint32_t>(gray)*0x010101u;
+}
+
+constexpr size_t kSearchContrastProfilePoints = 33;
+struct SearchContrastGradientStop {
+    double offset;
+    bool light;
+    uint32_t color;
+    bool operator==(SearchContrastGradientStop const&) const = default;
+};
+struct SearchContrastGradient {
+    std::array<std::optional<bool>,kSearchContrastProfilePoints> light{};
+    std::array<uint32_t,kSearchContrastProfilePoints> colors{};
+    std::vector<SearchContrastGradientStop> stops;
+    double widthDip = 0;
+    bool Mixed() const {
+        return !stops.empty() && std::any_of(stops.begin(),stops.end(),[&](auto const& stop) { return stop.color != stops.front().color; });
+    }
+    bool Sample(std::array<double,kSearchContrastProfilePoints> const& values, double inset, double width) {
+        auto old = stops;
+        widthDip = std::max(width,1.0);
+        inset = std::clamp(inset,0.0,.2);
+        auto known = values;
+        // Keep both the tone and polarity through a covered/unsampled part of
+        // a card. The first observation borrows the nearest exposed sample.
+        for (size_t i = 0; i < known.size(); ++i) {
+            if (!std::isfinite(known[i])) {
+                if (light[i]) continue;
+                size_t nearest = known.size(), distance = known.size();
+                for (size_t j = 0; j < values.size(); ++j) if (std::isfinite(values[j])) {
+                    const size_t d = i > j ? i-j : j-i;
+                    if (d < distance) { nearest = j; distance = d; }
+                }
+                if (nearest < known.size()) known[i] = values[nearest];
+            }
+            if (std::isfinite(known[i])) {
+                light[i] = SearchContainerLightText(known[i],light[i]);
+                colors[i] = SearchContrastGrayColor(known[i],*light[i]);
+            }
+        }
+        if (std::any_of(light.begin(),light.end(),[](auto v) { return !v.has_value(); })) return false;
+        stops.clear();
+        auto append = [&](double offset, size_t point) {
+            SearchContrastGradientStop stop{offset,*light[point],colors[point]};
+            if (!stops.empty() && stops.back().offset == offset) stops.back() = stop;
+            else stops.push_back(stop);
+        };
+        append(0,0);
+        const double spacing = (1-2*inset)/(light.size()-1);
+        const double feather = std::min(1.0/widthDip,spacing*.4);
+        for (size_t i = 1; i < light.size(); ++i) {
+            if (colors[i] == colors[i-1]) continue;
+            const double a = inset+(i-1)*spacing, b = inset+i*spacing;
+            append(a,i-1);
+            if (light[i] != light[i-1]) {
+                double t = .5;
+                if (std::isfinite(known[i-1]) && std::isfinite(known[i]) && std::abs(known[i]-known[i-1]) > .000001)
+                    t = std::clamp((.17912878-known[i-1])/(known[i]-known[i-1]),0.0,1.0);
+                // Quantized positions and a two-DIP crossover avoid a broad
+                // gray band cutting through letters on mixed backgrounds.
+                const double cross = std::clamp(std::round((a+t*spacing)*widthDip)/widthDip,a,b);
+                append(std::max(a,cross-feather),i-1);
+                append(std::min(b,cross+feather),i);
+            }
+            append(b,i);
+        }
+        append(1,light.size()-1);
+        return old != stops;
+    }
+};
+
+// One color field covers the main search window. Sparse empty strips across
+// controls seed the background; scroll position only changes brush coordinates.
+constexpr int kSearchContrastMapWidth = 512, kSearchContrastMapHeight = 512;
+constexpr size_t kSearchContrastMaxMapBands = 128;
+struct SearchContrastMapBand {
+    double y;
+    std::array<double,kSearchContrastProfilePoints> values;
+    double left = 0, right = 1;
+};
+struct SearchContrastMapProbe {
+    uint64_t id;
+    RECT bounds;
+    std::vector<RECT> strips;
+    uint8_t exposed = 3;
+};
+struct SearchContrastMapReading {
+    uint64_t id;
+    RECT bounds;
+    std::shared_ptr<std::vector<uint32_t> const> pixels;
+    uint64_t revision = 0;
+};
+class SearchContrastMap {
+    std::vector<uint32_t> pixels_;
+    std::vector<SearchContrastMapBand> previousBands_;
+    uint64_t revision_ = 0;
+public:
+    std::vector<uint32_t> const& Pixels() const { return pixels_; }
+    uint64_t Revision() const { return revision_; }
+    bool Sample(std::vector<SearchContrastMapBand> const& bands) {
+        // Compare the small sampled profile before touching the full image.
+        // Covered samples are semantically equal regardless of NaN payload.
+        if (!pixels_.empty() && bands.size() == previousBands_.size() &&
+            std::equal(bands.begin(),bands.end(),previousBands_.begin(),[](auto const& a,auto const& b) {
+                return a.y == b.y && a.left == b.left && a.right == b.right &&
+                    std::equal(a.values.begin(),a.values.end(),b.values.begin(),[](double x,double y) {
+                        return x == y || (!std::isfinite(x) && !std::isfinite(y));
+                    });
+            })) return false;
+        if (bands.empty() || std::none_of(bands.begin(),bands.end(),[](auto const& band) {
+            return std::any_of(band.values.begin(),band.values.end(),[](double value){return std::isfinite(value);});
+        })) return false;
+        constexpr size_t count = kSearchContrastMapWidth*kSearchContrastMapHeight;
+        const bool first = pixels_.empty();
+        if (first) pixels_.resize(count);
+        bool changed = first;
+        std::vector<std::pair<double,double>> column;
+        column.reserve(bands.size());
+        for (int x = 0; x < kSearchContrastMapWidth; ++x) {
+            const double position = x/double(kSearchContrastMapWidth-1);
+            column.clear();
+            for (auto const& band : bands) {
+                if (position < band.left || position > band.right || band.right <= band.left) continue;
+                const double point = std::clamp((position-band.left)/(band.right-band.left),0.0,1.0)*(kSearchContrastProfilePoints-1);
+                const size_t left = static_cast<size_t>(point), right = std::min(left+1,kSearchContrastProfilePoints-1);
+                double value = band.values[left];
+                if (!std::isfinite(value)) value = band.values[right];
+                else if (std::isfinite(band.values[right])) value += (band.values[right]-value)*(point-left);
+                if (std::isfinite(value)) column.push_back({band.y,value});
+            }
+            if (column.empty()) continue;
+            std::sort(column.begin(),column.end());
+            size_t below = 0;
+            for (int y = 0; y < kSearchContrastMapHeight; ++y) {
+                const double row = y/double(kSearchContrastMapHeight-1);
+                while (below+1 < column.size() && column[below+1].first < row) ++below;
+                const auto& a = column[below]; const auto& b = column[std::min(below+1,column.size()-1)];
+                const double blend = b.first > a.first ? std::clamp((row-a.first)/(b.first-a.first),0.0,1.0) : 0;
+                const double luminance = a.second+(b.second-a.second)*blend;
+                auto& old = pixels_[y*kSearchContrastMapWidth+x];
+                const auto prior = old ? std::optional<bool>((old&255)>127) : std::nullopt;
+                const auto color = SearchContrastGrayColor(luminance,SearchContainerLightText(luminance,prior));
+                changed |= old != color; old = color;
+            }
+        }
+        if (first) for (int y = 0; y < kSearchContrastMapHeight; ++y) {
+            auto row = pixels_.begin()+y*kSearchContrastMapWidth;
+            auto valid = std::find_if(row,row+kSearchContrastMapWidth,[](auto color){return color != 0;});
+            if (valid == row+kSearchContrastMapWidth) std::fill(row,row+kSearchContrastMapWidth,SearchContrastPreferredColor(true));
+            else {
+                std::fill(row,valid,*valid);
+                for (auto it=valid+1;it!=row+kSearchContrastMapWidth;++it) if(!*it)*it=*(it-1);
+            }
+        }
+        // Keep contrast at every texel. Averaging light and dark text colors
+        // creates a gray band that disappears against the mixed background.
+        previousBands_ = bands;
+        if (changed) ++revision_;
+        return changed;
+    }
+};
+
+struct SearchContrastProbe { uint64_t id; RECT bounds; bool outside = false; uint8_t exposed = 3; RECT surface{}; };
+struct SearchContrastReading {
+    uint64_t id; RECT bounds; double luminance;
+    std::array<double,kSearchContrastProfilePoints> profile{};
+    double inset = 0;
+};
+struct SearchContrastBatch {
+    uint64_t generation = 0;
+    HWND host = nullptr;
+    DWORD thread = 0;
+    std::vector<SearchContrastProbe> probes;
+    std::vector<SearchContrastMapProbe> maps;
+};
+struct SearchContrastResult {
+    uint64_t generation = 0;
+    std::vector<SearchContrastReading> readings;
+    std::vector<SearchContrastMapReading> maps;
+};
+
+// WindowFromPoint may ask a window to hit-test itself. Keep that operation on
+// the UI thread, so joining the capture worker can never wait on this thread.
+uint8_t SearchContrastExposure(SearchContrastProbe const& probe, HWND host, DWORD thread) {
+    const int inset = std::max(6,MulDiv(6,GetDpiForWindow(host),96));
+    uint8_t exposed = 0;
+    for (int side = 0; side < 2; ++side) {
+        const int x = side ? probe.bounds.right-inset-kSearchContrastStripWidth : probe.bounds.left+inset;
+        HWND window = WindowFromPoint(POINT{x+1,(probe.bounds.top+probe.bounds.bottom)/2});
+        if (!window || GetWindowThreadProcessId(window,nullptr) != thread) continue;
+        HWND root = GetAncestor(window,GA_ROOT);
+        if (!probe.outside && root != host) continue;
+        if (probe.outside) {
+            RECT bounds{}, intersection{};
+            if (!GetWindowRect(root,&bounds) || !IntersectRect(&intersection,&bounds,&probe.bounds) ||
+                !EqualRect(&intersection,&probe.bounds)) continue;
+        }
+        exposed |= 1u<<side;
+    }
+    return exposed;
+}
+
+class SearchContrastCapture {
+    HDC memory_ = nullptr;
+    HBITMAP bitmap_ = nullptr;
+    HGDIOBJ previous_ = nullptr;
+    uint32_t* pixels_ = nullptr;
+    static constexpr int kSize = 512;
+    std::array<std::pair<uint64_t,SearchContrastMap>,1> mapCache_{};
+    std::array<uint64_t,1> mapRevisions_{};
+    uint64_t mapRevision_ = 0;
+    std::shared_ptr<std::vector<uint32_t> const> mapPixels_;
+public:
+    SearchContrastCapture() {
+        memory_ = CreateCompatibleDC(nullptr);
+        if (!memory_) return;
+        BITMAPINFO info{};
+        info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        info.bmiHeader.biWidth = kSize;
+        info.bmiHeader.biHeight = -kSize;
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB;
+        bitmap_ = CreateDIBSection(memory_,&info,DIB_RGB_COLORS,reinterpret_cast<void**>(&pixels_),nullptr,0);
+        if (bitmap_) previous_ = SelectObject(memory_,bitmap_);
+        SetStretchBltMode(memory_,COLORONCOLOR);
+    }
+    ~SearchContrastCapture() {
+        if (previous_ && previous_ != HGDI_ERROR) SelectObject(memory_,previous_);
+        if (bitmap_) DeleteObject(bitmap_);
+        if (memory_) DeleteDC(memory_);
+    }
+    SearchContrastCapture(SearchContrastCapture const&) = delete;
+    SearchContrastCapture& operator=(SearchContrastCapture const&) = delete;
+
+    SearchContrastResult Read(SearchContrastBatch const& batch, std::atomic<uint64_t> const& generation) {
+        SearchContrastResult result{batch.generation,{}};
+        if (!pixels_ || !previous_ || previous_ == HGDI_ERROR || generation.load() != batch.generation ||
+            !IsWindowVisible(batch.host)) return result;
+        const size_t count = std::min(batch.probes.size(),kSearchContrastMaxContainers);
+        RECT area{};
+        for (size_t i = 0; i < count; ++i) UnionRect(&area,&area,&batch.probes[i].bounds);
+        for (size_t i = 0; i < std::min(batch.maps.size(),mapCache_.size()); ++i) UnionRect(&area,&area,&batch.maps[i].bounds);
+        RECT desktop{GetSystemMetrics(SM_XVIRTUALSCREEN),GetSystemMetrics(SM_YVIRTUALSCREEN),0,0};
+        desktop.right = desktop.left+GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        desktop.bottom = desktop.top+GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (!IntersectRect(&area,&area,&desktop)) return result;
+        const int width = area.right-area.left, height = area.bottom-area.top;
+        const int step = std::max(1,(std::max(width,height)+kSize-1)/kSize);
+        const int sampleWidth = (width+step-1)/step, sampleHeight = (height+step-1)/step;
+        HDC screen = GetDC(nullptr);
+        if (!screen) return result;
+        // One readback for every container combined. Separate tiny BitBlts can
+        // each synchronize with the compositor, despite moving fewer pixels.
+        const BOOL copied = StretchBlt(memory_,0,0,sampleWidth,sampleHeight,screen,
+            area.left,area.top,width,height,SRCCOPY | CAPTUREBLT);
+        GdiFlush();
+        ReleaseDC(nullptr,screen);
+        if (!copied || generation.load() != batch.generation) return result;
+        auto const& linear = SearchContrastLinearColors();
+        const UINT dpi = GetDpiForWindow(batch.host);
+        const int inset = std::max(6,MulDiv(6,dpi,96)), verticalInset = std::max(2,MulDiv(3,dpi,96));
+        for (size_t i = 0; i < count && generation.load() == batch.generation; ++i) {
+            auto const& probe = batch.probes[i]; auto const& rect = probe.bounds;
+            if (rect.right-rect.left < 24 || rect.bottom-rect.top < 18 || !probe.exposed) continue;
+            const RECT surface = IsRectEmpty(&probe.surface) ? rect : probe.surface;
+            SearchContrastReading reading{probe.id,rect,0};
+            reading.profile.fill(std::numeric_limits<double>::quiet_NaN());
+            reading.inset = std::min(.2,inset/double(rect.right-rect.left));
+            std::array<double,kSearchContrastProfilePoints> medians{};
+            size_t valid = 0;
+            for (size_t p = 0; p < kSearchContrastProfilePoints; ++p) {
+                if (!(probe.exposed & (p < kSearchContrastProfilePoints/2 ? 1u : 2u))) continue;
+                const int x = rect.left+inset+static_cast<int>(std::lround(
+                    (rect.right-rect.left-2*inset-1)*p/double(kSearchContrastProfilePoints-1)));
+                std::array<double,12> samples{}; size_t used = 0;
+                // Sample empty top/bottom padding, rather than glyphs, icons,
+                // or the preview image. A clipped row uses only visible padding.
+                for (int y : {surface.top+verticalInset,surface.bottom-verticalInset-2}) {
+                    if (y < rect.top || y+1 >= rect.bottom) continue;
+                    for (int dy = 0; dy < 2; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+                        const int sx = std::clamp(static_cast<int>(std::lround((x+dx-area.left)*sampleWidth/double(width))),0,sampleWidth-1);
+                        const int sy = std::clamp(static_cast<int>(std::lround((y+dy-area.top)*sampleHeight/double(height))),0,sampleHeight-1);
+                        const uint32_t color = pixels_[sy*kSize+sx];
+                        samples[used++] = .2126*linear[(color>>16)&255]+.7152*linear[(color>>8)&255]+.0722*linear[color&255];
+                    }
+                }
+                if (!used) continue;
+                auto middle = samples.begin()+used/2;
+                std::nth_element(samples.begin(),middle,samples.begin()+used);
+                reading.profile[p] = medians[valid++] = *middle;
+            }
+            if (!valid) continue;
+            auto middle = medians.begin()+valid/2;
+            std::nth_element(medians.begin(),middle,medians.begin()+valid);
+            reading.luminance = *middle;
+            result.readings.push_back(std::move(reading));
+        }
+        for (size_t m = 0; m < std::min(batch.maps.size(),mapCache_.size()) && generation.load() == batch.generation; ++m) {
+            auto const& probe = batch.maps[m]; auto const& rect = probe.bounds;
+            if (!probe.exposed || rect.right-rect.left < 24 || rect.bottom-rect.top < 18) continue;
+            std::vector<SearchContrastMapBand> bands;
+            const size_t stripCount = std::min(probe.strips.size(),kSearchContrastMaxMapBands);
+            for (size_t row = 0; row < stripCount; ++row) {
+                RECT strip{};
+                if (!IntersectRect(&strip,&probe.strips[row],&rect) || strip.right-strip.left < 24 || strip.bottom-strip.top < 2) continue;
+                const int y = strip.top, edge = std::min<int>(inset,(strip.right-strip.left)/5);
+                SearchContrastMapBand band{(y+.5-rect.top)/double(rect.bottom-rect.top),{},
+                    (strip.left+edge-rect.left)/double(rect.right-rect.left),
+                    (strip.right-edge-1-rect.left)/double(rect.right-rect.left)};
+                band.values.fill(std::numeric_limits<double>::quiet_NaN());
+                for (size_t p = 0; p < kSearchContrastProfilePoints; ++p) {
+                    const int x = strip.left+edge+static_cast<int>(std::lround(
+                        (strip.right-strip.left-2*edge-1)*p/double(kSearchContrastProfilePoints-1)));
+                    if (!(probe.exposed & (x < (rect.left+rect.right)/2 ? 1u : 2u))) continue;
+                    std::array<double,6> samples{}; size_t used = 0;
+                    for (int dy = 0; dy < 2; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+                        const int sx = std::clamp(static_cast<int>(std::lround((x+dx-area.left)*sampleWidth/double(width))),0,sampleWidth-1);
+                        const int sy = std::clamp(static_cast<int>(std::lround((y+dy-area.top)*sampleHeight/double(height))),0,sampleHeight-1);
+                        const uint32_t color = pixels_[sy*kSize+sx];
+                        samples[used++] = .2126*linear[(color>>16)&255]+.7152*linear[(color>>8)&255]+.0722*linear[color&255];
+                    }
+                    auto middle = samples.begin()+used/2;
+                    std::nth_element(samples.begin(),middle,samples.begin()+used);
+                    band.values[p] = *middle;
+                }
+                bands.push_back(std::move(band));
+            }
+            auto& cached = mapCache_[m];
+            if (cached.first != probe.id) cached = {probe.id,{}};
+            if (cached.second.Sample(bands)) {
+                mapRevisions_[m] = ++mapRevision_;
+                // Results share an immutable image until its actual colors
+                // change; a stationary timer tick allocates/copies no bitmap.
+                mapPixels_ = std::make_shared<std::vector<uint32_t> const>(cached.second.Pixels());
+            }
+            if (!cached.second.Pixels().empty())
+                result.maps.push_back({probe.id,rect,mapPixels_,mapRevisions_[m]});
+        }
+        return result;
+    }
+};
+
+class SearchContrastSampler {
+    std::mutex mutex_;
+    std::condition_variable wake_;
+    std::optional<SearchContrastBatch> pending_;
+    std::optional<SearchContrastResult> completed_;
+    bool stopping_ = false, working_ = false;
+    std::atomic<uint64_t> generation_{0};
+    std::thread worker_;
+    void Run() noexcept {
+        auto dpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        try {
+            SearchContrastCapture capture;
+            std::unique_lock lock(mutex_);
+            for (;;) {
+                wake_.wait(lock,[&] { return stopping_ || pending_.has_value(); });
+                if (stopping_) break;
+                auto batch = std::move(*pending_); pending_.reset(); working_ = true;
+                lock.unlock();
+                auto result = capture.Read(batch,generation_);
+                lock.lock(); working_ = false;
+                if (!stopping_ && result.generation == generation_.load()) {
+                    completed_ = std::move(result);
+                    PostMessageW(batch.host,kSearchContainerContrastReady,0,0);
+                }
+            }
+        } catch (...) {
+            std::lock_guard lock(mutex_); working_ = false; stopping_ = true; pending_.reset(); completed_.reset();
+        }
+        if (dpi) SetThreadDpiAwarenessContext(dpi);
+    }
+public:
+    SearchContrastSampler() : worker_([this] { Run(); }) {}
+    ~SearchContrastSampler() {
+        { std::lock_guard lock(mutex_); stopping_ = true; pending_.reset(); ++generation_; }
+        wake_.notify_one();
+        if (worker_.joinable()) worker_.join();
+    }
+    void Cancel() {
+        std::lock_guard lock(mutex_); ++generation_; pending_.reset(); completed_.reset();
+    }
+    bool Current(uint64_t generation) const { return generation == generation_.load(); }
+    void Submit(HWND host, DWORD thread, std::vector<SearchContrastProbe> probes, std::vector<SearchContrastMapProbe> maps = {}) {
+        if (probes.empty() && maps.empty()) return;
+        std::lock_guard lock(mutex_);
+        if (stopping_ || working_ || pending_ || completed_) return;
+        pending_ = SearchContrastBatch{generation_.load(),host,thread,std::move(probes),std::move(maps)};
+        wake_.notify_one();
+    }
+    std::optional<SearchContrastResult> Take() {
+        std::lock_guard lock(mutex_);
+        auto result = std::move(completed_); completed_.reset(); return result;
+    }
+};
+
+// Container contrast bindings. Uniform backgrounds use shared solid colors.
+// Mixed backgrounds use ordinary gradients aligned to the container, without
+// backdrop effects on individual text elements.
+struct SearchGradientBinding {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    wuxm::LinearGradientBrush brush{nullptr};
+    double opacity = 1;
+};
+struct SearchContrastPaint {
+    SearchContrastGradient gradient;
+    winrt::weak_ref<wux::FrameworkElement> root;
+    std::vector<SearchGradientBinding> bindings;
+};
+
+struct SearchContrastContainer {
+    uint64_t id;
+    winrt::weak_ref<wux::FrameworkElement> root;
+    wuxm::SolidColorBrush foreground{nullptr};
+    bool dirty = true, active = false, outside = false;
+    std::optional<bool> lightText;
+    std::shared_ptr<SearchContrastPaint> paint;
+};
+[[clang::no_destroy]] std::optional<SearchContrastSampler> g_searchContrastSampler;
+[[clang::no_destroy]] std::optional<std::vector<SearchContrastContainer>> g_searchContrastContainers;
+uint64_t g_searchContrastNextId = 0;
+bool g_searchContrastReported = false;
+
+bool g_searchGradientLayoutDirty = false, g_searchGradientLayoutHooked = false;
+
+struct SearchOriginalTextOpacity {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    double opacity;
+};
+[[clang::no_destroy]] std::optional<std::vector<SearchOriginalTextOpacity>> g_searchOriginalTextOpacities;
+size_t g_searchOpacityPruneAt = 256;
+
+void MakeSearchTextReadable(wux::FrameworkElement const& element) {
+    if (!element.try_as<wuxc::TextBlock>() && !element.try_as<wuxc::FontIcon>()) return;
+    const double original = element.Opacity(), readable = SearchReadableTextOpacity(original);
+    if (original == readable || SearchTextOverride()) return;
+    if (!g_searchOriginalTextOpacities) g_searchOriginalTextOpacities.emplace();
+    auto& saved = *g_searchOriginalTextOpacities;
+    if (saved.size() >= g_searchOpacityPruneAt) {
+        std::erase_if(saved,[](auto const& entry){return !entry.element.get();});
+        g_searchOpacityPruneAt = std::max<size_t>(256,saved.size()*2);
+    }
+    auto found = std::find_if(saved.begin(),saved.end(),[&](auto const& entry){return entry.element.get()==element;});
+    if (found == saved.end()) saved.push_back({winrt::make_weak(element),original});
+    else found->opacity = original;
+    element.Opacity(readable);
+}
+
+void RestoreSearchTextOpacity() {
+    if (g_searchOriginalTextOpacities) for (auto const& entry : *g_searchOriginalTextOpacities)
+        if (auto element=entry.element.get();element && element.Opacity()==SearchReadableTextOpacity(entry.opacity))
+            element.Opacity(entry.opacity);
+    g_searchOriginalTextOpacities.reset();
+    g_searchOpacityPruneAt = 256;
+}
+
+struct SearchColorMapBinding {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    wuxm::ImageBrush brush{nullptr};
+    wuxm::MatrixTransform transform{nullptr};
+    mutable winrt::weak_ref<wuxc::ScrollViewer> scroll;
+    double opacity = 1;
+};
+struct SearchColorMapPaint {
+    uint64_t id = 0, revision = 0;
+    winrt::weak_ref<wux::FrameworkElement> root;
+    wuxmi::WriteableBitmap bitmap{nullptr};
+    std::vector<SearchColorMapBinding> bindings;
+};
+[[clang::no_destroy]] std::shared_ptr<SearchColorMapPaint> g_searchColorMap;
+ULONGLONG g_searchColorMapScrollUntil = 0;
+bool g_searchColorMapReported = false;
+
+void PositionSearchColorMap(SearchColorMapPaint const& paint, SearchColorMapBinding const& binding) try {
+    auto root = paint.root.get(), element = binding.element.get();
+    if (!root || !element || root.ActualWidth() < 1 || root.ActualHeight() < 1) return;
+    auto scroll = binding.scroll.get();
+    if (!scroll) {
+        auto parent = wuxm::VisualTreeHelper::GetParent(element);
+        for (int depth=0;parent && depth<32;++depth) {
+            if ((scroll=parent.try_as<wuxc::ScrollViewer>())) { binding.scroll=winrt::make_weak(scroll); break; }
+            parent=wuxm::VisualTreeHelper::GetParent(parent);
+        }
+    }
+    wf::Point offset{};
+    auto content = scroll ? scroll.Content().try_as<wux::FrameworkElement>() : nullptr;
+    if (content) {
+        // Keep one root for both lists; their independent offsets affect only
+        // the coordinates where each glyph reads the shared image.
+        const auto origin = scroll.TransformToVisual(root).TransformPoint(wf::Point{0,0});
+        offset = element.TransformToVisual(content).TransformPoint(wf::Point{0,0});
+        offset.X += static_cast<float>(origin.X+scroll.Padding().Left-scroll.HorizontalOffset());
+        offset.Y += static_cast<float>(origin.Y+scroll.Padding().Top-scroll.VerticalOffset());
+        if (offset.Y+element.ActualHeight() < origin.Y-1 || offset.Y > origin.Y+scroll.ActualHeight()+1) return;
+    }
+    else offset = element.TransformToVisual(root).TransformPoint(wf::Point{0,0});
+    const auto old = binding.transform.Matrix();
+    wuxm::Matrix matrix{root.ActualWidth()/kSearchContrastMapWidth,0,0,
+                       root.ActualHeight()/kSearchContrastMapHeight,-offset.X,-offset.Y};
+    if (old.M11 != matrix.M11 || old.M22 != matrix.M22 || old.OffsetX != matrix.OffsetX || old.OffsetY != matrix.OffsetY)
+        binding.transform.Matrix(matrix);
+} catch (...) {}
+
+void PositionSearchColorMaps(wux::FrameworkElement const& only = nullptr) {
+    auto const& paint=g_searchColorMap;
+    if (!paint) return; // created only for auto, reset on appearance/settings changes
+    std::erase_if(paint->bindings,[](auto const& item){return !item.element.get();});
+    for (auto const& binding : paint->bindings)
+        if (!only || !binding.scroll.get() || binding.scroll.get() == only) PositionSearchColorMap(*paint,binding);
+}
+
+void SearchContrastScrolled(wuxc::ScrollViewer const& scroll) {
+    if (!g_searchWindowWindow.load() || !g_searchColorMap) return;
+    // Only reuse the cached image while scrolling. Moving labels cannot spoil
+    // the next background capture, and there is no readback in this callback.
+    g_searchColorMapScrollUntil = GetTickCount64()+160;
+    if (g_searchContrastSampler) g_searchContrastSampler->Cancel();
+    PositionSearchColorMaps(scroll);
+}
+
+wuxm::Brush SearchColorMapForeground(wux::FrameworkElement const& element, SearchColorMapPaint& paint, double opacity = 1) {
+    MakeSearchTextReadable(element);
+    for (auto const& binding : paint.bindings) if (binding.element.get() == element && binding.opacity == opacity) return binding.brush;
+    wuxm::ImageBrush brush;
+    brush.ImageSource(paint.bitmap);
+    brush.Opacity(opacity);
+    brush.Stretch(wuxm::Stretch::None);
+    brush.AlignmentX(wuxm::AlignmentX::Left); brush.AlignmentY(wuxm::AlignmentY::Top);
+    wuxm::MatrixTransform transform;
+    brush.Transform(transform);
+    paint.bindings.push_back({winrt::make_weak(element),brush,transform,{},opacity});
+    PositionSearchColorMap(paint,paint.bindings.back());
+    return brush;
+}
+
+
+void PositionSearchGradient(SearchContrastPaint const& paint, SearchGradientBinding const& binding) try {
+    auto root = paint.root.get(), element = binding.element.get();
+    if (!root || !element) return;
+    double width = root.ActualWidth();
+    if (width < 1) width = paint.gradient.widthDip;
+    if (width < 1) return;
+    double offset = 0;
+    try { offset = element.TransformToVisual(root).TransformPoint(wf::Point{0,0}).X; } catch (...) {}
+    const wf::Point start{static_cast<float>(-offset),0}, end{static_cast<float>(width-offset),0};
+    if (binding.brush.StartPoint() != start) binding.brush.StartPoint(start);
+    if (binding.brush.EndPoint() != end) binding.brush.EndPoint(end);
+} catch (...) {}
+
+void UpdateSearchGradientStops(wuxm::LinearGradientBrush const& brush, SearchContrastGradient const& gradient) {
+    auto stops = brush.GradientStops();
+    if (stops.Size() != gradient.stops.size()) {
+        stops.Clear();
+        for (auto const& value : gradient.stops) {
+            wuxm::GradientStop stop;
+            stop.Offset(value.offset); stop.Color(SearchUnpackColor(value.color));
+            stops.Append(stop);
+        }
+    } else for (uint32_t i = 0; i < stops.Size(); ++i) {
+        auto stop = stops.GetAt(i); auto const& value = gradient.stops[i];
+        const auto color = SearchUnpackColor(value.color);
+        if (stop.Color() != color) stop.Color(color);
+        if (stop.Offset() != value.offset) stop.Offset(value.offset);
+    }
+}
+
+void RefreshSearchGradientPaint(SearchContrastPaint& paint) {
+    std::erase_if(paint.bindings,[](auto const& item) { return !item.element.get(); });
+    for (auto const& binding : paint.bindings) {
+        UpdateSearchGradientStops(binding.brush,paint.gradient);
+        PositionSearchGradient(paint,binding);
+    }
+}
+
+void EnsureSearchGradientLayoutHandler() {
+    g_searchGradientLayoutDirty = true;
+    if (g_searchGradientLayoutHooked || !g_resultsHost) return;
+    KeepHandler(g_resultsHost,g_resultsHost.LayoutUpdated(winrt::auto_revoke,[](auto const&,auto const&) {
+        if (!g_searchGradientLayoutDirty) return;
+        g_searchGradientLayoutDirty = false;
+        PositionSearchColorMaps();
+        if (!g_searchContrastContainers) return;
+        for (auto& container : *g_searchContrastContainers) if (container.paint)
+            for (auto const& binding : container.paint->bindings) PositionSearchGradient(*container.paint,binding);
+    }));
+    g_searchGradientLayoutHooked = true;
+}
+
+wuxm::Brush SearchGradientForeground(wux::FrameworkElement const& element, wuxm::Brush const& fallback,
+                                    SearchContrastPaint* paint, double opacity = 1) {
+    MakeSearchTextReadable(element);
+    if (!paint || !paint->gradient.Mixed()) return fallback;
+    for (auto const& binding : paint->bindings)
+        if (binding.element.get() == element && binding.opacity == opacity) return binding.brush;
+    wuxm::LinearGradientBrush brush;
+    brush.MappingMode(wuxm::BrushMappingMode::Absolute);
+    brush.StartPoint(wf::Point{0,0}); brush.EndPoint(wf::Point{static_cast<float>(std::max(1.0,paint->gradient.widthDip)),0});
+    brush.Opacity(opacity);
+    UpdateSearchGradientStops(brush,paint->gradient);
+    paint->bindings.push_back({winrt::make_weak(element),brush,opacity});
+    PositionSearchGradient(*paint,paint->bindings.back());
+    // New rows keep the cached gradient immediately. LayoutUpdated fixes their
+    // final text offset before drawing; it does not capture or force layout.
+    EnsureSearchGradientLayoutHandler();
+    return brush;
+}
+
+void SetSearchContainerForeground(wux::DependencyObject const& node, wuxm::Brush const& brush, int depth = 0, SearchContrastPaint* paint = nullptr, SearchColorMapPaint* map = nullptr) {
+    if (!node || depth > 32 || node == g_ourBox) return;
+    auto foregroundFor = [&](wux::FrameworkElement const& element) -> wuxm::Brush {
+        return map ? SearchColorMapForeground(element,*map) : SearchGradientForeground(element,brush,paint);
+    };
+    if (auto text = node.try_as<wuxc::TextBlock>()) { text.Foreground(foregroundFor(text)); return; }
+    if (auto icon = node.try_as<wuxc::FontIcon>()) {
+        if (g_searchIcons) for (auto& entry : *g_searchIcons) if (entry.icon.get() == icon) {
+            if (icon.Foreground() == entry.applied) { auto foreground = foregroundFor(icon); icon.Foreground(foreground); entry.applied = foreground; }
+            return; // preserve deliberately colored converter/utility icons
+        }
+        icon.Foreground(foregroundFor(icon)); return;
+    }
+    if (auto control = node.try_as<wuxc::Control>(); control &&
+        (node.try_as<wuxc::MenuFlyoutPresenter>() || node.try_as<wuxc::MenuFlyoutItemBase>())) {
+        auto foreground = foregroundFor(control);
+        control.Foreground(foreground);
+        for (auto key : {L"MenuFlyoutItemForeground",L"MenuFlyoutItemForegroundPointerOver",L"MenuFlyoutItemForegroundPressed",
+                        L"MenuFlyoutSubItemForeground",L"MenuFlyoutSubItemForegroundPointerOver",L"MenuFlyoutSubItemForegroundPressed"})
+            control.Resources().Insert(winrt::box_value(key),foreground);
+        if (auto item = node.try_as<wuxc::MenuFlyoutItem>()) SetSearchContainerForeground(item.Icon(),brush,depth+1,paint,map);
+        if (auto sub = node.try_as<wuxc::MenuFlyoutSubItem>()) SetSearchContainerForeground(sub.Icon(),brush,depth+1,paint,map);
+    }
+    // Logical content is available before Control templates are realized. Avoid
+    // following both trees and recoloring every label twice.
+    if (auto border = node.try_as<wuxc::Border>()) { SetSearchContainerForeground(border.Child(),brush,depth+1,paint,map); return; }
+    if (auto panel = node.try_as<wuxc::Panel>()) {
+        for (auto child : panel.Children()) SetSearchContainerForeground(child,brush,depth+1,paint,map);
+        return;
+    }
+    if (auto content = node.try_as<wuxc::ContentControl>()) {
+        if (auto child = content.Content().try_as<wux::DependencyObject>()) {
+            SetSearchContainerForeground(child,brush,depth+1,paint,map); return;
+        }
+    }
+    const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; ++i) SetSearchContainerForeground(wuxm::VisualTreeHelper::GetChild(node,i),brush,depth+1,paint,map);
+}
+
+void BindSearchContrastContainer(SearchContrastContainer& container) {
+    auto root = container.root.get();
+    if (!root) return;
+    if (!container.paint) container.paint = std::make_shared<SearchContrastPaint>();
+    auto& paint = *container.paint;
+    paint.root = winrt::make_weak(root); paint.bindings.clear();
+    SetSearchContainerForeground(root,container.foreground,0,&paint);
+    container.dirty = false;
+}
+
+void InvalidateSearchContrastContainer(wux::FrameworkElement const& root) {
+    if (g_searchContrastContainers) for (auto& container : *g_searchContrastContainers) {
+        if (container.root.get() != root) continue;
+        // New heading/preview labels are already attached on this UI thread.
+        // Rebind before returning to layout, rather than waiting for the timer.
+        BindSearchContrastContainer(container);
+        break;
+    }
+}
+
+void PrepareSearchResultContrastColors() {
+    if (!g_searchWindowWindow.load() || SearchTextOverride() || !g_resultsHost) return;
+    auto& paint = g_searchColorMap;
+    if (!paint || paint->root.get() != g_resultsHost) {
+        paint = std::make_shared<SearchColorMapPaint>();
+        paint->id = ++g_searchContrastNextId;
+        paint->root = winrt::make_weak(g_resultsHost.as<wux::FrameworkElement>());
+        paint->bitmap = wuxmi::WriteableBitmap{kSearchContrastMapWidth,kSearchContrastMapHeight};
+        BYTE* bytes = nullptr;
+        winrt::check_hresult(paint->bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&bytes));
+        if (!bytes) winrt::throw_hresult(E_POINTER);
+        std::fill_n(reinterpret_cast<uint32_t*>(bytes),kSearchContrastMapWidth*kSearchContrastMapHeight,SearchMainTextColor());
+        paint->bitmap.Invalidate();
+    }
+    paint->bindings.clear();
+    SetSearchContainerForeground(g_resultsHost,g_searchTextBrush,0,nullptr,paint.get());
+    auto foreground = SearchColorMapForeground(g_ourBox,*paint);
+    g_ourBox.Foreground(foreground);
+    g_ourBox.PlaceholderForeground(foreground);
+    for (auto key : {L"TextControlForeground",L"TextControlForegroundFocused",L"TextControlForegroundPointerOver",
+                    L"TextControlButtonForeground",L"TextControlButtonForegroundPointerOver",L"TextControlButtonForegroundPressed"})
+        g_ourBox.Resources().Insert(winrt::box_value(key),foreground);
+    EnsureSearchGradientLayoutHandler();
+}
+
+bool SearchContrastBounds(wux::FrameworkElement const& element, bool outside, RECT* rect, RECT* surface = nullptr) try {
+    if (!element || element.Visibility() != wux::Visibility::Visible || element.Opacity() < .99 || !element.XamlRoot()) return false;
+    HWND host = g_searchWindowWindow.load();
+    POINT origin{};
+    if (!host || !ClientToScreen(g_searchWindowChild,&origin)) return false;
+    const double scale = element.XamlRoot().RasterizationScale();
+    auto bounds = [&](wux::FrameworkElement const& item) {
+        auto r = item.TransformToVisual(g_searchWindowRoot).TransformBounds(
+            wf::Rect{0,0,static_cast<float>(item.ActualWidth()),static_cast<float>(item.ActualHeight())});
+        return RECT{origin.x+static_cast<LONG>(std::ceil(r.X*scale)),origin.y+static_cast<LONG>(std::ceil(r.Y*scale)),
+                    origin.x+static_cast<LONG>(std::floor((r.X+r.Width)*scale)),origin.y+static_cast<LONG>(std::floor((r.Y+r.Height)*scale))};
+    };
+    *rect = bounds(element);
+    if (surface) *surface = *rect;
+    if (!outside) {
+        RECT visible{}; GetClientRect(g_searchWindowChild,&visible); OffsetRect(&visible,origin.x,origin.y);
+        if (!IntersectRect(rect,rect,&visible)) return false;
+        // A scrolled card must be sampled only inside its visible viewport.
+        auto parent = wuxm::VisualTreeHelper::GetParent(element);
+        for (int depth = 0; parent && depth < 32; ++depth) {
+            if (auto scroll = parent.try_as<wuxc::ScrollViewer>()) {
+                RECT viewport = bounds(scroll);
+                if (!IntersectRect(rect,rect,&viewport)) return false;
+                break;
+            }
+            parent = wuxm::VisualTreeHelper::GetParent(parent);
+        }
+    }
+    RECT desktop{GetSystemMetrics(SM_XVIRTUALSCREEN),GetSystemMetrics(SM_YVIRTUALSCREEN),0,0};
+    desktop.right = desktop.left+GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    desktop.bottom = desktop.top+GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    return IntersectRect(rect,rect,&desktop) && rect->right-rect->left >= 24 && rect->bottom-rect->top >= 18;
+} catch (...) { return false; }
+
+std::optional<SearchContrastMapProbe> BuildSearchColorMapProbe(SearchColorMapPaint const& paint) {
+    auto root = paint.root.get();
+    RECT rect{}, surface{};
+    if (!root || !SearchContrastBounds(root,false,&rect,&surface) || !EqualRect(&rect,&surface)) return std::nullopt;
+    SearchContrastMapProbe probe{paint.id,rect,{}};
+    probe.exposed = SearchContrastExposure({paint.id,rect,false},g_searchWindowWindow.load(),GetCurrentThreadId());
+    if (!probe.exposed) return std::nullopt;
+    const int padding = std::max(2,MulDiv(3,GetDpiForWindow(g_searchWindowWindow.load()),96));
+    auto add = [&](wux::FrameworkElement const& element) {
+        RECT visible{}, bounds{};
+        if (!SearchContrastBounds(element,false,&visible,&bounds)) return;
+        for (const int y : {bounds.top+padding,bounds.bottom-padding-2})
+            if (y >= visible.top && y+1 < visible.bottom)
+                probe.strips.push_back(RECT{visible.left,y,visible.right,y+2});
+    };
+    add(g_searchBarBorder); add(g_appsHeaderHolder); add(g_filesHeaderHolder); add(g_footerBorder);
+    for (auto panel : {g_appsList,g_resultsList}) if (panel)
+        for (auto child : panel.Children()) add(child.try_as<wux::FrameworkElement>());
+    if (probe.strips.empty()) return std::nullopt;
+    std::sort(probe.strips.begin(),probe.strips.end(),[](RECT const& a,RECT const& b) {
+        return a.top != b.top ? a.top < b.top : a.left < b.left;
+    });
+    if (probe.strips.size() > kSearchContrastMaxMapBands) {
+        std::vector<RECT> selected; selected.reserve(kSearchContrastMaxMapBands);
+        for(size_t i=0;i<kSearchContrastMaxMapBands;++i)
+            selected.push_back(probe.strips[i*(probe.strips.size()-1)/(kSearchContrastMaxMapBands-1)]);
+        probe.strips=std::move(selected);
+    }
+    return probe;
+}
+
+void ApplySearchColorMaps(SearchContrastResult const& result) {
+    auto const& paint = g_searchColorMap;
+    if (!paint || GetTickCount64() < g_searchColorMapScrollUntil) return;
+    for (auto const& reading : result.maps) {
+        if (paint->id != reading.id || !reading.pixels || reading.pixels->size() != kSearchContrastMapWidth*kSearchContrastMapHeight) continue;
+        RECT bounds{};
+        if (!SearchContrastBounds(paint->root.get(),false,&bounds) || !EqualRect(&bounds,&reading.bounds) ||
+            !SearchContrastExposure({reading.id,bounds,false},g_searchWindowWindow.load(),GetCurrentThreadId())) break;
+        if (paint->revision != reading.revision) {
+            BYTE* bytes = nullptr;
+            winrt::check_hresult(paint->bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&bytes));
+            if (!bytes || paint->bitmap.PixelBuffer().Capacity() < reading.pixels->size()*sizeof(uint32_t)) break;
+            memcpy(bytes,reading.pixels->data(),reading.pixels->size()*sizeof(uint32_t));
+            paint->bitmap.Invalidate();
+            paint->revision = reading.revision;
+            if (!g_searchColorMapReported) {
+                SearchWindowTrace(L"full-window contrast map active; scrolling reuses one shared image");
+                g_searchColorMapReported = true;
+            }
+        }
+        PositionSearchColorMaps();
+        break;
+    }
+}
+
+bool SearchContainerContrastActive() {
+    HWND host = g_searchWindowWindow.load();
+    return host && IsWindowVisible(host) && !g_searchWindowClosing && !g_searchWindowSliding &&
+        !g_searchWindowWaitingForStart && !g_searchWindowCloaked && !g_dragging &&
+        GetWindowThreadProcessId(GetForegroundWindow(),nullptr) == GetCurrentThreadId() && !SearchTextOverride();
+}
+
+void PauseSearchContainerContrast() {
+    if (HWND host = g_searchWindowWindow.load()) KillTimer(host,kSearchContainerContrastTimer);
+    if (g_searchContrastSampler) g_searchContrastSampler->Cancel();
+}
+void ResetSearchContainerContrast() {
+    PauseSearchContainerContrast();
+    RestoreSearchTextOpacity();
+    g_searchContrastContainers.reset();
+    g_searchColorMap.reset();
+    g_searchColorMapScrollUntil = 0;
+    g_searchColorMapReported = false;
+    g_searchContrastReported = false;
+    g_searchGradientLayoutDirty = false;
+}
+void StopSearchContainerContrast() {
+    ResetSearchContainerContrast();
+    g_searchContrastSampler.reset(); // join before XAML or the host can disappear
+    g_searchGradientLayoutHooked = false;
+}
+
+void ApplySearchContainerContrast() try {
+    if (!g_searchContrastSampler) return;
+    auto result = g_searchContrastSampler->Take();
+    if (!result || !g_searchContrastSampler->Current(result->generation) || !SearchContainerContrastActive() ||
+        !g_searchContrastContainers) return;
+    ApplySearchColorMaps(*result);
+    size_t applied = 0, lightCount = 0, mixedCount = 0;
+    for (auto const& reading : result->readings) for (auto& container : *g_searchContrastContainers) {
+        if (!container.active || container.id != reading.id) continue;
+        RECT now{};
+        if (!SearchContrastBounds(container.root.get(),container.outside,&now) || !EqualRect(&now,&reading.bounds) ||
+            !SearchContrastExposure({container.id,now,container.outside},g_searchWindowWindow.load(),GetCurrentThreadId())) break;
+        if (!container.paint) container.paint = std::make_shared<SearchContrastPaint>();
+        const bool wasMixed = container.paint->gradient.Mixed();
+        const double scale = GetDpiForWindow(g_searchWindowWindow.load())/96.0;
+        const bool changed = container.paint->gradient.Sample(reading.profile,reading.inset,(now.right-now.left)/scale);
+        const bool mixed = container.paint->gradient.Mixed();
+        const bool light = SearchContainerLightText(reading.luminance,container.lightText);
+        const uint32_t foreground = SearchContrastGrayColor(reading.luminance,light);
+        const auto color = SearchUnpackColor(foreground);
+        if (container.foreground.Color() != color) container.foreground.Color(color);
+        container.lightText = light;
+        if (wasMixed != mixed) BindSearchContrastContainer(container);
+        else if (changed && mixed) RefreshSearchGradientPaint(*container.paint);
+        ++applied; lightCount += light; mixedCount += mixed;
+        break;
+    }
+    if (applied && !g_searchContrastReported) {
+        wchar_t detail[128]{};
+        swprintf_s(detail,L"container contrast active: %zu sampled, %zu light, %zu dark, %zu gradients",applied,lightCount,applied-lightCount,mixedCount);
+        SearchWindowTrace(detail);
+        g_searchContrastReported = true;
+    }
+} catch (...) { SearchWindowTrace(L"container color update failed",winrt::to_hresult()); }
+
+void SearchContainerContrastTick() try {
+    if (!SearchContainerContrastActive()) { PauseSearchContainerContrast(); return; }
+    ApplySearchContainerContrast();
+    if (!g_searchContrastContainers) g_searchContrastContainers.emplace();
+    auto& containers = *g_searchContrastContainers;
+    std::erase_if(containers,[](auto const& item) { return !item.root.get(); });
+    for (auto& item : containers) item.active = false;
+    std::vector<SearchContrastProbe> probes;
+    auto add = [&](wux::FrameworkElement const& element, bool outside = false) {
+        RECT rect{}, surface{};
+        if (probes.size() >= kSearchContrastMaxContainers || !SearchContrastBounds(element,outside,&rect,&surface)) return;
+        auto found = std::find_if(containers.begin(),containers.end(),[&](auto const& item) { return item.root.get() == element; });
+        if (found == containers.end()) {
+            const uint32_t fallback = SearchMainTextColor();
+            containers.push_back({++g_searchContrastNextId,winrt::make_weak(element),wuxm::SolidColorBrush{SearchUnpackColor(fallback)}});
+            found = containers.end()-1;
+        }
+        auto& item = *found;
+        item.active = true; item.outside = outside;
+        if (item.dirty) BindSearchContrastContainer(item);
+        SearchContrastProbe probe{item.id,rect,outside};
+        probe.surface = surface;
+        probe.exposed = SearchContrastExposure(probe,g_searchWindowWindow.load(),GetCurrentThreadId());
+        if (probe.exposed) probes.push_back(probe);
+    };
+    if (g_previewPopup && g_previewPopup.IsOpen() && g_previewCard.Opacity() >= .99) {
+        add(g_previewDetails,true);
+        if (g_previewText && g_previewText.Visibility() == wux::Visibility::Visible) add(g_previewThumbBox,true);
+    }
+    bool menuOpen = false;
+    // Give menus priority over long result lists. Each open submenu is a
+    // separate container, rather than inheriting its parent's sampled color.
+    if (g_resultsHost && g_resultsHost.XamlRoot()) for (auto popup : wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
+        if (popup == g_previewPopup) continue;
+        auto visit = [&](auto&& self, wux::DependencyObject const& node, int depth) -> void {
+            if (!node || depth > 16) return;
+            if (auto menu = node.try_as<wuxc::MenuFlyoutPresenter>()) { menuOpen=true; add(menu,true); return; }
+            const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+            for (int i = 0; i < count; ++i) self(self,wuxm::VisualTreeHelper::GetChild(node,i),depth+1);
+        };
+        visit(visit,popup.Child(),0);
+    }
+    if (!g_searchColorMap) PrepareSearchResultContrastColors();
+    std::vector<SearchContrastMapProbe> maps;
+    if (!menuOpen && GetTickCount64() >= g_searchColorMapScrollUntil && g_searchColorMap)
+        if (auto probe=BuildSearchColorMapProbe(*g_searchColorMap)) maps.push_back(std::move(*probe));
+    if (!probes.empty() || !maps.empty()) {
+        if (!g_searchContrastSampler) g_searchContrastSampler.emplace();
+        g_searchContrastSampler->Submit(g_searchWindowWindow.load(),GetCurrentThreadId(),std::move(probes),std::move(maps));
+    }
+    SetTimer(g_searchWindowWindow.load(),kSearchContainerContrastTimer,250,nullptr);
+} catch (...) { PauseSearchContainerContrast(); SearchWindowTrace(L"container color sampling unavailable",winrt::to_hresult()); }
+
+
+struct SearchGlassBrush : wuxm::XamlCompositionBrushBaseT<SearchGlassBrush> {
+    SearchBrushData data;
+    searchcomp::Compositor compositor{nullptr};
+    searchcomp::CompositionEffectFactory factory{nullptr};
+    bool hostBackdrop;
+    SearchGlassBrush(SearchBrushData value,bool host) : data(value),hostBackdrop(host) {
+        compositor=wux::Hosting::ElementCompositionPreview::GetElementVisual(g_resultsHost).Compositor();
+    }
+    void OnConnected() noexcept {
+        if (CompositionBrush()) return;
+        try {
+            winrt::Windows::UI::ViewManagement::UISettings settings;
+            HIGHCONTRASTW contrast{sizeof(contrast)};
+            const bool highContrast=SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) &&
+                                    (contrast.dwFlags&HCF_HIGHCONTRASTON);
+            if (!settings.AdvancedEffectsEnabled() || highContrast) {
+                CompositionBrush(compositor.CreateColorBrush(SearchUnpackColor(data.fallback))); return;
+            }
+            // This brush's definition is immutable. Reconnecting it (for
+            // example in a preview) needs a new brush, not a new effect graph.
+            if (!factory) {
+                auto blur=winrt::make_self<SearchEffect>(CLSID_D2D1GaussianBlur);
+                blur->properties={wf::PropertyValue::CreateSingle(static_cast<float>(data.blur)),
+                                  wf::PropertyValue::CreateUInt32(1),wf::PropertyValue::CreateUInt32(1)};
+                blur->sources={searchcomp::CompositionEffectSourceParameter(L"Backdrop")};
+                searcheffect::IGraphicsEffectSource source=*blur;
+                // Same saturation/luminance operations as WindhawkBlur.
+                auto matrix=[&](std::array<float,20> const& values) {
+                    auto effect=winrt::make_self<SearchEffect>(CLSID_D2D1ColorMatrix);
+                    effect->properties={wf::PropertyValue::CreateSingleArray(values),
+                                        wf::PropertyValue::CreateUInt32(1),wf::PropertyValue::CreateBoolean(false)};
+                    effect->sources={source}; source=*effect;
+                };
+                constexpr float r=.2126f,g=.7152f,b=.0722f;
+                if (data.saturation!=1) {
+                    float sat=static_cast<float>(data.saturation),inv=1-sat;
+                    matrix({inv*r+sat,inv*r,inv*r,0,inv*g,inv*g+sat,inv*g,0,
+                            inv*b,inv*b,inv*b+sat,0,0,0,0,1,0,0,0,0});
+                }
+                const auto tint=SearchUnpackColor(data.color);
+                if (data.luminosity>0) {
+                    float op=static_cast<float>(data.luminosity);
+                    float lum=(tint.R*r+tint.G*g+tint.B*b)/255.0f*op;
+                    matrix({1-r*op,-r*op,-r*op,0,-g*op,1-g*op,-g*op,0,
+                            -b*op,-b*op,1-b*op,0,0,0,0,1,lum,lum,lum,0});
+                }
+                auto flood=winrt::make_self<SearchEffect>(CLSID_D2D1Flood);
+                flood->properties={wf::PropertyValue::CreateSingleArray(
+                    {tint.R/255.0f,tint.G/255.0f,tint.B/255.0f,tint.A/255.0f})};
+                auto composite=winrt::make_self<SearchEffect>(CLSID_D2D1Composite);
+                composite->properties={wf::PropertyValue::CreateUInt32(0)}; // SOURCE_OVER
+                composite->sources={source,*flood};
+                factory=compositor.CreateEffectFactory(*composite);
+            }
+            auto effect=factory.CreateBrush();
+            effect.SetSourceParameter(L"Backdrop",hostBackdrop ? compositor.CreateHostBackdropBrush() : compositor.CreateBackdropBrush());
+            CompositionBrush(effect);
+            if(hostBackdrop) SearchWindowTrace(L"glass composition ready");
+        } catch (...) {
+            SearchWindowTrace(L"glass effect fallback",winrt::to_hresult());
+            try { CompositionBrush(compositor.CreateColorBrush(SearchUnpackColor(data.fallback))); } catch (...) {}
+        }
+    }
+    void OnDisconnected() noexcept {
+        try { if(auto brush=CompositionBrush()) { CompositionBrush(nullptr); brush.Close(); } } catch (...) {}
+    }
+};
+
+wuxm::Brush RecreateSearchBrush(SearchBrushData const& data,bool hostBackdrop = false) {
+    if (!std::isfinite(data.opacity) || !std::isfinite(data.tint) || !std::isfinite(data.luminosity)) return nullptr;
+    wuxm::Brush brush{nullptr};
+    if (data.kind == 1) brush=wuxm::SolidColorBrush{SearchUnpackColor(data.color)};
+    else if (data.kind == 2) {
+        wuxm::AcrylicBrush acrylic;
+        acrylic.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
+        acrylic.TintColor(SearchUnpackColor(data.color)); acrylic.FallbackColor(SearchUnpackColor(data.fallback));
+        acrylic.TintOpacity(std::clamp(data.tint,0.0,1.0));
+        if (data.luminosity >= 0) acrylic.TintLuminosityOpacity(std::clamp(data.luminosity,0.0,1.0));
+        brush=acrylic;
+    } else if (data.kind == 4) {
+        if (!std::isfinite(data.blur) || data.blur<0 || data.blur>100 || !std::isfinite(data.saturation) || data.saturation<0 || data.saturation>10) return nullptr;
+        brush=winrt::make<SearchGlassBrush>(data,hostBackdrop);
+    } else if (data.kind == 3 && data.count <= 8) {
+        wuxm::LinearGradientBrush gradient;
+        for(double coordinate:data.points) if(!std::isfinite(coordinate) || std::abs(coordinate)>1000) return nullptr;
+        gradient.StartPoint(wf::Point{static_cast<float>(data.points[0]),static_cast<float>(data.points[1])});
+        gradient.EndPoint(wf::Point{static_cast<float>(data.points[2]),static_cast<float>(data.points[3])});
+        for (uint32_t i=0;i<data.count;++i) {
+            if (!std::isfinite(data.offsets[i])) return nullptr;
+            wuxm::GradientStop stop; stop.Color(SearchUnpackColor(data.colors[i])); stop.Offset(std::clamp(data.offsets[i],0.0,1.0));
+            gradient.GradientStops().Append(stop);
+        }
+        brush=gradient;
+    }
+    if (brush) brush.Opacity(std::clamp(data.opacity,0.0,1.0));
+    return brush;
+}
+
+// Public Windows.Graphics interop ABI, not supplied by the MinGW SDK.
+struct SearchGeometryInterop : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetGeometry(ID2D1Geometry**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE TryGetGeometryUsingFactory(ID2D1Factory*, ID2D1Geometry**) = 0;
+};
+
+} // namespace
+template <> inline constexpr winrt::guid winrt::impl::guid_v<SearchGeometryInterop>{
+    0x0657AF73,0x53FD,0x47CF,{0x84,0xFF,0xC8,0x49,0x2D,0x2A,0x80,0xA3}};
+namespace {
+
+struct SearchGeometrySource : winrt::implements<SearchGeometrySource,
+        winrt::Windows::Graphics::IGeometrySource2D,SearchGeometryInterop> {
+    winrt::com_ptr<ID2D1Geometry> geometry;
+    explicit SearchGeometrySource(winrt::com_ptr<ID2D1Geometry> value) : geometry(std::move(value)) {}
+    HRESULT STDMETHODCALLTYPE GetGeometry(ID2D1Geometry** value) noexcept override {
+        if(!value) return E_POINTER;
+        geometry.copy_to(value); return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE TryGetGeometryUsingFactory(ID2D1Factory*,ID2D1Geometry** value) noexcept override {
+        if(!value) return E_POINTER;
+        *value=nullptr; return E_NOTIMPL;
+    }
+};
+
+RECT g_searchWindowSlideFrame{};  // full, unclipped position of the XAML content
+HRGN g_searchWindowFullShape = nullptr;  // owned here; SetWindowRgn receives a copy
+
+void PositionSearchWindowChild() {
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_searchWindowChild) return;
+    RECT visible{}, frame = g_searchWindowSlideFrame;
+    if (!GetWindowRect(host, &visible)) return;
+    if (IsRectEmpty(&frame)) frame = visible;
+    const RECT child{frame.left-visible.left,frame.top-visible.top,
+                     frame.right-visible.left,frame.bottom-visible.top};
+    static HWND lastChild = nullptr;
+    static RECT last{};
+    if (lastChild == g_searchWindowChild && EqualRect(&last,&child)) return;
+    if (SetWindowPos(g_searchWindowChild,nullptr,child.left,child.top,
+                     child.right-child.left,child.bottom-child.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
+        lastChild = g_searchWindowChild;
+        last = child;
+    }
+}
+
+void ApplySearchWindowShapeRegion() {
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_searchWindowFullShape) return;
+    RECT visible{}, frame = g_searchWindowSlideFrame;
+    if (!GetWindowRect(host,&visible)) return;
+    if (IsRectEmpty(&frame)) frame = visible;
+    const std::array<LONG,4> clip{frame.left-visible.left,frame.top-visible.top,
+                                visible.right-visible.left,visible.bottom-visible.top};
+    static HWND lastHost = nullptr;
+    static HRGN lastShape = nullptr;
+    static std::array<LONG,4> lastClip{};
+    if (lastHost==host && lastShape==g_searchWindowFullShape && lastClip==clip) return;
+    HRGN region = CreateRectRgn(0,0,0,0);
+    HRGN viewport = CreateRectRgn(0,0,visible.right-visible.left,visible.bottom-visible.top);
+    if (!region || !viewport) {
+        if (region) DeleteObject(region);
+        if (viewport) DeleteObject(viewport);
+        return;
+    }
+    const bool valid = CombineRgn(region,g_searchWindowFullShape,nullptr,RGN_COPY)!=ERROR &&
+        OffsetRgn(region,frame.left-visible.left,frame.top-visible.top)!=ERROR &&
+        CombineRgn(region,region,viewport,RGN_AND)!=ERROR;
+    DeleteObject(viewport);
+    if (valid && SetWindowRgn(host,region,FALSE)) {
+        lastHost=host; lastShape=g_searchWindowFullShape; lastClip=clip;
+    } else DeleteObject(region);
+}
+
+void UpdateSearchWindowShape() {
+    HWND host=g_searchWindowWindow.load(); if(!host || !g_resultsHost || !g_searchWindowRoot) return;
+    RECT client{}; if(!GetClientRect(host,&client)) return;
+    if (!IsRectEmpty(&g_searchWindowSlideFrame)) {
+        client.right=g_searchWindowSlideFrame.right-g_searchWindowSlideFrame.left;
+        client.bottom=g_searchWindowSlideFrame.bottom-g_searchWindowSlideFrame.top;
+    }
+    if(client.right<=0 || client.bottom<=0) return;
+    const double scale=GetDpiForWindow(host)/96.0;
+    const float width=static_cast<float>(client.right/scale),height=static_cast<float>(client.bottom/scale);
+    auto corner=g_resultsHost.CornerRadius();
+    const double dips[]{corner.TopLeft,corner.TopRight,corner.BottomRight,corner.BottomLeft};
+    std::array<float,4> radii{};
+    for(size_t i=0;i<4;++i) radii[i]=static_cast<float>(std::clamp(dips[i],0.0,std::min(width,height)/2.0));
+    static HWND lastHost=nullptr; static RECT lastSize{}; static double lastScale=0;
+    static std::array<float,4> lastRadii{};
+    if(g_searchWindowFullShape && host==lastHost && EqualRect(&client,&lastSize) && scale==lastScale && radii==lastRadii) return;
+
+    bool smooth=false;
+    try {
+        winrt::com_ptr<ID2D1Factory> factory;
+        winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,factory.put()));
+        winrt::com_ptr<ID2D1PathGeometry> path;
+        winrt::check_hresult(factory->CreatePathGeometry(path.put()));
+        winrt::com_ptr<ID2D1GeometrySink> sink;
+        winrt::check_hresult(path->Open(sink.put()));
+        sink->BeginFigure({radii[0],0},D2D1_FIGURE_BEGIN_FILLED);
+        auto arc=[&](D2D1_POINT_2F point,float radius) {
+            if(radius>0) sink->AddArc(D2D1_ARC_SEGMENT{point,{radius,radius},0,
+                D2D1_SWEEP_DIRECTION_CLOCKWISE,D2D1_ARC_SIZE_SMALL});
+            else sink->AddLine(point);
+        };
+        sink->AddLine({width-radii[1],0}); arc({width,radii[1]},radii[1]);
+        sink->AddLine({width,height-radii[2]}); arc({width-radii[2],height},radii[2]);
+        sink->AddLine({radii[3],height}); arc({0,height-radii[3]},radii[3]);
+        sink->AddLine({0,radii[0]}); arc({radii[0],0},radii[0]);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        winrt::check_hresult(sink->Close());
+        auto visual=wux::Hosting::ElementCompositionPreview::GetElementVisual(g_searchWindowRoot);
+        auto compositor=visual.Compositor();
+        searchcomp::CompositionPath outline{winrt::make<SearchGeometrySource>(path.as<ID2D1Geometry>())};
+        visual.BorderMode(searchcomp::CompositionBorderMode::Soft);
+        visual.Clip(compositor.CreateGeometricClip(compositor.CreatePathGeometry(outline)));
+        smooth=true;
+        SearchWindowTrace(L"smooth window corners ready");
+    } catch(...) { SearchWindowTrace(L"smooth window corners failed",winrt::to_hresult()); }
+
+    // Retain a native region for pointer input, but place its hard edge two
+    // physical pixels outside the antialiased curve. Only the composition clip
+    // draws the visible edge; the transparent host has no backdrop to spill out.
+    HRGN region=CreateRectRgn(0,0,client.right,client.bottom); if(!region) return;
+    bool valid=true;
+    for(int i=0;i<4;++i) {
+        const int r=static_cast<int>(std::lround(radii[i]*scale));
+        const int outside=smooth ? 2 : 0;
+        if(!r) continue;
+        const bool right=i==1 || i==2,bottom=i>=2;
+        const int x=right ? client.right-r : 0,y=bottom ? client.bottom-r : 0;
+        const int cx=right ? client.right-2*r : 0,cy=bottom ? client.bottom-2*r : 0;
+        HRGN square=CreateRectRgn(x,y,x+r,y+r),circle=CreateEllipticRgn(cx-outside,cy-outside,cx+2*r+outside,cy+2*r+outside);
+        if(!square || !circle || CombineRgn(square,square,circle,RGN_DIFF)==ERROR ||
+           CombineRgn(region,region,square,RGN_DIFF)==ERROR) valid=false;
+        if(square) DeleteObject(square); if(circle) DeleteObject(circle);
+    }
+    if(valid) {
+        if(g_searchWindowFullShape) DeleteObject(g_searchWindowFullShape);
+        g_searchWindowFullShape=region;
+        lastHost=host; lastSize=client; lastScale=scale; lastRadii=radii;
+        ApplySearchWindowShapeRegion();
+    } else DeleteObject(region);
+}
+
+
+wux::CornerRadius SearchCorners(double const (&v)[4]) {
+    return wux::CornerRadius{v[0],v[1],v[2],v[3]};
+}
+wux::Thickness SearchThickness(double const (&v)[4]) {
+    return wux::ThicknessHelper::FromLengths(v[0],v[1],v[2],v[3]);
+}
+template<class Element> void ApplySearchSurface(Element const& element,SearchSurfaceData const& style) {
+    if(style.flags&1) element.Background(RecreateSearchBrush(style.background));
+    if(style.flags&2) element.BorderBrush(RecreateSearchBrush(style.outline));
+    if(style.flags&4) element.CornerRadius(SearchCorners(style.corners));
+    if(style.flags&8) element.BorderThickness(SearchThickness(style.thickness));
+    if(style.flags&16) element.Padding(SearchThickness(style.padding));
+    if(style.flags&32) element.Margin(SearchThickness(style.margin));
+}
+
+bool ValidSearchSurface(SearchSurfaceData const& surface) {
+    if(surface.flags & ~127u) return false;
+    for(auto values:{surface.corners,surface.thickness,surface.padding,surface.margin})
+        for(int i=0;i<4;++i) if(!std::isfinite(values[i]) || values[i]<0 || values[i]>200) return false;
+    return true;
+}
+
+struct SearchMenuAppearance {
+    uint32_t dark,foreground,overrideColor;
+    SearchSurfaceData presenter,border,item;
+    bool operator==(SearchMenuAppearance const&) const = default;
+};
+[[clang::no_destroy]] wux::Style g_searchMenuPresenterStyle{nullptr};
+std::optional<SearchMenuAppearance> g_searchMenuAppearance;
+uint64_t g_searchMenuStyleGeneration=0,g_searchMenuRefreshedGeneration=0;
+
+// The default MenuFlyoutPresenter template binds its border's material,
+// corners, thickness and padding to the corresponding presenter properties.
+// Put the final values in its Style before layout, instead of finding and
+// repainting an already visible Border.
+wux::Style CopiedMenuPresenterStyle() {
+    if(!g_searchWindowWindow.load() || !g_searchAppearanceValid) return nullptr;
+    auto const& appearance=g_searchAppearance;
+    SearchMenuAppearance snapshot{appearance.dark,SearchMainTextColor(),SearchTextOverride(),appearance.menu,appearance.menuBorder,appearance.menuItem};
+    if(g_searchMenuPresenterStyle && g_searchMenuAppearance && *g_searchMenuAppearance==snapshot)
+        return g_searchMenuPresenterStyle;
+    SearchSurfaceData surface=appearance.menu;
+    auto const& border=appearance.menuBorder;
+    if(border.flags&1) surface.background=border.background;
+    if(border.flags&2) surface.outline=border.outline;
+    if(border.flags&4) std::copy(std::begin(border.corners),std::end(border.corners),surface.corners);
+    if(border.flags&8) std::copy(std::begin(border.thickness),std::end(border.thickness),surface.thickness);
+    if(border.flags&16) std::copy(std::begin(border.padding),std::end(border.padding),surface.padding);
+    // A child Border's margin is an internal inset, not the popup's position.
+    // Do not transfer it to the presenter margin.
+    surface.flags |= border.flags&31u;
+    wux::Style style{winrt::xaml_typename<wuxc::MenuFlyoutPresenter>()};
+    auto set=[&](wux::DependencyProperty const& property,wf::IInspectable const& value) {
+        style.Setters().Append(wux::Setter{property,value});
+    };
+    const uint32_t foreground=SearchChooseTextColor(surface.background,
+        surface.foreground ? surface.foreground : snapshot.foreground,appearance.dark!=0,snapshot.overrideColor);
+    set(wux::FrameworkElement::RequestedThemeProperty(),winrt::box_value(
+        SearchLuminance(foreground)>0.5 ? wux::ElementTheme::Dark : wux::ElementTheme::Light));
+    set(wuxc::Control::ForegroundProperty(),wuxm::SolidColorBrush{SearchUnpackColor(foreground)});
+    if(surface.flags&1) set(wuxc::Control::BackgroundProperty(),RecreateSearchBrush(surface.background));
+    if(surface.flags&2) set(wuxc::Control::BorderBrushProperty(),RecreateSearchBrush(surface.outline));
+    if(surface.flags&4) set(wuxc::Control::CornerRadiusProperty(),winrt::box_value(SearchCorners(surface.corners)));
+    if(surface.flags&8) set(wuxc::Control::BorderThicknessProperty(),winrt::box_value(SearchThickness(surface.thickness)));
+    if(surface.flags&16) set(wuxc::Control::PaddingProperty(),winrt::box_value(SearchThickness(surface.padding)));
+    if(surface.flags&32) set(wux::FrameworkElement::MarginProperty(),winrt::box_value(SearchThickness(surface.margin)));
+    g_searchMenuPresenterStyle=style;
+    g_searchMenuAppearance=snapshot;
+    ++g_searchMenuStyleGeneration;
+    SearchWindowTrace(L"copied menu style prepared");
+    return style;
+}
+
+void PrepareCopiedMenuItems(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuFlyoutItemBase> const& items) {
+    auto const& surface=g_searchAppearance.menuItem;
+    auto const& menu=g_searchAppearance.menu;
+    auto const& border=g_searchAppearance.menuBorder;
+    auto background=(border.flags&1) ? border.background : menu.background;
+    const uint32_t menuColor=SearchChooseTextColor(background,menu.foreground ? menu.foreground : SearchMainTextColor(),
+                                                 g_searchAppearance.dark!=0,SearchTextOverride());
+    const uint32_t itemColor=SearchChooseTextColor((surface.flags&1) ? surface.background : background,
+        surface.foreground ? surface.foreground : menuColor,g_searchAppearance.dark!=0,SearchTextOverride());
+    for(auto item:items) {
+        if(item.try_as<wuxc::MenuFlyoutSeparator>()) continue;
+        auto control=item.as<wuxc::Control>();
+        wuxm::Brush foreground=wuxm::SolidColorBrush{SearchUnpackColor(itemColor)};
+        control.Foreground(foreground);
+        SetSearchContainerForeground(item,foreground);
+        for(auto key:{L"MenuFlyoutItemForeground",L"MenuFlyoutItemForegroundPointerOver",L"MenuFlyoutItemForegroundPressed",
+                      L"MenuFlyoutSubItemForeground",L"MenuFlyoutSubItemForegroundPointerOver",L"MenuFlyoutSubItemForegroundPressed"})
+            control.Resources().Insert(winrt::box_value(key),foreground);
+        // Remove our previous overrides if a new theme leaves them at default.
+        if(!(surface.flags&1)) control.ClearValue(wuxc::Control::BackgroundProperty());
+        if(!(surface.flags&2)) control.ClearValue(wuxc::Control::BorderBrushProperty());
+        if(!(surface.flags&4)) control.ClearValue(wuxc::Control::CornerRadiusProperty());
+        if(!(surface.flags&8)) control.ClearValue(wuxc::Control::BorderThicknessProperty());
+        if(!(surface.flags&16)) control.ClearValue(wuxc::Control::PaddingProperty());
+        if(!(surface.flags&32)) control.ClearValue(wux::FrameworkElement::MarginProperty());
+        ApplySearchSurface(control,surface);
+        if(auto sub=item.try_as<wuxc::MenuFlyoutSubItem>()) PrepareCopiedMenuItems(sub.Items());
+    }
+}
+
+void PrepareCopiedMenu(wuxc::MenuFlyout const& menu) try {
+    auto style=CopiedMenuPresenterStyle(); if(!style) return;
+    if(menu.MenuFlyoutPresenterStyle()!=style) menu.MenuFlyoutPresenterStyle(style);
+    PrepareCopiedMenuItems(menu.Items());
+    // Opening reapplies the copied style. Restore any cached gradients before
+    // that presenter draws, including reused nested-menu presenters.
+    if (g_searchContrastContainers) for (auto& container : *g_searchContrastContainers)
+        if (auto root = container.root.get(); root && root.try_as<wuxc::MenuFlyoutPresenter>())
+            BindSearchContrastContainer(container);
+} catch(...) { SearchWindowTrace(L"menu preparation failed",winrt::to_hresult()); }
+
+void InitializeCopiedMenu(wuxc::MenuFlyout const& menu) {
+    if(!g_searchWindowWindow.load()) return;
+    PrepareCopiedMenu(menu);
+    // Registered after the population handler, so every item and nested branch
+    // is ready before the flyout can draw. Windows forwards this same presenter
+    // style to each submenu before opening it (MenuFlyoutSubItem).
+    KeepHandler(menu,menu.Opening(winrt::auto_revoke,[](wf::IInspectable const& sender,wf::IInspectable const&) {
+        PrepareCopiedMenu(sender.as<wuxc::MenuFlyout>());
+    }));
+}
+
+void RefreshCopiedMenuStyles() try {
+    auto style=CopiedMenuPresenterStyle();
+    if(!style || g_searchMenuRefreshedGeneration==g_searchMenuStyleGeneration) return;
+    // A real appearance change may happen while a menu is already open. This
+    // refresh handles that case only; opening new menus never waits for a timer.
+    for(auto const* buttons:{&g_appButtonsOpt,&g_fileButtonsOpt}) {
+        if(!*buttons) continue;
+        for(auto const& button:**buttons) {
+            if(auto menu=button.ContextFlyout().try_as<wuxc::MenuFlyout>()) PrepareCopiedMenu(menu);
+        }
+    }
+    if(g_resultsHost && g_resultsHost.XamlRoot()) {
+        for(auto popup:wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
+            std::function<void(wux::DependencyObject const&,int)> update;
+            update=[&](wux::DependencyObject const& node,int depth) {
+                if(!node || depth>16) return;
+                if(auto presenter=node.try_as<wuxc::MenuFlyoutPresenter>()) {
+                    presenter.Style(style);
+                    return;
+                }
+                const int count=wuxm::VisualTreeHelper::GetChildrenCount(node);
+                for(int i=0;i<count;++i) update(wuxm::VisualTreeHelper::GetChild(node,i),depth+1);
+            };
+            update(popup.Child(),0);
+        }
+    }
+    g_searchMenuRefreshedGeneration=g_searchMenuStyleGeneration;
+} catch(...) { SearchWindowTrace(L"menu appearance refresh failed",winrt::to_hresult()); }
+
+
+void ApplyStartAppearance() try {
+    if (!g_searchAppearanceValid || !g_resultsHost || !g_searchAppearanceDirty) return;
+    auto const& appearance=g_searchAppearance;
+    auto theme=appearance.dark ? wux::ElementTheme::Dark : wux::ElementTheme::Light;
+    g_resultsHost.RequestedTheme(theme); g_cachedLightTheme.store(!appearance.dark);
+    UpdateSearchIcon(!appearance.dark);
+    if (auto brush=RecreateSearchBrush(appearance.background,true)) g_resultsHost.Background(brush);
+    g_resultsHost.BorderBrush(RecreateSearchBrush(appearance.outline));
+    auto bounded=[](double value) { return std::isfinite(value) ? std::clamp(value,0.0,200.0) : 0.0; };
+    g_resultsHost.CornerRadius(wux::CornerRadius{bounded(appearance.corners[0]),bounded(appearance.corners[1]),bounded(appearance.corners[2]),bounded(appearance.corners[3])});
+    g_resultsHost.BorderThickness(wux::ThicknessHelper::FromLengths(bounded(appearance.thickness[0]),bounded(appearance.thickness[1]),bounded(appearance.thickness[2]),bounded(appearance.thickness[3])));
+    if (auto brush=RecreateSearchBrush(appearance.searchBackground)) g_searchBarBorder.Background(brush);
+    g_searchBarBorder.BorderBrush(RecreateSearchBrush(appearance.searchOutline));
+    g_searchBarBorder.CornerRadius(wux::CornerRadius{bounded(appearance.searchCorners[0]),bounded(appearance.searchCorners[1]),bounded(appearance.searchCorners[2]),bounded(appearance.searchCorners[3])});
+    g_searchBarBorder.BorderThickness(wux::ThicknessHelper::FromLengths(bounded(appearance.searchThickness[0]),bounded(appearance.searchThickness[1]),bounded(appearance.searchThickness[2]),bounded(appearance.searchThickness[3])));
+    g_searchAppearanceDirty = false;
+    ApplySearchTextColors();
+    DWORD backdrop=1; // XAML owns the material and alpha edge; keep the native host transparent
+    DwmSetWindowAttribute(g_searchWindowWindow.load(),38,&backdrop,sizeof(backdrop));
+    UpdateSearchWindowShape();
+    RefreshCopiedMenuStyles();
+} catch (...) { SearchWindowTrace(L"style copy failed",winrt::to_hresult()); }
+
+void SearchWindowChooseBounds() {
+    HWND host = g_searchWindowWindow.load();
+    HWND start = CachedStartWindow();
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    HMONITOR screen = start && !IsStartMenuClosed()
+        ? MonitorFromWindow(start, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitor{sizeof(monitor)};
+    if (!GetMonitorInfoW(screen,&monitor)) winrt::throw_last_error();
+    g_searchWindowWork = monitor.rcWork;
+    g_searchTaskbarEdge = TaskbarEdgeForMonitor(screen);
+    const double scale = GetDpiForWindow(host) / 96.0;
+    const RECT work = monitor.rcWork;
+    bool customSize,filesVisible;
+    int customWidth,customHeight;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        customSize=g_settings.useCustomMenuSize;
+        customWidth=g_settings.menuWidth; customHeight=g_settings.menuHeight;
+        filesVisible=!g_settings.hideFilesPanel;
+    }
+    const double fullWidth=g_searchAppearance.width >= 400 ? g_searchAppearance.width : 660;
+    const double measuredWidth=customSize ? customWidth : (filesVisible ? fullWidth : fullWidth/2);
+    const double measuredHeight=customSize ? customHeight :
+        (g_searchAppearance.height >= 350 ? g_searchAppearance.height : 660);
+    const int width=std::max(1,std::min(static_cast<int>(measuredWidth*scale),static_cast<int>(work.right-work.left-32)));
+    const int height=std::max(1,std::min(static_cast<int>(measuredHeight*scale),static_cast<int>(work.bottom-work.top-32)));
+    const bool sameEdge = g_searchAppearance.taskbarEdge == static_cast<uint32_t>(g_searchTaskbarEdge);
+    const int gap = static_cast<int>((sameEdge ? g_searchAppearance.edgeGap : 12)*scale);
+    g_searchWindowBounds = SearchBoundsForEdge(work,width,height,gap,
+        sameEdge ? g_searchAppearance.alignment : 0.5,g_searchTaskbarEdge);
+}
+
+void FinishSearchWindowHide();
+
+double SearchWindowFrameInterval() {
+    MONITORINFOEXW monitor{}; monitor.cbSize = sizeof(monitor);
+    DEVMODEW mode{}; mode.dmSize = sizeof(mode);
+    double hz = 60;
+    if (GetMonitorInfoW(MonitorFromRect(&g_searchWindowBounds,MONITOR_DEFAULTTONEAREST),&monitor) &&
+        EnumDisplaySettingsW(monitor.szDevice,ENUM_CURRENT_SETTINGS,&mode) && mode.dmDisplayFrequency > 1)
+        hz = mode.dmDisplayFrequency;
+    DWM_TIMING_INFO timing{sizeof(timing)};
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr,&timing)) && timing.rateRefresh.uiDenominator) {
+        const double dwmHz = static_cast<double>(timing.rateRefresh.uiNumerator)/timing.rateRefresh.uiDenominator;
+        if (std::abs(dwmHz-hz) < 1) hz = dwmHz;
+    }
+    return 1000.0/std::clamp(hz,30.0,500.0);
+}
+
+void PositionSearchWindowSlide() {
+    HWND host = g_searchWindowWindow.load();
+    if (!host) return;
+    RECT frame = g_searchWindowBounds;
+    const int pixels = static_cast<int>(std::lround(g_searchWindowSlide.Value(SearchMotionTime())*GetDpiForWindow(host)/96.0));
+    const POINT move = SearchSlideTranslation(g_searchTaskbarEdge,pixels);
+    OffsetRect(&frame,move.x,move.y);
+    if (EqualRect(&frame,&g_searchWindowLastFrame)) return;
+    const RECT viewport = SearchSlideViewport(frame,g_searchWindowWork,g_searchTaskbarEdge);
+    g_searchWindowSlideFrame = frame;
+    if (SetWindowPos(host,nullptr,viewport.left,viewport.top,viewport.right-viewport.left,viewport.bottom-viewport.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE)) {
+        PositionSearchWindowChild();
+        ApplySearchWindowShapeRegion();
+        g_searchWindowLastFrame = frame;
+    }
+}
+
+double StopSearchWindowSlide() {
+    const double current = g_searchWindowSlide.Value(SearchMotionTime());
+    if (g_searchSlideClock) g_searchSlideClock->Pause();
+    g_searchWindowSlide.Snap(current);
+    g_searchWindowSliding = false;
+    return current;
+}
+
+void SnapSearchWindowSlide(double offset) {
+    StopSearchWindowSlide();
+    g_searchWindowSlideTarget = offset;
+    g_searchWindowSlide.Snap(offset);
+    PositionSearchWindowSlide();
+}
+
+void CompleteSearchWindowSlide() {
+    SnapSearchWindowSlide(g_searchWindowSlideTarget);
+    if (g_searchWindowClosing) FinishSearchWindowHide();
+    else if (!g_searchWindowWaitingForStart && !g_searchWindowCloaked) {
+        if (g_renderAfterSlide) RequestRender();
+        SchedulePreview();
+        SearchContainerContrastTick();
+    }
+}
+
+void StartSearchWindowSlide(double offset, unsigned duration, bool closing = false) {
+    PauseSearchContainerContrast();
+    const double from = StopSearchWindowSlide();
+    g_searchWindowSlideTarget = offset;
+    if (!duration || std::abs(from-offset) < 0.1) {
+        CompleteSearchWindowSlide();
+        return;
+    }
+    try {
+        if (!g_searchSlideClock) g_searchSlideClock.emplace();
+        const double interval = SearchWindowFrameInterval();
+        g_searchWindowSlide = {from,offset,SearchMotionTime(),static_cast<double>(duration),closing};
+        g_searchWindowSliding = true;
+        g_searchSlideClock->Start(g_searchWindowWindow.load(),interval);
+    } catch (...) {
+        SearchWindowTrace(L"slide unavailable; finishing immediately", winrt::to_hresult());
+        CompleteSearchWindowSlide();
+    }
+}
+
+void FinishSearchWindowHide() {
+    HWND host = g_searchWindowWindow.load();
+    if (!host) return;
+    KillTimer(host,kSearchWindowMotionTimer);
+    KillTimer(host,kSearchWindowStyleTimer);
+    PauseSearchContainerContrast();
+    ShowWindow(host,SW_HIDE);
+    SnapSearchWindowSlide(0);
+    SetSearchWindowCloaked(false);
+    g_searchWindowClosing = false;
+    g_searchWindowWaitingForStart = false;
+    g_isHiding = false;
+    g_isOverlayVisible = false;
+    if (g_ourBox) g_ourBox.Text(L"");
+    SearchWindowTrace(L"hidden");
+}
+
+void SearchWindowMotionFrame() {
+    HWND host = g_searchWindowWindow.load();
+    if (!host) return;
+    PositionSearchWindowSlide();
+    const ULONGLONG now = GetTickCount64();
+    if (g_searchWindowWaitingForStart) {
+        const bool closed = IsStartMenuClosed();
+        if (!closed) g_searchWindowStartClosedAt = 0;
+        else if (!g_searchWindowStartClosedAt) g_searchWindowStartClosedAt = now;
+        const ULONGLONG minimum = g_searchWindowStartWasOpen && SearchWindowAnimationsEnabled() ? 200 : 32;
+        if (closed && now-g_searchWindowHandoffStarted >= minimum && now-g_searchWindowStartClosedAt >= 32) {
+            g_searchWindowWaitingForStart = false;
+            KillTimer(host,kSearchWindowMotionTimer);
+            StartSearchWindowSlide(0,SearchWindowAnimationsEnabled() ? 240 : 0);
+        } else if (!closed && !g_searchWindowShellCloseAsked && now-g_searchWindowHandoffStarted >= 450 &&
+                   GetForegroundWindow() == host) {
+            // A cloaked foreground window can leave Start open. Ask the
+            // shell to close it once, after its normal close would have ended.
+            g_searchWindowShellCloseAsked = true;
+            if (HWND tray = FindWindowW(L"Shell_TrayWnd",nullptr))
+                PostMessageW(tray,WM_SYSCOMMAND,SC_TASKLIST,0);
+        } else if (now-g_searchWindowHandoffStarted >= 1500) {
+            SearchWindowTrace(L"Start handoff timed out");
+            FinishSearchWindowHide();
+            return;
+        }
+    }
+    if (!g_searchWindowWaitingForStart && g_searchWindowCloaked) {
+        SetSearchWindowCloaked(false);
+        if (!g_searchWindowSliding && g_renderAfterSlide) RequestRender();
+        if (!g_searchWindowSliding) SchedulePreview();
+        QueueSearchBoxRefocus();
+        SearchWindowTrace(L"revealed after handoff");
+    }
+    if (!g_searchWindowWaitingForStart) KillTimer(host,kSearchWindowMotionTimer);
+}
+
+void RunSearchWindowMotion() {
+    HWND host = g_searchWindowWindow.load();
+    if (!host) return;
+    SearchWindowMotionFrame();
+    if (g_searchWindowWaitingForStart) {
+        if (!SetTimer(host,kSearchWindowMotionTimer,15,nullptr)) {
+            FinishSearchWindowHide();
+        }
+    }
+}
+
+void SearchWindowLayout(bool animate) {
+    (void)animate;
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_ourBox || g_searchWindowChanging || g_searchWindowClosing) return;
+    g_searchWindowChanging = true;
+    try {
+        auto body = g_resultsHost.Children().GetAt(1).as<wux::FrameworkElement>();
+        body.Visibility(wux::Visibility::Visible);
+        if (g_ourBox.Text().empty()) {
+            HidePreview();
+            if(g_currentAppRows.empty() || !g_shownQuery.empty()) {
+                g_enterWaiting=false; g_selectedApp=g_selectedFile=-1; g_filesColumnActive=false;
+            }
+            g_footerStatus.Text(FilesPanelVisible() ? L"Suggested apps" : L"Apps");
+        }
+        RunSearchWindowMotion();
+    } catch (...) { SearchWindowTrace(L"layout failed",winrt::to_hresult()); }
+    g_searchWindowChanging = false;
+}
+
+void SearchWindowHide() {
+    HWND host = g_searchWindowWindow.load();
+    if (!host || g_searchWindowClosing || !IsWindowVisible(host)) return;
+    KillTimer(host,kSearchWindowDismissTimer);
+    g_searchWindowInputReady = false; g_enterWaiting = false;
+    g_isOverlayVisible = false; g_isHiding = true; g_searchWindowClosing = true;
+    g_resultsHost.IsHitTestVisible(false);
+    HidePreview();
+    if (g_searchWindowWaitingForStart) { FinishSearchWindowHide(); return; }
+    const double scale = GetDpiForWindow(host)/96.0;
+    StartSearchWindowSlide(SearchHiddenDistance(g_searchWindowBounds,g_searchWindowWork,scale,g_searchTaskbarEdge),
+                           SearchWindowAnimationsEnabled() ? 180 : 0,true);
+}
+
+void SearchWindowShow(std::wstring const& text, bool append) {
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_ourBox || g_quit.load()) return;
+    try {
+        // Initialize defaults once, then rebuild brushes only when the copied
+        // appearance (or a real theme/settings notification) changes.
+        RequestStartAppearance(); ApplyStartAppearance();
+        const bool wasVisible = IsWindowVisible(host);
+        const bool wasClosing = g_searchWindowClosing;
+        const bool fresh = !wasVisible || wasClosing;
+        g_searchWindowClosing = false; g_isHiding = false;
+        if (fresh) {
+            StopSearchWindowSlide();
+            SearchWindowChooseBounds();
+            g_ourBox.Text(L""); g_dragging = false;
+            RequestAppIndexRefresh();
+            if (!wasVisible) {
+                const double scale = GetDpiForWindow(host)/96.0;
+                SnapSearchWindowSlide(SearchHiddenDistance(g_searchWindowBounds,g_searchWindowWork,scale,g_searchTaskbarEdge));
+            }
+            g_searchWindowStartWasOpen = !IsStartMenuClosed();
+            g_searchWindowWaitingForStart = true;
+            g_searchWindowHandoffStarted = GetTickCount64();
+            g_searchWindowStartClosedAt = 0;
+            g_searchWindowShellCloseAsked = false;
+            SetSearchWindowCloaked(true);
+            HidePreview();
+        }
+        if (!text.empty()) {
+            std::wstring next = append && wasVisible && !wasClosing ? std::wstring(g_ourBox.Text()) : std::wstring();
+            next += text; g_ourBox.Text(next);
+        }
+        QueueQuery(std::wstring(g_ourBox.Text())); // empty text also needs an initial suggestion query
+        if (g_renderAfterSlide) RequestRender();
+        g_searchActivationTick = GetTickCount64();
+        KillTimer(host,kSearchWindowDismissTimer);
+        g_isOverlayVisible = true;
+        g_resultsHost.Opacity(1); g_resultsHost.IsHitTestVisible(true);
+        SearchWindowLayout(false);
+        HWND foreground = GetForegroundWindow();
+        if (foreground && (foreground == CachedStartWindow() || IsSearchHostWindow(foreground))) {
+            DWORD_PTR granted = 0;
+            SendMessageTimeoutW(foreground,SearchWindowForegroundMessage(),0,0,SMTO_ABORTIFHUNG,150,&granted);
+        }
+        ShowWindow(host,SW_SHOWNORMAL);
+        BOOL activated = SetForegroundWindow(host);
+        g_searchWindowInputReady = false;
+        SetFocus(g_searchWindowChild);
+        g_searchWindowSource.NavigateFocus(winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationRequest{
+            winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationReason::First});
+        g_ourBox.Focus(wux::FocusState::Programmatic);
+        g_ourBox.SelectionStart(static_cast<int32_t>(g_ourBox.Text().size())); g_ourBox.SelectionLength(0);
+        g_searchWindowInputReady = GetForegroundWindow() == host && SearchWindowTextboxHasFocus();
+        QueueSearchBoxRefocus();
+        SetTimer(host,kSearchWindowStyleTimer,500,nullptr);
+        RunSearchWindowMotion();
+        if (!g_searchWindowSliding) SearchContainerContrastTick();
+        SearchWindowTrace(!activated ? L"shown, foreground denied" :
+                          SearchWindowTextboxHasFocus() ? L"shown and focused" : L"shown; input focus pending");
+    } catch (...) { SearchWindowTrace(L"show failed",winrt::to_hresult()); }
+}
+
+LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) try {
+    if (message == kSearchContainerContrastReady) { ApplySearchContainerContrast(); return 0; }
+    if (message == kSearchWindowSlideFrameMessage) {
+        if (g_searchSlideClock) g_searchSlideClock->pending.store(false);
+        if (!g_searchWindowSliding) return 0;
+        if (wParam || !g_searchWindowSlide.Active(SearchMotionTime())) CompleteSearchWindowSlide();
+        else PositionSearchWindowSlide();
+        return 0;
+    }
+    if (message == WM_COPYDATA && reinterpret_cast<HWND>(wParam) == CachedStartWindow()) {
+        auto data = reinterpret_cast<const COPYDATASTRUCT*>(lParam);
+        if (data && data->dwData == kSearchWindowAppearanceData && data->cbData == sizeof(SearchAppearanceData) && data->lpData) {
+            SearchAppearanceData appearance;
+            memcpy(&appearance,data->lpData,sizeof(appearance));
+            if (appearance.version == 4 && appearance.taskbarEdge <= static_cast<uint32_t>(SearchTaskbarEdge::Bottom) && std::isfinite(appearance.width) && std::isfinite(appearance.height) &&
+                appearance.width >= 0 && appearance.width <= 4000 && appearance.height >= 0 && appearance.height <= 4000 &&
+                std::isfinite(appearance.edgeGap) && std::isfinite(appearance.alignment) &&
+                ValidSearchSurface(appearance.menu) && ValidSearchSurface(appearance.menuBorder) && ValidSearchSurface(appearance.menuItem)) {
+                if ((appearance.width < 400 || appearance.height < 350) && g_searchAppearance.width >= 400) {
+                    appearance.width=g_searchAppearance.width; appearance.height=g_searchAppearance.height;
+                    appearance.edgeGap=g_searchAppearance.edgeGap; appearance.alignment=g_searchAppearance.alignment;
+                    appearance.taskbarEdge=g_searchAppearance.taskbarEdge;
+                }
+                const bool changed=!g_searchAppearanceValid || memcmp(&appearance,&g_searchAppearance,sizeof(appearance)) != 0;
+                g_searchAppearance = appearance; g_searchAppearanceValid = true;
+                g_searchAppearanceDirty = g_searchAppearanceDirty || changed;
+                if (changed) {
+                    wchar_t description[128]{};
+                    swprintf_s(description,L"Start appearance: %.0fx%.0f gap=%.1f align=%.2f background=%u color=%08X blur=%.0f menu=%u",appearance.width,appearance.height,appearance.edgeGap,appearance.alignment,appearance.background.kind,appearance.background.color,appearance.background.blur,appearance.menuBorder.flags);
+                    SearchWindowTrace(description);
+                }
+                return 1;
+            }
+        }
+        return 0;
+    }
+    if (message == kSearchWindowDismissMenuMessage) { DismissSearchContextMenu(); return 0; }
+    if (message == kSearchWindowInputMessage) { ApplySearchWindowInput(); return 0; }
+    if (message == kSearchWindowShowMessage) { SearchWindowShow(); return 0; }
+    if (message == kSearchWindowLayoutMessage) { SearchWindowLayout(); return 0; }
+    if (message == RemovalCheckMessage())
+        return !g_removalPending.empty() && std::hash<std::wstring>{}(g_removalPending) == static_cast<size_t>(lParam);
+    if (message == DragDoneMessage()) {
+        g_dragging = false;
+        if (wParam) SearchWindowHide(); else if (IsWindowVisible(hwnd)) SearchWindowShow();
+        return 0;
+    }
+    switch (message) {
+    case WM_NCCALCSIZE: if (wParam) return 0; break;
+    case WM_ERASEBKGND: return 1;
+    case WM_SIZE:
+        PositionSearchWindowChild();
+        UpdateSearchWindowShape();
+        return 0;
+    case WM_DPICHANGED:
+        SearchWindowChooseBounds(); SearchWindowLayout(false);
+        UpdateSearchIcon(IsLightTheme()); return 0;
+    case WM_ACTIVATE:
+        if (LOWORD(wParam) == WA_INACTIVE && !g_dragging) SetTimer(hwnd,kSearchWindowDismissTimer,70,nullptr);
+        else {
+            KillTimer(hwnd,kSearchWindowDismissTimer);
+            if(LOWORD(wParam) != WA_INACTIVE) QueueSearchBoxRefocus();
+        }
+        break;
+    case WM_SETFOCUS:
+        QueueSearchBoxRefocus();
+        break;
+    case WM_TIMER:
+        if (wParam == kSearchContainerContrastTimer) { SearchContainerContrastTick(); return 0; }
+        if (wParam == kSearchWindowRefocusTimer) { SearchWindowRefocusFrame(); return 0; }
+        if (wParam == kSearchWindowStyleTimer) {
+            // Start already publishes appearance on its own timer. Avoid a
+            // second cross-process capture every time we check input focus.
+            if (!g_searchWindowSliding) ApplyStartAppearance();
+            CheckSearchWindowFocus(); return 0;
+        }
+        if (wParam == kSearchWindowMotionTimer) { SearchWindowMotionFrame(); return 0; }
+        if (wParam == kSearchWindowDismissTimer) {
+            KillTimer(hwnd,kSearchWindowDismissTimer);
+            HWND foreground = GetForegroundWindow();
+            DWORD thread = GetWindowThreadProcessId(foreground,nullptr);
+            if (!g_dragging && thread != GetCurrentThreadId() && IsWindowVisible(hwnd)) SearchWindowHide();
+            return 0;
+        }
+        break;
+    case WM_DISPLAYCHANGE:
+        SearchWindowChooseBounds(); SearchWindowLayout(false);
+        if (g_previewPopup && g_previewPopup.IsOpen()) PositionPreview();
+        return 0;
+    case WM_SETTINGCHANGE:
+        if (wParam==SPI_SETWORKAREA) {
+            SearchWindowChooseBounds(); SearchWindowLayout(false);
+            if (g_previewPopup && g_previewPopup.IsOpen()) PositionPreview();
+        }
+        [[fallthrough]];
+    case WM_THEMECHANGED:
+        RefreshThemeCache(); SearchWindowStyle();
+        if (!SearchWindowAnimationsEnabled() && g_searchWindowSliding) CompleteSearchWindowSlide();
+        break;
+    case WM_CLOSE: SearchWindowHide(); return 0;
+    }
+    return DefWindowProcW(hwnd,message,wParam,lParam);
+} catch (...) {
+    SearchWindowTrace(L"window message failed",winrt::to_hresult());
+    return DefWindowProcW(hwnd,message,wParam,lParam);
+}
+
+// Menu text must also work when the low-level opening-input hook misses a key.
+// Run before XAML's menu pretranslation, which can consume printable keydowns
+// before TranslateMessage gets a chance to produce their characters.
+bool SearchWindowMenuInput(MSG* message) {
+    const UINT kind=message->message;
+    if(kind!=WM_KEYDOWN && kind!=WM_SYSKEYDOWN && kind!=WM_CHAR && kind!=WM_SYSCHAR) return false;
+    HWND host=g_searchWindowWindow.load();
+    if(!host || !g_ourBox || !IsWindowVisible(host) || !IsWindowEnabled(host) ||
+       g_dragging || g_searchWindowClosing ||
+       GetWindowThreadProcessId(message->hwnd,nullptr)!=GetWindowThreadProcessId(host,nullptr) ||
+       GetWindowThreadProcessId(GetForegroundWindow(),nullptr)!=GetWindowThreadProcessId(host,nullptr)) return false;
+    if(!g_contextMenuOpen && !g_searchWindowMenuTyping && !ContextMenuHasFocus()) return false;
+
+    BYTE state[256]{};
+    if(!GetKeyboardState(state)) return false;
+    const bool altGr=(state[VK_RMENU]&0x80)!=0;
+    if((((state[VK_CONTROL]|state[VK_MENU])&0x80) && !altGr) ||
+       ((state[VK_LWIN]|state[VK_RWIN])&0x80)) return false;
+    if(kind==WM_KEYDOWN || kind==WM_SYSKEYDOWN) {
+        if(message->wParam==VK_ESCAPE) { DismissSearchContextMenu(); return true; }
+        if(message->wParam!=VK_BACK) {
+            const auto key=static_cast<winrt::Windows::System::VirtualKey>(message->wParam);
+            if(IsNavigationKey(key) || message->wParam==VK_HOME || message->wParam==VK_END ||
+               message->wParam==VK_PRIOR || message->wParam==VK_NEXT) return false;
+            wchar_t chars[8]{};
+            const UINT scan=(static_cast<ULONG_PTR>(message->lParam)>>16)&0xff;
+            if(message->wParam!=VK_PACKET && !ToUnicodeEx(static_cast<UINT>(message->wParam),scan,state,
+               chars,ARRAYSIZE(chars),4,GetKeyboardLayout(0))) return false;
+            // Let Windows compose dead keys and the active keyboard layout on
+            // this UI thread; WM_CHAR below delivers the actual text once.
+            TranslateMessage(message);
+            return true;
+        }
+    } else if(message->wParam<0x20 || message->wParam==0x7f) return false;
+
+    SearchWindowInput input;
+    if(kind==WM_KEYDOWN || kind==WM_SYSKEYDOWN) input.kind=SearchWindowInput::Backspace;
+    else input.text.assign(1,static_cast<wchar_t>(message->wParam));
+    const bool wasTyping=g_searchWindowMenuTyping.exchange(true);
+    if(!QueueSearchWindowInput(host,std::move(input))) {
+        g_searchWindowMenuTyping=wasTyping; return false;
+    }
+    if(!wasTyping) SearchWindowTrace(L"context menu typing received by search window");
+    return true;
+}
+
+bool SearchWindowPreTranslate(MSG* message) {
+    if (!g_searchWindowNative) return false;
+    if (SearchWindowMenuInput(message)) return true;
+    HWND host=g_searchWindowWindow.load();
+    if(message->message==WM_KEYDOWN && message->wParam==VK_ESCAPE && host &&
+       GetAncestor(message->hwnd,GA_ROOT)==host && GetForegroundWindow()==host &&
+       !g_dragging && !g_searchWindowClosing && !SearchWindowHasActivePopup() &&
+       !EscapeBelongsToContextMenu() && GetKeyState(VK_CONTROL)>=0 && GetKeyState(VK_MENU)>=0) {
+        if(g_ourBox && !g_ourBox.Text().empty()) { g_ourBox.Text(L""); QueueSearchBoxRefocus(true); }
+        else SearchWindowHide();
+        return true;
+    }
+    BOOL handled = FALSE;
+    g_searchWindowNative->PreTranslateMessage(message, &handled);
+    return handled;
+}
+
+bool SearchWindowInitialize() {
+    try {
+        SearchWindowTrace(L"initializing Windows 11 search window");
+        WNDCLASSEXW wc{sizeof(wc)};
+        wc.lpfnWndProc = SearchWindowWndProc; wc.hInstance = GetCurrentModuleHandle();
+        wc.lpszClassName = kSearchWindowClass; wc.hCursor = LoadCursorW(nullptr,IDC_ARROW);
+        RegisterClassExW(&wc);
+        HWND host = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,kSearchWindowClass,L"Everything Search",
+            WS_POPUP | WS_THICKFRAME | WS_CAPTION | WS_CLIPCHILDREN,
+            0,0,660,660,nullptr,nullptr,wc.hInstance,nullptr);
+        if (!host) winrt::throw_last_error();
+        g_searchWindowWindow = host;
+        ChangeWindowMessageFilterEx(host,WM_COPYDATA,MSGFLT_ALLOW,nullptr);
+        BOOL enabled = TRUE;
+        DwmSetWindowAttribute(host,DWMWA_TRANSITIONS_FORCEDISABLED,&enabled,sizeof(enabled));
+        DwmSetWindowAttribute(host,17,&enabled,sizeof(enabled)); // DWMWA_USE_HOSTBACKDROPBRUSH
+        DWORD borderColor=0xFFFFFFFE; // DWMWA_COLOR_NONE: the XAML panel draws its border
+        DwmSetWindowAttribute(host,34,&borderColor,sizeof(borderColor));
+        DWORD corner = 1;
+        DwmSetWindowAttribute(host,33,&corner,sizeof(corner));
+        DWORD backdrop = 1; // DWMSBT_NONE: XAML draws the material into an alpha-composed host
+        DwmSetWindowAttribute(host,38,&backdrop,sizeof(backdrop));
+        g_searchWindowManager = winrt::Windows::UI::Xaml::Hosting::WindowsXamlManager::InitializeForCurrentThread();
+        g_searchWindowSource = winrt::Windows::UI::Xaml::Hosting::DesktopWindowXamlSource{};
+        g_searchWindowNative = g_searchWindowSource.as<IDesktopWindowXamlSourceNative2>();
+        winrt::check_hresult(g_searchWindowNative->AttachToWindow(host));
+        winrt::check_hresult(g_searchWindowNative->get_WindowHandle(&g_searchWindowChild));
+        HRESULT transparencyResult = E_NOINTERFACE;
+        if (auto current = wux::Window::Current()) {
+            const IID transparencyId{0x06636c29,0x5a17,0x458d,{0x8e,0xa2,0x24,0x22,0xd9,0x97,0xa9,0x22}};
+            winrt::com_ptr<SearchXamlTransparency> transparency;
+            auto unknown = current.as<IUnknown>();
+            transparencyResult = unknown->QueryInterface(transparencyId,transparency.put_void());
+            if (SUCCEEDED(transparencyResult))
+                transparencyResult = transparency->put_IsBackgroundTransparent(true);
+        }
+        SearchWindowTrace(L"XAML island transparency",transparencyResult);
+        g_searchWindowRoot = wuxc::Grid{};
+        g_searchWindowRoot.Background(MakeBrush(0,0,0,0));
+        g_searchWindowRoot.RequestedTheme(IsLightTheme() ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
+        g_searchWindowSource.Content(g_searchWindowRoot);
+        if (!g_xamlHandlers) g_xamlHandlers.emplace();
+        BuildResultsList(g_searchWindowRoot);
+        if (!g_resultsHost || !g_ourBox) winrt::throw_hresult(E_FAIL);
+        KeepHandler(g_searchWindowSource,g_searchWindowSource.GotFocus(winrt::auto_revoke,[](auto const&,auto const&) {
+            QueueSearchBoxRefocus();
+        }));
+        KeepHandler(g_searchWindowSource,g_searchWindowSource.TakeFocusRequested(winrt::auto_revoke,[](auto const&,auto const&) {
+            QueueSearchBoxRefocus();
+        }));
+        SearchWindowStyle();
+        g_ourBoxLost=g_ourBox.LostFocus(winrt::auto_revoke,[](wf::IInspectable const&,wux::RoutedEventArgs const&) {
+            QueueSearchBoxRefocus();
+        });
+        AddPointerHandler(g_resultsHost,wux::UIElement::PointerReleasedEvent(),[](wf::IInspectable const&,wux::Input::PointerRoutedEventArgs const&) {
+            QueueSearchBoxRefocus(true);
+        });
+        g_resultsHost.Opacity(1); g_resultsHost.IsHitTestVisible(true);
+        SearchWindowChooseBounds(); SearchWindowLayout(false);
+        g_searchQuit = false; g_searchThread.emplace(SearchThreadMain);
+        StartSearchWindowInput();
+        SearchWindowTrace(L"ready");
+        return true;
+    } catch (...) {
+        SearchWindowTrace(L"initialization failed",winrt::to_hresult());
+        SearchWindowTeardown(); return false;
+    }
+}
+
+void SearchWindowTeardown() {
+    if (!g_searchWindowWindow.load()) return;
+    SearchWindowTrace(L"tearing down");
+    StopSearchWindowSlide();
+    StopSearchContainerContrast();
+    g_searchSlideClock.reset();
+    g_searchMenuPresenterStyle=nullptr;
+    g_searchMenuAppearance.reset();
+    KillTimer(g_searchWindowWindow.load(),kSearchWindowStyleTimer);
+    KillTimer(g_searchWindowWindow.load(), kSearchWindowMotionTimer);
+    KillTimer(g_searchWindowWindow.load(), kSearchWindowDismissTimer);
+    StopSearchWindowInput();
+    KillTimer(g_searchWindowWindow.load(),kSearchWindowRefocusTimer);
+    g_searchWindowRefocusUntil=0; g_searchWindowRefocusBodyClick=false;
+    g_searchWindowMenuTyping=false; g_searchWindowMenuCaret=-1; g_searchWindowMenuSelection=0;
+    g_searchQuit = true;
+    g_queryWake.notify_all();
+    if (g_searchThread && g_searchThread->joinable()) g_searchThread->join();
+    g_searchThread.reset();
+    StopPreviewThread();
+    WaitForTrackedLaunches();
+    TeardownSearchUi();
+    g_searchWindowRoot = nullptr;
+    if (g_searchWindowSource) {
+        g_searchWindowSource.Content(nullptr);
+        g_searchWindowSource.Close();
+    }
+    g_searchWindowNative = nullptr;
+    g_searchWindowSource = nullptr;
+    g_searchWindowChild = nullptr;
+    if (g_searchWindowManager) g_searchWindowManager.Close();
+    g_searchWindowManager = nullptr;
+    if (HWND host = g_searchWindowWindow.exchange(nullptr)) DestroyWindow(host);
+    if (g_searchWindowFullShape) { DeleteObject(g_searchWindowFullShape); g_searchWindowFullShape=nullptr; }
+    g_searchWindowSlideFrame={};
+    g_searchWindowLastFrame={};
+    UnregisterClassW(kSearchWindowClass, GetCurrentModuleHandle());
 }
 
 }  // namespace
@@ -12391,7 +15361,6 @@ void TeardownStartMenuUi() {
 // ===========================================================================
 // Mod entry points
 // ===========================================================================
-
 
 
 BOOL Wh_ModInit() {
@@ -12419,6 +15388,11 @@ void Wh_ModAfterInit() {
         g_targetProcess == TargetProcess::SearchHost ? L"SearchHost" :
         g_targetProcess == TargetProcess::Explorer ? L"Explorer" : L"Unknown");
 
+    if (g_targetProcess == TargetProcess::Explorer) {
+        StartExplorerHelperHost();
+        return;
+    }
+
     if (g_targetProcess == TargetProcess::SearchHost) {
         StartSearchHostWatchdog();
         return;
@@ -12428,18 +15402,19 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    g_searchQuit.store(false);
-    g_searchThread.emplace(SearchThreadMain);
-
     StartAttachWatch();
+    SubclassStartMenuWindow();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
-    if (g_targetProcess != TargetProcess::StartMenu) {
+    if (g_targetProcess != TargetProcess::StartMenu && g_targetProcess != TargetProcess::Explorer) {
         return;
     }
     LoadSettings();
+    if (g_targetProcess == TargetProcess::Explorer) {
+        if (HWND helper=g_hExplorerHelperWnd.load()) PostMessageW(helper,kExplorerUpdateShortcut,0,0);
+    }
     RequestAppIndexRefresh();
     if (g_resultsHost) {
         try {
@@ -12454,7 +15429,6 @@ void Wh_ModSettingsChanged() {
                         }
                         g_footerHints.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
                     }
-                    SyncOverlayBackground();  // the panel margin
                     // The text size, on all that is built.
                     if (g_ourBox) {
                         ScaleFont(g_ourBox, 14);
@@ -12464,6 +15438,10 @@ void Wh_ModSettingsChanged() {
                     }
                     RescaleFonts(g_resultsHost);
                     RescaleFonts(g_previewCard);
+                    ApplyFilesPanelLayout();
+                    QueueQuery(std::wstring(g_ourBox.Text()));
+                    RenderResults();
+                    if (g_searchWindowWindow.load()) { SearchWindowStyle(); SearchWindowChooseBounds(); SearchWindowLayout(); }
                 });
         } catch (...) {}
     }
@@ -12471,14 +15449,6 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
-
-    if (HWND core = g_hCoreWindow.load()) {
-        RemovePropW(core, L"WindhawkStartMenuWindow");
-    }
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (tray) {
-        RemovePropW(tray, L"WindhawkStartMenuHwnd");
-    }
 
     g_quit.store(true);
 
@@ -12511,66 +15481,12 @@ void Wh_ModUninit() {
     }
 
     StopAttachWatch();
-
-    {
-        std::lock_guard<std::mutex> lock(g_queryMutex);
-        g_searchQuit.store(true);
-    }
-    g_queryWake.notify_all();
-    if (g_searchThread && g_searchThread->joinable()) {
-        g_searchThread->join();
-        g_searchThread.reset();
-    }
-    // Before the teardown is queued, so whatever it dispatched runs first.
-    StopPreviewThread();
-    WaitForTrackedLaunches();
-
-    bool tornDown = false;
-    // Only the dispatcher: a reference to the box itself would be released
-    // here, off the XAML thread, after the teardown dropped the others. The
-    // stock button is kept from before the box is placed, so a half-done
-    // attach (stock elements hidden, no box) is still undone on its thread.
-    wuc::CoreDispatcher dispatcher{nullptr};
-    try {
-        if (g_ourBox) {
-            dispatcher = g_ourBox.Dispatcher();
-        } else if (g_stockButton) {
-            dispatcher = g_stockButton.Dispatcher();
-        }
-    } catch (...) {}
-    if (dispatcher) {
-        try {
-            auto op = dispatcher.RunAsync(
-                wuc::CoreDispatcherPriority::Low,
-                wuc::DispatchedHandler{[] { TeardownStartMenuUi(); }});
-            if (op.wait_for(std::chrono::seconds(5)) == wf::AsyncStatus::Completed) {
-                tornDown = true;
-            } else {
-                op.Cancel();
-            }
-        } catch (...) {}
-    }
-    if (!tornDown) {
-        HWND hCore = g_hCoreWindow;
-        if (hCore && IsWindow(hCore)) {
-            DWORD_PTR result = 0;
-            LRESULT lr = SendMessageTimeoutW(hCore, GetTeardownMessage(), 0, 0,
-                                             SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
-            if (lr != 0 && static_cast<LRESULT>(result) == kTeardownDone) {
-                tornDown = true;
-            }
-        }
-    }
-    if (!tornDown) {
-        try {
-            TeardownStartMenuUi();
-        } catch (...) {}
-    }
-    // A click before the teardown may have started a launch.
-    WaitForTrackedLaunches();
-    if (g_launchGate) {
-        CloseHandle(g_launchGate);
-        g_launchGate = nullptr;
+    if (HWND core = g_hCoreWindow.exchange(nullptr); core && IsWindow(core)) {
+        DWORD_PTR result = 0;
+        const LRESULT sent = SendMessageTimeoutW(core, GetTeardownMessage(), 0, 0,
+            SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
+        if (!sent || static_cast<LRESULT>(result) != kTeardownDone)
+            TeardownStartMenuBridge(core);
     }
     Wh_Log(L"uninit: StartMenuExperienceHost teardown complete");
 }
