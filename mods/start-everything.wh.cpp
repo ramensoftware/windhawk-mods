@@ -59,8 +59,8 @@ Version **2.0** introduces a separate Windows 11 search window, with Start appea
 - **Uninstall**: Right-click an app and choose Uninstall. After a confirmation that names what goes, a Store app is removed as Start removes it, and a program runs its own uninstaller, the one Installed apps in Settings runs. Protected Windows components offer no uninstall action. A Store app is removed in the background, with no progress bar: it is gone from the list after a few seconds.
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
-- **Start Menu Styler Compatibility**: Copies supported Start backgrounds, colors, rounded corners, and menu styling before menus appear. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast). Arbitrary custom Styler effects may not be reproduced exactly.
-- **No Simulated Keystrokes**: Focus is handled with standard foreground APIs only; the mod never attaches thread input or synthesizes keystrokes.
+- **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, and opened context menus from its live visual tree, with a best-effort read of Start Menu Styler's Windhawk registry settings for `WindhawkBlur` parameters and unopened menu rules (not available in portable Windhawk, which falls back to live tree inspection and a glass/acrylic approximation). Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
+- **No Simulated Keystrokes**: A low-level keyboard hook (`WH_KEYBOARD_LL`) is active while Start, SearchHost, or the search window is in the foreground to capture opening text and context-menu typing. Focus is handled with standard foreground APIs only; the mod never attaches thread input or synthesizes keystrokes.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
 ## Settings Sections
@@ -158,7 +158,7 @@ To show folder sizes, open **Everything → Tools → Options → Indexes**, ena
 
 ## Keyboard Shortcuts and Navigation
 
-To add another way to open search, go to **Settings → Apps & Search**, turn on **Enable Alternative Shortcut**, then choose **Shortcut Modifiers** and **Shortcut Key**. The default is **Alt+Space**, with the feature off until enabled. You can combine Ctrl, Alt, Shift, and Windows, or choose None; a key without modifiers is reserved even while typing in another app. The key list includes letters, digits, function, navigation, numpad, punctuation/OEM, browser, and media keys. F12 is reserved by Windows, and Fn/hardware-only keys cannot be registered. Punctuation labels use a US keyboard layout. If the combination belongs to Windows or another app, choose another; registration failures are recorded in the mod log. Changes apply immediately, and Win+S remains available.
+To add another way to open search, go to **Settings → Apps & Search**, turn on **Enable Alternative Shortcut**, then choose **Shortcut Modifiers** and **Shortcut Key**. The default is **Alt+Space**, with the feature off until enabled. You can combine Ctrl, Alt, Shift, and Windows, or choose None for function, media, browser, or special keys (unmodified typing keys are refused so normal typing cannot be blocked). The key list includes letters, digits, function, navigation, numpad, punctuation/OEM, browser, and media keys. F12 is reserved by Windows, and Fn/hardware-only keys cannot be registered. Punctuation labels use a US keyboard layout. If the combination belongs to Windows or another app, choose another; registration failures are recorded in the mod log. Changes apply immediately, and Win+S remains available.
 
 | Shortcut / Input | Action |
 | :--- | :--- |
@@ -195,7 +195,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - **Everything is reported as not running:** start the Everything application and leave it running in the tray. Its service alone does not provide the search IPC window. Everything 1.4 and 1.5 alpha/beta, including named instances, are supported.
 - **A preview shows only an icon:** enable File Preview. Common image formats have a built-in decoding fallback; specialist formats may require a thumbnail provider, and videos may require a compatible Windows codec. Unavailable or unreadable content falls back to its icon and available properties.
 - **Folder sizes are missing:** enable Everything's **Index folder size** option; see [Folder Sizes in Preview](#folder-sizes-in-preview). The mod does not recursively scan folders to calculate sizes.
-- **Start Menu Styler appearance is not copied yet:** open Start so its layout and styling can be measured. Supported solid, acrylic, gradient, and recognized glass definitions are copied; arbitrary Styler effects are not guaranteed to match.
+- **Start Menu Styler appearance is not copied yet:** open Start so its layout and live visual tree can be measured (and open a context menu in Start if using portable Windhawk so its live menu presenter can be captured). Reading `WindhawkBlur` parameters and unopened menu rules from Windhawk's registry is best-effort and does not work with portable Windhawk.
 - **A custom command does not start:** choose the shell that understands the command. PowerShell 7 and custom shells must already be installed. Hide Terminal hides the shell console; it does not shorten the command's lifetime or hide windows opened by the command.
 
 Tested on **Windows 11 25H2 and 26H2, x86-64**. Other Windows versions and builds, including Insider builds, have not been verified. For a reproducible problem, include the full Windows build, mod version, Everything version and instance name, other Start/search mods, and steps to reproduce it.
@@ -1392,10 +1392,9 @@ inline std::wstring WithExclusions(const std::wstring& query,
 // ===========================================================================
 // Turning shell icons into the pixel format the panel can draw.
 //
-// The panel lives in an AppContainer with no shell namespace and no file
-// access, so it cannot fetch an icon for anything. Icons have to arrive as
-// raw pixels over the same message that carries the rows: BGRA, top-down,
-// premultiplied, which is what a XAML WriteableBitmap expects.
+// Icons are fetched on the background search thread and handed to the UI
+// thread as raw pixels on each row: BGRA, top-down, premultiplied, which is
+// what a XAML WriteableBitmap expects.
 
 #include <commoncontrols.h>
 #include <shellapi.h>
@@ -2264,8 +2263,7 @@ inline const std::vector<SettingItem>& GetSettingsList() {
 // enumerated once up front and icons are fetched lazily, for visible rows
 // only.
 //
-// Enumeration runs in-process on the background search thread in
-// StartMenuExperienceHost at Medium integrity.
+// Enumeration runs in-process on the background search thread in explorer.exe.
 
 #include <cwctype>
 #include <memory>
@@ -3974,13 +3972,15 @@ RECT SearchSlideViewport(RECT const& frame, RECT const& work, SearchTaskbarEdge 
 }
 
 struct SearchAppearanceData {
-    uint32_t version = 4, dark = 1;
+    uint32_t version = 5, dark = 1;
     uint32_t taskbarEdge = static_cast<uint32_t>(SearchTaskbarEdge::Bottom), reserved = 0;
     uint32_t foreground = 0, searchForeground = 0;
     double width = 0, height = 0, edgeGap = 12, alignment = 0.5;
-    double corners[4]{8,8,8,8}, thickness[4]{1,1,1,1};
-    double searchCorners[4]{4,4,4,4}, searchThickness[4]{1,1,1,1};
-    SearchBrushData background, outline, searchBackground, searchOutline;
+    double corners[4]{8, 8, 8, 8}, thickness[4]{1, 1, 1, 1}, innerThickness[4]{};
+    double searchCorners[4]{4, 4, 4, 4}, searchThickness[4]{1, 1, 1, 1};
+    SearchBrushData background, innerBackground, outline, innerOutline;
+    SearchBrushData searchBackground, searchOutline;
+    SearchSurfaceData searchOverlay, header, itemHover, footer;
     SearchSurfaceData menu, menuBorder, menuItem;
 };
 static SearchAppearanceData g_searchAppearance;
@@ -3991,8 +3991,10 @@ void LoadSettings();
 bool SearchWindowInitialize();
 void StartSearchWindowInput();
 void StopSearchWindowInput();
+void SyncSearchWindowInputForForeground(HWND foreground = GetForegroundWindow());
 void ApplySearchWindowInput();
 bool HasBufferedSearchWindowInput();
+void RefreshSearchUiSettings();
 constexpr UINT kSearchWindowInputMessage = WM_APP + 0x73;
 void SearchWindowTrace(const wchar_t* message, HRESULT hr);
 void SearchWindowTeardown();
@@ -4118,16 +4120,7 @@ static bool IsSearchHostWindow(HWND hwnd) {
     return match;
 }
 
-// Explorer's helper sends this to Start's CoreWindow to ask whether a request
-// to remove a Store app is really Start's (AcceptPackageRemoval): lParam is
-// the family name's hash; Start answers 1 while it is asking for just that
-// (RequestPackageRemoval).
-static UINT RemovalCheckMessage() {
-    static const UINT message = RegisterWindowMessageW(L"StartEverything_RemovalCheck");
-    return message;
-}
-
-// Explorer's helper posts this to Start's CoreWindow when a drag of a result
+// Explorer's helper posts this to the search window when a drag of a result
 // it ran (StartFileDrag) is over: wParam 1 if it was dropped.
 static UINT DragDoneMessage() {
     static const UINT message = RegisterWindowMessageW(L"StartEverything_DragDone");
@@ -4137,6 +4130,9 @@ static UINT DragDoneMessage() {
 // Tracked launch threads for clean unload synchronization across processes
 static std::mutex g_launchHandlesMutex;
 static std::vector<HANDLE> g_launchHandles;
+// The thread showing an uninstall error, while it does (AcceptPackageRemoval):
+// unload closes the box before waiting on launch threads.
+static std::atomic<DWORD> g_removalBoxThread{0};
 
 template <typename F>
 static void SpawnTrackedLaunch(F&& f) {
@@ -4169,7 +4165,18 @@ static void SpawnTrackedLaunch(F&& f) {
     }
 }
 
+static void CloseRemovalErrorBox() {
+    for (int i = 0; i < 50 && g_removalBoxThread.load(); ++i) {
+        EnumThreadWindows(g_removalBoxThread.load(), [](HWND hwnd, LPARAM) -> BOOL {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            return TRUE;
+        }, 0);
+        Sleep(100);
+    }
+}
+
 static void WaitForTrackedLaunches() {
+    CloseRemovalErrorBox();
     std::vector<HANDLE> handlesToJoin;
     {
         std::lock_guard<std::mutex> lock(g_launchHandlesMutex);
@@ -4184,18 +4191,16 @@ static void WaitForTrackedLaunches() {
 }
 
 // ===========================================================================
-// Domain: Explorer Shell Property Relay
+// Domain: Explorer Helper Host
 // ===========================================================================
 
 static const wchar_t kExplorerHelperClassName[] = L"StartEverything_ExplorerHostClass";
 static const wchar_t kExplorerHelperWindowName[] = L"StartEverything_ExplorerHost";
-static const ULONG_PTR kExplorerCopyDataMagic = 0x53455052; // 'SEPR'
-static const ULONG_PTR kExplorerDragMagic = 0x53454447;      // 'SEDG': drag a result (StartFileDrag)
-static const ULONG_PTR kExplorerUninstallMagic = 0x5345554E; // 'SEUN': remove a packaged app (RequestPackageRemoval)
 static const UINT kExplorerStartDrag = WM_APP + 0x31;
 static const UINT kExplorerSearchShown = WM_APP + 0x32;
 static constexpr UINT_PTR kExplorerSearchStartupTimer = 2;
 static unsigned g_explorerSearchStartupAttempts = 0;  // helper thread only
+static unsigned g_explorerTaskbarWaitTicks = 0;  // helper thread only
 static bool g_explorerSearchRequested = false;  // helper thread only
 static constexpr UINT kExplorerOpenSearch = WM_APP + 0x33;
 static constexpr UINT kExplorerUpdateShortcut = WM_APP + 0x34;
@@ -4302,49 +4307,62 @@ static std::optional<UINT> ParseAlternativeShortcutModifiers(std::wstring_view t
         {L"none", 0}
     };
     const std::wstring value(text);
-    for (auto const& item : values) if (_wcsicmp(value.c_str(),item.name)==0) return item.value;
+    for (auto const& item : values) {
+        if (_wcsicmp(value.c_str(), item.name) == 0) return item.value;
+    }
     return std::nullopt;
 }
 
 static UINT ParseAlternativeShortcutKey(std::wstring_view text) {
     if (text.empty()) return VK_SPACE;
-    if (text.size()!=4 || text[0]!=L'0' || (text[1]!=L'x' && text[1]!=L'X')) return 0;
-    UINT key=0;
-    for (size_t i=2;i<4;++i) {
-        wchar_t c=text[i];
-        int digit=c>=L'0' && c<=L'9' ? c-L'0' : c>=L'a' && c<=L'f' ? c-L'a'+10 :
-                  c>=L'A' && c<=L'F' ? c-L'A'+10 : -1;
-        if (digit<0) return 0;
-        key=(key<<4)|digit;
+    if (text.size() != 4 || text[0] != L'0' || (text[1] != L'x' && text[1] != L'X')) return 0;
+    UINT key = 0;
+    for (size_t i = 2; i < 4; ++i) {
+        wchar_t c = text[i];
+        int digit = c >= L'0' && c <= L'9' ? c - L'0' :
+                    c >= L'a' && c <= L'f' ? c - L'a' + 10 :
+                    c >= L'A' && c <= L'F' ? c - L'A' + 10 : -1;
+        if (digit < 0) return 0;
+        key = (key << 4) | digit;
     }
     static constexpr UINT keys[] = {
         0x20, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7C, 0x7D, 0x7E, 0x7F, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x8, 0x9, 0xC, 0xD, 0x13, 0x14, 0x1B, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x5D, 0x5F, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F, 0x90, 0x91, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF, 0xE2, 0x15, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFD, 0xFE
     };
-    return std::find(std::begin(keys),std::end(keys),key)!=std::end(keys) ? key : 0;
+    return std::find(std::begin(keys), std::end(keys), key) != std::end(keys) ? key : 0;
+}
+
+// Without modifiers, only function, media, browser, and dedicated special keys
+// are allowed so normal typing keys cannot be taken away from other apps.
+static bool IsSafeUnmodifiedShortcutKey(UINT key) {
+    return (key >= VK_F1 && key <= VK_F24) ||
+           (key >= VK_BROWSER_BACK && key <= VK_LAUNCH_APP2) ||
+           key == VK_PAUSE || key == VK_SNAPSHOT || key == VK_APPS ||
+           key == VK_SLEEP || key == VK_SCROLL ||
+           (key >= 0x15 && key <= 0x1F) || (key >= 0xF6 && key <= 0xFE);
 }
 
 static bool AlternativeShortcutMatches(UINT shortcut, UINT key, const BYTE* state) {
-    if (!shortcut || key != (shortcut>>8)) return false;
-    const UINT modifiers=((state[VK_MENU]&0x80) ? MOD_ALT : 0) |
-        ((state[VK_CONTROL]&0x80) ? MOD_CONTROL : 0) |
-        ((state[VK_SHIFT]&0x80) ? MOD_SHIFT : 0) |
-        (((state[VK_LWIN]|state[VK_RWIN])&0x80) ? MOD_WIN : 0);
-    return modifiers == (shortcut&0xFF);
+    if (!shortcut || key != (shortcut >> 8)) return false;
+    const UINT modifiers = ((state[VK_MENU] & 0x80) ? MOD_ALT : 0) |
+        ((state[VK_CONTROL] & 0x80) ? MOD_CONTROL : 0) |
+        ((state[VK_SHIFT] & 0x80) ? MOD_SHIFT : 0) |
+        (((state[VK_LWIN] | state[VK_RWIN]) & 0x80) ? MOD_WIN : 0);
+    return modifiers == (shortcut & 0xFF);
 }
 
 // Registration belongs to the helper's message thread, in the taskbar process.
 static void ReleaseAlternativeShortcut(HWND helper) {
-    if (g_alternativeShortcutActive.exchange(0)) UnregisterHotKey(helper,kAlternativeShortcutId);
+    if (g_alternativeShortcutActive.exchange(0)) UnregisterHotKey(helper, kAlternativeShortcutId);
 }
 
 static void UpdateAlternativeShortcut(HWND helper) {
-    const UINT desired=IsTaskbarProcess() ? g_alternativeShortcutDesired.load() : 0;
-    if (desired==g_alternativeShortcutActive.load()) return;
+    const UINT desired = IsTaskbarProcess() ? g_alternativeShortcutDesired.load() : 0;
+    if (desired == g_alternativeShortcutActive.load()) return;
     ReleaseAlternativeShortcut(helper);
     if (!desired) return;
-    if (RegisterHotKey(helper,kAlternativeShortcutId,(desired&0xFF)|MOD_NOREPEAT,desired>>8)) {
-        g_alternativeShortcutActive=desired;
-        SearchWindowTrace(L"alternative search shortcut registered",S_OK);
+    if (RegisterHotKey(helper, kAlternativeShortcutId, (desired & 0xFF) | MOD_NOREPEAT, desired >> 8)) {
+        g_alternativeShortcutActive = desired;
+        SearchWindowTrace(L"alternative search shortcut registered", S_OK);
     } else {
         SearchWindowTrace(L"alternative search shortcut unavailable; choose another combination",
                           HRESULT_FROM_WIN32(GetLastError()));
@@ -4361,8 +4379,13 @@ static void ArmSearchAloneCheck(int ticksNeeded) {
 
 static void CALLBACK ShellWindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                           LONG idChild, DWORD, DWORD) {
-    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !g_hExplorerHelperWnd ||
-        SearchActivationSettling()) {
+    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !g_hExplorerHelperWnd) {
+        return;
+    }
+    if (event == EVENT_SYSTEM_FOREGROUND && IsTaskbarProcess()) {
+        SyncSearchWindowInputForForeground(hwnd);
+    }
+    if (SearchActivationSettling()) {
         return;
     }
     if (event == EVENT_OBJECT_CLOAKED) {
@@ -4545,43 +4568,27 @@ static void RunExplorerDrag(HWND hWnd) {
     }
 }
 
-// The thread showing an uninstall error, while it does (AcceptPackageRemoval):
-// StopExplorerHelperHost closes the box rather than wait for a click.
-static std::atomic<DWORD> g_removalBoxThread{0};
-
 // Removes a packaged app for this user, for Uninstall in an app's menu in
-// Start (RequestPackageRemoval): here, in a plain desktop process, as package
-// management is not open to Start's. Nothing the request says is taken on
-// trust -- any process can send it: it is acted on only while Start is open
-// and in front, where the user has just confirmed it, when Start itself says
-// it is asking for this package (RemovalCheckMessage), and only for a
-// package that is not part of Windows, checked again here. Says so when it
-// fails, under the package's own name.
+// search (RequestPackageRemoval). Acted on only while the search window is
+// open and in front, where the user has just confirmed it, and only for a
+// package that is not part of Windows. Shows an error under the package's
+// own name when removal fails.
 static bool AcceptPackageRemoval(std::wstring family) {
     while (!family.empty() && family.back() == L'\0') {
         family.pop_back();
     }
-    HWND start = g_searchWindowWindow.load();
-    if (!start) start = CachedStartWindow();
-    DWORD startPid = 0, foregroundPid = 0;
-    if (start) {
-        GetWindowThreadProcessId(start, &startPid);
+    HWND search = g_searchWindowWindow.load();
+    DWORD searchPid = 0, foregroundPid = 0;
+    if (search) {
+        GetWindowThreadProcessId(search, &searchPid);
     }
     GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
     const size_t underscore = family.rfind(L'_');
-    if (!start || IsCloaked(start) || !startPid || foregroundPid != startPid || family.size() > 128 ||
+    if (!search || IsCloaked(search) || !searchPid || foregroundPid != searchPid || family.size() > 128 ||
         underscore == std::wstring::npos || family.size() - underscore - 1 != 13 ||
         family.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_") !=
             std::wstring::npos) {
         Wh_Log(L"[Explorer] uninstall: refused %ls", family.c_str());
-        return false;
-    }
-    // Start sent this from inside a SendMessage, so it answers this one meanwhile.
-    DWORD_PTR confirmed = 0;
-    if (!SendMessageTimeoutW(start, RemovalCheckMessage(), 0, static_cast<LPARAM>(std::hash<std::wstring>{}(family)),
-                             SMTO_ABORTIFHUNG, 1000, &confirmed) ||
-        !confirmed) {
-        Wh_Log(L"[Explorer] uninstall: refused %ls, not asked for by Start", family.c_str());
         return false;
     }
     SpawnTrackedLaunch([family] {
@@ -4651,22 +4658,27 @@ static void TryInitializeExplorerSearch(HWND helper) {
         return;
     }
 
-    // Input capture is native Win32 and can buffer the first query without
-    // constructing XAML. The actual UI is created only on a search request.
+    // Input capture is native Win32 and only active while Start, SearchHost,
+    // or the search window is in the foreground. The XAML UI is created lazily.
     UpdateAlternativeShortcut(helper);
-    StartSearchWindowInput();
+    SyncSearchWindowInputForForeground(GetForegroundWindow());
     if (!g_explorerSearchRequested) {
         KillTimer(helper, kExplorerSearchStartupTimer);
         return;
     }
-    if (!TaskbarXamlReady(tray)) return;
+    // Defer briefly while the Windows 11 taskbar builds its own XAML island,
+    // but proceed after ~3 seconds so non-XAML taskbars still open search.
+    if (!TaskbarXamlReady(tray) && ++g_explorerTaskbarWaitTicks < 12) return;
     KillTimer(helper, kExplorerSearchStartupTimer);
     if (!g_searchWindowWindow.load()) {
         ++g_explorerSearchStartupAttempts;
         if (!SearchWindowInitialize()) {
-            if (g_explorerSearchStartupAttempts < 5)
+            if (g_explorerSearchStartupAttempts < 5) {
                 SetTimer(helper, kExplorerSearchStartupTimer, 1000, nullptr);
-            else g_explorerSearchRequested = false;
+            } else {
+                g_explorerSearchRequested = false;
+                StopSearchWindowInput();
+            }
             return;
         }
     }
@@ -4685,10 +4697,11 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
     switch (uMsg) {
     case kExplorerUpdateShortcut:
         UpdateAlternativeShortcut(hWnd);
+        RefreshSearchUiSettings();
         return 0;
     case WM_HOTKEY:
         if (wParam == kAlternativeShortcutId &&
-            g_alternativeShortcutActive.load() == PackAlternativeShortcut(LOWORD(lParam)&0xF,HIWORD(lParam)) &&
+            g_alternativeShortcutActive.load() == PackAlternativeShortcut(LOWORD(lParam) & 0xF, HIWORD(lParam)) &&
             g_alternativeShortcutActive.load()) {
             DismissSearchContextMenu();
             // Keep the hotkey's foreground permission during lazy UI creation.
@@ -4708,128 +4721,6 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
     case kExplorerStartDrag:
         RunExplorerDrag(hWnd);
         return 0;
-    case WM_COPYDATA: {
-        auto pcds = reinterpret_cast<const COPYDATASTRUCT*>(lParam);
-        if (pcds && pcds->dwData == kExplorerUninstallMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
-            return AcceptPackageRemoval(
-                       std::wstring(reinterpret_cast<const wchar_t*>(pcds->lpData), pcds->cbData / sizeof(wchar_t)))
-                       ? 1
-                       : 0;
-        }
-        if (pcds && pcds->dwData == kExplorerDragMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
-            std::wstring path(reinterpret_cast<const wchar_t*>(pcds->lpData), pcds->cbData / sizeof(wchar_t));
-            while (!path.empty() && path.back() == L'\0') {
-                path.pop_back();
-            }
-            // Only a drag the user is making: this window was given the
-            // foreground, which only the foreground process can do, and the
-            // primary button is down. And only a local file or folder that
-            // exists, as for Properties.
-            const int button = PrimaryButton();
-            bool local = path.size() >= 3 && path[1] == L':' && !PathIsUNCW(path.c_str());
-            if (local) {
-                const wchar_t root[] = {path[0], L':', L'\\', 0};
-                local = GetDriveTypeW(root) != DRIVE_REMOTE;
-            }
-            if (GetForegroundWindow() != hWnd || !(GetAsyncKeyState(button) & 0x8000) || !local ||
-                GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                Wh_Log(L"[Explorer] drag: refused for %ls", path.c_str());
-                if (HWND start = CachedStartWindow(); start && !IsCloaked(start) && GetForegroundWindow() == hWnd) {
-                    SetForegroundWindow(start);  // it gave this window the foreground for the drag
-                }
-                return 0;
-            }
-            // Started from the message loop: the drag loop must not run
-            // inside Start's SendMessage, which would wait for it.
-            g_explorerDragPath = std::move(path);
-            PostMessageW(hWnd, kExplorerStartDrag, 0, 0);
-            return 1;
-        }
-        if (pcds && pcds->dwData == kExplorerCopyDataMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
-            size_t charCount = pcds->cbData / sizeof(wchar_t);
-            const wchar_t* pStr = reinterpret_cast<const wchar_t*>(pcds->lpData);
-            std::wstring targetPath(pStr, charCount);
-            while (!targetPath.empty() && targetPath.back() == L'\0') {
-                targetPath.pop_back();
-            }
-            while (!targetPath.empty() && (targetPath.front() == L' ' || targetPath.front() == L'\t' || targetPath.front() == L'"')) {
-                targetPath.erase(targetPath.begin());
-            }
-            while (!targetPath.empty() && (targetPath.back() == L' ' || targetPath.back() == L'\t' || targetPath.back() == L'"')) {
-                targetPath.pop_back();
-            }
-
-            if (targetPath.empty()) return 0;
-
-            // Security validation: reject UNC paths and remote network drives
-            if (PathIsUNCW(targetPath.c_str()) || targetPath.starts_with(L"\\\\")) {
-                Wh_Log(L"[Explorer] Rejected UNC path: %ls", targetPath.c_str());
-                return 0;
-            }
-            if (targetPath.size() >= 2 && targetPath[1] == L':') {
-                wchar_t root[4] = { targetPath[0], L':', L'\\', 0 };
-                if (GetDriveTypeW(root) == DRIVE_REMOTE) {
-                    Wh_Log(L"[Explorer] Rejected remote drive path: %ls", targetPath.c_str());
-                    return 0;
-                }
-            }
-
-            // Security validation: path must exist
-            DWORD attr = GetFileAttributesW(targetPath.c_str());
-            if (attr == INVALID_FILE_ATTRIBUTES) {
-                Wh_Log(L"[Explorer] Rejected non-existent path: %ls", targetPath.c_str());
-                return 0;
-            }
-
-            Wh_Log(L"[Explorer] Received valid SEPR WM_COPYDATA for: %ls", targetPath.c_str());
-
-            SpawnTrackedLaunch([path = std::move(targetPath)]() {
-                HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-
-                // Attempt 1: SHObjectProperties (Dedicated Win32 Shell Properties API)
-                BOOL ok = SHObjectProperties(nullptr, 0x00000002 /* SHOP_FILEPATH */, path.c_str(), nullptr);
-                Wh_Log(L"[Explorer] SHObjectProperties returned %d, err=%lu for %ls", ok, GetLastError(), path.c_str());
-
-                // Attempt 2: ShellExecuteExW with PIDL
-                if (!ok) {
-                    PIDLIST_ABSOLUTE pidl = nullptr;
-                    SFGAOF sfgao = 0;
-                    if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, &sfgao)) && pidl) {
-                        SHELLEXECUTEINFOW sei{};
-                        sei.cbSize = sizeof(sei);
-                        sei.fMask = SEE_MASK_INVOKEIDLIST;
-                        sei.hwnd = nullptr;
-                        sei.lpIDList = pidl;
-                        sei.lpVerb = L"properties";
-                        sei.nShow = SW_SHOWNORMAL;
-                        ok = ShellExecuteExW(&sei);
-                        Wh_Log(L"[Explorer] ShellExecuteExW PIDL returned %d, err=%lu", ok, GetLastError());
-                        CoTaskMemFree(pidl);
-                    }
-                }
-
-                // Attempt 3: ShellExecuteExW with file path
-                if (!ok) {
-                    SHELLEXECUTEINFOW sei{};
-                    sei.cbSize = sizeof(sei);
-                    sei.fMask = SEE_MASK_INVOKEIDLIST;
-                    sei.hwnd = nullptr;
-                    sei.lpFile = path.c_str();
-                    sei.lpVerb = L"properties";
-                    sei.nShow = SW_SHOWNORMAL;
-                    ok = ShellExecuteExW(&sei);
-                    Wh_Log(L"[Explorer] ShellExecuteExW string returned %d, err=%lu", ok, GetLastError());
-                }
-
-                if (SUCCEEDED(hr)) {
-                    CoUninitialize();
-                }
-            });
-
-            return 1;
-        }
-        break;
-    }
     case WM_TIMER:
         if (wParam == kExplorerSearchStartupTimer) {
             TryInitializeExplorerSearch(hWnd);
@@ -4882,7 +4773,6 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
     );
 
     if (hWnd) {
-        ChangeWindowMessageFilterEx(hWnd, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
         g_hExplorerHelperWnd = hWnd;
         Wh_Log(L"[Explorer] Helper host window created: %p", hWnd);
         // Out of context: delivered to this thread's message loop, never run
@@ -4899,6 +4789,7 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
 
     if (hWnd) {
         g_explorerSearchStartupAttempts = 0;
+        g_explorerTaskbarWaitTicks = 0;
         g_explorerSearchRequested = false;
         SearchWindowTrace(L"search startup armed; XAML deferred until first search", S_OK);
         SetTimer(hWnd, kExplorerSearchStartupTimer, 250, nullptr);
@@ -4943,8 +4834,7 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
 // Every explorer.exe hosts one: File Explorer windows can run in processes of
 // their own, and which process loads this mod first is not fixed, so "only the
 // first" could leave the taskbar's process without one. Extra hosts are
-// harmless: the properties relay sends to whichever FindWindow returns, and
-// only the taskbar's process acts on Start and Search (IsTaskbarProcess).
+// harmless: only the taskbar's process acts on Start and Search (IsTaskbarProcess).
 static void StartExplorerHelperHost() {
     if (g_hExplorerHelperThread) return;
 
@@ -4960,6 +4850,9 @@ static void StartExplorerHelperHost() {
 }
 
 static void StopExplorerHelperHost() {
+    // The helper thread's teardown waits for launch threads, including one
+    // showing an uninstall error: close it first.
+    CloseRemovalErrorBox();
     if (g_hExplorerHelperWnd && IsWindow(g_hExplorerHelperWnd)) {
         PostMessageW(g_hExplorerHelperWnd, WM_CLOSE, 0, 0);
     }
@@ -4971,14 +4864,6 @@ static void StopExplorerHelperHost() {
         CloseHandle(g_hExplorerHelperThread);
         g_hExplorerHelperThread = nullptr;
         g_explorerHelperThreadId = 0;
-    }
-    // An uninstall error still up would hold the unload until clicked.
-    for (int i = 0; i < 50 && g_removalBoxThread.load(); ++i) {
-        EnumThreadWindows(g_removalBoxThread.load(), [](HWND hwnd, LPARAM) -> BOOL {
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            return TRUE;
-        }, 0);
-        Sleep(100);
     }
     WaitForTrackedLaunches();
 }
@@ -5270,17 +5155,22 @@ std::atomic<bool> g_forgetUsage{false};
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
 
-    auto shortcutModifiers=WindhawkUtils::StringSetting::make(L"search.shortcutModifiers");
-    auto shortcutKey=WindhawkUtils::StringSetting::make(L"search.shortcutKey");
-    auto modifiers=ParseAlternativeShortcutModifiers(shortcutModifiers.get() ? shortcutModifiers.get() : L"");
-    const UINT key=ParseAlternativeShortcutKey(shortcutKey.get() ? shortcutKey.get() : L"");
-    const bool shortcutEnabled=Wh_GetIntSetting(L"search.enableAlternativeShortcut")!=0;
-    g_alternativeShortcutDesired=shortcutEnabled && modifiers && key ? PackAlternativeShortcut(*modifiers,key) : 0;
-    if (shortcutEnabled && (!modifiers || !key))
+    auto shortcutModifiers = WindhawkUtils::StringSetting::make(L"search.shortcutModifiers");
+    auto shortcutKey = WindhawkUtils::StringSetting::make(L"search.shortcutKey");
+    auto modifiers = ParseAlternativeShortcutModifiers(shortcutModifiers.get());
+    const UINT key = ParseAlternativeShortcutKey(shortcutKey.get());
+    const bool shortcutEnabled = Wh_GetIntSetting(L"search.enableAlternativeShortcut") != 0;
+    const bool unsafeUnmodified = modifiers && *modifiers == 0 && key && !IsSafeUnmodifiedShortcutKey(key);
+    g_alternativeShortcutDesired =
+        shortcutEnabled && modifiers && key && !unsafeUnmodified ? PackAlternativeShortcut(*modifiers, key) : 0;
+    if (shortcutEnabled && unsafeUnmodified) {
+        Wh_Log(L"Alternative search shortcut with modifier None is only allowed for function, media, browser, and special keys");
+    } else if (shortcutEnabled && (!modifiers || !key)) {
         Wh_Log(L"Alternative search shortcut has an invalid modifier or key setting");
+    }
 
     auto defUrl = WindhawkUtils::StringSetting::make(L"web.defaultSearchUrl");
-    if (defUrl.get() && *defUrl.get()) {
+    if (*defUrl.get()) {
         g_settings.defaultSearchUrl = defUrl.get();
     } else {
         g_settings.defaultSearchUrl = L"https://duckduckgo.com/?q={q}";
@@ -5295,12 +5185,12 @@ void LoadSettings() {
         auto shellExecutable = WindhawkUtils::StringSetting::make(L"customCommands[%d].shellExecutable", i);
         auto shellArguments = WindhawkUtils::StringSetting::make(L"customCommands[%d].shellArguments", i);
         CustomCommand entry;
-        if (name.get()) entry.name = tools::Trim(name.get());
-        if (icon.get()) entry.icon = tools::Trim(icon.get());
-        if (command.get()) entry.command = tools::Trim(command.get());
+        entry.name = tools::Trim(name.get());
+        entry.icon = tools::Trim(icon.get());
+        entry.command = tools::Trim(command.get());
         entry.shell = ParseCustomCommandShell(shell.get());
-        if(shellExecutable.get()) entry.shellExecutable=tools::Trim(shellExecutable.get());
-        if(shellArguments.get() && *shellArguments.get()) entry.shellArguments=shellArguments.get();
+        entry.shellExecutable = tools::Trim(shellExecutable.get());
+        if (*shellArguments.get()) entry.shellArguments = shellArguments.get();
         entry.hideTerminal = Wh_GetIntSetting(L"customCommands[%d].hideTerminal", i) != 0;
         if (!entry.name.empty() && !entry.command.empty()) {
             g_settings.customCommands.push_back(std::move(entry));
@@ -5310,15 +5200,15 @@ void LoadSettings() {
     g_settings.webShortcuts.clear();
     for (int i = 0;; ++i) {
         auto pfx = WindhawkUtils::StringSetting::make(L"web.webShortcuts[%d].prefix", i);
-        if (!pfx.get() || !*pfx.get()) break;
+        if (!*pfx.get()) break;
         auto name = WindhawkUtils::StringSetting::make(L"web.webShortcuts[%d].name", i);
         auto url = WindhawkUtils::StringSetting::make(L"web.webShortcuts[%d].url", i);
 
         WebShortcut s;
         s.prefix = pfx.get();
         for (auto& c : s.prefix) c = static_cast<wchar_t>(towlower(c));
-        s.name = (name.get() && *name.get()) ? name.get() : L"Web";
-        s.url = (url.get() && *url.get()) ? url.get() : L"";
+        s.name = *name.get() ? name.get() : L"Web";
+        s.url = url.get();
         if (!s.prefix.empty() && !s.url.empty()) {
             g_settings.webShortcuts.push_back(std::move(s));
         }
@@ -5333,16 +5223,16 @@ void LoadSettings() {
     g_settings.unitConversions.clear();
     for (int i = 0;; ++i) {
         auto fromU = WindhawkUtils::StringSetting::make(L"unitConversions[%d].fromUnit", i);
-        if (!fromU.get() || !*fromU.get()) break;
+        if (!*fromU.get()) break;
         auto toU = WindhawkUtils::StringSetting::make(L"unitConversions[%d].toUnit", i);
         auto formula = WindhawkUtils::StringSetting::make(L"unitConversions[%d].formula", i);
         auto cat = WindhawkUtils::StringSetting::make(L"unitConversions[%d].category", i);
 
         CustomConversion c;
         c.fromUnit = tools::Trim(fromU.get());  // shown as written; matched by NormalizeUnit
-        c.toUnit = (toU.get() && *toU.get()) ? tools::Trim(toU.get()) : L"";
-        c.formula = (formula.get() && *formula.get()) ? tools::Trim(formula.get()) : L"";
-        c.category = (cat.get() && *cat.get()) ? tools::Trim(cat.get()) : L"Conversion";
+        c.toUnit = tools::Trim(toU.get());
+        c.formula = tools::Trim(formula.get());
+        c.category = *cat.get() ? tools::Trim(cat.get()) : L"Conversion";
         c.reciprocal = Wh_GetIntSetting(L"unitConversions[%d].reciprocal", i) != 0;
 
         if (!c.fromUnit.empty() && !c.toUnit.empty() && !c.formula.empty()) {
@@ -5355,7 +5245,7 @@ void LoadSettings() {
     g_settings.excludedPaths.clear();
     for (int i = 0;; ++i) {
         auto val = WindhawkUtils::StringSetting::make(L"files.excludedPaths[%d]", i);
-        if (!val.get() || !*val.get()) break;
+        if (!*val.get()) break;
         std::wstring s = tools::ToLower(tools::Trim(val.get()));
         for (auto& ch : s) {
             if (ch == L'/') ch = L'\\';
@@ -5403,7 +5293,7 @@ void LoadSettings() {
     g_settings.textScale = textScale ? std::clamp(textScale, 80, 150) : 100;  // 0: not set yet
     g_textScale.store(g_settings.textScale);
     auto textColor = WindhawkUtils::StringSetting::make(L"appearance.textColor");
-    g_settings.textColor = textColor.get() ? tools::Trim(textColor.get()) : L"auto";
+    g_settings.textColor = *textColor.get() ? tools::Trim(textColor.get()) : L"auto";
 
     g_settings.showKeyHints = Wh_GetIntSetting(L"appearance.showKeyHints") != 0;
 
@@ -5498,14 +5388,50 @@ void KeepHandler(wf::IInspectable const& source, Revoker revoker) {
     g_xamlHandlers->push_back({winrt::make_weak(source), std::make_shared<Revoker>(std::move(revoker))});
 }
 
+[[clang::no_destroy]] wuxc::Border g_windowInnerBorder{nullptr};
+[[clang::no_destroy]] wuxc::Image g_windowStrokeImage{nullptr};
+SearchBrushData g_windowOutlineBrush{};
+SearchBrushData g_windowInnerOutlineBrush{};
+std::array<double, 4> g_windowCorners{8, 8, 8, 8};
+std::array<double, 4> g_windowThickness{1, 1, 1, 1};
+std::array<double, 4> g_windowInnerThickness{0, 0, 0, 0};
+
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_filesHeaderHolder{nullptr};
+[[clang::no_destroy]] wuxc::Border g_appsHeaderContent{nullptr};
+[[clang::no_destroy]] wuxc::Border g_filesHeaderContent{nullptr};
+[[clang::no_destroy]] wuxc::Image g_appsHeaderStrokeImage{nullptr};
+[[clang::no_destroy]] wuxc::Image g_filesHeaderStrokeImage{nullptr};
+SearchBrushData g_headerOutlineBrush{};
+std::array<double, 4> g_headerCorners{0, 0, 0, 0};
+std::array<double, 4> g_headerThickness{0, 0, 0, 0};
+
 [[clang::no_destroy]] wuxc::Border g_searchBarBorder{nullptr};
+[[clang::no_destroy]] wuxc::Border g_searchBarInnerBorder{nullptr};
+[[clang::no_destroy]] wuxc::Image g_searchBarStrokeImage{nullptr};
+SearchBrushData g_searchBarOutlineBrush{};
+std::array<double, 4> g_searchBarCorners{4, 4, 4, 4};
+std::array<double, 4> g_searchBarThickness{1, 1, 1, 1};
+
 [[clang::no_destroy]] wuxc::Border g_divider{nullptr};
 [[clang::no_destroy]] wuxc::Border g_footerBorder{nullptr};
+[[clang::no_destroy]] wuxc::Image g_footerStrokeImage{nullptr};
+SearchBrushData g_footerOutlineBrush{};
+std::array<double, 4> g_footerCorners{0, 0, 0, 0};
+std::array<double, 4> g_footerThickness{0, 0, 0, 0};
+
+[[clang::no_destroy]] wuxc::Image g_previewStrokeImage{nullptr};
+
 std::atomic<bool> g_isOverlayVisible{false};
 std::atomic<bool> g_isHiding{false};
 
+void UpdateSearchBarShape();
+void UpdateSearchHeadersShape();
+void UpdateSearchFooterShape();
+void UpdatePreviewCardShape();
+void ApplyPreviewCardAppearance();
+void ApplyResultRowButtonTheme(wuxc::Button const& btn, bool selected, bool refreshTheme = false);
+void ClearSmoothShapeCache();
 void UpdateSearchResultsLayout(bool clearPreview = false);
 void HidePreview();
 
@@ -5682,15 +5608,11 @@ std::atomic<ULONGLONG> g_lastAppIndexRebuildTick{0};
 
 void RequestAppIndexRefresh();
 
-// The Store app Start is asking Explorer to remove, while it asks
-// (RequestPackageRemoval): what it answers RemovalCheckMessage by. XAML thread.
-static std::wstring g_removalPending;
-
-// A result is being dragged, by Explorer's helper (StartFileDrag), which holds
-// the foreground until the drop: Start losing it then is not Start closing.
+// A result is being dragged by Explorer's helper (StartFileDrag), which holds
+// the pointer until the drop: the search window losing focus then is not search closing.
 static std::atomic<bool> g_dragging{false};
 // An Enter pressed before the results for the text were in, run when they
-// arrive (RenderResults); dropped once Start closes, or if they take longer
+// arrive (RenderResults); dropped once search closes, or if they take longer
 // than this.
 static bool g_enterWaiting = false;
 static bool g_enterWaitingCtrl = false;
@@ -5699,108 +5621,6 @@ constexpr ULONGLONG kEnterWaitMs = 3000;
 
 void DismissSearch() {
     SearchWindowHide();
-}
-
-// Use Explorer's shell activation for ordinary launches, preserving app entries,
-// shortcuts and their arguments. Elevated launches keep their runas path.
-
-// The helper window (ExplorerHelperThreadProc) of the explorer.exe running the
-// taskbar and desktop: the process ShellExecuteInExplorer reaches.
-HWND FindExplorerLaunchHolder() {
-    DWORD shellPid = 0;
-    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        GetWindowThreadProcessId(tray, &shellPid);
-    }
-    for (HWND w = FindWindowExW(nullptr, nullptr, kExplorerHelperClassName, kExplorerHelperWindowName); w;
-         w = FindWindowExW(nullptr, w, kExplorerHelperClassName, kExplorerHelperWindowName)) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(w, &pid);
-        if (shellPid && pid == shellPid) {
-            return w;
-        }
-    }
-    return nullptr;
-}
-
-// Runs ShellExecute in Explorer, with the default verb. Returns false when
-// Explorer could not be asked; the caller then opens it here instead. Needs
-// COM on the calling thread.
-bool ShellExecuteInExplorer(const std::wstring& file, const std::wstring& params, const std::wstring& dir) {
-    IShellWindows* windows = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows))) ||
-        !windows) {
-        return false;
-    }
-    VARIANT empty{};
-    long hwnd = 0;
-    IDispatch* desktop = nullptr;
-    HRESULT hr = windows->FindWindowSW(&empty, &empty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &desktop);
-    windows->Release();
-    if (hr != S_OK || !desktop) {
-        return false;
-    }
-    IServiceProvider* provider = nullptr;
-    IShellBrowser* browser = nullptr;
-    IShellView* view = nullptr;
-    IDispatch* background = nullptr;
-    IShellFolderViewDual* folderView = nullptr;
-    IDispatch* application = nullptr;
-    IShellDispatch2* shell = nullptr;
-    hr = desktop->QueryInterface(IID_PPV_ARGS(&provider));
-    if (SUCCEEDED(hr)) hr = provider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&browser));
-    if (SUCCEEDED(hr)) hr = browser->QueryActiveShellView(&view);
-    if (SUCCEEDED(hr)) hr = view->GetItemObject(SVGIO_BACKGROUND, IID_PPV_ARGS(&background));
-    if (SUCCEEDED(hr)) hr = background->QueryInterface(IID_PPV_ARGS(&folderView));
-    if (SUCCEEDED(hr)) hr = folderView->get_Application(&application);
-    if (SUCCEEDED(hr)) hr = application->QueryInterface(IID_PPV_ARGS(&shell));
-    if (SUCCEEDED(hr)) {
-        BSTR fileArg = SysAllocString(file.c_str());
-        VARIANT paramsArg{}, dirArg{}, verbArg{}, showArg{};
-        if (!params.empty()) {
-            paramsArg.vt = VT_BSTR;
-            paramsArg.bstrVal = SysAllocString(params.c_str());
-        }
-        if (!dir.empty()) {
-            dirArg.vt = VT_BSTR;
-            dirArg.bstrVal = SysAllocString(dir.c_str());
-        }
-        showArg.vt = VT_I4;
-        showArg.lVal = SW_SHOWNORMAL;
-        hr = shell->ShellExecute(fileArg, paramsArg, dirArg, verbArg, showArg);
-        SysFreeString(fileArg);
-        VariantClear(&paramsArg);
-        VariantClear(&dirArg);
-    }
-    for (IUnknown* object : std::initializer_list<IUnknown*>{shell, application, folderView, background, view, browser, provider, desktop}) {
-        if (object) {
-            object->Release();
-        }
-    }
-    Wh_Log(L"launch: Explorer opened %ls (%08X)", file.c_str(), static_cast<unsigned>(hr));
-    return SUCCEEDED(hr);
-}
-
-// An app entry as Explorer can open it: shell:AppsFolder and its name there,
-// which keeps what its shortcut passes. Empty if that does not lead back to
-// the same entry.
-std::wstring AppsFolderPath(PCIDLIST_ABSOLUTE pidl) {
-    std::wstring path;
-    IShellItem* item = nullptr;
-    if (SUCCEEDED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) && item) {
-        LPWSTR name = nullptr;
-        if (SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &name)) && name) {
-            path = std::wstring(L"shell:AppsFolder\\") + name;
-            CoTaskMemFree(name);
-        }
-        item->Release();
-    }
-    PIDLIST_ABSOLUTE parsed = nullptr;
-    bool same = !path.empty() && SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &parsed, 0, nullptr)) &&
-                parsed && ILIsEqual(parsed, pidl);
-    if (parsed) {
-        ILFree(parsed);
-    }
-    return same ? path : std::wstring();
 }
 
 // Request the launch before hiding search. Explorer already owns this window,
@@ -5849,7 +5669,20 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
 void TeardownStartMenuBridge(HWND core) {
     if (!core) return;
     KillTimer(core, SearchAppearanceTimerId());
-    ChangeWindowMessageFilterEx(core, SearchWindowAppearanceMessage(), MSGFLT_RESET, nullptr);
+    try {
+        if (auto window = wux::Window::Current(); window && window.Content()) {
+            if (auto probe = FindDescendantByName(window.Content(), L"__WhMenuProbeCanvas", 16)) {
+                if (auto elem = probe.try_as<wux::UIElement>()) {
+                    if (auto parent = wuxm::VisualTreeHelper::GetParent(probe).try_as<wuxc::Panel>()) {
+                        uint32_t idx = 0;
+                        if (parent.Children().IndexOf(elem, idx))
+                            parent.Children().RemoveAt(idx);
+                    }
+                }
+            }
+        }
+    } catch (...) {
+    }
     if (g_subclassed) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(core, StartMenuSubclassProc);
         g_subclassed = false;
@@ -5999,10 +5832,9 @@ void SubclassStartMenuWindow() {
         },
         reinterpret_cast<LPARAM>(&ours));
     if (ours) {
-        ChangeWindowMessageFilterEx(ours,SearchWindowAppearanceMessage(),MSGFLT_ALLOW,nullptr);
-        SetTimer(ours,SearchAppearanceTimerId(),500,nullptr);
-        if (HWND host = FindWindowW(kSearchWindowClass,nullptr))
-            PostMessageW(ours,SearchWindowAppearanceMessage(),reinterpret_cast<WPARAM>(host),0);
+        SetTimer(ours, SearchAppearanceTimerId(), 500, nullptr);
+        if (HWND host = FindWindowW(kSearchWindowClass, nullptr))
+            PostMessageW(ours, SearchWindowAppearanceMessage(), reinterpret_cast<WPARAM>(host), 0);
         g_hCoreWindow = ours;
         SetPropW(ours, L"WindhawkStartMenuWindow", (HANDLE)1);
         HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -6077,8 +5909,8 @@ struct Row {
 // scale.
 inline constexpr int kIconDisplay = 24;  // what an icon occupies in the row, in DIPs
 
-// The same in physical pixels on the display Start is on: the size icons are
-// made at (see icons::Resample), so XAML draws them without scaling.
+// The same in physical pixels on the display the search window is on: the size
+// icons are made at (see icons::Resample), so XAML draws them without scaling.
 int IconPixels() {
     HWND start = GetSearchWindow();
     UINT dpi = start ? GetDpiForWindow(start) : 0;
@@ -6124,8 +5956,7 @@ std::vector<std::wstring> g_commandUsageRequests; // g_queryMutex; drained by th
 //
 // ShellExecute rather than CreateProcess: these are paths of any kind, and
 // the shell decides what opening one means. This process runs at the user's
-// own integrity, so what opens is what the user would have opened -- which is
-// exactly what the broker could not promise when it ran elevated.
+// own integrity in Explorer, so what opens is what the user would have opened.
 void OpenResult(std::wstring path, bool asAdmin = false) {
     SpawnTrackedLaunch([path = std::move(path), asAdmin] {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -6167,7 +5998,7 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
         }
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if ((asAdmin || !ShellExecuteInExplorer(path, params, workDir)) && !ShellExecuteExW(&info)) {
+        if (!ShellExecuteExW(&info)) {
             Wh_Log(L"open failed (%lu): %ls (admin=%d)", GetLastError(), path.c_str(), asAdmin ? 1 : 0);
         }
         if (SUCCEEDED(comHr)) {
@@ -6176,26 +6007,9 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
     });
 }
 
-// Lets the taskbar's explorer.exe, where the Properties relay runs, bring the
-// sheet it opens for us to the front. Only a process that just got user input
-// may hand that right on, and Start stops being one once it closes, so this
-// is called from the click handler, before DismissSearch.
-void AllowExplorerForeground() {
-    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        DWORD explorerPid = 0;
-        GetWindowThreadProcessId(tray, &explorerPid);
-        if (explorerPid) {
-            AllowSetForegroundWindow(explorerPid);
-        }
-    }
-}
-
 // Opens a folder window with the file selected, through the shell rather than
-// by starting explorer.exe /select. Which explorer.exe gets the window is not
-// ours to know -- a started one hands the request on and exits, and the window
-// lands in another it never met -- but the shell's own call reaches that
-// process over COM and hands it our right to the foreground on the way. Runs
-// on a worker (OpenFileLocationThenDismiss), while Start is still in front.
+// by starting explorer.exe /select. Runs on a worker (OpenFileLocationThenDismiss)
+// while the search window is still in front.
 void OpenFileLocation(const std::wstring& path) {
     PIDLIST_ABSOLUTE pidl = nullptr;
     HRESULT hr = SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr);
@@ -6208,12 +6022,10 @@ void OpenFileLocation(const std::wstring& path) {
     }
 }
 
-// "Open file location" from a menu: the folder opens on a worker, and Start is
-// dismissed after, back on its thread. The shell call waits on Explorer and
-// pumps messages meanwhile; in the click handler, Start losing the foreground
-// then closed the menu and rebuilt the results under the running handler, and
-// a slow or disconnected share froze Start. The foreground right belongs to
-// the process, so the folder still opens in front.
+// "Open file location" from a menu: the folder opens on a worker, and search is
+// dismissed after, back on its XAML thread. The shell call waits on Explorer and
+// pumps messages meanwhile, so running it off the XAML thread avoids stalling
+// the UI on a slow or disconnected share.
 void OpenFileLocationThenDismiss(std::wstring path) {
     wuc::CoreDispatcher dispatcher{nullptr};
     try {
@@ -6232,29 +6044,6 @@ void OpenFileLocationThenDismiss(std::wstring path) {
                                 wuc::DispatchedHandler{[] { DismissSearch(); }});
         }
     });
-}
-
-// Every explorer.exe hosts a relay window (StartExplorerHelperHost). The one in
-// the taskbar's process is used when it exists: that is the process the
-// Properties click lets take the foreground, so the dialog opens in front.
-HWND FindExplorerHelperWindow() {
-    DWORD trayPid = 0;
-    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        GetWindowThreadProcessId(tray, &trayPid);
-    }
-    HWND any = nullptr;
-    for (HWND hwnd = FindWindowExW(nullptr, nullptr, kExplorerHelperClassName, kExplorerHelperWindowName); hwnd;
-         hwnd = FindWindowExW(nullptr, hwnd, kExplorerHelperClassName, kExplorerHelperWindowName)) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hwnd, &pid);
-        if (pid == trayPid) {
-            return hwnd;
-        }
-        if (!any) {
-            any = hwnd;
-        }
-    }
-    return any;
 }
 
 // What Uninstall in an app's menu does for an app. A packaged app is removed
@@ -6552,43 +6341,25 @@ inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
 
 }  // namespace uninstall
 
-// Has Explorer remove a packaged app (AcceptPackageRemoval).
+// Removes a packaged app directly in Explorer (AcceptPackageRemoval).
 bool RequestPackageRemoval(const std::wstring& family) {
-    HWND helper = FindExplorerHelperWindow();
-    if (!helper) {
-        return false;
-    }
-    std::wstring request = family;
-    COPYDATASTRUCT cds{};
-    cds.dwData = kExplorerUninstallMagic;
-    cds.cbData = static_cast<DWORD>((request.size() + 1) * sizeof(wchar_t));
-    cds.lpData = request.data();
-    DWORD_PTR accepted = 0;
-    g_removalPending = family;  // Explorer asks back (RemovalCheckMessage)
-    const bool ok = SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetSearchWindow()),
-                                        reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 2000, &accepted) &&
-                    accepted;
-    g_removalPending.clear();
-    return ok;
+    return AcceptPackageRemoval(family);
 }
 
-// Starts a program's uninstaller, through Explorer like any program opened
-// from search (DismissSearchForLaunch), so it comes to the front -- and
-// asks for elevation itself when it needs it.
+// Starts a program's uninstaller from Explorer (DismissSearchForLaunch), so it
+// comes to the front and asks for elevation itself when it needs it.
 void RunUninstaller(uninstall::Command command) {
     SpawnTrackedLaunch([command = std::move(command)] {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         const std::wstring dir = uninstall::Folder(command.file);
-        if (!ShellExecuteInExplorer(command.file, command.params, dir)) {
-            SHELLEXECUTEINFOW sei{};
-            sei.cbSize = sizeof(sei);
-            sei.fMask = SEE_MASK_NOASYNC;
-            sei.lpFile = command.file.c_str();
-            sei.lpParameters = command.params.c_str();
-            sei.lpDirectory = dir.empty() ? nullptr : dir.c_str();
-            sei.nShow = SW_SHOWNORMAL;
-            ShellExecuteExW(&sei);
-        }
+        SHELLEXECUTEINFOW sei{};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_NOASYNC;
+        sei.lpFile = command.file.c_str();
+        sei.lpParameters = command.params.c_str();
+        sei.lpDirectory = dir.empty() ? nullptr : dir.c_str();
+        sei.nShow = SW_SHOWNORMAL;
+        ShellExecuteExW(&sei);
         Wh_Log(L"uninstall: ran %ls %ls", command.file.c_str(), command.params.c_str());
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
@@ -6658,41 +6429,16 @@ void ShowPropertiesDialog(std::wstring path) {
             cleanPath.pop_back();
         }
 
-        if (cleanPath.empty()) return;
-
-        // 1. Relay to Explorer host window (runs at Medium integrity desktop shell)
-        HWND hHost = nullptr;
-        for (int retry = 0; retry < 3 && !hHost; ++retry) {
-            hHost = FindExplorerHelperWindow();
-            if (!hHost) Sleep(50);
+        if (cleanPath.size() < 3 || cleanPath[1] != L':' || PathIsUNCW(cleanPath.c_str())) {
+            Wh_Log(L"ShowPropertiesDialog: refused non-local path %ls", cleanPath.c_str());
+            return;
+        }
+        const wchar_t root[] = {cleanPath[0], L':', L'\\', 0};
+        if (GetDriveTypeW(root) == DRIVE_REMOTE || GetFileAttributesW(cleanPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"ShowPropertiesDialog: refused remote or missing path %ls", cleanPath.c_str());
+            return;
         }
 
-        if (hHost && IsWindow(hHost)) {
-            COPYDATASTRUCT cds{};
-            cds.dwData = kExplorerCopyDataMagic;
-            cds.cbData = static_cast<DWORD>((cleanPath.size() + 1) * sizeof(wchar_t));
-            cds.lpData = const_cast<wchar_t*>(cleanPath.c_str());
-
-            DWORD_PTR dwResult = 0;
-            LRESULT lres = SendMessageTimeoutW(
-                hHost,
-                WM_COPYDATA,
-                0,
-                reinterpret_cast<LPARAM>(&cds),
-                SMTO_ABORTIFHUNG | SMTO_NORMAL,
-                3000,
-                &dwResult
-            );
-            Wh_Log(L"ShowPropertiesDialog: SendMessageTimeoutW to explorer host returned %ld, res=%llu for %ls",
-                   lres, (unsigned long long)dwResult, cleanPath.c_str());
-            if (lres && dwResult == 1) {
-                return; // Successfully handed off to Explorer
-            }
-        }
-
-        Wh_Log(L"ShowPropertiesDialog: explorer host not reachable, trying direct fallback for %ls", cleanPath.c_str());
-
-        // 2. Direct in-process fallback
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
         BOOL ok = SHObjectProperties(nullptr, 0x00000002 /* SHOP_FILEPATH */, cleanPath.c_str(), nullptr);
@@ -6711,6 +6457,7 @@ void ShowPropertiesDialog(std::wstring path) {
                 CoTaskMemFree(pidl);
             }
         }
+        Wh_Log(L"ShowPropertiesDialog: opened properties for %ls (ok=%d)", cleanPath.c_str(), ok ? 1 : 0);
 
         Sleep(1000);
 
@@ -6868,15 +6615,15 @@ void RunCustomCommand(CustomCommandLaunch launch, bool hideTerminal, bool asAdmi
     SpawnTrackedLaunch([launch = std::move(launch), hideTerminal, asAdmin] {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         try {
-            const auto& executable=launch.executable;
-            const auto& parameters=launch.parameters;
-            const auto& directory=launch.directory;
+            const auto& executable = launch.executable;
+            const auto& parameters = launch.parameters;
+            const auto& directory = launch.directory;
             if (hideTerminal && !asAdmin) {
                 // No console is allocated, so there is no terminal to flash
                 // or to be delegated to Windows Terminal during startup.
                 if (!CreateHiddenCommandProcess(executable, parameters, directory))
                     Wh_Log(L"custom command: hidden launch failed (%lu)", GetLastError());
-            } else if (asAdmin || !ShellExecuteInExplorer(executable, parameters, directory)) {
+            } else {
                 SHELLEXECUTEINFOW execute{sizeof(execute)};
                 execute.fMask = SEE_MASK_NOASYNC;
                 execute.lpVerb = asAdmin ? L"runas" : L"open";
@@ -6914,9 +6661,7 @@ void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
             sei.lpParameters = params.c_str();
             sei.lpDirectory = dir.c_str();
             sei.nShow = SW_SHOWNORMAL;
-            if (asAdmin || !ShellExecuteInExplorer(sei.lpFile, params, dir)) {
-                ShellExecuteExW(&sei);
-            }
+            ShellExecuteExW(&sei);
         } else {
             std::wstring cmdTarget = dir;
             if (cmdTarget.size() > 3 && cmdTarget.back() == L'\\') {
@@ -6931,9 +6676,7 @@ void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
             sei.lpParameters = params.c_str();
             sei.lpDirectory = dir.c_str();
             sei.nShow = SW_SHOWNORMAL;
-            if (asAdmin || !ShellExecuteInExplorer(sei.lpFile, params, dir)) {
-                ShellExecuteExW(&sei);
-            }
+            ShellExecuteExW(&sei);
         }
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
@@ -7076,31 +6819,22 @@ static int g_selectedFile = -1;
 static bool g_filesColumnActive = false;
 static uint64_t g_lastNavTick = 0;
 
+[[clang::no_destroy]] static winrt::weak_ref<wuxc::Button> g_paintedSelectedButton;
+
 // Highlights the selected button of a column and clears the rest; -1 clears
 // them all.
-void PaintColumnSelection(const std::optional<std::vector<wuxc::Button>>& buttons, int selected) {
+void PaintColumnSelection(const std::optional<std::vector<wuxc::Button>>& buttons, int selected, bool refreshTheme = false) {
     if (!buttons) {
         return;
     }
-    bool isLight = IsLightTheme();
     for (size_t i = 0; i < buttons->size(); ++i) {
         const auto& btn = (*buttons)[i];
         if (!btn) continue;
 
-        if (static_cast<int>(i) == selected) {
-            if (isLight) {
-                btn.Background(MakeBrush(0x14, 0x00, 0x5F, 0xB8));
-                btn.BorderBrush(MakeBrush(0x80, 0x00, 0x5F, 0xB8));
-            } else {
-                btn.Background(MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
-                btn.BorderBrush(MakeBrush(0x55, 0x60, 0xCD, 0xFF));
-            }
-            try {
-                btn.StartBringIntoView();
-            } catch (...) {}
-        } else {
-            btn.Background(MakeBrush(0, 0, 0, 0));
-            btn.BorderBrush(MakeBrush(0, 0, 0, 0));
+        const bool isSelected = static_cast<int>(i) == selected;
+        ApplyResultRowButtonTheme(btn, isSelected, refreshTheme);
+        if (isSelected) {
+            g_paintedSelectedButton = winrt::make_weak(btn);
         }
     }
 }
@@ -7108,7 +6842,7 @@ void PaintColumnSelection(const std::optional<std::vector<wuxc::Button>>& button
 void SchedulePreview();
 
 // Selects an app card, which makes Apps the active column.
-void SetAppSelection(int index) {
+void SetAppSelection(int index, bool fromPointer = false) {
     if (!g_appButtonsOpt || g_appButtonsOpt->empty()) {
         g_selectedApp = -1;
         return;
@@ -7119,13 +6853,29 @@ void SetAppSelection(int index) {
     }
     g_selectedApp = index;
     g_filesColumnActive = false;
-    PaintColumnSelection(g_appButtonsOpt, index);
-    PaintColumnSelection(g_fileButtonsOpt, -1);
+    wuxc::Button nextBtn = (*g_appButtonsOpt)[index];
+    wuxc::Button prevBtn = g_paintedSelectedButton.get();
+    if (prevBtn != nextBtn) {
+        if (prevBtn) {
+            ApplyResultRowButtonTheme(prevBtn, false, false);
+        }
+        if (nextBtn) {
+            ApplyResultRowButtonTheme(nextBtn, true, false);
+            g_paintedSelectedButton = winrt::make_weak(nextBtn);
+        } else {
+            g_paintedSelectedButton = {};
+        }
+    }
+    if (!fromPointer && nextBtn) {
+        try {
+            nextBtn.StartBringIntoView();
+        } catch (...) {}
+    }
     SchedulePreview();
 }
 
 // Selects a file row, which makes Files the active column.
-void SetFileSelection(int index) {
+void SetFileSelection(int index, bool fromPointer = false) {
     if(!FilesPanelVisible()) return;
     if (!g_fileButtonsOpt || g_fileButtonsOpt->empty()) {
         g_selectedFile = -1;
@@ -7137,8 +6887,24 @@ void SetFileSelection(int index) {
     }
     g_selectedFile = index;
     g_filesColumnActive = true;
-    PaintColumnSelection(g_fileButtonsOpt, index);
-    PaintColumnSelection(g_appButtonsOpt, -1);
+    wuxc::Button nextBtn = (*g_fileButtonsOpt)[index];
+    wuxc::Button prevBtn = g_paintedSelectedButton.get();
+    if (prevBtn != nextBtn) {
+        if (prevBtn) {
+            ApplyResultRowButtonTheme(prevBtn, false, false);
+        }
+        if (nextBtn) {
+            ApplyResultRowButtonTheme(nextBtn, true, false);
+            g_paintedSelectedButton = winrt::make_weak(nextBtn);
+        } else {
+            g_paintedSelectedButton = {};
+        }
+    }
+    if (!fromPointer && nextBtn) {
+        try {
+            nextBtn.StartBringIntoView();
+        } catch (...) {}
+    }
     SchedulePreview();
 }
 
@@ -7159,7 +6925,7 @@ void SetFileSelection(int index) {
 // some: a text file -- any, by what is in it -- line for line
 // (ReadTextStart), or a Word, Excel, PowerPoint, RTF or OpenDocument file
 // through Windows' or Office's own document filters (ReadDocumentText),
-// which run here, in Start.
+// which run here on the preview thread in Explorer.
 //
 // Motion plays over the still once it is ready (animatePreview): a video,
 // muted and looping, through XAML's own player; a GIF, which XAML animates
@@ -7167,7 +6933,7 @@ void SetFileSelection(int index) {
 // whole but without their timing, which is read from the file
 // (WebpFrameDurations); a PDF's first pages, a second each. Never sound. All
 // of it stops and is let go the
-// moment the selection moves or Start closes.
+// moment the selection moves or the search window closes.
 //
 // The card is a Popup beside the search window, using the monitor's work area
 // independently of the window height. It can extend above a short search
@@ -7771,7 +7537,7 @@ inline bool ReadTextStart(const std::wstring& path, std::wstring* text) {
 // The document filter (IFilter) registered for a file name's extension, as
 // LoadIFilter finds it: its class, if its DLL is Windows' own (System32) or
 // Microsoft Office's. Those are what the types in ReadDocumentText have; no
-// other is loaded into Start.
+// other is loaded into Explorer.
 inline bool TrustedDocumentFilter(const std::wstring& extension, CLSID* filter) {
     auto read = [](const std::wstring& key) {
         wchar_t value[MAX_PATH * 2];
@@ -7826,8 +7592,8 @@ inline bool TrustedDocumentFilter(const std::wstring& extension, CLSID* filter) 
 // The start of a document's text -- Word, Excel, PowerPoint, RTF,
 // OpenDocument -- through the document filter Windows' own search reads it
 // with (TrustedDocumentFilter): Windows has them for these, Office or not.
-// They run here, in Start, so: only Windows' or Office's, up to 30 MB, the
-// first 1500 characters.
+// They run here on the preview thread in Explorer, so: only Windows' or
+// Office's, up to 30 MB, the first 1500 characters.
 inline bool ReadDocumentText(const std::wstring& path, const std::wstring& lowerName, std::wstring* text) {
     static const wchar_t* const kDocuments[] = {L".doc", L".docx", L".docm", L".dot", L".dotx", L".rtf",
                                                 L".odt", L".xls", L".xlsx", L".xlsm", L".ppt", L".pptx",
@@ -8314,14 +8080,18 @@ void BuildPreviewCard() {
     }
     wuxc::Border card;
     card.Width(preview::kWidth);
-    card.Padding(wux::ThicknessHelper::FromLengths(12,12,12,6));
-    card.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
-    card.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+    card.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    card.CornerRadius(wux::CornerRadius{0, 0, 0, 0});
+    card.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    card.UseLayoutRounding(false);
     KeepHandler(card, card.SizeChanged(winrt::auto_revoke, [](wf::IInspectable const&, wux::SizeChangedEventArgs const& args) {
+        UpdatePreviewCardShape();
         if (g_previewPopup && g_previewPopup.IsOpen()) PositionPreview(args.NewSize().Height);
     }));
 
+    wuxc::Grid cardGrid;
     wuxc::StackPanel stack;
+    stack.Margin(wux::ThicknessHelper::FromLengths(12, 12, 12, 6));
     wuxc::Border thumbBox;
     thumbBox.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
     wuxc::Grid thumbGrid;
@@ -8387,7 +8157,19 @@ void BuildPreviewCard() {
     pathText.MaxLines(3);
     pathText.TextTrimming(wux::TextTrimming::CharacterEllipsis);
     detailsStack.Children().Append(PreviewCopyButton(pathText,L"Copy path"));
-    card.Child(stack);
+    cardGrid.Children().Append(stack);
+
+    wuxc::Canvas previewStrokeCanvas;
+    previewStrokeCanvas.IsHitTestVisible(false);
+    wuxc::Canvas::SetZIndex(previewStrokeCanvas, 10);
+    wuxc::Image previewStroke;
+    previewStroke.Stretch(wuxm::Stretch::Fill);
+    previewStroke.IsHitTestVisible(false);
+    previewStrokeCanvas.Children().Append(previewStroke);
+    cardGrid.Children().Append(previewStrokeCanvas);
+    g_previewStrokeImage = previewStroke;
+
+    card.Child(cardGrid);
 
     wuxcp::Popup popup;
     popup.Child(card);
@@ -8536,28 +8318,26 @@ void StartPreviewMotion(preview::Result& result) {
     }
 }
 
-// Drags a result out of Start, as File Explorer drags a file, by handing the
-// drag to this mod's helper window in Explorer (RunExplorerDrag).
+// Drags a result out of the search window, as File Explorer drags a file, by
+// posting the drag request to the helper window on this thread (RunExplorerDrag)
+// once the XAML pointer handler returns.
 //
-// Nowhere in this process works. XAML's own drag (CanDrag, StartDragAsync)
-// fails inside XAML in Start's window, which then ends the process. A shell
-// drag loop on Start's thread gets only the first move of the mouse -- Start's
-// input does not come through ordinary window messages -- and then waits for
-// good, the whole menu with it. One on another thread gets no mouse at all,
-// and Windows will not hand the foreground to it while the button is down.
-// It does hand it to Explorer's helper, a plain window in a plain process,
-// where the drag works as anywhere else. Start's results stay up meanwhile
-// (g_dragging); Explorer tells Start how it ended (DragDoneMessage).
+// XAML's own drag (CanDrag, StartDragAsync) does not produce a shell file drag
+// for arbitrary paths, and entering SHDoDragDrop directly inside a XAML
+// PointerMoved handler re-enters XAML input routing while the button still holds
+// pointer state. Posting kExplorerStartDrag lets the pointer handler release
+// capture and return first; RunExplorerDrag then runs the shell drag loop on
+// the helper window and notifies the search window when it finishes
+// (DragDoneMessage).
 void StartFileDrag(std::wstring const& path) {
-    // Only what Explorer's helper takes (a local file or folder that exists),
-    // or Start would give it the foreground for nothing.
     bool local = path.size() >= 3 && path[1] == L':' && !PathIsUNCW(path.c_str());
     if (local) {
         const wchar_t root[] = {path[0], L':', L'\\', 0};
         local = GetDriveTypeW(root) != DRIVE_REMOTE && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
     }
-    HWND helper = local ? FindExplorerLaunchHolder() : nullptr;
-    if (!helper) {
+    const bool buttonDown = (GetAsyncKeyState(PrimaryButton()) & 0x8000) != 0;
+    HWND helper = g_hExplorerHelperWnd.load();
+    if (!local || !buttonDown || !helper || !IsWindow(helper)) {
         Wh_Log(L"drag: not for %ls", path.c_str());
         return;
     }
@@ -8568,16 +8348,11 @@ void StartFileDrag(std::wstring const& path) {
         Wh_Log(L"drag: Explorer's helper did not get the foreground");
         return;
     }
-    COPYDATASTRUCT cds{};
-    cds.dwData = kExplorerDragMagic;
-    cds.cbData = static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t));
-    cds.lpData = const_cast<wchar_t*>(path.c_str());
-    DWORD_PTR accepted = 0;
-    if (!SendMessageTimeoutW(helper, WM_COPYDATA, reinterpret_cast<WPARAM>(GetSearchWindow()),
-                             reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG, 500, &accepted) ||
-        !accepted) {
+    g_explorerDragPath = path;
+    if (!PostMessageW(helper, kExplorerStartDrag, 0, 0)) {
+        g_explorerDragPath.clear();
         g_dragging = false;
-        Wh_Log(L"drag: Explorer's helper refused %ls", path.c_str());
+        Wh_Log(L"drag: failed to post drag request for %ls", path.c_str());
     }
 }
 
@@ -8663,14 +8438,7 @@ void ApplyPreview() try {
         return;
     }
     BuildPreviewCard();
-
-    const bool isLight = IsLightTheme();
-    g_previewCard.RequestedTheme(isLight ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
-    auto background = g_resultsHost.Background();
-    g_previewCard.Background(background ? background
-                                        : (isLight ? MakeBrush(0xF2, 0xF3, 0xF3, 0xF3) : MakeBrush(0xF2, 0x20, 0x20, 0x20)));
-    g_previewCard.BorderBrush(isLight ? MakeBrush(0x24, 0x00, 0x00, 0x00) : MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
-    g_previewThumbBox.Background(isLight ? MakeBrush(0x0C, 0x00, 0x00, 0x00) : MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
+    ApplyPreviewCardAppearance();
 
     // Already up: it eases from the old content's height to the new one's
     // (PreviewResize) rather than jump.
@@ -9031,11 +8799,37 @@ bool ContextMenuHasFocus() {
 // menu still closing, or closed a moment ago, counts as open, and the
 // query is kept.
 static std::atomic<bool> g_contextMenuOpen{false};
+static bool g_contextMenuInternalClose = false;
+static bool g_dismissSearchOnMenuClose = false;
+constexpr UINT_PTR kSearchWindowDismissTimer = 0x701;
 [[clang::no_destroy]] winrt::weak_ref<wuxcp::FlyoutBase> g_activeContextFlyout;
 static uint64_t g_contextMenuClosedTick = 0;
 
+bool IsPointInAnySearchThreadWindow(POINT pt) {
+    struct Ctx {
+        POINT pt;
+        bool inside = false;
+    } ctx{pt, false};
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hwnd, LPARAM lParam) -> BOOL {
+            if (!IsWindowVisible(hwnd))
+                return TRUE;
+            RECT r{};
+            if (GetWindowRect(hwnd, &r) && PtInRect(&r, reinterpret_cast<Ctx*>(lParam)->pt)) {
+                reinterpret_cast<Ctx*>(lParam)->inside = true;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&ctx));
+    return ctx.inside;
+}
+
 void NoteContextMenuOpening(wf::IInspectable const& sender) {
     if(auto flyout=sender.try_as<wuxcp::FlyoutBase>()) g_activeContextFlyout=winrt::make_weak(flyout);
+    g_contextMenuInternalClose = false;
+    g_dismissSearchOnMenuClose = false;
     g_contextMenuOpen=true;
 }
 
@@ -9044,7 +8838,22 @@ void NoteContextMenuClosed(wf::IInspectable const& sender) {
     if(active && active!=sender.try_as<wuxcp::FlyoutBase>()) return;
     g_activeContextFlyout={}; g_contextMenuOpen=false;
     g_contextMenuClosedTick=GetTickCount64();
-    if(g_searchWindowWindow.load()) QueueSearchBoxRefocus(true);
+    const bool internalClose = g_contextMenuInternalClose;
+    const bool dismissSearch = g_dismissSearchOnMenuClose;
+    g_contextMenuInternalClose = false;
+    g_dismissSearchOnMenuClose = false;
+    HWND host = g_searchWindowWindow.load();
+    if (!host)
+        return;
+    HWND fg = GetForegroundWindow();
+    const bool lostForeground = fg && GetWindowThreadProcessId(fg, nullptr) != GetCurrentThreadId();
+    if (!internalClose && !g_dragging && (dismissSearch || lostForeground)) {
+        SearchWindowHide();
+        return;
+    }
+    if (!g_dragging)
+        SetTimer(host, kSearchWindowDismissTimer, 70, nullptr);
+    QueueSearchBoxRefocus(true);
 }
 
 bool EscapeBelongsToContextMenu() {
@@ -9308,29 +9117,39 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     // Search bar container at Row 0
     wuxc::Border searchBarBorder;
     searchBarBorder.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 8));
-    searchBarBorder.Padding(wux::ThicknessHelper::FromLengths(12, 0, 12, 0));
-    searchBarBorder.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
-    searchBarBorder.Background(isLight ? MakeBrush(0xD0, 0xFF, 0xFF, 0xFF) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
-    searchBarBorder.BorderBrush(isLight ? MakeBrush(0x30, 0x00, 0x00, 0x00) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
-    searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-    searchBarBorder.Height(Fs(40));  // the text size's (Wh_ModSettingsChanged)
+    searchBarBorder.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    searchBarBorder.CornerRadius(wux::CornerRadius{0, 0, 0, 0});
+    searchBarBorder.Background(isLight ? MakeBrush(0xD0, 0xFF, 0xFF, 0xFF)
+                                       : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+    searchBarBorder.BorderBrush(nullptr);
+    searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    searchBarBorder.UseLayoutRounding(false);
+    searchBarBorder.Height(Fs(40)); // the text size's (Wh_ModSettingsChanged)
     wuxc::Grid::SetRow(searchBarBorder, 0);
     g_searchBarBorder = searchBarBorder;
+    g_searchBarCorners = {6, 6, 6, 6};
+    g_searchBarThickness = {1, 1, 1, 1};
+    g_searchBarOutlineBrush = {};
+    g_searchBarOutlineBrush.kind = 1;
+    g_searchBarOutlineBrush.color = isLight ? 0x30000000u : 0x28FFFFFFu;
 
     wuxc::Grid searchBarGrid;
     wuxc::ColumnDefinition sbIconCol, sbBoxCol;
-    sbIconCol.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
-    sbBoxCol.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
+    sbIconCol.Width(
+        wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
+    sbBoxCol.Width(
+        wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
     searchBarGrid.ColumnDefinitions().Append(sbIconCol);
     searchBarGrid.ColumnDefinitions().Append(sbBoxCol);
 
     wuxc::Border searchIcon;
-    searchIcon.Width(Fs(20)); searchIcon.Height(Fs(20));
-    searchIcon.Margin(wux::ThicknessHelper::FromLengths(0,0,8,0));
+    searchIcon.Width(Fs(20));
+    searchIcon.Height(Fs(20));
+    searchIcon.Margin(wux::ThicknessHelper::FromLengths(12, 0, 8, 0));
     searchIcon.VerticalAlignment(wux::VerticalAlignment::Center);
     searchIcon.UseLayoutRounding(true);
     searchIcon.IsHitTestVisible(false);
-    wuxc::Grid::SetColumn(searchIcon,0);
+    wuxc::Grid::SetColumn(searchIcon, 0);
     searchBarGrid.Children().Append(searchIcon);
 
     wuxc::TextBox box;
@@ -9342,6 +9161,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     // As tall as its text and centered in the bar, at any text size: no
     // minimum height, the same space above the text as below.
     box.MinHeight(0);
+    box.Margin(wux::ThicknessHelper::FromLengths(0, 0, 12, 0));
     box.Padding(wux::ThicknessHelper::FromLengths(0, 5, 0, 5));
     box.Background(MakeBrush(0, 0, 0, 0));
     box.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
@@ -9350,7 +9170,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     box.IsSpellCheckEnabled(false);
     box.IsTextPredictionEnabled(false);
 
-    static const wchar_t* kClearKeys[] = {
+    static const wchar_t *kClearKeys[] = {
         L"TextControlBackground",
         L"TextControlBackgroundPointerOver",
         L"TextControlBackgroundFocused",
@@ -9363,71 +9183,117 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
         L"TextControlButtonBackgroundPointerOver",
         L"TextControlButtonBackgroundPressed",
     };
-    for (const wchar_t* key : kClearKeys) {
-        box.Resources().Insert(winrt::box_value(winrt::hstring{key}),
-                               wuxm::SolidColorBrush{winrt::Windows::UI::Colors::Transparent()});
+    for (const wchar_t *key : kClearKeys) {
+      box.Resources().Insert(
+          winrt::box_value(winrt::hstring{key}),
+          wuxm::SolidColorBrush{winrt::Windows::UI::Colors::Transparent()});
     }
     // Start's TextBox style still draws a background of its own when focused,
     // a lighter pill inside the bar: its template's BorderElement, hidden so
     // the bar is one surface. The bar has the border.
-    KeepHandler(box, box.Loaded(winrt::auto_revoke, [](wf::IInspectable const& sender, wux::RoutedEventArgs const&) {
-        std::function<bool(wux::DependencyObject const&)> hide = [&](wux::DependencyObject const& node) {
-            const int32_t count = wuxm::VisualTreeHelper::GetChildrenCount(node);
-            for (int32_t i = 0; i < count; ++i) {
-                auto child = wuxm::VisualTreeHelper::GetChild(node, i);
-                if (auto element = child.try_as<wux::FrameworkElement>(); element && element.Name() == L"BorderElement") {
+    KeepHandler(
+        box, box.Loaded(winrt::auto_revoke, [](wf::IInspectable const &sender,
+                                               wux::RoutedEventArgs const &) {
+          std::function<bool(wux::DependencyObject const &)> hide =
+              [&](wux::DependencyObject const &node) {
+                const int32_t count =
+                    wuxm::VisualTreeHelper::GetChildrenCount(node);
+                for (int32_t i = 0; i < count; ++i) {
+                  auto child = wuxm::VisualTreeHelper::GetChild(node, i);
+                  if (auto element = child.try_as<wux::FrameworkElement>();
+                      element && element.Name() == L"BorderElement") {
                     element.Opacity(0);
                     return true;
-                }
-                if (hide(child)) {
+                  }
+                  if (hide(child)) {
                     return true;
+                  }
                 }
-            }
-            return false;
-        };
-        try {
+                return false;
+              };
+          try {
             hide(sender.as<wux::DependencyObject>());
-        } catch (...) {
-        }
-    }));
+          } catch (...) {
+          }
+        }));
 
     g_ourBoxChanged = box.TextChanged(
         winrt::auto_revoke,
-        [](wf::IInspectable const& sender, wuxc::TextChangedEventArgs const&) {
-            try {
-                auto b = sender.as<wuxc::TextBox>();
-                std::wstring text{b.Text()};
-                Wh_Log(L"own box: '%ls'", text.c_str());
-                if (text.empty()) {
-                    UpdateSearchResultsLayout(true);
-                } else {
-                    UpdateSearchResultsLayout();
-                }
-                QueueQuery(std::move(text));
-            } catch (...) {}
+        [](wf::IInspectable const &sender, wuxc::TextChangedEventArgs const &) {
+          try {
+            auto b = sender.as<wuxc::TextBox>();
+            std::wstring text{b.Text()};
+            Wh_Log(L"own box: '%ls'", text.c_str());
+            if (text.empty()) {
+              UpdateSearchResultsLayout(true);
+            } else {
+              UpdateSearchResultsLayout();
+            }
+            QueueQuery(std::move(text));
+          } catch (...) {
+          }
         });
 
-    KeepHandler(box, box.PreviewKeyDown(winrt::auto_revoke, [](wf::IInspectable const&, wux::Input::KeyRoutedEventArgs const& args) {
-        try {
-            auto key = args.Key();
-            if (key == winrt::Windows::System::VirtualKey::Escape && !EscapeBelongsToContextMenu()) {
-                if (g_ourBox && !g_ourBox.Text().empty()) g_ourBox.Text(L"");
-                else SearchWindowHide();
-                args.Handled(true);
-                return;
-            }
-            if (IsNavigationKey(key) && g_isOverlayVisible.load()) {
-                bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
-                if (HandleNavigationKey(key, ctrl)) {
-                    args.Handled(true);
+    KeepHandler(
+        box,
+        box.PreviewKeyDown(
+            winrt::auto_revoke, [](wf::IInspectable const &,
+                                   wux::Input::KeyRoutedEventArgs const &args) {
+              try {
+                auto key = args.Key();
+                if (key == winrt::Windows::System::VirtualKey::Escape &&
+                    !EscapeBelongsToContextMenu()) {
+                  if (g_ourBox && !g_ourBox.Text().empty())
+                    g_ourBox.Text(L"");
+                  else
+                    SearchWindowHide();
+                  args.Handled(true);
+                  return;
                 }
-            }
-        } catch (...) {}
-    }));
+                if (IsNavigationKey(key) && g_isOverlayVisible.load()) {
+                  bool ctrl = (GetKeyState(VK_CONTROL) < 0) ||
+                              ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+                  if (HandleNavigationKey(key, ctrl)) {
+                    args.Handled(true);
+                  }
+                }
+              } catch (...) {
+              }
+            }));
 
     wuxc::Grid::SetColumn(box, 1);
     searchBarGrid.Children().Append(box);
     g_ourBox = box;
+
+    wuxc::Canvas searchBarInnerCanvas;
+    searchBarInnerCanvas.IsHitTestVisible(false);
+    wuxc::Grid::SetColumn(searchBarInnerCanvas, 0);
+    wuxc::Grid::SetColumnSpan(searchBarInnerCanvas, 2);
+    wuxc::Canvas::SetZIndex(searchBarInnerCanvas, -1);
+    wuxc::Border searchBarInnerBorder;
+    searchBarInnerBorder.IsHitTestVisible(false);
+    searchBarInnerBorder.Visibility(wux::Visibility::Collapsed);
+    searchBarInnerCanvas.Children().Append(searchBarInnerBorder);
+    searchBarGrid.Children().Append(searchBarInnerCanvas);
+    g_searchBarInnerBorder = searchBarInnerBorder;
+
+    wuxc::Canvas searchBarStrokeCanvas;
+    searchBarStrokeCanvas.IsHitTestVisible(false);
+    wuxc::Grid::SetColumn(searchBarStrokeCanvas, 0);
+    wuxc::Grid::SetColumnSpan(searchBarStrokeCanvas, 2);
+    wuxc::Canvas::SetZIndex(searchBarStrokeCanvas, 10);
+    wuxc::Image searchBarStroke;
+    searchBarStroke.Stretch(wuxm::Stretch::Fill);
+    searchBarStroke.IsHitTestVisible(false);
+    searchBarStrokeCanvas.Children().Append(searchBarStroke);
+    searchBarGrid.Children().Append(searchBarStrokeCanvas);
+    g_searchBarStrokeImage = searchBarStroke;
+
+    KeepHandler(searchBarBorder,
+                searchBarBorder.SizeChanged(
+                    winrt::auto_revoke, [](wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
+                        UpdateSearchBarShape();
+                    }));
 
     searchBarBorder.Child(searchBarGrid);
     UpdateSearchIcon(isLight);
@@ -9456,9 +9322,32 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     wuxc::Grid::SetColumn(appsColGrid, 0);
 
     wuxc::Border appsHeaderHolder;
+    appsHeaderHolder.Margin(wux::ThicknessHelper::FromLengths(2, 0, 2, 6));
+    appsHeaderHolder.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    appsHeaderHolder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    appsHeaderHolder.UseLayoutRounding(false);
+    wuxc::Grid appsHeaderWrap;
+    wuxc::Border appsHeaderContent;
+    appsHeaderWrap.Children().Append(appsHeaderContent);
+    wuxc::Canvas appsHeaderStrokeCanvas;
+    appsHeaderStrokeCanvas.IsHitTestVisible(false);
+    wuxc::Canvas::SetZIndex(appsHeaderStrokeCanvas, 10);
+    wuxc::Image appsHeaderStroke;
+    appsHeaderStroke.Stretch(wuxm::Stretch::Fill);
+    appsHeaderStroke.IsHitTestVisible(false);
+    appsHeaderStrokeCanvas.Children().Append(appsHeaderStroke);
+    appsHeaderWrap.Children().Append(appsHeaderStrokeCanvas);
+    appsHeaderHolder.Child(appsHeaderWrap);
+    KeepHandler(appsHeaderHolder,
+                appsHeaderHolder.SizeChanged(
+                    winrt::auto_revoke, [](wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
+                        UpdateSearchHeadersShape();
+                    }));
     wuxc::Grid::SetRow(appsHeaderHolder, 0);
     appsColGrid.Children().Append(appsHeaderHolder);
     g_appsHeaderHolder = appsHeaderHolder;
+    g_appsHeaderContent = appsHeaderContent;
+    g_appsHeaderStrokeImage = appsHeaderStroke;
 
     wuxc::ScrollViewer appsScroll;
     appsScroll.Content(apps);
@@ -9494,9 +9383,32 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     wuxc::Grid::SetColumn(filesColGrid, 2);
 
     wuxc::Border filesHeaderHolder;
+    filesHeaderHolder.Margin(wux::ThicknessHelper::FromLengths(2, 0, 2, 6));
+    filesHeaderHolder.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    filesHeaderHolder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    filesHeaderHolder.UseLayoutRounding(false);
+    wuxc::Grid filesHeaderWrap;
+    wuxc::Border filesHeaderContent;
+    filesHeaderWrap.Children().Append(filesHeaderContent);
+    wuxc::Canvas filesHeaderStrokeCanvas;
+    filesHeaderStrokeCanvas.IsHitTestVisible(false);
+    wuxc::Canvas::SetZIndex(filesHeaderStrokeCanvas, 10);
+    wuxc::Image filesHeaderStroke;
+    filesHeaderStroke.Stretch(wuxm::Stretch::Fill);
+    filesHeaderStroke.IsHitTestVisible(false);
+    filesHeaderStrokeCanvas.Children().Append(filesHeaderStroke);
+    filesHeaderWrap.Children().Append(filesHeaderStrokeCanvas);
+    filesHeaderHolder.Child(filesHeaderWrap);
+    KeepHandler(filesHeaderHolder,
+                filesHeaderHolder.SizeChanged(
+                    winrt::auto_revoke, [](wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
+                        UpdateSearchHeadersShape();
+                    }));
     wuxc::Grid::SetRow(filesHeaderHolder, 0);
     filesColGrid.Children().Append(filesHeaderHolder);
     g_filesHeaderHolder = filesHeaderHolder;
+    g_filesHeaderContent = filesHeaderContent;
+    g_filesHeaderStrokeImage = filesHeaderStroke;
 
     wuxc::ScrollViewer filesScroll;
     filesScroll.Content(files);
@@ -9517,13 +9429,16 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     // Modern Raycast-style bottom status and shortcut bar
     wuxc::Border footerBorder;
     footerBorder.Margin(wux::ThicknessHelper::FromLengths(0, 6, 0, 0));
-    footerBorder.Padding(wux::ThicknessHelper::FromLengths(8, 6, 8, 4));
-    footerBorder.BorderBrush(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x12, 0xFF, 0xFF, 0xFF));
-    footerBorder.BorderThickness(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
+    footerBorder.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    footerBorder.BorderBrush(nullptr);
+    footerBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    footerBorder.UseLayoutRounding(false);
     wuxc::Grid::SetRow(footerBorder, 2);
     g_footerBorder = footerBorder;
 
+    wuxc::Grid footerWrap;
     wuxc::Grid footerGrid;
+    footerGrid.Margin(wux::ThicknessHelper::FromLengths(10, 6, 10, 5));
     wuxc::ColumnDefinition fColLeft, fColRight;
     fColLeft.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
     fColRight.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
@@ -9606,9 +9521,46 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     }
     rightHints.Visibility(showHints ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     footerGrid.Children().Append(rightHints);
+    footerWrap.Children().Append(footerGrid);
 
-    footerBorder.Child(footerGrid);
+    wuxc::Canvas footerStrokeCanvas;
+    footerStrokeCanvas.IsHitTestVisible(false);
+    wuxc::Canvas::SetZIndex(footerStrokeCanvas, 10);
+    wuxc::Image footerStroke;
+    footerStroke.Stretch(wuxm::Stretch::Fill);
+    footerStroke.IsHitTestVisible(false);
+    footerStrokeCanvas.Children().Append(footerStroke);
+    footerWrap.Children().Append(footerStrokeCanvas);
+    g_footerStrokeImage = footerStroke;
+
+    KeepHandler(footerBorder,
+                footerBorder.SizeChanged(
+                    winrt::auto_revoke, [](wf::IInspectable const&, wux::SizeChangedEventArgs const&) {
+                        UpdateSearchFooterShape();
+                    }));
+
+    footerBorder.Child(footerWrap);
     root.Children().Append(footerBorder);
+
+    wuxc::Canvas windowInnerCanvas;
+    windowInnerCanvas.IsHitTestVisible(false);
+    wuxc::Canvas::SetZIndex(windowInnerCanvas, -1);
+    wuxc::Border windowInnerBorder;
+    windowInnerBorder.IsHitTestVisible(false);
+    windowInnerBorder.Visibility(wux::Visibility::Collapsed);
+    windowInnerCanvas.Children().Append(windowInnerBorder);
+    root.Children().Append(windowInnerCanvas);
+    g_windowInnerBorder = windowInnerBorder;
+
+    wuxc::Canvas windowStrokeCanvas;
+    windowStrokeCanvas.IsHitTestVisible(false);
+    wuxc::Canvas::SetZIndex(windowStrokeCanvas, 10);
+    wuxc::Image windowStroke;
+    windowStroke.Stretch(wuxm::Stretch::Fill);
+    windowStroke.IsHitTestVisible(false);
+    windowStrokeCanvas.Children().Append(windowStroke);
+    root.Children().Append(windowStrokeCanvas);
+    g_windowStrokeImage = windowStroke;
 
     // Spanning every row and column of the menu's grid.
     wuxc::Grid::SetRow(root, 0);
@@ -9726,7 +9678,7 @@ void RenderResults() try {
 
     auto makeHeader = [isLight](const std::wstring& title, const wchar_t* iconGlyph, int count, const std::wstring& badgeText = L"") {
         wuxc::Grid headerGrid;
-        headerGrid.Margin(wux::ThicknessHelper::FromLengths(8, 4, 8, 6));
+        headerGrid.Margin(wux::ThicknessHelper::FromLengths(10, 5, 10, 5));
 
         wuxc::ColumnDefinition leftCol, rightCol;
         leftCol.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
@@ -9761,7 +9713,7 @@ void RenderResults() try {
         std::wstring badgeStr = badgeText.empty() ? std::to_wstring(count) : badgeText;
         if (!badgeStr.empty() && count >= 0) {
             wuxc::Border badge;
-            badge.CornerRadius(wux::CornerRadius{4, 4, 4, 4});
+            badge.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
             badge.Background(isLight ? MakeBrush(0x0E, 0x00, 0x00, 0x00) : MakeBrush(0x15, 0xFF, 0xFF, 0xFF));
             badge.BorderBrush(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x20, 0xFF, 0xFF, 0xFF));
             badge.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
@@ -9785,25 +9737,25 @@ void RenderResults() try {
     // The web-search rows have no app index; a Start menu internet shortcut is an app.
     bool isWebMode = (!appNames.empty() && appNames[0].appIndex < 0 &&
                       (appNames[0].openPath.starts_with(L"http:") || appNames[0].openPath.starts_with(L"https:")));
-    if (g_appsHeaderHolder) {
+    if (auto target = g_appsHeaderContent ? g_appsHeaderContent : g_appsHeaderHolder) {
         if (!appNames.empty() && (appNames[0].customGlyph == L"\uE701" || appNames[0].customGlyph == L"\uE704" || appNames[0].customGlyph == L"\uE839")) {
-            g_appsHeaderHolder.Child(makeHeader(L"NETWORK INTERFACES", L"\uE701", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(L"NETWORK INTERFACES", L"\uE701", static_cast<int>(appNames.size())));
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE88E") {
-            g_appsHeaderHolder.Child(makeHeader(L"UNIT CONVERTER", L"\uE88E", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(L"UNIT CONVERTER", L"\uE88E", static_cast<int>(appNames.size())));
         } else if (!appNames.empty() && appNames[0].customGlyph == L"\uE1D0") {
-            g_appsHeaderHolder.Child(makeHeader(L"CALCULATOR", L"\uE1D0", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(L"CALCULATOR", L"\uE1D0", static_cast<int>(appNames.size())));
         } else if (isWebMode) {
-            g_appsHeaderHolder.Child(makeHeader(L"WEB SEARCH", L"\uE774", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(L"WEB SEARCH", L"\uE774", static_cast<int>(appNames.size())));
         } else {
-            g_appsHeaderHolder.Child(makeHeader(suggestions ? L"SUGGESTED APPS" : L"APPS", L"\uE71D", static_cast<int>(appNames.size())));
+            target.Child(makeHeader(suggestions ? L"SUGGESTED APPS" : L"APPS", L"\uE71D", static_cast<int>(appNames.size())));
         }
     }
     std::wstring filesBadge = std::to_wstring(files.size()) + L" of " + std::to_wstring(total);
-    if (g_filesHeaderHolder) {
-        g_filesHeaderHolder.Child(makeHeader(L"FILES", L"\uE8B7", static_cast<int>(files.size()), filesBadge));
+    if (auto target = g_filesHeaderContent ? g_filesHeaderContent : g_filesHeaderHolder) {
+        target.Child(makeHeader(L"FILES", L"\uE8B7", static_cast<int>(files.size()), filesBadge));
     }
 
-    auto makeAppCard = [isLight](const Row& item) -> AppCardUI {
+    auto makeAppCard = [](const Row& item) -> AppCardUI {
         wuxc::Grid layout;
         wuxc::ColumnDefinition iconCol, textCol;
         iconCol.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
@@ -9914,10 +9866,6 @@ void RenderResults() try {
         button.Content(layout);
         button.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
         button.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
-        button.Background(MakeBrush(0, 0, 0, 0));
-        button.BorderBrush(MakeBrush(0, 0, 0, 0));
-        button.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-        button.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
         button.IsTabStop(false);
@@ -9925,19 +9873,7 @@ void RenderResults() try {
         if (whole) {
             wuxc::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring{item.title}));
         }
-
-        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPointerOver"),
-            isLight ? MakeBrush(0x14, 0x00, 0x5F, 0xB8) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPointerOver"),
-            isLight ? MakeBrush(0x80, 0x00, 0x5F, 0xB8) : MakeBrush(0x55, 0x60, 0xCD, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPressed"),
-            isLight ? MakeBrush(0x24, 0x00, 0x5F, 0xB8) : MakeBrush(0x35, 0xFF, 0xFF, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPressed"),
-            isLight ? MakeBrush(0xA0, 0x00, 0x5F, 0xB8) : MakeBrush(0x70, 0x60, 0xCD, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundFocused"),
-            MakeBrush(0, 0, 0, 0));
-        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushFocused"),
-            MakeBrush(0, 0, 0, 0));
+        ApplyResultRowButtonTheme(button, false);
 
         // Weak: the button holds these handlers, and a strong self-reference
         // would keep every card ever built alive.
@@ -9947,7 +9883,7 @@ void RenderResults() try {
             if (!btn || !g_activeAppsOpt || g_dragging) return;  // a drag passing over
             for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
                 if ((*g_activeAppsOpt)[i].button == btn) {
-                    SetAppSelection(static_cast<int>(i));
+                    SetAppSelection(static_cast<int>(i), true);
                     break;
                 }
             }
@@ -9974,6 +9910,14 @@ void RenderResults() try {
         menuItem.icon.clear();
         KeepHandler(menu, menu.Opening(winrt::auto_revoke, [item = std::move(menuItem), weakBtn = winrt::make_weak(button)](
                          wf::IInspectable const& sender, wf::IInspectable const&) {
+            if (auto btn = weakBtn.get(); btn && g_appButtonsOpt) {
+                for (size_t i = 0; i < g_appButtonsOpt->size(); ++i) {
+                    if ((*g_appButtonsOpt)[i] == btn) {
+                        SetAppSelection(static_cast<int>(i), true);
+                        break;
+                    }
+                }
+            }
             auto flyout = sender.as<wuxc::MenuFlyout>();
             if (flyout.Items().Size() > 0) return;
             if (!item.copyText.empty()) {
@@ -10107,7 +10051,6 @@ void RenderResults() try {
                             propIcon.Glyph(L"\uE946");
                             propItem.Icon(propIcon);
                             KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                                AllowExplorerForeground();
                                 DismissSearch();
                                 ShowPropertiesDialog(filePath);
                             }));
@@ -10229,7 +10172,7 @@ void RenderResults() try {
         if (g_appsList.Children().Size() == 0) {
             g_appsList.Children().Append(makeAppEmptyCard());
         }
-        SetAppSelection(-1);
+        g_selectedApp = -1;
     } else {
         if (g_activeAppsOpt->empty() && g_appsList.Children().Size() > 0) {
             g_appsList.Children().Clear();
@@ -10286,12 +10229,10 @@ void RenderResults() try {
         for (const auto& card : *g_activeAppsOpt) {
             g_appButtonsOpt->push_back(card.button);
         }
-
-        SetAppSelection(0);
     }
 
     // Files renderer
-    auto makeFileRow = [isLight](const Row& item) {
+    auto makeFileRow = [](const Row& item) {
         wuxc::Grid layout;
         wuxc::ColumnDefinition iconCol, textCol;
         iconCol.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
@@ -10363,27 +10304,11 @@ void RenderResults() try {
         button.Content(layout);
         button.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
         button.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
-        button.Background(MakeBrush(0, 0, 0, 0));
-        button.BorderBrush(MakeBrush(0, 0, 0, 0));
-        button.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-        button.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
         button.IsTabStop(false);
         button.AllowFocusOnInteraction(false);
-
-        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPointerOver"),
-            isLight ? MakeBrush(0x14, 0x00, 0x5F, 0xB8) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPointerOver"),
-            isLight ? MakeBrush(0x80, 0x00, 0x5F, 0xB8) : MakeBrush(0x55, 0x60, 0xCD, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPressed"),
-            isLight ? MakeBrush(0x24, 0x00, 0x5F, 0xB8) : MakeBrush(0x35, 0xFF, 0xFF, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPressed"),
-            isLight ? MakeBrush(0xA0, 0x00, 0x5F, 0xB8) : MakeBrush(0x70, 0x60, 0xCD, 0xFF));
-        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundFocused"),
-            MakeBrush(0, 0, 0, 0));
-        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushFocused"),
-            MakeBrush(0, 0, 0, 0));
+        ApplyResultRowButtonTheme(button, false);
 
         // Hovering a row selects it, as it does an app card, so the pointer's
         // highlight and the keyboard's are the same one. Weak: the button
@@ -10394,7 +10319,7 @@ void RenderResults() try {
             if (!btn || !g_fileButtonsOpt || g_dragging) return;  // a drag passing over
             for (size_t i = 0; i < g_fileButtonsOpt->size(); ++i) {
                 if ((*g_fileButtonsOpt)[i] == btn) {
-                    SetFileSelection(static_cast<int>(i));
+                    SetFileSelection(static_cast<int>(i), true);
                     break;
                 }
             }
@@ -10460,8 +10385,16 @@ void RenderResults() try {
             KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) { NoteContextMenuClosed(sender); }));
             // Filled in when first opened, not with the row: every keystroke
             // builds every row, and hardly any of their menus are ever opened.
-            KeepHandler(menu, menu.Opening(winrt::auto_revoke, [target, isFolder = item.isFolder, title = item.title](
+            KeepHandler(menu, menu.Opening(winrt::auto_revoke, [weakButton, target, isFolder = item.isFolder, title = item.title](
                              wf::IInspectable const& sender, wf::IInspectable const&) {
+                if (auto btn = weakButton.get(); btn && g_fileButtonsOpt) {
+                    for (size_t i = 0; i < g_fileButtonsOpt->size(); ++i) {
+                        if ((*g_fileButtonsOpt)[i] == btn) {
+                            SetFileSelection(static_cast<int>(i), true);
+                            break;
+                        }
+                    }
+                }
                 auto flyout = sender.as<wuxc::MenuFlyout>();
                 if (flyout.Items().Size() > 0) return;
                 wuxc::MenuFlyoutItem openItem;
@@ -10588,7 +10521,6 @@ void RenderResults() try {
                 propIcon.Glyph(L"\uE946");
                 propItem.Icon(propIcon);
                 KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    AllowExplorerForeground();
                     DismissSearch();
                     ShowPropertiesDialog(target);
                 }));
@@ -10659,10 +10591,17 @@ void RenderResults() try {
 
     // New results start the keyboard selection over: on the first app, or on
     // the first file when there are no apps.
-    if (g_appButtonsOpt->empty() && !g_fileButtonsOpt->empty()) {
-        SetFileSelection(0);
+    if (!g_appButtonsOpt->empty()) {
+        SetAppSelection(0, true);
+    } else if (!g_fileButtonsOpt->empty()) {
+        SetFileSelection(0, true);
     } else {
+        if (auto prevBtn = g_paintedSelectedButton.get()) {
+            ApplyResultRowButtonTheme(prevBtn, false, false);
+        }
+        g_paintedSelectedButton = {};
         g_filesColumnActive = false;
+        SchedulePreview();
     }
 
     if (g_ourBox && g_ourBox.Text().empty()) {
@@ -10769,11 +10708,11 @@ void RequestRender() {
 }
 
 // ---------------------------------------------------------------------------
-// Asking Everything, from inside the Start menu
+// Asking Everything, from Explorer's search thread
 //
 // On its own thread, with its own message pump: the IPC is a WM_COPYDATA
 // round trip and the reply lands on a window, so it cannot run on the XAML
-// thread without blocking the menu while the user types.
+// thread without blocking the search UI while the user types.
 //
 // Debounced, because a keystroke every ~60ms would otherwise be a query every
 // ~60ms. 120ms was measured as comfortable in the broker.
@@ -10830,8 +10769,8 @@ bool FetchAppIcon(const apps::App* app, int size, std::vector<BYTE>* out) {
 //
 // One with no file of its own goes by its shell identity: the parsing names
 // come in several shapes, including AUMIDs and known-folder GUIDs, and
-// rebuilding a path from them fails outright for some, while the PIDL, or the
-// shell:AppsFolder name made from it (AppsFolderPath), works for all of them.
+// rebuilding a path from them fails outright for some, while the PIDL works
+// for all of them.
 //
 // Runs on a launch thread. The index stays with the search thread, so this
 // gets copies of what it needs, the PIDL included.
@@ -11001,10 +10940,8 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
     // 0. If path is a URI (e.g. ms-settings:, http:, https:) or command:
     if (!path.empty()) {
         if (path.starts_with(L"ms-settings:") || path.starts_with(L"http:") || path.starts_with(L"https:")) {
-            if (ShellExecuteInExplorer(path, L"", L"")) {
-                launched = true;
-            } else if (HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                       reinterpret_cast<INT_PTR>(hInst) > 32) {
+            if (HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                reinterpret_cast<INT_PTR>(hInst) > 32) {
                 Wh_Log(L"launched URI setting: %ls", path.c_str());
                 launched = true;
             } else {
@@ -11012,10 +10949,8 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
             }
         } else if (path.starts_with(L"control ")) {
             std::wstring params = path.substr(8);
-            if (!asAdmin && ShellExecuteInExplorer(L"control.exe", params, L"")) {
-                launched = true;
-            } else if (HINSTANCE hInst = ShellExecuteW(nullptr, asAdmin ? L"runas" : L"open", L"control.exe", params.c_str(), nullptr, SW_SHOWNORMAL);
-                       reinterpret_cast<INT_PTR>(hInst) > 32) {
+            if (HINSTANCE hInst = ShellExecuteW(nullptr, asAdmin ? L"runas" : L"open", L"control.exe", params.c_str(), nullptr, SW_SHOWNORMAL);
+                reinterpret_cast<INT_PTR>(hInst) > 32) {
                 Wh_Log(L"launched control applet: %ls", path.c_str());
                 launched = true;
             }
@@ -11074,7 +11009,7 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         }
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if ((!asAdmin && ShellExecuteInExplorer(path, params, workDir ? workDir : L"")) || ShellExecuteExW(&info)) {
+        if (ShellExecuteExW(&info)) {
             Wh_Log(L"launched app (by file path): %ls (admin=%d, dir=%ls)", name.c_str(), asAdmin ? 1 : 0, workDir ? workDir : L"(null)");
             launched = true;
         } else {
@@ -11128,15 +11063,7 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
                 }
             }
         }
-        
-        // Fallback to normal launch if runas failed or was not requested:
-        if (!launched && !asAdmin) {
-            std::wstring appPath = AppsFolderPath(pidl);
-            if (!appPath.empty() && ShellExecuteInExplorer(appPath, L"", L"")) {
-                Wh_Log(L"launched app (by app entry): %ls", name.c_str());
-                launched = true;
-            }
-        }
+
         if (!launched) {
             SHELLEXECUTEINFOW info{};
             info.cbSize = sizeof(info);
@@ -12262,6 +12189,7 @@ void TeardownSearchUi() {
         g_previewText = nullptr;
         g_previewPopup = nullptr;
         g_previewCard = nullptr;
+        g_previewStrokeImage = nullptr;
         g_previewDetails = nullptr;
         g_previewThumbBox = nullptr;
         g_previewImage = nullptr;
@@ -12302,6 +12230,8 @@ void TeardownSearchUi() {
     g_appButtonsOpt.reset();
     g_fileButtonsOpt.reset();
     g_resultsHost = nullptr;
+    g_windowInnerBorder = nullptr;
+    g_windowStrokeImage = nullptr;
     g_searchTextBrush = nullptr;
     g_resolvedSearchTextBrush = nullptr;
     g_searchBoxTextBrush = nullptr;
@@ -12311,6 +12241,7 @@ void TeardownSearchUi() {
     g_renderPending.store(false);
     g_renderAfterSlide = false;
     ResetSearchContainerContrast();
+    ClearSmoothShapeCache();
     g_ourBox = nullptr;
     g_appsList = nullptr;
     g_appsScroll = nullptr;
@@ -12318,9 +12249,16 @@ void TeardownSearchUi() {
     g_resultsList = nullptr;
     g_appsHeaderHolder = nullptr;
     g_filesHeaderHolder = nullptr;
+    g_appsHeaderContent = nullptr;
+    g_filesHeaderContent = nullptr;
+    g_appsHeaderStrokeImage = nullptr;
+    g_filesHeaderStrokeImage = nullptr;
     g_searchBarBorder = nullptr;
+    g_searchBarInnerBorder = nullptr;
+    g_searchBarStrokeImage = nullptr;
     g_divider = nullptr;
     g_footerBorder = nullptr;
+    g_footerStrokeImage = nullptr;
     g_footerStatus = nullptr;
     g_footerHints = nullptr;
     g_currentAppRows.clear();
@@ -12342,7 +12280,6 @@ void TeardownSearchUi() {
 HWND g_searchWindowChild = nullptr;
 RECT g_searchWindowWork{};
 bool g_searchWindowChanging = false;
-constexpr UINT_PTR kSearchWindowDismissTimer = 0x701;
 constexpr UINT kSearchWindowLayoutMessage = WM_APP + 0x71;
 constexpr UINT kSearchWindowShowMessage = WM_APP + 0x72;
 
@@ -12521,9 +12458,10 @@ DWORD WINAPI SearchWindowInputThreadProc(void*) {
     g_searchWindowKeyState[VK_CAPITAL] |= GetKeyState(VK_CAPITAL) & 1;
     HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, SearchWindowKeyboardProc, GetCurrentModuleHandle(), 0);
     SearchWindowTrace(hook ? L"opening input buffer ready" : L"opening input hook failed",
-                   hook ? S_OK : HRESULT_FROM_WIN32(GetLastError()));
+                      hook ? S_OK : HRESULT_FROM_WIN32(GetLastError()));
     SetEvent(g_searchWindowInputStarted);
-    if (!hook) return 0;
+    if (!hook)
+        return 0;
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
         TranslateMessage(&message);
         DispatchMessageW(&message);
@@ -12534,12 +12472,16 @@ DWORD WINAPI SearchWindowInputThreadProc(void*) {
 }
 
 void StartSearchWindowInput() {
-    if (g_searchWindowInputThread) return;
+    if (g_searchWindowInputThread)
+        return;
     g_searchWindowInputStop = false;
     g_searchWindowInputStarted = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_searchWindowInputStarted) return;
-    g_searchWindowInputThread = CreateThread(nullptr, 0, SearchWindowInputThreadProc, nullptr, 0, &g_searchWindowInputThreadId);
-    if (g_searchWindowInputThread) WaitForSingleObject(g_searchWindowInputStarted, 1000);
+    if (!g_searchWindowInputStarted)
+        return;
+    g_searchWindowInputThread =
+        CreateThread(nullptr, 0, SearchWindowInputThreadProc, nullptr, 0, &g_searchWindowInputThreadId);
+    if (g_searchWindowInputThread)
+        WaitForSingleObject(g_searchWindowInputStarted, 1000);
 }
 
 void StopSearchWindowInput() {
@@ -12550,7 +12492,8 @@ void StopSearchWindowInput() {
         CloseHandle(g_searchWindowInputThread);
         g_searchWindowInputThread = nullptr;
     }
-    if (g_searchWindowInputStarted) CloseHandle(g_searchWindowInputStarted);
+    if (g_searchWindowInputStarted)
+        CloseHandle(g_searchWindowInputStarted);
     g_searchWindowInputStarted = nullptr;
     std::lock_guard lock(g_searchWindowInputMutex);
     g_searchWindowInputs.clear();
@@ -12561,6 +12504,25 @@ bool HasBufferedSearchWindowInput() {
     return g_searchWindowBuffered.load() != 0;
 }
 
+void SyncSearchWindowInputForForeground(HWND foreground) {
+    if (g_quit.load() || g_targetProcess != TargetProcess::Explorer) {
+        StopSearchWindowInput();
+        return;
+    }
+    HWND host = g_searchWindowWindow.load();
+    const bool inHost = foreground && host &&
+                        (foreground == host || GetAncestor(foreground, GA_ROOTOWNER) == host ||
+                         (g_contextMenuOpen.load() &&
+                          GetWindowThreadProcessId(foreground, nullptr) == GetWindowThreadProcessId(host, nullptr)));
+    const bool inShellSearch =
+        foreground && (inHost || foreground == CachedStartWindow() || IsSearchHostWindow(foreground));
+    if (inShellSearch || g_explorerSearchRequested || g_isOverlayVisible.load() || HasBufferedSearchWindowInput()) {
+        StartSearchWindowInput();
+    } else {
+        StopSearchWindowInput();
+    }
+}
+
 void ApplySearchWindowInput() try {
     // Keep the count nonzero until the whole batch has reached the textbox,
     // so later physical keys cannot overtake the opening letters.
@@ -12569,55 +12531,70 @@ void ApplySearchWindowInput() try {
         std::lock_guard lock(g_searchWindowInputMutex);
         inputs.swap(g_searchWindowInputs);
     }
-    if (inputs.empty()) return;
+    if (inputs.empty())
+        return;
     struct Drained {
         unsigned count;
         ~Drained() { g_searchWindowBuffered.fetch_sub(count); }
     } drained{static_cast<unsigned>(inputs.size())};
     HWND host = g_searchWindowWindow.load();
     HWND foreground = GetForegroundWindow();
-    const bool inHost=foreground && host && (foreground==host || GetAncestor(foreground,GA_ROOTOWNER)==host ||
-        (g_searchWindowMenuTyping.load() && GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr)));
-    if (foreground && (inHost || foreground==CachedStartWindow() || IsSearchHostWindow(foreground))) {
-        if(inHost && IsWindowVisible(host) && !g_searchWindowWaitingForStart) {
+    const bool inHost = foreground && host &&
+                        (foreground == host || GetAncestor(foreground, GA_ROOTOWNER) == host ||
+                         (g_searchWindowMenuTyping.load() &&
+                          GetWindowThreadProcessId(foreground, nullptr) == GetWindowThreadProcessId(host, nullptr)));
+    if (foreground && (inHost || foreground == CachedStartWindow() || IsSearchHostWindow(foreground))) {
+        if (inHost && IsWindowVisible(host) && !g_searchWindowWaitingForStart) {
             // Keep the query and caret. The first printable character closes
             // the whole menu, and every buffered character reaches the box.
-            const bool menuTyping=g_searchWindowMenuTyping.load();
-            if(menuTyping && g_searchWindowMenuCaret<0) {
-                g_searchWindowMenuCaret=g_ourBox.SelectionStart(); g_searchWindowMenuSelection=g_ourBox.SelectionLength();
+            const bool menuTyping = g_searchWindowMenuTyping.load();
+            if (menuTyping && g_searchWindowMenuCaret < 0) {
+                g_searchWindowMenuCaret = g_ourBox.SelectionStart();
+                g_searchWindowMenuSelection = g_ourBox.SelectionLength();
             }
             DismissSearchContextMenu();
             QueueSearchBoxRefocus(true);
-            if(menuTyping) { g_ourBox.SelectionStart(g_searchWindowMenuCaret); g_ourBox.SelectionLength(g_searchWindowMenuSelection); }
-        } else SearchWindowShow();
+            if (menuTyping) {
+                g_ourBox.SelectionStart(g_searchWindowMenuCaret);
+                g_ourBox.SelectionLength(g_searchWindowMenuSelection);
+            }
+        } else
+            SearchWindowShow();
         for (auto const& input : inputs) {
             if (input.kind == SearchWindowInput::Text) {
-                const int caret=g_ourBox.SelectionStart();
+                const int caret = g_ourBox.SelectionStart();
                 g_ourBox.SelectedText(winrt::hstring{input.text});
-                g_ourBox.SelectionStart(caret+static_cast<int32_t>(input.text.size()));
+                g_ourBox.SelectionStart(caret + static_cast<int32_t>(input.text.size()));
                 g_ourBox.SelectionLength(0);
             } else if (input.kind == SearchWindowInput::Backspace) {
                 std::wstring text{g_ourBox.Text()};
-                size_t caret=std::min(static_cast<size_t>(g_ourBox.SelectionStart()),text.size());
-                size_t length=std::min(static_cast<size_t>(g_ourBox.SelectionLength()),text.size()-caret);
-                if(length) text.erase(caret,length);
-                else if(caret) {
-                    size_t previous=caret-1;
-                    if(text[previous]>=0xDC00 && text[previous]<=0xDFFF && previous &&
-                       text[previous-1]>=0xD800 && text[previous-1]<=0xDBFF) --previous;
-                    text.erase(previous,caret-previous); caret=previous;
+                size_t caret = std::min(static_cast<size_t>(g_ourBox.SelectionStart()), text.size());
+                size_t length = std::min(static_cast<size_t>(g_ourBox.SelectionLength()), text.size() - caret);
+                if (length)
+                    text.erase(caret, length);
+                else if (caret) {
+                    size_t previous = caret - 1;
+                    if (text[previous] >= 0xDC00 && text[previous] <= 0xDFFF && previous &&
+                        text[previous - 1] >= 0xD800 && text[previous - 1] <= 0xDBFF)
+                        --previous;
+                    text.erase(previous, caret - previous);
+                    caret = previous;
                 }
-                g_ourBox.Text(text); g_ourBox.SelectionStart(static_cast<int32_t>(caret));
+                g_ourBox.Text(text);
+                g_ourBox.SelectionStart(static_cast<int32_t>(caret));
                 g_ourBox.SelectionLength(0);
             } else if (input.kind == SearchWindowInput::Enter) {
                 HandleNavigationKey(winrt::Windows::System::VirtualKey::Enter, false);
             } else if (input.kind == SearchWindowInput::Escape) {
-                if (g_ourBox.Text().empty()) SearchWindowHide();
-                else g_ourBox.Text(L"");
+                if (g_ourBox.Text().empty())
+                    SearchWindowHide();
+                else
+                    g_ourBox.Text(L"");
             }
         }
-        if(g_searchWindowMenuTyping.load()) {
-            g_searchWindowMenuCaret=g_ourBox.SelectionStart(); g_searchWindowMenuSelection=g_ourBox.SelectionLength();
+        if (g_searchWindowMenuTyping.load()) {
+            g_searchWindowMenuCaret = g_ourBox.SelectionStart();
+            g_searchWindowMenuSelection = g_ourBox.SelectionLength();
         }
         wchar_t detail[96]{};
         swprintf_s(detail, L"opening input delivered, events=%zu length=%u", inputs.size(), g_ourBox.Text().size());
@@ -12627,7 +12604,6 @@ void ApplySearchWindowInput() try {
     SearchWindowTrace(L"opening input delivery failed", winrt::to_hresult());
 }
 
-
 // Move the complete host so acrylic and the input region follow its contents.
 // The ordinary UI timer is only for the hidden Start handoff. Visible motion
 // uses a high-resolution clock at the destination display's refresh rate.
@@ -12636,20 +12612,24 @@ constexpr UINT_PTR kSearchWindowStyleTimer = 0x703;
 constexpr UINT kSearchWindowSlideFrameMessage = WM_APP + 0x76;
 
 double SearchMotionTime() {
-    return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 struct SearchWindowSlide {
     double from = 0, to = 0, started = 0, duration = 0;
     bool closing = false;
     double Value(double now) const {
-        if (duration <= 0) return to;
-        const double t = std::clamp((now-started)/duration,0.0,1.0);
-        const double ease = closing ? t*t*t : 1-(1-t)*(1-t)*(1-t);
-        return from+(to-from)*ease;
+        if (duration <= 0)
+            return to;
+        const double t = std::clamp((now - started) / duration, 0.0, 1.0);
+        const double ease = closing ? t * t * t : 1 - (1 - t) * (1 - t) * (1 - t);
+        return from + (to - from) * ease;
     }
-    bool Active(double now) const { return duration > 0 && now-started < duration; }
-    void Snap(double offset) { from = to = offset; duration = 0; }
+    bool Active(double now) const { return duration > 0 && now - started < duration; }
+    void Snap(double offset) {
+        from = to = offset;
+        duration = 0;
+    }
 };
 
 // No XAML or window-position operations run on this thread. It posts at most
@@ -12660,58 +12640,80 @@ class SearchSlideClock {
     std::thread thread_;
     std::atomic<bool> active_{false};
     std::atomic<HWND> host_{nullptr};
-    std::atomic<double> interval_{1000.0/60};
+    std::atomic<double> interval_{1000.0 / 60};
     void Run() {
-        const HANDLE waits[]{stop_,wake_,timer_};
+        const HANDLE waits[]{stop_, wake_, timer_};
         double next = 0;
         for (;;) {
-            const DWORD result = WaitForMultipleObjects(3,waits,FALSE,INFINITE);
-            if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) return;
-            if (result == WAIT_OBJECT_0+1) {
+            const DWORD result = WaitForMultipleObjects(3, waits, FALSE, INFINITE);
+            if (result == WAIT_OBJECT_0 || result == WAIT_FAILED)
+                return;
+            if (result == WAIT_OBJECT_0 + 1) {
                 CancelWaitableTimer(timer_);
                 next = SearchMotionTime();
             }
-            if (!active_.load()) continue;
-            if (result == WAIT_OBJECT_0+2) {
-                if (!pending.exchange(true) && !PostMessageW(host_.load(),kSearchWindowSlideFrameMessage,0,0))
+            if (!active_.load())
+                continue;
+            if (result == WAIT_OBJECT_0 + 2) {
+                if (!pending.exchange(true) && !PostMessageW(host_.load(), kSearchWindowSlideFrameMessage, 0, 0))
                     pending.store(false);
                 next += interval_.load();
             }
             const double now = SearchMotionTime();
-            if (next < now) next = now;
+            if (next < now)
+                next = now;
             LARGE_INTEGER due{};
-            due.QuadPart = -std::max<LONGLONG>(1,static_cast<LONGLONG>((next-now)*10000));
-            if (!SetWaitableTimer(timer_,&due,0,nullptr,nullptr,FALSE)) {
+            due.QuadPart = -std::max<LONGLONG>(1, static_cast<LONGLONG>((next - now) * 10000));
+            if (!SetWaitableTimer(timer_, &due, 0, nullptr, nullptr, FALSE)) {
                 active_.store(false);
-                PostMessageW(host_.load(),kSearchWindowSlideFrameMessage,1,0);
+                PostMessageW(host_.load(), kSearchWindowSlideFrameMessage, 1, 0);
             }
         }
     }
-public:
+
+   public:
     std::atomic<bool> pending{false};
     SearchSlideClock() {
-        stop_ = CreateEventW(nullptr,TRUE,FALSE,nullptr);
-        wake_ = CreateEventW(nullptr,FALSE,FALSE,nullptr);
+        stop_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        wake_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION (Windows 10 version 1803+).
-        timer_ = CreateWaitableTimerExW(nullptr,nullptr,0x2,TIMER_ALL_ACCESS);
+        timer_ = CreateWaitableTimerExW(nullptr, nullptr, 0x2, TIMER_ALL_ACCESS);
         if (!stop_ || !wake_ || !timer_) {
-            if (stop_) CloseHandle(stop_);
-            if (wake_) CloseHandle(wake_);
-            if (timer_) CloseHandle(timer_);
+            if (stop_)
+                CloseHandle(stop_);
+            if (wake_)
+                CloseHandle(wake_);
+            if (timer_)
+                CloseHandle(timer_);
             throw std::runtime_error("search animation clock unavailable");
         }
-        try { thread_ = std::thread([this] { Run(); }); }
-        catch (...) { CloseHandle(stop_); CloseHandle(wake_); CloseHandle(timer_); throw; }
+        try {
+            thread_ = std::thread([this] { Run(); });
+        } catch (...) {
+            CloseHandle(stop_);
+            CloseHandle(wake_);
+            CloseHandle(timer_);
+            throw;
+        }
     }
     ~SearchSlideClock() {
         SetEvent(stop_);
-        if (thread_.joinable()) thread_.join();
-        CloseHandle(timer_); CloseHandle(wake_); CloseHandle(stop_);
+        if (thread_.joinable())
+            thread_.join();
+        CloseHandle(timer_);
+        CloseHandle(wake_);
+        CloseHandle(stop_);
     }
-    void Start(HWND host,double interval) {
-        host_.store(host); interval_.store(interval); active_.store(true); SetEvent(wake_);
+    void Start(HWND host, double interval) {
+        host_.store(host);
+        interval_.store(interval);
+        active_.store(true);
+        SetEvent(wake_);
     }
-    void Pause() { active_.store(false); SetEvent(wake_); }
+    void Pause() {
+        active_.store(false);
+        SetEvent(wake_);
+    }
 };
 [[clang::no_destroy]] std::optional<SearchSlideClock> g_searchSlideClock;
 SearchWindowSlide g_searchWindowSlide;
@@ -12737,129 +12739,155 @@ struct SearchXamlTransparency : IInspectable {
 };
 
 bool SearchWindowHasActivePopup() try {
-    if(g_contextMenuOpen) return true;
-    if(g_resultsHost && g_resultsHost.XamlRoot()) {
-        for(auto popup:wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot()))
-            if(popup!=g_previewPopup && popup.IsLightDismissEnabled()) return true;
+    if (g_contextMenuOpen)
+        return true;
+    if (g_resultsHost && g_resultsHost.XamlRoot()) {
+        for (auto popup : wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot()))
+            if (popup != g_previewPopup && popup.IsLightDismissEnabled())
+                return true;
     }
     return false;
-} catch(...) { return true; }
+} catch (...) {
+    return true;
+}
 
-constexpr UINT_PTR kSearchWindowRefocusTimer=0x704;
-ULONGLONG g_searchWindowRefocusUntil=0;
-bool g_searchWindowRefocusBodyClick=false;
+constexpr UINT_PTR kSearchWindowRefocusTimer = 0x704;
+ULONGLONG g_searchWindowRefocusUntil = 0;
+bool g_searchWindowRefocusBodyClick = false;
 
 bool SearchWindowTextboxHasFocus() {
-    return g_ourBox && g_searchWindowSource &&
-        SearchWindowHasNativeFocus(g_searchWindowWindow.load()) && g_searchWindowSource.HasFocus() &&
-        wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot()) == g_ourBox;
+    return g_ourBox && g_searchWindowSource && SearchWindowHasNativeFocus(g_searchWindowWindow.load()) &&
+           g_searchWindowSource.HasFocus() &&
+           wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot()) == g_ourBox;
 }
 
 void TraceSearchWindowFocus(const wchar_t* reason) {
     wchar_t state[256]{};
     auto focused = g_ourBox ? wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot()) : nullptr;
-    swprintf_s(state, L"%ls; foreground=%p native=%p island=%d textbox=%d preview=%d", reason,
-               GetForegroundWindow(), GetFocus(), g_searchWindowSource && g_searchWindowSource.HasFocus(),
-               g_ourBox && focused == g_ourBox, g_previewText && focused == g_previewText);
+    swprintf_s(state, L"%ls; foreground=%p native=%p island=%d textbox=%d preview=%d", reason, GetForegroundWindow(),
+               GetFocus(), g_searchWindowSource && g_searchWindowSource.HasFocus(), g_ourBox && focused == g_ourBox,
+               g_previewText && focused == g_previewText);
     SearchWindowTrace(state);
 }
 
 void QueueSearchBoxRefocus(bool bodyClick) {
-    HWND host=g_searchWindowWindow.load();
-    if(!host || !g_ourBox || g_dragging || g_searchWindowClosing || !g_isOverlayVisible.load()) return;
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_ourBox || g_dragging || g_searchWindowClosing || !g_isOverlayVisible.load())
+        return;
     g_searchWindowRefocusBodyClick |= bodyClick;
-    g_searchWindowRefocusUntil=GetTickCount64()+400;
+    g_searchWindowRefocusUntil = GetTickCount64() + 400;
     // The popup can still be finishing its close when Closed fires. Retry on
     // the UI thread instead of abandoning focus after one dispatcher callback.
-    if(!g_contextMenuOpen) g_searchWindowInputReady=false;
-    SetTimer(host,kSearchWindowRefocusTimer,16,nullptr);
+    if (!g_contextMenuOpen)
+        g_searchWindowInputReady = false;
+    SetTimer(host, kSearchWindowRefocusTimer, 16, nullptr);
 }
 
 void SearchWindowRefocusFrame() try {
-    HWND host=g_searchWindowWindow.load();
-    auto stop=[&] {
-        if(host) KillTimer(host,kSearchWindowRefocusTimer);
-        g_searchWindowRefocusUntil=0; g_searchWindowRefocusBodyClick=false;
-        g_searchWindowMenuTyping=false; g_searchWindowMenuCaret=-1; g_searchWindowMenuSelection=0;
+    HWND host = g_searchWindowWindow.load();
+    auto stop = [&] {
+        if (host)
+            KillTimer(host, kSearchWindowRefocusTimer);
+        g_searchWindowRefocusUntil = 0;
+        g_searchWindowRefocusBodyClick = false;
+        g_searchWindowMenuTyping = false;
+        g_searchWindowMenuCaret = -1;
+        g_searchWindowMenuSelection = 0;
     };
-    HWND foreground=GetForegroundWindow();
+    HWND foreground = GetForegroundWindow();
     // Modal dialogs and other windows on this thread keep their own focus.
-    const bool ours=foreground == host && IsWindowEnabled(host);
-    if(!host || !g_ourBox || !IsWindowVisible(host) || !ours || g_dragging ||
-       g_searchWindowClosing || g_quit.load()) {
-        stop(); return;
+    const bool ours = foreground == host && IsWindowEnabled(host);
+    if (!host || !g_ourBox || !IsWindowVisible(host) || !ours || g_dragging || g_searchWindowClosing || g_quit.load()) {
+        stop();
+        return;
     }
-    if(GetTickCount64()>g_searchWindowRefocusUntil) {
+    if (GetTickCount64() > g_searchWindowRefocusUntil) {
         TraceSearchWindowFocus(L"search focus retry expired");
-        stop(); return;
+        stop();
+        return;
     }
-    if(SearchWindowHasActivePopup()) return;
-    auto focused=wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot());
-    if(!g_searchWindowRefocusBodyClick && focused && focused==g_previewText) {
-        g_searchWindowInputReady=SearchWindowHasNativeFocus(host); stop(); return;
+    if (SearchWindowHasActivePopup())
+        return;
+    auto focused = wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot());
+    if (!g_searchWindowRefocusBodyClick && focused && focused == g_previewText) {
+        g_searchWindowInputReady = SearchWindowHasNativeFocus(host);
+        stop();
+        return;
     }
     // Logical XAML focus alone is insufficient after a popup: restore the
     // native island input window first, then its editable search control.
-    const bool menuTyping=g_searchWindowMenuTyping.load() && g_searchWindowMenuCaret>=0;
-    const int caret=menuTyping ? g_searchWindowMenuCaret : g_ourBox.SelectionStart();
-    const int selection=menuTyping ? g_searchWindowMenuSelection : g_ourBox.SelectionLength();
-    HWND nativeFocus=GetFocus();
-    if((nativeFocus!=g_searchWindowChild && !IsChild(g_searchWindowChild,nativeFocus)) ||
-       !g_searchWindowSource.HasFocus()) {
+    const bool menuTyping = g_searchWindowMenuTyping.load() && g_searchWindowMenuCaret >= 0;
+    const int caret = menuTyping ? g_searchWindowMenuCaret : g_ourBox.SelectionStart();
+    const int selection = menuTyping ? g_searchWindowMenuSelection : g_ourBox.SelectionLength();
+    HWND nativeFocus = GetFocus();
+    if ((nativeFocus != g_searchWindowChild && !IsChild(g_searchWindowChild, nativeFocus)) ||
+        !g_searchWindowSource.HasFocus()) {
         SetFocus(g_searchWindowChild);
         g_searchWindowSource.NavigateFocus(winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationRequest{
             winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationReason::First});
     }
-    const bool requested=g_ourBox.Focus(wux::FocusState::Programmatic);
+    const bool requested = g_ourBox.Focus(wux::FocusState::Programmatic);
     // Focus() can succeed logically while the host still owns native input.
     // Keep buffering and retrying until both layers agree.
-    if(requested) {
-        g_ourBox.SelectionStart(caret); g_ourBox.SelectionLength(selection);
+    if (requested) {
+        g_ourBox.SelectionStart(caret);
+        g_ourBox.SelectionLength(selection);
     }
-    if(requested && SearchWindowTextboxHasFocus()) {
-        g_searchWindowInputReady=true;
+    if (requested && SearchWindowTextboxHasFocus()) {
+        g_searchWindowInputReady = true;
         SearchWindowTrace(L"search native and XAML focus restored");
         stop();
     }
-} catch(...) {
-    SearchWindowTrace(L"search focus restore failed",winrt::to_hresult());
-    if(HWND host=g_searchWindowWindow.load()) KillTimer(host,kSearchWindowRefocusTimer);
-    g_searchWindowRefocusUntil=0;
+} catch (...) {
+    SearchWindowTrace(L"search focus restore failed", winrt::to_hresult());
+    if (HWND host = g_searchWindowWindow.load())
+        KillTimer(host, kSearchWindowRefocusTimer);
+    g_searchWindowRefocusUntil = 0;
 }
 
 void CheckSearchWindowFocus() try {
-    HWND host=g_searchWindowWindow.load();
-    if(!host || !g_ourBox || !IsWindowVisible(host) || GetForegroundWindow()!=host ||
-       !IsWindowEnabled(host) || !g_isOverlayVisible.load() || g_dragging ||
-       g_searchWindowClosing || g_quit.load() || SearchWindowHasActivePopup()) return;
-    auto focused=wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot());
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_ourBox || !IsWindowVisible(host) || GetForegroundWindow() != host || !IsWindowEnabled(host) ||
+        !g_isOverlayVisible.load() || g_dragging || g_searchWindowClosing || g_quit.load() ||
+        SearchWindowHasActivePopup())
+        return;
+    auto focused = wux::Input::FocusManager::GetFocusedElement(g_ourBox.XamlRoot());
     // Selecting/copying a preview excerpt is deliberate keyboard focus.
-    if(focused && focused==g_previewText) return;
-    if(SearchWindowTextboxHasFocus()) return;
-    if(!g_searchWindowRefocusUntil) {
+    if (focused && focused == g_previewText)
+        return;
+    if (SearchWindowTextboxHasFocus())
+        return;
+    if (!g_searchWindowRefocusUntil) {
         TraceSearchWindowFocus(L"search focus loss detected");
         QueueSearchBoxRefocus();
     }
-} catch(...) {
-    SearchWindowTrace(L"search focus check failed",winrt::to_hresult());
+} catch (...) {
+    SearchWindowTrace(L"search focus check failed", winrt::to_hresult());
 }
 
-
 bool DismissSearchContextMenu() try {
-    auto flyout=g_activeContextFlyout.get();
-    if(!g_contextMenuOpen && !flyout) return false;
-    if(flyout) flyout.Hide();
-    else { g_contextMenuOpen=false; g_contextMenuClosedTick=GetTickCount64(); }
+    auto flyout = g_activeContextFlyout.get();
+    if (!g_contextMenuOpen && !flyout)
+        return false;
+    g_contextMenuInternalClose = true;
+    g_dismissSearchOnMenuClose = false;
+    if (flyout)
+        flyout.Hide();
+    else {
+        g_contextMenuOpen = false;
+        g_contextMenuClosedTick = GetTickCount64();
+    }
     QueueSearchBoxRefocus(true);
     return true;
-} catch(...) {
-    SearchWindowTrace(L"context menu dismiss failed",winrt::to_hresult());
+} catch (...) {
+    SearchWindowTrace(L"context menu dismiss failed", winrt::to_hresult());
     return true;
 }
 
 void SetSearchWindowCloaked(bool cloak) {
     HWND host = g_searchWindowWindow.load();
-    if (!host || cloak == g_searchWindowCloaked) return;
+    if (!host || cloak == g_searchWindowCloaked)
+        return;
     BOOL value = cloak;
     winrt::check_hresult(DwmSetWindowAttribute(host, DWMWA_CLOAK, &value, sizeof(value)));
     g_searchWindowCloaked = cloak;
@@ -12870,520 +12898,1129 @@ void SearchWindowStyle() {
     HWND host = g_searchWindowWindow.load();
     BOOL dark = !light;
     DwmSetWindowAttribute(host, 20, &dark, sizeof(dark));
-    if (!g_resultsHost) return;
+    if (!g_resultsHost)
+        return;
     g_resultsHost.RequestedTheme(light ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
     g_resultsHost.Margin(wux::ThicknessHelper::FromUniformLength(0));
-    g_resultsHost.Padding(wux::ThicknessHelper::FromLengths(16,16,16,12));
-    g_resultsHost.CornerRadius(wux::CornerRadius{8,8,8,8});
-    g_resultsHost.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-    g_resultsHost.BorderBrush(light ? MakeBrush(0x25,0,0,0) : MakeBrush(0x20,255,255,255));
+    g_resultsHost.Padding(wux::ThicknessHelper::FromLengths(16, 16, 16, 12));
+    g_resultsHost.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
+    g_resultsHost.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    g_resultsHost.BorderBrush(nullptr);
+    g_windowCorners = {8, 8, 8, 8};
+    g_windowThickness = {1, 1, 1, 1};
+    g_windowInnerThickness = {};
+    g_windowInnerOutlineBrush = {};
+    g_windowOutlineBrush = {};
+    g_windowOutlineBrush.kind = 1;
+    g_windowOutlineBrush.color = light ? 0x25000000u : 0x20FFFFFFu;
+    if (g_windowInnerBorder) {
+        g_windowInnerBorder.Background(nullptr);
+        g_windowInnerBorder.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
+    }
     wuxm::AcrylicBrush surface;
     surface.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
-    surface.TintColor(light ? winrt::Windows::UI::Color{255,243,243,243} : winrt::Windows::UI::Color{255,32,32,32});
+    surface.TintColor(light ? winrt::Windows::UI::Color{255, 243, 243, 243}
+                            : winrt::Windows::UI::Color{255, 32, 32, 32});
     surface.TintOpacity(light ? 0.80 : 0.78);
     surface.TintLuminosityOpacity(light ? 0.90 : 0.82);
-    surface.FallbackColor(light ? winrt::Windows::UI::Color{255,243,243,243} : winrt::Windows::UI::Color{255,32,32,32});
+    surface.FallbackColor(light ? winrt::Windows::UI::Color{255, 243, 243, 243}
+                                : winrt::Windows::UI::Color{255, 32, 32, 32});
     g_resultsHost.Background(surface);
     g_searchBarBorder.Height(Fs(40));
-    g_searchBarBorder.Margin(wux::ThicknessHelper::FromLengths(0,0,0,16));
-    g_searchBarBorder.Padding(wux::ThicknessHelper::FromLengths(12,0,12,0));
-    g_searchBarBorder.CornerRadius(wux::CornerRadius{4,4,4,4});
-    g_searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
-    g_searchBarBorder.BorderBrush(light ? MakeBrush(0x18,0,0,0) : MakeBrush(0x22,255,255,255));
-    g_searchBarBorder.Background(light ? MakeBrush(0xCE,255,255,255) : MakeBrush(0x50,0,0,0));
-    ScaleFont(g_ourBox,14);
+    g_searchBarBorder.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 16));
+    g_searchBarBorder.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    g_searchBarBorder.CornerRadius(wux::CornerRadius{0, 0, 0, 0});
+    g_searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    g_searchBarBorder.BorderBrush(nullptr);
+    g_searchBarBorder.Background(light ? MakeBrush(0xCE, 255, 255, 255) : MakeBrush(0x50, 0, 0, 0));
+    if (g_searchBarInnerBorder) {
+        g_searchBarInnerBorder.Background(nullptr);
+        g_searchBarInnerBorder.BorderBrush(nullptr);
+        g_searchBarInnerBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    }
+    g_searchBarCorners = {4, 4, 4, 4};
+    g_searchBarThickness = {1, 1, 1, 1};
+    g_searchBarOutlineBrush = {};
+    g_searchBarOutlineBrush.kind = 1;
+    g_searchBarOutlineBrush.color = light ? 0x18000000u : 0x22FFFFFFu;
+    g_headerCorners = {8, 8, 8, 8};
+    g_headerThickness = {};
+    g_headerOutlineBrush = {};
+    if (g_appsHeaderHolder)
+        g_appsHeaderHolder.Background(nullptr);
+    if (g_filesHeaderHolder)
+        g_filesHeaderHolder.Background(nullptr);
+    ScaleFont(g_ourBox, 14);
     g_ourBox.PlaceholderText(L"Search Anything");
     g_ourBox.Padding(wux::ThicknessHelper::FromUniformLength(0));
     auto searchGrid = g_searchBarBorder.Child().as<wuxc::Grid>();
-    auto searchIcon=searchGrid.Children().GetAt(0).as<wux::FrameworkElement>();
-    searchIcon.Width(Fs(20)); searchIcon.Height(Fs(20));
+    auto searchIcon = searchGrid.Children().GetAt(0).as<wux::FrameworkElement>();
+    searchIcon.Width(Fs(20));
+    searchIcon.Height(Fs(20));
     UpdateSearchIcon(light);
-    if (g_divider) g_divider.Background(light ? MakeBrush(0x18,0,0,0) : MakeBrush(0x14,255,255,255));
-    if (g_footerBorder) g_footerBorder.BorderBrush(light ? MakeBrush(0x18,0,0,0) : MakeBrush(0x14,255,255,255));
+    if (g_divider)
+        g_divider.Background(light ? MakeBrush(0x18, 0, 0, 0) : MakeBrush(0x14, 255, 255, 255));
+    g_footerCorners = {0, 0, 8, 8};
+    g_footerThickness = {0, 1, 0, 0};
+    g_footerOutlineBrush = {};
+    g_footerOutlineBrush.kind = 1;
+    g_footerOutlineBrush.color = light ? 0x18000000u : 0x14FFFFFFu;
+    if (g_footerBorder) {
+        g_footerBorder.Background(nullptr);
+        g_footerBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+        g_footerBorder.BorderBrush(nullptr);
+    }
     g_searchAppearanceDirty = true;
     ApplyStartAppearance();
+    UpdateSearchWindowShape();
+    UpdateSearchBarShape();
+    UpdateSearchHeadersShape();
+    UpdateSearchFooterShape();
     ApplySearchTextColors();
 }
 
 uint32_t SearchPackColor(winrt::Windows::UI::Color c) {
-    return (uint32_t(c.A)<<24)|(uint32_t(c.R)<<16)|(uint32_t(c.G)<<8)|c.B;
+    return (uint32_t(c.A) << 24) | (uint32_t(c.R) << 16) | (uint32_t(c.G) << 8) | c.B;
 }
 winrt::Windows::UI::Color SearchUnpackColor(uint32_t c) {
-    return {static_cast<BYTE>(c>>24),static_cast<BYTE>(c>>16),static_cast<BYTE>(c>>8),static_cast<BYTE>(c)};
+    return {static_cast<BYTE>(c >> 24), static_cast<BYTE>(c >> 16), static_cast<BYTE>(c >> 8), static_cast<BYTE>(c)};
 }
 
 uint32_t SearchParseTextColor(std::wstring_view text) {
-    if(text.size()!=7 || text[0]!=L'#') return 0;
-    uint32_t color=0;
-    for(size_t i=1;i<text.size();++i) {
-        const wchar_t c=text[i];
-        const int digit=c>=L'0' && c<=L'9' ? c-L'0' :
-                        c>=L'a' && c<=L'f' ? c-L'a'+10 :
-                        c>=L'A' && c<=L'F' ? c-L'A'+10 : -1;
-        if(digit<0) return 0;
-        color=(color<<4)|digit;
+    if (text.size() != 7 || text[0] != L'#')
+        return 0;
+    uint32_t color = 0;
+    for (size_t i = 1; i < text.size(); ++i) {
+        const wchar_t c = text[i];
+        const int digit = c >= L'0' && c <= L'9'   ? c - L'0'
+                          : c >= L'a' && c <= L'f' ? c - L'a' + 10
+                          : c >= L'A' && c <= L'F' ? c - L'A' + 10
+                                                   : -1;
+        if (digit < 0)
+            return 0;
+        color = (color << 4) | digit;
     }
-    return color|0xFF000000;
+    return color | 0xFF000000;
 }
 double SearchLuminance(uint32_t color) {
-    auto linear=[](uint32_t c) { double v=c/255.0; return v<=0.04045 ? v/12.92 : std::pow((v+0.055)/1.055,2.4); };
-    return 0.2126*linear((color>>16)&255)+0.7152*linear((color>>8)&255)+0.0722*linear(color&255);
+    auto linear = [](uint32_t c) {
+        double v = c / 255.0;
+        return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * linear((color >> 16) & 255) + 0.7152 * linear((color >> 8) & 255) + 0.0722 * linear(color & 255);
 }
-std::optional<uint32_t> SearchBackgroundColor(SearchBrushData const& brush,std::optional<uint32_t> backdrop=std::nullopt) {
+std::optional<uint32_t> SearchBackgroundColor(SearchBrushData const& brush,
+                                              std::optional<uint32_t> backdrop = std::nullopt) {
     // Transparent glass depends on whatever is behind the window. Keep the
     // copied text there; a user override covers deliberately unusual themes.
-    if(brush.kind==2 && (brush.fallback>>24)) return brush.fallback;
-    if(brush.kind==1 && backdrop) {
-        const double alpha=std::clamp((brush.color>>24)/255.0*brush.opacity,0.0,1.0);
-        uint32_t color=0xFF000000;
-        for(int shift:{0,8,16}) color|=static_cast<uint32_t>(std::lround(
-            ((brush.color>>shift)&255)*alpha+((*backdrop>>shift)&255)*(1-alpha)))<<shift;
+    if (brush.kind == 2 && (brush.fallback >> 24))
+        return brush.fallback;
+    if (brush.kind == 1 && backdrop) {
+        const double alpha = std::clamp((brush.color >> 24) / 255.0 * brush.opacity, 0.0, 1.0);
+        uint32_t color = 0xFF000000;
+        for (int shift : {0, 8, 16})
+            color |= static_cast<uint32_t>(std::lround(((brush.color >> shift) & 255) * alpha +
+                                                       ((*backdrop >> shift) & 255) * (1 - alpha)))
+                     << shift;
         return color;
     }
-    if((brush.kind==1 || brush.kind==4) && (brush.color>>24)*brush.opacity>=128) return brush.color;
+    if ((brush.kind == 1 || brush.kind == 4) && (brush.color >> 24) * brush.opacity >= 128)
+        return brush.color;
     return std::nullopt;
 }
-uint32_t SearchChooseTextColor(SearchBrushData const& background,uint32_t copied,bool dark,uint32_t overrideColor,
-                             std::optional<uint32_t> backdrop=std::nullopt) {
-    if(overrideColor) return overrideColor;
-    uint32_t color=(copied>>24) ? copied|0xFF000000 : dark ? 0xFFFFFFFF : 0xFF202020;
-    if(auto surface=SearchBackgroundColor(background,backdrop)) {
-        const double bg=SearchLuminance(*surface),fg=SearchLuminance(color);
-        if((std::max(bg,fg)+0.05)/(std::min(bg,fg)+0.05)<4.5)
-            color=(bg+0.05)/0.05 >= 1.05/(bg+0.05) ? 0xFF000000 : 0xFFFFFFFF;
+uint32_t SearchChooseTextColor(SearchBrushData const& background, uint32_t copied, bool dark, uint32_t overrideColor,
+                               std::optional<uint32_t> backdrop = std::nullopt) {
+    if (overrideColor)
+        return overrideColor;
+    uint32_t color = (copied >> 24) ? copied | 0xFF000000 : dark ? 0xFFFFFFFF : 0xFF202020;
+    if (auto surface = SearchBackgroundColor(background, backdrop)) {
+        const double bg = SearchLuminance(*surface), fg = SearchLuminance(color);
+        if ((std::max(bg, fg) + 0.05) / (std::min(bg, fg) + 0.05) < 4.5)
+            color = (bg + 0.05) / 0.05 >= 1.05 / (bg + 0.05) ? 0xFF000000 : 0xFFFFFFFF;
     }
     return color;
 }
 uint32_t SearchTextOverride() {
     HIGHCONTRASTW contrast{sizeof(contrast)};
-    if(SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) && (contrast.dwFlags&HCF_HIGHCONTRASTON)) {
-        const COLORREF color=GetSysColor(COLOR_WINDOWTEXT);
-        return 0xFF000000|(GetRValue(color)<<16)|(GetGValue(color)<<8)|GetBValue(color);
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+        (contrast.dwFlags & HCF_HIGHCONTRASTON)) {
+        const COLORREF color = GetSysColor(COLOR_WINDOWTEXT);
+        return 0xFF000000 | (GetRValue(color) << 16) | (GetGValue(color) << 8) | GetBValue(color);
     }
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     return SearchParseTextColor(g_settings.textColor);
 }
 uint32_t SearchMainTextColor() {
-    return SearchChooseTextColor(g_searchAppearance.background,g_searchAppearance.foreground,
-                                g_searchAppearanceValid ? g_searchAppearance.dark!=0 : !IsLightTheme(),SearchTextOverride());
+    return SearchChooseTextColor(g_searchAppearance.background, g_searchAppearance.foreground,
+                                 g_searchAppearanceValid ? g_searchAppearance.dark != 0 : !IsLightTheme(),
+                                 SearchTextOverride());
 }
 void ApplySearchTextColors() try {
-    if(!g_resultsHost || !g_ourBox) return;
+    if (!g_resultsHost || !g_ourBox)
+        return;
     // Theme/settings notifications and copied-appearance changes invalidate
     // these UI-thread caches. Ordinary result rows reuse the resolved brush.
     g_resolvedSearchTextBrush = nullptr;
     ResetSearchContainerContrast();
-    const uint32_t main=SearchMainTextColor();
-    const uint32_t search=SearchChooseTextColor(g_searchAppearance.searchBackground,
-        g_searchAppearance.searchForeground ? g_searchAppearance.searchForeground : main,
-        SearchLuminance(main)>0.5,SearchTextOverride(),SearchBackgroundColor(g_searchAppearance.background));
-    if(!g_searchTextBrush) g_searchTextBrush=MakeBrush(255,255,255,255);
+    const uint32_t main = SearchMainTextColor();
+    const uint32_t search = SearchChooseTextColor(
+        g_searchAppearance.searchBackground,
+        g_searchAppearance.searchForeground ? g_searchAppearance.searchForeground : main, SearchLuminance(main) > 0.5,
+        SearchTextOverride(), SearchBackgroundColor(g_searchAppearance.background));
+    if (!g_searchTextBrush)
+        g_searchTextBrush = MakeBrush(255, 255, 255, 255);
     g_searchTextBrush.Color(SearchUnpackColor(main));
-    if(!g_searchBoxTextBrush) g_searchBoxTextBrush=MakeBrush(255,255,255,255);
-    if(!g_searchPlaceholderBrush) g_searchPlaceholderBrush=MakeBrush(255,255,255,255);
+    if (!g_searchBoxTextBrush)
+        g_searchBoxTextBrush = MakeBrush(255, 255, 255, 255);
+    if (!g_searchPlaceholderBrush)
+        g_searchPlaceholderBrush = MakeBrush(255, 255, 255, 255);
     g_searchBoxTextBrush.Color(SearchUnpackColor(search));
     g_searchPlaceholderBrush.Color(SearchUnpackColor(search));
     g_searchPlaceholderBrush.Opacity(0.65);
-    wuxm::Brush foreground=g_searchBoxTextBrush;
+    wuxm::Brush foreground = g_searchBoxTextBrush;
     g_ourBox.Foreground(foreground);
     g_ourBox.PlaceholderForeground(g_searchPlaceholderBrush);
     // Focus/hover visual states use these resources instead of Foreground.
-    for(auto key:{L"TextControlForeground",L"TextControlForegroundFocused",L"TextControlForegroundPointerOver",
-                  L"TextControlButtonForeground",L"TextControlButtonForegroundPointerOver",L"TextControlButtonForegroundPressed"})
-        g_ourBox.Resources().Insert(winrt::box_value(key),foreground);
-    auto textBrush=SearchTextBrush();
+    for (auto key : {L"TextControlForeground", L"TextControlForegroundFocused", L"TextControlForegroundPointerOver",
+                     L"TextControlButtonForeground", L"TextControlButtonForegroundPointerOver",
+                     L"TextControlButtonForegroundPressed"})
+        g_ourBox.Resources().Insert(winrt::box_value(key), foreground);
+    auto textBrush = SearchTextBrush();
     RefreshSearchIcons(textBrush);
-    auto apply=[&](auto&& self,wux::DependencyObject const& node,int depth)->void {
-        if(!node || depth>32) return;
-        if(node==g_ourBox) return; // retain the field's own placeholder/focus brushes
-        if(auto text=node.try_as<wuxc::TextBlock>()) text.Foreground(textBrush);
-        const int count=wuxm::VisualTreeHelper::GetChildrenCount(node);
-        for(int i=0;i<count;++i) self(self,wuxm::VisualTreeHelper::GetChild(node,i),depth+1);
+    auto apply = [&](auto&& self, wux::DependencyObject const& node, int depth) -> void {
+        if (!node || depth > 32)
+            return;
+        if (node == g_ourBox)
+            return;  // retain the field's own placeholder/focus brushes
+        if (auto text = node.try_as<wuxc::TextBlock>())
+            text.Foreground(textBrush);
+        const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+        for (int i = 0; i < count; ++i)
+            self(self, wuxm::VisualTreeHelper::GetChild(node, i), depth + 1);
     };
-    apply(apply,g_resultsHost,0);
-    if(g_previewCard) apply(apply,g_previewCard,0);
-    const bool light=SearchLuminance(main)<0.5;
-    auto theme=light ? wux::ElementTheme::Light : wux::ElementTheme::Dark;
+    apply(apply, g_resultsHost, 0);
+    if (g_previewCard)
+        apply(apply, g_previewCard, 0);
+    const bool light = SearchLuminance(main) < 0.5;
+    auto theme = light ? wux::ElementTheme::Light : wux::ElementTheme::Dark;
     g_resultsHost.RequestedTheme(theme);
-    g_searchBarBorder.RequestedTheme(SearchLuminance(search)<0.5 ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
+    g_searchBarBorder.RequestedTheme(SearchLuminance(search) < 0.5 ? wux::ElementTheme::Light
+                                                                   : wux::ElementTheme::Dark);
     g_cachedLightTheme.store(light);
-    UpdateSearchIcon(SearchLuminance(search)<0.5);
-    if(g_previewCard) {
+    UpdateSearchIcon(SearchLuminance(search) < 0.5);
+    if (g_previewCard) {
         g_previewCard.RequestedTheme(theme);
-        g_previewCard.Background(g_resultsHost.Background());
-        g_previewCard.BorderBrush(light ? MakeBrush(0x24,0,0,0) : MakeBrush(0x30,255,255,255));
-        g_previewThumbBox.Background(light ? MakeBrush(0x0C,0,0,0) : MakeBrush(0x10,255,255,255));
+        ApplyPreviewCardAppearance();
+        if (g_previewThumbBox)
+            g_previewThumbBox.Background(light ? MakeBrush(0x0C, 0, 0, 0) : MakeBrush(0x10, 255, 255, 255));
     }
     SearchContainerContrastTick();
-} catch(...) { SearchWindowTrace(L"text appearance failed",winrt::to_hresult()); }
+} catch (...) {
+    SearchWindowTrace(L"text appearance failed", winrt::to_hresult());
+}
 
-// Surface rules from the Styler bundled themes; user overrides take precedence.
-struct SearchThemeRule { PCWSTR theme; int role; PCWSTR style; };
-static const SearchThemeRule kSearchThemeRules[] = {
-    {L"TranslucentStartMenu",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>"},
-    {L"TranslucentStartMenu",0,L"Background:=$CommonBgBrush"},
-    {L"TranslucentStartMenu",1,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>"},
-    {L"TranslucentStartMenu",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#22000000\"/>"},
-    {L"TranslucentStartMenu",3,L"BorderThickness=1"},
-    {L"TranslucentStartMenu_variant_ClassicStartMenu",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#25323232\"/>"},
-    {L"TranslucentStartMenu_variant_ClassicStartMenu",0,L"Background:=$CommonBgBrush"},
-    {L"TranslucentStartMenu_variant_ClassicStartMenu",1,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#15000000\"/>"},
-    {L"TranslucentStartMenu_variant_ClassicStartMenu",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#00000000\"/>"},
-    {L"TranslucentStartMenu_variant_ClassicStartMenu",3,L"BorderThickness=0"},
-    {L"LiquidGlass2",-1,L"Glass=<WindhawkBlur BlurAmount=\"5\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.1\" />"},
-    {L"LiquidGlass2",-1,L"Frosted=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0.3\" />"},
-    {L"LiquidGlass2",-1,L"Acrylic=<AcrylicBrush TintColor=\"{ThemeResource SystemChromeMediumColor}\" TintOpacity=\"0\" FallbackColor=\"{ThemeResource SystemChromeMediumColor}\" />"},
-    {L"LiquidGlass2",-1,L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#50808080\" Offset=\"1\" /></LinearGradientBrush>"},
-    {L"LiquidGlass2",-1,L"BorderBrush2=<WindhawkBlur BlurAmount=\"10\" TintColor=\"#909090\" TintOpacity=\"0.3\"/>"},
-    {L"LiquidGlass2",-1,L"ClockBG=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAccentColorLight2}\" TintOpacity=\"0.3\" />"},
-    {L"LiquidGlass2",-1,L"BorderThickness=0.3,1,0.3,1"},
-    {L"LiquidGlass2",-1,L"CornerRadius=25"},
-    {L"LiquidGlass2",-1,L"ElementBG=<SolidColorBrush Color=\"{ThemeResource SystemChromeAltHighColor}\" Opacity=\"0.30\" />"},
-    {L"LiquidGlass2",-1,L"ElementBorderThickness=0.3,0.5,0.3,1"},
-    {L"LiquidGlass2",-1,L"ElementCornerRadius=20"},
-    {L"LiquidGlass2",-1,L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>"},
-    {L"LiquidGlass2",-1,L"ElementBorderBrush2=<WindhawkBlur BlurAmount=\"30\" TintColor=\"#909090\" TintOpacity=\"0.3\"/>"},
-    {L"LiquidGlass2",-1,L"GlassDark=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#1A000000\" />"},
-    {L"LiquidGlass2",-1,L"GlassDark2=<WindhawkBlur BlurAmount=\"5\" TintColor=\"#0D000000\" />"},
-    {L"LiquidGlass2",-1,L"GlassDarkTitles=<WindhawkBlur BlurAmount=\"7\" TintColor=\"#10151515\"/>"},
-    {L"LiquidGlass2",-1,L"GlassDarkBottomTray=<WindhawkBlur BlurAmount=\"14\" TintColor=\"#3E4A4A4A\"/>"},
-    {L"LiquidGlass2",-1,L"fluidBorder=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Offset=\"0\" Color=\"#2FFFFFFF\" /><GradientStop Offset=\"0.2\" Color=\"#1AFFFFFF\" /><GradientStop Offset=\"0.65\" Color=\"#1AF0F0F0\" /><GradientStop Offset=\"1\" Color=\"#2F707070\" /></LinearGradientBrush>"},
-    {L"LiquidGlass2",-1,L"fluidNormal=<SolidColorBrush Color=\"{ThemeResource ControlFillColorDefault}\" />"},
-    {L"LiquidGlass2",-1,L"fluidHover=<SolidColorBrush Color=\"{ThemeResource ControlFillColorSecondary}\" />"},
-    {L"LiquidGlass2",-1,L"fluidPressed=<SolidColorBrush Color=\"{ThemeResource ControlFillColorTertiary}\" />"},
-    {L"LiquidGlass2",-1,L"GlassDarkSearchPage=<WindhawkBlur BlurAmount=\"4\" TintColor=\"#1F000000\"/>"},
-    {L"LiquidGlass2",0,L"Background:=$GlassDark"},
-    {L"LiquidGlass2",0,L"Background:=$GlassDark"},
-    {L"LiquidGlass2",1,L"Background:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#6F000000\" Offset=\"0.0\" /><GradientStop Color=\"#40000000\" Offset=\"0.3\" /><GradientStop Color=\"#30000000\" Offset=\"0.41\" /><GradientStop Color=\"#10000000\" Offset=\"0.6\" /><GradientStop Color=\"#00000000\" Offset=\"0.8\" /><GradientStop Color=\"#00000000\" Offset=\"1\" /></LinearGradientBrush>"},
-    {L"LiquidGlass2",2,L"Background:=Transparent"},
-    {L"LiquidGlass2",2,L"CornerRadius=40"},
-    {L"LiquidGlass2",2,L"BorderThickness=0"},
-    {L"LiquidGlass2",3,L"BorderBrush:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#70D3D3D3\" Offset=\"0.0\" /><GradientStop Color=\"#60CDCDCD\" Offset=\"0.25\" /><GradientStop Color=\"#40CDCDCD\" Offset=\"0.4\" /><GradientStop Color=\"#40696969\" Offset=\"0.65\" /><GradientStop Color=\"#553C3C3C\" Offset=\"1\" /></LinearGradientBrush>"},
-    {L"LiquidGlass2",3,L"Background:=$GlassDark"},
-    {L"LiquidGlass2",3,L"CornerRadius=40"},
-    {L"LiquidGlass2",3,L"BorderThickness=1,1,1,1"},
-    {L"LiquidGlass2",3,L"Padding=8,6,8,7"},
-    {L"LiquidGlass2",4,L"CornerRadius=11"},
-    {L"LiquidGlass2",4,L"Margin=2,3,2,3"},
-    {L"LiquidGlass",-1,L"BorderThickness=0.3,1,0.3,0.3"},
-    {L"LiquidGlass",-1,L"ElementBorderThickness=0.3,0.3,0.3,1"},
-    {L"LiquidGlass",-1,L"CornerRadius=12"},
-    {L"LiquidGlass",-1,L"ElementCornerRadius=8"},
-    {L"LiquidGlass",-1,L"Background=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.2\" />"},
-    {L"LiquidGlass",-1,L"ElementBackground=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.4\" />"},
-    {L"LiquidGlass",-1,L"ElementBackground2 = <WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAltLowColor}\" TintOpacity=\"0.2\"  />"},
-    {L"LiquidGlass",-1,L"AccentBackground=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemAccentColorLight1}\" TintOpacity=\"0.2\"  />"},
-    {L"LiquidGlass",-1,L"BorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"0.0\" /><GradientStop Color=\"#50404040\" Offset=\"0.25\" /><GradientStop Color=\"#50808080\" Offset=\"1\" /></LinearGradientBrush>\""},
-    {L"LiquidGlass",-1,L"ElementBorderBrush=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\"><GradientStop Color=\"#50808080\" Offset=\"1\" /><GradientStop Color=\"#50606060\" Offset=\"0.15\" /></LinearGradientBrush>"},
-    {L"LiquidGlass",0,L"Background:=$Background"},
-    {L"LiquidGlass",1,L"Background@Checked:=$ElementBackground"},
-    {L"LiquidGlass",1,L"Background@CheckedPointerOver:=$AccentBackground"},
-    {L"LiquidGlass",1,L"Background@CheckedPressed:=$ElementBackground2"},
-    {L"LiquidGlass",1,L"BackgroundTransition:=<BrushTransition Duration=\"0:0:0.083\" />"},
-    {L"LiquidGlass",3,L"BorderThickness=$BorderThickness"},
-    {L"LiquidGlass",3,L"BorderBrush:=$BorderBrush"},
-    {L"LiquidGlass",3,L"CornerRadius=$CornerRadius"},
-    {L"TintedGlass",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#80000000\"/>"},
-    {L"TintedGlass",0,L"Background:=$CommonBgBrush"},
-    {L"TintedGlass",1,L"Background:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#1AFFFFFF\"/>"},
-    {L"TintedGlass",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#22000000\"/>"},
-    {L"TintedGlass",3,L"BorderThickness=1"},
-    {L"TintedGlass_variant_ClassicStartMenu",-1,L"CommonBgBrush=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#80000000\"/>"},
-    {L"TintedGlass_variant_ClassicStartMenu",0,L"Background:=$CommonBgBrush"},
-    {L"TintedGlass_variant_ClassicStartMenu",1,L"Background:=<WindhawkBlur BlurAmount=\"18\" TintColor=\"#1AFFFFFF\"/>"},
-    {L"TintedGlass_variant_ClassicStartMenu",3,L"Background:=<WindhawkBlur BlurAmount=\"25\" TintColor=\"#00000000\"/>"},
-    {L"TintedGlass_variant_ClassicStartMenu",3,L"BorderThickness=0"},
-};
-
-std::wstring SearchTrim(std::wstring value) {
-    const auto first=value.find_first_not_of(L" \r\n\t");
-    return first==std::wstring::npos ? std::wstring() : value.substr(first,value.find_last_not_of(L" \r\n\t")-first+1);
-}
-std::wstring SearchStylerSetting(HKEY key,std::wstring const& name) {
-    wchar_t text[4096]{}; DWORD type=0,size=sizeof(text);
-    if (RegQueryValueExW(key,name.c_str(),nullptr,&type,reinterpret_cast<BYTE*>(text),&size)!=ERROR_SUCCESS ||
-        type!=REG_SZ || size>sizeof(text) || size<sizeof(wchar_t)) return {};
-    text[ARRAYSIZE(text)-1]=0; return text;
-}
-std::wstring SearchXmlAttribute(std::wstring const& xml,std::wstring_view name) {
-    std::wstring needle=std::wstring(name)+L"=\"";
-    size_t begin=xml.find(needle); if(begin==std::wstring::npos) return {};
-    begin+=needle.size(); size_t end=xml.find(L'\"',begin);
-    return end==std::wstring::npos ? std::wstring() : xml.substr(begin,end-begin);
-}
-using SearchStyleProperties=std::map<std::wstring,std::wstring>;
-struct SearchStyleConfig {
-    std::map<std::wstring,std::wstring> constants;
-    SearchStyleProperties roles[5]; // main, search bar, menu, menu border, item
-    void Add(int role,std::wstring text) {
-        size_t equal=text.find(L'='); if(equal==std::wstring::npos) return;
-        auto name=SearchTrim(text.substr(0,equal)); auto value=SearchTrim(text.substr(equal+1));
-        if(role<0) { constants[name]=value; return; }
-        if(name.ends_with(L":")) name.pop_back();
-        // Stateful rules belong to the Styler; retain native item interaction.
-        if(name.find(L'@')==std::wstring::npos) roles[role][name]=value;
-    }
-    std::wstring Value(int role,PCWSTR property) const {
-        auto it=roles[role].find(property); if(it==roles[role].end()) return {};
-        auto value=it->second;
-        for(int i=0;i<8 && value.starts_with(L"$");++i) {
-            auto c=constants.find(value.substr(1));
-            if(c==constants.end()) return {}; value=SearchTrim(c->second);
+bool SearchBrushIsVisible(SearchBrushData const& b) {
+    if (!b.kind || b.opacity <= 0.001)
+        return false;
+    if (b.kind == 1)
+        return (b.color >> 24) > 0;
+    if (b.kind == 3) {
+        for (uint32_t i = 0; i < b.count; ++i) {
+            if ((b.colors[i] >> 24) > 0)
+                return true;
         }
-        if(value.starts_with(L"$") || value.find(L"{{")!=std::wstring::npos) return {};
-        return value;
+        return false;
     }
-};
-int SearchStyleRole(std::wstring const& target) {
-    if(target.ends_with(L"#AcrylicBorder")) return 0;
-    if(target==L"Border#BorderElement" ||
-       (target.find(L"SearchBoxToggleButton")!=std::wstring::npos && target.ends_with(L"#BorderElement"))) return 1;
-    if(target==L"MenuFlyoutPresenter" || target==L"Windows.UI.Xaml.Controls.MenuFlyoutPresenter") return 2;
-    if(target==L"MenuFlyoutPresenter > Border" || target==L"MenuFlyoutPresenter > Border#BackgroundElement" ||
-       target==L"Windows.UI.Xaml.Controls.MenuFlyoutPresenter > Windows.UI.Xaml.Controls.Border") return 3;
-    if(target==L"MenuFlyoutItem" || target==L"Windows.UI.Xaml.Controls.MenuFlyoutItem") return 4;
-    return -1;
-}
-SearchStyleConfig ReadSearchStyleConfig() {
-    SearchStyleConfig config;
-    HKEY mod=nullptr;
-    if(RegOpenKeyExW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Windhawk\\Engine\\Mods\\windows-11-start-menu-styler",0,KEY_READ,&mod)!=ERROR_SUCCESS) return config;
-    struct Close {HKEY key; ~Close(){if(key)RegCloseKey(key);}} closeMod{mod};
-    DWORD disabled=0,size=sizeof(disabled);
-    if(RegQueryValueExW(mod,L"Disabled",nullptr,nullptr,reinterpret_cast<BYTE*>(&disabled),&size)==ERROR_SUCCESS && disabled) return config;
-    HKEY key=nullptr; if(RegOpenKeyExW(mod,L"Settings",0,KEY_READ,&key)!=ERROR_SUCCESS) return config;
-    Close close{key};
-    auto theme=SearchStylerSetting(key,L"theme");
-    for(auto const& rule:kSearchThemeRules) if(theme==rule.theme) config.Add(rule.role,rule.style);
-    for(int i=0;i<256;++i) {
-        auto value=SearchStylerSetting(key,L"styleConstants["+std::to_wstring(i)+L"]");
-        if(value.empty()) break; config.Add(-1,value);
-    }
-    for(int i=0;i<256;++i) {
-        const auto prefix=L"controlStyles["+std::to_wstring(i)+L"]";
-        auto target=SearchStylerSetting(key,prefix+L".target"); if(target.empty()) break;
-        const int role=SearchStyleRole(SearchTrim(target)); if(role<0) continue;
-        for(int j=0;j<128;++j) {
-            auto value=SearchStylerSetting(key,prefix+L".styles["+std::to_wstring(j)+L"]");
-            if(value.empty()) break; config.Add(role,value);
-        }
-    }
-    return config;
-}
-
-SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush) {
-    SearchBrushData data; if(!brush) return data; data.opacity=brush.Opacity();
-    if(auto solid=brush.try_as<wuxm::SolidColorBrush>()) {
-        data.kind=1; data.color=SearchPackColor(solid.Color());
-    } else if(auto acrylic=brush.try_as<wuxm::AcrylicBrush>()) {
-        data.kind=2; data.color=SearchPackColor(acrylic.TintColor());
-        data.fallback=SearchPackColor(acrylic.FallbackColor()); data.tint=acrylic.TintOpacity();
-        if(auto luminosity=acrylic.TintLuminosityOpacity()) data.luminosity=luminosity.Value();
-    } else if(auto gradient=brush.try_as<wuxm::LinearGradientBrush>()) {
-        data.kind=3; data.count=std::min<uint32_t>(8,gradient.GradientStops().Size());
-        auto start=gradient.StartPoint(),end=gradient.EndPoint();
-        data.points[0]=start.X; data.points[1]=start.Y; data.points[2]=end.X; data.points[3]=end.Y;
-        for(uint32_t i=0;i<data.count;++i) {
-            auto stop=gradient.GradientStops().GetAt(i); data.colors[i]=SearchPackColor(stop.Color()); data.offsets[i]=stop.Offset();
-        }
-    }
-    return data;
-}
-
-// Attach a short-lived brush resource so ThemeResource resolves in Start's theme.
-wuxm::Brush SearchReadBrush(std::wstring value,wux::FrameworkElement const& context) {
-    value=SearchTrim(value);
-    if(value.ends_with(L">\"")) value.pop_back(); // tolerate trailing quote in legacy theme
-    if(value.empty()) return nullptr;
-    if(value[0]!=L'<') value=L"<SolidColorBrush Color=\""+value+L"\"/>";
-    if(!value.starts_with(L"<SolidColorBrush ") && !value.starts_with(L"<AcrylicBrush ") &&
-       !value.starts_with(L"<LinearGradientBrush ")) return nullptr;
-    value.insert(value.find(L' '),L" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"");
-    auto brush=wux::Markup::XamlReader::Load(value).try_as<wuxm::Brush>();
-    if(brush && context) {
-        auto key=winrt::box_value(L"__StartEverything_ThemeProbe");
-        auto resources=context.Resources();
-        auto previous=resources.HasKey(key) ? resources.Lookup(key) : nullptr;
-        resources.Insert(key,brush);
-        if(previous) resources.Insert(key,previous); else resources.Remove(key);
-    }
-    return brush;
-}
-SearchBrushData SearchConfiguredBrush(std::wstring const& value,wux::FrameworkElement const& context) noexcept {
-    try {
-        if(!value.starts_with(L"<WindhawkBlur ")) return CaptureSearchBrush(SearchReadBrush(value,context));
-        SearchBrushData data;
-        auto color=SearchReadBrush(SearchXmlAttribute(value,L"TintColor"),context).try_as<wuxm::SolidColorBrush>();
-        if(!color) return data;
-        data.kind=4; data.color=SearchPackColor(color.Color()); data.fallback=data.color|0xFF000000;
-        data.blur=3; data.luminosity=0;
-        auto number=[&](PCWSTR name,double& out,double lo,double hi) {
-            auto text=SearchXmlAttribute(value,name); if(text.empty()) return;
-            size_t read=0; double parsed=std::stod(text,&read);
-            if(read!=text.size() || !std::isfinite(parsed)) throw std::invalid_argument("glass parameter");
-            out=std::clamp(parsed,lo,hi);
-        };
-        double alpha=(data.color>>24)/255.0;
-        number(L"TintOpacity",alpha,0,1); data.color=(data.color&0xFFFFFF)|(static_cast<uint32_t>(std::lround(alpha*255))<<24);
-        number(L"BlurAmount",data.blur,0,100); number(L"TintLuminosityOpacity",data.luminosity,0,1);
-        number(L"TintSaturation",data.saturation,0,10); number(L"Opacity",data.opacity,0,1);
-        auto fallback=SearchXmlAttribute(value,L"FallbackColor");
-        if(!fallback.empty()) if(auto brush=SearchReadBrush(fallback,context).try_as<wuxm::SolidColorBrush>()) data.fallback=SearchPackColor(brush.Color());
-        return data;
-    } catch(...) { return {}; }
-}
-bool SearchParseFour(std::wstring const& text,double (&values)[4]) {
-    if(text.empty()) return false;
-    std::vector<double> parts; const wchar_t* p=text.c_str();
-    while(*p && parts.size()<4) {
-        wchar_t* end=nullptr; double value=wcstod(p,&end);
-        if(end==p || !std::isfinite(value) || value<0 || value>200) return false;
-        parts.push_back(value); p=end; while(iswspace(*p))++p;
-        if(*p!=L',') break; ++p;
-    }
-    if(*p || (parts.size()!=1 && parts.size()!=4)) return false;
-    for(size_t i=0;i<4;++i) values[i]=parts[parts.size()==1 ? 0 : i];
     return true;
 }
-SearchSurfaceData SearchConfiguredSurface(SearchStyleConfig const& config,int role,wux::FrameworkElement const& context) {
-    SearchSurfaceData data;
-    auto foreground=SearchConfiguredBrush(config.Value(role,L"Foreground"),context);
-    if(foreground.kind==1 && (foreground.color>>24)) { data.foreground=foreground.color; data.flags|=64; }
-    data.background=SearchConfiguredBrush(config.Value(role,L"Background"),context);
-    data.outline=SearchConfiguredBrush(config.Value(role,L"BorderBrush"),context);
-    if(data.background.kind) data.flags|=1;
-    if(data.outline.kind) data.flags|=2;
-    if(SearchParseFour(config.Value(role,L"CornerRadius"),data.corners)) data.flags|=4;
-    if(SearchParseFour(config.Value(role,L"BorderThickness"),data.thickness)) data.flags|=8;
-    if(SearchParseFour(config.Value(role,L"Padding"),data.padding)) data.flags|=16;
-    if(SearchParseFour(config.Value(role,L"Margin"),data.margin)) data.flags|=32;
+
+SearchBrushData CaptureSearchBrush(wuxm::Brush const& brush, wux::FrameworkElement const& owner = nullptr) {
+    SearchBrushData data;
+    if (!brush)
+        return data;
+    data.opacity = brush.Opacity();
+    if (auto solid = brush.try_as<wuxm::SolidColorBrush>()) {
+        data.kind = 1;
+        data.color = SearchPackColor(solid.Color());
+    } else if (auto acrylic = brush.try_as<wuxm::AcrylicBrush>()) {
+        data.kind = 2;
+        data.color = SearchPackColor(acrylic.TintColor());
+        data.fallback = SearchPackColor(acrylic.FallbackColor());
+        data.tint = acrylic.TintOpacity();
+        if (auto luminosity = acrylic.TintLuminosityOpacity()) {
+            data.luminosity = luminosity.Value();
+        }
+    } else if (auto gradient = brush.try_as<wuxm::LinearGradientBrush>()) {
+        data.kind = 3;
+        data.count = std::min<uint32_t>(8, gradient.GradientStops().Size());
+        auto start = gradient.StartPoint(), end = gradient.EndPoint();
+        data.points[0] = start.X;
+        data.points[1] = start.Y;
+        data.points[2] = end.X;
+        data.points[3] = end.Y;
+        for (uint32_t i = 0; i < data.count; ++i) {
+            auto stop = gradient.GradientStops().GetAt(i);
+            data.colors[i] = SearchPackColor(stop.Color());
+            data.offsets[i] = stop.Offset();
+        }
+    } else if (auto comp = brush.try_as<wuxm::XamlCompositionBrushBase>()) {
+        data.kind = 4;
+        data.blur = 18;
+        data.luminosity = 0.0;
+        data.saturation = 1.0;
+        uint32_t fallback = SearchPackColor(comp.FallbackColor());
+        uint32_t tint = fallback;
+        bool extractedExact = false;
+
+        // XamlCompositionBrushBase is a composable WinRT class: winrt::get_abi(comp)
+        // returns m_inner (the aggregated Windows XAML object), whereas querying
+        // IXamlCompositionBrushBaseOverrides returns the vtable at offset 0 of the
+        // derived C++ class (Start Menu Styler's XamlBlurBrush).
+        // Note: IVisual::get_Compositor() allocates a new WinRT wrapper on each call,
+        // so raw pointer comparison against visual.Compositor() cannot be used.
+        // Instead, compute the exact C++/WinRT member offset from
+        // XamlCompositionBrushBaseT<D> and validate the member layout.
+        try {
+            struct StylerBlurBrushLayout {
+                void* compositor;
+                float blurAmount;
+                winrt::Windows::UI::Color tint;
+                std::optional<uint8_t> tintOpacity;
+                void* tintThemeResourceKey;
+                std::optional<float> tintLuminosityOpacity;
+                std::optional<float> tintSaturation;
+                std::optional<float> noiseOpacity;
+                std::optional<float> noiseDensity;
+                std::optional<winrt::Windows::UI::Color> fallbackColor;
+                void* fallbackThemeResourceKey;
+                void* proxyBrush;
+                void* fallbackProxyBrush;
+            };
+            struct StylerBlurBrushProbe : wuxm::XamlCompositionBrushBaseT<StylerBlurBrushProbe> {
+                StylerBlurBrushLayout layout;
+            };
+            alignas(StylerBlurBrushProbe) uint8_t probeStorage[sizeof(StylerBlurBrushProbe)]{};
+            auto* probeObj = reinterpret_cast<const StylerBlurBrushProbe*>(probeStorage);
+            const size_t exactOffset = static_cast<size_t>(reinterpret_cast<const uint8_t*>(&probeObj->layout) -
+                                                           reinterpret_cast<const uint8_t*>(probeObj));
+
+            auto isReadablePtr = [](const void* ptr, size_t bytes = sizeof(void*)) {
+                if (!ptr)
+                    return false;
+                MEMORY_BASIC_INFORMATION info{};
+                if (!VirtualQuery(ptr, &info, sizeof(info)) || info.State != MEM_COMMIT)
+                    return false;
+                if (!(info.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
+                                      PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY)))
+                    return false;
+                const uintptr_t end = reinterpret_cast<uintptr_t>(info.BaseAddress) + info.RegionSize;
+                return reinterpret_cast<uintptr_t>(ptr) + bytes <= end;
+            };
+
+            auto overrides = comp.try_as<wuxm::IXamlCompositionBrushBaseOverrides>();
+            auto* rawObj = reinterpret_cast<const uint8_t*>(winrt::get_abi(overrides));
+            if (rawObj) {
+                auto tryExtractAt = [&](size_t offset) -> bool {
+                    if (!isReadablePtr(rawObj + offset, sizeof(StylerBlurBrushLayout)))
+                        return false;
+                    auto const* layout = reinterpret_cast<const StylerBlurBrushLayout*>(rawObj + offset);
+                    if (!isReadablePtr(layout->compositor, sizeof(void*)) || !std::isfinite(layout->blurAmount) ||
+                        layout->blurAmount < 0.0f || layout->blurAmount > 200.0f) {
+                        return false;
+                    }
+                    // Verify std::optional engaged flags are valid booleans (0 or 1)
+                    const uint8_t optTintOp = reinterpret_cast<const uint8_t*>(&layout->tintOpacity)[1];
+                    const uint8_t optLum = reinterpret_cast<const uint8_t*>(&layout->tintLuminosityOpacity)[4];
+                    const uint8_t optSat = reinterpret_cast<const uint8_t*>(&layout->tintSaturation)[4];
+                    const uint8_t optFallback = reinterpret_cast<const uint8_t*>(&layout->fallbackColor)[4];
+                    if (optTintOp > 1 || optLum > 1 || optSat > 1 || optFallback > 1)
+                        return false;
+
+                    data.blur = std::clamp<double>(layout->blurAmount, 0.0, 100.0);
+                    winrt::Windows::UI::Color tintCol = layout->tint;
+                    if (layout->proxyBrush && isReadablePtr(layout->proxyBrush)) {
+                        wuxm::SolidColorBrush proxy{nullptr};
+                        winrt::copy_from_abi(proxy, layout->proxyBrush);
+                        if (proxy)
+                            tintCol = proxy.Color();
+                    }
+                    if (layout->fallbackProxyBrush && isReadablePtr(layout->fallbackProxyBrush)) {
+                        wuxm::SolidColorBrush fbProxy{nullptr};
+                        winrt::copy_from_abi(fbProxy, layout->fallbackProxyBrush);
+                        if (fbProxy)
+                            fallback = SearchPackColor(fbProxy.Color());
+                    } else if (layout->fallbackColor.has_value()) {
+                        fallback = SearchPackColor(*layout->fallbackColor);
+                    }
+                    if (layout->tintOpacity.has_value()) {
+                        tintCol.A = *layout->tintOpacity;
+                    }
+                    tint = SearchPackColor(tintCol);
+                    if (layout->tintLuminosityOpacity.has_value() && std::isfinite(*layout->tintLuminosityOpacity) &&
+                        *layout->tintLuminosityOpacity >= 0.0f && *layout->tintLuminosityOpacity <= 1.0f) {
+                        data.luminosity = *layout->tintLuminosityOpacity;
+                    }
+                    if (layout->tintSaturation.has_value() && std::isfinite(*layout->tintSaturation) &&
+                        *layout->tintSaturation >= 0.0f && *layout->tintSaturation <= 10.0f) {
+                        data.saturation = *layout->tintSaturation;
+                    }
+                    return true;
+                };
+
+                if (tryExtractAt(exactOffset)) {
+                    extractedExact = true;
+                } else {
+                    for (size_t offset = 16; offset <= 80; offset += 8) {
+                        if (offset != exactOffset && tryExtractAt(offset)) {
+                            extractedExact = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (...) {
+        }
+
+        if (!extractedExact && owner) {
+            bool foundTintProxy = false;
+            try {
+                for (auto const& pair : owner.Resources()) {
+                    auto key = winrt::unbox_value_or<winrt::hstring>(pair.Key(), L"");
+                    std::wstring_view keyView{key};
+                    if (keyView.starts_with(L"__WhBlurProxy_")) {
+                        if (auto proxy = pair.Value().try_as<wuxm::SolidColorBrush>()) {
+                            tint = SearchPackColor(proxy.Color());
+                            foundTintProxy = true;
+                        }
+                    } else if (keyView.starts_with(L"__WhBlurFallbackProxy_")) {
+                        if (auto proxy = pair.Value().try_as<wuxm::SolidColorBrush>()) {
+                            fallback = SearchPackColor(proxy.Color());
+                        }
+                    }
+                }
+            } catch (...) {
+            }
+            if (!foundTintProxy && ((tint >> 24) == 0 || (tint >> 24) == 0xFF)) {
+                tint = (tint & 0x00FFFFFFu) | 0x40000000u;
+            }
+        }
+        data.color = tint;
+        data.fallback = fallback | 0xFF000000u;
+    }
     return data;
+}
+
+SearchSurfaceData CaptureLiveSurface(wux::FrameworkElement const& element, bool isMenuItem = false) {
+    SearchSurfaceData data;
+    if (!element)
+        return data;
+    auto clampFour = [](double (&dst)[4], double a, double b, double c, double d) {
+        const double src[4]{a, b, c, d};
+        for (int i = 0; i < 4; ++i) {
+            dst[i] = std::isfinite(src[i]) ? std::clamp(src[i], 0.0, 200.0) : 0.0;
+        }
+    };
+    auto hasPositive4 = [](const double (&arr)[4]) {
+        return arr[0] > 0 || arr[1] > 0 || arr[2] > 0 || arr[3] > 0;
+    };
+    if (auto border = element.try_as<wuxc::Border>()) {
+        data.background = CaptureSearchBrush(border.Background(), border);
+        data.outline = CaptureSearchBrush(border.BorderBrush(), border);
+        auto c = border.CornerRadius();
+        clampFour(data.corners, c.TopLeft, c.TopRight, c.BottomRight, c.BottomLeft);
+        if (hasPositive4(data.corners))
+            data.flags |= 4;
+        auto t = border.BorderThickness();
+        clampFour(data.thickness, t.Left, t.Top, t.Right, t.Bottom);
+        if (hasPositive4(data.thickness))
+            data.flags |= 8;
+        auto p = border.Padding();
+        clampFour(data.padding, p.Left, p.Top, p.Right, p.Bottom);
+        if (!isMenuItem && hasPositive4(data.padding))
+            data.flags |= 16;
+    } else if (auto control = element.try_as<wuxc::Control>()) {
+        data.background = CaptureSearchBrush(control.Background(), control);
+        data.outline = CaptureSearchBrush(control.BorderBrush(), control);
+        if (auto fg = control.Foreground().try_as<wuxm::SolidColorBrush>()) {
+            const uint32_t c = SearchPackColor(fg.Color());
+            if (c >> 24) {
+                data.foreground = c;
+                data.flags |= 64;
+            }
+        }
+        auto c = control.CornerRadius();
+        clampFour(data.corners, c.TopLeft, c.TopRight, c.BottomRight, c.BottomLeft);
+        if (hasPositive4(data.corners))
+            data.flags |= 4;
+        auto t = control.BorderThickness();
+        clampFour(data.thickness, t.Left, t.Top, t.Right, t.Bottom);
+        if (hasPositive4(data.thickness))
+            data.flags |= 8;
+        auto p = control.Padding();
+        clampFour(data.padding, p.Left, p.Top, p.Right, p.Bottom);
+        if (!isMenuItem && hasPositive4(data.padding))
+            data.flags |= 16;
+    } else if (auto grid = element.try_as<wuxc::Grid>()) {
+        data.background = CaptureSearchBrush(grid.Background(), grid);
+        data.outline = CaptureSearchBrush(grid.BorderBrush(), grid);
+        auto c = grid.CornerRadius();
+        clampFour(data.corners, c.TopLeft, c.TopRight, c.BottomRight, c.BottomLeft);
+        if (hasPositive4(data.corners))
+            data.flags |= 4;
+        auto t = grid.BorderThickness();
+        clampFour(data.thickness, t.Left, t.Top, t.Right, t.Bottom);
+        if (hasPositive4(data.thickness))
+            data.flags |= 8;
+        auto p = grid.Padding();
+        clampFour(data.padding, p.Left, p.Top, p.Right, p.Bottom);
+        if (!isMenuItem && hasPositive4(data.padding))
+            data.flags |= 16;
+    } else if (auto stack = element.try_as<wuxc::StackPanel>()) {
+        data.background = CaptureSearchBrush(stack.Background(), stack);
+        data.outline = CaptureSearchBrush(stack.BorderBrush(), stack);
+        auto c = stack.CornerRadius();
+        clampFour(data.corners, c.TopLeft, c.TopRight, c.BottomRight, c.BottomLeft);
+        if (hasPositive4(data.corners))
+            data.flags |= 4;
+        auto t = stack.BorderThickness();
+        clampFour(data.thickness, t.Left, t.Top, t.Right, t.Bottom);
+        if (hasPositive4(data.thickness))
+            data.flags |= 8;
+        auto p = stack.Padding();
+        clampFour(data.padding, p.Left, p.Top, p.Right, p.Bottom);
+        if (!isMenuItem && hasPositive4(data.padding))
+            data.flags |= 16;
+    } else if (auto rel = element.try_as<wuxc::RelativePanel>()) {
+        data.background = CaptureSearchBrush(rel.Background(), rel);
+        data.outline = CaptureSearchBrush(rel.BorderBrush(), rel);
+        auto c = rel.CornerRadius();
+        clampFour(data.corners, c.TopLeft, c.TopRight, c.BottomRight, c.BottomLeft);
+        if (hasPositive4(data.corners))
+            data.flags |= 4;
+        auto t = rel.BorderThickness();
+        clampFour(data.thickness, t.Left, t.Top, t.Right, t.Bottom);
+        if (hasPositive4(data.thickness))
+            data.flags |= 8;
+        auto p = rel.Padding();
+        clampFour(data.padding, p.Left, p.Top, p.Right, p.Bottom);
+        if (!isMenuItem && hasPositive4(data.padding))
+            data.flags |= 16;
+    } else if (auto presenter = element.try_as<wuxc::ContentPresenter>()) {
+        data.background = CaptureSearchBrush(presenter.Background(), presenter);
+        data.outline = CaptureSearchBrush(presenter.BorderBrush(), presenter);
+        if (auto fg = presenter.Foreground().try_as<wuxm::SolidColorBrush>()) {
+            const uint32_t c = SearchPackColor(fg.Color());
+            if (c >> 24) {
+                data.foreground = c;
+                data.flags |= 64;
+            }
+        }
+        auto c = presenter.CornerRadius();
+        clampFour(data.corners, c.TopLeft, c.TopRight, c.BottomRight, c.BottomLeft);
+        if (hasPositive4(data.corners))
+            data.flags |= 4;
+        auto t = presenter.BorderThickness();
+        clampFour(data.thickness, t.Left, t.Top, t.Right, t.Bottom);
+        if (hasPositive4(data.thickness))
+            data.flags |= 8;
+        auto p = presenter.Padding();
+        clampFour(data.padding, p.Left, p.Top, p.Right, p.Bottom);
+        if (!isMenuItem && hasPositive4(data.padding))
+            data.flags |= 16;
+    } else if (auto panel = element.try_as<wuxc::Panel>()) {
+        data.background = CaptureSearchBrush(panel.Background(), panel);
+    }
+    if (SearchBrushIsVisible(data.background) &&
+        (!isMenuItem || data.background.kind != 1 || (data.background.color >> 24) != 0)) {
+        data.flags |= 1;
+    } else {
+        data.background = {};
+    }
+    if (SearchBrushIsVisible(data.outline) &&
+        (!isMenuItem || data.outline.kind != 1 || (data.outline.color >> 24) != 0)) {
+        data.flags |= 2;
+    } else {
+        data.outline = {};
+        if (isMenuItem)
+            data.flags &= ~8u;
+    }
+    auto m = element.Margin();
+    if (m.Left > 0 || m.Top > 0 || m.Right > 0 || m.Bottom > 0) {
+        clampFour(data.margin, m.Left, m.Top, m.Right, m.Bottom);
+        data.flags |= 32;
+    }
+    return data;
+}
+
+void MergeSearchSurface(SearchSurfaceData& dst, SearchSurfaceData const& src) {
+    if (src.flags & 1) {
+        dst.background = src.background;
+        dst.flags |= 1;
+    }
+    if (src.flags & 2) {
+        dst.outline = src.outline;
+        dst.flags |= 2;
+    }
+    if (src.flags & 4) {
+        std::copy(std::begin(src.corners), std::end(src.corners), dst.corners);
+        dst.flags |= 4;
+    }
+    if (src.flags & 8) {
+        std::copy(std::begin(src.thickness), std::end(src.thickness), dst.thickness);
+        dst.flags |= 8;
+    }
+    if (src.flags & 16) {
+        std::copy(std::begin(src.padding), std::end(src.padding), dst.padding);
+        dst.flags |= 16;
+    }
+    if (src.flags & 32) {
+        std::copy(std::begin(src.margin), std::end(src.margin), dst.margin);
+        dst.flags |= 32;
+    }
+    if (src.flags & 64) {
+        dst.foreground = src.foreground;
+        dst.flags |= 64;
+    }
 }
 
 void CaptureStartAppearance(HWND target) try {
-    DWORD pid=0,shellPid=0;
-    GetWindowThreadProcessId(target,&pid);
-    GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd",nullptr),&shellPid);
+    DWORD pid = 0, shellPid = 0;
+    GetWindowThreadProcessId(target, &pid);
+    GetWindowThreadProcessId(FindWindowW(L"Shell_TrayWnd", nullptr), &shellPid);
     wchar_t cls[128]{};
-    GetClassNameW(target,cls,ARRAYSIZE(cls));
-    if (!pid || pid != shellPid || wcscmp(cls,kSearchWindowClass) != 0) return;
+    GetClassNameW(target, cls, ARRAYSIZE(cls));
+    if (!pid || pid != shellPid || wcscmp(cls, kSearchWindowClass) != 0)
+        return;
     auto window = wux::Window::Current();
-    if (!window || !window.Content()) return;
+    if (!window || !window.Content())
+        return;
     auto content = window.Content();
-    auto found = FindDescendantByName(content,L"AcrylicBorder",16);
+
+    // Scope searches to MainMenu / RootContent so companion widgets (LeftCompanion,
+    // RightCompanion, CompanionRoot) are never mistaken for the main Start surface.
+    wux::DependencyObject mainRoot = FindDescendantByName(content, L"MainMenu", 12);
+    if (!mainRoot)
+        mainRoot = FindDescendantByName(content, L"RootContent", 12);
+    if (!mainRoot)
+        mainRoot = content;
+
+    auto found = FindDescendantByName(mainRoot, L"AcrylicBorder", 16);
+    if (!found && mainRoot != content)
+        found = FindDescendantByName(content, L"AcrylicBorder", 16);
     auto border = found ? found.try_as<wuxc::Border>() : nullptr;
-    if (!border) return;
+    if (!border)
+        return;
     if (border.ActualWidth() < 400 || border.ActualHeight() < 350) {
-        if (auto element = content.try_as<wux::FrameworkElement>()) element.UpdateLayout();
+        if (auto element = content.try_as<wux::FrameworkElement>())
+            element.UpdateLayout();
     }
+
+    auto hasPositive4 = [](const double (&arr)[4]) {
+        return arr[0] > 0 || arr[1] > 0 || arr[2] > 0 || arr[3] > 0;
+    };
+
     SearchAppearanceData appearance;
     appearance.dark = border.ActualTheme() == wux::ElementTheme::Dark;
-    appearance.background = CaptureSearchBrush(border.Background());
-    appearance.outline = CaptureSearchBrush(border.BorderBrush());
-    // Read rendered labels so custom TextBlock Foreground rules are included.
-    auto textColor=[](wux::DependencyObject const& root,std::initializer_list<PCWSTR> names) {
-        for(auto name:names) if(auto node=FindDescendantByName(root,name,20)) {
-            if(auto text=node.try_as<wuxc::TextBlock>()) {
-                if(auto brush=text.Foreground().try_as<wuxm::SolidColorBrush>())
-                    return SearchPackColor(brush.Color());
+
+    // 1. Universal Outer & Inner Window Surface Introspection:
+    // Inspect AcrylicBorder, its parent Border (Grid#Root > Border), Classic Start's
+    // Border#AppBorder, and inner content frames (Grid#MainMenu / Grid#RootContent).
+    SearchSurfaceData outerSurface = CaptureLiveSurface(border);
+    SearchSurfaceData innerSurface{};
+
+    auto considerWindowLayer = [&](wux::FrameworkElement const& elem, bool preferInner) {
+        if (!elem || elem == border || elem.Visibility() != wux::Visibility::Visible || elem.Opacity() <= 0.01)
+            return;
+        if (preferInner &&
+            (elem.ActualWidth() < border.ActualWidth() * 0.85 || elem.ActualHeight() < border.ActualHeight() * 0.85))
+            return;
+        auto surf = CaptureLiveSurface(elem);
+        if (!(surf.flags & 1) && !(surf.flags & 2))
+            return;
+        if (!preferInner) {
+            if (!(outerSurface.flags & 1) && (surf.flags & 1)) {
+                outerSurface.background = surf.background;
+                outerSurface.flags |= 1;
+            } else if ((surf.flags & 1) && !(innerSurface.flags & 1)) {
+                innerSurface.background = surf.background;
+                innerSurface.flags |= 1;
+            }
+            if (!(outerSurface.flags & 2) && (surf.flags & 2)) {
+                outerSurface.outline = surf.outline;
+                outerSurface.flags |= 2;
+                if (hasPositive4(surf.thickness))
+                    std::copy(std::begin(surf.thickness), std::end(surf.thickness), outerSurface.thickness);
+            } else if ((surf.flags & 2) && !(innerSurface.flags & 2)) {
+                innerSurface.outline = surf.outline;
+                innerSurface.flags |= 2;
+                if (hasPositive4(surf.thickness))
+                    std::copy(std::begin(surf.thickness), std::end(surf.thickness), innerSurface.thickness);
+            }
+            if (!hasPositive4(outerSurface.corners) && hasPositive4(surf.corners))
+                std::copy(std::begin(surf.corners), std::end(surf.corners), outerSurface.corners);
+        } else {
+            if ((surf.flags & 1) && !(innerSurface.flags & 1)) {
+                if (!(outerSurface.flags & 1)) {
+                    outerSurface.background = surf.background;
+                    outerSurface.flags |= 1;
+                } else {
+                    innerSurface.background = surf.background;
+                    innerSurface.flags |= 1;
+                }
+            }
+            if ((surf.flags & 2) && !(innerSurface.flags & 2)) {
+                if (!(outerSurface.flags & 2)) {
+                    outerSurface.outline = surf.outline;
+                    outerSurface.flags |= 2;
+                    if (hasPositive4(surf.thickness))
+                        std::copy(std::begin(surf.thickness), std::end(surf.thickness), outerSurface.thickness);
+                } else {
+                    innerSurface.outline = surf.outline;
+                    innerSurface.flags |= 2;
+                    if (hasPositive4(surf.thickness))
+                        std::copy(std::begin(surf.thickness), std::end(surf.thickness), innerSurface.thickness);
+                }
+            }
+            if (!hasPositive4(outerSurface.corners) && hasPositive4(surf.corners))
+                std::copy(std::begin(surf.corners), std::end(surf.corners), outerSurface.corners);
+        }
+    };
+
+    if (auto parentObj = wuxm::VisualTreeHelper::GetParent(border)) {
+        if (auto parentBorder = parentObj.try_as<wuxc::Border>())
+            considerWindowLayer(parentBorder, false);
+    }
+    if (auto appBorderNode = FindDescendantByName(content, L"AppBorder", 12)) {
+        if (auto appBorder = appBorderNode.try_as<wux::FrameworkElement>())
+            considerWindowLayer(appBorder, false);
+    }
+    for (PCWSTR innerName : {L"MainMenu", L"RootContent", L"InnerContent"}) {
+        if (auto node = FindDescendantByName(content, innerName, 14)) {
+            if (auto fe = node.try_as<wux::FrameworkElement>()) {
+                considerWindowLayer(fe, true);
+                for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(fe); i < n; ++i) {
+                    if (auto childFe = wuxm::VisualTreeHelper::GetChild(fe, i).try_as<wux::FrameworkElement>()) {
+                        auto name = childFe.Name();
+                        if (name == L"AcrylicBorder" || name == L"NavigationPane" || name == L"SearchBoxHolder" ||
+                            name == L"__WhMenuProbeCanvas")
+                            continue;
+                        if (childFe.try_as<wuxc::Border>() || childFe.try_as<wuxc::Grid>()) {
+                            considerWindowLayer(childFe, true);
+                        }
+                    }
+                }
             }
         }
+    }
+
+    // When a theme (such as LiquidGlass2) puts WindhawkBlur on both AcrylicBorder
+    // and Grid#Root > Border, composite their tints into a single host-backdrop
+    // glass brush so g_windowInnerBorder does not blur the backdrop a second time.
+    if (outerSurface.background.kind == 4 && innerSurface.background.kind == 4) {
+        auto c1 = SearchUnpackColor(outerSurface.background.color);
+        auto c2 = SearchUnpackColor(innerSurface.background.color);
+        const double a1 = (c1.A / 255.0) * std::clamp(outerSurface.background.opacity, 0.0, 1.0);
+        const double a2 = (c2.A / 255.0) * std::clamp(innerSurface.background.opacity, 0.0, 1.0);
+        const double outA = a1 + a2 * (1.0 - a1);
+        if (outA > 0.001) {
+            winrt::Windows::UI::Color merged{};
+            merged.A = static_cast<uint8_t>(std::clamp( std::round(outA * 255.0), 0.0, 255.0));
+            merged.R = static_cast<uint8_t>(std::clamp(std::round((c1.R * a1 + c2.R * a2 * (1.0 - a1)) / outA), 0.0, 255.0));
+            merged.G = static_cast<uint8_t>(std::clamp(std::round((c1.G * a1 + c2.G * a2 * (1.0 - a1)) / outA), 0.0, 255.0));
+            merged.B = static_cast<uint8_t>(std::clamp(std::round((c1.B * a1 + c2.B * a2 * (1.0 - a1)) / outA), 0.0, 255.0));
+            outerSurface.background.color = SearchPackColor(merged);
+            outerSurface.background.opacity = 1.0;
+        }
+        outerSurface.background.blur = std::max(outerSurface.background.blur, innerSurface.background.blur);
+        if (innerSurface.background.luminosity > outerSurface.background.luminosity)
+            outerSurface.background.luminosity = innerSurface.background.luminosity;
+        if (innerSurface.background.saturation != 1.0 && outerSurface.background.saturation == 1.0)
+            outerSurface.background.saturation = innerSurface.background.saturation;
+        innerSurface.background = {};
+        innerSurface.flags &= ~1u;
+    }
+
+    appearance.background = outerSurface.background;
+    appearance.outline = outerSurface.outline;
+    std::copy(std::begin(outerSurface.corners), std::end(outerSurface.corners), appearance.corners);
+    std::copy(std::begin(outerSurface.thickness), std::end(outerSurface.thickness), appearance.thickness);
+    appearance.innerBackground = innerSurface.background;
+    appearance.innerOutline = innerSurface.outline;
+    std::copy(std::begin(innerSurface.thickness), std::end(innerSurface.thickness), appearance.innerThickness);
+
+    // Read rendered labels so custom TextBlock Foreground rules are included.
+    auto textColor = [](wux::DependencyObject const& root, std::initializer_list<PCWSTR> names) {
+        for (auto name : names)
+            if (auto node = FindDescendantByName(root, name, 20)) {
+                if (auto text = node.try_as<wuxc::TextBlock>()) {
+                    if (auto brush = text.Foreground().try_as<wuxm::SolidColorBrush>())
+                        return SearchPackColor(brush.Color());
+                }
+            }
         return uint32_t{0};
     };
-    appearance.foreground=textColor(content,{L"DisplayName",L"AppDisplayName",L"PinnedListHeaderText",L"AllAppsHeading"});
-    auto corners = border.CornerRadius();
-    appearance.corners[0]=corners.TopLeft; appearance.corners[1]=corners.TopRight;
-    appearance.corners[2]=corners.BottomRight; appearance.corners[3]=corners.BottomLeft;
-    auto thickness = border.BorderThickness();
-    appearance.thickness[0]=thickness.Left; appearance.thickness[1]=thickness.Top;
-    appearance.thickness[2]=thickness.Right; appearance.thickness[3]=thickness.Bottom;
-    if (auto toggle = FindStockSearchToggle(content)) {
-        appearance.searchForeground=textColor(toggle,{L"PlaceholderText",L"Text",L"PlaceholderTextContentPresenter"});
-        if (auto searchFound = FindDescendantByName(toggle,L"BorderElement",8)) {
-            if (auto searchBorder = searchFound.try_as<wuxc::Border>()) {
-                appearance.searchBackground = CaptureSearchBrush(searchBorder.Background());
-                appearance.searchOutline = CaptureSearchBrush(searchBorder.BorderBrush());
-                auto c = searchBorder.CornerRadius(); auto t = searchBorder.BorderThickness();
-                appearance.searchCorners[0]=c.TopLeft; appearance.searchCorners[1]=c.TopRight;
-                appearance.searchCorners[2]=c.BottomRight; appearance.searchCorners[3]=c.BottomLeft;
-                appearance.searchThickness[0]=t.Left; appearance.searchThickness[1]=t.Top;
-                appearance.searchThickness[2]=t.Right; appearance.searchThickness[3]=t.Bottom;
+    appearance.foreground =
+        textColor(mainRoot, {L"DisplayName", L"AppDisplayName", L"PinnedListHeaderText", L"AllAppsHeading"});
+
+    // 2. Universal 3-Layer Search Box Introspection:
+    // Themes style SearchBoxToggleButton (Control), its template root Grid, and/or Border#BorderElement.
+    if (auto toggle = FindStockSearchToggle(mainRoot)) {
+        if (auto toggleCtrl = toggle.try_as<wuxc::Control>()) {
+            try {
+                wux::VisualStateManager::GoToState(toggleCtrl, L"Normal", false);
+            } catch (...) {
+            }
+        }
+        appearance.searchForeground =
+            textColor(toggle, {L"PlaceholderText", L"Text", L"PlaceholderTextContentPresenter", L"SearchGlyph"});
+
+        std::vector<SearchSurfaceData> searchLayers;
+        if (auto searchFound = FindDescendantByName(toggle, L"BorderElement", 8)) {
+            if (auto searchBorder = searchFound.try_as<wux::FrameworkElement>()) {
+                searchLayers.push_back(CaptureLiveSurface(searchBorder));
+                if (auto parentGrid = wuxm::VisualTreeHelper::GetParent(searchBorder).try_as<wux::FrameworkElement>()) {
+                    if (parentGrid != toggle)
+                        searchLayers.push_back(CaptureLiveSurface(parentGrid));
+                }
+            }
+        }
+        if (auto toggleFe = toggle.try_as<wux::FrameworkElement>()) {
+            searchLayers.push_back(CaptureLiveSurface(toggleFe));
+        }
+
+        bool havePrimaryBg = false, havePrimaryOutline = false, haveCorners = false;
+        for (auto const& layer : searchLayers) {
+            if ((layer.flags & 1) && !havePrimaryBg) {
+                appearance.searchBackground = layer.background;
+                havePrimaryBg = true;
+            } else if ((layer.flags & 1) && !(appearance.searchOverlay.flags & 1)) {
+                appearance.searchOverlay.background = layer.background;
+                appearance.searchOverlay.flags |= 1;
+            }
+            if ((layer.flags & 2) && hasPositive4(layer.thickness) && !havePrimaryOutline) {
+                appearance.searchOutline = layer.outline;
+                std::copy(std::begin(layer.thickness), std::end(layer.thickness), appearance.searchThickness);
+                havePrimaryOutline = true;
+            } else if ((layer.flags & 2) && hasPositive4(layer.thickness) && !(appearance.searchOverlay.flags & 2)) {
+                appearance.searchOverlay.outline = layer.outline;
+                std::copy(std::begin(layer.thickness), std::end(layer.thickness), appearance.searchOverlay.thickness);
+                appearance.searchOverlay.flags |= 2 | 8;
+            }
+            if (!haveCorners && hasPositive4(layer.corners)) {
+                std::copy(std::begin(layer.corners), std::end(layer.corners), appearance.searchCorners);
+                haveCorners = true;
             }
         }
     }
-    // Read settings once per request, but parse brush markup only when a value
-    // or resolved theme changes. No XAML objects survive the native capture.
-    auto config=ReadSearchStyleConfig();
-    std::wstring signature=appearance.dark ? L"dark" : L"light";
-    winrt::Windows::UI::ViewManagement::UISettings uiSettings;
-    signature+=std::to_wstring(SearchPackColor(uiSettings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent)));
-    static const PCWSTR properties[]{L"Background",L"BorderBrush",L"CornerRadius",L"BorderThickness",L"Padding",L"Margin",L"Foreground"};
-    for(int role=0;role<5;++role) for(auto property:properties) {
-        auto value=config.Value(role,property);
-        signature+=L"|"+std::to_wstring(value.size())+L":"+value;
+
+    // 3. Universal Section Header Introspection:
+    // Inspect Redesigned Start's Border#AllListHeading / TopLevelSuggestionsListHeader
+    // or Classic Start's section header containers.
+    for (PCWSTR headerName : {L"AllListHeading", L"TopLevelSuggestionsListHeader", L"PinnedListHeader", L"AllAppsHeading"}) {
+        if (auto node = FindDescendantByName(mainRoot, headerName, 20)) {
+            wux::DependencyObject cur = node;
+            for (int up = 0; up < 3 && cur; ++up, cur = wuxm::VisualTreeHelper::GetParent(cur)) {
+                if (auto fe = cur.try_as<wux::FrameworkElement>()) {
+                    if (fe.ActualHeight() > 80)
+                        break;
+                    auto surf = CaptureLiveSurface(fe);
+                    if ((surf.flags & 1) || (surf.flags & 2)) {
+                        MergeSearchSurface(appearance.header, surf);
+                        break;
+                    }
+                }
+            }
+            if ((appearance.header.flags & 1) || (appearance.header.flags & 2))
+                break;
+        }
     }
-    static thread_local std::wstring previousSignature;
-    static thread_local std::array<SearchSurfaceData,5> surfaces;
-    if(signature!=previousSignature) {
-        std::array<SearchSurfaceData,5> updated;
-        for(int role=0;role<5;++role) updated[role]=SearchConfiguredSurface(config,role,border);
-        surfaces=updated; previousSignature=std::move(signature);
+
+    // 4. Universal Bottom Status / Footer Bar Introspection:
+    // Inspect Border#NavPanePlaceholder, NavigationPane, and TaskbarSearchBackground.
+    for (PCWSTR footerName : {L"NavPanePlaceholder", L"NavigationPane", L"TaskbarSearchBackground", L"UserTileBorder"}) {
+        if (auto node = FindDescendantByName(mainRoot, footerName, 18)) {
+            wux::DependencyObject cur = node;
+            for (int up = 0; up < 3 && cur; ++up, cur = wuxm::VisualTreeHelper::GetParent(cur)) {
+                if (auto fe = cur.try_as<wux::FrameworkElement>()) {
+                    if (fe.ActualHeight() > 120)
+                        continue;
+                    auto surf = CaptureLiveSurface(fe);
+                    if ((surf.flags & 1) || (surf.flags & 2)) {
+                        MergeSearchSurface(appearance.footer, surf);
+                        break;
+                    }
+                }
+            }
+            if ((appearance.footer.flags & 1) || (appearance.footer.flags & 2))
+                break;
+        }
     }
-    // Some stock AcrylicBorder getters return the original acrylic even after
-    // Styler replaces the rendered brush. Explicit glass rules take precedence.
-    if(surfaces[0].background.kind==4) appearance.background=surfaces[0].background;
-    if(surfaces[1].background.kind==4) appearance.searchBackground=surfaces[1].background;
-    appearance.menu=surfaces[2]; appearance.menuBorder=surfaces[3]; appearance.menuItem=surfaces[4];
-    HWND start=CachedStartWindow(); POINT client{}; MONITORINFO monitor{sizeof(monitor)};
-    const double width=border.ActualWidth(),height=border.ActualHeight();
-    if (width >= 400 && height >= 350 && ClientToScreen(start,&client) &&
-        GetMonitorInfoW(MonitorFromWindow(start,MONITOR_DEFAULTTONEAREST),&monitor)) {
+
+    // 5. Universal Item Hover / Selection VisualState Probe:
+    // Find a representative item Control in Start and briefly transition it to
+    // "PointerOver" to read the exact hover/selection surface styled by any theme.
+    try {
+        wuxc::Control sampleItem{nullptr};
+        std::function<void(wux::DependencyObject const&, int)> findSampleItem =
+            [&](wux::DependencyObject const& node, int depth) {
+                if (!node || depth > 18 || sampleItem)
+                    return;
+                if (auto fe = node.try_as<wux::FrameworkElement>()) {
+                    if (fe.Name() == L"__WhMenuProbeCanvas")
+                        return;
+                }
+                if (auto ctrl = node.try_as<wuxc::Control>()) {
+                    auto clsName = winrt::get_class_name(ctrl);
+                    if (clsName == L"Windows.UI.Xaml.Controls.GridViewItem" ||
+                        clsName == L"Windows.UI.Xaml.Controls.ListViewItem" ||
+                        clsName.ends_with(L"TileGridViewItem") || clsName.ends_with(L"PinnedListTile") ||
+                        (ctrl.try_as<wuxc::Button>() && ctrl.Name() != L"SearchBoxToggleButton" &&
+                         ctrl.ActualWidth() >= 48 && ctrl.ActualHeight() >= 28 && ctrl.ActualHeight() <= 120)) {
+                        sampleItem = ctrl;
+                        return;
+                    }
+                }
+                for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(node); i < n && !sampleItem; ++i)
+                    findSampleItem(wuxm::VisualTreeHelper::GetChild(node, i), depth + 1);
+            };
+        for (PCWSTR listName : {L"StartMenuPinnedList", L"PinnedList", L"RecommendedList", L"AllAppsGrid", L"AllList"}) {
+            if (auto listNode = FindDescendantByName(mainRoot, listName, 16)) {
+                findSampleItem(listNode, 0);
+                if (sampleItem)
+                    break;
+            }
+        }
+        if (!sampleItem)
+            findSampleItem(mainRoot, 0);
+
+        if (sampleItem) {
+            auto captureItemSubtree = [&](wuxc::Control const& ctrl) {
+                SearchSurfaceData result = CaptureLiveSurface(ctrl, true);
+                std::function<void(wux::DependencyObject const&, int)> walk =
+                    [&](wux::DependencyObject const& n, int d) {
+                        if (!n || d > 5)
+                            return;
+                        if (auto fe = n.try_as<wux::FrameworkElement>()) {
+                            if (fe.try_as<wuxc::Border>() || fe.try_as<wuxc::Grid>() ||
+                                fe.try_as<wuxc::ContentPresenter>()) {
+                                auto sub = CaptureLiveSurface(fe, true);
+                                if ((sub.flags & 1) && !(result.flags & 1)) {
+                                    result.background = sub.background;
+                                    result.flags |= 1;
+                                }
+                                if ((sub.flags & 2) && hasPositive4(sub.thickness) && !(result.flags & 2)) {
+                                    result.outline = sub.outline;
+                                    std::copy(std::begin(sub.thickness), std::end(sub.thickness), result.thickness);
+                                    result.flags |= 2 | 8;
+                                }
+                                if (!hasPositive4(result.corners) && hasPositive4(sub.corners)) {
+                                    std::copy(std::begin(sub.corners), std::end(sub.corners), result.corners);
+                                    result.flags |= 4;
+                                }
+                            }
+                        }
+                        for (int i = 0, count = wuxm::VisualTreeHelper::GetChildrenCount(n); i < count; ++i)
+                            walk(wuxm::VisualTreeHelper::GetChild(n, i), d + 1);
+                    };
+                walk(ctrl, 0);
+                return result;
+            };
+            wux::VisualStateManager::GoToState(sampleItem, L"PointerOver", false);
+            appearance.itemHover = captureItemSubtree(sampleItem);
+            wux::VisualStateManager::GoToState(sampleItem, L"Normal", false);
+        }
+    } catch (...) {
+    }
+
+    // 6. Universal Context Menu (MenuFlyoutPresenter & MenuFlyoutItem) Introspection:
+    // First check any open popups; otherwise probe a hidden 0x0 MenuFlyoutPresenter
+    // inside the live visual tree so Start Menu Styler's OnVisualTreeChange callback
+    // styles MenuFlyoutPresenter, MenuFlyoutPresenter > Border, and MenuFlyoutItem.
+    // When the theme changes, recreate the probe so any broken TemplateBindings on
+    // MenuFlyoutPresenter > Border (e.g. CornerRadius=40 from LiquidGlass2) reset cleanly.
+    SearchSurfaceData liveMenu{}, liveMenuBorder{}, liveMenuItem{};
+    auto inspectPresenter = [&](wuxc::MenuFlyoutPresenter const& presenter) {
+        if (!presenter)
+            return;
+        liveMenu = CaptureLiveSurface(presenter);
+        liveMenuBorder = {};
+        wux::FrameworkElement borderElem{nullptr};
+        for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(presenter); i < n; ++i) {
+            if (auto b = wuxm::VisualTreeHelper::GetChild(presenter, i).try_as<wuxc::Border>()) {
+                borderElem = b;
+                break;
+            }
+        }
+        if (!borderElem) {
+            if (auto bgNode = FindDescendantByName(presenter, L"BackgroundElement", 4))
+                borderElem = bgNode.try_as<wux::FrameworkElement>();
+        }
+        if (borderElem)
+            liveMenuBorder = CaptureLiveSurface(borderElem);
+        std::function<wuxc::MenuFlyoutItem(wux::DependencyObject const&, int)> findItem =
+            [&](wux::DependencyObject const& node, int depth) -> wuxc::MenuFlyoutItem {
+            if (!node || depth > 8)
+                return nullptr;
+            if (auto item = node.try_as<wuxc::MenuFlyoutItem>())
+                return item;
+            for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(node); i < n; ++i) {
+                if (auto foundItem = findItem(wuxm::VisualTreeHelper::GetChild(node, i), depth + 1))
+                    return foundItem;
+            }
+            return nullptr;
+        };
+        if (auto item = findItem(presenter, 0)) {
+            liveMenuItem = CaptureLiveSurface(item, true);
+        }
+    };
+
+    bool foundOpenMenu = false;
+    try {
+        for (auto const& popup : wuxm::VisualTreeHelper::GetOpenPopups(window)) {
+            auto child = popup.Child();
+            if (!child)
+                continue;
+            auto presenter = child.try_as<wuxc::MenuFlyoutPresenter>();
+            if (!presenter) {
+                for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(child); i < n && !presenter; ++i)
+                    presenter = wuxm::VisualTreeHelper::GetChild(child, i).try_as<wuxc::MenuFlyoutPresenter>();
+            }
+            if (!presenter)
+                continue;
+            inspectPresenter(presenter);
+            foundOpenMenu = true;
+            break;
+        }
+    } catch (...) {
+    }
+
+    static SearchAppearanceData s_lastNonMenuAppearance{};
+    static uint32_t s_probeTickCounter = 0;
+    const bool nonMenuChanged = memcmp(&appearance, &s_lastNonMenuAppearance, sizeof(SearchAppearanceData)) != 0;
+    if (nonMenuChanged)
+        s_lastNonMenuAppearance = appearance;
+    const bool recreateProbe = nonMenuChanged || (++s_probeTickCounter % 4 == 0);
+
+    if (!foundOpenMenu) {
+        try {
+            if (auto hostPanel = mainRoot.try_as<wuxc::Panel>()) {
+                if (recreateProbe) {
+                    auto children = hostPanel.Children();
+                    for (int i = static_cast<int>(children.Size()) - 1; i >= 0; --i) {
+                        if (auto fe = children.GetAt(static_cast<uint32_t>(i)).try_as<wux::FrameworkElement>()) {
+                            if (fe.Name() == L"__WhMenuProbeCanvas")
+                                children.RemoveAt(static_cast<uint32_t>(i));
+                        }
+                    }
+                }
+                wuxc::MenuFlyoutPresenter probePresenter{nullptr};
+                if (!recreateProbe) {
+                    if (auto existingProbe = FindDescendantByName(hostPanel, L"__WhMenuProbePresenter", 4))
+                        probePresenter = existingProbe.try_as<wuxc::MenuFlyoutPresenter>();
+                }
+                if (!probePresenter) {
+                    wuxc::Canvas probeCanvas;
+                    probeCanvas.Name(L"__WhMenuProbeCanvas");
+                    probeCanvas.Width(0);
+                    probeCanvas.Height(0);
+                    probeCanvas.Opacity(0.0);
+                    probeCanvas.IsHitTestVisible(false);
+                    probePresenter = wuxc::MenuFlyoutPresenter{};
+                    probePresenter.Name(L"__WhMenuProbePresenter");
+                    probePresenter.Width(0);
+                    probePresenter.Height(0);
+                    probePresenter.MinWidth(0);
+                    probePresenter.MinHeight(0);
+                    probePresenter.MaxWidth(0);
+                    probePresenter.MaxHeight(0);
+                    probePresenter.Opacity(0.0);
+                    probePresenter.IsHitTestVisible(false);
+                    probePresenter.IsTabStop(false);
+                    wuxc::MenuFlyoutItem probeItem;
+                    probeItem.Text(L"Probe");
+                    probeItem.IsTabStop(false);
+                    probeItem.AllowFocusOnInteraction(false);
+                    probePresenter.Items().Append(probeItem);
+                    probeCanvas.Children().Append(probePresenter);
+                    hostPanel.Children().Append(probeCanvas);
+                    probePresenter.ApplyTemplate();
+                    probeItem.ApplyTemplate();
+                    probePresenter.UpdateLayout();
+                }
+                if (probePresenter) {
+                    inspectPresenter(probePresenter);
+                }
+            }
+        } catch (...) {
+        }
+    }
+
+    appearance.menu = liveMenu;
+    appearance.menuBorder = liveMenuBorder;
+    appearance.menuItem = liveMenuItem;
+
+    HWND start = CachedStartWindow();
+    POINT client{};
+    MONITORINFO monitor{sizeof(monitor)};
+    const double width = border.ActualWidth(), height = border.ActualHeight();
+    if (width >= 400 && height >= 350 && ClientToScreen(start, &client) &&
+        GetMonitorInfoW(MonitorFromWindow(start, MONITOR_DEFAULTTONEAREST), &monitor)) {
         // Arrange offsets describe the settled layout. TransformToVisual also
         // includes Start's opening/closing translation, which would erase the
         // bottom gap when search is opened while native Start is hidden.
         wf::Point origin{};
-        wux::DependencyObject node=border;
-        for(int depth=0;node && node!=content && depth<32;++depth) {
-            if(auto element=node.try_as<wux::UIElement>()) {
-                auto offset=element.ActualOffset(); origin.X+=offset.x; origin.Y+=offset.y;
+        wux::DependencyObject node = border;
+        for (int depth = 0; node && node != content && depth < 32; ++depth) {
+            if (auto element = node.try_as<wux::UIElement>()) {
+                auto offset = element.ActualOffset();
+                origin.X += offset.x;
+                origin.Y += offset.y;
             }
-            node=wuxm::VisualTreeHelper::GetParent(node);
+            node = wuxm::VisualTreeHelper::GetParent(node);
         }
-        const double scale=GetDpiForWindow(start)/96.0;
-        const double workWidth=(monitor.rcWork.right-monitor.rcWork.left)/scale;
-        if (node==content && width <= workWidth && height*scale <= monitor.rcWork.bottom-monitor.rcWork.top) {
-            appearance.width=width; appearance.height=height;
-            const auto edge = TaskbarEdgeForMonitor(MonitorFromWindow(start,MONITOR_DEFAULTTONEAREST));
+        const double scale = GetDpiForWindow(start) / 96.0;
+        const double workWidth = (monitor.rcWork.right - monitor.rcWork.left) / scale;
+        if (node == content && width <= workWidth && height * scale <= monitor.rcWork.bottom - monitor.rcWork.top) {
+            appearance.width = width;
+            appearance.height = height;
+            const auto edge = TaskbarEdgeForMonitor(MonitorFromWindow(start, MONITOR_DEFAULTTONEAREST));
             appearance.taskbarEdge = static_cast<uint32_t>(edge);
-            const double left = (client.x-monitor.rcWork.left)/scale+origin.X;
-            const double top = (client.y-monitor.rcWork.top)/scale+origin.Y;
-            const double workHeight = (monitor.rcWork.bottom-monitor.rcWork.top)/scale;
-            const bool vertical = edge==SearchTaskbarEdge::Left || edge==SearchTaskbarEdge::Right;
-            const double space = vertical ? workHeight-height : workWidth-width;
-            appearance.alignment = space>0 ? std::clamp((vertical ? top : left)/space,0.0,1.0) : 0.5;
-            const double gap = edge==SearchTaskbarEdge::Left ? left : edge==SearchTaskbarEdge::Top ? top :
-                edge==SearchTaskbarEdge::Right ? workWidth-left-width : workHeight-top-height;
-            appearance.edgeGap = std::max(0.0,gap);
+            const double left = (client.x - monitor.rcWork.left) / scale + origin.X;
+            const double top = (client.y - monitor.rcWork.top) / scale + origin.Y;
+            const double workHeight = (monitor.rcWork.bottom - monitor.rcWork.top) / scale;
+            const bool vertical = edge == SearchTaskbarEdge::Left || edge == SearchTaskbarEdge::Right;
+            const double space = vertical ? workHeight - height : workWidth - width;
+            appearance.alignment = space > 0 ? std::clamp((vertical ? top : left) / space, 0.0, 1.0) : 0.5;
+            const double gap = edge == SearchTaskbarEdge::Left    ? left
+                               : edge == SearchTaskbarEdge::Top   ? top
+                               : edge == SearchTaskbarEdge::Right ? workWidth - left - width
+                                                                  : workHeight - top - height;
+            appearance.edgeGap = std::max(0.0, gap);
         }
     }
-    COPYDATASTRUCT data{kSearchWindowAppearanceData,sizeof(appearance),&appearance};
-    DWORD_PTR received=0;
-    SendMessageTimeoutW(target,WM_COPYDATA,reinterpret_cast<WPARAM>(start),reinterpret_cast<LPARAM>(&data),SMTO_ABORTIFHUNG,150,&received);
-} catch (...) { Wh_Log(L"search appearance capture failed: %08X",static_cast<unsigned>(winrt::to_hresult())); }
+    COPYDATASTRUCT data{kSearchWindowAppearanceData, sizeof(appearance), &appearance};
+    DWORD_PTR received = 0;
+    SendMessageTimeoutW(target, WM_COPYDATA, reinterpret_cast<WPARAM>(start), reinterpret_cast<LPARAM>(&data),
+                        SMTO_ABORTIFHUNG, 150, &received);
+} catch (...) {
+    Wh_Log(L"search appearance capture failed: %08X", static_cast<unsigned>(winrt::to_hresult()));
+}
 
 void RequestStartAppearance() {
-    HWND start=CachedStartWindow(),host=g_searchWindowWindow.load();
-    if (!start || !host) return;
+    HWND start = CachedStartWindow(), host = g_searchWindowWindow.load();
+    if (!start || !host)
+        return;
     if (g_searchAppearanceValid) {
         // Reuse measured placement immediately. A busy Start process must not
         // hold up our UI thread on every opening or focus-check tick.
-        PostMessageW(start,SearchWindowAppearanceMessage(),reinterpret_cast<WPARAM>(host),0);
+        PostMessageW(start, SearchWindowAppearanceMessage(), reinterpret_cast<WPARAM>(host), 0);
         return;
     }
     // The first opening still obtains measured bounds before positioning, so
     // different entry points don't initially open at different sizes.
-    DWORD_PTR done=0;
-    SendMessageTimeoutW(start,SearchWindowAppearanceMessage(),reinterpret_cast<WPARAM>(host),0,SMTO_ABORTIFHUNG,180,&done);
+    DWORD_PTR done = 0;
+    SendMessageTimeoutW(start, SearchWindowAppearanceMessage(), reinterpret_cast<WPARAM>(host), 0, SMTO_ABORTIFHUNG,
+                        180, &done);
 }
 
 // Small Direct2D effect graph for Styler glass: blur, optional color adjustment,
@@ -13398,41 +14035,62 @@ struct SearchEffectInterop : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT*) = 0;
 };
 
-} // namespace
-template <> inline constexpr winrt::guid winrt::impl::guid_v<SearchEffectInterop>{
-    0x2FC57384,0xA068,0x44D7,{0xA3,0x31,0x30,0x98,0x2F,0xCF,0x71,0x77}};
+}  // namespace
+template <>
+inline constexpr winrt::guid winrt::impl::guid_v<SearchEffectInterop>{
+    0x2FC57384, 0xA068, 0x44D7, {0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77}};
 namespace {
 namespace searchcomp = winrt::Windows::UI::Composition;
 namespace searcheffect = winrt::Windows::Graphics::Effects;
 
-struct SearchEffect : winrt::implements<SearchEffect,searcheffect::IGraphicsEffect,
-                                       searcheffect::IGraphicsEffectSource,SearchEffectInterop> {
+struct SearchEffect : winrt::implements<SearchEffect, searcheffect::IGraphicsEffect,
+                                        searcheffect::IGraphicsEffectSource, SearchEffectInterop> {
     GUID id{};
     winrt::hstring name;
     std::vector<wf::IInspectable> properties;
     std::vector<searcheffect::IGraphicsEffectSource> sources;
     SearchEffect(GUID value) : id(value) {}
     winrt::hstring Name() const { return name; }
-    void Name(winrt::hstring value) { name=std::move(value); }
+    void Name(winrt::hstring value) { name = std::move(value); }
     HRESULT STDMETHODCALLTYPE GetEffectId(GUID* value) noexcept override {
-        if (!value) return E_POINTER; *value=id; return S_OK;
+        if (!value)
+            return E_POINTER;
+        *value = id;
+        return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR,UINT*,UINT*) noexcept override { return E_INVALIDARG; }
+    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR, UINT*, UINT*) noexcept override { return E_INVALIDARG; }
     HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* value) noexcept override {
-        if (!value) return E_POINTER; *value=static_cast<UINT>(properties.size()); return S_OK;
+        if (!value)
+            return E_POINTER;
+        *value = static_cast<UINT>(properties.size());
+        return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE GetProperty(UINT index,winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
-        if (!value) return E_POINTER; *value=nullptr;
-        if (index>=properties.size()) return E_BOUNDS;
-        winrt::copy_to_abi(properties[index].as<wf::IPropertyValue>(),*reinterpret_cast<void**>(value)); return S_OK;
-    } catch(...) { return winrt::to_hresult(); }
+    HRESULT STDMETHODCALLTYPE GetProperty(UINT index, winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override
+        try {
+        if (!value)
+            return E_POINTER;
+        *value = nullptr;
+        if (index >= properties.size())
+            return E_BOUNDS;
+        winrt::copy_to_abi(properties[index].as<wf::IPropertyValue>(), *reinterpret_cast<void**>(value));
+        return S_OK;
+    } catch (...) {
+        return winrt::to_hresult();
+    }
     HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* value) noexcept override {
-        if (!value) return E_POINTER; *value=static_cast<UINT>(sources.size()); return S_OK;
+        if (!value)
+            return E_POINTER;
+        *value = static_cast<UINT>(sources.size());
+        return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE GetSource(UINT index,IUnknown** value) noexcept override {
-        if (!value) return E_POINTER; *value=nullptr;
-        if (index>=sources.size()) return E_BOUNDS;
-        winrt::copy_to_abi(sources[index],*reinterpret_cast<void**>(value)); return S_OK;
+    HRESULT STDMETHODCALLTYPE GetSource(UINT index, IUnknown** value) noexcept override {
+        if (!value)
+            return E_POINTER;
+        *value = nullptr;
+        if (index >= sources.size())
+            return E_BOUNDS;
+        winrt::copy_to_abi(sources[index], *reinterpret_cast<void**>(value));
+        return S_OK;
     }
 };
 
@@ -13445,19 +14103,21 @@ constexpr size_t kSearchContrastMaxContainers = 64;
 constexpr int kSearchContrastStripWidth = 3;
 
 bool SearchContainerLightText(double luminance, std::optional<bool> previous = std::nullopt) {
-    if (!std::isfinite(luminance)) return previous.value_or(true);
+    if (!std::isfinite(luminance))
+        return previous.value_or(true);
     // Retain polarity only inside the range where either side can still reach
     // 4.5:1. Outside it, even pure white or black would be too faint.
-    if (previous) return *previous ? luminance <= 1.05/4.5-.05 : luminance < .05*4.5-.05;
+    if (previous)
+        return *previous ? luminance <= 1.05 / 4.5 - .05 : luminance < .05 * 4.5 - .05;
     return luminance < 0.17912878;
 }
 
-std::array<double,256> const& SearchContrastLinearColors() {
+std::array<double, 256> const& SearchContrastLinearColors() {
     static const auto values = [] {
-        std::array<double,256> result{};
+        std::array<double, 256> result{};
         for (int i = 0; i < 256; ++i) {
-            const double value = i/255.0;
-            result[i] = value <= .04045 ? value/12.92 : std::pow((value+.055)/1.055,2.4);
+            const double value = i / 255.0;
+            result[i] = value <= .04045 ? value / 12.92 : std::pow((value + .055) / 1.055, 2.4);
         }
         return result;
     }();
@@ -13472,16 +14132,17 @@ constexpr uint32_t SearchContrastPreferredColor(bool light) {
     return light ? 0xFFE0E0E0 : 0xFF282828;
 }
 uint32_t SearchContrastGrayColor(double background, bool light) {
-    if (!std::isfinite(background)) return SearchContrastPreferredColor(light);
-    background = std::clamp(background,0.0,1.0);
+    if (!std::isfinite(background))
+        return SearchContrastPreferredColor(light);
+    background = std::clamp(background, 0.0, 1.0);
     auto const& linear = SearchContrastLinearColors();
     int gray = light ? 224 : 40;
-    const double target = light ? 4.5*(background+.05)-.05 : (background+.05)/4.5-.05;
+    const double target = light ? 4.5 * (background + .05) - .05 : (background + .05) / 4.5 - .05;
     // Quantized tones keep tiny sampling changes from shimmering. Stronger
     // black/white is used only near the middle-brightness crossover.
     while (light ? linear[gray] < target && gray < 255 : linear[gray] > target && gray > 0)
-        gray = light ? std::min(gray+4,255) : std::max(gray-4,0);
-    return 0xFF000000u | static_cast<uint32_t>(gray)*0x010101u;
+        gray = light ? std::min(gray + 4, 255) : std::max(gray - 4, 0);
+    return 0xFF000000u | static_cast<uint32_t>(gray) * 0x010101u;
 }
 
 constexpr size_t kSearchContrastProfilePoints = 33;
@@ -13492,62 +14153,74 @@ struct SearchContrastGradientStop {
     bool operator==(SearchContrastGradientStop const&) const = default;
 };
 struct SearchContrastGradient {
-    std::array<std::optional<bool>,kSearchContrastProfilePoints> light{};
-    std::array<uint32_t,kSearchContrastProfilePoints> colors{};
+    std::array<std::optional<bool>, kSearchContrastProfilePoints> light{};
+    std::array<uint32_t, kSearchContrastProfilePoints> colors{};
     std::vector<SearchContrastGradientStop> stops;
     double widthDip = 0;
     bool Mixed() const {
-        return !stops.empty() && std::any_of(stops.begin(),stops.end(),[&](auto const& stop) { return stop.color != stops.front().color; });
+        return !stops.empty() && std::any_of(stops.begin(), stops.end(),
+                                             [&](auto const& stop) { return stop.color != stops.front().color; });
     }
-    bool Sample(std::array<double,kSearchContrastProfilePoints> const& values, double inset, double width) {
+    bool Sample(std::array<double, kSearchContrastProfilePoints> const& values, double inset, double width) {
         auto old = stops;
-        widthDip = std::max(width,1.0);
-        inset = std::clamp(inset,0.0,.2);
+        widthDip = std::max(width, 1.0);
+        inset = std::clamp(inset, 0.0, .2);
         auto known = values;
         // Keep both the tone and polarity through a covered/unsampled part of
         // a card. The first observation borrows the nearest exposed sample.
         for (size_t i = 0; i < known.size(); ++i) {
             if (!std::isfinite(known[i])) {
-                if (light[i]) continue;
+                if (light[i])
+                    continue;
                 size_t nearest = known.size(), distance = known.size();
-                for (size_t j = 0; j < values.size(); ++j) if (std::isfinite(values[j])) {
-                    const size_t d = i > j ? i-j : j-i;
-                    if (d < distance) { nearest = j; distance = d; }
-                }
-                if (nearest < known.size()) known[i] = values[nearest];
+                for (size_t j = 0; j < values.size(); ++j)
+                    if (std::isfinite(values[j])) {
+                        const size_t d = i > j ? i - j : j - i;
+                        if (d < distance) {
+                            nearest = j;
+                            distance = d;
+                        }
+                    }
+                if (nearest < known.size())
+                    known[i] = values[nearest];
             }
             if (std::isfinite(known[i])) {
-                light[i] = SearchContainerLightText(known[i],light[i]);
-                colors[i] = SearchContrastGrayColor(known[i],*light[i]);
+                light[i] = SearchContainerLightText(known[i], light[i]);
+                colors[i] = SearchContrastGrayColor(known[i], *light[i]);
             }
         }
-        if (std::any_of(light.begin(),light.end(),[](auto v) { return !v.has_value(); })) return false;
+        if (std::any_of(light.begin(), light.end(), [](auto v) { return !v.has_value(); }))
+            return false;
         stops.clear();
         auto append = [&](double offset, size_t point) {
-            SearchContrastGradientStop stop{offset,*light[point],colors[point]};
-            if (!stops.empty() && stops.back().offset == offset) stops.back() = stop;
-            else stops.push_back(stop);
+            SearchContrastGradientStop stop{offset, *light[point], colors[point]};
+            if (!stops.empty() && stops.back().offset == offset)
+                stops.back() = stop;
+            else
+                stops.push_back(stop);
         };
-        append(0,0);
-        const double spacing = (1-2*inset)/(light.size()-1);
-        const double feather = std::min(1.0/widthDip,spacing*.4);
+        append(0, 0);
+        const double spacing = (1 - 2 * inset) / (light.size() - 1);
+        const double feather = std::min(1.0 / widthDip, spacing * .4);
         for (size_t i = 1; i < light.size(); ++i) {
-            if (colors[i] == colors[i-1]) continue;
-            const double a = inset+(i-1)*spacing, b = inset+i*spacing;
-            append(a,i-1);
-            if (light[i] != light[i-1]) {
+            if (colors[i] == colors[i - 1])
+                continue;
+            const double a = inset + (i - 1) * spacing, b = inset + i * spacing;
+            append(a, i - 1);
+            if (light[i] != light[i - 1]) {
                 double t = .5;
-                if (std::isfinite(known[i-1]) && std::isfinite(known[i]) && std::abs(known[i]-known[i-1]) > .000001)
-                    t = std::clamp((.17912878-known[i-1])/(known[i]-known[i-1]),0.0,1.0);
+                if (std::isfinite(known[i - 1]) && std::isfinite(known[i]) &&
+                    std::abs(known[i] - known[i - 1]) > .000001)
+                    t = std::clamp((.17912878 - known[i - 1]) / (known[i] - known[i - 1]), 0.0, 1.0);
                 // Quantized positions and a two-DIP crossover avoid a broad
                 // gray band cutting through letters on mixed backgrounds.
-                const double cross = std::clamp(std::round((a+t*spacing)*widthDip)/widthDip,a,b);
-                append(std::max(a,cross-feather),i-1);
-                append(std::min(b,cross+feather),i);
+                const double cross = std::clamp(std::round((a + t * spacing) * widthDip) / widthDip, a, b);
+                append(std::max(a, cross - feather), i - 1);
+                append(std::min(b, cross + feather), i);
             }
-            append(b,i);
+            append(b, i);
         }
-        append(1,light.size()-1);
+        append(1, light.size() - 1);
         return old != stops;
     }
 };
@@ -13558,7 +14231,7 @@ constexpr int kSearchContrastMapWidth = 512, kSearchContrastMapHeight = 512;
 constexpr size_t kSearchContrastMaxMapBands = 128;
 struct SearchContrastMapBand {
     double y;
-    std::array<double,kSearchContrastProfilePoints> values;
+    std::array<double, kSearchContrastProfilePoints> values;
     double left = 0, right = 1;
 };
 struct SearchContrastMapProbe {
@@ -13577,76 +14250,105 @@ class SearchContrastMap {
     std::vector<uint32_t> pixels_;
     std::vector<SearchContrastMapBand> previousBands_;
     uint64_t revision_ = 0;
-public:
+
+   public:
     std::vector<uint32_t> const& Pixels() const { return pixels_; }
     uint64_t Revision() const { return revision_; }
     bool Sample(std::vector<SearchContrastMapBand> const& bands) {
         // Compare the small sampled profile before touching the full image.
         // Covered samples are semantically equal regardless of NaN payload.
         if (!pixels_.empty() && bands.size() == previousBands_.size() &&
-            std::equal(bands.begin(),bands.end(),previousBands_.begin(),[](auto const& a,auto const& b) {
+            std::equal(bands.begin(), bands.end(), previousBands_.begin(), [](auto const& a, auto const& b) {
                 return a.y == b.y && a.left == b.left && a.right == b.right &&
-                    std::equal(a.values.begin(),a.values.end(),b.values.begin(),[](double x,double y) {
-                        return x == y || (!std::isfinite(x) && !std::isfinite(y));
-                    });
-            })) return false;
-        if (bands.empty() || std::none_of(bands.begin(),bands.end(),[](auto const& band) {
-            return std::any_of(band.values.begin(),band.values.end(),[](double value){return std::isfinite(value);});
-        })) return false;
-        constexpr size_t count = kSearchContrastMapWidth*kSearchContrastMapHeight;
+                       std::equal(a.values.begin(), a.values.end(), b.values.begin(), [](double x, double y) {
+                           return x == y || (!std::isfinite(x) && !std::isfinite(y));
+                       });
+            }))
+            return false;
+        if (bands.empty() || std::none_of(bands.begin(), bands.end(), [](auto const& band) {
+                return std::any_of(band.values.begin(), band.values.end(),
+                                   [](double value) { return std::isfinite(value); });
+            }))
+            return false;
+        constexpr size_t count = kSearchContrastMapWidth * kSearchContrastMapHeight;
         const bool first = pixels_.empty();
-        if (first) pixels_.resize(count);
+        if (first)
+            pixels_.resize(count);
         bool changed = first;
-        std::vector<std::pair<double,double>> column;
+        std::vector<std::pair<double, double>> column;
         column.reserve(bands.size());
         for (int x = 0; x < kSearchContrastMapWidth; ++x) {
-            const double position = x/double(kSearchContrastMapWidth-1);
+            const double position = x / double(kSearchContrastMapWidth - 1);
             column.clear();
             for (auto const& band : bands) {
-                if (position < band.left || position > band.right || band.right <= band.left) continue;
-                const double point = std::clamp((position-band.left)/(band.right-band.left),0.0,1.0)*(kSearchContrastProfilePoints-1);
-                const size_t left = static_cast<size_t>(point), right = std::min(left+1,kSearchContrastProfilePoints-1);
+                if (position < band.left || position > band.right || band.right <= band.left)
+                    continue;
+                const double point = std::clamp((position - band.left) / (band.right - band.left), 0.0, 1.0) *
+                                     (kSearchContrastProfilePoints - 1);
+                const size_t left = static_cast<size_t>(point),
+                             right = std::min(left + 1, kSearchContrastProfilePoints - 1);
                 double value = band.values[left];
-                if (!std::isfinite(value)) value = band.values[right];
-                else if (std::isfinite(band.values[right])) value += (band.values[right]-value)*(point-left);
-                if (std::isfinite(value)) column.push_back({band.y,value});
+                if (!std::isfinite(value))
+                    value = band.values[right];
+                else if (std::isfinite(band.values[right]))
+                    value += (band.values[right] - value) * (point - left);
+                if (std::isfinite(value))
+                    column.push_back({band.y, value});
             }
-            if (column.empty()) continue;
-            std::sort(column.begin(),column.end());
+            if (column.empty())
+                continue;
+            std::sort(column.begin(), column.end());
             size_t below = 0;
             for (int y = 0; y < kSearchContrastMapHeight; ++y) {
-                const double row = y/double(kSearchContrastMapHeight-1);
-                while (below+1 < column.size() && column[below+1].first < row) ++below;
-                const auto& a = column[below]; const auto& b = column[std::min(below+1,column.size()-1)];
-                const double blend = b.first > a.first ? std::clamp((row-a.first)/(b.first-a.first),0.0,1.0) : 0;
-                const double luminance = a.second+(b.second-a.second)*blend;
-                auto& old = pixels_[y*kSearchContrastMapWidth+x];
-                const auto prior = old ? std::optional<bool>((old&255)>127) : std::nullopt;
-                const auto color = SearchContrastGrayColor(luminance,SearchContainerLightText(luminance,prior));
-                changed |= old != color; old = color;
+                const double row = y / double(kSearchContrastMapHeight - 1);
+                while (below + 1 < column.size() && column[below + 1].first < row)
+                    ++below;
+                const auto& a = column[below];
+                const auto& b = column[std::min(below + 1, column.size() - 1)];
+                const double blend =
+                    b.first > a.first ? std::clamp((row - a.first) / (b.first - a.first), 0.0, 1.0) : 0;
+                const double luminance = a.second + (b.second - a.second) * blend;
+                auto& old = pixels_[y * kSearchContrastMapWidth + x];
+                const auto prior = old ? std::optional<bool>((old & 255) > 127) : std::nullopt;
+                const auto color = SearchContrastGrayColor(luminance, SearchContainerLightText(luminance, prior));
+                changed |= old != color;
+                old = color;
             }
         }
-        if (first) for (int y = 0; y < kSearchContrastMapHeight; ++y) {
-            auto row = pixels_.begin()+y*kSearchContrastMapWidth;
-            auto valid = std::find_if(row,row+kSearchContrastMapWidth,[](auto color){return color != 0;});
-            if (valid == row+kSearchContrastMapWidth) std::fill(row,row+kSearchContrastMapWidth,SearchContrastPreferredColor(true));
-            else {
-                std::fill(row,valid,*valid);
-                for (auto it=valid+1;it!=row+kSearchContrastMapWidth;++it) if(!*it)*it=*(it-1);
+        if (first)
+            for (int y = 0; y < kSearchContrastMapHeight; ++y) {
+                auto row = pixels_.begin() + y * kSearchContrastMapWidth;
+                auto valid = std::find_if(row, row + kSearchContrastMapWidth, [](auto color) { return color != 0; });
+                if (valid == row + kSearchContrastMapWidth)
+                    std::fill(row, row + kSearchContrastMapWidth, SearchContrastPreferredColor(true));
+                else {
+                    std::fill(row, valid, *valid);
+                    for (auto it = valid + 1; it != row + kSearchContrastMapWidth; ++it)
+                        if (!*it)
+                            *it = *(it - 1);
+                }
             }
-        }
         // Keep contrast at every texel. Averaging light and dark text colors
         // creates a gray band that disappears against the mixed background.
         previousBands_ = bands;
-        if (changed) ++revision_;
+        if (changed)
+            ++revision_;
         return changed;
     }
 };
 
-struct SearchContrastProbe { uint64_t id; RECT bounds; bool outside = false; uint8_t exposed = 3; RECT surface{}; };
+struct SearchContrastProbe {
+    uint64_t id;
+    RECT bounds;
+    bool outside = false;
+    uint8_t exposed = 3;
+    RECT surface{};
+};
 struct SearchContrastReading {
-    uint64_t id; RECT bounds; double luminance;
-    std::array<double,kSearchContrastProfilePoints> profile{};
+    uint64_t id;
+    RECT bounds;
+    double luminance;
+    std::array<double, kSearchContrastProfilePoints> profile{};
     double inset = 0;
 };
 struct SearchContrastBatch {
@@ -13665,20 +14367,23 @@ struct SearchContrastResult {
 // WindowFromPoint may ask a window to hit-test itself. Keep that operation on
 // the UI thread, so joining the capture worker can never wait on this thread.
 uint8_t SearchContrastExposure(SearchContrastProbe const& probe, HWND host, DWORD thread) {
-    const int inset = std::max(6,MulDiv(6,GetDpiForWindow(host),96));
+    const int inset = std::max(6, MulDiv(6, GetDpiForWindow(host), 96));
     uint8_t exposed = 0;
     for (int side = 0; side < 2; ++side) {
-        const int x = side ? probe.bounds.right-inset-kSearchContrastStripWidth : probe.bounds.left+inset;
-        HWND window = WindowFromPoint(POINT{x+1,(probe.bounds.top+probe.bounds.bottom)/2});
-        if (!window || GetWindowThreadProcessId(window,nullptr) != thread) continue;
-        HWND root = GetAncestor(window,GA_ROOT);
-        if (!probe.outside && root != host) continue;
+        const int x = side ? probe.bounds.right - inset - kSearchContrastStripWidth : probe.bounds.left + inset;
+        HWND window = WindowFromPoint(POINT{x + 1, (probe.bounds.top + probe.bounds.bottom) / 2});
+        if (!window || GetWindowThreadProcessId(window, nullptr) != thread)
+            continue;
+        HWND root = GetAncestor(window, GA_ROOT);
+        if (!probe.outside && root != host)
+            continue;
         if (probe.outside) {
             RECT bounds{}, intersection{};
-            if (!GetWindowRect(root,&bounds) || !IntersectRect(&intersection,&bounds,&probe.bounds) ||
-                !EqualRect(&intersection,&probe.bounds)) continue;
+            if (!GetWindowRect(root, &bounds) || !IntersectRect(&intersection, &bounds, &probe.bounds) ||
+                !EqualRect(&intersection, &probe.bounds))
+                continue;
         }
-        exposed |= 1u<<side;
+        exposed |= 1u << side;
     }
     return exposed;
 }
@@ -13689,14 +14394,16 @@ class SearchContrastCapture {
     HGDIOBJ previous_ = nullptr;
     uint32_t* pixels_ = nullptr;
     static constexpr int kSize = 512;
-    std::array<std::pair<uint64_t,SearchContrastMap>,1> mapCache_{};
-    std::array<uint64_t,1> mapRevisions_{};
+    std::array<std::pair<uint64_t, SearchContrastMap>, 1> mapCache_{};
+    std::array<uint64_t, 1> mapRevisions_{};
     uint64_t mapRevision_ = 0;
     std::shared_ptr<std::vector<uint32_t> const> mapPixels_;
-public:
+
+   public:
     SearchContrastCapture() {
         memory_ = CreateCompatibleDC(nullptr);
-        if (!memory_) return;
+        if (!memory_)
+            return;
         BITMAPINFO info{};
         info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         info.bmiHeader.biWidth = kSize;
@@ -13704,113 +14411,153 @@ public:
         info.bmiHeader.biPlanes = 1;
         info.bmiHeader.biBitCount = 32;
         info.bmiHeader.biCompression = BI_RGB;
-        bitmap_ = CreateDIBSection(memory_,&info,DIB_RGB_COLORS,reinterpret_cast<void**>(&pixels_),nullptr,0);
-        if (bitmap_) previous_ = SelectObject(memory_,bitmap_);
-        SetStretchBltMode(memory_,COLORONCOLOR);
+        bitmap_ = CreateDIBSection(memory_, &info, DIB_RGB_COLORS, reinterpret_cast<void**>(&pixels_), nullptr, 0);
+        if (bitmap_)
+            previous_ = SelectObject(memory_, bitmap_);
+        SetStretchBltMode(memory_, COLORONCOLOR);
     }
     ~SearchContrastCapture() {
-        if (previous_ && previous_ != HGDI_ERROR) SelectObject(memory_,previous_);
-        if (bitmap_) DeleteObject(bitmap_);
-        if (memory_) DeleteDC(memory_);
+        if (previous_ && previous_ != HGDI_ERROR)
+            SelectObject(memory_, previous_);
+        if (bitmap_)
+            DeleteObject(bitmap_);
+        if (memory_)
+            DeleteDC(memory_);
     }
     SearchContrastCapture(SearchContrastCapture const&) = delete;
     SearchContrastCapture& operator=(SearchContrastCapture const&) = delete;
 
     SearchContrastResult Read(SearchContrastBatch const& batch, std::atomic<uint64_t> const& generation) {
-        SearchContrastResult result{batch.generation,{}};
+        SearchContrastResult result{batch.generation, {}};
         if (!pixels_ || !previous_ || previous_ == HGDI_ERROR || generation.load() != batch.generation ||
-            !IsWindowVisible(batch.host)) return result;
-        const size_t count = std::min(batch.probes.size(),kSearchContrastMaxContainers);
+            !IsWindowVisible(batch.host))
+            return result;
+        const size_t count = std::min(batch.probes.size(), kSearchContrastMaxContainers);
         RECT area{};
-        for (size_t i = 0; i < count; ++i) UnionRect(&area,&area,&batch.probes[i].bounds);
-        for (size_t i = 0; i < std::min(batch.maps.size(),mapCache_.size()); ++i) UnionRect(&area,&area,&batch.maps[i].bounds);
-        RECT desktop{GetSystemMetrics(SM_XVIRTUALSCREEN),GetSystemMetrics(SM_YVIRTUALSCREEN),0,0};
-        desktop.right = desktop.left+GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        desktop.bottom = desktop.top+GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        if (!IntersectRect(&area,&area,&desktop)) return result;
-        const int width = area.right-area.left, height = area.bottom-area.top;
-        const int step = std::max(1,(std::max(width,height)+kSize-1)/kSize);
-        const int sampleWidth = (width+step-1)/step, sampleHeight = (height+step-1)/step;
+        for (size_t i = 0; i < count; ++i)
+            UnionRect(&area, &area, &batch.probes[i].bounds);
+        for (size_t i = 0; i < std::min(batch.maps.size(), mapCache_.size()); ++i)
+            UnionRect(&area, &area, &batch.maps[i].bounds);
+        RECT desktop{GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN), 0, 0};
+        desktop.right = desktop.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        desktop.bottom = desktop.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (!IntersectRect(&area, &area, &desktop))
+            return result;
+        const int width = area.right - area.left, height = area.bottom - area.top;
+        const int step = std::max(1, (std::max(width, height) + kSize - 1) / kSize);
+        const int sampleWidth = (width + step - 1) / step, sampleHeight = (height + step - 1) / step;
         HDC screen = GetDC(nullptr);
-        if (!screen) return result;
+        if (!screen)
+            return result;
         // One readback for every container combined. Separate tiny BitBlts can
         // each synchronize with the compositor, despite moving fewer pixels.
-        const BOOL copied = StretchBlt(memory_,0,0,sampleWidth,sampleHeight,screen,
-            area.left,area.top,width,height,SRCCOPY | CAPTUREBLT);
+        const BOOL copied = StretchBlt(memory_, 0, 0, sampleWidth, sampleHeight, screen, area.left, area.top, width,
+                                       height, SRCCOPY | CAPTUREBLT);
         GdiFlush();
-        ReleaseDC(nullptr,screen);
-        if (!copied || generation.load() != batch.generation) return result;
+        ReleaseDC(nullptr, screen);
+        if (!copied || generation.load() != batch.generation)
+            return result;
         auto const& linear = SearchContrastLinearColors();
         const UINT dpi = GetDpiForWindow(batch.host);
-        const int inset = std::max(6,MulDiv(6,dpi,96)), verticalInset = std::max(2,MulDiv(3,dpi,96));
+        const int inset = std::max(6, MulDiv(6, dpi, 96)), verticalInset = std::max(2, MulDiv(3, dpi, 96));
         for (size_t i = 0; i < count && generation.load() == batch.generation; ++i) {
-            auto const& probe = batch.probes[i]; auto const& rect = probe.bounds;
-            if (rect.right-rect.left < 24 || rect.bottom-rect.top < 18 || !probe.exposed) continue;
+            auto const& probe = batch.probes[i];
+            auto const& rect = probe.bounds;
+            if (rect.right - rect.left < 24 || rect.bottom - rect.top < 18 || !probe.exposed)
+                continue;
             const RECT surface = IsRectEmpty(&probe.surface) ? rect : probe.surface;
-            SearchContrastReading reading{probe.id,rect,0};
+            SearchContrastReading reading{probe.id, rect, 0};
             reading.profile.fill(std::numeric_limits<double>::quiet_NaN());
-            reading.inset = std::min(.2,inset/double(rect.right-rect.left));
-            std::array<double,kSearchContrastProfilePoints> medians{};
+            reading.inset = std::min(.2, inset / double(rect.right - rect.left));
+            std::array<double, kSearchContrastProfilePoints> medians{};
             size_t valid = 0;
             for (size_t p = 0; p < kSearchContrastProfilePoints; ++p) {
-                if (!(probe.exposed & (p < kSearchContrastProfilePoints/2 ? 1u : 2u))) continue;
-                const int x = rect.left+inset+static_cast<int>(std::lround(
-                    (rect.right-rect.left-2*inset-1)*p/double(kSearchContrastProfilePoints-1)));
-                std::array<double,12> samples{}; size_t used = 0;
+                if (!(probe.exposed & (p < kSearchContrastProfilePoints / 2 ? 1u : 2u)))
+                    continue;
+                const int x = rect.left + inset +
+                              static_cast<int>(std::lround((rect.right - rect.left - 2 * inset - 1) * p /
+                                                           double(kSearchContrastProfilePoints - 1)));
+                std::array<double, 12> samples{};
+                size_t used = 0;
                 // Sample empty top/bottom padding, rather than glyphs, icons,
                 // or the preview image. A clipped row uses only visible padding.
-                for (int y : {surface.top+verticalInset,surface.bottom-verticalInset-2}) {
-                    if (y < rect.top || y+1 >= rect.bottom) continue;
-                    for (int dy = 0; dy < 2; ++dy) for (int dx = -1; dx <= 1; ++dx) {
-                        const int sx = std::clamp(static_cast<int>(std::lround((x+dx-area.left)*sampleWidth/double(width))),0,sampleWidth-1);
-                        const int sy = std::clamp(static_cast<int>(std::lround((y+dy-area.top)*sampleHeight/double(height))),0,sampleHeight-1);
-                        const uint32_t color = pixels_[sy*kSize+sx];
-                        samples[used++] = .2126*linear[(color>>16)&255]+.7152*linear[(color>>8)&255]+.0722*linear[color&255];
-                    }
+                for (int y : {surface.top + verticalInset, surface.bottom - verticalInset - 2}) {
+                    if (y < rect.top || y + 1 >= rect.bottom)
+                        continue;
+                    for (int dy = 0; dy < 2; ++dy)
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            const int sx = std::clamp(
+                                static_cast<int>(std::lround((x + dx - area.left) * sampleWidth / double(width))), 0,
+                                sampleWidth - 1);
+                            const int sy = std::clamp(
+                                static_cast<int>(std::lround((y + dy - area.top) * sampleHeight / double(height))), 0,
+                                sampleHeight - 1);
+                            const uint32_t color = pixels_[sy * kSize + sx];
+                            samples[used++] = .2126 * linear[(color >> 16) & 255] + .7152 * linear[(color >> 8) & 255] +
+                                              .0722 * linear[color & 255];
+                        }
                 }
-                if (!used) continue;
-                auto middle = samples.begin()+used/2;
-                std::nth_element(samples.begin(),middle,samples.begin()+used);
+                if (!used)
+                    continue;
+                auto middle = samples.begin() + used / 2;
+                std::nth_element(samples.begin(), middle, samples.begin() + used);
                 reading.profile[p] = medians[valid++] = *middle;
             }
-            if (!valid) continue;
-            auto middle = medians.begin()+valid/2;
-            std::nth_element(medians.begin(),middle,medians.begin()+valid);
+            if (!valid)
+                continue;
+            auto middle = medians.begin() + valid / 2;
+            std::nth_element(medians.begin(), middle, medians.begin() + valid);
             reading.luminance = *middle;
             result.readings.push_back(std::move(reading));
         }
-        for (size_t m = 0; m < std::min(batch.maps.size(),mapCache_.size()) && generation.load() == batch.generation; ++m) {
-            auto const& probe = batch.maps[m]; auto const& rect = probe.bounds;
-            if (!probe.exposed || rect.right-rect.left < 24 || rect.bottom-rect.top < 18) continue;
+        for (size_t m = 0; m < std::min(batch.maps.size(), mapCache_.size()) && generation.load() == batch.generation;
+             ++m) {
+            auto const& probe = batch.maps[m];
+            auto const& rect = probe.bounds;
+            if (!probe.exposed || rect.right - rect.left < 24 || rect.bottom - rect.top < 18)
+                continue;
             std::vector<SearchContrastMapBand> bands;
-            const size_t stripCount = std::min(probe.strips.size(),kSearchContrastMaxMapBands);
+            const size_t stripCount = std::min(probe.strips.size(), kSearchContrastMaxMapBands);
             for (size_t row = 0; row < stripCount; ++row) {
                 RECT strip{};
-                if (!IntersectRect(&strip,&probe.strips[row],&rect) || strip.right-strip.left < 24 || strip.bottom-strip.top < 2) continue;
-                const int y = strip.top, edge = std::min<int>(inset,(strip.right-strip.left)/5);
-                SearchContrastMapBand band{(y+.5-rect.top)/double(rect.bottom-rect.top),{},
-                    (strip.left+edge-rect.left)/double(rect.right-rect.left),
-                    (strip.right-edge-1-rect.left)/double(rect.right-rect.left)};
+                if (!IntersectRect(&strip, &probe.strips[row], &rect) || strip.right - strip.left < 24 ||
+                    strip.bottom - strip.top < 2)
+                    continue;
+                const int y = strip.top, edge = std::min<int>(inset, (strip.right - strip.left) / 5);
+                SearchContrastMapBand band{(y + .5 - rect.top) / double(rect.bottom - rect.top),
+                                           {},
+                                           (strip.left + edge - rect.left) / double(rect.right - rect.left),
+                                           (strip.right - edge - 1 - rect.left) / double(rect.right - rect.left)};
                 band.values.fill(std::numeric_limits<double>::quiet_NaN());
                 for (size_t p = 0; p < kSearchContrastProfilePoints; ++p) {
-                    const int x = strip.left+edge+static_cast<int>(std::lround(
-                        (strip.right-strip.left-2*edge-1)*p/double(kSearchContrastProfilePoints-1)));
-                    if (!(probe.exposed & (x < (rect.left+rect.right)/2 ? 1u : 2u))) continue;
-                    std::array<double,6> samples{}; size_t used = 0;
-                    for (int dy = 0; dy < 2; ++dy) for (int dx = -1; dx <= 1; ++dx) {
-                        const int sx = std::clamp(static_cast<int>(std::lround((x+dx-area.left)*sampleWidth/double(width))),0,sampleWidth-1);
-                        const int sy = std::clamp(static_cast<int>(std::lround((y+dy-area.top)*sampleHeight/double(height))),0,sampleHeight-1);
-                        const uint32_t color = pixels_[sy*kSize+sx];
-                        samples[used++] = .2126*linear[(color>>16)&255]+.7152*linear[(color>>8)&255]+.0722*linear[color&255];
-                    }
-                    auto middle = samples.begin()+used/2;
-                    std::nth_element(samples.begin(),middle,samples.begin()+used);
+                    const int x = strip.left + edge +
+                                  static_cast<int>(std::lround((strip.right - strip.left - 2 * edge - 1) * p /
+                                                               double(kSearchContrastProfilePoints - 1)));
+                    if (!(probe.exposed & (x < (rect.left + rect.right) / 2 ? 1u : 2u)))
+                        continue;
+                    std::array<double, 6> samples{};
+                    size_t used = 0;
+                    for (int dy = 0; dy < 2; ++dy)
+                        for (int dx = -1; dx <= 1; ++dx) {
+                            const int sx = std::clamp(
+                                static_cast<int>(std::lround((x + dx - area.left) * sampleWidth / double(width))), 0,
+                                sampleWidth - 1);
+                            const int sy = std::clamp(
+                                static_cast<int>(std::lround((y + dy - area.top) * sampleHeight / double(height))), 0,
+                                sampleHeight - 1);
+                            const uint32_t color = pixels_[sy * kSize + sx];
+                            samples[used++] = .2126 * linear[(color >> 16) & 255] + .7152 * linear[(color >> 8) & 255] +
+                                              .0722 * linear[color & 255];
+                        }
+                    auto middle = samples.begin() + used / 2;
+                    std::nth_element(samples.begin(), middle, samples.begin() + used);
                     band.values[p] = *middle;
                 }
                 bands.push_back(std::move(band));
             }
             auto& cached = mapCache_[m];
-            if (cached.first != probe.id) cached = {probe.id,{}};
+            if (cached.first != probe.id)
+                cached = {probe.id, {}};
             if (cached.second.Sample(bands)) {
                 mapRevisions_[m] = ++mapRevision_;
                 // Results share an immutable image until its actual colors
@@ -13818,7 +14565,7 @@ public:
                 mapPixels_ = std::make_shared<std::vector<uint32_t> const>(cached.second.Pixels());
             }
             if (!cached.second.Pixels().empty())
-                result.maps.push_back({probe.id,rect,mapPixels_,mapRevisions_[m]});
+                result.maps.push_back({probe.id, rect, mapPixels_, mapRevisions_[m]});
         }
         return result;
     }
@@ -13838,43 +14585,67 @@ class SearchContrastSampler {
             SearchContrastCapture capture;
             std::unique_lock lock(mutex_);
             for (;;) {
-                wake_.wait(lock,[&] { return stopping_ || pending_.has_value(); });
-                if (stopping_) break;
-                auto batch = std::move(*pending_); pending_.reset(); working_ = true;
+                wake_.wait(lock, [&] { return stopping_ || pending_.has_value(); });
+                if (stopping_)
+                    break;
+                auto batch = std::move(*pending_);
+                pending_.reset();
+                working_ = true;
                 lock.unlock();
-                auto result = capture.Read(batch,generation_);
-                lock.lock(); working_ = false;
+                auto result = capture.Read(batch, generation_);
+                lock.lock();
+                working_ = false;
                 if (!stopping_ && result.generation == generation_.load()) {
                     completed_ = std::move(result);
-                    PostMessageW(batch.host,kSearchContainerContrastReady,0,0);
+                    PostMessageW(batch.host, kSearchContainerContrastReady, 0, 0);
                 }
             }
         } catch (...) {
-            std::lock_guard lock(mutex_); working_ = false; stopping_ = true; pending_.reset(); completed_.reset();
+            std::lock_guard lock(mutex_);
+            working_ = false;
+            stopping_ = true;
+            pending_.reset();
+            completed_.reset();
         }
-        if (dpi) SetThreadDpiAwarenessContext(dpi);
+        if (dpi)
+            SetThreadDpiAwarenessContext(dpi);
     }
-public:
+
+   public:
     SearchContrastSampler() : worker_([this] { Run(); }) {}
     ~SearchContrastSampler() {
-        { std::lock_guard lock(mutex_); stopping_ = true; pending_.reset(); ++generation_; }
+        {
+            std::lock_guard lock(mutex_);
+            stopping_ = true;
+            pending_.reset();
+            ++generation_;
+        }
         wake_.notify_one();
-        if (worker_.joinable()) worker_.join();
+        if (worker_.joinable())
+            worker_.join();
     }
     void Cancel() {
-        std::lock_guard lock(mutex_); ++generation_; pending_.reset(); completed_.reset();
+        std::lock_guard lock(mutex_);
+        ++generation_;
+        pending_.reset();
+        completed_.reset();
     }
     bool Current(uint64_t generation) const { return generation == generation_.load(); }
-    void Submit(HWND host, DWORD thread, std::vector<SearchContrastProbe> probes, std::vector<SearchContrastMapProbe> maps = {}) {
-        if (probes.empty() && maps.empty()) return;
+    void Submit(HWND host, DWORD thread, std::vector<SearchContrastProbe> probes,
+                std::vector<SearchContrastMapProbe> maps = {}) {
+        if (probes.empty() && maps.empty())
+            return;
         std::lock_guard lock(mutex_);
-        if (stopping_ || working_ || pending_ || completed_) return;
-        pending_ = SearchContrastBatch{generation_.load(),host,thread,std::move(probes),std::move(maps)};
+        if (stopping_ || working_ || pending_ || completed_)
+            return;
+        pending_ = SearchContrastBatch{generation_.load(), host, thread, std::move(probes), std::move(maps)};
         wake_.notify_one();
     }
     std::optional<SearchContrastResult> Take() {
         std::lock_guard lock(mutex_);
-        auto result = std::move(completed_); completed_.reset(); return result;
+        auto result = std::move(completed_);
+        completed_.reset();
+        return result;
     }
 };
 
@@ -13915,25 +14686,33 @@ struct SearchOriginalTextOpacity {
 size_t g_searchOpacityPruneAt = 256;
 
 void MakeSearchTextReadable(wux::FrameworkElement const& element) {
-    if (!element.try_as<wuxc::TextBlock>() && !element.try_as<wuxc::FontIcon>()) return;
+    if (!element.try_as<wuxc::TextBlock>() && !element.try_as<wuxc::FontIcon>())
+        return;
     const double original = element.Opacity(), readable = SearchReadableTextOpacity(original);
-    if (original == readable || SearchTextOverride()) return;
-    if (!g_searchOriginalTextOpacities) g_searchOriginalTextOpacities.emplace();
+    if (original == readable || SearchTextOverride())
+        return;
+    if (!g_searchOriginalTextOpacities)
+        g_searchOriginalTextOpacities.emplace();
     auto& saved = *g_searchOriginalTextOpacities;
     if (saved.size() >= g_searchOpacityPruneAt) {
-        std::erase_if(saved,[](auto const& entry){return !entry.element.get();});
-        g_searchOpacityPruneAt = std::max<size_t>(256,saved.size()*2);
+        std::erase_if(saved, [](auto const& entry) { return !entry.element.get(); });
+        g_searchOpacityPruneAt = std::max<size_t>(256, saved.size() * 2);
     }
-    auto found = std::find_if(saved.begin(),saved.end(),[&](auto const& entry){return entry.element.get()==element;});
-    if (found == saved.end()) saved.push_back({winrt::make_weak(element),original});
-    else found->opacity = original;
+    auto found =
+        std::find_if(saved.begin(), saved.end(), [&](auto const& entry) { return entry.element.get() == element; });
+    if (found == saved.end())
+        saved.push_back({winrt::make_weak(element), original});
+    else
+        found->opacity = original;
     element.Opacity(readable);
 }
 
 void RestoreSearchTextOpacity() {
-    if (g_searchOriginalTextOpacities) for (auto const& entry : *g_searchOriginalTextOpacities)
-        if (auto element=entry.element.get();element && element.Opacity()==SearchReadableTextOpacity(entry.opacity))
-            element.Opacity(entry.opacity);
+    if (g_searchOriginalTextOpacities)
+        for (auto const& entry : *g_searchOriginalTextOpacities)
+            if (auto element = entry.element.get();
+                element && element.Opacity() == SearchReadableTextOpacity(entry.opacity))
+                element.Opacity(entry.opacity);
     g_searchOriginalTextOpacities.reset();
     g_searchOpacityPruneAt = 256;
 }
@@ -13957,13 +14736,17 @@ bool g_searchColorMapReported = false;
 
 void PositionSearchColorMap(SearchColorMapPaint const& paint, SearchColorMapBinding const& binding) try {
     auto root = paint.root.get(), element = binding.element.get();
-    if (!root || !element || root.ActualWidth() < 1 || root.ActualHeight() < 1) return;
+    if (!root || !element || root.ActualWidth() < 1 || root.ActualHeight() < 1)
+        return;
     auto scroll = binding.scroll.get();
     if (!scroll) {
         auto parent = wuxm::VisualTreeHelper::GetParent(element);
-        for (int depth=0;parent && depth<32;++depth) {
-            if ((scroll=parent.try_as<wuxc::ScrollViewer>())) { binding.scroll=winrt::make_weak(scroll); break; }
-            parent=wuxm::VisualTreeHelper::GetParent(parent);
+        for (int depth = 0; parent && depth < 32; ++depth) {
+            if ((scroll = parent.try_as<wuxc::ScrollViewer>())) {
+                binding.scroll = winrt::make_weak(scroll);
+                break;
+            }
+            parent = wuxm::VisualTreeHelper::GetParent(parent);
         }
     }
     wf::Point offset{};
@@ -13971,65 +14754,84 @@ void PositionSearchColorMap(SearchColorMapPaint const& paint, SearchColorMapBind
     if (content) {
         // Keep one root for both lists; their independent offsets affect only
         // the coordinates where each glyph reads the shared image.
-        const auto origin = scroll.TransformToVisual(root).TransformPoint(wf::Point{0,0});
-        offset = element.TransformToVisual(content).TransformPoint(wf::Point{0,0});
-        offset.X += static_cast<float>(origin.X+scroll.Padding().Left-scroll.HorizontalOffset());
-        offset.Y += static_cast<float>(origin.Y+scroll.Padding().Top-scroll.VerticalOffset());
-        if (offset.Y+element.ActualHeight() < origin.Y-1 || offset.Y > origin.Y+scroll.ActualHeight()+1) return;
-    }
-    else offset = element.TransformToVisual(root).TransformPoint(wf::Point{0,0});
+        const auto origin = scroll.TransformToVisual(root).TransformPoint(wf::Point{0, 0});
+        offset = element.TransformToVisual(content).TransformPoint(wf::Point{0, 0});
+        offset.X += static_cast<float>(origin.X + scroll.Padding().Left - scroll.HorizontalOffset());
+        offset.Y += static_cast<float>(origin.Y + scroll.Padding().Top - scroll.VerticalOffset());
+        if (offset.Y + element.ActualHeight() < origin.Y - 1 || offset.Y > origin.Y + scroll.ActualHeight() + 1)
+            return;
+    } else
+        offset = element.TransformToVisual(root).TransformPoint(wf::Point{0, 0});
     const auto old = binding.transform.Matrix();
-    wuxm::Matrix matrix{root.ActualWidth()/kSearchContrastMapWidth,0,0,
-                       root.ActualHeight()/kSearchContrastMapHeight,-offset.X,-offset.Y};
-    if (old.M11 != matrix.M11 || old.M22 != matrix.M22 || old.OffsetX != matrix.OffsetX || old.OffsetY != matrix.OffsetY)
+    wuxm::Matrix matrix{root.ActualWidth() / kSearchContrastMapWidth,   0,         0,
+                        root.ActualHeight() / kSearchContrastMapHeight, -offset.X, -offset.Y};
+    if (old.M11 != matrix.M11 || old.M22 != matrix.M22 || old.OffsetX != matrix.OffsetX ||
+        old.OffsetY != matrix.OffsetY)
         binding.transform.Matrix(matrix);
-} catch (...) {}
+} catch (...) {
+}
 
 void PositionSearchColorMaps(wux::FrameworkElement const& only = nullptr) {
-    auto const& paint=g_searchColorMap;
-    if (!paint) return; // created only for auto, reset on appearance/settings changes
-    std::erase_if(paint->bindings,[](auto const& item){return !item.element.get();});
+    auto const& paint = g_searchColorMap;
+    if (!paint)
+        return;  // created only for auto, reset on appearance/settings changes
+    std::erase_if(paint->bindings, [](auto const& item) { return !item.element.get(); });
     for (auto const& binding : paint->bindings)
-        if (!only || !binding.scroll.get() || binding.scroll.get() == only) PositionSearchColorMap(*paint,binding);
+        if (!only || !binding.scroll.get() || binding.scroll.get() == only)
+            PositionSearchColorMap(*paint, binding);
 }
 
 void SearchContrastScrolled(wuxc::ScrollViewer const& scroll) {
-    if (!g_searchWindowWindow.load() || !g_searchColorMap) return;
+    if (!g_searchWindowWindow.load() || !g_searchColorMap)
+        return;
     // Only reuse the cached image while scrolling. Moving labels cannot spoil
     // the next background capture, and there is no readback in this callback.
-    g_searchColorMapScrollUntil = GetTickCount64()+160;
-    if (g_searchContrastSampler) g_searchContrastSampler->Cancel();
+    g_searchColorMapScrollUntil = GetTickCount64() + 160;
+    if (g_searchContrastSampler)
+        g_searchContrastSampler->Cancel();
     PositionSearchColorMaps(scroll);
 }
 
-wuxm::Brush SearchColorMapForeground(wux::FrameworkElement const& element, SearchColorMapPaint& paint, double opacity = 1) {
+wuxm::Brush SearchColorMapForeground(wux::FrameworkElement const& element, SearchColorMapPaint& paint,
+                                     double opacity = 1) {
     MakeSearchTextReadable(element);
-    for (auto const& binding : paint.bindings) if (binding.element.get() == element && binding.opacity == opacity) return binding.brush;
+    for (auto const& binding : paint.bindings)
+        if (binding.element.get() == element && binding.opacity == opacity)
+            return binding.brush;
     wuxm::ImageBrush brush;
     brush.ImageSource(paint.bitmap);
     brush.Opacity(opacity);
     brush.Stretch(wuxm::Stretch::None);
-    brush.AlignmentX(wuxm::AlignmentX::Left); brush.AlignmentY(wuxm::AlignmentY::Top);
+    brush.AlignmentX(wuxm::AlignmentX::Left);
+    brush.AlignmentY(wuxm::AlignmentY::Top);
     wuxm::MatrixTransform transform;
     brush.Transform(transform);
-    paint.bindings.push_back({winrt::make_weak(element),brush,transform,{},opacity});
-    PositionSearchColorMap(paint,paint.bindings.back());
+    paint.bindings.push_back({winrt::make_weak(element), brush, transform, {}, opacity});
+    PositionSearchColorMap(paint, paint.bindings.back());
     return brush;
 }
 
-
 void PositionSearchGradient(SearchContrastPaint const& paint, SearchGradientBinding const& binding) try {
     auto root = paint.root.get(), element = binding.element.get();
-    if (!root || !element) return;
+    if (!root || !element)
+        return;
     double width = root.ActualWidth();
-    if (width < 1) width = paint.gradient.widthDip;
-    if (width < 1) return;
+    if (width < 1)
+        width = paint.gradient.widthDip;
+    if (width < 1)
+        return;
     double offset = 0;
-    try { offset = element.TransformToVisual(root).TransformPoint(wf::Point{0,0}).X; } catch (...) {}
-    const wf::Point start{static_cast<float>(-offset),0}, end{static_cast<float>(width-offset),0};
-    if (binding.brush.StartPoint() != start) binding.brush.StartPoint(start);
-    if (binding.brush.EndPoint() != end) binding.brush.EndPoint(end);
-} catch (...) {}
+    try {
+        offset = element.TransformToVisual(root).TransformPoint(wf::Point{0, 0}).X;
+    } catch (...) {
+    }
+    const wf::Point start{static_cast<float>(-offset), 0}, end{static_cast<float>(width - offset), 0};
+    if (binding.brush.StartPoint() != start)
+        binding.brush.StartPoint(start);
+    if (binding.brush.EndPoint() != end)
+        binding.brush.EndPoint(end);
+} catch (...) {
+}
 
 void UpdateSearchGradientStops(wuxm::LinearGradientBrush const& brush, SearchContrastGradient const& gradient) {
     auto stops = brush.GradientStops();
@@ -14037,220 +14839,291 @@ void UpdateSearchGradientStops(wuxm::LinearGradientBrush const& brush, SearchCon
         stops.Clear();
         for (auto const& value : gradient.stops) {
             wuxm::GradientStop stop;
-            stop.Offset(value.offset); stop.Color(SearchUnpackColor(value.color));
+            stop.Offset(value.offset);
+            stop.Color(SearchUnpackColor(value.color));
             stops.Append(stop);
         }
-    } else for (uint32_t i = 0; i < stops.Size(); ++i) {
-        auto stop = stops.GetAt(i); auto const& value = gradient.stops[i];
-        const auto color = SearchUnpackColor(value.color);
-        if (stop.Color() != color) stop.Color(color);
-        if (stop.Offset() != value.offset) stop.Offset(value.offset);
-    }
+    } else
+        for (uint32_t i = 0; i < stops.Size(); ++i) {
+            auto stop = stops.GetAt(i);
+            auto const& value = gradient.stops[i];
+            const auto color = SearchUnpackColor(value.color);
+            if (stop.Color() != color)
+                stop.Color(color);
+            if (stop.Offset() != value.offset)
+                stop.Offset(value.offset);
+        }
 }
 
 void RefreshSearchGradientPaint(SearchContrastPaint& paint) {
-    std::erase_if(paint.bindings,[](auto const& item) { return !item.element.get(); });
+    std::erase_if(paint.bindings, [](auto const& item) { return !item.element.get(); });
     for (auto const& binding : paint.bindings) {
-        UpdateSearchGradientStops(binding.brush,paint.gradient);
-        PositionSearchGradient(paint,binding);
+        UpdateSearchGradientStops(binding.brush, paint.gradient);
+        PositionSearchGradient(paint, binding);
     }
 }
 
 void EnsureSearchGradientLayoutHandler() {
     g_searchGradientLayoutDirty = true;
-    if (g_searchGradientLayoutHooked || !g_resultsHost) return;
-    KeepHandler(g_resultsHost,g_resultsHost.LayoutUpdated(winrt::auto_revoke,[](auto const&,auto const&) {
-        if (!g_searchGradientLayoutDirty) return;
+    if (g_searchGradientLayoutHooked || !g_resultsHost)
+        return;
+    KeepHandler(g_resultsHost, g_resultsHost.LayoutUpdated(winrt::auto_revoke, [](auto const&, auto const&) {
+        if (!g_searchGradientLayoutDirty)
+            return;
         g_searchGradientLayoutDirty = false;
         PositionSearchColorMaps();
-        if (!g_searchContrastContainers) return;
-        for (auto& container : *g_searchContrastContainers) if (container.paint)
-            for (auto const& binding : container.paint->bindings) PositionSearchGradient(*container.paint,binding);
+        if (!g_searchContrastContainers)
+            return;
+        for (auto& container : *g_searchContrastContainers)
+            if (container.paint)
+                for (auto const& binding : container.paint->bindings)
+                    PositionSearchGradient(*container.paint, binding);
     }));
     g_searchGradientLayoutHooked = true;
 }
 
 wuxm::Brush SearchGradientForeground(wux::FrameworkElement const& element, wuxm::Brush const& fallback,
-                                    SearchContrastPaint* paint, double opacity = 1) {
+                                     SearchContrastPaint* paint, double opacity = 1) {
     MakeSearchTextReadable(element);
-    if (!paint || !paint->gradient.Mixed()) return fallback;
+    if (!paint || !paint->gradient.Mixed())
+        return fallback;
     for (auto const& binding : paint->bindings)
-        if (binding.element.get() == element && binding.opacity == opacity) return binding.brush;
+        if (binding.element.get() == element && binding.opacity == opacity)
+            return binding.brush;
     wuxm::LinearGradientBrush brush;
     brush.MappingMode(wuxm::BrushMappingMode::Absolute);
-    brush.StartPoint(wf::Point{0,0}); brush.EndPoint(wf::Point{static_cast<float>(std::max(1.0,paint->gradient.widthDip)),0});
+    brush.StartPoint(wf::Point{0, 0});
+    brush.EndPoint(wf::Point{static_cast<float>(std::max(1.0, paint->gradient.widthDip)), 0});
     brush.Opacity(opacity);
-    UpdateSearchGradientStops(brush,paint->gradient);
-    paint->bindings.push_back({winrt::make_weak(element),brush,opacity});
-    PositionSearchGradient(*paint,paint->bindings.back());
+    UpdateSearchGradientStops(brush, paint->gradient);
+    paint->bindings.push_back({winrt::make_weak(element), brush, opacity});
+    PositionSearchGradient(*paint, paint->bindings.back());
     // New rows keep the cached gradient immediately. LayoutUpdated fixes their
     // final text offset before drawing; it does not capture or force layout.
     EnsureSearchGradientLayoutHandler();
     return brush;
 }
 
-void SetSearchContainerForeground(wux::DependencyObject const& node, wuxm::Brush const& brush, int depth = 0, SearchContrastPaint* paint = nullptr, SearchColorMapPaint* map = nullptr) {
-    if (!node || depth > 32 || node == g_ourBox) return;
+void SetSearchContainerForeground(wux::DependencyObject const& node, wuxm::Brush const& brush, int depth = 0,
+                                  SearchContrastPaint* paint = nullptr, SearchColorMapPaint* map = nullptr) {
+    if (!node || depth > 32 || node == g_ourBox)
+        return;
     auto foregroundFor = [&](wux::FrameworkElement const& element) -> wuxm::Brush {
-        return map ? SearchColorMapForeground(element,*map) : SearchGradientForeground(element,brush,paint);
+        return map ? SearchColorMapForeground(element, *map) : SearchGradientForeground(element, brush, paint);
     };
-    if (auto text = node.try_as<wuxc::TextBlock>()) { text.Foreground(foregroundFor(text)); return; }
-    if (auto icon = node.try_as<wuxc::FontIcon>()) {
-        if (g_searchIcons) for (auto& entry : *g_searchIcons) if (entry.icon.get() == icon) {
-            if (icon.Foreground() == entry.applied) { auto foreground = foregroundFor(icon); icon.Foreground(foreground); entry.applied = foreground; }
-            return; // preserve deliberately colored converter/utility icons
-        }
-        icon.Foreground(foregroundFor(icon)); return;
+    if (auto text = node.try_as<wuxc::TextBlock>()) {
+        text.Foreground(foregroundFor(text));
+        return;
     }
-    if (auto control = node.try_as<wuxc::Control>(); control &&
-        (node.try_as<wuxc::MenuFlyoutPresenter>() || node.try_as<wuxc::MenuFlyoutItemBase>())) {
+    if (auto icon = node.try_as<wuxc::FontIcon>()) {
+        if (g_searchIcons)
+            for (auto& entry : *g_searchIcons)
+                if (entry.icon.get() == icon) {
+                    if (icon.Foreground() == entry.applied) {
+                        auto foreground = foregroundFor(icon);
+                        icon.Foreground(foreground);
+                        entry.applied = foreground;
+                    }
+                    return;  // preserve deliberately colored converter/utility icons
+                }
+        icon.Foreground(foregroundFor(icon));
+        return;
+    }
+    if (auto control = node.try_as<wuxc::Control>();
+        control && (node.try_as<wuxc::MenuFlyoutPresenter>() || node.try_as<wuxc::MenuFlyoutItemBase>())) {
         auto foreground = foregroundFor(control);
         control.Foreground(foreground);
-        for (auto key : {L"MenuFlyoutItemForeground",L"MenuFlyoutItemForegroundPointerOver",L"MenuFlyoutItemForegroundPressed",
-                        L"MenuFlyoutSubItemForeground",L"MenuFlyoutSubItemForegroundPointerOver",L"MenuFlyoutSubItemForegroundPressed"})
-            control.Resources().Insert(winrt::box_value(key),foreground);
-        if (auto item = node.try_as<wuxc::MenuFlyoutItem>()) SetSearchContainerForeground(item.Icon(),brush,depth+1,paint,map);
-        if (auto sub = node.try_as<wuxc::MenuFlyoutSubItem>()) SetSearchContainerForeground(sub.Icon(),brush,depth+1,paint,map);
+        for (auto key : {L"MenuFlyoutItemForeground", L"MenuFlyoutItemForegroundPointerOver",
+                         L"MenuFlyoutItemForegroundPressed", L"MenuFlyoutSubItemForeground",
+                         L"MenuFlyoutSubItemForegroundPointerOver", L"MenuFlyoutSubItemForegroundPressed"})
+            control.Resources().Insert(winrt::box_value(key), foreground);
+        if (auto item = node.try_as<wuxc::MenuFlyoutItem>())
+            SetSearchContainerForeground(item.Icon(), brush, depth + 1, paint, map);
+        if (auto sub = node.try_as<wuxc::MenuFlyoutSubItem>())
+            SetSearchContainerForeground(sub.Icon(), brush, depth + 1, paint, map);
     }
     // Logical content is available before Control templates are realized. Avoid
     // following both trees and recoloring every label twice.
-    if (auto border = node.try_as<wuxc::Border>()) { SetSearchContainerForeground(border.Child(),brush,depth+1,paint,map); return; }
+    if (auto border = node.try_as<wuxc::Border>()) {
+        SetSearchContainerForeground(border.Child(), brush, depth + 1, paint, map);
+        return;
+    }
     if (auto panel = node.try_as<wuxc::Panel>()) {
-        for (auto child : panel.Children()) SetSearchContainerForeground(child,brush,depth+1,paint,map);
+        for (auto child : panel.Children())
+            SetSearchContainerForeground(child, brush, depth + 1, paint, map);
         return;
     }
     if (auto content = node.try_as<wuxc::ContentControl>()) {
         if (auto child = content.Content().try_as<wux::DependencyObject>()) {
-            SetSearchContainerForeground(child,brush,depth+1,paint,map); return;
+            SetSearchContainerForeground(child, brush, depth + 1, paint, map);
+            return;
         }
     }
     const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
-    for (int i = 0; i < count; ++i) SetSearchContainerForeground(wuxm::VisualTreeHelper::GetChild(node,i),brush,depth+1,paint,map);
+    for (int i = 0; i < count; ++i)
+        SetSearchContainerForeground(wuxm::VisualTreeHelper::GetChild(node, i), brush, depth + 1, paint, map);
 }
 
 void BindSearchContrastContainer(SearchContrastContainer& container) {
     auto root = container.root.get();
-    if (!root) return;
-    if (!container.paint) container.paint = std::make_shared<SearchContrastPaint>();
+    if (!root)
+        return;
+    if (!container.paint)
+        container.paint = std::make_shared<SearchContrastPaint>();
     auto& paint = *container.paint;
-    paint.root = winrt::make_weak(root); paint.bindings.clear();
-    SetSearchContainerForeground(root,container.foreground,0,&paint);
+    paint.root = winrt::make_weak(root);
+    paint.bindings.clear();
+    SetSearchContainerForeground(root, container.foreground, 0, &paint);
     container.dirty = false;
 }
 
 void InvalidateSearchContrastContainer(wux::FrameworkElement const& root) {
-    if (g_searchContrastContainers) for (auto& container : *g_searchContrastContainers) {
-        if (container.root.get() != root) continue;
-        // New heading/preview labels are already attached on this UI thread.
-        // Rebind before returning to layout, rather than waiting for the timer.
-        BindSearchContrastContainer(container);
-        break;
-    }
+    if (g_searchContrastContainers)
+        for (auto& container : *g_searchContrastContainers) {
+            if (container.root.get() != root)
+                continue;
+            // New heading/preview labels are already attached on this UI thread.
+            // Rebind before returning to layout, rather than waiting for the timer.
+            BindSearchContrastContainer(container);
+            break;
+        }
 }
 
 void PrepareSearchResultContrastColors() {
-    if (!g_searchWindowWindow.load() || SearchTextOverride() || !g_resultsHost) return;
+    if (!g_searchWindowWindow.load() || SearchTextOverride() || !g_resultsHost)
+        return;
     auto& paint = g_searchColorMap;
     if (!paint || paint->root.get() != g_resultsHost) {
         paint = std::make_shared<SearchColorMapPaint>();
         paint->id = ++g_searchContrastNextId;
         paint->root = winrt::make_weak(g_resultsHost.as<wux::FrameworkElement>());
-        paint->bitmap = wuxmi::WriteableBitmap{kSearchContrastMapWidth,kSearchContrastMapHeight};
+        paint->bitmap = wuxmi::WriteableBitmap{kSearchContrastMapWidth, kSearchContrastMapHeight};
         BYTE* bytes = nullptr;
-        winrt::check_hresult(paint->bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&bytes));
-        if (!bytes) winrt::throw_hresult(E_POINTER);
-        std::fill_n(reinterpret_cast<uint32_t*>(bytes),kSearchContrastMapWidth*kSearchContrastMapHeight,SearchMainTextColor());
+        winrt::check_hresult(
+            paint->bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&bytes));
+        if (!bytes)
+            winrt::throw_hresult(E_POINTER);
+        std::fill_n(reinterpret_cast<uint32_t*>(bytes), kSearchContrastMapWidth * kSearchContrastMapHeight,
+                    SearchMainTextColor());
         paint->bitmap.Invalidate();
     }
     paint->bindings.clear();
-    SetSearchContainerForeground(g_resultsHost,g_searchTextBrush,0,nullptr,paint.get());
-    auto foreground = SearchColorMapForeground(g_ourBox,*paint);
+    SetSearchContainerForeground(g_resultsHost, g_searchTextBrush, 0, nullptr, paint.get());
+    auto foreground = SearchColorMapForeground(g_ourBox, *paint);
     g_ourBox.Foreground(foreground);
     g_ourBox.PlaceholderForeground(foreground);
-    for (auto key : {L"TextControlForeground",L"TextControlForegroundFocused",L"TextControlForegroundPointerOver",
-                    L"TextControlButtonForeground",L"TextControlButtonForegroundPointerOver",L"TextControlButtonForegroundPressed"})
-        g_ourBox.Resources().Insert(winrt::box_value(key),foreground);
+    for (auto key : {L"TextControlForeground", L"TextControlForegroundFocused", L"TextControlForegroundPointerOver",
+                     L"TextControlButtonForeground", L"TextControlButtonForegroundPointerOver",
+                     L"TextControlButtonForegroundPressed"})
+        g_ourBox.Resources().Insert(winrt::box_value(key), foreground);
     EnsureSearchGradientLayoutHandler();
 }
 
 bool SearchContrastBounds(wux::FrameworkElement const& element, bool outside, RECT* rect, RECT* surface = nullptr) try {
-    if (!element || element.Visibility() != wux::Visibility::Visible || element.Opacity() < .99 || !element.XamlRoot()) return false;
+    if (!element || element.Visibility() != wux::Visibility::Visible || element.Opacity() < .99 || !element.XamlRoot())
+        return false;
     HWND host = g_searchWindowWindow.load();
     POINT origin{};
-    if (!host || !ClientToScreen(g_searchWindowChild,&origin)) return false;
+    if (!host || !ClientToScreen(g_searchWindowChild, &origin))
+        return false;
     const double scale = element.XamlRoot().RasterizationScale();
     auto bounds = [&](wux::FrameworkElement const& item) {
-        auto r = item.TransformToVisual(g_searchWindowRoot).TransformBounds(
-            wf::Rect{0,0,static_cast<float>(item.ActualWidth()),static_cast<float>(item.ActualHeight())});
-        return RECT{origin.x+static_cast<LONG>(std::ceil(r.X*scale)),origin.y+static_cast<LONG>(std::ceil(r.Y*scale)),
-                    origin.x+static_cast<LONG>(std::floor((r.X+r.Width)*scale)),origin.y+static_cast<LONG>(std::floor((r.Y+r.Height)*scale))};
+        auto r = item.TransformToVisual(g_searchWindowRoot)
+                     .TransformBounds(wf::Rect{0, 0, static_cast<float>(item.ActualWidth()),
+                                               static_cast<float>(item.ActualHeight())});
+        return RECT{origin.x + static_cast<LONG>(std::ceil(r.X * scale)),
+                    origin.y + static_cast<LONG>(std::ceil(r.Y * scale)),
+                    origin.x + static_cast<LONG>(std::floor((r.X + r.Width) * scale)),
+                    origin.y + static_cast<LONG>(std::floor((r.Y + r.Height) * scale))};
     };
     *rect = bounds(element);
-    if (surface) *surface = *rect;
+    if (surface)
+        *surface = *rect;
     if (!outside) {
-        RECT visible{}; GetClientRect(g_searchWindowChild,&visible); OffsetRect(&visible,origin.x,origin.y);
-        if (!IntersectRect(rect,rect,&visible)) return false;
+        RECT visible{};
+        GetClientRect(g_searchWindowChild, &visible);
+        OffsetRect(&visible, origin.x, origin.y);
+        if (!IntersectRect(rect, rect, &visible))
+            return false;
         // A scrolled card must be sampled only inside its visible viewport.
         auto parent = wuxm::VisualTreeHelper::GetParent(element);
         for (int depth = 0; parent && depth < 32; ++depth) {
             if (auto scroll = parent.try_as<wuxc::ScrollViewer>()) {
                 RECT viewport = bounds(scroll);
-                if (!IntersectRect(rect,rect,&viewport)) return false;
+                if (!IntersectRect(rect, rect, &viewport))
+                    return false;
                 break;
             }
             parent = wuxm::VisualTreeHelper::GetParent(parent);
         }
     }
-    RECT desktop{GetSystemMetrics(SM_XVIRTUALSCREEN),GetSystemMetrics(SM_YVIRTUALSCREEN),0,0};
-    desktop.right = desktop.left+GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    desktop.bottom = desktop.top+GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    return IntersectRect(rect,rect,&desktop) && rect->right-rect->left >= 24 && rect->bottom-rect->top >= 18;
-} catch (...) { return false; }
+    RECT desktop{GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN), 0, 0};
+    desktop.right = desktop.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    desktop.bottom = desktop.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    return IntersectRect(rect, rect, &desktop) && rect->right - rect->left >= 24 && rect->bottom - rect->top >= 18;
+} catch (...) {
+    return false;
+}
 
 std::optional<SearchContrastMapProbe> BuildSearchColorMapProbe(SearchColorMapPaint const& paint) {
     auto root = paint.root.get();
     RECT rect{}, surface{};
-    if (!root || !SearchContrastBounds(root,false,&rect,&surface) || !EqualRect(&rect,&surface)) return std::nullopt;
-    SearchContrastMapProbe probe{paint.id,rect,{}};
-    probe.exposed = SearchContrastExposure({paint.id,rect,false},g_searchWindowWindow.load(),GetCurrentThreadId());
-    if (!probe.exposed) return std::nullopt;
-    const int padding = std::max(2,MulDiv(3,GetDpiForWindow(g_searchWindowWindow.load()),96));
+    if (!root || !SearchContrastBounds(root, false, &rect, &surface) || !EqualRect(&rect, &surface))
+        return std::nullopt;
+    SearchContrastMapProbe probe{paint.id, rect, {}};
+    probe.exposed = SearchContrastExposure({paint.id, rect, false}, g_searchWindowWindow.load(), GetCurrentThreadId());
+    if (!probe.exposed)
+        return std::nullopt;
+    const int padding = std::max(2, MulDiv(3, GetDpiForWindow(g_searchWindowWindow.load()), 96));
     auto add = [&](wux::FrameworkElement const& element) {
         RECT visible{}, bounds{};
-        if (!SearchContrastBounds(element,false,&visible,&bounds)) return;
-        for (const int y : {bounds.top+padding,bounds.bottom-padding-2})
-            if (y >= visible.top && y+1 < visible.bottom)
-                probe.strips.push_back(RECT{visible.left,y,visible.right,y+2});
+        if (!SearchContrastBounds(element, false, &visible, &bounds))
+            return;
+        for (const int y : {bounds.top + padding, bounds.bottom - padding - 2})
+            if (y >= visible.top && y + 1 < visible.bottom)
+                probe.strips.push_back(RECT{visible.left, y, visible.right, y + 2});
     };
-    add(g_searchBarBorder); add(g_appsHeaderHolder); add(g_filesHeaderHolder); add(g_footerBorder);
-    for (auto panel : {g_appsList,g_resultsList}) if (panel)
-        for (auto child : panel.Children()) add(child.try_as<wux::FrameworkElement>());
-    if (probe.strips.empty()) return std::nullopt;
-    std::sort(probe.strips.begin(),probe.strips.end(),[](RECT const& a,RECT const& b) {
-        return a.top != b.top ? a.top < b.top : a.left < b.left;
-    });
+    add(g_searchBarBorder);
+    add(g_appsHeaderHolder);
+    add(g_filesHeaderHolder);
+    add(g_footerBorder);
+    for (auto panel : {g_appsList, g_resultsList})
+        if (panel)
+            for (auto child : panel.Children())
+                add(child.try_as<wux::FrameworkElement>());
+    if (probe.strips.empty())
+        return std::nullopt;
+    std::sort(probe.strips.begin(), probe.strips.end(),
+              [](RECT const& a, RECT const& b) { return a.top != b.top ? a.top < b.top : a.left < b.left; });
     if (probe.strips.size() > kSearchContrastMaxMapBands) {
-        std::vector<RECT> selected; selected.reserve(kSearchContrastMaxMapBands);
-        for(size_t i=0;i<kSearchContrastMaxMapBands;++i)
-            selected.push_back(probe.strips[i*(probe.strips.size()-1)/(kSearchContrastMaxMapBands-1)]);
-        probe.strips=std::move(selected);
+        std::vector<RECT> selected;
+        selected.reserve(kSearchContrastMaxMapBands);
+        for (size_t i = 0; i < kSearchContrastMaxMapBands; ++i)
+            selected.push_back(probe.strips[i * (probe.strips.size() - 1) / (kSearchContrastMaxMapBands - 1)]);
+        probe.strips = std::move(selected);
     }
     return probe;
 }
 
 void ApplySearchColorMaps(SearchContrastResult const& result) {
     auto const& paint = g_searchColorMap;
-    if (!paint || GetTickCount64() < g_searchColorMapScrollUntil) return;
+    if (!paint || GetTickCount64() < g_searchColorMapScrollUntil)
+        return;
     for (auto const& reading : result.maps) {
-        if (paint->id != reading.id || !reading.pixels || reading.pixels->size() != kSearchContrastMapWidth*kSearchContrastMapHeight) continue;
+        if (paint->id != reading.id || !reading.pixels ||
+            reading.pixels->size() != kSearchContrastMapWidth * kSearchContrastMapHeight)
+            continue;
         RECT bounds{};
-        if (!SearchContrastBounds(paint->root.get(),false,&bounds) || !EqualRect(&bounds,&reading.bounds) ||
-            !SearchContrastExposure({reading.id,bounds,false},g_searchWindowWindow.load(),GetCurrentThreadId())) break;
+        if (!SearchContrastBounds(paint->root.get(), false, &bounds) || !EqualRect(&bounds, &reading.bounds) ||
+            !SearchContrastExposure({reading.id, bounds, false}, g_searchWindowWindow.load(), GetCurrentThreadId()))
+            break;
         if (paint->revision != reading.revision) {
             BYTE* bytes = nullptr;
-            winrt::check_hresult(paint->bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&bytes));
-            if (!bytes || paint->bitmap.PixelBuffer().Capacity() < reading.pixels->size()*sizeof(uint32_t)) break;
-            memcpy(bytes,reading.pixels->data(),reading.pixels->size()*sizeof(uint32_t));
+            winrt::check_hresult(
+                paint->bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>()->Buffer(&bytes));
+            if (!bytes || paint->bitmap.PixelBuffer().Capacity() < reading.pixels->size() * sizeof(uint32_t))
+                break;
+            memcpy(bytes, reading.pixels->data(), reading.pixels->size() * sizeof(uint32_t));
             paint->bitmap.Invalidate();
             paint->revision = reading.revision;
             if (!g_searchColorMapReported) {
@@ -14266,13 +15139,15 @@ void ApplySearchColorMaps(SearchContrastResult const& result) {
 bool SearchContainerContrastActive() {
     HWND host = g_searchWindowWindow.load();
     return host && IsWindowVisible(host) && !g_searchWindowClosing && !g_searchWindowSliding &&
-        !g_searchWindowWaitingForStart && !g_searchWindowCloaked && !g_dragging &&
-        GetWindowThreadProcessId(GetForegroundWindow(),nullptr) == GetCurrentThreadId() && !SearchTextOverride();
+           !g_searchWindowWaitingForStart && !g_searchWindowCloaked && !g_dragging &&
+           GetWindowThreadProcessId(GetForegroundWindow(), nullptr) == GetCurrentThreadId() && !SearchTextOverride();
 }
 
 void PauseSearchContainerContrast() {
-    if (HWND host = g_searchWindowWindow.load()) KillTimer(host,kSearchContainerContrastTimer);
-    if (g_searchContrastSampler) g_searchContrastSampler->Cancel();
+    if (HWND host = g_searchWindowWindow.load())
+        KillTimer(host, kSearchContainerContrastTimer);
+    if (g_searchContrastSampler)
+        g_searchContrastSampler->Cancel();
 }
 void ResetSearchContainerContrast() {
     PauseSearchContainerContrast();
@@ -14286,194 +15161,301 @@ void ResetSearchContainerContrast() {
 }
 void StopSearchContainerContrast() {
     ResetSearchContainerContrast();
-    g_searchContrastSampler.reset(); // join before XAML or the host can disappear
+    g_searchContrastSampler.reset();  // join before XAML or the host can disappear
     g_searchGradientLayoutHooked = false;
 }
 
 void ApplySearchContainerContrast() try {
-    if (!g_searchContrastSampler) return;
+    if (!g_searchContrastSampler)
+        return;
     auto result = g_searchContrastSampler->Take();
     if (!result || !g_searchContrastSampler->Current(result->generation) || !SearchContainerContrastActive() ||
-        !g_searchContrastContainers) return;
+        !g_searchContrastContainers)
+        return;
     ApplySearchColorMaps(*result);
     size_t applied = 0, lightCount = 0, mixedCount = 0;
-    for (auto const& reading : result->readings) for (auto& container : *g_searchContrastContainers) {
-        if (!container.active || container.id != reading.id) continue;
-        RECT now{};
-        if (!SearchContrastBounds(container.root.get(),container.outside,&now) || !EqualRect(&now,&reading.bounds) ||
-            !SearchContrastExposure({container.id,now,container.outside},g_searchWindowWindow.load(),GetCurrentThreadId())) break;
-        if (!container.paint) container.paint = std::make_shared<SearchContrastPaint>();
-        const bool wasMixed = container.paint->gradient.Mixed();
-        const double scale = GetDpiForWindow(g_searchWindowWindow.load())/96.0;
-        const bool changed = container.paint->gradient.Sample(reading.profile,reading.inset,(now.right-now.left)/scale);
-        const bool mixed = container.paint->gradient.Mixed();
-        const bool light = SearchContainerLightText(reading.luminance,container.lightText);
-        const uint32_t foreground = SearchContrastGrayColor(reading.luminance,light);
-        const auto color = SearchUnpackColor(foreground);
-        if (container.foreground.Color() != color) container.foreground.Color(color);
-        container.lightText = light;
-        if (wasMixed != mixed) BindSearchContrastContainer(container);
-        else if (changed && mixed) RefreshSearchGradientPaint(*container.paint);
-        ++applied; lightCount += light; mixedCount += mixed;
-        break;
-    }
+    for (auto const& reading : result->readings)
+        for (auto& container : *g_searchContrastContainers) {
+            if (!container.active || container.id != reading.id)
+                continue;
+            RECT now{};
+            if (!SearchContrastBounds(container.root.get(), container.outside, &now) ||
+                !EqualRect(&now, &reading.bounds) ||
+                !SearchContrastExposure({container.id, now, container.outside}, g_searchWindowWindow.load(),
+                                        GetCurrentThreadId()))
+                break;
+            if (!container.paint)
+                container.paint = std::make_shared<SearchContrastPaint>();
+            const bool wasMixed = container.paint->gradient.Mixed();
+            const double scale = GetDpiForWindow(g_searchWindowWindow.load()) / 96.0;
+            const bool changed =
+                container.paint->gradient.Sample(reading.profile, reading.inset, (now.right - now.left) / scale);
+            const bool mixed = container.paint->gradient.Mixed();
+            const bool light = SearchContainerLightText(reading.luminance, container.lightText);
+            const uint32_t foreground = SearchContrastGrayColor(reading.luminance, light);
+            const auto color = SearchUnpackColor(foreground);
+            if (container.foreground.Color() != color)
+                container.foreground.Color(color);
+            container.lightText = light;
+            if (wasMixed != mixed)
+                BindSearchContrastContainer(container);
+            else if (changed && mixed)
+                RefreshSearchGradientPaint(*container.paint);
+            ++applied;
+            lightCount += light;
+            mixedCount += mixed;
+            break;
+        }
     if (applied && !g_searchContrastReported) {
         wchar_t detail[128]{};
-        swprintf_s(detail,L"container contrast active: %zu sampled, %zu light, %zu dark, %zu gradients",applied,lightCount,applied-lightCount,mixedCount);
+        swprintf_s(detail, L"container contrast active: %zu sampled, %zu light, %zu dark, %zu gradients", applied,
+                   lightCount, applied - lightCount, mixedCount);
         SearchWindowTrace(detail);
         g_searchContrastReported = true;
     }
-} catch (...) { SearchWindowTrace(L"container color update failed",winrt::to_hresult()); }
+} catch (...) {
+    SearchWindowTrace(L"container color update failed", winrt::to_hresult());
+}
+
+void EnableThreadPopupHostBackdrop() {
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hwnd, LPARAM) -> BOOL {
+            wchar_t cls[64]{};
+            if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) > 0 && wcscmp(cls, L"Xaml_WindowedPopupClass") == 0) {
+                BOOL enabled = TRUE;
+                DwmSetWindowAttribute(hwnd, 17, &enabled, sizeof(enabled));
+            }
+            return TRUE;
+        },
+        0);
+}
+
+void ApplyOpenMenuPresenters();
 
 void SearchContainerContrastTick() try {
-    if (!SearchContainerContrastActive()) { PauseSearchContainerContrast(); return; }
+    if (!SearchContainerContrastActive()) {
+        PauseSearchContainerContrast();
+        return;
+    }
     ApplySearchContainerContrast();
-    if (!g_searchContrastContainers) g_searchContrastContainers.emplace();
+    if (!g_searchContrastContainers)
+        g_searchContrastContainers.emplace();
     auto& containers = *g_searchContrastContainers;
-    std::erase_if(containers,[](auto const& item) { return !item.root.get(); });
-    for (auto& item : containers) item.active = false;
+    std::erase_if(containers, [](auto const& item) { return !item.root.get(); });
+    for (auto& item : containers)
+        item.active = false;
     std::vector<SearchContrastProbe> probes;
     auto add = [&](wux::FrameworkElement const& element, bool outside = false) {
         RECT rect{}, surface{};
-        if (probes.size() >= kSearchContrastMaxContainers || !SearchContrastBounds(element,outside,&rect,&surface)) return;
-        auto found = std::find_if(containers.begin(),containers.end(),[&](auto const& item) { return item.root.get() == element; });
+        if (probes.size() >= kSearchContrastMaxContainers || !SearchContrastBounds(element, outside, &rect, &surface))
+            return;
+        auto found = std::find_if(containers.begin(), containers.end(),
+                                  [&](auto const& item) { return item.root.get() == element; });
         if (found == containers.end()) {
             const uint32_t fallback = SearchMainTextColor();
-            containers.push_back({++g_searchContrastNextId,winrt::make_weak(element),wuxm::SolidColorBrush{SearchUnpackColor(fallback)}});
-            found = containers.end()-1;
+            containers.push_back({++g_searchContrastNextId, winrt::make_weak(element),
+                                  wuxm::SolidColorBrush{SearchUnpackColor(fallback)}});
+            found = containers.end() - 1;
         }
         auto& item = *found;
-        item.active = true; item.outside = outside;
-        if (item.dirty) BindSearchContrastContainer(item);
-        SearchContrastProbe probe{item.id,rect,outside};
+        item.active = true;
+        item.outside = outside;
+        if (item.dirty)
+            BindSearchContrastContainer(item);
+        SearchContrastProbe probe{item.id, rect, outside};
         probe.surface = surface;
-        probe.exposed = SearchContrastExposure(probe,g_searchWindowWindow.load(),GetCurrentThreadId());
-        if (probe.exposed) probes.push_back(probe);
+        probe.exposed = SearchContrastExposure(probe, g_searchWindowWindow.load(), GetCurrentThreadId());
+        if (probe.exposed)
+            probes.push_back(probe);
     };
     if (g_previewPopup && g_previewPopup.IsOpen() && g_previewCard.Opacity() >= .99) {
-        add(g_previewDetails,true);
-        if (g_previewText && g_previewText.Visibility() == wux::Visibility::Visible) add(g_previewThumbBox,true);
+        add(g_previewDetails, true);
+        if (g_previewText && g_previewText.Visibility() == wux::Visibility::Visible)
+            add(g_previewThumbBox, true);
     }
     bool menuOpen = false;
     // Give menus priority over long result lists. Each open submenu is a
     // separate container, rather than inheriting its parent's sampled color.
-    if (g_resultsHost && g_resultsHost.XamlRoot()) for (auto popup : wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
-        if (popup == g_previewPopup) continue;
-        auto visit = [&](auto&& self, wux::DependencyObject const& node, int depth) -> void {
-            if (!node || depth > 16) return;
-            if (auto menu = node.try_as<wuxc::MenuFlyoutPresenter>()) { menuOpen=true; add(menu,true); return; }
-            const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
-            for (int i = 0; i < count; ++i) self(self,wuxm::VisualTreeHelper::GetChild(node,i),depth+1);
-        };
-        visit(visit,popup.Child(),0);
-    }
-    if (!g_searchColorMap) PrepareSearchResultContrastColors();
+    if (g_resultsHost && g_resultsHost.XamlRoot())
+        for (auto popup : wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
+            if (popup == g_previewPopup)
+                continue;
+            auto visit = [&](auto&& self, wux::DependencyObject const& node, int depth) -> void {
+                if (!node || depth > 16)
+                    return;
+                if (auto menu = node.try_as<wuxc::MenuFlyoutPresenter>()) {
+                    menuOpen = true;
+                    add(menu, true);
+                    return;
+                }
+                const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+                for (int i = 0; i < count; ++i)
+                    self(self, wuxm::VisualTreeHelper::GetChild(node, i), depth + 1);
+            };
+            visit(visit, popup.Child(), 0);
+        }
+    if (menuOpen)
+        ApplyOpenMenuPresenters();
+    if (!g_searchColorMap)
+        PrepareSearchResultContrastColors();
     std::vector<SearchContrastMapProbe> maps;
     if (!menuOpen && GetTickCount64() >= g_searchColorMapScrollUntil && g_searchColorMap)
-        if (auto probe=BuildSearchColorMapProbe(*g_searchColorMap)) maps.push_back(std::move(*probe));
+        if (auto probe = BuildSearchColorMapProbe(*g_searchColorMap))
+            maps.push_back(std::move(*probe));
     if (!probes.empty() || !maps.empty()) {
-        if (!g_searchContrastSampler) g_searchContrastSampler.emplace();
-        g_searchContrastSampler->Submit(g_searchWindowWindow.load(),GetCurrentThreadId(),std::move(probes),std::move(maps));
+        if (!g_searchContrastSampler)
+            g_searchContrastSampler.emplace();
+        g_searchContrastSampler->Submit(g_searchWindowWindow.load(), GetCurrentThreadId(), std::move(probes),
+                                        std::move(maps));
     }
-    SetTimer(g_searchWindowWindow.load(),kSearchContainerContrastTimer,250,nullptr);
-} catch (...) { PauseSearchContainerContrast(); SearchWindowTrace(L"container color sampling unavailable",winrt::to_hresult()); }
-
+    SetTimer(g_searchWindowWindow.load(), kSearchContainerContrastTimer, 250, nullptr);
+} catch (...) {
+    PauseSearchContainerContrast();
+    SearchWindowTrace(L"container color sampling unavailable", winrt::to_hresult());
+}
 
 struct SearchGlassBrush : wuxm::XamlCompositionBrushBaseT<SearchGlassBrush> {
     SearchBrushData data;
     searchcomp::Compositor compositor{nullptr};
     searchcomp::CompositionEffectFactory factory{nullptr};
     bool hostBackdrop;
-    SearchGlassBrush(SearchBrushData value,bool host) : data(value),hostBackdrop(host) {
-        compositor=wux::Hosting::ElementCompositionPreview::GetElementVisual(g_resultsHost).Compositor();
+    SearchGlassBrush(SearchBrushData value, bool host) : data(value), hostBackdrop(host) {
+        compositor = wux::Hosting::ElementCompositionPreview::GetElementVisual(g_resultsHost).Compositor();
     }
     void OnConnected() noexcept {
-        if (CompositionBrush()) return;
+        if (CompositionBrush())
+            return;
         try {
+            if (hostBackdrop)
+                EnableThreadPopupHostBackdrop();
             winrt::Windows::UI::ViewManagement::UISettings settings;
             HIGHCONTRASTW contrast{sizeof(contrast)};
-            const bool highContrast=SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0) &&
-                                    (contrast.dwFlags&HCF_HIGHCONTRASTON);
+            const bool highContrast = SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+                                      (contrast.dwFlags & HCF_HIGHCONTRASTON);
             if (!settings.AdvancedEffectsEnabled() || highContrast) {
-                CompositionBrush(compositor.CreateColorBrush(SearchUnpackColor(data.fallback))); return;
+                CompositionBrush(compositor.CreateColorBrush(SearchUnpackColor(data.fallback)));
+                return;
             }
             // This brush's definition is immutable. Reconnecting it (for
             // example in a preview) needs a new brush, not a new effect graph.
             if (!factory) {
-                auto blur=winrt::make_self<SearchEffect>(CLSID_D2D1GaussianBlur);
-                blur->properties={wf::PropertyValue::CreateSingle(static_cast<float>(data.blur)),
-                                  wf::PropertyValue::CreateUInt32(1),wf::PropertyValue::CreateUInt32(1)};
-                blur->sources={searchcomp::CompositionEffectSourceParameter(L"Backdrop")};
-                searcheffect::IGraphicsEffectSource source=*blur;
+                auto blur = winrt::make_self<SearchEffect>(CLSID_D2D1GaussianBlur);
+                blur->properties = {wf::PropertyValue::CreateSingle(static_cast<float>(data.blur)),
+                                    wf::PropertyValue::CreateUInt32(1), wf::PropertyValue::CreateUInt32(1)};
+                blur->sources = {searchcomp::CompositionEffectSourceParameter(L"Backdrop")};
+                searcheffect::IGraphicsEffectSource source = *blur;
                 // Same saturation/luminance operations as WindhawkBlur.
-                auto matrix=[&](std::array<float,20> const& values) {
-                    auto effect=winrt::make_self<SearchEffect>(CLSID_D2D1ColorMatrix);
-                    effect->properties={wf::PropertyValue::CreateSingleArray(values),
-                                        wf::PropertyValue::CreateUInt32(1),wf::PropertyValue::CreateBoolean(false)};
-                    effect->sources={source}; source=*effect;
+                auto matrix = [&](std::array<float, 20> const& values) {
+                    auto effect = winrt::make_self<SearchEffect>(CLSID_D2D1ColorMatrix);
+                    effect->properties = {wf::PropertyValue::CreateSingleArray(values),
+                                          wf::PropertyValue::CreateUInt32(1), wf::PropertyValue::CreateBoolean(false)};
+                    effect->sources = {source};
+                    source = *effect;
                 };
-                constexpr float r=.2126f,g=.7152f,b=.0722f;
-                if (data.saturation!=1) {
-                    float sat=static_cast<float>(data.saturation),inv=1-sat;
-                    matrix({inv*r+sat,inv*r,inv*r,0,inv*g,inv*g+sat,inv*g,0,
-                            inv*b,inv*b,inv*b+sat,0,0,0,0,1,0,0,0,0});
+                constexpr float r = .2126f, g = .7152f, b = .0722f;
+                if (data.saturation != 1) {
+                    float sat = static_cast<float>(data.saturation), inv = 1 - sat;
+                    matrix({inv * r + sat,
+                            inv * r,
+                            inv * r,
+                            0,
+                            inv * g,
+                            inv * g + sat,
+                            inv * g,
+                            0,
+                            inv * b,
+                            inv * b,
+                            inv * b + sat,
+                            0,
+                            0,
+                            0,
+                            0,
+                            1,
+                            0,
+                            0,
+                            0,
+                            0});
                 }
-                const auto tint=SearchUnpackColor(data.color);
-                if (data.luminosity>0) {
-                    float op=static_cast<float>(data.luminosity);
-                    float lum=(tint.R*r+tint.G*g+tint.B*b)/255.0f*op;
-                    matrix({1-r*op,-r*op,-r*op,0,-g*op,1-g*op,-g*op,0,
-                            -b*op,-b*op,1-b*op,0,0,0,0,1,lum,lum,lum,0});
+                const auto tint = SearchUnpackColor(data.color);
+                if (data.luminosity > 0) {
+                    float op = static_cast<float>(data.luminosity);
+                    float lum = (tint.R * r + tint.G * g + tint.B * b) / 255.0f * op;
+                    matrix({1 - r * op, -r * op, -r * op, 0, -g * op, 1 - g * op, -g * op, 0,   -b * op, -b * op,
+                            1 - b * op, 0,       0,       0, 0,       1,          lum,     lum, lum,     0});
                 }
-                auto flood=winrt::make_self<SearchEffect>(CLSID_D2D1Flood);
-                flood->properties={wf::PropertyValue::CreateSingleArray(
-                    {tint.R/255.0f,tint.G/255.0f,tint.B/255.0f,tint.A/255.0f})};
-                auto composite=winrt::make_self<SearchEffect>(CLSID_D2D1Composite);
-                composite->properties={wf::PropertyValue::CreateUInt32(0)}; // SOURCE_OVER
-                composite->sources={source,*flood};
-                factory=compositor.CreateEffectFactory(*composite);
+                auto flood = winrt::make_self<SearchEffect>(CLSID_D2D1Flood);
+                flood->properties = {wf::PropertyValue::CreateSingleArray(
+                    {tint.R / 255.0f, tint.G / 255.0f, tint.B / 255.0f, tint.A / 255.0f})};
+                auto composite = winrt::make_self<SearchEffect>(CLSID_D2D1Composite);
+                composite->properties = {wf::PropertyValue::CreateUInt32(0)};  // SOURCE_OVER
+                composite->sources = {source, *flood};
+                factory = compositor.CreateEffectFactory(*composite);
             }
-            auto effect=factory.CreateBrush();
-            effect.SetSourceParameter(L"Backdrop",hostBackdrop ? compositor.CreateHostBackdropBrush() : compositor.CreateBackdropBrush());
+            auto effect = factory.CreateBrush();
+            effect.SetSourceParameter(
+                L"Backdrop", hostBackdrop ? compositor.CreateHostBackdropBrush() : compositor.CreateBackdropBrush());
             CompositionBrush(effect);
-            if(hostBackdrop) SearchWindowTrace(L"glass composition ready");
+            if (hostBackdrop)
+                SearchWindowTrace(L"glass composition ready");
         } catch (...) {
-            SearchWindowTrace(L"glass effect fallback",winrt::to_hresult());
-            try { CompositionBrush(compositor.CreateColorBrush(SearchUnpackColor(data.fallback))); } catch (...) {}
+            SearchWindowTrace(L"glass effect fallback", winrt::to_hresult());
+            try {
+                CompositionBrush(compositor.CreateColorBrush(SearchUnpackColor(data.fallback)));
+            } catch (...) {
+            }
         }
     }
     void OnDisconnected() noexcept {
-        try { if(auto brush=CompositionBrush()) { CompositionBrush(nullptr); brush.Close(); } } catch (...) {}
+        try {
+            if (auto brush = CompositionBrush()) {
+                CompositionBrush(nullptr);
+                brush.Close();
+            }
+        } catch (...) {
+        }
     }
 };
 
-wuxm::Brush RecreateSearchBrush(SearchBrushData const& data,bool hostBackdrop = false) {
-    if (!std::isfinite(data.opacity) || !std::isfinite(data.tint) || !std::isfinite(data.luminosity)) return nullptr;
+wuxm::Brush RecreateSearchBrush(SearchBrushData const& data, bool hostBackdrop = false) {
+    if (!std::isfinite(data.opacity) || !std::isfinite(data.tint) || !std::isfinite(data.luminosity))
+        return nullptr;
     wuxm::Brush brush{nullptr};
-    if (data.kind == 1) brush=wuxm::SolidColorBrush{SearchUnpackColor(data.color)};
+    if (data.kind == 1)
+        brush = wuxm::SolidColorBrush{SearchUnpackColor(data.color)};
     else if (data.kind == 2) {
         wuxm::AcrylicBrush acrylic;
         acrylic.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
-        acrylic.TintColor(SearchUnpackColor(data.color)); acrylic.FallbackColor(SearchUnpackColor(data.fallback));
-        acrylic.TintOpacity(std::clamp(data.tint,0.0,1.0));
-        if (data.luminosity >= 0) acrylic.TintLuminosityOpacity(std::clamp(data.luminosity,0.0,1.0));
-        brush=acrylic;
+        acrylic.TintColor(SearchUnpackColor(data.color));
+        acrylic.FallbackColor(SearchUnpackColor(data.fallback));
+        acrylic.TintOpacity(std::clamp(data.tint, 0.0, 1.0));
+        if (data.luminosity >= 0)
+            acrylic.TintLuminosityOpacity(std::clamp(data.luminosity, 0.0, 1.0));
+        brush = acrylic;
     } else if (data.kind == 4) {
-        if (!std::isfinite(data.blur) || data.blur<0 || data.blur>100 || !std::isfinite(data.saturation) || data.saturation<0 || data.saturation>10) return nullptr;
-        brush=winrt::make<SearchGlassBrush>(data,hostBackdrop);
+        if (!std::isfinite(data.blur) || data.blur < 0 || data.blur > 100 || !std::isfinite(data.saturation) ||
+            data.saturation < 0 || data.saturation > 10)
+            return nullptr;
+        brush = winrt::make<SearchGlassBrush>(data, hostBackdrop);
     } else if (data.kind == 3 && data.count <= 8) {
         wuxm::LinearGradientBrush gradient;
-        for(double coordinate:data.points) if(!std::isfinite(coordinate) || std::abs(coordinate)>1000) return nullptr;
-        gradient.StartPoint(wf::Point{static_cast<float>(data.points[0]),static_cast<float>(data.points[1])});
-        gradient.EndPoint(wf::Point{static_cast<float>(data.points[2]),static_cast<float>(data.points[3])});
-        for (uint32_t i=0;i<data.count;++i) {
-            if (!std::isfinite(data.offsets[i])) return nullptr;
-            wuxm::GradientStop stop; stop.Color(SearchUnpackColor(data.colors[i])); stop.Offset(std::clamp(data.offsets[i],0.0,1.0));
+        for (double coordinate : data.points)
+            if (!std::isfinite(coordinate) || std::abs(coordinate) > 1000)
+                return nullptr;
+        gradient.StartPoint(wf::Point{static_cast<float>(data.points[0]), static_cast<float>(data.points[1])});
+        gradient.EndPoint(wf::Point{static_cast<float>(data.points[2]), static_cast<float>(data.points[3])});
+        for (uint32_t i = 0; i < data.count; ++i) {
+            if (!std::isfinite(data.offsets[i]))
+                return nullptr;
+            wuxm::GradientStop stop;
+            stop.Color(SearchUnpackColor(data.colors[i]));
+            stop.Offset(std::clamp(data.offsets[i], 0.0, 1.0));
             gradient.GradientStops().Append(stop);
         }
-        brush=gradient;
+        brush = gradient;
     }
-    if (brush) brush.Opacity(std::clamp(data.opacity,0.0,1.0));
+    if (brush)
+        brush.Opacity(std::clamp(data.opacity, 0.0, 1.0));
     return brush;
 }
 
@@ -14483,42 +15465,50 @@ struct SearchGeometryInterop : IUnknown {
     virtual HRESULT STDMETHODCALLTYPE TryGetGeometryUsingFactory(ID2D1Factory*, ID2D1Geometry**) = 0;
 };
 
-} // namespace
-template <> inline constexpr winrt::guid winrt::impl::guid_v<SearchGeometryInterop>{
-    0x0657AF73,0x53FD,0x47CF,{0x84,0xFF,0xC8,0x49,0x2D,0x2A,0x80,0xA3}};
+}  // namespace
+template <>
+inline constexpr winrt::guid winrt::impl::guid_v<SearchGeometryInterop>{
+    0x0657AF73, 0x53FD, 0x47CF, {0x84, 0xFF, 0xC8, 0x49, 0x2D, 0x2A, 0x80, 0xA3}};
 namespace {
 
-struct SearchGeometrySource : winrt::implements<SearchGeometrySource,
-        winrt::Windows::Graphics::IGeometrySource2D,SearchGeometryInterop> {
+struct SearchGeometrySource
+    : winrt::implements<SearchGeometrySource, winrt::Windows::Graphics::IGeometrySource2D, SearchGeometryInterop> {
     winrt::com_ptr<ID2D1Geometry> geometry;
     explicit SearchGeometrySource(winrt::com_ptr<ID2D1Geometry> value) : geometry(std::move(value)) {}
     HRESULT STDMETHODCALLTYPE GetGeometry(ID2D1Geometry** value) noexcept override {
-        if(!value) return E_POINTER;
-        geometry.copy_to(value); return S_OK;
+        if (!value)
+            return E_POINTER;
+        geometry.copy_to(value);
+        return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE TryGetGeometryUsingFactory(ID2D1Factory*,ID2D1Geometry** value) noexcept override {
-        if(!value) return E_POINTER;
-        *value=nullptr; return E_NOTIMPL;
+    HRESULT STDMETHODCALLTYPE TryGetGeometryUsingFactory(ID2D1Factory*, ID2D1Geometry** value) noexcept override {
+        if (!value)
+            return E_POINTER;
+        *value = nullptr;
+        return E_NOTIMPL;
     }
 };
 
-RECT g_searchWindowSlideFrame{};  // full, unclipped position of the XAML content
+RECT g_searchWindowSlideFrame{};         // full, unclipped position of the XAML content
 HRGN g_searchWindowFullShape = nullptr;  // owned here; SetWindowRgn receives a copy
 
 void PositionSearchWindowChild() {
     HWND host = g_searchWindowWindow.load();
-    if (!host || !g_searchWindowChild) return;
+    if (!host || !g_searchWindowChild)
+        return;
     RECT visible{}, frame = g_searchWindowSlideFrame;
-    if (!GetWindowRect(host, &visible)) return;
-    if (IsRectEmpty(&frame)) frame = visible;
-    const RECT child{frame.left-visible.left,frame.top-visible.top,
-                     frame.right-visible.left,frame.bottom-visible.top};
+    if (!GetWindowRect(host, &visible))
+        return;
+    if (IsRectEmpty(&frame))
+        frame = visible;
+    const RECT child{frame.left - visible.left, frame.top - visible.top, frame.right - visible.left,
+                     frame.bottom - visible.top};
     static HWND lastChild = nullptr;
     static RECT last{};
-    if (lastChild == g_searchWindowChild && EqualRect(&last,&child)) return;
-    if (SetWindowPos(g_searchWindowChild,nullptr,child.left,child.top,
-                     child.right-child.left,child.bottom-child.top,
-                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
+    if (lastChild == g_searchWindowChild && EqualRect(&last, &child))
+        return;
+    if (SetWindowPos(g_searchWindowChild, nullptr, child.left, child.top, child.right - child.left,
+                     child.bottom - child.top, SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW)) {
         lastChild = g_searchWindowChild;
         last = child;
     }
@@ -14526,346 +15516,1129 @@ void PositionSearchWindowChild() {
 
 void ApplySearchWindowShapeRegion() {
     HWND host = g_searchWindowWindow.load();
-    if (!host || !g_searchWindowFullShape) return;
+    if (!host || !g_searchWindowFullShape)
+        return;
     RECT visible{}, frame = g_searchWindowSlideFrame;
-    if (!GetWindowRect(host,&visible)) return;
-    if (IsRectEmpty(&frame)) frame = visible;
-    const std::array<LONG,4> clip{frame.left-visible.left,frame.top-visible.top,
-                                visible.right-visible.left,visible.bottom-visible.top};
+    if (!GetWindowRect(host, &visible))
+        return;
+    if (IsRectEmpty(&frame))
+        frame = visible;
+    const std::array<LONG, 4> clip{frame.left - visible.left, frame.top - visible.top, visible.right - visible.left,
+                                   visible.bottom - visible.top};
     static HWND lastHost = nullptr;
     static HRGN lastShape = nullptr;
-    static std::array<LONG,4> lastClip{};
-    if (lastHost==host && lastShape==g_searchWindowFullShape && lastClip==clip) return;
-    HRGN region = CreateRectRgn(0,0,0,0);
-    HRGN viewport = CreateRectRgn(0,0,visible.right-visible.left,visible.bottom-visible.top);
+    static std::array<LONG, 4> lastClip{};
+    if (lastHost == host && lastShape == g_searchWindowFullShape && lastClip == clip)
+        return;
+    HRGN region = CreateRectRgn(0, 0, 0, 0);
+    HRGN viewport = CreateRectRgn(0, 0, visible.right - visible.left, visible.bottom - visible.top);
     if (!region || !viewport) {
-        if (region) DeleteObject(region);
-        if (viewport) DeleteObject(viewport);
+        if (region)
+            DeleteObject(region);
+        if (viewport)
+            DeleteObject(viewport);
         return;
     }
-    const bool valid = CombineRgn(region,g_searchWindowFullShape,nullptr,RGN_COPY)!=ERROR &&
-        OffsetRgn(region,frame.left-visible.left,frame.top-visible.top)!=ERROR &&
-        CombineRgn(region,region,viewport,RGN_AND)!=ERROR;
+    const bool valid = CombineRgn(region, g_searchWindowFullShape, nullptr, RGN_COPY) != ERROR &&
+                       OffsetRgn(region, frame.left - visible.left, frame.top - visible.top) != ERROR &&
+                       CombineRgn(region, region, viewport, RGN_AND) != ERROR;
     DeleteObject(viewport);
-    if (valid && SetWindowRgn(host,region,FALSE)) {
-        lastHost=host; lastShape=g_searchWindowFullShape; lastClip=clip;
-    } else DeleteObject(region);
+    if (valid && SetWindowRgn(host, region, FALSE)) {
+        lastHost = host;
+        lastShape = g_searchWindowFullShape;
+        lastClip = clip;
+    } else
+        DeleteObject(region);
+}
+
+struct SmoothShapeCacheEntry {
+    int widthPx = 0;
+    int heightPx = 0;
+    float width = 0.0f;
+    float height = 0.0f;
+    double scale = 0.0;
+    std::array<float, 4> radii{};
+    std::array<float, 4> thickness{};
+    SearchBrushData brush{};
+    std::array<float, 4> innerThickness{};
+    SearchBrushData innerBrush{};
+    bool operator==(SmoothShapeCacheEntry const&) const = default;
+};
+
+[[clang::no_destroy]] std::unordered_map<uintptr_t, SmoothShapeCacheEntry> g_smoothShapeCache;
+
+void ClearSmoothShapeCache() {
+    g_smoothShapeCache.clear();
+}
+
+bool ApplySmoothElementShape(wux::UIElement const& clipTarget, wuxc::Image const& strokeImage, double widthDip,
+                             double heightDip, std::array<double, 4> const& cornerDips,
+                             std::array<double, 4> const& thicknessDips, SearchBrushData const& outlineBrush,
+                             std::array<double, 4> const& innerThicknessDips = {},
+                             SearchBrushData const& innerOutlineBrush = {}) {
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !clipTarget)
+        return false;
+    if (!std::isfinite(widthDip) || !std::isfinite(heightDip) || widthDip <= 1.0 || heightDip <= 1.0)
+        return false;
+    const UINT dpi = GetDpiForWindow(host);
+    const double scale = (dpi ? dpi : 96) / 96.0;
+    const int widthPx = std::clamp(static_cast<int>(std::lround(widthDip * scale)), 1, 4096);
+    const int heightPx = std::clamp(static_cast<int>(std::lround(heightDip * scale)), 1, 4096);
+    const float width = static_cast<float>(widthDip);
+    const float height = static_cast<float>(heightDip);
+    const float maxRadius = std::min(width, height) / 2.0f;
+    std::array<float, 4> radii{};
+    std::array<float, 4> thickness{};
+    std::array<float, 4> innerThickness{};
+    for (size_t i = 0; i < 4; ++i) {
+        radii[i] = std::clamp(static_cast<float>(cornerDips[i]), 0.0f, maxRadius);
+        const float maxT = (i % 2 == 0) ? width / 2.0f : height / 2.0f;
+        thickness[i] = std::clamp(static_cast<float>(thicknessDips[i]), 0.0f, maxT);
+        innerThickness[i] = std::clamp(static_cast<float>(innerThicknessDips[i]), 0.0f, maxT);
+    }
+
+    const uintptr_t targetAbi = reinterpret_cast<uintptr_t>(winrt::get_abi(clipTarget));
+    SmoothShapeCacheEntry entry{widthPx, heightPx, width, height, scale, radii, thickness, outlineBrush,
+                                innerThickness, innerOutlineBrush};
+    auto it = g_smoothShapeCache.find(targetAbi);
+    if (it != g_smoothShapeCache.end() && it->second == entry)
+        return true;
+
+    bool smoothClip = false;
+    try {
+        winrt::com_ptr<ID2D1Factory> factory;
+        winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, factory.put()));
+
+        auto addRoundedRectFigure = [](ID2D1GeometrySink* sink, float left, float top, float right, float bottom,
+                                       std::array<float, 4> const& rx, std::array<float, 4> const& ry) {
+            auto arc = [&](D2D1_POINT_2F point, float radX, float radY) {
+                if (radX > 0.0f && radY > 0.0f)
+                    sink->AddArc(D2D1_ARC_SEGMENT{
+                        point, {radX, radY}, 0.0f, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL});
+                else
+                    sink->AddLine(point);
+            };
+            sink->BeginFigure({left + rx[0], top}, D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine({right - rx[1], top});
+            arc({right, top + ry[1]}, rx[1], ry[1]);
+            sink->AddLine({right, bottom - ry[2]});
+            arc({right - rx[2], bottom}, rx[2], ry[2]);
+            sink->AddLine({left + rx[3], bottom});
+            arc({left, bottom - ry[3]}, rx[3], ry[3]);
+            sink->AddLine({left, top + ry[0]});
+            arc({left + rx[0], top}, rx[0], ry[0]);
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        };
+
+        winrt::com_ptr<ID2D1PathGeometry> outerPath;
+        winrt::check_hresult(factory->CreatePathGeometry(outerPath.put()));
+        {
+            winrt::com_ptr<ID2D1GeometrySink> sink;
+            winrt::check_hresult(outerPath->Open(sink.put()));
+            addRoundedRectFigure(sink.get(), 0.0f, 0.0f, width, height, radii, radii);
+            winrt::check_hresult(sink->Close());
+        }
+
+        try {
+            auto visual = wux::Hosting::ElementCompositionPreview::GetElementVisual(clipTarget);
+            auto compositor = visual.Compositor();
+            if (radii[0] > 0.0f || radii[1] > 0.0f || radii[2] > 0.0f || radii[3] > 0.0f) {
+                searchcomp::CompositionPath outline{winrt::make<SearchGeometrySource>(outerPath.as<ID2D1Geometry>())};
+                visual.BorderMode(searchcomp::CompositionBorderMode::Soft);
+                visual.Clip(compositor.CreateGeometricClip(compositor.CreatePathGeometry(outline)));
+            } else {
+                visual.Clip(nullptr);
+            }
+            smoothClip = true;
+        } catch (...) {
+        }
+
+        if (strokeImage) {
+            strokeImage.Width(widthDip);
+            strokeImage.Height(heightDip);
+            const bool hasOuterStroke =
+                (thickness[0] > 0.0f || thickness[1] > 0.0f || thickness[2] > 0.0f || thickness[3] > 0.0f) &&
+                SearchBrushIsVisible(outlineBrush);
+            const bool hasInnerStroke =
+                (innerThickness[0] > 0.0f || innerThickness[1] > 0.0f || innerThickness[2] > 0.0f ||
+                 innerThickness[3] > 0.0f) &&
+                SearchBrushIsVisible(innerOutlineBrush);
+
+            if (!hasOuterStroke && !hasInnerStroke) {
+                strokeImage.Source(nullptr);
+            } else {
+                auto buildRingGeometry = [&](float boxL, float boxT, float boxR, float boxB,
+                                             std::array<float, 4> const& boxRx, std::array<float, 4> const& boxRy,
+                                             std::array<float, 4> const& strokeT, bool useBleedOuter) {
+                    const float inL = boxL + strokeT[0], inT = boxT + strokeT[1];
+                    const float inR = std::max(inL, boxR - strokeT[2]);
+                    const float inB = std::max(inT, boxB - strokeT[3]);
+                    const float inW = inR - inL, inH = inB - inT;
+                    const std::array<float, 4> inRx{
+                        std::clamp(boxRx[0] - strokeT[0], 0.0f, inW / 2.0f),
+                        std::clamp(boxRx[1] - strokeT[2], 0.0f, inW / 2.0f),
+                        std::clamp(boxRx[2] - strokeT[2], 0.0f, inW / 2.0f),
+                        std::clamp(boxRx[3] - strokeT[0], 0.0f, inW / 2.0f),
+                    };
+                    const std::array<float, 4> inRy{
+                        std::clamp(boxRy[0] - strokeT[1], 0.0f, inH / 2.0f),
+                        std::clamp(boxRy[1] - strokeT[1], 0.0f, inH / 2.0f),
+                        std::clamp(boxRy[2] - strokeT[3], 0.0f, inH / 2.0f),
+                        std::clamp(boxRy[3] - strokeT[3], 0.0f, inH / 2.0f),
+                    };
+                    winrt::com_ptr<ID2D1PathGeometry> ring;
+                    winrt::check_hresult(factory->CreatePathGeometry(ring.put()));
+                    winrt::com_ptr<ID2D1GeometrySink> sink;
+                    winrt::check_hresult(ring->Open(sink.put()));
+                    sink->SetFillMode(D2D1_FILL_MODE_ALTERNATE);
+                    if (useBleedOuter) {
+                        const std::array<float, 4> zero{};
+                        addRoundedRectFigure(sink.get(), -2.0f, -2.0f, width + 2.0f, height + 2.0f, zero, zero);
+                    } else {
+                        addRoundedRectFigure(sink.get(), boxL, boxT, boxR, boxB, boxRx, boxRy);
+                    }
+                    if (inW > 0.0f && inH > 0.0f)
+                        addRoundedRectFigure(sink.get(), inL, inT, inR, inB, inRx, inRy);
+                    winrt::check_hresult(sink->Close());
+                    return ring;
+                };
+
+                BITMAPINFO bmi{};
+                bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                bmi.bmiHeader.biWidth = widthPx;
+                bmi.bmiHeader.biHeight = -heightPx;
+                bmi.bmiHeader.biPlanes = 1;
+                bmi.bmiHeader.biBitCount = 32;
+                bmi.bmiHeader.biCompression = BI_RGB;
+                void* bits = nullptr;
+                HDC dc = CreateCompatibleDC(nullptr);
+                HBITMAP dib = dc ? CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
+                HGDIOBJ oldBmp = (dc && dib) ? SelectObject(dc, dib) : nullptr;
+                struct CleanupGdi {
+                    HDC dc;
+                    HBITMAP dib;
+                    HGDIOBJ oldBmp;
+                    ~CleanupGdi() {
+                        if (dc && oldBmp)
+                            SelectObject(dc, oldBmp);
+                        if (dib)
+                            DeleteObject(dib);
+                        if (dc)
+                            DeleteDC(dc);
+                    }
+                } cleanupGdi{dc, dib, oldBmp};
+                if (!dc || !dib || !bits)
+                    winrt::throw_last_error();
+
+                D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+                    D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                    static_cast<float>(96.0 * widthPx / widthDip), static_cast<float>(96.0 * heightPx / heightDip));
+                winrt::com_ptr<ID2D1DCRenderTarget> rt;
+                winrt::check_hresult(factory->CreateDCRenderTarget(&rtProps, rt.put()));
+                RECT bindRect{0, 0, widthPx, heightPx};
+                winrt::check_hresult(rt->BindDC(dc, &bindRect));
+
+                auto toColorF = [](uint32_t argb, double opacity) {
+                    const float a =
+                        static_cast<float>(((argb >> 24) & 0xFF) / 255.0 * std::clamp(opacity, 0.0, 1.0));
+                    const float r = static_cast<float>(((argb >> 16) & 0xFF) / 255.0);
+                    const float g = static_cast<float>(((argb >> 8) & 0xFF) / 255.0);
+                    const float b = static_cast<float>((argb & 0xFF) / 255.0);
+                    return D2D1::ColorF(r, g, b, a);
+                };
+
+                auto makeD2DBrush = [&](SearchBrushData const& brushData) -> winrt::com_ptr<ID2D1Brush> {
+                    if (brushData.kind == 3 && brushData.count > 0 && brushData.count <= 8) {
+                        D2D1_GRADIENT_STOP stops[8]{};
+                        for (uint32_t i = 0; i < brushData.count; ++i) {
+                            stops[i].position = std::clamp(static_cast<float>(brushData.offsets[i]), 0.0f, 1.0f);
+                            stops[i].color = toColorF(brushData.colors[i], brushData.opacity);
+                        }
+                        winrt::com_ptr<ID2D1GradientStopCollection> stopCollection;
+                        winrt::check_hresult(rt->CreateGradientStopCollection(
+                            stops, brushData.count, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, stopCollection.put()));
+                        D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES gradProps = D2D1::LinearGradientBrushProperties(
+                            D2D1::Point2F(static_cast<float>(brushData.points[0]) * width,
+                                          static_cast<float>(brushData.points[1]) * height),
+                            D2D1::Point2F(static_cast<float>(brushData.points[2]) * width,
+                                          static_cast<float>(brushData.points[3]) * height));
+                        winrt::com_ptr<ID2D1LinearGradientBrush> gradBrush;
+                        winrt::check_hresult(
+                            rt->CreateLinearGradientBrush(gradProps, stopCollection.get(), gradBrush.put()));
+                        return gradBrush;
+                    }
+                    winrt::com_ptr<ID2D1SolidColorBrush> solidBrush;
+                    const uint32_t col = (brushData.kind == 2 || brushData.kind == 4)
+                                             ? ((brushData.color >> 24) ? brushData.color : brushData.fallback)
+                                             : brushData.color;
+                    winrt::check_hresult(
+                        rt->CreateSolidColorBrush(toColorF(col, brushData.opacity), solidBrush.put()));
+                    return solidBrush;
+                };
+
+                rt->BeginDraw();
+                rt->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                rt->Clear(D2D1::ColorF(0, 0.0f));
+                if (hasOuterStroke) {
+                    auto ring = buildRingGeometry(0.0f, 0.0f, width, height, radii, radii, thickness, smoothClip);
+                    auto brush = makeD2DBrush(outlineBrush);
+                    rt->FillGeometry(ring.get(), brush.get());
+                }
+                if (hasInnerStroke) {
+                    const float offL = hasOuterStroke ? thickness[0] : 0.0f;
+                    const float offT = hasOuterStroke ? thickness[1] : 0.0f;
+                    const float offR = hasOuterStroke ? std::max(offL, width - thickness[2]) : width;
+                    const float offB = hasOuterStroke ? std::max(offT, height - thickness[3]) : height;
+                    const float boxW = offR - offL, boxH = offB - offT;
+                    const std::array<float, 4> inBoxRx{
+                        std::clamp(radii[0] - offL, 0.0f, boxW / 2.0f),
+                        std::clamp(radii[1] - (width - offR), 0.0f, boxW / 2.0f),
+                        std::clamp(radii[2] - (width - offR), 0.0f, boxW / 2.0f),
+                        std::clamp(radii[3] - offL, 0.0f, boxW / 2.0f),
+                    };
+                    const std::array<float, 4> inBoxRy{
+                        std::clamp(radii[0] - offT, 0.0f, boxH / 2.0f),
+                        std::clamp(radii[1] - offT, 0.0f, boxH / 2.0f),
+                        std::clamp(radii[2] - (height - offB), 0.0f, boxH / 2.0f),
+                        std::clamp(radii[3] - (height - offB), 0.0f, boxH / 2.0f),
+                    };
+                    auto ring = buildRingGeometry(offL, offT, offR, offB, inBoxRx, inBoxRy, innerThickness,
+                                                  !hasOuterStroke && smoothClip);
+                    auto brush = makeD2DBrush(innerOutlineBrush);
+                    rt->FillGeometry(ring.get(), brush.get());
+                }
+                winrt::check_hresult(rt->EndDraw());
+
+                wuxmi::WriteableBitmap bitmap{widthPx, heightPx};
+                auto access = bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
+                BYTE* dest = nullptr;
+                if (SUCCEEDED(access->Buffer(&dest)) && dest) {
+                    memcpy(dest, bits, static_cast<size_t>(widthPx) * heightPx * 4);
+                    bitmap.Invalidate();
+                    strokeImage.Source(bitmap);
+                }
+            }
+        }
+        g_smoothShapeCache[targetAbi] = entry;
+    } catch (...) {
+        SearchWindowTrace(L"smooth element shape failed", winrt::to_hresult());
+    }
+    return smoothClip;
 }
 
 void UpdateSearchWindowShape() {
-    HWND host=g_searchWindowWindow.load(); if(!host || !g_resultsHost || !g_searchWindowRoot) return;
-    RECT client{}; if(!GetClientRect(host,&client)) return;
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_resultsHost || !g_searchWindowRoot)
+        return;
+    RECT client{};
+    if (!GetClientRect(host, &client))
+        return;
     if (!IsRectEmpty(&g_searchWindowSlideFrame)) {
-        client.right=g_searchWindowSlideFrame.right-g_searchWindowSlideFrame.left;
-        client.bottom=g_searchWindowSlideFrame.bottom-g_searchWindowSlideFrame.top;
+        client.right = g_searchWindowSlideFrame.right - g_searchWindowSlideFrame.left;
+        client.bottom = g_searchWindowSlideFrame.bottom - g_searchWindowSlideFrame.top;
     }
-    if(client.right<=0 || client.bottom<=0) return;
-    const double scale=GetDpiForWindow(host)/96.0;
-    const float width=static_cast<float>(client.right/scale),height=static_cast<float>(client.bottom/scale);
-    auto corner=g_resultsHost.CornerRadius();
-    const double dips[]{corner.TopLeft,corner.TopRight,corner.BottomRight,corner.BottomLeft};
-    std::array<float,4> radii{};
-    for(size_t i=0;i<4;++i) radii[i]=static_cast<float>(std::clamp(dips[i],0.0,std::min(width,height)/2.0));
-    static HWND lastHost=nullptr; static RECT lastSize{}; static double lastScale=0;
-    static std::array<float,4> lastRadii{};
-    if(g_searchWindowFullShape && host==lastHost && EqualRect(&client,&lastSize) && scale==lastScale && radii==lastRadii) return;
+    if (client.right <= 0 || client.bottom <= 0)
+        return;
+    const double scale = GetDpiForWindow(host) / 96.0;
+    const double widthDip = client.right / scale, heightDip = client.bottom / scale;
+    const auto pad = g_resultsHost.Padding();
+    if (g_windowInnerBorder) {
+        wuxc::Canvas::SetLeft(g_windowInnerBorder, -pad.Left);
+        wuxc::Canvas::SetTop(g_windowInnerBorder, -pad.Top);
+        g_windowInnerBorder.Width(widthDip);
+        g_windowInnerBorder.Height(heightDip);
+    }
+    if (g_windowStrokeImage) {
+        wuxc::Canvas::SetLeft(g_windowStrokeImage, -pad.Left);
+        wuxc::Canvas::SetTop(g_windowStrokeImage, -pad.Top);
+    }
+    std::array<float, 4> radii{};
+    for (size_t i = 0; i < 4; ++i)
+        radii[i] = static_cast<float>(std::clamp(g_windowCorners[i], 0.0, std::min(widthDip, heightDip) / 2.0));
 
-    bool smooth=false;
-    try {
-        winrt::com_ptr<ID2D1Factory> factory;
-        winrt::check_hresult(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,factory.put()));
-        winrt::com_ptr<ID2D1PathGeometry> path;
-        winrt::check_hresult(factory->CreatePathGeometry(path.put()));
-        winrt::com_ptr<ID2D1GeometrySink> sink;
-        winrt::check_hresult(path->Open(sink.put()));
-        sink->BeginFigure({radii[0],0},D2D1_FIGURE_BEGIN_FILLED);
-        auto arc=[&](D2D1_POINT_2F point,float radius) {
-            if(radius>0) sink->AddArc(D2D1_ARC_SEGMENT{point,{radius,radius},0,
-                D2D1_SWEEP_DIRECTION_CLOCKWISE,D2D1_ARC_SIZE_SMALL});
-            else sink->AddLine(point);
-        };
-        sink->AddLine({width-radii[1],0}); arc({width,radii[1]},radii[1]);
-        sink->AddLine({width,height-radii[2]}); arc({width-radii[2],height},radii[2]);
-        sink->AddLine({radii[3],height}); arc({0,height-radii[3]},radii[3]);
-        sink->AddLine({0,radii[0]}); arc({radii[0],0},radii[0]);
-        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-        winrt::check_hresult(sink->Close());
-        auto visual=wux::Hosting::ElementCompositionPreview::GetElementVisual(g_searchWindowRoot);
-        auto compositor=visual.Compositor();
-        searchcomp::CompositionPath outline{winrt::make<SearchGeometrySource>(path.as<ID2D1Geometry>())};
-        visual.BorderMode(searchcomp::CompositionBorderMode::Soft);
-        visual.Clip(compositor.CreateGeometricClip(compositor.CreatePathGeometry(outline)));
-        smooth=true;
-        SearchWindowTrace(L"smooth window corners ready");
-    } catch(...) { SearchWindowTrace(L"smooth window corners failed",winrt::to_hresult()); }
+    const bool smooth = ApplySmoothElementShape(g_searchWindowRoot, g_windowStrokeImage, widthDip, heightDip,
+                                                g_windowCorners, g_windowThickness, g_windowOutlineBrush,
+                                                g_windowInnerThickness, g_windowInnerOutlineBrush);
+
+    static HWND lastHost = nullptr;
+    static RECT lastSize{};
+    static double lastScale = 0;
+    static std::array<float, 4> lastRadii{};
+    if (g_searchWindowFullShape && host == lastHost && EqualRect(&client, &lastSize) && scale == lastScale &&
+        radii == lastRadii)
+        return;
 
     // Retain a native region for pointer input, but place its hard edge two
     // physical pixels outside the antialiased curve. Only the composition clip
     // draws the visible edge; the transparent host has no backdrop to spill out.
-    HRGN region=CreateRectRgn(0,0,client.right,client.bottom); if(!region) return;
-    bool valid=true;
-    for(int i=0;i<4;++i) {
-        const int r=static_cast<int>(std::lround(radii[i]*scale));
-        const int outside=smooth ? 2 : 0;
-        if(!r) continue;
-        const bool right=i==1 || i==2,bottom=i>=2;
-        const int x=right ? client.right-r : 0,y=bottom ? client.bottom-r : 0;
-        const int cx=right ? client.right-2*r : 0,cy=bottom ? client.bottom-2*r : 0;
-        HRGN square=CreateRectRgn(x,y,x+r,y+r),circle=CreateEllipticRgn(cx-outside,cy-outside,cx+2*r+outside,cy+2*r+outside);
-        if(!square || !circle || CombineRgn(square,square,circle,RGN_DIFF)==ERROR ||
-           CombineRgn(region,region,square,RGN_DIFF)==ERROR) valid=false;
-        if(square) DeleteObject(square); if(circle) DeleteObject(circle);
+    HRGN region = CreateRectRgn(0, 0, client.right, client.bottom);
+    if (!region)
+        return;
+    bool valid = true;
+    for (int i = 0; i < 4; ++i) {
+        const int r = static_cast<int>(std::lround(radii[i] * scale));
+        const int outside = smooth ? 2 : 0;
+        if (!r)
+            continue;
+        const bool right = i == 1 || i == 2, bottom = i >= 2;
+        const int x = right ? client.right - r : 0, y = bottom ? client.bottom - r : 0;
+        const int cx = right ? client.right - 2 * r : 0, cy = bottom ? client.bottom - 2 * r : 0;
+        HRGN square = CreateRectRgn(x, y, x + r, y + r),
+             circle = CreateEllipticRgn(cx - outside, cy - outside, cx + 2 * r + outside, cy + 2 * r + outside);
+        if (!square || !circle || CombineRgn(square, square, circle, RGN_DIFF) == ERROR ||
+            CombineRgn(region, region, square, RGN_DIFF) == ERROR)
+            valid = false;
+        if (square)
+            DeleteObject(square);
+        if (circle)
+            DeleteObject(circle);
     }
-    if(valid) {
-        if(g_searchWindowFullShape) DeleteObject(g_searchWindowFullShape);
-        g_searchWindowFullShape=region;
-        lastHost=host; lastSize=client; lastScale=scale; lastRadii=radii;
+    if (valid) {
+        if (g_searchWindowFullShape)
+            DeleteObject(g_searchWindowFullShape);
+        g_searchWindowFullShape = region;
+        lastHost = host;
+        lastSize = client;
+        lastScale = scale;
+        lastRadii = radii;
         ApplySearchWindowShapeRegion();
-    } else DeleteObject(region);
+    } else
+        DeleteObject(region);
 }
 
+void UpdateSearchBarShape() {
+    if (!g_searchBarBorder || !g_searchBarStrokeImage)
+        return;
+    const double w = g_searchBarBorder.ActualWidth();
+    const double h = g_searchBarBorder.ActualHeight();
+    if (g_searchBarInnerBorder && std::isfinite(w) && std::isfinite(h) && w > 1.0 && h > 1.0) {
+        g_searchBarInnerBorder.Width(w);
+        g_searchBarInnerBorder.Height(h);
+    }
+    ApplySmoothElementShape(g_searchBarBorder, g_searchBarStrokeImage, w, h, g_searchBarCorners, g_searchBarThickness,
+                            g_searchBarOutlineBrush);
+}
+
+void UpdateSearchHeadersShape() {
+    if (g_appsHeaderHolder && g_appsHeaderStrokeImage) {
+        ApplySmoothElementShape(g_appsHeaderHolder, g_appsHeaderStrokeImage, g_appsHeaderHolder.ActualWidth(),
+                                g_appsHeaderHolder.ActualHeight(), g_headerCorners, g_headerThickness,
+                                g_headerOutlineBrush);
+    }
+    if (g_filesHeaderHolder && g_filesHeaderStrokeImage) {
+        ApplySmoothElementShape(g_filesHeaderHolder, g_filesHeaderStrokeImage, g_filesHeaderHolder.ActualWidth(),
+                                g_filesHeaderHolder.ActualHeight(), g_headerCorners, g_headerThickness,
+                                g_headerOutlineBrush);
+    }
+}
+
+void UpdateSearchFooterShape() {
+    if (!g_footerBorder || !g_footerStrokeImage)
+        return;
+    ApplySmoothElementShape(g_footerBorder, g_footerStrokeImage, g_footerBorder.ActualWidth(),
+                            g_footerBorder.ActualHeight(), g_footerCorners, g_footerThickness, g_footerOutlineBrush);
+}
+
+void UpdatePreviewCardShape() {
+    if (!g_previewCard || !g_previewStrokeImage)
+        return;
+    std::array<double, 4> corners{};
+    for (size_t i = 0; i < 4; ++i)
+        corners[i] = std::clamp(g_windowCorners[i], 6.0, 18.0);
+    ApplySmoothElementShape(g_previewCard, g_previewStrokeImage, g_previewCard.ActualWidth(),
+                            g_previewCard.ActualHeight(), corners, g_windowThickness, g_windowOutlineBrush);
+}
+
+void ApplyPreviewCardAppearance() {
+    if (!g_previewCard)
+        return;
+    EnableThreadPopupHostBackdrop();
+    const bool light = IsLightTheme();
+    if (g_searchAppearanceValid && SearchBrushIsVisible(g_searchAppearance.background)) {
+        if (auto brush = RecreateSearchBrush(g_searchAppearance.background, true))
+            g_previewCard.Background(brush);
+    } else {
+        wuxm::AcrylicBrush surface;
+        surface.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
+        surface.TintColor(light ? winrt::Windows::UI::Color{255, 243, 243, 243}
+                                : winrt::Windows::UI::Color{255, 32, 32, 32});
+        surface.TintOpacity(light ? 0.80 : 0.78);
+        surface.TintLuminosityOpacity(light ? 0.90 : 0.82);
+        surface.FallbackColor(light ? winrt::Windows::UI::Color{255, 243, 243, 243}
+                                    : winrt::Windows::UI::Color{255, 32, 32, 32});
+        g_previewCard.Background(surface);
+    }
+    g_previewCard.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    g_previewCard.BorderBrush(nullptr);
+    std::array<double, 4> corners{};
+    for (size_t i = 0; i < 4; ++i)
+        corners[i] = std::clamp(g_windowCorners[i], 6.0, 18.0);
+    g_previewCard.CornerRadius(wux::CornerRadius{corners[0], corners[1], corners[2], corners[3]});
+    UpdatePreviewCardShape();
+}
+
+void ApplyResultRowButtonTheme(wuxc::Button const& btn, bool isSelected, bool refreshTheme) try {
+    if (!btn)
+        return;
+    auto res = btn.Resources();
+    wuxm::Brush normalBg{nullptr};
+    wuxm::Brush selectedBg{nullptr};
+    wuxm::Brush normalBorder{nullptr};
+    wuxm::Brush activeBorder{nullptr};
+
+    // Cache only under our own private keys: HasKey/Lookup on built-in names
+    // such as ButtonBackgroundPointerOver can resolve through XAML's theme
+    // dictionaries even on a fresh button.
+    if (!refreshTheme) {
+        auto cached = [&](const wchar_t* key) -> wuxm::Brush {
+            if (auto value = res.TryLookup(winrt::box_value(key)))
+                return value.try_as<wuxm::Brush>();
+            return nullptr;
+        };
+        normalBg = cached(L"__WhNormalBg");
+        selectedBg = cached(L"__WhSelectedBg");
+        normalBorder = cached(L"__WhNormalBorder");
+        activeBorder = cached(L"__WhActiveBorder");
+    }
+
+    if (!normalBg || !selectedBg || !normalBorder || !activeBorder) {
+        const bool light = IsLightTheme();
+        auto const& itemHover = g_searchAppearance.itemHover;
+        const bool hasCopiedHoverBg = g_searchAppearanceValid && (itemHover.flags & 1) &&
+                                      SearchBrushIsVisible(itemHover.background);
+        const bool hasCopiedHoverOutline =
+            g_searchAppearanceValid && (itemHover.flags & 2) && SearchBrushIsVisible(itemHover.outline) &&
+            (itemHover.thickness[0] > 0 || itemHover.thickness[1] > 0 || itemHover.thickness[2] > 0 ||
+             itemHover.thickness[3] > 0);
+        const bool hasCopiedCorners =
+            g_searchAppearanceValid && (itemHover.flags & 4) &&
+            (itemHover.corners[0] > 0 || itemHover.corners[1] > 0 || itemHover.corners[2] > 0 ||
+             itemHover.corners[3] > 0);
+
+        if (hasCopiedCorners) {
+            btn.CornerRadius(wux::CornerRadius{
+                std::clamp(itemHover.corners[0], 0.0, 18.0),
+                std::clamp(itemHover.corners[1], 0.0, 18.0),
+                std::clamp(itemHover.corners[2], 0.0, 18.0),
+                std::clamp(itemHover.corners[3], 0.0, 18.0),
+            });
+        } else {
+            btn.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
+        }
+
+        normalBg = MakeBrush(0, 0, 0, 0);
+        wuxm::Brush pressedBg{nullptr};
+
+        if (hasCopiedHoverBg) {
+            selectedBg = RecreateSearchBrush(itemHover.background);
+            SearchBrushData pressedData = itemHover.background;
+            pressedData.opacity = std::clamp(pressedData.opacity * 0.85, 0.1, 1.0);
+            pressedBg = RecreateSearchBrush(pressedData);
+        }
+        if (!selectedBg)
+            selectedBg = light ? MakeBrush(0x16, 0, 0, 0) : MakeBrush(0x1D, 255, 255, 255);
+        if (!pressedBg)
+            pressedBg = light ? MakeBrush(0x1C, 0, 0, 0) : MakeBrush(0x24, 255, 255, 255);
+
+        normalBorder = MakeBrush(0, 0, 0, 0);
+        activeBorder = hasCopiedHoverOutline ? RecreateSearchBrush(itemHover.outline) : nullptr;
+        if (!activeBorder)
+            activeBorder = normalBorder;
+
+        if (hasCopiedHoverOutline) {
+            btn.BorderThickness(wux::ThicknessHelper::FromLengths(
+                std::clamp(itemHover.thickness[0], 0.0, 4.0), std::clamp(itemHover.thickness[1], 0.0, 4.0),
+                std::clamp(itemHover.thickness[2], 0.0, 4.0), std::clamp(itemHover.thickness[3], 0.0, 4.0)));
+        } else {
+            btn.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+        }
+
+        res.Insert(winrt::box_value(L"__WhNormalBg"), normalBg);
+        res.Insert(winrt::box_value(L"__WhSelectedBg"), selectedBg);
+        res.Insert(winrt::box_value(L"__WhNormalBorder"), normalBorder);
+        res.Insert(winrt::box_value(L"__WhActiveBorder"), activeBorder);
+        res.Insert(winrt::box_value(L"ButtonBackgroundPointerOver"), selectedBg);
+        res.Insert(winrt::box_value(L"ButtonBackgroundPressed"), pressedBg);
+        res.Insert(winrt::box_value(L"ButtonBorderBrushPointerOver"), activeBorder);
+        res.Insert(winrt::box_value(L"ButtonBorderBrushPressed"), activeBorder);
+    }
+
+    if (isSelected) {
+        btn.Background(selectedBg);
+        btn.BorderBrush(activeBorder);
+    } else {
+        btn.Background(normalBg);
+        btn.BorderBrush(normalBorder);
+        // A row left in PointerOver (e.g. in the other column) would keep
+        // showing the selected brush; send it back to Normal.
+        wux::VisualStateManager::GoToState(btn, L"Normal", false);
+    }
+} catch (...) {
+    Wh_Log(L"row theme failed %08X", static_cast<unsigned>(winrt::to_hresult()));
+}
 
 wux::CornerRadius SearchCorners(double const (&v)[4]) {
-    return wux::CornerRadius{v[0],v[1],v[2],v[3]};
+    return wux::CornerRadius{v[0], v[1], v[2], v[3]};
 }
 wux::Thickness SearchThickness(double const (&v)[4]) {
-    return wux::ThicknessHelper::FromLengths(v[0],v[1],v[2],v[3]);
+    return wux::ThicknessHelper::FromLengths(v[0], v[1], v[2], v[3]);
 }
-template<class Element> void ApplySearchSurface(Element const& element,SearchSurfaceData const& style) {
-    if(style.flags&1) element.Background(RecreateSearchBrush(style.background));
-    if(style.flags&2) element.BorderBrush(RecreateSearchBrush(style.outline));
-    if(style.flags&4) element.CornerRadius(SearchCorners(style.corners));
-    if(style.flags&8) element.BorderThickness(SearchThickness(style.thickness));
-    if(style.flags&16) element.Padding(SearchThickness(style.padding));
-    if(style.flags&32) element.Margin(SearchThickness(style.margin));
+template <class Element>
+void ApplySearchSurface(Element const& element, SearchSurfaceData const& style) {
+    if (style.flags & 1)
+        element.Background(RecreateSearchBrush(style.background));
+    if (style.flags & 2)
+        element.BorderBrush(RecreateSearchBrush(style.outline));
+    if (style.flags & 4)
+        element.CornerRadius(SearchCorners(style.corners));
+    if (style.flags & 8)
+        element.BorderThickness(SearchThickness(style.thickness));
+    if (style.flags & 16)
+        element.Padding(SearchThickness(style.padding));
+    if (style.flags & 32)
+        element.Margin(SearchThickness(style.margin));
 }
 
 bool ValidSearchSurface(SearchSurfaceData const& surface) {
-    if(surface.flags & ~127u) return false;
-    for(auto values:{surface.corners,surface.thickness,surface.padding,surface.margin})
-        for(int i=0;i<4;++i) if(!std::isfinite(values[i]) || values[i]<0 || values[i]>200) return false;
+    if (surface.flags & ~127u)
+        return false;
+    for (auto values : {surface.corners, surface.thickness, surface.padding, surface.margin})
+        for (int i = 0; i < 4; ++i)
+            if (!std::isfinite(values[i]) || values[i] < 0 || values[i] > 200)
+                return false;
     return true;
 }
 
 struct SearchMenuAppearance {
-    uint32_t dark,foreground,overrideColor;
-    SearchSurfaceData presenter,border,item;
+    uint32_t dark, foreground, overrideColor;
+    SearchSurfaceData presenter, border, item;
     bool operator==(SearchMenuAppearance const&) const = default;
 };
 [[clang::no_destroy]] wux::Style g_searchMenuPresenterStyle{nullptr};
 std::optional<SearchMenuAppearance> g_searchMenuAppearance;
-uint64_t g_searchMenuStyleGeneration=0,g_searchMenuRefreshedGeneration=0;
+uint64_t g_searchMenuStyleGeneration = 0, g_searchMenuRefreshedGeneration = 0;
+
+SearchSurfaceData MergedMenuSurface() {
+    auto const& appearance = g_searchAppearance;
+    SearchSurfaceData surface = appearance.menu;
+    auto const& border = appearance.menuBorder;
+    if (border.flags & 1)
+        surface.background = border.background;
+    if (border.flags & 2)
+        surface.outline = border.outline;
+    if (border.flags & 4)
+        std::copy(std::begin(border.corners), std::end(border.corners), surface.corners);
+    if (border.flags & 8)
+        std::copy(std::begin(border.thickness), std::end(border.thickness), surface.thickness);
+    if (border.flags & 16)
+        std::copy(std::begin(border.padding), std::end(border.padding), surface.padding);
+    // A child Border's margin is an internal inset, not the popup's position.
+    // Do not transfer it to the presenter margin.
+    surface.flags |= border.flags & 31u;
+    if (!(surface.flags & 4)) {
+        for (double& c : surface.corners)
+            c = 8.0;
+        surface.flags |= 4;
+    }
+    return surface;
+}
 
 // The default MenuFlyoutPresenter template binds its border's material,
 // corners, thickness and padding to the corresponding presenter properties.
 // Put the final values in its Style before layout, instead of finding and
 // repainting an already visible Border.
 wux::Style CopiedMenuPresenterStyle() {
-    if(!g_searchWindowWindow.load() || !g_searchAppearanceValid) return nullptr;
-    auto const& appearance=g_searchAppearance;
-    SearchMenuAppearance snapshot{appearance.dark,SearchMainTextColor(),SearchTextOverride(),appearance.menu,appearance.menuBorder,appearance.menuItem};
-    if(g_searchMenuPresenterStyle && g_searchMenuAppearance && *g_searchMenuAppearance==snapshot)
+    if (!g_searchWindowWindow.load() || !g_searchAppearanceValid)
+        return nullptr;
+    auto const& appearance = g_searchAppearance;
+    SearchMenuAppearance snapshot{appearance.dark, SearchMainTextColor(), SearchTextOverride(),
+                                  appearance.menu, appearance.menuBorder, appearance.menuItem};
+    if (g_searchMenuPresenterStyle && g_searchMenuAppearance && *g_searchMenuAppearance == snapshot)
         return g_searchMenuPresenterStyle;
-    SearchSurfaceData surface=appearance.menu;
-    auto const& border=appearance.menuBorder;
-    if(border.flags&1) surface.background=border.background;
-    if(border.flags&2) surface.outline=border.outline;
-    if(border.flags&4) std::copy(std::begin(border.corners),std::end(border.corners),surface.corners);
-    if(border.flags&8) std::copy(std::begin(border.thickness),std::end(border.thickness),surface.thickness);
-    if(border.flags&16) std::copy(std::begin(border.padding),std::end(border.padding),surface.padding);
-    // A child Border's margin is an internal inset, not the popup's position.
-    // Do not transfer it to the presenter margin.
-    surface.flags |= border.flags&31u;
+    SearchSurfaceData surface = MergedMenuSurface();
     wux::Style style{winrt::xaml_typename<wuxc::MenuFlyoutPresenter>()};
-    auto set=[&](wux::DependencyProperty const& property,wf::IInspectable const& value) {
-        style.Setters().Append(wux::Setter{property,value});
+    auto set = [&](wux::DependencyProperty const& property, wf::IInspectable const& value) {
+        style.Setters().Append(wux::Setter{property, value});
     };
-    const uint32_t foreground=SearchChooseTextColor(surface.background,
-        surface.foreground ? surface.foreground : snapshot.foreground,appearance.dark!=0,snapshot.overrideColor);
-    set(wux::FrameworkElement::RequestedThemeProperty(),winrt::box_value(
-        SearchLuminance(foreground)>0.5 ? wux::ElementTheme::Dark : wux::ElementTheme::Light));
-    set(wuxc::Control::ForegroundProperty(),wuxm::SolidColorBrush{SearchUnpackColor(foreground)});
-    if(surface.flags&1) set(wuxc::Control::BackgroundProperty(),RecreateSearchBrush(surface.background));
-    if(surface.flags&2) set(wuxc::Control::BorderBrushProperty(),RecreateSearchBrush(surface.outline));
-    if(surface.flags&4) set(wuxc::Control::CornerRadiusProperty(),winrt::box_value(SearchCorners(surface.corners)));
-    if(surface.flags&8) set(wuxc::Control::BorderThicknessProperty(),winrt::box_value(SearchThickness(surface.thickness)));
-    if(surface.flags&16) set(wuxc::Control::PaddingProperty(),winrt::box_value(SearchThickness(surface.padding)));
-    if(surface.flags&32) set(wux::FrameworkElement::MarginProperty(),winrt::box_value(SearchThickness(surface.margin)));
-    g_searchMenuPresenterStyle=style;
-    g_searchMenuAppearance=snapshot;
+    const uint32_t foreground =
+        SearchChooseTextColor(surface.background, surface.foreground ? surface.foreground : snapshot.foreground,
+                              appearance.dark != 0, snapshot.overrideColor);
+    set(wux::FrameworkElement::RequestedThemeProperty(),
+        winrt::box_value(SearchLuminance(foreground) > 0.5 ? wux::ElementTheme::Dark : wux::ElementTheme::Light));
+    set(wuxc::Control::ForegroundProperty(), wuxm::SolidColorBrush{SearchUnpackColor(foreground)});
+    if (surface.flags & 1)
+        set(wuxc::Control::BackgroundProperty(), RecreateSearchBrush(surface.background, true));
+    if (surface.flags & 2)
+        set(wuxc::Control::BorderBrushProperty(), RecreateSearchBrush(surface.outline));
+    if (surface.flags & 4)
+        set(wuxc::Control::CornerRadiusProperty(), winrt::box_value(SearchCorners(surface.corners)));
+    if (surface.flags & 8)
+        set(wuxc::Control::BorderThicknessProperty(), winrt::box_value(SearchThickness(surface.thickness)));
+    if (surface.flags & 16)
+        set(wuxc::Control::PaddingProperty(), winrt::box_value(SearchThickness(surface.padding)));
+    if (surface.flags & 32)
+        set(wux::FrameworkElement::MarginProperty(), winrt::box_value(SearchThickness(surface.margin)));
+    g_searchMenuPresenterStyle = style;
+    g_searchMenuAppearance = snapshot;
     ++g_searchMenuStyleGeneration;
     SearchWindowTrace(L"copied menu style prepared");
     return style;
 }
 
+void ApplyOpenMenuPresenters() try {
+    if (!g_searchAppearanceValid || !g_resultsHost || !g_resultsHost.XamlRoot())
+        return;
+    EnableThreadPopupHostBackdrop();
+    auto style = CopiedMenuPresenterStyle();
+    const SearchSurfaceData surface = MergedMenuSurface();
+    if (!(surface.flags & 31u))
+        return;
+    for (auto popup : wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
+        if (popup == g_previewPopup)
+            continue;
+        std::function<void(wux::DependencyObject const&, int)> visit;
+        visit = [&](wux::DependencyObject const& node, int depth) {
+            if (!node || depth > 16)
+                return;
+            if (auto presenter = node.try_as<wuxc::MenuFlyoutPresenter>()) {
+                if (style && presenter.Style() != style)
+                    presenter.Style(style);
+                wuxc::Border childBorder{nullptr};
+                for (int i = 0, n = wuxm::VisualTreeHelper::GetChildrenCount(presenter); i < n; ++i) {
+                    if (auto b = wuxm::VisualTreeHelper::GetChild(presenter, i).try_as<wuxc::Border>()) {
+                        childBorder = b;
+                        break;
+                    }
+                }
+                if (!childBorder) {
+                    if (auto bgNode = FindDescendantByName(presenter, L"BackgroundElement", 4))
+                        childBorder = bgNode.try_as<wuxc::Border>();
+                }
+                if (childBorder) {
+                    const uint64_t appliedGen = winrt::unbox_value_or<uint64_t>(childBorder.Tag(), 0);
+                    if (appliedGen != g_searchMenuStyleGeneration) {
+                        childBorder.Tag(winrt::box_value(g_searchMenuStyleGeneration));
+                        if (surface.flags & 1) {
+                            presenter.Background(MakeBrush(0, 0, 0, 0));
+                            childBorder.Background(RecreateSearchBrush(surface.background, true));
+                        } else {
+                            presenter.ClearValue(wuxc::Control::BackgroundProperty());
+                            childBorder.ClearValue(wuxc::Border::BackgroundProperty());
+                        }
+                        if (surface.flags & 2) {
+                            presenter.BorderBrush(MakeBrush(0, 0, 0, 0));
+                            childBorder.BorderBrush(RecreateSearchBrush(surface.outline));
+                        } else {
+                            presenter.ClearValue(wuxc::Control::BorderBrushProperty());
+                            childBorder.ClearValue(wuxc::Border::BorderBrushProperty());
+                        }
+                        if (surface.flags & 4) {
+                            presenter.CornerRadius(SearchCorners(surface.corners));
+                            childBorder.CornerRadius(SearchCorners(surface.corners));
+                        }
+                        if (surface.flags & 8) {
+                            presenter.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+                            childBorder.BorderThickness(SearchThickness(surface.thickness));
+                        } else {
+                            presenter.ClearValue(wuxc::Control::BorderThicknessProperty());
+                            childBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
+                        }
+                        if (surface.flags & 16) {
+                            childBorder.Padding(SearchThickness(surface.padding));
+                        }
+                    }
+                }
+                return;
+            }
+            const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+            for (int i = 0; i < count; ++i)
+                visit(wuxm::VisualTreeHelper::GetChild(node, i), depth + 1);
+        };
+        visit(popup.Child(), 0);
+    }
+} catch (...) {
+}
+
 void PrepareCopiedMenuItems(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuFlyoutItemBase> const& items) {
-    auto const& surface=g_searchAppearance.menuItem;
-    auto const& menu=g_searchAppearance.menu;
-    auto const& border=g_searchAppearance.menuBorder;
-    auto background=(border.flags&1) ? border.background : menu.background;
-    const uint32_t menuColor=SearchChooseTextColor(background,menu.foreground ? menu.foreground : SearchMainTextColor(),
-                                                 g_searchAppearance.dark!=0,SearchTextOverride());
-    const uint32_t itemColor=SearchChooseTextColor((surface.flags&1) ? surface.background : background,
-        surface.foreground ? surface.foreground : menuColor,g_searchAppearance.dark!=0,SearchTextOverride());
-    for(auto item:items) {
-        if(item.try_as<wuxc::MenuFlyoutSeparator>()) continue;
-        auto control=item.as<wuxc::Control>();
-        wuxm::Brush foreground=wuxm::SolidColorBrush{SearchUnpackColor(itemColor)};
+    auto const& surface = g_searchAppearance.menuItem;
+    auto const& menu = g_searchAppearance.menu;
+    auto const& border = g_searchAppearance.menuBorder;
+    auto background = (border.flags & 1) ? border.background : menu.background;
+    const uint32_t menuColor =
+        SearchChooseTextColor(background, menu.foreground ? menu.foreground : SearchMainTextColor(),
+                              g_searchAppearance.dark != 0, SearchTextOverride());
+    const uint32_t itemColor = SearchChooseTextColor((surface.flags & 1) ? surface.background : background,
+                                                     surface.foreground ? surface.foreground : menuColor,
+                                                     g_searchAppearance.dark != 0, SearchTextOverride());
+    for (auto item : items) {
+        if (item.try_as<wuxc::MenuFlyoutSeparator>())
+            continue;
+        auto control = item.as<wuxc::Control>();
+        wuxm::Brush foreground = wuxm::SolidColorBrush{SearchUnpackColor(itemColor)};
         control.Foreground(foreground);
-        SetSearchContainerForeground(item,foreground);
-        for(auto key:{L"MenuFlyoutItemForeground",L"MenuFlyoutItemForegroundPointerOver",L"MenuFlyoutItemForegroundPressed",
-                      L"MenuFlyoutSubItemForeground",L"MenuFlyoutSubItemForegroundPointerOver",L"MenuFlyoutSubItemForegroundPressed"})
-            control.Resources().Insert(winrt::box_value(key),foreground);
+        SetSearchContainerForeground(item, foreground);
+        for (auto key : {L"MenuFlyoutItemForeground", L"MenuFlyoutItemForegroundPointerOver",
+                         L"MenuFlyoutItemForegroundPressed", L"MenuFlyoutSubItemForeground",
+                         L"MenuFlyoutSubItemForegroundPointerOver", L"MenuFlyoutSubItemForegroundPressed"})
+            control.Resources().Insert(winrt::box_value(key), foreground);
         // Remove our previous overrides if a new theme leaves them at default.
-        if(!(surface.flags&1)) control.ClearValue(wuxc::Control::BackgroundProperty());
-        if(!(surface.flags&2)) control.ClearValue(wuxc::Control::BorderBrushProperty());
-        if(!(surface.flags&4)) control.ClearValue(wuxc::Control::CornerRadiusProperty());
-        if(!(surface.flags&8)) control.ClearValue(wuxc::Control::BorderThicknessProperty());
-        if(!(surface.flags&16)) control.ClearValue(wuxc::Control::PaddingProperty());
-        if(!(surface.flags&32)) control.ClearValue(wux::FrameworkElement::MarginProperty());
-        ApplySearchSurface(control,surface);
-        if(auto sub=item.try_as<wuxc::MenuFlyoutSubItem>()) PrepareCopiedMenuItems(sub.Items());
+        if (!(surface.flags & 1))
+            control.ClearValue(wuxc::Control::BackgroundProperty());
+        if (!(surface.flags & 2))
+            control.ClearValue(wuxc::Control::BorderBrushProperty());
+        if (!(surface.flags & 4))
+            control.ClearValue(wuxc::Control::CornerRadiusProperty());
+        if (!(surface.flags & 8))
+            control.ClearValue(wuxc::Control::BorderThicknessProperty());
+        if (!(surface.flags & 16))
+            control.ClearValue(wuxc::Control::PaddingProperty());
+        if (!(surface.flags & 32))
+            control.ClearValue(wux::FrameworkElement::MarginProperty());
+        ApplySearchSurface(control, surface);
+        if (auto sub = item.try_as<wuxc::MenuFlyoutSubItem>()) {
+            if (!sub.Tag()) {
+                sub.Tag(winrt::box_value(uint32_t{1}));
+                KeepHandler(sub, sub.PointerEntered(winrt::auto_revoke, [](auto const&, auto const&) {
+                    if (HWND host = g_searchWindowWindow.load())
+                        SetTimer(host, kSearchContainerContrastTimer, 40, nullptr);
+                }));
+                KeepHandler(sub, sub.GotFocus(winrt::auto_revoke, [](auto const&, auto const&) {
+                    if (HWND host = g_searchWindowWindow.load())
+                        SetTimer(host, kSearchContainerContrastTimer, 40, nullptr);
+                }));
+            }
+            PrepareCopiedMenuItems(sub.Items());
+        }
     }
 }
 
 void PrepareCopiedMenu(wuxc::MenuFlyout const& menu) try {
-    auto style=CopiedMenuPresenterStyle(); if(!style) return;
-    if(menu.MenuFlyoutPresenterStyle()!=style) menu.MenuFlyoutPresenterStyle(style);
+    auto style = CopiedMenuPresenterStyle();
+    if (!style)
+        return;
+    if (menu.MenuFlyoutPresenterStyle() != style)
+        menu.MenuFlyoutPresenterStyle(style);
     PrepareCopiedMenuItems(menu.Items());
     // Opening reapplies the copied style. Restore any cached gradients before
     // that presenter draws, including reused nested-menu presenters.
-    if (g_searchContrastContainers) for (auto& container : *g_searchContrastContainers)
-        if (auto root = container.root.get(); root && root.try_as<wuxc::MenuFlyoutPresenter>())
-            BindSearchContrastContainer(container);
-} catch(...) { SearchWindowTrace(L"menu preparation failed",winrt::to_hresult()); }
+    if (g_searchContrastContainers)
+        for (auto& container : *g_searchContrastContainers)
+            if (auto root = container.root.get(); root && root.try_as<wuxc::MenuFlyoutPresenter>())
+                BindSearchContrastContainer(container);
+} catch (...) {
+    SearchWindowTrace(L"menu preparation failed", winrt::to_hresult());
+}
 
 void InitializeCopiedMenu(wuxc::MenuFlyout const& menu) {
-    if(!g_searchWindowWindow.load()) return;
+    if (!g_searchWindowWindow.load())
+        return;
     PrepareCopiedMenu(menu);
     // Registered after the population handler, so every item and nested branch
     // is ready before the flyout can draw. Windows forwards this same presenter
     // style to each submenu before opening it (MenuFlyoutSubItem).
-    KeepHandler(menu,menu.Opening(winrt::auto_revoke,[](wf::IInspectable const& sender,wf::IInspectable const&) {
+    KeepHandler(menu, menu.Opening(winrt::auto_revoke, [](wf::IInspectable const& sender, wf::IInspectable const&) {
         PrepareCopiedMenu(sender.as<wuxc::MenuFlyout>());
+        if (g_resultsHost) {
+            g_resultsHost.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::High,
+                                                wuc::DispatchedHandler{[] { ApplyOpenMenuPresenters(); }});
+        }
+    }));
+    KeepHandler(menu, menu.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
+        ApplyOpenMenuPresenters();
+    }));
+    KeepHandler(menu, menu.Closing(winrt::auto_revoke, [](wf::IInspectable const&, auto const&) {
+        if (g_contextMenuInternalClose || g_dragging || g_searchWindowClosing)
+            return;
+        const bool mousePressed =
+            ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) | GetAsyncKeyState(VK_MBUTTON)) & 0x8000) !=
+            0;
+        if (mousePressed) {
+            POINT pt{};
+            if (GetCursorPos(&pt) && !IsPointInAnySearchThreadWindow(pt)) {
+                g_dismissSearchOnMenuClose = true;
+                return;
+            }
+        }
+        HWND fg = GetForegroundWindow();
+        if (fg && GetWindowThreadProcessId(fg, nullptr) != GetCurrentThreadId())
+            g_dismissSearchOnMenuClose = true;
     }));
 }
 
 void RefreshCopiedMenuStyles() try {
-    auto style=CopiedMenuPresenterStyle();
-    if(!style || g_searchMenuRefreshedGeneration==g_searchMenuStyleGeneration) return;
+    auto style = CopiedMenuPresenterStyle();
+    if (!style || g_searchMenuRefreshedGeneration == g_searchMenuStyleGeneration)
+        return;
     // A real appearance change may happen while a menu is already open. This
     // refresh handles that case only; opening new menus never waits for a timer.
-    for(auto const* buttons:{&g_appButtonsOpt,&g_fileButtonsOpt}) {
-        if(!*buttons) continue;
-        for(auto const& button:**buttons) {
-            if(auto menu=button.ContextFlyout().try_as<wuxc::MenuFlyout>()) PrepareCopiedMenu(menu);
+    for (auto const* buttons : {&g_appButtonsOpt, &g_fileButtonsOpt}) {
+        if (!*buttons)
+            continue;
+        for (auto const& button : **buttons) {
+            if (auto menu = button.ContextFlyout().try_as<wuxc::MenuFlyout>())
+                PrepareCopiedMenu(menu);
         }
     }
-    if(g_resultsHost && g_resultsHost.XamlRoot()) {
-        for(auto popup:wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
-            std::function<void(wux::DependencyObject const&,int)> update;
-            update=[&](wux::DependencyObject const& node,int depth) {
-                if(!node || depth>16) return;
-                if(auto presenter=node.try_as<wuxc::MenuFlyoutPresenter>()) {
-                    presenter.Style(style);
-                    return;
-                }
-                const int count=wuxm::VisualTreeHelper::GetChildrenCount(node);
-                for(int i=0;i<count;++i) update(wuxm::VisualTreeHelper::GetChild(node,i),depth+1);
-            };
-            update(popup.Child(),0);
-        }
-    }
-    g_searchMenuRefreshedGeneration=g_searchMenuStyleGeneration;
-} catch(...) { SearchWindowTrace(L"menu appearance refresh failed",winrt::to_hresult()); }
-
+    ApplyOpenMenuPresenters();
+    g_searchMenuRefreshedGeneration = g_searchMenuStyleGeneration;
+} catch (...) {
+    SearchWindowTrace(L"menu appearance refresh failed", winrt::to_hresult());
+}
 
 void ApplyStartAppearance() try {
-    if (!g_searchAppearanceValid || !g_resultsHost || !g_searchAppearanceDirty) return;
-    auto const& appearance=g_searchAppearance;
-    auto theme=appearance.dark ? wux::ElementTheme::Dark : wux::ElementTheme::Light;
-    g_resultsHost.RequestedTheme(theme); g_cachedLightTheme.store(!appearance.dark);
+    if (!g_searchAppearanceValid || !g_resultsHost || !g_searchAppearanceDirty)
+        return;
+    auto const& appearance = g_searchAppearance;
+    auto theme = appearance.dark ? wux::ElementTheme::Dark : wux::ElementTheme::Light;
+    g_resultsHost.RequestedTheme(theme);
+    g_cachedLightTheme.store(!appearance.dark);
     UpdateSearchIcon(!appearance.dark);
-    if (auto brush=RecreateSearchBrush(appearance.background,true)) g_resultsHost.Background(brush);
-    g_resultsHost.BorderBrush(RecreateSearchBrush(appearance.outline));
-    auto bounded=[](double value) { return std::isfinite(value) ? std::clamp(value,0.0,200.0) : 0.0; };
-    g_resultsHost.CornerRadius(wux::CornerRadius{bounded(appearance.corners[0]),bounded(appearance.corners[1]),bounded(appearance.corners[2]),bounded(appearance.corners[3])});
-    g_resultsHost.BorderThickness(wux::ThicknessHelper::FromLengths(bounded(appearance.thickness[0]),bounded(appearance.thickness[1]),bounded(appearance.thickness[2]),bounded(appearance.thickness[3])));
-    if (auto brush=RecreateSearchBrush(appearance.searchBackground)) g_searchBarBorder.Background(brush);
-    g_searchBarBorder.BorderBrush(RecreateSearchBrush(appearance.searchOutline));
-    g_searchBarBorder.CornerRadius(wux::CornerRadius{bounded(appearance.searchCorners[0]),bounded(appearance.searchCorners[1]),bounded(appearance.searchCorners[2]),bounded(appearance.searchCorners[3])});
-    g_searchBarBorder.BorderThickness(wux::ThicknessHelper::FromLengths(bounded(appearance.searchThickness[0]),bounded(appearance.searchThickness[1]),bounded(appearance.searchThickness[2]),bounded(appearance.searchThickness[3])));
+    auto bounded = [](double value) {
+        return std::isfinite(value) ? std::clamp(value, 0.0, 200.0) : 0.0;
+    };
+
+    // 1. Outer & Inner Window Surfaces + D2D Smooth Stroke
+    if (auto brush = RecreateSearchBrush(appearance.background, true))
+        g_resultsHost.Background(brush);
+    g_resultsHost.BorderBrush(nullptr);
+    g_resultsHost.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    g_windowCorners = {bounded(appearance.corners[0]), bounded(appearance.corners[1]), bounded(appearance.corners[2]),
+                       bounded(appearance.corners[3])};
+    g_windowThickness = {bounded(appearance.thickness[0]), bounded(appearance.thickness[1]),
+                         bounded(appearance.thickness[2]), bounded(appearance.thickness[3])};
+    g_windowOutlineBrush = appearance.outline;
+    g_windowInnerThickness = {bounded(appearance.innerThickness[0]), bounded(appearance.innerThickness[1]),
+                              bounded(appearance.innerThickness[2]), bounded(appearance.innerThickness[3])};
+    g_windowInnerOutlineBrush = appearance.innerOutline;
+    g_resultsHost.CornerRadius(
+        wux::CornerRadius{g_windowCorners[0], g_windowCorners[1], g_windowCorners[2], g_windowCorners[3]});
+
+    if (g_windowInnerBorder) {
+        if (SearchBrushIsVisible(appearance.innerBackground)) {
+            g_windowInnerBorder.Background(RecreateSearchBrush(appearance.innerBackground, false));
+            g_windowInnerBorder.Visibility(wux::Visibility::Visible);
+        } else {
+            g_windowInnerBorder.Background(nullptr);
+            g_windowInnerBorder.Visibility(wux::Visibility::Collapsed);
+        }
+        g_windowInnerBorder.CornerRadius(
+            wux::CornerRadius{g_windowCorners[0], g_windowCorners[1], g_windowCorners[2], g_windowCorners[3]});
+    }
+
+    // 2. Search Bar (Primary + 2nd Overlay Layer + D2D Smooth Stroke)
+    if (auto brush = RecreateSearchBrush(appearance.searchBackground))
+        g_searchBarBorder.Background(brush);
+    g_searchBarBorder.BorderBrush(nullptr);
+    g_searchBarBorder.CornerRadius(wux::CornerRadius{0, 0, 0, 0});
+    g_searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    g_searchBarOutlineBrush = appearance.searchOutline;
+    g_searchBarCorners = {bounded(appearance.searchCorners[0]), bounded(appearance.searchCorners[1]),
+                          bounded(appearance.searchCorners[2]), bounded(appearance.searchCorners[3])};
+    if (g_searchBarCorners[0] <= 0 && g_searchBarCorners[1] <= 0 && g_searchBarCorners[2] <= 0 &&
+        g_searchBarCorners[3] <= 0) {
+        const double defaultSearchR =
+            (SearchBrushIsVisible(appearance.searchBackground) || SearchBrushIsVisible(appearance.searchOutline)) ? 20.0
+                                                                                                                  : 6.0;
+        g_searchBarCorners = {defaultSearchR, defaultSearchR, defaultSearchR, defaultSearchR};
+    }
+    g_searchBarThickness = {bounded(appearance.searchThickness[0]), bounded(appearance.searchThickness[1]),
+                            bounded(appearance.searchThickness[2]), bounded(appearance.searchThickness[3])};
+    if (!SearchBrushIsVisible(g_searchBarOutlineBrush) && (appearance.searchOverlay.flags & 2)) {
+        g_searchBarOutlineBrush = appearance.searchOverlay.outline;
+        g_searchBarThickness = {bounded(appearance.searchOverlay.thickness[0]),
+                                bounded(appearance.searchOverlay.thickness[1]),
+                                bounded(appearance.searchOverlay.thickness[2]),
+                                bounded(appearance.searchOverlay.thickness[3])};
+    }
+    if (g_searchBarInnerBorder) {
+        if ((appearance.searchOverlay.flags & 1) && SearchBrushIsVisible(appearance.searchOverlay.background)) {
+            g_searchBarInnerBorder.Background(RecreateSearchBrush(appearance.searchOverlay.background));
+            g_searchBarInnerBorder.CornerRadius(wux::CornerRadius{g_searchBarCorners[0], g_searchBarCorners[1],
+                                                                  g_searchBarCorners[2], g_searchBarCorners[3]});
+            g_searchBarInnerBorder.Visibility(wux::Visibility::Visible);
+        } else {
+            g_searchBarInnerBorder.Background(nullptr);
+            g_searchBarInnerBorder.Visibility(wux::Visibility::Collapsed);
+        }
+    }
+
+    // 3. Section Headers (Apps & Files Pill / Glass Headers + D2D Smooth Stroke)
+    const bool hasHeaderBg = (appearance.header.flags & 1) && SearchBrushIsVisible(appearance.header.background);
+    const bool hasHeaderOutline = (appearance.header.flags & 2) && SearchBrushIsVisible(appearance.header.outline);
+    g_headerOutlineBrush = hasHeaderOutline ? appearance.header.outline : SearchBrushData{};
+    if (appearance.header.flags & 8) {
+        g_headerThickness = {bounded(appearance.header.thickness[0]), bounded(appearance.header.thickness[1]),
+                             bounded(appearance.header.thickness[2]), bounded(appearance.header.thickness[3])};
+    } else {
+        g_headerThickness = {};
+    }
+    if ((appearance.header.flags & 4) &&
+        (appearance.header.corners[0] > 0 || appearance.header.corners[1] > 0 || appearance.header.corners[2] > 0 ||
+         appearance.header.corners[3] > 0)) {
+        g_headerCorners = {bounded(appearance.header.corners[0]), bounded(appearance.header.corners[1]),
+                           bounded(appearance.header.corners[2]), bounded(appearance.header.corners[3])};
+    } else {
+        const double defaultHeaderR = std::clamp(g_windowCorners[0] * 0.5, 6.0, 14.0);
+        g_headerCorners = {defaultHeaderR, defaultHeaderR, defaultHeaderR, defaultHeaderR};
+    }
+    for (auto const* holderPtr : {&g_appsHeaderHolder, &g_filesHeaderHolder}) {
+        if (!*holderPtr)
+            continue;
+        if (hasHeaderBg)
+            holderPtr->Background(RecreateSearchBrush(appearance.header.background));
+        else
+            holderPtr->Background(nullptr);
+        holderPtr->BorderBrush(nullptr);
+        holderPtr->BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    }
+    const auto headerPad = (hasHeaderBg || hasHeaderOutline) ? wux::ThicknessHelper::FromLengths(10, 4, 10, 4)
+                                                             : wux::ThicknessHelper::FromLengths(8, 2, 6, 4);
+    if (g_appsHeaderContent)
+        g_appsHeaderContent.Padding(headerPad);
+    if (g_filesHeaderContent)
+        g_filesHeaderContent.Padding(headerPad);
+
+    // 4. Bottom Status / Footer Bar + D2D Smooth Stroke
+    const bool hasFooterBg = (appearance.footer.flags & 1) && SearchBrushIsVisible(appearance.footer.background);
+    const bool hasFooterOutline = (appearance.footer.flags & 2) && SearchBrushIsVisible(appearance.footer.outline);
+    if ((appearance.footer.flags & 4) &&
+        (appearance.footer.corners[0] > 0 || appearance.footer.corners[1] > 0 || appearance.footer.corners[2] > 0 ||
+         appearance.footer.corners[3] > 0)) {
+        g_footerCorners = {bounded(appearance.footer.corners[0]), bounded(appearance.footer.corners[1]),
+                           bounded(appearance.footer.corners[2]), bounded(appearance.footer.corners[3])};
+    } else {
+        const double botR = std::max(0.0, g_windowCorners[2] - 12.0);
+        const double botL = std::max(0.0, g_windowCorners[3] - 12.0);
+        g_footerCorners = {hasFooterBg ? std::min(8.0, botL) : 0.0, hasFooterBg ? std::min(8.0, botR) : 0.0, botR,
+                           botL};
+    }
+    if (hasFooterOutline && (appearance.footer.flags & 8)) {
+        g_footerOutlineBrush = appearance.footer.outline;
+        g_footerThickness = {bounded(appearance.footer.thickness[0]), bounded(appearance.footer.thickness[1]),
+                             bounded(appearance.footer.thickness[2]), bounded(appearance.footer.thickness[3])};
+    } else if (hasFooterBg && SearchBrushIsVisible(appearance.outline)) {
+        g_footerOutlineBrush = appearance.outline;
+        g_footerThickness = {0.0, std::max(1.0, bounded(appearance.thickness[1])), 0.0, 0.0};
+    } else {
+        g_footerOutlineBrush = {};
+        g_footerOutlineBrush.kind = 1;
+        g_footerOutlineBrush.color = appearance.dark ? 0x14FFFFFFu : 0x18000000u;
+        g_footerThickness = {0.0, 1.0, 0.0, 0.0};
+    }
+    if (g_footerBorder) {
+        if (hasFooterBg)
+            g_footerBorder.Background(RecreateSearchBrush(appearance.footer.background));
+        else
+            g_footerBorder.Background(nullptr);
+        g_footerBorder.Padding(wux::ThicknessHelper::FromUniformLength(0));
+        g_footerBorder.BorderBrush(nullptr);
+        g_footerBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    }
+
+    // 5. Refresh Result Row Hover & Selection Styling (only the active column highlights)
+    g_paintedSelectedButton = {};
+    PaintColumnSelection(g_appButtonsOpt, g_filesColumnActive ? -1 : g_selectedApp, true);
+    PaintColumnSelection(g_fileButtonsOpt, g_filesColumnActive ? g_selectedFile : -1, true);
+
     g_searchAppearanceDirty = false;
     ApplySearchTextColors();
-    DWORD backdrop=1; // XAML owns the material and alpha edge; keep the native host transparent
-    DwmSetWindowAttribute(g_searchWindowWindow.load(),38,&backdrop,sizeof(backdrop));
+    DWORD backdrop = 1;  // XAML owns the material and alpha edge; keep the
+                         // native host transparent
+    DwmSetWindowAttribute(g_searchWindowWindow.load(), 38, &backdrop, sizeof(backdrop));
     UpdateSearchWindowShape();
+    UpdateSearchBarShape();
+    UpdateSearchHeadersShape();
+    UpdateSearchFooterShape();
+    ApplyPreviewCardAppearance();
     RefreshCopiedMenuStyles();
-} catch (...) { SearchWindowTrace(L"style copy failed",winrt::to_hresult()); }
+} catch (...) {
+    SearchWindowTrace(L"style copy failed", winrt::to_hresult());
+}
 
 void SearchWindowChooseBounds() {
-    HWND host = g_searchWindowWindow.load();
-    HWND start = CachedStartWindow();
-    POINT cursor{};
-    GetCursorPos(&cursor);
-    HMONITOR screen = start && !IsStartMenuClosed()
-        ? MonitorFromWindow(start, MONITOR_DEFAULTTONEAREST)
-        : MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO monitor{sizeof(monitor)};
-    if (!GetMonitorInfoW(screen,&monitor)) winrt::throw_last_error();
-    g_searchWindowWork = monitor.rcWork;
-    g_searchTaskbarEdge = TaskbarEdgeForMonitor(screen);
-    const double scale = GetDpiForWindow(host) / 96.0;
-    const RECT work = monitor.rcWork;
-    bool customSize,filesVisible;
-    int customWidth,customHeight;
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        customSize=g_settings.useCustomMenuSize;
-        customWidth=g_settings.menuWidth; customHeight=g_settings.menuHeight;
-        filesVisible=!g_settings.hideFilesPanel;
-    }
-    const double fullWidth=g_searchAppearance.width >= 400 ? g_searchAppearance.width : 660;
-    const double measuredWidth=customSize ? customWidth : (filesVisible ? fullWidth : fullWidth/2);
-    const double measuredHeight=customSize ? customHeight :
-        (g_searchAppearance.height >= 350 ? g_searchAppearance.height : 660);
-    const int width=std::max(1,std::min(static_cast<int>(measuredWidth*scale),static_cast<int>(work.right-work.left-32)));
-    const int height=std::max(1,std::min(static_cast<int>(measuredHeight*scale),static_cast<int>(work.bottom-work.top-32)));
-    const bool sameEdge = g_searchAppearance.taskbarEdge == static_cast<uint32_t>(g_searchTaskbarEdge);
-    const int gap = static_cast<int>((sameEdge ? g_searchAppearance.edgeGap : 12)*scale);
-    g_searchWindowBounds = SearchBoundsForEdge(work,width,height,gap,
-        sameEdge ? g_searchAppearance.alignment : 0.5,g_searchTaskbarEdge);
+  HWND host = g_searchWindowWindow.load();
+  HWND start = CachedStartWindow();
+  POINT cursor{};
+  GetCursorPos(&cursor);
+  HMONITOR screen = start && !IsStartMenuClosed()
+                        ? MonitorFromWindow(start, MONITOR_DEFAULTTONEAREST)
+                        : MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO monitor{sizeof(monitor)};
+  if (!GetMonitorInfoW(screen, &monitor))
+    winrt::throw_last_error();
+  g_searchWindowWork = monitor.rcWork;
+  g_searchTaskbarEdge = TaskbarEdgeForMonitor(screen);
+  const double scale = GetDpiForWindow(host) / 96.0;
+  const RECT work = monitor.rcWork;
+  bool customSize, filesVisible;
+  int customWidth, customHeight;
+  {
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    customSize = g_settings.useCustomMenuSize;
+    customWidth = g_settings.menuWidth;
+    customHeight = g_settings.menuHeight;
+    filesVisible = !g_settings.hideFilesPanel;
+  }
+  const double fullWidth =
+      g_searchAppearance.width >= 400 ? g_searchAppearance.width : 660;
+  const double measuredWidth =
+      customSize ? customWidth : (filesVisible ? fullWidth : fullWidth / 2);
+  const double measuredHeight =
+      customSize ? customHeight
+                 : (g_searchAppearance.height >= 350 ? g_searchAppearance.height
+                                                     : 660);
+  const int width =
+      std::max(1, std::min(static_cast<int>(measuredWidth * scale),
+                           static_cast<int>(work.right - work.left - 32)));
+  const int height =
+      std::max(1, std::min(static_cast<int>(measuredHeight * scale),
+                           static_cast<int>(work.bottom - work.top - 32)));
+  const bool sameEdge = g_searchAppearance.taskbarEdge ==
+                        static_cast<uint32_t>(g_searchTaskbarEdge);
+  const int gap =
+      static_cast<int>((sameEdge ? g_searchAppearance.edgeGap : 12) * scale);
+  g_searchWindowBounds = SearchBoundsForEdge(
+      work, width, height, gap, sameEdge ? g_searchAppearance.alignment : 0.5,
+      g_searchTaskbarEdge);
 }
 
 void FinishSearchWindowHide();
 
 double SearchWindowFrameInterval() {
-    MONITORINFOEXW monitor{}; monitor.cbSize = sizeof(monitor);
-    DEVMODEW mode{}; mode.dmSize = sizeof(mode);
+    MONITORINFOEXW monitor{};
+    monitor.cbSize = sizeof(monitor);
+    DEVMODEW mode{};
+    mode.dmSize = sizeof(mode);
     double hz = 60;
-    if (GetMonitorInfoW(MonitorFromRect(&g_searchWindowBounds,MONITOR_DEFAULTTONEAREST),&monitor) &&
-        EnumDisplaySettingsW(monitor.szDevice,ENUM_CURRENT_SETTINGS,&mode) && mode.dmDisplayFrequency > 1)
+    if (GetMonitorInfoW(MonitorFromRect(&g_searchWindowBounds, MONITOR_DEFAULTTONEAREST), &monitor) &&
+        EnumDisplaySettingsW(monitor.szDevice, ENUM_CURRENT_SETTINGS, &mode) && mode.dmDisplayFrequency > 1)
         hz = mode.dmDisplayFrequency;
     DWM_TIMING_INFO timing{sizeof(timing)};
-    if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr,&timing)) && timing.rateRefresh.uiDenominator) {
-        const double dwmHz = static_cast<double>(timing.rateRefresh.uiNumerator)/timing.rateRefresh.uiDenominator;
-        if (std::abs(dwmHz-hz) < 1) hz = dwmHz;
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &timing)) && timing.rateRefresh.uiDenominator) {
+        const double dwmHz = static_cast<double>(timing.rateRefresh.uiNumerator) / timing.rateRefresh.uiDenominator;
+        if (std::abs(dwmHz - hz) < 1)
+            hz = dwmHz;
     }
-    return 1000.0/std::clamp(hz,30.0,500.0);
+    return 1000.0 / std::clamp(hz, 30.0, 500.0);
 }
 
 void PositionSearchWindowSlide() {
     HWND host = g_searchWindowWindow.load();
-    if (!host) return;
+    if (!host)
+        return;
     RECT frame = g_searchWindowBounds;
-    const int pixels = static_cast<int>(std::lround(g_searchWindowSlide.Value(SearchMotionTime())*GetDpiForWindow(host)/96.0));
-    const POINT move = SearchSlideTranslation(g_searchTaskbarEdge,pixels);
-    OffsetRect(&frame,move.x,move.y);
-    if (EqualRect(&frame,&g_searchWindowLastFrame)) return;
-    const RECT viewport = SearchSlideViewport(frame,g_searchWindowWork,g_searchTaskbarEdge);
+    const int pixels =
+        static_cast<int>(std::lround(g_searchWindowSlide.Value(SearchMotionTime()) * GetDpiForWindow(host) / 96.0));
+    const POINT move = SearchSlideTranslation(g_searchTaskbarEdge, pixels);
+    OffsetRect(&frame, move.x, move.y);
+    if (EqualRect(&frame, &g_searchWindowLastFrame))
+        return;
+    const RECT viewport = SearchSlideViewport(frame, g_searchWindowWork, g_searchTaskbarEdge);
     g_searchWindowSlideFrame = frame;
-    if (SetWindowPos(host,nullptr,viewport.left,viewport.top,viewport.right-viewport.left,viewport.bottom-viewport.top,
-                     SWP_NOZORDER | SWP_NOACTIVATE)) {
+    if (SetWindowPos(host, nullptr, viewport.left, viewport.top, viewport.right - viewport.left,
+                     viewport.bottom - viewport.top, SWP_NOZORDER | SWP_NOACTIVATE)) {
         PositionSearchWindowChild();
         ApplySearchWindowShapeRegion();
         g_searchWindowLastFrame = frame;
@@ -14874,7 +16647,8 @@ void PositionSearchWindowSlide() {
 
 double StopSearchWindowSlide() {
     const double current = g_searchWindowSlide.Value(SearchMotionTime());
-    if (g_searchSlideClock) g_searchSlideClock->Pause();
+    if (g_searchSlideClock)
+        g_searchSlideClock->Pause();
     g_searchWindowSlide.Snap(current);
     g_searchWindowSliding = false;
     return current;
@@ -14889,9 +16663,11 @@ void SnapSearchWindowSlide(double offset) {
 
 void CompleteSearchWindowSlide() {
     SnapSearchWindowSlide(g_searchWindowSlideTarget);
-    if (g_searchWindowClosing) FinishSearchWindowHide();
+    if (g_searchWindowClosing)
+        FinishSearchWindowHide();
     else if (!g_searchWindowWaitingForStart && !g_searchWindowCloaked) {
-        if (g_renderAfterSlide) RequestRender();
+        if (g_renderAfterSlide)
+            RequestRender();
         SchedulePreview();
         SearchContainerContrastTick();
     }
@@ -14901,16 +16677,17 @@ void StartSearchWindowSlide(double offset, unsigned duration, bool closing = fal
     PauseSearchContainerContrast();
     const double from = StopSearchWindowSlide();
     g_searchWindowSlideTarget = offset;
-    if (!duration || std::abs(from-offset) < 0.1) {
+    if (!duration || std::abs(from - offset) < 0.1) {
         CompleteSearchWindowSlide();
         return;
     }
     try {
-        if (!g_searchSlideClock) g_searchSlideClock.emplace();
+        if (!g_searchSlideClock)
+            g_searchSlideClock.emplace();
         const double interval = SearchWindowFrameInterval();
-        g_searchWindowSlide = {from,offset,SearchMotionTime(),static_cast<double>(duration),closing};
+        g_searchWindowSlide = {from, offset, SearchMotionTime(), static_cast<double>(duration), closing};
         g_searchWindowSliding = true;
-        g_searchSlideClock->Start(g_searchWindowWindow.load(),interval);
+        g_searchSlideClock->Start(g_searchWindowWindow.load(), interval);
     } catch (...) {
         SearchWindowTrace(L"slide unavailable; finishing immediately", winrt::to_hresult());
         CompleteSearchWindowSlide();
@@ -14919,43 +16696,49 @@ void StartSearchWindowSlide(double offset, unsigned duration, bool closing = fal
 
 void FinishSearchWindowHide() {
     HWND host = g_searchWindowWindow.load();
-    if (!host) return;
-    KillTimer(host,kSearchWindowMotionTimer);
-    KillTimer(host,kSearchWindowStyleTimer);
+    if (!host)
+        return;
+    KillTimer(host, kSearchWindowMotionTimer);
+    KillTimer(host, kSearchWindowStyleTimer);
     PauseSearchContainerContrast();
-    ShowWindow(host,SW_HIDE);
+    ShowWindow(host, SW_HIDE);
     SnapSearchWindowSlide(0);
     SetSearchWindowCloaked(false);
     g_searchWindowClosing = false;
     g_searchWindowWaitingForStart = false;
     g_isHiding = false;
     g_isOverlayVisible = false;
-    if (g_ourBox) g_ourBox.Text(L"");
+    if (g_ourBox)
+        g_ourBox.Text(L"");
+    SyncSearchWindowInputForForeground();
     SearchWindowTrace(L"hidden");
 }
 
 void SearchWindowMotionFrame() {
     HWND host = g_searchWindowWindow.load();
-    if (!host) return;
+    if (!host)
+        return;
     PositionSearchWindowSlide();
     const ULONGLONG now = GetTickCount64();
     if (g_searchWindowWaitingForStart) {
         const bool closed = IsStartMenuClosed();
-        if (!closed) g_searchWindowStartClosedAt = 0;
-        else if (!g_searchWindowStartClosedAt) g_searchWindowStartClosedAt = now;
+        if (!closed)
+            g_searchWindowStartClosedAt = 0;
+        else if (!g_searchWindowStartClosedAt)
+            g_searchWindowStartClosedAt = now;
         const ULONGLONG minimum = g_searchWindowStartWasOpen && SearchWindowAnimationsEnabled() ? 200 : 32;
-        if (closed && now-g_searchWindowHandoffStarted >= minimum && now-g_searchWindowStartClosedAt >= 32) {
+        if (closed && now - g_searchWindowHandoffStarted >= minimum && now - g_searchWindowStartClosedAt >= 32) {
             g_searchWindowWaitingForStart = false;
-            KillTimer(host,kSearchWindowMotionTimer);
-            StartSearchWindowSlide(0,SearchWindowAnimationsEnabled() ? 240 : 0);
-        } else if (!closed && !g_searchWindowShellCloseAsked && now-g_searchWindowHandoffStarted >= 450 &&
+            KillTimer(host, kSearchWindowMotionTimer);
+            StartSearchWindowSlide(0, SearchWindowAnimationsEnabled() ? 240 : 0);
+        } else if (!closed && !g_searchWindowShellCloseAsked && now - g_searchWindowHandoffStarted >= 450 &&
                    GetForegroundWindow() == host) {
             // A cloaked foreground window can leave Start open. Ask the
             // shell to close it once, after its normal close would have ended.
             g_searchWindowShellCloseAsked = true;
-            if (HWND tray = FindWindowW(L"Shell_TrayWnd",nullptr))
-                PostMessageW(tray,WM_SYSCOMMAND,SC_TASKLIST,0);
-        } else if (now-g_searchWindowHandoffStarted >= 1500) {
+            if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr))
+                PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
+        } else if (now - g_searchWindowHandoffStarted >= 1500) {
             SearchWindowTrace(L"Start handoff timed out");
             FinishSearchWindowHide();
             return;
@@ -14963,20 +16746,24 @@ void SearchWindowMotionFrame() {
     }
     if (!g_searchWindowWaitingForStart && g_searchWindowCloaked) {
         SetSearchWindowCloaked(false);
-        if (!g_searchWindowSliding && g_renderAfterSlide) RequestRender();
-        if (!g_searchWindowSliding) SchedulePreview();
+        if (!g_searchWindowSliding && g_renderAfterSlide)
+            RequestRender();
+        if (!g_searchWindowSliding)
+            SchedulePreview();
         QueueSearchBoxRefocus();
         SearchWindowTrace(L"revealed after handoff");
     }
-    if (!g_searchWindowWaitingForStart) KillTimer(host,kSearchWindowMotionTimer);
+    if (!g_searchWindowWaitingForStart)
+        KillTimer(host, kSearchWindowMotionTimer);
 }
 
 void RunSearchWindowMotion() {
     HWND host = g_searchWindowWindow.load();
-    if (!host) return;
+    if (!host)
+        return;
     SearchWindowMotionFrame();
     if (g_searchWindowWaitingForStart) {
-        if (!SetTimer(host,kSearchWindowMotionTimer,15,nullptr)) {
+        if (!SetTimer(host, kSearchWindowMotionTimer, 15, nullptr)) {
             FinishSearchWindowHide();
         }
     }
@@ -14985,56 +16772,73 @@ void RunSearchWindowMotion() {
 void SearchWindowLayout(bool animate) {
     (void)animate;
     HWND host = g_searchWindowWindow.load();
-    if (!host || !g_ourBox || g_searchWindowChanging || g_searchWindowClosing) return;
+    if (!host || !g_ourBox || g_searchWindowChanging || g_searchWindowClosing)
+        return;
     g_searchWindowChanging = true;
     try {
         auto body = g_resultsHost.Children().GetAt(1).as<wux::FrameworkElement>();
         body.Visibility(wux::Visibility::Visible);
         if (g_ourBox.Text().empty()) {
             HidePreview();
-            if(g_currentAppRows.empty() || !g_shownQuery.empty()) {
-                g_enterWaiting=false; g_selectedApp=g_selectedFile=-1; g_filesColumnActive=false;
+            if (g_currentAppRows.empty() || !g_shownQuery.empty()) {
+                g_enterWaiting = false;
+                g_selectedApp = g_selectedFile = -1;
+                g_filesColumnActive = false;
             }
             g_footerStatus.Text(FilesPanelVisible() ? L"Suggested apps" : L"Apps");
         }
         RunSearchWindowMotion();
-    } catch (...) { SearchWindowTrace(L"layout failed",winrt::to_hresult()); }
+    } catch (...) {
+        SearchWindowTrace(L"layout failed", winrt::to_hresult());
+    }
     g_searchWindowChanging = false;
 }
 
 void SearchWindowHide() {
     HWND host = g_searchWindowWindow.load();
-    if (!host || g_searchWindowClosing || !IsWindowVisible(host)) return;
-    KillTimer(host,kSearchWindowDismissTimer);
-    g_searchWindowInputReady = false; g_enterWaiting = false;
-    g_isOverlayVisible = false; g_isHiding = true; g_searchWindowClosing = true;
+    if (!host || g_searchWindowClosing || !IsWindowVisible(host))
+        return;
+    KillTimer(host, kSearchWindowDismissTimer);
+    g_searchWindowInputReady = false;
+    g_enterWaiting = false;
+    g_isOverlayVisible = false;
+    g_isHiding = true;
+    g_searchWindowClosing = true;
     g_resultsHost.IsHitTestVisible(false);
     HidePreview();
-    if (g_searchWindowWaitingForStart) { FinishSearchWindowHide(); return; }
-    const double scale = GetDpiForWindow(host)/96.0;
-    StartSearchWindowSlide(SearchHiddenDistance(g_searchWindowBounds,g_searchWindowWork,scale,g_searchTaskbarEdge),
-                           SearchWindowAnimationsEnabled() ? 180 : 0,true);
+    if (g_searchWindowWaitingForStart) {
+        FinishSearchWindowHide();
+        return;
+    }
+    const double scale = GetDpiForWindow(host) / 96.0;
+    StartSearchWindowSlide(SearchHiddenDistance(g_searchWindowBounds, g_searchWindowWork, scale, g_searchTaskbarEdge),
+                           SearchWindowAnimationsEnabled() ? 180 : 0, true);
 }
 
 void SearchWindowShow(std::wstring const& text, bool append) {
     HWND host = g_searchWindowWindow.load();
-    if (!host || !g_ourBox || g_quit.load()) return;
+    if (!host || !g_ourBox || g_quit.load())
+        return;
     try {
         // Initialize defaults once, then rebuild brushes only when the copied
         // appearance (or a real theme/settings notification) changes.
-        RequestStartAppearance(); ApplyStartAppearance();
+        RequestStartAppearance();
+        ApplyStartAppearance();
         const bool wasVisible = IsWindowVisible(host);
         const bool wasClosing = g_searchWindowClosing;
         const bool fresh = !wasVisible || wasClosing;
-        g_searchWindowClosing = false; g_isHiding = false;
+        g_searchWindowClosing = false;
+        g_isHiding = false;
         if (fresh) {
             StopSearchWindowSlide();
             SearchWindowChooseBounds();
-            g_ourBox.Text(L""); g_dragging = false;
+            g_ourBox.Text(L"");
+            g_dragging = false;
             RequestAppIndexRefresh();
             if (!wasVisible) {
-                const double scale = GetDpiForWindow(host)/96.0;
-                SnapSearchWindowSlide(SearchHiddenDistance(g_searchWindowBounds,g_searchWindowWork,scale,g_searchTaskbarEdge));
+                const double scale = GetDpiForWindow(host) / 96.0;
+                SnapSearchWindowSlide(
+                    SearchHiddenDistance(g_searchWindowBounds, g_searchWindowWork, scale, g_searchTaskbarEdge));
             }
             g_searchWindowStartWasOpen = !IsStartMenuClosed();
             g_searchWindowWaitingForStart = true;
@@ -15046,67 +16850,97 @@ void SearchWindowShow(std::wstring const& text, bool append) {
         }
         if (!text.empty()) {
             std::wstring next = append && wasVisible && !wasClosing ? std::wstring(g_ourBox.Text()) : std::wstring();
-            next += text; g_ourBox.Text(next);
+            next += text;
+            g_ourBox.Text(next);
         }
-        QueueQuery(std::wstring(g_ourBox.Text())); // empty text also needs an initial suggestion query
-        if (g_renderAfterSlide) RequestRender();
+        QueueQuery(std::wstring(g_ourBox.Text()));  // empty text also needs an initial suggestion query
+        if (g_renderAfterSlide)
+            RequestRender();
         g_searchActivationTick = GetTickCount64();
-        KillTimer(host,kSearchWindowDismissTimer);
+        KillTimer(host, kSearchWindowDismissTimer);
         g_isOverlayVisible = true;
-        g_resultsHost.Opacity(1); g_resultsHost.IsHitTestVisible(true);
+        g_resultsHost.Opacity(1);
+        g_resultsHost.IsHitTestVisible(true);
         SearchWindowLayout(false);
         HWND foreground = GetForegroundWindow();
         if (foreground && (foreground == CachedStartWindow() || IsSearchHostWindow(foreground))) {
             DWORD_PTR granted = 0;
-            SendMessageTimeoutW(foreground,SearchWindowForegroundMessage(),0,0,SMTO_ABORTIFHUNG,150,&granted);
+            SendMessageTimeoutW(foreground, SearchWindowForegroundMessage(), 0, 0, SMTO_ABORTIFHUNG, 150, &granted);
         }
-        ShowWindow(host,SW_SHOWNORMAL);
+        ShowWindow(host, SW_SHOWNORMAL);
         BOOL activated = SetForegroundWindow(host);
         g_searchWindowInputReady = false;
         SetFocus(g_searchWindowChild);
         g_searchWindowSource.NavigateFocus(winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationRequest{
             winrt::Windows::UI::Xaml::Hosting::XamlSourceFocusNavigationReason::First});
         g_ourBox.Focus(wux::FocusState::Programmatic);
-        g_ourBox.SelectionStart(static_cast<int32_t>(g_ourBox.Text().size())); g_ourBox.SelectionLength(0);
+        g_ourBox.SelectionStart(static_cast<int32_t>(g_ourBox.Text().size()));
+        g_ourBox.SelectionLength(0);
         g_searchWindowInputReady = GetForegroundWindow() == host && SearchWindowTextboxHasFocus();
         QueueSearchBoxRefocus();
-        SetTimer(host,kSearchWindowStyleTimer,500,nullptr);
+        SetTimer(host, kSearchWindowStyleTimer, 500, nullptr);
         RunSearchWindowMotion();
-        if (!g_searchWindowSliding) SearchContainerContrastTick();
-        SearchWindowTrace(!activated ? L"shown, foreground denied" :
-                          SearchWindowTextboxHasFocus() ? L"shown and focused" : L"shown; input focus pending");
-    } catch (...) { SearchWindowTrace(L"show failed",winrt::to_hresult()); }
+        if (!g_searchWindowSliding)
+            SearchContainerContrastTick();
+        SearchWindowTrace(!activated                      ? L"shown, foreground denied"
+                          : SearchWindowTextboxHasFocus() ? L"shown and focused"
+                                                          : L"shown; input focus pending");
+    } catch (...) {
+        SearchWindowTrace(L"show failed", winrt::to_hresult());
+    }
 }
 
 LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) try {
-    if (message == kSearchContainerContrastReady) { ApplySearchContainerContrast(); return 0; }
+    if (message == kSearchContainerContrastReady) {
+        ApplySearchContainerContrast();
+        return 0;
+    }
     if (message == kSearchWindowSlideFrameMessage) {
-        if (g_searchSlideClock) g_searchSlideClock->pending.store(false);
-        if (!g_searchWindowSliding) return 0;
-        if (wParam || !g_searchWindowSlide.Active(SearchMotionTime())) CompleteSearchWindowSlide();
-        else PositionSearchWindowSlide();
+        if (g_searchSlideClock)
+            g_searchSlideClock->pending.store(false);
+        if (!g_searchWindowSliding)
+            return 0;
+        if (wParam || !g_searchWindowSlide.Active(SearchMotionTime()))
+            CompleteSearchWindowSlide();
+        else
+            PositionSearchWindowSlide();
         return 0;
     }
     if (message == WM_COPYDATA && reinterpret_cast<HWND>(wParam) == CachedStartWindow()) {
         auto data = reinterpret_cast<const COPYDATASTRUCT*>(lParam);
-        if (data && data->dwData == kSearchWindowAppearanceData && data->cbData == sizeof(SearchAppearanceData) && data->lpData) {
+        if (data && data->dwData == kSearchWindowAppearanceData && data->cbData == sizeof(SearchAppearanceData) &&
+            data->lpData) {
             SearchAppearanceData appearance;
-            memcpy(&appearance,data->lpData,sizeof(appearance));
-            if (appearance.version == 4 && appearance.taskbarEdge <= static_cast<uint32_t>(SearchTaskbarEdge::Bottom) && std::isfinite(appearance.width) && std::isfinite(appearance.height) &&
-                appearance.width >= 0 && appearance.width <= 4000 && appearance.height >= 0 && appearance.height <= 4000 &&
+            memcpy(&appearance, data->lpData, sizeof(appearance));
+            if (appearance.version == 5 && appearance.taskbarEdge <= static_cast<uint32_t>(SearchTaskbarEdge::Bottom) &&
+                std::isfinite(appearance.width) && std::isfinite(appearance.height) && appearance.width >= 0 &&
+                appearance.width <= 4000 && appearance.height >= 0 && appearance.height <= 4000 &&
                 std::isfinite(appearance.edgeGap) && std::isfinite(appearance.alignment) &&
-                ValidSearchSurface(appearance.menu) && ValidSearchSurface(appearance.menuBorder) && ValidSearchSurface(appearance.menuItem)) {
+                ValidSearchSurface(appearance.searchOverlay) && ValidSearchSurface(appearance.header) &&
+                ValidSearchSurface(appearance.itemHover) && ValidSearchSurface(appearance.footer) &&
+                ValidSearchSurface(appearance.menu) && ValidSearchSurface(appearance.menuBorder) &&
+                ValidSearchSurface(appearance.menuItem)) {
                 if ((appearance.width < 400 || appearance.height < 350) && g_searchAppearance.width >= 400) {
-                    appearance.width=g_searchAppearance.width; appearance.height=g_searchAppearance.height;
-                    appearance.edgeGap=g_searchAppearance.edgeGap; appearance.alignment=g_searchAppearance.alignment;
-                    appearance.taskbarEdge=g_searchAppearance.taskbarEdge;
+                    appearance.width = g_searchAppearance.width;
+                    appearance.height = g_searchAppearance.height;
+                    appearance.edgeGap = g_searchAppearance.edgeGap;
+                    appearance.alignment = g_searchAppearance.alignment;
+                    appearance.taskbarEdge = g_searchAppearance.taskbarEdge;
                 }
-                const bool changed=!g_searchAppearanceValid || memcmp(&appearance,&g_searchAppearance,sizeof(appearance)) != 0;
-                g_searchAppearance = appearance; g_searchAppearanceValid = true;
+                const bool changed =
+                    !g_searchAppearanceValid || memcmp(&appearance, &g_searchAppearance, sizeof(appearance)) != 0;
+                g_searchAppearance = appearance;
+                g_searchAppearanceValid = true;
                 g_searchAppearanceDirty = g_searchAppearanceDirty || changed;
                 if (changed) {
-                    wchar_t description[128]{};
-                    swprintf_s(description,L"Start appearance: %.0fx%.0f gap=%.1f align=%.2f background=%u color=%08X blur=%.0f menu=%u",appearance.width,appearance.height,appearance.edgeGap,appearance.alignment,appearance.background.kind,appearance.background.color,appearance.background.blur,appearance.menuBorder.flags);
+                    wchar_t description[192]{};
+                    swprintf_s(
+                        description,
+                        L"Start appearance: %.0fx%.0f gap=%.1f align=%.2f bg=%u(%08X,blur=%.0f) inner=%u hdr=%u hover=%u ftr=%u menu=%u",
+                        appearance.width, appearance.height, appearance.edgeGap, appearance.alignment,
+                        appearance.background.kind, appearance.background.color, appearance.background.blur,
+                        appearance.innerBackground.kind, appearance.header.flags, appearance.itemHover.flags,
+                        appearance.footer.flags, appearance.menuBorder.flags);
                     SearchWindowTrace(description);
                 }
                 return 1;
@@ -15114,133 +16948,207 @@ LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPA
         }
         return 0;
     }
-    if (message == kSearchWindowDismissMenuMessage) { DismissSearchContextMenu(); return 0; }
-    if (message == kSearchWindowInputMessage) { ApplySearchWindowInput(); return 0; }
-    if (message == kSearchWindowShowMessage) { SearchWindowShow(); return 0; }
-    if (message == kSearchWindowLayoutMessage) { SearchWindowLayout(); return 0; }
-    if (message == RemovalCheckMessage())
-        return !g_removalPending.empty() && std::hash<std::wstring>{}(g_removalPending) == static_cast<size_t>(lParam);
+    if (message == kSearchWindowDismissMenuMessage) {
+        DismissSearchContextMenu();
+        return 0;
+    }
+    if (message == kSearchWindowInputMessage) {
+        ApplySearchWindowInput();
+        return 0;
+    }
+    if (message == kSearchWindowShowMessage) {
+        SearchWindowShow();
+        return 0;
+    }
+    if (message == kSearchWindowLayoutMessage) {
+        SearchWindowLayout();
+        return 0;
+    }
     if (message == DragDoneMessage()) {
         g_dragging = false;
-        if (wParam) SearchWindowHide(); else if (IsWindowVisible(hwnd)) SearchWindowShow();
+        if (wParam)
+            SearchWindowHide();
+        else if (IsWindowVisible(hwnd))
+            SearchWindowShow();
         return 0;
     }
     switch (message) {
-    case WM_NCCALCSIZE: if (wParam) return 0; break;
-    case WM_ERASEBKGND: return 1;
-    case WM_SIZE:
-        PositionSearchWindowChild();
-        UpdateSearchWindowShape();
-        return 0;
-    case WM_DPICHANGED:
-        SearchWindowChooseBounds(); SearchWindowLayout(false);
-        UpdateSearchIcon(IsLightTheme()); return 0;
-    case WM_ACTIVATE:
-        if (LOWORD(wParam) == WA_INACTIVE && !g_dragging) SetTimer(hwnd,kSearchWindowDismissTimer,70,nullptr);
-        else {
-            KillTimer(hwnd,kSearchWindowDismissTimer);
-            if(LOWORD(wParam) != WA_INACTIVE) QueueSearchBoxRefocus();
-        }
-        break;
-    case WM_SETFOCUS:
-        QueueSearchBoxRefocus();
-        break;
-    case WM_TIMER:
-        if (wParam == kSearchContainerContrastTimer) { SearchContainerContrastTick(); return 0; }
-        if (wParam == kSearchWindowRefocusTimer) { SearchWindowRefocusFrame(); return 0; }
-        if (wParam == kSearchWindowStyleTimer) {
-            // Start already publishes appearance on its own timer. Avoid a
-            // second cross-process capture every time we check input focus.
-            if (!g_searchWindowSliding) ApplyStartAppearance();
-            CheckSearchWindowFocus(); return 0;
-        }
-        if (wParam == kSearchWindowMotionTimer) { SearchWindowMotionFrame(); return 0; }
-        if (wParam == kSearchWindowDismissTimer) {
-            KillTimer(hwnd,kSearchWindowDismissTimer);
-            HWND foreground = GetForegroundWindow();
-            DWORD thread = GetWindowThreadProcessId(foreground,nullptr);
-            if (!g_dragging && thread != GetCurrentThreadId() && IsWindowVisible(hwnd)) SearchWindowHide();
+        case WM_NCCALCSIZE:
+            if (wParam)
+                return 0;
+            break;
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_SIZE:
+            PositionSearchWindowChild();
+            UpdateSearchWindowShape();
             return 0;
-        }
-        break;
-    case WM_DISPLAYCHANGE:
-        SearchWindowChooseBounds(); SearchWindowLayout(false);
-        if (g_previewPopup && g_previewPopup.IsOpen()) PositionPreview();
-        return 0;
-    case WM_SETTINGCHANGE:
-        if (wParam==SPI_SETWORKAREA) {
-            SearchWindowChooseBounds(); SearchWindowLayout(false);
-            if (g_previewPopup && g_previewPopup.IsOpen()) PositionPreview();
-        }
-        [[fallthrough]];
-    case WM_THEMECHANGED:
-        RefreshThemeCache(); SearchWindowStyle();
-        if (!SearchWindowAnimationsEnabled() && g_searchWindowSliding) CompleteSearchWindowSlide();
-        break;
-    case WM_CLOSE: SearchWindowHide(); return 0;
+        case WM_DPICHANGED:
+            SearchWindowChooseBounds();
+            SearchWindowLayout(false);
+            UpdateSearchIcon(IsLightTheme());
+            UpdateSearchWindowShape();
+            UpdateSearchBarShape();
+            UpdateSearchHeadersShape();
+            UpdateSearchFooterShape();
+            UpdatePreviewCardShape();
+            return 0;
+        case WM_ACTIVATE:
+          if (LOWORD(wParam) == WA_INACTIVE && !g_dragging)
+            SetTimer(hwnd, kSearchWindowDismissTimer, 70, nullptr);
+          else {
+            KillTimer(hwnd, kSearchWindowDismissTimer);
+            if (LOWORD(wParam) != WA_INACTIVE)
+              QueueSearchBoxRefocus();
+          }
+          break;
+        case WM_SETFOCUS:
+            QueueSearchBoxRefocus();
+            break;
+        case WM_TIMER:
+            if (wParam == kSearchContainerContrastTimer) {
+                SearchContainerContrastTick();
+                return 0;
+            }
+            if (wParam == kSearchWindowRefocusTimer) {
+                SearchWindowRefocusFrame();
+                return 0;
+            }
+            if (wParam == kSearchWindowStyleTimer) {
+                // Start already publishes appearance on its own timer. Avoid a
+                // second cross-process capture every time we check input focus.
+                if (!g_searchWindowSliding)
+                    ApplyStartAppearance();
+                CheckSearchWindowFocus();
+                return 0;
+            }
+            if (wParam == kSearchWindowMotionTimer) {
+                SearchWindowMotionFrame();
+                return 0;
+            }
+            if (wParam == kSearchWindowDismissTimer) {
+                KillTimer(hwnd, kSearchWindowDismissTimer);
+                HWND foreground = GetForegroundWindow();
+                DWORD thread = GetWindowThreadProcessId(foreground, nullptr);
+                if (!g_dragging && thread != GetCurrentThreadId() && IsWindowVisible(hwnd))
+                    SearchWindowHide();
+                return 0;
+            }
+            break;
+        case WM_DISPLAYCHANGE:
+            SearchWindowChooseBounds();
+            SearchWindowLayout(false);
+            if (g_previewPopup && g_previewPopup.IsOpen())
+                PositionPreview();
+            return 0;
+        case WM_SETTINGCHANGE:
+            if (wParam == SPI_SETWORKAREA) {
+                SearchWindowChooseBounds();
+                SearchWindowLayout(false);
+                if (g_previewPopup && g_previewPopup.IsOpen())
+                    PositionPreview();
+            }
+            [[fallthrough]];
+        case WM_THEMECHANGED:
+            RefreshThemeCache();
+            SearchWindowStyle();
+            if (!SearchWindowAnimationsEnabled() && g_searchWindowSliding)
+                CompleteSearchWindowSlide();
+            break;
+        case WM_CLOSE:
+            SearchWindowHide();
+            return 0;
     }
-    return DefWindowProcW(hwnd,message,wParam,lParam);
+    return DefWindowProcW(hwnd, message, wParam, lParam);
 } catch (...) {
-    SearchWindowTrace(L"window message failed",winrt::to_hresult());
-    return DefWindowProcW(hwnd,message,wParam,lParam);
+    SearchWindowTrace(L"window message failed", winrt::to_hresult());
+    return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
 // Menu text must also work when the low-level opening-input hook misses a key.
 // Run before XAML's menu pretranslation, which can consume printable keydowns
 // before TranslateMessage gets a chance to produce their characters.
 bool SearchWindowMenuInput(MSG* message) {
-    const UINT kind=message->message;
-    if(kind!=WM_KEYDOWN && kind!=WM_SYSKEYDOWN && kind!=WM_CHAR && kind!=WM_SYSCHAR) return false;
-    HWND host=g_searchWindowWindow.load();
-    if(!host || !g_ourBox || !IsWindowVisible(host) || !IsWindowEnabled(host) ||
-       g_dragging || g_searchWindowClosing ||
-       GetWindowThreadProcessId(message->hwnd,nullptr)!=GetWindowThreadProcessId(host,nullptr) ||
-       GetWindowThreadProcessId(GetForegroundWindow(),nullptr)!=GetWindowThreadProcessId(host,nullptr)) return false;
-    if(!g_contextMenuOpen && !g_searchWindowMenuTyping && !ContextMenuHasFocus()) return false;
+    const UINT kind = message->message;
+    if (kind != WM_KEYDOWN && kind != WM_SYSKEYDOWN && kind != WM_CHAR && kind != WM_SYSCHAR)
+        return false;
+    HWND host = g_searchWindowWindow.load();
+    if (!host || !g_ourBox || !IsWindowVisible(host) || !IsWindowEnabled(host) || g_dragging || g_searchWindowClosing ||
+        GetWindowThreadProcessId(message->hwnd, nullptr) != GetWindowThreadProcessId(host, nullptr) ||
+        GetWindowThreadProcessId(GetForegroundWindow(), nullptr) != GetWindowThreadProcessId(host, nullptr))
+        return false;
+    if (!g_contextMenuOpen && !g_searchWindowMenuTyping && !ContextMenuHasFocus())
+        return false;
 
     BYTE state[256]{};
-    if(!GetKeyboardState(state)) return false;
-    const bool altGr=(state[VK_RMENU]&0x80)!=0;
-    if((((state[VK_CONTROL]|state[VK_MENU])&0x80) && !altGr) ||
-       ((state[VK_LWIN]|state[VK_RWIN])&0x80)) return false;
-    if(kind==WM_KEYDOWN || kind==WM_SYSKEYDOWN) {
-        if(message->wParam==VK_ESCAPE) { DismissSearchContextMenu(); return true; }
-        if(message->wParam!=VK_BACK) {
-            const auto key=static_cast<winrt::Windows::System::VirtualKey>(message->wParam);
-            if(IsNavigationKey(key) || message->wParam==VK_HOME || message->wParam==VK_END ||
-               message->wParam==VK_PRIOR || message->wParam==VK_NEXT) return false;
+    if (!GetKeyboardState(state))
+        return false;
+    const bool altGr = (state[VK_RMENU] & 0x80) != 0;
+    if ((((state[VK_CONTROL] | state[VK_MENU]) & 0x80) && !altGr) || ((state[VK_LWIN] | state[VK_RWIN]) & 0x80))
+        return false;
+    if (kind == WM_KEYDOWN || kind == WM_SYSKEYDOWN) {
+        if (message->wParam == VK_ESCAPE) {
+            DismissSearchContextMenu();
+            return true;
+        }
+        if (message->wParam != VK_BACK) {
+            const auto key = static_cast<winrt::Windows::System::VirtualKey>(message->wParam);
+            if (IsNavigationKey(key) || message->wParam == VK_HOME || message->wParam == VK_END ||
+                message->wParam == VK_PRIOR || message->wParam == VK_NEXT)
+                return false;
             wchar_t chars[8]{};
-            const UINT scan=(static_cast<ULONG_PTR>(message->lParam)>>16)&0xff;
-            if(message->wParam!=VK_PACKET && !ToUnicodeEx(static_cast<UINT>(message->wParam),scan,state,
-               chars,ARRAYSIZE(chars),4,GetKeyboardLayout(0))) return false;
+            const UINT scan = (static_cast<ULONG_PTR>(message->lParam) >> 16) & 0xff;
+            if (message->wParam != VK_PACKET && !ToUnicodeEx(static_cast<UINT>(message->wParam), scan, state, chars,
+                                                             ARRAYSIZE(chars), 4, GetKeyboardLayout(0)))
+                return false;
             // Let Windows compose dead keys and the active keyboard layout on
             // this UI thread; WM_CHAR below delivers the actual text once.
             TranslateMessage(message);
             return true;
         }
-    } else if(message->wParam<0x20 || message->wParam==0x7f) return false;
+    } else if (message->wParam < 0x20 || message->wParam == 0x7f)
+        return false;
 
     SearchWindowInput input;
-    if(kind==WM_KEYDOWN || kind==WM_SYSKEYDOWN) input.kind=SearchWindowInput::Backspace;
-    else input.text.assign(1,static_cast<wchar_t>(message->wParam));
-    const bool wasTyping=g_searchWindowMenuTyping.exchange(true);
-    if(!QueueSearchWindowInput(host,std::move(input))) {
-        g_searchWindowMenuTyping=wasTyping; return false;
+    if (kind == WM_KEYDOWN || kind == WM_SYSKEYDOWN)
+        input.kind = SearchWindowInput::Backspace;
+    else
+        input.text.assign(1, static_cast<wchar_t>(message->wParam));
+    const bool wasTyping = g_searchWindowMenuTyping.exchange(true);
+    if (!QueueSearchWindowInput(host, std::move(input))) {
+        g_searchWindowMenuTyping = wasTyping;
+        return false;
     }
-    if(!wasTyping) SearchWindowTrace(L"context menu typing received by search window");
+    if (!wasTyping)
+        SearchWindowTrace(L"context menu typing received by search window");
     return true;
 }
 
 bool SearchWindowPreTranslate(MSG* message) {
-    if (!g_searchWindowNative) return false;
-    if (SearchWindowMenuInput(message)) return true;
-    HWND host=g_searchWindowWindow.load();
-    if(message->message==WM_KEYDOWN && message->wParam==VK_ESCAPE && host &&
-       GetAncestor(message->hwnd,GA_ROOT)==host && GetForegroundWindow()==host &&
-       !g_dragging && !g_searchWindowClosing && !SearchWindowHasActivePopup() &&
-       !EscapeBelongsToContextMenu() && GetKeyState(VK_CONTROL)>=0 && GetKeyState(VK_MENU)>=0) {
-        if(g_ourBox && !g_ourBox.Text().empty()) { g_ourBox.Text(L""); QueueSearchBoxRefocus(true); }
-        else SearchWindowHide();
+    if (!g_searchWindowNative)
+        return false;
+    if (g_contextMenuOpen.load() && !g_contextMenuInternalClose &&
+        (message->message == WM_LBUTTONDOWN || message->message == WM_RBUTTONDOWN ||
+         message->message == WM_MBUTTONDOWN || message->message == WM_NCLBUTTONDOWN ||
+         message->message == WM_NCRBUTTONDOWN || message->message == WM_NCMBUTTONDOWN)) {
+        POINT pt = message->pt;
+        if (pt.x == 0 && pt.y == 0)
+            GetCursorPos(&pt);
+        if (!IsPointInAnySearchThreadWindow(pt))
+            g_dismissSearchOnMenuClose = true;
+    }
+    if (SearchWindowMenuInput(message))
+        return true;
+    HWND host = g_searchWindowWindow.load();
+    if (message->message == WM_KEYDOWN && message->wParam == VK_ESCAPE && host &&
+        GetAncestor(message->hwnd, GA_ROOT) == host && GetForegroundWindow() == host && !g_dragging &&
+        !g_searchWindowClosing && !SearchWindowHasActivePopup() && !EscapeBelongsToContextMenu() &&
+        GetKeyState(VK_CONTROL) >= 0 && GetKeyState(VK_MENU) >= 0) {
+        if (g_ourBox && !g_ourBox.Text().empty()) {
+            g_ourBox.Text(L"");
+            QueueSearchBoxRefocus(true);
+        } else
+            SearchWindowHide();
         return true;
     }
     BOOL handled = FALSE;
@@ -15252,24 +17160,27 @@ bool SearchWindowInitialize() {
     try {
         SearchWindowTrace(L"initializing Windows 11 search window");
         WNDCLASSEXW wc{sizeof(wc)};
-        wc.lpfnWndProc = SearchWindowWndProc; wc.hInstance = GetCurrentModuleHandle();
-        wc.lpszClassName = kSearchWindowClass; wc.hCursor = LoadCursorW(nullptr,IDC_ARROW);
+        wc.lpfnWndProc = SearchWindowWndProc;
+        wc.hInstance = GetCurrentModuleHandle();
+        wc.lpszClassName = kSearchWindowClass;
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         RegisterClassExW(&wc);
-        HWND host = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,kSearchWindowClass,L"Everything Search",
-            WS_POPUP | WS_THICKFRAME | WS_CAPTION | WS_CLIPCHILDREN,
-            0,0,660,660,nullptr,nullptr,wc.hInstance,nullptr);
-        if (!host) winrt::throw_last_error();
+        HWND host = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP, kSearchWindowClass,
+                                    L"Everything Search", WS_POPUP | WS_THICKFRAME | WS_CAPTION | WS_CLIPCHILDREN, 0, 0,
+                                    660, 660, nullptr, nullptr, wc.hInstance, nullptr);
+        if (!host)
+            winrt::throw_last_error();
         g_searchWindowWindow = host;
-        ChangeWindowMessageFilterEx(host,WM_COPYDATA,MSGFLT_ALLOW,nullptr);
+        ChangeWindowMessageFilterEx(host, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
         BOOL enabled = TRUE;
-        DwmSetWindowAttribute(host,DWMWA_TRANSITIONS_FORCEDISABLED,&enabled,sizeof(enabled));
-        DwmSetWindowAttribute(host,17,&enabled,sizeof(enabled)); // DWMWA_USE_HOSTBACKDROPBRUSH
-        DWORD borderColor=0xFFFFFFFE; // DWMWA_COLOR_NONE: the XAML panel draws its border
-        DwmSetWindowAttribute(host,34,&borderColor,sizeof(borderColor));
+        DwmSetWindowAttribute(host, DWMWA_TRANSITIONS_FORCEDISABLED, &enabled, sizeof(enabled));
+        DwmSetWindowAttribute(host, 17, &enabled, sizeof(enabled));  // DWMWA_USE_HOSTBACKDROPBRUSH
+        DWORD borderColor = 0xFFFFFFFE;  // DWMWA_COLOR_NONE: the XAML panel draws its border
+        DwmSetWindowAttribute(host, 34, &borderColor, sizeof(borderColor));
         DWORD corner = 1;
-        DwmSetWindowAttribute(host,33,&corner,sizeof(corner));
-        DWORD backdrop = 1; // DWMSBT_NONE: XAML draws the material into an alpha-composed host
-        DwmSetWindowAttribute(host,38,&backdrop,sizeof(backdrop));
+        DwmSetWindowAttribute(host, 33, &corner, sizeof(corner));
+        DWORD backdrop = 1;  // DWMSBT_NONE: XAML draws the material into an alpha-composed host
+        DwmSetWindowAttribute(host, 38, &backdrop, sizeof(backdrop));
         g_searchWindowManager = winrt::Windows::UI::Xaml::Hosting::WindowsXamlManager::InitializeForCurrentThread();
         g_searchWindowSource = winrt::Windows::UI::Xaml::Hosting::DesktopWindowXamlSource{};
         g_searchWindowNative = g_searchWindowSource.as<IDesktopWindowXamlSourceNative2>();
@@ -15277,64 +17188,78 @@ bool SearchWindowInitialize() {
         winrt::check_hresult(g_searchWindowNative->get_WindowHandle(&g_searchWindowChild));
         HRESULT transparencyResult = E_NOINTERFACE;
         if (auto current = wux::Window::Current()) {
-            const IID transparencyId{0x06636c29,0x5a17,0x458d,{0x8e,0xa2,0x24,0x22,0xd9,0x97,0xa9,0x22}};
+            const IID transparencyId{0x06636c29, 0x5a17, 0x458d, {0x8e, 0xa2, 0x24, 0x22, 0xd9, 0x97, 0xa9, 0x22}};
             winrt::com_ptr<SearchXamlTransparency> transparency;
             auto unknown = current.as<IUnknown>();
-            transparencyResult = unknown->QueryInterface(transparencyId,transparency.put_void());
+            transparencyResult = unknown->QueryInterface(transparencyId, transparency.put_void());
             if (SUCCEEDED(transparencyResult))
                 transparencyResult = transparency->put_IsBackgroundTransparent(true);
         }
-        SearchWindowTrace(L"XAML island transparency",transparencyResult);
+        SearchWindowTrace(L"XAML island transparency", transparencyResult);
         g_searchWindowRoot = wuxc::Grid{};
-        g_searchWindowRoot.Background(MakeBrush(0,0,0,0));
+        g_searchWindowRoot.Background(MakeBrush(0, 0, 0, 0));
         g_searchWindowRoot.RequestedTheme(IsLightTheme() ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
         g_searchWindowSource.Content(g_searchWindowRoot);
-        if (!g_xamlHandlers) g_xamlHandlers.emplace();
+        if (!g_xamlHandlers)
+            g_xamlHandlers.emplace();
         BuildResultsList(g_searchWindowRoot);
-        if (!g_resultsHost || !g_ourBox) winrt::throw_hresult(E_FAIL);
-        KeepHandler(g_searchWindowSource,g_searchWindowSource.GotFocus(winrt::auto_revoke,[](auto const&,auto const&) {
-            QueueSearchBoxRefocus();
-        }));
-        KeepHandler(g_searchWindowSource,g_searchWindowSource.TakeFocusRequested(winrt::auto_revoke,[](auto const&,auto const&) {
-            QueueSearchBoxRefocus();
-        }));
+        if (!g_resultsHost || !g_ourBox)
+            winrt::throw_hresult(E_FAIL);
+        KeepHandler(g_searchWindowSource,
+                    g_searchWindowSource.GotFocus(winrt::auto_revoke,
+                                                  [](auto const&, auto const&) { QueueSearchBoxRefocus(); }));
+        KeepHandler(g_searchWindowSource,
+                    g_searchWindowSource.TakeFocusRequested(winrt::auto_revoke,
+                                                            [](auto const&, auto const&) { QueueSearchBoxRefocus(); }));
         SearchWindowStyle();
-        g_ourBoxLost=g_ourBox.LostFocus(winrt::auto_revoke,[](wf::IInspectable const&,wux::RoutedEventArgs const&) {
-            QueueSearchBoxRefocus();
-        });
-        AddPointerHandler(g_resultsHost,wux::UIElement::PointerReleasedEvent(),[](wf::IInspectable const&,wux::Input::PointerRoutedEventArgs const&) {
-            QueueSearchBoxRefocus(true);
-        });
-        g_resultsHost.Opacity(1); g_resultsHost.IsHitTestVisible(true);
-        SearchWindowChooseBounds(); SearchWindowLayout(false);
-        g_searchQuit = false; g_searchThread.emplace(SearchThreadMain);
-        StartSearchWindowInput();
+        g_ourBoxLost = g_ourBox.LostFocus(
+            winrt::auto_revoke, [](wf::IInspectable const&, wux::RoutedEventArgs const&) { QueueSearchBoxRefocus(); });
+        AddPointerHandler(
+            g_resultsHost, wux::UIElement::PointerReleasedEvent(),
+            [](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) { QueueSearchBoxRefocus(true); });
+        g_resultsHost.Opacity(1);
+        g_resultsHost.IsHitTestVisible(true);
+        SearchWindowChooseBounds();
+        SearchWindowLayout(false);
+        {
+            std::lock_guard<std::mutex> lock(preview::g_mutex);
+            preview::g_quit = false;
+        }
+        g_searchQuit = false;
+        g_searchThread.emplace(SearchThreadMain);
+        SyncSearchWindowInputForForeground();
         SearchWindowTrace(L"ready");
         return true;
     } catch (...) {
-        SearchWindowTrace(L"initialization failed",winrt::to_hresult());
-        SearchWindowTeardown(); return false;
+        SearchWindowTrace(L"initialization failed", winrt::to_hresult());
+        SearchWindowTeardown();
+        return false;
     }
 }
 
 void SearchWindowTeardown() {
-    if (!g_searchWindowWindow.load()) return;
+    if (!g_searchWindowWindow.load())
+        return;
     SearchWindowTrace(L"tearing down");
     StopSearchWindowSlide();
     StopSearchContainerContrast();
     g_searchSlideClock.reset();
-    g_searchMenuPresenterStyle=nullptr;
+    g_searchMenuPresenterStyle = nullptr;
     g_searchMenuAppearance.reset();
-    KillTimer(g_searchWindowWindow.load(),kSearchWindowStyleTimer);
+    KillTimer(g_searchWindowWindow.load(), kSearchWindowStyleTimer);
     KillTimer(g_searchWindowWindow.load(), kSearchWindowMotionTimer);
     KillTimer(g_searchWindowWindow.load(), kSearchWindowDismissTimer);
     StopSearchWindowInput();
-    KillTimer(g_searchWindowWindow.load(),kSearchWindowRefocusTimer);
-    g_searchWindowRefocusUntil=0; g_searchWindowRefocusBodyClick=false;
-    g_searchWindowMenuTyping=false; g_searchWindowMenuCaret=-1; g_searchWindowMenuSelection=0;
+    KillTimer(g_searchWindowWindow.load(), kSearchWindowRefocusTimer);
+    g_searchWindowRefocusUntil = 0;
+    g_searchWindowRefocusBodyClick = false;
+    g_searchWindowMenuTyping = false;
+    g_searchWindowMenuCaret = -1;
+    g_searchWindowMenuSelection = 0;
     g_searchQuit = true;
     g_queryWake.notify_all();
-    if (g_searchThread && g_searchThread->joinable()) g_searchThread->join();
+    if (g_searchThread && g_searchThread->joinable())
+        g_searchThread->join();
     g_searchThread.reset();
     StopPreviewThread();
     WaitForTrackedLaunches();
@@ -15347,13 +17272,53 @@ void SearchWindowTeardown() {
     g_searchWindowNative = nullptr;
     g_searchWindowSource = nullptr;
     g_searchWindowChild = nullptr;
-    if (g_searchWindowManager) g_searchWindowManager.Close();
+    if (g_searchWindowManager)
+        g_searchWindowManager.Close();
     g_searchWindowManager = nullptr;
-    if (HWND host = g_searchWindowWindow.exchange(nullptr)) DestroyWindow(host);
-    if (g_searchWindowFullShape) { DeleteObject(g_searchWindowFullShape); g_searchWindowFullShape=nullptr; }
-    g_searchWindowSlideFrame={};
-    g_searchWindowLastFrame={};
+    if (HWND host = g_searchWindowWindow.exchange(nullptr))
+        DestroyWindow(host);
+    if (g_searchWindowFullShape) {
+        DeleteObject(g_searchWindowFullShape);
+        g_searchWindowFullShape = nullptr;
+    }
+    g_searchWindowSlideFrame = {};
+    g_searchWindowLastFrame = {};
     UnregisterClassW(kSearchWindowClass, GetCurrentModuleHandle());
+}
+
+void RefreshSearchUiSettings() {
+    if (!g_resultsHost || g_quit.load()) {
+        return;
+    }
+    try {
+        if (g_footerHints) {
+            bool show = true;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                show = g_settings.showKeyHints;
+            }
+            g_footerHints.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+        }
+        if (g_ourBox) {
+            ScaleFont(g_ourBox, 14);
+        }
+        if (g_searchBarBorder) {
+            g_searchBarBorder.Height(Fs(40));
+        }
+        RescaleFonts(g_resultsHost);
+        RescaleFonts(g_previewCard);
+        ApplyFilesPanelLayout();
+        if (g_ourBox) {
+            QueueQuery(std::wstring(g_ourBox.Text()));
+        }
+        RenderResults();
+        if (g_searchWindowWindow.load()) {
+            SearchWindowStyle();
+            SearchWindowChooseBounds();
+            SearchWindowLayout();
+        }
+    } catch (...) {
+    }
 }
 
 }  // namespace
@@ -15361,7 +17326,6 @@ void SearchWindowTeardown() {
 // ===========================================================================
 // Mod entry points
 // ===========================================================================
-
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
@@ -15384,9 +17348,10 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"=== attached to pid %lu (%ls) ===", GetCurrentProcessId(),
-        g_targetProcess == TargetProcess::StartMenu ? L"StartMenu" :
-        g_targetProcess == TargetProcess::SearchHost ? L"SearchHost" :
-        g_targetProcess == TargetProcess::Explorer ? L"Explorer" : L"Unknown");
+           g_targetProcess == TargetProcess::StartMenu    ? L"StartMenu"
+           : g_targetProcess == TargetProcess::SearchHost ? L"SearchHost"
+           : g_targetProcess == TargetProcess::Explorer   ? L"Explorer"
+                                                          : L"Unknown");
 
     if (g_targetProcess == TargetProcess::Explorer) {
         StartExplorerHelperHost();
@@ -15412,38 +17377,11 @@ void Wh_ModSettingsChanged() {
         return;
     }
     LoadSettings();
-    if (g_targetProcess == TargetProcess::Explorer) {
-        if (HWND helper=g_hExplorerHelperWnd.load()) PostMessageW(helper,kExplorerUpdateShortcut,0,0);
-    }
     RequestAppIndexRefresh();
-    if (g_resultsHost) {
-        try {
-            g_resultsHost.Dispatcher().RunAsync(
-                winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                []() {
-                    if (g_footerHints) {
-                        bool show = true;
-                        {
-                            std::lock_guard<std::mutex> lock(g_settingsMutex);
-                            show = g_settings.showKeyHints;
-                        }
-                        g_footerHints.Visibility(show ? wux::Visibility::Visible : wux::Visibility::Collapsed);
-                    }
-                    // The text size, on all that is built.
-                    if (g_ourBox) {
-                        ScaleFont(g_ourBox, 14);
-                    }
-                    if (g_searchBarBorder) {
-                        g_searchBarBorder.Height(Fs(40));
-                    }
-                    RescaleFonts(g_resultsHost);
-                    RescaleFonts(g_previewCard);
-                    ApplyFilesPanelLayout();
-                    QueueQuery(std::wstring(g_ourBox.Text()));
-                    RenderResults();
-                    if (g_searchWindowWindow.load()) { SearchWindowStyle(); SearchWindowChooseBounds(); SearchWindowLayout(); }
-                });
-        } catch (...) {}
+    if (g_targetProcess == TargetProcess::Explorer) {
+        if (HWND helper = g_hExplorerHelperWnd.load()) {
+            PostMessageW(helper, kExplorerUpdateShortcut, 0, 0);
+        }
     }
 }
 
@@ -15483,8 +17421,8 @@ void Wh_ModUninit() {
     StopAttachWatch();
     if (HWND core = g_hCoreWindow.exchange(nullptr); core && IsWindow(core)) {
         DWORD_PTR result = 0;
-        const LRESULT sent = SendMessageTimeoutW(core, GetTeardownMessage(), 0, 0,
-            SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
+        const LRESULT sent =
+            SendMessageTimeoutW(core, GetTeardownMessage(), 0, 0, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
         if (!sent || static_cast<LRESULT>(result) != kTeardownDone)
             TeardownStartMenuBridge(core);
     }
