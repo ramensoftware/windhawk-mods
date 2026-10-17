@@ -417,8 +417,11 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
     g_hookThreadId = GetCurrentThreadId();
 
     HHOOK mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+    if (!mouseHook) {
+        Wh_Log(L"SetWindowsHookEx failed: %d", GetLastError());
+    }
 
-    // Signal that the hook was successfully installed
+    // Signal that the hook was processed
     SetEvent(hReadyEvent);
 
     MSG msg;
@@ -616,8 +619,9 @@ void Wh_ModAfterInit() {
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
-                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    WCHAR
+    commandLine[MAX_PATH + 2 +\
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
