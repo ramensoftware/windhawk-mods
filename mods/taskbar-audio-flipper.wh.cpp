@@ -2,7 +2,7 @@
 // @id              taskbar-audio-flipper
 // @name            Taskbar Audio Flipper
 // @description     A taskbar widget that switches between your speakers, headsets and microphones with a click, and turns a webcam on and off
-// @version         1.0.0
+// @version         1.1.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         windhawk.exe
@@ -41,8 +41,11 @@ taskbar. The **Output**, **Input** and **Webcam** submenus each have a **Show on
 their section, and the settings for it: picking a device directly, which devices are in the click
 rotation, whether to switch the communications device too, and links to the Windows settings.
 
-Devices are shown with the name and icon they have in the Windows Sound control panel. To change
-them, choose **Rename or change device icons…** in the **Output** or **Input** submenu, right-click a
+Devices are shown with the name they have in the Windows Sound control panel, and a Fluent icon for
+their kind (speakers, headphones, headset, monitor or microphone) in the taskbar's color, like the
+rest of Windows 11, struck through while muted. **Icon style → Windows device icons** in the menu
+shows the icon each device has in the Sound control panel instead. To change a device's name or that
+icon, choose **Rename or change device icons…** in the **Output** or **Input** submenu, right-click a
 device, and choose **Properties**.
 
 ## Webcam on/off
@@ -2568,24 +2571,36 @@ private:
 
 // ---------------------------------------------------------------------------
 // Device icons: the ones chosen for each device in the Sound control panel (Properties > Change
-// Icon), or a glyph from the Windows icon font.
+// Icon), or glyphs from the Windows icon font.
 
+// How the devices' icons look, chosen in the menu.
+enum class IconStyle {
+    Windows = 0,  // The icons Windows shows for each device in the Sound control panel.
+    Fluent = 1,   // Glyphs from the Windows icon font, in the taskbar's color, like its own icons (the default).
+};
+
+// The glyph for the device's kind, or a struck-through speaker when there's no device.
 const wchar_t* GlyphFor(const std::optional<AudioStatus>& status) {
     if (!status) {
         return L"";  // Mute
     }
     switch (status->device.kind) {
         case DeviceKind::Headphones:
-            return L"";
+            return L"";  // Headphone
         case DeviceKind::Headset:
-            return L"";
+            return L"";  // Headset
         case DeviceKind::Display:
-            return L"";
+            return L"";  // TVMonitor
         case DeviceKind::Microphone:
-            return L"";
+            return L"";  // Microphone
         default:
-            return L"";
+            return L"";  // Speakers
     }
+}
+
+// The glyph for a muted (or missing) output or input: a struck-through speaker or microphone.
+const wchar_t* MutedGlyph(EDataFlow flow) {
+    return flow == eCapture ? L"" : L"";  // MicOff, Mute
 }
 
 // A copy of an icon as a bitmap, with its transparency (from its alpha channel, or its mask for
@@ -2646,6 +2661,8 @@ std::shared_ptr<gp::Bitmap> IconToBitmap(HICON icon) {
 // gone before GDI+ shuts down.
 class DeviceIcons {
 public:
+    IconStyle style = IconStyle::Fluent;
+
     // The icon at the given pixel size, or null if it can't be loaded.
     gp::Bitmap* Get(const std::wstring& iconPath, int size);
 
@@ -2698,12 +2715,20 @@ void DrawMuteBadge(gp::Graphics& graphics, const gp::RectF& bounds) {
     graphics.DrawLine(&pen, badge.GetRight() - inset, badge.Y + inset, badge.X + inset, badge.GetBottom() - inset);
 }
 
-// Draws the device's Windows icon, or a glyph when there's no device or its icon can't be loaded.
-// Muted devices are faded, with a mute badge.
-void DrawDeviceIcon(gp::Graphics& graphics, DeviceIcons& icons, const std::optional<AudioStatus>& status, const gp::RectF& bounds,
-                    const gp::Color& glyphColor) {
-    gp::Bitmap* icon = status ? icons.Get(status->device.iconPath, (int)std::min(bounds.Width, bounds.Height)) : nullptr;
+// Draws the icon of the output or input device in the style chosen. In the Windows style, that's the
+// device's Windows icon (or a glyph when there's no device or its icon can't be loaded), faded with
+// a mute badge when it's muted. In the Fluent style, it's a glyph a little smaller than the box,
+// like the taskbar's own icons, struck through when the device is muted.
+void DrawDeviceIcon(gp::Graphics& graphics, DeviceIcons& icons, EDataFlow flow, const std::optional<AudioStatus>& status,
+                    const gp::RectF& bounds, const gp::Color& glyphColor) {
     bool muted = status && status->muted;
+    if (icons.style == IconStyle::Fluent) {
+        gp::RectF glyph = bounds;
+        glyph.Inflate(-bounds.Width / 8, -bounds.Height / 8);
+        DrawGlyph(graphics, !status || muted ? MutedGlyph(flow) : GlyphFor(status), glyph, glyphColor);
+        return;
+    }
+    gp::Bitmap* icon = status ? icons.Get(status->device.iconPath, (int)std::min(bounds.Width, bounds.Height)) : nullptr;
     if (!icon) {
         DrawGlyph(graphics, GlyphFor(status), bounds, muted ? WithAlpha(115, glyphColor) : glyphColor);
     } else {
@@ -2884,6 +2909,7 @@ struct Settings {
     bool showInput = false;
     bool showWebcam = false;
     int taskbarOffset = -1;
+    IconStyle iconStyle = IconStyle::Fluent;
     std::wstring webcamId;
     std::wstring webcamName;
     std::vector<std::wstring> excluded;
@@ -2952,6 +2978,7 @@ struct Settings {
         showInput = Storage::GetInt(L"ShowInput", showInput) != 0;
         showWebcam = Storage::GetInt(L"ShowWebcam", showWebcam) != 0;
         taskbarOffset = Storage::GetInt(L"TaskbarOffset", taskbarOffset);
+        iconStyle = Storage::GetInt(L"IconStyle", (int)iconStyle) == (int)IconStyle::Windows ? IconStyle::Windows : IconStyle::Fluent;
         webcamId = Storage::GetString(L"WebcamId");
         webcamName = Storage::GetString(L"WebcamName");
         for (const std::wstring& id : Split(Storage::GetString(L"Excluded"), L'\n')) {
@@ -2975,6 +3002,7 @@ struct Settings {
         saved = Storage::SetInt(L"ShowInput", showInput) && saved;
         saved = Storage::SetInt(L"ShowWebcam", showWebcam) && saved;
         saved = Storage::SetInt(L"TaskbarOffset", taskbarOffset) && saved;
+        saved = Storage::SetInt(L"IconStyle", (int)iconStyle) && saved;
         saved = Storage::SetString(L"WebcamId", webcamId) && saved;
         saved = Storage::SetString(L"WebcamName", webcamName) && saved;
         saved = Storage::SetString(L"Excluded", Join(excluded, L"\n")) && saved;
@@ -3072,8 +3100,9 @@ public:
 
     bool Create() { return CreatePopup(L"AudioFlipper.Mod.VolumeFlyout"); }
 
-    void SetStatus(const std::optional<AudioStatus>& status) {
+    void SetStatus(const std::optional<AudioStatus>& status, EDataFlow flow) {
         status_ = status;
+        flow_ = flow;
         if (holdingDragLevel_ && status && std::abs(status->level - dragLevel_) < 0.005f) {
             holdingDragLevel_ = false;
         }
@@ -3193,7 +3222,7 @@ protected:
                             (float)Px(4));
         }
         float iconSize = (float)Px(24);
-        DrawDeviceIcon(graphics, icons_, status_,
+        DrawDeviceIcon(graphics, icons_, flow_, status_,
                        gp::RectF(button.left + (button.right - button.left - iconSize) / 2, button.top + (button.bottom - button.top - iconSize) / 2,
                                  iconSize, iconSize),
                        colors.foreground);
@@ -3260,6 +3289,7 @@ private:
 
     DeviceIcons& icons_;
     std::optional<AudioStatus> status_;
+    EDataFlow flow_ = eRender;
     std::unique_ptr<gp::Font> titleFont_;
     std::unique_ptr<gp::Font> detailFont_;
     std::unique_ptr<gp::Font> valueFont_;
@@ -3344,7 +3374,7 @@ public:
         output_ = output;
         input_ = input;
         if (flyoutPart_ != kNone) {
-            flyout_.SetStatus(StatusOf(flyoutPart_));
+            flyout_.SetStatus(StatusOf(flyoutPart_), FlowOf(flyoutPart_).value_or(eRender));
         }
         ContentChanged();
     }
@@ -3464,7 +3494,7 @@ protected:
         GetCursorPos(&cursor);
         if (Visible() && !Pressed() && PtInRect(&bounds, cursor)) {
             flyoutPart_ = hoverTarget_;
-            flyout_.SetStatus(StatusOf(flyoutPart_));
+            flyout_.SetStatus(StatusOf(flyoutPart_), FlowOf(flyoutPart_).value_or(eRender));
             flyout_.ShowAbove(bounds);
         }
     }
@@ -3613,7 +3643,8 @@ private:
 
         float middle = height / 2.0f;
         float iconSize = (float)Px(24);
-        DrawDeviceIcon(graphics, icons_, status, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
+        DrawDeviceIcon(graphics, icons_, *FlowOf(section.part), status,
+                       gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
 
         float textLeft = section.x + (float)Px(44);
         float textWidth = section.x + section.width - textLeft - Px(10);
@@ -3737,12 +3768,21 @@ private:
         if (!settings_.showOutput && !settings_.showInput) {
             settings_.showOutput = true;
         }
+        icons_.style = settings_.iconStyle;
     }
 
     void Save() {
         if (!settings_.Save()) {
             popup_.ShowMessage(L"Couldn't save settings", L"Windhawk couldn't store the mod's settings.");
         }
+    }
+
+    // Switches the output and input icons between the devices' Windows icons and Fluent glyphs.
+    void SetIconStyle(IconStyle style) {
+        settings_.iconStyle = style;
+        Save();
+        icons_.style = style;
+        widget_.ContentChanged();
     }
 
     // Reads the default output and input with their volumes, updating the widget when anything
@@ -3783,7 +3823,7 @@ private:
         content.levelMuted = output->muted;
         AudioStatus status = *output;
         content.icon = [this, status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
-            DrawDeviceIcon(graphics, icons_, status, bounds, color);
+            DrawDeviceIcon(graphics, icons_, eRender, status, bounds, color);
         };
         popup_.Show(content, 1800);
     }
@@ -4051,6 +4091,10 @@ private:
         AddAudioMenu(menu, eRender);
         AddAudioMenu(menu, eCapture);
         AddWebcamMenu(menu);
+        Menu& iconStyle = menu.AddSubmenu(L"Icon style");
+        iconStyle.Add(L"Fluent icons", [this]() { SetIconStyle(IconStyle::Fluent); }, settings_.iconStyle == IconStyle::Fluent);
+        iconStyle.Add(L"Windows device icons", [this]() { SetIconStyle(IconStyle::Windows); },
+                      settings_.iconStyle == IconStyle::Windows);
 
         // Linking the widget with Taskbar RDP Launcher's into one, on either side; offered while that
         // mod is running (or they're linked).
