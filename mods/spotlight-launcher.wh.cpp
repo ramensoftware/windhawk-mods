@@ -102,7 +102,7 @@ Gentle sounds play as you use the launcher: a soft switch-like click when the ba
 * Six background effects (**Acrylic**, **Mica**, **Glass**, **Frosted**, **Aurora**, **Solid**) and 12 colours.
 * Each effect is built from a blurred view of whatever is behind the bar, finished with a colour tint, subtle grain and light highlights, so the bar looks the same on Windows 10 and 11.
 * **Live acrylic**: Acrylic, Glass, Frosted and Aurora follow what is behind the bar in real time. Turning it off uses a single snapshot taken when the bar opens, which helps performance and saves battery. It is on by default and can be changed in the settings.
-* Adjustable panel opacity, blur strength and layout.
+* Adjustable panel opacity, blur strength and layout. Blur strength applies to Mica, and to the other effects while Live acrylic is off; with it on, Windows sets their blur strength.
 * Looks sharp on every monitor, even high-resolution ones or a mix of several.
 * The bar can sit anywhere from against the top edge to against the bottom edge of the screen.
 
@@ -201,10 +201,10 @@ Copyright (c) 2026-present David Ravelo.
     - solid: Solid (no effect)
 - LiveAcrylic: true
   $name: Live acrylic (real time)
-  $description: Keeps the background blur live. Acrylic, Glass, Frosted and Aurora follow whatever is behind the bar in real time. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. Needs Windows 10 1803 or newer.
+  $description: Keeps the background blur live. Acrylic, Glass, Frosted and Aurora follow whatever is behind the bar in real time. Turn it off to use a single snapshot taken when the bar opens, which helps performance and saves battery on laptops and low-end machines. With it on, the blur strength of those effects is fixed by Windows and the Blur strength setting has no effect on them (Mica always follows it). Needs Windows 10 1803 or newer.
 - BlurAmount: 50
   $name: Blur strength (0 to 100)
-  $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Ignored with "Solid".
+  $description: How strong the blur is. 50 is the normal amount, lower values give a subtler blur and higher values a heavier one. The blur is seen through the colour, so it shows best with a Panel opacity below 100. Applies to Mica, and to the other effects only while Live acrylic is off (with it on, Windows sets their blur strength). Ignored with "Solid".
 - Color: midnight
   $name: Color
   $description: Colour scheme of the bar. Each colour sets the background colour, the selection highlight and the colour of the matching letters.
@@ -293,6 +293,7 @@ Copyright (c) 2026-present David Ravelo.
 #include <xaudio2.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cwctype>
@@ -1853,6 +1854,17 @@ struct Engine {
 static Engine g_eng;
 static unsigned g_rng = 0x9E3779B9u;
 
+// XAudio2 reports a lost output device (unplugged headset, disabled device...) through
+// OnCriticalError, on its own audio thread. StartEngine can still succeed afterwards with no
+// audible output, so the flag is what tells Resume() to rebuild the engine.
+struct EngineCallback : IXAudio2EngineCallback {
+    std::atomic<bool> lost{false};
+    void STDMETHODCALLTYPE OnProcessingPassStart() override {}
+    void STDMETHODCALLTYPE OnProcessingPassEnd() override {}
+    void STDMETHODCALLTYPE OnCriticalError(HRESULT) override { lost = true; }
+};
+static EngineCallback g_engineCallback;
+
 static double Rand01() {
     g_rng = g_rng * 1664525u + 1013904223u;
     return (double)((g_rng >> 8) & 0xFFFFFF) / 16777216.0;
@@ -2056,6 +2068,8 @@ static bool Init() {
     XAudio2Create_t create = (XAudio2Create_t)GetProcAddress(e.dll, "XAudio2Create");
     if (!create) return false;
     if (FAILED(create(&e.engine, 0, XAUDIO2_DEFAULT_PROCESSOR)) || !e.engine) return false;
+    g_engineCallback.lost = false;
+    e.engine->RegisterForCallbacks(&g_engineCallback);
     if (FAILED(e.engine->CreateMasteringVoice(&e.master)) || !e.master) return false;
     e.fmt.wFormatTag = WAVE_FORMAT_PCM;
     e.fmt.nChannels = 1;
@@ -2081,6 +2095,7 @@ static void Shutdown() {
             if (e.voices[i]) { e.voices[i]->DestroyVoice(); e.voices[i] = nullptr; }
         }
         if (e.master) { e.master->DestroyVoice(); e.master = nullptr; }
+        e.engine->UnregisterForCallbacks(&g_engineCallback);
         e.engine->Release();
         e.engine = nullptr;
     }
@@ -2089,12 +2104,12 @@ static void Shutdown() {
 }
 
 // The engine only runs while the bar is open and sounds are enabled.
-// If there was no output device at startup, or the device was removed/changed (the engine then
-// reports a critical error), rebuild the engine here before starting it.
+// If there was no output device at startup, or the device was removed (the engine then reports
+// a critical error, see EngineCallback), rebuild the engine here before starting it.
 static void Resume() {
     if (!g_cfg.sounds) return;
     Engine& e = g_eng;
-    if (e.ready && e.engine && SUCCEEDED(e.engine->StartEngine())) return;
+    if (e.ready && e.engine && !g_engineCallback.lost && SUCCEEDED(e.engine->StartEngine())) return;
     Shutdown();
     if (Init() && e.engine) e.engine->StartEngine();
 }
@@ -2532,6 +2547,18 @@ static void UpdateCalc() {
         g_calc = r;
         g_calcActive = true;
     }
+}
+
+// What Enter copies: the bare number, so it pastes cleanly into other apps. The display text
+// adds thousands separators, the unit and (for data sizes) the other reading in brackets. Base
+// conversions are the exception: their digits only make sense as shown (e.g. "0xFF").
+static std::wstring CalcClipboardText() {
+    if (!g_calc.display.empty() && g_calc.insertable == g_calc.display) {
+        return g_calc.display;
+    }
+    Calc::Locale plain = Calc::SystemLocale();
+    plain.grouping = false;
+    return Calc::Format(g_calc.value, plain);
 }
 
 // SID of the current user. Windhawk's Wh_Get/SetIntValue storage is machine-wide in a regular
@@ -3970,6 +3997,7 @@ static bool g_liveWin11 = false;                    // Windows 11: corners round
 typedef HRESULT(WINAPI* LvDwmSetWindowAttribute_t)(HWND, DWORD, LPCVOID, DWORD);
 static LvDwmSetWindowAttribute_t g_pDwmSetAttr = nullptr;
 static int g_liveRgnSize[2][2] = {};                // Windows 10: size of the last region
+static int g_livePos[2][4] = {};                    // last x, y, w, h given to each window
 
 static bool UseLive() {
     if (!g_liveSupported || !g_cfg.liveAcrylic) return false;
@@ -4069,6 +4097,7 @@ static void LiveHide() {
     if (g_liveWnd && IsWindowVisible(g_liveWnd)) ShowWindow(g_liveWnd, SW_HIDE);
     if (g_livePanel && IsWindowVisible(g_livePanel)) ShowWindow(g_livePanel, SW_HIDE);
     memset(g_liveRgnSize, 0, sizeof(g_liveRgnSize));
+    memset(g_livePos, 0, sizeof(g_livePos));
 }
 
 // Grain: kept separate from EnsureBackdropBrushes.
@@ -4802,8 +4831,23 @@ static void LivePlaceWindow(HWND wnd, int idx, int x, int y, int w, int h) {
         HRGN rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, d, d);
         SetWindowRgn(wnd, rgn, TRUE);  // the system takes ownership of rgn
     }
+    // Acrylic windows are slow to move on some Windows 10 builds, so the window is only touched
+    // when its rect changed, it is hidden, or something got between it and g_hwnd. Both acrylic
+    // windows sit right below g_hwnd, in either order.
+    const bool visible = IsWindowVisible(wnd) != FALSE;
+    const HWND above = GetWindow(wnd, GW_HWNDPREV);
+    const bool stacked = above == g_hwnd ||
+                         ((above == g_liveWnd || above == g_livePanel) && above &&
+                          GetWindow(above, GW_HWNDPREV) == g_hwnd);
+    int* last = g_livePos[idx];
+    if (visible && stacked && last[0] == x && last[1] == y && last[2] == w && last[3] == h) return;
+    last[0] = x;
+    last[1] = y;
+    last[2] = w;
+    last[3] = h;
     UINT flags = SWP_NOACTIVATE;
-    if (!IsWindowVisible(wnd)) flags |= SWP_SHOWWINDOW;
+    if (!visible) flags |= SWP_SHOWWINDOW;
+    if (stacked) flags |= SWP_NOZORDER;
     // insertAfter = g_hwnd  ->  ends up right BELOW g_hwnd.
     SetWindowPos(wnd, g_hwnd, x, y, w, h, flags);
 }
@@ -6330,7 +6374,7 @@ static bool HandleKeyDown(WPARAM vk) {
             if (CalcOk() && g_results.empty()) {
                 AddCalcHistory(g_text, g_calcDisplay, g_calc.insertable);
                 SetCalcAns(g_calc.value);
-                CopyTextToClipboard(g_calcDisplay);
+                CopyTextToClipboard(CalcClipboardText());
                 g_copiedAt = NowSec();
                 g_histScroll = 0;
                 g_calcHistSel = -1;
