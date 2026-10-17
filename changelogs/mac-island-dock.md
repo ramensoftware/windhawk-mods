@@ -1,3 +1,48 @@
+## 2.0.1 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5a3e20ab7652e5c542efc0af02a6bb1a83b8234a/mods/mac-island-dock.wh.cpp))
+
+**Panels and look**
+* Panels always open under the island (over it on the lower half of the screen), under the item clicked, the same for every panel (#6211). A panel already open for another item (the volume's page, then Wi-Fi) moves under the new one, and a closing panel no longer takes clicks meant for what's under it.
+* Every icon on the pill is the same size (the media and control center buttons and the arrows were smaller, the apps' icons bigger), and a new "Icon size" option (70% to 150%, per profile and monitor, in every style) changes them apart from the island's size, so a big bar can keep small icons.
+* Notches grow with their items until they almost touch each other (they scroll only then), instead of each stopping at a third of the screen; the "Icons before scrolling" option now says it's for the other apps' tray icons.
+* The power menu's confirmation shows its whole text, and buttons and menu rows no longer end with "…".
+* The control center's pages opened straight from their pill icon (Wi-Fi, Bluetooth...) have no back arrow (nothing to go back to).
+* A panel opened and closed again at once (a quick double click) no longer leaves its outline behind the island.
+
+**Profiles and monitors**
+* The profiles' button is per profile: turning it off on one monitor's island no longer turns it off on the others.
+* A monitor with its own profile no longer follows the main island for options added after its profile was saved (they're kept in its profile as it first shows them).
+* A monitor with its own profile shows the virtual desktops, the keyboard language, USB drives and the microphone/camera/location in use when its profile turns them on, even with the main island's off.
+
+**Notifications**
+* The Widgets button's news show on the island as "Widgets" with its icon, and a click opens Widgets (it was an unnamed grey square that did nothing) (#6206).
+* Windows' own notifications (like Windows Security's "Update antivirus protection", or a sender whose icon is only in the registry) show their name and icon instead of "SecurityCenter" and a grey square (#6206, #6187); apps whose windows carry no app ID (like Discord) show their program's icon.
+* A switch for the icons of the apps with notifications on the pill (Notifications section, on by default).
+* Clearing notifications on the island (the X, a swipe, a card's button, "Clear all") also removes them from Windows' notification center; "Clear all" removes only the ones the island's list shows (compared by ID).
+* With the island's own notifications, a priority app's Windows banner no longer flashes before the pill takes it, and a notification right after a screenshot shows in the pill (#6159).
+* With the island's own notifications and its "Do not disturb" on, Windows' "Do not disturb" is "alarms only": an app on Windows' priority list (like the Snipping Tool) no longer shows Windows' banner or plays its sound (calls, alarms and reminders still show and ring in the pill). Windows' "Do not disturb" is also turned back off when the mod is turned off or removed while the island isn't running.
+* The keyboard language bubble only shows when the mode changes in the same app (not when opening Start or minimizing an app), once, over the island's line, without repeating "中" (#6210, #6199, #6233).
+
+**Control center**
+* Brightness with more monitors: a slider for each monitor (with its name) instead of one for all, and the wheel on an island's brightness item changes its own monitor only (the control center follows it). The list is read again when a monitor is plugged in or out, a monitor plugged back in shows once it answers, and one turned off (still connected) leaves the list the next time it opens.
+* Bluetooth: clicking headphones or speakers connects or disconnects them, showing "Connecting...", then "Connected" or "Couldn't connect" on their row, and connected ones have a "Disconnect" button; other devices open Windows' Bluetooth settings (#6160). A control that's on shows in the island's own colors on the pill (no colored icon).
+* The volume mixer shows each app once, like Windows' mixer: an app playing from more than one of its processes (Spotify during an ad) was listed twice.
+* Updates: an app updated in the terminal that only finishes when it closes (like VS Code while open) says "Close it to finish" instead of offering the update again.
+
+**Folders**
+* Pinned folders can be dragged into another order; each folder's items can be listed by name or newest first (its own order) and searched (a name or a type like *.pdf); the folders shown update by themselves while the panel is open (a download, a file renamed or deleted), their rows come in with a short animation, and going back slides the columns.
+* Files and folders can be dragged out to Explorer or the desktop, copied or moved as chosen (asked the first time, with "Remember my choice"; also in the island's settings), and files can be dropped on a folder in the panel, from the panel itself or from Explorer and the desktop (held a moment on the folders item, the panel opens; held on a folder, it opens), copied or moved by Windows as in Explorer (its questions for names already there, its progress, Ctrl+Z). After a drop the panel stays open, the folder opens and the files dropped light up.
+
+**New pill items**
+* komorebi's layout (an option, off by default): the current layout of the island's monitor as an icon and a name ("Grid", "Paused", "Monocle"), after a dot for each of its workspaces (the one shown lit, ones with windows faint, empty ones a ring or hidden by an option, like yasb's; a click shows another one), only while komorebi runs; its click opens a menu with the layouts' icons to change the layout, tiling, monocle and pause for that monitor (#6163). It follows komorebi's own events (`komorebic subscribe-pipe`), with nothing polled, and finds a komorebi that starts slowly (at sign-in). komorebi's start and stop button has its own icon, and the settings say when "with whkd" is on but whkd isn't installed.
+* The app in focus on each monitor's island (an option, off by default): its icon and name (as the taskbar shows them, Steam included), or "Desktop", sliding to the next one; a click brings it to the front.
+
+**Other fixes**
+* Fog shows as a cloud in the weather (Windows 11's fog emoji is a plain square) (#6226).
+* Changing the wallpaper: the transition stays until Windows really shows the new picture (the old one no longer flashes back, and Windows' own zoom no longer shows through), the picture is placed exactly where Windows puts it ("Fill" keeps a third of what's cut above and two thirds below, measured on Windows 11; "Span" set for one monitor is drawn like "Fill"), so it no longer slides down at the end, and the transition no longer covers the taskbar of a monitor showing the desktop.
+* Clicking what's playing's cover brings back an app hidden in the tray that ignores its tray icon's click (Spotify from the Microsoft Store): it's started again by its ID, which shows its window.
+* Dock: one shown for an app's notification on one monitor no longer moves another monitor's dock (with monitors at different scales, the second dock was left almost hidden), and its background tint applies when Windows can't blur (transparency effects off, energy saver) instead of turning solid (#6251).
+* A transparent taskbar hides again while an app's button was already asking for attention when the taskbar's style changed.
+
 ## 2.0.0 ([Oct 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/083d7d594931ed64ed8214c4aff06f8daf3ea6f8/mods/mac-island-dock.wh.cpp))
 
 **Styles and look**

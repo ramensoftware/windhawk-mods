@@ -1,3 +1,17 @@
+## 2.1.0 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/03313a1c1b7fd3526f5a6fb8f79f3a727d6ae74c/mods/tourne-table-desktop-audio-visualizer.wh.cpp))
+
+* **Precision analysis engine:** every bar is its own band (real-input FFT, three resolution tiers; log, mel, bark, ERB, fractional-octave or note layouts; A/C/Z weighting; time-based ballistics). The 1.x analysis stays as Analysis Engine = Classic.
+* **Direct3D 11 renderer:** instanced bars drawn from a buffer. It skips frames that didn't change. Direct2D stays as an option and as the fallback.
+* **Idle:** one wake per frame while playing. In silence it wakes only on audio. Deep Idle then stops the loopback stream and reads the peak meter instead.
+* **Right-click menu** for live quick settings, stored in mod values and laid over the settings page.
+* **Any audio device** as the source, outputs or inputs.
+* **New shapes and styles:** Terminal, Goniometer, LED Meter, Spectrogram, VU Needles and more. Reflection, Glow and Bloom, and bar modifiers.
+* **Media Card** and **My Styles** with a Style Editor.
+* **Placement:** Taskbar, Panel and Dock To App.
+* **Setup sharing:** codes and `.ttstyle` files. A Community button reads a list of shared styles from GitHub, but only when it's pressed.
+* **32-bit:** builds for 32-bit as well as 64-bit.
+* **Readme:** the images now load from the Tourne-Style repo.
+
 ## 1.3.0 ([Sep 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e4bfa7249dca8ae600280c33614715815211823b/mods/tourne-table-desktop-audio-visualizer.wh.cpp))
 
 * **New: Input Gain (dB)**, a fixed level trim on the captured audio, range -24 to +24. Loopback capture sees each app's own volume slider but not the Windows master slider, so a music app held at a low volume reads as quiet no matter how loud the system is. This is the control for that, and it is also the only setting that scales the Oscilloscope waveform directly.

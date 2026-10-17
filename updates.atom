@@ -2,12 +2,95 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T06:01:44.000Z</updated>
+    <updated>2026-10-17T07:02:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 2.1.0]]></title>
+        <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#03313a1c1b7fd3526f5a6fb8f79f3a727d6ae74c</id>
+        <link href="https://windhawk.net/mods/tourne-table-desktop-audio-visualizer"/>
+        <updated>2026-10-17T07:02:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Precision analysis engine:</strong> every bar is its own band (real-input FFT, three resolution tiers; log, mel, bark, ERB, fractional-octave or note layouts; A/C/Z weighting; time-based ballistics). The 1.x analysis stays as Analysis Engine = Classic.</li>
+<li><strong>Direct3D 11 renderer:</strong> instanced bars drawn from a buffer. It skips frames that didn't change. Direct2D stays as an option and as the fallback.</li>
+<li><strong>Idle:</strong> one wake per frame while playing. In silence it wakes only on audio. Deep Idle then stops the loopback stream and reads the peak meter instead.</li>
+<li><strong>Right-click menu</strong> for live quick settings, stored in mod values and laid over the settings page.</li>
+<li><strong>Any audio device</strong> as the source, outputs or inputs.</li>
+<li><strong>New shapes and styles:</strong> Terminal, Goniometer, LED Meter, Spectrogram, VU Needles and more. Reflection, Glow and Bloom, and bar modifiers.</li>
+<li><strong>Media Card</strong> and <strong>My Styles</strong> with a Style Editor.</li>
+<li><strong>Placement:</strong> Taskbar, Panel and Dock To App.</li>
+<li><strong>Setup sharing:</strong> codes and <code>.ttstyle</code> files. A Community button reads a list of shared styles from GitHub, but only when it's pressed.</li>
+<li><strong>32-bit:</strong> builds for 32-bit as well as 64-bit.</li>
+<li><strong>Readme:</strong> the images now load from the Tourne-Style repo.</li>
+</ul>]]></content>
+        <author>
+            <name>USER-TOURNE</name>
+            <uri>https://github.com/USER-TOURNE</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mac Island & Dock 2.0.1]]></title>
+        <id>https://windhawk.net/mods/mac-island-dock#5a3e20ab7652e5c542efc0af02a6bb1a83b8234a</id>
+        <link href="https://windhawk.net/mods/mac-island-dock"/>
+        <updated>2026-10-17T07:02:48.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Panels and look</strong></p>
+<ul>
+<li>Panels always open under the island (over it on the lower half of the screen), under the item clicked, the same for every panel (#6211). A panel already open for another item (the volume's page, then Wi-Fi) moves under the new one, and a closing panel no longer takes clicks meant for what's under it.</li>
+<li>Every icon on the pill is the same size (the media and control center buttons and the arrows were smaller, the apps' icons bigger), and a new "Icon size" option (70% to 150%, per profile and monitor, in every style) changes them apart from the island's size, so a big bar can keep small icons.</li>
+<li>Notches grow with their items until they almost touch each other (they scroll only then), instead of each stopping at a third of the screen; the "Icons before scrolling" option now says it's for the other apps' tray icons.</li>
+<li>The power menu's confirmation shows its whole text, and buttons and menu rows no longer end with "…".</li>
+<li>The control center's pages opened straight from their pill icon (Wi-Fi, Bluetooth…) have no back arrow (nothing to go back to).</li>
+<li>A panel opened and closed again at once (a quick double click) no longer leaves its outline behind the island.</li>
+</ul>
+<p><strong>Profiles and monitors</strong></p>
+<ul>
+<li>The profiles' button is per profile: turning it off on one monitor's island no longer turns it off on the others.</li>
+<li>A monitor with its own profile no longer follows the main island for options added after its profile was saved (they're kept in its profile as it first shows them).</li>
+<li>A monitor with its own profile shows the virtual desktops, the keyboard language, USB drives and the microphone/camera/location in use when its profile turns them on, even with the main island's off.</li>
+</ul>
+<p><strong>Notifications</strong></p>
+<ul>
+<li>The Widgets button's news show on the island as "Widgets" with its icon, and a click opens Widgets (it was an unnamed grey square that did nothing) (#6206).</li>
+<li>Windows' own notifications (like Windows Security's "Update antivirus protection", or a sender whose icon is only in the registry) show their name and icon instead of "SecurityCenter" and a grey square (#6206, #6187); apps whose windows carry no app ID (like Discord) show their program's icon.</li>
+<li>A switch for the icons of the apps with notifications on the pill (Notifications section, on by default).</li>
+<li>Clearing notifications on the island (the X, a swipe, a card's button, "Clear all") also removes them from Windows' notification center; "Clear all" removes only the ones the island's list shows (compared by ID).</li>
+<li>With the island's own notifications, a priority app's Windows banner no longer flashes before the pill takes it, and a notification right after a screenshot shows in the pill (#6159).</li>
+<li>With the island's own notifications and its "Do not disturb" on, Windows' "Do not disturb" is "alarms only": an app on Windows' priority list (like the Snipping Tool) no longer shows Windows' banner or plays its sound (calls, alarms and reminders still show and ring in the pill). Windows' "Do not disturb" is also turned back off when the mod is turned off or removed while the island isn't running.</li>
+<li>The keyboard language bubble only shows when the mode changes in the same app (not when opening Start or minimizing an app), once, over the island's line, without repeating "中" (#6210, #6199, #6233).</li>
+</ul>
+<p><strong>Control center</strong></p>
+<ul>
+<li>Brightness with more monitors: a slider for each monitor (with its name) instead of one for all, and the wheel on an island's brightness item changes its own monitor only (the control center follows it). The list is read again when a monitor is plugged in or out, a monitor plugged back in shows once it answers, and one turned off (still connected) leaves the list the next time it opens.</li>
+<li>Bluetooth: clicking headphones or speakers connects or disconnects them, showing "Connecting…", then "Connected" or "Couldn't connect" on their row, and connected ones have a "Disconnect" button; other devices open Windows' Bluetooth settings (#6160). A control that's on shows in the island's own colors on the pill (no colored icon).</li>
+<li>The volume mixer shows each app once, like Windows' mixer: an app playing from more than one of its processes (Spotify during an ad) was listed twice.</li>
+<li>Updates: an app updated in the terminal that only finishes when it closes (like VS Code while open) says "Close it to finish" instead of offering the update again.</li>
+</ul>
+<p><strong>Folders</strong></p>
+<ul>
+<li>Pinned folders can be dragged into another order; each folder's items can be listed by name or newest first (its own order) and searched (a name or a type like *.pdf); the folders shown update by themselves while the panel is open (a download, a file renamed or deleted), their rows come in with a short animation, and going back slides the columns.</li>
+<li>Files and folders can be dragged out to Explorer or the desktop, copied or moved as chosen (asked the first time, with "Remember my choice"; also in the island's settings), and files can be dropped on a folder in the panel, from the panel itself or from Explorer and the desktop (held a moment on the folders item, the panel opens; held on a folder, it opens), copied or moved by Windows as in Explorer (its questions for names already there, its progress, Ctrl+Z). After a drop the panel stays open, the folder opens and the files dropped light up.</li>
+</ul>
+<p><strong>New pill items</strong></p>
+<ul>
+<li>komorebi's layout (an option, off by default): the current layout of the island's monitor as an icon and a name ("Grid", "Paused", "Monocle"), after a dot for each of its workspaces (the one shown lit, ones with windows faint, empty ones a ring or hidden by an option, like yasb's; a click shows another one), only while komorebi runs; its click opens a menu with the layouts' icons to change the layout, tiling, monocle and pause for that monitor (#6163). It follows komorebi's own events (<code>komorebic subscribe-pipe</code>), with nothing polled, and finds a komorebi that starts slowly (at sign-in). komorebi's start and stop button has its own icon, and the settings say when "with whkd" is on but whkd isn't installed.</li>
+<li>The app in focus on each monitor's island (an option, off by default): its icon and name (as the taskbar shows them, Steam included), or "Desktop", sliding to the next one; a click brings it to the front.</li>
+</ul>
+<p><strong>Other fixes</strong></p>
+<ul>
+<li>Fog shows as a cloud in the weather (Windows 11's fog emoji is a plain square) (#6226).</li>
+<li>Changing the wallpaper: the transition stays until Windows really shows the new picture (the old one no longer flashes back, and Windows' own zoom no longer shows through), the picture is placed exactly where Windows puts it ("Fill" keeps a third of what's cut above and two thirds below, measured on Windows 11; "Span" set for one monitor is drawn like "Fill"), so it no longer slides down at the end, and the transition no longer covers the taskbar of a monitor showing the desktop.</li>
+<li>Clicking what's playing's cover brings back an app hidden in the tray that ignores its tray icon's click (Spotify from the Microsoft Store): it's started again by its ID, which shows its window.</li>
+<li>Dock: one shown for an app's notification on one monitor no longer moves another monitor's dock (with monitors at different scales, the second dock was left almost hidden), and its background tint applies when Windows can't blur (transparency effects off, energy saver) instead of turning solid (#6251).</li>
+<li>A transparent taskbar hides again while an app's button was already asking for attention when the taskbar's style changed.</li>
+</ul>]]></content>
+        <author>
+            <name>caliberda</name>
+            <uri>https://github.com/cesarkali</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Toggle Hidden Files 1.1.0]]></title>
         <id>https://windhawk.net/mods/toggle-hidden-files#587704d691363d85fea430f5e02bc52ef75a6669</id>
@@ -637,131 +720,6 @@ This mod disables this adjustment.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[BubbleGlass Screensaver 1.7.6]]></title>
-        <id>https://windhawk.net/mods/bubble-glass-saver#1537caa51c413521c503304baa63526d45bf2525</id>
-        <link href="https://windhawk.net/mods/bubble-glass-saver"/>
-        <updated>2026-10-15T19:02:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bubbleglassscreensaver">BubbleGlass Screensaver</h1>
-<p>A transparent, animated soap-bubble screensaver for the Windows desktop.</p>
-<p>BubbleGlass shows colorful, iridescent soap bubbles directly above the live
-Windows desktop after a period of inactivity. The desktop stays visible and
-live underneath (per-pixel alpha layered window), and any keyboard or mouse
-activity dismisses the saver instantly. Rendering targets smooth 60 FPS even
-on large multi-monitor desktops.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/Nh5EyFe.png" alt="BubbleGlass Screensaver preview" /></p>
-<p><img src="https://i.imgur.com/gCsmdj6.gif" alt="BubbleGlass Screensaver animated preview" /></p>
-<p><em>Soap bubbles drifting over the live Windows desktop. The optional diagnostics
-overlay shows real-time FPS, frame time, jitter and rendering performance.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Transparent overlay above the live desktop - wallpaper, windows and video
-remain visible underneath.</li>
-<li>Smooth 60 FPS animation with QPC-based frame pacing and motion timing.</li>
-<li>Thin-film iridescent bubbles: rainbow interference arcs, membrane rim,
-specular highlight, hotspot and a faint opposite-side reflection.</li>
-<li>Organic wobble, slowly changing interference colors, optional subtle shadow.</li>
-<li>Gradual spawning, size variation, natural drift and optional turbulence.</li>
-<li>Bubble-to-bubble collisions (lightly damped) plus wall bouncing or edge
-wrapping.</li>
-<li>Configurable lifetime with an animated pop effect (expansion, flash,
-expanding ring).</li>
-<li>Primary-monitor or full multi-monitor mode.</li>
-<li>Instant dismissal on keystroke, click, mouse wheel or mouse movement (with a
-small movement threshold). Input is never swallowed.</li>
-<li>Fullscreen video playback (including fullscreen browser video) is intentionally
-supported: bubbles remain above the live, moving video.</li>
-<li>Windows presentation mode is suppressed when reported by Windows. Other
-fullscreen states are not automatically blocked to preserve video playback.</li>
-<li>Hidden automatically while the session is locked, disconnected or the
-display is off.</li>
-<li>Optional on-screen performance diagnostics and Windhawk/DbgView logging.</li>
-<li>No permanent clock or date elements.</li>
-</ul>
-<h2 id="howitworks">How It Works</h2>
-<p>BubbleGlass watches keyboard/mouse idle time. After the configured timeout it
-creates a click-through, topmost layered window and composites
-premultiplied-per-pixel-alpha bubbles over the desktop with
-<code>UpdateLayeredWindowIndirect</code>. Bubbles are drawn with GDI+ into per-bubble
-sprites that are cached and refreshed on a small time budget; only changed
-areas are cleared and presented (dirty rectangles). Low-level input hooks run
-on a dedicated thread and only while the saver is visible.</p>
-<h2 id="performance">Performance</h2>
-<p>The renderer targets 60 FPS; actual speed depends on resolution, bubble count
-and bubble sizes. The largest tuning levers are bubble count, maximum bubble
-size, sprite refresh interval, iridescence and total desktop area.</p>
-<p>Enable <strong>Show internal performance stats</strong> for the FPS / frame-time / jitter
-overlay, and <strong>Log performance stats to Windhawk/DbgView</strong> for one summary
-line per second. Every option (timeout, bubble count and size, motion,
-physics, lifetime, pop, appearance, performance, diagnostics) is described in
-the settings UI.</p>
-<h2 id="usage">Usage</h2>
-<ol>
-<li>Install and enable the BubbleGlass Screensaver mod.</li>
-<li>Configure the inactivity timeout and appearance.</li>
-<li>Leave the computer idle; BubbleGlass appears automatically.</li>
-<li>Move the mouse or press a key to dismiss it.</li>
-</ol>
-<p>No separate <code>.scr</code> screensaver file is required.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>BubbleGlass intentionally keeps the Windows desktop visible underneath; it
-is not a full-screen scene replacement like classic screensavers.</li>
-<li>The dismissing keystroke or click is also delivered to the focused
-application (input is never swallowed).</li>
-<li>Fullscreen video is intentionally allowed. Automatic suppression of every
-fullscreen app would also block this core feature. Windows presentation mode
-is suppressed when detectable; gamepad-only input may not reset Windows idle
-time, so fullscreen games are not guaranteed to suppress the saver.</li>
-<li>BubbleGlass never appears while the session is locked or display is off.</li>
-<li>Bubble sizes and the diagnostics overlay use raw pixels (no DPI scaling).</li>
-<li>"Span all monitors" uses the virtual-screen bounding rectangle; on
-mixed-size or offset monitor layouts parts of that rectangle may not be on
-any display.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p>Designed for Windows 11 and Windhawk. Runs as a dedicated Windhawk tool-mod
-process - no <code>.scr</code> screensaver file and no winlogon injection. Rendering
-uses standard GDI/GDI+ and layered-window APIs (no DirectX or GPU API).</p>
-<h2 id="credits">Credits</h2>
-<p>Developed and tested by <strong>SilverAmd</strong>, with iterative performance analysis,
-profiling and optimization focused on smooth frame pacing, large desktop
-resolutions, multi-monitor support and low rendering overhead.</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fancy Task View Cross-Monitor Drag 0.7.0]]></title>
-        <id>https://windhawk.net/mods/fancy-taskview-cross-monitor-drag#7d8699ddf863f280eeeac9bbcbdd7527eef7d423</id>
-        <link href="https://windhawk.net/mods/fancy-taskview-cross-monitor-drag"/>
-        <updated>2026-10-15T18:31:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fancytaskviewcrossmonitordrag">Fancy Task View Cross-Monitor Drag</h1>
-<p>Move windows between monitors by dragging their thumbnails in Windows 11 Task View (<code>Win + Tab</code>).</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Drag a Task View window thumbnail from one monitor to another.</li>
-<li>Remember window size and position separately for each monitor.</li>
-<li>Configure first-time window sizing and positioning.</li>
-<li>Choose whether Task View stays open, closes, or closes and reopens after a move.</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Task View may continue displaying the original thumbnail placement until reopened.</li>
-<li>Virtual desktop assignments do not change.</li>
-<li>Elevated or protected windows may not accept movement requests.</li>
-<li>Some applications adjust their own dimensions when changing monitors.</li>
-<li>Window positions are remembered while the mod is running.</li>
-<li>Windows with duplicate titles on the source monitor cannot be identified.</li>
-<li>A thumbnail whose name differs from its window title cannot be identified.</li>
-</ul>]]></content>
-        <author>
-            <name>His Fanciness</name>
-            <uri>https://github.com/HisFanciness</uri>
         </author>
     </entry>
 </feed>
