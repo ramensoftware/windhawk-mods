@@ -3293,6 +3293,33 @@
         "version": "1.0"
       }
     },
+    "covertabby": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792249412000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792249412000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "LTHC",
+        "compilerOptions": "-ldwmapi -lgdi32 -loleaut32 -lole32 -lshell32 -lversion -ladvapi32 -lhid -lruntimeobject -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -luuid -lwindowscodecs -lshcore -lpdh -lpsapi",
+        "description": "An animated Alt+Tab switcher with live previews and multiple layouts",
+        "github": "https://github.com/LoreTheHolyChip",
+        "include": [
+          "explorer.exe",
+          "windhawk.exe",
+          "windhawk-mod.exe"
+        ],
+        "license": "GPL-2.0-only",
+        "name": "CoverTabby",
+        "version": "0.22.14"
+      }
+    },
     "cpl-classic-view-lite": {
       "details": {
         "defaultSorting": 1670,
@@ -12562,6 +12589,31 @@
         "name": "Search Menu Inspect Helper",
         "twitter": "https://twitter.com/m417z",
         "version": "1.0"
+      }
+    },
+    "secondary-monitor-pin": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792249407000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792249407000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "tafadias",
+        "compilerOptions": "-luser32 -lole32 -ldwmapi -luuid",
+        "description": "Keeps windows that are placed on secondary monitors pinned so they appear on all virtual desktops.",
+        "github": "https://github.com/tafadias",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Secondary Monitor Pin",
+        "version": "1.1"
       }
     },
     "separate-system-tray-icons": {
