@@ -19,7 +19,7 @@ This mod recreates the classic Windows 7 network flyout on Windows 10 and 11, re
 
 Screenshot of the light theme:
 
-![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/networkflyoutwin7.PNG)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7net.png)
 
 Screenshot of the dark theme:
 
