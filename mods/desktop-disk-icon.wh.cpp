@@ -7,7 +7,6 @@
 // @version         1.0.0
 // @author          Raku Inkyetta
 // @github          https://github.com/AomiRaku
-// @homepage        https://raku404.com/
 // @license         GPL-3.0
 // @include         explorer.exe
 // @compilerOptions -lole32 -lshell32 -luuid -ladvapi32
@@ -70,6 +69,9 @@ brings the desktop icons in line with the devices that are currently attached.
 - The registry keys are **volatile** (`REG_OPTION_VOLATILE`): they only exist in memory, are
   never written to disk, and disappear on restart even after a crash. If the mod is terminated
   forcefully, the leftover in-memory keys are removed on the next start.
+- The mod only acts in the Explorer process that owns the desktop window; other
+  `explorer.exe` instances (folder windows in a separate process, `explorer.exe /select,` and
+  similar short-lived processes) are skipped, so they never touch the shared registry keys.
 - Updating the mod takes effect immediately; no Explorer restart is required, because the item is
   served by the shell itself.
 - If plugging or unplugging a disk does not update the desktop, set the polling interval to
@@ -112,6 +114,8 @@ brings the desktop icons in line with the devices that are currently attached.
 - 拔出设备时删除对应项；禁用或卸载模组时删除全部由本模组创建的项目。
 - 注册表项是**易失性键**（`REG_OPTION_VOLATILE`）：只存在于内存中，永不写入磁盘；
   即使异常终止，重启后也会自然消失。被强制终止时残留的内存键会在下次启动时清除。
+- 模组只在拥有桌面窗口的资源管理器进程中工作；其他 `explorer.exe` 实例（“在单独进程中打开
+  文件夹窗口”、`explorer.exe /select,` 等短命进程）会被跳过，不会改动共享的注册表项。
 - 更新模组即时生效，无需重启资源管理器（项本身由系统实现）。
 - 若插拔磁盘后桌面未更新，可在设置中将轮询间隔设为 10 秒左右。
 
@@ -419,7 +423,7 @@ constexpr PCWSTR kValueDisplayName = L"DisplayName";
 // 下。这是我们的项附带的副作用键（数值 0xFFFF 表示已失效），必须一并清掉，
 // 否则它会一直留在系统里、并可能在复用时被当成“已知无效”。
 constexpr PCWSTR kShellExtCachedKey =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Cached\\";
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Cached";
 
 constexpr PCWSTR kNamespaceNameSpaceKey =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace\\";
@@ -504,6 +508,52 @@ bool SetRegistryDword(HKEY root,
                        sizeof(value));
     RegCloseKey(key);
     return status == ERROR_SUCCESS;
+}
+
+// 资源管理器把“该 CLSID 实现了 IShellFolder”记为 Cached 键下的**值**，
+// 名字形如 "{CLSID} {IID} 0xFFFF"，而不是子键。因此必须按名字前缀枚举删除。
+void RemoveCachedShellExtension(const std::wstring& clsid) {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kShellExtCachedKey, 0,
+                      KEY_READ | KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
+        return;
+    }
+    const std::wstring prefix = clsid + L" ";
+    std::vector<std::wstring> stale;
+    for (DWORD index = 0;; index++) {
+        WCHAR name[512] = {};
+        DWORD nameLength = ARRAYSIZE(name) - 1;
+        if (RegEnumValueW(key, index, name, &nameLength, nullptr, nullptr,
+                          nullptr, nullptr) != ERROR_SUCCESS) {
+            break;
+        }
+        if (_wcsnicmp(name, prefix.c_str(), prefix.size()) == 0) {
+            stale.emplace_back(name);
+        }
+    }
+    for (const auto& name : stale) {
+        Wh_Log(L"Cached shell extension removed: %s", name.c_str());
+        RegDeleteValueW(key, name.c_str());
+    }
+    RegCloseKey(key);
+}
+
+// RegCreateKeyExW 会用同样的选项创建路径上缺失的父键。若父键被建成易失性键，
+// 其他程序（OneDrive、网盘等）就无法在其下创建普通键（ERROR_CHILD_MUST_BE_VOLATILE）。
+// 因此先确保父键以普通键存在，再在其下创建本模组的易失性 {CLSID} 键。
+void EnsureRegularParentKeys() {
+    constexpr PCWSTR kParents[] = {
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace",
+        L"Software\\Classes\\CLSID",
+    };
+    for (PCWSTR parent : kParents) {
+        HKEY key = nullptr;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, parent, 0, nullptr,
+                            REG_OPTION_NON_VOLATILE, KEY_CREATE_SUB_KEY, nullptr,
+                            &key, nullptr) == ERROR_SUCCESS) {
+            RegCloseKey(key);
+        }
+    }
 }
 
 void DeleteRegistryTree(HKEY root, const std::wstring& subKey) {
@@ -598,7 +648,7 @@ void RemoveNamespaceItemByIndex(int index) {
     std::wstring clsid = NamespaceClsidForDriveIndex(index);
     DeleteRegistryTree(HKEY_CURRENT_USER, kNamespaceNameSpaceKey + clsid);
     DeleteRegistryTree(HKEY_CURRENT_USER, L"Software\\Classes\\CLSID\\" + clsid);
-    DeleteRegistryTree(HKEY_CURRENT_USER, kShellExtCachedKey + clsid);
+    RemoveCachedShellExtension(clsid);
 }
 
 // 清掉所有不再需要的命名空间项（拔掉的盘、切换样式后的残留、被强杀后的孤儿）。
@@ -628,7 +678,7 @@ bool SweepNamespaceItems(const std::set<int>& presentIndexes) {
         DeleteRegistryTree(HKEY_CURRENT_USER, kNamespaceNameSpaceKey + clsid);
         DeleteRegistryTree(HKEY_CURRENT_USER,
                            L"Software\\Classes\\CLSID\\" + clsid);
-                           DeleteRegistryTree(HKEY_CURRENT_USER, kShellExtCachedKey + clsid);
+                           RemoveCachedShellExtension(clsid);
         removed = true;
     }
     return removed;
@@ -639,7 +689,7 @@ bool RemoveAllNamespaceItems() {
     for (int index = 0; index < 26; index++) {
         std::wstring clsid = NamespaceClsidForDriveIndex(index);
         // 即使条目本身已经不在了，也要清掉 shell 记录在该 CLSID 下的缓存书签。
-        DeleteRegistryTree(HKEY_CURRENT_USER, kShellExtCachedKey + clsid);
+        RemoveCachedShellExtension(clsid);
         std::wstring name;
         if (ReadRegistryString(HKEY_CURRENT_USER,
                                kNamespaceNameSpaceKey + clsid, nullptr, &name)) {
@@ -679,6 +729,8 @@ void Reconcile() {
     DWORD reconcileStart = GetTickCount();
 
     Settings settings = GetSettings();
+
+    EnsureRegularParentKeys();
 
     std::vector<Device> devices;
     AddDriveDevices(settings, devices);
@@ -919,12 +971,17 @@ DWORD WINAPI WorkerThread(LPVOID) {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    // @include explorer.exe 也会匹配承载文件夹窗口的独立进程
-    // （explorer.exe /factory,… -Embedding）。它们不需要也不应该跑同步：
-    // 多个进程会重复创建图标，并互相把对方的删除误判成“用户删除了图标”。
-    const wchar_t* cmdLine = GetCommandLineW();
-    if (wcsstr(cmdLine, L"/factory") || wcsstr(cmdLine, L"-Embedding")) {
-        Wh_Log(L"Folder window process, skipping");
+    // 只有拥有桌面窗口的进程才执行同步。explorer.exe 还会以其它形式启动：
+    // /factory、-Embedding、`explorer.exe <folder>`、`explorer.exe /select,<file>`
+    // 等短命进程。它们共享同一份注册表项，若在那里也执行清理+重建，会把桌面进程
+    // 里的项删掉；进程提前退出时这些项就一直缺失。桌面窗口属于哪个进程，就只在
+    // 哪个进程里工作。
+    DWORD shellPid = 0;
+    if (HWND shellWindow = GetShellWindow()) {
+        GetWindowThreadProcessId(shellWindow, &shellPid);
+    }
+    if (shellPid && shellPid != GetCurrentProcessId()) {
+        Wh_Log(L"Not the shell process (shell pid=%lu), skipping", shellPid);
         return FALSE;
     }
 
