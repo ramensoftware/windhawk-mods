@@ -2,7 +2,7 @@
 // @id              cursor-trail-helper-always-on-top
 // @name            Simple Cursor Trail helper - Always on top
 // @description     Places the Simple Cursor Trail overlay above the taskbar and Start menu by moving it to a higher Z-order band
-// @version         1.3
+// @version         1.4
 // @author          Ulrizza
 // @github          https://github.com/Ulrizza
 // @license         MIT
@@ -55,8 +55,6 @@ reset.
 ## Notes
 
 - Uses undocumented Windows APIs (`SetWindowBand`, `NtUserEnableIAMAccess`).
-- The `NtUserEnableIAMAccess` ordinal is only used after it is verified to
-  match `win32u.dll`'s named export; otherwise the IAM hook is disabled.
 - Places the trail above the taskbar, Start menu, Task Manager and Alt-Tab.
   The overlay is click-through, so it never steals input.
 - Requires the **Simple Cursor Trail** mod
@@ -255,32 +253,6 @@ static DWORD WINAPI BandWorkerThread(LPVOID) {
     return 0;
 }
 
-// Confirms that a tiny user32 export forwards to target (win32u's named
-// export) through a call/jmp [rip+disp32] import slot. Prevents hooking an
-// unrelated function if ordinal 2510 ever maps elsewhere on another build.
-static bool ThunkCallsTarget(const void* thunk, const void* target) {
-    const BYTE* p = (const BYTE*)thunk;
-    for (int i = 0; i + 6 <= 32; ++i) {
-        if (p[i] != 0xFF || (p[i + 1] != 0x15 && p[i + 1] != 0x25)) {
-            continue;
-        }
-#ifdef _WIN64
-        INT32 disp = *(const INT32*)(p + i + 2);
-        const void* slot = p + i + 6 + disp;
-#else
-        const void* slot = *(const void* const*)(p + i + 2);
-#endif
-        MEMORY_BASIC_INFORMATION mbi;
-        if (!VirtualQuery(slot, &mbi, sizeof(mbi)) ||
-            mbi.State != MEM_COMMIT ||
-            (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) {
-            continue;
-        }
-        return *(void* const*)slot == target;
-    }
-    return false;
-}
-
 static bool ResolveApis() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) {
@@ -291,29 +263,16 @@ static bool ResolveApis() {
     pSetWindowBand = (SetWindowBand_t)GetProcAddress(user32, "SetWindowBand");
     pGetWindowBand = (GetWindowBand_t)GetProcAddress(user32, "GetWindowBand");
 
-    // user32 exports NtUserEnableIAMAccess by ordinal only; on modern builds it
-    // is a thunk into win32u's named export. Only hook it when that matches, so
-    // a changed ordinal can never make us hook an unrelated function.
+    // Hook win32u's named export directly. user32 only exposes it by ordinal
+    // and forwards there, so this works on every architecture and also catches
+    // callers that import it from win32u directly.
     HMODULE win32u = GetModuleHandleW(L"win32u.dll");
-    void* byOrdinal = (void*)GetProcAddress(user32, MAKEINTRESOURCEA(2510));
-    void* byName = win32u
-        ? (void*)GetProcAddress(win32u, "NtUserEnableIAMAccess") : nullptr;
-    if (!win32u) {
-        pNtUserEnableIAMAccess = nullptr;
-        Wh_Log(L"win32u.dll not loaded, IAM hook disabled");
-    } else if (!byOrdinal) {
-        pNtUserEnableIAMAccess = nullptr;
-        Wh_Log(L"NtUserEnableIAMAccess ordinal 2510 not found, IAM hook disabled");
-    } else if (!byName) {
-        pNtUserEnableIAMAccess = nullptr;
+    pNtUserEnableIAMAccess = win32u
+        ? (NtUserEnableIAMAccess_t)GetProcAddress(win32u,
+                                                  "NtUserEnableIAMAccess")
+        : nullptr;
+    if (!pNtUserEnableIAMAccess) {
         Wh_Log(L"win32u!NtUserEnableIAMAccess not found, IAM hook disabled");
-    } else if (byOrdinal != byName && !ThunkCallsTarget(byOrdinal, byName)) {
-        pNtUserEnableIAMAccess = nullptr;
-        Wh_Log(L"Ordinal 2510 is not win32u!NtUserEnableIAMAccess, "
-               L"IAM hook disabled");
-    } else {
-        pNtUserEnableIAMAccess = (NtUserEnableIAMAccess_t)byOrdinal;
-        Wh_Log(L"NtUserEnableIAMAccess verified (ordinal 2510)");
     }
 
     if (!pSetWindowBand) {
