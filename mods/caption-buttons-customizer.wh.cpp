@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              windows-leftify
-// @name            Windows Leftify
+// @id              caption-buttons-customizer
+// @name            Caption Buttons Customizer
 // @description     Move the caption buttons to the left, reposition the window icon and title, and optionally draw macOS-style traffic lights (or your own button images).
 // @version         1.0
 // @author          grn15RenS
@@ -15,7 +15,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows Leftify
+# Caption Buttons Customizer
 
 Moves the caption buttons (minimize, maximize, close) to the left side of the title bar and repositions the window icon and title to match. It can also draw macOS-style traffic lights (red / yellow / green circles) or your own button images.
 
@@ -51,6 +51,25 @@ Windows with only a close button (message boxes, About windows, Properties dialo
 |--------|-------|
 | ![Dialog On](https://i.imgur.com/IlUb9kF.png) | ![Dialog Off](https://i.imgur.com/Iq9MAWu.png) |
 
+## Caption Button Style
+Three button styles are available in *Caption button style*: the default Windows glyphs (default), macOS circles in colors you choose (with the x, - and + symbols on hover), or your own images (png, jpg or bmp).
+
+| macOS style (circles) | Custom images | Windows default |
+|-----------------------|---------------|-----------------|
+| ![macOS style (circles)](https://i.imgur.com/dOdqDHp.png) | ![Custom images](https://i.imgur.com/OmjIMoI.png) | ![Windows default](https://i.imgur.com/KAHAbN0.png) |
+
+### Custom button images
+1. Set *Caption button style* to **Custom images**. (With the macOS style, the image settings are ignored and the circles stay as they are.)
+2. Set **Icon folder** (or the path of each button image) to any folder you can read, for example `C:\Users\You\Pictures\ButtonIcons`.
+3. Name the files `minimize`, `restore`, `maximize`, `close` (+ `.png`, `.jpg`, `.jpeg` or `.bmp`).
+4. Optional state variants: `close_hover` (mouse is over the button), `close_pressed` (button is being clicked) and `close_disabled` (button is greyed out). Same for the other buttons. If a variant is missing, the base image is used (darkened for pressed). The four base images are enough.
+5. Images are scaled down to fit the button slot (about 12 px at 100% DPI) and keep their own shape. They are not cut into a circle, so square images stay square. Use transparent PNGs and simple designs.
+6. A button without an image keeps its circle.
+
+`dwm.exe` runs under its own account and usually cannot read your profile folders. To get around that, the part of the mod running inside `explorer.exe` (which can read your folders) decodes your images, shrinks them to at most 64 px, and hands the pixels to `dwm.exe` through the mod's own storage in Windhawk. No image files are copied anywhere, and `dwm.exe` never opens or decodes an image file.
+
+If a changed image doesn't show up right away, move the mouse over a title bar button.
+
 ## Icon and title text
 **Flexible icon and title layout:** next to the buttons, centered on the window, or right-aligned; icon on either side of the title, far left or far right; hide the icon, the title, or both.
 
@@ -75,32 +94,14 @@ To pin the icon to the left edge of the window instead of right after the button
 ### Hide window icon and title
 Use *Hide window icon and title* to hide only the icon, only the title, or both.
 
-Turn off *Icon responds to click and double-click* if you don't want the window icon to open the window menu on click or close the window on double-click. The icon then behaves like an empty part of the title bar.
-
 | Hide icon only | Hide title only | Hide both |
 |----------------|-----------------|-----------|
 | ![Hide icon only](https://i.imgur.com/KPXmVYy.png) | ![Hide title only](https://i.imgur.com/e1M8jnX.png) | ![Hide both](https://i.imgur.com/GMB5Wjq.png) |
 
-## Caption Button Style
-Three button styles are available in *Caption button style*: the default Windows glyphs (default), macOS circles in colors you choose (with the x, - and + symbols on hover), or your own images (png, jpg or bmp).
+### Icon responds to click and double-click
+By default, Windows treats the window icon as a button: clicking it opens the window menu (Restore, Move, Size, Minimize, Maximize and Close), and double-clicking it closes the window.
 
-The preview images in this README use the macOS style. With the default Windows style, the buttons only move to the left and keep the standard Windows look.
-
-| macOS style (circles) | Custom images | Windows default |
-|-----------------------|---------------|-----------------|
-| ![macOS style (circles)](https://i.imgur.com/dOdqDHp.png) | ![Custom images](https://i.imgur.com/OmjIMoI.png) | ![Windows default](https://i.imgur.com/KAHAbN0.png) |
-
-### Custom button images
-1. Set *Caption button style* to **Custom images**. (With the macOS style, the image settings are ignored and the circles stay as they are.)
-2. Set **Icon folder** (or the path of each button image) to any folder you can read, for example `C:\Users\You\Pictures\ButtonIcons`.
-3. Name the files `minimize`, `restore`, `maximize`, `close` (+ `.png`, `.jpg`, `.jpeg` or `.bmp`).
-4. Optional state variants: `close_hover` (mouse is over the button), `close_pressed` (button is being clicked) and `close_disabled` (button is greyed out). Same for the other buttons. If a variant is missing, the base image is used (darkened for pressed). The four base images are enough.
-5. Images are scaled down to fit the button slot (about 12 px at 100% DPI) and keep their own shape. They are not cut into a circle, so square images stay square. Use transparent PNGs and simple designs.
-6. A button without an image keeps its circle.
-
-`dwm.exe` runs under its own account and usually cannot read your profile folders. To get around that, the part of the mod running inside `explorer.exe` (which can read your folders) decodes your images, shrinks them to at most 64 px, and hands the pixels to `dwm.exe` through the mod's own storage in Windhawk. No image files are copied anywhere, and `dwm.exe` never opens or decodes an image file.
-
-If a changed image doesn't show up right away, move the mouse over a title bar button.
+This can get in the way when *Icon and title alignment* is set to Center, because the icon then sits in the middle of the title bar, where it's easy to double-click by accident and close the window. Turn off *Icon responds to click and double-click* to prevent that. The icon then behaves like an empty part of the title bar: you can drag the window by it, and double-clicking it maximizes or restores the window.
 
 ### File Explorer
 The tab bar of File Explorer covers the left part of the title bar and blocks the buttons. The mod (running inside `explorer.exe`) makes the buttons clickable again, but the tabs themselves must be shifted with a separate mod.
@@ -110,7 +111,8 @@ The tab bar of File Explorer covers the left part of the title bar and blocks th
 
 Notes:
 - **File Explorer caption buttons on the right (default):** CabinetWClass is in Excluded window classes by default, so File Explorer keeps the default Windows layout. To keep this, leave it in the list. 
-- **File Explorer caption buttons on the left:** Remove `CabinetWClass` from *Excluded window classes*, then turn on *Move the File Explorer tab bar* so the buttons can be clicked. The tabs stay where they are and still visually overlap the buttons, so shift them with the [Windows 11 File Explorer Styler](https://windhawk.net/mods/windows-11-file-explorer-styler) mod by [m417z](https://github.com/m417z) (target `FileExplorerExtensions.FileExplorerTabControl`, style `Margin=187,0,0,0`; this value works well for me, so adjust it to taste).
+- **File Explorer caption buttons on the left:** Remove `CabinetWClass` from *Excluded window classes*, then turn on *Make caption buttons clickable in File Explorer* so the buttons can be clicked. The tabs stay where they are and still visually overlap the buttons, so shift them with the [Windows 11 File Explorer Styler](https://windhawk.net/mods/windows-11-file-explorer-styler) mod by [m417z](https://github.com/m417z) (target `FileExplorerExtensions.FileExplorerTabControl`, style `Margin=187,0,0,0`; this value works well for me, so adjust it to taste).
+- Alternatively, set *Shift tab bar and toolbar (px)* in *File Explorer tabs* (for example 145) to move the whole tab bar and toolbar to the right of the buttons instead of using Styler. This also moves the navigation arrows, address bar and search box.
 
 ## Excluded apps
 Apps that draw their own tabs in the title bar can conflict with buttons on the left. Add their executable names to *Excluded apps* (or their window class names to *Excluded window classes*) and every window of those apps keeps the default Windows layout.
@@ -127,7 +129,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 
 - When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back **only after dwm.exe restarts**: sign out and in, run `taskkill /f /im dwm.exe` from an administrator prompt, or enable *Restart dwm.exe when the mod is unloaded* (the screen flickers briefly; apps stay open). Until then, a button can look wrong or be missing after the mod is turned off, for example the maximize button when the mod was turned on while a window was maximized and turned off before it was restored. dwm.exe is never restarted twice within 30 seconds, and the mod refuses to load if dwm.exe started 4 or more times within a minute.
 - The circles or custom images are global. Excluded apps keep them too; only their layout stays at the Windows default.
-- When the mod is turned on, every open window with a title bar is resized by 1 px and back so DWM lays it out again (excluded apps are skipped). Changing a layout setting or turning the mod off only does this for the windows the mod has laid out. Changing the button colors or style does it for one of those windows only (the circles are shared by all windows), and changing images or the debug log does not do it at all.
+- When the mod is turned on or off, or when a layout, exclusion, color or style setting changes, DWM is asked to refresh itself so that open windows get the new layout; no window is resized. Changing the debug log does not trigger a refresh.
 - The mod hooks internal, undocumented functions of `uDWM.dll`. A Windows update can change them and stop the mod until it is updated.
 - If you report a bug, turn on *Write debug log* and attach the Windhawk log output.
 
@@ -159,6 +161,43 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
     $description: "Applies to windows that only have a close button (message boxes, About windows, Properties dialogs). Off = the button is hidden; Alt+F4 and Esc still close the window. Takes effect the next time a window is redrawn."
   $name: Caption buttons
   $description: Position and order of the minimize, maximize and close buttons.
+- buttonStyle:
+  - style: windows
+    $name: Caption button style
+    $description: "Windows = the default Windows glyphs (default). macOS = colored circles (the image settings below are ignored). Custom images = your own images; a button without an image keeps its circle. Switching back to Windows only takes effect after dwm.exe restarts (sign out and in)."
+    $options:
+    - macos: macOS style (circles)
+    - custom: Custom images
+    - windows: Windows default
+  - minimizeColor: "#FEBC2E"
+    $name: Minimize color
+    $description: "Hex color of the minimize circle, e.g. #FEBC2E. Used by the circles (macOS style, and buttons without an image in the Custom style)."
+  - maximizeColor: "#28C840"
+    $name: Maximize / restore color
+    $description: "Hex color of the maximize/restore circle, e.g. #28C840. Used by the circles (macOS style, and buttons without an image in the Custom style)."
+  - closeColor: "#FF5F57"
+    $name: Close color
+    $description: "Hex color of the close circle, e.g. #FF5F57. Used by the circles (macOS style, and buttons without an image in the Custom style)."
+  - iconFolder: ""
+    $name: Icon folder
+    $description: "Only used with the Custom images style. Folder with minimize, restore, maximize and close images (.png, .jpg, .bmp). Optional state variants: close_hover, close_pressed, close_disabled. Any folder you can read works, e.g. C:\\Users\\You\\Pictures\\ButtonIcons"
+  - minimizeIcon: ""
+    $name: Minimize image (file)
+    $description: Optional. Full path of an image file; overrides the folder for this button.
+  - maximizeIcon: ""
+    $name: Maximize image (file)
+    $description: Optional. Full path of an image file; overrides the folder for this button.
+  - restoreIcon: ""
+    $name: Restore image (file)
+    $description: Optional. Full path of an image file; overrides the folder for this button. Used when the window is maximized.
+  - closeIcon: ""
+    $name: Close image (file)
+    $description: Optional. Full path of an image file; overrides the folder for this button.
+  - restartDwmOnUnload: false
+    $name: Restart dwm.exe when the mod is unloaded
+    $description: "Off (recommended): the painted glyphs stay until dwm.exe restarts, so after the mod is turned off a button can look wrong or be missing. On: dwm.exe is terminated when the mod is unloaded (disable, recompile, Windhawk restart) so the original glyphs come back; the screen flickers briefly and apps stay open. dwm.exe is never restarted twice within 30 seconds."
+  $name: Button style
+  $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.  
 - titleText:
   - titleAlign: left
     $name: Icon and title alignment
@@ -221,53 +260,16 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
   $description: Apps with their own tabs in the title bar conflict with buttons on the left.
 - explorerTabs:
   - enabled: true
-    $name: Move the File Explorer tab bar
-    $description: "On = the tab bar window of File Explorer is moved to the right of the left-side buttons, so the buttons can be clicked. Only works while Move caption buttons to the left is on and CabinetWClass is not excluded."
+    $name: Make caption buttons clickable in File Explorer
+    $description: "On = the caption buttons can be clicked in File Explorer (the area under them is cut out of the tab bar window). Use the shift setting below to also move the tab bar and toolbar. Only works while Move caption buttons to the left is on and CabinetWClass is not excluded."
   - buttonsExtraMargin: 5
     $name: Extra left margin for File Explorer buttons (px)
     $description: "Moves the caption buttons right, in File Explorer only. About 5 aligns the circles with the nav arrows; about 28 centers them over the four nav buttons."
   - extraPx: 0
-    $name: Extra shift (px)
-    $description: "Fine-tune. Positive moves the tab bar further right, negative moves it left. The base shift is the width of the three buttons (scaled by DPI) plus the left margin."
+    $name: Shift tab bar and toolbar (px)
+    $description: "0 = leave the tab bar and toolbar of File Explorer where they are (shift only the tabs with the Windows 11 File Explorer Styler mod, see the readme). A positive value moves the whole tab bar and toolbar to the right, scaled by DPI; about 145 clears the three buttons."
   $name: File Explorer tabs
   $description: Fixes the tab bar of File Explorer blocking the buttons on the left.
-- buttonStyle:
-  - style: windows
-    $name: Caption button style
-    $description: "Windows = the default Windows glyphs (default). macOS = colored circles (the image settings below are ignored). Custom images = your own images; a button without an image keeps its circle. Switching back to Windows only takes effect after dwm.exe restarts (sign out and in)."
-    $options:
-    - macos: macOS style (circles)
-    - custom: Custom images
-    - windows: Windows default
-  - minimizeColor: "#FEBC2E"
-    $name: Minimize color
-    $description: "Hex color of the minimize circle, e.g. #FEBC2E. Used by the circles (macOS style, and buttons without an image in the Custom style)."
-  - maximizeColor: "#28C840"
-    $name: Maximize / restore color
-    $description: "Hex color of the maximize/restore circle, e.g. #28C840. Used by the circles (macOS style, and buttons without an image in the Custom style)."
-  - closeColor: "#FF5F57"
-    $name: Close color
-    $description: "Hex color of the close circle, e.g. #FF5F57. Used by the circles (macOS style, and buttons without an image in the Custom style)."
-  - iconFolder: ""
-    $name: Icon folder
-    $description: "Only used with the Custom images style. Folder with minimize, restore, maximize and close images (.png, .jpg, .bmp). Optional state variants: close_hover, close_pressed, close_disabled. Any folder you can read works, e.g. C:\\Users\\You\\Pictures\\ButtonIcons"
-  - minimizeIcon: ""
-    $name: Minimize image (file)
-    $description: Optional. Full path of an image file; overrides the folder for this button.
-  - maximizeIcon: ""
-    $name: Maximize image (file)
-    $description: Optional. Full path of an image file; overrides the folder for this button.
-  - restoreIcon: ""
-    $name: Restore image (file)
-    $description: Optional. Full path of an image file; overrides the folder for this button. Used when the window is maximized.
-  - closeIcon: ""
-    $name: Close image (file)
-    $description: Optional. Full path of an image file; overrides the folder for this button.
-  - restartDwmOnUnload: false
-    $name: Restart dwm.exe when the mod is unloaded
-    $description: "Off (recommended): the painted glyphs stay until dwm.exe restarts, so after the mod is turned off a button can look wrong or be missing. On: dwm.exe is terminated when the mod is unloaded (disable, recompile, Windhawk restart) so the original glyphs come back; the screen flickers briefly and apps stay open. dwm.exe is never restarted twice within 30 seconds."
-  $name: Button style
-  $description: Choose how the caption buttons look - macOS circles, your own images, or the Windows default.
 - debugLog: false
   $name: Write debug log
   $description: Writes detailed debug messages to the Windhawk log output. Turn on logging for this mod in Windhawk to see them.
@@ -292,7 +294,7 @@ None. Custom images are passed to `dwm.exe` through Windhawk's mod storage, and 
 #include <vector>
 
 // ======================================================================
-//  PART 1: Leftify (caption buttons on the left, icon and title layout)
+//  PART 1: Layout (caption buttons on the left, icon and title layout)
 // ======================================================================
 
 static struct {
@@ -1257,6 +1259,7 @@ static bool DoHitTest_Hook(void* pThis, const POINT* pt, void** ppVisual, unsign
 // ======================================================================
 
 static volatile LONG g_tlEnabled = 1;
+static volatile LONG g_styleCustom = 0;     // 1 = "Custom images" style
 static volatile LONG g_painterBroken = 0;   // 1 = DWM object layout did not match, the painter stays off
 static volatile LONG g_restartOnUnload = 0;
 static volatile LONG g_debug = 0;
@@ -1304,6 +1307,7 @@ static void TL_LoadSettings() {
     g_debug = Wh_GetIntSetting(L"debugLog") ? 1 : 0;
     PCWSTR style = Wh_GetStringSetting(L"buttonStyle.style");
     g_tlEnabled = (style && wcscmp(style, L"windows") != 0 && !g_painterBroken) ? 1 : 0;
+    g_styleCustom = (style && wcscmp(style, L"custom") == 0) ? 1 : 0;    
     Wh_FreeStringSetting(style);
     g_restartOnUnload = Wh_GetIntSetting(L"buttonStyle.restartDwmOnUnload") ? 1 : 0;
 
@@ -2075,7 +2079,7 @@ static void PaintAtlas() {
 static void ProcessPending() {
     // explorer.exe bumps this value after it stores new images in the mod storage
     ULONGLONG now = GetTickCount64();
-    if (now - g_iconVerCheck >= 500) {
+    if (g_pending || now - g_iconVerCheck >= 500) {
         g_iconVerCheck = now;
         if ((LONG)Wh_GetIntValue(L"iconCacheVersion", 0) != g_iconVerSeen) {
             LoadIcons();       // also updates g_iconVerSeen
@@ -2232,9 +2236,6 @@ static bool g_isExplorer = false;
 static volatile LONG g_exEnabled = 1;
 static int g_exExtra = 0;
 
-// Width of the three caption buttons at 96 dpi (47 + 46 + 47)
-static const int kButtonGroupW96 = 140;
-
 struct TabWin { HWND hwnd; int applied; bool isTab; bool bypass; };
 static TabWin g_tabs[32];
 static SRWLOCK g_tabLock = SRWLOCK_INIT;
@@ -2312,6 +2313,15 @@ static void TabSetState(HWND h, int applied, bool isTab) {
     ReleaseSRWLockExclusive(&g_tabLock);
 }
 
+static int TabGetApplied(HWND h) {
+    int a = 0;
+    AcquireSRWLockShared(&g_tabLock);
+    int i = TabIndexLocked(h);
+    if (i >= 0) a = g_tabs[i].applied;
+    ReleaseSRWLockShared(&g_tabLock);
+    return a;
+}
+
 static int ExDpiOf(HWND h) {
     int dpi = 0;
     if (h && g_pGetDpiForWindow) dpi = (int)g_pGetDpiForWindow(h);
@@ -2335,7 +2345,7 @@ static int ComputeTabShift(HWND h) {
     HWND top = GetAncestor(h, GA_ROOT);
     if (!top) return 0;
     if (IsHwndExcluded(top)) return 0;
-    int s = EffLeftMargin(top) + MulDiv(kButtonGroupW96, ExDpiOf(top), 96) + g_exExtra;
+    int s = MulDiv(g_exExtra, ExDpiOf(top), 96);   // 0 = leave the tab bar and toolbar where Explorer puts them
     return s < 0 ? 0 : s;
 }
 
@@ -2364,11 +2374,14 @@ static void AdjustTabPos(HWND hwnd, WINDOWPOS* p) {
 
     bool looksTab = isInputLayer || (p->y <= MulDiv(24, dpi, 96) && cy <= MulDiv(150, dpi, 96));
     int s = looksTab ? ComputeTabShift(hwnd) : 0;
+    int prevApplied = TabGetApplied(hwnd);   // shift already applied to the current position
     TabSetState(hwnd, s, looksTab);
     if (s == 0) return;
 
     // Use the original X when WinUI resized the window without moving it
-    int currentX = (p->flags & SWP_NOMOVE) ? cur.left : p->x;
+    int currentX = p->x;
+    if (p->flags & SWP_NOMOVE) currentX = cur.left - prevApplied;                       // resize only: strip our own shift
+    else if (prevApplied != 0 && p->x == cur.left) currentX = p->x - prevApplied;       // our shifted position echoed back
     int nx = currentX + s;
 
     RECT pc = {};
@@ -2488,7 +2501,7 @@ static void TabNudge(HWND h) {
     RECT r;
     if (!GetRectInParent(h, &r)) return;
     if (r.right <= r.left || r.bottom <= r.top) return;
-    SetWindowPos(h, nullptr, r.left, r.top, r.right - r.left, r.bottom - r.top,
+    SetWindowPos(h, nullptr, r.left - TabGetApplied(h), r.top, r.right - r.left, r.bottom - r.top,
                  SWP_NOZORDER | SWP_NOACTIVATE);
     ApplyButtonHole(h);
 }
@@ -2536,24 +2549,24 @@ static BOOL CALLBACK ExChildProc(HWND h, LPARAM);
 static int TabSnapshot(HWND* hw, int* applied, bool* isTab);
 
 static void StartRescan(HWND cab) {
-    SetPropW(cab, L"LeftifyTicks", (HANDLE)(INT_PTR)0);
+    SetPropW(cab, L"CaptionButtonsTicks", (HANDLE)(INT_PTR)0);
     SetTimer(cab, kRescanTimerId, 150, nullptr);
 }
 
 static LRESULT CALLBACK CabinetSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (g_msgCleanup && msg == g_msgCleanup) {
         KillTimer(hwnd, kRescanTimerId);
-        RemovePropW(hwnd, L"LeftifyTicks");
+        RemovePropW(hwnd, L"CaptionButtonsTicks");
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CabinetSubclassProc);
         return 0;
     }
     if (msg == WM_TIMER && wParam == kRescanTimerId) {
-        int ticks = (int)(INT_PTR)GetPropW(hwnd, L"LeftifyTicks") + 1;
-        SetPropW(hwnd, L"LeftifyTicks", (HANDLE)(INT_PTR)ticks);
+        int ticks = (int)(INT_PTR)GetPropW(hwnd, L"CaptionButtonsTicks") + 1;
+        SetPropW(hwnd, L"CaptionButtonsTicks", (HANDLE)(INT_PTR)ticks);
         EnumChildWindows(hwnd, ExChildProc, 0);
         if (ticks >= 12) {   // 12 x 150 ms = about 1.8 seconds
             KillTimer(hwnd, kRescanTimerId);
-            RemovePropW(hwnd, L"LeftifyTicks");
+            RemovePropW(hwnd, L"CaptionButtonsTicks");
         }
         return 0;
     }
@@ -2612,7 +2625,7 @@ static LRESULT CALLBACK CabinetSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, 
     }
     if (msg == WM_NCDESTROY) {
         KillTimer(hwnd, kRescanTimerId);
-        RemovePropW(hwnd, L"LeftifyTicks");
+        RemovePropW(hwnd, L"CaptionButtonsTicks");
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, CabinetSubclassProc);
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
@@ -2822,7 +2835,7 @@ static BOOL ExplorerInit() {
     SyncIconCache();    // copy custom images where dwm.exe can read them
     ExLoadSettings();
     LoadUser32Procs();
-    g_msgCleanup = RegisterWindowMessageW(L"WindowsLeftify_RemoveSubclass");
+    g_msgCleanup = RegisterWindowMessageW(L"CaptionButtonsCustomizer_RemoveSubclass");
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Orig);
     return TRUE;
 }
@@ -2830,9 +2843,16 @@ static BOOL ExplorerInit() {
 // ======================================================================
 //  Lifecycle (all parts)
 // ======================================================================
-static int RelayoutLaidOutWindows(bool onlyOne = false);
-static int RelayoutAllWindows();
-
+// Asks DWM to refresh itself (as if the system colors changed). DWM then lays out every
+// window again, so no window has to be resized.
+static void RequestDwmRefresh() {
+    HWND hDwm = FindWindowW(L"Dwm", nullptr);
+    if (!hDwm) {
+        Wh_Log(L"DWM notification window wasn't found");
+        return;
+    }
+    PostMessageW(hDwm, WM_SYSCOLORCHANGE, 0, 0);
+}
 static unsigned long long Fnv(unsigned long long h, unsigned long long v) {
     h ^= v;
     h *= 1099511628211ull;
@@ -2876,25 +2896,6 @@ static unsigned long long LayoutSignature() {
     return h;
 }
 
-// Hash of the exclusion lists only: a window that was excluded and is not anymore
-// is not in the layout table yet, so it needs the all-windows relayout.
-static unsigned long long ExclSignature() {
-    unsigned long long h = 1469598103934665603ull;
-    AcquireSRWLockShared(&g_exclLock);
-    h = Fnv(h, (unsigned long long)g_exclExeN);
-    for (int i = 0; i < g_exclExeN; i++) {
-        for (const wchar_t* p = g_exclExe[i]; *p; p++) h = Fnv(h, (unsigned long long)*p);
-        h = Fnv(h, 0);
-    }
-    h = Fnv(h, (unsigned long long)g_exclClsN);
-    for (int i = 0; i < g_exclClsN; i++) {
-        for (const wchar_t* p = g_exclCls[i]; *p; p++) h = Fnv(h, (unsigned long long)*p);
-        h = Fnv(h, 0);
-    }
-    ReleaseSRWLockShared(&g_exclLock);
-    return h;
-}
-
 // Hash of the settings that change how the buttons are painted (not where they are).
 static unsigned long long PaintSignature() {
     unsigned long long h = 1469598103934665603ull;
@@ -2902,13 +2903,10 @@ static unsigned long long PaintSignature() {
     for (int r = 0; r < 3; r++)
         for (int c = 0; c < 3; c++)
             h = Fnv(h, (unsigned long long)(long long)g_base[r][c]);
-    PCWSTR st = Wh_GetStringSetting(L"buttonStyle.style");
-    if (st) {
-        for (const wchar_t* p = st; *p; p++) h = Fnv(h, (unsigned long long)*p);
-    }
-    Wh_FreeStringSetting(st);
+    h = Fnv(h, (unsigned long long)g_styleCustom);
     return h;
 }
+
 void Wh_ModSettingsChanged() {
     if (g_isExplorer) {
         LoadSettings();
@@ -2918,97 +2916,66 @@ void Wh_ModSettingsChanged() {
         EnumWindows(ExTopProc, 0);
         return;
     }
+    LONG iconVerBefore = (LONG)Wh_GetIntValue(L"iconCacheVersion", 0);
+    bool wasCustom = g_styleCustom != 0;
     unsigned long long sigBefore = LayoutSignature();
-    unsigned long long exclBefore = ExclSignature();
     unsigned long long paintBefore = PaintSignature();
-    LoadSettings();       // Leftify (including the excluded apps lists)
+    LoadSettings();       // layout (including the excluded apps lists)
     TL_LoadSettings();    // painter
     InterlockedExchange(&g_pending, 1);   // repaint on the next DWM-thread hook call
-    // Open windows only need a new layout when a layout setting changed
-    if (LayoutSignature() != sigBefore) {
-        if (ExclSignature() != exclBefore) {
-            RelayoutLaidOutWindows();   // windows that are excluded by now go back to the default layout
-            RelayoutAllWindows();       // windows that are not excluded anymore get the new layout
+    // Open windows need a new layout when a layout setting (or the exclusion lists) or the
+    // painting changed. DWM refreshes itself and lays out every window again; no window is resized.
+    bool refresh = (LayoutSignature() != sigBefore) || (PaintSignature() != paintBefore);
+
+    // Custom images: explorer.exe decodes the images and bumps iconCacheVersion.
+    // Wait for it (max ~2 s), so the DWM thread loads and paints them on the refresh.
+    if (g_tlEnabled && (wasCustom || g_styleCustom)) {
+        for (int i = 0; i < 40 && (LONG)Wh_GetIntValue(L"iconCacheVersion", 0) == iconVerBefore; i++) {
+            Sleep(50);
         }
-        else RelayoutLaidOutWindows();
-    } else if (PaintSignature() != paintBefore) {
-        // Colors / style: DWM only repaints the buttons from its own hooks, so one
-        // window is nudged to trigger it. The glyph atlas is shared by all windows.
-        RelayoutLaidOutWindows(true);
+        InterlockedExchange(&g_pending, 1);
+        refresh = true;
     }
-}
 
-// Makes DWM lay the window out again: a 1 px move is enough for maximized windows,
-// normal windows need a 1 px size change (a pure move does not trigger a new layout).
-// A frame change alone (SWP_FRAMECHANGED without resize) does not make DWM lay out again.
-static void NudgeWindow(HWND h, int* count, bool ignoreExclusion = false) {
-    if (!IsWindowVisible(h) || IsIconic(h)) return;
-    if ((GetWindowLongW(h, GWL_STYLE) & WS_CAPTION) != WS_CAPTION) return;
-    // Windows from the layout table are nudged even when they are excluded by now,
-    // so they go back to the default layout.
-    if (!ignoreExclusion && IsHwndExcluded(h)) return;
-    RECT r;
-    if (!GetWindowRect(h, &r)) return;
-    int w = r.right - r.left, ht = r.bottom - r.top;
-    UINT base = SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
-    if (IsZoomed(h)) {
-        SetWindowPos(h, nullptr, r.left + 1, r.top, 0, 0, base | SWP_NOSIZE);
-        SetWindowPos(h, nullptr, r.left, r.top, 0, 0, base | SWP_NOSIZE);
-    } else {
-        SetWindowPos(h, nullptr, 0, 0, w + 1, ht, base | SWP_NOMOVE | SWP_FRAMECHANGED);
-        SetWindowPos(h, nullptr, 0, 0, w, ht, base | SWP_NOMOVE);
-    }
-    DebugLog(L"[Nudge] hwnd=%p zoomed=%d", h, (int)IsZoomed(h));
-    (*count) += 2;
-}
-
-static BOOL CALLBACK NudgeWindowProc(HWND h, LPARAM lp) {
-    NudgeWindow(h, (int*)lp);
-    return TRUE;
-}
-
-// Windows this mod has laid out (taken from the layout table). Only these need a new
-// layout when a layout setting changes or when the mod is unloaded.
-static int RelayoutLaidOutWindows(bool onlyOne) {
-    std::vector<HWND> list;
-    AcquireSRWLockShared(&g_layoutLock);
-    for (const auto& kv : g_winLayouts) {
-        const WinLayout& e = kv.second;
-        if (!e.valid || !e.hwnd) continue;
-        if (std::find(list.begin(), list.end(), e.hwnd) == list.end()) list.push_back(e.hwnd);
-    }
-    ReleaseSRWLockShared(&g_layoutLock);
-
-    int n = 0;
-    for (HWND h : list) {
-        if (IsWindow(h)) NudgeWindow(h, &n, true);
-        if (onlyOne && n > 0) break;   // one nudged window is enough to trigger a repaint
-    }
-    return n;
-}
-
-// Every visible window with a title bar. Needed when the mod is turned on (nothing has
-// been laid out yet) and when the exclusion lists change.
-static int RelayoutAllWindows() {
-    int n = 0;
-    EnumWindows(NudgeWindowProc, (LPARAM)&n);
-    return n;
+    if (refresh) RequestDwmRefresh();
 }
 
 // Called by Windhawk just before the mod is unloaded, while the hooks still work
 void Wh_ModBeforeUninit() {
     if (g_isExplorer) return;
     InterlockedExchange(&g_unloading, 1);
-    int n = RelayoutLaidOutWindows();
-    for (int i = 0; i < 25 && g_unloadRelayouts < n; i++) Sleep(20);   // wait up to ~0.5 second
-    Wh_Log(L"[Unload] relayout posted for %d nudge(s), %ld handled", n, (long)g_unloadRelayouts);
+    // DWM lays every window out again; with g_unloading set the hooks restore the default layout
+    RequestDwmRefresh();
+    for (int i = 0; i < 25 && g_unloadRelayouts == 0; i++) Sleep(20);   // wait up to ~0.5 second
+    if (g_unloadRelayouts > 0) Sleep(50);                               // let the layout pass finish
+    Wh_Log(L"[Unload] DWM refresh requested, %ld layout(s) handled", (long)g_unloadRelayouts);
+}
+
+// dwm.exe starts before explorer.exe, so the images are not in the mod storage yet when
+// dwm.exe loads the mod. This thread waits until explorer.exe has stored them (it bumps
+// iconCacheVersion), then asks DWM to refresh so that the images are loaded and painted.
+static HANDLE g_iconWaitThread = nullptr;
+
+static DWORD WINAPI IconWaitThread(LPVOID) {
+    for (int i = 0; i < 100 && !g_unloading; i++) {   // up to ~10 seconds
+        Sleep(100);
+        if ((LONG)Wh_GetIntValue(L"iconCacheVersion", 0) != g_iconVerSeen) {
+            InterlockedExchange(&g_pending, 1);
+            RequestDwmRefresh();
+            break;
+        }
+    }
+    return 0;
 }
 
 void Wh_ModAfterInit() {
     if (g_isExplorer) {
         EnumWindows(ExTopProc, 0);   // File Explorer windows that already exist
     } else {
-        RelayoutAllWindows();        // nothing is laid out yet: windows that are already open get the new layout right away
+        RequestDwmRefresh();         // windows that are already open get the new layout right away
+        if (g_tlEnabled && g_styleCustom) {
+            g_iconWaitThread = CreateThread(nullptr, 0, IconWaitThread, nullptr, 0, nullptr);
+        }        
     }
 }
 
@@ -3017,6 +2984,11 @@ void Wh_ModUninit() {
         ExplorerUninit();
         CleanIconCache();
         return;
+    }
+    if (g_iconWaitThread) {
+        WaitForSingleObject(g_iconWaitThread, 2000);   // the thread stops by itself when g_unloading is set
+        CloseHandle(g_iconWaitThread);
+        g_iconWaitThread = nullptr;
     }
     if (g_everPainted && g_restartOnUnload) RestartDwm();
     FreeIcons();
@@ -3070,7 +3042,7 @@ BOOL Wh_ModInit() {
     if (!udwm) return FALSE;
 
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
-        // ---- Leftify ----
+        // ---- Layout ----
         { { LR"(public: void __cdecl CTopLevelWindow::GetTitleBarInfo(struct tagTITLEBARINFOEX *,bool *))" },
           (void**)&GetTitleBarInfo_Orig, nullptr, false },
         { { LR"(private: long __cdecl CTopLevelWindow::UpdateNCAreaButton(enum CTopLevelWindow::ButtonType,int,int,int *))" },
