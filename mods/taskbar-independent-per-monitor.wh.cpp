@@ -12,7 +12,7 @@
 // @include         sihost.exe
 // @include         RuntimeBroker.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject -lgdi32
+// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject -lgdi32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -35,7 +35,7 @@ Each taskbar behaves like its own main taskbar.
   are added at the end.
 * Drag a pin to another taskbar to move it there.
 
-Requires Windows 10 or 11 and *Show my taskbar on all displays*. Tested with
+Requires 64-bit Windows 10 or Windows 11 and *Show my taskbar on all displays*. Tested with
 *Combine taskbar buttons: Never*. Not compatible with *Disable grouping on the
 taskbar*.
 */
@@ -117,6 +117,7 @@ taskbar*.
 #include <psapi.h>
 #include <appmodel.h>
 #include <uiautomation.h>
+#include <shellscalingapi.h>
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
@@ -260,6 +261,7 @@ static void UpdateConnected() {
 }
 
 static void ForgetMonitor(int n);
+static void ForgetMonitorLater(int n);
 
 static int MonNumberLocked(HMONITOR m, const MONITORINFO& mi, std::vector<int>& freed) {
     DWORD now = GetTickCount();
@@ -320,7 +322,8 @@ static int MonNumber(HMONITOR m) {
         std::lock_guard<std::mutex> l(g_slotMx);
         n = MonNumberLocked(m, mi, freed);
     }
-    for (int f : freed) ForgetMonitor(f);
+    // Callers may hold locks (e.g. the button order): forget the freed numbers later on the taskbar thread
+    for (int f : freed) ForgetMonitorLater(f);
     return n;
 }
 
@@ -577,18 +580,25 @@ static std::map<HWND, WinInfo> g_wins;
 static HWND g_msgWnd = nullptr;
 static bool g_msgWndFailed = false;  // creating it failed, don't retry on every call
 static std::atomic<bool> g_unloading{false};  // set in Wh_ModBeforeUninit: don't create it again
+static DWORD g_initTick = 0;  // when the mod started
 static const wchar_t kMsgClass[] = L"TaskbarIndependentPerMonitorMsg";
 static const UINT kMsgCleanup = WM_APP + 0x51;
 static const UINT kMsgSync = WM_APP + 0x52;  // posted: re-apply all pins on the taskbar thread
+static const UINT kMsgForget = WM_APP + 0x53;  // posted: a monitor number was handed to another monitor
+static void ForgetMonitorLater(int n) {
+    if (!g_msgWnd || !PostMessageW(g_msgWnd, kMsgForget, n, 0)) ForgetMonitor(n);
+}
 static const UINT_PTR kReevalTimerId = 1;
 static const UINT_PTR kApplyTimerId = 2;
 static const UINT_PTR kSyncTimerId = 3;
 static const UINT_PTR kOrderTimerId = 7;  // re-apply the pin order of each taskbar
 static const UINT_PTR kDragImageTimerId = 8;  // drag image follows the mouse
+static const UINT_PTR kOrderSaveTimerId = 9;  // save changed places of window buttons (5 s after the last change)
 static void DragImageTimerProc();
 static void DestroyDragImage();
 static void CreateDragImage(void* g, HMONITOR from);
 static void OrderTimerProc();
+static void OrderSaveTimerProc();
 static void SyncTimerProc();
 static void SyncAll();
 static const ULONG_PTR kCopyUnpinOne = 0x534B5031;  // WM_COPYDATA from the jump list ("SKP1")
@@ -845,28 +855,49 @@ static void InitDpaOffset() {
     Wh_Log(L"-> Button group list %ls (0x%X)", g_dpaOffset > 0 ? L"found" : L"NOT found", g_dpaOffset);
 }
 
-static std::vector<void*> BtnGroupsOf(void* tl, void* g) {
-    std::vector<void*> r;
-    if (g_dpaOffset <= 0 || !g_tb) return r;
-    // DPA: { int cp; void** pp; ... } - as in _GetTBGroupFromGroup ("mov rcx,[rax+8]")
+static void* pGroupVft = nullptr;  // CTaskGroup identity (ITaskGroup)
+
+// The image of taskbar.dll (explorer.exe on Windows 10), set at init: the button groups' vtables
+// must be inside it
+static char* g_tbLo = nullptr;
+static char* g_tbHi = nullptr;
+
+// The button groups of a taskbar in their order, each with its group (ITaskBtnGroup::GetGroup =
+// vtable[6], as Windows itself calls it; nullptr for an entry that doesn't look like a button group).
+// The list is the CDPA at tl + g_dpaOffset: { int cp; void** pp; ... }, as in _GetTBGroupFromGroup
+// ("mov rcx,[rax+8]"). No references.
+struct BtnGroup {
+    void* tbg;
+    void* g;
+};
+static std::vector<BtnGroup> BtnGroupList(void* tl) {
+    std::vector<BtnGroup> r;
+    if (!tl || g_dpaOffset <= 0 || !g_tbLo || !Readable((char*)tl + g_dpaOffset, sizeof(void*))) return r;
     char* dpa = *(char**)((char*)tl + g_dpaOffset);
     if (!dpa || !Readable(dpa, 0x10)) return r;
     int cnt = *(int*)dpa;
     void** pp = *(void***)(dpa + 0x08);
     if (cnt <= 0 || cnt > 2000 || !pp || !Readable(pp, cnt * sizeof(void*))) return r;
-    MODULEINFO mi{};
-    GetModuleInformation(GetCurrentProcess(), g_tb, &mi, sizeof(mi));
-    char* lo = (char*)mi.lpBaseOfDll;
-    char* hi = lo + mi.SizeOfImage;
     for (int k = 0; k < cnt; k++) {
         void* tbg = pp[k];
-        if (!tbg || !Readable(tbg, 8)) continue;
-        void** vt = *(void***)tbg;  // vtable must be inside taskbar.dll
-        if ((char*)vt < lo || (char*)vt >= hi || !Readable(vt, 7 * sizeof(void*))) continue;
-        auto getGroup = (void* (*)(void*))vt[6];  // ITaskBtnGroup::GetGroup (as Windows itself does)
-        if ((char*)getGroup < lo || (char*)getGroup >= hi) continue;
-        if (getGroup(tbg) == g) r.push_back(tbg);
+        void* g = nullptr;
+        void** vt = tbg && Readable(tbg, 8) ? *(void***)tbg : nullptr;
+        if ((char*)vt >= g_tbLo && (char*)vt < g_tbHi && Readable(vt, 7 * sizeof(void*))) {
+            auto getGroup = (void* (*)(void*))vt[6];
+            if ((char*)getGroup >= g_tbLo && (char*)getGroup < g_tbHi) g = getGroup(tbg);
+        }
+        r.push_back({tbg, g});
     }
+    return r;
+}
+
+// A CTaskGroup (checked by its vtable)
+static bool IsGroup(void* g) { return g && pGroupVft && Readable(g, sizeof(void*)) && *(void**)g == pGroupVft; }
+
+static std::vector<void*> BtnGroupsOf(void* tl, void* g) {
+    std::vector<void*> r;
+    for (auto& e : BtnGroupList(tl))
+        if (g && e.g == g) r.push_back(e.tbg);
     return r;
 }
 
@@ -1303,6 +1334,10 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         DragImageTimerProc();
         return 0;
     }
+    if (msg == WM_TIMER && wp == kOrderSaveTimerId) {
+        OrderSaveTimerProc();
+        return 0;
+    }
     if (msg == WM_TIMER && wp == kOrderTimerId) {
         OrderTimerProc();
         return 0;
@@ -1336,6 +1371,10 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (cd->dwData == kCopyUnpinOne) return HandleUnpinOne(app.c_str());
         return 0;
     }
+    if (msg == kMsgForget) {
+        if (!g_unloading && wp >= 1 && wp <= kMaxMon) ForgetMonitor((int)wp);
+        return 0;
+    }
     if (msg == kMsgSync) {
         if (!g_unloading) SyncAll();
         return 0;
@@ -1347,6 +1386,7 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(h, kPruneTimerId);
         KillTimer(h, kFrameTimerId);
         KillTimer(h, kOrderTimerId);
+        KillTimer(h, kOrderSaveTimerId);
         DestroyDragImage();
         if (g_dragGroup) {
             ((IUnknown*)g_dragGroup)->Release();
@@ -1536,7 +1576,6 @@ static void ReleasePending() {
 // mod is loaded only when everything is already in place. The sync walks all groups of all
 // taskbars: window buttons only on their monitor, pins only where allowed.
 
-static void* pGroupVft = nullptr;  // CTaskGroup identity (ITaskGroup)
 static int g_syncRuns = 0;
 
 // Find the taskbars ourselves (after a mod update the mod doesn't know them yet): every
@@ -1612,14 +1651,20 @@ static BOOL CALLBACK FindListWnd(HWND h, LPARAM lp) {
     return TRUE;
 }
 
-static BOOL CALLBACK FindTrays(HWND h, LPARAM lp) {
+// The taskbar windows of this process (primary and secondary)
+static BOOL CALLBACK TrayWindowsProc(HWND h, LPARAM lp) {
     wchar_t cls[64];
     DWORD pid = 0;
     GetWindowThreadProcessId(h, &pid);
-    if (pid == GetCurrentProcessId() && GetClassNameW(h, cls, 64) &&
+    if (pid == GetCurrentProcessId() && GetClassNameW(h, cls, ARRAYSIZE(cls)) &&
         (!wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd")))
-        EnumChildWindows(h, FindListWnd, lp);
+        ((std::vector<HWND>*)lp)->push_back(h);
     return TRUE;
+}
+static std::vector<HWND> TrayWindows() {
+    std::vector<HWND> r;
+    EnumWindows(TrayWindowsProc, (LPARAM)&r);
+    return r;
 }
 
 // Taskbars come and go with monitors. Before the list is used outside of a taskbar call, it's
@@ -1628,7 +1673,7 @@ static BOOL CALLBACK FindTrays(HWND h, LPARAM lp) {
 static void RefreshBars() {
     if (!pTlVftUI || !pTlVftWnd) return;
     std::set<void*> live;
-    EnumWindows(FindTrays, (LPARAM)&live);
+    for (HWND t : TrayWindows()) EnumChildWindows(t, FindListWnd, (LPARAM)&live);
     {
         std::lock_guard<std::mutex> l(g_mx);
         g_bars = live;
@@ -1639,27 +1684,8 @@ static void RefreshBars() {
 // All groups that have a button on the taskbar, with a reference each (release with Release).
 // ITaskBtnGroup::GetGroup returns the group without a reference.
 static void GroupsOfBar(void* tl, std::set<void*>& groups) {
-    if (g_dpaOffset <= 0 || !g_tb) return;
-    char* dpa = *(char**)((char*)tl + g_dpaOffset);
-    if (!dpa || !Readable(dpa, 0x10)) return;
-    int cnt = *(int*)dpa;
-    void** pp = *(void***)(dpa + 0x08);
-    if (cnt <= 0 || cnt > 2000 || !pp || !Readable(pp, cnt * sizeof(void*))) return;
-    MODULEINFO mi{};
-    GetModuleInformation(GetCurrentProcess(), g_tb, &mi, sizeof(mi));
-    char* lo = (char*)mi.lpBaseOfDll;
-    char* hi = lo + mi.SizeOfImage;
-    for (int k = 0; k < cnt; k++) {
-        void* tbg = pp[k];
-        if (!tbg || !Readable(tbg, 8)) continue;
-        void** vt = *(void***)tbg;
-        if ((char*)vt < lo || (char*)vt >= hi || !Readable(vt, 7 * sizeof(void*))) continue;
-        auto getGroup = (void* (*)(void*))vt[6];
-        if ((char*)getGroup < lo || (char*)getGroup >= hi) continue;
-        void* g = getGroup(tbg);
-        if (g && Readable(g, sizeof(void*)) && *(void**)g == pGroupVft && groups.insert(g).second)
-            ((IUnknown*)g)->AddRef();
-    }
+    for (auto& e : BtnGroupList(tl))
+        if (IsGroup(e.g) && groups.insert(e.g).second) ((IUnknown*)e.g)->AddRef();
 }
 
 
@@ -1713,33 +1739,13 @@ static void SavePinOrderLocked() {
 // reference
 static std::vector<void*> BarGroups(void* tl) {
     std::vector<void*> r;
-    if (g_dpaOffset <= 0 || !g_tb || !pGroupVft) return r;
-    char* dpa = *(char**)((char*)tl + g_dpaOffset);
-    if (!dpa || !Readable(dpa, 0x10)) return r;
-    int cnt = *(int*)dpa;
-    void** pp = *(void***)(dpa + 0x08);
-    if (cnt <= 0 || cnt > 2000 || !pp || !Readable(pp, cnt * sizeof(void*))) return r;
-    MODULEINFO mi{};
-    GetModuleInformation(GetCurrentProcess(), g_tb, &mi, sizeof(mi));
-    char* lo = (char*)mi.lpBaseOfDll;
-    char* hi = lo + mi.SizeOfImage;
-    for (int k = 0; k < cnt; k++) {
-        void* tbg = pp[k];
-        if (!tbg || !Readable(tbg, 8)) continue;
-        void** vt = *(void***)tbg;
-        if ((char*)vt < lo || (char*)vt >= hi || !Readable(vt, 7 * sizeof(void*))) continue;
-        auto getGroup = (void* (*)(void*))vt[6];
-        if ((char*)getGroup < lo || (char*)getGroup >= hi) continue;
-        void* g = getGroup(tbg);
-        if (g && Readable(g, sizeof(void*)) && *(void**)g == pGroupVft &&
-            std::find(r.begin(), r.end(), g) == r.end())
-            r.push_back(g);
-    }
+    for (auto& e : BtnGroupList(tl))
+        if (IsGroup(e.g) && std::find(r.begin(), r.end(), e.g) == r.end()) r.push_back(e.g);
     return r;
 }
 
 // Entry of a group in the order of a taskbar: the app, "~app" for a window button of an app that
-// isn't pinned on this taskbar (forgotten when it's gone - opened again, it goes to the end)
+// isn't pinned on this taskbar (opened again later, it goes to the end)
 static bool ShouldShow(void* tl, void* g, void* item);
 static bool PinnedOn(void* tl, void* g) { return Pinned(g) && ShouldShow(tl, g, nullptr); }
 static std::wstring EntryOf(void* tl, void* g) { return (PinnedOn(tl, g) ? L"" : L"~") + KeyOf(g); }
@@ -1761,7 +1767,7 @@ static int RankIn(const std::vector<std::wstring>& v, void* g) {
 }
 
 // Bring the order of a taskbar up to date: buttons without a place follow at the end (in their
-// current order), window buttons that are gone are forgotten. Returns whether a pin's entry changed.
+// current order). Returns whether it changed.
 static bool SyncOrderLocked(void* tl, std::vector<std::wstring>& v) {
     std::vector<void*> groups = BarGroups(tl);
     std::set<std::wstring> here;
@@ -1772,28 +1778,29 @@ static bool SyncOrderLocked(void* tl, std::vector<std::wstring>& v) {
         int r = RankIn(v, g);
         if (r < 0) {
             v.push_back(e);
-            changed |= e[0] != L'~';
+            changed = true;
         } else if (v[r] != e) {
             v[r] = e;  // pinned or unpinned in the meantime
             changed = true;
         }
     }
-    std::erase_if(v, [&](const std::wstring& e) { return e[0] == L'~' && !here.count(e); });
+    // Window buttons that are gone keep their place (e.g. while the taskbar is rebuilt after a restart);
+    // only a long list forgets them
+    if (v.size() > 100)
+        changed |= std::erase_if(v, [&](const std::wstring& e) { return e[0] == L'~' && !here.count(e); }) > 0;
     return changed;
 }
 
 // Remember a pin at a place of a taskbar (index = place in its button list, e.g. where it was
 // dropped): it follows the buttons in front of that place
-static void* GroupAtIndex(void* tl, int i);
 static void PlacePin(void* tl, const std::wstring& key, int index) {
     int mon = tl ? MonNumber(GetMonitor_orig(tl)) : 0;
     if (mon < 1 || key.empty() || index < 0 || g_s.pinsEverywhere) return;
     std::vector<std::wstring> front;
-    char* dpa = g_dpaOffset > 0 ? *(char**)((char*)tl + g_dpaOffset) : nullptr;
-    int cnt = dpa && Readable(dpa, 0x10) ? *(int*)dpa : 0;
-    for (int i = 0; i < std::min(index, cnt); i++) {
-        void* g = GroupAtIndex(tl, i);
-        if (g && KeyOf(g) != key) front.push_back(EntryOf(tl, g));
+    auto list = BtnGroupList(tl);
+    for (int i = 0; i < std::min(index, (int)list.size()); i++) {
+        void* g = list[i].g;
+        if (IsGroup(g) && KeyOf(g) != key) front.push_back(EntryOf(tl, g));
     }
     std::lock_guard<std::mutex> l(g_orderMx);
     LoadPinOrderLocked();
@@ -1827,10 +1834,9 @@ static int OrderedPos(void* tl, void* g, int pos) {
 // remembered for this taskbar: pins and window buttons keep their places, new ones go to the end.
 using GetVisualOrder_t = int (*)(void*);
 static GetVisualOrder_t GetVisualOrder_orig;
-static std::map<void*, int>* g_visualMap = nullptr;  // only while a taskbar sorts, on its thread
-static DWORD g_visualThread = 0;
+static thread_local std::map<void*, int>* g_visualMap = nullptr;  // only while a taskbar sorts
 static int GetVisualOrder_hook(void* g) {
-    if (g_visualMap && g_visualThread == GetCurrentThreadId()) {
+    if (g_visualMap) {
         auto it = g_visualMap->find(g);
         if (it != g_visualMap->end()) return it->second;
     }
@@ -1840,23 +1846,33 @@ static int GetVisualOrder_hook(void* g) {
 static void* g_sortingBar = nullptr;  // taskbar on which the user drags a button right now
 static DWORD g_sortingTick = 0;
 
-// Values for the buttons of a taskbar while it sorts: their places in its order (Windows 11 only
-// gives values to buttons of the primary taskbar, -1 elsewhere)
+// Values for the buttons of a taskbar while it sorts. They swap the values Windows gave them, so that
+// they follow the order remembered for this taskbar - values from outside that set would confuse
+// Windows 11, which keeps one list of all apps for all taskbars. Windows 11 gives values only to the
+// buttons of the primary taskbar (-1 elsewhere): without distinct values the buttons get their own, in
+// a range of their taskbar's own that doesn't overlap with the other taskbars.
 static void BuildVisualMap(void* tl, std::map<void*, int>& m) {
     int mon = tl ? MonNumber(GetMonitor_orig(tl)) : 0;
     if (mon < 1 || !GetVisualOrder_orig || g_s.pinsEverywhere || g_visualMap) return;
-    if (tl == g_sortingBar && GetTickCount() - g_sortingTick < 60000) {
-        // The user drags a button there: Windows moves it itself, its order stays as it is meanwhile
-        // (saved when the drag ends)
-        int k = 0;
-        for (void* g : BarGroups(tl)) m[g] = k++ - 10000;
-        return;
+    std::vector<void*> groups = BarGroups(tl);
+    std::vector<int> slots;
+    for (void* g : groups) slots.push_back(GetVisualOrder_orig(g));
+    std::sort(slots.begin(), slots.end());
+    bool own = std::adjacent_find(slots.begin(), slots.end()) != slots.end();
+    if (own) {
+        slots.clear();
+        for (size_t k = 0; k < groups.size(); k++) slots.push_back(-1000000 + mon * 10000 + (int)k);
     }
-    std::lock_guard<std::mutex> l(g_orderMx);
-    LoadPinOrderLocked();
-    auto& v = g_pinOrder[mon];
-    if (SyncOrderLocked(tl, v)) SavePinOrderLocked();
-    for (void* g : BarGroups(tl)) m[g] = RankIn(v, g) - 10000;
+    // The user drags a button there: Windows moves it itself, the order stays as it is meanwhile
+    // (saved when the drag ends)
+    if (!(tl == g_sortingBar && GetTickCount() - g_sortingTick < 60000)) {
+        std::lock_guard<std::mutex> l(g_orderMx);
+        LoadPinOrderLocked();
+        auto& v = g_pinOrder[mon];
+        if (SyncOrderLocked(tl, v) && g_msgWnd) SetTimer(g_msgWnd, kOrderSaveTimerId, 5000, nullptr);
+        std::stable_sort(groups.begin(), groups.end(), [&](void* a, void* b) { return RankIn(v, a) < RankIn(v, b); });
+    }
+    for (size_t k = 0; k < groups.size(); k++) m[groups[k]] = slots[k];
 }
 
 // Windows 10: UpdateVisualTaskOrder() sorts the buttons of the taskbar
@@ -1867,7 +1883,6 @@ static void UpdateVisual_hook(void* self) {
     BuildVisualMap(BarOf(self), m);
     bool own = !m.empty();
     if (own) {
-        g_visualThread = GetCurrentThreadId();
         g_visualMap = &m;
     }
     UpdateVisual_orig(self);
@@ -1882,7 +1897,6 @@ static void UpdateVisual11_hook(void* self, void* g, int order) {
     BuildVisualMap(BarOf(self), m);
     bool own = !m.empty();
     if (own) {
-        g_visualThread = GetCurrentThreadId();
         g_visualMap = &m;
     }
     UpdateVisual11_orig(self, g, order);
@@ -1892,26 +1906,44 @@ static void UpdateVisual11_hook(void* self, void* g, int order) {
 // A new button on a taskbar: Windows inserts it at the place of its app in the global order (an app
 // that had a button before can show up in front). It's put at its place in this taskbar's order right
 // away instead - a new window button at the end - so nothing has to be sorted afterwards.
+// The visible taskbar follows the same index. While many buttons are created at once (after a start,
+// when the taskbars are rebuilt) moved insertions let it get out of step: then only the order is kept
+// up to date, the taskbar is sorted afterwards.
 using CreateTBGroup_t = void* (*)(void*, void*, int);
 static CreateTBGroup_t CreateTBGroup_orig;
+static void* g_lastCreateBar = nullptr;
+static DWORD g_lastCreateTick = 0;
 static void* CreateTBGroup_hook(void* self, void* g, int index) {
     void* tl = BarOf(self);
     int mon = tl ? MonNumber(GetMonitor_orig(tl)) : 0;
+    DWORD now = GetTickCount();
+    bool rebuild = now - g_initTick < 10000 || (tl == g_lastCreateBar && now - g_lastCreateTick < 1000);
+    g_lastCreateBar = tl;
+    g_lastCreateTick = now;
     if (mon >= 1 && g && index >= 0 && !g_s.pinsEverywhere) {
         std::vector<void*> groups = BarGroups(tl);
         std::lock_guard<std::mutex> l(g_orderMx);
         LoadPinOrderLocked();
         auto& v = g_pinOrder[mon];
-        if (!PinnedOn(tl, g)) std::erase(v, KeyOf(g));  // not pinned here (any more): a new window goes to the end
+        bool pinned = PinnedOn(tl, g);
+        // A window opened (or moved here) goes to the end - not one that's only rebuilt
+        if (!pinned && !rebuild) {
+            std::erase(v, KeyOf(g));
+            std::erase(v, L"~" + KeyOf(g));
+        }
         SyncOrderLocked(tl, v);
         int r = RankIn(v, g);
         if (r < 0) {
             v.push_back(EntryOf(tl, g));
             r = (int)v.size() - 1;
         }
-        int at = 0;
-        for (void* x : groups) at += x != g && RankIn(v, x) < r;
-        index = at;
+        // Windows appends a new window button anyway
+        if (!rebuild && (pinned || index != INT_MAX)) {
+            int at = 0;
+            for (void* x : groups) at += x != g && RankIn(v, x) < r;
+            index = at;
+        }
+        if (g_msgWnd) SetTimer(g_msgWnd, kOrderSaveTimerId, 5000, nullptr);
     }
     return CreateTBGroup_orig(self, g, index);
 }
@@ -1922,7 +1954,10 @@ static void ApplyPinOrder(void* tl) {
     if (UpdateVisual_orig) {
         UpdateVisual_hook(tl);
     } else if (UpdateVisual11_orig) {
-        for (void* g : BarGroups(tl)) UpdateVisual11_hook(tl, g, GetVisualOrder_orig(g));
+        // Each call moves buttons of the visible taskbar: only the pins (window buttons follow when
+        // Windows sorts the taskbar itself), so that it doesn't get out of step while it's built
+        for (void* g : BarGroups(tl))
+            if (PinnedOn(tl, g)) UpdateVisual11_hook(tl, g, GetVisualOrder_orig(g));
     }
 }
 
@@ -1951,78 +1986,45 @@ static void SaveBarOrder(void* tl) {
 // The taskbar drags its buttons itself (_StartDragGroup ... _FinishDragGroup, with mouse capture, so
 // the end is reported even outside of it). Released over another taskbar: the pin moves there.
 
-// Group of a button group (ITaskBtnGroup::GetGroup = vtable[6], as Windows calls it; no reference)
-static void* GroupOfBtnGroup(void* tbg) {
-    MODULEINFO mi{};
-    if (!tbg || !g_tb || !Readable(tbg, 8) || !GetModuleInformation(GetCurrentProcess(), g_tb, &mi, sizeof(mi)))
-        return nullptr;
-    char* lo = (char*)mi.lpBaseOfDll;
-    char* hi = lo + mi.SizeOfImage;
-    void** vt = *(void***)tbg;
-    if ((char*)vt < lo || (char*)vt >= hi || !Readable(vt, 7 * sizeof(void*))) return nullptr;
-    auto getGroup = (void* (*)(void*))vt[6];
-    if ((char*)getGroup < lo || (char*)getGroup >= hi) return nullptr;
-    void* g = getGroup(tbg);
-    return g && Readable(g, sizeof(void*)) && *(void**)g == pGroupVft ? g : nullptr;
-}
-
 // Group of the button group at index i of a taskbar (no reference)
 static void* GroupAtIndex(void* tl, int i) {
-    if (g_dpaOffset <= 0 || i < 0) return nullptr;
-    char* dpa = *(char**)((char*)tl + g_dpaOffset);
-    if (!dpa || !Readable(dpa, 0x10)) return nullptr;
-    int cnt = *(int*)dpa;
-    void** pp = *(void***)(dpa + 0x08);
-    if (i >= cnt || cnt > 2000 || !pp || !Readable(pp + i, sizeof(void*))) return nullptr;
-    return GroupOfBtnGroup(pp[i]);
+    auto list = BtnGroupList(tl);
+    return i >= 0 && i < (int)list.size() && IsGroup(list[i].g) ? list[i].g : nullptr;
 }
 
 // Windows 10: the hit test counts the entries of the buttons - a button with windows has one for itself
 // and one per window, a pin without a window one. Place in the button list of the entry at place task.
 static int GroupIndexOfTask(void* tl, int task) {
-    if (g_dpaOffset <= 0 || task < 0 || !pBtnGetNumItems) return -1;
-    char* dpa = *(char**)((char*)tl + g_dpaOffset);
-    if (!dpa || !Readable(dpa, 0x10)) return -1;
-    int cnt = *(int*)dpa;
-    void** pp = *(void***)(dpa + 0x08);
-    if (cnt < 0 || cnt > 2000 || !pp || !Readable(pp, cnt * sizeof(void*))) return -1;
-    for (int k = 0; k < cnt; k++) {
-        int items = GroupOfBtnGroup(pp[k]) ? pBtnGetNumItems(pp[k]) : 0;
+    if (task < 0 || !pBtnGetNumItems) return -1;
+    auto list = BtnGroupList(tl);
+    for (int k = 0; k < (int)list.size(); k++) {
+        int items = IsGroup(list[k].g) ? pBtnGetNumItems(list[k].tbg) : 0;
         int n = items > 0 ? items + 1 : 1;
         if (task < n) return k;
         task -= n;
     }
-    return cnt;
+    return (int)list.size();
 }
 
-// Monitor of the taskbar at the point (nullptr if there's none). By the taskbar window's rectangle:
+// Taskbar window at the point and its monitor (nullptr if there's none). By the window's rectangle:
 // with styled (shortened) taskbars the window under the point can be the desktop.
-struct TrayAt {
-    POINT pt;
-    HMONITOR mon;
-    HWND h;
-};
-static BOOL CALLBACK TrayAtProc(HWND h, LPARAM lp) {
-    auto* t = (TrayAt*)lp;
-    wchar_t cls[64];
-    DWORD pid = 0;
-    GetWindowThreadProcessId(h, &pid);
-    RECT r;
-    if (pid == GetCurrentProcessId() && GetClassNameW(h, cls, ARRAYSIZE(cls)) &&
-        (!wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd")) && IsWindowVisible(h) &&
-        GetWindowRect(h, &r) && PtInRect(&r, t->pt)) {
-        t->mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
-        t->h = h;
-        return FALSE;
+static HWND TrayAt(POINT pt, HMONITOR* mon) {
+    for (HWND h : TrayWindows()) {
+        RECT r;
+        if (IsWindowVisible(h) && GetWindowRect(h, &r) && PtInRect(&r, pt)) {
+            if (mon) *mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            return h;
+        }
     }
-    return TRUE;
+    if (mon) *mon = nullptr;
+    return nullptr;
 }
 static void ReadButtonsAsync(HWND tray);
 static int ButtonIndexAt(HWND tray, POINT pt);
 static HMONITOR TaskbarMonitorAt(POINT pt) {
-    TrayAt t{pt, nullptr, nullptr};
-    EnumWindows(TrayAtProc, (LPARAM)&t);
-    return t.mon;
+    HMONITOR m;
+    TrayAt(pt, &m);
+    return m;
 }
 
 static void* g_dragFrom = nullptr;   // its taskbar
@@ -2062,11 +2064,17 @@ static std::wstring GroupLinkPath(void* g);
 static HMONITOR TaskbarMonitorAt(POINT pt);
 static HWND g_dragImg = nullptr;
 static HMONITOR g_dragImgFrom = nullptr;
-static const int kDragImgSize = 48;
+static const int kDragImgSize = 48;  // at 100 % scaling
+struct DragTray {
+    HWND h;
+    RECT r;
+    HMONITOR mon;
+};
+static std::vector<DragTray> g_dragTrays;  // the taskbars while a pin is dragged (they don't move meanwhile)
 static const wchar_t kDragImgClass[] = L"TaskbarIndependentPerMonitorDragImage";
 
 // Icon of a pinned app: from its shortcut, or from the Apps folder by app ID (packaged apps)
-static HBITMAP GroupIcon(void* g) {
+static HBITMAP GroupIcon(void* g, int size) {
     IShellItemImageFactory* f = nullptr;
     std::wstring lnk = GroupLinkPath(g);
     if (!lnk.empty()) SHCreateItemFromParsingName(lnk.c_str(), nullptr, IID_PPV_ARGS(&f));
@@ -2077,7 +2085,7 @@ static HBITMAP GroupIcon(void* g) {
     }
     HBITMAP bmp = nullptr;
     if (f) {
-        f->GetImage(SIZE{kDragImgSize, kDragImgSize}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bmp);
+        f->GetImage(SIZE{size, size}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bmp);
         f->Release();
     }
     return bmp;
@@ -2101,7 +2109,14 @@ static void CreateDragImage(void* g, HMONITOR from) {
         registered = RegisterClassW(&wc) != 0;
         if (!registered) return;
     }
-    HBITMAP bmp = GroupIcon(g);
+    g_dragTrays.clear();
+    UINT dpi = 96;
+    for (HWND h : TrayWindows()) {
+        DragTray t{h, {}, MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST)};
+        if (IsWindowVisible(h) && GetWindowRect(h, &t.r)) g_dragTrays.push_back(t);
+        if (t.mon == from) dpi = GetDpiForWindow(h);
+    }
+    HBITMAP bmp = GroupIcon(g, MulDiv(kDragImgSize, dpi ? dpi : 96, 96));
     if (!bmp) return;
     BITMAP bm{};
     GetObjectW(bmp, sizeof(bm), &bm);
@@ -2127,16 +2142,18 @@ static void CreateDragImage(void* g, HMONITOR from) {
 
 // Follow the mouse; hidden while it's over the pin's own taskbar
 static void DragImageTimerProc() {
-    if (!g_dragImg) {
-        KillTimer(g_msgWnd, kDragImageTimerId);
+    // also gone once the button is released, in case a drag ended without being reported
+    if (!g_dragImg || !(GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000)) {
+        DestroyDragImage();
         return;
     }
     POINT pt;
     GetCursorPos(&pt);
-    TrayAt t{pt, nullptr, nullptr};
-    EnumWindows(TrayAtProc, (LPARAM)&t);
-    bool show = t.mon != g_dragImgFrom;
-    if (show && t.h && !g_win10) ReadButtonsAsync(t.h);  // the place where it's dropped
+    const DragTray* over = nullptr;
+    for (auto& t : g_dragTrays)
+        if (PtInRect(&t.r, pt)) over = &t;
+    bool show = !over || over->mon != g_dragImgFrom;
+    if (over && show && !g_win10) ReadButtonsAsync(over->h);  // the place where it's dropped
     RECT r;
     GetWindowRect(g_dragImg, &r);
     SetWindowPos(g_dragImg, HWND_TOPMOST, pt.x - (r.right - r.left) / 2, pt.y - (r.bottom - r.top) / 2, 0, 0,
@@ -2249,6 +2266,23 @@ static void DragStarted11_hook(void* self, Float2 pt) {
     DragStarted11_orig(self, pt);
 }
 
+// Worker threads of the mod: Wh_ModUninit waits for them (they end quickly once g_unloading is set)
+static std::mutex g_threadsMx;
+static std::vector<HANDLE> g_threads;
+
+static bool StartWorker(LPTHREAD_START_ROUTINE proc, void* param) {
+    HANDLE t = CreateThread(nullptr, 0, proc, param, 0, nullptr);
+    if (!t) return false;
+    std::lock_guard<std::mutex> l(g_threadsMx);
+    std::erase_if(g_threads, [](HANDLE h) {  // drop finished ones
+        if (WaitForSingleObject(h, 0) != WAIT_OBJECT_0) return false;
+        CloseHandle(h);
+        return true;
+    });
+    g_threads.push_back(t);
+    return true;
+}
+
 // Windows 11: the place of a drop among the buttons of a taskbar, from their positions as UI Automation
 // reports them (in the order of the taskbar's button list). They are read while a pin is dragged over
 // another taskbar, on a worker thread - the taskbar thread answers UI Automation itself - so that the place
@@ -2257,73 +2291,74 @@ static std::mutex g_btnMx;
 static HWND g_btnTray = nullptr;      // taskbar of the last reading
 static std::vector<int> g_btnCenters;  // its buttons' centers (screen x)
 static DWORD g_btnTick = 0;
-static std::atomic<bool> g_btnReading{false};
+static HANDLE g_btnEvent = nullptr;  // wakes the reader (also when the mod unloads)
+static std::atomic<HWND> g_btnRequest{nullptr};
+static std::atomic<bool> g_btnStarted{false};
 
-static DWORD WINAPI ReadButtonsThread(LPVOID p) {
-    HWND tray = (HWND)p;
-    std::vector<int> centers;
-    bool ok = false;
-    if (SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
-        IUIAutomation* uia = nullptr;
-        IUIAutomationElement* bar = nullptr;
-        IUIAutomationCondition* cond = nullptr;
-        IUIAutomationElementArray* all = nullptr;
-        VARIANT cls;
-        VariantInit(&cls);
-        cls.vt = VT_BSTR;
-        cls.bstrVal = SysAllocString(L"Taskbar.TaskListButtonAutomationPeer");
-        int n = 0;
-        if (cls.bstrVal &&
-            SUCCEEDED(CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia))) &&
-            SUCCEEDED(uia->ElementFromHandle(tray, &bar)) && bar &&
-            SUCCEEDED(uia->CreatePropertyCondition(UIA_ClassNamePropertyId, cls, &cond)) &&
-            SUCCEEDED(bar->FindAll(TreeScope_Descendants, cond, &all)) && all && SUCCEEDED(all->get_Length(&n))) {
-            ok = true;
-            for (int i = 0; i < n; i++) {
-                IUIAutomationElement* e = nullptr;
-                RECT r{};
-                if (SUCCEEDED(all->GetElement(i, &e)) && e) {
-                    if (SUCCEEDED(e->get_CurrentBoundingRectangle(&r))) centers.push_back((r.left + r.right) / 2);
-                    e->Release();
-                }
-            }
+// The centers of the task buttons of a taskbar window (false if they can't be read)
+static bool ReadButtons(IUIAutomation* uia, HWND tray, std::vector<int>& centers) {
+    IUIAutomationElement* bar = nullptr;
+    IUIAutomationCondition* cond = nullptr;
+    IUIAutomationElementArray* all = nullptr;
+    VARIANT cls;
+    VariantInit(&cls);
+    cls.vt = VT_BSTR;
+    cls.bstrVal = SysAllocString(L"Taskbar.TaskListButtonAutomationPeer");
+    int n = 0;
+    bool ok = cls.bstrVal && SUCCEEDED(uia->ElementFromHandle(tray, &bar)) && bar &&
+              SUCCEEDED(uia->CreatePropertyCondition(UIA_ClassNamePropertyId, cls, &cond)) &&
+              SUCCEEDED(bar->FindAll(TreeScope_Descendants, cond, &all)) && all && SUCCEEDED(all->get_Length(&n));
+    for (int i = 0; ok && i < n; i++) {
+        IUIAutomationElement* e = nullptr;
+        RECT r{};
+        if (SUCCEEDED(all->GetElement(i, &e)) && e) {
+            if (SUCCEEDED(e->get_CurrentBoundingRectangle(&r))) centers.push_back((r.left + r.right) / 2);
+            e->Release();
         }
-        if (all) all->Release();
-        if (cond) cond->Release();
-        if (bar) bar->Release();
-        if (uia) uia->Release();
-        VariantClear(&cls);
-        CoUninitialize();
     }
-    if (ok) {
+    if (all) all->Release();
+    if (cond) cond->Release();
+    if (bar) bar->Release();
+    VariantClear(&cls);
+    return ok;
+}
+
+// One reader for the whole session, waiting for requests
+static DWORD WINAPI ReadButtonsThread(LPVOID) {
+    bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+    IUIAutomation* uia = nullptr;
+    if (com) CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia));
+    while (WaitForSingleObject(g_btnEvent, INFINITE) == WAIT_OBJECT_0 && !g_unloading) {
+        HWND tray = g_btnRequest.exchange(nullptr);
+        std::vector<int> centers;
+        if (!tray || !uia || !ReadButtons(uia, tray, centers)) continue;
         std::lock_guard<std::mutex> l(g_btnMx);
         g_btnTray = tray;
         g_btnCenters = centers;
         g_btnTick = GetTickCount();
     }
-    g_btnReading = false;
-    FreeLibraryAndExitThread(ModInstance(), 0);
+    if (uia) uia->Release();
+    if (com) CoUninitialize();
+    return 0;
 }
 
-// Read the buttons of a taskbar (at most every 250 ms, one reading at a time)
+// Read the buttons of a taskbar (at most every 250 ms)
 static void ReadButtonsAsync(HWND tray) {
     if (!tray || g_unloading) return;
     {
         std::lock_guard<std::mutex> l(g_btnMx);
         if (g_btnTray == tray && GetTickCount() - g_btnTick < 250) return;
     }
-    if (g_btnReading.exchange(true)) return;
-    HMODULE self = nullptr;
-    HANDLE t = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)&ReadButtonsThread, &self)) {
-        t = CreateThread(nullptr, 0, ReadButtonsThread, tray, 0, nullptr);
-        if (!t) FreeLibrary(self);
+    if (!g_btnStarted.exchange(true)) {
+        g_btnEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (g_btnEvent && !StartWorker(ReadButtonsThread, nullptr)) {
+            CloseHandle(g_btnEvent);
+            g_btnEvent = nullptr;
+        }
     }
-    if (t) {
-        CloseHandle(t);
-    } else {
-        g_btnReading = false;
-    }
+    if (!g_btnEvent) return;
+    g_btnRequest = tray;
+    SetEvent(g_btnEvent);
 }
 
 // Place at a point of a taskbar (number of its buttons left of it), -1 without a fresh reading
@@ -2342,13 +2377,13 @@ static void DragCompleted11_hook(void* self) {
     g_dragGroup = nullptr;
     POINT p{};
     GetCursorPos(&p);
-    TrayAt t{p, nullptr, nullptr};
-    EnumWindows(TrayAtProc, (LPARAM)&t);
+    HMONITOR target = nullptr;
+    HWND tray = TrayAt(p, &target);
     DestroyDragImage();
     DragCompleted11_orig(self);
-    if (g_dragFrom && (!t.mon || t.mon == GetMonitor_orig(g_dragFrom))) SaveBarOrder(g_dragFrom);
+    if (g_dragFrom && (!target || target == GetMonitor_orig(g_dragFrom))) SaveBarOrder(g_dragFrom);
     g_sortingBar = nullptr;
-    if (g && g_dragFrom) MovePinTo(g, GetMonitor_orig(g_dragFrom), t.mon, ButtonIndexAt(t.h, p));
+    if (g && g_dragFrom) MovePinTo(g, GetMonitor_orig(g_dragFrom), target, ButtonIndexAt(tray, p));
     if (g) ((IUnknown*)g)->Release();
 }
 
@@ -2372,6 +2407,12 @@ static void PersistOrder_hook(void* self) {
     PersistOrder_orig(self);
     // then give every taskbar its own order back
     if (g_msgWnd && !g_s.pinsEverywhere) SetTimer(g_msgWnd, kOrderTimerId, 250, nullptr);
+}
+
+static void OrderSaveTimerProc() {
+    KillTimer(g_msgWnd, kOrderSaveTimerId);
+    std::lock_guard<std::mutex> l(g_orderMx);
+    if (g_orderLoaded) SavePinOrderLocked();
 }
 
 static void OrderTimerProc() {
@@ -2603,8 +2644,16 @@ static void MoveToMonitor(HWND h, HMONITOR to) {
     // the normal position in workspace coordinates: shift it by the difference of the work areas
     RECT& r = wp.rcNormalPosition;
     OffsetRect(&r, b.rcWork.left - a.rcWork.left, b.rcWork.top - a.rcWork.top);
-    int w = std::min(r.right - r.left, (LONG)(b.rcWork.right - b.rcWork.left));
-    int ht = std::min(r.bottom - r.top, (LONG)(b.rcWork.bottom - b.rcWork.top));
+    // A per-monitor DPI aware app scales itself by the ratio of the monitors' scaling when it arrives:
+    // limit the size so that it still fits the work area afterwards
+    UINT dpiFrom = 96, dpiTo = 96, dummy;
+    bool perMonitor =
+        GetAwarenessFromDpiAwarenessContext(GetWindowDpiAwarenessContext(h)) == DPI_AWARENESS_PER_MONITOR_AWARE;
+    if (!perMonitor || FAILED(GetDpiForMonitor(from, MDT_EFFECTIVE_DPI, &dpiFrom, &dummy)) ||
+        FAILED(GetDpiForMonitor(to, MDT_EFFECTIVE_DPI, &dpiTo, &dummy)) || !dpiFrom || !dpiTo)
+        dpiFrom = dpiTo = 96;
+    int w = std::min((int)(r.right - r.left), MulDiv(b.rcWork.right - b.rcWork.left, dpiFrom, dpiTo));
+    int ht = std::min((int)(r.bottom - r.top), MulDiv(b.rcWork.bottom - b.rcWork.top, dpiFrom, dpiTo));
     r.right = r.left + w;
     r.bottom = r.top + ht;
     if (wp.showCmd == SW_SHOWMINIMIZED) wp.showCmd = SW_SHOWNORMAL;
@@ -2622,6 +2671,7 @@ static DWORD WINAPI MoveWindowThread(LPVOID p) {
         Sleep(100);
         if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) break;
         if (!IsWindowVisible(job.h)) continue;
+        if (IsHungAppWindow(job.h)) break;  // SetWindowPlacement would block (and the unload with it)
         if (MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST) != job.to) {
             MoveToMonitor(job.h, job.to);
             moves++;
@@ -2629,8 +2679,7 @@ static DWORD WINAPI MoveWindowThread(LPVOID p) {
     }
     Wh_Log(L"-> Launched window %p: moved %d time(s), now on monitor %d", (void*)job.h, moves,
            MonNumber(MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST)));
-    // the thread holds a reference to the mod, released only now: unloading never pulls the code away
-    FreeLibraryAndExitThread(ModInstance(), 0);
+    return 0;
 }
 
 // A new window of a group: the launched app? Then move it to the clicked taskbar's monitor
@@ -2639,15 +2688,11 @@ static void CheckLaunched(HWND h, void* g) {
     if (KeyOf(g) != g_launchKey) return;
     g_launchKey.clear();
     if (MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) == g_launchMon) return;
-    HMODULE self = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)&MoveWindowThread, &self)) return;
     auto* job = new MoveJob{h, g_launchMon};
-    if (HANDLE t = CreateThread(nullptr, 0, MoveWindowThread, job, 0, nullptr)) {
-        CloseHandle(t);
+    if (StartWorker(MoveWindowThread, job)) {
         Wh_Log(L"-> Launched window %p: moving to monitor %d", (void*)h, MonNumber(g_launchMon));
     } else {
         delete job;
-        FreeLibrary(self);
     }
 }
 
@@ -2704,7 +2749,6 @@ static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
 //  3. Unpin on X (only pinned there): real unpin, rule removed
 //  4. Unpin on X (also on Y): Windows would unpin globally -> skipped, only X is removed
 
-static DWORD g_initTick = 0;
 static const wchar_t* AppOf(void* g) {
     PCWSTR id = (g && pGroupGetAppID) ? pGroupGetAppID(g) : nullptr;
     return id ? id : L"?";
@@ -2868,8 +2912,10 @@ static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
     Wh_Log(L"-> Additionally pinned on monitor %d (mask 0x%X, order kept): %ls", mon, m, AppOf(g));
     g_swallowAddKey = KeyOf(g);
     g_swallowAddTick = GetTickCount();
-    g_swallowRemoveKey = KeyOf(g);  // Windows 10 removes the old pin afterwards
-    g_swallowRemoveTick = GetTickCount();
+    if (g_win10) {  // Windows 10 removes the old pin afterwards
+        g_swallowRemoveKey = KeyOf(g);
+        g_swallowRemoveTick = GetTickCount();
+    }
     QueueApply(g);
     SetFakeGroup(nullptr);
     return true;
@@ -3018,11 +3064,7 @@ static const wchar_t kAdvKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\
 using RegGetValueW_t = decltype(&RegGetValueW);
 static RegGetValueW_t RegGetValueW_orig;
 
-static bool IsTaskbarDllAddress(void* p) {
-    MODULEINFO mi{};
-    return g_tb && GetModuleInformation(GetCurrentProcess(), g_tb, &mi, sizeof(mi)) &&
-           (char*)p >= (char*)mi.lpBaseOfDll && (char*)p < (char*)mi.lpBaseOfDll + mi.SizeOfImage;
-}
+static bool IsTaskbarDllAddress(void* p) { return g_tbLo && (char*)p >= g_tbLo && (char*)p < g_tbHi; }
 
 // -1: report 0 if the setting is on. Otherwise: the value to report (used while unloading).
 static std::atomic<int> g_reportedAppsMode{-1};
@@ -3085,7 +3127,8 @@ static void InitAppsModeHook() {
 // Explorer: if it only applies to one taskbar, the global unpin is skipped.
 
 static HRESULT (*pGetAppIDForPinned)(void*, PCIDLIST_ABSOLUTE, PWSTR*);
-// Windows 10 hooks CPinnedList::InternalModify, which has a flags parameter (Windows 11 ignores it)
+// Windows 10 hooks CPinnedList::InternalModify, which has a flags parameter. Windows 11's
+// CPinnedList::Modify has none: the hook must not read it there.
 using PinModify_t = HRESULT (*)(void*, PCIDLIST_ABSOLUTE, PCIDLIST_ABSOLUTE, int, int);
 static PinModify_t PinModify_orig;
 
@@ -3117,7 +3160,7 @@ static bool AskExtraPin(PCIDLIST_ABSOLUTE pidl) {
 }
 
 static HRESULT PinModify_hook(void* self, PCIDLIST_ABSOLUTE from, PCIDLIST_ABSOLUTE to, int caller, int flags) {
-    if (from && !to && !flags) {  // flags 1 = MarkAsTombstone (Windows 10): not a user unpin
+    if (from && !to && !(g_win10 && flags)) {  // flags 1 = MarkAsTombstone (Windows 10 only): not a user unpin
         PWSTR app = nullptr;
         if (pGetAppIDForPinned) pGetAppIDForPinned(self, from, &app);
         HWND w = FindWindowExW(HWND_MESSAGE, nullptr, kMsgClass, nullptr);
@@ -3368,6 +3411,11 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     g_tb = tb;
+    MODULEINFO mi{};
+    if (GetModuleInformation(GetCurrentProcess(), tb, &mi, sizeof(mi))) {
+        g_tbLo = (char*)mi.lpBaseOfDll;
+        g_tbHi = g_tbLo + mi.SizeOfImage;
+    }
     if (!(g_win10 ? HookWin10(tb) : HookWin11(tb))) {
         Wh_Log(L"HookSymbols failed");
         return FALSE;
@@ -3585,6 +3633,7 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    g_unloading = true;  // also set by Wh_ModBeforeUninit
     if (g_msgWnd) {
         SendMessageW(g_msgWnd, kMsgCleanup, 0, 0);  // runs the cleanup on the taskbar thread
     } else {
@@ -3592,6 +3641,18 @@ void Wh_ModUninit() {
         SetJumpGroup(nullptr);
         ReleaseWindows(true);
     }
+    if (g_btnEvent) SetEvent(g_btnEvent);  // the button reader ends (g_unloading is set)
+    std::vector<HANDLE> threads;  // worker threads still running
+    {
+        std::lock_guard<std::mutex> l(g_threadsMx);
+        threads.swap(g_threads);
+    }
+    for (HANDLE t : threads) {
+        WaitForSingleObject(t, INFINITE);
+        CloseHandle(t);
+    }
+    if (g_btnEvent) CloseHandle(g_btnEvent);
+    g_btnEvent = nullptr;
     UnregisterClassW(kMsgClass, ModInstance());
     UnregisterClassW(kDragImgClass, ModInstance());
     // The hooks are removed at this point: taskbar.dll reads the real setting again
