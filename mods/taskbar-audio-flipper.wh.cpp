@@ -2579,9 +2579,18 @@ enum class IconStyle {
     Fluent = 1,   // Glyphs from the Windows icon font, in the taskbar's color, like its own icons (the default).
 };
 
+// Glyphs from the Windows icon font for the devices.
+const wchar_t* const kGlyphMute = L"\uE74F";
+const wchar_t* const kGlyphMicOff = L"\uEC54";
+const wchar_t* const kGlyphSpeakers = L"\uE7F5";
+const wchar_t* const kGlyphHeadphone = L"\uE7F6";
+const wchar_t* const kGlyphHeadset = L"\uE95B";
+const wchar_t* const kGlyphTvMonitor = L"\uE7F4";
+const wchar_t* const kGlyphMicrophone = L"\uE720";
+
 // The glyph for a muted (or missing) output or input: a struck-through speaker or microphone.
 const wchar_t* MutedGlyph(EDataFlow flow) {
-    return flow == eCapture ? L"\uEC54" : L"\uE74F";  // MicOff, Mute
+    return flow == eCapture ? kGlyphMicOff : kGlyphMute;
 }
 
 // The glyph for the output's or input's kind, or the muted one when there's no device. Inputs of
@@ -2592,15 +2601,15 @@ const wchar_t* GlyphFor(EDataFlow flow, const std::optional<AudioStatus>& status
     }
     switch (status->device.kind) {
         case DeviceKind::Headphones:
-            return L"\uE7F6";  // Headphone
+            return kGlyphHeadphone;
         case DeviceKind::Headset:
-            return L"\uE95B";  // Headset
+            return kGlyphHeadset;
         case DeviceKind::Display:
-            return L"\uE7F4";  // TVMonitor
+            return kGlyphTvMonitor;
         case DeviceKind::Microphone:
-            return L"\uE720";  // Microphone
+            return kGlyphMicrophone;
         default:
-            return flow == eCapture ? L"\uE720" : L"\uE7F5";  // Microphone, Speakers
+            return flow == eCapture ? kGlyphMicrophone : kGlyphSpeakers;
     }
 }
 
