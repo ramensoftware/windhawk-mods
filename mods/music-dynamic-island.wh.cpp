@@ -1,37 +1,67 @@
 // ==WindhawkMod==
 // @id              music-dynamic-island
 // @name            Music Dynamic Island 
-// @description     Music Dynamic Island inspired by Iphone's one and Matcha external music player
+// @description     Music Dynamic Island inspired by iPhone's one and Matcha external music player
 // @version         1.1.0
 // @author          MrsWorthless
-// @github          https://github.com/MrsWorthless
-// @include         explorer.exe
-// @compilerOptions -lgdi32 -luser32 -lgdiplus -lole32 -lshlwapi -ldwmapi -lwininet -lwindowsapp -lruntimeobject
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -luser32 -lgdiplus -lole32 -lshlwapi -lshell32 -lwininet -lwindowsapp -lruntimeobject
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Music Dynamic Island
+A smooth, DPI-aware desktop music island inspired by the iPhone Dynamic Island and the Matcha external music player. It features an atmospheric blurred album-art mesh backdrop, an expandable bottom lyrics drawer, and a full two-column Apple Music / Matcha studio view with word-by-word karaoke lyric illumination.
+*/
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - TopOffset: 8
   $name: Default Top Offset (px)
+  $description: Distance from the top of the primary monitor work area (minimum 0).
 - CompactWidth: 196
   $name: Compact Width (px)
+  $description: Width of the collapsed pill in logical pixels at 96 DPI (minimum 150).
 - CompactHeight: 34
   $name: Compact Height (px)
+  $description: Height of the collapsed pill in logical pixels at 96 DPI (minimum 28).
 - NormalWidth: 328
   $name: Normal Expanded Width (px)
+  $description: Width of the hovered media card in logical pixels at 96 DPI (minimum 290).
 - NormalHeight: 128
   $name: Normal Expanded Height (px)
-- StudioWidth: 760
+  $description: Height of the hovered media card before the lyrics drawer opens (minimum 118).
+- BigWidth: 760
   $name: Full Studio Width (px)
-- StudioHeight: 460
+  $description: Width of the expanded two-column studio window in logical pixels (minimum 680).
+- BigHeight: 460
   $name: Full Studio Height (px)
+  $description: Height of the expanded two-column studio window in logical pixels (minimum 430).
 - GlassOpacity: 240
   $name: Glass Richness (180-255)
+  $description: Opacity of the frosted glass backdrop (valid range 180 to 255).
+- PreferSpotify: true
+  $name: Prefer Playing Spotify Session
+  $description: When enabled, an actively playing Spotify session takes priority over background browser tabs.
+- AutoHideFullscreen: true
+  $name: Auto-Hide in Fullscreen Apps
+  $description: Automatically hides the island while a fullscreen game or video is active.
+- HideHotkeyModCtrl: true
+  $name: Require Ctrl for F12 Hide Hotkey
+  $description: Uses Ctrl+F12 when enabled (recommended so F12 in browsers still opens DevTools), or bare F12 when disabled.
+- EnableOnlineLyrics: false
+  $name: Enable Online Lyrics Lookup (LRCLIB)
+  $description: Opt-in setting that sends the current track title and artist to lrclib.net over HTTPS to fetch synced lyrics. Off by default.
+- LocalLyricsFolder: ""
+  $name: Local .lrc Folder (Optional)
+  $description: Optional folder path to load offline synced .lrc files (matches Artist - Title.lrc or Title.lrc).
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
+#include <shellapi.h>
 #include <objidl.h>
 #include <shlwapi.h>
 #include <dwmapi.h>
@@ -48,6 +78,7 @@
 #include <winrt/Windows.Storage.Streams.h>
 
 #include <thread>
+#include <optional>
 #include <atomic>
 #include <mutex>
 #include <string>
@@ -56,7 +87,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <algorithm>
+
+extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 using namespace Gdiplus;
 using namespace winrt::Windows::Media;
@@ -65,23 +99,40 @@ using namespace winrt::Windows::Storage::Streams;
 
 constexpr UINT WM_ISLAND_RELOAD_SETTINGS = WM_APP + 1;
 constexpr UINT WM_ISLAND_SHUTDOWN        = WM_APP + 2;
+constexpr UINT WM_ISLAND_MEDIA_CHANGED   = WM_APP + 3;
 constexpr UINT_PTR TIMER_ID_FRAME        = 1;
+constexpr int HOTKEY_ID_HIDE             = 1;
+
+constexpr UINT TIMER_INTERVAL_ANIM         = 8;
+constexpr UINT TIMER_INTERVAL_IDLE_PLAYING = 250;
 
 struct IslandSettings {
     int topOffset = 8, compactW = 196, compactH = 34;
     int expandedW = 328, expandedH = 128, bigW = 760, bigH = 460, glassOpacity = 240;
+    bool preferSpotify = true, autoHideFullscreen = true, hideHotkeyCtrl = true, enableOnlineLyrics = false;
+    std::wstring localLyricsFolder;
 } g_set;
 
 struct LyricLine { double timeSec; std::wstring text; };
 struct LyricHitBox { int lineIdx; RectF rect; };
 
-std::thread        g_uiThread, g_smtcThread, g_audioThread, g_lyricsThread;
+[[clang::no_destroy]] std::optional<std::thread> g_uiThread;
+HANDLE            g_uiReadyEvent  = nullptr;
+HANDLE            g_stopEvent     = nullptr;
+HANDLE            g_smtcWakeEvent = nullptr;
+HANDLE            g_audioWakeEvent = nullptr;
+HANDLE            g_lyricsWakeEvent = nullptr;
+
 std::atomic<HWND>  g_hWnd{nullptr};
-std::atomic<bool>  g_stopThreads{false};
+std::atomic<bool>  g_audioCaptureNeeded{false};
+std::atomic<bool>  g_audioDeviceChanged{false};
 std::atomic<int>   g_pendingCmd{0};
 std::atomic<float> g_pendingSeek{-1.0f};
 std::atomic<float> g_audioBands[5]{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-HANDLE             g_mutex = nullptr;
+
+std::mutex g_inetMutex;
+HINTERNET  g_activeInetNet = nullptr;
+HINTERNET  g_activeInetUrl = nullptr;
 
 std::mutex g_mediaMutex;
 struct MediaData {
@@ -95,39 +146,168 @@ struct MediaData {
     Color accent = Color(255, 220, 90, 140), prevAccent = Color(255, 220, 90, 140);
     std::unique_ptr<Bitmap> bigArt, prevBigArt, expArt, prevExpArt, miniArt, prevMiniArt, blurBg, prevBlurBg;
     std::vector<LyricLine> lyrics;
-    std::wstring lyricStatus = L"No synced lyrics";
+    std::wstring lyricStatus = L"Lyrics lookup disabled in settings";
 } g_media;
+
+struct CachedRenderResources {
+    HDC     memDC  = nullptr;
+    HBITMAP dib    = nullptr;
+    HBITMAP oldBmp = nullptr;
+    int     width  = 0;
+    int     height = 0;
+
+    std::unique_ptr<FontFamily> fontFamily;
+    std::unique_ptr<Font>       titleFont;
+    std::unique_ptr<Font>       subFont;
+    std::unique_ptr<Font>       timeFont;
+    std::unique_ptr<Font>       drawerActFont;
+    std::unique_ptr<Font>       drawerNextFont;
+    std::unique_ptr<Font>       bigTitleFont;
+    std::unique_ptr<Font>       bigSubFont;
+    std::unique_ptr<Font>       bigLrcFont;
+
+    uint32_t          cachedLyricSeq   = 0;
+    size_t            cachedLyricCount = 0;
+    REAL              cachedLyricWidth = 0.0f;
+    std::vector<REAL> cachedLineH;
+    std::vector<REAL> cachedLineY;
+
+    void EnsureSurface(HDC hdcScreen, int w, int h) {
+        if (memDC && dib && width == w && height == h) {
+            return;
+        }
+        ReleaseSurface();
+        memDC = CreateCompatibleDC(hdcScreen);
+        BITMAPINFO bmi{};
+        bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth       = w;
+        bmi.bmiHeader.biHeight      = -h;
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        void* bits = nullptr;
+        dib = CreateDIBSection(memDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (dib) {
+            oldBmp = (HBITMAP)SelectObject(memDC, dib);
+            width  = w;
+            height = h;
+        }
+    }
+
+    void EnsureFonts() {
+        if (fontFamily && titleFont) return;
+        fontFamily     = std::make_unique<FontFamily>(L"Segoe UI");
+        titleFont      = std::make_unique<Font>(fontFamily.get(), 13.5f, FontStyleBold, UnitPixel);
+        subFont        = std::make_unique<Font>(fontFamily.get(), 12.0f, FontStyleBold, UnitPixel);
+        timeFont       = std::make_unique<Font>(fontFamily.get(), 10.5f, FontStyleBold, UnitPixel);
+        drawerActFont  = std::make_unique<Font>(fontFamily.get(), 12.5f, FontStyleBold, UnitPixel);
+        drawerNextFont = std::make_unique<Font>(fontFamily.get(), 11.5f, FontStyleBold, UnitPixel);
+        bigTitleFont   = std::make_unique<Font>(fontFamily.get(), 15.0f, FontStyleBold, UnitPixel);
+        bigSubFont     = std::make_unique<Font>(fontFamily.get(), 13.0f, FontStyleBold, UnitPixel);
+        bigLrcFont     = std::make_unique<Font>(fontFamily.get(), 21.0f, FontStyleBold, UnitPixel);
+    }
+
+    void ReleaseSurface() {
+        if (memDC) {
+            if (oldBmp) { SelectObject(memDC, oldBmp); oldBmp = nullptr; }
+            if (dib)    { DeleteObject(dib); dib = nullptr; }
+            DeleteDC(memDC);
+            memDC = nullptr;
+        }
+        width = height = 0;
+    }
+
+    void ReleaseAll() {
+        ReleaseSurface();
+        titleFont.reset(); subFont.reset(); timeFont.reset();
+        drawerActFont.reset(); drawerNextFont.reset();
+        bigTitleFont.reset(); bigSubFont.reset(); bigLrcFont.reset();
+        fontFamily.reset();
+        cachedLineH.clear(); cachedLineY.clear();
+    }
+} g_res;
 
 struct UIState {
     float curW = 196.0f, curH = 34.0f, expandT = 0.0f, bigModeT = 0.0f, drawerT = 0.0f, bigLyricsT = 1.0f;
-    bool hovered = false, hidden = false, wasF12Down = false;
+    float dpiScale = 1.0f;
+bool hovered = false, hidden = false, fullscreenHidden = false, wasF12Down = false;
     bool bigMode = false, showLyrics = false;
     bool hasSavedBigPos = false, draggingWin = false, draggingSeek = false, hoveringSeek = false;
     float savedBigX = 0.0f, savedBigY = 80.0f, bigPosT = 0.0f;
     int curWinX = 0, curWinY = 8;
     POINT dragStartMouse{}, dragStartWin{};
     int hoveredBtn = -1, hoveredLyricIdx = -1;
-    float btnHoverT[8]{}, seekHoverT = 0.0f, seekHoverX = 0.0f;
+    float btnHoverT[8]{}, seekHoverT = 0.0f;
     float dragSeekRatio = 0.0f, dispRatio = 0.0f, holdSeekRatio = -1.0f;
     ULONGLONG holdSeekUntil = 0;
     float smoothBands[5]{}, trackAnimT = 1.0f, bounceW = 0.0f;
     float marqueeTime = 0.0f, smoothLyricIdx = 0.0f;
+    bool marqueeActive = false;
     int lastActiveLyric = -1;
     uint32_t seenSeq = 0;
+    UINT currentTimerInterval = 0;
+    ULONGLONG lastFullscreenCheckMs = 0;
     std::vector<LyricHitBox> lyricHits;
     LONGLONG lastQpc = 0;
     double qpcFreq = 1.0;
 } g_ui;
 
 void LoadModSettings() {
-    g_set.topOffset    = std::max(0, Wh_GetIntSetting(L"TopOffset"));
-    g_set.compactW     = std::max(150, Wh_GetIntSetting(L"CompactWidth"));
-    g_set.compactH     = std::max(28, Wh_GetIntSetting(L"CompactHeight"));
-    g_set.expandedW    = std::max(290, Wh_GetIntSetting(L"NormalWidth"));
-    g_set.expandedH    = std::max(118, Wh_GetIntSetting(L"NormalHeight"));
-    g_set.bigW         = std::max(680, Wh_GetIntSetting(L"StudioWidth"));
-    g_set.bigH         = std::max(430, Wh_GetIntSetting(L"StudioHeight"));
-    g_set.glassOpacity = std::clamp(Wh_GetIntSetting(L"GlassOpacity"), 180, 255);
+    g_set.topOffset          = std::max(0, Wh_GetIntSetting(L"TopOffset"));
+    g_set.compactW           = std::max(150, Wh_GetIntSetting(L"CompactWidth"));
+    g_set.compactH           = std::max(28, Wh_GetIntSetting(L"CompactHeight"));
+    g_set.expandedW          = std::max(290, Wh_GetIntSetting(L"NormalWidth"));
+    g_set.expandedH          = std::max(118, Wh_GetIntSetting(L"NormalHeight"));
+    g_set.bigW               = std::max(680, Wh_GetIntSetting(L"StudioWidth"));
+    g_set.bigH               = std::max(430, Wh_GetIntSetting(L"StudioHeight"));
+    g_set.glassOpacity       = std::clamp(Wh_GetIntSetting(L"GlassOpacity"), 180, 255);
+    g_set.preferSpotify      = Wh_GetIntSetting(L"PreferSpotify") != 0;
+    g_set.autoHideFullscreen = Wh_GetIntSetting(L"AutoHideFullscreen") != 0;
+    g_set.hideHotkeyCtrl     = Wh_GetIntSetting(L"HideHotkeyModCtrl") != 0;
+    g_set.enableOnlineLyrics = Wh_GetIntSetting(L"EnableOnlineLyrics") != 0;
+
+    PCWSTR folderPtr = Wh_GetStringSetting(L"LocalLyricsFolder");
+    g_set.localLyricsFolder = folderPtr ? folderPtr : L"";
+    if (folderPtr) Wh_FreeStringSetting(folderPtr);
+}
+
+void RegisterIslandHotkey(HWND hwnd) {
+    UnregisterHotKey(hwnd, HOTKEY_ID_HIDE);
+    UINT mods = g_set.hideHotkeyCtrl ? MOD_CONTROL : 0;
+    RegisterHotKey(hwnd, HOTKEY_ID_HIDE, mods | MOD_NOREPEAT, VK_F12);
+}
+
+void SetTimerIntervalIfNeeded(HWND hwnd, UINT intervalMs) {
+    if (g_ui.currentTimerInterval == intervalMs) return;
+    if (intervalMs == 0) {
+        KillTimer(hwnd, TIMER_ID_FRAME);
+        g_ui.currentTimerInterval = 0;
+    } else {
+        LARGE_INTEGER n{};
+        QueryPerformanceCounter(&n);
+        g_ui.lastQpc = n.QuadPart;
+        SetTimer(hwnd, TIMER_ID_FRAME, intervalMs, nullptr);
+        g_ui.currentTimerInterval = intervalMs;
+    }
+}
+
+void WakeAnimationTimer(HWND hwnd) {
+    if (!g_ui.hidden && !g_ui.fullscreenHidden) {
+        SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_ANIM);
+    }
+}
+
+void UpdateAudioCaptureNeeded() {
+    bool isPlaying = false;
+    {
+        std::lock_guard<std::mutex> lk(g_mediaMutex);
+        isPlaying = g_media.isPlaying;
+    }
+    bool needed = isPlaying && !g_ui.hidden && !g_ui.fullscreenHidden && (g_ui.bigModeT < 0.95f);
+    bool prev   = g_audioCaptureNeeded.exchange(needed);
+    if (needed && !prev && g_audioWakeEvent) {
+        SetEvent(g_audioWakeEvent);
+    }
 }
 
 void GetRoundRect(GraphicsPath& p, REAL x, REAL y, REAL w, REAL h, REAL r) {
@@ -257,6 +437,7 @@ bool DecodeArt(IRandomAccessStreamReference const& ref, std::unique_ptr<Bitmap>&
 std::string UrlEncodeUtf8(const std::wstring& w) {
     if (w.empty()) return "";
     int sz = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (sz <= 1) return "";
     std::string u(sz - 1, 0);
     WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, u.data(), sz, nullptr, nullptr);
     std::string out; char hex[4];
@@ -268,128 +449,351 @@ std::string UrlEncodeUtf8(const std::wstring& w) {
     return out;
 }
 
-std::string HttpGetQuick(const std::string& url) {
+void AbortActiveHttpRequests() {
+    std::lock_guard<std::mutex> lk(g_inetMutex);
+    if (g_activeInetUrl) {
+        InternetCloseHandle(g_activeInetUrl);
+        g_activeInetUrl = nullptr;
+    }
+    if (g_activeInetNet) {
+        InternetCloseHandle(g_activeInetNet);
+        g_activeInetNet = nullptr;
+    }
+}
+
+std::string HttpGetAbortable(const std::string& url) {
+    if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return "";
     HINTERNET hNet = InternetOpenA("MusicDynamicIsland/1.1", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!hNet) return "";
-    DWORD timeout = 3500;
+    {
+        std::lock_guard<std::mutex> lk(g_inetMutex);
+        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            InternetCloseHandle(hNet);
+            return "";
+        }
+        g_activeInetNet = hNet;
+    }
+
+    DWORD timeout = 2500;
     InternetSetOptionA(hNet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionA(hNet, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
     InternetSetOptionA(hNet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+
     HINTERNET hUrl = InternetOpenUrlA(hNet, url.c_str(), nullptr, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_SECURE, 0);
-    if (!hUrl) { InternetCloseHandle(hNet); return ""; }
-    std::string resp; char buf[2048]; DWORD read = 0;
-    while (InternetReadFile(hUrl, buf, sizeof(buf), &read) && read > 0) resp.append(buf, read);
-    InternetCloseHandle(hUrl); InternetCloseHandle(hNet);
+    if (!hUrl) {
+        std::lock_guard<std::mutex> lk(g_inetMutex);
+        if (g_activeInetNet == hNet) {
+            InternetCloseHandle(hNet);
+            g_activeInetNet = nullptr;
+        }
+        return "";
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_inetMutex);
+        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            InternetCloseHandle(hUrl);
+            if (g_activeInetNet == hNet) {
+                InternetCloseHandle(hNet);
+                g_activeInetNet = nullptr;
+            }
+            return "";
+        }
+        g_activeInetUrl = hUrl;
+    }
+
+    std::string resp;
+    char buf[2048];
+    DWORD read = 0;
+    while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0 &&
+           InternetReadFile(hUrl, buf, sizeof(buf), &read) && read > 0) {
+        resp.append(buf, read);
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(g_inetMutex);
+        if (g_activeInetUrl == hUrl) {
+            InternetCloseHandle(hUrl);
+            g_activeInetUrl = nullptr;
+        }
+        if (g_activeInetNet == hNet) {
+            InternetCloseHandle(hNet);
+            g_activeInetNet = nullptr;
+        }
+    }
     return resp;
+}
+
+bool ParseLrcContent(const std::wstring& wlrc, std::vector<LyricLine>& outLines) {
+    size_t start = 0;
+    while (start < wlrc.size()) {
+        size_t end = wlrc.find(L'\n', start);
+        if (end == std::wstring::npos) end = wlrc.size();
+        std::wstring line = wlrc.substr(start, end - start);
+        start = end + 1;
+        int m = 0; float s = 0.f;
+        size_t brk = line.find(L']');
+        if (line.size() > 6 && line[0] == L'[' && brk != std::wstring::npos &&
+            std::swscanf(line.c_str(), L"[%d:%f]", &m, &s) == 2) {
+            std::wstring rawTxt = line.substr(brk + 1);
+            std::wstring txt;
+            bool inTag = false;
+            for (wchar_t ch : rawTxt) {
+                if (ch == L'<') inTag = true;
+                else if (ch == L'>') inTag = false;
+                else if (!inTag && ch != L'\r') txt += ch;
+            }
+            while (!txt.empty() && (txt.front() == L' ' || txt.front() == L'\t')) txt.erase(txt.begin());
+            while (!txt.empty() && (txt.back() == L' ' || txt.back() == L'\t')) txt.pop_back();
+            if (!txt.empty()) outLines.push_back({m * 60.0 + s, txt});
+        }
+    }
+    return !outLines.empty();
+}
+
+bool TryLoadLocalLrc(const std::wstring& folder, const std::wstring& artist, const std::wstring& title, std::vector<LyricLine>& outLines) {
+    if (folder.empty()) return false;
+    auto sanitize = [](std::wstring s) {
+        for (wchar_t& c : s) {
+            if (wcschr(L"\\/:*?\"<>|", c)) c = L'_';
+        }
+        return s;
+    };
+    std::wstring base = folder;
+    if (base.back() != L'\\' && base.back() != L'/') base += L'\\';
+
+    std::wstring candidates[2] = {
+        base + sanitize(artist + L" - " + title) + L".lrc",
+        base + sanitize(title) + L".lrc"
+    };
+
+    for (auto const& path : candidates) {
+        std::ifstream f(path.c_str(), std::ios::binary);
+        if (!f) continue;
+        std::string raw((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        if (raw.empty()) continue;
+        int wlen = MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), nullptr, 0);
+        if (wlen <= 0) continue;
+        std::wstring wlrc(wlen, 0);
+        MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), wlrc.data(), wlen);
+        if (ParseLrcContent(wlrc, outLines)) return true;
+    }
+    return false;
 }
 
 bool ParseSyncedLyricsJson(const std::string& resp, std::vector<LyricLine>& outLines) {
     size_t pos = 0;
     while ((pos = resp.find("\"syncedLyrics\"", pos)) != std::string::npos) {
         pos += 14;
-        while (pos < resp.size() && (resp[pos] == ' ' || resp[pos] == ':')) ++pos;
+        while (pos < resp.size() && (resp[pos] == ' ' || resp[pos] == ':' || resp[pos] == '\t')) ++pos;
         if (pos >= resp.size() || resp[pos] != '\"') continue;
         ++pos;
-        std::string rawLrc;
-        for (size_t i = pos; i < resp.size(); ++i) {
-            if (resp[i] == '\"' && resp[i - 1] != '\\') break;
-            if (resp[i] == '\\' && i + 1 < resp.size()) {
-                char nx = resp[i + 1];
-                if (nx == 'n') { rawLrc += '\n'; ++i; continue; }
-                if (nx == 'r') { ++i; continue; }
-                if (nx == '\"' || nx == '\\' || nx == '/') { rawLrc += nx; ++i; continue; }
-            }
-            rawLrc += resp[i];
-        }
-        int wlen = MultiByteToWideChar(CP_UTF8, 0, rawLrc.c_str(), -1, nullptr, 0);
-        if (wlen <= 1) continue;
-        std::wstring wlrc(wlen - 1, 0);
-        MultiByteToWideChar(CP_UTF8, 0, rawLrc.c_str(), -1, wlrc.data(), wlen);
 
-        size_t start = 0;
-        while (start < wlrc.size()) {
-            size_t end = wlrc.find(L'\n', start);
-            if (end == std::wstring::npos) end = wlrc.size();
-            std::wstring line = wlrc.substr(start, end - start);
-            start = end + 1;
-            int m = 0; float s = 0.f;
-            size_t brk = line.find(L']');
-            if (line.size() > 6 && line[0] == L'[' && brk != std::wstring::npos &&
-                std::swscanf(line.c_str(), L"[%d:%f]", &m, &s) == 2) {
-                std::wstring rawTxt = line.substr(brk + 1);
-                std::wstring txt;
-                bool inTag = false;
-                for (wchar_t ch : rawTxt) {
-                    if (ch == L'<') inTag = true;
-                    else if (ch == L'>') inTag = false;
-                    else if (!inTag && ch != L'\r') txt += ch;
+        std::wstring wlrc;
+        std::string utf8Chunk;
+        auto flushUtf8 = [&]() {
+            if (utf8Chunk.empty()) return;
+            int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8Chunk.data(), (int)utf8Chunk.size(), nullptr, 0);
+            if (wlen > 0) {
+                size_t oldSz = wlrc.size();
+                wlrc.resize(oldSz + wlen);
+                MultiByteToWideChar(CP_UTF8, 0, utf8Chunk.data(), (int)utf8Chunk.size(), &wlrc[oldSz], wlen);
+            }
+            utf8Chunk.clear();
+        };
+
+        size_t i = pos;
+        for (; i < resp.size(); ++i) {
+            char c = resp[i];
+            if (c == '\"') {
+                ++i;
+                break;
+            }
+            if (c == '\\' && i + 1 < resp.size()) {
+                char nx = resp[++i];
+                if (nx == 'n') utf8Chunk += '\n';
+                else if (nx == 'r') utf8Chunk += '\r';
+                else if (nx == 't') utf8Chunk += ' ';
+                else if (nx == '\"' || nx == '\\' || nx == '/') utf8Chunk += nx;
+                else if (nx == 'u' && i + 4 < resp.size()) {
+                    flushUtf8();
+                    unsigned int cp = 0;
+                    if (std::sscanf(resp.c_str() + i + 1, "%4x", &cp) == 1) {
+                        wlrc += static_cast<wchar_t>(cp);
+                    }
+                    i += 4;
                 }
-                while (!txt.empty() && txt.front() == L' ') txt.erase(txt.begin());
-                while (!txt.empty() && txt.back() == L' ') txt.pop_back();
-                if (!txt.empty()) outLines.push_back({m * 60.0 + s, txt});
+            } else {
+                utf8Chunk += c;
             }
         }
-        if (!outLines.empty()) return true;
+        flushUtf8();
+        pos = i;
+
+        if (ParseLrcContent(wlrc, outLines)) return true;
     }
     return false;
 }
 
 void LyricsWorkerThread() {
     std::wstring fetchedKey;
-    while (!g_stopThreads.load()) {
-        std::wstring curKey, title, artist;
+    bool lastOnlineSetting = false;
+    std::wstring lastFolderSetting;
+
+    HANDLE waitHandles[2] = { g_stopEvent, g_lyricsWakeEvent };
+
+    while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
+        std::wstring curKey, title, artist, localFolder;
+        bool onlineEnabled = false;
         {
             std::lock_guard<std::mutex> lk(g_mediaMutex);
-            curKey = g_media.lyricsKey;
-            title  = g_media.title;
-            artist = g_media.rawArtist;
+            curKey        = g_media.lyricsKey;
+            title         = g_media.title;
+            artist        = g_media.rawArtist;
+            onlineEnabled = g_set.enableOnlineLyrics;
+            localFolder   = g_set.localLyricsFolder;
         }
+
+        bool settingsChanged = (onlineEnabled != lastOnlineSetting) || (localFolder != lastFolderSetting);
+        if (settingsChanged) {
+            lastOnlineSetting = onlineEnabled;
+            lastFolderSetting = localFolder;
+            fetchedKey.clear();
+        }
+
         if (!curKey.empty() && curKey != fetchedKey && title != L"Nothing Playing") {
             fetchedKey = curKey;
             std::vector<LyricLine> lines;
-            std::string tEnc = UrlEncodeUtf8(title), aEnc = UrlEncodeUtf8(artist);
-            std::string resp = HttpGetQuick("https://lrclib.net/api/get?track_name=" + tEnc + "&artist_name=" + aEnc);
-            if (!ParseSyncedLyricsJson(resp, lines)) {
-                resp = HttpGetQuick("https://lrclib.net/api/search?q=" + tEnc + "+" + aEnc);
-                ParseSyncedLyricsJson(resp, lines);
+            std::wstring statusText;
+
+            if (TryLoadLocalLrc(localFolder, artist, title, lines)) {
+                statusText = L"";
+            } else if (!onlineEnabled) {
+                statusText = L"Online lyrics disabled in settings";
+            } else {
+                {
+                    std::lock_guard<std::mutex> lk(g_mediaMutex);
+                    if (g_media.lyricsKey == curKey) g_media.lyricStatus = L"Searching lyrics...";
+                }
+                if (HWND h = g_hWnd.load()) PostMessageW(h, WM_ISLAND_MEDIA_CHANGED, 0, 0);
+
+                std::string tEnc = UrlEncodeUtf8(title), aEnc = UrlEncodeUtf8(artist);
+                std::string resp = HttpGetAbortable("https://lrclib.net/api/get?track_name=" + tEnc + "&artist_name=" + aEnc);
+                if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
+                if (!ParseSyncedLyricsJson(resp, lines)) {
+                    resp = HttpGetAbortable("https://lrclib.net/api/search?q=" + tEnc + "+" + aEnc);
+                    if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) break;
+                    ParseSyncedLyricsJson(resp, lines);
+                }
+                statusText = lines.empty() ? L"No synced lyrics" : L"";
             }
-            std::lock_guard<std::mutex> lk(g_mediaMutex);
-            if (g_media.lyricsKey == curKey) {
-                g_media.lyrics = std::move(lines);
-                g_media.lyricStatus = g_media.lyrics.empty() ? L"No synced lyrics" : L"";
+
+            {
+                std::lock_guard<std::mutex> lk(g_mediaMutex);
+                if (g_media.lyricsKey == curKey) {
+                    g_media.lyrics      = std::move(lines);
+                    g_media.lyricStatus = std::move(statusText);
+                }
             }
+            if (HWND h = g_hWnd.load()) PostMessageW(h, WM_ISLAND_MEDIA_CHANGED, 0, 0);
         }
-        Sleep(100);
+
+        WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
     }
 }
 
+class AudioEndpointNotificationClient final : public IMMNotificationClient {
+    LONG _ref = 1;
+public:
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&_ref); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG r = InterlockedDecrement(&_ref);
+        if (r == 0) delete this;
+        return r;
+    }
+    STDMETHODIMP QueryInterface(REFIID iid, void** ppv) override {
+        if (!ppv) return E_POINTER;
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IMMNotificationClient)) {
+            *ppv = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR) override {
+        if (flow == eRender && role == eConsole) {
+            g_audioDeviceChanged.store(true);
+            if (g_audioWakeEvent) SetEvent(g_audioWakeEvent);
+        }
+        return S_OK;
+    }
+    STDMETHODIMP OnDeviceAdded(LPCWSTR) override { return S_OK; }
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR) override { return S_OK; }
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
+};
+
 void AudioLoopbackThread() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    IMMDeviceEnumerator* pEnum = nullptr; IMMDevice* pDev = nullptr;
-    IAudioClient* pClient = nullptr; IAudioCaptureClient* pCap = nullptr; WAVEFORMATEX* pwfx = nullptr;
-    auto cleanup = [&]() {
+    IMMDeviceEnumerator* pEnum = nullptr;
+    IMMDevice*           pDev = nullptr;
+    IAudioClient*        pClient = nullptr;
+    IAudioCaptureClient* pCap = nullptr;
+    WAVEFORMATEX*        pwfx = nullptr;
+
+    AudioEndpointNotificationClient* pNotify = new AudioEndpointNotificationClient();
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                   __uuidof(IMMDeviceEnumerator), (void**)&pEnum)) && pEnum) {
+        pEnum->RegisterEndpointNotificationCallback(pNotify);
+    }
+
+    auto cleanupClient = [&]() {
         if (pClient) pClient->Stop();
-        if (pwfx) { CoTaskMemFree(pwfx); pwfx = nullptr; }
-        if (pCap) { pCap->Release(); pCap = nullptr; }
+        if (pwfx)    { CoTaskMemFree(pwfx); pwfx = nullptr; }
+        if (pCap)    { pCap->Release(); pCap = nullptr; }
         if (pClient) { pClient->Release(); pClient = nullptr; }
-        if (pDev) { pDev->Release(); pDev = nullptr; }
-        if (pEnum) { pEnum->Release(); pEnum = nullptr; }
+        if (pDev)    { pDev->Release(); pDev = nullptr; }
     };
+
     float lp[4]{}, peak = 0.04f;
-    while (!g_stopThreads.load()) {
+    HANDLE waitHandles[2] = { g_stopEvent, g_audioWakeEvent };
+
+    while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
+        if (!g_audioCaptureNeeded.load()) {
+            cleanupClient();
+            for (int i = 0; i < 5; ++i) g_audioBands[i].store(0.0f);
+            WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
+            continue;
+        }
+
+        if (g_audioDeviceChanged.exchange(false)) {
+            cleanupClient();
+        }
+
         if (!pCap) {
-            cleanup();
-            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnum)) &&
+            cleanupClient();
+            if (pEnum &&
                 SUCCEEDED(pEnum->GetDefaultAudioEndpoint(eRender, eConsole, &pDev)) &&
                 SUCCEEDED(pDev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&pClient)) &&
                 SUCCEEDED(pClient->GetMixFormat(&pwfx)) &&
                 SUCCEEDED(pClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 150000, 0, pwfx, nullptr)) &&
                 SUCCEEDED(pClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCap))) {
                 pClient->Start();
-            } else { cleanup(); Sleep(250); continue; }
+            } else {
+                cleanupClient();
+                if (WaitForSingleObject(g_stopEvent, 250) == WAIT_OBJECT_0) break;
+                continue;
+            }
         }
+
         UINT32 pkt = 0;
-        if (FAILED(pCap->GetNextPacketSize(&pkt))) { cleanup(); continue; }
-        float eng[5]{}; UINT32 count = 0;
+        if (FAILED(pCap->GetNextPacketSize(&pkt))) {
+            cleanupClient();
+            continue;
+        }
+
+        float eng[5]{};
+        UINT32 count = 0;
         while (pkt != 0) {
             BYTE* data = nullptr; UINT32 frames = 0; DWORD flags = 0;
             if (FAILED(pCap->GetBuffer(&data, &frames, &flags, nullptr, nullptr))) break;
@@ -408,6 +812,7 @@ void AudioLoopbackThread() {
             pCap->ReleaseBuffer(frames);
             if (FAILED(pCap->GetNextPacketSize(&pkt))) break;
         }
+
         if (count > 0) {
             float fmax = 0.f, rms[5];
             for (int i = 0; i < 5; ++i) { rms[i] = std::sqrt(eng[i] / count); fmax = std::max(fmax, rms[i]); }
@@ -416,14 +821,27 @@ void AudioLoopbackThread() {
         } else {
             for (int i = 0; i < 5; ++i) g_audioBands[i].store(g_audioBands[i].load() * 0.86f);
         }
-        Sleep(8);
+
+        if (WaitForSingleObject(g_stopEvent, 12) == WAIT_OBJECT_0) break;
     }
-    cleanup(); CoUninitialize();
+
+    cleanupClient();
+    if (pEnum) {
+        pEnum->UnregisterEndpointNotificationCallback(pNotify);
+        pEnum->Release();
+    }
+    pNotify->Release();
+    CoUninitialize();
 }
 
-void SendMediaVk(BYTE vk) {
-    keybd_event(vk, 0, 0, 0);
-    keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+void SendMediaVk(WORD vk) {
+    INPUT inputs[2]{};
+    inputs[0].type       = INPUT_KEYBOARD;
+    inputs[0].ki.wVk     = vk;
+    inputs[1].type       = INPUT_KEYBOARD;
+    inputs[1].ki.wVk     = vk;
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, inputs, sizeof(INPUT));
 }
 
 void SmtcWorkerThread() {
@@ -431,22 +849,101 @@ void SmtcWorkerThread() {
     std::wstring lastKey;
     double lastRawPos = -1.0;
     bool lastPlayingState = false;
-    GlobalSystemMediaTransportControlsSessionManager mgr{nullptr};
 
-    while (!g_stopThreads.load()) {
+    GlobalSystemMediaTransportControlsSessionManager mgr{nullptr};
+    winrt::event_token tokSessions{}, tokCurSession{};
+    bool mgrSubscribed = false;
+
+    struct SubscribedSession {
+        GlobalSystemMediaTransportControlsSession session{nullptr};
+        winrt::event_token tokProps{}, tokPlay{}, tokTime{};
+    };
+    std::vector<SubscribedSession> sessionSubs;
+
+    auto clearSessionSubs = [&]() {
+        for (auto& sub : sessionSubs) {
+            try {
+                if (sub.session) {
+                    sub.session.MediaPropertiesChanged(sub.tokProps);
+                    sub.session.PlaybackInfoChanged(sub.tokPlay);
+                    sub.session.TimelinePropertiesChanged(sub.tokTime);
+                }
+            } catch (...) {}
+        }
+        sessionSubs.clear();
+    };
+
+    auto clearMgrSubs = [&]() {
+        clearSessionSubs();
+        if (mgr && mgrSubscribed) {
+            try {
+                mgr.SessionsChanged(tokSessions);
+                mgr.CurrentSessionChanged(tokCurSession);
+            } catch (...) {}
+        }
+        mgrSubscribed = false;
+        mgr = nullptr;
+    };
+
+    auto refreshSessionSubscriptions = [&]() {
+        clearSessionSubs();
+        if (!mgr) return;
         try {
-            if (!mgr) mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+            auto all = mgr.GetSessions();
+            for (auto const& s : all) {
+                SubscribedSession sub;
+                sub.session = s;
+                sub.tokProps = s.MediaPropertiesChanged([](auto&&, auto&&) {
+                    if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                });
+                sub.tokPlay = s.PlaybackInfoChanged([](auto&&, auto&&) {
+                    if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                });
+                sub.tokTime = s.TimelinePropertiesChanged([](auto&&, auto&&) {
+                    if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                });
+                sessionSubs.push_back(std::move(sub));
+            }
+        } catch (...) {}
+    };
+
+    HANDLE waitHandles[2] = { g_stopEvent, g_smtcWakeEvent };
+    std::atomic<bool> needResubscribeSessions{true};
+
+    while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
+        try {
+            if (!mgr) {
+                mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
+                if (mgr) {
+                    tokSessions = mgr.SessionsChanged([&needResubscribeSessions](auto&&, auto&&) {
+                        needResubscribeSessions.store(true);
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                    });
+                    tokCurSession = mgr.CurrentSessionChanged([](auto&&, auto&&) {
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                    });
+                    mgrSubscribed = true;
+                    needResubscribeSessions.store(true);
+                }
+            }
+
+            if (needResubscribeSessions.exchange(false)) {
+                refreshSessionSubscriptions();
+            }
 
             GlobalSystemMediaTransportControlsSession sess{nullptr};
             if (mgr) {
                 sess = mgr.GetCurrentSession();
-                auto all = mgr.GetSessions();
-                for (auto const& s : all) {
-                    std::wstring appId = s.SourceAppUserModelId().c_str();
-                    auto pb = s.GetPlaybackInfo();
-                    bool pl = pb && (pb.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing);
-                    if (pl && (appId.find(L"Spotify") != std::wstring::npos || appId.find(L"spotify") != std::wstring::npos)) {
-                        sess = s; break;
+                if (g_set.preferSpotify) {
+                    auto all = mgr.GetSessions();
+                    for (auto const& s : all) {
+                        std::wstring appId = s.SourceAppUserModelId().c_str();
+                        auto pb = s.GetPlaybackInfo();
+                        bool pl = pb && (pb.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing);
+                        if (pl && (appId.find(L"Spotify") != std::wstring::npos || appId.find(L"spotify") != std::wstring::npos)) {
+                            sess = s;
+                            break;
+                        }
                     }
                 }
             }
@@ -535,41 +1032,60 @@ void SmtcWorkerThread() {
                     lastKey = key;
                 }
 
+                {
+                    std::lock_guard<std::mutex> lk(g_mediaMutex);
+                    if (changed) {
+                        g_media.prevTitle    = std::move(g_media.title);
+                        g_media.prevSubtitle = std::move(g_media.subtitle);
+                        g_media.prevAccent   = g_media.accent;
+                        g_media.prevBigArt   = std::move(g_media.bigArt);
+                        g_media.prevExpArt   = std::move(g_media.expArt);
+                        g_media.prevMiniArt  = std::move(g_media.miniArt);
+                        g_media.prevBlurBg   = std::move(g_media.blurBg);
+                        g_media.bigArt       = std::move(nBig);
+                        g_media.expArt       = std::move(nExp);
+                        g_media.miniArt      = std::move(nMini);
+                        g_media.blurBg       = std::move(nBlur);
+                        g_media.accent       = nAcc;
+                        g_media.lyrics.clear();
+                        g_media.lyricStatus  = g_set.enableOnlineLyrics ? L"Searching lyrics..." : L"Online lyrics disabled in settings";
+                        g_media.lyricsKey    = key;
+                        g_media.trackSeq++;
+                        if (g_lyricsWakeEvent) SetEvent(g_lyricsWakeEvent);
+                    }
+                    g_media.title     = std::move(t);
+                    g_media.rawArtist = std::move(a);
+                    g_media.subtitle  = std::move(sub);
+                    g_media.isPlaying = playing;
+                    g_media.isShuffle = shuf;
+                    g_media.repeatMode = rep;
+                    g_media.durSec    = dur;
+                    if (hasNewPosAnchor) {
+                        g_media.posSec    = rawPos;
+                        g_media.posTickMs = GetTickCount64();
+                    }
+                }
+            } else {
+                lastKey.clear();
                 std::lock_guard<std::mutex> lk(g_mediaMutex);
-                if (changed) {
-                    g_media.prevTitle    = std::move(g_media.title);
-                    g_media.prevSubtitle = std::move(g_media.subtitle);
-                    g_media.prevAccent   = g_media.accent;
-                    g_media.prevBigArt   = std::move(g_media.bigArt);
-                    g_media.prevExpArt   = std::move(g_media.expArt);
-                    g_media.prevMiniArt  = std::move(g_media.miniArt);
-                    g_media.prevBlurBg   = std::move(g_media.blurBg);
-                    g_media.bigArt       = std::move(nBig);
-                    g_media.expArt       = std::move(nExp);
-                    g_media.miniArt      = std::move(nMini);
-                    g_media.blurBg       = std::move(nBlur);
-                    g_media.accent       = nAcc;
-                    g_media.lyrics.clear();
-                    g_media.lyricStatus  = L"Searching lyrics...";
-                    g_media.lyricsKey    = key;
-                    g_media.trackSeq++;
-                }
-                g_media.title     = std::move(t);
-                g_media.rawArtist = std::move(a);
-                g_media.subtitle  = std::move(sub);
-                g_media.isPlaying = playing; g_media.isShuffle = shuf; g_media.repeatMode = rep;
-                g_media.durSec = dur;
-                if (hasNewPosAnchor) {
-                    g_media.posSec    = rawPos;
-                    g_media.posTickMs = GetTickCount64();
-                }
+                g_media.title      = L"Nothing Playing";
+                g_media.subtitle   = L"Play music to start";
+                g_media.isPlaying  = false;
+                g_media.posSec     = 0.0;
+                g_media.durSec     = 0.0;
+                g_media.lyricsKey.clear();
             }
-        } catch (...) { mgr = nullptr; }
 
-        for (int i = 0; i < 6 && !g_stopThreads.load() && g_pendingCmd.load() == 0 && g_pendingSeek.load() < 0.0f; ++i)
-            Sleep(25);
+            if (HWND h = g_hWnd.load()) PostMessageW(h, WM_ISLAND_MEDIA_CHANGED, 0, 0);
+        } catch (...) {
+            clearMgrSubs();
+        }
+
+        WaitForMultipleObjects(2, waitHandles, FALSE, mgr ? INFINITE : 1000);
     }
-    mgr = nullptr; winrt::uninit_apartment();
+
+    clearMgrSubs();
+    winrt::uninit_apartment();
 }
 
 void DrawVisualizer(Graphics& g, REAL rightX, REAL cy, REAL maxH, BYTE a, Color acc) {
@@ -587,7 +1103,7 @@ void DrawVisualizer(Graphics& g, REAL rightX, REAL cy, REAL maxH, BYTE a, Color 
 }
 
 void DrawMarqueeString(Graphics& g, const std::wstring& txt, Font* font, RectF box, Brush* br) {
-    if (txt.empty()) return;
+    if (txt.empty() || !font) return;
     RectF meas;
     StringFormat nf(StringFormatFlagsNoWrap);
     nf.SetLineAlignment(StringAlignmentCenter);
@@ -597,6 +1113,7 @@ void DrawMarqueeString(Graphics& g, const std::wstring& txt, Font* font, RectF b
         g.DrawString(txt.c_str(), -1, font, box, &nf, br);
         return;
     }
+    g_ui.marqueeActive = true;
     float overflow = meas.Width - box.Width + 12.0f;
     float cycle = std::fmod(g_ui.marqueeTime, 8.0f);
     float offset = 0.0f;
@@ -613,6 +1130,7 @@ void DrawMarqueeString(Graphics& g, const std::wstring& txt, Font* font, RectF b
 
 REAL DrawKaraokeLyricBlock(Graphics& g, const std::wstring& text, Font* font, RectF bounds,
                            float lineProg, bool isActive, BYTE alpha, bool centerAlign, bool measureOnly = false) {
+    if (!font) return 24.0f;
     if (text.empty()) return font->GetHeight(&g) + 6.0f;
 
     const StringFormat* typoFmt = StringFormat::GenericTypographic();
@@ -783,16 +1301,14 @@ void DrawSeekBarSection(Graphics& g, REAL bx, REAL by, REAL bw, double pos, doub
         g.FillEllipse(&dbr, dx - dr, by - dr, dr * 2.0f, dr * 2.0f);
     }
 
-    FontFamily ff(L"Segoe UI");
-    Font timeF(&ff, 10.5f, FontStyleBold, UnitPixel);
     SolidBrush mBr(Color((BYTE)(155 * (a / 255.0f)), 255, 255, 255));
     wchar_t pStr[16], rStr[16];
     FormatMMSS(pos, pStr, 16, false);
     FormatMMSS(std::max(0.0, dur - pos), rStr, 16, true);
 
     StringFormat rFmt; rFmt.SetAlignment(StringAlignmentFar);
-    g.DrawString(pStr, -1, &timeF, RectF(bx, by + 6.0f, 48.0f, 14.0f), nullptr, &mBr);
-    g.DrawString(rStr, -1, &timeF, RectF(bx + bw - 48.0f, by + 6.0f, 48.0f, 14.0f), &rFmt, &mBr);
+    g.DrawString(pStr, -1, g_res.timeFont.get(), RectF(bx, by + 6.0f, 48.0f, 14.0f), nullptr, &mBr);
+    g.DrawString(rStr, -1, g_res.timeFont.get(), RectF(bx + bw - 48.0f, by + 6.0f, 48.0f, 14.0f), &rFmt, &mBr);
 }
 
 REAL GetStudioPlayerColX(REAL px, REAL pw, REAL colW) {
@@ -801,33 +1317,74 @@ REAL GetStudioPlayerColX(REAL px, REAL pw, REAL colW) {
     return centerX + (leftX - centerX) * g_ui.bigLyricsT;
 }
 
-void RenderIslandFrame(HWND hwnd, float dt) {
-    if (g_ui.hidden) return;
-    int winW = (int)std::ceil(g_ui.curW) + 8, winH = (int)std::ceil(g_ui.curH) + 8;
-    int screenW = GetSystemMetrics(SM_CXSCREEN), screenH = GetSystemMetrics(SM_CYSCREEN);
+RECT GetTargetWorkArea(POINT anchorPt) {
+    HMONITOR hMon = MonitorFromPoint(anchorPt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(MONITORINFO);
+    if (hMon && GetMonitorInfoW(hMon, &mi)) {
+        return mi.rcWork;
+    }
+    RECT rc{};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &rc, 0);
+    return rc;
+}
 
-    float stdX = (screenW - winW) * 0.5f, stdY = (float)g_set.topOffset;
-    float defBigX = (screenW - g_set.bigW) * 0.5f, defBigY = std::max(40.0f, (screenH - g_set.bigH) * 0.30f);
+void RenderIslandFrame(HWND hwnd, float dt) {
+    if (g_ui.hidden || g_ui.fullscreenHidden) return;
+
+    UINT dpi = GetDpiForWindow(hwnd);
+    float scale = (dpi > 0) ? ((float)dpi / 96.0f) : 1.0f;
+    g_ui.dpiScale = scale;
+    g_ui.marqueeActive = false;
+
+    float logWinW = std::ceil(g_ui.curW) + 8.0f;
+    float logWinH = std::ceil(g_ui.curH) + 8.0f;
+    int winW = std::max(1, (int)std::ceil(logWinW * scale));
+    int winH = std::max(1, (int)std::ceil(logWinH * scale));
+
+    RECT primaryWork{};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &primaryWork, 0);
+    int workW = primaryWork.right - primaryWork.left;
+    int workH = primaryWork.bottom - primaryWork.top;
+
+    float stdX = primaryWork.left + (workW - winW) * 0.5f;
+    float stdY = primaryWork.top + (float)g_set.topOffset * scale;
+
+    int bigPhysW = (int)std::ceil((g_set.bigW + 8.0f) * scale);
+    int bigPhysH = (int)std::ceil((g_set.bigH + 8.0f) * scale);
+    float defBigX = primaryWork.left + (workW - bigPhysW) * 0.5f;
+    float defBigY = primaryWork.top + std::max(32.0f * scale, (workH - bigPhysH) * 0.30f);
+
+    if (g_ui.hasSavedBigPos && !g_ui.draggingWin) {
+        POINT pt{(LONG)g_ui.savedBigX, (LONG)g_ui.savedBigY};
+        RECT monWork = GetTargetWorkArea(pt);
+        float minX = (float)monWork.left;
+        float maxX = (float)std::max((LONG)minX, monWork.right - winW);
+        float minY = (float)monWork.top;
+        float maxY = (float)std::max((LONG)minY, monWork.bottom - winH);
+        g_ui.savedBigX = std::clamp(g_ui.savedBigX, minX, maxX);
+        g_ui.savedBigY = std::clamp(g_ui.savedBigY, minY, maxY);
+    }
+
     float targBigX = g_ui.hasSavedBigPos ? g_ui.savedBigX : defBigX;
     float targBigY = g_ui.hasSavedBigPos ? g_ui.savedBigY : defBigY;
 
     int posX = (int)std::lround(stdX + (targBigX - stdX) * g_ui.bigPosT);
     int posY = (int)std::lround(stdY + (targBigY - stdY) * g_ui.bigPosT);
-    g_ui.curWinX = posX; g_ui.curWinY = posY;
+    g_ui.curWinX = posX;
+    g_ui.curWinY = posY;
 
     REAL px = 4.0f, py = 4.0f, pw = g_ui.curW, ph = g_ui.curH;
     REAL rad = 17.0f + 5.0f * g_ui.expandT;
 
-    HDC hdcScr = GetDC(nullptr), hdcMem = CreateCompatibleDC(hdcScr);
-    BITMAPINFO bmi{}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = winW; bmi.bmiHeader.biHeight = -winH;
-    bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-    void* bits = nullptr;
-    HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
+    HDC hdcScr = GetDC(nullptr);
+    g_res.EnsureSurface(hdcScr, winW, winH);
+    g_res.EnsureFonts();
 
-    {
-        Graphics g(hdcMem);
+    if (g_res.memDC && g_res.dib) {
+        Graphics g(g_res.memDC);
+        g.Clear(Color(0, 0, 0, 0));
+        g.ScaleTransform(scale, scale);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetPixelOffsetMode(PixelOffsetModeHalf);
         g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
@@ -900,17 +1457,18 @@ void RenderIslandFrame(HWND hwnd, float dt) {
         Pen rimPen(Color(42, 255, 255, 255), 1.0f);
         g.DrawPath(&rimPen, &pillPath);
 
-        FontFamily ff(L"Segoe UI");
-        Font titleF(&ff, 13.5f, FontStyleBold, UnitPixel);
-        Font subF(&ff, 12.0f, FontStyleBold, UnitPixel);
-
         if (g_ui.expandT < 0.45f) {
             float mA = 1.0f - (g_ui.expandT / 0.45f);
             BYTE a = (BYTE)(mA * 255.0f);
             REAL iy = py + (ph - 20.0f) * 0.5f;
-            if (g_media.miniArt) DrawBmpAlpha(g, g_media.miniArt.get(), px + 8.0f, iy, 20.0f, 20.0f, mA * easeT);
+            if (easeT < 0.99f && g_media.prevMiniArt) {
+                DrawBmpAlpha(g, g_media.prevMiniArt.get(), px + 8.0f, iy, 20.0f, 20.0f, mA * (1.0f - easeT));
+            }
+            if (g_media.miniArt) {
+                DrawBmpAlpha(g, g_media.miniArt.get(), px + 8.0f, iy, 20.0f, 20.0f, mA * easeT);
+            }
             SolidBrush wBr(Color((BYTE)(a * easeT), 248, 250, 252));
-            DrawMarqueeString(g, g_media.title, &subF, RectF(px + 34.0f, py + 7.0f * (1.0f - easeT), pw - 64.0f, ph), &wBr);
+            DrawMarqueeString(g, g_media.title, g_res.subFont.get(), RectF(px + 34.0f, py + 7.0f * (1.0f - easeT), pw - 64.0f, ph), &wBr);
             DrawVisualizer(g, px + pw - 11.0f, py + ph * 0.5f, 10.0f, a, acc);
         }
 
@@ -936,15 +1494,15 @@ void RenderIslandFrame(HWND hwnd, float dt) {
                 BYTE oa = (BYTE)(a * (1.0f - easeT));
                 SolidBrush ow(Color(oa, 255, 255, 255)), om(Color((BYTE)(oa * 0.65f), 255, 255, 255));
                 REAL sy = -8.0f * easeT;
-                DrawMarqueeString(g, g_media.prevTitle, &titleF, RectF(infoX, py + 19.0f + sy, infoW, 18.0f), &ow);
-                DrawMarqueeString(g, g_media.prevSubtitle, &subF, RectF(infoX, py + 38.0f + sy, infoW, 17.0f), &om);
+                DrawMarqueeString(g, g_media.prevTitle, g_res.titleFont.get(), RectF(infoX, py + 19.0f + sy, infoW, 18.0f), &ow);
+                DrawMarqueeString(g, g_media.prevSubtitle, g_res.subFont.get(), RectF(infoX, py + 38.0f + sy, infoW, 17.0f), &om);
             }
             {
                 BYTE na = (BYTE)(a * easeT);
                 SolidBrush nw(Color(na, 255, 255, 255)), nm(Color((BYTE)(na * 0.65f), 255, 255, 255));
                 REAL sy = 8.0f * (1.0f - easeT);
-                DrawMarqueeString(g, g_media.title, &titleF, RectF(infoX, py + 19.0f + sy, infoW, 18.0f), &nw);
-                DrawMarqueeString(g, g_media.subtitle, &subF, RectF(infoX, py + 38.0f + sy, infoW, 17.0f), &nm);
+                DrawMarqueeString(g, g_media.title, g_res.titleFont.get(), RectF(infoX, py + 19.0f + sy, infoW, 18.0f), &nw);
+                DrawMarqueeString(g, g_media.subtitle, g_res.subFont.get(), RectF(infoX, py + 38.0f + sy, infoW, 17.0f), &nm);
             }
             DrawVisualizer(g, px + pw - 16.0f, py + 38.0f, 11.0f, a, acc);
 
@@ -969,26 +1527,23 @@ void RenderIslandFrame(HWND hwnd, float dt) {
                 GraphicsState st = g.Save();
                 g.SetClip(RectF(px + 12.0f, dTop, pw - 24.0f, std::max(1.0f, dH)));
 
-                Font dActF(&ff, 12.5f, FontStyleBold, UnitPixel);
-                Font dNextF(&ff, 11.5f, FontStyleBold, UnitPixel);
-
                 if (g_media.lyrics.empty()) {
                     StringFormat cFmt; cFmt.SetAlignment(StringAlignmentCenter); cFmt.SetLineAlignment(StringAlignmentCenter);
                     SolidBrush stBr(Color((BYTE)(da * 0.65f), 255, 255, 255));
-                    g.DrawString(g_media.lyricStatus.c_str(), -1, &dNextF, RectF(px + 16.0f, dTop, pw - 32.0f, dH), &cFmt, &stBr);
+                    g.DrawString(g_media.lyricStatus.c_str(), -1, g_res.drawerNextFont.get(), RectF(px + 16.0f, dTop, pw - 32.0f, dH), &cFmt, &stBr);
                 } else {
                     float slideOffset = std::clamp((float)activeLrc - g_ui.smoothLyricIdx, -1.0f, 1.0f) * 28.0f;
-                    REAL curH = DrawKaraokeLyricBlock(g, g_media.lyrics[activeLrc].text, &dActF,
+                    REAL curH = DrawKaraokeLyricBlock(g, g_media.lyrics[activeLrc].text, g_res.drawerActFont.get(),
                                                       RectF(px + 16.0f, 0, pw - 32.0f, 100.0f),
                                                       0.0f, false, 255, true, true);
                     REAL curY = dTop + 6.0f + slideOffset;
                     RectF curRect(px + 16.0f, curY, pw - 32.0f, curH);
-                    DrawKaraokeLyricBlock(g, g_media.lyrics[activeLrc].text, &dActF, curRect,
+                    DrawKaraokeLyricBlock(g, g_media.lyrics[activeLrc].text, g_res.drawerActFont.get(), curRect,
                                           activeLineProg, true, da, true, false);
 
                     if (activeLrc + 1 < (int)g_media.lyrics.size()) {
                         int nextIdx = activeLrc + 1;
-                        REAL nextH = DrawKaraokeLyricBlock(g, g_media.lyrics[nextIdx].text, &dNextF,
+                        REAL nextH = DrawKaraokeLyricBlock(g, g_media.lyrics[nextIdx].text, g_res.drawerNextFont.get(),
                                                            RectF(px + 16.0f, 0, pw - 32.0f, 100.0f),
                                                            0.0f, false, 255, true, true);
                         REAL nextY = curY + curH + 6.0f;
@@ -1002,7 +1557,7 @@ void RenderIslandFrame(HWND hwnd, float dt) {
                             g.FillPath(&hBr, &hp);
                         }
                         BYTE nextAlpha = (BYTE)(da * (isNextHov ? 0.88f : 0.45f));
-                        DrawKaraokeLyricBlock(g, g_media.lyrics[nextIdx].text, &dNextF, nextRect,
+                        DrawKaraokeLyricBlock(g, g_media.lyrics[nextIdx].text, g_res.drawerNextFont.get(), nextRect,
                                               0.0f, false, nextAlpha, true, false);
                         g_ui.lyricHits.push_back({nextIdx, RectF(px + 12.0f, nextY - 3.0f, pw - 24.0f, nextH + 6.0f)});
                     }
@@ -1042,12 +1597,10 @@ void RenderIslandFrame(HWND hwnd, float dt) {
                 g.FillPath(&fbBr, &fbPath);
             }
 
-            Font bigTitleF(&ff, 15.0f, FontStyleBold, UnitPixel);
-            Font bigSubF(&ff, 13.0f, FontStyleBold, UnitPixel);
             SolidBrush nw(Color((BYTE)(a * easeT), 255, 255, 255)), nm(Color((BYTE)(a * easeT * 0.65f), 255, 255, 255));
             REAL sy = 6.0f * (1.0f - easeT);
-            DrawMarqueeString(g, g_media.title, &bigTitleF, RectF(colX, py + 286.0f + sy, colW, 22.0f), &nw);
-            DrawMarqueeString(g, g_media.subtitle, &bigSubF, RectF(colX, py + 308.0f + sy, colW, 19.0f), &nm);
+            DrawMarqueeString(g, g_media.title, g_res.bigTitleFont.get(), RectF(colX, py + 286.0f + sy, colW, 22.0f), &nw);
+            DrawMarqueeString(g, g_media.subtitle, g_res.bigSubFont.get(), RectF(colX, py + 308.0f + sy, colW, 19.0f), &nm);
 
             DrawSeekBarSection(g, colX, py + 342.0f, colW, pos, dur, g_ui.dispRatio, a);
 
@@ -1068,29 +1621,37 @@ void RenderIslandFrame(HWND hwnd, float dt) {
                 GraphicsState st = g.Save();
                 g.SetClip(RectF(lrcX - 6.0f, lrcTop, lrcW + 12.0f, lrcH));
 
-                Font bigLrcF(&ff, 21.0f, FontStyleBold, UnitPixel);
-
                 if (g_media.lyrics.empty()) {
                     SolidBrush stBr(Color((BYTE)(laBase * 0.50f), 255, 255, 255));
-                    g.DrawString(g_media.lyricStatus.c_str(), -1, &bigLrcF, RectF(lrcX, lrcTop + lrcH * 0.42f, lrcW, 40.0f), nullptr, &stBr);
+                    g.DrawString(g_media.lyricStatus.c_str(), -1, g_res.bigLrcFont.get(), RectF(lrcX, lrcTop + lrcH * 0.42f, lrcW, 40.0f), nullptr, &stBr);
                 } else {
                     int nLines = (int)g_media.lyrics.size();
-                    std::vector<REAL> lineH(nLines, 36.0f), lineY(nLines, 0.0f);
-                    for (int i = 0; i < nLines; ++i) {
-                        REAL h = DrawKaraokeLyricBlock(g, g_media.lyrics[i].text, &bigLrcF,
-                                                       RectF(lrcX, 0, lrcW, 400.0f), 0.0f, false, 255, false, true);
-                        lineH[i] = h + 22.0f;
-                        if (i > 0) lineY[i] = lineY[i - 1] + lineH[i - 1];
+                    if (g_res.cachedLyricSeq != g_media.trackSeq ||
+                        g_res.cachedLyricCount != g_media.lyrics.size() ||
+                        std::fabs(g_res.cachedLyricWidth - lrcW) > 1.0f) {
+                        g_res.cachedLyricSeq   = g_media.trackSeq;
+                        g_res.cachedLyricCount = g_media.lyrics.size();
+                        g_res.cachedLyricWidth = lrcW;
+                        g_res.cachedLineH.assign(nLines, 36.0f);
+                        g_res.cachedLineY.assign(nLines, 0.0f);
+                        for (int i = 0; i < nLines; ++i) {
+                            REAL h = DrawKaraokeLyricBlock(g, g_media.lyrics[i].text, g_res.bigLrcFont.get(),
+                                                           RectF(lrcX, 0, lrcW, 400.0f), 0.0f, false, 255, false, true);
+                            g_res.cachedLineH[i] = h + 22.0f;
+                            if (i > 0) g_res.cachedLineY[i] = g_res.cachedLineY[i - 1] + g_res.cachedLineH[i - 1];
+                        }
                     }
+
                     int idx0 = std::clamp((int)std::floor(g_ui.smoothLyricIdx), 0, nLines - 1);
                     int idx1 = std::clamp(idx0 + 1, 0, nLines - 1);
                     float frac = g_ui.smoothLyricIdx - (float)idx0;
-                    float focusOffset = lineY[idx0] + (lineY[idx1] - lineY[idx0]) * frac;
+                    float focusOffset = g_res.cachedLineY[idx0] + (g_res.cachedLineY[idx1] - g_res.cachedLineY[idx0]) * frac;
                     REAL anchorY = lrcTop + lrcH * 0.34f;
 
                     for (int i = std::max(0, activeLrc - 5); i <= std::min(nLines - 1, activeLrc + 7); ++i) {
-                        REAL drawY = anchorY + (lineY[i] - focusOffset);
-                        if (drawY + lineH[i] < lrcTop - 10.0f || drawY > lrcTop + lrcH + 10.0f) continue;
+                        REAL drawY = anchorY + (g_res.cachedLineY[i] - focusOffset);
+                        REAL lh    = g_res.cachedLineH[i];
+                        if (drawY + lh < lrcTop - 10.0f || drawY > lrcTop + lrcH + 10.0f) continue;
 
                         float dist = std::fabs((float)i - g_ui.smoothLyricIdx);
                         float edgeFade = 1.0f;
@@ -1102,8 +1663,8 @@ void RenderIslandFrame(HWND hwnd, float dt) {
                         if (g_ui.hoveredLyricIdx == i && !isAct) baseOp = std::min(0.85f, baseOp + 0.25f);
 
                         BYTE lineAlpha = (BYTE)(laBase * baseOp * edgeFade);
-                        RectF rLine(lrcX, drawY, lrcW, lineH[i] - 18.0f);
-                        DrawKaraokeLyricBlock(g, g_media.lyrics[i].text, &bigLrcF, rLine,
+                        RectF rLine(lrcX, drawY, lrcW, lh - 18.0f);
+                        DrawKaraokeLyricBlock(g, g_media.lyrics[i].text, g_res.bigLrcFont.get(), rLine,
                                               isAct ? activeLineProg : 0.0f, isAct, lineAlpha, false, false);
                         g_ui.lyricHits.push_back({i, rLine});
                     }
@@ -1111,12 +1672,14 @@ void RenderIslandFrame(HWND hwnd, float dt) {
                 g.Restore(st);
             }
         }
+
+        POINT ptSrc{0, 0}, ptDst{posX, posY};
+        SIZE sz{winW, winH};
+        BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        UpdateLayeredWindow(hwnd, hdcScr, &ptDst, &sz, g_res.memDC, &ptSrc, 0, &bf, ULW_ALPHA);
     }
 
-    POINT ptSrc{0, 0}, ptDst{posX, posY}; SIZE sz{winW, winH};
-    BLENDFUNCTION bf{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(hwnd, hdcScr, &ptDst, &sz, hdcMem, &ptSrc, 0, &bf, ULW_ALPHA);
-    SelectObject(hdcMem, hOld); DeleteObject(hBmp); DeleteDC(hdcMem); ReleaseDC(nullptr, hdcScr);
+    ReleaseDC(nullptr, hdcScr);
 }
 
 float GetSeekRatio(float mx) {
@@ -1129,8 +1692,11 @@ float GetSeekRatio(float mx) {
 LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_CREATE: {
-            LARGE_INTEGER f{}, n{}; QueryPerformanceFrequency(&f); QueryPerformanceCounter(&n);
-            g_ui.qpcFreq = (double)f.QuadPart; g_ui.lastQpc = n.QuadPart;
+            LARGE_INTEGER f{}, n{};
+            QueryPerformanceFrequency(&f);
+            QueryPerformanceCounter(&n);
+            g_ui.qpcFreq = (double)f.QuadPart;
+            g_ui.lastQpc = n.QuadPart;
             SetTimer(hwnd, TIMER_ID_FRAME, 7, nullptr);
             return 0;
         }
@@ -1140,12 +1706,13 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 bool f12Down = (GetAsyncKeyState(VK_F12) & 0x8000) != 0;
                 if (f12Down && !g_ui.wasF12Down) {
                     g_ui.hidden = !g_ui.hidden;
-                    ShowWindow(hwnd, g_ui.hidden ? SW_HIDE : SW_SHOWNOACTIVATE);
+                    ShowWindow(hwnd, (g_ui.hidden || g_ui.fullscreenHidden) ? SW_HIDE : SW_SHOWNOACTIVATE);
                 }
                 g_ui.wasF12Down = f12Down;
                 if (g_ui.hidden) return 0;
 
-                LARGE_INTEGER n{}; QueryPerformanceCounter(&n);
+                LARGE_INTEGER n{};
+                QueryPerformanceCounter(&n);
                 float dt = std::clamp((float)((n.QuadPart - g_ui.lastQpc) / g_ui.qpcFreq), 0.001f, 0.050f);
                 g_ui.lastQpc = n.QuadPart;
                 g_ui.marqueeTime += dt;
@@ -1157,12 +1724,19 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
                 if (g_ui.trackAnimT < 1.0f) g_ui.trackAnimT = std::min(1.0f, g_ui.trackAnimT + dt * 2.4f);
                 g_ui.bounceW *= std::exp(-10.0f * dt);
+                if (g_ui.bounceW < 0.05f) g_ui.bounceW = 0.0f;
 
                 bool exp = g_ui.hovered || g_ui.draggingSeek || g_ui.draggingWin || g_ui.bigMode;
                 float mf = 1.0f - std::exp(-16.0f * dt);
-                g_ui.drawerT    += (((g_ui.showLyrics && !g_ui.bigMode && exp) ? 1.0f : 0.0f) - g_ui.drawerT) * mf;
-                g_ui.bigModeT   += ((g_ui.bigMode ? 1.0f : 0.0f) - g_ui.bigModeT) * mf;
-                g_ui.bigLyricsT += ((g_ui.showLyrics ? 1.0f : 0.0f) - g_ui.bigLyricsT) * mf;
+
+                float targDrawer    = (g_ui.showLyrics && !g_ui.bigMode && exp) ? 1.0f : 0.0f;
+                float targBigMode   = g_ui.bigMode ? 1.0f : 0.0f;
+                float targBigLyrics = g_ui.showLyrics ? 1.0f : 0.0f;
+                float targExpand    = exp ? 1.0f : 0.0f;
+
+                g_ui.drawerT    += (targDrawer - g_ui.drawerT) * mf;
+                g_ui.bigModeT   += (targBigMode - g_ui.bigModeT) * mf;
+                g_ui.bigLyricsT += (targBigLyrics - g_ui.bigLyricsT) * mf;
 
                 float normW = (float)g_set.expandedW;
                 float normH = (float)g_set.expandedH + 86.0f * g_ui.drawerT;
@@ -1174,25 +1748,64 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
                 g_ui.curW    += (tw - g_ui.curW) * mf;
                 g_ui.curH    += (th - g_ui.curH) * mf;
-                g_ui.expandT += ((exp ? 1.0f : 0.0f) - g_ui.expandT) * mf;
-                g_ui.bigPosT  = g_ui.draggingWin ? 1.0f : (g_ui.bigPosT + ((g_ui.bigMode ? 1.0f : 0.0f) - g_ui.bigPosT) * mf);
+                g_ui.expandT += (targExpand - g_ui.expandT) * mf;
+                g_ui.bigPosT  = g_ui.draggingWin ? 1.0f : (g_ui.bigPosT + (targBigMode - g_ui.bigPosT) * mf);
 
                 float uf = 1.0f - std::exp(-24.0f * dt);
-                for (int i = 0; i < 8; ++i)
-                    g_ui.btnHoverT[i] += (((g_ui.hoveredBtn == i && !g_ui.draggingSeek) ? 1.f : 0.f) - g_ui.btnHoverT[i]) * uf;
-                g_ui.seekHoverT += (((g_ui.hoveringSeek || g_ui.draggingSeek) ? 1.f : 0.f) - g_ui.seekHoverT) * uf;
+                bool anyHoverAnim = false;
+                for (int i = 0; i < 8; ++i) {
+                    float tb = (g_ui.hoveredBtn == i && !g_ui.draggingSeek) ? 1.f : 0.f;
+                    g_ui.btnHoverT[i] += (tb - g_ui.btnHoverT[i]) * uf;
+                    if (std::fabs(tb - g_ui.btnHoverT[i]) > 0.01f) anyHoverAnim = true;
+                }
+                float tSeek = (g_ui.hoveringSeek || g_ui.draggingSeek) ? 1.f : 0.f;
+                g_ui.seekHoverT += (tSeek - g_ui.seekHoverT) * uf;
+                if (std::fabs(tSeek - g_ui.seekHoverT) > 0.01f) anyHoverAnim = true;
 
                 float af = 1.0f - std::exp(-42.0f * dt), df = 1.0f - std::exp(-16.0f * dt);
+                bool anyAudioAnim = false;
                 for (int i = 0; i < 5; ++i) {
                     float tb = g_audioBands[i].load();
                     g_ui.smoothBands[i] += (tb - g_ui.smoothBands[i]) * (tb > g_ui.smoothBands[i] ? af : df);
+                    if (g_ui.smoothBands[i] > 0.01f || tb > 0.01f) anyAudioAnim = true;
                 }
+
+                UpdateAudioCaptureNeeded();
                 RenderIslandFrame(hwnd, dt);
+
+                bool isPlaying = false;
+                bool hasLyrics = false;
+                {
+                    std::lock_guard<std::mutex> lk(g_mediaMutex);
+                    isPlaying = g_media.isPlaying;
+                    hasLyrics = !g_media.lyrics.empty();
+                }
+
+                bool isMorphing = std::fabs(tw - g_ui.curW) > 0.4f ||
+                                  std::fabs(th - g_ui.curH) > 0.4f ||
+                                  std::fabs(targExpand - g_ui.expandT) > 0.01f ||
+                                  std::fabs(targBigMode - g_ui.bigModeT) > 0.01f ||
+                                  std::fabs(targDrawer - g_ui.drawerT) > 0.01f ||
+                                  g_ui.trackAnimT < 0.99f;
+
+                bool lyricsAnimating = isPlaying && hasLyrics && exp && (g_ui.showLyrics || g_ui.bigMode);
+                bool needHighFps = isMorphing || anyHoverAnim || anyAudioAnim ||
+                                   g_ui.marqueeActive || g_ui.draggingSeek || g_ui.draggingWin || lyricsAnimating;
+
+                if (needHighFps) {
+                    SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_ANIM);
+                } else if (isPlaying && exp) {
+                    SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_IDLE_PLAYING);
+                } else {
+                    SetTimerIntervalIfNeeded(hwnd, g_set.autoHideFullscreen ? 500 : 0);
+                }
             }
             return 0;
 
         case WM_LBUTTONDOWN: {
-            float mx = (float)GET_X_LPARAM(lParam);
+            WakeAnimationTimer(hwnd);
+            float scale = std::max(0.5f, g_ui.dpiScale);
+            float mx = (float)GET_X_LPARAM(lParam) / scale;
             if (g_ui.expandT > 0.8f && g_ui.hoveringSeek) {
                 g_ui.draggingSeek = true;
                 g_ui.dragSeekRatio = g_ui.dispRatio = GetSeekRatio(mx);
@@ -1215,13 +1828,18 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 TRACKMOUSEEVENT tme{sizeof(TRACKMOUSEEVENT), TME_LEAVE, hwnd, 0};
                 TrackMouseEvent(&tme);
             }
+            WakeAnimationTimer(hwnd);
+
             if (g_ui.draggingWin) {
                 POINT pt{}; GetCursorPos(&pt);
                 g_ui.savedBigX = (float)(g_ui.dragStartWin.x + (pt.x - g_ui.dragStartMouse.x));
                 g_ui.savedBigY = (float)(g_ui.dragStartWin.y + (pt.y - g_ui.dragStartMouse.y));
                 return 0;
             }
-            float mx = (float)GET_X_LPARAM(lParam), my = (float)GET_Y_LPARAM(lParam);
+
+            float scale = std::max(0.5f, g_ui.dpiScale);
+            float mx = (float)GET_X_LPARAM(lParam) / scale;
+            float my = (float)GET_Y_LPARAM(lParam) / scale;
             if (g_ui.draggingSeek) { g_ui.dragSeekRatio = GetSeekRatio(mx); return 0; }
 
             g_ui.hoveredBtn = -1; g_ui.hoveredLyricIdx = -1; g_ui.hoveringSeek = false;
@@ -1230,7 +1848,7 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 if (!g_ui.bigMode) {
                     float bx = px + 16.0f, bw = pw - 32.0f, by = py + 74.0f;
                     if (mx >= bx - 6 && mx <= bx + bw + 6 && my >= by - 10 && my <= by + 10) {
-                        g_ui.hoveringSeek = true; g_ui.seekHoverX = GetSeekRatio(mx);
+                        g_ui.hoveringSeek = true;
                     }
                     float btnY = py + 109.0f, cx = px + pw * 0.5f;
                     float xs[7] = {px + 26.0f, cx - 72.0f, cx - 36.0f, cx, cx + 36.0f, cx + 72.0f, px + pw - 26.0f};
@@ -1247,7 +1865,7 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                     float colW = 230.0f;
                     float bx = GetStudioPlayerColX(px, pw, colW), bw = colW, by = py + 342.0f;
                     if (mx >= bx - 6 && mx <= bx + bw + 6 && my >= by - 10 && my <= by + 10) {
-                        g_ui.hoveringSeek = true; g_ui.seekHoverX = GetSeekRatio(mx);
+                        g_ui.hoveringSeek = true;
                     }
                     float bCy = py + 386.0f, bCx = bx + bw * 0.5f;
                     float bXs[5] = {bCx - 92.0f, bCx - 46.0f, bCx, bCx + 46.0f, bCx + 92.0f};
@@ -1271,38 +1889,54 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
 
         case WM_LBUTTONUP: {
-            float mx = (float)GET_X_LPARAM(lParam);
+            WakeAnimationTimer(hwnd);
+            float scale = std::max(0.5f, g_ui.dpiScale);
+            float mx = (float)GET_X_LPARAM(lParam) / scale;
             if (g_ui.draggingWin) {
                 g_ui.draggingWin = false; ReleaseCapture();
             } else if (g_ui.draggingSeek) {
                 g_ui.dragSeekRatio = GetSeekRatio(mx); g_ui.draggingSeek = false;
                 g_ui.holdSeekRatio = g_ui.dragSeekRatio; g_ui.holdSeekUntil = GetTickCount64() + 900;
-                ReleaseCapture(); g_pendingSeek.store(g_ui.dragSeekRatio);
+                ReleaseCapture();
+                g_pendingSeek.store(g_ui.dragSeekRatio);
+                if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
             } else if (g_ui.hovered || g_ui.bigMode) {
                 if (g_ui.hoveringSeek) {
                     float r = GetSeekRatio(mx);
                     g_ui.holdSeekRatio = r; g_ui.holdSeekUntil = GetTickCount64() + 900;
                     g_pendingSeek.store(r);
+                    if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
                 } else if (g_ui.hoveredBtn >= 0) {
                     int b = g_ui.hoveredBtn;
                     if (b == 0) {
                         g_ui.bigMode = true;
                         g_ui.showLyrics = true;
-                    }
-                    else if (b == 1) g_pendingCmd.store(4);
-                    else if (b == 2) g_pendingCmd.store(1);
-                    else if (b == 3) {
+                    } else if (b == 1) {
+                        g_pendingCmd.store(4);
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                    } else if (b == 2) {
+                        g_pendingCmd.store(1);
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                    } else if (b == 3) {
                         {
                             std::lock_guard<std::mutex> lk(g_mediaMutex);
                             g_media.isPlaying = !g_media.isPlaying;
                             g_media.posTickMs = GetTickCount64();
                         }
+                        UpdateAudioCaptureNeeded();
                         g_pendingCmd.store(2);
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                    } else if (b == 4) {
+                        g_pendingCmd.store(3);
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                    } else if (b == 5) {
+                        g_pendingCmd.store(5);
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+                    } else if (b == 6) {
+                        g_ui.showLyrics = !g_ui.showLyrics;
+                    } else if (b == 7) {
+                        g_ui.bigMode = false;
                     }
-                    else if (b == 4) g_pendingCmd.store(3);
-                    else if (b == 5) g_pendingCmd.store(5);
-                    else if (b == 6) g_ui.showLyrics = !g_ui.showLyrics;
-                    else if (b == 7) g_ui.bigMode = false;
                 } else if (g_ui.showLyrics && g_ui.hoveredLyricIdx >= 0) {
                     std::lock_guard<std::mutex> lk(g_mediaMutex);
                     if (g_ui.hoveredLyricIdx < (int)g_media.lyrics.size() && g_media.durSec > 0.1) {
@@ -1311,50 +1945,90 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                         g_ui.holdSeekUntil = GetTickCount64() + 900;
                         g_ui.lastActiveLyric = g_ui.hoveredLyricIdx;
                         g_pendingSeek.store(r);
+                        if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
                     }
                 }
             }
             return 0;
         }
 
-        case WM_CAPTURECHANGED: g_ui.draggingSeek = g_ui.draggingWin = false; return 0;
+        case WM_CAPTURECHANGED:
+            g_ui.draggingSeek = g_ui.draggingWin = false;
+            return 0;
+
         case WM_MOUSELEAVE:
             if (!g_ui.draggingSeek && !g_ui.draggingWin) {
-                g_ui.hovered = g_ui.hoveringSeek = false; g_ui.hoveredBtn = -1; g_ui.hoveredLyricIdx = -1;
+                g_ui.hovered = g_ui.hoveringSeek = false;
+                g_ui.hoveredBtn = -1;
+                g_ui.hoveredLyricIdx = -1;
+                WakeAnimationTimer(hwnd);
             }
             return 0;
-        case WM_ISLAND_RELOAD_SETTINGS: LoadModSettings(); return 0;
+
+        case WM_ISLAND_RELOAD_SETTINGS:
+            LoadModSettings();
+            RegisterIslandHotkey(hwnd);
+            if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
+            if (g_lyricsWakeEvent) SetEvent(g_lyricsWakeEvent);
+            WakeAnimationTimer(hwnd);
+            return 0;
+
         case WM_ISLAND_SHUTDOWN:
-            KillTimer(hwnd, TIMER_ID_FRAME); DestroyWindow(hwnd); return 0;
-        case WM_DESTROY: PostQuitMessage(0); return 0;
+            UnregisterHotKey(hwnd, HOTKEY_ID_HIDE);
+            SetTimerIntervalIfNeeded(hwnd, 0);
+            DestroyWindow(hwnd);
+            return 0;
+
+        case WM_DESTROY:
+            g_res.ReleaseAll();
+            PostQuitMessage(0);
+            return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
 void OverlayUIThread() {
-    ULONG_PTR token = 0; GdiplusStartupInput gsi; GdiplusStartup(&token, &gsi, nullptr);
-    g_stopThreads.store(false);
-    g_smtcThread   = std::thread(SmtcWorkerThread);
-    g_audioThread  = std::thread(AudioLoopbackThread);
-    g_lyricsThread = std::thread(LyricsWorkerThread);
+    ULONG_PTR token = 0;
+    GdiplusStartupInput gsi;
+    GdiplusStartup(&token, &gsi, nullptr);
 
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    HINSTANCE hInst = reinterpret_cast<HINSTANCE>(&__ImageBase);
     const wchar_t* CLS = L"MusicDynamicIslandWindowClass";
-    WNDCLASSEXW wc{sizeof(WNDCLASSEXW), CS_DBLCLKS, IslandWndProc, 0, 0, hInst, nullptr, LoadCursor(nullptr, IDC_HAND), nullptr, nullptr, CLS, nullptr};
-    RegisterClassExW(&wc);
+    WNDCLASSEXW wc{sizeof(WNDCLASSEXW), 0, IslandWndProc, 0, 0, hInst, nullptr,
+                   LoadCursor(nullptr, IDC_HAND), nullptr, nullptr, CLS, nullptr};
+    ATOM clsAtom = RegisterClassExW(&wc);
 
-    HWND hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        CLS, L"Music Dynamic Island", WS_POPUP, 0, 0, g_set.compactW, g_set.compactH, nullptr, nullptr, hInst, nullptr);
+    HWND hwnd = nullptr;
+    if (clsAtom) {
+        hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            CLS, L"Music Dynamic Island", WS_POPUP, 0, 0, g_set.compactW, g_set.compactH,
+            nullptr, nullptr, hInst, nullptr);
+    }
+
     g_hWnd.store(hwnd);
-    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    SetEvent(g_uiReadyEvent);
 
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+    if (hwnd) {
+        std::thread smtcThread(SmtcWorkerThread);
+        std::thread audioThread(AudioLoopbackThread);
+        std::thread lyricsThread(LyricsWorkerThread);
 
-    g_stopThreads.store(true);
-    if (g_smtcThread.joinable())   g_smtcThread.join();
-    if (g_audioThread.joinable())  g_audioThread.join();
-    if (g_lyricsThread.joinable()) g_lyricsThread.join();
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+
+        MSG msg;
+        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        SetEvent(g_stopEvent);
+        AbortActiveHttpRequests();
+
+        if (smtcThread.joinable())   smtcThread.join();
+        if (audioThread.joinable())  audioThread.join();
+        if (lyricsThread.joinable()) lyricsThread.join();
+    }
+
     {
         std::lock_guard<std::mutex> lk(g_mediaMutex);
         g_media.bigArt.reset(); g_media.prevBigArt.reset();
@@ -1362,23 +2036,233 @@ void OverlayUIThread() {
         g_media.miniArt.reset(); g_media.prevMiniArt.reset();
         g_media.blurBg.reset(); g_media.prevBlurBg.reset();
     }
-    g_hWnd.store(nullptr); UnregisterClassW(CLS, hInst); GdiplusShutdown(token);
+
+    g_hWnd.store(nullptr);
+    if (clsAtom) UnregisterClassW(CLS, hInst);
+    GdiplusShutdown(token);
+}
+
+BOOL WhTool_ModInit() {
+    LoadModSettings();
+    g_ui.curW = (float)g_set.compactW;
+    g_ui.curH = (float)g_set.compactH;
+
+    g_uiReadyEvent    = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_stopEvent       = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_smtcWakeEvent   = CreateEventW(nullptr, FALSE, TRUE, nullptr);
+    g_audioWakeEvent  = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_lyricsWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
+    g_uiThread.emplace(OverlayUIThread);
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    if (HWND h = g_hWnd.load()) {
+        PostMessageW(h, WM_ISLAND_RELOAD_SETTINGS, 0, 0);
+    }
+}
+
+void WhTool_ModUninit() {
+    if (g_stopEvent) SetEvent(g_stopEvent);
+    AbortActiveHttpRequests();
+
+    if (g_uiThread) {
+        if (g_uiReadyEvent) WaitForSingleObject(g_uiReadyEvent, INFINITE);
+        if (HWND h = g_hWnd.load()) PostMessageW(h, WM_ISLAND_SHUTDOWN, 0, 0);
+        g_uiThread->join();
+        g_uiThread.reset();
+    }
+
+    if (g_uiReadyEvent)    { CloseHandle(g_uiReadyEvent);    g_uiReadyEvent = nullptr; }
+    if (g_stopEvent)       { CloseHandle(g_stopEvent);       g_stopEvent = nullptr; }
+    if (g_smtcWakeEvent)   { CloseHandle(g_smtcWakeEvent);   g_smtcWakeEvent = nullptr; }
+    if (g_audioWakeEvent)  { CloseHandle(g_audioWakeEvent);  g_audioWakeEvent = nullptr; }
+    if (g_lyricsWakeEvent) { CloseHandle(g_lyricsWakeEvent); g_lyricsWakeEvent = nullptr; }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk-mods/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as-is at the end of your mod file, and implement the
+// following:
+// - WhTool_ModInit
+// - WhTool_ModSettingsChanged
+// - WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    g_mutex = CreateMutexW(nullptr, TRUE, L"Local\\MusicDynamicIslandWindhawkMutex");
-    if (!g_mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
-        if (g_mutex) { CloseHandle(g_mutex); g_mutex = nullptr; }
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isParentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
-    LoadModSettings();
-    g_ui.curW = (float)g_set.compactW; g_ui.curH = (float)g_set.compactH;
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isToolModProcess = true;
+            } else {
+                isExcluded = true;
+            }
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-parent-tool-mod") == 0) {
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isParentToolModProcess = true;
+                break;
+            }
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isToolModProcess) {
+     g_toolModProcessMutex =
+            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutexW failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isParentToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
-void Wh_ModAfterInit() { g_uiThread = std::thread(OverlayUIThread); }
-void Wh_ModSettingsChanged() { if (HWND h = g_hWnd.load()) PostMessageW(h, WM_ISLAND_RELOAD_SETTINGS, 0, 0); }
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileNameW(nullptr, currentProcessPath,
+                               ARRAYSIZE(currentProcessPath))) {
+    case 0:
+  case 1:
+    case ARRAYSIZE(currentProcessPath):
+        TCHAR szDummy[1] = {0};
+        (void)szDummy;
+        Wh_Log(L"GetModuleFileNameW failed");
+        return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll or kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFOW si{
+        .cb = sizeof(STARTUPINFOW),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcessInternalW failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
 void Wh_ModUninit() {
-    if (HWND h = g_hWnd.load()) PostMessageW(h, WM_ISLAND_SHUTDOWN, 0, 0);
-    if (g_uiThread.joinable()) g_uiThread.join();
-    if (g_mutex) { ReleaseMutex(g_mutex); CloseHandle(g_mutex); g_mutex = nullptr; }
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
