@@ -2,7 +2,7 @@
 // @id              middle-click-new-tab
 // @name            Middle Click New Tab
 // @description     Middle-click the empty tab strip area of File Explorer or Notepad to open a new tab
-// @version         1.2.0
+// @version         1.0.0
 // @author          venasataa
 // @github          https://github.com/venasataa
 // @homepage        https://venasataa.github.io
