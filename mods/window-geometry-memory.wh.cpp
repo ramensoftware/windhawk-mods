@@ -2940,7 +2940,7 @@ static bool g_diagnosticsLog = false;
 // once looked complete while the lines being looked for were missing from it, which
 // cost a round of diagnosis. It identifies a verified behaviour, not every text
 // revision, so a run can be tied to the field result it belongs to.
-static constexpr PCWSTR kJournalBuild = L"r24-2026-10-16";
+static constexpr PCWSTR kJournalBuild = L"r25-2026-10-16";
 
 // The journal flag has to be known before the store is loaded, because the load
 // itself journals a line. Reading it only in ApplySettingsOnEventThread -- which
@@ -3148,7 +3148,8 @@ static const MonitorView* CurrentMonitorView(HWND hwnd) {
 // *showCommand receives the placement's show state when the rectangle came from
 // GetWindowPlacement, and is left alone otherwise; the save path uses it to record
 // whether the window was maximized.
-static bool WindowOwnRect(HWND hwnd, GeoRect& rect, UINT* showCommand) {
+static bool WindowOwnRect(HWND hwnd, GeoRect& rect, UINT* showCommand,
+                          UINT* placementFlags = nullptr) {
     if (IsIconic(hwnd) || IsZoomed(hwnd)) {
         WINDOWPLACEMENT placement{};
         placement.length = sizeof(placement);
@@ -3182,6 +3183,9 @@ static bool WindowOwnRect(HWND hwnd, GeoRect& rect, UINT* showCommand) {
         if (showCommand) {
             *showCommand = placement.showCmd;
         }
+        if (placementFlags) {
+            *placementFlags = placement.flags;
+        }
         return true;
     }
 
@@ -3191,6 +3195,29 @@ static bool WindowOwnRect(HWND hwnd, GeoRect& rect, UINT* showCommand) {
     }
     rect = {raw.left, raw.top, raw.right, raw.bottom};
     return true;
+}
+
+// Whether the window is maximized on this monitor. Used to recognise a restore
+// that has nothing to do: an application that opens maximized by itself is
+// already where the user left it, and moving it to the remembered normal
+// rectangle first -- which is what the settle sequence does -- un-maximizes it
+// and maximizes it again, a visible bounce on every launch.
+static bool WindowIsZoomedOn(HWND hwnd, const GeoRect& monitorRect) {
+    if (!IsZoomed(hwnd)) {
+        return false;
+    }
+
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                         &info)) {
+        return false;
+    }
+
+    return info.rcMonitor.left == monitorRect.left &&
+           info.rcMonitor.top == monitorRect.top &&
+           info.rcMonitor.right == monitorRect.right &&
+           info.rcMonitor.bottom == monitorRect.bottom;
 }
 
 // Applies an app's position/size switches to a target rectangle, using the
@@ -3477,6 +3504,13 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
     }
 
     bool maximize = entry->state == L"maximized";
+    if (maximize && WindowIsZoomedOn(hwnd, placed.pixelRect)) {
+        // Already maximized on the monitor this restore would use. Nothing to do,
+        // and doing anything means un-maximizing it first: the settle sequence
+        // moves the window to the remembered normal rectangle and then maximizes
+        // it again. Every app that opens maximized on its own would bounce.
+        return;
+    }
     if (!maximize &&
         GeoRectsApproxEqual(currentRect, target, kApplyTolerancePixels)) {
         return;  // already where it belongs
@@ -3739,7 +3773,8 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
 
     GeoRect geometry{};
     UINT showCommand = 0;
-    if (!WindowOwnRect(hwnd, geometry, &showCommand)) {
+    UINT placementFlags = 0;
+    if (!WindowOwnRect(hwnd, geometry, &showCommand, &placementFlags)) {
         // The usual case at a close: the window is being destroyed, and Windows
         // answers nothing for a handle that is already gone. Nothing can be done
         // about a rectangle that cannot be read; it is recorded so that the miss
@@ -3747,8 +3782,14 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
         JournalSaveSkip(identity, L"no-placement");
         return;
     }
-    const std::wstring state = (showCommand == SW_SHOWMAXIMIZED) ? L"maximized"
-                                                                 : L"normal";
+    // A window minimized from the maximized state reports SW_SHOWMINIMIZED and
+    // sets WPF_RESTORETOMAXIMIZED: the state the user left it in is maximized, and
+    // storing it as normal would bring it back at its normal size.
+    const bool maximizeState =
+        showCommand == SW_SHOWMAXIMIZED ||
+        (showCommand == SW_SHOWMINIMIZED &&
+         (placementFlags & WPF_RESTORETOMAXIMIZED));
+    const std::wstring state = maximizeState ? L"maximized" : L"normal";
     if (GeoRectWidth(geometry) <= 0 || GeoRectHeight(geometry) <= 0) {
         JournalSaveSkip(identity, L"empty-rect");
         return;
@@ -4130,8 +4171,11 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
     LogWindowEvent(EventName(event), hwnd, identity);
     if (event == EVENT_SYSTEM_MOVESIZEEND) {
         // Tracked late -- typically an app that titles its window only after
-        // showing it. The user has just placed it, so record that immediately.
+        // showing it. The user has just placed it, so record that immediately and
+        // stop: restoring here would move the window they are looking at, which
+        // is the one thing the readme promises never happens.
         SaveWindowGeometry(hwnd, identity);
+        return;
     }
     TryRestoreWindow(hwnd, identity);
 }
@@ -4260,8 +4304,8 @@ static void ApplySettingsOnEventThread() {
         Wh_Log(L"[GEOM] cleared stored data requested before startup");
     }
 
-    // A settings change may disable the mod or drop an app from the allowlist,
-    // so any restore still settling is abandoned rather than carried out.
+    // A settings change may drop an app from the allowlist, so any restore still
+    // settling is abandoned rather than carried out.
     if (!g_pendingApplies.empty()) {
         Wh_Log(L"[GEOM] settings changed; abandoning %d pending restore(s)",
                (int)g_pendingApplies.size());
@@ -4269,6 +4313,27 @@ static void ApplySettingsOnEventThread() {
     }
 
     RefreshDiagnosticsSetting();
+
+    // Windows that are already tracked were resolved against the old settings.
+    // Their switches and their place in the allowlist are refreshed here, before
+    // anything below can return: otherwise turning a switch off would not reach an
+    // open window until it closed, and an app removed from the list would keep
+    // being saved and moved.
+    for (auto it = g_identityCache.begin(); it != g_identityCache.end();) {
+        const AllowlistEntry* entry =
+            FindAllowlistEntry(it->second.exePath, it->second.exeName);
+        if (!entry) {
+            Wh_Log(L"[GEOM] no longer allowlisted; forgetting %s",
+                   it->second.exeName.c_str());
+            ReleaseOrdinal(it->second);
+            g_pendingApplies.erase(it->first);
+            it = g_identityCache.erase(it);
+            continue;
+        }
+        it->second.restorePosition = entry->restorePosition;
+        it->second.restoreSize = entry->restoreSize;
+        ++it;
+    }
 
     // The hooks are idempotent, so this is safe on every save. The relayout
     // baseline deliberately is not reset here: a save within half a second of a
