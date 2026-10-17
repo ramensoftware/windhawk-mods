@@ -129,7 +129,7 @@ Checking events on other dates:
   $description: |
     Local file path or remote URL to the .ics calendar file.
     Read the FAQ if you have issues with local files.
-- applyColorsOnEventBorders: true
+- applyColorsOnEventBorders: false
   $name: Apply colours on borders of events
   $description: Show set colour on the border of events.
 - hideCompletedEvents: false
@@ -156,7 +156,7 @@ Checking events on other dates:
   $options:
   - above: Show buttons above agenda
   - below: Show buttons below agenda
-- numberOfWeeksInView: 5
+- numberOfWeeksInView: 6
   $name: Number of weeks shown in calendar
   $description: |
     The number of weeks that the calendar shows when expanded. This setting only applies for when the calendar is in "inline" mode.
@@ -1233,7 +1233,7 @@ bool IsInlineCalendarMode() {
 int GetNumberOfWeeksInViewSetting() {
     int val = Wh_GetIntSetting(L"numberOfWeeksInView");
     if (val < 2 || val > 8) {
-        return 5;
+        return 6;
     }
     return val;
 }
