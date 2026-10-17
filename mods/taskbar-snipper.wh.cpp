@@ -544,9 +544,16 @@ const wchar_t* IconFontName() {
     return name;
 }
 
-// Glyphs from the Windows icon font for the toolbox.
-const wchar_t kGlyphText[] = {0xE8D2, 0};    // Font
-const wchar_t kGlyphPencil[] = {0xE70F, 0};  // Edit
+// Glyphs from the Windows icon font, for the taskbar buttons and the toolbox.
+const wchar_t kGlyphSnip[] = {0xF406, 0};        // ClippingTool
+const wchar_t kGlyphRecord[] = {0xE7C8, 0};      // Record
+const wchar_t kGlyphRecordStop[] = {0xEE1B, 0};  // RecordStop (Segoe Fluent Icons only)
+const wchar_t kGlyphStop[] = {0xE71A, 0};        // Stop
+const wchar_t kGlyphSelect[] = {0xE8B0, 0};      // Click
+const wchar_t kGlyphArrow[] = {0xE8AD, 0};       // Go
+const wchar_t kGlyphBox[] = {0xE739, 0};         // Checkbox
+const wchar_t kGlyphText[] = {0xE8D2, 0};        // Font
+const wchar_t kGlyphPencil[] = {0xE70F, 0};      // Edit
 const wchar_t kGlyphColor[] = {0xE790, 0};   // Color
 const wchar_t kGlyphMinus[] = {0xE738, 0};   // Remove
 const wchar_t kGlyphPlus[] = {0xE710, 0};    // Add
@@ -556,6 +563,13 @@ const wchar_t kGlyphSave[] = {0xE74E, 0};    // Save
 const wchar_t kGlyphClose[] = {0xE711, 0};   // Cancel
 const wchar_t kGlyphPlay[] = {0xE768, 0};    // Play
 const wchar_t kGlyphPause[] = {0xE769, 0};   // Pause
+
+// Stopping a recording: a square in a ring, like the record glyph's dot in its ring, or just a square
+// in Segoe MDL2 Assets (Windows 10), which hasn't the ring.
+const wchar_t* StopRecordingGlyph() {
+    const wchar_t* fontName = IconFontName();
+    return fontName && wcscmp(fontName, L"Segoe Fluent Icons") == 0 ? kGlyphRecordStop : kGlyphStop;
+}
 
 // Draws an icon-font glyph at one font size, centered in the box by its ink.
 void DrawGlyph(gp::Graphics& graphics, const wchar_t* glyph, float emSize, const gp::RectF& box, const gp::Color& color) {
@@ -1725,53 +1739,6 @@ void AddLinkMenu(Menu& menu, TaskbarWidget& widget) {
 // the record button records part of the screen, or stops recording. Right-click them for their
 // menu, and drag them to move them along the taskbar.
 
-// A screenshot icon: the corners of a frame, with a crosshair in the middle.
-void DrawScreenshotIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color) {
-    float stroke = std::max(1.25f, box.Width * 0.08f);
-    gp::Pen pen(color, stroke);
-    pen.SetStartCap(gp::LineCapRound);
-    pen.SetEndCap(gp::LineCapRound);
-    pen.SetLineJoin(gp::LineJoinRound);
-    gp::RectF frame = box;
-    frame.Inflate(-stroke / 2, -stroke / 2);
-    float corner = frame.Width * 0.3f;
-    float left = frame.X;
-    float top = frame.Y;
-    float right = frame.GetRight();
-    float bottom = frame.GetBottom();
-    gp::PointF topLeft[] = {{left, top + corner}, {left, top}, {left + corner, top}};
-    gp::PointF topRight[] = {{right - corner, top}, {right, top}, {right, top + corner}};
-    gp::PointF bottomRight[] = {{right, bottom - corner}, {right, bottom}, {right - corner, bottom}};
-    gp::PointF bottomLeft[] = {{left + corner, bottom}, {left, bottom}, {left, bottom - corner}};
-    for (const gp::PointF* corners : {topLeft, topRight, bottomRight, bottomLeft}) {
-        graphics.DrawLines(&pen, corners, 3);
-    }
-    float middleX = (left + right) / 2;
-    float middleY = (top + bottom) / 2;
-    float arm = frame.Width * 0.16f;
-    graphics.DrawLine(&pen, middleX - arm, middleY, middleX + arm, middleY);
-    graphics.DrawLine(&pen, middleX, middleY - arm, middleX, middleY + arm);
-}
-
-// A record icon: a ring with a dot in it; while recording, a stop square.
-void DrawRecordIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, bool recording) {
-    if (recording) {
-        gp::RectF square = box;
-        square.Inflate(-box.Width * 0.2f, -box.Height * 0.2f);
-        FillRoundedRect(graphics, color, square, box.Width * 0.1f);
-        return;
-    }
-    float stroke = std::max(1.25f, box.Width * 0.08f);
-    gp::Pen pen(color, stroke);
-    gp::RectF ring = box;
-    ring.Inflate(-stroke / 2, -stroke / 2);
-    graphics.DrawEllipse(&pen, ring);
-    gp::RectF dot = box;
-    dot.Inflate(-box.Width * 0.27f, -box.Height * 0.27f);
-    gp::SolidBrush brush(color);
-    graphics.FillEllipse(&brush, dot);
-}
-
 class SnipperWidget : public TaskbarWidget {
 public:
     std::function<void()> onSnip;
@@ -1819,13 +1786,10 @@ protected:
                 FillRoundedRect(graphics, WithAlpha(light ? 18 : 24, foreground),
                                 gp::RectF(left + Px(2), (float)Px(4), (float)(buttonWidth - Px(4)), (float)(height - Px(8))), (float)Px(4));
             }
-            float size = (float)Px(20);
-            gp::RectF icon(left + (buttonWidth - size) / 2, (height - size) / 2, size, size);
-            if (IsRecordButton(button)) {
-                DrawRecordIcon(graphics, icon, foreground, recording_);
-            } else {
-                DrawScreenshotIcon(graphics, icon, foreground);
-            }
+            // About the size of the taskbar's own icons; while recording, the record button stops it.
+            gp::RectF icon(left, 0, (float)buttonWidth, (float)height);
+            const wchar_t* glyph = !IsRecordButton(button) ? kGlyphSnip : recording_ ? StopRecordingGlyph() : kGlyphRecord;
+            DrawGlyph(graphics, glyph, 18 * Scale(), icon, foreground);
         }
     }
 
@@ -2464,37 +2428,28 @@ struct Tool {
     bool typed;
 };
 
-// A mouse pointer.
 void DrawSelectIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float scale) {
-    auto at = [&](float x, float y) { return gp::PointF(box.X + box.Width * x, box.Y + box.Height * y); };
-    gp::PointF outline[] = {at(0.26f, 0.06f), at(0.26f, 0.84f), at(0.44f, 0.67f), at(0.57f, 0.95f),
-                            at(0.69f, 0.89f), at(0.56f, 0.62f), at(0.80f, 0.62f)};
-    gp::Pen pen(color, 1.5f * scale);
-    pen.SetLineJoin(gp::LineJoinRound);
-    graphics.DrawPolygon(&pen, outline, ARRAYSIZE(outline));
+    DrawGlyph(graphics, kGlyphSelect, 16 * scale, box, color);
 }
 
 void DrawPencilIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float scale) {
     DrawGlyph(graphics, kGlyphPencil, 16 * scale, box, color);
 }
 
+// The icon font has no line, so it's drawn, about as thick as the glyphs look.
 void DrawLineIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float scale) {
-    gp::Pen pen(color, 1.6f * scale);
+    gp::Pen pen(color, 1.5f * scale);
     pen.SetStartCap(gp::LineCapRound);
     pen.SetEndCap(gp::LineCapRound);
     graphics.DrawLine(&pen, box.X + 2 * scale, box.GetBottom() - 2 * scale, box.GetRight() - 2 * scale, box.Y + 2 * scale);
 }
 
 void DrawArrowIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float scale) {
-    DrawArrow(graphics, gp::PointF(box.X + 1 * scale, box.GetBottom() - 1 * scale), gp::PointF(box.GetRight() - 1 * scale, box.Y + 1 * scale),
-              color, 1.6f * scale);
+    DrawGlyph(graphics, kGlyphArrow, 16 * scale, box, color);
 }
 
 void DrawBoxIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float scale) {
-    gp::Pen pen(color, 1.6f * scale);
-    gp::RectF square = box;
-    square.Inflate(-2 * scale, -3 * scale);
-    graphics.DrawRectangle(&pen, square);
+    DrawGlyph(graphics, kGlyphBox, 16 * scale, box, color);
 }
 
 void DrawTextIcon(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float scale) {
@@ -4886,10 +4841,8 @@ private:
                     DrawGlyph(graphics, kGlyphClose, 13 * scale, rect, ink);
                     break;
                 case Item::Record: {
-                    // A dot, and what it does.
-                    float diameter = 12 * scale;
-                    gp::SolidBrush dot(ink);
-                    graphics.FillEllipse(&dot, rect.X + 14 * scale, rect.Y + (rect.Height - diameter) / 2, diameter, diameter);
+                    // The record glyph, and what it does.
+                    DrawGlyph(graphics, kGlyphRecord, 16 * scale, gp::RectF(rect.X + 12 * scale, rect.Y, 16 * scale, rect.Height), ink);
                     gp::Font font(L"Segoe UI Semibold", 13.0f * scale, gp::FontStyleRegular, gp::UnitPixel);
                     DrawTextLine(graphics, L"Start recording", font, ink,
                                  gp::RectF(rect.X + 34 * scale, rect.Y, rect.Width - 38 * scale, rect.Height));
@@ -5277,9 +5230,7 @@ private:
                 FillRoundedRect(graphics, button == pressed_ ? colors.pressed : colors.hover, rect, 4 * scale_);
             }
             if (button == Button::Stop) {
-                float side = 12 * scale_;
-                FillRoundedRect(graphics, colors.foreground,
-                                gp::RectF(rect.X + (rect.Width - side) / 2, rect.Y + (rect.Height - side) / 2, side, side), 2 * scale_);
+                DrawGlyph(graphics, StopRecordingGlyph(), 16 * scale_, rect, colors.foreground);
             } else {
                 DrawGlyph(graphics, kGlyphClose, 12 * scale_, rect, colors.foreground);
             }
