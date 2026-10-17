@@ -9,8 +9,8 @@
 // @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lwinhttp -ldwmapi
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme==
 // clang-format off
+// ==WindhawkModReadme==
 /*
 # Taskbar Smoke
 Draws a transparent, click-through overlay with animated dark smoke around the
@@ -43,11 +43,11 @@ Styler); the smoke follows the taskbar's button groups. Runs in its own process
 
 Limitations: primary taskbar only, designed for a bottom-docked taskbar.
 */
-// clang-format on
 // ==/WindhawkModReadme==
+// clang-format on
 
-// ==WindhawkModSettings==
 // clang-format off
+// ==WindhawkModSettings==
 /*
 - color: violet
   $name: Smoke color
@@ -201,8 +201,8 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
   - orange: Orange
   - red: Red
 */
-// clang-format on
 // ==/WindhawkModSettings==
+// clang-format on
 
 #include <d2d1.h>
 #include <dwmapi.h>
