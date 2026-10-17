@@ -422,6 +422,7 @@ constexpr PCWSTR kValueDisplayName = L"DisplayName";
 // shell 会把“某个 CLSID 实现了 IShellFolder({000214E6-…})”记在 Shell Extensions\Cached
 // 下。这是我们的项附带的副作用键（数值 0xFFFF 表示已失效），必须一并清掉，
 // 否则它会一直留在系统里、并可能在复用时被当成“已知无效”。
+constexpr PCWSTR kShellExtCachedPrefix = L"{D3F0A1B2-C3D4-4E5F-8A9B-0C1D2E3F4A";
 constexpr PCWSTR kShellExtCachedKey =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Shell Extensions\\Cached";
 
@@ -512,13 +513,15 @@ bool SetRegistryDword(HKEY root,
 
 // 资源管理器把“该 CLSID 实现了 IShellFolder”记为 Cached 键下的**值**，
 // 名字形如 "{CLSID} {IID} 0xFFFF"，而不是子键。因此必须按名字前缀枚举删除。
-void RemoveCachedShellExtension(const std::wstring& clsid) {
+void RemoveCachedShellExtensions() {
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kShellExtCachedKey, 0,
                       KEY_READ | KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
         return;
     }
-    const std::wstring prefix = clsid + L" ";
+    // 本模组的所有 CLSID 共用同一个前缀，因此一次扫描即可全部匹配，
+    // 不必按盘符逐个扫（Cached 下常有数百个值）。
+    const size_t prefixLength = wcslen(kShellExtCachedPrefix);
     std::vector<std::wstring> stale;
     for (DWORD index = 0;; index++) {
         WCHAR name[512] = {};
@@ -527,7 +530,7 @@ void RemoveCachedShellExtension(const std::wstring& clsid) {
                           nullptr, nullptr) != ERROR_SUCCESS) {
             break;
         }
-        if (_wcsnicmp(name, prefix.c_str(), prefix.size()) == 0) {
+        if (_wcsnicmp(name, kShellExtCachedPrefix, prefixLength) == 0) {
             stale.emplace_back(name);
         }
     }
@@ -541,18 +544,57 @@ void RemoveCachedShellExtension(const std::wstring& clsid) {
 // RegCreateKeyExW 会用同样的选项创建路径上缺失的父键。若父键被建成易失性键，
 // 其他程序（OneDrive、网盘等）就无法在其下创建普通键（ERROR_CHILD_MUST_BE_VOLATILE）。
 // 因此先确保父键以普通键存在，再在其下创建本模组的易失性 {CLSID} 键。
+constexpr PCWSTR kParentKeys[] = {
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace",
+    L"Software\\Classes\\CLSID",
+};
+// 与 kParentKeys 一一对应：记录该父键是否由本模组创建（Wh_*Value 跨重启保存）。
+constexpr PCWSTR kParentKeyFlags[] = {L"createdNameSpaceParent",
+                                      L"createdClsidParent"};
+
 void EnsureRegularParentKeys() {
-    constexpr PCWSTR kParents[] = {
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace",
-        L"Software\\Classes\\CLSID",
-    };
-    for (PCWSTR parent : kParents) {
+    // RegCreateKeyExW 会用同样的选项创建路径上缺失的父键。若父键被建成易失性键，
+    // 其他程序（OneDrive、网盘等）就无法在其下创建普通键（ERROR_CHILD_MUST_BE_VOLATILE）。
+    // 因此先确保父键以普通键存在，并记住“是本次创建的”，以便卸载时清掉空键。
+    for (size_t i = 0; i < ARRAYSIZE(kParentKeys); i++) {
         HKEY key = nullptr;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, parent, 0, nullptr,
+        DWORD disposition = 0;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, kParentKeys[i], 0, nullptr,
                             REG_OPTION_NON_VOLATILE, KEY_CREATE_SUB_KEY, nullptr,
-                            &key, nullptr) == ERROR_SUCCESS) {
+                            &key, &disposition) == ERROR_SUCCESS) {
             RegCloseKey(key);
+            if (disposition == REG_CREATED_NEW_KEY) {
+                Wh_Log(L"Created parent key: %s", kParentKeys[i]);
+                Wh_SetIntValue(kParentKeyFlags[i], 1);
+            }
         }
+    }
+}
+
+// 卸载时清掉“由本模组创建、且如今已空”的父键，避免留下永久空键。
+void RemoveCreatedParentKeysIfEmpty() {
+    for (size_t i = 0; i < ARRAYSIZE(kParentKeys); i++) {
+        if (!Wh_GetIntValue(kParentKeyFlags[i], 0)) {
+            continue;
+        }
+        HKEY key = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, kParentKeys[i], 0, KEY_READ, &key) ==
+            ERROR_SUCCESS) {
+            DWORD subKeys = 0;
+            DWORD values = 0;
+            LSTATUS status =
+                RegQueryInfoKeyW(key, nullptr, nullptr, nullptr, &subKeys,
+                                 nullptr, nullptr, &values, nullptr, nullptr,
+                                 nullptr, nullptr);
+            RegCloseKey(key);
+            if (status == ERROR_SUCCESS && subKeys == 0 && values == 0) {
+                if (RegDeleteKeyW(HKEY_CURRENT_USER, kParentKeys[i]) ==
+                    ERROR_SUCCESS) {
+                    Wh_Log(L"Removed empty parent key: %s", kParentKeys[i]);
+                }
+            }
+        }
+        Wh_SetIntValue(kParentKeyFlags[i], 0);
     }
 }
 
@@ -648,7 +690,6 @@ void RemoveNamespaceItemByIndex(int index) {
     std::wstring clsid = NamespaceClsidForDriveIndex(index);
     DeleteRegistryTree(HKEY_CURRENT_USER, kNamespaceNameSpaceKey + clsid);
     DeleteRegistryTree(HKEY_CURRENT_USER, L"Software\\Classes\\CLSID\\" + clsid);
-    RemoveCachedShellExtension(clsid);
 }
 
 // 清掉所有不再需要的命名空间项（拔掉的盘、切换样式后的残留、被强杀后的孤儿）。
@@ -678,18 +719,20 @@ bool SweepNamespaceItems(const std::set<int>& presentIndexes) {
         DeleteRegistryTree(HKEY_CURRENT_USER, kNamespaceNameSpaceKey + clsid);
         DeleteRegistryTree(HKEY_CURRENT_USER,
                            L"Software\\Classes\\CLSID\\" + clsid);
-                           RemoveCachedShellExtension(clsid);
         removed = true;
+    }
+    if (removed) {
+        RemoveCachedShellExtensions();
     }
     return removed;
 }
 
 bool RemoveAllNamespaceItems() {
     bool removed = false;
+    RemoveCachedShellExtensions();
     for (int index = 0; index < 26; index++) {
         std::wstring clsid = NamespaceClsidForDriveIndex(index);
         // 即使条目本身已经不在了，也要清掉 shell 记录在该 CLSID 下的缓存书签。
-        RemoveCachedShellExtension(clsid);
         std::wstring name;
         if (ReadRegistryString(HKEY_CURRENT_USER,
                                kNamespaceNameSpaceKey + clsid, nullptr, &name)) {
@@ -1061,4 +1104,7 @@ void Wh_ModUninit() {
     }
 
 
+
+    // 本模组创建的空父键一并清掉。
+    RemoveCreatedParentKeysIfEmpty();
 }
