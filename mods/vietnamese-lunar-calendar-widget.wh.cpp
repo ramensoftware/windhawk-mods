@@ -4,7 +4,7 @@
 // @name:vi-VN      Widget Lịch Âm Việt Nam & Tử Vi
 // @description     Vietnamese lunar calendar and zodiac taskbar widget with an interactive horoscope popup
 // @description:vi-VN Widget Âm lịch & Con Giáp trên Taskbar kèm popup Tử Vi có hiệu ứng nền mờ
-// @version         1.0.14
+// @version         1.0.15
 // @author          caotu2k5
 // @github          https://github.com/caotu2k5
 // @include         explorer.exe
@@ -15,65 +15,178 @@
 
 // ==WindhawkModReadme==
 /*
-# Vietnamese Lunar Calendar Widget (Widget Lịch Âm Việt Nam & Tử Vi)
+# Vietnamese Lunar Calendar Widget
 
-Widget XAML hiển thị **Âm lịch, Con Giáp & Ngũ Hành** trực tiếp trên thanh Taskbar Windows 11, đi kèm **Popup Tử Vi & Lịch Ngày Lễ** tương tác với hiệu ứng nền mờ hiện đại. Mod hoạt động độc lập, nhẹ nhàng và chỉ chạy trong tiến trình `explorer.exe`.
+Github: caotu2k5
+
+A Vietnamese lunar calendar and zodiac widget for the primary Windows 11 taskbar,
+with an interactive daily almanac and a list of Vietnamese holidays and
+commemorations.
+
+![Screenshot1](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot1.png)
+
+Screenshot 1
+
+![Screenshot2](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot2.png)
+
+Screenshot 2
+
+![Screenshot3](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-widget-resources/main/screenshot3.png)
+
+Screenshot 3
+
+## Features
+
+### Taskbar widget
+
+- **Vietnamese zodiac and Five Elements:** displays the day's zodiac animal,
+  including the Cat for Mão, with a badge colored by its Nạp Âm element.
+- **Lunar date:** shows the lunar day/month, leap-month marker and Can Chi year.
+  The first line scales down when necessary to fit the widget width.
+- **Rotating information:** the second line cycles through daily almanac
+  information every **15 seconds**, including Can Chi, auspicious hours,
+  suggested activities and directions.
+- **Pinned holidays:** on holidays, commemorations, New Moon days and Full Moon
+  days, the event name stays on the second line instead of rotating.
+- **Tooltip:** hover over the widget to read the full text of both lines.
+
+### Daily almanac and holiday popup
+
+Click the widget to open or close the popup. Opening takes **300 ms** and closing
+takes **240 ms**. Clicking again during closing reopens it.
+
+The daily page includes the solar and lunar dates, day/month/hour Can Chi,
+zodiac animal, Nạp Âm, auspicious or inauspicious day star, Trực, auspicious hours,
+suggested activities, conflicting ages and travel directions.
+
+- **◀ / ● / ▶:** previous day, today and next day.
+- **List** (**Lễ** in Vietnamese): opens **13 lunar festival entries** and
+  **37 solar holiday and commemoration entries**. Lunar New Year's Eve is shown
+  on the actual last day of the lunar year, whether that is the 29th or 30th.
+- **↩:** returns to the daily almanac.
+- **Scrolling:** use the mouse wheel or vertical scrollbar to read all content.
+  Navigation stays at the top. The popup remains **316 DIP** tall, shrinking only
+  when the available screen space is smaller; holiday text does not enlarge it.
+- **Dismissal:** click the widget again, click outside the popup or press **Esc**.
+
+The popup follows the taskbar's light or dark theme and uses a Composition
+HostBackdrop when available. If backdrop setup fails, it uses a solid background.
+
+### Calendar and language
+
+Lunar dates are calculated locally using the **Hồ Ngọc Đức algorithm with UTC+7**.
+Calendar calculations and holiday lookup do not require an Internet connection.
+
+English and Vietnamese labels are available. **Auto** uses Vietnamese on a
+Vietnamese Windows UI and English otherwise. Traditional Can Chi and almanac
+names retain their Vietnamese names.
+
+## Settings
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `language` | `auto` | System UI language, English (`en`) or Vietnamese (`vi`). |
+| `enableTaskbarWidget` | `true` | Show or hide the widget. |
+| `position` | `tray_left` | Widget placement; see the positions below. |
+| `widgetLeftOffset` | `12` | Left offset for `root_left` only, in DIP; range 0–2500. |
+| `widgetWidth` | `270` | Widget width in DIP; range 140–480. |
+| `expandedWidth` | `540` | Popup width in DIP; range 320–640. |
+
+Values outside the supported numeric ranges are clamped to the nearest limit.
+DIP means device-independent pixels; Windows display scaling determines their
+on-screen size.
+
+Available positions:
+
+- **`tray_left` — System tray, leftmost (default).**
+- **`tray_before_clock` — System tray, before the clock.**
+- **`tray_after_clock` — System tray, after the clock.**
+- **`tray_right` — System tray, rightmost.**
+- **`root_left` — Left side of the taskbar, as an overlay.**
+
+Tray positions reserve space in the tray layout. The optional `root_left`
+position overlays the taskbar and can cover Widgets, Start or pinned apps.
+Adjust `widgetLeftOffset` to avoid those buttons, or choose a tray position.
+
+## Usage and compatibility
+
+1. Install and enable the mod from the **Windhawk catalog**.
+2. Open the mod's **Settings** tab to choose a language, position and sizes.
+3. Click the widget to browse the daily almanac or holiday list.
+
+This mod requires the native Windows 11 XAML taskbar and currently adds the
+widget to the **primary taskbar only**. Replacement taskbars are not supported.
+It does not change the native taskbar clock, clock tooltip or Windows calendar
+flyout.
+
+If the widget does not appear, enable **Detailed debug logs** and inspect this
+mod's taskbar initialization messages.
 
 ---
 
-## ✨ Tính năng nổi bật
+## Tiếng Việt
 
-### 1. Widget Âm Lịch & Con Giáp trên Taskbar
-- **Biểu tượng Con Giáp & Ngũ Hành**: Hiển thị emoji 12 Con Giáp chuẩn văn hóa Việt Nam (Mão là Mèo 🐈) đặt trên nền huy hiệu tự động đổi màu theo **Ngũ Hành Nạp Âm** của ngày (Kim, Mộc, Thủy, Hỏa, Thổ).
-- **Dòng 1 (Thông tin Âm lịch)**: Hiển thị ngày/tháng Âm lịch (kèm ghi chú tháng nhuận nếu có) và năm Can Chi (ví dụ: *"Âm lịch: 08/09 năm Bính Ngọ"*), tự động co chữ thông minh để không bị khuất.
-- **Dòng 2 (Tử Vi luân chuyển / Ngày lễ)**:
-  - **Ngày thường**: Tự động xoay vòng mỗi **15 giây** qua các thông tin Tử Vi trong ngày và giờ hiện tại: Can Chi ngày/tháng/giờ, Mệnh Nạp Âm, Sao Hoàng Đạo/Hắc Đạo, Trực, Giờ Hoàng Đạo, việc Nên/Kỵ, Tuổi xung, Hướng Hỷ Thần & Tài Thần.
-  - **Ngày Lễ / Sự kiện**: Tự động ghim cố định tên ngày lễ Dương lịch, Âm lịch hoặc ngày Sóc/Vọng (Mùng 1, Ngày Rằm) nổi bật ở dòng 2.
-- **Tooltip nhanh**: Di chuột lên widget để xem đầy đủ toàn bộ nội dung đang hiển thị.
+Widget hiển thị **Âm lịch, Con Giáp và Ngũ Hành** trên taskbar chính của Windows 11,
+kèm popup xem thông tin Tử Vi trong ngày và danh sách ngày lễ, kỷ niệm Việt Nam.
 
-### 2. Popup Tử Vi & Danh Mục Ngày Lễ Tương Tác
-- **Giao diện Fluent & Hiệu ứng nền mờ**: Nhấp vào widget để đóng/mở Popup với hiệu ứng nền mờ **HostBackdrop / Acrylic** (tự động thích ứng chế độ Sáng/Tối của Windows 11) cùng chuyển động đóng/mở mượt mà (mở 300 ms, đóng 240 ms).
-- **Lá số Tử Vi chi tiết trong ngày**:
-  - Thứ, ngày/tháng/năm Dương lịch và ngày/tháng/năm Âm lịch.
-  - Bát Tự: Can Chi của Ngày (kèm Con Giáp), Tháng và Giờ hiện tại.
-  - Mệnh Nạp Âm, Sao Hoàng Đạo / Hắc Đạo và Trực trong ngày.
-  - Danh sách các khung **Giờ Hoàng Đạo**.
-  - Gợi ý các việc **Nên làm** và **Kỵ làm** theo Trực.
-  - **Tuổi xung** trong ngày và hướng xuất hành tốt (**Hỷ Thần**, **Tài Thần**).
-- **Điều hướng ngày linh hoạt**: Sử dụng các nút `◀` (ngày trước), `●` (về hôm nay) và `▶` (ngày sau) để tra cứu nhanh Âm lịch và Tử Vi của bất kỳ ngày nào.
-- **Tra cứu Ngày Lễ & Kỷ Niệm Việt Nam**:
-  - Nhấn nút **`Lễ`** (`List`) cạnh cụm nút điều hướng để mở danh sách tổng hợp **13 ngày lễ truyền thống Âm lịch** (tự động nhận diện chính xác ngày Giao thừa 29 hoặc 30 tháng Chạp tùy năm) và **37 ngày lễ, kỷ niệm Dương lịch Việt Nam**.
-  - Nhấn nút **`↩`** để quay lại màn hình Tử Vi.
-- **Trải nghiệm cuộn mượt mà**: Popup giữ chiều cao cố định (**316 DIP**) với thanh cuộn dọc độc lập cho phần nội dung và hàng nút điều hướng cố định ở đầu trang; tự động đóng khi bấm ra ngoài hoặc nhấn phím `Esc`.
+### Tính năng
 
-### 3. Thuật toán Độc lập & Đa ngôn ngữ
-- **Thuật toán Hồ Ngọc Đức (UTC+7)**: Tính toán lịch Âm và Can Chi thuần số học ngay trên máy, chính xác theo múi giờ Việt Nam mà không cần kết nối Internet.
-- **Đa ngôn ngữ**: Hỗ trợ hiển thị hoàn chỉnh bằng **Tiếng Việt**, **Tiếng Anh** hoặc tự động theo ngôn ngữ hệ thống Windows.
+- **Con Giáp và Ngũ Hành:** hiển thị con giáp của ngày, trong đó Mão là Mèo;
+  màu huy hiệu thay đổi theo Ngũ Hành Nạp Âm.
+- **Dòng 1:** ngày/tháng Âm lịch, ghi chú tháng nhuận và năm Can Chi, ví dụ
+  **Âm lịch: 08/09 năm Bính Ngọ**. Chữ được thu nhỏ khi cần để vừa chiều rộng.
+- **Dòng 2:** luân chuyển thông tin Tử Vi mỗi **15 giây**. Khi có ngày lễ,
+  kỷ niệm, Mùng 1 hoặc ngày Rằm, tên sự kiện được giữ cố định.
+- **Tooltip:** di chuột lên widget để xem đầy đủ nội dung hai dòng.
+- **Popup:** bấm widget để mở/đóng, với animation mở **300 ms**, đóng **240 ms**.
+  Bấm lại khi đang đóng sẽ mở tiếp popup.
+- **Thông tin trong ngày:** ngày Dương/Âm lịch, Can Chi ngày/tháng/giờ, Con Giáp,
+  Nạp Âm, sao Hoàng Đạo/Hắc Đạo, Trực, Giờ Hoàng Đạo, việc Nên/Kỵ, tuổi xung
+  và hướng xuất hành.
+- **Điều hướng:** dùng **◀ / ● / ▶** để xem ngày trước, hôm nay và ngày sau.
+  Nút **Lễ** mở danh sách **13 mục lễ Âm lịch** và **37 mục lễ, kỷ niệm Dương lịch**;
+  nút **↩** trở về Tử Vi. Giao thừa được xác định theo ngày cuối năm Âm lịch thực tế.
+- **Cuộn nội dung:** popup cao **316 DIP**, có thanh cuộn dọc và hàng nút cố định.
+  Khung không phình lên khi có ngày lễ; chỉ thu nhỏ nếu màn hình không đủ chỗ.
+  Cuộn chuột hoặc kéo thanh cuộn để đọc hết nội dung.
+- **Đóng popup:** bấm lại widget, bấm ra ngoài hoặc nhấn **Esc**.
 
----
+Popup theo giao diện sáng/tối của taskbar, dùng nền mờ **Composition HostBackdrop**
+khi khả dụng và nền màu đặc nếu không thiết lập được hiệu ứng nền mờ.
+Phần tính lịch dùng thuật toán **Hồ Ngọc Đức, UTC+7**, không cần kết nối Internet.
 
-## ⚙️ Tùy chỉnh (Settings)
+### Cài đặt và sử dụng
 
-- **Ngôn ngữ hiển thị (`language`)**: Chọn `Tự động` (`auto`), `Tiếng Việt` (`vi`) hoặc `Tiếng Anh` (`en`).
-- **Bật/Tắt Widget (`enableTaskbarWidget`)**: Bật hoặc ẩn nhanh widget trên thanh Taskbar.
-- **Vị trí trên Taskbar (`position`)**: Hỗ trợ 5 vị trí linh hoạt:
-  1. **Góc trái thanh Taskbar (`root_left`)**: Đặt đè lên `RootGrid` ở phía bên trái Taskbar.
-  2. **Khay hệ thống - Ngoài cùng bên trái (`tray_left`)**.
-  3. **Khay hệ thống - Trước đồng hồ (`tray_before_clock`)**.
-  4. **Khay hệ thống - Sau đồng hồ (`tray_after_clock`)**.
-  5. **Khay hệ thống - Ngoài cùng bên phải (`tray_right`)**.
-- **Khoảng cách lề trái (`widgetLeftOffset`)**: Mặc định `12` DIP (áp dụng khi chọn vị trí góc trái Taskbar). Hãy tăng giá trị này (ví dụ `220`) nếu góc trái Taskbar của bạn đã có nút Widgets, nút Start hoặc trình phát nhạc.
-- **Chiều rộng Widget (`widgetWidth`)**: Mặc định `270` DIP (cho phép chỉnh từ `140` đến `480` DIP).
-- **Chiều rộng Popup Tử Vi (`expandedWidth`)**: Mặc định `540` DIP (cho phép chỉnh từ `320` đến `640` DIP).
+Cài và bật mod từ **danh mục Windhawk**, sau đó mở tab **Settings**:
 
----
+| Cài đặt | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| `language` | `auto` | Theo ngôn ngữ Windows, tiếng Anh (`en`) hoặc tiếng Việt (`vi`). |
+| `enableTaskbarWidget` | `true` | Bật hoặc ẩn widget. |
+| `position` | `tray_left` | Vị trí widget trên taskbar. |
+| `widgetLeftOffset` | `12` | Lề trái của vị trí `root_left`, từ 0–2500 DIP. |
+| `widgetWidth` | `270` | Chiều rộng widget, từ 140–480 DIP. |
+| `expandedWidth` | `540` | Chiều rộng popup, từ 320–640 DIP. |
 
-## 🚀 Cách dùng & Lưu ý
+Giá trị ngoài giới hạn được đưa về mức gần nhất. Kích thước DIP được điều chỉnh
+theo tỉ lệ hiển thị của Windows.
 
-1. Dán mã nguồn vào trình chỉnh sửa của Windhawk, nhấn **Compile Mod** và bật mod.
-2. Mở tab **Settings** của mod để chọn vị trí đặt widget và ngôn ngữ hiển thị mong muốn.
-3. Hiệu ứng nền mờ của Popup phụ thuộc vào tùy chọn **Transparency effects** trong *Settings > Personalization > Colors* của Windows (nếu tắt hiệu ứng trong suốt, Popup sẽ tự động dùng nền màu đặc phù hợp với giao diện Sáng/Tối).
-4. Nếu widget chưa xuất hiện ngay sau khi khởi động Explorer, bạn có thể bật **Detailed debug logs** để kiểm tra các dòng trạng thái `[Widget]`.
+Bốn vị trí khay hệ thống gồm **ngoài cùng bên trái** (`tray_left`, mặc định),
+**trước đồng hồ** (`tray_before_clock`), **sau đồng hồ** (`tray_after_clock`) và
+**ngoài cùng bên phải** (`tray_right`). Các vị trí này dành không gian riêng
+cho widget trong khay hệ thống.
+
+Vị trí **góc trái taskbar** (`root_left`) phủ lên taskbar và có thể che nút
+Widgets, Start hoặc ứng dụng đã ghim. Hãy điều chỉnh `widgetLeftOffset` để tránh
+che nút, hoặc chọn một vị trí trong khay hệ thống.
+
+Chế độ **Auto** dùng tiếng Việt nếu giao diện Windows là tiếng Việt, và tiếng Anh
+trong các trường hợp khác. Tên Can Chi và một số thuật ngữ Tử Vi giữ nguyên tiếng Việt.
+
+Mod chỉ hỗ trợ **taskbar XAML gốc của Windows 11**, hiện hiển thị trên
+**taskbar chính**, không sửa đồng hồ, tooltip đồng hồ hoặc khay Lịch của Windows.
+Nếu widget chưa xuất hiện, bật **Detailed debug logs** để xem thông báo khởi tạo
+taskbar của mod.
 */
 // ==/WindhawkModReadme==
 
@@ -93,7 +206,7 @@ Widget XAML hiển thị **Âm lịch, Con Giáp & Ngũ Hành** trực tiếp tr
 - enableTaskbarWidget: true
   $name: Enable taskbar Lunar & Zodiac widget
   $name:vi-VN: Bật Widget Âm lịch & Con Giáp trên thanh Taskbar
-- position: root_left
+- position: tray_left
   $name: Widget position on taskbar
   $name:vi-VN: Vị trí Widget trên thanh Taskbar
   $options:
@@ -116,15 +229,18 @@ Widget XAML hiển thị **Âm lịch, Con Giáp & Ngũ Hành** trực tiếp tr
 - widgetWidth: 270
   $name: Taskbar widget width (DIP)
   $name:vi-VN: Chiều rộng của Widget trên Taskbar (DIP)
+  $description: "Allowed range: 140–480 DIP. Values outside this range are clamped."
+  $description:vi-VN: "Giới hạn: 140–480 DIP. Giá trị ngoài giới hạn được đưa về mức gần nhất."
 - expandedWidth: 540
   $name: Horoscope popup width (DIP)
   $name:vi-VN: Chiều rộng Popup Tử Vi (DIP)
+  $description: "Allowed range: 320–640 DIP. Values outside this range are clamped."
+  $description:vi-VN: "Giới hạn: 320–640 DIP. Giá trị ngoài giới hạn được đưa về mức gần nhất."
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
-#include <windowsx.h>
 #include <dwmapi.h>
 
 #include <algorithm>
@@ -151,6 +267,8 @@ Widget XAML hiển thị **Âm lịch, Con Giáp & Ngũ Hành** trực tiếp tr
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.System.h>
+// Button.Click is inherited from ButtonBase; its projected definition is here.
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
@@ -174,16 +292,6 @@ struct IDesktopWindowXamlSourceNative : ::IUnknown {
 __CRT_UUID_DECL(IDesktopWindowXamlSourceNative,
                 0x3cbcf1bf, 0x2f76, 0x4e9c, 0x96, 0xab, 0xe8, 0x4b, 0x37, 0x97, 0x25, 0x54);
 
-// Documented Windows.UI.Xaml.Window interop. WinRT Boolean is one byte.
-// https://learn.microsoft.com/windows/apps/api-reference/interface-members/ixamlsourcetransparency-isbackgroundtransparent
-struct IVnXamlSourceTransparency : ::IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE get_IsBackgroundTransparent(boolean* value) = 0;
-    virtual HRESULT STDMETHODCALLTYPE put_IsBackgroundTransparent(boolean value) = 0;
-};
-__CRT_UUID_DECL(IVnXamlSourceTransparency,
-                0x06636c29, 0x5a17, 0x458d, 0x8e, 0xa2, 0x24, 0x22, 0xd9, 0x97, 0xa9, 0x22);
-
-constexpr PCWSTR kWidgetBuildLabel = L"VN Lunar Widget v2.2.2 | 15 s";
 std::atomic<bool> g_shuttingDown{false};
 
 
@@ -195,7 +303,7 @@ enum class ModLanguage { Auto, English, Vietnamese };
 struct ModSettings {
     ModLanguage language = ModLanguage::Auto;
     bool enableTaskbarWidget = true;
-    std::wstring position = L"root_left";
+    std::wstring position = L"tray_left";
     int widgetLeftOffset = 12;
     int widgetWidth = 270;
     int expandedWidth = 540;
@@ -221,7 +329,7 @@ void LoadSettings() {
     }
 
     WindhawkUtils::StringSetting pos = WindhawkUtils::StringSetting::make(L"position");
-    if (pos.get() && *pos.get()) {
+    if (*pos.get()) {
         s.position = pos.get();
     }
 
@@ -293,7 +401,7 @@ const PCWSTR ZODIAC_EMOJI_12[] = {
 };
 
 const PCWSTR ZODIAC_VI_NAME_12[] = {
-    L"Chuột", L"Trâu", L"Hổ", L"Mèo", L"Rồng", L"Rắn", L"Ngựa", L"Dê", L"Khỉ", L"Gà", L"Chó", L"Hợi"
+    L"Chuột", L"Trâu", L"Hổ", L"Mèo", L"Rồng", L"Rắn", L"Ngựa", L"Dê", L"Khỉ", L"Gà", L"Chó", L"Lợn"
 };
 
 const PCWSTR ZODIAC_EN_NAME_12[] = {
@@ -857,7 +965,7 @@ std::vector<std::wstring> BuildWidgetHoroscopeRows(ComputedHoroscope const& h, b
 std::wstring SelectWidgetSecondLine(ComputedHoroscope const& h, bool vi,
                                     uint64_t now, WidgetRotationState& state) {
     int today = MakeDateKey(h.sYear, h.sMonth, h.sDay);
-    // Preserve the existing holiday/event behavior, including 20/10, Tet and full moons.
+    // Pin holiday and event names instead of rotating the almanac rows.
     if (!h.specialHoliday.empty()) {
         state.Select(today, vi, true, 1, now);
         return L"🎉 " + h.specialHoliday;
@@ -881,6 +989,7 @@ TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 using Std_Ref_Decref_t = void(WINAPI*)(void* pThis);
 Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 
+std::atomic<bool> g_taskbarDllHookAttempted{false};
 std::atomic<bool> g_taskbarDllHooked{false};
 
 void RequestTaskbarWidgetInjection();
@@ -893,13 +1002,13 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     if (!g_shuttingDown) RequestTaskbarWidgetInjection();
 }
 
-// Called only from the taskbar UI thread. Avoid flooding the log every 2 seconds.
+// Called on the taskbar UI thread; repeated status messages are rate-limited.
 void ReportWidgetStatus(PCWSTR status) {
     static std::wstring lastStatus;
     static ULONGLONG lastTime = 0;
     ULONGLONG now = GetTickCount64();
     if (lastStatus != status || now - lastTime >= 30000) {
-        Wh_Log(L"[Widget] %s", status);
+        Wh_Log(L"%s", status);
         lastStatus = status;
         lastTime = now;
     }
@@ -949,13 +1058,21 @@ bool HookTaskbarDllSymbols(HMODULE module) {
     };
 
     if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
-        Wh_Log(L"[Widget] Taskbar.dll symbol resolution failed. Check symbol download/build compatibility.");
+        Wh_Log(L"Taskbar.dll symbol resolution failed. Check symbol download/build compatibility.");
         return false;
     }
-    Wh_Log(L"[Widget] Taskbar.dll symbols ready; GetTaskbarHost=%p, FrameHeight=%p",
+    Wh_Log(L"Taskbar.dll symbols ready; GetTaskbarHost=%p, FrameHeight=%p",
            reinterpret_cast<void*>(CTaskBand_GetTaskbarHost_Original),
            reinterpret_cast<void*>(TaskbarHost_FrameHeight_Original));
     return true;
+}
+
+void TryHookTaskbarDllSymbols(HMODULE module, bool applyHooks) {
+    if (!module || g_shuttingDown || g_taskbarDllHookAttempted.exchange(true)) return;
+    if (HookTaskbarDllSymbols(module)) {
+        g_taskbarDllHooked = true;
+        if (applyHooks) Wh_ApplyHookOperations();
+    }
 }
 
 // 1. Find HWND of Shell_TrayWnd in current explorer.exe process
@@ -1215,7 +1332,7 @@ void LogTrayLookupFailure(wux::FrameworkElement const& root, PCWSTR position) {
     auto now = GetTickCount64();
     if (lastLogged && now - lastLogged < 30000) return;
     lastLogged = now;
-    Wh_Log(L"[Widget v2.1.6] Target unavailable: position=%s; visual tree follows", position);
+    Wh_Log(L"Target unavailable: position=%s; visual tree follows", position);
     int remaining = 100;
     auto dump = [&](auto&& self, wux::DependencyObject const& node, int depth) -> void {
         if (!node || depth > 12 || remaining-- <= 0) return;
@@ -1291,22 +1408,25 @@ constexpr UINT_PTR kTaskbarEnsureTimerId   = 0x202601;
 HWND g_taskbarWnd = nullptr;
 bool g_taskbarTimerStarted = false;
 bool g_ensuringTaskbarWidget = false;
-wuxc::Panel g_injectedParentPanel{nullptr};
-wuxc::ColumnDefinition g_injectedColumnDef{nullptr};
-wuxc::ColumnDefinition g_injectedImplicitColumnDef{nullptr};
+// Release every strong UI reference on the taskbar thread during explicit
+// teardown; never release these objects from CRT destructors at process exit.
+[[clang::no_destroy]] wuxc::Panel g_injectedParentPanel{nullptr};
+[[clang::no_destroy]] wuxc::ColumnDefinition g_injectedColumnDef{nullptr};
+[[clang::no_destroy]] wuxc::ColumnDefinition g_injectedImplicitColumnDef{nullptr};
 struct ShiftedTrayChild {
-    wux::FrameworkElement element{nullptr};
+    winrt::weak_ref<wux::FrameworkElement> element;
     int column = 0;
     int span = 1;
     bool moved = false;
     bool widened = false;
 };
+// Contains only weak UI references; automatic destruction is safe at process exit.
 std::vector<ShiftedTrayChild> g_shiftedTrayChildren;
-wuxc::Border g_playerGrid{nullptr}; // The compact taskbar widget root border
-wuxc::Border g_widgetBadgeBorder{nullptr};
-wuxc::TextBlock g_widgetZodiacText{nullptr};
-wuxc::TextBlock g_widgetLine1Text{nullptr};
-wuxc::TextBlock g_widgetLine2Text{nullptr};
+[[clang::no_destroy]] wuxc::Border g_playerGrid{nullptr}; // The compact taskbar widget root border
+[[clang::no_destroy]] wuxc::Border g_widgetBadgeBorder{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_widgetZodiacText{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_widgetLine1Text{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_widgetLine2Text{nullptr};
 bool g_widgetHovered = false;
 std::wstring g_currentInjectedPosition;
 WidgetRotationState g_widgetRotation;
@@ -1320,32 +1440,28 @@ bool g_popupClosing = false;
 ULONGLONG g_popupCloseDeadline = 0;
 HWND g_expandedPopup = nullptr;
 HWND g_popupXamlChild = nullptr;
-wuxh::DesktopWindowXamlSource g_popupXamlSource{nullptr};
-winrt::com_ptr<IVnXamlSourceTransparency> g_popupTransparency;
-boolean g_popupOriginalTransparency = false;
-bool g_popupChangedTransparency = false;
-bool g_popupTransparencyEnabled = false;
+[[clang::no_destroy]] wuxh::DesktopWindowXamlSource g_popupXamlSource{nullptr};
 bool g_popupBackdropDirty = true;
 int g_popupBackdropTheme = -1;
-wuxc::Border g_popupRootCard{nullptr};
-wuxc::Border g_popupBackdropLayer{nullptr};
-wcomp::ContainerVisual g_popupBackdropVisual{nullptr};
-wcomp::CompositionColorBrush g_popupTintBrush{nullptr};
-wuxc::Border g_popupBadgeBorder{nullptr};
-wuxc::TextBlock g_popupZodiacText{nullptr};
-wuxc::TextBlock g_popupTitleSolar{nullptr};
-wuxc::TextBlock g_popupTitleLunar{nullptr};
-wuxc::Border g_popupHolidayBanner{nullptr};
-wuxc::TextBlock g_popupHolidayText{nullptr};
-wuxc::TextBlock g_popupRowBattu{nullptr};
-wuxc::TextBlock g_popupRowMenhTruc{nullptr};
-wuxc::TextBlock g_popupRowGioHoangDao{nullptr};
-wuxc::TextBlock g_popupRowNenKy{nullptr};
-wuxc::TextBlock g_popupRowXungHuong{nullptr};
-wuxc::ScrollViewer g_popupHoroscopeScroll{nullptr};
-wuxc::ScrollViewer g_popupHolidayScroll{nullptr};
-wuxc::TextBlock g_popupHolidayListText{nullptr};
-wuxc::Button g_popupHolidayListButton{nullptr};
+[[clang::no_destroy]] wuxc::Border g_popupRootCard{nullptr};
+[[clang::no_destroy]] wuxc::Border g_popupBackdropLayer{nullptr};
+[[clang::no_destroy]] wcomp::ContainerVisual g_popupBackdropVisual{nullptr};
+[[clang::no_destroy]] wcomp::CompositionColorBrush g_popupTintBrush{nullptr};
+[[clang::no_destroy]] wuxc::Border g_popupBadgeBorder{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupZodiacText{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupTitleSolar{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupTitleLunar{nullptr};
+[[clang::no_destroy]] wuxc::Border g_popupHolidayBanner{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupHolidayText{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupRowBattu{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupRowMenhTruc{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupRowGioHoangDao{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupRowNenKy{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupRowXungHuong{nullptr};
+[[clang::no_destroy]] wuxc::ScrollViewer g_popupHoroscopeScroll{nullptr};
+[[clang::no_destroy]] wuxc::ScrollViewer g_popupHolidayScroll{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_popupHolidayListText{nullptr};
+[[clang::no_destroy]] wuxc::Button g_popupHolidayListButton{nullptr};
 bool g_popupShowingHolidays = false;
 int g_popupHolidayListLanguage = -1;
 
@@ -1424,7 +1540,7 @@ void UpdateWidgetHoverVisual() {
             borderCol = light ? winrt::Windows::UI::Color{30, 0, 0, 0}
                               : winrt::Windows::UI::Color{40, 255, 255, 255};
         } else {
-            // Blend into the taskbar like the compact media widget in the reference.
+            // Use a transparent background when idle.
             bg = winrt::Windows::UI::Color{0, 0, 0, 0};
             borderCol = winrt::Windows::UI::Color{0, 0, 0, 0};
         }
@@ -1497,7 +1613,7 @@ void RefreshTaskbarWidgetData() {
         if (linesChanged) {
             // Long names remain available in full without increasing taskbar width.
             wuxc::ToolTipService::SetToolTip(g_playerGrid,
-                winrt::box_value(winrt::hstring{std::wstring(kWidgetBuildLabel) + L"\n" + line1 + L"\n" + line2}));
+                winrt::box_value(winrt::hstring{line1 + L"\n" + line2}));
         }
 
         UpdateWidgetHoverVisual();
@@ -1596,102 +1712,6 @@ void PositionExpandedPopup() {
     }
 }
 
-bool EnablePopupXamlTransparency() {
-    if (g_popupTransparencyEnabled) return true;
-    try {
-        auto window = wux::Window::Current();
-        auto transparency = window ? window.try_as<IVnXamlSourceTransparency>()
-                                   : winrt::com_ptr<IVnXamlSourceTransparency>{};
-        if (!transparency) {
-            Wh_Log(L"[Popup] IXamlSourceTransparency unavailable; trying XAML HostBackdrop.");
-            return false;
-        }
-        boolean original = false;
-        winrt::check_hresult(transparency->get_IsBackgroundTransparent(&original));
-        if (!original) winrt::check_hresult(transparency->put_IsBackgroundTransparent(true));
-        g_popupTransparency = std::move(transparency);
-        g_popupOriginalTransparency = original;
-        g_popupChangedTransparency = !original;
-        boolean enabled = false;
-        winrt::check_hresult(g_popupTransparency->get_IsBackgroundTransparent(&enabled));
-        g_popupTransparencyEnabled = enabled != false;
-        Wh_Log(L"[Popup] XAML background transparency readback=%d", enabled ? 1 : 0);
-        return g_popupTransparencyEnabled;
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"[Popup] XAML transparency failed: 0x%08X", static_cast<unsigned int>(e.code().value));
-        return false;
-    }
-}
-
-void RestorePopupXamlTransparency() {
-    // The setting is thread-wide: restore it when the popup hides/unloads.
-    if (g_popupTransparency && g_popupChangedTransparency) {
-        g_popupTransparency->put_IsBackgroundTransparent(g_popupOriginalTransparency);
-    }
-    g_popupTransparency = nullptr;
-    g_popupChangedTransparency = false;
-    g_popupTransparencyEnabled = false;
-    g_popupBackdropDirty = true;
-}
-
-// The DWM transient material may return S_OK while drawing a solid gray
-// fallback in an Explorer-owned XAML island. Request a tinted native accent
-// on our own popup HWND first; never apply it to the taskbar HWND.
-struct VnAccentPolicy {
-    int state;
-    int flags;
-    DWORD gradientColor; // AABBGGRR, not ARGB
-    int animationId;
-};
-struct VnCompositionAttributeData {
-    int attribute;
-    void* data;
-    SIZE_T size;
-};
-using VnSetWindowCompositionAttribute = BOOL(WINAPI*)(HWND, VnCompositionAttributeData*);
-
-bool SetPopupDwmAttributes(HWND hwnd, bool isLightTheme) {
-    if (!hwnd) return false;
-    DWM_WINDOW_CORNER_PREFERENCE cornerPref = DWMWCP_ROUND;
-    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPref, sizeof(cornerPref));
-
-    BOOL dark = isLightTheme ? FALSE : TRUE;
-    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
-
-    BOOL hostBackdrop = TRUE;
-    DwmSetWindowAttribute(hwnd, 17 /* DWMWA_USE_HOSTBACKDROPBRUSH */, &hostBackdrop, sizeof(hostBackdrop));
-    MARGINS margins{-1, -1, -1, -1};
-    HRESULT frameHr = DwmExtendFrameIntoClientArea(hwnd, &margins);
-
-    static auto setCompositionAttribute = reinterpret_cast<VnSetWindowCompositionAttribute>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute"));
-    if (setCompositionAttribute && SUCCEEDED(frameHr)) {
-        DWORD none = 1; // DWMSBT_NONE: don't stack an opaque system material below our accent.
-        DwmSetWindowAttribute(hwnd, 38, &none, sizeof(none));
-        VnAccentPolicy accent{4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */, 2,
-            isLightTheme ? 0x99FAF6F6u : 0x88262120u, 0};
-        VnCompositionAttributeData data{19 /* WCA_ACCENT_POLICY */, &accent, sizeof(accent)};
-        if (setCompositionAttribute(hwnd, &data)) {
-            Wh_Log(L"[Popup] Native Acrylic requested, tint=0x%08X", accent.gradientColor);
-            return true;
-        }
-        accent.state = 3; // ACCENT_ENABLE_BLURBEHIND compatibility path.
-        if (setCompositionAttribute(hwnd, &data)) {
-            Wh_Log(L"[Popup] Native blur-behind requested.");
-            return true;
-        }
-        accent.state = 0;
-        setCompositionAttribute(hwnd, &data);
-    }
-
-    DWORD backdropType = 3; // DWMSBT_TRANSIENTWINDOW (Acrylic flyout)
-    HRESULT backdropHr = DwmSetWindowAttribute(hwnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */,
-                                               &backdropType, sizeof(backdropType));
-    Wh_Log(L"[Popup] DWM fallback: frame=0x%08X, backdrop=0x%08X",
-           static_cast<unsigned int>(frameHr), static_cast<unsigned int>(backdropHr));
-    return SUCCEEDED(frameHr) && SUCCEEDED(backdropHr);
-}
-
 void ClearPopupCompositionBackdrop() {
     if (g_popupBackdropLayer) {
         try { wuxh::ElementCompositionPreview::SetElementChildVisual(g_popupBackdropLayer, nullptr); }
@@ -1736,11 +1756,11 @@ bool SetPopupCompositionBackdrop(bool light) {
         g_popupTintBrush.Color(light ? winrt::Windows::UI::Color{110, 246, 246, 250}
                                     : winrt::Windows::UI::Color{100, 32, 33, 38});
         g_popupRootCard.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
-        Wh_Log(L"[Popup v2.1.6] Composition HostBackdrop attached: host=0x%08X, island=0x%08X",
+        Wh_Log(L"Composition HostBackdrop attached: host=0x%08X, island=0x%08X",
                static_cast<unsigned int>(hostHr), static_cast<unsigned int>(islandHr));
         return true;
     } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"[Popup v2.1.6] Composition failed: 0x%08X", static_cast<unsigned int>(e.code().value));
+        Wh_Log(L"Composition failed: 0x%08X", static_cast<unsigned int>(e.code().value));
         ClearPopupCompositionBackdrop();
         return false;
     }
@@ -1750,41 +1770,12 @@ void ApplyPopupBackdrop(bool light) {
     if (!g_popupRootCard || !g_expandedPopup) return;
     if (!g_popupBackdropDirty && g_popupBackdropTheme == static_cast<int>(light)) return;
 
-    if (SetPopupCompositionBackdrop(light)) {
-        g_popupBackdropTheme = static_cast<int>(light);
-        g_popupBackdropDirty = false;
-        return;
-    }
-    ClearPopupCompositionBackdrop();
-
-    bool transparent = EnablePopupXamlTransparency();
-    bool nativeBackdrop = transparent && SetPopupDwmAttributes(g_expandedPopup, light);
-    auto fallback = light ? winrt::Windows::UI::Color{255, 246, 246, 250}
-                          : winrt::Windows::UI::Color{255, 32, 33, 38};
-    if (nativeBackdrop) {
-        // Let Windows draw the actual blurred material. An almost-opaque
-        // SolidColorBrush here would cover it, even with DWM Acrylic enabled.
-        g_popupRootCard.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
-    } else {
-        // HostBackdrop renders inside the island. Try it even if the Window
-        // transparency interface is unavailable; a failed QI is not a reason
-        // to force an opaque card before trying this independent path.
-        try {
-            BOOL hostBackdrop = TRUE;
-            DwmSetWindowAttribute(g_expandedPopup, 17, &hostBackdrop, sizeof(hostBackdrop));
-            wuxm::AcrylicBrush brush;
-            brush.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
-            brush.TintColor(fallback);
-            brush.TintOpacity(light ? 0.45 : 0.35);
-            brush.TintLuminosityOpacity(winrt::box_value(0.15).as<wf::IReference<double>>());
-            brush.FallbackColor(fallback);
-            brush.AlwaysUseFallback(false);
-            g_popupRootCard.Background(brush);
-            Wh_Log(L"[Popup] XAML HostBackdrop Acrylic requested.");
-        } catch (...) {
-            g_popupRootCard.Background(wuxm::SolidColorBrush(fallback));
-            Wh_Log(L"[Popup] Acrylic unsupported; using readable solid background.");
-        }
+    if (!SetPopupCompositionBackdrop(light)) {
+        ClearPopupCompositionBackdrop();
+        auto fallback = light ? winrt::Windows::UI::Color{255, 246, 246, 250}
+                              : winrt::Windows::UI::Color{255, 32, 33, 38};
+        g_popupRootCard.Background(wuxm::SolidColorBrush(fallback));
+        Wh_Log(L"Popup backdrop unavailable; using a solid background.");
     }
     g_popupBackdropTheme = static_cast<int>(light);
     g_popupBackdropDirty = false;
@@ -1986,6 +1977,8 @@ wuxc::Border CreatePopupRowSection(wuxc::TextBlock& tbOut, bool withBottomDivide
     return row;
 }
 
+void BeginCloseExpandedPopup(HWND hwnd);
+
 bool InitializePopupXamlHost(HWND hwnd) {
     try {
         g_popupXamlSource = wuxh::DesktopWindowXamlSource();
@@ -2001,6 +1994,12 @@ bool InitializePopupXamlHost(HWND hwnd) {
         rootCard.Padding({14, 12, 14, 10});
         rootCard.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
         rootCard.VerticalAlignment(wux::VerticalAlignment::Stretch);
+        rootCard.KeyDown([](wf::IInspectable const&, wuxi::KeyRoutedEventArgs const& args) {
+            if (args.Key() == winrt::Windows::System::VirtualKey::Escape) {
+                args.Handled(true);
+                BeginCloseExpandedPopup(g_expandedPopup);
+            }
+        });
 
         wuxc::Grid mainGrid;
         wuxc::RowDefinition headerRow;
@@ -2211,7 +2210,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
             g_popupXamlSource = nullptr;
         }
         g_popupXamlChild = nullptr;
-        RestorePopupXamlTransparency();
+
         return false;
     }
 }
@@ -2265,7 +2264,7 @@ bool AnimatePopupTransition(bool opening, bool freshOpen = false) {
                 visual.Scale({1.0f, 1.0f, 1.0f});
             } catch (...) {}
         }
-        Wh_Log(L"[Popup] Animation unavailable; using immediate visibility change.");
+        Wh_Log(L"Animation unavailable; using immediate visibility change.");
         return false;
     }
 }
@@ -2308,7 +2307,7 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         case WM_SHOWWINDOW:
             if (!wParam) {
                 CancelPopupClose(hwnd);
-                RestorePopupXamlTransparency();
+
             } else g_popupBackdropDirty = true;
             break;
 
@@ -2352,9 +2351,10 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             } else {
                 g_popupBackdropDirty = true;
             }
-            return 0;
+            break; // Let DefWindowProc assign keyboard focus on activation.
         }
 
+        case WM_SYSKEYDOWN:
         case WM_KEYDOWN:
             if (wParam == VK_ESCAPE) {
                 BeginCloseExpandedPopup(hwnd);
@@ -2387,17 +2387,15 @@ void ToggleExpandedPopup() {
         wc.lpszClassName = kExpandedPopupWindowClass;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hbrBackground = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
-        // Older versions left this class registered with an unloaded WndProc.
+        // Replace a stale registration before assigning this module's WndProc.
         UnregisterClassW(kExpandedPopupWindowClass, wc.hInstance);
         if (!RegisterClassExW(&wc)) {
-            Wh_Log(L"[Widget] Popup class registration failed: %lu", GetLastError());
+            Wh_Log(L"Popup class registration failed: %lu", GetLastError());
             return;
         }
 
         g_expandedPopup = CreateWindowExW(
-            // Native accent needs the host redirection surface. XAML supplies
-            // a child composition surface; NOREDIRECTIONBITMAP can hide the
-            // host's backdrop even though DwmSetWindowAttribute succeeds.
+            // Keep a redirected host surface for the popup's composition backdrop.
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             kExpandedPopupWindowClass,
             L"",
@@ -2452,10 +2450,12 @@ void RemoveInjectedTaskbarWidget() {
                     for (auto const& saved : g_shiftedTrayChildren) {
                         // Restore only properties that this mod successfully changed.
                         // Do not overwrite a later, different change by another mod.
-                        if (saved.moved && wuxc::Grid::GetColumn(saved.element) == saved.column + 1)
-                            wuxc::Grid::SetColumn(saved.element, saved.column);
-                        if (saved.widened && wuxc::Grid::GetColumnSpan(saved.element) == saved.span + 1)
-                            wuxc::Grid::SetColumnSpan(saved.element, saved.span);
+                        if (auto element = saved.element.get()) {
+                            if (saved.moved && wuxc::Grid::GetColumn(element) == saved.column + 1)
+                                wuxc::Grid::SetColumn(element, saved.column);
+                            if (saved.widened && wuxc::Grid::GetColumnSpan(element) == saved.span + 1)
+                                wuxc::Grid::SetColumnSpan(element, saved.span);
+                        }
                     }
                     grid.ColumnDefinitions().RemoveAt(colIdx);
                 }
@@ -2495,7 +2495,7 @@ void DestroyTaskbarWidgetAndPopupOnThread() {
         try { g_popupXamlSource.Close(); } catch (...) {}
         g_popupXamlSource = nullptr;
     }
-    RestorePopupXamlTransparency();
+
     g_popupRootCard = nullptr;
     g_popupBadgeBorder = nullptr;
     g_popupZodiacText = nullptr;
@@ -2642,7 +2642,7 @@ void EnsureTaskbarWidgetInjectedOnThread() {
     }
 
     if (GetWindowThreadProcessId(g_taskbarWnd, nullptr) != GetCurrentThreadId()) {
-        Wh_Log(L"[Widget] Injection must run on the taskbar UI thread.");
+        Wh_Log(L"Injection must run on the taskbar UI thread.");
         return;
     }
     if (!g_taskbarTimerStarted) {
@@ -2650,7 +2650,7 @@ void EnsureTaskbarWidgetInjectedOnThread() {
             [](HWND, UINT, UINT_PTR, DWORD) {
                 EnsureTaskbarWidgetInjectedOnThread();
             }) != 0;
-        if (!g_taskbarTimerStarted) Wh_Log(L"[Widget] SetTimer failed: %lu", GetLastError());
+        if (!g_taskbarTimerStarted) Wh_Log(L"SetTimer failed: %lu", GetLastError());
     }
 
     if (g_playerGrid && g_injectedParentPanel) {
@@ -2745,7 +2745,7 @@ void EnsureTaskbarWidgetInjectedOnThread() {
                 int c = wuxc::Grid::GetColumn(element);
                 int span = wuxc::Grid::GetColumnSpan(element);
                 if (c >= insertCol || c + span > insertCol) {
-                    g_shiftedTrayChildren.push_back({element, c, span, false, false});
+                    g_shiftedTrayChildren.push_back({winrt::make_weak(element), c, span, false, false});
                     auto& saved = g_shiftedTrayChildren.back();
                     if (c >= insertCol) {
                         wuxc::Grid::SetColumn(element, c + 1);
@@ -2769,15 +2769,15 @@ void EnsureTaskbarWidgetInjectedOnThread() {
         g_currentInjectedPosition = settings.position;
 
         RefreshTaskbarWidgetData();
-        Wh_Log(L"[Widget] Injected: position=%s, parent=%s, column=%d, childIndex=%d, width=%d DIP",
+        Wh_Log(L"Injected: position=%s, parent=%s, column=%d, childIndex=%d, width=%d DIP",
                settings.position.c_str(), winrt::get_class_name(target.panel).c_str(),
                target.column, target.childIndex, settings.widgetWidth);
     } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"[Widget] Injection failed: 0x%08X - %s",
+        Wh_Log(L"Injection failed: 0x%08X - %s",
                static_cast<unsigned int>(e.code().value), e.message().c_str());
         RemoveInjectedTaskbarWidget();
     } catch (...) {
-        Wh_Log(L"[Widget] Unexpected exception during injection.");
+        Wh_Log(L"Unexpected exception during injection.");
         RemoveInjectedTaskbarWidget();
     }
 }
@@ -2797,30 +2797,24 @@ UINT RunFromWindowThreadViaPostMessageMsg() {
 }
 
 std::mutex g_pendingPostHooksMutex;
-std::vector<HHOOK> g_pendingPostHooks;
+HHOOK g_pendingPostHook = nullptr;
+HWND g_pendingPostWindow = nullptr;
 
-void RememberPendingPostHook(HHOOK hook) {
-    std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
-    g_pendingPostHooks.push_back(hook);
-}
-
-void ForgetPendingPostHook(HHOOK hook) {
-    std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
-    for (auto it = g_pendingPostHooks.begin(); it != g_pendingPostHooks.end(); ++it) {
-        if (*it == hook) {
-            g_pendingPostHooks.erase(it);
-            break;
-        }
-    }
-}
-
-void UnhookPendingPostHooks() {
-    std::vector<HHOOK> hooks;
+// Called on the taskbar thread, both when consuming the request and on unload.
+void UnhookPendingPostHooks(bool discardMessage = true) {
+    HHOOK hook;
+    HWND window;
     {
         std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
-        hooks.swap(g_pendingPostHooks);
+        hook = std::exchange(g_pendingPostHook, nullptr);
+        window = std::exchange(g_pendingPostWindow, nullptr);
     }
-    for (HHOOK hook : hooks) UnhookWindowsHookEx(hook);
+    if (hook) UnhookWindowsHookEx(hook);
+    if (window && discardMessage) {
+        MSG msg{};
+        UINT message = g_runFromWindowThreadViaPostMessageMsg.load();
+        while (PeekMessageW(&msg, window, message, message, PM_REMOVE)) {}
+    }
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
@@ -2860,55 +2854,45 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procPa
     return true;
 }
 
-bool RunFromWindowThreadViaPostMessage(HWND hWnd, RunFromWindowThreadProc_t proc, PVOID procParam) {
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        PVOID procParam;
-        HHOOK hook;
-    };
+void RequestTaskbarWidgetInjection() {
+    if (g_shuttingDown) return;
+    HWND hwnd = FindCurrentProcessTaskbarWnd();
+    if (!hwnd) return; // StartTaskbar/CreateWindowExW will retry when it exists.
     const UINT message = RunFromWindowThreadViaPostMessageMsg();
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) return false;
+    DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
+    if (!threadId || !message) return;
 
+    std::lock_guard<std::mutex> lock(g_pendingPostHooksMutex);
+    // Recheck under the lock so no producer can queue a request after teardown.
+    if (g_shuttingDown || g_pendingPostHook) return;
     HHOOK hook = SetWindowsHookExW(
         WH_GETMESSAGE,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION && wParam == PM_REMOVE) {
                 MSG* msg = reinterpret_cast<MSG*>(lParam);
                 if (msg->message == g_runFromWindowThreadViaPostMessageMsg.load()) {
-                    auto* param = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(msg->lParam);
-                    if (param) {
-                        ForgetPendingPostHook(param->hook);
-                        param->proc(param->procParam);
-                        UnhookWindowsHookEx(param->hook);
-                        delete param;
-                        msg->lParam = 0;
-                    }
+                    UnhookPendingPostHooks(false);
+                    msg->message = WM_NULL;
+                    msg->wParam = 0;
+                    msg->lParam = 0;
+                    if (!g_shuttingDown) EnsureTaskbarWidgetInjectedOnThread();
                 }
             }
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
         },
-        nullptr, dwThreadId);
-    if (!hook) return false;
-
-    auto* param = new RUN_FROM_WINDOW_THREAD_PARAM{proc, procParam, hook};
-    RememberPendingPostHook(hook);
-    if (!PostMessageW(hWnd, message, 0, reinterpret_cast<LPARAM>(param))) {
-        ForgetPendingPostHook(hook);
-        UnhookWindowsHookEx(hook);
-        delete param;
-        return false;
+        nullptr, threadId);
+    if (!hook) {
+        Wh_Log(L"Failed to install taskbar initialization hook: %lu", GetLastError());
+        return;
     }
-    return true;
-}
-
-void RequestTaskbarWidgetInjection() {
-    if (g_shuttingDown) return;
-    HWND hwnd = FindCurrentProcessTaskbarWnd();
-    if (!hwnd) return; // StartTaskbar/CreateWindowExW will retry when it exists.
-    if (!RunFromWindowThreadViaPostMessage(
-            hwnd, [](PVOID) { EnsureTaskbarWidgetInjectedOnThread(); }, nullptr)) {
-        Wh_Log(L"[Widget] Failed to queue taskbar initialization: %lu", GetLastError());
+    g_pendingPostHook = hook;
+    g_pendingPostWindow = hwnd;
+    if (!PostMessageW(hwnd, message, 0, 0)) {
+        DWORD error = GetLastError();
+        UnhookWindowsHookEx(hook);
+        g_pendingPostHook = nullptr;
+        g_pendingPostWindow = nullptr;
+        Wh_Log(L"Failed to queue taskbar initialization: %lu", error);
     }
 }
 
@@ -2936,11 +2920,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (!module) return module;
 
-    if (!g_taskbarDllHooked && GetModuleHandleW(L"Taskbar.dll") == module) {
-        if (HookTaskbarDllSymbols(module)) {
-            g_taskbarDllHooked = true;
-            Wh_ApplyHookOperations();
-        }
+    if (!g_shuttingDown && GetModuleHandleW(L"Taskbar.dll") == module) {
+        TryHookTaskbarDllSymbols(module, true);
     }
     return module;
 }
@@ -2964,24 +2945,13 @@ bool InstallHook(HMODULE module, PCSTR functionName, Prototype* hook, Prototype*
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[VN Lunar Widget] v2.2.2 loaded; widget + popup only; rotation=15000 ms.");
+    Wh_Log(L"Initializing taskbar widget.");
     g_shuttingDown = false;
-
-    WCHAR modulePath[MAX_PATH]{};
-    DWORD length = GetModuleFileNameW(nullptr, modulePath, ARRAYSIZE(modulePath));
-    if (!length || length >= ARRAYSIZE(modulePath)) return FALSE;
-    PCWSTR moduleName = wcsrchr(modulePath, L'\\');
-    moduleName = moduleName ? moduleName + 1 : modulePath;
-    if (_wcsicmp(moduleName, L"explorer.exe") != 0) return FALSE;
 
     LoadSettings();
     RunFromWindowThreadViaPostMessageMsg();
 
-    if (HMODULE taskbarModule = GetModuleHandleW(L"Taskbar.dll")) {
-        if (HookTaskbarDllSymbols(taskbarModule)) {
-            g_taskbarDllHooked = true;
-        }
-    }
+    TryHookTaskbarDllSymbols(GetModuleHandleW(L"Taskbar.dll"), false);
 
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     if (!kernelBaseModule) {
@@ -2996,14 +2966,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (!g_taskbarDllHooked) {
-        if (HMODULE taskbarModule = GetModuleHandleW(L"Taskbar.dll")) {
-            if (HookTaskbarDllSymbols(taskbarModule)) {
-                g_taskbarDllHooked = true;
-                Wh_ApplyHookOperations();
-            }
-        }
-    }
+    TryHookTaskbarDllSymbols(GetModuleHandleW(L"Taskbar.dll"), true);
 
     if (HWND hTrayWnd = FindCurrentProcessTaskbarWnd()) {
         RunFromWindowThread(
@@ -3016,15 +2979,16 @@ void Wh_ModBeforeUninit() {
     g_shuttingDown = true;
     if (HWND hTrayWnd = FindCurrentProcessTaskbarWnd()) {
         RunFromWindowThread(
-            hTrayWnd, [](PVOID) { DestroyTaskbarWidgetAndPopupOnThread(); }, nullptr);
+            hTrayWnd,
+            [](PVOID) {
+                UnhookPendingPostHooks();
+                DestroyTaskbarWidgetAndPopupOnThread();
+            },
+            nullptr);
     }
-    UnhookPendingPostHooks();
 }
 
-void Wh_ModUninit() {
-    // Safe if the engine calls this after BeforeUninit; cleanup is idempotent.
-    Wh_ModBeforeUninit();
-}
+
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
