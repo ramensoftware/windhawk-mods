@@ -1295,8 +1295,9 @@ std::optional<std::wstring> PromptForText(const std::wstring& title, const std::
 //
 // Each mod keeps its own copy of the group (which widgets are in it, left to right, and where it
 // is) in its storage, and shows it to the others as properties of its widget window, stamped with
-// when it last changed: the newest copy wins. Each widget finds the others by their window class
-// and posts them a message whenever its group, size or place changes.
+// when it last changed: the newest copy wins. Each widget shows its id on its window too, finds the
+// others by theirs (the ones it knows, by their window class), and posts them a message whenever
+// its group, size or place changes.
 
 namespace WidgetLink {
 
