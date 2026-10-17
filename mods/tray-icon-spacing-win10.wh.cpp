@@ -47,8 +47,14 @@ the mod
 This is the technique of 7+ Taskbar Tweaker's `tray_icons_padding` option, which
 the mod [Adjustable tray icons padding for Win10
 taskbar](https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar) by
-Anixx brought to Windhawk. This mod keeps that tray mechanism intact and adds
-live application, `-1` off handling, and the hidden icons popup support below.
+Anixx brought to Windhawk. This mod keeps that tray mechanism intact and, on top
+of it, adds:
+
+* live application: a changed setting reaches the shell through its own reload,
+  with no disable/enable cycle and no Explorer restart,
+* the `-1` off value on every setting, which restores the previous state
+  without disabling the mod,
+* the hidden icons popup settings (icon size and cell padding).
 
 **Hidden icons popup.** The popup sizes its cells from two things: the icon
 images in its toolbar, and the theme's content margins around each cell
@@ -67,15 +73,14 @@ every time it opens.
   to reload lets the shell recompute its own spacing.
 - Value ranges: tray icon padding `-1` or `0`-`32` (the Windows default is about
   `16`, `0` and `1` are the tightest); hidden icons popup icon size `-1` or
-  `8`-`96` (the Windows default is `32`); hidden icons popup cell padding `-1`
-  or `0`-`24` (`-1` = the theme's 12 pixels, `0` = the icons sit next to each
-  other). Values outside a range are clamped and the clamped value is logged.
+  `8`-`96` (the Windows default is `16` at 100% scaling); hidden icons popup
+  cell padding `-1` or `0`-`24` (`-1` = the theme's 12 pixels per side, `0` =
+  the icons sit next to each other). Values outside a range are clamped and the
+  clamped value is logged.
 - For the tray spacing, small values are denser than the Windows default and
-  larger values wider. The exact mapping is not documented, so try a value
-  and adjust from there. All settings are applied without disabling the mod.
-- Larger tray values widen the tray as configured. In the confirmed v1.11 test,
-  the icons remained evenly spaced and no artificial trailing gap appeared.
-  The setting stays clamped to 32.
+  larger values wider; the icons stay evenly spaced. The exact mapping is not
+  documented, so try a value and adjust from there. All settings are applied
+  without disabling the mod.
 - Disabling the mod removes the redirection, restores the pending flag state,
   and asks Explorer to reload, so the tray returns to its own layout.
 - If a setting seems not to take effect right after enabling the mod, restart
@@ -110,8 +115,7 @@ every time it opens.
     0 or 1 = the tightest spacing. Windows 10 itself is around 16, so values
     between 1 and 16 are denser than the default.
 
-    Larger values widen the spacing. In the confirmed v1.11 test, the icons
-    remained evenly spaced, with no artificial trailing gap.
+    Larger values widen the spacing; the icons stay evenly spaced.
 - overflowIconSize: -1
   $name: Hidden icons popup icon size
   $description: >-
@@ -121,12 +125,11 @@ every time it opens.
 
     -1 = Windows default (the mod restores the popup's own icons)
 
-    The Windows default is 32 pixels, which gives 40 pixel cells and a 120x120
-    popup for 9 icons. Smaller values shrink the icons together with the popup,
-    for example 24 for 25 pixel cells, or 8 for the smallest. Larger values grow
-    the popup, but the effect stops increasing at some point because the cell
-    reaches the popup's maximum size. A new size is applied the next time the
-    popup opens.
+    The Windows default is 16 pixels at 100% scaling, the same small icons the
+    taskbar uses; with the stock 12 pixel margins per side, the cells are 40
+    pixels and the popup for 9 icons is 120x120. Smaller values shrink the
+    icons together with the popup; larger values grow them, up to the popup's
+    maximum size. A new size is applied the next time the popup opens.
 - overflowCellPadding: 0
   $name: Hidden icons popup cell padding
   $description: >-
@@ -135,8 +138,8 @@ every time it opens.
 
     Allowed values: -1 or 0 to 24.
 
-    -1 = Windows default (the theme's 12 pixels; the mod leaves the theme
-    values alone)
+    -1 = Windows default (the theme's 12 pixels per side; the mod leaves the
+    theme values alone)
 
     0 = no padding: the icons sit next to each other at their normal size.
     Larger values add air around each icon and grow the popup. A new padding is
@@ -217,9 +220,6 @@ inline bool IsWindowInCurrentProcess(HWND hWnd) {
     GetWindowThreadProcessId(hWnd, &pid);
     return pid == GetCurrentProcessId();
 }
-
-void ReloadTrayIcons();
-void ClearPendingTrayFlags();
 
 inline bool IsExplorerAddress(const void* address) {
     auto a = reinterpret_cast<ULONG_PTR>(address);
@@ -425,6 +425,28 @@ LRESULT CALLBACK TrayToolbarSubclassProc(HWND hWnd,
 // The shell computes the tray slot width from SM_CXSMICON. The value is
 // redirected for the single query it makes on the taskbar thread while laying
 // the tray out, which is what changes the total tray width.
+
+// Restores the tray flags armed for this thread and, when a pending layout of
+// this thread was found, returns true with the redirected metric.
+bool TakeArmedTrayMetric(int result, int* value) {
+    DWORD currentThreadId = GetCurrentThreadId();
+    bool restored = false;
+
+    EnterCriticalSection(&g_lock);
+    for (auto& entry : g_trayEntries) {
+        if (entry.pending && entry.threadId == currentThreadId) {
+            RestoreTrayEntry(entry);
+            restored = true;
+        }
+    }
+    LeaveCriticalSection(&g_lock);
+
+    if (restored) {
+        *value = (result + g_settings.trayIconPadding) / 2;
+    }
+    return restored;
+}
+
 using GetSystemMetrics_t = int(WINAPI*)(int);
 GetSystemMetrics_t GetSystemMetrics_Original = nullptr;
 int WINAPI GetSystemMetrics_Hook(int nIndex) {
@@ -432,20 +454,8 @@ int WINAPI GetSystemMetrics_Hook(int nIndex) {
 
     if (nIndex == SM_CXSMICON && TrayPaddingActive() &&
         IsExplorerAddress(__builtin_return_address(0))) {
-        DWORD currentThreadId = GetCurrentThreadId();
-        bool restored = false;
-
-        EnterCriticalSection(&g_lock);
-        for (auto& entry : g_trayEntries) {
-            if (entry.pending && entry.threadId == currentThreadId) {
-                RestoreTrayEntry(entry);
-                restored = true;
-            }
-        }
-        LeaveCriticalSection(&g_lock);
-
-        if (restored) {
-            int value = (result + g_settings.trayIconPadding) / 2;
+        int value = 0;
+        if (TakeArmedTrayMetric(result, &value)) {
             Wh_Log(L"SM_CXSMICON %d -> %d for the tray layout", result, value);
             return value;
         }
@@ -457,26 +467,12 @@ int WINAPI GetSystemMetrics_Hook(int nIndex) {
 using GetSystemMetricsForDpi_t = int(WINAPI*)(int, UINT);
 GetSystemMetricsForDpi_t GetSystemMetricsForDpi_Original = nullptr;
 int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
-    int result = GetSystemMetricsForDpi_Original
-                     ? GetSystemMetricsForDpi_Original(nIndex, dpi)
-                     : GetSystemMetrics_Original(nIndex);
+    int result = GetSystemMetricsForDpi_Original(nIndex, dpi);
 
     if (nIndex == SM_CXSMICON && TrayPaddingActive() &&
         IsExplorerAddress(__builtin_return_address(0))) {
-        DWORD currentThreadId = GetCurrentThreadId();
-        bool restored = false;
-
-        EnterCriticalSection(&g_lock);
-        for (auto& entry : g_trayEntries) {
-            if (entry.pending && entry.threadId == currentThreadId) {
-                RestoreTrayEntry(entry);
-                restored = true;
-            }
-        }
-        LeaveCriticalSection(&g_lock);
-
-        if (restored) {
-            int value = (result + g_settings.trayIconPadding) / 2;
+        int value = 0;
+        if (TakeArmedTrayMetric(result, &value)) {
             Wh_Log(L"SM_CXSMICON (dpi) %d -> %d for the tray layout", result,
                    value);
             return value;
@@ -496,6 +492,11 @@ HIMAGELIST g_overflowScaledImageList = nullptr;
 int g_overflowAppliedSize = 0;
 bool g_inImageListSwap = false;
 UINT g_overflowRefreshMsg = 0;
+
+// g_overflowRefreshMsg wParam: what the toolbar's own thread should do.
+constexpr WPARAM kOverflowRefreshApply = 0;    // apply unless already applied
+constexpr WPARAM kOverflowRefreshReapply = 1;  // apply even if already applied
+constexpr WPARAM kOverflowRefreshRestore = 2;  // put the shell's list back
 
 constexpr int kOverflowIconSizeOff = -1;
 constexpr int kOverflowIconSizeMin = 8;
@@ -698,6 +699,26 @@ void DestroyScaledImageList() {
     }
 }
 
+// Puts the shell's own image list back, but only while the mod's scaled copy
+// is still installed: the shell replaces its list when it repopulates the
+// popup, and a cached handle that is no longer in use must not be re-sent.
+// The cached handles are forgotten either way.
+void RestoreOverflowImageList(HWND hToolbar) {
+    HIMAGELIST current = reinterpret_cast<HIMAGELIST>(
+        SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0));
+    if (g_overflowScaledImageList && current == g_overflowScaledImageList &&
+        g_overflowOriginalImageList) {
+        g_inImageListSwap = true;
+        SendMessageW(hToolbar, TB_SETIMAGELIST, 0,
+                     reinterpret_cast<LPARAM>(g_overflowOriginalImageList));
+        g_inImageListSwap = false;
+        Wh_Log(L"Overflow image list restored");
+    }
+    DestroyScaledImageList();
+    g_overflowOriginalImageList = nullptr;
+    g_overflowAppliedSize = 0;
+}
+
 // Applies the configured icon size to the overflow toolbar, or restores the
 // shell's own image list. With force, the image list is installed again even
 // when it is already the current one, which makes the toolbar recompute its
@@ -708,15 +729,7 @@ void ApplyOverflowIconSize(HWND hToolbar, bool force = false) {
     }
 
     if (g_settings.overflowIconSize == kOverflowIconSizeOff || g_unloading) {
-        if (g_overflowOriginalImageList) {
-            g_inImageListSwap = true;
-            SendMessageW(hToolbar, TB_SETIMAGELIST, 0,
-                         reinterpret_cast<LPARAM>(g_overflowOriginalImageList));
-            g_inImageListSwap = false;
-            DestroyScaledImageList();
-            g_overflowAppliedSize = 0;
-            Wh_Log(L"Overflow image list restored");
-        }
+        RestoreOverflowImageList(hToolbar);
         return;
     }
 
@@ -766,9 +779,12 @@ LRESULT CALLBACK OverflowToolbarSubclassProc(HWND hWnd,
                                              LPARAM lParam,
                                              DWORD_PTR dwRefData) {
     if (uMsg == g_overflowRefreshMsg) {
-        if (!g_unloading &&
-            g_settings.overflowIconSize != kOverflowIconSizeOff) {
-            ApplyOverflowIconSize(hWnd, /*force=*/true);
+        if (wParam == kOverflowRefreshRestore) {
+            RestoreOverflowImageList(hWnd);
+        } else if (!g_unloading &&
+                   g_settings.overflowIconSize != kOverflowIconSizeOff) {
+            ApplyOverflowIconSize(hWnd,
+                                  /*force=*/wParam == kOverflowRefreshReapply);
         }
         return 0;
     }
@@ -790,7 +806,8 @@ LRESULT CALLBACK OverflowToolbarSubclassProc(HWND hWnd,
             // shell is done, from a posted message to stay out of its way.
             if (!g_inImageListSwap && !g_unloading &&
                 g_settings.overflowIconSize != kOverflowIconSizeOff) {
-                PostMessageW(hWnd, g_overflowRefreshMsg, 0, 0);
+                PostMessageW(hWnd, g_overflowRefreshMsg,
+                             kOverflowRefreshReapply, 0);
             }
             break;
 
@@ -814,6 +831,19 @@ LRESULT CALLBACK OverflowToolbarSubclassProc(HWND hWnd,
     }
 
     return result;
+}
+
+// The popup's image-list state belongs to the toolbar's own thread. Other
+// threads ask that thread to apply the configured icon size or to put the
+// shell's own list back, so no other thread touches the state.
+void RequestOverflowRefresh(bool restore) {
+    HWND hToolbar = g_overflowToolbar;
+    if (!hToolbar || !IsWindow(hToolbar)) {
+        return;
+    }
+
+    SendMessageW(hToolbar, g_overflowRefreshMsg,
+                 restore ? kOverflowRefreshRestore : kOverflowRefreshApply, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -943,17 +973,44 @@ void DiscoverAndSubclass() {
     DiscoverOverflowToolbar();
 }
 
-// Asks the shell to reload the notification area using the documented
-// TraySettings broadcast. Because the tray subclass remains installed, the
-// shell's own reload runs through the same hooks and keeps its window
-// geometry and button state consistent. This is the only tray refresh the mod
-// performs: it applies, restores, and unloads without artificial resizing.
-void ReloadTrayIcons() {
+// A taskbar reload, sent to this process's taskbar windows (the primary one
+// and any secondary ones) using the documented TraySettings message. It goes
+// to the taskbar windows directly instead of a session-wide broadcast, so no
+// other application is asked to re-read its settings; folder-window processes
+// have no taskbar and simply do nothing. Because the tray subclass remains
+// installed, the shell's own reload runs through the same hooks and keeps its
+// window geometry and button state consistent. This is the only tray refresh
+// the mod performs: it applies, restores, and unloads without artificial
+// resizing.
+BOOL CALLBACK ReloadTrayIconsProc(HWND hWnd, LPARAM lParam) {
+    if (!IsWindowInCurrentProcess(hWnd)) {
+        return TRUE;
+    }
+
+    WCHAR className[64];
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return TRUE;
+    }
+
+    if (_wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+        _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0) {
+        return TRUE;
+    }
+
     DWORD_PTR result = 0;
-    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+    SendMessageTimeoutW(hWnd, WM_SETTINGCHANGE, 0,
                         reinterpret_cast<LPARAM>(L"TraySettings"),
                         SMTO_ABORTIFHUNG, 1000, &result);
-    Wh_Log(L"Asked the shell to reload the tray");
+    *reinterpret_cast<bool*>(lParam) = true;
+    return TRUE;
+}
+
+void ReloadTrayIcons() {
+    bool delivered = false;
+    EnumWindows(ReloadTrayIconsProc, reinterpret_cast<LPARAM>(&delivered));
+    if (delivered) {
+        Wh_Log(L"Asked the shell to reload the tray");
+    }
 }
 
 // Releases any pending tray-flag state before a natural reload. The restore
@@ -976,7 +1033,10 @@ void ClearPendingTrayFlags() {
     }
 }
 
-void ApplyAll() {
+// Applies the current settings. The tray is only asked to reload when the
+// tray padding itself changed: the TraySettings message makes the taskbar
+// re-read all of its settings, which a popup-only change does not need.
+void ApplyAll(bool reloadTray) {
     DiscoverAndSubclass();
 
     // With tray redirection disabled, clear any pending flag state first so
@@ -985,9 +1045,11 @@ void ApplyAll() {
     if (!TrayPaddingActive()) {
         ClearPendingTrayFlags();
     }
-    ReloadTrayIcons();
+    if (reloadTray) {
+        ReloadTrayIcons();
+    }
 
-    ApplyOverflowIconSize(g_overflowToolbar);
+    RequestOverflowRefresh(g_settings.overflowIconSize == kOverflowIconSizeOff);
     PushOverflowThemePadding();
 }
 
@@ -1105,10 +1167,13 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Resolved dynamically so the mod needs no uxtheme link dependency.
+    // Resolved dynamically so the mod needs no uxtheme link dependency. It is
+    // normally already loaded; the fallback loads it from System32 only, so
+    // the load cannot be redirected to a foreign DLL.
     HMODULE hUxTheme = GetModuleHandleW(L"uxtheme.dll");
     if (!hUxTheme) {
-        hUxTheme = LoadLibraryW(L"uxtheme.dll");
+        hUxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr,
+                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     if (hUxTheme) {
         auto openThemeDataForDpi =
@@ -1148,14 +1213,17 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    ApplyAll();
+    // The reload applies the tray padding live when the mod is enabled in a
+    // running Explorer; there is nothing to reload with the tray value off.
+    ApplyAll(TrayPaddingActive());
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
+    int previousTrayIconPadding = g_settings.trayIconPadding;
     LoadSettings();
-    ApplyAll();
+    ApplyAll(previousTrayIconPadding != g_settings.trayIconPadding);
 }
 
 void RemoveTraySubclasses() {
@@ -1184,6 +1252,8 @@ void RemoveTraySubclasses() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
+    bool trayPaddingWasActive = TrayPaddingActive();
+
     g_unloading = true;
 
     // Disable redirection first, then let the shell recompute its own tray
@@ -1191,11 +1261,12 @@ void Wh_ModBeforeUninit() {
     ClearPendingTrayFlags();
 
     // Let go of the hidden icons popup.
-    ApplyOverflowIconSize(g_overflowToolbar);
+    RequestOverflowRefresh(/*restore=*/true);
     PushOverflowThemePadding();
 
-    DestroyScaledImageList();
-    ReloadTrayIcons();
+    if (trayPaddingWasActive) {
+        ReloadTrayIcons();
+    }
 }
 
 void Wh_ModUninit() {
@@ -1203,13 +1274,12 @@ void Wh_ModUninit() {
 
     RemoveTraySubclasses();
 
-    if (g_overflowToolbar && IsWindow(g_overflowToolbar)) {
+    HWND hOverflowToolbar = g_overflowToolbar;
+    if (hOverflowToolbar && IsWindow(hOverflowToolbar)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            g_overflowToolbar, OverflowToolbarSubclassProc);
+            hOverflowToolbar, OverflowToolbarSubclassProc);
     }
-
-    EnterCriticalSection(&g_lock);
     g_overflowToolbar = nullptr;
-    LeaveCriticalSection(&g_lock);
+
     DeleteCriticalSection(&g_lock);
 }
