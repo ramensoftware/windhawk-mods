@@ -4168,7 +4168,7 @@
         "ratingUsers": 38,
         "reviews": 0,
         "trendingSorting": 3.0416756698824345,
-        "updated": 1790964221000,
+        "updated": 1792260143000,
         "users": 757
       },
       "metadata": {
@@ -4181,7 +4181,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Desktop Window Cards",
-        "version": "1.7"
+        "version": "1.8"
       }
     },
     "disable-audio-limiter": {

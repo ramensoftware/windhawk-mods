@@ -1,3 +1,9 @@
+## 1.8 ([Oct 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/15eab1d96589bcbec11e4d9e8aeb2659510e1206/mods/desktop-window-cards.wh.cpp))
+
+- New: hold a modifier key (Shift, Ctrl or Alt) while minimizing to send the window to the taskbar without a card.
+- New: option to invert the modifier key, so that only windows minimized while holding it become cards.
+- New: exclusion list of programs whose windows never become cards.
+
 ## 1.7 ([Oct 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/128938b0170236340ac149a6dddb1a6860e78eee/mods/desktop-window-cards.wh.cpp))
 
 ## Desktop Window Cards 1.7

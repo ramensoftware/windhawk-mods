@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T15:03:32.000Z</updated>
+    <updated>2026-10-17T18:02:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Window Cards 1.8]]></title>
+        <id>https://windhawk.net/mods/desktop-window-cards#15eab1d96589bcbec11e4d9e8aeb2659510e1206</id>
+        <link href="https://windhawk.net/mods/desktop-window-cards"/>
+        <updated>2026-10-17T18:02:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New: hold a modifier key (Shift, Ctrl or Alt) while minimizing to send the window to the taskbar without a card.</li>
+<li>New: option to invert the modifier key, so that only windows minimized while holding it become cards.</li>
+<li>New: exclusion list of programs whose windows never become cards.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CoverTabby 0.22.14]]></title>
         <id>https://windhawk.net/mods/covertabby#6b46d57fa8fbd627be560ae6df9125d71e8dd39c</id>
@@ -757,68 +772,6 @@ hides the other takes its place.</p>
 Windhawk removes along with the mod. The first time it runs, the mod takes on the settings of the
 AudioFlipper app, if you have it (from <code>%APPDATA%\AudioFlipper\settings.txt</code>, which it doesn't
 change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
-        <author>
-            <name>Lucidic15</name>
-            <uri>https://github.com/Lucidic15</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar RDP Launcher 1.0.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-rdp-launcher#3c8dad353a8a45fa414a8a27e7ac46a0f403d48c</id>
-        <link href="https://windhawk.net/mods/taskbar-rdp-launcher"/>
-        <updated>2026-10-16T12:03:50.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarrdplauncher">Taskbar RDP Launcher</h1>
-<p><img src="https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-rdp-launcher/screenshot.png" alt="The widget on the taskbar, with a computer and buttons for 1, 2 and 3 displays" /></p>
-<p>A taskbar widget, in the style of the Windows weather widget, that starts Remote Desktop
-full screen on as many of your displays as you want. Instead of editing <code>use multimon</code> and
-<code>selectedmonitors</code> in an .rdp file (after looking up the display numbers with <code>mstsc /l</code>), click a
-number.</p>
-<ul>
-<li><strong>Number buttons</strong>: click <strong>1</strong>, <strong>2</strong> or <strong>3</strong> to connect full screen on that many displays.
-There's one button for each display you have.</li>
-<li><strong>Hover a number</strong> to see a map of your displays, laid out the way they are on your desk. The
-ones that button uses are highlighted, and the session's main display (where the remote taskbar
-goes) has a bar along its bottom. <strong>Click a display to add it or take it off.</strong></li>
-<li><strong>The computer</strong> shows its address, or the name you gave it over its address. Click it (or scroll
-over it) to go to the next of your computers.</li>
-<li><strong>Right-click</strong> for the menu: add computers (by name, from a saved .rdp file, or from Remote
-Desktop Connection's recent list), rename or remove them, and open their Remote Desktop settings.</li>
-<li><strong>Drag</strong> the widget left or right to move it along the taskbar.</li>
-</ul>
-<p>Out of the box, <strong>1</strong> is your main display, <strong>2</strong> adds the display nearest to it, and so on up to
-all of them. The buttons are remembered for each arrangement of displays, so a laptop that's
-sometimes docked keeps separate buttons for the desk and for the road.</p>
-<h2 id="howitconnects">How it connects</h2>
-<ul>
-<li><p>Computers added by name connect with <code>mstsc /v:&lt;computer&gt;</code>, like typing the computer into Remote
-Desktop Connection. Since the April 2026 Windows update, Remote Desktop shows a security warning
-every time an .rdp file is opened, but not for computers typed in, so this avoids it.</p>
-<p>Remote Desktop Connection takes the display options for these from its own settings file,
-<code>Default.rdp</code> in Documents. So just before the session starts, the mod sets <code>screen mode id</code>,
-<code>use multimon</code>, <code>span monitors</code> and <code>selectedmonitors</code> there (creating the file, hidden, if there
-isn't one), and as soon as the session ends, it puts back what they were. It notes what they were
-in its own storage first, so if Windhawk is closed during a session, they're put back the next
-time the mod starts; if the mod is turned off during a session, they're put back right away. A
-setting you change in Remote Desktop Connection in the meantime is left as you set it.</p></li>
-<li><p>Saved .rdp files are never changed: the mod opens a copy with the display options set (and gets
-the warning, as any .rdp file does), and deletes the copy when the session ends. If the file is
-signed and its signature covers the display options, the copy goes without the signature, so
-Remote Desktop shows it as from an unknown publisher.</p></li>
-<li><p>Remote Desktop numbers displays its own way (not as Windows Settings does), so the first time you
-connect on some of your displays, the mod reads Remote Desktop's list (<code>mstsc /l</code>, whose box may
-flash) and remembers it until your displays change. <strong>Read display numbers again</strong> in the menu
-asks again.</p></li>
-</ul>
-<h2 id="linkingwithtaskbaraudioflipper">Linking with Taskbar Audio Flipper</h2>
-<p>With the Taskbar Audio Flipper mod running too, the two widgets can be joined into one: right-click
-either, choose <strong>Link with AudioFlipper</strong> (or <strong>Link with RDPLauncher</strong>) and which side it goes on.
-Linked, they sit side by side with a divider between them, dragging either moves both, and if one
-hides the other takes its place.</p>
-<h2 id="settings">Settings</h2>
-<p>The computers, their names and the display buttons are kept in the mod's storage, which Windhawk
-removes along with the mod. The first time it runs, the mod takes on the computers and display
-buttons of the RDPLauncher app, if you have it (from <code>%APPDATA%\RDPLauncher\settings.txt</code>, which it
-doesn't change). Use the app or the mod, not both: each shows its own widget.</p>]]></content>
         <author>
             <name>Lucidic15</name>
             <uri>https://github.com/Lucidic15</uri>
