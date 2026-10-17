@@ -4,7 +4,7 @@
 // @description     Music Dynamic Island inspired by iPhone's one and Matcha external music player
 // @version         1.1.0
 // @author          MrsWorthless
-// github           https://github.com/MrsWorthless
+// @github          https://github.com/MrsWorthless
 // @include         windhawk.exe
 // @compilerOptions -lgdi32 -luser32 -lgdiplus -lole32 -lshlwapi -lshell32 -lwininet -lwindowsapp -lruntimeobject
 // ==/WindhawkMod==
