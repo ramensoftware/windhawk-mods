@@ -1,47 +1,57 @@
 // ==WindhawkMod==
-// @id              hide-desktop-icon-text
-// @name            Hide Desktop Icon Text and Shortcut Arrows
-// @description     Provides options to hide icon text labels (keeping folder names) and remove shortcut arrow overlays on the desktop.
-// @version         1.5.0
-// @author          kivsak
-// @github          https://github.com/kivsak
-// @include         explorer.exe
-// @architecture    x86-64
+// @id            hide-desktop-icon-text
+// @name          Hide Desktop Icon Text and Shortcut Arrows
+// @description   Provides advanced options to independently hide text labels for apps, files, and folders, plus flawlessly removes shortcut arrows and the UAC shield.
+// @version       2.5.0
+// @author        kivsak
+// @github        https://github.com/kivsak
+// @include       explorer.exe
+// @architecture  x86-64
 // @compilerOptions -lole32 -lshlwapi -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Provides options to hide desktop icon labels (keeping folder names) and remove the shortcut arrow overlay.
+👉 PLS GIB MONI FOR 2X SPEED BOOST: https://www.patreon.com/c/kivsak
 
-### Features
-* **Hide Icon Text**: Hides text labels for files and shortcuts on the desktop while preserving folder names.
-* **Hide Shortcut Arrows**: Removes the standard shortcut arrow overlay live without requiring registry edits or administrator rights.
+Tired of the stiff, boring default text labels cluttering your beautiful wallpaper? Inspired by minimalist aesthetic setups and clean UI design, this cinema-grade mod completely overhauls how your desktop icons are displayed.
+
+Unlike older, buggy alternatives, this mod features a completely rewritten memory-based alpha-channel engine that guarantees **zero visual artifacts** — completely destroying the infamous Windows 11 "black square" bug while perfectly preserving drop shadows and modern rounded corners!
+
+🌟 **Features**
+* **Triple-Threat Text Engine**: Granular control! Hide text labels independently for **Programs/Games**, **Regular Files**, and **Folders**.
+* **Smart Detection**: Dynamically scans your desktop structure to automatically differentiate between a shortcut to an app and a simple document.
+* **Flawless Overlays Removal**: Deletes those tiny blue shortcut arrows AND the yellow/blue UAC Admin Shields live, using a multi-layer draw intercept engine for full Win 11 compatibility.
 
 ### Notes
-* The shortcut arrow removal affects the entire running Explorer session because the overlay resides in the shared system image list.
-* Disabling the shortcut arrow feature (or the mod itself) restores the arrows only after Explorer restarts or the icon cache refreshes.
-
-### Known limitation
-Folder detection matches the drawn text against actual desktop folder names. If a *file* has
-exactly the same name as a *folder* on the desktop, that file's label will also be kept.
+* The overlay removal affects the entire running Explorer session. Disabling the feature restores them only after Explorer restarts.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- hide_text: true
-  $name: Hide desktop icon text
-  $description: Hides text labels for files and shortcuts on the desktop (keeps folder names).
+- hide_programs: true
+  $name: Hide Programs & Games
+  $description: Removes text labels from executable shortcuts and apps (.exe, .lnk, .url).
+- hide_files: true
+  $name: Hide Regular Files
+  $description: Removes text labels from documents, images, and other regular files.
+- hide_folders: false
+  $name: Hide Folders
+  $description: Removes text labels from folders.
 - hide_arrows: true
-  $name: Remove shortcut arrows
-  $description: Removes the shortcut arrow overlay from icons (applies to the whole Explorer session).
+  $name: Hide Shortcut Arrows
+  $description: Removes the small shortcut arrow overlay from icons (Zero black squares!).
+- hide_shield: true
+  $name: Hide UAC Shield Overlay
+  $description: Removes the yellow and blue administrator shield from shortcuts (Win 11 Compatible).
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
 #include <windows.h>
+#include <shellapi.h>
 #include <commctrl.h>
 #include <commoncontrols.h>
 #include <shlobj.h>
@@ -49,7 +59,7 @@ exactly the same name as a *folder* on the desktop, that file's label will also 
 #include <objbase.h>
 
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -57,15 +67,26 @@ exactly the same name as a *folder* on the desktop, that file's label will also 
 // ---------------------------------------------------------------------------
 
 struct {
-    bool hide_text;
+    bool hide_programs;
+    bool hide_files;
+    bool hide_folders;
     bool hide_arrows;
+    bool hide_shield;
 } g_settings;
 
 // Set only while the desktop SysListView32 is painting (per-thread).
 thread_local bool g_isDrawingDesktop = false;
 
-// Cache of folder display names on the desktop.
-std::unordered_set<std::wstring> g_folderNames;
+// Overlay tracking
+int g_linkOverlay = -1;
+std::vector<int> g_shieldOverlays;
+int g_shieldSysIdx = -1;
+
+// Item categories
+enum class ItemType { Folder, Program, File };
+
+// Cache of item types on the desktop.
+std::unordered_map<std::wstring, ItemType> g_itemTypes;
 DWORD g_lastUpdateTick = 0;
 
 // ---------------------------------------------------------------------------
@@ -115,7 +136,7 @@ static void UpdateFolderCache() {
     if (g_lastUpdateTick != 0 && now - g_lastUpdateTick < 1000) return;
     g_lastUpdateTick = now;
 
-    std::unordered_set<std::wstring> fresh;
+    std::unordered_map<std::wstring, ItemType> fresh;
 
     IShellFolder* pDesktop = nullptr;
     if (SUCCEEDED(SHGetDesktopFolder(&pDesktop))) {
@@ -123,14 +144,42 @@ static void UpdateFolderCache() {
         if (SUCCEEDED(pDesktop->EnumObjects(nullptr, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, &pEnum))) {
             LPITEMIDLIST pidl = nullptr;
             while (pEnum->Next(1, &pidl, nullptr) == S_OK) {
-                SFGAOF attr = SFGAO_FOLDER | SFGAO_STREAM;
-                if (SUCCEEDED(pDesktop->GetAttributesOf(1, (LPCITEMIDLIST*)&pidl, &attr)) &&
-                    (attr & SFGAO_FOLDER) && !(attr & SFGAO_STREAM)) {
+                SFGAOF attr = SFGAO_FOLDER | SFGAO_STREAM | SFGAO_LINK;
+                if (SUCCEEDED(pDesktop->GetAttributesOf(1, (LPCITEMIDLIST*)&pidl, &attr))) {
                     STRRET str;
                     if (SUCCEEDED(pDesktop->GetDisplayNameOf(pidl, SHGDN_NORMAL, &str))) {
                         WCHAR name[MAX_PATH];
                         if (SUCCEEDED(StrRetToBufW(&str, pidl, name, MAX_PATH))) {
-                            fresh.insert(name);
+
+                            ItemType type = ItemType::File;
+
+                            if ((attr & SFGAO_FOLDER) && !(attr & SFGAO_STREAM)) {
+                                type = ItemType::Folder;
+                            } else {
+                                bool isProgram = false;
+                                if (attr & SFGAO_LINK) {
+                                    isProgram = true; // Most desktop shortcuts point to apps
+                                } else {
+                                    STRRET pathStr;
+                                    if (SUCCEEDED(pDesktop->GetDisplayNameOf(pidl, SHGDN_FORPARSING, &pathStr))) {
+                                        WCHAR path[MAX_PATH];
+                                        if (SUCCEEDED(StrRetToBufW(&pathStr, pidl, path, MAX_PATH))) {
+                                            LPCWSTR ext = PathFindExtensionW(path);
+                                            if (ext) {
+                                                if (_wcsicmp(ext, L".exe") == 0 ||
+                                                    _wcsicmp(ext, L".bat") == 0 ||
+                                                    _wcsicmp(ext, L".cmd") == 0 ||
+                                                    _wcsicmp(ext, L".url") == 0 ||
+                                                    _wcsicmp(ext, L".lnk") == 0) {
+                                                    isProgram = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                type = isProgram ? ItemType::Program : ItemType::File;
+                            }
+                            fresh[name] = type;
                         }
                     }
                 }
@@ -141,23 +190,60 @@ static void UpdateFolderCache() {
         pDesktop->Release();
     }
 
-    g_folderNames = std::move(fresh);
+    g_itemTypes = std::move(fresh);
 }
 
 static inline bool ShouldHideLabel(LPCWSTR text, int cch) {
-    if (!g_settings.hide_text) return false;
+    if (!g_settings.hide_programs && !g_settings.hide_files && !g_settings.hide_folders) return false;
+
     std::wstring s(text, cch == -1 ? wcslen(text) : cch);
-    return g_folderNames.count(s) == 0;
+    auto it = g_itemTypes.find(s);
+    ItemType type = (it != g_itemTypes.end()) ? it->second : ItemType::File;
+
+    if (type == ItemType::Program && g_settings.hide_programs) return true;
+    if (type == ItemType::File && g_settings.hide_files) return true;
+    if (type == ItemType::Folder && g_settings.hide_folders) return true;
+
+    return false;
 }
 
 // ---------------------------------------------------------------------------
 // Subclass
 // ---------------------------------------------------------------------------
 
-LRESULT CALLBACK DesktopListSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
-                                     LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_PAINT && g_settings.hide_text) {
-        UpdateFolderCache();
+static void InitAndPatchImageLists();
+
+static constexpr UINT_PTR kResumeTimerId = 0x4948; // "HI" in hex
+
+static void ReapplyOverlayPatches() {
+    if (g_settings.hide_arrows || g_settings.hide_shield) {
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        InitAndPatchImageLists();
+    }
+    if (HWND hDesktop = GetDesktopFolderView()) {
+        int count = ListView_GetItemCount(hDesktop);
+        if (count > 0) ListView_RedrawItems(hDesktop, 0, count - 1);
+        InvalidateRect(hDesktop, nullptr, TRUE);
+        UpdateWindow(hDesktop);
+    }
+}
+
+LRESULT CALLBACK ProgmanSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    if (uMsg == WM_POWERBROADCAST && wParam == PBT_APMRESUMEAUTOMATIC) {
+        SetTimer(hWnd, kResumeTimerId, 2000, nullptr);
+    }
+    if (uMsg == WM_TIMER && wParam == kResumeTimerId) {
+        KillTimer(hWnd, kResumeTimerId);
+        ReapplyOverlayPatches();
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK DesktopListSubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    if (uMsg == WM_PAINT) {
+        if (g_settings.hide_programs || g_settings.hide_files || g_settings.hide_folders) {
+            UpdateFolderCache();
+        }
         g_isDrawingDesktop = true;
         LRESULT res = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         g_isDrawingDesktop = false;
@@ -168,7 +254,7 @@ LRESULT CALLBACK DesktopListSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
 }
 
 // ---------------------------------------------------------------------------
-// Hooks
+// Text Hooks
 // ---------------------------------------------------------------------------
 
 using DrawTextW_t = decltype(&DrawTextW);
@@ -194,7 +280,7 @@ HRESULT WINAPI DrawThemeTextEx_Hook(HTHEME hTheme, HDC hdc, int iPartId, int iSt
 }
 
 // ---------------------------------------------------------------------------
-// Shortcut arrow removal
+// Transparent Icon Builder
 // ---------------------------------------------------------------------------
 
 #ifndef IDO_SHGIOI_LINK
@@ -226,8 +312,8 @@ static HICON CreateTransparentIcon(int cx, int cy) {
         memset(bits, 0, (size_t)cx * cy * 4);
     }
 
-    int rowBytes = ((cx + 15) / 16) * 2;
-    std::vector<BYTE> maskBits((size_t)rowBytes * cy, 0xFF);
+    int maskStride = ((cx + 31) / 32) * 4;
+    std::vector<BYTE> maskBits((size_t)maskStride * cy, 0xFF);
     HBITMAP hMask = CreateBitmap(cx, cy, 1, 1, maskBits.data());
 
     ICONINFO ii = {};
@@ -241,41 +327,150 @@ static HICON CreateTransparentIcon(int cx, int cy) {
     return hIcon;
 }
 
-static void HideShortcutOverlay() {
+// A persistent blank icon, used by the SHGetStockIconInfo hook so callers
+// always get a valid handle for SIID_SHIELD.
+HICON g_hBlankShieldIcon = nullptr;
+
+static void InitAndPatchImageLists() {
     HMODULE hShell32 = GetModuleHandle(L"shell32.dll");
     if (!hShell32) return;
 
-    auto pSHGetImageList = (HRESULT(WINAPI*)(int, REFIID, void**))
-        GetProcAddress(hShell32, "SHGetImageList");
-    auto pSHGetIconOverlayIndex = (int(WINAPI*)(LPCWSTR, int))
-        GetProcAddress(hShell32, "SHGetIconOverlayIndexW");
+    auto pSHGetImageList = (HRESULT(WINAPI*)(int, REFIID, void**))GetProcAddress(hShell32, "SHGetImageList");
+    auto pSHGetIconOverlayIndex = (int(WINAPI*)(LPCWSTR, int))GetProcAddress(hShell32, "SHGetIconOverlayIndexW");
+
     if (!pSHGetImageList || !pSHGetIconOverlayIndex) return;
 
-    int linkOverlay = pSHGetIconOverlayIndex(nullptr, IDO_SHGIOI_LINK);
-    if (linkOverlay <= 0) return;
+    if (g_settings.hide_arrows) {
+        g_linkOverlay = pSHGetIconOverlayIndex(nullptr, IDO_SHGIOI_LINK);
+    }
 
-    static const GUID iidImageList =
-        {0x46eb5926, 0x582e, 0x4017, {0x9f, 0xdf, 0xe8, 0x99, 0x8d, 0xaa, 0x09, 0x50}};
+    g_shieldOverlays.clear();
+    g_shieldSysIdx = -1;
+    if (g_settings.hide_shield) {
+        const struct { LPCWSTR path; int id; } targets[] = {
+            { L"shell32.dll", 77 }, { L"imageres.dll", 77 }, { L"imageres.dll", 78 }
+        };
+        for (const auto& t : targets) {
+            int idx = pSHGetIconOverlayIndex(t.path, t.id);
+            if (idx > 0) g_shieldOverlays.push_back(idx);
+        }
 
-    const int sizes[] = { 1, 0, 2, 3, 4 }; // SHIL_LARGE, SHIL_SMALL, SHIL_EXTRALARGE, SHIL_SYSSMALL, SHIL_JUMBO
+        SHSTOCKICONINFO sii = { sizeof(sii) };
+        if (SUCCEEDED(SHGetStockIconInfo(SIID_SHIELD, SHGSI_SYSICONINDEX, &sii))) {
+            g_shieldSysIdx = sii.iSysImageIndex;
+        }
+    }
+
+    static const GUID iidImageList = {0x46eb5926, 0x582e, 0x4017, {0x9f, 0xdf, 0xe8, 0x99, 0x8d, 0xaa, 0x09, 0x50}};
+    const int sizes[] = { 1, 0, 2, 3, 4 };
+
     for (int shil : sizes) {
         IImageList* piml = nullptr;
-        if (FAILED(pSHGetImageList(shil, iidImageList, (void**)&piml)) || !piml) {
-            continue;
-        }
+        if (FAILED(pSHGetImageList(shil, iidImageList, (void**)&piml)) || !piml) continue;
 
         int cx = 0, cy = 0;
         if (SUCCEEDED(piml->GetIconSize(&cx, &cy)) && cx > 0 && cy > 0) {
             if (HICON hBlank = CreateTransparentIcon(cx, cy)) {
-                int idx = -1;
-                if (SUCCEEDED(piml->ReplaceIcon(-1, hBlank, &idx)) && idx >= 0) {
-                    piml->SetOverlayImage(idx, linkOverlay);
+                int blankIdx = -1;
+                if (SUCCEEDED(piml->ReplaceIcon(-1, hBlank, &blankIdx)) && blankIdx >= 0) {
+
+                    if (g_settings.hide_arrows && g_linkOverlay > 0) {
+                        piml->SetOverlayImage(blankIdx, g_linkOverlay);
+                    }
+                    if (g_settings.hide_shield) {
+                        for (int so : g_shieldOverlays) {
+                            piml->SetOverlayImage(blankIdx, so);
+                        }
+                    }
                 }
+
+                if (g_settings.hide_shield && g_shieldSysIdx >= 0) {
+                    int dummyIdx = -1;
+                    piml->ReplaceIcon(g_shieldSysIdx, hBlank, &dummyIdx);
+                }
+
                 DestroyIcon(hBlank);
             }
         }
         piml->Release();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Layer 2: Live Draw Intercept
+// ---------------------------------------------------------------------------
+
+using ImageList_DrawIndirect_t = BOOL(WINAPI*)(IMAGELISTDRAWPARAMS*);
+ImageList_DrawIndirect_t ImageList_DrawIndirect_Original;
+BOOL WINAPI ImageList_DrawIndirect_Hook(IMAGELISTDRAWPARAMS* pimldp) {
+    // No g_isDrawingDesktop gate: overlays can be drawn from any thread (esp. on Win 11)
+    // and the mod is explicitly designed to be process-wide for overlays.
+    if (pimldp && (pimldp->fStyle & ILD_OVERLAYMASK)) {
+        int overlayIndex = (pimldp->fStyle & ILD_OVERLAYMASK) >> 8;
+        bool stripOverlay = false;
+
+        if (g_settings.hide_arrows && overlayIndex == g_linkOverlay) {
+            stripOverlay = true;
+        }
+
+        if (g_settings.hide_shield) {
+            for (int so : g_shieldOverlays) {
+                if (overlayIndex == so) {
+                    stripOverlay = true;
+                    break;
+                }
+            }
+        }
+
+        if (stripOverlay) {
+            pimldp->fStyle &= ~ILD_OVERLAYMASK;
+        }
+    }
+    return ImageList_DrawIndirect_Original(pimldp);
+}
+
+// ---------------------------------------------------------------------------
+// Layer 3: Bake-in Interception (the actual UAC shield killer)
+// On Win 11 the UAC shield is composited INTO the HICON via SHGetFileInfo
+// (SHGFI_ADDOVERLAYS / SHGFI_OVERLAYINDEX). The image-list paths above never
+// see a separate overlay flag — the shield is already painted into the icon
+// pixels. Strip those flags at the source.
+// ---------------------------------------------------------------------------
+
+using SHGetFileInfoW_t = decltype(&SHGetFileInfoW);
+SHGetFileInfoW_t SHGetFileInfoW_Original;
+DWORD_PTR WINAPI SHGetFileInfoW_Hook(LPCWSTR pszPath, DWORD dwFileAttributes,
+                                     SHFILEINFOW* psfi, UINT cbFileInfo, UINT uFlags) {
+    if (g_settings.hide_shield || g_settings.hide_arrows) {
+        // SHGFI_ADDOVERLAYS bakes every registered overlay (incl. UAC shield) into the HICON.
+        // SHGFI_OVERLAYINDEX returns the overlay index in iIcon's upper bits.
+        // Removing both forces shell to give back a clean icon without composition.
+        uFlags &= ~(SHGFI_ADDOVERLAYS | SHGFI_OVERLAYINDEX);
+    }
+    return SHGetFileInfoW_Original(pszPath, dwFileAttributes, psfi, cbFileInfo, uFlags);
+}
+
+using SHGetStockIconInfo_t = decltype(&SHGetStockIconInfo);
+SHGetStockIconInfo_t SHGetStockIconInfo_Original;
+HRESULT WINAPI SHGetStockIconInfo_Hook(SHSTOCKICONID siid, UINT uFlags, SHSTOCKICONINFO* psii) {
+    HRESULT hr = SHGetStockIconInfo_Original(siid, uFlags, psii);
+
+    if (g_settings.hide_shield && SUCCEEDED(hr) && siid == SIID_SHIELD && psii) {
+        // Replace any returned icon handle with a transparent one. Callers that copy/paint
+        // SIID_SHIELD (toolbars, button decorators, certain shell extensions) now paint nothing.
+        if ((uFlags & SHGSI_ICON) && psii->hIcon) {
+            if (!g_hBlankShieldIcon) {
+                int cx = GetSystemMetrics((uFlags & SHGSI_SMALLICON) ? SM_CXSMICON : SM_CXICON);
+                int cy = GetSystemMetrics((uFlags & SHGSI_SMALLICON) ? SM_CYSMICON : SM_CYICON);
+                g_hBlankShieldIcon = CreateTransparentIcon(cx, cy);
+            }
+            if (g_hBlankShieldIcon) {
+                DestroyIcon(psii->hIcon);
+                psii->hIcon = CopyIcon(g_hBlankShieldIcon);
+            }
+        }
+    }
+    return hr;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,8 +492,11 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 }
 
 void LoadSettings() {
-    g_settings.hide_text = Wh_GetIntSetting(L"hide_text") != 0;
+    g_settings.hide_programs = Wh_GetIntSetting(L"hide_programs") != 0;
+    g_settings.hide_files = Wh_GetIntSetting(L"hide_files") != 0;
+    g_settings.hide_folders = Wh_GetIntSetting(L"hide_folders") != 0;
     g_settings.hide_arrows = Wh_GetIntSetting(L"hide_arrows") != 0;
+    g_settings.hide_shield = Wh_GetIntSetting(L"hide_shield") != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,20 +518,33 @@ BOOL Wh_ModInit() {
             WindhawkUtils::SetFunctionHook(p, DrawThemeTextEx_Hook, &DrawThemeTextEx_Original);
     }
 
-    if (g_settings.hide_arrows) {
-        HideShortcutOverlay();
+    if (HMODULE hComctl = GetModuleHandle(L"comctl32.dll")) {
+        if (auto p = (ImageList_DrawIndirect_t)GetProcAddress(hComctl, "ImageList_DrawIndirect"))
+            WindhawkUtils::SetFunctionHook(p, ImageList_DrawIndirect_Hook, &ImageList_DrawIndirect_Original);
+    }
+
+    if (HMODULE hShell32 = GetModuleHandle(L"shell32.dll")) {
+        if (auto p = (SHGetFileInfoW_t)GetProcAddress(hShell32, "SHGetFileInfoW"))
+            WindhawkUtils::SetFunctionHook(p, SHGetFileInfoW_Hook, &SHGetFileInfoW_Original);
+        if (auto p = (SHGetStockIconInfo_t)GetProcAddress(hShell32, "SHGetStockIconInfo"))
+            WindhawkUtils::SetFunctionHook(p, SHGetStockIconInfo_Hook, &SHGetStockIconInfo_Original);
     }
 
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_settings.hide_arrows) {
+    // SHChangeNotify must happen BEFORE we patch image lists. Otherwise it
+    // invalidates the icon cache and silently throws our SetOverlayImage /
+    // ReplaceIcon patches away, leaving the original arrows/shield in place.
+    if (g_settings.hide_arrows || g_settings.hide_shield) {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        InitAndPatchImageLists();
     }
 
     if (HWND hDesktop = GetDesktopFolderView()) {
         WindhawkUtils::SetWindowSubclassFromAnyThread(hDesktop, DesktopListSubclass, 0);
+
         int count = ListView_GetItemCount(hDesktop);
         if (count > 0) {
             ListView_RedrawItems(hDesktop, 0, count - 1);
@@ -341,13 +552,27 @@ void Wh_ModAfterInit() {
         InvalidateRect(hDesktop, nullptr, TRUE);
         UpdateWindow(hDesktop);
     }
+
+    if (HWND hProgman = GetShellWindow()) {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hProgman, ProgmanSubclass, 0);
+    }
 }
 
 void Wh_ModUninit() {
+    if (HWND hProgman = GetShellWindow()) {
+        KillTimer(hProgman, kResumeTimerId);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hProgman, ProgmanSubclass);
+    }
+
     if (HWND hDesktop = GetDesktopFolderView()) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hDesktop, DesktopListSubclass);
         InvalidateRect(hDesktop, nullptr, TRUE);
         UpdateWindow(hDesktop);
+    }
+
+    if (g_hBlankShieldIcon) {
+        DestroyIcon(g_hBlankShieldIcon);
+        g_hBlankShieldIcon = nullptr;
     }
 }
 
