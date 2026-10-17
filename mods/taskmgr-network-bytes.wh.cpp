@@ -226,7 +226,9 @@ bool IsValidValueUnitPattern(const std::wstring& pattern) {
 
         size_t end = i + 1;
         int insert = 0;
-        while (end < pattern.size() && iswdigit(pattern[end])) {
+        // FormatMessageW only reads ASCII digits as an insert number.
+        while (end < pattern.size() && pattern[end] >= L'0' &&
+               pattern[end] <= L'9') {
             insert = insert * 10 + (pattern[end] - L'0');
             end++;
         }
