@@ -98,6 +98,10 @@ with the buttons into one: right-click any of them, open **Link widgets**, and c
 the other. Linked, they sit side by side with a divider between them, and dragging any of them
 moves them all; **Move this widget left** and **right** change their order.
 
+Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
+later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
+unlinked.
+
 ## Good to know
 
 - Only Print Screen on its own is taken over. Alt+Print Screen, Win+Print Screen and Win+Shift+S
@@ -106,7 +110,11 @@ moves them all; **Move this widget left** and **right** change their order.
 - While a program running as administrator is in front, Windows doesn't let the mod see Print
   Screen or Win+Shift+R, so Windows handles them as usual.
 - The tool, color and thickness you used last are remembered.
-- A recording closed without copying or saving it is deleted; the window asks first.
+- A recording closed without copying or saving it is deleted; the window asks first. If the mod
+  turns off while recording, or with a recording still open, the recording is kept in the
+  recordings folder.
+- Recordings being made and trimmed, and the files put on the clipboard by Copy, are kept in the
+  mod's storage (in a folder only you can open), and go with the mod.
 - Windhawk 1.x runs mods in a 32-bit process, short on memory for video: there, an area bigger
   than 2560 × 1440 is recorded scaled down to that many pixels. Windhawk 2.0 records up to 4K.
 */
@@ -156,7 +164,6 @@ moves them all; **Move this widget left** and **right** change their order.
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
-#include <mferror.h>
 #include <gdiplus.h>
 
 #include <algorithm>
@@ -219,9 +226,17 @@ std::wstring KnownFolder(REFKNOWNFOLDERID folder) {
     return result;
 }
 
-bool FileExists(const std::wstring& path) {
-    DWORD attributes = GetFileAttributesW(path.c_str());
-    return attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+// A new file name in the folder, "<prefix> <date> <time>.<extension>", numbered if it's taken.
+std::wstring NewFileName(const std::wstring& folder, const wchar_t* prefix, const wchar_t* extension) {
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    WCHAR name[96];
+    swprintf_s(name, L"%s %04d-%02d-%02d %02d%02d%02d", prefix, now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+    std::wstring path = folder + L"\\" + name + extension;
+    for (int copy = 2; GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES && copy < 1000; copy++) {
+        path = folder + L"\\" + name + L" (" + std::to_wstring(copy) + L")" + extension;
+    }
+    return path;
 }
 
 // Menu text: "&" would underline the next letter.
@@ -290,6 +305,32 @@ void SetString(const wchar_t* name, const std::wstring& value) {
 
 void Delete(const wchar_t* name) {
     Wh_DeleteValue(ValueName(name).c_str());
+}
+
+// The user's own folder in the mod's storage (which goes with the mod), for recordings. Windhawk's
+// storage is shared by everyone on the PC, and recordings show what was on the screen, so only this
+// user (and the system) can open it.
+std::wstring Folder() {
+    WCHAR storage[MAX_PATH];
+    size_t length = Wh_GetModStoragePath(storage, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) {
+        return {};
+    }
+    std::wstring root(storage, length);
+    std::wstring folder = root + L"\\" + UserSid();
+    if (GetFileAttributesW(folder.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        SHCreateDirectoryExW(nullptr, root.c_str(), nullptr);  // Fails harmlessly when it's there already.
+        SECURITY_ATTRIBUTES attributes{sizeof(attributes), nullptr, FALSE};
+        PSECURITY_DESCRIPTOR descriptor = nullptr;
+        std::wstring access = L"D:P(A;OICI;FA;;;" + UserSid() + L")(A;OICI;FA;;;SY)";
+        if (UserSid() != L"User" &&
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(access.c_str(), SDDL_REVISION_1, &descriptor, nullptr)) {
+            attributes.lpSecurityDescriptor = descriptor;
+        }
+        CreateDirectoryW(folder.c_str(), &attributes);
+        LocalFree(descriptor);
+    }
+    return folder;
 }
 
 }  // namespace Storage
@@ -834,6 +875,8 @@ struct Member {
     const wchar_t* windowClass;  // Of its widget window.
 };
 
+// Every widget that can link, by id (its place here). Ids stay as they are: a new widget goes at
+// the end, up to 15 of them.
 constexpr Member kMembers[] = {
     {L"Audio Flipper", L"AudioFlipper.Mod.Widget"},
     {L"RDP Launcher", L"RDPLauncher.Mod.Widget"},
@@ -841,8 +884,14 @@ constexpr Member kMembers[] = {
 };
 constexpr int kMemberCount = ARRAYSIZE(kMembers);
 
+// The format of the group shown to the other widgets and kept in storage, in the top four bits of
+// its order. A widget skips copies in a format it doesn't know. Widgets added later don't need a new
+// one: an id a widget doesn't know stays in the group as it is.
+constexpr unsigned kFormat = 1;
+constexpr int kOrderSlots = 7;  // Widgets in a group: four bits each, below the format.
+
 struct Group {
-    std::vector<int> order;  // The widgets in it, by their place in kMembers, left to right.
+    std::vector<int> order;  // The widgets in it, by id, left to right.
     int offset = -1;         // Its left edge from the taskbar's left edge; negative for the default.
     int stamp = 0;           // When it last changed, in seconds since 2020: the newest copy wins.
 
@@ -851,31 +900,40 @@ struct Group {
     // Whether this widget is linked with another.
     bool Linked() const { return order.size() >= 2 && Has(kSelfMember); }
 
-    // As one number, the way it's stored and shown to the other widgets: two bits for each widget,
-    // left to right (its place plus one), and the offset above them.
-    int Pack() const {
-        int packed = 0;
-        for (size_t i = 0; i < order.size() && i < (size_t)kMemberCount; i++) {
-            packed |= (order[i] + 1) << (2 * i);
+    // The order as one number: the format, then four bits for each widget, left to right (its id
+    // plus one; none after the last).
+    int PackOrder() const {
+        unsigned packed = kFormat << 28;
+        for (size_t i = 0; i < order.size() && i < (size_t)kOrderSlots; i++) {
+            packed |= (unsigned)((order[i] + 1) & 15) << (4 * i);
         }
-        return packed | (std::max(-1, offset) + 1) << (2 * kMemberCount);
+        return (int)packed;
     }
 
-    static Group Unpack(int packed, int stamp) {
-        Group group;
-        for (int i = 0; i < kMemberCount; i++) {
-            int member = ((packed >> (2 * i)) & 3) - 1;
-            if (member >= 0 && member < kMemberCount && !group.Has(member)) {
-                group.order.push_back(member);
+    // Reads the order. False for a format this widget doesn't know.
+    bool UnpackOrder(int packed) {
+        if ((unsigned)packed >> 28 != kFormat) {
+            return false;
+        }
+        order.clear();
+        for (int i = 0; i < kOrderSlots; i++) {
+            int member = (int)(((unsigned)packed >> (4 * i)) & 15) - 1;
+            if (member < 0) {
+                break;
+            }
+            if (!Has(member)) {
+                order.push_back(member);
             }
         }
-        group.offset = (packed >> (2 * kMemberCount)) - 1;
-        group.stamp = stamp;
-        return group;
+        return true;
     }
 };
 
-const wchar_t kGroupProperty[] = L"TaskbarWidgetLink.Mod.Group";
+// What each widget shows on its window: its id (so any widget can find it, even one added after
+// this one), and its copy of the group.
+const wchar_t kMemberProperty[] = L"TaskbarWidgetLink.Mod.Member";
+const wchar_t kOrderProperty[] = L"TaskbarWidgetLink.Mod.Order";
+const wchar_t kOffsetProperty[] = L"TaskbarWidgetLink.Mod.Offset";
 const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.GroupStamp";
 
 // Posted to the other widgets when the group, or this widget's size or place, changes.
@@ -898,40 +956,81 @@ int NewStamp(int newerThan) {
 }
 
 Group Load() {
-    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
-    if (stamp != 0) {
-        return Group::Unpack(Storage::GetInt(L"LinkGroup", 0), stamp);
-    }
-    // Before there were three, two widgets linked as a pair, kept as Link: on or off, whether this
-    // widget was on the left, and the offset.
     Group group;
-    int pair = kLegacyPartner >= 0 ? Storage::GetInt(L"Link", 0) : 0;
-    if (pair & 1) {
-        group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
-        group.offset = (pair >> 2) - 1;
+    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
+    if (stamp != 0 && group.UnpackOrder(Storage::GetInt(L"LinkGroupOrder", 0))) {
+        group.offset = Storage::GetInt(L"LinkGroupOffset", -1);
+        group.stamp = stamp;
+        return group;
+    }
+    // Before there were three, two widgets linked as a pair, kept as Link (on or off, whether this
+    // widget was on the left, and the offset) and LinkStamp. The stamp counts even when they were
+    // unlinked: unlinking while the other widget's mod wasn't running still wins.
+    group = {};
+    if (kLegacyPartner >= 0) {
+        int pair = Storage::GetInt(L"Link", 0);
+        if (pair & 1) {
+            group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
+            group.offset = (pair >> 2) - 1;
+        }
         group.stamp = Storage::GetInt(L"LinkStamp", 0);
     }
     return group;
 }
 
 void Save(const Group& group) {
-    Storage::SetInt(L"LinkGroup", group.Pack());
+    Storage::SetInt(L"LinkGroupOrder", group.PackOrder());
+    Storage::SetInt(L"LinkGroupOffset", group.offset);
     Storage::SetInt(L"LinkGroupStamp", group.stamp);
+    // The pair link from before is in the group now.
+    Storage::Delete(L"Link");
+    Storage::Delete(L"LinkStamp");
 }
 
-// Shows this widget's copy of the group on its window, for the other widgets to read.
+// Shows this widget's id and copy of the group on its window, for the other widgets to read.
 void Publish(HWND window, const Group& group) {
-    SetPropW(window, kGroupProperty, (HANDLE)(INT_PTR)group.Pack());
+    SetPropW(window, kMemberProperty, (HANDLE)(INT_PTR)(kSelfMember + 1));
+    SetPropW(window, kOrderProperty, (HANDLE)(INT_PTR)group.PackOrder());
+    SetPropW(window, kOffsetProperty, (HANDLE)(INT_PTR)(std::max(-1, group.offset) + 1));
     SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)group.stamp);
 }
 
 void Unpublish(HWND window) {
-    RemovePropW(window, kGroupProperty);
+    RemovePropW(window, kMemberProperty);
+    RemovePropW(window, kOrderProperty);
+    RemovePropW(window, kOffsetProperty);
     RemovePropW(window, kStampProperty);
 }
 
+BOOL CALLBACK AddOtherWidget(HWND window, LPARAM widgets) {
+    int member = (int)(INT_PTR)GetPropW(window, kMemberProperty) - 1;
+    if (member >= 0 && member != kSelfMember) {
+        ((std::vector<std::pair<int, HWND>>*)widgets)->emplace_back(member, window);
+    }
+    return TRUE;
+}
+
+// The widget windows of the other widgets that are running, with their ids.
+std::vector<std::pair<int, HWND>> OtherWidgets() {
+    std::vector<std::pair<int, HWND>> widgets;
+    EnumWindows(AddOtherWidget, (LPARAM)&widgets);
+    return widgets;
+}
+
 HWND FindMember(int member) {
-    return FindWindowW(kMembers[member].windowClass, nullptr);
+    if (member == kSelfMember || member < 0) {
+        return nullptr;
+    }
+    if (member < kMemberCount) {
+        return FindWindowW(kMembers[member].windowClass, nullptr);
+    }
+    // One added after this widget: by the id it shows.
+    for (const auto& [id, window] : OtherWidgets()) {
+        if (id == member) {
+            return window;
+        }
+    }
+    return nullptr;
 }
 
 // Whether the widget's mod is running (this one always is).
@@ -942,11 +1041,13 @@ bool Running(int member) {
 // The newest copy of the group among the other widgets that are running.
 std::optional<Group> ReadNewest() {
     std::optional<Group> newest;
-    for (int member = 0; member < kMemberCount; member++) {
-        HWND window = member == kSelfMember ? nullptr : FindMember(member);
-        int stamp = window ? (int)(INT_PTR)GetPropW(window, kStampProperty) : 0;
-        if (stamp != 0 && (!newest || stamp > newest->stamp)) {
-            newest = Group::Unpack((int)(INT_PTR)GetPropW(window, kGroupProperty), stamp);
+    for (const auto& [member, window] : OtherWidgets()) {
+        int stamp = (int)(INT_PTR)GetPropW(window, kStampProperty);
+        Group group;
+        if (stamp != 0 && (!newest || stamp > newest->stamp) && group.UnpackOrder((int)(INT_PTR)GetPropW(window, kOrderProperty))) {
+            group.offset = (int)(INT_PTR)GetPropW(window, kOffsetProperty) - 1;
+            group.stamp = stamp;
+            newest = group;
         }
     }
     return newest;
@@ -959,13 +1060,8 @@ bool TryGetBounds(int member, RECT& bounds) {
 }
 
 void NotifyOthers() {
-    for (int member = 0; member < kMemberCount; member++) {
-        if (member == kSelfMember) {
-            continue;
-        }
-        if (HWND window = FindMember(member)) {
-            PostMessageW(window, ChangedMessage(), 0, 0);
-        }
+    for (const auto& [member, window] : OtherWidgets()) {
+        PostMessageW(window, ChangedMessage(), 0, 0);
     }
 }
 
@@ -1117,19 +1213,40 @@ public:
         WidgetLink::NotifyOthers();
     }
 
-    // Moves this widget one place left (-1) or right (1) in its group.
+    // Whether a widget in the group is showing left (-1) or right (1) of this one, to move past.
+    bool CanMoveInGroup(int direction) const { return NeighborShowing(direction) >= 0; }
+
+    // Moves this widget past the nearest widget in its group that's showing on its left (-1) or
+    // right (1). (Past one that's hidden, nothing would change to see.)
     void MoveInGroup(int direction) {
-        WidgetLink::Group group = link_;
-        auto self = std::find(group.order.begin(), group.order.end(), kSelfMember);
-        int index = (int)(self - group.order.begin());
-        int target = index + direction;
-        if (self == group.order.end() || target < 0 || target >= (int)group.order.size()) {
+        int neighbor = NeighborShowing(direction);
+        if (neighbor < 0) {
             return;
         }
-        std::swap(group.order[index], group.order[target]);
+        WidgetLink::Group group = link_;
+        int passed = group.order[neighbor];
+        group.order.erase(std::remove(group.order.begin(), group.order.end(), kSelfMember), group.order.end());
+        auto place = std::find(group.order.begin(), group.order.end(), passed);
+        group.order.insert(direction < 0 ? place : place + 1, kSelfMember);
         ChangeLink(group);
         UpdatePlacement(true);
         WidgetLink::NotifyOthers();
+    }
+
+    // The place in the group of the nearest widget showing on this one's left (-1) or right (1),
+    // or -1.
+    int NeighborShowing(int direction) const {
+        auto self = std::find(link_.order.begin(), link_.order.end(), kSelfMember);
+        if (self == link_.order.end()) {
+            return -1;
+        }
+        RECT bounds;
+        for (int i = (int)(self - link_.order.begin()) + direction; i >= 0 && i < (int)link_.order.size(); i += direction) {
+            if (WidgetLink::TryGetBounds(link_.order[i], bounds)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     float Scale() const { return scale_; }
@@ -1594,10 +1711,9 @@ void AddLinkMenu(Menu& menu, TaskbarWidget& widget) {
                     [&widget, member, linked]() { widget.SetMemberLinked(member, !linked); }, linked);
     }
     if (group.Linked()) {
-        auto self = std::find(group.order.begin(), group.order.end(), kSelfMember);
         submenu.AddSeparator();
-        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, self != group.order.begin());
-        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, self + 1 != group.order.end());
+        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, widget.CanMoveInGroup(-1));
+        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, widget.CanMoveInGroup(1));
     }
 }
 
@@ -2550,15 +2666,7 @@ std::optional<std::wstring> SaveScreenshot(gp::Bitmap& image, const std::wstring
         return std::nullopt;
     }
     SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);  // Fails harmlessly when it's there already.
-    SYSTEMTIME now;
-    GetLocalTime(&now);
-    WCHAR name[64];
-    swprintf_s(name, L"Screenshot %04d-%02d-%02d %02d%02d%02d", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
-               now.wSecond);
-    std::wstring path = folder + L"\\" + name + L".png";
-    for (int copy = 2; FileExists(path) && copy < 1000; copy++) {
-        path = folder + L"\\" + name + L" (" + std::to_wstring(copy) + L").png";
-    }
+    std::wstring path = NewFileName(folder, L"Screenshot", L".png");
     if (image.Save(path.c_str(), &png, nullptr) != gp::Ok) {
         return std::nullopt;
     }
@@ -2837,7 +2945,6 @@ public:
     int Height() const { return height_; }
     LONGLONG Duration() const { return duration_; }
     bool IsOpen() const { return (bool)reader_; }
-    bool OnGraphicsCard() const { return (bool)manager_; }
 
     // Goes back or ahead to the key frame at or before the time; reading goes on from there.
     bool Seek(LONGLONG time) {
@@ -3097,7 +3204,6 @@ private:
         started_ = mediaFoundation.Started() && bits && timer && writer.Open(path_, size_.cx, size_.cy);
         SetEvent(ready_);
         if (started_) {
-            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
             LARGE_INTEGER frequency;
             LARGE_INTEGER origin;
             QueryPerformanceFrequency(&frequency);
@@ -3165,15 +3271,29 @@ void DrawCursor(HDC dc, const RECT& area, double scale) {
     if (!GetIconInfo(cursor.hCursor, &icon)) {
         return;
     }
+    // Its size: a black-and-white pointer's mask holds two images, one over the other.
+    BITMAP bitmap{};
+    int width = 0;
+    int height = 0;
+    if (icon.hbmColor && GetObjectW(icon.hbmColor, sizeof(bitmap), &bitmap)) {
+        width = bitmap.bmWidth;
+        height = bitmap.bmHeight;
+    } else if (icon.hbmMask && GetObjectW(icon.hbmMask, sizeof(bitmap), &bitmap)) {
+        width = bitmap.bmWidth;
+        height = bitmap.bmHeight / 2;
+    }
     if (icon.hbmMask) {
         DeleteObject(icon.hbmMask);
     }
     if (icon.hbmColor) {
         DeleteObject(icon.hbmColor);
     }
-    int x = (int)std::lround((cursor.ptScreenPos.x - area.left) * scale) - (int)icon.xHotspot;
-    int y = (int)std::lround((cursor.ptScreenPos.y - area.top) * scale) - (int)icon.yHotspot;
-    DrawIconEx(dc, x, y, cursor.hCursor, 0, 0, 0, nullptr, DI_NORMAL);
+    // Scaled with the frame, when it's smaller than the area.
+    bool scaled = scale < 1 && width > 0 && height > 0;
+    int x = (int)std::lround((cursor.ptScreenPos.x - area.left - (int)icon.xHotspot) * scale);
+    int y = (int)std::lround((cursor.ptScreenPos.y - area.top - (int)icon.yHotspot) * scale);
+    DrawIconEx(dc, x, y, cursor.hCursor, scaled ? std::max(1, (int)std::lround(width * scale)) : 0,
+               scaled ? std::max(1, (int)std::lround(height * scale)) : 0, 0, nullptr, DI_NORMAL);
 }
 
 // The frame source for recording an area of the screen, with the mouse pointer.
@@ -3194,21 +3314,14 @@ Recorder::FrameSource ScreenFrames(const RECT& area) {
     };
 }
 
-// The folder for recordings being made and copies put on the clipboard: Taskbar Snipper in the
-// user's temporary files. Files older than a day there are cleaned up.
-std::wstring TemporaryFolder() {
-    WCHAR temp[MAX_PATH + 1];
-    DWORD length = GetTempPathW(ARRAYSIZE(temp), temp);
-    if (length == 0 || length > MAX_PATH) {
-        return L"";
-    }
-    std::wstring folder = std::wstring(temp) + L"Taskbar Snipper";
-    SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
-    return folder;
+// The folder for recordings being made and trimmed, and copies put on the clipboard: the user's
+// own folder in the mod's storage. Files older than a day there are cleaned up.
+std::wstring WorkFolder() {
+    return Storage::Folder();
 }
 
-void CleanUpTemporaryFolder() {
-    std::wstring folder = TemporaryFolder();
+void CleanUpWorkFolder() {
+    std::wstring folder = WorkFolder();
     if (folder.empty()) {
         return;
     }
@@ -3229,17 +3342,14 @@ void CleanUpTemporaryFolder() {
     FindClose(search);
 }
 
-// A new file name in the folder, "<prefix> <date> <time>.<extension>", numbered if it's taken.
-std::wstring NewFileName(const std::wstring& folder, const wchar_t* prefix, const wchar_t* extension) {
-    SYSTEMTIME now;
-    GetLocalTime(&now);
-    WCHAR name[96];
-    swprintf_s(name, L"%s %04d-%02d-%02d %02d%02d%02d", prefix, now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
-    std::wstring path = folder + L"\\" + name + extension;
-    for (int copy = 2; GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES && copy < 1000; copy++) {
-        path = folder + L"\\" + name + L" (" + std::to_wstring(copy) + L")" + extension;
+// Keeps a recording that wasn't copied or saved (the mod turned off with it open, or still
+// recording) in the recordings folder, rather than losing it. Returns whether it's there.
+bool KeepRecording(const std::wstring& recording, const std::wstring& folder) {
+    if (folder.empty() || GetFileAttributesW(recording.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return false;
     }
-    return path;
+    SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);  // Fails harmlessly when it's there already.
+    return MoveFileExW(recording.c_str(), NewFileName(folder, L"Screen Recording", L".mp4").c_str(), MOVEFILE_COPY_ALLOWED);
 }
 
 // Puts a file on the clipboard, as File Explorer's Copy does, to paste into a chat, an email or a
@@ -3508,7 +3618,11 @@ public:
         GetCursorPos(&cursor);
         UpdateHover(ToClient(cursor));
         ShowWindow(hwnd_, SW_SHOW);
-        SetForegroundWindow(hwnd_);  // Windows may not allow it; the first click brings it to the front anyway.
+        // The key that opened the overlay went to the app in front (the hook took it), so Windows
+        // would keep the overlay from coming to the front: input from this process first lets it.
+        INPUT input{};
+        SendInput(1, &input, sizeof(INPUT));
+        SetForegroundWindow(hwnd_);
         return true;
     }
 
@@ -3743,7 +3857,6 @@ private:
                 return;
             }
             RECT before = Highlight();
-            current_ = point;
             selection_ = {std::min(anchor_.x, point.x), std::min(anchor_.y, point.y), std::max(anchor_.x, point.x) + 1,
                           std::max(anchor_.y, point.y) + 1};
             SetHighlightChanged(before);
@@ -3769,7 +3882,6 @@ private:
         if (mode_ == Mode::Selecting) {
             dragging_ = true;
             anchor_ = point;
-            current_ = point;
             return;
         }
         pressedItem_ = ItemAt(point);
@@ -3784,7 +3896,6 @@ private:
             UpdateHover(point);
             dragging_ = true;
             anchor_ = point;
-            current_ = point;
             selection_ = {point.x, point.y, point.x + 1, point.y + 1};
             InvalidateRect(hwnd_, nullptr, FALSE);
             return;
@@ -4199,7 +4310,9 @@ private:
         }
     }
 
-    // Lets Windows' color dialog pick any color.
+    // Lets Windows' color dialog pick any color. The dialog belongs to the overlay's window, so the
+    // overlay can't finish while it's open (it would be deleted under the dialog): finishing then
+    // closes the dialog, and waits for it.
     void PickColor() {
         static COLORREF customColors[16] = {};
         gp::Color current(pen_.color);
@@ -4208,7 +4321,15 @@ private:
         choose.rgbResult = RGB(current.GetR(), current.GetG(), current.GetB());
         choose.lpCustColors = customColors;
         choose.Flags = CC_FULLOPEN | CC_RGBINIT;
-        if (ChooseColorW(&choose)) {
+        inColorDialog_ = true;
+        BOOL picked = ChooseColorW(&choose);
+        inColorDialog_ = false;
+        if (finishAfterDialog_) {
+            finishAfterDialog_ = false;
+            Done(finishWhenDialogCloses_);
+            return;
+        }
+        if (picked) {
             SetColor(gp::Color::MakeARGB(255, GetRValue(choose.rgbResult), GetGValue(choose.rgbResult), GetBValue(choose.rgbResult)));
         }
     }
@@ -4253,6 +4374,15 @@ private:
 
     void Done(std::optional<Finish> finish) {
         if (done_) {
+            return;
+        }
+        if (inColorDialog_) {
+            finishAfterDialog_ = true;
+            finishWhenDialogCloses_ = finish;
+            HWND dialog = GetLastActivePopup(hwnd_);
+            if (dialog && dialog != hwnd_) {
+                PostMessageW(dialog, WM_COMMAND, IDCANCEL, 0);
+            }
             return;
         }
         FinishTyping();
@@ -4706,7 +4836,6 @@ private:
     RECT hintRect_{};
     RECT selection_{};
     POINT anchor_{};
-    POINT current_{};
     bool dragging_ = false;
     MarkList marks_;
     std::vector<MarkList> history_;  // The marks before each change, for undo.
@@ -4735,6 +4864,9 @@ private:
     int wheelRemainder_ = 0;
     bool lightTheme_ = false;
     bool done_ = false;
+    bool inColorDialog_ = false;
+    bool finishAfterDialog_ = false;  // Asked to finish while the color dialog was open.
+    std::optional<Finish> finishWhenDialogCloses_;
     HDC blackDc_ = nullptr;
     HBITMAP black_ = nullptr;
     HGDIOBJ blackPrevious_ = nullptr;
@@ -5141,6 +5273,10 @@ public:
             DestroyWindow(hwnd_);
         }
         reader_.Close();
+        // Gone without being closed (the mod turned off), and neither copied nor saved: kept.
+        if (opened_ && !closed_ && !copied_ && !saved_ && saveFolder && KeepRecording(path_, saveFolder())) {
+            return;
+        }
         DeleteFileW(path_.c_str());
     }
 
@@ -5178,7 +5314,12 @@ public:
         DecodeToward(0, 1000);
         StartThumbnails();
         ShowWindow(hwnd_, SW_SHOW);
+        // Stopped with Win+Shift+R, the last input went to another app: input from this process
+        // first lets the window come to the front.
+        INPUT input{};
+        SendInput(1, &input, sizeof(INPUT));
         SetForegroundWindow(hwnd_);
+        opened_ = true;
         return true;
     }
 
@@ -5267,6 +5408,7 @@ public:
                 } else if (copied_ || saved_ ||
                            MessageBoxW(hwnd_, L"The recording hasn't been copied or saved, and it will be gone. Close it anyway?",
                                        L"Taskbar Snipper", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES) {
+                    closed_ = true;
                     DestroyWindow(hwnd_);
                 }
                 return true;
@@ -5797,7 +5939,7 @@ private:
             return;
         }
         StopPlaying();
-        std::wstring folder = save && saveFolder ? saveFolder() : TemporaryFolder();
+        std::wstring folder = save && saveFolder ? saveFolder() : WorkFolder();
         if (!folder.empty()) {
             SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);  // Fails harmlessly when it's there already.
         }
@@ -6117,6 +6259,8 @@ private:
     bool exporting_ = false;
     bool copied_ = false;
     bool saved_ = false;
+    bool opened_ = false;  // Shown, with a recording that could be read.
+    bool closed_ = false;  // By the user.
     std::wstring status_;
 };
 
@@ -6134,7 +6278,7 @@ public:
         }
         pen_.color = (ARGB)Storage::GetInt(L"Color", (int)pen_.color);
         pen_.thickness = std::clamp(Storage::GetInt(L"Thickness", pen_.thickness), kMinThickness, kMaxThickness);
-        CleanUpTemporaryFolder();
+        CleanUpWorkFolder();
         if (!messages_.Create(L"TaskbarSnipper.Mod.Messages") || !notice_.Create()) {
             return false;
         }
@@ -6157,7 +6301,12 @@ public:
     ~SnipApp() {
         hook_.Stop();
         overlay_.reset();
-        recorder_.Stop();
+        // Turning off while recording: the recording is finished and kept in the recordings
+        // folder, as are any not yet copied or saved in trim windows.
+        if (recorder_.Recording()) {
+            recorder_.Stop();
+            KeepRecording(recordingPath_, settings_.recordings.path);
+        }
         recordingBar_.Hide();
         trimWindows_.clear();
         widget_.Destroy();
@@ -6295,7 +6444,7 @@ private:
     }
 
     void StartRecording() {
-        std::wstring folder = TemporaryFolder();
+        std::wstring folder = WorkFolder();
         recordingPath_ = folder.empty() ? L"" : NewFileName(folder, L"Recording", L".mp4");
         SIZE size = VideoSizeFor(recordingArea_.right - recordingArea_.left, recordingArea_.bottom - recordingArea_.top);
         if (recordingPath_.empty() || !recorder_.Start(recordingPath_, size, ScreenFrames(recordingArea_))) {
