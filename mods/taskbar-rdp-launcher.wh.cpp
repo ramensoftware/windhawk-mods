@@ -3535,47 +3535,44 @@ bool EditConnection(const Connection& connection) {
 namespace {
 
 // ---------------------------------------------------------------------------
-// Icons, drawn to match the Windows 11 taskbar at any size.
+// Icons: glyphs from the Windows icon font, like the taskbar's own.
 
-// Outlines a monitor on its stand, filling the box; returns the inside of its screen.
-gp::RectF DrawMonitor(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, float stroke) {
-    float half = stroke / 2;
-    gp::RectF screen(box.X + half, box.Y + box.Height * 0.1f + half, box.Width - stroke, box.Height * 0.62f - stroke);
-    DrawRoundedRect(graphics, color, screen, box.Width * 0.09f, stroke);
-    gp::Pen pen(color, stroke);
-    pen.SetStartCap(gp::LineCapRound);
-    pen.SetEndCap(gp::LineCapRound);
-    float middle = box.X + box.Width / 2;
-    float baseY = box.Y + box.Height * 0.9f - half;
-    graphics.DrawLine(&pen, middle, screen.GetBottom() + half, middle, baseY);
-    graphics.DrawLine(&pen, box.X + box.Width * 0.3f, baseY, box.X + box.Width * 0.7f, baseY);
-    screen.Inflate(-half, -half);
-    return screen;
+const wchar_t* const kGlyphThisPC = L"\uEC4E";
+const wchar_t* const kGlyphMonitor = L"\uE7F4";  // TVMonitor
+const wchar_t* const kGlyphCheckMark = L"\uE73E";
+
+// Draws an icon-font glyph at one font size, centered in the box by its ink, the way the taskbar
+// draws its own glyphs: unlike DrawGlyph, it doesn't stretch each glyph to fill the box, so they all
+// keep the same size and weight. Returns where the ink went.
+gp::RectF DrawGlyphAtSize(gp::Graphics& graphics, const wchar_t* glyph, float emSize, const gp::RectF& box, const gp::Color& color) {
+    const wchar_t* fontName = IconFontName();
+    if (!fontName) {
+        DrawGlyph(graphics, glyph, box, color);  // Draws a placeholder.
+        return box;
+    }
+    gp::FontFamily family(fontName);
+    gp::GraphicsPath path;
+    path.AddString(glyph, -1, &family, gp::FontStyleRegular, emSize, gp::PointF(0, 0), gp::StringFormat::GenericTypographic());
+    gp::RectF ink;
+    path.GetBounds(&ink);
+    if (ink.Width <= 0 || ink.Height <= 0) {
+        return box;
+    }
+    gp::RectF placed(box.X + (box.Width - ink.Width) / 2, box.Y + (box.Height - ink.Height) / 2, ink.Width, ink.Height);
+    gp::Matrix transform;
+    transform.Translate(placed.X - ink.X, placed.Y - ink.Y);
+    path.Transform(&transform);
+    gp::SolidBrush brush(color);
+    graphics.FillPath(&brush, &path);
+    return placed;
 }
 
-// A monitor with an arrow on its screen: Remote Desktop.
-void DrawRemoteDesktop(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color) {
-    float stroke = std::max(1.25f, std::min(box.Width, box.Height) * 0.08f);
-    gp::RectF screen = DrawMonitor(graphics, box, color, stroke);
-    gp::Pen pen(color, stroke);
-    pen.SetStartCap(gp::LineCapRound);
-    pen.SetEndCap(gp::LineCapRound);
-    pen.SetLineJoin(gp::LineJoinRound);
-    float left = screen.X + screen.Width * 0.32f;
-    float right = screen.X + screen.Width * 0.68f;
-    float top = screen.Y + screen.Height * 0.26f;
-    float bottom = screen.Y + screen.Height * 0.74f;
-    float head = screen.Width * 0.2f;
-    graphics.DrawLine(&pen, left, bottom, right, top);
-    gp::PointF arrowHead[] = {{right - head, top}, {right, top}, {right, top + head}};
-    graphics.DrawLines(&pen, arrowHead, 3);
-}
-
-// A monitor outline with a number on its screen, for the display buttons.
-void DrawNumberedMonitor(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color, const std::wstring& number,
+// The monitor glyph with a number on its screen, for the display buttons.
+void DrawNumberedMonitor(gp::Graphics& graphics, const gp::RectF& box, float emSize, const gp::Color& color, const std::wstring& number,
                          float fontPixels) {
-    float stroke = std::max(1.25f, std::min(box.Width, box.Height) * 0.07f);
-    gp::RectF screen = DrawMonitor(graphics, box, color, stroke);
+    gp::RectF monitor = DrawGlyphAtSize(graphics, kGlyphMonitor, emSize, box, color);
+    // Inside its outline, above the stand (in both Segoe Fluent Icons and Segoe MDL2 Assets).
+    gp::RectF screen(monitor.X + monitor.Width * 0.07f, monitor.Y + monitor.Height * 0.08f, monitor.Width * 0.86f, monitor.Height * 0.66f);
     // The screen is shorter than a line of text, so draw the digits as a shape and center what's inked.
     gp::FontFamily family(L"Segoe UI Semibold");
     gp::GraphicsPath path;
@@ -3591,17 +3588,6 @@ void DrawNumberedMonitor(gp::Graphics& graphics, const gp::RectF& box, const gp:
     path.Transform(&transform);
     gp::SolidBrush brush(color);
     graphics.FillPath(&brush, &path);
-}
-
-// A tick, as on a chosen display in the display picker.
-void DrawCheck(gp::Graphics& graphics, const gp::RectF& box, const gp::Color& color) {
-    float s = std::min(box.Width, box.Height);
-    gp::Pen pen(color, std::max(1.5f, s * 0.12f));
-    pen.SetStartCap(gp::LineCapRound);
-    pen.SetEndCap(gp::LineCapRound);
-    pen.SetLineJoin(gp::LineJoinRound);
-    gp::PointF points[] = {{box.X + s * 0.2f, box.Y + s * 0.53f}, {box.X + s * 0.41f, box.Y + s * 0.73f}, {box.X + s * 0.8f, box.Y + s * 0.3f}};
-    graphics.DrawLines(&pen, points, 3);
 }
 
 // ---------------------------------------------------------------------------
@@ -3752,7 +3738,7 @@ private:
         }
         float check = std::min((float)Px(20), std::min(rect.Width, rect.Height) * 0.5f);
         if (chosen && check >= Px(8)) {
-            DrawCheck(graphics, gp::RectF(rect.X + (rect.Width - check) / 2, rect.Y + (rect.Height - check) / 2, check, check), mark);
+            DrawGlyphAtSize(graphics, kGlyphCheckMark, check, rect, mark);
         }
     }
 
@@ -3867,8 +3853,8 @@ protected:
                 graphics.DrawLine(&divider, (float)section.x, (float)Px(14), (float)section.x, (float)(height - Px(14)));
             }
             gp::Color iconColor = content_.busyButton == button ? WithAlpha(110, foreground) : foreground;
-            gp::RectF icon(section.x + (section.width - Px(26)) / 2.0f, height / 2.0f - Px(12), (float)Px(26), (float)Px(24));
-            DrawNumberedMonitor(graphics, icon, iconColor, std::to_wstring(content_.buttons[button].size()), 11.0f * Scale());
+            gp::RectF icon((float)section.x, height / 2.0f - Px(12), (float)section.width, (float)Px(24));
+            DrawNumberedMonitor(graphics, icon, 20.0f * Scale(), iconColor, std::to_wstring(content_.buttons[button].size()), 11.0f * Scale());
         }
     }
 
@@ -3986,13 +3972,15 @@ private:
         return width;
     }
 
-    // The Remote Desktop icon, then the name over the address, like the weather widget's two lines;
+    // The This PC icon, then the name over the address, like the weather widget's two lines;
     // just the name, centered, without an address.
     void DrawConnection(gp::Graphics& graphics, const Section& section, int height, const gp::Color& foreground,
                         const gp::Color& secondary) {
         float middle = height / 2.0f;
         float iconSize = (float)Px(24);
-        DrawRemoteDesktop(graphics, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize), foreground);
+        // At three quarters of the box's height, about the size of the taskbar's own icons.
+        DrawGlyphAtSize(graphics, kGlyphThisPC, iconSize * 0.75f, gp::RectF(section.x + (float)Px(10), middle - iconSize / 2, iconSize, iconSize),
+                        foreground);
         float textLeft = section.x + (float)Px(44);
         float textWidth = section.x + section.width - textLeft - Px(10);
         // The section is sized to fit the text, so it's only cut short when it's as wide as it gets.
