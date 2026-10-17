@@ -116,7 +116,7 @@ Limitations: primary taskbar only, designed for a bottom-docked taskbar.
 - mouse: gentle
   $name: Mouse reaction
   $options:
-  - "off": Off
+  - "off": "Off"
   - gentle: Gentle
   - strong: Strong
 - reach: normal
