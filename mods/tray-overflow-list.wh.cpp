@@ -2,7 +2,7 @@
 // @id tray-overflow-list
 // @name Tray Overflow List
 // @description Hidden tray icons in a list with application names
-// @version 0.1.8.7
+// @version 0.1.8.8
 // @author HeyOkay
 // @github https://github.com/HeyOkay
 // @homepage https://github.com/HeyOkay/TrayOverflowList
@@ -25,7 +25,8 @@ and application names on the right.
 preview](https://raw.githubusercontent.com/HeyOkay/TrayOverflowList/70bedeeab69d9ac2a1f9c486ffe8ac594fa06fd6/docs/images/preview.png)
 
 The original tray controls handle clicks, context menus, and dragging. The mod
-preserves the native flyout background and measures its width. Long lists scroll
+preserves the native flyout background and derives its width from the original
+grid measurements. Long lists scroll
 vertically, and long names are shortened with an ellipsis.
 
 ## Settings
@@ -73,6 +74,9 @@ flyout geometry. Disable them when investigating layout problems.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.Collections.h>
@@ -373,8 +377,77 @@ FrameworkElement FindDescendantByName(DependencyObject const& element,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Pure layout arithmetic: preserve the native grid's cell width, wrap limit,
+// and measured edge space without temporarily restoring or reparenting it.
+struct NativeWidthProfile {
+    double cellWidth = 0;
+    double edgeWidth = 0;
+    uint32_t wrapLimit = 0;
+    bool horizontal = true;
+    bool valid = false;
+};
+uint32_t NativeColumns(uint32_t count, uint32_t limit, bool horizontal) {
+    if (!count || !limit)
+        return 0;
+    return horizontal ? std::min(count, limit) : 1 + (count - 1) / limit;
+}
+NativeWidthProfile MakeNativeWidthProfile(double width,
+                                          double cellWidth,
+                                          int limit,
+                                          bool horizontal,
+                                          uint32_t count) {
+    NativeWidthProfile result;
+    if (!std::isfinite(width) || !std::isfinite(cellWidth) || width < 80 ||
+        cellWidth <= 0 || limit <= 0 || !count)
+        return result;
+    auto columns =
+        NativeColumns(count, static_cast<uint32_t>(limit), horizontal);
+    double edge = width - columns * cellWidth;
+    // A constrained or unfinished native measurement isn't a reliable basis.
+    if (!std::isfinite(edge) || edge < -1 || edge > 2 * cellWidth)
+        return result;
+    result.cellWidth = cellWidth;
+    result.edgeWidth = std::max(0.0, edge);
+    result.wrapLimit = static_cast<uint32_t>(limit);
+    result.horizontal = horizontal;
+    result.valid = true;
+    return result;
+}
+double NativeWidthForCount(NativeWidthProfile const& profile,
+                           uint32_t count,
+                           double current) {
+    if (!profile.valid || !count)
+        return current;
+    double width = NativeColumns(count, profile.wrapLimit, profile.horizontal) *
+                       profile.cellWidth +
+                   profile.edgeWidth;
+    return std::isfinite(width) && width >= 80 ? width : current;
+}
+enum DirtyFlags : uint32_t {
+    DirtyRows = 1,
+    DirtyNames = 2,
+    DirtyGeometry = 4,
+    DirtyWidth = 8,
+    DirtyAll = DirtyRows | DirtyNames | DirtyGeometry | DirtyWidth
+};
+struct RefreshQueue {
+    uint32_t flags = 0;
+    unsigned int passes = 0;
+    void Request(uint32_t requested) {
+        flags |= requested;
+        passes = 3;
+    }
+    bool Pending() const { return flags != 0 || passes != 0; }
+    uint32_t Take() {
+        auto result = std::exchange(flags, 0);
+        if (passes)
+            --passes;
+        return result;
+    }
+};
 struct SavedProperty {
     winrt::weak_ref<DependencyObject> object;
+    void* identity = nullptr;
     DependencyProperty property{nullptr};
     wf::IInspectable value{nullptr};
     Data::Binding binding{nullptr};
@@ -383,28 +456,45 @@ struct SavedLabel {
     winrt::weak_ref<Controls::Grid> grid;
     winrt::weak_ref<Controls::TextBlock> label;
 };
-struct State {
+struct RowWatch {
+    winrt::weak_ref<FrameworkElement> row;
+    winrt::weak_ref<FrameworkElement> content;
+    winrt::weak_ref<Controls::Grid> grid;
+    void* contentIdentity = nullptr;
+    void* propertyIdentity = nullptr;
+    void* gridIdentity = nullptr;
+    winrt::event_token loaded{}, dataContext{};
+    int64_t templateCallback = 0;
+    bool templateRegistered = false;
+    bool propertiesSaved = false;
+    bool retiring = false;
+};
+struct State : std::enable_shared_from_this<State> {
     void* manager = nullptr;
     winrt::weak_ref<Controls::Control> root;
     winrt::weak_ref<Controls::ItemsControl> items;
+    winrt::weak_ref<Controls::WrapGrid> panel;
     winrt::weak_ref<Controls::Grid> scrollParent;
     winrt::weak_ref<Controls::ScrollViewer> scroll;
+    winrt::weak_ref<Controls::ItemCollection> collection;
     std::vector<SavedProperty> saved;
-    std::vector<SavedLabel> labels;
-    winrt::event_token layout{};
-    bool busy = false;
-    bool detaching = false;
+    std::unordered_map<void*, std::unordered_set<void*>> savedKeys;
+    std::unordered_map<void*, SavedLabel> labels;
+    std::unordered_map<void*, RowWatch> rows;
+    winrt::event_token layout{}, itemsChanged{}, itemsLoaded{}, itemsSize{},
+        rootSize{}, scrollSize{}, scrollView{};
+    int64_t sourceCallback = 0, templateCallback = 0;
+    bool sourceRegistered = false, templateRegistered = false;
+    bool busy = false, detaching = false;
     unsigned int activeCallbacks = 0;
     double width = 0;
+    NativeWidthProfile nativeWidth;
+    RefreshQueue work;
     uint32_t originalIndex = 0;
     int logCount = 0;
-    int passes = 0;
-    std::wstring signature;
-    uint32_t measuredCount = UINT32_MAX;
 };
-// Only the tray UI thread accesses this optional. Reset there on unload so
-// XAML values/bindings and the vector's buffer are released on the right
-// thread.
+// This container and every XAML value it contains are released on the tray UI
+// thread, not by a process-shutdown destructor.
 [[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<State>>>
     g_states{std::in_place};
 struct LiveState {
@@ -416,27 +506,67 @@ struct LiveState {
 LiveState GetLiveState(State const& s) {
     return {s.root.get(), s.items.get(), s.scrollParent.get(), s.scroll.get()};
 }
-void PruneExpiredEntries(State& s) {
-    std::erase_if(s.saved,
-                  [](auto const& value) { return !value.object.get(); });
-    std::erase_if(s.labels, [](auto const& value) {
-        return !value.grid.get() || !value.label.get();
-    });
+struct CallbackScope {
+    State& state;
+    explicit CallbackScope(State& value) : state(value) {
+        ++state.activeCallbacks;
+    }
+    ~CallbackScope() { --state.activeCallbacks; }
+};
+template <typename Action>
+auto StateCallback(std::weak_ptr<State> weak, Action action) {
+    return [weak, action](auto&&...) {
+        if (g_unloading)
+            return;
+        auto state = weak.lock();
+        if (!state || state->detaching)
+            return;
+        CallbackScope scope(*state);
+        try {
+            action(*state);
+        } catch (...) {
+            if (!g_unloading)
+                Wh_Log(L"Tray event failed");
+        }
+    };
+}
+void MarkDirty(State& s, uint32_t flags) {
+    if (s.detaching || g_unloading)
+        return;
+    s.work.Request(flags);
+    if (auto root = s.root.get())
+        root.InvalidateArrange();
+}
+void* PropertyObjectIdentity(DependencyObject const& object) {
+    // Different projected base interfaces can have different ABI addresses.
+    // IUnknown is the canonical identity shared by all of them.
+    return object.as<::IUnknown>().get();
 }
 void Save(State& s,
           DependencyObject const& object,
           DependencyProperty const& property) {
-    for (auto const& value : s.saved) {
-        auto savedObject = value.object.get();
-        if (winrt::get_abi(savedObject) == winrt::get_abi(object) &&
-            winrt::get_abi(value.property) == winrt::get_abi(property))
-            return;
-    }
+    auto identity = PropertyObjectIdentity(object);
+    auto propertyIdentity = winrt::get_abi(property);
+    auto found = s.savedKeys.find(identity);
+    if (found != s.savedKeys.end() && found->second.contains(propertyIdentity))
+        return;
     auto expression =
         object.as<FrameworkElement>().GetBindingExpression(property);
-    s.saved.push_back({winrt::make_weak(object), property,
+    s.saved.push_back({winrt::make_weak(object), identity, property,
                        object.ReadLocalValue(property),
                        expression ? expression.ParentBinding() : nullptr});
+    s.savedKeys[identity].insert(propertyIdentity);
+}
+void PruneExpiredEntries(State& s) {
+    std::erase_if(s.saved, [&](auto const& value) {
+        if (value.object.get())
+            return false;
+        s.savedKeys.erase(value.identity);
+        return true;
+    });
+    std::erase_if(s.labels, [](auto const& entry) {
+        return !entry.second.grid.get() || !entry.second.label.get();
+    });
 }
 void RestoreProperty(DependencyObject const& object,
                      SavedProperty const& value) {
@@ -448,36 +578,182 @@ void RestoreProperty(DependencyObject const& object,
     else
         object.SetValue(value.property, value.value);
 }
-// Revoke executable callbacks first. If revocation fails, retain the state
-// for another cleanup attempt; never release it and pretend it was detached.
+bool RevokeRow(RowWatch& watch) {
+    auto row = watch.row.get();
+    if (!row) {
+        watch.loaded = {};
+        watch.dataContext = {};
+        watch.templateRegistered = false;
+        return true;
+    }
+    bool complete = true;
+    auto step = [&](auto action) {
+        try {
+            action();
+        } catch (...) {
+            complete = false;
+            Wh_Log(L"Could not revoke a tray row callback");
+        }
+    };
+    step([&] {
+        if (watch.loaded.value) {
+            row.Loaded(watch.loaded);
+            watch.loaded = {};
+        }
+    });
+    step([&] {
+        if (watch.dataContext.value) {
+            row.DataContextChanged(watch.dataContext);
+            watch.dataContext = {};
+        }
+    });
+    step([&] {
+        if (watch.templateRegistered) {
+            row.UnregisterPropertyChangedCallback(
+                Controls::Control::TemplateProperty(), watch.templateCallback);
+            watch.templateRegistered = false;
+        }
+    });
+    return complete;
+}
+void RemoveLabel(State& s, void* identity) {
+    auto found = s.labels.find(identity);
+    if (found == s.labels.end())
+        return;
+    try {
+        auto grid = found->second.grid.get();
+        auto label = found->second.label.get();
+        if (label)
+            label.ClearValue(Controls::TextBlock::ForegroundProperty());
+        uint32_t index;
+        if (grid && label && grid.Children().IndexOf(label, index))
+            grid.Children().RemoveAt(index);
+    } catch (...) {
+        Wh_Log(L"Could not remove a tray label");
+    }
+    s.labels.erase(found);
+}
+void RestoreObject(State& s, void* identity) {
+    if (!identity)
+        return;
+    std::erase_if(s.saved, [&](auto const& value) {
+        if (value.identity != identity)
+            return false;
+        try {
+            if (auto object = value.object.get())
+                RestoreProperty(object, value);
+        } catch (...) {
+            Wh_Log(L"Could not restore a retired row property");
+        }
+        return true;
+    });
+    s.savedKeys.erase(identity);
+}
+bool RetireRow(State& s, RowWatch& watch) {
+    watch.retiring = true;
+    if (!RevokeRow(watch))
+        return false;
+    RemoveLabel(s, watch.gridIdentity);
+    RestoreObject(s, watch.contentIdentity);
+    RestoreObject(s, watch.propertyIdentity);
+    return true;
+}
+// Every delegate and dependency-property callback is revoked before any
+// bookkeeping is discarded. Failed removals are retained for a cleanup retry.
+bool RevokeCallbacks(State& s, LiveState const& live) {
+    bool complete = true;
+    auto step = [&](auto action) {
+        try {
+            action();
+        } catch (...) {
+            complete = false;
+            Wh_Log(L"Could not revoke a tray callback");
+        }
+    };
+    step([&] {
+        if (s.layout.value) {
+            if (live.root)
+                live.root.LayoutUpdated(s.layout);
+            s.layout = {};
+        }
+    });
+    step([&] {
+        if (s.itemsChanged.value) {
+            if (auto collection = s.collection.get())
+                collection.VectorChanged(s.itemsChanged);
+            s.itemsChanged = {};
+        }
+    });
+    step([&] {
+        if (s.itemsLoaded.value) {
+            if (live.items)
+                live.items.Loaded(s.itemsLoaded);
+            s.itemsLoaded = {};
+        }
+    });
+    step([&] {
+        if (s.itemsSize.value) {
+            if (live.items)
+                live.items.SizeChanged(s.itemsSize);
+            s.itemsSize = {};
+        }
+    });
+    step([&] {
+        if (s.rootSize.value) {
+            if (live.root)
+                live.root.SizeChanged(s.rootSize);
+            s.rootSize = {};
+        }
+    });
+    step([&] {
+        if (s.scrollSize.value) {
+            if (live.scroll)
+                live.scroll.SizeChanged(s.scrollSize);
+            s.scrollSize = {};
+        }
+    });
+    step([&] {
+        if (s.scrollView.value) {
+            if (live.scroll)
+                live.scroll.ViewChanged(s.scrollView);
+            s.scrollView = {};
+        }
+    });
+    step([&] {
+        if (s.sourceRegistered) {
+            if (live.items)
+                live.items.UnregisterPropertyChangedCallback(
+                    Controls::ItemsControl::ItemsSourceProperty(),
+                    s.sourceCallback);
+            s.sourceRegistered = false;
+        }
+    });
+    step([&] {
+        if (s.templateRegistered) {
+            if (live.items)
+                live.items.UnregisterPropertyChangedCallback(
+                    Controls::Control::TemplateProperty(), s.templateCallback);
+            s.templateRegistered = false;
+        }
+    });
+    for (auto& [identity, watch] : s.rows) {
+        step([&] {
+            if (!RevokeRow(watch))
+                complete = false;
+        });
+    }
+    return complete;
+}
 bool Restore(State& s) {
     if (s.activeCallbacks)
         return false;
     s.detaching = true;
     s.busy = true;
-    LiveState live;
-    try {
-        live = GetLiveState(s);
-        if (s.layout.value && live.root)
-            live.root.LayoutUpdated(s.layout);
-        s.layout = {};
-    } catch (...) {
-        Wh_Log(L"Could not revoke tray layout handler; will retry");
+    auto live = GetLiveState(s);
+    if (!RevokeCallbacks(s, live))
         return false;
-    }
-    for (auto const& value : s.labels) {
-        try {
-            auto grid = value.grid.get();
-            auto label = value.label.get();
-            if (label)
-                label.ClearValue(Controls::TextBlock::ForegroundProperty());
-            uint32_t index;
-            if (grid && label && grid.Children().IndexOf(label, index))
-                grid.Children().RemoveAt(index);
-        } catch (...) {
-            Wh_Log(L"Could not remove a tray label");
-        }
-    }
+    while (!s.labels.empty())
+        RemoveLabel(s, s.labels.begin()->first);
     for (auto it = s.saved.rbegin(); it != s.saved.rend(); ++it) {
         try {
             if (auto object = it->object.get())
@@ -509,128 +785,212 @@ bool Restore(State& s) {
     } catch (...) {
         Wh_Log(L"Could not invalidate native tray layout");
     }
-    s.labels.clear();
+    s.rows.clear();
     s.saved.clear();
+    s.savedKeys.clear();
     return true;
 }
-void Visit(State& s, LiveState const& live, DependencyObject const& obj) {
-    auto fe = obj.try_as<FrameworkElement>();
-    if (fe && winrt::get_class_name(fe) == L"SystemTray.NotifyIconView") {
-        auto control = fe.try_as<Controls::Control>();
-        if (control)
-            control.ApplyTemplate();
-        auto grid =
-            FindDescendantByName(fe, L"ContainerGrid").try_as<Controls::Grid>();
-        auto content = FindDescendantByName(fe, L"ContentGrid");
-        if (!grid || !content)
+void EnsureRow(State& s,
+               FrameworkElement const& row,
+               Controls::Grid const& grid,
+               FrameworkElement const& content) {
+    auto identity = winrt::get_abi(row);
+    auto& watch = s.rows[identity];
+    watch.row = winrt::make_weak(row);
+    watch.propertyIdentity = PropertyObjectIdentity(row);
+    watch.retiring = false;
+    auto changed = [](State& state) {
+        MarkDirty(state, DirtyRows | DirtyNames | DirtyGeometry);
+    };
+    auto weak = s.weak_from_this();
+    if (!watch.loaded.value)
+        watch.loaded = row.Loaded(StateCallback(weak, changed));
+    if (!watch.dataContext.value)
+        watch.dataContext =
+            row.DataContextChanged(StateCallback(weak, changed));
+    if (!watch.templateRegistered && row.try_as<Controls::Control>()) {
+        watch.templateCallback = row.RegisterPropertyChangedCallback(
+            Controls::Control::TemplateProperty(),
+            StateCallback(weak, changed));
+        watch.templateRegistered = true;
+    }
+    if (!watch.propertiesSaved) {
+        Save(s, row, FrameworkElement::WidthProperty());
+        Save(s, row, FrameworkElement::HorizontalAlignmentProperty());
+        if (g_rowHeight >= 20) {
+            Save(s, row, FrameworkElement::HeightProperty());
+            Save(s, row, FrameworkElement::VerticalAlignmentProperty());
+        }
+        watch.propertiesSaved = true;
+    }
+    auto contentIdentity = PropertyObjectIdentity(content);
+    if (watch.contentIdentity != contentIdentity || !watch.content.get()) {
+        RestoreObject(s, watch.contentIdentity);
+        watch.contentIdentity = contentIdentity;
+        watch.content = winrt::make_weak(content);
+    }
+    // Constant-time saved-key lookup also handles a partial first capture.
+    Save(s, content, FrameworkElement::WidthProperty());
+    Save(s, content, FrameworkElement::HorizontalAlignmentProperty());
+    auto gridIdentity = winrt::get_abi(grid);
+    if (watch.gridIdentity != gridIdentity)
+        RemoveLabel(s, watch.gridIdentity);
+    watch.gridIdentity = gridIdentity;
+    watch.grid = winrt::make_weak(grid);
+}
+void CollectRows(DependencyObject const& object,
+                 std::vector<FrameworkElement>& rows) {
+    if (auto element = object.try_as<FrameworkElement>()) {
+        if (winrt::get_class_name(element) == L"SystemTray.NotifyIconView") {
+            rows.push_back(element);
             return;
-        // The item ends where the visible
-        // list area ends. The list area itself stops a bit short of the
-        // flyout's right edge, so the fixed right adjustment extends both the
-        // area (negative right margin on the scroll viewer) and the item by N
-        // px.
-        int adjust = kRightAdjust;
-        if (live.scroll) {
-            auto m = live.scroll.Margin();
-            if (m.Right != -adjust) {
-                m.Right = -adjust;
-                live.scroll.Margin(m);
-            }
         }
-        double itemWidth = fe.Width();
-        if (!std::isfinite(itemWidth) || itemWidth <= 0)
-            itemWidth = s.width;
-        try {
-            FrameworkElement area = live.scroll
-                                        ? live.scroll.as<FrameworkElement>()
-                                        : live.items.as<FrameworkElement>();
-            double areaW = live.scroll ? live.scroll.ViewportWidth()
-                                       : live.items.ActualWidth();
-            if (!(areaW > 40))
-                areaW = area.ActualWidth();
-            if (fe.ActualWidth() > 0 && areaW > 40) {
-                double left =
-                    fe.TransformToVisual(area).TransformPoint({0, 0}).X;
-                double areaX =
-                    area.TransformToVisual(live.root).TransformPoint({0, 0}).X;
-                double feX = left + areaX;
-                double rootW = live.root.ActualWidth();
-                // Width up to the area's edge, measured without our own
-                // extension.
-                double areaRight = areaX + areaW - (live.scroll ? adjust : 0);
-                double wanted = areaW - (live.scroll ? adjust : 0) - 2 * left;
-                if (rootW > 40 && feX >= 0 && feX < rootW / 4)
-                    wanted = std::min(wanted,
-                                      std::min(rootW - feX, areaRight) - feX);
-                if (left >= 0 && left < areaW / 4 && wanted > 40) {
-                    wanted = std::floor(wanted) + adjust;
-                    if (s.logCount < 3) {
-                        s.logCount++;
-                        Wh_Log(
-                            L"Geometry: feX=%f left=%f areaX=%f areaW=%f "
-                            L"rootW=%f adjust=%d -> %f",
-                            feX, left, areaX, areaW, rootW, adjust, wanted);
-                    }
-                    if (std::abs(wanted - itemWidth) > 0.5)
-                        itemWidth = wanted;
+    }
+    int count = Media::VisualTreeHelper::GetChildrenCount(object);
+    for (int i = 0; i < count; ++i)
+        CollectRows(Media::VisualTreeHelper::GetChild(object, i), rows);
+}
+void DiscoverRows(State& s, LiveState const& live) {
+    // Discard dead identities before a newly allocated row can reuse an
+    // address.
+    PruneExpiredEntries(s);
+    std::erase_if(s.rows,
+                  [](auto const& entry) { return !entry.second.row.get(); });
+    std::vector<FrameworkElement> rows;
+    CollectRows(live.items, rows);
+    std::unordered_set<void*> seen;
+    bool incomplete = false;
+    for (auto const& row : rows) {
+        seen.insert(winrt::get_abi(row));
+        if (auto control = row.try_as<Controls::Control>())
+            control.ApplyTemplate();
+        auto grid = FindDescendantByName(row, L"ContainerGrid")
+                        .try_as<Controls::Grid>();
+        auto content = FindDescendantByName(row, L"ContentGrid");
+        if (!grid || !content) {
+            incomplete = true;
+            continue;
+        }
+        EnsureRow(s, row, grid, content);
+    }
+    for (auto it = s.rows.begin(); it != s.rows.end();) {
+        if (!seen.contains(it->first) && RetireRow(s, it->second))
+            it = s.rows.erase(it);
+        else
+            ++it;
+    }
+    PruneExpiredEntries(s);
+    // Allow only the existing bounded follow-up passes for late templates.
+    if (incomplete || rows.size() < live.items.Items().Size())
+        s.work.flags |= DirtyRows;
+}
+void UpdateRow(State& s,
+               LiveState const& live,
+               RowWatch& watch,
+               bool updateName) {
+    if (watch.retiring)
+        return;
+    auto fe = watch.row.get();
+    auto grid = watch.grid.get();
+    auto content = watch.content.get();
+    if (!fe || !grid || !content) {
+        s.work.flags |= DirtyRows;
+        return;
+    }
+    auto control = fe.try_as<Controls::Control>();
+    int adjust = kRightAdjust;
+    if (live.scroll) {
+        auto m = live.scroll.Margin();
+        if (m.Right != -adjust) {
+            m.Right = -adjust;
+            live.scroll.Margin(m);
+        }
+    }
+    double itemWidth = fe.Width();
+    if (!std::isfinite(itemWidth) || itemWidth <= 0)
+        itemWidth = s.width;
+    try {
+        FrameworkElement area = live.scroll ? live.scroll.as<FrameworkElement>()
+                                            : live.items.as<FrameworkElement>();
+        double areaW = live.scroll ? live.scroll.ViewportWidth()
+                                   : live.items.ActualWidth();
+        if (!(areaW > 40))
+            areaW = area.ActualWidth();
+        if (fe.ActualWidth() > 0 && areaW > 40) {
+            double left = fe.TransformToVisual(area).TransformPoint({0, 0}).X;
+            double areaX =
+                area.TransformToVisual(live.root).TransformPoint({0, 0}).X;
+            double feX = left + areaX;
+            double rootW = live.root.ActualWidth();
+            // Width up to the area's edge, measured without our own
+            // extension.
+            double areaRight = areaX + areaW - (live.scroll ? adjust : 0);
+            double wanted = areaW - (live.scroll ? adjust : 0) - 2 * left;
+            if (rootW > 40 && feX >= 0 && feX < rootW / 4)
+                wanted =
+                    std::min(wanted, std::min(rootW - feX, areaRight) - feX);
+            if (left >= 0 && left < areaW / 4 && wanted > 40) {
+                wanted = std::floor(wanted) + adjust;
+                if (s.logCount < 3) {
+                    s.logCount++;
+                    Wh_Log(
+                        L"Geometry: feX=%f left=%f areaX=%f areaW=%f "
+                        L"rootW=%f adjust=%d -> %f",
+                        feX, left, areaX, areaW, rootW, adjust, wanted);
                 }
+                if (std::abs(wanted - itemWidth) > 0.5)
+                    itemWidth = wanted;
             }
-        } catch (...) {
         }
-        itemWidth = std::max(40.0, itemWidth);
-        Save(s, fe, FrameworkElement::WidthProperty());
-        if (fe.Width() != itemWidth)
-            fe.Width(itemWidth);
-        Save(s, fe, FrameworkElement::HorizontalAlignmentProperty());
-        if (fe.HorizontalAlignment() != HorizontalAlignment::Left)
-            fe.HorizontalAlignment(HorizontalAlignment::Left);
-        if (int h = g_rowHeight; h >= 20) {
-            auto m = fe.Margin();
-            double fh = std::max(16.0, h - m.Top - m.Bottom);
-            Save(s, fe, FrameworkElement::HeightProperty());
-            if (fe.Height() != fh)
-                fe.Height(fh);
-            Save(s, fe, FrameworkElement::VerticalAlignmentProperty());
-            if (fe.VerticalAlignment() != VerticalAlignment::Center)
-                fe.VerticalAlignment(VerticalAlignment::Center);
+    } catch (...) {
+    }
+    itemWidth = std::max(40.0, itemWidth);
+    if (fe.Width() != itemWidth)
+        fe.Width(itemWidth);
+    if (fe.HorizontalAlignment() != HorizontalAlignment::Left)
+        fe.HorizontalAlignment(HorizontalAlignment::Left);
+    if (int h = g_rowHeight; h >= 20) {
+        auto m = fe.Margin();
+        double fh = std::max(16.0, h - m.Top - m.Bottom);
+        if (fe.Height() != fh)
+            fe.Height(fh);
+        if (fe.VerticalAlignment() != VerticalAlignment::Center)
+            fe.VerticalAlignment(VerticalAlignment::Center);
+    }
+    if (content.Width() != 40)
+        content.Width(40);
+    if (content.HorizontalAlignment() != HorizontalAlignment::Left)
+        content.HorizontalAlignment(HorizontalAlignment::Left);
+    Controls::TextBlock label{nullptr};
+    auto key = winrt::get_abi(grid);
+    if (auto found = s.labels.find(key); found != s.labels.end())
+        label = found->second.label.get();
+    if (!label) {
+        label = Controls::TextBlock();
+        label.Name(L"WindhawkTrayListLabel");
+        label.Margin({48, 0, 12, 0});
+        label.VerticalAlignment(VerticalAlignment::Center);
+        label.TextWrapping(TextWrapping::NoWrap);
+        label.TextTrimming(TextTrimming::CharacterEllipsis);
+        label.FontSize(13);
+        label.IsHitTestVisible(false);
+        if (control) {
+            Data::Binding binding;
+            binding.Source(control);
+            binding.Path(PropertyPath(L"Foreground"));
+            label.SetBinding(Controls::TextBlock::ForegroundProperty(),
+                             binding);
         }
-        Save(s, content, FrameworkElement::WidthProperty());
-        if (content.Width() != 40)
-            content.Width(40);
-        Save(s, content, FrameworkElement::HorizontalAlignmentProperty());
-        if (content.HorizontalAlignment() != HorizontalAlignment::Left)
-            content.HorizontalAlignment(HorizontalAlignment::Left);
-        Controls::TextBlock label{nullptr};
-        for (auto const& pair : s.labels)
-            if (winrt::get_abi(pair.grid.get()) == winrt::get_abi(grid)) {
-                label = pair.label.get();
-                break;
-            }
-        if (!label) {
-            label = Controls::TextBlock();
-            label.Name(L"WindhawkTrayListLabel");
-            label.Margin({48, 0, 12, 0});
-            label.VerticalAlignment(VerticalAlignment::Center);
-            label.TextWrapping(TextWrapping::NoWrap);
-            label.TextTrimming(TextTrimming::CharacterEllipsis);
-            label.FontSize(13);
-            label.IsHitTestVisible(false);
-            if (control) {
-                Data::Binding binding;
-                binding.Source(control);
-                binding.Path(PropertyPath(L"Foreground"));
-                label.SetBinding(Controls::TextBlock::ForegroundProperty(),
-                                 binding);
-            }
-            grid.Children().Append(label);
-            s.labels.push_back(
-                {winrt::make_weak(grid), winrt::make_weak(label)});
-        }
-        // Windows may remove injected children when recycling a dragged row.
-        // A remembered label must actually belong to the current grid.
-        uint32_t labelIndex;
-        if (!grid.Children().IndexOf(label, labelIndex))
-            grid.Children().Append(label);
+        grid.Children().Append(label);
+        s.labels[key] = {winrt::make_weak(grid), winrt::make_weak(label)};
+        updateName = true;
+    }
+    // Windows may remove injected children when recycling a dragged row.
+    // A remembered label must actually belong to the current grid.
+    uint32_t labelIndex;
+    if (!grid.Children().IndexOf(label, labelIndex))
+        grid.Children().Append(label);
+    if (updateName) {
         IconInfo info;
         info.viewModel = fe.DataContext();
         ReadIconInfo(info);
@@ -642,189 +1002,138 @@ void Visit(State& s, LiveState const& live, DependencyObject const& obj) {
             name = L"Application";
         if (label.Text() != name)
             label.Text(name);
-        return;
     }
-    int n = Media::VisualTreeHelper::GetChildrenCount(obj);
-    for (int i = 0; i < n; i++)
-        Visit(s, live, Media::VisualTreeHelper::GetChild(obj, i));
 }
-// LayoutUpdated fires on every layout pass, including every frame of the
-// open animation. Walking the whole tree each time causes visible stutter, so
-// only do the work when something relevant changed (plus a few follow-up
-// passes, because the geometry needs a completed layout to settle).
-void AppendRowSignature(State& s,
-                        DependencyObject const& object,
-                        std::wstring& signature) {
-    auto element = object.try_as<FrameworkElement>();
-    if (element &&
-        winrt::get_class_name(element) == L"SystemTray.NotifyIconView") {
-        auto grid = FindDescendantByName(element, L"ContainerGrid")
-                        .try_as<Controls::Grid>();
-        signature += L'|';
-        signature += std::to_wstring(
-            reinterpret_cast<uintptr_t>(winrt::get_abi(element)));
-        signature += L':';
-        signature += std::to_wstring(
-            reinterpret_cast<uintptr_t>(winrt::get_abi(element.DataContext())));
-        signature += L':';
-        signature +=
-            std::to_wstring(reinterpret_cast<uintptr_t>(winrt::get_abi(grid)));
-        bool attached = false;
-        if (grid)
-            for (auto const& pair : s.labels)
-                if (winrt::get_abi(pair.grid.get()) == winrt::get_abi(grid)) {
-                    auto label = pair.label.get();
-                    uint32_t index;
-                    attached = label && grid.Children().IndexOf(label, index);
-                    break;
-                }
-        signature += attached ? L":label" : L":missing";
-        return;
+NativeWidthProfile CaptureNativeWidth(Controls::WrapGrid const& panel,
+                                      uint32_t count,
+                                      double width) {
+    double cellWidth = panel.ItemWidth();
+    if ((!std::isfinite(cellWidth) || cellWidth <= 0) &&
+        panel.Children().Size()) {
+        auto first = panel.Children().GetAt(0).try_as<FrameworkElement>();
+        if (first)
+            cellWidth = first.DesiredSize().Width;
     }
-    int count = Media::VisualTreeHelper::GetChildrenCount(object);
-    for (int i = 0; i < count; i++)
-        AppendRowSignature(s, Media::VisualTreeHelper::GetChild(object, i),
-                           signature);
+    return MakeNativeWidthProfile(
+        width, cellWidth, panel.MaximumRowsOrColumns(),
+        panel.Orientation() == Controls::Orientation::Horizontal, count);
 }
-std::wstring LayoutSignature(State& s, LiveState const& live) {
-    std::wstring sig;
-    try {
-        sig += std::to_wstring(live.items.Items().Size());
-        sig += L'|';
-        if (auto panel = live.items.ItemsPanelRoot())
-            sig += std::to_wstring(panel.Children().Size());
-        sig += L'|';
-        double w = live.scroll ? live.scroll.ViewportWidth()
-                               : live.items.ActualWidth();
-        sig += std::to_wstring((int)std::lround(w * 10));
-        AppendRowSignature(s, live.items, sig);
-    } catch (...) {
-    }
-    return sig;
-}
-// Re-measure the native grid when startup applications add their icons.
-// A width captured while only two icons exist must not remain fixed forever.
-void UpdateNativeWidth(State& s, LiveState const& live) {
-    uint32_t count = live.items.Items().Size();
-    if (count == s.measuredCount || count == 0)
-        return;
-    auto panel = live.items.ItemsPanelRoot().try_as<Controls::WrapGrid>();
+void ConfigurePanel(State& s, Controls::WrapGrid const& panel) {
     if (!panel)
         return;
-    struct PropertySnapshot {
-        DependencyObject object{nullptr};
-        SavedProperty original;
-        wf::IInspectable listValue{nullptr};
-    };
-    // Strong refs only for this measurement, so row replacement during layout
-    // cannot invalidate the restoration snapshot.
-    std::vector<PropertySnapshot> snapshots;
-    snapshots.reserve(s.saved.size());
-    for (auto const& value : s.saved) {
-        if (auto object = value.object.get())
-            snapshots.push_back(
-                {object, value, object.ReadLocalValue(value.property)});
+    if (winrt::get_abi(s.panel.get()) != winrt::get_abi(panel)) {
+        Save(s, panel, Controls::WrapGrid::OrientationProperty());
+        Save(s, panel, Controls::WrapGrid::MaximumRowsOrColumnsProperty());
+        Save(s, panel, Controls::WrapGrid::ItemWidthProperty());
+        if (g_rowHeight >= 20)
+            Save(s, panel, Controls::WrapGrid::ItemHeightProperty());
+        s.panel = winrt::make_weak(panel);
     }
-    std::vector<Controls::TextBlock> labels;
-    for (auto const& value : s.labels)
-        if (auto label = value.label.get())
-            labels.push_back(label);
-    bool unwrapped = false;
-    uint32_t wrapperIndex = 0;
-    auto restoreList = [&]() {
-        if (unwrapped) {
-            uint32_t index;
-            if (live.scrollParent.Children().IndexOf(live.items, index))
-                live.scrollParent.Children().RemoveAt(index);
-            live.scroll.Content(live.items);
-            live.scrollParent.Children().InsertAt(
-                std::min(wrapperIndex, live.scrollParent.Children().Size()),
-                live.scroll);
-            unwrapped = false;
-        }
-        for (auto const& snapshot : snapshots) {
-            auto const& property = snapshot.original.property;
-            if (snapshot.listValue == DependencyProperty::UnsetValue())
-                snapshot.object.ClearValue(property);
-            else
-                snapshot.object.SetValue(property, snapshot.listValue);
-        }
-        for (auto const& label : labels)
-            label.Visibility(Visibility::Visible);
-    };
-    double width = 0;
-    try {
-        for (auto const& label : labels)
-            label.Visibility(Visibility::Collapsed);
-        for (auto const& snapshot : snapshots)
-            RestoreProperty(snapshot.object, snapshot.original);
-        if (live.scrollParent && live.scroll &&
-            live.scrollParent.Children().IndexOf(live.scroll, wrapperIndex)) {
-            live.scrollParent.Children().RemoveAt(wrapperIndex);
-            live.scroll.Content(nullptr);
-            unwrapped = true;
-            live.scrollParent.Children().InsertAt(wrapperIndex, live.items);
-        }
-        live.items.InvalidateMeasure();
-        live.root.InvalidateMeasure();
-        live.root.UpdateLayout();
-        width = live.items.ActualWidth();
-        if (width < 80 || !std::isfinite(width))
-            width = live.items.DesiredSize().Width;
-    } catch (...) {
-        restoreList();
-        throw;
-    }
-    restoreList();
-    if (width < 80 || !std::isfinite(width))
+    if (panel.Orientation() != Controls::Orientation::Horizontal)
+        panel.Orientation(Controls::Orientation::Horizontal);
+    if (panel.MaximumRowsOrColumns() != 1)
+        panel.MaximumRowsOrColumns(1);
+    if (panel.ItemWidth() != s.width)
+        panel.ItemWidth(s.width);
+    if (g_rowHeight >= 20 && panel.ItemHeight() != g_rowHeight)
+        panel.ItemHeight(g_rowHeight);
+}
+void UpdateNativeWidth(State& s, LiveState const& live) {
+    double width =
+        NativeWidthForCount(s.nativeWidth, live.items.Items().Size(), s.width);
+    if (std::abs(width - s.width) <= 0.5)
         return;
-    s.measuredCount = count;
-    s.width = width;
     live.items.Width(width);
-    panel.ItemWidth(width);
-    Wh_Log(L"Native width refreshed: icons=%u width=%f", count, width);
-    s.passes = 3;
+    if (auto panel = live.items.ItemsPanelRoot().try_as<Controls::WrapGrid>())
+        panel.ItemWidth(width);
+    s.width = width;
+    Wh_Log(L"Native grid width updated: %f", width);
 }
 void Refresh(State& s, bool force = false) {
     if (s.busy || s.detaching || g_unloading)
         return;
+    if (force)
+        s.work.Request(DirtyAll);
+    // The normal animation-frame path does no XAML lookup or tree traversal.
+    if (!s.work.Pending())
+        return;
     auto live = GetLiveState(s);
     if (!live.root || !live.items)
         return;
-    auto sig = LayoutSignature(s, live);
-    if (force || sig != s.signature) {
-        s.signature = sig;
-        s.passes = 3;
+    struct BusyScope {
+        State& state;
+        explicit BusyScope(State& value) : state(value) { state.busy = true; }
+        ~BusyScope() { state.busy = false; }
+    } busyScope(s);
+    uint32_t dirty = s.work.Take();
+    try {
+        if (live.items.Width() != s.width)
+            live.items.Width(s.width);
+        ConfigurePanel(
+            s, live.items.ItemsPanelRoot().try_as<Controls::WrapGrid>());
+        if (dirty & DirtyWidth)
+            UpdateNativeWidth(s, live);
+        if (dirty & DirtyRows)
+            DiscoverRows(s, live);
+        for (auto& [identity, watch] : s.rows)
+            UpdateRow(s, live, watch, dirty & (DirtyRows | DirtyNames));
+    } catch (...) {
+        s.work.flags |= DirtyAll;
+        if (!g_unloading)
+            Wh_Log(L"Tray list refresh failed");
     }
-    if (s.passes <= 0)
+    // A late template gets a bounded retry, not an unbounded layout loop.
+    if (!s.work.passes)
+        s.work.flags = 0;
+    if (s.work.Pending())
+        live.root.InvalidateArrange();
+}
+void SubscribeCollection(State& s, Controls::ItemsControl const& items) {
+    auto collection = items.Items();
+    if (s.itemsChanged.value &&
+        winrt::get_abi(s.collection.get()) == winrt::get_abi(collection))
         return;
-    // Don't resolve every saved weak reference on each animation frame.
-    PruneExpiredEntries(s);
-    s.passes--;
-    s.busy = true;
-    try {
-        UpdateNativeWidth(s, live);
-    } catch (...) {
-        Wh_Log(L"Native width refresh failed");
+    if (s.itemsChanged.value) {
+        if (auto previous = s.collection.get())
+            previous.VectorChanged(s.itemsChanged);
+        s.itemsChanged = {};
     }
-    try {
-        if (auto panel =
-                live.items.ItemsPanelRoot().try_as<Controls::WrapGrid>()) {
-            int h = g_rowHeight;
-            if (h >= 20) {
-                Save(s, panel, Controls::WrapGrid::ItemHeightProperty());
-                if (panel.ItemHeight() != h)
-                    panel.ItemHeight(h);
-            }
-        }
-    } catch (...) {
+    s.collection = winrt::make_weak(collection);
+    s.itemsChanged = collection.VectorChanged(StateCallback(
+        s.weak_from_this(), [](State& state) { MarkDirty(state, DirtyAll); }));
+}
+void SubscribeState(State& s, LiveState const& live) {
+    auto weak = s.weak_from_this();
+    auto rowsChanged = [](State& state) { MarkDirty(state, DirtyAll); };
+    auto geometryChanged = [](State& state) {
+        MarkDirty(state, DirtyGeometry);
+    };
+    SubscribeCollection(s, live.items);
+    s.itemsLoaded = live.items.Loaded(StateCallback(weak, rowsChanged));
+    s.itemsSize = live.items.SizeChanged(StateCallback(weak, rowsChanged));
+    s.rootSize = live.root.SizeChanged(StateCallback(weak, geometryChanged));
+    if (live.scroll) {
+        s.scrollSize =
+            live.scroll.SizeChanged(StateCallback(weak, geometryChanged));
+        s.scrollView =
+            live.scroll.ViewChanged(StateCallback(weak, [](State& state) {
+                MarkDirty(state, DirtyRows | DirtyNames | DirtyGeometry);
+            }));
     }
-    try {
-        Visit(s, live, live.items);
-    } catch (...) {
-        Wh_Log(L"List labels: update failed");
-    }
-    s.busy = false;
+    s.sourceCallback = live.items.RegisterPropertyChangedCallback(
+        Controls::ItemsControl::ItemsSourceProperty(),
+        StateCallback(weak, [](State& state) {
+            if (auto items = state.items.get())
+                SubscribeCollection(state, items);
+            MarkDirty(state, DirtyAll);
+        }));
+    s.sourceRegistered = true;
+    s.templateCallback = live.items.RegisterPropertyChangedCallback(
+        Controls::Control::TemplateProperty(),
+        StateCallback(weak, rowsChanged));
+    s.templateRegistered = true;
+    s.layout = live.root.LayoutUpdated(
+        StateCallback(weak, [](State& state) { Refresh(state); }));
 }
 void UpdateScrollHeight(Controls::ScrollViewer const& scroll) {
     if (!scroll)
@@ -837,8 +1146,9 @@ void UpdateScrollHeight(Controls::ScrollViewer const& scroll) {
         dpi = GetDpiForWindow(taskbar);
     if (!dpi)
         dpi = 96;
-    scroll.MaxHeight(
-        std::max(120.0, (work.bottom - work.top) * 96.0 / dpi - 80));
+    double height = std::max(120.0, (work.bottom - work.top) * 96.0 / dpi - 80);
+    if (scroll.MaxHeight() != height)
+        scroll.MaxHeight(height);
 }
 void Attach(void* manager, Controls::Control const& root) {
     if (!manager || !root || g_unloading)
@@ -874,14 +1184,12 @@ void Attach(void* manager, Controls::Control const& root) {
             ++it;
     }
     root.ApplyTemplate();
-    root.UpdateLayout();
     auto items = FindDescendantByName(root, L"OverflowItemsControl")
                      .try_as<Controls::ItemsControl>();
     if (!items) {
         Wh_Log(L"OverflowItemsControl missing");
         return;
     }
-    items.UpdateLayout();
     auto panel = items.ItemsPanelRoot().try_as<Controls::WrapGrid>();
     if (!panel) {
         Wh_Log(L"Unsupported overflow panel");
@@ -899,66 +1207,60 @@ void Attach(void* manager, Controls::Control const& root) {
     s->root = winrt::make_weak(root);
     s->items = winrt::make_weak(items);
     s->width = width;
+    s->nativeWidth = CaptureNativeWidth(panel, items.Items().Size(), width);
     g_states->push_back(s);
-    Save(*s, items, FrameworkElement::WidthProperty());
-    items.Width(width);
-    Save(*s, panel, Controls::WrapGrid::OrientationProperty());
-    panel.Orientation(Controls::Orientation::Horizontal);
-    Save(*s, panel, Controls::WrapGrid::MaximumRowsOrColumnsProperty());
-    panel.MaximumRowsOrColumns(1);
-    Save(*s, panel, Controls::WrapGrid::ItemWidthProperty());
-    panel.ItemWidth(width);
-    auto parent =
-        Media::VisualTreeHelper::GetParent(items).try_as<Controls::Grid>();
-    if (parent && parent.Children().IndexOf(items, s->originalIndex)) {
-        s->scrollParent = winrt::make_weak(parent);
-        Controls::ScrollViewer scroll;
-        s->scroll = winrt::make_weak(scroll);
-        scroll.HorizontalScrollMode(Controls::ScrollMode::Disabled);
-        scroll.HorizontalScrollBarVisibility(
-            Controls::ScrollBarVisibility::Disabled);
-        scroll.VerticalScrollMode(Controls::ScrollMode::Enabled);
-        scroll.VerticalScrollBarVisibility(Controls::ScrollBarVisibility::Auto);
-        UpdateScrollHeight(scroll);
-        Controls::Grid::SetRow(scroll, Controls::Grid::GetRow(items));
-        Controls::Grid::SetColumn(scroll, Controls::Grid::GetColumn(items));
-        parent.Children().RemoveAt(s->originalIndex);
-        scroll.Content(items);
-        parent.Children().InsertAt(s->originalIndex, scroll);
-    } else
-        Wh_Log(L"Scroll wrapper unavailable: unexpected parent");
-    std::weak_ptr<State> weak = s;
-    s->layout = root.LayoutUpdated([weak](auto&&, auto&&) {
-        if (g_unloading)
-            return;
-        if (auto locked = weak.lock()) {
-            struct CallbackScope {
-                State& state;
-                explicit CallbackScope(State& value) : state(value) {
-                    ++state.activeCallbacks;
-                }
-                ~CallbackScope() { --state.activeCallbacks; }
-            } callbackScope(*locked);
-            try {
-                Refresh(*locked);
-            } catch (...) {
-                if (!g_unloading)
-                    Wh_Log(L"Tray layout refresh failed");
-            }
+    try {
+        Save(*s, items, FrameworkElement::WidthProperty());
+        items.Width(width);
+        ConfigurePanel(*s, panel);
+        auto parent =
+            Media::VisualTreeHelper::GetParent(items).try_as<Controls::Grid>();
+        if (parent && parent.Children().IndexOf(items, s->originalIndex)) {
+            s->scrollParent = winrt::make_weak(parent);
+            Controls::ScrollViewer scroll;
+            s->scroll = winrt::make_weak(scroll);
+            scroll.HorizontalScrollMode(Controls::ScrollMode::Disabled);
+            scroll.HorizontalScrollBarVisibility(
+                Controls::ScrollBarVisibility::Disabled);
+            scroll.VerticalScrollMode(Controls::ScrollMode::Enabled);
+            scroll.VerticalScrollBarVisibility(
+                Controls::ScrollBarVisibility::Auto);
+            UpdateScrollHeight(scroll);
+            Controls::Grid::SetRow(scroll, Controls::Grid::GetRow(items));
+            Controls::Grid::SetColumn(scroll, Controls::Grid::GetColumn(items));
+            parent.Children().RemoveAt(s->originalIndex);
+            scroll.Content(items);
+            parent.Children().InsertAt(s->originalIndex, scroll);
+        } else
+            Wh_Log(L"Scroll wrapper unavailable: unexpected parent");
+        SubscribeState(*s, GetLiveState(*s));
+        Refresh(*s, true);
+        root.InvalidateMeasure();
+    } catch (...) {
+        // A partial attach must not leave untracked executable callbacks.
+        bool detached = false;
+        try {
+            detached = Restore(*s);
+        } catch (...) {
+            Wh_Log(L"Partial attach cleanup failed");
         }
-    });
-    Refresh(*s, true);
-    root.InvalidateMeasure();
-    root.UpdateLayout();
+        if (detached)
+            std::erase(*g_states, s);
+        throw;
+    }
     Wh_Log(L"List attached: native content width=%f", width);
 }
-void* showing = nullptr;
+thread_local void* showing = nullptr;
 using Show_t = void(WINAPI*)(void*, POINT, int);
 Show_t ShowOriginal;
 void WINAPI ShowHook(void* self, POINT pt, int kind) {
-    showing = self;
+    struct ShowingScope {
+        void* previous;
+        explicit ShowingScope(void* manager)
+            : previous(std::exchange(showing, manager)) {}
+        ~ShowingScope() { showing = previous; }
+    } scope(self);
     ShowOriginal(self, pt, kind);
-    showing = nullptr;
 }
 using Measure_t = void(WINAPI*)(void*, wf::Size const*);
 Measure_t MeasureOriginal;
@@ -1365,21 +1667,5 @@ void Wh_ModBeforeUninit() {
         if (attempt < 2)
             Sleep(100);
     }
-    // Windhawk cannot cancel an unload. On this exceptional path, retain the
-    // DLL's code pages so an unrevoked XAML delegate cannot jump into unmapped
-    // memory. The delegate sees g_unloading and immediately returns. No hooks
-    // are kept active. Normal unloads release all state on the tray thread.
-    HMODULE retainedModule = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           reinterpret_cast<LPCWSTR>(&Wh_ModBeforeUninit),
-                           &retainedModule)) {
-        Wh_Log(
-            L"ERROR: tray cleanup could not finish; retained module for "
-            L"callback safety. Restart Explorer before re-enabling the mod");
-    } else {
-        Wh_Log(
-            L"ERROR: tray cleanup and module retention failed; restart "
-            L"Explorer");
-    }
+    Wh_Log(L"ERROR: tray cleanup could not finish; restart Explorer");
 }
