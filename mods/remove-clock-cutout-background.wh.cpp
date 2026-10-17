@@ -25,6 +25,16 @@ and classic Windows Date/Time flyouts (timedate.cpl) using OS-level
 double buffering (WS_EX_COMPOSITED) and GDI+ sub-pixel anti-aliased corner 
 masking with smart dark-mode dialog sampling, plus full animated GIF and PNG replacement support.
 
+### Transparent PNG Support
+
+Now with transparent PNG support!
+
+**Before:**
+![Before Transparent PNG](https://i.imgur.com/aC8dRN0.png)
+
+**After:**
+![After Transparent PNG](https://i.imgur.com/KoSYtFz.png)
+
 ### Custom Image / GIF Demonstration
 
 ![Custom Image Demo](https://i.imgur.com/qO1AHCG.gif)
