@@ -76,6 +76,10 @@ this one into one: right-click any of them, open **Link widgets**, and choose **
 they sit side by side with a divider between them, and dragging any of them moves them all; **Move
 this widget left** and **right** change their order. A widget that hides leaves no gap.
 
+Update the linked widgets' mods together (Taskbar Audio Flipper and Taskbar RDP Launcher 1.1 or
+later): a widget still on 1.0 doesn't follow the others when they're dragged, reordered or
+unlinked.
+
 ## Settings
 
 The sections, the click rotation and the webcam settings are kept in the mod's storage, which
@@ -124,10 +128,10 @@ constexpr int kLegacyPartner = 1;
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
-// Shared by the AudioFlipper and RDPLauncher mods (the same code is in both, each
-// keeping the parts it uses): the taskbar widget window, popups, menus, the text
-// prompt, the link between the two widgets, the mod's storage and launching
-// programs.
+// Shared by the Taskbar Audio Flipper, Taskbar RDP Launcher and Taskbar Snipper mods
+// (the same code is in all three, each keeping the parts it uses): the taskbar
+// widget window, popups, menus, the text prompt, the link between the widgets, the
+// mod's storage and launching programs.
 
 namespace gp = Gdiplus;
 
@@ -382,6 +386,10 @@ std::wstring GetString(const wchar_t* name) {
 
 bool SetString(const wchar_t* name, const std::wstring& value) {
     return Wh_SetStringValue(ValueName(name).c_str(), value.c_str());
+}
+
+void Delete(const wchar_t* name) {
+    Wh_DeleteValue(ValueName(name).c_str());
 }
 
 }  // namespace Storage
@@ -1297,6 +1305,8 @@ struct Member {
     const wchar_t* windowClass;  // Of its widget window.
 };
 
+// Every widget that can link, by id (its place here). Ids stay as they are: a new widget goes at
+// the end, up to 15 of them.
 constexpr Member kMembers[] = {
     {L"Audio Flipper", L"AudioFlipper.Mod.Widget"},
     {L"RDP Launcher", L"RDPLauncher.Mod.Widget"},
@@ -1304,8 +1314,14 @@ constexpr Member kMembers[] = {
 };
 constexpr int kMemberCount = ARRAYSIZE(kMembers);
 
+// The format of the group shown to the other widgets and kept in storage, in the top four bits of
+// its order. A widget skips copies in a format it doesn't know. Widgets added later don't need a new
+// one: an id a widget doesn't know stays in the group as it is.
+constexpr unsigned kFormat = 1;
+constexpr int kOrderSlots = 7;  // Widgets in a group: four bits each, below the format.
+
 struct Group {
-    std::vector<int> order;  // The widgets in it, by their place in kMembers, left to right.
+    std::vector<int> order;  // The widgets in it, by id, left to right.
     int offset = -1;         // Its left edge from the taskbar's left edge; negative for the default.
     int stamp = 0;           // When it last changed, in seconds since 2020: the newest copy wins.
 
@@ -1314,31 +1330,40 @@ struct Group {
     // Whether this widget is linked with another.
     bool Linked() const { return order.size() >= 2 && Has(kSelfMember); }
 
-    // As one number, the way it's stored and shown to the other widgets: two bits for each widget,
-    // left to right (its place plus one), and the offset above them.
-    int Pack() const {
-        int packed = 0;
-        for (size_t i = 0; i < order.size() && i < (size_t)kMemberCount; i++) {
-            packed |= (order[i] + 1) << (2 * i);
+    // The order as one number: the format, then four bits for each widget, left to right (its id
+    // plus one; none after the last).
+    int PackOrder() const {
+        unsigned packed = kFormat << 28;
+        for (size_t i = 0; i < order.size() && i < (size_t)kOrderSlots; i++) {
+            packed |= (unsigned)((order[i] + 1) & 15) << (4 * i);
         }
-        return packed | (std::max(-1, offset) + 1) << (2 * kMemberCount);
+        return (int)packed;
     }
 
-    static Group Unpack(int packed, int stamp) {
-        Group group;
-        for (int i = 0; i < kMemberCount; i++) {
-            int member = ((packed >> (2 * i)) & 3) - 1;
-            if (member >= 0 && member < kMemberCount && !group.Has(member)) {
-                group.order.push_back(member);
+    // Reads the order. False for a format this widget doesn't know.
+    bool UnpackOrder(int packed) {
+        if ((unsigned)packed >> 28 != kFormat) {
+            return false;
+        }
+        order.clear();
+        for (int i = 0; i < kOrderSlots; i++) {
+            int member = (int)(((unsigned)packed >> (4 * i)) & 15) - 1;
+            if (member < 0) {
+                break;
+            }
+            if (!Has(member)) {
+                order.push_back(member);
             }
         }
-        group.offset = (packed >> (2 * kMemberCount)) - 1;
-        group.stamp = stamp;
-        return group;
+        return true;
     }
 };
 
-const wchar_t kGroupProperty[] = L"TaskbarWidgetLink.Mod.Group";
+// What each widget shows on its window: its id (so any widget can find it, even one added after
+// this one), and its copy of the group.
+const wchar_t kMemberProperty[] = L"TaskbarWidgetLink.Mod.Member";
+const wchar_t kOrderProperty[] = L"TaskbarWidgetLink.Mod.Order";
+const wchar_t kOffsetProperty[] = L"TaskbarWidgetLink.Mod.Offset";
 const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.GroupStamp";
 
 // Posted to the other widgets when the group, or this widget's size or place, changes.
@@ -1361,40 +1386,81 @@ int NewStamp(int newerThan) {
 }
 
 Group Load() {
-    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
-    if (stamp != 0) {
-        return Group::Unpack(Storage::GetInt(L"LinkGroup", 0), stamp);
-    }
-    // Before there were three, two widgets linked as a pair, kept as Link: on or off, whether this
-    // widget was on the left, and the offset.
     Group group;
-    int pair = kLegacyPartner >= 0 ? Storage::GetInt(L"Link", 0) : 0;
-    if (pair & 1) {
-        group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
-        group.offset = (pair >> 2) - 1;
+    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
+    if (stamp != 0 && group.UnpackOrder(Storage::GetInt(L"LinkGroupOrder", 0))) {
+        group.offset = Storage::GetInt(L"LinkGroupOffset", -1);
+        group.stamp = stamp;
+        return group;
+    }
+    // Before there were three, two widgets linked as a pair, kept as Link (on or off, whether this
+    // widget was on the left, and the offset) and LinkStamp. The stamp counts even when they were
+    // unlinked: unlinking while the other widget's mod wasn't running still wins.
+    group = {};
+    if (kLegacyPartner >= 0) {
+        int pair = Storage::GetInt(L"Link", 0);
+        if (pair & 1) {
+            group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
+            group.offset = (pair >> 2) - 1;
+        }
         group.stamp = Storage::GetInt(L"LinkStamp", 0);
     }
     return group;
 }
 
 void Save(const Group& group) {
-    Storage::SetInt(L"LinkGroup", group.Pack());
+    Storage::SetInt(L"LinkGroupOrder", group.PackOrder());
+    Storage::SetInt(L"LinkGroupOffset", group.offset);
     Storage::SetInt(L"LinkGroupStamp", group.stamp);
+    // The pair link from before is in the group now.
+    Storage::Delete(L"Link");
+    Storage::Delete(L"LinkStamp");
 }
 
-// Shows this widget's copy of the group on its window, for the other widgets to read.
+// Shows this widget's id and copy of the group on its window, for the other widgets to read.
 void Publish(HWND window, const Group& group) {
-    SetPropW(window, kGroupProperty, (HANDLE)(INT_PTR)group.Pack());
+    SetPropW(window, kMemberProperty, (HANDLE)(INT_PTR)(kSelfMember + 1));
+    SetPropW(window, kOrderProperty, (HANDLE)(INT_PTR)group.PackOrder());
+    SetPropW(window, kOffsetProperty, (HANDLE)(INT_PTR)(std::max(-1, group.offset) + 1));
     SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)group.stamp);
 }
 
 void Unpublish(HWND window) {
-    RemovePropW(window, kGroupProperty);
+    RemovePropW(window, kMemberProperty);
+    RemovePropW(window, kOrderProperty);
+    RemovePropW(window, kOffsetProperty);
     RemovePropW(window, kStampProperty);
 }
 
+BOOL CALLBACK AddOtherWidget(HWND window, LPARAM widgets) {
+    int member = (int)(INT_PTR)GetPropW(window, kMemberProperty) - 1;
+    if (member >= 0 && member != kSelfMember) {
+        ((std::vector<std::pair<int, HWND>>*)widgets)->emplace_back(member, window);
+    }
+    return TRUE;
+}
+
+// The widget windows of the other widgets that are running, with their ids.
+std::vector<std::pair<int, HWND>> OtherWidgets() {
+    std::vector<std::pair<int, HWND>> widgets;
+    EnumWindows(AddOtherWidget, (LPARAM)&widgets);
+    return widgets;
+}
+
 HWND FindMember(int member) {
-    return FindWindowW(kMembers[member].windowClass, nullptr);
+    if (member == kSelfMember || member < 0) {
+        return nullptr;
+    }
+    if (member < kMemberCount) {
+        return FindWindowW(kMembers[member].windowClass, nullptr);
+    }
+    // One added after this widget: by the id it shows.
+    for (const auto& [id, window] : OtherWidgets()) {
+        if (id == member) {
+            return window;
+        }
+    }
+    return nullptr;
 }
 
 // Whether the widget's mod is running (this one always is).
@@ -1405,11 +1471,13 @@ bool Running(int member) {
 // The newest copy of the group among the other widgets that are running.
 std::optional<Group> ReadNewest() {
     std::optional<Group> newest;
-    for (int member = 0; member < kMemberCount; member++) {
-        HWND window = member == kSelfMember ? nullptr : FindMember(member);
-        int stamp = window ? (int)(INT_PTR)GetPropW(window, kStampProperty) : 0;
-        if (stamp != 0 && (!newest || stamp > newest->stamp)) {
-            newest = Group::Unpack((int)(INT_PTR)GetPropW(window, kGroupProperty), stamp);
+    for (const auto& [member, window] : OtherWidgets()) {
+        int stamp = (int)(INT_PTR)GetPropW(window, kStampProperty);
+        Group group;
+        if (stamp != 0 && (!newest || stamp > newest->stamp) && group.UnpackOrder((int)(INT_PTR)GetPropW(window, kOrderProperty))) {
+            group.offset = (int)(INT_PTR)GetPropW(window, kOffsetProperty) - 1;
+            group.stamp = stamp;
+            newest = group;
         }
     }
     return newest;
@@ -1422,13 +1490,8 @@ bool TryGetBounds(int member, RECT& bounds) {
 }
 
 void NotifyOthers() {
-    for (int member = 0; member < kMemberCount; member++) {
-        if (member == kSelfMember) {
-            continue;
-        }
-        if (HWND window = FindMember(member)) {
-            PostMessageW(window, ChangedMessage(), 0, 0);
-        }
+    for (const auto& [member, window] : OtherWidgets()) {
+        PostMessageW(window, ChangedMessage(), 0, 0);
     }
 }
 
@@ -1582,19 +1645,40 @@ public:
         WidgetLink::NotifyOthers();
     }
 
-    // Moves this widget one place left (-1) or right (1) in its group.
+    // Whether a widget in the group is showing left (-1) or right (1) of this one, to move past.
+    bool CanMoveInGroup(int direction) const { return NeighborShowing(direction) >= 0; }
+
+    // Moves this widget past the nearest widget in its group that's showing on its left (-1) or
+    // right (1). (Past one that's hidden, nothing would change to see.)
     void MoveInGroup(int direction) {
-        WidgetLink::Group group = link_;
-        auto self = std::find(group.order.begin(), group.order.end(), kSelfMember);
-        int index = (int)(self - group.order.begin());
-        int target = index + direction;
-        if (self == group.order.end() || target < 0 || target >= (int)group.order.size()) {
+        int neighbor = NeighborShowing(direction);
+        if (neighbor < 0) {
             return;
         }
-        std::swap(group.order[index], group.order[target]);
+        WidgetLink::Group group = link_;
+        int passed = group.order[neighbor];
+        group.order.erase(std::remove(group.order.begin(), group.order.end(), kSelfMember), group.order.end());
+        auto place = std::find(group.order.begin(), group.order.end(), passed);
+        group.order.insert(direction < 0 ? place : place + 1, kSelfMember);
         ChangeLink(group);
         UpdatePlacement(true);
         WidgetLink::NotifyOthers();
+    }
+
+    // The place in the group of the nearest widget showing on this one's left (-1) or right (1),
+    // or -1.
+    int NeighborShowing(int direction) const {
+        auto self = std::find(link_.order.begin(), link_.order.end(), kSelfMember);
+        if (self == link_.order.end()) {
+            return -1;
+        }
+        RECT bounds;
+        for (int i = (int)(self - link_.order.begin()) + direction; i >= 0 && i < (int)link_.order.size(); i += direction) {
+            if (WidgetLink::TryGetBounds(link_.order[i], bounds)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     float Scale() const { return scale_; }
@@ -2066,10 +2150,9 @@ void AddLinkMenu(Menu& menu, TaskbarWidget& widget) {
                     [&widget, member, linked]() { widget.SetMemberLinked(member, !linked); }, linked);
     }
     if (group.Linked()) {
-        auto self = std::find(group.order.begin(), group.order.end(), kSelfMember);
         submenu.AddSeparator();
-        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, self != group.order.begin());
-        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, self + 1 != group.order.end());
+        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, widget.CanMoveInGroup(-1));
+        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, widget.CanMoveInGroup(1));
     }
 }
 
