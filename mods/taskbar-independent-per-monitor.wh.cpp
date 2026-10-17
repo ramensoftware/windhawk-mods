@@ -585,8 +585,17 @@ static const wchar_t kMsgClass[] = L"TaskbarIndependentPerMonitorMsg";
 static const UINT kMsgCleanup = WM_APP + 0x51;
 static const UINT kMsgSync = WM_APP + 0x52;  // posted: re-apply all pins on the taskbar thread
 static const UINT kMsgForget = WM_APP + 0x53;  // posted: a monitor number was handed to another monitor
+// In Explorer always on the taskbar thread: kept until the message window exists
+static std::mutex g_forgetMx;
+static std::vector<int> g_pendingForget;
 static void ForgetMonitorLater(int n) {
-    if (!g_msgWnd || !PostMessageW(g_msgWnd, kMsgForget, n, 0)) ForgetMonitor(n);
+    if (g_msgWnd && PostMessageW(g_msgWnd, kMsgForget, n, 0)) return;
+    if (!g_isExplorer) {  // the button order isn't used there
+        ForgetMonitor(n);
+        return;
+    }
+    std::lock_guard<std::mutex> l(g_forgetMx);
+    g_pendingForget.push_back(n);
 }
 static const UINT_PTR kReevalTimerId = 1;
 static const UINT_PTR kApplyTimerId = 2;
@@ -597,8 +606,10 @@ static const UINT_PTR kOrderSaveTimerId = 9;  // save changed places of window b
 static void DragImageTimerProc();
 static void DestroyDragImage();
 static void CreateDragImage(void* g, HMONITOR from);
+static void NoteDragInput();
 static void OrderTimerProc();
 static void OrderSaveTimerProc();
+static void SaveOrderOnUnload();
 static void SyncTimerProc();
 static void SyncAll();
 static const ULONG_PTR kCopyUnpinOne = 0x534B5031;  // WM_COPYDATA from the jump list ("SKP1")
@@ -1386,7 +1397,7 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(h, kPruneTimerId);
         KillTimer(h, kFrameTimerId);
         KillTimer(h, kOrderTimerId);
-        KillTimer(h, kOrderSaveTimerId);
+        if (KillTimer(h, kOrderSaveTimerId)) SaveOrderOnUnload();  // changes that were still waiting
         DestroyDragImage();
         if (g_dragGroup) {
             ((IUnknown*)g_dragGroup)->Release();
@@ -1433,6 +1444,9 @@ static void EnsureMsgWnd() {
         return;
     }
     SetTimer(g_msgWnd, kSyncTimerId, 3000, nullptr);  // sync once startup is done
+    std::lock_guard<std::mutex> l(g_forgetMx);  // monitor numbers handed over before it existed
+    for (int n : g_pendingForget) PostMessageW(g_msgWnd, kMsgForget, n, 0);
+    g_pendingForget.clear();
 }
 
 // Run a function on the taskbar thread (mod loaded late / update): a short
@@ -1478,7 +1492,7 @@ static HMONITOR GetMonitor_hook(void* self) {
 
 static std::map<std::wstring, unsigned> LoadPinRules() {
     std::map<std::wstring, unsigned> r;
-    std::vector<wchar_t> buf(16384);
+    std::vector<wchar_t> buf(32768);
     Wh_GetStringValue(L"pinRules", buf.data(), buf.size());
     std::wstring all = buf.data(), part;
     size_t pos = 0;
@@ -1692,47 +1706,55 @@ static void GroupsOfBar(void* tl, std::set<void*>& groups) {
 // ---------- Button order per taskbar
 // Windows keeps ONE order for all apps: sorting on one taskbar changes it on all of them, after a
 // restart every taskbar shows the global order again, and an app that had a button before shows up
-// at its old place. The mod remembers the order of each taskbar ("pinOrder" = "n|entry>entry>...;",
-// pins and window buttons) and sorts the taskbar by it. New buttons go to the end.
+// at its old place. The mod remembers the order of each taskbar (pins and window buttons) and sorts the
+// taskbar by it. New buttons go to the end.
 
 static std::wstring KeyOf(void* g);
 static std::mutex g_orderMx;
 static std::map<int, std::vector<std::wstring>> g_pinOrder;
 static bool g_orderLoaded = false;
 
+// One value per monitor number ("pinOrder<n>" = "entry>entry>..."): at most kMaxOrder entries, so a
+// value always fits the read buffer
+static const size_t kMaxOrder = 100;
+
+static std::wstring OrderValueName(int n) { return L"pinOrder" + std::to_wstring(n); }
+
+static std::vector<std::wstring> ParseOrder(const std::wstring& s) {
+    std::vector<std::wstring> keys;
+    for (size_t p = 0; p < s.size();) {
+        size_t q = s.find(L'>', p);
+        if (q == std::wstring::npos) q = s.size();
+        if (q > p) keys.push_back(s.substr(p, q - p));
+        p = q + 1;
+    }
+    return keys;
+}
+
+static void SaveOrderLocked(int n) {
+    auto it = g_pinOrder.find(n);
+    if (it == g_pinOrder.end() || it->second.empty()) {
+        Wh_DeleteValue(OrderValueName(n).c_str());
+        return;
+    }
+    std::wstring out;
+    for (size_t i = 0; i < it->second.size() && i < kMaxOrder; i++) out += (i ? L">" : L"") + it->second[i];
+    Wh_SetStringValue(OrderValueName(n).c_str(), out.c_str());
+}
+
+static void SavePinOrderLocked() {
+    for (auto& [n, keys] : g_pinOrder) SaveOrderLocked(n);
+}
+
 static void LoadPinOrderLocked() {
     if (g_orderLoaded) return;
     g_orderLoaded = true;
     std::vector<wchar_t> buf(32768);
-    Wh_GetStringValue(L"pinOrder", buf.data(), buf.size());
-    std::wstring s = buf.data();
-    for (size_t pos = 0; pos < s.size();) {
-        size_t end = s.find(L';', pos);
-        if (end == std::wstring::npos) end = s.size();
-        std::wstring e = s.substr(pos, end - pos);
-        pos = end + 1;
-        size_t sep = e.find(L'|');
-        int n = _wtoi(e.c_str());
-        if (sep == std::wstring::npos || n < 1 || n > kMaxMon) continue;
-        std::vector<std::wstring> keys;
-        for (size_t p = sep + 1; p < e.size();) {
-            size_t q = e.find(L'>', p);
-            if (q == std::wstring::npos) q = e.size();
-            if (q > p) keys.push_back(e.substr(p, q - p));
-            p = q + 1;
-        }
-        g_pinOrder[n] = keys;
+    for (int n = 1; n <= kMaxMon; n++) {
+        buf[0] = 0;
+        Wh_GetStringValue(OrderValueName(n).c_str(), buf.data(), buf.size());
+        if (buf[0]) g_pinOrder[n] = ParseOrder(buf.data());
     }
-}
-
-static void SavePinOrderLocked() {
-    std::wstring out;
-    for (auto& [n, keys] : g_pinOrder) {
-        out += std::to_wstring(n) + L"|";
-        for (size_t i = 0; i < keys.size(); i++) out += (i ? L">" : L"") + keys[i];
-        out += L";";
-    }
-    Wh_SetStringValue(L"pinOrder", out.c_str());
 }
 
 // Groups of a taskbar in their visual order (the button group list as Windows keeps it), without a
@@ -1784,10 +1806,22 @@ static bool SyncOrderLocked(void* tl, std::vector<std::wstring>& v) {
             changed = true;
         }
     }
-    // Window buttons that are gone keep their place (e.g. while the taskbar is rebuilt after a restart);
-    // only a long list forgets them
-    if (v.size() > 100)
-        changed |= std::erase_if(v, [&](const std::wstring& e) { return e[0] == L'~' && !here.count(e); }) > 0;
+    // Buttons that are gone keep their place (e.g. while the taskbar is rebuilt after a restart). A long
+    // list forgets window buttons first, then apps that left this taskbar, the oldest first.
+    for (int pass = 0; pass < 2 && v.size() > kMaxOrder; pass++) {
+        for (auto it = v.begin(); it != v.end() && v.size() > kMaxOrder;) {
+            if (!here.count(*it) && (pass == 1 || (*it)[0] == L'~')) {
+                it = v.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+    }
+    if (v.size() > kMaxOrder) {
+        v.resize(kMaxOrder);
+        changed = true;
+    }
     return changed;
 }
 
@@ -1814,7 +1848,7 @@ static void PlacePin(void* tl, const std::wstring& key, int index) {
         if (f != v.end()) at = std::max(at, (size_t)(f - v.begin()) + 1);
     }
     v.insert(v.begin() + at, key);
-    SavePinOrderLocked();
+    SaveOrderLocked(mon);
     g_orderAfterApply = true;
     Wh_Log(L"-> Pin placed at position %d on monitor %d: %ls", (int)at + 1, mon, key.c_str());
 }
@@ -2049,6 +2083,7 @@ static void StartDrag_hook(void* self, int x, int y) {
     }
     if (g && PinnedOn(g_dragFrom, g)) {
         ((IUnknown*)g)->AddRef();
+        NoteDragInput();
         g_dragGroup = g;
         CreateDragImage(g, g_dragFrom ? GetMonitor_orig(g_dragFrom) : nullptr);
     }
@@ -2071,6 +2106,19 @@ struct DragTray {
     HMONITOR mon;
 };
 static std::vector<DragTray> g_dragTrays;  // the taskbars while a pin is dragged (they don't move meanwhile)
+static bool g_dragByMouse = true;  // the drag was started with the mouse (not touch or pen)
+
+// The primary mouse button (the right one if the buttons are swapped) is down
+static bool PrimaryButtonDown() {
+    return GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000;
+}
+
+// Remember whether the current input comes from the mouse (touch and pen drags don't press it)
+static void NoteDragInput() {
+    INPUT_MESSAGE_SOURCE src{};
+    g_dragByMouse = !GetCurrentInputMessageSource(&src) || src.deviceType == IMDT_MOUSE ||
+                    src.deviceType == IMDT_UNAVAILABLE;
+}
 static const wchar_t kDragImgClass[] = L"TaskbarIndependentPerMonitorDragImage";
 
 // Icon of a pinned app: from its shortcut, or from the Apps folder by app ID (packaged apps)
@@ -2142,8 +2190,8 @@ static void CreateDragImage(void* g, HMONITOR from) {
 
 // Follow the mouse; hidden while it's over the pin's own taskbar
 static void DragImageTimerProc() {
-    // also gone once the button is released, in case a drag ended without being reported
-    if (!g_dragImg || !(GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0x8000)) {
+    // also gone once the mouse button is released, in case a drag ended without being reported
+    if (!g_dragImg || (g_dragByMouse && !PrimaryButtonDown())) {
         DestroyDragImage();
         return;
     }
@@ -2260,6 +2308,7 @@ static void DragStarted11_hook(void* self, Float2 pt) {
     void* g = pos >= 1 ? GroupAtIndex(tl, pos - 1) : nullptr;
     if (g && PinnedOn(tl, g)) {
         ((IUnknown*)g)->AddRef();
+        NoteDragInput();
         g_dragGroup = g;
         CreateDragImage(g, g_dragFrom ? GetMonitor_orig(g_dragFrom) : nullptr);
     }
@@ -2409,6 +2458,17 @@ static void PersistOrder_hook(void* self) {
     if (g_msgWnd && !g_s.pinsEverywhere) SetTimer(g_msgWnd, kOrderTimerId, 250, nullptr);
 }
 
+// Only if the mod's storage still exists: after "Remove" in Windhawk it's already deleted (the monitor
+// numbers are always stored while the mod runs), and writing would create it again
+static void SaveOrderOnUnload() {
+    std::vector<wchar_t> probe(32768);  // a too small buffer would read as empty
+    Wh_GetStringValue(L"monitorSlots", probe.data(), probe.size());
+    if (!probe[0]) return;
+    std::lock_guard<std::mutex> l(g_orderMx);
+    if (g_orderLoaded) SavePinOrderLocked();
+    Wh_Log(L"-> Button order saved on unload");
+}
+
 static void OrderSaveTimerProc() {
     KillTimer(g_msgWnd, kOrderSaveTimerId);
     std::lock_guard<std::mutex> l(g_orderMx);
@@ -2516,7 +2576,8 @@ static void ForgetMonitor(int n) {
     {
         std::lock_guard<std::mutex> l(g_orderMx);
         LoadPinOrderLocked();
-        if (g_pinOrder.erase(n)) SavePinOrderLocked();
+        g_pinOrder.erase(n);
+        SaveOrderLocked(n);  // deletes the value
     }
     std::wstring dir = BarLinkDir(n);
     if (!dir.empty()) {
@@ -2639,11 +2700,7 @@ struct MoveJob {
 static void MoveToMonitor(HWND h, HMONITOR to) {
     HMONITOR from = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
     MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
-    WINDOWPLACEMENT wp{.length = sizeof(wp)};
-    if (from == to || !GetMonitorInfoW(from, &a) || !GetMonitorInfoW(to, &b) || !GetWindowPlacement(h, &wp)) return;
-    // the normal position in workspace coordinates: shift it by the difference of the work areas
-    RECT& r = wp.rcNormalPosition;
-    OffsetRect(&r, b.rcWork.left - a.rcWork.left, b.rcWork.top - a.rcWork.top);
+    if (from == to || !GetMonitorInfoW(from, &a) || !GetMonitorInfoW(to, &b)) return;
     // A per-monitor DPI aware app scales itself by the ratio of the monitors' scaling when it arrives:
     // limit the size so that it still fits the work area afterwards
     UINT dpiFrom = 96, dpiTo = 96, dummy;
@@ -2652,12 +2709,32 @@ static void MoveToMonitor(HWND h, HMONITOR to) {
     if (!perMonitor || FAILED(GetDpiForMonitor(from, MDT_EFFECTIVE_DPI, &dpiFrom, &dummy)) ||
         FAILED(GetDpiForMonitor(to, MDT_EFFECTIVE_DPI, &dpiTo, &dummy)) || !dpiFrom || !dpiTo)
         dpiFrom = dpiTo = 96;
-    int w = std::min((int)(r.right - r.left), MulDiv(b.rcWork.right - b.rcWork.left, dpiFrom, dpiTo));
-    int ht = std::min((int)(r.bottom - r.top), MulDiv(b.rcWork.bottom - b.rcWork.top, dpiFrom, dpiTo));
-    r.right = r.left + w;
-    r.bottom = r.top + ht;
-    if (wp.showCmd == SW_SHOWMINIMIZED) wp.showCmd = SW_SHOWNORMAL;
-    SetWindowPlacement(h, &wp);
+    int maxW = MulDiv(b.rcWork.right - b.rcWork.left, dpiFrom, dpiTo);
+    int maxH = MulDiv(b.rcWork.bottom - b.rcWork.top, dpiFrom, dpiTo);
+    // Same place on the other monitor: shifted by the difference of the work areas
+    int dx = b.rcWork.left - a.rcWork.left, dy = b.rcWork.top - a.rcWork.top;
+    if (!IsZoomed(h) && !IsIconic(h)) {  // asynchronous: never blocks, even if the app hangs
+        RECT r;
+        if (!GetWindowRect(h, &r)) return;
+        SetWindowPos(h, nullptr, r.left + dx, r.top + dy, std::min((int)(r.right - r.left), maxW),
+                     std::min((int)(r.bottom - r.top), maxH), SWP_ASYNCWINDOWPOS | SWP_NOZORDER | SWP_NOACTIVATE);
+        return;
+    }
+    // Maximized or minimized: restored, moved to its normal position on the other monitor and maximized
+    // again - asynchronous as well. The normal position is in workspace coordinates (relative to the
+    // primary monitor's work area) unless it's a tool window.
+    WINDOWPLACEMENT wp{.length = sizeof(wp)};
+    if (!GetWindowPlacement(h, &wp)) return;
+    RECT r = wp.rcNormalPosition;
+    MONITORINFO p{.cbSize = sizeof(p)};
+    if (!(GetWindowLongW(h, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) &&
+        GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), &p))
+        OffsetRect(&r, p.rcWork.left, p.rcWork.top);
+    bool maximized = IsZoomed(h) || (IsIconic(h) && (wp.flags & WPF_RESTORETOMAXIMIZED));
+    ShowWindowAsync(h, SW_SHOWNORMAL);  // normal size, also if it was maximized before it was minimized
+    SetWindowPos(h, nullptr, r.left + dx, r.top + dy, std::min((int)(r.right - r.left), maxW),
+                 std::min((int)(r.bottom - r.top), maxH), SWP_ASYNCWINDOWPOS | SWP_NOZORDER | SWP_NOACTIVATE);
+    if (maximized) ShowWindowAsync(h, SW_MAXIMIZE);
 }
 
 static DWORD WINAPI MoveWindowThread(LPVOID p) {
@@ -2669,9 +2746,9 @@ static DWORD WINAPI MoveWindowThread(LPVOID p) {
     int moves = 0;
     for (int i = 0; i < 30 && !g_unloading && IsWindow(job.h); i++) {
         Sleep(100);
-        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) break;
+        if (PrimaryButtonDown()) break;
         if (!IsWindowVisible(job.h)) continue;
-        if (IsHungAppWindow(job.h)) break;  // SetWindowPlacement would block (and the unload with it)
+        if (IsHungAppWindow(job.h)) break;  // it wouldn't follow anyway
         if (MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST) != job.to) {
             MoveToMonitor(job.h, job.to);
             moves++;
