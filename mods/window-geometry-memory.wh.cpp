@@ -131,10 +131,6 @@ so it is capped: once it passes a megabyte it starts over from empty.
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enabled
-  $description: >-
-    Master switch. When off, no windows are tracked or moved.
 - allowlist:
   - - Exe: ""
       $name: Executable
@@ -173,8 +169,7 @@ so it is capped: once it passes a megabyte it starts over from empty.
     Choose "Clear stored data now" and save the settings to wipe the whole
     stored geometry database. The action runs once when you select it, and
     re-saving the settings afterwards does not wipe again. To run it a second
-    time, set this to "Do nothing", save, then select it again. This action
-    works even while the mod is disabled.
+    time, set this to "Do nothing", save, then select it again.
   $options:
   - none: Do nothing
   - clearNow: Clear stored data now
@@ -2839,11 +2834,6 @@ static std::unordered_set<std::wstring> g_unwritableWindows;
 // Single-shot debounce timer for the relayout pass (see kRelayoutDebounceMs).
 static UINT_PTR g_relayoutTimer = 0;
 
-// Whether the mod is switched on in the settings. The relayout pass reads it:
-// a display change must not move windows while the master switch is off, and the
-// message window exists either way.
-static bool g_modEnabled = false;
-
 static std::wstring Utf8ToWide(const std::string& text) {
     if (text.empty()) {
         return std::wstring();
@@ -2932,7 +2922,7 @@ static bool g_diagnosticsLog = false;
 // once looked complete while the lines being looked for were missing from it, which
 // cost a round of diagnosis. It identifies a verified behaviour, not every text
 // revision, so a run can be tied to the field result it belongs to.
-static constexpr PCWSTR kJournalBuild = L"r22-2026-10-16";
+static constexpr PCWSTR kJournalBuild = L"r23-2026-10-16";
 
 // The journal flag has to be known before the store is loaded, because the load
 // itself journals a line. Reading it only in ApplySettingsOnEventThread -- which
@@ -3440,12 +3430,6 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
                          : FromNormalized(entry->rectNormalized,
                                           monitor.pixelRect);
 
-    bool clamped = ShouldClampRect(target, monitor.workRect,
-                                   !exactConfiguration);
-    if (clamped) {
-        target = ClampRectToWorkArea(target, monitor.workRect);
-    }
-
     RECT current{};
     if (!GetWindowRect(hwnd, &current)) {
         return;
@@ -3459,6 +3443,16 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
     // position, which is exactly what the setting governs.
     target = ApplyOwnRestoreFlags(hwnd, identity, target, currentRect,
                                   /*positionRequired=*/false);
+
+    // The clamp comes last, on the rectangle that will actually be applied. With
+    // "Restore size" off the window keeps its own size, which can be larger than
+    // the remembered one, so clamping the remembered rectangle first could leave
+    // the rectangle handed to the window hanging past the edge of the work area.
+    bool clamped = ShouldClampRect(target, monitor.workRect,
+                                   !exactConfiguration);
+    if (clamped) {
+        target = ClampRectToWorkArea(target, monitor.workRect);
+    }
 
     bool maximize = entry->state == L"maximized";
     if (!maximize &&
@@ -3508,12 +3502,6 @@ static void TryRestoreWindow(HWND hwnd, const WindowIdentity& identity) {
 // monitor changed underneath them. Run only from the debounce timer, never from
 // the WM_DISPLAYCHANGE handler directly.
 static void RunRelayoutPass() {
-    if (!g_modEnabled) {
-        // A display change must not move windows while the master switch is off.
-        Wh_Log(L"[GEOM] relayout pass skipped: the mod is disabled");
-        return;
-    }
-
     if (g_monitors.empty() || g_lastKnownMonitors.empty()) {
         // No previous arrangement to compare against (monitor enumeration failed,
         // or a pass before the first snapshot). Take the current set as the new
@@ -3580,30 +3568,31 @@ static void RunRelayoutPass() {
 
         const MonitorView& targetMonitor = g_monitors[(size_t)plan.targetIndex];
 
-        // The clamp policy the restore path uses, with one deliberate difference:
-        // configurationChanged is false. The mapped rectangle already refers to a
-        // monitor that exists, so the only question left is whether the title bar
-        // is reachable -- and a window the user deliberately hung off an edge has
-        // to survive a rescue.
-        bool clamped = ShouldClampRect(plan.target, targetMonitor.workRect,
-                                       /*configurationChanged=*/false);
-        GeoRect target = plan.target;
-        if (clamped) {
-            target = ClampRectToWorkArea(target, targetMonitor.workRect);
-        }
-
         // The same per-app switches as the restore path: an app the user told the
-        // mod not to resize must not be resized by a display change either. The
-        // clamp above still applies -- keeping a window reachable is not the same
-        // as restoring its size.
+        // mod not to resize must not be resized by a display change either.
         //
         // With "Restore position" off the window keeps its current position, with
         // one exception: if its monitor is the one that vanished, the move is the
         // rescue and it happens anyway. Otherwise the setting would leave the
         // window on a monitor that no longer exists, which the readme promises
         // never happens -- and the user cannot get it back by dragging it.
+        GeoRect target = plan.target;
         target = ApplyOwnRestoreFlags(hwnd, identity, target, currentRect,
                                       /*positionRequired=*/plan.originGone);
+
+        // The clamp comes last, on the rectangle that will actually be applied:
+        // keeping a window reachable is not the same as restoring its size, and a
+        // larger size may need the window pulled back in.
+        //
+        // configurationChanged is false on purpose, as in the restore path: the
+        // mapped rectangle already refers to a monitor that exists, so the only
+        // question left is whether the title bar is reachable -- and a window the
+        // user deliberately hung off an edge has to survive a rescue.
+        bool clamped = ShouldClampRect(target, targetMonitor.workRect,
+                                       /*configurationChanged=*/false);
+        if (clamped) {
+            target = ClampRectToWorkArea(target, targetMonitor.workRect);
+        }
 
         // The DPI sanity field: logged, never applied. The stored DPI is read for
         // this line only.
@@ -4257,28 +4246,12 @@ static void ApplySettingsOnEventThread() {
 
     RefreshDiagnosticsSetting();
 
-    bool enabled = Wh_GetIntSetting(L"enabled") != 0;
-    g_modEnabled = enabled;
-    if (enabled) {
-        // Relayout is a comparison against the arrangement that was there before,
-        // so enabling the mod starts from the arrangement in front of the user
-        // now: a display change from before it was enabled is not a reason to
-        // rescue every open window the moment it is switched back on.
-        g_lastKnownMonitors = g_monitors;
-        InstallHooks();
-    } else {
-        if (g_relayoutTimer) {
-            HWND target = g_messageWindow.load();
-            if (target) {
-                KillTimer(target, kRelayoutTimerId);
-            }
-            g_relayoutTimer = 0;
-        }
-        g_lastKnownMonitors.clear();
-        UninstallHooks();
-        Wh_Log(L"[GEOM] disabled in the settings; no windows will be tracked");
-        return;
-    }
+    // Relayout compares against the arrangement that was there before, so
+    // applying the settings starts from the arrangement in front of the user now:
+    // a display change from before the save is not a reason to rescue every open
+    // window. The hooks are idempotent, so this is safe on every save.
+    g_lastKnownMonitors = g_monitors;
+    InstallHooks();
 
     if (g_allowlistIsEmpty) {
         Wh_Log(L"[GEOM] the allowlist is empty; no windows will be tracked. Add "
@@ -4329,9 +4302,7 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 // per-monitor aware, so the two describe the same pixels.
                 L" primary=" + PrimaryMonitorSizeText() +
                 L" dpi=" + std::to_wstring((unsigned long)GetDpiForWindow(hwnd)));
-            if (g_modEnabled) {
-                ArmRelayoutTimer();
-            }
+            ArmRelayoutTimer();
             return 0;
 
         case WM_TIMER:
@@ -4391,7 +4362,6 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             g_unwritableWindows.clear();
             g_monitors.clear();
             g_lastKnownMonitors.clear();
-            g_modEnabled = false;
             g_store = GeometryStore();
             g_messageWindow.store(nullptr);
             DestroyWindow(hwnd);
@@ -4488,8 +4458,8 @@ static void ClearStoredFile() {
 // re-saving any unrelated setting would silently wipe data the mod had
 // collected since the previous clear.
 //
-// Deliberately independent of the "enabled" master switch: clearing is a
-// maintenance action, and users need it while the mod is off.
+// Deliberately independent of the allowlist and of any tracked window: clearing
+// is a maintenance action, and it runs whenever it is chosen.
 static void ApplyClearStoredDataAction() {
     const std::wstring& latchName = PerUserLatchValueName();
     if (latchName.empty()) {
