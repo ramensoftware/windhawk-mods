@@ -18,6 +18,8 @@ Keep Windows Clear of Taskbar v1.0.0 by Goobis
 
 AI was used to help develop this application
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/goobis2dmx)
+
 Windows lets app windows open, restore or be dragged so they end up under the
 taskbar. This mod keeps every normal window (one with a title bar and a sizing
 border) clear of the taskbar, whichever screen edge the taskbar is on: bottom,
