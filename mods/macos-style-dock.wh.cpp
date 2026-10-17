@@ -7,7 +7,7 @@
 // @github          https://github.com/zachvdev
 // @include         explorer.exe
 // @architecture    amd64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore -ladvapi32
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -82,7 +82,9 @@ Island & Dock", which replaces the taskbar with a separate dock window.)
 - Leave Windows' "Automatically hide the taskbar" setting off. While
   "Magnify over windows" is on, the mod turns it on behind the scenes (and
   keeps the taskbar from hiding), and puts it back as it was when the
-  setting or the mod is turned off.
+  setting or the mod is turned off. If the mod can't put it back, for
+  example when Windhawk is uninstalled while Explorer isn't running, turn it
+  off yourself in Windows' taskbar settings.
 - Icons are loaded at high resolution on Windows 11 with the October 2024
   update (KB5044384) or later. On older builds, magnified icons are blurrier.
 - Not designed to be used with other taskbar mods. In particular, it sets
@@ -152,6 +154,7 @@ his "Taskbar auto-hide when maximized" mod (all GPL-3.0).
 
 #include <shellapi.h>
 #include <shellscalingapi.h>
+#include <sddl.h>
 #include <shlobj.h>
 
 #include <algorithm>
@@ -169,6 +172,7 @@ his "Taskbar auto-hide when maximized" mod (all GPL-3.0).
 #include <regex>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #undef GetCurrentTime
@@ -324,6 +328,53 @@ void QueueShellJob(std::function<void()> job) {
 }
 
 // ---------------------------------------------------------------------------
+// The mod's window
+// ---------------------------------------------------------------------------
+// A hidden window on the taskbar's thread, where Windows reports Recycle Bin
+// changes, and where the mod's own updates are posted to run outside the
+// taskbar's code. The app bars (see "Magnify over windows") are windows of
+// the same class, and get screen and app bar changes.
+
+constexpr WCHAR kWindowClass[] = L"Windhawk_" WH_MOD_ID;
+constexpr UINT kAppBarMessage = WM_APP;              // ABN_* from the shell
+constexpr UINT kUpdateOverWindowsMessage = WM_APP + 1;
+constexpr UINT kTrashChangedMessage = WM_APP + 2;    // from SHChangeNotifyRegister
+constexpr UINT kTrashCheckedMessage = WM_APP + 3;    // from CheckRecycleBin
+
+std::atomic<HWND> g_modWindow = nullptr;
+
+HINSTANCE ModuleInstance() {
+    HMODULE module = nullptr;
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)&ModuleInstance, &module);
+    return module;
+}
+
+LRESULT CALLBACK ModWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+void ScheduleOverWindows(bool autoHide);  // see "Magnify over windows"
+
+bool RegisterWindowClass() {
+    static bool registered = [] {
+        WNDCLASS wc{};
+        wc.lpfnWndProc = ModWindowProc;
+        wc.hInstance = ModuleInstance();
+        wc.lpszClassName = kWindowClass;
+        return RegisterClass(&wc) != 0;
+    }();
+    return registered;
+}
+
+// Run on the taskbar's thread.
+HWND EnsureModWindow() {
+    if (!g_modWindow && RegisterWindowClass()) {
+        g_modWindow = CreateWindowEx(0, kWindowClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                     ModuleInstance(), nullptr);
+    }
+    return g_modWindow;
+}
+
+// ---------------------------------------------------------------------------
 // The actual feature
 // ---------------------------------------------------------------------------
 
@@ -429,6 +480,7 @@ winrt::weak_ref<wux::UIElement> g_rowParent;
 // Latest pointer state. Pointer events only write these; the per-frame
 // update below reads them.
 bool g_pointerOver = false;
+bool g_dockExpanded = false;  // icons magnified or about to be (see ClipTaskbars)
 float g_pointerX = 0;
 
 // Which end of the dock stays put as it grows and shrinks, and the most it
@@ -967,6 +1019,8 @@ void AddTrash(Plate& p, wuxc::Panel const& panel, wux::UIElement const& row) {
 }
 
 void EnsurePlate(wux::FrameworkElement const& button) {
+    // Only rows in a taskbar: not, say, the overflow flyout's.
+    if (!FindTaskbarFrame(button)) return;
     auto row = wuxm::VisualTreeHelper::GetParent(button).try_as<wux::FrameworkElement>();
     if (!row) return;
     for (auto& p : *g_plates) {
@@ -1336,13 +1390,12 @@ wuxm::ImageSource TrashIcon(bool full, wux::UIElement const& el) {
 }
 
 // Whether the Recycle Bin has anything in it: -1 = not known yet, 0 = empty,
-// 1 = full. Checked every second, on a thread pool thread since it can take
-// a moment with many drives.
+// 1 = full. Checked whenever Windows reports a change to it, on a thread pool
+// thread since it can take a moment with many drives.
 std::atomic<int> g_trashFull = -1;
 std::atomic<bool> g_trashChecking = false;
 PTP_WORK g_trashWork = nullptr;
-[[clang::no_destroy]] wux::DispatcherTimer g_trashTimer{nullptr};
-winrt::event_token g_trashTimerToken{};
+ULONG g_trashNotify = 0;  // the SHChangeNotifyRegister registration
 
 void CALLBACK CheckRecycleBin(PTP_CALLBACK_INSTANCE, PVOID, PTP_WORK) {
     HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -1350,6 +1403,7 @@ void CALLBACK CheckRecycleBin(PTP_CALLBACK_INSTANCE, PVOID, PTP_WORK) {
     if (SUCCEEDED(SHQueryRecycleBinW(nullptr, &info))) g_trashFull = info.i64NumItems > 0;
     if (SUCCEEDED(co)) CoUninitialize();
     g_trashChecking = false;
+    if (HWND w = g_modWindow) PostMessage(w, kTrashCheckedMessage, 0, 0);  // show it
 }
 
 void CheckRecycleBinSoon() {
@@ -1370,26 +1424,28 @@ void UpdateTrashIcons() {
     }
 }
 
+// Asks Windows to report changes to the Recycle Bin to the mod's window,
+// which then checks it again (see ModWindowProc).
 void StartTrash() {
     if (!g_trashWork) g_trashWork = CreateThreadpoolWork(CheckRecycleBin, nullptr, nullptr);
+    HWND w = EnsureModWindow();  // first, as it's sent the result
     CheckRecycleBinSoon();
-    if (g_trashTimer) return;
-    g_trashTimer = wux::DispatcherTimer();
-    g_trashTimer.Interval(std::chrono::seconds(1));
-    g_trashTimerToken = g_trashTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-        try { UpdateTrashIcons(); } catch (...) {}
-        CheckRecycleBinSoon();
-    });
-    g_trashTimer.Start();
+    if (g_trashNotify) return;
+    PIDLIST_ABSOLUTE bin;
+    if (!w || FAILED(SHGetFolderLocation(nullptr, CSIDL_BITBUCKET, nullptr, 0, &bin))) return;
+    SHChangeNotifyEntry entry{bin, TRUE};
+    g_trashNotify = SHChangeNotifyRegister(w, SHCNRF_ShellLevel, SHCNE_ALLEVENTS,
+                                           kTrashChangedMessage, 1, &entry);
+    CoTaskMemFree(bin);
+    if (!g_trashNotify) Wh_Log(L"[trash] can't watch the Recycle Bin for changes");
 }
 
-// Stops the timer and lets go of the icons. The check that may still be
+// Stops watching it and lets go of the icons. The check that may still be
 // running is waited for in Wh_ModBeforeUninit, off the taskbar's thread.
 void StopTrash() {
-    if (g_trashTimer) {
-        g_trashTimer.Stop();
-        g_trashTimer.Tick(g_trashTimerToken);
-        g_trashTimer = nullptr;
+    if (g_trashNotify) {
+        SHChangeNotifyDeregister(g_trashNotify);
+        g_trashNotify = 0;
     }
     g_trashIcons[0] = g_trashIcons[1] = nullptr;
 }
@@ -1442,7 +1498,8 @@ void AcceptTrashDrag(wux::DragEventArgs const& e) {
 }
 
 // Files dropped on the Recycle Bin: their paths are read (which Windows does
-// asynchronously), then they're recycled.
+// asynchronously), then they're recycled, both in a shell job, so the mod
+// waits for them before it unloads.
 //
 // The drop finishes right away, without waiting for that. While it hasn't
 // finished, the window the files were dragged from is stuck waiting for it,
@@ -1453,29 +1510,21 @@ void OnTrashDrop(wux::DragEventArgs const& e) {
     e.Handled(true);
     e.AcceptedOperation(wadt::DataPackageOperation::None);
     if (!e.DataView().Contains(wadt::StandardDataFormats::StorageItems())) return;
-    e.DataView().GetStorageItemsAsync().Completed(
-        [](auto const& operation, wf::AsyncStatus status) {
-            std::wstring paths;
-            try {
-                if (status != wf::AsyncStatus::Completed) {
-                    Wh_Log(L"[trash] reading the dropped files failed: 0x%08X",
-                           (uint32_t)operation.ErrorCode().value);
-                    return;
-                }
-                for (auto const& item : operation.GetResults()) {
-                    auto path = item.Path();
-                    if (path.empty()) continue;  // not a file on disk
-                    paths.append(path.c_str(), path.size());
-                    paths.push_back(L'\0');
-                }
-            } catch (...) {
-                Wh_Log(L"[trash] reading the dropped files failed: 0x%08X", winrt::to_hresult());
-                return;
+    QueueShellJob([items = winrt::make_agile(e.DataView().GetStorageItemsAsync())] {
+        std::wstring paths;
+        try {
+            for (auto const& item : items.get().get()) {
+                auto path = item.Path();
+                if (path.empty()) continue;  // not a file on disk
+                paths.append(path.c_str(), path.size());
+                paths.push_back(L'\0');
             }
-            if (!paths.empty()) {
-                QueueShellJob([paths = std::move(paths)] { RecycleFiles(paths); });
-            }
-        });
+        } catch (...) {
+            Wh_Log(L"[trash] reading the dropped files failed: 0x%08X", winrt::to_hresult());
+            return;
+        }
+        if (!paths.empty()) RecycleFiles(paths);
+    });
 }
 
 void HookUpTrash(Plate& p) {
@@ -1715,6 +1764,7 @@ void OnFrame() {
             }
         }
         for (auto& p : *g_plates) MeasurePlate(p);
+        ScheduleOverWindows(false);  // the taskbar may have changed size
     }
 
     // 0b. Re-read where the row's icons are, in their current order, so the
@@ -1745,6 +1795,15 @@ void OnFrame() {
             settled = false;
         }
         scales[i] = s;
+    }
+
+    // While the pointer is on the dock or icons are still magnified, the
+    // taskbar isn't clipped (see ClipTaskbars).
+    bool expanded = g_pointerOver;
+    for (float scale : scales) expanded |= scale > 1.0f;
+    if (expanded != g_dockExpanded) {
+        g_dockExpanded = expanded;
+        ScheduleOverWindows(false);
     }
 
     // 2. Spread: each icon is pushed right by the extra width of the icons
@@ -1969,6 +2028,7 @@ void NoteTaskbarFrame(wux::FrameworkElement const& frame) {
     g_frames.push_back(winrt::make_weak(frame));
     Wh_Log(L"Taskbar found");
     MarkPlatesDirty();
+    ScheduleOverWindows(true);
 }
 
 // ---- System tray ----
@@ -2090,10 +2150,13 @@ void OnTaskbarPointerMoved(wux::FrameworkElement const& frame,
             // Measured against the dock as it's shown, and never less than its
             // unmagnified size: an edge that shrinks back past a still pointer
             // would otherwise grow again under it, making the icons jitter.
-            float x = e.GetCurrentPoint(panel).Position().X;
-            over = x >= std::min(plate->left, plate->baseLeft) &&
-                   x <= std::max(plate->left + plate->width,
-                                 plate->baseLeft + plate->baseWidth);
+            // Above the dock only counts once it's magnifying, where the
+            // magnified icons are.
+            auto point = e.GetCurrentPoint(panel).Position();
+            over = point.X >= std::min(plate->left, plate->baseLeft) &&
+                   point.X <= std::max(plate->left + plate->width,
+                                       plate->baseLeft + plate->baseWidth) &&
+                   (point.Y >= plate->top || (g_pointerOver && g_rowParent.get() == row));
         }
     }
     if (!over) {
@@ -2115,6 +2178,7 @@ void OnTaskbarPointerExited() {
 }
 
 void RemoveAppBars();
+void ClipTaskbars();
 
 void ResetAll() {
     StopFrames();
@@ -2135,6 +2199,8 @@ void ResetAll() {
     RestoreIndicators();
     RestoreTrayRows();
     RemoveAppBars();
+    ClipTaskbars();  // unclipped, as g_unloading is set
+    if (HWND w = g_modWindow.exchange(nullptr)) DestroyWindow(w);
     g_row.clear();
     g_rowParent = nullptr;
     g_frames.clear();
@@ -2718,14 +2784,17 @@ void ApplyTaskbarHeight() {
 
 // ---- Magnify over windows ----
 // Maximized windows reach down to the top of the dock, and magnified icons
-// rise over them, as on a Mac. Two things Windows already does make that
-// happen, both managed by Explorer itself:
+// rise over them, as on a Mac. Things Windows already does make that happen,
+// managed by Explorer itself:
 // - "Automatically hide the taskbar" stops Windows from keeping any space
 //   free for the taskbar. It's turned on (and back off afterwards, if it was
 //   off), and the taskbar is kept from actually hiding (as in "Taskbar
 //   auto-hide when maximized").
 // - An app bar, the way docked toolbars keep a strip of the screen free,
 //   with just the dock's height, on each screen with a taskbar.
+// - A window region: the taskbar window, which is taller than the dock to
+//   leave room for magnified icons, is clipped to that strip while no icon is
+//   magnified, so it doesn't cover the bottom of maximized windows.
 
 // TrayUI::_HandleTrayPrivateSettingMessage: gets or sets auto-hide.
 constexpr UINT kTraySettingMessage = WM_USER + 0x1CA;
@@ -2738,6 +2807,27 @@ constexpr UINT_PTR kTrayHideTimer = 2;
 // restarts unexpectedly.
 bool g_managingAutoHide = false;
 bool g_autoHideBefore = false;
+
+// Auto-hide is a per-user setting, and the mod's storage may be shared by
+// every user of the PC, so what's saved is per user.
+std::wstring UserValueName(PCWSTR name) {
+    static std::wstring sid = [] {
+        std::wstring result;
+        HANDLE token;
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return result;
+        alignas(TOKEN_USER) BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+        DWORD size;
+        PWSTR text;
+        if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+            ConvertSidToStringSidW(((TOKEN_USER*)buffer)->User.Sid, &text)) {
+            result = text;
+            LocalFree(text);
+        }
+        CloseHandle(token);
+        return result;
+    }();
+    return std::wstring(name) + L"_" + sid;
+}
 
 bool KeepTaskbarShown() { return g_magnifyOverWindows && !g_unloading; }
 
@@ -2755,8 +2845,8 @@ void ApplyAutoHide() {
         g_managingAutoHide = false;
     }
     Wh_Log(L"[magnify over windows] %s", KeepTaskbarShown() ? L"on" : L"off");
-    Wh_SetIntValue(L"managingAutoHide", g_managingAutoHide);
-    Wh_SetIntValue(L"autoHideBefore", g_autoHideBefore);
+    Wh_SetIntValue(UserValueName(L"managingAutoHide").c_str(), g_managingAutoHide);
+    Wh_SetIntValue(UserValueName(L"autoHideBefore").c_str(), g_autoHideBefore);
 }
 
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
@@ -2777,87 +2867,162 @@ void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
     CSecondaryTray__AutoHide_Original(pThis, param1);
 }
 
-constexpr WCHAR kAppBarClass[] = L"Windhawk_" WH_MOD_ID L"_AppBar";
-std::vector<HWND> g_appBars;  // one per screen with a taskbar
-
-HINSTANCE ModuleInstance() {
-    HMODULE module = nullptr;
-    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                      (LPCWSTR)&ModuleInstance, &module);
-    return module;
-}
-
-void RemoveAppBars() {
-    for (HWND w : g_appBars) {
-        APPBARDATA abd{sizeof(abd)};
-        abd.hWnd = w;
-        SHAppBarMessage(ABM_REMOVE, &abd);
-        DestroyWindow(w);
-    }
-    g_appBars.clear();
-}
-
-// Keeps the dock's height free at the bottom of the screen `taskbar` is on.
-void AddAppBar(HWND taskbar) {
-    HMONITOR monitor = MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO info{sizeof(info)};
-    UINT dpiX = 96, dpiY = 96;
-    if (!GetMonitorInfo(monitor, &info) ||
-        FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
-        return;
-    }
-    HWND w = CreateWindowEx(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kAppBarClass, L"", WS_POPUP, 0, 0,
-                            0, 0, nullptr, nullptr, ModuleInstance(), nullptr);
-    if (!w) return;
-    g_appBars.push_back(w);
-
-    APPBARDATA abd{sizeof(abd)};
-    abd.hWnd = w;
-    abd.uCallbackMessage = WM_APP;
-    SHAppBarMessage(ABM_NEW, &abd);
-    int height = MulDiv((int)std::ceil(g_dockBottomGap + g_dockHeight), dpiY, 96);
-    abd.uEdge = ABE_BOTTOM;
-    abd.rc = info.rcMonitor;
-    abd.rc.top = abd.rc.bottom - height;
-    SHAppBarMessage(ABM_QUERYPOS, &abd);
-    abd.rc.top = abd.rc.bottom - height;
-    SHAppBarMessage(ABM_SETPOS, &abd);
-    Wh_Log(L"[magnify over windows] keeping %d px free at the bottom of a screen", height);
-}
-
-// Run on the taskbar's thread, which the app bars' windows belong to.
-void UpdateAppBars() {
-    RemoveAppBars();
-    if (!KeepTaskbarShown()) return;
-    static bool registered = [] {
-        WNDCLASS wc{};
-        wc.lpfnWndProc = DefWindowProc;
-        wc.hInstance = ModuleInstance();
-        wc.lpszClassName = kAppBarClass;
-        return RegisterClass(&wc) != 0;
-    }();
-    if (!registered) return;
+// Calls `f` with each taskbar window (one per screen).
+template <typename F>
+void ForEachTaskbarWindow(F f) {
     EnumWindows(
-        [](HWND w, LPARAM) -> BOOL {
+        [](HWND w, LPARAM l) -> BOOL {
             DWORD pid;
             WCHAR cls[32];
             if (GetWindowThreadProcessId(w, &pid) && pid == GetCurrentProcessId() &&
                 GetClassName(w, cls, ARRAYSIZE(cls)) &&
                 (!_wcsicmp(cls, L"Shell_TrayWnd") || !_wcsicmp(cls, L"Shell_SecondaryTrayWnd"))) {
-                AddAppBar(w);
+                (*(F*)l)(w);
             }
             return TRUE;
         },
-        0);
+        (LPARAM)&f);
 }
 
-// Applies "Magnify over windows" as it's now set.
-void ApplyMagnifyOverWindows() {
-    ApplyAutoHide();
-    if (HWND tb = FindTaskbar()) {
-        RunFromWindowThread(tb, [](void*) { UpdateAppBars(); }, nullptr);
+// The strip kept free at the bottom of the screen, in pixels: the dock and
+// the gap under it, or the system tray if that's taller.
+int StripHeight(UINT dpi) {
+    float height = std::max(g_dockBottomGap + g_dockHeight, (float)kStockTaskbarHeight);
+    return MulDiv((int)std::ceil(height), dpi, 96);
+}
+
+void ClipTaskbars() {
+    ForEachTaskbarWindow([](HWND tb) {
+        RECT window, have;
+        if (!GetWindowRect(tb, &window)) return;
+        int type = GetWindowRgnBox(tb, &have);
+        if (!KeepTaskbarShown() || g_dockExpanded) {
+            if (type != ERROR) SetWindowRgn(tb, nullptr, TRUE);
+            return;
+        }
+        RECT want{0, 0, window.right - window.left, window.bottom - window.top};
+        want.top = std::max(0, (int)want.bottom - StripHeight(GetDpiForWindow(tb)));
+        if (type == SIMPLEREGION && EqualRect(&have, &want)) return;
+        SetWindowRgn(tb, CreateRectRgnIndirect(&want), TRUE);
+    });
+}
+
+struct AppBar {
+    HWND hwnd;
+    RECT rect;  // the strip it keeps free
+};
+std::vector<AppBar> g_appBars;  // one per screen with a taskbar
+
+void RemoveAppBars() {
+    for (auto& bar : g_appBars) {
+        APPBARDATA abd{sizeof(abd)};
+        abd.hWnd = bar.hwnd;
+        SHAppBarMessage(ABM_REMOVE, &abd);
+        DestroyWindow(bar.hwnd);
     }
+    g_appBars.clear();
+}
+
+// Keeps `rect` free, at the bottom of a screen.
+void AddAppBar(RECT const& rect) {
+    HWND w = CreateWindowEx(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kWindowClass, L"", WS_POPUP, 0, 0,
+                            0, 0, nullptr, nullptr, ModuleInstance(), nullptr);
+    if (!w) return;
+    g_appBars.push_back({w, rect});
+
+    APPBARDATA abd{sizeof(abd)};
+    abd.hWnd = w;
+    abd.uCallbackMessage = kAppBarMessage;
+    SHAppBarMessage(ABM_NEW, &abd);
+    abd.uEdge = ABE_BOTTOM;
+    abd.rc = rect;
+    SHAppBarMessage(ABM_QUERYPOS, &abd);
+    abd.rc.top = abd.rc.bottom - (rect.bottom - rect.top);
+    SHAppBarMessage(ABM_SETPOS, &abd);
+    Wh_Log(L"[magnify over windows] keeping %d px free at the bottom of a screen",
+           (int)(rect.bottom - rect.top));
+}
+
+// Makes the app bars match the screens with a taskbar. Only changes them
+// when they don't match: changing them is announced to every app bar, these
+// included, which would otherwise make them again, and again.
+void UpdateAppBars() {
+    std::vector<RECT> want;
+    if (KeepTaskbarShown()) {
+        ForEachTaskbarWindow([&want](HWND tb) {
+            HMONITOR monitor = MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO info{sizeof(info)};
+            UINT dpiX, dpiY;
+            if (!GetMonitorInfo(monitor, &info) ||
+                FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+                return;
+            }
+            RECT rect = info.rcMonitor;
+            rect.top = rect.bottom - StripHeight(dpiY);
+            want.push_back(rect);
+        });
+    }
+    bool same = want.size() == g_appBars.size();
+    for (size_t i = 0; same && i < want.size(); i++) {
+        same = EqualRect(&want[i], &g_appBars[i].rect);
+    }
+    if (same) return;
+    RemoveAppBars();
+    if (want.empty() || !RegisterWindowClass()) return;
+    for (auto& rect : want) AddAppBar(rect);
+}
+
+// Updates the app bars and the clipping, and auto-hide too if `autoHide`, on
+// the taskbar's thread, from its message loop: outside the taskbar's own
+// code, and once for any number of requests until then.
+int g_overWindowsPending = 0;  // 1 = update, 2 = and auto-hide
+
+void ScheduleOverWindows(bool autoHide) {
+    bool post = g_overWindowsPending == 0;
+    g_overWindowsPending = std::max(g_overWindowsPending, autoHide ? 2 : 1);
+    if (!post) return;
+    HWND w = EnsureModWindow();
+    if (!w || !PostMessage(w, kUpdateOverWindowsMessage, 0, 0)) g_overWindowsPending = 0;
+}
+
+void UpdateOverWindows() {
+    int pending = std::exchange(g_overWindowsPending, 0);
+    if (g_unloading || !pending) return;
+    if (pending == 2) ApplyAutoHide();
+    UpdateAppBars();
+    ClipTaskbars();
+}
+
+// Applies "Magnify over windows" as it's now set. Also done whenever a
+// taskbar appears (see NoteTaskbarFrame), since the mod is often loaded
+// before there is one.
+void ApplyMagnifyOverWindows() {
+    if (HWND tb = FindTaskbar()) {
+        RunFromWindowThread(tb, [](void*) { ScheduleOverWindows(true); }, nullptr);
+    }
+}
+
+LRESULT CALLBACK ModWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case kAppBarMessage:
+            if (wParam == ABN_POSCHANGED) ScheduleOverWindows(false);
+            return 0;
+        case WM_DISPLAYCHANGE:
+            ScheduleOverWindows(false);
+            break;
+        case kUpdateOverWindowsMessage:
+            UpdateOverWindows();
+            return 0;
+        case kTrashChangedMessage:
+            CheckRecycleBinSoon();
+            return 0;
+        case kTrashCheckedMessage:
+            if (!g_unloading) {
+                try { UpdateTrashIcons(); } catch (...) {}
+            }
+            return 0;
+    }
+    return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
 // ---- Installing the hooks ----
@@ -3184,12 +3349,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR name, HANDLE file, DWORD flags) {
 
 void LoadSettings() {
     g_dockSize = std::clamp(Wh_GetIntSetting(L"dock.size"), 0, 100);
-    PCWSTR color = Wh_GetStringSetting(L"dock.color");
-    g_dockTheme = !color                        ? 0
-                  : wcscmp(color, L"dark") == 0  ? 1
-                  : wcscmp(color, L"light") == 0 ? 2
-                                                 : 0;
-    Wh_FreeStringSetting(color);
+    auto color = WindhawkUtils::StringSetting::make(L"dock.color");
+    g_dockTheme = wcscmp(color, L"dark") == 0 ? 1 : wcscmp(color, L"light") == 0 ? 2 : 0;
     g_dockTint = std::clamp(Wh_GetIntSetting(L"dock.tint"), 0, 100);
     g_dockBlur = std::clamp(Wh_GetIntSetting(L"dock.blur"), 0, 100);
     // Amount 0-100 -> the icon grows to 1.0x-2.0x.
@@ -3207,8 +3368,8 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    g_managingAutoHide = Wh_GetIntValue(L"managingAutoHide", 0);
-    g_autoHideBefore = Wh_GetIntValue(L"autoHideBefore", 0);
+    g_managingAutoHide = Wh_GetIntValue(UserValueName(L"managingAutoHide").c_str(), 0);
+    g_autoHideBefore = Wh_GetIntValue(UserValueName(L"autoHideBefore").c_str(), 0);
     g_shellJobWork = CreateThreadpoolWork(RunShellJob, nullptr, nullptr);
 
     if (!HookTaskbarDllSymbols()) Wh_Log(L"taskbar.dll hooks failed; height won't change");
@@ -3244,8 +3405,9 @@ void Wh_ModBeforeUninit() {
         RunFromWindowThread(tb, [](void*) { ResetAll(); }, nullptr);
     }
     ApplyAutoHide();  // back off, if the mod turned it on
-    UnregisterClass(kAppBarClass, ModuleInstance());
-    for (PTP_WORK* work : {&g_trashWork, &g_shellJobWork}) {
+    UnregisterClass(kWindowClass, ModuleInstance());
+    // Shell jobs first: they end by checking the Recycle Bin.
+    for (PTP_WORK* work : {&g_shellJobWork, &g_trashWork}) {
         if (!*work) continue;
         WaitForThreadpoolWorkCallbacks(*work, FALSE);
         CloseThreadpoolWork(*work);
