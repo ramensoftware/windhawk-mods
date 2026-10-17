@@ -3,7 +3,7 @@
 // @name            Taskbar Smoke
 // @description     Soft, living smoke around the Windows 11 taskbar pills. Real fluid simulation: it rises, swirls, drifts over the edge and reacts to the mouse. Click-through overlay, follows auto-hide, hides in fullscreen.
 // @version         1.1.0
-// @author          Mathis
+// @author          Rubicus
 // @github          https://github.com/xxsoulxx
 // @include         windhawk.exe
 // @compilerOptions -ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -lwinhttp -ldwmapi
