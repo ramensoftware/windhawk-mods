@@ -2,12 +2,95 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T13:04:44.000Z</updated>
+    <updated>2026-10-17T13:30:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8.1 UAC Recreation 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-uac-recreation#328b64ade45664ed8b24a65c00c8f241643e9b1d</id>
+        <link href="https://windhawk.net/mods/win7-uac-recreation"/>
+        <updated>2026-10-17T13:30:38.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows781uacrecreation">Windows 7/8.1 UAC Recreation</h1>
+<p>This mod recreates the Windows 7 and 8.1 classic UAC interface on Windows 10 and 11. It changes only the presentation: Windows retains control of consent, authentication, and the secure desktop.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Four themes: Windows 7 Basic, custom Aero, Windows 8.1, and Windows 10 (1507–1607).</li>
+<li>It restores the native prompt if the recreation fails; never makes an elevation decision.</li>
+<li>It leaves system files, settings, and credential prompts untouched.</li>
+<li>It matches the banner and shield to Windows' publisher verdict.</li>
+<li>Ithows the requesting program's icon and native prompt details when available.</li>
+</ul>
+<h2 id="emergencyshortcut">Emergency shortcut</h2>
+<p>Press <code>Ctrl+Shift+F10</code> to close the recreated dialog and return to the native prompt without approving or denying the request.</p>
+<h2 id="themes">Themes</h2>
+<h3 id="windows7basic">Windows 7 (Basic)</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uac.PNG" alt="Windows 7 UAC prompt" /></p>
+<h3 id="windows7aero">Windows 7 Aero</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uacaero.PNG" alt="Windows 7 Aero UAC prompt" /></p>
+<h3 id="windows81">Windows 8.1</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81uac.PNG" alt="Windows 8.1 UAC prompt" /></p>
+<h3 id="windows1015071607">Windows 10 (1507–1607)</h3>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10uac.PNG" alt="Windows 10 UAC prompt" /></p>
+<h2 id="installation">Installation</h2>
+<p>Windhawk excludes <code>consent.exe</code> by default. To enable the mod:</p>
+<ol>
+<li>Open <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
+<li>Add <code>consent.exe</code> to the <strong>Process inclusion list</strong>.</li>
+<li>Install and enable the mod.</li>
+</ol>
+<p>Without this change, the mod has no effect.</p>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Description |
+|---|---|
+| <strong>Dialog skin</strong> | Choose one of the four themes. |
+| <strong>Replace the UAC prompt</strong> | Replace the prompt or observe it and log events. |
+| <strong>Which apps get the Classic UAC prompt</strong> | Apply to all apps, only listed apps, or all except listed apps. |
+| <strong>App list</strong> | Semicolon-separated application names for the filter above. |
+| <strong>Button style</strong> | Use the system button or the mod's Aero-style button. |
+| <strong>Which shield is shown</strong> | Choose automatic, verified, question, or exclamation. |
+| <strong>Banner colour</strong> | Choose automatic, blue, yellow, or red; manual choices can only make the prompt more cautious. |
+| <strong>The Windows prompt, while the Windows 7 one is on screen</strong> | Move the native prompt off-screen or hide it. |
+| <strong>Read the elevation request</strong> | Read request details to show the app icon and "File origin". |
+| <strong>How long to wait for the prompt</strong> | Wait time, in milliseconds, before leaving the native prompt unchanged. |
+| <strong>Watchdog</strong> | Close the recreated dialog after this many seconds without a response. |
+| <strong>Panic hotkey</strong> | Shortcut to restore the native prompt; default: <code>Ctrl+Shift+F10</code>. |
+| <strong>Extra Yes/No key</strong> | Optional Alt+letter shortcut forwarded to the original prompt. |
+| <strong>Debug log</strong> | Record mod activity. |
+| <strong>Write a diagnostics dump</strong> | Write diagnostics; the mod runs in observation mode. |
+| <strong>Write the raw elevation request to the log</strong> | Log the raw request, which may include file and user names. |
+| <strong>How the prompt is found</strong> | Choose desktop watchers (recommended), polling, or hook only. |</p>
+<h2 id="behaviorandlimitations">Behavior and limitations</h2>
+<ul>
+<li>The banner follows the native publisher row. The shield follows the selected theme and Windows' verdict; the mod never upgrades an unknown or unverified publisher to verified.</li>
+<li>Publisher checks use the file's Authenticode signature or its Windows catalog when applicable. The native verdict is not overridden.</li>
+<li>Regedit is shown by its localized name only after Windows confirms the system file's signature.</li>
+<li>Details that cannot be read from the native prompt are omitted, not guessed.</li>
+<li>A XAML candidate without a Win32 edit control may be moved off-screen briefly during UI Automation classification.</li>
+<li>Logs and diagnostic files can contain prompt text, command lines, file names, and user names. Enable them only when needed.</li>
+</ul>
+<h2 id="testedsystems">Tested systems</h2>
+<p>The modification has been tested on the following systems:</p>
+<ul>
+<li>Windows 10 21H2</li>
+<li>Windows 11 24H2</li>
+<li>Windows 11 25H2</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li><strong>AdministratoX</strong> — Windows 11 24H2/25H2 testing</li>
+<li><strong>Microsoft</strong> — Documentation</li>
+<li><strong>m417z</strong> — Technical reference and review</li>
+</ul>
+<h2 id="reportingissues">Reporting issues</h2>
+<p>If there are anomalies, please report them to the author. It is recommended to include the debug log and, if needed, the diagnostic file.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Tray Agenda 1.0.1]]></title>
         <id>https://windhawk.net/mods/tray-agenda#3fed8cb0bdebcf06b4806bf78801069cb60e581e</id>
@@ -703,26 +786,6 @@ with or endorsed by Mawaqit.</p>]]></content>
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Pointer Afterimage Motion Blur 1.1]]></title>
-        <id>https://windhawk.net/mods/pointer-afterimage-motion-blur#ba10ab3e6ea5980b451594f0dc260d9986415f0f</id>
-        <link href="https://windhawk.net/mods/pointer-afterimage-motion-blur"/>
-        <updated>2026-10-16T11:01:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The blur now shows above the Start menu, Search and the notification centre: explorer.exe creates the overlay window in a higher band with <code>CreateWindowInBand</code> (as suggested), and the mod's own process draws into it. Nothing else runs in explorer.exe.</li>
-<li>New "Minimum blur speed" setting: slower movements draw no blur and use almost no CPU.</li>
-<li>Trail opacity now means what it says: 100% looks solid (the overlapping copies used to add up to about 60%), and the fade holds near full strength behind the pointer.</li>
-<li>New defaults: opacity 50, minimum blur speed 29 cm/s, trail 25 ms, hiding on above 30 cm/s. Trail opacity is stored under a new name, so everyone starts from 50 (an old 92 would now look nearly solid).</li>
-<li>The blur now matches the pointer size set in Windows; before, it was always drawn at size 1. Large pointers stay sharp.</li>
-<li>The blur now works over administrator windows, such as Task Manager or a terminal run as administrator.</li>
-<li>No CPU at all while idle: window activations come from the shell hook instead of polling.</li>
-<li>README: limitation, resource use with benchmarks, troubleshooting.</li>
-</ul>]]></content>
-        <author>
-            <name>sidlikesgrapess</name>
-            <uri>https://github.com/sidlikesgrapess</uri>
         </author>
     </entry>
 </feed>
