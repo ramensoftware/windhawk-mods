@@ -908,7 +908,7 @@ void ReportWidgetStatus(PCWSTR status) {
 bool HookTaskbarDllSymbols(HMODULE module) {
     if (!module) return false;
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {
                 LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})",
@@ -948,7 +948,7 @@ bool HookTaskbarDllSymbols(HMODULE module) {
         },
     };
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"[Widget] Taskbar.dll symbol resolution failed. Check symbol download/build compatibility.");
         return false;
     }
