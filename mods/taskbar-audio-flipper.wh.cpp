@@ -63,12 +63,18 @@ Windows only lets administrators turn devices on and off, so each switch runs Mi
 (`pnputil.exe`) as administrator, which may show a Windows prompt asking to allow it, depending on
 your User Account Control settings.
 
-## Linking with Taskbar RDP Launcher
+## Linking with the other widgets
 
-With the Taskbar RDP Launcher mod running too, the two widgets can be joined into one: right-click
-either, choose **Link with RDPLauncher** (or **Link with AudioFlipper**) and which side it goes on.
-Linked, they sit side by side with a divider between them, dragging either moves both, and if one
-hides the other takes its place.
+![Taskbar Snipper, Taskbar Audio Flipper and Taskbar RDP Launcher linked on the taskbar](https://raw.githubusercontent.com/Lucidic15/windhawk-mods/images/taskbar-widgets/linked.png)
+
+From the left: [Taskbar Snipper](https://windhawk.net/mods/taskbar-snipper),
+[Taskbar Audio Flipper](https://windhawk.net/mods/taskbar-audio-flipper) and
+[Taskbar RDP Launcher](https://windhawk.net/mods/taskbar-rdp-launcher).
+
+With the Taskbar RDP Launcher or Taskbar Snipper mod running too, their widgets can be joined with
+this one into one: right-click any of them, open **Link widgets**, and choose **Link with** the other. Linked,
+they sit side by side with a divider between them, and dragging any of them moves them all; **Move
+this widget left** and **right** change their order. A widget that hides leaves no gap.
 
 ## Settings
 
@@ -108,10 +114,12 @@ change). Use the app or the mod, not both: each shows its own widget.
 namespace {
 
 const wchar_t kSelfApp[] = L"AudioFlipper";
-const wchar_t kPartnerApp[] = L"RDPLauncher";
 const wchar_t kWidgetClassName[] = L"AudioFlipper.Mod.Widget";
-const wchar_t kPartnerWidgetClassName[] = L"RDPLauncher.Mod.Widget";
 const wchar_t kWidgetTitle[] = L"Taskbar Audio Flipper";
+// This widget's place among the widgets that can link (WidgetLink::kMembers), and the one it was
+// linked with as a pair before there were three.
+constexpr int kSelfMember = 0;
+constexpr int kLegacyPartner = 1;
 
 }  // namespace
 
@@ -1273,40 +1281,69 @@ std::optional<std::wstring> PromptForText(const std::wstring& title, const std::
 }
 
 // ---------------------------------------------------------------------------
-// The link between the Taskbar Audio Flipper and Taskbar RDP Launcher widgets (the same in both
-// mods). Linked, they sit side by side as one widget, in the order chosen, with a divider between
-// them, and dragging either moves both.
+// Linking the Taskbar Audio Flipper, Taskbar RDP Launcher and Taskbar Snipper widgets (the same
+// code is in all three mods). Linked widgets sit side by side as one, in the order chosen, with a
+// divider between them, and dragging any of them moves them all.
 //
-// Each mod keeps its own copy of the link (on or off, which widget is on the left, and where the
-// pair is) in its storage, and shows it to the other as properties of its widget window, stamped
-// with when it last changed: the newer copy wins. Each widget finds the other by its window class
-// and posts it a message whenever its link, size or place changes.
+// Each mod keeps its own copy of the group (which widgets are in it, left to right, and where it
+// is) in its storage, and shows it to the others as properties of its widget window, stamped with
+// when it last changed: the newest copy wins. Each widget finds the others by their window class
+// and posts them a message whenever its group, size or place changes.
 
 namespace WidgetLink {
 
-struct State {
-    bool linked = false;
-    bool selfOnLeft = true;
-    int offset = -1;  // The pair's left edge from the taskbar's left edge; negative for the default.
-    int stamp = 0;    // When it last changed, in seconds since 2020: the newer copy wins.
-
-    // As one number, the way it's stored and shown to the other widget (as seen from this side).
-    int Pack() const { return (linked ? 1 : 0) | (selfOnLeft ? 2 : 0) | (std::max(-1, offset) + 1) << 2; }
-
-    static State Unpack(int packed, int stamp) {
-        return State{(packed & 1) != 0, (packed & 2) != 0, (packed >> 2) - 1, stamp};
-    }
-
-    // The same link as the other widget sees it.
-    State Mirrored() const { return State{linked, !selfOnLeft, offset, stamp}; }
+struct Member {
+    const wchar_t* name;         // As the menus show it.
+    const wchar_t* windowClass;  // Of its widget window.
 };
 
-const wchar_t kStateProperty[] = L"TaskbarWidgetLink.Mod.State";
-const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.Stamp";
+constexpr Member kMembers[] = {
+    {L"Audio Flipper", L"AudioFlipper.Mod.Widget"},
+    {L"RDP Launcher", L"RDPLauncher.Mod.Widget"},
+    {L"Snipper", L"TaskbarSnipper.Mod.Widget"},
+};
+constexpr int kMemberCount = ARRAYSIZE(kMembers);
 
-// Posted to the other widget when the link, or this widget's size or place, changes.
+struct Group {
+    std::vector<int> order;  // The widgets in it, by their place in kMembers, left to right.
+    int offset = -1;         // Its left edge from the taskbar's left edge; negative for the default.
+    int stamp = 0;           // When it last changed, in seconds since 2020: the newest copy wins.
+
+    bool Has(int member) const { return std::find(order.begin(), order.end(), member) != order.end(); }
+
+    // Whether this widget is linked with another.
+    bool Linked() const { return order.size() >= 2 && Has(kSelfMember); }
+
+    // As one number, the way it's stored and shown to the other widgets: two bits for each widget,
+    // left to right (its place plus one), and the offset above them.
+    int Pack() const {
+        int packed = 0;
+        for (size_t i = 0; i < order.size() && i < (size_t)kMemberCount; i++) {
+            packed |= (order[i] + 1) << (2 * i);
+        }
+        return packed | (std::max(-1, offset) + 1) << (2 * kMemberCount);
+    }
+
+    static Group Unpack(int packed, int stamp) {
+        Group group;
+        for (int i = 0; i < kMemberCount; i++) {
+            int member = ((packed >> (2 * i)) & 3) - 1;
+            if (member >= 0 && member < kMemberCount && !group.Has(member)) {
+                group.order.push_back(member);
+            }
+        }
+        group.offset = (packed >> (2 * kMemberCount)) - 1;
+        group.stamp = stamp;
+        return group;
+    }
+};
+
+const wchar_t kGroupProperty[] = L"TaskbarWidgetLink.Mod.Group";
+const wchar_t kStampProperty[] = L"TaskbarWidgetLink.Mod.GroupStamp";
+
+// Posted to the other widgets when the group, or this widget's size or place, changes.
 UINT ChangedMessage() {
-    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.Changed");
+    static UINT message = RegisterWindowMessageW(L"TaskbarWidgetLink.Mod.GroupChanged");
     return message;
 }
 
@@ -1323,64 +1360,76 @@ int NewStamp(int newerThan) {
     return std::max(seconds, newerThan + 1);
 }
 
-State Load() {
-    return State::Unpack(Storage::GetInt(L"Link", 0), Storage::GetInt(L"LinkStamp", 0));
+Group Load() {
+    int stamp = Storage::GetInt(L"LinkGroupStamp", 0);
+    if (stamp != 0) {
+        return Group::Unpack(Storage::GetInt(L"LinkGroup", 0), stamp);
+    }
+    // Before there were three, two widgets linked as a pair, kept as Link: on or off, whether this
+    // widget was on the left, and the offset.
+    Group group;
+    int pair = kLegacyPartner >= 0 ? Storage::GetInt(L"Link", 0) : 0;
+    if (pair & 1) {
+        group.order = (pair & 2) ? std::vector<int>{kSelfMember, kLegacyPartner} : std::vector<int>{kLegacyPartner, kSelfMember};
+        group.offset = (pair >> 2) - 1;
+        group.stamp = Storage::GetInt(L"LinkStamp", 0);
+    }
+    return group;
 }
 
-void Save(const State& state) {
-    Storage::SetInt(L"Link", state.Pack());
-    Storage::SetInt(L"LinkStamp", state.stamp);
+void Save(const Group& group) {
+    Storage::SetInt(L"LinkGroup", group.Pack());
+    Storage::SetInt(L"LinkGroupStamp", group.stamp);
 }
 
-// Shows this widget's copy of the link on its window, for the other widget to read.
-void Publish(HWND window, const State& state) {
-    SetPropW(window, kStateProperty, (HANDLE)(INT_PTR)state.Pack());
-    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)state.stamp);
+// Shows this widget's copy of the group on its window, for the other widgets to read.
+void Publish(HWND window, const Group& group) {
+    SetPropW(window, kGroupProperty, (HANDLE)(INT_PTR)group.Pack());
+    SetPropW(window, kStampProperty, (HANDLE)(INT_PTR)group.stamp);
 }
 
 void Unpublish(HWND window) {
-    RemovePropW(window, kStateProperty);
+    RemovePropW(window, kGroupProperty);
     RemovePropW(window, kStampProperty);
 }
 
-HWND FindPartner() {
-    return FindWindowW(kPartnerWidgetClassName, nullptr);
+HWND FindMember(int member) {
+    return FindWindowW(kMembers[member].windowClass, nullptr);
 }
 
-// The other widget's copy of the link, as this widget sees it, if it's running.
-std::optional<State> ReadPartner() {
-    HWND window = FindPartner();
-    if (!window || !GetPropW(window, kStampProperty)) {
-        return std::nullopt;
+// Whether the widget's mod is running (this one always is).
+bool Running(int member) {
+    return member == kSelfMember || FindMember(member) != nullptr;
+}
+
+// The newest copy of the group among the other widgets that are running.
+std::optional<Group> ReadNewest() {
+    std::optional<Group> newest;
+    for (int member = 0; member < kMemberCount; member++) {
+        HWND window = member == kSelfMember ? nullptr : FindMember(member);
+        int stamp = window ? (int)(INT_PTR)GetPropW(window, kStampProperty) : 0;
+        if (stamp != 0 && (!newest || stamp > newest->stamp)) {
+            newest = Group::Unpack((int)(INT_PTR)GetPropW(window, kGroupProperty), stamp);
+        }
     }
-    return State::Unpack((int)(INT_PTR)GetPropW(window, kStateProperty), (int)(INT_PTR)GetPropW(window, kStampProperty))
-        .Mirrored();
+    return newest;
 }
 
-// Whether the other mod is running, to link with.
-bool PartnerRunning() {
-    return FindPartner() != nullptr;
-}
-
-// The other app's widget, when it's on the taskbar right now.
-bool TryGetPartnerBounds(RECT& bounds) {
-    HWND window = FindPartner();
+// The widget, when it's on the taskbar right now.
+bool TryGetBounds(int member, RECT& bounds) {
+    HWND window = FindMember(member);
     return window && IsWindowVisible(window) && GetWindowRect(window, &bounds) && bounds.right > bounds.left;
 }
 
-void NotifyPartner() {
-    if (HWND window = FindPartner()) {
-        PostMessageW(window, ChangedMessage(), 0, 0);
+void NotifyOthers() {
+    for (int member = 0; member < kMemberCount; member++) {
+        if (member == kSelfMember) {
+            continue;
+        }
+        if (HWND window = FindMember(member)) {
+            PostMessageW(window, ChangedMessage(), 0, 0);
+        }
     }
-}
-
-// Where a linked widget goes: the pair starts at groupOffset (kept on the taskbar), with the left
-// app first. Both apps work it out the same way from the same numbers, so they meet without a
-// gap. Without the other widget showing, this one takes the pair's place.
-int PlaceInGroup(int barLeft, int barWidth, int ownWidth, int partnerWidth, bool selfOnLeft, int groupOffset, int& groupLeft) {
-    int total = std::min(ownWidth + partnerWidth, barWidth);
-    groupLeft = barLeft + std::max(0, std::min(groupOffset, barWidth - total));
-    return selfOnLeft || partnerWidth == 0 ? groupLeft : std::min(groupLeft + partnerWidth, barLeft + barWidth - ownWidth);
 }
 
 }  // namespace WidgetLink
@@ -1426,18 +1475,18 @@ public:
             return false;
         }
         // Only needed when Windhawk itself runs as administrator (a portable Windhawk started that
-        // way): lets the other widget's and the shell's messages through to the widget.
+        // way): lets the other widgets' and the shell's messages through to the widget.
         ChangeWindowMessageFilterEx(hwnd_, WidgetLink::ChangedMessage(), MSGFLT_ALLOW, nullptr);
         appBarMessage_ = RegisterWindowMessageW((std::wstring(kSelfApp) + L".AppBarNotification").c_str());
         ChangeWindowMessageFilterEx(hwnd_, appBarMessage_, MSGFLT_ALLOW, nullptr);
         taskbarCreatedMessage_ = RegisterWindowMessageW(L"TaskbarCreated");
         ChangeWindowMessageFilterEx(hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
         RegisterAppBar();
-        // Take the other widget's copy of the link if it changed more recently, and let it know
+        // Take the other widgets' copy of the group if it changed more recently, and let them know
         // this one is here.
         WidgetLink::Publish(hwnd_, link_);
         SyncLink();
-        WidgetLink::NotifyPartner();
+        WidgetLink::NotifyOthers();
         return true;
     }
 
@@ -1454,7 +1503,7 @@ public:
         SHAppBarMessage(ABM_REMOVE, &data);
         WidgetLink::Unpublish(hwnd_);
         DestroyWindow(hwnd_);
-        WidgetLink::NotifyPartner();  // So it takes the pair's place.
+        WidgetLink::NotifyOthers();  // So they close the gap.
     }
 
     HWND Handle() const { return hwnd_; }
@@ -1493,24 +1542,59 @@ public:
     // Re-renders after the content changed (and resizes if its width did).
     void ContentChanged() { UpdatePlacement(true); }
 
-    const WidgetLink::State& Link() const { return link_; }
+    const WidgetLink::Group& Link() const { return link_; }
 
-    // Links this widget with the other mod's, with this one on the given side, or unlinks them.
-    void SetLink(bool linked, bool selfOnLeft) {
-        int groupOffset = link_.offset;
-        if (linked && !link_.linked) {
-            // Start the pair where the leftmost of the two widgets is now.
-            RECT bounds = Bounds();
-            int left = Visible() ? bounds.left : taskbar_.left + std::max(0, offset_);
-            RECT partner;
-            if (WidgetLink::TryGetPartnerBounds(partner)) {
-                left = Visible() ? std::min(left, (int)partner.left) : (int)partner.left;
+    // Links another mod's widget with this one (joining its group if it's in one), or takes it out
+    // of the group.
+    void SetMemberLinked(int member, bool linked) {
+        WidgetLink::Group group = link_;
+        if (linked) {
+            if (group.order.size() < 2) {
+                // A new group starts where the leftmost of the two widgets is now, in the order
+                // they're in.
+                RECT bounds = Bounds();
+                int left = Visible() ? bounds.left : taskbar_.left + std::max(0, offset_);
+                RECT other;
+                bool otherFirst = false;
+                if (WidgetLink::TryGetBounds(member, other)) {
+                    otherFirst = other.left < left;
+                    left = std::min(left, (int)other.left);
+                }
+                group.order = otherFirst ? std::vector<int>{member, kSelfMember} : std::vector<int>{kSelfMember, member};
+                group.offset = std::max(0, left - (int)taskbar_.left);
+            } else {
+                // Joining the group, at its right end.
+                if (!group.Has(kSelfMember)) {
+                    group.order.push_back(kSelfMember);
+                }
+                if (!group.Has(member)) {
+                    group.order.push_back(member);
+                }
             }
-            groupOffset = std::max(0, left - (int)taskbar_.left);
+        } else {
+            group.order.erase(std::remove(group.order.begin(), group.order.end(), member), group.order.end());
+            if (group.order.size() < 2) {
+                group.order.clear();
+            }
         }
-        ChangeLink(WidgetLink::State{linked, selfOnLeft, groupOffset});
+        ChangeLink(group);
         UpdatePlacement(true);
-        WidgetLink::NotifyPartner();
+        WidgetLink::NotifyOthers();
+    }
+
+    // Moves this widget one place left (-1) or right (1) in its group.
+    void MoveInGroup(int direction) {
+        WidgetLink::Group group = link_;
+        auto self = std::find(group.order.begin(), group.order.end(), kSelfMember);
+        int index = (int)(self - group.order.begin());
+        int target = index + direction;
+        if (self == group.order.end() || target < 0 || target >= (int)group.order.size()) {
+            return;
+        }
+        std::swap(group.order[index], group.order[target]);
+        ChangeLink(group);
+        UpdatePlacement(true);
+        WidgetLink::NotifyOthers();
     }
 
     float Scale() const { return scale_; }
@@ -1525,7 +1609,7 @@ public:
 
     bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result) {
         if (message == WidgetLink::ChangedMessage()) {
-            // The other widget moved, changed size, or changed the link.
+            // Another widget moved, changed size, or changed the group.
             SyncLink();
             UpdatePlacement(false);
             return true;
@@ -1582,9 +1666,9 @@ public:
                 }
                 int dragged = std::max(0, dragStartOffset_ + distance);
                 if (wasLinked_) {
-                    WidgetLink::State moved = link_;
+                    WidgetLink::Group moved = link_;
                     moved.offset = dragged;
-                    ChangeLink(moved);  // Moves the pair; the other widget follows when told.
+                    ChangeLink(moved);  // Moves the group; the other widgets follow when told.
                 } else {
                     offset_ = dragged;
                 }
@@ -1709,8 +1793,8 @@ protected:
         if (!shown_ || !TryGetVisibleTaskbar(bar, monitor) || IsFullScreenAppActive(monitor, hwnd_, shellReportsFullScreen_)) {
             if (IsWindowVisible(hwnd_)) {
                 ShowWindow(hwnd_, SW_HIDE);
-                if (link_.linked) {
-                    WidgetLink::NotifyPartner();  // So it takes the pair's place.
+                if (link_.Linked()) {
+                    WidgetLink::NotifyOthers();  // So they close the gap.
                 }
             }
             OnHidden();
@@ -1739,31 +1823,49 @@ protected:
         taskbar_ = bar;
 
         RECT bounds = Bounds();
-        if (wasLinked_ && !link_.linked && IsWindowVisible(hwnd_)) {
-            // Just unlinked: stay where the pair left this widget.
+        bool linked = link_.Linked();
+        if (wasLinked_ && !linked && IsWindowVisible(hwnd_)) {
+            // Just unlinked: stay where the group left this widget.
             offset_ = std::max(0, (int)(bounds.left - bar.left));
             if (onOffsetChanged) {
                 onOffsetChanged(offset_);
             }
         }
-        wasLinked_ = link_.linked;
+        wasLinked_ = linked;
 
         int x;
-        int partnerWidth = 0;
-        if (link_.linked) {
-            // Side by side with the other widget, wherever the pair was put.
-            RECT partner;
-            if (WidgetLink::TryGetPartnerBounds(partner)) {
-                partnerWidth = partner.right - partner.left;
+        bool divider = false;
+        if (linked) {
+            // Side by side with the other widgets in the group that are showing, in its order,
+            // wherever the group was put. Every widget works it out the same way from the same
+            // numbers, so they meet without gaps.
+            int before = 0;
+            int total = 0;
+            bool reachedSelf = false;
+            for (int member : link_.order) {
+                int memberWidth = 0;
+                RECT other;
+                if (member == kSelfMember) {
+                    memberWidth = width;
+                    reachedSelf = true;
+                } else if (WidgetLink::TryGetBounds(member, other)) {
+                    memberWidth = other.right - other.left;
+                }
+                if (!reachedSelf) {
+                    before += memberWidth;
+                }
+                total += memberWidth;
             }
-            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, width + partnerWidth);
-            x = WidgetLink::PlaceInGroup(bar.left, barWidth, width, partnerWidth, link_.selfOnLeft, groupOffset, groupLeft_);
+            total = std::min(total, barWidth);
+            int groupOffset = link_.offset >= 0 ? link_.offset : DefaultOffset(barWidth, total);
+            groupLeft_ = bar.left + std::max(0, std::min(groupOffset, barWidth - total));
+            x = std::min(groupLeft_ + before, (int)bar.left + barWidth - width);
+            divider = before > 0;
         } else {
             int preferredOffset = offset_ >= 0 ? offset_ : DefaultOffset(barWidth, width);
             x = bar.left + std::max(0, std::min(preferredOffset, barWidth - width));
             groupLeft_ = x;
         }
-        bool divider = partnerWidth > 0 && !link_.selfOnLeft;
         RECT target{x, bar.top, x + width, bar.bottom};
 
         bool moved = !EqualRect(&target, &bounds) || !IsWindowVisible(hwnd_);
@@ -1774,8 +1876,8 @@ protected:
         if (!IsWindowVisible(hwnd_)) {
             ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         }
-        if (moved && link_.linked) {
-            WidgetLink::NotifyPartner();  // So it moves up against this widget.
+        if (moved && linked) {
+            WidgetLink::NotifyOthers();  // So they move up against this widget.
         }
         OnPlaced();
         StayAboveTaskbar();
@@ -1797,24 +1899,24 @@ private:
         SHAppBarMessage(ABM_NEW, &data);
     }
 
-    // A change to the link made here: it's stamped as the newest copy, shown to the other widget,
+    // A change to the group made here: it's stamped as the newest copy, shown to the other widgets,
     // and saved once it settles (a drag changes it on every mouse move).
-    void ChangeLink(WidgetLink::State state) {
+    void ChangeLink(WidgetLink::Group group) {
         int newerThan = link_.stamp;
-        if (std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner()) {
-            newerThan = std::max(newerThan, partner->stamp);
+        if (std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest()) {
+            newerThan = std::max(newerThan, newest->stamp);
         }
-        state.stamp = WidgetLink::NewStamp(newerThan);
-        link_ = state;
+        group.stamp = WidgetLink::NewStamp(newerThan);
+        link_ = group;
         WidgetLink::Publish(hwnd_, link_);
         SaveLinkSoon();
     }
 
-    // Takes the other widget's copy of the link when it changed more recently than this one's.
+    // Takes the other widgets' copy of the group when it changed more recently than this one's.
     void SyncLink() {
-        std::optional<WidgetLink::State> partner = WidgetLink::ReadPartner();
-        if (partner && partner->stamp > link_.stamp) {
-            link_ = *partner;
+        std::optional<WidgetLink::Group> newest = WidgetLink::ReadNewest();
+        if (newest && newest->stamp > link_.stamp) {
+            link_ = *newest;
             WidgetLink::Publish(hwnd_, link_);
             SaveLinkSoon();
         }
@@ -1825,14 +1927,14 @@ private:
         SetTimer(hwnd_, kLinkSaveTimer, 1000, nullptr);
     }
 
-    // Keeps where a drag left the widget (or the pair).
+    // Keeps where a drag left the widget (or the group).
     void EndDrag() {
         if (wasLinked_) {
-            WidgetLink::State moved = link_;
-            moved.offset = groupLeft_ - taskbar_.left;  // Where the pair ended up after clamping.
+            WidgetLink::Group moved = link_;
+            moved.offset = groupLeft_ - taskbar_.left;  // Where the group ended up after clamping.
             ChangeLink(moved);
             Render();
-            WidgetLink::NotifyPartner();
+            WidgetLink::NotifyOthers();
         } else {
             offset_ = Bounds().left - taskbar_.left;  // Where it ended up after clamping.
             Render();
@@ -1874,7 +1976,7 @@ private:
                                     gp::RectF((float)Px(2), (float)Px(4), (float)(width - Px(4)), (float)(height - Px(8))), (float)Px(4));
                 }
                 if (dividerAtLeft_) {
-                    // Linked with the other app's widget on the left: the divider between the two.
+                    // Linked, with another widget on the left: the divider between them.
                     gp::Pen pen(WithAlpha(lightTaskbar_ ? 50 : 60, foreground), 1);
                     graphics.DrawLine(&pen, 1.0f, (float)Px(14), 1.0f, (float)(height - Px(14)));
                 }
@@ -1936,12 +2038,40 @@ private:
     int dragStartCursorX_ = 0;
     int dragStartOffset_ = 0;
     int wheelRemainder_ = 0;
-    int groupLeft_ = 0;  // Left edge of the linked pair on screen (or of this widget alone).
-    WidgetLink::State link_;
+    int groupLeft_ = 0;  // Left edge of the linked group on screen (or of this widget alone).
+    WidgetLink::Group link_;
     bool linkSavePending_ = false;
     bool wasLinked_ = false;
-    bool dividerAtLeft_ = false;  // Linked, with the other widget on the left.
+    bool dividerAtLeft_ = false;  // Linked, with another widget on the left.
 };
+
+// The Link widgets submenu: links this widget with the other mods' widgets that are running (or
+// linked already), and moves it left or right among them.
+void AddLinkMenu(Menu& menu, TaskbarWidget& widget) {
+    const WidgetLink::Group& group = widget.Link();
+    std::vector<int> others;
+    for (int member = 0; member < WidgetLink::kMemberCount; member++) {
+        if (member != kSelfMember && (WidgetLink::Running(member) || (group.Linked() && group.Has(member)))) {
+            others.push_back(member);
+        }
+    }
+    if (others.empty()) {
+        return;
+    }
+    menu.AddSeparator();
+    Menu& submenu = menu.AddSubmenu(L"Link widgets");
+    for (int member : others) {
+        bool linked = group.Linked() && group.Has(member);
+        submenu.Add(std::wstring(L"Link with ") + WidgetLink::kMembers[member].name,
+                    [&widget, member, linked]() { widget.SetMemberLinked(member, !linked); }, linked);
+    }
+    if (group.Linked()) {
+        auto self = std::find(group.order.begin(), group.order.end(), kSelfMember);
+        submenu.AddSeparator();
+        submenu.Add(L"Move this widget left", [&widget]() { widget.MoveInGroup(-1); }, false, self != group.order.begin());
+        submenu.Add(L"Move this widget right", [&widget]() { widget.MoveInGroup(1); }, false, self + 1 != group.order.end());
+    }
+}
 
 // The flyout shown above a part of the widget while hovering it. It stays open while the mouse is
 // on its way up from the widget, and closes as soon as the mouse leaves the flyout.
@@ -4128,17 +4258,7 @@ private:
         iconStyle.Add(L"Windows device icons", [this]() { SetIconStyle(IconStyle::Windows); },
                       settings_.iconStyle == IconStyle::Windows);
 
-        // Linking the widget with Taskbar RDP Launcher's into one, on either side; offered while that
-        // mod is running (or they're linked).
-        const WidgetLink::State& link = widget_.Link();
-        if (link.linked || WidgetLink::PartnerRunning()) {
-            menu.AddSeparator();
-            Menu& linkMenu = menu.AddSubmenu(std::wstring(L"Link with ") + kPartnerApp);
-            bool selfOnLeft = link.selfOnLeft;
-            linkMenu.Add(L"Not linked", [this, selfOnLeft]() { widget_.SetLink(false, selfOnLeft); }, !link.linked);
-            linkMenu.Add(std::wstring(kPartnerApp) + L" on the left", [this]() { widget_.SetLink(true, false); }, link.linked && !selfOnLeft);
-            linkMenu.Add(std::wstring(kPartnerApp) + L" on the right", [this]() { widget_.SetLink(true, true); }, link.linked && selfOnLeft);
-        }
+        AddLinkMenu(menu, widget_);
 
         RECT bounds = widget_.Bounds();
         POINT cursor;
