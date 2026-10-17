@@ -2,7 +2,7 @@
 // @id              middle-click-new-tab
 // @name            Middle Click New Tab
 // @description     Middle-click the empty tab strip area of File Explorer or Notepad to open a new tab
-// @version         1.0.3
+// @version         1.0.0
 // @author          venasataa
 // @github          https://github.com/venasataa
 // @homepage        https://venasataa.github.io
@@ -43,11 +43,13 @@ How it works:
 // ==/WindhawkModReadme==
 
 #include <windows.h>
-#include <windowsx.h>
 #include <oleauto.h>
 #include <shlwapi.h>
 #include <uiautomation.h>
 #include <cwchar>
+
+constexpr UINT WM_QUIT_THREAD = WM_APP;
+constexpr UINT WM_MIDDLE_CLICK = WM_APP + 1;
 
 // Thread IDs and handles
 DWORD g_workerThreadId = 0;
@@ -118,11 +120,11 @@ void SendCtrlKey(WORD vk) {
 // UI Automation Hit-Testing (Executed exclusively on the worker thread)
 
 enum class HitResult {
-    Undecided,     
-    OnTab,         
-    OnAddButton,   
-    OnOtherButton, 
-    InContainer,   
+    Undecided,     // Neither a tab item, nor an add button, nor a container was found in the ancestor chain.
+    OnTab,         // The click was on an actual tab item.
+    OnAddButton,   // The click was on the "new tab" / add button.
+    OnOtherButton, // The click was on some other button (e.g., window controls).
+    InContainer,   // The click was inside the tab strip container but not on a tab or button.
 };
 
 bool IsTabItemElement(IUIAutomationElement* pElement) {
@@ -164,6 +166,10 @@ bool IsTabStripContainerElement(IUIAutomationElement* pElement) {
     return false;
 }
 
+// Returns:
+// 0 = Not a button
+// 1 = Add/New Tab button
+// 2 = Other button
 int GetButtonKind(IUIAutomationElement* pElement) {
     CONTROLTYPEID controlType = 0;
     if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
@@ -330,14 +336,12 @@ void HandleMiddleClick(POINT pt) {
     
     HWND hForeground = GetForegroundWindow();
     if (hForeground != hRootWnd) {
-        if (!SetForegroundWindow(hRootWnd)) {
-            DWORD foreThreadId = GetWindowThreadProcessId(hForeground, nullptr);
-            DWORD currThreadId = GetCurrentThreadId();
-            if (foreThreadId != currThreadId) {
-                AttachThreadInput(currThreadId, foreThreadId, TRUE);
-                SetForegroundWindow(hRootWnd);
-                AttachThreadInput(currThreadId, foreThreadId, FALSE);
-            }
+        // Allows to steal focus.
+        INPUT input{};
+        SendInput(1, &input, sizeof(INPUT));
+        SetForegroundWindow(hRootWnd);
+        if (GetForegroundWindow() != hRootWnd) {
+            return;
         }
     }
     
@@ -362,10 +366,8 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
         }
     }
 
-    // CRITICAL: Force creation of the message queue before signaling readiness!
-    // PostThreadMessage requires the target thread to have a message queue, which is 
-    // normally only created when GetMessage is called. Without PeekMessage, clicks 
-    // will be lost because PostThreadMessage fails silently.
+    // Ensure the message queue is created before signaling readiness.
+    // (STA COM usually creates it, but this guarantees it for PostThreadMessage).
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -373,12 +375,12 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
     SetEvent(hReadyEvent);
 
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        if (msg.hwnd == nullptr && msg.message == WM_APP) {
+        if (msg.hwnd == nullptr && msg.message == WM_QUIT_THREAD) {
             PostQuitMessage(0);
             continue;
         }
 
-        if (msg.hwnd == nullptr && msg.message == WM_APP + 1) {
+        if (msg.hwnd == nullptr && msg.message == WM_MIDDLE_CLICK) {
             if (g_pAutomation && g_pControlWalker) {
                 POINT pt;
                 pt.x = (LONG)msg.wParam;
@@ -405,7 +407,7 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && wParam == WM_MBUTTONDOWN) {
         MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
-        PostThreadMessage(g_workerThreadId, WM_APP + 1, (WPARAM)(LONG_PTR)pMouseStruct->pt.x, (LPARAM)(LONG_PTR)pMouseStruct->pt.y);
+        PostThreadMessage(g_workerThreadId, WM_MIDDLE_CLICK, (WPARAM)(LONG_PTR)pMouseStruct->pt.x, (LPARAM)(LONG_PTR)pMouseStruct->pt.y);
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
@@ -421,7 +423,7 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
 
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        if (msg.hwnd == nullptr && msg.message == WM_APP) {
+        if (msg.hwnd == nullptr && msg.message == WM_QUIT_THREAD) {
             PostQuitMessage(0);
             continue;
         }
@@ -442,23 +444,38 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
 BOOL WhTool_ModInit() {
     // Initialize and start the UI Automation thread
     HANDLE hWorkerReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (hWorkerReady) {
-        g_workerThread = CreateThread(nullptr, 0, WorkerThread, hWorkerReady, 0, nullptr);
-        if (g_workerThread) {
-            WaitForSingleObject(hWorkerReady, INFINITE);
-        }
+    if (!hWorkerReady) {
+        Wh_Log(L"CreateEvent for worker failed");
+        return FALSE;
+    }
+    g_workerThread = CreateThread(nullptr, 0, WorkerThread, hWorkerReady, 0, nullptr);
+    if (!g_workerThread) {
+        Wh_Log(L"CreateThread for worker failed");
         CloseHandle(hWorkerReady);
+        return FALSE;
+    }
+    WaitForSingleObject(hWorkerReady, INFINITE);
+    CloseHandle(hWorkerReady);
+
+    if (!g_pAutomation || !g_pControlWalker) {
+        Wh_Log(L"UIA failed to initialize, skipping hook");
+        return TRUE;
     }
 
     // Initialize and start the isolated mouse hook thread
     HANDLE hHookReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (hHookReady) {
-        g_hookThread = CreateThread(nullptr, 0, HookThread, hHookReady, 0, nullptr);
-        if (g_hookThread) {
-            WaitForSingleObject(hHookReady, INFINITE);
-        }
-        CloseHandle(hHookReady);
+    if (!hHookReady) {
+        Wh_Log(L"CreateEvent for hook failed");
+        return FALSE;
     }
+    g_hookThread = CreateThread(nullptr, 0, HookThread, hHookReady, 0, nullptr);
+    if (!g_hookThread) {
+        Wh_Log(L"CreateThread for hook failed");
+        CloseHandle(hHookReady);
+        return FALSE;
+    }
+    WaitForSingleObject(hHookReady, INFINITE);
+    CloseHandle(hHookReady);
     
     return TRUE;
 }
@@ -469,7 +486,7 @@ void WhTool_ModSettingsChanged() {
 void WhTool_ModUninit() {
     // Terminate the mouse hook thread
     if (g_hookThread) {
-        PostThreadMessage(g_hookThreadId, WM_APP, 0, 0);
+        PostThreadMessage(g_hookThreadId, WM_QUIT_THREAD, 0, 0);
         WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
@@ -477,7 +494,7 @@ void WhTool_ModUninit() {
 
     // Terminate the UIA worker thread
     if (g_workerThread) {
-        PostThreadMessage(g_workerThreadId, WM_APP, 0, 0);
+        PostThreadMessage(g_workerThreadId, WM_QUIT_THREAD, 0, 0);
         WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
@@ -502,6 +519,7 @@ bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -518,6 +536,7 @@ BOOL Wh_ModInit() {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
@@ -550,10 +569,12 @@ BOOL Wh_ModInit() {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
@@ -591,12 +612,12 @@ void Wh_ModAfterInit() {
                               ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
             return;
     }
 
-    WCHAR
-    commandLine[MAX_PATH + 2 +\
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
@@ -604,6 +625,7 @@ void Wh_ModAfterInit() {
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
@@ -620,6 +642,7 @@ void Wh_ModAfterInit() {
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
                                                  "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
@@ -631,6 +654,7 @@ void Wh_ModAfterInit() {
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
