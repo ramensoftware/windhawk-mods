@@ -6,11 +6,16 @@
 // @author          grn15RenS
 // @github          https://github.com/grn15RenS
 // @donateUrl       https://ko-fi.com/grn15rens
-// @license         MIT
+// @license         GPL-3.0
 // @include         LockApp.exe
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
- 
+
+// The RunFromWindowThread helper is based on the one in "Taskbar Labels for
+// Windows 11" by m417z, published under the GNU General Public License v3.0,
+// so this mod uses the same license.
+
 // ==WindhawkModReadme==
 /*
 # Lock Screen Date and Time Format
@@ -23,7 +28,7 @@ Example (Windows default on the left, this mod on the right):
 
 | Before | After |
 |--------|-------|
-| ![Before](https://i.imgur.com/RacefWU.jpeg) | ![After](https://i.imgur.com/X7FyLkG.jpeg) |
+| ![Before](https://i.imgur.com/vwH10YW.png) | ![After](https://i.imgur.com/2kZgtnm.png) |
 
 The clock keeps updating on its own, and choosing the "Windows default"
 options restores the original text.
@@ -48,9 +53,10 @@ options restores the original text.
 
   Example with an emoji as the separator:
 
-  ![Clock with an emoji as the separator](https://i.imgur.com/BgbWJn5.jpeg)
+  ![Clock with an emoji as the separator](https://i.imgur.com/HDPAl63.png)
 
-- **Hour format**: follow the Windows setting, or force 24-hour or 12-hour.
+- **Hour format**: follow the Windows short time format (the one the lock
+  screen shows), or force 24-hour or 12-hour.
 - **Leading zero on hours**: show `09` or `9`.
 - **Show seconds**: also show the seconds (`15:19:42`). The clock then updates
   every second instead of once a minute. With the vertical layout this gives
@@ -109,7 +115,7 @@ inclusion list. For example:
 
 Example with this mod and the Styler together:
 
-![Lock screen using this mod together with Windows 11 Start Menu Styler](https://i.imgur.com/UvXQ5jN.jpeg)
+![Lock screen using this mod together with Windows 11 Start Menu Styler](https://i.imgur.com/FobjRr6.png)
 
 Making the clock font bigger usually moves the clock; adjust a
 `TranslateTransform` in the Styler if it ends up off-center.
@@ -127,7 +133,9 @@ back.
 
 The width of the clock is also kept constant, so the date underneath does not
 move sideways when the clock text gets wider or narrower (for example when the
-seconds change).
+seconds change, or when AM switches to PM). This is skipped when the clock
+takes up almost the whole width of the screen, because there is no room left
+for it to move and forcing a width could get it cut off.
 
 ## Known limitations
 
@@ -139,23 +147,16 @@ seconds change).
 - The AM/PM text cannot be made smaller than the clock yet.
 - Most fonts have digits of different widths, so with **Show seconds** on, the
   digits inside the clock can shift slightly every second. The date and the
-  position of the clock stay where they are. Pick a font with equal-width
-  digits in the Styler if that bothers you.
-- Tested on Windows 11 25H2 (build: 26200.9457). Other versions are untested.
+  position of the clock stay where they are, except when the clock takes up
+  almost the whole width of the screen. Pick a font with equal-width digits
+  in the Styler if that bothers you.
+- Tested on Windows 11 25H2 (build 26200.9457). Other versions are untested.
 
 ## Troubleshooting
 
 If nothing happens, open the Windhawk log for this mod and lock the screen
 with Win+L. You should see `Hook installed on UI thread`, `Clock format
 attached` and `Date format attached`.
-
-## Other Screenshots
-
-| | |
-|---|---|
-| ![otherscreenshot1](https://i.imgur.com/deNfP1g.jpeg) | ![otherscreenshot4](https://i.imgur.com/DhXtIHB.jpeg) |
-| ![otherscreenshot2](https://i.imgur.com/QlKQbhb.jpeg) | ![otherscreenshot5](https://i.imgur.com/L1ORUbh.jpeg) |
-| ![otherscreenshot3](https://i.imgur.com/SHiTh3N.jpeg) | ![otherscreenshot6](https://i.imgur.com/Qb4IN5i.jpeg) |
 */
 // ==/WindhawkModReadme==
  
@@ -172,7 +173,7 @@ attached` and `Date format attached`.
   $description: Distance between the lines of a multi-line clock, as a percentage of the clock font size. Only used when the clock has more than one line. Lower is tighter, higher is looser. 0 = font default.
 - clockSeparator: ":"
   $name: Separator (horizontal layout)
-  $description: Text between hours and minutes in the horizontal layout, for example a colon, a dot, or a single space.
+  $description: "Text placed between hours, minutes and seconds in the horizontal layout (ignored by the vertical layout). For example a colon, a dot, or a single space. To use the colon that Windows shows on the lock screen, copy and paste this symbol - ∶ (U+2236)."
 - hourFormat: system
   $name: Hour format
   $options:
@@ -194,7 +195,7 @@ attached` and `Date format attached`.
 - dateFormat: default
   $name: Date format
   $options:
-  - default: Friday, 16 October (Windows default)
+  - default: Windows default
   - shortComma: Fri, 16 Oct
   - shortNoComma: Fri 16 Oct
   - longYY: Friday, 16 Oct 26
@@ -212,10 +213,7 @@ attached` and `Date format attached`.
  
 #undef GetCurrentTime
  
-#include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -232,22 +230,26 @@ using namespace winrt::Windows::UI::Xaml::Media;
  
 // The clock TextBlock and the property-changed callback token.
 // Only touched from the UI thread.
-static Controls::TextBlock g_orig{nullptr};
+// Released with `= nullptr` on the UI thread in Detach().
+[[clang::no_destroy]] static Controls::TextBlock g_orig{nullptr};
 static int64_t g_cbToken = 0;
  
 static std::atomic<bool> g_stop{false};
 static HANDLE g_thread = nullptr;
-static int g_lineHeight = 0;  // line spacing, in percent of the font size
-static std::atomic<bool> g_unloading{false};
-static std::atomic<bool> g_detached{false};
+static std::atomic<int> g_lineHeight{0};  // line spacing, in percent of the font size
+static HANDLE g_stopEvent = nullptr;  // signaled on unload to wake the worker thread
 static HHOOK g_hook = nullptr;
 static HWND g_uiWnd = nullptr;
 static ULONGLONG g_lastTick = 0;
 static std::atomic<bool> g_dirty{false};  // settings changed, re-apply on UI thread
 static std::atomic<bool> g_showSeconds{false};
 static bool g_updating = false;           // guards against re-entering our own Text change
+static bool g_lineHeightApplied = false;  // we changed LineHeight on the clock
+static bool g_alignApplied = false;       // we changed TextAlignment on the clock
+static TextAlignment g_origAlign = TextAlignment::Left;
 // Date TextBlock (x:Name="Date") state. Only touched from the UI thread.
-static Controls::TextBlock g_date{nullptr};
+// Released with `= nullptr` on the UI thread in DetachDate().
+[[clang::no_destroy]] static Controls::TextBlock g_date{nullptr};
 static int64_t g_dateToken = 0;
 static std::wstring g_dateOrig;  // last date text written by Windows
 static std::wstring g_dateOut;   // last date text written by this mod
@@ -263,7 +265,7 @@ static std::wstring g_clockOut;   // last clock text written by this mod
 
 // Clock settings. Written from the settings thread, read from the UI thread
 // (guarded by g_settingsMutex).
-static std::wstring g_clockLayout = L"vertical";
+static std::wstring g_clockLayout = L"horizontal";
 static std::wstring g_hourFormat = L"system";
 static std::wstring g_clockSeparator = L":";
 static std::wstring g_ampmPosition = L"beside";
@@ -297,13 +299,11 @@ static std::wstring BuildClock() {
     if (hourFmt == L"h12") {
         use12 = true;
     } else if (hourFmt != L"h24") {
-        // Follow Windows: LOCALE_ITIME is 0 for 12-hour and 1 for 24-hour
-        DWORD v = 0;
-        int n = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT,
-                                LOCALE_ITIME | LOCALE_RETURN_NUMBER,
-                                reinterpret_cast<LPWSTR>(&v),
-                                sizeof(v) / sizeof(wchar_t));
-        use12 = (n > 0 && v == 0);
+        // Follow Windows: the lock screen shows the short time. A 24-hour
+        // format uses an uppercase H ("HH:mm"), a 12-hour one uses "h".
+        wchar_t fmt[80] = L"";
+        int n = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTTIME, fmt, 80);
+        if (n > 0) use12 = (wcschr(fmt, L'H') == nullptr);
     }
 
     int hour = st.wHour;
@@ -316,7 +316,7 @@ static std::wstring BuildClock() {
             wchar_t buf[32] = L"";
             int n = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT,
                                     pm ? LOCALE_SPM : LOCALE_SAM, buf, 32);
-            if (n > 0) suffix = buf;
+            if (n > 1) suffix = buf;
             else suffix = pm ? L"PM" : L"AM";
         }
     }
@@ -339,6 +339,16 @@ static std::wstring BuildClock() {
         text += suffix;
     }
     return text;
+}
+
+// The AM and PM designators for the current locale (same fallback as BuildClock).
+static void GetAmPmDesignators(std::wstring& am, std::wstring& pm) {
+    wchar_t buf[32] = L"";
+    int n = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SAM, buf, 32);
+    am = (n > 1) ? std::wstring(buf) : std::wstring(L"AM");
+    buf[0] = L'\0';
+    n = GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SPM, buf, 32);
+    pm = (n > 1) ? std::wstring(buf) : std::wstring(L"PM");
 }
 
 // Keeps the clock's width constant. Digits in most fonts have different
@@ -364,14 +374,38 @@ static double MeasureText(Controls::TextBlock const& ref, std::wstring const& te
 static void StabilizeClockWidth(std::wstring const& text) {
     if (!g_orig) return;
 
-    // Only measure again when the text shape or the font changed
-    std::wstring shape = text;
+    // AM and PM have different widths. Work on the text without the
+    // designator, so switching between AM and PM doesn't count as a change,
+    // and measure the text with both designators.
+    std::wstring am, pm;
+    GetAmPmDesignators(am, pm);
+
+    auto endsWith = [&](std::wstring const& s) {
+        return !s.empty() && text.size() >= s.size() &&
+               text.compare(text.size() - s.size(), s.size(), s) == 0;
+    };
+
+    std::wstring base = text;
+    bool hasDesignator = false;
+    if (endsWith(am)) {
+        base.resize(text.size() - am.size());
+        hasDesignator = true;
+    } else if (endsWith(pm)) {
+        base.resize(text.size() - pm.size());
+        hasDesignator = true;
+    }
+
+    double limit = Window::Current().Bounds().Width;
+
+    // Only measure again when the text shape, the font or the window changed
+    std::wstring shape = base;
     for (auto& c : shape) if (c >= L'0' && c <= L'9') c = L'#';
-    std::wstring key = shape + L"|" +
+    std::wstring key = shape + (hasDesignator ? L"|ampm|" : L"|") +
                        std::wstring(g_orig.FontFamily().Source().c_str()) + L"|" +
                        std::to_wstring(g_orig.FontSize()) + L"|" +
                        std::to_wstring(g_orig.FontWeight().Weight) + L"|" +
-                       std::to_wstring(g_orig.CharacterSpacing());
+                       std::to_wstring(g_orig.CharacterSpacing()) + L"|" +
+                       std::to_wstring((int)limit);
     if (key == g_widthKey) return;
 
     wchar_t widest = L'0';
@@ -381,13 +415,21 @@ static void StabilizeClockWidth(std::wstring const& text) {
         if (w > best) { best = w; widest = d; }
     }
 
-    std::wstring wide = text;
-    for (auto& c : wide) if (c >= L'0' && c <= L'9') c = widest;
+    for (auto& c : base) if (c >= L'0' && c <= L'9') c = widest;
 
-    double width = MeasureText(g_orig, wide);
-    g_orig.MinWidth(width);
+    double width = MeasureText(g_orig, hasDesignator ? base + am : base);
+    if (hasDesignator) {
+        double widthPm = MeasureText(g_orig, base + pm);
+        if (widthPm > width) width = widthPm;
+    }
+
+    // A clock that already takes up nearly the whole width has no room to
+    // jitter, and forcing a minimum width on it can get it cut off.
+    double applied = (limit > 0 && width > limit * 0.9) ? 0.0 : width;
+    g_orig.MinWidth(applied);
     g_widthKey = key;
-    Wh_Log(L"Clock minimum width set to %d px", (int)width);
+    Wh_Log(L"Clock minimum width set to %d px (widest text %d px, window %d px)",
+           (int)applied, (int)width, (int)limit);
 }
 
 static void ResetClockWidth() {
@@ -420,6 +462,15 @@ static void ApplyClock() {
         }
         if (formatted) StabilizeClockWidth(want);
         else ResetClockWidth();
+
+        // Center the text only while the clock is formatted
+        if (formatted && !g_alignApplied) {
+            g_orig.TextAlignment(TextAlignment::Center);
+            g_alignApplied = true;
+        } else if (!formatted && g_alignApplied) {
+            g_orig.TextAlignment(g_origAlign);
+            g_alignApplied = false;
+        }        
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Failed to set clock: %s", e.message().c_str());
     } catch (...) {
@@ -446,13 +497,17 @@ static void Detach() {
     try {
         if (g_orig) {
             g_orig.UnregisterPropertyChangedCallback(Controls::TextBlock::TextProperty(), g_cbToken);
-            g_orig.LineHeight(0);
-            g_orig.LineStackingStrategy(LineStackingStrategy::MaxHeight);
+            if (g_lineHeightApplied) {
+                g_orig.LineHeight(0);
+                g_orig.LineStackingStrategy(LineStackingStrategy::MaxHeight);
+            }
+            if (g_alignApplied) g_orig.TextAlignment(g_origAlign);
             if (!g_clockOrig.empty()) g_orig.Text(hstring(g_clockOrig));
-            g_orig.MinWidth(0);
-            g_widthKey.clear();
+            ResetClockWidth();
         }
     } catch (...) {}
+    g_lineHeightApplied = false;
+    g_alignApplied = false;
     g_orig = nullptr;
     g_clockOut.clear();
 }
@@ -480,7 +535,8 @@ static void Attach() {
         Controls::TextBlock::TextProperty(),
         [](DependencyObject const&, DependencyProperty const&) { ApplyClock(); });
 
-    orig.TextAlignment(TextAlignment::Center);
+    g_origAlign = orig.TextAlignment();
+    g_alignApplied = false;
     g_dirty = true;  // apply line spacing from the hook
     ApplyClock();
     Wh_Log(L"Clock format attached");
@@ -490,15 +546,18 @@ static void Attach() {
 static void ApplyLineHeight() {
     if (!g_orig) return;
     try {
+        int percent = g_lineHeight;
         bool multiLine = g_clockOut.find(L'\n') != std::wstring::npos;
-        if (g_lineHeight > 0 && multiLine) {
-            double h = g_orig.FontSize() * g_lineHeight / 100.0;
+        if (percent > 0 && multiLine) {
+            double h = g_orig.FontSize() * percent / 100.0;
             g_orig.LineStackingStrategy(LineStackingStrategy::BlockLineHeight);
             g_orig.LineHeight(h);
-            Wh_Log(L"Line spacing applied: %d%% (%d px)", g_lineHeight, (int)h);
-        } else {
+            g_lineHeightApplied = true;
+            Wh_Log(L"Line spacing applied: %d%% (%d px)", percent, (int)h);
+        } else if (g_lineHeightApplied) {
             g_orig.LineHeight(0);
             g_orig.LineStackingStrategy(LineStackingStrategy::MaxHeight);
+            g_lineHeightApplied = false;
             Wh_Log(L"Line spacing reset to font default");
         }
     } catch (winrt::hresult_error const& e) {
@@ -636,29 +695,21 @@ static void AttachDate() {
 // the only place where it is safe to touch XAML objects.
 static LRESULT CALLBACK GetMsgProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code >= 0) {
-        if (g_unloading) {
-            if (!g_detached) {
-                try { Detach(); } catch (...) {}
-                try { DetachDate(); } catch (...) {}
-                g_detached = true;
-            }
-        } else {
-            bool dirty = g_dirty.exchange(false);
-            ULONGLONG now = GetTickCount64();
-            ULONGLONG interval = g_showSeconds ? 200 : 1000;
-            if (dirty || now - g_lastTick > interval) {
-                g_lastTick = now;
-                try {
-                    Attach();
-                    AttachDate();
-                    ApplyClock();
-                    ApplyDate();
-                    if (dirty) ApplyLineHeight();
-                } catch (winrt::hresult_error const& e) {
-                    Wh_Log(L"Hook error: %s", e.message().c_str());
-                } catch (...) {
-                    Wh_Log(L"Hook error: unknown");
-                }
+        bool dirty = g_dirty.exchange(false);
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG interval = g_showSeconds ? 200 : 1000;
+        if (dirty || now - g_lastTick > interval) {
+            g_lastTick = now;
+            try {
+                Attach();
+                AttachDate();
+                ApplyClock();
+                ApplyDate();
+                if (dirty) ApplyLineHeight();
+            } catch (winrt::hresult_error const& e) {
+                Wh_Log(L"Hook error: %s", e.message().c_str());
+            } catch (...) {
+                Wh_Log(L"Hook error: unknown");
             }
         }
     }
@@ -696,39 +747,111 @@ static DWORD WINAPI WorkerThread(void*) {
                 Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
             }
         }
-        if (!g_hook) Sleep(2000);
+        if (!g_hook && WaitForSingleObject(g_stopEvent, 2000) == WAIT_OBJECT_0) break;
     }
     // Periodically wake the UI thread so the hook is guaranteed to run
     while (!g_stop) {
         if (g_uiWnd) PostMessageW(g_uiWnd, WM_NULL, 0, 0);
-        Sleep(g_showSeconds ? 250 : 1000);
+        if (WaitForSingleObject(g_stopEvent, g_showSeconds ? 250 : 1000) == WAIT_OBJECT_0) break;
     }
     return 0;
 }
  
+// Runs proc on the thread that owns hWnd and returns only after it has
+// finished. Based on RunFromWindowThread from the taskbar-labels mod by m417z
+// (GPL-3.0).
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+struct RunFromWindowThreadParam {
+    RunFromWindowThreadProc_t proc;
+    PVOID procParam;
+};
+
+static UINT g_runFromWindowThreadMsg = 0;
+
+static LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode,
+                                                    WPARAM wParam,
+                                                    LPARAM lParam) {
+    if (nCode == HC_ACTION) {
+        const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+        if (cwp->message == g_runFromWindowThreadMsg) {
+            RunFromWindowThreadParam* param =
+                (RunFromWindowThreadParam*)cwp->lParam;
+            param->proc(param->procParam);
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+static bool RunFromWindowThread(HWND hWnd,
+                                RunFromWindowThreadProc_t proc,
+                                PVOID procParam) {
+    if (!g_runFromWindowThreadMsg) {
+        g_runFromWindowThreadMsg =
+            RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    }
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, RunFromWindowThreadHookProc,
+                                  nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RunFromWindowThreadParam param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, g_runFromWindowThreadMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+// Runs on the lock screen's UI thread during unload.
+static void WINAPI TeardownOnUiThread(PVOID) {
+    if (g_hook) {
+        UnhookWindowsHookEx(g_hook);
+        g_hook = nullptr;
+    }
+    Detach();
+    DetachDate();
+}
+
 BOOL Wh_ModInit() {
     LoadSettings();
     g_stop = false;
-    g_unloading = false;
-    g_detached = false;
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) return FALSE;
     g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
     return TRUE;
 }
- 
+
 void Wh_ModUninit() {
     g_stop = true;
+    SetEvent(g_stopEvent);
     if (g_thread) {
-        WaitForSingleObject(g_thread, 3000);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    if (g_hook) {
-        // Ask the UI thread to restore the original clock, then remove the hook
-        g_unloading = true;
-        if (g_uiWnd) PostMessageW(g_uiWnd, WM_NULL, 0, 0);
-        for (int i = 0; i < 20 && !g_detached; i++) Sleep(50);
-        UnhookWindowsHookEx(g_hook);
-        g_hook = nullptr;
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
+
+    if (g_uiWnd) {
+        // Synchronous: returns after the callbacks are removed.
+        if (!RunFromWindowThread(g_uiWnd, TeardownOnUiThread, nullptr)) {
+            Wh_Log(L"Failed to run teardown on the UI thread");
+        }
+        g_uiWnd = nullptr;
     }
 }
  
