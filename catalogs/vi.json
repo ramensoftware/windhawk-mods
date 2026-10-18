@@ -331,7 +331,7 @@
         "ratingUsers": 11,
         "reviews": 0,
         "trendingSorting": 1.673201422682973,
-        "updated": 1790334075000,
+        "updated": 1792310690000,
         "users": 241
       },
       "metadata": {
@@ -348,7 +348,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Agenda in Calendar View",
-        "version": "1.2"
+        "version": "1.3"
       }
     },
     "alt-drag": {
@@ -5235,7 +5235,7 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791874866000,
+        "updated": 1792310677000,
         "users": 27
       },
       "metadata": {
@@ -5243,7 +5243,7 @@
           "x86-64"
         ],
         "author": "youareanimal",
-        "compilerOptions": "-loleacc -lole32 -loleaut32 -luuid",
+        "compilerOptions": "-loleacc -loleaut32 -luuid",
         "description": "Scroll the sheet tab strip with the vertical wheel and switch sheets with the horizontal wheel",
         "github": "https://github.com/youareanimal",
         "homepage": "https://github.com/youareanimal/excel-wheel-scroll-sheets",
@@ -5252,7 +5252,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Excel Wheel Sheet Navigation",
-        "version": "0.5.4"
+        "version": "0.5.5"
       }
     },
     "expanded-clipboard": {
@@ -9029,6 +9029,34 @@
         "license": "MIT",
         "name": "MacOS Minimize Animation",
         "version": "3.1.6"
+      }
+    },
+    "macos-style-dock": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792310686000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792310686000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "amd64"
+        ],
+        "author": "Zach Vaughn",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion -lgdi32 -lshell32 -lshcore -ladvapi32",
+        "description": "Turns the Windows 11 taskbar into a macOS-style dock with magnifying icons",
+        "github": "https://github.com/zachvdev",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "MacOS Style Dock",
+        "version": "1.0"
       }
     },
     "magic-mouse": {
@@ -13216,7 +13244,7 @@
         "ratingUsers": 21,
         "reviews": 0,
         "trendingSorting": 27.9,
-        "updated": 1791954046000,
+        "updated": 1792310681000,
         "users": 279
       },
       "metadata": {
@@ -13229,7 +13257,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "0.5.11"
+        "version": "0.6.0"
       }
     },
     "standard-title-bar-colors": {

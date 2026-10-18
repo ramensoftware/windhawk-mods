@@ -2,12 +2,161 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-18T07:03:12.000Z</updated>
+    <updated>2026-10-18T08:04:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Agenda in Calendar View 1.3]]></title>
+        <id>https://windhawk.net/mods/agenda-in-calendar-view#13f85eac68330eb852c85b4da897c19306ac5ba2</id>
+        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
+        <updated>2026-10-18T08:04:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>⚠️ WARNING: Existing calendar sources will show as empty text in the mod settings, but will still work! This is due to the colour option being added. You can mitigate this by re-uploading your calendar source. </li>
+<li>Added option to set a colour for each calendar source</li>
+<li>Added coloured bars representing how many events are in each day. </li>
+<li>Added option to use the calendar's colour as the border colour for events</li>
+<li>Added option to make the notification pane collapsible</li>
+<li>Added ability to set a custom size for the date picker (e.g. show 3 rows rather than the default 6)</li>
+<li>Converted option to customise position of buttons and position of calendar into individual settings</li>
+</ul>]]></content>
+        <author>
+            <name>lonfro</name>
+            <uri>https://github.com/lonfro</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MacOS Style Dock 1.0]]></title>
+        <id>https://windhawk.net/mods/macos-style-dock#c89ca2c9981682990720394ed651bcc0d5d717d5</id>
+        <link href="https://windhawk.net/mods/macos-style-dock"/>
+        <updated>2026-10-18T08:04:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="macosstyledock">MacOS Style Dock</h1>
+<p>Turns the Windows 11 taskbar into a dock with the look and feel of macOS,
+while it keeps working the way Windows does. It restyles the real taskbar
+rather than replacing it, so pinned apps, jump lists, thumbnails, dragging
+files onto apps and rearranging your apps all work as usual. (Unlike
+"Taskbar Dock Animation", which magnifies the stock taskbar's icons, and "Mac
+Island &amp; Dock", which replaces the taskbar with a separate dock window.)</p>
+<p><img src="https://i.imgur.com/z2GaRW8.gif" alt="The dock in action" /></p>
+<h2 id="thelook">The look</h2>
+<ul>
+<li><strong>A frosted glass dock.</strong> Your icons sit on a rounded plate of blurred,
+tinted glass with a thin edge, floating just above the bottom of the
+screen, in place of the taskbar's flat background. It's dark, light, or
+follows your Windows theme.</li>
+<li><strong>Bigger icons, no boxes.</strong> Icons are shown larger, without the square
+highlight Windows draws behind them on hover or for the active app.</li>
+<li><strong>Sharp at any size.</strong> Icons are loaded at the size they're shown at when
+fully magnified, so they stay crisp as they grow.</li>
+<li><strong>Running indicators.</strong> A small dot under each running app, just above
+the bottom of the dock.</li>
+<li><strong>Dividers.</strong> Thin lines separate Start, Task View and File Explorer from
+your other apps, and your apps from the Recycle Bin.</li>
+<li><strong>A tidier system tray.</strong> The clock, notifications and tray icons on the
+right keep a fixed size and position, with even margins from the screen
+edges, whatever size the dock is.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<ul>
+<li><strong>Magnification.</strong> Icons grow as the pointer passes over them, smoothly
+falling off with distance, and push their neighbors aside. As on a Mac,
+the dock grows from one end: with the pointer right of its middle, its
+left end stays put and its right end moves, and the other way around. The
+dock shrinks back as soon as the pointer leaves it.</li>
+<li><strong>Over your windows.</strong> Maximized windows reach down to the top of the
+dock, and magnified icons rise over them. Windows still keeps the dock's
+own strip of the screen free.</li>
+<li><strong>A fixed order.</strong> Start comes first, then Task View, then File Explorer,
+a divider, and the rest of your apps. Whenever File Explorer is pinned or
+open, it keeps its spot next to the divider and can't be dragged
+elsewhere; your other apps can be rearranged as usual.</li>
+<li><strong>Jump lists in the right place.</strong> Right-click menus open above the icon
+you clicked.</li>
+<li><strong>A Recycle Bin</strong> at the right end of the dock, using Windows' own icon,
+which shows whether it's empty or full. Click it to open it, drag files
+onto it to delete them (they can be restored), or right-click it to open
+or empty it.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Dock Panel:</strong> the size of the icons and dock, and the dock's color
+(System, Dark or Light), tint and blur.</li>
+<li><strong>Magnification:</strong> how much icons grow, how far from the pointer they
+grow, how long the animation takes, and whether icons magnify over
+maximized windows. With that turned off, the space above the dock is kept
+free for magnified icons instead, so maximized windows get a little less
+of the screen.</li>
+<li><strong>Dock Items:</strong> the divider after File Explorer, and the Recycle Bin.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11 only, with the taskbar at the bottom of the screen.</li>
+<li>x64 PCs only for now; ARM64 isn't supported yet.</li>
+<li>The "Small taskbar buttons" setting isn't supported.</li>
+<li>Leave Windows' "Automatically hide the taskbar" setting off. While
+"Magnify over windows" is on, the mod turns it on behind the scenes (and
+keeps the taskbar from hiding), and puts it back as it was when the
+setting or the mod is turned off. If the mod can't put it back, for
+example when Windhawk is uninstalled while Explorer isn't running, turn it
+off yourself in Windows' taskbar settings.</li>
+<li>Icons are loaded at high resolution on Windows 11 with the October 2024
+update (KB5044384) or later. On older builds, magnified icons are blurrier.</li>
+<li>Not designed to be used with other taskbar mods. In particular, it sets
+the taskbar's height and icon size, lays out and animates its icons
+itself, and places their right-click menus, so don't combine it with
+"Taskbar height and icon size", "Taskbar Dock Animation", "Taskbar Dock
+Animation Plus", "Mac Island &amp; Dock", "Taskbar Multirow" or "Start button
+always on the left".</li>
+<li>If Windows' Smart App Control is on, it blocks this mod (as it does all
+Windhawk mods), because the mod is compiled on your PC and isn't signed.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>The taskbar height code is based on m417z's "Taskbar height and icon size"
+mod. The way it handles dragging icons and places right-click menus follows
+his "Taskbar Multirow" mod, and the way it keeps the taskbar shown follows
+his "Taskbar auto-hide when maximized" mod (all GPL-3.0).</p>]]></content>
+        <author>
+            <name>Zach Vaughn</name>
+            <uri>https://github.com/zachvdev</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Spotlight Launcher 0.6.0]]></title>
+        <id>https://windhawk.net/mods/spotlight-launcher#c3497a2ea65f5c7e110ce53dcc52de7012342217</id>
+        <link href="https://windhawk.net/mods/spotlight-launcher"/>
+        <updated>2026-10-18T08:04:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a built-in calculator: type an expression in the search box and the result appears as a highlighted card and/or faintly inline. Enter copies it, and recent results are kept in a reusable history.</li>
+<li>Added soft interface sounds for opening the launcher, opening/closing the details panel, and typing. Everything is generated inside the mod, so it works offline.</li>
+<li>Added a "Live acrylic (real time)" setting: Acrylic, Frosted and Aurora now follow the background in real time, and Glass keeps refreshing its blur. It can be turned off to use a single snapshot taken on open, which is lighter on the CPU and battery.</li>
+<li>The details panel background now animates together with the panel as it opens and closes.</li>
+<li>Softened the tint of the Acrylic, Frosted, Aurora and Mica effects.</li>
+<li>The Glass effect now follows the "Live acrylic" setting (single static capture when it is disabled).</li>
+<li>Rewrote every setting description and the README in clearer, plain language.</li>
+</ul>]]></content>
+        <author>
+            <name>David Ravelo</name>
+            <uri>https://github.com/DavidRaveloU</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Excel Wheel Sheet Navigation 0.5.5]]></title>
+        <id>https://windhawk.net/mods/excel-wheel-scroll-sheets#a1192df55b11e15c592ee5068b7d040963626c26</id>
+        <link href="https://windhawk.net/mods/excel-wheel-scroll-sheets"/>
+        <updated>2026-10-18T08:04:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Lower the horizontal gesture quiet-period default and minimum to 50 ms; keep the maximum at 2000 ms and retain saved user values.</li>
+<li>Preserve horizontal input when Excel is busy or sheet activation fails, including buffered partial deltas, and pass the rest of a failed gesture through to Excel.</li>
+<li>Explain WPS-style navigation, horizontal input devices and the bottom-area exception in the English README; retain Chinese settings localization.</li>
+<li>Remove verified redundant code and unused optional callbacks/link dependency.</li>
+</ul>]]></content>
+        <author>
+            <name>youareanimal</name>
+            <uri>https://github.com/youareanimal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mawaqit Prayer Clock 0.7.0]]></title>
         <id>https://windhawk.net/mods/windhawk-mawaqit#bc310266006121c510512d69b92d4fdfd1dfc2a8</id>
@@ -603,108 +752,6 @@ states. The current version is intentionally focused on that workflow.</p>
         <author>
             <name>SilverAmd</name>
             <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer List Zebra Stripes 0.14.2]]></title>
-        <id>https://windhawk.net/mods/explorer-zebra-stripes#db6755f00eeee9b78c6d519b40d2bbf7f0b7ccf9</id>
-        <link href="https://windhawk.net/mods/explorer-zebra-stripes"/>
-        <updated>2026-10-16T16:00:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Make the zebra stripes anti aliased</li>
-<li>Fix a bug where scrolling with trackpad leads to flicking of stripes due to item recycling. This is done by caching stripe indices.</li>
-<li>Make the mod lazy load so as not to slow down explorer.exe from starting</li>
-</ul>]]></content>
-        <author>
-            <name>DarkionAvey</name>
-            <uri>https://github.com/DarkionAvey</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Properties Button 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-properties-button#032e419e893a9668ecd3624d7a71293d8a1f58c6</id>
-        <link href="https://windhawk.net/mods/explorer-properties-button"/>
-        <updated>2026-10-16T14:01:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerpropertiesbutton">Explorer Properties Button</h1>
-<p><img src="https://raw.githubusercontent.com/AnnAngela/windhawk-mods/main/explorer-properties-button/screenshot.png" alt="Explorer Properties Button" /></p>
-<p>Adds a <strong>Properties</strong> button to the Windows 11 File Explorer command bar,
-between the <strong>Delete</strong> and <strong>Sort</strong> buttons. Clicking it opens the properties
-dialog of the current selection:</p>
-<ul>
-<li><strong>Multiple selection</strong> - opens the combined properties dialog, just like
-the context menu's Properties entry.</li>
-<li><strong>Virtual locations</strong> - This PC, Recycle Bin, Quick Access and other items
-without a filesystem path work too.</li>
-<li><strong>No selection</strong> (configurable) - shows the properties of the current
-folder, or does nothing.</li>
-</ul>
-<p>The dialog opens via fast shell APIs (SHObjectProperties /
-SHMultiFileProperties) without building the shell context menu, so it appears
-without the delay that loading shell extensions would add. The context-menu
-properties verb is only used as a fallback for exotic locations.</p>
-<h1 id="systemrequirements">System requirements</h1>
-<p>Windows 11 24H2 / 25H2 or newer, with the WinAppSDK (WinUI 3) File Explorer
-command bar. Older versions (Windows 10, Windows 11 23H2 and earlier) use a
-completely different command bar; the mod stays silently disabled there.</p>
-<h1 id="howitworks">How it works</h1>
-<p>The mod hooks a couple of functions of File Explorer's own WinUI 3 code
-(FileExplorerExtensions.dll), gets the command bar from there, and inserts a
-WinRT-constructed AppBarButton into its PrimaryCommands. The button survives
-tab switches, navigation and new windows, and is cleanly removed when the mod
-is disabled. Clicks drive the shell lookups from a worker thread, so the
-Explorer UI stays responsive.</p>
-<p>File Explorer windows which were already open when the mod is enabled are
-handled too, but if the button doesn't show up in one of them right away,
-opening a new tab or navigating to another folder makes it appear.</p>
-<p>Implementation follows the Explorer Command Bar mod by DanRotaru from the
-official windhawk-mods repository.</p>
-<hr />
-<h1 id="">资源管理器属性按钮（中文说明）</h1>
-<p>在 Windows 11 文件资源管理器的命令栏（工具栏）上，"删除"和"排序"按钮之间添加一个"属性"按钮，点击后打开当前选中项目的属性对话框：</p>
-<ul>
-<li>支持多选：多选时与右键菜单里的"属性"一样，打开合并的属性对话框。</li>
-<li>支持虚拟位置：此电脑、回收站、Quick Access 等没有文件系统路径的项目也能正确打开属性。</li>
-<li>没有选中项时（可配置）：显示当前文件夹的属性，或什么都不做。</li>
-</ul>
-<p>属性对话框通过快速 Shell API（SHObjectProperties / SHMultiFileProperties）直接打开，不构建右键菜单，避免了加载 shell 扩展带来的延迟；右键菜单的"属性"动词仅作为特殊位置的兜底。</p>
-<h1 id="-1">系统要求</h1>
-<p>适用于 Windows 11 24H2 / 25H2 及以上使用 WinAppSDK (WinUI 3) 命令栏的文件资源管理器。旧版本（Windows 10、Windows 11 23H2 及更早）使用完全不同的命令栏实现，本 mod 会在其中安静地保持不启用状态。</p>
-<h1 id="-2">工作原理</h1>
-<p>本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入 PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时被干净移除。点击的 Shell 查询由独立工作线程驱动，资源管理器界面保持响应。</p>
-<p>启用本 mod 时已经打开的文件资源管理器窗口也会被处理；若某个已有窗口中按钮没有立即出现，打开一个新标签页或导航到其他文件夹即可让它出现。</p>
-<p>实现参考了官方仓库的 Explorer Command Bar mod（DanRotaru），在此致谢。</p>]]></content>
-        <author>
-            <name>AnnAngela</name>
-            <uri>https://github.com/AnnAngela</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.4.0]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a4c44e19cf76a635b3ecddac529fcdf1e83615ea</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-10-16T13:05:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improve compatibility with 26H2</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Coin & Stock Monitor 1.2.1]]></title>
-        <id>https://windhawk.net/mods/coin-stock-monitor#0e077339c6b1504dc9943f5ed14b7b311baac2de</id>
-        <link href="https://windhawk.net/mods/coin-stock-monitor"/>
-        <updated>2026-10-16T13:05:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><code>Symbols</code> and <code>EntryPrices</code> are documented with <code>|</code> as the separator. Lists saved with commas by older versions still work.</li>
-<li>Entry prices use <code>.</code> as the decimal separator. A comma is accepted only as a thousands separator, followed by exactly three digits, so <code>12,005</code> means <code>12005</code> and <code>0,45</code> is rejected.</li>
-<li>Numbers are parsed with the classic locale, so the result does not depend on the regional settings of the system.</li>
-<li>Fixes a wrong percentage change when an entry price had a comma.</li>
-</ul>]]></content>
-        <author>
-            <name>jayll1303</name>
-            <uri>https://github.com/jayll1303</uri>
         </author>
     </entry>
 </feed>

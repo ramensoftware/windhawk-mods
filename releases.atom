@@ -2,12 +2,107 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-17T15:03:32.000Z</updated>
+    <updated>2026-10-18T08:04:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Style Dock 1.0]]></title>
+        <id>https://windhawk.net/mods/macos-style-dock#c89ca2c9981682990720394ed651bcc0d5d717d5</id>
+        <link href="https://windhawk.net/mods/macos-style-dock"/>
+        <updated>2026-10-18T08:04:46.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="macosstyledock">MacOS Style Dock</h1>
+<p>Turns the Windows 11 taskbar into a dock with the look and feel of macOS,
+while it keeps working the way Windows does. It restyles the real taskbar
+rather than replacing it, so pinned apps, jump lists, thumbnails, dragging
+files onto apps and rearranging your apps all work as usual. (Unlike
+"Taskbar Dock Animation", which magnifies the stock taskbar's icons, and "Mac
+Island &amp; Dock", which replaces the taskbar with a separate dock window.)</p>
+<p><img src="https://i.imgur.com/z2GaRW8.gif" alt="The dock in action" /></p>
+<h2 id="thelook">The look</h2>
+<ul>
+<li><strong>A frosted glass dock.</strong> Your icons sit on a rounded plate of blurred,
+tinted glass with a thin edge, floating just above the bottom of the
+screen, in place of the taskbar's flat background. It's dark, light, or
+follows your Windows theme.</li>
+<li><strong>Bigger icons, no boxes.</strong> Icons are shown larger, without the square
+highlight Windows draws behind them on hover or for the active app.</li>
+<li><strong>Sharp at any size.</strong> Icons are loaded at the size they're shown at when
+fully magnified, so they stay crisp as they grow.</li>
+<li><strong>Running indicators.</strong> A small dot under each running app, just above
+the bottom of the dock.</li>
+<li><strong>Dividers.</strong> Thin lines separate Start, Task View and File Explorer from
+your other apps, and your apps from the Recycle Bin.</li>
+<li><strong>A tidier system tray.</strong> The clock, notifications and tray icons on the
+right keep a fixed size and position, with even margins from the screen
+edges, whatever size the dock is.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<ul>
+<li><strong>Magnification.</strong> Icons grow as the pointer passes over them, smoothly
+falling off with distance, and push their neighbors aside. As on a Mac,
+the dock grows from one end: with the pointer right of its middle, its
+left end stays put and its right end moves, and the other way around. The
+dock shrinks back as soon as the pointer leaves it.</li>
+<li><strong>Over your windows.</strong> Maximized windows reach down to the top of the
+dock, and magnified icons rise over them. Windows still keeps the dock's
+own strip of the screen free.</li>
+<li><strong>A fixed order.</strong> Start comes first, then Task View, then File Explorer,
+a divider, and the rest of your apps. Whenever File Explorer is pinned or
+open, it keeps its spot next to the divider and can't be dragged
+elsewhere; your other apps can be rearranged as usual.</li>
+<li><strong>Jump lists in the right place.</strong> Right-click menus open above the icon
+you clicked.</li>
+<li><strong>A Recycle Bin</strong> at the right end of the dock, using Windows' own icon,
+which shows whether it's empty or full. Click it to open it, drag files
+onto it to delete them (they can be restored), or right-click it to open
+or empty it.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Dock Panel:</strong> the size of the icons and dock, and the dock's color
+(System, Dark or Light), tint and blur.</li>
+<li><strong>Magnification:</strong> how much icons grow, how far from the pointer they
+grow, how long the animation takes, and whether icons magnify over
+maximized windows. With that turned off, the space above the dock is kept
+free for magnified icons instead, so maximized windows get a little less
+of the screen.</li>
+<li><strong>Dock Items:</strong> the divider after File Explorer, and the Recycle Bin.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11 only, with the taskbar at the bottom of the screen.</li>
+<li>x64 PCs only for now; ARM64 isn't supported yet.</li>
+<li>The "Small taskbar buttons" setting isn't supported.</li>
+<li>Leave Windows' "Automatically hide the taskbar" setting off. While
+"Magnify over windows" is on, the mod turns it on behind the scenes (and
+keeps the taskbar from hiding), and puts it back as it was when the
+setting or the mod is turned off. If the mod can't put it back, for
+example when Windhawk is uninstalled while Explorer isn't running, turn it
+off yourself in Windows' taskbar settings.</li>
+<li>Icons are loaded at high resolution on Windows 11 with the October 2024
+update (KB5044384) or later. On older builds, magnified icons are blurrier.</li>
+<li>Not designed to be used with other taskbar mods. In particular, it sets
+the taskbar's height and icon size, lays out and animates its icons
+itself, and places their right-click menus, so don't combine it with
+"Taskbar height and icon size", "Taskbar Dock Animation", "Taskbar Dock
+Animation Plus", "Mac Island &amp; Dock", "Taskbar Multirow" or "Start button
+always on the left".</li>
+<li>If Windows' Smart App Control is on, it blocks this mod (as it does all
+Windhawk mods), because the mod is compiled on your PC and isn't signed.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>The taskbar height code is based on m417z's "Taskbar height and icon size"
+mod. The way it handles dragging icons and places right-click menus follows
+his "Taskbar Multirow" mod, and the way it keeps the taskbar shown follows
+his "Taskbar auto-hide when maximized" mod (all GPL-3.0).</p>]]></content>
+        <author>
+            <name>Zach Vaughn</name>
+            <uri>https://github.com/zachvdev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[CoverTabby 0.22.14]]></title>
         <id>https://windhawk.net/mods/covertabby#6b46d57fa8fbd627be560ae6df9125d71e8dd39c</id>
@@ -1168,45 +1263,6 @@ so place more specific rules before general ones.</p>]]></content>
         <author>
             <name>Dev-StudioCode</name>
             <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 10 1507 Search Pane Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-1507-rtm-search-recreation#1acd570f98ddc79496b4f4e320e7e022f19f771c</id>
-        <link href="https://windhawk.net/mods/win10-1507-rtm-search-recreation"/>
-        <updated>2026-10-14T14:02:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows101507searchpane">Windows 10 1507 Search Pane</h1>
-<p>This mod provides a recreation of the Windows 10 1507 search pane experience in a standalone, DPI-aware window running in a dedicated tool process.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/refs/heads/main/win10search.png" alt="Windows 10 Search" /></p>
-<h2 id="whatthismoddoes">What this mod does</h2>
-<ul>
-<li>Provides a Home surface, a local Start-menu shortcut catalog, a searchable Settings category browser, and an optional Web search action.</li>
-<li>Search-only: it does not replace or draw the Start menu, and does not alter Cortana or the native search index.</li>
-<li>The Home, AllApps, and Settings icons use Segoe MDL2 Assets glyphs (Home U+E80F, AllApps U+E71D, Settings U+E713) rendered with GDI+. Application shortcut icons use Shell icon extraction.</li>
-<li>With <code>overTaskbar</code> enabled, a dedicated overlay window sits seamlessly over the taskbar search box while the search pane rests above the work area, matching the Windows 10 look and feel.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><code>searchHotkey</code>: Enables the fallback Ctrl+Alt+S shortcut (disabled by default because Ctrl+Alt conflicts with AltGr on international layouts like Polish AltGr+S and with application shortcuts such as JetBrains Settings).</li>
-<li><code>webSearch</code>: Shows or hides the Web footer action. When disabled, My stuff uses the full footer width.</li>
-<li><code>interceptSearch</code>: When enabled, clicking the taskbar search button/box or pressing Win+S / Win+Q opens this pane instead of Windows Search.</li>
-<li><code>overTaskbar</code>: Places a themed search bar overlay over the native taskbar search box while keeping the main search pane above the taskbar work area.</li>
-</ul>
-<h2 id="scopeandlimitations">Scope and limitations</h2>
-<ul>
-<li>The app catalog indexes Start-menu shortcuts; full file content indexing and UWP package enumeration are not included.</li>
-<li>The mod targets the Windows 10 1507 search interface design.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>AdmnistratoX - Technical inspiration</li>
-<li>m417z - Technical inspiration </li>
-<li>Microsoft - Documentation</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
