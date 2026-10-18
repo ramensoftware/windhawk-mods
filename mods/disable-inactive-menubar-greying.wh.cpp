@@ -34,12 +34,6 @@ thread_local bool found=false;
 // (COLOR_BTNSHADOW), а не просто "выглядит серым".
 bool IsGreyedColor(COLORREF color, COLORREF menuTextColor, COLORREF grayTextColor)
 {
-    // Отсекаем PALETTERGB/PALETTEINDEX - ненулевой старший байт.
-    // Настоящий менюбар всегда получает цвет через GetSysColor,
-    // где старший байт всегда нулевой.
-    if ((color & 0xFF000000) != 0)
-        return false;
-
     // Сравниваем с реальным системным цветом "затенённого" текста,
     // а не с жёстко заданной серой палитрой - он может быть любым
     // в зависимости от цветовой схемы.
