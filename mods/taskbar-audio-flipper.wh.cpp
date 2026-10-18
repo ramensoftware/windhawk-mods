@@ -3092,7 +3092,6 @@ struct Settings {
         saved = Storage::SetInt(L"ShowInput", showInput) && saved;
         saved = Storage::SetInt(L"ShowWebcam", showWebcam) && saved;
         saved = Storage::SetInt(L"TaskbarOffset", taskbarOffset) && saved;
-        Storage::Delete(L"IconStyle");  // There was a choice of icons before.
         saved = Storage::SetString(L"WebcamId", webcamId) && saved;
         saved = Storage::SetString(L"WebcamName", webcamName) && saved;
         saved = Storage::SetString(L"Excluded", Join(excluded, L"\n")) && saved;
