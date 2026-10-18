@@ -1199,7 +1199,21 @@ struct WindowEntry {
     bool isDesktopItem = false;
 };
 struct Settings {
-    WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR scrollWheelAction[32]; WCHAR scrollSecondaryAction[32]; WCHAR scrollSecondaryModifier[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR altBacktickBehavior[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
+    WCHAR theme[32];
+    WCHAR colorScheme[32];
+    WCHAR cornerPreference[32];
+    WCHAR scrollWheelBehavior[32];
+    WCHAR scrollWheelAction[32];
+    WCHAR scrollSecondaryAction[32];
+    WCHAR scrollSecondaryModifier[32];
+    WCHAR taskListOrientation[32];
+    WCHAR headerContentOrientation[32];
+    WCHAR iconSize[32];
+    WCHAR backwardShortcut[32];
+    WCHAR altBacktickBehavior[32];
+    WCHAR thumbnailPosition[32];
+    WCHAR thumbnailAlignment[32];
+    WCHAR switcherDisplayBehavior[32];
     WCHAR virtualDesktopBehavior[32];
     WCHAR backdropBlurEffect[32];
     int backdropBlurOpacity;
@@ -1237,7 +1251,12 @@ struct Settings {
     int badgeSwitcherPadding;
     int dockSwitcherPadding;
     int entryPadding;
-    bool perMonitorWindows; bool taskRoundedCorners; bool roundThumbnailCorners; bool roundGroupIndicator; bool roundBadgeIconBackground; bool reverseScrollDirection;
+    bool perMonitorWindows;
+    bool taskRoundedCorners;
+    bool roundThumbnailCorners;
+    bool roundGroupIndicator;
+    bool roundBadgeIconBackground;
+    bool reverseScrollDirection;
     bool centerTaskContent;
     bool showApplications;
     WCHAR showTitles[32];
