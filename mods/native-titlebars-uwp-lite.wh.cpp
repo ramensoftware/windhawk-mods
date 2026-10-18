@@ -7,7 +7,7 @@
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lpropsys -lgdiplus
+// @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -25,7 +25,6 @@ Replaces the UWP titlebars with native Win32 titlebars.
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <propsys.h>
-#include <propkey.h>
 #include <shlobj.h>
 #include <gdiplus.h>
 #include <vector>
@@ -388,8 +387,8 @@ HWND WINAPI CreateWindowInBandEx_hook(
     }
 
     dwExStyle &= ~WS_EX_DLGMODALFRAME;
-    dwExStyle &= ~0x00200000L;
-    dwStyle = WS_OVERLAPPEDWINDOW | WS_DLGFRAME;
+    dwExStyle &= ~WS_EX_NOREDIRECTIONBITMAP;
+    dwStyle = WS_OVERLAPPEDWINDOW;
 
     HWND res = CreateWindowInBandEx_orig(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
@@ -418,7 +417,7 @@ HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
 
     if (wcscmp(wszClassName, L"ApplicationFrameWindow") == 0)
     {
-        return 0x80263001;
+        return 0x80263001; // DWM_E_COMPOSITIONDISABLED
     }
 
     return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
