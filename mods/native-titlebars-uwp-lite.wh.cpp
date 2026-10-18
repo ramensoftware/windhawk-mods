@@ -2,7 +2,7 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars
 // @description     Enables native titlebars in UWP apps
-// @version         2.0
+// @version         2.0.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
@@ -15,7 +15,7 @@
 
 Replaces the UWP titlebars with native Win32 titlebars.
 
-![Screenshot](https://i.imgur.com/oeCYWJY.png)
+![Screenshot](https://i.imgur.com/w5OqyJJ.png)
 
 */
 // ==/WindhawkModReadme==
