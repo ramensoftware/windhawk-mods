@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         GPL-3.0-only
-// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lgdi32 -lversion -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lgdi32 -lversion -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -49,8 +49,10 @@ single icon update, at the same moment it would have received Explorer's own
 icon, and the generic folder icon never appears in between. A newly opened
 window gets its preview before it is shown for the first time.
 
-Previews come from an in-memory cache, from the mod's own disk cache
-(`%LOCALAPPDATA%\WindhawkFolderThumbs`) or from the Windows thumbnail cache.
+Previews come from an in-memory cache, from the mod's own disk cache or from
+the Windows thumbnail cache. The disk cache is kept in the mod's Windhawk
+storage, in a folder which only your account can open, and is removed together
+with the mod.
 When a preview is in none of them, the button keeps Explorer's own folder icon
 and the preview is rendered in the background, usually within a fraction of a
 second, and then saved for next time.
@@ -105,6 +107,7 @@ reboot, and the old ones are discarded once there are too many of them.
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <exdisp.h>
+#include <sddl.h>
 
 #include <algorithm>
 #include <atomic>
@@ -128,7 +131,10 @@ static const LONG kNotifyEvents = SHCNE_CREATE | SHCNE_DELETE |
                                   SHCNE_RENAMEITEM | SHCNE_UPDATEITEM |
                                   SHCNE_UPDATEDIR | SHCNE_MKDIR | SHCNE_RMDIR;
 
+// Messages to the mod's worker window.
 static const UINT kMsgRenderJobs = WM_APP + 1;
+static const UINT kMsgWindowGone = WM_APP + 2;   // wParam: the closed window
+static const UINT kMsgCheckWindow = WM_APP + 3;  // wParam: window to resolve
 static const UINT kNotifyMsgFirst = WM_APP + 0x100;
 static const UINT kNotifyMsgLast = 0xBFFF;
 
@@ -457,18 +463,71 @@ static std::wstring CacheFileFor(const std::wstring& key) {
     return g_cacheDir + L"\\" + name;
 }
 
+static std::wstring CurrentUserSid() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return {};
+    }
+
+    std::wstring result;
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> buffer(size);
+    if (size &&
+        GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+        PWSTR sid = nullptr;
+        auto* user = reinterpret_cast<TOKEN_USER*>(buffer.data());
+        if (ConvertSidToStringSidW(user->User.Sid, &sid)) {
+            result = sid;
+            LocalFree(sid);
+        }
+    }
+    CloseHandle(token);
+    return result;
+}
+
+// The cache lives in the mod's own Windhawk storage, which Windhawk removes
+// together with the mod. That storage is shared by every account on the PC,
+// while a preview shows what is inside one user's folders, so each account
+// gets its own subfolder which only that account (and SYSTEM) can open.
+// Without a usable folder the disk cache is simply off.
 static void InitCacheDir() {
-    PWSTR localAppData = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr,
-                                    &localAppData))) {
+    WCHAR storage[MAX_PATH];
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
         return;
     }
-    std::wstring dir = std::wstring(localAppData) + L"\\WindhawkFolderThumbs";
-    CoTaskMemFree(localAppData);
 
-    CreateDirectoryW(dir.c_str(), nullptr);
-    if (GetFileAttributesW(dir.c_str()) != INVALID_FILE_ATTRIBUTES) {
+    const std::wstring sid = CurrentUserSid();
+    if (sid.empty()) {
+        return;
+    }
+
+    int created = SHCreateDirectoryExW(nullptr, storage, nullptr);
+    if (created != ERROR_SUCCESS && created != ERROR_ALREADY_EXISTS &&
+        created != ERROR_FILE_EXISTS) {
+        return;
+    }
+
+    const std::wstring sddl = L"D:P(A;OICI;FA;;;" + sid + L")(A;OICI;FA;;;SY)";
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) {
+        return;
+    }
+
+    const std::wstring dir = std::wstring(storage) + L"\\" + sid;
+    SECURITY_ATTRIBUTES sa{sizeof(sa), sd, FALSE};
+    bool ok = CreateDirectoryW(dir.c_str(), &sa);
+    if (!ok && GetLastError() == ERROR_ALREADY_EXISTS) {
+        // Make sure the folder still admits this account alone.
+        ok = SetFileSecurityW(dir.c_str(), DACL_SECURITY_INFORMATION, sd);
+    }
+    LocalFree(sd);
+
+    if (ok) {
         g_cacheDir = dir;
+    } else {
+        Wh_Log(L"No private cache folder, the disk cache is off");
     }
 }
 
@@ -1042,49 +1101,11 @@ static IShellBrowser* GetShellBrowserSync(HWND hwnd) {
     return sb;
 }
 
-static bool GetActiveFolder(IWebBrowser2* wb, HWND top,
-                            PIDLIST_ABSOLUTE* pidlOut);
-
-// Fallback: the shell's window list. The window's own browser objects are
-// still called from this thread; only the list itself is remote.
-static bool GetFolderFromShellWindowsSync(HWND hwnd, PIDLIST_ABSOLUTE* pidl) {
-    ComPtr<IShellWindows> shellWindows;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
-                                IID_PPV_ARGS(shellWindows.put())))) {
-        return false;
-    }
-
-    long count = 0;
-    if (FAILED(shellWindows->get_Count(&count))) {
-        return false;
-    }
-
-    for (long i = 0; i < count; i++) {
-        VARIANT idx;
-        VariantInit(&idx);
-        idx.vt = VT_I4;
-        idx.lVal = i;
-
-        ComPtr<IDispatch> disp;
-        if (shellWindows->Item(idx, disp.put()) != S_OK || !disp) {
-            continue;
-        }
-        ComPtr<IWebBrowser2> wb;
-        if (FAILED(disp->QueryInterface(IID_PPV_ARGS(wb.put())))) {
-            continue;
-        }
-        SHANDLE_PTR h = 0;
-        if (FAILED(wb->get_HWND(&h)) || reinterpret_cast<HWND>(h) != hwnd) {
-            continue;
-        }
-        if (GetActiveFolder(wb.get(), hwnd, pidl)) {
-            LogResolveOnce(4, L"shell windows list");
-            return true;
-        }
-    }
-    return false;
-}
-
+// Only the direct lookup runs here. Asking the shell's window list from this
+// thread would make COM calls into every other Explorer window's thread, and
+// pump messages in the middle of Explorer's own navigation code. A window
+// this can't resolve is retried after the navigation step (PostRecheck), and
+// then handed to the worker, which uses the window list off the UI thread.
 static bool ResolveFolderSync(HWND hwnd, std::wstring* path,
                               PIDLIST_ABSOLUTE* pidl) {
     if (GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) {
@@ -1093,9 +1114,7 @@ static bool ResolveFolderSync(HWND hwnd, std::wstring* path,
 
     *pidl = nullptr;
     IShellBrowser* sb = GetShellBrowserSync(hwnd);
-    if (!(sb && GetBrowserFolder(sb, pidl)) &&
-        !GetFolderFromShellWindowsSync(hwnd, pidl)) {
-        LogResolveOnce(8, L"FAILED, falling back to the worker");
+    if (!sb || !GetBrowserFolder(sb, pidl)) {
         return false;
     }
 
@@ -1106,6 +1125,14 @@ static bool ResolveFolderSync(HWND hwnd, std::wstring* path,
         return false;
     }
     return true;
+}
+
+// The last resort for a window the direct lookup can't resolve.
+static void HandToWorker(HWND hwnd) {
+    LogResolveOnce(8, L"direct lookup failed, the worker resolves the window");
+    if (HWND worker = g_workerWnd.load()) {
+        PostMessageW(worker, kMsgCheckWindow, reinterpret_cast<WPARAM>(hwnd), 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1206,11 +1233,12 @@ static HICON UpdateSync(HWND hwnd, std::wstring* pathOut) {
 }
 
 // Applies whatever the instant path found. Called from the window procedure.
-static void TryApplySync(HWND hwnd) {
+// Returns false when the window's folder could not be found.
+static bool TryApplySync(HWND hwnd) {
     std::wstring path;
     HICON icon = UpdateSync(hwnd, &path);
     if (path.empty()) {
-        return;
+        return false;
     }
 
     const std::wstring shown = ShownPath(hwnd);
@@ -1229,6 +1257,7 @@ static void TryApplySync(HWND hwnd) {
         RestoreWindowIcons(hwnd, /*shuttingDown=*/false);
     }
     g_inSync = false;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1316,6 +1345,11 @@ static LRESULT CALLBACK FrameSubclassProc(HWND hwnd,
                                           DWORD_PTR refData) {
     if (msg == WM_NCDESTROY) {
         DropWindow(hwnd);
+        // The worker drops its folder change registration for this window.
+        if (HWND worker = g_workerWnd.load()) {
+            PostMessageW(worker, kMsgWindowGone, reinterpret_cast<WPARAM>(hwnd),
+                         0);
+        }
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
@@ -1332,8 +1366,9 @@ static LRESULT CALLBACK FrameSubclassProc(HWND hwnd,
         g_recheckPending.erase(hwnd);
         g_resolveMemo.erase(hwnd);  // the navigation has finished by now
         ReleaseSRWLockExclusive(&g_lock);
-        if (!g_inSync && g_enabled.load(std::memory_order_relaxed)) {
-            TryApplySync(hwnd);
+        if (!g_inSync && g_enabled.load(std::memory_order_relaxed) &&
+            !TryApplySync(hwnd)) {
+            HandToWorker(hwnd);
         }
         return 0;
     }
@@ -1395,7 +1430,9 @@ static BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
         // Before the taskbar button exists: take over the window's icon
         // changes and put the preview on it straight away.
         EnsureSubclassed(hwnd);
-        TryApplySync(hwnd);
+        if (!TryApplySync(hwnd)) {
+            PostRecheck(hwnd);
+        }
     }
     return ShowWindow_Original(hwnd, cmd);
 }
@@ -1722,6 +1759,10 @@ static void ApplyIconAsync(HWND hwnd, HICON icon, const std::wstring& path) {
 }
 
 static void ForgetWindowState(HWND hwnd) {
+    // Also for a window which was scheduled but never resolved, and so has
+    // no entry in g_windows.
+    g_pending.erase(hwnd);
+
     auto it = g_windows.find(hwnd);
     if (it == g_windows.end()) {
         return;
@@ -1733,7 +1774,6 @@ static void ForgetWindowState(HWND hwnd) {
         g_notifyMsgToHwnd.erase(it->second.notifyMsg);
     }
     g_windows.erase(it);
-    g_pending.erase(hwnd);
 }
 
 static void UpdateExplorerWindow(const FoundWindow& f, bool forceRender) {
@@ -1922,6 +1962,19 @@ static LRESULT CALLBACK WorkerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         return 0;
     }
 
+    if (msg == kMsgWindowGone) {
+        ForgetWindowState(reinterpret_cast<HWND>(wParam));
+        return 0;
+    }
+
+    if (msg == kMsgCheckWindow) {
+        HWND hwnd = reinterpret_cast<HWND>(wParam);
+        if (IsWindow(hwnd)) {
+            Schedule(hwnd, 0, false, 0);
+        }
+        return 0;
+    }
+
     auto it = g_notifyMsgToHwnd.find(msg);
     if (it != g_notifyMsgToHwnd.end()) {
         PIDLIST_ABSOLUTE* pidls = nullptr;
@@ -1970,8 +2023,9 @@ static void ProcessDue() {
             continue;
         }
         if (!IsWindow(it->first)) {
-            ForgetWindowState(it->first);
-            it = g_pending.begin();
+            HWND gone = it->first;
+            it = g_pending.erase(it);
+            ForgetWindowState(gone);
             continue;
         }
         due[it->first] = it->second.forceRender;
