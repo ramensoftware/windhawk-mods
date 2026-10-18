@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              dense-tray-icons-padding-old-taskbar
 // @name            Adjustable tray icons padding for Win10 taskbar
-// @description     Makes padding of tray icons adjustable in legacy taskbar
+// @description     Makes padding of tray and tray popup icons adjustable in legacy taskbar
 // @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
