@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              music-dynamic-island
-// @name            Music Dynamic Island 
+// @name            Music Dynamic Island
 // @description     Music Dynamic Island inspired by iPhone's one and Matcha external music player
 // @version         1.1.0
 // @author          MrsWorthless
@@ -13,6 +13,34 @@
 /*
 # Music Dynamic Island
 A smooth, DPI-aware desktop music island inspired by the iPhone Dynamic Island and the Matcha external music player. It features an atmospheric blurred album-art mesh backdrop, an expandable bottom lyrics drawer, and a full two-column Apple Music / Matcha studio view with word-by-word karaoke lyric illumination.
+
+![Music Dynamic Island Preview 1](https://raw.githubusercontent.com/MrsWorthless/readmeformymod/main/%7B27040A61-1818-46B1-B8E0-B560DE82D1B7%7D.png)
+
+![Music Dynamic Island Preview 2](https://raw.githubusercontent.com/MrsWorthless/readmeformymod/main/%7B42F674E6-B4D2-4FEB-A44D-9534B13EAB01%7D.png)
+
+![Music Dynamic Island Preview 3](https://raw.githubusercontent.com/MrsWorthless/readmeformymod/main/%7B7C216C03-18F7-4D11-960E-AA5F8EF8FC03%7D.png)
+
+![Music Dynamic Island Preview 4](https://raw.githubusercontent.com/MrsWorthless/readmeformymod/main/%7BB80392C3-C7B7-44A6-89BD-257CFD4C0972%7D.png)
+
+![Music Dynamic Island Preview 5](https://raw.githubusercontent.com/MrsWorthless/readmeformymod/main/%7BEDA3C7C4-3684-4C6F-87B1-482695371F50%7D.png)
+
+## Views & Features
+* **Compact Pill:** Displays mini album art, auto-scrolling marquee track title, and a 5-band WASAPI audio-reactive visualizer.
+* **Normal Expanded Card:** Hover over the pill to reveal album art, `Artist — Album` subtitle, an interactive seek bar with elapsed (`0:00`) and remaining (`-2:46`) timestamps, transport controls, and a dedicated **bottom lyrics drawer** that opens downward below the card.
+* **Full Studio View:** Click the bottom-left expand icon (`⤢`) to morph into the full two-column studio player with large artwork, transport controls on the left, and a multi-line scrolling word-by-word karaoke lyrics theatre on the right.
+
+## Controls & Shortcuts
+* **Hover:** Expands the compact pill into the normal media card.
+* **Click / Drag Seek Bar:** Scrubs the song timeline live and seeks on release.
+* **Click Any Lyric Line:** In both the normal bottom drawer (next line) and Full Studio View, clicking a lyric line jumps playback directly to that timestamp.
+* **Drag Studio Window:** In Full Studio View, drag anywhere on the glass background to reposition the window (its position is remembered and clamped to your monitor work area). Closing Studio View glides the island back to its standard top-center position.
+* **`Ctrl + F12` (or bare `F12`):** Hides or shows the island globally. By default `Ctrl + F12` is used so bare `F12` still opens browser DevTools. (If you disable `Require Ctrl for F12 Hide Hotkey` in settings, bare `F12` is registered system-wide and will not reach other apps.)
+* **Hold `Ctrl + Shift`:** Temporarily makes the island click-through (`WS_EX_TRANSPARENT`) so you can click windows underneath it.
+* **Fullscreen Auto-Hide:** Automatically hides when a fullscreen game or video application is active (`Auto-Hide in Fullscreen Apps` setting).
+
+## Synced Lyrics: Local `.lrc` Files & Opt-In Online Lookup
+* **Local `.lrc` Folder (Offline):** You can set a local folder path in the mod settings (`Local .lrc Folder`) containing time-synced `.lrc` files named either `<Artist> - <Title>.lrc` or `<Title>.lrc` (characters `\/:*?"<>|` in track metadata are replaced with `_`). Local files are checked first and work 100% offline.
+* **Online Lyrics Lookup (Opt-In, Off by Default):** If you enable **Enable Online Lyrics Lookup (LRCLIB)** in the mod settings, the mod sends the current track's title and artist name over HTTPS (`GET https://lrclib.net/api/get` and `/api/search`) to `lrclib.net` once per track change to fetch time-synced `.lrc` lyrics. No other data or identifiers are sent, and no network requests are made unless you explicitly enable this setting.
 */
 // ==/WindhawkModReadme==
 
@@ -50,7 +78,7 @@ A smooth, DPI-aware desktop music island inspired by the iPhone Dynamic Island a
   $description: Automatically hides the island while a fullscreen game or video is active.
 - HideHotkeyModCtrl: true
   $name: Require Ctrl for F12 Hide Hotkey
-  $description: Uses Ctrl+F12 when enabled (recommended so F12 in browsers still opens DevTools), or bare F12 when disabled.
+  $description: Uses Ctrl+F12 when enabled (recommended so F12 in browsers still opens DevTools). When disabled, bare F12 is registered globally and will not reach other apps.
 - EnableOnlineLyrics: false
   $name: Enable Online Lyrics Lookup (LRCLIB)
   $description: Opt-in setting that sends the current track title and artist to lrclib.net over HTTPS to fetch synced lyrics. Off by default.
@@ -65,11 +93,11 @@ A smooth, DPI-aware desktop music island inspired by the iPhone Dynamic Island a
 #include <shellapi.h>
 #include <objidl.h>
 #include <shlwapi.h>
-#include <dwmapi.h>
 #include <wininet.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #include <gdiplus.h>
+#include <windhawk_utils.h>
 
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
@@ -105,6 +133,7 @@ constexpr UINT_PTR TIMER_ID_FRAME        = 1;
 constexpr int HOTKEY_ID_HIDE             = 1;
 
 constexpr UINT TIMER_INTERVAL_ANIM         = 8;
+constexpr UINT TIMER_INTERVAL_VISUALIZER   = 32;
 constexpr UINT TIMER_INTERVAL_IDLE_PLAYING = 250;
 
 struct IslandSettings {
@@ -118,15 +147,16 @@ struct LyricLine { double timeSec; std::wstring text; };
 struct LyricHitBox { int lineIdx; RectF rect; };
 
 [[clang::no_destroy]] std::optional<std::thread> g_uiThread;
-HANDLE            g_uiReadyEvent  = nullptr;
-HANDLE            g_stopEvent     = nullptr;
-HANDLE            g_smtcWakeEvent = nullptr;
-HANDLE            g_audioWakeEvent = nullptr;
+HANDLE            g_uiReadyEvent    = nullptr;
+HANDLE            g_stopEvent       = nullptr;
+HANDLE            g_smtcWakeEvent   = nullptr;
+HANDLE            g_audioWakeEvent  = nullptr;
 HANDLE            g_lyricsWakeEvent = nullptr;
 
 std::atomic<HWND>  g_hWnd{nullptr};
 std::atomic<bool>  g_audioCaptureNeeded{false};
 std::atomic<bool>  g_audioDeviceChanged{false};
+std::atomic<bool>  g_needResubscribeSessions{true};
 std::atomic<int>   g_pendingCmd{0};
 std::atomic<float> g_pendingSeek{-1.0f};
 std::atomic<float> g_audioBands[5]{0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
@@ -231,7 +261,7 @@ struct CachedRenderResources {
 struct UIState {
     float curW = 196.0f, curH = 34.0f, expandT = 0.0f, bigModeT = 0.0f, drawerT = 0.0f, bigLyricsT = 1.0f;
     float dpiScale = 1.0f;
-    bool hovered = false, hidden = false, fullscreenHidden = false, wasF12Down = false;
+    bool hovered = false, hidden = false, fullscreenHidden = false;
     bool bigMode = false, showLyrics = false;
     bool hasSavedBigPos = false, draggingWin = false, draggingSeek = false, hoveringSeek = false;
     float savedBigX = 0.0f, savedBigY = 80.0f, bigPosT = 0.0f;
@@ -254,22 +284,34 @@ struct UIState {
 } g_ui;
 
 void LoadModSettings() {
-    g_set.topOffset          = std::max(0, Wh_GetIntSetting(L"TopOffset"));
-    g_set.compactW           = std::max(150, Wh_GetIntSetting(L"CompactWidth"));
-    g_set.compactH           = std::max(28, Wh_GetIntSetting(L"CompactHeight"));
-    g_set.expandedW          = std::max(290, Wh_GetIntSetting(L"NormalWidth"));
-    g_set.expandedH          = std::max(118, Wh_GetIntSetting(L"NormalHeight"));
-    g_set.bigW               = std::max(680, Wh_GetIntSetting(L"BigWidth"));
-    g_set.bigH               = std::max(430, Wh_GetIntSetting(L"BigHeight"));
-    g_set.glassOpacity       = std::clamp(Wh_GetIntSetting(L"GlassOpacity"), 180, 255);
-    g_set.preferSpotify      = Wh_GetIntSetting(L"PreferSpotify") != 0;
-    g_set.autoHideFullscreen = Wh_GetIntSetting(L"AutoHideFullscreen") != 0;
-    g_set.hideHotkeyCtrl     = Wh_GetIntSetting(L"HideHotkeyModCtrl") != 0;
-    g_set.enableOnlineLyrics = Wh_GetIntSetting(L"EnableOnlineLyrics") != 0;
+    int topOffset          = std::max(0, Wh_GetIntSetting(L"TopOffset"));
+    int compactW           = std::max(150, Wh_GetIntSetting(L"CompactWidth"));
+    int compactH           = std::max(28, Wh_GetIntSetting(L"CompactHeight"));
+    int expandedW          = std::max(290, Wh_GetIntSetting(L"NormalWidth"));
+    int expandedH          = std::max(118, Wh_GetIntSetting(L"NormalHeight"));
+    int bigW               = std::max(680, Wh_GetIntSetting(L"BigWidth"));
+    int bigH               = std::max(430, Wh_GetIntSetting(L"BigHeight"));
+    int glassOpacity       = std::clamp(Wh_GetIntSetting(L"GlassOpacity"), 180, 255);
+    bool preferSpotify     = Wh_GetIntSetting(L"PreferSpotify") != 0;
+    bool autoHideFs        = Wh_GetIntSetting(L"AutoHideFullscreen") != 0;
+    bool hideHotkeyCtrl    = Wh_GetIntSetting(L"HideHotkeyModCtrl") != 0;
+    bool enableOnline      = Wh_GetIntSetting(L"EnableOnlineLyrics") != 0;
+    std::wstring lrcFolder = WindhawkUtils::StringSetting::make(L"LocalLyricsFolder").get();
 
-    PCWSTR folderPtr = Wh_GetStringSetting(L"LocalLyricsFolder");
-    g_set.localLyricsFolder = folderPtr ? folderPtr : L"";
-    if (folderPtr) Wh_FreeStringSetting(folderPtr);
+    std::lock_guard<std::mutex> lk(g_mediaMutex);
+    g_set.topOffset          = topOffset;
+    g_set.compactW           = compactW;
+    g_set.compactH           = compactH;
+    g_set.expandedW          = expandedW;
+    g_set.expandedH          = expandedH;
+    g_set.bigW               = bigW;
+    g_set.bigH               = bigH;
+    g_set.glassOpacity       = glassOpacity;
+    g_set.preferSpotify      = preferSpotify;
+    g_set.autoHideFullscreen = autoHideFs;
+    g_set.hideHotkeyCtrl     = hideHotkeyCtrl;
+    g_set.enableOnlineLyrics = enableOnline;
+    g_set.localLyricsFolder  = std::move(lrcFolder);
 }
 
 void RegisterIslandHotkey(HWND hwnd) {
@@ -293,7 +335,7 @@ void SetTimerIntervalIfNeeded(HWND hwnd, UINT intervalMs) {
 }
 
 void WakeAnimationTimer(HWND hwnd) {
-    if (!g_ui.hidden && !g_ui.fullscreenHidden) {
+    if (!g_ui.hidden) {
         SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_ANIM);
     }
 }
@@ -909,33 +951,39 @@ void SmtcWorkerThread() {
     };
 
     HANDLE waitHandles[2] = { g_stopEvent, g_smtcWakeEvent };
-    std::atomic<bool> needResubscribeSessions{true};
+    g_needResubscribeSessions.store(true);
 
     while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
         try {
             if (!mgr) {
                 mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
                 if (mgr) {
-                    tokSessions = mgr.SessionsChanged([&needResubscribeSessions](auto&&, auto&&) {
-                        needResubscribeSessions.store(true);
+                    tokSessions = mgr.SessionsChanged([](auto&&, auto&&) {
+                        g_needResubscribeSessions.store(true);
                         if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
                     });
                     tokCurSession = mgr.CurrentSessionChanged([](auto&&, auto&&) {
                         if (g_smtcWakeEvent) SetEvent(g_smtcWakeEvent);
                     });
                     mgrSubscribed = true;
-                    needResubscribeSessions.store(true);
+                    g_needResubscribeSessions.store(true);
                 }
             }
 
-            if (needResubscribeSessions.exchange(false)) {
+            if (g_needResubscribeSessions.exchange(false)) {
                 refreshSessionSubscriptions();
+            }
+
+            bool preferSpotify = true;
+            {
+                std::lock_guard<std::mutex> lk(g_mediaMutex);
+                preferSpotify = g_set.preferSpotify;
             }
 
             GlobalSystemMediaTransportControlsSession sess{nullptr};
             if (mgr) {
                 sess = mgr.GetCurrentSession();
-                if (g_set.preferSpotify) {
+                if (preferSpotify) {
                     auto all = mgr.GetSessions();
                     for (auto const& s : all) {
                         std::wstring appId = s.SourceAppUserModelId().c_str();
@@ -1054,13 +1102,13 @@ void SmtcWorkerThread() {
                         g_media.trackSeq++;
                         if (g_lyricsWakeEvent) SetEvent(g_lyricsWakeEvent);
                     }
-                    g_media.title     = std::move(t);
-                    g_media.rawArtist = std::move(a);
-                    g_media.subtitle  = std::move(sub);
-                    g_media.isPlaying = playing;
-                    g_media.isShuffle = shuf;
+                    g_media.title      = std::move(t);
+                    g_media.rawArtist  = std::move(a);
+                    g_media.subtitle   = std::move(sub);
+                    g_media.isPlaying  = playing;
+                    g_media.isShuffle  = shuf;
                     g_media.repeatMode = rep;
-                    g_media.durSec    = dur;
+                    g_media.durSec     = dur;
                     if (hasNewPosAnchor) {
                         g_media.posSec    = rawPos;
                         g_media.posTickMs = GetTickCount64();
@@ -1725,19 +1773,28 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         case WM_TIMER:
             if (wParam == TIMER_ID_FRAME) {
                 ULONGLONG nowTick = GetTickCount64();
-                if (g_set.autoHideFullscreen && nowTick - g_ui.lastFullscreenCheckMs > 500) {
-                    g_ui.lastFullscreenCheckMs = nowTick;
-                    QUERY_USER_NOTIFICATION_STATE quns = QUNS_ACCEPTS_NOTIFICATIONS;
-                    bool fs = SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
-                              (quns == QUNS_BUSY || quns == QUNS_RUNNING_D3D_FULL_SCREEN || quns == QUNS_PRESENTATION_MODE);
-                    if (fs != g_ui.fullscreenHidden) {
-                        g_ui.fullscreenHidden = fs;
-                        ShowWindow(hwnd, (g_ui.hidden || g_ui.fullscreenHidden) ? SW_HIDE : SW_SHOWNOACTIVATE);
-                        UpdateAudioCaptureNeeded();
+                bool fs = false;
+                if (g_set.autoHideFullscreen) {
+                    if (nowTick - g_ui.lastFullscreenCheckMs > 500) {
+                        g_ui.lastFullscreenCheckMs = nowTick;
+                        QUERY_USER_NOTIFICATION_STATE quns = QUNS_ACCEPTS_NOTIFICATIONS;
+                        fs = SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+                             (quns == QUNS_BUSY || quns == QUNS_RUNNING_D3D_FULL_SCREEN || quns == QUNS_PRESENTATION_MODE);
+                    } else {
+                        fs = g_ui.fullscreenHidden;
                     }
                 }
-                if (g_ui.hidden || g_ui.fullscreenHidden) {
+                if (fs != g_ui.fullscreenHidden) {
+                    g_ui.fullscreenHidden = fs;
+                    ShowWindow(hwnd, (g_ui.hidden || g_ui.fullscreenHidden) ? SW_HIDE : SW_SHOWNOACTIVATE);
+                    UpdateAudioCaptureNeeded();
+                }
+                if (g_ui.hidden) {
                     SetTimerIntervalIfNeeded(hwnd, 0);
+                    return 0;
+                }
+                if (g_ui.fullscreenHidden) {
+                    SetTimerIntervalIfNeeded(hwnd, 500);
                     return 0;
                 }
 
@@ -1748,7 +1805,7 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                 g_ui.marqueeTime += dt;
 
                 bool clickThrough = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) &&
-                                    ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+                                    ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
                 LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
                 if (clickThrough && !(ex & WS_EX_TRANSPARENT)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_TRANSPARENT);
                 else if (!clickThrough && (ex & WS_EX_TRANSPARENT)) SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & ~WS_EX_TRANSPARENT);
@@ -1820,11 +1877,13 @@ LRESULT CALLBACK IslandWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                                   g_ui.trackAnimT < 0.99f;
 
                 bool lyricsAnimating = isPlaying && hasLyrics && exp && (g_ui.showLyrics || g_ui.bigMode);
-                bool needHighFps = isMorphing || anyHoverAnim || anyAudioAnim ||
-                                   g_ui.marqueeActive || g_ui.draggingSeek || g_ui.draggingWin || lyricsAnimating;
+                bool needHighFps     = isMorphing || anyHoverAnim || g_ui.draggingSeek || g_ui.draggingWin || lyricsAnimating;
+                bool needVisFps      = anyAudioAnim || g_ui.marqueeActive;
 
                 if (needHighFps) {
                     SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_ANIM);
+                } else if (needVisFps) {
+                    SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_VISUALIZER);
                 } else if (isPlaying && exp) {
                     SetTimerIntervalIfNeeded(hwnd, TIMER_INTERVAL_IDLE_PLAYING);
                 } else {
@@ -2115,7 +2174,7 @@ void WhTool_ModUninit() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk-mods/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
 //
@@ -2136,9 +2195,14 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
-    bool isParentToolModProcess = false;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv) {
@@ -2166,15 +2230,6 @@ BOOL Wh_ModInit() {
         }
     }
 
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-parent-tool-mod") == 0) {
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isParentToolModProcess = true;
-                break;
-            }
-        }
-    }
-
     LocalFree(argv);
 
     if (isExcluded) {
@@ -2183,9 +2238,9 @@ BOOL Wh_ModInit() {
 
     if (isToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutexW failed");
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
@@ -2199,7 +2254,7 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
@@ -2207,10 +2262,6 @@ BOOL Wh_ModInit() {
 
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
-    }
-
-    if (isParentToolModProcess) {
-        return FALSE;
     }
 
     g_isToolModProcessLauncher = true;
@@ -2223,12 +2274,12 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
-    case 0:
-    case ARRAYSIZE(currentProcessPath):
-        Wh_Log(L"GetModuleFileNameW failed");
-        return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
     WCHAR
@@ -2237,19 +2288,19 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll or kernel32.dll");
             return;
         }
     }
 
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+    using CreateProcessInternalW_t = WINBOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
