@@ -30,9 +30,9 @@ https://winclassic.net/post/40623
 #include <windows.h>
 #include <wininet.h>
 #include <bcrypt.h>
+#include <objbase.h>
 #include <unknwn.h>
 #include <atomic>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
@@ -91,6 +91,34 @@ HANDLE g_worker = nullptr;
 HANDLE g_stopEvent = nullptr;
 std::atomic<HINTERNET> g_activeInternet{nullptr};
 std::atomic<HINTERNET> g_activeUrl{nullptr};
+
+// RAII guard for the worker thread's COM apartment. pnidui's tray object
+// uses COM internally (network-status objects and their event sinks) and is
+// designed to run on an STA thread, like stobject's tray thread normally
+// provides. Without this, pnidui's COM calls either fail with
+// CO_E_NOTINITIALIZED or silently join Explorer's implicit MTA, which can
+// make status-change callbacks arrive on the wrong thread and the icon show
+// stale state.
+class ComInitGuard {
+   public:
+    ComInitGuard()
+        : hr_(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
+
+    ~ComInitGuard() {
+        if (SUCCEEDED(hr_)) {
+            CoUninitialize();
+        }
+    }
+
+    ComInitGuard(const ComInitGuard&) = delete;
+    ComInitGuard& operator=(const ComInitGuard&) = delete;
+
+    bool Succeeded() const { return SUCCEEDED(hr_); }
+    HRESULT Result() const { return hr_; }
+
+   private:
+    HRESULT hr_;
+};
 
 void CloseAndClear(std::atomic<HINTERNET>& handle) {
     HINTERNET h = handle.exchange(nullptr);
@@ -521,11 +549,14 @@ bool PreparePnidui() {
 
     g_pnidui = GetModuleHandleW(filePath);
     if (!g_pnidui) {
-        // Catches any pnidui.dll already loaded in the process, regardless
+        // Catches any pnidui.dll already loaded in this process, regardless
         // of the folder it was loaded from (e.g. another mod's private copy,
         // or ExplorerPatcher's bundled DLL). GetModuleHandleW matches by base
         // file name when no path is given, so this check works even if that
-        // copy sits in a different directory than ours.
+        // copy sits in a different directory than ours. Note that this only
+        // catches DLLs already loaded into *this* process; the taskbar
+        // ownership check above is what prevents this mod from running at
+        // all in processes that don't own the real taskbar.
         HMODULE anyPnidui = GetModuleHandleW(kFileName);
         if (anyPnidui) {
             Wh_Log(L"A pnidui.dll is already loaded from another location, "
@@ -629,40 +660,29 @@ void StopTray() {
     }
 }
 
-DWORD WINAPI WorkerThread(LPVOID) {
-    Wh_Log(L"Worker thread started");
-
-    if (SystemHasPnidui()) {
-        Wh_Log(L"System already provides pnidui.dll, not activating");
-        return 0;
-    }
-
-    HWND trayWnd = nullptr;
-    for (int i = 0; i < 100 && !trayWnd; i++) {
-        if (WaitOrStop(100)) {
-            Wh_Log(L"Worker thread stopping before tray window was found");
-            return 0;
-        }
-        trayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    }
-
-    if (!trayWnd) {
-        Wh_Log(L"Shell_TrayWnd not found, giving up");
-        return 0;
+// Runs everything that needs the worker thread's COM apartment to be
+// initialized: loading/activating the tray object and pumping messages for
+// it. Called only after the taskbar-ownership check has passed.
+void RunTrayOnStaThread() {
+    ComInitGuard comGuard;
+    if (!comGuard.Succeeded()) {
+        Wh_Log(L"CoInitializeEx failed: 0x%08X",
+               static_cast<unsigned>(comGuard.Result()));
+        return;
     }
 
     if (WaitOrStop(500)) {
-        return 0;
+        return;
     }
 
     if (!PreparePnidui()) {
         Wh_Log(L"Failed to prepare pnidui.dll");
-        return 0;
+        return;
     }
 
     if (!StartTray()) {
         Wh_Log(L"Failed to start legacy network tray");
-        return 0;
+        return;
     }
 
     Wh_Log(L"Legacy network tray started");
@@ -695,6 +715,46 @@ DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     StopTray();
+}
+
+DWORD WINAPI WorkerThread(LPVOID) {
+    Wh_Log(L"Worker thread started");
+
+    if (SystemHasPnidui()) {
+        Wh_Log(L"System already provides pnidui.dll, not activating");
+        return 0;
+    }
+
+    HWND trayWnd = nullptr;
+    for (int i = 0; i < 100 && !trayWnd; i++) {
+        if (WaitOrStop(100)) {
+            Wh_Log(L"Worker thread stopping before tray window was found");
+            return 0;
+        }
+        trayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+    }
+
+    if (!trayWnd) {
+        Wh_Log(L"Shell_TrayWnd not found, giving up");
+        return 0;
+    }
+
+    // @include explorer.exe also injects into File Explorer windows that run
+    // in their own explorer.exe process (e.g. the "Open folders in a
+    // separate process" setting). Shell_TrayWnd always refers to the single
+    // real taskbar, so FindWindowW above can find it from any such process.
+    // Only the process that actually owns the taskbar window should load
+    // and activate the tray object; everyone else must bail out now, before
+    // downloading or loading anything.
+    DWORD trayPid = 0;
+    GetWindowThreadProcessId(trayWnd, &trayPid);
+    if (trayPid != GetCurrentProcessId()) {
+        Wh_Log(L"The taskbar belongs to another process, not activating");
+        return 0;
+    }
+
+    RunTrayOnStaThread();
+
     Wh_Log(L"Worker thread exiting");
     return 0;
 }
