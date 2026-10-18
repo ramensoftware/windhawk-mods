@@ -35,8 +35,8 @@ The sandbox id is read from the process command line. If it cannot be found, the
 
 namespace {
 
-// Set once the sandbox has been stopped, so that a close queued behind the
-// first one is swallowed instead of starting a second stop.
+// Set once the sandbox has been stopped, so that the close which started the
+// stop is the only one swallowed and later closes go through to the app.
 bool g_stopped;
 
 // Stops the sandbox this process belongs to. Returns whether the sandbox was
@@ -93,16 +93,22 @@ bool FindGuid(const std::wstring &s, std::wstring &out)
     return false;
 }
 
-// Runs the command without a window and waits for it to finish. The command
-// line starts with an executable name and has no quoting, so the executable is
-// resolved here rather than by CreateProcessW, which would also search the
-// current directory.
+// Runs the command without a window and waits for it to finish. The executable
+// is looked up in the PATH directories only: the command line carries no
+// quoting, and letting CreateProcessW or SearchPathW fall back to the current
+// directory would run whatever executable is there.
 bool RunHidden(const std::wstring &executableName,
                const std::wstring &commandLine)
 {
+    DWORD pathSize = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+    std::wstring path(pathSize, L'\0');
+    path.resize(GetEnvironmentVariableW(L"PATH", path.data(), pathSize));
+
     WCHAR szExecutablePath[MAX_PATH];
-    if (!SearchPathW(nullptr, executableName.c_str(), L".exe",
-                     ARRAYSIZE(szExecutablePath), szExecutablePath, nullptr))
+    DWORD len = SearchPathW(path.c_str(), executableName.c_str(), L".exe",
+                            ARRAYSIZE(szExecutablePath), szExecutablePath,
+                            nullptr);
+    if (len == 0 || len >= ARRAYSIZE(szExecutablePath))
     {
         Wh_Log(L"Failed to find %s: %u", executableName.c_str(),
                GetLastError());
@@ -147,11 +153,6 @@ bool RunHidden(const std::wstring &executableName,
 
 bool StopSandbox()
 {
-    if (g_stopped)
-    {
-        return true;
-    }
-
     std::wstring commandLine = GetCommandLineW();
     Wh_Log(L"Command line: %s", commandLine.c_str());
 
