@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-18T13:02:21.000Z</updated>
+    <updated>2026-10-18T15:00:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.5.4]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#e8bbf8d63cb754e7d160f8a4162abd9b5b0ee855</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-10-18T15:00:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Scroll over the tray icon to change master volume</li>
+<li>A small volume popup shows the level when the mixer is closed</li>
+<li>Fixed the tray menu opening behind the taskbar while the Start menu is open</li>
+<li>Updated the tray icon to show volume levels</li>
+<li>Slight visual tweaks</li>
+</ul>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 3.1.7]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#a395f6d754b9e2a54ef68b12ecc2308d56f3d7eb</id>
@@ -760,23 +777,6 @@ by David Trapp (CherryDT). Their MIT notices are retained below.</p>]]></content
         <author>
             <name>Darius Varnelis</name>
             <uri>https://github.com/Darius-Varnelis</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor auto-hide on idle 1.1]]></title>
-        <id>https://windhawk.net/mods/cursor-auto-hide#c1f6d0d3554f55260011548f812901bcce4ac5b5</id>
-        <link href="https://windhawk.net/mods/cursor-auto-hide"/>
-        <updated>2026-10-17T09:00:15.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the <code>Toggle hotkey</code> setting: a global shortcut that turns the auto-hide on and off at runtime.</li>
-<li>Added <code>Record the shortcut by pressing it</code>: press the shortcut within 60 seconds and it is copied to the clipboard in the format the field expects, with an on-screen note while the window is open.</li>
-<li>A shortcut needs Ctrl, Alt or Win, because a global shortcut takes its key away from every application; F1 to F24, Pause and ScrollLock may be used alone or with Shift.</li>
-<li>Recording accepts every key the field can hold, punctuation, lock keys and numeric keypad included, and the note is placed on the monitor under the pointer at that monitor's scale.</li>
-<li>Documented the recording order - shortcut first, then paste - in the readme and in both settings descriptions.</li>
-</ul>]]></content>
-        <author>
-            <name>nikitor32</name>
-            <uri>https://github.com/nikitor32</uri>
         </author>
     </entry>
 </feed>

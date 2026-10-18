@@ -1,3 +1,11 @@
+## 1.5.4 ([Oct 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e8bbf8d63cb754e7d160f8a4162abd9b5b0ee855/mods/better-volume-mixer.wh.cpp))
+
+* Scroll over the tray icon to change master volume
+* A small volume popup shows the level when the mixer is closed
+* Fixed the tray menu opening behind the taskbar while the Start menu is open
+* Updated the tray icon to show volume levels
+* Slight visual tweaks
+
 ## 1.5.1 ([Oct 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/740fa0ebe790bae23b87a1ee223302715e0ce0db/mods/better-volume-mixer.wh.cpp))
 
 * Fixed the tray icon sometimes appearing twice

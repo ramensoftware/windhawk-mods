@@ -1022,12 +1022,12 @@
         "ratingUsers": 57,
         "reviews": 0,
         "trendingSorting": 9.572726036998123,
-        "updated": 1791817359000,
+        "updated": 1792335615000,
         "users": 2351
       },
       "metadata": {
         "author": "0Allu",
-        "compilerOptions": "-lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus",
+        "compilerOptions": "-lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -lgdiplus -ld2d1 -ldwrite",
         "description": "Quickly control master and per-app volume from the system tray",
         "donateUrl": "https://ko-fi.com/0allu",
         "github": "https://github.com/0Allu",
@@ -1037,7 +1037,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.5.1"
+        "version": "1.5.4"
       }
     },
     "block-smb-quick-access": {
