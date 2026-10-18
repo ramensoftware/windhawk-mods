@@ -12479,6 +12479,9 @@ static WindowsGetStringRawBuffer_t pWindowsGetStringRawBuffer = NULL;
 // static object is enough and safe across mod unload.
 static void *g_SabNoOpVtable[12] = {};
 static LONG g_SabNoOpRefs = 1;
+// riid StartAllBack requested at activation time. COM requires QI for an
+// interface the caller already holds to succeed, so it is always accepted.
+static GUID g_SabActivationIid = {};
 
 static ULONG STDMETHODCALLTYPE SabNoOp_AddRef(void *self);
 static HRESULT STDMETHODCALLTYPE SabNoOp_QI(void *self, REFIID riid,
@@ -12494,12 +12497,17 @@ static HRESULT STDMETHODCALLTYPE SabNoOp_QI(void *self, REFIID riid,
     static const GUID kIID_IActivationFactory = {0x00000035, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
     if (IsEqualGUID(riid, kIID_IUnknown) ||
         IsEqualGUID(riid, kIID_IInspectable) ||
-        IsEqualGUID(riid, kIID_IActivationFactory)) {
+        IsEqualGUID(riid, kIID_IActivationFactory) ||
+        IsEqualGUID(riid, g_SabActivationIid)) {
         *ppv = self;
         SabNoOp_AddRef(self);
         return S_OK;
     }
     *ppv = nullptr;
+    Wh_Log(L"[SAB] QI refused: {%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+           riid.Data1, riid.Data2, riid.Data3, riid.Data4[0], riid.Data4[1],
+           riid.Data4[2], riid.Data4[3], riid.Data4[4], riid.Data4[5],
+           riid.Data4[6], riid.Data4[7]);
     return E_NOINTERFACE;
 }
 static ULONG STDMETHODCALLTYPE SabNoOp_AddRef(void *self) {
@@ -12550,6 +12558,7 @@ HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING_T classId, REFIID riid,
             RequestShowWin7Flyout();
             if (factory) {
                 SabNoOp_InitVtable();
+                g_SabActivationIid = riid;
                 *factory = &g_SabNoOpObject;
                 SabNoOp_AddRef(&g_SabNoOpObject);
                 return S_OK;
