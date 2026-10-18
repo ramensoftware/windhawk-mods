@@ -1,12 +1,11 @@
 // ==WindhawkMod==
 // @id              native-titlebars-uwp-lite
-// @name            Remove UWP titlebars Lite
+// @name            Remove UWP titlebars
 // @description     Enables native titlebars in UWP apps
-// @version         1.4.0
+// @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
-// @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lpropsys -lgdiplus
 // ==/WindhawkMod==
@@ -15,8 +14,6 @@
 /*
 
 Replaces the UWP titlebars with native Win32 titlebars.
-
-This mod is focused on the Classic theme, so may produce sub-optimal results in other cases.
 
 ![Screenshot](https://i.imgur.com/oeCYWJY.png)
 
@@ -33,6 +30,10 @@ This mod is focused on the Classic theme, so may produce sub-optimal results in 
 #include <gdiplus.h>
 #include <vector>
 
+#ifndef WM_POPUPSYSTEMMENU
+#define WM_POPUPSYSTEMMENU 0x0313
+#endif
+
 static const GUID BHID_SFUIObject_local =
     {0x3981e225, 0xf559, 0x11d3, {0x8e, 0x3a, 0x00, 0xc0, 0x4f, 0x68, 0x37, 0xd5}};
 
@@ -45,25 +46,9 @@ static const GUID IID_IExtractIconW_local =
 static const PROPERTYKEY PKEY_AppUserModel_ID_local =
     {{0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
 
-typedef INT64 (*CTitleBar__CreateTitleBarWindow_t)(void *);
-CTitleBar__CreateTitleBarWindow_t CTitleBar__CreateTitleBarWindow_orig;
-INT64 __fastcall CTitleBar__CreateTitleBarWindow_hook(void *pThis)
-{
-    return 0;
-}
+INT64 __fastcall CTitleBar_Generic_hook(void *, void *, void *, void *) {return 0;}
 
-typedef INT64 (*CTitleBar__PaintButton_t)(INT64, INT64, INT64, UINT, int *, DWORD);
-CTitleBar__PaintButton_t CTitleBar__PaintButton_orig;
-INT64 __fastcall CTitleBar__PaintButton_hook(
-    INT64 a1,
-    INT64 a2,
-    INT64 a3,
-    UINT a4,
-    int *a5,
-    DWORD a6)
-{
-    return 0;
-}
+static void *g_dummyOrig;
 
 static ULONG_PTR g_gdiplusToken = 0;
 
@@ -193,10 +178,12 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
         return NULL;
     }
 
-    Gdiplus::Graphics g(scaled);
-    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-    g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-    g.DrawImage(bmp, 0, 0, targetSize, targetSize);
+    {
+        Gdiplus::Graphics g(scaled);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+        g.DrawImage(bmp, 0, 0, targetSize, targetSize);
+    }
     delete bmp;
 
     HICON hIcon = NULL;
@@ -337,20 +324,6 @@ void DestroyTitlebarIcons(HWND hWnd)
     RemovePropW(hWnd, L"NativeTitlebarIconSet");
 }
 
-typedef bool (* CTitleBar__UpdateBorderVisibilityAndMargins_t)(void *);
-
-CTitleBar__UpdateBorderVisibilityAndMargins_t CTitleBar__UpdateBorderVisibilityAndMargins_orig;
-
-bool __fastcall CTitleBar__UpdateBorderVisibilityAndMargins_hook(
-
-    void *pThis
-
-){
-
-    return 0;
-
-}
-
 LRESULT CALLBACK SubclassProc(
     HWND hWnd,
     UINT uMsg,
@@ -364,8 +337,13 @@ LRESULT CALLBACK SubclassProc(
         ForgetSubclassedWindow(hWnd);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
-
-    if (uMsg == WM_NCPAINT || uMsg == WM_NCCALCSIZE)
+    if (uMsg == WM_NCRBUTTONDOWN ||
+        uMsg == WM_NCRBUTTONUP ||
+        uMsg == WM_NCLBUTTONDBLCLK ||
+        uMsg == WM_POPUPSYSTEMMENU ||
+        uMsg == WM_SYSCOMMAND ||
+        uMsg == WM_NCPAINT || 
+        uMsg == WM_NCCALCSIZE)
     {
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
@@ -452,7 +430,7 @@ BOOL Wh_ModInit()
     InitializeCriticalSection(&g_csGdiplus);
 
     Wh_SetFunctionHook(
-        (void *)GetProcAddress(LoadLibraryW(L"user32.dll"), "CreateWindowInBandEx"),
+        (void *)GetProcAddress(GetModuleHandle(L"user32.dll"), "CreateWindowInBandEx"),
         (void *)CreateWindowInBandEx_hook,
         (void **)&CreateWindowInBandEx_orig);
 
@@ -462,25 +440,45 @@ BOOL Wh_ModInit()
         (void **)&DwmExtendFrameIntoClientArea_orig);
 
     WindhawkUtils::SYMBOL_HOOK ApplicationFrame_dll_hooks[] = {
-        {
-            {L"private: long __cdecl CTitleBar::_CreateTitleBarWindow(void)"},
-            (void **)&CTitleBar__CreateTitleBarWindow_orig,
-            (void *)CTitleBar__CreateTitleBarWindow_hook,
-            false
-        },
-        {
-            {L"private: long __cdecl CTitleBar::_PaintButton(struct IDCompositionSurface *,enum CTitleBar::TitleBarControl,enum TITLE_BAR_BITMAP_TYPE,struct tagRECT const &,struct tagRECT const &)"},
-            (void **)&CTitleBar__PaintButton_orig,
-            (void *)CTitleBar__PaintButton_hook,
-            false
-        },
-        {
-            {L"private: bool __cdecl CTitleBar::UpdateBorderVisibilityAndMargins(void)"},
-            (void **)&CTitleBar__UpdateBorderVisibilityAndMargins_orig,
-            (void *)CTitleBar__UpdateBorderVisibilityAndMargins_hook,
-            true
-        } 
-        
+        { {L"private: long __cdecl CTitleBar::_NotifyViewOfPersistence(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_OnTitleBarHitTestVisualUpdated(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_GetApplicationViewTitleBar(struct _GUID const &,void * *)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_NotifyVisibilityChanged(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateBackgroundVisualTree(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateConstraints(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateHoverPressState(enum CTitleBar::TitleBarControl)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateColorsFromApplicationViewAsync(bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateHitTestWindow(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_Cloak(int,bool,bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_ValidateDCompDevice(long)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_PaintTitle(struct IDCompositionSurface *,struct tagRECT const &)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_ComputeTitleBarRects(struct tagRECT const *)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_PlaceVisuals(struct tagRECT const *,bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateColorsFromApplicationView(bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateMica(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateBackgroundSurfaces(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_ManuallyPositionElements(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_SetIsVisible(int)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_NotifyReservedMetricsChanged(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_GetFrame(struct IApplicationFrameInternal * *)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_ShowTitleBar(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_GetCoreApplicationViewTitleBar(struct _GUID const &,void * *)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_ShowActionsMenu(struct tagPOINT *,enum TitleBarTelemetry::ACTIONS_MENU_INVOKE)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_InitializePersistence(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_PersistColors(struct Windows::UI::ViewManagement::IApplicationViewTitleBar *)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateDrawnByAppSetting(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_CommitDCompDevice(void *)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_InitializeDCompVariables(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_AnimateTitleBar(bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateButtonState(enum CTitleBar::TitleBarControl,bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_HideActionsMenu(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_GetDCompProvider(struct IDCompProvider * *)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateBackgroundTransforms(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_VisibleButtonsUpdated(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateButtonStateAndCommit(enum CTitleBar::TitleBarControl,bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_ShowSystemMenu(struct tagPOINT *,enum TitleBarTelemetry::SYSTEM_MENU_INVOKE)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateVisiblityForHideOptions(enum TITLE_BAR_HIDE_OPTIONS)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
+        { {L"private: long __cdecl CTitleBar::_UpdateAllButtonStates(enum CTitleBar::DrawButtonFilter,bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
     };
 
     return WindhawkUtils::HookSymbols(
@@ -500,8 +498,10 @@ void Wh_ModUninit()
     {
         if (IsWindow(hWnd))
         {
-            DestroyTitlebarIcons(hWnd);
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
+            SendMessageW(hWnd, WM_SETICON, ICON_SMALL, 0);
+            SendMessageW(hWnd, WM_SETICON, ICON_BIG, 0);
+            DestroyTitlebarIcons(hWnd);
         }
     }
 
