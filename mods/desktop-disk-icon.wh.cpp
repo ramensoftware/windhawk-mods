@@ -56,27 +56,31 @@ The mod runs inside `explorer.exe`, listens for the shell's drive and media chan
 notifications, and additionally polls at a configurable interval. Every synchronization pass
 brings the desktop icons in line with the devices that are currently attached.
 
-## Known limitations and cleanup
+## Cleanup behaviour
 
-- External hard disks are recognised by bus type (USB, IEEE 1394, SD/MMC, virtual). Disks
-  attached through Thunderbolt or eSATA that report an internal bus may not be recognised;
-  internal disks are never shown.
-- Portable devices (MTP/PTP, and phones in general) are not shown, because they are not volumes.
-- Removing a device deletes its icon immediately; there is no eject command. Use the system
-  tray safe-removal function before unplugging.
-- Unplugging a device deletes the corresponding item; disabling or uninstalling the mod deletes
-  every item created by it.
 - **Nothing is written to the system registry.** The item definitions live in a private hive
-  (`RegLoadAppKey`) inside the mod's storage, and five registry read hooks redirect Explorer's
+  (`RegLoadAppKey`) inside the mod's storage, and four registry read hooks redirect Explorer's
   reads of `Desktop\NameSpace` and `Software\Classes\CLSID` to that hive. The items therefore exist
   only inside Explorer and vanish as soon as the mod is unloaded.
-- The mod only acts in the Explorer process that owns the desktop window; other
-  `explorer.exe` instances (folder windows in a separate process, `explorer.exe /select,` and
-  similar short-lived processes) are skipped, so the hooks never run there and those windows do not show the items.
+- The bookkeeping values the shell writes under `Shell Extensions\Cached` are removed on unload.
+- Unplugging a device deletes the corresponding item; disabling or uninstalling the mod deletes
+  every item created by it.
+- The mod only acts in the Explorer process that owns the desktop window; other `explorer.exe`
+  instances (folder windows in a separate process, `explorer.exe /select,` and similar short-lived
+  processes) are skipped, so the hooks never run there and those windows do not show the items.
 - Updating the mod takes effect immediately; no Explorer restart is required, because the item is
   served by the shell itself.
-- If plugging or unplugging a disk does not update the desktop, set the polling interval to
-  about 10 seconds in the settings.
+
+## Known limitations
+
+- External hard disks are recognised by bus type (USB, IEEE 1394, SD/MMC, virtual). Disks attached
+  through Thunderbolt or eSATA that report an internal bus may not be recognised; internal disks are
+  never shown.
+- Portable devices (MTP/PTP, and phones in general) are not shown, because they are not volumes.
+- Removing a device deletes its icon immediately; there is no eject command. Use the system tray
+  safe-removal function before unplugging.
+- If plugging or unplugging a disk does not update the desktop, set the polling interval to about
+  10 seconds in the settings.
 
 ## Links
 
@@ -106,19 +110,24 @@ brings the desktop icons in line with the devices that are currently attached.
 模组运行于 `explorer.exe`，监听 shell 的驱动器与介质变更通知，并以定时轮询作为补充；
 每次同步均使桌面图标与当前设备状态保持一致。
 
-## 已知限制与清理行为
+## 清理行为
 
-- 外接硬盘依据设备总线类型识别（USB、IEEE 1394、SD/MMC、虚拟）；雷雳或 eSATA 接口且被
-  报告为内置总线的硬盘可能无法识别，内置磁盘始终不会显示。
+- **不写系统注册表。** 项的定义放在模组存储目录下的私有 hive 中（`RegLoadAppKey`），并用 4 个
+  注册表读取 hook 把资源管理器对 `Desktop\NameSpace` 与 `Software\Classes\CLSID` 的读取重定向
+  到该 hive。因此这些项只存在于资源管理器内部，模组卸载后立即消失。
+- 资源管理器写进 `Shell Extensions\Cached` 的书签值会在卸载时清除。
+- 拔出设备时删除对应项；禁用或卸载模组时删除全部由本模组创建的项目。
+- 模组只在拥有桌面窗口的资源管理器进程中工作；其他 `explorer.exe` 实例（在单独进程中打开
+  文件夹窗口、`explorer.exe /select,` 等短命进程）会被跳过：hook 不会装在那里，那些窗口也
+  不会显示这些项。
+- 更新模组即时生效，无需重启资源管理器（项本身由系统实现）。
+
+## 已知限制
+
+- 外接硬盘依据设备总线类型识别（USB、IEEE 1394、SD/MMC、虚拟）；雷雳或 eSATA 接口且被报告为
+  内置总线的硬盘可能无法识别，内置磁盘始终不会显示。
 - 便携设备（MTP/PTP 及手机）不显示，因为它们不是卷。
 - 拔出设备时直接移除图标，不提供弹出操作；请沿用系统托盘中的安全删除功能。
-- 拔出设备时删除对应项；禁用或卸载模组时删除全部由本模组创建的项目。
-- **不写系统注册表。** 项的定义放在模组存储目录下的私有 hive 中（`RegLoadAppKey`），
-  并用 5 个注册表读取 hook 把资源管理器对 `Desktop\NameSpace` 与 `Software\Classes\CLSID`
-  的读取重定向到该 hive。因此这些项只存在于资源管理器内部，模组卸载后立即消失。
-- 模组只在拥有桌面窗口的资源管理器进程中工作；其他 `explorer.exe` 实例（“在单独进程中打开
-  文件夹窗口”、`explorer.exe /select,` 等短命进程）会被跳过：hook 不会装在那里，那些窗口也不会显示这些项。
-- 更新模组即时生效，无需重启资源管理器（项本身由系统实现）。
 - 若插拔磁盘后桌面未更新，可在设置中将轮询间隔设为 10 秒左右。
 
 ## 相关链接
@@ -457,7 +466,7 @@ int DriveIndexFromNamespaceClsid(const std::wstring& clsid) {
 // 私有 hive：项的定义不再写进系统注册表
 //
 // 定义放在模组存储目录下的 <用户>-shell.hiv（RegLoadAppKeyW 加载），只在内存里映射，
-// 不写 HKCU。再用 5 个注册表读取 hook 把 explorer 对这些路径的读取重定向到 hive：
+// 不写 HKCU。再用 4 个注册表读取 hook 把 explorer 对这些路径的读取重定向到 hive：
 //   Software\Classes\CLSID\{…}            -> hive Classes\CLSID\{…}
 //   …\Desktop\NameSpace\{…}               -> hive NameSpaceNodes\{…}
 //   …\Desktop\NameSpace（容器本身）        -> 真实键 + 追加 hive 中的项
@@ -480,8 +489,9 @@ struct KeyNameInfo {
 using NtQueryKey_t = NTSTATUS(WINAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
 
 bool IsDesktopNameSpace(HKEY key) {
-    if (!key || key == HKEY_CURRENT_USER || key == HKEY_CLASSES_ROOT ||
-        key == HKEY_LOCAL_MACHINE) {
+    // 预定义句柄（HKEY_CURRENT_USER / HKEY_CLASSES_ROOT / HKEY_USERS …）都是
+    // 0x80000000 及以上的伪句柄，不能交给 NtQueryKey。
+    if (((ULONG_PTR)key & 0x80000000) != 0) {
         return false;
     }
     static NtQueryKey_t ntQueryKey = (NtQueryKey_t)GetProcAddress(
@@ -500,8 +510,10 @@ bool IsDesktopNameSpace(HKEY key) {
     }
     std::wstring path(info->name, info->nameLength / sizeof(WCHAR));
     CharLowerBuffW(path.data(), (DWORD)path.size());
-    // HKLM 下的同名容器不参与：桌面项只来自 HKCU。
-    if (path.rfind(L"\\registry\\machine\\", 0) == 0) {
+    // 桌面同时枚举 HKLM 与 HKCU 两个容器。HKCU 的那个可能不存在（配置文件里
+    // 没有 OneDrive / Dropbox 等客户端时就不会创建），HKLM 的每个安装都有；
+    // 因此只匹配 HKLM 这一个：既不会丢项，也不会重复。
+    if (path.rfind(L"\\registry\\machine\\", 0) != 0) {
         return false;
     }
     const size_t suffixLength = wcslen(kDesktopNameSpaceSuffix);
@@ -620,7 +632,7 @@ bool HiveReadString(const std::wstring& subKey,
 }
 
 // shell 会在 Shell Extensions\Cached 下按 CLSID 记录书签（值名形如
-// "{CLSID} {IID} 0xFFFF"）。旧版本曾写入过真实项，这里做一次性迁移清理。
+// "{CLSID} {IID} 0xFFFF"）。这些值由 shell 写入真实 HKCU，卸载时需要清掉。
 void RemoveCachedShellExtensions() {
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kShellExtCachedKey, 0,
@@ -677,7 +689,11 @@ RegEnumKeyExW_t RegEnumKeyExW_Original;
 RegQueryInfoKeyW_t RegQueryInfoKeyW_Original;
 
 bool MightBeOurs(PCWSTR subKey) {
-    return subKey && (wcsstr(subKey, L"D3F0A1B2") || wcsstr(subKey, L"NameSpace"));
+    if (!subKey) {
+        return false;
+    }
+    return wcsstr(subKey, L"D3F0A1B2") || wcsstr(subKey, L"d3f0a1b2") ||
+           wcsstr(subKey, L"NameSpace") || wcsstr(subKey, L"namespace");
 }
 
 bool StartsWithNoCase(const std::wstring& value, PCWSTR prefix) {
