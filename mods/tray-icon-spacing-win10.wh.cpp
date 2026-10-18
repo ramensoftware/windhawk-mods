@@ -2,7 +2,7 @@
 // @id              tray-icon-spacing-win10
 // @name            Tray icon spacing for Windows 10 (live + overflow)
 // @description     Adjust the tray icon spacing and the size of the hidden icons popup on the Windows 10 taskbar, applied instantly
-// @version         1.11
+// @version         1.12
 // @author          piknockyou
 // @github          https://github.com/piknockyou
 // @include         explorer.exe
@@ -29,6 +29,17 @@ the next time it opens.
 
 This mod is for the Windows 10 taskbar. On Windows 11, use
 [Taskbar tray icon spacing and grid](https://windhawk.net/mods/taskbar-notification-icon-spacing).
+
+## Screenshots
+
+![Hidden icons popup at the Windows defaults](https://raw.githubusercontent.com/piknockyou/images/main/tray-icon-spacing-win10/readme-1-popup-defaults.png) \
+*Windows defaults: 16 pixel icons in 40 pixel cells.*
+
+![Hidden icons popup with all paddings zero](https://raw.githubusercontent.com/piknockyou/images/main/tray-icon-spacing-win10/readme-2-popup-padding-zero.png) \
+*All paddings zero: the icons sit next to each other.*
+
+![Hidden icons popup with 50 pixel icons and padding zero](https://raw.githubusercontent.com/piknockyou/images/main/tray-icon-spacing-win10/readme-3-popup-padding-zero-icon50.png) \
+*Paddings zero with 50 pixel popup icons.*
 
 ## How it works
 
@@ -87,7 +98,7 @@ every time it opens.
   Explorer once; changes afterwards are applied live.
 - The mod writes to Explorer's memory only to flip the two "pointer device"
   flag bytes that decide how the shell lays the tray out. They are restored
-  immediately, a readable-memory check and a sanity check guard the write, and
+  immediately, a writable-memory check and a sanity check guard the write, and
   the mod does nothing at all while the setting is `-1`.
 
 ## Credits
@@ -226,7 +237,7 @@ inline bool IsExplorerAddress(const void* address) {
     return a >= g_explorerBase && a < g_explorerEnd;
 }
 
-inline bool IsReadableMemory(const void* ptr, SIZE_T size) {
+inline bool IsWritableMemory(const void* ptr, SIZE_T size) {
     MEMORY_BASIC_INFORMATION mbi{};
     if (VirtualQuery(ptr, &mbi, sizeof(mbi)) == 0) {
         return false;
@@ -237,6 +248,14 @@ inline bool IsReadableMemory(const void* ptr, SIZE_T size) {
     }
 
     if (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS)) {
+        return false;
+    }
+
+    // The two flag bytes are written, not only read: a read-only page would
+    // fault instead of silently leaving the flags untouched.
+    constexpr DWORD kWritable = PAGE_READWRITE | PAGE_WRITECOPY |
+                                PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    if (!(mbi.Protect & kWritable)) {
         return false;
     }
 
@@ -255,7 +274,7 @@ inline bool GetFlagPointers(LONG_PTR lpNotify,
 
     BYTE* pSupported = reinterpret_cast<BYTE*>(lpNotify + kPtrDevOffset);
     BYTE* pValid = pSupported + 1;
-    if (!IsReadableMemory(pSupported, 2)) {
+    if (!IsWritableMemory(pSupported, 2)) {
         return false;
     }
 
@@ -939,9 +958,14 @@ void SubclassOverflowToolbar(HWND hToolbar) {
         return;
     }
 
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hToolbar, OverflowToolbarSubclassProc, 0)) {
+        Wh_Log(L"Failed to subclass overflow toolbar 0x%08X",
+               static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hToolbar)));
+        return;
+    }
+
     g_overflowToolbar = hToolbar;
-    WindhawkUtils::SetWindowSubclassFromAnyThread(
-        hToolbar, OverflowToolbarSubclassProc, 0);
 
     Wh_Log(L"Overflow toolbar 0x%08X",
            static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hToolbar)));
