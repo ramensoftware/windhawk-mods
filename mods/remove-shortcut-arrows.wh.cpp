@@ -36,9 +36,7 @@ a completely transparent one, you can specify its path in the mod settings.
 /*
 - custom_icon_path: ""
   $name: Custom Overlay Icon Path (Optional)
-  $description: Leave this empty to use the built-in transparent icon
-(recommended). If you want a custom overlay, specify the full path to a valid
-.ico file (e.g. C:\icons\my_custom.ico).
+  $description: Leave this empty to use the built-in transparent icon (recommended). If you want a custom overlay, specify the full path to a valid .ico file (e.g. C:\icons\my_custom.ico).
 */
 // ==/WindhawkModSettings==
 
