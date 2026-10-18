@@ -189,11 +189,11 @@ available to select or cancel.
       - dark: Dark
     - backdropBlurEffect: off
       $name: Backdrop Blur
-      $description: Blur the desktop behind the switcher while it is open. Off by default. Acrylic blurs a snapshot of the live desktop; Acrylic + Wallpaper blurs the desktop wallpaper instead and follows the shell's wallpaper fit mode.
+      $description: Blur the desktop behind the switcher while it is open. Off by default. Acrylic blurs a snapshot of the live desktop; Wallpaper blurs the desktop wallpaper instead and follows the shell's wallpaper fit mode.
       $options:
       - off: Off
-      - acrylic: Acrylic Blur
-      - acrylicWallpaper: Acrylic Blur + Wallpaper
+      - acrylic: Acrylic
+      - acrylicWallpaper: Wallpaper
     - backdropBlurOpacity: 18
       $name: Backdrop Dim Opacity (%)
       $description: How much the blurred backdrop is darkened (0-100). Higher = darker. 15-25 keeps the switcher readable while leaving the blur visible. Only applies when Backdrop Blur is enabled.
@@ -1518,9 +1518,11 @@ static Settings g_settings;
 // A small shared travel distance keeps the reveal/exit visible on non-layered
 // Mica/Acrylic windows, where a global HWND alpha is not available.
 #define SWS_PRESENTATION_OFFSET_PX 6
-// Keep initial presentation bounded. If blur misses this budget, omit it for
-// this session instead of attaching it after the switcher becomes visible.
-#define SWS_BACKDROP_PRESENTATION_BUDGET_MS 125u
+// Keep initial presentation bounded. The first show waits long enough for the
+// observed wallpaper build; later shows adapt to measured worker duration.
+#define SWS_BACKDROP_PRESENTATION_BUDGET_MS 400u
+#define SWS_BACKDROP_PRESENTATION_MARGIN_MS 100u
+#define SWS_BACKDROP_PRESENTATION_MAX_MS 600u
 // g_hBackdropWnd is declared above, near the other switcher window handles.
 static bool g_backdropClassRegistered = false;
 static Gdiplus::Bitmap* g_backdropBitmap = NULL; // blurred backdrop, dim veil baked in
@@ -1570,6 +1572,7 @@ static bool g_backdropBuildRequested = false;
 static bool g_backdropBuildRetryPending = false;
 static bool g_isPendingShow = false;
 static ULONGLONG g_backdropBuildStartTick = 0;
+static ULONGLONG g_backdropLastBuildDurationMs = 0;
 
 static bool AreAnimationsGloballyEnabled(); // defined further down
 static bool IsWin11OrGreater();             // defined further down
@@ -1577,6 +1580,15 @@ static void StartAnimationTicker();          // defined further down
 
 static bool BackdropBlurEnabled() { return wcscmp(g_settings.backdropBlurEffect, L"off") != 0; }
 static bool BackdropBlurUsesWallpaper() { return wcscmp(g_settings.backdropBlurEffect, L"acrylicWallpaper") == 0; }
+
+static UINT BackdropPresentationBudgetMs() {
+    if (!g_backdropLastBuildDurationMs) return SWS_BACKDROP_PRESENTATION_BUDGET_MS;
+    ULONGLONG budget = g_backdropLastBuildDurationMs +
+                       SWS_BACKDROP_PRESENTATION_MARGIN_MS;
+    budget = (std::max)((ULONGLONG)SWS_BACKDROP_PRESENTATION_BUDGET_MS, budget);
+    budget = (std::min)((ULONGLONG)SWS_BACKDROP_PRESENTATION_MAX_MS, budget);
+    return (UINT)budget;
+}
 
 static void BackdropFreeBitmap() {
     if (g_backdropPaintDC && g_backdropPaintOldBitmap) {
@@ -1638,7 +1650,10 @@ static bool PrepareBackdropSurfaceForBitmap(Gdiplus::Bitmap* bitmap, int w, int 
     Gdiplus::Status status;
     {
         Gdiplus::Graphics graphics(output->paintDC);
-        graphics.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+        graphics.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+        graphics.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
+        graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
         status = graphics.DrawImage(bitmap, 0, 0, w, h);
     }
     if (status != Gdiplus::Ok) {
@@ -1764,29 +1779,30 @@ static Gdiplus::Bitmap* BackdropAllocCanvas(int w, int h, int& sw, int& sh) {
     return new Gdiplus::Bitmap(sw, sh, PixelFormat32bppARGB);
 }
 
-// One box-blur pass over `len` samples that are `step` bytes apart. Running sums keep
+// One box-blur pass over `len` samples that are `step` float elements apart. Running sums keep
 // it O(len) per line (no inner loop over the kernel), so multiple passes stay cheap.
-static void BackdropBoxBlurLine(const BYTE* base, BYTE* out, int len, size_t step, int R) {
-    int sum[4] = {0, 0, 0, 0};
+static void BackdropBoxBlurLine(const float* base, float* out, int len,
+                                size_t step, int R) {
+    float sum[4] = {0, 0, 0, 0};
     int count = 0;
     int seed = (R < len - 1) ? R : len - 1;
     for (int k = 0; k <= seed; k++) {
-        const BYTE* p = base + (size_t)k * step;
+        const float* p = base + (size_t)k * step;
         sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2]; sum[3] += p[3];
         count++;
     }
     for (int i = 0; i < len; i++) {
-        BYTE* o = out + (size_t)i * step;
-        o[0] = (BYTE)(sum[0] / count); o[1] = (BYTE)(sum[1] / count);
-        o[2] = (BYTE)(sum[2] / count); o[3] = (BYTE)(sum[3] / count);
+        float* o = out + (size_t)i * step;
+        o[0] = sum[0] / count; o[1] = sum[1] / count;
+        o[2] = sum[2] / count; o[3] = sum[3] / count;
         int add = i + R + 1, rem = i - R;
         if (add < len) {
-            const BYTE* p = base + (size_t)add * step;
+            const float* p = base + (size_t)add * step;
             sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2]; sum[3] += p[3];
             count++;
         }
         if (rem >= 0) {
-            const BYTE* p = base + (size_t)rem * step;
+            const float* p = base + (size_t)rem * step;
             sum[0] -= p[0]; sum[1] -= p[1]; sum[2] -= p[2]; sum[3] -= p[3];
             count--;
         }
@@ -1794,26 +1810,46 @@ static void BackdropBoxBlurLine(const BYTE* base, BYTE* out, int len, size_t ste
 }
 
 // Blur the 32bpp canvas in place: SWS_BACKDROP_BLUR_PASSES separable box passes, which
-// approximate a gaussian without the blocky plateaus a single pass leaves behind (and
-// MinGW has no GDI+ 1.1 effect classes). The dim veil is baked in afterwards so the
-// backdrop is one opaque bitmap. Runs once per show, never per frame.
+// approximate a gaussian without blocky plateaus. Float intermediates prevent each pass
+// from quantizing channels back to BYTE before the final write. The dim veil is baked in
+// afterwards so backdrop is one opaque bitmap. Runs once per show, never per frame.
 static bool BackdropBlurAndVeil(Gdiplus::Bitmap* bmp, int sw, int sh,
                                 int opacity, HANDLE cancel = nullptr) {
     const int R = SWS_BACKDROP_BLUR_RADIUS;
     Gdiplus::Rect full(0, 0, sw, sh);
     Gdiplus::BitmapData bd = {};
-    if (bmp->LockBits(&full, Gdiplus::ImageLockModeRead | Gdiplus::ImageLockModeWrite,
-                      PixelFormat32bppARGB, &bd) == Gdiplus::Ok && bd.Scan0) {
+    const Gdiplus::Status lockStatus = bmp->LockBits(
+        &full, Gdiplus::ImageLockModeRead | Gdiplus::ImageLockModeWrite,
+        PixelFormat32bppARGB, &bd);
+    if (lockStatus != Gdiplus::Ok || !bd.Scan0) {
+        Wh_Log(L"SWS: backdrop blur lock failed status=%d size=%dx%d",
+               lockStatus, sw, sh);
+        return false;
+    }
+    {
         const size_t stride = (size_t)bd.Stride;
-        std::vector<BYTE> src(stride * sh), dst(stride * sh);
-        memcpy(src.data(), bd.Scan0, stride * sh);
+        const size_t pixels = (size_t)sw * sh;
+        std::vector<float> src(pixels * 4), dst(pixels * 4);
+        for (int y = 0; y < sh; ++y) {
+            const BYTE* row = (const BYTE*)bd.Scan0 + (size_t)y * stride;
+            float* out = src.data() + (size_t)y * sw * 4;
+            for (int x = 0; x < sw; ++x) {
+                const BYTE* pixel = row + (size_t)x * 4;
+                out[0] = pixel[0];
+                out[1] = pixel[1];
+                out[2] = pixel[2];
+                out[3] = pixel[3];
+                out += 4;
+            }
+        }
         for (int pass = 0; pass < SWS_BACKDROP_BLUR_PASSES; pass++) {
             for (int y = 0; y < sh; y++) {
                 if (cancel && WaitForSingleObject(cancel, 0) == WAIT_OBJECT_0) {
                     bmp->UnlockBits(&bd);
                     return false;
                 }
-                BackdropBoxBlurLine(src.data() + (size_t)y * stride, dst.data() + (size_t)y * stride,
+                BackdropBoxBlurLine(src.data() + (size_t)y * sw * 4,
+                                    dst.data() + (size_t)y * sw * 4,
                                     sw, 4, R);
             }
             for (int x = 0; x < sw; x++) {
@@ -1821,11 +1857,23 @@ static bool BackdropBlurAndVeil(Gdiplus::Bitmap* bmp, int sw, int sh,
                     bmp->UnlockBits(&bd);
                     return false;
                 }
-                BackdropBoxBlurLine(dst.data() + (size_t)x * 4, src.data() + (size_t)x * 4,
-                                    sh, stride, R);
+                BackdropBoxBlurLine(dst.data() + (size_t)x * 4,
+                                    src.data() + (size_t)x * 4,
+                                    sh, (size_t)sw * 4, R);
             }
         }
-        memcpy(bd.Scan0, src.data(), stride * sh);
+        for (int y = 0; y < sh; ++y) {
+            BYTE* row = (BYTE*)bd.Scan0 + (size_t)y * stride;
+            const float* in = src.data() + (size_t)y * sw * 4;
+            for (int x = 0; x < sw; ++x) {
+                BYTE* pixel = row + (size_t)x * 4;
+                pixel[0] = (BYTE)(std::clamp(in[0], 0.0f, 255.0f) + 0.5f);
+                pixel[1] = (BYTE)(std::clamp(in[1], 0.0f, 255.0f) + 0.5f);
+                pixel[2] = (BYTE)(std::clamp(in[2], 0.0f, 255.0f) + 0.5f);
+                pixel[3] = (BYTE)(std::clamp(in[3], 0.0f, 255.0f) + 0.5f);
+                in += 4;
+            }
+        }
         bmp->UnlockBits(&bd);
     }
 
@@ -1901,14 +1949,17 @@ static BOOL CALLBACK BackdropMonitorEnumProc(HMONITOR hMon, HDC, LPRECT, LPARAM)
 
 // Build the blurred wallpaper bitmap once per show ("wallpaper" mode).
 static Gdiplus::Bitmap* BuildBackdropWallpaper(int w, int h, int opacity,
-                                                HANDLE cancel = nullptr) {
+                                                 HANDLE cancel = nullptr) {
     if (w <= 0 || h <= 0) return nullptr;
     WCHAR wp[MAX_PATH] = L"";
     if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wp, 0) || !wp[0]) {
+        Wh_Log(L"SWS: wallpaper backdrop source unavailable error=%u", GetLastError());
         return nullptr;
     }
     Gdiplus::Bitmap src(wp);
     if (src.GetLastStatus() != Gdiplus::Ok || src.GetWidth() == 0 || src.GetHeight() == 0) {
+        Wh_Log(L"SWS: wallpaper backdrop load failed path='%s' status=%d size=%ux%u",
+               wp, src.GetLastStatus(), src.GetWidth(), src.GetHeight());
         return nullptr;
     }
 
@@ -1926,6 +1977,8 @@ static Gdiplus::Bitmap* BuildBackdropWallpaper(int w, int h, int opacity,
     style = readWallpaperNumber(L"WallpaperStyle", style);
     tile = readWallpaperNumber(L"TileWallpaper", tile);
     if (tile == 1) style = 1; // "Tile" checkbox overrides the fit style
+    Wh_Log(L"SWS: wallpaper backdrop source path='%s' style=%u tile=%u source=%ux%u canvas=%dx%d",
+           wp, style, tile, src.GetWidth(), src.GetHeight(), w, h);
 
     int sw = 0, sh = 0;
     Gdiplus::Bitmap* small = BackdropAllocCanvas(w, h, sw, sh);
@@ -2082,18 +2135,26 @@ static DWORD WINAPI BackdropWorkerProc(LPVOID parameter) {
 static void HandleBackdropBuildResult(BackdropBuildResult* result) {
     if (!result) return;
     BackdropReapWorker();
+    if (result->success) {
+        g_backdropLastBuildDurationMs = result->elapsedMs;
+    }
     Wh_Log(L"SWS: backdrop worker result generation=%u success=%d elapsed=%llu ms",
            result->generation, result->success,
            (unsigned long long)result->elapsedMs);
+    const bool sameGeneration =
+        result->generation == g_backdropGeneration.load(std::memory_order_acquire);
     const bool current =
-        result->generation == g_backdropGeneration.load(std::memory_order_acquire) &&
+        sameGeneration &&
         g_backdropBuildRequested && !g_backdropWorkerShutdown.load(std::memory_order_acquire) &&
-        BackdropBlurEnabled();
+        BackdropBlurEnabled() && !g_backdropPresentationResolved;
     if (!current || !result->success) {
         const bool retry = g_backdropBuildRetryPending;
         const bool failed = !result->success;
+        Wh_Log(L"SWS: backdrop result rejected generation=%u current=%d success=%d retry=%d resolved=%d",
+               result->generation, current, result->success, retry,
+               g_backdropPresentationResolved);
         g_backdropBuildRetryPending = false;
-        if (current) g_backdropBuildRequested = false;
+        if (sameGeneration) g_backdropBuildRequested = false;
         BackdropFreeOutput(&result->output);
         delete result;
         if (!g_backdropPresentationResolved &&
@@ -2112,6 +2173,9 @@ static void HandleBackdropBuildResult(BackdropBuildResult* result) {
     g_backdropPaintBitmap = result->output.paintBitmap;
     g_backdropPaintOldBitmap = result->output.paintOldBitmap;
     g_backdropPaintSize = result->output.paintSize;
+    Wh_Log(L"SWS: backdrop result accepted generation=%u paint=%dx%d elapsed=%llu ms",
+           result->generation, g_backdropPaintSize.cx, g_backdropPaintSize.cy,
+           (unsigned long long)result->elapsedMs);
     result->output = {};
     delete result;
 
@@ -5966,8 +6030,11 @@ static std::map<HWND, PendingCloseRequest> s_pendingCloseRequests;
 // Activation MRU (Most Recently Used) tracking
 static std::vector<HWND> g_mruWindows;
 
-static void UpdateMruWindow(HWND hWnd) {
-    if (!hWnd || IsSwitcherWindow(hWnd)) return;
+// Resolve popups and owned helper windows to the same Alt+Tab representative
+// used by MRU ordering and initial selection. Keeping this identity canonical
+// prevents a normal window's popup/root mismatch from selecting itself again.
+static HWND CanonicalAltTabWindow(HWND hWnd) {
+    if (!hWnd || IsSwitcherWindow(hWnd)) return nullptr;
     HWND hTarget = hWnd;
     if (!IsAltTabWindow(hTarget)) {
         HWND own = GetWindow(hTarget, GW_OWNER);
@@ -5978,11 +6045,16 @@ static void UpdateMruWindow(HWND hWnd) {
             if (root && IsAltTabWindow(root)) {
                 hTarget = root;
             } else {
-                return;
+                return nullptr;
             }
         }
     }
-    if (!hTarget || IsSwitcherWindow(hTarget)) return;
+    return hTarget && !IsSwitcherWindow(hTarget) ? hTarget : nullptr;
+}
+
+static void UpdateMruWindow(HWND hWnd) {
+    HWND hTarget = CanonicalAltTabWindow(hWnd);
+    if (!hTarget) return;
 
     auto it = std::find(g_mruWindows.begin(), g_mruWindows.end(), hTarget);
     if (it != g_mruWindows.end()) {
@@ -12861,8 +12933,10 @@ static void RevealPendingSwitcher() {
     // Build backdrop only after pending sessions have proved they need a visual
     // reveal. Direct touchpad commits must not pay this cost before release.
     PrepareBackdropBlur();
-    const bool backdropReady = BackdropWaitForReady(
-        SWS_BACKDROP_PRESENTATION_BUDGET_MS);
+    const UINT backdropBudgetMs = BackdropPresentationBudgetMs();
+    const bool backdropReady = BackdropWaitForReady(backdropBudgetMs);
+    Wh_Log(L"SWS: backdrop presentation ready=%d budget=%u ms",
+           backdropReady, backdropBudgetMs);
 
     // Backdrop waiting blocks this message pump, so check the reader-owned
     // release state again before material and window presentation can proceed.
@@ -13219,8 +13293,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     // three-finger stroke during this invocation's scheduling window.
     g_touchpadSwitcherActive.store(true);
     PublishNativeSwipePolicy();
-    HWND invocationWindow = GetAncestor(
-        invocationSource ? invocationSource : GetForegroundWindow(), GA_ROOTOWNER);
+    HWND invocationInput = invocationSource ? invocationSource : GetForegroundWindow();
+    HWND invocationWindow = CanonicalAltTabWindow(invocationInput);
     s_switchAnimationSource = invocationWindow;
     g_sameAppSessionKey[0] = L'\0';
     if (g_isAltBacktickSameApp) {
@@ -13265,16 +13339,21 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     g_consumeEscUp = false;
     g_drillInAfterReveal = false;
     g_selectedIndex = 0;
+    int invocationIndex = -1;
     if (!touchpadInvocation) {
         for (int i = 0; i < (int)g_windows.size(); ++i) {
             const auto& e = g_windows[i];
             if (e.hWnd == invocationWindow ||
                 std::find(e.groupWindows.begin(), e.groupWindows.end(), invocationWindow) != e.groupWindows.end()) {
                 g_selectedIndex = (i + 1) % (int)g_windows.size();
+                invocationIndex = i;
                 break;
             }
         }
     }
+    Wh_Log(L"SWS: show invocation input=%p canonical=%p matchedIndex=%d selected=%d entries=%u touchpad=%d",
+           invocationInput, invocationWindow, invocationIndex, g_selectedIndex,
+           (unsigned)g_windows.size(), touchpadInvocation);
     g_hoverIndex = -1;
     g_hoverThumbIndex = -1;
     g_hoverWnd = NULL;
@@ -13419,8 +13498,10 @@ static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSou
     // The switcher remains hidden here, so capture cannot contain its own surface.
     // Keep this work out of the pending touchpad path above.
     PrepareBackdropBlur();
-    const bool backdropReady = BackdropWaitForReady(
-        SWS_BACKDROP_PRESENTATION_BUDGET_MS);
+    const UINT backdropBudgetMs = BackdropPresentationBudgetMs();
+    const bool backdropReady = BackdropWaitForReady(backdropBudgetMs);
+    Wh_Log(L"SWS: backdrop presentation ready=%d budget=%u ms",
+           backdropReady, backdropBudgetMs);
     g_backdropPresentationResolved = true;
     g_backdropBuildRetryPending = false;
     KillTimer(g_hSwitcher, SWS_BACKDROP_RETRY_TIMER_ID);
@@ -13716,29 +13797,36 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         // last-input eligibility while a different app owns the foreground).
         TapUnassignedKeyForForeground();
     }
-    BOOL foregroundOk = FALSE;
-    if (!ownerRestorePending) {
+    const bool alreadyForeground = !ownerRestorePending &&
+                                   GetForegroundWindow() == hForegroundTarget;
+    bool activationSkipped = alreadyForeground;
+    BOOL foregroundOk = alreadyForeground;
+    if (!ownerRestorePending && !alreadyForeground) {
         foregroundOk = SetForegroundWindow(hForegroundTarget);
         if (!foregroundOk) SwitchToThisWindow(hForegroundTarget, TRUE);
     }
     bool active = !ownerRestorePending &&
                   GetForegroundWindow() == hForegroundTarget;
-    if (s_pendingActivationListTarget != hTarget ||
-        !s_pendingActivationListDeadline ||
-        GetTickCount64() >= s_pendingActivationListDeadline) {
+    if (!active || ownerRestorePending) {
         s_pendingActivationListTarget = hTarget;
         s_pendingActivationListDeadline = GetTickCount64() +
             SWS_WINDOW_LIST_RECONCILE_TIMEOUT_MS;
+    } else {
+        ClearPendingActivationListTarget();
     }
     if (!retrying || active) {
-        Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d active=%d", hForegroundTarget,
-               foregroundOk, active);
+        Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d active=%d skipped=%d",
+               hForegroundTarget, foregroundOk, active, activationSkipped);
     }
     if (active) {
         s_touchpadActivationRetryTarget = NULL;
         s_touchpadActivationRetryDeadline = 0;
         if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
         UpdateMruWindow(hTarget);
+        if (activationSkipped) {
+            Wh_Log(L"SWS: activation skipped target already foreground hwnd=%p",
+                   hForegroundTarget);
+        }
         s_touchpadCommitActivation = false;
     } else if (g_hSwitcher && ((!g_isVisible && !g_isPendingShow) || g_animExitActive)) {
         // Foreground activation may be denied transiently after the raw input
@@ -17999,7 +18087,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (!g_isVisible && !g_isPendingShow) {
             HWND hFg = GetForegroundWindow();
-            if (hFg && !IsSwitcherWindow(hFg) && IsEligibleWindow(hFg)) {
+            if (hFg && !IsSwitcherWindow(hFg)) {
                 UpdateMruWindow(hFg);
             }
             if (isAltBacktickTrigger) g_isAltBacktickSameApp = true;
