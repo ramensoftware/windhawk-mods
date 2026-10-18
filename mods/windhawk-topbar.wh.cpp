@@ -3313,6 +3313,15 @@ void EnsureButtonHoverHook(wuxc::Button const& button) {
     {
         std::lock_guard<std::mutex> lock(g_buttonHoverMutex);
         auto& entry = g_buttonHoverOverrides[key];
+        auto existing = entry.weakButton.get();
+        if (!existing || existing != button) {
+            entry.backgrounds.clear();
+            entry.borderBrushes.clear();
+            entry.hooked = false;
+            if (s_hoveredButton && winrt::get_abi(s_hoveredButton) == key) {
+                s_hoveredButton = nullptr;
+            }
+        }
         if (entry.backgrounds.find(L"Normal") == entry.backgrounds.end()) {
             try {
                 if (auto bg = button.Background()) {
@@ -3329,6 +3338,7 @@ void EnsureButtonHoverHook(wuxc::Button const& button) {
         }
         alreadyHooked = entry.hooked;
         entry.hooked = true;
+        entry.weakButton = winrt::make_weak(button);
     }
     if (alreadyHooked) {
         std::wstring cur = L"Normal";
@@ -4754,20 +4764,25 @@ void PerformCalendarScroll(int direction, int steps) {
         idleAnim.InsertKeyFrame(1.0f, {0.0f, 0.0f, 0.0f}, ease);
         idleVisual.StartAnimation(L"Offset", idleAnim);
 
-        RunInBackground([activeVisual, idleVisual, activeGrid, idleGrid, generation, travel]() mutable {
-            if (WaitForSingleObject(g_stopEvent, 140) == WAIT_OBJECT_0) return;
-            RunOnUiThread([activeVisual, idleVisual, activeGrid, idleGrid, generation, travel]() mutable {
-                if (generation != s_animationGeneration) return;
-                try {
-                    activeVisual.StopAnimation(L"Offset");
-                    idleVisual.StopAnimation(L"Offset");
-                    activeVisual.Offset({0.0f, 0.0f, 0.0f});
-                    idleVisual.Offset({static_cast<float>(travel), 0.0f, 0.0f});
-                } catch (...) {}
-                g_clockCalGridActive = idleGrid;
-                g_clockCalGridIdle = activeGrid;
-            });
+        static std::shared_ptr<DispatcherTimer> s_animCleanupTimer;
+        if (!s_animCleanupTimer) {
+            s_animCleanupTimer = std::make_shared<DispatcherTimer>();
+            s_animCleanupTimer->Interval(std::chrono::milliseconds(140));
+        }
+        s_animCleanupTimer->Stop();
+        s_animCleanupTimer->Tick([activeVisual, idleVisual, activeGrid, idleGrid, generation, travel](wf::IInspectable const&, wf::IInspectable const&) {
+            s_animCleanupTimer->Stop();
+            if (generation != s_animationGeneration) return;
+            try {
+                activeVisual.StopAnimation(L"Offset");
+                idleVisual.StopAnimation(L"Offset");
+                activeVisual.Offset({0.0f, 0.0f, 0.0f});
+                idleVisual.Offset({static_cast<float>(travel), 0.0f, 0.0f});
+            } catch (...) {}
+            g_clockCalGridActive = idleGrid;
+            g_clockCalGridIdle = activeGrid;
         });
+        s_animCleanupTimer->Start();
     } catch (...) {}
 }
 
@@ -11370,10 +11385,17 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut,
             };
             std::shared_ptr<std::function<void()>> resetPtr =
                 std::make_shared<std::function<void()>>(resetVisual);
-            RunInBackground([dur, resetPtr]() {
-                Sleep(static_cast<DWORD>(dur.count()) + 30);
-                RunOnUiThread([resetPtr]() { (*resetPtr)(); });
+            static std::shared_ptr<DispatcherTimer> s_flyoutResetTimer;
+            if (!s_flyoutResetTimer) {
+                s_flyoutResetTimer = std::make_shared<DispatcherTimer>();
+            }
+            s_flyoutResetTimer->Stop();
+            s_flyoutResetTimer->Interval(std::chrono::milliseconds(static_cast<DWORD>(dur.count()) + 30));
+            s_flyoutResetTimer->Tick([resetPtr](wf::IInspectable const&, wf::IInspectable const&) {
+                s_flyoutResetTimer->Stop();
+                (*resetPtr)();
             });
+            s_flyoutResetTimer->Start();
         } catch (...) {}
     });
     InstallLightDismissGuard(flyout);
@@ -12107,15 +12129,15 @@ void Fetch(double lat, double lon, WeatherState* out) {
 }
 
 std::atomic<bool> g_weatherFetching{false};
+static std::atomic<ULONGLONG> s_nextWeatherFetchTick{0};
+static std::atomic<int> s_weatherFailCount{0};
 
 void EnsureFresh() {
-    // Must be called on the UI thread. Reads g_settings by value before
-    // dispatching, and only writes g_weatherState via RunOnUiThread, so
-    // the worker never races LoadSettings() or the UI reader.
     std::wstring latStr = g_settings.weatherLatitude;
     std::wstring lonStr = g_settings.weatherLongitude;
     std::wstring locName = g_settings.weatherLocationName;
     if (latStr.empty() || lonStr.empty()) return;
+    if (GetTickCount64() < s_nextWeatherFetchTick.load()) return;
     if (g_weatherFetching.exchange(true)) return;
 
     double lat = _wtof(latStr.c_str());
@@ -12126,6 +12148,15 @@ void EnsureFresh() {
         fresh.locationName = locName;
         RunOnUiThread([fresh = std::move(fresh)]() mutable {
             g_weatherState = std::move(fresh);
+            if (g_weatherState.valid) {
+                s_weatherFailCount = 0;
+                s_nextWeatherFetchTick = 0;
+            } else {
+                int fail = ++s_weatherFailCount;
+                int delaySec = 3 * (1 << (std::min)(fail - 1, 6));
+                if (delaySec > 300) delaySec = 300;
+                s_nextWeatherFetchTick = GetTickCount64() + (delaySec * 1000ULL);
+            }
             if (g_weatherState.dailyDates.empty()) g_weatherSelectedDay = 0;
             else if (g_weatherSelectedDay >= g_weatherState.dailyDates.size()) g_weatherSelectedDay = 0;
             RefreshWeatherButtonContent();
@@ -22191,6 +22222,7 @@ void ScheduleReload() {
             try {
             LoadSettings();
             if (g_settings.topBarBehaviour == L"default") {
+                if (g_topBarAutoHideTimer) g_topBarAutoHideTimer.Stop();
                 g_topBarAutoHidden = false;
                 g_autoHideRevealPending = false;
                 g_autoHideBootDelay = false;
@@ -22211,14 +22243,17 @@ void ScheduleReload() {
                                           &cloakOff, sizeof(cloakOff));
                     ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
                 }
-            } else if (g_topBarAutoHidden.load() &&
-                       g_settings.topBarShowTrigger == L"activationbar") {
-                // Recreate/show the configured reveal target after a live
-                // settings reload while the bar is already hidden.
-                AnimateActivationPillWindow(true);
-            } else if (g_settings.topBarShowTrigger != L"activationbar" &&
-                       g_activationPillHwnd && IsWindow(g_activationPillHwnd)) {
-                ShowWindow(g_activationPillHwnd, SW_HIDE);
+            } else {
+                if (g_topBarAutoHideTimer) g_topBarAutoHideTimer.Start();
+                if (g_topBarAutoHidden.load() &&
+                    g_settings.topBarShowTrigger == L"activationbar") {
+                    // Recreate/show the configured reveal target after a live
+                    // settings reload while the bar is already hidden.
+                    AnimateActivationPillWindow(true);
+                } else if (g_settings.topBarShowTrigger != L"activationbar" &&
+                           g_activationPillHwnd && IsWindow(g_activationPillHwnd)) {
+                    ShowWindow(g_activationPillHwnd, SW_HIDE);
+                }
             }
             bool turnedOffStart =
                 g_prevDefaultStartMenu && !g_settings.defaultStartMenu;
@@ -23697,6 +23732,27 @@ static std::wstring BuildSettingsJson() {
     addInt(L"mediaButtonShowControls");
     addInt(L"mediaButtonShowVisualizer");
     addStr(L"weatherUnit");
+    addStr(L"topBarScaleMode");
+    addInt(L"topBarScale");
+    addInt(L"globalBlurAmount");
+    addInt(L"showSettingsButton");
+    addStr(L"weatherLocationName");
+    addStr(L"weatherLatitude");
+    addStr(L"weatherLongitude");
+    addStr(L"topBarBehaviour");
+    addStr(L"topBarShowTrigger");
+    addInt(L"topBarAutoHideMs");
+    addStr(L"flyoutAnimation");
+    addInt(L"activationPillHeight");
+    addInt(L"activationPillWidth");
+    addInt(L"activationPillVerticalOffset");
+    addStr(L"activationPillColor");
+    addInt(L"thumbPreviewEnabled");
+    addInt(L"thumbShowPin");
+    addInt(L"thumbShowMinimize");
+    addInt(L"thumbShowMaximize");
+    addInt(L"thumbShowClose");
+    addInt(L"thumbPreviewScale");
 
     return std::wstring(obj.Stringify());
 }
@@ -23896,6 +23952,9 @@ static void ApplySettingsPairs(
         L"showClock", L"timeFormat", L"showDate", L"dateFormat",
         L"weatherLocationName", L"weatherLatitude", L"weatherLongitude",
         L"weatherUnit",
+        L"topBarBehaviour", L"topBarShowTrigger", L"topBarAutoHideMs", L"flyoutAnimation",
+        L"activationPillHeight", L"activationPillWidth", L"activationPillVerticalOffset", L"activationPillColor",
+        L"thumbPreviewEnabled", L"thumbShowPin", L"thumbShowMinimize", L"thumbShowMaximize", L"thumbShowClose", L"thumbPreviewScale"
     };
     static const std::map<std::wstring, std::pair<int, int>> kIntRanges = {
         { L"topBarScale",               {  50, 300 } },
@@ -23933,6 +23992,16 @@ static void ApplySettingsPairs(
         { L"showClock",                 {   0,   1 } },
         { L"showDate",                  {   0,   1 } },
         { L"fontBold",                  {   0,   1 } },
+        { L"topBarAutoHideMs",          {   0, 2000 } },
+        { L"activationPillHeight",      {   1,  20 } },
+        { L"activationPillWidth",       {  20, 400 } },
+        { L"activationPillVerticalOffset", { -30, 60 } },
+        { L"thumbPreviewEnabled",       {   0,   1 } },
+        { L"thumbShowPin",              {   0,   1 } },
+        { L"thumbShowMinimize",         {   0,   1 } },
+        { L"thumbShowMaximize",         {   0,   1 } },
+        { L"thumbShowClose",            {   0,   1 } },
+        { L"thumbPreviewScale",         {  50, 200 } },
     };
     for (const auto& kv : pairs) {
         if (kAllowedKeys.find(kv.first) == kAllowedKeys.end()) {
@@ -26923,12 +26992,17 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
                                 offsetAnim.InsertKeyFrame(1.0f, {-30.0f, 0.0f, 0.0f}, ease);
                                 visual.StartAnimation(L"Offset", offsetAnim);
                                 animated = true;
-                                RunInBackground([panel, flyout] {
-                                    Sleep(200);
-                                    RunOnUiThread([panel, flyout] {
-                                        PopulateWindowsNotificationPanel(panel, flyout);
-                                    });
+                                static std::shared_ptr<DispatcherTimer> s_notifDismissTimer;
+                                if (!s_notifDismissTimer) {
+                                    s_notifDismissTimer = std::make_shared<DispatcherTimer>();
+                                    s_notifDismissTimer->Interval(std::chrono::milliseconds(200));
+                                }
+                                s_notifDismissTimer->Stop();
+                                s_notifDismissTimer->Tick([panel, flyout](wf::IInspectable const&, wf::IInspectable const&) {
+                                    s_notifDismissTimer->Stop();
+                                    PopulateWindowsNotificationPanel(panel, flyout);
                                 });
+                                s_notifDismissTimer->Start();
                             }
                         }
                     } catch (...) {}
@@ -27628,15 +27702,17 @@ g_centerPanel.Children().Append(resourceButton);
             ApplyAllControlStyles();
         });
         notificationsFlyout.Opening([notificationsPanel, notificationsFlyout](auto&&, auto&&) {
-            PopulateWindowsNotificationPanel(notificationsPanel, notificationsFlyout);
-            windows_notifications::RefreshAsync([notificationsPanel, notificationsFlyout] {
-                try {
-                    if (notificationsFlyout && notificationsFlyout.IsOpen()) {
-                        PopulateWindowsNotificationPanel(notificationsPanel,
-                                                         notificationsFlyout);
-                    }
-                } catch (...) {}
-            });
+            try {
+                PopulateWindowsNotificationPanel(notificationsPanel, notificationsFlyout);
+                windows_notifications::RefreshAsync([notificationsPanel, notificationsFlyout] {
+                    try {
+                        if (notificationsFlyout && notificationsFlyout.IsOpen()) {
+                            PopulateWindowsNotificationPanel(notificationsPanel,
+                                                             notificationsFlyout);
+                        }
+                    } catch (...) {}
+                });
+            } catch (...) {}
         });
         notificationsButton.Flyout(notificationsFlyout);
         RegisterNamed(L"NotificationsButton", notificationsButton);
@@ -31695,6 +31771,9 @@ static bool IsTopBarBackdropTarget(HWND hwnd) {
 
 void ForceDisableWindowsTransparency(HWND hwnd, bool force) {
     if (!hwnd || !IsWindow(hwnd) || !IsTopBarBackdropTarget(hwnd)) return;
+    static std::atomic<bool> s_inForce{false};
+    if (s_inForce.exchange(true)) return;
+    struct Guard { ~Guard() { s_inForce = false; } } guard;
 
     wchar_t clsCheck[256]{};
     bool isXamlSurface = GetClassNameW(hwnd, clsCheck, ARRAYSIZE(clsCheck)) &&
@@ -32078,98 +32157,7 @@ LRESULT CALLBACK ThumbPreviewWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
 
         case WM_LBUTTONDOWN: {
-            int mx = GET_X_LPARAM(lParam);
-            int my = GET_Y_LPARAM(lParam);
-            RECT rc{};
-            GetClientRect(hwnd, &rc);
-            int W = rc.right - rc.left;
-
-            const int btnSize = 26;
-            const int gap = 4;
-            const int padRight = 6;
-            const int padTop = (kThumbPreviewButtonStripH - btnSize) / 2;
-
-            int hitIdx = -1;
-            int right = W - padRight;
-            int order[4] = { 3, 2, 1, 0 };
-            for (int oi = 0; oi < 4; oi++) {
-                int idx = order[oi];
-                bool visible = false;
-                switch (idx) {
-                    case 0: visible = g_settings.thumbShowPin; break;
-                    case 1: visible = g_settings.thumbShowMinimize; break;
-                    case 2: visible = g_settings.thumbShowMaximize; break;
-                    case 3: visible = g_settings.thumbShowClose; break;
-                }
-                if (!visible) continue;
-                RECT br{ right - btnSize, padTop, right, padTop + btnSize };
-                right = br.left - gap;
-                POINT pt{ mx, my };
-                if (PtInRect(&br, pt)) { hitIdx = idx; break; }
-            }
-
             HWND src = g_thumbSourceHwnd;
-
-            hitIdx = -1;
-
-            if (hitIdx == 0) {
-                if (IsWindow(src)) {
-                    bool wasTopmost = IsWindowTopmost(src);
-                    if (wasTopmost) {
-                        SetWindowPos(src, HWND_NOTOPMOST, 0, 0, 0, 0,
-                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                        g_thumbPinned = false;
-                    } else {
-                        SetWindowPos(src, HWND_TOPMOST, 0, 0, 0, 0,
-                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                        g_thumbPinned = true;
-                    }
-                    RefreshTaskButtonPinBadge(src);
-                    // The preview is topmost; force it above the just-
-                    // changed source window and repaint the button strip
-                    // so the pin glyph and its colour reflect the new
-                    // state on this frame.
-                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                    RECT strip{ 0, 0, 9999, kThumbPreviewButtonStripH };
-                    InvalidateRect(hwnd, &strip, TRUE);
-                    if (!g_thumbPinned) {
-                        if (g_thumbShowTimer) g_thumbShowTimer.Stop();
-                        if (g_thumbHideTimer) g_thumbHideTimer.Stop();
-                        if (g_thumbAnimTimer) g_thumbAnimTimer.Stop();
-                        if (g_thumbButtonsHwnd && IsWindow(g_thumbButtonsHwnd)) {
-                            PostMessage(g_thumbButtonsHwnd, WM_CLOSE, 0, 0);
-                        }
-                        if (g_thumbPreviewHwnd && IsWindow(g_thumbPreviewHwnd)) {
-                            PostMessage(g_thumbPreviewHwnd, WM_CLOSE, 0, 0);
-                        }
-                        g_thumbPinned = false;
-                    }
-                }
-                return 0;
-            }
-            if (hitIdx == 1) {
-                if (IsWindow(src)) ShowWindow(src, SW_MINIMIZE);
-                return 0;
-            }
-            if (hitIdx == 2) {
-                if (IsWindow(src)) {
-                    HWND s = src;
-                    RunInBackground([s] {
-                        try { ToggleMaximizeWindow(s); } catch (...) {}
-                    });
-                }
-                InvalidateRect(hwnd, nullptr, FALSE);
-                return 0;
-            }
-            if (hitIdx == 3) {
-                if (IsWindow(src)) PostMessage(src, WM_CLOSE, 0, 0);
-                DestroyThumbnailPreview();
-                return 0;
-            }
-
-            // Click on the thumbnail area: bring the source window forward
-            // (restore if minimized, otherwise activate).
             if (IsWindow(src)) {
                 HWND s = src;
                 RunInBackground([s] {
@@ -34067,12 +34055,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         ForegroundEventProcInstall();
 
-        if (!g_thumbDestroyGlobalHook) {
-            g_thumbDestroyGlobalHook = SetWinEventHook(
-                EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY,
-                nullptr, ThumbDestroyGlobalProc,
-                0, 0, WINEVENT_OUTOFCONTEXT);
-        }
+
 
         if (!g_selfProcessWindowHook) {
             g_selfProcessWindowHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
@@ -34253,7 +34236,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             try { AutoHideTick(); } catch (...) {}
         });
     }
-    g_topBarAutoHideTimer.Start();
+    if (g_settings.topBarBehaviour != L"default") {
+        g_topBarAutoHideTimer.Start();
+    }
 
     g_blurRefreshTimer = DispatcherTimer();
         g_blurRefreshTimer.Interval(std::chrono::seconds(2));
@@ -34313,52 +34298,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             try { RefreshMediaButtonState(); } catch (...) {}
         });
 
-        if (!g_thumbLivenessTimer) {
-            g_thumbLivenessTimer = DispatcherTimer();
-            g_thumbLivenessTimer.Interval(std::chrono::milliseconds(1500));
-            g_thumbLivenessTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-                try {
-                    if (!g_thumbPreviewHwnd || !IsWindow(g_thumbPreviewHwnd)) return;
-                    if (!g_thumbSourceHwnd) return;
-                    bool sourceGone = false;
-                    if (!IsWindow(g_thumbSourceHwnd)) {
-                        sourceGone = true;
-                    } else {
-                        BOOL cloaked = FALSE;
-                        if (SUCCEEDED(DwmGetWindowAttribute(g_thumbSourceHwnd,
-                                DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
-                            sourceGone = true;
-                        }
-                        if (!sourceGone && !IsWindowVisible(g_thumbSourceHwnd) &&
-                            !IsIconic(g_thumbSourceHwnd)) {
-                            sourceGone = true;
-                        }
-                        if (!sourceGone) {
-                            DWORD srcPid = 0;
-                            GetWindowThreadProcessId(g_thumbSourceHwnd, &srcPid);
-                            if (!srcPid || srcPid == GetCurrentProcessId()) {
-                                sourceGone = true;
-                            } else {
-                                HANDLE hSrc = OpenProcess(
-                                    PROCESS_QUERY_LIMITED_INFORMATION, FALSE, srcPid);
-                                if (!hSrc) {
-                                    sourceGone = true;
-                                } else {
-                                    DWORD exitCode = 0;
-                                    if (GetExitCodeProcess(hSrc, &exitCode) &&
-                                        exitCode != STILL_ACTIVE) {
-                                        sourceGone = true;
-                                    }
-                                    CloseHandle(hSrc);
-                                }
-                            }
-                        }
-                    }
-                    if (sourceGone) DestroyThumbnailPreview();
-                } catch (...) {}
-            });
-            g_thumbLivenessTimer.Start();
-        }
+
 
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
@@ -34808,13 +34748,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         g_restoreTimer.Start();
 
-        static bool s_thumbWatchThreadStarted = false;
-        if (!s_thumbWatchThreadStarted) {
-            s_thumbWatchThreadStarted = true;
-            HANDLE watchThread = CreateThread(nullptr, 0,
-                ThumbSourceWatchThread, nullptr, 0, nullptr);
-            if (watchThread) CloseHandle(watchThread);
-        }
+
 
         // Wallpaper updates are handled by WM_SETTINGCHANGE – no timer needed.
 
@@ -34953,6 +34887,13 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_mediaProgressTimer = nullptr;
         g_flyoutShellTemplate = nullptr;
         g_menuShellTemplate = nullptr;
+        windows_notifications::g_appIconCache.clear();
+        g_searchIconCache.clear();
+        g_startAppIconCache.clear();
+        g_mediaThumbnailCache = nullptr;
+        g_mediaThumbnailCacheBytes.clear();
+        s_hoveredButton = nullptr;
+        g_thumbHoverButton = nullptr;
         g_allowHide = true;  // allow hiding during final teardown
         // Release XAML and COM objects on this thread (before it exits)
         if (g_clockTimer) g_clockTimer = nullptr;
@@ -36119,7 +36060,7 @@ static LONG WINAPI TopBarUnhandledExceptionFilter(EXCEPTION_POINTERS* info) {
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"TopBar: WhTool_ModInit called.");
-    SetUnhandledExceptionFilter(&TopBarUnhandledExceptionFilter);
+
     InstallProcessTransparencyBlock();
     LoadSettings();
     // Start every mode in the same visible, interactive state. If autohide
@@ -36614,7 +36555,8 @@ void Wh_ModUninit() {
         }
 
         if (g_shellTrayPushThread) {
-            WaitForSingleObject(g_shellTrayPushThread, 3000);
+            if (g_shellTrayPushWake) SetEvent(g_shellTrayPushWake);
+            WaitForSingleObject(g_shellTrayPushThread, INFINITE);
             CloseHandle(g_shellTrayPushThread);
             g_shellTrayPushThread = nullptr;
         }
