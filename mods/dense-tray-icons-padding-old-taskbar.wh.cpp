@@ -1,7 +1,7 @@
 // ==WindhawkMod==
-// @id              tray-icon-spacing-win10
-// @name            Tray icon spacing for Windows 10 (live + overflow)
-// @description     Adjust the tray icon spacing and the size of the hidden icons popup on the Windows 10 taskbar, applied instantly
+// @id              dense-tray-icons-padding-old-taskbar
+// @name            Adjustable tray icons padding for Win10 taskbar
+// @description     Makes padding of tray icons adjustable in legacy taskbar
 // @version         2.0
 // @author          Anixx
 // @github          https://github.com/Anixx
