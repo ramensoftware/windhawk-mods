@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.238
+// @version         0.10.239
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -39,8 +39,8 @@ I use this mod every day myself, so most updates really just come from my own ta
 
 | Layout | Dark theme | Light theme |
 | :--- | :--- | :--- |
-| **Fullsize** · Glass | ![liquid-glass-fullsize-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-fullsize-dark.gif) | ![liquid-glass-fullsize-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-fullsize-light.gif) |
-| Borderless | ![transparent-borderless-fullsize-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/transparent-borderless-fullsize-dark.gif) | ![transparent-borderless-fullsize-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/transparent-borderless-fullsize-light.gif) |
+| **Fullsize** · Glass | ![liquid-glass-fullsize-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/pr-0.10.239/liquid-glass-fullsize-dark.gif) | ![liquid-glass-fullsize-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/pr-0.10.239/liquid-glass-fullsize-light.gif) |
+| Borderless | ![transparent-borderless-fullsize-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/pr-0.10.239/transparent-borderless-fullsize-dark.gif) | ![transparent-borderless-fullsize-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/pr-0.10.239/transparent-borderless-fullsize-light.gif) |
 | **Compact** · Glass | ![liquid-glass-compact-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-compact-dark.gif) | ![liquid-glass-compact-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-compact-light.gif) |
 | Borderless | ![transparent-borderless-compact-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/transparent-borderless-compact-dark.gif) | ![transparent-borderless-compact-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/transparent-borderless-compact-light.gif) |
 | **Side** · Glass | ![liquid-glass-sideexpansion-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-sideexpansion-dark.gif) | ![liquid-glass-sideexpansion-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-sideexpansion-light.gif) |
