@@ -2,11 +2,11 @@
 // @id              realtime-cast-shadow-wallpaper
 // @name            Real-time Cast Shadow Wallpaper
 // @description     A light moves over your desktop and every open window casts a soft, real-time shadow on the wallpaper
-// @version         1.0.1
+// @version         1.0.3
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
-// @compilerOptions -lopengl32 -lgdi32 -luser32 -lshell32 -ldwmapi -lgdiplus -lole32 -luuid
+// @compilerOptions -lopengl32 -lgdi32 -luser32 -lshell32 -ldwmapi -lgdiplus -lole32 -luuid -lwtsapi32
 // ==/WindhawkMod==
 
 // clang-format off
@@ -70,8 +70,12 @@ height, so they look consistent with every light preset.
   still desktop costs almost nothing (the flickering candle redraws
   continuously). On older desktop layouts every frame is drawn, up to the FPS
   limit.
-- The Windows wallpaper setting is never modified, and nothing is written to
-  the registry. Disabling the mod removes everything it created.
+- Rendering pauses while the session is locked, the display is off, or every
+  monitor shows a fullscreen app. If the desktop isn't ready yet (at sign-in,
+  or while Explorer restarts), the mod waits and attaches when it appears.
+- The Windows wallpaper setting is never modified, Explorer's own windows are
+  never reordered, and nothing is written to the registry. Disabling the mod
+  removes everything it created.
 - Disable other animated-wallpaper mods while using this one.
 */
 // ==/WindhawkModReadme==
@@ -203,9 +207,14 @@ height, so they look consistent with every light preset.
 - performance:
   - fps: 60
     $name: Maximum frames per second (15-120)
-  - renderWidth: 1536
-    $name: Maximum render resolution (768-2560)
-    $description: Longest side of the internal image; lower is faster
+  - quality: native
+    $name: Render quality
+    $description: Native draws at the monitor's full resolution; lower levels render smaller and upscale smoothly, using less GPU
+    $options:
+    - native: Native (sharpest)
+    - high: High (up to 2560 px)
+    - balanced: Balanced (up to 1920 px)
+    - fast: Fast (up to 1280 px)
   - maxWindows: 48
     $name: Maximum number of windows (8-64)
   - pauseFullscreen: true
@@ -215,28 +224,23 @@ height, so they look consistent with every light preset.
     $description: Places a dragged window from the cursor and syncs frames to screen refresh during the drag
   - primaryOnly: false
     $name: Primary monitor only
-  - preview: false
-    $name: Diagnostic preview window
-    $description: Shows the effect in a separate window on the primary monitor instead of the desktop
   $name: Performance and advanced
 */
 // ==/WindhawkModSettings==
 // clang-format on
 
-#define WIN32_LEAN_AND_MEAN
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
 // clang-format off
 #include <windows.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <shellapi.h>
 #include <shobjidl.h>
+#include <wtsapi32.h>
 #include <GL/gl.h>
 // clang-format on
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -465,11 +469,12 @@ struct Settings {
     std::wstring backgroundMode, backgroundPath, backgroundFit;
     float backgroundBrightness, vignette, floor[3];
     // Performance and advanced.
+    // Longest side of the internal image; 0 = native monitor resolution.
     int fps, renderWidth, maxWindows;
-    bool fullscreen, dragPrediction, primary, preview;
+    bool fullscreen, dragPrediction, primary;
     bool NeedsOverlay() const {
         return overWindows && (opacity > 0 || contact > 0) &&
-               windowShadowStrength > 0 && !preview;
+               windowShadowStrength > 0;
     }
 };
 int Setting(const wchar_t* key, int lo, int hi) {
@@ -480,9 +485,8 @@ bool Flag(const wchar_t* key) {
 }
 std::wstring StringSetting(const wchar_t* name) {
     PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    if (value)
-        Wh_FreeStringSetting(value);
+    std::wstring result = value;
+    Wh_FreeStringSetting(value);
     return result;
 }
 struct LightPreset {
@@ -599,12 +603,15 @@ Settings ReadSettings() {
     s.floor[2] = Setting(L"background.blue", 0, 255) / 255.f;
 
     s.fps = Setting(L"performance.fps", 15, 120);
-    s.renderWidth = Setting(L"performance.renderWidth", 768, 2560);
+    std::wstring quality = StringSetting(L"performance.quality");
+    s.renderWidth = quality == L"high"       ? 2560
+                    : quality == L"balanced" ? 1920
+                    : quality == L"fast"     ? 1280
+                                             : 0;
     s.maxWindows = Setting(L"performance.maxWindows", 8, 64);
     s.fullscreen = Flag(L"performance.pauseFullscreen");
     s.dragPrediction = Flag(L"performance.smoothDrag");
     s.primary = Flag(L"performance.primaryOnly");
-    s.preview = Flag(L"performance.preview");
     return s;
 }
 
@@ -721,6 +728,12 @@ void ReleaseTarget(Target& t) {
         glDeleteTextures(1, &t.texture);
     t = Target{};
 }
+// Scale from monitor pixels to the internal image (1 = native resolution).
+float RenderScale(int maxSide, int width, int height) {
+    if (maxSide <= 0)
+        return 1.f;
+    return std::min(1.f, float(maxSide) / std::max(width, height));
+}
 HBITMAP CreateDib(int w, int h, void** bits) {
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -794,28 +807,21 @@ struct DragHook {
     }
 };
 bool raisedDesktop = false;
-HWND backgroundWindow = nullptr, savedBackground = nullptr,
-     savedBackgroundPrevious = nullptr;
-void EnsureDesktopOrder() {
-    if (!raisedDesktop || !backgroundWindow || !IsWindow(backgroundWindow))
+HWND backgroundWindow = nullptr;
+// Raised desktop layout: our layer must sit between SHELLDLL_DefView (icons)
+// and Explorer's background WorkerW. Only our own window is ever moved.
+void EnsureLayerOrder(HWND layer) {
+    if (!raisedDesktop || !iconView || !IsWindow(iconView) || !IsWindow(layer))
         return;
-    if (savedBackground != backgroundWindow) {
-        savedBackground = backgroundWindow;
-        savedBackgroundPrevious = GetWindow(backgroundWindow, GW_HWNDPREV);
+    for (HWND w = GetWindow(iconView, GW_HWNDNEXT); w;
+         w = GetWindow(w, GW_HWNDNEXT)) {
+        if (w == layer)
+            return;  // Already below the icons and above the background.
+        if (w == backgroundWindow)
+            break;
     }
-    SetWindowPos(backgroundWindow, HWND_BOTTOM, 0, 0, 0, 0,
+    SetWindowPos(layer, iconView, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-}
-void RestoreDesktopOrder() {
-    if (savedBackground && IsWindow(savedBackground) &&
-        (!savedBackgroundPrevious ||
-         (IsWindow(savedBackgroundPrevious) &&
-          GetParent(savedBackgroundPrevious) == GetParent(savedBackground))))
-        SetWindowPos(
-            savedBackground,
-            savedBackgroundPrevious ? savedBackgroundPrevious : HWND_TOP, 0, 0,
-            0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    savedBackground = savedBackgroundPrevious = nullptr;
 }
 // The reduced-resolution frame a desktop window paints from (scaled once, in WM_PAINT).
 struct PaintSource {
@@ -837,9 +843,16 @@ LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
         if (source && source->dc) {
             RECT r{};
             GetClientRect(w, &r);
-            SetStretchBltMode(output, COLORONCOLOR);
-            StretchBlt(output, 0, 0, r.right, r.bottom, source->dc, 0, 0,
-                       source->w, source->h, SRCCOPY);
+            if (r.right == source->w && r.bottom == source->h) {
+                BitBlt(output, 0, 0, r.right, r.bottom, source->dc, 0, 0,
+                       SRCCOPY);
+            } else {
+                // Reduced quality: filter instead of repeating pixels.
+                SetStretchBltMode(output, HALFTONE);
+                SetBrushOrgEx(output, 0, 0, nullptr);
+                StretchBlt(output, 0, 0, r.right, r.bottom, source->dc, 0, 0,
+                           source->w, source->h, SRCCOPY);
+            }
         }
         EndPaint(w, &ps);
         return 0;
@@ -848,7 +861,18 @@ LRESULT CALLBACK WindowProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     return DefWindowProcW(w, m, wp, lp);
 }
-BOOL CALLBACK FindDesktop(HWND top, LPARAM) {
+DWORD ShellProcessId() {
+    DWORD pid = 0;
+    if (HWND shell = GetShellWindow())
+        GetWindowThreadProcessId(shell, &pid);
+    return pid;
+}
+// lParam: the shell's process id, so another app's SHELLDLL_DefView is ignored.
+BOOL CALLBACK FindDesktop(HWND top, LPARAM shellPid) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(top, &pid);
+    if (DWORD(shellPid) && pid != DWORD(shellPid))
+        return TRUE;
     HWND icons = FindWindowExW(top, nullptr, L"SHELLDLL_DefView", nullptr);
     if (icons && !iconView) {
         iconHost = top;
@@ -861,13 +885,16 @@ HWND FindWallpaperParent() {
     iconHost = nullptr;
     iconView = nullptr;
     raisedDesktop = false;
-    HWND prog = FindWindowW(L"Progman", nullptr);
+    backgroundWindow = nullptr;
+    HWND prog = GetShellWindow();
+    if (!prog)
+        prog = FindWindowW(L"Progman", nullptr);
     if (!prog)
         return nullptr;
     DWORD_PTR result = 0;
     SendMessageTimeoutW(prog, 0x052C, 0xD, 0, SMTO_ABORTIFHUNG, 1000, &result);
     SendMessageTimeoutW(prog, 0x052C, 0xD, 1, SMTO_ABORTIFHUNG, 1000, &result);
-    EnumWindows(FindDesktop, 0);
+    EnumWindows(FindDesktop, LPARAM(ShellProcessId()));
     if (!iconView) {
         Wh_Log(L"Desktop SHELLDLL_DefView not found");
         return nullptr;
@@ -929,22 +956,14 @@ BOOL CALLBACK CollectMonitor(HMONITOR h, HDC, LPRECT, LPARAM param) {
             {h, mi.rcMonitor, (mi.dwFlags & MONITORINFOF_PRIMARY) != 0});
     return TRUE;
 }
-std::vector<MonitorInfo> Monitors(bool primary, bool preview = false) {
+std::vector<MonitorInfo> Monitors(bool primaryOnly) {
     std::vector<MonitorInfo> list;
     EnumDisplayMonitors(nullptr, nullptr, CollectMonitor,
                         reinterpret_cast<LPARAM>(&list));
-    if (primary || preview)
+    if (primaryOnly)
         list.erase(std::remove_if(list.begin(), list.end(),
                                   [](auto& m) { return !m.primary; }),
                    list.end());
-    if (preview)
-        for (auto& mi : list) {
-            LONG width = std::min(1280L, mi.rect.right - mi.rect.left - 80),
-                 height = std::min(720L, mi.rect.bottom - mi.rect.top - 80);
-            LONG x = mi.rect.left + (mi.rect.right - mi.rect.left - width) / 2,
-                 y = mi.rect.top + (mi.rect.bottom - mi.rect.top - height) / 2;
-            mi.rect = {x, y, x + width, y + height};
-        }
     return list;
 }
 bool SameMonitors(const std::vector<MonitorInfo>& a,
@@ -1248,7 +1267,7 @@ BackgroundPixels RenderBackground(const BackgroundInfo& bg,
             "Cannot decode wallpaper image (JPG/PNG/BMP supported)");
     int width = viewport.right - viewport.left,
         height = viewport.bottom - viewport.top;
-    float scale = std::min(1.f, float(maxWidth) / std::max(width, height));
+    float scale = RenderScale(maxWidth, width, height);
     result.w = std::max(1, int(std::round(width * scale)));
     result.h = std::max(1, int(std::round(height * scale)));
     Gdiplus::Bitmap output(result.w, result.h, PixelFormat32bppARGB);
@@ -1318,10 +1337,10 @@ BackgroundPixels RenderBackground(const BackgroundInfo& bg,
 
 struct Wallpaper {
     HWND window = nullptr, renderWindow = nullptr;
-    HDC dc = nullptr, smallDC = nullptr, largeDC = nullptr;
+    HDC dc = nullptr, smallDC = nullptr;
     HGLRC context = nullptr;
-    HBITMAP smallBitmap = nullptr, largeBitmap = nullptr;
-    HGDIOBJ oldSmall = nullptr, oldLarge = nullptr;
+    HBITMAP smallBitmap = nullptr;
+    HGDIOBJ oldSmall = nullptr;
     void* pixels = nullptr;
     PaintSource paint;
     Target frame;
@@ -1374,8 +1393,7 @@ struct Wallpaper {
     }
     void ComputeFixedPoint() {
         // "Primary" shares one light across monitors in global coordinates, like the mouse light.
-        RECT base =
-            (s.fixedPerMonitor || s.preview) ? info.rect : PrimaryMonitorRect();
+        RECT base = s.fixedPerMonitor ? info.rect : PrimaryMonitorRect();
         fixedX = base.left + s.fixedX * (base.right - base.left);
         fixedY = base.top + s.fixedY * (base.bottom - base.top);
     }
@@ -1387,29 +1405,22 @@ struct Wallpaper {
         const RECT& r = info.rect;
         outputW = r.right - r.left;
         outputH = r.bottom - r.top;
-        layered = raisedDesktop || s.preview;
+        layered = raisedDesktop;
         POINT origin{r.left, r.top};
-        if (s.preview)
-            parent = nullptr;
-        else
-            MapWindowPoints(nullptr, parent, &origin, 1);
+        MapWindowPoints(nullptr, parent, &origin, 1);
+        // WS_EX_NOPARENTNOTIFY: creating/destroying a child otherwise sends a
+        // synchronous WM_PARENTNOTIFY to Explorer, which blocks if it hangs.
         window = CreateWindowExW(
-            WS_EX_NOACTIVATE | WS_EX_TRANSPARENT |
-                (s.preview ? WS_EX_TOOLWINDOW : 0) |
+            WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_NOPARENTNOTIFY |
                 (layered ? WS_EX_LAYERED : 0),
             layered ? LayerClass : WindowClass,
             L"Real-time Cast Shadow Wallpaper",
-            (s.preview ? WS_POPUP : WS_CHILD) |
-                (layered ? 0 : WS_CLIPSIBLINGS | WS_CLIPCHILDREN),
+            WS_CHILD | (layered ? 0 : WS_CLIPSIBLINGS | WS_CLIPCHILDREN),
             origin.x, origin.y, outputW, outputH, parent, nullptr, instance,
             nullptr);
         if (!window)
             throw std::runtime_error("Wallpaper window creation failed");
-        SetWindowPos(window,
-                     s.preview ? HWND_TOP
-                     : layered ? iconView
-                               : HWND_BOTTOM,
-                     0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        PlaceLayer();
         if (layered) {
             renderWindow = CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, WindowClass,
@@ -1443,8 +1454,7 @@ struct Wallpaper {
             fn(0);
         shader.program = Program(lightShader);
         if (layered) {
-            float scale = std::min(
-                1.f, float(s.renderWidth) / std::max(outputW, outputH));
+            float scale = RenderScale(s.renderWidth, outputW, outputH);
             frame.w = std::max(1, int(std::round(outputW * scale)));
             frame.h = std::max(1, int(std::round(outputH * scale)));
             CreateTarget(frame, "Presentation framebuffer failed");
@@ -1453,23 +1463,11 @@ struct Wallpaper {
             if (!smallDC || !smallBitmap || !pixels)
                 throw std::runtime_error("Presentation DIB allocation failed");
             oldSmall = SelectObject(smallDC, smallBitmap);
-            if (s.preview) {
-                // UpdateLayeredWindow needs a full-size source; the desktop path scales in WM_PAINT instead.
-                void* largePixels = nullptr;
-                largeDC = CreateCompatibleDC(nullptr);
-                largeBitmap = CreateDib(outputW, outputH, &largePixels);
-                if (!largeDC || !largeBitmap)
-                    throw std::runtime_error("Preview DIB allocation failed");
-                oldLarge = SelectObject(largeDC, largeBitmap);
-                SetStretchBltMode(largeDC, COLORONCOLOR);
-            } else {
-                if (!SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA))
-                    throw std::runtime_error(
-                        "Fixed opacity desktop setup failed");
-                paint = {smallDC, frame.w, frame.h};
-                SetWindowLongPtrW(window, GWLP_USERDATA,
-                                  reinterpret_cast<LONG_PTR>(&paint));
-            }
+            if (!SetLayeredWindowAttributes(window, 0, 255, LWA_ALPHA))
+                throw std::runtime_error("Fixed opacity desktop setup failed");
+            paint = {smallDC, frame.w, frame.h};
+            SetWindowLongPtrW(window, GWLP_USERDATA,
+                              reinterpret_cast<LONG_PTR>(&paint));
         }
         if (s.NeedsOverlay()) {
             try {
@@ -1493,27 +1491,34 @@ struct Wallpaper {
             int(s.motion));
         Render(true);
         ShowWindow(window, SW_SHOWNOACTIVATE);
-        if (!s.preview) {
-            EnsureDesktopOrder();
-            SetWindowPos(window, layered ? iconView : HWND_BOTTOM, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
+        PlaceLayer();
         logged = false;
         Render(true);
     }
-    void Step(float dt, POINT mouse) {
-        if (!s.preview && s.fullscreen &&
-            FullscreenOn(info.monitor, info.rect)) {
+    // Raised layout: between the icons and Explorer's background. Classic
+    // layout: at the bottom of the WorkerW we are a child of.
+    void PlaceLayer() {
+        if (layered)
+            EnsureLayerOrder(window);
+        else
+            SetWindowPos(window, HWND_BOTTOM, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+    // Forces a full redraw on the next frame (e.g. after a pause).
+    void Invalidate() { desktopDirty = overlayDirty = true; }
+    // Returns false while this monitor is paused for a fullscreen app.
+    bool Step(float dt, POINT mouse) {
+        if (s.fullscreen && FullscreenOn(info.monitor, info.rect)) {
             if (shadowOverlay)
                 ShowWindow(shadowOverlay, SW_HIDE);
-            desktopDirty = overlayDirty =
-                true;  // Redraw everything when the pause ends.
-            return;
+            Invalidate();  // Redraw everything when the pause ends.
+            return false;
         }
         UpdateLight(dt, mouse);
         wglMakeCurrent(dc, context);
         UpdateBackground(false);
         Render(false);
+        return true;
     }
     // Places the light on an arc across the monitor (f: 0 = left horizon,
     // 1 = right horizon) and returns its elevation (0 horizon .. 1 top).
@@ -1685,8 +1690,7 @@ struct Wallpaper {
             nullptr);
         if (!shadowOverlay)
             throw std::runtime_error("Shadow overlay window creation failed");
-        float scale =
-            std::min(1.f, float(s.renderWidth) / std::max(outputW, outputH));
+        float scale = RenderScale(s.renderWidth, outputW, outputH);
         overlayFrame.w = std::max(1, int(std::round(outputW * scale)));
         overlayFrame.h = std::max(1, int(std::round(outputH * scale)));
         CreateTarget(overlayFrame, "Shadow overlay framebuffer failed");
@@ -1830,21 +1834,9 @@ struct Wallpaper {
                 glPixelStorei(GL_PACK_ALIGNMENT, 4);
                 glReadPixels(0, 0, frame.w, frame.h, BGRA, GL_UNSIGNED_BYTE,
                              pixels);
-                if (s.preview) {
-                    ok = StretchBlt(largeDC, 0, 0, outputW, outputH, smallDC, 0,
-                                    0, frame.w, frame.h, SRCCOPY);
-                    GdiFlush();
-                    POINT dest{info.rect.left, info.rect.top}, source{0, 0};
-                    SIZE size{outputW, outputH};
-                    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, 0};
-                    ok = ok && UpdateLayeredWindow(window, nullptr, &dest,
-                                                   &size, largeDC, &source, 0,
-                                                   &blend, ULW_ALPHA);
-                } else {
-                    // WM_PAINT scales the small frame straight onto the window: one blit per frame.
-                    InvalidateRect(window, nullptr, FALSE);
-                    UpdateWindow(window);
-                }
+                // WM_PAINT copies the frame straight onto the window.
+                InvalidateRect(window, nullptr, FALSE);
+                UpdateWindow(window);
             } else {
                 BindFramebuffer(Framebuffer, 0);
                 glViewport(0, 0, outputW, outputH);
@@ -1854,10 +1846,9 @@ struct Wallpaper {
             if (!logged || !ok) {
                 Wh_Log(
                     L"Light frame: ok=%d error=%lu GL=0x%X windows=%u "
-                    L"preview=%d visible=%d",
+                    L"visible=%d",
                     ok, ok ? 0 : GetLastError(), glGetError(),
-                    unsigned(trackedWindows.size()), s.preview,
-                    IsWindowVisible(window));
+                    unsigned(trackedWindows.size()), IsWindowVisible(window));
                 logged = true;
             }
             desktopDirty = !ok;
@@ -1890,16 +1881,10 @@ struct Wallpaper {
             ReleaseDC(layered ? renderWindow : window, dc);
         if (smallDC && oldSmall)
             SelectObject(smallDC, oldSmall);
-        if (largeDC && oldLarge)
-            SelectObject(largeDC, oldLarge);
         if (smallBitmap)
             DeleteObject(smallBitmap);
-        if (largeBitmap)
-            DeleteObject(largeBitmap);
         if (smallDC)
             DeleteDC(smallDC);
-        if (largeDC)
-            DeleteDC(largeDC);
         if (overlayDC && oldOverlay)
             SelectObject(overlayDC, oldOverlay);
         if (overlayBitmap)
@@ -1912,6 +1897,67 @@ struct Wallpaper {
             DestroyWindow(renderWindow);
         if (window && IsWindow(window))
             DestroyWindow(window);
+    }
+};
+
+// Session lock and display state, updated by the control window's messages.
+// Rendering pauses while nobody can see the desktop.
+bool sessionLocked = false, displayOff = false;
+LRESULT CALLBACK ControlProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_WTSSESSION_CHANGE) {
+        if (wp == WTS_SESSION_LOCK)
+            sessionLocked = true;
+        else if (wp == WTS_SESSION_UNLOCK)
+            sessionLocked = false;
+        return 0;
+    }
+    if (m == WM_POWERBROADCAST && wp == PBT_POWERSETTINGCHANGE) {
+        auto setting = reinterpret_cast<const POWERBROADCAST_SETTING*>(lp);
+        if (setting &&
+            IsEqualGUID(setting->PowerSetting, GUID_CONSOLE_DISPLAY_STATE) &&
+            setting->DataLength >= sizeof(DWORD)) {
+            // 0 = off, 1 = on, 2 = dimmed (still visible).
+            displayOff = *reinterpret_cast<const DWORD*>(setting->Data) == 0;
+        }
+        return TRUE;
+    }
+    return DefWindowProcW(w, m, wp, lp);
+}
+constexpr wchar_t ControlClass[] = L"WindhawkCastShadowControl";
+// Hidden window receiving session-lock and display-state notifications.
+struct PowerWatcher {
+    HWND window = nullptr;
+    HPOWERNOTIFY power = nullptr;
+    bool session = false;
+    PowerWatcher() {
+        WNDCLASSEXW cls{};
+        cls.cbSize = sizeof(cls);
+        cls.lpfnWndProc = ControlProc;
+        cls.hInstance = instance;
+        cls.lpszClassName = ControlClass;
+        if (!RegisterClassExW(&cls))
+            return;
+        window = CreateWindowExW(WS_EX_TOOLWINDOW, ControlClass,
+                                 L"Cast shadow control", WS_POPUP, 0, 0, 0, 0,
+                                 nullptr, nullptr, instance, nullptr);
+        if (!window)
+            return;
+        session =
+            WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION);
+        power = RegisterPowerSettingNotification(
+            window, &GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_WINDOW_HANDLE);
+        Wh_Log(L"Pause notifications: session=%d display=%d", session,
+               power != nullptr);
+    }
+    ~PowerWatcher() {
+        if (power)
+            UnregisterPowerSettingNotification(power);
+        if (session)
+            WTSUnRegisterSessionNotification(window);
+        if (window)
+            DestroyWindow(window);
+        UnregisterClassW(ControlClass, instance);
+        sessionLocked = displayOff = false;
     }
 };
 
@@ -1939,13 +1985,21 @@ DWORD WINAPI RenderThread(void*) {
     }
     ImageRuntime imageRuntime;
     DragHook dragHook;
+    PowerWatcher powerWatcher;
+    // The desktop may not exist yet (e.g. at sign-in, or while Explorer
+    // restarts); the loop below keeps retrying, so startup succeeds here.
+    startupOK = true;
+    SetEvent(readyEvent);
+
     std::vector<std::unique_ptr<Wallpaper>> wallpapers;
     Settings settings = ReadSettings();
     std::vector<MonitorInfo> monitors;
     dragPrediction = settings.dragPrediction;
     HWND parent = nullptr;
-    bool rebuild = true, signaled = false;
-    ULONGLONG nextCheck = 0;
+    bool rebuild = true, paused = false;
+    // Failed builds are retried with a growing delay (2 s .. 60 s), so a
+    // missing desktop or OpenGL driver doesn't cost work every 2 seconds.
+    ULONGLONG nextCheck = 0, retryDelay = 2000;
     LARGE_INTEGER freq, last;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&last);
@@ -1966,33 +2020,50 @@ DWORD WINAPI RenderThread(void*) {
             if (WaitForSingleObject(updateEvent, 0) == WAIT_OBJECT_0) {
                 settings = ReadSettings();
                 rebuild = true;
+                retryDelay = 2000;
                 dragPrediction = settings.dragPrediction;
             }
+            HANDLE events[]{stopEvent};
+            // Locked session or display off: nothing is visible, so do no
+            // work at all and wake rarely; redraw everything on resume.
+            if (sessionLocked || displayOff) {
+                if (!paused)
+                    Wh_Log(L"Paused (locked=%d displayOff=%d)", sessionLocked,
+                           displayOff);
+                paused = true;
+                if (MsgWaitForMultipleObjects(1, events, FALSE, 1000,
+                                              QS_ALLINPUT) == WAIT_OBJECT_0)
+                    break;
+                continue;
+            }
+            if (paused) {
+                paused = false;
+                Wh_Log(L"Resumed");
+                for (auto& w : wallpapers)
+                    w->Invalidate();
+                QueryPerformanceCounter(&last);
+                continue;
+            }
             ULONGLONG now = GetTickCount64();
-            // Desktop shadows only need application windows; the overlay pass
-            // re-samples the full Z order (including masking surfaces) itself.
-            RefreshWindows(settings.maxWindows, false);
             if (now >= nextCheck) {
                 nextCheck = now + 2000;
-                if (!settings.preview)
-                    EnsureDesktopOrder();
-                auto list = Monitors(settings.primary, settings.preview);
+                auto list = Monitors(settings.primary);
                 if (!SameMonitors(monitors, list))
                     rebuild = true;
                 if (!parent || !IsWindow(parent) || wallpapers.empty())
                     rebuild = true;
-                for (auto& w : wallpapers)
+                for (auto& w : wallpapers) {
                     if (!IsWindow(w->window))
                         rebuild = true;
+                    else
+                        w->PlaceLayer();
+                }
             }
             if (rebuild) {
                 wallpapers.clear();
-                RestoreDesktopOrder();
                 parent = FindWallpaperParent();
-                monitors = Monitors(settings.primary, settings.preview);
+                monitors = Monitors(settings.primary);
                 if (parent) {
-                    if (!settings.preview)
-                        EnsureDesktopOrder();
                     for (auto& mi : monitors) {
                         auto w = std::make_unique<Wallpaper>();
                         try {
@@ -2003,35 +2074,47 @@ DWORD WINAPI RenderThread(void*) {
                                    e.what());
                         }
                     }
-                } else
-                    Wh_Log(
-                        L"No wallpaper WorkerW found. Retrying; no overlay "
-                        L"window created.");
+                }
                 rebuild = false;
-                if (!signaled) {
-                    startupOK = !wallpapers.empty();
-                    SetEvent(readyEvent);
-                    signaled = true;
+                if (wallpapers.empty()) {
+                    Wh_Log(L"Desktop not ready; retrying in %llu s",
+                           retryDelay / 1000);
+                    nextCheck = GetTickCount64() + retryDelay;
+                    retryDelay = std::min<ULONGLONG>(retryDelay * 2, 60000);
+                } else {
+                    retryDelay = 2000;
                 }
                 QueryPerformanceCounter(&last);
                 dt = 1.f / settings.fps;
             }
-            POINT mouse{};
-            bool gotMouse = GetCursorPos(&mouse) != 0;
-            for (auto& w : wallpapers)
-                w->Step(dt, gotMouse ? mouse : POINT{LONG_MIN, LONG_MIN});
-            if (draggedWindow && settings.dragPrediction) {
+            // Window geometry is only needed when something will be drawn.
+            bool anyActive = false;
+            if (!wallpapers.empty()) {
+                // Desktop shadows only need application windows; the overlay
+                // pass re-samples the full Z order (masking surfaces) itself.
+                RefreshWindows(settings.maxWindows, false);
+                POINT mouse{};
+                bool gotMouse = GetCursorPos(&mouse) != 0;
+                for (auto& w : wallpapers)
+                    anyActive |= w->Step(
+                        dt, gotMouse ? mouse : POINT{LONG_MIN, LONG_MIN});
+            }
+            if (anyActive && draggedWindow && settings.dragPrediction) {
                 // While dragging, wake right after each composition so window
                 // positions are sampled fresh and presented by the next one.
                 if (FAILED(DwmFlush()))
                     Sleep(1);
                 continue;
             }
-            QueryPerformanceCounter(&frameStart);
-            double elapsed = double(frameStart.QuadPart - last.QuadPart) *
-                             1000 / freq.QuadPart;
-            DWORD wait = DWORD(std::max(1., 1000. / settings.fps - elapsed));
-            HANDLE events[]{stopEvent};
+            // Nothing to draw (no desktop yet, or every monitor is paused for
+            // a fullscreen app): check back a few times per second only.
+            DWORD wait = 250;
+            if (anyActive) {
+                QueryPerformanceCounter(&frameStart);
+                double elapsed = double(frameStart.QuadPart - last.QuadPart) *
+                                 1000 / freq.QuadPart;
+                wait = DWORD(std::max(1., 1000. / settings.fps - elapsed));
+            }
             if (MsgWaitForMultipleObjects(1, events, FALSE, wait,
                                           QS_ALLINPUT) == WAIT_OBJECT_0)
                 break;
@@ -2040,11 +2123,8 @@ DWORD WINAPI RenderThread(void*) {
         Wh_Log(L"Renderer stopped: %S", e.what());
     }
     wallpapers.clear();
-    RestoreDesktopOrder();
     UnregisterClassW(LayerClass, instance);
     UnregisterClassW(WindowClass, instance);
-    if (!signaled)
-        SetEvent(readyEvent);
     return 0;
 }
 void CloseEvents() {
@@ -2074,7 +2154,7 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
     if (WaitForSingleObject(readyEvent, 15000) != WAIT_OBJECT_0 || !startupOK) {
-        Wh_Log(L"Startup failed. Check OpenGL/WorkerW messages above.");
+        Wh_Log(L"Startup failed: the render thread could not be set up.");
         SetEvent(stopEvent);
         WaitForSingleObject(worker, INFINITE);
         CloseHandle(worker);
