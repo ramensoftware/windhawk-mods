@@ -317,7 +317,9 @@ void LoadModSettings() {
 void RegisterIslandHotkey(HWND hwnd) {
     UnregisterHotKey(hwnd, HOTKEY_ID_HIDE);
     UINT mods = g_set.hideHotkeyCtrl ? MOD_CONTROL : 0;
-    RegisterHotKey(hwnd, HOTKEY_ID_HIDE, mods | MOD_NOREPEAT, VK_F12);
+    if (!RegisterHotKey(hwnd, HOTKEY_ID_HIDE, mods | MOD_NOREPEAT, VK_F12)) {
+        Wh_Log(L"RegisterHotKey failed (error %lu)", GetLastError());
+    }
 }
 
 void SetTimerIntervalIfNeeded(HWND hwnd, UINT intervalMs) {
@@ -2178,11 +2180,10 @@ void WhTool_ModUninit() {
 //
 // The mod will load and run in a dedicated windhawk.exe process.
 //
-// Paste the code below as-is at the end of your mod file, and implement the
-// following:
-// - WhTool_ModInit
-// - WhTool_ModSettingsChanged
-// - WhTool_ModUninit
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
 //
 // Currently, other callbacks are not supported.
 
@@ -2203,8 +2204,9 @@ BOOL Wh_ModInit() {
 
     bool isExcluded = false;
     bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -2221,10 +2223,9 @@ BOOL Wh_ModInit() {
 
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
             if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
-                isToolModProcess = true;
-            } else {
-                isExcluded = true;
+                isCurrentToolModProcess = true;
             }
             break;
         }
@@ -2236,7 +2237,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (isToolModProcess) {
+    if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
             CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
@@ -2257,11 +2258,16 @@ BOOL Wh_ModInit() {
             (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
         void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
     }
 
     g_isToolModProcessLauncher = true;
@@ -2292,12 +2298,12 @@ void Wh_ModAfterInit() {
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll or kernel32.dll");
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
 
-    using CreateProcessInternalW_t = WINBOOL(WINAPI*)(
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
@@ -2313,15 +2319,15 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcessInternalW failed");
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
