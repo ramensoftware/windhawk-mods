@@ -138,7 +138,7 @@ every time it opens.
     pixels and the popup for 9 icons is 120x120. Smaller values shrink the
     icons together with the popup; larger values grow them, up to the popup's
     maximum size. A new size is applied the next time the popup opens.
-- overflowCellPadding: 0
+- overflowCellPadding: -1
   $name: Hidden icons popup cell padding
   $description: >-
     The empty border around each icon in the popup that shows the hidden tray
