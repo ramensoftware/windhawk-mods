@@ -60,11 +60,7 @@ the mod
 3. after a settings change, asks Explorer to reload the notification area so
    that this work happens in the shell's own layout pass.
 
-This is the technique of 7+ Taskbar Tweaker's `tray_icons_padding` option, which
-the mod [Adjustable tray icons padding for Win10
-taskbar](https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar) by
-Anixx brought to Windhawk. This mod keeps that tray mechanism intact and, on top
-of it, adds:
+This update adds:
 
 * live application: a changed setting reaches the shell through its own reload,
   with no disable/enable cycle and no Explorer restart,
