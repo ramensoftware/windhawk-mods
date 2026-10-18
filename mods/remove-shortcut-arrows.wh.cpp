@@ -239,8 +239,6 @@ static void RefreshDesktopAndExplorer() {
         SHCNE_UPDATEIMAGE, SHCNF_DWORD | SHCNF_FLUSH, nullptr,
         reinterpret_cast<LPCVOID>(
             static_cast<ULONG_PTR>(g_overlayImageIndex)));
-  } else {
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
   }
   RefreshDesktop();
 }
