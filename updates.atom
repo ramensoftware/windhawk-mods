@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-17T21:02:02.000Z</updated>
+    <updated>2026-10-18T07:03:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mawaqit Prayer Clock 0.7.0]]></title>
+        <id>https://windhawk.net/mods/windhawk-mawaqit#bc310266006121c510512d69b92d4fdfd1dfc2a8</id>
+        <link href="https://windhawk.net/mods/windhawk-mawaqit"/>
+        <updated>2026-10-18T07:03:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added multi-monitor support with independent visibility and customizable taskbar positioning.</li>
+<li>Added animated prayer popups and hover-to-open functionality.</li>
+<li>Improved Explorer restart recovery and overall stability.</li>
+<li>Cleaned up and formatted the code.</li>
+</ul>]]></content>
+        <author>
+            <name>HHeitlager</name>
+            <uri>https://github.com/hheitlager</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.9.0]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-percentage#b00b5e3043a606e9864405a111acaf29d69dc170</id>
@@ -686,48 +702,6 @@ official windhawk-mods repository.</p>
 <li>Numbers are parsed with the classic locale, so the result does not depend on the regional settings of the system.</li>
 <li>Fixes a wrong percentage change when an entry price had a comma.</li>
 </ul>]]></content>
-        <author>
-            <name>jayll1303</name>
-            <uri>https://github.com/jayll1303</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win+V Panel Tweaks 1.0.0]]></title>
-        <id>https://windhawk.net/mods/winv-panel-tweaks#d7afc202adc5a0b927f4fc78e67e1a3e4230afaa</id>
-        <link href="https://windhawk.net/mods/winv-panel-tweaks"/>
-        <updated>2026-10-16T12:04:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winvpaneltweaks">Win+V Panel Tweaks</h1>
-<p>The Win+V clipboard panel and the Win+. emoji panel are the same panel, with
-tabs for Most recently used, Emoji, GIF, Kaomoji, Symbols and Clipboard. This
-mod makes the panel bigger or smaller and hides the tabs you turn off in its
-settings.</p>
-<p><img src="https://raw.githubusercontent.com/jayll1303/WindowsClipboardMods/main/images/winv-panel-tweaks-taller-clipboard-only.png" alt="A taller Win+V panel showing more clipboard entries, with only the Clipboard tab left" /></p>
-<h2 id="panelsize">Panel size</h2>
-<p>The panel is normally 360 x 400 (in display-scaled pixels). Width and height
-are scaled separately, e.g. width 150% and height 100% gives 540 x 400.
-Windows still keeps the panel within the space available on screen. A new
-size applies the next time the panel opens.</p>
-<p>By default the items keep their normal size, so a taller panel shows more
-clipboard entries and a wider one fits more emoji per row. Turn on "Scale
-content with the panel" to have the items grow with the panel instead.</p>
-<h2 id="tabs">Tabs</h2>
-<p>The Clipboard tab is always kept. Hiding a tab only removes its button: a
-shortcut that opens a view directly still opens it (e.g. Win+. still opens
-Emoji even when the Emoji tab is hidden).</p>
-<h2 id="howitworks">How it works</h2>
-<p>The panel is drawn by TextInputHost.exe. Its size is computed in
-<code>InputApp.dll</code>, which the mod hooks using Microsoft's public symbols, so the
-first start after installing may take a moment while Windhawk downloads them.</p>
-<p>The tab strip lives in a web page hosted in a WebView inside the panel. The
-same hook finds that WebView each time the panel opens and runs a small script
-in the page, which marks the chosen tabs as hidden in the page's own view
-model, re-applying it whenever the page resets them. Tweaks therefore show up
-the next time the panel opens after the mod is enabled.</p>
-<p>That page ships with Windows but Microsoft can update it separately. If it
-changes in a way the mod doesn't recognize, the mod leaves it alone and the
-panel keeps working as usual.</p>
-<p>Tested on Windows 11 25H2 (build 26200).</p>
-<p>Source and research notes: https://github.com/jayll1303/WindowsClipboardMods</p>]]></content>
         <author>
             <name>jayll1303</name>
             <uri>https://github.com/jayll1303</uri>
