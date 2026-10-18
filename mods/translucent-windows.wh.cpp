@@ -1,10 +1,10 @@
 // ==WindhawkMod==
-// @id              translucent-windows-fork
-// @name            Translucent Windows - Fork
+// @id              translucent-windows
+// @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
 // @version         1.8.2
-// @author          Undisputed00x
-// @github          https://github.com/Undisputed00x
+// @author          DerjunHH
+// @github          https://github.com/derjunHH
 // @include         *
 // @compilerOptions -ldwmapi -luxtheme -lcomctl32 -lgdi32 -ld2d1 -lmsimg32 -lshcore -lversion -ffp-exception-behavior=maytrap
 // ==/WindhawkMod==
