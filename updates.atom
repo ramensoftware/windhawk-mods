@@ -2,12 +2,86 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-18T08:04:50.000Z</updated>
+    <updated>2026-10-18T10:02:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Network Speed in Bytes 1.1]]></title>
+        <id>https://windhawk.net/mods/taskmgr-network-bytes#2995b1cd1f98d682ad5b13863523536d0bd58f6d</id>
+        <link href="https://windhawk.net/mods/taskmgr-network-bytes"/>
+        <updated>2026-10-18T10:02:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskmanagernetworkspeedinbytes">Task Manager Network Speed in Bytes</h1>
+<p>Task Manager reports network throughput in <strong>bits</strong> per second (Kbps, Mbps,
+Gbps), while browsers, download managers and Task Manager's own disk graphs use
+<strong>bytes</strong> per second. This mod converts every network rate to bytes:</p>
+<p>| Where | Before | After |
+|---|---|---|
+| Performance → Ethernet / Wi-Fi: Send / Receive | <code>8.0 Kbps</code> | <code>1.0 KB/s</code> |
+| Performance sidebar | <code>S: 0 R: 8.0 Kbps</code> | <code>S: 0 R: 1.0 KB/s</code> |
+| Performance graph scale labels | <code>500 Kbps</code> / <code>450 Kbps</code> | <code>62.5 KB/s</code> / <code>56.3 KB/s</code> |
+| Processes / Users tabs, Network column | <code>0.1 Mbps</code>, <code>2.4 Mbps</code> | <code>12.5 KB/s</code>, <code>300 KB/s</code> |
+| View network details → Link speed | <code>1 Gbps</code> | <code>125 MB/s</code> |</p>
+<p>The Processes column switches unit per value: KB/s below 1 MB/s, MB/s above.
+Units are decimal (1 KB = 1000 bytes), like Task Manager's disk rates.</p>
+<p>By default the units are always the English <code>KB/s</code>, <code>MB/s</code> and <code>GB/s</code>,
+whatever Task Manager's display language is. The <strong>Unit names</strong> setting can
+switch them to Task Manager's own translated names instead (the ones its disk
+rates use).</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The mod needs the debug symbols of <code>taskmgr.exe</code>. Windhawk downloads them
+(about 20 MB) the first time Task Manager starts after the mod is installed —
+wait for the "Loading symbols" popup to reach 100%.</li>
+<li>Restart Task Manager after enabling or disabling the mod. Graph scale labels
+are cached until the graph rescales.</li>
+<li>The graph keeps Task Manager's original scale steps, which are round numbers
+in bits, so some labels are uneven in bytes (<code>54 Mbps</code> → <code>6.75 MB/s</code>).</li>
+</ul>]]></content>
+        <author>
+            <name>Nehoray-Bitan</name>
+            <uri>https://github.com/Nehoray-Bitan</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tray Overflow List 0.1.8.8]]></title>
+        <id>https://windhawk.net/mods/tray-overflow-list#16fecfa1f6771b87beb01f13b26bedb7b3693506</id>
+        <link href="https://windhawk.net/mods/tray-overflow-list"/>
+        <updated>2026-10-18T10:02:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="trayoverflowlist">Tray Overflow List</h1>
+<p>Displays hidden Windows 11 tray icons as a vertical list, with icons on the left
+and application names on the right.</p>
+<p><img src="https://raw.githubusercontent.com/HeyOkay/TrayOverflowList/70bedeeab69d9ac2a1f9c486ffe8ac594fa06fd6/docs/images/preview.png" alt="Tray Overflow List
+preview" /></p>
+<p>The original tray controls handle clicks, context menus, and dragging. The mod
+preserves the native flyout background and derives its width from the original
+grid measurements. Long lists scroll
+vertically, and long names are shortened with an ellipsis.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Row height</strong> defaults to 33 pixels. Set it to 0 to keep the native height;
+custom heights are applied from 20 pixels upward.</li>
+<li><strong>Hidden name suffixes</strong> defaults to <code>.Root, .App, .Runner</code>. Listed endings
+are removed from the end of labels without regard to case. For example,
+<code>WhatsApp.Root</code> becomes <code>WhatsApp</code>. Leave the setting empty to keep the
+original names. Dots inside names and unlisted endings are preserved.</li>
+</ul>
+<p>Changing settings reloads the mod to restore the native layout first. Reopen
+the flyout to apply the new settings.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested on Windows 11 26H2 build 26300.9457, x64, with an English Windows
+interface. Other Windows builds and display languages have not been verified.
+This mod uses internal tray interfaces, so Windows updates can affect
+compatibility.</p>
+<p>System Tray Folders and Taskbar tray icon spacing and grid change the same
+flyout geometry. Disable them when investigating layout problems.</p>]]></content>
+        <author>
+            <name>HeyOkay</name>
+            <uri>https://github.com/HeyOkay</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Agenda in Calendar View 1.3]]></title>
         <id>https://windhawk.net/mods/agenda-in-calendar-view#13f85eac68330eb852c85b4da897c19306ac5ba2</id>
@@ -669,89 +743,6 @@ by David Trapp (CherryDT). Their MIT notices are retained below.</p>]]></content
         <author>
             <name>caliberda</name>
             <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Toggle Hidden Files 1.1.0]]></title>
-        <id>https://windhawk.net/mods/toggle-hidden-files#587704d691363d85fea430f5e02bc52ef75a6669</id>
-        <link href="https://windhawk.net/mods/toggle-hidden-files"/>
-        <updated>2026-10-17T06:01:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added separate and configurable modifier to toggle protected operating system files</li>
-<li>Fixed a bug where icons may occasionally disappear in File Explorer when toggling back the hidden files and folders.</li>
-</ul>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[What When Where Notes 1.3.2]]></title>
-        <id>https://windhawk.net/mods/what-when-where-notes#42b2e0d8841f564a666a6130fbf89d4929e0af53</id>
-        <link href="https://windhawk.net/mods/what-when-where-notes"/>
-        <updated>2026-10-16T17:01:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="whatwhenwherenotes">What When Where Notes</h1>
-<p>A customizable desktop note overlay for Windows, powered by Windhawk.
-Organize reminders in three editable parts: <strong>What - When - Where</strong>.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h3 id="taskoverviewandstatusindicators">Task overview and status indicators</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/status-yellow.png" alt="Task overview with numbered notes, gray red and green status circles, and completed tasks struck through" /></p>
-<h3 id="customcolorsandrowhighlighting">Custom colors and row highlighting</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/green-hover.png" alt="Green notes, pink heading and highlighted task row" /></p>
-<h3 id="editnotesdirectlyonthedesktop">Edit notes directly on the desktop</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/edit-note.png" alt="Editing the WHERE field inside the desktop overlay" /></p>
-<h3 id="rightclickcolorandtransparencymenu">Right-click color and transparency menu</h3>
-<p><img src="https://raw.githubusercontent.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD/main/screenshots/color-transparency-menu.png" alt="Context menu for changing note color and transparency" /></p>
-<h2 id="taskstatusindicators">Task status indicators</h2>
-<p>Click the colored circle next to a task to change its state:</p>
-<ul>
-<li>⚪ <strong>Gray — Open:</strong> The task has not been started.</li>
-<li>🔴 <strong>Red — In Progress:</strong> Work on the task is underway.</li>
-<li>🟢 <strong>Green — Completed:</strong> What, When and Where are struck through.</li>
-</ul>
-<p><strong>Cycle:</strong> ⚪ Open → 🔴 In Progress → 🟢 Completed → ⚪ Open. Each task's status is saved across Windhawk restarts.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Up to <strong>14 numbered note rows</strong> with independently editable What, When and Where fields.</li>
-<li>Optional centered title, adjustable fonts, spacing and colors.</li>
-<li>Three status states for each row: <strong>gray</strong> (open), <strong>red</strong> (in progress), and <strong>green</strong> (done). Completed notes are struck through.</li>
-<li>Add rows, remove the last row, or delete a selected row.</li>
-<li>Move the overlay with a configurable drag-mode hotkey.</li>
-<li>Adjustable transparency and note color; optional always-on-top behavior.</li>
-<li>Saved notes, row statuses, position and display preferences persist across restarts.</li>
-</ul>
-<h2 id="usingthenotes">Using the notes</h2>
-<ul>
-<li><strong>Click</strong> a What, When or Where field to edit it. Press <strong>Enter</strong> to save or <strong>Esc</strong> to cancel. Leaving the edit field also saves.</li>
-<li>Click <strong>+</strong> to add a row (up to the configured maximum) or <strong>-</strong> to remove the last row.</li>
-<li>Click the <strong>X</strong> next to a row to delete that row. At least one row is kept.</li>
-<li>Click a <strong>status circle</strong> to cycle through open, in progress and done.</li>
-<li><strong>Right-click</strong> the overlay to open the color and transparency menu.</li>
-<li><strong>Mouse wheel</strong> over the overlay to scale it in 10% steps (20% to 320%); <strong>middle-click</strong> to reset the scale.</li>
-<li>Press <strong>Ctrl+Alt+N</strong> by default to toggle drag mode, then drag the overlay with the left mouse button. Press the hotkey again to exit drag mode.</li>
-</ul>
-<h2 id="configuration">Configuration</h2>
-<p>Open <strong>Settings</strong> to customize the initial position, always-on-top mode, title, the three default note fields, separators, maximum row count, fonts, colors, default transparency, default scale, and the drag hotkey.</p>
-<p><strong>Note:</strong> Existing edited notes and saved display preferences are stored separately from the initial defaults. Changing a default does not automatically overwrite previously saved note rows. A previously dragged position is preserved when changing unrelated options. Editing X/Y settings explicitly moves the overlay to those new coordinates.</p>
-<h2 id="technicalinformation">Technical information</h2>
-<ul>
-<li>Designed for <strong>Windows / Windhawk</strong>.</li>
-<li>Runs as a Windhawk <strong>tool mod</strong>, using a dedicated <code>windhawk.exe</code> helper process.</li>
-<li>The overlay is implemented with the Windows API and GDI.</li>
-<li>Source code and license: <a href="https://github.com/SilverAmd/WHAT-WHEN-WHERE-NOTES-MOD">GitHub repository</a>.</li>
-</ul>
-<h2 id="projectbackgroundandrelationtoeasynotes">Project background and relation to Easy Notes</h2>
-<p>This mod is an independent Windows/Windhawk implementation inspired by the
-original ToDoLite / What When Where Rainmeter project by the same author:
-https://forum.rainmeter.net/viewtopic.php?t=42543#p215957</p>
-<p>Unlike free-form desktop sticky notes, this mod displays a structured three-field
-task list (What / When / Where) with distinct Open / In Progress / Completed
-states. The current version is intentionally focused on that workflow.</p>
-<h2 id="author">Author</h2>
-<p><strong>SilverAmd</strong></p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>

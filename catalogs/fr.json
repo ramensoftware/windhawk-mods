@@ -16306,6 +16306,33 @@
         "version": "1.0.0"
       }
     },
+    "taskmgr-network-bytes": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792317749000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792317749000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Nehoray-Bitan",
+        "compilerOptions": "-luser32",
+        "description": "Show network throughput in Task Manager as KB/s, MB/s, GB/s (bytes) instead of Kbps, Mbps, Gbps (bits)",
+        "github": "https://github.com/Nehoray-Bitan",
+        "include": [
+          "taskmgr.exe"
+        ],
+        "name": "Task Manager Network Speed in Bytes",
+        "version": "1.1"
+      }
+    },
     "taskmgr-tab-slide-animation": {
       "details": {
         "defaultSorting": 34182,
@@ -16866,6 +16893,35 @@
         "license": "MIT",
         "name": "Tray hover expand",
         "version": "1.7.0"
+      }
+    },
+    "tray-overflow-list": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792317744000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792317744000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "HeyOkay",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Hidden tray icons in a list with application names",
+        "github": "https://github.com/HeyOkay",
+        "homepage": "https://github.com/HeyOkay/TrayOverflowList",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Tray Overflow List",
+        "version": "0.1.8.8"
       }
     },
     "tray-utility-customizer": {

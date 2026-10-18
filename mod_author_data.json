@@ -799,7 +799,9 @@
     "author": "HeyOkay",
     "github": "https://github.com/HeyOkay",
     "githubId": 122743407,
-    "homepages": []
+    "homepages": [
+      "https://github.com/HeyOkay/TrayOverflowList"
+    ]
   },
   "https://github.com/hheitlager": {
     "author": "HHeitlager",
@@ -1286,6 +1288,12 @@
     "homepages": [
       "https://narayanchetri.dev"
     ]
+  },
+  "https://github.com/nehoray-bitan": {
+    "author": "Nehoray-Bitan",
+    "github": "https://github.com/Nehoray-Bitan",
+    "githubId": 82737482,
+    "homepages": []
   },
   "https://github.com/neizqwe": {
     "author": "NeiZ",
