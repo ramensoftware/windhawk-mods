@@ -7,16 +7,8 @@
 // @github          https://github.com/Issuch
 // @include         explorer.exe
 // @architecture    x86-64
-// @license         GPL-3.0-only
-// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lgdi32 -lversion -lcomctl32 -ladvapi32
+// @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lgdi32 -lcomctl32 -ladvapi32
 // ==/WindhawkMod==
-
-// Source code is published under The GNU General Public License v3.0.
-//
-// The code which makes the taskbar draw window icons is based on the
-// "Use window icons" option of the "Disable grouping on the taskbar" mod by
-// m417z, used under the terms of the GPL-3.0:
-// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-grouping.wh.cpp
 
 // ==WindhawkModReadme==
 /*
@@ -62,43 +54,21 @@ The mod sleeps while nothing happens. It reacts to events: a window being
 shown, a navigation, a tab switch, a change among the files of an open folder,
 and a window being closed. A folder which has not changed is never re-rendered.
 
-## Window icons on the taskbar
-The taskbar normally draws the application's icon on a button rather than the
-icon of the window, which would hide the preview. The mod makes it use the
-window icon instead. That can be limited to File Explorer windows, which is the
-default, or applied to every program.
-
 ## Requirements
-* **Ungrouped taskbar buttons.** While several Explorer windows share one
-  button, that button shows the Explorer icon. On Windows 10, set Taskbar
-  settings -> "Combine taskbar buttons" to "Never"; on Windows 11, a mod which
-  disables taskbar grouping has the same effect.
+* **[Disable grouping on the taskbar](https://windhawk.net/mods/taskbar-grouping)
+  with its "Use window icons" option.** The mod puts the preview on each
+  Explorer window, and that mod gives each window its own taskbar button and
+  makes the button show the window's icon instead of the Explorer icon. To use
+  window icons for File Explorer only, leave "Use window icons" off and add
+  `explorer.exe` to "Use window icons exceptions".
 * **Thumbnails enabled.** In File Explorer, under Options -> View, the checkbox
   "Always show icons, never thumbnails" must be unchecked.
-* Windows 10 or Windows 11, 64-bit, with the standard taskbar, not
-  ExplorerPatcher. Windhawk downloads the taskbar symbols the first time the
-  mod is enabled, which can take a while.
 
-Everything else takes care of itself. The preview resolution follows the
-screen's DPI, previews are kept on disk so that they are instant after a
-reboot, and the old ones are discarded once there are too many of them.
+The mod has no settings. The preview resolution follows the screen's DPI,
+previews are kept on disk so that they are instant after a reboot, and the old
+ones are discarded once there are too many of them.
 */
 // ==/WindhawkModReadme==
-
-// ==WindhawkModSettings==
-/*
-- taskbarWindowIcons: explorer
-  $name: Window icons on the taskbar
-  $description: >-
-    The taskbar draws the icon of the window instead of the icon of the
-    application, which is what makes the folder previews visible. A new value
-    takes effect on a button the next time its icon is updated, so reopening
-    the windows is the quickest way to apply it everywhere.
-  $options:
-  - explorer: File Explorer windows only
-  - all: All programs
-*/
-// ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
@@ -184,8 +154,6 @@ struct ComPtr {
     explicit operator bool() const { return p != nullptr; }
 };
 
-enum class WindowIconsMode { Explorer = 0, All = 1 };
-
 struct CacheHeader {
     DWORD magic;
     DWORD version;
@@ -243,10 +211,7 @@ static std::map<HWND, ResolveMemo> g_resolveMemo;
 static std::vector<RenderJob> g_jobs;
 
 static std::atomic<bool> g_enabled{false};
-static std::atomic<int> g_windowIconsMode{
-    static_cast<int>(WindowIconsMode::Explorer)};
 static std::atomic<HWND> g_workerWnd{nullptr};
-static std::atomic<bool> g_taskbarHooksReady{false};
 
 // Set once in Wh_ModInit and read everywhere after.
 static int g_iconSize = 64;
@@ -1438,279 +1403,6 @@ static BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
 }
 
 // ---------------------------------------------------------------------------
-// Taskbar: draw window icons instead of application icons
-//
-// While the taskbar works out a button's icon, CTaskGroup::GetShortcutIDList
-// returns null for that button's group, so the taskbar falls back to the icon
-// of the window, which is the preview this mod has set. Same approach as the
-// "Use window icons" option of the "Disable grouping on the taskbar" mod.
-
-// The group whose icon is being worked out on this thread.
-static thread_local PVOID g_iconTaskGroup = nullptr;
-
-using CTaskGroup_GetNumItems_t = int(WINAPI*)(PVOID pThis);
-using CTaskGroup_GetAppID_t = PCWSTR(WINAPI*)(PVOID pThis);
-using CTaskGroup_IsImmersiveGroup_t = bool(WINAPI*)(PVOID pThis);
-using CTaskGroup_GetFlags_t = DWORD(WINAPI*)(PVOID pThis);
-using CTaskGroup_GetShortcutIDList_t = const ITEMIDLIST*(WINAPI*)(PVOID pThis);
-using CTaskBtnGroup_GetGroup_t = PVOID(WINAPI*)(PVOID pThis);
-using CTaskBtnGroup_GetIcon_t = HRESULT(WINAPI*)(PVOID pThis,
-                                                 PVOID taskItem,
-                                                 HICON* icon);
-using CTaskBtnGroup__DrawRegularButton_t = void(WINAPI*)(PVOID pThis,
-                                                         PVOID hdc,
-                                                         PVOID renderInfo);
-using CTaskListWnd_GroupChanged_t = void(WINAPI*)(PVOID pThis,
-                                                  PVOID taskGroup,
-                                                  int property);
-using CTaskListWnd_TaskDestroyed_t = LONG_PTR(WINAPI*)(PVOID pThis,
-                                                       PVOID taskGroup,
-                                                       PVOID taskItem,
-                                                       int flags);
-using CTaskListWnd_TaskDestroyed_2_t = LONG_PTR(WINAPI*)(PVOID pThis,
-                                                         PVOID taskGroup,
-                                                         PVOID taskItem);
-
-static CTaskGroup_GetNumItems_t CTaskGroup_GetNumItems_Original;
-static CTaskGroup_GetAppID_t CTaskGroup_GetAppID_Original;
-static CTaskGroup_IsImmersiveGroup_t CTaskGroup_IsImmersiveGroup_Original;
-static CTaskGroup_GetFlags_t CTaskGroup_GetFlags_Original;
-static CTaskGroup_GetShortcutIDList_t CTaskGroup_GetShortcutIDList_Original;
-static CTaskBtnGroup_GetGroup_t CTaskBtnGroup_GetGroup_Original;
-static CTaskBtnGroup_GetIcon_t CTaskBtnGroup_GetIcon_Original;
-static CTaskBtnGroup__DrawRegularButton_t
-    CTaskBtnGroup__DrawRegularButton_Original;
-static CTaskListWnd_GroupChanged_t CTaskListWnd_GroupChanged_Original;
-static CTaskListWnd_TaskDestroyed_t CTaskListWnd_TaskDestroyed_Original;
-static CTaskListWnd_TaskDestroyed_2_t CTaskListWnd_TaskDestroyed_2_Original;
-
-static bool IsExplorerAppId(PCWSTR appId) {
-    static const WCHAR kExplorerAppId[] = L"Microsoft.Windows.Explorer";
-    const size_t len = ARRAYSIZE(kExplorerAppId) - 1;
-    // A mod which disables grouping appends a "~Wh~..." suffix to app IDs.
-    return appId && _wcsnicmp(appId, kExplorerAppId, len) == 0 &&
-           (appId[len] == L'\0' || appId[len] == L'~');
-}
-
-static bool TaskGroupWantsWindowIcon(PVOID taskGroup) {
-    if (!taskGroup || !g_taskbarHooksReady.load() ||
-        !g_enabled.load(std::memory_order_relaxed)) {
-        return false;
-    }
-
-    // A store app has no window icon worth showing.
-    if (CTaskGroup_IsImmersiveGroup_Original(taskGroup)) {
-        return false;
-    }
-
-    if (static_cast<WindowIconsMode>(g_windowIconsMode.load()) ==
-        WindowIconsMode::All) {
-        return true;
-    }
-
-    return IsExplorerAppId(CTaskGroup_GetAppID_Original(taskGroup));
-}
-
-static const ITEMIDLIST* WINAPI CTaskGroup_GetShortcutIDList_Hook(PVOID pThis) {
-    // The decision follows the button's group rather than pThis, because a
-    // grouping mod may forward this call to a different group.
-    PVOID group = g_iconTaskGroup;
-    if (group && g_taskbarHooksReady.load() &&
-        CTaskGroup_GetNumItems_Original(group) > 0 &&
-        TaskGroupWantsWindowIcon(group)) {
-        return nullptr;
-    }
-
-    return CTaskGroup_GetShortcutIDList_Original(pThis);
-}
-
-// Windows 11.
-static HRESULT WINAPI CTaskBtnGroup_GetIcon_Hook(PVOID pThis,
-                                                 PVOID taskItem,
-                                                 HICON* icon) {
-    PVOID prev = g_iconTaskGroup;
-    g_iconTaskGroup = g_taskbarHooksReady.load()
-                          ? CTaskBtnGroup_GetGroup_Original(pThis)
-                          : nullptr;
-    HRESULT ret = CTaskBtnGroup_GetIcon_Original(pThis, taskItem, icon);
-    g_iconTaskGroup = prev;
-    return ret;
-}
-
-// Windows 10, where the icon is worked out while the button is drawn.
-static void WINAPI CTaskBtnGroup__DrawRegularButton_Hook(PVOID pThis,
-                                                         PVOID hdc,
-                                                         PVOID renderInfo) {
-    PVOID prev = g_iconTaskGroup;
-    g_iconTaskGroup = g_taskbarHooksReady.load()
-                          ? CTaskBtnGroup_GetGroup_Original(pThis)
-                          : nullptr;
-    CTaskBtnGroup__DrawRegularButton_Original(pThis, hdc, renderInfo);
-    g_iconTaskGroup = prev;
-}
-
-// When the last window of a pinned group closes, the button has to go back to
-// the application icon, which the taskbar doesn't do by itself.
-// https://github.com/ramensoftware/windhawk-mods/issues/644
-template <typename Original>
-static LONG_PTR OnTaskDestroyed(Original original,
-                                PVOID taskList,
-                                PVOID taskGroup,
-                                PVOID taskItem) {
-    if (!taskItem || !taskGroup || !g_taskbarHooksReady.load()) {
-        return original();
-    }
-
-    const int numItems = CTaskGroup_GetNumItems_Original(taskGroup);
-    const bool pinned = (CTaskGroup_GetFlags_Original(taskGroup) & 1) != 0;
-
-    LONG_PTR ret = original();
-
-    if (pinned && numItems == 1 && CTaskListWnd_GroupChanged_Original &&
-        TaskGroupWantsWindowIcon(taskGroup)) {
-        const int kTaskGroupPropertyIcon = 4;
-        CTaskListWnd_GroupChanged_Original(taskList, taskGroup,
-                                           kTaskGroupPropertyIcon);
-    }
-    return ret;
-}
-
-static LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_Hook(PVOID pThis,
-                                                       PVOID taskGroup,
-                                                       PVOID taskItem,
-                                                       int flags) {
-    return OnTaskDestroyed(
-        [=]() {
-            return CTaskListWnd_TaskDestroyed_Original(pThis, taskGroup,
-                                                       taskItem, flags);
-        },
-        pThis, taskGroup, taskItem);
-}
-
-static LONG_PTR WINAPI CTaskListWnd_TaskDestroyed_2_Hook(PVOID pThis,
-                                                         PVOID taskGroup,
-                                                         PVOID taskItem) {
-    return OnTaskDestroyed(
-        [=]() {
-            return CTaskListWnd_TaskDestroyed_2_Original(pThis, taskGroup,
-                                                         taskItem);
-        },
-        pThis, taskGroup, taskItem);
-}
-
-static bool IsWindows10Taskbar() {
-    // explorer.exe's version: a build below 22000 is Windows 10.
-    HRSRC res = FindResourceW(nullptr, MAKEINTRESOURCEW(VS_VERSION_INFO),
-                              MAKEINTRESOURCEW(16) /* RT_VERSION */);
-    HGLOBAL global = res ? LoadResource(nullptr, res) : nullptr;
-    void* data = global ? LockResource(global) : nullptr;
-    VS_FIXEDFILEINFO* info = nullptr;
-    UINT len = 0;
-    if (!data ||
-        !VerQueryValueW(data, L"\\", reinterpret_cast<void**>(&info), &len) ||
-        !info || len == 0) {
-        return false;
-    }
-    WORD build = HIWORD(info->dwFileVersionLS);
-    Wh_Log(L"explorer.exe build %u", build);
-    return build < 22000;
-}
-
-// Failing here only turns this part off; the folder previews keep working.
-// The symbols live in taskbar.dll on Windows 11 and in explorer.exe on
-// Windows 10.
-static void HookTaskbarSymbols() {
-    // taskbar.dll, explorer.exe
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: virtual int __cdecl CTaskGroup::GetNumItems(void))"},
-            &CTaskGroup_GetNumItems_Original,
-        },
-        {
-            {LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))"},
-            &CTaskGroup_GetAppID_Original,
-        },
-        {
-            {LR"(public: virtual bool __cdecl CTaskGroup::IsImmersiveGroup(void))"},
-            &CTaskGroup_IsImmersiveGroup_Original,
-        },
-        {
-            {LR"(public: virtual unsigned long __cdecl CTaskGroup::GetFlags(void)const )"},
-            &CTaskGroup_GetFlags_Original,
-        },
-        {
-            {LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __cdecl CTaskGroup::GetShortcutIDList(void))"},
-            &CTaskGroup_GetShortcutIDList_Original,
-            CTaskGroup_GetShortcutIDList_Hook,
-        },
-        {
-            {LR"(public: virtual struct ITaskGroup * __cdecl CTaskBtnGroup::GetGroup(void))"},
-            &CTaskBtnGroup_GetGroup_Original,
-        },
-        {
-            // Available from Windows 11.
-            {LR"(public: virtual long __cdecl CTaskBtnGroup::GetIcon(struct ITaskItem *,struct HICON__ * *))"},
-            &CTaskBtnGroup_GetIcon_Original,
-            CTaskBtnGroup_GetIcon_Hook,
-            true,
-        },
-        {
-            // Available until Windows 10.
-            {LR"(private: void __cdecl CTaskBtnGroup::_DrawRegularButton(struct HDC__ *,struct BUTTONRENDERINFO const &))"},
-            &CTaskBtnGroup__DrawRegularButton_Original,
-            CTaskBtnGroup__DrawRegularButton_Hook,
-            true,
-        },
-        {
-            // Available from Windows 11.
-            {LR"(public: virtual void __cdecl CTaskListWnd::GroupChanged(struct ITaskGroup *,enum winrt::WindowsUdk::UI::Shell::TaskGroupProperty))"},
-            &CTaskListWnd_GroupChanged_Original,
-            nullptr,
-            true,
-        },
-        {
-            {LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *,enum TaskDestroyedFlags))"},
-            &CTaskListWnd_TaskDestroyed_Original,
-            CTaskListWnd_TaskDestroyed_Hook,
-            true,
-        },
-        {
-            // A newer variant seen in insider builds.
-            {LR"(public: virtual long __cdecl CTaskListWnd::TaskDestroyed(struct ITaskGroup *,struct ITaskItem *))"},
-            &CTaskListWnd_TaskDestroyed_2_Original,
-            CTaskListWnd_TaskDestroyed_2_Hook,
-            true,
-        },
-    };
-
-    HMODULE module;
-    if (IsWindows10Taskbar()) {
-        module = GetModuleHandleW(nullptr);
-    } else {
-        module = LoadLibraryExW(L"taskbar.dll", nullptr,
-                                LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!module) {
-            Wh_Log(L"Couldn't load taskbar.dll, window icons are off");
-            return;
-        }
-    }
-
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks,
-                                    ARRAYSIZE(symbolHooks))) {
-        Wh_Log(L"Taskbar symbols not found, window icons are off");
-        return;
-    }
-
-    if (!CTaskBtnGroup_GetIcon_Original &&
-        !CTaskBtnGroup__DrawRegularButton_Original) {
-        Wh_Log(L"No icon function found, window icons are off");
-        return;
-    }
-
-    g_taskbarHooksReady = true;
-}
-
-// ---------------------------------------------------------------------------
 // Worker thread
 
 static void Schedule(HWND hwnd, DWORD delay, bool forceRender, int confirmStep) {
@@ -2205,17 +1897,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 // ---------------------------------------------------------------------------
 // Windhawk entry points
 
-static void LoadSettings() {
-    PCWSTR mode = Wh_GetStringSetting(L"taskbarWindowIcons");
-    g_windowIconsMode = static_cast<int>(mode && wcscmp(mode, L"all") == 0
-                                             ? WindowIconsMode::All
-                                             : WindowIconsMode::Explorer);
-    Wh_FreeStringSetting(mode);
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
-    LoadSettings();
     InitCacheDir();
 
     // A preview is rendered a little larger than the taskbar needs, so that
@@ -2241,8 +1924,6 @@ BOOL Wh_ModInit() {
 
     Wh_SetFunctionHook(showWindow, reinterpret_cast<void*>(ShowWindow_Hook),
                        reinterpret_cast<void**>(&ShowWindow_Original));
-
-    HookTaskbarSymbols();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent) {
@@ -2272,9 +1953,4 @@ void Wh_ModUninit() {
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
     }
-}
-
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
-    LoadSettings();
 }
