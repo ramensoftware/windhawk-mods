@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @include         explorer.exe
-// @compilerOptions -fno-modules -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lcomctl32 -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -lruntimeobject -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -lruntimeobject -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -207,22 +207,9 @@ Live system data (volume, brightness, network, battery) is read only while a pan
 #endif
 // winsock2.h has to be included, not skipped: iphlpapi.h builds IP_ADAPTER_ADDRESSES and the GAA_FLAG_*
 // constants on the Winsock 2 definitions (ws2def.h/ws2ipdef.h), and without them GetAdaptersAddresses does
-// not even have a type to take. Windhawk's prelude includes windows.h - and with it the old winsock.h -
-// before any mod code runs, so winsock2.h always arrives "late" here and clang prints its include-order
-// warning. That warning is expected and harmless for this file (the mod calls no Winsock function at all,
-// it only needs the adapter structures), so it is silenced around this single include and nowhere else.
-#if defined(__clang__)
-#pragma clang diagnostic push
-// clang has named this group both ways over the years; the third line keeps an unknown group from turning
-// this suppression into a warning of its own.
-#pragma clang diagnostic ignored "-W#warnings"
-#pragma clang diagnostic ignored "-W#pragma-messages"
-#pragma clang diagnostic ignored "-Wunknown-warning-option"
-#endif
+// not even have a type to take. With -DWIN32_LEAN_AND_MEAN in @compilerOptions, the preincluded windows.h
+// no longer pulls in winsock.h, so winsock2.h can be included without the old include-order warning.
 #include <winsock2.h>
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 #include <windows.h>
 #include <iphlpapi.h>
 #include <powrprof.h>
@@ -650,7 +637,7 @@ static WinHandle g_uiReady, g_keyboardReady;
 static DWORD g_uiTid = 0, g_keyboardTid = 0;
 static HHOOK g_mouseHook = NULL;           // owned by the input-hook thread
 static bool g_mouseHookWanted = false;     // UI-thread view of the requested state
-static ScopedWinEventHook g_foregroundHook;    // owned by the UI thread
+static HWINEVENTHOOK g_foregroundHook = nullptr;    // owned by the UI thread; unhooked explicitly before exit
 static DWORD g_openTick = 0;               // GetTickCount() of the last OpenPane
 static volatile LONG g_uiStarted = 0, g_keyboardStarted = 0;
 static DWORD g_lastApply = 0;
@@ -2002,6 +1989,8 @@ public:
 private:
     ULONG_PTR token_ = 0;
 };
+// g_panelGdiplus: destroyed explicitly in Wh_ModUninit to avoid running the destructor
+// under the loader lock at process exit.
 static std::unique_ptr<PanelGdiplusSession> g_panelGdiplus;
 static bool BackButtonAt(int x, int y) {
     const Lay L = Layout();
@@ -3192,9 +3181,9 @@ static DWORD WINAPI UiThread(LPVOID) {
 
         // Out-of-context WinEvent hook: delivered on this thread, which has a message loop as SetWinEventHook
         // requires.
-        g_foregroundHook.reset(SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
-                                               NULL, ForegroundEventProc, 0, 0, WINEVENT_OUTOFCONTEXT));
-        if (!g_foregroundHook.get())
+        g_foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                                           NULL, ForegroundEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+        if (!g_foregroundHook)
             Wh_Log(L"[Dismiss] SetWinEventHook(EVENT_SYSTEM_FOREGROUND) failed, err=%u",
                    (unsigned)GetLastError());
 
@@ -3217,7 +3206,7 @@ static DWORD WINAPI UiThread(LPVOID) {
 
     if (!readySignaled) SignalUiReady(false);
 
-    g_foregroundHook.reset();
+    if (g_foregroundHook) { UnhookWinEvent(g_foregroundHook); g_foregroundHook = nullptr; }
     g_mouseHookWanted = false;
 
     if (g_menuWnd) {
@@ -3381,9 +3370,18 @@ void Uninit() {
 }
 
 // ---------------------------------------------------------------- Charms Bar integration
-// Opens or closes the Second screen / Project panel. Only the Devices charm calls this; the mod does not
-// handle Win+P and never sends keys to open the panel.
+// Opens or closes the Second screen / Project panel. First tries to hand off to the companion
+// Windows 8/8.1 Display Switch Recreation mod (which may be installed alongside this one), then
+// falls back to the built-in panel. If neither is available, returns false so the caller can
+// fall back to Win+P.
 bool TogglePanel() {
+    // 1. Try the companion Display Switch mod (win8-display-switch-recreation).
+    HWND externalPanel = FindWindowW(L"Win81DisplaySwitchMod", NULL);
+    if (externalPanel) {
+        PostMessageW(externalPanel, WM_APP + 1, 0, 0);
+        return true;
+    }
+    // 2. Fall back to the built-in panel.
     HWND panel = FindWindowW(kClass, NULL);
     if (!panel) return false;
     PostMessageW(panel, WM_APP_TOGGLE, 0, 0);
@@ -3886,6 +3884,8 @@ BYTE GetRailWindowAlpha(int animationAlpha) noexcept {
     return (BYTE)(animationAlpha*g_opacity.load()/255);
 }
 ULONG_PTR g_gdiplusToken = 0;
+// g_dtmInterop, g_dtm, g_dataRequested: released explicitly in the UI thread exit path to avoid
+// running COM destructors under the loader lock at process exit.
 ComPtr<IDataTransferManagerInteropLocal> g_dtmInterop;
 ComPtr<dt::IDataTransferManager> g_dtm;
 using ShareEventHandler = awf::ITypedEventHandler<dt::DataTransferManager*, dt::DataRequestedEventArgs*>;
@@ -4637,14 +4637,7 @@ void SendWinTap() {
     if (sent == 1) InjectKeyUp(VK_LWIN);
 }
 
-UINT SendWinModifiedKey(WORD windowsKey, WORD key) {
-    INPUT input[2]{};
-    input[0].type = INPUT_KEYBOARD;
-    input[0].ki.wVk = windowsKey;
-    input[1].type = INPUT_KEYBOARD;
-    input[1].ki.wVk = key;
-    return SendInput(2, input, sizeof(INPUT));
-}
+
 
 HRESULT SetupShareManager(HWND shareWindow) {
     if(!shareWindow || !IsWindow(shareWindow)) return E_HANDLE;
@@ -8743,9 +8736,10 @@ static void ActivateDevicesPaneItem(int id) {
         if(!PaneTryOpen(kDevicesAndPrintersClsid))
             PaneRun(L"control.exe",L"/name Microsoft.DevicesAndPrinters");
     } else if(id==102) {
-        // The built-in Second screen / Project panel. Nothing else is launched.
+        // The Second screen / Project panel: first try the companion Display Switch mod, then
+        // the built-in panel, then fall back to Win+P.
         if(!DisplaySwitchMod::TogglePanel())
-            Wh_Log(L"Charms port: Second screen panel is not running");
+            SendWinChord('P'); // native Windows Project flyout
     }
 }
 
@@ -9062,6 +9056,9 @@ LRESULT CALLBACK RailProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
                 VerifyCompanionStartScreen();
             }
             else if (wp == TIMER_STATUS) {
+                // Only poll registry, accent and status while the rail (or clock) is actually visible.
+                // When hidden, these values are refreshed on ShowCharms / ShowCharmPane instead.
+                if (!g_visible.load() && (!g_clock || !IsWindowVisible(g_clock))) break;
                 RefreshEdgeUiRegistry(); RefreshSystemAccent();
                 if (!g_clockStatusTimerActive && g_clock && IsWindowVisible(g_clock)) UpdateStatus();
                 if (g_visible.load()) RaiseCharmsOverCompanionStartScreen();
@@ -9291,64 +9288,51 @@ LRESULT CALLBACK KeyboardProcImpl(int code, WPARAM wp, LPARAM lp) {
     const bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
     const bool up = wp == WM_KEYUP || wp == WM_SYSKEYUP;
     const bool windowsKey = key->vkCode == VK_LWIN || key->vkCode == VK_RWIN;
-    static UINT pendingWindowsKey = 0;
-    static bool windowsKeyForwarded = false;
+    // Track whether we consumed a Win+C chord so the matching C-up is also swallowed and
+    // the Win-up does not open Start.  The Win key itself always passes through untouched,
+    // so Win+drag, GetAsyncKeyState queries and elevated windows all keep working.
     static bool charmChordConsumed = false;
-    static bool charmChordSeen = false; // stays set until the physical Win key is released
 
-    // Hold the physical Win-down for one event. If the next key is C, consume both parts of Win+C. Otherwise
-    // replay Win-down with the first chord key in order, preserving native Win+P/Win+S/etc without leaving
-    // Win latched.
-    if (down && windowsKey) {
-        if (!pendingWindowsKey) pendingWindowsKey = key->vkCode;
-        if (key->vkCode == pendingWindowsKey && !windowsKeyForwarded) return 1;
-        if (pendingWindowsKey && !windowsKeyForwarded) {
-            const UINT sent = SendWinModifiedKey((WORD)pendingWindowsKey, (WORD)key->vkCode);
-            if (sent == 2) {
-                windowsKeyForwarded = true;
-                return 1; // the physical key-down was replayed synthetically
+    // When Win+C activation is off or the Charms Bar is disabled, do not touch the Win key
+    // at all.  This prevents the previous hold-and-replay logic from breaking Win shortcuts,
+    // Start taps and Win+mouse combinations when the mod is not using Win+C.
+    const bool winCActive = g_useWinC.load() && g_charmsEnabled.load();
+
+    // Win+C detection: swallow only the C key when Win is physically held.  A masking key
+    // (VK_F23) is injected before the C-down so the Win release does not open Start.
+    if (down && key->vkCode == 'C' && winCActive) {
+        if ((GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
+            if (!charmChordConsumed) {
+                charmChordConsumed = true;
+                // Mask the Win release so it does not open Start after we swallow C.
+                INPUT mask{};
+                mask.type = INPUT_KEYBOARD;
+                mask.ki.wVk = VK_F23;
+                SendInput(1, &mask, sizeof(INPUT));
+                const bool paneOpen=g_paneVisible.load() || (g_pane && IsWindowVisible(g_pane));
+                PostThreadMessageW(g_threadId, WM_PORT_OPEN, paneOpen?2:1, 0);
             }
-            if (sent == 1) {
-                windowsKeyForwarded = true; // Win-down arrived; pass the physical chord key
-                return CallNextHookEx(g_keyboardHook, code, wp, lp);
-            }
-            Wh_Log(L"Charms port: SendInput could not replay Win chord (error %lu)", GetLastError());
-            windowsKeyForwarded = true; // don't synthesize an unrelated Win tap on key-up
-            return CallNextHookEx(g_keyboardHook, code, wp, lp);
+            return 1;
         }
-        return CallNextHookEx(g_keyboardHook, code, wp, lp);
-    }
-
-    if (up && windowsKey && key->vkCode == pendingWindowsKey) {
-        const bool forwarded = windowsKeyForwarded;
-        if (!forwarded && !charmChordConsumed && !charmChordSeen) {
-            // A standalone Win tap was delayed; replay it as a complete pair. Never replayed after Win+C:
-            // that tap is what opened the Start menu.
-            INPUT input[2]{};
-            input[0].type = input[1].type = INPUT_KEYBOARD;
-            input[0].ki.wVk = input[1].ki.wVk = (WORD)pendingWindowsKey;
-            input[1].ki.dwFlags = KEYEVENTF_KEYUP;
-            const UINT sent = SendInput(2, input, sizeof(INPUT));
-            if (sent == 1) InjectKeyUp((WORD)pendingWindowsKey);
-        }
-        pendingWindowsKey = 0;
-        windowsKeyForwarded = false;
-        charmChordSeen = false;
-        if (!forwarded) return 1; // swallow the physical up matching our swallowed down
-    }
-
-    if (down && key->vkCode == 'C' && pendingWindowsKey &&
-        g_useWinC.load() && g_charmsEnabled.load() && !windowsKeyForwarded) {
-        if (!charmChordConsumed) {
-            charmChordConsumed = true;
-            charmChordSeen = true;
-            const bool paneOpen=g_paneVisible.load() || (g_pane && IsWindowVisible(g_pane));
-            PostThreadMessageW(g_threadId, WM_PORT_OPEN, paneOpen?2:1, 0);
-        }
-        return 1;
     }
     if (up && key->vkCode == 'C' && charmChordConsumed) {
         charmChordConsumed = false;
+        // Release the masking key so the system key state is clean.
+        INPUT mask{};
+        mask.type = INPUT_KEYBOARD;
+        mask.ki.wVk = VK_F23;
+        mask.ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(1, &mask, sizeof(INPUT));
+        return 1;
+    }
+    // If Win goes up while we had consumed C, swallow the up to prevent Start from opening.
+    if (up && windowsKey && charmChordConsumed) {
+        charmChordConsumed = false;
+        INPUT mask{};
+        mask.type = INPUT_KEYBOARD;
+        mask.ki.wVk = VK_F23;
+        mask.ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(1, &mask, sizeof(INPUT));
         return 1;
     }
 
@@ -9373,18 +9357,6 @@ LRESULT CALLBACK KeyboardProcImpl(int code, WPARAM wp, LPARAM lp) {
         }
     }
 
-    if (down && pendingWindowsKey && !windowsKeyForwarded) {
-        const UINT sent = SendWinModifiedKey((WORD)pendingWindowsKey, (WORD)key->vkCode);
-        if (sent == 2) {
-            windowsKeyForwarded = true;
-            return 1;
-        }
-        if (sent == 1) windowsKeyForwarded = true;
-        else {
-            Wh_Log(L"Charms port: SendInput could not replay Win chord (error %lu)", GetLastError());
-            windowsKeyForwarded = true;
-        }
-    }
     return CallNextHookEx(g_keyboardHook, code, wp, lp);
 }
 
@@ -9678,26 +9650,30 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
         wc.lpfnWndProc=RailProc;
         wc.lpszClassName=kRailClass;
-        if(!RegisterClassExW(&wc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
+        UnregisterClassW(kRailClass,wc.hInstance); // clear any stale class from a previous instance
+        if(!RegisterClassExW(&wc))
             Wh_Log(L"Charms port: rail window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW cc{sizeof(cc)};
         cc.hInstance=wc.hInstance; cc.hCursor=wc.hCursor;
         cc.lpfnWndProc=ClockProc; cc.lpszClassName=kClockClass;
-        if(!RegisterClassExW(&cc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
+        UnregisterClassW(kClockClass,wc.hInstance);
+        if(!RegisterClassExW(&cc))
             Wh_Log(L"Charms port: clock window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW mc{sizeof(mc)};
         mc.style=CS_DROPSHADOW;
         mc.hInstance=wc.hInstance; mc.hCursor=wc.hCursor;
         mc.lpfnWndProc=MenuProc; mc.lpszClassName=kMenuClass;
-        if(!RegisterClassExW(&mc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
+        UnregisterClassW(kMenuClass,wc.hInstance);
+        if(!RegisterClassExW(&mc))
             Wh_Log(L"Charms port: menu window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW pc{sizeof(pc)};
         pc.hInstance=wc.hInstance; pc.hCursor=wc.hCursor;
         pc.lpfnWndProc=PaneProc; pc.lpszClassName=kPaneClass;
-        if(!RegisterClassExW(&pc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
+        UnregisterClassW(kPaneClass,wc.hInstance);
+        if(!RegisterClassExW(&pc))
             Wh_Log(L"Charms port: settings pane class registration failed (%lu)",GetLastError());
         g_pane=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,kPaneClass,L"Settings",WS_POPUP,
             0,0,DpiScale(kPaneWidth),DpiScale(600),nullptr,wc.hInstance);
@@ -9705,7 +9681,8 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         vc.hInstance=wc.hInstance; vc.hCursor=wc.hCursor;
         vc.style=CS_DROPSHADOW;
         vc.lpfnWndProc=VolumeFlyoutProc; vc.lpszClassName=kVolumeFlyoutClass;
-        if(!RegisterClassExW(&vc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
+        UnregisterClassW(kVolumeFlyoutClass,wc.hInstance);
+        if(!RegisterClassExW(&vc))
             Wh_Log(L"Charms port: settings flyout class registration failed (%lu)",GetLastError());
         // Owned by the pane, so it has to share the pane's band or it would be drawn behind its own owner.
         g_volumeFlyout=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
@@ -9714,7 +9691,8 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         WNDCLASSEXW tc{sizeof(tc)};
         tc.hInstance=wc.hInstance; tc.hCursor=wc.hCursor;
         tc.lpfnWndProc=VolumeTipProc; tc.lpszClassName=kVolumeTipClass;
-        if(!RegisterClassExW(&tc) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
+        UnregisterClassW(kVolumeTipClass,wc.hInstance);
+        if(!RegisterClassExW(&tc))
             Wh_Log(L"Charms port: value tip class registration failed (%lu)",GetLastError());
         g_volumeTip=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
             kVolumeTipClass,L"Value",WS_POPUP,0,0,DpiScale(kVolTipWidth),
@@ -9741,7 +9719,8 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         WNDCLASSEXW tipClass{sizeof(tipClass)};
         tipClass.hInstance=wc.hInstance; tipClass.hCursor=wc.hCursor;
         tipClass.lpfnWndProc=StartTipProc; tipClass.lpszClassName=kStartTipClass;
-        if(!RegisterClassExW(&tipClass) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS)
+        UnregisterClassW(kStartTipClass,wc.hInstance);
+        if(!RegisterClassExW(&tipClass))
             Wh_Log(L"Charms port: Start tip class registration failed (%lu)",GetLastError());
         g_startTip=CreateCharmsSurface(
             WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED,
@@ -10002,7 +9981,7 @@ void ReturnToCharmsBarFromDisplaySwitch() {
 // "secondary" Explorer process and stays idle: it starts a supervisor thread instead, which waits for this
 // process to own the shell window and then starts the Charms Bar. The supervisor also retries a failed
 // startup instead of giving up, so the mod recovers by itself after an Explorer restart.
-constexpr PCWSTR kModVersion=L"1.0.0";
+constexpr PCWSTR kModVersion=L"1.0.1";
 // Assigned explicitly in Wh_ModInit/StartSupervisorIfNeeded, like the other atomics in this file, so builds
 // whose standard library omits value-taking atomic constructors keep working.
 std::atomic<bool> g_charmsServicesStarted;
@@ -10078,11 +10057,10 @@ bool StartSupervisorIfNeeded() {
 void StopSupervisor() {
     g_supervisorStop.store(true);
     if(!g_supervisorThread) return;
-    // The supervisor may be inside a startup attempt, which can take up to ~15 s, so allow for that.
-    if(WaitForSingleObject(g_supervisorThread,30000)!=WAIT_OBJECT_0) {
-        Wh_Log(L"Charms port: supervisor thread did not stop in time; leaving it to process exit");
-        return; // never close the handle under a thread that may still be running
-    }
+    // The supervisor may be inside a startup attempt, which can take up to ~15 s, so wait
+    // without a bounded timeout.  Returning while the thread is still alive would let
+    // Windhawk unload the image under a running thread and crash Explorer.
+    WaitForSingleObject(g_supervisorThread,INFINITE);
     CloseHandle(g_supervisorThread);
     g_supervisorThread=nullptr;
 }
@@ -10194,7 +10172,7 @@ BOOL InitializeCharmsMod() {
     const HWND shell=GetShellWindow();
     DWORD shellPid=0;
     if(shell) GetWindowThreadProcessId(shell,&shellPid);
-    Wh_Log(L"Charms port: v%s Wh_ModInit (pid %lu, session %lu, shell pid %lu, state %s)",
+    Wh_Log(L"Charms port: v%s, Wh_ModInit: pid=%lu, session=%lu, shell pid=%lu, state=%s",
            kModVersion,GetCurrentProcessId(),(unsigned long)sessionId,(unsigned long)shellPid,
            ShellHostStateName(state));
 
@@ -10230,13 +10208,13 @@ BOOL Wh_ModInit() {
 
 // Optional Windhawk callback: runs after Wh_ModInit and after the engine finished applying hooks.
 void Wh_ModAfterInit() {
-    Wh_Log(L"Charms port: v%s Wh_ModAfterInit (pid %lu, services started=%s, supervisor=%s)",
+    Wh_Log(L"Charms port: v%s, Wh_ModAfterInit: pid=%lu, services started=%s, supervisor=%s",
            kModVersion,GetCurrentProcessId(),
            g_charmsServicesStarted.load()?L"yes":L"no",g_supervisorThread?L"yes":L"no");
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Charms port: v%s Wh_ModUninit (pid %lu, services started=%s)",
+    Wh_Log(L"Charms port: v%s, Wh_ModUninit: pid=%lu, services started=%s",
            kModVersion,GetCurrentProcessId(),g_charmsServicesStarted.load()?L"yes":L"no");
     StopSupervisor();
     DisplaySwitchMod::Uninit();
