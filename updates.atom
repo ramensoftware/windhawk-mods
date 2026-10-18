@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-18T15:00:15.000Z</updated>
+    <updated>2026-10-18T16:01:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Magic Pointer 1.0.3]]></title>
+        <id>https://windhawk.net/mods/magic-pointer#2cb665613f187b4f2160998718b76a5600c22011</id>
+        <link href="https://windhawk.net/mods/magic-pointer"/>
+        <updated>2026-10-18T16:01:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added translations. The hint, the card with its buttons and messages, and the Google Lens helper page now follow your Windows display language. Available in Arabic, Bengali, Chinese (Simplified and Traditional), Croatian, Czech, Danish, Dutch, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian, Persian, Polish, Portuguese (Brazil), Romanian, Russian, Spanish, Swedish, Tamil, Thai, Turkish, Ukrainian and Vietnamese, including right-to-left layouts. To make things easier the translations were written with AI assistance, so corrections are welcome on GitHub.</li>
+<li>New <strong>Language</strong> setting to use a different language than Windows. The settings page is translated too, in the languages Windhawk offers, and follows Windhawk's own language.</li>
+<li>The Translate button now uses your chosen language when <strong>Translate to</strong> is set to Auto. The language list shows native names and gained Croatian, Persian and Tamil, and Smart suggestions are written in your language.</li>
+<li>The ripple animation is much smoother on slower PCs and high-resolution screens. It lowers its detail when a frame takes too long, and it now follows your monitor's refresh rate, up to 144 fps.</li>
+<li>Fixed a hitch when summoning the pointer on large or high-resolution screens.</li>
+</ul>]]></content>
+        <author>
+            <name>Rono</name>
+            <uri>https://github.com/rono-zeroseven</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Volume Mixer 1.5.4]]></title>
         <id>https://windhawk.net/mods/better-volume-mixer#e8bbf8d63cb754e7d160f8a4162abd9b5b0ee855</id>
@@ -762,21 +779,6 @@ by David Trapp (CherryDT). Their MIT notices are retained below.</p>]]></content
         <author>
             <name>Choihyunseok1</name>
             <uri>https://github.com/Choihyunseok1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shake to Find Cursor 1.4.1]]></title>
-        <id>https://windhawk.net/mods/shake-to-find-cursor#564e574c0812bbae205023f0b5ff4c6ed4a1a8f8</id>
-        <link href="https://windhawk.net/mods/shake-to-find-cursor"/>
-        <updated>2026-10-17T10:01:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed flickering and stutter with larger pointer sizes (Settings &gt; Accessibility &gt; Mouse pointer and touch &gt; Size). Thanks to @winchestercanal for tracking this down in #5595.</li>
-<li>Fixed the cursor briefly appearing at the wrong size when it changes type (e.g. arrow to text cursor) during or after the animation.</li>
-<li>Fixed the cursor not updating while the mouse is held still.</li>
-</ul>]]></content>
-        <author>
-            <name>Darius Varnelis</name>
-            <uri>https://github.com/Darius-Varnelis</uri>
         </author>
     </entry>
 </feed>

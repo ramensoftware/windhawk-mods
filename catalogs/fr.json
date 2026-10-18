@@ -9125,19 +9125,22 @@
         "ratingUsers": 41,
         "reviews": 0,
         "trendingSorting": 59.2,
-        "updated": 1791957729000,
+        "updated": 1792339266000,
         "users": 592
       },
       "metadata": {
         "author": "Rono",
         "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -loleaut32 -lwinhttp -limm32",
-        "description": "Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini AI about it",
+        "description": "Secouez le curseur de la souris pour faire apparaître un Magic Pointer façon Googlebook, puis pointez ou sélectionnez n'importe quoi à l'écran et interrogez Gemini AI à ce sujet",
         "github": "https://github.com/rono-zeroseven",
         "include": [
           "windhawk.exe"
         ],
         "name": "Magic Pointer",
-        "version": "1.0.2"
+        "version": "1.0.3"
+      },
+      "metadataEnglish": {
+        "description": "Shake the mouse cursor to summon a Googlebook-style Magic Pointer, then point at or select anything on screen and ask Gemini AI about it"
       }
     },
     "magnifier-headless": {

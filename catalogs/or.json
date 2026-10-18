@@ -9118,7 +9118,7 @@
         "ratingUsers": 41,
         "reviews": 0,
         "trendingSorting": 59.2,
-        "updated": 1791957729000,
+        "updated": 1792339266000,
         "users": 592
       },
       "metadata": {
@@ -9130,7 +9130,7 @@
           "windhawk.exe"
         ],
         "name": "Magic Pointer",
-        "version": "1.0.2"
+        "version": "1.0.3"
       }
     },
     "magnifier-headless": {
