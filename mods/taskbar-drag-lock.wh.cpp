@@ -15,6 +15,7 @@
 /*
 Bring back the Windows 10 ability to drag the taskbar to left, top, right and
 bottom, and lock it with the "Lock Taskbar" item in the taskbar context menu.
+The lock remembered from the context menu prevents accidental drags.
 
 Requires the native Windows 11 taskbar position setting (Windows 11 26H2,
 build 26300+).
@@ -158,11 +159,11 @@ bool LocationSettingUsable(NativeSettingItem* setting) {
 }
 
 static std::atomic<int> g_positionSettingProbe = -1;
+static std::atomic<bool> g_positionSettingUnavailableLogged = false;
 
 bool TaskbarPositionSettingUsable() {
-    const int cached = g_positionSettingProbe.load();
-    if (cached >= 0) {
-        return cached != 0;
+    if (g_positionSettingProbe.load() == 1) {
+        return true;
     }
 
     bool usable = false;
@@ -172,12 +173,13 @@ bool TaskbarPositionSettingUsable() {
     } catch (...) {
     }
 
-    if (!usable) {
+    if (usable) {
+        g_positionSettingProbe.store(1);
+    } else if (!g_positionSettingUnavailableLogged.exchange(true)) {
         Wh_Log(L"Taskbar position setting unavailable; drag and menu item "
                L"disabled");
     }
 
-    g_positionSettingProbe.store(usable ? 1 : 0);
     return usable;
 }
 
@@ -742,14 +744,14 @@ bool IsTaskbarInputSiteWindow(HWND hWnd) {
 bool HookInputSiteWindow(HWND hWnd) {
     void* wndProc =
         reinterpret_cast<void*>(GetWindowLongPtrW(hWnd, GWLP_WNDPROC));
-    void* hookedProc = g_hookedInputSiteProc.load();
-    if (hookedProc == wndProc) {
-        return true;
-    }
-    if (hookedProc) {
-        Wh_Log(L"InputSite wndproc %p differs from hooked %p; not hooking",
-               wndProc, hookedProc);
-        return false;
+
+    void* expected = nullptr;
+    if (!g_hookedInputSiteProc.compare_exchange_strong(expected, wndProc)) {
+        if (expected != wndProc) {
+            Wh_Log(L"InputSite wndproc %p differs from hooked %p; not hooking",
+                   wndProc, expected);
+        }
+        return expected == wndProc;
     }
 
     // The InputSite window cannot be subclassed: inputsite.dll validates its
@@ -759,6 +761,7 @@ bool HookInputSiteWindow(HWND hWnd) {
             reinterpret_cast<WNDPROC>(wndProc), InputSiteWindowProc_Hook,
             &InputSiteWindowProc_Original)) {
         Wh_Log(L"Failed to hook InputSite wndproc %p", wndProc);
+        g_hookedInputSiteProc.store(nullptr);
         return false;
     }
 
@@ -766,7 +769,6 @@ bool HookInputSiteWindow(HWND hWnd) {
         Wh_ApplyHookOperations();
     }
 
-    g_hookedInputSiteProc.store(wndProc);
     Wh_Log(L"Hooked InputSite wndproc %p (hwnd %p)", wndProc, hWnd);
     return true;
 }
