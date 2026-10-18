@@ -8,16 +8,19 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lwininet
+// @compilerOptions -lole32 -lwininet -lbcrypt
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 
 Redstores the classic network tray icon on Windows 10 taskbar running under Windows 11 24H2 or later.
-The mod downloads the network icon dll from the Microsoft's symbols server, so will notwork in a portable Windhawk version.
+The mod downloads the network icon dll from the Microsoft's symbols server.
 
-The original version of the mod is ьфву by user DerBaron of WinClassic forum and published under MIT license:
+This mod downloads the version of the network icon dll from one of the latest builds of Windows 11 23H2, so it may conflict 
+with the mod `Windows 10 legacy flyouts on Win11 24H2 restorer`. It is recommended to use only one of the mods.
+
+The original version of the mod is by user DerBaron of WinClassic forum, published under MIT license:
 https://winclassic.net/post/40623
 
 */
@@ -26,6 +29,7 @@ https://winclassic.net/post/40623
 #include <windhawk_api.h>
 #include <windows.h>
 #include <wininet.h>
+#include <bcrypt.h>
 #include <unknwn.h>
 #include <cstdint>
 #include <cstring>
@@ -38,6 +42,10 @@ constexpr wchar_t kLogPrefix[] = L"[NetworkTray]";
 constexpr wchar_t kPniduiDownloadUrl[] =
     L"https://msdl.microsoft.com/download/symbols/pnidui.dll/"
     L"C506D2E820b000/pnidui.dll";
+
+// Вставьте сюда SHA-256 строкой (как в логе мода: "Computed SHA-256: ...").
+// Пока пусто - проверка хэша пропускается (с предупреждением в лог).
+constexpr wchar_t kExpectedSha256Hex[] = L"0f929cf218142a2aab06d31d7fac4db5c419faf153a41c7f24d7c72ef338c76e";
 
 const GUID kClsidNetworkTray = {
     0xC2796011, 0x81BA, 0x4148,
@@ -77,23 +85,17 @@ volatile LONG g_workerId = 0;
 volatile LONG g_stopping = 0;
 
 // ---------------------------------------------------------------------------
-// Paths.
+// Paths (mod-private storage, to avoid conflicts with other mods).
 // ---------------------------------------------------------------------------
 
 bool BuildPaths(wchar_t* dirPath, size_t dirPathSize,
                 wchar_t* filePath, size_t filePathSize) {
-    wchar_t programData[MAX_PATH] = {};
-    DWORD length = GetEnvironmentVariableW(
-        L"ProgramData", programData, ARRAYSIZE(programData));
-    if (!length || length >= ARRAYSIZE(programData)) {
-        Wh_Log(L"%s Unable to resolve ProgramData", kLogPrefix);
+    size_t written = Wh_GetModStoragePath(dirPath, dirPathSize);
+    if (written == 0 || written >= dirPathSize) {
+        Wh_Log(L"%s Wh_GetModStoragePath failed or buffer too small",
+               kLogPrefix);
         return false;
     }
-
-    if (swprintf_s(dirPath, dirPathSize,
-                   L"%s\\Windhawk\\Engine\\ModsWritable\\LegacyStore",
-                   programData) < 0)
-        return false;
 
     if (swprintf_s(filePath, filePathSize, L"%s\\pnidui.dll", dirPath) < 0)
         return false;
@@ -101,35 +103,12 @@ bool BuildPaths(wchar_t* dirPath, size_t dirPathSize,
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Directory creation (no shell32 dependency; creates each path segment).
-// ---------------------------------------------------------------------------
-
-bool EnsureDirectoryRecursive(wchar_t* path) {
-    size_t length = wcslen(path);
-    if (length < 3) return false;  // Expect at least "C:\".
-
-    for (size_t i = 3; i < length; ++i) {
-        if (path[i] != L'\\') continue;
-
-        path[i] = L'\0';
-        if (!CreateDirectoryW(path, nullptr)) {
-            DWORD error = GetLastError();
-            if (error != ERROR_ALREADY_EXISTS) {
-                Wh_Log(L"%s CreateDirectoryW(%s) failed: %lu",
-                       kLogPrefix, path, error);
-                path[i] = L'\\';
-                return false;
-            }
-        }
-        path[i] = L'\\';
-    }
-
-    if (!CreateDirectoryW(path, nullptr)) {
+bool EnsureStorageDirectory(const wchar_t* dirPath) {
+    if (!CreateDirectoryW(dirPath, nullptr)) {
         DWORD error = GetLastError();
         if (error != ERROR_ALREADY_EXISTS) {
             Wh_Log(L"%s CreateDirectoryW(%s) failed: %lu",
-                   kLogPrefix, path, error);
+                   kLogPrefix, dirPath, error);
             return false;
         }
     }
@@ -137,10 +116,127 @@ bool EnsureDirectoryRecursive(wchar_t* path) {
 }
 
 // ---------------------------------------------------------------------------
-// Download pnidui.dll from the Microsoft symbol server if it's missing.
+// SHA-256 checksum verification via CNG (BCrypt).
+// ---------------------------------------------------------------------------
+
+bool ComputeSha256(const wchar_t* path, BYTE outHash[32]) {
+    HANDLE hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"%s ComputeSha256: CreateFileW failed: %lu",
+               kLogPrefix, GetLastError());
+        return false;
+    }
+
+    BCRYPT_ALG_HANDLE hAlg = nullptr;
+    NTSTATUS status =
+        BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+    if (!BCRYPT_SUCCESS(status)) {
+        Wh_Log(L"%s BCryptOpenAlgorithmProvider failed: 0x%08X",
+               kLogPrefix, static_cast<unsigned>(status));
+        CloseHandle(hFile);
+        return false;
+    }
+
+    DWORD hashObjectLength = 0, dataLength = 0;
+    BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH,
+                       reinterpret_cast<PUCHAR>(&hashObjectLength),
+                       sizeof(hashObjectLength), &dataLength, 0);
+
+    DWORD hashLength = 0;
+    BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH,
+                       reinterpret_cast<PUCHAR>(&hashLength),
+                       sizeof(hashLength), &dataLength, 0);
+
+    bool ok = false;
+    if (hashObjectLength > 0 && hashLength == 32) {
+        BYTE* hashObject = static_cast<BYTE*>(
+            HeapAlloc(GetProcessHeap(), 0, hashObjectLength));
+        if (hashObject) {
+            BCRYPT_HASH_HANDLE hHash = nullptr;
+            status = BCryptCreateHash(hAlg, &hHash, hashObject,
+                                       hashObjectLength, nullptr, 0, 0);
+            if (BCRYPT_SUCCESS(status)) {
+                BYTE buffer[64 * 1024];
+                DWORD bytesRead = 0;
+                bool readOk = true;
+                for (;;) {
+                    if (!ReadFile(hFile, buffer, sizeof(buffer), &bytesRead,
+                                 nullptr)) {
+                        Wh_Log(L"%s ComputeSha256: ReadFile failed: %lu",
+                               kLogPrefix, GetLastError());
+                        readOk = false;
+                        break;
+                    }
+                    if (bytesRead == 0) break;  // EOF.
+
+                    status = BCryptHashData(hHash, buffer, bytesRead, 0);
+                    if (!BCRYPT_SUCCESS(status)) {
+                        readOk = false;
+                        break;
+                    }
+                }
+                if (readOk) {
+                    status = BCryptFinishHash(hHash, outHash, 32, 0);
+                    ok = BCRYPT_SUCCESS(status);
+                }
+                BCryptDestroyHash(hHash);
+            }
+            HeapFree(GetProcessHeap(), 0, hashObject);
+        }
+    }
+
+    BCryptCloseAlgorithmProvider(hAlg, 0);
+    CloseHandle(hFile);
+    return ok;
+}
+
+void BytesToHex(const BYTE* bytes, size_t count, wchar_t* out, size_t outSize) {
+    static const wchar_t kHexDigits[] = L"0123456789abcdef";
+    size_t i = 0;
+    for (; i < count && (i * 2 + 1) < outSize; ++i) {
+        out[i * 2]     = kHexDigits[bytes[i] >> 4];
+        out[i * 2 + 1] = kHexDigits[bytes[i] & 0x0F];
+    }
+    size_t nullPos = i * 2;
+    out[nullPos < outSize ? nullPos : outSize - 1] = L'\0';
+}
+
+bool VerifyChecksum(const wchar_t* path) {
+    BYTE hash[32] = {};
+    if (!ComputeSha256(path, hash)) {
+        Wh_Log(L"%s Failed to compute SHA-256 for %s", kLogPrefix, path);
+        return false;
+    }
+
+    wchar_t hashHex[65] = {};
+    BytesToHex(hash, 32, hashHex, ARRAYSIZE(hashHex));
+    Wh_Log(L"%s Computed SHA-256: %s", kLogPrefix, hashHex);
+
+    if (!*kExpectedSha256Hex) {
+        Wh_Log(L"%s WARNING: expected SHA-256 not configured, "
+               L"skipping checksum verification", kLogPrefix);
+        return true;
+    }
+
+    if (_wcsicmp(hashHex, kExpectedSha256Hex) != 0) {
+        Wh_Log(L"%s Checksum mismatch (expected %s)",
+               kLogPrefix, kExpectedSha256Hex);
+        return false;
+    }
+
+    Wh_Log(L"%s Checksum verified", kLogPrefix);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Download pnidui.dll from the Microsoft symbol server if it's missing or
+// fails checksum verification.
 // ---------------------------------------------------------------------------
 
 bool DownloadFile(const wchar_t* url, const wchar_t* destPath) {
+    Wh_Log(L"%s Connecting to download server...", kLogPrefix);
+
     HINTERNET hInternet = InternetOpenW(
         L"WindhawkRestoreLegacyNetworkTray/1.0",
         INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
@@ -226,7 +322,6 @@ bool DownloadFile(const wchar_t* url, const wchar_t* destPath) {
     InternetCloseHandle(hUrl);
     InternetCloseHandle(hInternet);
 
-    // Sanity check: a real pnidui.dll is at least a few hundred KB.
     if (!ok || totalBytes < 64 * 1024) {
         Wh_Log(L"%s Download incomplete (%lu bytes)", kLogPrefix, totalBytes);
         DeleteFileW(tempPath);
@@ -243,34 +338,39 @@ bool DownloadFile(const wchar_t* url, const wchar_t* destPath) {
     return true;
 }
 
-bool EnsurePniduiFile(const wchar_t* dirPath, const wchar_t* filePath) {
+bool EnsurePniduiFile(const wchar_t* filePath) {
     DWORD attr = GetFileAttributesW(filePath);
-    if (attr != INVALID_FILE_ATTRIBUTES &&
-        !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-        return true;  // Already present.
-    }
+    bool exists = attr != INVALID_FILE_ATTRIBUTES &&
+                  !(attr & FILE_ATTRIBUTE_DIRECTORY);
 
-    Wh_Log(L"%s pnidui.dll not found, attempting download", kLogPrefix);
-
-    wchar_t dirCopy[MAX_PATH] = {};
-    wcscpy_s(dirCopy, dirPath);
-    if (!EnsureDirectoryRecursive(dirCopy)) {
-        Wh_Log(L"%s Could not create directory: %s", kLogPrefix, dirPath);
-        return false;
+    if (exists) {
+        Wh_Log(L"%s pnidui.dll found at %s", kLogPrefix, filePath);
+        if (VerifyChecksum(filePath)) return true;
+        Wh_Log(L"%s Existing pnidui.dll failed checksum, re-downloading",
+               kLogPrefix);
+        DeleteFileW(filePath);
+    } else {
+        Wh_Log(L"%s pnidui.dll not found, will download", kLogPrefix);
     }
 
     constexpr int kMaxAttempts = 3;
     for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
         if (InterlockedCompareExchange(&g_stopping, 0, 0)) return false;
 
-        if (DownloadFile(kPniduiDownloadUrl, filePath)) return true;
-
-        Wh_Log(L"%s Download attempt %d/%d failed",
+        Wh_Log(L"%s Download attempt %d/%d...",
                kLogPrefix, attempt, kMaxAttempts);
+
+        if (DownloadFile(kPniduiDownloadUrl, filePath)) {
+            if (VerifyChecksum(filePath)) return true;
+            Wh_Log(L"%s Downloaded file failed checksum verification",
+                   kLogPrefix);
+            DeleteFileW(filePath);
+        }
+
         if (attempt < kMaxAttempts) Sleep(3000);
     }
 
-    Wh_Log(L"%s Giving up downloading pnidui.dll", kLogPrefix);
+    Wh_Log(L"%s Giving up obtaining a valid pnidui.dll", kLogPrefix);
     return false;
 }
 
@@ -455,15 +555,26 @@ bool PreparePnidui() {
         return false;
     }
 
-    if (!EnsurePniduiFile(dirPath, path)) {
+    if (!EnsureStorageDirectory(dirPath)) return false;
+
+    if (!EnsurePniduiFile(path)) {
         Wh_Log(L"%s pnidui.dll unavailable: %s", kLogPrefix, path);
         return false;
     }
 
-    g_pnidui = LoadLibraryW(path);
-    if (!g_pnidui) {
-        Wh_Log(L"%s LoadLibrary failed: %lu", kLogPrefix, GetLastError());
-        return false;
+    // Avoid loading a second copy if this exact module is already mapped
+    // into the process (e.g. after a mod reload without restarting Explorer).
+    HMODULE existing = GetModuleHandleW(path);
+    if (existing) {
+        g_pnidui = existing;
+        Wh_Log(L"%s pnidui.dll already loaded, reusing existing handle",
+               kLogPrefix);
+    } else {
+        g_pnidui = LoadLibraryW(path);
+        if (!g_pnidui) {
+            Wh_Log(L"%s LoadLibrary failed: %lu", kLogPrefix, GetLastError());
+            return false;
+        }
     }
 
     wchar_t actualPath[MAX_PATH] = {};
@@ -587,6 +698,8 @@ bool IsShellExplorer() {
 DWORD WINAPI WorkerThread(LPVOID) {
     InterlockedExchange(&g_workerId, static_cast<LONG>(GetCurrentThreadId()));
 
+    Wh_Log(L"%s Worker thread started", kLogPrefix);
+
     // Force the creation of the STA thread's message queue.
     MSG message = {};
     PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -617,7 +730,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     if (shellFound) {
-        Sleep(500);  // Allow taskbar initialization to finish.
+        Wh_Log(L"%s Shell_TrayWnd found, preparing tray", kLogPrefix);
+        Sleep(200);  // Allow taskbar initialization to finish.
         if (!InterlockedCompareExchange(&g_stopping, 0, 0) &&
             IsShellExplorer() && StartTray()) {
             while (!InterlockedCompareExchange(&g_stopping, 0, 0)) {
@@ -651,6 +765,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
 }  // namespace
 
 BOOL Wh_ModInit() {
+    Wh_Log(L"%s Wh_ModInit", kLogPrefix);
     InterlockedExchange(&g_stopping, 0);
     g_worker = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
     if (!g_worker) {
@@ -661,6 +776,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    Wh_Log(L"%s Wh_ModUninit", kLogPrefix);
     InterlockedExchange(&g_stopping, 1);
     LONG workerId = InterlockedCompareExchange(&g_workerId, 0, 0);
     if (workerId)
