@@ -1,11 +1,10 @@
 // ==WindhawkMod==
 // @id              remove-shortcut-arrows
 // @name            Remove Shortcut Arrow Overlays
-// @description     Removes shortcut arrow overlays from desktop and File
-// Explorer icons cleanly in memory without touching the Windows registry.
+// @description     Removes shortcut arrow overlays from desktop and File Explorer icons cleanly in memory.
 // @version         1.0.0
-// @author          Community
-// @github          https://github.com/ramensoftware/windhawk-mods
+// @author          Dev-StudioCode
+// @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lshlwapi -lgdi32 -lcomctl32
