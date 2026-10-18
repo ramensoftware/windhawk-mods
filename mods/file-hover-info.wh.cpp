@@ -2,8 +2,8 @@
 // @id              file-hover-info
 // @name            File Hover Info
 // @description     A themeable info card with size, dates and more when you hover files on the desktop or in File Explorer
-// @version         1.1.0
-// @author          HaVeN80
+// @version         1.1.1
+// @author          haven80
 // @github          https://github.com/haven80
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -lshell32 -ld2d1 -ldwrite -ldwmapi -lshlwapi -lgdi32 -luser32 -loleacc
@@ -177,13 +177,16 @@ free space instead of being scanned.
 #include <exdisp.h>
 #include <servprov.h>
 #include <propsys.h>
-#include <uiautomation.h>
 #include <oleacc.h>
 #include <commctrl.h>
 #include <d2d1.h>
 #include <dwrite.h>
 
+#include <windhawk_utils.h>
+
 #include <algorithm>
+#include <atomic>
+#include <optional>
 #include <memory>
 #include <cmath>
 #include <cstdio>
@@ -227,10 +230,6 @@ class CPtr {
 // ---------------------------------------------------------------------------
 // GUIDs and property keys (defined locally to avoid linker surprises)
 // ---------------------------------------------------------------------------
-static const CLSID kCLSID_CUIAutomation = {
-    0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
-static const IID kIID_IUIAutomation = {
-    0x30cbe57d, 0xd9d0, 0x452a, {0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee}};
 static const CLSID kCLSID_ShellWindows = {
     0x9ba05972, 0xf6a8, 0x11cf, {0xa4, 0x42, 0x00, 0xa0, 0xc9, 0x0a, 0x8f, 0x39}};
 static const GUID kSID_STopLevelBrowser = {
@@ -255,8 +254,6 @@ static const PROPERTYKEY kPK_LinkTarget = {
 static const PROPERTYKEY kPK_FileVersion = {
     {0x0cef7d53, 0xfa64, 0x11d1, {0xa2, 0x03, 0x00, 0x00, 0xf8, 0x1f, 0xed, 0xee}},
     4};
-
-static const CONTROLTYPEID kListItemControlType = 50007;
 
 #ifndef FILE_ATTRIBUTE_PINNED
 #define FILE_ATTRIBUTE_PINNED 0x00080000
@@ -414,10 +411,7 @@ static const Strings& S() {
 }
 
 static std::wstring GetStr(PCWSTR name) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring r = v ? v : L"";
-    Wh_FreeStringSetting(v);
-    return r;
+    return WindhawkUtils::StringSetting(Wh_GetStringSetting(name)).get();
 }
 
 static bool GetBool(PCWSTR name) { return Wh_GetIntSetting(name) != 0; }
@@ -590,15 +584,13 @@ static void BuildPalette() {
 // ---------------------------------------------------------------------------
 static HINSTANCE g_hInst;
 static HANDLE g_thread;
-static HWND volatile g_msgWnd;
+static std::atomic<HWND> g_msgWnd;
 static HWND g_cardWnd;
-static volatile bool g_quit;
-static volatile bool g_hideNative = true;
+static std::atomic<bool> g_quit;
+static std::atomic<bool> g_hideNative{true};
 static ID2D1Factory* g_d2d;
 static IDWriteFactory* g_dw;
 static ID2D1DCRenderTarget* g_rt;
-static IUIAutomation* g_uia;
-static IUIAutomationTreeWalker* g_walker;
 static IShellWindows* g_shellWindows;
 
 static POINT g_lastPt = {LONG_MIN, LONG_MIN};
@@ -853,18 +845,18 @@ struct SizeJob {
     std::wstring path;
     LONG gen;
     ULONGLONG deadline;
-    HMODULE module;  // keeps the mod loaded until the thread is done
 };
 struct SizeResult {
     LONG gen;
     ULONGLONG bytes;
     bool partial;
 };
-static volatile LONG g_sizeGen;
-static HANDLE g_sizeThread;
+static std::atomic<LONG> g_sizeGen;
+// Handles of the folder-size threads. Only the worker thread touches this.
+static std::vector<HANDLE> g_sizeThreads;
 
 static bool SizeCancelled(LONG gen) {
-    return InterlockedCompareExchange(&g_sizeGen, 0, 0) != gen;
+    return g_sizeGen.load() != gen;
 }
 
 static DWORD WINAPI SizeThread(LPVOID param) {
@@ -881,6 +873,10 @@ static DWORD WINAPI SizeThread(LPVOID param) {
     }
     std::vector<std::wstring> stack{root};
     while (!stack.empty() && !partial) {
+        if (SizeCancelled(job->gen) || GetTickCount64() > job->deadline) {
+            partial = true;
+            break;
+        }
         std::wstring dir = std::move(stack.back());
         stack.pop_back();
         std::wstring pattern = dir;
@@ -916,35 +912,51 @@ static DWORD WINAPI SizeThread(LPVOID param) {
         if (!w || !PostMessageW(w, WM_APP_SIZEDONE, 0, (LPARAM)r))
             delete r;
     }
-    HMODULE module = job->module;
     delete job;
-    FreeLibraryAndExitThread(module, 0);
     return 0;
 }
 
-static void CancelFolderSize(DWORD wait = 0) {
-    InterlockedIncrement(&g_sizeGen);
-    if (g_sizeThread) {
-        WaitForSingleObject(g_sizeThread, wait);
-        CloseHandle(g_sizeThread);
-        g_sizeThread = nullptr;
+// Closes the handles of size threads that have finished.
+static void PruneSizeThreads() {
+    for (auto it = g_sizeThreads.begin(); it != g_sizeThreads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_sizeThreads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Tells running size threads to stop. With `join`, waits until all of them
+// have exited, interrupting any blocking file-system call (e.g. a slow
+// network share) with CancelSynchronousIo.
+static void CancelFolderSize(bool join = false) {
+    g_sizeGen++;
+    for (HANDLE h : g_sizeThreads)
+        CancelSynchronousIo(h);
+    if (!join) {
+        PruneSizeThreads();
+        return;
+    }
+    while (!g_sizeThreads.empty()) {
+        for (HANDLE h : g_sizeThreads)
+            CancelSynchronousIo(h);
+        WaitForSingleObject(g_sizeThreads.front(), 100);
+        PruneSizeThreads();
     }
 }
 
 static void StartFolderSize(const std::wstring& path) {
     CancelFolderSize();
-    HMODULE module = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(&SizeThread), &module))
-        return;
     SizeJob* job = new SizeJob{
-        path, InterlockedCompareExchange(&g_sizeGen, 0, 0),
-        GetTickCount64() + (ULONGLONG)g_set.folderSizeLimit * 1000, module};
-    g_sizeThread = CreateThread(nullptr, 0, SizeThread, job, 0, nullptr);
-    if (!g_sizeThread) {
+        path, g_sizeGen.load(),
+        GetTickCount64() + (ULONGLONG)g_set.folderSizeLimit * 1000};
+    HANDLE h = CreateThread(nullptr, 0, SizeThread, job, 0, nullptr);
+    if (h)
+        g_sizeThreads.push_back(h);
+    else
         delete job;
-        FreeLibrary(module);
-    }
 }
 
 static std::wstring FormatBytes(ULONGLONG size) {
@@ -977,7 +989,10 @@ struct Card {
           cardH = 0, margin = 0;
     int sizeRow = -1;
     std::wstring sizePath;  // folder to sum once the card is on screen
-} g_card;
+};
+// Holds DWrite/D2D objects, which must not be released by the automatic
+// destructor at process exit. Created and reset on the worker thread.
+[[clang::no_destroy]] static std::optional<Card> g_card;
 
 static float FirstBaseline(IDWriteTextLayout* l) {
     UINT32 count = 0;
@@ -1080,9 +1095,9 @@ static void LoadIconBitmap(IShellItem* item, int px) {
                 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
                                   D2D1_ALPHA_MODE_PREMULTIPLIED));
             if (SUCCEEDED(g_rt->CreateBitmap(D2D1::SizeU(w, h), bits.data(),
-                                             w * 4, props, &g_card.icon))) {
-                g_card.iconW = (float)w;
-                g_card.iconH = (float)h;
+                                             w * 4, props, &g_card->icon))) {
+                g_card->iconW = (float)w;
+                g_card->iconH = (float)h;
             }
         }
     }
@@ -1095,14 +1110,14 @@ static void AddRow(const wchar_t* label, const std::wstring& value) {
     Row r;
     r.label = label;
     r.value = value;
-    g_card.rows.push_back(std::move(r));
+    g_card->rows.push_back(std::move(r));
 }
 
 static void LayoutCard();
 
 static bool BuildCard(IShellItem2* item, UINT dpi) {
-    g_card = Card();
-    Card& c = g_card;
+    *g_card = Card();
+    Card& c = *g_card;
     const Strings& s = S();
 
     PWSTR raw = nullptr;
@@ -1235,7 +1250,7 @@ static bool BuildCard(IShellItem2* item, UINT dpi) {
     if (g_set.icon) {
         int px = (int)std::round(g_set.iconSize * sc);
         LoadIconBitmap(item, px);
-        if (g_card.icon)
+        if (g_card->icon)
             c.iconBox = (float)px;
     }
 
@@ -1244,7 +1259,7 @@ static bool BuildCard(IShellItem2* item, UINT dpi) {
 }
 
 static void LayoutCard() {
-    Card& c = g_card;
+    Card& c = *g_card;
     float sc = c.s;
     float fs = g_set.fontSize * sc;
     c.labelColW = 0;
@@ -1313,7 +1328,7 @@ static void FillRR(ID2D1RenderTarget* rt, D2D1_RECT_F r, float rad,
 }
 
 static void DrawCard(ID2D1RenderTarget* rt, bool solid) {
-    Card& c = g_card;
+    Card& c = *g_card;
     float s = c.s, ox = c.margin, oy = c.margin;
     D2D1_RECT_F card = {ox, oy, ox + c.cardW, oy + c.cardH};
     float rad = solid ? g_set.cornerRadius * s : 0;
@@ -1400,7 +1415,8 @@ static void DrawCard(ID2D1RenderTarget* rt, bool solid) {
 }
 
 static void RecreateRenderTarget() {
-    g_card.icon.Reset();  // resources belong to the old render target
+    if (g_card)
+        g_card->icon.Reset();  // resources belong to the old render target
     if (g_rt) {
         g_rt->Release();
         g_rt = nullptr;
@@ -1501,7 +1517,8 @@ static void HideCard() {
     if (g_cardWnd && g_visible)
         ShowWindow(g_cardWnd, SW_HIDE);
     g_visible = false;
-    g_card.icon.Reset();
+    if (g_card)
+        g_card->icon.Reset();
 }
 
 static void PresentLayered(int x, int y, int w, int h, BYTE alpha) {
@@ -1543,7 +1560,7 @@ static void ShowCardAt(POINT pt, bool update = false) {
     g_cardPt = pt;
     if (!g_cardWnd || !g_rt)
         return;
-    Card& c = g_card;
+    Card& c = *g_card;
     int w = (int)(c.cardW + 2 * c.margin), h = (int)(c.cardH + 2 * c.margin);
 
     // Card goes below-right of the cursor, flipped if it doesn't fit.
@@ -1625,6 +1642,24 @@ static BOOL CALLBACK EnumTipsProc(HWND w, LPARAM lp) {
     return TRUE;
 }
 
+// True if `w` is still a window of this process with the given class. HWND
+// values can be reused by unrelated windows after the original is destroyed.
+static bool IsOurWindowOfClass(HWND w, PCWSTR cls) {
+    if (!IsWindow(w))
+        return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    wchar_t buf[64] = L"";
+    return pid == GetCurrentProcessId() && GetClassNameW(w, buf, 64) &&
+           !wcscmp(buf, cls);
+}
+
+static void PruneDeadHandles(std::vector<HWND>& v, PCWSTR cls) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [cls](HWND w) { return !IsOurWindowOfClass(w, cls); }),
+            v.end());
+}
+
 static void MuteNativeTips(HWND hovered, bool force) {
     if (!g_hideNative || !hovered || (!force && hovered == g_lastTipCheck))
         return;
@@ -1636,6 +1671,9 @@ static void MuteNativeTips(HWND hovered, bool force) {
     HWND defView = AncestorWithClass(hovered, L"SHELLDLL_DefView");
     if (!defView)
         return;
+
+    PruneDeadHandles(g_mutedTips, L"tooltips_class32");
+    PruneDeadHandles(g_mutedLists, L"SysListView32");
 
     std::vector<HWND> tips;
     wchar_t cls[64] = L"";
@@ -1672,12 +1710,12 @@ static void MuteNativeTips(HWND hovered, bool force) {
 
 static void RestoreNativeTips() {
     for (HWND t : g_mutedTips) {
-        if (IsWindow(t))
+        if (IsOurWindowOfClass(t, L"tooltips_class32"))
             SendMessageTimeoutW(t, TTM_ACTIVATE, TRUE, 0, SMTO_ABORTIFHUNG,
                                 500, nullptr);
     }
     for (HWND lv : g_mutedLists) {
-        if (IsWindow(lv))
+        if (IsOurWindowOfClass(lv, L"SysListView32"))
             SendMessageTimeoutW(lv, LVM_SETEXTENDEDLISTVIEWSTYLE,
                                 LVS_EX_INFOTIP, LVS_EX_INFOTIP,
                                 SMTO_ABORTIFHUNG, 500, nullptr);
@@ -1741,8 +1779,7 @@ static bool GetShellView(HWND defView, bool isDesktop, IShellView** out) {
     return false;
 }
 
-// Finds the item whose display name matches. Tries IShellItemArray first,
-// then falls back to enumerating PIDLs through the view's folder.
+// Finds the view's item whose display name matches.
 static bool FindItemByName(IFolderView* fv, const std::wstring& name,
                            IShellItem2** out) {
     CPtr<IShellItemArray> arr;
@@ -1764,40 +1801,7 @@ static bool FindItemByName(IFolderView* fv, const std::wstring& name,
         }
         return false;
     }
-    Wh_Log(L"Items(IShellItemArray) failed 0x%08X, trying IEnumIDList",
-           (unsigned)hr);
-
-    CPtr<IShellFolder> folder;
-    CPtr<IEnumIDList> en;
-    hr = fv->GetFolder(IID_PPV_ARGS(&folder));
-    if (FAILED(hr)) {
-        Wh_Log(L"GetFolder failed 0x%08X", (unsigned)hr);
-        return false;
-    }
-    hr = fv->Items(SVGIO_ALLVIEW, IID_PPV_ARGS(&en));
-    if (FAILED(hr) || !en) {
-        Wh_Log(L"Items(IEnumIDList) failed 0x%08X", (unsigned)hr);
-        return false;
-    }
-    PITEMID_CHILD child = nullptr;
-    int count = 0;
-    while (en->Next(1, &child, nullptr) == S_OK) {
-        count++;
-        STRRET sr;
-        wchar_t buf[MAX_PATH] = L"";
-        bool match = false;
-        if (SUCCEEDED(folder->GetDisplayNameOf(child, SHGDN_NORMAL, &sr)) &&
-            SUCCEEDED(StrRetToBufW(&sr, child, buf, MAX_PATH)))
-            match = name == buf;
-        if (match) {
-            HRESULT hr2 = SHCreateItemWithParent(nullptr, folder, child,
-                                                 IID_PPV_ARGS(out));
-            CoTaskMemFree(child);
-            return SUCCEEDED(hr2);
-        }
-        CoTaskMemFree(child);
-    }
-    Wh_Log(L"No match among %d items", count);
+    Wh_Log(L"IFolderView::Items failed 0x%08X", (unsigned)hr);
     return false;
 }
 
@@ -1873,40 +1877,13 @@ static bool MsaaHit(POINT pt, std::wstring* name, RECT* rc) {
     return false;
 }
 
-// Last resort: UI Automation.
-static bool UiaHit(POINT pt, std::wstring* name, RECT* rc) {
-    if (!g_uia || !g_walker)
-        return false;
-    CPtr<IUIAutomationElement> el;
-    HRESULT hr = g_uia->ElementFromPoint(pt, &el);
-    if (FAILED(hr) || !el)
-        return false;
-    for (int i = 0; i < 4 && el; i++) {
-        CONTROLTYPEID ct = 0;
-        el->get_CurrentControlType(&ct);
-        if (ct == kListItemControlType) {
-            BSTR b = nullptr;
-            el->get_CurrentName(&b);
-            *name = b ? b : L"";
-            SysFreeString(b);
-            if (FAILED(el->get_CurrentBoundingRectangle(rc)) || IsRectEmpty(rc))
-                SetRect(rc, pt.x - 4, pt.y - 4, pt.x + 4, pt.y + 4);
-            return !name->empty();
-        }
-        CPtr<IUIAutomationElement> parent;
-        g_walker->GetParentElement(el, &parent);
-        el = std::move(parent);
-    }
-    return false;
-}
-
 // Name and bounds of the list item under the cursor in window `h`.
 static bool HitTestItem(HWND h, POINT pt, std::wstring* name, RECT* rc) {
     wchar_t cls[64] = L"";
     GetClassNameW(h, cls, 64);
     if (!wcscmp(cls, L"SysListView32"))
         return ListViewHit(h, pt, name, rc);
-    return MsaaHit(pt, name, rc) || UiaHit(pt, name, rc);
+    return MsaaHit(pt, name, rc);
 }
 
 static bool ResolveHoveredItem(POINT pt, IShellItem2** out, RECT* itemRect,
@@ -2041,8 +2018,8 @@ static void Tick() {
             MuteNativeTips(WindowFromPoint(pt), true);
             g_lastVerify = GetTickCount64();
             ShowCardAt(pt);
-            if (g_card.sizeRow >= 0)
-                StartFolderSize(g_card.sizePath);
+            if (g_card->sizeRow >= 0)
+                StartFolderSize(g_card->sizePath);
         } else {
             Wh_Log(L"BuildCard failed");
         }
@@ -2076,13 +2053,13 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_APP_SIZEDONE: {
             SizeResult* r = (SizeResult*)lp;
-            if (r->gen == InterlockedCompareExchange(&g_sizeGen, 0, 0) &&
-                g_visible && g_card.sizeRow >= 0 &&
-                g_card.sizeRow < (int)g_card.rows.size()) {
+            if (r->gen == g_sizeGen.load() &&
+                g_visible && g_card->sizeRow >= 0 &&
+                g_card->sizeRow < (int)g_card->rows.size()) {
                 std::wstring v = FormatBytes(r->bytes);
                 if (r->partial)
                     v = L"\u2265 " + v + L"  (" + S().partial + L")";
-                g_card.rows[g_card.sizeRow].value = v;
+                g_card->rows[g_card->sizeRow].value = v;
                 LayoutCard();
                 ShowCardAt(g_cardPt, true);
             }
@@ -2115,16 +2092,13 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     LoadSettings();
+    g_card.emplace();
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2d);
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
                         reinterpret_cast<IUnknown**>(&g_dw));
     if (g_d2d)
         RecreateRenderTarget();
-    if (SUCCEEDED(CoCreateInstance(kCLSID_CUIAutomation, nullptr,
-                                   CLSCTX_INPROC_SERVER, kIID_IUIAutomation,
-                                   (void**)&g_uia)))
-        g_uia->get_ControlViewWalker(&g_walker);
 
     WNDCLASSEXW wc = {sizeof(wc)};
     wc.lpfnWndProc = MsgWndProc;
@@ -2151,20 +2125,18 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         }
     } else if (!g_quit) {
         Wh_Log(L"Initialization failed: msgWnd=%p d2d=%p dw=%p rt=%p",
-               (HWND)g_msgWnd, g_d2d, g_dw, g_rt);
+               g_msgWnd.load(), g_d2d, g_dw, g_rt);
     }
 
-    CancelFolderSize(5000);
+    CancelFolderSize(true);
     RestoreNativeTips();
     HideCard();
     DestroyCardWindow();
     if (g_msgWnd && IsWindow(g_msgWnd))
         DestroyWindow(g_msgWnd);
     g_msgWnd = nullptr;
-    g_card = Card();
+    g_card.reset();
     if (g_shellWindows) { g_shellWindows->Release(); g_shellWindows = nullptr; }
-    if (g_walker) { g_walker->Release(); g_walker = nullptr; }
-    if (g_uia) { g_uia->Release(); g_uia = nullptr; }
     if (g_rt) { g_rt->Release(); g_rt = nullptr; }
     if (g_dw) { g_dw->Release(); g_dw = nullptr; }
     if (g_d2d) { g_d2d->Release(); g_d2d = nullptr; }
@@ -2172,8 +2144,6 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     UnregisterClassW(kMsgClass, g_hInst);
     if (SUCCEEDED(hrCo))
         CoUninitialize();
-    // Drop the reference taken in Wh_ModInit; the mod can unload only now.
-    FreeLibraryAndExitThread(g_hInst, 0);
     return 0;
 }
 
@@ -2190,60 +2160,37 @@ static void WINAPI SHGetSetSettings_hook(LPSHELLSTATE lpss, DWORD mask,
         lpss->fShowInfoTip = FALSE;
 }
 
-using SHGetSettings_t = void(WINAPI*)(SHELLFLAGSTATE*, DWORD);
-static SHGetSettings_t SHGetSettings_orig;
-static void WINAPI SHGetSettings_hook(SHELLFLAGSTATE* lpsfs, DWORD mask) {
-    SHGetSettings_orig(lpsfs, mask);
-    if (lpsfs && (mask & SSF_SHOWINFOTIP) && g_hideNative)
-        lpsfs->fShowInfoTip = FALSE;
-}
-
 // ---------------------------------------------------------------------------
 // Windhawk entry points
 // ---------------------------------------------------------------------------
 BOOL Wh_ModInit() {
     Wh_Log(L">");
     g_hideNative = Wh_GetIntSetting(L"hideNativeTooltip") != 0;
-    HMODULE shell32 = LoadLibraryW(L"shell32.dll");
-    if (shell32) {
+    // shell32 is always loaded in Explorer.
+    if (HMODULE shell32 = GetModuleHandleW(L"shell32.dll")) {
         if (auto p = (SHGetSetSettings_t)GetProcAddress(shell32,
                                                         "SHGetSetSettings"))
-            Wh_SetFunctionHook((void*)p, (void*)SHGetSetSettings_hook,
-                               (void**)&SHGetSetSettings_orig);
-        if (auto p =
-                (SHGetSettings_t)GetProcAddress(shell32, "SHGetSettings"))
-            Wh_SetFunctionHook((void*)p, (void*)SHGetSettings_hook,
-                               (void**)&SHGetSettings_orig);
+            WindhawkUtils::SetFunctionHook(p, SHGetSetSettings_hook,
+                                           &SHGetSetSettings_orig);
     }
-    // Take a reference on the mod for the worker thread, so the code can't be
-    // unloaded while the thread is still running.
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(&WorkerThread), &g_hInst))
-        return FALSE;
+    // Module handle for the window classes, without taking a reference.
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&WorkerThread), &g_hInst);
     g_quit = false;
     g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
-    if (!g_thread) {
-        FreeLibrary(g_hInst);
-        return FALSE;
-    }
-    return TRUE;
+    return g_thread != nullptr;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
     if (g_thread) {
-        // Ask the worker to quit. It may still be starting up, so keep
-        // posting until it's gone (or give up after ~10 s; the thread holds
-        // its own reference on the mod, so the code stays loaded until it
-        // actually exits).
         g_quit = true;
-        for (int i = 0; i < 100; i++) {
-            HWND w = g_msgWnd;
-            if (w)
+        // The worker may still be starting up, so keep posting until it exits.
+        do {
+            if (HWND w = g_msgWnd)
                 PostMessageW(w, WM_APP_QUIT, 0, 0);
-            if (WaitForSingleObject(g_thread, 100) == WAIT_OBJECT_0)
-                break;
-        }
+        } while (WaitForSingleObject(g_thread, 100) == WAIT_TIMEOUT);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
