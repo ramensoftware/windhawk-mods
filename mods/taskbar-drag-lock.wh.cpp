@@ -7,23 +7,33 @@
 // @github          https://github.com/yoriichi111012
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -ladvapi32 -lshell32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Bring back the Windows 10 ability to drag the taskbar to left, top, right and bottom.
+Bring back the Windows 10 ability to drag the taskbar to left, top, right and
+bottom, and lock it with the "Lock Taskbar" item in the taskbar context menu.
 
-Requires the native Windows 11 taskbar position setting (Windows 11 build 26300+).
+Requires the native Windows 11 taskbar position setting (Windows 11 26H2,
+build 26300+).
 
-The position is changed through the same native setting as Windows Settings and
-applies immediately, without restarting Explorer. Unloading the mod leaves the
-chosen position in place.
+The taskbar is moved through the same native setting as Windows Settings, so a
+drag is equivalent to changing the position in Settings: it applies
+immediately, without restarting Explorer, and it persists after the mod is
+disabled. The setting is stored as a DWORD value named TaskbarLocation under
+HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, and can be
+changed back in Settings at any time. The taskbar moves between screen edges
+only; it cannot be dragged to another monitor.
+
+Not compatible with mods that force a fixed taskbar position, such as Taskbar
+on top or Vertical Taskbar.
 
 Based on the taskbar-empty-space-clicks mod by m1lhaus (input handling,
-GPL-3.0), the Taskbar Move mod by Asteski (native position setting), and the
-Taskbar Restart Explorer mod by Mgrmjp (context menu injection).
+GPL-3.0), the Taskbar Move mod by Asteski (native position setting), the
+Taskbar Restart Explorer mod by Mgrmjp (context menu injection), and the
+Taskbar Labels mod by m417z (taskbar-thread dispatch helpers).
 */
 // ==/WindhawkModReadme==
 
@@ -32,7 +42,6 @@ Taskbar Restart Explorer mod by Mgrmjp (context menu injection).
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
-#include <winver.h>
 #include <roapi.h>
 #include <inspectable.h>
 #include <uiautomation.h>
@@ -51,7 +60,8 @@ Taskbar Restart Explorer mod by Mgrmjp (context menu injection).
 
 #include <algorithm>
 #include <atomic>
-#include <unordered_set>
+#include <string_view>
+#include <vector>
 
 namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
@@ -128,7 +138,7 @@ static constexpr wchar_t kLocationSettingClass[] =
     L"SystemSettings.Desktop.Taskbar.DesktopTaskbarLoSetting";
 
 // DesktopTaskbarLoSetting uses the Settings tile order, not ABE_* order.
-// Verified against LocationModeFromSettingIndex on 26200.9278.
+// Verified against the Windows 11 26H2 taskbar symbols.
 static constexpr DWORD kLocationEdges[] = {ABE_BOTTOM, ABE_TOP, ABE_LEFT,
                                            ABE_RIGHT};
 
@@ -145,6 +155,30 @@ bool LocationSettingUsable(NativeSettingItem* setting) {
     return SUCCEEDED(setting->get_IsEnabled(&enabled)) && enabled &&
            SUCCEEDED(setting->get_IsApplicable(&applicable)) && applicable &&
            SUCCEEDED(setting->get_IsSetByGroupPolicy(&managed)) && !managed;
+}
+
+static std::atomic<int> g_positionSettingProbe = -1;
+
+bool TaskbarPositionSettingUsable() {
+    const int cached = g_positionSettingProbe.load();
+    if (cached >= 0) {
+        return cached != 0;
+    }
+
+    bool usable = false;
+    try {
+        auto setting = OpenLocationSetting();
+        usable = LocationSettingUsable(setting.get());
+    } catch (...) {
+    }
+
+    if (!usable) {
+        Wh_Log(L"Taskbar position setting unavailable; drag and menu item "
+               L"disabled");
+    }
+
+    g_positionSettingProbe.store(usable ? 1 : 0);
+    return usable;
 }
 
 bool SetTaskbarLocationByEdge(DWORD edge) {
@@ -217,8 +251,9 @@ bool GetCurrentTaskbarEdge(DWORD* edge) {
     return true;
 }
 
-DWORD NearestEdgeFromPoint(POINT pt) {
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+DWORD NearestEdgeFromPoint(POINT pt, HWND taskbarWindow) {
+    HMONITOR monitor = MonitorFromWindow(GetAncestor(taskbarWindow, GA_ROOT),
+                                         MONITOR_DEFAULTTONEAREST);
     MONITORINFO info = {};
     info.cbSize = sizeof(info);
     if (!GetMonitorInfoW(monitor, &info)) {
@@ -246,8 +281,8 @@ DWORD NearestEdgeFromPoint(POINT pt) {
     return edge;
 }
 
-void MoveTaskbarToNearestEdge(POINT pt) {
-    DWORD target = NearestEdgeFromPoint(pt);
+void MoveTaskbarToNearestEdge(POINT pt, HWND taskbarWindow) {
+    DWORD target = NearestEdgeFromPoint(pt, taskbarWindow);
     if (target > ABE_BOTTOM) {
         return;
     }
@@ -265,9 +300,9 @@ void MoveTaskbarToNearestEdge(POINT pt) {
     SetTaskbarLocationByEdge(target);
 }
 
-// Lazy UIAutomation setup. The taskbar thread is already initialized as an STA,
-// so creation is deferred to first use; initialization at mod init has been
-// observed to break unrelated global shortcuts.
+// Lazy UIAutomation setup. The taskbar thread is an initialized STA and the
+// object is created and released on it: creation at mod init, on a different
+// thread, has been observed to break unrelated global shortcuts.
 static IUIAutomation* g_uia = nullptr;
 static bool g_uiaUnavailable = false;
 
@@ -275,8 +310,6 @@ IUIAutomation* GetUIAutomation() {
     if (g_uia || g_uiaUnavailable) {
         return g_uia;
     }
-
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     IUIAutomation* uia = nullptr;
     if (FAILED(CoCreateInstance(CLSID_CUIAutomation, nullptr,
@@ -288,8 +321,6 @@ IUIAutomation* GetUIAutomation() {
         return nullptr;
     }
 
-    // ponytail: intentionally leaked; it is bound to the taskbar thread's
-    // apartment and releasing it from an unloading thread would be unsafe.
     g_uia = uia;
     return g_uia;
 }
@@ -365,7 +396,15 @@ struct DragState {
     POINT start = {0, 0};
     HWND hWnd = nullptr;
 };
-static DragState g_drag;
+static thread_local DragState g_drag;
+
+void CancelDrag() {
+    const bool captured = g_drag.captured;
+    g_drag = DragState{};
+    if (captured) {
+        ReleaseCapture();
+    }
+}
 
 bool ExceededDragThreshold(POINT a, POINT b) {
     const LONG cx = std::max<LONG>(8, GetSystemMetrics(SM_CXDRAG));
@@ -385,6 +424,10 @@ WNDPROC InputSiteWindowProc_Original;
 
 LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
                                           LPARAM lParam) {
+    bool moveAfterOriginal = false;
+    POINT movePoint = {};
+    HWND moveTaskbarWindow = nullptr;
+
     if (uMsg == WM_POINTERDOWN || uMsg == WM_POINTERUPDATE ||
         uMsg == WM_POINTERUP || uMsg == WM_POINTERCAPTURECHANGED) {
         const UINT32 pointerId = GET_POINTERID_WPARAM(wParam);
@@ -392,11 +435,16 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
 
         switch (uMsg) {
             case WM_POINTERDOWN:
+                // A second press of the same pointer means the previous one
+                // ended without a message we could see; start over.
+                if (g_drag.tracking && pointerId == g_drag.pointerId) {
+                    CancelDrag();
+                }
                 if (!g_taskbarLocked.load() && !g_drag.tracking &&
-                    IsTaskbarClassWindow(GetAncestor(hWnd, GA_ROOT))) {
+                    IsTaskbarClassWindow(GetAncestor(hWnd, GA_ROOT)) &&
+                    TaskbarPositionSettingUsable()) {
                     DragPointerKind kind = ClassifyPointer(pointerId, wParam);
-                    if (kind != DragPointerKind::None &&
-                        IsEmptySpaceAtPoint(pt)) {
+                    if (kind != DragPointerKind::None) {
                         g_drag = DragState{};
                         g_drag.tracking = true;
                         g_drag.isMouse = kind == DragPointerKind::Mouse;
@@ -408,9 +456,19 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
                 break;
 
             case WM_POINTERUPDATE:
-                if (g_drag.tracking && !g_drag.moving &&
-                    pointerId == g_drag.pointerId &&
-                    ExceededDragThreshold(pt, g_drag.start)) {
+                if (!g_drag.tracking || hWnd != g_drag.hWnd ||
+                    pointerId != g_drag.pointerId) {
+                    break;
+                }
+                if (!IS_POINTER_INCONTACT_WPARAM(wParam)) {
+                    CancelDrag();
+                    break;
+                }
+                if (!g_drag.moving && ExceededDragThreshold(pt, g_drag.start)) {
+                    if (!IsEmptySpaceAtPoint(g_drag.start)) {
+                        CancelDrag();
+                        break;
+                    }
                     g_drag.moving = true;
                     if (g_drag.isMouse && SetCapture(hWnd)) {
                         g_drag.captured = true;
@@ -420,32 +478,41 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd, UINT uMsg, WPARAM wParam,
                 break;
 
             case WM_POINTERUP:
-                if (g_drag.tracking && pointerId == g_drag.pointerId) {
-                    const bool moved = g_drag.moving;
-                    if (g_drag.captured) {
-                        ReleaseCapture();
-                    }
-                    g_drag = DragState{};
-                    if (moved) {
-                        MoveTaskbarToNearestEdge(pt);
-                    }
+                if (!g_drag.tracking || hWnd != g_drag.hWnd ||
+                    pointerId != g_drag.pointerId) {
+                    break;
                 }
+                if (g_drag.moving) {
+                    moveAfterOriginal = true;
+                    movePoint = pt;
+                    moveTaskbarWindow = GetAncestor(g_drag.hWnd, GA_ROOT);
+                }
+                CancelDrag();
                 break;
 
             case WM_POINTERCAPTURECHANGED:
-                // Capture can change mid-drag; re-capture so the release
-                // point is still received when the pointer leaves the bar.
-                if (g_drag.tracking && g_drag.moving && g_drag.isMouse &&
-                    pointerId == g_drag.pointerId) {
-                    if (SetCapture(g_drag.hWnd)) {
-                        g_drag.captured = true;
-                    }
+                if (!g_drag.tracking || hWnd != g_drag.hWnd ||
+                    pointerId != g_drag.pointerId) {
+                    break;
+                }
+                if (!g_drag.isMouse) {
+                    CancelDrag();
+                } else if (g_drag.moving && SetCapture(g_drag.hWnd)) {
+                    // Capture can change mid-drag; re-capture so the release
+                    // point is still received when the pointer leaves the bar.
+                    g_drag.captured = true;
                 }
                 break;
         }
     }
 
-    return InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
+    LRESULT result = InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
+
+    if (moveAfterOriginal) {
+        MoveTaskbarToNearestEdge(movePoint, moveTaskbarWindow);
+    }
+
+    return result;
 }
 
 void OnLockToggleClick(wf::IInspectable const& sender,
@@ -471,7 +538,21 @@ using MenuFlyoutItemBaseVector_Append_t =
     void(__cdecl*)(void* pThis, wuxc::MenuFlyoutItemBase const& item);
 MenuFlyoutItemBaseVector_Append_t MenuFlyoutItemBaseVector_Append_Original;
 
+// The click handler delegate lives in this DLL, so it must be revoked before
+// the mod is unloaded. All taskbars share one UI thread, and every access to
+// this list happens on it.
+struct InjectedItem {
+    winrt::weak_ref<wuxc::MenuFlyoutItem> item;
+    winrt::event_token clickToken{};
+};
+
+static std::vector<InjectedItem> g_injectedItems;
+
 void AppendInjectedItems(void* vectorThis) {
+    if (!TaskbarPositionSettingUsable()) {
+        return;
+    }
+
     const bool locked = g_taskbarLocked.load();
 
     wuxc::MenuFlyoutItem item;
@@ -485,7 +566,14 @@ void AppendInjectedItems(void* vectorThis) {
     icon.Opacity(locked ? 1.0 : 0.0);
     item.Icon(icon);
 
-    item.Click(wux::RoutedEventHandler{&OnLockToggleClick});
+    const winrt::event_token clickToken =
+        item.Click(wux::RoutedEventHandler{&OnLockToggleClick});
+
+    std::erase_if(g_injectedItems, [](InjectedItem const& entry) {
+        return !entry.item.get();
+    });
+    g_injectedItems.push_back(
+        {winrt::weak_ref<wuxc::MenuFlyoutItem>(item), clickToken});
 
     wuxc::MenuFlyoutSeparator separator;
     separator.Name(kSeparatorName);
@@ -552,48 +640,6 @@ void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
         target, taskbarSettings, args, options);
 }
 
-VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
-    void* fixedFileInfo = nullptr;
-    UINT len = 0;
-
-    HRSRC resource =
-        FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
-    if (resource) {
-        HGLOBAL global = LoadResource(module, resource);
-        if (global) {
-            void* data = LockResource(global);
-            if (data) {
-                if (!VerQueryValueW(data, L"\\", &fixedFileInfo, &len) ||
-                    len == 0) {
-                    fixedFileInfo = nullptr;
-                }
-            }
-        }
-    }
-
-    return static_cast<VS_FIXEDFILEINFO*>(fixedFileInfo);
-}
-
-void LogModuleInfo(HMODULE module, const wchar_t* reason) {
-    wchar_t path[MAX_PATH] = {};
-    GetModuleFileNameW(module, path, ARRAYSIZE(path));
-
-    const wchar_t* moduleName = wcsrchr(path, L'\\');
-    moduleName = moduleName ? moduleName + 1 : path;
-
-    VS_FIXEDFILEINFO* versionInfo = GetModuleVersionInfo(module);
-    if (versionInfo) {
-        Wh_Log(L"%s module=%s path=%s version=%u.%u.%u.%u", reason, moduleName,
-               path, HIWORD(versionInfo->dwFileVersionMS),
-               LOWORD(versionInfo->dwFileVersionMS),
-               HIWORD(versionInfo->dwFileVersionLS),
-               LOWORD(versionInfo->dwFileVersionLS));
-    } else {
-        Wh_Log(L"%s module=%s path=%s version=<unavailable>", reason,
-               moduleName, path);
-    }
-}
-
 HMODULE GetTaskbarViewModuleHandle() {
     HMODULE module = GetModuleHandleW(L"Taskbar.View.dll");
     if (!module) {
@@ -604,8 +650,6 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    LogModuleInfo(module, L"Resolving taskbar symbols");
-
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
@@ -625,7 +669,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-        Wh_Log(L"Skipping menu injection: missing symbols");
         return false;
     }
 
@@ -677,8 +720,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return module;
 }
 
-static std::unordered_set<HWND> g_hookedInputSiteWindows;
-static std::unordered_set<void*> g_hookedInputSiteProcs;
+static std::atomic<void*> g_hookedInputSiteProc = nullptr;
 static std::atomic<bool> g_whInitialized = false;
 
 bool IsTaskbarInputSiteWindow(HWND hWnd) {
@@ -698,32 +740,34 @@ bool IsTaskbarInputSiteWindow(HWND hWnd) {
 }
 
 bool HookInputSiteWindow(HWND hWnd) {
-    if (g_hookedInputSiteWindows.contains(hWnd)) {
+    void* wndProc =
+        reinterpret_cast<void*>(GetWindowLongPtrW(hWnd, GWLP_WNDPROC));
+    void* hookedProc = g_hookedInputSiteProc.load();
+    if (hookedProc == wndProc) {
         return true;
+    }
+    if (hookedProc) {
+        Wh_Log(L"InputSite wndproc %p differs from hooked %p; not hooking",
+               wndProc, hookedProc);
+        return false;
     }
 
     // The InputSite window cannot be subclassed: inputsite.dll validates its
     // own window proc and crashes if it was replaced. The shared window proc
     // is patched in place instead.
-    void* wndProc =
-        reinterpret_cast<void*>(GetWindowLongPtrW(hWnd, GWLP_WNDPROC));
-    if (!g_hookedInputSiteProcs.contains(wndProc)) {
-        if (!Wh_SetFunctionHook(wndProc,
-                                reinterpret_cast<void*>(InputSiteWindowProc_Hook),
-                                reinterpret_cast<void**>(
-                                    &InputSiteWindowProc_Original))) {
-            Wh_Log(L"Failed to hook InputSite wndproc %p", wndProc);
-            return false;
-        }
-        g_hookedInputSiteProcs.insert(wndProc);
-        Wh_Log(L"Hooked InputSite wndproc %p (hwnd %p)", wndProc, hWnd);
+    if (!WindhawkUtils::SetFunctionHook(
+            reinterpret_cast<WNDPROC>(wndProc), InputSiteWindowProc_Hook,
+            &InputSiteWindowProc_Original)) {
+        Wh_Log(L"Failed to hook InputSite wndproc %p", wndProc);
+        return false;
     }
 
     if (g_whInitialized.load()) {
         Wh_ApplyHookOperations();
     }
 
-    g_hookedInputSiteWindows.insert(hWnd);
+    g_hookedInputSiteProc.store(wndProc);
+    Wh_Log(L"Hooked InputSite wndproc %p (hwnd %p)", wndProc, hWnd);
     return true;
 }
 
@@ -814,53 +858,127 @@ void HookExistingTaskbarInputSites() {
     EnumWindows(EnumTaskbarWindowsProc, 0);
 }
 
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
     g_taskbarLocked.store(Wh_GetIntValue(L"LockTaskbar", 0) != 0);
     Wh_Log(L"Taskbar lock is %s", g_taskbarLocked.load() ? L"on" : L"off");
 
-    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+    const HMODULE taskbarViewModule = GetTaskbarViewModuleHandle();
+    if (taskbarViewModule) {
         g_taskbarViewModuleHooked = true;
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
             Wh_Log(L"Menu symbols missing; only dragging will be available");
         }
     } else {
         Wh_Log(L"Taskbar view module not loaded yet");
-    }
 
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    auto loadLibraryExW =
-        kernelBase ? reinterpret_cast<LoadLibraryExW_t>(
-                         GetProcAddress(kernelBase, "LoadLibraryExW"))
-                   : nullptr;
-    if (loadLibraryExW &&
-        WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original)) {
-        Wh_Log(L"Hook installed: LoadLibraryExW");
+        // Only needed when the module isn't loaded yet: an already hooked
+        // module is never re-hooked, so there is nothing to apply for it.
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        auto loadLibraryExW =
+            kernelBase ? reinterpret_cast<LoadLibraryExW_t>(
+                             GetProcAddress(kernelBase, "LoadLibraryExW"))
+                       : nullptr;
+        if (loadLibraryExW &&
+            WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original)) {
+            Wh_Log(L"Hook installed: LoadLibraryExW");
+        }
     }
 
     // Taskbar (and its InputSite window) can be recreated; catch creation.
-    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(CreateWindowExW),
-                            reinterpret_cast<void*>(CreateWindowExW_Hook),
-                            reinterpret_cast<void**>(
-                                &CreateWindowExW_Original))) {
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original)) {
         Wh_Log(L"CreateWindowExW hook failed");
     }
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    void* createWindowInBand =
-        user32 ? reinterpret_cast<void*>(
+    auto createWindowInBand =
+        user32 ? reinterpret_cast<CreateWindowInBand_t>(
                      GetProcAddress(user32, "CreateWindowInBand"))
                : nullptr;
-    if (createWindowInBand &&
-        Wh_SetFunctionHook(createWindowInBand,
-                           reinterpret_cast<void*>(CreateWindowInBand_Hook),
-                           reinterpret_cast<void**>(
-                               &CreateWindowInBand_Original))) {
-        Wh_Log(L"Hook installed: CreateWindowInBand");
+    if (createWindowInBand) {
+        if (!WindhawkUtils::SetFunctionHook(createWindowInBand,
+                                            CreateWindowInBand_Hook,
+                                            &CreateWindowInBand_Original)) {
+            Wh_Log(L"CreateWindowInBand hook failed");
+        }
     } else {
-        Wh_Log(L"CreateWindowInBand hook failed");
+        Wh_Log(L"CreateWindowInBand not found");
     }
 
     g_whInitialized.store(true);
@@ -891,4 +1009,29 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+
+    // The hooks are already removed, so no new items can be injected from
+    // here on. Revoking the delegates and releasing the UI Automation object
+    // must both happen on the taskbar thread.
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(
+            hTaskbarWnd,
+            [](PVOID) {
+                for (auto const& entry : g_injectedItems) {
+                    try {
+                        if (auto item = entry.item.get()) {
+                            item.Click(entry.clickToken);
+                        }
+                    } catch (...) {
+                    }
+                }
+                g_injectedItems.clear();
+
+                if (g_uia) {
+                    g_uia->Release();
+                    g_uia = nullptr;
+                }
+            },
+            nullptr);
+    }
 }
