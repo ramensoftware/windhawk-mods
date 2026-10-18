@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @license         GPL-3.0
 // @include         explorer.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -lruntimeobject -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -lshlwapi -ldwmapi -lshcore -lgdiplus -lmsimg32 -lwlanapi -liphlpapi -lwininet -lwindowsapp -luuid -ladvapi32 -lpowrprof -lcrypt32 -lwindowscodecs
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -15,11 +15,19 @@
 
 This mod recreates the classic Windows 8/8.1 Charms Bar on Windows 10 and 11.
 
-Note: This is a best effort modification. Layout, colors, icons and animations are heavily inspired by Windows 8/8.1. Share, Devices and the Second screen panel are recreations on Windows 10/11, not the original code.
+## Screenshots 
+# Windows 8/8.1-styled Charms Bar
+
+![win8charmsnormal](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8charmsnormal.PNG)
+
+# Windows 8 beta-styled Charms Bar 
+
+![win8betacharms](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betacharms.PNG)
 
 ## About the mod
 
 It recreates the five charms (Search, Share, Start, Devices, Settings) with Win+C and edge activation, keyboard and touch input, multi-monitor placement, and a clock/status flyout. Suggestions are welcome. Tested on Windows 10 21H2, Windows 11 24H2 and Windows 11 25H2.
+Note: This is a best effort modification. Layout, colors, icons and animations are heavily inspired by Windows 8/8.1. Share, Devices and the Second screen panel are recreations on Windows 10/11, not the original code.
 
 ## Keyboard shortcuts
 
@@ -69,7 +77,6 @@ Live system data (volume, brightness, network, battery) is read only while a pan
 ## Requirements
 
 - Windows 10 version 1809 or later (64-bit), with DWM enabled (default on Windows)
-- 2 GB RAM or more
 
 ## Notes
 
@@ -80,6 +87,7 @@ Live system data (volume, brightness, network, battery) is read only while a pan
 - Icepenguins101 - Technical Inspiration 
 - AdministratoX - Testing on Windows 11 25H2 and providing feedback
 - Kiyaku - Providing feedback
+- CharmsBarReloaded project - Wi-Fi PNGs and battery silhouettes (GPL-3.0, license-compatible)
 
 */
 // ==/WindhawkModReadme==
@@ -220,7 +228,6 @@ Live system data (volume, brightness, network, battery) is read only while a pan
 #include <initguid.h>
 #include <wincodec.h>
 #include <math.h>
-#include <strsafe.h>
 #include <exception>
 #include <winstring.h>
 #include <windows.foundation.h>
@@ -3532,7 +3539,7 @@ static HWND CreateCharmsSurface(DWORD exStyle,PCWSTR className,PCWSTR title,DWOR
             if(hwnd) {
                 if(g_charmsBand!=(int)band) {
                     g_charmsBand=(int)band;
-                    Wh_Log(L"Charms port: %s created in z-band %u (above the Start screen and fullscreen apps)",
+                    Wh_Log(L"%s created in z-band %u (above the Start screen and fullscreen apps)",
                            className,(unsigned)band);
                 }
                 return hwnd;
@@ -3540,7 +3547,7 @@ static HWND CreateCharmsSurface(DWORD exStyle,PCWSTR className,PCWSTR title,DWOR
         }
         if(g_charmsBand<0) {
             g_charmsBand=0;
-            Wh_Log(L"Charms port: no z-band available; the Charms Bar falls back to ordinary topmost windows");
+            Wh_Log(L"no z-band available; the Charms Bar falls back to ordinary topmost windows");
         }
     }
     return CreateWindowExW(exStyle,className,title,style,x,y,w,h,parent,nullptr,instance,nullptr);
@@ -3565,7 +3572,7 @@ public:
     explicit ScopedDC(HDC dc = nullptr) noexcept : value_(dc) {}
     ~ScopedDC() noexcept {
         if (value_ && !DeleteDC(value_))
-            Wh_Log(L"Charms port: DeleteDC failed (%lu)",GetLastError());
+            Wh_Log(L"DeleteDC failed (%lu)",GetLastError());
     }
     ScopedDC(const ScopedDC&) = delete;
     ScopedDC& operator=(const ScopedDC&) = delete;
@@ -3586,7 +3593,7 @@ public:
     explicit operator bool() const noexcept { return value_ && value_!=INVALID_HANDLE_VALUE; }
     void reset(HANDLE handle=nullptr) noexcept {
         if(value_ && value_!=INVALID_HANDLE_VALUE && !CloseHandle(value_))
-            Wh_Log(L"Charms port: CloseHandle failed (%lu)",GetLastError());
+            Wh_Log(L"CloseHandle failed (%lu)",GetLastError());
         value_=handle;
     }
 private:
@@ -3597,7 +3604,7 @@ class ScopedGuidMemory {
 public:
     ~ScopedGuidMemory() noexcept {
         if(value_ && LocalFree(value_))
-            Wh_Log(L"Charms port: freeing power-scheme GUID failed (%lu)",GetLastError());
+            Wh_Log(L"freeing power-scheme GUID failed (%lu)",GetLastError());
     }
     ScopedGuidMemory() noexcept = default;
     ScopedGuidMemory(const ScopedGuidMemory&)=delete;
@@ -3617,7 +3624,7 @@ public:
     explicit ScopedGdiObject(HGDIOBJ object = nullptr) noexcept : value_(object) {}
     ~ScopedGdiObject() noexcept {
         if (value_ && !DeleteObject(value_))
-            Wh_Log(L"Charms port: DeleteObject failed (%lu)",GetLastError());
+            Wh_Log(L"DeleteObject failed (%lu)",GetLastError());
     }
     ScopedGdiObject(const ScopedGdiObject&) = delete;
     ScopedGdiObject& operator=(const ScopedGdiObject&) = delete;
@@ -3640,7 +3647,7 @@ public:
         if (selected_) {
             HGDIOBJ restored=SelectObject(dc_,previous_);
             if (!restored || restored==HGDI_ERROR)
-                Wh_Log(L"Charms port: restoring selected GDI object failed (%lu)",GetLastError());
+                Wh_Log(L"restoring selected GDI object failed (%lu)",GetLastError());
         }
     }
     ScopedSelectObject(const ScopedSelectObject&) = delete;
@@ -3657,7 +3664,7 @@ public:
     ~ScopedRegKey() noexcept {
         if (value_) {
             const LONG rc=RegCloseKey(value_);
-            if (rc!=ERROR_SUCCESS) Wh_Log(L"Charms port: RegCloseKey failed (%ld)",rc);
+            if (rc!=ERROR_SUCCESS) Wh_Log(L"RegCloseKey failed (%ld)",rc);
         }
     }
     ScopedRegKey(const ScopedRegKey&) = delete;
@@ -3674,7 +3681,7 @@ public:
     ~ScopedWlanHandle() noexcept {
         if (value_) {
             const DWORD rc=WlanCloseHandle(value_,nullptr);
-            if (rc!=ERROR_SUCCESS) Wh_Log(L"Charms port: WlanCloseHandle failed (%lu)",rc);
+            if (rc!=ERROR_SUCCESS) Wh_Log(L"WlanCloseHandle failed (%lu)",rc);
         }
     }
     ScopedWlanHandle(const ScopedWlanHandle&) = delete;
@@ -3717,7 +3724,7 @@ public:
 private:
     void Restore() noexcept {
         if(active_ && !AdjustTokenPrivileges(token_,FALSE,&previous_,0,nullptr,nullptr))
-            Wh_Log(L"Charms port: restoring the shutdown privilege failed (%lu)",GetLastError());
+            Wh_Log(L"restoring the shutdown privilege failed (%lu)",GetLastError());
         active_=false;
     }
     HANDLE token_=nullptr;
@@ -3768,7 +3775,7 @@ public:
     }
     ~ScopedPaint() noexcept {
         if (begun_ && !EndPaint(hwnd_,&paint_))
-            Wh_Log(L"Charms port: EndPaint failed (%lu)",GetLastError());
+            Wh_Log(L"EndPaint failed (%lu)",GetLastError());
     }
     ScopedPaint(const ScopedPaint&) = delete;
     ScopedPaint& operator=(const ScopedPaint&) = delete;
@@ -3812,7 +3819,7 @@ RECT g_monitorRect = {}, g_workRect = {};
 std::atomic<bool> g_stop;
 std::atomic<bool> g_useWinC, g_edgeActivation, g_topRightCornerOnly, g_useAnimations;
 std::atomic<bool> g_charmsEnabled, g_hideAfterClick;
-std::atomic<bool> g_showClock, g_showQuickMenu, g_fullHeight, g_autoHideOnPointerLeave;
+std::atomic<bool> g_showClock, g_showQuickMenu, g_fullHeight;
 std::atomic<bool> g_closeOnClickOutside;
 std::atomic<int> g_opacity, g_openMs, g_closeMs, g_edgeDelay, g_startLogoStyle;
 // 0 = Windows 8/8.1 regular icons, 1 = Windows 8 Build 8102 beta icon set (Start logo excluded).
@@ -3867,7 +3874,7 @@ int g_animFromAlpha = 0, g_animFromSlide = 0, g_animToSlide = 0;
 int g_animDurationMs = 0;
 LONGLONG g_animStartQpc = 0, g_animQpcFrequency = 0;
 std::atomic<bool> g_edgeLatched, g_menuEdgeLatched, g_edgePosted;
-std::atomic<ULONGLONG> g_edgeSince, g_leaveSince;
+std::atomic<ULONGLONG> g_edgeSince;
 std::wstring g_shareTitle, g_shareText;
 
 void HideVolumeFlyout();
@@ -4036,7 +4043,6 @@ void ReadWindhawkSettings() {
     g_showClock.store(Wh_GetIntSetting(L"showClock")!=0);
     g_showQuickMenu.store(false); // The legacy menu is intentionally dormant.
     g_fullHeight.store(true);
-    g_autoHideOnPointerLeave.store(false);
     g_closeOnClickOutside.store(Wh_GetIntSetting(L"closeOnClickOutside")!=0);
 
     ScopedWhString searchHotkey(Wh_GetStringSetting(L"searchHotkey"));
@@ -4207,14 +4213,11 @@ UINT QueryMonitorDpi(HMONITOR monitor) noexcept {
     // monitor.
     if (!dpi && monitor && !g_threadPerMonitorDpi.load()) {
         HMODULE shcore = GetModuleHandleW(L"shcore.dll");
-        bool loaded = false;
-        if (!shcore) { shcore = LoadLibraryW(L"shcore.dll"); loaded = shcore != nullptr; }
         auto getDpiForMonitor = shcore ? reinterpret_cast<GetDpiForMonitorFn>(
             GetProcAddress(shcore, "GetDpiForMonitor")) : nullptr;
         UINT dpiX = 0, dpiY = 0;
         if (getDpiForMonitor && SUCCEEDED(getDpiForMonitor(monitor, 0, &dpiX, &dpiY)))
             dpi = dpiX;
-        if (loaded) FreeLibrary(shcore);
     }
     if (!dpi) {
         HDC screen = GetDC(nullptr);
@@ -4500,7 +4503,7 @@ void StartRailAnimation(bool opening) {
         return;
     }
     if (!SetTimer(g_rail, TIMER_ANIMATION, 8, nullptr)) {
-        Wh_Log(L"Charms port: animation timer failed (%lu); applying final frame", GetLastError());
+        Wh_Log(L"animation timer failed (%lu); applying final frame", GetLastError());
         ApplyRailFrame(opening ? 255 : 0, g_animToSlide);
         if (!opening) {
             if (g_clock) ShowWindow(g_clock, SW_HIDE);
@@ -4543,7 +4546,6 @@ void ShowCharms(POINT pt, bool byKeyboard) {
     }
     g_hover = -1;
     g_pressed = -1;
-    g_leaveSince.store(0);
     g_visible = true;
     g_noFocusDismissUntil.store(0);
     g_openTick.store(GetTickCount());
@@ -4568,7 +4570,7 @@ void ShowCharms(POINT pt, bool byKeyboard) {
     static bool firstShowLogged = false;
     if (!firstShowLogged) {
         firstShowLogged = true;
-        Wh_Log(L"Charms port: Charms Bar shown for the first time in this process (pid %lu)",
+        Wh_Log(L"Charms Bar shown for the first time in this process (pid %lu)",
                GetCurrentProcessId());
     }
 }
@@ -4620,7 +4622,7 @@ bool SendWinChord(WORD vk) {
     inputs[3].ki.wVk = VK_LWIN; inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
     const UINT sent = SendInput((UINT)_countof(inputs), inputs, sizeof(INPUT));
     if (sent != _countof(inputs)) {
-        Wh_Log(L"Charms port: incomplete Win chord injection (%u/4, error %lu)", sent, GetLastError());
+        Wh_Log(L"incomplete Win chord injection (%u/4, error %lu)", sent, GetLastError());
         if (sent >= 2 && sent < 3) InjectKeyUp(vk);
         if (sent >= 1 && sent < 4) InjectKeyUp(VK_LWIN);
         return false;
@@ -4647,7 +4649,7 @@ HRESULT SetupShareManager(HWND shareWindow) {
         if(g_dtm && g_dataRequested) {
             const HRESULT removeResult=g_dtm->remove_DataRequested(g_dataToken);
             if(FAILED(removeResult))
-                Wh_Log(L"Charms port: removing previous Share event handler failed (0x%08X)",
+                Wh_Log(L"removing previous Share event handler failed (0x%08X)",
                        (unsigned)removeResult);
         }
         g_shareReady=false;
@@ -4683,7 +4685,7 @@ HRESULT SetupShareManager(HWND shareWindow) {
         }
         return hr;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while preparing Share UI");
+        Wh_Log(L"C++ exception while preparing Share UI");
         g_shareReady=false;
         g_shareOwner=nullptr;
         g_dataRequested.Reset();
@@ -4740,12 +4742,12 @@ void OpenMailFallback() noexcept {
                                L"&body="+EncodeMailComponent(text.c_str());
         const HINSTANCE launched=ShellExecuteW(nullptr,L"open",uri.c_str(),nullptr,nullptr,SW_SHOWNORMAL);
         if((INT_PTR)launched>32) return;
-        Wh_Log(L"Charms port: mail fallback failed (ShellExecute code %ld)",(LONG)(INT_PTR)launched);
+        Wh_Log(L"mail fallback failed (ShellExecute code %ld)",(LONG)(INT_PTR)launched);
         const bool copied=CopyShareTextToClipboard(text.c_str());
         const PCWSTR notice=copied?LocalizedShareFallbackNotice():LocalizedShareClipboardFailure();
         MessageBoxW(nullptr,notice,LocalizedShareFallbackTitle(), MB_OK|MB_ICONINFORMATION|MB_TOPMOST);
     } catch (...) {
-        Wh_Log(L"Charms port: exception in mail/clipboard Share fallback");
+        Wh_Log(L"exception in mail/clipboard Share fallback");
     }
 }
 
@@ -4780,12 +4782,12 @@ void LaunchShare(HWND requestedOwner=nullptr) {
         CompleteCharmAction();
         if(fromPane) ClosePaneWindow(FAILED(hr));
         if(FAILED(hr)) {
-            Wh_Log(L"Charms port: native Share UI unavailable (0x%08X); using fallback",
+            Wh_Log(L"native Share UI unavailable (0x%08X); using fallback",
                    (unsigned)hr);
             OpenMailFallback();
         }
     } catch (...) {
-        Wh_Log(L"Charms port: exception while launching Share UI");
+        Wh_Log(L"exception while launching Share UI");
         if(fromPane) ClosePaneWindow(true);
         CompleteCharmAction();
         OpenMailFallback();
@@ -4899,16 +4901,16 @@ static bool TryOpenCompanionSearchPanel(const wchar_t* caller) {
     const HWND panel=FindCompanionSearchPanel();
     if(!panel) return false;
     if(CompanionSearchPanelOpen(panel)) {
-        Wh_Log(L"Charms port: %s: the Windows 8 Search Charm panel is already open (hwnd 0x%p); leaving it open "
+        Wh_Log(L"%s: the Windows 8 Search Charm panel is already open (hwnd 0x%p); leaving it open "
                L"instead of toggling it closed",caller,(void*)panel);
         return true;
     }
     if(!PostMessageW(panel,kCompanionSearchToggle,0,0)) {
-        Wh_Log(L"Charms port: %s: posting WM_APP_TOGGLE to the Windows 8 Search Charm panel failed (%lu); "
+        Wh_Log(L"%s: posting WM_APP_TOGGLE to the Windows 8 Search Charm panel failed (%lu); "
                L"falling back to the Windows shortcut",caller,GetLastError());
         return false;
     }
-    Wh_Log(L"Charms port: %s: opened the Windows 8/8.1 Search Charm Recreation panel (hwnd 0x%p, WM_APP+1)",
+    Wh_Log(L"%s: opened the Windows 8/8.1 Search Charm Recreation panel (hwnd 0x%p, WM_APP+1)",
            caller,(void*)panel);
     return true;
 }
@@ -4963,7 +4965,7 @@ static bool TryOpenCompanionStartScreen(const wchar_t* caller) {
     const HWND screen=FindCompanionStartScreen();
     if(!screen) return false;
     if(CompanionStartScreenOpen(screen)) {
-        Wh_Log(L"Charms port: %s: the Windows 8 Start Screen is already open (hwnd 0x%p); leaving it as it is",
+        Wh_Log(L"%s: the Windows 8 Start Screen is already open (hwnd 0x%p); leaving it as it is",
                caller,(void*)screen);
         return true;
     }
@@ -4972,7 +4974,7 @@ static bool TryOpenCompanionStartScreen(const wchar_t* caller) {
     // Windows key is then better than clicking into the void.
     const DWORD retryAfter=g_companionStartRetryAfter.load();
     if(retryAfter && (LONG)(retryAfter-GetTickCount())>0) {
-        Wh_Log(L"Charms port: %s: the Windows 8 Start Screen did not answer the last request; using the Windows "
+        Wh_Log(L"%s: the Windows 8 Start Screen did not answer the last request; using the Windows "
                L"key for now (fallback clears in %lu s)",caller,(unsigned)((retryAfter-GetTickCount())/1000));
         return false;
     }
@@ -4981,16 +4983,16 @@ static bool TryOpenCompanionStartScreen(const wchar_t* caller) {
     const bool idempotent=message && version>=kCompanionInteropMessageVersion;
     const UINT posted=idempotent?message:kCompanionStartToggle;
     if(!PostMessageW(screen,posted,0,0)) {
-        Wh_Log(L"Charms port: %s: posting to the Windows 8 Start Screen failed (%lu); "
+        Wh_Log(L"%s: posting to the Windows 8 Start Screen failed (%lu); "
                L"falling back to the Windows key",caller,GetLastError());
         return false;
     }
-    Wh_Log(L"Charms port: %s: opened the Windows 8 Start Screen (hwnd 0x%p, %s, interop v%d)",caller,(void*)screen,
+    Wh_Log(L"%s: opened the Windows 8 Start Screen (hwnd 0x%p, %s, interop v%d)",caller,(void*)screen,
            idempotent?L"registered open message":L"WM_APP+1",version);
     if(g_rail) {
         KillTimer(g_rail,TIMER_START_VERIFY);
         if(!SetTimer(g_rail,TIMER_START_VERIFY,1500,nullptr))
-            Wh_Log(L"Charms port: could not arm the Start screen verification timer (%lu)",GetLastError());
+            Wh_Log(L"could not arm the Start screen verification timer (%lu)",GetLastError());
     }
     return true;
 }
@@ -5004,7 +5006,7 @@ static void VerifyCompanionStartScreen() {
     // Nothing appeared. Do not send more messages to a surface that is not answering: park the hand-off so the
     // next presses use the Windows key, and say why.
     g_companionStartRetryAfter.store(GetTickCount()+5*60*1000);
-    Wh_Log(L"Charms port: the Windows 8 Start Screen did not appear after the open request; falling back to the "
+    Wh_Log(L"the Windows 8 Start Screen did not appear after the open request; falling back to the "
            L"Windows key for 5 minutes (a swallowed 250 ms toggle debounce also looks like this)");
 }
 
@@ -5023,7 +5025,7 @@ static void RaiseCharmsOverCompanionStartScreen() {
     static bool logged=false;
     if(!logged) {
         logged=true;
-        Wh_Log(L"Charms port: Charms Bar raised above the Windows 8 (8045) Start Screen (same z-band, re-raised)");
+        Wh_Log(L"Charms Bar raised above the Windows 8 (8045) Start Screen (same z-band, re-raised)");
     }
 }
 
@@ -5151,14 +5153,14 @@ static void PaintStartTip(HWND hwnd) {
             EndPaint(hwnd,&ps);
             return;
         }
-        Wh_Log(L"Charms port: Build 8102 Start tip glyph failed; drawing the regular flag");
+        Wh_Log(L"Build 8102 Start tip glyph failed; drawing the regular flag");
     }
     bool painted=false;
     if(g_gdiplusToken) {
         try {
             Gdiplus::Graphics g(dc);
             if(g.GetLastStatus()!=Gdiplus::Ok) {
-                Wh_Log(L"Charms port: GDI+ Graphics unavailable for the Start tip; using the GDI flag");
+                Wh_Log(L"GDI+ Graphics unavailable for the Start tip; using the GDI flag");
             } else {
                 g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
                 g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
@@ -5189,7 +5191,7 @@ static void PaintStartTip(HWND hwnd) {
                 }
             }
         } catch (...) {
-            Wh_Log(L"Charms port: C++ exception while drawing the Start tip");
+            Wh_Log(L"C++ exception while drawing the Start tip");
         }
     }
     if(!painted) {
@@ -5224,17 +5226,17 @@ static void ReturnToDesktopFromStartScreen() {
     g_startTipSuppressUntil.store(GetTickCount()+kStartTipSuppressAfterClickMs);
     if(!screen) {
         // The tip only appears over that screen, so this means it has just gone: nothing left to close.
-        Wh_Log(L"Charms port: Start tip used, but the Windows 8 Start Screen is no longer there");
+        Wh_Log(L"Start tip used, but the Windows 8 Start Screen is no longer there");
         return;
     }
     if(!PostMessageW(screen,kCompanionStartClose,0,0)) {
-        Wh_Log(L"Charms port: posting the close message to the Start Screen failed (%lu)",GetLastError());
+        Wh_Log(L"posting the close message to the Start Screen failed (%lu)",GetLastError());
         return;
     }
-    Wh_Log(L"Charms port: Start tip used; the Windows 8 Start Screen was asked to close");
+    Wh_Log(L"Start tip used; the Windows 8 Start Screen was asked to close");
     g_startTipCloseDeadline=GetTickCount64()+(ULONGLONG)kStartTipCloseTimeoutMs;
     if(g_startTip && !SetTimer(g_startTip,TIMER_STARTTIP_CLOSE,(UINT)kStartTipClosePollMs,nullptr))
-        Wh_Log(L"Charms port: could not watch the Start-screen close (%lu)",GetLastError());
+        Wh_Log(L"could not watch the Start-screen close (%lu)",GetLastError());
 }
 
 // True while a click is still being acted on: the tip must not pop back in that moment.
@@ -5248,7 +5250,7 @@ static void StartStartTipFrames(HWND hwnd) {
     if(!StartTipEffectsEnabled()) return;
     if(!g_startTipLastFrame) g_startTipLastFrame=GetTickCount64();
     if(!SetTimer(hwnd,TIMER_STARTTIP_FRAME,15,nullptr))
-        Wh_Log(L"Charms port: Start tip frame timer failed (%lu)",GetLastError());
+        Wh_Log(L"Start tip frame timer failed (%lu)",GetLastError());
 }
 
 static void StartStartTipGlint(HWND hwnd) {
@@ -5381,7 +5383,7 @@ LRESULT CALLBACK StartTipProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
                 }
                 if(GetTickCount64()>=g_startTipCloseDeadline) {
                     KillTimer(hwnd,TIMER_STARTTIP_CLOSE);
-                    Wh_Log(L"Charms port: the Start Screen is still open %d s after the close request; "
+                    Wh_Log(L"the Start Screen is still open %d s after the close request; "
                            L"leaving it alone (Esc or the Windows key still closes it)",
                            kStartTipCloseTimeoutMs/1000);
                 }
@@ -5473,7 +5475,7 @@ LRESULT CALLBACK StartTipProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
             // Right-clicking the Start button has always opened the Win+X style menu.
             HideStartTip();
             if(!g_threadId || !PostThreadMessageW(g_threadId,WM_PORT_MENU,0,0))
-                Wh_Log(L"Charms port: could not ask the UI thread for the Start tip menu (%lu)",GetLastError());
+                Wh_Log(L"could not ask the UI thread for the Start tip menu (%lu)",GetLastError());
             return 0;
     }
     return DefWindowProcW(hwnd,msg,wp,lp);
@@ -5483,7 +5485,7 @@ LRESULT CALLBACK StartTipProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     try {
         return StartTipProcImpl(hwnd,msg,wp,lp);
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while handling the Start tip");
+        Wh_Log(L"C++ exception while handling the Start tip");
         return DefWindowProcW(hwnd,msg,wp,lp);
     }
 }
@@ -5491,7 +5493,7 @@ LRESULT CALLBACK StartTipProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
 static void ShowStartTip() {
     if(g_startTipShown.load() || StartTipSuppressed()) return;
     if(!g_startTip || !IsWindow(g_startTip)) {
-        if(g_startTip) Wh_Log(L"Charms port: the Start tip window is gone; not showing it");
+        if(g_startTip) Wh_Log(L"the Start tip window is gone; not showing it");
         return;
     }
     HMONITOR monitor=CompanionStartScreenMonitor();
@@ -5530,7 +5532,7 @@ static void ShowStartTip() {
     if(animated) {
         if(g_startTipHover) g_startTipGlintAt=now;
         if(!SetTimer(g_startTip,TIMER_STARTTIP_FRAME,15,nullptr))
-            Wh_Log(L"Charms port: Start tip frame timer failed (%lu)",GetLastError());
+            Wh_Log(L"Start tip frame timer failed (%lu)",GetLastError());
     }
     InvalidateRect(g_startTip,nullptr,FALSE);
     // A 500 ms poll retires the tip if the Start screen closes by other means (the Windows key, the Charms
@@ -5539,7 +5541,7 @@ static void ShowStartTip() {
     static bool logged=false;
     if(!logged) {
         logged=true;
-        Wh_Log(L"Charms port: Start tip shown in the bottom-left corner of the Start screen");
+        Wh_Log(L"Start tip shown in the bottom-left corner of the Start screen");
     }
 }
 
@@ -5555,7 +5557,7 @@ static void NoteSearchChordSent() {
     if(g_rail) {
         KillTimer(g_rail,TIMER_SEARCH_VERIFY);
         if(!SetTimer(g_rail,TIMER_SEARCH_VERIFY,700,nullptr))
-            Wh_Log(L"Charms port: could not arm the search verification timer (%lu)",GetLastError());
+            Wh_Log(L"could not arm the search verification timer (%lu)",GetLastError());
     }
 }
 
@@ -5564,12 +5566,12 @@ static void NoteSearchChordSent() {
 // click look dead, which is the failure the log showed.
 static void VerifySearchChord() {
     if(FindWindowsSearchWindow()) {
-        Wh_Log(L"Charms port: search UI confirmed open after the Win chord");
+        Wh_Log(L"search UI confirmed open after the Win chord");
         return;
     }
     const bool wasOpen=g_searchKnownOpen.exchange(false);
     if(wasOpen)
-        Wh_Log(L"Charms port: no search window was found after the Win chord; the next Search press will send "
+        Wh_Log(L"no search window was found after the Win chord; the next Search press will send "
                L"it again instead of assuming the search UI is open");
 }
 
@@ -5594,11 +5596,11 @@ void ActivateCharm(int slot) {
             if(searchWindow) {
                 wchar_t searchClass[64]{};
                 GetClassNameW(searchWindow,searchClass,_countof(searchClass));
-                Wh_Log(L"Charms port: Search charm pressed while the search UI is already open "
+                Wh_Log(L"Search charm pressed while the search UI is already open "
                        L"(hwnd 0x%p, class \"%s\"); leaving it open instead of toggling it closed",
                        (void*)searchWindow,searchClass);
             } else {
-                Wh_Log(L"Charms port: Search charm pressed while the search UI is already open (tracked "
+                Wh_Log(L"Search charm pressed while the search UI is already open (tracked "
                        L"state); leaving it open instead of toggling it closed");
             }
             CompleteCharmAction();
@@ -5609,12 +5611,12 @@ void ActivateCharm(int slot) {
         const WORD key=mode==1?'S':mode==2?'Q':(immersive?'Q':'S');
         // Deliver the chord before hiding the no-activate rail; this avoids racing the foreground hand-off.
         auto sendSearchChord=[&]() {
-            Wh_Log(L"Charms port: Search charm opening the Windows search UI with Win+%c",key);
+            Wh_Log(L"Search charm opening the Windows search UI with Win+%c",key);
             bool sent=SendWinChord(key);
             if(!sent && mode==0)
                 sent=SendWinChord(key=='S'?'Q':'S');
             if(!sent)
-                Wh_Log(L"Charms port: Search Win+%c injection failed; nothing was sent",key);
+                Wh_Log(L"Search Win+%c injection failed; nothing was sent",key);
             else
                 NoteSearchChordSent();
         };
@@ -5802,7 +5804,7 @@ void RefreshStatusData() {
     g_wifiRadioOff.store(adapterDetected && radioStateKnown && !anyRadioOn);
     g_airplane.store(ReadRadioState()==1);
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while refreshing system status");
+        Wh_Log(L"C++ exception while refreshing system status");
         g_networkState.store(0);
         g_wifiSignal.store(-1);
         g_adapterDetected.store(false);
@@ -7318,9 +7320,6 @@ public:
     WmiServicesClient& operator=(const WmiServicesClient&)=delete;
     bool Connect() noexcept {
         if(!apartment_.ready()) return false;
-        const HRESULT security=CoInitializeSecurity(nullptr,-1,nullptr,nullptr,
-            RPC_C_AUTHN_LEVEL_DEFAULT,RPC_C_IMP_LEVEL_IMPERSONATE,nullptr,EOAC_NONE,nullptr);
-        if(FAILED(security) && security!=RPC_E_TOO_LATE) return false;
         ComPtr<IWbemLocator> locator;
         if(FAILED(CoCreateInstance(CLSID_WbemLocator,nullptr,CLSCTX_INPROC_SERVER, IID_IWbemLocator,
                                    reinterpret_cast<void**>(locator.GetAddressOf())))) return false;
@@ -7374,7 +7373,7 @@ bool QueryWmiBrightness(int* percent) noexcept {
         *percent=(int)value;
         return true;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception querying WMI display brightness");
+        Wh_Log(L"C++ exception querying WMI display brightness");
         return false;
     }
 }
@@ -7423,7 +7422,7 @@ bool SetWmiBrightnessPercent(int percent) noexcept {
         LONG code=1;
         return VariantToLong(returnValue.value(),&code) && code==0;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception setting WMI display brightness");
+        Wh_Log(L"C++ exception setting WMI display brightness");
         return false;
     }
 }
@@ -7589,7 +7588,7 @@ void DrawPane(HDC dc,RECT rc);
 void DiscardPaneSlideCache() {
     if(g_paneSlideBitmap) {
         if(!DeleteObject(g_paneSlideBitmap))
-            Wh_Log(L"Charms port: pane slide cache cleanup failed (%lu)",GetLastError());
+            Wh_Log(L"pane slide cache cleanup failed (%lu)",GetLastError());
         g_paneSlideBitmap=nullptr;
     }
     g_paneSlideWidth=g_paneSlideHeight=0;
@@ -7745,7 +7744,7 @@ bool ShowCharmPane(int kind) {
         const UINT delay=animate?(UINT)((std::max)(80,g_paneAnimDurationMs)+kPaneMetricsDelayMs)
                                  :kPaneMetricsDelayMs;
         if(!SetTimer(g_pane,TIMER_PANE_METRICS,delay,nullptr)) {
-            Wh_Log(L"Charms port: pane metrics timer failed (%lu); refreshing now",GetLastError());
+            Wh_Log(L"pane metrics timer failed (%lu); refreshing now",GetLastError());
             RefreshSettingsPaneMetrics();
         }
     }
@@ -8476,7 +8475,7 @@ LRESULT CALLBACK VolumeFlyoutProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
 
 LRESULT CALLBACK VolumeFlyoutProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     try { return VolumeFlyoutProcImpl(hwnd,msg,wp,lp); }
-    catch (...) { Wh_Log(L"Charms port: C++ exception in volume/brightness flyout"); return DefWindowProcW(hwnd,msg,wp,lp); }
+    catch (...) { Wh_Log(L"C++ exception in volume/brightness flyout"); return DefWindowProcW(hwnd,msg,wp,lp); }
 }
 
 static void PaneRun(PCWSTR file,PCWSTR params=nullptr) {
@@ -8491,18 +8490,18 @@ static bool PaneTryOpen(PCWSTR target,PCWSTR parameters=nullptr) {
 static bool EnterSystemSleepState() noexcept {
     ScopedHandle token;
     if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY|TOKEN_ADJUST_PRIVILEGES,token.put())) {
-        Wh_Log(L"Charms port: opening the process token for Sleep failed (%lu)",GetLastError());
+        Wh_Log(L"opening the process token for Sleep failed (%lu)",GetLastError());
         return false;
     }
     ScopedShutdownPrivilege privilege;
     if(!privilege.Enable(token.get())) {
-        Wh_Log(L"Charms port: enabling the shutdown privilege for Sleep failed (%lu)",GetLastError());
+        Wh_Log(L"enabling the shutdown privilege for Sleep failed (%lu)",GetLastError());
         return false;
     }
     const BOOLEAN slept=SetSuspendState(FALSE,FALSE,FALSE);
     const DWORD sleepError=GetLastError();
     if(!slept)
-        Wh_Log(L"Charms port: entering the Sleep state failed (%lu)",sleepError);
+        Wh_Log(L"entering the Sleep state failed (%lu)",sleepError);
     return slept!=FALSE;
 }
 
@@ -8571,13 +8570,13 @@ static bool ShowMetroContextMenu(int purpose,POINT anchor,bool fromKeyboard,HWND
     SetWindowLongPtrW(g_menu,GWLP_HWNDPARENT,(LONG_PTR)owner);
     if(!SetWindowPos(g_menu,HWND_TOPMOST,anchor.x,anchor.y,width,height,SWP_SHOWWINDOW)) {
         HideMetroContextMenu(false);
-        Wh_Log(L"Charms port: positioning the Metro context menu failed (%lu)",GetLastError());
+        Wh_Log(L"positioning the Metro context menu failed (%lu)",GetLastError());
         return false;
     }
     SetLayeredWindowAttributes(g_menu,0,255,LWA_ALPHA);
     InvalidateRect(g_menu,nullptr,TRUE);
     if(!SetForegroundWindow(g_menu))
-        Wh_Log(L"Charms port: foreground activation of the Metro menu was declined");
+        Wh_Log(L"foreground activation of the Metro menu was declined");
     SetFocus(g_menu);
     return true;
 }
@@ -8648,7 +8647,7 @@ void ShowPowerMetroMenu(HWND hwnd) {
     } catch (...) {
         g_paneMenuOpen=false;
         HideMetroContextMenu(false);
-        Wh_Log(L"Charms port: exception while preparing the Power context menu");
+        Wh_Log(L"exception while preparing the Power context menu");
     }
 }
 
@@ -8660,7 +8659,7 @@ void ShowQuickMetroMenu(POINT anchor) {
         ShowMetroContextMenu(METRO_MENU_QUICK,anchor,false,g_rail);
     } catch (...) {
         HideMetroContextMenu(false);
-        Wh_Log(L"Charms port: exception while preparing the quick context menu");
+        Wh_Log(L"exception while preparing the quick context menu");
     }
 }
 
@@ -8702,20 +8701,20 @@ static bool ShowPlayToPicker() {
                 hr=statics->ShowPlayToUI();
                 if(SUCCEEDED(hr)) {
                     shown=true;
-                    Wh_Log(L"Charms port: Play To picker shown through PlayToManager.ShowPlayToUI");
+                    Wh_Log(L"Play To picker shown through PlayToManager.ShowPlayToUI");
                 } else {
-                    Wh_Log(L"Charms port: PlayToManager.ShowPlayToUI failed (0x%08X); "
+                    Wh_Log(L"PlayToManager.ShowPlayToUI failed (0x%08X); "
                            L"using the Connect surface for the rest of this session",(unsigned)hr);
                     playToUnavailable=true;
                 }
             } else {
-                Wh_Log(L"Charms port: Play To activation factory unavailable (0x%08X); "
+                Wh_Log(L"Play To activation factory unavailable (0x%08X); "
                        L"using the Connect surface for the rest of this session",(unsigned)hr);
                 playToUnavailable=true;
             }
         }
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while opening the Play To picker");
+        Wh_Log(L"C++ exception while opening the Play To picker");
         playToUnavailable=true;
     }
     return shown;
@@ -8729,7 +8728,7 @@ static void ActivateDevicesPaneItem(int id) {
     CompleteCharmAction();
     if(id==100) {
         if(!ShowPlayToPicker()) {
-            Wh_Log(L"Charms port: Devices > Play opened through Win+K (Connect)");
+            Wh_Log(L"Devices > Play opened through Win+K (Connect)");
             SendWinChord('K'); // Windows 10/11 Connect surface, the modern Play To picker.
         }
     } else if(id==101) {
@@ -8750,7 +8749,7 @@ static void ActivateSharePaneItem(int id) {
     HINSTANCE launched=ShellExecuteW(nullptr,L"open",L"SnippingTool.exe",nullptr,
                                       nullptr,SW_SHOWNORMAL);
     if((INT_PTR)launched<=32)
-        Wh_Log(L"Charms port: SnippingTool.exe launch failed (%ld)",(LONG)(INT_PTR)launched);
+        Wh_Log(L"SnippingTool.exe launch failed (%ld)",(LONG)(INT_PTR)launched);
 }
 
 void ActivatePaneItem(HWND hwnd,int id) {
@@ -8893,7 +8892,7 @@ LRESULT CALLBACK PaneProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
 
 LRESULT CALLBACK PaneProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     try { return PaneProcImpl(hwnd,msg,wp,lp); }
-    catch (...) { Wh_Log(L"Charms port: C++ exception in recreated charm pane"); return DefWindowProcW(hwnd,msg,wp,lp); }
+    catch (...) { Wh_Log(L"C++ exception in recreated charm pane"); return DefWindowProcW(hwnd,msg,wp,lp); }
 }
 
 LRESULT PaintRailWindow(HWND hwnd) {
@@ -8913,7 +8912,7 @@ LRESULT PaintRailWindow(HWND hwnd) {
         BitBlt(dc,0,0,device.right,device.bottom,memory.get(),0,0,SRCCOPY);
         return 0;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while painting rail");
+        Wh_Log(L"C++ exception while painting rail");
         return 0;
     }
 }
@@ -8941,7 +8940,7 @@ LRESULT PaintClockWindow(HWND hwnd) {
             BitBlt(dc,0,0,device.right,device.bottom,memory.get(),0,0,SRCCOPY);
         return 0;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while painting clock/status");
+        Wh_Log(L"C++ exception while painting clock/status");
         return 0;
     }
 }
@@ -9010,7 +9009,7 @@ LRESULT PaintMenuWindow(HWND hwnd) {
             BitBlt(dc,0,0,device.right,device.bottom,memory.get(),0,0,SRCCOPY);
         return 0;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while painting Metro context menu");
+        Wh_Log(L"C++ exception while painting Metro context menu");
         return 0;
     }
 }
@@ -9142,7 +9141,7 @@ LRESULT CALLBACK RailProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
                     }
                 }
             } catch (...) {
-                Wh_Log(L"Charms port: could not allocate touch input buffer");
+                Wh_Log(L"could not allocate touch input buffer");
             }
             CloseTouchInputHandle((HTOUCHINPUT)lp);
             return 0;
@@ -9156,7 +9155,7 @@ LRESULT CALLBACK RailProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     try {
         return RailProcImpl(hwnd,msg,wp,lp);
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception in rail window procedure");
+        Wh_Log(L"C++ exception in rail window procedure");
         if (msg == WM_TOUCH) CloseTouchInputHandle((HTOUCHINPUT)lp);
         return DefWindowProcW(hwnd,msg,wp,lp);
     }
@@ -9181,7 +9180,7 @@ LRESULT CALLBACK ClockProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     try {
         return ClockProcImpl(hwnd,msg,wp,lp);
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception in clock window procedure");
+        Wh_Log(L"C++ exception in clock window procedure");
         return DefWindowProcW(hwnd,msg,wp,lp);
     }
 }
@@ -9261,7 +9260,7 @@ LRESULT CALLBACK MenuProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     try {
         return MenuProcImpl(hwnd,msg,wp,lp);
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception in Metro context-menu window procedure");
+        Wh_Log(L"C++ exception in Metro context-menu window procedure");
         HideMetroContextMenu(false);
         return DefWindowProcW(hwnd,msg,wp,lp);
     }
@@ -9364,7 +9363,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     try {
         return KeyboardProcImpl(code,wp,lp);
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception in low-level keyboard callback");
+        Wh_Log(L"C++ exception in low-level keyboard callback");
         return CallNextHookEx(g_keyboardHook,code,wp,lp);
     }
 }
@@ -9494,26 +9493,7 @@ LRESULT CALLBACK MouseProcImpl(int code,WPARAM wp,LPARAM lp) {
                 PostThreadMessageW(g_threadId,WM_PORT_CLOSE,0,0);
             }
         }
-        if (wp == WM_MOUSEMOVE) {
-            if (g_visible && g_rail && !g_keyboardOpened &&
-                g_autoHideOnPointerLeave.load() && g_animTarget.load() == 255 && g_animStep.load() >= 255) {
-                RECT railRect{};
-                GetWindowRect(g_rail, &railRect);
-                RECT clockRect{};
-                const bool overClock = g_clock && GetWindowRect(g_clock, &clockRect) &&
-                                       PtInRect(&clockRect, p);
-                if (p.x < railRect.left - DpiScale(30) && !overClock) {
-                    const ULONGLONG now = GetTickCount64();
-                    const ULONGLONG since = g_leaveSince.load();
-                    if (!since) g_leaveSince.store(now);
-                    else if (now - since > 700) PostMessageW(g_rail, WM_CLOSE, 0, 0);
-                } else {
-                    g_leaveSince.store(0);
-                }
-            } else {
-                g_leaveSince.store(0);
-            }
-        }
+
     }
     return CallNextHookEx(g_mouseHook,code,wp,lp);
 }
@@ -9522,7 +9502,7 @@ LRESULT CALLBACK MouseProc(int code,WPARAM wp,LPARAM lp) {
     try {
         return MouseProcImpl(code,wp,lp);
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception in low-level mouse callback");
+        Wh_Log(L"C++ exception in low-level mouse callback");
         return CallNextHookEx(g_mouseHook,code,wp,lp);
     }
 }
@@ -9576,10 +9556,10 @@ DWORD WINAPI InputHookThreadProc(LPVOID) {
 
         g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, (HINSTANCE)&__ImageBase, 0);
         if (!g_keyboardHook)
-            Wh_Log(L"Charms port: WH_KEYBOARD_LL install failed (%lu)", GetLastError());
+            Wh_Log(L"WH_KEYBOARD_LL install failed (%lu)", GetLastError());
         g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, (HINSTANCE)&__ImageBase, 0);
         if (!g_mouseHook)
-            Wh_Log(L"Charms port: WH_MOUSE_LL install failed (%lu)", GetLastError());
+            Wh_Log(L"WH_MOUSE_LL install failed (%lu)", GetLastError());
 
         const bool installed = g_keyboardHook && g_mouseHook;
         g_hooksSucceeded.store(installed);
@@ -9593,7 +9573,7 @@ DWORD WINAPI InputHookThreadProc(LPVOID) {
             DispatchMessageW(&message);
         }
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception in input-hook thread");
+        Wh_Log(L"C++ exception in input-hook thread");
         g_hooksSucceeded.store(false);
         g_stop.store(true);
         if (g_hookReady) SetEvent(g_hookReady);
@@ -9602,12 +9582,12 @@ DWORD WINAPI InputHookThreadProc(LPVOID) {
 
     if (g_mouseHook) {
         if (!UnhookWindowsHookEx(g_mouseHook))
-            Wh_Log(L"Charms port: mouse hook removal failed (%lu)",GetLastError());
+            Wh_Log(L"mouse hook removal failed (%lu)",GetLastError());
         g_mouseHook = nullptr;
     }
     if (g_keyboardHook) {
         if (!UnhookWindowsHookEx(g_keyboardHook))
-            Wh_Log(L"Charms port: keyboard hook removal failed (%lu)",GetLastError());
+            Wh_Log(L"keyboard hook removal failed (%lu)",GetLastError());
         g_keyboardHook = nullptr;
     }
     RestoreThreadDpiContext(previousDpiContext);
@@ -9626,12 +9606,12 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         Gdiplus::GdiplusStartupInput gdiplusStartupInput;
         if(Gdiplus::GdiplusStartup(&g_gdiplusToken,&gdiplusStartupInput,nullptr)!=Gdiplus::Ok) {
             g_gdiplusToken=0;
-            Wh_Log(L"Charms port: GDI+ startup failed; using vector GDI fallback");
+            Wh_Log(L"GDI+ startup failed; using vector GDI fallback");
         }
 
         roInit=RoInitialize(RO_INIT_SINGLETHREADED);
         if(FAILED(roInit))
-            Wh_Log(L"Charms port: RoInitialize failed (0x%08X)",(unsigned)roInit);
+            Wh_Log(L"RoInitialize failed (0x%08X)",(unsigned)roInit);
 
         RefreshSystemAccent();
 
@@ -9644,7 +9624,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
             if(user32) g_charmsCreateInBand=reinterpret_cast<CreateWindowInBandCharms_t>(
                 reinterpret_cast<void*>(GetProcAddress(user32,"CreateWindowInBand")));
             if(!g_charmsCreateInBand)
-                Wh_Log(L"Charms port: CreateWindowInBand not available; using ordinary topmost windows");
+                Wh_Log(L"CreateWindowInBand not available; using ordinary topmost windows");
         }
         wc.hInstance=(HINSTANCE)&__ImageBase;
         wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
@@ -9652,14 +9632,14 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         wc.lpszClassName=kRailClass;
         UnregisterClassW(kRailClass,wc.hInstance); // clear any stale class from a previous instance
         if(!RegisterClassExW(&wc))
-            Wh_Log(L"Charms port: rail window class registration failed (%lu)",GetLastError());
+            Wh_Log(L"rail window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW cc{sizeof(cc)};
         cc.hInstance=wc.hInstance; cc.hCursor=wc.hCursor;
         cc.lpfnWndProc=ClockProc; cc.lpszClassName=kClockClass;
         UnregisterClassW(kClockClass,wc.hInstance);
         if(!RegisterClassExW(&cc))
-            Wh_Log(L"Charms port: clock window class registration failed (%lu)",GetLastError());
+            Wh_Log(L"clock window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW mc{sizeof(mc)};
         mc.style=CS_DROPSHADOW;
@@ -9667,14 +9647,14 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         mc.lpfnWndProc=MenuProc; mc.lpszClassName=kMenuClass;
         UnregisterClassW(kMenuClass,wc.hInstance);
         if(!RegisterClassExW(&mc))
-            Wh_Log(L"Charms port: menu window class registration failed (%lu)",GetLastError());
+            Wh_Log(L"menu window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW pc{sizeof(pc)};
         pc.hInstance=wc.hInstance; pc.hCursor=wc.hCursor;
         pc.lpfnWndProc=PaneProc; pc.lpszClassName=kPaneClass;
         UnregisterClassW(kPaneClass,wc.hInstance);
         if(!RegisterClassExW(&pc))
-            Wh_Log(L"Charms port: settings pane class registration failed (%lu)",GetLastError());
+            Wh_Log(L"settings pane class registration failed (%lu)",GetLastError());
         g_pane=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,kPaneClass,L"Settings",WS_POPUP,
             0,0,DpiScale(kPaneWidth),DpiScale(600),nullptr,wc.hInstance);
         WNDCLASSEXW vc{sizeof(vc)};
@@ -9683,7 +9663,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         vc.lpfnWndProc=VolumeFlyoutProc; vc.lpszClassName=kVolumeFlyoutClass;
         UnregisterClassW(kVolumeFlyoutClass,wc.hInstance);
         if(!RegisterClassExW(&vc))
-            Wh_Log(L"Charms port: settings flyout class registration failed (%lu)",GetLastError());
+            Wh_Log(L"settings flyout class registration failed (%lu)",GetLastError());
         // Owned by the pane, so it has to share the pane's band or it would be drawn behind its own owner.
         g_volumeFlyout=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
             kVolumeFlyoutClass,L"Volume",WS_POPUP,0,0,DpiScale(kVolumeFlyoutWidth),
@@ -9693,14 +9673,14 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         tc.lpfnWndProc=VolumeTipProc; tc.lpszClassName=kVolumeTipClass;
         UnregisterClassW(kVolumeTipClass,wc.hInstance);
         if(!RegisterClassExW(&tc))
-            Wh_Log(L"Charms port: value tip class registration failed (%lu)",GetLastError());
+            Wh_Log(L"value tip class registration failed (%lu)",GetLastError());
         g_volumeTip=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
             kVolumeTipClass,L"Value",WS_POPUP,0,0,DpiScale(kVolTipWidth),
             DpiScale(kVolTipHeight),g_pane,wc.hInstance);
         if(!g_volumeTip)
-            Wh_Log(L"Charms port: optional value tip window creation failed (%lu)",GetLastError());
+            Wh_Log(L"optional value tip window creation failed (%lu)",GetLastError());
         if(!g_volumeFlyout) {
-            Wh_Log(L"Charms port: optional settings flyout window creation failed (%lu)",GetLastError());
+            Wh_Log(L"optional settings flyout window creation failed (%lu)",GetLastError());
         } else {
             g_brightnessNotifyCurrent=RegisterPowerSettingNotification(
                 g_volumeFlyout,&kGuidCurrentMonitorBrightness,DEVICE_NOTIFY_WINDOW_HANDLE);
@@ -9721,35 +9701,35 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         tipClass.lpfnWndProc=StartTipProc; tipClass.lpszClassName=kStartTipClass;
         UnregisterClassW(kStartTipClass,wc.hInstance);
         if(!RegisterClassExW(&tipClass))
-            Wh_Log(L"Charms port: Start tip class registration failed (%lu)",GetLastError());
+            Wh_Log(L"Start tip class registration failed (%lu)",GetLastError());
         g_startTip=CreateCharmsSurface(
             WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED,
             kStartTipClass,L"Start",WS_POPUP,0,0,DpiScale(kStartTipSize),DpiScale(kStartTipSize),
             nullptr,wc.hInstance);
         if(!g_startTip)
-            Wh_Log(L"Charms port: Start tip creation failed (%lu)",GetLastError());
+            Wh_Log(L"Start tip creation failed (%lu)",GetLastError());
 
         if(g_rail) {
             SetLayeredWindowAttributes(g_rail,0,0,LWA_ALPHA);
             RegisterTouchWindow(g_rail,TWF_WANTPALM);
             if(!SetTimer(g_rail,TIMER_STATUS,1000,nullptr))
-                Wh_Log(L"Charms port: rail status timer failed (%lu)",GetLastError());
+                Wh_Log(L"rail status timer failed (%lu)",GetLastError());
         }
         if(g_clock) SetLayeredWindowAttributes(g_clock,0,255,LWA_ALPHA);
         if(g_menu) SetLayeredWindowAttributes(g_menu,0,255,LWA_ALPHA);
         g_clockStatusTimerActive = g_clock && SetTimer(g_clock,TIMER_CLOCK_STATUS,1000,nullptr) != 0;
         if(g_clock && !g_clockStatusTimerActive)
-            Wh_Log(L"Charms port: clock status timer failed (%lu); using rail timer fallback",GetLastError());
+            Wh_Log(L"clock status timer failed (%lu); using rail timer fallback",GetLastError());
         if(!g_menu)
-            Wh_Log(L"Charms port: optional context-menu window creation failed (%lu)",GetLastError());
+            Wh_Log(L"optional context-menu window creation failed (%lu)",GetLastError());
         if(!g_rail || !g_clock)
-            Wh_Log(L"Charms port: required rail/clock window creation failed (%lu)",GetLastError());
+            Wh_Log(L"required rail/clock window creation failed (%lu)",GetLastError());
 
         RefreshEdgeUiRegistry();
         g_foregroundHook=SetWinEventHook(EVENT_SYSTEM_FOREGROUND,EVENT_SYSTEM_FOREGROUND,
             nullptr,ForegroundEventProc,0,0,WINEVENT_OUTOFCONTEXT);
         if(!g_foregroundHook)
-            Wh_Log(L"Charms port: foreground light-dismiss hook failed (%lu)",GetLastError());
+            Wh_Log(L"foreground light-dismiss hook failed (%lu)",GetLastError());
         g_startSucceeded.store(g_rail!=nullptr && g_clock!=nullptr);
         if(g_ready) SetEvent(g_ready);
 
@@ -9809,7 +9789,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
                         dwell=kStartTipCornerDwellMs;
                     }
                     if(!SetTimer(g_startTip,TIMER_STARTTIP_DWELL,(UINT)dwell,nullptr))
-                        Wh_Log(L"Charms port: Start tip dwell timer failed (%lu)",GetLastError());
+                        Wh_Log(L"Start tip dwell timer failed (%lu)",GetLastError());
                 }
                 continue;
             }
@@ -9822,7 +9802,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
                 // decision point on the timer also covers a dwell that is still waiting: if the
                 // pointer does not come back, that pending dwell must not raise the square later.
                 if(g_startTip && !SetTimer(g_startTip,TIMER_STARTTIP_EXIT,(UINT)kStartTipLeaveGraceMs,nullptr))
-                    Wh_Log(L"Charms port: Start tip exit timer failed (%lu)",GetLastError());
+                    Wh_Log(L"Start tip exit timer failed (%lu)",GetLastError());
                 continue;
             }
             if(message.hwnd==nullptr && message.message==WM_PORT_MENU_COMMAND) {
@@ -9841,7 +9821,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
             DispatchMessageW(&message);
         }
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception in UI thread; shutting down safely");
+        Wh_Log(L"C++ exception in UI thread; shutting down safely");
         g_startSucceeded.store(false);
         g_stop.store(true);
         if(g_ready) SetEvent(g_ready);
@@ -9850,7 +9830,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 
     if(g_foregroundHook) {
         if(!UnhookWinEvent(g_foregroundHook))
-            Wh_Log(L"Charms port: foreground event hook removal failed (%lu)",GetLastError());
+            Wh_Log(L"foreground event hook removal failed (%lu)",GetLastError());
         g_foregroundHook=nullptr;
     }
 
@@ -9858,11 +9838,11 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         if(g_dtm && g_dataRequested) {
             const HRESULT removeResult=g_dtm->remove_DataRequested(g_dataToken);
             if(FAILED(removeResult))
-                Wh_Log(L"Charms port: removing Share event handler failed (0x%08X)",
+                Wh_Log(L"removing Share event handler failed (0x%08X)",
                        (unsigned)removeResult);
         }
     } catch (...) {
-        Wh_Log(L"Charms port: exception while removing Share event handler");
+        Wh_Log(L"exception while removing Share event handler");
     }
     g_dataRequested.Reset();
     g_dtm.Reset();
@@ -9873,18 +9853,18 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     HideMetroContextMenu(false);
     if(g_volumeTip) {
         HideVolumeTip();
-        if(!DestroyWindow(g_volumeTip)) Wh_Log(L"Charms port: value tip destruction failed (%lu)",GetLastError());
+        if(!DestroyWindow(g_volumeTip)) Wh_Log(L"value tip destruction failed (%lu)",GetLastError());
         g_volumeTip=nullptr;
     }
     if(g_volumeFlyout) {
         HideVolumeFlyout();
         if(g_brightnessNotifyCurrent && !UnregisterPowerSettingNotification(g_brightnessNotifyCurrent))
-            Wh_Log(L"Charms port: brightness notification cleanup failed (%lu)",GetLastError());
+            Wh_Log(L"brightness notification cleanup failed (%lu)",GetLastError());
         g_brightnessNotifyCurrent=nullptr;
         if(g_brightnessNotifyPolicy && !UnregisterPowerSettingNotification(g_brightnessNotifyPolicy))
-            Wh_Log(L"Charms port: brightness policy notification cleanup failed (%lu)",GetLastError());
+            Wh_Log(L"brightness policy notification cleanup failed (%lu)",GetLastError());
         g_brightnessNotifyPolicy=nullptr;
-        if(!DestroyWindow(g_volumeFlyout)) Wh_Log(L"Charms port: volume flyout destruction failed (%lu)",GetLastError());
+        if(!DestroyWindow(g_volumeFlyout)) Wh_Log(L"volume flyout destruction failed (%lu)",GetLastError());
         g_volumeFlyout=nullptr;
     }
     // The Start tip lives in the same band and on the same thread as the other surfaces, so it has to be
@@ -9898,43 +9878,43 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         KillTimer(g_startTip,TIMER_STARTTIP_EXIT);
         if(IsWindowVisible(g_startTip)) ShowWindow(g_startTip,SW_HIDE);
         g_startTipShown.store(false);
-        if(!DestroyWindow(g_startTip)) Wh_Log(L"Charms port: Start tip destruction failed (%lu)",GetLastError());
+        if(!DestroyWindow(g_startTip)) Wh_Log(L"Start tip destruction failed (%lu)",GetLastError());
         g_startTip=nullptr;
     }
     if(g_pane) {
         g_paneVisible.store(false);
         KillTimer(g_pane,TIMER_PANE_METRICS);
-        if(!DestroyWindow(g_pane)) Wh_Log(L"Charms port: settings pane destruction failed (%lu)",GetLastError());
+        if(!DestroyWindow(g_pane)) Wh_Log(L"settings pane destruction failed (%lu)",GetLastError());
         g_pane=nullptr;
     }
     DiscardPaneSlideCache();
     if(g_menu) {
-        if(!DestroyWindow(g_menu)) Wh_Log(L"Charms port: menu window destruction failed (%lu)",GetLastError());
+        if(!DestroyWindow(g_menu)) Wh_Log(L"menu window destruction failed (%lu)",GetLastError());
         g_menu=nullptr;
     }
     if(g_clock) {
-        if(!DestroyWindow(g_clock)) Wh_Log(L"Charms port: clock window destruction failed (%lu)",GetLastError());
+        if(!DestroyWindow(g_clock)) Wh_Log(L"clock window destruction failed (%lu)",GetLastError());
         g_clock=nullptr;
     }
     if(g_rail) {
-        if(!DestroyWindow(g_rail)) Wh_Log(L"Charms port: rail window destruction failed (%lu)",GetLastError());
+        if(!DestroyWindow(g_rail)) Wh_Log(L"rail window destruction failed (%lu)",GetLastError());
         g_rail=nullptr;
     }
     g_clockStatusTimerActive=false;
     if(!UnregisterClassW(kVolumeTipClass,(HINSTANCE)&__ImageBase) && GetLastError()!=ERROR_CLASS_DOES_NOT_EXIST)
-        Wh_Log(L"Charms port: value tip class cleanup failed (%lu)",GetLastError());
+        Wh_Log(L"value tip class cleanup failed (%lu)",GetLastError());
     if(!UnregisterClassW(kVolumeFlyoutClass,(HINSTANCE)&__ImageBase) && GetLastError()!=ERROR_CLASS_DOES_NOT_EXIST)
-        Wh_Log(L"Charms port: volume flyout class cleanup failed (%lu)",GetLastError());
+        Wh_Log(L"volume flyout class cleanup failed (%lu)",GetLastError());
     if(!UnregisterClassW(kPaneClass,(HINSTANCE)&__ImageBase) && GetLastError()!=ERROR_CLASS_DOES_NOT_EXIST)
-        Wh_Log(L"Charms port: settings pane class cleanup failed (%lu)",GetLastError());
+        Wh_Log(L"settings pane class cleanup failed (%lu)",GetLastError());
     if(!UnregisterClassW(kMenuClass,(HINSTANCE)&__ImageBase) && GetLastError()!=ERROR_CLASS_DOES_NOT_EXIST)
-        Wh_Log(L"Charms port: menu window class cleanup failed (%lu)",GetLastError());
+        Wh_Log(L"menu window class cleanup failed (%lu)",GetLastError());
     if(!UnregisterClassW(kClockClass,(HINSTANCE)&__ImageBase) && GetLastError()!=ERROR_CLASS_DOES_NOT_EXIST)
-        Wh_Log(L"Charms port: clock window class cleanup failed (%lu)",GetLastError());
+        Wh_Log(L"clock window class cleanup failed (%lu)",GetLastError());
     if(!UnregisterClassW(kRailClass,(HINSTANCE)&__ImageBase) && GetLastError()!=ERROR_CLASS_DOES_NOT_EXIST)
-        Wh_Log(L"Charms port: rail window class cleanup failed (%lu)",GetLastError());
+        Wh_Log(L"rail window class cleanup failed (%lu)",GetLastError());
     if(!UnregisterClassW(kStartTipClass,(HINSTANCE)&__ImageBase) && GetLastError()!=ERROR_CLASS_DOES_NOT_EXIST)
-        Wh_Log(L"Charms port: Start tip class cleanup failed (%lu)",GetLastError());
+        Wh_Log(L"Start tip class cleanup failed (%lu)",GetLastError());
 
     if(SUCCEEDED(roInit)) RoUninitialize();
     if(g_gdiplusToken) {
@@ -9995,7 +9975,7 @@ DWORD WINAPI ShellHostSupervisorProc(LPVOID) {
     int startAttempts=0;
     unsigned readyPolls=0;
     ShellHostState lastState=ShellHostState::NotReady;
-    Wh_Log(L"Charms port: supervisor started for pid %lu",GetCurrentProcessId());
+    Wh_Log(L"supervisor started for pid %lu",GetCurrentProcessId());
     for(;;) {
         if(g_supervisorStop.load()) break;
         const ShellHostState state=QueryShellHostState();
@@ -10003,28 +9983,28 @@ DWORD WINAPI ShellHostSupervisorProc(LPVOID) {
             DWORD shellPid=0;
             const HWND shell=GetShellWindow();
             if(shell) GetWindowThreadProcessId(shell,&shellPid);
-            Wh_Log(L"Charms port: shell host state is now %s (shell pid %lu, this pid %lu)",
+            Wh_Log(L"shell host state is now %s (shell pid %lu, this pid %lu)",
                    ShellHostStateName(state),(unsigned long)shellPid,GetCurrentProcessId());
             lastState=state;
         }
         if(state==ShellHostState::OtherLive) {
-            Wh_Log(L"Charms port: another live Explorer process owns the shell window; "
+            Wh_Log(L"another live Explorer process owns the shell window; "
                    L"the Charms Bar stays idle in this process (this is the normal case for extra explorer.exe instances)");
             break;
         }
         if(state==ShellHostState::Host) {
             if(g_charmsServicesStarted.load()) break;
             ++startAttempts;
-            Wh_Log(L"Charms port: shell window is ready, starting the Charms Bar (attempt %d of %d)",
+            Wh_Log(L"shell window is ready, starting the Charms Bar (attempt %d of %d)",
                    startAttempts,kMaxStartAttempts);
             if(StartCharmsServices()) {
                 g_charmsServicesStarted.store(true);
-                Wh_Log(L"Charms port: Charms Bar initialized and running in pid %lu",GetCurrentProcessId());
+                Wh_Log(L"Charms Bar initialized and running in pid %lu",GetCurrentProcessId());
                 break;
             }
-            Wh_Log(L"Charms port: startup attempt %d failed",startAttempts);
+            Wh_Log(L"startup attempt %d failed",startAttempts);
             if(startAttempts>=kMaxStartAttempts) {
-                Wh_Log(L"Charms port: giving up after %d startup attempts; the mod stays loaded but idle",
+                Wh_Log(L"giving up after %d startup attempts; the mod stays loaded but idle",
                        kMaxStartAttempts);
                 break;
             }
@@ -10035,11 +10015,11 @@ DWORD WINAPI ShellHostSupervisorProc(LPVOID) {
         // Explorer). Poll every 250 ms and log the wait every 30 s so an idle log still shows the mod is
         // alive and what it is waiting for.
         if(readyPolls==0 || readyPolls%120==0)
-            Wh_Log(L"Charms port: waiting for this process to own the shell window (poll %u)",readyPolls);
+            Wh_Log(L"waiting for this process to own the shell window (poll %u)",readyPolls);
         ++readyPolls;
         Sleep(250);
     }
-    Wh_Log(L"Charms port: supervisor exiting for pid %lu",GetCurrentProcessId());
+    Wh_Log(L"supervisor exiting for pid %lu",GetCurrentProcessId());
     return 0;
 }
 
@@ -10048,7 +10028,7 @@ bool StartSupervisorIfNeeded() {
     g_supervisorStop.store(false);
     g_supervisorThread=CreateThread(nullptr,0,ShellHostSupervisorProc,nullptr,0,nullptr);
     if(!g_supervisorThread) {
-        Wh_Log(L"Charms port: supervisor thread creation failed (%lu)",GetLastError());
+        Wh_Log(L"supervisor thread creation failed (%lu)",GetLastError());
         return false;
     }
     return true;
@@ -10102,7 +10082,7 @@ bool StartCharmsServices() {
     g_animFromAlpha=g_animFromSlide=g_animToSlide=g_animDurationMs=0;
     g_animStartQpc=g_animQpcFrequency=0;
     g_edgeLatched.store(false); g_menuEdgeLatched.store(false); g_edgePosted.store(false);
-    g_edgeSince.store(0); g_leaveSince.store(0);
+    g_edgeSince.store(0);
     g_searchTarget.store(0); g_searchKnownOpen.store(false); g_searchVerifyTick.store(0);
     g_companionStartRetryAfter.store(0);
 
@@ -10113,19 +10093,19 @@ bool StartCharmsServices() {
         if (g_ready) CloseHandle(g_ready);
         if (g_hookReady) CloseHandle(g_hookReady);
         g_ready = g_hookReady = nullptr;
-        Wh_Log(L"Charms port: startup event creation failed (%lu)", GetLastError());
+        Wh_Log(L"startup event creation failed (%lu)", GetLastError());
         return false;
     }
 
     g_thread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, &g_threadId);
     if (!g_thread) {
-        Wh_Log(L"Charms port: UI thread creation failed (%lu)", GetLastError());
+        Wh_Log(L"UI thread creation failed (%lu)", GetLastError());
         CloseHandle(g_ready); CloseHandle(g_hookReady);
         g_ready = g_hookReady = nullptr;
         return false;
     }
     if (WaitForSingleObject(g_ready, 15000) != WAIT_OBJECT_0 || !g_startSucceeded.load()) {
-        Wh_Log(L"Charms port: UI startup timed out or required windows failed");
+        Wh_Log(L"UI startup timed out or required windows failed");
         g_stop.store(true);
         if (g_threadId) PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_thread, INFINITE);
@@ -10138,7 +10118,7 @@ bool StartCharmsServices() {
     g_hookThread = CreateThread(nullptr, 0, InputHookThreadProc, nullptr, 0, &g_hookThreadId);
     if (!g_hookThread || WaitForSingleObject(g_hookReady, 8000) != WAIT_OBJECT_0 ||
         !g_hooksSucceeded.load() || !g_startSucceeded.load() || g_stop.load()) {
-        Wh_Log(L"Charms port: input hook thread failed to start");
+        Wh_Log(L"input hook thread failed to start");
         g_stop.store(true);
         if (g_hookThreadId) PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
         if (g_threadId) PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
@@ -10149,13 +10129,13 @@ bool StartCharmsServices() {
         return false;
     }
     DisplaySwitchMod::Init(); // logs its own failures; the Charms Bar keeps running either way
-    Wh_Log(L"Charms port: v%s services started (rail=0x%p clock=0x%p menu=0x%p pane=0x%p volume=0x%p, "
+    Wh_Log(L"v%s services started (rail=0x%p clock=0x%p menu=0x%p pane=0x%p volume=0x%p, "
            L"keyboard hook=%s, mouse hook=%s, foreground hook=%s)",
            kModVersion,(void*)g_rail,(void*)g_clock,(void*)g_menu,(void*)g_pane,(void*)g_volumeFlyout,
            g_keyboardHook?L"ok":L"failed",g_mouseHook?L"ok":L"failed",g_foregroundHook?L"ok":L"failed");
     return true;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception during mod initialization; cleaning up");
+        Wh_Log(L"C++ exception during mod initialization; cleaning up");
         StopAndJoinWorkers();
         return false;
     }
@@ -10172,28 +10152,28 @@ BOOL InitializeCharmsMod() {
     const HWND shell=GetShellWindow();
     DWORD shellPid=0;
     if(shell) GetWindowThreadProcessId(shell,&shellPid);
-    Wh_Log(L"Charms port: v%s, Wh_ModInit: pid=%lu, session=%lu, shell pid=%lu, state=%s",
+    Wh_Log(L"v%s, Wh_ModInit: pid=%lu, session=%lu, shell pid=%lu, state=%s",
            kModVersion,GetCurrentProcessId(),(unsigned long)sessionId,(unsigned long)shellPid,
            ShellHostStateName(state));
 
     if(state==ShellHostState::Host) {
         if(StartCharmsServices()) {
             g_charmsServicesStarted.store(true);
-            Wh_Log(L"Charms port: v%s initialized in pid %lu",kModVersion,GetCurrentProcessId());
+            Wh_Log(L"v%s initialized in pid %lu",kModVersion,GetCurrentProcessId());
             return TRUE;
         }
-        Wh_Log(L"Charms port: immediate start failed; handing over to the supervisor");
+        Wh_Log(L"immediate start failed; handing over to the supervisor");
     } else if(state==ShellHostState::OtherLive) {
-        Wh_Log(L"Charms port: another live Explorer process owns the shell window; this process stays idle");
+        Wh_Log(L"another live Explorer process owns the shell window; this process stays idle");
         return TRUE;
     } else {
-        Wh_Log(L"Charms port: shell window not ready yet (the usual state right after an Explorer restart); "
+        Wh_Log(L"shell window not ready yet (the usual state right after an Explorer restart); "
                L"startup is deferred to the supervisor");
     }
     // Returning TRUE keeps the mod loaded so the supervisor can finish the job once the shell is up. A
     // FALSE return would make Windhawk unload the mod for this Explorer process until it is restarted again.
     if(!StartSupervisorIfNeeded())
-        Wh_Log(L"Charms port: WARNING supervisor could not be started; the Charms Bar will not initialize in this process");
+        Wh_Log(L"WARNING supervisor could not be started; the Charms Bar will not initialize in this process");
     return TRUE;
 }
 
@@ -10201,20 +10181,20 @@ BOOL Wh_ModInit() {
     try {
         return InitializeCharmsMod();
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception during Wh_ModInit");
+        Wh_Log(L"C++ exception during Wh_ModInit");
         return FALSE;
     }
 }
 
 // Optional Windhawk callback: runs after Wh_ModInit and after the engine finished applying hooks.
 void Wh_ModAfterInit() {
-    Wh_Log(L"Charms port: v%s, Wh_ModAfterInit: pid=%lu, services started=%s, supervisor=%s",
+    Wh_Log(L"v%s, Wh_ModAfterInit: pid=%lu, services started=%s, supervisor=%s",
            kModVersion,GetCurrentProcessId(),
            g_charmsServicesStarted.load()?L"yes":L"no",g_supervisorThread?L"yes":L"no");
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"Charms port: v%s, Wh_ModUninit: pid=%lu, services started=%s",
+    Wh_Log(L"v%s, Wh_ModUninit: pid=%lu, services started=%s",
            kModVersion,GetCurrentProcessId(),g_charmsServicesStarted.load()?L"yes":L"no");
     StopSupervisor();
     DisplaySwitchMod::Uninit();
@@ -10234,33 +10214,33 @@ void Wh_ModUninit() {
     if (g_ready) { CloseHandle(g_ready); g_ready = nullptr; }
     g_hookThreadId = g_threadId = 0;
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception during mod uninitialization; forcing worker cleanup");
+        Wh_Log(L"C++ exception during mod uninitialization; forcing worker cleanup");
         StopAndJoinWorkers();
     }
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"Charms port: settings changed (pid %lu, services started=%s)",
+    Wh_Log(L"settings changed (pid %lu, services started=%s)",
            GetCurrentProcessId(),g_charmsServicesStarted.load()?L"yes":L"no");
     DisplaySwitchMod::SettingsChanged();
     try {
         ReadWindhawkSettings();
         RefreshSystemAccent();
-        Wh_Log(L"Charms port: settings applied (charms=%s, language=%d, animation=%s, system animations=%s)",
+        Wh_Log(L"settings applied (charms=%s, language=%d, animation=%s, system animations=%s)",
                g_charmsEnabled.load()?L"on":L"off",g_uiLanguage.load(),g_useAnimations.load()?L"on":L"off",
                SystemAnimationsEnabled()?L"on":L"off");
-        Wh_Log(L"Charms port: search target=%s, Windows 8 Search Charm panel=%s",
+        Wh_Log(L"search target=%s, Windows 8 Search Charm panel=%s",
                g_searchTarget.load()==0?L"automatic":L"windows search only",
                FindCompanionSearchPanel()?L"present (opened through its own window)":L"not found (Win+S fallback)");
         {
             const HWND startScreen=FindCompanionStartScreen();
             const int interop=CompanionInteropVersion(startScreen);
-            Wh_Log(L"Charms port: Windows 8 Start Screen mod=%s, interop v%d (%s)",
+            Wh_Log(L"Windows 8 Start Screen mod=%s, interop v%d (%s)",
                    startScreen?L"present":L"not found (Start charm uses the Windows key)",interop,
                    interop>=kCompanionInteropMessageVersion?L"registered open message"
                                                           :L"WM_APP+1 toggle");
         }
     } catch (...) {
-        Wh_Log(L"Charms port: C++ exception while applying settings");
+        Wh_Log(L"C++ exception while applying settings");
     }
 }
