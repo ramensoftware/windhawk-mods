@@ -6,7 +6,7 @@
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
-// @compilerOptions -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32
+// @compilerOptions -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof
 // @donateUrl       https://ko-fi.com/gilnet
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -29,7 +29,6 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 
 ### 2. Background Throttling
 - Temporarily reduces the CPU priority of background processes exceeding defined utilization thresholds.
-- Optionally applies deep thread-level I/O background mode (`THREAD_MODE_BACKGROUND_BEGIN`) to minimize disk I/O and SSD latency.
 - Optionally restricts throttled tasks to efficiency cores or applies Windows EcoQoS.
 
 ### 3. Audio & Network Protection
@@ -46,17 +45,15 @@ Dynamically manages process priorities and memory allocation to keep foreground 
 
 ### 6. Dynamic Power Scheme
 - Automatically engages the High Performance power plan during demanding workloads on AC power.
-- Restores the original system power plan when returning to the desktop or entering sleep.
+- Note: Switches the system-wide power plan for all users. The original plan is restored upon returning to desktop or when the mod is disabled. If the PC crashes, loses power, or if a user signs out while High Performance is active, the plan can stay active until the mod restarts (or permanently if the mod is removed while engaged).
 
 ### 7. Inactive Browser Tab Trimming
 - Detects dormant background browser renderers and trims their unused memory while keeping active tabs intact.
 
-### 8. Passive Environment Diagnostics
-- Passively detects and logs Hardware-Accelerated GPU Scheduling (HAGS), Virtualization-Based Security (VBS/Core Isolation), and Memory Compression status.
-
 ## Settings
 
 - **Foreground priority boost**: Automatically increases the CPU priority of the active foreground window.
+- **Dynamic high-performance power scheme**: Temporarily activates the High Performance power scheme for demanding workloads on AC power.
 - **Throttle CPU-heavy background processes**: Temporarily lowers priority of background processes consuming excessive CPU.
 - **Process startup grace period**: Minimum age in seconds a process must have before its memory can be optimized or trimmed (default: 5 seconds). Protects processes during initialization and JIT compilation.
 - **Standard free RAM threshold**: Percentage of available physical memory below which background memory cleanup is triggered.
@@ -101,9 +98,6 @@ If you find this mod useful, you can support its development and maintenance:
 - enableBackgroundThrottling: true
   $name: 2. Throttle CPU-Heavy Background Processes
   $description: Temporarily lowers the priority of background processes consuming excessive CPU while you are working.
-- enableThreadBackgroundMode: false
-  $name: Deep Background I/O & CPU Mode
-  $description: Places threads of throttled background processes into Windows background mode (THREAD_MODE_BACKGROUND_BEGIN) to minimize disk I/O and SSD latency.
 - enableBackgroundCpuSets: false
   $name: Restrict Throttled Background Apps to E-Cores
   $description: Confines throttled background tasks to Efficiency Cores (E-cores) on hybrid Intel/AMD CPUs, reserving P-cores for your active app.
@@ -116,12 +110,6 @@ If you find this mod useful, you can support its development and maintenance:
 - systemCpuContentionThresholdPercent: 60
   $name: System Contention Trigger Threshold (%)
   $description: Total system CPU usage (load) required before background throttling can engage (e.g. 60% CPU in use, not idle).
-- backgroundThrottlePriorityLevel: "belowNormal"
-  $name: Background Throttle Priority Level
-  $description: Priority class applied to throttled background processes.
-  $options:
-    - "belowNormal": Below Normal (Recommended)
-    - "idle": Idle (Strict Throttling)
 - enableAudioShielding: true
   $name: 3. Audio & Music Protection Shield
   $description: Shields applications actively streaming or playing audio (Spotify, YouTube, DAWs, games) against throttling and memory sweeps.
@@ -151,7 +139,7 @@ If you find this mod useful, you can support its development and maintenance:
   $description: Reclaims memory from listed heavy apps once their memory exceeds the configured cap, without waiting for system-wide RAM pressure.
 - electronMemoryCapMb: 300
   $name: Heavy Apps Memory Cap (MB)
-  $description: Maximum memory threshold before an inactive listed application is cleaned (100 to 2000 MB).
+  $description: Maximum memory threshold before an inactive listed application is cleaned (100 to 4000 MB).
 - processStartupGraceSeconds: 5
   $name: Process Startup Grace Period (seconds)
   $description: Minimum age in seconds a newly spawned process must reach before being eligible for memory trimming or priority throttling (1 to 60s, default 5s). Prevents page faults and access violations during process initialization and JIT compilation.
@@ -182,6 +170,9 @@ If you find this mod useful, you can support its development and maintenance:
 #endif
 
 #include <windows.h>
+
+// Must follow windows.h for ULONG and WINAPI_FAMILY_PARTITION
+#include <powrprof.h>
 
 #include <windhawk_utils.h>
 
@@ -305,18 +296,15 @@ static DWORD GetSystemCoreCount() {
 struct SystemHardwareProfile {
     double totalRamGb = 0.0;
     DWORD coreCount = 0;
-    bool isLowRamTier = false;              // < 12 GB
-    bool isHighRamTier = false;             // >= 24 GB
-    bool isLowCoreCount = false;            // <= 4 cores
-    bool isHybridCpu = false;               // Heterogeneous CPU architecture
-    bool isHagsEnabled = false;             // Hardware-Accelerated GPU Scheduling
-    bool isVbsEnabled = false;              // Virtualization-Based Security (Core Isolation)
-    bool isMemoryCompressionActive = false; // Windows Memory Compression
-    std::vector<ULONG> pCoreCpuSetIds;      // Performance core IDs
-    std::vector<ULONG> eCoreCpuSetIds;      // Efficiency core IDs
+    bool isLowRamTier = false;         // < 12 GB
+    bool isHighRamTier = false;        // >= 24 GB
+    bool isLowCoreCount = false;       // <= 4 cores
+    bool isHybridCpu = false;          // Heterogeneous CPU architecture
+    std::vector<ULONG> pCoreCpuSetIds; // Performance core IDs
+    std::vector<ULONG> eCoreCpuSetIds; // Efficiency core IDs
 };
 
-static SystemHardwareProfile GetHardwareProfile() {
+static const SystemHardwareProfile& GetHardwareProfile() {
     static const SystemHardwareProfile profile = [] {
         SystemHardwareProfile p;
         MEMORYSTATUSEX mem{};
@@ -328,47 +316,6 @@ static SystemHardwareProfile GetHardwareProfile() {
         p.isLowRamTier = (p.totalRamGb > 0.0 && p.totalRamGb < 12.0);
         p.isHighRamTier = (p.totalRamGb >= 24.0);
         p.isLowCoreCount = (p.coreCount <= 4);
-
-        HKEY hKeyGfx = nullptr;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                          L"SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers",
-                          0, KEY_READ, &hKeyGfx) == ERROR_SUCCESS) {
-            DWORD val = 0;
-            DWORD sz = sizeof(val);
-            if (RegQueryValueExW(hKeyGfx, L"HwSchMode", nullptr, nullptr,
-                                 reinterpret_cast<LPBYTE>(&val), &sz) == ERROR_SUCCESS) {
-                p.isHagsEnabled = (val == 2);
-            }
-            RegCloseKey(hKeyGfx);
-        }
-
-        HKEY hKeyDg = nullptr;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                          L"SYSTEM\\CurrentControlSet\\Control\\DeviceGuard",
-                          0, KEY_READ, &hKeyDg) == ERROR_SUCCESS) {
-            DWORD val = 0;
-            DWORD sz = sizeof(val);
-            if (RegQueryValueExW(hKeyDg, L"EnableVirtualizationBasedSecurity", nullptr,
-                                 nullptr, reinterpret_cast<LPBYTE>(&val), &sz) == ERROR_SUCCESS) {
-                p.isVbsEnabled = (val == 1);
-            }
-            RegCloseKey(hKeyDg);
-        }
-
-        SC_HANDLE hSCM = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
-        if (hSCM) {
-            SC_HANDLE hSvc = OpenServiceW(hSCM, L"SysMain", SERVICE_QUERY_STATUS);
-            if (hSvc) {
-                SERVICE_STATUS_PROCESS ssp{};
-                DWORD bytesNeeded = 0;
-                if (QueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO,
-                                         reinterpret_cast<LPBYTE>(&ssp), sizeof(ssp), &bytesNeeded)) {
-                    p.isMemoryCompressionActive = (ssp.dwCurrentState == SERVICE_RUNNING);
-                }
-                CloseServiceHandle(hSvc);
-            }
-            CloseServiceHandle(hSCM);
-        }
 
         HMODULE hK32 = GetModuleHandleW(L"kernel32.dll");
         if (hK32) {
@@ -470,20 +417,9 @@ static double GetEffectiveRamThreshold(int userSettingPercent, double totalRamGb
 // Settings Structure & Enums
 // ---------------------------------------------------------------------------
 
-enum class CleanMode : uint8_t {
-    SmartThreshold,
-    Periodic,
-    SmartAndPeriodic,
-};
-
 enum class ForegroundPrioritySetting : uint8_t {
     AboveNormal,
     High,
-};
-
-enum class ThrottlePrioritySetting : uint8_t {
-    BelowNormal,
-    Idle,
 };
 
 enum class LogDetailLevel : uint8_t {
@@ -499,11 +435,8 @@ struct ModSettings {
     bool enableForegroundCpuSets = false;
     bool enableBackgroundCpuSets = false;
     bool enableBackgroundThrottling = true;
-    bool enableThreadBackgroundMode = false;
     int backgroundCpuThrottleThresholdPercent = 15;
     int systemCpuContentionThresholdPercent = 60;
-    ThrottlePrioritySetting backgroundThrottlePriorityLevel =
-        ThrottlePrioritySetting::BelowNormal;
     bool enableEcoQosManagement = false;
     bool enableNetworkShielding = true;
     bool enableSmartAiOptimization = true;
@@ -512,10 +445,8 @@ struct ModSettings {
     bool enableAudioShielding = true;
     bool enableMultitaskingAdaptation = true;
     bool enableGameModeDetection = true;
-    CleanMode cleanMode = CleanMode::SmartThreshold;
     int freeRamThresholdPercent = 0;
     bool enableTieredRamThreshold = true;
-    int tieredHogThresholdPercent = 40;
     bool enableIdleBoost = true;
     int idleThresholdMinutes = 15;
     bool trimMinimizedWindows = true;
@@ -526,8 +457,6 @@ struct ModSettings {
     int electronMemoryCapMb = 300;
     bool cleanBackgroundWorkingSets = true;
     DWORD minProcessMemoryToTrimMb = 50;
-    int periodicIntervalMinutes = 10;
-    bool targetProcessesOnly = false;
     std::vector<std::wstring> customTargetList;
     std::vector<std::wstring> excludedProcesses;
     bool enablePanicHotkey = true;
@@ -542,7 +471,6 @@ struct ModSettings {
     bool pauseOnBattery = true;
     int processStartupGraceSeconds = 5;
     int checkIntervalSec = 10;
-    LogDetailLevel logDetailLevel = LogDetailLevel::Detailed;
 };
 
 static ModSettings g_settings;
@@ -579,33 +507,17 @@ static std::atomic<bool> g_gameSweepRequested{false};
 // an original priority set by the other.
 static std::mutex g_priorityMutex;
 
-// ARCH-01: Unified Process State Machine (FSM)
-enum class ProcessState : uint8_t {
-    Untracked = 0,
-    ForegroundBoosted,
-    ShieldedAudioNetwork,
-    BackgroundNormal,
-    BackgroundThrottled,
-    DormantPaged,
-};
-
-struct ProcessContext {
-    DWORD pid = 0;
-    std::wstring name;
-    ProcessState state = ProcessState::Untracked;
+// // Soft-trimmed memory priority tracker, guarded by g_priorityMutex.
+// Holds an open handle to prevent PID recycling and guarantees full reversibility.
+struct SoftTrimmedMemoryInfo {
     HANDLE hProcess = nullptr;
-    DWORD originalPriority = NORMAL_PRIORITY_CLASS;
-    ULONG originalIoPriority = IoPriorityNormal;
     ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
-    bool ecoQosApplied = false;
-    bool cpuSetsApplied = false;
-    bool threadBackgroundApplied = false;
-    std::chrono::steady_clock::time_point stateEnteredAt{};
 };
-static std::unordered_map<DWORD, ProcessContext> g_processContexts;
+static std::unordered_map<DWORD, SoftTrimmedMemoryInfo> g_softTrimmedProcesses;
 
 struct BoostedProcessEntry {
     DWORD pid = 0;
+    std::wstring procName;
     HANDLE hProcess = nullptr;
     DWORD originalPriority = NORMAL_PRIORITY_CLASS;
     ULONG originalIoPriority = IoPriorityNormal;
@@ -621,15 +533,6 @@ static std::atomic<ULONGLONG> g_lastFocusChangeTick{0};
 // Dynamic Power Plan Management (High Performance on Demand & POWR-02 Async Dispatch)
 // ---------------------------------------------------------------------------
 
-typedef DWORD(WINAPI* pfnPowerGetActiveScheme)(HKEY UserRootPowerKey,
-                                               GUID** ActivePolicyGuid);
-typedef DWORD(WINAPI* pfnPowerSetActiveScheme)(HKEY UserRootPowerKey,
-                                               const GUID* SchemeGuid);
-
-static pfnPowerGetActiveScheme g_pfnPowerGetActiveScheme = nullptr;
-static pfnPowerSetActiveScheme g_pfnPowerSetActiveScheme = nullptr;
-static HMODULE g_hPowrProf = nullptr;
-
 static const GUID kGuidHighPerformance = {
     0x8c5e7fda, 0xe8bf, 0x4a96, {0x9a, 0x85, 0xa6, 0xe2, 0x3a, 0x8e, 0x63, 0x5c}};
 
@@ -644,59 +547,34 @@ static std::atomic<bool> g_powerWorkerRunning{false};
 static HANDLE g_powerWakeEvent = nullptr;
 [[clang::no_destroy]] static std::optional<std::thread> g_powerWorkerThread;
 
-static const wchar_t* kPowerSchemeRegKey =
-    L"Software\\Windhawk\\SmartProcessOptimizer";
-static const wchar_t* kPowerSchemeRegValOriginal = L"OriginalPowerScheme";
-static const wchar_t* kPowerSchemeRegValActive = L"HighPerformanceEngaged";
-
-static void SavePowerSchemeToRegistry(const GUID& guid, bool engaged) {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kPowerSchemeRegKey, 0, nullptr,
-                        REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &hKey,
-                        nullptr) == ERROR_SUCCESS) {
-        RegSetValueExW(hKey, kPowerSchemeRegValOriginal, 0, REG_BINARY,
-                       reinterpret_cast<const BYTE*>(&guid), sizeof(GUID));
-        DWORD valEngaged = engaged ? 1 : 0;
-        RegSetValueExW(hKey, kPowerSchemeRegValActive, 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&valEngaged),
-                       sizeof(DWORD));
-        RegCloseKey(hKey);
-    }
+static void SavePowerSchemeState(const GUID& guid, bool engaged) {
+    Wh_SetBinaryValue(L"OriginalPowerScheme", &guid, sizeof(GUID));
+    Wh_SetIntValue(L"HighPerformanceEngaged", engaged ? 1 : 0);
 }
 
-static void ClearPowerSchemeRegistry() {
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kPowerSchemeRegKey, 0, KEY_SET_VALUE,
-                      &hKey) == ERROR_SUCCESS) {
-        DWORD valEngaged = 0;
-        RegSetValueExW(hKey, kPowerSchemeRegValActive, 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&valEngaged),
-                       sizeof(DWORD));
-        RegCloseKey(hKey);
-    }
+static void ClearPowerSchemeState() {
+    Wh_DeleteValue(L"HighPerformanceEngaged");
 }
 
 static void RestoreOriginalPowerScheme() {
     std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (!g_isHighPerformanceActive.load() || !g_hasOriginalPowerScheme ||
-        !g_pfnPowerSetActiveScheme) {
+    if (!g_isHighPerformanceActive.load() || !g_hasOriginalPowerScheme) {
         return;
     }
-    g_pfnPowerSetActiveScheme(nullptr, &g_originalPowerScheme);
+    PowerSetActiveScheme(nullptr, &g_originalPowerScheme);
     g_isHighPerformanceActive.store(false);
-    ClearPowerSchemeRegistry();
-    Wh_Log(L"[SmartOptimizer] Restored original system power plan.");
+    ClearPowerSchemeState();
+    Wh_Log(L"Restored original system power plan.");
 }
 
 static void EngageHighPerformancePowerScheme() {
     std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (g_isHighPerformanceActive.load() || !g_pfnPowerGetActiveScheme ||
-        !g_pfnPowerSetActiveScheme) {
+    if (g_isHighPerformanceActive.load()) {
         return;
     }
 
     GUID* pCurrent = nullptr;
-    if (g_pfnPowerGetActiveScheme(nullptr, &pCurrent) == ERROR_SUCCESS && pCurrent) {
+    if (PowerGetActiveScheme(nullptr, &pCurrent) == ERROR_SUCCESS && pCurrent) {
         if (IsEqualGUID(*pCurrent, kGuidHighPerformance)) {
             LocalFree(pCurrent);
             return;
@@ -706,11 +584,11 @@ static void EngageHighPerformancePowerScheme() {
         g_hasOriginalPowerScheme = true;
         LocalFree(pCurrent);
 
-        SavePowerSchemeToRegistry(g_originalPowerScheme, /*engaged=*/true);
+        SavePowerSchemeState(g_originalPowerScheme, /*engaged=*/true);
 
-        if (g_pfnPowerSetActiveScheme(nullptr, &kGuidHighPerformance) == ERROR_SUCCESS) {
+        if (PowerSetActiveScheme(nullptr, &kGuidHighPerformance) == ERROR_SUCCESS) {
             g_isHighPerformanceActive.store(true);
-            Wh_Log(L"[SmartOptimizer] Switched system power plan to High Performance for active foreground workload.");
+            Wh_Log(L"Switched system power plan to High Performance for active foreground workload.");
         }
     }
 }
@@ -732,7 +610,7 @@ static void PowerSchemeWorkerProc() {
             }
         }
     } catch (...) {
-        Wh_Log(L"[SmartOptimizer] PowerSchemeWorkerProc unhandled exception caught.");
+        Wh_Log(L"PowerSchemeWorkerProc unhandled exception caught.");
     }
 }
 
@@ -744,31 +622,12 @@ static void RequestPowerSchemeAsync(bool highPerformance) {
 }
 
 static void CheckAndRecoverCrashedPowerScheme() {
-    if (!g_pfnPowerSetActiveScheme)
-        return;
-    HKEY hKey = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kPowerSchemeRegKey, 0, KEY_READ | KEY_SET_VALUE,
-                      &hKey) == ERROR_SUCCESS) {
-        DWORD valEngaged = 0;
-        DWORD cbEngaged = sizeof(valEngaged);
-        if (RegQueryValueExW(hKey, kPowerSchemeRegValActive, nullptr, nullptr,
-                             reinterpret_cast<BYTE*>(&valEngaged),
-                             &cbEngaged) == ERROR_SUCCESS &&
-            valEngaged == 1) {
-            GUID savedGuid{};
-            DWORD cbGuid = sizeof(savedGuid);
-            if (RegQueryValueExW(hKey, kPowerSchemeRegValOriginal, nullptr,
-                                 nullptr, reinterpret_cast<BYTE*>(&savedGuid),
-                                 &cbGuid) == ERROR_SUCCESS &&
-                cbGuid == sizeof(GUID)) {
-                g_pfnPowerSetActiveScheme(nullptr, &savedGuid);
-                Wh_Log(L"[SmartOptimizer] Recovered and restored original power scheme after previous crash or shutdown.");
-            }
-            DWORD zero = 0;
-            RegSetValueExW(hKey, kPowerSchemeRegValActive, 0, REG_DWORD,
-                           reinterpret_cast<const BYTE*>(&zero), sizeof(DWORD));
-        }
-        RegCloseKey(hKey);
+    GUID saved{};
+    if (Wh_GetIntValue(L"HighPerformanceEngaged", 0) &&
+        Wh_GetBinaryValue(L"OriginalPowerScheme", &saved, sizeof(saved)) == sizeof(saved)) {
+        PowerSetActiveScheme(nullptr, &saved);
+        Wh_DeleteValue(L"HighPerformanceEngaged");
+        Wh_Log(L"Recovered and restored original power scheme after previous crash or shutdown.");
     }
 }
 
@@ -794,7 +653,6 @@ struct ThrottledProcessInfo {
     ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
     bool ecoQosApplied = false;
     bool cpuSetsApplied = false;
-    bool threadBackgroundApplied = false;
     DWORD staleSampleCount = 0;
 };
 static std::unordered_map<DWORD, ThrottledProcessInfo>
@@ -986,7 +844,6 @@ static bool IsGamingLockdownActive(DWORD fgPid,
     return true;
 }
 
-static std::chrono::steady_clock::time_point g_lastPeriodicCleanTime{};
 static std::chrono::steady_clock::time_point g_lastTriggerCleanTime{};
 static std::chrono::steady_clock::time_point g_lastIdleCleanTime{};
 static bool g_wasIdle = false;
@@ -1045,28 +902,28 @@ enum class LogCategory : uint8_t {
 };
 
 static void LogEvent(LogCategory cat, LogDetailLevel /*minLevel*/, const wchar_t* format, ...) {
-    const wchar_t* prefix = L"[SmartOptimizer]";
+    const wchar_t* categoryTag = L"";
     switch (cat) {
     case LogCategory::Boot:
-        prefix = L"[SmartOptimizer::Boot]";
+        categoryTag = L"[Boot] ";
         break;
     case LogCategory::ProBalance:
-        prefix = L"[SmartOptimizer::ProBalance]";
+        categoryTag = L"[ProBalance] ";
         break;
     case LogCategory::Throttler:
-        prefix = L"[SmartOptimizer::Throttler]";
+        categoryTag = L"[Throttler] ";
         break;
     case LogCategory::Sanctuary:
-        prefix = L"[SmartOptimizer::Sanctuary]";
+        categoryTag = L"[Sanctuary] ";
         break;
     case LogCategory::Memory:
-        prefix = L"[SmartOptimizer::Memory]";
+        categoryTag = L"[Memory] ";
         break;
     case LogCategory::Power:
-        prefix = L"[SmartOptimizer::Power]";
+        categoryTag = L"[Power] ";
         break;
     case LogCategory::Shutdown:
-        prefix = L"[SmartOptimizer::Shutdown]";
+        categoryTag = L"[Shutdown] ";
         break;
     }
 
@@ -1076,7 +933,7 @@ static void LogEvent(LogCategory cat, LogDetailLevel /*minLevel*/, const wchar_t
     _vsnwprintf_s(buffer, _countof(buffer), _TRUNCATE, format, args);
     va_end(args);
 
-    Wh_Log(L"%s %s", prefix, buffer);
+    Wh_Log(L"%s%s", categoryTag, buffer);
 }
 
 // ---------------------------------------------------------------------------
@@ -1354,6 +1211,20 @@ static bool DoesCommandLineMatchAiMarkers(const std::wstring& cmdline) {
 }
 
 static bool DoesProcessLoadAiModules(HANDLE hProcess) {
+    // Under 32-bit WOW64 (Windhawk 1.x), EnumProcessModulesEx fails with ERROR_PARTIAL_COPY
+    // on 64-bit processes. Skip module inspection if the tool process is WOW64 and the target is 64-bit.
+    static const bool isSelfWow64 = []() {
+        BOOL wow64 = FALSE;
+        return (IsWow64Process(GetCurrentProcess(), &wow64) && wow64);
+    }();
+
+    if (isSelfWow64) {
+        BOOL targetWow64 = FALSE;
+        if (!IsWow64Process(hProcess, &targetWow64) || !targetWow64) {
+            return false;
+        }
+    }
+
     HMODULE hMods[256];
     DWORD cbNeeded = 0;
     if (!EnumProcessModulesEx(hProcess, hMods, sizeof(hMods), &cbNeeded,
@@ -1761,21 +1632,22 @@ static std::unordered_set<DWORD> GetActiveAudioProcessIds() {
 static bool SetProcessMemoryPriorityHint(HANDLE hProcess, ULONG priority);
 static bool ResetProcessEcoQoS(HANDLE hProcess);
 static bool RestoreAndEraseThrottledProcess(DWORD pid);
+static bool RestoreAndEraseSoftTrimmedProcess(DWORD pid);
 
 static std::wstring GetProcessNameByPid(DWORD pid) {
-    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnap != INVALID_HANDLE_VALUE) {
-        PROCESSENTRY32W pe{};
-        pe.dwSize = sizeof(pe);
-        if (Process32FirstW(hSnap, &pe)) {
-            do {
-                if (pe.th32ProcessID == pid) {
-                    CloseHandle(hSnap);
-                    return ToLower(pe.szExeFile);
-                }
-            } while (Process32NextW(hSnap, &pe));
+    if (pid == 0 || pid == 4) {
+        return L"system";
+    }
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hProcess) {
+        WCHAR path[MAX_PATH];
+        DWORD size = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
+            CloseHandle(hProcess);
+            const wchar_t* pSlash = wcsrchr(path, L'\\');
+            return ToLower(pSlash ? (pSlash + 1) : path);
         }
-        CloseHandle(hSnap);
+        CloseHandle(hProcess);
     }
     return L"process";
 }
@@ -1977,37 +1849,6 @@ static bool ResetProcessEcoQoS(HANDLE hProcess) {
                                  &state, sizeof(state)) != 0;
 }
 
-// Applies or clears Windows thread background processing mode (THREAD_MODE_BACKGROUND_BEGIN / END)
-// on all threads of the target process. This sets disk I/O and memory priorities to very low,
-// eliminating storage contention and micro-stutters during heavy background operations.
-static bool SetProcessThreadsBackgroundMode(DWORD pid, bool enable) {
-    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (hSnap == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    THREADENTRY32 te{};
-    te.dwSize = sizeof(te);
-    bool anyApplied = false;
-    if (Thread32First(hSnap, &te)) {
-        do {
-            if (te.th32OwnerProcessID == pid) {
-                HANDLE hThread = OpenThread(
-                    THREAD_SET_INFORMATION | THREAD_QUERY_LIMITED_INFORMATION,
-                    FALSE, te.th32ThreadID);
-                if (hThread) {
-                    if (SetThreadPriority(hThread, enable ? THREAD_MODE_BACKGROUND_BEGIN
-                                                          : THREAD_MODE_BACKGROUND_END)) {
-                        anyApplied = true;
-                    }
-                    CloseHandle(hThread);
-                }
-            }
-        } while (Thread32Next(hSnap, &te));
-    }
-    CloseHandle(hSnap);
-    return anyApplied;
-}
-
 // ---------------------------------------------------------------------------
 // Foreground Priority Boost (Process Family Zero-Stutter)
 // ---------------------------------------------------------------------------
@@ -2038,18 +1879,8 @@ static void RestoreForegroundBoostLocked() {
             }
             CloseHandle(entry.hProcess);
         }
-        auto itCtx = g_processContexts.find(entry.pid);
-        if (itCtx != g_processContexts.end()) {
-            itCtx->second.state = ProcessState::BackgroundNormal;
-            itCtx->second.stateEnteredAt = std::chrono::steady_clock::now();
-        }
-    }
-    for (const auto& entry : g_boostedProcesses) {
-        auto itCtx = g_processContexts.find(entry.pid);
         const wchar_t* pName =
-            (itCtx != g_processContexts.end() && !itCtx->second.name.empty())
-                ? itCtx->second.name.c_str()
-                : L"process";
+            !entry.procName.empty() ? entry.procName.c_str() : L"process";
         LogEvent(LogCategory::ProBalance, LogDetailLevel::Detailed,
                  L"Restoring priority for background %s (PID %u) -> Priority: Normal | I/O: Normal",
                  pName, entry.pid);
@@ -2059,6 +1890,17 @@ static void RestoreForegroundBoostLocked() {
     if (g_isHighPerformanceActive.load()) {
         RequestPowerSchemeAsync(false);
     }
+}
+
+static bool IsShellOrLauncherProcessName(const std::wstring& name) {
+    return (name == L"explorer.exe" ||
+            name == L"userinit.exe" ||
+            name == L"cmd.exe" ||
+            name == L"powershell.exe" ||
+            name == L"pwsh.exe" ||
+            name == L"windowsterminal.exe" ||
+            name == L"services.exe" ||
+            name == L"svchost.exe");
 }
 
 static void UpdateForegroundBoost(DWORD newForegroundPid,
@@ -2084,6 +1926,8 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
         return;
     }
 
+    RestoreAndEraseSoftTrimmedProcess(newForegroundPid);
+
     // Discover process tree descendants (helpers, renderers, workers)
     std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
     std::unordered_map<DWORD, std::vector<DWORD>> childrenOf;
@@ -2098,11 +1942,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
     auto itRootName = nameByPid.find(newForegroundPid);
     std::wstring rootName =
         (itRootName != nameByPid.end()) ? itRootName->second : L"";
-    bool isShellOrLauncher = (rootName == L"explorer.exe" ||
-                              rootName == L"cmd.exe" ||
-                              rootName == L"powershell.exe" ||
-                              rootName == L"pwsh.exe" ||
-                              rootName == L"windowsterminal.exe");
+    bool isShellOrLauncher = IsShellOrLauncherProcessName(rootName);
 
     // Family Continuity: preserve elevated state without teardown/reboost jitter
     // when switching between windows belonging to the same application tree or executable.
@@ -2271,26 +2111,15 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
 
                 BoostedProcessEntry entry;
                 entry.pid = pid;
+                if (itName != nameByPid.end()) {
+                    entry.procName = itName->second;
+                }
                 entry.hProcess = hProc;
                 entry.originalPriority = origPriority;
                 entry.originalIoPriority = origIoPriority;
                 entry.originalMemoryPriority = origMemoryPriority;
                 entry.cpuSetsApplied = appliedCpuSets;
                 g_boostedProcesses.push_back(entry);
-
-                // ARCH-01: Update unified process state machine
-                auto& ctx = g_processContexts[pid];
-                ctx.pid = pid;
-                if (itName != nameByPid.end()) {
-                    ctx.name = itName->second;
-                }
-                ctx.state = ProcessState::ForegroundBoosted;
-                ctx.hProcess = hProc;
-                ctx.originalPriority = origPriority;
-                ctx.originalIoPriority = origIoPriority;
-                ctx.originalMemoryPriority = origMemoryPriority;
-                ctx.cpuSetsApplied = appliedCpuSets;
-                ctx.stateEnteredAt = std::chrono::steady_clock::now();
                 continue;
             }
         }
@@ -2504,14 +2333,7 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
     ULONG originalMemoryPriority = it->second.originalMemoryPriority;
     bool ecoQosApplied = it->second.ecoQosApplied;
     bool cpuSetsApplied = it->second.cpuSetsApplied;
-    bool threadBackgroundApplied = it->second.threadBackgroundApplied;
     g_throttledProcesses.erase(it);
-
-    auto itCtx = g_processContexts.find(pid);
-    if (itCtx != g_processContexts.end()) {
-        itCtx->second.state = ProcessState::BackgroundNormal;
-        itCtx->second.stateEnteredAt = std::chrono::steady_clock::now();
-    }
 
     if (hSaved) {
         if (!IsProcessTerminated(hSaved)) {
@@ -2524,9 +2346,25 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
             if (cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
                 g_pfnSetProcessDefaultCpuSets(hSaved, nullptr, 0);
             }
-            if (threadBackgroundApplied) {
-                SetProcessThreadsBackgroundMode(pid, false);
-            }
+        }
+        CloseHandle(hSaved);
+    }
+    return true;
+}
+
+static bool RestoreAndEraseSoftTrimmedProcess(DWORD pid) {
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
+    auto it = g_softTrimmedProcesses.find(pid);
+    if (it == g_softTrimmedProcesses.end()) {
+        return false;
+    }
+    HANDLE hSaved = it->second.hProcess;
+    ULONG originalMemoryPriority = it->second.originalMemoryPriority;
+    g_softTrimmedProcesses.erase(it);
+
+    if (hSaved) {
+        if (!IsProcessTerminated(hSaved)) {
+            SetProcessMemoryPriorityHint(hSaved, originalMemoryPriority);
         }
         CloseHandle(hSaved);
     }
@@ -2535,14 +2373,8 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
 
 static void RestoreAllThrottledProcesses() {
     std::lock_guard<std::mutex> lock(g_priorityMutex);
-    auto now = std::chrono::steady_clock::now();
     for (auto& kv : g_throttledProcesses) {
         auto& info = kv.second;
-        auto itCtx = g_processContexts.find(kv.first);
-        if (itCtx != g_processContexts.end()) {
-            itCtx->second.state = ProcessState::BackgroundNormal;
-            itCtx->second.stateEnteredAt = now;
-        }
         if (info.hProcess) {
             if (!IsProcessTerminated(info.hProcess)) {
                 SetPriorityClass(info.hProcess, info.originalPriority);
@@ -2554,14 +2386,24 @@ static void RestoreAllThrottledProcesses() {
                 if (info.cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
                     g_pfnSetProcessDefaultCpuSets(info.hProcess, nullptr, 0);
                 }
-                if (info.threadBackgroundApplied) {
-                    SetProcessThreadsBackgroundMode(kv.first, false);
-                }
             }
             CloseHandle(info.hProcess);
         }
     }
     g_throttledProcesses.clear();
+}
+
+static void RestoreAllSoftTrimmedProcesses() {
+    std::lock_guard<std::mutex> lock(g_priorityMutex);
+    for (auto& kv : g_softTrimmedProcesses) {
+        if (kv.second.hProcess) {
+            if (!IsProcessTerminated(kv.second.hProcess)) {
+                SetProcessMemoryPriorityHint(kv.second.hProcess, kv.second.originalMemoryPriority);
+            }
+            CloseHandle(kv.second.hProcess);
+        }
+    }
+    g_softTrimmedProcesses.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -2651,7 +2493,7 @@ static std::unordered_set<DWORD> g_loggedAudioWorkers;
 
 static std::unordered_set<DWORD>
 ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
-                         const std::vector<ProcessSnapshotEntry>& /*processList*/,
+                         const std::vector<ProcessSnapshotEntry>& processList,
                          const std::unordered_map<DWORD, std::vector<DWORD>>& childrenOf,
                          const std::unordered_map<DWORD, DWORD>& parentOf,
                          const std::unordered_map<DWORD, WindowState>& windowStates) {
@@ -2663,17 +2505,53 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
     auto now = std::chrono::steady_clock::now();
     std::unordered_set<DWORD> activeAudioPids = rawAudioPids;
 
+    std::unordered_map<DWORD, std::wstring> nameByPid;
+    for (const auto& entry : processList) {
+        nameByPid[entry.pid] = entry.name;
+    }
+
     for (DWORD aPid : rawAudioPids) {
-        // 1. Walk up parentOf to find root ancestor in the user session
+        // 1. Walk up parentOf to find root ancestor in the user session without crossing shell boundaries
         std::unordered_set<DWORD> ancestors{aPid};
         DWORD cur = aPid;
         DWORD rootPid = aPid;
         while (true) {
             auto itP = parentOf.find(cur);
-            if (itP == parentOf.end() || itP->second == 0 || itP->second == 4 ||
-                !ancestors.insert(itP->second).second)
+            if (itP == parentOf.end() || itP->second == 0 || itP->second == 4) {
                 break;
-            cur = itP->second;
+            }
+            DWORD parentPid = itP->second;
+            auto itName = nameByPid.find(parentPid);
+            if (itName != nameByPid.end() && IsShellOrLauncherProcessName(itName->second)) {
+                break;
+            }
+            // Verify parent process is alive and created before child (prevents climbing dead/recycled PIDs)
+            HANDLE hParent = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, parentPid);
+            if (!hParent) {
+                break;
+            }
+            FILETIME pCreate{}, pExit{}, pKernel{}, pUser{};
+            FILETIME cCreate{}, cExit{}, cKernel{}, cUser{};
+            bool validParent = false;
+            HANDLE hCur = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, cur);
+            if (hCur) {
+                if (GetProcessTimes(hParent, &pCreate, &pExit, &pKernel, &pUser) &&
+                    GetProcessTimes(hCur, &cCreate, &cExit, &cKernel, &cUser)) {
+                    if (CompareFileTime(&pCreate, &cCreate) <= 0) {
+                        validParent = true;
+                    }
+                }
+                CloseHandle(hCur);
+            }
+            CloseHandle(hParent);
+            if (!validParent) {
+                break;
+            }
+
+            if (!ancestors.insert(parentPid).second) {
+                break;
+            }
+            cur = parentPid;
             rootPid = cur;
         }
 
@@ -2870,7 +2748,8 @@ static bool IsVoluntaryComputeTask(
     const std::unordered_map<DWORD, DWORD>& parentOf,
     const std::unordered_map<DWORD, WindowState>& windowStates,
     const ModSettings& settings,
-    DWORD coreCount) {
+    DWORD coreCount,
+    const std::unordered_map<DWORD, std::wstring>* procNames = nullptr) {
     // W11-03 & GAME-01: DirectStorage & Game Sanctuary full tree immunity
     DWORD gameSanctuaryPid = GetLiveGameSanctuaryPid();
     if (gameSanctuaryPid != 0) {
@@ -2916,6 +2795,15 @@ static bool IsVoluntaryComputeTask(
         if (parentPid == current)
             break; // Avoid cycles
 
+        // Do not climb past shell processes (e.g. explorer.exe); Explorer's taskbar/desktop
+        // must not immunize every application in the user session.
+        if (procNames) {
+            auto itName = procNames->find(parentPid);
+            if (itName != procNames->end() && IsShellOrLauncherProcessName(itName->second)) {
+                break;
+            }
+        }
+
         auto itWin = windowStates.find(parentPid);
         if (itWin != windowStates.end() && itWin->second.hasVisibleWindow && !itWin->second.isMinimized) {
             return true;
@@ -2944,6 +2832,12 @@ static bool IsVoluntaryComputeTask(
             auto itP = parentOf.find(curAnc);
             if (itP == parentOf.end() || itP->second == 0 || itP->second == 4) {
                 break;
+            }
+            if (procNames) {
+                auto itName = procNames->find(itP->second);
+                if (itName != procNames->end() && IsShellOrLauncherProcessName(itName->second)) {
+                    break;
+                }
             }
             auto itWin = windowStates.find(itP->second);
             if (itWin != windowStates.end() && itWin->second.hasVisibleWindow) {
@@ -2975,6 +2869,12 @@ static bool IsVoluntaryComputeTask(
             auto itP = parentOf.find(curAnc);
             if (itP == parentOf.end() || itP->second == 0 || itP->second == 4)
                 break;
+            if (procNames) {
+                auto itName = procNames->find(itP->second);
+                if (itName != procNames->end() && IsShellOrLauncherProcessName(itName->second)) {
+                    break;
+                }
+            }
             auto itWin = windowStates.find(itP->second);
             if (itWin != windowStates.end() && itWin->second.hasVisibleWindow && !itWin->second.isMinimized) {
                 return true;
@@ -3012,21 +2912,20 @@ enum class ActionType : uint8_t {
 
 enum class VetoReason : uint16_t {
     None = 0,
-    KernelSecurity = 1 << 0,         // System PID, essential dialogs, or excluded (Weight: 1000)
-    AntiCheatProtected = 1 << 1,     // Access denied / anti-cheat PPL (Weight: 1000)
-    NonInteractiveSession = 1 << 2,  // Non-interactive session 0 services (Weight: 1000)
-    ForegroundOrFamily = 1 << 3,     // Foreground process or UI descendant helpers (Weight: 980)
-    AudioSessionActive = 1 << 4,     // Active WASAPI audio session (Weight: 950)
-    AiInferenceActive = 1 << 5,      // Active local AI token generation (Weight: 900)
-    AiGracePeriod = 1 << 6,          // Dormant AI within warm grace period (Weight: 900)
-    VoluntaryCompute = 1 << 7,       // Multi-threaded voluntary compute workload (Weight: 880)
-    DiskWriteActive = 1 << 8,        // Active disk write transfer (Weight: 850)
-    NetworkStreaming = 1 << 9,       // Active network download or VoIP stream (Weight: 800)
-    VisibleGuiWindow = 1 << 10,      // Visible non-minimized GUI window (Weight: 750)
-    UserRecentFocus = 1 << 11,       // Recent user interaction grace (Weight: 600)
-    TargetFilterExclusion = 1 << 12, // targetProcessesOnly is active and not listed (Weight: 500)
-    PackagedApp = 1 << 13,           // UWP/MSIX managed by Windows PLM (Weight: 450)
-    StartupGracePeriod = 1 << 14,    // Process in startup / initialization phase (Weight: 1000)
+    KernelSecurity = 1 << 0,        // System PID, essential dialogs, or excluded (Weight: 1000)
+    AntiCheatProtected = 1 << 1,    // Access denied / anti-cheat PPL (Weight: 1000)
+    NonInteractiveSession = 1 << 2, // Non-interactive session 0 services (Weight: 1000)
+    ForegroundOrFamily = 1 << 3,    // Foreground process or UI descendant helpers (Weight: 980)
+    AudioSessionActive = 1 << 4,    // Active WASAPI audio session (Weight: 950)
+    AiInferenceActive = 1 << 5,     // Active local AI token generation (Weight: 900)
+    AiGracePeriod = 1 << 6,         // Dormant AI within warm grace period (Weight: 900)
+    VoluntaryCompute = 1 << 7,      // Multi-threaded voluntary compute workload (Weight: 880)
+    DiskWriteActive = 1 << 8,       // Active disk write transfer (Weight: 850)
+    NetworkStreaming = 1 << 9,      // Active network download or VoIP stream (Weight: 800)
+    VisibleGuiWindow = 1 << 10,     // Visible non-minimized GUI window (Weight: 750)
+    UserRecentFocus = 1 << 11,      // Recent user interaction grace (Weight: 600)
+    PackagedApp = 1 << 12,          // UWP/MSIX managed by Windows PLM (Weight: 450)
+    StartupGracePeriod = 1 << 13,   // Process in startup / initialization phase (Weight: 1000)
 };
 
 struct DecisionResult {
@@ -3042,13 +2941,14 @@ struct SystemActionArbiter {
     const std::unordered_set<DWORD>& activeAudioPids;
     const std::unordered_set<DWORD>& immuneFamilyPids;
     std::chrono::steady_clock::time_point now;
+    const std::unordered_map<DWORD, std::wstring>* procNames = nullptr;
 
     [[nodiscard]] DecisionResult EvaluatePreOpen(
         DWORD pid,
         const std::wstring& name,
         ActionType action,
         const std::unordered_map<DWORD, WindowState>* windowStates = nullptr,
-        int64_t graceSeconds = 0) const noexcept {
+        int64_t graceSeconds = 0) const {
         if (pid == 0 || pid == 4 || pid == currentPid) {
             return {false, VetoReason::KernelSecurity, L"System / Self PID"};
         }
@@ -3096,12 +2996,6 @@ struct SystemActionArbiter {
                     return {false, VetoReason::AiGracePeriod,
                             L"AI Model Warmth Grace Period Active"};
                 }
-            }
-        }
-        if (action == ActionType::TrimWorkingSet && settings.targetProcessesOnly) {
-            if (!IsInList(name, settings.customTargetList)) {
-                return {false, VetoReason::TargetFilterExclusion,
-                        L"Process Not in Custom Target List"};
             }
         }
         if (windowStates) {
@@ -3155,7 +3049,7 @@ struct SystemActionArbiter {
         double cpuPercent = 0.0,
         const std::unordered_map<DWORD, DWORD>* parentOf = nullptr,
         const std::unordered_map<DWORD, WindowState>* windowStates =
-            nullptr) const noexcept {
+            nullptr) const {
         uint64_t ageSec = GetProcessAgeSeconds(hProcess);
         if (ageSec < static_cast<uint64_t>(settings.processStartupGraceSeconds)) {
             return {false, VetoReason::StartupGracePeriod,
@@ -3198,7 +3092,7 @@ struct SystemActionArbiter {
                 const SystemHardwareProfile& hw = GetHardwareProfile();
                 if (IsVoluntaryComputeTask(pid, hProcess, threadCount, cpuPercent,
                                            false, *parentOf, *windowStates,
-                                           settings, hw.coreCount)) {
+                                           settings, hw.coreCount, procNames)) {
                     return {false, VetoReason::VoluntaryCompute,
                             L"Protected Compute / Shader / GPU Staging Workload"};
                 }
@@ -3226,7 +3120,7 @@ struct SystemActionArbiter {
             const SystemHardwareProfile& hw = GetHardwareProfile();
             if (IsVoluntaryComputeTask(pid, hProcess, threadCount, cpuPercent,
                                        isThrottled, *parentOf, *windowStates,
-                                       settings, hw.coreCount)) {
+                                       settings, hw.coreCount, procNames)) {
                 return {false, VetoReason::VoluntaryCompute,
                         L"Voluntary Cooperative Compute Workload"};
             }
@@ -3319,6 +3213,12 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
     for (const auto& kv : windowStates) {
         if (kv.second.hasVisibleWindow && !kv.second.isMinimized) {
             visibleFamilyPids.insert(kv.first);
+            // Do not collect descendants of shell/launcher processes (e.g. explorer.exe);
+            // Explorer's visible taskbar/desktop window must not immunize every application in the user session.
+            auto itName = procNames.find(kv.first);
+            if (itName != procNames.end() && IsShellOrLauncherProcessName(itName->second)) {
+                continue;
+            }
             std::vector<DWORD> desc;
             std::unordered_set<DWORD> visited;
             CollectDescendants(kv.first, childrenOf, desc, visited);
@@ -3341,7 +3241,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
     }
 
     SystemActionArbiter arbiter{settings, currentPid, foregroundPid,
-                                activeAudioPids, visibleFamilyPids, now};
+                                activeAudioPids, visibleFamilyPids, now, &procNames};
 
     // PERF-01: Persistent differential sampling watchlist for calm background processes
     static std::unordered_map<DWORD, std::chrono::steady_clock::time_point> g_lastCalmSampleTime;
@@ -3457,7 +3357,6 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                     ULONG prevMem = GetProcessMemoryPriorityHint(hProc);
                     bool appliedEcoQos = false;
                     bool appliedCpuSets = false;
-                    bool appliedThreadBackground = false;
                     {
                         std::lock_guard<std::mutex> lock(g_priorityMutex);
                         if (pid != g_currentBoostedPid.load(std::memory_order_relaxed) &&
@@ -3465,16 +3364,12 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                             if (SetPriorityClass(hProc, targetThrottlePrio)) {
                                 SetProcessMemoryPriorityHint(hProc, 1 /* MEMORY_PRIORITY_VERY_LOW */);
 
-                                // Never degrade I/O priority, apply EcoQoS, or thread background mode on active disk/network transfers
+                                // Never degrade I/O priority or apply EcoQoS on active disk/network transfers
                                 if (!ioAct.isWritingDisk && !ioAct.isTransferringNetworkOrIo) {
                                     SetProcessIoPriorityHint(hProc, IoPriorityLow);
                                     if (settings.enableEcoQosManagement) {
                                         appliedEcoQos =
                                             SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
-                                    }
-                                    if (settings.enableThreadBackgroundMode) {
-                                        appliedThreadBackground =
-                                            SetProcessThreadsBackgroundMode(pid, true);
                                     }
                                 }
 
@@ -3491,31 +3386,15 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 
                                 g_sessionThrottleTransitions.fetch_add(1, std::memory_order_relaxed);
                                 LogEvent(LogCategory::Throttler, LogDetailLevel::Detailed,
-                                         L"Throttling background %s (PID %u): CPU load %.1f%% >= %d%% -> Priority: %s | I/O: Low%s%s%s",
+                                         L"Throttling background %s (PID %u): CPU load %.1f%% >= %d%% -> Priority: %s | I/O: Low%s%s",
                                          name.c_str(), pid, cpuPercent,
                                          settings.backgroundCpuThrottleThresholdPercent,
                                          (targetThrottlePrio == IDLE_PRIORITY_CLASS) ? L"Idle" : L"BelowNormal",
                                          appliedEcoQos ? L" | EcoQoS" : L"",
-                                         appliedCpuSets ? L" | E-Cores Confined" : L"",
-                                         appliedThreadBackground ? L" | Thread Background Mode" : L"");
+                                         appliedCpuSets ? L" | E-Cores Confined" : L"");
 
                                 g_throttledProcesses[pid] = {hProc, prevPriority, prevIo,
-                                                             prevMem, appliedEcoQos, appliedCpuSets,
-                                                             appliedThreadBackground, 0};
-
-                                // ARCH-01: Update unified process state machine
-                                auto& ctx = g_processContexts[pid];
-                                ctx.pid = pid;
-                                ctx.name = name;
-                                ctx.state = ProcessState::BackgroundThrottled;
-                                ctx.hProcess = hProc;
-                                ctx.originalPriority = prevPriority;
-                                ctx.originalIoPriority = prevIo;
-                                ctx.originalMemoryPriority = prevMem;
-                                ctx.ecoQosApplied = appliedEcoQos;
-                                ctx.cpuSetsApplied = appliedCpuSets;
-                                ctx.threadBackgroundApplied = appliedThreadBackground;
-                                ctx.stateEnteredAt = now;
+                                                             prevMem, appliedEcoQos, appliedCpuSets, 0};
 
                                 hProc = nullptr; // Transferred ownership to
                                                  // g_throttledProcesses: blocks PID reuse!
@@ -3862,6 +3741,11 @@ TryTrimProcess(DWORD pid, const std::wstring& procName,
     const ModSettings& settings = arbiter.settings;
     auto now = arbiter.now;
 
+    if (IsInList(procName, settings.excludedProcesses) ||
+        IsEssentialSystemSecurityProcess(procName)) {
+        return result;
+    }
+
     if (IsAccessDeniedImmune(pid))
         return result;
 
@@ -3960,6 +3844,19 @@ TryTrimProcess(DWORD pid, const std::wstring& procName,
                     // Fall back to soft trim
                     ULONG currentMemPri = GetProcessMemoryPriorityHint(hProc);
                     if (currentMemPri > 2 /* MEMORY_PRIORITY_LOW */) {
+                        {
+                            std::lock_guard<std::mutex> lock(g_priorityMutex);
+                            if (g_softTrimmedProcesses.count(pid) == 0) {
+                                HANDLE hHeld = nullptr;
+                                if (DuplicateHandle(
+                                        GetCurrentProcess(), hProc, GetCurrentProcess(),
+                                        &hHeld,
+                                        PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
+                                        FALSE, 0)) {
+                                    g_softTrimmedProcesses[pid] = {hHeld, currentMemPri};
+                                }
+                            }
+                        }
                         SetProcessMemoryPriorityHint(
                             hProc, 2 /* MEMORY_PRIORITY_LOW */);
                         g_processLastTrimmed[pid] = now;
@@ -3976,6 +3873,19 @@ TryTrimProcess(DWORD pid, const std::wstring& procName,
                 // Soft trim: demote memory priority to let standby list manager gradually reclaim pages
                 ULONG currentMemPri = GetProcessMemoryPriorityHint(hProc);
                 if (currentMemPri > 2 /* MEMORY_PRIORITY_LOW */) {
+                    {
+                        std::lock_guard<std::mutex> lock(g_priorityMutex);
+                        if (g_softTrimmedProcesses.count(pid) == 0) {
+                            HANDLE hHeld = nullptr;
+                            if (DuplicateHandle(
+                                    GetCurrentProcess(), hProc, GetCurrentProcess(),
+                                    &hHeld,
+                                    PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
+                                    FALSE, 0)) {
+                                g_softTrimmedProcesses[pid] = {hHeld, currentMemPri};
+                            }
+                        }
+                    }
                     SetProcessMemoryPriorityHint(
                         hProc, 2 /* MEMORY_PRIORITY_LOW */);
                     g_processLastTrimmed[pid] = now;
@@ -4031,10 +3941,12 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
     std::unordered_map<DWORD, std::vector<DWORD>> childrenOf;
     std::unordered_map<DWORD, DWORD> parentOf;
     std::unordered_map<DWORD, const ProcessSnapshotEntry*> byPid;
+    std::unordered_map<DWORD, std::wstring> procNames;
     for (const auto& entry : processList) {
         childrenOf[entry.parentPid].push_back(entry.pid);
         parentOf[entry.pid] = entry.parentPid;
         byPid[entry.pid] = &entry;
+        procNames[entry.pid] = entry.name;
     }
 
     std::unordered_map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
@@ -4068,7 +3980,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
     }
 
     SystemActionArbiter arbiter{settings, currentPid, foregroundPid,
-                                activeAudioPids, handledPids, now};
+                                activeAudioPids, handledPids, now, &procNames};
 
     auto tryTrimAndRecord = [&](DWORD pid, const std::wstring& name) {
         TrimAttemptResult attempt =
@@ -4279,11 +4191,6 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
 // Cleanup Pass Dispatcher
 // ---------------------------------------------------------------------------
 
-static DWORD WINAPI PlayChimeWorkItem(LPVOID) {
-    MessageBeep(MB_OK);
-    return 0;
-}
-
 static void PerformMemoryCleanup(const wchar_t* triggerReason,
                                  bool allowWorkingSetTrim = true,
                                  bool hogsOnly = false,
@@ -4412,9 +4319,9 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
         // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
         std::wstring report = BuildSessionStatsString();
         LogEvent(LogCategory::Memory, LogDetailLevel::Minimal, L"%s", report.c_str());
-        Wh_Log(L"[SmartOptimizer] %s", report.c_str());
+        Wh_Log(L"%s", report.c_str());
         if (settings.enableHotkeySound) {
-            QueueUserWorkItem(PlayChimeWorkItem, nullptr, WT_EXECUTEDEFAULT);
+            MessageBeep(MB_OK);
         }
     }
 }
@@ -4548,7 +4455,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
             if (msg.message == WM_HOTKEY && msg.wParam == kPanicHotkeyId) {
                 // NOLINTNEXTLINE(bugprone-unused-local-non-trivial-variable)
                 std::wstring report = BuildSessionStatsString();
-                Wh_Log(L"[SmartOptimizer] %s", report.c_str());
+                Wh_Log(L"%s", report.c_str());
                 LogEvent(LogCategory::Memory, LogDetailLevel::Minimal,
                          L"Panic hotkey triggered (Ctrl+Alt+F11). Requesting immediate working set sweep...");
                 g_forceCleanupRequested.store(true);
@@ -4588,7 +4495,7 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
         }
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
     } catch (...) {
-        Wh_Log(L"[SmartOptimizer] Unhandled exception in HookThreadProc");
+        Wh_Log(L"Unhandled exception in HookThreadProc");
     }
     return 0;
 }
@@ -4600,14 +4507,12 @@ static DWORD WINAPI HookThreadProc(LPVOID) {
 static void MemoryOptimizerWorker() {
     HRESULT hrCom = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-    Wh_Log(L"[SmartOptimizer] Adaptive Memory & Priority Optimizer engine "
-           L"started "
-           L"(0.00%% CPU passive wait).");
+    Wh_Log(L"Adaptive Memory & Priority Optimizer engine started "
+           L"(near-zero CPU passive wait).");
 
     try {
         HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
         g_modStartTime = std::chrono::steady_clock::now();
-        g_lastPeriodicCleanTime = g_modStartTime;
         g_lastIdleCleanTime = g_modStartTime;
         g_lastTriggerCleanTime = g_modStartTime;
 
@@ -4632,7 +4537,7 @@ static void MemoryOptimizerWorker() {
                                      /*forceHardTrim=*/true);
             }
             if (g_gameSweepRequested.exchange(false)) {
-                Wh_Log(L"[SmartOptimizer] Fullscreen / 3D game detected. Running "
+                Wh_Log(L"Fullscreen / 3D game detected. Running "
                        L"preventive RAM sweep...");
                 PerformMemoryCleanup(L"[Pre-Game Sweep]", /*allowWorkingSetTrim=*/true,
                                      /*hogsOnly=*/false, /*forceHardTrim=*/true);
@@ -4747,8 +4652,7 @@ static void MemoryOptimizerWorker() {
 
                     // Smart threshold trigger
                     bool hogsOnly = false;
-                    if (!isWarmupPass && (settings.cleanMode == CleanMode::SmartThreshold ||
-                                          settings.cleanMode == CleanMode::SmartAndPeriodic)) {
+                    if (!isWarmupPass) {
                         if (freePercent <= effectiveFreeRamThreshold &&
                             triggerCooldownElapsed && ramGrowthConditionMet) {
                             shouldClean = true;
@@ -4775,30 +4679,6 @@ static void MemoryOptimizerWorker() {
                         }
                     }
 
-                    // 2. Periodic timer trigger (gated on memory pressure).
-                    if (!shouldClean && !isWarmupPass &&
-                        (settings.cleanMode == CleanMode::Periodic ||
-                         settings.cleanMode == CleanMode::SmartAndPeriodic)) {
-                        auto elapsedMinutes =
-                            std::chrono::duration_cast<std::chrono::minutes>(
-                                now - g_lastPeriodicCleanTime)
-                                .count();
-                        if (elapsedMinutes >= settings.periodicIntervalMinutes) {
-                            if (freePercent <= effectiveFreeRamThreshold) {
-                                shouldClean = true;
-                                hogsOnly = false;
-                                wchar_t buf[160];
-                                swprintf_s(buf,
-                                           L"[Periodic Trigger: %d min interval (Free RAM %.1f%% "
-                                           L"<= %.1f%%)]",
-                                           settings.periodicIntervalMinutes, freePercent,
-                                           effectiveFreeRamThreshold);
-                                reason = buf;
-                            }
-                            g_lastPeriodicCleanTime = now;
-                        }
-                    }
-
                     // Idle trigger: sweeps on entering idle state with minimum cooldown and memory pressure check
                     DWORD idleSec = GetSystemIdleSeconds();
                     DWORD idleThresholdSec =
@@ -4811,8 +4691,7 @@ static void MemoryOptimizerWorker() {
                             std::chrono::duration_cast<std::chrono::minutes>(
                                 now - g_lastIdleCleanTime)
                                 .count();
-                        int idleIntervalMin =
-                            (std::max)(10, settings.periodicIntervalMinutes);
+                        int idleIntervalMin = 10;
                         if (!g_wasIdle || elapsedSinceIdleClean >= idleIntervalMin) {
                             if (freePercent <= effectiveFreeRamThreshold) {
                                 shouldClean = true;
@@ -4868,10 +4747,9 @@ static void MemoryOptimizerWorker() {
             }
         }
     } catch (const std::exception& ex) {
-        Wh_Log(L"[SmartOptimizer] Fatal exception in MemoryOptimizerWorker: %S",
-               ex.what());
+        Wh_Log(L"Fatal exception in MemoryOptimizerWorker: %S", ex.what());
     } catch (...) {
-        Wh_Log(L"[SmartOptimizer] Fatal unhandled exception in MemoryOptimizerWorker");
+        Wh_Log(L"Fatal unhandled exception in MemoryOptimizerWorker");
     }
 
     {
@@ -4881,8 +4759,7 @@ static void MemoryOptimizerWorker() {
 
     RestoreAllThrottledProcesses();
 
-    Wh_Log(
-        L"[SmartOptimizer] Memory & Priority Optimizer engine stopped cleanly.");
+    Wh_Log(L"Memory & Priority Optimizer engine stopped cleanly.");
 
     if (hrCom == S_OK || hrCom == S_FALSE) {
         CoUninitialize();
@@ -4900,7 +4777,7 @@ static void LoadSettings() {
     g_settings.enableProBalance = Wh_GetIntSetting(L"enableProBalance") != 0;
 
     auto prioStr = WindhawkUtils::StringSetting::make(L"foregroundPriorityLevel");
-    if (prioStr.get() && wcscmp(prioStr.get(), L"high") == 0) {
+    if (wcscmp(prioStr.get(), L"high") == 0) {
         g_settings.foregroundPriorityLevel = ForegroundPrioritySetting::High;
     } else {
         g_settings.foregroundPriorityLevel = ForegroundPrioritySetting::AboveNormal;
@@ -4915,9 +4792,6 @@ static void LoadSettings() {
     g_settings.enableBackgroundThrottling =
         Wh_GetIntSetting(L"enableBackgroundThrottling") != 0;
 
-    g_settings.enableThreadBackgroundMode =
-        Wh_GetIntSetting(L"enableThreadBackgroundMode") != 0;
-
     int bgThrottle =
         (int)Wh_GetIntSetting(L"backgroundCpuThrottleThresholdPercent");
     g_settings.backgroundCpuThrottleThresholdPercent =
@@ -4927,15 +4801,6 @@ static void LoadSettings() {
         (int)Wh_GetIntSetting(L"systemCpuContentionThresholdPercent");
     g_settings.systemCpuContentionThresholdPercent =
         std::clamp(sysContention, 0, 95);
-
-    auto bgPrioStr =
-        WindhawkUtils::StringSetting::make(L"backgroundThrottlePriorityLevel");
-    if (bgPrioStr.get() && wcscmp(bgPrioStr.get(), L"idle") == 0) {
-        g_settings.backgroundThrottlePriorityLevel = ThrottlePrioritySetting::Idle;
-    } else {
-        g_settings.backgroundThrottlePriorityLevel =
-            ThrottlePrioritySetting::BelowNormal;
-    }
 
     g_settings.enableEcoQosManagement =
         Wh_GetIntSetting(L"enableEcoQosManagement") != 0;
@@ -4974,29 +4839,24 @@ static void LoadSettings() {
     g_settings.enableDynamicPowerPlan =
         Wh_GetIntSetting(L"enableDynamicPowerPlan") != 0;
     if (!g_settings.enableDynamicPowerPlan) {
-        RestoreOriginalPowerScheme();
+        RequestPowerSchemeAsync(false);
     }
 
     // Section 4: Process Lists & Hotkeys
     auto customListStr = WindhawkUtils::StringSetting::make(L"customTargetList");
-    g_settings.customTargetList =
-        ParseProcessList(customListStr.get() ? customListStr.get() : L"");
+    g_settings.customTargetList = ParseProcessList(customListStr.get());
 
     auto customAiStr = WindhawkUtils::StringSetting::make(L"customAiProcesses");
-    g_settings.customAiProcesses =
-        ParseProcessList(customAiStr.get() ? customAiStr.get() : L"");
+    g_settings.customAiProcesses = ParseProcessList(customAiStr.get());
 
     auto exclListStr = WindhawkUtils::StringSetting::make(L"excludedProcesses");
-    g_settings.excludedProcesses =
-        ParseProcessList(exclListStr.get() ? exclListStr.get() : L"");
+    g_settings.excludedProcesses = ParseProcessList(exclListStr.get());
 
     g_settings.enablePanicHotkey = Wh_GetIntSetting(L"enablePanicHotkey") != 0;
     g_settings.enableHotkeySound = Wh_GetIntSetting(L"enableHotkeySound") != 0;
-    g_settings.logDetailLevel = LogDetailLevel::Detailed;
 
     // Architectural defaults and internal safety heuristics:
     g_settings.enableTieredRamThreshold = true;
-    g_settings.tieredHogThresholdPercent = 40;
     g_settings.recentActivityGraceMinutes = 3;
     g_settings.enableIdleBoost = true;
     g_settings.aiInactivityGraceMinutes = 5;
@@ -5010,8 +4870,6 @@ static void LoadSettings() {
     g_settings.enableProcessTreeTrimming = true;
     g_settings.cleanBackgroundWorkingSets = true;
     g_settings.minProcessMemoryToTrimMb = 50;
-    g_settings.periodicIntervalMinutes = 10;
-    g_settings.targetProcessesOnly = false;
 
     // Hardware-Aware Auto-Tuning:
     // Automatically adapt thresholds to the machine's physical hardware capacity.
@@ -5037,37 +4895,15 @@ BOOL WhTool_ModInit() {
         LogCategory::Boot, LogDetailLevel::Minimal,
         L"Initializing Smart Process Priority & RAM Optimizer (Dedicated Tool Process)...");
 
-    // Dynamically initialize Per-Monitor V2 DPI awareness for physical pixel evaluation
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        using pfnSetProcessDpiAwarenessContext_t =
-            BOOL(WINAPI*)(DPI_AWARENESS_CONTEXT);
-        auto pfnSetDpiContext = (pfnSetProcessDpiAwarenessContext_t)GetProcAddress(
-            hUser32, "SetProcessDpiAwarenessContext");
-        if (pfnSetDpiContext) {
-            pfnSetDpiContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        } else {
-            using pfnSetProcessDPIAware_t = BOOL(WINAPI*)();
-            auto pfnSetDpiAware =
-                (pfnSetProcessDPIAware_t)GetProcAddress(hUser32, "SetProcessDPIAware");
-            if (pfnSetDpiAware) {
-                pfnSetDpiAware();
-            }
-        }
-    }
-
-    SystemHardwareProfile hw = GetHardwareProfile();
+    const SystemHardwareProfile& hw = GetHardwareProfile();
     LogEvent(LogCategory::Boot, LogDetailLevel::Minimal,
-             L"Hardware Profile: %.1f GB RAM (%s), %u CPU cores (%s)%s | HAGS: %s | VBS: %s | Memory Compression: %s.",
+             L"Hardware Profile: %.1f GB RAM (%s), %u CPU cores (%s)%s.",
              hw.totalRamGb,
              hw.isLowRamTier ? L"Low-RAM Tier / iGPU Buffer Elevated"
                              : (hw.isHighRamTier ? L"High-RAM Tier" : L"Standard RAM Tier"),
              hw.coreCount,
              hw.isLowCoreCount ? L"Aggressive Contention Guard" : L"Standard Contention Guard",
-             hw.isHybridCpu ? L", Intel/AMD Hybrid P/E-Cores Active" : L"",
-             hw.isHagsEnabled ? L"Enabled" : L"Disabled",
-             hw.isVbsEnabled ? L"Enabled" : L"Disabled",
-             hw.isMemoryCompressionActive ? L"Active" : L"Inactive");
+             hw.isHybridCpu ? L", Intel/AMD Hybrid P/E-Cores Active" : L"");
 
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
     if (hNtdll) {
@@ -5085,14 +4921,7 @@ BOOL WhTool_ModInit() {
                 hShell32, "SHQueryUserNotificationState");
     }
 
-    g_hPowrProf = LoadLibraryW(L"powrprof.dll");
-    if (g_hPowrProf) {
-        g_pfnPowerGetActiveScheme = (pfnPowerGetActiveScheme)GetProcAddress(
-            g_hPowrProf, "PowerGetActiveScheme");
-        g_pfnPowerSetActiveScheme = (pfnPowerSetActiveScheme)GetProcAddress(
-            g_hPowrProf, "PowerSetActiveScheme");
-        CheckAndRecoverCrashedPowerScheme();
-    }
+    CheckAndRecoverCrashedPowerScheme();
 
     LoadSettings();
 
@@ -5102,8 +4931,7 @@ BOOL WhTool_ModInit() {
     g_powerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
     if (!g_stopEvent || !g_wakeEvent || !g_hookThreadReadyEvent || !g_powerWakeEvent) {
-        Wh_Log(L"[SmartOptimizer] Fatal Error: Failed to create synchronization "
-               L"events.");
+        Wh_Log(L"Fatal Error: Failed to create synchronization events.");
         if (g_stopEvent) {
             CloseHandle(g_stopEvent);
             g_stopEvent = nullptr;
@@ -5120,10 +4948,6 @@ BOOL WhTool_ModInit() {
             CloseHandle(g_powerWakeEvent);
             g_powerWakeEvent = nullptr;
         }
-        if (g_hPowrProf) {
-            FreeLibrary(g_hPowrProf);
-            g_hPowrProf = nullptr;
-        }
         return FALSE;
     }
 
@@ -5138,8 +4962,7 @@ BOOL WhTool_ModInit() {
     if (g_hookThreadHandle) {
         WaitForSingleObject(g_hookThreadReadyEvent, 3000);
     } else {
-        Wh_Log(L"[SmartOptimizer] Warning: Failed to start event-hook thread; "
-               L"falling back to polling-only detection.");
+        Wh_Log(L"Warning: Failed to start event-hook thread; falling back to polling-only detection.");
         g_hookThreadRunning.store(false);
     }
 
@@ -5225,6 +5048,7 @@ void WhTool_ModUninit() {
     }
 
     RestoreAllThrottledProcesses();
+    RestoreAllSoftTrimmedProcesses();
     g_audioPidLastActive.clear();
     g_audioPidsCache.clear();
     g_audioWorkerSamples.clear();
@@ -5233,7 +5057,6 @@ void WhTool_ModUninit() {
     {
         std::lock_guard<std::mutex> lock(g_priorityMutex);
         RestoreForegroundBoostLocked();
-        g_processContexts.clear();
     }
     RestoreOriginalPowerScheme();
     {
@@ -5258,10 +5081,6 @@ void WhTool_ModUninit() {
         CloseHandle(g_hookThreadReadyEvent);
         g_hookThreadReadyEvent = nullptr;
     }
-    if (g_hPowrProf) {
-        FreeLibrary(g_hPowrProf);
-        g_hPowrProf = nullptr;
-    }
 
     {
         double sessionGb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
@@ -5274,35 +5093,47 @@ void WhTool_ModUninit() {
             std::lock_guard<std::mutex> lock(g_immunitySetMutex);
             immuneCount = g_accessDeniedImmunitySet.size();
         }
-        Wh_Log(L"[SmartOptimizer::Shutdown] ========================================");
-        Wh_Log(L"[SmartOptimizer::Shutdown] Smart Process Priority & RAM Optimizer");
-        Wh_Log(L"[SmartOptimizer::Shutdown] Session Summary Report:");
-        Wh_Log(L"[SmartOptimizer::Shutdown]   • Total Uptime: %s", uptime.c_str());
-        Wh_Log(L"[SmartOptimizer::Shutdown]   • Total RAM Reclaimed: %.2f GB freed, %.2f GB standby across %u passes (%u process trimmings)",
+        Wh_Log(L"========================================");
+        Wh_Log(L"Smart Process Priority & RAM Optimizer");
+        Wh_Log(L"Session Summary Report:");
+        Wh_Log(L"  Total Uptime: %s", uptime.c_str());
+        Wh_Log(L"  Total RAM Reclaimed: %.2f GB freed, %.2f GB standby across %u passes (%u process trimmings)",
                sessionGb, sessionStandbyGb,
                g_sessionCleanupPasses.load(std::memory_order_relaxed),
                g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed));
-        Wh_Log(L"[SmartOptimizer::Shutdown]   • ProBalance Boost Transitions: %u",
+        Wh_Log(L"  ProBalance Boost Transitions: %u",
                g_sessionBoostTransitions.load());
-        Wh_Log(L"[SmartOptimizer::Shutdown]   • Background Throttle Transitions: %u",
+        Wh_Log(L"  Background Throttle Transitions: %u",
                g_sessionThrottleTransitions.load());
-        Wh_Log(L"[SmartOptimizer::Shutdown]   • Dynamic Anti-Cheat Immune Processes: %zu",
+        Wh_Log(L"  Dynamic Anti-Cheat Immune Processes: %zu",
                immuneCount);
-        Wh_Log(L"[SmartOptimizer::Shutdown] ========================================");
+        Wh_Log(L"========================================");
     }
 
-    Wh_Log(L"[SmartOptimizer] Mod unloaded cleanly.");
+    Wh_Log(L"Mod unloaded cleanly.");
 }
 
-// ---------------------------------------------------------------------------
-// Tool Mod Process Bootstrap
-// ---------------------------------------------------------------------------
-// Dedicated tool-mod bootstrap: re-launches windhawk.exe with -tool-mod and drives lifecycle
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+#ifndef WH_MOD_ID
+#define WH_MOD_ID L"smart-process-priority-ram-optimizer"
+#endif
 
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -5313,6 +5144,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -5326,8 +5158,8 @@ BOOL Wh_ModInit() {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
-            LocalFree(reinterpret_cast<HLOCAL>(argv));
-            return FALSE;
+            isExcluded = true;
+            break;
         }
     }
 
@@ -5342,6 +5174,10 @@ BOOL Wh_ModInit() {
     }
 
     LocalFree(reinterpret_cast<HLOCAL>(argv));
+
+    if (isExcluded) {
+        return FALSE;
+    }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
@@ -5360,7 +5196,8 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
@@ -5385,14 +5222,20 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    DWORD modLen = GetModuleFileName(nullptr, currentProcessPath,
-                                     ARRAYSIZE(currentProcessPath));
-    if (modLen == 0 || modLen == ARRAYSIZE(currentProcessPath)) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+    case 0:
+    case ARRAYSIZE(currentProcessPath):
         Wh_Log(L"GetModuleFileName failed");
         return;
+    default:
+        break;
     }
 
-    WCHAR commandLine[MAX_PATH + 64];
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
+                       sizeof(WCHAR)) -
+                      1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
@@ -5410,7 +5253,8 @@ void Wh_ModAfterInit() {
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule,
@@ -5420,9 +5264,13 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si{};
-    si.cb = sizeof(STARTUPINFO);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+#pragma clang diagnostic pop
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
