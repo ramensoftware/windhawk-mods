@@ -30,7 +30,9 @@ top, left or right. A window is corrected when:
 - an app moves or resizes it,
 - you finish dragging or resizing it (can be turned off in Settings).
 
-Windows that are already open when the mod starts are checked once too.
+Windows that are already open are checked too: when the mod starts, and again
+whenever the taskbar or the display layout changes (for example when you move
+or resize the taskbar, or change resolution or monitors).
 
 If a window fits, it is moved just far enough to clear the taskbar. If it is too
 big to fit between the taskbar and the opposite screen edge, it is shrunk to
@@ -98,6 +100,11 @@ windows are not corrected.
 
 static const UINT kMsgSettingsChanged = WM_APP + 1;
 
+// Re-check open windows this long after the taskbar or display layout stops
+// changing (a taskbar animation or a display change sends a burst of events).
+static const UINT_PTR kResweepTimerId = 1;
+static const UINT kResweepDelayMs = 400;
+
 // Back-off for apps that undo the correction.
 static const DWORD kRetryWindowMs = 2000;
 static const int kMaxCorrectionsPerWindow = 3;  // per kRetryWindowMs
@@ -128,6 +135,11 @@ static std::unordered_map<HWND, CorrectionHistory> g_history;
 static std::unordered_set<HWND> g_givenUp;
 static std::unordered_set<HWND> g_cannotShrink;
 static std::unordered_set<HWND> g_userPlaced;
+
+// Hidden top-level window that receives the work area, display and taskbar
+// broadcasts (message-only windows don't get broadcasts).
+static HWND g_notifyWindow = nullptr;
+static UINT g_taskbarCreatedMsg = 0;
 
 // Returns true for a normal, captioned, resizable top-level window.
 static bool IsNormalWindowStyle(DWORD style, DWORD exStyle) {
@@ -515,8 +527,27 @@ static void CorrectWindow(HWND hWnd) {
 }
 
 static BOOL CALLBACK SweepProc(HWND hWnd, LPARAM) {
-    CorrectWindow(hWnd);
+    if (hWnd != g_movingWindow && !g_userPlaced.count(hWnd)) {
+        CorrectWindow(hWnd);
+    }
     return TRUE;
+}
+
+// Re-check all open windows once things settle. Repeated calls restart the
+// timer, so a burst of changes leads to a single sweep.
+static void ScheduleResweep() {
+    if (g_notifyWindow) {
+        SetTimer(g_notifyWindow, kResweepTimerId, kResweepDelayMs, nullptr);
+    }
+}
+
+static bool IsTaskbarWindow(HWND hWnd) {
+    WCHAR className[32];
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return false;
+    }
+    return wcscmp(className, L"Shell_TrayWnd") == 0 ||
+           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
 }
 
 static void ForgetWindow(HWND hWnd) {
@@ -574,6 +605,14 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK,
         case EVENT_OBJECT_SHOW:
         case EVENT_OBJECT_LOCATIONCHANGE:
         case EVENT_OBJECT_UNCLOAKED:
+            if (IsTaskbarWindow(hWnd)) {
+                // In auto-hide mode, moving or resizing the taskbar doesn't
+                // change the work area, so watch the taskbar itself.
+                if (g_autoHiddenTaskbar) {
+                    ScheduleResweep();
+                }
+                return;
+            }
             if (hWnd == g_movingWindow) {
                 return;  // User is mid-drag.
             }
@@ -592,11 +631,104 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK,
 // ---------------------------------------------------------------------------
 // Watcher thread
 // ---------------------------------------------------------------------------
+static const WCHAR kNotifyClassName[] = L"KeepWindowsClearOfTaskbar_Notify";
+
+static LRESULT CALLBACK NotifyWndProc(HWND hWnd,
+                                      UINT msg,
+                                      WPARAM wParam,
+                                      LPARAM lParam) {
+    switch (msg) {
+        case WM_SETTINGCHANGE:
+            if (wParam == SPI_SETWORKAREA) {
+                ScheduleResweep();
+            }
+            return 0;
+
+        case WM_DISPLAYCHANGE:
+            ScheduleResweep();
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == kResweepTimerId) {
+                KillTimer(hWnd, kResweepTimerId);
+                // Like the startup sweep: with the setting off, windows may
+                // have been placed by the user on purpose.
+                if (g_correctAfterDrag) {
+                    EnumWindows(SweepProc, 0);
+                }
+                return 0;
+            }
+            break;
+
+        default:
+            if (g_taskbarCreatedMsg && msg == g_taskbarCreatedMsg) {
+                // Explorer restarted; the taskbar may be back somewhere else.
+                ScheduleResweep();
+                return 0;
+            }
+            break;
+    }
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+static HINSTANCE GetThisModule() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&NotifyWndProc), &module);
+    return module;
+}
+
+static void CreateNotifyWindow(HINSTANCE instance) {
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = NotifyWndProc;
+    wc.hInstance = instance;
+    wc.lpszClassName = kNotifyClassName;
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+        return;
+    }
+
+    // A regular (never shown) top-level window, so it receives broadcasts.
+    g_notifyWindow =
+        CreateWindowExW(WS_EX_TOOLWINDOW, kNotifyClassName, L"", WS_POPUP, 0, 0,
+                        0, 0, nullptr, nullptr, instance, nullptr);
+    if (!g_notifyWindow) {
+        Wh_Log(L"CreateWindow failed: %u", GetLastError());
+        UnregisterClassW(kNotifyClassName, instance);
+        return;
+    }
+
+    g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
+    // Let these through even if this process runs at a higher integrity level
+    // than Explorer.
+    ChangeWindowMessageFilterEx(g_notifyWindow, WM_SETTINGCHANGE, MSGFLT_ALLOW,
+                                nullptr);
+    ChangeWindowMessageFilterEx(g_notifyWindow, WM_DISPLAYCHANGE, MSGFLT_ALLOW,
+                                nullptr);
+    if (g_taskbarCreatedMsg) {
+        ChangeWindowMessageFilterEx(g_notifyWindow, g_taskbarCreatedMsg,
+                                    MSGFLT_ALLOW, nullptr);
+    }
+}
+
+static void DestroyNotifyWindow(HINSTANCE instance) {
+    if (g_notifyWindow) {
+        KillTimer(g_notifyWindow, kResweepTimerId);
+        DestroyWindow(g_notifyWindow);
+        g_notifyWindow = nullptr;
+        UnregisterClassW(kNotifyClassName, instance);
+    }
+}
+
 static DWORD WINAPI WatcherThread(LPVOID) {
     // Create the message queue before signaling ready, so the WM_QUIT posted
     // at unload is never lost.
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    const HINSTANCE instance = GetThisModule();
+    CreateNotifyWindow(instance);
 
     const DWORD flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
     HWINEVENTHOOK hooks[] = {
@@ -643,6 +775,8 @@ static DWORD WINAPI WatcherThread(LPVOID) {
             UnhookWinEvent(h);
         }
     }
+
+    DestroyNotifyWindow(instance);
 
     g_history.clear();
     g_givenUp.clear();
