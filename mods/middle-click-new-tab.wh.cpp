@@ -21,7 +21,7 @@ Three apps are supported:
 
 - File Explorer: the new tab is opened by sending Ctrl+T.
 - Notepad: the new tab is opened by sending Ctrl+N.
-- Terminal: the new tab is opened by sending Ctrl+Shift+T.
+- Terminal: the new tab is opened by sending Ctrl+Shift+T. Note: This does not work if Terminal is running as administrator due to privilege isolation.
 
 You can enable or disable each app individually in the mod's settings tab.
 
