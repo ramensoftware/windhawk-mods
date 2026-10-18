@@ -1996,9 +1996,8 @@ public:
 private:
     ULONG_PTR token_ = 0;
 };
-// g_panelGdiplus: destroyed explicitly in Wh_ModUninit to avoid running the destructor
-// under the loader lock at process exit.
-static std::unique_ptr<PanelGdiplusSession> g_panelGdiplus;
+// g_panelGdiplus: no_destroy prevents the destructor from running at process exit under the loader lock.
+[[clang::no_destroy]] static std::unique_ptr<PanelGdiplusSession> g_panelGdiplus;
 static bool BackButtonAt(int x, int y) {
     const Lay L = Layout();
     const int cx = L.backX + L.backD / 2, cy = L.backY + L.backD / 2;
@@ -3891,12 +3890,12 @@ BYTE GetRailWindowAlpha(int animationAlpha) noexcept {
     return (BYTE)(animationAlpha*g_opacity.load()/255);
 }
 ULONG_PTR g_gdiplusToken = 0;
-// g_dtmInterop, g_dtm, g_dataRequested: released explicitly in the UI thread exit path to avoid
-// running COM destructors under the loader lock at process exit.
-ComPtr<IDataTransferManagerInteropLocal> g_dtmInterop;
-ComPtr<dt::IDataTransferManager> g_dtm;
+// g_dtmInterop, g_dtm, g_dataRequested: no_destroy prevents COM destructors from running at process exit
+// under the loader lock after the STA thread is already gone.
+[[clang::no_destroy]] ComPtr<IDataTransferManagerInteropLocal> g_dtmInterop;
+[[clang::no_destroy]] ComPtr<dt::IDataTransferManager> g_dtm;
 using ShareEventHandler = awf::ITypedEventHandler<dt::DataTransferManager*, dt::DataRequestedEventArgs*>;
-ComPtr<ShareEventHandler> g_dataRequested;
+[[clang::no_destroy]] ComPtr<ShareEventHandler> g_dataRequested;
 EventRegistrationToken g_dataToken{};
 HWND g_shareOwner=nullptr;
 
@@ -4638,7 +4637,6 @@ void SendWinTap() {
     const UINT sent = SendInput((UINT)_countof(inputs), inputs, sizeof(INPUT));
     if (sent == 1) InjectKeyUp(VK_LWIN);
 }
-
 
 
 HRESULT SetupShareManager(HWND shareWindow) {
@@ -9286,10 +9284,9 @@ LRESULT CALLBACK KeyboardProcImpl(int code, WPARAM wp, LPARAM lp) {
 
     const bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
     const bool up = wp == WM_KEYUP || wp == WM_SYSKEYUP;
-    const bool windowsKey = key->vkCode == VK_LWIN || key->vkCode == VK_RWIN;
-    // Track whether we consumed a Win+C chord so the matching C-up is also swallowed and
-    // the Win-up does not open Start.  The Win key itself always passes through untouched,
-    // so Win+drag, GetAsyncKeyState queries and elevated windows all keep working.
+    // Track whether we consumed a Win+C chord so the matching C-up is also swallowed.
+    // The Win key itself always passes through untouched, so Win+drag, GetAsyncKeyState
+    // queries and elevated windows all keep working.
     static bool charmChordConsumed = false;
 
     // When Win+C activation is off or the Charms Bar is disabled, do not touch the Win key
@@ -9297,17 +9294,20 @@ LRESULT CALLBACK KeyboardProcImpl(int code, WPARAM wp, LPARAM lp) {
     // Start taps and Win+mouse combinations when the mod is not using Win+C.
     const bool winCActive = g_useWinC.load() && g_charmsEnabled.load();
 
-    // Win+C detection: swallow only the C key when Win is physically held.  A masking key
-    // (VK_F23) is injected before the C-down so the Win release does not open Start.
+    // Win+C detection: swallow only the C key when Win is physically held. A masking key
+    // (0xE8, unassigned) is injected down+up together before the C-down so the Win release
+    // does not open Start. Using 0xE8 instead of VK_F23 avoids conflict with Copilot, which
+    // sends Win+Shift+F23 on some keyboards.
     if (down && key->vkCode == 'C' && winCActive) {
         if ((GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
             if (!charmChordConsumed) {
                 charmChordConsumed = true;
                 // Mask the Win release so it does not open Start after we swallow C.
-                INPUT mask{};
-                mask.type = INPUT_KEYBOARD;
-                mask.ki.wVk = VK_F23;
-                SendInput(1, &mask, sizeof(INPUT));
+                INPUT mask[2]{};
+                mask[0].type = mask[1].type = INPUT_KEYBOARD;
+                mask[0].ki.wVk = mask[1].ki.wVk = 0xE8;  // unassigned: keeps Win-up from opening Start
+                mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
+                SendInput(2, mask, sizeof(INPUT));
                 const bool paneOpen=g_paneVisible.load() || (g_pane && IsWindowVisible(g_pane));
                 PostThreadMessageW(g_threadId, WM_PORT_OPEN, paneOpen?2:1, 0);
             }
@@ -9316,24 +9316,9 @@ LRESULT CALLBACK KeyboardProcImpl(int code, WPARAM wp, LPARAM lp) {
     }
     if (up && key->vkCode == 'C' && charmChordConsumed) {
         charmChordConsumed = false;
-        // Release the masking key so the system key state is clean.
-        INPUT mask{};
-        mask.type = INPUT_KEYBOARD;
-        mask.ki.wVk = VK_F23;
-        mask.ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(1, &mask, sizeof(INPUT));
         return 1;
     }
-    // If Win goes up while we had consumed C, swallow the up to prevent Start from opening.
-    if (up && windowsKey && charmChordConsumed) {
-        charmChordConsumed = false;
-        INPUT mask{};
-        mask.type = INPUT_KEYBOARD;
-        mask.ki.wVk = VK_F23;
-        mask.ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(1, &mask, sizeof(INPUT));
-        return 1;
-    }
+    // No Win-up handling: let it through naturally.
 
     // Visible-panel navigation is posted to the UI thread: never run actions such as ShellExecute or WinRT
     // Share synchronously inside a low-level hook.
@@ -9630,84 +9615,98 @@ DWORD WINAPI UiThreadProc(LPVOID) {
         wc.hCursor=LoadCursorW(nullptr,IDC_ARROW);
         wc.lpfnWndProc=RailProc;
         wc.lpszClassName=kRailClass;
-        UnregisterClassW(kRailClass,wc.hInstance); // clear any stale class from a previous instance
-        if(!RegisterClassExW(&wc))
-            Wh_Log(L"rail window class registration failed (%lu)",GetLastError());
+        const bool railClassRegistered = RegisterClassExW(&wc) != 0;
+        if(!railClassRegistered)
+            Wh_Log(L"critical: rail window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW cc{sizeof(cc)};
         cc.hInstance=wc.hInstance; cc.hCursor=wc.hCursor;
         cc.lpfnWndProc=ClockProc; cc.lpszClassName=kClockClass;
-        UnregisterClassW(kClockClass,wc.hInstance);
-        if(!RegisterClassExW(&cc))
-            Wh_Log(L"clock window class registration failed (%lu)",GetLastError());
+        const bool clockClassRegistered = RegisterClassExW(&cc) != 0;
+        if(!clockClassRegistered)
+            Wh_Log(L"critical: clock window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW mc{sizeof(mc)};
         mc.style=CS_DROPSHADOW;
         mc.hInstance=wc.hInstance; mc.hCursor=wc.hCursor;
         mc.lpfnWndProc=MenuProc; mc.lpszClassName=kMenuClass;
-        UnregisterClassW(kMenuClass,wc.hInstance);
-        if(!RegisterClassExW(&mc))
-            Wh_Log(L"menu window class registration failed (%lu)",GetLastError());
+        const bool menuClassRegistered = RegisterClassExW(&mc) != 0;
+        if(!menuClassRegistered)
+            Wh_Log(L"optional: menu window class registration failed (%lu)",GetLastError());
 
         WNDCLASSEXW pc{sizeof(pc)};
         pc.hInstance=wc.hInstance; pc.hCursor=wc.hCursor;
         pc.lpfnWndProc=PaneProc; pc.lpszClassName=kPaneClass;
-        UnregisterClassW(kPaneClass,wc.hInstance);
-        if(!RegisterClassExW(&pc))
-            Wh_Log(L"settings pane class registration failed (%lu)",GetLastError());
-        g_pane=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,kPaneClass,L"Settings",WS_POPUP,
-            0,0,DpiScale(kPaneWidth),DpiScale(600),nullptr,wc.hInstance);
+        const bool paneClassRegistered = RegisterClassExW(&pc) != 0;
+        if(!paneClassRegistered)
+            Wh_Log(L"critical: settings pane class registration failed (%lu)",GetLastError());
+        if(paneClassRegistered) {
+            g_pane=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,kPaneClass,L"Settings",WS_POPUP,
+                0,0,DpiScale(kPaneWidth),DpiScale(600),nullptr,wc.hInstance);
+        }
         WNDCLASSEXW vc{sizeof(vc)};
         vc.hInstance=wc.hInstance; vc.hCursor=wc.hCursor;
         vc.style=CS_DROPSHADOW;
         vc.lpfnWndProc=VolumeFlyoutProc; vc.lpszClassName=kVolumeFlyoutClass;
-        UnregisterClassW(kVolumeFlyoutClass,wc.hInstance);
-        if(!RegisterClassExW(&vc))
-            Wh_Log(L"settings flyout class registration failed (%lu)",GetLastError());
+        const bool volumeClassRegistered = RegisterClassExW(&vc) != 0;
+        if(!volumeClassRegistered)
+            Wh_Log(L"optional: settings flyout class registration failed (%lu)",GetLastError());
         // Owned by the pane, so it has to share the pane's band or it would be drawn behind its own owner.
-        g_volumeFlyout=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
-            kVolumeFlyoutClass,L"Volume",WS_POPUP,0,0,DpiScale(kVolumeFlyoutWidth),
-            DpiScale(kVolumeFlyoutHeight),g_pane,wc.hInstance);
+        if(volumeClassRegistered && g_pane) {
+            g_volumeFlyout=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
+                kVolumeFlyoutClass,L"Volume",WS_POPUP,0,0,DpiScale(kVolumeFlyoutWidth),
+                DpiScale(kVolumeFlyoutHeight),g_pane,wc.hInstance);
+        }
         WNDCLASSEXW tc{sizeof(tc)};
         tc.hInstance=wc.hInstance; tc.hCursor=wc.hCursor;
         tc.lpfnWndProc=VolumeTipProc; tc.lpszClassName=kVolumeTipClass;
-        UnregisterClassW(kVolumeTipClass,wc.hInstance);
-        if(!RegisterClassExW(&tc))
-            Wh_Log(L"value tip class registration failed (%lu)",GetLastError());
-        g_volumeTip=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
-            kVolumeTipClass,L"Value",WS_POPUP,0,0,DpiScale(kVolTipWidth),
-            DpiScale(kVolTipHeight),g_pane,wc.hInstance);
+        const bool tipClassRegistered = RegisterClassExW(&tc) != 0;
+        if(!tipClassRegistered)
+            Wh_Log(L"optional: value tip class registration failed (%lu)",GetLastError());
+        if(tipClassRegistered && g_pane) {
+            g_volumeTip=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE,
+                kVolumeTipClass,L"Value",WS_POPUP,0,0,DpiScale(kVolTipWidth),
+                DpiScale(kVolTipHeight),g_pane,wc.hInstance);
+        }
         if(!g_volumeTip)
-            Wh_Log(L"optional value tip window creation failed (%lu)",GetLastError());
+            Wh_Log(L"optional value tip window not created",GetLastError());
         if(!g_volumeFlyout) {
-            Wh_Log(L"optional settings flyout window creation failed (%lu)",GetLastError());
+            Wh_Log(L"optional settings flyout window not created",GetLastError());
         } else {
             g_brightnessNotifyCurrent=RegisterPowerSettingNotification(
                 g_volumeFlyout,&kGuidCurrentMonitorBrightness,DEVICE_NOTIFY_WINDOW_HANDLE);
             g_brightnessNotifyPolicy=RegisterPowerSettingNotification(
                 g_volumeFlyout,&kGuidVideoPolicyBrightness,DEVICE_NOTIFY_WINDOW_HANDLE);
         }
-        g_rail=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LAYERED|WS_EX_NOACTIVATE,
-            kRailClass,L"Charms",WS_POPUP,0,0,DpiScale(kRailWidth),DpiScale(600),
-            nullptr,wc.hInstance);
-        g_clock=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LAYERED|WS_EX_NOACTIVATE,
-            kClockClass,L"Charms Clock",WS_POPUP,0,0,DpiScale(kClockWidth),DpiScale(kClockHeight),
-            nullptr,wc.hInstance);
-        g_menu=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LAYERED,
-            kMenuClass,L"Charms Menu",WS_POPUP,0,0,DpiScale(300),DpiScale(220),
-            nullptr,wc.hInstance);
+        if(railClassRegistered) {
+            g_rail=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LAYERED|WS_EX_NOACTIVATE,
+                kRailClass,L"Charms",WS_POPUP,0,0,DpiScale(kRailWidth),DpiScale(600),
+                nullptr,wc.hInstance);
+        }
+        if(clockClassRegistered) {
+            g_clock=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LAYERED|WS_EX_NOACTIVATE,
+                kClockClass,L"Charms Clock",WS_POPUP,0,0,DpiScale(kClockWidth),DpiScale(kClockHeight),
+                nullptr,wc.hInstance);
+        }
+        if(menuClassRegistered) {
+            g_menu=CreateCharmsSurface(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_LAYERED,
+                kMenuClass,L"Charms Menu",WS_POPUP,0,0,DpiScale(300),DpiScale(220),
+                nullptr,wc.hInstance);
+        }
         WNDCLASSEXW tipClass{sizeof(tipClass)};
         tipClass.hInstance=wc.hInstance; tipClass.hCursor=wc.hCursor;
         tipClass.lpfnWndProc=StartTipProc; tipClass.lpszClassName=kStartTipClass;
-        UnregisterClassW(kStartTipClass,wc.hInstance);
-        if(!RegisterClassExW(&tipClass))
-            Wh_Log(L"Start tip class registration failed (%lu)",GetLastError());
-        g_startTip=CreateCharmsSurface(
-            WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED,
-            kStartTipClass,L"Start",WS_POPUP,0,0,DpiScale(kStartTipSize),DpiScale(kStartTipSize),
-            nullptr,wc.hInstance);
+        const bool startTipClassRegistered = RegisterClassExW(&tipClass) != 0;
+        if(!startTipClassRegistered)
+            Wh_Log(L"optional: Start tip class registration failed (%lu)",GetLastError());
+        if(startTipClassRegistered) {
+            g_startTip=CreateCharmsSurface(
+                WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED,
+                kStartTipClass,L"Start",WS_POPUP,0,0,DpiScale(kStartTipSize),DpiScale(kStartTipSize),
+                nullptr,wc.hInstance);
+        }
         if(!g_startTip)
-            Wh_Log(L"Start tip creation failed (%lu)",GetLastError());
+            Wh_Log(L"optional Start tip window not created",GetLastError());
 
         if(g_rail) {
             SetLayeredWindowAttributes(g_rail,0,0,LWA_ALPHA);
@@ -9961,7 +9960,7 @@ void ReturnToCharmsBarFromDisplaySwitch() {
 // "secondary" Explorer process and stays idle: it starts a supervisor thread instead, which waits for this
 // process to own the shell window and then starts the Charms Bar. The supervisor also retries a failed
 // startup instead of giving up, so the mod recovers by itself after an Explorer restart.
-constexpr PCWSTR kModVersion=L"1.0.1";
+constexpr PCWSTR kModVersion=L"1.0.0";
 // Assigned explicitly in Wh_ModInit/StartSupervisorIfNeeded, like the other atomics in this file, so builds
 // whose standard library omits value-taking atomic constructors keep working.
 std::atomic<bool> g_charmsServicesStarted;
