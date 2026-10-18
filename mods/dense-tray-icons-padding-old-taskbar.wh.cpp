@@ -16,7 +16,7 @@
 # Adjustable tray icons padding for Win10 taskbar
 
 This is a port of functionality of [7+ Taskbar Tweaker](https://github.com/m417z/7-Taskbar-Tweaker) by [m417z](https://github.com/m417z) that allows to adjust the padding of the tray icons
-in classic (Windos 10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
+in classic (Windows 10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
 use the mod [Taskbar tray icon spacing and grid](https://windhawk.net/mods/taskbar-notification-icon-spacing). The version 2.0 of the mod was [comprehensively reworked](https://github.com/ramensoftware/windhawk-mods/pull/6342)
 by [piknockyou](https://github.com/piknockyou).
 
@@ -27,11 +27,6 @@ by [piknockyou](https://github.com/piknockyou).
   opens when you click the chevron, which also shrinks that popup.
 * **Hidden icons popup cell padding** - the empty border around each icon in
   the popup. `0` packs the icons next to each other at their normal size.
-
-Changing a tray value asks Explorer to reload the notification area through its
-own layout path; no tray click, disable/enable cycle, or Explorer restart is
-required after the mod is installed. The hidden icons popup applies a new size
-the next time it opens.
 
 The default padding value is set to 2, the same as under Windows 95-Windows XP, more dense than under Windows 7, but can be changed in mod's options.
 
@@ -62,8 +57,7 @@ the mod
 
 This update adds:
 
-* live application: a changed setting reaches the shell through its own reload,
-  with no disable/enable cycle and no Explorer restart,
+* less cases for Explorer's restart,
 * the `-1` off value on every setting, which restores the previous state
   without disabling the mod,
 * the hidden icons popup settings (icon size and cell padding).
