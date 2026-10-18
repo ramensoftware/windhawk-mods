@@ -3,7 +3,7 @@
 // @name                Tourne'Table [Audio Visualizer]
 // @description         A real-time audio visualizer for the Windows desktop: every bar its own frequency band, a Direct3D 11 renderer that idles to nothing, live right-click settings, My Styles, a Media Card and shareable setups.
 // @description:ru-RU   Аудиовизуализатор реального времени для рабочего стола Windows. Расширенные настройки без ущерба для экономии ресурсов. Практически безинтерфейсный (near-headless) поток рендеринга с оптимизацией процессора для захвата звука.
-// @version             2.1.0
+// @version             2.1.1
 // @author              USER-TOURNE
 // @github              https://github.com/USER-TOURNE
 // @donateUrl           https://ko-fi.com/tourne
@@ -49,7 +49,7 @@ Tourne'Table doesn't live inside `explorer.exe`. It runs as its own dedicated pr
 
 2.1 replaces 1.x. If you ran one of the 2.0 test builds from GitHub, turn it off: only one Tourne'Table should run. If you also use **Tourne Desktop** (my separate desktop app, not part of Windhawk), its taskbar counts as the taskbar for Place In = Taskbar, and it can show, hide or pin the panel through the window message `TourneTable.Panel`. The performance figures further down were measured on 1.x and haven't been re-measured on 2.x yet.
 
-**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** opens the setups people have shared in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/tree/main/community) in your browser (bring one in with **Paste code** or **Open file**; the mod itself never goes online) or opens a ready GitHub issue to share yours. A setup carries every setting except the ones that belong to your PC: the audio device, icon files, panel hotkey, monitor, docked app and graphics card. Browse them all on the [community page](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
+**Share your style.** Right-click > My Styles > Style Editor > Share: **Copy code** puts your setup on the clipboard as one line for any chat, **Save file** writes a `.ttstyle` file, and **Community** opens the [community styles page](https://user-tourne.github.io/Tourne-Style/) in your browser, with live previews of the setups people have shared (bring one in with **Paste code** or **Open file**; the mod itself never goes online) or opens a ready GitHub issue to share yours. A setup carries every setting except the ones that belong to your PC: the audio device, icon files, panel hotkey, monitor, docked app and graphics card. The styles and how to share one are also in [the Tourne'Style repo](https://github.com/USER-TOURNE/Tourne-Style/blob/main/community/README.md).
 
 **Every bar is its own measurement now.** Up to 1.5 the analysis split the sound into 7 fixed bands and every bar interpolated between those 7 numbers, so Bar Count and FFT Size changed how many bars you saw, not how much they knew. The new **Precision** engine gives each bar its own frequency band with its own edges, measured straight from the spectrum:
 
@@ -17632,7 +17632,7 @@ static const VizQuickPart kQuickParts[] = {
     {L"progress", kPartExtras},   {L"mediaControls", kPartExtras}, {L"readout", kPartExtras}, {L"pixelSnap", kPartPlace},
 };
 
-static const wchar_t kCommunityFolder[] = L"https://github.com/USER-TOURNE/Tourne-Style/tree/main/community/setups";
+static const wchar_t kCommunityFolder[] = L"https://user-tourne.github.io/Tourne-Style/";
 static const wchar_t kCommunityIssue[] = L"https://github.com/USER-TOURNE/Tourne-Style/issues/new";
 
 unsigned VizQuickPartOf(const std::wstring& key) {
@@ -17956,7 +17956,7 @@ bool VizOpenSetupFile(HWND owner, std::wstring* text) {
 }
 
 // ---- The community list: setups in a folder of the Tourne-Style repository on GitHub ----
-// The mod never downloads anything itself: Community opens the folder in the browser, and a setup
+// The mod never downloads anything itself: Community opens the styles page in the browser, and a setup
 // found there comes in with Paste code or Open file.
 
 std::wstring VizUrlEncode(const std::wstring& w) {
@@ -18150,7 +18150,7 @@ void EditorBuild(HWND hWnd) {
     add(L"STATIC",
         L"Changes apply at once. Reset Quick Settings in the right-click menu returns to the settings page. "
         L"Reflection, Glow and Bloom need the Direct3D 11 renderer. Share carries the ticked parts; your audio "
-        L"device, hotkey, monitor, docked app, GPU and file paths stay out. Community opens GitHub in your browser.",
+        L"device, hotkey, monitor, docked app, GPU and file paths stay out. Community opens the styles page in your browser.",
         SS_LEFT, L, y, labelW + ctlW, px(80), -1);
     y += px(88);
     RECT rc = {0, 0, labelW + ctlW + L * 2, y};
@@ -18228,7 +18228,7 @@ LRESULT CALLBACK StyleEditorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
                 EditorSync(hWnd);
             } else if (id == kIdShareCommunity) {
                 HMENU m = CreatePopupMenu();
-                AppendMenuW(m, MF_STRING, 1001, L"Browse Community Setups (opens GitHub)");
+                AppendMenuW(m, MF_STRING, 1001, L"Browse Community Styles (opens in your browser)");
                 AppendMenuW(m, MF_STRING, 1000, L"Share Mine to the Community...");
                 RECT rc = {};
                 GetWindowRect(GetDlgItem(hWnd, kIdShareCommunity), &rc);
