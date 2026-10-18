@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              translucent-windows
-// @name            Translucent Windows
+// @id              translucent-windows-fork
+// @name            Translucent Windows - Fork
 // @description     Enables native translucent effects in Windows 11
 // @version         1.8.2
 // @author          Undisputed00x
@@ -5176,6 +5176,43 @@ VOID EnableBlurBehind(HWND hWnd)
     }
 }
 
+// Apply blur-based effect for all background types (fixes Alt+Tab black screen issue)
+VOID ApplyBlurBasedEffect(HWND hWnd)
+{
+    // Skip Windows Terminal and UWP app containers
+    if(IsWindowClass(hWnd, L"CASCADIA_HOSTING_WINDOW_CLASS") || IsWindowClass(hWnd, L"ApplicationFrameWindow"))
+        return;
+
+    ACCENT_POLICY accentPolicy = {};
+    WINCOMPATTRDATA winCompositionAttrib = {};
+    DWM_BLURBEHIND dwmBlurBehindData = { };
+
+    dwmBlurBehindData.fEnable = TRUE;
+    dwmBlurBehindData.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION | DWM_BB_TRANSITIONONMAXIMIZED;
+    HRGN hRgn = CreateRectRgn(0, 0, -1, -1);
+    dwmBlurBehindData.hRgnBlur = hRgn;
+    dwmBlurBehindData.fTransitionOnMaximized = TRUE;
+
+    DwmEnableBlurBehindWindow(hWnd, &dwmBlurBehindData);
+    DeleteObject(hRgn);
+
+    // Use ACCENT_STATE_ENABLE_HOSTBACKDROP for Mica/MicaAlt/AcrylicSystem to get system backdrop behavior
+    // Use ACCENT_STATE_ENABLE_ACRYLICBLURBEHIND for AccentBlurBehind
+    if (g_settings.BgType == g_settings.AccentBlurBehind)
+        accentPolicy.AccentState = ACCENT_STATE_ENABLE_ACRYLICBLURBEHIND;
+    else
+        accentPolicy.AccentState = ACCENT_STATE_ENABLE_HOSTBACKDROP;
+    
+    accentPolicy.GradientColor = g_settings.AccentBlurBehindClr;
+
+    winCompositionAttrib.Attrib = WCA_ACCENT_POLICY;
+    winCompositionAttrib.pvData = &accentPolicy;
+    winCompositionAttrib.cbData = sizeof(accentPolicy);
+
+    if (SetWindowCompositionAttribute)
+        SetWindowCompositionAttribute(hWnd, &winCompositionAttrib);
+}
+
 static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {    
     if (msg == WM_SETTINGCHANGE) 
@@ -5218,6 +5255,25 @@ static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT msg, WPARAM wParam, L
         }
     }   
 
+    // Fix: Re-apply background effects when window is activated (Alt+Tab switch)
+    // This prevents black screen issue when switching to explorer with custom background effects
+    if (msg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE && g_settings.BgType != g_settings.Default) 
+    {
+        BOOL isFlyoutWindow = isWindowFlyout(hWnd);
+        if (!isFlyoutWindow && IsWindowEligible(hWnd)) 
+        {
+            // Re-apply background effect using blur-based mechanism for all types
+            ApplyBlurBasedEffect(hWnd);
+            
+            // Re-extend frame into client area to ensure proper rendering
+            MARGINS margins = {-1, -1, -1, -1};
+            DwmExtendFrameIntoClientArea(hWnd, &margins);
+            
+            // Force redraw to prevent black screen
+            RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        }
+    }
+
     if (IsWindowClass(hWnd, L"ViewControlClass") && msg == WM_NCPAINT) {
         UINT borderType = DWMWCP_ROUND;
         DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &borderType, sizeof(UINT));
@@ -5232,16 +5288,9 @@ VOID HandleEffects(HWND hWnd)
     if (g_IsSysThemeDarkMode) 
         DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &ENABLE, sizeof(UINT));
 
-    if(g_settings.BgType == g_settings.AccentBlurBehind)
-        EnableBlurBehind(hWnd);
-    else if (g_settings.BgType > g_settings.AccentBlurBehind)
-    {
-        if (isFlyoutWindow) {
-            DwmMakeWindowTransparent(hWnd);
-            TriggerWindowNCRendering(hWnd);
-        }
-        DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &g_settings.BgType, sizeof(UINT));
-    }
+    // Use blur-based effect for all background types to fix Alt+Tab black screen issue
+    if(g_settings.BgType != g_settings.Default)
+        ApplyBlurBasedEffect(hWnd);
 
     if (!isFlyoutWindow && g_settings.BgType != g_settings.Default) {
         MARGINS margins = {-1, -1, -1, -1};
