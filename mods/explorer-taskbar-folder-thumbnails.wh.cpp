@@ -684,6 +684,7 @@ static std::wstring MakeKey(const std::wstring& path) {
     return std::to_wstring(g_iconSize) + L"|" + NormalizePath(path);
 }
 
+static bool IsValidIcon(HICON icon);
 
 // Requires g_lock.
 static std::set<HICON> IconsInUseLocked() {
@@ -758,7 +759,19 @@ static HICON GetCachedIcon(const std::wstring& path) {
     ReleaseSRWLockExclusive(&g_lock);
 
     if (cached) {
-        return cached;
+        if (IsValidIcon(cached)) {
+            return cached;
+        }
+        // Destroyed by someone else. Never hand it out again: drop it, without
+        // destroying it a second time, and rebuild it from the disk copy.
+        Wh_Log(L"cached preview was destroyed, rebuilding | %s", path.c_str());
+        AcquireSRWLockExclusive(&g_lock);
+        auto stale = g_cache.find(key);
+        if (stale != g_cache.end() && stale->second.icon == cached) {
+            g_cache.erase(stale);
+        }
+        g_owned.erase(cached);
+        ReleaseSRWLockExclusive(&g_lock);
     }
 
     std::vector<DWORD> px;
@@ -1255,7 +1268,13 @@ static HICON UpdateSync(HWND hwnd, std::wstring* pathOut) {
     HICON icon = nullptr;
     std::wstring path;
     PIDLIST_ABSOLUTE pidl = nullptr;
-    if (ResolveFolderSync(hwnd, &path, &pidl)) {
+    const bool resolved = ResolveFolderSync(hwnd, &path, &pidl);
+    if (!resolved) {
+        // Folder unknown here: the worker's scan decides, unhindered.
+        AcquireSRWLockExclusive(&g_lock);
+        g_currentPath.erase(hwnd);
+        ReleaseSRWLockExclusive(&g_lock);
+    } else {
         icon = GetIconSync(path, pidl);
         *pathOut = path;
 
@@ -1571,31 +1590,27 @@ static void ForgetWindowState(HWND hwnd) {
     g_windows.erase(it);
 }
 
-// True while the window is still known to show f's folder. Every live window
-// has an entry by now (UpdateSync sets it before posting a job, a scan sets
-// it before updating), so a missing one means the window has closed.
+// False when the window has closed, or its own thread has since found it in
+// another folder (whose preview then has its own job). Only the window's
+// thread records the folder; when it can't tell, a scan's result stands.
 static bool StillShows(const FoundWindow& f) {
+    if (!IsWindow(f.hwnd)) {
+        return false;
+    }
     AcquireSRWLockShared(&g_lock);
     auto it = g_currentPath.find(f.hwnd);
-    bool same = it != g_currentPath.end() && it->second == f.path;
+    bool same = it == g_currentPath.end() || it->second == f.path;
     ReleaseSRWLockShared(&g_lock);
     return same;
 }
 
-// fresh: f was looked up just now (a scan), not handed over by a window thread
-// whose window may have moved on since.
-static void UpdateExplorerWindow(const FoundWindow& f, bool forceRender,
-                                 bool fresh) {
+static void UpdateExplorerWindow(const FoundWindow& f, bool forceRender) {
+    if (!StillShows(f)) {
+        return;  // closed, or the window's newer folder has its own job
+    }
+
     // Covers a window which was already open when the mod started.
     EnsureSubclassed(f.hwnd);
-
-    if (fresh) {
-        AcquireSRWLockExclusive(&g_lock);
-        g_currentPath[f.hwnd] = f.path;
-        ReleaseSRWLockExclusive(&g_lock);
-    } else if (!StillShows(f)) {
-        return;  // the window's newer folder has its own job
-    }
 
     WindowState& st = g_windows[f.hwnd];
     const bool pathChanged = !st.known || st.path != f.path;
@@ -1676,18 +1691,17 @@ static bool GetActiveFolder(IWebBrowser2* wb, HWND top,
 }
 
 // Walks the shell's window list. Used once at startup, and for a window the
-// instant path couldn't resolve. Returns the windows whose folder it found.
-static std::set<HWND> Scan(const std::map<HWND, bool>* only) {
-    std::set<HWND> resolved;
+// instant path couldn't resolve.
+static void Scan(const std::map<HWND, bool>* only) {
     ComPtr<IShellWindows> shellWindows;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(shellWindows.put())))) {
-        return resolved;
+        return;
     }
 
     long count = 0;
     if (FAILED(shellWindows->get_Count(&count))) {
-        return resolved;
+        return;
     }
 
     const DWORD myPid = GetCurrentProcessId();
@@ -1751,12 +1765,10 @@ static std::set<HWND> Scan(const std::map<HWND, bool>* only) {
             force = it != only->end() && it->second;
         }
         if (!f.path.empty()) {
-            UpdateExplorerWindow(f, force, /*fresh=*/true);
-            resolved.insert(f.hwnd);
+            UpdateExplorerWindow(f, force);
         }
         ILFree(f.pidl);
     }
-    return resolved;
 }
 
 // Folders handed over by Explorer threads, rendered without asking Explorer
@@ -1771,8 +1783,7 @@ static void ProcessRenderJobs() {
 
     for (auto& job : jobs) {
         if (IsWindow(job.hwnd)) {
-            UpdateExplorerWindow({job.hwnd, job.pidl, job.path}, false,
-                                 /*fresh=*/false);
+            UpdateExplorerWindow({job.hwnd, job.pidl, job.path}, false);
         }
         ILFree(job.pidl);
     }
@@ -1860,12 +1871,13 @@ static void ProcessDue() {
         return;
     }
 
-    const std::set<HWND> resolved = Scan(&due);
+    Scan(&due);
 
-    // The follow-up scans are only for a window whose folder wasn't found
-    // yet: a window which was just resolved is followed by its own messages.
+    // The follow-up scans run even when this one found a folder: while a
+    // navigation is still in progress, the window list can report the folder
+    // being left, and only a later scan sees the new one.
     for (const auto& [hwnd, step] : steps) {
-        if (step < kNoConfirms && !resolved.count(hwnd) && IsWindow(hwnd)) {
+        if (step < kNoConfirms && IsWindow(hwnd)) {
             Schedule(hwnd, kConfirmDelays[step], false, step + 1);
         }
     }
