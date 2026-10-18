@@ -12403,11 +12403,18 @@ static void RequestShowWin7Flyout() {
         PostThreadMessageW(tid, WM_TOGGLE_FLYOUT_REQUEST, 0, 0);
         return;
     }
-    try {
-        ToggleFlyoutWindow();
-    } catch (...) {
-        Wh_Log(L"RequestShowWin7Flyout: exception while toggling flyout, ignored");
-    }
+    // No flyout/hotkey thread: never fall back to running the flyout inline on
+    // the caller's (tray/UI) thread.
+    Wh_Log(L"RequestShowWin7Flyout: no flyout thread available, request dropped");
+}
+
+// True when 'address' lies inside StartAllBackX64.dll.
+static bool IsStartAllBackAddress(void *address) {
+    HMODULE module = nullptr;
+    return GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                  GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              (LPCWSTR)address, &module) &&
+           module && module == GetModuleHandleW(L"StartAllBackX64.dll");
 }
 
 // --- ShellExecuteW / ShellExecuteExW hooks (path 1) ------------------------
@@ -12473,11 +12480,27 @@ static WindowsGetStringRawBuffer_t pWindowsGetStringRawBuffer = NULL;
 static void *g_SabNoOpVtable[12] = {};
 static LONG g_SabNoOpRefs = 1;
 
+static ULONG STDMETHODCALLTYPE SabNoOp_AddRef(void *self);
 static HRESULT STDMETHODCALLTYPE SabNoOp_QI(void *self, REFIID riid,
                                             void **ppv) {
-    if (ppv)
+    if (!ppv)
+        return E_POINTER;
+    // Strict: only IUnknown, IInspectable and IActivationFactory-style
+    // identity. Everything else (IAgileObject, IMarshal,
+    // IWeakReferenceSource, ...) is refused so COM never caches or marshals
+    // this mod-image object.
+    static const GUID kIID_IUnknown = {0x00000000, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
+    static const GUID kIID_IInspectable = {0xAF86E2E0, 0xB12D, 0x4C6A, {0x9C, 0x5A, 0xD7, 0xAA, 0x65, 0x10, 0x1E, 0x90}};
+    static const GUID kIID_IActivationFactory = {0x00000035, 0x0000, 0x0000, {0xC0, 0, 0, 0, 0, 0, 0, 0x46}};
+    if (IsEqualGUID(riid, kIID_IUnknown) ||
+        IsEqualGUID(riid, kIID_IInspectable) ||
+        IsEqualGUID(riid, kIID_IActivationFactory)) {
         *ppv = self;
-    return S_OK;
+        SabNoOp_AddRef(self);
+        return S_OK;
+    }
+    *ppv = nullptr;
+    return E_NOINTERFACE;
 }
 static ULONG STDMETHODCALLTYPE SabNoOp_AddRef(void *self) {
     return (ULONG)InterlockedIncrement(&g_SabNoOpRefs);
@@ -12513,8 +12536,9 @@ static const WCHAR kNetworkFlyoutClass[] =
 
 HRESULT WINAPI RoGetActivationFactory_Hook(HSTRING_T classId, REFIID riid,
                                            void **factory) {
+    void *retAddr = __builtin_return_address(0);
     if (g_Settings.interceptNativeFlyout && pWindowsGetStringRawBuffer &&
-        classId) {
+        classId && IsStartAllBackAddress(retAddr)) {
         UINT32 len = 0;
         PCWSTR name = pWindowsGetStringRawBuffer(classId, &len);
         // 46 = wcslen(kNetworkFlyoutClass); reject everything else (in
@@ -12618,9 +12642,6 @@ BOOL Wh_ModInit() {
     LoadSettings();
     DetermineLocale();
 
-    // 5.2.0: StartAllBack / custom taskbar support (see block above).
-    InstallStartAllBackHooks();
-
     // g_Ctx.csLock must be ready before Win7NetworkCenterLinks::Init() below
     // installs its DirectUI/DrawTextW hooks: those hooks run in control.exe
     // too (via SetXMLFromResource_Hook / DrawTextW_Hook -> 
@@ -12637,6 +12658,10 @@ BOOL Wh_ModInit() {
 
     g_IsExplorerHost = IsExplorerProcess();
     g_IsRetroBarHost = (!g_IsExplorerHost && IsRetroBarProcess());
+
+    // 5.2.0: StartAllBack support hooks, Explorer host only.
+    if (g_IsExplorerHost)
+        InstallStartAllBackHooks();
 
     // Win7NetworkCenterLinks hooks dui70.dll/LoadImageW process-wide for a
     // Control Panel page that RetroBar.exe can never host; skip it there.
