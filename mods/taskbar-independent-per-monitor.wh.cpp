@@ -848,13 +848,16 @@ static int g_dpaOffset = -1;                    // from tl; -1 = unknown/disable
 
 static void InitDpaOffset() {
 #if defined(__aarch64__)
+    // "add x0,x0,#imm" and a jump to the DPA function (Windows 10 19041 and Windows 11 26100 ARM64),
+    // or "ldr xN,[x0,#imm]"
     const DWORD* p = (const DWORD*)pGetButtonGroupCount;
     for (int i = 0; p && i < 4 && Readable(p + i, 4); i++) {
-        if ((p[i] & 0xFFC003E0) == 0xF9400000) {  // ldr xN,[x0,#imm]
-            int d = ((p[i] >> 10) & 0xFFF) * 8;
-            if (d > 0 && d < 0x1000) g_dpaOffset = d;
-            break;
-        }
+        int d = 0;
+        if ((p[i] & 0xFFC003FF) == 0x91000000) d = (p[i] >> 10) & 0xFFF;  // add x0,x0,#imm
+        else if ((p[i] & 0xFFC003E0) == 0xF9400000) d = ((p[i] >> 10) & 0xFFF) * 8;  // ldr xN,[x0,#imm]
+        else continue;
+        if (d > 0 && d < 0x1000) g_dpaOffset = d;
+        break;
     }
 #else
     const unsigned char* p = (const unsigned char*)pGetButtonGroupCount;
@@ -3667,14 +3670,20 @@ static bool HookWin10(HMODULE tb) {
          (void**)&UnpinnedEvt_orig, (void*)UnpinnedEvt_hook, true},
     };
     if (!WindhawkUtils::HookSymbols(tb, explorerHooks, ARRAYSIZE(explorerHooks))) return false;
-    // TaskIndexHitTest is called with the interface at object + 0x40: only if its code says so. Checked
-    // on x64 only - the ARM64 build of Windows 10 can't be verified, so the hit test (and with it
-    // dragging a pin to another taskbar) isn't used there.
+    // TaskIndexHitTest is called with the interface at object + 0x40: only if its code says so
     bool ok = false;
 #if defined(__x86_64__)
     const unsigned char* p = (const unsigned char*)pTaskIndexHitTest;
     for (int i = 0; p && i < 32 && Readable(p + i, 4); i++) {
         if (p[i] == 0x48 && p[i + 1] == 0x83 && p[i + 2] == 0xC1 && p[i + 3] == 0xC0) ok = true;  // add rcx,-40h
+    }
+#elif defined(__aarch64__)
+    // "sub xD,xN,#0x40" with xN = x0 or a copy of it ("mov xN,x0") - 19041 ARM64: mov x22,x0 ... sub x0,x22,#0x40
+    const DWORD* p = (const DWORD*)pTaskIndexHitTest;
+    unsigned self = 1;  // registers that hold "this"
+    for (int i = 0; p && i < 12 && Readable(p + i, 4); i++) {
+        if ((p[i] & 0xFFFFFFE0) == 0xAA0003E0) self |= 1u << (p[i] & 31);  // mov xN,x0
+        if ((p[i] & 0xFFFFFC00) == 0xD1010000 && (self & (1u << ((p[i] >> 5) & 31)))) ok = true;
     }
 #endif
     if (!ok) pTaskIndexHitTest = nullptr;
