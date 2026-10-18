@@ -32,6 +32,7 @@ improvements by [Asteski](https://github.com/Asteski) and
   and configurable group closing and restoration.
 - Recent-window ordering, live window-list updates, and options to hide, sort,
   or mark minimized windows.
+- Optional Desktop entry with a live desktop preview and shell toggle action.
 - Multi-monitor display and filtering, DPI-aware sizing, and current/all virtual
   desktop filtering. All virtual desktops are included by default.
 - Window exclusions by title or executable name, custom application names/icons,
@@ -61,7 +62,7 @@ Choose a layout under **Appearance → Layout → Switcher Layout**.
 | Win+Alt+Tab | Temporarily bypass the per-monitor window filter. |
 | Tab / Shift+Tab, arrow keys | Navigate entries while the switcher is open. Shift+Tab follows the configured backward shortcut. |
 | Page Up / Page Down | Navigate overflow pages. |
-| Enter / Space, left-click an entry | Activate the selected or clicked window. |
+| Enter / Space, left-click an entry | Activate the selected or clicked window, or toggle the desktop entry. |
 | Esc | Leave an expanded application group, or dismiss the switcher. |
 | Ctrl tap | Expand or collapse an application group when grouping is enabled. |
 | Q / Ctrl+W / Delete | Close the selected entry. |
@@ -133,8 +134,8 @@ available to select or cancel.
   styling, and animation options.
 - **Dimensions**: tile sizing, screen limits, padding, and shrink-to-fit behavior.
 - **Grouping**: application grouping, displayed titles, restoration, and closing.
-- **Accessibility**: invocation delay, navigation, monitor/desktop filtering, and
-  minimized-window options.
+- **Accessibility**: invocation delay, navigation, monitor/desktop filtering,
+  optional Desktop entry, and minimized-window options.
 - **Touchpad / Excluded Windows / Custom Header**: gesture controls, exclusion
   patterns, Xbox Mode exclusion, and per-application names/icons.
 
@@ -780,6 +781,9 @@ available to select or cancel.
       $options:
       - currentOnly: Show windows from current virtual desktop only
       - allDesktops: Show windows from all virtual desktops
+    - includeDesktopItem: false
+      $name: Include 'Desktop' Item
+      $description: Include the 'Desktop' item at the end of the switcher.
     - hideMinimizedWindows: false
       $name: Hide Minimized Windows
       $description: Hide minimized windows from the switcher. When "Group Windows by Application" is enabled, an application is only hidden if all of its windows are minimized.
@@ -845,6 +849,7 @@ available to select or cancel.
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <shellapi.h>
+#include <shldisp.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <propkey.h>
@@ -1191,6 +1196,7 @@ struct WindowEntry {
     float hoverScaleProgress = 1.0f;
     float hoverScaleDuration = 0.167f;
     MotionTrackClock hoverScaleClock;
+    bool isDesktopItem = false;
 };
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR scrollWheelAction[32]; WCHAR scrollSecondaryAction[32]; WCHAR scrollSecondaryModifier[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR altBacktickBehavior[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
@@ -1236,6 +1242,7 @@ struct Settings {
     bool showApplications;
     WCHAR showTitles[32];
     bool restoreAllWindows;
+    bool includeDesktopItem;
     bool hideMinimizedWindows;
     bool sortMinimizedWindowsToEnd;
     bool showMinimizedIndicator;
@@ -2775,6 +2782,7 @@ static RECT ComputeDockPerimeterRect(const RECT& rcCell, int itemW, int itemH, c
 static bool BadgeIconPositionIs(const WCHAR* v) { return wcscmp(g_settings.badgeIconPosition, v) == 0; }
 static bool BadgeTitleIsTop() { return wcscmp(g_settings.badgeTitlePosition, L"top") == 0; }
 static inline bool IsEntryMinimized(const WindowEntry& w) {
+    if (w.isDesktopItem) return false;
     if (g_settings.showApplications && !w.groupWindows.empty()) {
         for (HWND hw : w.groupWindows) {
             if (IsWindow(hw) && !IsIconic(hw)) return false;
@@ -3304,6 +3312,7 @@ struct OutgoingItemSnapshot {
     RECT rcCellLayout = {};
     RECT rcThumbLayout = {};
     ItemTransitionMotion entryMotion;
+    bool isDesktopItem = false;
 };
 
 struct ScrollTransitionState {
@@ -3341,6 +3350,7 @@ struct DepartingEntrySnapshot {
     std::vector<HWND> groupWindows;
     SIZE sourceSize = {};
     RECT rcSourceCrop = {};
+    bool isDesktopItem = false;
 };
 
 struct LayoutTransitionState {
@@ -3680,6 +3690,7 @@ static void CaptureLayoutTransitionStart() {
 static DepartingEntrySnapshot CaptureDepartingEntry(const WindowEntry& entry) {
     DepartingEntrySnapshot snapshot = {};
     snapshot.hWnd = entry.hWnd;
+    snapshot.isDesktopItem = entry.isDesktopItem;
     snapshot.rcCellStart = snapshot.rcCellCurrent = entry.rcCell;
     snapshot.rcThumbStart = snapshot.rcThumbCurrent = entry.rcThumbActual;
     snapshot.alpha = entry.isNewEntry ? entry.enterAlpha : 1.0f;
@@ -3710,6 +3721,7 @@ static void CaptureGroupTransitionStart() {
             if (index >= 0 && HasLayoutRect(g_windows[index].rcCell)) continue;
             WindowEntry frame = {};
             frame.hWnd = item.hWnd;
+            frame.isDesktopItem = item.isDesktopItem;
             frame.rcCell = item.rcCell;
             frame.rcThumbActual = item.rcThumbActual;
             OffsetRect(&frame.rcCell, x - g_scrollTransition.travelDistanceX,
@@ -4055,7 +4067,10 @@ static void UpdateMicrointeractionTargets() {
     StartOpacityMotion(g_chevronHoverNext, g_animChevronHoverAlphaNext, g_hoverChevron == 1 ? 1.0f : 0.0f);
     for (int i = 0; i < (int)g_windows.size(); i++) {
         auto& w = g_windows[i];
-        float targetAlpha = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
+        float targetAlpha = (i == g_hoverIndex && g_settings.showCloseButton &&
+                             !g_windows[i].isDesktopItem && !IsWindowTruncated(i))
+                                ? 1.0f
+                                : 0.0f;
         if (DockLayoutActive() && DockCloseButtonIsHidden()) targetAlpha = 0.0f;
         UpdateCloseButtonMotionTarget(w, targetAlpha);
         float targetScale = (ThumbnailHoverIsZoom() && i == g_hoverThumbIndex && !IsWindowTruncated(i)) ?
@@ -4447,10 +4462,13 @@ static void FinishAnimations() {
     g_animChevronProgressPrev = 1.0f;
     g_animChevronProgressNext = 1.0f;
     g_animHoverScaleActive = false;
-    g_animCloseBtnAlpha = (g_hoverIndex >= 0 && g_settings.showCloseButton && !IsWindowTruncated(g_hoverIndex)) ? 1.0f : 0.0f;
+    g_animCloseBtnAlpha = (g_hoverIndex >= 0 && g_hoverIndex < (int)g_windows.size() &&
+                           g_settings.showCloseButton && !g_windows[g_hoverIndex].isDesktopItem &&
+                           !IsWindowTruncated(g_hoverIndex)) ? 1.0f : 0.0f;
     g_animCloseBtnHoverAlpha = g_isCloseHovered ? 1.0f : 0.0f;
     for (int i = 0; i < (int)g_windows.size(); i++) {
-        SnapCloseButtonMotion(g_windows[i], (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f);
+        SnapCloseButtonMotion(g_windows[i], (i == g_hoverIndex && g_settings.showCloseButton &&
+                                             !g_windows[i].isDesktopItem && !IsWindowTruncated(i)) ? 1.0f : 0.0f);
         g_windows[i].hoverScale = 1.0f;
         g_windows[i].hoverScaleStart = 1.0f;
         g_windows[i].hoverScaleTarget = 1.0f;
@@ -4523,6 +4541,7 @@ static void CaptureOutgoingSnapshot() {
 
         OutgoingItemSnapshot snap;
         snap.hWnd = w.hWnd;
+        snap.isDesktopItem = w.isDesktopItem;
         snap.windowIndex = i;
         snap.rcCell = w.rcCell;
         snap.rcThumbActual = w.rcThumbActual;
@@ -4756,10 +4775,13 @@ static void TriggerHoverAnimation(int thumbIdx) {
             g_animHoverAlphaCurrent = 0.0f;
             g_animHoverAlphaTarget = 0.0f;
         }
-        g_animCloseBtnAlpha = (g_hoverIndex >= 0 && g_settings.showCloseButton && !IsWindowTruncated(g_hoverIndex)) ? 1.0f : 0.0f;
+        g_animCloseBtnAlpha = (g_hoverIndex >= 0 && g_hoverIndex < (int)g_windows.size() &&
+                               g_settings.showCloseButton && !g_windows[g_hoverIndex].isDesktopItem &&
+                               !IsWindowTruncated(g_hoverIndex)) ? 1.0f : 0.0f;
         g_animCloseBtnHoverAlpha = (g_isCloseHovered && g_animCloseBtnAlpha > 0.05f) ? 1.0f : 0.0f;
         for (int i = 0; i < (int)g_windows.size(); i++) {
-            SnapCloseButtonMotion(g_windows[i], (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f);
+            SnapCloseButtonMotion(g_windows[i], (i == g_hoverIndex && g_settings.showCloseButton &&
+                                                 !g_windows[i].isDesktopItem && !IsWindowTruncated(i)) ? 1.0f : 0.0f);
             float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
             g_windows[i].hoverScale = s;
             g_windows[i].hoverScaleStart = s;
@@ -6479,6 +6501,7 @@ static void ConsumeWindowIconResults() {
     // after freeing slots, without enumeration or any synchronous resolver.
     auto refill = [&](auto& entries) {
         for (auto& entry : entries) {
+            if (entry.isDesktopItem) continue;
             if (entry.iconCell && (entry.iconCell->retired.load() ||
                                   !IconWindowIdentityMatches(*entry.iconCell))) continue;
             HICON previous = entry.hIcon;
@@ -6501,6 +6524,10 @@ static void ConsumeWindowIconResults() {
 }
 
 static void GetWindowGroupKey(HWND hWnd, WCHAR* out, size_t cch);
+
+static bool IsDesktopSourceWindow(HWND hWnd) {
+    return hWnd && hWnd == GetShellWindow();
+}
 
 typedef BOOL (WINAPI *pfnIsGamingFullScreenExperienceActive)();
 
@@ -6534,6 +6561,7 @@ static bool IsXboxModeOrForeground() {
 
 static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
     if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd) || IsNativeSwitcherWindow(hWnd)) return false;
+    if (IsDesktopSourceWindow(hWnd)) return false;
     if (!IsAltTabWindow(hWnd)) return false;
 
     BOOL cloaked = FALSE;
@@ -6657,6 +6685,42 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
         list->push_back(e);
     }
     return TRUE;
+}
+
+static HICON LoadDesktopIcon() {
+    WCHAR path[MAX_PATH] = {};
+    UINT length = GetSystemDirectoryW(path, ARRAYSIZE(path));
+    if (length > 0 && length + ARRAYSIZE(L"\\imageres.dll") <= ARRAYSIZE(path)) {
+        wcscat_s(path, L"\\imageres.dll");
+        HICON icon = nullptr;
+        if (ExtractIconExW(path, -110, &icon, nullptr, 1) > 0 && icon) {
+            return icon;
+        }
+    }
+    return s_iconPlaceholder ? s_iconPlaceholder : LoadIconW(nullptr, IDI_APPLICATION);
+}
+
+static void LoadDesktopTitle(WCHAR* title, size_t cch) {
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    if (!shell32 || !LoadStringW(shell32, 21769, title, (int)cch)) {
+        wcsncpy_s(title, cch, L"Desktop", _TRUNCATE);
+    }
+}
+
+static WindowEntry CreateDesktopEntry() {
+    WindowEntry entry = {};
+    entry.hWnd = GetShellWindow();
+    entry.isDesktopItem = true;
+    LoadDesktopTitle(entry.title, ARRAYSIZE(entry.title));
+
+    HICON icon = LoadDesktopIcon();
+    if (icon && icon != s_iconPlaceholder) {
+        entry.iconCell = std::make_shared<WindowIconCell>();
+        entry.iconCell->hWnd = entry.hWnd;
+        entry.iconCell->icon = std::make_shared<OwnedWindowIcon>(icon);
+    }
+    entry.hIcon = icon;
+    return entry;
 }
 
 // === UWP Icon Extraction (Explorer IPC) ===
@@ -7857,6 +7921,12 @@ static void BuildWindowList() {
     g_windows.clear();
     EnumWindows(EnumWindowsProc, (LPARAM)&g_windows);
 
+    HWND desktopWindow = GetShellWindow();
+    g_windows.erase(std::remove_if(g_windows.begin(), g_windows.end(),
+        [desktopWindow](const WindowEntry& entry) {
+            return desktopWindow && entry.hWnd == desktopWindow;
+        }), g_windows.end());
+
     // Prune destroyed windows from MRU history
     g_mruWindows.erase(
         std::remove_if(g_mruWindows.begin(), g_mruWindows.end(), [](HWND h) {
@@ -7933,6 +8003,10 @@ static void BuildWindowList() {
         std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
             return IsEntryMinimized(a) < IsEntryMinimized(b);
         });
+    }
+
+    if (g_settings.includeDesktopItem && !g_isAltBacktickSameApp && desktopWindow) {
+        g_windows.push_back(CreateDesktopEntry());
     }
 }
 
@@ -9757,6 +9831,7 @@ static inline RECT GetCloseButtonRect(const WindowEntry& e) {
 }
 
 static bool HitTestCloseButton(const WindowEntry& e, POINT ptClient) {
+    if (e.isDesktopItem) return false;
     RECT rc = GetCloseButtonRect(e);
     if (rc.left == 0 && rc.right == 0 && rc.top == 0 && rc.bottom == 0) return false;
     // Inflate slightly (2px) for comfortable mouse target acquisition
@@ -10077,7 +10152,7 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
     // ---- Normal (non-badge) header content rendering ----
     int btnReserve = 0;
     bool isIconOnly = !g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon;
-    if (g_settings.showCloseButton && !HeaderIsVertical()) {
+    if (g_settings.showCloseButton && !e.isDesktopItem && !HeaderIsVertical()) {
         if (!isIconOnly && !(g_settings.showThumbnails && ThumbnailIsSide())) {
             btnReserve = ((g_settings.centerTaskContent) || isHovered)
                      ? closeBtnReserve
@@ -10331,6 +10406,7 @@ static void DrawDockIconStrip(HDC hdc) {
             if (index >= 0 && !IsWindowTruncated(index)) continue;
             WindowEntry entry = {};
             entry.hWnd = snap.hWnd;
+            entry.isDesktopItem = snap.isDesktopItem;
             entry.hIcon = snap.hIcon;
             entry.groupWindows = snap.groupWindows;
             RECT cell = snap.rcCell;
@@ -10537,6 +10613,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
         for (const auto& dep : g_layoutTransition.departingItems) {
             if (dep.alpha <= 0.01f) continue;
             WindowEntry e = {};
+            e.isDesktopItem = dep.isDesktopItem;
             e.rcCell = dep.rcCellCurrent;
             e.rcThumbActual = dep.rcThumbCurrent;
             e.rcThumbSlot = dep.rcThumbCurrent;
@@ -10917,7 +10994,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         }
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
-        if (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f) {
+        if (g_settings.showCloseButton && !e.isDesktopItem && e.closeBtnAlpha > 0.01f) {
             if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
                 RECT btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
                 if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
@@ -10937,7 +11014,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         float groupBadgeAlpha = 1.0f;
         if (DockLayoutActive() && DockPositionsOverlap()) {
             // Overlapping case: close button takes precedence in visibility when hovered over the button area
-            if (e.closeBtnAlpha > 0.01f) {
+            if (!e.isDesktopItem && e.closeBtnAlpha > 0.01f) {
                 groupBadgeAlpha = (1.0f - e.closeBtnAlpha);
                 if (groupBadgeAlpha < 0.01f) {
                     showThisGroupBadge = false;
@@ -11242,7 +11319,7 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
 
         float groupBadgeAlpha = 1.0f;
         if (DockLayoutActive() && DockPositionsOverlap()) {
-            if (e.closeBtnAlpha > 0.01f) {
+            if (!e.isDesktopItem && e.closeBtnAlpha > 0.01f) {
                 groupBadgeAlpha = (1.0f - e.closeBtnAlpha);
                 if (groupBadgeAlpha < 0.01f) {
                     showThisGroupBadge = false;
@@ -11394,7 +11471,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
         for (int i = 0; i < (int)g_windows.size(); i++) {
             const auto& e = g_windows[i];
             if (IsWindowTruncated(i)) continue;
-            if (e.closeBtnAlpha > 0.01f) {
+            if (!e.isDesktopItem && e.closeBtnAlpha > 0.01f) {
                 if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
                     RECT rcThumbActual = (ThumbnailHoverIsZoom() && e.hoverScale > 1.0001f) ? GetScaledThumbRect(e) : e.rcThumbActual;
                     RECT btnRc = GetCloseButtonRect(e.rcCell, rcThumbActual, e.rcThumbSlot);
@@ -13456,6 +13533,19 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
     }
 }
 
+static void ToggleDesktop() {
+    IShellDispatch4* shell = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_IShellDispatch4,
+                                  reinterpret_cast<void**>(&shell));
+    if (SUCCEEDED(hr) && shell) {
+        hr = shell->ToggleDesktop();
+        shell->Release();
+    }
+    Wh_Log(L"SWS: ToggleDesktop hr=0x%08X", (unsigned)hr);
+    s_touchpadCommitActivation = false;
+}
+
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
     CancelTwoFingerTapDismiss();
@@ -13470,11 +13560,13 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     CancelRawTouchpadStroke();
 
     HWND hTarget = NULL;
+    bool activateDesktop = false;
     std::vector<HWND> restoreWindows;
     if (activateSelectedWindow && g_selectedIndex >= 0 &&
         g_selectedIndex < (int)g_windows.size()) {
         hTarget = g_windows[g_selectedIndex].hWnd;
-        if (g_settings.showApplications && g_settings.restoreAllWindows) {
+        activateDesktop = g_windows[g_selectedIndex].isDesktopItem;
+        if (!activateDesktop && g_settings.showApplications && g_settings.restoreAllWindows) {
             restoreWindows = g_windows[g_selectedIndex].groupWindows;
         }
     }
@@ -13487,7 +13579,10 @@ static void StartExitAnimation(bool activateSelectedWindow) {
         // handing off. Activation must precede even non-animated teardown.
         g_animExitActive = true;
         PublishMouseHookPolicy();
-        if (activateSelectedWindow) ActivateExitedWindow(hTarget, restoreWindows);
+        if (activateSelectedWindow) {
+            if (activateDesktop) ToggleDesktop();
+            else ActivateExitedWindow(hTarget, restoreWindows);
+        }
         HideSwitcher();
         return;
     }
@@ -13528,7 +13623,10 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     StartAnimationTicker();
     // Both release paths hand off before visual teardown. The exit guard and
     // click-through state are established before external calls can reenter.
-    if (activateSelectedWindow) ActivateExitedWindow(hTarget, restoreWindows);
+    if (activateSelectedWindow) {
+        if (activateDesktop) ToggleDesktop();
+        else ActivateExitedWindow(hTarget, restoreWindows);
+    }
 }
 
 static void SwitchToSelected() {
@@ -13607,6 +13705,7 @@ static void RecomputeAndReposition() {
     if (!g_windows.empty()) {
         bool removedAny = false;
         for (int i = (int)g_windows.size() - 1; i >= 0; i--) {
+            if (g_windows[i].isDesktopItem) continue;
             HWND h = g_windows[i].hWnd;
             if (!IsWindow(h) || (!IsWindowVisible(h) && !IsIconic(h))) {
                 for (const auto& kv : g_windows[i].hThumbs) {
@@ -14707,7 +14806,8 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
     }
 
     bool closeHovered = false;
-    if (g_settings.showCloseButton && entryIdx >= 0 && entryIdx < (int)g_windows.size() && !IsWindowTruncated(entryIdx)) {
+    if (g_settings.showCloseButton && entryIdx >= 0 && entryIdx < (int)g_windows.size() &&
+        !g_windows[entryIdx].isDesktopItem && !IsWindowTruncated(entryIdx)) {
         if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
             POINT pt = { x, y };
             closeHovered = HitTestCloseButton(g_windows[entryIdx], pt);
@@ -14756,10 +14856,13 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
                 g_animHoverAlphaCurrent = 0.0f;
                 g_animHoverAlphaTarget = 0.0f;
             }
-            g_animCloseBtnAlpha = (entryIdx >= 0 && g_settings.showCloseButton && !IsWindowTruncated(entryIdx)) ? 1.0f : 0.0f;
+            g_animCloseBtnAlpha = (entryIdx >= 0 && entryIdx < (int)g_windows.size() &&
+                                   g_settings.showCloseButton && !g_windows[entryIdx].isDesktopItem &&
+                                   !IsWindowTruncated(entryIdx)) ? 1.0f : 0.0f;
             g_animCloseBtnHoverAlpha = (closeHovered && g_animCloseBtnAlpha > 0.05f) ? 1.0f : 0.0f;
             for (int i = 0; i < (int)g_windows.size(); i++) {
-                bool shouldShowClose = (i == entryIdx && g_settings.showCloseButton && !IsWindowTruncated(i));
+                bool shouldShowClose = (i == entryIdx && g_settings.showCloseButton &&
+                                        !g_windows[i].isDesktopItem && !IsWindowTruncated(i));
                 if (DockLayoutActive() && DockCloseButtonIsHidden()) shouldShowClose = false;
                 SnapCloseButtonMotion(g_windows[i], shouldShowClose ? 1.0f : 0.0f);
                 float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
@@ -14838,6 +14941,7 @@ static void SWS_RegisterHotkeys();
 
 static void UpdateEntryForWindow(WindowEntry& e) {
     InvalidateStaticCache();
+    if (e.isDesktopItem) return;
     GetWindowTextW(e.hWnd, e.title, 256);
     if (!e.title[0]) InternalGetWindowText(e.hWnd, e.title, 256);
     e.hIcon = LoadWindowIcon(e.hWnd, &e.iconCell, true);
@@ -14891,6 +14995,7 @@ static bool RefreshGroupRepresentative(WindowEntry& entry) {
 }
 
 static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
+    if (IsDesktopSourceWindow(hDestroyed)) return;
     if (!IsWindow(hDestroyed)) InvalidateWindowIcon(hDestroyed);
     if (g_animExitActive || (!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
     InvalidateStaticCache();
@@ -15094,6 +15199,7 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
 static void AddWindowEntry(HWND hWnd) {
     if (g_animExitActive || (!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
     if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd)) return;
+    if (IsDesktopSourceWindow(hWnd)) return;
     if (!IsEligibleWindow(hWnd)) {
         RemoveWindowEntryByHwnd(hWnd);
         return;
@@ -15502,6 +15608,7 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     if (event != 0x0003 /* EVENT_SYSTEM_FOREGROUND */ &&
         (idObject != OBJID_WINDOW || idChild != CHILDID_SELF)) return;
     if (!hwnd) return;
+    if (IsDesktopSourceWindow(hwnd)) return;
     if (event == EVENT_OBJECT_DESTROY) {
         InvalidateWindowIcon(hwnd);
         RemoveWindowEntryByHwnd(hwnd);
@@ -15654,6 +15761,7 @@ static void QueueCloseWindow(HWND hw) {
 
 static void CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return;
+    if (g_windows[idx].isDesktopItem) return;
 
     HWND targetWnd = g_windows[idx].hWnd;
     if (g_settings.showApplications && g_windows[idx].groupWindows.size() > 1) {
@@ -18352,6 +18460,7 @@ static void LoadSettings() {
         wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") != 0) {
         wcsncpy_s(g_settings.virtualDesktopBehavior, L"allDesktops", _TRUNCATE);
     }
+    g_settings.includeDesktopItem = LoadBoolSetting(L"Accessibility.includeDesktopItem", false);
 
     g_settings.rowHeight = Wh_GetIntSetting(L"Dimensions.rowHeight");
     if (g_settings.rowHeight <= 0) g_settings.rowHeight = 230;
