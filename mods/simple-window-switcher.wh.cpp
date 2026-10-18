@@ -87,7 +87,7 @@ the upward launcher independently.
 
 | Gesture | Action |
 | --- | --- |
-| Three-finger horizontal swipe while closed | Select the single adjacent MRU entry immediately. Release before the hold threshold activates it without revealing the UI; hold to reveal normal mode, then drag to navigate. Selection wraps at list boundaries. |
+| Three-finger horizontal swipe while closed | Select the single adjacent MRU entry immediately. Release before the hold threshold activates it without revealing the UI; hold to reveal normal mode, then drag to navigate. Initial selection wraps within the first row. |
 | Three-finger upward swipe while closed | Open sticky mode when the upward launcher is enabled. |
 | Three-finger drag while open | Navigate entries and rows without wrapping past the spatial edges. In sticky mode, lifting after a drag leaves the switcher open. |
 | Fresh stationary three-finger tap in sticky mode | Activate the selection after lifting from the previous swipe. |
@@ -15953,6 +15953,8 @@ static bool RapidTouchpadLiftObserved() {
     return s_rawGestureTips == 0 && s_rawGestureSawThree;
 }
 
+static bool SelectInitialTouchpadTarget(int direction);
+
 static bool BeginRapidTouchpadPending(int initialStep, HWND invocationSource = nullptr,
                                       ULONGLONG gestureStartTick = 0,
                                       int physicalDirection = 0) {
@@ -16012,7 +16014,7 @@ static bool BeginRapidTouchpadPending(int initialStep, HWND invocationSource = n
         return false;
     }
     if (!g_windows.empty() && !s_touchpadRapidPendingCommitted) {
-        CycleLinear(s_touchpadRapidPendingDirection);
+        SelectInitialTouchpadTarget(s_touchpadRapidPendingDirection);
         s_touchpadRapidPendingTargetIndex = g_selectedIndex;
         s_touchpadRapidPendingCommitted = true;
     }
@@ -16243,6 +16245,49 @@ static bool TouchpadNavigate(bool horizontalSwipe, int delta) {
         return g_selectedIndex != previous;
     }
     return NavigateRawWithinLine(horizontalSwipe, delta);
+}
+
+// Select first horizontal-swipe target without wrapping into a later row.
+// Closed-session swipes start at entry 0, so left must wrap within first row,
+// not select final entry in list when multiple rows exist.
+static bool SelectInitialTouchpadTarget(int direction) {
+    if (g_windows.empty() || !direction) return false;
+
+    int previous = g_selectedIndex;
+    if (DockLayoutActive()) {
+        CycleLinear(direction);
+    } else if (LayoutIsVertical()) {
+        CycleDirectional(direction, false);
+    } else {
+        RECT current = RawNavigationCell(g_selectedIndex);
+        if (IsRectEmpty(&current)) return false;
+
+        int lineCoord = current.top;
+        std::vector<int> line;
+        for (int i = 0; i < (int)g_windows.size(); ++i) {
+            RECT cell = RawNavigationCell(i);
+            if (IsRectEmpty(&cell) || cell.top != lineCoord) continue;
+            line.push_back(i);
+        }
+        std::sort(line.begin(), line.end(), [&](int a, int b) {
+            RECT ca = RawNavigationCell(a), cb = RawNavigationCell(b);
+            int aa = (ca.left + ca.right) / 2;
+            int ab = (cb.left + cb.right) / 2;
+            return aa == ab ? a < b : aa < ab;
+        });
+        auto it = std::find(line.begin(), line.end(), g_selectedIndex);
+        if (it == line.end() || line.size() <= 1) return false;
+        int position = (int)(it - line.begin());
+        int targetPosition = position + (direction > 0 ? 1 : -1);
+        if (targetPosition < 0) targetPosition = (int)line.size() - 1;
+        if (targetPosition >= (int)line.size()) targetPosition = 0;
+        int target = line[targetPosition];
+        CycleLinear(target - g_selectedIndex);
+    }
+
+    Wh_Log(L"SWS: initial touchpad target direction=%d selected=%d->%d",
+           direction, previous, g_selectedIndex);
+    return g_selectedIndex != previous;
 }
 
 // Whether the layout actually shows more than one line of entries: a single-line task list
