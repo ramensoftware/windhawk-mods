@@ -2,7 +2,7 @@
 // @id              covertabby
 // @name            CoverTabby
 // @description     An animated Alt+Tab switcher with live previews and multiple layouts
-// @version         0.22.14
+// @version         1.0
 // @author          LTHC
 // @github          https://github.com/LoreTheHolyChip
 // @license         GPL-2.0-only
@@ -21,7 +21,7 @@
 # CoverTabby
 Replaces the alt+tab with a modded kind of the stardock alt tabby's layout.
 
-By **LTHC (LoreTheHolyChip)**. Version **0.22.14**.
+By **LTHC (LoreTheHolyChip)**. Version **1.0**.
 
 Win+Tab integration is experimental and disabled by default. Alt+Tab remains enabled.
 Explorer forwards Alt+Tab to the switcher running in Windhawk’s own tool process. No separate application needs to be installed.
@@ -82,6 +82,7 @@ Windows without a saved preview use the regular theme-colored minimized card.
 - **Windowed** uses a compact centered popup. Windowed Scale resizes the entire popup.
 
 Colors, fonts and rounded corners follow Windows 11 automatically.
+The optional bottom position bar shows the number of open windows and tracks the selected window. It follows search results and resets to the start when navigation wraps. The Desktop card is excluded from the window count.
 
 Enable **Show Desktop Card** to keep a Desktop item at the end of the carousel.
 Selecting it uses Windows' native Show Desktop action.
@@ -163,11 +164,15 @@ Hold to Preview is optional and disabled by default. In thumbnail styles, hold A
 
 While CoverTabby is open, type a letter to focus Search and filter immediately without changing the selected style. Search must be enabled for the current mode. Press Enter to activate a result or Escape to cancel.
 
-Win+Tab opens the optional desktop overview. Further Tab presses while holding Win select the next desktop; Shift+Tab selects the previous one. Hold Win to Keep Desktop Overview Open is enabled by default: releasing Win activates the selection. Disable it to leave the overview open; touchpad opening remains persistent. Beginning a rename leaves hold mode so typing is possible. Three quick three-finger taps toggle between windows and desktops while CoverTabby is open. A single tap is confirmed after a short 340 ms recognition window. Hover a desktop to reveal its centered name and Alt+Tab-style controls. Rename uses a blue pencil button, Delete uses a red trash button, and their labels expand on hover; Desktop 1 cannot be deleted. Rename supports Enter to save and Escape to cancel. The + button after the last desktop creates a new desktop; deleting a desktop moves its windows to the previous desktop. Desktop cards have equal sizes, stay flat and slide horizontally. Desktop overview always fills the monitor. Panels share Alt+Tab's theme-aware material and controls. Alt+Tab and Alt+` select the next/previous open app on the selected desktop; releasing Alt activates it. Left/right arrows select desktops, and clicking an app or pressing Enter focuses it. Minimized apps appear as an icon dock in a rounded top panel; titles appear only when hovering an icon. The app list follows the shell switcher visibility flag and refreshes while open, excluding retained hidden app windows. Live window captures are loaded incrementally for the selected and adjacent desktops (up to four extra captures, two in energy saver); unavailable frames use saved previews or icons and titles. Click or tap to activate the selected desktop; Escape or a downward swipe cancels.
-Each open HWND is shown as a separate fitted tile inside its desktop card; windows
-from the same application are never grouped or stacked together in this view.
+Win+Tab opens the optional desktop overview. A quick tap leaves it open. Holding Win for at least 280 ms, or pressing Tab again while holding Win, selects on release. Tab cycles desktops in the gallery and windows in an expanded desktop; Shift+Tab cycles backward. Left/right arrows select desktops. Disable Hold Win to Keep Desktop Overview Open for a permanently persistent overview. Renaming or inspecting with a right-click leaves hold mode so the overview stays open.
 
-Each card shows its wallpaper and window layout. Active-window content is live; other desktops reuse available snapshots. Windows without cached content show their application icon and title. At most three small wallpaper textures are loaded at once. Windows' internal desktop contracts vary between builds; unsupported builds show an availability message.
+One to three desktops use a perspective carousel, four use a 2×2 grid, and larger sets use a Flip 3D stack. Click a desktop to activate it and close the overview; right-click to expand its preview and keep the overview open. The expanded view preserves each window's desktop position. The Desktops button returns to the gallery. Each HWND remains separate, including windows belonging to the same app.
+
+Minimized windows appear in a top strip with their icon, title and available thumbnail. Missing previews are requested one window at a time by temporarily restoring without activation, then restoring its minimized placement. This attempt has a 250 ms deadline and is cleaned up on cancellation or exit. Applications that do not provide a frame use an icon fallback. Click once to restore a minimized window without leaving the overview, and again to focus it and close. Drag windows to desktop cards or the desktop destination strip. Rename supports Enter and Escape. Closing an occupied desktop asks to move its windows to the first desktop; an empty desktop asks for confirmation. Desktop 1 remains protected.
+
+Live Desktop Wallpaper captures an icon-free Wallpaper Engine host while CoverTabby is open, with a static-image fallback. Host discovery repeats once per second to follow playlist changes and recreated wallpaper hosts. It displays the frames Wallpaper Engine supplies; it cannot animate a wallpaper that Wallpaper Engine itself has paused. Windows on other desktops may only supply cached frames. Wallpaper textures, gallery surfaces and additional live window captures are bounded; there is no wallpaper capture while the switcher is closed.
+
+The optional Show Windows from Other Desktops setting applies only to Alt+Tab. Selecting a remote window switches to its desktop and focuses it. Aero 3D adds the parallel tilted window stack as a separate Alt+Tab style. The position bar and open-window count support English and Italian. Windows' internal desktop contracts vary between builds; unsupported builds show an availability message.
 
 
 */
@@ -193,6 +198,7 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   $description:it: "Scegli lo stile di disposizione delle finestre."
   $options:
   - normal: Normal
+  - aero3d: Aero 3D
   - tiles: Tiles
   - icons: Icon only
   - list: No thumbnail
@@ -201,6 +207,7 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   - enchanted: Windows 10/11 Enchanted
   $options:it:
   - normal: "Normale"
+  - aero3d: "Aero 3D"
   - tiles: "Riquadri"
   - icons: "Solo icone"
   - list: "Senza anteprime"
@@ -233,6 +240,11 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
   $options:it:
   - border: "Aggiungi bordo"
   - bigger: "Ingrandisci"
+- selectionBar: true
+  $name: Bottom window position bar
+  $name:it: "Barra inferiore di posizione delle finestre"
+  $description: Show the open-window count and a selection indicator. The indicator returns to the start when navigation wraps.
+  $description:it: "Mostra il numero di finestre aperte e un indicatore di selezione. L’indicatore torna all’inizio quando la navigazione ricomincia dalla prima finestra."
 - groupWindows: true
   $name: Group Windows
   $name:it: "Raggruppa finestre"
@@ -387,8 +399,18 @@ Each card shows its wallpaper and window layout. Active-window content is live; 
 - desktopOverviewHoldWin: true
   $name: Hold Win to Keep Desktop Overview Open
   $name:it: "Tieni premuto Win per mantenere la panoramica aperta"
-  $description: "Keep holding Win after Win+Tab. Press Tab again to select the next desktop, or Shift+Tab for the previous one. Release Win to activate the selection and close. Turn off to keep the overview open after releasing Win."
-  $description:it: "Continua a tenere premuto Win dopo Win+Tab. Tab seleziona il desktop successivo, Maiusc+Tab quello precedente. Rilascia Win per attivare la selezione e chiudere. Disattiva per lasciare aperta la panoramica."
+  $description: "A quick Win+Tab tap keeps the overview open. Hold Win for at least 280 ms, or press Tab again while holding Win, to select on release. Tab cycles desktops in the gallery and windows in an expanded desktop; Shift+Tab reverses. Turn off to always keep the overview open."
+  $description:it: "Un tocco rapido su Win+Tab lascia aperta la panoramica. Tieni Win premuto per almeno 280 ms, oppure premi di nuovo Tab tenendo Win premuto, per selezionare al rilascio. Tab cambia desktop nella galleria e finestra nel desktop espanso; Maiusc+Tab torna indietro. Disattiva per mantenere sempre aperta la panoramica."
+- otherDesktopWindows: false
+  $name: Show Windows from Other Desktops in Alt+Tab
+  $name:it: "Mostra finestre degli altri desktop in Alt+Tab"
+  $description: "Include windows from every virtual desktop in Alt+Tab. Selecting one switches to its desktop and focuses it. Win+Tab continues to show windows on their own desktops."
+  $description:it: "Include in Alt+Tab le finestre di tutti i desktop virtuali. Selezionandone una, passa al suo desktop e la attiva. Win+Tab continua a mostrare le finestre nei rispettivi desktop."
+- liveDesktopWallpaper: true
+  $name: Live Desktop Wallpaper
+  $name:it: "Sfondo desktop animato"
+  $description: "Use a live preview of the wallpaper host when available, including Wallpaper Engine. Capture runs only while CoverTabby is open. Static wallpaper is the fallback."
+  $description:it: "Mostra lo sfondo animato quando disponibile, incluso Wallpaper Engine. L'acquisizione avviene solo mentre CoverTabby è aperto. In alternativa usa lo sfondo statico."
 */
 // ==/WindhawkModSettings==
 
@@ -429,6 +451,7 @@ static PCWSTR CoverTabbyIconFont();
 #include <atomic>
 #include <cmath>
 #include <cwctype>
+#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -455,7 +478,93 @@ static int LoadIntSetting(LPCWSTR settingName) {
     return Wh_GetIntSetting(settingName);
 }
 
+#include <algorithm>
+#include <cmath>
+#include <vector>
+namespace CoverTabbyPosition {
+struct Selection {int total=0,count=0,rank=-1;};
+template<class Items>
+Selection summarize(const Items& items,const std::vector<int>& matches,bool filtered,int selected){
+    Selection result;
+    auto valid=[&](int i){return i>=0&&i<(int)items.size()&&!items[i]->desktopPlaceholder&&!items[i]->windowGone;};
+    for(int i=0;i<(int)items.size();++i)if(valid(i))++result.total;
+    auto add=[&](int i){if(!valid(i))return;if(i==selected)result.rank=result.count;++result.count;};
+    if(filtered){for(int i:matches)add(i);}else{for(int i=0;i<(int)items.size();++i)add(i);}
+    return result;
+}
+struct Motion {
+    double value=-1;int lastRank=-1,lastCount=0;
+    double update(int rank,int count,double dt,bool animate){
+        if(rank<0||count<=0){value=-1;lastRank=-1;lastCount=count;return value;}
+        rank=std::clamp(rank,0,count-1);
+        double target=count==1?.5:double(rank)/(count-1);
+        bool wrap=count>1&&lastCount==count&&((lastRank==count-1&&rank==0)||(lastRank==0&&rank==count-1));
+        if(value<0||!animate||wrap||count!=lastCount)value=target;
+        else value+=(target-value)*(1-std::exp(-22*std::clamp(dt,0.0,.05)));
+        if(std::fabs(value-target)<.001)value=target;
+        value=std::clamp(value,0.0,1.0);lastRank=rank;lastCount=count;return value;
+    }
+};
+struct Bounds {float left,right,labelTop,barTop,barBottom;};
+inline Bounds bounds(float width,float height,float ui,bool windowed){
+    const float trackWidth=std::max(0.f,std::min(240*ui,width-96*ui));
+    const float bottom=height-(windowed?44.f:20.f)*ui;
+    return {(width-trackWidth)*.5f,(width+trackWidth)*.5f,bottom-34*ui,bottom-4*ui,bottom};
+}
+}
+
+namespace CoverTabbyNavigation {
+struct WinTabGesture {
+    unsigned winKeys=0,tabPresses=0;
+    unsigned long long winDownAt=0,chordStartedAt=0;
+    bool winTimeKnown=false,chordActive=false;
+    void win(unsigned bit,bool down,unsigned long long now) {
+        if(down) {
+            if(!winKeys) {winDownAt=now;winTimeKnown=true;}
+            winKeys|=bit;
+        } else winKeys&=~bit;
+    }
+    void tab(unsigned long long now) {
+        if(!chordActive) {
+            chordActive=true;tabPresses=0;
+            chordStartedAt=winTimeKnown ? winDownAt : now;
+        }
+        if(tabPresses<2) ++tabPresses;
+    }
+    bool finish(unsigned long long now) {
+        if(winKeys) return false;
+        const bool commit=chordActive && (tabPresses>1 || now-chordStartedAt>=280);
+        chordActive=false;tabPresses=0;winTimeKnown=false;
+        return commit;
+    }
+};
+inline int tabStep(bool expanded,bool backwards) {
+    return (backwards ? -1 : 1)*(expanded ? 1 : 3);
+}
+}
+
 namespace covertabby {
+static void TraceDesktop(const char* event,int first=0,int second=0,HRESULT status=S_OK) {
+#ifdef COVERTABBY_LOCAL_DIAGNOSTICS
+    // Local troubleshooting build only: bounded event metadata, no titles or content.
+    wchar_t path[MAX_PATH]{};
+    if(!GetTempPathW(MAX_PATH,path) || wcslen(path)+32>=MAX_PATH) return;
+    wcscat_s(path,L"CoverTabby-navigation.log");
+    static bool firstEvent=true;
+    HANDLE file=CreateFileW(path,FILE_APPEND_DATA|GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,
+        nullptr,firstEvent ? CREATE_ALWAYS : OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(file==INVALID_HANDLE_VALUE) return;
+    firstEvent=false;
+    LARGE_INTEGER size{};
+    if(GetFileSizeEx(file,&size) && size.QuadPart<65536) {
+        char line[192]{};
+        const int length=std::snprintf(line,sizeof(line),"%llu %s a=%d b=%d hr=%08lX\r\n",
+            GetTickCount64(),event,first,second,(unsigned long)status);
+        DWORD written=0;if(length>0) WriteFile(file,line,(DWORD)std::min(length,(int)sizeof(line)-1),&written,nullptr);
+    }
+    CloseHandle(file);
+#endif
+}
 namespace wgc = winrt::Windows::Graphics::Capture;
 namespace wgdx = winrt::Windows::Graphics::DirectX;
 namespace wgd3d = winrt::Windows::Graphics::DirectX::Direct3D11;
@@ -602,7 +711,8 @@ struct Settings {
     MinimizedTint minimizedTint=MinimizedTint::Accent;
     BackdropStyle backdropStyle=BackdropStyle::Blur;
     bool energySaver=false, previewCache=true, touchpadGestures=true, desktopOverviewHotkey=false;
-    bool desktopOverviewHoldWin=true;
+    bool desktopOverviewHoldWin=true, otherDesktopWindows=false;
+    bool aero3D=false, liveDesktopWallpaper=true;
     bool ignoreRepeatedNavigationKeys=true;
     float transparentOpacity=0.35f;
     bool compactMaterial = true;
@@ -621,6 +731,7 @@ struct Settings {
     bool animateHover = true;
     bool showCloseButton = true;
     bool showIcons = true;
+    bool selectionBar = true;
     double hoverSelectionDelay = 0.35;
     bool hoverSelects = false;
     bool hoverShowsTitle = true;
@@ -633,7 +744,7 @@ struct Settings {
     int iconSize = 46, iconSpacing = 64, visibleIcons = 11;
     float sideWindowScale = 1, sideWindowSpacing = 1;
     float sideWindowBrightness = 0.8f, sideWindowOpacity = 1;
-    static constexpr bool compactCoverFlow = true;
+    bool compactCoverFlow = true;
     bool reflections = true;
     bool groupPrograms = true;
     bool tileGrid = false;
@@ -666,6 +777,7 @@ Settings LoadSettings() {
     s.windowMode = wcscmp(theme, L"windowed") == 0;
     const auto style = WindhawkUtils::StringSetting::make(L"style");
     s.simpleStyle = wcscmp(style,L"icons")==0 ? 1 : wcscmp(style,L"list")==0 ? 2 : wcscmp(style,L"text")==0 ? 3 : wcscmp(style,L"search")==0 ? 4 : wcscmp(style,L"enchanted")==0 ? 5 : 0;
+    s.aero3D=wcscmp(style,L"aero3d")==0;
     const auto material=WindhawkUtils::StringSetting::make(L"enchantedMaterial");
     s.enchantedMaterial=wcscmp(material,L"dark")==0 ? 1 : wcscmp(material,L"light")==0 ? 2 : wcscmp(material,L"acrylic")==0 ? 3 : 0;
     s.tileGrid = wcscmp(style, L"tiles") == 0;
@@ -674,6 +786,7 @@ Settings LoadSettings() {
     const auto animation = WindhawkUtils::StringSetting::make(L"animation");
     s.originalAnimations = wcscmp(animation, L"original") == 0;
     s.groupPrograms = ::LoadBoolSetting(L"groupWindows");
+    s.selectionBar = ::LoadBoolSetting(L"selectionBar");
     s.windowScale = std::clamp(::LoadIntSetting(L"windowScale"), 25, 200) / 100.0f;
     s.enableSearch = ::LoadBoolSetting(L"searchEnabled");
     // Windowed mode is intentionally a compact picker: keep the area clear
@@ -707,6 +820,8 @@ Settings LoadSettings() {
     s.touchpadGestures=::LoadBoolSetting(L"touchpadGestures");
     s.desktopOverviewHotkey=::LoadBoolSetting(L"desktopOverviewHotkey");
     s.desktopOverviewHoldWin=::LoadBoolSetting(L"desktopOverviewHoldWin");
+    s.otherDesktopWindows=::LoadBoolSetting(L"otherDesktopWindows");
+    s.liveDesktopWallpaper=::LoadBoolSetting(L"liveDesktopWallpaper");
     s.ignoreRepeatedNavigationKeys=::LoadBoolSetting(L"ignoreRepeatedNavigationKeys");
     s.italian = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
     s.typingAnimation = ::LoadBoolSetting(L"typingAnimation");
@@ -752,6 +867,7 @@ Settings LoadSettings() {
     s.shadows = true;
     s.includeMinimized = s.minimizedContent = true;
     if (s.simpleStyle) { s.groupPrograms=false; s.enableSearch=s.simpleStyle>=4; s.showThumbnails=s.simpleStyle>=4; s.hoverControls=false; }
+    if(s.aero3D) {s.groupPrograms=false;s.compactCoverFlow=false;s.showThumbnails=true;s.disable3DWindows=false;}
     return s;
 }
 HMODULE g_module;
@@ -966,18 +1082,24 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
         (vk==VK_TAB || vk==VK_OEM_3 || vk==VK_OEM_8) && g_desktopOverviewActive)
         g_stickyControls=false;
     static bool desktopTabHeld=false;
+    static CoverTabbyNavigation::WinTabGesture desktopGesture;
     static bool leftWinDown=false,rightWinDown=false;
     static unsigned handledWinReleases=0;
     if(vk==VK_LWIN) leftWinDown=keyDown;
     if(vk==VK_RWIN) rightWinDown=keyDown;
     if(vk==VK_LWIN || vk==VK_RWIN)
         g_physicalWinKeys=(leftWinDown ? 1u : 0u)|(rightWinDown ? 2u : 0u);
+    if(vk==VK_LWIN || vk==VK_RWIN)
+        desktopGesture.win(vk==VK_LWIN ? 1u : 2u,keyDown,GetTickCount64());
     if(!keyDown && (vk==VK_LWIN || vk==VK_RWIN)) {
         const unsigned bit=vk==VK_LWIN ? 1 : 2;
         if(handledWinReleases & bit) {
             handledWinReleases&=~bit;
-            if(!leftWinDown && !rightWinDown && g_desktopWinHoldSession.exchange(false) && g_desktopOverviewHoldWin) {
-                PostMessageW(g_overlayWnd,WM_APP_DESKTOP_WIN_RELEASE,0,0);
+            if(!leftWinDown && !rightWinDown) {
+                const bool held=desktopGesture.finish(GetTickCount64());
+                const bool active=g_desktopWinHoldSession.exchange(false);
+                if(active && g_desktopOverviewHoldWin && held)
+                    PostMessageW(g_overlayWnd,WM_APP_DESKTOP_WIN_RELEASE,0,0);
             }
             // Swallow the physical release. Queue a harmless chord key before
             // the tagged Win-up, so Start never receives a bare Windows tap.
@@ -993,6 +1115,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
             }
             return 1;
         }
+        if(!leftWinDown && !rightWinDown) desktopGesture.finish(GetTickCount64());
     }
     if(vk==VK_TAB && !keyDown && desktopTabHeld) {
         desktopTabHeld=false;return 1;
@@ -1002,6 +1125,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
         g_takeOver && g_desktopOverviewHotkey) {
         if(desktopTabHeld) return 1;
         desktopTabHeld=true;
+        desktopGesture.tab(GetTickCount64());
         // Mask the completed chord on release; never hold Ctrl synthetically.
         if(leftWinDown || IsKeyDown(VK_LWIN)) handledWinReleases|=1;
         if(rightWinDown || IsKeyDown(VK_RWIN)) handledWinReleases|=2;
@@ -1660,12 +1784,16 @@ public:
         if(!Initialize()) return E_NOINTERFACE;
         const auto desktop=std::find_if(entries.begin(),entries.end(),[&](const Entry& entry){return IsEqualGUID(entry.id,id);});
         if(desktop==entries.end()) return E_INVALIDARG;
+        HRESULT result;
         if(m_monitorArgument) {
             using Fn=HRESULT(STDMETHODCALLTYPE*)(IUnknown*,HMONITOR,Desktop*);
-            return Method<Fn>(m_internal.get(),9)(m_internal.get(),nullptr,desktop->object.get());
+            result=Method<Fn>(m_internal.get(),9)(m_internal.get(),nullptr,desktop->object.get());
+        } else {
+            using Fn=HRESULT(STDMETHODCALLTYPE*)(IUnknown*,Desktop*);
+            result=Method<Fn>(m_internal.get(),9)(m_internal.get(),desktop->object.get());
         }
-        using Fn=HRESULT(STDMETHODCALLTYPE*)(IUnknown*,Desktop*);
-        return Method<Fn>(m_internal.get(),9)(m_internal.get(),desktop->object.get());
+        TraceDesktop("Switch-call",(int)(desktop-entries.begin()),(int)entries.size(),result);
+        return result;
     }
     HRESULT Create(GUID* id) {
         if(!id) return E_POINTER;
@@ -2185,9 +2313,18 @@ class Switcher {
     static BOOL CALLBACK EnumOverviewWindow(HWND hwnd, LPARAM parameter);
     static BOOL CALLBACK FindOverviewTaskbar(HWND hwnd, LPARAM parameter);
     void DrawDesktopOverview(float opacity);
+    void DrawDesktopGallery(float opacity);
+    int HitOverviewDesktop(D2D1_POINT_2F point) const;
     void LoadOverviewWallpaper();
     void UpdateOverviewCaptures();
     void ClearOverviewCaptures();
+    void UpdateLiveWallpaper();
+    void ClearLiveWallpaper();
+    bool DrawLiveWallpaper(const D2D1_RECT_F& destination,float opacity);
+    bool RestoreOverviewWindow(HWND hwnd,DWORD pid);
+    void FinishOverviewPreview(bool keepRestored=false);
+    void DrawDesktopRemoval(float opacity);
+    void RemoveOverviewDesktop();
     void RefreshOverviewDesktops(const GUID& selected);
     void FinishDesktopRename(bool save);
     void TickTouchpadTaps(double now);
@@ -2267,6 +2404,12 @@ class Switcher {
     }
     void DrawSimpleStyle(float t);
     void DrawTitle(float t);
+    void DrawSelectionBar(float t);
+    CoverTabbyPosition::Motion m_positionMotion;
+    com_ptr<IDWriteTextFormat> m_positionFormat;
+    float m_positionFontSize=0;
+    int m_positionTextCount=-1;
+    std::wstring m_positionLabel;
     void DrawTileSelection(float t);
     void DrawCompactIcons(float t);
     void DrawProcessStats(float t);
@@ -2358,6 +2501,16 @@ class Switcher {
     DWORD m_overviewSelectedPid=0;
     GUID m_overviewCurrentDesktop{};
     std::unique_ptr<Item> m_overviewTaskbar;
+    std::unique_ptr<Item> m_liveWallpaper;
+    double m_liveWallpaperCheckAt=0;
+    bool m_overviewExpanded=false;
+    GUID m_overviewDeleteId{};
+    bool m_overviewDeletePending=false;
+    D2D1_RECT_F m_overviewDeleteAccept{},m_overviewDeleteCancel{};
+    HWND m_overviewPreviewWindow=nullptr;
+    DWORD m_overviewPreviewPid=0;
+    WINDOWPLACEMENT m_overviewPreviewPlacement{};
+    double m_overviewPreviewDeadline=0;
     double m_overviewDockTransition=0;
     float m_overviewDockHeight=0;
     HWND m_overviewPress=nullptr;
@@ -2380,11 +2533,14 @@ class Switcher {
         GUID id{};
         std::wstring name;
         com_ptr<ID2D1Bitmap1> wallpaper;
+        com_ptr<ID2D1Bitmap1> surface;
+        com_ptr<ID2D1Effect> projection;
+        Quad quad{};
         bool tried = false;
         D2D1_RECT_F hit{}, rename{}, remove{};
         float hoverAmount = 0, focusAmount = 0, renameHover = 0, removeHover = 0;
     };
-    D2D1_RECT_F m_overviewAdd{},m_overviewRenameBox{};
+    D2D1_RECT_F m_overviewAdd{},m_overviewRenameBox{},m_overviewBack{};
     GUID m_overviewRenameId{};
     std::wstring m_overviewRenameText;
     bool m_overviewRenameSelectAll=false;
@@ -2403,9 +2559,12 @@ class Switcher {
         float dockHover = 0, dockFocus = 0, dockAmount = 0;
         D2D1_RECT_F dockVisual{};
         bool dockTarget = false, alive = true, minimized = false;
+        bool previewTried=false,restoredInOverview=false;
         double validateAt = 0;
     };
     std::vector<OverviewDesktop> m_overviewDesktops;
+    std::vector<int> m_overviewPaintOrder;
+    std::vector<D2D1_RECT_F> m_overviewDropTargets;
     std::vector<OverviewWindow> m_overviewWindows;
     com_ptr<IDWriteTextFormat> m_overviewFormat;
     com_ptr<IDWriteTextFormat> m_overviewTitleFormat;
@@ -2426,6 +2585,7 @@ class Switcher {
     com_ptr<ID2D1Factory1> m_d2dFactory;
     com_ptr<ID2D1Device> m_d2dDevice;
     com_ptr<ID2D1DeviceContext> m_ctx;
+    com_ptr<ID2D1DeviceContext> m_overviewDrawContext;
     com_ptr<IDCompositionDevice> m_dcompDevice;
     com_ptr<IDCompositionTarget> m_dcompTarget;
     com_ptr<IDCompositionVisual> m_dcompVisual;
@@ -2822,6 +2982,8 @@ bool Switcher::CreateDeviceResources() {
 }
 
 void Switcher::ReleaseDeviceResources() {
+    ClearLiveWallpaper();
+    m_overviewDrawContext=nullptr;
     m_searchTextAnimation = {};
     m_renameTextAnimation = {};
     m_uiTextBlur = nullptr;
@@ -3319,8 +3481,9 @@ void Switcher::TickTouchpadTaps(double now) {
 }
 
 void Switcher::OnDesktopHotkey(bool backwards) {
+    TraceDesktop("WinTab",m_overviewSelected,m_overviewExpanded);
     if(m_desktopOverview && (m_state==State::Pending || m_state==State::Open)) {
-        OnStep(backwards ? -3 : 3);
+        OnStep(backwards ? -1 : 1);
     } else {
         ToggleDesktopOverview(true);
         if(m_desktopOverview && m_settings.desktopOverviewHoldWin && (IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN)))
@@ -3329,8 +3492,9 @@ void Switcher::OnDesktopHotkey(bool backwards) {
 }
 
 void Switcher::OnDesktopWinReleased() {
+    TraceDesktop("Win-release",m_overviewSelected,(int)m_state);
     if(!m_desktopOverview || (m_state!=State::Pending && m_state!=State::Open)) return;
-    if(g_physicalWinKeys.load()!=0 || g_desktopRenameTyping || m_overviewPress) return;
+    if(g_physicalWinKeys.load()!=0 || g_desktopRenameTyping || m_overviewDeletePending || m_overviewPress) return;
     EndSwitching();OnCommit(-1);
 }
 
@@ -3366,6 +3530,13 @@ void Switcher::ToggleDesktopOverview(bool force) {
         m_overviewSavedBackground=m_background;m_overviewSavedBackgroundKey=m_backgroundKey;
     }
     m_overviewDesktops.clear();m_overviewWindows.clear();m_overviewSelected=0;
+    m_drawList.clear();
+    std::erase_if(m_items,[](const auto& item){return item->showDesktop;});
+    if(m_items.empty()) {
+        auto item=std::make_unique<Item>();item->desktopPlaceholder=true;item->minimized=true;
+        item->rect=m_monitor;item->title=Text(L"Desktops",L"Desktop");m_items.push_back(std::move(item));
+    }
+    m_overviewExpanded=false;m_overviewDeletePending=false;
     m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
     m_overviewRefreshAt=0;m_overviewTooltip.clear();m_overviewTooltipOpacity=0;
     m_desktopOverview=true;g_desktopOverviewActive=true;m_overviewTransition=NowSeconds();
@@ -3390,6 +3561,7 @@ void Switcher::ToggleDesktopOverview(bool force) {
     }
     m_overviewScroll=m_overviewSelected;
     EnumWindows(EnumOverviewWindow,reinterpret_cast<LPARAM>(this));
+    TraceDesktop("Overview-open",(int)m_overviewDesktops.size(),(int)m_overviewWindows.size());
     size_t explorerWindows=0;
     for(const auto& window:m_overviewWindows) {
         wchar_t className[64]{};GetClassNameW(window.hwnd,className,64);
@@ -3473,16 +3645,194 @@ void Switcher::FinishDesktopRename(bool save) {
 }
 
 void Switcher::ClearOverviewCaptures() {
+    FinishOverviewPreview();
     if(m_overviewTaskbar) {StopCapture(*m_overviewTaskbar);m_overviewTaskbar.reset();}
     for(auto& window:m_overviewWindows) if(window.capture) {
         SaveWindowSnapshot(*window.capture);StopCapture(*window.capture);window.capture.reset();
     }
 }
 
+void Switcher::FinishOverviewPreview(bool keepRestored) {
+    if(!m_overviewPreviewWindow) return;
+    const HWND target=m_overviewPreviewWindow;DWORD pid=0;GetWindowThreadProcessId(target,&pid);
+    for(auto& window:m_overviewWindows) if(window.hwnd==target && window.pid==m_overviewPreviewPid && window.capture) {
+        PollFrames(*window.capture);SaveWindowSnapshot(*window.capture);
+        StopCapture(*window.capture);window.capture.reset();
+    }
+    if(!keepRestored && IsWindow(target) && pid==m_overviewPreviewPid) {
+        auto placement=m_overviewPreviewPlacement;placement.flags|=WPF_ASYNCWINDOWPLACEMENT;
+        SetWindowPlacement(target,&placement);
+    }
+    m_overviewPreviewWindow=nullptr;m_overviewPreviewPid=0;
+}
+
+bool Switcher::RestoreOverviewWindow(HWND target,DWORD expected) {
+    DWORD pid=0;GetWindowThreadProcessId(target,&pid);
+    if(!IsWindow(target) || pid!=expected) return false;
+    if(m_overviewPreviewWindow==target) FinishOverviewPreview(true);
+    else {
+        WINDOWPLACEMENT placement{};placement.length=sizeof(placement);
+        if(!GetWindowPlacement(target,&placement)) return false;
+        placement.flags|=WPF_ASYNCWINDOWPLACEMENT;placement.showCmd=SW_SHOWNOACTIVATE;
+        if(!SetWindowPlacement(target,&placement)) return false;
+    }
+    for(auto& window:m_overviewWindows) if(window.hwnd==target && window.pid==expected) {
+        window.restoredInOverview=true;window.minimized=false;window.validateAt=0;
+    }
+    g_desktopWinHoldSession=false;g_stickyControls=true;
+    return true;
+}
+
+void Switcher::RemoveOverviewDesktop() {
+    if(!m_overviewDeletePending || m_overviewDesktops.size()<2) return;
+    const GUID id=m_overviewDeleteId,fallback=m_overviewDesktops.front().id;
+    m_overviewDeletePending=false;
+    FinishOverviewPreview();
+    // The shell operation atomically moves remaining windows to the fallback.
+    // Refresh before invoking it so an externally removed desktop cannot be reused.
+    const HRESULT refreshed=m_desktopBridge.Refresh();
+    const HRESULT hr=SUCCEEDED(refreshed) ? m_desktopBridge.Remove(id,fallback) : refreshed;
+    if(SUCCEEDED(hr)) {
+        for(auto& window:m_overviewWindows) if(IsEqualGUID(window.desktop,id)) window.desktop=fallback;
+        m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;RefreshOverviewDesktops(fallback);
+        m_overviewRefreshAt=0;
+    } else {m_overviewActionErrorUntil=NowSeconds()+3;Wh_Log(L"Desktop removal failed: 0x%08X",(UINT)hr);}
+    g_switching=true;g_stickyControls=true;PostThreadMessageW(g_hookThreadId,WM_HOOK_ENGAGE,0,0);
+}
+
+void Switcher::DrawDesktopRemoval(float opacity) {
+    if(!m_overviewDeletePending || m_overviewDesktops.empty()) return;
+    const bool occupied=std::any_of(m_overviewWindows.begin(),m_overviewWindows.end(),[&](const auto& window) {
+        return window.alive && IsEqualGUID(window.desktop,m_overviewDeleteId);
+    });
+    m_brush->SetColor(D2D1::ColorF(0,0,0,.65f*opacity));
+    m_ctx->FillRectangle({0,0,m_width,m_height},m_brush.get());
+    const float width=std::min(540*m_dpiScale,m_width-40*m_dpiScale),height=184*m_dpiScale;
+    const D2D1_RECT_F panel{(m_width-width)*.5f,(m_height-height)*.5f,(m_width+width)*.5f,(m_height+height)*.5f};
+    DrawUiPanel(panel,16*m_dpiScale,opacity);
+    std::wstring message=occupied
+        ? std::wstring(Text(L"There are windows open on this virtual desktop. Move them to ",L"Ci sono finestre aperte in questo desktop virtuale. Spostarle in "))+m_overviewDesktops.front().name+L"?"
+        : Text(L"Close this virtual desktop?",L"Chiudere questo desktop virtuale?");
+    m_brush->SetColor(UiForeground(opacity));
+    m_overviewTitleFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+    m_ctx->DrawText(message.c_str(),(UINT32)message.size(),m_overviewTitleFormat.get(),
+        {panel.left+24*m_dpiScale,panel.top+22*m_dpiScale,panel.right-24*m_dpiScale,panel.bottom-70*m_dpiScale},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    m_overviewTitleFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    const float button=118*m_dpiScale;
+    m_overviewDeleteCancel={panel.right-24*m_dpiScale-button,panel.bottom-54*m_dpiScale,panel.right-24*m_dpiScale,panel.bottom-18*m_dpiScale};
+    m_overviewDeleteAccept={m_overviewDeleteCancel.left-button-12*m_dpiScale,m_overviewDeleteCancel.top,m_overviewDeleteCancel.left-12*m_dpiScale,m_overviewDeleteCancel.bottom};
+    m_brush->SetColor(StyleColor(m_settings.highlightColor,.8f*opacity));
+    m_ctx->FillRoundedRectangle({m_overviewDeleteAccept,7*m_dpiScale,7*m_dpiScale},m_brush.get());
+    DrawUiPanel(m_overviewDeleteCancel,7*m_dpiScale,opacity);
+    m_brush->SetColor(UiForeground(opacity));
+    const auto accept=occupied ? Text(L"Move",L"Sposta") : Text(L"Close desktop",L"Chiudi desktop");
+    m_ctx->DrawText(accept,(UINT32)wcslen(accept),m_overviewButtonFormat.get(),m_overviewDeleteAccept,m_brush.get());
+    const auto cancel=Text(L"Cancel",L"Annulla");
+    m_ctx->DrawText(cancel,(UINT32)wcslen(cancel),m_overviewButtonFormat.get(),m_overviewDeleteCancel,m_brush.get());
+}
+
+void Switcher::ClearLiveWallpaper() {
+    if(m_liveWallpaper) {StopCapture(*m_liveWallpaper);m_liveWallpaper.reset();}
+    m_liveWallpaperCheckAt=0;
+}
+
+void Switcher::UpdateLiveWallpaper() {
+    if(!m_settings.liveDesktopWallpaper || (!m_desktopOverview && !m_settings.showDesktopCard)) {
+        ClearLiveWallpaper();return;
+    }
+    const double now=NowSeconds();
+    if(now>=m_liveWallpaperCheckAt) {
+        m_liveWallpaperCheckAt=now+1.0;
+        struct Search {RECT monitor;HWND host=nullptr;DWORD pid=0;};
+        Search search{m_monitor};
+        EnumWindows([](HWND host,LPARAM parameter) WINAPI ->BOOL {
+            auto& search=*reinterpret_cast<Search*>(parameter);
+            wchar_t name[64]{};GetClassNameW(host,name,64);
+            if(wcscmp(name,L"WorkerW") && wcscmp(name,L"Progman")) return TRUE;
+            // Never capture the icon-bearing desktop or the monitor itself:
+            // both could include the switcher and feed its image back into itself.
+            if(!IsWindowVisible(host) || FindWindowExW(host,nullptr,L"SHELLDLL_DefView",nullptr)) return TRUE;
+            RECT bounds{},intersection{};
+            if(!GetWindowRect(host,&bounds) || !IntersectRect(&intersection,&bounds,&search.monitor)) return TRUE;
+            struct ChildSearch {bool found=false;};ChildSearch children;
+            EnumChildWindows(host,[](HWND child,LPARAM parameter) WINAPI ->BOOL {
+                auto& result=*reinterpret_cast<ChildSearch*>(parameter);
+                DWORD pid=0;GetWindowThreadProcessId(child,&pid);
+                HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);
+                wchar_t path[MAX_PATH]{};DWORD length=MAX_PATH;
+                if(process) {
+                    if(QueryFullProcessImageNameW(process,0,path,&length)) {
+                        const wchar_t* leaf=wcsrchr(path,L'\\');leaf=leaf ? leaf+1 : path;
+                        result.found=!_wcsicmp(leaf,L"wallpaper64.exe") || !_wcsicmp(leaf,L"wallpaper32.exe") ||
+                            !_wcsicmp(leaf,L"webwallpaper32.exe") || !_wcsicmp(leaf,L"webwallpaper64.exe");
+                    }
+                    CloseHandle(process);
+                }
+                return !result.found;
+            },reinterpret_cast<LPARAM>(&children));
+            if(!children.found) return TRUE;
+            search.host=host;GetWindowThreadProcessId(host,&search.pid);return FALSE;
+        },reinterpret_cast<LPARAM>(&search));
+        if(m_liveWallpaper && (m_liveWallpaper->hwnd!=search.host || m_liveWallpaper->pid!=search.pid)) {
+            StopCapture(*m_liveWallpaper);m_liveWallpaper.reset();
+            for(auto& item:m_items) if(item->showDesktop) item->content=nullptr;
+        }
+        if(search.host && !m_liveWallpaper) {
+            auto item=std::make_unique<Item>();item->hwnd=search.host;item->pid=search.pid;
+            if(GetWindowRect(search.host,&item->rect)) {
+                StartCapture(*item);
+                if(item->framePool) m_liveWallpaper=std::move(item);
+            }
+        }
+    }
+    if(!m_liveWallpaper) return;
+    PollFrames(*m_liveWallpaper);
+    if(!m_liveWallpaper->content) return;
+    const auto size=m_liveWallpaper->content->GetPixelSize();
+    const RECT& source=m_liveWallpaper->rect;
+    RECT crop{};if(!IntersectRect(&crop,&source,&m_monitor)) return;
+    const float sx=(float)size.width/std::max(1L,source.right-source.left);
+    const float sy=(float)size.height/std::max(1L,source.bottom-source.top);
+    const D2D1_RECT_U pixels{(UINT32)std::max(0.f,(crop.left-source.left)*sx),
+        (UINT32)std::max(0.f,(crop.top-source.top)*sy),
+        std::min(size.width,(UINT32)std::max(0.f,(crop.right-source.left)*sx)),
+        std::min(size.height,(UINT32)std::max(0.f,(crop.bottom-source.top)*sy))};
+    if(pixels.right<=pixels.left || pixels.bottom<=pixels.top) return;
+    for(auto& item:m_items) if(item->showDesktop) {
+        const D2D1_SIZE_U desired{pixels.right-pixels.left,pixels.bottom-pixels.top};
+        const auto existing=item->content ? item->content->GetPixelSize() : D2D1_SIZE_U{};
+        if(existing.width!=desired.width || existing.height!=desired.height) {
+            item->content=nullptr;
+            const auto props=D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_NONE,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED));
+            m_ctx->CreateBitmap(desired,nullptr,0,&props,item->content.put());
+        }
+        if(item->content) item->content->CopyFromBitmap(nullptr,m_liveWallpaper->content.get(),&pixels);
+    }
+}
+
+bool Switcher::DrawLiveWallpaper(const D2D1_RECT_F& destination,float opacity) {
+    if(!m_liveWallpaper || !m_liveWallpaper->content) return false;
+    const auto size=m_liveWallpaper->content->GetSize();
+    const RECT& source=m_liveWallpaper->rect;RECT crop{};
+    if(!IntersectRect(&crop,&source,&m_monitor)) return false;
+    const float sx=size.width/std::max(1L,source.right-source.left),sy=size.height/std::max(1L,source.bottom-source.top);
+    const D2D1_RECT_F pixels{(crop.left-source.left)*sx,(crop.top-source.top)*sy,(crop.right-source.left)*sx,(crop.bottom-source.top)*sy};
+    m_ctx->DrawBitmap(m_liveWallpaper->content.get(),destination,opacity,D2D1_INTERPOLATION_MODE_LINEAR,&pixels);
+    return true;
+}
+
 void Switcher::UpdateOverviewCaptures() {
     if(m_overviewDesktops.empty()) return;
     if(m_overviewTaskbar) PollFrames(*m_overviewTaskbar);
     const double now=NowSeconds();
+    if(m_overviewPreviewWindow) {
+        bool ready=false;
+        for(auto& window:m_overviewWindows) if(window.hwnd==m_overviewPreviewWindow && window.capture) {
+            PollFrames(*window.capture);ready=window.capture->content!=nullptr;
+        }
+        if(ready || now>=m_overviewPreviewDeadline) FinishOverviewPreview();
+    }
     if(now>=m_overviewRefreshAt) {
         m_overviewRefreshAt=now+0.75;
         GUID current{};
@@ -3495,6 +3845,24 @@ void Switcher::UpdateOverviewCaptures() {
             return true;
         });
         EnumWindows(EnumOverviewWindow,reinterpret_cast<LPARAM>(this));
+    }
+    // Obtain missing minimized previews one at a time, without focusing apps.
+    // Every attempt has a deadline and restores its original placement even on exit.
+    if(!m_overviewPreviewWindow && !m_overviewPress && !m_overviewDeletePending) {
+        for(auto& window:m_overviewWindows) {
+            if(window.previewTried || !IsIconic(window.hwnd) ||
+                !IsEqualGUID(window.desktop,m_overviewDesktops[m_overviewSelected].id)) continue;
+            window.previewTried=true;
+            if(m_windowSnapshots.contains(window.hwnd)) continue;
+            WINDOWPLACEMENT original{};original.length=sizeof(original);
+            if(!GetWindowPlacement(window.hwnd,&original)) continue;
+            m_overviewPreviewWindow=window.hwnd;m_overviewPreviewPid=window.pid;
+            m_overviewPreviewPlacement=original;m_overviewPreviewDeadline=now+.25;
+            auto visible=original;visible.showCmd=SW_SHOWNOACTIVATE;visible.flags|=WPF_ASYNCWINDOWPLACEMENT;
+            if(!SetWindowPlacement(window.hwnd,&visible)) {m_overviewPreviewWindow=nullptr;break;}
+            auto item=std::make_unique<Item>();item->hwnd=window.hwnd;item->pid=window.pid;item->rect=window.rect;item->title=window.title;
+            StartCapture(*item);window.capture=std::move(item);break;
+        }
     }
     const size_t limit=m_settings.energySaver ? 2 : 4;
     size_t active=0;
@@ -3530,9 +3898,14 @@ void Switcher::UpdateOverviewCaptures() {
 
 void Switcher::LoadOverviewWallpaper() {
     if(m_overviewDesktops.empty()) return;
-    // Only selected/nearby desktops need textures; keep at most three at once.
-    for(int index:CaptureOrder((int)m_overviewDesktops.size(),m_overviewSelected)) {
-        if(std::abs(index-m_overviewSelected)>1) continue;
+    const int count=(int)m_overviewDesktops.size(),limit=m_settings.energySaver ? 3 : 7;
+    auto visible=[&](int index) {
+        return count<=4 || PositiveMod(index-m_overviewSelected,count)<limit;
+    };
+    // Decode one visible wallpaper per frame and bound the retained textures.
+    for(int offset=0;offset<count;++offset) {
+        const int index=PositiveMod(m_overviewSelected+offset,count);
+        if(!visible(index)) continue;
         auto& desktop=m_overviewDesktops[index];
         if(desktop.tried) continue;
         desktop.tried=true;
@@ -3540,7 +3913,7 @@ void Switcher::LoadOverviewWallpaper() {
         desktop.wallpaper=LoadWallpaperPreview(std::move(path));
         break;
     }
-    for(int index=0;index<(int)m_overviewDesktops.size();++index) if(std::abs(index-m_overviewSelected)>1) {
+    for(int index=0;index<count;++index) if(!visible(index)) {
         m_overviewDesktops[index].wallpaper=nullptr;m_overviewDesktops[index].tried=false;
     }
 }
@@ -3558,6 +3931,166 @@ static OverviewLayout CalculateOverviewLayout(float screenWidth,float screenHeig
     const float height=width/aspect;
     return {width,height,(screenWidth+sidebar)*.5f,
         std::clamp(screenHeight*(minimized ? .56f : .48f),top+height*.5f,bottom-height*.5f),sidebar};
+}
+
+static Pose DesktopGalleryPose(int count,int index,float relative,float screenWidth,float screenHeight,
+    float worldWidth,float worldHeight,float dpi) {
+    Pose pose;
+    float width=std::min(screenWidth*.52f,screenHeight*.52f*worldWidth/worldHeight);
+    pose.scale=width/worldWidth;
+    if(count==4) {
+        width=std::min(screenWidth*.39f,(screenHeight-220*dpi)*.43f*worldWidth/worldHeight);
+        pose.scale=std::max(1.f,width)/worldWidth;
+        pose.x=(index%2 ? 1.f : -1.f)*(width*.5f+24*dpi);
+        pose.y=(index/2 ? 1.f : -1.f)*(width*worldHeight/worldWidth*.5f+34*dpi)-10*dpi;
+    } else if(count>4) {
+        pose.scale*=.80f;
+        pose.x=screenWidth*(.11f-.085f*relative);pose.y=screenHeight*(.015f-.055f*relative);
+        pose.z=screenWidth*.15f*relative;pose.angleY=-.40f;pose.angleX=.06f;pose.angleZ=-.02f;
+    } else {
+        pose.x=relative*screenWidth*.38f;pose.z=std::fabs(relative)*screenWidth*.20f;
+        pose.angleY=-std::clamp(relative,-1.f,1.f)*.38f;
+    }
+    return pose;
+}
+
+int Switcher::HitOverviewDesktop(D2D1_POINT_2F point) const {
+    if(m_overviewDragging || !m_overviewExpanded) for(int i=0;i<(int)m_overviewDropTargets.size();++i)
+        if(InRect(point,m_overviewDropTargets[i])) return i;
+    if(!m_overviewExpanded) {
+        for(auto it=m_overviewPaintOrder.rbegin();it!=m_overviewPaintOrder.rend();++it)
+            if(*it>=0 && *it<(int)m_overviewDesktops.size() &&
+                m_overviewDesktops[*it].hit.right>m_overviewDesktops[*it].hit.left &&
+                QuadContains(m_overviewDesktops[*it].quad,point)) return *it;
+        return -1;
+    }
+    return m_overviewSelected<(int)m_overviewDesktops.size() && InRect(point,m_overviewDesktops[m_overviewSelected].hit) ? m_overviewSelected : -1;
+}
+
+void Switcher::DrawDesktopGallery(float opacity) {
+    if(!m_overviewDrawContext && FAILED(m_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,m_overviewDrawContext.put()))) return;
+    m_overviewDrawContext->SetDpi(96,96);m_overviewDrawContext->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
+    const int count=(int)m_overviewDesktops.size();
+    const float worldWidth=std::max(1L,m_overviewWorld.right-m_overviewWorld.left);
+    const float worldHeight=std::max(1L,m_overviewWorld.bottom-m_overviewWorld.top);
+    const bool grid=count==4,stack=count>4;
+    float delta=(float)m_overviewSelected-(float)m_overviewScroll;
+    if(!grid) {if(delta>count*.5f) delta-=count;if(delta< -count*.5f) delta+=count;}
+    m_overviewScroll+=delta*(m_settings.animateSelection ? 1-std::exp(-18*m_motionDt) : 1);
+    m_overviewPaintOrder.clear();
+    for(int i=0;i<count;++i) {
+        m_overviewDesktops[i].hit={};
+        m_overviewDesktops[i].quad={};
+        m_overviewDesktops[i].rename={};
+        m_overviewDesktops[i].remove={};
+    }
+    auto distance=[&](int i) {
+        const float relative=PositiveMod((float)i-(float)m_overviewScroll,(float)count);
+        return stack ? relative : (relative>count*.5f ? relative-count : relative);
+    };
+    for(int i=0;i<count;++i) if(grid || std::fabs(distance(i))<(m_settings.energySaver ? 3.0f : 7.0f)) m_overviewPaintOrder.push_back(i);
+    for(int i=0;i<count;++i) if(std::find(m_overviewPaintOrder.begin(),m_overviewPaintOrder.end(),i)==m_overviewPaintOrder.end()) {
+        m_overviewDesktops[i].surface=nullptr;m_overviewDesktops[i].projection=nullptr;
+    }
+    std::stable_sort(m_overviewPaintOrder.begin(),m_overviewPaintOrder.end(),[&](int a,int b) {return std::fabs(distance(a))>std::fabs(distance(b));});
+    POINT cursor{};const bool hasCursor=GetCursorPos(&cursor) && ScreenToClient(m_hwnd,&cursor);
+    const auto pointer=LayoutPoint(cursor);
+    for(int index:m_overviewPaintOrder) {
+        auto& desktop=m_overviewDesktops[index];
+        const UINT32 textureWidth=(UINT32)std::min(960.f,worldWidth);
+        const UINT32 textureHeight=(UINT32)std::max(1.f,textureWidth*worldHeight/worldWidth);
+        const D2D1_SIZE_U size{textureWidth,textureHeight};
+        if(!desktop.surface || desktop.surface->GetPixelSize().width!=size.width || desktop.surface->GetPixelSize().height!=size.height) {
+            desktop.surface=nullptr;
+            const auto properties=D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED));
+            if(FAILED(m_ctx->CreateBitmap(size,nullptr,0,&properties,desktop.surface.put()))) continue;
+        }
+        const auto output=m_ctx;m_ctx=m_overviewDrawContext;
+        m_ctx->SetTarget(desktop.surface.get());m_ctx->SetTransform(D2D1::Matrix3x2F::Identity());
+        m_ctx->BeginDraw();m_ctx->Clear(m_settings.backgroundColor);
+        const D2D1_RECT_F bounds{0,0,(float)size.width,(float)size.height};
+        if(!DrawLiveWallpaper(bounds,1) && desktop.wallpaper) m_ctx->DrawBitmap(desktop.wallpaper.get(),bounds,1,D2D1_INTERPOLATION_MODE_LINEAR);
+        // Render back to front, preserving the actual desktop positions.
+        for(auto it=m_overviewWindows.rbegin();it!=m_overviewWindows.rend();++it) {
+            const auto& window=*it;
+            if(!window.alive || window.minimized || !IsEqualGUID(window.desktop,desktop.id)) continue;
+            ID2D1Bitmap1* bitmap=window.capture ? window.capture->content.get() : nullptr;
+            if(!bitmap) for(const auto& item:m_items) if(item->hwnd==window.hwnd && item->pid==window.pid) {bitmap=item->content.get();break;}
+            if(!bitmap) {const auto saved=m_windowSnapshots.find(window.hwnd);
+                if(saved!=m_windowSnapshots.end() && saved->second.pid==window.pid && saved->second.title==window.title) bitmap=saved->second.bitmap.get();}
+            const D2D1_RECT_F windowRect{(window.rect.left-m_overviewWorld.left)*size.width/worldWidth,
+                (window.rect.top-m_overviewWorld.top)*size.height/worldHeight,(window.rect.right-m_overviewWorld.left)*size.width/worldWidth,
+                (window.rect.bottom-m_overviewWorld.top)*size.height/worldHeight};
+            if(bitmap) m_ctx->DrawBitmap(bitmap,windowRect,1,D2D1_INTERPOLATION_MODE_LINEAR);
+            else {m_brush->SetColor(m_settings.backgroundColor);m_ctx->FillRectangle(windowRect,m_brush.get());
+                if(window.icon) {const float icon=std::min(28.f,std::min(windowRect.right-windowRect.left,windowRect.bottom-windowRect.top)*.5f);
+                    const float x=(windowRect.left+windowRect.right-icon)*.5f,y=(windowRect.top+windowRect.bottom-icon)*.5f;
+                    m_ctx->DrawBitmap(window.icon.get(),{x,y,x+icon,y+icon},1,D2D1_INTERPOLATION_MODE_LINEAR);}}
+            if(window.hwnd==m_overviewSelectedWindow) {m_brush->SetColor(m_settings.highlightColor);m_ctx->DrawRectangle(windowRect,m_brush.get(),3);}
+        }
+        const HRESULT drawn=m_ctx->EndDraw();m_ctx->SetTarget(nullptr);m_ctx=output;
+        if(FAILED(drawn)) continue;
+        const float relative=distance(index);
+        const Pose pose=DesktopGalleryPose(count,index,relative,m_width,m_height,worldWidth,worldHeight,m_dpiScale);
+        desktop.quad=Project(pose,worldWidth,worldHeight);
+        const auto& q=desktop.quad;
+        D2D1_RECT_F hit{q.p[0].x,q.p[0].y,q.p[0].x,q.p[0].y};
+        for(const auto p:q.p) {
+            hit.left=std::min(hit.left,p.x);
+            hit.right=std::max(hit.right,p.x);
+            hit.top=std::min(hit.top,p.y);
+            hit.bottom=std::max(hit.bottom,p.y);
+        }
+        desktop.hit=hit;
+        if(!desktop.projection) m_ctx->CreateEffect(CLSID_D2D13DTransform,desktop.projection.put());
+        if(desktop.projection) {
+            desktop.projection->SetInput(0,desktop.surface.get());
+            desktop.projection->SetValue(kTransform3DPropInterpolationMode,kTransform3DInterpolationAnisotropic);
+            desktop.projection->SetValue(kTransform3DPropTransformMatrix,RectToQuadMatrix((float)size.width,(float)size.height,q));
+            auto parameters=D2D1::LayerParameters1();parameters.opacity=opacity;
+            m_ctx->PushLayer(parameters,nullptr);m_ctx->DrawImage(desktop.projection.get());m_ctx->PopLayer();
+        }
+        m_brush->SetColor(StyleColor(index==m_overviewSelected ? m_settings.highlightColor : m_settings.borderColor,opacity));
+        for(int edge=0;edge<4;++edge) m_ctx->DrawLine(q.p[edge],q.p[(edge+1)%4],m_brush.get(),(index==m_overviewSelected ? 2 : 1)*m_dpiScale);
+        if(grid || index==m_overviewSelected) {
+            const D2D1_RECT_F footer{hit.left,hit.bottom+8*m_dpiScale,hit.right,hit.bottom+46*m_dpiScale};
+            m_brush->SetColor(UiForeground(opacity));
+            m_ctx->DrawText(desktop.name.c_str(),(UINT32)desktop.name.size(),m_overviewTitleFormat.get(),
+                {footer.left+42*m_dpiScale,footer.top,footer.right-42*m_dpiScale,footer.bottom},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            if(index==m_overviewSelected || (hasCursor && (InRect(pointer,hit) || InRect(pointer,footer)))) {
+                desktop.rename={footer.left,footer.top,footer.left+36*m_dpiScale,footer.bottom};
+                if(index>0) desktop.remove={footer.right-36*m_dpiScale,footer.top,footer.right,footer.bottom};
+                const auto pencil=L"\uE70F",trash=L"\uE74D";
+                m_ctx->DrawText(pencil,1,m_overviewSymbolFormat.get(),desktop.rename,m_brush.get());
+                if(index>0) {m_brush->SetColor(D2D1::ColorF(.95f,.22f,.25f,opacity));m_ctx->DrawText(trash,1,m_overviewSymbolFormat.get(),desktop.remove,m_brush.get());}
+            }
+        }
+    }
+    const float x=m_width-72*m_dpiScale,y=24*m_dpiScale;
+    m_overviewAdd={x,y,x+42*m_dpiScale,y+42*m_dpiScale};
+    DrawUiPanel(m_overviewAdd,10*m_dpiScale,opacity);m_brush->SetColor(UiForeground(opacity));
+    m_ctx->DrawText(L"+",1,m_overviewTitleFormat.get(),m_overviewAdd,m_brush.get());
+    const int visible=std::min(count,9),start=std::clamp(m_overviewSelected-visible/2,0,std::max(0,count-visible));
+    const float gap=8*m_dpiScale,chip=std::min(150*m_dpiScale,(m_width-48*m_dpiScale)/std::max(1,visible)-gap);
+    const float left=(m_width-visible*(chip+gap)+gap)*.5f;
+    m_overviewDropTargets.resize(count);
+    for(int i=0;i<visible;++i) {
+        const int index=start+i;
+        const D2D1_RECT_F rect{left+i*(chip+gap),m_height-104*m_dpiScale,left+i*(chip+gap)+chip,m_height-66*m_dpiScale};
+        m_overviewDropTargets[index]=rect;
+        DrawUiPanel(rect,8*m_dpiScale,opacity);
+        if(index==m_overviewSelected) {
+            m_brush->SetColor(StyleColor(m_settings.highlightColor,.45f*opacity));
+            m_ctx->FillRoundedRectangle({rect,8*m_dpiScale,8*m_dpiScale},m_brush.get());
+            m_brush->SetColor(StyleColor(m_settings.highlightColor,opacity));
+            m_ctx->DrawRoundedRectangle({rect,8*m_dpiScale,8*m_dpiScale},m_brush.get(),2*m_dpiScale);
+        }
+        m_brush->SetColor(UiForeground(opacity));const auto& name=m_overviewDesktops[index].name;
+        m_ctx->DrawText(name.c_str(),(UINT32)name.size(),m_overviewButtonFormat.get(),rect,m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    }
+    const auto hint=Text(L"Tab: next desktop · Click: switch · Right-click: preview",L"Tab: desktop successivo · Clic: cambia desktop · Clic destro: anteprima");
+    m_ctx->DrawText(hint,(UINT32)wcslen(hint),m_overviewButtonFormat.get(),{20*m_dpiScale,m_height-48*m_dpiScale,m_width-20*m_dpiScale,m_height-12*m_dpiScale},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
 }
 
 void Switcher::DrawDesktopOverview(float opacity) {
@@ -3603,32 +4136,42 @@ void Switcher::DrawDesktopOverview(float opacity) {
         if(overviewNow>=window.validateAt) {
             DWORD pid=0;GetWindowThreadProcessId(window.hwnd,&pid);
             window.alive=IsWindow(window.hwnd) && pid==window.pid;
-            window.minimized=window.alive && IsIconic(window.hwnd);
+            window.minimized=window.alive && (IsIconic(window.hwnd) || window.hwnd==m_overviewPreviewWindow);
             window.validateAt=overviewNow+0.20;
         }
     }
     for(auto& desktop:m_overviewDesktops) {desktop.hit={};desktop.rename={};desktop.remove={};}
-    m_overviewAdd={};m_overviewRenameBox={};
+    m_overviewAdd={};m_overviewRenameBox={};m_overviewBack={};m_overviewDropTargets.clear();
     m_brush->SetColor(UiForeground(opacity));
     const auto heading=Text(L"Desktops",L"Desktop");
-    m_ctx->DrawText(heading,(UINT32)wcslen(heading),m_overviewFormat.get(),{0,m_height*.05f,m_width,m_height*.11f},m_brush.get());
+    if(m_overviewExpanded) m_ctx->DrawText(heading,(UINT32)wcslen(heading),m_overviewFormat.get(),{0,m_height*.05f,m_width,m_height*.11f},m_brush.get());
     if(m_overviewDesktops.empty()) {
         const auto error=Text(L"Desktop overview unavailable on this Windows build",L"Panoramica desktop non disponibile su questa versione di Windows");
         m_ctx->DrawText(error,(UINT32)wcslen(error),m_overviewFormat.get(),{0,m_height*.4f,m_width,m_height*.6f},m_brush.get());return;
     }
+    if(!m_overviewExpanded) {DrawDesktopGallery(opacity);DrawDesktopRemoval(opacity);return;}
+    m_overviewBack={20*m_dpiScale,20*m_dpiScale,140*m_dpiScale,58*m_dpiScale};
+    DrawUiPanel(m_overviewBack,9*m_dpiScale,opacity);
+    m_brush->SetColor(UiForeground(opacity));
+    const auto back=Text(L"‹ Desktops",L"‹ Desktop");
+    m_ctx->DrawText(back,(UINT32)wcslen(back),m_overviewButtonFormat.get(),m_overviewBack,m_brush.get());
     m_overviewScroll+=(m_overviewSelected-m_overviewScroll)*(1-std::exp(-18*m_motionDt));
     const float worldWidth=std::max(1L,m_overviewWorld.right-m_overviewWorld.left);
     const float worldHeight=std::max(1L,m_overviewWorld.bottom-m_overviewWorld.top);
     std::vector<OverviewWindow*> minimized,active;
     for(auto& window:m_overviewWindows) {
-        if(window.alive && window.minimized &&
+        if(window.alive && (window.minimized || window.restoredInOverview) &&
             (IsEqualGUID(window.desktop,m_overviewDesktops[m_overviewSelected].id) || IsEqualGUID(window.desktop,GUID_NULL)))
             minimized.push_back(&window);
-        else if(window.alive && !window.minimized &&
+        else if(window.alive && !window.minimized && !window.restoredInOverview &&
             (IsEqualGUID(window.desktop,m_overviewDesktops[m_overviewSelected].id) || IsEqualGUID(window.desktop,GUID_NULL)))
             active.push_back(&window);
     }
-    const auto layout=CalculateOverviewLayout(m_width,m_height,m_dpiScale,worldWidth/worldHeight,!minimized.empty(),!active.empty());
+    auto layout=CalculateOverviewLayout(m_width,m_height,m_dpiScale,worldWidth/worldHeight,!minimized.empty(),false);
+    const float expandedTop=minimized.empty() ? 80*m_dpiScale : std::max(170*m_dpiScale,m_height*.15f+132*m_dpiScale);
+    layout.width=std::min(m_width-48*m_dpiScale,(m_height-expandedTop-86*m_dpiScale)*worldWidth/worldHeight);
+    layout.height=layout.width*worldHeight/worldWidth;
+    layout.centerX=m_width*.5f;layout.centerY=expandedTop+layout.height*.5f;layout.sidebar=0;
     if(m_overviewLayoutWidth<=0) {
         m_overviewLayoutWidth=layout.width;m_overviewLayoutHeight=layout.height;
         m_overviewLayoutX=layout.centerX;m_overviewLayoutY=layout.centerY;
@@ -3648,21 +4191,21 @@ void Switcher::DrawDesktopOverview(float opacity) {
     const auto pointer=LayoutPoint(cursor);
     std::wstring hoveredTitle;
     if(!minimized.empty()) {
-        const float tileWidth=56*m_dpiScale,gap=8*m_dpiScale,top=m_height*.20f-12*m_dpiScale*dockClose;
+        const float tileWidth=172*m_dpiScale,tileHeight=110*m_dpiScale,gap=8*m_dpiScale,top=m_height*.15f-12*m_dpiScale*dockClose;
         const int visible=std::max(1,(int)((m_width-sidebar-80*m_dpiScale)/(tileWidth+gap)));
         int selectedMini=-1;
         for(int i=0;i<(int)minimized.size();++i) if(minimized[i]->hwnd==m_overviewSelectedWindow) selectedMini=i;
         const int start=selectedMini<0 ? 0 : std::clamp(selectedMini-visible/2,0,std::max(0,(int)minimized.size()-visible));
         const int count=std::min(visible,(int)minimized.size());
         const float left=centerX-(count*tileWidth+(count-1)*gap)*.5f;
-        const D2D1_RECT_F dock{left-12*m_dpiScale,top-10*m_dpiScale,left+count*tileWidth+(count-1)*gap+12*m_dpiScale,top+tileWidth+10*m_dpiScale};
+        const D2D1_RECT_F dock{left-12*m_dpiScale,top-10*m_dpiScale,left+count*tileWidth+(count-1)*gap+12*m_dpiScale,top+tileHeight+10*m_dpiScale};
         m_brush->SetColor(m_settings.darkBackground ? D2D1::ColorF(.10f,.10f,.12f,opacity*.96f) : D2D1::ColorF(.94f,.94f,.96f,opacity*.96f));
         m_ctx->FillRoundedRectangle({dock,18*m_dpiScale,18*m_dpiScale},m_brush.get());
         m_brush->SetColor(D2D1::ColorF(1,1,1,opacity*.14f));
         m_ctx->DrawRoundedRectangle({dock,18*m_dpiScale,18*m_dpiScale},m_brush.get(),m_dpiScale);
         for(int i=0;i<count;++i) {
             auto& window=*minimized[start+i];
-            const D2D1_RECT_F targetTile{left+i*(tileWidth+gap),top,left+i*(tileWidth+gap)+tileWidth,top+tileWidth};
+            const D2D1_RECT_F targetTile{left+i*(tileWidth+gap),top,left+i*(tileWidth+gap)+tileWidth,top+tileHeight};
             window.dockTarget=true;
             if(window.dockAmount<0.001f) window.dockVisual={targetTile.left,targetTile.top-8*m_dpiScale,targetTile.right,targetTile.bottom-8*m_dpiScale};
             window.dockAmount+=(1-window.dockAmount)*dockBlend;
@@ -3678,15 +4221,24 @@ void Switcher::DrawDesktopOverview(float opacity) {
                 if(selected) {m_brush->SetColor(StyleColor(m_settings.highlightColor,opacity));
                     m_ctx->DrawRoundedRectangle({tile,12*m_dpiScale,12*m_dpiScale},m_brush.get(),m_dpiScale);}
             }
-            const float grow=3*m_dpiScale*window.dockHover,lift=4*m_dpiScale*window.dockHover;
-            if(window.icon) m_ctx->DrawBitmap(window.icon.get(),{tile.left+10*m_dpiScale-grow,tile.top+10*m_dpiScale-grow-lift,tile.right-10*m_dpiScale+grow,tile.bottom-10*m_dpiScale+grow-lift},opacity*window.dockAmount,D2D1_INTERPOLATION_MODE_LINEAR);
+            ID2D1Bitmap1* preview=window.capture ? window.capture->content.get() : nullptr;
+            if(!preview) {
+                const auto saved=m_windowSnapshots.find(window.hwnd);
+                if(saved!=m_windowSnapshots.end() && saved->second.pid==window.pid && saved->second.title==window.title) preview=saved->second.bitmap.get();
+            }
+            if(preview) m_ctx->DrawBitmap(preview,{tile.left+6*m_dpiScale,tile.top+6*m_dpiScale,tile.right-6*m_dpiScale,tile.bottom-32*m_dpiScale},opacity*window.dockAmount,D2D1_INTERPOLATION_MODE_LINEAR);
+            if(window.icon) m_ctx->DrawBitmap(window.icon.get(),{tile.left+7*m_dpiScale,tile.bottom-26*m_dpiScale,tile.left+27*m_dpiScale,tile.bottom-6*m_dpiScale},opacity*window.dockAmount,D2D1_INTERPOLATION_MODE_LINEAR);
+            m_brush->SetColor(UiForeground(opacity*window.dockAmount));
+            m_ctx->DrawText(window.title.c_str(),(UINT32)window.title.size(),m_overviewButtonFormat.get(),
+                {tile.left+32*m_dpiScale,tile.bottom-29*m_dpiScale,tile.right-6*m_dpiScale,tile.bottom-3*m_dpiScale},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
             if(hovered) hoveredTitle=window.title;
         }
     }
     m_ctx->PushAxisAlignedClip({std::max(20*m_dpiScale,sidebar),0,m_width-20*m_dpiScale,m_height},D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     for(int index=0;index<(int)m_overviewDesktops.size();++index) {
+        if(m_overviewExpanded && index!=m_overviewSelected) continue;
         auto& desktop=m_overviewDesktops[index];
-        const float center=centerX+(index-(float)m_overviewScroll)*spacing;
+        const float center=centerX+(m_overviewExpanded ? 0 : (index-(float)m_overviewScroll)*spacing);
         const D2D1_RECT_F card{center-width*.5f,centerY-height*.5f,center+width*.5f,centerY+height*.5f};
         desktop.hit={std::max(card.left,std::max(20*m_dpiScale,sidebar)),card.top,std::min(card.right,m_width-20*m_dpiScale),card.bottom};
         if(card.right<0 || card.left>m_width) continue;
@@ -3704,7 +4256,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
         layer.opacity = opacity;
         m_ctx->PushLayer(layer,nullptr);
         m_brush->SetColor(m_settings.backgroundColor);m_ctx->FillRectangle(card,m_brush.get());
-        if(desktop.wallpaper) m_ctx->DrawBitmap(desktop.wallpaper.get(),card,1,D2D1_INTERPOLATION_MODE_LINEAR);
+        if(!DrawLiveWallpaper(card,1) && desktop.wallpaper) m_ctx->DrawBitmap(desktop.wallpaper.get(),card,1,D2D1_INTERPOLATION_MODE_LINEAR);
         // Every HWND gets its own tile. Windows from the same application are
         // deliberately not stacked or grouped in the desktop overview.
         std::vector<OverviewWindow*> cardWindows;
@@ -3712,6 +4264,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
             if((IsEqualGUID(window.desktop,desktop.id) || IsEqualGUID(window.desktop,GUID_NULL)) &&
                 window.alive && !window.minimized) cardWindows.push_back(&window);
         }
+        std::reverse(cardWindows.begin(),cardWindows.end());
         const bool currentDesktop=IsEqualGUID(desktop.id,m_overviewCurrentDesktop);
         float taskbarHeight=0;
         if(currentDesktop) {
@@ -3731,16 +4284,18 @@ void Switcher::DrawDesktopOverview(float opacity) {
         for(int tileIndex=0;tileIndex<count;++tileIndex) {
             auto& window=*cardWindows[tileIndex];DWORD pid=0;GetWindowThreadProcessId(window.hwnd,&pid);
             GetWindowBounds(window.hwnd,false,&window.rect);
-            const int column=tileIndex%columns,row=tileIndex/columns;
-            const D2D1_RECT_F cell{grid.left+column*(cellWidth+gap),grid.top+row*(cellHeight+gap),
-                grid.left+column*(cellWidth+gap)+cellWidth,grid.top+row*(cellHeight+gap)+cellHeight};
             const float sourceWidth=std::max(1L,window.rect.right-window.rect.left);
             const float sourceHeight=std::max(1L,window.rect.bottom-window.rect.top);
-            const float fit=std::min(cellWidth/sourceWidth,cellHeight/sourceHeight);
-            const float tileWidth=sourceWidth*fit,tileHeight=sourceHeight*fit;
-            const D2D1_RECT_F destination{(cell.left+cell.right-tileWidth)*.5f,(cell.top+cell.bottom-tileHeight)*.5f,
-                (cell.left+cell.right+tileWidth)*.5f,(cell.top+cell.bottom+tileHeight)*.5f};
-            if(index==m_overviewSelected || window.hitDesktop<0) {window.hit=destination;window.hitDesktop=index;}
+            const float tileWidth=sourceWidth*width/worldWidth,tileHeight=sourceHeight*height/worldHeight;
+            const D2D1_RECT_F destination{card.left+(window.rect.left-m_overviewWorld.left)*width/worldWidth,
+                card.top+(window.rect.top-m_overviewWorld.top)*height/worldHeight,
+                card.left+(window.rect.right-m_overviewWorld.left)*width/worldWidth,
+                card.top+(window.rect.bottom-m_overviewWorld.top)*height/worldHeight};
+            if(index==m_overviewSelected || window.hitDesktop<0) {
+                window.hit={std::max(card.left,destination.left),std::max(card.top,destination.top),
+                    std::min(card.right,destination.right),std::min(card.bottom,destination.bottom)};
+                if(window.hit.right>window.hit.left && window.hit.bottom>window.hit.top) window.hitDesktop=index;
+            }
             m_brush->SetColor(D2D1::ColorF(0,0,0,.30f));
             m_ctx->FillRoundedRectangle({{destination.left-2*m_dpiScale,destination.top+2*m_dpiScale,
                 destination.right+2*m_dpiScale,destination.bottom+5*m_dpiScale},5*m_dpiScale,5*m_dpiScale},m_brush.get());
@@ -3863,7 +4418,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
     m_ctx->DrawLine({plusX-10*m_dpiScale,centerY},{plusX+10*m_dpiScale,centerY},m_brush.get(),2*m_dpiScale);
     m_ctx->DrawLine({plusX,centerY-10*m_dpiScale},{plusX,centerY+10*m_dpiScale},m_brush.get(),2*m_dpiScale);
     m_ctx->PopAxisAlignedClip();
-    if(!active.empty()) {
+    if(!active.empty() && !m_overviewExpanded) {
         const float tile=54*m_dpiScale,gap=8*m_dpiScale;
         const int visible=std::max(1,(int)((m_height*.76f-24*m_dpiScale+gap)/(tile+gap)));
         int chosen=0;for(int i=0;i<(int)active.size();++i) if(active[i]->hwnd==m_overviewSelectedWindow) chosen=i;
@@ -3916,6 +4471,21 @@ void Switcher::DrawDesktopOverview(float opacity) {
         m_ctx->DrawText(error,(UINT32)wcslen(error),m_overviewFormat.get(),{0,m_height*.91f,m_width,m_height*.97f},m_brush.get());
     }
     if(m_overviewDragging) {
+        const int desktops=(int)m_overviewDesktops.size();
+        const float gap=6*m_dpiScale,chip=std::min(150*m_dpiScale,(m_width-40*m_dpiScale)/std::max(1,std::min(desktops,7))-gap);
+        const int visible=std::min(desktops,7),start=std::clamp(m_overviewSelected-visible/2,0,std::max(0,desktops-visible));
+        const float left=(m_width-visible*(chip+gap)+gap)*.5f;
+        m_overviewDropTargets.resize(desktops);
+        for(int i=0;i<visible;++i) {
+            const int index=start+i;
+            const D2D1_RECT_F rect{left+i*(chip+gap),m_height-48*m_dpiScale,left+i*(chip+gap)+chip,m_height-12*m_dpiScale};
+            m_overviewDropTargets[index]=rect;DrawUiPanel(rect,8*m_dpiScale,opacity);
+            m_brush->SetColor(StyleColor(m_settings.highlightColor,opacity*(InRect(m_overviewDragPoint,rect) ? .45f : .15f)));
+            m_ctx->FillRoundedRectangle({rect,8*m_dpiScale,8*m_dpiScale},m_brush.get());
+            m_brush->SetColor(UiForeground(opacity));
+            const auto& name=m_overviewDesktops[index].name;
+            m_ctx->DrawText(name.c_str(),(UINT32)name.size(),m_overviewButtonFormat.get(),rect,m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
         for(const auto& desktop:m_overviewDesktops) if(InRect(m_overviewDragPoint,desktop.hit)) {
             m_brush->SetColor(StyleColor(m_settings.highlightColor,opacity*.25f));
             m_ctx->FillRoundedRectangle({desktop.hit,8*m_dpiScale,8*m_dpiScale},m_brush.get());break;
@@ -3955,6 +4525,7 @@ void Switcher::DrawDesktopOverview(float opacity) {
                 {x+8*m_dpiScale,y+8*m_dpiScale,x+tipWidth-8*m_dpiScale,y+tipHeight},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
         }
     }
+    DrawDesktopRemoval(opacity);
 }
 
 void Switcher::ConfigureTouchpad() {
@@ -4060,6 +4631,7 @@ void Switcher::OnStart(WPARAM flags) {
     g_simpleNavigation=m_settings.simpleStyle>0 && m_settings.simpleStyle<4;
     m_searchTextAnimation={};m_searchFormat=nullptr;m_countFormat=nullptr;m_countSuffixLayout=nullptr;m_countSuffixText.clear();m_countFound=-1;
     m_enchantedIndex=-1;m_resultPanelWidth=0;m_resultPanelHeight=0;m_enchantedHover.clear();m_simplePinRects.clear();m_enchantedSymbols=nullptr;
+    m_positionMotion={};m_positionFormat=nullptr;m_positionTextCount=-1;m_positionLabel.clear();
     m_simpleShortcutNumber=0; m_simpleShortcutTime=0;
     if(!m_settings.previewCache) m_windowSnapshots.clear();
     m_cursorTitleOpacity=0; m_cursorTitle.clear(); m_hoverTitleLayout=nullptr; m_hoverTitleFormat=nullptr;
@@ -4259,13 +4831,16 @@ bool Switcher::AltReleased(double now) {
 void Switcher::OnStep(int step) {
     g_lastNavigationInputTick=GetTickCount64();
     DismissIconContext();
-    if(g_desktopRenameTyping) return;
+    if(g_desktopRenameTyping || m_overviewDeletePending) return;
     if(m_desktopOverview && !m_overviewDesktops.empty() &&
         (m_state==State::Open || m_state==State::Pending)) {
+        // Route both bare Tab in a persistent overview and Win+Tab here.
+        if(std::abs(step)==1) step=CoverTabbyNavigation::tabStep(m_overviewExpanded,step<0);
         if(std::abs(step)==3) {
             m_overviewSelected=PositiveMod(m_overviewSelected+(step>0 ? 1 : -1),(int)m_overviewDesktops.size());
             m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
             m_overviewDockTransition=NowSeconds();
+            TraceDesktop("Desktop-step",m_overviewSelected,step);
         } else {
             std::vector<const OverviewWindow*> windows;
             for(const auto& window:m_overviewWindows) {
@@ -4363,6 +4938,8 @@ void Switcher::OnStep(int step) {
 }
 
 void Switcher::OnCommit(int index) {
+    TraceDesktop("Commit",m_overviewSelected,m_desktopOverview);
+    if(m_overviewDeletePending) {RemoveOverviewDesktop();return;}
     if(g_desktopRenameTyping) {FinishDesktopRename(true);return;}
     if(m_desktopOverview) {
         if(m_overviewDesktops.empty() || (m_state!=State::Open && m_state!=State::Pending)) return;
@@ -4406,6 +4983,10 @@ void Switcher::OnCommit(int index) {
 }
 
 void Switcher::OnCancel() {
+    if(m_overviewDeletePending) {
+        m_overviewDeletePending=false;g_switching=true;g_stickyControls=true;
+        PostThreadMessageW(g_hookThreadId,WM_HOOK_ENGAGE,0,0);return;
+    }
     if(g_desktopRenameTyping) {FinishDesktopRename(false);return;}
     g_searchTyping=false;
     if (m_state == State::Pending) {
@@ -4425,6 +5006,18 @@ void Switcher::DismissIconContext() {
 }
 
 void Switcher::OnIconContext(POINT pt) {
+    if(m_desktopOverview && m_state==State::Open) {
+        if(m_overviewDeletePending) return;
+        const auto point=LayoutPoint(pt);
+        const int i=HitOverviewDesktop(point);
+        if(i>=0) {
+            m_overviewSelected=i;m_overviewExpanded=true;m_overviewLayoutWidth=0;
+            m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
+            g_desktopWinHoldSession=false;g_stickyControls=true;return;
+        }
+        if(m_overviewExpanded) m_overviewExpanded=false;
+        return;
+    }
     if(m_state!=State::Open || m_desktopOverview || m_pressedWindow) return;
     const auto point=LayoutPoint(pt);
     Item* target=nullptr;
@@ -4585,6 +5178,14 @@ void Switcher::OnClick(POINT pt) {
         DismissIconContext();return;
     }
     if(m_desktopOverview) {
+        if(m_overviewDeletePending) {
+            if(InRect(point,m_overviewDeleteAccept)) RemoveOverviewDesktop();
+            else if(InRect(point,m_overviewDeleteCancel)) m_overviewDeletePending=false;
+            return;
+        }
+        if(m_overviewExpanded && InRect(point,m_overviewBack)) {
+            m_overviewExpanded=false;FinishOverviewPreview();return;
+        }
         if(g_desktopRenameTyping) {
             if(InRect(point,m_overviewRenameBox)) return;
             bool saveButton=false;
@@ -4607,14 +5208,14 @@ void Switcher::OnClick(POINT pt) {
         for(size_t i=0;i<m_overviewDesktops.size();++i) {
             auto& desktop=m_overviewDesktops[i];
             if(InRect(point,desktop.rename)) {
+                m_overviewExpanded=true;m_overviewLayoutWidth=0;
                 m_overviewRenameId=desktop.id;m_overviewRenameText=desktop.name;m_overviewRenameSelectAll=true;
                 g_desktopRenameTyping=true;g_desktopWinHoldSession=false;g_stickyControls=true;if(!m_hasFocus) TakeFocus();return;
             }
             if(i>0 && InRect(point,desktop.remove)) {
-                const GUID selected=m_overviewDesktops[i-1].id;
-                const HRESULT hr=m_desktopBridge.Remove(desktop.id,selected);
-                if(SUCCEEDED(hr)) {m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;RefreshOverviewDesktops(selected);}
-                else {m_overviewActionErrorUntil=NowSeconds()+3;Wh_Log(L"Desktop removal failed: 0x%08X",(UINT)hr);}
+                m_overviewDeleteId=desktop.id;m_overviewDeletePending=true;
+                g_desktopWinHoldSession=false;g_stickyControls=true;
+                FinishOverviewPreview();
                 return;
             }
         }
@@ -4623,10 +5224,13 @@ void Switcher::OnClick(POINT pt) {
             m_overviewPress=window.hwnd;m_overviewPressPid=window.pid;m_overviewPressPoint=pt;
             m_overviewDragging=false;m_overviewPressFromDock=false;g_desktopWinHoldSession=false;g_stickyControls=true;SetCapture(m_hwnd);return;
         }
-        for(size_t i=0;i<m_overviewDesktops.size();++i) if(InRect(point,m_overviewDesktops[i].hit)) {
+        const int desktopHit=HitOverviewDesktop(point);
+        TraceDesktop("Desktop-click",desktopHit,m_overviewExpanded);
+        if(desktopHit>=0) {
+            const int i=desktopHit;
             m_overviewSelected=(int)i;m_overviewSelectedWindow=nullptr;m_overviewSelectedPid=0;
             m_overviewDockTransition=NowSeconds();
-            EndSwitching();OnCommit(-1);break;
+            EndSwitching();OnCommit(-1);
         }
         return;
     }
@@ -4752,7 +5356,7 @@ void Switcher::OnPointerUp() {
         POINT cursor{};int destination=-1;
         if(GetCursorPos(&cursor) && ScreenToClient(m_hwnd,&cursor)) {
             const auto point=LayoutPoint(cursor);
-            for(int i=0;i<(int)m_overviewDesktops.size();++i) if(InRect(point,m_overviewDesktops[i].hit)) {destination=i;break;}
+            destination=HitOverviewDesktop(point);
         }
         ClearPointerPress();DWORD pid=0;GetWindowThreadProcessId(target,&pid);
         if(m_state!=State::Open || !IsWindow(target) || pid!=expected) return;
@@ -4765,7 +5369,12 @@ void Switcher::OnPointerUp() {
                     m_overviewSelected=destination;m_overviewDockTransition=NowSeconds();
                 } else {m_overviewActionErrorUntil=NowSeconds()+3;Wh_Log(L"Desktop drop failed: 0x%08X",(UINT)hr);}
             }
-        } else {EndSwitching();OnCommit(-1);}
+        } else {
+            bool minimized=IsIconic(target) || target==m_overviewPreviewWindow;
+            for(const auto& window:m_overviewWindows) if(window.hwnd==target && window.pid==expected) minimized|=window.minimized;
+            if(minimized) RestoreOverviewWindow(target,expected);
+            else {EndSwitching();OnCommit(-1);}
+        }
         return;
     }
     if (m_dragMoving) { EndWindowDrag(); return; }
@@ -5130,11 +5739,12 @@ struct EnumWindowsContext {
     std::vector<HWND> windows;
     size_t max;
     bool includeMinimized;
+    bool includeOtherDesktops=false;
 };
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     auto* context = reinterpret_cast<EnumWindowsContext*>(lParam);
-    if (IsSwitchableWindow(hwnd) &&
+    if (IsSwitchableWindow(hwnd,context->includeOtherDesktops) &&
         (context->includeMinimized || !IsIconic(hwnd))) {
         context->windows.push_back(hwnd);
     }
@@ -5149,7 +5759,8 @@ void Switcher::CollectWindows() {
         else ++it;
     }
     EnumWindowsContext context{
-        {}, (size_t)m_settings.maxWindows, m_settings.includeMinimized};
+        {}, (size_t)m_settings.maxWindows, m_settings.includeMinimized,
+        m_settings.otherDesktopWindows && !m_openingOverview};
     EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&context));
 
     // EnumWindows returns the Z order, which puts topmost windows first. The
@@ -5163,6 +5774,7 @@ void Switcher::CollectWindows() {
 
     m_items.clear();
     for (HWND hwnd : context.windows) {
+        if(context.includeOtherDesktops && !m_desktopBridge.ShowsInSwitcher(hwnd)) continue;
         auto item = std::make_unique<Item>();
         item->hwnd = hwnd;
         DWORD pid=0; GetWindowThreadProcessId(hwnd,&pid);
@@ -5227,7 +5839,7 @@ void Switcher::CollectWindows() {
         m_items.push_back(std::move(item));
     }
 
-    if(m_settings.showDesktopCard) {
+    if(m_settings.showDesktopCard && !m_openingOverview && !m_desktopOverview) {
         HWND shell=GetShellWindow();
         if(shell) {
             auto item=std::make_unique<Item>();
@@ -5463,6 +6075,7 @@ void Switcher::Teardown() {
     m_commitDesktop = false;
     m_touchTapCount = 0;
     ClearOverviewCaptures();
+    ClearLiveWallpaper();
     m_overviewWindows.clear();m_overviewDesktops.clear();
     m_overviewSavedBackground=nullptr;m_overviewSavedBackgroundKey.clear();
     SetTouchpadOwnership(false);
@@ -5629,6 +6242,8 @@ void Switcher::ReopenDuringClose(bool backwards) {
 }
 
 void Switcher::FinishClose() {
+    TraceDesktop("Finish-close",m_overviewSelected,m_commitDesktop);
+    FinishOverviewPreview();
     if(m_commitDesktop) {
         const GUID destination=m_destinationDesktop;
         const HWND target=m_overviewSelectedWindow;const DWORD expectedPid=m_overviewSelectedPid;
@@ -5674,6 +6289,19 @@ void Switcher::ActivateWindow(HWND hwnd) {
         return;
     }
 
+    // Keep cross-desktop activation in the common path, including quick
+    // Alt+Tab, clicks and modifier-release activation.
+    if(m_settings.otherDesktopWindows && !m_desktopOverview) {
+        GUID destination{},current{};
+        if(SUCCEEDED(m_desktopBridge.WindowDesktop(hwnd,&destination)) &&
+            !IsEqualGUID(destination,GUID_NULL) &&
+            SUCCEEDED(m_desktopBridge.Current(&current)) && !IsEqualGUID(destination,current)) {
+            const HRESULT refreshed=m_desktopBridge.Refresh();
+            const HRESULT switched=SUCCEEDED(refreshed) ? m_desktopBridge.Switch(destination) : refreshed;
+            if(FAILED(switched)) {Wh_Log(L"Cross-desktop activation failed: 0x%08X",(UINT)switched);return;}
+        }
+    }
+
     HWND popup = GetLastActivePopup(hwnd);
     if (!popup || !IsWindowVisible(popup) || !IsWindowEnabled(popup)) {
         popup = hwnd;
@@ -5706,7 +6334,7 @@ void Switcher::ComputeLayout() {
         const float tileInset=m_settings.tileSelectedBigger?1.30f:1.12f;
         m_boxWidth=m_tileCellWidth/tileInset;
         m_boxHeight=m_tileCellHeight/tileInset;
-        m_tileIconY=std::min(m_height-100*m_dpiScale,m_tileGridTop+gridHeight+24*m_dpiScale);
+        m_tileIconY=std::min(m_height-(m_settings.selectionBar?150.f:100.f)*m_dpiScale,m_tileGridTop+gridHeight+24*m_dpiScale);
         m_tileTitleY=std::min(m_height-24*m_dpiScale,m_tileIconY+m_settings.iconSize*m_dpiScale*.5f+50*m_dpiScale);
     } else {
         m_boxWidth = m_width * 0.42f;
@@ -5750,6 +6378,21 @@ Pose Switcher::LayoutPose(const Item& item, int itemIndex, float rel) const {
     const float fit =
         std::min({m_boxWidth / item.Width(), m_boxHeight / item.Height(), 1.0f});
     pose.scale = fit;
+    if(m_settings.aero3D) {
+        // Flip 3D: parallel tilted planes recede towards the upper left.
+        // The leaving front plane and arriving rear plane use separate chains.
+        const float depth=std::max(0.f,rel);
+        pose.x=m_width*(.13f-.105f*depth);
+        pose.y=m_height*(.055f-.065f*depth);
+        pose.z=m_width*.15f*depth;
+        pose.angleY=-.48f;pose.angleX=.08f;pose.angleZ=-.035f;
+        pose.scale*=1.12f;
+        pose.brightness=std::max(.45f,1-.065f*depth);
+        pose.opacity=std::clamp(8.f-depth,0.f,1.f);
+        if(rel<0) {pose.x-=m_width*.32f*(-rel);pose.y+=m_height*.23f*(-rel);pose.opacity*=std::max(0.f,1+rel);}
+        pose.highlight=std::max(0.f,1-std::fabs(rel));
+        return pose;
+    }
     if (m_settings.tileGrid) {
         const int columns = std::min(m_items.size()<=6?3:4, std::max(1, (int)m_items.size()));
         const int column = itemIndex % columns;
@@ -5936,7 +6579,13 @@ void Switcher::BuildDrawList(float t) {
 
     for (int i = 0; i < count; ++i) {
         const float slot = PositiveMod((float)(i - m_scroll), (float)count);
-        add(i, 0, slot >= count / 2.0f ? slot - count : slot, 1);
+        if(m_settings.aero3D && !m_searchActive) {
+            if(slot>count-1.f && count>1) {
+                const float entering=slot-(count-1.f);
+                add(i,0,slot-count,1);
+                add(i,1,slot,1-entering);
+            } else add(i,0,slot,1);
+        } else add(i, 0, slot >= count / 2.0f ? slot - count : slot, 1);
     }
 
     if(m_searchActive) {
@@ -6352,7 +7001,8 @@ void Switcher::DrawTitle(float t) {
         ? 18 * m_dpiScale * (1 - settle*searchEase) : 0;
     const float titleAnchor=m_settings.tileGrid?m_tileTitleY:m_settings.windowMode?m_height-32*m_dpiScale-metrics.height*.5f:m_height*.91f+m_contentOffset;
     const float titleCenter=std::max(titleAnchor,m_statsBottom+12*m_dpiScale+metrics.height*0.5f);
-    const float centerY = std::round(std::min(titleCenter+titleDrop,m_height-28*m_dpiScale-metrics.height*0.5f));
+    const float footerTop=m_settings.selectionBar ? CoverTabbyPosition::bounds(m_width,m_height,m_dpiScale,m_settings.windowMode).labelTop-12*m_dpiScale : m_height-28*m_dpiScale;
+    const float centerY = std::round(std::min(titleCenter+titleDrop,footerTop-metrics.height*0.5f));
 
     if (iconSize > 0) {
         const D2D1_RECT_F iconRect{left, centerY - iconSize / 2,
@@ -7119,6 +7769,43 @@ void Switcher::DrawAnimatedUiText(UiTextAnimation& state,const std::wstring& tex
     m_ctx->PopAxisAlignedClip();
 }
 
+
+void Switcher::DrawSelectionBar(float opacity) {
+    if(!m_settings.selectionBar||m_desktopOverview||opacity<.005f)return;
+    const bool filtered=m_searchActive||m_settings.simpleStyle>=4;
+    const auto selection=CoverTabbyPosition::summarize(m_items,m_searchMatches,filtered,SelectedIndex());
+    const double position=m_positionMotion.update(selection.rank,selection.count,m_motionDt,m_settings.animateSelection);
+    const float ui=m_dpiScale;
+    const auto box=CoverTabbyPosition::bounds(m_width,m_height,ui,m_settings.windowMode&&m_settings.simpleStyle==0);
+    if(box.right-box.left<32*ui||box.labelTop<0)return;
+    const float fontSize=12*ui;
+    if(!m_positionFormat||std::fabs(m_positionFontSize-fontSize)>.1f){
+        m_positionFormat=nullptr;
+        if(FAILED(m_dwriteFactory->CreateTextFormat(m_settings.fontFamily.c_str(),nullptr,
+            DWRITE_FONT_WEIGHT_NORMAL,DWRITE_FONT_STYLE_NORMAL,DWRITE_FONT_STRETCH_NORMAL,
+            fontSize,L"",m_positionFormat.put())))return;
+        m_positionFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        m_positionFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        m_positionFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        m_positionFontSize=fontSize;
+    }
+    if(m_positionTextCount!=selection.total){
+        m_positionTextCount=selection.total;
+        m_positionLabel=std::to_wstring(selection.total)+(selection.total==1 ?
+            Text(L" window open",L" finestra aperta") : Text(L" windows open",L" finestre aperte"));
+    }
+    auto ink=UiForeground(opacity*.76f);m_brush->SetColor(ink);
+    m_ctx->DrawText(m_positionLabel.c_str(),(UINT32)m_positionLabel.size(),m_positionFormat.get(),
+        {box.left-24*ui,box.labelTop,box.right+24*ui,box.barTop-5*ui},m_brush.get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    m_brush->SetColor(m_settings.darkBackground ? D2D1::ColorF(1,1,1,.16f*opacity) : D2D1::ColorF(0,0,0,.18f*opacity));
+    m_ctx->FillRoundedRectangle({{box.left,box.barTop,box.right,box.barBottom},2*ui,2*ui},m_brush.get());
+    if(position<0)return;
+    const float thumbWidth=std::min(22*ui,box.right-box.left);
+    const float x=box.left+(box.right-box.left-thumbWidth)*(float)position;
+    m_brush->SetColor(StyleColor(m_settings.highlightColor,.95f*opacity));
+    m_ctx->FillRoundedRectangle({{x,box.barTop,x+thumbWidth,box.barBottom},2*ui,2*ui},m_brush.get());
+}
+
 void Switcher::DrawWindowCount(float opacity,D2D1_RECT_F rect,int found,int total,bool forceDark) {
     const float ui=m_dpiScale;
     if(!m_countFormat) {
@@ -7537,6 +8224,7 @@ void Switcher::RenderFrame() {
     m_motionDt=dt;
     if(!m_settings.animateSelection) {m_scroll=(double)m_target;m_iconScroll=m_scroll;m_velocity=0;}
     m_lastFrame = now;
+    UpdateLiveWallpaper();
 
     if(m_settings.tileGrid) {
         const float blend=(float)(1-std::exp(-18*dt));
@@ -7915,6 +8603,7 @@ void Switcher::RenderFrame() {
     DrawDesktopPicker(contentT);
     DrawIconContext(contentT);
     }
+    DrawSelectionBar(contentT);
     if (m_state == State::Closing) {
         m_ctx->SetTransform(m_popupTransform);
         m_ctx->PopAxisAlignedClip();
@@ -7949,6 +8638,7 @@ void Switcher::RenderFrame() {
     }
     if (FAILED(hr)) {
         Wh_Log(L"Rendering failed: 0x%08X", (UINT)hr);
+        TraceDesktop("Render-failed",(int)m_state,m_commitDesktop,hr);
         HandleDeviceLost();
         return;
     }
