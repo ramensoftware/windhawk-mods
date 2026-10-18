@@ -12034,7 +12034,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792146673000,
+        "updated": 1792342961000,
         "users": 23
       },
       "metadata": {
@@ -12047,7 +12047,7 @@
           "rundll32.exe"
         ],
         "name": "Remove Legacy Clock Square Cutout & Animated Custom Image",
-        "version": "3.2.0"
+        "version": "3.2.1"
       }
     },
     "remove-command-bar": {

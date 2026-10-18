@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-18T16:01:06.000Z</updated>
+    <updated>2026-10-18T17:02:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove Legacy Clock Square Cutout & Animated Custom Image 3.2.1]]></title>
+        <id>https://windhawk.net/mods/remove-clock-cutout-background#47a5170a682da083cfc0bd7cbb10ac410ef79cf4</id>
+        <link href="https://windhawk.net/mods/remove-clock-cutout-background"/>
+        <updated>2026-10-18T17:02:41.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed transparent PNG and GIF background bleeding by clearing the background with the parent color.</li>
+<li>Removed leftover window border lines (<code>WS_BORDER</code>) on clock controls.</li>
+</ul>]]></content>
+        <author>
+            <name>awnaise</name>
+            <uri>https://github.com/awnaise</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Magic Pointer 1.0.3]]></title>
         <id>https://windhawk.net/mods/magic-pointer#2cb665613f187b4f2160998718b76a5600c22011</id>
@@ -729,56 +743,6 @@ the focused window is.</li>
         <author>
             <name>Rubens Nascimento</name>
             <uri>https://github.com/chambber</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Sticky Notes: Alt+Tab group 1.1.1]]></title>
-        <id>https://windhawk.net/mods/sticky-notes-alt-tab-group#4487102abb2aa126c83ea826c028e098d74e8383</id>
-        <link href="https://windhawk.net/mods/sticky-notes-alt-tab-group"/>
-        <updated>2026-10-17T13:04:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="stickynotesalttabgroup">Sticky Notes: Alt+Tab group</h1>
-<p>Keep multiple Microsoft Sticky Notes windows from filling the Alt+Tab switcher.</p>
-<ul>
-<li>Show one representative Sticky Notes window in Alt+Tab.</li>
-<li>Switch to Sticky Notes to bring all its open windows on the current virtual
-desktop forward together.</li>
-<li>Minimized notes are restored; closed notes are not opened.</li>
-<li>Switching from another application by clicking a note or its taskbar button
-also brings the open notes forward.</li>
-<li>Use compact Sticky Notes previews, with a default maximum source size of
-260 by 160 pixels while preserving the aspect ratio.</li>
-<li>Other shell views that use the same thumbnail factory can also use this
-compact source size. The shell controls the final display scale.</li>
-<li>Matching uses the note window's extended frame bounds.</li>
-<li>Keep note contents, window sizes, positions, and ownership unchanged.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11, x64, with the standard XAML Alt+Tab switcher.</li>
-<li>Locally tested on Windows 11 25H2, build 26200.9457, Windhawk 1.7.3,
-and Microsoft Sticky Notes 6.1.4.0.</li>
-<li>Other Windows builds and the newer OneNote-based Sticky Notes experience
-have not been tested.</li>
-<li>Uses private shell symbols, which may change after Windows updates.</li>
-<li>Tested alongside Alt+Tab per monitor 1.2 with its cursor-monitor filter.</li>
-<li>That mod's monitor filtering still applies. Notes restored after selection
-can be on any monitor on the current virtual desktop.</li>
-<li>Disabling this mod restores the normal switcher behavior.</li>
-<li>Do not enable both a local copy and the catalog version simultaneously.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Preview maximum width / height</strong>: maximum reported Sticky Notes thumbnail
-source dimensions. Values at or below zero use the defaults (260 / 160).</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>The Alt+Tab visibility-filtering approach is adapted from
-<a href="https://windhawk.net/mods/alt-tab-per-monitor">Alt+Tab per monitor</a> by L3r0y and
-<a href="https://windhawk.net/mods/alt-tab-hide-ghost-windows">Alt+Tab: Hide ghost windows</a>
-by David Trapp (CherryDT). Their MIT notices are retained below.</p>]]></content>
-        <author>
-            <name>Choihyunseok1</name>
-            <uri>https://github.com/Choihyunseok1</uri>
         </author>
     </entry>
 </feed>
