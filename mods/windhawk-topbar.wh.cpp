@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              windhawk-topbar
-// @name             TopBar for Windows
+// @name            TopBar for Windows
 // @donateUrl       https://www.patreon.com/WasiXGamer/join
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
 // @version         1.4.0
@@ -13,14 +13,52 @@
 
 // ==WindhawkModReadme==
 /*
-# TopBar For Windhawk
+# TopBar For Windows
+Adds a fully customizable **TopBar** at the top of your screen. It features task list,
+control center, media player, resource monitor, Weather, Start menu and
+Spotlight-style search, and More. — hosted in a dedicated `explorer.exe` tool process, with some hooks on windows explorer.exe for Tray icons, and Notifications.
 ## Note: 
-### Settings(Except Themes) for this mod can be accessed either by settings icon in the topbar, OR from the context menus. 
-![TopBar screenshot](https://i.imgur.com/BgmSodU.png)
-![Flyouts screenshot](https://i.imgur.com/MVUKR21.jpeg)
-Adds a fully customizable **TopBar** at the top of your screen — task list,
-control-centre flyouts, media player, resource monitor, Start menu and
-Spotlight-style search — hosted in a dedicated `explorer.exe` tool process.
+### Settings(Except Themes) for this mod can be accessed either by settings icon ⚙ in the topbar, OR from the context menus. 
+
+## Top Bar Preview:
+### Normal:
+![normal](https://i.imgur.com/uuYusDH.gif)
+### Auto Hide:
+![autohide](https://i.imgur.com/spkndgp.gif)
+
+## Flyout Previews
+
+| Start Menu | Search | Control Center |
+| :---: | :---: | :---: |
+| ![Start Menu](https://i.imgur.com/fIkNeB9.png) | ![Search](https://i.imgur.com/hBmnVtY.png) | ![Control Center](https://i.imgur.com/2VjdQIt.png) |
+
+| Resource Monitor | Media Player | Weather |
+| :---: | :---: | :---: |
+| ![Resource Monitor](https://i.imgur.com/pV0AXHi.png) | ![Media Player](https://i.imgur.com/P8wv5jV.png) | ![Weather](https://i.imgur.com/iUcxD71.png) |
+
+| System Tray | Calendar | Notifications |
+| :---: | :---: | :---: |
+| ![System Tray](https://i.imgur.com/j1V3ezP.png) | ![Calendar](https://i.imgur.com/AoKFj2u.png) | ![Notifications](https://i.imgur.com/MCp6CCn.png) |
+
+| Display | Wifi | Battery |
+| :---: | :---: | :---: |
+| ![Display](https://i.imgur.com/AgbkXIt.png) | ![Wifi](https://i.imgur.com/zd1FIyM.png) | ![Battery](https://i.imgur.com/WERLJp6.png) |
+
+# Support my Work:
+[![Patreon](https://i.imgur.com/JJ0TluA.png)](https://www.patreon.com/WasiXGamer/join)
+
+## Themes
+Themes are collections of styles that can be selected from the **Theme** dropdown in the mod settings. The following themes are available:
+
+| Theme | Preview |
+|-------|---------|
+| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/GreenBar/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
+| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/NoIslands/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
+| [OS27 GoldenGate](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) | [![OS27 GoldenGate](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/dec72b4c5382da44b83c63b74f195fc4353493c6/Themes/OS27%20GoldenGate/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) |
+| [Midnight Neon](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) | [![Midnight Neon](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/Midnight%20Neon/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) |
+
+More themes, stylings, etc can be found and contributed from:
+**[Windhawk TopBar Styling Guide](https://github.com/wasixgamer/windhawk-topbar-styling-guide)**
 
 ## Settings
 
@@ -41,21 +79,6 @@ entry. Pages:
   copy / paste it via the clipboard.
 - **About** — version info and links.
 
-# Support my Work:
-[![Patreon](https://i.imgur.com/JJ0TluA.png)](https://www.patreon.com/WasiXGamer/join)
-
-## Themes
-Themes are collections of styles that can be selected from the **Theme** dropdown in the mod settings. The following themes are available:
-
-| Theme | Preview |
-|-------|---------|
-| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/GreenBar/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
-| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/NoIslands/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
-| [OS27 GoldenGate](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) | [![OS27 GoldenGate](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/dec72b4c5382da44b83c63b74f195fc4353493c6/Themes/OS27%20GoldenGate/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) |
-| [Midnight Neon](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) | [![Midnight Neon](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/Midnight%20Neon/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) |
-
-More themes, stylings, etc can be found and contributed from:
-**[Windhawk TopBar Styling Guide](https://github.com/wasixgamer/windhawk-topbar-styling-guide)**
 
 ## Features
 
@@ -1041,17 +1064,21 @@ IXamlSourceTransparency : public IUnknown
 };
 // Returns the system accent color, falling back to default blue if it fails.
 wui::Color GetSystemAccentColor() {
-    try {
-        auto settings = winrt::Windows::UI::ViewManagement::UISettings();
-        auto c = settings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-        const double factor = 0.8;
-        uint8_t r = static_cast<uint8_t>(c.R * factor);
-        uint8_t g = static_cast<uint8_t>(c.G * factor);
-        uint8_t b = static_cast<uint8_t>(c.B * factor);
-        return wui::ColorHelper::FromArgb(c.A, r, g, b);
-    } catch (...) {
-        return wui::ColorHelper::FromArgb(255, 0, 120, 212);
+    static wui::Color s_cachedColor{0, 0, 0, 0};
+    if (s_cachedColor.A == 0) {
+        try {
+            auto settings = winrt::Windows::UI::ViewManagement::UISettings();
+            auto c = settings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+            const double factor = 0.8;
+            uint8_t r = static_cast<uint8_t>(c.R * factor);
+            uint8_t g = static_cast<uint8_t>(c.G * factor);
+            uint8_t b = static_cast<uint8_t>(c.B * factor);
+            s_cachedColor = wui::ColorHelper::FromArgb(c.A, r, g, b);
+        } catch (...) {
+            s_cachedColor = wui::ColorHelper::FromArgb(255, 0, 120, 212);
+        }
     }
+    return s_cachedColor;
 }
 // Windows build number via RtlGetVersion. GetVersionEx lies in manifest-less
 // processes (this tool-mod host is one), so RtlGetVersion is the only
@@ -4538,7 +4565,33 @@ void UpdateClockCalendarHeaderText() {
 void FillCalendarGridCells(wuxc::Grid const& grid, int year, int month) {
     if (!grid) return;
     auto children = grid.Children();
-    children.Clear();
+
+    if (children.Size() < 42) {
+        children.Clear();
+        for (int cell = 0; cell < 42; ++cell) {
+            auto btn = MakeGhostButton(L"ClockCalendarDay", 20);
+            btn.Width(40);
+            btn.Height(40);
+            btn.MinWidth(0);
+            btn.Padding(Thickness{0, 0, 0, 0});
+            btn.HorizontalAlignment(HorizontalAlignment::Center);
+            btn.HorizontalContentAlignment(HorizontalAlignment::Center);
+            auto txt = MakeText(nullptr, L"", 14, false);
+            btn.Content(txt);
+            wuxc::Grid::SetRow(btn, cell / 7);
+            wuxc::Grid::SetColumn(btn, cell % 7);
+            btn.Click([grid](auto&& sender, auto&&) {
+                auto b = sender.template as<wuxc::Button>();
+                int day = winrt::unbox_value<int>(b.Tag());
+                g_clockSelectedYear = g_clockCalendarYear;
+                g_clockSelectedMonth = g_clockCalendarMonth;
+                g_clockSelectedDay = day;
+                FillCalendarGridCells(grid, g_clockCalendarYear, g_clockCalendarMonth);
+                UpdateClockCalendarHeaderText();
+            });
+            children.Append(btn);
+        }
+    }
 
     SYSTEMTIME now{};
     GetLocalTime(&now);
@@ -4571,18 +4624,28 @@ void FillCalendarGridCells(wuxc::Grid const& grid, int year, int month) {
     const uint8_t tG = bright ? 0 : 255;
     const uint8_t tB = bright ? 0 : 255;
 
+    wui::Color defaultFc{};
+    bool hasDefaultFc = !g_settings.fontColor.empty() &&
+        (TryParseHexColor(g_settings.fontColor, &defaultFc) ||
+         TryParseNamedColor(g_settings.fontColor, &defaultFc));
+
     const int firstCol = normalized.wDayOfWeek;
     for (int cell = 0; cell < 42; ++cell) {
+        auto btn = children.GetAt(cell).try_as<wuxc::Button>();
+        if (!btn) continue;
+        
         const int day = cell - firstCol + 1;
-        if (day < 1 || day > daysInMonth) continue;
+        bool isCurrentMonth = (day >= 1 && day <= daysInMonth);
+        
+        auto txt = btn.Content().try_as<wuxc::TextBlock>();
+        if (!txt) continue;
 
-        auto btn = MakeGhostButton(L"ClockCalendarDay", 20);
-        btn.Width(40);
-        btn.Height(40);
-        btn.MinWidth(0);
-        btn.Padding(Thickness{0, 0, 0, 0});
-        btn.HorizontalAlignment(HorizontalAlignment::Center);
-        btn.HorizontalContentAlignment(HorizontalAlignment::Center);
+        if (!isCurrentMonth) {
+            btn.Visibility(Visibility::Collapsed);
+            continue;
+        }
+        btn.Visibility(Visibility::Visible);
+        btn.Tag(winrt::box_value(day));
 
         const bool sel = day == g_clockSelectedDay &&
                          month == g_clockSelectedMonth &&
@@ -4591,32 +4654,24 @@ void FillCalendarGridCells(wuxc::Grid const& grid, int year, int month) {
                            month == now.wMonth &&
                            year == now.wYear;
 
-        auto txt = MakeText(nullptr, std::to_wstring(day), 14, sel);
-        btn.Content(txt);
+        txt.Text(winrt::hstring(std::to_wstring(day)));
+        txt.FontWeight(sel ? winrt::Windows::UI::Text::FontWeights::SemiBold() : winrt::Windows::UI::Text::FontWeights::Normal());
+        
         if (sel) {
             btn.Background(MakeBrush(0xFF, accent.R, accent.G, accent.B));
             txt.Foreground(MakeBrush(0xFF, tR, tG, tB));
-        } else if (today) {
-            btn.Background(MakeBrush(0x40, accent.R, accent.G, accent.B));
         } else {
-            btn.Background(MakeBrush(0, 0, 0, 0));
-        }
-
-        btn.Click([day](auto&&, auto&&) {
-            g_clockSelectedYear = g_clockCalendarYear;
-            g_clockSelectedMonth = g_clockCalendarMonth;
-            g_clockSelectedDay = day;
-            if (g_clockCalGridActive) {
-                FillCalendarGridCells(g_clockCalGridActive,
-                                      g_clockCalendarYear,
-                                      g_clockCalendarMonth);
+            if (today) {
+                btn.Background(MakeBrush(0x40, accent.R, accent.G, accent.B));
+            } else {
+                btn.Background(MakeBrush(0, 0, 0, 0));
             }
-            UpdateClockCalendarHeaderText();
-        });
-
-        wuxc::Grid::SetRow(btn, cell / 7);
-        wuxc::Grid::SetColumn(btn, cell % 7);
-        children.Append(btn);
+            if (hasDefaultFc) {
+                txt.Foreground(MakeBrush(defaultFc.A, defaultFc.R, defaultFc.G, defaultFc.B));
+            } else {
+                txt.ClearValue(wuxc::TextBlock::ForegroundProperty());
+            }
+        }
     }
 }
 
@@ -4653,20 +4708,19 @@ void PerformCalendarScroll(int direction, int steps) {
 
     FillCalendarGridCells(g_clockCalGridIdle, g_clockCalendarYear,
                           g_clockCalendarMonth);
-    UpdateClockCalendarHeaderText();
 
     const double enterFrom = direction > 0 ? travel : -travel;
     idleTransform.X(enterFrom);
 
     // Retarget each wheel event directly and keep its slide under one frame.
     // This prevents a fast wheel burst from leaving visible catch-up work.
-    const int durationMs = monthSteps > 1 ? 10 : 16;
+    const int durationMs = 200;
     const Duration duration{std::chrono::milliseconds(durationMs)};
     auto sb = std::make_shared<wuxa::Storyboard>();
     wuxa::DoubleAnimation activeAnim;
     activeAnim.To(-enterFrom);
     activeAnim.Duration(duration);
-    activeAnim.EnableDependentAnimation(true);
+    activeAnim.EnableDependentAnimation(false);
     wuxa::Storyboard::SetTarget(activeAnim, g_clockCalGridActive);
     wuxa::Storyboard::SetTargetProperty(activeAnim,
         L"(UIElement.RenderTransform).(TranslateTransform.X)");
@@ -4675,7 +4729,7 @@ void PerformCalendarScroll(int direction, int steps) {
     wuxa::DoubleAnimation idleAnim;
     idleAnim.To(0.0);
     idleAnim.Duration(duration);
-    idleAnim.EnableDependentAnimation(true);
+    idleAnim.EnableDependentAnimation(false);
     wuxa::Storyboard::SetTarget(idleAnim, g_clockCalGridIdle);
     wuxa::Storyboard::SetTargetProperty(idleAnim,
         L"(UIElement.RenderTransform).(TranslateTransform.X)");
@@ -4823,6 +4877,7 @@ void PopulateClockPanel() {
     wuxc::Grid calContainer;
     calContainer.Name(L"ClockCalendarContainer");
     calContainer.HorizontalAlignment(HorizontalAlignment::Stretch);
+    calContainer.Background(MakeBrush(0, 0, 0, 0));
     try {
         wuxm::RectangleGeometry calClip;
         calClip.Rect({0.0f, 0.0f, 400.0f, 400.0f});
@@ -4899,11 +4954,11 @@ void PopulateClockPanel() {
                 const ULONGLONG elapsed = now - lastWheelTick;
                 if (lastWheelTick != 0 && lastWheelDirection == direction &&
                     elapsed < 85) {
-                    steps *= elapsed < 30 ? 5 : (elapsed < 55 ? 3 : 2);
+                    steps *= elapsed < 30 ? 2 : 1;
                 }
                 lastWheelTick = now;
                 lastWheelDirection = direction;
-                PerformCalendarScroll(direction, std::clamp(steps, 1, 24));
+                PerformCalendarScroll(direction, std::clamp(steps, 1, 3));
                 args.Handled(true);
             } catch (...) {}
         });
@@ -7881,7 +7936,13 @@ void ComputeBands(const float* samples, int n, float* outBands) {
         float sum = 0;
         for (int i = i0; i < i1; i++) sum += sqrtf(re[i] * re[i] + im[i] * im[i]);
         float avg = sum / (i1 - i0);
-        float val = avg * 0.05f * (1.0f + b * 0.08f);
+        // Normalize the FFT output. A pure sine wave of amplitude 1.0
+        // produces a peak magnitude of kFFT_N / 2. Dividing by this
+        // maps the signal back to the [0, 1] range before scaling.
+        avg /= (kFFT_N / 2.0f);
+        // Apply visual scaling and a slight boost for higher bands.
+        float val = avg * 3.0f * (1.0f + b * 0.05f);
+        if (val < 0.0f || std::isnan(val)) val = 0.0f;
         if (val > 1.0f) val = 1.0f;
         outBands[b] = val;
     }
@@ -10311,6 +10372,12 @@ void ApplyIconColorToElement(FrameworkElement element, const std::wstring& value
     std::function<void(DependencyObject)> walk = [&](DependencyObject node) {
         if (!node) return;
         try {
+            if (auto fe = node.try_as<FrameworkElement>()) {
+                std::wstring n(fe.Name());
+                if (n == L"ControlCenterPanel" || n == L"ControlCenterFlyoutRoot") {
+                    return;
+                }
+            }
             // Controls whose template draws its own Shape-based visuals
             // (ToggleSwitch track + knob, Slider track + thumb, ProgressRing,
             // ProgressBar, ScrollBar). Recoloring their internals overwrites
@@ -10895,7 +10962,7 @@ void ForceTopMostChildXamlPopups() {
 void ApplyFlyoutOpeningAnimation(FrameworkElement const& presenter) {
     if (!presenter) return;
     std::wstring mode = g_settings.flyoutAnimation;
-    if (mode.empty()) mode = L"winui3";
+    if (mode.empty()) mode = L"zoom";
 
     // Resolve the OUTER VISIBLE CONTAINER of the flyout. For both
     // FlyoutPresenter and MenuFlyoutPresenter, that is the Border named
@@ -11216,7 +11283,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut,
     });
     flyout.Closing([](auto&& sender, auto&&) {
         std::wstring mode = g_settings.flyoutAnimation;
-        if (mode.empty()) mode = L"winui3";
+        if (mode.empty()) mode = L"zoom";
         if (mode == L"none") return;
         if (g_trayFlyout) {
             try {
@@ -17656,7 +17723,7 @@ void PopulateControlCenterPanel_New() {
         children.Append(bottomRow);
     }
 
-    ApplyAllControlStyles();
+    RunOnUiThread([] { try { ApplyAllControlStyles(); } catch (...) {} });
 }
 
 void PopulateControlCenterPanel() {
@@ -18300,6 +18367,7 @@ wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text,
 
 wuxc::MenuFlyoutSeparator MakeMenuSeparator() {
     wuxc::MenuFlyoutSeparator separator;
+    separator.Opacity(0.3);
     return separator;
 }
 
@@ -35109,13 +35177,13 @@ void LoadSettings() {
     if (g_settings.globalBlurAmount < 1) g_settings.globalBlurAmount = 1;
     if (g_settings.globalBlurAmount > 50) g_settings.globalBlurAmount = 50;
     g_settings.flyoutAnimation = GetStringSettingCopy(L"flyoutAnimation");
-    if (g_settings.flyoutAnimation.empty()) g_settings.flyoutAnimation = L"winui3";
+    if (g_settings.flyoutAnimation.empty()) g_settings.flyoutAnimation = L"zoom";
     if (g_settings.flyoutAnimation != L"slide" &&
         g_settings.flyoutAnimation != L"fade" &&
         g_settings.flyoutAnimation != L"zoom" &&
         g_settings.flyoutAnimation != L"winui3" &&
         g_settings.flyoutAnimation != L"none") {
-        g_settings.flyoutAnimation = L"winui3";
+        g_settings.flyoutAnimation = L"zoom";
     }
     g_settings.topBarBehaviour = GetStringSettingCopy(L"topBarBehaviour");
     if (g_settings.topBarBehaviour != L"autohide") {
