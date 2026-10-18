@@ -3,8 +3,8 @@
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
 // @version         1.8.2
-// @author          DerjunHH
-// @github          https://github.com/derjunHH
+// @author          Undisputed00x
+// @github          https://github.com/Undisputed00x
 // @include         *
 // @compilerOptions -ldwmapi -luxtheme -lcomctl32 -lgdi32 -ld2d1 -lmsimg32 -lshcore -lversion -ffp-exception-behavior=maytrap
 // ==/WindhawkMod==
