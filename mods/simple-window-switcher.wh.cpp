@@ -944,6 +944,8 @@ namespace SwsSelectionProtocol {
 // Retry the selected-window activation briefly when foreground-lock rules reject
 // the first handoff after a raw touchpad session.
 #define SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID 112
+#define SWS_WINDOW_LIST_RECONCILE_TIMER_ID 120
+#define SWS_WINDOW_LIST_RECONCILE_TIMEOUT_MS 3000u
 #define SWS_BACKDROP_RETRY_TIMER_ID 117
 // Marker expiry never extends the invisible foreground shield's lifetime.
 #define SWS_RAW_SWIPE_MARKER_EXPIRY_TIMER_ID 111
@@ -975,9 +977,13 @@ namespace SwsSelectionProtocol {
 // A stationary two-finger tap is owned only by a visible, interactive session.
 // Keep its promoted mouse pair briefly after lift, without retaining foreground.
 #define SWS_RAW_TAP_MAX_MS 300
-#define SWS_RAW_TAP_SLOP (65535 / 50)
+static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 #define SWS_RAW_TWO_TAP_MOUSE_GRACE_MS 250u
 #define SWS_RAW_TWO_TAP_MOUSE_PAIR_MS 500u
+#define SWS_CLOSE_PRIMARY_TIMEOUT_MS 3000u
+#define SWS_CLOSE_FALLBACK_TIMEOUT_MS 1000u
+#define SWS_STICKY_TWO_FINGER_CLOSE_TIMEOUT_MS \
+    (SWS_CLOSE_PRIMARY_TIMEOUT_MS + SWS_CLOSE_FALLBACK_TIMEOUT_MS)
 #define SWS_RAW_TWO_TAP_MOUSE_TIMER_ID 115
 #define SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID 116
 #define SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_TIMER_ID 118
@@ -1451,8 +1457,10 @@ static bool g_showAllMonitors = false;
 static HHOOK g_hMouseHook = NULL;
 static HWINEVENTHOOK s_hWinEventHook = NULL;
 static HWINEVENTHOOK s_hForegroundEventHook = NULL;
-static void AddWindowEntry(HWND hWnd);
-static void CloseSwitcherEntry(int idx);
+static void AddWindowEntry(HWND hWnd, bool removeIfIneligible = true);
+static void ClearPendingActivationListTarget();
+static void ReconcilePendingActivationListTarget();
+static bool CloseSwitcherEntry(int idx, PCWSTR source = L"unknown");
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
@@ -5937,10 +5945,23 @@ static bool CanCloseWindow(HWND hWnd) {
     return true;
 }
 
+enum class CloseRequestState {
+    RestorePending,
+    PrimaryQueued,
+    FallbackQueued,
+};
+struct PendingCloseRequest {
+    CloseRequestState state = CloseRequestState::PrimaryQueued;
+    UINT primaryMessage = WM_SYSCOMMAND;
+    WPARAM primaryWParam = SC_CLOSE;
+    UINT fallbackMessage = WM_CLOSE;
+    WPARAM fallbackWParam = 0;
+    bool restoreRequested = false;
+    ULONGLONG deadline = 0;
+};
+
 static std::vector<HWND> s_pendingCloseWindows;
-static int s_pendingCloseRetries = 0;
-static std::map<HWND, ULONGLONG> s_pendingCloseDeadlines;
-static constexpr ULONGLONG SWS_CLOSE_COOLDOWN_MS = 3000;
+static std::map<HWND, PendingCloseRequest> s_pendingCloseRequests;
 
 // Activation MRU (Most Recently Used) tracking
 static std::vector<HWND> g_mruWindows;
@@ -6773,6 +6794,14 @@ static std::atomic<bool> g_touchpadTwoFingerCloseActive{false};
 static std::atomic<DWORD> g_touchpadRawTwoFingerNextSerial{0};
 static std::atomic<ULONGLONG> g_touchpadRawTwoFingerTapMouseState{0};
 static std::atomic<DWORD> g_touchpadRawTwoFingerTapConsumedSerial{0};
+static std::atomic<DWORD> g_touchpadRawTwoFingerTapValidSerial{0};
+static std::atomic<DWORD> g_touchpadRawTwoFingerTapInvalidSerial{0};
+static void ClearRawTwoFingerTapOutcome() {
+    g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+    g_touchpadRawTwoFingerTapConsumedSerial.store(0, std::memory_order_release);
+    g_touchpadRawTwoFingerTapValidSerial.store(0, std::memory_order_release);
+    g_touchpadRawTwoFingerTapInvalidSerial.store(0, std::memory_order_release);
+}
 static DWORD RawTwoFingerTapMouseRemainingMs(ULONGLONG state, ULONGLONG now);
 static void CancelTwoFingerTapDismiss();
 // Settings callbacks run outside the switcher thread. These atomics are the
@@ -6819,6 +6848,7 @@ struct RawTouchpadFrameSlot {
     ULONG tips = 0;
     ULONG packedPos = 0;
     ULONGLONG captureTick = 0;
+    DWORD twoFingerTapValidSerial = 0;
 };
 static constexpr DWORD SWS_RAW_FRAME_QUEUE_CAPACITY = 256;
 static RawTouchpadFrameSlot s_rawFrameQueue[SWS_RAW_FRAME_QUEUE_CAPACITY];
@@ -6852,6 +6882,8 @@ static bool QueueRawTouchpadFrame(ULONG tips, ULONG packedPos, ULONGLONG capture
     slot.tips = tips;
     slot.packedPos = packedPos;
     slot.captureTick = captureTick;
+    slot.twoFingerTapValidSerial =
+        g_touchpadRawTwoFingerTapValidSerial.load(std::memory_order_acquire);
     slot.published.store(write + 1, std::memory_order_release);
     s_rawFrameWrite.store(write + 1, std::memory_order_release);
 
@@ -6973,24 +7005,23 @@ static bool s_rawTouchpadShieldReleasePending = false;
 static bool s_rawSwipeMarkerActive = false;
 // Physical-stroke evidence survives UI cancellation, but never a complete lift.
 static bool s_rawStrokeOwned = false;
-static bool s_rawTwoFingerTapActive = false;
-static bool s_rawTwoFingerTapMoved = false;
-static ULONGLONG s_rawTwoFingerTapStartTick = 0;
-static int s_rawTwoFingerTapOriginX = 0;
-static int s_rawTwoFingerTapOriginY = 0;
+static DWORD s_rawTwoFingerTapHandledSerial = 0;
 static bool s_twoFingerTapDismissPending = false;
 // A two-finger close is a command owned by the visible sticky session. Keep
 // that ownership through the selected window's asynchronous close/focus churn,
-// but never beyond the promoted mouse-pair grace.
+// then release it when close completes or the bounded close timeout expires.
 static DWORD s_stickyTwoFingerTapSerial = 0;
 static ULONGLONG s_stickyTwoFingerTapOwnershipDeadline = 0;
 static bool s_stickyTwoFingerTapCloseRequested = false;
 static bool s_stickyTwoFingerTapMousePairConsumed = false;
 static bool s_stickyTwoFingerTapFocusRestoreActive = false;
+static HWND s_stickyTwoFingerTapCloseTarget = nullptr;
 static ULONGLONG s_rawTouchpadShieldFocusStartTick = 0;
 static HWND s_rawShieldRestoreForeground = NULL;
 static HWND s_touchpadActivationRetryTarget = NULL;
 static ULONGLONG s_touchpadActivationRetryDeadline = 0;
+static HWND s_pendingActivationListTarget = NULL;
+static ULONGLONG s_pendingActivationListDeadline = 0;
 static bool s_touchpadCommitActivation = false;
 static bool s_touchpadRapidPending = false;
 static ULONGLONG s_touchpadRapidPendingTick = 0;
@@ -7377,14 +7408,6 @@ static void CancelNativeTouchpadInvocation() {
     ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
 }
 
-static void ResetRawTwoFingerTap() {
-    s_rawTwoFingerTapActive = false;
-    s_rawTwoFingerTapMoved = false;
-    s_rawTwoFingerTapStartTick = 0;
-    s_rawTwoFingerTapOriginX = 0;
-    s_rawTwoFingerTapOriginY = 0;
-}
-
 static void CancelTwoFingerTapDismiss() {
     s_twoFingerTapDismissPending = false;
     if (g_hSwitcher) {
@@ -7403,6 +7426,10 @@ static DWORD RawTwoFingerTapMouseSerial() {
         std::memory_order_acquire) >> 32);
 }
 
+static DWORD RawTwoFingerTapValidSerial() {
+    return g_touchpadRawTwoFingerTapValidSerial.load(std::memory_order_acquire);
+}
+
 static void ClearStickyTwoFingerTapOwnership() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID);
@@ -7412,6 +7439,7 @@ static void ClearStickyTwoFingerTapOwnership() {
     s_stickyTwoFingerTapCloseRequested = false;
     s_stickyTwoFingerTapMousePairConsumed = false;
     s_stickyTwoFingerTapFocusRestoreActive = false;
+    s_stickyTwoFingerTapCloseTarget = nullptr;
 }
 
 static bool StickyTwoFingerTapOwnershipLive() {
@@ -7424,40 +7452,66 @@ static bool StickyTwoFingerTapOwnershipLive() {
         ClearStickyTwoFingerTapOwnership();
         return false;
     }
+    HWND target = s_stickyTwoFingerTapCloseTarget;
+    HWND popup = target && IsWindow(target) ? GetLastActivePopup(target) : nullptr;
+    if (popup && popup != target && IsWindow(popup) && IsWindowVisible(popup)) {
+        Wh_Log(L"SWS: sticky two-finger close released for modal popup target=%p popup=%p",
+               target, popup);
+        ClearStickyTwoFingerTapOwnership();
+        return false;
+    }
     return true;
+}
+
+static bool StickyTwoFingerTapCloseCompleted() {
+    HWND target = s_stickyTwoFingerTapCloseTarget;
+    return target && (!IsWindow(target) ||
+                      (!IsWindowVisible(target) && !IsIconic(target)));
 }
 
 static void RetainStickyTwoFingerTapForeground() {
     if (!StickyTwoFingerTapOwnershipLive() || s_stickyTwoFingerTapFocusRestoreActive) return;
+    bool closeCompleted = StickyTwoFingerTapCloseCompleted();
     HWND foreground = GetForegroundWindow();
-    if (IsSwitcherWindow(foreground)) return;
+    if (IsSwitcherWindow(foreground)) {
+        if (closeCompleted) ClearStickyTwoFingerTapOwnership();
+        return;
+    }
     s_stickyTwoFingerTapFocusRestoreActive = true;
     BringWindowToTop(g_hSwitcher);
     BOOL restored = SetForegroundWindow(g_hSwitcher);
     s_stickyTwoFingerTapFocusRestoreActive = false;
-    Wh_Log(L"SWS: retaining sticky switcher after two-finger close foreground=%p restored=%d active=%d",
-           foreground, restored, GetForegroundWindow() == g_hSwitcher);
+    bool active = GetForegroundWindow() == g_hSwitcher;
+    Wh_Log(L"SWS: retaining sticky switcher after two-finger close foreground=%p target=%p "
+           L"completed=%d restored=%d active=%d",
+           foreground, s_stickyTwoFingerTapCloseTarget, closeCompleted, restored, active);
+    if (closeCompleted && active) ClearStickyTwoFingerTapOwnership();
 }
 
-static void BeginStickyTwoFingerTapOwnership() {
-    if (!g_isSticky || !g_isVisible || !g_hSwitcher) return;
+static void BeginStickyTwoFingerTapOwnership(HWND target) {
+    if (!g_isSticky || !g_isVisible || !g_hSwitcher || !target) return;
     ULONGLONG now = GetTickCount64();
-    s_stickyTwoFingerTapSerial = RawTwoFingerTapMouseSerial();
-    s_stickyTwoFingerTapOwnershipDeadline = now + SWS_RAW_TWO_TAP_MOUSE_PAIR_MS;
+    s_stickyTwoFingerTapSerial = RawTwoFingerTapValidSerial();
+    if (!s_stickyTwoFingerTapSerial) {
+        s_stickyTwoFingerTapSerial = RawTwoFingerTapMouseSerial();
+    }
+    s_stickyTwoFingerTapOwnershipDeadline =
+        now + SWS_STICKY_TWO_FINGER_CLOSE_TIMEOUT_MS;
     s_stickyTwoFingerTapCloseRequested = true;
     s_stickyTwoFingerTapMousePairConsumed =
         s_stickyTwoFingerTapSerial &&
         g_touchpadRawTwoFingerTapConsumedSerial.load(std::memory_order_acquire) ==
             s_stickyTwoFingerTapSerial;
+    s_stickyTwoFingerTapCloseTarget = target;
     SetTimer(g_hSwitcher, SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID,
-             SWS_RAW_TWO_TAP_MOUSE_PAIR_MS, nullptr);
-    Wh_Log(L"SWS: sticky two-finger close owned serial=%u pairConsumed=%d deadline=%llu",
-           s_stickyTwoFingerTapSerial, s_stickyTwoFingerTapMousePairConsumed,
+             SWS_STICKY_TWO_FINGER_CLOSE_TIMEOUT_MS, nullptr);
+    Wh_Log(L"SWS: sticky two-finger close owned serial=%u target=%p pairConsumed=%d deadline=%llu",
+           s_stickyTwoFingerTapSerial, target,
+           s_stickyTwoFingerTapMousePairConsumed,
            (unsigned long long)s_stickyTwoFingerTapOwnershipDeadline);
 }
 
 static void CancelRawTouchpadStroke() {
-    ResetRawTwoFingerTap();
     s_rawPartialReleasePending = false;
     s_rawPartialReleaseStartTick = 0;
     CancelNativeTouchpadInvocation();
@@ -12001,6 +12055,13 @@ static bool s_twoFingerTapRecoveryValueNameChecked = false;
 static TwoFingerTapRecovery s_twoFingerTapRecoverySession{};
 static bool s_twoFingerTapRecoveryChecked = false;
 static bool s_twoFingerTapRecoveryPending = false;
+// Switcher-thread state for the live Windows tap override. Raw HID still
+// classifies the gesture; this override prevents Windows from promoting it
+// into a right-click before the raw close command reaches the UI thread.
+static bool s_twoFingerTapRestoreOwned = false;
+static bool s_twoFingerTapOverrideActive = false;
+static bool s_twoFingerTapParametersUnavailable = false;
+static DWORD s_twoFingerTapParameterError = ERROR_SUCCESS;
 
 static PCWSTR TwoFingerTapRecoveryValueName() {
     if (s_twoFingerTapRecoveryValueNameChecked) {
@@ -12109,6 +12170,114 @@ static bool ClearTwoFingerTapRecovery() {
     return Wh_DeleteValue(valueName);
 }
 
+static bool SaveTwoFingerTapRecovery() {
+    PCWSTR valueName = TwoFingerTapRecoveryValueName();
+    if (!valueName || !ReadTwoFingerTapRecoverySession()) return false;
+    auto recovery = s_twoFingerTapRecoverySession;
+    recovery.restoreOwed = 1;
+    return Wh_SetBinaryValue(valueName, &recovery, sizeof(recovery));
+}
+
+static void LogTwoFingerTapParameterError(BOOL want, DWORD error) {
+    if (s_twoFingerTapParameterError == error) return;
+    s_twoFingerTapParameterError = error;
+    Wh_Log(L"SWS: two-finger Windows tap %s failed (error=%u)",
+           want ? L"override" : L"restore", error);
+}
+
+static void UpdateTwoFingerTapOverride(bool want, bool allowRetryTimer = true) {
+    if (want) {
+        if (s_twoFingerTapOverrideActive || s_twoFingerTapParametersUnavailable) return;
+
+        SwsTouchpadParametersV1 parameters{};
+        parameters.versionNumber = 1;
+        SetLastError(ERROR_SUCCESS);
+        BOOL read = SystemParametersInfoW(SWS_SPI_GETTOUCHPADPARAMETERS,
+                                          sizeof(parameters), &parameters, 0);
+        DWORD error = read ? ERROR_SUCCESS : GetLastError();
+        if (read && !parameters.touchpadPresent) return;
+        if (read && !parameters.twoFingerTapEnabled) {
+            // The user already disabled promotion. Do not claim restoration.
+            s_twoFingerTapOverrideActive = true;
+            s_twoFingerTapParameterError = ERROR_SUCCESS;
+            Wh_Log(L"SWS: two-finger Windows tap already disabled");
+            return;
+        }
+        if (read) {
+            // Record ownership before changing the live setting. A process
+            // crash after the write can then restore it on the next start.
+            if (!SaveTwoFingerTapRecovery()) {
+                LogTwoFingerTapParameterError(TRUE, ERROR_WRITE_FAULT);
+                if (allowRetryTimer && g_hSwitcher) {
+                    SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID,
+                             100, nullptr);
+                }
+                return;
+            }
+            parameters.twoFingerTapEnabled = FALSE;
+            SetLastError(ERROR_SUCCESS);
+            BOOL set = SystemParametersInfoW(SWS_SPI_SETTOUCHPADPARAMETERS,
+                                             sizeof(parameters), &parameters, 0);
+            error = set ? ERROR_SUCCESS : GetLastError();
+            if (set) {
+                s_twoFingerTapRestoreOwned = true;
+                s_twoFingerTapOverrideActive = true;
+                s_twoFingerTapParameterError = ERROR_SUCCESS;
+                ClearRawTwoFingerTapOutcome();
+                Wh_Log(L"SWS: two-finger Windows tap override active=1");
+                return;
+            }
+        }
+        if (error == ERROR_INVALID_PARAMETER) {
+            s_twoFingerTapParametersUnavailable = true;
+        }
+        LogTwoFingerTapParameterError(TRUE, error);
+        if (allowRetryTimer && !s_twoFingerTapParametersUnavailable && g_hSwitcher) {
+            SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID,
+                     100, nullptr);
+        }
+        return;
+    }
+
+    if (!s_twoFingerTapOverrideActive && !s_twoFingerTapRestoreOwned) return;
+    if (!s_twoFingerTapRestoreOwned) {
+        s_twoFingerTapOverrideActive = false;
+        s_twoFingerTapParameterError = ERROR_SUCCESS;
+        return;
+    }
+
+    SwsTouchpadParametersV1 parameters{};
+    parameters.versionNumber = 1;
+    SetLastError(ERROR_SUCCESS);
+    BOOL read = SystemParametersInfoW(SWS_SPI_GETTOUCHPADPARAMETERS,
+                                      sizeof(parameters), &parameters, 0);
+    DWORD error = read ? ERROR_SUCCESS : GetLastError();
+    if (read && !parameters.twoFingerTapEnabled) {
+        // BOOL bit-fields are signed one-bit fields with this SDK layout.
+        parameters.twoFingerTapEnabled = -1;
+        SetLastError(ERROR_SUCCESS);
+        BOOL set = SystemParametersInfoW(SWS_SPI_SETTOUCHPADPARAMETERS,
+                                         sizeof(parameters), &parameters, 0);
+        error = set ? ERROR_SUCCESS : GetLastError();
+        read = set;
+    }
+    if (read && ClearTwoFingerTapRecovery()) {
+        s_twoFingerTapRestoreOwned = false;
+        s_twoFingerTapOverrideActive = false;
+        s_twoFingerTapRecoverySession.restoreOwed = 0;
+        s_twoFingerTapRecoveryPending = false;
+        s_twoFingerTapParameterError = ERROR_SUCCESS;
+        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
+        Wh_Log(L"SWS: restored two-finger Windows tap setting");
+        return;
+    }
+    if (read) error = ERROR_WRITE_FAULT;
+    LogTwoFingerTapParameterError(FALSE, error);
+    if (allowRetryTimer && g_hSwitcher) {
+        SetTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID, 100, nullptr);
+    }
+}
+
 static void RecoverLegacyTwoFingerTapOverride(bool allowRetryTimer = true) {
     if (g_isVisible || g_isPendingShow || g_animExitActive || g_isHidingSwitcher ||
         s_rawTouchpadShieldActive || s_rawSessionOwned) {
@@ -12144,6 +12313,8 @@ static void RecoverLegacyTwoFingerTapOverride(bool allowRetryTimer = true) {
         if (ClearTwoFingerTapRecovery()) {
             s_twoFingerTapRecoverySession.restoreOwed = 0;
             s_twoFingerTapRecoveryPending = false;
+            s_twoFingerTapRestoreOwned = false;
+            s_twoFingerTapOverrideActive = false;
             if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID);
             Wh_Log(L"SWS: recovered two-finger Windows tap setting");
             return;
@@ -12362,14 +12533,36 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
     ULONGLONG policy = s_mousePolicy.load(std::memory_order_acquire);
     DWORD flags = MousePolicyFlags(policy);
     DWORD generation = MousePolicyGeneration(policy);
+    bool consumed = false;
     if (nCode == HC_ACTION) {
-        bool consumed = SuppressTwoFingerTapMouse(wParam);
+        const bool rightButton = wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP;
+        ULONGLONG stateBefore = rightButton
+            ? g_touchpadRawTwoFingerTapMouseState.load(std::memory_order_acquire)
+            : 0;
+        DWORD remainingBefore = rightButton
+            ? RawTwoFingerTapMouseRemainingMs(stateBefore, GetTickCount64())
+            : 0;
+        DWORD evidenceSerialBefore = rightButton ? (DWORD)(stateBefore >> 32) : 0;
+        DWORD pairSerialBefore = rightButton ? s_rawTwoFingerMouseButtonSerial : 0;
+        consumed = SuppressTwoFingerTapMouse(wParam);
+        if (rightButton && (flags & SWS_MOUSE_VISIBLE || remainingBefore ||
+                            pairSerialBefore || consumed)) {
+            MSLLHOOKSTRUCT* mouse = (MSLLHOOKSTRUCT*)lParam;
+            Wh_Log(L"SWS: right-button hook message=0x%X point=%ld,%ld "
+                   L"evidenceSerial=%u remaining=%u pairSerial=%u closeActive=%d "
+                   L"valid=%u invalid=%u consumed=%d",
+                   (UINT)wParam, mouse ? mouse->pt.x : 0, mouse ? mouse->pt.y : 0,
+                   evidenceSerialBefore, remainingBefore, pairSerialBefore,
+                   g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire),
+                   g_touchpadRawTwoFingerTapValidSerial.load(std::memory_order_acquire),
+                   g_touchpadRawTwoFingerTapInvalidSerial.load(std::memory_order_acquire),
+                   consumed);
+        }
         if (consumed) {
             if (flags & SWS_MOUSE_VISIBLE) {
                 s_mouseCancelsCtrlTap.store((ULONGLONG)generation << 32 | 1u,
                                             std::memory_order_release);
             }
-            Wh_Log(L"SWS: consumed owned two-finger tap mouse event (message=0x%X)", (UINT)wParam);
             return 1;
         }
     }
@@ -12594,6 +12787,7 @@ static void PresentSwitcherWindows() {
             UpdateWindow(g_hCloseBtnWnd);
         }
     }
+    ReconcilePendingActivationListTarget();
 }
 
 static void RevealPendingSwitcher() {
@@ -13386,12 +13580,14 @@ static void HideSwitcher() {
     s_combinedRawLiftHandled = false;
     s_commitStarted = false;
     if (g_hSwitcher) {
-        KillTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID);
+        if (s_pendingCloseWindows.empty()) {
+            KillTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID);
+        } else {
+            SetTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
+        }
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
         KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
     }
-    s_pendingCloseWindows.clear();
-    s_pendingCloseRetries = 0;
     g_isHidingSwitcher = false;
     // Once hidden, a background controller cannot suppress shell gestures.
     // Explorer's source-specific PTP hook covers the reader's release grace.
@@ -13468,6 +13664,7 @@ static bool RestoreWindowIfIconic(HWND hWnd) {
 
 static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows) {
     if (!hTarget || !IsWindow(hTarget)) {
+        ClearPendingActivationListTarget();
         ClearSwsSwitchAnimationSelection();
         s_touchpadCommitActivation = false;
         return;
@@ -13526,6 +13723,13 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
     }
     bool active = !ownerRestorePending &&
                   GetForegroundWindow() == hForegroundTarget;
+    if (s_pendingActivationListTarget != hTarget ||
+        !s_pendingActivationListDeadline ||
+        GetTickCount64() >= s_pendingActivationListDeadline) {
+        s_pendingActivationListTarget = hTarget;
+        s_pendingActivationListDeadline = GetTickCount64() +
+            SWS_WINDOW_LIST_RECONCILE_TIMEOUT_MS;
+    }
     if (!retrying || active) {
         Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d active=%d", hForegroundTarget,
                foregroundOk, active);
@@ -15215,12 +15419,13 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
     }
 }
 
-static void AddWindowEntry(HWND hWnd) {
-    if (g_animExitActive || (!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
+static void AddWindowEntry(HWND hWnd, bool removeIfIneligible) {
+    if (g_animExitActive || (!g_isVisible && !g_isPendingShow)) return;
+    if (g_drilledIn && g_windows.empty()) return;
     if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd)) return;
     if (IsDesktopSourceWindow(hWnd)) return;
     if (!IsEligibleWindow(hWnd)) {
-        RemoveWindowEntryByHwnd(hWnd);
+        if (removeIfIneligible) RemoveWindowEntryByHwnd(hWnd);
         return;
     }
 
@@ -15242,7 +15447,7 @@ static void AddWindowEntry(HWND hWnd) {
         bool member = g_settings.showApplications && !g_drilledIn &&
                       std::find(entry.groupWindows.begin(), entry.groupWindows.end(), hWnd) != entry.groupWindows.end();
         if ((entry.hWnd == hWnd || member) && g_settings.hideMinimizedWindows && IsEntryMinimized(entry)) {
-            RemoveWindowEntryByHwnd(entry.hWnd);
+            if (removeIfIneligible) RemoveWindowEntryByHwnd(entry.hWnd);
             return;
         }
         if (member && RefreshGroupRepresentative(entry)) {
@@ -15271,9 +15476,9 @@ static void AddWindowEntry(HWND hWnd) {
     if (g_drilledIn) {
         for (auto& w : g_savedAppList) {
             auto& grp = w.groupWindows;
-            if (w.hWnd == hWnd || std::find(grp.begin(), grp.end(), hWnd) != grp.end()) {
+                if (w.hWnd == hWnd || std::find(grp.begin(), grp.end(), hWnd) != grp.end()) {
                 if (g_settings.hideMinimizedWindows && IsEntryMinimized(w)) {
-                    RemoveWindowEntryByHwnd(w.hWnd);
+                    if (removeIfIneligible) RemoveWindowEntryByHwnd(w.hWnd);
                     return;
                 }
                 RefreshGroupRepresentative(w);
@@ -15295,16 +15500,9 @@ static void AddWindowEntry(HWND hWnd) {
     if (g_settings.hideMinimizedWindows && IsIconic(hWnd) &&
         (!g_settings.showApplications || g_drilledIn || g_isAltBacktickSameApp)) return;
 
-    // ── Defensive cleanup: purge pending-close tracking and any departing ghost
-    // for this window. With lazy removal (CloseSwitcherEntry no longer removes the
-    // entry eagerly), a surviving window never leaves g_windows, so this is normally
-    // a no-op. It only matters if an entry was removed while the window turned out
-    // to be alive (e.g. an EVENT_OBJECT_DESTROY/HIDE raced a modal dialog).
+    // ── Defensive cleanup for any departing ghost. Pending close tracking stays
+    // owned by the close state machine until completion, rejection, or timeout.
     {
-        auto pcIt = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hWnd);
-        if (pcIt != s_pendingCloseWindows.end()) {
-            s_pendingCloseWindows.erase(pcIt);
-        }
         auto& deps = g_layoutTransition.departingItems;
         for (auto dit = deps.begin(); dit != deps.end(); ++dit) {
             if (dit->hWnd == hWnd) {
@@ -15460,6 +15658,54 @@ static void AddWindowEntry(HWND hWnd) {
             g_animHoverAlphaTarget = 0.0f;
             PaintSwitcher();
         }
+    }
+}
+
+static void ClearPendingActivationListTarget() {
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_WINDOW_LIST_RECONCILE_TIMER_ID);
+    s_pendingActivationListTarget = NULL;
+    s_pendingActivationListDeadline = 0;
+}
+
+static void ReconcilePendingActivationListTarget() {
+    HWND target = s_pendingActivationListTarget;
+    if (!target) return;
+
+    ULONGLONG now = GetTickCount64();
+    if (!IsWindow(target) || !s_pendingActivationListDeadline ||
+        now >= s_pendingActivationListDeadline) {
+        Wh_Log(L"SWS: activation list reconciliation ended target=%p reason=%s",
+               target, !IsWindow(target) ? L"destroyed" : L"timeout");
+        ClearPendingActivationListTarget();
+        return;
+    }
+    if (!g_isVisible && !g_isPendingShow) {
+        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_WINDOW_LIST_RECONCILE_TIMER_ID);
+        return;
+    }
+
+    auto containsTarget = [&]() {
+        for (const auto& entry : g_windows) {
+            if (entry.hWnd == target ||
+                std::find(entry.groupWindows.begin(), entry.groupWindows.end(), target) !=
+                    entry.groupWindows.end()) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (!containsTarget() && IsEligibleWindow(target)) {
+        Wh_Log(L"SWS: activation list reconciliation adding target=%p", target);
+        AddWindowEntry(target, false);
+    }
+    if (containsTarget()) {
+        ClearPendingActivationListTarget();
+        return;
+    }
+
+    if (g_hSwitcher) {
+        SetTimer(g_hSwitcher, SWS_WINDOW_LIST_RECONCILE_TIMER_ID, 40, NULL);
     }
 }
 
@@ -15630,6 +15876,9 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     if (IsDesktopSourceWindow(hwnd)) return;
     if (event == EVENT_OBJECT_DESTROY) {
         InvalidateWindowIcon(hwnd);
+        if (s_pendingActivationListTarget == hwnd) {
+            ClearPendingActivationListTarget();
+        }
         RemoveWindowEntryByHwnd(hwnd);
         return;
     }
@@ -15666,8 +15915,9 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
         if (!IsSwitcherWindow(hwnd)) {
             UpdateMruWindow(hwnd);
             if (!g_animExitActive && (g_isVisible || g_isPendingShow)) {
-                AddWindowEntry(hwnd);
+                AddWindowEntry(hwnd, false);
             }
+            ReconcilePendingActivationListTarget();
         }
         return;
     }
@@ -15726,7 +15976,7 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
 
     if (event == EVENT_OBJECT_SHOW) {
         // Shell windows are suppression-only; they never navigate or commit.
-        AddWindowEntry(hwnd);
+        AddWindowEntry(hwnd, false);
     } else if (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY) {
         if (!IsWindowVisible(hwnd) || event == EVENT_OBJECT_DESTROY) {
             // EVENT_OBJECT_DESTROY always satisfies this guard (a destroyed window is
@@ -15740,69 +15990,144 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     }
 }
 
-// Close the window for the entry at idx (posts SC_CLOSE, same as the close
-// button). The entry is kept in the list while the close is pending: actual
-// removal only happens once the window is confirmed gone (HSHELL_WINDOWDESTROYED,
-// WinEvent HIDE/DESTROY, or the close-verify timer). This lazy removal keeps the
-// entry at its exact position and preserves its MRU rank, so a window that
-// survives the close attempt (e.g. it showed a modal "save changes?" dialog)
-// never moves to the minimized boundary and never overlaps other entries.
-// Shared by Q / Ctrl+W / Del and the close button. Posts SC_CLOSE and arms the
-// close-verify timer exactly once per window, so rapid double-clicks or repeated
-// key presses can't queue duplicate SC_CLOSE messages (which could re-trigger or
-// dismiss an app's confirmation dialog).
-static void QueueCloseWindow(HWND hw) {
-    // Other lifecycle paths can retire the HWND vector while the session closes.
-    // Prune those timestamps before recording a new request.
-    for (auto it = s_pendingCloseDeadlines.begin(); it != s_pendingCloseDeadlines.end();) {
-        if (std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), it->first) == s_pendingCloseWindows.end()) {
-            it = s_pendingCloseDeadlines.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    ULONGLONG now = GetTickCount64();
-    auto pending = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hw);
-    if (pending != s_pendingCloseWindows.end()) {
-        auto deadline = s_pendingCloseDeadlines.find(hw);
-        if (deadline != s_pendingCloseDeadlines.end() && now < deadline->second) return;
-        s_pendingCloseWindows.erase(pending);
-        s_pendingCloseDeadlines.erase(hw);
-    }
-    // A failed post is not an in-flight close and must remain retryable.
-    BOOL posted = PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
-    if (!posted) Wh_Log(L"SWS: close request post failed (window=%p error=%u)", hw, GetLastError());
-    if (posted) {
-        s_pendingCloseWindows.push_back(hw);
-        s_pendingCloseDeadlines[hw] = now + SWS_CLOSE_COOLDOWN_MS;
-    }
+static bool IsApplicationFrameWindow(HWND hWnd) {
+    WCHAR className[64] = {};
+    return GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+           wcscmp(className, L"ApplicationFrameWindow") == 0;
 }
 
-static void CloseSwitcherEntry(int idx) {
-    if (idx < 0 || idx >= (int)g_windows.size()) return;
-    if (g_windows[idx].isDesktopItem) return;
+static PCWSTR CloseRequestStateName(CloseRequestState state) {
+    if (state == CloseRequestState::FallbackQueued) return L"fallbackQueued";
+    if (state == CloseRequestState::RestorePending) return L"restorePending";
+    return L"primaryQueued";
+}
+
+static bool PostCloseMessage(HWND hWnd, UINT message, WPARAM wParam,
+                             PCWSTR phase) {
+    SetLastError(ERROR_SUCCESS);
+    BOOL posted = PostMessageW(hWnd, message, wParam, 0);
+    DWORD error = posted ? ERROR_SUCCESS : GetLastError();
+    Wh_Log(L"SWS: close dispatch hwnd=%p phase=%s message=0x%X posted=%d error=%u",
+           hWnd, phase, message, posted, error);
+    return posted != FALSE;
+}
+
+// Close the window for the entry at idx. Minimized windows receive a queued
+// restore before close. ApplicationFrameWindow hosts use WM_CLOSE first;
+// ordinary Win32 windows keep SC_CLOSE first. One bounded fallback handles
+// targets which ignore the primary command without duplicating requests.
+// The entry remains in the list until the target is confirmed gone.
+static bool QueueCloseWindow(HWND hw) {
+    if (!IsWindow(hw)) {
+        Wh_Log(L"SWS: close request rejected hwnd=%p reason=invalid-window", hw);
+        return false;
+    }
+
+    auto pending = s_pendingCloseRequests.find(hw);
+    if (pending != s_pendingCloseRequests.end()) {
+        Wh_Log(L"SWS: close request already pending hwnd=%p state=%s deadline=%llu",
+               hw, CloseRequestStateName(pending->second.state),
+               (unsigned long long)pending->second.deadline);
+        return true;
+    }
+
+    const bool applicationFrame = IsApplicationFrameWindow(hw);
+    PendingCloseRequest request;
+    request.primaryMessage = applicationFrame ? WM_CLOSE : WM_SYSCOMMAND;
+    request.primaryWParam = applicationFrame ? 0 : SC_CLOSE;
+    request.fallbackMessage = applicationFrame ? WM_SYSCOMMAND : WM_CLOSE;
+    request.fallbackWParam = applicationFrame ? SC_CLOSE : 0;
+    request.deadline = GetTickCount64() + SWS_CLOSE_PRIMARY_TIMEOUT_MS;
+
+    WCHAR className[64] = {};
+    GetClassNameW(hw, className, ARRAYSIZE(className));
+    WCHAR title[128] = {};
+    GetWindowTextW(hw, title, ARRAYSIZE(title));
+    BOOL cloaked = FALSE;
+    DwmGetWindowAttribute(hw, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+    DWORD processId = 0;
+    DWORD threadId = GetWindowThreadProcessId(hw, &processId);
+    const bool iconic = IsIconic(hw) != FALSE;
+    Wh_Log(L"SWS: close request inspect hwnd=%p class=%s title='%s' pid=%u tid=%u "
+           L"iconic=%d cloaked=%d appFrame=%d",
+           hw, className, title, processId, threadId, iconic, cloaked,
+           applicationFrame);
+
+    if (iconic) {
+        request.state = CloseRequestState::RestorePending;
+        Wh_Log(L"SWS: close request state hwnd=%p state=%s",
+               hw, CloseRequestStateName(request.state));
+        SetLastError(ERROR_SUCCESS);
+        BOOL restored = ShowWindowAsync(hw, SW_RESTORE);
+        DWORD error = restored ? ERROR_SUCCESS : GetLastError();
+        request.restoreRequested = restored != FALSE;
+        Wh_Log(L"SWS: close restore queued hwnd=%p requested=%d error=%u",
+               hw, restored, error);
+    }
+
+    if (!PostCloseMessage(hw, request.primaryMessage, request.primaryWParam,
+                           L"primary")) {
+        Wh_Log(L"SWS: close request rejected hwnd=%p reason=primary-dispatch",
+               hw);
+        return false;
+    }
+
+    request.state = CloseRequestState::PrimaryQueued;
+    s_pendingCloseRequests.emplace(hw, request);
+    s_pendingCloseWindows.push_back(hw);
+    Wh_Log(L"SWS: close request queued hwnd=%p state=%s restore=%d deadline=%llu",
+           hw, CloseRequestStateName(request.state), request.restoreRequested,
+           (unsigned long long)request.deadline);
+    return true;
+}
+
+static bool CloseSwitcherEntry(int idx, PCWSTR source) {
+    if (idx < 0 || idx >= (int)g_windows.size()) {
+        Wh_Log(L"SWS: close entry rejected source=%s idx=%d reason=invalid-index",
+               source, idx);
+        return false;
+    }
+    if (g_windows[idx].isDesktopItem) {
+        Wh_Log(L"SWS: close entry rejected source=%s idx=%d reason=desktop",
+               source, idx);
+        return false;
+    }
 
     HWND targetWnd = g_windows[idx].hWnd;
+    bool requested = false;
+    auto requestClose = [&](HWND hw) {
+        HWND popup = IsWindow(hw) ? GetLastActivePopup(hw) : nullptr;
+        bool popupVisible = popup && popup != hw && IsWindow(popup) && IsWindowVisible(popup);
+        bool enabled = IsWindow(hw) && IsWindowEnabled(hw);
+        if (!CanCloseWindow(hw)) {
+            Wh_Log(L"SWS: close entry rejected source=%s idx=%d hwnd=%p enabled=%d popup=%p "
+                   L"popupVisible=%d reason=not-closeable",
+                   source, idx, hw, enabled, popup, popupVisible);
+            return;
+        }
+        requested = QueueCloseWindow(hw) || requested;
+    };
     if (g_settings.showApplications && g_windows[idx].groupWindows.size() > 1) {
         if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") == 0) {
             std::vector<HWND> toClose = g_windows[idx].groupWindows;
             for (HWND hw : toClose) {
-                if (CanCloseWindow(hw)) {
-                    QueueCloseWindow(hw);
-                }
+                requestClose(hw);
             }
         } else {
             // closeRecent (Default)
-            if (CanCloseWindow(targetWnd)) QueueCloseWindow(targetWnd);
+            requestClose(targetWnd);
         }
     } else {
-        if (CanCloseWindow(targetWnd)) QueueCloseWindow(targetWnd);
+        requestClose(targetWnd);
     }
 
+    Wh_Log(L"SWS: close entry source=%s idx=%d hwnd=%p requested=%d sticky=%d pending=%u",
+           source, idx, targetWnd, requested, g_isSticky,
+           (unsigned)s_pendingCloseWindows.size());
     if (!s_pendingCloseWindows.empty() && g_hSwitcher) {
-        s_pendingCloseRetries = 0;
         SetTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
     }
+    return requested;
 }
 
 // The raw path has no hotkey or Explorer foreground grant. The legacy
@@ -16525,7 +16850,8 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
     CompleteNativeTouchpadInvocation();
 }
 
-static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
+static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
+                                   DWORD queuedValidSerial = 0) {
     const ULONGLONG now = s_rawFrameDispatchTick ? s_rawFrameDispatchTick : GetTickCount64();
     ++s_touchpadInputDiagnostics.uiFrames;
     s_touchpadInputDiagnostics.lastUiTick.store(now);
@@ -16539,11 +16865,6 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     }
     int prevTips = s_rawGestureTips;
     s_rawGestureTips = (int)tips;
-
-    if (tips > 0 && prevTips == 0 && s_stickyTwoFingerTapCloseRequested) {
-        Wh_Log(L"SWS: new raw touchpad gesture retires sticky two-finger close ownership");
-        ClearStickyTwoFingerTapOwnership();
-    }
 
     // A synthetic right-button down can arrive before the HID frame reaches
     // this queue. Raw tap evidence wins over outside-click dismissal.
@@ -16613,28 +16934,15 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         return;
     }
 
-    const int frameX = (int)(packedPos & 0xFFFF);
-    const int frameY = (int)((packedPos >> 16) & 0xFFFF);
     bool closeTwoFingerTap = false;
     if (tips == 0) {
-        closeTwoFingerTap = s_rawTwoFingerTapActive && !s_rawTwoFingerTapMoved &&
-                            now - s_rawTwoFingerTapStartTick <= SWS_RAW_TAP_MAX_MS &&
-                            g_isVisible && !g_animExitActive;
-        ResetRawTwoFingerTap();
-    } else if (s_rawTwoFingerTapActive) {
-        if (tips > 2 ||
-            abs(frameX - s_rawTwoFingerTapOriginX) > SWS_RAW_TAP_SLOP ||
-            abs(frameY - s_rawTwoFingerTapOriginY) > SWS_RAW_TAP_SLOP) {
-            ResetRawTwoFingerTap();
-        } else if (tips == 2 && prevTips == 0) {
-            ResetRawTwoFingerTap();
+        DWORD validSerial = queuedValidSerial ? queuedValidSerial : RawTwoFingerTapValidSerial();
+        if (validSerial && validSerial != s_rawTwoFingerTapHandledSerial) {
+            closeTwoFingerTap = g_isVisible && !g_animExitActive;
+            s_rawTwoFingerTapHandledSerial = validSerial;
+            Wh_Log(L"SWS: two-finger UI result serial=%u valid=%d visible=%d",
+                   validSerial, closeTwoFingerTap, g_isVisible);
         }
-    } else if (tips == 2 && prevTips == 0 && g_isVisible && !g_isPendingShow) {
-        s_rawTwoFingerTapActive = true;
-        s_rawTwoFingerTapMoved = false;
-        s_rawTwoFingerTapStartTick = now;
-        s_rawTwoFingerTapOriginX = frameX;
-        s_rawTwoFingerTapOriginY = frameY;
     }
 
     if (tips >= 2 || tips == 0 || g_isSticky) {
@@ -16665,8 +16973,17 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     if (tips == 0) {
         if (closeTwoFingerTap && g_selectedIndex >= 0 &&
             g_selectedIndex < (int)g_windows.size()) {
-            if (g_isSticky) BeginStickyTwoFingerTapOwnership();
-            CloseSwitcherEntry(g_selectedIndex);
+            const int closeIndex = g_selectedIndex;
+            const HWND closeTarget = g_windows[closeIndex].hWnd;
+            Wh_Log(L"SWS: two-finger close classified idx=%d hwnd=%p sticky=%d desktop=%d",
+                   closeIndex, closeTarget, g_isSticky,
+                   g_windows[closeIndex].isDesktopItem);
+            if (g_isSticky) BeginStickyTwoFingerTapOwnership(closeTarget);
+            bool requested = CloseSwitcherEntry(closeIndex, L"twoFingerTap");
+            if (g_isSticky && !requested) {
+                Wh_Log(L"SWS: clearing sticky two-finger ownership after rejected close");
+                ClearStickyTwoFingerTapOwnership();
+            }
             return;
         }
         const bool hadThree = s_rawGestureSawThree;
@@ -17099,9 +17416,10 @@ static void HandleQueuedRawTouchpadFrame(WPARAM wParam) {
     const ULONG tips = slot.tips;
     const ULONG packedPos = slot.packedPos;
     const ULONGLONG captureTick = slot.captureTick;
+    const DWORD queuedValidSerial = slot.twoFingerTapValidSerial;
     s_rawFrameRead.store(read + 1, std::memory_order_release);
     s_rawFrameDispatchTick = captureTick;
-    HandleRawTouchpadFrame(tips, packedPos);
+    HandleRawTouchpadFrame(tips, packedPos, queuedValidSerial);
     s_rawFrameDispatchTick = 0;
 }
 
@@ -17122,12 +17440,24 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         if (command.kind == MouseCommandKind::Button) {
             if (command.message == WM_RBUTTONDOWN && g_isVisible && !g_animExitActive) {
-                if (IsSwitcherWindow(WindowFromPoint(command.point))) return 0;
+                HWND target = WindowFromPoint(command.point);
+                WCHAR className[64] = {};
+                WCHAR title[128] = {};
+                if (target) {
+                    GetClassNameW(target, className, ARRAYSIZE(className));
+                    GetWindowTextW(target, title, ARRAYSIZE(title));
+                }
                 bool rawEvidence = RawTwoFingerTapEvidenceLive();
-                Wh_Log(L"SWS: outside right-button command rawEvidence=%d closeActive=%d foreground=%p",
-                       rawEvidence,
+                Wh_Log(L"SWS: right-button command point=%ld,%ld target=%p class=%s "
+                       L"title='%s' switcher=%d rawEvidence=%d valid=%u invalid=%u "
+                       L"closeActive=%d foreground=%p",
+                       command.point.x, command.point.y, target, className, title,
+                       IsSwitcherWindow(target), rawEvidence,
+                       RawTwoFingerTapValidSerial(),
+                       g_touchpadRawTwoFingerTapInvalidSerial.load(std::memory_order_acquire),
                        g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire),
                        GetForegroundWindow());
+                if (IsSwitcherWindow(target)) return 0;
                 s_twoFingerTapDismissPending = true;
                 SetTimer(hWnd, SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_TIMER_ID,
                          SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_MS, NULL);
@@ -17251,7 +17581,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (wParam == SWS_TWO_FINGER_TAP_RESTORE_TIMER_ID) {
-            RecoverLegacyTwoFingerTapOverride();
+            if (g_isVisible || g_animExitActive) {
+                UpdateTwoFingerTapOverride(
+                    g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire));
+            } else {
+                RecoverLegacyTwoFingerTapOverride();
+            }
             return 0;
         }
         if (wParam == SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID) {
@@ -17286,8 +17621,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (wParam == SWS_TOUCHPAD_TWO_FINGER_OWNERSHIP_TIMER_ID) {
+            Wh_Log(L"SWS: sticky two-finger close ownership expired target=%p completed=%d",
+                   s_stickyTwoFingerTapCloseTarget,
+                   StickyTwoFingerTapCloseCompleted());
             ClearStickyTwoFingerTapOwnership();
-            Wh_Log(L"SWS: sticky two-finger close ownership expired");
             return 0;
         }
 
@@ -17341,6 +17678,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
             HWND target = s_touchpadActivationRetryTarget;
             ActivateExitedWindow(target, {});
+            return 0;
+        }
+
+        if (wParam == SWS_WINDOW_LIST_RECONCILE_TIMER_ID) {
+            ReconcilePendingActivationListTarget();
             return 0;
         }
 
@@ -17477,23 +17819,66 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             ULONGLONG now = GetTickCount64();
             for (auto it = s_pendingCloseWindows.begin(); it != s_pendingCloseWindows.end(); ) {
                 HWND h = *it;
-                auto deadline = s_pendingCloseDeadlines.find(h);
+                auto request = s_pendingCloseRequests.find(h);
                 if (!IsWindow(h) || (!IsWindowVisible(h) && !IsIconic(h))) {
                     // Window truly closed (or hid itself) — remove its entry now.
                     // With lazy removal, the entry was never taken out eagerly, so
                     // this is the single point of removal and the departing fade
                     // starts from the entry's real position.
+                    Wh_Log(L"SWS: close verification completed hwnd=%p state=%s "
+                           L"visible=%d iconic=%d",
+                           h,
+                           request == s_pendingCloseRequests.end()
+                               ? L"unknown"
+                               : CloseRequestStateName(request->second.state),
+                           IsWindowVisible(h), IsIconic(h));
+                    if (s_stickyTwoFingerTapCloseTarget == h) {
+                        ClearStickyTwoFingerTapOwnership();
+                    }
                     toRemove.push_back(h);
-                    s_pendingCloseDeadlines.erase(h);
+                    s_pendingCloseRequests.erase(h);
                     it = s_pendingCloseWindows.erase(it);
-                } else if (!CanCloseWindow(h) || deadline == s_pendingCloseDeadlines.end() || now >= deadline->second) {
-                    // A modal refusal is protected by CanCloseWindow. Otherwise
-                    // retain deduplication for a bounded asynchronous cooldown,
-                    // then permit a fresh user request without reposting here.
-                    s_pendingCloseDeadlines.erase(h);
+                } else if (request == s_pendingCloseRequests.end()) {
+                    Wh_Log(L"SWS: close verification released hwnd=%p reason=missing-state",
+                           h);
                     it = s_pendingCloseWindows.erase(it);
-                } else {
+                } else if (!CanCloseWindow(h)) {
+                    Wh_Log(L"SWS: close verification rejected hwnd=%p state=%s "
+                           L"reason=not-closeable",
+                           h, CloseRequestStateName(request->second.state));
+                    if (s_stickyTwoFingerTapCloseTarget == h) {
+                        ClearStickyTwoFingerTapOwnership();
+                    }
+                    s_pendingCloseRequests.erase(request);
+                    it = s_pendingCloseWindows.erase(it);
+                } else if (now < request->second.deadline) {
                     ++it;
+                } else if (request->second.state == CloseRequestState::PrimaryQueued) {
+                    PendingCloseRequest& pending = request->second;
+                    if (PostCloseMessage(h, pending.fallbackMessage,
+                                         pending.fallbackWParam, L"fallback")) {
+                        pending.state = CloseRequestState::FallbackQueued;
+                        pending.deadline = now + SWS_CLOSE_FALLBACK_TIMEOUT_MS;
+                        Wh_Log(L"SWS: close verification fallback queued hwnd=%p deadline=%llu",
+                               h, (unsigned long long)pending.deadline);
+                        ++it;
+                    } else {
+                        Wh_Log(L"SWS: close verification rejected hwnd=%p reason=fallback-dispatch",
+                               h);
+                        if (s_stickyTwoFingerTapCloseTarget == h) {
+                            ClearStickyTwoFingerTapOwnership();
+                        }
+                        s_pendingCloseRequests.erase(request);
+                        it = s_pendingCloseWindows.erase(it);
+                    }
+                } else {
+                    Wh_Log(L"SWS: close verification timed out hwnd=%p state=%s",
+                           h, CloseRequestStateName(request->second.state));
+                    if (s_stickyTwoFingerTapCloseTarget == h) {
+                        ClearStickyTwoFingerTapOwnership();
+                    }
+                    s_pendingCloseRequests.erase(request);
+                    it = s_pendingCloseWindows.erase(it);
                 }
             }
             for (HWND h : toRemove) {
@@ -17503,8 +17888,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (!s_pendingCloseWindows.empty()) {
                 SetTimer(hWnd, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
             } else {
-                s_pendingCloseRetries = 0;
-                s_pendingCloseDeadlines.clear();
+                s_pendingCloseRequests.clear();
             }
             return 0;
         }
@@ -17878,7 +18262,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             bool isCtrlW = (wParam == 'W' && (GetKeyState(VK_CONTROL) & 0x8000) != 0);
             if (wParam == 'Q' || wParam == VK_DELETE || isCtrlW) {
                 bool isRepeat = (lParam & 0x40000000) != 0;
-                if (!isRepeat) CloseSwitcherEntry(g_selectedIndex);
+                if (!isRepeat) CloseSwitcherEntry(g_selectedIndex, L"keyboard");
                 return 0;
             }
         }
@@ -18123,7 +18507,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         if (wasClose) {
             POINT pt = {x, y};
-            if (pressedIdx >= 0 && HitTestCloseButton(g_windows[pressedIdx], pt)) CloseSwitcherEntry(pressedIdx);
+            if (pressedIdx >= 0 && HitTestCloseButton(g_windows[pressedIdx], pt)) {
+                CloseSwitcherEntry(pressedIdx, L"closeButton");
+            }
             return 0;
         }
 
@@ -18165,7 +18551,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
             int idx = g_settings.showThumbnails ? HitTestThumb(x, y) : HitTest(x, y);
             if (idx < 0) idx = HitTest(x, y);
-            if (idx >= 0) CloseSwitcherEntry(idx);
+            if (idx >= 0) CloseSwitcherEntry(idx, L"middleClick");
         }
         return 0;
     }
@@ -18303,8 +18689,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (hAct && !IsSwitcherWindow(hAct)) {
                 UpdateMruWindow(hAct);
                 if (g_isVisible || g_isPendingShow) {
-                    AddWindowEntry(hAct);
+                    AddWindowEntry(hAct, false);
                 }
+                ReconcilePendingActivationListTarget();
             }
         } else if (code == HSHELL_WINDOWDESTROYED) {
             HWND hS = (HWND)lParam;
@@ -18315,9 +18702,24 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             RemoveMruWindow(hS);
+            if (s_pendingActivationListTarget == hS) {
+                ClearPendingActivationListTarget();
+            }
             auto it = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hS);
             if (it != s_pendingCloseWindows.end()) {
                 s_pendingCloseWindows.erase(it);
+            }
+            auto request = s_pendingCloseRequests.find(hS);
+            if (request != s_pendingCloseRequests.end()) {
+                Wh_Log(L"SWS: shell close completion hwnd=%p state=%s",
+                       hS, CloseRequestStateName(request->second.state));
+                s_pendingCloseRequests.erase(request);
+            }
+            if (s_stickyTwoFingerTapCloseTarget == hS) {
+                ClearStickyTwoFingerTapOwnership();
+            }
+            if (s_pendingCloseWindows.empty() && g_hSwitcher) {
+                KillTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID);
             }
             if (g_isVisible || g_isPendingShow) {
                 RemoveWindowEntryByHwnd(hS);
@@ -18325,7 +18727,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         } else if (code == HSHELL_WINDOWCREATED || code == HSHELL_REDRAW) {
             HWND hTarget = (HWND)lParam;
             if (hTarget && (g_isVisible || g_isPendingShow)) {
-                AddWindowEntry(hTarget);
+                AddWindowEntry(hTarget, false);
             }
         }
         return 0;
@@ -19850,8 +20252,9 @@ static bool RefreshTouchpadGestureKinds() {
     // Only the switcher thread creates, configures and releases this controller.
     bool twoFingerActive =
         TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load() &&
-        g_isVisible && !g_animExitActive && !g_isHidingSwitcher;
+        (g_isVisible || g_animExitActive) && !g_isHidingSwitcher;
     g_touchpadTwoFingerCloseActive.store(twoFingerActive);
+    UpdateTwoFingerTapOverride(twoFingerActive);
     return UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
 }
 
@@ -20064,10 +20467,13 @@ thread_exit:
     g_touchpadGesturesEnabled.store(false);
     PublishNativeSwipePolicy();
     if (g_isVisible || g_isPendingShow) HideSwitcher();
+    ClearPendingActivationListTarget();
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID);
+    s_pendingCloseWindows.clear();
+    s_pendingCloseRequests.clear();
     g_touchpadTwoFingerCloseActive.store(false);
     RestoreTwoFingerTapOverrideBeforeExit();
-    g_touchpadRawTwoFingerTapMouseState.store(0);
-    g_touchpadRawTwoFingerTapConsumedSerial.store(0, std::memory_order_release);
+    ClearRawTwoFingerTapOutcome();
     s_rawTwoFingerMouseButtonSerial = 0;
     s_rawTwoFingerMouseButtonDeadline = 0;
     if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_RAW_TWO_TAP_MOUSE_TIMER_ID);
@@ -20149,8 +20555,11 @@ struct TouchpadReaderStroke {
     ULONGLONG threeFingerSerial = 0;
     DWORD twoFingerTapMouseSerial = 0;
     ULONGLONG twoFingerTapStartTick = 0;
-    int twoFingerTapOriginX = 0;
-    int twoFingerTapOriginY = 0;
+    ULONG twoFingerTapContactIds[2] = {};
+    LONG twoFingerTapContactX[2] = {};
+    LONG twoFingerTapContactY[2] = {};
+    ULONG twoFingerTapContactCount = 0;
+    bool twoFingerTapPartialRelease = false;
     double lastX = -1.0;
     double lastY = -1.0;
     ULONGLONG lastPostTick = 0;
@@ -20244,57 +20653,141 @@ static TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
     return dev.valid ? &dev : NULL;
 }
 
-static void UpdateRawTwoFingerTapMouseEvidence(TouchpadReaderStroke& stroke,
-                                               ULONG tips, ULONG previousTips,
-                                               ULONG packedPos, ULONGLONG now) {
-    int x = (int)(packedPos & 0xFFFF);
-    int y = (int)((packedPos >> 16) & 0xFFFF);
+static void UpdateRawTwoFingerTapMouseEvidence(
+    TouchpadReaderStroke& stroke, const std::vector<TouchpadContact>& contacts,
+    ULONG tips, ULONG previousTips, ULONG packedPos, double rangeX,
+    double rangeY, ULONGLONG now) {
+    const int centroidX = (int)(packedPos & 0xFFFF);
+    const int centroidY = (int)((packedPos >> 16) & 0xFFFF);
+    const double slopScale = static_cast<double>(SWS_RAW_TAP_SLOP) / 65535.0;
+    const LONG slopX = (LONG)(std::max)(1.0, rangeX * slopScale);
+    const LONG slopY = (LONG)(std::max)(1.0, rangeY * slopScale);
+    const TouchpadContact* active[3] = {};
+    ULONG activeCount = 0;
+    for (const TouchpadContact& contact : contacts) {
+        if (!contact.tip) continue;
+        if (activeCount < ARRAYSIZE(active)) active[activeCount] = &contact;
+        ++activeCount;
+    }
+
+    auto clearCandidate = [&]() {
+        stroke.twoFingerTapMouseSerial = 0;
+        stroke.twoFingerTapStartTick = 0;
+        stroke.twoFingerTapContactCount = 0;
+        stroke.twoFingerTapPartialRelease = false;
+    };
+    auto invalidate = [&](PCWSTR reason) {
+        DWORD serial = stroke.twoFingerTapMouseSerial;
+        if (!serial) return;
+        ULONGLONG age = now - stroke.twoFingerTapStartTick;
+        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        g_touchpadRawTwoFingerTapValidSerial.store(0, std::memory_order_release);
+        g_touchpadRawTwoFingerTapInvalidSerial.store(serial, std::memory_order_release);
+        Wh_Log(L"SWS: two-finger raw tap invalid serial=%u reason=%s tips=%u "
+               L"previous=%u age=%llu centroid=%d,%d",
+               serial, reason, tips, previousTips, (unsigned long long)age,
+               centroidX, centroidY);
+        clearCandidate();
+    };
+
     if (tips > 0 && previousTips == 0) {
         // Every fresh stroke retires the prior release tail, including a new
         // outside tap after dismissal. Windows owns that new stroke normally.
-        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
-        g_touchpadRawTwoFingerTapConsumedSerial.store(0, std::memory_order_release);
-        stroke.twoFingerTapMouseSerial = 0;
+        ClearRawTwoFingerTapOutcome();
+        clearCandidate();
         bool closeActive = g_touchpadTwoFingerCloseActive.load(std::memory_order_acquire);
-        if (tips == 2 && closeActive) {
-            DWORD serial = ++g_touchpadRawTwoFingerNextSerial;
-            if (!serial) serial = ++g_touchpadRawTwoFingerNextSerial;
-            stroke.twoFingerTapMouseSerial = serial;
-            stroke.twoFingerTapStartTick = now;
-            stroke.twoFingerTapOriginX = x;
-            stroke.twoFingerTapOriginY = y;
-            g_touchpadRawTwoFingerTapMouseState.store(
-                EncodeRawTwoFingerTapMouseState(serial, now + SWS_RAW_TAP_MAX_MS),
-                std::memory_order_release);
-            Wh_Log(L"SWS: two-finger raw start serial=%u closeActive=%d pos=%d,%d",
-                   serial, closeActive, x, y);
-        }
-    } else if (stroke.twoFingerTapMouseSerial) {
-        bool tap = now - stroke.twoFingerTapStartTick <= SWS_RAW_TAP_MAX_MS &&
-                   tips <= 2 &&
-                   (!tips || (abs(x - stroke.twoFingerTapOriginX) <= SWS_RAW_TAP_SLOP &&
-                              abs(y - stroke.twoFingerTapOriginY) <= SWS_RAW_TAP_SLOP));
-        if (!tap) {
-            Wh_Log(L"SWS: two-finger raw tap invalid serial=%u tips=%u age=%llu",
-                   stroke.twoFingerTapMouseSerial, tips,
-                   (unsigned long long)(now - stroke.twoFingerTapStartTick));
-            stroke.twoFingerTapMouseSerial = 0;
-            g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
-        } else if (tips == 0) {
-            // Update only the same live stroke. A consumed mouse up may have
-            // retired it already, and must not be re-published by a late lift.
-            ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
-                std::memory_order_acquire);
-            if ((DWORD)(state >> 32) == stroke.twoFingerTapMouseSerial) {
-                g_touchpadRawTwoFingerTapMouseState.compare_exchange_strong(
-                    state, EncodeRawTwoFingerTapMouseState(stroke.twoFingerTapMouseSerial,
-                                                          now + SWS_RAW_TWO_TAP_MOUSE_GRACE_MS),
-                    std::memory_order_acq_rel);
+        if (tips != 2 || activeCount != 2 || !closeActive) {
+            if (tips == 2 && closeActive) {
+                Wh_Log(L"SWS: two-finger raw candidate ignored reason=frame-contact-count "
+                       L"tips=%u active=%u", tips, activeCount);
             }
-            Wh_Log(L"SWS: two-finger raw lift serial=%u grace=%u",
-                   stroke.twoFingerTapMouseSerial, SWS_RAW_TWO_TAP_MOUSE_GRACE_MS);
-            stroke.twoFingerTapMouseSerial = 0;
+            return;
         }
+
+        DWORD serial = ++g_touchpadRawTwoFingerNextSerial;
+        if (!serial) serial = ++g_touchpadRawTwoFingerNextSerial;
+        stroke.twoFingerTapMouseSerial = serial;
+        stroke.twoFingerTapStartTick = now;
+        stroke.twoFingerTapContactCount = 2;
+        for (ULONG i = 0; i < 2; ++i) {
+            stroke.twoFingerTapContactIds[i] = active[i]->id;
+            stroke.twoFingerTapContactX[i] = active[i]->x;
+            stroke.twoFingerTapContactY[i] = active[i]->y;
+        }
+        g_touchpadRawTwoFingerTapMouseState.store(
+            EncodeRawTwoFingerTapMouseState(serial, now + SWS_RAW_TAP_MAX_MS),
+            std::memory_order_release);
+        Wh_Log(L"SWS: two-finger raw start serial=%u closeActive=%d contacts=%u,%u "
+               L"centroid=%d,%d",
+               serial, closeActive, stroke.twoFingerTapContactIds[0],
+               stroke.twoFingerTapContactIds[1], centroidX, centroidY);
+        return;
+    }
+
+    if (!stroke.twoFingerTapMouseSerial) return;
+    if (now - stroke.twoFingerTapStartTick > SWS_RAW_TAP_MAX_MS) {
+        invalidate(L"timeout");
+        return;
+    }
+    if (tips > 2 || activeCount > 2) {
+        invalidate(L"extra-finger");
+        return;
+    }
+    if (tips == 0) {
+        // Update only the same live stroke. A consumed mouse up may have
+        // retired the mouse lease already, and must not re-publish it.
+        ULONGLONG state = g_touchpadRawTwoFingerTapMouseState.load(
+            std::memory_order_acquire);
+        if ((DWORD)(state >> 32) == stroke.twoFingerTapMouseSerial) {
+            g_touchpadRawTwoFingerTapMouseState.compare_exchange_strong(
+                state, EncodeRawTwoFingerTapMouseState(stroke.twoFingerTapMouseSerial,
+                                                       now + SWS_RAW_TWO_TAP_MOUSE_GRACE_MS),
+                std::memory_order_acq_rel);
+        }
+        g_touchpadRawTwoFingerTapInvalidSerial.store(0, std::memory_order_release);
+        g_touchpadRawTwoFingerTapValidSerial.store(
+            stroke.twoFingerTapMouseSerial, std::memory_order_release);
+        Wh_Log(L"SWS: two-finger raw lift valid serial=%u previous=%u partial=%d "
+               L"grace=%u",
+               stroke.twoFingerTapMouseSerial, previousTips,
+               stroke.twoFingerTapPartialRelease, SWS_RAW_TWO_TAP_MOUSE_GRACE_MS);
+        clearCandidate();
+        return;
+    }
+
+    PCWSTR invalidReason = nullptr;
+    bool matched[2] = {};
+    for (ULONG i = 0; i < activeCount; ++i) {
+        int candidate = -1;
+        for (ULONG j = 0; j < stroke.twoFingerTapContactCount; ++j) {
+            if (stroke.twoFingerTapContactIds[j] == active[i]->id) {
+                candidate = (int)j;
+                break;
+            }
+        }
+        if (candidate < 0) {
+            invalidReason = L"unknown-contact";
+            break;
+        }
+        matched[candidate] = true;
+        if (std::abs((long long)active[i]->x - stroke.twoFingerTapContactX[candidate]) > slopX ||
+            std::abs((long long)active[i]->y - stroke.twoFingerTapContactY[candidate]) > slopY) {
+            invalidReason = L"contact-moved";
+            break;
+        }
+    }
+    if (!invalidReason && activeCount != tips) invalidReason = L"frame-contact-count";
+    if (!invalidReason && tips == 2 && (!matched[0] || !matched[1])) {
+        invalidReason = L"contact-reland";
+    }
+    if (invalidReason) {
+        invalidate(invalidReason);
+        return;
+    }
+    if (tips == 1) {
+        stroke.twoFingerTapPartialRelease = true;
+        Wh_Log(L"SWS: two-finger raw partial release serial=%u contact=%u",
+               stroke.twoFingerTapMouseSerial, active[0]->id);
     }
 }
 
@@ -20313,8 +20806,7 @@ static void TouchpadReaderSetAvailable(bool available) {
                                        GetTickCount64());
         }
         ClearRawSwipeMarkerPropertyFromReader();
-        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
-        g_touchpadRawTwoFingerTapConsumedSerial.store(0, std::memory_order_release);
+        ClearRawTwoFingerTapOutcome();
         if (activeStroke) *activeStroke = {};
         g_touchpadActiveDevice = nullptr;
     }
@@ -20368,7 +20860,7 @@ static void TouchpadReaderProcessFrame(TouchpadDevice& dev, HANDLE hDevice) {
                                        GetTickCount64());
         }
         ClearRawSwipeMarkerPropertyFromReader();
-        g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+        ClearRawTwoFingerTapOutcome();
         dev.stroke = {};
         return;
     }
@@ -20440,8 +20932,9 @@ static void TouchpadReaderProcessFrame(TouchpadDevice& dev, HANDLE hDevice) {
     double ny = dev.rangeY > 0 ? cy / dev.rangeY : 0.0;
     ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
     if (g_touchpadActiveDevice == hDevice) {
-        UpdateRawTwoFingerTapMouseEvidence(readerStroke, tips, previousTips,
-                                           packedPos, now);
+        UpdateRawTwoFingerTapMouseEvidence(readerStroke, dev.frame, tips,
+                                           previousTips, packedPos, dev.rangeX,
+                                           dev.rangeY, now);
     }
 
     if (g_touchpadActiveDevice != hDevice ||
@@ -20690,7 +21183,7 @@ static void TouchpadReaderOnDeviceChange(HANDLE hDevice, WPARAM change) {
         g_touchpadActiveDevice = nullptr;
     }
     ClearRawSwipeMarkerPropertyFromReader();
-    g_touchpadRawTwoFingerTapMouseState.store(0, std::memory_order_release);
+    ClearRawTwoFingerTapOutcome();
     g_touchpadDevices.erase(device);
     if (g_touchpadReaderAvailable.load()) {
         PublishNativeSwipePolicy();
