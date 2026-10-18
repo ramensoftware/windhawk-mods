@@ -93,9 +93,22 @@ bool FindGuid(const std::wstring &s, std::wstring &out)
     return false;
 }
 
-// Runs the command without a window and waits for it to finish.
-bool RunHidden(const std::wstring &commandLine)
+// Runs the command without a window and waits for it to finish. The command
+// line starts with an executable name and has no quoting, so the executable is
+// resolved here rather than by CreateProcessW, which would also search the
+// current directory.
+bool RunHidden(const std::wstring &executableName,
+               const std::wstring &commandLine)
 {
+    WCHAR szExecutablePath[MAX_PATH];
+    if (!SearchPathW(nullptr, executableName.c_str(), L".exe",
+                     ARRAYSIZE(szExecutablePath), szExecutablePath, nullptr))
+    {
+        Wh_Log(L"Failed to find %s: %u", executableName.c_str(),
+               GetLastError());
+        return false;
+    }
+
     std::wstring commandLineCopy = commandLine;
 
     STARTUPINFOW si{.cb = sizeof(si)};
@@ -104,8 +117,9 @@ bool RunHidden(const std::wstring &commandLine)
 
     PROCESS_INFORMATION pi{};
 
-    if (!CreateProcessW(nullptr, commandLineCopy.data(), nullptr, nullptr,
-                        FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi))
+    if (!CreateProcessW(szExecutablePath, commandLineCopy.data(), nullptr,
+                        nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si,
+                        &pi))
     {
         Wh_Log(L"CreateProcessW failed: %u", GetLastError());
         return false;
@@ -150,7 +164,7 @@ bool StopSandbox()
 
     Wh_Log(L"Stopping sandbox %s", guid.c_str());
 
-    if (!RunHidden(L"wsb.exe stop --id " + guid))
+    if (!RunHidden(L"wsb", L"wsb.exe stop --id " + guid))
     {
         return false;
     }
@@ -166,7 +180,10 @@ LRESULT CALLBACK SubclassProc(HWND hWnd,
                               LPARAM lParam,
                               DWORD_PTR)
 {
-    if (msg == WM_CLOSE && StopSandbox())
+    // Only the close which started the stop is swallowed. Once the sandbox is
+    // stopped, later closes are passed through, so a close the app sends to
+    // itself after the session ends still closes the window.
+    if (msg == WM_CLOSE && !g_stopped && StopSandbox())
     {
         return 0;
     }
