@@ -3054,6 +3054,7 @@ struct ButtonHoverOverride {
     std::map<std::wstring, wf::IInspectable> backgrounds;
     std::map<std::wstring, wf::IInspectable> borderBrushes;
     bool hooked = false;
+    winrt::weak_ref<wuxc::Button> weakButton{nullptr};
 };
 std::mutex g_buttonHoverMutex;
 std::map<void*, ButtonHoverOverride> g_buttonHoverOverrides;
@@ -3342,56 +3343,43 @@ void EnsureButtonHoverHook(wuxc::Button const& button) {
         ApplyCommonStateStyle(button, cur);
         return;
     }
-    auto hookNow = [button]() {
+    winrt::weak_ref<wuxc::Button> weakBtn = winrt::make_weak(button);
+    auto hookNow = [weakBtn]() {
+        auto button = weakBtn.get();
+        if (!button) return;
         try {
             auto groups = VisualStateManager::GetVisualStateGroups(button);
             for (auto const& g : groups) {
                 if (!g) continue;
                 if (std::wstring(g.Name()) != L"CommonStates") continue;
-                auto btn = button;
-                // Read the new state directly from the event args. The
-                // previous implementation re-queried the group via
-                // GetVisualStateGroups and read CurrentState() from
-                // inside the handler — but XAML can fire this event
-                // before the group's CurrentState property is actually
-                // updated, so we would apply the OLD state name on every
-                // transition (hover would apply Normal, exit would apply
-                // PointerOver). The event args carry the new state
-                // directly and are always correct.
                 g.CurrentStateChanged(
-                    [btn](wf::IInspectable const&,
+                    [weakBtn](wf::IInspectable const&,
                           VisualStateChangedEventArgs const& args) {
+                        auto btn = weakBtn.get();
+                        if (!btn) return;
                         try {
                             auto newState = args.NewState();
                             if (!newState) return;
                             std::wstring stateName(newState.Name());
                             if (stateName.empty()) return;
-                            // Deferred so we run after the template's own
-                            // VisualState setter for this transition.
                             ApplyCommonStateStyle(btn, stateName);
                         } catch (...) {}
                     });
                 std::wstring cur = L"Normal";
                 if (auto cs = g.CurrentState()) cur = cs.Name();
-                ApplyCommonStateStyle(btn, cur);
+                ApplyCommonStateStyle(button, cur);
                 break;
             }
         } catch (...) {}
     };
-    // Pointer-event handlers. These are the primary drivers of the hover
-    // visual; the CurrentStateChanged hook above only ensures the initial
-    // state matches. The critical piece is the s_hoveredButton tracking:
-    // when a new button is entered, we forcibly reset the previous
-    // hovered button to Normal, regardless of whether its own
-    // PointerExited fired. This closes the two failure modes that made
-    // hover feel unreliable:
-    //   * previous button stuck on PointerOver after the pointer moved
-    //     to a sibling (XAML's routed input occasionally drops the exit)
-    //   * re-hovering a stale button applied Normal because the state
-    //     machine believed it was already PointerOver
     try {
-        auto btn = button;
-        button.PointerEntered([btn](auto&&, auto&&) {
+        {
+            std::lock_guard<std::mutex> lock(g_buttonHoverMutex);
+            g_buttonHoverOverrides[key].weakButton = weakBtn;
+        }
+        button.PointerEntered([weakBtn](auto&&, auto&&) {
+            auto btn = weakBtn.get();
+            if (!btn) return;
             try {
                 wuxc::Button previous{nullptr};
                 {
@@ -3407,7 +3395,9 @@ void EnsureButtonHoverHook(wuxc::Button const& button) {
                 ApplyCommonStateStyle(btn, L"PointerOver");
             } catch (...) {}
         });
-        button.PointerExited([btn](auto&&, auto&&) {
+        button.PointerExited([weakBtn](auto&&, auto&&) {
+            auto btn = weakBtn.get();
+            if (!btn) return;
             try {
                 bool wasCurrent = false;
                 {
@@ -3422,10 +3412,14 @@ void EnsureButtonHoverHook(wuxc::Button const& button) {
                 }
             } catch (...) {}
         });
-        button.PointerPressed([btn](auto&&, auto&&) {
+        button.PointerPressed([weakBtn](auto&&, auto&&) {
+            auto btn = weakBtn.get();
+            if (!btn) return;
             try { ApplyCommonStateStyle(btn, L"Pressed"); } catch (...) {}
         });
-        button.PointerReleased([btn](auto&&, auto&&) {
+        button.PointerReleased([weakBtn](auto&&, auto&&) {
+            auto btn = weakBtn.get();
+            if (!btn) return;
             try {
                 bool stillHovered = false;
                 {
@@ -3436,7 +3430,9 @@ void EnsureButtonHoverHook(wuxc::Button const& button) {
                                                          : L"Normal");
             } catch (...) {}
         });
-        button.PointerCaptureLost([btn](auto&&, auto&&) {
+        button.PointerCaptureLost([weakBtn](auto&&, auto&&) {
+            auto btn = weakBtn.get();
+            if (!btn) return;
             try {
                 bool stillHovered = false;
                 {
@@ -3448,6 +3444,26 @@ void EnsureButtonHoverHook(wuxc::Button const& button) {
             } catch (...) {}
         });
     } catch (...) {}
+    {
+        static std::atomic<ULONGLONG> s_lastSweep{0};
+        ULONGLONG nowTick = GetTickCount64();
+        if (nowTick - s_lastSweep.load() > 30000) {
+            s_lastSweep.store(nowTick);
+            std::lock_guard<std::mutex> lock(g_buttonHoverMutex);
+            for (auto it = g_buttonHoverOverrides.begin();
+                 it != g_buttonHoverOverrides.end();) {
+                if (!it->second.weakButton.get()) {
+                    if (s_hoveredButton &&
+                        winrt::get_abi(s_hoveredButton) == it->first) {
+                        s_hoveredButton = nullptr;
+                    }
+                    it = g_buttonHoverOverrides.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
     bool alreadyLoaded = false;
     try { alreadyLoaded = button.XamlRoot() != nullptr; } catch (...) {}
     if (alreadyLoaded) {
@@ -4580,13 +4596,16 @@ void FillCalendarGridCells(wuxc::Grid const& grid, int year, int month) {
             btn.Content(txt);
             wuxc::Grid::SetRow(btn, cell / 7);
             wuxc::Grid::SetColumn(btn, cell % 7);
-            btn.Click([grid](auto&& sender, auto&&) {
+            winrt::weak_ref<wuxc::Grid> weakGrid = winrt::make_weak(grid);
+            btn.Click([weakGrid](auto&& sender, auto&&) {
                 auto b = sender.template as<wuxc::Button>();
+                auto g = weakGrid.get();
+                if (!g) return;
                 int day = winrt::unbox_value<int>(b.Tag());
                 g_clockSelectedYear = g_clockCalendarYear;
                 g_clockSelectedMonth = g_clockCalendarMonth;
                 g_clockSelectedDay = day;
-                FillCalendarGridCells(grid, g_clockCalendarYear, g_clockCalendarMonth);
+                FillCalendarGridCells(g, g_clockCalendarYear, g_clockCalendarMonth);
                 UpdateClockCalendarHeaderText();
             });
             children.Append(btn);
@@ -4676,29 +4695,14 @@ void FillCalendarGridCells(wuxc::Grid const& grid, int year, int month) {
 }
 
 void PerformCalendarScroll(int direction, int steps) {
-    static std::shared_ptr<wuxa::Storyboard> s_clockCalSb;
     static uint64_t s_animationGeneration = 0;
     if (!g_clockCalGridActive || !g_clockCalGridIdle || direction == 0) return;
 
-    // Keep the calendar position in sync with input immediately. A wheel burst
-    // retargets the in-flight slide to the newest month instead of building a
-    // queue of animations that continues after scrolling has stopped.
     const int monthSteps = std::clamp(steps, 1, 24);
     const uint64_t generation = ++s_animationGeneration;
-    if (s_clockCalSb) {
-        try { s_clockCalSb->Stop(); } catch (...) {}
-        s_clockCalSb.reset();
-    }
 
-    auto activeTransform = g_clockCalGridActive.RenderTransform()
-                               .try_as<wuxm::TranslateTransform>();
-    auto idleTransform = g_clockCalGridIdle.RenderTransform()
-                             .try_as<wuxm::TranslateTransform>();
-    if (!activeTransform || !idleTransform) return;
-    double travel = g_clockCalGridActive.ActualWidth();
-    if (travel < 1.0) travel = 380.0;
-    activeTransform.X(0.0);
-    idleTransform.X(travel);
+    auto activeGrid = g_clockCalGridActive;
+    auto idleGrid = g_clockCalGridIdle;
 
     int monthIndex = g_clockCalendarYear * 12 + (g_clockCalendarMonth - 1) +
                      direction * monthSteps;
@@ -4706,50 +4710,65 @@ void PerformCalendarScroll(int direction, int steps) {
     g_clockCalendarYear = monthIndex / 12;
     g_clockCalendarMonth = monthIndex % 12 + 1;
 
-    FillCalendarGridCells(g_clockCalGridIdle, g_clockCalendarYear,
-                          g_clockCalendarMonth);
+    FillCalendarGridCells(idleGrid, g_clockCalendarYear, g_clockCalendarMonth);
+    UpdateClockCalendarHeaderText();
 
+    double travel = activeGrid.ActualWidth();
+    if (travel < 1.0) travel = 380.0;
     const double enterFrom = direction > 0 ? travel : -travel;
-    idleTransform.X(enterFrom);
 
-    // Retarget each wheel event directly and keep its slide under one frame.
-    // This prevents a fast wheel burst from leaving visible catch-up work.
-    const int durationMs = 200;
-    const Duration duration{std::chrono::milliseconds(durationMs)};
-    auto sb = std::make_shared<wuxa::Storyboard>();
-    wuxa::DoubleAnimation activeAnim;
-    activeAnim.To(-enterFrom);
-    activeAnim.Duration(duration);
-    activeAnim.EnableDependentAnimation(false);
-    wuxa::Storyboard::SetTarget(activeAnim, g_clockCalGridActive);
-    wuxa::Storyboard::SetTargetProperty(activeAnim,
-        L"(UIElement.RenderTransform).(TranslateTransform.X)");
-    sb->Children().Append(activeAnim);
+    try {
+        auto activeVisual = wuxh::ElementCompositionPreview::GetElementVisual(activeGrid);
+        auto idleVisual = wuxh::ElementCompositionPreview::GetElementVisual(idleGrid);
+        if (!activeVisual || !idleVisual) return;
+        auto compositor = activeVisual.Compositor();
+        if (!compositor) return;
 
-    wuxa::DoubleAnimation idleAnim;
-    idleAnim.To(0.0);
-    idleAnim.Duration(duration);
-    idleAnim.EnableDependentAnimation(false);
-    wuxa::Storyboard::SetTarget(idleAnim, g_clockCalGridIdle);
-    wuxa::Storyboard::SetTargetProperty(idleAnim,
-        L"(UIElement.RenderTransform).(TranslateTransform.X)");
-    sb->Children().Append(idleAnim);
-
-    sb->Completed([generation, travel](wf::IInspectable const&, wf::IInspectable const&) {
-        if (generation != s_animationGeneration) return;
-        auto oldActive = g_clockCalGridActive;
-        g_clockCalGridActive = g_clockCalGridIdle;
-        g_clockCalGridIdle = oldActive;
-        if (auto tt = g_clockCalGridIdle.RenderTransform()
-                          .try_as<wuxm::TranslateTransform>()) {
-            tt.X(travel);
+        if (activeGrid.RenderTransform() != nullptr) {
+            activeGrid.RenderTransform(nullptr);
         }
-        UpdateClockCalendarHeaderText();
-        s_clockCalSb.reset();
-    });
+        if (idleGrid.RenderTransform() != nullptr) {
+            idleGrid.RenderTransform(nullptr);
+        }
+        wuxh::ElementCompositionPreview::SetIsTranslationEnabled(activeGrid, true);
+        wuxh::ElementCompositionPreview::SetIsTranslationEnabled(idleGrid, true);
 
-    s_clockCalSb = sb;
-    sb->Begin();
+        activeVisual.StopAnimation(L"Offset");
+        idleVisual.StopAnimation(L"Offset");
+        activeVisual.Offset({0.0f, 0.0f, 0.0f});
+        idleVisual.Offset({static_cast<float>(enterFrom), 0.0f, 0.0f});
+
+        auto dur = std::chrono::milliseconds(120);
+        auto ease = compositor.CreateCubicBezierEasingFunction(
+            {0.0f, 0.0f}, {0.2f, 1.0f});
+
+        auto activeAnim = compositor.CreateVector3KeyFrameAnimation();
+        activeAnim.Duration(dur);
+        activeAnim.InsertKeyFrame(0.0f, {0.0f, 0.0f, 0.0f}, ease);
+        activeAnim.InsertKeyFrame(1.0f, {static_cast<float>(-enterFrom), 0.0f, 0.0f}, ease);
+        activeVisual.StartAnimation(L"Offset", activeAnim);
+
+        auto idleAnim = compositor.CreateVector3KeyFrameAnimation();
+        idleAnim.Duration(dur);
+        idleAnim.InsertKeyFrame(0.0f, {static_cast<float>(enterFrom), 0.0f, 0.0f}, ease);
+        idleAnim.InsertKeyFrame(1.0f, {0.0f, 0.0f, 0.0f}, ease);
+        idleVisual.StartAnimation(L"Offset", idleAnim);
+
+        RunInBackground([activeVisual, idleVisual, activeGrid, idleGrid, generation, travel]() mutable {
+            if (WaitForSingleObject(g_stopEvent, 140) == WAIT_OBJECT_0) return;
+            RunOnUiThread([activeVisual, idleVisual, activeGrid, idleGrid, generation, travel]() mutable {
+                if (generation != s_animationGeneration) return;
+                try {
+                    activeVisual.StopAnimation(L"Offset");
+                    idleVisual.StopAnimation(L"Offset");
+                    activeVisual.Offset({0.0f, 0.0f, 0.0f});
+                    idleVisual.Offset({static_cast<float>(travel), 0.0f, 0.0f});
+                } catch (...) {}
+                g_clockCalGridActive = idleGrid;
+                g_clockCalGridIdle = activeGrid;
+            });
+        });
+    } catch (...) {}
 }
 
 void PopulateClockPanel() {
@@ -4778,7 +4797,7 @@ void PopulateClockPanel() {
         wcscpy_s(selectedDayText, L"Selected date");
     }
     auto selectedDateLabel = MakeText(L"ClockSelectedDate", selectedDayText,
-                                      13, false, 0.75);
+                                      15, true, 1.0);
     selectedDateLabel.Margin(Thickness{4, 0, 4, 8});
     children.Append(selectedDateLabel);
     RegisterNamed(L"ClockSelectedDate", selectedDateLabel);
@@ -4853,7 +4872,8 @@ void PopulateClockPanel() {
         wuxc::ColumnDefinition column;
         column.Width(GridLength{1, GridUnitType::Star});
         weekdayRow.ColumnDefinitions().Append(column);
-        auto label = MakeText(nullptr, weekdays[col], 12, true, 0.75);
+        auto label = MakeText(nullptr, weekdays[col], 14, true, 1.0);
+        try { label.FontWeight(winrt::Windows::UI::Text::FontWeights::ExtraBold()); } catch (...) {}
         label.HorizontalAlignment(HorizontalAlignment::Center);
         wuxc::Grid::SetColumn(label, col);
         weekdayRow.Children().Append(label);
@@ -4877,20 +4897,8 @@ void PopulateClockPanel() {
     wuxc::Grid calContainer;
     calContainer.Name(L"ClockCalendarContainer");
     calContainer.HorizontalAlignment(HorizontalAlignment::Stretch);
+    calContainer.VerticalAlignment(VerticalAlignment::Top);
     calContainer.Background(MakeBrush(0, 0, 0, 0));
-    try {
-        wuxm::RectangleGeometry calClip;
-        calClip.Rect({0.0f, 0.0f, 400.0f, 400.0f});
-        calContainer.Clip(calClip);
-        calContainer.SizeChanged([calClip](auto&& s, auto&&) {
-            try {
-                auto fe = s.template as<FrameworkElement>();
-                calClip.Rect({0.0f, 0.0f,
-                    static_cast<float>(fe.ActualWidth()),
-                    static_cast<float>(fe.ActualHeight())});
-            } catch (...) {}
-        });
-    } catch (...) {}
 
     wuxc::Grid gridA;
     gridA.Name(L"ClockCalGridA");
@@ -4931,6 +4939,7 @@ void PopulateClockPanel() {
     gridB.RenderTransform(ttB);
 
     FillCalendarGridCells(gridA, g_clockCalendarYear, g_clockCalendarMonth);
+    FillCalendarGridCells(gridB, g_clockCalendarYear, g_clockCalendarMonth);
 
     calContainer.Children().Append(gridA);
     calContainer.Children().Append(gridB);
@@ -5658,8 +5667,8 @@ FrameworkElement SearchIcon() {
 }
 
 FrameworkElement DisplayIcon() {
-    if (IsWinUI()) return Glyph(L"\uE706", 20);
-    return BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 18, 1.6);
+    if (IsWinUI()) return Glyph(L"\uE706", 18);
+    return BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 16, 1.6);
 }
 
 FrameworkElement SettingsIcon() {
@@ -6868,6 +6877,9 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
             HWND hwnd = reinterpret_cast<HWND>(winrt::unbox_value<int64_t>(btn.Tag()));
             if (!IsWindow(hwnd)) {
                 return;
+            }
+            if (g_thumbPreviewHwnd && IsWindow(g_thumbPreviewHwnd) && g_thumbSourceHwnd == hwnd) {
+                DestroyThumbnailPreview();
             }
             // Defer the single-tap action just long enough for a second tap to
             // arrive and cancel it. GetDoubleClickTime() matches the interval
@@ -10763,26 +10775,22 @@ wuxc::ControlTemplate BuildFlyoutShellTemplate(bool isMenu) {
     <ItemsPresenter Padding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Padding}"/>
   </Border>
 </ControlTemplate>)XAML";
-    static wuxc::ControlTemplate s_flyoutTemplate{nullptr};
-    static wuxc::ControlTemplate s_menuTemplate{nullptr};
-    static std::once_flag s_flyoutOnce;
-    static std::once_flag s_menuOnce;
     if (isMenu) {
-        std::call_once(s_menuOnce, [] {
+        if (!g_menuShellTemplate) {
             try {
-                s_menuTemplate = Markup::XamlReader::Load(kMenuShell)
+                g_menuShellTemplate = Markup::XamlReader::Load(kMenuShell)
                     .as<wuxc::ControlTemplate>();
             } catch (...) {}
-        });
-        return s_menuTemplate;
+        }
+        return g_menuShellTemplate;
     }
-    std::call_once(s_flyoutOnce, [] {
+    if (!g_flyoutShellTemplate) {
         try {
-            s_flyoutTemplate = Markup::XamlReader::Load(kFlyoutShell)
+            g_flyoutShellTemplate = Markup::XamlReader::Load(kFlyoutShell)
                 .as<wuxc::ControlTemplate>();
         } catch (...) {}
-    });
-    return s_flyoutTemplate;
+    }
+    return g_flyoutShellTemplate;
 }
 
 double GetFlyoutScaleFactor() {
@@ -11230,7 +11238,11 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut,
     blurHost.Width(panelWidth);
     blurHost.HorizontalAlignment(HorizontalAlignment::Left);
     blurHost.VerticalAlignment(VerticalAlignment::Top);
-    blurHost.Child(scroller);
+    
+    wuxc::Grid flyoutRootGrid;
+    flyoutRootGrid.Name(winrt::hstring(std::wstring(name) + L"_Root"));
+    flyoutRootGrid.Children().Append(scroller);
+    blurHost.Child(flyoutRootGrid);
 
     wuxc::Viewbox flyoutScaler;
     flyoutScaler.Name(L"FlyoutScaler");
@@ -13003,13 +13015,18 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
 
     if (g_settings.mediaButtonShowIcon) {
         if (g_mediaThumbnailCache) {
+            wuxc::Border artBorder;
+            artBorder.Width(18);
+            artBorder.Height(18);
+            artBorder.CornerRadius(MakeCorner(3));
+            artBorder.VerticalAlignment(VerticalAlignment::Center);
             wuxc::Image img;
             img.Source(g_mediaThumbnailCache);
-            img.Width(16);
-            img.Height(16);
-            img.Stretch(wuxm::Stretch::Uniform);
-            img.VerticalAlignment(VerticalAlignment::Center);
-            row.Children().Append(img);
+            img.Width(18);
+            img.Height(18);
+            img.Stretch(wuxm::Stretch::UniformToFill);
+            artBorder.Child(img);
+            row.Children().Append(artBorder);
         } else {
             if (auto icon = BuildVectorIcon(
                     nullptr, icons::kMusicNoteFill, L"", 24, 16, 1.5,
@@ -13129,21 +13146,32 @@ void ApplyMediaSnapshot(const media::Snapshot& snapshot) {
         g_lastGoodThumbnailBytes = snapshot.thumbnailBytes;
     }
 
+    static std::wstring s_lastMediaButtonSig;
+    std::wstring buttonSig = snapshot.title + L"|" + snapshot.artist + L"|" +
+                             (playing ? L"1" : L"0") + L"|" +
+                             (sessionExists ? L"1" : L"0");
+    bool needRebuild = (buttonSig != s_lastMediaButtonSig);
+    s_lastMediaButtonSig = buttonSig;
+
     if (sessionExists && g_settings.showMediaButton && g_mediaButton) {
         if (!snapshot.thumbnailBytes.empty() &&
             snapshot.thumbnailBytes != g_mediaThumbnailCacheBytes) {
             g_mediaThumbnailCacheBytes = snapshot.thumbnailBytes;
             g_mediaThumbnailCache = BytesToBitmapImage(snapshot.thumbnailBytes);
         }
-        g_mediaButton.Content(BuildMediaButtonContent(snapshot));
+        if (needRebuild) {
+            g_mediaButton.Content(BuildMediaButtonContent(snapshot));
+        }
     }
 
-    RunOnUiThread([] {
-        try { ApplyAllControlStyles(); } catch (...) {}
+    if (needRebuild) {
         RunOnUiThread([] {
             try { ApplyAllControlStyles(); } catch (...) {}
+            RunOnUiThread([] {
+                try { ApplyAllControlStyles(); } catch (...) {}
+            });
         });
-    });
+    }
     if (playing != wasPlaying || sessionExists != wasSessionExists) {
         ApplyVisibilitySettings();
         if (g_mediaFlyout && g_mediaFlyout.IsOpen()) {
@@ -19156,6 +19184,7 @@ void BuildSearchFlyoutContent() {
     if (!g_searchFlyout) return;
 
     wuxc::Grid layout;
+    layout.Name(L"SearchLayout");
     layout.Padding(Thickness{ 14, 14, 14, 14 });
     layout.RowSpacing(10);
     layout.RequestedTheme(ElementTheme::Dark);
@@ -20346,6 +20375,7 @@ void BuildStartMenuFlyoutContent() {
     if (g_startMenuFlyout.Content() != nullptr) return;
 
     wuxc::Grid layout;
+    layout.Name(L"StartMenuLayout");
     layout.Background(MakeBrush(0, 0, 0, 0));
     layout.Padding(Thickness{ 20, 20, 20, 20 });
 
@@ -25470,6 +25500,7 @@ void TickActivationPillAnim() {
 
     if (s_pillAnim->current == s_pillAnim->target) {
         s_pillAnim->active = false;
+        if (g_pillAnimTimer) g_pillAnimTimer.Stop();
         if (s_pillAnim->target <= 0.0) {
             if (g_activationPillHwnd && IsWindow(g_activationPillHwnd)) {
                 ShowWindow(g_activationPillHwnd, SW_HIDE);
@@ -26090,7 +26121,9 @@ static SmartAutoHideAction EvaluateSmartAutoHide(
 
 #endif
 void AutoHideTick() {
-    EnforceTopBarPopupState();
+    if (g_settings.topBarBehaviour != L"default" || g_anyChildFlyoutOpen.load()) {
+        EnforceTopBarPopupState();
+    }
     SyncTopBarCloakState();
     if (g_settings.topBarBehaviour == L"default") {
         if (g_autoHideBootDelay.exchange(false)) {
@@ -26754,7 +26787,6 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
             closeApp.Width(26); closeApp.Height(26); closeApp.MinWidth(26);
             closeApp.Padding(Thickness{0, 0, 0, 0});
             closeApp.Opacity(0.0);
-            closeApp.IsHitTestVisible(false);
             wuxc::FontIcon closeAppGlyph;
             closeAppGlyph.Glyph(L"\uE711");
             closeAppGlyph.FontSize(12);
@@ -26764,13 +26796,13 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
             appHeader.Children().Append(closeApp);
             appHeader.PointerEntered([closeApp](auto&&, auto&&) {
                 closeApp.Opacity(1.0);
-                closeApp.IsHitTestVisible(true);
             });
             appHeader.PointerExited([closeApp](auto&&, auto&&) {
                 closeApp.Opacity(0.0);
-                closeApp.IsHitTestVisible(false);
             });
-            closeApp.Click([appId, panel, flyout](auto&&, auto&&) {
+            closeApp.Click([appId, panel, flyout](auto&& sender, auto&&) {
+                auto btn = sender.template try_as<wuxc::Button>();
+                if (!btn || btn.Opacity() < 0.5) return;
                 windows_notifications::g_dismissedApps.insert(appId);
                 PopulateWindowsNotificationPanel(panel, flyout);
             });
@@ -26841,7 +26873,6 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
                 closeNotification.MinWidth(26);
                 closeNotification.Padding(Thickness{0, 0, 0, 0});
                 closeNotification.Opacity(0.0);
-                closeNotification.IsHitTestVisible(false);
                 wuxc::FontIcon closeNotificationGlyph;
                 closeNotificationGlyph.Glyph(L"\uE711");
                 closeNotificationGlyph.FontSize(12);
@@ -26867,15 +26898,43 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
                 cardLayout.Children().Append(closeNotification);
                 cardLayout.PointerEntered([closeNotification](auto&&, auto&&) {
                     closeNotification.Opacity(1.0);
-                    closeNotification.IsHitTestVisible(true);
                 });
                 cardLayout.PointerExited([closeNotification](auto&&, auto&&) {
                     closeNotification.Opacity(0.0);
-                    closeNotification.IsHitTestVisible(false);
                 });
-                closeNotification.Click([captured, panel, flyout](auto&&, auto&&) {
+                closeNotification.Click([captured, panel, flyout, cardLayout](auto&& sender, auto&&) {
+                    auto btn = sender.template try_as<wuxc::Button>();
+                    if (!btn || btn.Opacity() < 0.5) return;
                     windows_notifications::g_dismissedNotificationIds.insert(captured.id);
-                    PopulateWindowsNotificationPanel(panel, flyout);
+                    bool animated = false;
+                    try {
+                        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(cardLayout);
+                        if (visual) {
+                            auto compositor = visual.Compositor();
+                            if (compositor) {
+                                wuxh::ElementCompositionPreview::SetIsTranslationEnabled(cardLayout, true);
+                                auto ease = compositor.CreateCubicBezierEasingFunction({0.4f, 0.0f}, {1.0f, 1.0f});
+                                auto opacityAnim = compositor.CreateScalarKeyFrameAnimation();
+                                opacityAnim.Duration(std::chrono::milliseconds(200));
+                                opacityAnim.InsertKeyFrame(1.0f, 0.0f, ease);
+                                visual.StartAnimation(L"Opacity", opacityAnim);
+                                auto offsetAnim = compositor.CreateVector3KeyFrameAnimation();
+                                offsetAnim.Duration(std::chrono::milliseconds(200));
+                                offsetAnim.InsertKeyFrame(1.0f, {-30.0f, 0.0f, 0.0f}, ease);
+                                visual.StartAnimation(L"Offset", offsetAnim);
+                                animated = true;
+                                RunInBackground([panel, flyout] {
+                                    Sleep(200);
+                                    RunOnUiThread([panel, flyout] {
+                                        PopulateWindowsNotificationPanel(panel, flyout);
+                                    });
+                                });
+                            }
+                        }
+                    } catch (...) {}
+                    if (!animated) {
+                        PopulateWindowsNotificationPanel(panel, flyout);
+                    }
                 });
                 card.Click([captured, flyout](auto&&, auto&&) {
                     if (!captured.appId.empty()) {
@@ -31887,6 +31946,7 @@ DWORD WINAPI ThumbSourceWatchThread(LPVOID) {
 }
 
 void HideThumbnailPreview() {
+    if (g_settings.disableFlyoutAutoClose) return;
     POINT pt{};
     if (GetCursorPos(&pt)) {
         auto inRect = [](HWND h, POINT p) -> bool {
@@ -34126,12 +34186,17 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             g_statusIconTimer.Interval(std::chrono::seconds(3));
             g_statusIconTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
                 try {
-                    if (!g_settings.weatherLatitude.empty() &&
+                    if (g_settings.showWeatherButton &&
+                        !g_settings.weatherLatitude.empty() &&
                         !g_settings.weatherLongitude.empty() &&
                         !g_weatherState.valid) {
                         weather::EnsureFresh();
                     }
                 } catch (...) {}
+                if (!g_settings.showWifiButton && !g_settings.showSoundButton &&
+                    !g_settings.showBluetoothButton) {
+                    return;
+                }
                 static std::atomic<bool> s_refreshing{false};
                 bool expected = false;
                 if (!s_refreshing.compare_exchange_strong(expected, true)) return;
@@ -34852,7 +34917,42 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_mediaVisualizerTimer) g_mediaVisualizerTimer.Stop();
         visualizer::Stop();
         if (g_restoreTimer) g_restoreTimer.Stop();
+        if (g_topBarAutoHideTimer) g_topBarAutoHideTimer.Stop();
+        if (g_autoHideBootDelayTimer) g_autoHideBootDelayTimer.Stop();
+        if (g_topBarPopupRetryTimer) g_topBarPopupRetryTimer.Stop();
+        if (g_forceShowTimer) g_forceShowTimer.Stop();
+        if (g_slideAnimTimer) g_slideAnimTimer.Stop();
+        if (g_cloakTimer) g_cloakTimer.Stop();
+        if (g_pillAnimTimer) g_pillAnimTimer.Stop();
+        if (g_thumbShowTimer) g_thumbShowTimer.Stop();
+        if (g_thumbHideTimer) g_thumbHideTimer.Stop();
+        if (g_thumbAnimTimer) g_thumbAnimTimer.Stop();
+        if (g_ccDelayedOpenTimer) g_ccDelayedOpenTimer.Stop();
+        if (g_nativeSmCloseTimer) g_nativeSmCloseTimer.Stop();
+        if (g_trayHelloRetryTimer) g_trayHelloRetryTimer.Stop();
         if (g_restoreTimer) g_restoreTimer = nullptr;
+        g_topBarAutoHideTimer = nullptr;
+        g_autoHideBootDelayTimer = nullptr;
+        g_topBarPopupRetryTimer = nullptr;
+        g_forceShowTimer = nullptr;
+        g_slideAnimTimer = nullptr;
+        g_cloakTimer = nullptr;
+        g_pillAnimTimer = nullptr;
+        g_thumbShowTimer = nullptr;
+        g_thumbHideTimer = nullptr;
+        g_thumbAnimTimer = nullptr;
+        g_ccDelayedOpenTimer = nullptr;
+        g_nativeSmCloseTimer = nullptr;
+        g_trayHelloRetryTimer = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_brushCacheMutex);
+            g_brushCache.clear();
+        }
+        s_hoverTemplate = nullptr;
+        if (g_mediaProgressTimer) g_mediaProgressTimer.Stop();
+        g_mediaProgressTimer = nullptr;
+        g_flyoutShellTemplate = nullptr;
+        g_menuShellTemplate = nullptr;
         g_allowHide = true;  // allow hiding during final teardown
         // Release XAML and COM objects on this thread (before it exits)
         if (g_clockTimer) g_clockTimer = nullptr;
@@ -35652,28 +35752,48 @@ LRESULT CALLBACK ShellTraySubclassProc(HWND hWnd, UINT msg, WPARAM wParam,
         if (IsWindow(client)) {
             g_shellTrayClientHwnd = client;
             ShellTrayPushToClient();
-            // Re-broadcast TaskbarCreated so already-running apps re-add
-            // their tray icons (some are missed at cold boot).
+            // Re-broadcast TaskbarCreated once per shell lifetime so
+            // already-running apps re-add their tray icons (some are missed
+            // at cold boot). Repeated HELLOs from the client (which fires
+            // every 2 s while its list is empty) must not flood every
+            // top-level window in the session with the broadcast.
             static const UINT tc = RegisterWindowMessageW(L"TaskbarCreated");
-            if (tc) PostMessageW(HWND_BROADCAST, tc, 0, 0);
+            static std::atomic<bool> s_broadcastSent{false};
+            if (tc && !s_broadcastSent.exchange(true)) {
+                PostMessageW(HWND_BROADCAST, tc, 0, 0);
+            }
         }
         return 0;
     }
     if (msg == WM_COPYDATA) {
         const auto* cd = (const COPYDATASTRUCT*)lParam;
         // Tray action forwarded from the client: deliver to the owner window
-        // through its callback message.
+        // through its callback message. The sender-supplied callback and
+        // owner are validated against our own record of registered tray
+        // icons, so no other process in the session can use Explorer's
+        // message pump to post an arbitrary message to an arbitrary window.
         if (cd && cd->dwData == WM_TOPBAR_TRAY_ACTION &&
             cd->cbData == sizeof(TopBarTrayActionWire) && cd->lpData) {
             TopBarTrayActionWire p{};
             memcpy(&p, cd->lpData, sizeof(p));
-            if (IsWindow(p.owner) && p.callback) {
+            HWND owner = nullptr;
+            UINT callback = 0;
+            {
+                std::lock_guard<std::mutex> lock(g_shellTrayMutex);
+                for (auto const& rec : g_shellTrayIcons) {
+                    if (rec.owner != p.owner || rec.id != p.id) continue;
+                    owner = rec.owner;
+                    callback = rec.callback;
+                    break;
+                }
+            }
+            if (owner && callback && IsWindow(owner)) {
                 if (p.newer) {
-                    PostMessage(p.owner, p.callback,
+                    PostMessage(owner, callback,
                                 MAKEWPARAM(p.cursor.x, p.cursor.y),
                                 MAKELPARAM(p.shellMessage, p.id));
                 } else {
-                    PostMessage(p.owner, p.callback, p.id, p.shellMessage);
+                    PostMessage(owner, callback, p.id, p.shellMessage);
                 }
             }
             return TRUE;
@@ -35687,6 +35807,7 @@ LRESULT CALLBACK ShellTraySubclassProc(HWND hWnd, UINT msg, WPARAM wParam,
 
 void InstallShellTrayInterceptor(HWND trayHwnd) {
     if (g_isShellTrayHost) return;
+    if (g_shellTrayPushShutdown.load()) return;
     g_isShellTrayHost = true;
     g_shellTrayHwnd = trayHwnd;
     Wh_Log(L"Shell tray host detected: %p", trayHwnd);
@@ -36475,16 +36596,6 @@ void Wh_ModUninit() {
         g_shellTrayPushPending.store(false);
         if (g_shellTrayPushWake) SetEvent(g_shellTrayPushWake);
 
-        if (g_shellTrayPushThread) {
-            WaitForSingleObject(g_shellTrayPushThread, 3000);
-            CloseHandle(g_shellTrayPushThread);
-            g_shellTrayPushThread = nullptr;
-        }
-        if (g_shellTrayPushWake) {
-            CloseHandle(g_shellTrayPushWake);
-            g_shellTrayPushWake = nullptr;
-        }
-
         {
             std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
             for (HANDLE h : g_workerThreads) {
@@ -36500,16 +36611,27 @@ void Wh_ModUninit() {
                     g_shellTrayHwnd, ShellTraySubclassProc);
                 g_shellTrayHwnd = nullptr;
             }
-            {
-                std::lock_guard<std::mutex> lock(g_shellTrayMutex);
-                for (auto& rec : g_shellTrayIcons) {
-                    if (rec.icon) {
-                        DestroyIcon(rec.icon);
-                        rec.icon = nullptr;
-                    }
+        }
+
+        if (g_shellTrayPushThread) {
+            WaitForSingleObject(g_shellTrayPushThread, 3000);
+            CloseHandle(g_shellTrayPushThread);
+            g_shellTrayPushThread = nullptr;
+        }
+        if (g_shellTrayPushWake) {
+            CloseHandle(g_shellTrayPushWake);
+            g_shellTrayPushWake = nullptr;
+        }
+
+        if (g_isShellTrayHost) {
+            std::lock_guard<std::mutex> lock(g_shellTrayMutex);
+            for (auto& rec : g_shellTrayIcons) {
+                if (rec.icon) {
+                    DestroyIcon(rec.icon);
+                    rec.icon = nullptr;
                 }
-                g_shellTrayIcons.clear();
             }
+            g_shellTrayIcons.clear();
             g_shellTrayClientHwnd = nullptr;
             g_isShellTrayHost = false;
         }
