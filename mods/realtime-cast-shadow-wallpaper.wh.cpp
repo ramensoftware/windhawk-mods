@@ -18,7 +18,7 @@ Turns the desktop into a lit surface: a light source moves over your wallpaper
 and every visible window casts a projected shadow on it, updated in real time
 as you move, resize and drag windows.
 
-![Preview](https://i.imgur.com/k0Rit6I.gif)
+![Preview](https://i.imgur.com/hfuF3Na.gif)
 
 [Watch the full-quality video](https://i.imgur.com/5f4m5cO.mp4)
 
