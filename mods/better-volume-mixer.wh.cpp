@@ -2,7 +2,7 @@
 // @id           better-volume-mixer
 // @name         Better Volume Mixer
 // @description  Quickly control master and per-app volume from the system tray
-// @version      1.5.0
+// @version      1.5.1
 // @author       0Allu
 // @github       https://github.com/0Allu
 // @homepage     https://github.com/0Allu/better-volume-mixer
@@ -3979,6 +3979,15 @@ TrayAction GetTrayAction(UINT event, bool version4) {
 }
 
 void AddTrayIcon(HWND hWnd) {
+    NOTIFYICONDATAW stale = {};
+    stale.cbSize = sizeof(stale);
+    stale.hWnd = hWnd;
+    stale.uID = TRAY_ICON_ID;
+    Shell_NotifyIconW(NIM_DELETE, &stale);
+    stale.uFlags = NIF_GUID;
+    stale.guidItem = MIXER_TRAY_GUID;
+    Shell_NotifyIconW(NIM_DELETE, &stale);
+
     g_trayVersion4 = false;
     g_trayUsesGuid = true;
     NOTIFYICONDATAW data = {};
