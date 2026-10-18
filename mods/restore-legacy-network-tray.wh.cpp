@@ -32,6 +32,7 @@ https://winclassic.net/post/40623
 #include <bcrypt.h>
 #include <unknwn.h>
 #include <atomic>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
@@ -219,6 +220,23 @@ void RestoreImport(void** slot, void* originalFunc) {
         *slot = originalFunc;
         VirtualProtect(slot, sizeof(void*), oldProtect, &oldProtect);
     }
+}
+
+// True if the OS ships its own pnidui.dll (Windows 10, and Windows 11 up to
+// 23H2). On such systems the legacy network tray is already provided by the
+// system and this mod should not activate a second copy.
+bool SystemHasPnidui() {
+    wchar_t path[MAX_PATH];
+    UINT len = GetSystemDirectoryW(path, ARRAYSIZE(path));
+    if (len == 0 || len >= ARRAYSIZE(path)) {
+        return false;
+    }
+
+    if (wcscat_s(path, ARRAYSIZE(path), L"\\pnidui.dll") != 0) {
+        return false;
+    }
+
+    return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
 }
 
 bool BuildPaths(wchar_t* dirPath, size_t dirPathSize, wchar_t* filePath,
@@ -503,6 +521,18 @@ bool PreparePnidui() {
 
     g_pnidui = GetModuleHandleW(filePath);
     if (!g_pnidui) {
+        // Catches any pnidui.dll already loaded in the process, regardless
+        // of the folder it was loaded from (e.g. another mod's private copy,
+        // or ExplorerPatcher's bundled DLL). GetModuleHandleW matches by base
+        // file name when no path is given, so this check works even if that
+        // copy sits in a different directory than ours.
+        HMODULE anyPnidui = GetModuleHandleW(kFileName);
+        if (anyPnidui) {
+            Wh_Log(L"A pnidui.dll is already loaded from another location, "
+                   L"not activating a second copy");
+            return false;
+        }
+
         g_pnidui = LoadLibraryW(filePath);
     }
 
@@ -601,6 +631,11 @@ void StopTray() {
 
 DWORD WINAPI WorkerThread(LPVOID) {
     Wh_Log(L"Worker thread started");
+
+    if (SystemHasPnidui()) {
+        Wh_Log(L"System already provides pnidui.dll, not activating");
+        return 0;
+    }
 
     HWND trayWnd = nullptr;
     for (int i = 0; i < 100 && !trayWnd; i++) {
