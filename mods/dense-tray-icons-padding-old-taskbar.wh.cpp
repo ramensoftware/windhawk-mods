@@ -111,7 +111,7 @@ every time it opens.
 
 // ==WindhawkModSettings==
 /*
-- trayIconPadding: 2
+- padding: 2
   $name: Tray icon padding
   $description: >-
     The spacing between the tray icons on the taskbar.
@@ -1107,14 +1107,13 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
         SubclassTrayToolbar(hWnd);
     } else if (FindOverflowNotifyForToolbar(hWnd)) {
         SubclassOverflowToolbar(hWnd);
-        ApplyOverflowIconSize(hWnd);
     }
 
     return hWnd;
 }
 
 void LoadSettings() {
-    g_settings.trayIconPadding = Wh_GetIntSetting(L"trayIconPadding");
+    g_settings.trayIconPadding = Wh_GetIntSetting(L"padding");
     if (g_settings.trayIconPadding > kMaxIconPadding) {
         Wh_Log(L"Tray padding %d is above the maximum, clamping to %d",
                g_settings.trayIconPadding, kMaxIconPadding);
