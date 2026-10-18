@@ -38,7 +38,7 @@ processes retain their separate process image lists.
 
 ### Credits
 * Credit to the **Hide Desktop Icon Text and Shortcut Arrows** mod
-(`hide-desktop-icon-text`) by m417z for the transparent GDI icon generation and
+(`hide-desktop-icon-text`) by kivsak for the transparent GDI icon generation and
 shell image list technique.
 */
 // ==/WindhawkModReadme==
@@ -77,6 +77,7 @@ static const GUID g_iidImageList = {
     {0x9f, 0xdf, 0xe8, 0x99, 0x8d, 0xaa, 0x09, 0x50}};
 
 static std::vector<OverlayBackup> g_backupOverlays;
+static int g_overlayImageIndex = -1;
 static WindhawkUtils::StringSetting g_customIconPath;
 
 // ---------------------------------------------------------------------------
@@ -153,6 +154,7 @@ static void HideShortcutOverlay() {
   const int sizes[] = {SHIL_LARGE, SHIL_SMALL, SHIL_EXTRALARGE, SHIL_SYSSMALL,
                        SHIL_JUMBO};
   g_backupOverlays.clear();
+  g_overlayImageIndex = -1;
 
   for (int shil : sizes) {
     IImageList *piml = nullptr;
@@ -165,6 +167,7 @@ static void HideShortcutOverlay() {
     if (SUCCEEDED(piml->GetOverlayImage(linkOverlay, &imageIndex)) &&
         imageIndex >= 0 && SUCCEEDED(piml->GetIconSize(&cx, &cy)) &&
         SUCCEEDED(piml->GetIcon(imageIndex, ILD_TRANSPARENT, &original))) {
+      g_overlayImageIndex = imageIndex;
       if (HICON replacement = GetReplacementIcon(cx, cy)) {
         int replaced = -1;
         if (SUCCEEDED(piml->ReplaceIcon(imageIndex, replacement, &replaced))) {
@@ -231,7 +234,14 @@ static void RefreshDesktop() {
 }
 
 static void RefreshDesktopAndExplorer() {
-  SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+  if (g_overlayImageIndex >= 0) {
+    SHChangeNotify(
+        SHCNE_UPDATEIMAGE, SHCNF_DWORD | SHCNF_FLUSH, nullptr,
+        reinterpret_cast<LPCVOID>(
+            static_cast<ULONG_PTR>(g_overlayImageIndex)));
+  } else {
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+  }
   RefreshDesktop();
 }
 
