@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         0.3.79
+// @version         0.3.80
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -369,6 +369,7 @@ constexpr size_t kMaxButtonLenses = UW_BUTTON_LENS_CAP;
 constexpr wchar_t kWindowClass[] = L"Windhawk.BetterUltrawideTaskbar.2";
 std::atomic<bool> g_stopping{};
 std::atomic<unsigned> g_active{};
+std::atomic<unsigned> g_retiring{};
 std::atomic<DWORD> g_ownerThread{};
 std::atomic<HWND> g_dispatch{};
 std::atomic<bool> g_dockingDisabled{};
@@ -409,6 +410,10 @@ TrayOverrides g_customTrayIcons;
 struct ActiveScope {
     ActiveScope() { ++g_active; }
     ~ActiveScope() { --g_active; }
+};
+struct RetiringScope {
+    RetiringScope() { ++g_retiring; }
+    ~RetiringScope() { --g_retiring; }
 };
 
 // Local settings are loaded at startup and applied on the taskbar's UI thread.
@@ -5538,7 +5543,7 @@ float4 ps(VertexOutput input) : SV_Target {
 }
 )";
 
-    std::mutex mutex;
+    std::timed_mutex mutex;
     DWORD compositorProcess{};
     ContainerVisual geometryVisual{nullptr};
     std::shared_ptr<Source> geometrySource;
@@ -5666,7 +5671,7 @@ float4 ps(VertexOutput input) : SV_Target {
     ContainerVisual visualRoot{nullptr};
     SpriteVisual pixels{nullptr};
 
-    ~LiquidRenderer() { Stop(); }
+    ~LiquidRenderer() { TakeUnderLock().Drain(); }
 
     bool Initialize(Compositor const& compositor, HWND taskbarWindow,
                     UINT pixelWidth, UINT pixelHeight, HWND displayWindow=nullptr,
@@ -5966,7 +5971,7 @@ float4 ps(VertexOutput input) : SV_Target {
             haveCompositorBounds = false;
             geometryReadback = nullptr;
         }
-        CloseSource(old);
+        RetireSources({std::move(old)});
         try {
             auto item = capture::GraphicsCaptureItem::CreateFromVisual(geometryVisual);
             auto source = CreateCaptureSource(item, nullptr, {});
@@ -5980,7 +5985,7 @@ float4 ps(VertexOutput input) : SV_Target {
                     accepted = true;
                 }
             }
-            if (!accepted) { CloseSource(source); return; }
+            if (!accepted) { RetireSources({source}); return; }
             if (!StartSource(source)) source->closed = true;
         } catch (...) {
             Wh_Log(L"[UWLIQUID] compositor sampling unavailable hr=%08X", winrt::to_hresult().value);
@@ -6607,7 +6612,7 @@ float4 ps(VertexOutput input) : SV_Target {
             old = std::move(sources);
             if (compositor) compositorProcess = compositor;
         }
-        for (auto const& source : old) CloseSource(source);
+        RetireSources(std::move(old));
         if (!visual) return;
         auto item = capture::GraphicsCaptureItem::CreateFromVisual(visual);
         auto source = CreateCaptureSource(item,nullptr,{},true);
@@ -6622,7 +6627,7 @@ float4 ps(VertexOutput input) : SV_Target {
                 accepted = true;
             }
         }
-        if (!accepted) { CloseSource(source); return; }
+        if (!accepted) { RetireSources({source}); return; }
         if (!StartSource(source)) source->closed = true;
     }
 
@@ -7212,55 +7217,121 @@ float4 ps(VertexOutput input) : SV_Target {
         else if (FAILED(hr)) failure = hr;
     }
 
+    struct Teardown {
+        struct DrainWork {
+            void operator()(PTP_WORK work) const noexcept {
+                WaitForThreadpoolWorkCallbacks(work, TRUE);
+                CloseThreadpoolWork(work);
+            }
+        };
+        std::unique_ptr<TP_WORK, DrainWork> sourceWork, presentWork;
+        std::unique_ptr<PresentWorkContext> presentContext;
+        winrt::handle waitable, timer;
+        std::vector<std::shared_ptr<Source>> sources;
+
+        bool empty() const noexcept {
+            return !sourceWork && !presentWork && !waitable && !timer && sources.empty();
+        }
+        void Drain() noexcept {
+            sourceWork.reset();
+            presentWork.reset();
+            presentContext.reset();
+            waitable.close();
+            timer.close();
+            for (auto const& source : sources) CloseSource(source);
+            sources.clear();
+        }
+        Teardown() = default;
+        Teardown(Teardown&&) noexcept = default;
+        Teardown& operator=(Teardown&&) = delete;
+        ~Teardown() { Drain(); }
+    };
+
+    // The threadpool tears down because every release here can wait on the capture
+    // server or the D3D device, and the owner thread is the taskbar's (issue 15).
+    struct Retirement {
+        RetiringScope retiring;
+        std::shared_ptr<LiquidRenderer> renderer;
+        std::optional<Teardown> taken;
+
+        static void CALLBACK Run(PTP_CALLBACK_INSTANCE, void* raw) noexcept {
+            std::unique_ptr<Retirement> job(static_cast<Retirement*>(raw));
+            bool apartment = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
+            auto started = GetTickCount64();
+            {
+                Teardown teardown = job->taken ? std::move(*job->taken) : job->renderer->TakeUnderLock();
+                teardown.Drain();
+            }
+            if (auto ms = GetTickCount64() - started; ms >= 1000)
+                Wh_Log(L"[UWLIQUID] capture teardown took %llu ms", ms);
+            job->renderer.reset();
+            if (apartment) CoUninitialize();
+        }
+    };
+
+    Teardown TakeLocked() {
+        running = false;
+        ++sourceRevision;
+        sourceUpdatePending=false;
+        sourceWorkPending=false;
+        requestedSources.clear();
+        pendingPresent = false;
+        presentWorkPending = false;
+        motionActive = false;
+        effectsAnimating = false;
+        motionObservationPending = false;
+        bodyVisual = nullptr;
+        haveCompositorBounds = false;
+        lensProbes = {};
+        std::fill_n(sampledLensTags,kMaxButtonLenses,0);
+        Teardown taken;
+        taken.sources = std::exchange(sources, {});
+        if (geometrySource) taken.sources.push_back(std::exchange(geometrySource, nullptr));
+        for (auto const& source : taken.sources) source->active.store(false, std::memory_order_release);
+        taken.sourceWork.reset(std::exchange(sourceWork, nullptr));
+        taken.presentWork.reset(std::exchange(presentWork, nullptr));
+        taken.presentContext.reset(std::exchange(presentWorkContext, nullptr));
+        taken.waitable.attach(std::exchange(frameLatencyWaitable, nullptr));
+        taken.timer.attach(std::exchange(presentTimer, nullptr));
+        return taken;
+    }
+
+    Teardown TakeUnderLock() {
+        std::lock_guard lock(mutex);
+        return TakeLocked();
+    }
+
+    void Retire(std::optional<Teardown> taken) {
+        auto job = new Retirement{{}, shared_from_this(), std::move(taken)};
+        if (!TrySubmitThreadpoolCallback(Retirement::Run, job, nullptr)) {
+            Wh_Log(L"[UWLIQUID] threadpool refused the capture teardown; draining inline");
+            Retirement::Run(nullptr, job);
+        }
+    }
+
+    void RetireSources(std::vector<std::shared_ptr<Source>> old) {
+        std::erase(old, nullptr);
+        if (old.empty()) return;
+        for (auto const& source : old) source->active.store(false, std::memory_order_release);
+        Teardown taken;
+        taken.sources = std::move(old);
+        Retire(std::move(taken));
+    }
+
+    // The longest healthy hold on `mutex` is one RenderLocked. A longer hold is a D3D
+    // call stuck behind the device lock, which Stop must not wait out.
+    static constexpr std::chrono::milliseconds kStopLockBudget{20};
+
     void Stop() {
-        std::vector<std::shared_ptr<Source>> oldSources;
-        PTP_WORK work{};
-        PTP_WORK captureWork{};
-        PresentWorkContext* workContext{};
-        HANDLE waitable{};
-        HANDLE timer{};
-        {
-            std::lock_guard lock(mutex);
-            if (!running && sources.empty() && !presentWork && !sourceWork &&
-                !frameLatencyWaitable && !presentTimer)
-                return;
-            running = false;
-            ++sourceRevision;
-            sourceUpdatePending=false;
-            requestedSources.clear();
-            captureWork=std::exchange(sourceWork,nullptr);
-            pendingPresent = false;
-            presentWorkPending = false;
-            motionActive = false;
-            effectsAnimating = false;
-            motionObservationPending = false;
-            oldSources = std::move(sources);
-            bodyVisual = nullptr;
-            if (geometrySource) oldSources.push_back(std::exchange(geometrySource, nullptr));
-            haveCompositorBounds = false;
-            lensProbes = {};
-            std::fill_n(sampledLensTags,kMaxButtonLenses,0);
-            work = presentWork;
-            presentWork = nullptr;
-            workContext = presentWorkContext;
-            presentWorkContext = nullptr;
-            waitable = std::exchange(frameLatencyWaitable, nullptr);
-            timer = std::exchange(presentTimer, nullptr);
+        std::optional<Teardown> taken;
+        if (std::unique_lock lock(mutex, kStopLockBudget); lock) {
+            taken.emplace(TakeLocked());
+            if (taken->empty()) return;
+        } else {
+            Wh_Log(L"[UWLIQUID] stop deferred: renderer lock busy over %lld ms",
+                   static_cast<long long>(kStopLockBudget.count()));
         }
-        if (captureWork) {
-            WaitForThreadpoolWorkCallbacks(captureWork,TRUE);
-            CloseThreadpoolWork(captureWork);
-            std::lock_guard lock(mutex);
-            sourceWorkPending=false;
-        }
-        if (work) {
-            WaitForThreadpoolWorkCallbacks(work, TRUE);
-            CloseThreadpoolWork(work);
-            delete workContext;
-        }
-        if (waitable) CloseHandle(waitable);
-        if (timer) CloseHandle(timer);
-        for (auto const& source : oldSources) CloseSource(source);
+        Retire(std::move(taken));
     }
 };
 
@@ -12037,6 +12108,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
+    Wh_Log(L"[UWLIQUID] unload thread=%lu owner=%lu", GetCurrentThreadId(), g_ownerThread.load());
     g_stopping = true;
     g_dockingDisabled = true;
     g_compositorProcessCache.Stop();
@@ -12045,8 +12117,17 @@ void Wh_ModBeforeUninit() {
     while (g_active) Sleep(1);
     if (HWND window = g_dispatch) SendMessage(window, kRestoreMessage, 0, 0);
     if (g_explorer) RefreshTaskbarHeight();
-    // Closing the free-threaded capture pools prevents new frame callbacks.
-    while (g_active) Sleep(1);
+    // Unbounded on purpose: Windhawk unmaps the DLL after Wh_ModUninit, and a retirement
+    // still inside a capture call would return into unmapped code.
+    auto started = GetTickCount64();
+    bool logged = false;
+    while (g_active || g_retiring) {
+        if (!logged && GetTickCount64() - started >= 2000) {
+            logged = true;
+            Wh_Log(L"[UWLIQUID] unload waiting for capture teardown");
+        }
+        Sleep(1);
+    }
     RestorePanels(nullptr, !g_explorer);
 }
 
