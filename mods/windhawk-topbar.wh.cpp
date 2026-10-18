@@ -141,6 +141,8 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 | `ResourceButton` | CPU / RAM / GPU button |
 | `WeatherButton` / `WeatherButtonContent` | Weather button and its inline content |
 | `RecycleBinButton` / `RecycleBinIcon` | Recycle Bin button and its glyph |
+| `TrayIconButton` | System tray overflow button |
+| `NotificationsButton` | Windows notifications button |
 | `MediaButton` / `MediaTransportButton` | Media Player button and its transport buttons |
 | `SettingsButton` | Settings gear |
 | `AppTitleButton` / `AppTitleText` | Foreground application-name button |
@@ -1611,6 +1613,7 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
         {L"WeatherButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"RecycleBinButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"TrayIconButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
+        {L"NotificationsButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"SettingsButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"AppTitleButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"MediaButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
@@ -1640,6 +1643,7 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
     {L"ResourceButton", {L"Background:=#27403C"}},
     {L"BatteryButton", {L"Background:=#27403C"}}, 
     {L"ControlCenterButton", {L"Background:=#27403C"}},
+    {L"NotificationsButton", {L"Background:=#27403C"}},
     {L"TaskButton", {L"Background:=#27403C"}},
     {L"AppTitleButton", {L"Background:=#27403C"}},
     {L"MediaButton", {L"Background:=#27403C"}},
@@ -1666,6 +1670,7 @@ const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
     {L"BluetoothButton", {L"Background:=transparent"}},
     {L"BatteryButton", {L"Background:=transparent"}}, 
     {L"ControlCenterButton", {L"Background:=transparent"}},
+    {L"NotificationsButton", {L"Background:=transparent"}},
     {L"ResourceButton", {L"Background:=transparent"}},
     {L"TrayIconButton", {L"Background:=transparent"}},
     {L"TaskButton", {L"Background:=transparent"}},
@@ -1713,7 +1718,7 @@ const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
         L"BorderThickness=1",
         L"CornerRadius=10",
         L"Margin=3,3,3,3"}},
-    {L"DisplayButton, SoundButton, WifiButton, BluetoothButton, ResourceButton, BatteryButton, WeatherButton, RecycleBinButton, SettingsButton, ControlCenterButton, TrayIconButton", {
+    {L"DisplayButton, SoundButton, WifiButton, BluetoothButton, ResourceButton, BatteryButton, WeatherButton, RecycleBinButton, SettingsButton, ControlCenterButton, TrayIconButton, NotificationsButton", {
         L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#20FFFFFF\" TintOpacity=\"0.2\" />",
         L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.50,1.17\" EndPoint=\"0.50,-0.17\"><GradientStop Offset=\"0.09\" Color=\"#C9FFFFFF\"/><GradientStop Offset=\"0.46\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.49\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.91\" Color=\"#A8FFFFFF\"/></LinearGradientBrush>",
         L"BorderThickness=1",
@@ -1831,6 +1836,12 @@ const std::vector<ControlStyleRule> g_themeMidnightNeonStyles = {
         L"CornerRadius=10",
         L"IconColor=#E8A5C8"}},
     {L"ControlCenterButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"NotificationsButton", {
         L"Background:=#16243A",
         L"BorderBrush:=#338FD9F0",
         L"BorderThickness=1",
@@ -2014,24 +2025,6 @@ void RegisterOpenPopup(wuxc::Primitives::FlyoutBase const& fb) {
     // sits behind other windows for up to a second, waiting for the next
     // restore-timer tick.
     RunOnUiThread([fb] {
-        try {
-            auto flyout = fb.try_as<wuxc::Flyout>();
-            if (flyout) {
-                auto content = flyout.Content().try_as<FrameworkElement>();
-                if (content) {
-                    auto xr = content.XamlRoot();
-                    if (xr) {
-                        HWND popupHwnd = FindWindowExW(nullptr, nullptr,
-                            L"Xaml_WindowedPopupClass", nullptr);
-                        if (popupHwnd && IsWindow(popupHwnd)) {
-                            SetWindowPos(popupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-                            DwmFlush();
-                        }
-                    }
-                }
-            }
-        } catch (...) {}
         try { StripFlyoutPopupBackgrounds(fb); } catch (...) {}
         try { PromoteChildFlyoutPopups(); } catch (...) {}
         RunOnUiThread([fb] {
@@ -4340,6 +4333,15 @@ void ApplyAllControlStyles() {
         }
     } catch (...) {}
 
+    // Reset all icons to default color before applying themes
+    std::wstring defaultIconColor = g_settings.iconColor.empty() ? L"#FFFFFF" : g_settings.iconColor;
+    try {
+        if (g_rootElement) ApplyIconColorToElement(g_rootElement, defaultIconColor);
+        for (auto& root : g_detachedStyleRoots) {
+            if (root) ApplyIconColorToElement(root, defaultIconColor);
+        }
+    } catch (...) {}
+
     // Built-ins always applied.
     ApplyRuleList(BuiltInStyles());
     // Theme styles applied after built-ins, before user custom styles.
@@ -5282,7 +5284,23 @@ FrameworkElement BuildSearchIcon(double displaySize) {
 // Battery icon builder
 // ============================================================================
 
-FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charging) {
+FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charging, bool present = true) {
+    if (!present) {
+        std::wstring brush = GetEffectiveIconColorString();
+        std::wstring xaml =
+            L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+            L"Stretch=\"Uniform\" Height=\"" + std::to_wstring(displaySize) + L"\">"
+            L"<Grid Width=\"24\" Height=\"24\">"
+            L"<Path Data=\"M5,5 L19,19 M19,5 L5,19\" Stroke=\"" + brush + L"\" StrokeThickness=\"2\"/>"
+            L"</Grid></Viewbox>";
+        try {
+            auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
+            element.Name(L"BatteryIcon");
+            return element;
+        } catch (...) {
+            return nullptr;
+        }
+    }
     percentage = std::clamp(percentage, 0, 100);
 
     // Indicator colour depends only on the charge level; charging is shown by
@@ -5645,25 +5663,31 @@ FrameworkElement BluetoothIcon(bool on) {
     return v;
 }
 
-FrameworkElement BatteryIcon(int percentage, bool charging) {
+FrameworkElement BatteryIcon(int percentage, bool charging, bool present = true) {
     if (IsWinUI()) {
+        if (!present) {
+            auto ic = Glyph(L"\uE996", 24);
+            ic.VerticalAlignment(VerticalAlignment::Center);
+            ic.HorizontalAlignment(HorizontalAlignment::Center);
+            return ic;
+        }
         percentage = std::clamp(percentage, 0, 100);
         PCWSTR glyph;
         if (charging) {
-            static const wchar_t* kCharging[9] = {
+            static const wchar_t* kCharging[11] = {
                 L"\uE85A", L"\uE85B", L"\uE85C", L"\uE85D", L"\uE85E",
-                L"\uE85F", L"\uE860", L"\uE861", L"\uE862"
+                L"\uE85F", L"\uE860", L"\uE861", L"\uE862", L"\uE83E", L"\uE83E"
             };
             int slot = percentage / 10;
-            if (slot > 8) slot = 8;
+            if (slot > 10) slot = 10;
             glyph = kCharging[slot];
         } else {
-            static const wchar_t* kLevels[10] = {
+            static const wchar_t* kLevels[11] = {
                 L"\uE850", L"\uE851", L"\uE852", L"\uE853", L"\uE854",
-                L"\uE855", L"\uE856", L"\uE857", L"\uE858", L"\uE859"
+                L"\uE855", L"\uE856", L"\uE857", L"\uE858", L"\uE859", L"\uE83F"
             };
             int lvl = percentage / 10;
-            if (lvl > 9) lvl = 9;
+            if (lvl > 10) lvl = 10;
             glyph = kLevels[lvl];
         }
         
@@ -5676,14 +5700,14 @@ FrameworkElement BatteryIcon(int percentage, bool charging) {
         auto tb = MakeText(nullptr, std::to_wstring(percentage) + L"%", 12);
         tb.VerticalAlignment(VerticalAlignment::Center);
         
-        auto ic = Glyph(glyph, 20);
+        auto ic = Glyph(glyph, 24);
         ic.VerticalAlignment(VerticalAlignment::Center);
         
         panel.Children().Append(tb);
         panel.Children().Append(ic);
         return panel;
     }
-    auto v = BuildBatteryIcon(18, percentage, charging);
+    auto v = BuildBatteryIcon(20, percentage, charging, present);
     if (v) v.VerticalAlignment(VerticalAlignment::Center);
     return v;
 }
@@ -6509,6 +6533,16 @@ bool IsAnyFullscreenActive() {
     return IsWindowFullscreenOnMonitor(fg, mon);
 }
 
+static bool IsAltTabOrTaskViewSurface(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+    wchar_t cls[128]{};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return false;
+    return _wcsicmp(cls, L"TaskSwitcherWnd") == 0 ||
+           _wcsicmp(cls, L"MultitaskingViewFrame") == 0 ||
+           _wcsicmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
+           _wcsicmp(cls, L"ForegroundStaging") == 0;
+}
+
 void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                   LONG idChild, DWORD, DWORD) {
     if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW ||
@@ -6528,7 +6562,9 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     // check here as a second kill path.
     try { KillNativeShellHostIfOursOpen(hwnd); } catch (...) {}
 
-    g_lastForegroundHwnd = hwnd;
+    if (!IsAltTabOrTaskViewSurface(hwnd)) {
+        g_lastForegroundHwnd = hwnd;
+    }
 
     if (g_anyChildFlyoutOpen.load()) {
         try { PromoteChildFlyoutPopups(); } catch (...) {}
@@ -10286,7 +10322,8 @@ void ApplyIconColorToElement(FrameworkElement element, const std::wstring& value
                 node.try_as<wuxc::Slider>() ||
                 node.try_as<wuxc::ProgressRing>() ||
                 node.try_as<wuxc::ProgressBar>() ||
-                node.try_as<wuxc::Primitives::ScrollBar>()) {
+                node.try_as<wuxc::Primitives::ScrollBar>() ||
+                node.try_as<wuxc::MenuFlyoutSeparator>()) {
                 return;
             }
             // Path, Rectangle, Ellipse, Line, Polygon, Polyline all derive
@@ -10344,6 +10381,7 @@ void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
 [[clang::no_destroy]] DispatcherTimer g_volumeRevertTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_brightnessRevertTimer{nullptr};
 [[clang::no_destroy]] std::vector<wuxc::Slider> g_monitorBrightnessSliders;
+[[clang::no_destroy]] wuxc::Slider g_mainBrightnessSlider{nullptr};
 std::atomic<bool> g_syncingBrightness{false};
 std::function<void(int)> g_mainBrightnessSyncCallback;
 
@@ -12184,6 +12222,7 @@ void PopulateDisplayPanel() {
     }
 
     g_monitorBrightnessSliders.clear();
+    g_mainBrightnessSlider = nullptr;
 
     g_populatingPanel = true;
     struct Guard {
@@ -12197,6 +12236,7 @@ void PopulateDisplayPanel() {
 
     if (brightness::Available()) {
         auto icon = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 18, 1.6);
+        wuxc::Slider mainSlider{nullptr};
         children.Append(MakeSliderRow(icon, brightness::Get(),
                                       [](int value) {
                                           SetBrightnessCoalesced(value);
@@ -12212,7 +12252,8 @@ void PopulateDisplayPanel() {
                                               }
                                               g_syncingBrightness = false;
                                           }
-                                      }));
+                                      }, &mainSlider));
+        g_mainBrightnessSlider = mainSlider;
     } else {
         children.Append(MakeStatusText(L"Brightness control isn't available on this display."));
     }
@@ -12262,10 +12303,18 @@ void PopulateDisplayPanel() {
             row.Children().Append(MakeSliderRow(icon, m.percent,
                 [hmon](int value) {
                     SetMonitorBrightnessCoalesced(hmon, value);
-                    if (!g_syncingBrightness.load() &&
-                        g_mainBrightnessSyncCallback) {
+                    if (!g_syncingBrightness.load()) {
                         g_syncingBrightness = true;
-                        try { g_mainBrightnessSyncCallback(value); } catch (...) {}
+                        if (g_mainBrightnessSlider) {
+                            try {
+                                if (std::abs(g_mainBrightnessSlider.Value() - (double)value) > 0.5) {
+                                    g_mainBrightnessSlider.Value((double)value);
+                                }
+                            } catch (...) {}
+                        }
+                        if (g_mainBrightnessSyncCallback) {
+                            try { g_mainBrightnessSyncCallback(value); } catch (...) {}
+                        }
                         g_syncingBrightness = false;
                     }
                 },
@@ -13675,9 +13724,14 @@ void PopulateSoundPanel() {
             row.Margin(Thickness{10, 4, 10, 4});
             row.Children().Append(MakeText(nullptr, session.name, 12, false, 0.85));
 
-            auto icon = BuildVectorIcon(
-                nullptr, session.isSystemSounds ? icons::kSpeakerFill : icons::kAppFill, L"",
-                24, 15, 1.5);
+            FrameworkElement icon{nullptr};
+            if (session.isSystemSounds) {
+                if (iconpacks::IsWinUI()) icon = iconpacks::Glyph(L"\uE767", 15);
+                else icon = BuildVectorIcon(nullptr, icons::kSpeakerFill, L"", 24, 15, 1.5);
+            } else {
+                if (iconpacks::IsWinUI()) icon = iconpacks::Glyph(L"\uE71D", 15);
+                else icon = BuildVectorIcon(nullptr, icons::kAppFill, L"", 24, 15, 1.5);
+            }
 
             // The control interface is captured so the slider writes straight
             // to that session without re-enumerating on every drag.
@@ -14903,7 +14957,7 @@ void UpdateBatteryButton() {
     s_lastPercentage = info.percentage;
     s_lastCharging = info.charging;
     s_initialized = true;
-    auto batteryIcon = iconpacks::BatteryIcon(info.percentage, info.charging);
+    auto batteryIcon = iconpacks::BatteryIcon(info.percentage, info.charging, info.present);
     if (batteryIcon) {
         batteryIcon.VerticalAlignment(VerticalAlignment::Center);
         g_batteryButton.Content(batteryIcon);
@@ -17111,7 +17165,7 @@ void PopulateControlCenterPanel_New() {
             BatteryInfo info = GetBatteryInfo();
             std::wstring sub = std::to_wstring(info.percentage) + L"%";
             if (info.charging) sub += L" \u00B7 Chg";
-            auto ic = BuildBatteryIcon(16, info.percentage, info.charging);
+            auto ic = BuildBatteryIcon(16, info.percentage, info.charging, info.present);
             return makeSimpleTile(ic, L"Battery", sub, false,
                 [] { RunOnUiThread([] { try {
                     if (!g_batteryButton || !g_batteryFlyout) return;
@@ -18056,6 +18110,7 @@ wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> 
         wuxc::FontIcon icon;
         icon.Glyph(glyph);
         icon.FontSize(14);
+        icon.Foreground(IconColorBrush());
         item.Icon(icon);
     }
     if (!g_settings.fontFamily.empty()) {
@@ -18155,6 +18210,7 @@ wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text,
         wuxc::FontIcon icon;
         icon.Glyph(glyph);
         icon.FontSize(14);
+        icon.Foreground(IconColorBrush());
         item.Icon(icon);
     }
     if (!g_settings.fontFamily.empty()) {
@@ -25084,18 +25140,7 @@ void PopulateTrayFlyoutPanel() {
                 // symptom. This matches what the real Shell_TrayWnd does: the
                 // taskbar is foreground when the user right-clicks a tray icon.
                 if (rec.owner && IsWindow(rec.owner)) {
-                    HWND fg = GetForegroundWindow();
-                    DWORD fgThread = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-                    DWORD targetThread = GetWindowThreadProcessId(rec.owner, nullptr);
-                    DWORD selfThread = GetCurrentThreadId();
-                    bool a1 = fgThread && fgThread != selfThread &&
-                              AttachThreadInput(selfThread, fgThread, TRUE);
-                    bool a2 = targetThread && targetThread != selfThread &&
-                              targetThread != fgThread &&
-                              AttachThreadInput(selfThread, targetThread, TRUE);
                     SetForegroundWindow(rec.owner);
-                    if (a2) AttachThreadInput(selfThread, targetThread, FALSE);
-                    if (a1) AttachThreadInput(selfThread, fgThread, FALSE);
                     Sleep(60);
                 }
                 SendTrayActionToServer(rec, WM_CONTEXTMENU);
@@ -27271,7 +27316,7 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
     // text label is added next to it.
     {
         BatteryInfo info = GetBatteryInfo();
-        auto batteryIcon = iconpacks::BatteryIcon(info.percentage, info.charging);
+        auto batteryIcon = iconpacks::BatteryIcon(info.percentage, info.charging, info.present);
         if (batteryIcon) {
             batteryIcon.VerticalAlignment(VerticalAlignment::Center);
         }
@@ -31937,6 +31982,8 @@ LRESULT CALLBACK ThumbPreviewWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
             HWND src = g_thumbSourceHwnd;
 
+            hitIdx = -1;
+
             if (hitIdx == 0) {
                 if (IsWindow(src)) {
                     bool wasTopmost = IsWindowTopmost(src);
@@ -33875,8 +33922,6 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         // Re-apply backdrop after window becomes visible (fixes blur on top bar)
         ApplyWindowBackdrop(g_topBarHwnd);
         RegisterAppBar(g_topBarHwnd);
-        RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SETTINGS,
-                       MOD_CONTROL | MOD_ALT, 'S');
         // A moment later, so the shell has finished its own start-up layout pass
         // and doesn't immediately overwrite our reservation.
         SetTimer(g_topBarHwnd, kAppBarInitTimerId, 800, nullptr);
@@ -35332,9 +35377,11 @@ DWORD WINAPI ShellTrayPushWorkerProc(LPVOID) {
         if (g_shellTrayPushShutdown.load()) return 0;
         while (g_shellTrayPushPending.exchange(false)) {
             if (g_shellTrayPushShutdown.load()) return 0;
-            if (g_shellTrayPushShutdown.load()) return 0;
             try { ShellTrayPushToClientImpl(); } catch (...) {}
-            Sleep(1000);
+            for (int i = 0; i < 10; i++) {
+                if (g_shellTrayPushShutdown.load()) return 0;
+                Sleep(100);
+            }
         }
     }
 }
@@ -36052,6 +36099,15 @@ void WhTool_ModUninit() {
     InterlockedExchange(&g_shuttingDown, 1);
     g_allowHide = true;   // allow the bar to hide during shutdown
 
+    try { RestoreNativeShellHostWindows(true, true); } catch (...) {}
+    if (g_topBarHwnd && g_appBarRegistered) {
+        APPBARDATA data{};
+        data.cbSize = sizeof(data);
+        data.hWnd = g_topBarHwnd;
+        SHAppBarMessage(ABM_REMOVE, &data);
+        g_appBarRegistered = false;
+    }
+
     // Kill the settings-reload timer first. If a reload is pending or
     // mid-run on the topbar thread, WM_QUIT below cannot be processed until
     // it finishes, and that is what has been making "Uninitializing…" sit
@@ -36257,11 +36313,13 @@ void Wh_ModAfterInit() {
     // Sleep instead of WaitForSingleObject.
     RunInBackground([] {
         for (int i = 0; i < 240; i++) {
+            if (g_shellTrayPushShutdown.load()) return;
             HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
             if (tray) {
                 DWORD pid = 0;
                 GetWindowThreadProcessId(tray, &pid);
                 if (pid == GetCurrentProcessId()) {
+                    if (g_shellTrayPushShutdown.load()) return;
                     Wh_Log(L"TopBar tray: shell host owns Shell_TrayWnd %p (after %d tries)",
                            tray, i);
                     InstallShellTrayInterceptor(tray);
@@ -36345,26 +36403,51 @@ void Wh_ModUninit() {
         // receives jumps into freed code — which shows up as a random
         // explorer.exe crash, and keeps Windhawk's uninit spinner up
         // while the shell's message pump stalls on the dying subclass.
+        g_shellTrayPushShutdown.store(true);
+        g_shellTrayPushPending.store(false);
+        if (g_shellTrayPushWake) SetEvent(g_shellTrayPushWake);
+
+        if (g_shellTrayPushThread) {
+            WaitForSingleObject(g_shellTrayPushThread, 3000);
+            CloseHandle(g_shellTrayPushThread);
+            g_shellTrayPushThread = nullptr;
+        }
+        if (g_shellTrayPushWake) {
+            CloseHandle(g_shellTrayPushWake);
+            g_shellTrayPushWake = nullptr;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
+            for (HANDLE h : g_workerThreads) {
+                WaitForSingleObject(h, 3000);
+                CloseHandle(h);
+            }
+            g_workerThreads.clear();
+        }
+
         if (g_isShellTrayHost) {
             if (g_shellTrayHwnd && IsWindow(g_shellTrayHwnd)) {
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                     g_shellTrayHwnd, ShellTraySubclassProc);
                 g_shellTrayHwnd = nullptr;
             }
-            if (g_shellTrayPushWake) {
-                SetEvent(g_shellTrayPushWake);
+            {
+                std::lock_guard<std::mutex> lock(g_shellTrayMutex);
+                for (auto& rec : g_shellTrayIcons) {
+                    if (rec.icon) {
+                        DestroyIcon(rec.icon);
+                        rec.icon = nullptr;
+                    }
+                }
+                g_shellTrayIcons.clear();
             }
             g_shellTrayClientHwnd = nullptr;
-            g_shellTrayPushShutdown.store(true);
-            g_shellTrayPushPending.store(false);
-            g_shellTrayPushShutdown.store(true);
-            if (g_shellTrayPushWake) SetEvent(g_shellTrayPushWake);
             g_isShellTrayHost = false;
         }
         return;
     }
 
     WhTool_ModUninit();
-    TerminateProcess(GetCurrentProcess(), 0);
     ExitProcess(0);
 }
