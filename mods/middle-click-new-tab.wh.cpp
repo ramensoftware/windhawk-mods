@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              middle-click-new-tab
 // @name            Middle Click New Tab
-// @description     Middle-click the empty tab strip area of File Explorer or Notepad to open a new tab
+// @description     Middle-click the empty tab strip area of File Explorer, Notepad or Terminal to open a new tab
 // @version         1.0.0
 // @author          venasataa
 // @github          https://github.com/venasataa
@@ -15,14 +15,15 @@
 // ==WindhawkModReadme==
 /*
 
-This mod adds the browser-style behavior of opening a new tab when the mouse
-wheel (middle button) is clicked on the empty part of the tab strip, i.e. the
-area where the tabs are located, but not on a tab itself.
+The mod opens a new tab when you middle-click the empty space of a tab strip. You can toggle support for each app individually in the settings.
 
-Only two apps are supported, and the mod ignores clicks everywhere else:
+Three apps are supported:
 
 - File Explorer: the new tab is opened by sending Ctrl+T.
-- Windows 11 Notepad: the new tab is opened by sending Ctrl+N.
+- Notepad: the new tab is opened by sending Ctrl+N.
+- Terminal: the new tab is opened by sending Ctrl+Shift+T.
+
+You can enable or disable each app individually in the mod's settings tab.
 
 How it works:
 
@@ -41,6 +42,23 @@ How it works:
 ![Middle Click New Tab Demo](https://raw.githubusercontent.com/venasataa/windhawk-mod-assets/refs/heads/main/middle-click-new-tab.gif)
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- enableExplorer: true
+  $name: File Explorer
+  $description: >-
+    Enable middle-click new tab for File Explorer (Ctrl+T).
+- enableNotepad: true
+  $name: Notepad
+  $description: >-
+    Enable middle-click new tab for Notepad (Ctrl+N).
+- enableTerminal: true
+  $name: Terminal
+  $description: >-
+    Enable middle-click new tab for Windows Terminal (Ctrl+Shift+T).
+*/
+// ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <oleauto.h>
@@ -62,18 +80,36 @@ HANDLE g_hookThread = nullptr;
 IUIAutomation* g_pAutomation = nullptr;
 IUIAutomationTreeWalker* g_pControlWalker = nullptr;
 
+// Settings
+bool g_enableExplorer = true;
+bool g_enableNotepad = true;
+bool g_enableTerminal = true;
+
+void LoadSettings() {
+    g_enableExplorer = Wh_GetIntSetting(L"enableExplorer") != 0;
+    g_enableNotepad = Wh_GetIntSetting(L"enableNotepad") != 0;
+    g_enableTerminal = Wh_GetIntSetting(L"enableTerminal") != 0;
+    Wh_Log(L"Settings updated: Explorer=%d, Notepad=%d, Terminal=%d", 
+           g_enableExplorer, g_enableNotepad, g_enableTerminal);
+}
+
 ////////////////////////////////////////////////////////////
 // Target applications and shortcut key dispatch
 
-WORD GetNewTabKeyForWindow(HWND hWnd) {
+struct ShortcutInfo {
+    WORD vk;
+    bool shift;
+};
+
+ShortcutInfo GetShortcutForWindow(HWND hWnd) {
     DWORD dwProcessId = 0;
     if (!GetWindowThreadProcessId(hWnd, &dwProcessId)) {
-        return 0;
+        return {0, false};
     }
 
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
     if (!hProcess) {
-        return 0;
+        return {0, false};
     }
 
     WCHAR szPath[MAX_PATH];
@@ -81,39 +117,61 @@ WORD GetNewTabKeyForWindow(HWND hWnd) {
     BOOL bOk = QueryFullProcessImageNameW(hProcess, 0, szPath, &dwSize);
     CloseHandle(hProcess);
     if (!bOk) {
-        return 0;
+        return {0, false};
     }
 
     PCWSTR fileName = wcsrchr(szPath, L'\\');
     fileName = fileName ? fileName + 1 : szPath;
 
     if (_wcsicmp(fileName, L"explorer.exe") == 0) {
-        return 'T';
+        if (g_enableExplorer) return {'T', false};
     }
     if (_wcsicmp(fileName, L"Notepad.exe") == 0) {
-        return 'N';
+        if (g_enableNotepad) return {'N', false};
     }
-    return 0;
+    if (_wcsicmp(fileName, L"WindowsTerminal.exe") == 0) {
+        if (g_enableTerminal) return {'T', true};
+    }
+    
+    return {0, false};
 }
 
-void SendCtrlKey(WORD vk) {
-    INPUT inputs[4] = {};
+void SendCtrlKey(WORD vk, bool shift) {
+    INPUT inputs[6] = {};
+    int count = 0;
 
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[count].type = INPUT_KEYBOARD;
+    inputs[count].ki.wVk = VK_CONTROL;
+    count++;
 
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = vk;
+    if (shift) {
+        inputs[count].type = INPUT_KEYBOARD;
+        inputs[count].ki.wVk = VK_SHIFT;
+        count++;
+    }
 
-    inputs[2].type = INPUT_KEYBOARD;
-    inputs[2].ki.wVk = vk;
-    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[count].type = INPUT_KEYBOARD;
+    inputs[count].ki.wVk = vk;
+    count++;
 
-    inputs[3].type = INPUT_KEYBOARD;
-    inputs[3].ki.wVk = VK_CONTROL;
-    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[count].type = INPUT_KEYBOARD;
+    inputs[count].ki.wVk = vk;
+    inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
+    count++;
 
-    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+    if (shift) {
+        inputs[count].type = INPUT_KEYBOARD;
+        inputs[count].ki.wVk = VK_SHIFT;
+        inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
+        count++;
+    }
+
+    inputs[count].type = INPUT_KEYBOARD;
+    inputs[count].ki.wVk = VK_CONTROL;
+    inputs[count].ki.dwFlags = KEYEVENTF_KEYUP;
+    count++;
+
+    SendInput(count, inputs, sizeof(INPUT));
 }
 
 ////////////////////////////////////////////////////////////
@@ -330,8 +388,9 @@ void HandleMiddleClick(POINT pt) {
     HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
     if (!hRootWnd) hRootWnd = hWnd;
 
-    WORD newTabKey = GetNewTabKeyForWindow(hRootWnd);
-    if (!newTabKey) return;
+    ShortcutInfo shortcut = GetShortcutForWindow(hRootWnd);
+    if (!shortcut.vk) return; // Unsupported app or disabled in settings
+    
     if (!IsEmptyTabStripAtPoint(pt, hRootWnd)) return;
     
     HWND hForeground = GetForegroundWindow();
@@ -345,7 +404,7 @@ void HandleMiddleClick(POINT pt) {
         }
     }
     
-    SendCtrlKey(newTabKey);
+    SendCtrlKey(shortcut.vk, shortcut.shift);
 }
 
 ////////////////////////////////////////////////////////////
@@ -445,6 +504,8 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
 // Windhawk Tool mod callbacks
 
 BOOL WhTool_ModInit() {
+    LoadSettings();
+
     // Initialize and start the UI Automation thread
     HANDLE hWorkerReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!hWorkerReady) {
@@ -484,6 +545,7 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
+    LoadSettings();
 }
 
 void WhTool_ModUninit() {
