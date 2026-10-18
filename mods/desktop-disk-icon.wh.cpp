@@ -66,9 +66,10 @@ brings the desktop icons in line with the devices that are currently attached.
   tray safe-removal function before unplugging.
 - Unplugging a device deletes the corresponding item; disabling or uninstalling the mod deletes
   every item created by it.
-- The registry keys are **volatile** (`REG_OPTION_VOLATILE`): they only exist in memory, are
-  never written to disk, and disappear on restart even after a crash. If the mod is terminated
-  forcefully, the leftover in-memory keys are removed on the next start.
+- **Nothing is written to the system registry.** The item definitions live in a private hive
+  (`RegLoadAppKey`) inside the mod's storage, and five registry read hooks redirect Explorer's
+  reads of `Desktop\NameSpace` and `Software\Classes\CLSID` to that hive. The items therefore exist
+  only inside Explorer and vanish as soon as the mod is unloaded.
 - The mod only acts in the Explorer process that owns the desktop window; other
   `explorer.exe` instances (folder windows in a separate process, `explorer.exe /select,` and
   similar short-lived processes) are skipped, so they never touch the shared registry keys.
@@ -112,8 +113,9 @@ brings the desktop icons in line with the devices that are currently attached.
 - 便携设备（MTP/PTP 及手机）不显示，因为它们不是卷。
 - 拔出设备时直接移除图标，不提供弹出操作；请沿用系统托盘中的安全删除功能。
 - 拔出设备时删除对应项；禁用或卸载模组时删除全部由本模组创建的项目。
-- 注册表项是**易失性键**（`REG_OPTION_VOLATILE`）：只存在于内存中，永不写入磁盘；
-  即使异常终止，重启后也会自然消失。被强制终止时残留的内存键会在下次启动时清除。
+- **不写系统注册表。** 项的定义放在模组存储目录下的私有 hive 中（`RegLoadAppKey`），
+  并用 5 个注册表读取 hook 把资源管理器对 `Desktop\NameSpace` 与 `Software\Classes\CLSID`
+  的读取重定向到该 hive。因此这些项只存在于资源管理器内部，模组卸载后立即消失。
 - 模组只在拥有桌面窗口的资源管理器进程中工作；其他 `explorer.exe` 实例（“在单独进程中打开
   文件夹窗口”、`explorer.exe /select,` 等短命进程）会被跳过，不会改动共享的注册表项。
 - 更新模组即时生效，无需重启资源管理器（项本身由系统实现）。
@@ -412,7 +414,6 @@ void NotifyShell(LONG event, PCWSTR path) {
 
 // CLSID 模板：最后一段前 10 位固定，后 2 位编码盘符序号，便于扫描清理自己的残留。
 constexpr PCWSTR kNamespaceClsidPrefix = L"{D3F0A1B2-C3D4-4E5F-8A9B-0C1D2E3F4A";
-constexpr PCWSTR kValueTargetPath = L"TargetFolderPath";
 
 // shell 自带的委托文件夹（Delegated Folder）：把命名空间项交给系统实现，
 // 指向一个真实的文件系统目录，无需模组提供 COM 服务器。
@@ -452,56 +453,76 @@ int DriveIndexFromNamespaceClsid(const std::wstring& clsid) {
     return (int)value;
 }
 
-bool ReadRegistryString(HKEY root,
-                        const std::wstring& subKey,
-                        PCWSTR valueName,
-                        std::wstring* out) {
-    HKEY key = nullptr;
-    if (RegOpenKeyExW(root, subKey.c_str(), 0, KEY_READ, &key) !=
-        ERROR_SUCCESS) {
+// ---------------------------------------------------------------------------
+// 私有 hive：项的定义不再写进系统注册表
+//
+// 定义放在模组存储目录下的 <用户>-shell.hiv（RegLoadAppKeyW 加载），只在内存里映射，
+// 不写 HKCU。再用 5 个注册表读取 hook 把 explorer 对这些路径的读取重定向到 hive：
+//   Software\Classes\CLSID\{…}            -> hive Classes\CLSID\{…}
+//   …\Desktop\NameSpace\{…}               -> hive NameSpaceNodes\{…}
+//   …\Desktop\NameSpace（容器本身）        -> 真实键 + 追加 hive 中的项
+// 因此这些项只对资源管理器可见，且模组卸载后立即消失。
+// ---------------------------------------------------------------------------
+
+HKEY g_hive = nullptr;
+std::set<HKEY> g_nameSpaceHandles;
+std::mutex g_nameSpaceHandlesMutex;
+
+constexpr PCWSTR kHiveClassesPrefix = L"Classes\\CLSID\\";
+constexpr PCWSTR kHiveNodesKey = L"NameSpaceNodes";
+constexpr PCWSTR kHiveNodesPrefix = L"NameSpaceNodes\\";
+constexpr PCWSTR kNameSpaceRel =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace";
+constexpr PCWSTR kClassesRel = L"Software\\Classes\\CLSID\\";
+
+bool OpenHive() {
+    WCHAR storage[MAX_PATH] = {};
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) {
+        Wh_Log(L"Wh_GetModStoragePath failed");
         return false;
     }
-    WCHAR buffer[512] = {};
-    DWORD size = sizeof(buffer);
-    DWORD type = 0;
-    LSTATUS status = RegQueryValueExW(key, valueName, nullptr, &type,
-                                      (LPBYTE)buffer, &size);
-    RegCloseKey(key);
+    SHCreateDirectoryExW(nullptr, storage, nullptr);
+    WCHAR user[256] = {};
+    DWORD userLength = ARRAYSIZE(user);
+    if (!GetUserNameW(user, &userLength)) {
+        Wh_Log(L"GetUserNameW failed: %u", GetLastError());
+        return false;
+    }
+    std::wstring file = std::wstring(storage) + L"\\" + user + L"-shell.hiv";
+    LSTATUS status = RegLoadAppKeyW(file.c_str(), &g_hive, KEY_ALL_ACCESS, 0, 0);
     if (status != ERROR_SUCCESS) {
+        Wh_Log(L"RegLoadAppKeyW failed: %d", status);
+        g_hive = nullptr;
         return false;
     }
-    *out = buffer;
     return true;
 }
 
-// 全部写入都用 REG_OPTION_VOLATILE（易失性键）：这些键只存在于内存中，
-// 永不写入磁盘。模组卸载时主动删除，异常终止也会在重启后自然消失，
-// 因此不会在系统注册表里留下任何持久残留。
-constexpr DWORD kVolatileOptions = REG_OPTION_VOLATILE;
-
-bool SetRegistryString(HKEY root,
-                       const std::wstring& subKey,
-                       PCWSTR valueName,
-                       const std::wstring& value) {
+bool HiveSetString(const std::wstring& subKey, PCWSTR valueName, PCWSTR value) {
+    if (!g_hive) {
+        return false;
+    }
     HKEY key = nullptr;
-    if (RegCreateKeyExW(root, subKey.c_str(), 0, nullptr, kVolatileOptions,
-                        KEY_WRITE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+    if (RegCreateKeyExW(g_hive, subKey.c_str(), 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &key,
+                        nullptr) != ERROR_SUCCESS) {
         return false;
     }
     LSTATUS status = RegSetValueExW(
-        key, valueName, 0, REG_SZ, (const BYTE*)value.c_str(),
-        (DWORD)((value.size() + 1) * sizeof(WCHAR)));
+        key, valueName, 0, REG_SZ, (const BYTE*)value,
+        (DWORD)((wcslen(value) + 1) * sizeof(WCHAR)));
     RegCloseKey(key);
     return status == ERROR_SUCCESS;
 }
 
-bool SetRegistryDword(HKEY root,
-                      const std::wstring& subKey,
-                      PCWSTR valueName,
-                      DWORD value) {
+bool HiveSetDword(const std::wstring& subKey, PCWSTR valueName, DWORD value) {
+    if (!g_hive) {
+        return false;
+    }
     HKEY key = nullptr;
-    if (RegCreateKeyExW(root, subKey.c_str(), 0, nullptr, kVolatileOptions,
-                        KEY_WRITE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+    if (RegCreateKeyExW(g_hive, subKey.c_str(), 0, nullptr,
+                        REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &key,
+                        nullptr) != ERROR_SUCCESS) {
         return false;
     }
     LSTATUS status =
@@ -511,16 +532,48 @@ bool SetRegistryDword(HKEY root,
     return status == ERROR_SUCCESS;
 }
 
-// 资源管理器把“该 CLSID 实现了 IShellFolder”记为 Cached 键下的**值**，
-// 名字形如 "{CLSID} {IID} 0xFFFF"，而不是子键。因此必须按名字前缀枚举删除。
+bool HiveReadString(const std::wstring& subKey,
+                    PCWSTR valueName,
+                    std::wstring* out) {
+    if (!g_hive) {
+        return false;
+    }
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(g_hive, subKey.c_str(), 0, KEY_READ, &key) !=
+        ERROR_SUCCESS) {
+        return false;
+    }
+    WCHAR buffer[1024] = {};
+    DWORD size = sizeof(buffer) - sizeof(WCHAR);
+    DWORD type = 0;
+    LSTATUS status =
+        RegQueryValueExW(key, valueName, nullptr, &type, (BYTE*)buffer, &size);
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ)) {
+        return false;
+    }
+    *out = buffer;
+    return true;
+}
+
+void DeleteRegistryTree(HKEY root, const std::wstring& subKey) {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(root, subKey.c_str(), 0, KEY_READ | KEY_WRITE, &key) ==
+        ERROR_SUCCESS) {
+        RegDeleteTreeW(key, nullptr);
+        RegCloseKey(key);
+    }
+    RegDeleteKeyW(root, subKey.c_str());
+}
+
+// shell 会在 Shell Extensions\Cached 下按 CLSID 记录书签（值名形如
+// "{CLSID} {IID} 0xFFFF"）。旧版本曾写入过真实项，这里做一次性迁移清理。
 void RemoveCachedShellExtensions() {
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kShellExtCachedKey, 0,
                       KEY_READ | KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
         return;
     }
-    // 本模组的所有 CLSID 共用同一个前缀，因此一次扫描即可全部匹配，
-    // 不必按盘符逐个扫（Cached 下常有数百个值）。
     const size_t prefixLength = wcslen(kShellExtCachedPrefix);
     std::vector<std::wstring> stale;
     for (DWORD index = 0;; index++) {
@@ -535,78 +588,304 @@ void RemoveCachedShellExtensions() {
         }
     }
     for (const auto& name : stale) {
-        Wh_Log(L"Cached shell extension removed: %s", name.c_str());
         RegDeleteValueW(key, name.c_str());
     }
     RegCloseKey(key);
 }
 
-// RegCreateKeyExW 会用同样的选项创建路径上缺失的父键。若父键被建成易失性键，
-// 其他程序（OneDrive、网盘等）就无法在其下创建普通键（ERROR_CHILD_MUST_BE_VOLATILE）。
-// 因此先确保父键以普通键存在，再在其下创建本模组的易失性 {CLSID} 键。
-constexpr PCWSTR kParentKeys[] = {
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace",
-    L"Software\\Classes\\CLSID",
-};
-// 与 kParentKeys 一一对应：记录该父键是否由本模组创建（Wh_*Value 跨重启保存）。
-constexpr PCWSTR kParentKeyFlags[] = {L"createdNameSpaceParent",
-                                      L"createdClsidParent"};
+// 清掉旧版本可能留在真实 HKCU 里的持久/易失项，避免与 hook 提供的项重复。
+void RemoveLegacyRegistryItems() {
+    for (int index = 0; index < 26; index++) {
+        std::wstring clsid = NamespaceClsidForDriveIndex(index);
+        DeleteRegistryTree(HKEY_CURRENT_USER, kNamespaceNameSpaceKey + clsid);
+        DeleteRegistryTree(HKEY_CURRENT_USER,
+                           L"Software\\Classes\\CLSID\\" + clsid);
+    }
+    RemoveCachedShellExtensions();
+}
 
-void EnsureRegularParentKeys() {
-    // RegCreateKeyExW 会用同样的选项创建路径上缺失的父键。若父键被建成易失性键，
-    // 其他程序（OneDrive、网盘等）就无法在其下创建普通键（ERROR_CHILD_MUST_BE_VOLATILE）。
-    // 因此先确保父键以普通键存在，并记住“是本次创建的”，以便卸载时清掉空键。
-    for (size_t i = 0; i < ARRAYSIZE(kParentKeys); i++) {
-        HKEY key = nullptr;
-        DWORD disposition = 0;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, kParentKeys[i], 0, nullptr,
-                            REG_OPTION_NON_VOLATILE, KEY_CREATE_SUB_KEY, nullptr,
-                            &key, &disposition) == ERROR_SUCCESS) {
-            RegCloseKey(key);
-            if (disposition == REG_CREATED_NEW_KEY) {
-                Wh_Log(L"Created parent key: %s", kParentKeys[i]);
-                Wh_SetIntValue(kParentKeyFlags[i], 1);
-            }
-        }
+// ---- 注册表读取 hook -------------------------------------------------------
+
+using RegOpenKeyExW_t = LSTATUS(WINAPI*)(HKEY, LPCWSTR, DWORD, REGSAM, PHKEY);
+using RegEnumKeyExW_t = LSTATUS(WINAPI*)(HKEY,
+                                        DWORD,
+                                        LPWSTR,
+                                        LPDWORD,
+                                        LPDWORD,
+                                        LPWSTR,
+                                        LPDWORD,
+                                        PFILETIME);
+using RegQueryInfoKeyW_t = LSTATUS(WINAPI*)(HKEY,
+                                            LPWSTR,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            LPDWORD,
+                                            PFILETIME);
+using RegCloseKey_t = LSTATUS(WINAPI*)(HKEY);
+
+RegOpenKeyExW_t RegOpenKeyExW_Original;
+RegEnumKeyExW_t RegEnumKeyExW_Original;
+RegQueryInfoKeyW_t RegQueryInfoKeyW_Original;
+RegCloseKey_t RegCloseKey_Original;
+
+bool StartsWithNoCase(const std::wstring& value, PCWSTR prefix) {
+    size_t length = wcslen(prefix);
+    return value.size() >= length &&
+           _wcsnicmp(value.c_str(), prefix, length) == 0;
+}
+
+// 若字符串以本模组的 CLSID 开头，返回其长度（含右花括号），否则返回 0。
+size_t OurClsidLength(const std::wstring& text) {
+    const size_t prefixLength = wcslen(kNamespaceClsidPrefix);
+    if (text.size() < prefixLength + 3) {
+        return 0;
+    }
+    if (_wcsnicmp(text.c_str(), kNamespaceClsidPrefix, prefixLength) != 0) {
+        return 0;
+    }
+    if (text[prefixLength + 2] != L'}') {
+        return 0;
+    }
+    return prefixLength + 3;
+}
+
+bool IsNameSpaceHandle(HKEY key) {
+    std::lock_guard<std::mutex> lock(g_nameSpaceHandlesMutex);
+    return g_nameSpaceHandles.contains(key);
+}
+
+void TrackNameSpaceHandle(HKEY key, bool track) {
+    std::lock_guard<std::mutex> lock(g_nameSpaceHandlesMutex);
+    if (track) {
+        g_nameSpaceHandles.insert(key);
+    } else {
+        g_nameSpaceHandles.erase(key);
     }
 }
 
-// 卸载时清掉“由本模组创建、且如今已空”的父键，避免留下永久空键。
-void RemoveCreatedParentKeysIfEmpty() {
-    for (size_t i = 0; i < ARRAYSIZE(kParentKeys); i++) {
-        if (!Wh_GetIntValue(kParentKeyFlags[i], 0)) {
-            continue;
-        }
-        HKEY key = nullptr;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, kParentKeys[i], 0, KEY_READ, &key) ==
-            ERROR_SUCCESS) {
-            DWORD subKeys = 0;
-            DWORD values = 0;
-            LSTATUS status =
-                RegQueryInfoKeyW(key, nullptr, nullptr, nullptr, &subKeys,
-                                 nullptr, nullptr, &values, nullptr, nullptr,
-                                 nullptr, nullptr);
-            RegCloseKey(key);
-            if (status == ERROR_SUCCESS && subKeys == 0 && values == 0) {
-                if (RegDeleteKeyW(HKEY_CURRENT_USER, kParentKeys[i]) ==
-                    ERROR_SUCCESS) {
-                    Wh_Log(L"Removed empty parent key: %s", kParentKeys[i]);
-                }
-            }
-        }
-        Wh_SetIntValue(kParentKeyFlags[i], 0);
+// 把对真实注册表的读取路径映射到 hive 里的路径。
+bool MapToHive(HKEY hKey, const std::wstring& subKey, std::wstring& out) {
+    if (!g_hive || subKey.empty()) {
+        return false;
     }
+    // 相对 NameSpace 容器句柄打开：" {CLSID}" 或 "{CLSID}\…"
+    if (IsNameSpaceHandle(hKey)) {
+        if (OurClsidLength(subKey)) {
+            out = std::wstring(kHiveNodesPrefix) + subKey;
+            return true;
+        }
+        return false;
+    }
+    if (StartsWithNoCase(subKey, kNameSpaceRel)) {
+        std::wstring rest = subKey.substr(wcslen(kNameSpaceRel));
+        if (!rest.empty() && rest[0] == L'\\') {
+            rest.erase(0, 1);
+        }
+        if (OurClsidLength(rest)) {
+            out = std::wstring(kHiveNodesPrefix) + rest;
+            return true;
+        }
+        return false;
+    }
+    if (StartsWithNoCase(subKey, kClassesRel)) {
+        std::wstring rest = subKey.substr(wcslen(kClassesRel));
+        if (OurClsidLength(rest)) {
+            out = std::wstring(kHiveClassesPrefix) + rest;
+            return true;
+        }
+        return false;
+    }
+    // COM 通过 HKCR 激活：HKEY_CLASSES_ROOT\CLSID\{…}
+    if (hKey == HKEY_CLASSES_ROOT && StartsWithNoCase(subKey, L"CLSID\\")) {
+        std::wstring rest = subKey.substr(6);
+        if (OurClsidLength(rest)) {
+            out = std::wstring(kHiveClassesPrefix) + rest;
+            return true;
+        }
+    }
+    return false;
 }
 
-void DeleteRegistryTree(HKEY root, const std::wstring& subKey) {
-    // RegDeleteTreeW 会连同所有子键一起删除。
-    // 之前手写循环：子键下还有子键时 RegDeleteKeyW 会失败，而枚举下标 0 仍返回
-    // 同一个名字，导致无限循环（挂死在 Wh_ModUninit 里）。
-    RegDeleteTreeW(root, subKey.c_str());
+LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey,
+                                  LPCWSTR subKey,
+                                  DWORD options,
+                                  REGSAM samDesired,
+                                  PHKEY result) {
+    if (subKey && result) {
+        std::wstring hivePath;
+        std::wstring sub = subKey;
+        if (MapToHive(hKey, sub, hivePath)) {
+            static int loggedMatches = 0;
+            if (loggedMatches < 10) {
+                loggedMatches++;
+                Wh_Log(L"Mapped %s -> %s", sub.c_str(), hivePath.c_str());
+            }
+            return RegOpenKeyExW_Original(g_hive, hivePath.c_str(), 0,
+                                          samDesired, result);
+        }
+    }
+    LSTATUS status =
+        RegOpenKeyExW_Original(hKey, subKey, options, samDesired, result);
+    if (status == ERROR_SUCCESS && subKey &&
+        (_wcsicmp(subKey, kNameSpaceRel) == 0 ||
+         _wcsicmp(subKey, L"NameSpace") == 0)) {
+        TrackNameSpaceHandle(*result, true);
+    }
+    return status;
 }
 
-// 取磁盘自己的图标位置（形如 "C:\Windows\system32\imageres.dll,-35"），
-// 光盘会拿到 autorun.inf 里指定的图标。
+LSTATUS WINAPI RegEnumKeyExW_Hook(HKEY hKey,
+                                  DWORD index,
+                                  LPWSTR name,
+                                  LPDWORD nameLength,
+                                  LPDWORD reserved,
+                                  LPWSTR className,
+                                  LPDWORD classNameLength,
+                                  PFILETIME lastWriteTime) {
+    LSTATUS status = RegEnumKeyExW_Original(hKey, index, name, nameLength,
+                                            reserved, className,
+                                            classNameLength, lastWriteTime);
+    if (status != ERROR_NO_MORE_ITEMS || !g_hive ||
+        !IsNameSpaceHandle(hKey)) {
+        return status;
+    }
+    DWORD realCount = 0;
+    if (RegQueryInfoKeyW_Original(hKey, nullptr, nullptr, nullptr, &realCount,
+                                  nullptr, nullptr, nullptr, nullptr, nullptr,
+                                  nullptr, nullptr) != ERROR_SUCCESS) {
+        return status;
+    }
+    if (index < realCount) {
+        return status;
+    }
+    HKEY nodes = nullptr;
+    if (RegOpenKeyExW_Original(g_hive, kHiveNodesKey, 0, KEY_READ, &nodes) !=
+        ERROR_SUCCESS) {
+        return status;
+    }
+    status = RegEnumKeyExW_Original(nodes, index - realCount, name, nameLength,
+                                    reserved, className, classNameLength,
+                                    lastWriteTime);
+    RegCloseKey(nodes);
+    return status;
+}
+
+LSTATUS WINAPI RegQueryInfoKeyW_Hook(HKEY hKey,
+                                     LPWSTR className,
+                                     LPDWORD classNameLength,
+                                     LPDWORD reserved,
+                                     LPDWORD subKeys,
+                                     LPDWORD maxSubKeyLength,
+                                     LPDWORD maxClassLength,
+                                     LPDWORD values,
+                                     LPDWORD maxValueNameLength,
+                                     LPDWORD maxValueLength,
+                                     LPDWORD securityDescriptor,
+                                     PFILETIME lastWriteTime) {
+    LSTATUS status = RegQueryInfoKeyW_Original(
+        hKey, className, classNameLength, reserved, subKeys, maxSubKeyLength,
+        maxClassLength, values, maxValueNameLength, maxValueLength,
+        securityDescriptor, lastWriteTime);
+    if (status == ERROR_SUCCESS && subKeys && g_hive &&
+        IsNameSpaceHandle(hKey)) {
+        HKEY nodes = nullptr;
+        if (RegOpenKeyExW_Original(g_hive, kHiveNodesKey, 0, KEY_READ,
+                                   &nodes) == ERROR_SUCCESS) {
+            DWORD ourCount = 0;
+            RegQueryInfoKeyW_Original(nodes, nullptr, nullptr, nullptr,
+                                      &ourCount, nullptr, nullptr, nullptr,
+                                      nullptr, nullptr, nullptr, nullptr);
+            RegCloseKey(nodes);
+            *subKeys += ourCount;
+        }
+    }
+    return status;
+}
+
+using RegGetValueW_t = LSTATUS(WINAPI*)(HKEY,
+                                        LPCWSTR,
+                                        LPCWSTR,
+                                        DWORD,
+                                        LPDWORD,
+                                        PVOID,
+                                        LPDWORD);
+RegGetValueW_t RegGetValueW_Original;
+
+// COM 可能用一次调用读值：RegGetValueW(HKEY_CLASSES_ROOT, L"CLSID\\{…}\\…", …)
+LSTATUS WINAPI RegGetValueW_Hook(HKEY hKey,
+                                 LPCWSTR subKey,
+                                 LPCWSTR value,
+                                 DWORD flags,
+                                 LPDWORD type,
+                                 PVOID data,
+                                 LPDWORD dataSize) {
+    if (subKey && *subKey) {
+        std::wstring hivePath;
+        std::wstring sub = subKey;
+        if (MapToHive(hKey, sub, hivePath)) {
+            return RegGetValueW_Original(g_hive, hivePath.c_str(), value, flags,
+                                         type, data, dataSize);
+        }
+    }
+    return RegGetValueW_Original(hKey, subKey, value, flags, type, data,
+                                 dataSize);
+}
+
+// advapi32 的这些导出只是转发桩，真正的实现在 kernelbase.dll，
+// 因此必须 hook kernelbase 里的函数，hook advapi32 拦不到调用。
+FARPROC KernelBaseFunction(const char* name) {
+    HMODULE module = GetModuleHandleW(L"kernelbase.dll");
+    FARPROC proc = module ? GetProcAddress(module, name) : nullptr;
+    if (!proc) {
+        module = GetModuleHandleW(L"kernel32.dll");
+        if (module) {
+            proc = GetProcAddress(module, name);
+        }
+    }
+    return proc;
+}
+
+template <typename T>
+bool HookKernelBase(const char* name, T hook, T* original) {
+    T target = (T)(void*)KernelBaseFunction(name);
+    if (!target) {
+        Wh_Log(L"Hook target not found");
+        return false;
+    }
+    if (!Wh_SetFunctionHook((void*)target, (void*)hook, (void**)original)) {
+        Wh_Log(L"Wh_SetFunctionHook failed");
+        return false;
+    }
+    return true;
+}
+LSTATUS WINAPI RegCloseKey_Hook(HKEY hKey) {
+    if (IsNameSpaceHandle(hKey)) {
+        TrackNameSpaceHandle(hKey, false);
+    }
+    return RegCloseKey_Original(hKey);
+}
+
+bool InstallHooks() {
+    bool ok = true;
+    ok &= HookKernelBase("RegOpenKeyExW", RegOpenKeyExW_Hook,
+                         &RegOpenKeyExW_Original);
+    ok &= HookKernelBase("RegEnumKeyExW", RegEnumKeyExW_Hook,
+                         &RegEnumKeyExW_Original);
+    ok &= HookKernelBase("RegQueryInfoKeyW", RegQueryInfoKeyW_Hook,
+                         &RegQueryInfoKeyW_Original);
+    ok &= HookKernelBase("RegCloseKey", RegCloseKey_Hook,
+                         &RegCloseKey_Original);
+    ok &= HookKernelBase("RegGetValueW", RegGetValueW_Hook,
+                         &RegGetValueW_Original);
+    Wh_Log(L"Registry hooks installed: %d", ok ? 1 : 0);
+    return ok;
+}
 std::wstring GetDriveIconLocation(PCWSTR root) {
     SHFILEINFOW fileInfo = {};
     if (!SHGetFileInfoW(root, 0, &fileInfo, sizeof(fileInfo),
@@ -625,130 +904,119 @@ std::wstring GetDriveIconLocation(PCWSTR root) {
 // 返回 true 表示注册表有变化（新建或取值不同）——这种变化必须配一次
 // SHChangeNotify(SHCNE_ASSOCCHANGED)，否则桌面不会重新枚举、插拔不生效。
 bool SyncNamespaceItem(const Device& device) {
+    if (!g_hive) {
+        return false;
+    }
     int index = towupper(device.targetPath[0]) - L'A';
     if (index < 0 || index > 25) {
         return false;
     }
 
     std::wstring clsid = NamespaceClsidForDriveIndex(index);
-    std::wstring clsidKey = L"Software\\Classes\\CLSID\\" + clsid;
-    std::wstring namespaceKey = kNamespaceNameSpaceKey + clsid;
+    std::wstring clsidKey = std::wstring(kHiveClassesPrefix) + clsid;
+    std::wstring nodeKey = std::wstring(kHiveNodesPrefix) + clsid;
 
     std::wstring existingName;
     std::wstring existingTarget;
-    bool existed = ReadRegistryString(HKEY_CURRENT_USER, clsidKey,
-                                      kValueDisplayName, &existingName) &&
-                   !existingName.empty();
-    ReadRegistryString(HKEY_CURRENT_USER,
-                       clsidKey + L"\\Instance\\InitPropertyBag",
-                       L"TargetFolderPath", &existingTarget);
+    bool existed =
+        HiveReadString(clsidKey, kValueDisplayName, &existingName) &&
+        !existingName.empty();
+    HiveReadString(clsidKey + L"\\Instance\\InitPropertyBag", L"TargetFolderPath",
+                   &existingTarget);
     bool changed = !existed || existingName != device.name ||
                    existingTarget != device.targetPath;
 
-    SetRegistryString(HKEY_CURRENT_USER, clsidKey, nullptr, device.name);
-    SetRegistryString(HKEY_CURRENT_USER, clsidKey, kValueDisplayName,
-                      device.name);
+    HiveSetString(clsidKey, nullptr, device.name.c_str());
+    HiveSetString(clsidKey, kValueDisplayName, device.name.c_str());
 
-    // 不实现文件夹对象本身，而是让 shell 自带的委托文件夹指向该卷：
+    // 项仍由 shell 自带的委托文件夹实现：
     //   InProcServer32 = shell32.dll
     //   Instance\CLSID = {0E5AAE11-A475-4c5b-AB00-C66DE400274E}
     //   Instance\InitPropertyBag\{Attributes=0x11, TargetFolderPath=<卷根>}
-    // 这样 shell 用的是它自己的文件夹对象，任何进程都不会加载模组代码。
-    SetRegistryString(HKEY_CURRENT_USER, clsidKey + L"\\InProcServer32", nullptr,
-                      L"%SystemRoot%\\system32\\shell32.dll");
-    SetRegistryString(HKEY_CURRENT_USER, clsidKey + L"\\InProcServer32",
-                      L"ThreadingModel", L"Apartment");
-    SetRegistryString(HKEY_CURRENT_USER, clsidKey + L"\\Instance", L"CLSID",
-                      kDelegateFolderClsid);
-    SetRegistryDword(HKEY_CURRENT_USER,
-                     clsidKey + L"\\Instance\\InitPropertyBag", L"Attributes",
-                     0x11);
-    SetRegistryString(HKEY_CURRENT_USER,
-                      clsidKey + L"\\Instance\\InitPropertyBag",
-                      L"TargetFolderPath", device.targetPath);
+    HiveSetString(clsidKey + L"\\InProcServer32", nullptr,
+                  L"%SystemRoot%\\system32\\shell32.dll");
+    HiveSetString(clsidKey + L"\\InProcServer32", L"ThreadingModel",
+                  L"Apartment");
+    HiveSetString(clsidKey + L"\\Instance", L"CLSID", kDelegateFolderClsid);
+    HiveSetDword(clsidKey + L"\\Instance\\InitPropertyBag", L"Attributes", 0x11);
+    HiveSetString(clsidKey + L"\\Instance\\InitPropertyBag", L"TargetFolderPath",
+                  device.targetPath.c_str());
     std::wstring iconLocation = GetDriveIconLocation(device.targetPath.c_str());
     if (!iconLocation.empty()) {
-        SetRegistryString(HKEY_CURRENT_USER, clsidKey + L"\\DefaultIcon", nullptr,
-                          iconLocation);
+        HiveSetString(clsidKey + L"\\DefaultIcon", nullptr,
+                      iconLocation.c_str());
     }
-    SetRegistryDword(HKEY_CURRENT_USER, clsidKey + L"\\ShellFolder",
-                     L"FolderValueFlags", 0x28);
-    SetRegistryDword(HKEY_CURRENT_USER, clsidKey + L"\\ShellFolder",
-                     L"Attributes", 0xF080004D);
-    SetRegistryString(HKEY_CURRENT_USER, namespaceKey, nullptr, device.name);
+    HiveSetDword(clsidKey + L"\\ShellFolder", L"FolderValueFlags", 0x28);
+    HiveSetDword(clsidKey + L"\\ShellFolder", L"Attributes", 0xF080004D);
+    HiveSetString(nodeKey, nullptr, device.name.c_str());
 
     if (changed) {
         Wh_Log(L"Namespace item %s: %s (%s)",
                existed ? L"updated" : L"created", device.name.c_str(),
                clsid.c_str());
-
     }
     return changed;
 }
 
 void RemoveNamespaceItemByIndex(int index) {
+    if (!g_hive) {
+        return;
+    }
     std::wstring clsid = NamespaceClsidForDriveIndex(index);
-    DeleteRegistryTree(HKEY_CURRENT_USER, kNamespaceNameSpaceKey + clsid);
-    DeleteRegistryTree(HKEY_CURRENT_USER, L"Software\\Classes\\CLSID\\" + clsid);
+    RegDeleteTreeW(g_hive, (std::wstring(kHiveClassesPrefix) + clsid).c_str());
+    RegDeleteTreeW(g_hive, (std::wstring(kHiveNodesPrefix) + clsid).c_str());
 }
 
 // 清掉所有不再需要的命名空间项（拔掉的盘、切换样式后的残留、被强杀后的孤儿）。
 bool SweepNamespaceItems(const std::set<int>& presentIndexes) {
-    bool removed = false;
-    HKEY key = nullptr;
-    std::vector<std::wstring> stale;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace",
-                      0, KEY_READ, &key) == ERROR_SUCCESS) {
-        for (DWORD i = 0;; i++) {
-            WCHAR name[128] = {};
-            DWORD nameLength = ARRAYSIZE(name);
-            if (RegEnumKeyExW(key, i, name, &nameLength, nullptr, nullptr,
-                              nullptr, nullptr) != ERROR_SUCCESS) {
-                break;
-            }
-            int index = DriveIndexFromNamespaceClsid(name);
-            if (index >= 0 && !presentIndexes.contains(index)) {
-                stale.push_back(name);
-            }
-        }
-        RegCloseKey(key);
+    if (!g_hive) {
+        return false;
     }
+    bool removed = false;
+    HKEY nodes = nullptr;
+    if (RegOpenKeyExW(g_hive, kHiveNodesKey, 0, KEY_READ, &nodes) !=
+        ERROR_SUCCESS) {
+        return false;
+    }
+    std::vector<std::wstring> stale;
+    for (DWORD index = 0;; index++) {
+        WCHAR name[128] = {};
+        DWORD nameLength = ARRAYSIZE(name);
+        if (RegEnumKeyExW(nodes, index, name, &nameLength, nullptr, nullptr,
+                          nullptr, nullptr) != ERROR_SUCCESS) {
+            break;
+        }
+        int driveIndex = DriveIndexFromNamespaceClsid(name);
+        if (driveIndex >= 0 && !presentIndexes.contains(driveIndex)) {
+            stale.emplace_back(name);
+        }
+    }
+    RegCloseKey(nodes);
     for (const auto& clsid : stale) {
         Wh_Log(L"Namespace item removed: %s", clsid.c_str());
-        DeleteRegistryTree(HKEY_CURRENT_USER, kNamespaceNameSpaceKey + clsid);
-        DeleteRegistryTree(HKEY_CURRENT_USER,
-                           L"Software\\Classes\\CLSID\\" + clsid);
+        RegDeleteTreeW(g_hive, (std::wstring(kHiveClassesPrefix) + clsid).c_str());
+        RegDeleteTreeW(g_hive, (std::wstring(kHiveNodesPrefix) + clsid).c_str());
         removed = true;
-    }
-    if (removed) {
-        RemoveCachedShellExtensions();
     }
     return removed;
 }
 
 bool RemoveAllNamespaceItems() {
+    if (!g_hive) {
+        return false;
+    }
     bool removed = false;
-    RemoveCachedShellExtensions();
     for (int index = 0; index < 26; index++) {
         std::wstring clsid = NamespaceClsidForDriveIndex(index);
-        // 即使条目本身已经不在了，也要清掉 shell 记录在该 CLSID 下的缓存书签。
-        std::wstring name;
-        if (ReadRegistryString(HKEY_CURRENT_USER,
-                               kNamespaceNameSpaceKey + clsid, nullptr, &name)) {
-            RemoveNamespaceItemByIndex(index);
-            removed = true;
-        } else {
-            // 可能只剩 CLSID 半截，一并清掉
-            std::wstring clsidKey = L"Software\\Classes\\CLSID\\" + clsid;
-            std::wstring target;
-            if (ReadRegistryString(
-                  HKEY_CURRENT_USER, clsidKey + L"\\Instance\\InitPropertyBag",
-                  kValueTargetPath, &target)) {
-                RemoveNamespaceItemByIndex(index);
-                removed = true;
-            }
+        HKEY key = nullptr;
+        if (RegOpenKeyExW(g_hive,
+                          (std::wstring(kHiveNodesPrefix) + clsid).c_str(), 0,
+                          KEY_READ, &key) != ERROR_SUCCESS) {
+            continue;
         }
+        RegCloseKey(key);
+        RemoveNamespaceItemByIndex(index);
+        removed = true;
     }
     return removed;
 }
@@ -772,8 +1040,6 @@ void Reconcile() {
     DWORD reconcileStart = GetTickCount();
 
     Settings settings = GetSettings();
-
-    EnsureRegularParentKeys();
 
     std::vector<Device> devices;
     AddDriveDevices(settings, devices);
@@ -1047,8 +1313,19 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    // 旧版本把键写在真实注册表里（持久）。这里先清一遍，随后同步会以易失性键
-    // 重新创建，保证不会同时存在持久键与易失键。
+    // 私有 hive：项的定义只存在于模组存储目录，不写系统注册表。
+    if (!OpenHive()) {
+        Wh_Log(L"Private hive is not available");
+        return FALSE;
+    }
+    if (!InstallHooks()) {
+        Wh_Log(L"Registry hooks failed");
+        return FALSE;
+    }
+
+    // 一次性迁移清理：旧版本写进真实 HKCU 的项与 Shell Extensions\Cached 书签。
+    RemoveLegacyRegistryItems();
+
     RemoveAllNamespaceItems();
 
     g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, &g_threadId);
@@ -1103,8 +1380,11 @@ void Wh_ModUninit() {
         g_reconcileEvent = nullptr;
     }
 
+    // 关闭 hive 句柄（文件留在模组存储目录，下次启用时复用）。
+    if (g_hive) {
+        RegCloseKey(g_hive);
+        g_hive = nullptr;
+    }
 
 
-    // 本模组创建的空父键一并清掉。
-    RemoveCreatedParentKeysIfEmpty();
 }
