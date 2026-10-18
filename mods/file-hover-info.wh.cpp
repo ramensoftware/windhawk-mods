@@ -3,7 +3,7 @@
 // @name            File Hover Info
 // @description     A themeable info card with size, dates and more when you hover files on the desktop or in File Explorer
 // @version         1.1.0
-// @author          haven80
+// @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -lshell32 -ld2d1 -ldwrite -ldwmapi -lshlwapi -lgdi32 -luser32 -loleacc
