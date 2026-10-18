@@ -1,3 +1,10 @@
+## 2.0 ([Oct 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f2a007255a1fa993638d0b9f7130f3d1fafea1c9/mods/native-titlebars-uwp-lite.wh.cpp))
+
+* Use another method
+* Remove black lines under titlebars
+* Improve compatibility with Windows 11 23H2 and Windows 10
+* Improve compatibility with themed setups
+
 ## 1.4.0 ([Oct 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a4c44e19cf76a635b3ecddac529fcdf1e83615ea/mods/native-titlebars-uwp-lite.wh.cpp))
 
 * Improve compatibility with 26H2

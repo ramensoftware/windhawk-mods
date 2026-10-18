@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-18T17:02:41.000Z</updated>
+    <updated>2026-10-18T19:00:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars 2.0]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#f2a007255a1fa993638d0b9f7130f3d1fafea1c9</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-10-18T19:00:09.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Use another method</li>
+<li>Remove black lines under titlebars</li>
+<li>Improve compatibility with Windows 11 23H2 and Windows 10</li>
+<li>Improve compatibility with themed setups</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Legacy Clock Square Cutout & Animated Custom Image 3.2.1]]></title>
         <id>https://windhawk.net/mods/remove-clock-cutout-background#47a5170a682da083cfc0bd7cbb10ac410ef79cf4</id>
@@ -729,20 +745,6 @@ the focused window is.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tray Agenda 1.0.1]]></title>
-        <id>https://windhawk.net/mods/tray-agenda#3fed8cb0bdebcf06b4806bf78801069cb60e581e</id>
-        <link href="https://windhawk.net/mods/tray-agenda"/>
-        <updated>2026-10-17T13:04:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the widget and popup text color when the Windows mode (taskbar) differs from the app mode: it now follows the taskbar's <code>SystemUsesLightTheme</code> setting, so the text stays readable on a dark taskbar with light apps and the other way around.</li>
-<li>Added a "Contributing and issues" section to the mod description with the repository link.</li>
-</ul>]]></content>
-        <author>
-            <name>Rubens Nascimento</name>
-            <uri>https://github.com/chambber</uri>
         </author>
     </entry>
 </feed>

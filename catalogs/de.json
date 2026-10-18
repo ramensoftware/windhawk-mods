@@ -9999,7 +9999,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0.9105129923958487,
-        "updated": 1792155908000,
+        "updated": 1792350009000,
         "users": 450
       },
       "metadata": {
@@ -10011,11 +10011,10 @@
         "description": "Enables native titlebars in UWP apps",
         "github": "https://github.com/Anixx",
         "include": [
-          "ApplicationFrameHost.exe",
-          "explorer.exe"
+          "ApplicationFrameHost.exe"
         ],
-        "name": "Remove UWP titlebars Lite",
-        "version": "1.4.0"
+        "name": "Remove UWP titlebars",
+        "version": "2.0"
       }
     },
     "neiz-supersmile-audio-visualizer": {
@@ -18329,7 +18328,7 @@
         "rating": 9,
         "ratingBreakdown": [7, 9, 17, 17, 135],
         "ratingUsers": 185,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 1.5675105633183009,
         "updated": 1792148509000,
         "users": 3283

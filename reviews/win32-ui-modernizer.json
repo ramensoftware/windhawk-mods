@@ -1,0 +1,14 @@
+{
+  "modId": "win32-ui-modernizer",
+  "reviews": [
+    {
+      "authorName": "vis",
+      "content": "Wizards and in app things get impossible to read (dark text on dark background). Happens with most apps",
+      "id": 65,
+      "modVersion": "1.0.4",
+      "parentId": null,
+      "timestamp": 1792342368,
+      "votes": 0
+    }
+  ]
+}
