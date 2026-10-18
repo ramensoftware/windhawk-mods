@@ -32,7 +32,8 @@ top, left or right. A window is corrected when:
 
 Windows that are already open are checked too: when the mod starts, and again
 whenever the taskbar or the display layout changes (for example when you move
-or resize the taskbar, or change resolution or monitors).
+or resize the taskbar, or change resolution or monitors). An auto-hide taskbar
+sliding in and out doesn't count, so it never shuffles your windows around.
 
 If a window fits, it is moved just far enough to clear the taskbar. If it is too
 big to fit between the taskbar and the opposite screen edge, it is shrunk to
@@ -550,7 +551,90 @@ static bool IsTaskbarWindow(HWND hWnd) {
            wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
 }
 
+// Where a fully shown taskbar is docked. Auto-hide slides the taskbar in and
+// out without changing any of this, so only a real move or resize changes it.
+struct TaskbarDock {
+    HMONITOR monitor;
+    int edge;  // ABE_LEFT, ABE_TOP, ABE_RIGHT or ABE_BOTTOM
+    int thickness;
+    int length;
+
+    bool operator==(const TaskbarDock& o) const {
+        return monitor == o.monitor && edge == o.edge &&
+               thickness == o.thickness && length == o.length;
+    }
+};
+
+static std::unordered_map<HWND, TaskbarDock> g_taskbarDocks;
+
+// Returns false while the taskbar is partly off-screen (hidden or sliding).
+static bool GetTaskbarDock(HWND taskbar, TaskbarDock* dock) {
+    RECT t;
+    if (!IsWindowVisible(taskbar) || !GetWindowRect(taskbar, &t) ||
+        t.right <= t.left || t.bottom <= t.top) {
+        return false;
+    }
+    HMONITOR monitor = MonitorFromRect(&t, MONITOR_DEFAULTTONULL);
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    if (!monitor || !GetMonitorInfoW(monitor, &mi)) {
+        return false;
+    }
+    const RECT& m = mi.rcMonitor;
+    if (t.left < m.left || t.top < m.top || t.right > m.right ||
+        t.bottom > m.bottom) {
+        return false;
+    }
+
+    const int width = t.right - t.left;
+    const int height = t.bottom - t.top;
+    dock->monitor = monitor;
+    if (width > height) {
+        dock->edge = (t.top + t.bottom > m.top + m.bottom) ? ABE_BOTTOM : ABE_TOP;
+        dock->thickness = height;
+        dock->length = width;
+    } else {
+        dock->edge = (t.left + t.right > m.left + m.right) ? ABE_RIGHT : ABE_LEFT;
+        dock->thickness = width;
+        dock->length = height;
+    }
+    return true;
+}
+
+// Called when a taskbar moves or shows. Returns true if it was docked
+// somewhere else or resized since it was last fully shown.
+static bool TaskbarDockChanged(HWND taskbar) {
+    TaskbarDock dock;
+    if (!GetTaskbarDock(taskbar, &dock)) {
+        return false;
+    }
+    auto it = g_taskbarDocks.find(taskbar);
+    if (it == g_taskbarDocks.end()) {
+        // First time seen fully shown: just remember it. A new taskbar after
+        // an Explorer restart is handled by TaskbarCreated.
+        g_taskbarDocks.emplace(taskbar, dock);
+        return false;
+    }
+    if (it->second == dock) {
+        return false;
+    }
+    it->second = dock;
+    return true;
+}
+
+static void RecordTaskbarDocks() {
+    if (HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        TaskbarDockChanged(primary);
+    }
+    for (HWND secondary = nullptr;
+         (secondary = FindWindowExW(nullptr, secondary,
+                                    L"Shell_SecondaryTrayWnd", nullptr));) {
+        TaskbarDockChanged(secondary);
+    }
+}
+
 static void ForgetWindow(HWND hWnd) {
+    g_taskbarDocks.erase(hWnd);
     g_history.erase(hWnd);
     g_givenUp.erase(hWnd);
     g_cannotShrink.erase(hWnd);
@@ -607,8 +691,9 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK,
         case EVENT_OBJECT_UNCLOAKED:
             if (IsTaskbarWindow(hWnd)) {
                 // In auto-hide mode, moving or resizing the taskbar doesn't
-                // change the work area, so watch the taskbar itself.
-                if (g_autoHiddenTaskbar) {
+                // change the work area, so watch the taskbar itself. Its
+                // auto-hide slides don't count, only a real move or resize.
+                if (TaskbarDockChanged(hWnd) && g_autoHiddenTaskbar) {
                     ScheduleResweep();
                 }
                 return;
@@ -750,6 +835,8 @@ static DWORD WINAPI WatcherThread(LPVOID) {
 
     SetEvent(g_readyEvent);
 
+    RecordTaskbarDocks();
+
     // Check windows that were already open before the mod started.
     if (g_correctAfterDrag) {
         EnumWindows(SweepProc, 0);
@@ -782,6 +869,7 @@ static DWORD WINAPI WatcherThread(LPVOID) {
     g_givenUp.clear();
     g_cannotShrink.clear();
     g_userPlaced.clear();
+    g_taskbarDocks.clear();
     g_movingWindow = nullptr;
     return 0;
 }
