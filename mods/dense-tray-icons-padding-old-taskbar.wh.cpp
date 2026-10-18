@@ -15,10 +15,10 @@
 
 # Adjustable tray icons padding for Win10 taskbar
 
-This is a port of functionality of [7+ Taskbar Tweaker](https://github.com/m417z/7-Taskbar-Tweaker) by m417z that allows to adjust the padding of the tray icons
+This is a port of functionality of [7+ Taskbar Tweaker](https://github.com/m417z/7-Taskbar-Tweaker) by [m417z](https://github.com/m417z) that allows to adjust the padding of the tray icons
 in classic (Windos 10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
 use the mod [Taskbar tray icon spacing and grid](https://windhawk.net/mods/taskbar-notification-icon-spacing). The version 2.0 of the mod was comprehensively reworked
-by piknockyou.
+by [piknockyou](https://github.com/piknockyou).
 
 ![screenshot](https://i.imgur.com/NjGhXuc.png)
 
