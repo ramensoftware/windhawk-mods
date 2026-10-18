@@ -3667,12 +3667,16 @@ static bool HookWin10(HMODULE tb) {
          (void**)&UnpinnedEvt_orig, (void*)UnpinnedEvt_hook, true},
     };
     if (!WindhawkUtils::HookSymbols(tb, explorerHooks, ARRAYSIZE(explorerHooks))) return false;
-    // TaskIndexHitTest is called with the interface at object + 0x40: only if its code says so
-    const unsigned char* p = (const unsigned char*)pTaskIndexHitTest;
+    // TaskIndexHitTest is called with the interface at object + 0x40: only if its code says so. Checked
+    // on x64 only - the ARM64 build of Windows 10 can't be verified, so the hit test (and with it
+    // dragging a pin to another taskbar) isn't used there.
     bool ok = false;
+#if defined(__x86_64__)
+    const unsigned char* p = (const unsigned char*)pTaskIndexHitTest;
     for (int i = 0; p && i < 32 && Readable(p + i, 4); i++) {
         if (p[i] == 0x48 && p[i + 1] == 0x83 && p[i + 2] == 0xC1 && p[i + 3] == 0xC0) ok = true;  // add rcx,-40h
     }
+#endif
     if (!ok) pTaskIndexHitTest = nullptr;
     return true;
 }
