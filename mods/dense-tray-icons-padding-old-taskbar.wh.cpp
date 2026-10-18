@@ -3,8 +3,8 @@
 // @name            Tray icon spacing for Windows 10 (live + overflow)
 // @description     Adjust the tray icon spacing and the size of the hidden icons popup on the Windows 10 taskbar, applied instantly
 // @version         2.0
-// @author          piknockyou
-// @github          https://github.com/piknockyou
+// @author          Anixx
+// @github          https://github.com/Anixx
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lpsapi
 // @license         MIT
