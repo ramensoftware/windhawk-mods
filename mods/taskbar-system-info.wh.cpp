@@ -7699,8 +7699,10 @@ bool RemoveWidgetCopy(HWND window) {
     bool xamlRemoved = DetachSecondaryWidget(*copy);
     if (!nativeRemoved || !xamlRemoved)
         return false;
-    RemovePropW(window, kCopyProperty);
+    // Remove the registry owner before exposing a propertyless HWND to unload.
+    // Otherwise the engine thread can retire the controller just before delete.
     ForgetCopyWindow(window);
+    RemovePropW(window, kCopyProperty);
     delete copy;
     return true;
 }
@@ -7729,11 +7731,9 @@ LRESULT CALLBACK CopyWindowProc(HWND window,
             if (!RemoveWidgetCopy(window) && !RemoveWidgetCopy(window)) {
                 // Native destruction removes its timer/subclass automatically.
                 copy->timerRegistered = copy->subclassRegistered = false;
+                // Transfer ownership once, before the property disappears.
+                RetireDeadCopyWindow(window);
                 RemovePropW(window, kCopyProperty);
-                std::lock_guard lock(g_copyWindowsMutex);
-                std::erase(g_copyWindows, window);
-                g_copyOwners.erase(window);
-                g_pendingCopyCleanup.push_back({GetCurrentThreadId(), copy});
                 Wh_Log(L"Secondary XAML cleanup deferred to its owner thread");
             }
             RequestWidgetCopySync();
