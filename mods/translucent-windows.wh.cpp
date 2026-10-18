@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.8.2
+// @version         1.8.3
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
