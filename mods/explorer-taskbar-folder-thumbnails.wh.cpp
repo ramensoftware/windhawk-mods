@@ -684,7 +684,6 @@ static std::wstring MakeKey(const std::wstring& path) {
     return std::to_wstring(g_iconSize) + L"|" + NormalizePath(path);
 }
 
-static bool IsValidIcon(HICON icon);
 
 // Requires g_lock.
 static std::set<HICON> IconsInUseLocked() {
@@ -759,19 +758,7 @@ static HICON GetCachedIcon(const std::wstring& path) {
     ReleaseSRWLockExclusive(&g_lock);
 
     if (cached) {
-        if (IsValidIcon(cached)) {
-            return cached;
-        }
-        // Destroyed by someone else. Never hand it out again: drop it, without
-        // destroying it a second time, and rebuild it from the disk copy.
-        Wh_Log(L"cached preview was destroyed, rebuilding | %s", path.c_str());
-        AcquireSRWLockExclusive(&g_lock);
-        auto stale = g_cache.find(key);
-        if (stale != g_cache.end() && stale->second.icon == cached) {
-            g_cache.erase(stale);
-        }
-        g_owned.erase(cached);
-        ReleaseSRWLockExclusive(&g_lock);
+        return cached;
     }
 
     std::vector<DWORD> px;
@@ -920,11 +907,16 @@ static void SetOurIcon(HWND hwnd, HICON icon, const std::wstring& path) {
 
         HICON previous = nullptr;
         if (!SendSetIcon(hwnd, type, icon, &previous)) {
-            if (before && before != icon) {
-                AcquireSRWLockExclusive(&g_lock);
+            AcquireSRWLockExclusive(&g_lock);
+            if (!IsWindow(hwnd)) {
+                // Closed meanwhile: nothing will be delivered, and nothing
+                // would ever clear these entries.
+                g_ourIcons.erase({hwnd, type});
+                g_unconfirmed.erase({hwnd, type});
+            } else if (before && before != icon) {
                 g_unconfirmed.insert({{hwnd, type}, before});
-                ReleaseSRWLockExclusive(&g_lock);
             }
+            ReleaseSRWLockExclusive(&g_lock);
             continue;
         }
 
@@ -1579,11 +1571,13 @@ static void ForgetWindowState(HWND hwnd) {
     g_windows.erase(it);
 }
 
-// True unless the window has been seen in another folder since f was found.
+// True while the window is still known to show f's folder. Every live window
+// has an entry by now (UpdateSync sets it before posting a job, a scan sets
+// it before updating), so a missing one means the window has closed.
 static bool StillShows(const FoundWindow& f) {
     AcquireSRWLockShared(&g_lock);
     auto it = g_currentPath.find(f.hwnd);
-    bool same = it == g_currentPath.end() || it->second == f.path;
+    bool same = it != g_currentPath.end() && it->second == f.path;
     ReleaseSRWLockShared(&g_lock);
     return same;
 }
