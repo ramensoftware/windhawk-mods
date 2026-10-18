@@ -2,7 +2,7 @@
 // @id              taskbar-cat
 // @name            Taskbar Cat
 // @description     An orange pixel-art cat that lives on your Windows 11 taskbar: it wanders, naps, grooms, purrs when you hover, hunts butterflies, plays with yarn and reacts to you.
-// @version         1.0.3
+// @version         1.0.4
 // @author          viraj-rgb
 // @github          https://github.com/viraj-rgb
 // @homepage        https://github.com/viraj-rgb/windhawk-taskbar-cat
@@ -50,7 +50,8 @@ from the right-click menu to toss it a ball of yarn; click the ball to send
 it rolling, right-click it (or the cat) to put it away. Once in a while the cat leaves you a gift (a toy mouse): click
 it to collect it.
 
-When music is playing it sits and bobs along to the beat. Around 8:00 and
+When music is playing it sits and bobs along to the beat (it listens to
+everything your PC plays, so videos and games count too). Around 8:00 and
 19:00 it gets hungry and asks for a treat (right-click, "Give a treat").
 It wears a witch hat in late October, a Santa hat in December, and a party
 hat on New Year's and on its own birthday. The tooltip shows how old it is ("day 2"); set its birthday in the settings.
@@ -122,6 +123,7 @@ auto-hidden taskbar or a fullscreen app.
   $description: The yarn ball from the right-click menu works either way
 - danceToMusic: true
   $name: Dance when music is playing
+  $description: Any sound counts, including videos, calls and games
 - mealtimes: true
   $name: Mealtimes (asks for a treat around 8:00 and 19:00)
 - seasonalHats: true
@@ -3599,6 +3601,7 @@ struct AudioWatcher {
 
 AudioWatcher g_audio;
 constexpr DWORD kAudioPollMs = 40;
+constexpr DWORD kAudioIdleMs = 1000;  // while the meter isn't wanted
 
 AudioMeter* AcquireMeter() {
     IMMDeviceEnumerator* devices = nullptr;
@@ -3638,7 +3641,9 @@ DWORD WINAPI AudioThread(LPVOID) {
     HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     AudioMeter* meter = nullptr;
     ULONGLONG refreshAt = 0;
-    while (WaitForSingleObject(g_audio.stop, kAudioPollMs) == WAIT_TIMEOUT) {
+    DWORD waitMs = kAudioPollMs;
+    while (WaitForSingleObject(g_audio.stop, waitMs) == WAIT_TIMEOUT) {
+        waitMs = g_audio.enabled.load() ? kAudioPollMs : kAudioIdleMs;
         if (!g_audio.enabled.load()) {
             ReleaseMeter(meter);
             refreshAt = 0;
@@ -3956,6 +3961,7 @@ void Tick(CatWindow& c) {
     if (c.locked || !ShouldShow(c, &c.taskbarRect)) {
         SetCatVisible(c, false);
         SetTimerInterval(c, kHiddenIntervalMs);  // also when it started hidden
+        g_audio.enabled = false;                 // no dancing while hidden
         HideToy(c);
         if (c.purring) {
             StopSounds(c);
@@ -4423,7 +4429,6 @@ DWORD WINAPI CatThread(LPVOID) {
     }
     c.state = LoadCat(GetTickCount64());
     LoadLifeEvents(c);
-    StartAudioWatcher();
 
     // Register the classes under the mod's own module, not explorer's.
     HINSTANCE instance = nullptr;
@@ -4450,6 +4455,9 @@ DWORD WINAPI CatThread(LPVOID) {
     }
 
     c.taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
+    // Started only now: from here on every way out of this thread goes
+    // through StopAudioWatcher(), so the audio thread can't outlive the mod.
+    StartAudioWatcher();
     // The taskbar owns the cat's windows, so if explorer recreates the taskbar
     // they go with it. Make new ones for the new taskbar until told to stop.
     while (WaitForSingleObject(g_stopEvent, 0) != WAIT_OBJECT_0) {
