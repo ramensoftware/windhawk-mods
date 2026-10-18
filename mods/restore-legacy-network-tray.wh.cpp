@@ -42,8 +42,12 @@ namespace {
 constexpr wchar_t kDownloadUrl[] =
     L"https://msdl.microsoft.com/download/symbols/pnidui.dll/C506D2E820b000/pnidui.dll";
 
-// Paste the hex string from the "Computed SHA-256: ..." log line here.
-// If left empty, checksum verification is skipped (with a warning in the log).
+// Must be set to the SHA-256 of the exact file at kDownloadUrl, as a
+// 64-character hex string (the mod logs the hash of any file it downloads
+// or finds in storage as "Computed SHA-256: ..."; copy that value here).
+// If this is left empty, verification fails closed: the mod will not load
+// or activate anything. This is intentional, so that emptying the constant
+// by mistake can't silently turn the check off.
 constexpr wchar_t kExpectedSha256Hex[] = L"0f929cf218142a2aab06d31d7fac4db5c419faf153a41c7f24d7c72ef338c76e";
 
 constexpr wchar_t kFileName[] = L"pnidui.dll";
@@ -54,8 +58,20 @@ constexpr CLSID kClsidNetworkTray = {
     0x4148,
     {0x8F, 0xCA, 0xC6, 0x64, 0x32, 0x45, 0x11, 0x3F}};
 
-// Manual GUID constants: this toolchain doesn't support __declspec(uuid(...))
-// / __uuidof, so interface IIDs are declared explicitly instead.
+// IID_IClassFactory already has a declaration (in the SDK headers) and a
+// definition (in uuid.lib, linked via -luuid) available, and
+// __uuidof(IClassFactory) does work fine with this clang/mingw-based
+// toolchain. kIidClassFactory below is a hand-written copy of that same
+// well-known value, used only so the mod doesn't need the extra -luuid link
+// dependency for this one constant.
+//
+// INetworkTrayPrivate, in contrast, is a private interface specific to this
+// mod, so the SDK has no declared IID for it. Attaching one via
+// __declspec(uuid("...")) does not work here: clang accepts the attribute
+// syntax but ignores it ("unknown attribute 'uuid' ignored"), so
+// __uuidof(INetworkTrayPrivate) would not resolve to the right value.
+// kIidNetworkTrayPrivate is therefore a plain constant, passed explicitly
+// wherever the IID is needed.
 
 // {8E282AAE-ACE9-4821-83AD-849C1D08939D}
 constexpr GUID kIidNetworkTrayPrivate = {
@@ -143,13 +159,25 @@ LONG WINAPI RegGetValueHook(HKEY hkey, LPCWSTR subKey, LPCWSTR value,
         if (type) {
             *type = REG_DWORD;
         }
-        if (data && dataSize && *dataSize >= sizeof(DWORD)) {
+
+        if (data && dataSize && *dataSize < sizeof(DWORD)) {
+            *dataSize = sizeof(DWORD);
+            return ERROR_MORE_DATA;
+        }
+
+        if (data) {
             *reinterpret_cast<DWORD*>(data) = 0;
         }
+
         if (dataSize) {
             *dataSize = sizeof(DWORD);
         }
+
         return ERROR_SUCCESS;
+    }
+
+    if (!g_originalRegGetValue) {
+        return ERROR_CALL_NOT_IMPLEMENTED;
     }
 
     return g_originalRegGetValue(hkey, subKey, value, flags, type, data,
@@ -171,6 +199,11 @@ PIMAGE_NT_HEADERS GetNtHeaders(HMODULE module) {
     return nt;
 }
 
+// Writes the original function pointer to *originalFuncOut before switching
+// the IAT slot to newFunc. This ordering matters: callers that pass the
+// address of a global used by the hook itself (e.g. &g_originalRegGetValue)
+// are guaranteed that the global is populated before the hook can possibly
+// be invoked, with no race window in between.
 bool PatchImportByName(HMODULE module, const char* dllName,
                         const char* funcName, void* newFunc,
                         void*** originalSlotOut, void** originalFuncOut) {
@@ -292,7 +325,15 @@ bool EnsureStorageDirectory(const wchar_t* dirPath) {
     return GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
-bool ComputeSha256(const wchar_t* path, BYTE (&hash)[32]) {
+// Hashes the remaining contents of an already-open file handle, starting
+// from the beginning. The handle is not closed by this function.
+bool ComputeSha256Handle(HANDLE file, BYTE (&hash)[32]) {
+    if (SetFilePointer(file, 0, nullptr, FILE_BEGIN) ==
+            INVALID_SET_FILE_POINTER &&
+        GetLastError() != NO_ERROR) {
+        return false;
+    }
+
     BCRYPT_ALG_HANDLE algHandle = nullptr;
     if (BCryptOpenAlgorithmProvider(&algHandle, BCRYPT_SHA256_ALGORITHM,
                                      nullptr, 0) != 0) {
@@ -317,21 +358,15 @@ bool ComputeSha256(const wchar_t* path, BYTE (&hash)[32]) {
         return false;
     }
 
-    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
-                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    bool ok = file != INVALID_HANDLE_VALUE;
-
-    if (ok) {
-        BYTE buffer[64 * 1024];
-        DWORD bytesRead = 0;
-        while (ReadFile(file, buffer, sizeof(buffer), &bytesRead, nullptr) &&
-               bytesRead > 0) {
-            if (BCryptHashData(hashHandle, buffer, bytesRead, 0) != 0) {
-                ok = false;
-                break;
-            }
+    bool ok = true;
+    BYTE buffer[64 * 1024];
+    DWORD bytesRead = 0;
+    while (ReadFile(file, buffer, sizeof(buffer), &bytesRead, nullptr) &&
+           bytesRead > 0) {
+        if (BCryptHashData(hashHandle, buffer, bytesRead, 0) != 0) {
+            ok = false;
+            break;
         }
-        CloseHandle(file);
     }
 
     if (ok && BCryptFinishHash(hashHandle, hash, sizeof(hash), 0) != 0) {
@@ -341,6 +376,18 @@ bool ComputeSha256(const wchar_t* path, BYTE (&hash)[32]) {
     BCryptDestroyHash(hashHandle);
     delete[] hashObject;
     BCryptCloseAlgorithmProvider(algHandle, 0);
+    return ok;
+}
+
+bool ComputeSha256(const wchar_t* path, BYTE (&hash)[32]) {
+    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    bool ok = ComputeSha256Handle(file, hash);
+    CloseHandle(file);
     return ok;
 }
 
@@ -357,6 +404,20 @@ void BytesToHex(const BYTE* bytes, size_t count, wchar_t* out,
     }
 }
 
+bool VerifyChecksumBytes(const BYTE (&hash)[32]) {
+    wchar_t hex[65];
+    BytesToHex(hash, sizeof(hash), hex, ARRAYSIZE(hex));
+    Wh_Log(L"Computed SHA-256: %s", hex);
+
+    if (kExpectedSha256Hex[0] == L'\0') {
+        Wh_Log(L"No expected checksum configured in kExpectedSha256Hex, "
+               L"failing closed");
+        return false;
+    }
+
+    return _wcsicmp(hex, kExpectedSha256Hex) == 0;
+}
+
 bool VerifyChecksum(const wchar_t* path) {
     BYTE hash[32];
     if (!ComputeSha256(path, hash)) {
@@ -364,16 +425,17 @@ bool VerifyChecksum(const wchar_t* path) {
         return false;
     }
 
-    wchar_t hex[65];
-    BytesToHex(hash, sizeof(hash), hex, ARRAYSIZE(hex));
-    Wh_Log(L"Computed SHA-256: %s", hex);
+    return VerifyChecksumBytes(hash);
+}
 
-    if (kExpectedSha256Hex[0] == L'\0') {
-        Wh_Log(L"Warning: no expected checksum configured, skipping verification");
-        return true;
+bool VerifyChecksumHandle(HANDLE file) {
+    BYTE hash[32];
+    if (!ComputeSha256Handle(file, hash)) {
+        Wh_Log(L"Failed to compute SHA-256");
+        return false;
     }
 
-    return _wcsicmp(hex, kExpectedSha256Hex) == 0;
+    return VerifyChecksumBytes(hash);
 }
 
 bool DownloadFile(const wchar_t* url, const wchar_t* destPath) {
@@ -529,6 +591,37 @@ bool EnsurePniduiFile(const wchar_t* filePath) {
     return false;
 }
 
+// Opens the file with a sharing mode that denies write access to other
+// processes/threads, and keeps that handle open across both the checksum
+// verification and the LoadLibraryW call, only releasing it afterwards.
+// This closes the TOCTOU window between "the file on disk matches
+// kExpectedSha256Hex" and "this is the file that actually got mapped into
+// the process": nothing can replace or modify the file out from under us
+// while this handle stays open.
+HMODULE PinAndLoadLibrary(const wchar_t* path) {
+    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Failed to open %s: %u", path, GetLastError());
+        return nullptr;
+    }
+
+    bool verified = VerifyChecksumHandle(file);
+
+    HMODULE module = nullptr;
+    if (verified) {
+        module = LoadLibraryW(path);
+        if (!module) {
+            Wh_Log(L"LoadLibraryW failed: %u", GetLastError());
+        }
+    } else {
+        Wh_Log(L"Refusing to load %s: checksum verification failed", path);
+    }
+
+    CloseHandle(file);
+    return module;
+}
+
 bool PreparePnidui() {
     wchar_t dirPath[MAX_PATH];
     wchar_t filePath[MAX_PATH];
@@ -537,34 +630,33 @@ bool PreparePnidui() {
         return false;
     }
 
-    if (!EnsureStorageDirectory(dirPath)) {
-        Wh_Log(L"Failed to create storage directory: %u", GetLastError());
-        return false;
-    }
-
-    if (!EnsurePniduiFile(filePath)) {
-        Wh_Log(L"Failed to ensure pnidui.dll is available");
-        return false;
-    }
-
+    // GetModuleHandleW with a bare file name matches a module already
+    // loaded in this process regardless of which folder it came from, so
+    // this also catches another mod's private copy or ExplorerPatcher's
+    // bundled DLL. Do this check before touching storage or the network, so
+    // the mod doesn't download a file it's then going to refuse to load.
     g_pnidui = GetModuleHandleW(filePath);
     if (!g_pnidui) {
-        // Catches any pnidui.dll already loaded in this process, regardless
-        // of the folder it was loaded from (e.g. another mod's private copy,
-        // or ExplorerPatcher's bundled DLL). GetModuleHandleW matches by base
-        // file name when no path is given, so this check works even if that
-        // copy sits in a different directory than ours. Note that this only
-        // catches DLLs already loaded into *this* process; the taskbar
-        // ownership check above is what prevents this mod from running at
-        // all in processes that don't own the real taskbar.
         HMODULE anyPnidui = GetModuleHandleW(kFileName);
         if (anyPnidui) {
             Wh_Log(L"A pnidui.dll is already loaded from another location, "
                    L"not activating a second copy");
             return false;
         }
+    }
 
-        g_pnidui = LoadLibraryW(filePath);
+    if (!g_pnidui) {
+        if (!EnsureStorageDirectory(dirPath)) {
+            Wh_Log(L"Failed to create storage directory: %u", GetLastError());
+            return false;
+        }
+
+        if (!EnsurePniduiFile(filePath)) {
+            Wh_Log(L"Failed to ensure pnidui.dll is available");
+            return false;
+        }
+
+        g_pnidui = PinAndLoadLibrary(filePath);
     }
 
     if (!g_pnidui) {
@@ -584,12 +676,12 @@ bool PreparePnidui() {
         "api-ms-win-core-registry-l1-1-0.dll",
     };
 
-    void* original = nullptr;
+    g_originalRegGetValue = nullptr;
     for (const char* moduleName : kRegGetValueModules) {
-        if (PatchImportByName(g_pnidui, moduleName, "RegGetValueW",
-                               reinterpret_cast<void*>(RegGetValueHook),
-                               &g_importSlot, &original)) {
-            g_originalRegGetValue = reinterpret_cast<RegGetValueWFn>(original);
+        if (PatchImportByName(
+                g_pnidui, moduleName, "RegGetValueW",
+                reinterpret_cast<void*>(RegGetValueHook), &g_importSlot,
+                reinterpret_cast<void**>(&g_originalRegGetValue))) {
             break;
         }
     }
