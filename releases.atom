@@ -2,12 +2,114 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-18T10:02:29.000Z</updated>
+    <updated>2026-10-18T13:02:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Caption Buttons Customizer 1.0]]></title>
+        <id>https://windhawk.net/mods/caption-buttons-customizer#f01e3f58c58a8a6690871834aa711491519e91d5</id>
+        <link href="https://windhawk.net/mods/caption-buttons-customizer"/>
+        <updated>2026-10-18T13:02:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="captionbuttonscustomizer">Caption Buttons Customizer</h1>
+<p>Moves the caption buttons (minimize, maximize, close) to the left side of the title bar and repositions the window icon and title to match. It can also draw macOS-style traffic lights (red / yellow / green circles) or your own button images.</p>
+<p>It works by hooking internal functions of the Desktop Window Manager (<code>dwm.exe</code> / <code>uDWM.dll</code>), so it affects every standard Windows window.</p>
+<h2 id="setup">Setup</h2>
+<p><code>dwm.exe</code> is a critical system process, so Windhawk does not inject into it by default. To use this mod, add <code>dwm.exe</code> to the process inclusion list: <em>Windhawk Settings > Advanced settings > More advanced settings > Process inclusion list</em>. Without it, only the <code>explorer.exe</code> part of the mod loads and the caption buttons will not move.</p>
+<h1 id="featurespreview">Features &amp; Preview</h1>
+<h2 id="captionbuttons">Caption Buttons</h2>
+<p><strong>Buttons on the left</strong>, with a left margin and three order presets: close / minimize / maximize (macOS), close / maximize / minimize, minimize / maximize / close.</p>
+<h3 id="movecaptionbuttonstothelefton">Move caption buttons to the left = on</h3>
+<p>Turn on <em>Move caption buttons to the left</em> to move the buttons to the left side of the title bar. When it is off, they stay in their default place on the right.</p>
+<p>| Before | After |
+|---------|---------|
+| <img src="https://i.imgur.com/TPtC4TD.png" alt="Before" /> | <img src="https://i.imgur.com/uhoUYhp.png" alt="After" /> |</p>
+<h3 id="buttonorder">Button order</h3>
+<p>Pick one of three presets in the <em>Button order</em> setting. The order is counted from the left edge of the window.</p>
+<p>| Close, minimize, maximize | Close, maximize, minimize | Minimize, maximize, close |
+|---------------------------|---------------------------|---------------------------|
+| <img src="https://i.imgur.com/uhoUYhp.png" alt="1" /> | <img src="https://i.imgur.com/bdPirba.png" alt="2" /> | <img src="https://i.imgur.com/5ZXtvpB.png" alt="3" /> |</p>
+<h3 id="showtheclosebuttonondialogs">Show the close button on dialogs</h3>
+<p>Windows with only a close button (message boxes, About windows, Properties dialogs) and very narrow windows are handled. The close button of dialogs can be hidden with <em>Show the close button on dialogs</em>, and their icon and title can have their own alignment.</p>
+<p>| Dialog On | Dialog Off |
+|--------|-------|
+| <img src="https://i.imgur.com/IlUb9kF.png" alt="Dialog On" /> | <img src="https://i.imgur.com/Iq9MAWu.png" alt="Dialog Off" /> |</p>
+<h2 id="captionbuttonstyle">Caption Button Style</h2>
+<p>Three button styles are available in <em>Caption button style</em>: the default Windows glyphs (default), macOS circles in colors you choose (with the x, - and + symbols on hover), or your own images (png, jpg or bmp).</p>
+<p>| macOS style (circles) | Custom images | Windows default |
+|-----------------------|---------------|-----------------|
+| <img src="https://i.imgur.com/dOdqDHp.png" alt="macOS style (circles)" /> | <img src="https://i.imgur.com/OmjIMoI.png" alt="Custom images" /> | <img src="https://i.imgur.com/KAHAbN0.png" alt="Windows default" /> |</p>
+<h3 id="custombuttonimages">Custom button images</h3>
+<ol>
+<li>Set <em>Caption button style</em> to <strong>Custom images</strong>. (With the macOS style, the image settings are ignored and the circles stay as they are.)</li>
+<li>Set <strong>Icon folder</strong> (or the path of each button image) to any folder you can read, for example <code>C:\Users\You\Pictures\ButtonIcons</code>.</li>
+<li>Name the files <code>minimize</code>, <code>restore</code>, <code>maximize</code>, <code>close</code> (+ <code>.png</code>, <code>.jpg</code>, <code>.jpeg</code> or <code>.bmp</code>).</li>
+<li>Optional state variants: <code>close_hover</code> (mouse is over the button), <code>close_pressed</code> (button is being clicked) and <code>close_disabled</code> (button is greyed out). Same for the other buttons. If a variant is missing, the base image is used (darkened for pressed). The four base images are enough.</li>
+<li>Images are scaled down to fit the button slot (about 12 px at 100% DPI) and keep their own shape. They are not cut into a circle, so square images stay square. Use transparent PNGs and simple designs.</li>
+<li>A button without an image keeps its circle.</li>
+</ol>
+<p><code>dwm.exe</code> runs under its own account and usually cannot read your profile folders. To get around that, the part of the mod running inside <code>explorer.exe</code> (which can read your folders) decodes your images, shrinks them to at most 64 px, and hands the pixels to <code>dwm.exe</code> through the mod's own storage in Windhawk. No image files are copied anywhere, and <code>dwm.exe</code> never opens or decodes an image file.</p>
+<p>If a changed image doesn't show up right away, move the mouse over a title bar button.</p>
+<h2 id="iconandtitletext">Icon and title text</h2>
+<p><strong>Flexible icon and title layout:</strong> next to the buttons, centered on the window, or right-aligned; icon on either side of the title, far left or far right; hide the icon, the title, or both.</p>
+<h3 id="iconandtitlealignment">Icon and title alignment</h3>
+<p><em>Icon and title alignment</em> decides where the icon and title sit in the title bar. Left puts them right after the buttons, Center puts them in the middle of the window, and Right puts them at the right edge.</p>
+<p>| Left | Center | Right |
+|------|--------|-------|
+| <img src="https://i.imgur.com/uhoUYhp.png" alt="Left" /> | <img src="https://i.imgur.com/DsKWlzm.png" alt="Center" /> | <img src="https://i.imgur.com/ja4fJzt.png" alt="Right" /> |</p>
+<h3 id="iconposition">Icon Position</h3>
+<p><em>Icon position</em> decides where the window icon goes. Left or right of the title keeps the icon attached to the title, while far left or far right pins the icon to that edge.</p>
+<p>To pin the icon to the left edge of the window instead of right after the buttons, turn off <em>Move caption buttons to the left</em>. To pin it to the right edge, turn that option on (with it off, a far right icon sits next to the buttons on the right instead). For the best look with an icon pinned to a corner, set <em>Icon and title alignment</em> to Center.</p>
+<p>| Left of the title | Right of the title |
+|-------------------|--------------------|
+| <img src="https://i.imgur.com/DsKWlzm.png" alt="Left of the title" /> | <img src="https://i.imgur.com/77UoaGz.png" alt="Right of the title" /> |
+| <strong>Far left</strong> | <strong>Far right</strong> |
+| <img src="https://i.imgur.com/8djx87p.png" alt="Far left" /> | <img src="https://i.imgur.com/tUx3iGd.png" alt="Far right" /> |</p>
+<h3 id="hidewindowiconandtitle">Hide window icon and title</h3>
+<p>Use <em>Hide window icon and title</em> to hide only the icon, only the title, or both.</p>
+<p>| Hide icon only | Hide title only | Hide both |
+|----------------|-----------------|-----------|
+| <img src="https://i.imgur.com/KPXmVYy.png" alt="Hide icon only" /> | <img src="https://i.imgur.com/e1M8jnX.png" alt="Hide title only" /> | <img src="https://i.imgur.com/GMB5Wjq.png" alt="Hide both" /> |</p>
+<h3 id="iconrespondstoclickanddoubleclick">Icon responds to click and double-click</h3>
+<p>By default, Windows treats the window icon as a button: clicking it opens the window menu (Restore, Move, Size, Minimize, Maximize and Close), and double-clicking it closes the window.</p>
+<p>This can get in the way when <em>Icon and title alignment</em> is set to Center, because the icon then sits in the middle of the title bar, where it's easy to double-click by accident and close the window. Turn off <em>Icon responds to click and double-click</em> to prevent that. The icon then behaves like an empty part of the title bar: you can drag the window by it, and double-clicking it maximizes or restores the window.</p>
+<h3 id="fileexplorer">File Explorer</h3>
+<p>The tab bar of File Explorer covers the left part of the title bar and blocks the buttons. The mod (running inside <code>explorer.exe</code>) makes the buttons clickable again, but the tabs themselves must be shifted with a separate mod.
+| File Explorer caption buttons on the right (default) | File Explorer caption buttons on the left |
+|------------------------------------------------------|-------------------------------------------|
+| <img src="https://i.imgur.com/cZHP6po.png" alt="File Explorer caption buttons on the right (default)" /> | <img src="https://i.imgur.com/LarGnlp.png" alt="File Explorer caption buttons on the left" /> |</p>
+<p>Notes:</p>
+<ul>
+<li><strong>File Explorer caption buttons on the right (default):</strong> CabinetWClass is in Excluded window classes by default, so File Explorer keeps the default Windows layout. To keep this, leave it in the list. </li>
+<li><strong>File Explorer caption buttons on the left:</strong> Remove <code>CabinetWClass</code> from <em>Excluded window classes</em>, then turn on <em>Make caption buttons clickable in File Explorer</em> so the buttons can be clicked. The tabs stay where they are and still visually overlap the buttons, so shift them with the <a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a> mod by <a href="https://github.com/m417z">m417z</a> (target <code>FileExplorerExtensions.FileExplorerTabControl</code>, style <code>Margin=187,0,0,0</code>; this value works well for me, so adjust it to taste).</li>
+<li>Alternatively, set <em>Shift tab bar and toolbar (px)</em> in <em>File Explorer tabs</em> (for example 145) to move the whole tab bar and toolbar to the right of the buttons instead of using Styler. This also moves the navigation arrows, address bar and search box.</li>
+</ul>
+<h2 id="excludedapps">Excluded apps</h2>
+<p>Apps that draw their own tabs in the title bar can conflict with buttons on the left. Add their executable names to <em>Excluded apps</em> (or their window class names to <em>Excluded window classes</em>) and every window of those apps keeps the default Windows layout.</p>
+<p>By default <em>Excluded apps</em> contains <code>notepad.exe</code>, <code>taskmgr.exe</code> and <code>WindowsTerminal.exe</code>. The icon and title of Task Manager overlap the buttons, and the tabs of Notepad and Windows Terminal overlap the buttons when they are on the left. To see how these apps look with the buttons on the left, remove them from the list. Fixing them properly is planned for later, when time allows.</p>
+<p><code>CabinetWClass</code> (File Explorer) is in <em>Excluded window classes</em> by default, see the File Explorer section above.</p>
+<h2 id="filescreatedbythemod">Files created by the mod</h2>
+<p>None. Custom images are passed to <code>dwm.exe</code> through Windhawk's mod storage, and with <em>Write debug log</em> on (off by default) the mod writes detailed messages to the Windhawk log output instead of files. Logs can contain folder paths (including your Windows user name), so check them before sharing.</p>
+<h2 id="importantnotes">Important notes</h2>
+<ul>
+<li>When you use the macOS or custom style, drawing the glyphs rewrites a bitmap that DWM shares between all windows. The original glyphs come back <strong>only after dwm.exe restarts</strong>: sign out and in, run <code>taskkill /f /im dwm.exe</code> from an administrator prompt, or enable <em>Restart dwm.exe when the mod is unloaded</em> (the screen flickers briefly; apps stay open). Until then, a button can look wrong or be missing after the mod is turned off, for example the maximize button when the mod was turned on while a window was maximized and turned off before it was restored. dwm.exe is never restarted twice within 30 seconds, and the mod refuses to load if dwm.exe started 4 or more times within a minute.</li>
+<li>The circles or custom images are global. Excluded apps keep them too; only their layout stays at the Windows default.</li>
+<li>When the mod is turned on or off, or when a layout, exclusion, color or style setting changes, DWM is asked to refresh itself so that open windows get the new layout; no window is resized. Changing the debug log does not trigger a refresh.</li>
+<li>The mod hooks internal, undocumented functions of <code>uDWM.dll</code>. A Windows update can change them and stop the mod until it is updated.</li>
+<li>If you report a bug, turn on <em>Write debug log</em> and attach the Windhawk log output.</li>
+</ul>
+<h2 id="compatibilityandknownissues">Compatibility and known issues</h2>
+<ul>
+<li><strong>Apps that draw their own title bar</strong> (Office apps, Chrome, Edge and others) cannot be changed by this mod. The <a href="https://windhawk.net/mods/titlebar-for-everyone">Titlebar For Everyone</a> mod by <a href="https://github.com/Ingan121">Ingan121</a> can make them use the standard title bar.</li>
+<li>At 125% and 150% display scaling, the maximize circle can show the wrong color (known issue).</li>
+</ul>]]></content>
+        <author>
+            <name>grn15RenS</name>
+            <uri>https://github.com/grn15RenS</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Network Speed in Bytes 1.1]]></title>
         <id>https://windhawk.net/mods/taskmgr-network-bytes#2995b1cd1f98d682ad5b13863523536d0bd58f6d</id>
@@ -1133,43 +1235,6 @@ context-menu, and translation components.</li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Micrographics Taskbar Clock 1.0]]></title>
-        <id>https://windhawk.net/mods/micrographics-taskbar-clock#d4ee5f65a63f19962d025831b57cde6d010d9de9</id>
-        <link href="https://windhawk.net/mods/micrographics-taskbar-clock"/>
-        <updated>2026-10-15T07:00:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="micrographicstaskbarclock">Micrographics Taskbar Clock</h1>
-<p>Replaces the Windows 11 taskbar clock with a clock face inspired by the
-"Micrographics" clock of Nothing OS 5.</p>
-<p><img src="https://raw.githubusercontent.com/SAM2WOW/micrographics-taskbar-clock/main/images/taskbar.png" alt="Screenshot" /></p>
-<ul>
-<li>Weekday, day of month in a filled pill, month in an outlined pill, the time
-and a block cursor.</li>
-<li>Temperature, a weather icon and the current conditions in a speech bubble.</li>
-<li>Follows the taskbar's light/dark text color automatically, on every monitor.</li>
-<li>Clicking the clock still opens the notification center and calendar.</li>
-</ul>
-<h2 id="weather">Weather</h2>
-<p>The weather line is off by default, and the mod makes no network requests until
-it's turned on. To show it, enable <strong>Show weather</strong> in the settings and enter a
-city name or <code>latitude,longitude</code> as the location. Weather then comes from
-<a href="https://open-meteo.com/">Open-Meteo</a> (free, no API key), and a city name is
-looked up with Open-Meteo's geocoding service.</p>
-<p>Alternatively, enable <strong>Detect location from IP address</strong> to leave the location
-empty. Your public IP address is then sent to <a href="https://ipwho.is/">ipwho.is</a>, or
-to <a href="https://www.geojs.io/">GeoJS</a> if that fails, to approximate your location.</p>
-<h2 id="fonts">Fonts</h2>
-<p>The default font is Bahnschrift, which ships with Windows. Any installed font
-can be used, e.g. a monospaced one such as Cascadia Mono, or a dot matrix font.</p>
-<h2 id="otherclockmods">Other clock mods</h2>
-<p>This mod hides the original clock text and draws its own clock face, so changes
-from other clock mods, such as Taskbar Clock Customization, aren't visible
-while it's enabled.</p>]]></content>
-        <author>
-            <name>SAM2WOW</name>
-            <uri>https://github.com/SAM2WOW</uri>
         </author>
     </entry>
 </feed>

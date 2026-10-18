@@ -1269,6 +1269,36 @@
         "version": "0.7"
       }
     },
+    "caption-buttons-customizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792328536000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792328536000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "grn15RenS",
+        "compilerOptions": "-lgdi32 -lole32 -lcomctl32",
+        "description": "Move the caption buttons to the left, reposition the window icon and title, and optionally draw macOS-style traffic lights (or your own button images).",
+        "donateUrl": "https://ko-fi.com/grn15rens",
+        "github": "https://github.com/grn15RenS",
+        "include": [
+          "dwm.exe",
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Caption Buttons Customizer",
+        "version": "1.0"
+      }
+    },
     "ce-disable-process-button-flashing": {
       "details": {
         "defaultSorting": 170,
@@ -9015,7 +9045,7 @@
         "ratingUsers": 1174,
         "reviews": 0,
         "trendingSorting": 8.33912542533498,
-        "updated": 1791194501000,
+        "updated": 1792328541000,
         "users": 84815
       },
       "metadata": {
@@ -9028,7 +9058,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.1.6"
+        "version": "3.1.7"
       }
     },
     "macos-style-dock": {
@@ -13983,7 +14013,7 @@
         "rating": 9,
         "ratingBreakdown": [61, 29, 44, 127, 1099],
         "ratingUsers": 1360,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 1.3158749590675776,
         "updated": 1774855380000,
         "users": 112858

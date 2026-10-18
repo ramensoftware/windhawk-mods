@@ -1,3 +1,9 @@
+## 3.1.7 ([Oct 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a395f6d754b9e2a54ef68b12ecc2308d56f3d7eb/mods/macos-minimize-animation.wh.cpp))
+
+* App launch animation: Tauri and Slint (and other winit / GPU-rendered) apps no longer flash on screen before the genie. Launching windows are now hidden with a DWM cloak instead of layered transparency.
+* Firefox-family browsers keep the previous launch behavior for their first window.
+* Excluded programs are no longer briefly hidden on launch.
+
 ## 3.1.6 ([Oct 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1cefd9b6c5400916d74378ed90d711adc699f69b/mods/macos-minimize-animation.wh.cpp))
 
 * Reverted the v3.1.5 hardware Direct2D render target, which showed a greyed window during the animation on some NVIDIA / external-monitor setups. The genie uses the default render target again, as in v3.1.4.

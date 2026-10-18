@@ -1,0 +1,14 @@
+{
+  "modId": "taskbar-auto-hide-when-maximized",
+  "reviews": [
+    {
+      "authorName": "Pedro Pais",
+      "content": "I love this mod while using a translucent taskbar style with the \"Never auto-hide\" mode. The windows just blur behind the taskbar and it looks great while scrolling on your favorite browser for example. But some apps it's not a great experience because the controls get behind the taskbar like on Spotify. I'd love if you could exclude certain apps to not get behind the taskbar, that would be perfect!",
+      "id": 64,
+      "modVersion": "1.2.6",
+      "parentId": null,
+      "timestamp": 1792312408,
+      "votes": 0
+    }
+  ]
+}
