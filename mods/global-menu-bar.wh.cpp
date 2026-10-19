@@ -308,6 +308,7 @@ bool IsWindowOfClass(HWND hwnd, PCWSTR className) {
 // property of Shell_TrayWnd (with the time of the click), and ShellHost
 // reads it from there when positioning quick settings.
 constexpr WCHAR kFlyoutTargetProp[] = L"GlobalMenuBarFlyoutTarget";
+constexpr WCHAR kFlyoutTargetTimeProp[] = L"GlobalMenuBarFlyoutTargetTime";
 constexpr DWORD kFlyoutTargetTimeout = 3000;
 
 void SetFlyoutTarget(HMONITOR monitor) {
@@ -318,20 +319,22 @@ void SetFlyoutTarget(HMONITOR monitor) {
     }
     int x = (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
     int y = (mi.rcMonitor.top + mi.rcMonitor.bottom) / 2;
-    ULONG_PTR value = ((ULONG_PTR)GetTickCount() << 32) |
-                      ((ULONG_PTR)(USHORT)(SHORT)x << 16) |
-                      (USHORT)(SHORT)y;
-    SetPropW(tray, kFlyoutTargetProp, (HANDLE)value);
+    // Two properties: a handle is only 32 bits wide in 32-bit processes.
+    ULONG_PTR point = ((ULONG_PTR)(USHORT)(SHORT)x << 16) | (USHORT)(SHORT)y;
+    SetPropW(tray, kFlyoutTargetTimeProp, (HANDLE)(ULONG_PTR)GetTickCount());
+    SetPropW(tray, kFlyoutTargetProp, (HANDLE)point);
 }
 
 // Monitor requested by a recent click on the bar, or nullptr.
 HMONITOR GetFlyoutTarget() {
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    ULONG_PTR value = tray ? (ULONG_PTR)GetPropW(tray, kFlyoutTargetProp) : 0;
-    if (!value || GetTickCount() - (DWORD)(value >> 32) > kFlyoutTargetTimeout) {
+    ULONG_PTR point = tray ? (ULONG_PTR)GetPropW(tray, kFlyoutTargetProp) : 0;
+    DWORD time =
+        tray ? (DWORD)(ULONG_PTR)GetPropW(tray, kFlyoutTargetTimeProp) : 0;
+    if (!point || GetTickCount() - time > kFlyoutTargetTimeout) {
         return nullptr;
     }
-    POINT pt{(SHORT)(USHORT)(value >> 16), (SHORT)(USHORT)value};
+    POINT pt{(SHORT)(USHORT)(point >> 16), (SHORT)(USHORT)point};
     return MonitorFromPoint(pt, MONITOR_DEFAULTTONULL);
 }
 
