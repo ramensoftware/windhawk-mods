@@ -38,7 +38,8 @@ view switches to columns:
   "Address bar follows the last column" in the settings, or use the context
   menu and Ctrl+V inside the column.
 
-To leave the columns, choose another view mode (Details, Icons...).
+To leave the columns, choose another view mode (Details, Icons...). The
+mod never changes the view mode Explorer saves for each folder.
 
 ### Keyboard and mouse
 - **Up and down arrows** select; **right arrow** enters the folder; **left
@@ -65,14 +66,16 @@ seconds; there's no need to restart Explorer.
   changed by this mod.
 - The columns' context menu is the classic menu (the same as "Show more
   options"); the new Windows 11 menu only exists inside the native list.
-- Folders opened through the columns are saved in List mode, because that's
-  the mode that turns the columns on next time.
 - Very large or network folders take a while to open a column, since the
   contents are read at once.
 - With "Address bar follows the last column" on, each opened folder really
   navigates Explorer, and mods that animate folder changes (like "File
   Explorer WinUI-Like Content Animation") show the native list over the
   columns during the animation.
+- With the macOS look, the sidebar's row height and background are set by
+  this mod. Mods that also change them, such as Explorer TreeItem Tweaker or
+  Classic Explorer Treeview, fight with it: set "Sidebar row height" to 0 or
+  turn the macOS look off when using them.
 */
 // ==/WindhawkModReadme==
 
@@ -86,6 +89,7 @@ seconds; there's no need to restart Explorer.
   $description: Rounded selection, taller rows, arrows on folders and a cleaner sidebar
 - selectionColor: macos
   $name: Selection color
+  $description: Only with the macOS look
   $options:
   - macos: macOS blue
   - accent: Windows accent color
@@ -136,6 +140,7 @@ constexpr WCHAR kOverlayClass[] = L"WindhawkFinderColumns";
 // Timer on the tab window, which belongs to Explorer: an id it doesn't use.
 constexpr UINT_PTR kTimerPoll = 0x57484645;
 constexpr UINT kPollInterval = 120;
+constexpr UINT kHiddenPollInterval = 1000;  // Only to notice it's shown again.
 
 // On the columns window, which belongs to the mod.
 constexpr UINT WM_APP_SELCHANGE = WM_APP + 1;
@@ -208,9 +213,8 @@ void LoadSettings() {
     Settings s;
     s.columnView = Wh_GetIntSetting(L"columnView") != 0;
     s.macAppearance = Wh_GetIntSetting(L"macAppearance") != 0;
-    PCWSTR color = Wh_GetStringSetting(L"selectionColor");
-    s.accentSelection = color && !wcscmp(color, L"accent");
-    Wh_FreeStringSetting(color);
+    s.accentSelection = !wcscmp(
+        WindhawkUtils::StringSetting::make(L"selectionColor"), L"accent");
     s.columnWidth = std::clamp(Wh_GetIntSetting(L"columnWidth"), 120, 800);
     s.showPreview = Wh_GetIntSetting(L"showPreview") != 0;
     s.foldersFirst = Wh_GetIntSetting(L"foldersFirst") != 0;
@@ -306,6 +310,11 @@ struct Tab {
     COLORREF treeOriginalBk = CLR_NONE;
     bool treeChanged = false;
 
+    // Menus, dialogs and drag loops running in the mod's code on the tab's
+    // thread. The mod can't unload while one runs: it returns into mod code.
+    int modalDepth = 0;
+    bool pollFast = true;  // Poll timer at kPollInterval (visible tab).
+
     // Look, computed when creating the columns.
     Settings settings;
     float scale = 1;
@@ -320,16 +329,64 @@ std::mutex g_tabsMutex;
 std::set<HWND> g_tabs;
 UINT g_attachMsg, g_detachMsg, g_settingsMsg;
 
+struct ModalScope {
+    Tab& t;
+    explicit ModalScope(Tab& tab) : t(tab) { t.modalDepth++; }
+    ~ModalScope() { t.modalDepth--; }
+    ModalScope(const ModalScope&) = delete;
+    ModalScope& operator=(const ModalScope&) = delete;
+};
+
 int Px(const Tab& t, float dip) {
     return (int)std::lround(dip * t.scale);
 }
 
+// Asked on every poll (sidebar) by every tab: the value is read again only
+// after the registry key changes.
+std::mutex g_darkMutex;
+HKEY g_personalizeKey;
+HANDLE g_personalizeChanged;
+std::atomic<int> g_dark{-1};
+
 bool IsDarkMode() {
+    int cached = g_dark;
+    if (cached >= 0 && g_personalizeChanged &&
+        WaitForSingleObject(g_personalizeChanged, 0) == WAIT_TIMEOUT) {
+        return cached;
+    }
+    std::lock_guard<std::mutex> lock(g_darkMutex);
+    if (!g_personalizeKey) {
+        RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                      0, KEY_READ | KEY_NOTIFY, &g_personalizeKey);
+    }
+    if (!g_personalizeChanged) {
+        g_personalizeChanged = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    }
+    // Armed before reading, so that no change is missed.
+    if (g_personalizeKey && g_personalizeChanged) {
+        RegNotifyChangeKeyValue(
+            g_personalizeKey, FALSE,
+            REG_NOTIFY_CHANGE_LAST_SET | REG_NOTIFY_THREAD_AGNOSTIC,
+            g_personalizeChanged, TRUE);
+    }
     DWORD value = 1, size = sizeof(value);
     RegGetValueW(HKEY_CURRENT_USER,
                  L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                  L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
+    g_dark = value == 0;
     return value == 0;
+}
+
+void FreeDarkModeWatch() {
+    if (g_personalizeKey) {
+        RegCloseKey(g_personalizeKey);
+        g_personalizeKey = nullptr;
+    }
+    if (g_personalizeChanged) {
+        CloseHandle(g_personalizeChanged);
+        g_personalizeChanged = nullptr;
+    }
 }
 
 COLORREF AccentColor(COLORREF fallback) {
@@ -414,11 +471,15 @@ void UpdateLook(Tab& t) {
     }
 }
 
+// Process-wide and never changes: fetched once.
 HIMAGELIST SystemSmallIcons() {
-    SHFILEINFOW sfi{};
-    return (HIMAGELIST)SHGetFileInfoW(
-        L"C:\\", FILE_ATTRIBUTE_DIRECTORY, &sfi, sizeof(sfi),
-        SHGFI_SYSICONINDEX | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+    static HIMAGELIST icons = [] {
+        SHFILEINFOW sfi{};
+        return (HIMAGELIST)SHGetFileInfoW(
+            L"C:\\", FILE_ATTRIBUTE_DIRECTORY, &sfi, sizeof(sfi),
+            SHGFI_SYSICONINDEX | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+    }();
+    return icons;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -465,6 +526,7 @@ void ReadDetails(IShellFolder2* folder, Item& item) {
 }
 
 void Enumerate(Tab& t, Column& c, bool allowUi = true) {
+    ModalScope modal(t);  // EnumObjects may ask for network credentials.
     for (auto& item : c.items) {
         CoTaskMemFree(item.child);
     }
@@ -669,6 +731,8 @@ class DropTarget final : public IDropTarget {
                         DWORD* effect) override {
         HRESULT hr = S_OK;
         if (m_target) {
+            // A right-button drop shows a menu; a conflict, a dialog.
+            ModalScope modal(*m_tab);
             hr = m_target->Drop(data, keys, pt, effect);
             m_target.Reset();
         } else {
@@ -1251,6 +1315,7 @@ void Invoke(Tab& t, IContextMenu* menu, LPCSTR verb, PCWSTR verbW, POINT* pt) {
     info.lpVerb = verb;
     info.lpVerbW = verbW;
     info.nShow = SW_SHOWNORMAL;
+    ModalScope modal(t);  // Confirmations (Shift+Delete) are modal.
     menu->InvokeCommand((CMINVOKECOMMANDINFO*)&info);
 }
 
@@ -1385,8 +1450,12 @@ void ShowContextMenu(Tab& t, int k, POINT screen, bool onItems) {
     menu.As(&menu3);
     t_menu2 = menu2.Get();
     t_menu3 = menu3.Get();
-    UINT id = TrackPopupMenuEx(popup, TPM_RETURNCMD | TPM_RIGHTBUTTON,
-                               screen.x, screen.y, t.overlay, nullptr);
+    UINT id;
+    {
+        ModalScope modal(t);
+        id = TrackPopupMenuEx(popup, TPM_RETURNCMD | TPM_RIGHTBUTTON, screen.x,
+                              screen.y, t.overlay, nullptr);
+    }
     t_menu2 = nullptr;
     t_menu3 = nullptr;
 
@@ -1832,6 +1901,7 @@ LRESULT OnListNotify(Tab& t, NMHDR* hdr) {
                     t.overlay, (UINT)children.size(), children.data(),
                     IID_IDataObject, nullptr, (void**)&data))) {
                 DWORD effect = 0;
+                ModalScope modal(t);
                 SHDoDragDrop(t.overlay, data.Get(), nullptr,
                              DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK,
                              &effect);
@@ -1873,11 +1943,16 @@ LRESULT OnListNotify(Tab& t, NMHDR* hdr) {
                 return FALSE;
             }
             PITEMID_CHILD renamed = nullptr;
-            if (SUCCEEDED(c.folder->SetNameOf(t.overlay, c.items[i].child,
-                                              info->item.pszText,
-                                              SHGDN_INFOLDER | SHGDN_FOREDITING,
-                                              &renamed)) &&
-                renamed) {
+            HRESULT hr;
+            {
+                // Asks before changing the file name extension.
+                ModalScope modal(t);
+                hr = c.folder->SetNameOf(t.overlay, c.items[i].child,
+                                         info->item.pszText,
+                                         SHGDN_INFOLDER | SHGDN_FOREDITING,
+                                         &renamed);
+            }
+            if (SUCCEEDED(hr) && renamed) {
                 STRRET name;
                 PWSTR text = nullptr;
                 if (SUCCEEDED(c.folder->GetDisplayNameOf(renamed, SHGDN_INFOLDER,
@@ -1894,6 +1969,8 @@ LRESULT OnListNotify(Tab& t, NMHDR* hdr) {
     }
     return 0;
 }
+
+void RefreshLook(Tab& t);
 
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_NCCREATE) {
@@ -2110,6 +2187,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         case WM_SIZE:
             LayoutOverlay(t);
+            return 0;
+
+        case WM_DPICHANGED_AFTERPARENT:
+            RefreshLook(t);
             return 0;
 
         case WM_DESTROY:
@@ -2347,6 +2428,38 @@ LRESULT CALLBACK DefViewChildSubclassProc(HWND hwnd,
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
+// Scaling or light/dark changed while the columns exist: new fonts, colors
+// and row height for the overlay and every list.
+void RefreshLook(Tab& t) {
+    // The lists use the old fonts until they get the new ones.
+    HFONT oldFonts[] = {t.font, t.boldFont, t.smallFont};
+    t.font = t.boldFont = t.smallFont = nullptr;
+    UpdateLook(t);
+    PCWSTR theme = t.dark ? L"DarkMode_Explorer" : L"Explorer";
+    SetWindowTheme(t.overlay, theme, nullptr);
+    for (auto& c : t.columns) {
+        SetWindowTheme(c->list, theme, nullptr);
+        ListView_SetBkColor(c->list, t.bg);
+        SetWindowFont(c->list, t.font, FALSE);
+        // Owner-drawn rows are measured again on WM_WINDOWPOSCHANGED.
+        RECT rc;
+        GetWindowRect(c->list, &rc);
+        WINDOWPOS wp{c->list, nullptr, 0, 0, rc.right - rc.left,
+                     rc.bottom - rc.top,
+                     SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER |
+                         SWP_NOZORDER};
+        SendMessageW(c->list, WM_WINDOWPOSCHANGED, 0, (LPARAM)&wp);
+    }
+    for (HFONT font : oldFonts) {
+        if (font) {
+            DeleteObject(font);
+        }
+    }
+    LayoutOverlay(t);
+    RedrawWindow(t.overlay, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+}
+
 bool CreateOverlay(Tab& t) {
     UpdateLook(t);
     t.overlay = CreateWindowExW(WS_EX_LAYERED, kOverlayClass, L"",
@@ -2531,6 +2644,9 @@ void CheckNativeSelection(Tab& t, IFolderView* folderView) {
 
 void Poll(Tab& t) {
     ApplySidebar(t);
+    if (t.overlay && t.dark != IsDarkMode()) {
+        RefreshLook(t);
+    }
     if (!GetSettings().columnView) {
         if (t.active) {
             Deactivate(t);
@@ -2565,12 +2681,11 @@ void Poll(Tab& t) {
                 ClearPreview(t);
                 LayoutOverlay(t);
             }
-            // To switch modes keep turning the columns off.
-            if (!IsColumnMode(mode)) {
-                UINT keep = IsColumnMode(t.lastMode) ? t.lastMode : FVM_LIST;
-                folderView->SetCurrentViewMode(keep);
-                mode = keep;
-            }
+            // Explorer shows the folder in the mode it remembers for it, which
+            // may not be List or Details. The columns cover it anyway, and
+            // changing it would be saved for that folder. The folder's mode
+            // becomes the reference: only a change made without navigating
+            // is the user's (below).
         } else {
             bool wasActive = t.active;
             t.active = IsColumnMode(mode);
@@ -2586,7 +2701,7 @@ void Poll(Tab& t) {
             }
         }
     } else if (t.active && t.overlay && IsColumnMode(mode) &&
-               (mode == FVM_DETAILS) != t.details) {
+               mode != t.lastMode && (mode == FVM_DETAILS) != t.details) {
         t.details = mode == FVM_DETAILS;
         ResetColumns(t, pidl);
     } else if (IsColumnMode(mode) != IsColumnMode(t.lastMode)) {
@@ -2645,7 +2760,15 @@ LRESULT CALLBACK TabSubclassProc(HWND hwnd,
                                  DWORD_PTR refData) {
     Tab* t = (Tab*)refData;
     if (msg == WM_TIMER && wParam == kTimerPoll) {
-        Poll(*t);
+        bool visible = IsWindowVisible(hwnd);
+        if (visible != t->pollFast) {
+            t->pollFast = visible;
+            SetTimer(hwnd, kTimerPoll,
+                     visible ? kPollInterval : kHiddenPollInterval, nullptr);
+        }
+        if (visible) {
+            Poll(*t);
+        }
         return 0;
     }
     if (msg == g_attachMsg && g_attachMsg) {
@@ -2663,6 +2786,13 @@ LRESULT CALLBACK TabSubclassProc(HWND hwnd,
         return 0;
     }
     if (msg == g_detachMsg && g_detachMsg) {
+        // Sent messages are also handled inside menus and dialogs, which
+        // return into the mod's code: not detached yet, Wh_ModUninit tries
+        // again. A menu is closed; a dialog waits for the user.
+        if (t->modalDepth > 0) {
+            EndMenu();
+            return FALSE;
+        }
         CleanupTab(*t);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TabSubclassProc);
         {
@@ -2670,7 +2800,7 @@ LRESULT CALLBACK TabSubclassProc(HWND hwnd,
             g_tabs.erase(hwnd);
         }
         delete t;
-        return 0;
+        return TRUE;
     }
     if (msg == WM_NCDESTROY) {
         // The subclass was already removed by Windhawk.
@@ -2757,7 +2887,7 @@ void AttachExistingTabs() {
 
 DWORD WINAPI WatcherThread(void*) {
     HWINEVENTHOOK hook = SetWinEventHook(
-        EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW, nullptr, OnWindowEvent,
+        EVENT_OBJECT_CREATE, EVENT_OBJECT_CREATE, nullptr, OnWindowEvent,
         GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
     AttachExistingTabs();
     MSG msg;
@@ -2815,14 +2945,15 @@ void Wh_ModUninit() {
         tabs.assign(g_tabs.begin(), g_tabs.end());
     }
     for (HWND tab : tabs) {
-        if (IsWindow(tab)) {
-            SendMessageW(tab, g_detachMsg, 0, 0);
+        while (IsWindow(tab) && !SendMessageW(tab, g_detachMsg, 0, 0)) {
+            Sleep(100);
         }
     }
     UnregisterClassW(kOverlayClass, Instance());
+    FreeDarkModeWatch();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     LoadSettings();
@@ -2830,5 +2961,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     for (HWND tab : g_tabs) {
         PostMessageW(tab, g_settingsMsg, 0, 0);
     }
-    return TRUE;
 }
