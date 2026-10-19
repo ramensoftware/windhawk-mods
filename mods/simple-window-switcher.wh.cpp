@@ -967,7 +967,7 @@ namespace SwsSelectionProtocol {
 // A short horizontal stroke selects one MRU neighbor without revealing the UI.
 // Longer holds reveal the normal switcher when this pending window expires.
 // Keep enough time for a deliberate hold while bounding hidden activation.
-#define SWS_TOUCHPAD_RAPID_PENDING_MS 750u
+#define SWS_TOUCHPAD_RAPID_PENDING_MS 125u
 // Defer outside right-button dismissal briefly so the raw reader can classify a
 // synthetic two-finger tap before the visible switcher is dismissed.
 #define SWS_TOUCHPAD_TWO_FINGER_CLASSIFY_MS 150u
@@ -1008,6 +1008,7 @@ static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 #define SWS_NATIVE_TOUCHPAD_END 5u
 #define SWS_NATIVE_TOUCHPAD_CANCEL 6u
 #define SWS_NATIVE_TOUCHPAD_START_MAX_AGE_MS 1000u
+#define SWS_TOUCHPAD_RAPID_PENDING_TIMER_ID 113
 #define SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID 114
 // Let the reader adopt reports after a foreground/context handoff. This is a
 // single bounded wait, not a synthetic lift or a foreground retry loop.
@@ -2732,7 +2733,9 @@ static void CreateMirrorSwitchers();
 static void ShowMirrorSwitchers();
 static void HideSwitcher();
 static void EndTouchpadGesture();
+static void CompleteNativeTouchpadInvocation();
 static bool RapidTouchpadLiftObserved();
+static bool RapidTouchpadLiveObserved();
 static void InvalidateRapidPendingTimer();
 static void ShowBackdropBlur();
 static void HideBackdropBlur();
@@ -7221,7 +7224,6 @@ static int s_touchpadRapidPendingDirection = 0;
 static bool s_touchpadRapidPendingCommitted = false;
 static bool s_touchpadRapidRevealReanchorPending = false;
 static DWORD s_touchpadRapidPendingGeneration = 0;
-static UINT_PTR s_touchpadRapidPendingTimerId = 0;
 
 // A normal Alt session and a normal three-finger session are separate owners.
 // The switcher commits only after both owners have released.
@@ -7331,6 +7333,8 @@ struct NativeTouchpadInvocation {
     DWORD token = 0;
     DWORD epoch = 0;
     bool rawAdopted = false;
+    bool rawReaderAvailable = false;
+    bool rawStartLive = false;
     bool upward = false;
     UINT completion = 0;
     DWORD completionTick = 0;
@@ -12949,6 +12953,7 @@ static void PresentSwitcherWindows() {
     }
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     HWND keyboardHandoffSource = nullptr;
+    HWND touchpadHandoffSource = nullptr;
     if (g_keyboardPendingForegroundHandoff && !g_isTouchpadGestureActive) {
         // The switcher is visible and frame-zero painted before this eligibility
         // request. Do not steal focus during the hidden show-delay period.
@@ -12958,12 +12963,14 @@ static void PresentSwitcherWindows() {
     // The window is already topmost from staging. Do not call BringWindowToTop:
     // it can activate the switcher before the single foreground handoff below.
     if (g_isTouchpadGestureActive) {
-        Wh_Log(L"SWS: touchpad presentation context %s",
-               FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), g_hSwitcher).c_str());
+        touchpadHandoffSource = GetForegroundWindow();
+        Wh_Log(L"SWS: touchpad presentation context nativeToken=%u rawAdopted=%d %s",
+               s_nativeTouchpadInvocation.token, s_nativeTouchpadInvocation.rawAdopted,
+               FormatTouchpadForegroundDiagnostic(touchpadHandoffSource, g_hSwitcher).c_str());
         // Best-effort legacy foreground request; SendInput's return alone does
         // not prove last-input eligibility or routing across an elevated app.
         if (GetForegroundWindow() != g_hSwitcher &&
-            !s_nativeTouchpadInvocation.token) {
+            (!s_nativeTouchpadInvocation.token || !s_nativeTouchpadInvocation.rawAdopted)) {
             TapUnassignedKeyForForeground();
         }
     }
@@ -12974,6 +12981,12 @@ static void PresentSwitcherWindows() {
     if (g_isTouchpadGestureActive && GetForegroundWindow() != g_hSwitcher) {
         SwitchToThisWindow(g_hSwitcher, TRUE);
         foreground = GetForegroundWindow() == g_hSwitcher;
+    }
+    if (g_isTouchpadGestureActive) {
+        Wh_Log(L"SWS: touchpad foreground handoff after presentation source=%p set=%d "
+               L"active=%d error=%u",
+               touchpadHandoffSource, foreground,
+               GetForegroundWindow() == g_hSwitcher, foregroundError);
     }
     if (g_keyboardPendingForegroundHandoff && !g_isTouchpadGestureActive) {
         g_keyboardPendingForegroundHandoffSucceeded =
@@ -13010,6 +13023,18 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     }
 
     const bool rapidPending = s_touchpadRapidPending;
+    // A native-only release can precede the deadline while its adoption wait
+    // extends past it. Finish that short stroke without flashing the switcher.
+    if (rapidPending && s_nativeTouchpadInvocation.token &&
+        !s_nativeTouchpadInvocation.rawAdopted &&
+        (s_nativeTouchpadInvocation.completion == SWS_NATIVE_TOUCHPAD_CANCEL ||
+         (s_nativeTouchpadInvocation.completion == SWS_NATIVE_TOUCHPAD_END &&
+          !s_nativeTouchpadInvocation.rawStartLive && !RapidTouchpadLiveObserved() &&
+          (LONG)(s_nativeTouchpadInvocation.completionTick -
+                 (DWORD)s_touchpadRapidPendingDeadline) < 0))) {
+        CompleteNativeTouchpadInvocation();
+        return;
+    }
     const ULONGLONG showDelayDeadline = g_showDelayDeadlineTick;
     const ULONGLONG revealTick = GetTickCount64();
     const bool skipBackdropWait = forceImmediate || rapidPending ||
@@ -13163,6 +13188,12 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     s_touchpadRapidPendingDirection = 0;
     s_touchpadRapidPendingCommitted = false;
     s_touchpadRapidRevealReanchorPending = rapidPending;
+    if (rapidPending && s_nativeTouchpadInvocation.token &&
+        s_nativeTouchpadInvocation.rawAdopted) {
+        Wh_Log(L"SWS: cancelling completed native PTP context after rapid reveal token=%u",
+               s_nativeTouchpadInvocation.token);
+        CancelNativeTouchpadInvocation();
+    }
     g_isPendingShow = false;
 
     // Backdrop first (opt-in), then the switcher, its overlay and the mirrors in the
@@ -13177,6 +13208,14 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
     }
     SetTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID, 120, NULL);
+    if (rapidPending && s_nativeTouchpadInvocation.token &&
+        s_nativeTouchpadInvocation.completion) {
+        // The visible handoff can resume raw delivery. Give queued contact
+        // reports one bounded adoption wait before accepting the native release.
+        s_nativeTouchpadInvocation.completionDeadline =
+            GetTickCount64() + SWS_NATIVE_TOUCHPAD_HANDOFF_MS;
+        CompleteNativeTouchpadInvocation();
+    }
     // Deferred auto-drill for Alt+Backtick "sameApp" + grouping (issue #5532). The
     // reveal is complete now, so it is safe to expand the current app's group.
     if (g_drillInAfterReveal) {
@@ -14002,7 +14041,7 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
     }
 }
 
-static void ToggleDesktop() {
+static void ShowDesktop() {
     IShellDispatch4* shell = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
                                   IID_IShellDispatch4,
@@ -14011,7 +14050,7 @@ static void ToggleDesktop() {
         hr = shell->ToggleDesktop();
         shell->Release();
     }
-    Wh_Log(L"SWS: ToggleDesktop hr=0x%08X", (unsigned)hr);
+    Wh_Log(L"SWS: ShowDesktop hr=0x%08X", (unsigned)hr);
     s_touchpadCommitActivation = false;
 }
 
@@ -14049,7 +14088,7 @@ static void StartExitAnimation(bool activateSelectedWindow) {
         g_animExitActive = true;
         PublishMouseHookPolicy();
         if (activateSelectedWindow) {
-            if (activateDesktop) ToggleDesktop();
+            if (activateDesktop) ShowDesktop();
             else ActivateExitedWindow(hTarget, restoreWindows);
         }
         HideSwitcher();
@@ -14093,7 +14132,7 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     // Both release paths hand off before visual teardown. The exit guard and
     // click-through state are established before external calls can reenter.
     if (activateSelectedWindow) {
-        if (activateDesktop) ToggleDesktop();
+        if (activateDesktop) ShowDesktop();
         else ActivateExitedWindow(hTarget, restoreWindows);
     }
 }
@@ -16529,22 +16568,10 @@ static void ScheduleRawTouchpadShieldRelease() {
     SetTimer(g_hSwitcher, SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID, 220, NULL);
 }
 
-static void CALLBACK RapidPendingTimerProc(HWND hWnd, UINT, UINT_PTR timerId,
-                                           DWORD) {
-    if (timerId != s_touchpadRapidPendingTimerId || !s_touchpadRapidPending) {
-        return;
-    }
-    KillTimer(hWnd, timerId);
-    s_touchpadRapidPendingTimerId = 0;
-    PostMessageW(hWnd, WM_SWS_RAPID_TIMEOUT,
-                 (WPARAM)s_touchpadRapidPendingGeneration, 0);
-}
-
 static void InvalidateRapidPendingTimer() {
-    if (g_hSwitcher && s_touchpadRapidPendingTimerId) {
-        KillTimer(g_hSwitcher, s_touchpadRapidPendingTimerId);
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_TOUCHPAD_RAPID_PENDING_TIMER_ID);
     }
-    s_touchpadRapidPendingTimerId = 0;
     if (!++s_touchpadRapidPendingGeneration) ++s_touchpadRapidPendingGeneration;
 }
 
@@ -16555,21 +16582,25 @@ static bool RapidTouchpadDeadlineReached(ULONGLONG uiTick) {
 
 static void ArmRapidPendingTimer() {
     if (!g_hSwitcher || !s_touchpadRapidPending) return;
-    if (s_touchpadRapidPendingTimerId) {
-        KillTimer(g_hSwitcher, s_touchpadRapidPendingTimerId);
-        s_touchpadRapidPendingTimerId = 0;
-    }
+    KillTimer(g_hSwitcher, SWS_TOUCHPAD_RAPID_PENDING_TIMER_ID);
     ULONGLONG now = GetTickCount64();
     UINT remaining = RapidTouchpadDeadlineReached(now)
                          ? 1u
                          : (UINT)(s_touchpadRapidPendingDeadline - now);
-    s_touchpadRapidPendingTimerId = SetTimer(
-        g_hSwitcher, 0, remaining, RapidPendingTimerProc);
-    if (!s_touchpadRapidPendingTimerId) {
+    if (!SetTimer(g_hSwitcher, SWS_TOUCHPAD_RAPID_PENDING_TIMER_ID,
+                  remaining, nullptr)) {
         Wh_Log(L"SWS: rapid pending timer arm failed error=%u deadline=%llu now=%llu",
                GetLastError(),
                (unsigned long long)s_touchpadRapidPendingDeadline,
                (unsigned long long)now);
+    } else {
+        Wh_Log(L"SWS: rapid pending timer armed generation=%u remaining=%u now=%llu "
+               L"deadline=%llu rawPhase=%u",
+               s_touchpadRapidPendingGeneration, remaining,
+               (unsigned long long)now,
+               (unsigned long long)s_touchpadRapidPendingDeadline,
+               RawThreeFingerStatePhase(g_touchpadRawThreeFingerState.load(
+                   std::memory_order_acquire)));
     }
 }
 
@@ -16592,6 +16623,22 @@ static bool RapidTouchpadLiftObserved() {
     // The reader may publish its lift before the UI receives the frame. Keep
     // the UI-side state as a fallback when the shared phase is still live.
     return s_rawGestureTips == 0 && s_rawGestureSawThree;
+}
+
+static bool RapidTouchpadLiveObserved() {
+    if (!s_touchpadRapidPending) return false;
+    ULONGLONG state = g_touchpadRawThreeFingerState.load(std::memory_order_acquire);
+    ULONGLONG serial = RawThreeFingerStateSerial(state);
+    ULONG phase = RawThreeFingerStatePhase(state);
+    ULONGLONG stateTick = g_touchpadRawThreeFingerLastTick.load(
+        std::memory_order_acquire);
+    if (phase == SWS_RAW_THREE_PHASE_LIVE &&
+        stateTick >= s_touchpadRapidPendingTick &&
+        (!s_touchpadRapidPendingRawSerial ||
+         serial >= s_touchpadRapidPendingRawSerial)) {
+        return true;
+    }
+    return s_rawGestureTips > 0 && s_rawGestureSawThree;
 }
 
 static bool SelectInitialTouchpadTarget(int direction);
@@ -16662,11 +16709,6 @@ static bool BeginRapidTouchpadPending(int initialStep, HWND invocationSource = n
 
     ArmRapidPendingTimer();
 
-    BringWindowToTop(g_hSwitcher);
-    TapUnassignedKeyForForeground();
-    if (!ActivateRawTouchpadWindow()) {
-        ScheduleRawTouchpadForegroundRetry();
-    }
     SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID,
              SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
     ULONGLONG physicalAge = physicalStartTick && now >= physicalStartTick
@@ -16968,14 +17010,19 @@ static bool NavigateRawTouchpad(bool horizontal, int delta, int travel) {
     return moved;
 }
 
-static bool ActivateNativeTouchpadWindow() {
+static bool ActivateNativeTouchpadWindow(bool activateForeground = true) {
     if (!g_hSwitcher || !IsWindow(g_hSwitcher)) return false;
-    // Consume Explorer's supported grant before expensive list/layout/icon work
-    // or another input packet can revoke it. The endpoint is revealed offscreen
-    // without activation, never with an old painted frame on the desktop.
+    // Stage endpoint offscreen before expensive list/layout/icon work. Never
+    // reveal an old painted frame on the desktop.
     SetWindowPos(g_hSwitcher, nullptr, -32000, -32000, 0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
+    if (!activateForeground) {
+        Wh_Log(L"SWS: native PTP foreground handoff deferred until presentation "
+               L"foreground=%p",
+               GetForegroundWindow());
+        return true;
+    }
     SetLastError(ERROR_SUCCESS);
     BOOL granted = SetForegroundWindow(g_hSwitcher);
     DWORD error = granted ? ERROR_SUCCESS : GetLastError();
@@ -16988,26 +17035,73 @@ static bool ActivateNativeTouchpadWindow() {
 
 static void CompleteNativeTouchpadInvocation() {
     if (!s_nativeTouchpadInvocation.token || !s_nativeTouchpadInvocation.completion) return;
+    const bool valid = s_nativeTouchpadInvocation.epoch == s_nativeTouchpadRelayEpoch.load() &&
+                       g_touchpadGesturesEnabled.load() && !g_touchpadReaderStopping.load();
+    if (!valid) {
+        CancelNativeTouchpadInvocation();
+        return;
+    }
     ULONGLONG now = GetTickCount64();
+    const UINT event = s_nativeTouchpadInvocation.completion;
+    const bool rawLiveObserved =
+        s_nativeTouchpadInvocation.rawStartLive || RapidTouchpadLiveObserved();
+    const bool rapidEndPending =
+        event == SWS_NATIVE_TOUCHPAD_END && s_touchpadRapidPending &&
+        !s_nativeTouchpadInvocation.rawAdopted &&
+        rawLiveObserved &&
+        g_touchpadReaderAvailable.load(std::memory_order_acquire) &&
+        !g_touchpadReaderStopping.load(std::memory_order_acquire);
+    const bool rapidLiftObserved =
+        s_touchpadRapidPending && RapidTouchpadLiftObserved();
+    if (rapidEndPending && !rapidLiftObserved) {
+        // Native PTP completion ends Explorer's visual gesture, not necessarily
+        // the physical three-finger contact. Let raw lift evidence or the rapid
+        // deadline decide whether this hidden session commits or becomes visible.
+        KillTimer(g_hSwitcher, SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID);
+        Wh_Log(L"SWS: native PTP completion deferred event=%u token=%u reason=awaiting-raw-lift "
+               L"rawReaderAvailable=%d rawPhase=%u rawTips=%d pending=%d deadline=%llu",
+               event, s_nativeTouchpadInvocation.token,
+               s_nativeTouchpadInvocation.rawReaderAvailable,
+               RawThreeFingerStatePhase(g_touchpadRawThreeFingerState.load(
+                   std::memory_order_acquire)),
+               s_rawGestureTips,
+               s_touchpadRapidPending,
+               (unsigned long long)s_touchpadRapidPendingDeadline);
+        if (RapidTouchpadDeadlineReached(now)) RevealPendingSwitcher();
+        return;
+    }
+    if (event == SWS_NATIVE_TOUCHPAD_END && s_touchpadRapidPending &&
+        !s_nativeTouchpadInvocation.rawAdopted && !rapidLiftObserved &&
+        (LONG)(s_nativeTouchpadInvocation.completionTick -
+               (DWORD)s_touchpadRapidPendingDeadline) >= 0) {
+        Wh_Log(L"SWS: native PTP end after rapid deadline token=%u; revealing before completion",
+               s_nativeTouchpadInvocation.token);
+        RevealPendingSwitcher();
+        return;
+    }
     if (!s_nativeTouchpadInvocation.rawAdopted &&
         now < s_nativeTouchpadInvocation.completionDeadline &&
         SetTimer(g_hSwitcher, SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID,
                  (UINT)(s_nativeTouchpadInvocation.completionDeadline - now), nullptr)) {
         return; // A queued timer from an old invocation must not shorten this wait.
     }
-    UINT event = s_nativeTouchpadInvocation.completion;
     DWORD token = s_nativeTouchpadInvocation.token;
     DWORD tick = s_nativeTouchpadInvocation.completionTick;
-    bool valid = s_nativeTouchpadInvocation.epoch == s_nativeTouchpadRelayEpoch.load() &&
-                 g_touchpadGesturesEnabled.load() && !g_touchpadReaderStopping.load();
     bool rawOwnsStroke = s_nativeTouchpadInvocation.rawAdopted &&
                         s_rawGestureSawThree && s_rawGestureTips > 0;
+    const bool rawReaderAvailable = s_nativeTouchpadInvocation.rawReaderAvailable;
+    const bool rawStartLive = s_nativeTouchpadInvocation.rawStartLive;
+    const bool rapidPending = s_touchpadRapidPending;
     CancelNativeTouchpadInvocation();
-    Wh_Log(L"SWS: native PTP completion (event=%u token=%u rawOwnsStroke=%d sticky=%d)",
-           event, token, rawOwnsStroke, g_isSticky);
+    Wh_Log(L"SWS: native PTP completion (event=%u token=%u rawOwnsStroke=%d "
+           L"rawReaderAvailable=%d rawStartLive=%d rapidPending=%d rapidLive=%d "
+           L"rapidLift=%d sticky=%d)",
+           event, token, rawOwnsStroke, rawReaderAvailable,
+           rawStartLive, rapidPending,
+           rawLiveObserved, rapidLiftObserved, g_isSticky);
     // Moving focus to SWS can finish/cancel the old native context while reports
     // now arrive in SWS. Once adopted, only the actual HID lift commits it.
-    if (!valid || rawOwnsStroke) return;
+    if (rawOwnsStroke) return;
     s_nativeTouchpadRawDiscardTick = tick;
     s_nativeTouchpadRawDiscardPending = true;
     g_isTouchpadGestureActive = false;
@@ -17070,12 +17164,15 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
             Wh_Log(L"SWS: fresh native touchpad start interrupts exit animation");
             HideSwitcher();
         }
+        const bool horizontal = event != 2;
         HWND source = GetForegroundWindow();
         s_nativeTouchpadInvocation = {token, epoch,
             rawStartLive && s_rawGestureSawThree && s_rawGestureTips > 0 &&
                 GetTickCount64() - s_rawTouchpadLastFrameTick < 1000,
+            rawReaderAvailable,
+            rawStartLive,
             event == 2};
-        if (!ActivateNativeTouchpadWindow()) {
+        if (!ActivateNativeTouchpadWindow(!horizontal)) {
             CancelNativeTouchpadInvocation();
             return;
         }
@@ -17097,7 +17194,6 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
             s_rawGestureSawThree = false;
             s_rawGestureArmed = false;
         }
-        const bool horizontal = event != 2;
         int initialStep = event == 3 ? 1 : -1;
         if (g_settings.reverseScrollDirection) initialStep = -initialStep;
         const int physicalDirection = horizontal ? (event == 3 ? 1 : -1) : 0;
@@ -17116,7 +17212,7 @@ static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
             !TouchpadHandlingEnabled() || g_touchpadReaderStopping.load() ||
             ((!g_isVisible && !g_isPendingShow) ||
              (horizontal && !openedRapidPending)) ||
-            GetForegroundWindow() != g_hSwitcher) {
+            (!horizontal && GetForegroundWindow() != g_hSwitcher)) {
             HideSwitcher();
             return;
         }
@@ -17526,8 +17622,8 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
         bool openedRapidPending = false;
         if (!sessionOpen) {
             if (s_rawSwipePassedToWindows) return;
-            // No hotkey and no Explorer grant here: make this process eligible for the
-            // foreground before opening, or the commit could not activate the selection.
+            // Rapid pending defers foreground ownership until visible presentation.
+            // Immediate fallback still needs its own foreground eligibility request.
             s_rawSessionOwned = true;
             int initialStep = g_settings.reverseScrollDirection ? -openingDirection : openingDirection;
             openedRapidPending = BeginRapidTouchpadPending(
@@ -17536,9 +17632,9 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
             if (!g_isVisible && !g_isPendingShow) return;
             PromoteRawTouchpadShieldToSession();
             PublishRawSwipe();
-            if (g_hSwitcher && GetForegroundWindow() != g_hSwitcher) {
-                // The tap did not land (seen in a capture): the switcher has to own the
-                // foreground, or the commit cannot activate the selection.
+            if (!openedRapidPending && g_hSwitcher &&
+                GetForegroundWindow() != g_hSwitcher) {
+                // The immediate fallback has no pending presentation handoff.
                 TapUnassignedKeyForForeground();
                 ActivateRawTouchpadWindow();
             }
@@ -17811,6 +17907,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             ArmRapidPendingTimer();
             return 0;
         }
+        Wh_Log(L"SWS: rapid timeout received generation=%u now=%llu deadline=%llu "
+               L"lift=%d foreground=%p pending=%d visible=%d",
+               generation, (unsigned long long)now,
+               (unsigned long long)s_touchpadRapidPendingDeadline,
+               RapidTouchpadLiftObserved(), GetForegroundWindow(),
+               s_touchpadRapidPending, g_isVisible);
         if (RapidTouchpadLiftObserved()) {
             Wh_Log(L"SWS: rapid transition state=committing reason=timeout-lift uiTick=%llu deadline=%llu",
                    (unsigned long long)now,
@@ -17872,6 +17974,23 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
 
     if (uMsg == WM_TIMER) {
+        if (wParam == SWS_TOUCHPAD_RAPID_PENDING_TIMER_ID) {
+            KillTimer(hWnd, SWS_TOUCHPAD_RAPID_PENDING_TIMER_ID);
+            Wh_Log(L"SWS: rapid pending timer received generation=%u pending=%d "
+                   L"now=%llu deadline=%llu rawPhase=%u",
+                   s_touchpadRapidPendingGeneration, s_touchpadRapidPending,
+                   (unsigned long long)GetTickCount64(),
+                   (unsigned long long)s_touchpadRapidPendingDeadline,
+                   RawThreeFingerStatePhase(g_touchpadRawThreeFingerState.load(
+                       std::memory_order_acquire)));
+            if (s_touchpadRapidPending &&
+                !PostMessageW(hWnd, WM_SWS_RAPID_TIMEOUT,
+                              (WPARAM)s_touchpadRapidPendingGeneration, 0)) {
+                Wh_Log(L"SWS: rapid timeout post failed error=%u", GetLastError());
+                ArmRapidPendingTimer();
+            }
+            return 0;
+        }
         if (wParam == SWS_RAW_TWO_TAP_MOUSE_TIMER_ID) {
             UpdateTwoFingerTapMouseHookLifetime();
             return 0;
