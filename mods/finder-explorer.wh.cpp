@@ -15,6 +15,8 @@
 /*
 # Finder-style Explorer (column view)
 
+![Column view in File Explorer](https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/finder-explorer.png)
+
 Brings the macOS Finder column view to the Windows 11 File Explorer, with a
 look inspired by macOS.
 
