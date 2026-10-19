@@ -15710,6 +15710,30 @@
         "version": "1.0.2"
       }
     },
+    "taskbar-smoke": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792386289000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792386289000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Rubicus",
+        "compilerOptions": "-ld2d1 -lole32 -loleaut32 -luuid -lshell32 -luser32 -lgdi32 -ldwmapi",
+        "description": "Soft, living smoke around the Windows 11 taskbar pills. Real fluid simulation: it rises, swirls, drifts over the edge and reacts to the mouse. Click-through overlay, follows auto-hide, hides in fullscreen.",
+        "github": "https://github.com/xxsoulxx",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Taskbar Smoke",
+        "version": "1.2.0"
+      }
+    },
     "taskbar-spatial-order": {
       "details": {
         "defaultSorting": 660,

@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-19T04:03:50.000Z</updated>
+    <updated>2026-10-19T05:04:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Smoke 1.2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-smoke#1d75df2dd28eee3ed9223f8f32c46e07f7feb4b7</id>
+        <link href="https://windhawk.net/mods/taskbar-smoke"/>
+        <updated>2026-10-19T05:04:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarsmoke">Taskbar Smoke</h1>
+<p>Draws a transparent, click-through overlay with animated dark smoke around the
+Windows 11 taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/xxsoulxx/taskbar-smoke/main/taskbar-smoke.gif" alt="Taskbar Smoke" /></p>
+<ul>
+<li><strong>Five smoke styles:</strong> a real-time fluid simulation (the smoke rises, swirls
+and drifts over the edge), a classic layered texture smoke, and three tuned
+variants of the fluid smoke.</li>
+<li><strong>Reacts to the mouse:</strong> moving the cursor across the taskbar pushes the smoke
+aside; it flows back on its own.</li>
+<li><strong>Eight colors</strong> (violet, pink, light blue, ice blue, green, gold, orange,
+red), plus the Windows accent color or a slow rainbow cycle. An optional
+<strong>second color</strong> blends along each pill, from left to right.</li>
+<li><strong>Opacity</strong> in seven steps (17% to 150%), <strong>density</strong>, <strong>speed</strong>, <strong>tone</strong>
+(dark smoke or light glow), <strong>halo thickness</strong> and <strong>mouse reach</strong>.</li>
+<li>Optional small dark clouds slowly rising from the taskbar.</li>
+<li>Follows auto-hide, hides in fullscreen apps, settings apply instantly.</li>
+</ul>
+<p>Works best with a dark, pill-shaped taskbar theme (e.g. Windows 11 Taskbar
+Styler); the smoke follows the taskbar's button groups. Runs in its own process
+(tool mod), Explorer is not modified.</p>
+<p>Limitations: primary taskbar only, designed for a bottom-docked taskbar.</p>]]></content>
+        <author>
+            <name>Rubicus</name>
+            <uri>https://github.com/xxsoulxx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Open Window Underline 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-open-window-underline#ed9b52479fb527279540b2fb7afcd367afac640e</id>
@@ -1167,35 +1199,6 @@ resolutions, multi-monitor support and low rendering overhead.</p>]]></content>
         <author>
             <name>SilverAmd</name>
             <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fancy Task View Cross-Monitor Drag 0.7.0]]></title>
-        <id>https://windhawk.net/mods/fancy-taskview-cross-monitor-drag#7d8699ddf863f280eeeac9bbcbdd7527eef7d423</id>
-        <link href="https://windhawk.net/mods/fancy-taskview-cross-monitor-drag"/>
-        <updated>2026-10-15T18:31:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fancytaskviewcrossmonitordrag">Fancy Task View Cross-Monitor Drag</h1>
-<p>Move windows between monitors by dragging their thumbnails in Windows 11 Task View (<code>Win + Tab</code>).</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Drag a Task View window thumbnail from one monitor to another.</li>
-<li>Remember window size and position separately for each monitor.</li>
-<li>Configure first-time window sizing and positioning.</li>
-<li>Choose whether Task View stays open, closes, or closes and reopens after a move.</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Task View may continue displaying the original thumbnail placement until reopened.</li>
-<li>Virtual desktop assignments do not change.</li>
-<li>Elevated or protected windows may not accept movement requests.</li>
-<li>Some applications adjust their own dimensions when changing monitors.</li>
-<li>Window positions are remembered while the mod is running.</li>
-<li>Windows with duplicate titles on the source monitor cannot be identified.</li>
-<li>A thumbnail whose name differs from its window title cannot be identified.</li>
-</ul>]]></content>
-        <author>
-            <name>His Fanciness</name>
-            <uri>https://github.com/HisFanciness</uri>
         </author>
     </entry>
 </feed>

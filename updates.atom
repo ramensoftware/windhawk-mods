@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-19T04:49:33.000Z</updated>
+    <updated>2026-10-19T05:04:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Smoke 1.2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-smoke#1d75df2dd28eee3ed9223f8f32c46e07f7feb4b7</id>
+        <link href="https://windhawk.net/mods/taskbar-smoke"/>
+        <updated>2026-10-19T05:04:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarsmoke">Taskbar Smoke</h1>
+<p>Draws a transparent, click-through overlay with animated dark smoke around the
+Windows 11 taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/xxsoulxx/taskbar-smoke/main/taskbar-smoke.gif" alt="Taskbar Smoke" /></p>
+<ul>
+<li><strong>Five smoke styles:</strong> a real-time fluid simulation (the smoke rises, swirls
+and drifts over the edge), a classic layered texture smoke, and three tuned
+variants of the fluid smoke.</li>
+<li><strong>Reacts to the mouse:</strong> moving the cursor across the taskbar pushes the smoke
+aside; it flows back on its own.</li>
+<li><strong>Eight colors</strong> (violet, pink, light blue, ice blue, green, gold, orange,
+red), plus the Windows accent color or a slow rainbow cycle. An optional
+<strong>second color</strong> blends along each pill, from left to right.</li>
+<li><strong>Opacity</strong> in seven steps (17% to 150%), <strong>density</strong>, <strong>speed</strong>, <strong>tone</strong>
+(dark smoke or light glow), <strong>halo thickness</strong> and <strong>mouse reach</strong>.</li>
+<li>Optional small dark clouds slowly rising from the taskbar.</li>
+<li>Follows auto-hide, hides in fullscreen apps, settings apply instantly.</li>
+</ul>
+<p>Works best with a dark, pill-shaped taskbar theme (e.g. Windows 11 Taskbar
+Styler); the smoke follows the taskbar's button groups. Runs in its own process
+(tool mod), Explorer is not modified.</p>
+<p>Limitations: primary taskbar only, designed for a bottom-docked taskbar.</p>]]></content>
+        <author>
+            <name>Rubicus</name>
+            <uri>https://github.com/xxsoulxx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 5.2.0]]></title>
         <id>https://windhawk.net/mods/win7-network-flyout-recreation#16daa7c23005f6dce3f8152f548e5af5c7ca629b</id>
@@ -678,41 +710,6 @@ from the same application are never grouped or stacked together in this view.</p
         <author>
             <name>LTHC</name>
             <uri>https://github.com/LoreTheHolyChip</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Secondary Monitor Pin 1.1]]></title>
-        <id>https://windhawk.net/mods/secondary-monitor-pin#fbef6d45b84dfebdbca3478bd40d54e6f5fdab16</id>
-        <link href="https://windhawk.net/mods/secondary-monitor-pin"/>
-        <updated>2026-10-17T15:03:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="secondarymonitorpin">Secondary Monitor Pin</h1>
-<p>Automatically pins windows that are placed on a <strong>secondary monitor</strong> so that
-they are shown on <strong>all virtual desktops</strong>, the same as choosing <em>Show this
-window on all desktops</em> from the window's title bar context menu.</p>
-<p>When a window moves back to the primary monitor it is unpinned again, but only
-if this mod was the one that pinned it. Windows that were pinned manually are
-left untouched.</p>
-<p>The mod runs as a tool mod in a dedicated process, so it does not inject into
-<code>explorer.exe</code>. It only talks to the virtual desktop manager when a window
-changes monitors, when a new window appears or when a window closes, which keeps
-the number of shell calls low and keeps switching virtual desktops smooth. A
-timer polls for monitor changes that the window event hooks do not report, such
-as <code>Win</code>+<code>Shift</code>+arrow, programmatic moves and display changes.</p>
-<p>Windows that are on another virtual desktop are pinned too, so the
-secondary-monitor windows of every desktop end up shown together on all
-desktops.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Uses undocumented Windows virtual desktop interfaces, which may change with
-future Windows updates.</li>
-<li>Works on Windows 10 and Windows 11.</li>
-<li>Do not run this mod together with another tool that also pins windows across
-virtual desktops, as two implementations competing over the same shell
-interfaces can cause issues.</li>
-</ul>]]></content>
-        <author>
-            <name>tafadias</name>
-            <uri>https://github.com/tafadias</uri>
         </author>
     </entry>
 </feed>
