@@ -4,7 +4,7 @@
 // @description     Transforms the classic Run dialog into a modern Fluent UI with Acrylic blur, history, timestamps, and Taskbar toggle.
 // @version         2.0.14
 // @author          caotu2k5
-// @github          caotu2k5
+// @github          https://github.com/caotu2k5
 // @include         explorer.exe
 // @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -luxtheme -lcomctl32 -lversion -lgdiplus -limm32 -lcomdlg32
 // ==/WindhawkMod==
