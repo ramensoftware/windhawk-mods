@@ -15,6 +15,8 @@
 /*
 # Standalone Dock (macOS-like)
 
+![Standalone Dock](https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/macos-dock.png)
+
 A Dock like the one in macOS, drawn by the mod itself in its own windows (it's
 not a restyled taskbar). Behaviors taken from macOS:
 
