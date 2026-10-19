@@ -7,8 +7,8 @@
 // @version         1.0.0
 // @author          @sharexza
 // @github          https://github.com/raviadityasetiawan-oss
-// @include         explorer.exe
-// @compilerOptions -luser32
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,18 +20,25 @@ Take several screenshots in a row (Win+Shift+S, PrintScreen, ...), then press
 the **second** on the next Ctrl+V, and so on (First In, First Out).
 
 How it works (short version):
-* A hidden window in explorer.exe listens for clipboard changes
-  (`AddClipboardFormatListener`) and copies every new screenshot as raw bytes
-  (CF_DIB / PNG) into a private FIFO queue. No GDI handles are ever stored.
+* A hidden window in a dedicated tool process listens for clipboard changes
+  (`AddClipboardFormatListener`) and copies pure screenshot payloads
+  (PNG / CF_DIB) into a private FIFO queue.
+* Only pure screenshots are queued. Copying anything else (text, Excel cells,
+  files, HTML) automatically clears the queue so Ctrl+V never interferes with
+  normal copy/paste.
 * A low-level keyboard hook swallows Ctrl+V (in any application) when the
-  queue is not empty, puts the oldest screenshot onto
-  the real clipboard, then re-sends a marked V keystroke so the app pastes it.
+  queue is not empty, puts the oldest screenshot onto the clipboard, then
+  re-sends a marked V keystroke so the app pastes it.
+* Windows Clipboard History (Win+V) duplicates are suppressed for re-injected
+  pastes.
 * When the queue is empty, Ctrl+V behaves completely normally.
-* Copying anything that is not an image (text, files, ...) clears the queue,
-  so Ctrl+V never pastes a stale screenshot over what you just copied.
 
-Only explorer.exe is injected. Nothing is injected into the apps you paste into,
-so there is nothing to marshal across processes.
+Runs as a dedicated tool process in Windhawk. Nothing is injected into explorer.exe
+or into the apps you paste into, so there is nothing to marshal across processes.
+
+Note: When pasting, the physical 'V' keystroke is swallowed while the image is
+restored to the clipboard, then re-injected. Very fast typing immediately after
+Ctrl+V may occasionally land before the pasted image.
 */
 // ==/WindhawkModReadme==
 
@@ -47,14 +54,12 @@ so there is nothing to marshal across processes.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellapi.h>
 
-#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <cwctype>
 #include <deque>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -65,30 +70,29 @@ namespace {
 // ----------------------------------------------------------------------------
 constexpr UINT kMsgPaste = WM_APP + 1;
 constexpr ULONG_PTR kInjectMarker = 0x53585A41;  // "SXZA": tags our own SendInput events
-constexpr SIZE_T kMaxFormatBytes = 256ull * 1024 * 1024;
+constexpr SIZE_T kMaxItemBytes = 32ull * 1024 * 1024;    // 32 MB max per single image
+constexpr SIZE_T kMaxQueueBytes = 128ull * 1024 * 1024;  // 128 MB total queue budget
 constexpr ULONGLONG kDuplicateWindowMs = 1500;
 constexpr wchar_t kWndClass[] = L"WH_SeqScreenshotPaste_Window";
-constexpr wchar_t kMutexName[] = L"Local\\WH_SeqScreenshotPaste_SingleInstance";
 
 // ----------------------------------------------------------------------------
-// Data model: a queue item is a set of raw clipboard payloads (plain bytes).
+// Data model: a queue item stores a single image format payload as raw bytes.
 // ----------------------------------------------------------------------------
-struct FormatBlob {
-    UINT fmt;
-    std::vector<BYTE> data;
-};
-
 struct ClipItem {
-    std::vector<FormatBlob> blobs;
+    UINT fmt = 0;
+    std::vector<BYTE> data;
     ULONGLONG tickMs = 0;
     uint64_t hash = 0;
+
+    size_t byteSize() const { return data.size(); }
 };
 
 // ----------------------------------------------------------------------------
 // Globals
 // ----------------------------------------------------------------------------
-CRITICAL_SECTION g_cs;  // guards g_queue, g_maxQueue, g_expireSec
+CRITICAL_SECTION g_cs;  // guards g_queue, g_queueTotalBytes, g_maxQueue, g_expireSec
 std::deque<ClipItem> g_queue;
+size_t g_queueTotalBytes = 0;
 int g_maxQueue = 10;
 int g_expireSec = 600;
 
@@ -96,10 +100,14 @@ std::atomic<HWND> g_clipWnd{nullptr};
 HANDLE g_clipThread = nullptr;
 HANDLE g_hookThread = nullptr;
 DWORD g_hookThreadId = 0;
-HANDLE g_instanceMutex = nullptr;
 HHOOK g_hook = nullptr;
-UINT g_fmtPng = 0;
 bool g_active = false;
+
+UINT g_fmtPng = 0;
+UINT g_fmtCanIncludeInHistory = 0;
+UINT g_fmtCanUploadToCloud = 0;
+UINT g_fmtExcludeMonitor = 0;
+UINT g_fmtClipboardViewerIgnore = 0;
 
 std::atomic<bool> g_swallowedV{false};
 std::atomic<ULONGLONG> g_swallowTick{0};
@@ -143,6 +151,19 @@ void PurgeExpiredLocked() {
     const ULONGLONG now = GetTickCount64();
     const ULONGLONG limit = static_cast<ULONGLONG>(g_expireSec) * 1000ULL;
     while (!g_queue.empty() && now - g_queue.front().tickMs > limit) {
+        g_queueTotalBytes -= g_queue.front().byteSize();
+        g_queue.pop_front();
+    }
+}
+
+// Caller must hold the lock. Ensures both item count and memory budget limits.
+void EnforceBudgetLocked(size_t additionalBytes) {
+    while (!g_queue.empty() &&
+           (g_queueTotalBytes + additionalBytes > kMaxQueueBytes ||
+            static_cast<int>(g_queue.size()) >= g_maxQueue)) {
+        Wh_Log(L"Dropping oldest screenshot (count=%d, total=%zu bytes)",
+               static_cast<int>(g_queue.size()), g_queueTotalBytes);
+        g_queueTotalBytes -= g_queue.front().byteSize();
         g_queue.pop_front();
     }
 }
@@ -156,9 +177,10 @@ bool QueueHasItems() {
 void ClearQueue() {
     Lock l;
     if (!g_queue.empty()) {
-        Wh_Log(L"Queue cleared (%d item(s) discarded)",
-               static_cast<int>(g_queue.size()));
+        Wh_Log(L"Queue cleared (%d item(s), %zu bytes discarded)",
+               static_cast<int>(g_queue.size()), g_queueTotalBytes);
         g_queue.clear();
+        g_queueTotalBytes = 0;
     }
 }
 
@@ -166,14 +188,17 @@ void LoadSettings() {
     int maxQ = Wh_GetIntSetting(L"maxQueue");
     int expire = Wh_GetIntSetting(L"expireSeconds");
 
-    if (maxQ < 1) maxQ = 10;
+    if (maxQ < 1) maxQ = 1;
     if (maxQ > 50) maxQ = 50;
     if (expire < 0) expire = 0;
 
     Lock l;
     g_maxQueue = maxQ;
     g_expireSec = expire;
-    while (static_cast<int>(g_queue.size()) > g_maxQueue) g_queue.pop_front();
+    while (static_cast<int>(g_queue.size()) > g_maxQueue) {
+        g_queueTotalBytes -= g_queue.front().byteSize();
+        g_queue.pop_front();
+    }
 }
 
 // The clipboard may be briefly locked by the program that just wrote to it.
@@ -191,74 +216,176 @@ bool ReadFormat(UINT fmt, std::vector<BYTE>& out) {
     HANDLE h = GetClipboardData(fmt);
     if (!h) return false;
     const SIZE_T size = GlobalSize(h);
-    if (size == 0 || size > kMaxFormatBytes) return false;
+    if (size == 0 || size > kMaxItemBytes) return false;
     const BYTE* p = static_cast<const BYTE*>(GlobalLock(h));
     if (!p) return false;
-    out.assign(p, p + size);
+
+    bool ok = false;
+    try {
+        out.assign(p, p + size);
+        ok = true;
+    } catch (const std::bad_alloc&) {
+        Wh_Log(L"Memory allocation failed in ReadFormat (%zu bytes)", size);
+        out.clear();
+        ok = false;
+    }
+
     GlobalUnlock(h);
-    return true;
+    return ok;
+}
+
+// Identifies known metadata/helper formats that screenshot tools or Windows
+// produce alongside the image, so we know it's not text, HTML, or native app data.
+bool IsKnownScreenshotMetadataFormat(UINT fmt) {
+    if (fmt == g_fmtCanIncludeInHistory ||
+        fmt == g_fmtCanUploadToCloud ||
+        fmt == g_fmtExcludeMonitor ||
+        fmt == g_fmtClipboardViewerIgnore) {
+        return true;
+    }
+
+    WCHAR name[256];
+    if (GetClipboardFormatNameW(fmt, name, ARRAYSIZE(name)) > 0) {
+        if (_wcsicmp(name, L"PNG") == 0 ||
+            _wcsicmp(name, L"image/png") == 0 ||
+            _wcsicmp(name, L"Bitmap") == 0 ||
+            _wcsicmp(name, L"DeviceIndependentBitmap") == 0 ||
+            _wcsicmp(name, L"DeviceIndependentBitmapV5") == 0 ||
+            _wcsicmp(name, L"Format17") == 0 ||
+            _wcsicmp(name, L"CanIncludeInClipboardHistory") == 0 ||
+            _wcsicmp(name, L"CanUploadToCloudClipboard") == 0 ||
+            _wcsicmp(name, L"ExcludeClipboardContentFromMonitorProcessing") == 0 ||
+            _wcsicmp(name, L"Clipboard Viewer Ignore") == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Clipboard must be open. Synthesized formats are enumerated too.
+// Returns true ONLY if the clipboard exclusively contains image formats and
+// recognized screenshot metadata (i.e. no text, HTML, Excel cells, files, etc.).
+bool IsImageOnlyClipboard() {
+    bool sawImage = false;
+    for (UINT fmt = EnumClipboardFormats(0); fmt; fmt = EnumClipboardFormats(fmt)) {
+        if (fmt == CF_BITMAP || fmt == CF_DIB || fmt == CF_DIBV5 ||
+            fmt == CF_PALETTE || (g_fmtPng && fmt == g_fmtPng)) {
+            sawImage = true;
+        } else if (!IsKnownScreenshotMetadataFormat(fmt)) {
+            return false;  // text, HTML, native app data, files, ...
+        }
+    }
+    return sawImage;
+}
+
+// Checks if the source application requested that this clipboard content be
+// excluded from history/monitoring (e.g. password managers or sensitive data).
+bool IsContentExcluded() {
+    if (g_fmtExcludeMonitor && IsClipboardFormatAvailable(g_fmtExcludeMonitor)) {
+        return true;
+    }
+    if (g_fmtClipboardViewerIgnore && IsClipboardFormatAvailable(g_fmtClipboardViewerIgnore)) {
+        return true;
+    }
+    if (g_fmtCanIncludeInHistory && IsClipboardFormatAvailable(g_fmtCanIncludeInHistory)) {
+        HANDLE h = GetClipboardData(g_fmtCanIncludeInHistory);
+        if (h) {
+            const DWORD* val = static_cast<const DWORD*>(GlobalLock(h));
+            if (val) {
+                bool excluded = (*val == 0);
+                GlobalUnlock(h);
+                if (excluded) return true;
+            }
+        }
+    }
+    return false;
 }
 
 // Snapshot the current clipboard image as plain bytes.
-// CF_DIB is preferred (universally supported, no alpha surprises); CF_DIBV5 is
-// only used when CF_DIB is missing. PNG is added when present (best for
-// Chromium/Electron apps and keeps alpha). CF_BITMAP is never stored: Windows
-// synthesizes it from the DIB on demand, and an HBITMAP is only valid while
-// the clipboard is open.
-bool CaptureClipboard(HWND owner, ClipItem& out) {
-    if (!OpenClipboardRetry(owner)) return false;
-
+// Stores a single format per item: PNG when available (compressed, preserves
+// alpha, lightweight memory footprint), or CF_DIB / CF_DIBV5 otherwise.
+bool CaptureClipboard(ClipItem& out) {
+    // Clipboard is already open by caller.
     std::vector<BYTE> buf;
-    if (IsClipboardFormatAvailable(CF_DIB) && ReadFormat(CF_DIB, buf)) {
-        out.blobs.push_back(FormatBlob{CF_DIB, std::move(buf)});
-    } else {
-        buf.clear();
-        if (IsClipboardFormatAvailable(CF_DIBV5) && ReadFormat(CF_DIBV5, buf)) {
-            out.blobs.push_back(FormatBlob{CF_DIBV5, std::move(buf)});
-        }
+    UINT chosenFmt = 0;
+
+    if (g_fmtPng && IsClipboardFormatAvailable(g_fmtPng) && ReadFormat(g_fmtPng, buf)) {
+        chosenFmt = g_fmtPng;
+    } else if (IsClipboardFormatAvailable(CF_DIB) && ReadFormat(CF_DIB, buf)) {
+        chosenFmt = CF_DIB;
+    } else if (IsClipboardFormatAvailable(CF_DIBV5) && ReadFormat(CF_DIBV5, buf)) {
+        chosenFmt = CF_DIBV5;
     }
 
-    if (g_fmtPng && IsClipboardFormatAvailable(g_fmtPng)) {
-        std::vector<BYTE> png;
-        if (ReadFormat(g_fmtPng, png)) {
-            out.blobs.push_back(FormatBlob{g_fmtPng, std::move(png)});
-        }
-    }
+    if (!chosenFmt || buf.empty()) return false;
 
-    CloseClipboard();
-
-    if (out.blobs.empty()) return false;
-    out.hash = HashBytes(out.blobs.front().data);
+    out.fmt = chosenFmt;
+    out.hash = HashBytes(buf);
     out.tickMs = GetTickCount64();
+    out.data = std::move(buf);
     return true;
 }
 
 // Put an item on the real clipboard. Runs on the clipboard thread, with our
 // own window as clipboard owner (used to recognise our own updates).
+// Also suppresses duplicate entry creation in Windows Clipboard History (Win+V).
 bool RestoreToClipboard(HWND owner, const ClipItem& item) {
     if (!OpenClipboardRetry(owner)) return false;
     EmptyClipboard();
 
-    bool any = false;
-    for (const auto& b : item.blobs) {
-        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, b.data.size());
-        if (!h) continue;
-        void* p = GlobalLock(h);
-        if (!p) {
-            GlobalFree(h);
-            continue;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, item.data.size());
+    if (!h) {
+        CloseClipboard();
+        return false;
+    }
+    void* p = GlobalLock(h);
+    if (!p) {
+        GlobalFree(h);
+        CloseClipboard();
+        return false;
+    }
+    std::memcpy(p, item.data.data(), item.data.size());
+    GlobalUnlock(h);
+
+    bool ok = (SetClipboardData(item.fmt, h) != nullptr);
+    if (!ok) {
+        GlobalFree(h);
+    }
+
+    // Suppress Win+V clipboard history duplicates for re-injected pastes
+    if (g_fmtCanIncludeInHistory) {
+        HGLOBAL hHist = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+        if (hHist) {
+            DWORD* pVal = static_cast<DWORD*>(GlobalLock(hHist));
+            if (pVal) {
+                *pVal = 0;  // 0 = do not include in history
+                GlobalUnlock(hHist);
+                if (!SetClipboardData(g_fmtCanIncludeInHistory, hHist)) {
+                    GlobalFree(hHist);
+                }
+            } else {
+                GlobalFree(hHist);
+            }
         }
-        std::memcpy(p, b.data.data(), b.data.size());
-        GlobalUnlock(h);
-        if (SetClipboardData(b.fmt, h)) {
-            any = true;  // clipboard now owns h
-        } else {
-            GlobalFree(h);
+    }
+    if (g_fmtExcludeMonitor) {
+        HGLOBAL hEx = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD));
+        if (hEx) {
+            DWORD* pVal = static_cast<DWORD*>(GlobalLock(hEx));
+            if (pVal) {
+                *pVal = 0;
+                GlobalUnlock(hEx);
+                if (!SetClipboardData(g_fmtExcludeMonitor, hEx)) {
+                    GlobalFree(hEx);
+                }
+            } else {
+                GlobalFree(hEx);
+            }
         }
     }
 
     CloseClipboard();
-    return any;
+    return ok;
 }
 
 void SendPasteKeystroke() {
@@ -291,25 +418,35 @@ void OnClipboardUpdate(HWND hwnd) {
     // Our own RestoreToClipboard() also triggers this notification: ignore it.
     if (GetClipboardOwner() == hwnd) return;
 
-    const bool hasImage = IsClipboardFormatAvailable(CF_DIB) ||
-                          IsClipboardFormatAvailable(CF_DIBV5) ||
-                          (g_fmtPng && IsClipboardFormatAvailable(g_fmtPng));
+    if (!OpenClipboardRetry(hwnd)) return;
 
-    if (!hasImage) {
-        // The user copied something else (text, files, ...). Drop stale
-        // screenshots so Ctrl+V pastes what was copied last. An empty clipboard
-        // (transient clear) does not count.
-        if (CountClipboardFormats() > 0) ClearQueue();
+    // Check if clipboard contains exclusively image data.
+    if (!IsImageOnlyClipboard()) {
+        const bool hasFormats = (EnumClipboardFormats(0) != 0);
+        CloseClipboard();
+        // The user copied something else (text, Excel cells, files, HTML, ...).
+        // Drop stale screenshots so Ctrl+V pastes what was copied last.
+        // An empty clipboard (transient clear) does not count.
+        if (hasFormats) ClearQueue();
+        return;
+    }
+
+    if (IsContentExcluded()) {
+        CloseClipboard();
         return;
     }
 
     ClipItem item;
-    if (!CaptureClipboard(hwnd, item)) {
-        Wh_Log(L"Could not capture the clipboard image (clipboard busy?)");
+    const bool captured = CaptureClipboard(item);
+    CloseClipboard();
+
+    if (!captured) {
+        Wh_Log(L"Could not capture the clipboard image");
         return;
     }
 
-    // Some programs fire more than one update for a single copy.
+    // Some programs (like Snipping Tool or repeated triggers) fire multiple
+    // updates for a single copy.
     if (g_haveLast && item.hash == g_lastHash &&
         item.tickMs - g_lastTick < kDuplicateWindowMs) {
         return;
@@ -318,13 +455,16 @@ void OnClipboardUpdate(HWND hwnd) {
     g_lastHash = item.hash;
     g_lastTick = item.tickMs;
 
-    Lock l;
-    g_queue.push_back(std::move(item));
-    while (static_cast<int>(g_queue.size()) > g_maxQueue) {
-        Wh_Log(L"Queue full: dropping the oldest screenshot");
-        g_queue.pop_front();
+    try {
+        Lock l;
+        EnforceBudgetLocked(item.byteSize());
+        g_queueTotalBytes += item.byteSize();
+        g_queue.push_back(std::move(item));
+        Wh_Log(L"Screenshot queued (%d in queue, %zu bytes total)",
+               static_cast<int>(g_queue.size()), g_queueTotalBytes);
+    } catch (const std::bad_alloc&) {
+        Wh_Log(L"Memory allocation failed while enqueuing screenshot");
     }
-    Wh_Log(L"Screenshot queued (%d in queue)", static_cast<int>(g_queue.size()));
 }
 
 void OnPaste(HWND hwnd) {
@@ -335,6 +475,7 @@ void OnPaste(HWND hwnd) {
         PurgeExpiredLocked();
         if (!g_queue.empty()) {
             item = std::move(g_queue.front());
+            g_queueTotalBytes -= item.byteSize();
             g_queue.pop_front();
             have = true;
         }
@@ -344,8 +485,13 @@ void OnPaste(HWND hwnd) {
         if (!RestoreToClipboard(hwnd, item)) {
             // Do not lose the screenshot: put it back at the head of the queue.
             Wh_Log(L"Restore failed, re-queueing the screenshot");
-            Lock l;
-            g_queue.push_front(std::move(item));
+            try {
+                Lock l;
+                g_queueTotalBytes += item.byteSize();
+                g_queue.push_front(std::move(item));
+            } catch (const std::bad_alloc&) {
+                Wh_Log(L"Memory allocation failed while re-queueing");
+            }
         }
     }
 
@@ -361,6 +507,9 @@ LRESULT CALLBACK ClipWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             return 0;
         case kMsgPaste:
             OnPaste(hwnd);
+            return 0;
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
             RemoveClipboardFormatListener(hwnd);
@@ -472,14 +621,14 @@ DWORD WINAPI HookThreadProc(LPVOID param) {
 void StopThreads() {
     if (g_hookThread) {
         PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hookThread, 5000);
+        WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
     }
     if (g_clipThread) {
         HWND w = g_clipWnd.load();
         if (w) PostMessageW(w, WM_CLOSE, 0, 0);
-        WaitForSingleObject(g_clipThread, 5000);
+        WaitForSingleObject(g_clipThread, INFINITE);
         CloseHandle(g_clipThread);
         g_clipThread = nullptr;
     }
@@ -488,25 +637,22 @@ void StopThreads() {
 }  // namespace
 
 // ----------------------------------------------------------------------------
-// Windhawk entry points
+// Windhawk tool mod callbacks
 // ----------------------------------------------------------------------------
-BOOL Wh_ModInit() {
-    Wh_Log(L"Init");
-
-    // Several explorer.exe processes can exist; only the first one may act.
-    g_instanceMutex = CreateMutexW(nullptr, FALSE, kMutexName);
-    if (g_instanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"Another explorer.exe instance already runs this mod; staying idle");
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
-        return TRUE;
-    }
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Tool Mod Init");
 
     InitializeCriticalSection(&g_cs);
     LoadSettings();
     g_fmtPng = RegisterClipboardFormatW(L"PNG");
+    g_fmtCanIncludeInHistory = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+    g_fmtCanUploadToCloud = RegisterClipboardFormatW(L"CanUploadToCloudClipboard");
+    g_fmtExcludeMonitor = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    g_fmtClipboardViewerIgnore = RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
+
     g_swallowedV = false;
     g_haveLast = false;
+    g_queueTotalBytes = 0;
 
     HANDLE clipReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     HANDLE hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -514,16 +660,15 @@ BOOL Wh_ModInit() {
         if (clipReady) CloseHandle(clipReady);
         if (hookReady) CloseHandle(hookReady);
         DeleteCriticalSection(&g_cs);
-        if (g_instanceMutex) { CloseHandle(g_instanceMutex); g_instanceMutex = nullptr; }
         return FALSE;
     }
 
     g_clipThread = CreateThread(nullptr, 0, ClipThreadProc, clipReady, 0, nullptr);
-    if (g_clipThread) WaitForSingleObject(clipReady, 3000);
+    if (g_clipThread) WaitForSingleObject(clipReady, INFINITE);
 
     if (g_clipThread && g_clipWnd.load()) {
         g_hookThread = CreateThread(nullptr, 0, HookThreadProc, hookReady, 0, &g_hookThreadId);
-        if (g_hookThread) WaitForSingleObject(hookReady, 3000);
+        if (g_hookThread) WaitForSingleObject(hookReady, INFINITE);
     }
 
     CloseHandle(clipReady);
@@ -534,29 +679,205 @@ BOOL Wh_ModInit() {
         StopThreads();
         DeleteCriticalSection(&g_cs);
         g_queue.clear();
-        if (g_instanceMutex) { CloseHandle(g_instanceMutex); g_instanceMutex = nullptr; }
+        g_queueTotalBytes = 0;
         return FALSE;
     }
 
     g_active = true;
-    Wh_Log(L"Active");
+    Wh_Log(L"Tool Mod Active");
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_active) LoadSettings();
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
+void WhTool_ModUninit() {
+    Wh_Log(L"Tool Mod Uninit");
     if (g_active) {
         StopThreads();  // hook first, then the clipboard window
         g_queue.clear();
+        g_queueTotalBytes = 0;
         DeleteCriticalSection(&g_cs);
         g_active = false;
     }
-    if (g_instanceMutex) {
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
