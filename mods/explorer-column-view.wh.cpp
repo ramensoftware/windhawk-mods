@@ -2,7 +2,7 @@
 // @id              explorer-column-view
 // @name            Explorer Column View
 // @description     Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.
-// @version         0.40
+// @version         0.42
 // @author          ItsMikesch
 // @github          https://github.com/ItsMikesch
 // @license         MIT
@@ -527,6 +527,19 @@ struct Session final : std::enable_shared_from_this<Session> {
     IConnectionPoint* nativeSelectionConnection = nullptr;
     DWORD nativeSelectionCookie = 0;
     IUnknown* nativeSelectionIdentity = nullptr;
+    HWND nativeSelectionWindow = nullptr;
+    PIDLIST_ABSOLUTE nativeRestorationExpected = nullptr;
+    PIDLIST_ABSOLUTE nativeRestorationRoot = nullptr;
+    ULONG_PTR nativeRestorationRootSerial = 0;
+    ULONG_PTR nativeRestorationNavigation = 0;
+    ULONG_PTR nativeRestorationConnection = 0;
+    ULONG_PTR nativeRestorationInputEpoch = 0;
+    ULONG_PTR nativeRestorationObserver = 0;
+    ULONG_PTR nativeRestorationBlockedSerial = 0;
+    ULONGLONG nativeRestorationStarted = 0;
+    // Borrowed from the observer, which retires its bound permit before release.
+    IUnknown* nativeRestorationViewIdentity = nullptr;
+    HWND nativeRestorationWindow = nullptr;
     ULONG_PTR nativeSelectionGeneration = 0;
     ULONG_PTR nativeSelectionChangeSerial = 0;
     std::wstring tabPath;
@@ -565,6 +578,7 @@ struct Session final : std::enable_shared_from_this<Session> {
     bool nativePointerPending = false;
     ULONG_PTR pointerRootCompletionSerial = 0;
     unsigned stateRetryAttempts = 0;
+    unsigned nativeViewRetryAttempts = 0;
     unsigned navigationConnectAttempts = 0;
     IConnectionPoint* navigationConnection = nullptr;
     DWORD navigationCookie = 0;
@@ -575,6 +589,9 @@ struct Session final : std::enable_shared_from_this<Session> {
 
 thread_local Session* g_currentSession = nullptr;
 thread_local HHOOK g_uiMouseHook = nullptr;
+// Frame and tab input can run on different UI threads. Any intervening input
+// conservatively cancels restoration eligibility in every Explorer session.
+std::atomic<ULONG_PTR> g_nativeInputEpoch{0};
 thread_local unsigned g_uiMouseUsers = 0;
 std::atomic<unsigned> g_creatingSessions{0};
 std::atomic<DWORD> g_previewSequence{0};
@@ -1310,7 +1327,7 @@ void QueueThreadBoundsUpdates() {
 
 
 void NativeRootNavigationStarting();
-void NativeSelectionChanged();
+void NativeSelectionChanged(DISPID event = DISPID_SELECTIONCHANGED);
 
 class NavigationSink final : public IDispatch {
     ComObjectLifetime lifetime_{g_liveNavigationSinks};
@@ -1371,7 +1388,7 @@ public:
         if (selectionEvents_) {
             if (generation_ == Context().nativeSelectionGeneration &&
                 (id == DISPID_SELECTIONCHANGED || id == DISPID_FILELISTENUMDONE))
-                NativeSelectionChanged();
+                NativeSelectionChanged(id);
             return S_OK;
         }
         if (generation_ != Context().nativeConnectionGeneration) return S_OK;
@@ -1529,9 +1546,30 @@ void SetActivePane(int index) {
     }
 }
 
+bool IsNativeRestorationInput(UINT message, WPARAM wp = 0) {
+    switch (message) {
+        case WM_KEYDOWN: case WM_SYSKEYDOWN: case WM_CHAR: case WM_SYSCHAR:
+        case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN: case WM_XBUTTONDOWN:
+        case WM_LBUTTONDBLCLK: case WM_RBUTTONDBLCLK: case WM_MBUTTONDBLCLK: case WM_XBUTTONDBLCLK:
+        case WM_NCLBUTTONDOWN: case WM_NCRBUTTONDOWN: case WM_NCMBUTTONDOWN: case WM_NCXBUTTONDOWN:
+        case WM_NCLBUTTONDBLCLK: case WM_NCRBUTTONDBLCLK: case WM_NCMBUTTONDBLCLK: case WM_NCXBUTTONDBLCLK:
+        case WM_MOUSEWHEEL: case WM_MOUSEHWHEEL: case WM_POINTERDOWN: case WM_TOUCH:
+        case WM_COMMAND: case WM_SYSCOMMAND: case WM_APPCOMMAND:
+            return true;
+        case WM_POINTERUPDATE:
+            return (HIWORD(wp) & POINTER_MESSAGE_FLAG_INCONTACT) != 0;
+    }
+    return false;
+}
+
+void ObserveNativeRestorationInput(UINT message, WPARAM wp = 0) {
+    if (IsNativeRestorationInput(message, wp)) g_nativeInputEpoch.fetch_add(1);
+}
+
 LRESULT CALLBACK MouseHookProc(int code, WPARAM wp, LPARAM lp) {
     CallbackScope callbackScope;
     if (g_unloading.load()) return CallNextHookEx(nullptr, code, wp, lp);
+    if (code >= 0) ObserveNativeRestorationInput(static_cast<UINT>(wp));
     if (code >= 0 && (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_RBUTTONUP)) {
         if (NativeMenuSessionOnThread()) return CallNextHookEx(nullptr, code, wp, lp);
         auto* mouse = reinterpret_cast<MOUSEHOOKSTRUCT*>(lp);
@@ -1642,7 +1680,130 @@ HWND BrowserTab(IDispatch* dispatch) {
     return tab;
 }
 
+void RetireNativeRestorationPermit() {
+    auto& session = Context();
+    CoTaskMemFree(std::exchange(session.nativeRestorationExpected, nullptr));
+    CoTaskMemFree(std::exchange(session.nativeRestorationRoot, nullptr));
+    session.nativeRestorationRootSerial = 0;
+    session.nativeRestorationNavigation = 0;
+    session.nativeRestorationConnection = 0;
+    session.nativeRestorationInputEpoch = 0;
+    session.nativeRestorationObserver = 0;
+    session.nativeRestorationStarted = 0;
+    session.nativeRestorationViewIdentity = nullptr;
+    session.nativeRestorationWindow = nullptr;
+}
+
+PIDLIST_ABSOLUTE NativeRestorationChild(PCIDLIST_ABSOLUTE root, PCIDLIST_ABSOLUTE previous) {
+    if (!root || !previous || !ILIsParent(root, previous, FALSE)) return nullptr;
+    PIDLIST_ABSOLUTE computer = nullptr;
+    HRESULT hr = SHParseDisplayName(L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}",
+        nullptr, &computer, 0, nullptr);
+    bool isComputer = SUCCEEDED(hr) && computer && ILIsEqual(root, computer);
+    CoTaskMemFree(computer);
+    if (!isComputer) return nullptr;
+    PCUIDLIST_RELATIVE child = ILFindChild(const_cast<PIDLIST_ABSOLUTE>(root), previous);
+    PITEMID_CHILD first = child ? ILCloneFirst(child) : nullptr;
+    PIDLIST_ABSOLUTE expected = first ? ILCombine(root, first) : nullptr;
+    CoTaskMemFree(first);
+    if (expected && !ILIsParent(root, expected, TRUE)) {
+        CoTaskMemFree(expected);
+        expected = nullptr;
+    }
+    return expected;
+}
+
+void ArmNativeRestorationPermit(PIDLIST_ABSOLUTE expected,
+        ULONG_PTR inputEpoch = g_nativeInputEpoch.load(), ULONGLONG started = GetTickCount64()) {
+    RetireNativeRestorationPermit();
+    auto& session = Context();
+    if (!expected || session.closed || session.nativeNavigationInProgress ||
+            !session.columnCount || !session.nativeLocationIdentity) {
+        CoTaskMemFree(expected);
+        return;
+    }
+    if (g_nativeInputEpoch.load() != inputEpoch) {
+        session.nativeRestorationBlockedSerial = session.panes[0].navigationSerial;
+        session.nativeSelectionYielded = true;
+        CoTaskMemFree(expected);
+        return;
+    }
+    session.nativeRestorationRoot = ILCloneFull(session.nativeLocationIdentity);
+    if (!session.nativeRestorationRoot || !ILIsParent(session.nativeLocationIdentity, expected, TRUE)) {
+        session.nativeRestorationBlockedSerial = session.panes[0].navigationSerial;
+        session.nativeSelectionYielded = true;
+        CoTaskMemFree(expected);
+        CoTaskMemFree(std::exchange(session.nativeRestorationRoot, nullptr));
+        return;
+    }
+    session.nativeRestorationExpected = expected;
+    session.nativeRestorationRootSerial = session.panes[0].navigationSerial;
+    session.nativeRestorationNavigation = session.nativeNavigationGeneration;
+    session.nativeRestorationConnection = session.nativeConnectionGeneration;
+    session.nativeRestorationInputEpoch = inputEpoch;
+    session.nativeRestorationStarted = started;
+    Wh_Log(L"[Columns] Parent selection restoration armed; root serial=%llu",
+        static_cast<unsigned long long>(session.nativeRestorationRootSerial));
+}
+
+void BindNativeRestorationPermit(IUnknown* identity, HWND window) {
+    auto& session = Context();
+    if (!session.nativeRestorationExpected) return;
+    if (session.closed || !session.columnCount ||
+            session.panes[0].navigationSerial != session.nativeRestorationRootSerial ||
+            session.nativeNavigationGeneration != session.nativeRestorationNavigation ||
+            session.nativeConnectionGeneration != session.nativeRestorationConnection ||
+            g_nativeInputEpoch.load() != session.nativeRestorationInputEpoch ||
+            GetTickCount64() - session.nativeRestorationStarted > 2000 ||
+            !session.nativeLocationIdentity || !session.nativeRestorationRoot ||
+            !ILIsEqual(session.nativeLocationIdentity, session.nativeRestorationRoot) ||
+            (session.nativeRestorationViewIdentity &&
+                (session.nativeRestorationViewIdentity != identity || session.nativeRestorationWindow != window))) {
+        session.nativeRestorationBlockedSerial = session.nativeRestorationRootSerial;
+        if (session.columnCount && session.panes[0].navigationSerial == session.nativeRestorationRootSerial)
+            session.nativeSelectionYielded = true;
+        RetireNativeRestorationPermit();
+        return;
+    }
+    session.nativeRestorationViewIdentity = identity;
+    session.nativeRestorationWindow = window;
+    session.nativeRestorationObserver = session.nativeSelectionGeneration;
+}
+
+bool ConsumeNativeRestorationPermit(IShellView* view, IUnknown* identity, HWND window,
+    ULONG_PTR* inputEpoch, PIDLIST_ABSOLUTE* verifiedRoot);
+bool NativeRestorationRootMatches(PCIDLIST_ABSOLUTE root);
+
+HRESULT NativeViewWindow(IShellView* view, HWND* window) {
+    *window = nullptr;
+    HRESULT hr = view->GetWindow(window);
+    if (SUCCEEDED(hr) && (!IsWindow(*window) || !IsChild(Context().tab, *window) ||
+            SessionForWindow(*window))) hr = HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE);
+    return hr;
+}
+
 HWND FindOriginalView(HWND root) {
+    // During a Shell view replacement, the departing DefView can still be the
+    // largest child. Once the browser is cached, only its active view is valid.
+    if (g_currentSession && root == Context().tab && Context().nativeBrowser) {
+        auto& session = Context();
+        if (session.closed || session.nativeBrowserThread != GetCurrentThreadId()) return nullptr;
+        IShellBrowser* browser = session.nativeBrowser;
+        browser->AddRef();
+        ULONG_PTR connection = session.nativeConnectionGeneration;
+        ULONG_PTR navigation = session.nativeNavigationGeneration;
+        IShellView* view = nullptr;
+        HWND window = nullptr;
+        HRESULT hr = browser->QueryActiveShellView(&view);
+        if (SUCCEEDED(hr)) hr = view ? NativeViewWindow(view, &window) : E_NOINTERFACE;
+        if (view) view->Release();
+        browser->Release();
+        if (FAILED(hr) || session.closed || session.nativeBrowser != browser ||
+                session.nativeConnectionGeneration != connection ||
+                session.nativeNavigationGeneration != navigation) return nullptr;
+        return window;
+    }
+    // Bootstrap discovery before the tab's native browser has been cached.
     struct Search {
         HWND view = nullptr;
         LONG_PTR area = 0;
@@ -1680,11 +1841,17 @@ bool ViewRectInTab(HWND fileView, HWND tab, RECT* result, bool allowEmpty = fals
 }
 
 void DisconnectNativeSelectionEvents() {
+    // The first binding belongs to the new root; a later disconnect retires it.
+    if (Context().nativeRestorationViewIdentity) {
+        Context().nativeRestorationBlockedSerial = Context().nativeRestorationRootSerial;
+        RetireNativeRestorationPermit();
+    }
     Context().nativeSelectionGuarded = false;
     ++Context().nativeSelectionGeneration;
     auto* connection = std::exchange(Context().nativeSelectionConnection, nullptr);
     DWORD cookie = std::exchange(Context().nativeSelectionCookie, 0);
     auto* identity = std::exchange(Context().nativeSelectionIdentity, nullptr);
+    Context().nativeSelectionWindow = nullptr;
     if (connection) {
         if (cookie) connection->Unadvise(cookie);
         connection->Release();
@@ -1692,10 +1859,22 @@ void DisconnectNativeSelectionEvents() {
     if (identity) identity->Release();
 }
 
-HRESULT ConnectNativeSelectionEvents(IShellView* view, IUnknown* identity) {
-    if (Context().nativeSelectionIdentity == identity &&
-        Context().nativeSelectionConnection && Context().nativeSelectionCookie) return S_OK;
+HRESULT ConnectNativeSelectionEvents(IShellView* view, IUnknown* identity, HWND window) {
+    if (Context().nativeSelectionIdentity == identity && Context().nativeSelectionWindow == window &&
+        Context().nativeSelectionConnection && Context().nativeSelectionCookie) {
+        BindNativeRestorationPermit(identity, window);
+        return S_OK;
+    }
+    bool replaced = Context().nativeSelectionIdentity &&
+        (Context().nativeSelectionIdentity != identity || Context().nativeSelectionWindow != window);
     DisconnectNativeSelectionEvents();
+    // Protection belongs to the observed view. Retire it only for a confirmed
+    // replacement, before Advise can deliver genuine events from the new view.
+    if (replaced) {
+        Wh_Log(L"[Columns] Native selection observer replaced; prior yield=%d root pending=%d",
+            Context().nativeSelectionYielded, Context().rootNavigationPending);
+        Context().nativeSelectionYielded = false;
+    }
     ULONG_PTR generation = Context().nativeSelectionGeneration;
     IDispatch* automation = nullptr;
     IConnectionPointContainer* container = nullptr;
@@ -1722,6 +1901,8 @@ HRESULT ConnectNativeSelectionEvents(IShellView* view, IUnknown* identity) {
         Context().nativeSelectionCookie = cookie;
         identity->AddRef();
         Context().nativeSelectionIdentity = identity;
+        Context().nativeSelectionWindow = window;
+        BindNativeRestorationPermit(identity, window);
     } else if (connection) {
         if (cookie) connection->Unadvise(cookie);
         connection->Release();
@@ -1729,18 +1910,24 @@ HRESULT ConnectNativeSelectionEvents(IShellView* view, IUnknown* identity) {
     return hr;
 }
 
-HRESULT NativeViewSelectionIsEmpty(IShellView* view, HWND expectedView) {
+HRESULT NativeViewSelectionIsEmpty(IShellView* view, HWND expectedView, int* selectionCount = nullptr) {
+    if (selectionCount) *selectionCount = -1;
     HWND window = nullptr;
-    HRESULT hr = view->GetWindow(&window);
-    if (SUCCEEDED(hr) && (window != expectedView || !IsWindow(window) ||
-            !IsChild(Context().tab, window))) hr = E_ABORT;
+    HRESULT hr = NativeViewWindow(view, &window);
+    if (SUCCEEDED(hr) && window != expectedView)
+        hr = HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE);
     IFolderView* folderView = nullptr;
     if (SUCCEEDED(hr)) hr = view->QueryInterface(IID_IFolderView,
         reinterpret_cast<void**>(&folderView));
     int selected = -1;
     if (SUCCEEDED(hr) && folderView) hr = folderView->ItemCount(SVGIO_SELECTION, &selected);
     if (folderView) folderView->Release();
-    if (SUCCEEDED(hr) && selected != 0) hr = E_ABORT;
+    if (SUCCEEDED(hr) && selectionCount) *selectionCount = selected;
+    if (SUCCEEDED(hr) && selected != 0) {
+        Wh_Log(L"[Columns] Native view has selection; count=%d root pending=%d navigation=%d",
+            selected, Context().rootNavigationPending, Context().nativeNavigationInProgress);
+        hr = E_ABORT;
+    }
     return hr;
 }
 
@@ -1766,15 +1953,63 @@ bool ClearNativeViewSelection(HWND fileView) {
     if (SUCCEEDED(hr) && view) hr = view->QueryInterface(IID_IUnknown,
         reinterpret_cast<void**>(&identity));
     if (SUCCEEDED(hr) && (!view || !identity)) hr = E_NOINTERFACE;
-    if (SUCCEEDED(hr)) hr = ConnectNativeSelectionEvents(view, identity);
+    HWND window = nullptr;
+    if (SUCCEEDED(hr)) hr = NativeViewWindow(view, &window);
+    // Verify the target before mutating selection, not only after deselection.
+    if (SUCCEEDED(hr) && window != fileView) {
+        Wh_Log(L"[Columns] Native takeover deferred for view replacement; expected=%p active=%p",
+            fileView, window);
+        hr = HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE);
+    }
+    if (SUCCEEDED(hr) && (session.closed || session.nativeNavigationInProgress ||
+            session.nativeNavigationGeneration != navigationGeneration ||
+            session.nativeConnectionGeneration != generation || session.nativeBrowser != browser))
+        hr = E_ABORT;
+    if (SUCCEEDED(hr)) hr = ConnectNativeSelectionEvents(view, identity, window);
+    if (SUCCEEDED(hr) && (session.closed || session.nativeNavigationInProgress ||
+            session.nativeNavigationGeneration != navigationGeneration ||
+            session.nativeConnectionGeneration != generation || session.nativeBrowser != browser ||
+            session.nativeSelectionIdentity != identity || session.nativeSelectionWindow != window))
+        hr = E_ABORT;
     HWND focused = GetFocus();
     if (SUCCEEDED(hr) && focused && IsChild(fileView, focused) && IsColumnTextInput(focused)) {
         session.nativeSelectionYielded = true;
         hr = E_ABORT;
     }
-    // Initial takeover may clear a restored history selection. Once a native
-    // command has yielded the overlay, preserve its selection and rename box.
-    if (SUCCEEDED(hr) && !session.nativeSelectionYielded) {
+    // Qualifying This PC roots must also protect a deliberate selection whose
+    // asynchronous notification has not yet reached this observer.
+    bool skipEmptyRestorationClear = false;
+    bool permitHasSelection = false;
+    if (session.columnCount && session.nativeRestorationBlockedSerial == session.panes[0].navigationSerial)
+        session.nativeSelectionYielded = true;
+    if (SUCCEEDED(hr) && session.nativeRestorationExpected) {
+        int selected = -1;
+        HRESULT selectionHr = NativeViewSelectionIsEmpty(view, fileView, &selected);
+        if (selectionHr == E_ABORT && selected > 0) {
+            session.nativeSelectionYielded = true;
+            permitHasSelection = selected == 1;
+            if (!permitHasSelection) hr = selectionHr;
+        } else if (FAILED(selectionHr)) hr = selectionHr;
+        else skipEmptyRestorationClear = true;
+    }
+    ULONG_PTR restorationEpoch = 0;
+    ULONG_PTR restorationSerial = session.nativeRestorationRootSerial;
+    PIDLIST_ABSOLUTE verifiedRestorationRoot = nullptr;
+    bool restoredParent = SUCCEEDED(hr) && session.nativeSelectionYielded && permitHasSelection &&
+        ConsumeNativeRestorationPermit(view, identity, window, &restorationEpoch, &verifiedRestorationRoot);
+    auto restorationRoot = std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)>(
+        verifiedRestorationRoot, CoTaskMemFree);
+    if (restoredParent) session.nativeSelectionYielded = false;
+    // Initial takeover may clear history selection. A yielded command remains
+    // protected, except for the one exact ancestor child just proved above.
+    focused = GetFocus();
+    if (SUCCEEDED(hr) && ((focused && IsChild(fileView, focused) && IsColumnTextInput(focused)) ||
+            (restoredParent && (g_nativeInputEpoch.load() != restorationEpoch ||
+                !session.columnCount || session.panes[0].navigationSerial != restorationSerial)))) {
+        session.nativeSelectionYielded = true;
+        hr = E_ABORT;
+    }
+    if (SUCCEEDED(hr) && !session.nativeSelectionYielded && !skipEmptyRestorationClear) {
         session.nativeSelectionClearing = true;
         hr = view->SelectItem(nullptr, SVSI_DESELECTOTHERS);
         session.nativeSelectionClearing = false;
@@ -1799,13 +2034,40 @@ bool ClearNativeViewSelection(HWND fileView) {
     if (identity) identity->Release();
     if (view) view->Release();
     browser->Release();
+    if (restoredParent && !NativeRestorationRootMatches(restorationRoot.get())) {
+        session.nativeSelectionYielded = true;
+        hr = E_ABORT;
+    }
     // COM queries/releases may pump Shell notifications. A restored selection
     // after the count query invalidates the result even if the view is the same.
     if (SUCCEEDED(hr) && (session.nativeSelectionChangeSerial != selectionSerial ||
             session.nativeConnectionGeneration != generation || session.nativeBrowser != browser ||
             session.nativeNavigationGeneration != navigationGeneration ||
             session.closed || session.nativeNavigationInProgress)) hr = E_ABORT;
-    if (FAILED(hr)) LogHr(L"Native selection safety check; retaining native view", hr);
+    if (restoredParent && (g_nativeInputEpoch.load() != restorationEpoch ||
+            !session.columnCount || session.panes[0].navigationSerial != restorationSerial)) {
+        session.nativeSelectionYielded = true;
+        hr = E_ABORT;
+    }
+    // A native command can start rename while the final COM queries pump.
+    // Even an empty selection must not let the overlay cover its new editor.
+    focused = GetFocus();
+    if (SUCCEEDED(hr) && focused && IsChild(fileView, focused) && IsColumnTextInput(focused)) {
+        session.nativeSelectionYielded = true;
+        hr = E_ABORT;
+    }
+    if (FAILED(hr)) {
+        if (restoredParent) session.nativeSelectionYielded = true;
+        if (session.nativeRestorationExpected) {
+            session.nativeRestorationBlockedSerial = session.nativeRestorationRootSerial;
+            session.nativeSelectionYielded = true;
+        }
+        RetireNativeRestorationPermit();
+        LogHr(L"Native selection safety check; retaining native view", hr);
+    } else {
+        session.nativeViewRetryAttempts = 0;
+        session.nativeSelectionYielded = false;
+    }
     return SUCCEEDED(hr);
 }
 
@@ -1858,6 +2120,9 @@ enum class NativeLocationKind { Supported, Unsupported, TransientFailure };
 struct NativeLocation {
     NativeLocationKind kind = NativeLocationKind::TransientFailure;
     HRESULT result = E_FAIL;
+    bool inputSnapshotValid = false;
+    ULONG_PTR inputEpoch = 0;
+    ULONGLONG inputObservedAt = 0;
     std::wstring path;
     std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)> identity{nullptr, CoTaskMemFree};
 };
@@ -1873,6 +2138,7 @@ void DisconnectNavigationEvents() {
 }
 
 void ResetNativeTabConnection() {
+    RetireNativeRestorationPermit();
     ++Context().nativeConnectionGeneration;
     auto* browser = std::exchange(Context().nativeBrowser, nullptr);
     auto* automation = std::exchange(Context().nativeAutomation, nullptr);
@@ -2119,6 +2385,8 @@ NativeLocation ClassifyNativeLocation(PIDLIST_ABSOLUTE pidl) {
 
 NativeLocation ReadNativeLocation() {
     NativeLocation location;
+    ULONG_PTR inputEpoch = g_nativeInputEpoch.load();
+    ULONGLONG inputObservedAt = GetTickCount64();
     if (!Context().nativeBrowser || Context().nativeBrowserThread != GetCurrentThreadId())
         return location;
     IShellView* shell = nullptr;
@@ -2134,11 +2402,121 @@ NativeLocation ReadNativeLocation() {
     PIDLIST_ABSOLUTE pidl = nullptr;
     if (SUCCEEDED(location.result) && folder) location.result = folder->GetCurFolder(&pidl);
     if (folder) folder->Release();
-    if (SUCCEEDED(location.result) && pidl) return ClassifyNativeLocation(pidl);
+    if (SUCCEEDED(location.result) && pidl) {
+        NativeLocation classified = ClassifyNativeLocation(pidl);
+        classified.inputSnapshotValid = true;
+        classified.inputEpoch = inputEpoch;
+        classified.inputObservedAt = inputObservedAt;
+        return classified;
+    }
     CoTaskMemFree(pidl);
     // A failed query is not a virtual location or a deselection. Keep the last
     // valid UI while the native navigation settles, then retry asynchronously.
     return location;
+}
+
+bool ConsumeNativeRestorationPermit(IShellView* view, IUnknown* identity, HWND window,
+        ULONG_PTR* inputEpoch, PIDLIST_ABSOLUTE* verifiedRoot) {
+    auto& session = Context();
+    if (!session.nativeRestorationExpected) return false;
+    // Consume before COM: nested selection notifications cannot spend it twice.
+    auto expected = std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)>(
+        std::exchange(session.nativeRestorationExpected, nullptr), CoTaskMemFree);
+    auto root = std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)>(
+        std::exchange(session.nativeRestorationRoot, nullptr), CoTaskMemFree);
+    ULONG_PTR serial = session.nativeRestorationRootSerial;
+    ULONG_PTR navigation = session.nativeRestorationNavigation;
+    ULONG_PTR connection = session.nativeRestorationConnection;
+    ULONG_PTR observer = session.nativeRestorationObserver;
+    ULONG_PTR epoch = session.nativeRestorationInputEpoch;
+    ULONGLONG started = session.nativeRestorationStarted;
+    IUnknown* boundIdentity = session.nativeRestorationViewIdentity;
+    HWND boundWindow = session.nativeRestorationWindow;
+    IShellBrowser* browser = session.nativeBrowser;
+    ULONG_PTR selectionSerial = session.nativeSelectionChangeSerial;
+    session.nativeRestorationBlockedSerial = serial;
+    RetireNativeRestorationPermit();
+    auto current = [&] {
+        return !session.closed && !session.nativeNavigationInProgress && session.columnCount &&
+            session.panes[0].navigationSerial == serial &&
+            session.nativeNavigationGeneration == navigation &&
+            session.nativeConnectionGeneration == connection && session.nativeBrowser == browser &&
+            session.nativeBrowserThread == GetCurrentThreadId() &&
+            session.nativeSelectionGeneration == observer &&
+            session.nativeSelectionChangeSerial == selectionSerial &&
+            identity == boundIdentity && window == boundWindow &&
+            session.nativeSelectionIdentity == identity && session.nativeSelectionWindow == window &&
+            IsWindow(window) && IsChild(session.tab, window) && !SessionForWindow(window) &&
+            root && session.nativeLocationIdentity && ILIsEqual(root.get(), session.nativeLocationIdentity) &&
+            g_nativeInputEpoch.load() == epoch && GetTickCount64() - started <= 2000;
+    };
+    HWND focused = GetFocus();
+    if (!current() || (focused && IsChild(window, focused) && IsColumnTextInput(focused))) {
+        Wh_Log(L"[Columns] Parent selection restoration retired before query; input changed=%d expired=%d root serial changed=%d",
+            g_nativeInputEpoch.load() != epoch, GetTickCount64() - started > 2000,
+            !session.columnCount || session.panes[0].navigationSerial != serial);
+        return false;
+    }
+    IFolderView2* folder = nullptr;
+    IShellItemArray* selection = nullptr;
+    IShellItem* item = nullptr;
+    PIDLIST_ABSOLUTE selected = nullptr;
+    HRESULT hr = view->QueryInterface(IID_IFolderView2, reinterpret_cast<void**>(&folder));
+    if (SUCCEEDED(hr) && folder) hr = folder->GetSelection(FALSE, &selection);
+    else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+    DWORD count = 0;
+    if (SUCCEEDED(hr) && selection) hr = selection->GetCount(&count);
+    else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+    if (SUCCEEDED(hr) && count == 1) hr = selection->GetItemAt(0, &item);
+    else if (SUCCEEDED(hr)) hr = E_ABORT;
+    if (SUCCEEDED(hr) && item) hr = SHGetIDListFromObject(item, &selected);
+    else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+    bool matches = SUCCEEDED(hr) && selected && ILIsEqual(selected, expected.get());
+    if (item) item->Release();
+    if (selection) selection->Release();
+    if (folder) folder->Release();
+    // Re-read the actual root and active view after all selected-item queries.
+    IShellView* active = nullptr;
+    IUnknown* activeIdentity = nullptr;
+    HWND activeWindow = nullptr;
+    if (SUCCEEDED(hr)) hr = browser ? browser->QueryActiveShellView(&active) : E_NOINTERFACE;
+    if (SUCCEEDED(hr) && active) hr = active->QueryInterface(IID_IUnknown,
+        reinterpret_cast<void**>(&activeIdentity));
+    else if (SUCCEEDED(hr)) hr = E_NOINTERFACE;
+    if (SUCCEEDED(hr)) hr = NativeViewWindow(active, &activeWindow);
+    bool sameView = SUCCEEDED(hr) && activeIdentity == identity && activeWindow == window;
+    if (activeIdentity) activeIdentity->Release();
+    if (active) active->Release();
+    NativeLocation actual = ReadNativeLocation();
+    focused = GetFocus();
+    bool allowed = matches && sameView && actual.kind == NativeLocationKind::Supported &&
+        actual.identity && ILIsEqual(actual.identity.get(), root.get()) && current() &&
+        !(focused && IsChild(window, focused) && IsColumnTextInput(focused));
+    Wh_Log(L"[Columns] Parent selection restoration %s; count=%u same item=%d same view=%d",
+        allowed ? L"approved once" : L"retired", count, matches, sameView);
+    if (allowed) {
+        *inputEpoch = epoch;
+        *verifiedRoot = root.release();
+    } else {
+        // Diagnostic names never participate in matching. Query them only after
+        // denial, when this consumed attempt cannot mutate or cover the view.
+        PWSTR selectedName = nullptr;
+        PWSTR expectedName = nullptr;
+        if (selected) SHGetNameFromIDList(selected, SIGDN_DESKTOPABSOLUTEPARSING, &selectedName);
+        SHGetNameFromIDList(expected.get(), SIGDN_DESKTOPABSOLUTEPARSING, &expectedName);
+        Wh_Log(L"[Columns] Parent restoration denied; selected=%s expected=%s",
+            selectedName ? selectedName : L"(unavailable)", expectedName ? expectedName : L"(unavailable)");
+        CoTaskMemFree(selectedName);
+        CoTaskMemFree(expectedName);
+    }
+    CoTaskMemFree(selected);
+    return allowed;
+}
+
+bool NativeRestorationRootMatches(PCIDLIST_ABSOLUTE root) {
+    NativeLocation actual = ReadNativeLocation();
+    return root && actual.kind == NativeLocationKind::Supported && actual.identity &&
+        ILIsEqual(actual.identity.get(), root);
 }
 
 void ConnectNavigationEvents(HWND explorer) {
@@ -2205,8 +2583,10 @@ void ReleasePane(Pane& pane) {
     pane.viewHost = nullptr;
 }
 
-HRESULT BrowsePidl(Pane& pane, PCIDLIST_ABSOLUTE pidl, const std::wstring& path) {
+HRESULT BrowsePidl(Pane& pane, PCIDLIST_ABSOLUTE pidl, const std::wstring& path,
+        ULONG_PTR* startedSerial = nullptr) {
     pane.navigationSerial = ++g_navigationSequence;
+    if (startedSerial) *startedSerial = pane.navigationSerial;
     ClearNavigationTarget(pane);
     if (!pidl || !pane.browser) return E_INVALIDARG;
     pane.navigationTarget = ILCloneFull(pidl);
@@ -4847,7 +5227,8 @@ bool ShowPreview(const std::wstring& path) {
 
 void RemoveColumnsAfter(int index);
 bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity = nullptr);
-bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSOLUTE identity);
+bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSOLUTE identity,
+    ULONG_PTR* startedSerial = nullptr);
 void TestPaintOnly(const wchar_t* reason);
 
 void ProcessSelectionUpdates(bool recovery) {
@@ -4919,7 +5300,17 @@ void HideColumnsForNativeView(HWND hwnd, NativeViewReason reason = NativeViewRea
     RestoreOriginalView();
 }
 
+void RetryNativeViewTransition() {
+    // A transient active-view lookup must not consume the last navigation event.
+    // Stop after a short recovery window; genuine selections wait for their own
+    // deselection event and never enter this retry path.
+    if (!Context().nativeSelectionYielded && ++Context().nativeViewRetryAttempts <= 10)
+        SetTimer(Context().overlay, kStateRetryTimerId, 100, nullptr);
+}
+
 void NativeRootNavigationStarting() {
+    RetireNativeRestorationPermit();
+    Context().nativeRestorationBlockedSerial = 0;
     ++Context().nativeNavigationGeneration;
     Context().nativeNavigationInProgress = true;
     // A column completion for the preceding root must not cover a view that
@@ -4929,7 +5320,7 @@ void NativeRootNavigationStarting() {
     HideColumnsForNativeView(Context().overlay, NativeViewReason::Navigation);
 }
 
-void NativeSelectionChanged() {
+void NativeSelectionChanged(DISPID event) {
     ++Context().nativeSelectionChangeSerial;
     if (Context().nativeSelectionChecking) {
         if (!Context().nativeSelectionClearing) Context().nativeSelectionYielded = true;
@@ -4938,20 +5329,48 @@ void NativeSelectionChanged() {
     }
     if (Context().closed) return;
     IShellBrowser* browser = Context().nativeBrowser;
+    ULONG_PTR connection = Context().nativeConnectionGeneration;
+    ULONG_PTR navigation = Context().nativeNavigationGeneration;
+    ULONG_PTR observer = Context().nativeSelectionGeneration;
+    ULONG_PTR serial = Context().nativeSelectionChangeSerial;
     IShellView* view = nullptr;
     IUnknown* identity = nullptr;
+    HWND window = nullptr;
+    bool replaced = false;
+    int selectionCount = -1;
     HRESULT hr = E_ABORT;
     if (browser && Context().nativeBrowserThread == GetCurrentThreadId()) {
         browser->AddRef();
         hr = browser->QueryActiveShellView(&view);
         if (SUCCEEDED(hr) && view) hr = view->QueryInterface(IID_IUnknown,
             reinterpret_cast<void**>(&identity));
-        if (SUCCEEDED(hr) && (!identity || identity != Context().nativeSelectionIdentity))
-            hr = E_ABORT;
-        if (SUCCEEDED(hr)) hr = NativeViewSelectionIsEmpty(view, Context().originalView);
+        if (SUCCEEDED(hr) && (!view || !identity)) hr = E_NOINTERFACE;
+        if (SUCCEEDED(hr)) hr = NativeViewWindow(view, &window);
+        if (SUCCEEDED(hr)) replaced = identity != Context().nativeSelectionIdentity ||
+            window != Context().nativeSelectionWindow;
+        if (SUCCEEDED(hr) && !replaced) hr = NativeViewSelectionIsEmpty(view, window, &selectionCount);
         if (identity) identity->Release();
         if (view) view->Release();
         browser->Release();
+    }
+    // These queries/releases can pump a newer navigation or selection event.
+    // Its state wins; an older observer must not protect or resume that view.
+    if (Context().closed || Context().nativeBrowser != browser ||
+            Context().nativeConnectionGeneration != connection ||
+            Context().nativeNavigationGeneration != navigation ||
+            Context().nativeSelectionGeneration != observer ||
+            Context().nativeSelectionChangeSerial != serial) return;
+    if (replaced) {
+        if (Context().nativeRestorationViewIdentity) {
+            Context().nativeRestorationBlockedSerial = Context().nativeRestorationRootSerial;
+            RetireNativeRestorationPermit();
+        }
+        HideColumnsForNativeView(Context().overlay, NativeViewReason::Navigation);
+        Context().stateRetryAttempts = 0;
+        QueueNativeNavigationUpdate();
+        Wh_Log(L"[Columns] Stale native selection observer; active view changed, root pending=%d",
+            Context().rootNavigationPending);
+        return;
     }
     if (SUCCEEDED(hr)) {
         if (Context().nativeSelectionYielded) {
@@ -4960,6 +5379,13 @@ void NativeSelectionChanged() {
         }
         return;
     }
+    if (hr != E_ABORT || selectionCount != 1) {
+        if (Context().nativeRestorationExpected)
+            Context().nativeRestorationBlockedSerial = Context().nativeRestorationRootSerial;
+        RetireNativeRestorationPermit();
+    }
+    Wh_Log(L"[Columns] Native selection event=%d count=%d restoration pending=%d",
+        event, selectionCount, Context().nativeRestorationExpected != nullptr);
     // Enumeration/history restoration can select an item after the root
     // navigation event. Reveal it synchronously; never leave stale selection
     // hidden until the queued root check gets a chance to run.
@@ -4971,6 +5397,7 @@ void NativeSelectionChanged() {
 }
 
 void SuspendColumnsForNativeLocation(HWND hwnd) {
+    RetireNativeRestorationPermit();
     bool changed = !Context().suspended || !Context().tabPath.empty();
     Context().rootNavigationPending = false;
     Context().rootNavigationRetry = false;
@@ -4980,6 +5407,7 @@ void SuspendColumnsForNativeLocation(HWND hwnd) {
 }
 
 void SuspendColumnsForRootFailure(HWND hwnd) {
+    RetireNativeRestorationPermit();
     Context().rootNavigationPending = false;
     Context().rootNavigationRetry = true;
     HideColumnsForNativeView(hwnd, NativeViewReason::RootFailure);
@@ -5174,7 +5602,19 @@ bool ApplyNativeLocation(NativeLocation location) {
         return false; // Re-query the latest native root after release.
     }
     Context().nativePointerPending = false; // A successful query confirms the root.
+    ULONG_PTR restorationEpoch = location.inputSnapshotValid ? location.inputEpoch : g_nativeInputEpoch.load();
+    ULONGLONG restorationStarted = location.inputSnapshotValid ? location.inputObservedAt : GetTickCount64();
+    ULONG_PTR connection = Context().nativeConnectionGeneration;
+    ULONG_PTR navigation = Context().nativeNavigationGeneration;
     HWND current = FindOriginalView(Context().tab);
+    if (Context().closed || Context().nativeNavigationInProgress ||
+            Context().nativeConnectionGeneration != connection ||
+            Context().nativeNavigationGeneration != navigation) return false;
+    if (location.kind == NativeLocationKind::Supported && !current) {
+        HideColumnsForNativeView(hwnd, NativeViewReason::Navigation);
+        RetryNativeViewTransition();
+        return false;
+    }
     if (current) Context().originalView = current;
     bool navigated = Context().tabPath.empty() || !Context().nativeLocationIdentity ||
         !ILIsEqual(location.identity.get(), Context().nativeLocationIdentity);
@@ -5188,6 +5628,17 @@ bool ApplyNativeLocation(NativeLocation location) {
     if (navigated || Context().rootNavigationRetry ||
         (Context().suspended && Context().nativeViewReason != NativeViewReason::Selection &&
             !Context().rootNavigationPending)) {
+        auto previous = std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)>(
+            Context().nativeLocationIdentity ? ILCloneFull(Context().nativeLocationIdentity) : nullptr, CoTaskMemFree);
+        auto intendedRoot = std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)>(
+            ILCloneFull(location.identity.get()), CoTaskMemFree);
+        auto expected = std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)>(
+            NativeRestorationChild(location.identity.get(), previous.get()), CoTaskMemFree);
+        if (Context().closed || Context().nativeNavigationInProgress ||
+                Context().nativeConnectionGeneration != connection ||
+                Context().nativeNavigationGeneration != navigation) return false;
+        RetireNativeRestorationPermit();
+        Context().nativeRestorationBlockedSerial = 0;
         Context().pointerRootCompletionSerial = 0;
         HideColumnsForNativeView(hwnd, NativeViewReason::Navigation);
         Context().tabPath = location.path;
@@ -5202,12 +5653,13 @@ bool ApplyNativeLocation(NativeLocation location) {
         active.navigationStarted = GetTickCount();
         active.selectionDirty = true;
         bool loaded = false;
+        ULONG_PTR rootSerial = 0;
         if (!Context().columnCount) {
             // Unsupported initial roots retain only their navigation observer.
             // Build the first column on the first supported navigation event.
             Context().columnCount = 1;
             Context().columnWidths[0] = DefaultColumnWidth(hwnd);
-            loaded = CreatePane(hwnd, 0, Context().tabPath, Context().nativeLocationIdentity) &&
+            loaded = CreatePane(hwnd, 0, Context().tabPath, Context().nativeLocationIdentity, &rootSerial) &&
                 CreateSplitter(0);
             if (!loaded) {
                 HWND paneWindow = active.window;
@@ -5219,13 +5671,22 @@ bool ApplyNativeLocation(NativeLocation location) {
                 Context().columnCount = 0;
             }
         } else {
-            loaded = SUCCEEDED(BrowsePidl(active, Context().nativeLocationIdentity, Context().tabPath));
+            loaded = SUCCEEDED(BrowsePidl(active, Context().nativeLocationIdentity, Context().tabPath, &rootSerial));
         }
         SetActivePane(0);
         if (!loaded) {
             active.awaitingNavigationRepair = false;
             SuspendColumnsForRootFailure(hwnd);
-        } else LayoutPanes(hwnd);
+        } else {
+            LayoutPanes(hwnd);
+            if (!Context().closed && !Context().nativeNavigationInProgress &&
+                    Context().nativeConnectionGeneration == connection &&
+                    Context().nativeNavigationGeneration == navigation && Context().columnCount &&
+                    rootSerial && Context().panes[0].navigationSerial == rootSerial &&
+                    intendedRoot && Context().nativeLocationIdentity &&
+                    ILIsEqual(intendedRoot.get(), Context().nativeLocationIdentity))
+                ArmNativeRestorationPermit(expected.release(), restorationEpoch, restorationStarted);
+        }
         Wh_Log(L"[Columns] Native location changed; root=%s", Context().tabPath.c_str());
         // Keep the good native view until a matching completion message arrives.
         return false;
@@ -5245,6 +5706,7 @@ bool ApplyNativeLocation(NativeLocation location) {
         Context().suspended = false;
     if (!HideOriginalView(Context().originalView)) {
         HideColumnsForNativeView(hwnd);
+        RetryNativeViewTransition();
         return false;
     }
     Context().nativeSelectionYielded = false;
@@ -5501,6 +5963,8 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                     // Explorer can change roots or begin New/Paste rename
                     // while this column's asynchronous navigation finishes.
                     // Revalidate the actual root before allowing takeover.
+                    ULONG_PTR navigation = Context().nativeNavigationGeneration;
+                    ULONG_PTR connection = Context().nativeConnectionGeneration;
                     NativeLocation native = ReadNativeLocation();
                     if (Context().closed || !Context().columnCount ||
                         !Context().rootNavigationPending ||
@@ -5517,12 +5981,24 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                         ApplyNativeLocation(std::move(native));
                         return 0;
                     }
-                    Context().suspended = false;
                     HWND current = FindOriginalView(Context().tab);
-                    if (current) Context().originalView = current;
+                    if (Context().closed || !Context().columnCount ||
+                            !Context().rootNavigationPending || Context().nativeNavigationInProgress ||
+                            Context().nativeNavigationGeneration != navigation ||
+                            Context().nativeConnectionGeneration != connection ||
+                            static_cast<ULONG_PTR>(lp) != Context().panes[0].navigationSerial) return 0;
+                    if (!current) {
+                        Context().pointerRootCompletionSerial = static_cast<ULONG_PTR>(lp);
+                        HideColumnsForNativeView(hwnd, NativeViewReason::Navigation);
+                        RetryNativeViewTransition();
+                        return 0;
+                    }
+                    Context().suspended = false;
+                    Context().originalView = current;
                     if (!HideOriginalView(Context().originalView)) {
                         Context().pointerRootCompletionSerial = static_cast<ULONG_PTR>(lp);
                         HideColumnsForNativeView(hwnd);
+                        RetryNativeViewTransition();
                         return 0;
                     }
                     Context().rootNavigationPending = false;
@@ -5699,7 +6175,8 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, message, wp, lp);
 }
 
-bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSOLUTE identity = nullptr) {
+bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSOLUTE identity,
+        ULONG_PTR* startedSerial) {
     Pane& pane = Context().panes[index];
     pane.index = index;
     pane.generation = ++g_paneSequence;
@@ -5771,7 +6248,7 @@ bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSO
         LogHr(L"ExplorerBrowser::Advise", hr);
         return false;
     }
-    if (FAILED(identity ? BrowsePidl(pane, identity, path) : BrowsePath(pane, path))) return false;
+    if (FAILED(identity ? BrowsePidl(pane, identity, path, startedSerial) : BrowsePath(pane, path))) return false;
     RefreshPane(pane);
     return true;
 }
@@ -6004,6 +6481,7 @@ LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
         return CallNextHookEx(nullptr, code, wp, lp);
     if (code >= 0 && wp == PM_REMOVE && lp) {
         MSG* msg = reinterpret_cast<MSG*>(lp);
+        ObserveNativeRestorationInput(msg->message, msg->wParam);
         if (msg->message == g_toggleMessage) {
             HWND explorer = reinterpret_cast<HWND>(msg->wParam);
             LPARAM command = msg->lParam;
