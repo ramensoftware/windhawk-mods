@@ -14689,6 +14689,34 @@
         "name": "Taskbar Dock Animation Plus"
       }
     },
+    "taskbar-drag-lock": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1792389652000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1792389652000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "yorii",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32",
+        "description": "Drag the taskbar to any screen edge and lock it from the taskbar context menu",
+        "github": "https://github.com/yoriichi111012",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Windows 11 Taskbar Drag and Lock",
+        "version": "1.0.0"
+      }
+    },
     "taskbar-elastic-pill": {
       "details": {
         "defaultSorting": 29106,

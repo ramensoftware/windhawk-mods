@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-19T05:04:49.000Z</updated>
+    <updated>2026-10-19T06:00:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Drag and Lock 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-drag-lock#653f7c72cda602b566dc5d8395ecd5d726d1e5fe</id>
+        <link href="https://windhawk.net/mods/taskbar-drag-lock"/>
+        <updated>2026-10-19T06:00:52.000Z</updated>
+        <content type="html"><![CDATA[<p>Bring back the Windows 10 ability to drag the taskbar to left, top, right and
+bottom, and lock it with the "Lock Taskbar" item in the taskbar context menu.
+The lock remembered from the context menu prevents accidental drags.</p>
+<p>Requires the native Windows 11 taskbar position setting (Windows 11 26H2,
+build 26300+).</p>
+<p>The taskbar is moved through the same native setting as Windows Settings, so a
+drag is equivalent to changing the position in Settings: it applies
+immediately, without restarting Explorer, and it persists after the mod is
+disabled. The setting is stored as a DWORD value named TaskbarLocation under
+HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, and can be
+changed back in Settings at any time. The taskbar moves between screen edges
+only; it cannot be dragged to another monitor.</p>
+<p>Not compatible with mods that force a fixed taskbar position, such as Taskbar
+on top or Vertical Taskbar.</p>
+<p>Based on the taskbar-empty-space-clicks mod by m1lhaus (input handling,
+GPL-3.0), the Taskbar Move mod by Asteski (native position setting), the
+Taskbar Restart Explorer mod by Mgrmjp (context menu injection), and the
+Taskbar Labels mod by m417z (taskbar-thread dispatch helpers).</p>]]></content>
+        <author>
+            <name>yorii</name>
+            <uri>https://github.com/yoriichi111012</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Smoke 1.2.0]]></title>
         <id>https://windhawk.net/mods/taskbar-smoke#1d75df2dd28eee3ed9223f8f32c46e07f7feb4b7</id>
@@ -581,135 +609,6 @@ his "Taskbar auto-hide when maximized" mod (all GPL-3.0).</p>]]></content>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[CoverTabby 0.22.14]]></title>
-        <id>https://windhawk.net/mods/covertabby#6b46d57fa8fbd627be560ae6df9125d71e8dd39c</id>
-        <link href="https://windhawk.net/mods/covertabby"/>
-        <updated>2026-10-17T15:03:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="covertabby">CoverTabby</h1>
-<p>Replaces the alt+tab with a modded kind of the stardock alt tabby's layout.</p>
-<p>By <strong>LTHC (LoreTheHolyChip)</strong>. Version <strong>0.22.14</strong>.</p>
-<p>Win+Tab integration is experimental and disabled by default. Alt+Tab remains enabled.
-Explorer forwards Alt+Tab to the switcher running in Windhawk’s own tool process. No separate application needs to be installed.</p>
-<p>Credits: caliberda (MIT-licensed Alt+Tab Flip 3D renderer), Lone (touchpad integration),
-and the Simple Window Switcher contributors (HID parsing).
-Renderer: https://github.com/ramensoftware/windhawk-mods/blob/main/mods/alt-tab-flip-3d.wh.cpp
-Touchpad source by Lone (Louis047): https://github.com/ramensoftware/windhawk-mods/pull/5396
-Simple Window Switcher credits the GPLv2 upstream sws by valinet: https://github.com/valinet/sws
-CoverTabby is distributed under GPL-2.0-only; MIT terms remain applicable to the renderer portions. License texts are included below in the source.</p>
-<hr />
-<h1 id="styles">Styles</h1>
-<hr />
-<p>| Style | Preview |
-| --- | --- |
-| Tiles — Windowed | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/tiles-windowed.jpg" alt="Tiles — Windowed" /> |
-| Tiles — Fullscreen | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/tiles-full.png" alt="Tiles — Fullscreen" /> |
-| Normal — Windowed | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/normal-windowed.jpg" alt="Normal — Windowed" /> |
-| Normal — Fullscreen | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/normal-full.png" alt="Normal — Fullscreen" /> |
-| Icons only | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/icons-full.jpg" alt="Icons only" /> |
-| No thumbnail | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/list-full.jpg" alt="No thumbnail" /> |
-| Text only | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/text-full.jpg" alt="Text only" /> |
-| Search | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/search-full.jpg" alt="Search" /> |
-| Windows 10/11 Enchanted | <img src="https://raw.githubusercontent.com/LoreTheHolyChip/windhawk-mods/main/screenshots/enchanted-full.png" alt="Windows 10/11 Enchanted" /> |</p>
-<p>These screenshots were captured using a macro. The same macro can generate fresh screenshots whenever I update CoverTabby.</p>
-<p>thanks for using my mod :D</p>
-<p><strong>Windows 11 supported; Windows 10 1607 (build 14393) and newer are experimental and use the built-in Segoe MDL2 Assets icon font.</strong>
-On Windows 10 builds earlier than 20348, live-captured windows can display a yellow capture border because those builds cannot disable it.
-The desktop overview's virtual-desktop management requires Windows 11; on Windows 10, those controls are unavailable.</p>
-<p>Pressing the top grip quickly reveals the real window without starting a drag.
-Move while holding to drag it with its native decorations and a short
-centered popup animation. Resizable windows shrink to the preview size while
-the remaining interface fades out. Releasing the mouse stops the drag.
-A simple click still switches windows. Canceling before dragging restores the
-window's original size, position and minimized/maximized state.
-Minimized and maximized windows are restored to a movable window before the
-drag begins, including minimized windows that would normally restore maximized.
-Drag from the top area of a preview: a standard Windows title bar or system
-menu is not required. Clicking elsewhere selects the window. Custom title bars and borderless application windows keep
-their own decorations. Fixed-size windows keep their native size while moving.
-Minimized windows show a card matching the Windows light/dark theme, with a top
-drag grip and a restore hint. The app icon remains in the icon strip below.
-If CoverTabby previously captured the window, its last preview is kept in memory
-and shown blurred and darkened while minimized. Holding the top grip reveals
-the restored real window with sharp content; moving starts the held drag.
-Windows without a saved preview use the regular theme-colored minimized card.</p>
-<h2 id="modes">Modes</h2>
-<ul>
-<li><strong>Full</strong> fills the monitor. Background Style chooses Blur, Opaque or Transparent.</li>
-<li><strong>Windowed</strong> uses a compact centered popup. Windowed Scale resizes the entire popup.</li>
-</ul>
-<p>Colors, fonts and rounded corners follow Windows 11 automatically.</p>
-<p>Enable <strong>Show Desktop Card</strong> to keep a Desktop item at the end of the carousel.
-Selecting it uses Windows' native Show Desktop action.</p>
-<h2 id="language">Language</h2>
-<p>Language is detected at every start: Italian for an Italian Windows display language, English otherwise. Window titles and custom desktop names keep their original text.</p>
-<h2 id="features">Features</h2>
-<p>Live previews, application icons, grouped windows, Pin / Unpin, hover close
-controls, reflections and smooth animations. Settings cover only the essentials. Hover Behavior offers Show Title, Select Window or None for unselected windows.
-Opening uses a quick stationary fade. On normal selection, the selected preview smoothly resizes and returns to the real window position, starting fast and slowing down at the end. The real window remains visible beneath the topmost overlay throughout this return animation. The background fades in place while the remaining previews, icons and controls slide down and fade. Dragging keeps following the mouse instead.
-Hover Animation offers None, Lift, Enlarge or Lift + Enlarge. It is disabled for
-unselected windows when Hover Behavior is None. Click a preview to activate it.</p>
-<h2 id="search">Search</h2>
-<p>While CoverTabby is open, press <strong>Alt+S</strong>, type a window title or application name, then press <strong>Enter</strong>.
-Search Bar Scale changes the bar, icon and text together. Width adapts automatically.
-Disable Search Bar to remove its reserved space and center the content. Search is unavailable in Windowed mode and Tiles.</p>
-<h2 id="virtualdesktops">Virtual desktops</h2>
-<p>In the Win+Tab overview, desktop cards include the Windows taskbar on the current
-desktop when capture is available, with a themed app bar as the fallback on
-that desktop only. Other desktops do not show a taskbar.
-A left-side app dock offers animated selection and hover labels; minimized windows
-use the separate upper dock. Desktop rename keeps the text caret and animates
-new letters with a quick fade, upward overshoot and smooth settling.
-Drag an app preview or dock icon onto another desktop card to move the window
-there, keeping its original position and size. A simple click activates it.
-Drag it away from the desktop cards to take the real window onto the current
-desktop. Maximized and minimized windows stay unchanged until movement begins,
-then restore to their normal size and follow the held pointer.</p>
-<p>Hover the selected preview to reveal the green desktop icon and label alongside Pin and Close.
-Click it to open CoverTabby's own desktop picker, then choose a desktop to move
-the window there without changing its position or size. The current desktop stays active.
-Use the mouse wheel to scroll the list when there are many desktops.</p>
-<h2 id="processinformation">Process information</h2>
-<p>CPU, RAM and GPU appear below the selected application's icon and refresh approximately every 1.5 seconds while the selection is stable.
-These are metrics for the process owning the selected window, not its child processes.
-RAM shows the working set in MB/GB; its color uses the percentage of physical RAM.
-GPU reports the busiest GPU engine for that process, or N/A when counters are unavailable.
-Usage colors are green up to 10%, white below 35%, yellow below 50%, orange up to 75%, and red above 75%.
-Hover the selected preview to see relative process age at the top right, such as Opened 5 minutes ago. This is process age, not window age.
-The skull button beside Close kills the owning process, including its other windows,
-after a second confirming click within four seconds. Unsaved work will be lost. Close continues to request normal application closure.</p>
-<h2 id="iconcontrols">Icon controls</h2>
-<p>Hover an app icon for a small smooth lift, zoom and Windows accent background.
-Right-click an icon or preview to open CoverTabby's animated menu: Close, Kill,
-and Pin/Unpin. These actions target the clicked window without changing selection.
-Click outside or press Escape to dismiss. Releasing Alt still closes CoverTabby.
-The menu is rendered by CoverTabby and uses Segoe Fluent Icons.</p>
-<h2 id="navigation">Navigation</h2>
-<p>Alt+Tab cycles forward; Shift+Alt+Tab or Alt+` cycles backward.
-The first press selects the next or previous window relative to the active window,
-including when pinned windows change the list order.
-With Group Windows enabled, Up/Down selects a window in the current application.
-Windows from the same application stay consecutive. Switching between them moves
-the stack vertically; Left/Right changes applications horizontally.
-Mouse selection and wheel navigation are also supported.</p>
-<h3 id="performanceandbackground">Performance and background</h3>
-<p>Background Style offers Blur, Opaque and Transparent in Full and Windowed. Transparent Background Opacity controls the tint without applying blur. Background During Energy Saver automatically switches to Opaque or Transparent while Windows saves energy; Keep Selected Background disables this override.</p>
-<p>The selected preview starts first. Other live previews start progressively, and opening waits at most 45 ms for the selected capture after startup. Desktop blur is captured at up to 960 pixels on its longest side. Preview Cache reuses up to twelve 512-pixel snapshots (384 during Energy Saver), updated gradually only while the switcher is open. When closed, captures stop except for a window currently being held and dragged. Dragging, search, groups, controls and animations remain available. VSync is always enabled: the render loop waits on DXGI frame availability with a one-frame queue and has no fixed 60 FPS cap. The actual rate follows the display compositor and available GPU performance.</p>
-<h2 id="precisiontouchpad">Precision touchpad</h2>
-<p>Three fingers starting in the lower third and moving upward open CoverTabby. Continuing that same stroke sideways navigates. Starting in the middle third and moving upward requests normal closure of the selected window while CoverTabby is open. Swipe downward to dismiss; a short three-finger tap selects the current window. Holding still gives animated press feedback. Existing touchpad mouse-click/hold dragging stays available.</p>
-<p>Touchpad from Modern Window Switcher — <strong>Lone</strong>. HID parsing adapted from the downloaded Simple Window Switcher 3.0 source. The gesture controller is used where supported; older Windows builds may require setting native three-finger swipe/tap actions to Nothing in Windows touchpad settings to prevent duplicate system actions. Disable Precision Touchpad Gestures to stop listening to touchpad reports.</p>
-<h2 id="desktopoverview">Desktop overview</h2>
-<p>Hold to Preview is optional and disabled by default. In thumbnail styles, hold Alt on the same selection for five seconds to enlarge its native-resolution live capture to fit the monitor without stretching. Tab slides the enlarged image left; releasing Alt returns it toward the real window. Minimized previews also enlarge; two seconds after reaching full size, their minimized message changes to a playful message.</p>
-<p>While CoverTabby is open, type a letter to focus Search and filter immediately without changing the selected style. Search must be enabled for the current mode. Press Enter to activate a result or Escape to cancel.</p>
-<p>Win+Tab opens the optional desktop overview. Further Tab presses while holding Win select the next desktop; Shift+Tab selects the previous one. Hold Win to Keep Desktop Overview Open is enabled by default: releasing Win activates the selection. Disable it to leave the overview open; touchpad opening remains persistent. Beginning a rename leaves hold mode so typing is possible. Three quick three-finger taps toggle between windows and desktops while CoverTabby is open. A single tap is confirmed after a short 340 ms recognition window. Hover a desktop to reveal its centered name and Alt+Tab-style controls. Rename uses a blue pencil button, Delete uses a red trash button, and their labels expand on hover; Desktop 1 cannot be deleted. Rename supports Enter to save and Escape to cancel. The + button after the last desktop creates a new desktop; deleting a desktop moves its windows to the previous desktop. Desktop cards have equal sizes, stay flat and slide horizontally. Desktop overview always fills the monitor. Panels share Alt+Tab's theme-aware material and controls. Alt+Tab and Alt+` select the next/previous open app on the selected desktop; releasing Alt activates it. Left/right arrows select desktops, and clicking an app or pressing Enter focuses it. Minimized apps appear as an icon dock in a rounded top panel; titles appear only when hovering an icon. The app list follows the shell switcher visibility flag and refreshes while open, excluding retained hidden app windows. Live window captures are loaded incrementally for the selected and adjacent desktops (up to four extra captures, two in energy saver); unavailable frames use saved previews or icons and titles. Click or tap to activate the selected desktop; Escape or a downward swipe cancels.
-Each open HWND is shown as a separate fitted tile inside its desktop card; windows
-from the same application are never grouped or stacked together in this view.</p>
-<p>Each card shows its wallpaper and window layout. Active-window content is live; other desktops reuse available snapshots. Windows without cached content show their application icon and title. At most three small wallpaper textures are loaded at once. Windows' internal desktop contracts vary between builds; unsupported builds show an availability message.</p>]]></content>
-        <author>
-            <name>LTHC</name>
-            <uri>https://github.com/LoreTheHolyChip</uri>
         </author>
     </entry>
 </feed>

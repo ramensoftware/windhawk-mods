@@ -2,12 +2,40 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-19T05:04:49.000Z</updated>
+    <updated>2026-10-19T06:00:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Drag and Lock 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-drag-lock#653f7c72cda602b566dc5d8395ecd5d726d1e5fe</id>
+        <link href="https://windhawk.net/mods/taskbar-drag-lock"/>
+        <updated>2026-10-19T06:00:52.000Z</updated>
+        <content type="html"><![CDATA[<p>Bring back the Windows 10 ability to drag the taskbar to left, top, right and
+bottom, and lock it with the "Lock Taskbar" item in the taskbar context menu.
+The lock remembered from the context menu prevents accidental drags.</p>
+<p>Requires the native Windows 11 taskbar position setting (Windows 11 26H2,
+build 26300+).</p>
+<p>The taskbar is moved through the same native setting as Windows Settings, so a
+drag is equivalent to changing the position in Settings: it applies
+immediately, without restarting Explorer, and it persists after the mod is
+disabled. The setting is stored as a DWORD value named TaskbarLocation under
+HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, and can be
+changed back in Settings at any time. The taskbar moves between screen edges
+only; it cannot be dragged to another monitor.</p>
+<p>Not compatible with mods that force a fixed taskbar position, such as Taskbar
+on top or Vertical Taskbar.</p>
+<p>Based on the taskbar-empty-space-clicks mod by m1lhaus (input handling,
+GPL-3.0), the Taskbar Move mod by Asteski (native position setting), the
+Taskbar Restart Explorer mod by Mgrmjp (context menu injection), and the
+Taskbar Labels mod by m417z (taskbar-thread dispatch helpers).</p>]]></content>
+        <author>
+            <name>yorii</name>
+            <uri>https://github.com/yoriichi111012</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Smoke 1.2.0]]></title>
         <id>https://windhawk.net/mods/taskbar-smoke#1d75df2dd28eee3ed9223f8f32c46e07f7feb4b7</id>
@@ -1103,102 +1131,6 @@ This mod disables this adjustment.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[BubbleGlass Screensaver 1.7.6]]></title>
-        <id>https://windhawk.net/mods/bubble-glass-saver#1537caa51c413521c503304baa63526d45bf2525</id>
-        <link href="https://windhawk.net/mods/bubble-glass-saver"/>
-        <updated>2026-10-15T19:02:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bubbleglassscreensaver">BubbleGlass Screensaver</h1>
-<p>A transparent, animated soap-bubble screensaver for the Windows desktop.</p>
-<p>BubbleGlass shows colorful, iridescent soap bubbles directly above the live
-Windows desktop after a period of inactivity. The desktop stays visible and
-live underneath (per-pixel alpha layered window), and any keyboard or mouse
-activity dismisses the saver instantly. Rendering targets smooth 60 FPS even
-on large multi-monitor desktops.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/Nh5EyFe.png" alt="BubbleGlass Screensaver preview" /></p>
-<p><img src="https://i.imgur.com/gCsmdj6.gif" alt="BubbleGlass Screensaver animated preview" /></p>
-<p><em>Soap bubbles drifting over the live Windows desktop. The optional diagnostics
-overlay shows real-time FPS, frame time, jitter and rendering performance.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Transparent overlay above the live desktop - wallpaper, windows and video
-remain visible underneath.</li>
-<li>Smooth 60 FPS animation with QPC-based frame pacing and motion timing.</li>
-<li>Thin-film iridescent bubbles: rainbow interference arcs, membrane rim,
-specular highlight, hotspot and a faint opposite-side reflection.</li>
-<li>Organic wobble, slowly changing interference colors, optional subtle shadow.</li>
-<li>Gradual spawning, size variation, natural drift and optional turbulence.</li>
-<li>Bubble-to-bubble collisions (lightly damped) plus wall bouncing or edge
-wrapping.</li>
-<li>Configurable lifetime with an animated pop effect (expansion, flash,
-expanding ring).</li>
-<li>Primary-monitor or full multi-monitor mode.</li>
-<li>Instant dismissal on keystroke, click, mouse wheel or mouse movement (with a
-small movement threshold). Input is never swallowed.</li>
-<li>Fullscreen video playback (including fullscreen browser video) is intentionally
-supported: bubbles remain above the live, moving video.</li>
-<li>Windows presentation mode is suppressed when reported by Windows. Other
-fullscreen states are not automatically blocked to preserve video playback.</li>
-<li>Hidden automatically while the session is locked, disconnected or the
-display is off.</li>
-<li>Optional on-screen performance diagnostics and Windhawk/DbgView logging.</li>
-<li>No permanent clock or date elements.</li>
-</ul>
-<h2 id="howitworks">How It Works</h2>
-<p>BubbleGlass watches keyboard/mouse idle time. After the configured timeout it
-creates a click-through, topmost layered window and composites
-premultiplied-per-pixel-alpha bubbles over the desktop with
-<code>UpdateLayeredWindowIndirect</code>. Bubbles are drawn with GDI+ into per-bubble
-sprites that are cached and refreshed on a small time budget; only changed
-areas are cleared and presented (dirty rectangles). Low-level input hooks run
-on a dedicated thread and only while the saver is visible.</p>
-<h2 id="performance">Performance</h2>
-<p>The renderer targets 60 FPS; actual speed depends on resolution, bubble count
-and bubble sizes. The largest tuning levers are bubble count, maximum bubble
-size, sprite refresh interval, iridescence and total desktop area.</p>
-<p>Enable <strong>Show internal performance stats</strong> for the FPS / frame-time / jitter
-overlay, and <strong>Log performance stats to Windhawk/DbgView</strong> for one summary
-line per second. Every option (timeout, bubble count and size, motion,
-physics, lifetime, pop, appearance, performance, diagnostics) is described in
-the settings UI.</p>
-<h2 id="usage">Usage</h2>
-<ol>
-<li>Install and enable the BubbleGlass Screensaver mod.</li>
-<li>Configure the inactivity timeout and appearance.</li>
-<li>Leave the computer idle; BubbleGlass appears automatically.</li>
-<li>Move the mouse or press a key to dismiss it.</li>
-</ol>
-<p>No separate <code>.scr</code> screensaver file is required.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>BubbleGlass intentionally keeps the Windows desktop visible underneath; it
-is not a full-screen scene replacement like classic screensavers.</li>
-<li>The dismissing keystroke or click is also delivered to the focused
-application (input is never swallowed).</li>
-<li>Fullscreen video is intentionally allowed. Automatic suppression of every
-fullscreen app would also block this core feature. Windows presentation mode
-is suppressed when detectable; gamepad-only input may not reset Windows idle
-time, so fullscreen games are not guaranteed to suppress the saver.</li>
-<li>BubbleGlass never appears while the session is locked or display is off.</li>
-<li>Bubble sizes and the diagnostics overlay use raw pixels (no DPI scaling).</li>
-<li>"Span all monitors" uses the virtual-screen bounding rectangle; on
-mixed-size or offset monitor layouts parts of that rectangle may not be on
-any display.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p>Designed for Windows 11 and Windhawk. Runs as a dedicated Windhawk tool-mod
-process - no <code>.scr</code> screensaver file and no winlogon injection. Rendering
-uses standard GDI/GDI+ and layered-window APIs (no DirectX or GPU API).</p>
-<h2 id="credits">Credits</h2>
-<p>Developed and tested by <strong>SilverAmd</strong>, with iterative performance analysis,
-profiling and optimization focused on smooth frame pacing, large desktop
-resolutions, multi-monitor support and low rendering overhead.</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>
