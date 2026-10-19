@@ -3046,8 +3046,10 @@ struct DockIcon {
     bool app = false;
     Media::ImageSource bigSource{nullptr};
     Media::ImageSource ownSource{nullptr};
-    // The size of the picture in bigSource (see BigIconPixels).
+    // The size of the picture in bigSource (see BigIconPixels), and the app
+    // it's for.
     int bigPixels = 0;
+    std::wstring bigAppId;
     // The app's overlay icon (like Discord's red counter) drawn from the
     // app's own picture, and the taskbar's in its place before (see
     // UseBigOverlay).
@@ -4818,6 +4820,7 @@ void ResetAppsArea() {
 }
 
 bool OnRenderingUnsafe(double now, double dt);
+void RaiseOverWindows(HWND hTaskbarWnd);
 
 // The frame's own opacity back (see g_dockScaleSettled).
 void RestoreDockOpacity(FrameworkElement const& frame) {
@@ -5386,6 +5389,9 @@ bool OnRenderingUnsafe(double now, double dt) {
     // the open app's icon minimized it): the taskbar's hide timer hands the
     // focus on, so it hides (see HandFocusBack).
     if (hovering) {
+        if (dock && g_dockHovered != g_dockWnd) {
+            RaiseOverWindows(g_dockWnd);
+        }
         g_dockHovered = g_dockWnd;
         // (Windows shows them in its window as it is: placed beforehand.)
         if (dock) {
@@ -5841,17 +5847,26 @@ void UseBigIcon(DockIcon& icon, FrameworkElement const& button, int pixels) {
     }
     const auto source = image.Source();
     const bool shownBig = icon.bigSource && source == icon.bigSource;
-    if (!source || (shownBig && icon.bigPixels == BigIconPixels(pixels))) {
+    // (The button reused for another app may keep the big picture of the one
+    // before: the taskbar doesn't always set its own again. Measured at
+    // sign-in: Discord's stayed on Windhawk's button.)
+    const std::wstring appId = GetButtonAppId(button);
+    const bool sameApp = appId == icon.bigAppId;
+    if (!source ||
+        (shownBig && sameApp && icon.bigPixels == BigIconPixels(pixels))) {
         return;
     }
     if (image.ReadLocalValue(Controls::Image::SourceProperty())
             .try_as<Data::BindingExpression>()) {
         return;
     }
-    const std::wstring appId = GetButtonAppId(button);
     auto big = appId.empty() ? nullptr : BigAppIcon(appId, pixels);
     if (!big) {
         return;
+    }
+    // (The taskbar's own picture kept is the other app's: none to put back.)
+    if (shownBig && !sameApp) {
+        icon.ownSource = nullptr;
     }
     // (At the size it has: a bigger picture mustn't make it bigger.)
     if (std::isnan(image.Width()) || std::isnan(image.Height())) {
@@ -5866,6 +5881,7 @@ void UseBigIcon(DockIcon& icon, FrameworkElement const& button, int pixels) {
     }
     icon.bigSource = big;
     icon.bigPixels = BigIconPixels(pixels);
+    icon.bigAppId = appId;
     image.Source(big);
 }
 
@@ -5878,6 +5894,7 @@ void RestoreDockIcon(DockIcon& icon) {
     icon.ownSource = nullptr;
     icon.bigSource = nullptr;
     icon.bigPixels = 0;
+    icon.bigAppId.clear();
     if (auto image = icon.overlayImage.get();
         image && icon.overlayOwn && image.Source() == icon.overlayBig) {
         image.Source(icon.overlayOwn);
@@ -6556,7 +6573,9 @@ void ClipToOwnMonitor(HWND hWnd, const RECT* next = nullptr) {
     }
     RECT current{};
     const int kind = GetWindowRgnBox(hWnd, &current);
-    if (ours && kind == SIMPLEREGION && EqualRect(&current, &own)) {
+    // (Unloading: none set again, see ClipDockWindow.)
+    if (g_unloading ||
+        (ours && kind == SIMPLEREGION && EqualRect(&current, &own))) {
         return;
     }
     if (HRGN region = CreateRectRgnIndirect(&own)) {
@@ -6701,12 +6720,22 @@ RECT GrownRect(const RECT& base, int extra, bool* up) {
 // A size with the room already in it (the mod's own moves, or Windows' for a
 // new scaling) is left as it is.
 void GrowTaskbarWindow(HWND hWnd, WINDOWPOS* pos) {
-    if ((pos->flags & (SWP_NOMOVE | SWP_NOSIZE)) == (SWP_NOMOVE | SWP_NOSIZE)) {
-        return;
-    }
     RECT now;
     if (!GetWindowRect(hWnd, &now)) {
         return;
+    }
+    if ((pos->flags & (SWP_NOMOVE | SWP_NOSIZE)) == (SWP_NOMOVE | SWP_NOSIZE)) {
+        // Not grown yet (see RegrowTaskbarProc): the main taskbar's own
+        // handler turns a move it didn't ask for into none at all (measured:
+        // after the mod loaded, only the other monitors' taskbars grew).
+        if (FindGrownTaskbar(hWnd)) {
+            return;
+        }
+        pos->x = now.left;
+        pos->y = now.top;
+        pos->cx = now.right - now.left;
+        pos->cy = now.bottom - now.top;
+        pos->flags &= ~(SWP_NOMOVE | SWP_NOSIZE);
     }
     // (Upright or almost square: on its way to the left or right edge, see
     // below.)
@@ -6880,8 +6909,11 @@ bool DockTrayShown() {
 
 // The shown dock's window may hide with the mouse still on it but off what
 // takes the mouse (see ClipDockWindow): beside the dock, over what's behind.
+// Only while the taskbar hides itself: Windows asks this also with its
+// auto-hide off (as Start closes), and the dock would go.
 bool DockMayHide(HWND hWnd) {
-    if (g_unloading || !IsDock() || hWnd != g_dockWnd || g_dockRoomOpen ||
+    if (g_unloading || !g_taskbarAutoHides || !IsDock() || hWnd != g_dockWnd ||
+        g_dockRoomOpen ||
         g_dockHovered || IsRectEmpty(&g_dockShelfRest) || DockTrayShown() ||
         NowSeconds() < g_keepShownUntil || JumpListOpen()) {
         return false;
@@ -6924,6 +6956,11 @@ bool DockMayHide(HWND hWnd) {
 // move (they grow into its whole room then). Windows' own moves drop a
 // region: cut again after them.
 void ClipDockWindow(HWND hWnd, const RECT* next) {
+    // (Unloading: the clips were taken off, none is set again: a last frame
+    // would leave one the next load doesn't know, see ResetDockBehavior.)
+    if (g_unloading) {
+        return;
+    }
     DockScope scope(hWnd);
     RECT window;
     const GrownTaskbar* grown = FindGrownTaskbar(hWnd);
@@ -7023,10 +7060,16 @@ void ClipDockWindow(HWND hWnd, const RECT* next) {
         DeleteObject(current);
     }
     // (The system owns the region once it's set.)
-    if (same || !SetWindowRgn(hWnd, region, TRUE)) {
+    if (!same && !SetWindowRgn(hWnd, region, TRUE)) {
         DeleteObject(region);
         return;
     }
+    if (same) {
+        DeleteObject(region);
+    }
+    // (Kept as the mod's also when it was already cut so, like by the mod
+    // before it was turned off and on: the whole room opens again with the
+    // mouse on it, see ClipToOwnMonitor.)
     if (std::find(g_ownClips.begin(), g_ownClips.end(), hWnd) ==
         g_ownClips.end()) {
         g_ownClips.push_back(hWnd);
@@ -7216,6 +7259,18 @@ constexpr int kUnhideForAttention = 17;
 std::atomic<double> g_otherUnhideAt{-100.0};
 constexpr double kOtherUnhideSeconds = 1.0;
 
+// Another request than kUnhideForAttention right after a flash, logged once
+// in a while (like LogKeptDown).
+void LogUnhideAfterFlash(int flags, int request) {
+    static std::atomic<double> logged{-100.0};
+    const double now = NowSeconds();
+    if (now - logged >= 10) {
+        logged = now;
+        Wh_Log(L"Taskbar asked up right after a flash: request %d, flags 0x%X",
+               request, (unsigned)flags);
+    }
+}
+
 // Unless the whole dock is wanted, the taskbar doesn't show itself when an
 // app asks for attention: only the app's icon peeks out (or nothing). The
 // transparent taskbar never does (its button shows it, once up). Not when
@@ -7241,6 +7296,11 @@ TrayUI_Unhide_t TrayUI_Unhide_Original;
 void WINAPI TrayUI_Unhide_Hook(void* pThis, int flags, int request) {
     if (request != kUnhideForAttention) {
         g_otherUnhideAt = NowSeconds();
+        // (kUnhideForAttention was measured on one build: another one that
+        // numbers it otherwise shows here, right after a flash.)
+        if (NowSeconds() - g_lastFlashTime < kAttentionShowWindow) {
+            LogUnhideAfterFlash(flags, request);
+        }
     } else if (HWND taskbar = FindCurrentProcessTaskbarWnd();
                taskbar && KeepsDownForAttention(taskbar)) {
         LogKeptDown();
@@ -7521,6 +7581,32 @@ bool FullscreenWindowOnMonitor(HWND hTaskbarWnd) {
                        (info.rcMonitor.top + info.rcMonitor.bottom) / 2};
     return CoversMonitor(GetAncestor(WindowFromPoint(middle), GA_ROOT), monitor,
                          info.rcMonitor);
+}
+
+// Windows sometimes leaves a taskbar under a window with its "topmost" style
+// still set (seen at sign-in: an app opening maximized on the second monitor
+// came out above that monitor's taskbar until Start opened), and the guards
+// that keep it on top (TrayUI_SlideWindow_Hook, TaskbarSubclassProc) only run
+// where the mod hides it: the magnified icons in the dock's room would show
+// behind that window. Raised as the mouse comes in, unless an app is in full
+// screen there.
+void RaiseOverWindows(HWND hTaskbarWnd) {
+    RECT bar{};
+    if (!GetWindowRect(hTaskbarWnd, &bar) ||
+        FullscreenWindowOnMonitor(hTaskbarWnd)) {
+        return;
+    }
+    for (HWND w = GetWindow(hTaskbarWnd, GW_HWNDPREV); w;
+         w = GetWindow(w, GW_HWNDPREV)) {
+        RECT rect{}, both{};
+        if (!(GetWindowLongPtr(w, GWL_EXSTYLE) & WS_EX_TOPMOST) &&
+            IsWindowVisible(w) && GetWindowRect(w, &rect) &&
+            IntersectRect(&both, &rect, &bar)) {
+            SetWindowPos(hTaskbarWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            return;
+        }
+    }
 }
 
 bool IsFullscreenAppOn(HMONITOR monitor) {
@@ -12869,6 +12955,11 @@ constexpr double kMoveDot = 0.2;
 // may still be installing (at most this often).
 constexpr UINT_PTR kDeviceRetryTimerId = 19;
 constexpr double kDeviceRetrySeconds = 2;
+// Every glass made again this long after the island starts, then after each
+// next wait (see RenewAllGlass): at sign-in, Windows may not be ready for
+// its blur in the first moments.
+constexpr UINT_PTR kGlassRenewTimerId = 29;
+constexpr UINT kGlassRenewMs[] = {15000, 30000, 75000};
 constexpr UINT kUrgentSoundMaxMs = 60000;
 constexpr UINT kPinDelayMs = 2000;
 constexpr double kPinGrowSeconds = 0.22;
@@ -13836,6 +13927,8 @@ constexpr float kGlassTranslucentSaturation = 1.5f;
 // The glass's blur slider at 100%: this much more blur (a Gaussian blur's
 // standard deviation, in pixels) over Windows' own.
 constexpr float kGlassBlurMost = 20;
+// Windows refused its blur to a glass's window: tried again this much later.
+constexpr double kGlassRetrySeconds = 5;
 
 // The tint over the glass as chosen (lighter when translucent).
 float GlassTint(float tint) {
@@ -13994,6 +14087,11 @@ struct GlassComposition {
 // It couldn't be made: not tried again until the island's thread starts
 // again.
 bool g_glassCompositionFailed = false;
+// Each glass's window is made again once this changes (see RenewAllGlass):
+// one made as Windows starts may never get Windows' blur (measured at
+// sign-in: the island's glass stayed black, while the panels' glass made
+// later showed the blur).
+unsigned g_glassGeneration = 0;
 
 // Whether the Liquid Glass shows now (the island's own look, see
 // IslandScope): Windows' blur only with its transparency effects on.
@@ -14078,6 +14176,11 @@ class GlassLayer {
     std::vector<GlassShape> m_shapes;
     bool m_visible = false;
     bool m_drawn = false;
+    // The g_glassGeneration its window was made for.
+    unsigned m_generation = 0;
+    // When Windows last refused its blur to the window (see ShowBlurred):
+    // tried again a while later, the plain color meanwhile.
+    double m_refusedAt = -100;
 };
 
 // The parts for Windows' blur, made the first time (nullptr if they can't
@@ -14203,6 +14306,13 @@ void GlassLayer::ShowBlurred(HWND owner,
         Hide();
         return;
     }
+    if (m_hwnd && m_generation != g_glassGeneration) {
+        DestroyWindowParts();
+    }
+    if (!m_hwnd && NowSeconds() - m_refusedAt < kGlassRetrySeconds) {
+        Hide();
+        return;
+    }
     if (!m_hwnd) {
         // The mouse goes through it.
         m_hwnd = CreateWindowEx(WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED |
@@ -14218,8 +14328,18 @@ void GlassLayer::ShowBlurred(HWND owner,
         // (A window of an app that isn't from the Store can show Windows'
         // blur of what's behind it only with this.)
         const BOOL hostBackdrop = TRUE;
-        DwmSetWindowAttribute(m_hwnd, kDwmUseHostBackdropBrush, &hostBackdrop,
-                              sizeof(hostBackdrop));
+        const HRESULT hr =
+            DwmSetWindowAttribute(m_hwnd, kDwmUseHostBackdropBrush,
+                                  &hostBackdrop, sizeof(hostBackdrop));
+        if (FAILED(hr)) {
+            Wh_Log(L"Liquid Glass: Windows refused its blur: %08X",
+                   (unsigned)hr);
+            m_refusedAt = NowSeconds();
+            DestroyWindowParts();
+            Hide();
+            return;
+        }
+        m_generation = g_glassGeneration;
     }
     if (!m_desktopTarget) {
         auto interop = parts->compositor.as<ICompositorDesktopInteropLocal>();
@@ -15285,6 +15405,11 @@ void Panel::Render() {
         glass.tint = Bg(GlassTint(kLiquidPanelTint));
         glass.opacity = m_placing ? 0.0f : 1.0f;
         m_liquid.Show(m_hwnd, windowPosition, windowSize, {glass});
+        // (Gone: drawn again with its own background, as the island.)
+        if (overLiquid && !m_liquid.Shown()) {
+            Render();
+            return;
+        }
     } else {
         m_liquid.Hide();
     }
@@ -38449,6 +38574,11 @@ class Island final : public DropTarget::Receiver {
     // The notification list was opened: the bell's dot goes.
     void OnNotificationsSeen();
     void CatchUpToasts();
+    // The main island's, once every island is made (see kGlassRenewMs).
+    void StartGlassRenewals() {
+        m_glassRenewals = 0;
+        SetTimer(m_hwnd, kGlassRenewTimerId, kGlassRenewMs[0], nullptr);
+    }
     // What the islands look for together (the usage, the weather, updates)
     // looked at again: the main island's, once every island is made (one
     // only another monitor's profile shows counts then).
@@ -38534,6 +38664,16 @@ class Island final : public DropTarget::Receiver {
     void Relayout() {
         StartAnimating();
         Render();
+    }
+    // Drawn again with its glass and its open panels' made again (see
+    // RenewAllGlass).
+    void RenewGlass() {
+        Render(true);
+        for (Panel* panel : Panels()) {
+            if (panel->IsOpen()) {
+                panel->Render();
+            }
+        }
     }
     // Another size chosen for the panels (islandPanelSize): the open ones
     // laid out again at it.
@@ -39721,6 +39861,9 @@ class Island final : public DropTarget::Receiver {
     std::vector<PillGroup> m_layoutOrder;
     // A restart after a lost device waits for this timer (see OnDeviceLost).
     bool m_deviceRetryPending = false;
+    // The glass made again so many times since the island started (see
+    // kGlassRenewMs).
+    int m_glassRenewals = 0;
     // The monitor it's on (see WantedMonitor), and moving to another one: it
     // closes into its dot (1), the dot glides there (2), and it opens again
     // (m_moveT from 0 to 1 while gliding, from where it was).
@@ -39862,6 +40005,17 @@ void ForEachIsland(Action action) {
         IslandScope scope(island);
         action(*island);
     }
+}
+
+// Every glass's window made again (see g_glassGeneration): a while after the
+// island starts, when the displays change, and when Windows' transparency
+// effects or the energy saver let the glass show again.
+void RenewAllGlass() {
+    if (!LiquidGlassOn()) {
+        return;
+    }
+    g_glassGeneration++;
+    ForEachIsland([](Island& island) { island.RenewGlass(); });
 }
 
 Island* MainIsland() {
@@ -61610,6 +61764,12 @@ void Island::Render(bool force) {
     // (Its shapes already fade with the island, see addLiquid.)
     if (liquid) {
         m_liquid.Show(m_hwnd, m_position, m_size, m_liquidShapes);
+        // Drawn for the glass, which is gone (Windows refused its blur):
+        // drawn again with its own background.
+        if (overLiquid && !m_liquid.Shown()) {
+            Render(true);
+            return;
+        }
     } else {
         m_liquid.Hide();
     }
@@ -66955,6 +67115,9 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             CheckMonitor();
             m_control.ReloadControls();
             Relayout();
+            if (m_main) {
+                RenewAllGlass();
+            }
             break;
         case WM_SETTINGCHANGE:
             // The taskbar moved to another edge (or a bar came or went): the
@@ -66974,8 +67137,15 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 FollowWindowsMode();
                 // Windows' transparency effects (the frosted glass needs
                 // them) may have been switched.
-                g_transparencyEffects = TransparencyEffectsOn();
+                // (Back on: Windows' blur too, see RenewAllGlass. This comes
+                // often with nothing switched, like as the work area changes.)
+                const bool effects = TransparencyEffectsOn();
+                const bool effectsBack = effects && !g_transparencyEffects;
+                g_transparencyEffects = effects;
                 Render(true);
+                if (effectsBack) {
+                    RenewAllGlass();
+                }
             }
             break;
         case WM_APP_INPUT_METHOD:
@@ -67145,6 +67315,15 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                 KillTimer(m_hwnd, kDeviceRetryTimerId);
                 m_deviceRetryPending = false;
                 OnDeviceLost();
+                return 0;
+            }
+            if (wParam == kGlassRenewTimerId) {
+                KillTimer(m_hwnd, kGlassRenewTimerId);
+                RenewAllGlass();
+                if (++m_glassRenewals < (int)std::size(kGlassRenewMs)) {
+                    SetTimer(m_hwnd, kGlassRenewTimerId,
+                             kGlassRenewMs[m_glassRenewals], nullptr);
+                }
                 return 0;
             }
             if (wParam == kTrayAppTimerId) {
@@ -67380,6 +67559,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
                     if (saver != g_energySaver) {
                         g_energySaver = saver;
                         ForEachIsland([](Island& island) { island.Relayout(); });
+                        RenewAllGlass();
                         StartIslandAnimation();
                     }
                     return TRUE;
@@ -67984,6 +68164,7 @@ DWORD WINAPI IslandThreadProc(LPVOID parameter) {
                 IslandScope scope(&main);
                 main.CatchUpToasts();
                 main.RefreshWatches();
+                main.StartGlassRenewals();
             }
             ForEachIsland([](Island& island) { island.Tick(); });
             // While one is animating, a frame per display refresh (or fewer,
