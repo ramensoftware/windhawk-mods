@@ -2,7 +2,7 @@
 // @id              multiwm
 // @name            MultiWM
 // @description     Lightweight, low-cortisol window manager with true per-virtual-desktop layouts. 
-// @version         1.13.58
+// @version         1.13.59
 // @author          meteoni
 // @github          https://github.com/Meteoni
 // @license         MIT
