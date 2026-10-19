@@ -119,6 +119,7 @@ inclusion list. For example:
     - FontSize=30
     - Margin=0,-100,0,0
 ```
+Note: `Plus Jakarta Sans` and `SF Pro` are not bundled with Windows and have to be installed separately, otherwise Windows falls back to a default font. Replace them with any font you have installed.
 
 Example with this mod and the Styler together:
 
