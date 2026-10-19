@@ -19,9 +19,9 @@ The mod opens a new tab when you release the middle mouse button over the empty 
 
 Three apps are supported:
 
-- File Explorer: the new tab is opened by sending Ctrl+T.
-- Notepad: the new tab is opened by sending Ctrl+N.
-- Terminal: the new tab is opened by sending Ctrl+Shift+T. Note: This does not work if Terminal is running as administrator due to privilege isolation.
+- File Explorer: the new tab is opened by invoking the native AddButton (fallback: Ctrl+T).
+- Notepad: the new tab is opened by invoking the native AddButton (fallback: Ctrl+N).
+- Terminal: the new tab is opened by invoking the native AddButton (fallback: Ctrl+Shift+T). Note: This does not work if Terminal is running as administrator due to privilege isolation.
 
 You can enable or disable each app individually in the mod's settings tab.
 
@@ -37,8 +37,8 @@ How it works:
 - If the mouse button is released before the check finishes, the mod temporarily
   holds the release event and re-sends it synthetically after the check. This avoids
   the race condition where the native app closes the tab before the mod can inspect it.
-- Middle clicking an actual tab is left untouched, so the native "close tab" 
-  behavior keeps working perfectly.
+- Middle clicking an actual tab or the add button is left untouched, so the native 
+  behaviors keep working perfectly.
 
 ![Middle Click New Tab Demo](https://raw.githubusercontent.com/venasataa/windhawk-mod-assets/refs/heads/main/middle-click-new-tab.gif)
 */
@@ -49,15 +49,15 @@ How it works:
 - enableExplorer: true
   $name: File Explorer
   $description: >-
-    Enable middle-click new tab for File Explorer (Ctrl+T).
+    Enable middle-click new tab for File Explorer.
 - enableNotepad: true
   $name: Notepad
   $description: >-
-    Enable middle-click new tab for Notepad (Ctrl+N).
+    Enable middle-click new tab for Notepad.
 - enableTerminal: true
   $name: Terminal
   $description: >-
-    Enable middle-click new tab for Windows Terminal (Ctrl+Shift+T).
+    Enable middle-click new tab for Windows Terminal.
 */
 // ==/WindhawkModSettings==
 
@@ -433,25 +433,34 @@ bool IsTabStripContainerElement(IUIAutomationElement* pElement) {
     return false;
 }
 
+bool IsAddButton(IUIAutomationElement* pElement) {
+    CONTROLTYPEID controlType = 0;
+    if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
+        controlType != UIA_ButtonControlTypeId) {
+        return false;
+    }
+
+    BSTR automationId = nullptr;
+    bool isAdd = false;
+    if (SUCCEEDED(pElement->get_CurrentAutomationId(&automationId)) && automationId) {
+        if (_wcsicmp(automationId, L"AddButton") == 0 || 
+            _wcsicmp(automationId, L"NewTabButton") == 0 ||
+            StrStrIW(automationId, L"AddButton") || 
+            StrStrIW(automationId, L"NewTab")) {
+            isAdd = true;
+        }
+        SysFreeString(automationId);
+    }
+    return isAdd;
+}
+
 int GetButtonKind(IUIAutomationElement* pElement) {
     CONTROLTYPEID controlType = 0;
     if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
         controlType != UIA_ButtonControlTypeId) {
         return 0;
     }
-
-    int kind = 2;
-    BSTR automationId = nullptr;
-    if (SUCCEEDED(pElement->get_CurrentAutomationId(&automationId)) &&
-        automationId) {
-        if (StrStrIW(automationId, L"add") ||
-            StrStrIW(automationId, L"newtab")) {
-            kind = 1;
-        }
-        SysFreeString(automationId);
-    }
-
-    return kind;
+    return 2; // Other button
 }
 
 bool FindTabStripBottom(IUIAutomationElement* pTabView, LONG* pBottom) {
@@ -596,7 +605,9 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip, LONG* pStripBottom) {
     if (found && pTabStrip) {
         if (SUCCEEDED(pTabStrip->get_CurrentBoundingRectangle(prcTabStrip))) {
             if (pStripBottom) {
-                *pStripBottom = prcTabStrip->bottom;
+                // Fallback to a reasonable tab strip height if FindTabStripBottom fails
+                // to prevent the entire content area from being considered a tab strip
+                *pStripBottom = prcTabStrip->top + ScaleByDpi(40);
                 FindTabStripBottom(pTabStrip, pStripBottom);
             }
             result = !IsRectEmpty(prcTabStrip);
@@ -653,17 +664,10 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
             break;
         }
 
-        if (int buttonKind = GetButtonKind(pCurrent)) {
-            if (buttonKind == 1) {
-                foundAddButton = true;
-            } else {
-                hit = HitResult::OnOtherButton;
-                break;
-            }
-        }
-
-        if (IsTabStripContainerElement(pCurrent)) {
-            hit = HitResult::InContainer;
+        if (IsAddButton(pCurrent)) {
+            foundAddButton = true;
+        } else if (GetButtonKind(pCurrent)) {
+            hit = HitResult::OnOtherButton;
             break;
         }
 
@@ -673,6 +677,7 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
         pCurrent = SUCCEEDED(hrParent) ? pParent : nullptr;
     }
 
+    // If we clicked exactly on the AddButton, let the native click handle it
     if (hit == HitResult::Undecided && foundAddButton) {
         hit = HitResult::OnOtherButton;
     }
@@ -683,18 +688,99 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
     pElement->Release();
 
     switch (hit) {
-        case HitResult::OnAddButton:
         case HitResult::InContainer:
-            return true;
+        case HitResult::Undecided:
+            return true; // Empty space in tab strip!
 
         case HitResult::OnTab:
         case HitResult::OnOtherButton:
             return false;
-
-        case HitResult::Undecided:
-            return true;
     }
     return false;
+}
+
+IUIAutomationElement* FindAddButtonInWindow(HWND hRootWnd) {
+    if (!g_pAutomation) return nullptr;
+    
+    IUIAutomationElement* pRoot = nullptr;
+    if (FAILED(g_pAutomation->ElementFromHandle(hRootWnd, &pRoot)) || !pRoot) {
+        return nullptr;
+    }
+
+    IUIAutomationElement* pTabView = nullptr;
+    bool found = false;
+
+    VARIANT varControlType;
+    VariantInit(&varControlType);
+    varControlType.vt = VT_I4;
+    varControlType.lVal = UIA_TabControlTypeId;
+
+    IUIAutomationCondition* pCondition = nullptr;
+    if (SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlType, &pCondition)) && pCondition) {
+        if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pCondition, &pTabView)) && pTabView) {
+            found = true;
+        }
+        pCondition->Release();
+    }
+    VariantClear(&varControlType);
+
+    if (!found) {
+        static const WCHAR* kTabViewClassNames[] = {
+            L"Windows.UI.Xaml.Controls.TabView",
+            L"Microsoft.UI.Xaml.Controls.TabView",
+        };
+        for (PCWSTR className : kTabViewClassNames) {
+            VARIANT varClassName;
+            VariantInit(&varClassName);
+            varClassName.vt = VT_BSTR;
+            varClassName.bstrVal = SysAllocString(className);
+            IUIAutomationCondition* pClassCondition = nullptr;
+            if (varClassName.bstrVal && SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId, varClassName, &pClassCondition)) && pClassCondition) {
+                if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pClassCondition, &pTabView)) && pTabView) {
+                    found = true;
+                }
+                pClassCondition->Release();
+            }
+            VariantClear(&varClassName);
+            if (found) break;
+        }
+    }
+
+    IUIAutomationElement* pAddButton = nullptr;
+    if (found && pTabView) {
+        VARIANT varControlTypeBtn;
+        VariantInit(&varControlTypeBtn);
+        varControlTypeBtn.vt = VT_I4;
+        varControlTypeBtn.lVal = UIA_ButtonControlTypeId;
+
+        IUIAutomationCondition* pBtnCondition = nullptr;
+        if (SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlTypeBtn, &pBtnCondition)) && pBtnCondition) {
+            IUIAutomationElementArray* pButtons = nullptr;
+            if (SUCCEEDED(pTabView->FindAll(TreeScope_Descendants, pBtnCondition, &pButtons)) && pButtons) {
+                int count = 0;
+                pButtons->get_Length(&count);
+                for (int i = 0; i < count; i++) {
+                    IUIAutomationElement* pBtn = nullptr;
+                    if (SUCCEEDED(pButtons->GetElement(i, &pBtn)) && pBtn) {
+                        if (IsAddButton(pBtn)) {
+                            pAddButton = pBtn;
+                            break;
+                        }
+                        pBtn->Release();
+                    }
+                }
+                pButtons->Release();
+            }
+            pBtnCondition->Release();
+        }
+        VariantClear(&varControlTypeBtn);
+        pTabView->Release();
+    } else if (pTabView) {
+        pTabView->Release();
+    }
+
+    pRoot->Release();
+    return pAddButton;
 }
 
 ////////////////////////////////////////////////////////////
@@ -786,7 +872,22 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
                 SendMiddleUpAt(upPt);
 
                 if (shouldCreate) {
-                    FocusAndSendShortcut(root, shortcut);
+                    bool invoked = false;
+                    IUIAutomationElement* pAddButton = FindAddButtonInWindow(root);
+                    if (pAddButton) {
+                        IUIAutomationInvokePattern* pInvoke = nullptr;
+                        if (SUCCEEDED(pAddButton->GetCurrentPattern(UIA_InvokePatternId, (IUnknown**)&pInvoke)) && pInvoke) {
+                            if (SUCCEEDED(pInvoke->Invoke())) {
+                                invoked = true;
+                            }
+                            pInvoke->Release();
+                        }
+                        pAddButton->Release();
+                    }
+                    
+                    if (!invoked) {
+                        FocusAndSendShortcut(root, shortcut);
+                    }
                 }
 
                 EnterState();
@@ -1172,11 +1273,8 @@ void Wh_ModAfterInit() {
             return;
     }
 
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
