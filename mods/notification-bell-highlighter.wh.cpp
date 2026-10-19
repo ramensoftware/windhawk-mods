@@ -2,10 +2,10 @@
 // @id              notification-bell-highlighter
 // @name            Notification Bell Highlighter
 // @description     Pulsing, bright overlay with a counter on the taskbar notification bell
-// @version         0.3
+// @version         0.4
 // @author          mwalker212
 // @github          https://github.com/mwalker212
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -lshell32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
@@ -23,7 +23,7 @@ Windows 11 only. Tested on 26H2 build 26300.9711.
 Limitations:
 Overlay rather than restyled icon
 Primary taskbar only
-English accessible name
+Relies on the English accessible name, e.g. "Notifications 1 new notification"
 */
 // ==/WindhawkModReadme==
 
@@ -47,30 +47,40 @@ English accessible name
 #include <windows.h>
 #include <shellapi.h>
 #include <uiautomation.h>
+#include <stdio.h>
+#include <climits>
 #include <cmath>
 #include <string>
 
 struct Settings {
-    int sizePercent = 100;
+    int sizePercent = 140;
     COLORREF color = RGB(255, 45, 45);
     int pulseMs = 1100;
     bool showCount = true;
-    int offsetX = 10;
+    int offsetX = 0;
     int offsetY = 0;
 } g;
 
 static HANDLE g_thread = nullptr;
-static HWND g_wnd = nullptr;
-static volatile LONG g_relayout = 1;
+static HANDLE g_readyEvent = nullptr;
+static HWND volatile g_wnd = nullptr;
 static int g_count = 0;
 static int g_curSize = 0;
+static BYTE g_alpha = 255;
+static bool g_pulseRunning = false;
+
+// Overlay bitmap cache
 static HDC g_memDC = nullptr;
 static HBITMAP g_dib = nullptr;
 static HGDIOBJ g_oldBmp = nullptr;
 static int g_dibSize = 0, g_dibCount = -1;
 static COLORREF g_dibColor = 0;
 static bool g_dibShowCount = false;
-static BYTE g_alpha = 255;
+
+// Cached bell element (overlay thread only)
+static IUIAutomationElement* g_bell = nullptr;
+static HWND g_bellTray = nullptr;
+static DWORD g_lastFindTick = 0;
 
 static void LoadSettings() {
     g.sizePercent = Wh_GetIntSetting(L"sizePercent");
@@ -100,56 +110,102 @@ static int ParseCount(const wchar_t* name) {
     return _wtoi(s.substr(b, e - b).c_str());
 }
 
-// Finds the notification-centre button in the taskbar via UI Automation.
-static bool QueryBell(IUIAutomation* uia, RECT* rc, int* count) {
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!tray || !IsWindowVisible(tray)) return false;
+static void ReleaseBell() {
+    if (g_bell) {
+        g_bell->Release();
+        g_bell = nullptr;
+    }
+    g_bellTray = nullptr;
+}
 
-    IUIAutomationElement* root = nullptr;
-    if (FAILED(uia->ElementFromHandle(tray, &root)) || !root) return false;
-
+static IUIAutomationCondition* MakeCondition(IUIAutomation* uia, PROPERTYID prop,
+                                             PCWSTR text, bool substring) {
     VARIANT v;
     VariantInit(&v);
     v.vt = VT_BSTR;
-    v.bstrVal = SysAllocString(L"Notification");
+    v.bstrVal = SysAllocString(text);
     IUIAutomationCondition* cond = nullptr;
-        // 1 = IgnoreCase, 2 = MatchSubstring (numeric because older headers lack the enum name)
-    HRESULT hr = uia->CreatePropertyConditionEx(
-        UIA_NamePropertyId, v, (PropertyConditionFlags)(1 | 2), &cond);
+    HRESULT hr = substring
+        // 1 = IgnoreCase, 2 = MatchSubstring (numeric: older headers lack the names)
+        ? uia->CreatePropertyConditionEx(prop, v, (PropertyConditionFlags)(1 | 2), &cond)
+        : uia->CreatePropertyCondition(prop, v, &cond);
     VariantClear(&v);
+    return SUCCEEDED(hr) ? cond : nullptr;
+}
 
-    bool found = false;
-    if (SUCCEEDED(hr) && cond) {
-        IUIAutomationElementArray* arr = nullptr;
-        if (SUCCEEDED(root->FindAll(TreeScope_Descendants, cond, &arr)) && arr) {
-            int n = 0;
-            arr->get_Length(&n);
-            for (int i = 0; i < n && !found; i++) {
-                IUIAutomationElement* el = nullptr;
-                if (FAILED(arr->GetElement(i, &el)) || !el) continue;
-                BSTR name = nullptr;
-                RECT r{};
-                if (SUCCEEDED(el->get_CurrentName(&name)) && name &&
-                    SUCCEEDED(el->get_CurrentBoundingRectangle(&r)) &&
-                    r.right > r.left && r.bottom > r.top) {
-                    static std::wstring lastName;
-                    if (lastName != name) {
-                        lastName = name;
-                        Wh_Log(L"Bell element name: %s", name);
-                    }
-                    *rc = r;
-                    *count = ParseCount(name);
-                    found = true;
-                }
-                if (name) SysFreeString(name);
+// Of all elements matching cond, returns the rightmost visible one.
+static IUIAutomationElement* PickRightmost(IUIAutomationElement* root,
+                                           IUIAutomationCondition* cond) {
+    IUIAutomationElement* best = nullptr;
+    LONG bestRight = LONG_MIN;
+    IUIAutomationElementArray* arr = nullptr;
+    if (SUCCEEDED(root->FindAll(TreeScope_Descendants, cond, &arr)) && arr) {
+        int n = 0;
+        arr->get_Length(&n);
+        for (int i = 0; i < n; i++) {
+            IUIAutomationElement* el = nullptr;
+            if (FAILED(arr->GetElement(i, &el)) || !el) continue;
+            RECT r{};
+            if (SUCCEEDED(el->get_CurrentBoundingRectangle(&r)) &&
+                r.right > r.left && r.bottom > r.top && r.right > bestRight) {
+                if (best) best->Release();
+                best = el;
+                bestRight = r.right;
+            } else {
                 el->Release();
             }
-            arr->Release();
         }
-        cond->Release();
+        arr->Release();
     }
+    return best;
+}
+
+static IUIAutomationElement* FindBell(IUIAutomation* uia, HWND tray) {
+    IUIAutomationElement* root = nullptr;
+    if (FAILED(uia->ElementFromHandle(tray, &root)) || !root) return nullptr;
+
+    IUIAutomationElement* best = nullptr;
+    auto tryFind = [&](PROPERTYID prop, PCWSTR text, bool substring) {
+        if (best) return;
+        IUIAutomationCondition* cond = MakeCondition(uia, prop, text, substring);
+        if (!cond) return;
+        best = PickRightmost(root, cond);
+        cond->Release();
+    };
+
+    tryFind(UIA_ClassNamePropertyId, L"SystemTray.OmniButtonRight", false);
+    tryFind(UIA_NamePropertyId, L"Notification", true);   // fallback
     root->Release();
-    return found;
+
+    if (best) {
+        BSTR name = nullptr, id = nullptr, cls = nullptr;
+        best->get_CurrentName(&name);
+        best->get_CurrentAutomationId(&id);
+        best->get_CurrentClassName(&cls);
+        Wh_Log(L"Bell found: name='%s' automationId='%s' class='%s'",
+               name ? name : L"", id ? id : L"", cls ? cls : L"");
+        SysFreeString(name);
+        SysFreeString(id);
+        SysFreeString(cls);
+    }
+    return best;
+}
+
+// Reads state from the cached element. Fails if the element has gone away.
+static bool ReadBell(IUIAutomationElement* el, RECT* rc, int* count) {
+    BSTR name = nullptr;
+    if (FAILED(el->get_CurrentName(&name))) return false;
+    HRESULT hr = el->get_CurrentBoundingRectangle(rc);
+
+    static std::wstring lastName;
+    if (name && lastName != name) {
+        lastName = name;
+        Wh_Log(L"Bell name: %s", name);
+    }
+    *count = name ? ParseCount(name) : 0;
+    SysFreeString(name);
+
+    return SUCCEEDED(hr) && rc->right > rc->left && rc->bottom > rc->top;
 }
 
 static void RenderOverlay(HWND hwnd, BYTE alpha) {
@@ -192,7 +248,6 @@ static void RenderOverlay(HWND hwnd, BYTE alpha) {
             }
         }
 
-        // Count text (GDI leaves the alpha channel alone; text sits inside the opaque area)
         if (g.showCount && g_count > 0) {
             wchar_t txt[16];
             if (g_count > 99) wcscpy(txt, L"99+");
@@ -222,6 +277,14 @@ static void RenderOverlay(HWND hwnd, BYTE alpha) {
     UpdateLayeredWindow(hwnd, nullptr, nullptr, &sz, g_memDC, &src, 0, &bf, ULW_ALPHA);
 }
 
+static void HideOverlay(HWND hwnd) {
+    if (g_pulseRunning) {
+        KillTimer(hwnd, 1);
+        g_pulseRunning = false;
+    }
+    ShowWindow(hwnd, SW_HIDE);
+}
+
 static void Reposition(HWND hwnd, const RECT& rc, int count) {
     bool hide = count <= 0;
     QUERY_USER_NOTIFICATION_STATE qs;
@@ -231,7 +294,7 @@ static void Reposition(HWND hwnd, const RECT& rc, int count) {
         hide = true;   // don't draw over fullscreen apps
     }
     if (hide) {
-        ShowWindow(hwnd, SW_HIDE);
+        HideOverlay(hwnd);
         return;
     }
 
@@ -244,6 +307,44 @@ static void Reposition(HWND hwnd, const RECT& rc, int count) {
     SetWindowPos(hwnd, HWND_TOPMOST, x, y, size, size,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     RenderOverlay(hwnd, g_alpha);
+
+    if (!g_pulseRunning) {
+        SetTimer(hwnd, 1, 33, nullptr);     // pulse animation, only while visible
+        g_pulseRunning = true;
+    }
+}
+
+static void Poll(HWND hwnd, IUIAutomation* uia) {
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!tray || !IsWindowVisible(tray)) {
+        ReleaseBell();
+        HideOverlay(hwnd);
+        return;
+    }
+    if (g_bell && tray != g_bellTray) ReleaseBell();   // taskbar was recreated
+
+    RECT rc{};
+    int count = 0;
+    bool ok = g_bell && ReadBell(g_bell, &rc, &count);
+
+    if (!ok) {
+        ReleaseBell();
+        DWORD now = GetTickCount();
+        // Full-tree search only when needed, and at most every 3 seconds.
+        if (g_lastFindTick == 0 || now - g_lastFindTick >= 3000) {
+            g_lastFindTick = now;
+            g_bell = FindBell(uia, tray);
+            g_bellTray = tray;
+            ok = g_bell && ReadBell(g_bell, &rc, &count);
+        }
+    }
+
+    if (ok) {
+        g_count = count;
+        Reposition(hwnd, rc, count);
+    } else {
+        HideOverlay(hwnd);
+    }
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -252,27 +353,24 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_CREATE:
         CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
                          IID_IUIAutomation, (void**)&uia);
-        SetTimer(hwnd, 1, 33, nullptr);    // pulse animation
-        SetTimer(hwnd, 2, 700, nullptr);   // poll bell state
+        SetTimer(hwnd, 2, 700, nullptr);   // poll the cached bell element
+        return 0;
+
+    case WM_APP:                            // settings changed
+        LoadSettings();
+        ReleaseBell();
+        g_lastFindTick = 0;
+        if (uia) Poll(hwnd, uia);
         return 0;
 
     case WM_TIMER:
         if (wp == 1) {
-            if (IsWindowVisible(hwnd)) {
-                double t = (GetTickCount() % g.pulseMs) / (double)g.pulseMs;
-                double k = 0.5 + 0.5 * sin(t * 6.2831853);
-                g_alpha = (BYTE)(110 + 145 * k);
-                RenderOverlay(hwnd, g_alpha);
-            }
+            double t = (GetTickCount() % g.pulseMs) / (double)g.pulseMs;
+            double k = 0.5 + 0.5 * sin(t * 6.2831853);
+            g_alpha = (BYTE)(110 + 145 * k);
+            RenderOverlay(hwnd, g_alpha);
         } else if (wp == 2 && uia) {
-            RECT rc{};
-            int count = 0;
-            if (QueryBell(uia, &rc, &count)) {
-                g_count = count;
-                Reposition(hwnd, rc, count);
-            } else {
-                ShowWindow(hwnd, SW_HIDE);
-            }
+            Poll(hwnd, uia);
         }
         return 0;
 
@@ -286,6 +384,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DESTROY:
         KillTimer(hwnd, 1);
         KillTimer(hwnd, 2);
+        g_pulseRunning = false;
+        ReleaseBell();
         if (uia) { uia->Release(); uia = nullptr; }
         if (g_memDC) {
             if (g_oldBmp) SelectObject(g_memDC, g_oldBmp);
@@ -307,13 +407,21 @@ static DWORD WINAPI OverlayThread(LPVOID) {
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = L"WhBellHighlighter";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    RegisterClassW(&wc);
+
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
+        SetEvent(g_readyEvent);
+        CoUninitialize();
+        return 0;
+    }
 
     g_wnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
             WS_EX_TRANSPARENT,
         wc.lpszClassName, L"", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr,
         wc.hInstance, nullptr);
+
+    SetEvent(g_readyEvent);     // g_wnd is final from here on (window or null)
 
     if (g_wnd) {
         MSG m;
@@ -329,22 +437,212 @@ static DWORD WINAPI OverlayThread(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
-    g_thread = CreateThread(nullptr, 0, OverlayThread, nullptr, 0, nullptr);
+    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_thread = g_readyEvent
+                   ? CreateThread(nullptr, 0, OverlayThread, nullptr, 0, nullptr)
+                   : nullptr;
     return g_thread != nullptr;
 }
 
-void Wh_ModSettingsChanged() {
-    LoadSettings();
-    InterlockedExchange(&g_relayout, 1);
+void WhTool_ModSettingsChanged() {
+    // Reload on the overlay thread so settings aren't read while changing.
+    if (g_thread && g_readyEvent &&
+        WaitForSingleObject(g_readyEvent, 0) == WAIT_OBJECT_0 && g_wnd) {
+        PostMessageW(g_wnd, WM_APP, 0, 0);
+    }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (g_thread) {
+        WaitForSingleObject(g_readyEvent, INFINITE);   // g_wnd is final now
         if (g_wnd) PostMessageW(g_wnd, WM_CLOSE, 0, 0);
-        WaitForSingleObject(g_thread, 3000);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
+    if (g_readyEvent) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
