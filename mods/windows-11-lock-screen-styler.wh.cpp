@@ -3,11 +3,11 @@
 // @name            Windows 11 Lock Screen Styler
 // @description     Customize the Windows 11 lock screen with styles and themes
 // @version         1.5
-// @author          ZACHARIAgs, Acercandr0, m417z
+// @author          ZACHARIAgs
 // @github          https://github.com/ZACHARIAgs
 // @include         LockApp.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -17,75 +17,85 @@
 //
 // Original styling engine implementation by m417z:
 // https://github.com/m417z/my-windhawk-mods
-//
-// Lock screen Solid-Mist theme by Acercandr0:
-// https://github.com/Acercandr0/Solid-Mist
 
 // ==WindhawkModReadme==
 /*
 # Windows 11 Lock Screen Styler
 
-Customize the Windows 11 lock screen with themes contributed by the community or create your own custom styles.
+Customize the Windows 11 lock screen (`LockApp.exe`) with dedicated controls for the clock, date, and lock screen overlays, or create your own custom XAML styles.
 
-This mod targets `LockApp.exe` (the Windows lock screen process) using native Windows XAML diagnostics and styling capabilities.
+![Screenshot](https://raw.githubusercontent.com/ZACHARIAgs/windhawk-mods/refs/heads/main/Clipboard.png)
 
 ## Direct Customization Settings
 
-The Settings tab provides dedicated controls for all major lock screen modules:
+By default, the mod applies a clean **Space Black** layout using bold **Segoe UI** typography with the clock positioned near the top, the date centered near the bottom, and lock screen widgets hidden. Every section can be customized or disabled independently in the **Settings** tab:
 
 - **Time (Clock)**:
-  - **Font family & weight**: Any installed font name (defaults to `Vipnagorgialla, Vipnagorgialla Rg`) and weight (`Thin` to `Black`).
+  - **Enable clock customization**: Toggle dedicated clock overrides on or off (disable to keep the stock Windows clock or style it exclusively via **Control styles**).
+  - **Font family & weight**: Any installed font name (defaults to `Segoe UI`) and weight (`Default`, `Thin` to `Black`; defaults to `Bold`). Leave **Font family** empty or select **System Default** weight to keep the system default.
   - **Rendering style**: Choose from **Pure Solid Color**, **Frosted Glass Blur (Acrylic)**, **Crystal Glass + Film Grain**, **Vibrant Chameleon (Wallpaper Color Boost)**, **Metallic Chrome Gradient**, **Lunar Eclipse Fade**, **Cyberpunk Neon Gradient**, **Golden Hour Gradient**, or **Black-Pixel Mask (Moon Cutout)**.
   - **Primary color / tint**: Hex color (`#RRGGBB` or `#AARRGGBB`) for solid, glass, eclipse, and mask styles.
-  - **Scale (%), Letter spacing, & Opacity (%)**: Vector font scaling, character tracking (`CharacterSpacing`), and opacity.
-  - **X offset (px) & Y offset (px)**: Moves the clock left/right and up/down independently of the date.
-  - **Blend mode toggle**: Quick toggle for the black-pixel backdrop mask (`BlackThreshold`) so the clock only appears over pure black wallpaper pixels.
+  - **Scale (%), Letter spacing, & Opacity (%)**: Vector font scaling (`100` = `390px` base size), character tracking (`CharacterSpacing`), and opacity.
+  - **X offset (px) & Y offset (px)**: Moves the clock horizontally and vertically (`-310` default positions the clock near the top).
+  - **Blend mode toggle**: Quick toggle for the black-pixel backdrop mask (`BlackThreshold`) so the clock only renders over pure black wallpaper pixels (`false` by default).
 - **Date**:
-  - **Show date toggle, Font family, & Font weight**.
-  - **Rendering style, Primary color, & Blend mode toggle**.
-  - **Scale (%), Letter spacing, Opacity (%), & independent X/Y offsets** (`430` places the date at the very bottom).
-- **Media Player**:
-  - **Show media player**: Toggle visibility of the lock screen media player widget.
-  - **Horizontal position, Scale (%), X offset (px), & Y offset (px)**: Move and scale the media player anywhere on screen.
-  - **Card backdrop style**: Choose **Frosted Glass**, **Dark Glass**, **Solid Dark**, or **Transparent (Borderless)**.
-  - **Corner radius (px) & Album artwork scale (%)**.
-- **Battery & Network Module**:
-  - **Horizontal position**: Align the bottom status bar to **Left**, **Center**, **Right**, or **Hidden**.
-  - **Show frosted pill backplate**: Toggle the translucent pill border behind the status icons.
-  - **Scale (%), X offset (px), & Y offset (px)**.
+  - **Enable date customization & Show date**: Toggle dedicated date styling or hide the date text completely.
+  - **Font family & weight**: Defaults to `Segoe UI` and `Bold`.
+  - **Rendering style, Primary color / tint, & Blend mode toggle**.
+  - **Scale (%), Letter spacing, Opacity (%), & independent X/Y offsets** (`100` = `54px` base size; `430` default Y offset places the date near the bottom).
 - **Additional Lock Screen Options**:
-  - **Hide lock screen widgets**: Hides the bottom weather and video preview widgets.
-  - **Hide Windows Spotlight / fun facts overlay**: Hides Spotlight tips and promotional links.
+  - **Hide lock screen widgets**: Hides the bottom weather, finance, and video preview widget cards (`true` by default).
+  - **Hide Windows Spotlight / fun facts overlay**: Hides Spotlight promotional links and text overlays (`false` by default).
 
-## Themes
+## Custom Styles (`controlStyles`, `styleConstants`, `themeResourceVariables`)
 
-- **Space Black**: Designed for dark/space wallpapers using the **Vipnagorgialla** font in pure white (`#FFFFFF`), with the clock near the top and the date centered at the very bottom.
-- **Solid-Mist**: A blurred glass theme designed by [Acercandr0](https://github.com/Acercandr0/Solid-Mist) that applies frosted glass backgrounds to the lock screen media controls and status bar.
+Custom rules defined under **Control styles** are applied after the dedicated settings above, so your custom rules always take precedence. For full target and style syntax documentation, see the [Windows 11 Start Menu Styler guide](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-start-menu-styler.wh.cpp).
+
+Common `LockApp.exe` XAML targets include:
+- `StackPanel#TimeAndDatePanel` — container holding the clock and date panels
+- `StackPanel#TimePanel > TextBlock#Time` — lock screen clock text
+- `StackPanel#TimeAndDatePanel > TextBlock#Date` — lock screen date text
+- `Grid#MediaControlsContainer`, `Grid#MediaTransportControls`, `Grid#ThumbnailImageArea` — media playback controls card and album artwork container
+- `UserControl > Grid#NetworkAndBatteryIcon > Border#BackplateBorder` — bottom-right network and battery status indicator
+- `Button#Weather_Preview_LockScreen_LockScreen`, `Button#Videos_Preview_LockScreen_LockScreen`, `Grid#WidgetFrameGrid` — bottom lock screen widget cards
+
+### `WindhawkBlur` & `BlackThreshold`
+
+In addition to standard `<WindhawkBlur BlurAmount="..." TintColor="..." TintOpacity="..." />` parameters, this mod supports `BlackThreshold` (`0.005` to `1.0`), which masks the element against the wallpaper backdrop so it renders only where backdrop pixels are darker than the threshold:
+
+```xml
+Foreground:=<WindhawkBlur BlurAmount="0" TintColor="#FFFFFFFF" BlackThreshold="0.02" />
+```
+
+### Compatibility Note
+
+Only one XAML Diagnostics consumer can attach to `LockApp.exe` at a time. If you previously added `LockApp.exe` to the custom process inclusion list in **Windows 11 Start Menu Styler**, remove `LockApp.exe` from that mod's settings so the two mods do not conflict.
+
+## Credits
+
+- Based on the XAML styling engine by [m417z](https://github.com/m417z) ([my-windhawk-mods](https://github.com/m417z/my-windhawk-mods)).
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- theme: Space Black
-  $name: Theme
-  $description: >-
-    Select a base theme preset for media controls and backdrop styling, or select
-    None to use only the settings below.
-  $options:
-  - Space Black: Space Black
-  - Solid-Mist: Solid-Mist (by Acercandr0)
-  - "": None
 - timeSettings:
-  - font: Vipnagorgialla, Vipnagorgialla Rg
+  - enabled: true
+    $name: Enable clock customization
+    $description: >-
+      Apply the dedicated clock customization settings below. Disable to keep the
+      stock Windows clock.
+  - font: Segoe UI
     $name: Font family
     $description: >-
-      Font family name for the clock (e.g., Vipnagorgialla, Bahnschrift, Segoe UI).
-  - weight: Default
+      Font family name for the clock (e.g., Segoe UI, Bahnschrift, Vipnagorgialla).
+      Leave empty to keep the system default font.
+  - weight: Bold
     $name: Font weight
     $description: >-
       Stroke weight for the clock digits.
     $options:
-    - Default: Theme Default
+    - Default: System Default
     - Thin: Thin
     - Light: Light
     - Normal: Normal (Regular)
@@ -114,7 +124,7 @@ The Settings tab provides dedicated controls for all major lock screen modules:
   - scale: 100
     $name: Scale (%)
     $description: >-
-      Clock size scale in percent (100 = default size, 120 = 20% larger, 80 = 20% smaller).
+      Clock size scale in percent (100 = 390px default size, 120 = 20% larger, 80 = 20% smaller).
   - characterSpacing: 0
     $name: Letter spacing (tracking)
     $description: >-
@@ -139,20 +149,26 @@ The Settings tab provides dedicated controls for all major lock screen modules:
   $description: >-
     Customize the clock font, rendering style, color, scale, letter spacing, X/Y offsets, and blend mode.
 - dateSettings:
+  - enabled: true
+    $name: Enable date customization
+    $description: >-
+      Apply the dedicated date customization settings below. Disable to keep the
+      stock Windows date.
   - visible: true
     $name: Show date
     $description: >-
       Toggle visibility of the lock screen date text.
-  - font: Vipnagorgialla, Vipnagorgialla Rg
+  - font: Segoe UI
     $name: Font family
     $description: >-
-      Font family name for the date (e.g., Vipnagorgialla, Bahnschrift, Segoe UI).
-  - weight: Default
+      Font family name for the date (e.g., Segoe UI, Bahnschrift, Vipnagorgialla).
+      Leave empty to keep the system default font.
+  - weight: Bold
     $name: Font weight
     $description: >-
       Stroke weight for the date text.
     $options:
-    - Default: Theme Default
+    - Default: System Default
     - Thin: Thin
     - Light: Light
     - Normal: Normal (Regular)
@@ -181,7 +197,7 @@ The Settings tab provides dedicated controls for all major lock screen modules:
   - scale: 100
     $name: Scale (%)
     $description: >-
-      Date size scale in percent (100 = default size, 120 = 20% larger, 80 = 20% smaller).
+      Date size scale in percent (100 = 54px default size, 120 = 20% larger, 80 = 20% smaller).
   - characterSpacing: 0
     $name: Letter spacing (tracking)
     $description: >-
@@ -197,7 +213,7 @@ The Settings tab provides dedicated controls for all major lock screen modules:
   - offsetY: 430
     $name: Y offset (px)
     $description: >-
-      Vertical offset in pixels (negative = move up, positive = move down; 430 places the date at the very bottom).
+      Vertical offset in pixels (negative = move up, positive = move down; 430 places the date near the bottom).
   - blendMode: false
     $name: Blend mode (only show on pure black pixels)
     $description: >-
@@ -205,80 +221,6 @@ The Settings tab provides dedicated controls for all major lock screen modules:
   $name: Date
   $description: >-
     Customize the date visibility, font, rendering style, color, scale, letter spacing, X/Y offsets, and blend mode.
-- mediaSettings:
-  - visible: true
-    $name: Show media player
-    $description: >-
-      Toggle visibility of the lock screen media playback controls card.
-  - position: Center
-    $name: Horizontal position
-    $description: >-
-      Align the media player card to the Left, Center, or Right of the screen.
-    $options:
-    - Left: Left
-    - Center: Center (Default)
-    - Right: Right
-  - cardStyle: FrostedGlass
-    $name: Card backdrop style
-    $description: >-
-      Choose the background material for the media player card.
-    $options:
-    - FrostedGlass: Frosted Glass Blur (Default)
-    - DarkGlass: Deep Dark Glass Blur
-    - SolidDark: Matte Solid Dark
-    - Transparent: Transparent / Borderless Floating Controls
-  - scale: 100
-    $name: Scale (%)
-    $description: >-
-      Media player card size scale in percent (100 = default size).
-  - offsetX: 0
-    $name: X offset (px)
-    $description: >-
-      Horizontal offset in pixels for the media player card (negative = move left, positive = move right).
-  - offsetY: 0
-    $name: Y offset (px)
-    $description: >-
-      Vertical offset in pixels for the media player card (negative = move up, positive = move down).
-  - cornerRadius: 10
-    $name: Card corner radius (px)
-    $description: >-
-      Rounding of the media player card corners in pixels (0 = sharp square corners, 10 = default rounded).
-  - artworkScale: 130
-    $name: Album artwork zoom (%)
-    $description: >-
-      Scale factor for the album art thumbnail inside the media card (130 = 1.3x zoomed, 100 = standard size).
-  $name: Media Player Module
-  $description: >-
-    Customize the media player visibility, position, backdrop style, scale, X/Y offsets, and album artwork zoom.
-- batterySettings:
-  - position: Right
-    $name: Horizontal position
-    $description: >-
-      Align the network and battery module to the Left, Center, Right, or hide it.
-    $options:
-    - Left: Left
-    - Center: Center
-    - Right: Right (Default)
-    - Hidden: Hidden
-  - showBackplate: true
-    $name: Show frosted pill backplate
-    $description: >-
-      Show the translucent rounded pill background behind the network and battery icons.
-  - scale: 100
-    $name: Scale (%)
-    $description: >-
-      Scale the network and battery status module in percent (100 = default size).
-  - offsetX: 0
-    $name: X offset (px)
-    $description: >-
-      Horizontal offset in pixels for the network and battery module (negative = move left, positive = move right).
-  - offsetY: 0
-    $name: Y offset (px)
-    $description: >-
-      Vertical offset in pixels for the network and battery module (negative = move up, positive = move down).
-  $name: Battery & Network Module
-  $description: >-
-    Customize the horizontal position, pill backplate, scale, and X/Y offsets of the battery/network status module.
 - extraSettings:
   - hideWidgets: true
     $name: Hide lock screen widgets (Weather & Videos)
@@ -302,7 +244,7 @@ The Settings tab provides dedicated controls for all major lock screen modules:
       $name: Styles
   $name: Control styles
   $description: >-
-    Additional custom XAML control styles.
+    Additional custom XAML control styles (overrides the dedicated settings above).
 - themeResourceVariables: [""]
   $name: Resource variables
   $description: >-
@@ -318,107 +260,6 @@ The Settings tab provides dedicated controls for all major lock screen modules:
 #undef GetCurrentTime
 
 #include <winrt/Windows.UI.Xaml.h>
-
-struct ThemeTargetStyles {
-    PCWSTR target;
-    std::vector<PCWSTR> styles;
-};
-
-struct Theme {
-    std::vector<ThemeTargetStyles> targetStyles;
-    std::vector<PCWSTR> styleConstants;
-    std::vector<PCWSTR> themeResourceVariables;
-};
-
-// clang-format off
-
-const Theme g_themeSolidMist = {{
-    ThemeTargetStyles{L"StackPanel#TimeAndDatePanel", {
-        L"VerticalAlignment=Center",
-        L"HorizontalAlignment=Center",
-        L"MaxWidth=9999"}},
-    ThemeTargetStyles{L"StackPanel#TimePanel", {
-        L"Background=Transparent",
-        L"HorizontalAlignment=Center",
-        L"MaxWidth=9999"}},
-    ThemeTargetStyles{L"Grid#MediaControlsContainer", {
-        L"Margin=0,0,0,70"}},
-    ThemeTargetStyles{L"Grid#MediaTransportControls", {
-        L"Background:=$bg2",
-        L"BorderThickness=0.5",
-        L"BorderBrush=#20FFFFFF",
-        L"CornerRadius=$r",
-        L"Padding=5",
-        L"Width=310",
-        L"Height=80",
-        L"Margin=0,-130,0,0"}},
-    ThemeTargetStyles{L"Grid#ThumbnailImageArea", {
-        L"RenderTransformOrigin=0.5,0.5",
-        L"RenderTransform:=<ScaleTransform ScaleX=\"1.3\" ScaleY=\"1.3\" />",
-        L"Margin=12,0,18,0"}},
-    ThemeTargetStyles{L"Button#Videos_Preview_LockScreen_LockScreen", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Button#Weather_Preview_LockScreen_LockScreen", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"UserControl > Grid#NetworkAndBatteryIcon > Border#BackplateBorder", {
-        L"Background:=$bg2",
-        L"BorderThickness=0.5",
-        L"CornerRadius=$r",
-        L"BorderBrush=#20FFFFFF",
-        L"Margin=0,0,0,20"}},
-}, {
-    L"bg=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemChromeLowColor}\" TintOpacity=\"0.5\" />",
-    L"bg2=<WindhawkBlur BlurAmount=\"10\" TintColor=\"{ThemeResource SystemChromeLowColor}\" TintOpacity=\"0.3\" />",
-    L"bg3=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemChromeLowColor}\" TintOpacity=\"0.3\" />",
-    L"border=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\" Opacity=\"0.15\"><GradientStop Color=\"{ThemeResource TextFillColorSecondary}\" Offset=\"0.0\"/><GradientStop Color=\"{ThemeResource TextFillColorTertiary}\" Offset=\"0.5\"/><GradientStop Color=\"{ThemeResource TextFillColorSecondary}\" Offset=\"1.0\"/></LinearGradientBrush>",
-    L"r=10",
-    L"r2=7",
-}};
-
-const Theme g_themeSpaceBlack = {{
-    ThemeTargetStyles{L"StackPanel#TimeAndDatePanel", {
-        L"VerticalAlignment=Center",
-        L"HorizontalAlignment=Center",
-        L"MaxWidth=9999"}},
-    ThemeTargetStyles{L"StackPanel#TimePanel", {
-        L"Background=Transparent",
-        L"HorizontalAlignment=Center",
-        L"MaxWidth=9999"}},
-    ThemeTargetStyles{L"Grid#MediaControlsContainer", {
-        L"Margin=0,0,0,70"}},
-    ThemeTargetStyles{L"Grid#MediaTransportControls", {
-        L"Background:=$bg2",
-        L"BorderThickness=0.5",
-        L"BorderBrush=#20FFFFFF",
-        L"CornerRadius=$r",
-        L"Padding=5",
-        L"Width=310",
-        L"Height=80",
-        L"Margin=0,-130,0,0"}},
-    ThemeTargetStyles{L"Grid#ThumbnailImageArea", {
-        L"RenderTransformOrigin=0.5,0.5",
-        L"RenderTransform:=<ScaleTransform ScaleX=\"1.3\" ScaleY=\"1.3\" />",
-        L"Margin=12,0,18,0"}},
-    ThemeTargetStyles{L"Button#Videos_Preview_LockScreen_LockScreen", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"Button#Weather_Preview_LockScreen_LockScreen", {
-        L"Visibility=1"}},
-    ThemeTargetStyles{L"UserControl > Grid#NetworkAndBatteryIcon > Border#BackplateBorder", {
-        L"Background:=$bg2",
-        L"BorderThickness=0.5",
-        L"CornerRadius=$r",
-        L"BorderBrush=#20FFFFFF",
-        L"Margin=0,0,0,20"}},
-}, {
-    L"bg=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemChromeLowColor}\" TintOpacity=\"0.5\" />",
-    L"bg2=<WindhawkBlur BlurAmount=\"10\" TintColor=\"{ThemeResource SystemChromeLowColor}\" TintOpacity=\"0.3\" />",
-    L"bg3=<WindhawkBlur BlurAmount=\"15\" TintColor=\"{ThemeResource SystemChromeLowColor}\" TintOpacity=\"0.3\" />",
-    L"border=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"0,1\" Opacity=\"0.15\"><GradientStop Color=\"{ThemeResource TextFillColorSecondary}\" Offset=\"0.0\"/><GradientStop Color=\"{ThemeResource TextFillColorTertiary}\" Offset=\"0.5\"/><GradientStop Color=\"{ThemeResource TextFillColorSecondary}\" Offset=\"1.0\"/></LinearGradientBrush>",
-    L"r=10",
-    L"r2=7",
-}};
-
-// clang-format on
 
 std::atomic<DWORD> g_targetThreadId = 0;
 
@@ -608,7 +449,7 @@ HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle, VisualElementSt
 
 #include <ocidl.h>
 
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
 
 // {C85D8CC7-5463-40E8-A432-F5916B6427E5}
 static constexpr CLSID CLSID_WindhawkTAP = { 0xc85d8cc7, 0x5463, 0x40e8, { 0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5 } };
@@ -1005,7 +846,7 @@ struct ElementTreeNode {
 // Keyed by the object's IUnknown pointer: COM only guarantees a stable pointer
 // for that interface, and the same element is reached both as a
 // FrameworkElement and as a VisualTreeHelper::GetParent result.
-std::unordered_map<void*, std::weak_ptr<ElementTreeNode>> g_elementTreeNodes;
+[[clang::no_destroy]] std::unordered_map<void*, std::weak_ptr<ElementTreeNode>> g_elementTreeNodes;
 
 // Expired pool entries are reaped once the map grows past this, which is then
 // set to twice the surviving size, making the sweep amortized O(1).
@@ -1125,7 +966,7 @@ struct ElementCustomizationRules {
     PropertyOverridesMaybeUnresolved propertyOverrides;
 };
 
-std::vector<ElementCustomizationRules> g_elementsCustomizationRules;
+[[clang::no_destroy]] std::vector<ElementCustomizationRules> g_elementsCustomizationRules;
 
 struct ElementPropertyCustomizationState {
     std::optional<winrt::Windows::Foundation::IInspectable> originalValue;
@@ -1193,7 +1034,7 @@ struct ElementCustomizationState {
         perVisualStateGroup;
 };
 
-std::unordered_map<InstanceHandle, ElementCustomizationState>
+[[clang::no_destroy]] std::unordered_map<InstanceHandle, ElementCustomizationState>
     g_elementsCustomizationState;
 
 // The element's spine node, built on first use if the eager attempt in
@@ -1253,7 +1094,7 @@ struct StyleVariableState {
         consumers;
 };
 
-StyleVariableState g_styleVariableState;
+[[clang::no_destroy]] StyleVariableState g_styleVariableState;
 
 // Non-zero while PropagateStyleVariableChange is running, so nested calls queue
 // instead of recursing.
@@ -1269,7 +1110,7 @@ struct PendingStyleVariablePropagation {
 
 // Propagations queued while another one is running, drained by the outermost
 // PropagateStyleVariableChange frame.
-std::vector<PendingStyleVariablePropagation> g_pendingStyleVariablePropagations;
+[[clang::no_destroy]] std::vector<PendingStyleVariablePropagation> g_pendingStyleVariablePropagations;
 
 StyleVariableState* GetStyleVariableState() {
     return &g_styleVariableState;
@@ -1316,7 +1157,7 @@ struct TrackedImageBrushesForThread {
         retryDebounceTimerTickRevoker;
 };
 
-thread_local TrackedImageBrushesForThread g_trackedImageBrushesForThread;
+[[clang::no_destroy]] thread_local TrackedImageBrushesForThread g_trackedImageBrushesForThread;
 
 // A single connectivity transition raises several network status events, and
 // the state right after the first one isn't final yet.
@@ -1343,7 +1184,7 @@ std::mutex g_imageRetryMutex;
 bool g_imageRetryActive;
 // The dispatcher of each UI thread which has tracked brushes, used to run a
 // retry on the thread that owns the brush.
-std::vector<winrt::weak_ref<winrt::Windows::System::DispatcherQueue>>
+[[clang::no_destroy]] std::vector<winrt::weak_ref<winrt::Windows::System::DispatcherQueue>>
     g_imageRetryDispatchers;
 winrt::event_token g_networkStatusChangedToken;
 // Set while a thread is registering the handler outside the mutex, so that a
@@ -1369,18 +1210,18 @@ struct ResourceVariableEntry {
     ResourceVariableType type;
 };
 
-std::vector<ResourceVariableEntry> g_resourceVariables;
+[[clang::no_destroy]] std::vector<ResourceVariableEntry> g_resourceVariables;
 
 // Track original resource values for restoration (per-thread since
 // Application::Current().Resources() is per-thread).
-std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>
+[[clang::no_destroy]] std::unordered_map<std::wstring, winrt::Windows::Foundation::IInspectable>
     g_originalResourceValues;
 
 // Track our merged theme dictionary for cleanup (per-thread).
-ResourceDictionary g_resourceVariablesThemeDict{nullptr};
+[[clang::no_destroy]] ResourceDictionary g_resourceVariablesThemeDict{nullptr};
 
 // For listening to theme color changes (per-thread).
-winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
 thread_local winrt::event_token g_colorValuesChangedToken;
 
 winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
@@ -1464,16 +1305,6 @@ winrt::Windows::Foundation::IInspectable ReadLocalValueWithWorkaround(
 // pixels). Opacity is handled downstream by the composition effect graph.
 winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     float density) {
-    // Cache the last stream to avoid regenerating when density hasn't changed.
-    // The cached stream is never read directly; callers get independent clones
-    // via CloneStream() so they don't share a seek cursor.
-    thread_local float cachedDensity = std::numeric_limits<float>::quiet_NaN();
-    thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
-        cachedStream{nullptr};
-
-    if (density == cachedDensity && cachedStream) {
-        return cachedStream.CloneStream();
-    }
 
     // Use 256x256 to minimize visible tiling seams.
     constexpr int kSize = 256;
@@ -1532,10 +1363,7 @@ winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
     writer.StoreAsync().get();
     writer.DetachStream();
 
-    cachedStream = std::move(stream);
-    cachedDensity = density;
-
-    return cachedStream.CloneStream();
+    return stream;
 }
 
 // Blur background implementation, copied from TranslucentTB.
@@ -2751,8 +2579,56 @@ wuc::CompositionBrush XamlBlurBrush::CreateEffectBrush()
 
     wuc::CompositionEffectSourceParameter backdropParam{L"backdrop"};
 
-    // 1. Blur (if m_blurAmount > 0; otherwise pass backdrop directly so sharp
-    // foreground edges don't bleed a halo when BlackThreshold is used).
+    // Black-key backdrop mask (optional) - outputs premultiplied tint where the
+    // backdrop pixel is darker than m_blackThreshold, and transparent (0,0,0,0)
+    // where brighter. Returns early so unused blur/noise stages aren't built.
+    if (m_blackThreshold)
+    {
+        float threshold = std::clamp(*m_blackThreshold, 0.005f, 1.0f);
+        float op = m_tint.A / 255.0f;
+        float r = m_tint.R / 255.0f;
+        float g = m_tint.G / 255.0f;
+        float b = m_tint.B / 255.0f;
+
+        // Stage 1: Compute mask in RGB in [0, 1] while keeping Alpha = 1.0 so
+        // premultiplied ColorMatrixEffect does not multiply negative RGB by
+        // negative Alpha before clamping.
+        float slope = 1.0f / (3.0f * threshold);
+
+        auto blackKeyLuma = winrt::make_self<ColorMatrixEffect>();
+        blackKeyLuma->Source = backdropParam;
+        blackKeyLuma->ClampOutput = true;
+
+        auto& m1 = blackKeyLuma->Matrix;
+        m1[0]  = -slope; m1[1]  = -slope; m1[2]  = -slope; m1[3]  = 0.0f;
+        m1[4]  = -slope; m1[5]  = -slope; m1[6]  = -slope; m1[7]  = 0.0f;
+        m1[8]  = -slope; m1[9]  = -slope; m1[10] = -slope; m1[11] = 0.0f;
+        m1[12] = 0.0f;   m1[13] = 0.0f;   m1[14] = 0.0f;   m1[15] = 1.0f;
+        m1[16] = 1.0f;   m1[17] = 1.0f;   m1[18] = 1.0f;   m1[19] = 0.0f;
+        blackKeyLuma->Name(L"BlackKeyLuma");
+
+        // Stage 2: ColorMatrixEffect runs in premultiplied mode. Put straight
+        // tint RGB in the bias row (m2[16..18]) and op in m2[3] so D2D1
+        // premultiplies the output to (r*op*mask, g*op*mask, b*op*mask, op*mask).
+        auto blackKeyMask = winrt::make_self<ColorMatrixEffect>();
+        blackKeyMask->Source = *blackKeyLuma;
+        blackKeyMask->ClampOutput = true;
+
+        auto& m2 = blackKeyMask->Matrix;
+        m2[0]  = 0.0f; m2[1]  = 0.0f; m2[2]  = 0.0f; m2[3]  = op;
+        m2[4]  = 0.0f; m2[5]  = 0.0f; m2[6]  = 0.0f; m2[7]  = 0.0f;
+        m2[8]  = 0.0f; m2[9]  = 0.0f; m2[10] = 0.0f; m2[11] = 0.0f;
+        m2[12] = 0.0f; m2[13] = 0.0f; m2[14] = 0.0f; m2[15] = 0.0f;
+        m2[16] = r;    m2[17] = g;    m2[18] = b;    m2[19] = 0.0f;
+        blackKeyMask->Name(L"BlackKeyMask");
+
+        auto factory = m_compositor.CreateEffectFactory(*blackKeyMask);
+        auto brush = factory.CreateBrush();
+        brush.SetSourceParameter(L"backdrop", backdropBrush);
+        return brush;
+    }
+
+    // 1. Blur
     wge::IGraphicsEffectSource topOfStack{nullptr};
     if (m_blurAmount > 0.0f)
     {
@@ -2860,56 +2736,7 @@ wuc::CompositionBrush XamlBlurBrush::CreateEffectBrush()
     compositeEffect->Sources.push_back(topOfStack);
     compositeEffect->Sources.push_back(*floodEffect);
 
-    wge::IGraphicsEffect finalEffect = *compositeEffect;
-
-    // 6. Black-key backdrop mask (optional) - outputs solid tint (e.g. pure
-    // white #FFFFFFFF) where the backdrop pixel is pure black, and 100%
-    // transparent (#00000000, zero alpha and zero RGB) where the backdrop
-    // pixel is brighter than m_blackThreshold (such as the moon).
-    if (m_blackThreshold)
-    {
-        float threshold = std::clamp(*m_blackThreshold, 0.005f, 1.0f);
-        float op = m_tint.A / 255.0f;
-        float cr = (m_tint.R / 255.0f) * op;
-        float cg = (m_tint.G / 255.0f) * op;
-        float cb = (m_tint.B / 255.0f) * op;
-
-        // Stage 1: Compute mask in RGB in [0, 1] while keeping Alpha = 1.0 so
-        // premultiplied ColorMatrixEffect does not multiply negative RGB by
-        // negative Alpha before clamping.
-        float slope = 1.0f / (3.0f * threshold);
-
-        auto blackKeyLuma = winrt::make_self<ColorMatrixEffect>();
-        blackKeyLuma->Source = backdropParam;
-        blackKeyLuma->ClampOutput = true;
-
-        auto& m1 = blackKeyLuma->Matrix;
-        m1[0]  = -slope; m1[1]  = -slope; m1[2]  = -slope; m1[3]  = 0.0f;
-        m1[4]  = -slope; m1[5]  = -slope; m1[6]  = -slope; m1[7]  = 0.0f;
-        m1[8]  = -slope; m1[9]  = -slope; m1[10] = -slope; m1[11] = 0.0f;
-        m1[12] = 0.0f;   m1[13] = 0.0f;   m1[14] = 0.0f;   m1[15] = 1.0f;
-        m1[16] = 1.0f;   m1[17] = 1.0f;   m1[18] = 1.0f;   m1[19] = 0.0f;
-        blackKeyLuma->Name(L"BlackKeyLuma");
-
-        // Stage 2: Convert the non-negative clamped mask in R into RGBA
-        // (cr*mask, cg*mask, cb*mask, op*mask), producing (1,1,1,1) on black
-        // and (0,0,0,0) on the moon.
-        auto blackKeyMask = winrt::make_self<ColorMatrixEffect>();
-        blackKeyMask->Source = *blackKeyLuma;
-        blackKeyMask->ClampOutput = true;
-
-        auto& m2 = blackKeyMask->Matrix;
-        m2[0]  = cr;   m2[1]  = cg;   m2[2]  = cb;   m2[3]  = op;
-        m2[4]  = 0.0f; m2[5]  = 0.0f; m2[6]  = 0.0f; m2[7]  = 0.0f;
-        m2[8]  = 0.0f; m2[9]  = 0.0f; m2[10] = 0.0f; m2[11] = 0.0f;
-        m2[12] = 0.0f; m2[13] = 0.0f; m2[14] = 0.0f; m2[15] = 0.0f;
-        m2[16] = 0.0f; m2[17] = 0.0f; m2[18] = 0.0f; m2[19] = 0.0f;
-        blackKeyMask->Name(L"BlackKeyMask");
-
-        finalEffect = *blackKeyMask;
-    }
-
-    auto factory = m_compositor.CreateEffectFactory(finalEffect);
+    auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
     auto brush = factory.CreateBrush();
 
     brush.SetSourceParameter(L"backdrop", backdropBrush);
@@ -6303,8 +6130,7 @@ std::optional<StyleConstant> ParseStyleConstant(
     return StyleConstant{std::wstring(key), std::move(value)};
 }
 
-StyleConstants LoadStyleConstants(
-    const std::vector<PCWSTR>& themeStyleConstants) {
+StyleConstants LoadStyleConstants() {
     StyleConstants result;
 
     auto addToResult = [&result](StyleConstant sc) {
@@ -6318,12 +6144,6 @@ StyleConstants LoadStyleConstants(
 
         result.insert(insertIndex, std::move(sc));
     };
-
-    for (const auto themeStyleConstant : themeStyleConstants) {
-        if (auto parsed = ParseStyleConstant(themeStyleConstant, result)) {
-            addToResult(std::move(*parsed));
-        }
-    }
 
     for (int i = 0;; i++) {
         string_setting_unique_ptr constantSetting(
@@ -6518,7 +6338,6 @@ std::wstring AdjustTypeName(std::wstring_view type) {
 
     static const std::vector<std::pair<std::wstring_view, std::wstring_view>>
         adjustments = {
-            {L"StartMenu:", L"StartMenu."},
             {L"muxc:", L"Microsoft.UI.Xaml.Controls."},
         };
 
@@ -6927,19 +6746,8 @@ void RefreshThemeResourceEntries() {
 }
 
 std::vector<ResourceVariableEntry> ProcessResourceVariablesFromSettings(
-    const StyleConstants& styleConstants,
-    const std::vector<PCWSTR>& themeResourceVariables) {
+    const StyleConstants& styleConstants) {
     std::vector<ResourceVariableEntry> resourceVariables;
-
-    for (const auto& themeResourceVariable : themeResourceVariables) {
-        Wh_Log(L"Processing theme resource variable %s", themeResourceVariable);
-
-        auto parsed =
-            ParseResourceVariable(themeResourceVariable, styleConstants);
-        if (parsed) {
-            resourceVariables.push_back(std::move(*parsed));
-        }
-    }
 
     for (int i = 0;; i++) {
         string_setting_unique_ptr setting(
@@ -7011,65 +6819,6 @@ void MergeResourceVariables() {
     }
 }
 
-const Theme* GetSelectedTheme() {
-    PCWSTR themeName = Wh_GetStringSetting(L"theme");
-    const Theme* theme = nullptr;
-    if (_wcsicmp(themeName, L"Solid-Mist") == 0 ||
-        _wcsicmp(themeName, L"Solid Mist") == 0) {
-        theme = &g_themeSolidMist;
-    } else if (_wcsicmp(themeName, L"Space Black") == 0 ||
-               _wcsicmp(themeName, L"Space-Black") == 0 ||
-               _wcsicmp(themeName, L"Space Black Simple") == 0 ||
-               _wcsicmp(themeName, L"Space Black (Simple White)") == 0) {
-        theme = &g_themeSpaceBlack;
-    }
-    Wh_FreeStringSetting(themeName);
-    return theme;
-}
-
-bool IsLegacyPresetStyle(std::wstring_view target,
-                         std::wstring_view rawStyle) {
-    for (const auto& entry : g_themeSolidMist.targetStyles) {
-        if (target == entry.target) {
-            for (const auto& s : entry.styles) {
-                if (rawStyle == s) {
-                    return true;
-                }
-            }
-        }
-    }
-    static constexpr PCWSTR kLegacyPresetStyles[] = {
-        L"Margin=0,-160,0,0",
-        L"Margin=0,-280,0,0",
-        L"Margin=0,-310,0,0",
-        L"MaxWidth=9999",
-        L"Foreground:=<WindhawkBlur BlurAmount=\"20\" TintColor=\"{ThemeResource SystemBaseHighColor}\" TintOpacity=\"0.5\" />",
-        L"Foreground:=<WindhawkBlur BlurAmount=\"0\" TintColor=\"{ThemeResource SystemBaseHighColor}\" TintOpacity=\"0.5\" BlackThreshold=\"0.02\" />",
-        L"Foreground:=<WindhawkBlur BlurAmount=\"0\" TintColor=\"{ThemeResource SystemBaseHighColor}\" TintOpacity=\"0.5\" BlackThreshold=\"0.03\" />",
-        L"Foreground:=<WindhawkBlur BlurAmount=\"0\" TintColor=\"#FFFFFFFF\" TintOpacity=\"1.0\" BlackThreshold=\"0.02\" />",
-        L"Foreground=#FFFFFFFF",
-        L"FontFamily=Bahnschrift",
-        L"FontFamily=Vipnagorgialla, Vipnagorgialla Rg",
-        L"FontSize=450",
-        L"FontSize=390",
-        L"FontSize=54",
-        L"FontSize=30",
-        L"FontWeight=Bold",
-        L"FontWeight=Light",
-        L"FontWeight=Normal",
-        L"TextWrapping=NoWrap",
-        L"RenderTransform:=<TranslateTransform Y=\"-365\" />",
-        L"RenderTransform:=<TranslateTransform Y=\"-410\" />",
-        L"RenderTransform:=<TranslateTransform Y=\"580\" />",
-    };
-    for (PCWSTR legacyStyle : kLegacyPresetStyles) {
-        if (rawStyle == legacyStyle) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::wstring NormalizeHexColor(std::wstring_view rawColor,
                                std::wstring_view fallback = L"#FFFFFFFF") {
     std::wstring_view trimmed = TrimStringView(rawColor);
@@ -7098,11 +6847,19 @@ std::wstring NormalizeHexColor(std::wstring_view rawColor,
     return L"#" + hex;
 }
 
-std::wstring ResolveFontWeightStyle(PCWSTR weightSetting,
-                                    PCWSTR themeDefaultWeight) {
+double ExtractHexColorAlphaFactor(std::wstring_view normalizedHex) {
+    if (normalizedHex.size() == 9 && normalizedHex.front() == L'#') {
+        auto alphaHex = normalizedHex.substr(1, 2);
+        auto alphaVal = std::stoul(std::wstring(alphaHex), nullptr, 16);
+        return std::clamp(alphaVal / 255.0, 0.0, 1.0);
+    }
+    return 1.0;
+}
+
+std::wstring ResolveFontWeightStyle(PCWSTR weightSetting) {
     if (!weightSetting || !*weightSetting ||
         _wcsicmp(weightSetting, L"Default") == 0) {
-        return std::wstring(L"FontWeight=") + themeDefaultWeight;
+        return L"";
     }
     if (_wcsicmp(weightSetting, L"Thin") == 0) {
         return L"FontWeight=Thin";
@@ -7127,38 +6884,40 @@ std::wstring ResolveFontWeightStyle(PCWSTR weightSetting,
         _wcsicmp(weightSetting, L"Heavy") == 0) {
         return L"FontWeight=Black";
     }
-    return std::wstring(L"FontWeight=") + themeDefaultWeight;
+    return L"";
 }
 
 std::wstring BuildTextForegroundStyle(PCWSTR renderStyleSetting,
                                       std::wstring_view rawColor,
-                                      bool blendMode,
-                                      bool isSolidMistDefault) {
+                                      bool blendMode) {
     std::wstring hexColor = NormalizeHexColor(rawColor, L"#FFFFFFFF");
+    double alphaFactor = ExtractHexColorAlphaFactor(hexColor);
 
     if (blendMode || (renderStyleSetting &&
                       _wcsicmp(renderStyleSetting, L"BlackMask") == 0)) {
         return L"Foreground:=<WindhawkBlur BlurAmount=\"0\" TintColor=\"" +
-               hexColor +
-               L"\" TintOpacity=\"1.0\" BlackThreshold=\"0.02\" />";
+               hexColor + L"\" BlackThreshold=\"0.02\" />";
     }
 
     if (renderStyleSetting) {
         if (_wcsicmp(renderStyleSetting, L"FrostedGlass") == 0) {
+            std::wstring tintOp = FormatDoubleInvariant(0.45 * alphaFactor);
             return L"Foreground:=<WindhawkBlur BlurAmount=\"20\" TintColor=\"" +
-                   hexColor +
-                   L"\" TintOpacity=\"0.45\" TintLuminosityOpacity=\"0.5\" />";
+                   hexColor + L"\" TintOpacity=\"" + tintOp +
+                   L"\" TintLuminosityOpacity=\"0.5\" />";
         }
         if (_wcsicmp(renderStyleSetting, L"CrystalGlass") == 0) {
+            std::wstring tintOp = FormatDoubleInvariant(0.25 * alphaFactor);
             return L"Foreground:=<WindhawkBlur BlurAmount=\"12\" TintColor=\"" +
-                   hexColor +
-                   L"\" TintOpacity=\"0.25\" TintSaturation=\"1.6\" "
+                   hexColor + L"\" TintOpacity=\"" + tintOp +
+                   L"\" TintSaturation=\"1.6\" "
                    L"NoiseOpacity=\"0.06\" NoiseDensity=\"0.6\" />";
         }
         if (_wcsicmp(renderStyleSetting, L"ChameleonGlass") == 0) {
+            std::wstring tintOp = FormatDoubleInvariant(0.15 * alphaFactor);
             return L"Foreground:=<WindhawkBlur BlurAmount=\"28\" TintColor=\"" +
-                   hexColor +
-                   L"\" TintOpacity=\"0.15\" TintSaturation=\"2.4\" />";
+                   hexColor + L"\" TintOpacity=\"" + tintOp +
+                   L"\" TintSaturation=\"2.4\" />";
         }
         if (_wcsicmp(renderStyleSetting, L"MetallicChrome") == 0) {
             return L"Foreground:=<LinearGradientBrush StartPoint=\"0,0\" "
@@ -7195,346 +6954,205 @@ std::wstring BuildTextForegroundStyle(PCWSTR renderStyleSetting,
                    L"<GradientStop Color=\"#FFFB5607\" Offset=\"1.0\"/>"
                    L"</LinearGradientBrush>";
         }
-        if (_wcsicmp(renderStyleSetting, L"SolidColor") == 0) {
-            if (isSolidMistDefault && hexColor == L"#FFFFFFFF") {
-                return L"Foreground:=<WindhawkBlur BlurAmount=\"20\" "
-                       L"TintColor=\"{ThemeResource SystemBaseHighColor}\" "
-                       L"TintOpacity=\"0.5\" />";
-            }
-            return L"Foreground=" + hexColor;
-        }
     }
 
-    if (isSolidMistDefault) {
-        return L"Foreground:=<WindhawkBlur BlurAmount=\"20\" "
-               L"TintColor=\"{ThemeResource SystemBaseHighColor}\" "
-               L"TintOpacity=\"0.5\" />";
-    }
     return L"Foreground=" + hexColor;
 }
 
-void ApplyDirectModuleSettings(const Theme* theme) {
-    const bool isSolidMist = (theme == &g_themeSolidMist);
+void ApplyDirectModuleSettings() {
+    bool timeEnabled = Wh_GetIntSetting(L"timeSettings.enabled") != 0;
+    bool dateEnabled = Wh_GetIntSetting(L"dateSettings.enabled") != 0;
 
-    // 1. Time (Clock) settings
-    string_setting_unique_ptr timeFontSetting(
-        Wh_GetStringSetting(L"timeSettings.font"));
-    std::wstring_view timeFontView = TrimStringView(timeFontSetting.get());
-    const bool hasV14Settings = !timeFontView.empty();
-    std::wstring timeFont =
-        hasV14Settings
-            ? std::wstring(timeFontView)
-            : (isSolidMist ? L"Bahnschrift"
-                           : L"Vipnagorgialla, Vipnagorgialla Rg");
-
-    string_setting_unique_ptr timeWeightSetting(
-        Wh_GetStringSetting(L"timeSettings.weight"));
-    const bool hasV15Settings =
-        !TrimStringView(timeWeightSetting.get()).empty();
-    std::wstring timeWeightStyle = ResolveFontWeightStyle(
-        timeWeightSetting.get(), isSolidMist ? L"Bold" : L"Normal");
-
-    string_setting_unique_ptr timeRenderStyleSetting(
-        Wh_GetStringSetting(L"timeSettings.renderStyle"));
-    string_setting_unique_ptr timeColorSetting(
-        Wh_GetStringSetting(L"timeSettings.color"));
-
-    int timeScale = Wh_GetIntSetting(L"timeSettings.scale");
-    if (timeScale <= 0) {
-        timeScale = 100;
-    }
-    int baseTimeFontSize = isSolidMist ? 450 : 390;
-    int timeFontSize = std::max(
-        1, static_cast<int>(std::lround(baseTimeFontSize * (timeScale / 100.0))));
-
-    int timeCharSpacing = Wh_GetIntSetting(L"timeSettings.characterSpacing");
-    int timeOpacityPct = Wh_GetIntSetting(L"timeSettings.opacity");
-    if (timeOpacityPct <= 0) {
-        timeOpacityPct = 100;
-    }
-    double timeOpacity = std::clamp(timeOpacityPct, 1, 100) / 100.0;
-
-    int timeOffsetX = Wh_GetIntSetting(L"timeSettings.offsetX");
-    int timeOffsetY =
-        hasV14Settings ? Wh_GetIntSetting(L"timeSettings.offsetY") : -310;
-    bool timeBlendMode = Wh_GetIntSetting(L"timeSettings.blendMode") != 0;
-
-    std::wstring timeForeground = BuildTextForegroundStyle(
-        timeRenderStyleSetting.get(), timeColorSetting.get(), timeBlendMode,
-        isSolidMist);
-
-    std::wstring timeTransform =
-        L"RenderTransform:=<TranslateTransform X=\"" +
-        std::to_wstring(timeOffsetX) + L"\" Y=\"" +
-        std::to_wstring(timeOffsetY) + L"\" />";
-
-    AddElementCustomizationRules(
-        L"StackPanel#TimeAndDatePanel",
-        {
-            L"VerticalAlignment=Center",
-            L"HorizontalAlignment=Center",
-            L"MaxWidth=9999",
-            L"Margin=0,0,0,0",
-        });
-
-    AddElementCustomizationRules(
-        L"StackPanel#TimePanel",
-        {
-            L"Background=Transparent",
-            L"HorizontalAlignment=Center",
-            L"MaxWidth=9999",
-        });
-
-    AddElementCustomizationRules(
-        L"StackPanel#TimePanel > TextBlock#Time",
-        {
-            timeForeground,
-            L"FontFamily=" + timeFont,
-            L"FontSize=" + std::to_wstring(timeFontSize),
-            timeWeightStyle,
-            L"CharacterSpacing=" + std::to_wstring(timeCharSpacing),
-            L"Opacity=" + FormatDoubleInvariant(timeOpacity),
-            L"TextWrapping=NoWrap",
-            L"HorizontalAlignment=Center",
-            timeTransform,
-        });
-
-    // 2. Date settings
-    bool dateVisible =
-        !hasV15Settings || (Wh_GetIntSetting(L"dateSettings.visible") != 0);
-
-    string_setting_unique_ptr dateFontSetting(
-        Wh_GetStringSetting(L"dateSettings.font"));
-    std::wstring_view dateFontView = TrimStringView(dateFontSetting.get());
-    std::wstring dateFont =
-        !dateFontView.empty()
-            ? std::wstring(dateFontView)
-            : (isSolidMist ? L"Segoe UI"
-                           : L"Vipnagorgialla, Vipnagorgialla Rg");
-
-    string_setting_unique_ptr dateWeightSetting(
-        Wh_GetStringSetting(L"dateSettings.weight"));
-    std::wstring dateWeightStyle = ResolveFontWeightStyle(
-        dateWeightSetting.get(), isSolidMist ? L"Light" : L"Normal");
-
-    string_setting_unique_ptr dateRenderStyleSetting(
-        Wh_GetStringSetting(L"dateSettings.renderStyle"));
-    string_setting_unique_ptr dateColorSetting(
-        Wh_GetStringSetting(L"dateSettings.color"));
-
-    int dateScale = Wh_GetIntSetting(L"dateSettings.scale");
-    if (dateScale <= 0) {
-        dateScale = 100;
-    }
-    int baseDateFontSize = isSolidMist ? 30 : 54;
-    int dateFontSize = std::max(
-        1, static_cast<int>(std::lround(baseDateFontSize * (dateScale / 100.0))));
-
-    int dateCharSpacing = Wh_GetIntSetting(L"dateSettings.characterSpacing");
-    int dateOpacityPct = Wh_GetIntSetting(L"dateSettings.opacity");
-    if (dateOpacityPct <= 0) {
-        dateOpacityPct = 100;
-    }
-    double dateOpacity = std::clamp(dateOpacityPct, 1, 100) / 100.0;
-
-    int dateOffsetX = Wh_GetIntSetting(L"dateSettings.offsetX");
-    int dateOffsetY =
-        hasV14Settings ? Wh_GetIntSetting(L"dateSettings.offsetY") : 430;
-    bool dateBlendMode = Wh_GetIntSetting(L"dateSettings.blendMode") != 0;
-
-    // Compensate for changes in TextBlock#Time height so dateOffsetY stays
-    // anchored to the same screen coordinate regardless of timeScale.
-    int timeHeightDeltaCompensation =
-        static_cast<int>(std::lround((390 - timeFontSize) * 0.65));
-    int effectiveDateOffsetY = dateOffsetY + timeHeightDeltaCompensation;
-
-    std::wstring dateForeground = BuildTextForegroundStyle(
-        dateRenderStyleSetting.get(), dateColorSetting.get(), dateBlendMode,
-        /*isSolidMistDefault=*/false);
-
-    std::wstring dateTransform =
-        L"RenderTransform:=<TranslateTransform X=\"" +
-        std::to_wstring(dateOffsetX) + L"\" Y=\"" +
-        std::to_wstring(effectiveDateOffsetY) + L"\" />";
-
-    AddElementCustomizationRules(
-        L"StackPanel#TimeAndDatePanel > TextBlock#Date",
-        {
-            dateVisible ? L"Visibility=0" : L"Visibility=1",
-            dateForeground,
-            L"FontFamily=" + dateFont,
-            L"FontSize=" + std::to_wstring(dateFontSize),
-            dateWeightStyle,
-            L"CharacterSpacing=" + std::to_wstring(dateCharSpacing),
-            L"Opacity=" + FormatDoubleInvariant(dateOpacity),
-            L"TextWrapping=NoWrap",
-            L"HorizontalAlignment=Center",
-            L"Margin=0,-160,0,0",
-            dateTransform,
-        });
-
-    // 3. Media Player Module settings
-    bool mediaVisible =
-        !hasV15Settings || (Wh_GetIntSetting(L"mediaSettings.visible") != 0);
-    string_setting_unique_ptr mediaPosSetting(
-        Wh_GetStringSetting(L"mediaSettings.position"));
-    string_setting_unique_ptr mediaCardStyleSetting(
-        Wh_GetStringSetting(L"mediaSettings.cardStyle"));
-
-    int mediaScalePct = Wh_GetIntSetting(L"mediaSettings.scale");
-    if (mediaScalePct <= 0) {
-        mediaScalePct = 100;
-    }
-    double mediaScale = std::clamp(mediaScalePct, 10, 300) / 100.0;
-    std::wstring mediaScaleStr = FormatDoubleInvariant(mediaScale);
-
-    int mediaOffsetX = Wh_GetIntSetting(L"mediaSettings.offsetX");
-    int mediaOffsetY = Wh_GetIntSetting(L"mediaSettings.offsetY");
-    int mediaCornerRadius =
-        hasV15Settings
-            ? std::max(0, Wh_GetIntSetting(L"mediaSettings.cornerRadius"))
-            : 10;
-
-    int artworkScalePct = Wh_GetIntSetting(L"mediaSettings.artworkScale");
-    if (artworkScalePct <= 0) {
-        artworkScalePct = 130;
-    }
-    double artworkScale = std::clamp(artworkScalePct, 10, 300) / 100.0;
-    std::wstring artworkScaleStr = FormatDoubleInvariant(artworkScale);
-
-    std::wstring mediaAlign = L"HorizontalAlignment=Center";
-    if (_wcsicmp(mediaPosSetting.get(), L"Left") == 0) {
-        mediaAlign = L"HorizontalAlignment=Left";
-    } else if (_wcsicmp(mediaPosSetting.get(), L"Right") == 0) {
-        mediaAlign = L"HorizontalAlignment=Right";
-    }
-
-    std::wstring mediaContainerTransform =
-        L"RenderTransform:=<TransformGroup>"
-        L"<ScaleTransform ScaleX=\"" +
-        mediaScaleStr + L"\" ScaleY=\"" + mediaScaleStr +
-        L"\" />"
-        L"<TranslateTransform X=\"" +
-        std::to_wstring(mediaOffsetX) + L"\" Y=\"" +
-        std::to_wstring(mediaOffsetY) +
-        L"\" />"
-        L"</TransformGroup>";
-
-    AddElementCustomizationRules(
-        L"Grid#MediaControlsContainer",
-        {
-            mediaVisible ? L"Visibility=0" : L"Visibility=1",
-            mediaAlign,
-            L"RenderTransformOrigin=0.5,0.5",
-            mediaContainerTransform,
-        });
-
-    std::vector<std::wstring> mediaCardStyles = {
-        mediaVisible ? L"Visibility=0" : L"Visibility=1",
-        mediaAlign,
-        L"CornerRadius=" + std::to_wstring(mediaCornerRadius),
-    };
-
-    if (_wcsicmp(mediaCardStyleSetting.get(), L"DarkGlass") == 0) {
-        mediaCardStyles.push_back(
-            L"Background:=<WindhawkBlur BlurAmount=\"18\" "
-            L"TintColor=\"#FF080A0F\" TintOpacity=\"0.65\" />");
-        mediaCardStyles.push_back(L"BorderThickness=0.5");
-        mediaCardStyles.push_back(L"BorderBrush=#30FFFFFF");
-    } else if (_wcsicmp(mediaCardStyleSetting.get(), L"SolidDark") == 0) {
-        mediaCardStyles.push_back(L"Background=#E6101216");
-        mediaCardStyles.push_back(L"BorderThickness=1");
-        mediaCardStyles.push_back(L"BorderBrush=#28FFFFFF");
-    } else if (_wcsicmp(mediaCardStyleSetting.get(), L"Transparent") == 0) {
-        mediaCardStyles.push_back(L"Background=Transparent");
-        mediaCardStyles.push_back(L"BorderThickness=0");
-        mediaCardStyles.push_back(L"BorderBrush=Transparent");
-    } else {
-        // FrostedGlass (default)
-        mediaCardStyles.push_back(
-            L"Background:=<WindhawkBlur BlurAmount=\"10\" "
-            L"TintColor=\"{ThemeResource SystemChromeLowColor}\" "
-            L"TintOpacity=\"0.3\" />");
-        mediaCardStyles.push_back(L"BorderThickness=0.5");
-        mediaCardStyles.push_back(L"BorderBrush=#20FFFFFF");
-    }
-
-    AddElementCustomizationRules(L"Grid#MediaTransportControls",
-                                 mediaCardStyles);
-
-    AddElementCustomizationRules(
-        L"Grid#ThumbnailImageArea",
-        {
-            L"RenderTransformOrigin=0.5,0.5",
-            L"RenderTransform:=<ScaleTransform ScaleX=\"" + artworkScaleStr +
-                L"\" ScaleY=\"" + artworkScaleStr + L"\" />",
-            L"Margin=12,0,18,0",
-        });
-
-    // 4. Battery & Network Module settings
-    string_setting_unique_ptr batteryPosSetting(
-        Wh_GetStringSetting(L"batterySettings.position"));
-    bool batteryShowBackplate =
-        !hasV15Settings ||
-        (Wh_GetIntSetting(L"batterySettings.showBackplate") != 0);
-    int batteryScalePct = Wh_GetIntSetting(L"batterySettings.scale");
-    if (batteryScalePct <= 0) {
-        batteryScalePct = 100;
-    }
-    double batteryScale = std::clamp(batteryScalePct, 10, 300) / 100.0;
-    std::wstring batteryScaleStr = FormatDoubleInvariant(batteryScale);
-
-    int batteryOffsetX = Wh_GetIntSetting(L"batterySettings.offsetX");
-    int batteryOffsetY = Wh_GetIntSetting(L"batterySettings.offsetY");
-
-    std::vector<std::wstring> batteryStyles;
-    if (_wcsicmp(batteryPosSetting.get(), L"Hidden") == 0) {
-        batteryStyles.push_back(L"Visibility=1");
-    } else {
-        batteryStyles.push_back(L"Visibility=0");
-        if (_wcsicmp(batteryPosSetting.get(), L"Left") == 0) {
-            batteryStyles.push_back(L"HorizontalAlignment=Left");
-        } else if (_wcsicmp(batteryPosSetting.get(), L"Center") == 0) {
-            batteryStyles.push_back(L"HorizontalAlignment=Center");
-        } else {
-            batteryStyles.push_back(L"HorizontalAlignment=Right");
-        }
-    }
-    batteryStyles.push_back(L"RenderTransformOrigin=0.5,0.5");
-    batteryStyles.push_back(
-        L"RenderTransform:=<TransformGroup>"
-        L"<ScaleTransform ScaleX=\"" +
-        batteryScaleStr + L"\" ScaleY=\"" + batteryScaleStr +
-        L"\" />"
-        L"<TranslateTransform X=\"" +
-        std::to_wstring(batteryOffsetX) + L"\" Y=\"" +
-        std::to_wstring(batteryOffsetY) +
-        L"\" />"
-        L"</TransformGroup>");
-
-    AddElementCustomizationRules(L"Grid#NetworkAndBatteryIcon", batteryStyles);
-
-    if (!batteryShowBackplate) {
+    if (timeEnabled || dateEnabled) {
         AddElementCustomizationRules(
-            L"UserControl > Grid#NetworkAndBatteryIcon > Border#BackplateBorder",
+            L"StackPanel#TimeAndDatePanel",
             {
-                L"Background=Transparent",
-                L"BorderThickness=0",
-                L"BorderBrush=Transparent",
+                L"VerticalAlignment=Center",
+                L"HorizontalAlignment=Center",
+                L"MaxWidth=9999",
+                L"Margin=0,0,0,0",
             });
     }
 
-    // 5. Additional Lock Screen Options (Widgets & Spotlight Tips)
-    bool hideWidgets =
-        !hasV15Settings ||
-        (Wh_GetIntSetting(L"extraSettings.hideWidgets") != 0);
-    std::wstring widgetVisibility =
-        hideWidgets ? L"Visibility=1" : L"Visibility=0";
-    AddElementCustomizationRules(
-        L"Button#Videos_Preview_LockScreen_LockScreen, "
-        L"Button#Weather_Preview_LockScreen_LockScreen, "
-        L"Grid#WidgetFrameGrid",
-        {widgetVisibility});
+    int timeFontSize = 390;
+
+    // 1. Time (Clock) settings
+    if (timeEnabled) {
+        string_setting_unique_ptr timeFontSetting(
+            Wh_GetStringSetting(L"timeSettings.font"));
+        std::wstring_view timeFontView = TrimStringView(timeFontSetting.get());
+
+        string_setting_unique_ptr timeWeightSetting(
+            Wh_GetStringSetting(L"timeSettings.weight"));
+        std::wstring timeWeightStyle =
+            ResolveFontWeightStyle(timeWeightSetting.get());
+
+        string_setting_unique_ptr timeRenderStyleSetting(
+            Wh_GetStringSetting(L"timeSettings.renderStyle"));
+        string_setting_unique_ptr timeColorSetting(
+            Wh_GetStringSetting(L"timeSettings.color"));
+
+        int timeScale = Wh_GetIntSetting(L"timeSettings.scale");
+        if (timeScale <= 0) {
+            timeScale = 100;
+        }
+        constexpr int kBaseTimeFontSize = 390;
+        timeFontSize = std::max(
+            1, static_cast<int>(
+                   std::lround(kBaseTimeFontSize * (timeScale / 100.0))));
+
+        int timeCharSpacing =
+            Wh_GetIntSetting(L"timeSettings.characterSpacing");
+        int timeOpacityPct = Wh_GetIntSetting(L"timeSettings.opacity");
+        if (timeOpacityPct <= 0) {
+            timeOpacityPct = 100;
+        }
+
+        int timeOffsetX = Wh_GetIntSetting(L"timeSettings.offsetX");
+        int timeOffsetY = Wh_GetIntSetting(L"timeSettings.offsetY");
+        bool timeBlendMode = Wh_GetIntSetting(L"timeSettings.blendMode") != 0;
+
+        AddElementCustomizationRules(
+            L"StackPanel#TimePanel",
+            {
+                L"Background=Transparent",
+                L"HorizontalAlignment=Center",
+                L"MaxWidth=9999",
+            });
+
+        std::vector<std::wstring> timeStyles = {
+            BuildTextForegroundStyle(timeRenderStyleSetting.get(),
+                                     timeColorSetting.get(), timeBlendMode),
+            L"FontSize=" + std::to_wstring(timeFontSize),
+            L"TextWrapping=NoWrap",
+            L"HorizontalAlignment=Center",
+        };
+
+        if (!timeFontView.empty()) {
+            timeStyles.push_back(L"FontFamily=" + std::wstring(timeFontView));
+        }
+        if (!timeWeightStyle.empty()) {
+            timeStyles.push_back(std::move(timeWeightStyle));
+        }
+        if (timeCharSpacing != 0) {
+            timeStyles.push_back(L"CharacterSpacing=" +
+                                 std::to_wstring(timeCharSpacing));
+        }
+        if (timeOpacityPct < 100) {
+            double timeOpacity = std::clamp(timeOpacityPct, 1, 100) / 100.0;
+            timeStyles.push_back(L"Opacity=" +
+                                 FormatDoubleInvariant(timeOpacity));
+        }
+        if (timeOffsetX != 0 || timeOffsetY != 0) {
+            timeStyles.push_back(
+                L"RenderTransform:=<TranslateTransform X=\"" +
+                std::to_wstring(timeOffsetX) + L"\" Y=\"" +
+                std::to_wstring(timeOffsetY) + L"\" />");
+        }
+
+        AddElementCustomizationRules(L"StackPanel#TimePanel > TextBlock#Time",
+                                     timeStyles);
+    }
+
+    // 2. Date settings
+    if (dateEnabled) {
+        bool dateVisible = Wh_GetIntSetting(L"dateSettings.visible") != 0;
+        if (!dateVisible) {
+            AddElementCustomizationRules(
+                L"StackPanel#TimeAndDatePanel > TextBlock#Date",
+                {L"Visibility=1"});
+        } else {
+            string_setting_unique_ptr dateFontSetting(
+                Wh_GetStringSetting(L"dateSettings.font"));
+            std::wstring_view dateFontView =
+                TrimStringView(dateFontSetting.get());
+
+            string_setting_unique_ptr dateWeightSetting(
+                Wh_GetStringSetting(L"dateSettings.weight"));
+            std::wstring dateWeightStyle =
+                ResolveFontWeightStyle(dateWeightSetting.get());
+
+            string_setting_unique_ptr dateRenderStyleSetting(
+                Wh_GetStringSetting(L"dateSettings.renderStyle"));
+            string_setting_unique_ptr dateColorSetting(
+                Wh_GetStringSetting(L"dateSettings.color"));
+
+            int dateScale = Wh_GetIntSetting(L"dateSettings.scale");
+            if (dateScale <= 0) {
+                dateScale = 100;
+            }
+            constexpr int kBaseDateFontSize = 54;
+            int dateFontSize = std::max(
+                1, static_cast<int>(
+                       std::lround(kBaseDateFontSize * (dateScale / 100.0))));
+
+            int dateCharSpacing =
+                Wh_GetIntSetting(L"dateSettings.characterSpacing");
+            int dateOpacityPct = Wh_GetIntSetting(L"dateSettings.opacity");
+            if (dateOpacityPct <= 0) {
+                dateOpacityPct = 100;
+            }
+
+            int dateOffsetX = Wh_GetIntSetting(L"dateSettings.offsetX");
+            int dateOffsetY = Wh_GetIntSetting(L"dateSettings.offsetY");
+            bool dateBlendMode =
+                Wh_GetIntSetting(L"dateSettings.blendMode") != 0;
+
+            int timeHeightDeltaCompensation =
+                timeEnabled
+                    ? static_cast<int>(std::lround((390 - timeFontSize) * 0.65))
+                    : 0;
+            int effectiveDateOffsetY =
+                dateOffsetY + timeHeightDeltaCompensation;
+
+            std::vector<std::wstring> dateStyles = {
+                BuildTextForegroundStyle(dateRenderStyleSetting.get(),
+                                         dateColorSetting.get(), dateBlendMode),
+                L"FontSize=" + std::to_wstring(dateFontSize),
+                L"TextWrapping=NoWrap",
+                L"HorizontalAlignment=Center",
+            };
+
+            if (timeEnabled) {
+                dateStyles.push_back(L"Margin=0,-160,0,0");
+            }
+            if (!dateFontView.empty()) {
+                dateStyles.push_back(L"FontFamily=" +
+                                     std::wstring(dateFontView));
+            }
+            if (!dateWeightStyle.empty()) {
+                dateStyles.push_back(std::move(dateWeightStyle));
+            }
+            if (dateCharSpacing != 0) {
+                dateStyles.push_back(L"CharacterSpacing=" +
+                                     std::to_wstring(dateCharSpacing));
+            }
+            if (dateOpacityPct < 100) {
+                double dateOpacity = std::clamp(dateOpacityPct, 1, 100) / 100.0;
+                dateStyles.push_back(L"Opacity=" +
+                                     FormatDoubleInvariant(dateOpacity));
+            }
+            if (dateOffsetX != 0 || effectiveDateOffsetY != 0) {
+                dateStyles.push_back(
+                    L"RenderTransform:=<TranslateTransform X=\"" +
+                    std::to_wstring(dateOffsetX) + L"\" Y=\"" +
+                    std::to_wstring(effectiveDateOffsetY) + L"\" />");
+            }
+
+            AddElementCustomizationRules(
+                L"StackPanel#TimeAndDatePanel > TextBlock#Date", dateStyles);
+        }
+    }
+
+    // 3. Additional Lock Screen Options (Widgets & Spotlight Tips)
+    bool hideWidgets = Wh_GetIntSetting(L"extraSettings.hideWidgets") != 0;
+    if (hideWidgets) {
+        AddElementCustomizationRules(
+            L"Button#Videos_Preview_LockScreen_LockScreen, "
+            L"Button#Weather_Preview_LockScreen_LockScreen, "
+            L"Grid#WidgetFrameGrid",
+            {L"Visibility=1"});
+    }
 
     bool hideTips = Wh_GetIntSetting(L"extraSettings.hideTips") != 0;
     if (hideTips) {
@@ -7547,73 +7165,22 @@ void ApplyDirectModuleSettings(const Theme* theme) {
 }
 
 void ProcessAllStylesFromSettings() {
-    const Theme* theme = GetSelectedTheme();
+    StyleConstants styleConstants = LoadStyleConstants();
 
-    StyleConstants styleConstants = LoadStyleConstants(
-        theme ? theme->styleConstants : std::vector<PCWSTR>{});
-
-    if (theme) {
-        for (const auto& themeTargetStyle : theme->targetStyles) {
-            try {
-                std::vector<std::wstring> styles;
-                styles.reserve(themeTargetStyle.styles.size());
-                for (const auto& s : themeTargetStyle.styles) {
-                    styles.push_back(ApplyStyleConstants(s, styleConstants));
-                }
-
-                AddElementCustomizationRules(themeTargetStyle.target, styles);
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Error %08X", ex.code());
-            } catch (std::exception const& ex) {
-                Wh_Log(L"Error: %S", ex.what());
-            }
-        }
+    // Apply dedicated settings first so custom controlStyles rules added below
+    // always take precedence.
+    try {
+        ApplyDirectModuleSettings();
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    } catch (std::exception const& ex) {
+        Wh_Log(L"Error: %S", ex.what());
     }
 
     for (int i = 0;; i++) {
         try {
-            string_setting_unique_ptr targetStringSetting(
-                Wh_GetStringSetting(L"controlStyles[%d].target", i));
-            if (!*targetStringSetting.get()) {
+            if (!ProcessSingleTargetStylesFromSettings(i, styleConstants)) {
                 break;
-            }
-
-            // Skip if commented.
-            if (targetStringSetting[0] == L'/' &&
-                targetStringSetting[1] == L'/') {
-                continue;
-            }
-
-            std::wstring_view targetView = TrimStringView(targetStringSetting.get());
-            std::vector<std::wstring> styles;
-
-            for (int styleIndex = 0;; styleIndex++) {
-                string_setting_unique_ptr styleSetting(Wh_GetStringSetting(
-                    L"controlStyles[%d].styles[%d]", i, styleIndex));
-                if (!*styleSetting.get()) {
-                    break;
-                }
-
-                if (styleSetting[0] == L'/' && styleSetting[1] == L'/') {
-                    continue;
-                }
-
-                std::wstring_view rawStyleView = TrimStringView(styleSetting.get());
-                if (IsLegacyPresetStyle(targetView, rawStyleView)) {
-                    Wh_Log(L"Skipping legacy preset style for %.*s: %.*s",
-                           static_cast<int>(targetView.size()),
-                           targetView.data(),
-                           static_cast<int>(rawStyleView.size()),
-                           rawStyleView.data());
-                    continue;
-                }
-
-                styles.push_back(
-                    ApplyStyleConstants(styleSetting.get(), styleConstants));
-            }
-
-            if (!styles.empty()) {
-                AddElementCustomizationRules(targetStringSetting.get(), styles);
             }
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
@@ -7622,19 +7189,7 @@ void ProcessAllStylesFromSettings() {
         }
     }
 
-    // Apply dedicated Time, Date, Media, Battery, and Extra settings last so
-    // they take highest priority.
-    try {
-        ApplyDirectModuleSettings(theme);
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-    } catch (std::exception const& ex) {
-        Wh_Log(L"Error: %S", ex.what());
-    }
-
-    g_resourceVariables = ProcessResourceVariablesFromSettings(
-        styleConstants,
-        theme ? theme->themeResourceVariables : std::vector<PCWSTR>{});
+    g_resourceVariables = ProcessResourceVariablesFromSettings(styleConstants);
 }
 
 void UninitializeResourceVariables() {
@@ -7643,7 +7198,7 @@ void UninitializeResourceVariables() {
         g_colorValuesChangedToken = {};
     }
     g_uiSettings = nullptr;
-    g_resourceVariables.clear();
+    g_resourceVariables = {};
 
     auto resources = Application::Current().Resources();
     for (const auto& [key, originalValue] : g_originalResourceValues) {
@@ -7654,7 +7209,7 @@ void UninitializeResourceVariables() {
             Wh_Log(L"Error %08X", hr);
         }
     }
-    g_originalResourceValues.clear();
+    g_originalResourceValues = {};
 
     if (g_resourceVariablesThemeDict) {
         auto merged = resources.MergedDictionaries();
@@ -7694,13 +7249,13 @@ void UninitializeSettingsAndTap() {
         }
     }
 
-    g_elementsCustomizationState.clear();
-    g_elementTreeNodes.clear();
+    g_elementsCustomizationState = {};
+    g_elementTreeNodes = {};
     g_elementTreeNodesReapThreshold = 64;
-    g_pendingStyleVariablePropagations.clear();
+    g_pendingStyleVariablePropagations = {};
     g_styleVariableState = {};
 
-    g_elementsCustomizationRules.clear();
+    g_elementsCustomizationRules = {};
 
     UninitializeResourceVariables();
 
@@ -7770,63 +7325,6 @@ bool RunFromWindowThread(HWND hWnd,
     SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
 
     UnhookWindowsHookEx(hook);
-
-    return true;
-}
-
-bool RunFromWindowThreadViaPostMessage(HWND hWnd,
-                                       RunFromWindowThreadProc_t proc,
-                                       PVOID procParam) {
-    static const UINT runFromWindowThreadRegisteredMsgViaPostMessage =
-        RegisterWindowMessage(
-            L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        PVOID procParam;
-        HHOOK hook;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0) {
-        return false;
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_GETMESSAGE,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION && wParam == PM_REMOVE) {
-                MSG* msg = (MSG*)lParam;
-                if (msg->message ==
-                    runFromWindowThreadRegisteredMsgViaPostMessage) {
-                    auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)msg->lParam;
-                    if (param) {
-                        param->proc(param->procParam);
-                        UnhookWindowsHookEx(param->hook);
-                        delete param;
-                        msg->lParam = 0;
-                    }
-                }
-            }
-
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, dwThreadId);
-    if (!hook) {
-        return false;
-    }
-
-    auto* param = new RUN_FROM_WINDOW_THREAD_PARAM{
-        .proc = proc,
-        .procParam = procParam,
-        .hook = hook,
-    };
-    if (!PostMessage(hWnd, runFromWindowThreadRegisteredMsgViaPostMessage, 0,
-                     (LPARAM)param)) {
-        UnhookWindowsHookEx(hook);
-        delete param;
-        return false;
-    }
 
     return true;
 }
@@ -7922,43 +7420,6 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD dwExStyle,
-                                        LPCWSTR lpClassName,
-                                        LPCWSTR lpWindowName,
-                                        DWORD dwStyle,
-                                        int X,
-                                        int Y,
-                                        int nWidth,
-                                        int nHeight,
-                                        HWND hWndParent,
-                                        HMENU hMenu,
-                                        HINSTANCE hInstance,
-                                        LPVOID lpParam);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 LPVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam);
-    if (!hWnd) {
-        return hWnd;
-    }
-
-    OnWindowCreated(hWnd, lpClassName, __FUNCTION__);
-
-    return hWnd;
-}
-
 HWND GetCoreWnd() {
     struct ENUM_WINDOWS_PARAM {
         HWND* hWnd;
@@ -8013,14 +7474,6 @@ BOOL Wh_ModInit() {
             Wh_SetFunctionHook(pCreateWindowInBandEx,
                                (void*)CreateWindowInBandEx_Hook,
                                (void**)&CreateWindowInBandEx_Original);
-        }
-
-        void* pCreateWindowExW =
-            (void*)GetProcAddress(user32Module, "CreateWindowExW");
-        if (pCreateWindowExW) {
-            Wh_SetFunctionHook(pCreateWindowExW,
-                               (void*)CreateWindowExW_Hook,
-                               (void**)&CreateWindowExW_Original);
         }
     }
 
