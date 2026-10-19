@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.241
+// @version         1.0.0
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
