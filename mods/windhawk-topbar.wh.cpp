@@ -23129,12 +23129,12 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
 // dark text — matches the topbar's own flyout textboxes.
 static void StyleLightTextBox(wuxc::TextBox const& tb) {
     try { tb.CornerRadius(CornerRadius{ 8, 8, 8, 8 }); } catch (...) {}
-    auto bg   = MakeSolid(0xFF, 0x2D, 0x2D, 0x2D);
-    auto bgH  = MakeSolid(0xFF, 0x33, 0x33, 0x33);
-    auto bgF  = MakeSolid(0xFF, 0x1F, 0x1F, 0x1F);
+    auto bg   = MakeSolid(0x40, 0x1A, 0x1A, 0x1A);
+    auto bgH  = MakeSolid(0x60, 0x2A, 0x2A, 0x2A);
+    auto bgF  = MakeSolid(0x30, 0x10, 0x10, 0x10);
     auto fg   = MakeSolid(0xFF, 0xFF, 0xFF, 0xFF);
-    auto brd  = MakeSolid(0xFF, 0x55, 0x55, 0x55);
-    auto brdH = MakeSolid(0xFF, 0x77, 0x77, 0x77);
+    auto brd  = MakeSolid(0x30, 0xFF, 0xFF, 0xFF);
+    auto brdH = MakeSolid(0x50, 0xFF, 0xFF, 0xFF);
     auto brdF = MakeSolid(0xFF, 0x00, 0x78, 0xD4);
     auto ph   = MakeSolid(0xFF, 0x88, 0x88, 0x88);
 
@@ -23156,11 +23156,11 @@ static void StyleLightTextBox(wuxc::TextBox const& tb) {
 
 static void StyleLightComboBox(wuxc::ComboBox const& cb) {
     try { cb.CornerRadius(CornerRadius{ 8, 8, 8, 8 }); } catch (...) {}
-    auto bg   = MakeSolid(0xFF, 0x2D, 0x2D, 0x2D);
-    auto bgH  = MakeSolid(0xFF, 0x33, 0x33, 0x33);
+    auto bg   = MakeSolid(0x40, 0x1A, 0x1A, 0x1A);
+    auto bgH  = MakeSolid(0x60, 0x2A, 0x2A, 0x2A);
     auto fg   = MakeSolid(0xFF, 0xFF, 0xFF, 0xFF);
-    auto brd  = MakeSolid(0xFF, 0x55, 0x55, 0x55);
-    auto brdH = MakeSolid(0xFF, 0x77, 0x77, 0x77);
+    auto brd  = MakeSolid(0x30, 0xFF, 0xFF, 0xFF);
+    auto brdH = MakeSolid(0x50, 0xFF, 0xFF, 0xFF);
     auto brdF = MakeSolid(0xFF, 0x00, 0x78, 0xD4);
     auto ddBg = MakeSolid(0xFF, 0x20, 0x20, 0x20);
 
@@ -24483,8 +24483,8 @@ wuxc::Grid BuildWindowContent() {
     auto blurBrush = winrt::make<XamlBlurBrush>(
         blurOverlay.as<UIElement>(),
         60.0f,
-        wui::ColorHelper::FromArgb(255, 0, 0, 0),
-        160,
+        wui::ColorHelper::FromArgb(255, 14, 14, 14),
+        198,
         false
     );
     blurOverlay.Background(blurBrush);
@@ -33306,8 +33306,6 @@ void ApplyModernWindowChrome(HWND hwnd) {
                               &corner, sizeof(corner));
         DWORD backdrop = 2;
         DwmSetWindowAttribute(hwnd, 38, &backdrop, sizeof(backdrop));
-        MARGINS margins{-1, -1, -1, -1};
-        DwmExtendFrameIntoClientArea(hwnd, &margins);
     }
 }
 
@@ -36035,7 +36033,7 @@ static HRESULT WINAPI TopBarDwmSetWindowAttribute_Hook(HWND hwnd, DWORD attr,
     }
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId()) {
+    if (pid == GetCurrentProcessId() && IsTopBarBackdropTarget(hwnd)) {
         if (attr == 17) {
             BOOL falseVal = FALSE;
             return TopBarDwmSetWindowAttribute_Original(hwnd, attr, &falseVal, sizeof(falseVal));
