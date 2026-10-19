@@ -2,7 +2,7 @@
 // @id              explorer-column-view
 // @name            Explorer Column View
 // @description     Browse folders in Finder-style columns with keyboard navigation, file previews, and inline audio and video.
-// @version         0.36
+// @version         0.38
 // @author          ItsMikesch
 // @github          https://github.com/ItsMikesch
 // @license         MIT
@@ -19,6 +19,16 @@ Bring Finder-style column browsing to Windows 11 File Explorer. Follow a folder
 path across resizable columns, revisit earlier selections, and inspect files
 beside your folders.
 
+## In action
+
+Native Windows styling, with folder columns and the audio Inspector:
+
+![Folder columns and audio waveform in Windows 11 light mode](https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-light.png)
+
+Columns also follow your existing Explorer styling. See the
+[customized Explorer screenshot](https://raw.githubusercontent.com/ItsMikesch/windhawk-mods/a133451a82c0a5123db47025382704d27a8cbca4/explorer-column-view-styled.png);
+its glass appearance comes from the user's other customization tools.
+
 ## Browse with a clear trail
 
 - Select a folder to reveal its contents in the next column. Choose a different
@@ -28,6 +38,8 @@ beside your folders.
 - Press **Right Arrow** to enter the selected folder's column and **Left Arrow**
   to focus the previous column. Folder double-click and Enter extend the trail.
 - Each Explorer tab keeps its own folders, selections, column widths and Inspector.
+- On supported Shell versions, **Open in new tab** targets the owning Explorer window; ordinary folder opening
+  continues along the column trail. **Open in new window** keeps its native behavior.
 - Browse **Home** and **This PC**, local and network folders, and archives exposed
   by your Windows Shell providers, including supported ZIP, RAR and 7z folders.
 
@@ -46,8 +58,9 @@ it on the right and show folder details too.
 
 ## Turn columns on or off
 
-Press **Ctrl+Alt+Shift+V** to switch column browsing across open and new Explorer
-windows and tabs. **Enable columns by default** controls the initial mode.
+With Explorer focused, press **Ctrl+Alt+Shift+V** to switch column browsing across
+open and new Explorer windows and tabs. The shortcut remains available to other
+apps. **Enable columns by default** controls the initial mode.
 Use Explorer's main sidebar or address bar to change the first column's location.
 Click **Save settings** in Windhawk to apply configuration changes.
 
@@ -55,26 +68,28 @@ Click **Save settings** in Windhawk to apply configuration changes.
 
 - Designed for Windows 11. The mod hosts native Shell views and follows existing
   Explorer styling; it does not include a glass theme.
-- Windows 11 context menus are available on recognized Shell versions. Other
-  versions fall back to classic menus. **Use classic context menus** forces that
-  fallback inside the columns.
+- Windows 11 context menus are available on supported x64 builds in the 26100
+  and 26200 families. Other builds and architectures use classic menus.
+  **Use classic context menus** forces that fallback inside the columns.
 - Use a column's context menu or keyboard shortcuts for file operations. The
-  outer Explorer command bar and status bar can still reflect the original tab
-  view rather than the focused embedded column.
+  hidden native view's selection is cleared before columns cover it. The outer
+  command bar's **New** and **Paste** still target the original tab folder;
+  its status bar can reflect that folder rather than the focused column.
 - Home contents depend on Windows' Shell provider. Unavailable recent entries
   cannot be previewed. Unsupported virtual roots return to the regular native view.
 - Previews depend on installed handlers/codecs. Some archive providers expose
   folders but no file streams. Encrypted archives and playback inside archives
-  require an external application. Slow preview providers can delay shutdown.
-- Disable the separate dual-pane prototype before enabling this mod: both use
-  Explorer's file area. Other layout/styling mods may need compatibility testing.
+  require an external application.
+- Some metadata and document-preview calls run on Explorer's UI thread. A slow
+  handler or unavailable network file can pause the window. Installed media
+  codecs run inside Explorer; **Enable inline audio and video** can be turned
+  off for setups with incompatible codecs. Slow providers can delay unload.
+- Other mods that rearrange Explorer's file area may need compatibility testing.
 
 ## Troubleshooting
 
 **Refresh views after navigation and resizing** keeps additional redraw recovery
 enabled. If another styling mod causes excessive flashing, compare with it off.
-For diagnostics, **Ctrl+Alt+Shift+D** logs state, **Ctrl+Alt+Shift+R** repairs
-drawing, and **Ctrl+Alt+Shift+P** requests a repaint.
 */
 // ==/WindhawkModReadme==
 
@@ -89,9 +104,6 @@ drawing, and **Ctrl+Alt+Shift+P** requests a repaint.
 - DividerWidth: 4
   $name: Divider width
   $description: Width of the draggable divider area, from 2 to 12 logical pixels. Default 4. The visible separator stays one physical pixel; the rest matches the folder background. Save settings to apply.
-  #! $min: 2
-  #! $max: 12
-  #! $format: slider
 - ClassicContextMenus: false
   $name: Use classic context menus
   $description: On uses the old right-click menu in folder columns only. Off requests the Windows 11 menu when available, with the classic menu as a fallback. Applies to the next menu opened.
@@ -110,6 +122,7 @@ drawing, and **Ctrl+Alt+Shift+P** requests a repaint.
 #include <uxtheme.h>
 #include <exdisp.h>
 #include <exdispid.h>
+#include <shdispid.h>
 #include <ocidl.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -131,22 +144,27 @@ drawing, and **Ctrl+Alt+Shift+P** requests a repaint.
 #include <cassert>
 #include <cwctype>
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT reinterpret_cast<HINSTANCE>(&__ImageBase)
+
 namespace {
-constexpr wchar_t kSourceVersion[] = L"0.36";
 std::atomic<bool> g_unloading{false};
 std::atomic<unsigned> g_activeCallbacks{0};
+std::atomic<unsigned> g_liveComObjects{0};
 struct CallbackScope {
     CallbackScope() { g_activeCallbacks.fetch_add(1, std::memory_order_acq_rel); }
     ~CallbackScope() { g_activeCallbacks.fetch_sub(1, std::memory_order_acq_rel); }
     CallbackScope(const CallbackScope&) = delete;
     CallbackScope& operator=(const CallbackScope&) = delete;
 };
-constexpr UINT kHotkeyId = 1;
-constexpr UINT kDiagnosticHotkeyId = 2;
-constexpr UINT kResizeTestHotkeyId = 3;
-constexpr UINT kPaintTestHotkeyId = 4;
-constexpr UINT_PTR kResizeTimerId = 1;
-constexpr UINT_PTR kNavigationTimerId = 2;
+// Declared first in each COM object, so its count survives the complete
+// destructor and member teardown. Release's callback scope also covers delete.
+struct ComObjectLifetime {
+    ComObjectLifetime() { g_liveComObjects.fetch_add(1, std::memory_order_acq_rel); }
+    ~ComObjectLifetime() { g_liveComObjects.fetch_sub(1, std::memory_order_acq_rel); }
+    ComObjectLifetime(const ComObjectLifetime&) = delete;
+    ComObjectLifetime& operator=(const ComObjectLifetime&) = delete;
+};
 constexpr UINT_PTR kVisualRepairTimerId = 3;
 constexpr UINT_PTR kSettledPaintTimerId = 4;
 constexpr UINT_PTR kDividerPaintTimerId = 5;
@@ -165,6 +183,9 @@ constexpr UINT kSelectionUpdateMessage = WM_APP + 49;
 constexpr UINT kRootNavigationFailedMessage = WM_APP + 50;
 constexpr UINT kPaletteRefreshMessage = WM_APP + 51;
 constexpr UINT kOverlayBoundsMessage = WM_APP + 52;
+constexpr UINT kExplorerWindowMessage = WM_APP + 53;
+constexpr UINT kToggleColumnsMessage = WM_APP + 54;
+constexpr UINT kNativeStructureMessage = WM_APP + 55;
 constexpr UINT_PTR kPaletteRefreshTimerId = 10;
 constexpr UINT kPaletteSettleDelayMs = 150;
 constexpr UINT_PTR kSelectionRetryTimerId = 9;
@@ -173,9 +194,6 @@ constexpr UINT kPointerReleaseDelayMs = 16;
 constexpr UINT kSelectionRetryDelayMs = 100;
 constexpr unsigned kSelectionRetryLimit = 4;
 constexpr UINT_PTR kStateRetryTimerId = 8;
-constexpr DWORD kRecoveryIntervalMs = 1500;
-constexpr DWORD kDiscoveryIntervalMs = 250;
-constexpr DWORD kOpenRetryDelayMs = 750;
 constexpr UINT_PTR kFocusTimerId = 6;
 constexpr UINT_PTR kAudioTimerId = 7;
 constexpr int kSeparatorWidth = 4; // Logical resize hit area; the visible line is one physical pixel.
@@ -184,22 +202,24 @@ constexpr DWORD kLiveResizeIntervalMs = 16;
 constexpr int kMaxColumns = 64;
 constexpr int kDefaultColumnWidth = 300;
 constexpr int kInspectorWidth = 360;
-constexpr wchar_t kOverlayClass[] = L"WindhawkNativeColumnsOverlayV036";
-constexpr wchar_t kPaneClass[] = L"WindhawkNativeColumnsPaneV036";
-constexpr wchar_t kViewHostClass[] = L"WindhawkNativeColumnsViewHostV036";
-constexpr wchar_t kSplitterClass[] = L"WindhawkNativeColumnsSplitterV036";
-constexpr wchar_t kPreviewClass[] = L"WindhawkNativeColumnsPreviewV036";
-constexpr wchar_t kVideoClass[] = L"WindhawkNativeColumnsVideoV036";
-constexpr wchar_t kThemeObserverClass[] = L"WindhawkNativeColumnsThemeObserverV036";
+constexpr wchar_t kOverlayClass[] = L"WindhawkExplorerColumnViewOverlay";
+constexpr wchar_t kPaneClass[] = L"WindhawkExplorerColumnViewPane";
+constexpr wchar_t kViewHostClass[] = L"WindhawkExplorerColumnViewHost";
+constexpr wchar_t kSplitterClass[] = L"WindhawkExplorerColumnViewSplitter";
+constexpr wchar_t kPreviewClass[] = L"WindhawkExplorerColumnViewPreview";
+constexpr wchar_t kVideoClass[] = L"WindhawkExplorerColumnViewVideo";
+constexpr wchar_t kThemeObserverClass[] = L"WindhawkExplorerColumnViewObserver";
 
 struct Session;
 class PaneNavigationSink;
+class MediaEngineNotify;
 
 struct Pane {
     Session* session = nullptr;
     HWND window = nullptr;
     HWND viewHost = nullptr;
     IExplorerBrowser* browser = nullptr;
+    IShellBrowser* navigationBrowser = nullptr;
     IServiceProvider* browserSite = nullptr;
     PIDLIST_ABSOLUTE navigationTarget = nullptr;
     IUnknown* styledView = nullptr;
@@ -267,7 +287,7 @@ SRWLOCK g_previewJobsLock = SRWLOCK_INIT;
 std::atomic<UINT_PTR> g_previewJobSequence{0};
 // Keep every thread handle until it is signaled, including the interval before
 // its entry point starts. CallbackScope alone cannot cover that startup gap.
-[[clang::no_destroy]] std::vector<std::shared_ptr<PreviewJob>> g_previewJobs;
+std::vector<std::shared_ptr<PreviewJob>> g_previewJobs;
 
 bool PreviewCanceled(HANDLE cancel) {
     return g_unloading.load(std::memory_order_acquire) ||
@@ -343,6 +363,9 @@ bool ReapPreviewJobs() {
 std::shared_ptr<PreviewJob> StartPreviewJob(const std::wstring& path,
         HWND target, DWORD generation, UINT message, LPTHREAD_START_ROUTINE entry) {
     if (g_unloading.load(std::memory_order_acquire)) return {};
+    // Retired workers are also collected when new selection work starts;
+    // preview cleanup does not need a recurring discovery timer.
+    ReapPreviewJobs();
     std::shared_ptr<PreviewJob> job;
     try {
         job = std::make_shared<PreviewJob>();
@@ -383,22 +406,19 @@ std::atomic<bool> g_enableByDefault{true};
 std::atomic<bool> g_columnsEnabled{true};
 std::atomic<bool> g_preferenceChangePending{false};
 HANDLE g_thread = nullptr;
-HANDLE g_readyEvent = nullptr;
-DWORD g_threadId = 0;
-std::atomic<bool> g_ready{false};
-bool g_diagnosticHotkeyRegistered = false;
-bool g_resizeTestHotkeyRegistered = false;
-bool g_paintTestHotkeyRegistered = false;
+std::atomic<DWORD> g_threadId{0};
 UINT g_toggleMessage = 0;
-bool g_toggleHotkeyRegistered = false;
-struct SharedColumnsMode { LONG magic; LONG enabled; };
-constexpr LONG kSharedModeMagic = 0x4E435024;
+UINT g_modeChangedMessage = 0;
+struct SharedColumnsMode { LONG magic; LONG enabled; LONG revision; };
+constexpr LONG kSharedModeMagic = 0x4E435038;
 HANDLE g_modeMapping = nullptr; // Helper-thread-owned, never used by UI callbacks.
 SharedColumnsMode* g_sharedMode = nullptr;
-#ifndef NATIVE_COLUMNS_MODE_NAME
-// V024 is the shared-mode protocol version, independent of the mod release.
-#define NATIVE_COLUMNS_MODE_NAME L"Local\\Windhawk.NativeColumns.Mode.V024"
-#endif
+constexpr wchar_t kColumnsModeName[] = L"Local\\Windhawk.NativeColumns.Mode.V038";
+LONG g_modeRevision = 0; // Helper-thread-owned; broadcasts carry no pointers.
+SRWLOCK g_windowEventsLock = SRWLOCK_INIT;
+std::vector<HWND> g_windowEvents;
+bool g_windowEventPosted = false; // Protected by g_windowEventsLock.
+std::atomic<bool> g_helperQueueReady{false};
 
 std::atomic<ULONG_PTR> g_sessionSequence{0};
 std::atomic<ULONG_PTR> g_paneSequence{0};
@@ -431,6 +451,7 @@ struct Session final : std::enable_shared_from_this<Session> {
     DWORD videoWidth = 0, videoHeight = 0, videoFrameRate = 0;
     IMFMediaEngine* mediaEngine = nullptr;
     IMFMediaEngineEx* mediaEngineEx = nullptr;
+    MediaEngineNotify* mediaNotify = nullptr; // Owns one ref until playback retirement.
     bool mediaFoundationStarted = false;
     bool mediaReady = false;
     HICON previewIcon = nullptr;
@@ -481,6 +502,14 @@ struct Session final : std::enable_shared_from_this<Session> {
     bool syncingOverlayBounds = false;
     HWND originalDrawingSurface = nullptr;
     bool originalWasVisible = false;
+    bool nativeSelectionGuarded = false;
+    bool nativeSelectionChecking = false;
+    bool nativeNavigationInProgress = false;
+    IConnectionPoint* nativeSelectionConnection = nullptr;
+    DWORD nativeSelectionCookie = 0;
+    IUnknown* nativeSelectionIdentity = nullptr;
+    ULONG_PTR nativeSelectionGeneration = 0;
+    ULONG_PTR nativeSelectionChangeSerial = 0;
     std::wstring tabPath;
     int activePane = 0;
     bool uiComInitialized = false;
@@ -513,6 +542,7 @@ struct Session final : std::enable_shared_from_this<Session> {
     bool nativePointerPending = false;
     ULONG_PTR pointerRootCompletionSerial = 0;
     unsigned stateRetryAttempts = 0;
+    unsigned navigationConnectAttempts = 0;
     IConnectionPoint* navigationConnection = nullptr;
     DWORD navigationCookie = 0;
     bool mouseHookAcquired = false;
@@ -525,7 +555,7 @@ thread_local HHOOK g_uiMouseHook = nullptr;
 thread_local unsigned g_uiMouseUsers = 0;
 std::atomic<unsigned> g_creatingSessions{0};
 std::atomic<DWORD> g_previewSequence{0};
-constexpr wchar_t kSessionProperty[] = L"Windhawk.NativeColumns.Session.V036";
+constexpr wchar_t kSessionProperty[] = L"Windhawk.ExplorerColumnView.Session";
 
 struct SessionScope {
     std::shared_ptr<Session> owner;
@@ -552,7 +582,7 @@ struct SessionRecord {
 SRWLOCK g_sessionsLock = SRWLOCK_INIT;
 // Process exit happens under the loader lock. Normal unload explicitly drains
 // all windows and this registry on their owning UI threads.
-[[clang::no_destroy]] std::vector<SessionRecord> g_sessions;
+std::vector<SessionRecord> g_sessions;
 
 void PublishSession(HWND tab, HWND overlay, std::shared_ptr<Session> owner) {
     AcquireSRWLockExclusive(&g_sessionsLock);
@@ -595,19 +625,11 @@ Session* SessionForWindow(HWND window) {
 struct DispatchTarget { DWORD thread; HHOOK hook; HANDLE ownerThread; };
 std::vector<DispatchTarget> g_dispatchHooks; // Helper-thread-owned.
 struct TabTarget { HWND explorer; HWND tab; };
-struct TabCommand { HWND tab; DWORD sentAt; bool pending; LPARAM action; };
+std::vector<TabTarget> g_knownTabs; // Discovered once at load, then by window creation.
+struct TabCommand { HWND tab; bool pending; LPARAM action; };
 std::vector<TabCommand> g_tabCommands; // Helper-thread-owned; UI callbacks post acknowledgments.
 constexpr LPARAM kOpenColumnsCommand = 4;
 constexpr LPARAM kCloseColumnsCommand = 5;
-
-std::vector<TabTarget> SessionTargets() {
-    std::vector<TabTarget> result;
-    AcquireSRWLockShared(&g_sessionsLock);
-    for (const auto& entry : g_sessions)
-        result.push_back({GetAncestor(entry.tab, GA_ROOT), entry.tab});
-    ReleaseSRWLockShared(&g_sessionsLock);
-    return result;
-}
 
 // Shell DefView asks its browser host for this service before showing the
 // Windows 11 menu. These private identifiers are also documented in the
@@ -619,9 +641,6 @@ constexpr CLSID kContextMenuPresenterClass = {
     0x86ca1aa0, 0x34aa, 0x4e8b, {0xa5,0x09,0x50,0xc9,0x05,0xba,0xe2,0xa2}};
 constexpr IID kContextMenuPresenterV2 = {
     0x37a472f7, 0x63cf, 0x4ccf, {0xa8,0x8b,0x52,0x31,0xa3,0xc7,0xd8,0xb6}};
-// Diagnostic identity only: no methods from this older private contract are called.
-constexpr IID kOlderContextMenuPresenter = {
-    0x706461d1, 0xac5f, 0x4730, {0xbf,0xe3,0xca,0xc6,0xca,0xd5,0xef,0x5e}};
 constexpr IID kInvokeContextMenuCommand = {
     0x9a19ddcf, 0x9ed4, 0x4a18, {0x89,0xde,0xc3,0xb4,0xdd,0x1d,0x7a,0xe3}};
 
@@ -797,18 +816,6 @@ HRESULT ColumnClipboardCommand(Pane& pane, const char* verb, bool execute, DWORD
     return hr;
 }
 
-class MenuTimingScope final {
-    int index_;
-    PCWSTR phase_;
-    ULONGLONG started_ = GetTickCount64();
-public:
-    MenuTimingScope(int index, PCWSTR phase) : index_(index), phase_(phase) {}
-    ~MenuTimingScope() {
-        Wh_Log(L"[Columns menu timing] Pane %d %s=%llu ms", index_, phase_,
-            GetTickCount64() - started_);
-    }
-};
-
 void CancelPendingFocus();
 
 bool NativePointerInteractionActive() {
@@ -849,8 +856,12 @@ void QueueNativeNavigationUpdate() {
             kNavigationEventMessage, session.identity, 0) != FALSE;
 }
 
+void QueueOverlayBoundsUpdate(Session& session);
+void QueueThreadBoundsUpdates();
+
 class PaneBrowserSite final : public IServiceProvider, public IOleWindow,
     public IOleCommandTarget, public NativeMenuCommandCallback, public ICommDlgBrowser2 {
+    ComObjectLifetime lifetime_;
     LONG refs_ = 1;
     std::weak_ptr<Session> owner_;
     int index_;
@@ -878,7 +889,7 @@ class PaneBrowserSite final : public IServiceProvider, public IOleWindow,
             result = DefSubclassProc(window, message, wp, lp);
             self->Release(); // The installed subclass's reference.
         } else if (message == WM_CONTEXTMENU && !g_classicContextMenus.load()) {
-            MenuTimingScope timing(self->index_, L"native menu request returned");
+
             result = DefSubclassProc(window, message, wp, lp);
         } else if (message == NativeMenuInvokeMessage() && !lp &&
                    wp <= MAXUINT && self->InvokeMenuCommand(window, static_cast<UINT>(wp))) {
@@ -894,7 +905,7 @@ class PaneBrowserSite final : public IServiceProvider, public IOleWindow,
         if (!owner || owner->closed || g_unloading.load() || !presenter_ ||
             window != presenterWindow_ || invokingMenu_) return false;
         SessionScope scope(std::move(owner));
-        MenuTimingScope timing(index_, L"command returned");
+
         auto* native = static_cast<ContextMenuPresenterV2*>(presenter_);
         native->AddRef();
         invokingMenu_ = true;
@@ -931,6 +942,10 @@ public:
         : owner_(Context().weak_from_this()), index_(index),
           generation_(Context().panes[index].generation) {}
     ~PaneBrowserSite() { ResetPresenter(); }
+    void Retire() {
+        ResetPresenter(); // Break presenter -> callback and subclass references first.
+        owner_.reset();
+    }
     void RecordMenuInput() {
         menuInputAt_ = GetTickCount64();
         menuOpenReported_ = false;
@@ -980,7 +995,7 @@ public:
         if (FAILED(hr)) return hr;
         if (current != presenterView_) ResetPresenter();
         if (!presenter_) {
-            MenuTimingScope timing(index_, L"presenter creation");
+
             hr = current->QueryInterface(kInvokeContextMenuCommand,
                 reinterpret_cast<void**>(&invokeCommand_));
             ContextMenuPresenterV2* native = nullptr;
@@ -1029,8 +1044,12 @@ public:
         AddRef();
         return S_OK;
     }
-    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        CallbackScope callbackScope;
+        return InterlockedIncrement(&refs_);
+    }
     ULONG STDMETHODCALLTYPE Release() override {
+        CallbackScope callbackScope;
         ULONG refs = InterlockedDecrement(&refs_);
         if (!refs) delete this;
         return refs;
@@ -1040,6 +1059,8 @@ public:
         auto owner = owner_.lock();
         if (!owner || !invokeCommand_ || (!retiring && (owner->closed || g_unloading.load()))) return;
         SessionScope scope(std::move(owner));
+        if (!retiring && (Context().panes[index_].generation != generation_ ||
+            Context().panes[index_].browserSite != static_cast<IServiceProvider*>(this))) return;
         auto* native = static_cast<NativeMenuCommandCallback*>(invokeCommand_);
         native->AddRef();
         action(native);
@@ -1047,24 +1068,29 @@ public:
     }
     void STDMETHODCALLTYPE Invoke(IContextMenu* menu, IShellItemArray* selection,
         HMENU popup, UINT command, POINT point) override {
+        CallbackScope callbackScope;
         ForwardMenuCallback([&](NativeMenuCommandCallback* native) {
             native->Invoke(menu, selection, popup, command, point);
         });
     }
     void STDMETHODCALLTYPE OnContextMenuDismiss() override {
-        MenuTimingScope timing(index_, L"native dismissal callback");
+        CallbackScope callbackScope;
+
         ForwardMenuCallback([](NativeMenuCommandCallback* native) {
             native->OnContextMenuDismiss();
         }, true);
+        QueueThreadBoundsUpdates();
     }
     void STDMETHODCALLTYPE DoExpandedContextMenu(POINT point, int flags, GUID* context,
         POINT* originalPoint, int keyboard) override {
+        CallbackScope callbackScope;
         ForwardMenuCallback([&](NativeMenuCommandCallback* native) {
             native->DoExpandedContextMenu(point, flags, context, originalPoint, keyboard);
         });
     }
     void STDMETHODCALLTYPE SetFocus() override {
-        MenuTimingScope timing(index_, L"native focus callback");
+        CallbackScope callbackScope;
+
         ForwardMenuCallback([](NativeMenuCommandCallback* native) { native->SetFocus(); });
     }
     HRESULT STDMETHODCALLTYPE QueryService(REFGUID service, REFIID iid, void** out) override {
@@ -1093,11 +1119,10 @@ public:
         if (IsEqualGUID(service, SID_SFolderView))
             return pane.browser->GetCurrentView(iid, out);
         if (!IsEqualGUID(service, kContextMenuPresenterService)) return E_NOINTERFACE;
-        MenuTimingScope timing(index_, L"presenter service request");
+
         bool classic = g_classicContextMenus.load();
         HRESULT hr = E_NOINTERFACE;
         PCWSTR reason = classic ? L"classic-setting" :
-            IsEqualIID(iid, kOlderContextMenuPresenter) ? L"older-presenter-contract-update-Windows" :
             !IsEqualIID(iid, kContextMenuPresenterV2) ? L"unrecognized-presenter-IID" :
             !IsSupportedMenuPlatform() ? L"unsupported-Windows-build-or-architecture" : L"none";
         if (!classic && IsEqualIID(iid, kContextMenuPresenterV2)) {
@@ -1114,13 +1139,13 @@ public:
         StringFromGUID2(iid, requested, ARRAYSIZE(requested));
         Wh_Log(L"[Columns menu] v%s pid=%u Tab=%p pane=%d request=%u mode=%s result=%08X "
                L"Windows=%u.%u.%u.%u arch=%u requested=%s reason=%s",
-            kSourceVersion, GetCurrentProcessId(), Context().tab, index_, pane.menuRequests,
+            WH_MOD_VERSION, GetCurrentProcessId(), Context().tab, index_, pane.menuRequests,
             classic ? L"classic" : L"Windows 11", static_cast<unsigned>(hr),
             platform.major, platform.minor, platform.build, platform.revision,
             static_cast<unsigned>(platform.architecture), requested, reason);
         if (FAILED(hr)) {
             Wh_Log(L"[Columns menu fallback] v%s Windows=%u.%u.%u.%u arch=%u requested=%s reason=%s",
-                kSourceVersion, platform.major, platform.minor, platform.build, platform.revision,
+                WH_MOD_VERSION, platform.major, platform.minor, platform.build, platform.revision,
                 static_cast<unsigned>(platform.architecture), requested, reason);
         }
         return hr;
@@ -1139,8 +1164,12 @@ public:
         if (shell) shell->Release();
         return SUCCEEDED(hr) && IsWindow(*window) ? S_OK : E_FAIL;
     }
-    HRESULT STDMETHODCALLTYPE ContextSensitiveHelp(BOOL) override { return E_NOTIMPL; }
+    HRESULT STDMETHODCALLTYPE ContextSensitiveHelp(BOOL) override {
+        CallbackScope callbackScope;
+        return E_NOTIMPL;
+    }
     HRESULT STDMETHODCALLTYPE OnDefaultCommand(IShellView*) override {
+        CallbackScope callbackScope;
         // S_FALSE explicitly preserves DefView's file-open/default verb. Folder
         // activation is still intercepted by PaneNavigationSink's existing path.
         return S_FALSE;
@@ -1159,13 +1188,21 @@ public:
         // Never replace views or call navigation from a Shell callback.
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE IncludeObject(IShellView*, PCUITEMID_CHILD) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE Notify(IShellView*, DWORD) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE IncludeObject(IShellView*, PCUITEMID_CHILD) override {
+        CallbackScope callbackScope;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Notify(IShellView*, DWORD) override {
+        CallbackScope callbackScope;
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE GetDefaultMenuText(IShellView*, LPWSTR text, int length) override {
+        CallbackScope callbackScope;
         if (text && length > 0) *text = L'\0';
         return S_FALSE;
     }
     HRESULT STDMETHODCALLTYPE GetViewFlags(DWORD* flags) override {
+        CallbackScope callbackScope;
         if (!flags) return E_POINTER;
         // Keep Explorer's normal hidden-file policy. Avoid the expensive
         // IncludeObject callback for every item: this host does no filtering.
@@ -1238,21 +1275,39 @@ std::shared_ptr<Session> NativeMenuSessionOnThread() {
     return {};
 }
 
+void QueueThreadBoundsUpdates() {
+    if (g_unloading.load()) return;
+    // Bounds changes are deferred while any asynchronous flyout owns this UI
+    // thread. Its dismissal supplies the event that resumes those updates.
+    for (HWND overlay : SessionWindows()) {
+        if (GetWindowThreadProcessId(overlay, nullptr) != GetCurrentThreadId()) continue;
+        if (auto* session = SessionForWindow(overlay)) QueueOverlayBoundsUpdate(*session);
+    }
+}
+
+
+void NativeRootNavigationStarting();
+void NativeSelectionChanged();
 
 class NavigationSink final : public IDispatch {
+    ComObjectLifetime lifetime_;
     LONG refs_ = 1;
     std::weak_ptr<Session> owner_;
+    bool selectionEvents_;
     ULONG_PTR generation_;
 public:
-    explicit NavigationSink(std::weak_ptr<Session> owner)
-        : owner_(std::move(owner)), generation_(Context().nativeConnectionGeneration) {}
+    explicit NavigationSink(std::weak_ptr<Session> owner, bool selectionEvents = false)
+        : owner_(std::move(owner)), selectionEvents_(selectionEvents),
+          generation_(selectionEvents ? Context().nativeSelectionGeneration :
+              Context().nativeConnectionGeneration) {}
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         CallbackScope callbackScope;
         if (!out) return E_POINTER;
         *out = nullptr;
         if (IsEqualIID(iid, IID_IUnknown) ||
             IsEqualIID(iid, IID_IDispatch) ||
-            IsEqualIID(iid, DIID_DWebBrowserEvents2)) {
+            IsEqualIID(iid, selectionEvents_ ? DIID_DShellFolderViewEvents :
+                DIID_DWebBrowserEvents2)) {
             *out = static_cast<IDispatch*>(this);
             AddRef();
             return S_OK;
@@ -1260,22 +1315,27 @@ public:
         return E_NOINTERFACE;
     }
     ULONG STDMETHODCALLTYPE AddRef() override {
+        CallbackScope callbackScope;
         return InterlockedIncrement(&refs_);
     }
     ULONG STDMETHODCALLTYPE Release() override {
+        CallbackScope callbackScope;
         ULONG refs = InterlockedDecrement(&refs_);
         if (!refs) delete this;
         return refs;
     }
     HRESULT STDMETHODCALLTYPE GetTypeInfoCount(UINT* count) override {
+        CallbackScope callbackScope;
         if (count) *count = 0;
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE GetTypeInfo(UINT, LCID, ITypeInfo**) override {
+        CallbackScope callbackScope;
         return E_NOTIMPL;
     }
     HRESULT STDMETHODCALLTYPE GetIDsOfNames(REFIID, LPOLESTR*, UINT, LCID,
                                             DISPID*) override {
+        CallbackScope callbackScope;
         return E_NOTIMPL;
     }
     HRESULT STDMETHODCALLTYPE Invoke(DISPID id, REFIID, LCID, WORD,
@@ -1285,20 +1345,32 @@ public:
         auto owner = owner_.lock();
         if (g_unloading.load() || !owner || owner->closed) return S_OK;
         SessionScope scope(std::move(owner));
+        if (selectionEvents_) {
+            if (generation_ == Context().nativeSelectionGeneration &&
+                (id == DISPID_SELECTIONCHANGED || id == DISPID_FILELISTENUMDONE))
+                NativeSelectionChanged();
+            return S_OK;
+        }
+        if (generation_ != Context().nativeConnectionGeneration) return S_OK;
+        if (id == DISPID_BEFORENAVIGATE2) NativeRootNavigationStarting();
         if (id == DISPID_BEFORENAVIGATE2)
             Wh_Log(L"[Columns] Explorer BeforeNavigate2");
         if (id == DISPID_DOCUMENTCOMPLETE)
             Wh_Log(L"[Columns] Explorer DocumentComplete");
         if (id == DISPID_DOWNLOADCOMPLETE)
             Wh_Log(L"[Columns] Explorer DownloadComplete");
-        if (generation_ != Context().nativeConnectionGeneration) return S_OK;
         if (id == DISPID_NAVIGATECOMPLETE2 || id == DISPID_DOCUMENTCOMPLETE ||
-            id == DISPID_DOWNLOADCOMPLETE) QueueNativeNavigationUpdate();
+            id == DISPID_DOWNLOADCOMPLETE || id == DISPID_NAVIGATEERROR) {
+            Context().nativeNavigationInProgress = false;
+            Context().stateRetryAttempts = 0;
+            QueueNativeNavigationUpdate();
+        }
         return S_OK;
     }
 };
 
 class PaneNavigationSink final : public IExplorerBrowserEvents {
+    ComObjectLifetime lifetime_;
     LONG refs_ = 1;
     int index_;
     ULONG_PTR generation_;
@@ -1321,9 +1393,11 @@ public:
         return E_NOINTERFACE;
     }
     ULONG STDMETHODCALLTYPE AddRef() override {
+        CallbackScope callbackScope;
         return InterlockedIncrement(&refs_);
     }
     ULONG STDMETHODCALLTYPE Release() override {
+        CallbackScope callbackScope;
         ULONG refs = InterlockedDecrement(&refs_);
         if (!refs) delete this;
         return refs;
@@ -1480,6 +1554,34 @@ bool IsExplorerWindow(HWND hwnd) {
     return pid == GetCurrentProcessId();
 }
 
+void QueueExplorerWindow(HWND window) {
+    if (g_unloading.load()) return;
+    AcquireSRWLockExclusive(&g_windowEventsLock);
+    if (std::find(g_windowEvents.begin(), g_windowEvents.end(), window) == g_windowEvents.end())
+        g_windowEvents.push_back(window);
+    if (!g_windowEventPosted && g_helperQueueReady.load())
+        g_windowEventPosted = PostThreadMessageW(g_threadId, kExplorerWindowMessage, 0, 0) != FALSE;
+    ReleaseSRWLockExclusive(&g_windowEventsLock);
+}
+
+using CreateWindowExWFn = decltype(&CreateWindowExW);
+CreateWindowExWFn g_createWindowExWOriginal = nullptr;
+
+HWND WINAPI CreateWindowExWHook(DWORD exStyle, LPCWSTR className, LPCWSTR title,
+    DWORD style, int x, int y, int width, int height, HWND parent, HMENU menu,
+    HINSTANCE instance, LPVOID parameter) {
+    CallbackScope callbackScope;
+    HWND window = g_createWindowExWOriginal(exStyle, className, title, style,
+        x, y, width, height, parent, menu, instance, parameter);
+    if (!window || g_unloading.load() || SessionForWindow(window)) return window;
+    wchar_t name[80] = {};
+    if (GetClassNameW(window, name, ARRAYSIZE(name)) &&
+        (!wcscmp(name, L"CabinetWClass") || !wcscmp(name, L"ShellTabWindowClass") ||
+         !wcscmp(name, L"SHELLDLL_DefView") || !wcscmp(name, L"DirectUIHWND")))
+        QueueExplorerWindow(window);
+    return window;
+}
+
 HWND FindTabWindow(HWND fileView) {
     for (HWND parent = GetParent(fileView); parent; parent = GetParent(parent)) {
         wchar_t name[64] = {};
@@ -1487,21 +1589,6 @@ HWND FindTabWindow(HWND fileView) {
             wcscmp(name, L"ShellTabWindowClass") == 0) return parent;
     }
     return nullptr;
-}
-
-HWND FindActiveTab(HWND explorer) {
-    HWND tab = nullptr;
-    EnumChildWindows(explorer, [](HWND window, LPARAM value) -> BOOL {
-        wchar_t name[80] = {};
-        if (IsWindowVisible(window) &&
-            GetClassNameW(window, name, ARRAYSIZE(name)) &&
-            !wcscmp(name, L"ShellTabWindowClass")) {
-            *reinterpret_cast<HWND*>(value) = window;
-            return FALSE;
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&tab));
-    return tab;
 }
 
 HWND BrowserTab(IDispatch* dispatch) {
@@ -1569,7 +1656,120 @@ bool ViewRectInTab(HWND fileView, HWND tab, RECT* result, bool allowEmpty = fals
     return allowEmpty || nonempty;
 }
 
+void DisconnectNativeSelectionEvents() {
+    Context().nativeSelectionGuarded = false;
+    ++Context().nativeSelectionGeneration;
+    auto* connection = std::exchange(Context().nativeSelectionConnection, nullptr);
+    DWORD cookie = std::exchange(Context().nativeSelectionCookie, 0);
+    auto* identity = std::exchange(Context().nativeSelectionIdentity, nullptr);
+    if (connection) {
+        if (cookie) connection->Unadvise(cookie);
+        connection->Release();
+    }
+    if (identity) identity->Release();
+}
+
+HRESULT ConnectNativeSelectionEvents(IShellView* view, IUnknown* identity) {
+    if (Context().nativeSelectionIdentity == identity &&
+        Context().nativeSelectionConnection && Context().nativeSelectionCookie) return S_OK;
+    DisconnectNativeSelectionEvents();
+    ULONG_PTR generation = Context().nativeSelectionGeneration;
+    IDispatch* automation = nullptr;
+    IConnectionPointContainer* container = nullptr;
+    IConnectionPoint* connection = nullptr;
+    DWORD cookie = 0;
+    HRESULT hr = view->GetItemObject(SVGIO_BACKGROUND, IID_IDispatch,
+        reinterpret_cast<void**>(&automation));
+    if (SUCCEEDED(hr) && automation)
+        hr = automation->QueryInterface(IID_IConnectionPointContainer,
+            reinterpret_cast<void**>(&container));
+    if (SUCCEEDED(hr) && container)
+        hr = container->FindConnectionPoint(DIID_DShellFolderViewEvents, &connection);
+    if (automation) automation->Release();
+    if (container) container->Release();
+    if (SUCCEEDED(hr) && connection) {
+        auto* sink = new (std::nothrow) NavigationSink(Context().weak_from_this(), true);
+        hr = sink ? connection->Advise(static_cast<IDispatch*>(sink), &cookie) : E_OUTOFMEMORY;
+        if (sink) sink->Release();
+    }
+    if (SUCCEEDED(hr) && (!connection || !cookie || Context().closed ||
+            generation != Context().nativeSelectionGeneration)) hr = E_ABORT;
+    if (SUCCEEDED(hr)) {
+        Context().nativeSelectionConnection = connection;
+        Context().nativeSelectionCookie = cookie;
+        identity->AddRef();
+        Context().nativeSelectionIdentity = identity;
+    } else if (connection) {
+        if (cookie) connection->Unadvise(cookie);
+        connection->Release();
+    }
+    return hr;
+}
+
+HRESULT NativeViewSelectionIsEmpty(IShellView* view, HWND expectedView) {
+    HWND window = nullptr;
+    HRESULT hr = view->GetWindow(&window);
+    if (SUCCEEDED(hr) && (window != expectedView || !IsWindow(window) ||
+            !IsChild(Context().tab, window))) hr = E_ABORT;
+    IFolderView* folderView = nullptr;
+    if (SUCCEEDED(hr)) hr = view->QueryInterface(IID_IFolderView,
+        reinterpret_cast<void**>(&folderView));
+    int selected = -1;
+    if (SUCCEEDED(hr) && folderView) hr = folderView->ItemCount(SVGIO_SELECTION, &selected);
+    if (folderView) folderView->Release();
+    if (SUCCEEDED(hr) && selected != 0) hr = E_ABORT;
+    return hr;
+}
+
+bool ClearNativeViewSelection(HWND fileView) {
+    auto& session = Context();
+    session.nativeSelectionGuarded = false;
+    if (session.closed || session.nativeSelectionChecking || session.nativeNavigationInProgress ||
+        !session.nativeBrowser || session.nativeBrowserThread != GetCurrentThreadId()) return false;
+    session.nativeSelectionChecking = true;
+    struct SelectionCheckScope {
+        Session& session;
+        ~SelectionCheckScope() { session.nativeSelectionChecking = false; }
+    } checking{session};
+    IShellBrowser* browser = session.nativeBrowser;
+    browser->AddRef(); // Shell calls can pump messages and replace the cached browser.
+    ULONG_PTR generation = session.nativeConnectionGeneration;
+    IShellView* view = nullptr;
+    IUnknown* identity = nullptr;
+    HRESULT hr = browser->QueryActiveShellView(&view);
+    if (SUCCEEDED(hr) && view) hr = view->QueryInterface(IID_IUnknown,
+        reinterpret_cast<void**>(&identity));
+    if (SUCCEEDED(hr) && (!view || !identity)) hr = E_NOINTERFACE;
+    if (SUCCEEDED(hr)) hr = ConnectNativeSelectionEvents(view, identity);
+    if (SUCCEEDED(hr)) hr = view->SelectItem(nullptr, SVSI_DESELECTOTHERS);
+    ULONG_PTR selectionSerial = session.nativeSelectionChangeSerial;
+    if (SUCCEEDED(hr)) hr = NativeViewSelectionIsEmpty(view, fileView);
+    IShellView* current = nullptr;
+    IUnknown* currentIdentity = nullptr;
+    if (SUCCEEDED(hr)) hr = browser->QueryActiveShellView(&current);
+    if (SUCCEEDED(hr) && current) hr = current->QueryInterface(IID_IUnknown,
+        reinterpret_cast<void**>(&currentIdentity));
+    if (SUCCEEDED(hr) && (!currentIdentity || currentIdentity != identity ||
+            session.closed || session.nativeNavigationInProgress ||
+            session.nativeConnectionGeneration != generation || session.nativeBrowser != browser))
+        hr = E_ABORT;
+    if (currentIdentity) currentIdentity->Release();
+    if (current) current->Release();
+    if (identity) identity->Release();
+    if (view) view->Release();
+    browser->Release();
+    // COM queries/releases may pump Shell notifications. A restored selection
+    // after the count query invalidates the result even if the view is the same.
+    if (SUCCEEDED(hr) && (session.nativeSelectionChangeSerial != selectionSerial ||
+            session.nativeConnectionGeneration != generation || session.nativeBrowser != browser ||
+            session.closed || session.nativeNavigationInProgress)) hr = E_ABORT;
+    if (FAILED(hr)) LogHr(L"Native selection safety check; retaining native view", hr);
+    return SUCCEEDED(hr);
+}
+
 void RestoreOriginalView() {
+    // Disable DirectUI show suppression before restoring it (ShowWindow can reenter).
+    Context().nativeSelectionGuarded = false;
     if (Context().originalDrawingSurface && Context().originalWasVisible &&
         IsWindow(Context().originalDrawingSurface)) {
         ShowWindow(Context().originalDrawingSurface, SW_SHOWNA);
@@ -1578,7 +1778,7 @@ void RestoreOriginalView() {
     Context().originalWasVisible = false;
 }
 
-void HideOriginalView(HWND fileView) {
+bool HideOriginalView(HWND fileView) {
     HWND drawingSurface = IsWindow(fileView) ?
         FindWindowExW(fileView, nullptr, L"DirectUIHWND", nullptr) : nullptr;
     if (drawingSurface != Context().originalDrawingSurface) {
@@ -1590,8 +1790,16 @@ void HideOriginalView(HWND fileView) {
         Context().originalWasVisible = drawingSurface &&
             (GetWindowLongPtrW(drawingSurface, GWL_STYLE) & WS_VISIBLE) != 0;
     }
+    // The frame command bar still belongs to this native view. Never cover a
+    // selection that its Cut/Delete/Rename commands could act on invisibly.
+    // Observe late selection restoration as well as checking this instant.
+    if (!drawingSurface || !ClearNativeViewSelection(fileView)) return false;
+    Context().nativeSelectionGuarded = true;
     if (drawingSurface && (GetWindowLongPtrW(drawingSurface, GWL_STYLE) & WS_VISIBLE))
         ShowWindow(drawingSurface, SW_HIDE);
+    // Native window processing can restore a selection or start navigation.
+    return Context().nativeSelectionGuarded && !Context().suspended &&
+        !Context().closed && Context().originalDrawingSurface == drawingSurface;
 }
 
 bool IsShellFolderPath(const std::wstring& path) {
@@ -1613,24 +1821,25 @@ struct NativeLocation {
 };
 
 void DisconnectNavigationEvents() {
-    if (Context().navigationConnection) {
-        if (Context().navigationCookie)
-            Context().navigationConnection->Unadvise(Context().navigationCookie);
-        Context().navigationConnection->Release();
-    }
-    Context().navigationConnection = nullptr;
-    Context().navigationCookie = 0;
+    auto* connection = std::exchange(Context().navigationConnection, nullptr);
+    DWORD cookie = std::exchange(Context().navigationCookie, 0);
     Context().navigationUpdatePosted = false;
+    if (connection) {
+        if (cookie) connection->Unadvise(cookie);
+        connection->Release();
+    }
 }
 
 void ResetNativeTabConnection() {
     ++Context().nativeConnectionGeneration;
-    DisconnectNavigationEvents();
-    if (Context().nativeBrowser) Context().nativeBrowser->Release();
-    if (Context().nativeAutomation) Context().nativeAutomation->Release();
-    Context().nativeBrowser = nullptr;
-    Context().nativeAutomation = nullptr;
+    auto* browser = std::exchange(Context().nativeBrowser, nullptr);
+    auto* automation = std::exchange(Context().nativeAutomation, nullptr);
     Context().nativeBrowserThread = 0;
+    DisconnectNativeSelectionEvents();
+    Context().nativeNavigationInProgress = false;
+    DisconnectNavigationEvents();
+    if (browser) browser->Release();
+    if (automation) automation->Release();
 }
 
 bool CacheNativeTabBrowser(HWND explorer, HWND tab) {
@@ -1677,6 +1886,139 @@ bool CacheNativeTabBrowser(HWND explorer, HWND tab) {
     }
     windows->Release();
     return Context().nativeBrowser != nullptr;
+}
+
+// Explorer's native opennewtab verb asks the embedded browser to BrowseObject
+// with this tab-disposition bit. Forward the native request to its real frame;
+// OnNavigationPending has only a PIDL and cannot recover this disposition.
+// This native bit is restricted to the same verified Windows build families
+// as the modern menu contract. No private method RVA or vtable replacement.
+constexpr UINT kNativeNewTabBrowse = 0x00000400;
+using ColumnBrowseObjectFn = HRESULT (STDMETHODCALLTYPE*)(IShellBrowser*, PCUIDLIST_RELATIVE, UINT);
+ColumnBrowseObjectFn g_columnBrowseOriginal = nullptr;
+HMODULE g_columnBrowseModule = nullptr;
+
+HRESULT STDMETHODCALLTYPE ColumnBrowseObjectHook(IShellBrowser* browser,
+    PCUIDLIST_RELATIVE target, UINT flags) {
+    CallbackScope callbackScope;
+    if (g_unloading.load() || !IsSupportedMenuPlatform() ||
+        !(flags & kNativeNewTabBrowse) || !target ||
+        (flags & (SBSP_RELATIVE | SBSP_PARENT | SBSP_NAVIGATEBACK | SBSP_NAVIGATEFORWARD)))
+        return g_columnBrowseOriginal(browser, target, flags);
+
+    std::shared_ptr<Session> owner;
+    int index = -1;
+    DWORD thread = GetCurrentThreadId();
+    AcquireSRWLockShared(&g_sessionsLock);
+    for (const auto& entry : g_sessions) {
+        // Plain Session/Pane state belongs to this UI thread. Other Explorer
+        // windows or other embedded browsers must retain their original route.
+        if (GetWindowThreadProcessId(entry.tab, nullptr) != thread || entry.owner->closed)
+            continue;
+        for (int i = 0; i < entry.owner->columnCount; ++i) {
+            const Pane& pane = entry.owner->panes[i];
+            if (pane.generation && pane.initialized && pane.navigationBrowser == browser) {
+                owner = entry.owner;
+                index = i;
+                break;
+            }
+        }
+        if (owner) break;
+    }
+    ReleaseSRWLockShared(&g_sessionsLock);
+    if (!owner) return g_columnBrowseOriginal(browser, target, flags);
+
+    SessionScope scope(owner);
+    IShellBrowser* native = owner->nativeBrowser;
+    IWebBrowser2* automation = owner->nativeAutomation;
+    if (!native || native == browser || !automation || owner->nativeBrowserThread != thread)
+        return g_columnBrowseOriginal(browser, target, flags);
+    browser->AddRef();
+    native->AddRef();
+    automation->AddRef();
+    struct BrowserRefs {
+        IShellBrowser* source;
+        IShellBrowser* destination;
+        IWebBrowser2* automation;
+        ~BrowserRefs() { automation->Release(); destination->Release(); source->Release(); }
+    } refs{browser, native, automation};
+    ULONG_PTR generation = owner->panes[index].generation;
+    ULONG_PTR connection = owner->nativeConnectionGeneration;
+    HWND tab = owner->tab;
+    PIDLIST_ABSOLUTE absolute = ILCloneFull(target);
+    if (!absolute) return E_OUTOFMEMORY;
+    std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)> keepTarget(absolute, CoTaskMemFree);
+    bool matchingTab = BrowserTab(automation) == tab;
+    // BrowserTab can call COM and pump messages. Re-check the logical owners
+    // after it returns, retaining every COM reference across that validation.
+    if (!matchingTab || g_unloading.load() || owner->closed ||
+        !IsWindow(tab) || owner->nativeConnectionGeneration != connection ||
+        owner->nativeBrowser != native || owner->nativeAutomation != automation ||
+        owner->panes[index].generation != generation ||
+        owner->panes[index].navigationBrowser != browser ||
+        SessionForTab(tab).get() != owner.get())
+        return g_columnBrowseOriginal(browser, target, flags);
+    HRESULT hr = native->BrowseObject(absolute, flags);
+    Wh_Log(L"[Columns new tab] v%s tab=%p pane=%d flags=%08X result=%08X",
+        WH_MOD_VERSION, tab, index, flags, static_cast<unsigned>(hr));
+    // Never retry in the embedded browser after native dispatch; its caller
+    // must receive the exact native HRESULT and choose any fallback itself.
+    return hr;
+}
+
+struct ColumnBrowseProbe {
+    void* method = nullptr;
+    HMODULE module = nullptr;
+    HRESULT result = E_FAIL;
+};
+
+DWORD WINAPI ResolveColumnBrowseEntry(void* argument) {
+    auto& probe = *static_cast<ColumnBrowseProbe*>(argument);
+    HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    probe.result = apartment;
+    if (FAILED(apartment)) return 0;
+    IExplorerBrowser* browser = nullptr;
+    IShellBrowser* navigation = nullptr;
+    probe.result = CoCreateInstance(CLSID_ExplorerBrowser, nullptr, CLSCTX_INPROC_SERVER,
+        IID_IExplorerBrowser, reinterpret_cast<void**>(&browser));
+    if (SUCCEEDED(probe.result))
+        probe.result = browser->QueryInterface(IID_IShellBrowser,
+            reinterpret_cast<void**>(&navigation));
+    if (SUCCEEDED(probe.result)) {
+        // Slot 11 is BrowseObject in the public IShellBrowser COM ABI.
+        // Discover it from a real class instance; do not patch its vtable.
+        probe.method = (*reinterpret_cast<void***>(navigation))[11];
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                reinterpret_cast<PCWSTR>(probe.method), &probe.module)) {
+            probe.result = HRESULT_FROM_WIN32(GetLastError());
+            probe.method = nullptr;
+        }
+    }
+    if (navigation) navigation->Release();
+    if (browser) browser->Release();
+    CoUninitialize();
+    return 0;
+}
+
+bool RegisterColumnBrowseHook() {
+    if (!IsSupportedMenuPlatform()) return true;
+    ColumnBrowseProbe probe;
+    // Discover the COM entry in a private STA, without creating a view or
+    // enumerating a user folder. Join it fully before registering from ModInit.
+    HANDLE thread = CreateThread(nullptr, 0, ResolveColumnBrowseEntry, &probe, 0, nullptr);
+    if (!thread) return false;
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+    bool registered = SUCCEEDED(probe.result) && probe.method && probe.module &&
+        Wh_SetFunctionHook(probe.method, reinterpret_cast<void*>(ColumnBrowseObjectHook),
+            reinterpret_cast<void**>(&g_columnBrowseOriginal));
+    if (!registered) {
+        if (probe.module) FreeLibrary(probe.module);
+        Wh_Log(L"[Columns new tab] Hook initialization failed: %08X", static_cast<unsigned>(probe.result));
+        return false;
+    }
+    g_columnBrowseModule = probe.module; // Retain until engine hook removal and Uninit drain.
+    return true;
 }
 
 bool IsAbsoluteColumnPath(const std::wstring& path) {
@@ -1781,8 +2123,10 @@ void ReleasePane(Pane& pane) {
     pane.generation = 0;
     pane.navigationSerial = 0;
     pane.selectionDirty = false;
+    IShellBrowser* navigation = std::exchange(pane.navigationBrowser, nullptr);
+    if (navigation) navigation->Release();
     if (pane.browserSite)
-        static_cast<PaneBrowserSite*>(pane.browserSite)->ResetPresenter();
+        static_cast<PaneBrowserSite*>(pane.browserSite)->Retire();
     if (pane.styledView) pane.styledView->Release();
     pane.styledView = nullptr;
     if (pane.browser) {
@@ -1915,10 +2259,6 @@ void ApplyBrowserRect(HWND host, Pane& pane) {
     if (elapsed >= 24) {
         Wh_Log(L"[Columns] Pane %d SetRect took %u ms",
                pane.index, elapsed);
-        wchar_t message[160] = {};
-        wsprintfW(message, L"[Columns] Pane %d SetRect took %u ms\n",
-                  pane.index, elapsed);
-        OutputDebugStringW(message);
     }
 }
 
@@ -2082,23 +2422,6 @@ void ScrollToNewestColumn() {
     GetClientRect(Context().overlay, &rect);
     Context().scrollX = std::max(0, TotalColumnWidth() -
         (static_cast<int>(rect.right) - InspectorWidth(Context().overlay)));
-    LayoutPanes(Context().overlay);
-}
-
-int ColumnWidthAtPoint(int index, POINT point) {
-    if (!Context().overlay || index < 0 || index >= SlotCount()) return 0;
-    int start = -Context().scrollX;
-    for (int i = 0; i < index; ++i)
-        start += Context().columnWidths[i] + SeparatorWidth();
-    int dpi = GetDpiForWindow(Context().overlay);
-    return std::clamp(static_cast<int>(point.x) - start,
-                      MulDiv(180, dpi, 96), MulDiv(1200, dpi, 96));
-}
-
-[[maybe_unused]] void ResizeColumnAtPoint(int index, POINT point) {
-    int width = ColumnWidthAtPoint(index, point);
-    if (!width || width == Context().columnWidths[index]) return;
-    Context().columnWidths[index] = width;
     LayoutPanes(Context().overlay);
 }
 
@@ -2268,7 +2591,7 @@ bool CreateSplitter(int index) {
     Context().splitters[index] = CreateWindowExW(0, kSplitterClass, L"",
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
         0, 0, SeparatorWidth(), 100,
-        Context().overlay, nullptr, GetModuleHandleW(nullptr),
+        Context().overlay, nullptr, HINST_THISCOMPONENT,
         &Context().panes[index]);
     if (!Context().splitters[index]) LogWin32(L"CreateWindowEx(splitter)");
     return Context().splitters[index] != nullptr;
@@ -2462,11 +2785,13 @@ void RequestFocusColumn(int index) {
 }
 
 class MediaEngineNotify final : public IMFMediaEngineNotify {
+    ComObjectLifetime lifetime_;
     LONG references_ = 1;
-    HWND target_;
+    std::atomic<HWND> target_;
     DWORD generation_;
 public:
     MediaEngineNotify(HWND target, DWORD generation) : target_(target), generation_(generation) {}
+    void Detach() { target_.store(nullptr, std::memory_order_release); }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
         CallbackScope callbackScope;
         if (!out) return E_POINTER;
@@ -2477,8 +2802,12 @@ public:
         }
         return E_NOINTERFACE;
     }
-    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&references_); }
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        CallbackScope callbackScope;
+        return InterlockedIncrement(&references_);
+    }
     ULONG STDMETHODCALLTYPE Release() override {
+        CallbackScope callbackScope;
         ULONG count = InterlockedDecrement(&references_);
         if (!count) delete this;
         return count;
@@ -2492,7 +2821,8 @@ public:
         if (g_unloading.load()) return S_OK;
         // No UI or global player state is touched from the engine callback thread.
         LPARAM packed = static_cast<LPARAM>((static_cast<ULONGLONG>(param2) << 32) | event);
-        PostMessageW(target_, kMediaEventMessage, generation_, packed);
+        HWND target = target_.load(std::memory_order_acquire);
+        if (target) PostMessageW(target, kMediaEventMessage, generation_, packed);
         return S_OK;
     }
 };
@@ -2514,9 +2844,14 @@ void PauseMediaPreview() {
 void StopAudioPreview() {
     if (IsWindow(Context().previewWindow)) KillTimer(Context().previewWindow, kAudioTimerId);
     Context().mediaReady = false;
-    if (Context().mediaEngine) Context().mediaEngine->Shutdown();
-    if (Context().mediaEngineEx) { Context().mediaEngineEx->Release(); Context().mediaEngineEx = nullptr; }
-    if (Context().mediaEngine) { Context().mediaEngine->Release(); Context().mediaEngine = nullptr; }
+    auto* callback = std::exchange(Context().mediaNotify, nullptr);
+    if (callback) callback->Detach();
+    auto* engine = std::exchange(Context().mediaEngine, nullptr);
+    auto* engineEx = std::exchange(Context().mediaEngineEx, nullptr);
+    if (engine) engine->Shutdown();
+    if (engineEx) engineEx->Release();
+    if (engine) engine->Release();
+    if (callback) callback->Release();
     if (Context().mediaFoundationStarted) { MFShutdown(); Context().mediaFoundationStarted = false; }
     if (Context().audioControl) Context().audioControl->Stop();
     if (Context().directShowVideo) {
@@ -2683,7 +3018,7 @@ void ReadInspectorColors() {
     Context().inspectorBackground = background;
     Context().inspectorText = text;
     Wh_Log(L"[Columns palette] v%s background=%08X text=%08X source=%s appDark=%d highContrast=%d systemWindow=%08X",
-        kSourceVersion, static_cast<unsigned>(background), static_cast<unsigned>(text), source,
+        WH_MOD_VERSION, static_cast<unsigned>(background), static_cast<unsigned>(text), source,
         appDark, highContrast, static_cast<unsigned>(GetSysColor(COLOR_WINDOW)));
     if (IsWindow(Context().overlay)) InvalidateRect(Context().overlay, nullptr, FALSE);
     if (IsWindow(Context().previewWindow)) InvalidateRect(Context().previewWindow, nullptr, FALSE);
@@ -2888,7 +3223,7 @@ bool CreateVideoWindow() {
     if (IsWindow(Context().videoWindow)) return true;
     Context().videoWindow = CreateWindowExW(0, kVideoClass, L"",
         WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 10, 10, Context().previewWindow,
-        nullptr, GetModuleHandleW(nullptr), &Context());
+        nullptr, HINST_THISCOMPONENT, &Context());
     PositionVideoPreview();
     return Context().videoWindow != nullptr;
 }
@@ -3100,12 +3435,18 @@ void ReadOpenWithDefault() {
     DWORD count = ARRAYSIZE(name);
     if (SUCCEEDED(AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_FRIENDLYAPPNAME,
             extension, L"open", name, &count)) && name[0]) Context().openWithName = name;
-    wchar_t executable[32768] = {};
-    count = ARRAYSIZE(executable);
-    if (SUCCEEDED(AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE,
-            extension, L"open", executable, &count))) {
+    std::wstring executable(MAX_PATH, L'\0');
+    count = static_cast<DWORD>(executable.size());
+    HRESULT executableResult = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE,
+        extension, L"open", executable.data(), &count);
+    if (executableResult == E_POINTER && count > executable.size()) {
+        executable.resize(count);
+        executableResult = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE,
+            extension, L"open", executable.data(), &count);
+    }
+    if (SUCCEEDED(executableResult)) {
         SHFILEINFOW info = {};
-        if (SHGetFileInfoW(executable, 0, &info, sizeof(info), SHGFI_ICON | SHGFI_SMALLICON))
+        if (SHGetFileInfoW(executable.c_str(), 0, &info, sizeof(info), SHGFI_ICON | SHGFI_SMALLICON))
             Context().openWithIcon = info.hIcon;
     }
 }
@@ -3637,9 +3978,8 @@ LRESULT CALLBACK PreviewSlotProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) 
     return DefWindowProcW(hwnd, message, wp, lp);
 }
 
-void ClearPreview(bool restoreSlot = true) {
+void ClearPreview() {
     if (Context().previewIndex < 0) return;
-    (void)restoreSlot;
     Context().previewGeneration = g_previewSequence.fetch_add(1) + 1;
     Context().imageWanted = false;
     Context().waveWanted = false;
@@ -4086,18 +4426,22 @@ HRESULT StartMediaEngine(const std::wstring& path) {
     if (SUCCEEDED(hr)) hr = Context().mediaEngine->SetVolume(Context().audioVolume / 100.0);
     if (SUCCEEDED(hr)) hr = Context().mediaEngine->SetPreload(MF_MEDIA_ENGINE_PRELOAD_AUTOMATIC);
     if (SUCCEEDED(hr)) {
-        wchar_t url[32768] = {};
-        DWORD length = ARRAYSIZE(url);
-        hr = UrlCreateFromPathW(path.c_str(), url, &length, 0);
+        std::wstring url(MAX_PATH, L'\0');
+        DWORD length = static_cast<DWORD>(url.size());
+        hr = UrlCreateFromPathW(path.c_str(), url.data(), &length, 0);
+        if (hr == E_POINTER && length > url.size()) {
+            url.resize(length);
+            hr = UrlCreateFromPathW(path.c_str(), url.data(), &length, 0);
+        }
         if (SUCCEEDED(hr)) {
-            BSTR source = SysAllocString(url);
+            BSTR source = SysAllocString(url.c_str());
             hr = source ? Context().mediaEngine->SetSource(source) : E_OUTOFMEMORY;
             SysFreeString(source);
         }
     }
     if (attributes) attributes->Release();
     if (factory) factory->Release();
-    if (callback) callback->Release();
+    Context().mediaNotify = callback; // Retain a detachable callback through Shutdown.
     if (FAILED(hr)) { StopAudioPreview(); return hr; }
     Context().previewMessage = L"Loading media…";
     SetTimer(Context().previewWindow, kAudioTimerId, 200, nullptr);
@@ -4131,7 +4475,7 @@ void HandleMediaEvent(DWORD event, HRESULT error) {
             }
         }
         if (event == MF_MEDIA_ENGINE_EVENT_CANPLAY || event == MF_MEDIA_ENGINE_EVENT_CANPLAYTHROUGH) {
-            if (!Context().mediaReady) Wh_Log(L"[Columns] Media Engine ready: duration=%lld video=%d size=%ux%u", 
+            if (!Context().mediaReady) Wh_Log(L"[Columns] Media Engine ready: duration=%lld video=%d size=%ux%u",
                 Context().audioDuration, Context().previewVideo ? 1 : 0, Context().videoWidth, Context().videoHeight);
             Context().mediaReady = true;
             Context().previewMessage.clear();
@@ -4330,7 +4674,7 @@ bool ShowPreview(const std::wstring& path) {
     int index = Context().columnCount;
     Context().previewWindow = CreateWindowExW(0, kPreviewClass, L"",
         WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VSCROLL,
-        0, 0, 100, 100, Context().overlay, nullptr, GetModuleHandleW(nullptr),
+        0, 0, 100, 100, Context().overlay, nullptr, HINST_THISCOMPONENT,
         &Context());
     if (!Context().previewWindow) {
         LogWin32(L"CreateWindowEx(preview)");
@@ -4401,7 +4745,7 @@ bool ShowPreview(const std::wstring& path) {
 
 void RemoveColumnsAfter(int index);
 bool AppendColumn(const std::wstring& path, PCIDLIST_ABSOLUTE identity = nullptr);
-void RepairOverlayDrawing();
+bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSOLUTE identity);
 void TestPaintOnly(const wchar_t* reason);
 
 void ProcessSelectionUpdates(bool recovery) {
@@ -4464,10 +4808,48 @@ void HideColumnsForNativeView(HWND hwnd) {
     Context().selectionRetryAttempts = 0;
     KillTimer(hwnd, kVisualRepairTimerId);
     KillTimer(hwnd, kSettledPaintTimerId);
-    if (!Context().suspended) ClearPreview(false);
+    if (!Context().suspended) ClearPreview();
     Context().suspended = true;
     ShowWindow(hwnd, SW_HIDE);
     RestoreOriginalView();
+}
+
+void NativeRootNavigationStarting() {
+    Context().nativeNavigationInProgress = true;
+    // A column completion for the preceding root must not cover a view that
+    // is being replaced, including a navigation back to the same folder.
+    Context().rootNavigationPending = false;
+    Context().pointerRootCompletionSerial = 0;
+    HideColumnsForNativeView(Context().overlay);
+}
+
+void NativeSelectionChanged() {
+    ++Context().nativeSelectionChangeSerial;
+    if (!Context().nativeSelectionGuarded) return;
+    IShellBrowser* browser = Context().nativeBrowser;
+    IShellView* view = nullptr;
+    IUnknown* identity = nullptr;
+    HRESULT hr = E_ABORT;
+    if (browser && Context().nativeBrowserThread == GetCurrentThreadId()) {
+        browser->AddRef();
+        hr = browser->QueryActiveShellView(&view);
+        if (SUCCEEDED(hr) && view) hr = view->QueryInterface(IID_IUnknown,
+            reinterpret_cast<void**>(&identity));
+        if (SUCCEEDED(hr) && (!identity || identity != Context().nativeSelectionIdentity))
+            hr = E_ABORT;
+        if (SUCCEEDED(hr)) hr = NativeViewSelectionIsEmpty(view, Context().originalView);
+        if (identity) identity->Release();
+        if (view) view->Release();
+        browser->Release();
+    }
+    if (SUCCEEDED(hr)) return;
+    // Enumeration/history restoration can select an item after the root
+    // navigation event. Reveal it synchronously; never leave stale selection
+    // hidden until the queued root check gets a chance to run.
+    HideColumnsForNativeView(Context().overlay);
+    Context().stateRetryAttempts = 0;
+    QueueNativeNavigationUpdate();
+    LogHr(L"Native selection changed; native view restored", hr);
 }
 
 void SuspendColumnsForNativeLocation(HWND hwnd) {
@@ -4499,7 +4881,32 @@ LRESULT CALLBACK NativeBoundsProc(HWND window, UINT message, WPARAM wp,
     // Cleanup removes every subclass before the registry releases its owner.
     // Retain it through native processing, which can run a nested message loop.
     auto owner = session->shared_from_this();
+    if (!g_unloading.load() && !owner->closed && !owner->suspended &&
+        owner->nativeSelectionGuarded && window == owner->originalDrawingSurface) {
+        if (message == WM_WINDOWPOSCHANGING && lp) {
+            auto* position = reinterpret_cast<WINDOWPOS*>(lp);
+            if (position->flags & SWP_SHOWWINDOW) {
+                owner->originalWasVisible = true;
+                position->flags = (position->flags & ~SWP_SHOWWINDOW) | SWP_HIDEWINDOW;
+            }
+        } else if (message == WM_SHOWWINDOW && wp) {
+            // ShowWindow still sends WINDOWPOSCHANGING, where the show is
+            // converted into a hide before the native surface becomes visible.
+            owner->originalWasVisible = true;
+        }
+    }
     if (message == WM_NCDESTROY) {
+        if (!owner->closed && (owner->originalView == window ||
+            owner->originalDrawingSurface == window)) {
+            SessionScope scope(owner);
+            // A replacement native view must stay uncovered until its own
+            // selection has been verified. Disarm suppression synchronously.
+            owner->originalWasVisible = false;
+            owner->nativeSelectionGuarded = false;
+            owner->rootNavigationPending = false;
+            HideColumnsForNativeView(owner->overlay);
+            QueueNativeNavigationUpdate();
+        }
         RemoveWindowSubclass(window, NativeBoundsProc, subclass);
         for (HWND& tracked : owner->boundsWindows)
             if (tracked == window) tracked = nullptr;
@@ -4507,11 +4914,20 @@ LRESULT CALLBACK NativeBoundsProc(HWND window, UINT message, WPARAM wp,
             owner->originalView = nullptr;
             owner->originalDrawingSurface = nullptr;
             owner->originalWasVisible = false;
+            owner->nativeSelectionGuarded = false;
         }
+        if (owner->originalDrawingSurface == window) {
+            owner->originalDrawingSurface = nullptr;
+            owner->originalWasVisible = false;
+            owner->nativeSelectionGuarded = false;
+        }
+        if (owner->tab == window && IsWindow(owner->overlay))
+            PostMessageW(owner->overlay, WM_CLOSE, 0, 0);
     }
     LRESULT result = DefSubclassProc(window, message, wp, lp);
     if (!g_unloading.load() && !owner->closed &&
-        (message == WM_WINDOWPOSCHANGED || message == WM_SIZE ||
+        (message == WM_WINDOWPOSCHANGED || message == WM_SIZE || message == WM_STYLECHANGED ||
+         message == WM_DPICHANGED_AFTERPARENT ||
          message == WM_SHOWWINDOW || message == WM_NCDESTROY ||
          (message == WM_PARENTNOTIFY &&
           (LOWORD(wp) == WM_CREATE || LOWORD(wp) == WM_DESTROY))))
@@ -4534,6 +4950,8 @@ void DetachNativeBoundsTracking() {
 void TrackNativeBounds(HWND source) {
     HWND chain[ARRAYSIZE(Context().boundsWindows)] = {};
     unsigned count = 0;
+    HWND drawingSurface = FindWindowExW(source, nullptr, L"DirectUIHWND", nullptr);
+    if (drawingSurface) chain[count++] = drawingSurface;
     for (HWND window = source; window && count < ARRAYSIZE(chain);
          window = GetParent(window)) {
         if (GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId()) break;
@@ -4584,7 +5002,10 @@ void SyncOverlayBounds(HWND overlay, HWND originalView, bool nativeLayout = fals
     }
     Context().originalView = originalView;
     TrackNativeBounds(originalView);
-    HideOriginalView(originalView);
+    if (!HideOriginalView(originalView)) {
+        HideColumnsForNativeView(overlay);
+        return;
+    }
     RECT rect = {};
     if (!ViewRectInTab(originalView, Context().tab, &rect, true)) return;
     RECT now = {};
@@ -4613,6 +5034,10 @@ void SyncOverlayBounds(HWND overlay, HWND originalView, bool nativeLayout = fals
         if (!SetWindowPos(overlay, after, rect.left, rect.top,
                 rect.right - rect.left, rect.bottom - rect.top, flags)) return;
         if (Context().closed) return;
+        if (Context().suspended || !Context().nativeSelectionGuarded) {
+            HideColumnsForNativeView(overlay);
+            return;
+        }
         if (moved) RedrawVacatedOverlayArea(Context().tab, now, rect);
     }
     // The native file views can keep their own size while their entire parent
@@ -4624,6 +5049,7 @@ void SyncOverlayBounds(HWND overlay, HWND originalView, bool nativeLayout = fals
 
 bool ApplyNativeLocation(NativeLocation location) {
     HWND hwnd = Context().overlay;
+    if (Context().nativeNavigationInProgress) return false;
     if (location.kind == NativeLocationKind::TransientFailure) return false;
     if (NativePointerInteractionActive()) {
         SchedulePointerRelease(false, true);
@@ -4652,15 +5078,35 @@ bool ApplyNativeLocation(NativeLocation location) {
         Context().rootNavigationRetry = false;
         RemoveColumnsAfter(0);
         Context().columnSelection[0].clear();
-        SetActivePane(0);
         Pane& active = Context().panes[0];
         active.awaitingNavigationRepair = true;
         active.navigationStarted = GetTickCount();
         active.selectionDirty = true;
-        if (FAILED(BrowsePidl(active, Context().nativeLocationIdentity, Context().tabPath))) {
+        bool loaded = false;
+        if (!Context().columnCount) {
+            // Unsupported initial roots retain only their navigation observer.
+            // Build the first column on the first supported navigation event.
+            Context().columnCount = 1;
+            Context().columnWidths[0] = DefaultColumnWidth(hwnd);
+            loaded = CreatePane(hwnd, 0, Context().tabPath, Context().nativeLocationIdentity) &&
+                CreateSplitter(0);
+            if (!loaded) {
+                HWND paneWindow = active.window;
+                ReleasePane(active);
+                if (IsWindow(paneWindow)) DestroyWindow(paneWindow);
+                if (IsWindow(Context().splitters[0])) DestroyWindow(Context().splitters[0]);
+                Context().splitters[0] = nullptr;
+                active = Pane{};
+                Context().columnCount = 0;
+            }
+        } else {
+            loaded = SUCCEEDED(BrowsePidl(active, Context().nativeLocationIdentity, Context().tabPath));
+        }
+        SetActivePane(0);
+        if (!loaded) {
             active.awaitingNavigationRepair = false;
             SuspendColumnsForRootFailure(hwnd);
-        }
+        } else LayoutPanes(hwnd);
         Wh_Log(L"[Columns] Native location changed; root=%s", Context().tabPath.c_str());
         // Keep the good native view until a matching completion message arrives.
         return false;
@@ -4674,9 +5120,12 @@ bool ApplyNativeLocation(NativeLocation location) {
             PostMessageW(hwnd, kPaneNavigationCompleteMessage, 0, complete);
         return false;
     }
-    HideOriginalView(Context().originalView);
+    if (!HideOriginalView(Context().originalView)) {
+        HideColumnsForNativeView(hwnd);
+        return false;
+    }
     SyncOverlayBounds(hwnd, Context().originalView);
-    return true;
+    return !Context().suspended && Context().nativeSelectionGuarded;
 }
 
 void CleanupSession(HWND hwnd) {
@@ -4686,8 +5135,6 @@ void CleanupSession(HWND hwnd) {
     DetachNativeBoundsTracking();
     CancelPendingFocus();
     CancelColumnResize();
-    KillTimer(hwnd, kResizeTimerId);
-    KillTimer(hwnd, kNavigationTimerId);
     KillTimer(hwnd, kVisualRepairTimerId);
     KillTimer(hwnd, kSettledPaintTimerId);
     KillTimer(hwnd, kDividerPaintTimerId);
@@ -4720,7 +5167,7 @@ void CleanupSession(HWND hwnd) {
     CoTaskMemFree(Context().nativeLocationIdentity);
     Context().nativeLocationIdentity = nullptr;
     RestoreOriginalView();
-    ClearPreview(false);
+    ClearPreview();
     DeleteInspectorFonts();
     for (int i = 0; i < Context().columnCount; ++i)
         ReleasePane(Context().panes[i]);
@@ -4762,7 +5209,43 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
         case kOverlayBoundsMessage:
             if (wp != Context().identity) return 0;
             Context().boundsUpdatePosted = false;
+            if (!IsWindow(Context().tab)) {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                return 0;
+            }
+            {
+                bool visible = IsWindowVisible(Context().tab) != FALSE;
+                if (!visible && Context().tabWasVisible) PauseMediaPreview();
+                if (visible && !Context().tabWasVisible) {
+                    Context().stateRetryAttempts = 0;
+                    Context().navigationConnectAttempts = 0;
+                    QueueNativeNavigationUpdate();
+                }
+                Context().tabWasVisible = visible;
+                HWND root = GetAncestor(Context().tab, GA_ROOT);
+                if (root != Context().explorer && IsExplorerWindow(root)) {
+                    Context().explorer = root;
+                    Context().stateRetryAttempts = 0;
+                    Context().navigationConnectAttempts = 0;
+                    QueueNativeNavigationUpdate();
+                }
+                HWND current = FindOriginalView(Context().tab);
+                if (current && current != Context().originalView) {
+                    Context().originalView = current;
+                    Context().stateRetryAttempts = 0;
+                    Context().navigationConnectAttempts = 0;
+                    QueueNativeNavigationUpdate();
+                }
+                TrackNativeBounds(current ? current : Context().tab);
+            }
             SyncOverlayBounds(hwnd, Context().originalView, true);
+            return 0;
+        case kNativeStructureMessage:
+            if (wp != Context().identity) return 0;
+            Context().stateRetryAttempts = 0;
+            Context().navigationConnectAttempts = 0;
+            QueueOverlayBoundsUpdate(Context());
+            QueueNativeNavigationUpdate();
             return 0;
         case kPaletteRefreshMessage:
             if (wp != Context().identity) return 0;
@@ -4796,7 +5279,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
             RedrawWindow(hwnd, nullptr, nullptr,
                          RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
             Wh_Log(L"[Columns settings] Applied v%s tab=%p fixedInspector=%d classicMenus=%d divider=%d",
-                kSourceVersion, Context().tab, Context().fixedInspector,
+                WH_MOD_VERSION, Context().tab, Context().fixedInspector,
                 g_classicContextMenus.load(), Context().dividerWidth);
             return 0;
         }
@@ -4899,8 +5382,12 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                     Context().suspended = false;
                     HWND current = FindOriginalView(Context().tab);
                     if (current) Context().originalView = current;
-                    HideOriginalView(Context().originalView);
+                    if (!HideOriginalView(Context().originalView)) {
+                        HideColumnsForNativeView(hwnd);
+                        return 0;
+                    }
                     SyncOverlayBounds(hwnd, Context().originalView);
+                    if (Context().suspended || Context().closed) return 0;
                     QueueSelectionUpdate(Context().panes[0]);
                 }
                 RefreshPane(Context().panes[wp]);
@@ -4994,19 +5481,6 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                 }
                 return 0;
             }
-            if (message == WM_TIMER && wp == kResizeTimerId) {
-                bool visible = IsWindowVisible(Context().tab) != FALSE;
-                if (!visible && Context().tabWasVisible) PauseMediaPreview();
-                Context().tabWasVisible = visible;
-                if (!visible) return 0;
-                HWND root = GetAncestor(Context().tab, GA_ROOT);
-                if (root != Context().explorer && IsExplorerWindow(root)) {
-                    Context().explorer = root;
-                    ConnectNavigationEvents(root);
-                }
-                SyncOverlayBounds(hwnd, Context().originalView);
-                return 0;
-            }
             if (message == WM_TIMER && wp == kVisualRepairTimerId) {
                 KillTimer(hwnd, kVisualRepairTimerId);
                 TestPaintOnly(L"early navigation");
@@ -5022,8 +5496,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                 TestPaintOnly(L"settled divider drag");
                 return 0;
             }
-            if (message == WM_TIMER && wp != kNavigationTimerId && wp != kStateRetryTimerId) return 0;
-            bool recovery = message == WM_TIMER && wp == kNavigationTimerId;
+            if (message == WM_TIMER && wp != kStateRetryTimerId) return 0;
             if (message == WM_TIMER && wp == kStateRetryTimerId) KillTimer(hwnd, kStateRetryTimerId);
             if (!IsWindowVisible(Context().tab)) return 0;
             HWND focused = GetFocus();
@@ -5032,8 +5505,8 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                     (focused == Context().panes[i].window ||
                      IsChild(Context().panes[i].window, focused))) SetActivePane(i);
             }
-            // Selection notifications take the direct path. Only native tab
-            // events and slow recovery consult its cached Shell browser.
+            // Selection notifications take the direct path. Native events and
+            // their bounded transient-failure retries consult the cached browser.
             if (message != kSelectionUpdateMessage) {
                 ConnectNavigationEvents(Context().explorer); // Retries failed connections.
                 NativeLocation location = ReadNativeLocation();
@@ -5045,11 +5518,15 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
                 }
                 Context().stateRetryAttempts = 0;
                 KillTimer(hwnd, kStateRetryTimerId);
+                // A readable location does not imply Advise succeeded. Keep a
+                // short, bounded connection-recovery window even for dormant
+                // unsupported roots; successful subscriptions need no polling.
+                if (Context().navigationCookie) Context().navigationConnectAttempts = 0;
+                else if (++Context().navigationConnectAttempts <= 10)
+                    SetTimer(hwnd, kStateRetryTimerId, 100, nullptr);
                 if (!ApplyNativeLocation(std::move(location))) return 0;
-                if (recovery)
-                    for (int i = 0; i < Context().columnCount; ++i) RefreshPane(Context().panes[i]);
             }
-            ProcessSelectionUpdates(recovery);
+            ProcessSelectionUpdates(false);
             return 0;
         }
         case WM_ERASEBKGND: {
@@ -5087,7 +5564,7 @@ bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSO
     pane.session = &Context();
     pane.window = CreateWindowExW(0, kPaneClass, L"",
         WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
-        0, 0, 100, 100, overlay, nullptr, GetModuleHandleW(nullptr), &pane);
+        0, 0, 100, 100, overlay, nullptr, HINST_THISCOMPONENT, &pane);
     if (!pane.window) {
         LogWin32(L"CreateWindowEx(pane)");
         return false;
@@ -5095,7 +5572,7 @@ bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSO
     pane.viewHost = CreateWindowExW(0, kViewHostClass, L"",
         WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
         0, 0, 100, 100, pane.window, nullptr,
-        GetModuleHandleW(nullptr), &pane);
+        HINST_THISCOMPONENT, &pane);
     if (!pane.viewHost) {
         LogWin32(L"CreateWindowEx(view host)");
         return false;
@@ -5106,6 +5583,12 @@ bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSO
     if (FAILED(hr)) {
         LogHr(L"CoCreateInstance(ExplorerBrowser)", hr);
         return false;
+    }
+    hr = pane.browser->QueryInterface(IID_IShellBrowser,
+        reinterpret_cast<void**>(&pane.navigationBrowser));
+    if (FAILED(hr)) {
+        LogHr(L"ExplorerBrowser navigation interface", hr);
+        if (IsSupportedMenuPlatform()) return false;
     }
     pane.menuRequests = 0;
     pane.lastMenuResult = E_PENDING;
@@ -5119,10 +5602,13 @@ bool CreatePane(HWND overlay, int index, const std::wstring& path, PCIDLIST_ABSO
         withSite->Release();
     }
     Wh_Log(L"[Columns menu] Pane %d browser site=%08X", index, static_cast<unsigned>(hr));
-    // Keep the native classic menu usable if this host cannot accept a site.
+    // Selection updates depend on this site's ICommDlgBrowser2 callbacks.
+    // If it cannot be installed, preserve native Explorer instead of opening
+    // a column that would require a permanent selection-polling fallback.
     if (FAILED(hr)) {
         pane.browserSite->Release();
         pane.browserSite = nullptr;
+        return false;
     }
     hr = pane.browser->SetOptions(static_cast<EXPLORER_BROWSER_OPTIONS>(
         EBO_NOBORDER | EBO_NOPERSISTVIEWSTATE));
@@ -5228,20 +5714,13 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
     } connectionGuard;
     HWND original = FindOriginalView(tab);
     RECT rect = {};
-    if (!tab || !ViewRectInTab(original, tab, &rect)) {
+    if (!ViewRectInTab(original, tab, &rect, true) && !GetClientRect(tab, &rect)) {
         Context().uiComInitialized = false;
         CoUninitialize();
         return;
     }
     CacheNativeTabBrowser(explorer, tab);
     NativeLocation location = ReadNativeLocation();
-    if (location.kind != NativeLocationKind::Supported) {
-        ResetNativeTabConnection();
-        Context().uiComInitialized = false;
-        CoUninitialize();
-        return;
-    }
-    std::wstring path = location.path;
     if (!g_columnsEnabled.load() || g_unloading.load()) {
         ResetNativeTabConnection();
         Context().uiComInitialized = false;
@@ -5254,7 +5733,7 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
     Context().overlay = CreateWindowExW(0, kOverlayClass, L"Explorer Column View",
         WS_CHILD | WS_HSCROLL | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
         rect.left, rect.top, rect.right - rect.left,
-        rect.bottom - rect.top, tab, nullptr, GetModuleHandleW(nullptr), owner.get());
+        rect.bottom - rect.top, tab, nullptr, HINST_THISCOMPONENT, owner.get());
     if (!Context().overlay) {
         LogWin32(L"CreateWindowEx(overlay)");
         ResetNativeTabConnection();
@@ -5264,40 +5743,31 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
     }
     PublishSession(tab, Context().overlay, owner);
     connectionGuard.committed = true;
-    Context().nativeLocationIdentity = location.identity.release();
     Context().tab = tab;
     Context().explorer = explorer;
     Context().originalView = original;
-    Context().tabPath = path;
     Context().fixedInspector = g_fixedInspectorSetting.load();
     Context().activePane = 0;
-    Context().columnCount = 1;
+    Context().columnCount = 0;
     Context().scrollX = 0;
     for (auto& selection : Context().columnSelection) selection.clear();
     for (auto& width : Context().columnWidths) width = 0;
     Context().layoutDpi = GetDpiForWindow(Context().overlay);
     Context().columnWidths[0] = DefaultColumnWidth(Context().overlay);
-    // Initial binding has the same failure policy as a later sidebar change:
-    // retain the native view until the new root has actually completed.
-    Context().rootNavigationPending = true;
+    // A dormant session keeps navigation events for unsupported/transient roots.
+    // A confirmed supported location creates pane zero through the same path
+    // as subsequent sidebar navigation.
     Context().suspended = true;
-    Context().panes[0].awaitingNavigationRepair = true;
-    Context().panes[0].navigationStarted = GetTickCount();
-    if (!CreatePane(Context().overlay, 0, path, Context().nativeLocationIdentity) || !CreateSplitter(0)) {
-        SendMessageW(Context().overlay, WM_CLOSE, 0, 0);
-        return;
-    }
     // A global off request can arrive while a slow Shell folder is opening.
     if (!g_columnsEnabled.load() || g_unloading.load()) {
         SendMessageW(Context().overlay, WM_CLOSE, 0, 0);
         return;
     }
-    LayoutPanes(Context().overlay);
-    SetTimer(Context().overlay, kResizeTimerId, 16, nullptr);
-    SetTimer(Context().overlay, kNavigationTimerId, kRecoveryIntervalMs, nullptr);
-    // kPaneNavigationCompleteMessage reveals the overlay after validating its
-    // request serial. Bounds polling does not reveal a suspended/pending root.
+    TrackNativeBounds(original ? original : tab);
     ConnectNavigationEvents(explorer);
+    if (location.kind == NativeLocationKind::TransientFailure || !Context().navigationCookie)
+        SetTimer(Context().overlay, kStateRetryTimerId, 100, nullptr);
+    if (location.kind != NativeLocationKind::TransientFailure) ApplyNativeLocation(std::move(location));
     if (!g_uiMouseHook)
         g_uiMouseHook = SetWindowsHookExW(WH_MOUSE, MouseHookProc,
                                          nullptr, GetCurrentThreadId());
@@ -5310,83 +5780,8 @@ void SetTabColumns(HWND explorer, HWND tab, bool enabled) {
     DWORD tabThread = GetWindowThreadProcessId(tab, nullptr);
     Wh_Log(L"[Columns] UI thread: tab=%u overlay=%u",
            tabThread, GetWindowThreadProcessId(Context().overlay, nullptr));
-    Wh_Log(L"[Columns] Opened at %s", path.c_str());
+    Wh_Log(L"[Columns] Navigation observer attached; root=%s", Context().tabPath.c_str());
 
-}
-
-void LogVisualSample(const wchar_t* label, HWND expected) {
-    if (!IsWindow(expected)) {
-        Wh_Log(L"[Columns diagnostic] %s window missing", label);
-        return;
-    }
-    RECT rect = {};
-    if (!GetWindowRect(expected, &rect)) {
-        LogWin32(L"GetWindowRect(diagnostic)");
-        return;
-    }
-    POINT center = {(rect.left + rect.right) / 2,
-                    (rect.top + rect.bottom) / 2};
-    HWND hit = WindowFromPoint(center);
-    wchar_t hitClass[80] = {};
-    if (hit) GetClassNameW(hit, hitClass, ARRAYSIZE(hitClass));
-    RECT update = {};
-    bool pending = GetUpdateRect(expected, &update, FALSE) != FALSE;
-    bool hitPending = hit && GetUpdateRect(hit, &update, FALSE) != FALSE;
-    bool hitBelongs = hit == expected || (hit && IsChild(expected, hit));
-    Wh_Log(L"[Columns diagnostic] %s expected=%p visible=%d "
-           L"rect=%d,%d %dx%d paintPending=%d hit=%p (%s) "
-           L"hitBelongs=%d hitPaintPending=%d",
-           label, expected, IsWindowVisible(expected) ? 1 : 0,
-           rect.left, rect.top, rect.right - rect.left,
-           rect.bottom - rect.top, pending ? 1 : 0,
-           hit, hitClass, hitBelongs ? 1 : 0, hitPending ? 1 : 0);
-}
-
-void LogVisualState() {
-    if (!IsWindow(Context().overlay)) {
-        Wh_Log(L"[Columns diagnostic] Overlay is closed");
-        return;
-    }
-    HWND above = GetWindow(Context().overlay, GW_HWNDPREV);
-    wchar_t aboveClass[80] = {};
-    if (above) GetClassNameW(above, aboveClass, ARRAYSIZE(aboveClass));
-    Wh_Log(L"[Columns diagnostic] v%s active=%d overlay=%p above=%p (%s) "
-           L"originalSurface=%p originalVisible=%d",
-           kSourceVersion, Context().activePane, Context().overlay, above, aboveClass,
-           Context().originalDrawingSurface,
-           IsWindow(Context().originalDrawingSurface) &&
-           IsWindowVisible(Context().originalDrawingSurface) ? 1 : 0);
-    Wh_Log(L"[Columns palette] v%s background=%08X systemWindow=%08X divider=%d hitPixels=%d",
-        kSourceVersion, static_cast<unsigned>(Context().inspectorBackground),
-        static_cast<unsigned>(GetSysColor(COLOR_WINDOW)), Context().dividerWidth, SeparatorWidth());
-    for (int i = 0; i < Context().columnCount; ++i) {
-        LogVisualSample(L"column", Context().panes[i].viewHost);
-        LogVisualSample(L"divider", Context().splitters[i]);
-    }
-}
-
-void RepairOverlayDrawing() {
-    if (!IsWindow(Context().overlay)) return;
-    RECT rect = {};
-    if (!GetWindowRect(Context().overlay, &rect)) {
-        LogWin32(L"GetWindowRect(overlay repair)");
-        return;
-    }
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
-    if (width < 2 || height < 2) return;
-    constexpr UINT flags = SWP_NOMOVE | SWP_NOZORDER |
-                           SWP_NOACTIVATE | SWP_NOCOPYBITS;
-    DWORD start = GetTickCount();
-    BOOL shrink = SetWindowPos(Context().overlay, nullptr, 0, 0,
-                              width - 1, height, flags);
-    BOOL restore = SetWindowPos(Context().overlay, nullptr, 0, 0,
-                               width, height, flags);
-    Wh_Log(L"[Columns] Overlay drawing repair (manual): "
-           L"shrink=%d restore=%d elapsed=%u ms",
-           shrink ? 1 : 0,
-           restore ? 1 : 0,
-           GetTickCount() - start);
 }
 
 void TestPaintOnly(const wchar_t* reason) {
@@ -5463,15 +5858,24 @@ LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
             if (command == kOpenColumnsCommand || command == kCloseColumnsCommand) {
                 bool enabled = command == kOpenColumnsCommand;
                 if (enabled == g_columnsEnabled.load()) SetTabColumns(explorer, msg->hwnd, enabled);
-            } else if (auto owner = SessionForTab(msg->hwnd)) {
-                SessionScope scope(std::move(owner));
-                if (command == 1) LogVisualState();
-                else if (command == 2) RepairOverlayDrawing();
-                else if (command == 3) TestPaintOnly(L"manual");
             }
             PostThreadMessageW(g_threadId, kCommandDoneMessage,
                 reinterpret_cast<WPARAM>(msg->hwnd), command);
         } else if (msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN) {
+            HWND foreground = GetForegroundWindow();
+            if (msg->wParam == 'V' && IsExplorerWindow(foreground) &&
+                GetWindowThreadProcessId(msg->hwnd, nullptr) == GetCurrentThreadId() &&
+                GetAncestor(msg->hwnd, GA_ROOT) == foreground &&
+                (GetKeyState(VK_CONTROL) & 0x8000) &&
+                (GetKeyState(VK_MENU) & 0x8000) &&
+                (GetKeyState(VK_SHIFT) & 0x8000)) {
+                // Only this foreground Explorer's input is consumed. Repeated
+                // keydown messages stay consumed without toggling repeatedly.
+                if (!(msg->lParam & (1LL << 30)))
+                    PostThreadMessageW(g_threadId, kToggleColumnsMessage, 0, 0);
+                msg->message = WM_NULL;
+                return CallNextHookEx(nullptr, code, wp, lp);
+            }
             if (auto menuOwner = NativeMenuSessionOnThread()) {
                 wchar_t name[100] = {};
                 GetClassNameW(msg->hwnd, name, ARRAYSIZE(name));
@@ -5544,7 +5948,7 @@ LRESULT CALLBACK DispatchHookProc(int code, WPARAM wp, LPARAM lp) {
 }
 
 void InitializeModeStore() {
-    std::wstring gateName = NATIVE_COLUMNS_MODE_NAME;
+    std::wstring gateName = kColumnsModeName;
     gateName += L".Initialize";
     HANDLE gate = CreateMutexW(nullptr, FALSE, gateName.c_str());
     if (!gate) { LogWin32(L"CreateMutex(columns mode)"); return; }
@@ -5555,7 +5959,7 @@ void InitializeModeStore() {
         return;
     }
     g_modeMapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
-        0, sizeof(SharedColumnsMode), NATIVE_COLUMNS_MODE_NAME);
+        0, sizeof(SharedColumnsMode), kColumnsModeName);
     if (g_modeMapping) {
         g_sharedMode = static_cast<SharedColumnsMode*>(MapViewOfFile(g_modeMapping,
             FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(SharedColumnsMode)));
@@ -5565,6 +5969,7 @@ void InitializeModeStore() {
             g_modeMapping = nullptr;
         } else if (InterlockedCompareExchange(&g_sharedMode->magic, 0, 0) != kSharedModeMagic) {
             InterlockedExchange(&g_sharedMode->enabled, g_enableByDefault.load() ? 1 : 0);
+            InterlockedExchange(&g_sharedMode->revision, 1);
             InterlockedExchange(&g_sharedMode->magic, kSharedModeMagic);
         }
     } else LogWin32(L"CreateFileMapping(columns mode)");
@@ -5581,27 +5986,39 @@ void CloseModeStore() {
 
 void RefreshLocalColumnsMode(bool enabled) {
     if (g_columnsEnabled.exchange(enabled) != enabled) {
-        for (auto& entry : g_tabCommands)
-            if (!entry.pending) entry.action = 0; // Apply a new mode without retry backoff.
         Wh_Log(L"[Columns] Global mode %s", enabled ? L"enabled" : L"disabled");
     }
 }
 
 void ApplyColumnsMode(bool enabled) {
-    if (g_sharedMode) InterlockedExchange(&g_sharedMode->enabled, enabled ? 1 : 0);
+    if (g_sharedMode) {
+        InterlockedExchange(&g_sharedMode->enabled, enabled ? 1 : 0);
+        g_modeRevision = InterlockedIncrement(&g_sharedMode->revision);
+        // Each Explorer helper has a hidden top-level observer window. A
+        // registered broadcast reaches every process, unlike one auto-reset
+        // event, which would wake only one waiter. The revision/payload is
+        // advisory; receivers always reread the authoritative shared mapping.
+        if (!PostMessageW(HWND_BROADCAST, g_modeChangedMessage, 0, 0))
+            LogWin32(L"PostMessage(columns mode broadcast)");
+    }
     RefreshLocalColumnsMode(enabled);
 }
 
 void SynchronizeColumnsMode() {
     if (g_preferenceChangePending.exchange(false)) ApplyColumnsMode(g_enableByDefault.load());
-    if (g_sharedMode)
+    if (g_sharedMode) {
+        g_modeRevision = InterlockedCompareExchange(&g_sharedMode->revision, 0, 0);
         RefreshLocalColumnsMode(InterlockedCompareExchange(&g_sharedMode->enabled, 0, 0) != 0);
+    }
 }
+
+bool EnsureDispatchThread(HWND window);
 
 std::vector<TabTarget> DiscoverExplorerTabs() {
     std::vector<TabTarget> result;
     EnumWindows([](HWND root, LPARAM value) -> BOOL {
         if (!IsExplorerWindow(root)) return TRUE;
+        EnsureDispatchThread(root);
         struct Search { HWND root; std::vector<TabTarget>* result; } search{
             root, reinterpret_cast<std::vector<TabTarget>*>(value)};
         EnumChildWindows(root, [](HWND child, LPARAM data) -> BOOL {
@@ -5627,38 +6044,83 @@ void PruneDispatchTargets() {
         }), g_dispatchHooks.end());
     g_tabCommands.erase(std::remove_if(g_tabCommands.begin(), g_tabCommands.end(),
         [](const TabCommand& entry) { return !IsWindow(entry.tab); }), g_tabCommands.end());
+    g_knownTabs.erase(std::remove_if(g_knownTabs.begin(), g_knownTabs.end(),
+        [](const TabTarget& entry) { return !IsWindow(entry.tab); }), g_knownTabs.end());
 }
 
-void QueueTabCommand(HWND explorer, HWND tab, LPARAM action) {
-    if (g_unloading.load() || !IsExplorerWindow(explorer)) return;
+bool EnsureDispatchThread(HWND window) {
     DWORD pid = 0;
-    DWORD thread = GetWindowThreadProcessId(tab, &pid);
-    if (!thread || pid != GetCurrentProcessId() || GetAncestor(tab, GA_ROOT) != explorer) return;
-    auto pending = std::find_if(g_tabCommands.begin(), g_tabCommands.end(),
-        [tab](const TabCommand& entry) { return entry.tab == tab; });
-    if (pending != g_tabCommands.end()) {
-        if (pending->pending) return;
-        if (action == kOpenColumnsCommand && pending->action == action &&
-            GetTickCount() - pending->sentAt < kOpenRetryDelayMs) return;
-    }
+    DWORD thread = GetWindowThreadProcessId(window, &pid);
+    if (!thread || pid != GetCurrentProcessId()) return false;
     auto hook = std::find_if(g_dispatchHooks.begin(), g_dispatchHooks.end(),
         [thread](const DispatchTarget& entry) { return entry.thread == thread; });
     if (hook == g_dispatchHooks.end()) {
         HANDLE ownerThread = OpenThread(SYNCHRONIZE, FALSE, thread);
-        if (!ownerThread) { LogWin32(L"OpenThread(columns dispatch)"); return; }
+        if (!ownerThread) { LogWin32(L"OpenThread(columns dispatch)"); return false; }
         HHOOK installed = SetWindowsHookExW(WH_GETMESSAGE, DispatchHookProc, nullptr, thread);
         if (!installed) {
             LogWin32(L"SetWindowsHookEx(WH_GETMESSAGE)");
             CloseHandle(ownerThread);
-            return;
+            return false;
         }
         g_dispatchHooks.push_back({thread, installed, ownerThread});
     }
+    return true;
+}
+
+void QueueTabCommand(HWND explorer, HWND tab, LPARAM action) {
+    if (g_unloading.load() || !IsExplorerWindow(explorer) ||
+        GetAncestor(tab, GA_ROOT) != explorer || !EnsureDispatchThread(tab)) return;
+    auto pending = std::find_if(g_tabCommands.begin(), g_tabCommands.end(),
+        [tab](const TabCommand& entry) { return entry.tab == tab; });
+    if (pending != g_tabCommands.end() && pending->pending) return;
     if (PostMessageW(tab, g_toggleMessage, reinterpret_cast<WPARAM>(explorer), action)) {
         if (pending == g_tabCommands.end())
-            g_tabCommands.push_back({tab, GetTickCount(), true, action});
-        else *pending = {tab, GetTickCount(), true, action};
+            g_tabCommands.push_back({tab, true, action});
+        else *pending = {tab, true, action};
     } else LogWin32(L"PostMessage(columns command)");
+}
+
+void RememberExplorerTab(HWND explorer, HWND tab) {
+    if (!IsExplorerWindow(explorer) || GetAncestor(tab, GA_ROOT) != explorer) return;
+    // The toggle must work before any columns have been opened, including
+    // when EnableByDefault is off. Also cover the frame's own input thread.
+    EnsureDispatchThread(explorer);
+    EnsureDispatchThread(tab);
+    auto known = std::find_if(g_knownTabs.begin(), g_knownTabs.end(),
+        [tab](const TabTarget& entry) { return entry.tab == tab; });
+    if (known == g_knownTabs.end()) g_knownTabs.push_back({explorer, tab});
+    else known->explorer = explorer;
+}
+
+void ProcessExplorerWindowEvents() {
+    std::vector<HWND> windows;
+    AcquireSRWLockExclusive(&g_windowEventsLock);
+    windows.swap(g_windowEvents);
+    g_windowEventPosted = false;
+    ReleaseSRWLockExclusive(&g_windowEventsLock);
+    PruneDispatchTargets();
+    for (HWND window : windows) {
+        if (!IsWindow(window) || SessionForWindow(window)) continue;
+        HWND explorer = GetAncestor(window, GA_ROOT);
+        if (!IsExplorerWindow(explorer)) continue;
+        EnsureDispatchThread(explorer);
+        EnsureDispatchThread(window);
+        HWND tab = window;
+        for (; tab && tab != explorer; tab = GetParent(tab)) {
+            wchar_t name[80] = {};
+            if (GetClassNameW(tab, name, ARRAYSIZE(name)) &&
+                !wcscmp(name, L"ShellTabWindowClass")) break;
+        }
+        if (!tab || tab == explorer) continue;
+        RememberExplorerTab(explorer, tab);
+        if (auto owner = SessionForTab(tab)) {
+            // Only native structure creation reaches here; custom column
+            // descendants were excluded by the CreateWindowExW hook.
+            PostMessageW(owner->overlay, kNativeStructureMessage, owner->identity, 0);
+        } else if (g_columnsEnabled.load())
+            QueueTabCommand(explorer, tab, kOpenColumnsCommand);
+    }
 }
 
 void ReconcileColumnsMode() {
@@ -5666,8 +6128,11 @@ void ReconcileColumnsMode() {
     SynchronizeColumnsMode();
     PruneDispatchTargets();
     bool enabled = g_columnsEnabled.load();
-    auto targets = enabled ? DiscoverExplorerTabs() : SessionTargets();
-    for (const auto& target : targets) {
+    for (auto& target : g_knownTabs) {
+        target.explorer = GetAncestor(target.tab, GA_ROOT);
+        if (!IsExplorerWindow(target.explorer)) continue;
+        EnsureDispatchThread(target.explorer);
+        EnsureDispatchThread(target.tab);
         bool open = SessionForTab(target.tab) != nullptr;
         if (open != enabled)
             QueueTabCommand(target.explorer, target.tab,
@@ -5675,13 +6140,12 @@ void ReconcileColumnsMode() {
     }
 }
 
-void DispatchToggle(HWND explorer, LPARAM command) {
-    HWND tab = FindActiveTab(explorer);
-    if (tab && SessionForTab(tab)) QueueTabCommand(explorer, tab, command);
-}
-
 LRESULT CALLBACK ThemeObserverProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
     CallbackScope callbackScope;
+    if (!g_unloading.load() && message == g_modeChangedMessage) {
+        PostThreadMessageW(g_threadId, kReconcileModeMessage, 0, 0);
+        return 0;
+    }
     if (!g_unloading.load() && (message == WM_SETTINGCHANGE ||
         message == WM_SYSCOLORCHANGE || message == WM_THEMECHANGED)) {
         // This hidden top-level window receives broadcasts that child overlays
@@ -5697,24 +6161,26 @@ LRESULT CALLBACK ThemeObserverProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp
 }
 
 DWORD WINAPI UiThread(void*) {
+    g_threadId.store(GetCurrentThreadId());
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) {
         LogHr(L"CoInitializeEx", hr);
-        SetEvent(g_readyEvent);
+        g_unloading.store(true);
         return 1;
     }
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
     if (g_unloading.load()) {
-        SetEvent(g_readyEvent);
         CoUninitialize();
         return 0;
     }
     g_toggleMessage = RegisterWindowMessageW(
         L"Windhawk.NativeColumns.Toggle.7CCDD1D4-57CA-47D5-AE3B-67A6A15AC0C2");
-    if (!g_toggleMessage) {
+    g_modeChangedMessage = RegisterWindowMessageW(
+        L"Windhawk.NativeColumns.ModeChanged.V038");
+    if (!g_toggleMessage || !g_modeChangedMessage) {
         LogWin32(L"RegisterWindowMessage(toggle)");
-        SetEvent(g_readyEvent);
+        g_unloading.store(true);
         CoUninitialize();
         return 1;
     }
@@ -5728,7 +6194,7 @@ DWORD WINAPI UiThread(void*) {
     for (int i = 0; i < classCount; ++i) {
         WNDCLASSW wc = {};
         wc.lpfnWndProc = procs[i];
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hInstance = HINST_THISCOMPONENT;
         wc.lpszClassName = classes[i];
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         if (!RegisterClassW(&wc)) {
@@ -5739,96 +6205,66 @@ DWORD WINAPI UiThread(void*) {
         ++registered;
     }
     if (registered != classCount) {
-        SetEvent(g_readyEvent);
+        g_unloading.store(true);
         for (int i = registered - 1; i >= 0; --i)
-            UnregisterClassW(classes[i], GetModuleHandleW(nullptr));
+            UnregisterClassW(classes[i], HINST_THISCOMPONENT);
         CoUninitialize();
         return 1;
     }
     HWND themeObserver = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kThemeObserverClass, L"", WS_POPUP, 0, 0, 0, 0,
-        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-    if (!themeObserver) LogWin32(L"CreateWindowEx(theme observer)");
-    // One Explorer process owns the hotkey; all controllers share its mode.
-    g_toggleHotkeyRegistered = RegisterHotKey(nullptr, kHotkeyId,
-        MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'V') != FALSE;
-    if (!g_toggleHotkeyRegistered) LogWin32(L"RegisterHotKey(global columns)");
-    g_diagnosticHotkeyRegistered = RegisterHotKey(
-        nullptr, kDiagnosticHotkeyId,
-        MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'D') != FALSE;
-    if (!g_diagnosticHotkeyRegistered)
-        LogWin32(L"RegisterHotKey(diagnostic)");
-    g_resizeTestHotkeyRegistered = RegisterHotKey(
-        nullptr, kResizeTestHotkeyId,
-        MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'R') != FALSE;
-    if (!g_resizeTestHotkeyRegistered)
-        LogWin32(L"RegisterHotKey(resize test)");
-    g_paintTestHotkeyRegistered = RegisterHotKey(
-        nullptr, kPaintTestHotkeyId,
-        MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, 'P') != FALSE;
-    if (!g_paintTestHotkeyRegistered)
-        LogWin32(L"RegisterHotKey(paint test)");
+        nullptr, nullptr, HINST_THISCOMPONENT, nullptr);
+    if (!themeObserver) {
+        LogWin32(L"CreateWindowEx(theme observer)");
+        g_unloading.store(true);
+        for (int i = classCount - 1; i >= 0; --i)
+            UnregisterClassW(classes[i], HINST_THISCOMPONENT);
+        CoUninitialize();
+        return 1;
+    }
+    // Create the broadcast receiver before reading shared state: a concurrent
+    // change is then represented either by that read or by a queued broadcast.
     InitializeModeStore();
     SynchronizeColumnsMode();
-    UINT_PTR discoveryTimer = SetTimer(nullptr, 0, kDiscoveryIntervalMs, nullptr);
-    if (!discoveryTimer) LogWin32(L"SetTimer(columns discovery)");
-    g_ready = true;
-    SetEvent(g_readyEvent);
-    Wh_Log(L"[Columns] Ready v%s: global mode=%s; V toggles all windows; D diagnostic=%d; "
-           L"R resize test=%d; P paint test=%d (Ctrl+Alt+Shift)",
-           kSourceVersion, g_columnsEnabled.load() ? L"on" : L"off",
-           g_diagnosticHotkeyRegistered ? 1 : 0,
-           g_resizeTestHotkeyRegistered ? 1 : 0,
-           g_paintTestHotkeyRegistered ? 1 : 0);
+    g_helperQueueReady.store(true);
+    Wh_Log(L"[Columns] Ready v%s: mode=%s revision=%ld; Ctrl+Alt+Shift+V in Explorer toggles columns",
+           WH_MOD_VERSION, g_columnsEnabled.load() ? L"on" : L"off", g_modeRevision);
+    // The only full enumeration. Later tabs/native views arrive through the
+    // CreateWindowExW hook, registered during Wh_ModInit before hooks activate.
+    for (const auto& target : DiscoverExplorerTabs())
+        RememberExplorerTab(target.explorer, target.tab);
+    ProcessExplorerWindowEvents();
     ReconcileColumnsMode();
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (g_unloading.load()) break;
-        if (msg.message == kReconcileModeMessage ||
-            (msg.message == WM_TIMER && msg.wParam == discoveryTimer)) {
+        if (msg.message == kReconcileModeMessage) {
             ReapPreviewJobs();
+            ReconcileColumnsMode();
+        } else if (msg.message == kExplorerWindowMessage) {
+            ReapPreviewJobs();
+            ProcessExplorerWindowEvents();
+        } else if (msg.message == kToggleColumnsMessage) {
+            SynchronizeColumnsMode();
+            ApplyColumnsMode(!g_columnsEnabled.load());
             ReconcileColumnsMode();
         } else if (msg.message == kCommandDoneMessage) {
             HWND tab = reinterpret_cast<HWND>(msg.wParam);
             auto pending = std::find_if(g_tabCommands.begin(), g_tabCommands.end(),
                 [tab](const TabCommand& entry) { return entry.tab == tab; });
-            if (pending != g_tabCommands.end() && pending->action == msg.lParam)
+            if (pending != g_tabCommands.end() && pending->action == msg.lParam) {
                 pending->pending = false;
-        } else if (msg.message == WM_HOTKEY &&
-            (msg.wParam == kHotkeyId ||
-             msg.wParam == kDiagnosticHotkeyId ||
-             msg.wParam == kResizeTestHotkeyId ||
-             msg.wParam == kPaintTestHotkeyId)) {
-            HWND explorer = GetForegroundWindow();
-            if (msg.wParam == kHotkeyId && IsExplorerFrame(explorer)) {
-                SynchronizeColumnsMode();
-                ApplyColumnsMode(!g_columnsEnabled.load());
-                ReconcileColumnsMode();
-            } else if (IsExplorerWindow(explorer))
-                DispatchToggle(explorer,
-                               msg.wParam == kDiagnosticHotkeyId ? 1 :
-                               msg.wParam == kResizeTestHotkeyId ? 2 :
-                               msg.wParam == kPaintTestHotkeyId ? 3 : 0);
+                // A mode change can race a queued UI command. Reconcile only
+                // that race; a failed open waits for a native window event.
+                if ((msg.lParam == kOpenColumnsCommand) != g_columnsEnabled.load())
+                    ReconcileColumnsMode();
+            }
         } else {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
+    g_helperQueueReady.store(false);
     if (themeObserver) DestroyWindow(themeObserver);
-    if (discoveryTimer) KillTimer(nullptr, discoveryTimer);
-    if (g_toggleHotkeyRegistered) UnregisterHotKey(nullptr, kHotkeyId);
-    g_toggleHotkeyRegistered = false;
-    if (g_diagnosticHotkeyRegistered) {
-        UnregisterHotKey(nullptr, kDiagnosticHotkeyId);
-        g_diagnosticHotkeyRegistered = false;
-    }
-    if (g_resizeTestHotkeyRegistered) {
-        UnregisterHotKey(nullptr, kResizeTestHotkeyId);
-        g_resizeTestHotkeyRegistered = false;
-    }
-    if (g_paintTestHotkeyRegistered) {
-        UnregisterHotKey(nullptr, kPaintTestHotkeyId);
-        g_paintTestHotkeyRegistered = false;
-    }
     for (const auto& entry : g_dispatchHooks) {
         UnhookWindowsHookEx(entry.hook);
         CloseHandle(entry.ownerThread);
@@ -5836,6 +6272,11 @@ DWORD WINAPI UiThread(void*) {
     g_dispatchHooks.clear();
     std::vector<DispatchTarget>().swap(g_dispatchHooks);
     std::vector<TabCommand>().swap(g_tabCommands);
+    std::vector<TabTarget>().swap(g_knownTabs);
+    AcquireSRWLockExclusive(&g_windowEventsLock);
+    std::vector<HWND>().swap(g_windowEvents);
+    g_windowEventPosted = false;
+    ReleaseSRWLockExclusive(&g_windowEventsLock);
     CloseModeStore();
     for (;;) {
         if (g_creatingSessions.load()) { Sleep(1); continue; }
@@ -5853,7 +6294,7 @@ DWORD WINAPI UiThread(void*) {
     std::vector<SessionRecord>().swap(g_sessions);
     ReleaseSRWLockExclusive(&g_sessionsLock);
     for (int i = classCount - 1; i >= 0; --i) {
-        if (!UnregisterClassW(classes[i], GetModuleHandleW(nullptr))) {
+        if (!UnregisterClassW(classes[i], HINST_THISCOMPONENT)) {
             Wh_Log(L"[Columns] UnregisterClass failed for %s: %u",
                    classes[i], GetLastError());
         }
@@ -5861,11 +6302,27 @@ DWORD WINAPI UiThread(void*) {
     CoUninitialize();
     return 0;
 }
+void DrainComObjectsAndCallbacks(DWORD warningAfter = 5000) {
+    ULONGLONG nextWarning = GetTickCount64() + warningAfter;
+    while (g_liveComObjects.load(std::memory_order_acquire) != 0 ||
+           g_activeCallbacks.load(std::memory_order_acquire) != 0) {
+        if (GetTickCount64() >= nextWarning) {
+            Wh_Log(L"[Columns unload] Still waiting for %u COM objects and %u callbacks; "
+                   L"the module must remain loaded until their owners release them",
+                g_liveComObjects.load(std::memory_order_acquire),
+                g_activeCallbacks.load(std::memory_order_acquire));
+            // A diagnostic timeout cannot authorize unloading callable vtables.
+            nextWarning = GetTickCount64() + 30000;
+        }
+        Sleep(1);
+    }
+}
 }  // namespace
 
 BOOL Wh_ModInit() {
     g_unloading.store(false);
-    g_ready.store(false);
+    g_helperQueueReady.store(false);
+    g_threadId.store(0);
     g_preferenceChangePending.store(false);
     g_enableByDefault.store(Wh_GetIntSetting(L"EnableByDefault") != 0);
     g_columnsEnabled.store(g_enableByDefault.load());
@@ -5875,21 +6332,28 @@ BOOL Wh_ModInit() {
     g_delayedPaintRepairs.store(Wh_GetIntSetting(L"DelayedPaintRepairs") != 0);
     g_inlineMediaPlayback.store(Wh_GetIntSetting(L"InlineMediaPlayback") != 0);
     Wh_Log(L"[Columns settings] Loaded v%s default=%d fixedInspector=%d classicMenus=%d",
-        kSourceVersion, g_enableByDefault.load(), g_fixedInspectorSetting.load(), g_classicContextMenus.load());
+        WH_MOD_VERSION, g_enableByDefault.load(), g_fixedInspectorSetting.load(), g_classicContextMenus.load());
     const auto& platform = GetMenuPlatform();
     Wh_Log(L"[Columns platform] Windows=%u.%u.%u.%u arch=%u knownV2Family=%d",
         platform.major, platform.minor, platform.build, platform.revision,
         static_cast<unsigned>(platform.architecture), IsSupportedMenuPlatform());
-    g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    return g_readyEvent != nullptr;
+    // Windhawk applies these hooks after ModInit returns. Discovery must be
+    // registered here, while its queue/one initial enumeration start AfterInit.
+    if (!Wh_SetFunctionHook(reinterpret_cast<void*>(CreateWindowExW),
+            reinterpret_cast<void*>(CreateWindowExWHook),
+            reinterpret_cast<void**>(&g_createWindowExWOriginal)) ||
+        !RegisterColumnBrowseHook()) {
+        return FALSE;
+    }
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    // Start the helper after initialization; never block Wh_ModInit waiting for it.
-    g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, &g_threadId);
+    // Start the event/discovery coordinator after function hooks are active.
+    g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     if (!g_thread) {
-        LogWin32(L"CreateThread(hotkey helper)");
-        SetEvent(g_readyEvent);
+        LogWin32(L"CreateThread(columns coordinator)");
+        g_unloading.store(true);
     }
 }
 
@@ -5911,7 +6375,7 @@ void Wh_ModSettingsChanged() {
         if (g_threadId) PostThreadMessageW(g_threadId, kReconcileModeMessage, 0, 0);
     }
     Wh_Log(L"[Columns settings] Saved v%s default=%d fixedInspector=%d classicMenus=%d modeChange=%d",
-        kSourceVersion, preference, g_fixedInspectorSetting.load(), g_classicContextMenus.load(),
+        WH_MOD_VERSION, preference, g_fixedInspectorSetting.load(), g_classicContextMenus.load(),
         g_preferenceChangePending.load());
     if (!g_unloading.load())
         for (HWND overlay : SessionWindows())
@@ -5930,15 +6394,19 @@ void Wh_ModUninit() {
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
-    while (g_activeCallbacks.load(std::memory_order_acquire) != 0) Sleep(1);
     // Also cover any registered worker whose entry point had not begun when
     // shutdown started. Never unload this code while a worker can still run it.
     while (ReapPreviewJobs()) Sleep(1);
+    // A closed tab does not imply that Windows has dropped its last site,
+    // event-sink or Media Foundation callback reference. In particular,
+    // Release must remain callable after shutdown returns on another thread.
+    DrainComObjectsAndCallbacks();
     AcquireSRWLockExclusive(&g_previewJobsLock);
     std::vector<std::shared_ptr<PreviewJob>>().swap(g_previewJobs);
     ReleaseSRWLockExclusive(&g_previewJobsLock);
-    if (g_readyEvent) { CloseHandle(g_readyEvent); g_readyEvent = nullptr; }
-    g_ready.store(false);
+    // Windhawk disables function hooks before Wh_ModUninit. All callbacks
+    // have drained above, so their implementation module can now be released.
+    if (g_columnBrowseModule) { FreeLibrary(g_columnBrowseModule); g_columnBrowseModule = nullptr; }
 }
 
 
