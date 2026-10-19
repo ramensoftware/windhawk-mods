@@ -2,12 +2,92 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-18T19:00:09.000Z</updated>
+    <updated>2026-10-19T04:03:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Open Window Underline 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-open-window-underline#ed9b52479fb527279540b2fb7afcd367afac640e</id>
+        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
+        <updated>2026-10-19T04:03:50.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaropenwindowunderline">Taskbar Open Window Underline</h1>
+<p>Underlines the label of every Windows 11 taskbar button that has a window
+currently shown on the desktop. Buttons whose windows are all minimized keep a
+plain label, so you can tell at a glance which apps actually have something
+open in front of you.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo.png" alt="Labels underlined" />
+<em>Whole label</em></p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo2.png" alt="First letter underlined" />
+<em>First letter only</em></p>
+<p>Requirements:</p>
+<ul>
+<li>Windows 11 with the XAML taskbar (22H2 or newer).</li>
+<li>Taskbar labels must be visible: Settings → Personalization → Taskbar →
+Taskbar behaviors → "Combine taskbar buttons and hide labels" set to
+<strong>Never</strong> (or <strong>When taskbar is full</strong>). The "Show labels, combine taskbar
+buttons" mode of the Taskbar Labels mod is supported as well; a combined
+group is underlined when any (or, optionally, every) one of its windows is
+shown.</li>
+</ul>
+<p>How it works:</p>
+<ul>
+<li>The taskbar's buttons live in an <code>ItemsRepeater</code>; each button's item is its
+view model (<code>TaskListWindowViewModel</code> for one window, <code>TaskListGroupViewModel</code>
+for a group), and the view model knows its windows through the shell's
+<code>TaskItem</code> / <code>TaskGroup</code> objects. The mod resolves every button's windows
+that way and judges them with <code>IsIconic</code> (plus DWM cloaking for windows on
+other virtual desktops). Win+D counts as minimized.</li>
+<li>A WinEvent hook (minimize / restore / show / hide / cloak, and foreground or
+title changes when a setting needs them) invalidates the buttons; events are
+coalesced and every button is re-evaluated on the taskbar thread, on every
+taskbar.</li>
+<li>The underline is the native <code>TextBlock</code> underline, so it follows the text
+color, trimming and theme. It can cover the whole label or just its first
+letter. It is removed when the mod is disabled.</li>
+<li>On builds where the view-model symbols can't be resolved, the mod falls back
+to matching label text against window titles, which is exact for "Never
+combine" but blind to combined groups.</li>
+</ul>]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Custom Cached Context Menu 1.1.0]]></title>
+        <id>https://windhawk.net/mods/custom-cached-context-menu#3275a4ab62bd8c754a1820acf3cdff814fe08575</id>
+        <link href="https://windhawk.net/mods/custom-cached-context-menu"/>
+        <updated>2026-10-19T04:03:46.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li>Top action bar (opt-in): Cut, Copy, Paste, Rename and Delete as an icon bar on the side of the menu nearest the cursor, like the Windows 11 menu. Unavailable actions are hidden from the bar.</li>
+<li>Paste into a single right-clicked folder, like the Windows 11 menu.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Middle-clicking a folder no longer fails to open it in a new tab (invocation-only menu builds are no longer deferred).</li>
+<li>The icon cache no longer runs its destructor at process exit.</li>
+<li>Items that report SFGAO_FOLDER but are not directories (for example .zip files) no longer get the folder menu and its Paste.</li>
+<li>Actions no longer wait for the shell menu: Open, Cut, Copy, Delete, Properties and Set as desktop background are dispatched directly, and registered extension verbs (Share, Print, Open in Terminal and others) run through the shell's association lookup, so clicking an action starts it immediately instead of after a short pause with a busy cursor. The shell menu is only populated for items that exist only inside it.</li>
+<li>The menu disappears immediately when an action is chosen instead of playing the closing animation, so nothing lingers on screen while a modal dialog (Properties, the delete confirmation) is up.</li>
+<li>Cut and Copy run the file view's own command when the view owns the keyboard (guarded so the keys can never land in another window), keeping the cut dimming, the shell clipboard data object and undo exactly like the native menu; otherwise they write the clipboard directly. Paste drops the clipboard object on the target folder's drop target — the shell's own paste path — so collision naming, undo and virtual clipboard items match, including for a right-clicked folder and the navigation tree.</li>
+<li>Hover highlights track the mouse immediately during fast sweeps: interactive repaints no longer wait for vsync, and a burst of mouse moves paints only the final hover position.</li>
+<li>Windows items that are not moved into the submenu no longer jump to the top of background menus; they stay with the other extras above the "More options" entry.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>Theme names in the settings now match the bundled theme previews.</li>
+<li>Default padding tightened to 4; existing configs and theme files are migrated when they still carry the old default (schema v9). Right-aligned content now mirrors the icon's left inset.</li>
+<li>The "Windows items to move" default list uses language-independent verbs where they exist instead of English labels (labels still work as a fallback); commands whose verb is a GUID accept friendly aliases (openterminal, editwithphotos, editwithpaint, editwithnotepad), and Windows' modern commands are no longer treated as third-party handlers.</li>
+</ul>]]></content>
+        <author>
+            <name>BOLT</name>
+            <uri>https://github.com/Bolt-Scripts</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove UWP titlebars 2.0]]></title>
         <id>https://windhawk.net/mods/native-titlebars-uwp-lite#f2a007255a1fa993638d0b9f7130f3d1fafea1c9</id>
@@ -636,115 +716,6 @@ interfaces can cause issues.</li>
         <author>
             <name>lima26x</name>
             <uri>https://github.com/brdantas26</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AltTab Mouse Focus 1.1]]></title>
-        <id>https://windhawk.net/mods/alt-tab-mouse-focus#716c4dff8e60cc806b7c896b98281a477f163d47</id>
-        <link href="https://windhawk.net/mods/alt-tab-mouse-focus"/>
-        <updated>2026-10-17T14:01:34.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="alttabmousefocus">AltTab Mouse Focus</h1>
-<p>Moves the mouse cursor to the center of the window that gets focused after
-switching windows with <strong>Alt+Tab</strong>.</p>
-<ul>
-<li>Only acts on Alt+Tab. Clicking, other keyboard shortcuts or focus changes
-made by other programs do not move the cursor.</li>
-<li>The cursor is moved once the <strong>Alt</strong> key is released, after the window
-switcher closes.</li>
-<li>Ignores system overlays (desktop, taskbar, the Alt+Tab switcher).</li>
-<li>Moves the cursor as soon as the selected window receives focus
-(<code>EVENT_SYSTEM_FOREGROUND</code>), instead of polling.</li>
-<li>Works with multiple monitors: the cursor is centered on the monitor where
-the focused window is.</li>
-</ul>
-<p>The mod runs as a tool mod in a dedicated process, so it does not inject into
-<code>explorer.exe</code>.</p>]]></content>
-        <author>
-            <name>tafadias</name>
-            <uri>https://github.com/tafadias</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 UAC Recreation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-uac-recreation#328b64ade45664ed8b24a65c00c8f241643e9b1d</id>
-        <link href="https://windhawk.net/mods/win7-uac-recreation"/>
-        <updated>2026-10-17T13:30:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781uacrecreation">Windows 7/8.1 UAC Recreation</h1>
-<p>This mod recreates the Windows 7 and 8.1 classic UAC interface on Windows 10 and 11. It changes only the presentation: Windows retains control of consent, authentication, and the secure desktop.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Four themes: Windows 7 Basic, custom Aero, Windows 8.1, and Windows 10 (1507–1607).</li>
-<li>It restores the native prompt if the recreation fails; never makes an elevation decision.</li>
-<li>It leaves system files, settings, and credential prompts untouched.</li>
-<li>It matches the banner and shield to Windows' publisher verdict.</li>
-<li>Ithows the requesting program's icon and native prompt details when available.</li>
-</ul>
-<h2 id="emergencyshortcut">Emergency shortcut</h2>
-<p>Press <code>Ctrl+Shift+F10</code> to close the recreated dialog and return to the native prompt without approving or denying the request.</p>
-<h2 id="themes">Themes</h2>
-<h3 id="windows7basic">Windows 7 (Basic)</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uac.PNG" alt="Windows 7 UAC prompt" /></p>
-<h3 id="windows7aero">Windows 7 Aero</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7uacaero.PNG" alt="Windows 7 Aero UAC prompt" /></p>
-<h3 id="windows81">Windows 8.1</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win81uac.PNG" alt="Windows 8.1 UAC prompt" /></p>
-<h3 id="windows1015071607">Windows 10 (1507–1607)</h3>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win10uac.PNG" alt="Windows 10 UAC prompt" /></p>
-<h2 id="installation">Installation</h2>
-<p>Windhawk excludes <code>consent.exe</code> by default. To enable the mod:</p>
-<ol>
-<li>Open <strong>Settings</strong> → <strong>Advanced settings</strong> → <strong>More advanced settings</strong>.</li>
-<li>Add <code>consent.exe</code> to the <strong>Process inclusion list</strong>.</li>
-<li>Install and enable the mod.</li>
-</ol>
-<p>Without this change, the mod has no effect.</p>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Description |
-|---|---|
-| <strong>Dialog skin</strong> | Choose one of the four themes. |
-| <strong>Replace the UAC prompt</strong> | Replace the prompt or observe it and log events. |
-| <strong>Which apps get the Classic UAC prompt</strong> | Apply to all apps, only listed apps, or all except listed apps. |
-| <strong>App list</strong> | Semicolon-separated application names for the filter above. |
-| <strong>Button style</strong> | Use the system button or the mod's Aero-style button. |
-| <strong>Which shield is shown</strong> | Choose automatic, verified, question, or exclamation. |
-| <strong>Banner colour</strong> | Choose automatic, blue, yellow, or red; manual choices can only make the prompt more cautious. |
-| <strong>The Windows prompt, while the Windows 7 one is on screen</strong> | Move the native prompt off-screen or hide it. |
-| <strong>Read the elevation request</strong> | Read request details to show the app icon and "File origin". |
-| <strong>How long to wait for the prompt</strong> | Wait time, in milliseconds, before leaving the native prompt unchanged. |
-| <strong>Watchdog</strong> | Close the recreated dialog after this many seconds without a response. |
-| <strong>Panic hotkey</strong> | Shortcut to restore the native prompt; default: <code>Ctrl+Shift+F10</code>. |
-| <strong>Extra Yes/No key</strong> | Optional Alt+letter shortcut forwarded to the original prompt. |
-| <strong>Debug log</strong> | Record mod activity. |
-| <strong>Write a diagnostics dump</strong> | Write diagnostics; the mod runs in observation mode. |
-| <strong>Write the raw elevation request to the log</strong> | Log the raw request, which may include file and user names. |
-| <strong>How the prompt is found</strong> | Choose desktop watchers (recommended), polling, or hook only. |</p>
-<h2 id="behaviorandlimitations">Behavior and limitations</h2>
-<ul>
-<li>The banner follows the native publisher row. The shield follows the selected theme and Windows' verdict; the mod never upgrades an unknown or unverified publisher to verified.</li>
-<li>Publisher checks use the file's Authenticode signature or its Windows catalog when applicable. The native verdict is not overridden.</li>
-<li>Regedit is shown by its localized name only after Windows confirms the system file's signature.</li>
-<li>Details that cannot be read from the native prompt are omitted, not guessed.</li>
-<li>A XAML candidate without a Win32 edit control may be moved off-screen briefly during UI Automation classification.</li>
-<li>Logs and diagnostic files can contain prompt text, command lines, file names, and user names. Enable them only when needed.</li>
-</ul>
-<h2 id="testedsystems">Tested systems</h2>
-<p>The modification has been tested on the following systems:</p>
-<ul>
-<li>Windows 10 21H2</li>
-<li>Windows 11 24H2</li>
-<li>Windows 11 25H2</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li><strong>AdministratoX</strong> — Windows 11 24H2/25H2 testing</li>
-<li><strong>Microsoft</strong> — Documentation</li>
-<li><strong>m417z</strong> — Technical reference and review</li>
-</ul>
-<h2 id="reportingissues">Reporting issues</h2>
-<p>If there are anomalies, please report them to the author. It is recommended to include the debug log and, if needed, the diagnostic file.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
