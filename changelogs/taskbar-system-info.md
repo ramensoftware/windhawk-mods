@@ -1,3 +1,13 @@
+## 1.8.1 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/25d3c591d7a442a0319733fe7d8bba3e63251f1b/mods/taskbar-system-info.wh.cpp))
+
+* Fix dock clipping with Taskbar Styler Grid placement, including constrained columns, dynamic docks and theme reapplication.
+* Fix square WindhawkBlur borders at zero corner radius and refresh brush/radius-only changes.
+* Add optional network download/upload rates with byte/bit units, adaptive layouts and move previews.
+* Add optional widget copies on other taskbars, sharing metrics with independent theme/layout handling.
+* Avoid repeated taskbar discovery during ordinary updates and bound retries for temporarily unavailable taskbars.
+* Stop native copy callbacks before XAML cleanup, retain failed revocations for owner-thread retry, and fix concurrent unload retirement and duplicate pending cleanup.
+* Re-evaluate rejected space reservations when network visibility or units change.
+
 ## 1.7.2 ([Oct 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/61383b397cd68d6ab9da69049518ef89ac492128/mods/taskbar-system-info.wh.cpp))
 
 * Fix the widget disappearing in auto-sized dock taskbars when reserving space before the Start button.
