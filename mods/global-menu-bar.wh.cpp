@@ -15,7 +15,7 @@
 // @exclude         msedgewebview2.exe
 // @exclude         windhawk.exe
 // @exclude         windhawk-ui.exe
-// @compilerOptions -lgdi32 -lshell32 -lversion -lpowrprof -lshcore -ladvapi32 -lcomctl32 -ldwmapi -ld2d1 -ldwrite -lwindowscodecs -lole32 -loleaut32 -luuid -lruntimeobject -lwlanapi -liphlpapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lgdi32 -lshell32 -lversion -lpowrprof -lshcore -ladvapi32 -lcomctl32 -ldwmapi -ld2d1 -ldwrite -lwindowscodecs -lole32 -loleaut32 -luuid -lruntimeobject -lwlanapi -liphlpapi
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -42,16 +42,40 @@ follows the focused window and shows:
 - **Status icons**: Wi-Fi/Ethernet, Bluetooth, volume (scroll the mouse to
   adjust), battery, search and quick settings.
 - **Clock**: click it to open the notification center and the calendar.
-- **System flyouts at the top**: quick settings (Wi-Fi, Bluetooth, volume),
-  notifications and calendar open right below the bar, on the monitor whose
-  bar was clicked.
+- **System flyouts at the top** (optional, off by default): quick settings
+  (Wi-Fi, Bluetooth, volume), notifications and calendar open right below the
+  bar, on the monitor whose bar was clicked.
 
 ## How it works
-The mod runs in `explorer.exe` (the bar), in each app (a small agent) and in
-`ShellHost.exe`/`ShellExperienceHost.exe` (to bring the flyouts to the top).
-The agent opens the menu inside the app itself, so everything works like the
+The mod runs in `explorer.exe` (the bar) and in each app (a small agent). The
+agent opens the menu inside the app itself, so everything works like the
 original menu, including menus drawn by the app. If the option is on, it also
 hides the native menu inside the window.
+
+## System flyouts at the top
+The **Open system flyouts at the top** option moves the content of the quick
+settings, notifications and calendar flyouts, which Windows only places at
+the bottom. That content is XAML in `ShellHost.exe` and
+`ShellExperienceHost.exe`, and the mod finds it with XAML Diagnostics. In
+`explorer.exe`, XAML Diagnostics finds the clock of each taskbar, so that
+clicking the clock of a monitor's bar opens the notification center on that
+monitor (Win+N always opens it on the primary one).
+
+Only one XAML Diagnostics client works per process. With the option on, this
+mod conflicts with **Windows 11 Taskbar Styler** and **Windows 11 File
+Explorer Styler** (explorer.exe), **Windows 11 Notification Center Styler**
+(the flyouts), UWPSpy and TranslucentTB, whatever those are configured to do.
+With the option off (the default), the mod doesn't use XAML Diagnostics at
+all.
+
+## Other top bars
+[TopBar for Windows](https://windhawk.net/mods/windhawk-topbar) and the menu
+bar style of [Mac Island & Dock](https://windhawk.net/mods/mac-island-dock)
+also put a macOS-style bar at the top, with a clock, status icons and tray
+icons. What this mod adds is the focused app's own menus (classic Win32 menus,
+modern apps through UI Automation, and standard menus for the others) and the
+flyouts at the top. Don't run it together with them: each one reserves its
+own strip at the top of the screen, and the bars stack.
 
 ## If an app breaks
 Add the executable (e.g. `notepad++.exe`) to **Excluded apps**. The mod
@@ -67,8 +91,10 @@ after excluding it.
   `TaskbarCreated` message). Some rare apps may duplicate the icon.
 - The system Mica/Acrylic effects require Windows 11 22H2 or newer.
 - The flyouts at the top depend on the internal structure of Windows 11 and
-  may stop working after updates. Don't use it together with the Windows 11
-  Notification Center Styler mod configured to change the same flyouts.
+  may stop working after updates.
+- Elevated (administrator) apps get their menus on the bar, but a top-level
+  menu item without a submenu does nothing there: any app could ask for it,
+  so the agent only opens submenus, which need a click.
 - Electron apps (VS Code etc.) only expose their menu after one or two
   seconds in focus; until then the bar shows the standard menus.
 */
@@ -127,11 +153,12 @@ after excluding it.
   - inline: Directly on the bar
   - both: Both
   - off: Hidden
-- flyoutsOnTop: true
+- flyoutsOnTop: false
   $name: Open system flyouts at the top
   $description: >-
     Quick settings (Wi-Fi, Bluetooth, volume), notifications and calendar
-    open right below the bar
+    open right below the bar. Uses XAML Diagnostics: conflicts with the
+    Windows 11 Taskbar, File Explorer and Notification Center Styler mods
 - flyoutsGap: 8
   $name: Space between the bar and the flyouts
   $description: In pixels, at 100% scaling
@@ -176,11 +203,7 @@ after excluding it.
 #include <shellscalingapi.h>
 #include <dwmapi.h>
 #include <powrprof.h>
-// windhawk_api.h already included windows.h; the order warning is harmless here.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-W#warnings"
 #include <winsock2.h>
-#pragma clang diagnostic pop
 #include <iphlpapi.h>
 #include <wlanapi.h>
 // Otherwise the Win32 macro renames ID2D1RenderTarget::DrawText.
@@ -212,10 +235,13 @@ after excluding it.
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cmath>
 #include <map>
 #include <mutex>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using Microsoft::WRL::ComPtr;
@@ -253,10 +279,7 @@ std::wstring AgentObjectName(DWORD pid) {
 }
 
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 std::wstring ToLower(std::wstring s) {
@@ -272,9 +295,8 @@ std::wstring FileNameFromPath(const std::wstring& path) {
 std::vector<std::wstring> LoadExcludedApps() {
     std::vector<std::wstring> result;
     for (int i = 0; i < 64; i++) {
-        PCWSTR value = Wh_GetStringSetting(L"excludedApps[%d]", i);
-        std::wstring name = value ? value : L"";
-        Wh_FreeStringSetting(value);
+        std::wstring name =
+            WindhawkUtils::StringSetting::make(L"excludedApps[%d]", i).get();
         if (!name.empty()) {
             result.push_back(ToLower(FileNameFromPath(name)));
         }
@@ -338,6 +360,13 @@ HMONITOR GetFlyoutTarget() {
     return MonitorFromPoint(pt, MONITOR_DEFAULTTONULL);
 }
 
+void ClearFlyoutTarget() {
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        RemovePropW(tray, kFlyoutTargetProp);
+        RemovePropW(tray, kFlyoutTargetTimeProp);
+    }
+}
+
 UINT MonitorDpi(HMONITOR monitor) {
     UINT dpiX = 96, dpiY = 96;
     if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
@@ -358,15 +387,14 @@ HANDLE g_presence;
 
 HWND g_trackHwnd;
 HHOOK g_filterHook;
+// High integrity: explorer (medium) can only post to its windows through a
+// message filter, which any lower-integrity process can then use too.
+bool g_elevated;
 
-using GetMenu_t = HMENU(WINAPI*)(HWND);
-using SetMenu_t = BOOL(WINAPI*)(HWND, HMENU);
-using DispatchMessage_t = LRESULT(WINAPI*)(const MSG*);
-
-GetMenu_t GetMenu_orig;
-SetMenu_t SetMenu_orig;
-DispatchMessage_t DispatchMessageW_orig;
-DispatchMessage_t DispatchMessageA_orig;
+decltype(&GetMenu) GetMenu_orig;
+decltype(&SetMenu) SetMenu_orig;
+decltype(&DispatchMessageW) DispatchMessageW_orig;
+decltype(&DispatchMessageA) DispatchMessageA_orig;
 
 // With the menu hidden, the app still sees its own menu.
 HMENU WINAPI GetMenu_hook(HWND hwnd) {
@@ -391,19 +419,43 @@ BOOL WINAPI SetMenu_hook(HWND hwnd, HMENU menu) {
     return SetMenu_orig(hwnd, menu);
 }
 
+// DestroyWindow only destroys the menu attached to the window: a hidden one
+// is destroyed here, with the window.
+LRESULT CALLBACK HiddenMenuSubclassProc(HWND hwnd,
+                                        UINT msg,
+                                        WPARAM wParam,
+                                        LPARAM lParam,
+                                        DWORD_PTR) {
+    if (msg == WM_NCDESTROY) {
+        HMENU menu = (HMENU)RemovePropW(hwnd, kPropMenu);
+        if (menu && IsMenu(menu)) {
+            DestroyMenu(menu);
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, HiddenMenuSubclassProc);
+    }
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+// Runs on the window's thread (from its message loop).
 void HideMenu(HWND hwnd) {
     HMENU menu = GetMenu_orig(hwnd);
     if (menu && IsMenu(menu)) {
         SetPropW(hwnd, kPropMenu, menu);
         SetMenu_orig(hwnd, nullptr);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, HiddenMenuSubclassProc, 0);
     }
 }
 
+// Also runs on the engine's thread when unloading.
 void RestoreMenu(HWND hwnd) {
     HMENU menu = (HMENU)GetPropW(hwnd, kPropMenu);
     if (!menu) {
         return;
     }
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd,
+                                                     HiddenMenuSubclassProc);
     RemovePropW(hwnd, kPropMenu);
     if (!GetMenu_orig(hwnd) && IsMenu(menu)) {
         SetMenu_orig(hwnd, menu);
@@ -466,7 +518,9 @@ void ShowPopup(HWND hwnd, int pos, POINT pt) {
     if (!sub) {
         UINT id = GetMenuItemID(menu, pos);
         NotifyMenuClosed();
-        if (id != (UINT)-1) {
+        // In an elevated app the request may come from any process with a
+        // lower integrity level; only submenus open, which need a click.
+        if (id != (UINT)-1 && !g_elevated) {
             SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(id, 0), 0);
         }
         return;
@@ -510,7 +564,26 @@ bool HandleAgentMessage(const MSG* msg) {
     return false;
 }
 
+// Elevated processes: lets the bar's messages through only to the top-level
+// windows that have a menu, and only from the moment they handle messages.
+void AllowBarMessages(HWND hwnd) {
+    thread_local HWND lastRoot;
+    HWND root = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+    if (!root || root == lastRoot) {
+        return;
+    }
+    // A window without a menu yet is checked again on its next message.
+    if (GetMenu_orig(root) || GetPropW(root, kPropMenu)) {
+        lastRoot = root;
+        ChangeWindowMessageFilterEx(root, g_msgPopup, MSGFLT_ALLOW, nullptr);
+        ChangeWindowMessageFilterEx(root, g_msgHide, MSGFLT_ALLOW, nullptr);
+    }
+}
+
 LRESULT WINAPI DispatchMessageW_hook(const MSG* msg) {
+    if (g_elevated && g_active && msg) {
+        AllowBarMessages(msg->hwnd);
+    }
     if (HandleAgentMessage(msg)) {
         return 0;
     }
@@ -518,10 +591,33 @@ LRESULT WINAPI DispatchMessageW_hook(const MSG* msg) {
 }
 
 LRESULT WINAPI DispatchMessageA_hook(const MSG* msg) {
+    if (g_elevated && g_active && msg) {
+        AllowBarMessages(msg->hwnd);
+    }
     if (HandleAgentMessage(msg)) {
         return 0;
     }
     return DispatchMessageA_orig(msg);
+}
+
+bool IsElevatedProcess() {
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return false;
+    }
+    alignas(TOKEN_MANDATORY_LABEL)
+        BYTE buffer[sizeof(TOKEN_MANDATORY_LABEL) + SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    bool high = false;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer),
+                            &size)) {
+        PSID sid = ((TOKEN_MANDATORY_LABEL*)buffer)->Label.Sid;
+        DWORD level = *GetSidSubAuthority(
+            sid, *GetSidSubAuthorityCount(sid) - 1);
+        high = level >= SECURITY_MANDATORY_HIGH_RID;
+    }
+    CloseHandle(token);
+    return high;
 }
 
 bool IsInteractiveProcess() {
@@ -558,18 +654,16 @@ BOOL Init() {
     g_hide = Wh_GetIntSetting(L"hideNativeMenu") != 0;
     g_active = true;
 
-    Wh_SetFunctionHook((void*)GetMenu, (void*)GetMenu_hook,
-                       (void**)&GetMenu_orig);
-    Wh_SetFunctionHook((void*)SetMenu, (void*)SetMenu_hook,
-                       (void**)&SetMenu_orig);
-    Wh_SetFunctionHook((void*)DispatchMessageW, (void*)DispatchMessageW_hook,
-                       (void**)&DispatchMessageW_orig);
-    Wh_SetFunctionHook((void*)DispatchMessageA, (void*)DispatchMessageA_hook,
-                       (void**)&DispatchMessageA_orig);
+    WindhawkUtils::SetFunctionHook(GetMenu, GetMenu_hook, &GetMenu_orig);
+    WindhawkUtils::SetFunctionHook(SetMenu, SetMenu_hook, &SetMenu_orig);
+    WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_hook,
+                                   &DispatchMessageW_orig);
+    WindhawkUtils::SetFunctionHook(DispatchMessageA, DispatchMessageA_hook,
+                                   &DispatchMessageA_orig);
 
-    // Lets explorer (medium integrity) talk to elevated apps.
-    ChangeWindowMessageFilter(g_msgPopup, MSGFLT_ADD);
-    ChangeWindowMessageFilter(g_msgHide, MSGFLT_ADD);
+    // Explorer (medium integrity) can post to elevated apps only through a
+    // message filter, set per window (AllowBarMessages).
+    g_elevated = IsElevatedProcess();
 
     SetPresence(true);
     return TRUE;
@@ -597,6 +691,7 @@ void SettingsChanged() {
 
 namespace flyouts {
 bool OpenNotificationCenterOn(HMONITOR monitor);
+void InjectIntoTaskbar();
 }  // namespace flyouts
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -730,11 +825,16 @@ DWORD g_threadId;
 HANDLE g_readyEvent;
 HWND g_controller;
 
-ComPtr<IUIAutomation> g_uia;
-ComPtr<IMMDeviceEnumerator> g_deviceEnumerator;
+// The globals that hold COM objects are released by their thread before it
+// ends (no_destroy): when the process exits, Wh_ModUninit isn't called, the
+// threads are already gone, and static destructors would release them on the
+// exiting thread under the loader lock.
+[[clang::no_destroy]] ComPtr<IUIAutomation> g_uia;
+[[clang::no_destroy]] ComPtr<IMMDeviceEnumerator> g_deviceEnumerator;
 HANDLE g_wlan;
 UINT g_uiaGeneration;
-std::vector<ComPtr<IUIAutomationElement>> g_uiaItems;
+// UI Automation proxies to other apps' elements.
+[[clang::no_destroy]] std::vector<ComPtr<IUIAutomationElement>> g_uiaItems;
 StatusInfo g_lastStatus;
 StatusInfo g_radios;
 int g_pollCount;
@@ -1091,7 +1191,7 @@ DWORD WINAPI ThreadProc(void*) {
         }
     }
 
-    g_uiaItems.clear();
+    decltype(g_uiaItems)().swap(g_uiaItems);
     g_uia.Reset();
     g_deviceEnumerator.Reset();
     if (g_wlan) {
@@ -1238,7 +1338,6 @@ struct Colors {
 
 HANDLE g_thread;
 HANDLE g_readyEvent;
-HANDLE g_mutex;
 
 HWND g_controller;
 HWND g_tooltip;
@@ -1247,12 +1346,14 @@ HWINEVENTHOOK g_winEventHook;
 HHOOK g_msgFilterHook;
 bool g_started;
 
-ComPtr<ID2D1Factory> g_d2d;
-ComPtr<IDWriteFactory> g_dwrite;
-ComPtr<IWICImagingFactory> g_wic;
+// Released by the bar thread (no_destroy, see worker::g_uia).
+[[clang::no_destroy]] ComPtr<ID2D1Factory> g_d2d;
+[[clang::no_destroy]] ComPtr<IDWriteFactory> g_dwrite;
+[[clang::no_destroy]] ComPtr<IWICImagingFactory> g_wic;
 std::wstring g_iconFontFamily = L"Segoe MDL2 Assets";
 
-std::vector<std::unique_ptr<Bar>> g_bars;
+// Render targets and bitmaps of the bar thread.
+[[clang::no_destroy]] std::vector<std::unique_ptr<Bar>> g_bars;
 std::vector<BarItem> g_items;
 std::vector<TrayIcon> g_tray;
 worker::StatusInfo g_status;
@@ -2440,8 +2541,8 @@ void InstallTrayHook() {
     static HWND lastLogged;
     if (tray != lastLogged) {
         lastLogged = tray;
-        Wh_Log(L"Bandeja: Shell_TrayWnd %p, subclasse %s", tray,
-               g_trayWnd ? L"instalada" : L"falhou");
+        Wh_Log(L"Tray: Shell_TrayWnd %p, subclass %s", tray,
+               g_trayWnd ? L"installed" : L"failed");
     }
 }
 
@@ -2769,6 +2870,22 @@ enum : UINT {
     CMD_CLOSE,
 };
 
+// SetSuspendState needs SE_SHUTDOWN_NAME enabled, not only present.
+void EnableShutdownPrivilege() {
+    HANDLE token;
+    if (!OpenProcessToken(GetCurrentProcess(),
+                          TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
+        return;
+    }
+    TOKEN_PRIVILEGES tp{1};
+    if (LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME,
+                              &tp.Privileges[0].Luid)) {
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        AdjustTokenPrivileges(token, FALSE, &tp, 0, nullptr, nullptr);
+    }
+    CloseHandle(token);
+}
+
 void ShowStartMenu(Bar& bar, POINT pt) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, CMD_ABOUT, L"About This PC");
@@ -2797,7 +2914,10 @@ void ShowStartMenu(Bar& bar, POINT pt) {
             RunShell(L"taskmgr.exe");
             break;
         case CMD_SLEEP:
-            SetSuspendState(FALSE, FALSE, FALSE);
+            EnableShutdownPrivilege();
+            if (!SetSuspendState(FALSE, FALSE, FALSE)) {
+                Wh_Log(L"SetSuspendState failed: %u", GetLastError());
+            }
             break;
         case CMD_RESTART:
             if (Confirm(L"Restart the computer now?")) {
@@ -2958,10 +3078,23 @@ void ShowStandardMenu(Bar& bar, int index, POINT pt) {
             SetForegroundWindow(target);
             break;
         case StandardAction::WebHelp: {
-            std::wstring query = g_appName;
-            for (WCHAR& c : query) {
-                if (c == L' ') {
-                    c = L'+';
+            std::wstring query;
+            int size = WideCharToMultiByte(CP_UTF8, 0, g_appName.c_str(), -1,
+                                           nullptr, 0, nullptr, nullptr);
+            std::string utf8(size > 0 ? size - 1 : 0, '\0');
+            if (size > 1) {
+                WideCharToMultiByte(CP_UTF8, 0, g_appName.c_str(), -1,
+                                    utf8.data(), size, nullptr, nullptr);
+            }
+            for (unsigned char c : utf8) {
+                if (isalnum(c) || c == '-' || c == '_' || c == '.') {
+                    query += (WCHAR)c;
+                } else if (c == ' ') {
+                    query += L'+';
+                } else {
+                    WCHAR hex[4];
+                    swprintf(hex, ARRAYSIZE(hex), L"%%%02X", c);
+                    query += hex;
                 }
             }
             std::wstring url =
@@ -3641,6 +3774,8 @@ BOOL CALLBACK CreateBarForMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM) {
     if (!hwnd) {
         return TRUE;
     }
+    // Agents in apps with a lower integrity level ask it during their menus.
+    ChangeWindowMessageFilterEx(hwnd, g_msgMenuHover, MSGFLT_ALLOW, nullptr);
 
     ApplyBackdrop(*bar);
     g_bars.push_back(std::move(bar));
@@ -3679,6 +3814,8 @@ bool IsOurTaskbarReady() {
 
 void StartBars() {
     g_started = true;
+    // The taskbar may have appeared after the mod loaded.
+    flyouts::InjectIntoTaskbar();
     CreateBars();
     InstallTrayHook();
     if (g_settings.trayIcons) {
@@ -3692,7 +3829,12 @@ void ReloadSettings() {
     LoadSettings();
     UpdateColors();
     if (g_started) {
-        CreateBars();
+        if (g_openIndex >= 0) {
+            // Inside the open menu's loop: the bars are recreated after it.
+            SetTimer(g_controller, TIMER_RECREATE, 800, nullptr);
+        } else {
+            CreateBars();
+        }
         if (g_settings.trayIcons && !hadTray) {
             RequestTrayIcons();
         }
@@ -3836,6 +3978,13 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         }
 
         case WM_CLOSE:
+            if (g_openIndex >= 0 && !g_openAsync) {
+                // Dispatched by the open menu's loop: the menu code still
+                // uses the bar. Closes the menu and tries again after it.
+                EndMenu();
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                return 0;
+            }
             DestroyWindow(hwnd);
             return 0;
 
@@ -3872,8 +4021,6 @@ DWORD WINAPI BarThread(void*) {
     LoadSettings();
     UpdateColors();
     RegisterSharedMessages();
-    ChangeWindowMessageFilter(g_msgMenuHover, MSGFLT_ADD);
-    ChangeWindowMessageFilter(g_msgMenuClosed, MSGFLT_ADD);
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, g_d2d.GetAddressOf());
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
@@ -3906,6 +4053,8 @@ DWORD WINAPI BarThread(void*) {
                             HWND_MESSAGE, nullptr, instance, nullptr);
         ok = controller != nullptr;
         if (ok) {
+            ChangeWindowMessageFilterEx(controller, g_msgMenuClosed,
+                                        MSGFLT_ALLOW, nullptr);
             worker::Start(controller);
             if (g_started) {
                 RequestUia();
@@ -3926,12 +4075,30 @@ DWORD WINAPI BarThread(void*) {
 
     worker::Stop();
 
-    // Discards results that arrived after the end of the loop.
+    // Frees results that arrived after the end of the loop.
     MSG msg;
     while (PeekMessageW(&msg, nullptr, WM_C_TRAY, WM_C_UIA, PM_REMOVE)) {
+        switch (msg.message) {
+            case WM_C_TRAY: {
+                auto* update = (TrayUpdate*)msg.lParam;
+                if (update->data.icon) {
+                    DestroyIcon(update->data.icon);
+                }
+                delete update;
+                break;
+            }
+            case WM_C_STATUS:
+                delete (worker::StatusInfo*)msg.lParam;
+                break;
+            case WM_C_UIA:
+                delete (worker::UiaResult*)msg.lParam;
+                break;
+        }
     }
 
+    ClearFlyoutTarget();
     ClearTray();
+    decltype(g_bars)().swap(g_bars);
     g_items.clear();
     g_wic.Reset();
     g_dwrite.Reset();
@@ -3958,23 +4125,14 @@ BOOL Init() {
     if (!IsShellExplorer()) {
         Wh_Log(L"Folder windows process, the bar stays in the taskbar "
                L"process");
-        return TRUE;
+        return FALSE;
     }
-
-    // There's only one taskbar process per session. The mutex is still
-    // created so that earlier versions of the mod, which may still be
-    // running in the folders process during the update, don't create a
-    // second bar; if it already exists, it's one of those versions, which
-    // will be unloaded right after.
-    g_mutex = CreateMutexW(nullptr, FALSE, L"Local\\WindhawkGlobalMenuBar");
 
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, BarThread, nullptr, 0, nullptr);
     if (!g_thread) {
         CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
         return FALSE;
     }
     return TRUE;
@@ -3991,11 +4149,6 @@ void Uninit() {
         g_thread = nullptr;
         CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
-    }
-
-    if (g_mutex) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
     }
 }
 
@@ -4026,11 +4179,21 @@ namespace wux = winrt::Windows::UI::Xaml;
 enum class Target { ShellExperienceHost, ShellHost, Explorer };
 
 Target g_target;
-bool g_animateFromTop;
-int g_barHeight = 28;
-int g_gap = 8;
+// Settings; explorer reloads them without reloading the mod, the flyout
+// processes reload the mod.
+std::atomic<bool> g_enabled;
+std::atomic<bool> g_animateFromTop;
+std::atomic<int> g_barHeight = 28;
+std::atomic<int> g_gap = 8;
 std::atomic<bool> g_tapInjected;
 std::atomic<bool> g_unloading;
+
+void LoadSettings() {
+    g_enabled = Wh_GetIntSetting(L"flyoutsOnTop") != 0;
+    g_animateFromTop = Wh_GetIntSetting(L"flyoutsAnimateFromTop") != 0;
+    g_barHeight = std::clamp(Wh_GetIntSetting(L"height"), 20, 64);
+    g_gap = std::clamp(Wh_GetIntSetting(L"flyoutsGap"), 0, 200);
+}
 
 // With more than one UI thread, XAML's composition diagnostics corrupt the
 // heap. They're turned off by answering "1" to the DisableCompositionDiag
@@ -4078,8 +4241,10 @@ struct ThreadState {
     bool releaseArmed = false;
 };
 
+// The XAML objects are released by their own threads in Uninit
+// (no_destroy: when the process exits, those threads are gone).
 std::mutex g_threadsMutex;
-std::map<DWORD, ThreadState> g_threads;
+[[clang::no_destroy]] std::map<DWORD, ThreadState> g_threads;
 
 ThreadState& CurrentThreadState() {
     std::lock_guard<std::mutex> lock(g_threadsMutex);
@@ -4377,7 +4542,7 @@ struct ClockButton {
     winrt::Windows::System::DispatcherQueue queue{nullptr};
 };
 std::mutex g_clockButtonsMutex;
-std::vector<ClockButton> g_clockButtons;
+[[clang::no_destroy]] std::vector<ClockButton> g_clockButtons;
 
 void RememberClockButton(const wux::FrameworkElement& element) {
     auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
@@ -4459,6 +4624,9 @@ BOOL CALLBACK FindMonitorTaskbarProc(HWND hwnd, LPARAM param) {
 // Notification Center on that monitor, with the right size for its DPI.
 // Returns false on the primary monitor or if there's no button.
 bool OpenNotificationCenterOn(HMONITOR monitor) {
+    if (!g_enabled || g_unloading) {
+        return false;
+    }
     std::pair<HMONITOR, HWND> data{monitor, nullptr};
     EnumWindows(FindMonitorTaskbarProc, (LPARAM)&data);
     RECT rc;
@@ -4648,7 +4816,9 @@ class VisualTreeWatcher
     }
 };
 
-winrt::com_ptr<VisualTreeWatcher> g_watcher;
+[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_watcher;
+// Joined in Uninit, before UnadviseVisualTreeChange.
+std::atomic<HANDLE> g_adviseThread;
 
 DWORD WINAPI AdviseThreadProc(LPVOID param) {
     auto* watcher = (VisualTreeWatcher*)param;
@@ -4673,7 +4843,10 @@ VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
     AddRef();
     HANDLE thread = CreateThread(nullptr, 0, AdviseThreadProc, this, 0, nullptr);
     if (thread) {
-        CloseHandle(thread);
+        // A previous watcher's thread ended long ago.
+        if (HANDLE previous = g_adviseThread.exchange(thread)) {
+            CloseHandle(previous);
+        }
     } else {
         Release();
     }
@@ -4755,7 +4928,7 @@ HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation,
                                element.Type ? element.Type : L"");
             }
         } catch (...) {
-            Wh_Log(L"Erro: %08X", winrt::to_hresult());
+            Wh_Log(L"Error: %08X", winrt::to_hresult());
         }
         QueueRelease(element.Handle);
         QueueRelease(relation.Parent);
@@ -4871,7 +5044,7 @@ NtUserSetWindowRgn_t NtUserSetWindowRgn_orig;
 
 int WINAPI NtUserSetWindowRgn_hook(HWND hwnd, HRGN rgn, BOOL redraw) {
     RECT box, rc;
-    if (!g_unloading && rgn && IsTargetWindow(hwnd) &&
+    if (g_enabled && !g_unloading && rgn && IsTargetWindow(hwnd) &&
         GetRgnBox(rgn, &box) != ERROR && box.top > 0 &&
         GetWindowRect(hwnd, &rc) && box.bottom >= rc.bottom - rc.top - 4 &&
         box.bottom > box.top) {
@@ -4889,8 +5062,11 @@ int WINAPI NtUserSetWindowRgn_hook(HWND hwnd, HRGN rgn, BOOL redraw) {
         if (HRGN moved = CreateRectRgn(0, 0, rc.right - rc.left, bottom)) {
             Wh_Log(L"Quick settings region: %d..%d -> 0..%d",
                    box.top, box.bottom, bottom);
-            DeleteObject(rgn);
-            rgn = moved;
+            // On success the system owns the region passed: the caller's
+            // one, which it no longer uses, is deleted here.
+            int result = NtUserSetWindowRgn_orig(hwnd, moved, redraw);
+            DeleteObject(result ? rgn : moved);
+            return result;
         }
     }
     return NtUserSetWindowRgn_orig(hwnd, rgn, redraw);
@@ -4908,7 +5084,8 @@ BOOL WINAPI SetWindowPos_hook(HWND hwnd,
                               int cx,
                               int cy,
                               UINT flags) {
-    if (g_unloading || (flags & SWP_NOMOVE) || !IsTargetWindow(hwnd)) {
+    if (!g_enabled || g_unloading || (flags & SWP_NOMOVE) ||
+        !IsTargetWindow(hwnd)) {
         return SetWindowPos_orig(hwnd, insertAfter, x, y, cx, cy, flags);
     }
 
@@ -5018,16 +5195,20 @@ UINT RunLaterMsg() {
     return msg;
 }
 
-HHOOK g_runLaterHook;
+// Only one call at a time; whoever takes the hook out of g_runLaterHook
+// (the hook itself, a later call if it's stale, or Uninit) removes it.
+std::atomic<HHOOK> g_runLaterHook;
+std::atomic<DWORD> g_runLaterTime;
+constexpr DWORD kRunLaterTimeout = 5000;
 
 LRESULT CALLBACK RunLaterHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION) {
         auto* msg = (const MSG*)lParam;
         if (wParam == PM_REMOVE && msg->message == RunLaterMsg()) {
-            HHOOK hook = g_runLaterHook;
-            g_runLaterHook = nullptr;
-            ((ThreadProc_t)msg->lParam)();
-            if (hook) {
+            if (HHOOK hook = g_runLaterHook.exchange(nullptr)) {
+                if (!g_unloading) {
+                    ((ThreadProc_t)msg->lParam)();
+                }
                 UnhookWindowsHookEx(hook);
             }
         }
@@ -5037,20 +5218,42 @@ LRESULT CALLBACK RunLaterHook(int code, WPARAM wParam, LPARAM lParam) {
 
 void RunFromWindowThreadLater(HWND hwnd, ThreadProc_t proc) {
     DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
-    if (!threadId || g_runLaterHook) {
+    if (!threadId || g_unloading) {
         return;
     }
-    g_runLaterHook =
+    if (g_runLaterHook) {
+        // The message never arrived (the window was destroyed first).
+        if (GetTickCount() - g_runLaterTime < kRunLaterTimeout) {
+            return;
+        }
+        if (HHOOK stale = g_runLaterHook.exchange(nullptr)) {
+            UnhookWindowsHookEx(stale);
+        }
+    }
+    HHOOK hook =
         SetWindowsHookExW(WH_GETMESSAGE, RunLaterHook, nullptr, threadId);
-    if (g_runLaterHook && !PostMessageW(hwnd, RunLaterMsg(), 0, (LPARAM)proc)) {
-        UnhookWindowsHookEx(g_runLaterHook);
-        g_runLaterHook = nullptr;
+    if (!hook) {
+        return;
+    }
+    HHOOK expected = nullptr;
+    if (!g_runLaterHook.compare_exchange_strong(expected, hook)) {
+        UnhookWindowsHookEx(hook);
+        return;
+    }
+    g_runLaterTime = GetTickCount();
+    if (!PostMessageW(hwnd, RunLaterMsg(), 0, (LPARAM)proc)) {
+        if (HHOOK own = g_runLaterHook.exchange(nullptr)) {
+            UnhookWindowsHookEx(own);
+        }
     }
 }
 
 void OnWindowCreated(HWND hwnd, LPCWSTR className) {
     if (((ULONG_PTR)className & ~(ULONG_PTR)0xFFFF) == 0) {
         return;  // atom, not a name
+    }
+    if (!g_enabled) {
+        return;
     }
     Wh_Log(L"Window created: %s", className);
     if (g_target == Target::ShellExperienceHost &&
@@ -5192,19 +5395,40 @@ LSTATUS WINAPI RegQueryValueExW_hook(HKEY key,
 
 // In explorer, XAML Diagnostics is only used to find the taskbars'
 // clocks.
+template <typename T>
+void HookExport(HMODULE module, const char* name, T hook, T* original) {
+    if (T target = module ? (T)GetProcAddress(module, name) : nullptr) {
+        WindhawkUtils::SetFunctionHook(target, hook, original);
+    }
+}
+
+void HookRegistry() {
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    HookExport(kernelBase, "RegOpenKeyExW", RegOpenKeyExW_hook,
+               &RegOpenKeyExW_orig);
+    HookExport(kernelBase, "RegQueryValueExW", RegQueryValueExW_hook,
+               &RegQueryValueExW_orig);
+}
+
 void InitExplorer() {
     g_target = Target::Explorer;
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (kernelBase) {
-        if (void* p = (void*)GetProcAddress(kernelBase, "RegOpenKeyExW")) {
-            Wh_SetFunctionHook(p, (void*)RegOpenKeyExW_hook,
-                               (void**)&RegOpenKeyExW_orig);
-        }
-        if (void* p = (void*)GetProcAddress(kernelBase, "RegQueryValueExW")) {
-            Wh_SetFunctionHook(p, (void*)RegQueryValueExW_hook,
-                               (void**)&RegQueryValueExW_orig);
-        }
+    LoadSettings();
+    HookRegistry();
+}
+
+// Explorer only uses XAML Diagnostics while the option is on.
+void InjectIntoTaskbar() {
+    if (g_target != Target::Explorer || !g_enabled || g_tapInjected) {
+        return;
     }
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        RunFromWindowThreadLater(tray, InjectTapOnce);
+    }
+}
+
+void SettingsChangedExplorer() {
+    LoadSettings();
+    InjectIntoTaskbar();
 }
 
 bool IsFlyoutProcess() {
@@ -5212,13 +5436,10 @@ bool IsFlyoutProcess() {
     return name == L"shellexperiencehost.exe" || name == L"shellhost.exe";
 }
 
+// Stays loaded with the option off (the hooks do nothing then), so that
+// turning it on works without restarting the process.
 BOOL Init() {
-    if (!Wh_GetIntSetting(L"flyoutsOnTop")) {
-        return FALSE;
-    }
-    g_animateFromTop = Wh_GetIntSetting(L"flyoutsAnimateFromTop") != 0;
-    g_barHeight = std::clamp(Wh_GetIntSetting(L"height"), 20, 64);
-    g_gap = std::clamp(Wh_GetIntSetting(L"flyoutsGap"), 0, 200);
+    LoadSettings();
     g_target = ToLower(FileNameFromPath(GetCurrentProcessPath())) ==
                        L"shellhost.exe"
                    ? Target::ShellHost
@@ -5226,40 +5447,16 @@ BOOL Init() {
 
     HMODULE user32 =
         LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (user32) {
-        if (void* p = (void*)GetProcAddress(user32, "CreateWindowInBand")) {
-            Wh_SetFunctionHook(p, (void*)CreateWindowInBand_hook,
-                               (void**)&CreateWindowInBand_orig);
-        }
-        if (void* p = (void*)GetProcAddress(user32, "CreateWindowInBandEx")) {
-            Wh_SetFunctionHook(p, (void*)CreateWindowInBandEx_hook,
-                               (void**)&CreateWindowInBandEx_orig);
-        }
-        if (void* p = (void*)GetProcAddress(user32, "SetWindowPos")) {
-            Wh_SetFunctionHook(p, (void*)SetWindowPos_hook,
-                               (void**)&SetWindowPos_orig);
-        }
+    HookExport(user32, "CreateWindowInBand", CreateWindowInBand_hook,
+               &CreateWindowInBand_orig);
+    HookExport(user32, "CreateWindowInBandEx", CreateWindowInBandEx_hook,
+               &CreateWindowInBandEx_orig);
+    HookExport(user32, "SetWindowPos", SetWindowPos_hook, &SetWindowPos_orig);
+    if (g_target == Target::ShellHost) {
+        HookExport(GetModuleHandleW(L"win32u.dll"), "NtUserSetWindowRgn",
+                   NtUserSetWindowRgn_hook, &NtUserSetWindowRgn_orig);
     }
-    HMODULE win32u = GetModuleHandleW(L"win32u.dll");
-    if (win32u && g_target == Target::ShellHost) {
-        if (void* p = (void*)GetProcAddress(win32u, "NtUserSetWindowRgn")) {
-            Wh_SetFunctionHook(p, (void*)NtUserSetWindowRgn_hook,
-                               (void**)&NtUserSetWindowRgn_orig);
-        }
-
-    }
-
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (kernelBase) {
-        if (void* p = (void*)GetProcAddress(kernelBase, "RegOpenKeyExW")) {
-            Wh_SetFunctionHook(p, (void*)RegOpenKeyExW_hook,
-                               (void**)&RegOpenKeyExW_orig);
-        }
-        if (void* p = (void*)GetProcAddress(kernelBase, "RegQueryValueExW")) {
-            Wh_SetFunctionHook(p, (void*)RegQueryValueExW_hook,
-                               (void**)&RegQueryValueExW_orig);
-        }
-    }
+    HookRegistry();
     return TRUE;
 }
 
@@ -5270,9 +5467,10 @@ BOOL CALLBACK FindAnyThreadWindowProc(HWND hwnd, LPARAM param) {
 
 void AfterInit() {
     if (g_target == Target::Explorer) {
-        if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-            RunFromWindowThread(tray, InjectTapOnce);
-        }
+        InjectIntoTaskbar();
+        return;
+    }
+    if (!g_enabled) {
         return;
     }
 
@@ -5290,6 +5488,14 @@ void AfterInit() {
 
 void Uninit() {
     g_unloading = true;
+
+    if (HHOOK hook = g_runLaterHook.exchange(nullptr)) {
+        UnhookWindowsHookEx(hook);
+    }
+    if (HANDLE thread = g_adviseThread.exchange(nullptr)) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
 
     if (g_watcher) {
         g_watcher->UnadviseVisualTreeChange();
@@ -5317,10 +5523,10 @@ void Uninit() {
 
     {
         std::lock_guard<std::mutex> lock(g_clockButtonsMutex);
-        g_clockButtons.clear();
+        decltype(g_clockButtons)().swap(g_clockButtons);
     }
     std::lock_guard<std::mutex> lock(g_threadsMutex);
-    g_threads.clear();
+    decltype(g_threads)().swap(g_threads);
 }
 
 }  // namespace flyouts
@@ -5367,8 +5573,9 @@ namespace panelregion {
 
 using SetWindowRgn_t = decltype(&SetWindowRgn);
 SetWindowRgn_t SetWindowRgn_orig;
-int g_barHeight = 28;
-int g_gap = 8;
+using flyouts::g_barHeight;
+using flyouts::g_enabled;
+using flyouts::g_gap;
 
 bool IsNotificationPanel(HWND hwnd) {
     if (!IsWindowOfClass(hwnd, L"Windows.UI.Core.CoreWindow")) {
@@ -5391,7 +5598,7 @@ bool IsNotificationPanel(HWND hwnd) {
 
 int WINAPI SetWindowRgn_hook(HWND hwnd, HRGN rgn, BOOL redraw) {
     RECT box, rc;
-    if (rgn && GetRgnBox(rgn, &box) != ERROR && box.top > 0 &&
+    if (g_enabled && rgn && GetRgnBox(rgn, &box) != ERROR && box.top > 0 &&
         box.bottom > box.top && GetWindowRect(hwnd, &rc) &&
         IsNotificationPanel(hwnd)) {
         MONITORINFO mi{sizeof(mi)};
@@ -5413,21 +5620,19 @@ int WINAPI SetWindowRgn_hook(HWND hwnd, HRGN rgn, BOOL redraw) {
         if (HRGN moved = CreateRectRgn(box.left, 0, box.right, bottom)) {
             Wh_Log(L"Notification Center region: %d..%d -> 0..%d", box.top,
                    box.bottom, bottom);
-            DeleteObject(rgn);
-            rgn = moved;
+            // Same ownership rule as NtUserSetWindowRgn_hook.
+            int result = SetWindowRgn_orig(hwnd, moved, redraw);
+            DeleteObject(result ? rgn : moved);
+            return result;
         }
     }
     return SetWindowRgn_orig(hwnd, rgn, redraw);
 }
 
+// Reads the settings through flyouts::InitExplorer.
 void Init() {
-    if (!Wh_GetIntSetting(L"flyoutsOnTop")) {
-        return;
-    }
-    g_barHeight = std::clamp(Wh_GetIntSetting(L"height"), 20, 64);
-    g_gap = std::clamp(Wh_GetIntSetting(L"flyoutsGap"), 0, 200);
-    Wh_SetFunctionHook((void*)SetWindowRgn, (void*)SetWindowRgn_hook,
-                       (void**)&SetWindowRgn_orig);
+    WindhawkUtils::SetFunctionHook(SetWindowRgn, SetWindowRgn_hook,
+                                   &SetWindowRgn_orig);
 }
 
 }  // namespace panelregion
@@ -5440,8 +5645,8 @@ BOOL Wh_ModInit() {
         if (!bar::Init()) {
             return FALSE;
         }
-        panelregion::Init();
         flyouts::InitExplorer();
+        panelregion::Init();
         return TRUE;
     }
     if (flyouts::IsFlyoutProcess()) {
@@ -5484,6 +5689,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     switch (g_role) {
         case ProcessRole::Explorer:
+            flyouts::SettingsChangedExplorer();
             bar::SettingsChanged();
             break;
         case ProcessRole::Flyouts:
