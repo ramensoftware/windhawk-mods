@@ -716,6 +716,10 @@ static void ReleaseUnusedLocked() {
     const std::set<HICON> inUse = IconsInUseLocked();
 
     for (auto it = g_retired.begin(); it != g_retired.end();) {
+        if (g_deadCopies.count(*it)) {
+            it = g_retired.erase(it);  // already destroyed, by someone else
+            continue;
+        }
         if (inUse.count(*it)) {
             ++it;
             continue;
@@ -725,19 +729,14 @@ static void ReleaseUnusedLocked() {
         it = g_retired.erase(it);
     }
 
+    // No window holds a cached preview, only copies of one, so the least
+    // recently used previews can always go.
     while (g_cache.size() > kMemCacheMax) {
-        auto victim = g_cache.end();
+        auto victim = g_cache.begin();
         for (auto it = g_cache.begin(); it != g_cache.end(); ++it) {
-            if (inUse.count(it->second.icon)) {
-                continue;
-            }
-            if (victim == g_cache.end() ||
-                it->second.lastUse < victim->second.lastUse) {
+            if (it->second.lastUse < victim->second.lastUse) {
                 victim = it;
             }
-        }
-        if (victim == g_cache.end()) {
-            break;  // every preview is on a window right now
         }
         g_owned.erase(victim->second.icon);
         DestroyIcon(victim->second.icon);
@@ -932,8 +931,21 @@ static HICON ReusableCopyLocked(HWND hwnd, WPARAM type, HICON source) {
     }
     Wh_Log(L"The icon of %p was destroyed, making a new copy", hwnd);
     g_deadCopies.insert(it->second.copy);
+    g_retired.erase(it->second.copy);
     g_ourIcons.erase(it);
     return nullptr;
+}
+
+// Requires g_lock. Queues a copy for freeing once nothing needs it, unless it
+// is still the window's current copy (that one is retired when replaced) or
+// was destroyed by someone else.
+static void RetireIfReplacedLocked(HWND hwnd, WPARAM type, HICON icon) {
+    auto it = g_ourIcons.find({hwnd, type});
+    if (g_deadCopies.count(icon) ||
+        (it != g_ourIcons.end() && it->second.copy == icon)) {
+        return;
+    }
+    g_retired.insert(icon);
 }
 
 // Requires g_lock. Records the copy now on a window, and retires the one it
@@ -968,18 +980,14 @@ static void EraseUnconfirmedLocked(HWND hwnd, WPARAM type, HICON copy) {
             break;
         }
     }
-    if (!g_deadCopies.count(copy)) {
-        g_retired.insert(copy);  // freed if nothing else still needs it
-    }
+    RetireIfReplacedLocked(hwnd, type, copy);
 }
 
 // Requires g_lock. Every pending message for this window and type is settled.
 static void SettleUnconfirmedLocked(HWND hwnd, WPARAM type) {
     auto range = g_unconfirmed.equal_range({hwnd, type});
     for (auto it = range.first; it != range.second; ++it) {
-        if (!g_deadCopies.count(it->second)) {
-            g_retired.insert(it->second);
-        }
+        RetireIfReplacedLocked(hwnd, type, it->second);
     }
     g_unconfirmed.erase(range.first, range.second);
 }
@@ -1475,6 +1483,8 @@ static HICON NoteExplorerIcon(HWND hwnd, WPARAM type, HICON explorerIcon) {
     return explorerPrevious;
 }
 
+// Must run before the copy the window gave up is freed: once it is, it no
+// longer counts as the mod's, and would be handed to Explorer to free again.
 static LRESULT AnswerExplorer(LRESULT r, HICON explorerPrevious,
                               HICON explorerIcon) {
     HICON replaced = reinterpret_cast<HICON>(r);
@@ -1492,8 +1502,11 @@ static LRESULT PassExplorerSetIcon(HWND hwnd, WPARAM type, LPARAM lParam) {
     const HICON explorerIcon = reinterpret_cast<HICON>(lParam);
     const HICON explorerPrevious = NoteExplorerIcon(hwnd, type, explorerIcon);
     LRESULT r = DefSubclassProc(hwnd, WM_SETICON, type, lParam);
+    // Decided first: ForgetOurIcon may free the copy the window just gave up,
+    // and only while it is still counted as the mod's is it never handed back.
+    const LRESULT answer = AnswerExplorer(r, explorerPrevious, explorerIcon);
     ForgetOurIcon(hwnd, type, explorerIcon);
-    return AnswerExplorer(r, explorerPrevious, explorerIcon);
+    return answer;
 }
 
 static LRESULT HandleExplorerSetIcon(HWND hwnd, WPARAM type, LPARAM lParam) {
@@ -1533,6 +1546,12 @@ static LRESULT HandleExplorerSetIcon(HWND hwnd, WPARAM type, LPARAM lParam) {
     LRESULT r = DefSubclassProc(hwnd, WM_SETICON, type,
                                 reinterpret_cast<LPARAM>(copy));
 
+    // Decided before the bookkeeping below frees the copy the window gave up:
+    // only while that one is still counted as the mod's is it never handed
+    // back. Explorer gets its own previous icon instead, which is not on the
+    // window (the copy is), so it can free that one safely.
+    const LRESULT answer = AnswerExplorer(r, explorerPrevious, explorerIcon);
+
     // Set directly, so the copy it replaced is off the window now. A send of
     // the worker's which timed out may still arrive; the window procedure
     // drops it, since it no longer carries the current copy.
@@ -1542,9 +1561,7 @@ static LRESULT HandleExplorerSetIcon(HWND hwnd, WPARAM type, LPARAM lParam) {
     ReleaseUnusedLocked();
     ReleaseSRWLockExclusive(&g_lock);
 
-    // The window holds this window's own copy, not Explorer's previous icon,
-    // so handing that one back is safe: Explorer frees what it no longer uses.
-    return AnswerExplorer(r, explorerPrevious, explorerIcon);
+    return answer;
 }
 
 // A copy of the mod's arrives in a WM_SETICON which this thread didn't set
