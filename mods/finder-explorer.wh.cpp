@@ -315,6 +315,9 @@ struct Tab {
     // Menus, dialogs and drag loops running in the mod's code on the tab's
     // thread. The mod can't unload while one runs: it returns into mod code.
     int modalDepth = 0;
+    // WM_NCDESTROY arrived while a mod frame was open: the outermost
+    // ModalScope deletes the Tab.
+    bool destroyed = false;
     bool pollFast = true;  // Poll timer at kPollInterval (visible tab).
 
     // Look, computed when creating the columns.
@@ -338,7 +341,11 @@ UINT g_attachMsg, g_detachMsg, g_settingsMsg;
 struct ModalScope {
     Tab& t;
     explicit ModalScope(Tab& tab) : t(tab) { t.modalDepth++; }
-    ~ModalScope() { t.modalDepth--; }
+    ~ModalScope() {
+        if (--t.modalDepth == 0 && t.destroyed) {
+            delete &t;
+        }
+    }
     ModalScope(const ModalScope&) = delete;
     ModalScope& operator=(const ModalScope&) = delete;
 };
@@ -2792,13 +2799,19 @@ LRESULT CALLBACK TabSubclassProc(HWND hwnd,
         return TRUE;
     }
     if (msg == WM_NCDESTROY) {
-        // The subclass was already removed by Windhawk.
+        // The subclass was already removed by Windhawk. The tab can close
+        // itself inside a mod frame (WM_CLOSE reaching DefWindowProc): then
+        // that frame's ModalScope still uses t, and deletes it on exit.
         CleanupTab(*t);
         {
             std::lock_guard<std::mutex> lock(g_tabsMutex);
             g_tabs.erase(hwnd);
         }
-        delete t;
+        if (t->modalDepth > 0) {
+            t->destroyed = true;
+        } else {
+            delete t;
+        }
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
