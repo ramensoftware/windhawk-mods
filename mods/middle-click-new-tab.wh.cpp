@@ -40,7 +40,7 @@ How it works:
 - Middle clicking an actual tab or the add button is left untouched, so the native 
   behaviors keep working perfectly.
 
-![Middle Click New Tab Demo](https://raw.githubusercontent.com/venasataa/windhawk-mod-assets/refs/heads/main/middle-click-new-tab.gif)
+![Middle Click New Tab Demo](https://raw.githubusercontent.com/venasataa/middle-click-new-tab/refs/heads/main/preview.gif)
 */
 // ==/WindhawkModReadme==
 
@@ -1130,10 +1130,12 @@ void WhTool_ModUninit() {
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
-// Paste the code below in your mod, and implement the following callbacks:
-// - WhTool_ModInit: Called when the mod is initialized.
-// - WhTool_ModSettingsChanged: Called when the mod settings are changed.
-// - WhTool_ModUninit: Called when the mod is unloaded.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
 // Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
