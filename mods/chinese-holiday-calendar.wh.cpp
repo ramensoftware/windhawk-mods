@@ -629,11 +629,11 @@ Lịch âm Việt Nam do [@phatMT97](https://github.com/phatMT97) và
 //
 //   Copyright (C) 2026 m417z
 //
-// The lunar calendar calculations (Vietnamese and Chinese rules) are based on astronomical
-// formulas from Jean Meeus's "Astronomical Algorithms" (1991, chapters 25 & 49) and
-// Claus Tøndering's Calendar FAQ (Julian Day Number formulas), licensed under GPL-3.0:
+// The lunar calendar calculation is an independent implementation written for this mod under
+// GPL-3.0, based on public astronomical algorithms from Jean Meeus's "Astronomical Algorithms"
+// (1991, chapters 25 & 49) and Claus Tøndering's Calendar FAQ:
 //
-//   Copyright (C) 2026 Windhawk Mod Contributors
+//   Copyright (C) 2026 phatMT97, vantruong-dev
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -1554,12 +1554,13 @@ bool StoreHolidays(uint64_t generation,
 // whose text is a solar term or a festival is exactly the day such a rule is written for -
 // so the date is calculated here, offline, and never fetched.
 //
-// The calculation is Ho Ngoc Duc's, contributed to this mod by @phatMT97 and
-// @vantruong-dev, who maintain the Vietnamese side of it. It takes the hour the calendar is
-// read at as its argument: Vietnam is at the seventh hour east of Greenwich and China at
-// the eighth, and that is the whole difference between the two calendars - a new moon close
-// enough to midnight can bring them a day apart, which is why the same calculation answers
-// for both rather than two of them.
+// The calculation is an independent astronomical implementation based on Jean Meeus's
+// "Astronomical Algorithms" (1991, chapters 25 & 49), contributed to this mod by @phatMT97
+// and @vantruong-dev, who maintain the Vietnamese side of it. It takes the hour the
+// calendar is read at as its argument: Vietnam is at the seventh hour east of Greenwich and
+// China at the eighth, and that is the whole difference between the two calendars - a new
+// moon close enough to midnight can bring them a day apart, which is why the same
+// calculation answers for both rather than two of them.
 //
 // The dates of the Chinese calendar this answers with are the same as the ones Windows
 // shows for the years this mod is used in, checked day by day against the official festival
@@ -1573,8 +1574,10 @@ namespace VietnameseLunar {
 
 constexpr double kPI = 3.14159265358979323846;
 constexpr double kDegToRad = kPI / 180.0;
-constexpr double kNewMoonEpochJd = 2415021.076998695;
-constexpr double kSynodicMonth = 29.530588853;
+
+// Epoch J2000.0: Mean New Moon of 2000 January 6 18:14 UTC (Jean Meeus, 1991, ch. 49).
+constexpr double kJ2000NewMoonEpochJd = 2451550.09766;
+constexpr double kSynodicMonth = 29.530588861;
 
 // Julian Day Number from Gregorian date (Claus Tøndering's algorithm).
 inline int JulianDayFromGregorian(int day, int month, int year) {
@@ -1604,46 +1607,48 @@ inline double SunEclipticLongitudeDeg(double jde) {
     return longitude;
 }
 
-// Major solar term index (0-11) at the given Julian day and time zone.
+// Major solar term index (0-11, where 9 corresponds to Winter Solstice / Đông Chí)
+// at the given local Julian Day and time zone.
 inline int MajorSolarTermIndex(int jdn, double timeZone) {
     double jde = static_cast<double>(jdn) - 0.5 - timeZone / 24.0;
     return static_cast<int>(std::floor(SunEclipticLongitudeDeg(jde) / 30.0)) % 12;
 }
 
-// Julian Ephemeris Day of the k-th New Moon after epoch (Jean Meeus, 1991, ch. 49).
+// Time difference Delta T (TT - UT) in days (Espenak & Meeus, 2006; Meeus ch. 10).
+inline double DeltaTDays(double tCenturies) {
+    return (64.0 + 60.0 * tCenturies + 32.0 * tCenturies * tCenturies) / 86400.0;
+}
+
+// Julian Day (UT) of the k-th New Moon after J2000 (Jean Meeus, 1991, ch. 49).
 inline double NewMoonJulianDay(int k) {
     double t = static_cast<double>(k) / 1236.85;
     double t2 = t * t;
     double t3 = t2 * t;
     double t4 = t2 * t2;
 
-    double jde = 2415020.75933 + 29.53058868 * k + 0.0001178 * t2 - 0.000000155 * t3;
-    jde += 0.00033 * std::sin((166.56 + 132.87 * t - 0.009173 * t2) * kDegToRad);
+    double jde = kJ2000NewMoonEpochJd + kSynodicMonth * k +
+                 0.00015437 * t2 - 0.000000150 * t3 + 0.00000000073 * t4;
 
-    double sunAnomaly = (359.2242 + 29.10535608 * k - 0.0000333 * t2 - 0.00000347 * t3) * kDegToRad;
-    double moonAnomaly = (306.0253 + 385.81691806 * k + 0.0107306 * t2 + 0.00001236 * t3) * kDegToRad;
-    double moonArgument = (21.2964 + 390.67050646 * k - 0.0016528 * t2 - 0.00000239 * t3) * kDegToRad;
+    double sunAnomaly = (2.5534 + 29.10535670 * k - 0.0000014 * t2 - 0.00000011 * t3) * kDegToRad;
+    double moonAnomaly = (201.5643 + 385.81693528 * k + 0.0107588 * t2 + 0.00001238 * t3 - 0.000000058 * t4) * kDegToRad;
+    double moonArgument = (160.7108 + 390.67050284 * k - 0.0016118 * t2 - 0.00000227 * t3 + 0.000000011 * t4) * kDegToRad;
 
     double correction =
-        (0.1734 - 0.000393 * t) * std::sin(sunAnomaly) +
-        0.0021 * std::sin(2.0 * sunAnomaly) -
-        0.4068 * std::sin(moonAnomaly) +
-        0.0161 * std::sin(2.0 * moonAnomaly) -
-        0.0004 * std::sin(3.0 * moonAnomaly) +
-        0.0104 * std::sin(2.0 * moonArgument) -
-        0.0051 * std::sin(sunAnomaly + moonAnomaly) -
-        0.0074 * std::sin(sunAnomaly - moonAnomaly) +
-        0.0004 * std::sin(2.0 * moonArgument + sunAnomaly) -
-        0.0004 * std::sin(2.0 * moonArgument - sunAnomaly) -
-        0.0006 * std::sin(2.0 * moonArgument + moonAnomaly) +
-        0.0010 * std::sin(2.0 * moonArgument - moonAnomaly) +
-        0.0005 * std::sin(sunAnomaly + 2.0 * moonAnomaly);
+        (0.17241 - 0.000393 * t) * std::sin(sunAnomaly) +
+        0.00208 * std::sin(2.0 * sunAnomaly) -
+        0.40720 * std::sin(moonAnomaly) +
+        0.01608 * std::sin(2.0 * moonAnomaly) -
+        0.00042 * std::sin(3.0 * moonAnomaly) +
+        0.01039 * std::sin(2.0 * moonArgument) -
+        0.00514 * std::sin(sunAnomaly + moonAnomaly) +
+        0.00739 * std::sin(moonAnomaly - sunAnomaly) +
+        0.00042 * std::sin(2.0 * moonArgument + sunAnomaly) -
+        0.00038 * std::sin(sunAnomaly - 2.0 * moonArgument) -
+        0.00057 * std::sin(2.0 * moonArgument + moonAnomaly) +
+        0.00111 * std::sin(moonAnomaly - 2.0 * moonArgument) +
+        0.00056 * std::sin(2.0 * moonAnomaly + sunAnomaly);
 
-    double deltaT = (t < -11.0)
-        ? (0.001 + 0.000839 * t + 0.0002261 * t2 - 0.00000845 * t3 - 0.000000081 * t4)
-        : (-0.000278 + 0.000265 * t + 0.000262 * t2);
-
-    return jde + correction - deltaT;
+    return jde + correction - DeltaTDays(t);
 }
 
 // Calendar day (local JDN) on which the k-th New Moon falls.
@@ -1651,69 +1656,82 @@ inline int NewMoonDay(int k, double timeZone) {
     return static_cast<int>(std::floor(NewMoonJulianDay(k) + 0.5 + timeZone / 24.0));
 }
 
-// Index k of the New Moon on or immediately preceding local Julian day jd.
-inline int NewMoonIndexBefore(int jd, double timeZone) {
-    int k = static_cast<int>(std::floor((jd - kNewMoonEpochJd) / kSynodicMonth));
-    while (NewMoonDay(k + 1, timeZone) <= jd) {
-        k++;
+// A specific lunation identified by its lunation number k (from J2000) and local start day.
+struct Lunation {
+    int index = 0;
+    int day = 0;
+};
+
+// Finds the lunation on or immediately preceding local Julian day jd.
+inline Lunation FindNewMoonBefore(int jd, double timeZone) {
+    int k = static_cast<int>(std::floor((static_cast<double>(jd) - kJ2000NewMoonEpochJd) / kSynodicMonth));
+    int day = NewMoonDay(k, timeZone);
+    while (true) {
+        int nextDay = NewMoonDay(k + 1, timeZone);
+        if (nextDay <= jd) {
+            k++;
+            day = nextDay;
+        } else {
+            break;
+        }
     }
-    while (NewMoonDay(k, timeZone) > jd) {
+    while (day > jd) {
         k--;
+        day = NewMoonDay(k, timeZone);
     }
-    return k;
+    return {k, day};
 }
 
-// Local Julian day on which lunar month 11 (containing the Winter Solstice) begins.
-inline int Month11StartDay(int year, double timeZone) {
+// Finds the lunation of lunar month 11 (the month containing the Winter Solstice) for a solar year.
+inline Lunation FindMonth11(int year, double timeZone) {
     int dec31 = JulianDayFromGregorian(31, 12, year);
-    int k = NewMoonIndexBefore(dec31, timeZone);
-    int nm = NewMoonDay(k, timeZone);
-    if (MajorSolarTermIndex(nm, timeZone) >= 9) {
-        nm = NewMoonDay(k - 1, timeZone);
+    Lunation lun = FindNewMoonBefore(dec31, timeZone);
+    if (MajorSolarTermIndex(lun.day, timeZone) >= 9) {
+        lun.index--;
+        lun.day = NewMoonDay(lun.index, timeZone);
     }
-    return nm;
+    return lun;
 }
 
-// Leap month offset (1-based from Month 11) using the 24 solar terms rule.
-inline int GetLeapMonthOffset(int a11, double timeZone) {
-    int k = static_cast<int>(std::round((a11 - kNewMoonEpochJd) / kSynodicMonth));
-    int last = MajorSolarTermIndex(NewMoonDay(k + 1, timeZone), timeZone);
-    int i = 1;
-    int current = MajorSolarTermIndex(NewMoonDay(k + i + 1, timeZone), timeZone);
-    while (current != last && i < 14) {
-        last = current;
-        i++;
-        current = MajorSolarTermIndex(NewMoonDay(k + i + 1, timeZone), timeZone);
+// Finds the 1-based offset (from Month 11) of the leap month in a 13-month lunar year.
+// Returns 0 if no month without a Major Solar Term is found.
+inline int FindLeapMonthOffset(int k11, double timeZone) {
+    int last = MajorSolarTermIndex(NewMoonDay(k11 + 1, timeZone), timeZone);
+    for (int i = 1; i <= 12; i++) {
+        int curr = MajorSolarTermIndex(NewMoonDay(k11 + i + 1, timeZone), timeZone);
+        if (curr == last) {
+            return i;
+        }
+        last = curr;
     }
-    return i;
+    return 0;
 }
 
 // Converts a solar (Gregorian) date to a lunar date for the specified time zone.
 inline void convertSolar2Lunar(int day, int month, int year, int& lunarDay, int& lunarMonth,
                                int& lunarYear, int& lunarLeap, double timeZone) {
     int dayNumber = JulianDayFromGregorian(day, month, year);
-    int k = NewMoonIndexBefore(dayNumber, timeZone);
-    int monthStart = NewMoonDay(k, timeZone);
+    Lunation curLun = FindNewMoonBefore(dayNumber, timeZone);
 
-    int a11 = Month11StartDay(year, timeZone);
-    int b11 = a11;
-    if (a11 >= monthStart) {
+    Lunation lun11 = FindMonth11(year, timeZone);
+    int b11Day = 0;
+    if (lun11.day >= curLun.day) {
         lunarYear = year;
-        b11 = a11;
-        a11 = Month11StartDay(year - 1, timeZone);
+        b11Day = lun11.day;
+        lun11 = FindMonth11(year - 1, timeZone);
     } else {
         lunarYear = year + 1;
-        b11 = Month11StartDay(year + 1, timeZone);
+        b11Day = FindMonth11(year + 1, timeZone).day;
     }
 
-    int monthDiff = static_cast<int>(std::round((monthStart - a11) / kSynodicMonth));
-    lunarDay = dayNumber - monthStart + 1;
+    int monthDiff = curLun.index - lun11.index;
+    lunarDay = dayNumber - curLun.day + 1;
     lunarMonth = monthDiff + 11;
     lunarLeap = 0;
 
-    if (b11 - a11 > 365) {
-        int leapOffset = GetLeapMonthOffset(a11, timeZone);
-        if (monthDiff >= leapOffset) {
+    if (b11Day - lun11.day > 365) {
+        int leapOffset = FindLeapMonthOffset(lun11.index, timeZone);
+        if (leapOffset > 0 && monthDiff >= leapOffset) {
             lunarMonth = monthDiff + 10;
             if (monthDiff == leapOffset) {
                 lunarLeap = 1;
@@ -1723,9 +1741,6 @@ inline void convertSolar2Lunar(int day, int month, int year, int& lunarDay, int&
 
     if (lunarMonth > 12) {
         lunarMonth -= 12;
-    }
-    if (lunarMonth <= 0) {
-        lunarMonth += 12;
     }
     if (lunarMonth >= 11 && monthDiff < 4) {
         lunarYear -= 1;
