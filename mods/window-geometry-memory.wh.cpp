@@ -39,8 +39,9 @@ list are remembered or moved.
   closes. Move a window where you want it, close it, and it opens there next
   time -- in the same session or after a reboot.
 * Maximized and minimized windows are handled as you would expect: a window that
-  was maximized comes back maximized, and one that was minimized comes back at
-  its normal size where it was.
+  was maximized comes back maximized, and one that was minimized comes back where
+  it was, at its normal size, or maximized if it was maximized before it was
+  minimized.
 * Saving is per monitor arrangement. A window is restored to the same monitor it
   was on, and after docking or undocking it is mapped to the closest equivalent
   monitor instead of being left off-screen.
@@ -88,8 +89,9 @@ list are remembered or moved.
   at. Moving the window once by hand records it there and then, and that save is not
   a last-moment read, so this is about windows that are moved by something other than
   you and closed immediately after.
-* **A window that was minimized when it closed comes back at its normal size**,
-  not minimized.
+* **A window that was minimized when it closed comes back where it was**, at its
+  normal size, or maximized if it was maximized before it was minimized. It does
+  not come back minimized.
 * **Stored resolution is not rescaled when DPI changes.** Nothing multiplies a
   stored rectangle by a DPI ratio. After a display change a window is mapped by
   the rules above, which already express it as a fraction of its monitor -- so a
@@ -3756,8 +3758,8 @@ static void SaveWindowGeometry(HWND hwnd, const WindowIdentity& identity) {
     // the converted normal rect of a minimized or maximized one (minimized windows
     // report roughly -32000, and a maximized window's GetWindowRect covers the whole
     // monitor, so neither is usable as "where the user left it"). A window that is
-    // minimized at close therefore comes back at its normal size rather than
-    // minimized.
+    // minimized at close therefore comes back where it was, at its normal size, or
+    // maximized if it was maximized before it was minimized, rather than minimized.
     //
     // The conversion needs the monitor's rectangles, and WindowOwnRect asks
     // Windows for them rather than the cache -- see its comment. The cache is still
