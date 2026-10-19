@@ -3,7 +3,7 @@
 // @name            Windows 11 Lock Screen Styler
 // @description     Customize the Windows 11 lock screen with styles and themes
 // @version         1.5
-// @author          ZACHARIAgs, Acercandr0, m417z
+// @author          ZACHARIAgs
 // @github          https://github.com/ZACHARIAgs
 // @include         LockApp.exe
 // @architecture    x86-64
