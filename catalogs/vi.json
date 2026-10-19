@@ -6564,7 +6564,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 1, 3, 25],
         "ratingUsers": 29,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 47.4,
         "updated": 1792166409000,
         "users": 474
@@ -18721,7 +18721,7 @@
         "ratingUsers": 22,
         "reviews": 0,
         "trendingSorting": 0.5302336174391756,
-        "updated": 1789924557000,
+        "updated": 1792385373000,
         "users": 694
       },
       "metadata": {
@@ -18735,7 +18735,7 @@
           "RetroBar.exe"
         ],
         "name": "Windows 7 Network Flyout Recreation",
-        "version": "5.1.0"
+        "version": "5.2.0"
       }
     },
     "win7-on-screen-keyboard-restorer": {

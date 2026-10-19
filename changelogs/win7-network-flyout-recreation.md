@@ -1,3 +1,7 @@
+## 5.2.0 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/16daa7c23005f6dce3f8152f548e5af5c7ca629b/mods/win7-network-flyout-recreation.wh.cpp))
+
+- Added support for StartAllBack (credits to awnaise for the implementation)
+
 ## 5.1.0 ([Sep 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3cd24569eaf0a887463b47d98a3dee6579e383b3/mods/win7-network-flyout-recreation.wh.cpp))
 
 - Tried to enhance the support for high contrast theme (credits to OrthodoxToolkits for the suggestion)

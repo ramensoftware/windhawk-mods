@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-19T04:03:50.000Z</updated>
+    <updated>2026-10-19T04:49:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 5.2.0]]></title>
+        <id>https://windhawk.net/mods/win7-network-flyout-recreation#16daa7c23005f6dce3f8152f548e5af5c7ca629b</id>
+        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
+        <updated>2026-10-19T04:49:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for StartAllBack (credits to awnaise for the implementation)</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Open Window Underline 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-open-window-underline#ed9b52479fb527279540b2fb7afcd367afac640e</id>
@@ -700,22 +713,6 @@ interfaces can cause issues.</li>
         <author>
             <name>tafadias</name>
             <uri>https://github.com/tafadias</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Reopen Programs at Sign-in 2.0.1]]></title>
-        <id>https://windhawk.net/mods/reopen-programs-at-sign-in#1b77d44584c94c1be861fc3745528cca2e13133b</id>
-        <link href="https://windhawk.net/mods/reopen-programs-at-sign-in"/>
-        <updated>2026-10-17T14:01:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed: nothing was reopened in Windhawk portable mode, because the mod storage drops line breaks. The saved list now uses a separator that survives (the old one is still read).</li>
-<li>Fixed: programs with a background process but no window were treated as already open and skipped. The check now compares windows, also right before each launch.</li>
-<li>Windhawk's own programs (tray app, 2.0 tool-mod hosts, editor) are no longer saved or reopened.</li>
-<li>README: documents the already-open check and the helper-process limitation.</li>
-</ul>]]></content>
-        <author>
-            <name>lima26x</name>
-            <uri>https://github.com/brdantas26</uri>
         </author>
     </entry>
 </feed>
