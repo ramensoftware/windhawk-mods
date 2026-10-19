@@ -22,7 +22,7 @@ the **second** on the next Ctrl+V, and so on (First In, First Out).
 How it works (short version):
 * A hidden window in a dedicated tool process listens for clipboard changes
   (`AddClipboardFormatListener`) and copies pure screenshot payloads
-  (PNG / CF_DIB) into a private FIFO queue.
+  (CF_DIB and PNG) into a private FIFO queue.
 * Only pure screenshots are queued. Copying anything else (text, Excel cells,
   files, HTML) automatically clears the queue so Ctrl+V never interferes with
   normal copy/paste.
@@ -36,6 +36,10 @@ How it works (short version):
 Runs as a dedicated tool process in Windhawk. Nothing is injected into explorer.exe
 or into the apps you paste into, so there is nothing to marshal across processes.
 
+Memory limits:
+* Total queue memory is capped at 128 MB (the oldest screenshots are dropped if
+  this budget is exceeded). Individual image payloads above 32 MB are skipped.
+
 Note: When pasting, the physical 'V' keystroke is swallowed while the image is
 restored to the clipboard, then re-injected. Very fast typing immediately after
 Ctrl+V may occasionally land before the pasted image.
@@ -46,7 +50,7 @@ Ctrl+V may occasionally land before the pasted image.
 /*
 - maxQueue: 10
   $name: Maximum queued screenshots
-  $description: Between 1 and 50. If exceeded, the oldest screenshot is dropped.
+  $description: Between 1 and 50. If exceeded (or if the 128 MB memory budget is reached), the oldest screenshot is dropped. Images over 32 MB are skipped.
 - expireSeconds: 600
   $name: Queue expiry (seconds)
   $description: Screenshots older than this are discarded. 0 = never expire.
@@ -60,6 +64,7 @@ Ctrl+V may occasionally land before the pasted image.
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <new>
 #include <utility>
 #include <vector>
 
@@ -70,21 +75,29 @@ namespace {
 // ----------------------------------------------------------------------------
 constexpr UINT kMsgPaste = WM_APP + 1;
 constexpr ULONG_PTR kInjectMarker = 0x53585A41;  // "SXZA": tags our own SendInput events
-constexpr SIZE_T kMaxItemBytes = 32ull * 1024 * 1024;    // 32 MB max per single image
+constexpr SIZE_T kMaxItemBytes = 32ull * 1024 * 1024;    // 32 MB max per format payload
 constexpr SIZE_T kMaxQueueBytes = 128ull * 1024 * 1024;  // 128 MB total queue budget
 constexpr ULONGLONG kDuplicateWindowMs = 1500;
 constexpr wchar_t kWndClass[] = L"WH_SeqScreenshotPaste_Window";
 
 // ----------------------------------------------------------------------------
-// Data model: a queue item stores a single image format payload as raw bytes.
+// Data model: a queue item stores image payloads (CF_DIB and PNG) as raw bytes.
 // ----------------------------------------------------------------------------
-struct ClipItem {
+struct FormatBlob {
     UINT fmt = 0;
     std::vector<BYTE> data;
+};
+
+struct ClipItem {
+    std::vector<FormatBlob> blobs;
     ULONGLONG tickMs = 0;
     uint64_t hash = 0;
 
-    size_t byteSize() const { return data.size(); }
+    size_t byteSize() const {
+        size_t total = 0;
+        for (const auto& b : blobs) total += b.data.size();
+        return total;
+    }
 };
 
 // ----------------------------------------------------------------------------
@@ -246,16 +259,7 @@ bool IsKnownScreenshotMetadataFormat(UINT fmt) {
 
     WCHAR name[256];
     if (GetClipboardFormatNameW(fmt, name, ARRAYSIZE(name)) > 0) {
-        if (_wcsicmp(name, L"PNG") == 0 ||
-            _wcsicmp(name, L"image/png") == 0 ||
-            _wcsicmp(name, L"Bitmap") == 0 ||
-            _wcsicmp(name, L"DeviceIndependentBitmap") == 0 ||
-            _wcsicmp(name, L"DeviceIndependentBitmapV5") == 0 ||
-            _wcsicmp(name, L"Format17") == 0 ||
-            _wcsicmp(name, L"CanIncludeInClipboardHistory") == 0 ||
-            _wcsicmp(name, L"CanUploadToCloudClipboard") == 0 ||
-            _wcsicmp(name, L"ExcludeClipboardContentFromMonitorProcessing") == 0 ||
-            _wcsicmp(name, L"Clipboard Viewer Ignore") == 0) {
+        if (_wcsicmp(name, L"image/png") == 0) {
             return true;
         }
     }
@@ -289,7 +293,7 @@ bool IsContentExcluded() {
     }
     if (g_fmtCanIncludeInHistory && IsClipboardFormatAvailable(g_fmtCanIncludeInHistory)) {
         HANDLE h = GetClipboardData(g_fmtCanIncludeInHistory);
-        if (h) {
+        if (h && GlobalSize(h) >= sizeof(DWORD)) {
             const DWORD* val = static_cast<const DWORD*>(GlobalLock(h));
             if (val) {
                 bool excluded = (*val == 0);
@@ -302,27 +306,31 @@ bool IsContentExcluded() {
 }
 
 // Snapshot the current clipboard image as plain bytes.
-// Stores a single format per item: PNG when available (compressed, preserves
-// alpha, lightweight memory footprint), or CF_DIB / CF_DIBV5 otherwise.
+// Stores CF_DIB (universal compatibility with classic Paint, WordPad, Win32 apps),
+// plus PNG when present (preserves alpha and clarity in modern apps).
 bool CaptureClipboard(ClipItem& out) {
     // Clipboard is already open by caller.
-    std::vector<BYTE> buf;
-    UINT chosenFmt = 0;
-
-    if (g_fmtPng && IsClipboardFormatAvailable(g_fmtPng) && ReadFormat(g_fmtPng, buf)) {
-        chosenFmt = g_fmtPng;
-    } else if (IsClipboardFormatAvailable(CF_DIB) && ReadFormat(CF_DIB, buf)) {
-        chosenFmt = CF_DIB;
-    } else if (IsClipboardFormatAvailable(CF_DIBV5) && ReadFormat(CF_DIBV5, buf)) {
-        chosenFmt = CF_DIBV5;
+    std::vector<BYTE> dib;
+    if (IsClipboardFormatAvailable(CF_DIB) && ReadFormat(CF_DIB, dib)) {
+        out.blobs.push_back(FormatBlob{CF_DIB, std::move(dib)});
+    } else {
+        std::vector<BYTE> dibv5;
+        if (IsClipboardFormatAvailable(CF_DIBV5) && ReadFormat(CF_DIBV5, dibv5)) {
+            out.blobs.push_back(FormatBlob{CF_DIBV5, std::move(dibv5)});
+        }
     }
 
-    if (!chosenFmt || buf.empty()) return false;
+    if (g_fmtPng && IsClipboardFormatAvailable(g_fmtPng)) {
+        std::vector<BYTE> png;
+        if (ReadFormat(g_fmtPng, png)) {
+            out.blobs.push_back(FormatBlob{g_fmtPng, std::move(png)});
+        }
+    }
 
-    out.fmt = chosenFmt;
-    out.hash = HashBytes(buf);
+    if (out.blobs.empty()) return false;
+
+    out.hash = HashBytes(out.blobs.front().data);
     out.tickMs = GetTickCount64();
-    out.data = std::move(buf);
     return true;
 }
 
@@ -333,23 +341,23 @@ bool RestoreToClipboard(HWND owner, const ClipItem& item) {
     if (!OpenClipboardRetry(owner)) return false;
     EmptyClipboard();
 
-    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, item.data.size());
-    if (!h) {
-        CloseClipboard();
-        return false;
-    }
-    void* p = GlobalLock(h);
-    if (!p) {
-        GlobalFree(h);
-        CloseClipboard();
-        return false;
-    }
-    std::memcpy(p, item.data.data(), item.data.size());
-    GlobalUnlock(h);
+    bool any = false;
+    for (const auto& b : item.blobs) {
+        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, b.data.size());
+        if (!h) continue;
+        void* p = GlobalLock(h);
+        if (!p) {
+            GlobalFree(h);
+            continue;
+        }
+        std::memcpy(p, b.data.data(), b.data.size());
+        GlobalUnlock(h);
 
-    bool ok = (SetClipboardData(item.fmt, h) != nullptr);
-    if (!ok) {
-        GlobalFree(h);
+        if (SetClipboardData(b.fmt, h)) {
+            any = true;
+        } else {
+            GlobalFree(h);
+        }
     }
 
     // Suppress Win+V clipboard history duplicates for re-injected pastes
@@ -385,7 +393,7 @@ bool RestoreToClipboard(HWND owner, const ClipItem& item) {
     }
 
     CloseClipboard();
-    return ok;
+    return any;
 }
 
 void SendPasteKeystroke() {
@@ -418,7 +426,12 @@ void OnClipboardUpdate(HWND hwnd) {
     // Our own RestoreToClipboard() also triggers this notification: ignore it.
     if (GetClipboardOwner() == hwnd) return;
 
-    if (!OpenClipboardRetry(hwnd)) return;
+    if (!OpenClipboardRetry(hwnd)) {
+        // Clipboard couldn't be opened: clear stale queue so Ctrl+V doesn't
+        // paste an old screenshot over new uncaptured content.
+        ClearQueue();
+        return;
+    }
 
     // Check if clipboard contains exclusively image data.
     if (!IsImageOnlyClipboard()) {
@@ -433,6 +446,7 @@ void OnClipboardUpdate(HWND hwnd) {
 
     if (IsContentExcluded()) {
         CloseClipboard();
+        ClearQueue();
         return;
     }
 
@@ -441,7 +455,8 @@ void OnClipboardUpdate(HWND hwnd) {
     CloseClipboard();
 
     if (!captured) {
-        Wh_Log(L"Could not capture the clipboard image");
+        Wh_Log(L"Could not capture the clipboard image (too large or read failed)");
+        ClearQueue();
         return;
     }
 
@@ -457,9 +472,10 @@ void OnClipboardUpdate(HWND hwnd) {
 
     try {
         Lock l;
-        EnforceBudgetLocked(item.byteSize());
-        g_queueTotalBytes += item.byteSize();
+        const size_t bytes = item.byteSize();
+        EnforceBudgetLocked(bytes);
         g_queue.push_back(std::move(item));
+        g_queueTotalBytes += bytes;  // increment only after push_back succeeds
         Wh_Log(L"Screenshot queued (%d in queue, %zu bytes total)",
                static_cast<int>(g_queue.size()), g_queueTotalBytes);
     } catch (const std::bad_alloc&) {
@@ -487,8 +503,9 @@ void OnPaste(HWND hwnd) {
             Wh_Log(L"Restore failed, re-queueing the screenshot");
             try {
                 Lock l;
-                g_queueTotalBytes += item.byteSize();
+                const size_t bytes = item.byteSize();
                 g_queue.push_front(std::move(item));
+                g_queueTotalBytes += bytes;  // increment only after push_front succeeds
             } catch (const std::bad_alloc&) {
                 Wh_Log(L"Memory allocation failed while re-queueing");
             }
