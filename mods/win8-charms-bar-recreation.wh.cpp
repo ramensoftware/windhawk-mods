@@ -16,11 +16,11 @@
 This mod recreates the classic Windows 8/8.1 Charms Bar on Windows 10 and 11.
 
 ## Screenshots 
-# Windows 8/8.1-styled Charms Bar
+### Windows 8/8.1-styled Charms Bar
 
 ![win8charmsnormal](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8charmsnormal.PNG)
 
-# Windows 8 beta-styled Charms Bar 
+### Windows 8 beta-styled Charms Bar 
 
 ![win8betacharms](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8betacharms.PNG)
 
@@ -84,10 +84,12 @@ Live system data (volume, brightness, network, battery) is read only while a pan
 
 ## Credits
 
+- m417z - Code review
 - Icepenguins101 - Technical Inspiration 
 - AdministratoX - Testing on Windows 11 25H2 and providing feedback
 - Kiyaku - Providing feedback
 - CharmsBarReloaded project - Wi-Fi PNGs and battery silhouettes (GPL-3.0, license-compatible)
+
 
 */
 // ==/WindhawkModReadme==
@@ -3387,9 +3389,15 @@ bool TogglePanel() {
         PostMessageW(externalPanel, WM_APP + 1, 0, 0);
         return true;
     }
-    // 2. Fall back to the built-in panel.
+    // 2. Fall back to the built-in panel – lazy initialization.
     HWND panel = FindWindowW(kClass, NULL);
-    if (!panel) return false;
+    if (!panel) {
+        if (!Init()) {
+            return false;
+        }
+        panel = FindWindowW(kClass, NULL);
+        if (!panel) return false;
+    }
     PostMessageW(panel, WM_APP_TOGGLE, 0, 0);
     return true;
 }
@@ -4558,6 +4566,7 @@ void ShowCharms(POINT pt, bool byKeyboard) {
     SetLayeredWindowAttributes(g_rail, 0, GetRailWindowAlpha(g_animStep.load()), LWA_ALPHA);
     ShowWindow(g_rail, SW_SHOWNOACTIVATE);
     RaiseCharmsOverCompanionStartScreen();
+    if (g_rail) SetTimer(g_rail, TIMER_STATUS, 1000, nullptr);
 
     if (AnimationsEnabled() && g_openMs.load() > 0) {
         StartRailAnimation(true);
@@ -4586,6 +4595,7 @@ void HideCharms(bool immediate = false) {
 
     if (immediate || !wasVisible || !AnimationsEnabled() || g_closeMs.load() == 0) {
         KillTimer(g_rail, TIMER_ANIMATION);
+        KillTimer(g_rail, TIMER_STATUS);
         ApplyRailFrame(0, kRailWidth);
         if (g_clock) ShowWindow(g_clock, SW_HIDE);
         ShowWindow(g_rail, SW_HIDE);
@@ -9031,6 +9041,7 @@ void UpdateAnimation() {
     if (t >= 1.0) {
         KillTimer(g_rail, TIMER_ANIMATION);
         if (targetAlpha == 0) {
+            KillTimer(g_rail, TIMER_STATUS);
             if (g_clock) ShowWindow(g_clock, SW_HIDE);
             ShowWindow(g_rail, SW_HIDE);
         }
@@ -9299,6 +9310,9 @@ LRESULT CALLBACK KeyboardProcImpl(int code, WPARAM wp, LPARAM lp) {
     // does not open Start. Using 0xE8 instead of VK_F23 avoids conflict with Copilot, which
     // sends Win+Shift+F23 on some keyboards.
     if (down && key->vkCode == 'C' && winCActive) {
+        if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) || (GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_MENU) & 0x8000)) {
+            return CallNextHookEx(g_keyboardHook, code, wp, lp);
+        }
         if ((GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000)) {
             if (!charmChordConsumed) {
                 charmChordConsumed = true;
@@ -9669,9 +9683,9 @@ DWORD WINAPI UiThreadProc(LPVOID) {
                 DpiScale(kVolTipHeight),g_pane,wc.hInstance);
         }
         if(!g_volumeTip)
-            Wh_Log(L"optional value tip window not created",GetLastError());
+            Wh_Log(L"optional value tip window not created (%lu)",GetLastError());
         if(!g_volumeFlyout) {
-            Wh_Log(L"optional settings flyout window not created",GetLastError());
+            Wh_Log(L"optional settings flyout window not created (%lu)",GetLastError());
         } else {
             g_brightnessNotifyCurrent=RegisterPowerSettingNotification(
                 g_volumeFlyout,&kGuidCurrentMonitorBrightness,DEVICE_NOTIFY_WINDOW_HANDLE);
@@ -9706,13 +9720,12 @@ DWORD WINAPI UiThreadProc(LPVOID) {
                 nullptr,wc.hInstance);
         }
         if(!g_startTip)
-            Wh_Log(L"optional Start tip window not created",GetLastError());
+            Wh_Log(L"optional Start tip window not created (%lu)",GetLastError());
 
         if(g_rail) {
             SetLayeredWindowAttributes(g_rail,0,0,LWA_ALPHA);
             RegisterTouchWindow(g_rail,TWF_WANTPALM);
-            if(!SetTimer(g_rail,TIMER_STATUS,1000,nullptr))
-                Wh_Log(L"rail status timer failed (%lu)",GetLastError());
+            // TIMER_STATUS is started lazily in ShowCharms and stopped in HideCharms
         }
         if(g_clock) SetLayeredWindowAttributes(g_clock,0,255,LWA_ALPHA);
         if(g_menu) SetLayeredWindowAttributes(g_menu,0,255,LWA_ALPHA);
@@ -10127,7 +10140,7 @@ bool StartCharmsServices() {
         g_ready = g_hookReady = nullptr;
         return false;
     }
-    DisplaySwitchMod::Init(); // logs its own failures; the Charms Bar keeps running either way
+    // DisplaySwitchMod::Init() removed from eager startup – lazy init on first Devices > Project use.
     Wh_Log(L"v%s services started (rail=0x%p clock=0x%p menu=0x%p pane=0x%p volume=0x%p, "
            L"keyboard hook=%s, mouse hook=%s, foreground hook=%s)",
            kModVersion,(void*)g_rail,(void*)g_clock,(void*)g_menu,(void*)g_pane,(void*)g_volumeFlyout,
