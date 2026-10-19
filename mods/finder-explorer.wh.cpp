@@ -331,6 +331,10 @@ std::mutex g_tabsMutex;
 std::set<HWND> g_tabs;
 UINT g_attachMsg, g_detachMsg, g_settingsMsg;
 
+// Counts the mod's frames on the tab thread's stack: a sent message (the
+// detach request included) can be handled inside any nested message loop
+// started below one of them (menus, dialogs, COM waits), and detaching then
+// would return into unloaded code. Opened on entry to each window procedure.
 struct ModalScope {
     Tab& t;
     explicit ModalScope(Tab& tab) : t(tab) { t.modalDepth++; }
@@ -1697,6 +1701,7 @@ LRESULT CALLBACK ListSubclassProc(HWND hwnd,
                                   UINT_PTR,
                                   DWORD_PTR refData) {
     Tab& t = *(Tab*)refData;
+    ModalScope frame(t);
     int k = ColumnOfList(t, hwnd);
     switch (msg) {
         case WM_MOUSEWHEEL:
@@ -1984,6 +1989,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
     Tab& t = *tp;
+    ModalScope frame(t);
 
     // Messages for the items drawn by the context menu itself.
     if (t_menu3 || t_menu2) {
@@ -2377,6 +2383,7 @@ LRESULT CALLBACK DefViewSubclassProc(HWND hwnd,
                                      UINT_PTR,
                                      DWORD_PTR refData) {
     Tab& t = *(Tab*)refData;
+    ModalScope frame(t);
     LRESULT result = DefSubclassProc(hwnd, msg, wParam, lParam);
     switch (msg) {
         case WM_WINDOWPOSCHANGED:
@@ -2402,6 +2409,7 @@ LRESULT CALLBACK DefViewChildSubclassProc(HWND hwnd,
                                           UINT_PTR,
                                           DWORD_PTR refData) {
     Tab& t = *(Tab*)refData;
+    ModalScope frame(t);
     switch (msg) {
         case WM_LBUTTONDOWN:
         case WM_LBUTTONUP:
@@ -2706,6 +2714,11 @@ void Poll(Tab& t) {
                mode != t.lastMode && (mode == FVM_DETAILS) != t.details) {
         t.details = mode == FVM_DETAILS;
         ResetColumns(t, pidl);
+    } else if (t.active && mode != t.lastMode && !IsColumnMode(mode)) {
+        // Any switch to a non-column mode made without navigating (also
+        // Icons -> Tiles under the columns, when Explorer kept the folder's
+        // own mode).
+        Deactivate(t);
     } else if (IsColumnMode(mode) != IsColumnMode(t.lastMode)) {
         t.active = IsColumnMode(mode);
         if (t.active) {
@@ -2761,6 +2774,35 @@ LRESULT CALLBACK TabSubclassProc(HWND hwnd,
                                  LPARAM lParam,
                                  DWORD_PTR refData) {
     Tab* t = (Tab*)refData;
+    if (msg == g_detachMsg && g_detachMsg) {
+        // Refused while a mod frame is below this one (see ModalScope): a
+        // menu is closed; a dialog waits for the user. Wh_ModUninit tries
+        // again.
+        if (t->modalDepth > 0) {
+            EndMenu();
+            return FALSE;
+        }
+        CleanupTab(*t);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TabSubclassProc);
+        {
+            std::lock_guard<std::mutex> lock(g_tabsMutex);
+            g_tabs.erase(hwnd);
+        }
+        delete t;
+        return TRUE;
+    }
+    if (msg == WM_NCDESTROY) {
+        // The subclass was already removed by Windhawk.
+        CleanupTab(*t);
+        {
+            std::lock_guard<std::mutex> lock(g_tabsMutex);
+            g_tabs.erase(hwnd);
+        }
+        delete t;
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
+    }
+
+    ModalScope frame(*t);
     if (msg == WM_TIMER && wParam == kTimerPoll) {
         bool visible = IsWindowVisible(hwnd);
         if (visible != t->pollFast) {
@@ -2786,32 +2828,6 @@ LRESULT CALLBACK TabSubclassProc(HWND hwnd,
         t->lastPidl = nullptr;
         Poll(*t);
         return 0;
-    }
-    if (msg == g_detachMsg && g_detachMsg) {
-        // Sent messages are also handled inside menus and dialogs, which
-        // return into the mod's code: not detached yet, Wh_ModUninit tries
-        // again. A menu is closed; a dialog waits for the user.
-        if (t->modalDepth > 0) {
-            EndMenu();
-            return FALSE;
-        }
-        CleanupTab(*t);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TabSubclassProc);
-        {
-            std::lock_guard<std::mutex> lock(g_tabsMutex);
-            g_tabs.erase(hwnd);
-        }
-        delete t;
-        return TRUE;
-    }
-    if (msg == WM_NCDESTROY) {
-        // The subclass was already removed by Windhawk.
-        CleanupTab(*t);
-        {
-            std::lock_guard<std::mutex> lock(g_tabsMutex);
-            g_tabs.erase(hwnd);
-        }
-        delete t;
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
