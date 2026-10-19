@@ -7,7 +7,7 @@
 // @github          https://github.com/venasataa
 // @homepage        https://venasataa.github.io
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshlwapi -lgdi32
+// @compilerOptions -lole32 -loleaut32 -lshlwapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -321,7 +321,7 @@ void SendCtrlKey(WORD vk, bool shift) {
     SendInput(count, inputs, sizeof(INPUT));
 }
 
-void SendMiddleUpAt(POINT /*pt*/) {
+void SendMiddleUp() {
     INPUT input{};
     input.type = INPUT_MOUSE;
     input.mi.dwFlags = MOUSEEVENTF_MIDDLEUP;
@@ -369,7 +369,6 @@ enum class HitResult {
     Undecided,      // No specific element identified
     OnTab,          // Clicked on a tab item
     OnOtherButton,  // Clicked on a button other than the add button
-    InContainer,    // Clicked inside the tab strip container but not on a tab/button
 };
 
 bool IsTabItemElement(IUIAutomationElement* pElement) {
@@ -392,31 +391,10 @@ bool IsTabItemElement(IUIAutomationElement* pElement) {
     return false;
 }
 
-bool IsTabStripContainerElement(IUIAutomationElement* pElement) {
-    CONTROLTYPEID controlType = 0;
-    if (SUCCEEDED(pElement->get_CurrentControlType(&controlType)) &&
-        controlType == UIA_TabControlTypeId) {
-        return true;
-    }
-
-    BSTR className = nullptr;
-    if (SUCCEEDED(pElement->get_CurrentClassName(&className)) && className) {
-        bool isContainer = !StrStrIW(className, L"TabViewItem") &&
-                           (StrStrIW(className, L"TabView") ||
-                            StrStrIW(className, L"TabStrip"));
-        SysFreeString(className);
-        if (isContainer) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool IsAddButton(IUIAutomationElement* pElement) {
     CONTROLTYPEID controlType = 0;
     if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
-        controlType != UIA_ButtonControlTypeId) {
+        (controlType != UIA_ButtonControlTypeId && controlType != UIA_SplitButtonControlTypeId)) {
         return false;
     }
 
@@ -434,16 +412,13 @@ bool IsAddButton(IUIAutomationElement* pElement) {
     return isAdd;
 }
 
-// Returns:
-// 0 - Not a button
-// 2 - Other button (Add button is handled separately)
-int GetButtonKind(IUIAutomationElement* pElement) {
+bool IsButton(IUIAutomationElement* pElement) {
     CONTROLTYPEID controlType = 0;
     if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
-        controlType != UIA_ButtonControlTypeId) {
-        return 0;
+        (controlType != UIA_ButtonControlTypeId && controlType != UIA_SplitButtonControlTypeId)) {
+        return false;
     }
-    return 2; // Other button
+    return true;
 }
 
 bool FindTabStripBottom(IUIAutomationElement* pTabView, LONG* pBottom) {
@@ -527,20 +502,16 @@ bool FindTabStripBottom(IUIAutomationElement* pTabView, LONG* pBottom) {
     return false;
 }
 
-bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip, LONG* pStripBottom) {
-    // Check cache first
-    if (GetCachedTabStrip(hRootWnd, prcTabStrip, pStripBottom)) {
-        return true;
-    }
+IUIAutomationElement* FindTabView(HWND hRootWnd) {
+    if (!g_pAutomation) return nullptr;
     
     IUIAutomationElement* pRoot = nullptr;
     if (FAILED(g_pAutomation->ElementFromHandle(hRootWnd, &pRoot)) || !pRoot) {
-        SetCachedTabStrip(hRootWnd, false, nullptr, 0);
-        return false;
+        return nullptr;
     }
 
+    IUIAutomationElement* pTabView = nullptr;
     bool found = false;
-    IUIAutomationElement* pTabStrip = nullptr;
 
     VARIANT varControlType;
     VariantInit(&varControlType);
@@ -548,9 +519,8 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip, LONG* pStripBottom) {
     varControlType.lVal = UIA_TabControlTypeId;
 
     IUIAutomationCondition* pCondition = nullptr;
-    if (SUCCEEDED(g_pAutomation->CreatePropertyCondition(
-            UIA_ControlTypePropertyId, varControlType, &pCondition)) && pCondition) {
-        if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pCondition, &pTabStrip)) && pTabStrip) {
+    if (SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlType, &pCondition)) && pCondition) {
+        if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pCondition, &pTabView)) && pTabView) {
             found = true;
         }
         pCondition->Release();
@@ -562,43 +532,50 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip, LONG* pStripBottom) {
             L"Windows.UI.Xaml.Controls.TabView",
             L"Microsoft.UI.Xaml.Controls.TabView",
         };
-
         for (PCWSTR className : kTabViewClassNames) {
             VARIANT varClassName;
             VariantInit(&varClassName);
             varClassName.vt = VT_BSTR;
             varClassName.bstrVal = SysAllocString(className);
-
             IUIAutomationCondition* pClassCondition = nullptr;
-            if (varClassName.bstrVal &&
-                SUCCEEDED(g_pAutomation->CreatePropertyCondition(
-                    UIA_ClassNamePropertyId, varClassName, &pClassCondition)) && pClassCondition) {
-                if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pClassCondition, &pTabStrip)) && pTabStrip) {
+            if (varClassName.bstrVal && SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId, varClassName, &pClassCondition)) && pClassCondition) {
+                if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pClassCondition, &pTabView)) && pTabView) {
                     found = true;
                 }
                 pClassCondition->Release();
             }
             VariantClear(&varClassName);
-
             if (found) break;
         }
     }
 
-    bool result = false;
-    if (found && pTabStrip) {
-        if (SUCCEEDED(pTabStrip->get_CurrentBoundingRectangle(prcTabStrip))) {
-            if (pStripBottom) {
-                // Fallback to a reasonable tab strip height if FindTabStripBottom fails
-                // to prevent the entire content area from being considered a tab strip
-                *pStripBottom = prcTabStrip->top + ScaleByDpi(40, hRootWnd);
-                FindTabStripBottom(pTabStrip, pStripBottom);
-            }
-            result = !IsRectEmpty(prcTabStrip);
-        }
-        pTabStrip->Release();
+    pRoot->Release();
+    return pTabView;
+}
+
+bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip, LONG* pStripBottom) {
+    // Check cache first
+    if (GetCachedTabStrip(hRootWnd, prcTabStrip, pStripBottom)) {
+        return true;
+    }
+    
+    IUIAutomationElement* pTabView = FindTabView(hRootWnd);
+    if (!pTabView) {
+        SetCachedTabStrip(hRootWnd, false, nullptr, 0);
+        return false;
     }
 
-    pRoot->Release();
+    bool result = false;
+    if (SUCCEEDED(pTabView->get_CurrentBoundingRectangle(prcTabStrip))) {
+        if (pStripBottom) {
+            // Fallback to a reasonable tab strip height if FindTabStripBottom fails
+            // to prevent the entire content area from being considered a tab strip
+            *pStripBottom = prcTabStrip->top + ScaleByDpi(40, hRootWnd);
+            FindTabStripBottom(pTabView, pStripBottom);
+        }
+        result = !IsRectEmpty(prcTabStrip);
+    }
+    pTabView->Release();
     
     // Cache the result
     SetCachedTabStrip(hRootWnd, result, result ? prcTabStrip : nullptr, result ? *pStripBottom : 0);
@@ -649,7 +626,7 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
 
         if (IsAddButton(pCurrent)) {
             foundAddButton = true;
-        } else if (GetButtonKind(pCurrent)) {
+        } else if (IsButton(pCurrent)) {
             hit = HitResult::OnOtherButton;
             break;
         }
@@ -671,7 +648,6 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
     pElement->Release();
 
     switch (hit) {
-        case HitResult::InContainer:
         case HitResult::Undecided:
             return true; // Empty space in tab strip!
 
@@ -683,86 +659,55 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
 }
 
 IUIAutomationElement* FindAddButtonInWindow(HWND hRootWnd) {
-    if (!g_pAutomation) return nullptr;
-    
-    IUIAutomationElement* pRoot = nullptr;
-    if (FAILED(g_pAutomation->ElementFromHandle(hRootWnd, &pRoot)) || !pRoot) {
-        return nullptr;
-    }
-
-    IUIAutomationElement* pTabView = nullptr;
-    bool found = false;
-
-    VARIANT varControlType;
-    VariantInit(&varControlType);
-    varControlType.vt = VT_I4;
-    varControlType.lVal = UIA_TabControlTypeId;
-
-    IUIAutomationCondition* pCondition = nullptr;
-    if (SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlType, &pCondition)) && pCondition) {
-        if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pCondition, &pTabView)) && pTabView) {
-            found = true;
-        }
-        pCondition->Release();
-    }
-    VariantClear(&varControlType);
-
-    if (!found) {
-        static const WCHAR* kTabViewClassNames[] = {
-            L"Windows.UI.Xaml.Controls.TabView",
-            L"Microsoft.UI.Xaml.Controls.TabView",
-        };
-        for (PCWSTR className : kTabViewClassNames) {
-            VARIANT varClassName;
-            VariantInit(&varClassName);
-            varClassName.vt = VT_BSTR;
-            varClassName.bstrVal = SysAllocString(className);
-            IUIAutomationCondition* pClassCondition = nullptr;
-            if (varClassName.bstrVal && SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ClassNamePropertyId, varClassName, &pClassCondition)) && pClassCondition) {
-                if (SUCCEEDED(pRoot->FindFirst(TreeScope_Descendants, pClassCondition, &pTabView)) && pTabView) {
-                    found = true;
-                }
-                pClassCondition->Release();
-            }
-            VariantClear(&varClassName);
-            if (found) break;
-        }
-    }
+    IUIAutomationElement* pTabView = FindTabView(hRootWnd);
+    if (!pTabView) return nullptr;
 
     IUIAutomationElement* pAddButton = nullptr;
-    if (found && pTabView) {
-        VARIANT varControlTypeBtn;
-        VariantInit(&varControlTypeBtn);
-        varControlTypeBtn.vt = VT_I4;
-        varControlTypeBtn.lVal = UIA_ButtonControlTypeId;
+    
+    VARIANT varControlTypes[2];
+    VariantInit(&varControlTypes[0]);
+    varControlTypes[0].vt = VT_I4;
+    varControlTypes[0].lVal = UIA_ButtonControlTypeId;
+    VariantInit(&varControlTypes[1]);
+    varControlTypes[1].vt = VT_I4;
+    varControlTypes[1].lVal = UIA_SplitButtonControlTypeId;
 
-        IUIAutomationCondition* pBtnCondition = nullptr;
-        if (SUCCEEDED(g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlTypeBtn, &pBtnCondition)) && pBtnCondition) {
-            IUIAutomationElementArray* pButtons = nullptr;
-            if (SUCCEEDED(pTabView->FindAll(TreeScope_Descendants, pBtnCondition, &pButtons)) && pButtons) {
-                int count = 0;
-                pButtons->get_Length(&count);
-                for (int i = 0; i < count; i++) {
-                    IUIAutomationElement* pBtn = nullptr;
-                    if (SUCCEEDED(pButtons->GetElement(i, &pBtn)) && pBtn) {
-                        if (IsAddButton(pBtn)) {
-                            pAddButton = pBtn;
-                            break;
-                        }
-                        pBtn->Release();
-                    }
-                }
-                pButtons->Release();
-            }
-            pBtnCondition->Release();
-        }
-        VariantClear(&varControlTypeBtn);
-        pTabView->Release();
-    } else if (pTabView) {
-        pTabView->Release();
+    IUIAutomationCondition* pBtnConditions[2] = {nullptr, nullptr};
+    IUIAutomationCondition* pOrCondition = nullptr;
+
+    g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlTypes[0], &pBtnConditions[0]);
+    g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlTypes[1], &pBtnConditions[1]);
+    
+    if (pBtnConditions[0] && pBtnConditions[1]) {
+        g_pAutomation->CreateOrCondition(pBtnConditions[0], pBtnConditions[1], &pOrCondition);
     }
 
-    pRoot->Release();
+    if (pOrCondition) {
+        IUIAutomationElementArray* pButtons = nullptr;
+        if (SUCCEEDED(pTabView->FindAll(TreeScope_Descendants, pOrCondition, &pButtons)) && pButtons) {
+            int count = 0;
+            pButtons->get_Length(&count);
+            for (int i = 0; i < count; i++) {
+                IUIAutomationElement* pBtn = nullptr;
+                if (SUCCEEDED(pButtons->GetElement(i, &pBtn)) && pBtn) {
+                    if (IsAddButton(pBtn)) {
+                        pAddButton = pBtn;
+                        break;
+                    }
+                    pBtn->Release();
+                }
+            }
+            pButtons->Release();
+        }
+        pOrCondition->Release();
+    }
+    
+    if (pBtnConditions[0]) pBtnConditions[0]->Release();
+    if (pBtnConditions[1]) pBtnConditions[1]->Release();
+    VariantClear(&varControlTypes[0]);
+    VariantClear(&varControlTypes[1]);
+    pTabView->Release();
+
     return pAddButton;
 }
 
@@ -836,7 +781,6 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
             HWND root = nullptr;
             ShortcutInfo shortcut = {0, false};
             POINT upPt = {};
-            POINT downPt = {};
 
             EnterState();
             if (g_generation == gen) {
@@ -845,7 +789,6 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
                 root = g_downRoot;
                 shortcut = g_downShortcut;
                 upPt = g_upPt;
-                downPt = g_downPt;
 
                 if (g_upSwallowed) {
                     g_upSwallowed = false;
@@ -854,7 +797,7 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
             LeaveState();
 
             if (validGen) {
-                SendMiddleUpAt(upPt);
+                SendMiddleUp();
 
                 if (shouldCreate) {
                     // Verify release is still in the tab strip
@@ -908,12 +851,10 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
 
 bool ReleasePreviousSwallowedUpIfNeeded() {
     bool release = false;
-    POINT pt = {};
 
     EnterState();
     if (g_upSwallowed) {
         release = true;
-        pt = g_upPt;
         g_upSwallowed = false;
         g_clickState = CLICK_NONE;
         g_generation++;
@@ -921,7 +862,7 @@ bool ReleasePreviousSwallowedUpIfNeeded() {
     LeaveState();
 
     if (release) {
-        SendMiddleUpAt(pt);
+        SendMiddleUp();
         return true;
     }
     return false;
@@ -929,20 +870,18 @@ bool ReleasePreviousSwallowedUpIfNeeded() {
 
 void WatchdogCheck() {
     bool release = false;
-    POINT pt = {};
     LONG gen = 0;
 
     EnterState();
     if (g_upSwallowed && GetTickCount() - g_upSwallowedTime >= RELEASE_TIMEOUT_MS) {
         release = true;
-        pt = g_upPt;
         gen = g_generation;
         g_upSwallowed = false;
     }
     LeaveState();
 
     if (release) {
-        SendMiddleUpAt(pt);
+        SendMiddleUp();
 
         EnterState();
         if (g_generation == gen) {
@@ -1052,9 +991,10 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             LeaveState();
 
             if (swallow) {
-                if (g_watchdogTimerId == 0) {
-                    g_watchdogTimerId = SetTimer(nullptr, 0, RELEASE_TIMEOUT_MS, nullptr);
+                if (g_watchdogTimerId != 0) {
+                    KillTimer(nullptr, g_watchdogTimerId);
                 }
+                g_watchdogTimerId = SetTimer(nullptr, 0, RELEASE_TIMEOUT_MS, nullptr);
                 PostThreadMessage(g_workerThreadId, message, (WPARAM)gen, 0);
                 return 1;
             }
@@ -1193,7 +1133,7 @@ void WhTool_ModUninit() {
 // Paste the code below in your mod, and implement the following callbacks:
 // - WhTool_ModInit: Called when the mod is initialized.
 // - WhTool_ModSettingsChanged: Called when the mod settings are changed.
-// - WhTool_ModUninit: Called when the mod is uninstalled.
+// - WhTool_ModUninit: Called when the mod is unloaded.
 // Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
