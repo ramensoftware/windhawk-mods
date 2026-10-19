@@ -1,22 +1,22 @@
 // ==WindhawkMod==
 // @id              macos-dock
-// @name            macOS Dock
+// @name            Standalone Dock (macOS-like)
 // @description     A macOS-style Dock: magnification on hover, bouncing icons, running app indicators, drag to rearrange and more
 // @version         1.0.0
 // @author          Rafael Mendes
 // @github          https://github.com/RafaelMendes1407
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lshell32 -lversion -lshcore -ladvapi32 -ldwmapi -ld2d1 -ldwrite -lole32 -loleaut32 -luuid -lcomctl32
+// @compilerOptions -lgdi32 -lshell32 -lversion -lshcore -ladvapi32 -ldwmapi -ld2d1 -ldwrite -lole32 -luuid -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# macOS Dock
+# Standalone Dock (macOS-like)
 
-A Dock like the one in macOS, drawn by the mod itself (it's not a modified
-taskbar). Behaviors taken from macOS:
+A Dock like the one in macOS, drawn by the mod itself in its own windows (it's
+not a restyled taskbar). Behaviors taken from macOS:
 
 - **Magnification**: icons near the mouse grow along a smooth curve, their
   neighbors make room and the Dock follows. The icon under the mouse stays
@@ -48,17 +48,39 @@ taskbar). Behaviors taken from macOS:
 - **Minimize**: clicking the icon of the focused app minimizes it, and
   another click brings it back.
 
-## How it works
-The mod runs in `explorer.exe`. It can hide the Windows taskbar (the option
-turns on the taskbar's auto-hide and keeps it from showing up); when the mod
-is disabled, everything goes back to how it was.
+## How it differs from other dock mods
+[MacOS Style Dock](https://windhawk.net/mods/macos-style-dock) and
+[Mac Island & Dock](https://windhawk.net/mods/mac-island-dock) restyle the
+Windows taskbar itself into a dock, so they keep the taskbar's pins, jump
+lists and bottom position. This mod is a separate Dock window next to the
+taskbar: it has its own pin list, one Dock per monitor, bottom, left or right
+placement, a Downloads stack, a Recycle Bin and drag-out removal. Don't
+combine it with mods that turn the taskbar into a dock, or you get two docks.
 
-Pinned apps are kept in the mod's storage. The first time, the mod imports
-the shortcuts pinned to the taskbar.
+## How it works
+The mod runs in `explorer.exe`, in the process that owns the taskbar. Pinned
+apps are kept in the mod's storage. The first time, the mod imports the
+shortcuts pinned to the taskbar.
+
+## Hiding the Windows taskbar
+The **Hide the Windows taskbar** option is off by default. A hidden taskbar
+still reserves its strip of the screen, so when the option is on, the mod also
+turns on the taskbar's **Automatically hide the taskbar** setting (only if it
+was off) and keeps the taskbar windows hidden. That setting is saved by
+Windows: the Settings app shows it as on while the mod runs.
+
+The mod turns the setting back off when you turn the option off, or when the
+mod is disabled or removed while Explorer is running. If Explorer exits first
+(sign-out, restart), the setting stays on until the mod loads again, which
+restores it the next time it's disabled. If you remove the mod while Explorer
+isn't running, turn it off in Settings > Personalization > Taskbar > Taskbar
+behaviors.
+
+The clock, the tray icons and the notification and quick settings buttons
+go away with the taskbar. Win+N still opens the notifications and the
+calendar, and Win+A the quick settings.
 
 ## Tips
-- Combine it with the **Global Menu Bar** mod to have the menu bar, the clock
-  and the tray icons at the top, since the taskbar goes away.
 - The Start button opens the Start menu; right clicking it opens the Win+X
   menu.
 - Windows doesn't allow changing the target of the minimize animation. Mods
@@ -123,8 +145,9 @@ from the monitor edge, the Dock takes (without magnification).
 - reserveSpace: true
   $name: Reserve screen space
   $description: Maximized windows don't go under the Dock (only when the Dock never hides)
-- hideTaskbar: true
+- hideTaskbar: false
   $name: Hide the Windows taskbar
+  $description: Also turns on the taskbar's auto-hide setting while the Dock runs, see the description for details
 - clickActive: minimize
   $name: Clicking the icon of the focused app
   $options:
@@ -309,10 +332,7 @@ struct Settings {
 } g_settings;
 
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 void LoadSettings() {
@@ -574,8 +594,7 @@ bool IsTaskbarWindow(HWND hwnd) {
             !wcscmp(className, L"Shell_SecondaryTrayWnd"));
 }
 
-using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
-ShowWindow_t ShowWindow_Original;
+decltype(&ShowWindow) ShowWindow_Original;
 BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
     if (g_taskbarHidden && cmd != SW_HIDE && IsTaskbarWindow(hwnd)) {
         cmd = SW_HIDE;
@@ -583,8 +602,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hwnd, int cmd) {
     return ShowWindow_Original(hwnd, cmd);
 }
 
-using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
-SetWindowPos_t SetWindowPos_Original;
+decltype(&SetWindowPos) SetWindowPos_Original;
 BOOL WINAPI SetWindowPos_Hook(HWND hwnd,
                               HWND insertAfter,
                               int x,
@@ -674,11 +692,15 @@ bool TaskbarAutohides() {
 ////////////////////////////////////////////////////////////////////////////////
 // Icon images
 
-ComPtr<ID2D1Factory> g_d2d;
-ComPtr<IDWriteFactory> g_dwrite;
-ComPtr<ID2D1DCRenderTarget> g_target;
-ComPtr<ID2D1DeviceContext> g_context;
-ComPtr<ID2D1SolidColorBrush> g_brush;
+// The globals that hold COM objects are released by the Dock thread before it
+// ends (no_destroy): when Explorer exits, Wh_ModUninit isn't called, the
+// thread is already gone, and static destructors would release them on the
+// exiting thread under the loader lock.
+[[clang::no_destroy]] ComPtr<ID2D1Factory> g_d2d;
+[[clang::no_destroy]] ComPtr<IDWriteFactory> g_dwrite;
+[[clang::no_destroy]] ComPtr<ID2D1DCRenderTarget> g_target;
+[[clang::no_destroy]] ComPtr<ID2D1DeviceContext> g_context;
+[[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_brush;
 UINT g_targetGeneration = 1;
 
 struct Image {
@@ -995,7 +1017,7 @@ struct Item {
     HWND lastMinimized = nullptr;
 };
 
-std::vector<std::unique_ptr<Item>> g_items;
+[[clang::no_destroy]] std::vector<std::unique_ptr<Item>> g_items;  // Holds D2D bitmaps.
 std::vector<std::wstring> g_pins;
 double g_orderCounter = 0;
 bool g_ready;  // After the first build, new items animate in.
@@ -1033,7 +1055,8 @@ struct DropState {
     std::vector<std::wstring> files;
     ComPtr<IDataObject> data;
     Item* target = nullptr;
-} g_drop;
+};
+[[clang::no_destroy]] DropState g_drop;
 
 struct PendingDrop {
     Item* target = nullptr;
@@ -1225,7 +1248,7 @@ struct WindowInfo {
 };
 
 std::unordered_map<HWND, WindowInfo> g_windowCache;
-ComPtr<IVirtualDesktopManager> g_desktops;
+[[clang::no_destroy]] ComPtr<IVirtualDesktopManager> g_desktops;
 // Invisible window that receives the timers and the system notifications;
 // the Docks come and go with the monitors.
 std::atomic<HWND> g_controller;
@@ -1583,7 +1606,7 @@ struct Dock {
     bool wasAnimating = false;
 };
 
-std::vector<std::unique_ptr<Dock>> g_docks;
+[[clang::no_destroy]] std::vector<std::unique_ptr<Dock>> g_docks;  // DWrite formats.
 Dock* g_d;       // The Dock being computed or drawn right now.
 Dock* g_active;  // The one on the mouse's monitor; outside loops, g_d is it.
 int g_iconPixels = 96;  // The largest among the Docks; the icons are shared.
@@ -1938,8 +1961,9 @@ void ComputeLayout(float cursorU, double now) {
     g_d->layout.valid = true;
 }
 
-// The fullscreen Start (another mod) leaves the Dock strip free: while it's
-// open on this monitor, the Dock shows up even with windows over it.
+// The Fullscreen Start mod (Launchpad style, by the same author) leaves the
+// Dock strip free: while it's open on this monitor, the Dock shows up even
+// with windows over it. Without that mod, FindWindow just finds nothing.
 bool StartMenuOpenHere() {
     HWND start = FindWindowW(L"WindhawkFullscreenStart", nullptr);
     return start && IsWindowVisible(start) &&
@@ -2974,13 +2998,17 @@ UINT TrackMenu(HMENU menu, Item* item) {
     }
 
     HWND previous = GetForegroundWindow();
+    HWND owner = g_d->wnd;
     g_menuOpen = true;
     MarkDirty();
-    SetForegroundWindow(g_d->wnd);
-    UINT cmd = TrackPopupMenuEx(menu, flags, pt.x, pt.y, g_d->wnd, nullptr);
-    PostMessageW(g_d->wnd, WM_NULL, 0, 0);
+    SetForegroundWindow(owner);
+    UINT cmd = TrackPopupMenuEx(menu, flags, pt.x, pt.y, owner, nullptr);
+    PostMessageW(owner, WM_NULL, 0, 0);
     g_menuOpen = false;
-    if (GetForegroundWindow() == g_d->wnd && previous && IsWindow(previous)) {
+    if (!g_d) {
+        return 0;  // The Docks were closed (unload) while the menu was open.
+    }
+    if (GetForegroundWindow() == owner && previous && IsWindow(previous)) {
         SetForegroundWindow(previous);
     }
     return cmd;
@@ -3025,7 +3053,7 @@ void ShowAppMenu(Item& item) {
         InternalGetWindowText(windows[i], title, ARRAYSIZE(title));
         std::wstring text = MenuText(*title ? title : item.name.c_str());
         if (IsIconic(windows[i])) {
-            text += L" (minimizada)";
+            text += L" (minimized)";
         }
         UINT flags = MF_STRING;
         if (windows[i] == foreground || windows[i] == root) {
@@ -4141,12 +4169,15 @@ void UnhookTaskman() {
     g_taskman = nullptr;
 }
 
+bool g_started;  // See StartDock.
+bool StartDock();
+
 LRESULT CALLBACK ControllerWndProc(HWND hwnd,
                                    UINT msg,
                                    WPARAM wParam,
                                    LPARAM lParam) {
     if (msg == g_iconQueryMsg && g_iconQueryMsg) {
-        return QueryIconPoint((HWND)wParam);
+        return g_started ? QueryIconPoint((HWND)wParam) : 0;
     }
     if (msg == g_shellHookMsg && g_shellHookMsg) {
         if (wParam == HSHELL_GETMINRECT) {
@@ -4157,11 +4188,35 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd,
         return 0;
     }
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg) {
+        if (!g_started) {
+            StartDock();
+            return 0;
+        }
         if (g_settings.hideTaskbar) {
             SetTaskbarHidden(true);
         }
         HookTaskman();
         return 0;
+    }
+
+    if (!g_started) {
+        switch (msg) {
+            case WM_TIMER:
+                if (wParam == kTimerSlow) {
+                    StartDock();
+                }
+                return 0;
+            case WM_APP_RELOAD:
+                LoadSettings();
+                return 0;
+            case WM_SETTINGCHANGE:
+                if (lParam && !wcscmp((PCWSTR)lParam, L"ImmersiveColorSet")) {
+                    UpdateColors();
+                }
+                return 0;
+            case WM_DISPLAYCHANGE:
+                return 0;
+        }
     }
 
     switch (msg) {
@@ -4428,17 +4483,56 @@ bool CreateController() {
         WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, instance, nullptr);
 
     g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
-    RegisterShellHookWindow(controller);
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
     // Apps of any integrity level can ask.
     g_iconQueryMsg = RegisterWindowMessageW(L"WindhawkMacDock.GetIconPoint");
     ChangeWindowMessageFilterEx(controller, g_iconQueryMsg, MSGFLT_ALLOW,
                                 nullptr);
 
+    // Until StartDock, only this timer runs: it waits for the taskbar.
+    SetTimer(controller, kTimerSlow, 1000, nullptr);
+    return true;
+}
+
+// Every explorer.exe gets the mod, including short-lived ones such as
+// "explorer.exe /select,<file>", which hand the request to the shell and exit.
+// The Dock only starts in the process that owns the taskbar; at sign-in the
+// mod loads before the taskbar exists, so the slow timer and TaskbarCreated
+// try again.
+bool StartDock() {
+    if (g_started || !FindOurTaskbar()) {
+        return g_started;
+    }
+    g_started = true;
+
+    int savedState = Wh_GetIntValue(L"taskbarState", -1);
+    if (savedState >= 0) {
+        g_changedAutohide = true;
+        g_originalTaskbarState = (UINT)savedState;
+    }
+
+    HWND controller = g_controller;
+    RegisterShellHookWindow(controller);
     HookWindowChanges();
     HookTaskman();
-    SetTimer(controller, kTimerSlow, 1000, nullptr);
     SetTimer(controller, kTimerTick, 50, nullptr);
+
+    SetTaskbarHidden(g_settings.hideTaskbar);
+    g_trashFull = QueryTrashFull();
+    SyncDocks();
+    if (g_docks.empty()) {
+        Wh_Log(L"Failed to create the Dock");
+        DestroyWindow(controller);
+        return false;
+    }
+    LoadPins();
+    EnsureStaticItems();
+    SyncPins();
+    g_lastTick = Now();
+    UpdateDockStates();
+    MarkDirty();
+    Tick();
+    g_ready = true;
     return true;
 }
 
@@ -4454,12 +4548,6 @@ DWORD WINAPI DockThread(void*) {
 
     LoadSettings();
     UpdateColors();
-
-    int savedState = Wh_GetIntValue(L"taskbarState", -1);
-    if (savedState >= 0) {
-        g_changedAutohide = true;
-        g_originalTaskbarState = (UINT)savedState;
-    }
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, g_d2d.GetAddressOf());
     DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
@@ -4495,24 +4583,7 @@ DWORD WINAPI DockThread(void*) {
 
     bool ok = g_d2d && g_dwrite && CreateController();
     if (ok) {
-        SetTaskbarHidden(g_settings.hideTaskbar);
-        Wh_DeleteValue(L"monitor");  // From the version where the Dock switched monitors.
-        g_trashFull = QueryTrashFull();
-        SyncDocks();
-        if (g_docks.empty()) {
-            DestroyWindow(g_controller);
-            ok = false;
-        }
-    }
-    if (ok) {
-        LoadPins();
-        EnsureStaticItems();
-        SyncPins();
-        g_lastTick = Now();
-        UpdateDockStates();
-        MarkDirty();
-        Tick();
-        g_ready = true;
+        StartDock();
     }
     SetEvent(g_readyEvent);
 
@@ -4523,8 +4594,7 @@ DWORD WINAPI DockThread(void*) {
             DispatchMessageW(&msg);
         }
     } else {
-        Wh_Log(L"Failed to create the Dock");
-        SetTaskbarHidden(false);
+        Wh_Log(L"Failed to create the Dock controller");
     }
     g_controller = nullptr;
 
@@ -4534,7 +4604,9 @@ DWORD WINAPI DockThread(void*) {
         delete (PendingDrop*)msg.lParam;
     }
 
-    g_items.clear();
+    // Swapped with empty ones so that the memory is freed too (no_destroy).
+    decltype(g_items)().swap(g_items);
+    decltype(g_docks)().swap(g_docks);
     g_windowCache.clear();
     g_drop = {};
     FreeSurface(g_dockSurface);
@@ -4553,32 +4625,30 @@ DWORD WINAPI DockThread(void*) {
 }
 
 // With "Launch folder windows in a separate process", folder windows run in
-// their own explorer.exe; the Dock stays only in the taskbar's process.
-bool IsShellExplorer() {
+// their own explorer.exe, which never owns the taskbar. Other short-lived
+// explorer.exe processes are filtered by StartDock.
+bool IsFolderWindowsProcess() {
     std::wstring commandLine = ToLower(GetCommandLineW());
-    return commandLine.find(L"/factory") == std::wstring::npos &&
-           commandLine.find(L"-embedding") == std::wstring::npos &&
-           commandLine.find(L"/separate") == std::wstring::npos;
+    return commandLine.find(L"/factory") != std::wstring::npos ||
+           commandLine.find(L"-embedding") != std::wstring::npos ||
+           commandLine.find(L"/separate") != std::wstring::npos;
 }
-
-bool g_isShell;
 
 }  // namespace
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    g_isShell = IsShellExplorer();
-    if (!g_isShell) {
+    if (IsFolderWindowsProcess()) {
         Wh_Log(L"Folder windows process, the Dock stays in the taskbar "
                L"process");
-        return TRUE;
+        return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook,
-                       (void**)&ShowWindow_Original);
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook,
-                       (void**)&SetWindowPos_Original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
+                                   &ShowWindow_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
+                                   &SetWindowPos_Original);
 
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, DockThread, nullptr, 0, nullptr);
@@ -4607,11 +4677,10 @@ void Wh_ModUninit() {
     g_readyEvent = nullptr;
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     if (HWND controller = g_controller) {
         PostMessageW(controller, WM_APP_RELOAD, 0, 0);
     }
-    return TRUE;
 }
