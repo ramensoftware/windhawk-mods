@@ -9,7 +9,7 @@
 // @github          https://github.com/caotu2k5
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -lgdiplus -limm32 -lcomdlg32
+// @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -lgdiplus -limm32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -162,7 +162,6 @@ Modern Run Dialog UI Preview
 
 #include <windhawk_utils.h>
 #include <windows.h>
-#include <commdlg.h>
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <shlwapi.h>
@@ -176,17 +175,8 @@ Modern Run Dialog UI Preview
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include <optional>
 #include <condition_variable>
-
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-#endif
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
-#ifndef DWMWA_BORDER_COLOR
-#define DWMWA_BORDER_COLOR 34
-#endif
 
 enum ACCENT_STATE {
     ACCENT_DISABLED = 0,
@@ -227,8 +217,6 @@ struct LocalizedStrings {
     const wchar_t* runBtn;
     const wchar_t* exitBtn;
     const wchar_t* todayPrefix;
-    const wchar_t* browseTitle;
-    const wchar_t* browseFilter;
 };
 
 struct ModSettings {
@@ -249,16 +237,26 @@ LocalizedStrings g_i18n = {
     L"Browse",
     L"Run",
     L"Exit",
-    L"Today",
-    L"Select an executable program",
-    L"Programs (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0All Files (*.*)\0*.*\0\0"
+    L"Today"
 };
 
+std::mutex g_gdiplusMutex;
 ULONG_PTR g_gdiplusToken = 0;
+
+bool EnsureGdiplusInitialized() {
+    std::lock_guard<std::mutex> lock(g_gdiplusMutex);
+    if (g_gdiplusToken != 0) {
+        return true;
+    }
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    return Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) == Gdiplus::Ok;
+}
 
 // Registered messages for safe cross-thread communication with the Run dialog thread
 UINT g_msgUninit = 0;
 UINT g_msgToggle = 0;
+HANDLE g_hUninitEvent = nullptr;
+std::atomic<bool> g_unloading{false};
 
 enum ToggleAction : WPARAM {
     kActionMinimize = 1,
@@ -275,8 +273,8 @@ constexpr int kBaseListPadBottom  = 10;
 constexpr int kBaseInputBarHeight = 66;
 constexpr UINT_PTR kTimerCaret    = 9010;
 constexpr int kModernEditId       = 9901;
+constexpr int kNativeBrowseBtnId  = 12288;
 constexpr size_t kMaxMruEntries   = 26;
-
 
 int DpiScale(int value, UINT dpi) {
     return MulDiv(value, static_cast<int>(dpi) * 88, 96 * 100);
@@ -313,9 +311,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Duyệt",
             L"Chạy",
             L"Thoát",
-            L"Hôm nay",
-            L"Chọn chương trình (.exe) để đưa vào ô nhập",
-            L"Chương trình (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tất cả tệp (*.*)\0*.*\0\0"
+            L"Hôm nay"
         };
     }
     if (lang == L"ja") {
@@ -324,9 +320,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"参照",
             L"実行",
             L"閉じる",
-            L"今日",
-            L"実行するプログラムを選択",
-            L"プログラム (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0すべてのファイル (*.*)\0*.*\0\0"
+            L"今日"
         };
     }
     if (lang == L"zh_cn") {
@@ -335,9 +329,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"浏览",
             L"运行",
             L"退出",
-            L"今天",
-            L"选择要运行的程序",
-            L"程序 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0所有文件 (*.*)\0*.*\0\0"
+            L"今天"
         };
     }
     if (lang == L"zh_tw") {
@@ -346,9 +338,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"瀏覽",
             L"執行",
             L"退出",
-            L"今天",
-            L"選擇要執行的程式",
-            L"程式 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0所有檔案 (*.*)\0*.*\0\0"
+            L"今天"
         };
     }
     if (lang == L"ko") {
@@ -357,9 +347,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"찾아보기",
             L"실행",
             L"닫기",
-            L"오늘",
-            L"실행할 프로그램 선택",
-            L"프로그램 (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0모든 파일 (*.*)\0*.*\0\0"
+            L"오늘"
         };
     }
     if (lang == L"fr") {
@@ -368,9 +356,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Parcourir",
             L"Exécuter",
             L"Quitter",
-            L"Aujourd'hui",
-            L"Sélectionner un programme",
-            L"Programmes (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Tous les fichiers (*.*)\0*.*\0\0"
+            L"Aujourd'hui"
         };
     }
     if (lang == L"de") {
@@ -379,9 +365,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Durchsuchen",
             L"Ausführen",
             L"Schließen",
-            L"Heute",
-            L"Programm auswählen",
-            L"Programme (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Alle Dateien (*.*)\0*.*\0\0"
+            L"Heute"
         };
     }
     if (lang == L"es") {
@@ -390,9 +374,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Examinar",
             L"Ejecutar",
             L"Salir",
-            L"Hoy",
-            L"Seleccionar un programa",
-            L"Programas (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Todos los archivos (*.*)\0*.*\0\0"
+            L"Hoy"
         };
     }
     if (lang == L"ru") {
@@ -401,9 +383,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
             L"Обзор",
             L"Выполнить",
             L"Выход",
-            L"Сегодня",
-            L"Выберите программу",
-            L"Программы (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0Все файлы (*.*)\0*.*\0\0"
+            L"Сегодня"
         };
     }
 
@@ -412,9 +392,7 @@ LocalizedStrings GetLocalizedStringsForLanguage(std::wstring lang) {
         L"Browse",
         L"Run",
         L"Exit",
-        L"Today",
-        L"Select an executable program",
-        L"Programs (*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl)\0*.exe;*.bat;*.cmd;*.com;*.msc;*.cpl\0All Files (*.*)\0*.*\0\0"
+        L"Today"
     };
 }
 
@@ -452,7 +430,7 @@ struct RunDialogState {
     HWND hOrigEdit = nullptr;
     HWND hModernEdit = nullptr;
     HWND hOkBtn = nullptr;
-    HWND hCancelBtn = nullptr;
+    HWND hBrowseBtn = nullptr;
 
     HFONT hFontEditCtl = nullptr;
     HICON hRunIcon = nullptr;
@@ -477,6 +455,7 @@ struct RunDialogState {
     bool caretVisible = true;
     bool isTriggeringRun = false;
     bool isBrowsingFile = false;
+    bool pendingUninit = false;
 };
 
 // Atomic state shared safely across threads
@@ -485,12 +464,12 @@ std::atomic<ULONGLONG> g_openTick{0};
 std::atomic<ULONGLONG> g_lastToggleTick{0};
 std::atomic<bool> g_winRReleasedSinceOpen{false};
 std::atomic<bool> g_isBrowsingFile{false};
-thread_local bool g_internalActivation = false;
 
-// Dedicated thread for WH_KEYBOARD_LL so the Run dialog thread never stalls global keyboard input
+// Dedicated thread for WH_KEYBOARD_LL so the Run dialog thread never stalls global keyboard input.
+// Wrapped in [[clang::no_destroy]] std::optional so process exit with an open dialog won't call std::terminate.
 std::mutex g_keyHookMutex;
 std::condition_variable g_keyHookCv;
-std::thread g_keyHookThread;
+[[clang::no_destroy]] std::optional<std::thread> g_keyHookThread;
 DWORD g_keyHookThreadId = 0;
 bool g_keyHookThreadReady = false;
 
@@ -520,14 +499,14 @@ LRESULT CALLBACK LowLevelKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 void StartKeyHookThread() {
     std::unique_lock<std::mutex> lock(g_keyHookMutex);
-    if (g_keyHookThread.joinable()) {
+    if (g_keyHookThread && g_keyHookThread->joinable()) {
         return;
     }
 
     g_keyHookThreadReady = false;
     g_keyHookThreadId = 0;
 
-    g_keyHookThread = std::thread([]() {
+    g_keyHookThread.emplace([]() {
         MSG msg = {};
         PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -557,13 +536,14 @@ void StopKeyHookThread() {
     std::thread threadToJoin;
     {
         std::lock_guard<std::mutex> lock(g_keyHookMutex);
-        if (!g_keyHookThread.joinable()) {
+        if (!g_keyHookThread || !g_keyHookThread->joinable()) {
             return;
         }
         if (g_keyHookThreadId != 0) {
             PostThreadMessageW(g_keyHookThreadId, WM_QUIT, 0, 0);
         }
-        threadToJoin = std::move(g_keyHookThread);
+        threadToJoin = std::move(*g_keyHookThread);
+        g_keyHookThread.reset();
         g_keyHookThreadId = 0;
         g_keyHookThreadReady = false;
     }
@@ -575,6 +555,7 @@ void StopKeyHookThread() {
 void ApplyWindowBlur(HWND hDlg, const RunDialogState* state);
 void CloseRunDialog(HWND hDlg);
 void SyncInputToNativeCombo(RunDialogState* state, const wchar_t* textOverride = nullptr);
+void PerformUninitCleanup(HWND hWnd, RunDialogState* state);
 
 int GetDlgWidth(const RunDialogState* state) {
     return DpiScale(kBaseDlgWidth, state->dpi);
@@ -645,13 +626,7 @@ void MinimizeRunDialog(RunDialogState* state) {
         }
     }
 
-    g_internalActivation = true;
-    if (ShowWindow_Orig) {
-        ShowWindow_Orig(state->hDlg, SW_MINIMIZE);
-    } else {
-        ShowWindow(state->hDlg, SW_MINIMIZE);
-    }
-    g_internalActivation = false;
+    ShowWindow_Orig(state->hDlg, SW_MINIMIZE);
 }
 
 // Restore the Run dialog from the Taskbar to its proper position and DPI-scaled size
@@ -661,12 +636,7 @@ void RestoreRunDialog(RunDialogState* state) {
     if (now - g_lastToggleTick.load() < 250) return;
     g_lastToggleTick.store(now);
 
-    g_internalActivation = true;
-    if (ShowWindow_Orig) {
-        ShowWindow_Orig(state->hDlg, SW_RESTORE);
-    } else {
-        ShowWindow(state->hDlg, SW_RESTORE);
-    }
+    ShowWindow_Orig(state->hDlg, SW_RESTORE);
 
     // Ensure WS_CAPTION remains stripped after restore
     LONG_PTR style = GetWindowLongPtrW(state->hDlg, GWL_STYLE);
@@ -681,64 +651,57 @@ void RestoreRunDialog(RunDialogState* state) {
                  SWP_SHOWWINDOW | SWP_FRAMECHANGED);
 
     ApplyWindowBlur(state->hDlg, state);
-
-    if (SetForegroundWindow_Orig) {
-        SetForegroundWindow_Orig(state->hDlg);
-    } else {
-        SetForegroundWindow(state->hDlg);
-    }
+    SetForegroundWindow_Orig(state->hDlg);
 
     if (state->hModernEdit && IsWindow(state->hModernEdit)) {
         SetFocus(state->hModernEdit);
     }
     state->caretVisible = true;
     InvalidateRect(state->hDlg, nullptr, TRUE);
-    g_internalActivation = false;
 }
 
-// Open the native file picker (.exe, etc.) and insert the selected path into the input bar
+// Trigger the native Browse button (ID 12288) and sync the resulting path to the modern input box
 void OpenBrowseExecutableDialog(RunDialogState* state) {
     if (!state || !state->hDlg || state->isBrowsingFile) return;
+    HWND hDlg = state->hDlg;
+    HWND hBrowse = state->hBrowseBtn ? state->hBrowseBtn : GetDlgItem(hDlg, kNativeBrowseBtnId);
+    if (!hBrowse) return;
+
     state->isBrowsingFile = true;
     g_isBrowsingFile.store(true);
 
-    wchar_t filePath[MAX_PATH] = {};
+    EnableWindow(hBrowse, TRUE);
+    SendMessageW(hDlg, WM_COMMAND, MAKEWPARAM(kNativeBrowseBtnId, BN_CLICKED), (LPARAM)hBrowse);
 
-    OPENFILENAMEW ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = state->hDlg;
-    ofn.lpstrFilter = state->i18n.browseFilter;
-    ofn.lpstrFile = filePath;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrTitle = state->i18n.browseTitle;
-    ofn.lpstrDefExt = L"exe";
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
-
-    if (GetOpenFileNameW(&ofn) && filePath[0] != L'\0') {
-        std::wstring formattedPath = filePath;
-        // Quote paths containing spaces as expected by Windows Run
-        if (formattedPath.find(L' ') != std::wstring::npos && formattedPath.front() != L'"') {
-            formattedPath = L"\"" + formattedPath + L"\"";
-        }
-
-        if (state->hModernEdit && IsWindow(state->hModernEdit)) {
-            SetWindowTextW(state->hModernEdit, formattedPath.c_str());
-            SendMessageW(state->hModernEdit, EM_SETSEL, formattedPath.size(), formattedPath.size());
-        }
-        SyncInputToNativeCombo(state, formattedPath.c_str());
-        state->selectedRow = -1;
+    if (!IsWindow(hDlg) || g_hActiveRunDlg.load() != hDlg) {
+        return;
     }
 
     state->isBrowsingFile = false;
     g_isBrowsingFile.store(false);
 
-    if (IsWindow(state->hDlg)) {
-        if (state->hModernEdit && IsWindow(state->hModernEdit)) {
-            SetFocus(state->hModernEdit);
-        }
-        state->caretVisible = true;
-        InvalidateRect(state->hDlg, nullptr, TRUE);
+    if (state->pendingUninit) {
+        PerformUninitCleanup(hDlg, state);
+        return;
     }
+
+    if (state->hCombo && state->hModernEdit && IsWindow(state->hModernEdit)) {
+        wchar_t filePath[MAX_PATH] = {};
+        GetWindowTextW(state->hCombo, filePath, MAX_PATH);
+        if (filePath[0] != L'\0') {
+            SetWindowTextW(state->hModernEdit, filePath);
+            size_t len = wcslen(filePath);
+            SendMessageW(state->hModernEdit, EM_SETSEL, len, len);
+            SyncInputToNativeCombo(state, filePath);
+            state->selectedRow = -1;
+        }
+    }
+
+    if (state->hModernEdit && IsWindow(state->hModernEdit)) {
+        SetFocus(state->hModernEdit);
+    }
+    state->caretVisible = true;
+    InvalidateRect(hDlg, nullptr, TRUE);
 }
 
 // --- Command Timestamp Management in Windhawk Mod Storage ---
@@ -981,6 +944,10 @@ void TriggerRunCommand(RunDialogState* state) {
 
     if (g_hActiveRunDlg.load() == hDlg && IsWindow(hDlg)) {
         state->isTriggeringRun = false;
+        if (state->pendingUninit) {
+            PerformUninitCleanup(hDlg, state);
+            return;
+        }
     }
 }
 
@@ -1537,6 +1504,21 @@ void CleanupDialogState(HWND hWnd, RunDialogState* state) {
         }
         delete state;
     }
+
+    if (g_hUninitEvent) {
+        SetEvent(g_hUninitEvent);
+    }
+}
+
+LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+                                    UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
+void PerformUninitCleanup(HWND hWnd, RunDialogState* state) {
+    RemoveWindowSubclass(hWnd, RunDlgSubclassProc, 1);
+    CleanupDialogState(hWnd, state);
+    HWND hCancel = GetDlgItem(hWnd, IDCANCEL);
+    if (hCancel) EnableWindow(hCancel, TRUE);
+    PostMessageW(hWnd, WM_COMMAND, IDCANCEL, 0);
 }
 
 LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
@@ -1544,12 +1526,16 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
     auto* state = reinterpret_cast<RunDialogState*>(dwRefData);
 
     if (uMsg == g_msgUninit && g_msgUninit != 0) {
-        RemoveWindowSubclass(hWnd, RunDlgSubclassProc, uIdSubclass);
-        CleanupDialogState(hWnd, state);
-        HWND hCancel = GetDlgItem(hWnd, IDCANCEL);
-        if (hCancel) EnableWindow(hCancel, TRUE);
-        PostMessageW(hWnd, WM_COMMAND, IDCANCEL, 0);
-        return 0;
+        if (state && (state->isBrowsingFile || state->isTriggeringRun)) {
+            state->pendingUninit = true;
+            HWND hPopup = GetWindow(hWnd, GW_ENABLEDPOPUP);
+            if (hPopup && hPopup != hWnd) {
+                PostMessageW(hPopup, WM_CLOSE, 0, 0);
+            }
+            return 1;
+        }
+        PerformUninitCleanup(hWnd, state);
+        return 1;
     }
 
     if (uMsg == g_msgToggle && g_msgToggle != 0) {
@@ -2157,8 +2143,11 @@ LRESULT CALLBACK RunDlgSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 }
 
 void TransformRunDialog(HWND hDlg) {
+    if (g_unloading.load()) return;
     if (!hDlg || !IsWindow(hDlg)) return;
     if (GetPropW(hDlg, L"WindhawkModernRunApplied")) return;
+    if (!EnsureGdiplusInitialized()) return;
+
     SetPropW(hDlg, L"WindhawkModernRunApplied", (HANDLE)1);
 
     auto* state = new RunDialogState();
@@ -2206,7 +2195,9 @@ void TransformRunDialog(HWND hDlg) {
                 state->hOkBtn = hChild;
                 SetWindowPos(hChild, nullptr, -32000, -32000, 1, 1, SWP_NOZORDER);
             } else if (id == IDCANCEL) {
-                state->hCancelBtn = hChild;
+                SetWindowPos(hChild, nullptr, -32000, -32000, 1, 1, SWP_NOZORDER);
+            } else if (id == kNativeBrowseBtnId) {
+                state->hBrowseBtn = hChild;
                 SetWindowPos(hChild, nullptr, -32000, -32000, 1, 1, SWP_NOZORDER);
             } else {
                 ShowWindow(hChild, SW_HIDE);
@@ -2298,7 +2289,7 @@ INT_PTR CALLBACK RunDlgProc_Hook(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     HWND hActive = g_hActiveRunDlg.load();
-    if (!g_internalActivation && hActive && hWnd == hActive) {
+    if (hActive && hWnd == hActive) {
         if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_FORCEMINIMIZE) {
             PostMessageW(hActive, g_msgToggle, kActionMinimize, 0);
             return TRUE;
@@ -2313,7 +2304,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 
 void WINAPI SwitchToThisWindow_Hook(HWND hWnd, BOOL fUnknown) {
     HWND hActive = g_hActiveRunDlg.load();
-    if (!g_internalActivation && hActive && hWnd == hActive && !g_isBrowsingFile.load()) {
+    if (hActive && hWnd == hActive && !g_isBrowsingFile.load()) {
         ULONGLONG now = GetTickCount64();
         if (now - g_openTick.load() > 350 && now - g_lastToggleTick.load() > 250) {
             if (IsIconic(hWnd)) {
@@ -2331,14 +2322,12 @@ void WINAPI SwitchToThisWindow_Hook(HWND hWnd, BOOL fUnknown) {
             }
         }
     }
-    if (SwitchToThisWindow_Orig) {
-        SwitchToThisWindow_Orig(hWnd, fUnknown);
-    }
+    SwitchToThisWindow_Orig(hWnd, fUnknown);
 }
 
 BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
     HWND hActive = g_hActiveRunDlg.load();
-    if (!g_internalActivation && hActive && hWnd == hActive && !g_isBrowsingFile.load()) {
+    if (hActive && hWnd == hActive && !g_isBrowsingFile.load()) {
         ULONGLONG now = GetTickCount64();
         if (now - g_openTick.load() > 350 && now - g_lastToggleTick.load() > 250) {
             if (IsIconic(hWnd)) {
@@ -2360,12 +2349,11 @@ BOOL WINAPI SetForegroundWindow_Hook(HWND hWnd) {
 }
 
 BOOL Wh_ModInit() {
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
-
+    g_unloading.store(false);
     LoadSettings();
     g_msgUninit = RegisterWindowMessageW(L"Windhawk_Uninit_" WH_MOD_ID);
     g_msgToggle = RegisterWindowMessageW(L"Windhawk_Toggle_" WH_MOD_ID);
+    g_hUninitEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
     HMODULE hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32) {
@@ -2373,7 +2361,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Hook only the Run dialog's own procedure in shell32.dll
     WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
         {
             {
@@ -2405,14 +2392,25 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
+    g_unloading.store(true);
     if (HWND hDlg = g_hActiveRunDlg.load()) {
-        SendMessageW(hDlg, g_msgUninit, 0, 0);
+        if (g_hUninitEvent) {
+            ResetEvent(g_hUninitEvent);
+        }
+        if (SendMessageW(hDlg, g_msgUninit, 0, 0) == 1 && g_hUninitEvent) {
+            WaitForSingleObject(g_hUninitEvent, 5000);
+        }
     }
     StopKeyHookThread();
 }
 
 void Wh_ModUninit() {
     StopKeyHookThread();
+    if (g_hUninitEvent) {
+        CloseHandle(g_hUninitEvent);
+        g_hUninitEvent = nullptr;
+    }
+    std::lock_guard<std::mutex> lock(g_gdiplusMutex);
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
