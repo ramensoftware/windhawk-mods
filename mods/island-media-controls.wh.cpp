@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.239
+// @version         0.10.240
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -28,6 +28,8 @@ I use this mod every day myself, so most updates really just come from my own ta
 > One small favor, though—please stop sending PRs to this media repository! Please head over to the [mod's Windhawk page](https://windhawk.net/mods/island-media-controls) for feedback, and send code PRs to the [Windhawk mods repository](https://github.com/ramensoftware/windhawk-mods/pulls). I am much more likely to see them there. Thanks again, everyone!
 
 网易云音乐的适配看来是个不小的问题。就我目前测试的情况而言，它没有通过 Windows 的系统媒体会话完整提供组件所需的信息，因此高清封面和播放进度都不方便直接获取。这里涉及的是 **系统媒体传输控件（SMTC）**，以及本组件用来读取媒体会话的 **GSMTC 接口**。目前我暂时还没有可靠的解决方案；如果有大佬了解这方面，请不吝赐教了 orz。
+
+NetEase Cloud Music compatibility remains limited: the sessions exposed through Windows System Media Transport Controls (SMTC/GSMTC) do not reliably provide the high-resolution artwork and playback timeline needed here. I do not have a reliable workaround yet; implementation advice is welcome.
 
 ## Preview
 
@@ -152,7 +154,7 @@ I use this mod every day myself, so most updates really just come from my own ta
     - "minimal_transport": "Minimal transport"
     - "fluent_bold": "Fluent bold"
     - "solid_material": "Solid material"
-    - "liquid_glass_experimental": "liquid glass{#experimental}"
+    - "liquid_glass_experimental": "Liquid glass (experimental)"
     #! $showIf: {Main.DisplayMode: [fullsize, compact]}
   - PopupBackdropCoverEffect: "dark_only"
     $name: Expanded player album-color background
@@ -199,7 +201,7 @@ I use this mod every day myself, so most updates really just come from my own ta
     $name: Feedback lighting
     $description: Enable progress-bar lighting in every layout and the main island breathing light.
   - FeedbackAnimation: false
-    $name: "feedbackAnimation{#experimental}"
+    $name: "Feedback animation (experimental)"
     $description: Enable button-click light ripples inside the playback panel.
     #! $showIf: {Main.DisplayMode: [fullsize, compact]}
   - ClassicMorphScaleAnimation: true
@@ -400,6 +402,7 @@ extern "C" HRESULT __stdcall CreateDirect3D11DeviceFromDXGIDevice(
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 
@@ -594,6 +597,7 @@ std::optional<Settings> g_pendingSettings;
 std::mutex g_mediaMutex;
 std::mutex g_seekMutex;
 MediaState g_media;
+std::atomic<uint64_t> g_mediaUiRevision{0};
 std::chrono::steady_clock::time_point g_mediaStateTimestamp;
 uint64_t g_mediaProgressRevision = 0;
 double g_popupLiveProgressValue = 0.0;
@@ -715,7 +719,15 @@ bool WaitForAsyncWithTimeout(AsyncOperation const& operation,
         return false;
     }
 
-    auto status = operation.wait_for(timeout);
+    // No Completed delegate is installed: a late provider completion cannot
+    // enter this DLL after unload, including when Cancel is ignored.
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    auto status = operation.Status();
+    while (status == winrt::Windows::Foundation::AsyncStatus::Started &&
+           !g_unloading && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        status = operation.Status();
+    }
     if (status == winrt::Windows::Foundation::AsyncStatus::Completed) {
         return true;
     }
@@ -861,7 +873,7 @@ bool g_islandAnchorMarginReserved = false;
 [[clang::no_destroy]] controls::ColumnDefinition g_islandReservationColumn{nullptr};
 [[clang::no_destroy]] controls::RowDefinition g_islandReservationRow{nullptr};
 struct IslandReservedTrack { FrameworkElement element{nullptr}; int index=0, span=1, appliedIndex=0, appliedSpan=1; };
-[[clang::no_destroy]] std::vector<IslandReservedTrack> g_islandReservedTracks;
+[[clang::no_destroy]] std::optional<std::vector<IslandReservedTrack>> g_islandReservedTracks;
 bool g_islandReservationVertical=false;
 bool g_dockReservationSuspended=false;
 [[clang::no_destroy]] FrameworkElement g_dockReservationSurface{nullptr};
@@ -1042,7 +1054,7 @@ std::atomic<int> g_dynamicTransportNavigationFailureDirection{0};
 winrt::event_token g_dynamicCompactRenderingToken{};
 bool g_dynamicCompactRenderingHooked = false;
 winrt::event_token g_dynamicMainGlowRenderingToken{};
-bool g_dynamicMainGlowRenderingHooked = false;
+bool g_sideBreathRunning = false;
 std::chrono::steady_clock::time_point g_lastDynamicMainGlowFrameTime{};
 
 double g_dynamicTransportReveal = 0.0;
@@ -1681,6 +1693,21 @@ void CommitDiscMainWash() {
     if(g_discPendingMainWash&&g_dynamicMainWash)g_dynamicMainWash.Source(g_discPendingMainWash);
     g_discPendingMainWash=nullptr;
 }
+winrt::event_token g_transportLayoutToken{};
+winrt::event_token g_transportOcclusionLayoutToken{};
+void RevokeTransportLayoutHandlers() noexcept {
+    try {
+        if (g_dynamicTransportIsland && g_transportLayoutToken.value)
+            g_dynamicTransportIsland.LayoutUpdated(g_transportLayoutToken);
+    } catch (...) {}
+    try {
+        if (g_dynamicTransportOcclusionHost && g_transportOcclusionLayoutToken.value)
+            g_dynamicTransportOcclusionHost.LayoutUpdated(g_transportOcclusionLayoutToken);
+    } catch (...) {}
+    g_transportLayoutToken = {};
+    g_transportOcclusionLayoutToken = {};
+}
+
 void SyncCircularSideArtworkVisuals();
 void SetDiscPlaying(bool playing);
 void StopDiscRendering() {
@@ -1690,8 +1717,38 @@ void StopDiscRendering() {
     }
     g_discFrameTime={};
 }
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Media::Animation::Storyboard g_discCruiseStoryboard{nullptr};
+std::chrono::steady_clock::time_point g_discCruiseStarted{};
+double g_discCruiseAngle = 0;
+void StopDiscCruise() {
+    if (!g_discCruiseStoryboard) return;
+    double elapsed = std::chrono::duration<double>(
+        std::chrono::steady_clock::now()-g_discCruiseStarted).count();
+    g_discMotion.angle = g_discCruiseAngle + elapsed*DiscMotion::speed;
+    g_discMotion.velocity = DiscMotion::speed;
+    g_discMotion.Segment(1,0);
+    g_discCruiseStoryboard.Stop();
+    g_discCruiseStoryboard = nullptr;
+    if (g_discRotation) g_discRotation.Angle(std::fmod(g_discMotion.angle,360.0));
+}
+void StartDiscCruise() {
+    if (g_discCruiseStoryboard || !g_discRotation) return;
+    namespace animation = winrt::Windows::UI::Xaml::Media::Animation;
+    animation::DoubleAnimation rotation;
+    g_discCruiseAngle = std::fmod(g_discMotion.angle,360.0);
+    rotation.From(g_discCruiseAngle);
+    rotation.To(g_discCruiseAngle+360.0);
+    rotation.Duration(xaml::DurationHelper::FromTimeSpan(std::chrono::seconds(10)));
+    rotation.RepeatBehavior(animation::RepeatBehaviorHelper::Forever());
+    animation::Storyboard::SetTarget(rotation,g_discRotation);
+    animation::Storyboard::SetTargetProperty(rotation,L"Angle");
+    g_discCruiseStoryboard = animation::Storyboard();
+    g_discCruiseStoryboard.Children().Append(rotation);
+    g_discCruiseStarted = std::chrono::steady_clock::now();
+    g_discCruiseStoryboard.Begin();
+}
 void ResetDiscArtwork() {
-    StopDiscRendering();g_discMotion={};g_discPlaying=false;
+    StopDiscRendering();StopDiscCruise();g_discMotion={};g_discPlaying=false;
     g_discManualRequested=g_discSwapPending=false;g_discPendingSource=nullptr;
     g_discPendingMainWash=nullptr;
     g_discSideCrossfadeActive=g_discSideWaitingPeak=false;
@@ -1720,6 +1777,7 @@ void SyncCircularSideArtworkVisuals() {
        g_discArt.Fill().as<mediax::ImageBrush>().ImageSource()!=g_compactAlbumArtImage.Source()) {
         g_discManualRequested=false;g_discSwapPending=true;
         g_discPendingSource=g_compactAlbumArtImage.Source();
+        StopDiscCruise();
         g_discMotion.Prepare(true,g_discNavigationDirection);
         SetDiscPlaying(g_discPlaying);
     }
@@ -1762,15 +1820,29 @@ void OnDiscRendering(winrt::Windows::Foundation::IInspectable const&,
         g_discMotion.Step(std::min(dt,.1));
         g_discRotation.Angle(std::fmod(g_discMotion.angle,360.0));
         if(g_discSwapPending)SyncCircularSideArtworkVisuals();
-        if(g_discMotion.phase==0)StopDiscRendering();
+        if (g_discMotion.phase==1 && !g_discSwapPending) {
+            StartDiscCruise();
+            StopDiscRendering();
+        } else if(g_discMotion.phase==0)StopDiscRendering();
     } catch(...) {StopDiscRendering();}
 }
 void SetDiscPlaying(bool playing) {
     // Provider playback often reports a transient pause during a skip. Keep
     // the gesture intact; the requested playback state is applied after it.
+    bool changed = playing != g_discPlaying;
     g_discPlaying=playing;
-    if(g_islandEnvironmentSuppressed||!g_discRotation||!UseCircularSideArtwork())return;
+    if(g_islandEnvironmentSuppressed||!g_discRotation||!UseCircularSideArtwork()) {
+        StopDiscCruise();
+        StopDiscRendering();
+        return;
+    }
+    if (g_discCruiseStoryboard && !changed && !g_discMotion.manual) return;
+    StopDiscCruise();
     g_discMotion.Playback(playing);
+    if (g_discMotion.phase==1 && playing && !g_discSwapPending) {
+        StartDiscCruise();
+        return;
+    }
     if(!g_discRenderingHooked&&g_discMotion.phase!=0) {
         g_discFrameTime=std::chrono::steady_clock::now();
         g_discRenderingToken=mediax::CompositionTarget::Rendering(OnDiscRendering);
@@ -1795,6 +1867,7 @@ double g_compactTextProgress = 1.0;
 std::chrono::steady_clock::time_point g_lastCompactTextFrameTime{};
 bool g_compactTextEdgeFadeActive = false;
 HWND g_taskbarLayoutTimerWindow = nullptr;
+[[clang::no_destroy]] xaml::XamlRoot g_taskbarLayoutWatchXamlRoot = nullptr;
 [[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchRoot = nullptr;
 [[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchTarget = nullptr;
 [[clang::no_destroy]] FrameworkElement g_taskbarLayoutWatchSystemTrayFrame = nullptr;
@@ -2553,9 +2626,51 @@ void AdvanceGlassBreathPhase() {
     if (g_glassBreathFrameTime.time_since_epoch().count() != 0) {
         double dt = std::chrono::duration<double>(now - g_glassBreathFrameTime).count();
         g_dynamicMainGlowBreathPhase = std::fmod(g_dynamicMainGlowBreathPhase +
-            Clamp(dt, 0.0, 0.05) * 6.283185307179586 / 4.8, 6.283185307179586);
+            std::max(0.0, dt) * 6.283185307179586 / 4.8, 6.283185307179586);
     }
     g_glassBreathFrameTime = now;
+}
+
+bool g_projectionBreathRunning = false;
+void SetProjectionCompositorBreath(bool running) {
+    if (!g_compactGlassProjection || running == g_projectionBreathRunning) return;
+    auto container = hosting::ElementCompositionPreview::GetElementChildVisual(
+        g_compactGlassProjection).try_as<composition::ContainerVisual>();
+    if (!container) return;
+    AdvanceGlassBreathPhase();
+    auto compositor = container.Compositor();
+    auto properties = container.Properties();
+    if (!running) {
+        properties.StopAnimation(L"Breath");
+        properties.InsertScalar(L"Breath",static_cast<float>(0.5+0.5*std::sin(g_dynamicMainGlowBreathPhase)));
+        g_projectionBreathRunning = false;
+        return;
+    }
+    auto breath = compositor.CreateScalarKeyFrameAnimation();
+    breath.Duration(std::chrono::milliseconds(4800));
+    breath.IterationBehavior(composition::AnimationIterationBehavior::Forever);
+    auto linear = compositor.CreateLinearEasingFunction();
+    for (int i=0;i<=64;++i) {
+        float t=static_cast<float>(i)/64;
+        float value=static_cast<float>(0.5+0.5*std::sin(g_dynamicMainGlowBreathPhase+t*6.283185307179586));
+        breath.InsertKeyFrame(t,value,linear);
+    }
+    properties.InsertScalar(L"Breath",static_cast<float>(0.5+0.5*std::sin(g_dynamicMainGlowBreathPhase)));
+    auto opacity = compositor.CreateExpressionAnimation(L"0.82 + state.Breath * 0.18");
+    opacity.SetReferenceParameter(L"state",properties);
+    container.StartAnimation(L"Opacity",opacity);
+    if (UseRingProjection()) {
+        for (auto child : container.Children()) {
+            float diameter=0;
+            child.Properties().TryGetScalar(L"GlowDiameter",diameter);
+            auto size = compositor.CreateExpressionAnimation(L"Vector2(diameter,diameter) * (0.78 + state.Breath * 0.22)");
+            size.SetScalarParameter(L"diameter",diameter);
+            size.SetReferenceParameter(L"state",properties);
+            child.StartAnimation(L"Size",size);
+        }
+    }
+    properties.StartAnimation(L"Breath",breath);
+    g_projectionBreathRunning = true;
 }
 
 void StopCompactProjectionRendering() {
@@ -2573,7 +2688,7 @@ void OnCompactProjectionRendering(
     winrt::Windows::Foundation::IInspectable const&,
     winrt::Windows::Foundation::IInspectable const&) {
     try {
-        if (g_unloading || !g_compactGlassProjection || !g_playerGrid) {
+        if (g_unloading || g_islandEnvironmentSuppressed || !g_compactGlassProjection || !g_playerGrid) {
             StopCompactProjectionRendering();
             return;
         }
@@ -2581,9 +2696,6 @@ void OnCompactProjectionRendering(
         double dt = Clamp(std::chrono::duration<double>(now - g_compactProjectionFrameTime).count(),
                           0.0, 0.05);
         g_compactProjectionFrameTime = now;
-        if (!g_expanded) {
-            UpdateCompactProgressFromSnapshot();
-        }
         bool trackBusy = g_sideTrackHoldingMain.load() || g_trackGlowWaiting.load() ||
             g_trackGlowRequest.load() || g_trackGlowTransition.stage != 0;
         // Providers can briefly report paused while skipping. Preserve an
@@ -2606,18 +2718,15 @@ void OnCompactProjectionRendering(
                 g_compactProjectionReveal = target;
             }
         }
-        AdvanceGlassBreathPhase();
-        double phase = g_dynamicMainGlowBreathPhase;
-        double breath = 0.5 + std::sin(phase) * 0.5;
-        if (UseRingProjection()) UpdateSideProjectionBreath(g_compactGlassProjection, breath);
-        g_compactGlassProjection.Opacity((g_compactProjectionReveal * (0.82 + breath * 0.18)) * MainTrackGlowEnvelope());
+        g_compactGlassProjection.Opacity(g_compactProjectionReveal * MainTrackGlowEnvelope());
         if (auto scale = g_compactGlassProjection.RenderTransform().try_as<ScaleTransform>()) {
             // The side ring must stay attached to the body border throughout
             // a breath; vary light intensity rather than shrinking its radius.
             scale.ScaleX(1.0);
             scale.ScaleY(1.0);
         }
-        if (!g_compactProjectionPlaying && g_compactProjectionReveal == 0.0) {
+        if (!trackBusy && !landing && g_compactProjectionReveal == target) {
+            if (target == 0.0) SetProjectionCompositorBreath(false);
             StopCompactProjectionRendering();
         }
     } catch (...) {
@@ -2628,8 +2737,17 @@ void OnCompactProjectionRendering(
 void SetCompactProjectionPlaying(bool playing) {
     playing = playing && g_settings.feedbackLighting;
     g_compactProjectionPlaying = playing;
+    if (g_unloading || g_islandEnvironmentSuppressed) {
+        SetProjectionCompositorBreath(false);
+        StopCompactProjectionRendering();
+        return;
+    }
+    double target = playing && !g_expanded ? 1.0 : 0.0;
+    bool transition = g_popupClosing || g_trackGlowTransition.stage != 0 ||
+        g_trackGlowWaiting.load() || g_trackGlowRequest.load();
+    SetProjectionCompositorBreath(playing && (target > 0 || g_compactProjectionReveal > 0));
     if (g_compactGlassProjection && !g_compactProjectionRenderingHooked &&
-        (playing || g_compactProjectionReveal > 0.0)) {
+        (std::abs(target-g_compactProjectionReveal)>0.001 || transition)) {
         g_compactProjectionFrameTime = std::chrono::steady_clock::now();
         g_compactProjectionRenderingToken =
             mediax::CompositionTarget::Rendering(OnCompactProjectionRendering);
@@ -2854,14 +2972,9 @@ const wchar_t* GroupedSettingsPath(const wchar_t* legacyPath) {
 }
 
 int GetGroupedIntSetting(const wchar_t* legacyPath) {
-    auto path = GroupedSettingsPath(legacyPath);
-    if (path != legacyPath) {
-        auto grouped = WindhawkUtils::StringSetting::make(path);
-        // Read existence as text so an explicitly stored zero/false is not
-        // mistaken for a missing key. Windhawk exposes integer values as text.
-        if (grouped.get()[0] != L'\0') return Wh_GetIntSetting(path);
-    }
-    return Wh_GetIntSetting(legacyPath);
+    auto marker = WindhawkUtils::StringSetting::make(L"Behavior.PopupExpansionAlignment");
+    bool grouped = marker.get() && marker.get()[0] != L'\0';
+    return Wh_GetIntSetting(grouped ? GroupedSettingsPath(legacyPath) : legacyPath);
 }
 
 std::wstring GetStringSetting(const wchar_t* key, const wchar_t* fallback) {
@@ -3576,7 +3689,16 @@ void SetMedia(MediaState&& state) {
         }
     }
 
+    bool uiChanged = progressIdentityChanged || currentKey != nextKey ||
+        g_media.isPlaying != state.isPlaying || g_media.canSeek != state.canSeek ||
+        g_media.canSkipPrevious != state.canSkipPrevious ||
+        g_media.canSkipNext != state.canSkipNext ||
+        g_media.playbackRate != state.playbackRate ||
+        g_media.positionTicks != state.positionTicks ||
+        g_media.preparedArtwork != state.preparedArtwork ||
+        g_media.thumbnailBytes != state.thumbnailBytes;
     g_media = std::move(state);
+    if (uiChanged) ++g_mediaUiRevision;
     if (progressIdentityChanged) {
         ++g_mediaProgressRevision;
         if (g_mediaProgressRevision == 0) {
@@ -3606,12 +3728,7 @@ RequestMediaManagerWithTimeout(std::chrono::milliseconds timeout) {
     try {
         auto operation =
             gsm::GlobalSystemMediaTransportControlsSessionManager::RequestAsync();
-        if (operation.wait_for(timeout) !=
-            winrt::Windows::Foundation::AsyncStatus::Completed) {
-            try {
-                operation.Cancel();
-            } catch (...) {
-            }
+        if (!WaitForAsyncWithTimeout(operation, timeout, L"RequestMediaManager")) {
             return nullptr;
         }
         return operation.GetResults();
@@ -6320,8 +6437,14 @@ constexpr UINT_PTR kPopupTimerId = 0x494D;
 constexpr UINT_PTR kTaskbarLayoutMonitorTimerId = 0x494D4C54;
 constexpr UINT kPopupBackdropOverlayFrameReadyMessage = WM_APP + 0x494;
 constexpr UINT kPopupOutsidePointerDownMessage = WM_APP + 0x495;
-std::atomic<HHOOK> g_popupOutsidePointerHook{nullptr};
-constexpr UINT kTaskbarLayoutMonitorIntervalMs = 250;
+unsigned g_popupOutsideButtons = 0;
+unsigned PopupPointerButtons() {
+    const int keys[]{VK_LBUTTON,VK_RBUTTON,VK_MBUTTON,VK_XBUTTON1,VK_XBUTTON2};
+    unsigned result=0;
+    for (unsigned i=0;i<5;++i) if (GetAsyncKeyState(keys[i]) & 0x8000) result |= 1u<<i;
+    return result;
+}
+constexpr UINT kTaskbarLayoutMonitorIntervalMs = 600;
 constexpr int kPopupBackdropOverlayRefreshMs = 90;
 constexpr int kPopupBackdropOverlayMaxCaptureSize = 320;
 
@@ -8666,9 +8789,12 @@ struct PopupButtonLensCache {
     mediax::ImageBrush pointerRimBrush{nullptr};
 };
 
+[[clang::no_destroy]] std::optional<std::array<PopupButtonLensCache, 3>> g_popupButtonLensCaches;
+
 void UpdatePopupButtonLens(Border const& surface, Grid const& host,
                           double ux, double uy, double strength, bool pointerOnly = false) {
-    [[clang::no_destroy]] static std::array<PopupButtonLensCache, 3> caches;
+    if (!g_popupButtonLensCaches) g_popupButtonLensCaches.emplace();
+    auto& caches = *g_popupButtonLensCaches;
     std::wstring name(surface.Name());
     auto& cache = caches[name == L"Popup_Prev" ? 0 : name == L"Popup_Next" ? 2 : 1];
     auto path = host.Children().GetAt(kPopupButtonBodyLightLayer).as<shapes::Path>();
@@ -9801,6 +9927,13 @@ std::array<double,4> PopupBottomCoverWash(std::shared_ptr<PreparedArtwork const>
     return result;
 }
 
+struct PopupArtBreathCache {
+    std::shared_ptr<PreparedArtwork const> art;
+    double width=0, height=0;
+    mediax::ImageBrush brush{nullptr};
+};
+[[clang::no_destroy]] std::optional<PopupArtBreathCache> g_popupArtBreathCache;
+
 void UpdatePopupArtworkBreath() {
     if(!g_popupXamlArtBreath||!g_popupXamlArtFrame||!g_popupXamlCanvas)return;
     auto now=std::chrono::steady_clock::now();
@@ -9824,8 +9957,8 @@ void UpdatePopupArtworkBreath() {
         g_popupXamlArtBreath.Width(width+40);g_popupXamlArtBreath.Height(height+40);
         controls::Canvas::SetLeft(g_popupXamlArtBreath,point.X-20);
         controls::Canvas::SetTop(g_popupXamlArtBreath,point.Y-20);
-        struct Cache {std::shared_ptr<PreparedArtwork const> art;double width=0,height=0;mediax::ImageBrush brush{nullptr};};
-        [[clang::no_destroy]] static Cache cache;
+        if (!g_popupArtBreathCache) g_popupArtBreathCache.emplace();
+        auto& cache = *g_popupArtBreathCache;
         // Keep the old texture until it fades out and the new cover has settled.
         // Gaussian reflection generation is expensive. During a morph reuse the
         // existing texture, then regenerate once at the settled geometry.
@@ -9850,6 +9983,17 @@ void UpdatePopupArtworkBreath() {
     }catch(winrt::hresult_error const&){g_popupXamlArtBreath.Opacity(0);}
 }
 
+struct PopupPointerLightCache {
+    imaging::WriteableBitmap bitmap{nullptr};
+    mediax::ImageBrush brush{nullptr};
+    imaging::WriteableBitmap rimBitmap{nullptr};
+    mediax::ImageBrush rimBrush{nullptr};
+    std::array<double,9> key{};
+    bool valid=false;
+    std::shared_ptr<PreparedArtwork const> art;
+};
+[[clang::no_destroy]] std::optional<std::array<PopupPointerLightCache,3>> g_popupPointerLightCaches;
+
 void UpdatePopupBackgroundPointerLights() {
     if(!g_popupXamlRoot)return;
     auto now=std::chrono::steady_clock::now();
@@ -9858,13 +10002,8 @@ void UpdatePopupBackgroundPointerLights() {
     POINT cursor{};RECT client{};
     bool valid=g_popupXamlChild && GetCursorPos(&cursor) && ScreenToClient(g_popupXamlChild,&cursor) &&
         GetClientRect(g_popupXamlChild,&client) && client.right>0 && client.bottom>0;
-    struct Cache { imaging::WriteableBitmap bitmap{nullptr};
-        mediax::ImageBrush brush{nullptr};
-        imaging::WriteableBitmap rimBitmap{nullptr};
-        mediax::ImageBrush rimBrush{nullptr};
-
-        std::array<double,9> key{};bool valid=false;std::shared_ptr<PreparedArtwork const> art; };
-    [[clang::no_destroy]] static std::array<Cache,3> caches;
+    if (!g_popupPointerLightCaches) g_popupPointerLightCaches.emplace();
+    auto& caches = *g_popupPointerLightCaches;
     for(int index=0;index<3;++index) {
         auto surface=index==0?g_popupXamlBackdrop:index==1?g_popupXamlPanel:g_popupXamlArtFrame;
         if(!surface || (index==0?!g_popupXamlBackdropPointerLight:index==1?!g_popupXamlPanelPointerLight:!g_popupXamlArtPointerRim))continue;
@@ -12575,7 +12714,7 @@ void ReleaseIslandAnchorSpace() {
             g_islandReservationPanel.Children().RemoveAt(index);
     }
     if(auto grid=g_islandReservationPanel.try_as<Grid>()) {
-        for(auto const& track:g_islandReservedTracks) {
+        if (g_islandReservedTracks) for(auto const& track:*g_islandReservedTracks) {
             if(g_islandReservationVertical) {
                 if(Grid::GetRow(track.element)==track.appliedIndex)Grid::SetRow(track.element,track.index);
                 if(Grid::GetRowSpan(track.element)==track.appliedSpan)Grid::SetRowSpan(track.element,track.span);
@@ -12588,7 +12727,7 @@ void ReleaseIslandAnchorSpace() {
         if(g_islandReservationColumn&&grid.ColumnDefinitions().IndexOf(g_islandReservationColumn,index))grid.ColumnDefinitions().RemoveAt(index);
         if(g_islandReservationRow&&grid.RowDefinitions().IndexOf(g_islandReservationRow,index))grid.RowDefinitions().RemoveAt(index);
     }
-    g_islandReservedTracks.clear();g_islandReservationPanel=nullptr;g_islandReservationSpacer=nullptr;
+    g_islandReservedTracks.reset();g_islandReservationPanel=nullptr;g_islandReservationSpacer=nullptr;
     g_islandReservationColumn=nullptr;g_islandReservationRow=nullptr;
     if(g_islandPlacementAnchor&&g_islandAnchorMarginReserved) {
         auto margin=g_islandPlacementAnchor.Margin();
@@ -12638,7 +12777,8 @@ void ReserveIslandAnchorSpace() {
                 int index=vertical?Grid::GetRow(element):Grid::GetColumn(element);
                 int span=vertical?Grid::GetRowSpan(element):Grid::GetColumnSpan(element);
                 int next=index>=position?index+1:index, nextSpan=index<position&&index+span>position?span+1:span;
-                g_islandReservedTracks.push_back({element,index,span,next,nextSpan});
+                if (!g_islandReservedTracks) g_islandReservedTracks.emplace();
+                g_islandReservedTracks->push_back({element,index,span,next,nextSpan});
                 if(vertical){Grid::SetRow(element,next);Grid::SetRowSpan(element,nextSpan);}
                 else {Grid::SetColumn(element,next);Grid::SetColumnSpan(element,nextSpan);}
             }
@@ -14127,32 +14267,6 @@ void EndPopupSeek(bool commit) {
     }
 }
 
-void StopPopupOutsidePointerHook() {
-    if (HHOOK hook = g_popupOutsidePointerHook.exchange(nullptr)) {
-        UnhookWindowsHookEx(hook);
-    }
-}
-
-LRESULT CALLBACK PopupOutsidePointerHook(int code, WPARAM message, LPARAM data) {
-    if (code == HC_ACTION && g_expandedPopup &&
-        (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
-         message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN)) {
-        auto point = reinterpret_cast<MSLLHOOKSTRUCT const*>(data)->pt;
-        // Never eat or synchronously process another application's input.
-        PostMessageW(g_expandedPopup, kPopupOutsidePointerDownMessage,
-                     static_cast<WPARAM>(point.x), static_cast<LPARAM>(point.y));
-    }
-    return CallNextHookEx(nullptr, code, message, data);
-}
-
-HINSTANCE ModInstance();
-void StartPopupOutsidePointerHook() {
-    StopPopupOutsidePointerHook();
-    g_popupOutsidePointerHook = SetWindowsHookExW(
-        WH_MOUSE_LL, PopupOutsidePointerHook, ModInstance(), 0);
-    if (!g_popupOutsidePointerHook) Wh_Log(L"outside pointer hook failed error=%lu", GetLastError());
-}
-
 void HandlePopupOutsidePointerDown(HWND hwnd, POINT cursor) {
     if (!g_expanded || g_popupClosing || g_popupSeekDragging) return;
     RECT popupRect{};
@@ -14226,7 +14340,7 @@ void BeginCloseExpandedPopup() {
         }
     }
     g_popupClosing = true;
-    StopPopupOutsidePointerHook();
+
     SetPopupWindowClickThrough(g_expandedPopup, true);
     SetPopupWindowClickThrough(g_popupXamlChild, true);
     g_popupOutsideClickArmed = false;
@@ -14286,7 +14400,7 @@ void StopPopupXamlRenderLoop() {
 void FinishCloseExpandedPopup(HWND hwnd) {
     g_popupOpeningFramesPending=0;
     RestoreDockEdgeReservation();
-    StopPopupOutsidePointerHook();
+
     StopPopupXamlRenderLoop();
     g_popupCometMotionSeconds = 0.0;
     g_popupCometPlaybackPhase = 0.0;
@@ -14568,27 +14682,13 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
             if (wParam != kPopupTimerId) {
                 return DefWindowProcW(hwnd, message, wParam, lParam);
             }
-            if (!g_popupSeekDragging) {
-                bool leftDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-                if (!leftDown) {
-                    g_popupOutsideClickArmed = true;
-                } else if (g_popupOutsideClickArmed) {
-                    POINT cursor{};
-                    RECT popupRect{};
-                    GetCursorPos(&cursor);
-                    if (g_popupXamlRoot) {
-                        popupRect = CurrentPopupSurfaceScreenRect();
-                        InflateRect(&popupRect, 12, 12);
-                    } else {
-                        GetWindowRect(hwnd, &popupRect);
-                    }
-                    if (!PtInRect(&popupRect, cursor)) {
-                        BeginCloseExpandedPopup();
-                    }
-                }
+            unsigned buttons = PopupPointerButtons();
+            unsigned pressed = buttons & ~g_popupOutsideButtons;
+            g_popupOutsideButtons = buttons;
+            if (pressed && !g_popupSeekDragging) {
+                POINT cursor{};
+                if (GetCursorPos(&cursor)) HandlePopupOutsidePointerDown(hwnd, cursor);
             }
-
-
 
             if (g_popupXamlRoot) {
                 // CompositionTarget::Rendering already performs both updates
@@ -14657,7 +14757,7 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
             BeginCloseExpandedPopup();
             return 0;
         case WM_DESTROY:
-            StopPopupOutsidePointerHook();
+
             StopPopupXamlRenderLoop();
             KillTimer(hwnd, kPopupTimerId);
             if (g_expandedPopup == hwnd) {
@@ -17832,6 +17932,7 @@ void PrepareTransparentPopupForegroundContrast() {
 }
 
 void ShowExpandedPopup() {
+    g_popupOutsideButtons = PopupPointerButtons();
     StopPopupXamlRenderLoop();
     g_popupOpeningFramesPending=0;
     g_popupAnimationTiming={true};
@@ -17898,7 +17999,7 @@ void ShowExpandedPopup() {
     ShowWindow(g_expandedPopup, SW_SHOW);
     SetCompactIslandSuppressed(true);
     if (!g_popupOpeningFramesPending) SuspendDockEdgeReservation();
-    StartPopupOutsidePointerHook();
+
     if (!g_settings.allowScreenCapture) {
         if (SetExpandedPopupCaptureExclusion(true)) {
             DwmFlush();
@@ -17914,7 +18015,10 @@ void ShowExpandedPopup() {
 }
 
 void DestroyExpandedPopup() {
-    StopPopupOutsidePointerHook();
+    g_popupButtonLensCaches.reset();
+    g_popupArtBreathCache.reset();
+    g_popupPointerLightCaches.reset();
+
     g_popupProgressMotion = {};
     g_popupCometSpeedMotion = {};
     g_popupProgressMotionTime = {};
@@ -17932,10 +18036,8 @@ void DestroyExpandedPopup() {
         DestroyWindow(g_expandedPopup);
         g_expandedPopup = nullptr;
     }
-    try {
-        SetCompactIslandSuppressed(false);
-    } catch (...) {
-    }
+    // This function is only used during island teardown. Restoring the main
+    // island here would resubscribe Rendering after its handlers were revoked.
     if (g_popupXamlSource) {
         try {
             g_popupXamlSource.Content(nullptr);
@@ -18590,7 +18692,7 @@ bool ApplyMainWashCompositionClip(FrameworkElement const& element,
                                  double width,
                                  double height,
                                  double radius) {
-    if (!element || !EnsureDynamicTransportClipFactory()) {
+    if (!element) {
         return false;
     }
 
@@ -18618,24 +18720,13 @@ bool ApplyMainWashCompositionClip(FrameworkElement const& element,
         // The compact main body is a circular Border, even in fullsize mode.
         // A G2 mask bows outside that contour and lights up its translucent
         // outline. Keep coverage inside the stroke's inner edge instead.
-        winrt::com_ptr<ID2D1RoundedRectangleGeometry> pathGeometry;
         float innerRadius = static_cast<float>(std::max(0.0, radius - inset));
-        winrt::check_hresult(g_dynamicTransportClipD2dFactory->CreateRoundedRectangleGeometry(
-            D2D1::RoundedRect(D2D1::RectF(static_cast<float>(left), static_cast<float>(top),
-                static_cast<float>(right), static_cast<float>(bottom)), innerRadius, innerRadius),
-            pathGeometry.put()));
-
-        winrt::com_ptr<DynamicTransportGeometrySource> source;
-        source.attach(new DynamicTransportGeometrySource(
-            pathGeometry.as<ID2D1Geometry>()));
-        composition::CompositionPath compositionPath{
-            source.as<winrt::Windows::Graphics::IGeometrySource2D>()};
         auto compositor = visual.Compositor();
-        auto compositor5 = compositor.as<composition::ICompositor5>();
-        auto compositor6 = compositor.as<composition::ICompositor6>();
-        auto compositionGeometry =
-            compositor5.CreatePathGeometry(compositionPath);
-        visual.Clip(compositor6.CreateGeometricClip(compositionGeometry));
+        auto geometry = compositor.CreateRoundedRectangleGeometry();
+        geometry.Offset({static_cast<float>(left), static_cast<float>(top)});
+        geometry.Size({static_cast<float>(right-left), static_cast<float>(bottom-top)});
+        geometry.CornerRadius({innerRadius, innerRadius});
+        visual.Clip(compositor.CreateGeometricClip(geometry));
         element.Tag(winrt::box_value(winrt::Windows::Foundation::Rect{
             static_cast<float>(width), static_cast<float>(height), static_cast<float>(radius), 0}));
         return true;
@@ -19111,7 +19202,12 @@ void ApplyVerticalDynamicTransportVisuals(double rawReveal, double reveal, doubl
     UpdateIslandPlacement();
 }
 
+void StopDynamicMainGlowBreathing();
+void StartDynamicMainGlowBreathing();
+
 void ApplyDynamicCompactVisuals() {
+    StopDynamicMainGlowBreathing();
+    AdvanceGlassBreathPhase();
     if (!IsDynamicCompactMode() || !g_playerGrid || !g_dynamicMainIsland) {
         return;
     }
@@ -19370,6 +19466,10 @@ void ApplyDynamicCompactVisuals() {
         g_dynamicTransportTranslate.X(transportShift);
     }
     UpdateIslandPlacement();
+    if (!g_dynamicCompactRenderingHooked && g_trackGlowTransition.stage == 0 &&
+        !g_trackGlowWaiting.load() && !g_trackGlowRequest.load()) {
+        StartDynamicMainGlowBreathing();
+    }
 }
 
 void ReapplyTransparentDynamicTransportSeamClipAfterLayout() {
@@ -19551,74 +19651,42 @@ void TriggerCompactNavigationFailure(
     EnsureCompactNavigationRenderLoop();
 }
 
+[[clang::no_destroy]] std::optional<std::array<composition::Visual,3>> g_sideBreathVisuals;
 void StopDynamicMainGlowBreathing() {
-    if (!g_dynamicMainGlowRenderingHooked) {
-        return;
+    if (g_sideBreathVisuals) {
+        for (auto const& visual : *g_sideBreathVisuals) {
+            try { if (visual) visual.StopAnimation(L"Opacity"); } catch (...) {}
+        }
+        g_sideBreathVisuals.reset();
     }
-    try {
-        mediax::CompositionTarget::Rendering(g_dynamicMainGlowRenderingToken);
-    } catch (...) {
-    }
-    g_dynamicMainGlowRenderingHooked = false;
-    g_lastDynamicMainGlowFrameTime = {};
-}
-
-void OnDynamicMainGlowRendering(
-    winrt::Windows::Foundation::IInspectable const&,
-    winrt::Windows::Foundation::IInspectable const&) {
-    try {
-        if (!g_settings.feedbackLighting || !IsDynamicCompactMode() || g_unloading ||
-            g_dynamicTransportTargetReveal <= 0.5 ||
-            (!g_dynamicMainOcclusion && !g_dynamicMainWashHost &&
-             !g_dynamicMainEdgeGlow)) {
-            StopDynamicMainGlowBreathing();
-            return;
-        }
-
-        AdvanceGlassBreathPhase();
-
-        double breathAmount =
-            0.5 + std::sin(g_dynamicMainGlowBreathPhase) * 0.5;
-        double opacity = 0.82 + breathAmount * 0.18;
-        g_lastAppliedGlowBreathOpacity = opacity;
-
-        if (g_dynamicMainOcclusion && IsTransparentMaterial()) {
-            g_dynamicMainOcclusion.Opacity((
-                g_compactMainTintOpacity * opacity) * MainTrackGlowEnvelope());
-        }
-        if (g_dynamicMainOcclusionGlowScale) {
-            g_dynamicMainOcclusionGlowScale.ScaleX(1.0);
-            g_dynamicMainOcclusionGlowScale.ScaleY(1.0);
-        }
-        if (g_dynamicMainWashHost) {
-            g_dynamicMainWashHost.Opacity((opacity) * MainTrackGlowEnvelope());
-        }
-        if (g_dynamicMainWashRevealScale) {
-            g_dynamicMainWashRevealScale.ScaleX(1.0);
-            g_dynamicMainWashRevealScale.ScaleY(1.0);
-        }
-        if (g_dynamicMainEdgeGlow) {
-            g_dynamicMainEdgeGlow.Opacity((opacity) * MainTrackGlowEnvelope());
-        }
-        if (g_dynamicMainEdgeGlowRevealScale) {
-            g_dynamicMainEdgeGlowRevealScale.ScaleX(1.0);
-            g_dynamicMainEdgeGlowRevealScale.ScaleY(1.0);
-        }
-
-    } catch (...) {
-        StopDynamicMainGlowBreathing();
-    }
+    g_sideBreathRunning = false;
 }
 void StartDynamicMainGlowBreathing() {
-    if (!g_settings.feedbackLighting || g_dynamicMainGlowRenderingHooked ||
-        g_dynamicTransportTargetReveal <= 0.5) {
-        return;
+    if (!g_settings.feedbackLighting || g_sideBreathRunning ||
+        g_unloading || g_islandEnvironmentSuppressed ||
+        g_dynamicTransportTargetReveal <= 0.5) return;
+    AdvanceGlassBreathPhase();
+    g_sideBreathVisuals.emplace(std::array<composition::Visual,3>{nullptr,nullptr,nullptr});
+    FrameworkElement elements[]{IsTransparentMaterial() ? g_dynamicMainOcclusion : nullptr,
+                                g_dynamicMainWashHost,g_dynamicMainEdgeGlow};
+    for (int index=0;index<3;++index) {
+        if (!elements[index]) continue;
+        auto visual = hosting::ElementCompositionPreview::GetElementVisual(elements[index]);
+        auto compositor = visual.Compositor();
+        auto animation = compositor.CreateScalarKeyFrameAnimation();
+        animation.Duration(std::chrono::milliseconds(4800));
+        animation.IterationBehavior(composition::AnimationIterationBehavior::Forever);
+        auto linear = compositor.CreateLinearEasingFunction();
+        double envelope = MainTrackGlowEnvelope() * (index==0 ? g_compactMainTintOpacity : 1.0);
+        for (int i=0;i<=64;++i) {
+            float t=static_cast<float>(i)/64;
+            double breath=0.5+0.5*std::sin(g_dynamicMainGlowBreathPhase+t*6.283185307179586);
+            animation.InsertKeyFrame(t,static_cast<float>(envelope*(0.82+0.18*breath)),linear);
+        }
+        (*g_sideBreathVisuals)[index]=visual;
+        visual.StartAnimation(L"Opacity",animation);
     }
-    g_lastDynamicMainGlowFrameTime = std::chrono::steady_clock::now();
-    g_lastAppliedGlowBreathOpacity = -1.0;
-    g_dynamicMainGlowRenderingToken =
-        mediax::CompositionTarget::Rendering(OnDynamicMainGlowRendering);
-    g_dynamicMainGlowRenderingHooked = true;
+    g_sideBreathRunning = true;
 }
 
 void StartDynamicCompactRenderLoop(double targetReveal);
@@ -19763,6 +19831,7 @@ void StepDynamicCompactRenderLoopNow() {
 }
 
 void EnsureDynamicCompactRenderLoop() {
+    StopDynamicMainGlowBreathing();
     if (!IsDynamicCompactMode() || !g_dynamicTransportIsland) {
         return;
     }
@@ -20389,8 +20458,7 @@ void MediaThreadProc() {
     while (g_mediaThreadRunning) {
         try {
         auto now = std::chrono::steady_clock::now();
-        bool noMedia = !SnapshotMediaProgress().hasSession;
-        if ((!manager || mediaRefreshFailed || noMedia) &&
+        if (!manager &&
             now - lastManagerAttempt >= std::chrono::seconds(5)) {
             lastManagerAttempt = now;
             if (tryConnectManager(std::chrono::seconds(2))) {
@@ -20421,8 +20489,7 @@ void MediaThreadProc() {
             g_mediaRefreshRequested = true;
         }
 
-        auto fallbackInterval = (mediaRefreshFailed || noMedia)
-            ? std::chrono::seconds(2) : std::chrono::seconds(30);
+        auto fallbackInterval = std::chrono::seconds(30);
         bool fallbackPollDue =
             lastFallbackPoll.time_since_epoch().count() == 0 ||
             now - lastFallbackPoll >= fallbackInterval;
@@ -20436,9 +20503,11 @@ void MediaThreadProc() {
                 subscribeAllSessionEvents();
                 lastSessionAudit = now;
             }
+            auto previousRevision = g_mediaUiRevision.load();
             mediaRefreshFailed = !RefreshMediaState(manager);
             lastFallbackPoll = std::chrono::steady_clock::now();
-            uiRefreshPending = true;
+            uiRefreshPending = uiRefreshPending || !mediaTaskbarWnd ||
+                g_mediaUiRevision.load() != previousRevision;
         }
 
         if (uiRefreshPending && (shouldRefresh || now >= nextUiRetry)) {
@@ -20489,8 +20558,7 @@ void MediaThreadProc() {
             return deadline <= waitNow ? std::chrono::milliseconds(1) :
                 std::chrono::duration_cast<std::chrono::milliseconds>(deadline - waitNow);
         };
-        auto pollInterval = (mediaRefreshFailed || !SnapshotMediaProgress().hasSession)
-            ? std::chrono::seconds(2) : std::chrono::seconds(30);
+        auto pollInterval = std::chrono::seconds(30);
         navigationWait = std::min(navigationWait, until(lastFallbackPoll + pollInterval));
         navigationWait = std::min(navigationWait, until(lastSessionAudit + std::chrono::seconds(30)));
         if (uiRefreshPending) {
@@ -21288,7 +21356,6 @@ void UpdateThemeVisuals() {
         return;
     }
 
-    InvalidateDarkModeCache();
     UpdateGlassProjection(g_compactGlassProjection, DynamicTransportAccentColor());
     bool dark = IsDarkModeApprox();
     RefreshTransparentCompactForegroundContrast();
@@ -21539,6 +21606,8 @@ Grid BuildIslandGrid() {
     g_compactProjectionReveal = 0.0;
     g_dynamicTransportVisualDirection = -1;
     ResetDynamicTransportOcclusionClipCache();
+    SetProjectionCompositorBreath(false);
+    g_projectionBreathRunning = false;
     g_compactGlassProjection = nullptr;
     g_compactBackgroundBorder = nullptr;
     g_dynamicTransportStrokeBorder = nullptr;
@@ -22078,7 +22147,7 @@ Grid BuildIslandGrid() {
         g_dynamicTransportIsland = transportIsland;
         g_dynamicTransportScale = transportScale;
         g_dynamicTransportTranslate = transportTranslate;
-        transportIsland.LayoutUpdated([](auto const&, auto const&) {
+        g_transportLayoutToken = transportIsland.LayoutUpdated([](auto const&, auto const&) {
             ReapplyTransparentDynamicTransportSeamClipAfterLayout();
         });
 
@@ -22092,7 +22161,7 @@ Grid BuildIslandGrid() {
             controls::Canvas::SetZIndex(transportOcclusionHost, 1);
             wrapper.Children().Append(transportOcclusionHost);
             g_dynamicTransportOcclusionHost = transportOcclusionHost;
-            transportOcclusionHost.LayoutUpdated([](auto const&, auto const&){
+            g_transportOcclusionLayoutToken = transportOcclusionHost.LayoutUpdated([](auto const&, auto const&){
                 ReapplyTransparentDynamicTransportSeamClipAfterLayout();
             });
         } else {
@@ -22414,11 +22483,17 @@ Grid BuildIslandGrid() {
     return wrapper;
 }
 
+HWINEVENTHOOK g_taskbarForegroundHook = nullptr;
 void StopTaskbarLayoutMonitor() {
+    if (g_taskbarForegroundHook) {
+        UnhookWinEvent(g_taskbarForegroundHook);
+        g_taskbarForegroundHook = nullptr;
+    }
     if (g_taskbarLayoutTimerWindow) {
         KillTimer(g_taskbarLayoutTimerWindow, kTaskbarLayoutMonitorTimerId);
         g_taskbarLayoutTimerWindow = nullptr;
     }
+    g_taskbarLayoutWatchXamlRoot = nullptr;
     g_taskbarLayoutWatchRoot = nullptr;
     g_taskbarLayoutWatchTarget = nullptr;
     g_taskbarLayoutWatchSystemTrayFrame = nullptr;
@@ -22482,6 +22557,13 @@ void RefreshIslandEnvironmentVisibility() {
         WindowCoversTaskbarMonitor(foreground, taskbar);
     bool wasSuppressed = g_islandEnvironmentSuppressed;
     g_islandEnvironmentSuppressed = suppressed;
+    if (suppressed != wasSuppressed) {
+        auto playback = SnapshotMediaProgress();
+        SetDiscPlaying(playback.hasSession && playback.isPlaying);
+        SetCompactProjectionPlaying(playback.hasSession && playback.isPlaying);
+        if (suppressed) StopDynamicMainGlowBreathing();
+        else StartDynamicMainGlowBreathing();
+    }
     if (suppressed && !wasSuppressed && g_expandedPopup && (g_expanded || g_popupClosing)) {
         FinishCloseExpandedPopup(g_expandedPopup);
     }
@@ -22496,6 +22578,12 @@ void RefreshIslandEnvironmentVisibility() {
         g_islandOverlayReopenPending = !wasSuppressed;
     }
     SyncIslandOverlayVisibility();
+}
+
+void CALLBACK OnTaskbarForegroundChanged(HWINEVENTHOOK, DWORD, HWND,
+                                          LONG, LONG, DWORD, DWORD) {
+    if (g_unloading || !g_playerGrid) return;
+    try { RefreshIslandEnvironmentVisibility(); } catch (...) {}
 }
 
 void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
@@ -22513,6 +22601,7 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
         RepairExpandedPopupStateIfHidden();
         auto playback = SnapshotMediaProgress();
         SetDiscPlaying(playback.hasSession && playback.isPlaying);
+        SetCompactProjectionPlaying(playback.hasSession && playback.isPlaying);
         PaintPlaybackGlyph(g_playbackGlyphTransition.Resolve(playback.isPlaying, std::chrono::steady_clock::now()));
         if (g_compactProgress && !g_expanded) {
             UpdateCompactProgressFromSnapshot();
@@ -22532,10 +22621,15 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
 
         RefreshTaskbarEdge(hwnd);
         bool taskbarDirectionChanged = g_injectedTaskbarEdge != g_taskbarEdge;
-        auto currentXamlRoot = GetTaskbarXamlRoot(hwnd);
+        auto currentXamlRoot = g_taskbarLayoutWatchXamlRoot;
+        if (!currentXamlRoot) currentXamlRoot = GetTaskbarXamlRoot(hwnd);
         auto currentRoot = currentXamlRoot ? currentXamlRoot.Content().try_as<FrameworkElement>() : nullptr;
         bool treeChanged = currentRoot && currentRoot != g_taskbarLayoutWatchRoot;
-        auto target = currentRoot ? ResolveInjectionTarget(currentRoot) : InjectionTarget{};
+        bool anchorDetached = g_islandPlacementAnchor &&
+            !mediax::VisualTreeHelper::GetParent(g_islandPlacementAnchor);
+        bool targetDetached = !mediax::VisualTreeHelper::GetParent(g_taskbarLayoutWatchTarget);
+        auto target = currentRoot && (treeChanged || taskbarDirectionChanged || anchorDetached || targetDetached)
+            ? ResolveInjectionTarget(currentRoot) : InjectionTarget{};
         bool targetChanged = target.grid && target.grid != g_injectionParent;
         if (!targetChanged && !treeChanged && !taskbarDirectionChanged &&
             target.grid && target.anchor != g_islandPlacementAnchor) {
@@ -22660,6 +22754,7 @@ void StartTaskbarLayoutMonitor(FrameworkElement const& root,
 
     StopTaskbarLayoutMonitor();
     g_lastSystemThemeProbeTime = {};
+    g_taskbarLayoutWatchXamlRoot = root.XamlRoot();
     g_taskbarLayoutWatchRoot = root;
     g_taskbarLayoutWatchTarget = targetElement;
     g_taskbarLayoutWatchSystemTrayFrame =
@@ -22676,7 +22771,8 @@ void StartTaskbarLayoutMonitor(FrameworkElement const& root,
                   kTaskbarLayoutMonitorTimerId,
                   kTaskbarLayoutMonitorIntervalMs,
                   OnTaskbarLayoutTimer)) {
-        g_taskbarLayoutWatchRoot = nullptr;
+        g_taskbarLayoutWatchXamlRoot = nullptr;
+    g_taskbarLayoutWatchRoot = nullptr;
         g_taskbarLayoutWatchTarget = nullptr;
         g_taskbarLayoutWatchSystemTrayFrame = nullptr;
         g_taskbarLayoutWatchTaskbarFrame = nullptr;
@@ -22684,6 +22780,9 @@ void StartTaskbarLayoutMonitor(FrameworkElement const& root,
         return;
     }
     g_taskbarLayoutTimerWindow = hwnd;
+    g_taskbarForegroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_FOREGROUND, nullptr, OnTaskbarForegroundChanged,
+        0, 0, WINEVENT_OUTOFCONTEXT);
 }
 
 void UpdatePlayerContents() {
@@ -23162,6 +23261,13 @@ void UpdatePlayerContents() {
 }
 
 void RemoveIslandOsResourcesNoexcept() noexcept {
+    if (g_taskbarForegroundHook) {
+        UnhookWinEvent(g_taskbarForegroundHook);
+        g_taskbarForegroundHook = nullptr;
+    }
+    try { ResetDiscArtwork(); } catch (...) {}
+    try { SetProjectionCompositorBreath(false); } catch (...) {}
+    RevokeTransportLayoutHandlers();
     g_popupArtworkPreparationRequested.store(
         false, std::memory_order_release);
 
@@ -23215,6 +23321,7 @@ void RemoveIslandOsResourcesNoexcept() noexcept {
 }
 
 void RemoveIslandGridImpl() {
+    RevokeTransportLayoutHandlers();
     g_dockReservationSuspended=false; // Teardown must not re-create a suspended slot.
     g_dockReservationSurface=nullptr;
     g_dockReservationReturning=false;
@@ -23252,6 +23359,8 @@ void RemoveIslandGridImpl() {
     });
     g_dynamicTransportClipD2dFactory = nullptr;
     ResetDynamicTransportOcclusionClipCache();
+    SetProjectionCompositorBreath(false);
+    g_projectionBreathRunning = false;
     g_compactGlassProjection = nullptr;
     g_compactBackgroundBorder = nullptr;
     g_dynamicTransportStrokeBorder = nullptr;
@@ -23678,7 +23787,7 @@ void Wh_ModUninit() {
     if (g_unloading.exchange(true)) {
         return;
     }
-    StopPopupOutsidePointerHook();
+
     g_modActive = false;
     StopPopupOverlayWgcBorderlessAccessThread();
     ReleasePopupOverlayWgcDeviceResources();
