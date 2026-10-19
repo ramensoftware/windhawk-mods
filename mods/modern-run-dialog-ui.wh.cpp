@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              modern-run-dialog-ui
 // @name            Modern Run Dialog UI For Windows 11
-// @description     Transforms the classic Run dialog (Win+R) into a modern Windows 11 Fluent UI with Acrylic blur, rich history, timestamps & Taskbar toggle. | Biến đổi hộp thoại Run (Win+R) sang giao diện Fluent hiện đại với Acrylic Blur, lịch sử kèm tên ứng dụng & thời gian chạy, ẩn/mở từ Taskbar.
+// @description     Transforms the classic Run dialog into a modern Fluent UI with Acrylic blur, history, timestamps, and Taskbar toggle.
 // @version         2.0.14
 // @author          caotu2k5
+// @github          caotu2k5
 // @include         explorer.exe
 // @compilerOptions -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -luxtheme -lcomctl32 -lversion -lgdiplus -limm32 -lcomdlg32
 // ==/WindhawkMod==
@@ -25,104 +26,57 @@
 * **Fluent UI & Acrylic Blur:**
   * Completely removes the classic title bar and legacy window frames while preserving native Windows 11 rounded corners.
   * Full-window **Acrylic Blur** background with customizable opacity.
-  * **GDI+ 32-bit ARGB (Premultiplied Alpha)** rendering engine with crisp system **Segoe UI** typography (no jagged or dark text edges on transparent backgrounds).
+  * **GDI+ 32-bit ARGB (Premultiplied Alpha)** rendering engine with crisp system **Segoe UI** typography.
 
 * **Smart History List:**
   * Displays up to **5 recently executed commands** right above the input bar.
-  * Automatically extracts **native application icons** and **friendly application names** in the `command - App Name` format (e.g., `cmd - Command Prompt`, `winver - Windows Version`, `winword - Microsoft Word`).
-  * Shows the **last executed timestamp** (e.g., `Today, 15:30` or `14:20 18/10`) next to the history clock icon on each row.
-  * Supports single-click to fill the input box, double-click to execute immediately, or **Up / Down (`↑` / `↓`)** arrow keys to cycle through history items.
+  * Automatically extracts **native application icons** and **friendly application names** in the `command - App Name` format.
+  * Shows the **last executed timestamp** next to the history clock icon on each row.
+  * Supports single-click to fill the input box, double-click to execute immediately, or **Up / Down (`↑` / `↓`)** arrow keys to cycle through history.
 
 * **Modern Input Bar & Action Buttons:**
   * Borderless single-line input box with automatic horizontal scrolling for long file paths.
-  * **Browse Button (`Browse 📁`):** Opens the native Windows file picker (`*.exe`, `*.bat`, `*.cmd`, `*.msc`, `*.cpl`) and inserts the full path (automatically quoted if spaces are present) into the input bar so you can review or add arguments before running.
+  * **Browse Button (`Browse 📁`):** Opens the native Windows file picker (`*.exe`, `*.bat`, `*.cmd`, `*.msc`, `*.cpl`) and inserts the full path into the input bar.
   * **Run (`Run ↵`) & Exit (`Exit ✕`) Buttons:** High-contrast Fluent accent buttons with smooth hover and press states.
 
-* **Quality-of-Life Fixes for Windows Run:**
-  * **Taskbar Icon Click to Minimize / Restore:** Fixes the long-standing Windows limitation where clicking the Run icon on the Taskbar does nothing. You can now click the Taskbar icon to minimize (hide) or restore the Run window just like any normal app.
-  * **`Win + R` Toggle:** Pressing `Win + R` while the Run dialog is open will immediately close it (or restore it if minimized to the Taskbar).
-  * **Flawless IME & Multilingual Input:** Works seamlessly with Windows IME (Vietnamese Telex/VNI, Japanese, Chinese, Korean) and third-party input methods (Unikey, EVKey) without white composition box glitches or history selection overrides when pressing `Enter`.
+* **Quality-of-Life Fixes:**
+  * **Taskbar Icon Click to Minimize / Restore:** Click the Run icon on the Taskbar to minimize (hide) or restore the Run window like a normal app.
+  * **`Win + R` Toggle:** Pressing `Win + R` while the Run dialog is open will immediately close it (or restore it if minimized).
+  * **Flawless IME Input:** Works seamlessly with Windows IME (Vietnamese Telex/VNI, CJK) and Unikey without composition glitches.
 
 * **Multilingual Interface:**
-  * Automatically detects the Windows UI language or lets you manually choose from 10 languages: English, Vietnamese, Japanese, Simplified Chinese, Traditional Chinese, Korean, French, German, Spanish, and Russian.
-
-### ⌨️ Shortcuts & Controls
-
-| Shortcut / Action | Function |
-| :--- | :--- |
-| **`Win + R`** | Open Run dialog / Close if already open (Restore if minimized) |
-| **`Enter`** | Execute the command currently in the input bar |
-| **`Esc`** | Close the Run dialog immediately |
-| **`↑` / `↓`** | Navigate through the recent command history list |
-| **Single-click history row** | Fill the selected command into the input bar |
-| **Double-click history row** | Execute the selected command immediately |
-| **Click Run icon on Taskbar** | Minimize (Hide) / Restore the Run window (or Close, configurable) |
-
-### ⚙️ Mod Settings
-
-1. **Language:** Auto-detect from Windows or select a fixed language.
-2. **Taskbar Icon Click Action:** Choose between *Minimize / Restore window* or *Close window*.
-3. **Acrylic Blur Effect:** Enable or disable the translucent blurred background.
-4. **Blur Opacity (0 - 255):** Adjust background transparency (lower values = more transparent).
-5. **Max History Items (0 - 5):** Number of recent commands shown in the top panel (set to `0` for input-bar-only mode).
-6. **Show Last Executed Timestamp:** Show or hide the execution time next to the history icon.
-7. **Clear Initial Input on Open:** Start with an empty input box and placeholder text instead of pre-filling the last command.
-8. **Close on Click Outside:** Automatically close the Run dialog when clicking outside the window.
+  * Automatically detects the Windows UI language or lets you manually choose from 10 languages.
 
 ---
 
 ## 🇻🇳 Tiếng Việt
 
-**Modern Run Dialog UI For Windows 11** thay thế hộp thoại **Run (`Win + R`)** cổ điển của Windows bằng giao diện **Fluent Design / Command Palette** hiện đại, không viền và trong suốt chuẩn Windows 11.
+**Modern Run Dialog UI For Windows 11** thay thế hộp thoại **Run (`Win + R`)** cổ điển bằng giao diện **Fluent Design / Command Palette** hiện đại, không viền và trong suốt chuẩn Windows 11.
 
 ### ✨ Tính năng nổi bật
 
-* **Giao diện Fluent & Hiệu ứng kính mờ (Acrylic Blur):**
-  * Loại bỏ hoàn toàn thanh tiêu đề (Titlebar) và khung viền cổ điển, giữ nguyên góc bo tròn tự nhiên của Windows 11.
-  * Làm mờ nền trong suốt (**Acrylic Blur**) toàn cửa sổ, cho phép tùy chỉnh độ trong suốt theo ý thích.
-  * Kết xuất đồ họa bằng **GDI+ 32-bit ARGB (Premultiplied Alpha)** với phông chữ hệ thống **Segoe UI** sắc nét, không bị rỗ hay viền đen quanh chữ.
+* **Giao diện Fluent & Kính mờ (Acrylic Blur):**
+  * Loại bỏ thanh tiêu đề và khung viền cổ điển, giữ góc bo tròn tự nhiên của Windows 11.
+  * Làm mờ nền trong suốt (**Acrylic Blur**) toàn cửa sổ, tùy chỉnh độ trong suốt linh hoạt.
+  * Kết xuất đồ họa bằng **GDI+ 32-bit ARGB** với phông chữ hệ thống **Segoe UI** sắc nét.
 
-* **Danh sách lịch sử thông minh (Smart History List):**
-  * Hiển thị tối đa **5 lệnh chạy gần nhất** ở phần phía trên thanh nhập liệu.
-  * Tự động trích xuất **biểu tượng (Icon) gốc** và **tên ứng dụng** theo định dạng `lệnh - Tên ứng dụng` (ví dụ: `cmd - Command Prompt`, `winver - Windows Version`, `winword - Microsoft Word`).
-  * Hiển thị **thời gian chạy lệnh gần nhất** (ví dụ: `Hôm nay, 15:30` hoặc `14:20 18/10`) ngay bên cạnh biểu tượng đồng hồ ở mỗi dòng lịch sử.
-  * Hỗ trợ bấm chuột 1 lần để điền nhanh lệnh xuống ô nhập, nhấp đúp chuột để chạy ngay, hoặc dùng phím mũi tên **Lên / Xuống (`↑` / `↓`)** để duyệt lịch sử.
+* **Lịch sử thông minh:**
+  * Hiển thị tối đa **5 lệnh chạy gần nhất** kèm biểu tượng gốc và tên ứng dụng (`lệnh - Tên ứng dụng`).
+  * Hiển thị **thời gian chạy lệnh gần nhất** ngay bên cạnh biểu tượng đồng hồ ở mỗi dòng.
+  * Hỗ trợ bấm chọn nhanh, nhấp đúp để chạy ngay, hoặc dùng phím **Lên / Xuống (`↑` / `↓`)**.
 
-* **Thanh nhập liệu & Cụm nút chức năng hiện đại:**
-  * Ô nhập lệnh 1 dòng không viền, tự động cuộn ngang mượt mà khi đường dẫn dài.
-  * **Nút Duyệt (`Duyệt 📁`):** Mở hộp thoại chọn tệp mặc định của hệ thống (`*.exe`, `*.bat`, `*.cmd`, `*.msc`, `*.cpl`) và đưa toàn bộ đường dẫn (tự động bọc dấu ngoặc kép nếu có khoảng trắng) lên thanh nhập để người dùng tùy ý kiểm tra hoặc thêm tham số trước khi quyết định chạy.
-  * **Nút Chạy (`Chạy ↵`) & Thoát (`Thoát ✕`):** Thiết kế nổi bật, trực quan với hiệu ứng chuyển màu khi rê và nhấn chuột.
+* **Thanh nhập liệu & Nút chức năng:**
+  * Ô nhập lệnh không viền, tự cuộn ngang khi đường dẫn dài.
+  * **Nút Duyệt (`Duyệt 📁`):** Mở hộp thoại chọn tệp hệ thống (`*.exe`, `*.bat`, `*.cmd`, `*.msc`, `*.cpl`) và đưa đường dẫn lên thanh nhập.
+  * **Nút Chạy (`Chạy ↵`) & Thoát (`Thoát ✕`):** Nổi bật, trực quan với hiệu ứng chuyển màu khi rê chuột.
 
-* **Khắc phục triệt để các bất cập cố hữu của Windows Run:**
-  * **Bấm biểu tượng Run trên Taskbar để Ẩn / Mở cửa sổ:** Sửa lỗi cố hữu của Windows khi bấm vào icon Run dưới thanh Taskbar không có phản hồi. Giờ đây bạn có thể bấm vào icon trên Taskbar để thu nhỏ (ẩn) hoặc mở lại cửa sổ Run như mọi ứng dụng bình thường.
-  * **Nhấn `Win + R` để đóng nhanh:** Nhấn lại `Win + R` khi hộp thoại đang mở sẽ lập tức đóng cửa sổ (hoặc khôi phục lên nếu đang thu nhỏ dưới Taskbar).
-  * **Tương thích hoàn hảo bộ gõ Tiếng Việt (IME):** Hoạt động mượt mà với bộ gõ Windows (Telex/VNI), Unikey, EVKey và các bộ gõ đa ngôn ngữ (Nhật, Trung, Hàn), không bị lỗi khung trắng đè chữ và không bị chạy nhầm lệnh trong lịch sử khi nhấn `Enter`.
+* **Cải tiến trải nghiệm (Quality-of-Life):**
+  * **Bấm icon Taskbar để Ẩn / Mở cửa sổ:** Cho phép click vào icon Run dưới thanh Taskbar để thu nhỏ hoặc khôi phục cửa sổ.
+  * **Nhấn `Win + R` để đóng nhanh:** Nhấn lại `Win + R` khi hộp thoại đang mở sẽ lập tức đóng hoặc khôi phục cửa sổ.
+  * **Tương thích hoàn hảo bộ gõ Tiếng Việt (IME):** Hoạt động mượt mà với Unikey, EVKey và bộ gõ Windows, không bị lỗi khung trắng đè chữ.
 
-* **Hỗ trợ Đa ngôn ngữ (Multilingual):**
-  * Tự động nhận diện ngôn ngữ hệ thống hoặc tùy chọn cố định 10 ngôn ngữ: Tiếng Việt, English, 日本語, 简体中文, 繁體中文, 한국어, Français, Deutsch, Español, Русский.
-
-### ⌨️ Phím tắt & Thao tác
-
-| Phím / Thao tác | Chức năng |
-| :--- | :--- |
-| **`Win + R`** | Mở hộp thoại Run / Đóng nếu đang mở (Khôi phục nếu đang ẩn dưới Taskbar) |
-| **`Enter`** | Thực thi lệnh đang có trên thanh nhập liệu |
-| **`Esc`** | Đóng hộp thoại Run ngay lập tức |
-| **`↑` / `↓`** | Di chuyển và chọn nhanh các lệnh trong danh sách lịch sử |
-| **Click chuột vào dòng lịch sử** | Điền lệnh đó xuống thanh nhập liệu |
-| **Nhấp đúp vào dòng lịch sử** | Chạy ngay lập tức lệnh đó |
-| **Click icon Run trên Taskbar** | Thu nhỏ (Ẩn) / Mở lại cửa sổ Run (hoặc Đóng hẳn tùy cài đặt) |
-
-### ⚙️ Tùy chỉnh trong Cài đặt (Mod Settings)
-
-1. **Ngôn ngữ hiển thị (Language):** Tự động theo Windows hoặc chọn ngôn ngữ cố định.
-2. **Hành vi khi bấm icon Run trên Taskbar:** Chọn giữa *Ẩn / Mở lại cửa sổ* hoặc *Đóng hẳn cửa sổ*.
-3. **Hiệu ứng làm mờ trong suốt (Blur / Acrylic):** Bật hoặc tắt nền kính mờ.
-4. **Độ đậm nền Blur (0 - 255):** Điều chỉnh mức độ trong suốt của nền cửa sổ.
-5. **Số mục lịch sử tối đa (0 - 5):** Số lượng lệnh gần đây hiển thị ở phần trên (đặt về `0` nếu chỉ muốn hiện 1 dòng nhập lệnh).
-6. **Hiển thị thời gian chạy lệnh gần nhất:** Bật/tắt mốc thời gian bên cạnh biểu tượng đồng hồ.
-7. **Để trống ô nhập khi mở:** Hiển thị dòng gợi ý thay vì tự điền sẵn lệnh cũ khi vừa mở.
-8. **Tự động đóng khi bấm ra ngoài:** Tự động đóng hộp thoại Run khi click chuột ra ngoài cửa sổ.
+* **Hỗ trợ Đa ngôn ngữ:**
+  * Tự động nhận diện ngôn ngữ Windows hoặc tùy chọn cố định 10 ngôn ngữ.
 */
 // ==/WindhawkModReadme==
 
