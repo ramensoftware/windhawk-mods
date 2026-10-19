@@ -2,10 +2,10 @@
 // @id              taskbar-modding
 // @name            Taskbar modding
 // @name:zh-CN      任务栏魔改
-// @description     Customize the floating and rounded corner styles of the Windows 11 taskbar; left-clicking a grouped taskbar item cycles through its windows. When the system's "Automatically hide the taskbar" option is enabled, the taskbar only hides when a window is maximized or overlaps the taskbar. It allows hiding or adjusting system tray icons, supports macOS Dock-like icon hover zoom animations, and enables customization of the taskbar clock's time/date format, two-line layout content, and performance metrics.
-// @description:zh-CN 自定义Windows 11 任务栏的悬浮以及圆角样式；左键点击合并的任务栏项会在窗口之间循环切换；开启系统"自动隐藏任务栏"后，只有窗口最大化或与任务栏相交时任务栏才会隐藏；可以隐藏/调整任务栏的系统托盘图标；支持类似 macOS Dock 的图标悬停放大动画；可以自定义任务栏时钟的时间/日期格式、上下两行内容与性能数据
+// @description     Customize Windows 11 taskbar with floating look and rounded corners. Left-click grouped taskbar entries to cycle between their windows. With system auto-hide taskbar turned on, the taskbar hides only under maximized windows or when covered by other windows. You may hide or tweak system tray icons. It supports macOS Dock-style zoom animation on icon hover. Customize the taskbar clock’s time and date format, two-line layout content, plus real-time performance metrics display.
+// @description:zh-CN 自定义Windows 11任务栏，采用悬浮外观和圆角设计。左键点击分组任务栏条目，可以在它们的窗口间循环切换。当系统自动隐藏任务栏开启时，任务栏只会隐藏在最大化的窗口下或被其他窗口遮挡时。你可以隐藏或调整系统托盘图标。它支持macOS风格的图标悬停缩放动画。可自定义任务栏时钟的时间和日期格式、两行布局内容，以及实时性能指标显示。
 // @version         1.16.3
-// @author          chaochenzhudian, some adapted from m417z's mods Windows 11 Taskbar Styler, Cycle through taskbar windows on click, Taskbar auto-hide when maximized, Taskbar tray system icon tweaks, Taskbar Clock Customization) and Taskbar Dock Animation Plus
+// @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
 // @include         explorer.exe
 // @include         ShellHost.exe
@@ -10869,7 +10869,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &g_ctaskBandTaskListWndSiteVftable,
