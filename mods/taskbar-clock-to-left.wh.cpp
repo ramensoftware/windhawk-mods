@@ -96,6 +96,7 @@ This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods
 #include <atomic>
 #include <cmath>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #undef GetCurrentTime
@@ -4836,8 +4837,8 @@ BOOL WINAPI SetWindowPos_Hook(HWND window, HWND insertAfter, int x, int y,
     try {
         DWORD process = 0;
         wchar_t name[64];
-        if (g_callbacksEnabled && g_movedClocks &&
-            GetCurrentThreadId() == g_clockThreadId && !(flags & SWP_HIDEWINDOW) &&
+        if (GetCurrentThreadId() == g_clockThreadId && g_callbacksEnabled &&
+            g_movedClocks && !(flags & SWP_HIDEWINDOW) &&
             GetWindowThreadProcessId(window, &process) == g_clockThreadId &&
             process == GetCurrentProcessId() && GetAncestor(window, GA_ROOT) == window &&
             !GetWindow(window, GW_OWNER) && GetClassNameW(window, name, ARRAYSIZE(name)) &&
@@ -4919,7 +4920,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    Wh_Log(L"Taskbar Clock to Left 2.3: keepOnLeftWhenLeftAligned=%d moveControlCenter=%d moveNonActivatableStack=%d moveNotifyIconStack=%d moveNotificationAreaIcons=%d reserveCenteredViewport=%d",
+    Wh_Log(L"Taskbar Clock to Left " WH_MOD_VERSION L": keepOnLeftWhenLeftAligned=%d moveControlCenter=%d moveNonActivatableStack=%d moveNotifyIconStack=%d moveNotificationAreaIcons=%d reserveCenteredViewport=%d",
            g_settings.keepOnLeftWhenLeftAligned, g_settings.moveControlCenter,
            g_settings.moveNonActivatableStack, g_settings.moveNotifyIconStack,
            g_settings.moveNotificationAreaIcons, g_settings.reserveCenteredViewport);
