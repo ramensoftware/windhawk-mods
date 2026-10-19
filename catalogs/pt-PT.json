@@ -3825,19 +3825,20 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1788807824000,
+        "updated": 1792397607000,
         "users": 36
       },
       "metadata": {
         "author": "Anixx",
         "compilerOptions": "-lcomctl32 -lpsapi",
-        "description": "Makes padding of tray icons adjustable in legacy taskbar",
+        "description": "Makes padding of tray and tray popup icons adjustable in legacy taskbar",
         "github": "https://github.com/Anixx",
         "include": [
           "explorer.exe"
         ],
+        "license": "MIT",
         "name": "Adjustable tray icons padding for Win10 taskbar",
-        "version": "1.0"
+        "version": "2.0"
       }
     },
     "desktop-audio-visualizer": {

@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-19T06:00:52.000Z</updated>
+    <updated>2026-10-19T08:13:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 2.0]]></title>
+        <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#4d9eb477f62d70d767d5721e9a6b5fa915fadfdd</id>
+        <link href="https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar"/>
+        <updated>2026-10-19T08:13:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Massive rewrite by <a href="https://github.com/piknockyou">piknockyou</a></li>
+<li>Add options for icon spacing inside the flyout</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Drag and Lock 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-drag-lock#653f7c72cda602b566dc5d8395ecd5d726d1e5fe</id>
@@ -594,21 +608,6 @@ his "Taskbar auto-hide when maximized" mod (all GPL-3.0).</p>]]></content>
         <author>
             <name>gilnett</name>
             <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Window Cards 1.8]]></title>
-        <id>https://windhawk.net/mods/desktop-window-cards#15eab1d96589bcbec11e4d9e8aeb2659510e1206</id>
-        <link href="https://windhawk.net/mods/desktop-window-cards"/>
-        <updated>2026-10-17T18:02:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New: hold a modifier key (Shift, Ctrl or Alt) while minimizing to send the window to the taskbar without a card.</li>
-<li>New: option to invert the modifier key, so that only windows minimized while holding it become cards.</li>
-<li>New: exclusion list of programs whose windows never become cards.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>
