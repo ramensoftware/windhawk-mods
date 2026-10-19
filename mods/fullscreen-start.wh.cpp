@@ -7,7 +7,7 @@
 // @github          https://github.com/RafaelMendes1407
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lshell32 -lshcore -ldwmapi -ld2d1 -ldwrite -lole32 -loleaut32 -luuid -lcomctl32
+// @compilerOptions -lgdi32 -lshell32 -lshcore -ldwmapi -ld2d1 -ldwrite -lole32 -luuid -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -22,7 +22,7 @@ background.
 ## Features
 - **Fullscreen**: takes the whole work area of the monitor where the mouse
   is, without covering the taskbar, other side bars or the Dock of the
-  **macOS Dock** mod.
+  **Standalone Dock (macOS-like)** mod.
 - **All apps**: the same ones as the "All apps" list of Start (programs and
   Store apps), in alphabetical order, with icon and name.
 - **Search**: just type. The list is filtered instantly, ignoring case and
@@ -31,8 +31,15 @@ background.
   color.
 
 ## How to open
-- **Windows** key or **Ctrl+Esc**.
-- **Start button** of the Dock or of the taskbar.
+Everything that would open the Windows Start menu opens this one instead:
+- the **Windows** key and **Ctrl+Esc**;
+- the **Start button** of the taskbar, or of the Dock of the Standalone Dock
+  mod.
+
+The mod hooks the function Explorer uses to show Start
+(`XamlLauncher::ShowStartView` in `twinui.pcshell.dll`), so the original
+Start doesn't open at all. Windhawk downloads the symbols of that file the
+first time the mod loads.
 
 ## Keyboard and mouse
 - Type to search; **Backspace** deletes, **Ctrl+Backspace** deletes the last
@@ -53,13 +60,6 @@ background.
 - **No blur**: only the color on top.
 
 Changes to the settings apply the next time Start opens.
-
-## Limitations
-- Clicking the taskbar's Start button opens the original Start for a moment
-  before this one appears (Windows doesn't notify before opening it).
-- With an administrator app focused, Windows doesn't let the mod see the
-  keys; the Windows key opens the original Start, which is replaced by this
-  one right after.
 */
 // ==/WindhawkModReadme==
 
@@ -87,10 +87,11 @@ Changes to the settings apply the next time Start opens.
   $name: Grid columns
   $description: 0 picks based on the screen size
 - winKey: true
-  $name: Open with the Windows key and Ctrl+Esc
+  $name: Open with the Windows key
+  $description: When off, the Windows key opens the original Start
 - startButton: true
   $name: Open with the Start button
-  $description: Of the Dock and of the taskbar. If the original Start opens some other way, it's replaced by this one
+  $description: Of the taskbar and of the Standalone Dock mod, and the other ways Start opens (not the keyboard). When off, they open the original Start
 */
 // ==/WindhawkModSettings==
 
@@ -126,7 +127,7 @@ constexpr WCHAR kWindowClass[] = L"WindhawkFullscreenStart";
 constexpr WCHAR kBackdropClass[] = L"WindhawkFullscreenStartBackdrop";
 constexpr WCHAR kAppsFolder[] = L"shell:AppsFolder\\";
 
-// From macOS Dock: the edge strip it takes.
+// From the Standalone Dock mod: the edge strip it takes.
 constexpr WCHAR kDockClass[] = L"WindhawkMacDock";
 constexpr WCHAR kDockPlateClass[] = L"WindhawkMacDockPlate";
 constexpr WCHAR kDockEdgeProp[] = L"WindhawkMacDock.Edge";
@@ -138,16 +139,7 @@ constexpr UINT WM_APP_RELOAD = WM_APP + 3;
 constexpr UINT WM_APP_QUIT = WM_APP + 4;
 
 constexpr UINT_PTR kTimerFrame = 1;
-constexpr UINT_PTR kTimerTaskbar = 2;
-constexpr UINT_PTR kTimerOpenLater = 3;
 constexpr UINT_PTR kTimerFirstLoad = 4;
-
-// Keys simulated by the mod itself carry this mark, and the keyboard hook
-// lets them through.
-constexpr ULONG_PTR kInjectedMarker = 0x57485354;
-// Unused key: pressed between the Windows key and its release, the original
-// Start understands it was a shortcut (Win+something) and doesn't open.
-constexpr WORD kMaskKey = 0xE8;
 
 constexpr GUID kBhidEnumItems = {
     0x94f60519,
@@ -196,15 +188,12 @@ struct Settings {
 };
 
 Settings g_settings;
-// Also read on the taskbar thread and in the keyboard hook.
+// Also read in the ShowStartView hook, on Explorer's threads.
 std::atomic<bool> g_winKeyEnabled{true};
 std::atomic<bool> g_startButtonEnabled{true};
 
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 D2D1_COLOR_F ParseColor(std::wstring text, D2D1_COLOR_F fallback) {
@@ -256,7 +245,11 @@ struct App {
 };
 using AppList = std::vector<std::shared_ptr<App>>;
 
-AppList g_apps;
+// The globals that hold COM objects (D2D bitmaps, factories, text formats) are
+// released by the Start thread before it ends (no_destroy): when Explorer
+// exits, Wh_ModUninit isn't called, the thread is already gone, and static
+// destructors would release them on the exiting thread under the loader lock.
+[[clang::no_destroy]] AppList g_apps;
 bool g_appsLoaded;
 double g_appsTime;
 int g_appsIconPixels;
@@ -370,10 +363,10 @@ void LoadAppIcon(IShellItem* item, int size, App& app) {
 bool ShouldSkip(const std::wstring& name, const std::wstring& parsing) {
     std::wstring lowerName = ToLower(name);
     std::wstring lowerTarget = ToLower(parsing);
-    if (lowerName.empty() || lowerName.find(L"uninstall") != std::wstring::npos ||
-        lowerName.find(L"desinstalar") != std::wstring::npos ||
+    if (lowerName.empty() ||
         lowerTarget.find(L"\\unins0") != std::wstring::npos ||
         lowerTarget.find(L"\\uninst.exe") != std::wstring::npos ||
+        lowerTarget.find(L"\\uninstall.exe") != std::wstring::npos ||
         lowerTarget.rfind(L"http://", 0) == 0 ||
         lowerTarget.rfind(L"https://", 0) == 0) {
         return true;
@@ -540,7 +533,7 @@ void UpdateFilter() {
 // Available area
 //
 // The monitor's work area already excludes the visible taskbar and the side
-// bars that reserve space. The macOS Dock usually doesn't reserve it (it
+// bars that reserve space. The Standalone Dock usually doesn't reserve it (it
 // hides by itself), so its strip is removed separately.
 
 RECT AvailableArea(HMONITOR monitor) {
@@ -588,8 +581,6 @@ RECT AvailableArea(HMONITOR monitor) {
     return a;
 }
 
-// The Dock window lowest in the order; Start goes right below it, so the
-// Dock's magnified icons pass over it.
 // Puts the Dock windows above Start, which leaves the Dock's strip free.
 // The background ones first: the Dock window is owned by one of them and stays above.
 void RaiseDockWindows() {
@@ -614,10 +605,10 @@ void RaiseDockWindows() {
 ////////////////////////////////////////////////////////////////////////////////
 // Drawing
 
-ComPtr<ID2D1Factory> g_d2d;
-ComPtr<IDWriteFactory> g_dwrite;
-ComPtr<ID2D1DCRenderTarget> g_target;
-ComPtr<ID2D1SolidColorBrush> g_brush;
+[[clang::no_destroy]] ComPtr<ID2D1Factory> g_d2d;
+[[clang::no_destroy]] ComPtr<IDWriteFactory> g_dwrite;
+[[clang::no_destroy]] ComPtr<ID2D1DCRenderTarget> g_target;
+[[clang::no_destroy]] ComPtr<ID2D1SolidColorBrush> g_brush;
 UINT g_targetGeneration = 1;
 
 struct Surface {
@@ -735,7 +726,7 @@ struct Backdrop {
     ComPtr<ID2D1Bitmap> bitmap;
     UINT generation = 0;
 };
-Backdrop g_backdropImage;
+[[clang::no_destroy]] Backdrop g_backdropImage;
 
 void BoxBlurPass(const UINT32* src,
                  UINT32* dst,
@@ -968,7 +959,8 @@ Layout g_layout;
 float g_scroll, g_scrollTarget;
 int g_wheelDelta;  // Wheel accumulated until it completes a row (touchpads).
 
-ComPtr<IDWriteTextFormat> g_labelFormat, g_searchFormat, g_messageFormat;
+[[clang::no_destroy]] ComPtr<IDWriteTextFormat> g_labelFormat, g_searchFormat,
+    g_messageFormat;
 float g_formatScale;
 
 void EnsureFormats(float scale) {
@@ -1309,9 +1301,7 @@ void HideNow() {
     g_appear = 0;
     g_backdropImage = {};
     FreeSurface(g_surface);
-    if (g_trackingMouse) {
-        g_trackingMouse = false;
-    }
+    g_trackingMouse = false;
 }
 
 void OnFrame() {
@@ -1350,25 +1340,12 @@ void OnFrame() {
 ////////////////////////////////////////////////////////////////////////////////
 // Opening and closing
 
-// Explorer can't always bring its own window to the foreground; attaching
-// the input queue to the focused window's one allows it.
+// SetForegroundWindow succeeds when the calling process received the last
+// input event; an empty SendInput provides it.
 void ForceForeground(HWND hwnd) {
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
-    HWND foreground = GetForegroundWindow();
-    if (foreground != hwnd) {
-        DWORD current = GetCurrentThreadId();
-        DWORD other =
-            foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-        if (other && other != current &&
-            AttachThreadInput(current, other, TRUE)) {
-            BringWindowToTop(hwnd);
-            SetForegroundWindow(hwnd);
-            AttachThreadInput(current, other, FALSE);
-        }
-        if (GetForegroundWindow() != hwnd) {
-            SwitchToThisWindow(hwnd, TRUE);
-        }
-    }
     SetFocus(hwnd);
 }
 
@@ -1612,218 +1589,46 @@ void OnKeyDown(WPARAM key) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Ways to open
+// Opening instead of the Windows Start
 //
-// - Windows key and Ctrl+Esc: a low-level keyboard hook.
-// - Start button (of the Dock and the taskbar): the taskbar receives
-//   WM_SYSCOMMAND/SC_TASKLIST, intercepted by a subclass of it.
-// - Any other path: when the original Start window comes to the
-//   foreground, it's closed and this one opens instead.
+// Every way of opening Start (Windows key, Ctrl+Esc, the taskbar's Start
+// button, WM_SYSCOMMAND/SC_TASKLIST from the Dock) goes through
+// XamlLauncher::ShowStartView in twinui.pcshell.dll. The hook asks the mod's
+// window to toggle and doesn't call the original, so the Windows Start never
+// opens.
 
-HHOOK g_keyboardHook;
-DWORD g_winKey;     // Windows key pressed, or 0.
-bool g_winCombo;    // Another key was used along with it (Win+E, Win+X...).
-bool g_swallowEscUp;
-double g_nativeWinTime;  // Windows key left for the original Start.
+// IMMERSIVELAUNCHERSHOWMETHOD value of the keyboard (Windows key).
+constexpr int kShowMethodKeyboard = 1;
 
-void SendMarkedKeys(std::initializer_list<std::pair<WORD, bool>> keys) {
-    std::vector<INPUT> inputs;
-    for (const auto& [vk, up] : keys) {
-        INPUT in{};
-        in.type = INPUT_KEYBOARD;
-        in.ki.wVk = vk;
-        in.ki.dwFlags = up ? KEYEVENTF_KEYUP : 0;
-        if (vk == VK_LWIN || vk == VK_RWIN) {
-            in.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
-        }
-        in.ki.dwExtraInfo = kInjectedMarker;
-        inputs.push_back(in);
-    }
-    SendInput((UINT)inputs.size(), inputs.data(), sizeof(INPUT));
-}
-
-LRESULT CALLBACK KeyboardHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code != HC_ACTION) {
-        return CallNextHookEx(nullptr, code, wParam, lParam);
-    }
-    auto* k = (KBDLLHOOKSTRUCT*)lParam;
-    if (k->dwExtraInfo == kInjectedMarker) {
-        return CallNextHookEx(nullptr, code, wParam, lParam);
-    }
-    bool down = !(k->flags & LLKHF_UP);
-    DWORD vk = k->vkCode;
-
-    if (vk == VK_LWIN || vk == VK_RWIN) {
-        if (down) {
-            if (!g_winKey) {
-                g_winKey = vk;
-                g_winCombo = false;
-            }
-        } else if (vk == g_winKey) {
-            g_winKey = 0;
-            if (!g_winCombo) {
-                if (!g_winKeyEnabled) {
-                    g_nativeWinTime = Now();
-                } else if (HWND wnd = g_wnd) {
-                    // The real release is swallowed and redone after the
-                    // unused key, in the right order.
-                    SendMarkedKeys({{kMaskKey, false},
-                                    {kMaskKey, true},
-                                    {(WORD)vk, true}});
-                    PostMessageW(wnd, WM_APP_TOGGLE, 0, 0);
-                    return 1;
-                }
-            }
-        }
-        return CallNextHookEx(nullptr, code, wParam, lParam);
-    }
-
-    if (down && g_winKey) {
-        g_winCombo = true;
-    }
-    if (vk == VK_ESCAPE && g_winKeyEnabled) {
-        if (down && !g_winKey && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
-            !(GetAsyncKeyState(VK_SHIFT) & 0x8000) &&
-            !(GetAsyncKeyState(VK_MENU) & 0x8000)) {
-            if (HWND wnd = g_wnd) {
-                g_swallowEscUp = true;
-                PostMessageW(wnd, WM_APP_TOGGLE, 0, 0);
-                return 1;
-            }
-        }
-        if (!down && g_swallowEscUp) {
-            g_swallowEscUp = false;
-            return 1;
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-HWND g_tray;
-
-LRESULT CALLBACK TraySubclassProc(HWND hwnd,
-                                  UINT msg,
-                                  WPARAM wParam,
-                                  LPARAM lParam,
-                                  DWORD_PTR) {
-    if (msg == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_TASKLIST &&
-        g_startButtonEnabled) {
-        if (HWND wnd = g_wnd) {
-            PostMessageW(wnd, WM_APP_TOGGLE, 0, 0);
-            return 0;
-        }
-    }
-    return DefSubclassProc(hwnd, msg, wParam, lParam);
-}
-
-// Also redone when the taskbar is recreated (explorer restarted).
-void HookTaskbar() {
+bool OwnsTaskbar() {
     DWORD pid = 0;
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (tray && (!GetWindowThreadProcessId(tray, &pid) ||
-                 pid != GetCurrentProcessId())) {
-        tray = nullptr;
-    }
-    if (tray == g_tray && (!tray || IsWindow(tray))) {
-        return;
-    }
-    if (g_tray && IsWindow(g_tray)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_tray,
-                                                         TraySubclassProc);
-    }
-    g_tray = nullptr;
-    if (tray && WindhawkUtils::SetWindowSubclassFromAnyThread(
-                    tray, TraySubclassProc, 0)) {
-        g_tray = tray;
-    }
+    return tray && GetWindowThreadProcessId(tray, &pid) &&
+           pid == GetCurrentProcessId();
 }
 
-void UnhookTaskbar() {
-    if (g_tray && IsWindow(g_tray)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_tray,
-                                                         TraySubclassProc);
+using XamlLauncher_ShowStartView_t = HRESULT(WINAPI*)(void* pThis,
+                                                      int showMethod,
+                                                      int showFlags);
+XamlLauncher_ShowStartView_t XamlLauncher_ShowStartView_Original;
+HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis,
+                                               int showMethod,
+                                               int showFlags) {
+    Wh_Log(L"> method %d, flags %d", showMethod, showFlags);
+    bool enabled = showMethod == kShowMethodKeyboard ? g_winKeyEnabled
+                                                     : g_startButtonEnabled;
+    HWND wnd = g_wnd;
+    if (!enabled || !wnd) {
+        return XamlLauncher_ShowStartView_Original(pThis, showMethod,
+                                                   showFlags);
     }
-    g_tray = nullptr;
-}
-
-HWINEVENTHOOK g_foregroundHook;
-
-bool IsNativeStartWindow(HWND hwnd) {
-    WCHAR className[64];
-    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
-        wcscmp(className, L"Windows.UI.Core.CoreWindow")) {
-        return false;
-    }
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    HANDLE process =
-        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) {
-        return false;
-    }
-    WCHAR path[MAX_PATH];
-    DWORD size = ARRAYSIZE(path);
-    bool start = QueryFullProcessImageNameW(process, 0, path, &size) &&
-                 EndsWith(ToLower(path), L"\\startmenuexperiencehost.exe");
-    CloseHandle(process);
-    return start;
-}
-
-void CALLBACK OnForeground(HWINEVENTHOOK,
-                           DWORD,
-                           HWND hwnd,
-                           LONG idObject,
-                           LONG,
-                           DWORD,
-                           DWORD) {
-    if (!hwnd || idObject != OBJID_WINDOW || !g_startButtonEnabled ||
-        (g_shown && !g_closing) || !IsNativeStartWindow(hwnd)) {
-        return;
-    }
-    // The Windows key with its option off opens the original one anyway.
-    if (Now() - g_nativeWinTime < 1.5) {
-        return;
-    }
-    // Esc closes the original Start; the background screenshot is taken after
-    // it's gone. If this one just closed because of the click on the Start
-    // button, the click was meant to close it.
-    SendMarkedKeys({{VK_ESCAPE, false}, {VK_ESCAPE, true}});
-    if (Now() - g_lastClosed > 0.5) {
-        SetTimer(g_wnd, kTimerOpenLater, 200, nullptr);
-    }
-}
-
-void InstallInputHooks() {
-    HINSTANCE instance = (HINSTANCE)&__ImageBase;
-    if (!g_keyboardHook) {
-        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHookProc,
-                                           instance, 0);
-    }
-    if (!g_foregroundHook) {
-        g_foregroundHook = SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
-            OnForeground, 0, 0,
-            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    }
-    HookTaskbar();
-}
-
-void RemoveInputHooks() {
-    if (g_keyboardHook) {
-        UnhookWindowsHookEx(g_keyboardHook);
-        g_keyboardHook = nullptr;
-    }
-    if (g_foregroundHook) {
-        UnhookWinEvent(g_foregroundHook);
-        g_foregroundHook = nullptr;
-    }
-    UnhookTaskbar();
+    PostMessageW(wnd, WM_APP_TOGGLE, 0, 0);
+    return S_OK;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windows
 
-UINT g_taskbarCreatedMsg;
 
 void OnAppsLoaded(AppList* list, int iconPixels) {
     g_apps = std::move(*list);
@@ -1843,13 +1648,14 @@ void OnAppsLoaded(AppList* list, int iconPixels) {
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg) {
-        HookTaskbar();
-        return 0;
-    }
-
     switch (msg) {
         case WM_APP_TOGGLE:
+            // Clicking the taskbar's Start button while this one is open first
+            // takes the focus (which closes it) and then asks for Start: that
+            // click was meant to close it.
+            if ((!g_shown || g_closing) && Now() - g_lastClosed < 0.5) {
+                return 0;
+            }
             Toggle();
             return 0;
 
@@ -1876,17 +1682,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 case kTimerFrame:
                     OnFrame();
                     break;
-                case kTimerTaskbar:
-                    HookTaskbar();
-                    break;
-                case kTimerOpenLater:
-                    KillTimer(hwnd, kTimerOpenLater);
-                    Open();
-                    break;
                 case kTimerFirstLoad:
-                    KillTimer(hwnd, kTimerFirstLoad);
-                    if (!g_appsLoaded) {
-                        StartLoadingApps();
+                    // Only in the process that owns the taskbar: short-lived
+                    // explorer.exe processes (explorer.exe /select,...) get
+                    // the mod too, and exit before they'd need the list.
+                    if (OwnsTaskbar()) {
+                        KillTimer(hwnd, kTimerFirstLoad);
+                        if (!g_appsLoaded) {
+                            StartLoadingApps();
+                        }
                     }
                     break;
             }
@@ -2051,10 +1855,6 @@ DWORD WINAPI StartThread(void*) {
     bool ok = g_d2d && g_dwrite && g_backdrop && wnd;
     if (ok) {
         g_wnd = wnd;
-        g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
-        InstallInputHooks();
-        // The taskbar may not exist yet when explorer is starting.
-        SetTimer(wnd, kTimerTaskbar, 2000, nullptr);
         // The app list is read a bit later, so it doesn't weigh on explorer's
         // startup.
         SetTimer(wnd, kTimerFirstLoad, 3000, nullptr);
@@ -2074,7 +1874,6 @@ DWORD WINAPI StartThread(void*) {
         }
     }
     g_wnd = nullptr;
-    RemoveInputHooks();
 
     g_workerStop = true;
     if (g_worker) {
@@ -2092,7 +1891,7 @@ DWORD WINAPI StartThread(void*) {
         DestroyWindow(g_backdrop);
         g_backdrop = nullptr;
     }
-    g_apps.clear();
+    AppList().swap(g_apps);  // Also frees the memory (no_destroy).
     g_backdropImage = {};
     FreeSurface(g_surface);
     g_labelFormat.Reset();
@@ -2108,12 +1907,34 @@ DWORD WINAPI StartThread(void*) {
 }
 
 // With "Launch folder windows in a separate process", folder windows run in
-// their own explorer.exe; Start stays only in the taskbar's process.
-bool IsShellExplorer() {
+// their own explorer.exe, which never shows Start.
+bool IsFolderWindowsProcess() {
     std::wstring commandLine = ToLower(GetCommandLineW());
-    return commandLine.find(L"/factory") == std::wstring::npos &&
-           commandLine.find(L"-embedding") == std::wstring::npos &&
-           commandLine.find(L"/separate") == std::wstring::npos;
+    return commandLine.find(L"/factory") != std::wstring::npos ||
+           commandLine.find(L"-embedding") != std::wstring::npos ||
+           commandLine.find(L"/separate") != std::wstring::npos;
+}
+
+bool HookShowStartView() {
+    HMODULE module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Couldn't load twinui.pcshell.dll");
+        return false;
+    }
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
+            &XamlLauncher_ShowStartView_Original,
+            XamlLauncher_ShowStartView_Hook,
+        },
+    };
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -2121,9 +1942,13 @@ bool IsShellExplorer() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    if (!IsShellExplorer()) {
+    if (IsFolderWindowsProcess()) {
         Wh_Log(L"Folder windows process; Start stays in the taskbar's one");
-        return TRUE;
+        return FALSE;
+    }
+    LoadSettings();
+    if (!HookShowStartView()) {
+        return FALSE;
     }
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, StartThread, nullptr, 0, nullptr);
@@ -2152,11 +1977,10 @@ void Wh_ModUninit() {
     g_readyEvent = nullptr;
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     if (HWND wnd = g_wnd) {
         PostMessageW(wnd, WM_APP_RELOAD, 0, 0);
     }
-    return TRUE;
 }
