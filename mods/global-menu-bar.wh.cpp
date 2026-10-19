@@ -237,6 +237,7 @@ after excluding it.
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <map>
@@ -409,9 +410,15 @@ HMENU WINAPI GetMenu_hook(HWND hwnd) {
     return menu;
 }
 
+LRESULT CALLBACK HiddenMenuSubclassProc(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
+
 BOOL WINAPI SetMenu_hook(HWND hwnd, HMENU menu) {
     if (g_active && GetPropW(hwnd, kPropMenu)) {
         if (!menu) {
+            // The app drops its menu (e.g. in full screen): nothing is hidden
+            // any more, and RestoreAllMenus won't find this window.
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, HiddenMenuSubclassProc);
             RemovePropW(hwnd, kPropMenu);
             return SetMenu_orig(hwnd, nullptr);
         }
@@ -788,6 +795,7 @@ constexpr UINT_PTR TIMER_ASYNC_CHECK = 4;
 constexpr UINT_PTR TIMER_TOOLTIP = 5;
 constexpr UINT_PTR TIMER_UIA_RETRY = 6;
 constexpr UINT_PTR TIMER_SEND_KEYS = 7;
+constexpr UINT_PTR TIMER_CLOSE = 8;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Worker thread: system status and UI Automation
@@ -2872,20 +2880,36 @@ enum : UINT {
     CMD_CLOSE,
 };
 
-// SetSuspendState needs SE_SHUTDOWN_NAME enabled, not only present.
-void EnableShutdownPrivilege() {
-    HANDLE token;
-    if (!OpenProcessToken(GetCurrentProcess(),
-                          TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
-        return;
+// SetSuspendState needs SE_SHUTDOWN_NAME enabled, not only present. It's
+// enabled only for the call, then put back as it was in explorer's token.
+void Suspend() {
+    HANDLE token = nullptr;
+    TOKEN_PRIVILEGES previous{};
+    bool adjusted = false;
+    if (OpenProcessToken(GetCurrentProcess(),
+                         TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
+        TOKEN_PRIVILEGES tp{1};
+        DWORD size = sizeof(previous);
+        if (LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME,
+                                  &tp.Privileges[0].Luid)) {
+            tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+            adjusted = AdjustTokenPrivileges(token, FALSE, &tp,
+                                             sizeof(previous), &previous,
+                                             &size) &&
+                       GetLastError() == ERROR_SUCCESS;
+        }
+    } else {
+        token = nullptr;
     }
-    TOKEN_PRIVILEGES tp{1};
-    if (LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME,
-                              &tp.Privileges[0].Luid)) {
-        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-        AdjustTokenPrivileges(token, FALSE, &tp, 0, nullptr, nullptr);
+    if (!SetSuspendState(FALSE, FALSE, FALSE)) {
+        Wh_Log(L"SetSuspendState failed: %u", GetLastError());
     }
-    CloseHandle(token);
+    if (adjusted) {
+        AdjustTokenPrivileges(token, FALSE, &previous, 0, nullptr, nullptr);
+    }
+    if (token) {
+        CloseHandle(token);
+    }
 }
 
 void ShowStartMenu(Bar& bar, POINT pt) {
@@ -2916,10 +2940,7 @@ void ShowStartMenu(Bar& bar, POINT pt) {
             RunShell(L"taskmgr.exe");
             break;
         case CMD_SLEEP:
-            EnableShutdownPrivilege();
-            if (!SetSuspendState(FALSE, FALSE, FALSE)) {
-                Wh_Log(L"SetSuspendState failed: %u", GetLastError());
-            }
+            Suspend();
             break;
         case CMD_RESTART:
             if (Confirm(L"Restart the computer now?")) {
@@ -3922,6 +3943,11 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                     FlushPendingKeys();
                     break;
 
+                case TIMER_CLOSE:
+                    KillTimer(hwnd, TIMER_CLOSE);
+                    PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                    break;
+
                 case TIMER_UIA_RETRY:
                     KillTimer(hwnd, TIMER_UIA_RETRY);
                     RequestUia();
@@ -3982,9 +4008,10 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_CLOSE:
             if (g_openIndex >= 0 && !g_openAsync) {
                 // Dispatched by the open menu's loop: the menu code still
-                // uses the bar. Closes the menu and tries again after it.
+                // uses the bar. Closes the menu and tries again after it (a
+                // confirmation dialog waits for the user).
                 EndMenu();
-                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                SetTimer(hwnd, TIMER_CLOSE, 100, nullptr);
                 return 0;
             }
             DestroyWindow(hwnd);
@@ -3998,6 +4025,7 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             KillTimer(hwnd, TIMER_TOOLTIP);
             KillTimer(hwnd, TIMER_UIA_RETRY);
             KillTimer(hwnd, TIMER_SEND_KEYS);
+            KillTimer(hwnd, TIMER_CLOSE);
             RemoveTrayHook();
             if (g_winEventHook) {
                 UnhookWinEvent(g_winEventHook);
@@ -5201,18 +5229,21 @@ UINT RunLaterMsg() {
 // (the hook itself, a later call if it's stale, or Uninit) removes it.
 std::atomic<HHOOK> g_runLaterHook;
 std::atomic<DWORD> g_runLaterTime;
+std::atomic<int> g_runLaterRunning;
 constexpr DWORD kRunLaterTimeout = 5000;
 
 LRESULT CALLBACK RunLaterHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION) {
         auto* msg = (const MSG*)lParam;
         if (wParam == PM_REMOVE && msg->message == RunLaterMsg()) {
+            g_runLaterRunning++;
             if (HHOOK hook = g_runLaterHook.exchange(nullptr)) {
                 if (!g_unloading) {
                     ((ThreadProc_t)msg->lParam)();
                 }
                 UnhookWindowsHookEx(hook);
             }
+            g_runLaterRunning--;
         }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -5438,10 +5469,12 @@ bool IsFlyoutProcess() {
     return name == L"shellexperiencehost.exe" || name == L"shellhost.exe";
 }
 
-// Stays loaded with the option off (the hooks do nothing then), so that
-// turning it on works without restarting the process.
 BOOL Init() {
     LoadSettings();
+    if (!g_enabled) {
+        // Windhawk loads the mod again on the next settings change.
+        return FALSE;
+    }
     g_target = ToLower(FileNameFromPath(GetCurrentProcessPath())) ==
                        L"shellhost.exe"
                    ? Target::ShellHost
@@ -5493,6 +5526,9 @@ void Uninit() {
 
     if (HHOOK hook = g_runLaterHook.exchange(nullptr)) {
         UnhookWindowsHookEx(hook);
+    }
+    while (g_runLaterRunning > 0) {
+        Sleep(10);
     }
     if (HANDLE thread = g_adviseThread.exchange(nullptr)) {
         WaitForSingleObject(thread, INFINITE);
@@ -5690,10 +5726,18 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
     switch (g_role) {
-        case ProcessRole::Explorer:
+        case ProcessRole::Explorer: {
+            // XAML Diagnostics can't be disconnected while running: turning
+            // the option off reloads the mod, whose Uninit unadvises it.
+            bool wasEnabled = flyouts::g_enabled;
             flyouts::SettingsChangedExplorer();
+            if (wasEnabled && !flyouts::g_enabled && flyouts::g_tapInjected) {
+                *bReload = TRUE;
+                break;
+            }
             bar::SettingsChanged();
             break;
+        }
         case ProcessRole::Flyouts:
             // Reloading reapplies everything: XAML Diagnostics reports the whole
             // tree again when connecting.
