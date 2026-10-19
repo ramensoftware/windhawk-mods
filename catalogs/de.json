@@ -15047,7 +15047,7 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": 1.7758349229733954,
-        "updated": 1790881204000,
+        "updated": 1792411433000,
         "users": 146
       },
       "metadata": {
@@ -15055,19 +15055,20 @@
           "x86-64"
         ],
         "author": "2ndSky95",
-        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject",
-        "description": "Jede Taskleiste zeigt nur die Fenster ihres Monitors und hat eigene angeheftete Apps (nur Windows 11)",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject -lgdi32 -lshcore",
+        "description": "Jede Taskleiste zeigt nur die Fenster ihres Monitors und hat eigene angeheftete Apps",
         "github": "https://github.com/2ndSky95",
         "include": [
           "explorer.exe",
-          "sihost.exe"
+          "sihost.exe",
+          "RuntimeBroker.exe"
         ],
         "license": "MIT",
         "name": "Eigenständige Taskleiste pro Monitor",
-        "version": "1.5.0"
+        "version": "1.6.0"
       },
       "metadataEnglish": {
-        "description": "Each taskbar shows only the windows of its own monitor and has its own pinned items (Windows 11 only)",
+        "description": "Each taskbar shows only the windows of its own monitor and has its own pinned items",
         "name": "Independent taskbar per monitor"
       }
     },
