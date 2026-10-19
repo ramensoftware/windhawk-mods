@@ -4051,6 +4051,11 @@ void OnShellHook(WPARAM code, HWND hwnd) {
 // Where the window shrinks to when minimizing, and comes back from: the
 // app's icon on the Dock of its monitor, not the hidden taskbar button.
 bool GetMinRect(HWND hwnd, RECT& rc) {
+    // StartDock waits in cross-thread calls before the Docks exist, and the
+    // shell hook can already ask for a rectangle then.
+    if (!g_ready || g_docks.empty()) {
+        return false;
+    }
     Item* item = ItemForWindow(hwnd);
     if (!item) {
         RefreshWindows();
@@ -4210,6 +4215,7 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd,
                 return 0;
             case WM_APP_RELOAD:
                 LoadSettings();
+                UpdateColors();
                 return 0;
             case WM_SETTINGCHANGE:
                 if (lParam && !wcscmp((PCWSTR)lParam, L"ImmersiveColorSet")) {
