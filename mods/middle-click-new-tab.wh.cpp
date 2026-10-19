@@ -67,14 +67,12 @@ How it works:
 #include <uiautomation.h>
 #include <cwchar>
 #include <atomic>
-#include <climits>
 
 constexpr UINT WM_QUIT_THREAD = WM_APP;
 constexpr UINT WM_WORKER_DOWN = WM_APP + 1;
 constexpr UINT WM_WORKER_UP_PENDING = WM_APP + 2;
 constexpr UINT WM_WORKER_UP_VALID = WM_APP + 3;
 
-constexpr UINT_PTR RELEASE_TIMER_ID = 1;
 constexpr DWORD RELEASE_TIMEOUT_MS = 500;
 constexpr int TOP_BAND_BASE = 160;
 constexpr DWORD TAB_STRIP_CACHE_TTL_MS = 2000;
@@ -136,7 +134,7 @@ struct ShortcutInfo {
 
 ShortcutInfo g_downShortcut = {0, false};
 
-int g_systemDpi = 96;
+UINT_PTR g_watchdogTimerId = 0;
 
 void LoadSettings() {
     g_enableExplorer = Wh_GetIntSetting(L"enableExplorer") != 0;
@@ -149,9 +147,10 @@ void LoadSettings() {
 ////////////////////////////////////////////////////////////
 // Helpers
 
-int ScaleByDpi(int value) {
-    if (g_systemDpi <= 0) return value;
-    return MulDiv(value, g_systemDpi, 96);
+int ScaleByDpi(int value, HWND hWnd) {
+    UINT dpi = GetDpiForWindow(hWnd);
+    if (dpi <= 0) dpi = 96;
+    return MulDiv(value, dpi, 96);
 }
 
 void EnterState() {
@@ -322,28 +321,10 @@ void SendCtrlKey(WORD vk, bool shift) {
     SendInput(count, inputs, sizeof(INPUT));
 }
 
-void SendMiddleUpAt(POINT pt) {
-    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
+void SendMiddleUpAt(POINT /*pt*/) {
     INPUT input{};
     input.type = INPUT_MOUSE;
-
-    if (vw <= 1 || vh <= 1) {
-        input.mi.dwFlags = MOUSEEVENTF_MIDDLEUP;
-        SendInput(1, &input, sizeof(INPUT));
-        return;
-    }
-
-    LONG64 normX = (LONG64)(pt.x - vx) * 65535 / (vw - 1);
-    LONG64 normY = (LONG64)(pt.y - vy) * 65535 / (vh - 1);
-
-    input.mi.dx = (LONG)normX;
-    input.mi.dy = (LONG)normY;
-    input.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_MIDDLEUP;
-
+    input.mi.dwFlags = MOUSEEVENTF_MIDDLEUP;
     SendInput(1, &input, sizeof(INPUT));
 }
 
@@ -377,7 +358,7 @@ bool IsPotentialTabStripPoint(HWND hRootWnd, POINT pt) {
         return false;
     }
 
-    int band = ScaleByDpi(TOP_BAND_BASE);
+    int band = ScaleByDpi(TOP_BAND_BASE, hRootWnd);
     return pt.y <= rcWindow.top + band;
 }
 
@@ -385,11 +366,10 @@ bool IsPotentialTabStripPoint(HWND hRootWnd, POINT pt) {
 // UI Automation hit-testing (executed exclusively on the worker thread)
 
 enum class HitResult {
-    Undecided,
-    OnTab,
-    OnAddButton,
-    OnOtherButton,
-    InContainer,
+    Undecided,      // No specific element identified
+    OnTab,          // Clicked on a tab item
+    OnOtherButton,  // Clicked on a button other than the add button
+    InContainer,    // Clicked inside the tab strip container but not on a tab/button
 };
 
 bool IsTabItemElement(IUIAutomationElement* pElement) {
@@ -454,6 +434,9 @@ bool IsAddButton(IUIAutomationElement* pElement) {
     return isAdd;
 }
 
+// Returns:
+// 0 - Not a button
+// 2 - Other button (Add button is handled separately)
 int GetButtonKind(IUIAutomationElement* pElement) {
     CONTROLTYPEID controlType = 0;
     if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
@@ -607,7 +590,7 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip, LONG* pStripBottom) {
             if (pStripBottom) {
                 // Fallback to a reasonable tab strip height if FindTabStripBottom fails
                 // to prevent the entire content area from being considered a tab strip
-                *pStripBottom = prcTabStrip->top + ScaleByDpi(40);
+                *pStripBottom = prcTabStrip->top + ScaleByDpi(40, hRootWnd);
                 FindTabStripBottom(pTabStrip, pStripBottom);
             }
             result = !IsRectEmpty(prcTabStrip);
@@ -853,6 +836,7 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
             HWND root = nullptr;
             ShortcutInfo shortcut = {0, false};
             POINT upPt = {};
+            POINT downPt = {};
 
             EnterState();
             if (g_generation == gen) {
@@ -861,6 +845,7 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
                 root = g_downRoot;
                 shortcut = g_downShortcut;
                 upPt = g_upPt;
+                downPt = g_downPt;
 
                 if (g_upSwallowed) {
                     g_upSwallowed = false;
@@ -870,6 +855,13 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
 
             if (validGen) {
                 SendMiddleUpAt(upPt);
+
+                if (shouldCreate) {
+                    // Verify release is still in the tab strip
+                    if (!IsPointOnTabStripRow(root, upPt)) {
+                        shouldCreate = false;
+                    }
+                }
 
                 if (shouldCreate) {
                     bool invoked = false;
@@ -914,7 +906,7 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
 ////////////////////////////////////////////////////////////
 // Hook thread: low-level mouse hook
 
-void ReleasePreviousSwallowedUpIfNeeded() {
+bool ReleasePreviousSwallowedUpIfNeeded() {
     bool release = false;
     POINT pt = {};
 
@@ -930,7 +922,9 @@ void ReleasePreviousSwallowedUpIfNeeded() {
 
     if (release) {
         SendMiddleUpAt(pt);
+        return true;
     }
+    return false;
 }
 
 void WatchdogCheck() {
@@ -968,37 +962,64 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
 
         if (wParam == WM_MBUTTONDOWN) {
-            ReleasePreviousSwallowedUpIfNeeded();
+            bool releasedOld = ReleasePreviousSwallowedUpIfNeeded();
 
             POINT pt = pMouseStruct->pt;
             HWND hWnd = WindowFromPoint(pt);
+            bool shouldTrack = false;
+            HWND hRootWnd = nullptr;
+            ShortcutInfo shortcut = {0, false};
+
             if (hWnd) {
-                HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+                hRootWnd = GetAncestor(hWnd, GA_ROOT);
                 if (!hRootWnd) hRootWnd = hWnd;
 
-                // Check if it's a target app FIRST (fast check)
-                ShortcutInfo shortcut = GetShortcutForWindow(hRootWnd);
+                shortcut = GetShortcutForWindow(hRootWnd);
                 if (shortcut.vk && IsPotentialTabStripPoint(hRootWnd, pt)) {
-                    EnterState();
-                    g_generation++;
-                    g_clickState = CLICK_PENDING;
-                    g_downPt = pt;
-                    g_upPt = pt;
-                    g_downRoot = hRootWnd;
-                    g_downShortcut = shortcut;
-                    g_upSwallowed = false;
-                    LONG gen = g_generation;
-                    LeaveState();
-
-                    PostThreadMessage(g_workerThreadId, WM_WORKER_DOWN, (WPARAM)gen, 0);
-                } else {
-                    EnterState();
-                    if (g_clickState != CLICK_NONE) {
-                        g_clickState = CLICK_NONE;
-                        g_generation++;
+                    RECT rcTabStrip;
+                    LONG stripBottom;
+                    bool inStrip = true;
+                    if (GetCachedTabStrip(hRootWnd, &rcTabStrip, &stripBottom)) {
+                        if (pt.y < rcTabStrip.top || pt.y > stripBottom) {
+                            inStrip = false;
+                        }
                     }
-                    LeaveState();
+                    
+                    if (inStrip) {
+                        shouldTrack = true;
+                    }
                 }
+            }
+
+            if (shouldTrack) {
+                EnterState();
+                g_generation++;
+                g_clickState = CLICK_PENDING;
+                g_downPt = pt;
+                g_upPt = pt;
+                g_downRoot = hRootWnd;
+                g_downShortcut = shortcut;
+                g_upSwallowed = false;
+                LONG gen = g_generation;
+                LeaveState();
+
+                PostThreadMessage(g_workerThreadId, WM_WORKER_DOWN, (WPARAM)gen, 0);
+            } else {
+                EnterState();
+                if (g_clickState != CLICK_NONE) {
+                    g_clickState = CLICK_NONE;
+                    g_generation++;
+                }
+                LeaveState();
+            }
+
+            if (releasedOld) {
+                // Re-inject the down event so it arrives after the injected up event
+                INPUT input{};
+                input.type = INPUT_MOUSE;
+                input.mi.dwFlags = MOUSEEVENTF_MIDDLEDOWN;
+                SendInput(1, &input, sizeof(INPUT));
+                return 1;
             }
         } else if (wParam == WM_MBUTTONUP) {
             POINT pt = pMouseStruct->pt;
@@ -1031,6 +1052,9 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             LeaveState();
 
             if (swallow) {
+                if (g_watchdogTimerId == 0) {
+                    g_watchdogTimerId = SetTimer(nullptr, 0, RELEASE_TIMEOUT_MS, nullptr);
+                }
                 PostThreadMessage(g_workerThreadId, message, (WPARAM)gen, 0);
                 return 1;
             }
@@ -1049,8 +1073,6 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
         Wh_Log(L"SetWindowsHookEx failed: %d", GetLastError());
     }
 
-    SetTimer(nullptr, RELEASE_TIMER_ID, 50, nullptr);
-
     SetEvent(hReadyEvent);
 
     MSG msg;
@@ -1060,7 +1082,11 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
             continue;
         }
 
-        if (msg.message == WM_TIMER && msg.wParam == RELEASE_TIMER_ID) {
+        if (msg.message == WM_TIMER) {
+            KillTimer(nullptr, msg.wParam);
+            if (g_watchdogTimerId == msg.wParam) {
+                g_watchdogTimerId = 0;
+            }
             WatchdogCheck();
             continue;
         }
@@ -1068,8 +1094,6 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-
-    KillTimer(nullptr, RELEASE_TIMER_ID);
 
     if (mouseHook) {
         UnhookWindowsHookEx(mouseHook);
@@ -1089,13 +1113,6 @@ BOOL WhTool_ModInit() {
 
     InitializeCriticalSection(&g_tabStripCacheCs);
     g_tabStripCacheCsInitialized = true;
-
-    HDC hdc = GetDC(nullptr);
-    if (hdc) {
-        g_systemDpi = GetDeviceCaps(hdc, LOGPIXELSX);
-        ReleaseDC(nullptr, hdc);
-    }
-    if (g_systemDpi <= 0) g_systemDpi = 96;
 
     HANDLE hWorkerReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!hWorkerReady) {
@@ -1171,6 +1188,13 @@ void WhTool_ModUninit() {
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+// Paste the code below in your mod, and implement the following callbacks:
+// - WhTool_ModInit: Called when the mod is initialized.
+// - WhTool_ModSettingsChanged: Called when the mod settings are changed.
+// - WhTool_ModUninit: Called when the mod is uninstalled.
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
