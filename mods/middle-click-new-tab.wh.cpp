@@ -7,7 +7,7 @@
 // @github          https://github.com/venasataa
 // @homepage        https://venasataa.github.io
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lshlwapi -lgdi32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -15,7 +15,7 @@
 // ==WindhawkModReadme==
 /*
 
-The mod opens a new tab when you middle-click the empty space of a tab strip. You can toggle support for each app individually in the settings.
+The mod opens a new tab when you release the middle mouse button over the empty space of a tab strip.
 
 Three apps are supported:
 
@@ -29,13 +29,14 @@ How it works:
 
 - The mod runs as a standalone Windhawk Tool, ensuring it executes in a single 
   instance and doesn't inject multiple hooks into different Explorer processes.
-- A dedicated low-level mouse hook thread records the click position and immediately 
-  posts it to an isolated UI Automation worker thread. Input is never delayed.
-- The worker thread uses UI Automation to find out what was clicked. If the
-  point is inside a tab strip (a Tab control / TabView) but not on a tab
-  item and not on a strip button, the mod sends the app's new tab shortcut.
-- Areas that are visually part of the tab strip row but are not descendants
-  of the TabView element in the UIA tree are detected by a row fallback check.
+- A dedicated low-level mouse hook thread records middle-button press/release events.
+  It never performs slow UI Automation work and never blocks global input.
+- If the press looks like it happened in a tab strip area, an isolated UI Automation
+  worker thread verifies whether the point is on an actual tab, a button, or empty
+  tab strip space.
+- If the mouse button is released before the check finishes, the mod temporarily
+  holds the release event and re-sends it synthetically after the check. This avoids
+  the race condition where the native app closes the tab before the mod can inspect it.
 - Middle clicking an actual tab is left untouched, so the native "close tab" 
   behavior keeps working perfectly.
 
@@ -65,9 +66,25 @@ How it works:
 #include <shlwapi.h>
 #include <uiautomation.h>
 #include <cwchar>
+#include <atomic>
+#include <climits>
 
 constexpr UINT WM_QUIT_THREAD = WM_APP;
-constexpr UINT WM_MIDDLE_CLICK = WM_APP + 1;
+constexpr UINT WM_WORKER_DOWN = WM_APP + 1;
+constexpr UINT WM_WORKER_UP_PENDING = WM_APP + 2;
+constexpr UINT WM_WORKER_UP_VALID = WM_APP + 3;
+
+constexpr UINT_PTR RELEASE_TIMER_ID = 1;
+constexpr DWORD RELEASE_TIMEOUT_MS = 500;
+constexpr int TOP_BAND_BASE = 160;
+constexpr DWORD TAB_STRIP_CACHE_TTL_MS = 2000;
+
+enum ClickState {
+    CLICK_NONE = 0,
+    CLICK_PENDING = 1,
+    CLICK_VALID = 2,
+    CLICK_INVALID = 3,
+};
 
 // Thread IDs and handles
 DWORD g_workerThreadId = 0;
@@ -81,25 +98,148 @@ IUIAutomation* g_pAutomation = nullptr;
 IUIAutomationTreeWalker* g_pControlWalker = nullptr;
 
 // Settings
-bool g_enableExplorer = true;
-bool g_enableNotepad = true;
-bool g_enableTerminal = true;
+std::atomic<bool> g_enableExplorer = true;
+std::atomic<bool> g_enableNotepad = true;
+std::atomic<bool> g_enableTerminal = true;
+
+// State synchronization
+CRITICAL_SECTION g_stateCs;
+bool g_csInitialized = false;
+
+// Tab strip cache
+struct TabStripCacheEntry {
+    HWND hwnd;
+    bool hasTabStrip;
+    RECT row;
+    LONG stripBottom;
+    DWORD timestamp;
+};
+
+TabStripCacheEntry g_tabStripCache[32];
+int g_tabStripCacheCount = 0;
+CRITICAL_SECTION g_tabStripCacheCs;
+bool g_tabStripCacheCsInitialized = false;
+
+// Click state
+int g_clickState = CLICK_NONE;
+LONG g_generation = 0;
+bool g_upSwallowed = false;
+DWORD g_upSwallowedTime = 0;
+POINT g_downPt = {};
+POINT g_upPt = {};
+HWND g_downRoot = nullptr;
+
+struct ShortcutInfo {
+    WORD vk;
+    bool shift;
+};
+
+ShortcutInfo g_downShortcut = {0, false};
+
+int g_systemDpi = 96;
 
 void LoadSettings() {
     g_enableExplorer = Wh_GetIntSetting(L"enableExplorer") != 0;
     g_enableNotepad = Wh_GetIntSetting(L"enableNotepad") != 0;
     g_enableTerminal = Wh_GetIntSetting(L"enableTerminal") != 0;
     Wh_Log(L"Settings updated: Explorer=%d, Notepad=%d, Terminal=%d", 
-           g_enableExplorer, g_enableNotepad, g_enableTerminal);
+           g_enableExplorer.load(), g_enableNotepad.load(), g_enableTerminal.load());
+}
+
+////////////////////////////////////////////////////////////
+// Helpers
+
+int ScaleByDpi(int value) {
+    if (g_systemDpi <= 0) return value;
+    return MulDiv(value, g_systemDpi, 96);
+}
+
+void EnterState() {
+    EnterCriticalSection(&g_stateCs);
+}
+
+void LeaveState() {
+    LeaveCriticalSection(&g_stateCs);
+}
+
+void EnterTabStripCache() {
+    EnterCriticalSection(&g_tabStripCacheCs);
+}
+
+void LeaveTabStripCache() {
+    LeaveCriticalSection(&g_tabStripCacheCs);
+}
+
+bool GetCachedTabStrip(HWND hwnd, RECT* prcTabStrip, LONG* pStripBottom) {
+    if (!hwnd || !prcTabStrip || !pStripBottom) return false;
+    
+    EnterTabStripCache();
+    
+    DWORD now = GetTickCount();
+    for (int i = 0; i < g_tabStripCacheCount; i++) {
+        if (g_tabStripCache[i].hwnd == hwnd) {
+            if (now - g_tabStripCache[i].timestamp < TAB_STRIP_CACHE_TTL_MS) {
+                bool hasTabStrip = g_tabStripCache[i].hasTabStrip;
+                if (hasTabStrip) {
+                    *prcTabStrip = g_tabStripCache[i].row;
+                    *pStripBottom = g_tabStripCache[i].stripBottom;
+                }
+                LeaveTabStripCache();
+                return hasTabStrip;
+            } else {
+                // Expired, remove from cache
+                g_tabStripCache[i] = g_tabStripCache[--g_tabStripCacheCount];
+                break;
+            }
+        }
+    }
+    
+    LeaveTabStripCache();
+    return false;
+}
+
+void SetCachedTabStrip(HWND hwnd, bool hasTabStrip, const RECT* prcTabStrip, LONG stripBottom) {
+    if (!hwnd) return;
+    
+    EnterTabStripCache();
+    
+    int index = -1;
+    for (int i = 0; i < g_tabStripCacheCount; i++) {
+        if (g_tabStripCache[i].hwnd == hwnd) {
+            index = i;
+            break;
+        }
+    }
+    
+    if (index == -1) {
+        if (g_tabStripCacheCount < ARRAYSIZE(g_tabStripCache)) {
+            index = g_tabStripCacheCount++;
+        } else {
+            // Evict oldest entry
+            DWORD oldestTime = g_tabStripCache[0].timestamp;
+            index = 0;
+            for (int i = 1; i < g_tabStripCacheCount; i++) {
+                if (g_tabStripCache[i].timestamp < oldestTime) {
+                    oldestTime = g_tabStripCache[i].timestamp;
+                    index = i;
+                }
+            }
+        }
+        g_tabStripCache[index].hwnd = hwnd;
+    }
+    
+    g_tabStripCache[index].hasTabStrip = hasTabStrip;
+    if (hasTabStrip && prcTabStrip) {
+        g_tabStripCache[index].row = *prcTabStrip;
+        g_tabStripCache[index].stripBottom = stripBottom;
+    }
+    g_tabStripCache[index].timestamp = GetTickCount();
+    
+    LeaveTabStripCache();
 }
 
 ////////////////////////////////////////////////////////////
 // Target applications and shortcut key dispatch
-
-struct ShortcutInfo {
-    WORD vk;
-    bool shift;
-};
 
 ShortcutInfo GetShortcutForWindow(HWND hWnd) {
     DWORD dwProcessId = 0;
@@ -124,11 +264,19 @@ ShortcutInfo GetShortcutForWindow(HWND hWnd) {
     fileName = fileName ? fileName + 1 : szPath;
 
     if (_wcsicmp(fileName, L"explorer.exe") == 0) {
+        // Ensure it's a standard Explorer window, not the Taskbar or Desktop.
+        WCHAR className[256];
+        if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+            _wcsicmp(className, L"CabinetWClass") != 0) {
+            return {0, false};
+        }
         if (g_enableExplorer) return {'T', false};
     }
+
     if (_wcsicmp(fileName, L"Notepad.exe") == 0) {
         if (g_enableNotepad) return {'N', false};
     }
+
     if (_wcsicmp(fileName, L"WindowsTerminal.exe") == 0) {
         if (g_enableTerminal) return {'T', true};
     }
@@ -174,15 +322,74 @@ void SendCtrlKey(WORD vk, bool shift) {
     SendInput(count, inputs, sizeof(INPUT));
 }
 
+void SendMiddleUpAt(POINT pt) {
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    INPUT input{};
+    input.type = INPUT_MOUSE;
+
+    if (vw <= 1 || vh <= 1) {
+        input.mi.dwFlags = MOUSEEVENTF_MIDDLEUP;
+        SendInput(1, &input, sizeof(INPUT));
+        return;
+    }
+
+    LONG64 normX = (LONG64)(pt.x - vx) * 65535 / (vw - 1);
+    LONG64 normY = (LONG64)(pt.y - vy) * 65535 / (vh - 1);
+
+    input.mi.dx = (LONG)normX;
+    input.mi.dy = (LONG)normY;
+    input.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_MIDDLEUP;
+
+    SendInput(1, &input, sizeof(INPUT));
+}
+
+void FocusAndSendShortcut(HWND hRootWnd, ShortcutInfo shortcut) {
+    if (!shortcut.vk || !IsWindow(hRootWnd)) return;
+
+    HWND hForeground = GetForegroundWindow();
+    if (hForeground != hRootWnd) {
+        // Allows to steal focus.
+        INPUT input{};
+        SendInput(1, &input, sizeof(INPUT));
+        SetForegroundWindow(hRootWnd);
+        if (GetForegroundWindow() != hRootWnd) {
+            return;
+        }
+    }
+
+    SendCtrlKey(shortcut.vk, shortcut.shift);
+}
+
+bool IsPotentialTabStripPoint(HWND hRootWnd, POINT pt) {
+    if (!IsWindow(hRootWnd)) return false;
+
+    RECT rcWindow;
+    if (!GetWindowRect(hRootWnd, &rcWindow)) {
+        return false;
+    }
+
+    if (pt.x < rcWindow.left || pt.x > rcWindow.right ||
+        pt.y < rcWindow.top || pt.y > rcWindow.bottom) {
+        return false;
+    }
+
+    int band = ScaleByDpi(TOP_BAND_BASE);
+    return pt.y <= rcWindow.top + band;
+}
+
 ////////////////////////////////////////////////////////////
-// UI Automation Hit-Testing (Executed exclusively on the worker thread)
+// UI Automation hit-testing (executed exclusively on the worker thread)
 
 enum class HitResult {
-    Undecided,     // Neither a tab item, nor an add button, nor a container was found in the ancestor chain.
-    OnTab,         // The click was on an actual tab item.
-    OnAddButton,   // The click was on the "new tab" / add button.
-    OnOtherButton, // The click was on some other button (e.g., window controls).
-    InContainer,   // The click was inside the tab strip container but not on a tab or button.
+    Undecided,
+    OnTab,
+    OnAddButton,
+    OnOtherButton,
+    InContainer,
 };
 
 bool IsTabItemElement(IUIAutomationElement* pElement) {
@@ -201,6 +408,7 @@ bool IsTabItemElement(IUIAutomationElement* pElement) {
             return true;
         }
     }
+
     return false;
 }
 
@@ -221,13 +429,10 @@ bool IsTabStripContainerElement(IUIAutomationElement* pElement) {
             return true;
         }
     }
+
     return false;
 }
 
-// Returns:
-// 0 = Not a button
-// 1 = Add/New Tab button
-// 2 = Other button
 int GetButtonKind(IUIAutomationElement* pElement) {
     CONTROLTYPEID controlType = 0;
     if (FAILED(pElement->get_CurrentControlType(&controlType)) ||
@@ -245,12 +450,100 @@ int GetButtonKind(IUIAutomationElement* pElement) {
         }
         SysFreeString(automationId);
     }
+
     return kind;
 }
 
-bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip) {
+bool FindTabStripBottom(IUIAutomationElement* pTabView, LONG* pBottom) {
+    if (!g_pAutomation || !g_pControlWalker || !pTabView || !pBottom) return false;
+
+    VARIANT varControlType;
+    VariantInit(&varControlType);
+    varControlType.vt = VT_I4;
+    varControlType.lVal = UIA_TabItemControlTypeId;
+
+    IUIAutomationCondition* pCondition = nullptr;
+    if (FAILED(g_pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varControlType, &pCondition)) || !pCondition) {
+        VariantClear(&varControlType);
+        return false;
+    }
+
+    IUIAutomationElementArray* pElements = nullptr;
+    if (FAILED(pTabView->FindAll(TreeScope_Descendants, pCondition, &pElements)) || !pElements) {
+        pCondition->Release();
+        VariantClear(&varControlType);
+        return false;
+    }
+    pCondition->Release();
+    VariantClear(&varControlType);
+
+    int count = 0;
+    pElements->get_Length(&count);
+    
+    if (count > 0) {
+        IUIAutomationElement* pFirstItem = nullptr;
+        if (SUCCEEDED(pElements->GetElement(0, &pFirstItem)) && pFirstItem) {
+            IUIAutomationElement* pCurrent = nullptr;
+            if (SUCCEEDED(g_pControlWalker->GetParentElement(pFirstItem, &pCurrent)) && pCurrent) {
+                RECT rcTabView;
+                if (SUCCEEDED(pTabView->get_CurrentBoundingRectangle(&rcTabView))) {
+                    int tabViewHeight = rcTabView.bottom - rcTabView.top;
+                    
+                    for (int depth = 0; depth < 5 && pCurrent; depth++) {
+                        RECT rc;
+                        if (SUCCEEDED(pCurrent->get_CurrentBoundingRectangle(&rc)) && !IsRectEmpty(&rc)) {
+                            int height = rc.bottom - rc.top;
+                            if (height < tabViewHeight - 10 && height >= 10) {
+                                *pBottom = rc.bottom;
+                                pCurrent->Release();
+                                pFirstItem->Release();
+                                pElements->Release();
+                                return true;
+                            }
+                        }
+                        IUIAutomationElement* pParent = nullptr;
+                        HRESULT hr = g_pControlWalker->GetParentElement(pCurrent, &pParent);
+                        pCurrent->Release();
+                        pCurrent = SUCCEEDED(hr) ? pParent : nullptr;
+                    }
+                }
+                if (pCurrent) pCurrent->Release();
+            }
+            pFirstItem->Release();
+        }
+    }
+
+    LONG maxBottom = 0;
+    for (int i = 0; i < count; i++) {
+        IUIAutomationElement* pItem = nullptr;
+        if (SUCCEEDED(pElements->GetElement(i, &pItem)) && pItem) {
+            RECT rc;
+            if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&rc))) {
+                if (rc.bottom > maxBottom) {
+                    maxBottom = rc.bottom;
+                }
+            }
+            pItem->Release();
+        }
+    }
+    pElements->Release();
+
+    if (maxBottom > 0) {
+        *pBottom = maxBottom + 20;
+        return true;
+    }
+    return false;
+}
+
+bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip, LONG* pStripBottom) {
+    // Check cache first
+    if (GetCachedTabStrip(hRootWnd, prcTabStrip, pStripBottom)) {
+        return true;
+    }
+    
     IUIAutomationElement* pRoot = nullptr;
     if (FAILED(g_pAutomation->ElementFromHandle(hRootWnd, &pRoot)) || !pRoot) {
+        SetCachedTabStrip(hRootWnd, false, nullptr, 0);
         return false;
     }
 
@@ -302,22 +595,31 @@ bool FindTabStripRect(HWND hRootWnd, RECT* prcTabStrip) {
     bool result = false;
     if (found && pTabStrip) {
         if (SUCCEEDED(pTabStrip->get_CurrentBoundingRectangle(prcTabStrip))) {
+            if (pStripBottom) {
+                *pStripBottom = prcTabStrip->bottom;
+                FindTabStripBottom(pTabStrip, pStripBottom);
+            }
             result = !IsRectEmpty(prcTabStrip);
         }
         pTabStrip->Release();
     }
 
     pRoot->Release();
+    
+    // Cache the result
+    SetCachedTabStrip(hRootWnd, result, result ? prcTabStrip : nullptr, result ? *pStripBottom : 0);
+    
     return result;
 }
 
 bool IsPointOnTabStripRow(HWND hRootWnd, POINT pt) {
     RECT rcTabStrip;
-    if (!FindTabStripRect(hRootWnd, &rcTabStrip)) {
+    LONG stripBottom;
+    if (!FindTabStripRect(hRootWnd, &rcTabStrip, &stripBottom)) {
         return false;
     }
 
-    if (pt.y < rcTabStrip.top || pt.y > rcTabStrip.bottom) {
+    if (pt.y < rcTabStrip.top || pt.y > stripBottom) {
         return false;
     }
 
@@ -330,6 +632,10 @@ bool IsPointOnTabStripRow(HWND hRootWnd, POINT pt) {
 }
 
 bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
+    if (!IsPointOnTabStripRow(hRootWnd, pt)) {
+        return false;
+    }
+
     IUIAutomationElement* pElement = nullptr;
     if (FAILED(g_pAutomation->ElementFromPoint(pt, &pElement)) || !pElement) {
         return false;
@@ -339,6 +645,8 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
     IUIAutomationElement* pCurrent = pElement;
     pCurrent->AddRef();
 
+    bool foundAddButton = false;
+
     for (int i = 0; i < 16 && pCurrent; i++) {
         if (IsTabItemElement(pCurrent)) {
             hit = HitResult::OnTab;
@@ -346,8 +654,12 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
         }
 
         if (int buttonKind = GetButtonKind(pCurrent)) {
-            hit = (buttonKind == 1) ? HitResult::OnAddButton : HitResult::OnOtherButton;
-            break;
+            if (buttonKind == 1) {
+                foundAddButton = true;
+            } else {
+                hit = HitResult::OnOtherButton;
+                break;
+            }
         }
 
         if (IsTabStripContainerElement(pCurrent)) {
@@ -359,6 +671,10 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
         HRESULT hrParent = g_pControlWalker->GetParentElement(pCurrent, &pParent);
         pCurrent->Release();
         pCurrent = SUCCEEDED(hrParent) ? pParent : nullptr;
+    }
+
+    if (hit == HitResult::Undecided && foundAddButton) {
+        hit = HitResult::OnOtherButton;
     }
 
     if (pCurrent) {
@@ -376,39 +692,37 @@ bool IsEmptyTabStripAtPoint(POINT pt, HWND hRootWnd) {
             return false;
 
         case HitResult::Undecided:
-            return IsPointOnTabStripRow(hRootWnd, pt);
+            return true;
     }
     return false;
 }
 
-void HandleMiddleClick(POINT pt) {
-    HWND hWnd = WindowFromPoint(pt);
-    if (!hWnd) return;
-
-    HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
-    if (!hRootWnd) hRootWnd = hWnd;
-
-    ShortcutInfo shortcut = GetShortcutForWindow(hRootWnd);
-    if (!shortcut.vk) return; // Unsupported app or disabled in settings
-    
-    if (!IsEmptyTabStripAtPoint(pt, hRootWnd)) return;
-    
-    HWND hForeground = GetForegroundWindow();
-    if (hForeground != hRootWnd) {
-        // Allows to steal focus.
-        INPUT input{};
-        SendInput(1, &input, sizeof(INPUT));
-        SetForegroundWindow(hRootWnd);
-        if (GetForegroundWindow() != hRootWnd) {
-            return;
-        }
-    }
-    
-    SendCtrlKey(shortcut.vk, shortcut.shift);
-}
-
 ////////////////////////////////////////////////////////////
-// Thread 1: UI Automation (Worker Thread)
+// Worker thread: UI Automation checks
+
+void PerformDownCheckIfNeeded(LONG gen) {
+    bool needsDownCheck = false;
+    POINT downPt = {};
+    HWND downRoot = nullptr;
+
+    EnterState();
+    if (g_generation == gen && g_clickState == CLICK_PENDING) {
+        needsDownCheck = true;
+        downPt = g_downPt;
+        downRoot = g_downRoot;
+    }
+    LeaveState();
+
+    if (needsDownCheck && g_pAutomation && g_pControlWalker) {
+        bool valid = IsEmptyTabStripAtPoint(downPt, downRoot);
+
+        EnterState();
+        if (g_generation == gen && g_clickState == CLICK_PENDING) {
+            g_clickState = valid ? CLICK_VALID : CLICK_INVALID;
+        }
+        LeaveState();
+    }
+}
 
 DWORD WINAPI WorkerThread(LPVOID lpParameter) {
     HANDLE hReadyEvent = (HANDLE)lpParameter;
@@ -425,12 +739,9 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
         }
     }
 
-    // Ensure the message queue is created before signaling readiness.
-    // (STA COM usually creates it, but this guarantees it for PostThreadMessage).
     MSG msg;
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    // Signal the main mod thread that COM and UIA are initialized
     SetEvent(hReadyEvent);
 
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
@@ -439,13 +750,52 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
             continue;
         }
 
-        if (msg.hwnd == nullptr && msg.message == WM_MIDDLE_CLICK) {
-            if (g_pAutomation && g_pControlWalker) {
-                POINT pt;
-                pt.x = (LONG)msg.wParam;
-                pt.y = (LONG)msg.lParam;
-                HandleMiddleClick(pt);
+        if (msg.hwnd == nullptr && msg.message == WM_WORKER_DOWN) {
+            LONG gen = (LONG)msg.wParam;
+            PerformDownCheckIfNeeded(gen);
+            continue;
+        }
+
+        if (msg.hwnd == nullptr &&
+            (msg.message == WM_WORKER_UP_PENDING || msg.message == WM_WORKER_UP_VALID)) {
+            LONG gen = (LONG)msg.wParam;
+
+            PerformDownCheckIfNeeded(gen);
+
+            bool validGen = false;
+            bool shouldCreate = false;
+            HWND root = nullptr;
+            ShortcutInfo shortcut = {0, false};
+            POINT upPt = {};
+
+            EnterState();
+            if (g_generation == gen) {
+                validGen = true;
+                shouldCreate = (g_clickState == CLICK_VALID);
+                root = g_downRoot;
+                shortcut = g_downShortcut;
+                upPt = g_upPt;
+
+                if (g_upSwallowed) {
+                    g_upSwallowed = false;
+                }
             }
+            LeaveState();
+
+            if (validGen) {
+                SendMiddleUpAt(upPt);
+
+                if (shouldCreate) {
+                    FocusAndSendShortcut(root, shortcut);
+                }
+
+                EnterState();
+                if (g_generation == gen) {
+                    g_clickState = CLICK_NONE;
+                }
+                LeaveState();
+            }
+
             continue;
         }
 
@@ -461,13 +811,131 @@ DWORD WINAPI WorkerThread(LPVOID lpParameter) {
 }
 
 ////////////////////////////////////////////////////////////
-// Thread 2: Low-level mouse hook (Lightweight implementation)
+// Hook thread: low-level mouse hook
+
+void ReleasePreviousSwallowedUpIfNeeded() {
+    bool release = false;
+    POINT pt = {};
+
+    EnterState();
+    if (g_upSwallowed) {
+        release = true;
+        pt = g_upPt;
+        g_upSwallowed = false;
+        g_clickState = CLICK_NONE;
+        g_generation++;
+    }
+    LeaveState();
+
+    if (release) {
+        SendMiddleUpAt(pt);
+    }
+}
+
+void WatchdogCheck() {
+    bool release = false;
+    POINT pt = {};
+    LONG gen = 0;
+
+    EnterState();
+    if (g_upSwallowed && GetTickCount() - g_upSwallowedTime >= RELEASE_TIMEOUT_MS) {
+        release = true;
+        pt = g_upPt;
+        gen = g_generation;
+        g_upSwallowed = false;
+    }
+    LeaveState();
+
+    if (release) {
+        SendMiddleUpAt(pt);
+
+        EnterState();
+        if (g_generation == gen) {
+            g_clickState = CLICK_NONE;
+            g_generation++;
+        }
+        LeaveState();
+    }
+}
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && wParam == WM_MBUTTONDOWN) {
+    if (nCode == HC_ACTION) {
         MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
-        PostThreadMessage(g_workerThreadId, WM_MIDDLE_CLICK, (WPARAM)(LONG_PTR)pMouseStruct->pt.x, (LPARAM)(LONG_PTR)pMouseStruct->pt.y);
+
+        if (pMouseStruct->flags & LLMHF_INJECTED) {
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        }
+
+        if (wParam == WM_MBUTTONDOWN) {
+            ReleasePreviousSwallowedUpIfNeeded();
+
+            POINT pt = pMouseStruct->pt;
+            HWND hWnd = WindowFromPoint(pt);
+            if (hWnd) {
+                HWND hRootWnd = GetAncestor(hWnd, GA_ROOT);
+                if (!hRootWnd) hRootWnd = hWnd;
+
+                // Check if it's a target app FIRST (fast check)
+                ShortcutInfo shortcut = GetShortcutForWindow(hRootWnd);
+                if (shortcut.vk && IsPotentialTabStripPoint(hRootWnd, pt)) {
+                    EnterState();
+                    g_generation++;
+                    g_clickState = CLICK_PENDING;
+                    g_downPt = pt;
+                    g_upPt = pt;
+                    g_downRoot = hRootWnd;
+                    g_downShortcut = shortcut;
+                    g_upSwallowed = false;
+                    LONG gen = g_generation;
+                    LeaveState();
+
+                    PostThreadMessage(g_workerThreadId, WM_WORKER_DOWN, (WPARAM)gen, 0);
+                } else {
+                    EnterState();
+                    if (g_clickState != CLICK_NONE) {
+                        g_clickState = CLICK_NONE;
+                        g_generation++;
+                    }
+                    LeaveState();
+                }
+            }
+        } else if (wParam == WM_MBUTTONUP) {
+            POINT pt = pMouseStruct->pt;
+
+            bool swallow = false;
+            UINT message = 0;
+            LONG gen = 0;
+
+            EnterState();
+            if (g_clickState != CLICK_NONE) {
+                if (g_clickState == CLICK_INVALID) {
+                    g_clickState = CLICK_NONE;
+                    g_upSwallowed = false;
+                    g_generation++;
+                } else {
+                    g_upPt = pt;
+                    g_upSwallowed = true;
+                    g_upSwallowedTime = GetTickCount();
+
+                    if (g_clickState == CLICK_VALID) {
+                        message = WM_WORKER_UP_VALID;
+                    } else {
+                        message = WM_WORKER_UP_PENDING;
+                    }
+
+                    gen = g_generation;
+                    swallow = true;
+                }
+            }
+            LeaveState();
+
+            if (swallow) {
+                PostThreadMessage(g_workerThreadId, message, (WPARAM)gen, 0);
+                return 1;
+            }
+        }
     }
+
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
@@ -480,7 +948,8 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
         Wh_Log(L"SetWindowsHookEx failed: %d", GetLastError());
     }
 
-    // Signal that the hook was processed
+    SetTimer(nullptr, RELEASE_TIMER_ID, 50, nullptr);
+
     SetEvent(hReadyEvent);
 
     MSG msg;
@@ -490,13 +959,21 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
             continue;
         }
 
+        if (msg.message == WM_TIMER && msg.wParam == RELEASE_TIMER_ID) {
+            WatchdogCheck();
+            continue;
+        }
+
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
+    KillTimer(nullptr, RELEASE_TIMER_ID);
+
     if (mouseHook) {
         UnhookWindowsHookEx(mouseHook);
     }
+
     return 0;
 }
 
@@ -506,18 +983,32 @@ DWORD WINAPI HookThread(LPVOID lpParameter) {
 BOOL WhTool_ModInit() {
     LoadSettings();
 
-    // Initialize and start the UI Automation thread
+    InitializeCriticalSection(&g_stateCs);
+    g_csInitialized = true;
+
+    InitializeCriticalSection(&g_tabStripCacheCs);
+    g_tabStripCacheCsInitialized = true;
+
+    HDC hdc = GetDC(nullptr);
+    if (hdc) {
+        g_systemDpi = GetDeviceCaps(hdc, LOGPIXELSX);
+        ReleaseDC(nullptr, hdc);
+    }
+    if (g_systemDpi <= 0) g_systemDpi = 96;
+
     HANDLE hWorkerReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!hWorkerReady) {
         Wh_Log(L"CreateEvent for worker failed");
         return FALSE;
     }
+
     g_workerThread = CreateThread(nullptr, 0, WorkerThread, hWorkerReady, 0, nullptr);
     if (!g_workerThread) {
         Wh_Log(L"CreateThread for worker failed");
         CloseHandle(hWorkerReady);
         return FALSE;
     }
+
     WaitForSingleObject(hWorkerReady, INFINITE);
     CloseHandle(hWorkerReady);
 
@@ -526,18 +1017,19 @@ BOOL WhTool_ModInit() {
         return TRUE;
     }
 
-    // Initialize and start the isolated mouse hook thread
     HANDLE hHookReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!hHookReady) {
         Wh_Log(L"CreateEvent for hook failed");
         return FALSE;
     }
+
     g_hookThread = CreateThread(nullptr, 0, HookThread, hHookReady, 0, nullptr);
     if (!g_hookThread) {
         Wh_Log(L"CreateThread for hook failed");
         CloseHandle(hHookReady);
         return FALSE;
     }
+
     WaitForSingleObject(hHookReady, INFINITE);
     CloseHandle(hHookReady);
     
@@ -549,7 +1041,6 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    // Terminate the mouse hook thread
     if (g_hookThread) {
         PostThreadMessage(g_hookThreadId, WM_QUIT_THREAD, 0, 0);
         WaitForSingleObject(g_hookThread, INFINITE);
@@ -557,12 +1048,21 @@ void WhTool_ModUninit() {
         g_hookThread = nullptr;
     }
 
-    // Terminate the UIA worker thread
     if (g_workerThread) {
         PostThreadMessage(g_workerThreadId, WM_QUIT_THREAD, 0, 0);
         WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
+    }
+
+    if (g_csInitialized) {
+        DeleteCriticalSection(&g_stateCs);
+        g_csInitialized = false;
+    }
+
+    if (g_tabStripCacheCsInitialized) {
+        DeleteCriticalSection(&g_tabStripCacheCs);
+        g_tabStripCacheCsInitialized = false;
     }
 }
 
@@ -570,15 +1070,6 @@ void WhTool_ModUninit() {
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -682,7 +1173,7 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR
-    commandLine[MAX_PATH + 2 +\
+    commandLine[MAX_PATH + 2 +
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
