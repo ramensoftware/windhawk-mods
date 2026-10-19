@@ -18,156 +18,11 @@
 
 // ==WindhawkModReadme==
 /*
-# 农历与节假日日历（Lunar & Holiday Calendar）
+**Languages:** English · 中文 · Tiếng Việt
 
 ![Lunar & Holiday Calendar View](https://i.imgur.com/SBafHNL.png)
 
-Windows 11 的日历（点击任务栏右下角的时间弹出）会在日期格里显示农历、节气或节日名。这个 mod 按你写的
-规则，把节假日的文字和颜色写进这一行；也可以直接用规则标记农历或阳历日期。任何国家的订阅源都能用。
-
-- **默认**：`休` 标到的日子显示节日名（蓝），`班` 标到的日子显示 `补班`（红）。
-- 其他日子保留系统那一行；打开越南农历后显示越南农历日期。
-
-## 使用前提
-
-mod 写的是日期格里的**第二行**（通常就是显示农历、节气或节日名的那一行），所以先把它打开：
-
-设置 → 时间和语言 → 日期和时间 → "在任务栏中显示其他日历" → 选中"简体中文（农历）"
-
-不打开这一行，日期格子里往往就没有可写的地方，日历上也看不出标记——越南农历写的也是这一行。
-格子已经有内容、但找不到可用的第二行文本块（不存在或没有文字）时，mod 不会猜别的文本块，直接跳过
-这个格子并在日志里说明。
-
-## 设置项
-
-| 设置 | 填什么 |
-| --- | --- |
-| 数据来源 | 你的 `.ics` 订阅地址。**留空（默认）则不读取订阅源**；只用日期规则标记时可以不填。 |
-| 刷新间隔（小时） | 隔多久重新下载一次（默认 24 小时）。 |
-| 越南农历（替换农历文字） | 日期格默认显示越南农历；日历顶部的农历日期是中文格式时也改成越南写法。见下文。 |
-| 悬停时显示完整文字 | 鼠标停在有标记的日期上，显示完整名称（或规则写的文字）。名字太长、日期格显示不下时用。 |
-| 高亮规则 | 哪些日子被标记、标成什么颜色和文字。见下文。 |
-| 剔除的文字 | 从事件原文里删掉的那几段文字（默认 `（休）`、`（班）`）。见下文。 |
-
-改规则、改"剔除的文字"不会立即重新下载：mod 会拿已经读到的数据按新设置重新标一遍。
-
-## 越南农历
-
-打开"越南农历（替换农历文字）"后：
-
-- 日期格默认显示越南农历日期，写成 `日/月`（如 `15/8`），闰月写成 `1/2N`；有规则文字时显示
-  规则文字。
-- 日历顶部的农历日期行是中文格式时，整行换成越南写法：日期、月份和干支年（如
-  `15 Tháng 8 Năm Bính Ngọ`）。
-- 日期离线计算（UTC+7），不依赖订阅源。
-
-越南的节假日不内置在 mod 里：要么订阅源里有，要么用下面的规则标。
-
-## 高亮规则
-
-一项一类日子，每项填三栏：
-
-    要找的词：休        颜色：#4EA1FF        显示的文字：{name}
-
-- **要找的词**：只填一个词，它出现在事件文字里就算命中。默认两项是"休"和"班"；填 `*` 是**兜底**：
-  所有没被别的规则命中过的事件都归它，写在哪一项都可以——别国的订阅源大多没有"休"/"班"，
-  加一项填 `*` 就能全标上。
-- **颜色**：`#RRGGBB`；留空不设置颜色。
-- **显示的文字**：`{name}` 是事件原文（先按"剔除的文字"删除）；留空沿用日期格自己的文字
-  （系统那一行，或越南农历日期）。
-- 颜色和文字都留空、或要找的词留空，这一项不生效；第一条命中的生效。
-
-几个例子（每行都是列表里的一项）：
-
-| 要找的词 | 颜色 | 显示的文字 | 效果 |
-| --- | --- | --- | --- |
-| `休` | `#4EA1FF` | `{name}` | 放假的日子显示节日名、蓝色（默认） |
-| `班` | `#FF5A5A` | `补班` | 调休上班的日子显示"补班"、红色（默认） |
-| `*` | `#4EA1FF` | `{name}` | 订阅源里的所有事件都显示原文、蓝色 |
-| `祝日` | `#E81123` | （留空） | 日文订阅源里"祝日"的日子只改颜色，沿用日期格文字 |
-| `nghỉ lễ` | `#FF5A5A` | `{name}` | 越南订阅源里"nghỉ lễ"的日子显示原文、红色 |
-
-### 用规则标农历日子
-
-"要找的词"里也可以写一个日子，这样不依赖订阅源也能标记某一天：
-
-| 写法 | 意思 |
-| --- | --- |
-| `{lunar: d=15}` | 每个农历月的十五（含闰月） |
-| `{lunar: m=8, d=15}` | 农历八月十五（不算闰八月十五） |
-| `{lunar: m=8L, d=15}` | 闰八月十五；也可写 `{lunar: m=8, d=15, leap}` |
-| `{lunar: m=9}` | 农历九月的每一天 |
-| `{solar: m=4, d=30}` | 阳历 4 月 30 日 |
-
-- `m` 月份、`d` 日子，用逗号分隔；顺序、大小写和空格都不影响。
-- `m=8L`，或者加一个 `leap` 字段，表示闰月；写了月份但没加，表示那个号码的本气月。只写
-  `d` 不写月份时，闰月也算。
-- `solar` 没有闰月，不能写 `L` 或 `leap`。
-- 阳历日子可以到 31，农历日子最多 30；写了月份但该月没有这一天（例如 2 月 30 日）也算写法有误。
-- 同一个月份的本气月和闰月都想标，就写两项：`{lunar: m=8, d=15}` 和
-  `{lunar: m=8L, d=15}`。
-- 写法有误（未知键、月份或日子越界、重复字段、没有日期）这一项不生效。
-- 农历日期按哪本历算**看上面那个开关**：开着按越南农历，关着按系统显示的中国农历。
-- 同一天有被订阅源规则命中的事件时，订阅源优先；订阅源里没有命中的日子才由这类规则标记。
-- 这类规则没有事件原文，所以 `{name}` 是空的；文字留空就保留原有日期。一项只写一个日期条件。
-
-越南节假日的一组例子（每行都是列表里的一项）：
-
-| 要找的词 | 颜色 | 显示的文字 | 效果 |
-| --- | --- | --- | --- |
-| `{lunar: d=1}` | `#FF5A5A` | （留空） | 每个农历初一，保留农历日期，红色 |
-| `{lunar: d=15}` | `#FF5A5A` | （留空） | 每个农历十五（Rằm），保留农历日期，红色 |
-| `{lunar: m=1, d=1}` | `#E81123` | `Tết Nguyên đán` | 越南春节 |
-| `{lunar: m=3, d=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | 雄王纪念日 |
-| `{lunar: m=5, d=5}` | `#E81123` | `Đoan Ngọ` | 端午节 |
-| `{lunar: m=8, d=15}` | `#E81123` | `Tết Trung thu` | 中秋节 |
-| `{lunar: m=12, d=23}` | `#E81123` | `Ông Táo` | 灶君 |
-| `{solar: m=4, d=30}` | `#E81123` | `Ngày Thống nhất` | 越南统一日 |
-| `{solar: m=9, d=2}` | `#E81123` | `Quốc khánh` | 越南国庆 |
-
-## 剔除的文字
-
-事件原文里不想要的那一段，原样写一条，它就从显示的文字里消失（出现几次删几次，写什么删什么，
-括号和空格都算）。它只影响显示，不影响规则匹配。默认两条是中文订阅源的标记：
-
-```
-（休）       国庆节（休）                    显示成  国庆节
-```
-
-`（班）` 也一样；如果规则显示固定文字，就显示那段固定文字。其他订阅源可以自己加标记，例如
-`(nghỉ bù)`。默认只列了全角括号；半角 `(休)`、`(班)` 或其他写法自己加一条。清空列表就什么都不删。
-如果整个名字都被删空，这一天只保留颜色或原有日期。
-
-## 数据来源
-
-mod 不内置节假日数据，只会请求你填的地址。下面只是示例：
-
-- 苹果 iCloud 中国节假日：`https://p10-calendars.icloud.com/holiday/CN_zh.ics`
-- 苹果 iCloud 越南节假日：`https://p10-calendars.icloud.com/holiday/VN_vi.ics`
-- `https://holiday.ailcc.com/api/holiday/ics`（中国，一次返回多年）
-
-订阅源里每个事件大致长这样，**"要找的词"就是在这里面找**：
-
-```
-SUMMARY:春节（休）
-```
-
-常见按日期的 `.ics` 订阅都能用。暂时读不到新数据时，已加载的标记会保留；没有数据时日历仍显示
-系统内容（或越南农历）和日期规则。
-
-## 致谢
-
-日历窗口的定位方式来自 lonfro 的
-[Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
-（GPL-3.0），跨线程调用沿用 m417z 的
-[Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods)。
-
-越南农历的计算来自 [@phatMT97](https://github.com/phatMT97) 与
-[@vantruong-dev](https://github.com/vantruong-dev) 的贡献（Hồ Ngọc Đức 算法），越南历那部分由他们维护。
-
----
-
-# Lunar & Holiday Calendar (English)
+# Lunar & Holiday Calendar
 
 The Windows 11 calendar flyout prints a lunar date, solar term or festival name in each day
 cell. This mod writes holiday text and colour into that line by rules you write; rules can
@@ -234,8 +89,8 @@ A few examples, each of them one item of the list:
 
 | Word | Colour | Text | What it does |
 | --- | --- | --- | --- |
-| `休` | `#4EA1FF` | `{name}` | a day off shows the name of the holiday, in blue (default) |
 | `班` | `#FF5A5A` | `补班` | an adjusted workday shows `补班`, in red (default) |
+| `休` | `#4EA1FF` | `{name}` | a day off shows the name of the holiday, in blue (default) |
 | `*` | `#4EA1FF` | `{name}` | every event of the feed shows its own text, in blue |
 | `祝日` | `#E81123` | (empty) | 祝日 of a Japanese feed is coloured, the cell text kept |
 | `nghỉ lễ` | `#FF5A5A` | `{name}` | days of a Vietnamese feed which say `nghỉ lễ`, in red |
@@ -329,7 +184,154 @@ side of the mod.
 
 ---
 
-# Lịch âm & ngày lễ (Tiếng Việt)
+# 农历与节假日日历
+
+Windows 11 的日历（点击任务栏右下角的时间弹出）会在日期格里显示农历、节气或节日名。这个 mod 按你写的
+规则，把节假日的文字和颜色写进这一行；也可以直接用规则标记农历或阳历日期。任何国家的订阅源都能用。
+
+- **默认**：`休` 标到的日子显示节日名（蓝），`班` 标到的日子显示 `补班`（红）。
+- 其他日子保留系统那一行；打开越南农历后显示越南农历日期。
+
+## 使用前提
+
+mod 写的是日期格里的**第二行**（通常就是显示农历、节气或节日名的那一行），所以先把它打开：
+
+设置 → 时间和语言 → 日期和时间 → "在任务栏中显示其他日历" → 选中"简体中文（农历）"
+
+不打开这一行，日期格子里往往就没有可写的地方，日历上也看不出标记——越南农历写的也是这一行。
+格子已经有内容、但找不到可用的第二行文本块（不存在或没有文字）时，mod 不会猜别的文本块，直接跳过
+这个格子并在日志里说明。
+
+## 设置项
+
+| 设置 | 填什么 |
+| --- | --- |
+| 数据来源 | 你的 `.ics` 订阅地址。**留空（默认）则不读取订阅源**；只用日期规则标记时可以不填。 |
+| 刷新间隔（小时） | 隔多久重新下载一次（默认 24 小时）。 |
+| 越南农历（替换农历文字） | 日期格默认显示越南农历；日历顶部的农历日期是中文格式时也改成越南写法。见下文。 |
+| 悬停时显示完整文字 | 鼠标停在有标记的日期上，显示完整名称（或规则写的文字）。名字太长、日期格显示不下时用。 |
+| 高亮规则 | 哪些日子被标记、标成什么颜色和文字。见下文。 |
+| 剔除的文字 | 从事件原文里删掉的那几段文字（默认 `（休）`、`（班）`）。见下文。 |
+
+改规则、改"剔除的文字"不会立即重新下载：mod 会拿已经读到的数据按新设置重新标一遍。
+
+## 越南农历
+
+打开"越南农历（替换农历文字）"后：
+
+- 日期格默认显示越南农历日期，写成 `日/月`（如 `15/8`），闰月写成 `1/2N`；有规则文字时显示
+  规则文字。
+- 日历顶部的农历日期行是中文格式时，整行换成越南写法：日期、月份和干支年（如
+  `15 Tháng 8 Năm Bính Ngọ`）。
+- 日期离线计算（UTC+7），不依赖订阅源。
+
+越南的节假日不内置在 mod 里：要么订阅源里有，要么用下面的规则标。
+
+## 高亮规则
+
+一项一类日子，每项填三栏：
+
+    要找的词：休        颜色：#4EA1FF        显示的文字：{name}
+
+- **要找的词**：只填一个词，它出现在事件文字里就算命中。默认两项是"班"和"休"；填 `*` 是**兜底**：
+  所有没被别的规则命中过的事件都归它，写在哪一项都可以——别国的订阅源大多没有"休"/"班"，
+  加一项填 `*` 就能全标上。
+- **颜色**：`#RRGGBB`；留空不设置颜色。
+- **显示的文字**：`{name}` 是事件原文（先按"剔除的文字"删除）；留空沿用日期格自己的文字
+  （系统那一行，或越南农历日期）。
+- 颜色和文字都留空、或要找的词留空，这一项不生效；第一条命中的生效。
+
+几个例子（每行都是列表里的一项）：
+
+| 要找的词 | 颜色 | 显示的文字 | 效果 |
+| --- | --- | --- | --- |
+| `班` | `#FF5A5A` | `补班` | 调休上班的日子显示"补班"、红色（默认） |
+| `休` | `#4EA1FF` | `{name}` | 放假的日子显示节日名、蓝色（默认） |
+| `*` | `#4EA1FF` | `{name}` | 订阅源里的所有事件都显示原文、蓝色 |
+| `祝日` | `#E81123` | （留空） | 日文订阅源里"祝日"的日子只改颜色，沿用日期格文字 |
+| `nghỉ lễ` | `#FF5A5A` | `{name}` | 越南订阅源里"nghỉ lễ"的日子显示原文、红色 |
+
+### 用规则标农历日子
+
+"要找的词"里也可以写一个日子，这样不依赖订阅源也能标记某一天：
+
+| 写法 | 意思 |
+| --- | --- |
+| `{lunar: d=15}` | 每个农历月的十五（含闰月） |
+| `{lunar: m=8, d=15}` | 农历八月十五（不算闰八月十五） |
+| `{lunar: m=8L, d=15}` | 闰八月十五；也可写 `{lunar: m=8, d=15, leap}` |
+| `{lunar: m=9}` | 农历九月的每一天 |
+| `{solar: m=4, d=30}` | 阳历 4 月 30 日 |
+
+- `m` 月份、`d` 日子，用逗号分隔；顺序、大小写和空格都不影响。
+- `m=8L`，或者加一个 `leap` 字段，表示闰月；写了月份但没加，表示那个号码的本气月。只写
+  `d` 不写月份时，闰月也算。
+- `solar` 没有闰月，不能写 `L` 或 `leap`。
+- 阳历日子可以到 31，农历日子最多 30；写了月份但该月没有这一天（例如 2 月 30 日）也算写法有误。
+- 同一个月份的本气月和闰月都想标，就写两项：`{lunar: m=8, d=15}` 和
+  `{lunar: m=8L, d=15}`。
+- 写法有误（未知键、月份或日子越界、重复字段、没有日期）这一项不生效。
+- 农历日期按哪本历算**看上面那个开关**：开着按越南农历，关着按系统显示的中国农历。
+- 同一天有被订阅源规则命中的事件时，订阅源优先；订阅源里没有命中的日子才由这类规则标记。
+- 这类规则没有事件原文，所以 `{name}` 是空的；文字留空就保留原有日期。一项只写一个日期条件。
+
+越南节假日的一组例子（每行都是列表里的一项）：
+
+| 要找的词 | 颜色 | 显示的文字 | 效果 |
+| --- | --- | --- | --- |
+| `{lunar: d=1}` | `#FF5A5A` | （留空） | 每个农历初一，保留农历日期，红色 |
+| `{lunar: d=15}` | `#FF5A5A` | （留空） | 每个农历十五（Rằm），保留农历日期，红色 |
+| `{lunar: m=1, d=1}` | `#E81123` | `Tết Nguyên đán` | 越南春节 |
+| `{lunar: m=3, d=10}` | `#E81123` | `Giỗ tổ Hùng Vương` | 雄王纪念日 |
+| `{lunar: m=5, d=5}` | `#E81123` | `Đoan Ngọ` | 端午节 |
+| `{lunar: m=8, d=15}` | `#E81123` | `Tết Trung thu` | 中秋节 |
+| `{lunar: m=12, d=23}` | `#E81123` | `Ông Táo` | 灶君 |
+| `{solar: m=4, d=30}` | `#E81123` | `Ngày Thống nhất` | 越南统一日 |
+| `{solar: m=9, d=2}` | `#E81123` | `Quốc khánh` | 越南国庆 |
+
+## 剔除的文字
+
+事件原文里不想要的那一段，原样写一条，它就从显示的文字里消失（出现几次删几次，写什么删什么，
+括号和空格都算）。它只影响显示，不影响规则匹配。默认两条是中文订阅源的标记：
+
+```
+（休）       国庆节（休）                    显示成  国庆节
+```
+
+`（班）` 也一样；如果规则显示固定文字，就显示那段固定文字。其他订阅源可以自己加标记，例如
+`(nghỉ bù)`。默认只列了全角括号；半角 `(休)`、`(班)` 或其他写法自己加一条。清空列表就什么都不删。
+如果整个名字都被删空，这一天只保留颜色或原有日期。
+
+## 数据来源
+
+mod 不内置节假日数据，只会请求你填的地址。下面只是示例：
+
+- 苹果 iCloud 中国节假日：`https://p10-calendars.icloud.com/holiday/CN_zh.ics`
+- 苹果 iCloud 越南节假日：`https://p10-calendars.icloud.com/holiday/VN_vi.ics`
+- `https://holiday.ailcc.com/api/holiday/ics`（中国，一次返回多年）
+
+订阅源里每个事件大致长这样，**"要找的词"就是在这里面找**：
+
+```
+SUMMARY:春节（休）
+```
+
+常见按日期的 `.ics` 订阅都能用。暂时读不到新数据时，已加载的标记会保留；没有数据时日历仍显示
+系统内容（或越南农历）和日期规则。
+
+## 致谢
+
+日历窗口的定位方式来自 lonfro 的
+[Agenda in Calendar View](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/agenda-in-calendar-view.wh.cpp)
+（GPL-3.0），跨线程调用沿用 m417z 的
+[Windows 11 Notification Center Styler](https://github.com/m417z/my-windhawk-mods)。
+
+越南农历的计算来自 [@phatMT97](https://github.com/phatMT97) 与
+[@vantruong-dev](https://github.com/vantruong-dev) 的贡献（Hồ Ngọc Đức 算法），越南历那部分由他们维护。
+
+---
+
+# Lịch âm và ngày lễ
 
 Bảng lịch Windows 11 (bấm vào đồng hồ ở khay hệ thống) hiện ngày âm, tiết khí hoặc tên ngày lễ trong ô
 ngày. Mod này ghi chữ và màu ngày lễ vào dòng đó theo quy tắc bạn viết; quy tắc cũng có thể tô trực tiếp
@@ -392,8 +394,8 @@ Vài ví dụ (mỗi dòng là một mục trong danh sách):
 
 | Từ | Màu | Chữ | Tác dụng |
 | --- | --- | --- | --- |
-| `休` | `#4EA1FF` | `{name}` | ngày nghỉ hiện tên ngày lễ, màu xanh (mặc định) |
 | `班` | `#FF5A5A` | `补班` | ngày làm bù hiện 补班, màu đỏ (mặc định) |
+| `休` | `#4EA1FF` | `{name}` | ngày nghỉ hiện tên ngày lễ, màu xanh (mặc định) |
 | `*` | `#4EA1FF` | `{name}` | mọi sự kiện của nguồn đều hiện nguyên văn, màu xanh |
 | `祝日` | `#E81123` | (trống) | ngày 祝日 của nguồn Nhật chỉ đổi màu, giữ dòng hiện có |
 | `nghỉ lễ` | `#FF5A5A` | `{name}` | ngày có "nghỉ lễ" của nguồn Việt hiện nguyên văn, màu đỏ |
@@ -536,6 +538,19 @@ do hai bạn phụ trách.
     Đưa chuột lên ngày được tô để xem tên đầy đủ, hoặc chữ mà quy tắc ghi. Dùng khi tên
     quá dài, ô không hiện hết.
 - highlightRules:
+  - - word: "班"
+      $name: Word to look for
+      $name:zh-CN: 要找的词
+      $name:vi-VN: Từ cần tìm
+    - color: "#FF5A5A"
+      $name: Colour
+      $name:zh-CN: 颜色
+      $name:vi-VN: Màu
+      #! $format: colorRgb
+    - text: "补班"
+      $name: Text to show
+      $name:zh-CN: 显示的文字
+      $name:vi-VN: Chữ hiển thị
   - - word: "休"
       $name: Word to look for
       $name:zh-CN: 要找的词
@@ -573,19 +588,6 @@ do hai bạn phụ trách.
       $description:vi-VN: >-
         Chữ trong ô ngày. "{name}" là nguyên văn sự kiện; để trống là dùng dòng của ô (dòng
         hệ thống, hoặc ngày âm Việt Nam) và chỉ đổi màu.
-  - - word: "班"
-      $name: Word to look for
-      $name:zh-CN: 要找的词
-      $name:vi-VN: Từ cần tìm
-    - color: "#FF5A5A"
-      $name: Colour
-      $name:zh-CN: 颜色
-      $name:vi-VN: Màu
-      #! $format: colorRgb
-    - text: "补班"
-      $name: Text to show
-      $name:zh-CN: 显示的文字
-      $name:vi-VN: Chữ hiển thị
   $name: Highlight rules
   $name:zh-CN: 高亮规则
   $name:vi-VN: Quy tắc tô màu
@@ -695,7 +697,6 @@ namespace wux = winrt::Windows::UI::Xaml;
 #include <cstdlib>
 #include <cwctype>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -705,10 +706,8 @@ namespace wux = winrt::Windows::UI::Xaml;
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.h>
 
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxd = winrt::Windows::UI::Xaml::Data;
@@ -937,7 +936,6 @@ std::vector<HighlightRule> LoadHighlightRules() {
     std::wstring firstNoColour;
     size_t droppedColour = 0;
     size_t droppedWords = 0;
-    bool saidAboutOlderWords = false;
 
     for (int i = 0; i < kMaxHighlightRules; i++) {
         const std::wstring word = NormalizeNfc(
@@ -956,19 +954,6 @@ std::vector<HighlightRule> LoadHighlightRules() {
         // A rule without a word marks nothing - "*" is what a rule which takes the
         // events no other rule matched is written with - so it is left out as well.
         if (word.empty()) {
-            // An item of the older shape: before the word of a rule was one word it was a
-            // list of them, separated by commas and stored under "words". That value is
-            // not read - what a rule looks for is one word now - but the item is one
-            // somebody wrote, so a word about it once is worth more than a calendar which
-            // is quietly empty where it was not.
-            if (!saidAboutOlderWords &&
-                !ReadStringSetting(L"highlightRules[%d].words", i).empty()) {
-                saidAboutOlderWords = true;
-                Wh_Log(L"A highlight rule is stored under \"words\", from a version in "
-                       L"which a rule looked for several of them: a rule looks for one "
-                       L"word now, and that value is not read. Write the word of the rule "
-                       L"again in the settings");
-            }
             droppedWords++;
             continue;
         }
@@ -1517,6 +1502,10 @@ int32_t NextDateKey(int32_t key) {
 
 std::mutex g_holidaysMutex;
 HolidayMap g_holidays;
+// Bumped on every settings change. A fetch or a re-mark which started under an older
+// value is dropped instead of overwriting data which belongs to the settings now in
+// force; the increment and the store both happen under g_holidaysMutex.
+std::atomic<uint64_t> g_settingsGeneration{0};
 // The body of the last feed which was read. It is kept so that a rule list which is
 // changed afterwards can be put on the data which is already loaded, without asking the
 // source for the same feed a second time (see RemarkStoredHolidays); changing the
@@ -1534,11 +1523,19 @@ bool LookupHoliday(int32_t key, HolidayInfo& out) {
 }
 
 // The feed covers every year at once, so the data replaces the old data. The body is
-// kept with it: see the comment above g_holidaysBody.
-void StoreHolidays(std::wstring const& body, HolidayMap parsed) {
+// kept with it: see the comment above g_holidaysBody. False means the settings changed
+// since the caller started, and its result belongs to settings which are no longer in
+// force; nothing is stored then.
+bool StoreHolidays(uint64_t generation,
+                   std::wstring const& body,
+                   HolidayMap parsed) {
     std::lock_guard<std::mutex> lock(g_holidaysMutex);
+    if (g_settingsGeneration.load(std::memory_order_relaxed) != generation) {
+        return false;
+    }
     g_holidays = std::move(parsed);
     g_holidaysBody = body;
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2276,8 +2273,8 @@ bool ParseIcs(std::wstring const& text,
     }
 
     // The years the feed is about, which is what a yearly rule with no end of its own is
-    // expanded over: the mod neither invents a horizon of its own nor a date outside the
-    // span of the feed it was given.
+    // expanded over. A feed which consists only of a rule written years ago would name no
+    // year near today, so the expansion reaches next year as well.
     int firstYear = 0;
     int lastYear = 0;
     auto noteYear = [&](int32_t key) {
@@ -2302,6 +2299,9 @@ bool ParseIcs(std::wstring const& text,
             noteYear(key);
         }
     }
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+    const int currentYear = now.wYear;
 
     bool sawUnexpandedRecurrence = false;
     size_t added = 0;
@@ -2323,15 +2323,19 @@ bool ParseIcs(std::wstring const& text,
         // starts on when it wrote neither.
         int32_t end = 0;
         if (collected.hasEnd) {
-            if (collected.end <= collected.start) {
-                // A DTEND which is there but does not make a range: it did not parse, or
-                // it is not later than DTSTART. The event is dropped instead of being read
-                // as a single day, because a wrong end would put the holiday name on dates
-                // the feed never named.
+            if (collected.end < collected.start) {
+                // A DTEND which is there but ends before it starts: it did not parse, or
+                // the feed is wrong. The event is dropped instead of being read as a single
+                // day, because a wrong end would put the name on dates the feed never
+                // named.
                 droppedRanges++;
                 continue;
             }
-            end = collected.end;
+            // A timed event may start and end on the same date (09:00 to 17:00, say).
+            // That is one day here, not an empty range.
+            end = collected.end == collected.start
+                      ? NextDateKey(collected.start)
+                      : collected.end;
         } else if (collected.durationDays > 0) {
             end = collected.start;
             for (int day = 0; day < collected.durationDays && end; day++) {
@@ -2402,9 +2406,12 @@ bool ParseIcs(std::wstring const& text,
                 const int startYear = collected.start / 10000;
                 // A rule which names an end of its own - a COUNT or an UNTIL - is expanded
                 // to that end; one which names neither is expanded over the years the feed
-                // itself covers, so that a date outside the feed is never invented.
+                // itself covers, and at least through next year, so that a feed made only
+                // of an old yearly rule still marks the days near today.
                 const int lastYearToUse =
-                    (collected.yearly.count || collected.yearly.until) ? 9999 : lastYear;
+                    (collected.yearly.count || collected.yearly.until)
+                        ? 9999
+                        : (lastYear > currentYear + 1 ? lastYear : currentYear + 1);
                 int marked = 1;  // the day of the event itself
                 for (int year = startYear + collected.yearly.intervalYears;
                      year <= lastYearToUse;
@@ -3100,7 +3107,7 @@ std::wstring NormalizeIcsUrl(std::wstring const& url) {
                 return s;
             }
             if (scheme == L"webcal") {
-                return L"http" + s.substr(colonSlashSlash);
+                return L"https" + s.substr(colonSlashSlash);
             }
             if (scheme == L"webcals") {
                 return L"https" + s.substr(colonSlashSlash);
@@ -3198,6 +3205,9 @@ bool FetchHolidayData() {
     // user expects to see the feed marked with. The address is the one this response
     // was asked for, so a response which arrives after the address was changed is
     // dropped - its data would be the data of an address which is no longer set.
+    // The generation is read before the settings, so a change in between is caught by
+    // the check in StoreHolidays.
+    const uint64_t generation = g_settingsGeneration.load(std::memory_order_relaxed);
     const std::shared_ptr<const Settings> current = GetSettings();
     if (NormalizeIcsUrl(current->dataSourceUrl) != url) {
         Wh_Log(L"The data source changed while the feed was on its way; the "
@@ -3216,7 +3226,11 @@ bool FetchHolidayData() {
     // setting like any other, and a feed which is read but marks nothing is one which
     // has to be marked again - from the body - as soon as the rules say so (see
     // Wh_ModSettingsChanged).
-    StoreHolidays(body, std::move(parsed));
+    if (!StoreHolidays(generation, body, std::move(parsed))) {
+        Wh_Log(L"The settings changed while the feed was being read; the response "
+               L"is dropped");
+        return false;
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_fetchStateMutex);
@@ -3436,6 +3450,7 @@ void ResetHolidayData() {
 // lock which guards the data, and StoreHolidays publishes the result in one piece.
 void RemarkStoredHolidays(std::vector<HighlightRule> const& rules,
                           std::vector<std::wstring> const& removeTexts) {
+    const uint64_t generation = g_settingsGeneration.load(std::memory_order_relaxed);
     std::wstring body;
     {
         std::lock_guard<std::mutex> lock(g_holidaysMutex);
@@ -3458,7 +3473,11 @@ void RemarkStoredHolidays(std::vector<HighlightRule> const& rules,
     }
 
     size_t entryCount = parsed.size();
-    StoreHolidays(body, std::move(parsed));
+    if (!StoreHolidays(generation, body, std::move(parsed))) {
+        Wh_Log(L"The settings changed again while the feed was being marked; this "
+               L"result is dropped");
+        return;
+    }
 
     if (entryCount) {
         Wh_Log(L"Marked the feed which was read before again with %zu rule(s) and %zu "
@@ -3787,13 +3806,11 @@ struct TrackedDayItem {
 };
 
 // The most day items to keep an eye on. The walk finds every day item the calendar holds,
-// and the calendar holds more than the six weeks a month view shows: the first limit this
-// had (128, from when the calendar reported its cells one by one) was reached by a single
-// pass of the walk on a live flyout. A full list makes a pass drop the cells it found
-// first, so the limit has to leave room for the tree; what it is really for is the
-// opposite case - a shell which keeps day items alive in a pool the calendar no longer
-// shows. A day item which is gone is released and dropped on the next pass, and one which
-// is shown again is found again by the walk, and tracked again.
+// and the calendar holds more than the six weeks a month view shows. A full list makes a
+// pass drop the cells it found first, so the limit has to leave room for the tree; it is
+// there for a shell which keeps day items alive in a pool the calendar no longer shows.
+// A day item which is gone is released and dropped on the next pass, and one which is
+// shown again is found again by the walk, and tracked again.
 constexpr size_t kMaxTrackedDayItems = 512;
 
 // The state of every day cell of this thread, keyed by the day item's identity.
@@ -4105,9 +4122,8 @@ void OnLabelTextChanged(wux::DependencyObject const& sender) {
 // wants to write is the same one.
 //
 // A text of a rule which holds no {name} is recognised as it is written; a rule whose
-// text is built from the name of the event is not, and neither is it in the version
-// before the rules - what is written then is the name itself, which is covered by the
-// second test below.
+// text is built from the name of the event is not, and what is written then is the name
+// itself, which is covered by the second test below.
 bool IsOwnText(std::wstring const& text, Settings const& settings) {
     if (text.empty()) {
         return false;
@@ -4210,10 +4226,16 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     // calendar the user is about to open.
     const bool calendarShown = CalendarIsShownNow();
 
-    // A day item which now shows another date was filled in by the shell again,
-    // so its text is the shell's own. A binding saved for the label element still
-    // applies and is kept; the colour state stays too, because it belongs to the
-    // label element, which is still the same one and still carries the mod's brush.
+    // A day item which now shows another date was filled in by the shell again. A
+    // binding saved for the label element still applies and is kept; the colour state
+    // stays too, because it belongs to the label element, which is still the same one
+    // and still carries the mod's brush.
+    //
+    // The text the mod wrote is kept when a binding was saved: writing it as a local
+    // value detached that binding, so the shell cannot update the line for the new date
+    // until the binding is put back. Keeping appliedText lets the restore branch
+    // recognise its own text and do that. Without a saved binding there is nothing to
+    // put back, and the shell's own text is what the new date should show.
     //
     // The saved colour value is dropped, but the brush the mod wrote itself
     // (ownBrush) is kept: the shell re-templates a recycled cell for its new date
@@ -4225,7 +4247,9 @@ void ApplyToDayItem(wuxc::CalendarViewDayItem const& item) {
     // there in the meantime.
     if (cell.key != key) {
         cell.key = key;
-        cell.appliedText.clear();
+        if (!cell.hasSavedTextBinding) {
+            cell.appliedText.clear();
+        }
         cell.savedForeground = nullptr;
         cell.hasSavedForeground = false;
         cell.savedForegroundWasLocal = false;
@@ -4736,21 +4760,14 @@ bool CalendarWindowIsShownOnCurrentThread() {
     }
 
     struct WindowSearch {
-        DWORD threadId = 0;
         bool found = false;
         bool visible = false;
     } search;
-    search.threadId = GetCurrentThreadId();
 
-    EnumWindows(
+    EnumThreadWindows(
+        GetCurrentThreadId(),
         [](HWND hWnd, LPARAM lParam) -> BOOL {
             WindowSearch& search = *reinterpret_cast<WindowSearch*>(lParam);
-            DWORD processId = 0;
-            if (GetWindowThreadProcessId(hWnd, &processId) != search.threadId ||
-                processId != GetCurrentProcessId()) {
-                return TRUE;
-            }
-
             WCHAR className[32];
             if (!GetClassName(hWnd, className, ARRAYSIZE(className)) ||
                 !IsCalendarWindowClass(className)) {
@@ -5019,7 +5036,7 @@ void UninitializeLunarHeaderTextOnCurrentThread() {
         } catch (...) {
         }
     }
-    t_lunarHeaders.clear();
+    decltype(t_lunarHeaders)().swap(t_lunarHeaders);
 }
 
 // A thread without a XAML window is worth reporting once: "the mod does nothing" is
@@ -5814,9 +5831,8 @@ void RefreshCalendarOnUiThreads() {
 // GetProcAddress takes one, and %S prints it from this wide format.
 //
 // The hook, the original and the target all carry the same Prototype, so the compiler
-// checks the signatures: the void* casts this had before let a hook whose signature had
-// drifted from the function it replaces compile, and that mistake shows up as a crash
-// inside the shell, not as an error here.
+// checks the signatures: a hook whose signature has drifted from the function it
+// replaces is an error here rather than a crash inside the shell.
 template <typename Prototype>
 bool InstallHook(HMODULE module,
                  PCSTR functionName,
@@ -5961,6 +5977,14 @@ void Wh_ModSettingsChanged() {
     const std::shared_ptr<const Settings> previous = GetSettings();
     LoadSettings();
     const std::shared_ptr<const Settings> settings = GetSettings();
+
+    // A fetch or a re-mark which started under the previous settings is stale from here
+    // on. The increment happens under the data lock, so a store cannot slip in between
+    // its check and its write.
+    {
+        std::lock_guard<std::mutex> lock(g_holidaysMutex);
+        g_settingsGeneration.fetch_add(1, std::memory_order_relaxed);
+    }
 
     // The holidays of one data source are not the holidays of another, but the
     // data of the same source is kept: dropping it would make the calendar fall
