@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-19T12:03:53.000Z</updated>
+    <updated>2026-10-19T16:02:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Inactive Menubar Greying 2.0]]></title>
+        <id>https://windhawk.net/mods/disable-inactive-menubar-greying#0782b9afbee6d20f2b3ef9a83d2c0264742beab7</id>
+        <link href="https://windhawk.net/mods/disable-inactive-menubar-greying"/>
+        <updated>2026-10-19T16:02:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>fix compatibility with more color schemes</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Independent taskbar per monitor 1.6.0]]></title>
         <id>https://windhawk.net/mods/taskbar-independent-per-monitor#b0f5bd82a63baa016bb54b8604848c0d287ed9ae</id>
@@ -616,25 +629,6 @@ flyout geometry. Disable them when investigating layout problems.</p>]]></conten
         <author>
             <name>HeyOkay</name>
             <uri>https://github.com/HeyOkay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Agenda in Calendar View 1.3]]></title>
-        <id>https://windhawk.net/mods/agenda-in-calendar-view#13f85eac68330eb852c85b4da897c19306ac5ba2</id>
-        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
-        <updated>2026-10-18T08:04:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>⚠️ WARNING: Existing calendar sources will show as empty text in the mod settings, but will still work! This is due to the colour option being added. You can mitigate this by re-uploading your calendar source. </li>
-<li>Added option to set a colour for each calendar source</li>
-<li>Added coloured bars representing how many events are in each day. </li>
-<li>Added option to use the calendar's colour as the border colour for events</li>
-<li>Added option to make the notification pane collapsible</li>
-<li>Added ability to set a custom size for the date picker (e.g. show 3 rows rather than the default 6)</li>
-<li>Converted option to customise position of buttons and position of calendar into individual settings</li>
-</ul>]]></content>
-        <author>
-            <name>lonfro</name>
-            <uri>https://github.com/lonfro</uri>
         </author>
     </entry>
 </feed>

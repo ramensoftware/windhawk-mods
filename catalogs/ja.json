@@ -4320,7 +4320,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1787592516000,
+        "updated": 1792425751000,
         "users": 32
       },
       "metadata": {
@@ -4332,7 +4332,7 @@
           "explorer.exe"
         ],
         "name": "Disable Inactive Menubar Greying",
-        "version": "1.3"
+        "version": "2.0"
       }
     },
     "disable-ms-teams-hotkey": {

@@ -1,3 +1,7 @@
+## 2.0 ([Oct 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0782b9afbee6d20f2b3ef9a83d2c0264742beab7/mods/disable-inactive-menubar-greying.wh.cpp))
+
+* fix compatibility with more color schemes
+
 ## 1.3 ([Aug 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fa70d57a80b307b069a16e5a889febc47afd01f1/mods/disable-inactive-menubar-greying.wh.cpp))
 
 Exclude effect on taskbar
