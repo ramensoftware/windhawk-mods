@@ -52,6 +52,8 @@ right edge.
   falls back to its native position when the apps collide.
 - Unsupported native layouts, external property changes and unsafe geometry
   restore the clock instead of fighting the layout.
+- After a centered-layout safety fallback, closing apps alone does not move
+  the clock back to the left. Make room, then turn the mod off and on to retry.
 
 ## Disable
 
@@ -162,6 +164,15 @@ struct TaskbarItemIdentity {
     uintptr_t elementIdentity;
     uintptr_t itemIdentity;
     winrt::Windows::Foundation::IInspectable item{nullptr};
+};
+
+struct TaskbarElementSample {
+    uintptr_t repeaterIdentity{};
+    Controls::Grid root{nullptr};
+    FrameworkElement repeater{nullptr};
+    std::vector<FrameworkElement> elements;
+    std::optional<std::vector<TaskbarItemIdentity>> itemIdentities;
+    FrameworkElement widgets{nullptr};
 };
 
 struct LeftHostLayoutSnapshot {
@@ -735,6 +746,34 @@ std::optional<std::vector<FrameworkElement>> GetRealizedTaskbarElements(
     return elements;
 }
 
+std::optional<TaskbarElementSample> CollectTaskbarElements(
+    Controls::Grid root, FrameworkElement repeater, bool needIdentities) {
+    if (!root || !repeater || !IsTaskbarRepeater(repeater, root)) {
+        return std::nullopt;
+    }
+    TaskbarElementSample sample;
+    sample.repeaterIdentity =
+        reinterpret_cast<uintptr_t>(winrt::get_abi(repeater));
+    sample.root = root;
+    sample.repeater = repeater;
+    if (needIdentities) {
+        sample.itemIdentities.emplace();
+    }
+    auto elements = GetRealizedTaskbarElements(
+        repeater, needIdentities ? &*sample.itemIdentities : nullptr);
+    if (!elements) {
+        return std::nullopt;
+    }
+    sample.elements = std::move(*elements);
+    for (const auto& child : sample.elements) {
+        if (IdentifySystemButton(child) == SystemButtonKind::Widgets) {
+            sample.widgets = child;
+            break;
+        }
+    }
+    return sample;
+}
+
 std::optional<HorizontalBounds> TryGetLayoutBounds(
     FrameworkElement element, Controls::Grid root, double width) {
     if (!element || !root || !element.IsLoaded() || !root.XamlRoot() ||
@@ -881,7 +920,8 @@ double GetLeftAlignedRightBoundary(const LeftHostLayoutSnapshot& layout,
 std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     Controls::Grid root, FrameworkElement repeater, Controls::Grid host,
     std::optional<double> prefixOrigin = std::nullopt,
-    uintptr_t spacingTarget = 0, double spacingIncrement = 0) {
+    uintptr_t spacingTarget = 0, double spacingIncrement = 0,
+    const TaskbarElementSample* sample = nullptr) {
     if (!IsTaskbarRepeater(repeater, root) || !root.IsLoaded() ||
         !std::isfinite(root.ActualWidth()) || root.ActualWidth() <= 0) {
         return std::nullopt;
@@ -889,6 +929,20 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     auto repeaterBounds = TryGetLayoutBounds(repeater, root,
                                              repeater.ActualWidth());
     if (!repeaterBounds) {
+        return std::nullopt;
+    }
+    std::optional<TaskbarElementSample> fallbackSample;
+    if (!sample) {
+        fallbackSample = CollectTaskbarElements(
+            root, repeater, g_settings.reserveCenteredViewport);
+        if (!fallbackSample) {
+            return std::nullopt;
+        }
+        sample = &*fallbackSample;
+    }
+    if (sample->repeaterIdentity !=
+            reinterpret_cast<uintptr_t>(winrt::get_abi(repeater)) ||
+        winrt::get_abi(sample->root) != winrt::get_abi(root)) {
         return std::nullopt;
     }
     LeftHostLayoutSnapshot snapshot{
@@ -922,15 +976,12 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
         }
         snapshot.rightBoundary = bounds->left;
     }
-    // An unavailable projection or unfinished realization is not an empty prefix.
-    auto children = GetRealizedTaskbarElements(repeater,
-        g_settings.reserveCenteredViewport
-            ? &snapshot.itemIdentities : nullptr);
-    if (!children) {
-        return std::nullopt;
+    // Use the sample collected once for this update. An unavailable projection
+    // or unfinished realization is not an empty prefix.
+    if (sample->itemIdentities) {
+        snapshot.itemIdentities = *sample->itemIdentities;
     }
-    // Use realized ItemsRepeater entries, excluding its visual-tree cache.
-    for (auto child : *children) {
+    for (auto child : sample->elements) {
         auto identity = reinterpret_cast<uintptr_t>(winrt::get_abi(child));
         snapshot.childIdentities.push_back(identity);
         auto kind = IdentifySystemButton(child);
@@ -1384,7 +1435,8 @@ std::optional<double> ReadMovedTrayContribution(
         if (reason) *reason = value;
         return std::nullopt;
     };
-    const auto& saved = *record;
+    const auto saved = *record;
+    auto leftHost = data.leftHost;
     auto target = saved.element.get();
     auto parent = saved.originalParent.get().try_as<Controls::Grid>();
     auto column = saved.nativeColumn;
@@ -1396,9 +1448,9 @@ std::optional<double> ReadMovedTrayContribution(
     if (target.Name() == L"NotifyIconStack" && !saved.nativeChevron.get()) return reject(L"notify-chevron-expired");
     if (!parent) return reject(L"native-parent-unavailable");
     if (!column) return reject(L"native-column-unavailable");
-    if (!data.leftHost) return reject(L"left-host-unavailable");
+    if (!leftHost) return reject(L"left-host-unavailable");
     if (!saved.columnChanged) return reject(L"column-write-record-missing");
-    if (!data.leftHost.Children().IndexOf(target.as<UIElement>(), index)) {
+    if (!leftHost.Children().IndexOf(target.as<UIElement>(), index)) {
         return reject(L"host-child-ownership");
     }
     if (target.GetBindingExpression(Controls::Grid::ColumnProperty()) ||
@@ -1418,8 +1470,8 @@ std::optional<double> ReadMovedTrayContribution(
     }
     auto visualParent = Media::VisualTreeHelper::GetParent(target);
     auto targetRoot = target.XamlRoot();
-    auto hostRoot = data.leftHost.XamlRoot();
-    if (visualParent && visualParent != data.leftHost) {
+    auto hostRoot = leftHost.XamlRoot();
+    if (visualParent && visualParent != leftHost) {
         return reject(L"visual-parent");
     }
     if (targetRoot && hostRoot && targetRoot != hostRoot) {
@@ -1428,27 +1480,17 @@ std::optional<double> ReadMovedTrayContribution(
     // Children.Append can precede Loaded, visual parent/root and first measure.
     // Only initial attachment may wait; known ownership conflicts above never do.
     bool layoutPending = !targetRoot || !hostRoot || !target.IsLoaded() ||
-                         !data.leftHost.IsLoaded() ||
-                         data.leftHost.ActualWidth() <= kLayoutTolerance;
+                         !leftHost.IsLoaded() ||
+                         leftHost.ActualWidth() <= kLayoutTolerance;
     if (saved.lastContribution < 0 && layoutPending) {
         if (reason) *reason = L"layout-pending";
         return 0;
     }
     if (!visualParent || !targetRoot || !hostRoot ||
-        !target.IsLoaded() || !data.leftHost.IsLoaded()) {
+        !target.IsLoaded() || !leftHost.IsLoaded()) {
         return reject(L"visual-attachment-lost");
     }
     return std::max(0.0, saved.nativeColumnWidth - column.ActualWidth());
-}
-
-std::optional<double> ReadControlCenterContribution(
-    const MovedClockData& data, PCWSTR* reason = nullptr) {
-    return ReadMovedTrayContribution(data, data.controlCenter, reason);
-}
-
-std::optional<double> ReadTrayGroupContribution(
-    const MovedClockData& data, PCWSTR* reason = nullptr) {
-    return ReadMovedTrayContribution(data, data.trayGroup, reason);
 }
 
 std::optional<double> ReadNotifyIconGroupContribution(
@@ -1457,15 +1499,20 @@ std::optional<double> ReadNotifyIconGroupContribution(
 }
 
 double GetReservedTrayLayoutWidth(const MovedClockData& data) {
-    // Native-left layout reserves the host after the fixed prefix and uses
-    // the actual remaining tray edge. Only centered layout needs compensation.
     if (!TaskbarUsesCenteredAlignment()) {
         return 0;
     }
-    // Keep the original clock baseline separate from the measured extra shrink.
-    return data.layoutReservedWidth + ReadControlCenterContribution(data).value_or(0) +
-           ReadTrayGroupContribution(data).value_or(0) + ReadNotifyIconGroupContribution(data).value_or(0) +
-           ReadMovedTrayContribution(data, data.applicationTray, nullptr).value_or(0);
+    // Keep only the tray inputs alive across XAML reads, not the vector record.
+    double reserved = data.layoutReservedWidth;
+    MovedClockData readState;
+    readState.leftHost = data.leftHost;
+    readState.restoring = data.restoring;
+    const auto records = {data.controlCenter, data.trayGroup,
+                          data.notifyIcons, data.applicationTray};
+    for (const auto& record : records) {
+        reserved += ReadMovedTrayContribution(readState, record, nullptr).value_or(0);
+    }
+    return reserved;
 }
 
 PCWSTR TrayElementLogTag(TrayElementRecord record) {
@@ -1709,7 +1756,6 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
             CancelCenteredViewportProbe(clock, reason, &layout);
             return true;
         }
-        double reserved = GetReservedTrayLayoutWidth(*data);
         auto target = data->repeater.get();
         auto root = data->taskbarRoot.get();
         auto spacing = data->flowSpacing;
@@ -1798,6 +1844,10 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
         }
         if (probe.appliedLogged) {
             return true;
+        }
+        double reserved = 0;
+        if (auto current = FindMovedClockData(clock)) {
+            reserved = GetReservedTrayLayoutWidth(*current);
         }
         LogLeftHostLayout(layout, L"centered-viewport-applied", reserved);
         Wh_Log(L"[centered-viewport] automatic viewport accepted: origin=%.3f width=%.3f increment=%.3f clockWidth=%.3f visibleFlowInside=1",
@@ -2151,39 +2201,27 @@ void UpdateWidgetsSpacing(FrameworkElement clock,
     widgets.Margin(margin);
 }
 
-void RefreshTrackedElements(MovedClockData& data) {
-    auto root = data.taskbarRoot.get();
-    if (root && !IsTaskbarRepeater(data.repeater.get(), root)) {
-        data.repeater = FindTaskbarRepeater(root);
-        data.layoutSnapshot.reset();
-    }
-    auto repeater = data.repeater.get();
-    if (root && IsTaskbarRepeater(repeater, root)) {
-        auto children = GetRealizedTaskbarElements(repeater);
-        if (!children) {
-            return;
-        }
-        FrameworkElement widgets = nullptr;
-        for (auto child : *children) {
-            if (IdentifySystemButton(child) == SystemButtonKind::Widgets) {
-                widgets = child;
-                break;
-            }
-        }
-        if (widgets != data.widgets.get()) {
-            RevokeWidgetsTracking(data);
-            data.widgets = widgets;
-            if (auto clock = data.clock.get()) {
-                RegisterWidgetsTracking(data, clock);
-            }
-        }
-    }
+bool RefreshTrackedElements(FrameworkElement clock, Controls::Grid host,
+                            const TaskbarElementSample& sample) {
+    auto data = FindMovedClockData(clock);
+    if (!data || data->restoring || data->leftHost != host ||
+        data->taskbarRoot.get() != sample.root ||
+        data->repeater.get() != sample.repeater) return true;
+    if (sample.widgets == data->widgets.get()) return false;
+    RevokeWidgetsTracking(*data);
+    data = FindMovedClockData(clock);
+    if (!data || data->restoring || data->leftHost != host ||
+        data->taskbarRoot.get() != sample.root ||
+        data->repeater.get() != sample.repeater) return true;
+    data->widgets = sample.widgets;
+    RegisterWidgetsTracking(*data, clock);
+    return true; // Registration is a sampling boundary, even if identities match.
 }
 
 void UpdateLeftHostOffsetForClock(
     winrt::weak_ref<FrameworkElement> weakClock) {
-    if (!g_callbacksEnabled || !g_movedClocks ||
-        g_clockThreadId != GetCurrentThreadId()) {
+    if (!g_callbacksEnabled || g_clockThreadId != GetCurrentThreadId() ||
+        !g_movedClocks) {
         return;
     }
 
@@ -2197,6 +2235,7 @@ void UpdateLeftHostOffsetForClock(
         !ShouldRelocateClock()) {
         return;
     }
+    auto trackedHost = data->leftHost;
     data->updatingLayout = true;
     try {
         // Keep the original processing order and the control-center fallback.
@@ -2209,7 +2248,18 @@ void UpdateLeftHostOffsetForClock(
             }
             PCWSTR tag = TrayElementLogTag(record);
             PCWSTR reason = nullptr;
-            auto contribution = ReadMovedTrayContribution(*data, data->*record, &reason);
+            // A read can reenter cleanup; never carry a container pointer across it.
+            auto saved = data->*record;
+            MovedClockData readState;
+            readState.leftHost = trackedHost;
+            data = nullptr;
+            auto contribution = ReadMovedTrayContribution(readState, saved, &reason);
+            data = FindMovedClockData(clock);
+            if (!data || data->restoring || data->leftHost != trackedHost) return;
+            if (!(data->*record) || (data->*record)->nativeColumn != saved->nativeColumn) {
+                data->updatingLayout = false;
+                return;
+            }
             if (!contribution) {
                 if (record == &MovedClockData::controlCenter) {
                     data = nullptr;
@@ -2222,7 +2272,7 @@ void UpdateLeftHostOffsetForClock(
                        tag, reason);
                 RestoreExtraTrayElements(*data, record);
                 data = FindMovedClockData(clock);
-                if (!data || data->restoring) return;
+                if (!data || data->restoring || data->leftHost != trackedHost) return;
             } else if (reason) {
                 if ((data->*record)->lastContribution != -2) {
                     (data->*record)->lastContribution = -2;
@@ -2234,14 +2284,39 @@ void UpdateLeftHostOffsetForClock(
                 }
             } else if (std::abs((data->*record)->lastContribution - *contribution) > kLayoutTolerance) {
                 (data->*record)->lastContribution = *contribution;
-                Wh_Log(L"[%s] measured native column shrink=%.3f clockBaseline=%.3f totalReserved=%.3f",
-                       tag, *contribution, data->layoutReservedWidth, GetReservedTrayLayoutWidth(*data));
+                Wh_Log(L"[%s] measured native column shrink=%.3f clockBaseline=%.3f",
+                       tag, *contribution, data->layoutReservedWidth);
             }
         }
-        RefreshTrackedElements(*data);
-        auto root = data->taskbarRoot.get();
-        auto repeater = data->repeater.get();
-        auto host = data->leftHost;
+        auto weakRoot = data->taskbarRoot;
+        auto weakRepeater = data->repeater;
+        data = nullptr;
+        auto root = weakRoot.get();
+        auto repeater = weakRepeater.get();
+        if (root && !IsTaskbarRepeater(repeater, root)) {
+            repeater = FindTaskbarRepeater(root);
+            data = FindMovedClockData(clock);
+            if (!data || data->restoring || data->leftHost != trackedHost) return;
+            data->repeater = repeater;
+            data->layoutSnapshot.reset();
+            data = nullptr;
+        }
+        auto sample = CollectTaskbarElements(
+            root, repeater, g_settings.reserveCenteredViewport);
+        if (sample && RefreshTrackedElements(clock, trackedHost, *sample)) {
+            sample = CollectTaskbarElements(
+                root, repeater, g_settings.reserveCenteredViewport);
+        }
+        data = FindMovedClockData(clock);
+        if (!data || data->restoring || data->leftHost != trackedHost) return;
+        if (data->taskbarRoot.get() != root || data->repeater.get() != repeater ||
+            (sample && data->widgets.get() != sample->widgets)) {
+            data->updatingLayout = false;
+            data = nullptr;
+            if (root) root.InvalidateMeasure();
+            return;
+        }
+        auto host = trackedHost;
         // An owned viewport is an app constraint, not a new fixed prefix.
         // Keep the clock at its baseline while managing that constraint.
         auto prefixOrigin = data->centeredProbe ?
@@ -2257,8 +2332,11 @@ void UpdateLeftHostOffsetForClock(
                 spacingIncrement = flowSpacing->increment;
             }
         }
-        auto snapshot = ReadLeftHostLayout(root, repeater, host, prefixOrigin,
-                                           spacingTarget, spacingIncrement);
+        data = nullptr;
+        auto snapshot = sample
+            ? ReadLeftHostLayout(root, repeater, host, prefixOrigin,
+                                 spacingTarget, spacingIncrement, &*sample)
+            : std::nullopt;
         data = FindMovedClockData(clock);
         if (data && !data->restoring && data->leftHost == host && snapshot) {
             data->layoutSampleUnavailableLogged = false;
@@ -2268,10 +2346,20 @@ void UpdateLeftHostOffsetForClock(
                          snapshot->repeaterDesiredWidth) > kLayoutTolerance ||
                 (data->centeredProbe &&
                  !SameTaskbarItemSource(*data->layoutSnapshot, *snapshot));
+            data = nullptr;
             auto margin = host.Margin();
+            data = FindMovedClockData(clock);
+            if (!data || data->restoring || data->leftHost != trackedHost) return;
             bool needsMove =
                 std::abs(margin.Left - snapshot->offset) > kLayoutTolerance;
-            double reservedRightWidth = GetReservedTrayLayoutWidth(*data);
+            // Only the decision log needs this number. Stable passes do not read
+            // all four tray groups again for an unchanged log line.
+            double reservedRightWidth = 0;
+            if (changed) {
+                reservedRightWidth = GetReservedTrayLayoutWidth(*data);
+                data = FindMovedClockData(clock);
+                if (!data || data->restoring || data->leftHost != trackedHost) return;
+            }
             data->layoutSnapshot = *snapshot;
             // Save all state before a write; XAML can reenter and erase records.
             data = nullptr;
@@ -2318,12 +2406,12 @@ void UpdateLeftHostOffsetForClock(
         }
     } catch (...) {
         data = FindMovedClockData(clock);
-        if (data && data->centeredProbe) {
+        if (data && data->leftHost == trackedHost && data->centeredProbe) {
             data->centeredProbe->failed = true;
             Wh_Log(L"[centered-viewport] failed: reason=layout-exception hr=%08X; retaining Margin record for cleanup",
                    winrt::to_hresult());
         }
-        if (data && !data->layoutSampleUnavailableLogged) {
+        if (data && data->leftHost == trackedHost && !data->layoutSampleUnavailableLogged) {
             data->layoutSampleUnavailableLogged = true;
             Wh_Log(L"Left host layout handling failed: %08X", winrt::to_hresult());
         }
@@ -2337,56 +2425,69 @@ void UpdateLeftHostOffsetForClock(
             }
         }
     }
-    if (auto current = FindMovedClockData(clock)) {
+    if (auto current = FindMovedClockData(clock); current && current->leftHost == trackedHost) {
         current->updatingLayout = false;
     }
 }
 
 void RegisterWidgetsTracking(MovedClockData& data, FrameworkElement clock) {
+    auto host = data.leftHost;
     auto widgets = data.widgets.get();
-    if (!widgets) {
-        return;
-    }
-
+    if (!widgets) return;
     auto weakClock = winrt::make_weak(clock);
-    data.widgetsSizeChangedToken = widgets.SizeChanged(
+    auto sizeToken = widgets.SizeChanged(
         [weakClock](winrt::Windows::Foundation::IInspectable const&,
                     SizeChangedEventArgs const&) {
             try {
                 UpdateLeftHostOffsetForClock(weakClock);
             } catch (...) {
-                Wh_Log(L"Widgets size handling failed: %08X",
-                       winrt::to_hresult());
+                Wh_Log(L"Widgets size handling failed: %08X", winrt::to_hresult());
             }
         });
-    data.widgetsVisibilityChangedToken =
-        widgets.RegisterPropertyChangedCallback(
-            UIElement::VisibilityProperty(),
-            [weakClock](DependencyObject const&, DependencyProperty const&) {
-                try {
-                    UpdateLeftHostOffsetForClock(weakClock);
-                } catch (...) {
-                    Wh_Log(L"Widgets visibility handling failed: %08X",
-                           winrt::to_hresult());
-                }
-            });
+    auto current = FindMovedClockData(clock);
+    if (!g_callbacksEnabled || !current || current->restoring ||
+        current->leftHost != host || current->widgets.get() != widgets ||
+        current->widgetsSizeChangedToken) {
+        widgets.SizeChanged(sizeToken);
+        return;
+    }
+    current->widgetsSizeChangedToken = sizeToken;
+    current = nullptr;
+    auto visibilityToken = widgets.RegisterPropertyChangedCallback(
+        UIElement::VisibilityProperty(),
+        [weakClock](DependencyObject const&, DependencyProperty const&) {
+            try {
+                UpdateLeftHostOffsetForClock(weakClock);
+            } catch (...) {
+                Wh_Log(L"Widgets visibility handling failed: %08X", winrt::to_hresult());
+            }
+        });
+    current = FindMovedClockData(clock);
+    if (!g_callbacksEnabled || !current || current->restoring ||
+        current->leftHost != host || current->widgets.get() != widgets ||
+        !current->widgetsSizeChangedToken ||
+        current->widgetsSizeChangedToken->value != sizeToken.value ||
+        current->widgetsVisibilityChangedToken) {
+        widgets.UnregisterPropertyChangedCallback(
+            UIElement::VisibilityProperty(), visibilityToken);
+        return;
+    }
+    current->widgetsVisibilityChangedToken = visibilityToken;
 }
 
 void RevokeWidgetsTracking(MovedClockData& data) {
     auto widgets = data.widgets.get();
-    if (widgets) {
-        if (data.widgetsSizeChangedToken) {
-            widgets.SizeChanged(*data.widgetsSizeChangedToken);
-        }
-        if (data.widgetsVisibilityChangedToken) {
-            widgets.UnregisterPropertyChangedCallback(
-                UIElement::VisibilityProperty(),
-                data.widgetsVisibilityChangedToken);
-        }
-    }
-
+    auto sizeToken = data.widgetsSizeChangedToken;
+    auto visibilityToken = data.widgetsVisibilityChangedToken;
     data.widgetsSizeChangedToken.reset();
     data.widgetsVisibilityChangedToken = 0;
+    if (widgets) {
+        if (sizeToken) widgets.SizeChanged(*sizeToken);
+        if (visibilityToken) {
+            widgets.UnregisterPropertyChangedCallback(
+                UIElement::VisibilityProperty(), visibilityToken);
+        }
+    }
 }
 
 void RegisterLeftHostTracking(MovedClockData& data, FrameworkElement clock) {
