@@ -53,11 +53,11 @@ Relies on the English accessible name, e.g. "Notifications 1 new notification"
 #include <string>
 
 struct Settings {
-    int sizePercent = 140;
+    int sizePercent = 100;
     COLORREF color = RGB(255, 45, 45);
     int pulseMs = 1100;
     bool showCount = true;
-    int offsetX = 0;
+    int offsetX = 10;
     int offsetY = 0;
 } g;
 
