@@ -2,8 +2,8 @@
 // @id              taskbar-modding
 // @name            Taskbar modding
 // @name:zh-CN      任务栏魔改
-// @description     Customize Windows 11 taskbar with floating look and rounded corners. Left-click grouped taskbar entries to cycle between their windows. With system auto-hide taskbar turned on, the taskbar hides only under maximized windows or when covered by other windows. You may hide or tweak system tray icons. It supports macOS Dock-style zoom animation on icon hover. Customize the taskbar clock’s time and date format, two-line layout content, plus real-time performance metrics display.
-// @description:zh-CN 自定义Windows 11任务栏，采用悬浮外观和圆角设计。左键点击分组任务栏条目，可以在它们的窗口间循环切换。当系统自动隐藏任务栏开启时，任务栏只会隐藏在最大化的窗口下或被其他窗口遮挡时。你可以隐藏或调整系统托盘图标。它支持macOS风格的图标悬停缩放动画。可自定义任务栏时钟的时间和日期格式、两行布局内容，以及实时性能指标显示。
+// @description     Custom Win11 taskbar: floating rounded, left-click grouped icons cycle windows. Auto-hide on maximized/overlapped windows. Adjust tray icons, macOS Dock hover zoom, 2-line custom clock + real-time performance stats.
+// @description:zh-CN 自定义Win11任务栏：浮动圆角、左键分组图标循环窗口。在最大化/重叠的窗口自动隐藏。调整托盘图标、macOS Dock悬停缩放、两行自定义时钟+实时性能统计
 // @version         1.16.3
 // @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
