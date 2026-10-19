@@ -88,7 +88,7 @@ Changes to the settings apply the next time Start opens.
   $description: 0 picks based on the screen size
 - winKey: true
   $name: Open with the Windows key
-  $description: When off, the Windows key opens the original Start
+  $description: Also Ctrl+Esc. When off, they open the original Start
 - startButton: true
   $name: Open with the Start button
   $description: Of the taskbar and of the Standalone Dock mod, and the other ways Start opens (not the keyboard). When off, they open the original Start
@@ -1597,8 +1597,15 @@ void OnKeyDown(WPARAM key) {
 // window to toggle and doesn't call the original, so the Windows Start never
 // opens.
 
-// IMMERSIVELAUNCHERSHOWMETHOD value of the keyboard (Windows key).
+// Observed on Windows 11 build 26300: the Windows key and Ctrl+Esc arrive as
+// method 1 with flag 8; WM_SYSCOMMAND/SC_TASKLIST (the Dock's Start button)
+// also arrives as method 1, without that flag.
 constexpr int kShowMethodKeyboard = 1;
+constexpr int kShowFlagKeyboard = 0x8;
+
+bool IsKeyboardShow(int showMethod, int showFlags) {
+    return showMethod == kShowMethodKeyboard && (showFlags & kShowFlagKeyboard);
+}
 
 bool OwnsTaskbar() {
     DWORD pid = 0;
@@ -1615,8 +1622,9 @@ HRESULT WINAPI XamlLauncher_ShowStartView_Hook(void* pThis,
                                                int showMethod,
                                                int showFlags) {
     Wh_Log(L"> method %d, flags %d", showMethod, showFlags);
-    bool enabled = showMethod == kShowMethodKeyboard ? g_winKeyEnabled
-                                                     : g_startButtonEnabled;
+    bool enabled = IsKeyboardShow(showMethod, showFlags)
+                       ? g_winKeyEnabled
+                       : g_startButtonEnabled;
     HWND wnd = g_wnd;
     if (!enabled || !wnd) {
         return XamlLauncher_ShowStartView_Original(pThis, showMethod,
