@@ -23,6 +23,8 @@
 /*
 # Global Menu Bar (macOS style)
 
+![Global Menu Bar](https://raw.githubusercontent.com/RafaelMendes1407/windhawk-mods/screenshots/global-menu-bar.png)
+
 Creates a bar fixed at the top of the monitors, like the macOS menu bar. It
 follows the focused window and shows:
 
