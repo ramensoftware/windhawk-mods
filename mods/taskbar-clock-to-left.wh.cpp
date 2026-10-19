@@ -122,7 +122,6 @@ constexpr double kLayoutTolerance = 0.5;
 constexpr double kTaskbarLayoutGap = 4.0;
 constexpr uint64_t kLayoutReadyTimeoutMs = 10000;
 constexpr uint32_t kLayoutReadyMaxAttempts = 600;
-constexpr uint64_t kCenteredProbeTimeoutMs = 10000;
 constexpr uint32_t kAutomaticArrangeMaxCallbacks = 16;
 constexpr uint64_t kAutomaticArrangeTimeoutMs = 1000;
 constexpr double kNativeClockFontSize = 12.0;
@@ -190,18 +189,6 @@ struct WidgetsSpacingData {
     double lastRight;
 };
 
-struct CenteredWidthConstraintData {
-    winrt::weak_ref<Controls::Grid> parent;
-    double originalWidth;
-    HorizontalAlignment originalAlignment;
-    bool widthLocalUnset;
-    bool alignmentLocalUnset;
-    double targetWidth{};
-    uint64_t operation{};
-    bool widthWritten{};
-    bool alignmentWritten{};
-};
-
 struct FlowSpacingData {
     winrt::weak_ref<FrameworkElement> target;
     Thickness originalMargin;
@@ -209,17 +196,14 @@ struct FlowSpacingData {
     double lastValue;
     double increment{};
     bool rightSide{};
-    std::optional<CenteredWidthConstraintData> widthConstraint;
 };
 
 struct CenteredViewportProbeData {
     LeftHostLayoutSnapshot baseline;
     ULONGLONG startTick;
     double increment;
-    bool restored{};
     bool failed{};
     bool appliedLogged{};
-    bool automatic{};
     uint32_t initialLayoutWaits{};
     bool initialArrangeAccepted{};
 };
@@ -295,8 +279,6 @@ struct DeferredClockData {
 // Deferred event registration and cleanup run on the captured taskbar UI thread.
 // A serial distinguishes an in-flight registration from a cancelled replacement.
 uint64_t g_nextDeferredRegistration{};
-// Paired property writes also run on this UI thread; reject replaced plans.
-uint64_t g_nextCenteredWidthOperation{};
 
 struct {
     bool keepOnLeftWhenLeftAligned;
@@ -305,8 +287,6 @@ struct {
     bool moveNotifyIconStack;
     bool moveNotificationAreaIcons;
     bool reserveCenteredViewport;
-    bool measureCenteredViewport;
-    bool holdCenteredViewportForInteraction;
 } g_settings;
 
 void LoadSettings() {
@@ -318,10 +298,6 @@ void LoadSettings() {
     g_settings.moveNotificationAreaIcons = Wh_GetIntSetting(L"moveNotificationAreaIcons") != 0;
     g_settings.reserveCenteredViewport =
         Wh_GetIntSetting(L"reserveCenteredViewport") != 0;
-    // Development-only finite diagnostics are not part of this release.
-    // Do not read stale settings left by an older build.
-    g_settings.measureCenteredViewport = false;
-    g_settings.holdCenteredViewportForInteraction = false;
 }
 
 decltype(&SetWindowPos) SetWindowPos_Original;
@@ -636,412 +612,6 @@ bool ShouldRelocateClock() {
            g_settings.keepOnLeftWhenLeftAligned;
 }
 
-void LogLayoutElement(FrameworkElement element, Controls::Grid root,
-                      int siblingIndex, uint32_t depth) {
-    try {
-        auto parent = Media::VisualTreeHelper::GetParent(element)
-                          .try_as<FrameworkElement>();
-        auto margin = element.Margin();
-        auto desired = element.DesiredSize();
-        auto slot = Controls::Primitives::LayoutInformation::GetLayoutSlot(
-            element);
-        auto localMargin = element.ReadLocalValue(
-            FrameworkElement::MarginProperty());
-        bool bound = static_cast<bool>(element.GetBindingExpression(
-            FrameworkElement::MarginProperty()));
-        auto xamlRoot = element.XamlRoot();
-        Wh_Log(L"[layout] node=%p parent=%p sibling=%d depth=%u "
-               L"class=%s name=%s automationId=%s xamlRoot=%p "
-               L"loaded=%d visibility=%d opacity=%.3f",
-               winrt::get_abi(element), winrt::get_abi(parent), siblingIndex,
-               depth, winrt::get_class_name(element).c_str(),
-               element.Name().c_str(),
-               Automation::AutomationProperties::GetAutomationId(element)
-                   .c_str(),
-               winrt::get_abi(xamlRoot), element.IsLoaded(),
-               static_cast<int>(element.Visibility()), element.Opacity());
-        Wh_Log(L"[layout] node=%p actual=(%.3f,%.3f) "
-               L"desired=(%.3f,%.3f) slotParent=(%.3f,%.3f,%.3f,%.3f) "
-               L"margin=(%.3f,%.3f,%.3f,%.3f) bound=%d "
-               L"localUnset=%d localClass=%s",
-               winrt::get_abi(element), element.ActualWidth(),
-               element.ActualHeight(), desired.Width, desired.Height,
-               slot.X, slot.Y, slot.Width, slot.Height,
-               margin.Left, margin.Top, margin.Right, margin.Bottom, bound,
-               localMargin == DependencyProperty::UnsetValue(),
-               localMargin ? winrt::get_class_name(localMargin).c_str()
-                           : L"<null>");
-        if (xamlRoot && xamlRoot == root.XamlRoot()) {
-            auto visual = element.TransformToVisual(root).TransformBounds(
-                {0, 0, static_cast<float>(element.ActualWidth()),
-                 static_cast<float>(element.ActualHeight())});
-            Wh_Log(L"[layout] node=%p visualRoot=(%.3f,%.3f,%.3f,%.3f)",
-                   winrt::get_abi(element), visual.X, visual.Y,
-                   visual.Width, visual.Height);
-            if (parent) {
-                auto origin = parent.TransformToVisual(root)
-                                  .TransformPoint({0, 0});
-                auto offset = element.ActualOffset();
-                double left = origin.X + offset.x;
-                double right = left + element.ActualWidth();
-                // This excludes only the element's own render transform.
-                // Parent transforms can still affect this diagnostic candidate.
-                Wh_Log(L"[layout] node=%p parentVisualOrigin=(%.3f,%.3f) "
-                       L"actualOffset=(%.3f,%.3f) "
-                       L"candidateRootX=(%.3f,%.3f) finite=%d",
-                       winrt::get_abi(element), origin.X, origin.Y,
-                       offset.x, offset.y, left, right,
-                       std::isfinite(left) && std::isfinite(right));
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"[layout] node=%p inspection failed: %08X",
-               winrt::get_abi(element), winrt::to_hresult());
-    }
-}
-
-void LogControlCenterCandidate(FrameworkElement clock, Controls::Grid root) {
-    try {
-        auto grid = Media::VisualTreeHelper::GetParent(clock)
-                        .try_as<Controls::Grid>();
-        if (!grid || grid.Name() != L"SystemTrayFrameGrid") {
-            Wh_Log(L"[control-center] native parent Grid unavailable");
-            return;
-        }
-        auto frame = Media::VisualTreeHelper::GetParent(grid)
-                         .try_as<FrameworkElement>();
-        if (!frame || winrt::get_class_name(frame) !=
-                          L"SystemTray.SystemTrayFrame" ||
-            Media::VisualTreeHelper::GetParent(frame) != root ||
-            grid.XamlRoot() != root.XamlRoot()) {
-            Wh_Log(L"[control-center] native parent chain mismatch");
-            return;
-        }
-
-        auto children = grid.Children();
-        if (children.Size() > 32 || grid.ColumnDefinitions().Size() > 32) {
-            Wh_Log(L"[control-center] native Grid exceeds inspection limit");
-            return;
-        }
-        FrameworkElement controlCenter{nullptr};
-        int controlIndex = -1;
-        int clockIndex = -1;
-        for (uint32_t i = 0; i < children.Size(); i++) {
-            auto child = children.GetAt(i).try_as<FrameworkElement>();
-            if (child == clock) {
-                clockIndex = static_cast<int>(i);
-            }
-            if (!child || child.Name() != L"ControlCenterButton" ||
-                winrt::get_class_name(child) != L"SystemTray.OmniButton") {
-                continue;
-            }
-            if (controlCenter) {
-                Wh_Log(L"[control-center] duplicate native candidates");
-                return;
-            }
-            controlCenter = child;
-            controlIndex = static_cast<int>(i);
-        }
-        if (!controlCenter || clockIndex < 0) {
-            Wh_Log(L"[control-center] native sibling candidate unavailable");
-            return;
-        }
-
-        Wh_Log(L"[control-center] BEGIN build=" WH_MOD_VERSION L" candidate=%p clock=%p "
-               L"parent=%p frame=%p indices=(%d,%d) sameXamlRoot=%d "
-               L"gridWidth=%.3f frameWidth=%.3f context=(%p,%p,%p)",
-               winrt::get_abi(controlCenter), winrt::get_abi(clock),
-               winrt::get_abi(grid), winrt::get_abi(frame), controlIndex,
-               clockIndex, controlCenter.XamlRoot() == root.XamlRoot(),
-               grid.ActualWidth(), frame.ActualWidth(),
-               winrt::get_abi(grid.DataContext()),
-               winrt::get_abi(frame.DataContext()),
-               winrt::get_abi(root.DataContext()));
-        LogLayoutElement(controlCenter, root, controlIndex, 0);
-
-        // Read only at the existing explicit snapshot, before reparenting.
-        // Local value classes expose expressions we must not overwrite.
-        struct Property {
-            PCWSTR name;
-            DependencyProperty property;
-        };
-        const Property properties[] = {
-            {L"Grid.Column", Controls::Grid::ColumnProperty()},
-            {L"Grid.ColumnSpan", Controls::Grid::ColumnSpanProperty()},
-            {L"Grid.Row", Controls::Grid::RowProperty()},
-            {L"Grid.RowSpan", Controls::Grid::RowSpanProperty()},
-            {L"HorizontalAlignment", FrameworkElement::HorizontalAlignmentProperty()},
-            {L"VerticalAlignment", FrameworkElement::VerticalAlignmentProperty()},
-            {L"Margin", FrameworkElement::MarginProperty()},
-            {L"DataContext", FrameworkElement::DataContextProperty()},
-            {L"Width", FrameworkElement::WidthProperty()},
-            {L"MinWidth", FrameworkElement::MinWidthProperty()},
-            {L"MaxWidth", FrameworkElement::MaxWidthProperty()},
-        };
-        for (auto element : {controlCenter, clock}) {
-            Wh_Log(L"[control-center] node=%p grid=(%d,%d,%d,%d) "
-                   L"alignment=(%d,%d) width=%.3f minWidth=%.3f "
-                   L"maxWidth=%.3f context=%p",
-                   winrt::get_abi(element), Controls::Grid::GetColumn(element),
-                   Controls::Grid::GetColumnSpan(element),
-                   Controls::Grid::GetRow(element),
-                   Controls::Grid::GetRowSpan(element),
-                   static_cast<int>(element.HorizontalAlignment()),
-                   static_cast<int>(element.VerticalAlignment()), element.Width(),
-                   element.MinWidth(), element.MaxWidth(),
-                   winrt::get_abi(element.DataContext()));
-            for (const auto& entry : properties) {
-                auto local = element.ReadLocalValue(entry.property);
-                Wh_Log(L"[control-center] node=%p property=%s bound=%d "
-                       L"localUnset=%d localClass=%s",
-                       winrt::get_abi(element), entry.name,
-                       static_cast<bool>(element.GetBindingExpression(entry.property)),
-                       local == DependencyProperty::UnsetValue(),
-                       local ? winrt::get_class_name(local).c_str() : L"<null>");
-            }
-        }
-        auto columns = grid.ColumnDefinitions();
-        for (uint32_t i = 0; i < columns.Size(); i++) {
-            auto column = columns.GetAt(i);
-            auto width = column.Width();
-            auto local = column.ReadLocalValue(Controls::ColumnDefinition::WidthProperty());
-            Wh_Log(L"[control-center] column=%u width=(%.3f,%d) "
-                   L"actualWidth=%.3f minWidth=%.3f maxWidth=%.3f "
-                   L"localUnset=%d localClass=%s",
-                   i, width.Value, static_cast<int>(width.GridUnitType),
-                   column.ActualWidth(), column.MinWidth(), column.MaxWidth(),
-                   local == DependencyProperty::UnsetValue(),
-                   local ? winrt::get_class_name(local).c_str() : L"<null>");
-        }
-        Wh_Log(L"[control-center] END children=%u columns=%u; "
-               L"inspection only, migration not enabled", children.Size(),
-               columns.Size());
-    } catch (...) {
-        // Discovery must not affect clock placement or restoration.
-        Wh_Log(L"[control-center] inspection failed: %08X", winrt::to_hresult());
-    }
-}
-
-void LogTrayGroupCandidate(FrameworkElement clock, Controls::Grid root,
-                           PCWSTR groupName = L"NonActivatableStack") {
-    try {
-        auto grid = Media::VisualTreeHelper::GetParent(clock).try_as<Controls::Grid>();
-        auto frame = grid ? Media::VisualTreeHelper::GetParent(grid)
-                                .try_as<FrameworkElement>() : nullptr;
-        if (!grid || grid.Name() != L"SystemTrayFrameGrid" || !frame ||
-            winrt::get_class_name(frame) != L"SystemTray.SystemTrayFrame" ||
-            Media::VisualTreeHelper::GetParent(frame) != root ||
-            grid.XamlRoot() != root.XamlRoot() || grid.Children().Size() > 32 ||
-            grid.ColumnDefinitions().Size() > 32) {
-            Wh_Log(L"[tray-group] native parent chain unavailable or exceeds inspection limit");
-            return;
-        }
-        FrameworkElement group{nullptr};
-        uint32_t groupIndex = 0;
-        auto children = grid.Children();
-        PCWSTR expectedClass = wcscmp(groupName, L"NotificationAreaIcons") == 0
-            ? L"SystemTray.NotificationAreaIcons" : L"SystemTray.Stack";
-        for (uint32_t i = 0; i < children.Size(); i++) {
-            auto child = children.GetAt(i).try_as<FrameworkElement>();
-            if (!child || child.Name() != groupName ||
-                winrt::get_class_name(child) != expectedClass) continue;
-            if (group) {
-                Wh_Log(L"[tray-group] duplicate %s candidates", groupName);
-                return;
-            }
-            group = child;
-            groupIndex = i;
-        }
-        if (!group) {
-            Wh_Log(L"[tray-group] %s candidate unavailable", groupName);
-            return;
-        }
-        Wh_Log(L"[tray-group] BEGIN build=" WH_MOD_VERSION L" name=%s candidate=%p "
-               L"parent=%p frame=%p sibling=%u sameXamlRoot=%d "
-               L"gridWidth=%.3f context=(%p,%p,%p,%p)",
-               groupName, winrt::get_abi(group), winrt::get_abi(grid), winrt::get_abi(frame),
-               groupIndex, group.XamlRoot() == root.XamlRoot(), grid.ActualWidth(),
-               winrt::get_abi(group.DataContext()), winrt::get_abi(grid.DataContext()),
-               winrt::get_abi(frame.DataContext()), winrt::get_abi(root.DataContext()));
-        Wh_Log(L"[tray-group] grid=(%d,%d,%d,%d) alignment=(%d,%d) "
-               L"width=%.3f minWidth=%.3f maxWidth=%.3f",
-               Controls::Grid::GetColumn(group), Controls::Grid::GetColumnSpan(group),
-               Controls::Grid::GetRow(group), Controls::Grid::GetRowSpan(group),
-               static_cast<int>(group.HorizontalAlignment()),
-               static_cast<int>(group.VerticalAlignment()), group.Width(),
-               group.MinWidth(), group.MaxWidth());
-        struct Property { PCWSTR name; DependencyProperty property; };
-        const Property properties[] = {
-            {L"Grid.Column", Controls::Grid::ColumnProperty()},
-            {L"Grid.ColumnSpan", Controls::Grid::ColumnSpanProperty()},
-            {L"Grid.Row", Controls::Grid::RowProperty()},
-            {L"Grid.RowSpan", Controls::Grid::RowSpanProperty()},
-            {L"HorizontalAlignment", FrameworkElement::HorizontalAlignmentProperty()},
-            {L"VerticalAlignment", FrameworkElement::VerticalAlignmentProperty()},
-            {L"Margin", FrameworkElement::MarginProperty()},
-            {L"DataContext", FrameworkElement::DataContextProperty()},
-            {L"Width", FrameworkElement::WidthProperty()},
-            {L"MinWidth", FrameworkElement::MinWidthProperty()},
-            {L"MaxWidth", FrameworkElement::MaxWidthProperty()},
-        };
-        for (auto element : {group, grid.as<FrameworkElement>(), frame, root.as<FrameworkElement>()}) {
-            for (const auto& entry : properties) {
-                if (element != group && entry.property != FrameworkElement::DataContextProperty()) continue;
-                auto local = element.ReadLocalValue(entry.property);
-                Wh_Log(L"[tray-group] node=%p property=%s bound=%d localUnset=%d localClass=%s",
-                       winrt::get_abi(element), entry.name,
-                       static_cast<bool>(element.GetBindingExpression(entry.property)),
-                       local == DependencyProperty::UnsetValue(),
-                       local ? winrt::get_class_name(local).c_str() : L"<null>");
-            }
-        }
-        int columnIndex = Controls::Grid::GetColumn(group);
-        if (columnIndex >= 0 && static_cast<uint32_t>(columnIndex) < grid.ColumnDefinitions().Size()) {
-            auto column = grid.ColumnDefinitions().GetAt(columnIndex);
-            auto width = column.Width();
-            auto local = column.ReadLocalValue(Controls::ColumnDefinition::WidthProperty());
-            uint32_t shared = 0, unknown = 0;
-            for (auto child : children) {
-                auto element = child.try_as<FrameworkElement>();
-                if (!element) { unknown++; continue; }
-                int first = Controls::Grid::GetColumn(element);
-                int span = Controls::Grid::GetColumnSpan(element);
-                shared += element != group && first <= columnIndex && columnIndex - first < span;
-            }
-            Wh_Log(L"[tray-group] column=%d object=%p width=(%.3f,%d) actualWidth=%.3f "
-                   L"minWidth=%.3f maxWidth=%.3f sharedSiblings=%u untypedSiblings=%u localUnset=%d localClass=%s",
-                   columnIndex, winrt::get_abi(column), width.Value, static_cast<int>(width.GridUnitType),
-                   column.ActualWidth(), column.MinWidth(), column.MaxWidth(), shared, unknown,
-                   local == DependencyProperty::UnsetValue(),
-                   local ? winrt::get_class_name(local).c_str() : L"<null>");
-        } else {
-            Wh_Log(L"[tray-group] original column unavailable: %d", columnIndex);
-        }
-        // Inspect this group's subtree because the whole-root snapshot can truncate it.
-        struct Node { FrameworkElement element; int sibling; uint32_t depth; };
-        std::vector<Node> nodes{{group, static_cast<int>(groupIndex), 0}};
-        bool truncated = false;
-        for (size_t i = 0; i < nodes.size(); i++) {
-            auto node = nodes[i];
-            LogLayoutElement(node.element, root, node.sibling, node.depth);
-            if (group.Name() == L"NotifyIconStack") {
-                auto name = Automation::AutomationProperties::GetName(node.element);
-                if (!name.empty()) {
-                    Wh_Log(L"[tray-group] accessible node=%p name=%.160s",
-                           winrt::get_abi(node.element), name.c_str());
-                }
-            }
-            if (auto items = node.element.try_as<Controls::ItemsControl>()) {
-                auto source = items.ItemsSource();
-                auto local = items.ReadLocalValue(Controls::ItemsControl::ItemsSourceProperty());
-                Wh_Log(L"[tray-group] items node=%p count=%u source=%p sourceClass=%s "
-                       L"bound=%d localUnset=%d localClass=%s context=%p",
-                       winrt::get_abi(items), items.Items().Size(), winrt::get_abi(source),
-                       source ? winrt::get_class_name(source).c_str() : L"<null>",
-                       static_cast<bool>(items.GetBindingExpression(Controls::ItemsControl::ItemsSourceProperty())),
-                       local == DependencyProperty::UnsetValue(),
-                       local ? winrt::get_class_name(local).c_str() : L"<null>",
-                       winrt::get_abi(items.DataContext()));
-                if (group.Name() == L"NotifyIconStack" || group.Name() == L"MainStack" ||
-                    group.Name() == L"NotificationAreaIcons") {
-                    auto values = items.Items();
-                    uint32_t count = values.Size();
-                    for (uint32_t j = 0; j < std::min(count, 16u); j++) {
-                        auto value = values.GetAt(j);
-                        Wh_Log(L"[tray-group] item node=%p index=%u object=%p class=%s",
-                               winrt::get_abi(items), j, winrt::get_abi(value),
-                               value ? winrt::get_class_name(value).c_str() : L"<null>");
-                    }
-                    if (count > 16) Wh_Log(L"[tray-group] item metadata truncated count=%u", count);
-                }
-            }
-            int count = Media::VisualTreeHelper::GetChildrenCount(node.element);
-            if (node.depth >= 8) { truncated |= count > 0; continue; }
-            truncated |= count > 32;
-            for (int j = 0; j < std::min(count, 32); j++) {
-                auto child = Media::VisualTreeHelper::GetChild(node.element, j).try_as<FrameworkElement>();
-                if (!child) continue;
-                if (nodes.size() == 64) { truncated = true; break; }
-                nodes.push_back({child, j, node.depth + 1});
-            }
-        }
-        Wh_Log(L"[tray-group] END name=%s nodes=%u truncated=%d; read-only inspection, group not moved",
-               groupName, static_cast<uint32_t>(nodes.size()), truncated);
-    } catch (...) {
-        Wh_Log(L"[tray-group] inspection failed: %08X", winrt::to_hresult());
-    }
-}
-
-void LogLayoutSnapshot(FrameworkElement clock, Controls::Grid root,
-                       PCWSTR reason) {
-    if (!g_callbacksEnabled || g_clockThreadId != GetCurrentThreadId()) {
-        return;
-    }
-
-    try {
-        if (!clock || !root || !root.IsLoaded() || !root.XamlRoot() ||
-            root.ActualWidth() <= 0 || root.ActualHeight() <= 0) {
-            return;
-        }
-
-        Wh_Log(L"[layout] BEGIN build=" WH_MOD_VERSION L" reason=%s thread=%u "
-               L"centered=%d root=%p xamlRoot=%p viewport=(0,%.3f) "
-               L"height=%.3f scale=%.3f",
-               reason, GetCurrentThreadId(), TaskbarUsesCenteredAlignment(),
-               winrt::get_abi(root), winrt::get_abi(root.XamlRoot()),
-               root.ActualWidth(), root.ActualHeight(),
-               root.XamlRoot().RasterizationScale());
-        LogLayoutElement(clock, root, -1, 0);
-        LogControlCenterCandidate(clock, root);
-        LogTrayGroupCandidate(clock, root);
-        LogTrayGroupCandidate(clock, root, L"NotifyIconStack");
-        LogTrayGroupCandidate(clock, root, L"MainStack");
-        LogTrayGroupCandidate(clock, root, L"NotificationAreaIcons");
-
-        // Discovery is bounded and runs only at explicit diagnostic points,
-        // never on every LayoutUpdated callback. Indices refer to the live tree.
-        struct Node {
-            FrameworkElement element;
-            int siblingIndex;
-            uint32_t depth;
-        };
-        constexpr size_t kMaxNodes = 128;
-        constexpr int kMaxChildren = 32;
-        constexpr uint32_t kMaxDepth = 10;
-        std::vector<Node> nodes{{root, -1, 0}};
-        bool truncated = false;
-        for (size_t i = 0; i < nodes.size(); i++) {
-            // Copy before appending: push_back may invalidate vector entries.
-            auto node = nodes[i];
-            LogLayoutElement(node.element, root, node.siblingIndex, node.depth);
-            int count = Media::VisualTreeHelper::GetChildrenCount(node.element);
-            if (node.depth >= kMaxDepth) {
-                truncated |= count > 0;
-                continue;
-            }
-            truncated |= count > kMaxChildren;
-            for (int j = 0; j < std::min(count, kMaxChildren); j++) {
-                auto child = Media::VisualTreeHelper::GetChild(node.element, j)
-                                 .try_as<FrameworkElement>();
-                if (!child) {
-                    continue;
-                }
-                if (nodes.size() == kMaxNodes) {
-                    truncated = true;
-                    break;
-                }
-                nodes.push_back({child, j, node.depth + 1});
-            }
-        }
-        Wh_Log(L"[layout] END nodes=%u truncated=%d; "
-               L"candidate coordinates are diagnostic, not layout policy",
-               static_cast<uint32_t>(nodes.size()), truncated);
-    } catch (...) {
-        // A diagnostic failure must not prevent the existing relocation path.
-        Wh_Log(L"[layout] snapshot failed: %08X", winrt::to_hresult());
-    }
-}
-
 bool IsValidHorizontalBounds(HorizontalBounds bounds) {
     return std::isfinite(bounds.left) && std::isfinite(bounds.right) &&
            bounds.left < bounds.right;
@@ -1332,7 +902,7 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
         .rightBoundary = root.ActualWidth(),
         .repeaterDesiredWidth = repeater.DesiredSize().Width,
     };
-    if (!snapshot.centered || g_settings.measureCenteredViewport ||
+    if (!snapshot.centered ||
         g_settings.reserveCenteredViewport || g_settings.moveControlCenter ||
         g_settings.moveNonActivatableStack || g_settings.moveNotifyIconStack ||
         g_settings.moveNotificationAreaIcons) {
@@ -1354,7 +924,7 @@ std::optional<LeftHostLayoutSnapshot> ReadLeftHostLayout(
     }
     // An unavailable projection or unfinished realization is not an empty prefix.
     auto children = GetRealizedTaskbarElements(repeater,
-        (g_settings.measureCenteredViewport || g_settings.reserveCenteredViewport)
+        g_settings.reserveCenteredViewport
             ? &snapshot.itemIdentities : nullptr);
     if (!children) {
         return std::nullopt;
@@ -1470,26 +1040,6 @@ void LogLeftHostLayout(const LeftHostLayoutSnapshot& snapshot, PCWSTR reason,
                GetLeftAlignedRightBoundary(snapshot, reservedRightWidth),
            snapshot.unknownVisible, snapshot.contentLeft, snapshot.contentWidth,
            snapshot.repeaterDesiredWidth);
-    for (const auto& button : snapshot.buttons) {
-        Wh_Log(L"[layout] button=%p kind=%d visible=%d fixed=%d "
-               L"layoutX=(%.3f,%.3f) outerWidth=%.3f contentWidth=%.3f "
-               L"marginLeft=%.3f marginRight=%.3f",
-               reinterpret_cast<void*>(button.identity),
-               static_cast<int>(button.kind), button.visible,
-               button.fixed, button.bounds.left, button.bounds.right,
-               button.outerWidth, button.contentWidth, button.marginLeft,
-               button.marginRight);
-    }
-    for (const auto& element : snapshot.flowElements) {
-        Wh_Log(L"[layout] flow=%p layoutX=(%.3f,%.3f) overflow=%d",
-               reinterpret_cast<void*>(element.identity),
-               element.bounds.left, element.bounds.right, element.overflow);
-    }
-    for (const auto& item : snapshot.itemIdentities) {
-        Wh_Log(L"[layout] item index=%d element=%p sourceItem=%p",
-               item.index, reinterpret_cast<void*>(item.elementIdentity),
-               reinterpret_cast<void*>(item.itemIdentity));
-    }
 }
 
 bool SameLeftHostLayout(const LeftHostLayoutSnapshot& a,
@@ -2035,227 +1585,6 @@ bool HasCenteredOnlyFlow(const LeftHostLayoutSnapshot& layout) {
         });
 }
 
-bool IsSupportedCenteredViewportBaseline(
-    const LeftHostLayoutSnapshot& layout, const FlowSpacingData& spacing,
-    PCWSTR* reason = nullptr) {
-    auto reject = [&](PCWSTR value) {
-        if (reason) *reason = value;
-        return false;
-    };
-    if (reason) *reason = nullptr;
-    const auto& margin = spacing.originalMargin;
-    for (double value : {layout.rootWidth, layout.contentLeft, layout.contentWidth,
-                         layout.hostLeft, layout.hostWidth, layout.offset,
-                         layout.rightBoundary, margin.Left, margin.Top,
-                         margin.Right, margin.Bottom}) {
-        if (!std::isfinite(value)) return reject(L"nonfinite-baseline");
-    }
-    if (layout.rootWidth <= 0 || layout.contentWidth <= 0 || layout.hostWidth <= 0 ||
-        layout.hostLeft < 0 || layout.offset < 0 || layout.rightBoundary <= 0 ||
-        margin.Left < 0 || margin.Right < 0 || margin.Top != 0 || margin.Bottom != 0 ||
-        spacing.localUnset || spacing.rightSide) {
-        return reject(L"unsupported-baseline-values-or-source");
-    }
-    if (std::abs(layout.contentLeft - margin.Left) > kLayoutTolerance ||
-        std::abs(layout.contentWidth - (layout.rootWidth - margin.Left - margin.Right)) > kLayoutTolerance ||
-        std::abs(layout.hostLeft - layout.offset) > kLayoutTolerance) {
-        return reject(L"baseline-geometry-mismatch");
-    }
-    return true;
-}
-
-std::optional<FlowSpacingData> ReadCenteredWidthSpacing(
-    FrameworkElement repeater, Controls::Grid root, double rootWidth) {
-    if (!IsTaskbarRepeater(repeater, root)) {
-        Wh_Log(L"[centered-width] rejected: not the native taskbar repeater");
-        return std::nullopt;
-    }
-    auto parent = Media::VisualTreeHelper::GetParent(repeater).try_as<Controls::Grid>();
-    if (!parent) {
-        Wh_Log(L"[centered-width] rejected: repeater parent is not a Grid");
-        return std::nullopt;
-    }
-    auto padding = parent.Padding();
-    auto border = parent.BorderThickness();
-    LogLayoutElement(parent, root, 0, 0);
-    Wh_Log(L"[centered-width] parent=%p repeater=%p children=%u rows=%u columns=%u "
-           L"width=%.3f min=%.3f max=%.3f padding=(%.3f,%.3f,%.3f,%.3f) border=(%.3f,%.3f,%.3f,%.3f) "
-           L"alignment=%d flow=%d sameXamlRoot=%d",
-           winrt::get_abi(parent), winrt::get_abi(repeater), parent.Children().Size(),
-           parent.RowDefinitions().Size(), parent.ColumnDefinitions().Size(),
-           parent.Width(), parent.MinWidth(), parent.MaxWidth(),
-           padding.Left, padding.Top, padding.Right, padding.Bottom,
-           border.Left, border.Top, border.Right, border.Bottom,
-           static_cast<int>(parent.HorizontalAlignment()),
-           static_cast<int>(parent.FlowDirection()),
-           parent.XamlRoot() == repeater.XamlRoot());
-    if (winrt::get_class_name(parent) != L"Windows.UI.Xaml.Controls.Grid" ||
-        parent.Children().Size() != 4 || parent.Children().GetAt(1) != repeater ||
-        parent.XamlRoot() != repeater.XamlRoot() ||
-        parent.HorizontalAlignment() != HorizontalAlignment::Stretch ||
-        parent.FlowDirection() != FlowDirection::LeftToRight ||
-        !std::isnan(parent.Width()) || parent.MinWidth() != 0 ||
-        parent.MaxWidth() != INFINITY || padding != Thickness{} || border != Thickness{} ||
-        parent.RowDefinitions().Size() || parent.ColumnDefinitions().Size()) {
-        Wh_Log(L"[centered-width] rejected: native parent contract");
-        return std::nullopt;
-    }
-    constexpr PCWSTR classes[] = {L"Taskbar.TaskbarBackground", L"Microsoft.UI.Xaml.Controls.ItemsRepeater",
-                                 L"Taskbar.Gripper", L"Windows.UI.Xaml.Shapes.Rectangle"};
-    constexpr PCWSTR names[] = {L"BackgroundControl", L"TaskbarFrameRepeater", L"GripperControl", L"ScreenEdgeStroke"};
-    for (uint32_t i = 0; i < ARRAYSIZE(classes); i++) {
-        auto child = parent.Children().GetAt(i).try_as<FrameworkElement>();
-        if (!child || winrt::get_class_name(child) != classes[i] || child.Name() != names[i]) {
-            Wh_Log(L"[centered-width] rejected: native sibling %u is not the recognized object", i);
-            return std::nullopt;
-        }
-    }
-    auto parentSpacing = ReadFlowSpacing(parent);
-    auto bounds = TryGetLayoutBounds(parent, root, parent.ActualWidth());
-    auto base = parent.GetAnimationBaseValue(FrameworkElement::MarginProperty())
-                    .try_as<winrt::Windows::Foundation::IReference<Thickness>>();
-    if (!parentSpacing || parentSpacing->originalMargin != Thickness{} || !base ||
-        base.Value() != parentSpacing->originalMargin || !bounds ||
-        !std::isfinite(rootWidth) || rootWidth <= 0 ||
-        std::abs(bounds->left) > kLayoutTolerance ||
-        std::abs(bounds->right - rootWidth) > kLayoutTolerance) {
-        Wh_Log(L"[centered-width] rejected: parent geometry or Margin source "
-               L"(spacing=%d margin=(%.3f,%.3f,%.3f,%.3f) base=%d bounds=(%.3f,%.3f) root=%.3f)",
-               static_cast<bool>(parentSpacing),
-               parentSpacing ? parentSpacing->originalMargin.Left : NAN,
-               parentSpacing ? parentSpacing->originalMargin.Top : NAN,
-               parentSpacing ? parentSpacing->originalMargin.Right : NAN,
-               parentSpacing ? parentSpacing->originalMargin.Bottom : NAN,
-               static_cast<bool>(base), bounds ? bounds->left : NAN,
-               bounds ? bounds->right : NAN, rootWidth);
-        return std::nullopt;
-    }
-    auto widthProperty = FrameworkElement::WidthProperty();
-    auto alignmentProperty = FrameworkElement::HorizontalAlignmentProperty();
-    auto widthLocal = repeater.ReadLocalValue(widthProperty);
-    auto alignmentLocal = repeater.ReadLocalValue(alignmentProperty);
-    bool widthUnset = widthLocal == DependencyProperty::UnsetValue();
-    bool alignmentUnset = alignmentLocal == DependencyProperty::UnsetValue();
-    double width = repeater.Width();
-    auto alignment = repeater.HorizontalAlignment();
-    auto widthBase = repeater.GetAnimationBaseValue(widthProperty)
-                         .try_as<winrt::Windows::Foundation::IReference<double>>();
-    auto alignmentBase = repeater.GetAnimationBaseValue(alignmentProperty)
-                             .try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>();
-    Wh_Log(L"[centered-width] baseline target=%p width=%.3f min=%.3f max=%.3f alignment=%d unset=(%d,%d) bound=(%d,%d) "
-           L"widthBase=%.3f alignmentBase=%d",
-           winrt::get_abi(repeater), width, repeater.MinWidth(), repeater.MaxWidth(), static_cast<int>(alignment),
-           widthUnset, alignmentUnset, static_cast<bool>(repeater.GetBindingExpression(widthProperty)),
-           static_cast<bool>(repeater.GetBindingExpression(alignmentProperty)),
-           widthBase ? widthBase.Value() : NAN,
-           alignmentBase ? static_cast<int>(alignmentBase.Value()) : -1);
-    if (!std::isnan(width) || repeater.MinWidth() != 0 || repeater.MaxWidth() != INFINITY ||
-        alignment != HorizontalAlignment::Stretch ||
-        repeater.GetBindingExpression(widthProperty) || repeater.GetBindingExpression(alignmentProperty) ||
-        (!widthUnset && !widthLocal.try_as<winrt::Windows::Foundation::IReference<double>>()) ||
-        (!alignmentUnset && !alignmentLocal.try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>()) ||
-        !widthBase || !std::isnan(widthBase.Value()) || !alignmentBase || alignmentBase.Value() != alignment) {
-        Wh_Log(L"[centered-width] rejected: repeater Width/Alignment source");
-        return std::nullopt;
-    }
-    auto spacing = ReadFlowSpacing(repeater);
-    if (!spacing) {
-        Wh_Log(L"[centered-width] rejected: Repeater.Margin is bound, animated or unreadable");
-        return std::nullopt;
-    }
-    spacing->widthConstraint = CenteredWidthConstraintData{parent, width, alignment, widthUnset, alignmentUnset};
-    return spacing;
-}
-
-bool OwnsCenteredWidthConstraint(FrameworkElement target, const CenteredWidthConstraintData& constraint,
-                                 bool beforeAlignment = false) {
-    auto widthProperty = FrameworkElement::WidthProperty();
-    auto alignmentProperty = FrameworkElement::HorizontalAlignmentProperty();
-    auto widthBase = target.GetAnimationBaseValue(widthProperty)
-                         .try_as<winrt::Windows::Foundation::IReference<double>>();
-    auto alignmentBase = target.GetAnimationBaseValue(alignmentProperty)
-                             .try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>();
-    auto alignmentLocal = target.ReadLocalValue(alignmentProperty);
-    bool alignmentUnset = alignmentLocal == DependencyProperty::UnsetValue();
-    auto expectedAlignment = beforeAlignment ? constraint.originalAlignment : HorizontalAlignment::Right;
-    return constraint.widthWritten && (beforeAlignment ? !constraint.alignmentWritten : constraint.alignmentWritten) &&
-        target.Width() == constraint.targetWidth && target.HorizontalAlignment() == expectedAlignment &&
-        !target.GetBindingExpression(widthProperty) && !target.GetBindingExpression(alignmentProperty) &&
-        target.ReadLocalValue(widthProperty).try_as<winrt::Windows::Foundation::IReference<double>>() &&
-        alignmentUnset == (beforeAlignment && constraint.alignmentLocalUnset) &&
-        (alignmentUnset || alignmentLocal.try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>()) &&
-        widthBase && widthBase.Value() == constraint.targetWidth && alignmentBase &&
-        alignmentBase.Value() == expectedAlignment;
-}
-
-bool RestoreCenteredWidthConstraint(FrameworkElement target, const CenteredWidthConstraintData& constraint) {
-    auto widthProperty = FrameworkElement::WidthProperty();
-    bool widthRestored = !constraint.widthWritten;
-    if (constraint.widthWritten) {
-        auto local = target.ReadLocalValue(widthProperty);
-        bool unset = local == DependencyProperty::UnsetValue();
-        auto base = target.GetAnimationBaseValue(widthProperty)
-                        .try_as<winrt::Windows::Foundation::IReference<double>>();
-        if (!target.GetBindingExpression(widthProperty) && base &&
-            (unset || local.try_as<winrt::Windows::Foundation::IReference<double>>())) {
-            if (!unset && target.Width() == constraint.targetWidth && base.Value() == constraint.targetWidth) {
-                if (constraint.widthLocalUnset) target.ClearValue(widthProperty);
-                else target.Width(constraint.originalWidth);
-                widthRestored = true;
-            } else if (unset == constraint.widthLocalUnset && std::isnan(target.Width()) && std::isnan(base.Value())) {
-                widthRestored = true; // A nested cleanup already restored the original source.
-            }
-        }
-    }
-    auto alignmentProperty = FrameworkElement::HorizontalAlignmentProperty();
-    bool alignmentRestored = !constraint.alignmentWritten;
-    if (constraint.alignmentWritten) {
-        auto local = target.ReadLocalValue(alignmentProperty);
-        bool unset = local == DependencyProperty::UnsetValue();
-        auto base = target.GetAnimationBaseValue(alignmentProperty)
-                        .try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>();
-        if (!target.GetBindingExpression(alignmentProperty) && base &&
-            (unset || local.try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>())) {
-            if (!unset && target.HorizontalAlignment() == HorizontalAlignment::Right && base.Value() == HorizontalAlignment::Right) {
-                if (constraint.alignmentLocalUnset) target.ClearValue(alignmentProperty);
-                else target.HorizontalAlignment(constraint.originalAlignment);
-                alignmentRestored = true;
-            } else if (unset == constraint.alignmentLocalUnset && target.HorizontalAlignment() == constraint.originalAlignment &&
-                       base.Value() == constraint.originalAlignment) {
-                alignmentRestored = true;
-            }
-        }
-    }
-    // Sample the live source after restoration. The saved flags in the log
-    // below describe the original source, not what the property reports now;
-    // this line is the evidence that Width/Alignment actually returned.
-    auto widthLocalFinal = target.ReadLocalValue(widthProperty);
-    auto alignmentLocalFinal = target.ReadLocalValue(alignmentProperty);
-    auto widthBaseFinal = target.GetAnimationBaseValue(widthProperty)
-                              .try_as<winrt::Windows::Foundation::IReference<double>>();
-    auto alignmentBaseFinal = target.GetAnimationBaseValue(alignmentProperty)
-                                  .try_as<winrt::Windows::Foundation::IReference<HorizontalAlignment>>();
-    Wh_Log(L"[centered-width] restored-source target=%p width=%.3f widthUnset=%d widthLocal=%d widthBound=%d "
-           L"widthBase=%.3f alignment=%d alignmentUnset=%d alignmentLocal=%d alignmentBound=%d alignmentBase=%d "
-           L"marginLeft=%.3f",
-           winrt::get_abi(target), target.Width(),
-           widthLocalFinal == DependencyProperty::UnsetValue(),
-           static_cast<bool>(widthLocalFinal.try_as<winrt::Windows::Foundation::IReference<double>>()),
-           static_cast<bool>(target.GetBindingExpression(widthProperty)),
-           widthBaseFinal ? widthBaseFinal.Value() : NAN,
-           static_cast<int>(target.HorizontalAlignment()),
-           alignmentLocalFinal == DependencyProperty::UnsetValue(),
-           static_cast<bool>(alignmentLocalFinal.try_as<
-               winrt::Windows::Foundation::IReference<HorizontalAlignment>>()),
-           static_cast<bool>(target.GetBindingExpression(alignmentProperty)),
-           alignmentBaseFinal ? static_cast<int>(alignmentBaseFinal.Value()) : -1,
-           target.Margin().Left);
-    Wh_Log(L"[centered-width] restoration target=%p widthAccepted=%d alignmentAccepted=%d unset=(%d,%d)",
-           winrt::get_abi(target), widthRestored, alignmentRestored,
-           constraint.widthLocalUnset, constraint.alignmentLocalUnset);
-    return widthRestored && alignmentRestored;
-}
-
 bool SameTaskbarItemSource(const LeftHostLayoutSnapshot& a,
                            const LeftHostLayoutSnapshot& b) {
     if (a.itemIdentities.empty() || a.itemIdentities.size() != b.itemIdentities.size()) {
@@ -2274,44 +1603,6 @@ bool SameTaskbarItemSource(const LeftHostLayoutSnapshot& a,
     return true;
 }
 
-bool SameCenteredLogicalLayout(const LeftHostLayoutSnapshot& a,
-                               const LeftHostLayoutSnapshot& b) {
-    if (!HasCenteredOnlyFlow(a) || !HasCenteredOnlyFlow(b) || !SameTaskbarItemSource(a, b)) {
-        return false;
-    }
-    // Pin the source objects while comparing: recycled UI elements are not app IDs.
-    auto baseline = a;
-    auto restored = b;
-    auto normalize = [](LeftHostLayoutSnapshot& layout) {
-        auto children = layout.childIdentities;
-        for (auto& flow : layout.flowElements) {
-            if (std::any_of(layout.buttons.begin(), layout.buttons.end(),
-                [&](const auto& button) { return button.identity == flow.identity; })) {
-                continue; // System-button identity and geometry remain strict.
-            }
-            auto item = std::find_if(layout.itemIdentities.begin(), layout.itemIdentities.end(),
-                [&](const auto& entry) { return entry.elementIdentity == flow.identity; });
-            if (item == layout.itemIdentities.end() ||
-                std::count_if(layout.itemIdentities.begin(), layout.itemIdentities.end(),
-                    [&](const auto& entry) {
-                        return entry.elementIdentity == flow.identity ||
-                               entry.itemIdentity == item->itemIdentity;
-                    }) != 1) {
-                return false;
-            }
-            for (size_t i = 0; i < children.size(); i++) {
-                if (children[i] == flow.identity) {
-                    layout.childIdentities[i] = item->itemIdentity;
-                }
-            }
-            flow.identity = item->itemIdentity;
-        }
-        return true;
-    };
-    return normalize(baseline) && normalize(restored) &&
-           SameLeftHostLayout(baseline, restored);
-}
-
 bool CenteredViewportApplied(const CenteredViewportProbeData& probe,
                              const LeftHostLayoutSnapshot& current) {
     if (std::abs(current.contentLeft - probe.baseline.contentLeft - probe.increment) > kLayoutTolerance ||
@@ -2326,61 +1617,6 @@ bool CenteredViewportApplied(const CenteredViewportProbeData& probe,
             return flow.bounds.left + kLayoutTolerance >= requiredEnd &&
                    flow.bounds.right + kTaskbarLayoutGap <= current.rightBoundary + kLayoutTolerance;
         });
-}
-
-bool LogCenteredViewportComparison(const CenteredViewportProbeData& probe,
-                                   const LeftHostLayoutSnapshot& current) {
-    const auto& baseline = probe.baseline;
-    bool comparable = HasCenteredOnlyFlow(current) &&
-        baseline.repeaterIdentity == current.repeaterIdentity &&
-        std::abs(baseline.rootWidth - current.rootWidth) <= kLayoutTolerance &&
-        std::abs(baseline.rightBoundary - current.rightBoundary) <= kLayoutTolerance &&
-        std::abs(baseline.offset - current.offset) <= kLayoutTolerance &&
-        std::abs(baseline.hostLeft - current.hostLeft) <= kLayoutTolerance &&
-        std::abs(baseline.hostWidth - current.hostWidth) <= kLayoutTolerance;
-    double leftDelta = current.contentLeft - baseline.contentLeft;
-    double widthDelta = current.contentWidth - baseline.contentWidth;
-    double requiredEnd = baseline.offset + baseline.hostWidth + kTaskbarLayoutGap;
-    bool flowInside = !current.flowElements.empty();
-    for (const auto& item : current.flowElements) {
-        flowInside = flowInside && item.bounds.left + kLayoutTolerance >= requiredEnd &&
-            item.bounds.right + kTaskbarLayoutGap <= current.rightBoundary + kLayoutTolerance;
-    }
-    bool viewportAccepted = comparable &&
-        std::abs(leftDelta - probe.increment) <= kLayoutTolerance &&
-        std::abs(widthDelta + probe.increment) <= kLayoutTolerance;
-    bool returned = comparable && SameLeftHostLayout(baseline, current);
-    bool logicalReturned = comparable && SameCenteredLogicalLayout(baseline, current);
-    Wh_Log(L"[centered-viewport] phase=%s comparable=%d leftDelta=%.3f "
-           L"widthDelta=%.3f increment=%.3f viewportAccepted=%d "
-           L"visibleFlowInside=%d flowCount=%zu baselineCount=%zu baselineReturned=%d logicalBaselineReturned=%d; "
-           L"overflow, hit testing and focus require manual verification",
-           probe.restored ? L"restored" : L"applied", comparable, leftDelta,
-           widthDelta, probe.increment, !probe.restored && viewportAccepted,
-           flowInside, current.flowElements.size(), baseline.flowElements.size(),
-           probe.restored && returned, probe.restored && logicalReturned);
-    return returned;
-}
-
-bool StopCenteredViewportProbe(FrameworkElement clock) {
-    auto data = FindMovedClockData(clock);
-    if (!data || !data->centeredProbe) {
-        return false;
-    }
-    auto root = data->taskbarRoot.get();
-    auto spacing = data->flowSpacing;
-    data = nullptr;
-    // Keep the owning record reachable if a XAML read/write throws.
-    bool restored = !spacing || RestoreFlowSpacing(*spacing);
-    if (auto current = FindMovedClockData(clock); current && current->centeredProbe) {
-        current->flowSpacing.reset();
-        current->centeredProbe.reset();
-    }
-    if (root) {
-        root.InvalidateMeasure();
-    }
-    Wh_Log(L"[centered-viewport] reservation restoration accepted=%d", restored);
-    return restored;
 }
 
 bool CenteredViewportFallbackActive(FrameworkElement clock) {
@@ -2427,25 +1663,20 @@ void CancelCenteredViewportProbe(FrameworkElement clock, const wchar_t* reason,
     }
     auto probe = *data->centeredProbe;
     double reserved = GetReservedTrayLayoutWidth(*data);
-    bool holding = (probe.automatic || g_settings.holdCenteredViewportForInteraction) && !probe.restored;
     data = nullptr;
     if (layout) {
         LogLeftHostLayout(*layout, L"centered-viewport-cancelled", reserved);
     }
     Wh_Log(L"[centered-viewport] cancelled: reason=%s held=%d elapsedMs=%llu "
            L"clockWidth=(%.3f,%.3f) viewport=(%.3f,%.3f) expected=(%.3f,%.3f)",
-           reason, holding,
+           reason, 1,
            static_cast<unsigned long long>(GetTickCount64() - probe.startTick),
            layout ? layout->hostWidth : -1.0, probe.baseline.hostWidth,
            layout ? layout->contentLeft : -1.0, layout ? layout->contentWidth : -1.0,
            probe.baseline.contentLeft + probe.increment,
            probe.baseline.contentWidth - probe.increment);
-    if (holding) {
-        bool restored = RestoreCenteredClockFallback(clock);
-        Wh_Log(L"[centered-viewport] native clock fallback accepted=%d", restored);
-    } else {
-        StopCenteredViewportProbe(clock);
-    }
+    bool restored = RestoreCenteredClockFallback(clock);
+    Wh_Log(L"[centered-viewport] native clock fallback accepted=%d", restored);
 }
 
 bool UpdateCenteredViewportProbe(FrameworkElement clock,
@@ -2459,10 +1690,6 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
             return true; // Retain ownership for cleanup; do not retry writes.
         }
         auto probe = *data->centeredProbe;
-        bool holding = (probe.automatic || g_settings.holdCenteredViewportForInteraction) && !probe.restored;
-        // Held widths are validated against actual native item bounds below.
-        bool widthFits = holding ? layout.hostWidth > 0 :
-            std::abs(layout.hostWidth - probe.baseline.hostWidth) <= kLayoutTolerance;
         const wchar_t* reason = nullptr;
         if (!layout.centered) {
             reason = L"alignment-changed";
@@ -2472,16 +1699,10 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
             reason = L"repeater-replaced";
         } else if (std::abs(layout.rootWidth - probe.baseline.rootWidth) > kLayoutTolerance) {
             reason = L"root-width-changed";
-        } else if (!holding &&
-                   std::abs(layout.rightBoundary - probe.baseline.rightBoundary) > kLayoutTolerance) {
-            reason = L"finite-tray-boundary-changed";
-        } else if (!widthFits) {
-            reason = layout.hostWidth <= 0 ? L"clock-width-invalid" :
-                L"finite-clock-width-changed";
+        } else if (layout.hostWidth <= 0) {
+            reason = L"clock-width-invalid";
         } else if (std::abs(layout.offset - probe.baseline.offset) > kLayoutTolerance) {
             reason = L"fixed-prefix-offset-changed";
-        } else if (!holding && GetTickCount64() - probe.startTick >= kCenteredProbeTimeoutMs) {
-            reason = L"finite-probe-timeout";
         }
         if (reason) {
             data = nullptr;
@@ -2492,140 +1713,102 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
         auto target = data->repeater.get();
         auto root = data->taskbarRoot.get();
         auto spacing = data->flowSpacing;
-        if (!probe.restored && spacing && spacing->widthConstraint) {
-            data = nullptr;
-            auto parent = target ? Media::VisualTreeHelper::GetParent(target).try_as<Controls::Grid>() : nullptr;
-            if (holding || !IsTaskbarRepeater(target, root) || !parent ||
-                parent != spacing->widthConstraint->parent.get() ||
-                !OwnsCenteredWidthConstraint(target, *spacing->widthConstraint)) {
-                CancelCenteredViewportProbe(clock, L"width-constraint-contract-changed", &layout);
-                return true;
+        data = nullptr;
+        bool flowOutside = false;
+        // Native app changes can keep the same safe, owned viewport.
+        if (!SameTaskbarItemSource(layout, layout)) {
+            reason = L"item-source-invalid";
+        } else if (!target) {
+            reason = L"repeater-expired";
+        } else if (!spacing) {
+            reason = L"reservation-missing";
+        } else if (!ReadFlowSpacing(target)) {
+            reason = L"margin-bound-or-expression";
+        } else if (target.Margin().Left != spacing->lastValue) {
+            reason = L"margin-external-change";
+        } else if (!CenteredViewportApplied(probe, layout)) {
+            // Margin ownership can be current while the first arranged
+            // viewport is still the baseline. Never wait on other changes,
+            // diagnostics, an accepted viewport, or a stale growth result.
+            if (!probe.appliedLogged && !probe.initialArrangeAccepted &&
+                probe.initialLayoutWaits < kAutomaticArrangeMaxCallbacks &&
+                GetTickCount64() - probe.startTick < kAutomaticArrangeTimeoutMs &&
+                std::abs(layout.contentLeft - probe.baseline.contentLeft) <= kLayoutTolerance &&
+                std::abs(layout.contentWidth - probe.baseline.contentWidth) <= kLayoutTolerance &&
+                std::abs(layout.hostLeft - probe.baseline.hostLeft) <= kLayoutTolerance &&
+                std::abs(layout.hostWidth - probe.baseline.hostWidth) <= kLayoutTolerance &&
+                SameTaskbarItemSource(probe.baseline, layout) && !layout.flowElements.empty() &&
+                std::all_of(layout.flowElements.begin(), layout.flowElements.end(),
+                    [&](const auto& flow) {
+                        return flow.bounds.right + kTaskbarLayoutGap <= layout.rightBoundary + kLayoutTolerance;
+                    })) {
+                if (auto current = FindMovedClockData(clock);
+                    current && !current->restoring && current->centeredProbe && current->flowSpacing) {
+                    current->centeredProbe->initialLayoutWaits++;
+                    if (!probe.initialLayoutWaits) {
+                        Wh_Log(L"[centered-viewport] waiting for first automatic arrange: increment=%.3f; owned Margin, baseline viewport; limits=%u callbacks/%llums",
+                               probe.increment, kAutomaticArrangeMaxCallbacks,
+                               static_cast<unsigned long long>(kAutomaticArrangeTimeoutMs));
+                    }
+                }
+                return true; // Existing root LayoutUpdated validates the next native result.
+            }
+            if (std::abs(layout.contentLeft - probe.baseline.contentLeft - probe.increment) > kLayoutTolerance) {
+                reason = L"viewport-origin-changed";
+            } else if (std::abs(layout.contentWidth - probe.baseline.contentWidth + probe.increment) > kLayoutTolerance) {
+                reason = L"viewport-width-changed";
+            } else if (std::abs(layout.hostLeft - probe.baseline.hostLeft) > kLayoutTolerance) {
+                reason = L"clock-position-changed";
+            } else {
+                reason = L"flow-outside-boundaries";
+                flowOutside = !layout.flowElements.empty();
             }
         }
-        if (holding) {
-            data = nullptr;
-            bool flowOutside = false;
-            // Native app changes can keep the same safe, owned viewport.
-            if (!SameTaskbarItemSource(layout, layout)) {
-                reason = L"item-source-invalid";
-            } else if (!target) {
-                reason = L"repeater-expired";
-            } else if (!spacing) {
-                reason = L"reservation-missing";
-            } else if (!ReadFlowSpacing(target)) {
-                reason = L"margin-bound-or-expression";
-            } else if (target.Margin().Left != spacing->lastValue) {
-                reason = L"margin-external-change";
-            } else if (!CenteredViewportApplied(probe, layout)) {
-                // Margin ownership can be current while the first arranged
-                // viewport is still the baseline. Never wait on other changes,
-                // diagnostics, an accepted viewport, or a stale growth result.
-                if (probe.automatic && !probe.appliedLogged && !probe.initialArrangeAccepted &&
-                    probe.initialLayoutWaits < kAutomaticArrangeMaxCallbacks &&
-                    GetTickCount64() - probe.startTick < kAutomaticArrangeTimeoutMs &&
-                    std::abs(layout.contentLeft - probe.baseline.contentLeft) <= kLayoutTolerance &&
-                    std::abs(layout.contentWidth - probe.baseline.contentWidth) <= kLayoutTolerance &&
-                    std::abs(layout.hostLeft - probe.baseline.hostLeft) <= kLayoutTolerance &&
-                    std::abs(layout.hostWidth - probe.baseline.hostWidth) <= kLayoutTolerance &&
-                    SameTaskbarItemSource(probe.baseline, layout) && !layout.flowElements.empty() &&
-                    std::all_of(layout.flowElements.begin(), layout.flowElements.end(),
-                        [&](const auto& flow) {
-                            return flow.bounds.right + kTaskbarLayoutGap <= layout.rightBoundary + kLayoutTolerance;
-                        })) {
-                    if (auto current = FindMovedClockData(clock);
-                        current && !current->restoring && current->centeredProbe && current->flowSpacing) {
-                        current->centeredProbe->initialLayoutWaits++;
-                        if (!probe.initialLayoutWaits) {
-                            Wh_Log(L"[centered-viewport] waiting for first automatic arrange: increment=%.3f; owned Margin, baseline viewport; limits=%u callbacks/%llums",
-                                   probe.increment, kAutomaticArrangeMaxCallbacks,
-                                   static_cast<unsigned long long>(kAutomaticArrangeTimeoutMs));
-                        }
-                    }
-                    return true; // Existing root LayoutUpdated validates the next native result.
-                }
-                if (std::abs(layout.contentLeft - probe.baseline.contentLeft - probe.increment) > kLayoutTolerance) {
-                    reason = L"viewport-origin-changed";
-                } else if (std::abs(layout.contentWidth - probe.baseline.contentWidth + probe.increment) > kLayoutTolerance) {
-                    reason = L"viewport-width-changed";
-                } else if (std::abs(layout.hostLeft - probe.baseline.hostLeft) > kLayoutTolerance) {
-                    reason = L"clock-position-changed";
+        if (reason) {
+            double increment = layout.hostLeft + layout.hostWidth + kTaskbarLayoutGap -
+                               probe.baseline.contentLeft;
+            if (probe.appliedLogged && flowOutside && root &&
+                std::isfinite(increment) && increment > probe.increment + kLayoutTolerance &&
+                increment < probe.baseline.contentWidth &&
+                probe.baseline.contentLeft + increment < layout.rightBoundary &&
+                std::isfinite(spacing->originalMargin.Left + increment) &&
+                std::all_of(layout.flowElements.begin(), layout.flowElements.end(),
+                    [&](const auto& flow) {
+                        return flow.bounds.right + kTaskbarLayoutGap <= layout.rightBoundary + kLayoutTolerance;
+                    })) {
+                auto margin = target.Margin();
+                margin.Left = spacing->originalMargin.Left + increment;
+                if (auto current = FindMovedClockData(clock);
+                    current && !current->restoring && current->centeredProbe && current->flowSpacing) {
+                    current->centeredProbe->increment = increment;
+                    current->centeredProbe->appliedLogged = false;
+                    current->flowSpacing->increment = increment;
+                    current->flowSpacing->lastValue = margin.Left;
                 } else {
-                    reason = L"flow-outside-boundaries";
-                    flowOutside = !layout.flowElements.empty();
-                }
-            }
-            if (reason) {
-                double increment = layout.hostLeft + layout.hostWidth + kTaskbarLayoutGap -
-                                   probe.baseline.contentLeft;
-                if (probe.automatic && probe.appliedLogged && flowOutside && root &&
-                    std::isfinite(increment) && increment > probe.increment + kLayoutTolerance &&
-                    increment < probe.baseline.contentWidth &&
-                    probe.baseline.contentLeft + increment < layout.rightBoundary &&
-                    std::isfinite(spacing->originalMargin.Left + increment) &&
-                    std::all_of(layout.flowElements.begin(), layout.flowElements.end(),
-                        [&](const auto& flow) {
-                            return flow.bounds.right + kTaskbarLayoutGap <= layout.rightBoundary + kLayoutTolerance;
-                        })) {
-                    auto margin = target.Margin();
-                    margin.Left = spacing->originalMargin.Left + increment;
-                    if (auto current = FindMovedClockData(clock);
-                        current && !current->restoring && current->centeredProbe && current->flowSpacing) {
-                        current->centeredProbe->increment = increment;
-                        current->centeredProbe->appliedLogged = false;
-                        current->flowSpacing->increment = increment;
-                        current->flowSpacing->lastValue = margin.Left;
-                    } else {
-                        return true;
-                    }
-                    Wh_Log(L"[centered-viewport] automatic growth requested: increment=(%.3f,%.3f) clockWidth=%.3f; awaiting native layout",
-                           probe.increment, increment, layout.hostWidth);
-                    target.Margin(margin);
-                    root.InvalidateMeasure();
                     return true;
                 }
-                CancelCenteredViewportProbe(clock, reason, &layout);
+                Wh_Log(L"[centered-viewport] automatic growth requested: increment=(%.3f,%.3f) clockWidth=%.3f; awaiting native layout",
+                       probe.increment, increment, layout.hostWidth);
+                target.Margin(margin);
+                root.InvalidateMeasure();
                 return true;
             }
-            if (probe.appliedLogged) {
-                return true;
-            }
-        }
-        data = nullptr;
-        LogLeftHostLayout(layout, probe.restored ? L"centered-viewport-restored"
-                                                : L"centered-viewport-applied", reserved);
-        if (probe.automatic) {
-            Wh_Log(L"[centered-viewport] automatic viewport accepted: origin=%.3f width=%.3f increment=%.3f clockWidth=%.3f visibleFlowInside=1",
-                   layout.contentLeft, layout.contentWidth, probe.increment, layout.hostWidth);
-        } else {
-            LogCenteredViewportComparison(probe, layout);
-        }
-        LogLayoutElement(target, root, 0, 0);
-        if (holding) {
-            if (auto current = FindMovedClockData(clock); current && current->centeredProbe) {
-                current->centeredProbe->appliedLogged = true;
-                current->centeredProbe->initialArrangeAccepted = true;
-            }
-            if (!probe.automatic) {
-                Wh_Log(L"[centered-viewport] interaction held; manually disable diagnostic after testing");
-            }
+            CancelCenteredViewportProbe(clock, reason, &layout);
             return true;
         }
-        if (probe.restored) {
-            if (auto current = FindMovedClockData(clock)) {
-                current->centeredProbe.reset();
-            }
-        } else if (StopCenteredViewportProbe(clock)) {
-            if (auto current = FindMovedClockData(clock);
-                current && current->centeredProbeAttempted &&
-                !current->centeredProbe && !current->flowSpacing) {
-                probe.restored = true;
-                current->centeredProbe = std::move(probe);
-            }
+        if (probe.appliedLogged) {
+            return true;
+        }
+        LogLeftHostLayout(layout, L"centered-viewport-applied", reserved);
+        Wh_Log(L"[centered-viewport] automatic viewport accepted: origin=%.3f width=%.3f increment=%.3f clockWidth=%.3f visibleFlowInside=1",
+               layout.contentLeft, layout.contentWidth, probe.increment, layout.hostWidth);
+        if (auto current = FindMovedClockData(clock); current && current->centeredProbe) {
+            current->centeredProbe->appliedLogged = true;
+            current->centeredProbe->initialArrangeAccepted = true;
         }
         return true;
     }
-    bool automatic = g_settings.reserveCenteredViewport && !g_settings.measureCenteredViewport;
-    if ((!automatic && !g_settings.measureCenteredViewport) || !layout.centered ||
+    if (!g_settings.reserveCenteredViewport || !layout.centered ||
         data->centeredProbeAttempted || layout.hostWidth <= 0 ||
         std::abs(layout.hostLeft - layout.offset) > kLayoutTolerance ||
         data->flowSpacing || data->widgetsSpacing) {
@@ -2633,36 +1816,19 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
     }
     bool fullRootViewport = std::abs(layout.contentLeft) <= kLayoutTolerance &&
         std::abs(layout.contentWidth - layout.rootWidth) <= kLayoutTolerance;
-    if (!automatic && !fullRootViewport && !LeftHostFlowCollision(layout)) {
-        return false; // Do not consume the finite attempt before a real collision.
+    if (!fullRootViewport) {
+        return false; // External repeater margins stay on the native fallback.
     }
     auto appCount = std::count_if(layout.flowElements.begin(), layout.flowElements.end(),
         [&](const auto& item) {
             return !item.overflow && std::none_of(layout.buttons.begin(), layout.buttons.end(),
                 [&](const auto& button) { return button.identity == item.identity; });
         });
-    if (!HasCenteredOnlyFlow(layout) || appCount < 3 ||
-        (automatic && !fullRootViewport)) {
-        if (!automatic) {
-            Wh_Log(L"[centered-viewport] skipped: fixed prefix, Widgets, unknown item or fewer than three apps");
-        }
+    if (!HasCenteredOnlyFlow(layout) || appCount < 3) {
         return false;
     }
-    // Nonzero baselines remain a finite diagnostic until live geometry and
-    // restoration have been verified. The original full-root path is unchanged.
-    bool externalBaseline = !fullRootViewport;
-    if ((automatic || g_settings.holdCenteredViewportForInteraction || externalBaseline) &&
-        !SameTaskbarItemSource(layout, layout)) {
-        if (!automatic) {
-            Wh_Log(L"[centered-viewport] skipped: complete source identities required");
-        }
+    if (!SameTaskbarItemSource(layout, layout)) {
         return false;
-    }
-    // Consume the finite attempt only after the layout can actually qualify.
-    // A collision with fewer than three apps, or a transient incomplete item
-    // source while apps are still being realized, must not burn the one shot.
-    if (!automatic) {
-        data->centeredProbeAttempted = true;
     }
     auto target = data->repeater;
     auto root = data->taskbarRoot;
@@ -2672,32 +1838,7 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
     auto taskbarRoot = root.get();
     auto spacing = element ? ReadFlowSpacing(element) : std::nullopt;
     if (!spacing || !taskbarRoot) {
-        if (!automatic) Wh_Log(L"[centered-viewport] skipped: unavailable, bound or unknown Margin");
         return false;
-    }
-    if (externalBaseline) {
-        PCWSTR reason = nullptr;
-        if (g_settings.holdCenteredViewportForInteraction ||
-            reinterpret_cast<uintptr_t>(winrt::get_abi(element)) != layout.repeaterIdentity ||
-            !IsTaskbarRepeater(element, taskbarRoot) ||
-            element.HorizontalAlignment() != HorizontalAlignment::Stretch ||
-            element.FlowDirection() != FlowDirection::LeftToRight ||
-            !IsSupportedCenteredViewportBaseline(layout, *spacing, &reason)) {
-            Wh_Log(L"[centered-viewport] nonzero baseline skipped: %s",
-                   reason ? reason : L"finite-mode-or-parent-layout-contract");
-            return false;
-        }
-        auto base = element.GetAnimationBaseValue(FrameworkElement::MarginProperty())
-                        .try_as<winrt::Windows::Foundation::IReference<Thickness>>();
-        if (!base || base.Value() != spacing->originalMargin) {
-            Wh_Log(L"[centered-viewport] nonzero baseline skipped: animated or unknown base Margin");
-            return false;
-        }
-        spacing = ReadCenteredWidthSpacing(element, taskbarRoot, layout.rootWidth);
-        if (!spacing) {
-            Wh_Log(L"[centered-viewport] nonzero baseline skipped: width/alignment source or native parent contract");
-            return false;
-        }
     }
     auto leading = std::min_element(layout.flowElements.begin(), layout.flowElements.end(),
         [](const auto& a, const auto& b) { return a.bounds.left < b.bounds.left; });
@@ -2707,97 +1848,36 @@ bool UpdateCenteredViewportProbe(FrameworkElement clock,
         !std::isfinite(layout.contentLeft + increment) ||
         layout.contentLeft + increment >= layout.rightBoundary ||
         !std::isfinite(spacing->originalMargin.Left + increment)) {
-        if (!automatic) Wh_Log(L"[centered-viewport] skipped: no collision or no available width");
         return false;
     }
     LogLeftHostLayout(layout, L"centered-viewport-baseline", reserved);
-    LogLayoutElement(element, taskbarRoot, 0, 0);
-    // Property reads and diagnostics can reenter and replace the moved record.
-    // Recheck the source/value, then reacquire by clock identity before saving.
     auto spacingElement = spacing->target.get();
-    auto currentSpacing = externalBaseline ?
-        ReadCenteredWidthSpacing(element, taskbarRoot, layout.rootWidth) :
-        ReadFlowSpacing(element);
+    auto currentSpacing = ReadFlowSpacing(element);
     if (!currentSpacing || currentSpacing->localUnset != spacing->localUnset ||
         currentSpacing->originalMargin != spacing->originalMargin ||
         currentSpacing->target.get() != spacingElement || !spacingElement) {
         return false;
     }
-    if (spacing->widthConstraint &&
-        (!currentSpacing->widthConstraint ||
-         currentSpacing->widthConstraint->parent.get() != spacing->widthConstraint->parent.get() ||
-         currentSpacing->widthConstraint->widthLocalUnset != spacing->widthConstraint->widthLocalUnset ||
-         currentSpacing->widthConstraint->alignmentLocalUnset != spacing->widthConstraint->alignmentLocalUnset)) {
-        return false;
-    }
-    // The Repeater remains Styler-owned even when its parent is writable.
-    if (externalBaseline) {
-        auto repeaterSpacing = ReadFlowSpacing(element);
-        PCWSTR reason = nullptr;
-        if (!repeaterSpacing ||
-            !IsSupportedCenteredViewportBaseline(layout, *repeaterSpacing, &reason)) {
-            return false;
-        }
-    }
     data = FindMovedClockData(clock);
     if (!data || data->restoring || data->centeredProbe || data->flowSpacing || data->widgetsSpacing ||
-        data->repeater.get() != element || data->taskbarRoot.get() != taskbarRoot ||
-        automatic != (g_settings.reserveCenteredViewport && !g_settings.measureCenteredViewport) ||
-        (!automatic && !g_settings.measureCenteredViewport) ||
-        (externalBaseline && g_settings.holdCenteredViewportForInteraction)) {
+        data->repeater.get() != element || data->taskbarRoot.get() != taskbarRoot) {
         return false;
     }
     spacing->increment = increment;
-    spacing->lastValue = spacing->originalMargin.Left + (spacing->widthConstraint ? 0 : increment);
-    if (spacing->widthConstraint) {
-        spacing->widthConstraint->targetWidth = layout.contentWidth - increment;
-        spacing->widthConstraint->operation = ++g_nextCenteredWidthOperation;
-    }
+    spacing->lastValue = spacing->originalMargin.Left + increment;
     data->flowSpacing = *spacing;
     data->centeredProbe = CenteredViewportProbeData{layout, GetTickCount64(), increment};
-    data->centeredProbe->automatic = automatic;
     data->centeredProbeAttempted = true;
     data = nullptr;
-    if (spacing->widthConstraint) {
-        Wh_Log(L"[centered-width] request target=%p targetWidth=%.3f alignment=Right increment=%.3f "
-               L"expectedViewport=(%.3f,%.3f) unchangedMarginLeft=%.3f finite=1",
-               winrt::get_abi(spacingElement), spacing->widthConstraint->targetWidth, increment,
-               layout.contentLeft + increment, layout.contentWidth - increment, spacing->originalMargin.Left);
-        data = FindMovedClockData(clock);
-        if (!g_callbacksEnabled || !data || data->restoring || !data->flowSpacing || !data->flowSpacing->widthConstraint || !data->centeredProbe ||
-            data->flowSpacing->widthConstraint->operation != spacing->widthConstraint->operation) return true;
-        data->flowSpacing->widthConstraint->widthWritten = true;
-        data = nullptr;
-        spacingElement.Width(spacing->widthConstraint->targetWidth);
-        data = FindMovedClockData(clock);
-        if (!g_callbacksEnabled || !data || data->restoring || !data->flowSpacing || !data->flowSpacing->widthConstraint || !data->centeredProbe ||
-            data->flowSpacing->widthConstraint->operation != spacing->widthConstraint->operation) return true;
-        auto currentRepeater = data->repeater;
-        auto checkpoint = *data->flowSpacing->widthConstraint;
-        data = nullptr;
-        if (currentRepeater.get() != spacingElement) return true;
-        if (!OwnsCenteredWidthConstraint(spacingElement, checkpoint, true)) {
-            CancelCenteredViewportProbe(clock, L"width-constraint-write-interrupted", nullptr);
-            return true;
-        }
-        data = FindMovedClockData(clock);
-        if (!g_callbacksEnabled || !data || data->restoring || !data->flowSpacing || !data->flowSpacing->widthConstraint || !data->centeredProbe ||
-            data->flowSpacing->widthConstraint->operation != spacing->widthConstraint->operation) return true;
-        data->flowSpacing->widthConstraint->alignmentWritten = true;
-        data = nullptr;
-        spacingElement.HorizontalAlignment(HorizontalAlignment::Right);
-    } else {
-        Wh_Log(L"[centered-viewport] target=%p originalLeft=%.3f localUnset=%d increment=%.3f "
-           L"targetLeft=%.3f expectedViewport=(%.3f,%.3f) externalBaseline=%d finite=%d repeater=%p",
+    Wh_Log(L"[centered-viewport] target=%p originalLeft=%.3f localUnset=%d increment=%.3f "
+           L"targetLeft=%.3f expectedViewport=(%.3f,%.3f) repeater=%p",
            winrt::get_abi(spacingElement), spacing->originalMargin.Left,
            spacing->localUnset, increment, spacing->lastValue,
            layout.contentLeft + increment, layout.contentWidth - increment,
-           externalBaseline, !automatic,
            reinterpret_cast<void*>(layout.repeaterIdentity));
-        auto margin = currentSpacing->originalMargin;
-        margin.Left = spacing->lastValue;
-        spacingElement.Margin(margin);
-    }
+    auto margin = currentSpacing->originalMargin;
+    margin.Left = spacing->lastValue;
+    spacingElement.Margin(margin);
     taskbarRoot.InvalidateMeasure();
     return true;
 }
@@ -3518,8 +2598,6 @@ bool MoveClock(FrameworkElement content) {
         return false;
     }
 
-    LogLayoutSnapshot(clock, root, L"before-relocation");
-
     auto repeater = FindTaskbarRepeater(root);
     auto layout = ReadLeftHostLayout(root, repeater, nullptr);
     if (!layout) {
@@ -3850,9 +2928,6 @@ bool RestoreFlowSpacing(const FlowSpacingData& spacing) {
     auto target = spacing.target.get();
     if (!target) {
         return false;
-    }
-    if (spacing.widthConstraint) {
-        return RestoreCenteredWidthConstraint(target, *spacing.widthConstraint);
     }
     auto margin = target.Margin();
     double& value = spacing.rightSide ? margin.Right : margin.Left;
@@ -4216,8 +3291,7 @@ void UpdateClockPlacement(FrameworkElement content) {
                 if (auto current = FindDeferredClockData(content)) {
                     current->diagnosticAlignment = 0;
                 }
-                LogLayoutSnapshot(clock, root, L"native-left-aligned");
-            }
+                        }
         }
     } else if (content.IsLoaded()) {
         GetDeferredData(content).diagnosticAlignment = 1;
