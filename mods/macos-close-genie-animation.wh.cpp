@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              macos-close-genie-animation
 // @name            MacOS Genie Closing Animation
-// @description     Plays a macOS-style genie effect when a supported window closes. Choose its style, direction, duration, quality, and optional process exclusions.
+// @description     Plays a configurable genie-style animation when supported windows close.
 // @version         1.0.0
 // @author          MrCrustyToast
 // @github          https://github.com/MrCrustyToast
@@ -17,6 +17,13 @@
 Plays a macOS-style genie effect when a supported window closes. Choose the style,
 direction, duration, and quality in the settings. Lower quality uses fewer tiles
 and can reduce graphics work on smaller PCs.
+
+![Closing animation preview](https://i.imgur.com/Vzpi1re.gif)
+
+This mod adds a genie effect for closing windows. MacOS Minimize Animation focuses
+on minimizing and restoring windows, while Windows Animations offers several
+closing effects. These mods use overlapping window hooks, so do not run this mod
+alongside either one unless compatibility has been confirmed.
 
 No processes are excluded by default. Add process names in the settings to skip
 specific apps.
@@ -206,15 +213,57 @@ std::atomic<int> g_closeDirection{2}; // 0=left, 1=right, 2=up
 // (written only from LoadSettings, read once per animation start).
 std::vector<std::wstring> g_ExcludedPrograms;
 
-// --- UNLOAD COORDINATION ---
-// Windhawk unmaps the mod DLL right after uninit, so any worker thread still
-// running mod code at that point would crash its host process. Workers register
-// here and abort promptly once g_unloading is set; Wh_ModBeforeUninit waits for
-// the count to drain before the DLL goes away. (MINE's drain model is kept in
-// preference to HIS's join-and-pump StopAndJoinAllThreads: pumping messages while
-// unloading can re-enter our six hooks under @include *.)
+// --- WORKER LIFETIME ---
+// Keep thread handles until their threads have fully exited. Registration and
+// the unloading check share a lock so shutdown cannot miss a newly-created worker.
+void MacGenieSetCloak(HWND hWnd, BOOL cloak);
 std::atomic<bool> g_unloading{false};
-std::atomic<int>  g_workerCount{0};
+std::mutex g_WorkerMutex;
+std::vector<HANDLE> g_WorkerThreads;
+
+HANDLE MacGenieCreateWorkerThread(LPTHREAD_START_ROUTINE threadProc, LPVOID data) {
+    std::lock_guard<std::mutex> lock(g_WorkerMutex);
+    if (g_unloading.load(std::memory_order_acquire)) {
+        SetLastError(ERROR_OPERATION_ABORTED);
+        return NULL;
+    }
+
+    // Reap finished workers during normal operation so handles don't accumulate.
+    for (auto it = g_WorkerThreads.begin(); it != g_WorkerThreads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_WorkerThreads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    HANDLE thread = CreateThread(NULL, 0, threadProc, data, 0, NULL);
+    if (thread) g_WorkerThreads.push_back(thread);
+    return thread;
+}
+
+void MacGenieStopAndJoinWorkerThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_WorkerMutex);
+        g_unloading.store(true, std::memory_order_release);
+        threads.swap(g_WorkerThreads);
+    }
+
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
+static bool MacGenieMarkCloseAndCloak(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_WorkerMutex);
+    if (g_unloading.load(std::memory_order_acquire)) return false;
+    SetPropW(hWnd, L"GenieCloseHandled", (HANDLE)1);
+    MacGenieSetCloak(hWnd, TRUE);
+    return true;
+}
 
 void MacGenieLoadSettings() {
     int ms = Wh_GetIntSetting(L"duration_ms");
@@ -488,8 +537,7 @@ static bool MacGenieAnimateBeforeNativeHide(HWND hWnd, const WCHAR* apiName) {
         MacGenieSetDwmTransitions(hWnd, TRUE);
         return false;
     }
-    SetPropW(hWnd, L"GenieCloseHandled", (HANDLE)1);
-    MacGenieSetCloak(hWnd, TRUE);
+    if (!MacGenieMarkCloseAndCloak(hWnd)) return false;
     for (int i = 0; i < 350 && IsWindow(hWnd) &&
          !g_unloading.load(std::memory_order_relaxed); ++i) {
         bool active;
@@ -811,7 +859,7 @@ static void ClampGenieCanvas(int& left, int& top, int& right, int& bottom,
 // -------------------------------------------------------------------------
 // Genie Animation Thread
 //
-// MINE's loop and lifecycle - g_workerCount, g_unloading early-out, the
+// MINE's loop and lifecycle - g_unloading early-out, the
 // first-frame sync event, g_AnimActive teardown - with HIS's Direct2D mesh
 // renderer as the per-frame draw call. Frames are paced by a high-resolution
 // waitable timer at 2x the display's refresh rate (never a busy loop), so DWM
@@ -1301,6 +1349,14 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             }
         }
     }
+    if (data->isClosing && g_unloading.load(std::memory_order_acquire) &&
+        IsWindow(data->hRealWnd)) {
+        MacGenieSetCloak(data->hRealWnd, FALSE);
+        MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+        RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+        RemovePropW(data->hRealWnd, L"GenieCloseBypass");
+        RemovePropW(data->hRealWnd, L"GenieCloseHandled");
+    }
 
     if (bmpBrush) { bmpBrush->Release(); bmpBrush = nullptr; }
     if (snapshotBmp) { snapshotBmp->Release(); snapshotBmp = nullptr; }
@@ -1369,7 +1425,6 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         g_AnimActive.erase(data->hRealWnd);
     }
     delete data;
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -1723,6 +1778,14 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
             }
         }
     }
+    if (data->isClosing && g_unloading.load(std::memory_order_acquire) &&
+        IsWindow(data->hRealWnd)) {
+        MacGenieSetCloak(data->hRealWnd, FALSE);
+        MacGenieSetDwmTransitions(data->hRealWnd, TRUE);
+        RemovePropW(data->hRealWnd, L"GenieCloseAnimating");
+        RemovePropW(data->hRealWnd, L"GenieCloseBypass");
+        RemovePropW(data->hRealWnd, L"GenieCloseHandled");
+    }
 
     delete[] yb;
     SelectObject(hCanvasDC, hOldCanvas);
@@ -1781,7 +1844,6 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
         g_AnimActive.erase(data->hRealWnd);
     }
     delete data;
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -1895,52 +1957,38 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     }
     int monWidth = mi.rcMonitor.right - mi.rcMonitor.left;
 
-    // Default dock target before UIA (Potassiumuncher's engine): left-aligned
-    // taskbars start near the monitor's left, centered ones at its middle.
-    DWORD alignVal = 1, dataSize = sizeof(alignVal);
-    RegGetValueW(HKEY_CURRENT_USER,
-                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                 L"TaskbarAl", RRF_RT_REG_DWORD, NULL, &alignVal, &dataSize);
-    int learnedTargetX = (alignVal == 0) ? (mi.rcMonitor.left + 160)
+    // The taskbar button target is only used by minimize/restore animations.
+    // Closing animations choose their destination from close_direction in the
+    // renderer, so don't query the registry, cursor, or Explorer UI Automation here.
+    int learnedTargetX = mi.rcMonitor.left + monWidth / 2;
+    if (!isClosing) {
+        // Default dock target before UIA: left-aligned taskbars start near the
+        // monitor's left; centered taskbars use its middle.
+        DWORD alignVal = 1, dataSize = sizeof(alignVal);
+        RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                     L"TaskbarAl", RRF_RT_REG_DWORD, NULL, &alignVal, &dataSize);
+        learnedTargetX = (alignVal == 0) ? (mi.rcMonitor.left + 160)
                                          : (mi.rcMonitor.left + monWidth / 2);
 
-    // --- Per-window targeting ---
-    // UI Automation (GetTaskbarButtonX) matches taskbar buttons by title / process
-    // name, which can't reliably tell apart several windows of the SAME process
-    // (e.g. multiple Brave profiles): they tie on the process-name score and it
-    // resolves them all to the first-opened window's button. So MINE's cursor +
-    // per-window signal takes priority; UIA is only a fallback for a window we've
-    // never seen minimized from the taskbar (frame 0 of the warp is the identity,
-    // so targetDockX is only needed for later frames).
-    //
-    // 1. Cursor over the taskbar = the user clicked THIS window's own taskbar
-    //    button, so its X is exactly the icon - the only fully reliable per-window
-    //    signal when windows share a process. Learn it, keyed by HWND (never shared
-    //    across sibling windows).
-    POINT pt;
-    GetCursorPos(&pt);
-    RECT workArea;
-    MONITORINFO cursorMi;
-    cursorMi.cbSize = sizeof(cursorMi);
-    if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &cursorMi)) {
-        workArea = cursorMi.rcWork;
-    } else {
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
-    }
+        POINT pt;
+        GetCursorPos(&pt);
+        RECT workArea;
+        MONITORINFO cursorMi;
+        cursorMi.cbSize = sizeof(cursorMi);
+        if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &cursorMi)) {
+            workArea = cursorMi.rcWork;
+        } else {
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
+        }
 
-    if (!PtInRect(&workArea, pt)) {
-        learnedTargetX = pt.x;                        // steal the click X
-        std::lock_guard<std::mutex> lock(g_CacheMutex);
-        g_IconPositions[hWnd] = learnedTargetX;       // remember it for this window
-    } else {
-        // 2. Title-bar / keyboard minimize: locate the taskbar button via UI
-        //    Automation EVERY time (Potassiumuncher's targeting). Reusing a
-        //    per-window cache here made the button-minimize land past the icon when
-        //    the cached spot was stale; running UIA fresh lands it on the icon.
-        //    GetTaskbarButtonX still falls back to the per-window / per-process cache
-        //    (including a position learned from an earlier taskbar click) internally
-        //    if UIA can't match, so nothing is lost.
-        learnedTargetX = GetTaskbarButtonX(hWnd, learnedTargetX, hMon);
+        if (!PtInRect(&workArea, pt)) {
+            learnedTargetX = pt.x;
+            std::lock_guard<std::mutex> lock(g_CacheMutex);
+            g_IconPositions[hWnd] = learnedTargetX;
+        } else {
+            learnedTargetX = GetTaskbarButtonX(hWnd, learnedTargetX, hMon);
+        }
     }
 
     MacGenieAnimData* data = new MacGenieAnimData();
@@ -2145,16 +2193,14 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     }
     bool waitForFirstFrame = (data->hFirstFrameShown != NULL);
 
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
     // Same setup and capture for both styles; only the render thread differs.
     LPTHREAD_START_ROUTINE renderProc =
         g_classicEngine.load(std::memory_order_relaxed) ? MacGenieAnimThreadClassic
                                                         : MacGenieAnimThread;
-    HANDLE hThread = CreateThread(NULL, 0, renderProc, data, 0, NULL);
+    HANDLE hThread = MacGenieCreateWorkerThread(renderProc, data);
     if (hThread) {
         if (isClosing) Wh_Log(L"Close genie DEBUG: renderer started hwnd=%p engine=%s", hWnd,
             g_classicEngine.load(std::memory_order_relaxed) ? L"classic" : L"modern");
-        CloseHandle(hThread);
         if (hFirstShown) {
             if (waitForFirstFrame) {
                 DWORD frameWait = WaitForSingleObject(hFirstShown, 200);   // capped: worst case = old behavior
@@ -2168,7 +2214,6 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     // Thread couldn't start - undo our state so the window isn't left invisible or
     // with transitions permanently disabled.
     if (isClosing) Wh_Log(L"Close genie DEBUG: renderer thread creation failed hwnd=%p error=%u", hWnd, GetLastError());
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     if (rising) {
         MacGenieUndoRisingHide(hWnd, data->originalExStyle, data->hiddenByCloak);
     } else {
@@ -2217,12 +2262,10 @@ static void MacGenieLaunchCommit(HWND hWnd, LONG_PTR originalExStyle) {
     MacGenieLaunchData* ld = new MacGenieLaunchData();
     ld->hWnd = hWnd;
     ld->originalExStyle = originalExStyle;
-    g_workerCount.fetch_add(1, std::memory_order_relaxed);
-    HANDLE h = CreateThread(NULL, 0, MacGenieLaunchThread, ld, 0, NULL);
+    HANDLE h = MacGenieCreateWorkerThread(MacGenieLaunchThread, ld);
     if (h) {
-        CloseHandle(h);
+        // The tracked handle is retained until the worker exits and is reaped.
     } else {
-        g_workerCount.fetch_sub(1, std::memory_order_release);
         delete ld;
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         if (!(originalExStyle & WS_EX_LAYERED)) {
@@ -2274,9 +2317,8 @@ BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
         if (StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE),
                               FALSE, FALSE, FALSE, NULL, TRUE, WM_DESTROY)) {
             animated = true;
-            SetPropW(hWnd, L"GenieCloseHandled", (HANDLE)1);
             Wh_Log(L"Close genie DEBUG: DestroyWindow animation accepted hwnd=%p", hWnd);
-            MacGenieSetCloak(hWnd, TRUE);
+            MacGenieMarkCloseAndCloak(hWnd);
             // The worker leaves the window cloaked. Wait for its cleanup before
             // allowing the application's confirmed DestroyWindow call through.
             for (int i = 0; i < 400 && IsWindow(hWnd) &&
@@ -2324,7 +2366,8 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
                GetPropW(hWnd, L"GenieCloseBypass") != nullptr,
                GetPropW(hWnd, L"GenieCloseAnimating") != nullptr);
     }
-    if (closeMessage && GetPropW(hWnd, L"GenieCloseHandled") &&
+    if (closeMessage && IsWindowVisible(hWnd) &&
+        GetPropW(hWnd, L"GenieCloseAnimating") &&
         !GetPropW(hWnd, L"GenieCloseBypass")) {
         Wh_Log(L"Close genie DEBUG: suppress duplicate close request hwnd=%p msg=0x%04X", hWnd, Msg);
         return 0;
@@ -2334,8 +2377,6 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             // SC_CLOSE's default processing can synchronously generate WM_CLOSE.
             // Carry the bypass through that handoff and consume it there.
             if (Msg == WM_CLOSE) RemovePropW(hWnd, L"GenieCloseBypass");
-        } else if (GetPropW(hWnd, L"GenieCloseAnimating")) {
-            return 0;
         } else if (IsWindowVisible(hWnd) && !IsIconic(hWnd) &&
                    GetAncestor(hWnd, GA_ROOT) == hWnd &&
                    !g_unloading.load(std::memory_order_relaxed)) {
@@ -2346,9 +2387,8 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
                     GetWindowLongPtrW(hWnd, GWL_EXSTYLE), FALSE, FALSE,
                     FALSE, NULL, TRUE,
                     Msg)) {
-                SetPropW(hWnd, L"GenieCloseHandled", (HANDLE)1);
-                MacGenieSetCloak(hWnd, TRUE);
-                return 0;
+                if (MacGenieMarkCloseAndCloak(hWnd)) return 0;
+                return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
             }
             Wh_Log(L"Close genie: animation setup failed hwnd=%p", hWnd);
             RemovePropW(hWnd, L"GenieCloseAnimating");
@@ -2476,13 +2516,12 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int nCmdShow) {
             Wh_Log(L"Close genie DEBUG: ShowWindowAsync deferred hide accepted hwnd=%p", hWnd);
             MacGenieSetDwmTransitions(hWnd, FALSE);
             SetPropW(hWnd, L"GenieCloseAnimating", (HANDLE)1);
-            SetPropW(hWnd, L"GenieCloseHandled", (HANDLE)1);
             if (StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE),
                                   FALSE, FALSE, FALSE, NULL, TRUE,
                                   GENIE_DEFERRED_ASYNC_HIDE)) {
-                if (IsWindow(hWnd) && IsWindowVisible(hWnd))
-                    MacGenieSetCloak(hWnd, TRUE);
-                return TRUE;
+                if (MacGenieMarkCloseAndCloak(hWnd)) return TRUE;
+                RemovePropW(hWnd, L"GenieCloseAnimating");
+                return ShowWindowAsync_Original(hWnd, nCmdShow);
             }
             Wh_Log(L"Close genie DEBUG: ShowWindowAsync deferred hide setup failed hwnd=%p", hWnd);
             RemovePropW(hWnd, L"GenieCloseHandled");
@@ -2563,14 +2602,12 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
             }
             MacGenieSetDwmTransitions(hWnd, TRUE);
         }
-        g_workerCount.fetch_sub(1, std::memory_order_release);
         return 0;
     }
 
     // Rising genie; reveals the real window. (Launch uses layered+alpha hide, not
     // cloak - cloakHidden defaults FALSE - so the UWP uncloak-wait above still works.)
     StartMacGenieAnim(hWnd, TRUE, originalExStyle);
-    g_workerCount.fetch_sub(1, std::memory_order_release);
     return 0;
 }
 
@@ -2599,15 +2636,10 @@ void Wh_ModSettingsChanged() {
     MacGenieLoadSettings();
 }
 
-// Windhawk unmaps the mod DLL right after Wh_ModUninit returns, so any worker
-// thread still running mod code would crash its host. Signal workers to abort and
-// wait for them to drain (MINE's drain model - the animation loop checks the flag
-// every frame, the launch worker every 50 ms; the cap only guards a hung DWM).
+// Signal workers to stop, then join every registered thread before the mod DLL can
+// be unmapped. Registration and this state change are serialized by g_WorkerMutex.
 void Wh_ModBeforeUninit() {
-    g_unloading.store(true, std::memory_order_relaxed);
-    for (int i = 0; i < 300 && g_workerCount.load(std::memory_order_acquire) > 0; ++i) {
-        Sleep(10);
-    }
+    MacGenieStopAndJoinWorkerThreads();
 }
 
 void Wh_ModUninit() {
