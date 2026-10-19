@@ -198,12 +198,18 @@ static SRWLOCK g_lock = SRWLOCK_INIT;
 static std::map<std::wstring, CacheEntry> g_cache;
 // Every icon the mod has created, so that one can be told from Explorer's.
 static std::set<HICON> g_owned;
-// Replaced previews, waiting until no window shows them any more.
-static std::vector<HICON> g_retired;
+// Icons waiting until nothing may still show them, then freed.
+static std::set<HICON> g_retired;
 
-// What the mod has set on each window. An icon named here is on a window and
-// must never be destroyed, which is what keeps icons from vanishing.
-static std::map<IconKey, HICON> g_ourIcons;
+// What the mod has set on each window. A window never holds a cached preview
+// itself, only its own copy of one, so that whatever becomes of one window's
+// icon (Explorer destroying it, say) can't reach the cache or another window.
+// A copy named here is on its window, so it is never destroyed.
+struct OurIcon {
+    HICON copy;    // the handle the window holds
+    HICON source;  // the cached preview, or the folder icon, it was copied from
+};
+static std::map<IconKey, OurIcon> g_ourIcons;
 // Explorer's own icon for each window, to put back when the mod lets go.
 static std::map<IconKey, HICON> g_explorerIcons;
 // The folder whose preview a window currently shows.
@@ -211,15 +217,22 @@ static std::map<HWND, std::wstring> g_shownPath;
 // The folder each window was last found to have open. A preview rendered for
 // any other folder arrived too late and is not put on the window.
 static std::map<HWND, std::wstring> g_currentPath;
-// Previews a WM_SETICON may still be about to replace: the send timed out,
-// and a timed-out message is delivered once the window's thread catches up.
-// Kept alive until a later send for the same icon confirms the outcome.
+// Copies a timed-out WM_SETICON involves: the one it carries, and the one it
+// replaces. A timed-out message is still delivered once the window's thread
+// catches up, so both stay alive until that delivery, a later send from
+// another thread (which is delivered after it), or the window closing.
 static std::multimap<IconKey, HICON> g_unconfirmed;
+// Copies found destroyed by someone else. Still counted as the mod's, so that
+// Explorer is never handed one, but never destroyed again.
+static std::set<HICON> g_deadCopies;
 // Explorer windows whose window procedure the mod has taken over.
 static std::set<HWND> g_subclassed;
 static std::set<HWND> g_recheckPending;
 static std::map<HWND, ResolveMemo> g_resolveMemo;
 static std::vector<RenderJob> g_jobs;
+// A plain folder icon, copied for a window whose own Explorer icon isn't
+// known. Created once in Wh_ModInit, and never put on a window itself.
+static HICON g_folderIcon = nullptr;
 
 static std::atomic<bool> g_enabled{false};
 static std::atomic<HWND> g_workerWnd{nullptr};
@@ -676,21 +689,21 @@ static void SaveToDisk(const std::wstring& path, const std::vector<DWORD>& px) {
 // ---------------------------------------------------------------------------
 // Icon cache
 //
-// The one rule which keeps icons from disappearing: an icon named in
-// g_ourIcons is set on a window, so it is never destroyed. An icon the mod
-// can't prove is unused is leaked instead, and the process frees it on exit.
+// Two rules keep icons from disappearing. The previews in the cache never
+// leave the mod: each window gets its own copy, so nothing outside the mod can
+// free a cached preview. And a copy named in g_ourIcons or g_unconfirmed may be
+// on a window, so it is never destroyed; one the mod can't prove is unused is
+// leaked instead, and the process frees it on exit.
 
 static std::wstring MakeKey(const std::wstring& path) {
     return std::to_wstring(g_iconSize) + L"|" + NormalizePath(path);
 }
 
-static bool IsValidIcon(HICON icon);
-
 // Requires g_lock.
 static std::set<HICON> IconsInUseLocked() {
     std::set<HICON> inUse;
-    for (const auto& [key, icon] : g_ourIcons) {
-        inUse.insert(icon);
+    for (const auto& [key, our] : g_ourIcons) {
+        inUse.insert(our.copy);
     }
     for (const auto& [key, icon] : g_unconfirmed) {
         inUse.insert(icon);
@@ -759,19 +772,8 @@ static HICON GetCachedIcon(const std::wstring& path) {
     ReleaseSRWLockExclusive(&g_lock);
 
     if (cached) {
-        if (IsValidIcon(cached)) {
-            return cached;
-        }
-        // Destroyed by someone else. Never hand it out again: drop it, without
-        // destroying it a second time, and rebuild it from the disk copy.
-        Wh_Log(L"cached preview was destroyed, rebuilding | %s", path.c_str());
-        AcquireSRWLockExclusive(&g_lock);
-        auto stale = g_cache.find(key);
-        if (stale != g_cache.end() && stale->second.icon == cached) {
-            g_cache.erase(stale);
-        }
-        g_owned.erase(cached);
-        ReleaseSRWLockExclusive(&g_lock);
+        // Never on a window, so nothing outside the mod can have freed it.
+        return cached;
     }
 
     std::vector<DWORD> px;
@@ -857,7 +859,7 @@ static HICON StoreRendered(const std::wstring& path,
         return icon;
     }
     if (it != g_cache.end()) {
-        g_retired.push_back(it->second.icon);  // freed once no window shows it
+        g_retired.insert(it->second.icon);  // no window holds a cached preview
         it->second = {icon, hash, now, byWorker ? now : 0, byWorker};
     } else {
         g_cache[key] = {icon, hash, now, byWorker ? now : 0, byWorker};
@@ -890,6 +892,98 @@ static bool IsValidIcon(HICON icon) {
     return true;
 }
 
+static bool IsWindowThread(HWND hwnd) {
+    return GetWindowThreadProcessId(hwnd, nullptr) == GetCurrentThreadId();
+}
+
+// Requires g_lock. A new copy, for one window, of the preview the cache holds
+// for path right now, or of the folder icon. Null when the preview has been
+// replaced or evicted in the meantime: under the lock, a cached preview which
+// is still current can't be freed while it is being copied.
+static HICON MakeCopyLocked(HICON source, const std::wstring& path) {
+    bool current = false;
+    if (source && source == g_folderIcon) {
+        current = true;
+    } else if (source) {
+        auto it = g_cache.find(MakeKey(path));
+        current = it != g_cache.end() && it->second.icon == source;
+    }
+    if (!current) {
+        return nullptr;
+    }
+    HICON copy = CopyIcon(source);
+    if (copy) {
+        g_owned.insert(copy);
+    }
+    return copy;
+}
+
+// Requires g_lock. The window's own copy of source, if it has one which still
+// works. One which doesn't was destroyed by someone else, which affects this
+// window alone: it stops being used, without being destroyed again, and the
+// window gets a new copy.
+static HICON ReusableCopyLocked(HWND hwnd, WPARAM type, HICON source) {
+    auto it = g_ourIcons.find({hwnd, type});
+    if (it == g_ourIcons.end() || it->second.source != source) {
+        return nullptr;
+    }
+    if (IsValidIcon(it->second.copy)) {
+        return it->second.copy;
+    }
+    Wh_Log(L"The icon of %p was destroyed, making a new copy", hwnd);
+    g_deadCopies.insert(it->second.copy);
+    g_ourIcons.erase(it);
+    return nullptr;
+}
+
+// Requires g_lock. Records the copy now on a window, and retires the one it
+// replaced (freed once nothing may still put it back).
+static void RecordCopyLocked(HWND hwnd, WPARAM type, HICON copy, HICON source) {
+    auto it = g_ourIcons.find({hwnd, type});
+    if (it != g_ourIcons.end() && it->second.copy != copy &&
+        !g_deadCopies.count(it->second.copy)) {
+        g_retired.insert(it->second.copy);
+    }
+    g_ourIcons[{hwnd, type}] = {copy, source};
+}
+
+// Requires g_lock. The window no longer holds its copy of this type.
+static void RetireCopyLocked(HWND hwnd, WPARAM type) {
+    auto it = g_ourIcons.find({hwnd, type});
+    if (it == g_ourIcons.end()) {
+        return;
+    }
+    if (!g_deadCopies.count(it->second.copy)) {
+        g_retired.insert(it->second.copy);
+    }
+    g_ourIcons.erase(it);
+}
+
+// Requires g_lock. Drops one record of a copy a pending message involves.
+static void EraseUnconfirmedLocked(HWND hwnd, WPARAM type, HICON copy) {
+    auto range = g_unconfirmed.equal_range({hwnd, type});
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second == copy) {
+            g_unconfirmed.erase(it);
+            break;
+        }
+    }
+    if (!g_deadCopies.count(copy)) {
+        g_retired.insert(copy);  // freed if nothing else still needs it
+    }
+}
+
+// Requires g_lock. Every pending message for this window and type is settled.
+static void SettleUnconfirmedLocked(HWND hwnd, WPARAM type) {
+    auto range = g_unconfirmed.equal_range({hwnd, type});
+    for (auto it = range.first; it != range.second; ++it) {
+        if (!g_deadCopies.count(it->second)) {
+            g_retired.insert(it->second);
+        }
+    }
+    g_unconfirmed.erase(range.first, range.second);
+}
+
 // Works from any thread: on the window's own thread this is a direct call,
 // and the window procedure passes it through while g_inSync is set.
 static bool SendSetIcon(HWND hwnd, WPARAM type, HICON icon, HICON* previous) {
@@ -903,46 +997,68 @@ static bool SendSetIcon(HWND hwnd, WPARAM type, HICON icon, HICON* previous) {
     return true;
 }
 
-// Puts the mod's preview on a window and remembers Explorer's own icon.
-static void SetOurIcon(HWND hwnd, HICON icon, const std::wstring& path) {
+// Puts a preview on a window, as the window's own copy of source (a cached
+// preview or the folder icon), and remembers Explorer's own icon. A type which
+// already shows a working copy of the same preview is left alone.
+static void SetOurIcon(HWND hwnd, HICON source, const std::wstring& path) {
+    // A send to another thread is delivered after every earlier send from
+    // this thread, so once it succeeds, an earlier timed-out one is settled.
+    // A direct call on the window's own thread settles nothing.
+    const bool crossThread = !IsWindowThread(hwnd);
+
     for (WPARAM type : {static_cast<WPARAM>(ICON_BIG),
                         static_cast<WPARAM>(ICON_SMALL)}) {
-        // Recorded before sending: a send which times out is still delivered
-        // once the window's thread catches up, and from then on the preview
-        // must not be freed. Until a send confirms the outcome, the preview
-        // it replaces stays protected too.
         AcquireSRWLockExclusive(&g_lock);
-        auto current = g_ourIcons.find({hwnd, type});
-        const HICON before =
-            current != g_ourIcons.end() ? current->second : nullptr;
-        g_ourIcons[{hwnd, type}] = icon;
-        ReleaseSRWLockExclusive(&g_lock);
-
-        HICON previous = nullptr;
-        if (!SendSetIcon(hwnd, type, icon, &previous)) {
-            AcquireSRWLockExclusive(&g_lock);
-            if (!IsWindow(hwnd)) {
-                // Closed meanwhile: nothing will be delivered, and nothing
-                // would ever clear these entries.
-                g_ourIcons.erase({hwnd, type});
-                g_unconfirmed.erase({hwnd, type});
-            } else if (before && before != icon) {
-                g_unconfirmed.insert({{hwnd, type}, before});
-            }
+        if (ReusableCopyLocked(hwnd, type, source)) {
             ReleaseSRWLockExclusive(&g_lock);
             continue;
         }
+        const HICON copy = MakeCopyLocked(source, path);
+        if (!copy) {
+            ReleaseSRWLockExclusive(&g_lock);
+            continue;
+        }
+        // Recorded before sending. While the message is on its way, the
+        // window's own thread may set another copy, and a send which times out
+        // is still delivered later: so the copy it carries is kept alive until
+        // it arrives, and the copy it replaces until the outcome is known.
+        auto current = g_ourIcons.find({hwnd, type});
+        const HICON before =
+            current != g_ourIcons.end() ? current->second.copy : nullptr;
+        if (before && !g_deadCopies.count(before)) {
+            g_unconfirmed.insert({{hwnd, type}, before});
+        }
+        g_unconfirmed.insert({{hwnd, type}, copy});
+        RecordCopyLocked(hwnd, type, copy, source);
+        ReleaseSRWLockExclusive(&g_lock);
 
-        // A dead handle left by an earlier run of the mod must not be taken
-        // for Explorer's icon, or restoring would put it back.
-        const bool explorers = previous && !IsOwnedIcon(previous) &&
-                               IsValidIcon(previous);
+        HICON previous = nullptr;
+        const bool sent = SendSetIcon(hwnd, type, copy, &previous);
 
         AcquireSRWLockExclusive(&g_lock);
-        g_unconfirmed.erase({hwnd, type});
-        if (explorers) {
-            g_explorerIcons[{hwnd, type}] = previous;
+        if (!sent) {
+            if (!IsWindow(hwnd)) {
+                // Closed meanwhile: nothing will be delivered.
+                RetireCopyLocked(hwnd, type);
+                SettleUnconfirmedLocked(hwnd, type);
+            }
+            // Otherwise still to be delivered: both copies stay alive.
+        } else {
+            if (crossThread) {
+                SettleUnconfirmedLocked(hwnd, type);
+            } else {
+                if (before && !g_deadCopies.count(before)) {
+                    EraseUnconfirmedLocked(hwnd, type, before);
+                }
+                EraseUnconfirmedLocked(hwnd, type, copy);
+            }
+            // Neither a copy of the mod's nor a dead handle left by an earlier
+            // run of the mod may be taken for Explorer's icon.
+            if (previous && !g_owned.count(previous) && IsValidIcon(previous)) {
+                g_explorerIcons[{hwnd, type}] = previous;
+            }
         }
+        ReleaseUnusedLocked();
         ReleaseSRWLockExclusive(&g_lock);
     }
 
@@ -956,10 +1072,6 @@ static HICON ExplorerIconLocked(HWND hwnd, WPARAM type) {
     auto it = g_explorerIcons.find({hwnd, type});
     return it != g_explorerIcons.end() ? it->second : nullptr;
 }
-
-// A plain folder icon of the mod's own, for a window whose own Explorer icon
-// isn't known. Created once; freed at the end only if no window shows it.
-static HICON g_folderIcon = nullptr;
 
 static void CreateFolderIcon() {
     SHSTOCKICONINFO info{};
@@ -982,12 +1094,11 @@ static void CreateFolderIcon() {
 static void RestoreWindowIcons(HWND hwnd, bool shuttingDown) {
     for (WPARAM type : {static_cast<WPARAM>(ICON_BIG),
                         static_cast<WPARAM>(ICON_SMALL)}) {
-        HICON ours = nullptr;
+        bool ours = false;
         HICON theirs = nullptr;
         AcquireSRWLockExclusive(&g_lock);
-        auto it = g_ourIcons.find({hwnd, type});
-        if (it != g_ourIcons.end()) {
-            ours = it->second;
+        if (g_ourIcons.count({hwnd, type})) {
+            ours = true;
             theirs = ExplorerIconLocked(hwnd, type);
         }
         ReleaseSRWLockExclusive(&g_lock);
@@ -998,8 +1109,8 @@ static void RestoreWindowIcons(HWND hwnd, bool shuttingDown) {
 
         if (!IsWindow(hwnd)) {
             AcquireSRWLockExclusive(&g_lock);
-            g_ourIcons.erase({hwnd, type});
-            g_unconfirmed.erase({hwnd, type});
+            RetireCopyLocked(hwnd, type);
+            SettleUnconfirmedLocked(hwnd, type);
             ReleaseSRWLockExclusive(&g_lock);
             continue;
         }
@@ -1011,8 +1122,20 @@ static void RestoreWindowIcons(HWND hwnd, bool shuttingDown) {
                 Wh_Log(L"No Explorer icon for %p, keeping the preview", hwnd);
                 continue;
             }
-            replacement = g_folderIcon;
+            AcquireSRWLockExclusive(&g_lock);
+            replacement = MakeCopyLocked(g_folderIcon, std::wstring());
+            ReleaseSRWLockExclusive(&g_lock);
+            if (!replacement) {
+                continue;
+            }
             replacementIsOurs = true;
+        }
+
+        if (replacementIsOurs) {
+            // Kept alive while its message is on its way, like any copy.
+            AcquireSRWLockExclusive(&g_lock);
+            g_unconfirmed.insert({{hwnd, type}, replacement});
+            ReleaseSRWLockExclusive(&g_lock);
         }
 
         HICON previous = nullptr;
@@ -1023,11 +1146,11 @@ static void RestoreWindowIcons(HWND hwnd, bool shuttingDown) {
         }
 
         AcquireSRWLockExclusive(&g_lock);
-        g_unconfirmed.erase({hwnd, type});
         if (replacementIsOurs) {
-            g_ourIcons[{hwnd, type}] = replacement;  // protected while shown
+            RecordCopyLocked(hwnd, type, replacement, g_folderIcon);
+            EraseUnconfirmedLocked(hwnd, type, replacement);
         } else {
-            g_ourIcons.erase({hwnd, type});
+            RetireCopyLocked(hwnd, type);
         }
         ReleaseSRWLockExclusive(&g_lock);
     }
@@ -1044,8 +1167,7 @@ static void RestoreWindowIcons(HWND hwnd, bool shuttingDown) {
 // longer owns that one.
 static void ForgetOurIcon(HWND hwnd, WPARAM type, HICON explorerIcon) {
     AcquireSRWLockExclusive(&g_lock);
-    g_ourIcons.erase({hwnd, type});
-    g_unconfirmed.erase({hwnd, type});
+    RetireCopyLocked(hwnd, type);  // the window holds Explorer's icon now
     if (explorerIcon && !g_owned.count(explorerIcon)) {
         g_explorerIcons[{hwnd, type}] = explorerIcon;
     }
@@ -1059,12 +1181,12 @@ static void ForgetOurIcon(HWND hwnd, WPARAM type, HICON explorerIcon) {
 
 static void DropWindow(HWND hwnd) {
     AcquireSRWLockExclusive(&g_lock);
-    g_ourIcons.erase({hwnd, ICON_BIG});
-    g_ourIcons.erase({hwnd, ICON_SMALL});
-    g_explorerIcons.erase({hwnd, ICON_BIG});
-    g_explorerIcons.erase({hwnd, ICON_SMALL});
-    g_unconfirmed.erase({hwnd, ICON_BIG});
-    g_unconfirmed.erase({hwnd, ICON_SMALL});
+    for (WPARAM type : {static_cast<WPARAM>(ICON_BIG),
+                        static_cast<WPARAM>(ICON_SMALL)}) {
+        RetireCopyLocked(hwnd, type);
+        SettleUnconfirmedLocked(hwnd, type);  // nothing reaches a closed window
+        g_explorerIcons.erase({hwnd, type});
+    }
     g_shownPath.erase(hwnd);
     g_currentPath.erase(hwnd);
     g_subclassed.erase(hwnd);
@@ -1311,13 +1433,7 @@ static bool TryApplySync(HWND hwnd) {
 
     g_inSync = true;
     if (icon) {
-        AcquireSRWLockShared(&g_lock);
-        auto it = g_ourIcons.find({hwnd, ICON_BIG});
-        bool same = it != g_ourIcons.end() && it->second == icon;
-        ReleaseSRWLockShared(&g_lock);
-        if (!same) {
-            SetOurIcon(hwnd, icon, path);
-        }
+        SetOurIcon(hwnd, icon, path);  // leaves a type which already shows it
     } else if (!shown.empty() && shown != path) {
         // The preview of the previous folder must not stay on the button.
         RestoreWindowIcons(hwnd, /*shuttingDown=*/false);
@@ -1382,24 +1498,32 @@ static LRESULT PassExplorerSetIcon(HWND hwnd, WPARAM type, LPARAM lParam) {
 
 static LRESULT HandleExplorerSetIcon(HWND hwnd, WPARAM type, LPARAM lParam) {
     std::wstring path;
-    HICON ours = UpdateSync(hwnd, &path);
+    HICON source = UpdateSync(hwnd, &path);
 
-    if (!ours) {
-        // Keep the preview already on the window when it belongs to this same
-        // folder; otherwise let Explorer's icon through until one is ready.
-        const std::wstring shown = ShownPath(hwnd);
-        if (!shown.empty() && (path.empty() || shown == path)) {
-            AcquireSRWLockShared(&g_lock);
-            auto it = g_ourIcons.find({hwnd, type});
-            if (it != g_ourIcons.end()) {
-                ours = it->second;
-            }
-            ReleaseSRWLockShared(&g_lock);
-            path = shown;
+    HICON copy = nullptr;
+    AcquireSRWLockExclusive(&g_lock);
+    if (source) {
+        copy = ReusableCopyLocked(hwnd, type, source);
+        if (!copy) {
+            copy = MakeCopyLocked(source, path);
         }
     }
+    if (!copy) {
+        // Keep the preview already on the window when it belongs to this same
+        // folder; otherwise let Explorer's icon through until one is ready.
+        auto shown = g_shownPath.find(hwnd);
+        auto it = g_ourIcons.find({hwnd, type});
+        if (shown != g_shownPath.end() && !shown->second.empty() &&
+            (path.empty() || shown->second == path) &&
+            it != g_ourIcons.end() && IsValidIcon(it->second.copy)) {
+            copy = it->second.copy;
+            source = it->second.source;
+            path = shown->second;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_lock);
 
-    if (!ours) {
+    if (!copy) {
         return PassExplorerSetIcon(hwnd, type, lParam);
     }
 
@@ -1407,17 +1531,34 @@ static LRESULT HandleExplorerSetIcon(HWND hwnd, WPARAM type, LPARAM lParam) {
     const HICON explorerPrevious = NoteExplorerIcon(hwnd, type, explorerIcon);
 
     LRESULT r = DefSubclassProc(hwnd, WM_SETICON, type,
-                                reinterpret_cast<LPARAM>(ours));
+                                reinterpret_cast<LPARAM>(copy));
 
+    // Set directly, so the copy it replaced is off the window now. A send of
+    // the worker's which timed out may still arrive; the window procedure
+    // drops it, since it no longer carries the current copy.
     AcquireSRWLockExclusive(&g_lock);
-    g_ourIcons[{hwnd, type}] = ours;
-    g_unconfirmed.erase({hwnd, type});
+    RecordCopyLocked(hwnd, type, copy, source);
     g_shownPath[hwnd] = path;
+    ReleaseUnusedLocked();
     ReleaseSRWLockExclusive(&g_lock);
 
-    // The window still holds the preview, not Explorer's previous icon, so
-    // handing that one back is safe: Explorer frees what it no longer uses.
+    // The window holds this window's own copy, not Explorer's previous icon,
+    // so handing that one back is safe: Explorer frees what it no longer uses.
     return AnswerExplorer(r, explorerPrevious, explorerIcon);
+}
+
+// A copy of the mod's arrives in a WM_SETICON which this thread didn't set
+// directly: a send from the worker. Its message has arrived, so it no longer
+// needs keeping alive for that. One which is no longer the window's current
+// copy was overtaken while it waited, and is dropped.
+static bool DropStaleDelivery(HWND hwnd, WPARAM type, HICON icon) {
+    AcquireSRWLockExclusive(&g_lock);
+    auto it = g_ourIcons.find({hwnd, type});
+    const bool stale = it == g_ourIcons.end() || it->second.copy != icon;
+    EraseUnconfirmedLocked(hwnd, type, icon);  // freed if it is stale
+    ReleaseUnusedLocked();
+    ReleaseSRWLockExclusive(&g_lock);
+    return stale;
 }
 
 static LRESULT CALLBACK FrameSubclassProc(HWND hwnd,
@@ -1435,11 +1576,19 @@ static LRESULT CALLBACK FrameSubclassProc(HWND hwnd,
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
-    // Sent by the worker to hand the window back to Explorer.
+    // From the worker. wParam 0: the mod is stopping, so the window goes back
+    // to Explorer. wParam 1: no scan could tell which folder the window has
+    // open, so the preview, which shows the folder it was in before, goes
+    // too, unless that folder can be found after all.
     if (msg == g_msgRestoreIcons && msg != 0) {
-        g_inSync = true;
-        RestoreWindowIcons(hwnd, /*shuttingDown=*/true);
-        g_inSync = false;
+        const bool stopping = wParam == 0;
+        if (stopping || (!g_inSync &&
+                         g_enabled.load(std::memory_order_relaxed) &&
+                         !TryApplySync(hwnd))) {
+            g_inSync = true;
+            RestoreWindowIcons(hwnd, stopping);
+            g_inSync = false;
+        }
         return 0;
     }
 
@@ -1479,13 +1628,21 @@ static LRESULT CALLBACK FrameSubclassProc(HWND hwnd,
         }
 
         case WM_SETICON:
-            if ((wParam == ICON_BIG || wParam == ICON_SMALL) &&
-                !IsOwnedIcon(reinterpret_cast<HICON>(lParam))) {
+            if (wParam != ICON_BIG && wParam != ICON_SMALL) {
+                break;
+            }
+            if (IsOwnedIcon(reinterpret_cast<HICON>(lParam))) {
+                if (DropStaleDelivery(hwnd, wParam,
+                                      reinterpret_cast<HICON>(lParam))) {
+                    return 0;
+                }
+                break;
+            }
+            {
                 LRESULT r = HandleExplorerSetIcon(hwnd, wParam, lParam);
                 PostRecheck(hwnd);
                 return r;
             }
-            break;
     }
 
     return DefSubclassProc(hwnd, msg, wParam, lParam);
@@ -1654,13 +1811,7 @@ static void UpdateExplorerWindow(const FoundWindow& f, bool forceRender) {
         return;
     }
 
-    AcquireSRWLockShared(&g_lock);
-    auto it = g_ourIcons.find({f.hwnd, ICON_BIG});
-    bool same = it != g_ourIcons.end() && it->second == rendered;
-    ReleaseSRWLockShared(&g_lock);
-    if (!same) {
-        SetOurIcon(f.hwnd, rendered, f.path);
-    }
+    SetOurIcon(f.hwnd, rendered, f.path);  // leaves a type which already shows it
 }
 
 static bool GetActiveFolder(IWebBrowser2* wb, HWND top,
@@ -1691,17 +1842,19 @@ static bool GetActiveFolder(IWebBrowser2* wb, HWND top,
 }
 
 // Walks the shell's window list. Used once at startup, and for a window the
-// instant path couldn't resolve.
-static void Scan(const std::map<HWND, bool>* only) {
+// instant path couldn't resolve. Returns the windows whose folder it found.
+static std::set<HWND> Scan(const std::map<HWND, bool>* only) {
+    std::set<HWND> resolved;
+
     ComPtr<IShellWindows> shellWindows;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                 IID_PPV_ARGS(shellWindows.put())))) {
-        return;
+        return resolved;
     }
 
     long count = 0;
     if (FAILED(shellWindows->get_Count(&count))) {
-        return;
+        return resolved;
     }
 
     const DWORD myPid = GetCurrentProcessId();
@@ -1765,10 +1918,12 @@ static void Scan(const std::map<HWND, bool>* only) {
             force = it != only->end() && it->second;
         }
         if (!f.path.empty()) {
+            resolved.insert(f.hwnd);
             UpdateExplorerWindow(f, force);
         }
         ILFree(f.pidl);
     }
+    return resolved;
 }
 
 // Folders handed over by Explorer threads, rendered without asking Explorer
@@ -1842,6 +1997,17 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
     }
 }
 
+// A window which shows a preview, while its own thread could not determine
+// its folder the last time it tried.
+static bool ShowsUnknownFolder(HWND hwnd) {
+    AcquireSRWLockShared(&g_lock);
+    auto shown = g_shownPath.find(hwnd);
+    const bool result = shown != g_shownPath.end() && !shown->second.empty() &&
+                        !g_currentPath.count(hwnd);
+    ReleaseSRWLockShared(&g_lock);
+    return result;
+}
+
 static void ProcessDue() {
     if (g_jobsPosted) {
         ProcessRenderJobs();
@@ -1871,14 +2037,22 @@ static void ProcessDue() {
         return;
     }
 
-    Scan(&due);
+    const std::set<HWND> resolved = Scan(&due);
 
     // The follow-up scans run even when this one found a folder: while a
     // navigation is still in progress, the window list can report the folder
     // being left, and only a later scan sees the new one.
     for (const auto& [hwnd, step] : steps) {
-        if (step < kNoConfirms && IsWindow(hwnd)) {
+        if (!IsWindow(hwnd)) {
+            continue;
+        }
+        if (step < kNoConfirms) {
             Schedule(hwnd, kConfirmDelays[step], false, step + 1);
+        } else if (!resolved.count(hwnd) && ShowsUnknownFolder(hwnd)) {
+            // The last scan, and neither it nor the window's own thread can
+            // tell which folder the window has open (a view without a folder).
+            // Its preview shows the folder it was in before.
+            PostMessageW(hwnd, g_msgRestoreIcons, 1, 0);
         }
     }
 }
@@ -1914,8 +2088,16 @@ static void RestoreEverything() {
             continue;
         }
         if (IsSubclassed(hwnd) && g_msgRestoreIcons) {
-            SendMessageTimeoutW(hwnd, g_msgRestoreIcons, 0, 0,
-                                SMTO_ABORTIFHUNG, kSendTimeout, nullptr);
+            if (SendMessageTimeoutW(hwnd, g_msgRestoreIcons, 0, 0,
+                                    SMTO_ABORTIFHUNG, kSendTimeout, nullptr)) {
+                // Delivered after every earlier send to the window, so
+                // nothing pending can put an old copy back any more.
+                AcquireSRWLockExclusive(&g_lock);
+                SettleUnconfirmedLocked(hwnd, ICON_BIG);
+                SettleUnconfirmedLocked(hwnd, ICON_SMALL);
+                ReleaseUnusedLocked();
+                ReleaseSRWLockExclusive(&g_lock);
+            }
         } else {
             RestoreWindowIcons(hwnd, /*shuttingDown=*/true);
         }
@@ -2014,11 +2196,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     for (HICON icon : g_owned) {
         if (inUse.count(icon)) {
             leaked++;
-        } else {
+        } else if (!g_deadCopies.count(icon)) {
             DestroyIcon(icon);
         }
     }
     g_owned.clear();
+    g_deadCopies.clear();
     g_folderIcon = nullptr;
     g_ourIcons.clear();
     g_unconfirmed.clear();
