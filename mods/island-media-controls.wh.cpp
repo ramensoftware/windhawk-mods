@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.240
+// @version         0.10.241
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -1053,16 +1053,13 @@ std::atomic<int> g_dynamicTransportNavigationFailureDirection{0};
 [[clang::no_destroy]] TranslateTransform g_dynamicTransportTranslate = nullptr;
 winrt::event_token g_dynamicCompactRenderingToken{};
 bool g_dynamicCompactRenderingHooked = false;
-winrt::event_token g_dynamicMainGlowRenderingToken{};
 bool g_sideBreathRunning = false;
-std::chrono::steady_clock::time_point g_lastDynamicMainGlowFrameTime{};
 
 double g_dynamicTransportReveal = 0.0;
 double g_dynamicTransportTargetReveal = 0.0;
 double g_dynamicTransportRevealVelocity = 0.0;
 double g_dynamicMainGlowRevealProgress = 0.0;
 double g_dynamicMainGlowBreathPhase = 0.0;
-double g_lastAppliedGlowBreathOpacity = -1.0;
 bool g_dynamicTransportLaunchPhase = false;
 std::chrono::steady_clock::time_point g_lastDynamicCompactFrameTime{};
 uint64_t g_dynamicTransportAccentThumbnailHash = UINT64_MAX;
@@ -1431,26 +1428,6 @@ int g_popupProgressGlowTextureAperture = -1;
 int g_popupProgressGlowTextureExtension = -1;
 int g_popupProgressGlowTextureThickness = -1;
 int g_popupProgressGlowTextureMotion = -1;
-struct CompactProgressLighting {
-    Image g_popupXamlProgressGlowHalo = nullptr;
-    Image g_popupXamlProgressGlowCoreImage = nullptr;
-    Image g_popupXamlProgressFibers = nullptr;
-    imaging::WriteableBitmap g_popupProgressGlowHaloBitmap = nullptr;
-    imaging::WriteableBitmap g_popupProgressGlowCoreBitmap = nullptr;
-    imaging::WriteableBitmap g_popupProgressFiberBitmap = nullptr;
-    uint32_t g_popupProgressGlowTextureColor = UINT32_MAX;
-    int g_popupProgressGlowTextureReveal = -1;
-    int g_popupProgressGlowTextureTrail = -1;
-    int g_popupProgressGlowTextureAperture = -1;
-    int g_popupProgressGlowTextureExtension = -1;
-    int g_popupProgressGlowTextureThickness = -1;
-    int g_popupProgressGlowTextureMotion = -1;
-    controls::Canvas canvas = nullptr;
-    double phase = 0.0;
-    double seconds = 0.0;
-    std::chrono::steady_clock::time_point frameTime{};
-};
-[[clang::no_destroy]] CompactProgressLighting g_compactProgressLighting;
 double g_popupCometMotionSeconds = 0.0;
 double g_popupCometPlaybackPhase = 0.0;
 bool g_popupCometPlaybackInitialized = false;
@@ -1600,6 +1577,7 @@ RECT g_lastPopupWindowRect{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
 [[clang::no_destroy]] Image g_compactAlbumArtFade = nullptr;
 [[clang::no_destroy]] shapes::Ellipse g_discArt{nullptr}, g_discArtFade{nullptr};
 [[clang::no_destroy]] mediax::RotateTransform g_discRotation{nullptr};
+[[clang::no_destroy]] Grid g_discVisualHost{nullptr};
 winrt::event_token g_discRenderingToken{};
 bool g_discRenderingHooked=false, g_discPlaying=false;
 std::chrono::steady_clock::time_point g_discFrameTime{};
@@ -1752,7 +1730,7 @@ void ResetDiscArtwork() {
     g_discManualRequested=g_discSwapPending=false;g_discPendingSource=nullptr;
     g_discPendingMainWash=nullptr;
     g_discSideCrossfadeActive=g_discSideWaitingPeak=false;
-    g_discArt=nullptr;g_discArtFade=nullptr;g_discRotation=nullptr;
+    g_discArt=nullptr;g_discArtFade=nullptr;g_discRotation=nullptr;g_discVisualHost=nullptr;
 }
 void ConsumeDiscNavigationRequest() {
     int direction=g_discNavigationMailbox.exchange(0,std::memory_order_acq_rel);
@@ -1771,6 +1749,10 @@ void ConsumeDiscNavigationRequest() {
 void SyncCircularSideArtworkVisuals() {
     ConsumeDiscNavigationRequest();
     if(!g_discArt||!g_discArtFade)return;
+    if (g_discVisualHost) {
+        g_discVisualHost.Width(g_layout.artSize);
+        g_discVisualHost.Height(g_layout.artSize);
+    }
     if(g_discManualRequested && std::chrono::steady_clock::now()-g_discManualRequestTime>std::chrono::milliseconds(8000))
         g_discManualRequested=false;
     if(g_discManualRequested && g_compactAlbumArtImage &&
@@ -2528,18 +2510,6 @@ mediax::Brush SideMainGlowBrush() {
 
 // Two elliptical light fields: a broad transmitted wash and a narrow caustic.
 // Composition gradients taper to transparent in both axes without a host mask.
-void UpdateSideProjectionBreath(Grid const& host, double breath) {
-    if (!host || !winrt::unbox_value_or<bool>(host.Tag(), false)) return;
-    auto container = hosting::ElementCompositionPreview::GetElementChildVisual(host).try_as<composition::ContainerVisual>();
-    if (!container) return;
-    float range = static_cast<float>(0.78 + Clamp(breath, 0.0, 1.0) * 0.22);
-    for (auto const& child : container.Children()) {
-        float diameter = 0;
-        child.Properties().TryGetScalar(L"GlowDiameter", diameter);
-        child.Size({diameter * range, diameter * range});
-    }
-}
-
 Grid CreateGlassProjection(bool sideTaskbar = false) {
     Grid host;
     host.UseLayoutRounding(!sideTaskbar);
@@ -6436,7 +6406,6 @@ constexpr wchar_t kPopupBackdropOverlayClassName[] = L"WindhawkIslandMediaBackdr
 constexpr UINT_PTR kPopupTimerId = 0x494D;
 constexpr UINT_PTR kTaskbarLayoutMonitorTimerId = 0x494D4C54;
 constexpr UINT kPopupBackdropOverlayFrameReadyMessage = WM_APP + 0x494;
-constexpr UINT kPopupOutsidePointerDownMessage = WM_APP + 0x495;
 unsigned g_popupOutsideButtons = 0;
 unsigned PopupPointerButtons() {
     const int keys[]{VK_LBUTTON,VK_RBUTTON,VK_MBUTTON,VK_XBUTTON1,VK_XBUTTON2};
@@ -6463,21 +6432,7 @@ bool UpdatePopupProgressEllipticalGlowTextures(double trailLength,
                                               double aperture,
                                               double extension,
                                               double progressThickness,
-                                              double motionSeconds,
-                                              CompactProgressLighting* compact = nullptr) {
-    auto& g_popupXamlProgressGlowHalo = compact ? compact->g_popupXamlProgressGlowHalo : ::g_popupXamlProgressGlowHalo;
-    auto& g_popupXamlProgressGlowCoreImage = compact ? compact->g_popupXamlProgressGlowCoreImage : ::g_popupXamlProgressGlowCoreImage;
-    auto& g_popupXamlProgressFibers = compact ? compact->g_popupXamlProgressFibers : ::g_popupXamlProgressFibers;
-    auto& g_popupProgressGlowHaloBitmap = compact ? compact->g_popupProgressGlowHaloBitmap : ::g_popupProgressGlowHaloBitmap;
-    auto& g_popupProgressGlowCoreBitmap = compact ? compact->g_popupProgressGlowCoreBitmap : ::g_popupProgressGlowCoreBitmap;
-    auto& g_popupProgressFiberBitmap = compact ? compact->g_popupProgressFiberBitmap : ::g_popupProgressFiberBitmap;
-    auto& g_popupProgressGlowTextureColor = compact ? compact->g_popupProgressGlowTextureColor : ::g_popupProgressGlowTextureColor;
-    auto& g_popupProgressGlowTextureReveal = compact ? compact->g_popupProgressGlowTextureReveal : ::g_popupProgressGlowTextureReveal;
-    auto& g_popupProgressGlowTextureTrail = compact ? compact->g_popupProgressGlowTextureTrail : ::g_popupProgressGlowTextureTrail;
-    auto& g_popupProgressGlowTextureAperture = compact ? compact->g_popupProgressGlowTextureAperture : ::g_popupProgressGlowTextureAperture;
-    auto& g_popupProgressGlowTextureExtension = compact ? compact->g_popupProgressGlowTextureExtension : ::g_popupProgressGlowTextureExtension;
-    auto& g_popupProgressGlowTextureThickness = compact ? compact->g_popupProgressGlowTextureThickness : ::g_popupProgressGlowTextureThickness;
-    auto& g_popupProgressGlowTextureMotion = compact ? compact->g_popupProgressGlowTextureMotion : ::g_popupProgressGlowTextureMotion;
+                                              double motionSeconds) {
     constexpr int kTextureWidth = 192;
     constexpr int kTextureHeight = 72;
     if (!g_popupXamlProgressGlowHalo ||
@@ -13692,49 +13647,6 @@ bool UpdateCompactProgressFromSnapshot() {
                       0.0, 1000.0);
     }
     g_compactProgress.Value(value);
-    auto& light = g_compactProgressLighting;
-    if (light.canvas) {
-        auto now = std::chrono::steady_clock::now();
-        double dt = light.frameTime.time_since_epoch().count() == 0 ? 0.0 :
-            Clamp(std::chrono::duration<double>(now - light.frameTime).count(), 0.0, 0.1);
-        light.frameTime = now;
-        bool playing = g_settings.feedbackLighting && state.hasSession &&
-            state.isPlaying && state.durationTicks > 0;
-        light.phase = Clamp(light.phase + (playing ? dt : -dt) / 0.52, 0.0, 1.0);
-        if (!g_settings.feedbackLighting) light.phase = 0.0;
-        light.seconds = std::fmod(light.seconds + dt, 14.4);
-        double width = g_layout.progressWidth;
-        double played = width * value / 1000.0;
-        double trail = Clamp(width * 0.62, 24.0, 190.0);
-        double extension = SmootherStep(light.phase);
-        double breath = 0.5 - 0.5 * std::cos(light.seconds * 6.283185307179586 / 3.6);
-        bool visible = light.phase > 0.001 && played > 0.5 && !g_expanded &&
-            UpdatePopupProgressEllipticalGlowTextures(trail, std::min(played, trail),
-                extension * (0.94 + 0.06 * breath), extension,
-                g_layout.progressHeight, light.seconds, &light);
-        light.canvas.Visibility(visible ? Visibility::Visible : Visibility::Collapsed);
-        light.canvas.Opacity(visible ? SmootherStep(Clamp(light.phase / 0.55, 0.0, 1.0)) *
-            SmootherStep(Clamp(played / 14.0, 0.0, 1.0)) * (0.88 + 0.12 * breath) *
-            (IsDarkModeApprox() ? 1.0 : 0.5) : 0.0);
-        light.canvas.Width(width);
-        light.canvas.Height(g_layout.progressHeight);
-        light.canvas.Margin({g_layout.progressMarginLeft, 0, 0, 0});
-        mediax::RectangleGeometry clip;
-        clip.Rect({0, -10, static_cast<float>(width),
-                   static_cast<float>(g_layout.progressHeight + 20)});
-        light.canvas.Clip(clip);
-        Image layers[] = {light.g_popupXamlProgressGlowHalo,
-                          light.g_popupXamlProgressGlowCoreImage,
-                          light.g_popupXamlProgressFibers};
-        for (auto const& layer : layers) {
-            layer.Width(trail);
-            layer.Height(72);
-            controls::Canvas::SetLeft(layer, played - trail);
-            controls::Canvas::SetTop(layer, g_layout.progressHeight * 0.5 - 36);
-        }
-        light.g_popupXamlProgressFibers.Visibility(IsDarkModeApprox()
-            ? Visibility::Visible : Visibility::Collapsed);
-    }
     return state.hasSession && state.isPlaying && state.durationTicks > 0;
 }
 
@@ -14749,9 +14661,6 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
             ApplyPopupBackdrop(hwnd);
             ApplyPopupXamlTheme(true);
             RenderExpandedPopupLayer();
-            return 0;
-        case kPopupOutsidePointerDownMessage:
-            HandlePopupOutsidePointerDown(hwnd, {static_cast<LONG>(wParam), static_cast<LONG>(lParam)});
             return 0;
         case WM_CLOSE:
             BeginCloseExpandedPopup();
@@ -19246,6 +19155,10 @@ void ApplyDynamicCompactVisuals() {
     if (IsVerticalTaskbar()) {
         ApplyVerticalDynamicTransportVisuals(rawReveal, reveal, easedReveal, chainVisibility,
             backgroundVisualReveal, jelly, backgroundImpulse, openingChain);
+        if (!g_dynamicCompactRenderingHooked && g_trackGlowTransition.stage == 0 &&
+            !g_trackGlowWaiting.load() && !g_trackGlowRequest.load()) {
+            StartDynamicMainGlowBreathing();
+        }
         return;
     }
     g_dynamicMainIsland.Width(g_layout.compactWidth);
@@ -19651,13 +19564,11 @@ void TriggerCompactNavigationFailure(
     EnsureCompactNavigationRenderLoop();
 }
 
-[[clang::no_destroy]] std::optional<std::array<composition::Visual,3>> g_sideBreathVisuals;
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Media::Animation::Storyboard g_sideBreathStoryboard{nullptr};
 void StopDynamicMainGlowBreathing() {
-    if (g_sideBreathVisuals) {
-        for (auto const& visual : *g_sideBreathVisuals) {
-            try { if (visual) visual.StopAnimation(L"Opacity"); } catch (...) {}
-        }
-        g_sideBreathVisuals.reset();
+    if (g_sideBreathStoryboard) {
+        try { g_sideBreathStoryboard.Stop(); } catch (...) {}
+        g_sideBreathStoryboard = nullptr;
     }
     g_sideBreathRunning = false;
 }
@@ -19665,27 +19576,35 @@ void StartDynamicMainGlowBreathing() {
     if (!g_settings.feedbackLighting || g_sideBreathRunning ||
         g_unloading || g_islandEnvironmentSuppressed ||
         g_dynamicTransportTargetReveal <= 0.5) return;
+    namespace animation = winrt::Windows::UI::Xaml::Media::Animation;
     AdvanceGlassBreathPhase();
-    g_sideBreathVisuals.emplace(std::array<composition::Visual,3>{nullptr,nullptr,nullptr});
+    auto storyboard = animation::Storyboard();
     FrameworkElement elements[]{IsTransparentMaterial() ? g_dynamicMainOcclusion : nullptr,
                                 g_dynamicMainWashHost,g_dynamicMainEdgeGlow};
+    double reveal = SmootherStep(Clamp(g_dynamicMainGlowRevealProgress, 0.0, 1.0));
+    double settled = SmootherStep(Clamp((g_dynamicMainGlowRevealProgress-0.70)/0.30, 0.0, 1.0));
     for (int index=0;index<3;++index) {
         if (!elements[index]) continue;
-        auto visual = hosting::ElementCompositionPreview::GetElementVisual(elements[index]);
-        auto compositor = visual.Compositor();
-        auto animation = compositor.CreateScalarKeyFrameAnimation();
-        animation.Duration(std::chrono::milliseconds(4800));
-        animation.IterationBehavior(composition::AnimationIterationBehavior::Forever);
-        auto linear = compositor.CreateLinearEasingFunction();
-        double envelope = MainTrackGlowEnvelope() * (index==0 ? g_compactMainTintOpacity : 1.0);
+        animation::DoubleAnimationUsingKeyFrames pulse;
+        pulse.Duration(xaml::DurationHelper::FromTimeSpan(std::chrono::milliseconds(4800)));
+        pulse.RepeatBehavior(animation::RepeatBehaviorHelper::Forever());
+        double envelope = reveal * MainTrackGlowEnvelope() *
+            (index==0 ? g_compactMainTintOpacity : 1.0);
         for (int i=0;i<=64;++i) {
-            float t=static_cast<float>(i)/64;
-            double breath=0.5+0.5*std::sin(g_dynamicMainGlowBreathPhase+t*6.283185307179586);
-            animation.InsertKeyFrame(t,static_cast<float>(envelope*(0.82+0.18*breath)),linear);
+            double breath=0.5+0.5*std::sin(g_dynamicMainGlowBreathPhase+i*6.283185307179586/64);
+            animation::LinearDoubleKeyFrame frame;
+            frame.KeyTime(animation::KeyTimeHelper::FromTimeSpan(std::chrono::milliseconds(i*75)));
+            frame.Value(envelope*(1.0-settled*(1.0-breath)*0.18));
+            pulse.KeyFrames().Append(frame);
         }
-        (*g_sideBreathVisuals)[index]=visual;
-        visual.StartAnimation(L"Opacity",animation);
+        // UIElement.Opacity is independent and has one owner; no second
+        // envelope/breath multiplier is applied to its Composition visual.
+        animation::Storyboard::SetTarget(pulse,elements[index]);
+        animation::Storyboard::SetTargetProperty(pulse,L"Opacity");
+        storyboard.Children().Append(pulse);
     }
+    g_sideBreathStoryboard = storyboard;
+    storyboard.Begin();
     g_sideBreathRunning = true;
 }
 
@@ -21871,22 +21790,29 @@ Grid BuildIslandGrid() {
     artImage.Opacity(1.0);
     artHost.Children().Append(artImage);
     if(UseCircularSideArtwork()) {
-        // Native vector coverage at final DPI; rotate the ImageBrush beneath a
-        // stationary circle so neither its rim nor its AA changes with angle.
+        // Rotate a shared visual parent: RenderTransform supports independent
+        // animation, unlike ImageBrush.RelativeTransform. The circular outline
+        // and the separate stationary rim retain their centre and dimensions.
         art.UseLayoutRounding(false);artShell.UseLayoutRounding(false);
         artHost.UseLayoutRounding(false);artPlaceholder.UseLayoutRounding(false);
         art.CornerRadius({0,0,0,0});
         artImage.Visibility(Visibility::Collapsed);artFade.Visibility(Visibility::Collapsed);
-        g_discRotation=mediax::RotateTransform();g_discRotation.CenterX(.5);g_discRotation.CenterY(.5);
+        g_discRotation=mediax::RotateTransform();
+        g_discVisualHost=Grid();
+        g_discVisualHost.Width(g_layout.artSize);g_discVisualHost.Height(g_layout.artSize);
+        g_discVisualHost.RenderTransformOrigin({.5,.5});
+        g_discVisualHost.RenderTransform(g_discRotation);
+        g_discVisualHost.IsHitTestVisible(false);
         auto makeDisc=[&] {
             shapes::Ellipse disc;disc.Width(g_layout.artSize);disc.Height(g_layout.artSize);
             disc.UseLayoutRounding(false);disc.IsHitTestVisible(false);
             mediax::ImageBrush brush;brush.Stretch(mediax::Stretch::UniformToFill);
-            brush.RelativeTransform(g_discRotation);disc.Fill(brush);
+            disc.Fill(brush);
             return disc;
         };
         g_discArtFade=makeDisc();g_discArt=makeDisc();g_discArtFade.Opacity(0);
-        artHost.Children().Append(g_discArtFade);artHost.Children().Append(g_discArt);
+        g_discVisualHost.Children().Append(g_discArtFade);g_discVisualHost.Children().Append(g_discArt);
+        artHost.Children().Append(g_discVisualHost);
     }
 
     Border artStroke;
@@ -22060,25 +21986,6 @@ Grid BuildIslandGrid() {
     g_compactProgress = progress;
     Grid progressHost;
     progressHost.Children().Append(progress);
-    g_compactProgressLighting = {};
-    auto& light = g_compactProgressLighting;
-    light.canvas = controls::Canvas();
-    light.canvas.IsHitTestVisible(false);
-    light.canvas.Visibility(Visibility::Collapsed);
-    light.canvas.HorizontalAlignment(HorizontalAlignment::Left);
-    light.canvas.VerticalAlignment(VerticalAlignment::Center);
-    light.g_popupXamlProgressGlowHalo = Image();
-    light.g_popupXamlProgressGlowCoreImage = Image();
-    light.g_popupXamlProgressFibers = Image();
-    Image lightLayers[] = {light.g_popupXamlProgressGlowHalo,
-                          light.g_popupXamlProgressGlowCoreImage,
-                          light.g_popupXamlProgressFibers};
-    for (auto const& layer : lightLayers) {
-        layer.Stretch(mediax::Stretch::Fill);
-        layer.IsHitTestVisible(false);
-        light.canvas.Children().Append(layer);
-    }
-    progressHost.Children().Append(light.canvas);
     details.Children().Append(progressHost);
     content.Children().Append(details);
 
@@ -22621,10 +22528,13 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
 
         RefreshTaskbarEdge(hwnd);
         bool taskbarDirectionChanged = g_injectedTaskbarEdge != g_taskbarEdge;
-        auto currentXamlRoot = g_taskbarLayoutWatchXamlRoot;
-        if (!currentXamlRoot) currentXamlRoot = GetTaskbarXamlRoot(hwnd);
+        // The old tree can retain all its parents after Explorer replaces its island.
+        // Re-read the cheap HWND root identity; keep expensive tree walks gated.
+        auto currentXamlRoot = GetTaskbarXamlRoot(hwnd);
         auto currentRoot = currentXamlRoot ? currentXamlRoot.Content().try_as<FrameworkElement>() : nullptr;
-        bool treeChanged = currentRoot && currentRoot != g_taskbarLayoutWatchRoot;
+        bool treeChanged = currentRoot &&
+            (currentXamlRoot != g_taskbarLayoutWatchXamlRoot ||
+             currentRoot != g_taskbarLayoutWatchRoot);
         bool anchorDetached = g_islandPlacementAnchor &&
             !mediax::VisualTreeHelper::GetParent(g_islandPlacementAnchor);
         bool targetDetached = !mediax::VisualTreeHelper::GetParent(g_taskbarLayoutWatchTarget);
@@ -23418,7 +23328,6 @@ void RemoveIslandGridImpl() {
         g_dynamicTransportWashFade = nullptr;
         g_sideTrackBase = nullptr;
         g_compactProgress = nullptr;
-        g_compactProgressLighting = {};
         g_compactTextEdgeFadeActive = false;
         g_compactTextInitialized = false;
         g_compactLastTitle.clear();
@@ -23508,7 +23417,6 @@ void RemoveIslandGridImpl() {
     g_dynamicTransportWashFade = nullptr;
     g_sideTrackBase = nullptr;
     g_compactProgress = nullptr;
-    g_compactProgressLighting = {};
     g_compactTextEdgeFadeActive = false;
     g_compactTextInitialized = false;
     g_compactLastTitle.clear();
