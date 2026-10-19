@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              discrete-touchpad-wheel
 // @name            Discrete Touchpad Wheel
-// @description     Converts continuous precision-touchpad scrolling into discrete mouse wheel events for legacy apps that ignore the scroll magnitude and scroll uncontrollably fast
+// @description     Converts continuous precision-touchpad (or high-resolution mouse wheel) scrolling into discrete mouse wheel events for legacy apps that ignore the scroll magnitude and scroll uncontrollably fast
 // @version         0.1.0
 // @author          yezhiyi9670
 // @github          https://github.com/yezhiyi9670
@@ -19,7 +19,8 @@
 > affect to the **Custom process inclusion list** in the mod's Advanced
 > settings.
 
-Windows precision touchpads report scrolling as a continuous stream of wheel
+Windows precision touchpads (as well as certain mice with high-resolution
+wheels) report scrolling as a continuous stream of wheel
 messages, each carrying a signed delta (a magnitude). Modern apps scroll the
 page accurately according to the delta, which produces smooth
 scrolling. Some legacy apps ignore the magnitude and treat every message as one
